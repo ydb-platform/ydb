@@ -172,6 +172,12 @@ class KikimrConfigGenerator(object):
             simple_config=False,
             breakpad_minidumps_path=None,
             breakpad_minidumps_script=None,
+            explicit_hosts_and_host_configs=False,
+            table_service_config=None,  # dict[name]=value
+            bridge_config=None,
+            memory_controller_config=None,
+            verbose_memory_limit_exception=False,
+            enable_static_auth=False,
     ):
         if extra_feature_flags is None:
             extra_feature_flags = []
@@ -522,6 +528,11 @@ class KikimrConfigGenerator(object):
             security_config = self.yaml_config["domains_config"]["security_config"]
             security_config.setdefault("administration_allowed_sids", []).append(self.__default_clusteradmin)
             security_config.setdefault("default_access", []).append('+F:{}'.format(self.__default_clusteradmin))
+        self.__enable_static_auth = enable_static_auth
+
+    @property
+    def enable_static_auth(self):
+        return self.__enable_static_auth
 
     @property
     def default_clusteradmin(self):

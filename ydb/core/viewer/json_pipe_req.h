@@ -282,6 +282,9 @@ protected:
     static bool IsSuccess(const NKqp::TEvGetScriptExecutionOperationResponse& ev);
     static TString GetError(const NKqp::TEvGetScriptExecutionOperationResponse& ev);
 
+    static bool IsSuccess(const NKqp::TEvGetScriptExecutionOperationResponse& ev);
+    static TString GetError(const NKqp::TEvGetScriptExecutionOperationResponse& ev);
+
     void UpdateSharedCacheTablet(TTabletId tabletId, std::unique_ptr<IEventBase> request);
 
     [[nodiscard]] TRequestResponse<TEvHive::TEvResponseHiveDomainStats> MakeRequestHiveDomainStats(TTabletId hiveId);

@@ -94,6 +94,7 @@ TKikimrConfiguration::TKikimrConfiguration() {
     REGISTER_SETTING(*this, UseGraceJoinCoreForMap);
     REGISTER_SETTING(*this, UseBlockHashJoin);
     REGISTER_SETTING(*this, EnableOrderPreservingLookupJoin);
+    REGISTER_SETTING(*this, OptEnableHashShuffleConnectionsForExtend);
 
     REGISTER_SETTING(*this, OptUseFinalizeByKey);
     REGISTER_SETTING(*this, CostBasedOptimizationLevel);
@@ -202,6 +203,10 @@ ui64 TKikimrConfiguration::GetEnabledSpillingNodes() const {
 
 bool TKikimrConfiguration::GetEnableOlapPushdownProjections() const {
     return ((GetOptionalFlagValue(OptEnableOlapPushdownProjections.Get()) == EOptionalFlag::Enabled) || EnableOlapPushdownProjections);
+}
+
+bool TKikimrConfiguration::GetEnableHashShuffleConnectionsForExtend() const {
+    return ((GetOptionalFlagValue(OptEnableHashShuffleConnectionsForExtend.Get()) == EOptionalFlag::Enabled) || EnableHashShuffleConnectionsForExtend);
 }
 
 }

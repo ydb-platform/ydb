@@ -68,6 +68,18 @@ constexpr const char* TABLE_STOCK = "stock";
 constexpr const char* TABLE_ORDER_LINE = "order_line";
 constexpr const char* TABLE_HISTORY = "history";
 
+constexpr std::array<const char*, 9> TPCC_TABLES = {
+    TABLE_CUSTOMER,
+    TABLE_WAREHOUSE,
+    TABLE_DISTRICT,
+    TABLE_NEW_ORDER,
+    TABLE_OORDER,
+    TABLE_ITEM,
+    TABLE_STOCK,
+    TABLE_ORDER_LINE,
+    TABLE_HISTORY
+};
+
 // Index/View names
 constexpr const char* INDEX_CUSTOMER_NAME = "idx_customer_name";
 constexpr const char* INDEX_ORDER = "idx_order";

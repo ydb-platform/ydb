@@ -39,23 +39,38 @@ namespace {
 
         return result;
     }
+
+    const TDuration& GetCurrentDelay(
+            const NKikimrConfig::TBackgroundCleaningConfig::TRetrySettings& backgroundCleaningRetrySettings,
+            TTempDirsState::TRetryState& state) {
+        if (state.CurrentDelay == TDuration::Zero()) {
+            state.CurrentDelay =
+                TDuration::MilliSeconds(backgroundCleaningRetrySettings.GetStartDelayMs());
+        }
+        return state.CurrentDelay;
+    }
+
+    TDuration GetDelay(
+        const NKikimrConfig::TBackgroundCleaningConfig::TRetrySettings& backgroundCleaningRetrySettings,
+        TTempDirsState::TRetryState& state
+    ) {
+        auto newDelay = state.CurrentDelay;
+        newDelay *= 2;
+        auto maxDelay =
+            TDuration::MilliSeconds(backgroundCleaningRetrySettings.GetMaxDelayMs());
+        if (newDelay > maxDelay) {
+            newDelay = maxDelay;
+        }
+        newDelay *= AppData()->RandomProvider->Uniform(50, 200);
+        newDelay /= 100;
+        state.CurrentDelay = newDelay;
+        return state.CurrentDelay;
+    }
 }
 
 NOperationQueue::EStartStatus TSchemeShard::StartBackgroundCleaning(const TPathId& pathId) {
     auto info = ResolveTempDirInfo(pathId);
     if (!info) {
-        return NOperationQueue::EStartStatus::EOperationRemove;
-    }
-
-    auto& TempDirsByOwner = TempDirsState.TempDirsByOwner;
-
-    auto it = TempDirsByOwner.find(info->TempDirOwnerActorId);
-    if (it == TempDirsByOwner.end()) {
-        return NOperationQueue::EStartStatus::EOperationRemove;
-    }
-
-    auto tempDirIt = it->second.find(pathId);
-    if (tempDirIt == it->second.end()) {
         return NOperationQueue::EStartStatus::EOperationRemove;
     }
 
@@ -152,7 +167,14 @@ NOperationQueue::EStartStatus TSchemeShard::StartBackgroundCleaning(const TPathI
     }
 
     if (state.ObjectsToDrop == 0) {
-        ContinueBackgroundCleaning(pathId);
+        if (state.DirsToRemove.empty()) {
+            CleanBackgroundCleaningState(pathId);
+            return NOperationQueue::EStartStatus::EOperationRemove;
+        }
+
+        if (!ContinueBackgroundCleaning(pathId)) {
+            return NOperationQueue::EStartStatus::EOperationRetry;
+        }
     }
 
     return NOperationQueue::EStartStatus::EOperationRunning;
@@ -206,6 +228,7 @@ bool TSchemeShard::ContinueBackgroundCleaning(const TPathId& pathId) {
     } else if (state.ObjectsToDrop == state.ObjectsDropped) {
         if (state.NeedToRetryLater || !processNextDir()) {
             CleanBackgroundCleaningState(pathId);
+            BackgroundCleaningQueue->OnDone(pathId);
             EnqueueBackgroundCleaning(pathId);
             return false;
         }
@@ -213,6 +236,7 @@ bool TSchemeShard::ContinueBackgroundCleaning(const TPathId& pathId) {
         ++state.ObjectsDropped;
         if (state.ObjectsToDrop == state.ObjectsDropped && (state.NeedToRetryLater || !processNextDir())) {
             CleanBackgroundCleaningState(pathId);
+            BackgroundCleaningQueue->OnDone(pathId);
             EnqueueBackgroundCleaning(pathId);
             return false;
         }
@@ -268,33 +292,6 @@ void TSchemeShard::Handle(TEvInterconnect::TEvNodeDisconnected::TPtr& ev, const 
     RetryNodeSubscribe(ev->Get()->NodeId);
 }
 
-const TDuration& GetCurrentDelay(
-        const NKikimrConfig::TBackgroundCleaningConfig::TRetrySettings& backgroundCleaningRetrySettings,
-        TTempDirsState::TRetryState& state) {
-    if (state.CurrentDelay == TDuration::Zero()) {
-        state.CurrentDelay =
-            TDuration::MilliSeconds(backgroundCleaningRetrySettings.GetStartDelayMs());
-    }
-    return state.CurrentDelay;
-}
-
-TDuration GetDelay(
-    const NKikimrConfig::TBackgroundCleaningConfig::TRetrySettings& backgroundCleaningRetrySettings,
-    TTempDirsState::TRetryState& state
-) {
-    auto newDelay = state.CurrentDelay;
-    newDelay *= 2;
-    auto maxDelay =
-        TDuration::MilliSeconds(backgroundCleaningRetrySettings.GetMaxDelayMs());
-    if (newDelay > maxDelay) {
-        newDelay = maxDelay;
-    }
-    newDelay *= AppData()->RandomProvider->Uniform(50, 200);
-    newDelay /= 100;
-    state.CurrentDelay = newDelay;
-    return state.CurrentDelay;
-}
-
 void TSchemeShard::RetryNodeSubscribe(ui32 nodeId) {
     auto& nodeStates = TempDirsState.NodeStates;
     auto it = nodeStates.find(nodeId);
@@ -319,7 +316,7 @@ void TSchemeShard::RetryNodeSubscribe(ui32 nodeId) {
         << " at schemeshard " << TabletID());
 
     if (retryState.RetryNumber > BackgroundCleaningRetrySettings.GetMaxRetryNumber()) {
-        for (const auto& ownerActorId: nodeState.Owners) {
+        for (const auto& ownerActorId : nodeState.Owners) {
             auto& tempDirsByOwner = TempDirsState.TempDirsByOwner;
 
             auto itTempDirs = tempDirsByOwner.find(ownerActorId);
@@ -328,7 +325,7 @@ void TSchemeShard::RetryNodeSubscribe(ui32 nodeId) {
             }
 
             auto& currentTempDirs = itTempDirs->second;
-            for (auto& pathId: currentTempDirs) {
+            for (auto& pathId : currentTempDirs) {
                 EnqueueBackgroundCleaning(pathId);
             }
             tempDirsByOwner.erase(itTempDirs);
@@ -348,7 +345,7 @@ void TSchemeShard::RetryNodeSubscribe(ui32 nodeId) {
         return;
     }
 
-    for (const auto& ownerActorId: nodeState.Owners) {
+    for (const auto& ownerActorId : nodeState.Owners) {
         Send(new IEventHandle(ownerActorId, SelfId(),
             new TEvSchemeShard::TEvOwnerActorAck(),
             IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession));
@@ -366,14 +363,20 @@ bool TSchemeShard::CheckOwnerUndelivered(TEvents::TEvUndelivered::TPtr& ev) {
         return false;
     }
 
-    auto& currentTempDirs = it->second;
     auto ctx = ActorContext();
     LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Owner undelivered for BackgroundCleaning "
         "for ownerActorId# " << ownerActorId
         << ", undelivered reason# " << ev->Get()->Reason
         << " at schemeshard " << TabletID());
 
-    for (auto& pathId: currentTempDirs) {
+    if (ev->Get()->Reason != TEvents::TEvUndelivered::EReason::ReasonActorUnknown) {
+        RetryNodeSubscribe(ownerActorId.NodeId());
+        return true;
+    }
+
+    auto& currentTempDirs = it->second;
+
+    for (auto& pathId : currentTempDirs) {
         EnqueueBackgroundCleaning(pathId);
     }
     tempDirsByOwner.erase(it);

@@ -328,6 +328,41 @@ def parse_datetime(dt_str: Optional[str]) -> Optional[datetime]:
     except (ValueError, TypeError):
         return None
 
+# --- branch version helpers ---
+def parse_branch(label):
+    if label == 'main':
+        return ('main', 0, 0, 0)
+    if label.startswith('stable-'):
+        parts = label.split('-')
+        nums = [int(x) for x in parts[1:]]
+        while len(nums) < 3:
+            nums.append(0)
+        return ('stable', *nums)
+    if label.startswith('prestable-'):
+        parts = label.split('-')
+        nums = [int(x) for x in parts[1:]]
+        while len(nums) < 3:
+            nums.append(0)
+        return ('prestable', *nums)
+    return (None, 0, 0, 0)
+
+def get_max_branch(branch_labels):
+    stable = []
+    prestable = []
+    for label in branch_labels:
+        kind, major, minor, patch = parse_branch(label)
+        if kind == 'stable':
+            stable.append((major, minor, patch, label))
+        elif kind == 'prestable':
+            prestable.append((major, minor, patch, label))
+    if stable:
+        return max(stable)[-1]
+    if prestable:
+        return max(prestable)[-1]
+    if 'main' in branch_labels:
+        return 'main'
+    return None
+
 def transform_issues_for_ydb(issues: List[Dict[str, Any]], project_fields: Optional[Dict[int, Dict[str, Any]]] = None) -> List[Dict[str, Any]]:
     """Transform GitHub issues data for YDB storage"""
     print("Transforming issues data for YDB...")
@@ -345,12 +380,30 @@ def transform_issues_for_ydb(issues: List[Dict[str, Any]], project_fields: Optio
         
         # Extract labels
         labels = []
+        branch_labels = []
+        env = None
+        priority = None
         for label in issue.get('labels', {}).get('nodes', []):
+            name = label.get('name', '')
             labels.append({
-                'name': label.get('name', ''),
+                'name': name,
                 'color': label.get('color', ''),
                 'description': label.get('description', '')
             })
+            # branch detection (main, stable-*, prestable-*)
+            if name == 'main' or name.startswith('stable-') or name.startswith('prestable-'):
+                branch_labels.append(name)
+            # env detection
+            if name.startswith('env:'):
+                env = name
+            # priority detection
+            if name.startswith('prio:'):
+                priority = name
+        branch = ';'.join(branch_labels) if branch_labels else None
+        max_branch = get_max_branch(branch_labels) if branch_labels else None
+        info = {'branch': branch, 'max_branch': max_branch, 'env': env, 'priority': priority}
+        # Issue type from project fields
+        issue_type = issue_project_fields.get('type') or issue_project_fields.get('Type')
         
         # Extract assignees
         assignees = []
@@ -428,13 +481,6 @@ def transform_issues_for_ydb(issues: List[Dict[str, Any]], project_fields: Optio
             'author_login': author_info['login'],
             'author_url': author_info['url'],
             
-            # Metrics
-            'reactions_count': issue.get('reactions', {}).get('totalCount', 0),
-            'comments_count': issue.get('comments', {}).get('totalCount', 0),
-            'participants_count': issue.get('participants', {}).get('totalCount', 0),
-            'body_length': body_length,
-            'labels_count': labels_count,
-            'assignees_count': assignees_count,
             
             # Repository dimensions
             'repository_name': issue.get('repository', {}).get('name', ''),
@@ -456,6 +502,8 @@ def transform_issues_for_ydb(issues: List[Dict[str, Any]], project_fields: Optio
             'labels': json.dumps(labels) if labels else None,
             'milestone': json.dumps(milestone_info) if milestone_info else None,
             'project_fields': json.dumps(issue_project_fields) if issue_project_fields else None,
+            'info': json.dumps(info) if any(info.values()) else None,
+            'issue_type': issue_type,
             
             # System fields
             'exported_at': now
@@ -509,13 +557,6 @@ def create_issues_table(session, table_path: str):
                 `author_login` Utf8,
                 `author_url` Utf8,
                 
-                -- Metrics (denormalized for BI)
-                `reactions_count` Uint64,
-                `comments_count` Uint64,
-                `participants_count` Uint64,
-                `body_length` Uint64,  -- Text length metric
-                `labels_count` Uint64,  -- Count of labels
-                `assignees_count` Uint64,  -- Count of assignees
                 
                 -- Repository dimensions
                 `repository_name` Utf8,
@@ -537,6 +578,8 @@ def create_issues_table(session, table_path: str):
                 `labels` Json,
                 `milestone` Json,
                 `project_fields` Json,
+                `info` Json,
+                `issue_type` Utf8,
                 
                 -- System fields
                 `exported_at` Timestamp NOT NULL,
@@ -591,13 +634,6 @@ def bulk_upsert_issues(table_client, table_path: str, issues: List[Dict[str, Any
         .add_column("author_login", ydb.OptionalType(ydb.PrimitiveType.Utf8))
         .add_column("author_url", ydb.OptionalType(ydb.PrimitiveType.Utf8))
         
-        # Metrics
-        .add_column("reactions_count", ydb.OptionalType(ydb.PrimitiveType.Uint64))
-        .add_column("comments_count", ydb.OptionalType(ydb.PrimitiveType.Uint64))
-        .add_column("participants_count", ydb.OptionalType(ydb.PrimitiveType.Uint64))
-        .add_column("body_length", ydb.OptionalType(ydb.PrimitiveType.Uint64))
-        .add_column("labels_count", ydb.OptionalType(ydb.PrimitiveType.Uint64))
-        .add_column("assignees_count", ydb.OptionalType(ydb.PrimitiveType.Uint64))
         
         # Repository dimensions
         .add_column("repository_name", ydb.OptionalType(ydb.PrimitiveType.Utf8))
@@ -619,6 +655,8 @@ def bulk_upsert_issues(table_client, table_path: str, issues: List[Dict[str, Any
         .add_column("labels", ydb.OptionalType(ydb.PrimitiveType.Json))
         .add_column("milestone", ydb.OptionalType(ydb.PrimitiveType.Json))
         .add_column("project_fields", ydb.OptionalType(ydb.PrimitiveType.Json))
+        .add_column("info", ydb.OptionalType(ydb.PrimitiveType.Json))
+        .add_column("issue_type", ydb.OptionalType(ydb.PrimitiveType.Utf8))
         
         # System fields
         .add_column("exported_at", ydb.OptionalType(ydb.PrimitiveType.Timestamp))

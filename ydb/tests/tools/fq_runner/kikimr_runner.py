@@ -125,6 +125,8 @@ class BaseTenant(abc.ABC):
         self.enable_logging("PUBLIC_HTTP")
         self.enable_logging("FQ_CONTROL_PLANE_CONFIG")
         self.enable_logging("FQ_ROW_DISPATCHER", LogLevels.TRACE)
+        self.enable_logging("DB_POOL", LogLevels.TRACE)
+        
         # self.enable_logging("GRPC_SERVER")
 
     @abc.abstractclassmethod
@@ -706,6 +708,8 @@ class StreamingOverKikimr(object):
                         ydb.Column('subject_id', ydb.OptionalType(ydb.DataType.String))
                     ).with_column(
                         ydb.Column('vtenant', ydb.OptionalType(ydb.DataType.String))
+                    ).with_column(
+                        ydb.Column('node', ydb.OptionalType(ydb.DataType.String))
                     ).with_primary_keys('subject_type', 'subject_id')
                 )
 
@@ -718,9 +722,9 @@ class StreamingOverKikimr(object):
             for vtenant, tenant in _tenant_mapping.items():
                 query = query + """UPSERT INTO tenants (tenant, vtenant, common, state, state_time) values("{}", "{}", true, 0, CurrentUtcTimestamp());
                 """.format(tenant, vtenant)
-            for cloud, vtenant in configuration.cloud_mapping.items():
-                query = query + """UPSERT INTO mappings (subject_type, subject_id, vtenant) values ("cloud", "{}", "{}");
-                """.format(cloud, vtenant)
+            for cloud, vtenant_with_node in configuration.cloud_mapping.items():
+                query = query + """UPSERT INTO mappings (subject_type, subject_id, vtenant, node) values ("cloud", "{}", "{}", "{}");
+                """.format(cloud, vtenant_with_node[0], vtenant_with_node[1])
             self.exec_db_statement(query)
             self.control_plane.fq_config['control_plane_storage']['use_db_mapping'] = True
 

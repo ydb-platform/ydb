@@ -168,8 +168,12 @@ private:
                         auto subject_type = *parser.ColumnParser(SUBJECT_TYPE_COLUMN_NAME).GetOptionalString();
                         auto subject_id = *parser.ColumnParser(SUBJECT_ID_COLUMN_NAME).GetOptionalString();
                         auto vtenant = *parser.ColumnParser(VTENANT_COLUMN_NAME).GetOptionalString();
-                        auto node = *parser.ColumnParser(NODE_COLUMN_NAME).GetOptionalString();
-                        info.SubjectMapping[subject_type].emplace(subject_id, TTenantInfo::TMapping{TString(vtenant), TString(node)});
+                        auto optionalNode = parser.ColumnParser(NODE_COLUMN_NAME).GetOptionalString();
+                        TString node;
+                        if (optionalNode) {
+                            node = *optionalNode;
+                        }
+                        info.SubjectMapping[subject_type].emplace(subject_id, TTenantInfo::TMapping{TString(vtenant), node});
                     }
                 }
             },

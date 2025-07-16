@@ -55,6 +55,7 @@ message GetTaskRequest {
         string query_executor = 1 [(Ydb.length).le = 100];
     }
     Filter filter = 5;
+    uint32 node_id = 6;
 }
 
 message SignedIdentity {
@@ -122,6 +123,7 @@ message GetTaskResult {
         map<string, Ydb.TypedValue> parameters = 39;
 
         google.protobuf.Timestamp request_submitted_at = 40;
+        string nodes = 41;
     }
     repeated Task tasks = 1;
 }

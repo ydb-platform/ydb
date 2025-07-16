@@ -331,6 +331,7 @@ private:
         request.set_owner_id(GetOwnerId());
         request.set_host(HostName());
         request.set_tenant(TenantName);
+        request.set_node_id(SelfId().NodeId());
         GetTaskCounters.InFly->Inc();
         StartGetTaskTime = TInstant::Now();
         Send(InternalServiceId, new TEvInternalService::TEvGetTaskRequest(request));
@@ -438,6 +439,8 @@ private:
         computeConnection.set_endpoint(task.compute_connection().endpoint());
         computeConnection.set_database(task.compute_connection().database());
         computeConnection.set_usessl(task.compute_connection().usessl());
+
+        LOG_D("NewTask nodes :" << task.nodes());
 
         TRunActorParams params(
             YqSharedResources, CredentialsProviderFactory, S3Gateway, ConnectorClient,

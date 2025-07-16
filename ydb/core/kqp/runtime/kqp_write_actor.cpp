@@ -389,8 +389,6 @@ public:
             std::move(writeIndexes),
             priority);
 
-        // At current time only insert operation can fail.
-        NeedToFlushBeforeCommit |= (operationType == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INSERT);
         CA_LOG_D("Open: token=" << token);
     }
 
@@ -402,6 +400,9 @@ public:
         YQL_ENSURE(ShardedWriteController);
         CA_LOG_D("Write: token=" << token);
         ShardedWriteController->Write(token, operationType, std::move(data));
+
+        // At current time only insert operation can fail.
+        NeedToFlushBeforeCommit |= (operationType == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INSERT);
     }
 
     void Close(TWriteToken token) {
@@ -2018,6 +2019,7 @@ class TKqpBufferWriteActor :public TActorBootstrapped<TKqpBufferWriteActor>, pub
 public:
     enum class EState {
         WRITING, // Allow to write data to buffer.
+        WAITING_TASKS, // Wait for all write tasks to finish (task can read some data).
         FLUSHING, // Force flush (for uncommitted changes visibility). Can't accept any writes in this state.
         PREPARING, // Do preparation for commit. All writers are closed. New writes wouldn't be accepted.
         COMMITTING, // Do commit. All writers are closed. New writes wouldn't be accepted.
@@ -2048,7 +2050,6 @@ public:
 
     static constexpr char ActorName[] = "KQP_BUFFER_WRITE_ACTOR";
 
-    // TODO: split states
     STFUNC(StateWrite) {
         try {
             switch (ev->GetTypeRewrite()) {
@@ -2057,6 +2058,48 @@ public:
                 hFunc(TEvKqpBuffer::TEvCommit, Handle);
                 hFunc(TEvKqpBuffer::TEvRollback, Handle);
                 hFunc(TEvBufferWrite, Handle);
+            default:
+                AFL_ENSURE(false)("unknown message", ev->GetTypeRewrite());
+            }
+        } catch (const TMemoryLimitExceededException&) {
+            ReplyMemoryLimitErrorAndDie();
+        } catch (...) {
+            ReplyCurrentExceptionErrorAndDie();
+        }
+    }
+
+    STFUNC(StateWaitTasks) {
+        try {
+            switch (ev->GetTypeRewrite()) {
+                hFunc(TEvKqpBuffer::TEvTerminate, Handle);
+            default:
+                AFL_ENSURE(false)("unknown message", ev->GetTypeRewrite());
+            }
+        } catch (const TMemoryLimitExceededException&) {
+            ReplyMemoryLimitErrorAndDie();
+        } catch (...) {
+            ReplyCurrentExceptionErrorAndDie();
+        }
+    }
+
+    STFUNC(StateFlush) {
+        try {
+            switch (ev->GetTypeRewrite()) {
+                hFunc(TEvKqpBuffer::TEvTerminate, Handle);
+            default:
+                AFL_ENSURE(false)("unknown message", ev->GetTypeRewrite());
+            }
+        } catch (const TMemoryLimitExceededException&) {
+            ReplyMemoryLimitErrorAndDie();
+        } catch (...) {
+            ReplyCurrentExceptionErrorAndDie();
+        }
+    }
+
+    STFUNC(StateCommit) {
+        try {
+            switch (ev->GetTypeRewrite()) {
+                hFunc(TEvKqpBuffer::TEvTerminate, Handle);
 
                 hFunc(TEvTxProxy::TEvProposeTransactionStatus, Handle);
                 hFunc(TEvPersQueue::TEvProposeTransactionResult, Handle);
@@ -2066,21 +2109,27 @@ public:
                 AFL_ENSURE(false)("unknown message", ev->GetTypeRewrite());
             }
         } catch (const TMemoryLimitExceededException&) {
-            ReplyErrorAndDie(
-                NYql::NDqProto::StatusIds::PRECONDITION_FAILED,
-                NYql::TIssuesIds::KIKIMR_PRECONDITION_FAILED,
-                TStringBuilder() << "Memory limit exception"
-                    << ", current limit is " << Alloc->GetLimit() << " bytes.",
-                {});
-            return;
+            ReplyMemoryLimitErrorAndDie();
         } catch (...) {
-            ReplyErrorAndDie(
-                NYql::NDqProto::StatusIds::INTERNAL_ERROR,
-                NYql::TIssuesIds::KIKIMR_INTERNAL_ERROR,
-                CurrentExceptionMessage(),
-                {});
-            return;
+            ReplyCurrentExceptionErrorAndDie();
         }
+    }
+
+    void ReplyMemoryLimitErrorAndDie() {
+        ReplyErrorAndDie(
+            NYql::NDqProto::StatusIds::PRECONDITION_FAILED,
+            NYql::TIssuesIds::KIKIMR_PRECONDITION_FAILED,
+            TStringBuilder() << "Memory limit exception"
+                << ", current limit is " << Alloc->GetLimit() << " bytes.",
+            {});
+    }
+
+    void ReplyCurrentExceptionErrorAndDie() {
+        ReplyErrorAndDie(
+            NYql::NDqProto::StatusIds::INTERNAL_ERROR,
+            NYql::TIssuesIds::KIKIMR_INTERNAL_ERROR,
+            CurrentExceptionMessage(),
+            {});
     }
 
     void Handle(TEvBufferWrite::TPtr& ev) {
@@ -2264,7 +2313,9 @@ public:
         }
         ProcessAckQueue();
 
-        if (State == EState::FLUSHING) {
+        if (State == EState::WAITING_TASKS && WriteTasks.empty()) {
+            OnAllTasksFinised();
+        } else if (State == EState::FLUSHING) {
             bool isEmpty = true;
             ForEachWriteActor([&](const TKqpTableWriteActor* actor, const TActorId) {
                 if (NeedToFlushActor(actor)) {
@@ -2274,7 +2325,7 @@ public:
             if (isEmpty) {
                 OnFlushed();
             }
-        }
+        } 
         return true;
     }
 
@@ -2312,10 +2363,19 @@ public:
     }
 
     void ProcessTasks() {
-        for (auto& [pathId, writeTask] : WriteTasks) {
+        TVector<ui64> finishedCookies;
+        for (auto& [cookie, writeTask] : WriteTasks) {
             do {
                 writeTask.Process();
             } while (writeTask.TryFlush());
+
+            if (writeTask.IsFinished()) {
+                finishedCookies.push_back(cookie);
+            }
+        }
+
+        for (const auto& cookie : finishedCookies) {
+            WriteTasks.erase(cookie);
         }
     }
 
@@ -2365,15 +2425,57 @@ public:
     }
 
     bool Flush(NWilson::TTraceId traceId) {
+        AFL_ENSURE(WriteTasks.empty());
+        YQL_ENSURE(State == EState::WAITING_TASKS);
+        State = EState::FLUSHING;
+
         Counters->BufferActorFlushes->Inc();
         UpdateTracingState("Flush", std::move(traceId));
         OperationStartTime = TInstant::Now();
 
+        ForEachWriteActor([](TKqpTableWriteActor* actor, const TActorId) {
+            actor->FlushBuffers();
+        });
+
         CA_LOG_D("Start flush");
-        YQL_ENSURE(State == EState::WRITING);
-        State = EState::FLUSHING;
         CheckQueuesEmpty();
         return Process();
+    }
+
+    void Commit(ui64 txId, NWilson::TTraceId traceId) {
+        AFL_ENSURE(WriteTasks.empty());
+        ForEachWriteActor([&](TKqpTableWriteActor* actor, const TActorId) {
+            actor->FlushBuffers();
+        });
+
+        if (!TxManager->NeedCommit()) {
+            RollbackAndDie(std::move(traceId));
+        } else if (TxManager->BrokenLocks()) {
+            NYql::TIssues issues;
+            issues.AddIssue(*TxManager->GetLockIssue());
+            ReplyErrorAndDie(
+                NYql::NDqProto::StatusIds::ABORTED,
+                std::move(issues));
+            return;
+        } else if (TxManager->IsSingleShard() && !TxManager->HasOlapTable() && (!WriteInfos.empty() || TxManager->HasTopics())) {
+            TxManager->StartExecute();
+            ImmediateCommit(std::move(traceId));
+        } else {
+            AFL_ENSURE(txId);
+            TxId = txId;
+
+            bool needToFlushBeforeCommit = false;
+            ForEachWriteActor([&](TKqpTableWriteActor* actor, const TActorId) {
+                needToFlushBeforeCommit |= actor->FlushBeforeCommit();
+            });
+
+            if (needToFlushBeforeCommit) {
+                Flush(std::move(traceId));
+            } else {
+                TxManager->StartPrepare();
+                Prepare(std::move(traceId));
+            }
+        }
     }
 
     bool Prepare(std::optional<NWilson::TTraceId> traceId) {
@@ -2381,7 +2483,7 @@ public:
         OperationStartTime = TInstant::Now();
 
         CA_LOG_D("Start prepare for distributed commit");
-        YQL_ENSURE(State == EState::WRITING);
+        YQL_ENSURE(State == EState::WAITING_TASKS);
         State = EState::PREPARING;
         CheckQueuesEmpty();
         AFL_ENSURE(TxId);
@@ -2404,7 +2506,7 @@ public:
         OperationStartTime = TInstant::Now();
 
         CA_LOG_D("Start immediate commit");
-        YQL_ENSURE(State == EState::WRITING);
+        YQL_ENSURE(State == EState::WAITING_TASKS);
         State = EState::COMMITTING;
         IsImmediateCommit = true;
         CheckQueuesEmpty();
@@ -2614,6 +2716,9 @@ public:
         ForEachWriteActor([&](const TKqpTableWriteActor* actor, const TActorId) {
             totalMemory += actor->GetMemory();
         });
+        for (auto& [_, writeTask] : WriteTasks) {
+            totalMemory += writeTask.GetMemory();
+        }
         return totalMemory;
     }
 
@@ -2809,45 +2914,51 @@ public:
 
     void Handle(TEvKqpBuffer::TEvFlush::TPtr& ev) {
         ExecuterActorId = ev->Get()->ExecuterActorId;
-        ForEachWriteActor([](TKqpTableWriteActor* actor, const TActorId) {
-            actor->FlushBuffers();
-        });
-        Flush(std::move(ev->TraceId));
+        for (auto& [_, writeTask] : WriteTasks) {
+            AFL_ENSURE(writeTask.IsClosed());
+        }
+        YQL_ENSURE(State == EState::WRITING);
+        State = EState::WAITING_TASKS;
+        UpdateTracingState("WaitTasks", NWilson::TTraceId(ev->TraceId));
+
+        Become(&TKqpBufferWriteActor::StateWaitTasks);
+        AfterWaitTasksState = TAfterWaitTasksState{
+            .IsCommit = false,
+            .TxId = 0,
+            .TraceId = std::move(ev->TraceId),
+        };
+        Process();
     }
 
     void Handle(TEvKqpBuffer::TEvCommit::TPtr& ev) {
         ExecuterActorId = ev->Get()->ExecuterActorId;
-        ForEachWriteActor([&](TKqpTableWriteActor* actor, const TActorId) {
-            actor->FlushBuffers();
-        });
+        for (auto& [_, writeTask] : WriteTasks) {
+            AFL_ENSURE(writeTask.IsClosed());
+        }
+        YQL_ENSURE(State == EState::WRITING);
+        State = EState::WAITING_TASKS;
+        UpdateTracingState("WaitTasks", NWilson::TTraceId(ev->TraceId));
 
-        if (!TxManager->NeedCommit()) {
-            RollbackAndDie(std::move(ev->TraceId));
-        } else if (TxManager->BrokenLocks()) {
-            NYql::TIssues issues;
-            issues.AddIssue(*TxManager->GetLockIssue());
-            ReplyErrorAndDie(
-                NYql::NDqProto::StatusIds::ABORTED,
-                std::move(issues));
-            return;
-        } else if (TxManager->IsSingleShard() && !TxManager->HasOlapTable() && (!WriteInfos.empty() || TxManager->HasTopics())) {
-            TxManager->StartExecute();
-            ImmediateCommit(std::move(ev->TraceId));
+        Become(&TKqpBufferWriteActor::StateWaitTasks);
+        AfterWaitTasksState = TAfterWaitTasksState{
+            .IsCommit = true,
+            .TxId = ev->Get()->TxId,
+            .TraceId = std::move(ev->TraceId),
+        };
+        Process();
+    }
+
+    void OnAllTasksFinised() {
+        AFL_ENSURE(AfterWaitTasksState);
+        auto afterWaitTasksState = std::move(*AfterWaitTasksState);
+        AfterWaitTasksState = std::nullopt;
+
+        if (afterWaitTasksState.IsCommit) {
+            Become(&TKqpBufferWriteActor::StateCommit);
+            Commit(afterWaitTasksState.TxId, std::move(afterWaitTasksState.TraceId));
         } else {
-            AFL_ENSURE(ev->Get()->TxId);
-            TxId = ev->Get()->TxId;
-
-            bool needToFlushBeforeCommit = false;
-            ForEachWriteActor([&](TKqpTableWriteActor* actor, const TActorId) {
-                needToFlushBeforeCommit |= actor->FlushBeforeCommit();
-            });
-
-            if (needToFlushBeforeCommit) {
-                Flush(std::move(ev->TraceId));
-            } else {
-                TxManager->StartPrepare();
-                Prepare(std::move(ev->TraceId));
-            }
+            Become(&TKqpBufferWriteActor::StateFlush);
+            Flush(std::move(afterWaitTasksState.TraceId));
         }
     }
 
@@ -3226,7 +3337,8 @@ public:
         YQL_ENSURE(State == EState::FLUSHING);
         UpdateTracingState("Write", BufferWriteActorSpan.GetTraceId());
         OnOperationFinished(Counters->BufferActorFlushLatencyHistogram);
-        State = EState::WRITING;
+        State = EState::WRITING; // TODO: use only StateFunc
+        Become(&TKqpBufferWriteActor::StateWrite);
 
         ForEachWriteActor([&](TKqpTableWriteActor* actor, const TActorId) {
             AFL_ENSURE(TxId || actor->IsEmpty());
@@ -3403,6 +3515,14 @@ private:
     TIntrusivePtr<NTxProxy::TTxProxyMon> TxProxyMon;
     THashMap<ui64, TInstant> SendTime;
     TInstant OperationStartTime;
+
+    struct TAfterWaitTasksState {
+        bool IsCommit = false;
+        ui64 TxId = 0;
+        NWilson::TTraceId TraceId;
+    };
+
+    std::optional<TAfterWaitTasksState> AfterWaitTasksState;
 
     NWilson::TSpan BufferWriteActorSpan;
     NWilson::TSpan BufferWriteActorStateSpan;

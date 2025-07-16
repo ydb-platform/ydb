@@ -138,7 +138,7 @@ namespace NKikimr::NStorage {
             return;
         }
 
-        Self->StateStorageSelfHealActor = RegisterWithSameMailbox(new TStateStorageSelfhealActor(Sender, Cookie, TDuration::Seconds(cmd.GetWaitForConfigStep()), std::move(currentConfig), std::move(targetConfig)));
+        Self->StateStorageSelfHealActor = Register(new TStateStorageSelfhealActor(Sender, Cookie, TDuration::Seconds(cmd.GetWaitForConfigStep()), std::move(currentConfig), std::move(targetConfig)));
         auto ev = PrepareResult(TResult::OK, std::nullopt);
         Finish(Sender, SelfId(), ev.release(), 0, Cookie);
     }

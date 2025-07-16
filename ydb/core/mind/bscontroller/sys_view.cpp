@@ -506,21 +506,6 @@ void TBlobStorageController::UpdateSystemViews() {
         CopyInfo(state.Groups, update->DeletedGroups, GroupMap, SysViewChangedGroups, finder);
         CopyInfo(state.StoragePools, update->DeletedStoragePools, StoragePools, SysViewChangedStoragePools, finder);
 
-        /*for (const auto& groupId : SysViewChangedGroups) {
-            if (const auto it = GroupMap.find(groupId); it != GroupMap.end()) {
-                const auto& group = it->second;
-                if (group->BridgeGroupInfo) {
-                    NKikimrBlobStorage::TGroupInfo groupInfoPb;
-                    bool success = groupInfoPb.ParseFromString(*group->BridgeGroupInfo);
-                    Y_DEBUG_ABORT_UNLESS(success);
-                    for (auto bridgeGroupId : groupInfoPb.GetBridgeGroupIds()) {
-                        state.Groups[TGroupId::FromValue(bridgeGroupId)].SetProxyGroupId(groupId.GetRawId());
-                    }
-                }
-            }
-        }*/
-
-
         // process static slots and static groups
         for (const auto& [pdiskId, pdisk] : StaticPDisks) {
             if (SysViewChangedPDisks.count(pdiskId) && !FindPDisk(pdiskId)) {
@@ -595,6 +580,11 @@ void TBlobStorageController::UpdateSystemViews() {
                 const auto& status = group.GetStatus(staticFinder);
                 pb->SetOperatingStatus(NKikimrBlobStorage::TGroupStatus::E_Name(status.OperatingStatus));
                 pb->SetExpectedStatus(NKikimrBlobStorage::TGroupStatus::E_Name(status.ExpectedStatus));
+
+                for (size_t i = 0; i < group.Info->GetBridgeGroupIds().size(); ++i) {
+                    state.Groups[group.Info->GetBridgeGroupIds()[i]].SetProxyGroupId(group.Info->GroupID.GetRawId());
+                    state.Groups[group.Info->GetBridgeGroupIds()[i]].SetBridgePileId(i);
+                }
             }
         }
 
@@ -615,15 +605,6 @@ void TBlobStorageController::UpdateSystemViews() {
                     if (it->second.HasAvailableSize()) {
                         pb.SetAvailableSize(Min<ui64>(pb.HasAvailableSize() ? pb.GetAvailableSize() : Max<ui64>(),
                             it->second.GetAvailableSize()));
-                    }
-
-                    pb->SetProxyGroupId(group.GetBridgeGroupIds().size());
-
-                    for (ui32 bridgeGroupRawId : group.GetBridgeGroupIds()) {
-                        auto bridgeGroupId = TGroupId::FromValue(bridgeGroupRawId);
-                        if (true || SysViewChangedGroups.contains(bridgeGroupId)) {
-                            state.Groups[bridgeGroupId].SetProxyGroupId(group.GetGroupID());
-                        }
                     }
                 }
             }

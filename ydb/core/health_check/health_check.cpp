@@ -3007,7 +3007,7 @@ public:
             context.OverallStatus = status;
             if (status != Ydb::Monitoring::StatusFlag::GREEN) {
                 TStringBuilder issue;
-                switch (status) {
+                switch (maxStatus) {
                     default:
                     case Ydb::Monitoring::StatusFlag::BLUE:
                         issue << "Group has issues";

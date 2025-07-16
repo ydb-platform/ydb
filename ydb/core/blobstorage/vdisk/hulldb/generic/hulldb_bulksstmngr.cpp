@@ -99,24 +99,15 @@ namespace NKikimr {
                 Die(ctx);
             }
 
-            void HandlePoison() {
-                ActiveActors.KillAndClear(TActivationContext::AsActorContext());
-                PassAway();
-            }
-
-            void Handle(const TEvents::TEvActorDied::TPtr& ev) {
-                // One LevelSegmentLoader termintaed unsuccessfully, kill all other actors,
-                // send TEvActorDied to the parent and Die
-                ActiveActors.Erase(ev->Sender);
-                ActiveActors.KillAndClear(TActivationContext::AsActorContext());
-                Send(LocalRecoveryActorId, new TEvents::TEvActorDied);
-                PassAway();
+            void HandlePoison(TEvents::TEvPoisonPill::TPtr &ev, const TActorContext &ctx) {
+                Y_UNUSED(ev);
+                ActiveActors.KillAndClear(ctx);
+                Die(ctx);
             }
 
             STRICT_STFUNC(StateFunc,
                 HFunc(THullSegLoaded, Handle)
-                hFunc(TEvents::TEvActorDied, Handle)
-                cFunc(TEvents::TEvPoisonPill::EventType, HandlePoison)
+                HFunc(TEvents::TEvPoisonPill, HandlePoison)
             )
         };
     } // NLoaderActor

@@ -41,6 +41,33 @@ namespace NKikimr::NCms {
 
 namespace NSentinel {
 
+/// TNodeStatusComputer
+
+bool TNodeStatusComputer::GetCurrentState() const {
+    return ActualState == ENodeStatus::GOOD;
+}
+
+bool TNodeStatusComputer::Compute() {
+    if (ActualState != CurrentState
+        && ((CurrentState == ENodeStatus::BAD && StateCounter >= BadStateLimit)
+        || (CurrentState == ENodeStatus::GOOD && StateCounter >= GoodStateLimit))) {
+        ActualState = CurrentState;
+        return true;
+    }
+    return false;
+}
+
+void TNodeStatusComputer::AddState(ENodeStatus newState) {
+    if (newState == CurrentState) {
+        if (StateCounter != Max<ui64>()) {
+            StateCounter++;
+        }
+    } else {
+        CurrentState = newState;
+        StateCounter = 1;
+    }
+}
+
 /// TPDiskStatusComputer
 
 TPDiskStatusComputer::TPDiskStatusComputer(const ui32& defaultStateLimit, const ui32& goodStateLimit, const TLimitsMap& stateLimits)
@@ -270,7 +297,7 @@ TClusterMap::TClusterMap(TSentinelState::TPtr state)
 
 void TClusterMap::AddPDisk(const TPDiskID& id, const bool inGoodState) {
     Y_ABORT_UNLESS(State->Nodes.contains(id.NodeId));
-    const auto& node = State->Nodes[id.NodeId];
+    const auto& node = State->Nodes.at(id.NodeId);
     const auto& location = node.Location;
 
     ByDataCenter[location.HasKey(TNodeLocation::TKeys::DataCenter) ? location.GetDataCenterId() : ""].insert(id);
@@ -520,21 +547,28 @@ class TConfigUpdater: public TUpdaterBase<TEvSentinel::TEvConfigUpdated, TConfig
         }
 
         if (record.HasState()) {
-            SentinelState->Nodes.clear();
+            std::unordered_set<ui32> nodesToDelete;
+            for (const auto &[nodeId, _] : SentinelState->Nodes) {
+                nodesToDelete.insert(nodeId);
+            }
             for (const auto& host : record.GetState().GetHosts()) {
                 if (host.HasNodeId() && host.HasLocation() && host.HasName()) {
                     THashSet<NKikimrCms::EMarker> markers;
                     for (auto marker : host.GetMarkers()) {
                         markers.insert(static_cast<NKikimrCms::EMarker>(marker));
                     }
-
-                    SentinelState->Nodes.emplace(host.GetNodeId(), TNodeInfo{
-                        .Host = host.GetName(),
-                        .Location = NActors::TNodeLocation(host.GetLocation()),
-                        .PileId = host.HasPileId() ? TMaybeFail<ui32>(host.GetPileId()) : Nothing(),
-                        .Markers = std::move(markers),
-                    });
+                    auto &node = SentinelState->Nodes[host.GetNodeId()];
+                    nodesToDelete.erase(host.GetNodeId());
+                    node.Host = host.GetName();
+                    node.Location = NActors::TNodeLocation(host.GetLocation());
+                    node.PileId = host.HasPileId() ? TMaybeFail<ui32>(host.GetPileId()) : Nothing();
+                    node.Markers = std::move(markers);
+                    node.BadStateLimit = Config.NodeBadStateLimit;
+                    node.GoodStateLimit = Config.NodeGoodStateLimit;
                 }
+            }
+            for (const auto& nodeId : nodesToDelete) {
+                SentinelState->Nodes.erase(nodeId);
             }
         }
 
@@ -686,7 +720,7 @@ class TStateUpdater: public TUpdaterBase<TEvSentinel::TEvStateUpdated, TStateUpd
                 ++it;
                 continue;
             }
-            
+
             Y_ABORT_UNLESS(!it->second->IsTouched());
             it->second->AddState(state, isNodeLocked);
             ++it;
@@ -804,9 +838,9 @@ public:
     using TBase::TBase;
 
     void Bootstrap() {
-        for (const auto& [id, _] : SentinelState->PDisks) {
-            if (SentinelState->StateUpdaterWaitNodes.insert(id.NodeId).second) {
-                RequestPDiskState(id.NodeId);
+        for (const auto& [nodeId, _] : SentinelState->Nodes) {
+            if (SentinelState->StateUpdaterWaitNodes.insert(nodeId).second) {
+                RequestPDiskState(nodeId);
             }
         }
 

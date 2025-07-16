@@ -80,7 +80,7 @@ The following constraints apply when using autopartitioning:
 
 Messages are ordered using the `producer_id`. The order of written messages is maintained within `producer_id`.
 
-When used for the first time, a `producer_id` is linked to a topic's [partition](#partitioning) using the round-robin algorithm and all messages with this pair of IDs get into the same partition. The link is removed if there are no new messages using this producer ID for 14 days.
+When used for the first time, a `producer_id` is linked to a topic's [partition](#partitioning) using the round-robin algorithm and all messages with `producer_id` get into the same partition. The link is removed if there are no new messages using this producer ID for 14 days.
 
 {% note warning %}
 
@@ -102,7 +102,7 @@ To accurately calculate the balance, the message processing order is crucial. If
 
 When several application instances read messages from a stream, a message about account top-ups can be received by one instance and a message about debiting by another. In this case, there's no guaranteed instance with accurate balance information. To avoid this issue, you can, for example, save data in the DBMS, share information between application instances, and implement a distributed cache.
 
-{{ ydb-short-name }} can write data so that messages from one source (for example, about transactions from one account) arrive at the same application instance. The source of a message is identified by the producer_id, while the sequence number of a message from the source is used to ensure there are no duplicate messages. {{ydb-short-name}} arranges data streams so that messages from the same source arrive at the same partition. As a result, transaction messages for a given account will always arrive at the same partition and be processed by the application instance linked to this partition. Each of the instances processes its own subset of partitions and there's no need to synchronize the instances.
+{{ ydb-short-name }} can write data so that messages from one source (for example, about transactions from one account) arrive at the same application instance. Each source writes messages with its own unique producer_id, and a sequence number (seqno) is used to prevent duplicate processing. {{ ydb-short-name }} routes all messages with the same producer_id to the same partition. As a result, transaction messages for a given account always arrive at the same partition and are processed by the application instance associated with it. Each instance handles its own subset of partitions, so there is no need for synchronization between instances.
 
 Below is an example when all transactions on accounts with even IDs are transferred to the first instance of the application, and with odd ones — to the second.
 

@@ -1075,24 +1075,6 @@ private:
         return IGraphTransformer::TStatus::Ok;
     }
 
-    TString EncodeResultToYson(const NKikimrMiniKQL::TResult& result, bool& truncated) {
-        TStringStream ysonStream;
-        NYson::TYsonWriter writer(&ysonStream, NYson::EYsonFormat::Binary);
-        NYql::IDataProvider::TFillSettings fillSettings;
-        fillSettings.AllResultsBytesLimit = Nothing();
-        fillSettings.RowsLimitPerWrite = Nothing();
-        KikimrResultToYson(ysonStream, writer, result, {}, fillSettings, truncated);
-
-        TStringStream out;
-        NYson::TYsonWriter writer2((IOutputStream*)&out);
-        writer2.OnBeginMap();
-        writer2.OnKeyedItem("Data");
-        writer2.OnRaw(ysonStream.Str());
-        writer2.OnEndMap();
-
-        return out.Str();
-    }
-
 public:
     TKiSourceCallableExecutionTransformer(TIntrusivePtr<IKikimrGateway> gateway,
         TIntrusivePtr<TKikimrSessionContext> sessionCtx,

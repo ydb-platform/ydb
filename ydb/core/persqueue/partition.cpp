@@ -1950,7 +1950,7 @@ void TPartition::ProcessTxsAndUserActs(const TActorContext& ctx)
 
         ctx.Send(Tablet, PersistRequest.Release(),
                  0, 0,
-                 KVWriteSpan ? KVWriteSpan.GetTraceId() : NWilson::TTraceId());
+                 KVWriteSpan.GetTraceId());
         PersistRequest = nullptr;
         DeletePartitionState = DELETION_IN_PROCESS;
         KVWriteInProgress = true;
@@ -2172,7 +2172,7 @@ void TPartition::RunPersist() {
 
         ctx.Send(HaveWriteMsg ? BlobCache : Tablet, PersistRequest.Release(),
                  0, 0,
-                 KVWriteSpan ? KVWriteSpan.GetTraceId() : NWilson::TTraceId());
+                 KVWriteSpan.GetTraceId());
         KVWriteInProgress = true;
     } else {
         OnProcessTxsAndUserActsWriteComplete(ActorContext());

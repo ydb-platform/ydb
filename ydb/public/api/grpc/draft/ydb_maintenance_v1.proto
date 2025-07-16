@@ -22,4 +22,6 @@ service MaintenanceService {
 
     // Mark action as completed.
     rpc CompleteAction(CompleteActionRequest) returns (ManageActionResponse);
+
+    rpc DrainNode(DrainNodeRequest) returns (DrainNodeResponse);
 }

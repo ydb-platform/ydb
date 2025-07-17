@@ -17,14 +17,14 @@ and timeout (by default, the maximum response time from healthcheck). Documentat
 * 16857:Added information about the processing lag of committed messages to `DescribeConsumer`. [#16857](https://github.com/ydb-platform/ydb/pull/16857) ([Nikolay Shestakov](https://github.com/nshestakov))
 * 16834:Enabled pushdown of string types in Generic provider. [#16834](https://github.com/ydb-platform/ydb/pull/16834) ([Vitaly Isaev](https://github.com/vitalyisaev2))
 * 16076:Added automatic cleanup of temporary tables and directories created during S3 export operations. Previously, users had to manually remove temporary directories and tables that were created as part of the export pipeline. [#16076](https://github.com/ydb-platform/ydb/pull/16076) ([stanislav_shchetinin](https://github.com/stanislav-shchetinin))
-* 18214:Supported import to s3 for topic configuration [#18214](https://github.com/ydb-platform/ydb/pull/18214) ([stanislav_shchetinin](https://github.com/stanislav-shchetinin))
-* 18138:Export topic's configuration to S3 [#18138](https://github.com/ydb-platform/ydb/pull/18138) ([stanislav_shchetinin](https://github.com/stanislav-shchetinin))
-* 18095:Add audit logging on `create tenant` database in console tablet. [#18095](https://github.com/ydb-platform/ydb/pull/18095) ([flown4qqqq](https://github.com/flown4qqqq))
-* 18063:Support new version format Year.Major.Minor.Patch.Hotfix (old format is Year.Major.Minor.Hotfix) [#18063](https://github.com/ydb-platform/ydb/pull/18063) ([Sergey Belyakov](https://github.com/serbel324))
+* 18214:Added support for importing topic configurations from S3. [#18214](https://github.com/ydb-platform/ydb/pull/18214) ([stanislav_shchetinin](https://github.com/stanislav-shchetinin))
+* 18138:Added support for exporting topic configurations to S3. [#18138](https://github.com/ydb-platform/ydb/pull/18138) ([stanislav_shchetinin](https://github.com/stanislav-shchetinin))
+* 18095:Added audit logging to track `create tenant` database actions within the console tablet. [#18095](https://github.com/ydb-platform/ydb/pull/18095) ([flown4qqqq](https://github.com/flown4qqqq))
+* 18063:Added support for the new version format `Year.Major.Minor.Patch.Hotfix` (the old format was `Year.Major.Minor.Hotfix`). [#18063](https://github.com/ydb-platform/ydb/pull/18063) ([Sergey Belyakov](https://github.com/serbel324))
 * 17957:[Added](https://github.com/ydb-platform/ydb/pull/17957) BS Controller settings in the [cluster configuration](https://ydb.tech/docs/ru/reference/configuration/?version=v25.1#blob-storage-config). ([Semyon Danilov](https://github.com/SammyVimes))
-* 17952:Store the access resource ID for cluster information as the `container_id` user attribute in the root database. Users can check permissions on this resource to access cluster-related information. [#17952](https://github.com/ydb-platform/ydb/pull/17952) ([Andrei Rykov](https://github.com/StekPerepolnen))
+* 17952:Implemented storage of access resource ID for cluster information as the `container_id` user attribute in the root database. Users can check permissions on this resource to access cluster-related information. [#17952](https://github.com/ydb-platform/ydb/pull/17952) ([Andrei Rykov](https://github.com/StekPerepolnen))
 * 17804:Added CPU limit per process in CS for integration with Workload Manager. [#17804](https://github.com/ydb-platform/ydb/pull/17804) ([Pisarenko Grigoriy](https://github.com/GrigoriyPA))
-* 17751:Added Create Time, End Time and Created By (user SID) tracking for BuildIndex operations. [#17751](https://github.com/ydb-platform/ydb/pull/17751) ([Vitaliy Filippov](https://github.com/vitalif))
+* 17751:Added `Create Time`, `End Time`, and `Created By` (user SID) tracking for BuildIndex operations. [#17751](https://github.com/ydb-platform/ydb/pull/17751) ([Vitaliy Filippov](https://github.com/vitalif))
 
 ### Bug fixes
 
@@ -67,7 +67,7 @@ and timeout (by default, the maximum response time from healthcheck). Documentat
 * 17982:Fixed an issue where an `ALTER TABLE table RENAME INDEX` statement fails for a vector index. [#17982](https://github.com/ydb-platform/ydb/pull/17982) ([azevaykin](https://github.com/azevaykin))
 * 17814:Fixed the incorrect order in which BuildIndex, Export, and Import operations were listed. (#17817) [#17814](https://github.com/ydb-platform/ydb/pull/17814) ([Vitaliy Filippov](https://github.com/vitalif))
 * 17729:Fixed schema version collisions in serverless DBs. #17184 [#17729](https://github.com/ydb-platform/ydb/pull/17729) ([Semyon](https://github.com/swalrus1))
-* 18401:Fixed an [issue](https://github.com/ydb-platform/ydb/issues/18358). Do not save to local backups destination tables of `ASYNC REPLICATION` and its changefeeds. It prevents duplication of changefeeds and reduces the amount of space the backup takes on disk. [#18401](https://github.com/ydb-platform/ydb/pull/18401) ([Daniil Demin](https://github.com/jepett0))
+* 18401:Fixed an [issue](https://github.com/ydb-platform/ydb/issues/18358) where destination tables of `ASYNC REPLICATION` and its changefeeds were saved to local backups. This fix prevents duplication of changefeeds and reduces the amount of space the backup takes on disk. [#18401](https://github.com/ydb-platform/ydb/pull/18401) ([Daniil Demin](https://github.com/jepett0))
 * 18234:Fixed an [issue](https://github.com/ydb-platform/ydb/issues/18358). Don't allow conflicting read-write transactions to violate serializability after shard restarts. [#18234](https://github.com/ydb-platform/ydb/pull/18234) ([Aleksei Borzenkov](https://github.com/snaury))
 
 ### YDB UI

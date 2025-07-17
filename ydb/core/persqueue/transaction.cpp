@@ -530,7 +530,9 @@ void TDistributedTransaction::BeginPersistSpan(ui64 tabletId, EState state, cons
 {
     PersistSpan = CreateSpan("Topic.Transaction.Persist", tabletId);
     PersistSpan.Attribute("State", NKikimrPQ::TTransaction_EState_Name(state));
-    PersistSpan.Link(traceId);
+    if (traceId) {
+        PersistSpan.Link(traceId);
+    }
 }
 
 void TDistributedTransaction::EndPersistSpan()
@@ -544,7 +546,9 @@ void TDistributedTransaction::EndPersistSpan()
 void TDistributedTransaction::BeginDeleteSpan(ui64 tabletId, const NWilson::TTraceId& traceId)
 {
     DeleteSpan = CreateSpan("Topic.Transaction.Delete", tabletId);
-    DeleteSpan.Link(traceId);
+    if (traceId) {
+        DeleteSpan.Link(traceId);
+    }
 }
 
 void TDistributedTransaction::EndDeleteSpan()

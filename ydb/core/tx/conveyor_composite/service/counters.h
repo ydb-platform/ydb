@@ -36,7 +36,9 @@ private:
 
 public:
     const ::NMonitoring::THistogramPtr WaitingHistogram;
+    const ::NMonitoring::TDynamicCounters::TCounterPtr NoTasks;
     const ::NMonitoring::THistogramPtr TaskExecuteHistogram;
+    const ::NMonitoring::TDynamicCounters::TCounterPtr ValueWeight;
 
     const ::NMonitoring::TDynamicCounters::TCounterPtr ExecuteDuration;
 
@@ -75,7 +77,6 @@ public:
     const ::NMonitoring::TDynamicCounters::TCounterPtr WaitWorkerRate;
     const ::NMonitoring::TDynamicCounters::TCounterPtr UseWorkerRate;
     const ::NMonitoring::TDynamicCounters::TCounterPtr ChangeCPULimitRate;
-    const ::NMonitoring::TDynamicCounters::TCounterPtr NoTasks;
 
     TWorkersPoolCounters(const TString& poolName, const NColumnShard::TCommonCountersOwner& owner);
 

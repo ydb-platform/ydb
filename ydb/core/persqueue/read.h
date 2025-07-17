@@ -205,6 +205,7 @@ namespace NPQ {
 
                         Y_ABORT_UNLESS(outBlobs[pos].Value.empty());
                         outBlobs[pos].Value = r->GetValue();
+                        outBlobs[pos].CreationUnixTime = r->GetCreationUnixTime();
                     } else {
                         LOG_ERROR_S(ctx, NKikimrServices::PERSQUEUE, "Got Error response " << r->GetStatus()
                                         << " for " << i << "'s blob from " << resp.ReadResultSize() << " blobs");

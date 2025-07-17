@@ -71,6 +71,7 @@ public:
         const NJson::TJsonValue* lastMessageNode = nullptr,
         const NJson::TJsonValue* waitTimeUsNode = nullptr);
     TSingleMetric(std::shared_ptr<TSummaryMetric> summary, ui64 value);
+    TSingleMetric(std::shared_ptr<TSummaryMetric> summary);
 
     std::shared_ptr<TSummaryMetric> Summary;
     TAggregation Details;
@@ -315,6 +316,7 @@ class TPlanVisualizer {
 public:
 
     void LoadPlans(const TString& plans, bool simplified = false);
+    void LoadPlans(const NJson::TJsonValue& root);
     void LoadPlan(const TString& planNodeType, const NJson::TJsonValue& root);
     void PostProcessPlans();
     TString PrintSvg();

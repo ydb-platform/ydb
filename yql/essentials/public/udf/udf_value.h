@@ -718,12 +718,12 @@ class TBoxedValueLink: public TBoxedValueBase
 public:
     void Link(TBoxedValueLink* root);
     void Unlink();
-    void InitLinks() { Left = Right = this; }
-    TBoxedValueLink* GetLeft() const { return Left; }
-    TBoxedValueLink* GetRight() const { return Right; }
+    void InitLinks() { Left_ = Right_ = this; }
+    TBoxedValueLink* GetLeft() const { return Left_; }
+    TBoxedValueLink* GetRight() const { return Right_; }
 private:
-    TBoxedValueLink *Left = nullptr;
-    TBoxedValueLink *Right = nullptr;
+    TBoxedValueLink *Left_ = nullptr;
+    TBoxedValueLink *Right_ = nullptr;
 };
 
 class TBoxedValue: public TBoxedValueLink, public TWithUdfAllocator
@@ -925,9 +925,9 @@ protected:
         ui64 Halfs[2] = {0, 0};
 
         TRawEmbeddedValue Embedded;
-        
+
         TRawBoxedValue Boxed;
-        
+
         TRawStringValue String;
 
         struct {
@@ -1127,14 +1127,14 @@ inline TBoxedValue::~TBoxedValue()
 }
 
 inline void TBoxedValueLink::Link(TBoxedValueLink* root) {
-    Left = root;
-    Right = root->Right;
-    Right->Left = Left->Right = this;
+    Left_ = root;
+    Right_ = root->Right_;
+    Right_->Left_ = Left_->Right_ = this;
 }
 
 inline void TBoxedValueLink::Unlink() {
-    std::tie(Right->Left, Left->Right) = std::make_pair(Left, Right);
-    Left = Right = nullptr;
+    std::tie(Right_->Left_, Left_->Right_) = std::make_pair(Left_, Right_);
+    Left_ = Right_ = nullptr;
 }
 
 inline TUnboxedValue TBoxedValueBase::GetDictIterator() const

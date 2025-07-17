@@ -14,74 +14,176 @@ using namespace NKikimr;
 using namespace NSchemeShard;
 using namespace NSchemeShardUT_Private;
 
-Y_UNIT_TEST_SUITE (VectorIndexBuildTest) {
-    Y_UNIT_TEST (BaseCase) {
+namespace {
+    // to check cpu converted to request units it should be big enough
+    const ui64 CpuTimeUsMultiplier = 150;
+
+    template<class TEvType>
+    bool MakeCpuMeteringDeterministic(const TEvType& ev) {
+        auto stats = ev->Get()->Record.MutableMeteringStats();
+        UNIT_ASSERT(stats->HasCpuTimeUs());
+        stats->SetCpuTimeUs((stats->GetReadRows() + stats->GetUploadRows()) * CpuTimeUsMultiplier);
+        return false;
+    }
+
+    auto MakeCpuMeteringDeterministic(TTestBasicRuntime& runtime) {
+        return std::make_tuple(
+            MakeHolder<TBlockEvents<TEvDataShard::TEvSampleKResponse>>(runtime, [&](const auto& ev) {
+                return MakeCpuMeteringDeterministic(ev);
+            }),
+            MakeHolder<TBlockEvents<TEvIndexBuilder::TEvUploadSampleKResponse>>(runtime, [&](const auto& ev) {
+                // special internal Scheme Shard event, no cpu, but AddRead/AddUpload helpers will fix it
+                auto stats = ev->Get()->Record.MutableMeteringStats();
+                UNIT_ASSERT(!stats->HasCpuTimeUs() || stats->GetCpuTimeUs() == (stats->GetReadRows() + stats->GetUploadRows()) * CpuTimeUsMultiplier);
+                stats->SetCpuTimeUs((stats->GetReadRows() + stats->GetUploadRows()) * CpuTimeUsMultiplier);
+                return false;
+            }),
+            MakeHolder<TBlockEvents<TEvDataShard::TEvRecomputeKMeansResponse>>(runtime, [&](const auto& ev) {
+                return MakeCpuMeteringDeterministic(ev);
+            }),
+            MakeHolder<TBlockEvents<TEvDataShard::TEvReshuffleKMeansResponse>>(runtime, [&](const auto& ev) {
+                return MakeCpuMeteringDeterministic(ev);
+            }),
+            MakeHolder<TBlockEvents<TEvDataShard::TEvLocalKMeansResponse>>(runtime, [&](const auto& ev) {
+                return MakeCpuMeteringDeterministic(ev);
+            })
+        );
+    }
+
+    void AddRead(TMeteringStats& stats, ui64 rows, ui64 bytes) {
+        stats.SetReadRows(stats.GetReadRows() + rows);
+        stats.SetReadBytes(stats.GetReadBytes() + bytes);
+        stats.SetCpuTimeUs(stats.GetCpuTimeUs() + rows * CpuTimeUsMultiplier); // see MakeCpuMeteringDeterministic
+    }
+
+    void AddUpload(TMeteringStats& stats, ui64 rows, ui64 bytes) {
+        stats.SetUploadRows(stats.GetUploadRows() + rows);
+        stats.SetUploadBytes(stats.GetUploadBytes() + bytes);
+        stats.SetCpuTimeUs(stats.GetCpuTimeUs() + rows * CpuTimeUsMultiplier); // see MakeCpuMeteringDeterministic
+    }
+}
+
+Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
+    Y_UNIT_TEST(CreateAndDrop) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
 
-        TestCreateExtSubDomain(runtime, ++txId, "/MyRoot",
-                               "Name: \"ResourceDB\"");
-        env.TestWaitNotification(runtime, txId);
-
-        TestAlterExtSubDomain(runtime, ++txId, "/MyRoot",
-                              "StoragePools { "
-                              "  Name: \"pool-1\" "
-                              "  Kind: \"pool-kind-1\" "
-                              "} "
-                              "StoragePools { "
-                              "  Name: \"pool-2\" "
-                              "  Kind: \"pool-kind-2\" "
-                              "} "
-                              "PlanResolution: 50 "
-                              "Coordinators: 1 "
-                              "Mediators: 1 "
-                              "TimeCastBucketsPerMediator: 2 "
-                              "ExternalSchemeShard: true "
-                              "Name: \"ResourceDB\"");
-        env.TestWaitNotification(runtime, txId);
-
-        const auto attrs = AlterUserAttrs({
-            {"cloud_id", "CLOUD_ID_VAL"},
-            {"folder_id", "FOLDER_ID_VAL"},
-            {"database_id", "DATABASE_ID_VAL"},
-        });
-
-        TestCreateExtSubDomain(runtime, ++txId, "/MyRoot", Sprintf(R"(
-            Name: "ServerLessDB"
-            ResourcesDomainKey {
-                SchemeShard: %lu
-                PathId: 2
-            }
-        )", TTestTxConfig::SchemeShard), attrs);
-        env.TestWaitNotification(runtime, txId);
-
-        TString alterData = TStringBuilder()
-                            << "PlanResolution: 50 "
-                            << "Coordinators: 1 "
-                            << "Mediators: 1 "
-                            << "TimeCastBucketsPerMediator: 2 "
-                            << "ExternalSchemeShard: true "
-                            << "ExternalHive: false "
-                            << "Name: \"ServerLessDB\" "
-                            << "StoragePools { "
-                            << "  Name: \"pool-1\" "
-                            << "  Kind: \"pool-kind-1\" "
-                            << "} ";
-        TestAlterExtSubDomain(runtime, ++txId, "/MyRoot", alterData);
-        env.TestWaitNotification(runtime, txId);
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
 
         ui64 tenantSchemeShard = 0;
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/ServerLessDB"),
-                           {NLs::PathExist,
-                            NLs::IsExternalSubDomain("ServerLessDB"),
-                            NLs::ExtractTenantSchemeshard(&tenantSchemeShard)});
+        TestCreateServerLessDb(runtime, env, txId, tenantSchemeShard);
 
-        // Just create main table
         TestCreateTable(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB", R"(
             Name: "Table"
             Columns { Name: "key"       Type: "Uint32" }
             Columns { Name: "embedding" Type: "String" }
+            Columns { Name: "prefix"    Type: "Uint32" }
+            Columns { Name: "value"     Type: "String" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId, tenantSchemeShard);
+
+        // Write data directly into shards
+        WriteVectorTableRows(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB/Table", 0, 0, 200);
+
+        TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB/Table"),
+            {NLs::PathExist, NLs::IndexesCount(0), NLs::PathVersionEqual(3)});
+
+        ui64 buildIndexTx = ++txId;
+        TestBuildVectorIndex(runtime, buildIndexTx, tenantSchemeShard, "/MyRoot/ServerLessDB", "/MyRoot/ServerLessDB/Table", "index1", {"embedding"});
+        env.TestWaitNotification(runtime, buildIndexTx, tenantSchemeShard);
+
+        auto buildIndexOperations = TestListBuildIndex(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB");
+        UNIT_ASSERT_VALUES_EQUAL(buildIndexOperations.EntriesSize(), 1);
+
+        auto buildIndexOperation = TestGetBuildIndex(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB", buildIndexTx);
+        UNIT_ASSERT_VALUES_EQUAL(buildIndexOperation.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_DONE);
+
+        TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB/Table"),
+            {NLs::PathExist, NLs::IndexesCount(1), NLs::PathVersionEqual(6)});
+
+        TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB/Table/index1", true, true, true),
+            {NLs::PathExist, NLs::IndexState(NKikimrSchemeOp::EIndexState::EIndexStateReady)});
+
+        TestForgetBuildIndex(runtime, ++txId, tenantSchemeShard, "/MyRoot/ServerLessDB", buildIndexTx);
+        buildIndexOperations = TestListBuildIndex(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB");
+        UNIT_ASSERT_VALUES_EQUAL(buildIndexOperations.EntriesSize(), 0);
+
+        TestDropTableIndex(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB", R"(
+            TableName: "Table"
+            IndexName: "index1"
+        )");
+        env.TestWaitNotification(runtime, txId, tenantSchemeShard);
+
+        Cerr << "... rebooting scheme shard" << Endl;
+        RebootTablet(runtime, tenantSchemeShard, runtime.AllocateEdgeActor());
+
+        TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB/Table"),
+            {NLs::PathExist, NLs::IndexesCount(0), NLs::PathVersionEqual(8)});
+    }
+
+    Y_UNIT_TEST(RecreatedColumns) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
+
+        ui64 tenantSchemeShard = 0;
+        TestCreateServerLessDb(runtime, env, txId, tenantSchemeShard);
+
+        TestCreateTable(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB", R"(
+            Name: "Table"
+            Columns { Name: "key"       Type: "Uint32" }
+            Columns { Name: "embedding" Type: "String" }
+            Columns { Name: "prefix"    Type: "Uint32" }
+            Columns { Name: "value"     Type: "String" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId, tenantSchemeShard);
+
+        // Test that index build succeeds on recreated columns
+        TestAlterTable(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB", R"(
+            Name: "Table"
+            DropColumns { Name: "embedding" }
+        )");
+        env.TestWaitNotification(runtime, txId, tenantSchemeShard);
+
+        TestAlterTable(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB", R"(
+            Name: "Table"
+            Columns { Name: "embedding"   Type: "String" }
+        )");
+        env.TestWaitNotification(runtime, txId, tenantSchemeShard);
+
+        WriteVectorTableRows(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB/Table", 0, 0, 200, {1, 5, 3, 4});
+
+        TestBuildVectorIndex(runtime, ++txId, tenantSchemeShard, "/MyRoot/ServerLessDB", "/MyRoot/ServerLessDB/Table", "index2", {"embedding"});
+        env.TestWaitNotification(runtime, txId, tenantSchemeShard);
+
+        TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB/Table"),
+            {NLs::PathExist, NLs::IndexesCount(1), NLs::PathVersionEqual(8)});
+    }
+
+    Y_UNIT_TEST(SimpleDuplicates) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
+
+        ui64 tenantSchemeShard = 0;
+        TestCreateServerLessDb(runtime, env, txId, tenantSchemeShard);
+
+        TestCreateTable(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB", R"(
+            Name: "Table"
+            Columns { Name: "key"       Type: "Uint32" }
+            Columns { Name: "embedding" Type: "String" }
+            Columns { Name: "prefix"    Type: "Uint32" }
+            Columns { Name: "value"     Type: "String" }
             KeyColumnNames: ["key"]
             SplitBoundary { KeyPrefix { Tuple { Optional { Uint32: 50 } } } }
             SplitBoundary { KeyPrefix { Tuple { Optional { Uint32: 150 } } } }
@@ -89,38 +191,19 @@ Y_UNIT_TEST_SUITE (VectorIndexBuildTest) {
         env.TestWaitNotification(runtime, txId, tenantSchemeShard);
 
         // Write data directly into shards
-        WriteVectorTableRows(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB/Table", false, 0, 0, 50);
-        WriteVectorTableRows(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB/Table", false, 1, 50, 150);
-        WriteVectorTableRows(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB/Table", false, 2, 150, 200);
-
-        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
-        runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
+        WriteVectorTableRows(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB/Table", 0, 0, 50);
+        WriteVectorTableRows(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB/Table", 1, 50, 150);
+        WriteVectorTableRows(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB/Table", 2, 150, 200);
 
         TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB/Table"),
-                           {NLs::PathExist,
-                            NLs::IndexesCount(0),
-                            NLs::PathVersionEqual(3)});
-
-        TStringBuilder meteringMessages;
-        auto observerHolder = runtime.AddObserver<NMetering::TEvMetering::TEvWriteMeteringJson>([&](NMetering::TEvMetering::TEvWriteMeteringJson::TPtr& event) {
-            Cerr << "grabMeteringMessage has happened" << Endl;
-            meteringMessages << event->Get()->MeteringJson;
-        });
+            {NLs::PathExist, NLs::IndexesCount(0), NLs::PathVersionEqual(3)});
 
         TBlockEvents<TEvDataShard::TEvReshuffleKMeansRequest> reshuffleBlocker(runtime, [&](const auto& ) {
             return true;
         });
 
-        // Build vector index with max_shards_in_flight(1) to guarantee deterministic meteringData
-        ui64 buildIndexId = ++txId;
-        {
-            auto sender = runtime.AllocateEdgeActor();
-            auto request = CreateBuildIndexRequest(buildIndexId, "/MyRoot/ServerLessDB", "/MyRoot/ServerLessDB/Table", TBuildIndexConfig{
-                "index1", NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree, {"embedding"}, {}
-            });
-            request->Record.MutableSettings()->set_max_shards_in_flight(1);
-            ForwardToTablet(runtime, tenantSchemeShard, sender, request);
-        }
+        ui64 buildIndexTx = ++txId;
+        AsyncBuildVectorIndex(runtime, buildIndexTx, tenantSchemeShard, "/MyRoot/ServerLessDB", "/MyRoot/ServerLessDB/Table", "index1", {"embedding"});
 
         // Wait for the first "reshuffle" request (samples will be already collected on the first level)
         // and reboot the scheme shard to verify that its intermediate state is persisted correctly.
@@ -137,8 +220,7 @@ Y_UNIT_TEST_SUITE (VectorIndexBuildTest) {
             }
             return false;
         });
-        reshuffleBlocker.Stop();
-        reshuffleBlocker.Unblock(reshuffleBlocker.size());
+        reshuffleBlocker.Stop().Unblock();
 
         // Reshard the first level table (0build)
         // First bug checked here: after restarting the schemeshard during reshuffle it
@@ -161,25 +243,12 @@ Y_UNIT_TEST_SUITE (VectorIndexBuildTest) {
             }
         }
 
-        level1Blocker.Stop();
-        level1Blocker.Unblock(level1Blocker.size());
+        level1Blocker.Stop().Unblock();
 
         // Now wait for the index build
-        {
-            auto expectedStatus = Ydb::StatusIds::SUCCESS;
-            TAutoPtr<IEventHandle> handle;
-            TEvIndexBuilder::TEvCreateResponse* event = runtime.GrabEdgeEvent<TEvIndexBuilder::TEvCreateResponse>(handle);
-            UNIT_ASSERT(event);
-
-            Cerr << "BUILDINDEX RESPONSE CREATE: " << event->ToString() << Endl;
-            UNIT_ASSERT_EQUAL_C(event->Record.GetStatus(), expectedStatus,
-                                "status mismatch"
-                                    << " got " << Ydb::StatusIds::StatusCode_Name(event->Record.GetStatus())
-                                    << " expected "  << Ydb::StatusIds::StatusCode_Name(expectedStatus)
-                                    << " issues was " << event->Record.GetIssues());
-        }
-
-        env.TestWaitNotification(runtime, buildIndexId, tenantSchemeShard);
+        env.TestWaitNotification(runtime, buildIndexTx, tenantSchemeShard);
+        TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB/Table"),
+            {NLs::PathExist, NLs::IndexesCount(1), NLs::PathVersionEqual(6)});
 
         // Check row count in the posting table
         {
@@ -187,114 +256,659 @@ Y_UNIT_TEST_SUITE (VectorIndexBuildTest) {
             Cerr << "... posting table contains " << rows << " rows" << Endl;
             UNIT_ASSERT_VALUES_EQUAL(rows, 200);
         }
+    }
 
-        auto listing = TestListBuildIndex(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB");
-        UNIT_ASSERT_VALUES_EQUAL(listing.EntriesSize(), 1);
+    Y_UNIT_TEST(PrefixedDuplicates) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
 
-        auto descr = TestGetBuildIndex(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB", buildIndexId);
-        UNIT_ASSERT_VALUES_EQUAL(descr.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_DONE);
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
 
-        const TString meteringData = R"({"usage":{"start":1,"quantity":433,"finish":1,"unit":"request_unit","type":"delta"},"tags":{},"id":"109-72075186233409549-2-0-0-0-0-611-609-11032-11108","cloud_id":"CLOUD_ID_VAL","source_wt":1,"source_id":"sless-docapi-ydb-ss","resource_id":"DATABASE_ID_VAL","schema":"ydb.serverless.requests.v1","folder_id":"FOLDER_ID_VAL","version":"1.0.0"})""\n";
+        ui64 tenantSchemeShard = 0;
+        TestCreateServerLessDb(runtime, env, txId, tenantSchemeShard);
 
-        UNIT_ASSERT_NO_DIFF(meteringMessages, meteringData);
-
-        TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB/Table"),
-                           {NLs::PathExist,
-                            NLs::IndexesCount(1),
-                            NLs::PathVersionEqual(6)});
-
-        TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB/Table/index1", true, true, true),
-                           {NLs::PathExist,
-                            NLs::IndexState(NKikimrSchemeOp::EIndexState::EIndexStateReady)});
-
-        TestForgetBuildIndex(runtime, ++txId, tenantSchemeShard, "/MyRoot/ServerLessDB", buildIndexId);
-        listing = TestListBuildIndex(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB");
-        UNIT_ASSERT_VALUES_EQUAL(listing.EntriesSize(), 0);
-
-        TestDropTableIndex(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB", R"(
-            TableName: "Table"
-            IndexName: "index1"
+        // Just create main table
+        TestCreateTable(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB", R"(
+            Name: "Table"
+            Columns { Name: "key"       Type: "Uint32" }
+            Columns { Name: "embedding" Type: "String" }
+            Columns { Name: "prefix"    Type: "Uint32" }
+            Columns { Name: "value"     Type: "String" }
+            KeyColumnNames: ["key"]
+            SplitBoundary { KeyPrefix { Tuple { Optional { Uint32: 50 } } } }
+            SplitBoundary { KeyPrefix { Tuple { Optional { Uint32: 150 } } } }
         )");
         env.TestWaitNotification(runtime, txId, tenantSchemeShard);
 
+        // Write data directly into shards
+        WriteVectorTableRows(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB/Table", 0, 0, 50);
+        WriteVectorTableRows(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB/Table", 1, 50, 150);
+        WriteVectorTableRows(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB/Table", 2, 150, 200);
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
+
+        TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB/Table"),
+            {NLs::PathExist, NLs::IndexesCount(0), NLs::PathVersionEqual(3)});
+
+        TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction> lockBlocker(runtime, [&](const auto& ev) {
+            const auto& tx = ev->Get()->Record.GetTransaction(0);
+            if (tx.GetOperationType() == NKikimrSchemeOp::ESchemeOpCreateLock &&
+                tx.GetLockConfig().GetName() == "indexImplPostingTable0build") {
+                return true;
+            }
+            return false;
+        });
+
+        // Build vector index with max_shards_in_flight > 1 to guarantee double upload of the same shard
+        const ui64 buildIndexId = ++txId;
+        AsyncBuildVectorIndex(runtime, buildIndexId, tenantSchemeShard, "/MyRoot/ServerLessDB", "/MyRoot/ServerLessDB/Table", "index1", {"prefix", "embedding"});
+
+        // Wait for the "lock" request
+        runtime.WaitFor("LockBuildRequest", [&]{ return lockBlocker.size(); });
+        lockBlocker.Stop();
+
+        // Reshard the first level secondary-index-like prefix table (0build)
+        // Force out-of-order shard indexes (1, 3, 2)
+        {
+            auto indexDesc = DescribePath(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB/Table/index1/indexImplPostingTable0build", true, true, true);
+            auto parts = indexDesc.GetPathDescription().GetTablePartitions();
+            UNIT_ASSERT_EQUAL(parts.size(), 1);
+            TestSplitTable(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB/Table/index1/indexImplPostingTable0build", Sprintf(R"(
+                SourceTabletId: %lu
+                SplitBoundary { KeyPrefix { Tuple { Optional { Uint32: 10 } } Tuple { Optional { Uint32: 100 } } } }
+            )", parts[0].GetDatashardId()));
+            env.TestWaitNotification(runtime, txId, tenantSchemeShard);
+        }
+        {
+            auto indexDesc = DescribePath(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB/Table/index1/indexImplPostingTable0build", true, true, true);
+            auto parts = indexDesc.GetPathDescription().GetTablePartitions();
+            UNIT_ASSERT_EQUAL(parts.size(), 2);
+            TestSplitTable(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB/Table/index1/indexImplPostingTable0build", Sprintf(R"(
+                SourceTabletId: %lu
+                SplitBoundary { KeyPrefix { Tuple { Optional { Uint32: 5 } } Tuple { Optional { Uint32: 100 } } } }
+            )", parts[0].GetDatashardId()));
+            env.TestWaitNotification(runtime, txId, tenantSchemeShard);
+        }
+
+        int prefixSeen = 0;
+        TBlockEvents<TEvDataShard::TEvPrefixKMeansRequest> prefixBlocker(runtime, [&](const auto& ) {
+            return (++prefixSeen) == 2;
+        });
+        TBlockEvents<TEvDataShard::TEvPrefixKMeansResponse> prefixResponseBlocker(runtime, [&](const auto& ) {
+            return true;
+        });
+
+        lockBlocker.Unblock(lockBlocker.size());
+
+        // Wait for the first scan to finish to prevent it from aborting on split
+        // Wait for the second PrefixKMeansRequest and reboot the scheme shard
+        runtime.WaitFor("Second PrefixKMeansRequest", [&]{ return prefixBlocker.size() && prefixResponseBlocker.size(); });
         Cerr << "... rebooting scheme shard" << Endl;
         RebootTablet(runtime, tenantSchemeShard, runtime.AllocateEdgeActor());
 
+        prefixResponseBlocker.Stop();
+        prefixResponseBlocker.Unblock(prefixResponseBlocker.size());
+        prefixBlocker.Stop();
+        prefixBlocker.Unblock(prefixBlocker.size());
+
+        // Now wait for the index build
+        env.TestWaitNotification(runtime, buildIndexId, tenantSchemeShard);
         TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB/Table"),
-                           {NLs::PathExist,
-                            NLs::IndexesCount(0),
-                            NLs::PathVersionEqual(8)});
+            {NLs::PathExist, NLs::IndexesCount(1), NLs::PathVersionEqual(6)});
 
-        // Test that index build succeeds on recreated columns
+        // Check row count in the posting table
+        {
+            auto rows = CountRows(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB/Table/index1/indexImplPostingTable");
+            Cerr << "... posting table contains " << rows << " rows" << Endl;
+            UNIT_ASSERT_VALUES_EQUAL(rows, 200);
+        }
+    }
 
-        TestAlterTable(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB", R"(
-              Name: "Table"
-              DropColumns { Name: "embedding" }
-        )");
-        env.TestWaitNotification(runtime, txId, tenantSchemeShard);
+    Y_UNIT_TEST(Metering_CommonDB) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
 
-        TestAlterTable(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB", R"(
-              Name: "Table"
-              Columns { Name: "embedding"   Type: "String" }
-        )");
-        env.TestWaitNotification(runtime, txId, tenantSchemeShard);
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
+        auto deterministicMetering = MakeCpuMeteringDeterministic(runtime);
 
-        TestBuildVectorIndex(runtime, ++txId, tenantSchemeShard, "/MyRoot/ServerLessDB", "/MyRoot/ServerLessDB/Table", "index2", "embedding");
-        env.TestWaitNotification(runtime, txId, tenantSchemeShard);
-
-        // CommonDB
-        TestCreateExtSubDomain(runtime, ++txId, "/MyRoot",
-                               "Name: \"CommonDB\"");
+        TestCreateExtSubDomain(runtime, ++txId, "/MyRoot", "Name: \"CommonDB\"");
         env.TestWaitNotification(runtime, txId);
 
         TestAlterExtSubDomain(runtime, ++txId, "/MyRoot",
-                              "StoragePools { "
-                              "  Name: \"pool-3\" "
-                              "  Kind: \"pool-kind-3\" "
-                              "} "
-                              "PlanResolution: 50 "
-                              "Coordinators: 1 "
-                              "Mediators: 1 "
-                              "TimeCastBucketsPerMediator: 2 "
-                              "ExternalSchemeShard: true "
-                              "Name: \"CommonDB\"");
+            "StoragePools { "
+            "  Name: \"pool-3\" "
+            "  Kind: \"pool-kind-3\" "
+            "} "
+            "PlanResolution: 50 "
+            "Coordinators: 1 "
+            "Mediators: 1 "
+            "TimeCastBucketsPerMediator: 2 "
+            "ExternalSchemeShard: true "
+            "Name: \"CommonDB\"");
         env.TestWaitNotification(runtime, txId);
 
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/CommonDB"),
-                           {NLs::PathExist,
-                            NLs::IsExternalSubDomain("CommonDB"),
-                            NLs::ExtractTenantSchemeshard(&tenantSchemeShard)});
+        ui64 tenantSchemeShard = 0;
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/CommonDB"), {
+            NLs::PathExist,
+            NLs::IsExternalSubDomain("CommonDB"),
+            NLs::ExtractTenantSchemeshard(&tenantSchemeShard)});
 
         TestCreateTable(runtime, tenantSchemeShard, ++txId, "/MyRoot/CommonDB", R"(
             Name: "Table"
             Columns { Name: "key"       Type: "Uint32" }
             Columns { Name: "embedding" Type: "String" }
+            Columns { Name: "prefix"    Type: "Uint32" }
+            Columns { Name: "value"     Type: "String" }
             KeyColumnNames: ["key"]
         )");
         env.TestWaitNotification(runtime, txId, tenantSchemeShard);
 
-        WriteVectorTableRows(runtime, tenantSchemeShard, ++txId, "/MyRoot/CommonDB/Table", false, 0, 100, 300);
+        WriteVectorTableRows(runtime, tenantSchemeShard, ++txId, "/MyRoot/CommonDB/Table", 0, 100, 300);
 
-        TVector<TString> billRecords;
-        observerHolder = runtime.AddObserver<NMetering::TEvMetering::TEvWriteMeteringJson>([&](NMetering::TEvMetering::TEvWriteMeteringJson::TPtr& event) {
-            billRecords.push_back(event->Get()->MeteringJson);
+        TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/CommonDB/Table"), {
+            NLs::PathExist,
+            NLs::IndexesCount(0),
+            NLs::PathVersionEqual(3)});
+
+        TBlockEvents<NMetering::TEvMetering::TEvWriteMeteringJson> meteringBlocker(runtime, [&](const auto& ev) {
+            Cerr << "TEvWriteMeteringJson " << ev->Get()->MeteringJson << Endl;
+            return true;
         });
 
-        TestBuildVectorIndex(runtime, ++txId, tenantSchemeShard, "/MyRoot/CommonDB", "/MyRoot/CommonDB/Table", "index1", "embedding");
-        buildIndexId = txId;
+        // Initiate index build:
+        ui64 buildIndexTx = ++txId;
+        TestBuildVectorIndex(runtime, buildIndexTx, tenantSchemeShard, "/MyRoot/CommonDB", "/MyRoot/CommonDB/Table", "index1", {"embedding"});
+        {
+            auto buildIndexOperations = TestListBuildIndex(runtime, tenantSchemeShard, "/MyRoot/CommonDB");
+            UNIT_ASSERT_VALUES_EQUAL(buildIndexOperations.EntriesSize(), 1);
+            auto buildIndexOperation = TestGetBuildIndex(runtime, tenantSchemeShard, "/MyRoot/CommonDB", buildIndexTx);
+            UNIT_ASSERT_VALUES_EQUAL(buildIndexOperation.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_PREPARING);
 
-        listing = TestListBuildIndex(runtime, tenantSchemeShard, "/MyRoot/CommonDB");
-        UNIT_ASSERT_VALUES_EQUAL(listing.EntriesSize(), 1);
+            TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/CommonDB/Table"), {
+                NLs::PathExist,
+                NLs::IndexesCount(0),
+                NLs::PathVersionEqual(3)});
+        }
 
-        env.TestWaitNotification(runtime, txId, tenantSchemeShard);
+        // Wait and check Filling state:
+        TBlockEvents<TEvDataShard::TEvLocalKMeansResponse> localKBlocker(runtime, [&](const auto&) {
+            return true;
+        });
+        runtime.WaitFor("localK", [&]{ return localKBlocker.size(); });
+        {
+            auto buildIndexOperations = TestListBuildIndex(runtime, tenantSchemeShard, "/MyRoot/CommonDB");
+            UNIT_ASSERT_VALUES_EQUAL(buildIndexOperations.EntriesSize(), 1);
+            auto buildIndexOperation = TestGetBuildIndex(runtime, tenantSchemeShard, "/MyRoot/CommonDB", buildIndexTx);
+            UNIT_ASSERT_VALUES_EQUAL(buildIndexOperation.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_TRANSFERING_DATA);
 
-        descr = TestGetBuildIndex(runtime, tenantSchemeShard, "/MyRoot/CommonDB", txId);
-        UNIT_ASSERT_VALUES_EQUAL(descr.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_DONE);
+            TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/CommonDB/Table"), {
+                NLs::PathExist,
+                NLs::IndexesCount(1),
+                NLs::PathVersionEqual(4)});
+            TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/CommonDB/Table/index1", true, true, true), {
+                NLs::PathExist,
+                NLs::IndexState(NKikimrSchemeOp::EIndexState::EIndexStateWriteOnly)});
+        }
+        localKBlocker.Stop().Unblock();
 
-        UNIT_ASSERT_VALUES_EQUAL(billRecords.size(), 0);
+        // Wait Done state:
+        env.TestWaitNotification(runtime, buildIndexTx, tenantSchemeShard);
+        {
+            auto buildIndexOperations = TestListBuildIndex(runtime, tenantSchemeShard, "/MyRoot/CommonDB");
+            UNIT_ASSERT_VALUES_EQUAL(buildIndexOperations.EntriesSize(), 1);
+            auto buildIndexOperation = TestGetBuildIndex(runtime, tenantSchemeShard, "/MyRoot/CommonDB", buildIndexTx);
+            UNIT_ASSERT_VALUES_EQUAL(buildIndexOperation.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_DONE);
+
+            TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/CommonDB/Table"), {
+                NLs::PathExist,
+                NLs::IndexesCount(1),
+                NLs::PathVersionEqual(6)});
+            TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/CommonDB/Table/index1", true, true, true), {
+                NLs::PathExist,
+                NLs::IndexState(NKikimrSchemeOp::EIndexState::EIndexStateReady)});
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(meteringBlocker.size(), 0);
     }
 
-    Y_UNIT_TEST_FLAG(VectorIndexDescriptionIsPersisted, prefixed) {
+    Y_UNIT_TEST_FLAG(Metering_ServerLessDB, smallScanBuffer) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
+        auto deterministicMetering = MakeCpuMeteringDeterministic(runtime);
+
+        ui64 tenantSchemeShard = 0;
+        TestCreateServerLessDb(runtime, env, txId, tenantSchemeShard);
+
+        TestCreateTable(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB", R"(
+            Name: "Table"
+            Columns { Name: "key"       Type: "Uint32" }
+            Columns { Name: "embedding" Type: "String" }
+            Columns { Name: "prefix"    Type: "Uint32" }
+            Columns { Name: "value"     Type: "String" }
+            KeyColumnNames: ["key"]
+            SplitBoundary { KeyPrefix { Tuple { Optional { Uint32: 50 } } } }
+            SplitBoundary { KeyPrefix { Tuple { Optional { Uint32: 150 } } } }
+        )");
+        env.TestWaitNotification(runtime, txId, tenantSchemeShard);
+
+        // Write data directly into shards
+        const ui32 K = 4;
+        const ui32 tableRows = 200;
+        const ui64 tableRowBytes = 9; // key:Uint32 (4 bytes), embedding:String (5 bytes)
+        const ui64 tableBytes = tableRows * tableRowBytes;
+        const ui64 buildRowBytes = 17; // parent:Uint64 (8 bytes), key:Uint32 (4 bytes), embedding:String (5 bytes)
+        const ui64 buildBytes = tableRows * buildRowBytes;
+        const ui64 postingRowBytes = 12; // parent:Uint64 (8 bytes), key:Uint32 (4 bytes)
+        const ui64 postingBytes = tableRows * postingRowBytes;
+        const ui64 levelRowBytes = 21; // parent:Uint64 (8 bytes), id:Uint64 (8 bytes), embedding:String (5 bytes)
+        WriteVectorTableRows(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB/Table", 0, 0, 50);
+        WriteVectorTableRows(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB/Table", 1, 50, 150);
+        WriteVectorTableRows(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB/Table", 2, 150, 200);
+
+        TBlockEvents<NMetering::TEvMetering::TEvWriteMeteringJson> meteringBlocker(runtime, [&](const auto& ev) {
+            Cerr << "TEvWriteMeteringJson " << ev->Get()->MeteringJson << Endl;
+            return true;
+        });
+        TString previousBillId = "0-0-0-0";
+
+        TMeteringStats billingStats = TMeteringStatsHelper::ZeroValue();
+        TMeteringStats expectedBillingStats = TMeteringStatsHelper::ZeroValue();
+        auto logBillingStats = [&]() {
+            Cerr << "BillingStats: " << billingStats << Endl;
+        };
+
+        TBlockEvents<TEvDataShard::TEvSampleKResponse> sampleKBlocker(runtime, [&](const auto& ev) {
+            auto response = ev->Get()->Record;
+            billingStats += response.GetMeteringStats();
+            return true;
+        });
+
+        TBlockEvents<TEvDataShard::TEvRecomputeKMeansResponse> recomputeKBlocker(runtime, [&](const auto& ev) {
+            auto response = ev->Get()->Record;
+            billingStats += response.GetMeteringStats();
+            return true;
+        });
+
+        TBlockEvents<TEvIndexBuilder::TEvUploadSampleKResponse> uploadSampleKBlocker(runtime, [&](const auto& ev) {
+            auto response = ev->Get()->Record;
+            billingStats += response.GetMeteringStats();
+            return true;
+        });
+
+        TBlockEvents<TEvDataShard::TEvReshuffleKMeansResponse> reshuffleBlocker(runtime, [&](const auto& ev) {
+            auto response = ev->Get()->Record;
+            billingStats += response.GetMeteringStats();
+            return true;
+        });
+
+        TBlockEvents<TEvDataShard::TEvLocalKMeansResponse> localKMeansBlocker(runtime, [&](const auto& ev) {
+            auto response = ev->Get()->Record;
+            billingStats += response.GetMeteringStats();
+            return true;
+        });
+
+        // Build vector index with max_shards_in_flight(1) to guarantee deterministic metering data
+        ui64 buildIndexTx = ++txId;
+        {
+            auto sender = runtime.AllocateEdgeActor();
+            auto request = CreateBuildIndexRequest(buildIndexTx, "/MyRoot/ServerLessDB", "/MyRoot/ServerLessDB/Table", TBuildIndexConfig{
+                "index1", NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree, {"embedding"}, {}
+            });
+            auto settings = request->Record.MutableSettings();
+            settings->set_max_shards_in_flight(1);
+            if (smallScanBuffer) {
+                settings->MutableScanSettings()->SetMaxBatchRows(1);
+            } else {
+                settings->MutableScanSettings()->ClearMaxBatchRows();
+            }
+            auto kmeansSettings = request->Record.MutableSettings()->mutable_index()->Mutableglobal_vector_kmeans_tree_index();
+            kmeansSettings->Mutablevector_settings()->Setlevels(2);
+            kmeansSettings->Mutablevector_settings()->Setclusters(K);
+            ForwardToTablet(runtime, tenantSchemeShard, sender, request);
+        }
+
+        for (ui32 shard = 0; shard < 3; shard++) {
+            runtime.WaitFor("sampleK", [&]{ return sampleKBlocker.size(); });
+            sampleKBlocker.Unblock();
+        }
+        // SAMPLE reads table once, no writes:
+        AddRead(expectedBillingStats, tableRows, tableBytes);
+        logBillingStats();
+        UNIT_ASSERT_VALUES_EQUAL(billingStats.ShortDebugString(), expectedBillingStats.ShortDebugString());
+
+        // every RECOMPUTE round reads table once, no writes; there are 3 recompute rounds:
+        for (ui32 round = 0; round < 3; round++) {
+            for (ui32 shard = 0; shard < 3; shard++) {
+                runtime.WaitFor("recomputeK", [&]{ return recomputeKBlocker.size(); });
+                recomputeKBlocker.Unblock();
+            }
+            AddRead(expectedBillingStats, tableRows, tableBytes);
+            logBillingStats();
+            UNIT_ASSERT_VALUES_EQUAL(billingStats.ShortDebugString(), expectedBillingStats.ShortDebugString());
+        }
+
+        runtime.WaitFor("uploadSampleK", [&]{ return uploadSampleKBlocker.size(); });
+        // upload SAMPLE writes K level rows, no reads:
+        AddUpload(expectedBillingStats, K, K * levelRowBytes);
+        logBillingStats();
+        UNIT_ASSERT_VALUES_EQUAL(billingStats.ShortDebugString(), expectedBillingStats.ShortDebugString());
+        uploadSampleKBlocker.Unblock();
+
+        runtime.WaitFor("metering", [&]{ return meteringBlocker.size(); });
+        {
+            auto newBillId = TStringBuilder()
+                << expectedBillingStats.GetUploadRows() << "-" << expectedBillingStats.GetReadRows() << "-"
+                << expectedBillingStats.GetUploadBytes() << "-" << expectedBillingStats.GetReadBytes();
+            auto expectedId = TStringBuilder()
+                << "109-72075186233409549-2-" << previousBillId << "-" << newBillId;
+            auto expectedBill = TBillRecord()
+                .Id(expectedId)
+                .CloudId("CLOUD_ID_VAL").FolderId("FOLDER_ID_VAL").ResourceId("DATABASE_ID_VAL")
+                .SourceWt(TInstant::Seconds(10))
+                .Usage(TBillRecord::RequestUnits(130, TInstant::Seconds(0), TInstant::Seconds(10)));
+            UNIT_ASSERT_VALUES_EQUAL(meteringBlocker.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(meteringBlocker[0]->Get()->MeteringJson, expectedBill.ToString());
+            previousBillId = newBillId;
+            meteringBlocker.Unblock();
+        }
+
+        for (ui32 shard = 0; shard < 3; shard++) {
+            runtime.WaitFor("reshuffle", [&]{ return reshuffleBlocker.size(); });
+            reshuffleBlocker.Unblock();
+        }
+        // RESHUFFLE reads and writes table once:
+        AddUpload(expectedBillingStats, tableRows, buildBytes);
+        AddRead(expectedBillingStats, tableRows, tableBytes);
+        logBillingStats();
+        UNIT_ASSERT_VALUES_EQUAL(billingStats.ShortDebugString(), expectedBillingStats.ShortDebugString());
+
+        for (ui32 shard = 0; shard < 4; shard++) {
+            runtime.WaitFor("localKMeans", [&]{ return localKMeansBlocker.size(); });
+            localKMeansBlocker.Unblock();
+        }
+        // KMEANS writes build table once and forms at least K, at most K * K level rows
+        // (depending on clustering uniformity; it's not so good on test data)
+        AddUpload(expectedBillingStats, tableRows, postingBytes);
+        UNIT_ASSERT(billingStats.GetUploadRows() >= expectedBillingStats.GetUploadRows() + K);
+        const ui64 level2clusters = billingStats.GetUploadRows() - expectedBillingStats.GetUploadRows();
+        AddUpload(expectedBillingStats, level2clusters, level2clusters * levelRowBytes);
+        if (smallScanBuffer) {
+            // KMEANS reads build table 5 times (SAMPLE + KMEANS * 3 + UPLOAD):
+            AddRead(expectedBillingStats, tableRows * 5, buildBytes * 5);
+        } else {
+            // KMEANS reads build table once:
+            AddRead(expectedBillingStats, tableRows, buildBytes);
+        }
+        logBillingStats();
+        UNIT_ASSERT_VALUES_EQUAL(billingStats.ShortDebugString(), expectedBillingStats.ShortDebugString());
+
+        env.TestWaitNotification(runtime, buildIndexTx, tenantSchemeShard);
+        {
+            auto buildIndexOperations = TestListBuildIndex(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB");
+            UNIT_ASSERT_VALUES_EQUAL(buildIndexOperations.EntriesSize(), 1);
+            auto buildIndexOperation = TestGetBuildIndex(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB", buildIndexTx);
+            UNIT_ASSERT_VALUES_EQUAL(buildIndexOperation.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_DONE);
+
+            TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB/Table"), {
+                NLs::PathExist,
+                NLs::IndexesCount(1),
+                NLs::PathVersionEqual(6)});
+            TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB/Table/index1", true, true, true), {
+                NLs::PathExist,
+                NLs::IndexState(NKikimrSchemeOp::EIndexState::EIndexStateReady)});
+        }
+
+        runtime.WaitFor("metering", [&]{ return meteringBlocker.size(); });
+        {
+            auto newBillId = TStringBuilder()
+                << expectedBillingStats.GetUploadRows() << "-" << expectedBillingStats.GetReadRows() << "-"
+                << expectedBillingStats.GetUploadBytes() << "-" << expectedBillingStats.GetReadBytes();
+            auto expectedId = TStringBuilder()
+                << "109-72075186233409549-2-" << previousBillId << "-" << newBillId;
+            auto expectedBill = TBillRecord()
+                .Id(expectedId)
+                .CloudId("CLOUD_ID_VAL").FolderId("FOLDER_ID_VAL").ResourceId("DATABASE_ID_VAL")
+                .SourceWt(TInstant::Seconds(10))
+                .Usage(TBillRecord::RequestUnits(336, TInstant::Seconds(10), TInstant::Seconds(10)));
+            UNIT_ASSERT_VALUES_EQUAL(meteringBlocker.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(meteringBlocker[0]->Get()->MeteringJson, expectedBill.ToString());
+            previousBillId = newBillId;
+            meteringBlocker.Stop().Unblock();
+        }
+    }
+
+    Y_UNIT_TEST_FLAG(Metering_ServerLessDB_Restarts, doRestarts) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
+        auto deterministicMetering = MakeCpuMeteringDeterministic(runtime);
+
+        ui64 tenantSchemeShard = 0;
+        TestCreateServerLessDb(runtime, env, txId, tenantSchemeShard);
+
+        TestCreateTable(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB", R"(
+            Name: "Table"
+            Columns { Name: "key"       Type: "Uint32" }
+            Columns { Name: "embedding" Type: "String" }
+            Columns { Name: "prefix"    Type: "Uint32" }
+            Columns { Name: "value"     Type: "String" }
+            KeyColumnNames: ["key"]
+            SplitBoundary { KeyPrefix { Tuple { Optional { Uint32: 50 } } } }
+            SplitBoundary { KeyPrefix { Tuple { Optional { Uint32: 150 } } } }
+        )");
+        env.TestWaitNotification(runtime, txId, tenantSchemeShard);
+
+        // Write data directly into shards
+        const ui32 K = 4;
+        const ui32 tableRows = 200;
+        const ui64 tableRowBytes = 9; // key:Uint32 (4 bytes), embedding:String (5 bytes)
+        const ui64 tableBytes = tableRows * tableRowBytes;
+        const ui64 shardRows = 50;
+        const ui64 tableShardBytes = shardRows * tableRowBytes;
+        const ui64 buildRowBytes = 17; // parent:Uint64 (8 bytes), key:Uint32 (4 bytes), embedding:String (5 bytes)
+        const ui64 buildBytes = tableRows * buildRowBytes;
+        const ui64 buildShardBytes = shardRows * buildRowBytes;
+        const ui64 postingRowBytes = 12; // parent:Uint64 (8 bytes), key:Uint32 (4 bytes)
+        const ui64 postingBytes = tableRows * postingRowBytes;
+        const ui64 levelRowBytes = 21; // parent:Uint64 (8 bytes), id:Uint64 (8 bytes), embedding:String (5 bytes)
+        WriteVectorTableRows(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB/Table", 0, 0, 50);
+        WriteVectorTableRows(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB/Table", 1, 50, 150);
+        WriteVectorTableRows(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB/Table", 2, 150, 200);
+
+        TBlockEvents<NMetering::TEvMetering::TEvWriteMeteringJson> meteringBlocker(runtime, [&](const auto& ev) {
+            Cerr << "TEvWriteMeteringJson " << ev->Get()->MeteringJson << Endl;
+            return true;
+        });
+        TString previousBillId = "0-0-0-0";
+        TMeteringStats billedStats = TMeteringStatsHelper::ZeroValue();
+        TMeteringStats expectedBillingStats = TMeteringStatsHelper::ZeroValue();
+
+        TBlockEvents<TEvDataShard::TEvReshuffleKMeansResponse> reshuffleBlocker(runtime, [&](const auto&) {
+            return true;
+        });
+
+        TBlockEvents<TEvDataShard::TEvLocalKMeansResponse> localKMeansBlocker(runtime, [&](const auto&) {
+            return doRestarts;
+        });
+
+        // Build vector index with max_shards_in_flight(1) to guarantee deterministic metering data
+        ui64 buildIndexTx = ++txId;
+        {
+            auto sender = runtime.AllocateEdgeActor();
+            auto request = CreateBuildIndexRequest(buildIndexTx, "/MyRoot/ServerLessDB", "/MyRoot/ServerLessDB/Table", TBuildIndexConfig{
+                "index1", NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree, {"embedding"}, {}
+            });
+            auto settings = request->Record.MutableSettings();
+            settings->set_max_shards_in_flight(1);
+            settings->MutableScanSettings()->SetMaxBatchRows(1);
+            auto kmeansSettings = request->Record.MutableSettings()->mutable_index()->Mutableglobal_vector_kmeans_tree_index();
+            kmeansSettings->Mutablevector_settings()->Setlevels(2);
+            kmeansSettings->Mutablevector_settings()->Setclusters(K);
+            ForwardToTablet(runtime, tenantSchemeShard, sender, request);
+        }
+
+        runtime.WaitFor("reshuffle", [&]{ return reshuffleBlocker.size(); });
+        // SAMPLE reads table once, no writes:
+        AddRead(expectedBillingStats, tableRows, tableBytes);
+        // every RECOMPUTE round reads table once, no writes; there are 3 recompute rounds:
+        AddRead(expectedBillingStats, tableRows * 3, tableBytes * 3);
+        // upload SAMPLE writes K level rows, no reads:
+        AddUpload(expectedBillingStats, K, K * levelRowBytes);
+        {
+            auto buildIndexHtml = TestGetBuildIndexHtml(runtime, tenantSchemeShard, buildIndexTx);
+            Cout << "BuildIndex 1 " << buildIndexHtml << Endl;
+            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml,  "Processed: " + expectedBillingStats.ShortDebugString());
+            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml, TStringBuilder() << "Request Units: 130 (ReadTable: 128, BulkUpsert: 2, " 
+                << "CPU: " << expectedBillingStats.GetCpuTimeUs() / 1500 << ")");
+            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml,  "Billed: " + billedStats.ShortDebugString());
+        }
+        runtime.WaitFor("metering", [&]{ return meteringBlocker.size(); });
+        {
+            auto newBillId = TStringBuilder()
+                << expectedBillingStats.GetUploadRows() << "-" << expectedBillingStats.GetReadRows() << "-"
+                << expectedBillingStats.GetUploadBytes() << "-" << expectedBillingStats.GetReadBytes();
+            auto expectedId = TStringBuilder()
+                << "109-72075186233409549-2-" << previousBillId << "-" << newBillId;
+            auto expectedBill = TBillRecord()
+                .Id(expectedId)
+                .CloudId("CLOUD_ID_VAL").FolderId("FOLDER_ID_VAL").ResourceId("DATABASE_ID_VAL")
+                .SourceWt(TInstant::Seconds(10))
+                .Usage(TBillRecord::RequestUnits(130, TInstant::Seconds(0), TInstant::Seconds(10)));
+            UNIT_ASSERT_VALUES_EQUAL(meteringBlocker.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(meteringBlocker[0]->Get()->MeteringJson, expectedBill.ToString());
+            previousBillId = newBillId;
+            billedStats = expectedBillingStats;
+            meteringBlocker.Unblock();
+        }
+        if (doRestarts) {
+            RebootTablet(runtime, tenantSchemeShard, runtime.AllocateEdgeActor());
+        }
+        {
+            auto buildIndexHtml = TestGetBuildIndexHtml(runtime, tenantSchemeShard, buildIndexTx);
+            Cout << "BuildIndex 2 " << buildIndexHtml << Endl;
+            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml,  "Processed: " + expectedBillingStats.ShortDebugString());
+            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml, TStringBuilder() << "Request Units: 130 (ReadTable: 128, BulkUpsert: 2, " 
+                << "CPU: " << expectedBillingStats.GetCpuTimeUs() / 1500 << ")");
+            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml,  "Billed: " + billedStats.ShortDebugString());
+        }
+
+        reshuffleBlocker.Unblock();
+        runtime.WaitFor("reshuffle", [&]{ return reshuffleBlocker.size(); });
+        // shard RESHUFFLE reads and writes once:
+        TMeteringStats shardReshuffleBillingStats = TMeteringStatsHelper::ZeroValue();
+        AddUpload(shardReshuffleBillingStats, shardRows, buildShardBytes);
+        AddRead(shardReshuffleBillingStats, shardRows, tableShardBytes);
+        expectedBillingStats += shardReshuffleBillingStats;
+        {
+            auto buildIndexHtml = TestGetBuildIndexHtml(runtime, tenantSchemeShard, buildIndexTx);
+            Cout << "BuildIndex 3 " << buildIndexHtml << Endl;
+            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml,  "Processed: " + expectedBillingStats.ShortDebugString());
+            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml, TStringBuilder() << "Request Units: 155 (ReadTable: 128, BulkUpsert: 27, " 
+                << "CPU: " << expectedBillingStats.GetCpuTimeUs() / 1500 << ")");
+            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml,  "Billed: " + billedStats.ShortDebugString());
+            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml, "<td>" + shardReshuffleBillingStats.ShortDebugString());
+        }
+        runtime.WaitFor("metering", [&]{ return meteringBlocker.size(); });
+        {
+            auto newBillId = TStringBuilder()
+                << expectedBillingStats.GetUploadRows() << "-" << expectedBillingStats.GetReadRows() << "-"
+                << expectedBillingStats.GetUploadBytes() << "-" << expectedBillingStats.GetReadBytes();
+            auto expectedId = TStringBuilder()
+                << "109-72075186233409549-2-" << previousBillId << "-" << newBillId;
+            auto expectedBill = TBillRecord()
+                .Id(expectedId)
+                .CloudId("CLOUD_ID_VAL").FolderId("FOLDER_ID_VAL").ResourceId("DATABASE_ID_VAL")
+                .SourceWt(TInstant::Seconds(20))
+                .Usage(TBillRecord::RequestUnits(153, TInstant::Seconds(10), TInstant::Seconds(20)));
+            UNIT_ASSERT_VALUES_EQUAL(meteringBlocker.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(meteringBlocker[0]->Get()->MeteringJson, expectedBill.ToString());
+            previousBillId = newBillId;
+            billedStats = expectedBillingStats;
+            meteringBlocker.Unblock();
+        }
+        if (doRestarts) {
+            RebootTablet(runtime, tenantSchemeShard, runtime.AllocateEdgeActor());
+        }
+        {
+            auto buildIndexHtml = TestGetBuildIndexHtml(runtime, tenantSchemeShard, buildIndexTx);
+            Cout << "BuildIndex 4 " << buildIndexHtml << Endl;
+            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml,  "Processed: " + expectedBillingStats.ShortDebugString());
+            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml, TStringBuilder() << "Request Units: 155 (ReadTable: 128, BulkUpsert: 27, " 
+                << "CPU: " << expectedBillingStats.GetCpuTimeUs() / 1500 << ")");
+            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml,  "Billed: " + billedStats.ShortDebugString());
+            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml, "<td>" + shardReshuffleBillingStats.ShortDebugString());
+        }
+
+        reshuffleBlocker.Stop().Unblock();
+        // RESHUFFLE reads and writes table once:
+        expectedBillingStats -= shardReshuffleBillingStats; // already added
+        AddUpload(expectedBillingStats, tableRows, buildBytes);
+        AddRead(expectedBillingStats, tableRows, tableBytes);
+    
+        if (doRestarts) {
+            runtime.WaitFor("localKMeans", [&]{ return localKMeansBlocker.size(); });
+            RebootTablet(runtime, tenantSchemeShard, runtime.AllocateEdgeActor());
+            localKMeansBlocker.Stop().Unblock();
+        }
+
+        env.TestWaitNotification(runtime, buildIndexTx, tenantSchemeShard);
+        // KMEANS writes build table once and forms K * K level rows:
+        AddUpload(expectedBillingStats, tableRows + K * K, postingBytes + K * K * levelRowBytes);
+        // KMEANS reads build table 5 times (SAMPLE + KMEANS * 3 + UPLOAD):
+        AddRead(expectedBillingStats, tableRows * 5, buildBytes * 5);
+        {
+            auto buildIndexHtml = TestGetBuildIndexHtml(runtime, tenantSchemeShard, buildIndexTx);
+            Cout << "BuildIndex 5 " << buildIndexHtml << Endl;
+            Cout << expectedBillingStats.ShortDebugString() << Endl;
+            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml,  "Processed: " + expectedBillingStats.ShortDebugString());
+            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml, TStringBuilder() << "Request Units: 338 (ReadTable: 128, BulkUpsert: 210, " 
+                << "CPU: " << expectedBillingStats.GetCpuTimeUs() / 1500 << ")");
+            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml,  "Billed: " + expectedBillingStats.ShortDebugString());
+        }
+        runtime.WaitFor("metering", [&]{ return meteringBlocker.size(); });
+        {
+            auto newBillId = TStringBuilder()
+                << expectedBillingStats.GetUploadRows() << "-" << expectedBillingStats.GetReadRows() << "-"
+                << expectedBillingStats.GetUploadBytes() << "-" << expectedBillingStats.GetReadBytes();
+            auto expectedId = TStringBuilder()
+                << "109-72075186233409549-2-" << previousBillId << "-" << newBillId;
+            auto expectedBill = TBillRecord()
+                .Id(expectedId)
+                .CloudId("CLOUD_ID_VAL").FolderId("FOLDER_ID_VAL").ResourceId("DATABASE_ID_VAL")
+                .SourceWt(TInstant::Seconds(20))
+                .Usage(TBillRecord::RequestUnits(311, TInstant::Seconds(20), TInstant::Seconds(20)));
+            UNIT_ASSERT_VALUES_EQUAL(meteringBlocker.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(meteringBlocker[0]->Get()->MeteringJson, expectedBill.ToString());
+            previousBillId = newBillId;
+            billedStats = expectedBillingStats;
+            meteringBlocker.Unblock();
+        }
+        if (doRestarts) {
+            RebootTablet(runtime, tenantSchemeShard, runtime.AllocateEdgeActor());
+        }
+        {
+            auto buildIndexHtml = TestGetBuildIndexHtml(runtime, tenantSchemeShard, buildIndexTx);
+            Cout << "BuildIndex 6 " << buildIndexHtml << Endl;
+            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml,  "Processed: " + expectedBillingStats.ShortDebugString());
+            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml, TStringBuilder() << "Request Units: 338 (ReadTable: 128, BulkUpsert: 210, " 
+                << "CPU: " << expectedBillingStats.GetCpuTimeUs() / 1500 << ")");
+            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml,  "Billed: " + expectedBillingStats.ShortDebugString());
+        }
+    }
+
+    Y_UNIT_TEST_FLAG(DescriptionIsPersisted, prefixed) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
@@ -424,7 +1038,6 @@ Y_UNIT_TEST_SUITE (VectorIndexBuildTest) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
-
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
         runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
 
@@ -460,9 +1073,7 @@ Y_UNIT_TEST_SUITE (VectorIndexBuildTest) {
         });
 
         const ui64 buildIndexTx = ++txId;
-        const TVector<TString> dataColumns;
-        const TVector<TString> indexColumns{"embedding"};
-        AsyncBuildVectorIndex(runtime, buildIndexTx, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/vectors", "index1", "embedding");
+        AsyncBuildVectorIndex(runtime, buildIndexTx, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/vectors", "index1", {"embedding"});
 
         runtime.WaitFor("block", [&]{ return blocked.size(); });
         blocked.Stop().Unblock();
@@ -526,9 +1137,7 @@ Y_UNIT_TEST_SUITE (VectorIndexBuildTest) {
         }
 
         const ui64 buildIndexTx = ++txId;
-        const TVector<TString> dataColumns;
-        const TVector<TString> indexColumns{"embedding"};
-        AsyncBuildVectorIndex(runtime, buildIndexTx, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/vectors", "index1", "embedding");
+        AsyncBuildVectorIndex(runtime, buildIndexTx, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/vectors", "index1", {"embedding"});
 
         env.TestWaitNotification(runtime, buildIndexTx);
 
@@ -689,9 +1298,7 @@ Y_UNIT_TEST_SUITE (VectorIndexBuildTest) {
         });
 
         const ui64 buildIndexTx = ++txId;
-        const TVector<TString> dataColumns;
-        const TVector<TString> indexColumns{"embedding"};
-        AsyncBuildVectorIndex(runtime, buildIndexTx, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/vectors", "index1", "embedding");
+        AsyncBuildVectorIndex(runtime, buildIndexTx, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/vectors", "index1", {"embedding"});
 
         runtime.WaitFor("block", [&]{ return blocked.size(); });
         blocked.Stop().Unblock();
@@ -707,7 +1314,7 @@ Y_UNIT_TEST_SUITE (VectorIndexBuildTest) {
             );
             UNIT_ASSERT_STRING_CONTAINS(buildIndexOperation.DebugString(), "One of the shards report BUILD_ERROR");
             UNIT_ASSERT_STRING_CONTAINS(buildIndexOperation.DebugString(), "Error: Datashard test fail");
-            UNIT_ASSERT_STRING_CONTAINS(buildIndexOperation.DebugString(), "Processed: { upload rows: 0, upload bytes: 0, read rows: 0, read bytes: 0 } }");
+            UNIT_ASSERT_STRING_CONTAINS(buildIndexOperation.DebugString(), "Processed: UploadRows: 0 UploadBytes: 0 ReadRows: 0 ReadBytes: 0");
         }
 
         RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
@@ -721,7 +1328,7 @@ Y_UNIT_TEST_SUITE (VectorIndexBuildTest) {
             );
             UNIT_ASSERT_STRING_CONTAINS(buildIndexOperation.DebugString(), "One of the shards report BUILD_ERROR");
             UNIT_ASSERT_STRING_CONTAINS(buildIndexOperation.DebugString(), "Error: Datashard test fail");
-            UNIT_ASSERT_STRING_CONTAINS(buildIndexOperation.DebugString(), "Processed: { upload rows: 0, upload bytes: 0, read rows: 0, read bytes: 0 } }");
+            UNIT_ASSERT_STRING_CONTAINS(buildIndexOperation.DebugString(), "Processed: UploadRows: 0 UploadBytes: 0 ReadRows: 0 ReadBytes: 0");
         }
     }
 }

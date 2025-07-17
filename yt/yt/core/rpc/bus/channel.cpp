@@ -726,7 +726,7 @@ private:
                 header.clear_timeout();
             }
 
-            if (options.RequestHeavy || request->IsAttachmentCompressionEnabled()) {
+            if (options.RequestHeavy || (request->IsAttachmentCompressionEnabled() && request->HasAttachments())) {
                 BIND(&IClientRequest::Serialize, request)
                     .AsyncVia(TDispatcher::Get()->GetHeavyInvoker())
                     .Run()
@@ -889,7 +889,7 @@ private:
                 Bus_->GetEndpointDescription(),
                 GetMessageBodySize(requestMessage),
                 GetTotalMessageAttachmentSize(requestMessage),
-                request->GetRequestInfo() ? std::string(Format(", %v", *request->GetRequestInfo())) : std::string());
+                !request->GetRequestInfo().empty() ? std::string(Format(", %v", request->GetRequestInfo())) : std::string());
         }
 
 

@@ -1,6 +1,7 @@
 #include "tx_blobs_written.h"
 
 #include <ydb/core/tx/columnshard/blob_cache.h>
+#include <ydb/core/tx/columnshard/blobs_action/common/statistics.h>
 #include <ydb/core/tx/columnshard/common/path_id.h>
 #include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
 #include <ydb/core/tx/columnshard/engines/portions/constructor_portion.h>
@@ -76,6 +77,8 @@ bool TTxBlobsWritingFinished::DoExecute(TTransactionContext& txc, const TActorCo
             lock.SetCounter(info.GetInternalGenerationCounter());
             writeMeta.GetPathId().SchemeShardLocalPathId.ToProto(lock);
             auto ev = NEvents::TDataEvents::TEvWriteResult::BuildCompleted(Self->TabletID(), operation->GetLockId(), lock);
+            AddTableAccessStatsToTxStats(*ev->Record.MutableTxStats(), writeMeta.GetPathId().SchemeShardLocalPathId.GetRawValue(),
+                                         writeResult.GetRecordsCount(), writeResult.GetDataSize(), operation->GetModificationType());
             Results.emplace_back(std::move(ev), writeMeta.GetSource(), operation->GetCookie());
         }
     }
@@ -132,6 +135,7 @@ void TTxBlobsWritingFinished::DoComplete(const TActorContext& ctx) {
         }
         Self->Counters.GetCSCounters().OnWriteTxComplete(now - writeMeta.GetWriteStartInstant());
         Self->Counters.GetCSCounters().OnSuccessWriteResponse();
+        writeMeta.OnStage(NEvWrite::EWriteStage::Finished);
     }
     Self->SetupCompaction(pathIds);
 }
@@ -168,6 +172,7 @@ void TTxBlobsWritingFailed::DoComplete(const TActorContext& ctx) {
     }
     for (auto&& wResult : Pack.GetWriteResults()) {
         const auto& writeMeta = wResult.GetWriteMeta();
+        writeMeta.OnStage(NEvWrite::EWriteStage::Aborted);
         auto op = Self->GetOperationsManager().GetOperationVerified((TOperationWriteId)writeMeta.GetWriteId());
         Self->OperationsManager->AbortTransactionOnComplete(*Self, op->GetLockId());
     }

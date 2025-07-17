@@ -79,10 +79,19 @@ public:
         return TStringBuilder() << "OK";
     }
 
-    TFetchedData(const bool useFilter, const ui32 recordsCount) {
-        Table = std::make_shared<NArrow::NAccessor::TAccessorsCollection>(recordsCount);
+    TFetchedData(const bool useFilter, const std::optional<ui32> recordsCount) {
+        if (recordsCount) {
+            Table = std::make_shared<NArrow::NAccessor::TAccessorsCollection>(*recordsCount);
+        } else {
+            Table = std::make_shared<NArrow::NAccessor::TAccessorsCollection>();
+        }
         Table->SetFilterUsage(useFilter);
         Indexes = std::make_shared<NIndexes::TIndexesCollection>();
+    }
+
+    void InitRecordsCount(const ui32 recordsCount) {
+        AFL_VERIFY(!Table->HasData());
+        Table = std::make_shared<NArrow::NAccessor::TAccessorsCollection>(recordsCount);
     }
 
     void SetAccessorsGuard(std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>&& guard) {
@@ -115,7 +124,7 @@ public:
 
     void SyncTableColumns(const std::vector<std::shared_ptr<arrow::Field>>& fields, const ISnapshotSchema& schema, const ui32 recordsCount);
 
-    std::shared_ptr<NArrow::TColumnFilter> GetAppliedFilter() const {
+    const std::shared_ptr<NArrow::TColumnFilter>& GetAppliedFilter() const {
         return Table->GetAppliedFilter();
     }
 

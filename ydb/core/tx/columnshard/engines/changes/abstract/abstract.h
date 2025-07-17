@@ -10,6 +10,7 @@
 #include <ydb/core/tx/columnshard/data_locks/locks/composite.h>
 #include <ydb/core/tx/columnshard/data_locks/locks/list.h>
 #include <ydb/core/tx/columnshard/data_locks/manager/manager.h>
+#include <ydb/core/tx/columnshard/data_reader/contexts.h>
 #include <ydb/core/tx/columnshard/engines/changes/counters/changes.h>
 #include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
 #include <ydb/core/tx/columnshard/engines/portions/write_with_blobs.h>
@@ -17,6 +18,7 @@
 #include <ydb/core/tx/columnshard/engines/storage/actualizer/common/address.h>
 #include <ydb/core/tx/columnshard/resource_subscriber/task.h>
 #include <ydb/core/tx/columnshard/splitter/settings.h>
+#include <ydb/core/tx/limiter/grouped_memory/usage/abstract.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/scalar.h>
 #include <util/datetime/base.h>
@@ -238,10 +240,10 @@ class TGranuleMeta;
 
 class TDataAccessorsInitializationContext {
 private:
-    YDB_READONLY_DEF(std::shared_ptr<TVersionedIndex>, VersionedIndex);
+    YDB_READONLY_DEF(std::shared_ptr<const TVersionedIndex>, VersionedIndex);
 
 public:
-    TDataAccessorsInitializationContext(const std::shared_ptr<TVersionedIndex>& versionedIndex)
+    TDataAccessorsInitializationContext(const std::shared_ptr<const TVersionedIndex>& versionedIndex)
         : VersionedIndex(versionedIndex) {
         AFL_VERIFY(VersionedIndex);
     }
@@ -253,7 +255,7 @@ private:
     TString AbortedReason;
     const TString TaskIdentifier = TGUID::CreateTimebased().AsGuidString();
     std::shared_ptr<const TAtomicCounter> ActivityFlag;
-    std::shared_ptr<NChanges::TChangesCounters::TStageCountersGuard> Counters;
+    NCounters::TStateSignalsOperator<NChanges::EStage>::TGuard StateGuard;
 
 protected:
     std::optional<TDataAccessorsResult> FetchedDataAccessors;
@@ -283,7 +285,7 @@ protected:
         return DoBuildDataLock();
     }
 
-    std::shared_ptr<TDataAccessorsRequest> PortionsToAccess = std::make_shared<TDataAccessorsRequest>(TaskIdentifier);
+    std::vector<TPortionInfo::TConstPtr> PortionsToAccess;
     virtual void OnDataAccessorsInitialized(const TDataAccessorsInitializationContext& context) = 0;
 
 public:
@@ -298,9 +300,8 @@ public:
         ActivityFlag = flag;
     }
 
-    std::shared_ptr<TDataAccessorsRequest> ExtractDataAccessorsRequest() {
-        AFL_VERIFY(!!PortionsToAccess);
-        return std::move(PortionsToAccess);
+    const std::vector<TPortionInfo::TConstPtr>& GetPortionsToAccess() const {
+        return PortionsToAccess;
     }
 
     const TPortionDataAccessor& GetPortionDataAccessor(const ui64 portionId) const {
@@ -352,7 +353,7 @@ public:
     }
 
     TColumnEngineChanges(const std::shared_ptr<IStoragesManager>& storagesManager, const NBlobOperations::EConsumer consumerId)
-        : Counters(NChanges::TChangesCounters::GetStageCounters(consumerId))
+        : StateGuard(NChanges::TChangesCounters::GetStageCounters(consumerId))
         , BlobsAction(storagesManager, consumerId) {
     }
 
@@ -360,7 +361,7 @@ public:
     virtual ~TColumnEngineChanges();
 
     bool IsAborted() const {
-        return Counters->GetCurrentStage() == NChanges::EStage::Aborted;
+        return StateGuard.GetStage() == NChanges::EStage::Aborted;
     }
 
     void StartEmergency();
@@ -379,7 +380,7 @@ public:
     void Compile(TFinalizationContext& context) noexcept;
 
     NBlobOperations::NRead::TCompositeReadBlobs Blobs;
-    std::shared_ptr<NResourceBroker::NSubscribe::TResourcesGuard> ResourcesGuard;
+    std::optional<NOlap::NDataFetcher::TCurrentContext> FetchingContext;
 
     std::vector<std::shared_ptr<IBlobsReadingAction>> GetReadingActions() const {
         auto result = BlobsAction.GetReadingActions();

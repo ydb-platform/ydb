@@ -155,7 +155,7 @@ private:
         int BatchesRowCount = 0;
         i64 BatchesDataWeight = 0;
         THashMap<int, TTablet> TabletMap;
-        std::atomic<bool> Failed = {false};
+        std::atomic<bool> Failed = false;
     };
 
     using TStatePtr = TIntrusivePtr<TState>;

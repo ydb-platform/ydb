@@ -1,14 +1,16 @@
 #include "yql_completer.h"
 
-#include <ydb/public/lib/ydb_cli/commands/interactive/complete/dummy_name_service.h>
-#include <ydb/public/lib/ydb_cli/commands/interactive/complete/ydb_schema.h>
+#include "ydb_schema.h"
+
 #include <ydb/public/lib/ydb_cli/commands/interactive/highlight/color/schema.h>
 
 #include <yql/essentials/sql/v1/complete/sql_complete.h>
+#include <yql/essentials/sql/v1/complete/name/cache/local/cache.h>
+#include <yql/essentials/sql/v1/complete/name/object/simple/cached/schema.h>
+#include <yql/essentials/sql/v1/complete/name/service/impatient/name_service.h>
 #include <yql/essentials/sql/v1/complete/name/service/schema/name_service.h>
 #include <yql/essentials/sql/v1/complete/name/service/static/name_service.h>
 #include <yql/essentials/sql/v1/complete/name/service/union/name_service.h>
-#include <yql/essentials/sql/v1/complete/text/word.h>
 
 #include <yql/essentials/sql/v1/lexer/antlr4_pure/lexer.h>
 #include <yql/essentials/sql/v1/lexer/antlr4_pure_ansi/lexer.h>
@@ -54,6 +56,16 @@ namespace NYdb::NConsoleClient {
 
             contextLen = GetNumberOfUTF8Chars(completion.CompletedToken.Content);
 
+            if (light &&
+                completion.Candidates.size() == 1 &&
+                !completion.Candidates[0].Content.StartsWith(completion.CompletedToken.Content)) {
+                completion.Candidates.push_back({
+                    // Disable inline hint
+                    .Kind = NSQLComplete::ECandidateKind::Keyword,
+                    .Content = " ",
+                });
+            }
+
             return ReplxxCompletionsOf(std::move(completion.Candidates));
         }
 
@@ -68,19 +80,22 @@ namespace NYdb::NConsoleClient {
             replxx::Replxx::completions_t entries;
             entries.reserve(candidates.size());
             for (auto& candidate : candidates) {
-                if (candidate.Kind == NSQLComplete::ECandidateKind::FolderName && 
-                    candidate.Content.EndsWith('`')) {
-                    candidate.Content.pop_back();
-                }
                 entries.emplace_back(ReplxxCompletionOf(std::move(candidate)));
             }
             return entries;
         }
 
         replxx::Replxx::Completion ReplxxCompletionOf(NSQLComplete::TCandidate candidate) const {
+            Y_ENSURE(candidate.CursorShift <= candidate.Content.length());
+            const size_t prefixLen = candidate.Content.length() - candidate.CursorShift;
+            candidate.Content.resize(prefixLen);
+
+            Y_ENSURE(!candidate.Content.empty());
             const auto back = candidate.Content.back();
             if (
-                !(candidate.Kind == NSQLComplete::ECandidateKind::FolderName || candidate.Kind == NSQLComplete::ECandidateKind::TableName) && (!IsLeftPunct(back) && back != '<' || IsQuotation(back))) {
+                !(candidate.Kind == NSQLComplete::ECandidateKind::FolderName ||
+                  (candidate.Kind == NSQLComplete::ECandidateKind::TableName) &&
+                      (!IsLeftPunct(back) && back != '<' || IsQuotation(back)))) {
                 candidate.Content += ' ';
             }
 
@@ -101,6 +116,9 @@ namespace NYdb::NConsoleClient {
                 case NSQLComplete::ECandidateKind::FolderName:
                 case NSQLComplete::ECandidateKind::TableName:
                     return Color.identifier.quoted;
+                case NSQLComplete::ECandidateKind::BindingName:
+                case NSQLComplete::ECandidateKind::ColumnName:
+                    return Color.identifier.variable;
                 default:
                     return replxx::Replxx::Color::DEFAULT;
             }
@@ -122,34 +140,57 @@ namespace NYdb::NConsoleClient {
         };
     }
 
+    NSQLComplete::TSchemaCaches MakeSchemaCaches() {
+        using TKey = NSQLComplete::TSchemaDescribeCacheKey;
+
+        auto time = NMonotonic::CreateDefaultMonotonicTimeProvider();
+
+        NSQLComplete::TLocalCacheConfig config = {
+            .ByteCapacity = 1 * 1024 * 1024,
+            .TTL = TDuration::Seconds(8),
+        };
+
+        return {
+            .List = NSQLComplete::MakeLocalCache<
+                TKey, TVector<NSQLComplete::TFolderEntry>>(time, config),
+            .DescribeTable = NSQLComplete::MakeLocalCache<
+                TKey, TMaybe<NSQLComplete::TTableDetails>>(time, config),
+        };
+    }
+
     IYQLCompleter::TPtr MakeYQLCompleter(
         TColorSchema color, TDriver driver, TString database, bool isVerbose) {
         NSQLComplete::TLexerSupplier lexer = MakePureLexerSupplier();
 
-        NSQLComplete::IRanking::TPtr ranking = NSQLComplete::MakeDefaultRanking();
+        auto ranking = NSQLComplete::MakeDefaultRanking(NSQLComplete::LoadFrequencyData());
 
-        auto statics = NSQLComplete::MakeStaticNameService(
-            NSQLComplete::MakeDefaultNameSet(), ranking);
+        auto statics = NSQLComplete::MakeStaticNameService(NSQLComplete::LoadDefaultNameSet(), ranking);
 
-        TVector<NSQLComplete::INameService::TPtr> heavies = {
-            statics,
+        auto schema =
             NSQLComplete::MakeSchemaNameService(
                 NSQLComplete::MakeSimpleSchema(
-                    MakeYDBSchema(std::move(driver), std::move(database), isVerbose))),
-        };
+                    NSQLComplete::MakeCachedSimpleSchema(
+                        MakeSchemaCaches(),
+                        /* zone = */ "",
+                        MakeYDBSchema(std::move(driver), std::move(database), isVerbose))));
 
-        TVector<NSQLComplete::INameService::TPtr> lighties = {
-            statics,
-            MakeDummyNameService(),
-        };
+        auto heavy = NSQLComplete::MakeUnionNameService(
+            {
+                statics,
+                schema,
+            }, ranking);
+
+        auto light = NSQLComplete::MakeUnionNameService(
+            {
+                statics,
+                NSQLComplete::MakeImpatientNameService(schema),
+            }, ranking);
+
+        auto config = NSQLComplete::MakeYDBConfiguration();
 
         return IYQLCompleter::TPtr(new TYQLCompleter(
-            NSQLComplete::MakeSqlCompletionEngine(
-                lexer,
-                NSQLComplete::MakeUnionNameService(std::move(heavies), ranking)),
-            NSQLComplete::MakeSqlCompletionEngine(
-                lexer,
-                NSQLComplete::MakeUnionNameService(std::move(lighties), ranking)),
+            /* heavyEngine = */ NSQLComplete::MakeSqlCompletionEngine(lexer, heavy, config),
+            /* lightEngine = */ NSQLComplete::MakeSqlCompletionEngine(lexer, light, config),
             std::move(color)));
     }
 

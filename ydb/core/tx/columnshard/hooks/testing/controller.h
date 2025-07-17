@@ -49,6 +49,8 @@ private:
 
     TMutex ActiveTabletsMutex;
 
+    bool ForcedGenerateInternalPathId = true;
+
     using TInternalPathId = NKikimr::NColumnShard::TInternalPathId;
     using TSchemeShardLocalPathId = NKikimr::NColumnShard::TSchemeShardLocalPathId;
     using TUnifiedPathId =  NKikimr::NColumnShard::TUnifiedPathId;
@@ -82,13 +84,13 @@ private:
         }
 
     public: //NOlap::IPathIdTranslator
-        virtual std::optional<TSchemeShardLocalPathId> ResolveSchemeShardLocalPathId(const TInternalPathId internalPathId) const override {
+        virtual std::optional<TSchemeShardLocalPathId> ResolveSchemeShardLocalPathIdOptional(const TInternalPathId internalPathId) const override {
             if (const auto* p = InternalToSchemeShardLocal.FindPtr(internalPathId)) {
                 return {*p};
             }
             return std::nullopt;
         }
-        virtual std::optional<TInternalPathId> ResolveInternalPathId(const TSchemeShardLocalPathId schemeShardLocalPathId) const override  {
+        virtual std::optional<TInternalPathId> ResolveInternalPathIdOptional(const TSchemeShardLocalPathId schemeShardLocalPathId) const override  {
             if (const auto* p = SchemeShardLocalToInternal.FindPtr(schemeShardLocalPathId)) {
                 return {*p};
             }
@@ -398,6 +400,14 @@ public:
         auto* tablet = ActiveTablets.FindPtr(tabletId);
         AFL_VERIFY(tablet);
         (*tablet)->DeletePathId(pathId);
+    }
+
+    virtual bool IsForcedGenerateInternalPathId() const override {
+        return ForcedGenerateInternalPathId;
+    }
+
+    void SetForcedGenerateInternalPathId(const bool value) {
+        ForcedGenerateInternalPathId = value;
     }
 
 };

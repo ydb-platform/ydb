@@ -41,12 +41,26 @@ namespace NSQLComplete {
         TVector<TFolderEntry> Entries;
     };
 
+    struct TDescribeTableRequest {
+        TString TableCluster;
+        TString TablePath;
+        TString ColumnPrefix;
+        size_t ColumnsLimit = 128; // TODO: introduce default limit constant
+    };
+
+    struct TDescribeTableResponse {
+        bool IsExisting = false;
+        TVector<TString> Columns;
+    };
+
     class ISchema: public TThrRefBase {
     public:
         using TPtr = TIntrusivePtr<ISchema>;
 
-        ~ISchema() override = default;
         virtual NThreading::TFuture<TListResponse> List(const TListRequest& request) const = 0;
+
+        virtual NThreading::TFuture<TDescribeTableResponse>
+        Describe(const TDescribeTableRequest& request) const = 0;
     };
 
 } // namespace NSQLComplete

@@ -2,16 +2,38 @@
 
 namespace NKikimr::NStorage {
 
+    // generate set of mandatory pile ids for quorum
+    THashSet<TBridgePileId> GetMandatoryPileIds(const NKikimrBlobStorage::TStorageConfig& config,
+            THashSet<TBridgePileId> specificBridgePileIds) {
+        THashSet<TBridgePileId> mandatoryPileIds;
+        if (specificBridgePileIds) { // we are requested to process quorum from specific pile
+            mandatoryPileIds = std::move(specificBridgePileIds);
+        } else if (config.HasClusterState()) {
+            const auto& clusterState = config.GetClusterState();
+            for (size_t i = 0; i < clusterState.PerPileStateSize(); ++i) {
+                if (clusterState.GetPerPileState(i) != NKikimrBridge::TClusterState::DISCONNECTED) {
+                    mandatoryPileIds.insert(TBridgePileId::FromValue(i));
+                }
+            }
+        } else {
+            mandatoryPileIds.emplace(); // default pile id for non-bridged mode
+        }
+        return mandatoryPileIds;
+    }
+
     template<typename T>
     bool HasDiskQuorum(const NKikimrBlobStorage::TStorageConfig& config, T&& generateSuccessful,
             const THashSet<TBridgePileId>& mandatoryPileIds) {
         // generate set of all required drives
         THashMap<TBridgePileId, THashMap<TString, std::tuple<ui32, ui32>>> status; // dc -> {ok, err}
         THashMap<ui32, const NKikimrBlobStorage::TNodeIdentifier*> nodeMap;
-        THashSet<std::tuple<TNodeIdentifier, TString>> allDrives;
-        auto cb = [&status, &allDrives](const auto& node, const auto& drive) {
+        THashSet<std::tuple<TNodeIdentifier, TString>> allDrives; // only drives from mandatory piles
+        auto cb = [&](const auto& node, const auto& drive) {
             TNodeIdentifier identifier(node);
             const TBridgePileId bridgePileId = identifier.BridgePileId.value_or(TBridgePileId());
+            if (!mandatoryPileIds.contains(bridgePileId)) {
+                return; // we ignore drives from non-mandatory piles
+            }
             const TNodeLocation location(node.GetLocation());
             auto& [ok, err] = status[bridgePileId][location.GetDataCenterId()];
             ++err;
@@ -63,13 +85,17 @@ namespace NKikimr::NStorage {
     }
 
     template<typename T>
-    bool HasNodeQuorum(const NKikimrBlobStorage::TStorageConfig& config, T&& generateSuccessful) {
+    bool HasNodeQuorum(const NKikimrBlobStorage::TStorageConfig& config, T&& generateSuccessful,
+            const THashSet<TBridgePileId>& mandatoryPileIds) {
         // generate set of all nodes
         THashMap<TBridgePileId, THashMap<TString, std::tuple<ui32, ui32>>> status; // dc -> {ok, err}
         THashMap<ui32, const NKikimrBlobStorage::TNodeIdentifier*> nodeMap;
         for (const auto& node : config.GetAllNodes()) {
             const TNodeIdentifier identifier(node);
             const TBridgePileId bridgePileId = identifier.BridgePileId.value_or(TBridgePileId());
+            if (!mandatoryPileIds.contains(bridgePileId)) {
+                continue; // skip nodes from non-mandatory piles
+            }
             const TNodeLocation location(node.GetLocation());
             auto& [ok, err] = status[bridgePileId][location.GetDataCenterId()];
             ++err;
@@ -99,7 +125,7 @@ namespace NKikimr::NStorage {
         });
 
         // calculate number of good and bad datacenters
-        auto checkPile = [&](TBridgePileId bridgePileId) {
+        for (TBridgePileId bridgePileId : mandatoryPileIds) {
             if (!status.contains(bridgePileId)) {
                 return false;
             }
@@ -112,21 +138,17 @@ namespace NKikimr::NStorage {
             }
 
             // strict datacenter majority
-            return ok > err;
-        };
-
-        if (config.HasClusterState()) {
-            const auto& clusterState = config.GetClusterState();
-            for (size_t i = 0; i < clusterState.PerPileStateSize(); ++i) {
-                if (clusterState.GetPerPileState(i) != NKikimrBridge::TClusterState::DISCONNECTED &&
-                        !checkPile(TBridgePileId::FromValue(i))) {
-                    return false;
-                }
+            if (ok <= err) {
+                return false;
             }
-            return true;
-        } else {
-            return checkPile(TBridgePileId());
         }
+
+        return true;
+    }
+
+    template<typename T>
+    bool HasNodeQuorum(const NKikimrBlobStorage::TStorageConfig& config, T&& generateSuccessful) {
+        return HasNodeQuorum(config, std::forward<T>(generateSuccessful), GetMandatoryPileIds(config, {}));
     }
 
     template<typename T>
@@ -254,18 +276,9 @@ namespace NKikimr::NStorage {
     // Ensure configuration has quorum in both disk and storage ways for current and previous configuration.
     template<typename T>
     bool HasConfigQuorum(const NKikimrBlobStorage::TStorageConfig& config, T&& generateSuccessful,
-            const TNodeWardenConfig& nwConfig, bool mindPrev = true) {
-        THashSet<TBridgePileId> mandatoryPileIds;
-        if (config.HasClusterState()) {
-            const auto& clusterState = config.GetClusterState();
-            for (size_t i = 0; i < clusterState.PerPileStateSize(); ++i) {
-                if (clusterState.GetPerPileState(i) != NKikimrBridge::TClusterState::DISCONNECTED) {
-                    mandatoryPileIds.insert(TBridgePileId::FromValue(i));
-                }
-            }
-        } else {
-            mandatoryPileIds.emplace(); // default pile id for non-bridged mode
-        }
+            const TNodeWardenConfig& nwConfig, bool mindPrev = true,
+            THashSet<TBridgePileId> specificBridgePileIds = {}) {
+        const auto& mandatoryPileIds = GetMandatoryPileIds(config, specificBridgePileIds);
         if (!HasDiskQuorum(config, generateSuccessful, mandatoryPileIds) ||
                 !HasStorageQuorum(config, generateSuccessful, nwConfig, true, mandatoryPileIds)) {
             // no quorum in terms of new configuration

@@ -39,6 +39,7 @@ SRCS(
     monitoring.cpp
     multiget.cpp
     patch.cpp
+    phantom_blobs.cpp
     recovery.cpp
     sanitize_groups.cpp
     scrub_fast.cpp
@@ -47,7 +48,6 @@ SRCS(
     snapshots.cpp
     space_check.cpp
     sync.cpp
-    ut_helpers.cpp
     validation.cpp
     vdisk_malfunction.cpp
     group_size_in_units.cpp
@@ -76,8 +76,10 @@ RECURSE_FOR_TESTS(
     ut_osiris
     ut_replication
     ut_scrub
+    ut_statestorage
     ut_vdisk_restart
     ut_restart_pdisk
     ut_read_only_pdisk
     ut_stop_pdisk
+    ut_cluster_balancing
 )

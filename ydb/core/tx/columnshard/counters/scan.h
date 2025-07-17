@@ -157,6 +157,8 @@ private:
     NMonitoring::TDynamicCounters::TCounterPtr RecordsDeniedByHeader;
     std::shared_ptr<TSubColumnCounters> SubColumnCounters;
 
+    NMonitoring::TDynamicCounters::TCounterPtr HangingRequests;
+
 public:
     const std::shared_ptr<TSubColumnCounters>& GetSubColumns() const {
         AFL_VERIFY(SubColumnCounters);
@@ -314,6 +316,10 @@ public:
     }
     void OnReadingOverloaded() const {
         ReadingOverload->Add(1);
+    }
+
+    void OnHangingRequestDetected() const {
+        HangingRequests->Inc();
     }
 
     TScanAggregations BuildAggregations();

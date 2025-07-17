@@ -32,8 +32,8 @@ public:
             const auto addPtr = CastInst::Create(Instruction::IntToPtr, addFunc, PointerType::getUnqual(addType), "write", block);
             CallInst::Create(addType, addPtr, {selfArg, arg}, "", block);
         }
-        if (Node->IsTemporaryValue())
-            ValueCleanup(Node->GetRepresentation(), item, ctx, block);
+        if (Node_->IsTemporaryValue())
+            ValueCleanup(Node_->GetRepresentation(), item, ctx, block);
         return GetFalse(context);
     }
 #endif

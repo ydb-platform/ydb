@@ -277,8 +277,26 @@ TString MakeCreateExternalDataSourceQuery(
                 "location"_a = common.GetObjectStorageEndpoint() + "/" + EscapeString(bucketName, '"') + "/");
             break;
         }
-        case FederatedQuery::ConnectionSetting::kMonitoring:
-        break;
+        case FederatedQuery::ConnectionSetting::kMonitoring: {
+            auto project = connectionContent.setting().monitoring().project();
+            auto cluster = connectionContent.setting().monitoring().cluster();
+            properties = fmt::format(
+                R"(
+                    SOURCE_TYPE="Solomon",
+                    LOCATION={http_location},
+                    GRPC_LOCATION={grpc_location},
+                    USE_TLS="{use_tls}",
+                    PROJECT={project},
+                    CLUSTER={cluster}
+                )",
+                "http_location"_a = EncloseAndEscapeString(common.GetMonitoringReadHttpEndpoint(), '"'),
+                "grpc_location"_a = EncloseAndEscapeString(common.GetMonitoringReadGrpcEndpoint(), '"'),
+                "use_tls"_a = "true",
+                "project"_a = EncloseAndEscapeString(project, '"'),
+                "cluster"_a = EncloseAndEscapeString(cluster, '"')
+            );
+            break;
+        }
         case FederatedQuery::ConnectionSetting::kPostgresqlCluster: {
             const auto pgschema = connectionContent.setting().postgresql_cluster().schema();
             properties = fmt::format(

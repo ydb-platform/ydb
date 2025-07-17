@@ -35,17 +35,21 @@ TNodeWarden::TNodeWarden(const TIntrusivePtr<TNodeWardenConfig> &cfg)
     , DefaultHugeGarbagePerMille(300, 1, 1000)
     , HugeDefragFreeSpaceBorderPerMille(260, 1, 1000)
     , MaxChunksToDefragInflight(10, 1, 50)
+    , FreshCompMaxInFlightWrites(10, 1, 1000)
+    , FreshCompMaxInFlightReads(10, 1, 1000)
+    , HullCompMaxInFlightWrites(10, 1, 1000)
+    , HullCompMaxInFlightReads(20, 1, 1000)
     , ThrottlingDryRun(1, 0, 1)
-    , ThrottlingMinLevel0SstCount(100, 1, 1000)
-    , ThrottlingMaxLevel0SstCount(250, 1, 1000)
-    , ThrottlingMinInplacedSizeHDD(20ull << 30, 1 << 20, 500ull << 30)
-    , ThrottlingMaxInplacedSizeHDD(60ull << 30, 1 << 20, 500ull << 30)
-    , ThrottlingMinInplacedSizeSSD(20ull << 30, 1 << 20, 500ull << 30)
-    , ThrottlingMaxInplacedSizeSSD(60ull << 30, 1 << 20, 500ull << 30)
+    , ThrottlingMinLevel0SstCount(100, 1, 100000)
+    , ThrottlingMaxLevel0SstCount(250, 1, 100000)
+    , ThrottlingMinInplacedSizeHDD(20ull << 30, 1 << 20, 500ull << 40)
+    , ThrottlingMaxInplacedSizeHDD(60ull << 30, 1 << 20, 500ull << 40)
+    , ThrottlingMinInplacedSizeSSD(20ull << 30, 1 << 20, 500ull << 40)
+    , ThrottlingMaxInplacedSizeSSD(60ull << 30, 1 << 20, 500ull << 40)
     , ThrottlingMinOccupancyPerMille(900, 1, 1000)
     , ThrottlingMaxOccupancyPerMille(950, 1, 1000)
-    , ThrottlingMinLogChunkCount(100, 1, 1000)
-    , ThrottlingMaxLogChunkCount(130, 1, 1000)
+    , ThrottlingMinLogChunkCount(100, 1, 100000)
+    , ThrottlingMaxLogChunkCount(130, 1, 100000)
     , MaxInProgressSyncCount(0, 0, 1000)
     , MaxCommonLogChunksHDD(200, 1, 1'000'000)
     , MaxCommonLogChunksSSD(200, 1, 1'000'000)
@@ -67,6 +71,7 @@ TNodeWarden::TNodeWarden(const TIntrusivePtr<TNodeWardenConfig> &cfg)
     , ReportingControllerBucketSize(1, 1, 100'000)
     , ReportingControllerLeakDurationMs(60'000, 1, 3'600'000)
     , ReportingControllerLeakRate(1, 1, 100'000)
+    , EnableDeepScrubbing(false, false, true)
 {
     Y_ABORT_UNLESS(Cfg->BlobStorageConfig.GetServiceSet().AvailabilityDomainsSize() <= 1);
     AvailDomainId = 1;
@@ -162,9 +167,11 @@ STATEFN(TNodeWarden::StateOnline) {
         fFunc(TEvBlobStorage::EvNodeWardenUpdateCache, ForwardToDistributedConfigKeeper);
         fFunc(TEvBlobStorage::EvNodeWardenQueryCache, ForwardToDistributedConfigKeeper);
         fFunc(TEvBlobStorage::EvNodeWardenUnsubscribeFromCache, ForwardToDistributedConfigKeeper);
+        fFunc(TEvBlobStorage::EvNodeWardenUpdateConfigFromPeer, ForwardToDistributedConfigKeeper);
 
         hFunc(TEvNodeWardenQueryBaseConfig, Handle);
         hFunc(TEvNodeConfigInvokeOnRootResult, Handle);
+        hFunc(TEvNodeWardenNotifyConfigMismatch, Handle);
 
         fFunc(TEvents::TSystem::Gone, HandleGone);
 
@@ -173,6 +180,8 @@ STATEFN(TNodeWarden::StateOnline) {
         hFunc(TEvPrivate::TEvDereferencePDisk, Handle);
 
         hFunc(TEvNodeWardenQueryCacheResult, Handle);
+
+        hFunc(TEvNodeWardenManageSyncers, HandleManageSyncers);
 
         default:
             EnqueuePendingMessage(ev);
@@ -366,6 +375,10 @@ void TNodeWarden::Bootstrap() {
         icb->RegisterSharedControl(DefaultHugeGarbagePerMille, "VDiskControls.DefaultHugeGarbagePerMille");
         icb->RegisterSharedControl(HugeDefragFreeSpaceBorderPerMille, "VDiskControls.HugeDefragFreeSpaceBorderPerMille");
         icb->RegisterSharedControl(MaxChunksToDefragInflight, "VDiskControls.MaxChunksToDefragInflight");
+        icb->RegisterSharedControl(FreshCompMaxInFlightWrites, "VDiskControls.FreshCompMaxInFlightWrites");
+        icb->RegisterSharedControl(FreshCompMaxInFlightReads, "VDiskControls.FreshCompMaxInFlightReads");
+        icb->RegisterSharedControl(HullCompMaxInFlightWrites, "VDiskControls.HullCompMaxInFlightWrites");
+        icb->RegisterSharedControl(HullCompMaxInFlightReads, "VDiskControls.HullCompMaxInFlightReads");
 
         icb->RegisterSharedControl(ThrottlingDryRun, "VDiskControls.ThrottlingDryRun");
         icb->RegisterSharedControl(ThrottlingMinLevel0SstCount, "VDiskControls.ThrottlingMinLevel0SstCount");
@@ -413,6 +426,8 @@ void TNodeWarden::Bootstrap() {
         icb->RegisterSharedControl(ReportingControllerBucketSize, "DSProxyControls.RequestReportingSettings.BucketSize");
         icb->RegisterSharedControl(ReportingControllerLeakDurationMs, "DSProxyControls.RequestReportingSettings.LeakDurationMs");
         icb->RegisterSharedControl(ReportingControllerLeakRate, "DSProxyControls.RequestReportingSettings.LeakRate");
+
+        icb->RegisterSharedControl(EnableDeepScrubbing, "VDiskControls.EnableDeepScrubbing");
     }
 
     // start replication broker
@@ -662,7 +677,7 @@ void TNodeWarden::PersistConfig(std::optional<TString> mainYaml, ui64 mainYamlVe
         return;
     }
 
-    STLOG(PRI_DEBUG, BS_NODE, NW51, "persisting new configurations",
+    STLOG(PRI_DEBUG, BS_NODE, NW63, "persisting new configurations",
         (MainYaml, mainYaml), (MainYamlVersion, mainYamlVersion), (StorageYaml, storageYaml),
         (StorageYamlVersion, storageYamlVersion), (YamlConfig, YamlConfig));
 
@@ -1535,18 +1550,19 @@ bool NKikimr::NStorage::DeriveStorageConfig(const NKikimrConfig::TAppConfig& app
         } else if (node.HasWalleLocation()) {
             r->MutableLocation()->CopyFrom(node.GetWalleLocation());
         }
+        const auto& bridgePileName = TNodeLocation(r->GetLocation()).GetBridgePileName();
         if (!piles.empty()) {
-            if (!node.HasBridgePileName()) {
+            if (!bridgePileName) {
                 *errorReason = TStringBuilder() << "mandatory pile name is missing for node " << r->GetNodeId();
                 return false;
             }
-            const auto it = piles.find(node.GetBridgePileName());
+            const auto it = piles.find(*bridgePileName);
             if (it == piles.end()) {
-                *errorReason = TStringBuilder() << "incorrect pile name " << node.GetBridgePileName();
+                *errorReason = TStringBuilder() << "incorrect pile name " << *bridgePileName;
                 return false;
             }
             it->second.CopyToProto(r, &NKikimrBlobStorage::TNodeIdentifier::SetBridgePileId);
-        } else if (node.HasBridgePileName()) {
+        } else if (bridgePileName) {
             *errorReason = "pile name can't be specified when Bridge mode is not enabled";
             return false;
         }

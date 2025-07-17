@@ -86,9 +86,9 @@
                                                                 "Columns": [
                                                                     "pkxx"
                                                                 ],
-                                                                "E-Cost": "No estimate",
-                                                                "E-Rows": "No estimate",
-                                                                "E-Size": "No estimate",
+                                                                "E-Cost": "0",
+                                                                "E-Rows": "0",
+                                                                "E-Size": "0",
                                                                 "LookupKeyColumns": [
                                                                     "pkxx"
                                                                 ],
@@ -163,10 +163,6 @@
                                                         "Name": "TableFullScan",
                                                         "Path": "/Root/postgres_jointest/coalesce-and-join.test_plan/yy",
                                                         "ReadColumns": [
-                                                            "pkxx",
-                                                            "pkyy"
-                                                        ],
-                                                        "ReadRanges": [
                                                             "pkxx (-\u221e, +\u221e)",
                                                             "pkyy (-\u221e, +\u221e)"
                                                         ],

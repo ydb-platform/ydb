@@ -24,6 +24,7 @@
 #include <util/generic/string.h>
 #include <util/generic/utility.h>
 #include <util/string/cast.h>
+#include <util/generic/xrange.h>
 
 namespace NKikimr {
 
@@ -51,7 +52,7 @@ namespace {
     }
 
     template <typename TPath>
-    bool IsValidNotification(const TPath& path, const NKikimrSchemeBoard::TEvNotify& record) {
+    bool IsValidNotification(const TPath& path, const NKikimrSchemeBoard::TEvNotify& record, const TClusterState* clusterState = nullptr) {
         bool valid = false;
 
         if (record.HasPath()) {
@@ -60,6 +61,10 @@ namespace {
 
         if (!valid && (record.HasPathOwnerId() && record.HasLocalPathId())) {
             valid = IsSame(path, TPathId(record.GetPathOwnerId(), record.GetLocalPathId()));
+        }
+
+        if (valid && clusterState && record.HasClusterState()) {
+            valid = (*clusterState == TClusterState(record.GetClusterState()));
         }
 
         return valid;
@@ -137,7 +142,7 @@ namespace {
         NKikimrSchemeBoard::TEvNotify Notify;
         TPathId SubdomainPathId;
         TSet<ui64> PathAbandonedTenantsSchemeShards;
-        TMaybe<NKikimrScheme::TEvDescribeSchemeResult> DescribeSchemeResult;
+        TMaybe<NKikimrScheme::TEvDescribeSchemeResult> DescribeSchemeResult = Nothing();
 
         static TNotifyResponse FromNotify(NKikimrSchemeBoard::TEvNotify&& record) {
             // PathSubdomainPathId's absence is a marker that input message was sent
@@ -339,21 +344,6 @@ namespace {
 
     };
 
-    struct TEvPrivate {
-        enum EEv {
-            EvReplicaMissing = EventSpaceBegin(TKikimrEvents::ES_PRIVATE),
-            EvSwitchReplica,
-
-            EvEnd,
-        };
-
-        static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_PRIVATE), "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_PRIVATE)");
-
-        struct TEvReplicaMissing : public TEventLocal<TEvReplicaMissing, EvReplicaMissing> {
-            // empty
-        };
-    };
-
 } // anonymous
 
 template <typename TPath, typename TDerived>
@@ -417,13 +407,6 @@ class TReplicaSubscriber: public TMonitorableActor<TDerived> {
         this->Send(ev->Sender, std::move(response), 0, ev->Cookie);
     }
 
-    void Handle(TEvents::TEvUndelivered::TPtr&) {
-        // We notify parent that this replica is missing, but we stay alive
-        // until the node is disconnected, in which case we assume the node
-        // may reboot and actor is launched.
-        this->Send(Parent, new TEvPrivate::TEvReplicaMissing);
-    }
-
     void PassAway() override {
         if (Replica.NodeId() != this->SelfId().NodeId()) {
             this->Send(MakeInterconnectProxyId(Replica.NodeId()), new TEvents::TEvUnsubscribe());
@@ -478,11 +461,11 @@ public:
             hFunc(NInternalEvents::TEvNotify, Handle);
             hFunc(NInternalEvents::TEvSyncVersionRequest, Handle);
             hFunc(NInternalEvents::TEvSyncVersionResponse, Handle);
-            hFunc(TEvents::TEvUndelivered, Handle);
 
             hFunc(TSchemeBoardMonEvents::TEvInfoRequest, Handle);
 
             cFunc(TEvInterconnect::TEvNodeDisconnected::EventType, PassAway);
+            cFunc(TEvents::TEvUndelivered::EventType, PassAway);
             cFunc(TEvents::TEvPoisonPill::EventType, PassAway);
         }
     }
@@ -521,16 +504,12 @@ class TSubscriberProxy: public TMonitorableActor<TDerived> {
     }
 
     void Handle(NInternalEvents::TEvSyncVersionRequest::TPtr& ev) {
-        if (!ReplicaMissing) {
-            CurrentSyncRequest = ev->Cookie;
-            this->Send(ReplicaSubscriber, ev->Release().Release(), 0, ev->Cookie);
-        } else {
-            this->Send(Parent, new NInternalEvents::TEvSyncVersionResponse(0, true), 0, ev->Cookie);
-        }
+        CurrentSyncRequest = ev->Cookie;
+        this->Send(ReplicaSubscriber, ev->Release().Release(), 0, ev->Cookie);
     }
 
     void HandleSleep(NInternalEvents::TEvSyncVersionRequest::TPtr& ev) {
-        this->Send(Parent, new NInternalEvents::TEvSyncVersionResponse(0, true), 0, ev->Cookie);
+        this->Send(Parent, new NInternalEvents::TEvSyncVersionResponse(0), 0, ev->Cookie);
     }
 
     void Handle(NInternalEvents::TEvSyncVersionResponse::TPtr& ev) {
@@ -563,41 +542,20 @@ class TSubscriberProxy: public TMonitorableActor<TDerived> {
         this->Send(ev->Sender, std::move(response), 0, ev->Cookie);
     }
 
-    void OnReplicaFailure() {
-        if (CurrentSyncRequest) {
-            this->Send(Parent, new NInternalEvents::TEvSyncVersionResponse(0, true), 0, CurrentSyncRequest);
-            CurrentSyncRequest = 0;
-        }
-
-        this->Send(Parent, new NInternalEvents::TEvNotifyBuilder(Path, true));
-    }
-
     void Handle(TEvents::TEvGone::TPtr& ev) {
         if (ev->Sender != ReplicaSubscriber) {
             return;
         }
 
-        if (!ReplicaMissing) {
-            OnReplicaFailure();
+        if (CurrentSyncRequest) {
+            this->Send(Parent, new NInternalEvents::TEvSyncVersionResponse(0), 0, CurrentSyncRequest);
+            CurrentSyncRequest = 0;
         }
 
         ReplicaSubscriber = TActorId();
-        ReplicaMissing = false;
-
+        this->Send(Parent, new NInternalEvents::TEvNotifyBuilder(Path, true));
         this->Become(&TDerived::StateSleep, Delay, new TEvents::TEvWakeup());
         Delay = Min(Delay * 2, MaxDelay);
-    }
-
-    void Handle(TEvPrivate::TEvReplicaMissing::TPtr& ev) {
-        if (ev->Sender != ReplicaSubscriber) {
-            return;
-        }
-
-        if (!ReplicaMissing) {
-            OnReplicaFailure();
-
-            ReplicaMissing = true;
-        }
     }
 
     void PassAway() override {
@@ -614,11 +572,6 @@ class TSubscriberProxy: public TMonitorableActor<TDerived> {
             {"ReplicaIndex", TStringBuilder() << ReplicaIndex << '/' << TotalReplicas},
             {"Path", ToString(Path)},
         };
-    }
-
-    void HandleSwitchReplica(STATEFN_SIG) {
-        Replica = ev->Sender;
-        TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, ReplicaSubscriber, this->SelfId(), nullptr, 0));
     }
 
 public:
@@ -664,10 +617,7 @@ public:
             hFunc(TSchemeBoardMonEvents::TEvInfoRequest, Handle);
 
             hFunc(TEvents::TEvGone, Handle);
-            hFunc(TEvPrivate::TEvReplicaMissing, Handle);
             cFunc(TEvents::TEvPoisonPill::EventType, PassAway);
-
-            fFunc(TEvPrivate::EvSwitchReplica, HandleSwitchReplica);
         }
     }
 
@@ -679,8 +629,6 @@ public:
 
             CFunc(TEvents::TEvWakeup::EventType, Bootstrap);
             cFunc(TEvents::TEvPoisonPill::EventType, PassAway);
-
-            fFunc(TEvPrivate::EvSwitchReplica, HandleSwitchReplica);
         }
     }
 
@@ -698,7 +646,6 @@ private:
     TDuration Delay;
 
     ui64 CurrentSyncRequest;
-    bool ReplicaMissing = false;
 
     static constexpr TDuration DefaultDelay = TDuration::MilliSeconds(10);
     static constexpr TDuration MaxDelay = TDuration::Seconds(5);
@@ -717,6 +664,16 @@ public:
 
 template <typename TPath, typename TDerived, typename TProxyDerived>
 class TSubscriber: public TMonitorableActor<TDerived> {
+
+    struct TProxyInfo {
+        TActorId Proxy;
+        TActorId Replica;
+    };
+
+    struct TProxyGroup {
+        TVector<TProxyInfo> Proxies;
+    };
+
     template <typename TNotify, typename... Args>
     static THolder<TNotify> BuildNotify(const NKikimrSchemeBoard::TEvNotify& record, Args&&... args) {
         THolder<TNotify> notify;
@@ -778,7 +735,21 @@ class TSubscriber: public TMonitorableActor<TDerived> {
     }
 
     bool IsMajorityReached() const {
-        return InitialResponses.size() > (Proxies.size() / 2);
+        TVector<ui32> responsesByGroup(ProxyGroups.size(), 0);
+        for (const auto& [proxy, _] : InitialResponses) {
+            if (const auto* groupIdx = ProxyToGroupMap.FindPtr(proxy)) {
+                responsesByGroup[*groupIdx]++;
+            } else {
+                SBS_LOG_N("Previously received response sender is currently unknown"
+                    << ": sender# " << proxy);
+            }
+        }
+        for (size_t groupIdx : xrange(ProxyGroups.size())) {
+            if (responsesByGroup[groupIdx] <= ProxyGroups[groupIdx].Proxies.size() / 2) {
+                return false;
+            }
+        }
+        return true;
     }
 
     void EnqueueSyncRequest(NInternalEvents::TEvSyncRequest::TPtr& ev) {
@@ -794,9 +765,11 @@ class TSubscriber: public TMonitorableActor<TDerived> {
         DelayedSyncRequest = 0;
 
         Y_ABORT_UNLESS(PendingSync.empty());
-        for (const auto& [proxy, replica] : Proxies) {
-            this->Send(proxy, new NInternalEvents::TEvSyncVersionRequest(Path), 0, CurrentSyncRequest);
-            PendingSync.emplace(proxy);
+        for (const auto& proxyGroup : ProxyGroups) {
+            for (const auto& [proxy, _] : proxyGroup.Proxies) {
+                this->Send(proxy, new NInternalEvents::TEvSyncVersionRequest(Path), 0, CurrentSyncRequest);
+                PendingSync.emplace(proxy);
+            }
         }
 
         return true;
@@ -806,8 +779,14 @@ class TSubscriber: public TMonitorableActor<TDerived> {
         SBS_LOG_D("Handle " << ev->Get()->ToString()
             << ": sender# " << ev->Sender);
 
-        if (!IsValidNotification(Path, ev->Get()->GetRecord())) {
+        if (!IsValidNotification(Path, ev->Get()->GetRecord(), &ClusterState)) {
             SBS_LOG_E("Suspicious " << ev->Get()->ToString()
+                << ": sender# " << ev->Sender);
+            return;
+        }
+
+        if (!ProxyToGroupMap.contains(ev->Sender)) {
+            SBS_LOG_E("Unknown " << ev->Get()->ToString()
                 << ": sender# " << ev->Sender);
             return;
         }
@@ -886,6 +865,11 @@ class TSubscriber: public TMonitorableActor<TDerived> {
         Y_ABORT_UNLESS(MaybeRunVersionSync());
     }
 
+    static bool IsSyncFinished(ui32 successes, ui32 failures, ui32 expectedTotal) {
+        const auto half = expectedTotal;
+        return successes > half || failures > half || successes + failures >= expectedTotal;
+    }
+
     void Handle(NInternalEvents::TEvSyncVersionResponse::TPtr& ev) {
         SBS_LOG_D("Handle " << ev->Get()->ToString()
             << ": sender# " << ev->Sender
@@ -907,48 +891,79 @@ class TSubscriber: public TMonitorableActor<TDerived> {
             return;
         }
 
-        PendingSync.erase(it);
-        Y_ABORT_UNLESS(!ReceivedSync.contains(ev->Sender));
-        ReceivedSync[ev->Sender] = ev->Get()->Record.GetPartial();
-
-        ui32 successes = 0;
-        ui32 failures = 0;
-        for (const auto& [_, partial] : ReceivedSync) {
-            if (!partial) {
-                ++successes;
-            } else {
-                ++failures;
-            }
-        }
-
-        const ui32 size = Proxies.size();
-        const ui32 half = size / 2;
-        if (successes <= half && failures <= half && (successes + failures) < size) {
-            SBS_LOG_D("Sync is in progress"
-                << ": cookie# " << ev->Cookie
-                << ", size# " << size
-                << ", half# " << half
-                << ", successes# " << successes
-                << ", faulires# " << failures);
+        if (!ProxyToGroupMap.contains(ev->Sender)) {
+            SBS_LOG_E("Sync sender is unknown"
+                << ": sender# " << ev->Sender
+                << ", cookie# " << ev->Cookie);
             return;
         }
 
-        const bool partial = !(successes > half);
-        const TString done = TStringBuilder() << "Sync is done"
-            << ": cookie# " << ev->Cookie
-            << ", size# " << size
-            << ", half# " << half
-            << ", successes# " << successes
-            << ", faulires# " << failures
-            << ", partial# " << partial;
-
-        if (!partial) {
-            SBS_LOG_D(done);
-        } else {
-            SBS_LOG_W(done);
+        const auto& record = ev->Get()->Record;
+        const bool configMismatch = record.HasClusterState() && ClusterState != TClusterState(record.GetClusterState());
+        if (configMismatch) {
+            SBS_LOG_I("Cluster State mismatch in sync version response"
+                << ": sender# " << ev->Sender
+                << ", cookie# " << ev->Cookie
+                << ", subscriber cluster state# " << ClusterState
+                << ", replica cluster state# {" << record.GetClusterState().ShortDebugString() << "}"
+            );
         }
 
-        this->Send(Owner, new NInternalEvents::TEvSyncResponse(Path, partial), 0, ev->Cookie);
+        PendingSync.erase(it);
+        Y_ABORT_UNLESS(!ReceivedSync.contains(ev->Sender));
+        // Treat both partial syncs and configuration mismatches as sync failures.
+        ReceivedSync[ev->Sender] = record.GetPartial() || configMismatch;
+
+        TVector<ui32> successesByGroup(ProxyGroups.size(), 0);
+        TVector<ui32> failuresByGroup(ProxyGroups.size(), 0);
+        for (const auto& [proxy, partial] : ReceivedSync) {
+            const auto* groupIdx = ProxyToGroupMap.FindPtr(proxy);
+            if (!groupIdx) {
+                SBS_LOG_N("Previously received sync sender is currently unknown"
+                    << ": sender# " << proxy);
+                continue;
+            }
+            if (!partial) {
+                ++successesByGroup[*groupIdx];
+            } else {
+                ++failuresByGroup[*groupIdx];
+            }
+        }
+        bool syncIsComplete = true;
+        for (size_t groupIdx : xrange(ProxyGroups.size())) {
+            const ui32 size = ProxyGroups[groupIdx].Proxies.size();
+            const ui32 half = size / 2;
+            if (!IsSyncFinished(successesByGroup[groupIdx], failuresByGroup[groupIdx], size)) {
+                SBS_LOG_D("Sync is in progress"
+                    << ": cookie# " << ev->Cookie
+                    << ", ring group# " << groupIdx
+                    << ", size# " << size
+                    << ", half# " << half
+                    << ", successes# " << successesByGroup[groupIdx]
+                    << ", failures# " << failuresByGroup[groupIdx]);
+                return;
+            }
+            syncIsComplete &= successesByGroup[groupIdx] > half;
+            const auto finalMessage = TStringBuilder() << "Sync is done in the ring group"
+                << ": cookie# " << ev->Cookie
+                << ", ring group# " << groupIdx
+                << ", size# " << size
+                << ", half# " << half
+                << ", successes# " << successesByGroup[groupIdx]
+                << ", failures# " << failuresByGroup[groupIdx]
+                << ", partial# " << !syncIsComplete;
+            if (syncIsComplete) {
+                SBS_LOG_D(finalMessage);
+            } else {
+                SBS_LOG_N(finalMessage);
+            }
+        }
+        if (!syncIsComplete) {
+            SBS_LOG_W("Sync is incomplete in one of the ring groups"
+                << ": cookie# " << ev->Cookie);
+        }
+
+        this->Send(Owner, new NInternalEvents::TEvSyncResponse(Path, !syncIsComplete), 0, ev->Cookie);
 
         PendingSync.clear();
         ReceivedSync.clear();
@@ -956,33 +971,68 @@ class TSubscriber: public TMonitorableActor<TDerived> {
         MaybeRunVersionSync();
     }
 
+    static bool ShouldIgnore(const TEvStateStorage::TEvResolveReplicasList::TReplicaGroup& replicaGroup) {
+        return replicaGroup.WriteOnly || replicaGroup.State == ERingGroupState::DISCONNECTED;
+    }
+
     void Handle(TEvStateStorage::TEvResolveReplicasList::TPtr& ev) {
         SBS_LOG_D("Handle " << ev->Get()->ToString());
 
-        const auto& replicas = ev->Get()->GetPlainReplicas();
+        const auto& replicaGroups = ev->Get()->ReplicaGroups;
 
-        if (replicas.empty()) {
-            Y_ABORT_UNLESS(Proxies.empty());
+        if (replicaGroups.empty()) {
+            Y_ABORT_UNLESS(ProxyGroups.empty());
             SBS_LOG_E("Subscribe on unconfigured SchemeBoard");
             this->Become(&TDerived::StateCalm);
             return;
         }
 
-        Y_ABORT_UNLESS(Proxies.empty() || Proxies.size() == replicas.size());
-
-        if (Proxies.empty()) {
-            for (size_t i = 0; i < replicas.size(); ++i) {
-                Proxies.emplace_back(this->RegisterWithSameMailbox(new TProxyDerived(this->SelfId(), i, replicas.size(),
-                    replicas[i], Path, DomainOwnerId)), replicas[i]);
-            }
-        } else {
-            for (size_t i = 0; i < replicas.size(); ++i) {
-                if (auto& [proxy, replica] = Proxies[i]; replica != replicas[i]) {
-                    TActivationContext::Send(new IEventHandle(TEvPrivate::EvSwitchReplica, 0, proxy, replicas[i], nullptr, 0));
-                    replica = replicas[i];
-                }
+        for (const auto& group : ProxyGroups) {
+            for (const auto& [proxy, _] : group.Proxies) {
+                this->Send(proxy, new TEvents::TEvPoisonPill());
             }
         }
+
+        if (CurrentSyncRequest) {
+            SBS_LOG_I("Delay current sync request: " << CurrentSyncRequest);
+            DelayedSyncRequest = Max(DelayedSyncRequest, CurrentSyncRequest);
+            CurrentSyncRequest = 0;
+        }
+
+        ProxyToGroupMap.clear();
+        ProxyGroups.clear();
+        States.clear();
+        InitialResponses.clear();
+        State.Clear();
+        PendingSync.clear();
+        ReceivedSync.clear();
+
+        for (size_t groupIdx = 0; groupIdx < replicaGroups.size(); ++groupIdx) {
+            const auto& replicaGroup = replicaGroups[groupIdx];
+            if (ShouldIgnore(replicaGroup)) {
+                continue;
+            }
+            auto& proxyGroup = ProxyGroups.emplace_back();
+            proxyGroup.Proxies.reserve(replicaGroup.Replicas.size());
+            for (size_t i = 0; i < replicaGroup.Replicas.size(); ++i) {
+                auto& proxy = proxyGroup.Proxies.emplace_back();
+                proxy.Replica = replicaGroup.Replicas[i];
+                proxy.Proxy = this->RegisterWithSameMailbox(
+                    new TProxyDerived(
+                        this->SelfId(),
+                        i,
+                        replicaGroup.Replicas.size(),
+                        replicaGroup.Replicas[i],
+                        Path,
+                        DomainOwnerId
+                    )
+                );
+                ProxyToGroupMap[proxy.Proxy] = ProxyGroups.size() - 1;
+            }
+        }
+
+        ClusterState.Generation = ev->Get()->ClusterStateGeneration;
+        ClusterState.Guid = ev->Get()->ClusterStateGuid;
 
         this->Become(&TDerived::StateWork);
     }
@@ -1040,10 +1090,11 @@ class TSubscriber: public TMonitorableActor<TDerived> {
     }
 
     void PassAway() override {
-        for (const auto& [proxy, replica] : Proxies) {
-            this->Send(proxy, new TEvents::TEvPoisonPill());
+        for (const auto& group : ProxyGroups) {
+            for (const auto& [proxy, _] : group.Proxies) {
+                this->Send(proxy, new TEvents::TEvPoisonPill());
+            }
         }
-
         TActivationContext::Send(new IEventHandle(TEvents::TSystem::Unsubscribe, 0, MakeStateStorageProxyID(),
             this->SelfId(), nullptr, 0));
 
@@ -1128,7 +1179,8 @@ private:
     const TPath Path;
     const ui64 DomainOwnerId;
 
-    std::vector<std::tuple<TActorId, TActorId>> Proxies;
+    THashMap<TActorId, ui32> ProxyToGroupMap;
+    TVector<TProxyGroup> ProxyGroups;
     TMap<TActorId, TState> States;
     TMap<TActorId, TNotifyResponse> InitialResponses;
     TMaybe<TState> State;
@@ -1137,6 +1189,8 @@ private:
     ui64 CurrentSyncRequest;
     TSet<TActorId> PendingSync;
     TMap<TActorId, bool> ReceivedSync;
+
+    TClusterState ClusterState;
 
 }; // TSubscriber
 

@@ -7,6 +7,7 @@
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/interconnect.h>
 #include <ydb/library/actors/core/log.h>
+#include <ydb/core/blobstorage/nodewarden/node_warden_events.h>
 
 #include <util/digest/city.h>
 #include <util/generic/xrange.h>
@@ -59,7 +60,7 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
     TMap<TActorId, TActorId> Followers;
 
     const ui32 RingGroupIndex;
-    bool NotifyPassAway;
+    bool NotifyRingGroupProxy;
 
     void SelectRequestReplicas(TStateStorageInfo *info) {
         THolder<TStateStorageInfo::TSelection> selection(new TStateStorageInfo::TSelection());
@@ -89,7 +90,7 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
                 }
             }
         }
-        if(NotifyPassAway)
+        if (NotifyRingGroupProxy)
             Send(Source, new TEvStateStorage::TEvRingGroupPassAway());
         TActor::PassAway();
     }
@@ -114,16 +115,22 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
     struct TCloneUpdateEventOp {
         const TEvStateStorage::TEvUpdate * const Ev;
         const bool UpdateLeaderTablet;
+        ui64 ClusterStateGeneration;
+        ui64 ClusterStateGuid;
 
-        TCloneUpdateEventOp(const TEvStateStorage::TEvUpdate *ev)
+        TCloneUpdateEventOp(const TEvStateStorage::TEvUpdate *ev, ui64 clusterStateGeneration, ui64 clusterStateGuid)
             : Ev(ev)
             , UpdateLeaderTablet(!!ev->ProposedLeaderTablet)
+            , ClusterStateGeneration(clusterStateGeneration)
+            , ClusterStateGuid(clusterStateGuid)
         {}
 
         IEventBase* operator()(ui64 cookie, TActorId replicaId) const {
             THolder<TEvStateStorage::TEvReplicaUpdate> req(new TEvStateStorage::TEvReplicaUpdate());
             req->Record.SetSignature(Ev->Signature.GetReplicaSignature(replicaId));
             req->Record.SetTabletID(Ev->TabletID);
+            req->Record.SetClusterStateGeneration(ClusterStateGeneration);
+            req->Record.SetClusterStateGuid(ClusterStateGuid);
             ActorIdToProto(Ev->ProposedLeader, req->Record.MutableProposedLeader());
 
             if (UpdateLeaderTablet)
@@ -138,15 +145,21 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
 
     struct TCloneLockEventOp {
         const TEvStateStorage::TEvLock * const Ev;
+        ui64 ClusterStateGeneration;
+        ui64 ClusterStateGuid;
 
-        TCloneLockEventOp(const TEvStateStorage::TEvLock *ev)
+        TCloneLockEventOp(const TEvStateStorage::TEvLock *ev, ui64 clusterStateGeneration, ui64 clusterStateGuid)
             : Ev(ev)
+            , ClusterStateGeneration(clusterStateGeneration)
+            , ClusterStateGuid(clusterStateGuid)
         {}
 
         IEventBase* operator()(ui64 cookie, TActorId replicaId) const {
             THolder<TEvStateStorage::TEvReplicaLock> req(new TEvStateStorage::TEvReplicaLock());
             req->Record.SetSignature(Ev->Signature.GetReplicaSignature(replicaId));
             req->Record.SetTabletID(Ev->TabletID);
+            req->Record.SetClusterStateGeneration(ClusterStateGeneration);
+            req->Record.SetClusterStateGuid(ClusterStateGuid);
             ActorIdToProto(Ev->ProposedLeader, req->Record.MutableProposedLeader());
             req->Record.SetProposedGeneration(Ev->ProposedGeneration);
             req->Record.SetCookie(cookie);
@@ -172,14 +185,41 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
         }
     }
 
-    void MergeReply(TEvStateStorage::TEvReplicaInfo *ev) {
+    bool CheckConfigVersion(TActorId &sender, TEvStateStorage::TEvReplicaInfo *ev) {
+        const auto &record = ev->Record;
+        const ui64 clusterStateGeneration = record.GetClusterStateGeneration();
+        const ui64 clusterStateGuid = record.GetClusterStateGuid();
+        if (Info->ClusterStateGeneration < clusterStateGeneration ||
+            (Info->ClusterStateGeneration == clusterStateGeneration && Info->ClusterStateGuid != clusterStateGuid)) {
+            BLOG_D("StateStorageProxy TEvNodeWardenNotifyConfigMismatch: Info->ClusterStateGeneration=" << Info->ClusterStateGeneration << " clusterStateGeneration=" << clusterStateGeneration <<" Info->ClusterStateGuid=" << Info->ClusterStateGuid << " clusterStateGuid=" << clusterStateGuid);
+            if (NotifyRingGroupProxy) {
+                Send(Source, new TEvStateStorage::TEvConfigVersionInfo(clusterStateGeneration, clusterStateGuid));
+            }
+            Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()),
+                new NStorage::TEvNodeWardenNotifyConfigMismatch(sender.NodeId(), clusterStateGeneration, clusterStateGuid));
+            ReplyAndDie(NKikimrProto::ERROR);
+            return false;
+        }
+        return true;
+    }
+
+    void MergeReply(TActorId &sender, TEvStateStorage::TEvReplicaInfo *ev) {
         const auto &record = ev->Record;
         const NKikimrProto::EReplyStatus status = record.GetStatus();
         const ui64 cookie = record.GetCookie();
 
+        if (!CheckConfigVersion(sender, ev)) {
+            return;
+        }
+
         Y_ABORT_UNLESS(cookie < Replicas);
         auto replicaId = ReplicaSelection->SelectedReplicas[cookie];
-        Y_ABORT_UNLESS(!Signature.HasReplicaSignature(replicaId));
+
+        if (Signature.HasReplicaSignature(replicaId)) {
+            BLOG_ERROR("TStateStorageProxyRequest::MergeReply duplicated TEvReplicaInfo cookie:" << cookie
+                << " replica:" << replicaId << " signature:" << Signature.GetReplicaSignature(replicaId) << " ev: " << ev->ToString());
+            return;
+        }
         UndeliveredReplicas.erase(replicaId);
         Signature.SetReplicaSignature(replicaId, ev->Record.GetSignature());
         ++RepliesMerged;
@@ -247,7 +287,7 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
         Source = ev->Sender;
 
         PrepareInit(msg);
-        SendRequest([this](ui64 cookie, TActorId /*replica*/) { return new TEvStateStorage::TEvReplicaLookup(TabletID, cookie); });
+        SendRequest([this](ui64 cookie, TActorId /*replica*/) { return new TEvStateStorage::TEvReplicaLookup(TabletID, cookie, Info->ClusterStateGeneration, Info->ClusterStateGuid); });
 
         Become(&TThis::StateLookup, TDuration::MicroSeconds(StateStorageRequestTimeout), new TEvents::TEvWakeup());
     }
@@ -264,9 +304,9 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
         SuggestedGeneration = msg->ProposedGeneration;
         SuggestedStep = msg->ProposedStep;
 
-            TCloneUpdateEventOp op(msg);
-            SendRequest(op);
-            Become(&TThis::StateUpdate, TDuration::MicroSeconds(StateStorageRequestTimeout), new TEvents::TEvWakeup());
+        TCloneUpdateEventOp op(msg, Info->ClusterStateGeneration, Info->ClusterStateGuid);
+        SendRequest(op);
+        Become(&TThis::StateUpdate, TDuration::MicroSeconds(StateStorageRequestTimeout), new TEvents::TEvWakeup());
     }
 
     void HandleInit(TEvStateStorage::TEvLock::TPtr &ev) {
@@ -280,9 +320,9 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
         SuggestedGeneration = msg->ProposedGeneration;
         SuggestedStep = 0;
 
-            TCloneLockEventOp op(msg);
-            SendRequest(op);
-            Become(&TThis::StateUpdate, TDuration::MicroSeconds(StateStorageRequestTimeout), new TEvents::TEvWakeup());
+        TCloneLockEventOp op(msg, Info->ClusterStateGeneration, Info->ClusterStateGuid);
+        SendRequest(op);
+        Become(&TThis::StateUpdate, TDuration::MicroSeconds(StateStorageRequestTimeout), new TEvents::TEvWakeup());
     }
 
     // lookup handling
@@ -354,7 +394,7 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
     void HandleLookup(TEvStateStorage::TEvReplicaInfo::TPtr &ev) {
         BLOG_D("ProxyRequest::HandleLookup ringGroup:" << RingGroupIndex << " ev: " << ev->Get()->ToString());
         TEvStateStorage::TEvReplicaInfo *msg = ev->Get();
-        MergeReply(msg);
+        MergeReply(ev->Sender, msg);
         CheckLookupReply();
     }
 
@@ -428,7 +468,7 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
     void HandleUpdate(TEvStateStorage::TEvReplicaInfo::TPtr &ev) {
         BLOG_D("ProxyRequest::HandleUpdate ringGroup:" << RingGroupIndex << " ev: " << ev->Get()->ToString());
         TEvStateStorage::TEvReplicaInfo *msg = ev->Get();
-        MergeReply(msg);
+        MergeReply(ev->Sender, msg);
         CheckUpdateReply();
     }
 
@@ -449,7 +489,9 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
         Y_ABORT_UNLESS(cookie < Replicas);
         const auto replicaId = ReplicaSelection->SelectedReplicas[cookie];
         if ((sig == Max<ui64>() && UndeliveredReplicas.insert(replicaId).second) || !Signature.HasReplicaSignature(replicaId)) {
-            Signature.SetReplicaSignature(replicaId, sig);
+            if (sig != Max<ui64>()) {
+                Signature.SetReplicaSignature(replicaId, sig);
+            }
             ++RepliesAfterReply;
             ++SignaturesMerged;
 
@@ -481,10 +523,17 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
         BLOG_D("ProxyRequest::HandleUpdateSig ringGroup:" << RingGroupIndex << " ev: " << ev->Get()->ToString());
 
         TEvStateStorage::TEvReplicaInfo *msg = ev->Get();
+
+        CheckConfigVersion(ev->Sender, msg);
+
         const ui64 cookie = msg->Record.GetCookie();
         Y_ABORT_UNLESS(cookie < Replicas);
         const auto replicaId = ReplicaSelection->SelectedReplicas[cookie];
-        Y_ABORT_UNLESS(!Signature.HasReplicaSignature(replicaId));
+        if (Signature.HasReplicaSignature(replicaId)) {
+            BLOG_ERROR("TStateStorageProxyRequest::HandleUpdateSig duplicated TEvReplicaInfo cookie:" << cookie
+                << " replica:" << replicaId << " signature:" << Signature.GetReplicaSignature(replicaId) << " ev: " << ev->ToString());
+            return;
+        }
         UndeliveredReplicas.erase(replicaId);
         return UpdateSigFor(cookie, msg->Record.GetSignature());
     }
@@ -501,7 +550,7 @@ public:
         return NKikimrServices::TActivity::SS_PROXY_REQUEST;
     }
 
-    TStateStorageProxyRequest(const TIntrusivePtr<TStateStorageInfo> &info, ui32 ringGroupIndex, bool notifyPassAway = true)
+    TStateStorageProxyRequest(const TIntrusivePtr<TStateStorageInfo> &info, ui32 ringGroupIndex, bool notifyRingGroupProxy = true)
         : TActor(&TThis::StateInit)
         , Info(info)
         , UseInterconnectSubscribes(true)
@@ -519,7 +568,7 @@ public:
         , ReplyLocked(false)
         , ReplyLockedFor(0)
         , RingGroupIndex(ringGroupIndex)
-        , NotifyPassAway(notifyPassAway)
+        , NotifyRingGroupProxy(notifyRingGroupProxy)
     {}
 
     STATEFN(StateInit) {
@@ -618,8 +667,11 @@ class TStateStorageRingGroupProxyRequest : public TActorBootstrapped<TStateStora
         WaitAllReplies = msg->ProxyOptions.SigWaitMode != msg->ProxyOptions.SigNone;
         BLOG_D("RingGroupProxyRequest::HandleInit ev: " << msg->ToString());
         for (ui32 ringGroupIndex = 0; ringGroupIndex < Info->RingGroups.size(); ++ringGroupIndex) {
-            if (!WaitAllReplies && Info->RingGroups[ringGroupIndex].WriteOnly)
+            const auto &ringGroup = Info->RingGroups[ringGroupIndex];
+            if ((!WaitAllReplies && ringGroup.WriteOnly) || ringGroup.State == ERingGroupState::DISCONNECTED
+                || ringGroup.State == ERingGroupState::NOT_SYNCHRONIZED) {
                 continue;
+            }
             auto actorId = RegisterWithSameMailbox(new TStateStorageProxyRequest(Info, ringGroupIndex));
             RingGroupActors[actorId] = ringGroupIndex;
             RingGroupActorsByIndex[ringGroupIndex] = actorId;
@@ -634,6 +686,10 @@ class TStateStorageRingGroupProxyRequest : public TActorBootstrapped<TStateStora
         WaitAllReplies = true;
         BLOG_D("RingGroupProxyRequest::HandleInit ev: " << msg->ToString());
         for (ui32 ringGroupIndex = 0; ringGroupIndex < Info->RingGroups.size(); ++ringGroupIndex) {
+            const auto &ringGroup = Info->RingGroups[ringGroupIndex];
+            if (ringGroup.State == ERingGroupState::DISCONNECTED || ringGroup.State == ERingGroupState::NOT_SYNCHRONIZED) {
+                continue;
+            }
             auto actorId = RegisterWithSameMailbox(new TStateStorageProxyRequest(Info, ringGroupIndex));
             RingGroupActors[actorId] = ringGroupIndex;
             RingGroupActorsByIndex[ringGroupIndex] = actorId;
@@ -642,7 +698,7 @@ class TStateStorageRingGroupProxyRequest : public TActorBootstrapped<TStateStora
     }
 
     void ProcessEvInfo(ui32 ringGroupIdx, TEvStateStorage::TEvInfo *msg) {
-        if (!Info->RingGroups[ringGroupIdx].WriteOnly) {
+        if (!Info->RingGroups[ringGroupIdx].WriteOnly && Info->RingGroups[ringGroupIdx].State == ERingGroupState::PRIMARY) {
             // TODO: if ringGroups return different results? Y_ABORT("StateStorage ring groups are not synchronized");
             TabletID = msg->TabletID;
             Cookie = msg->Cookie;
@@ -695,6 +751,15 @@ class TStateStorageRingGroupProxyRequest : public TActorBootstrapped<TStateStora
         Send(Source, new TEvStateStorage::TEvUpdateSignature(msg->TabletID, Signature));
     }
 
+    void HandleConfigVersion(TEvStateStorage::TEvConfigVersionInfo::TPtr &ev) {
+        TEvStateStorage::TEvConfigVersionInfo *msg = ev->Get();
+        if (Info->ClusterStateGeneration < msg->ClusterStateGeneration ||
+            (Info->ClusterStateGeneration == msg->ClusterStateGeneration && Info->ClusterStateGuid != msg->ClusterStateGuid)) {
+            Reply(NKikimrProto::ERROR);
+            PassAway();
+        }
+    }
+
     void Timeout() {
         PassAway();
     }
@@ -729,6 +794,7 @@ public:
 
         hFunc(TEvStateStorage::TEvInfo, HandleResult);
         hFunc(TEvStateStorage::TEvUpdateSignature, HandleResult);
+        hFunc(TEvStateStorage::TEvConfigVersionInfo, HandleConfigVersion);
         hFunc(TEvStateStorage::TEvRingGroupPassAway, Handle);
         cFunc(TEvents::TSystem::Wakeup, Timeout);
     )
@@ -833,7 +899,7 @@ public:
         AllReplicas = Info->SelectAllReplicas();
         if (!AllReplicas.empty()) {
             for (const TActorId &replica : AllReplicas) {
-                Send(replica, new TEvStateStorage::TEvReplicaDelete(TabletID), IEventHandle::FlagTrackDelivery);
+                Send(replica, new TEvStateStorage::TEvReplicaDelete(TabletID, Info->ClusterStateGeneration, Info->ClusterStateGuid), IEventHandle::FlagTrackDelivery);
             }
             Schedule(TDuration::Seconds(60), new TEvents::TEvWakeup());
             Become(&TThis::StateRequestedDelete);
@@ -860,8 +926,18 @@ public:
         OnResponseReceived();
     }
 
-    void Handle(TEvStateStorage::TEvReplicaInfo::TPtr &) {
+    void Handle(TEvStateStorage::TEvReplicaInfo::TPtr &ev) {
         ++Count;
+        auto &record = ev->Get()->Record;
+        const ui64 clusterStateGeneration = record.GetClusterStateGeneration();
+        const ui64 clusterStateGuid = record.GetClusterStateGuid();
+        if (Info->ClusterStateGeneration < clusterStateGeneration ||
+            (Info->ClusterStateGeneration == clusterStateGeneration && Info->ClusterStateGuid != clusterStateGuid)) {
+            Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()),
+                new NStorage::TEvNodeWardenNotifyConfigMismatch(ev->Sender.NodeId(), clusterStateGeneration, clusterStateGuid));
+            SendResponse();
+            return;
+        }
         OnResponseReceived();
     }
 
@@ -888,7 +964,7 @@ class TStateStorageProxy : public TActor<TStateStorageProxy> {
 
     void SpreadCleanupRequest(const TStateStorageInfo::TSelection &selection, ui64 tabletId, TActorId proposedLeader) {
         for (ui32 i = 0; i < selection.Sz; ++i)
-            Send(selection.SelectedReplicas[i], new TEvStateStorage::TEvReplicaCleanup(tabletId, proposedLeader));
+            Send(selection.SelectedReplicas[i], new TEvStateStorage::TEvReplicaCleanup(tabletId, proposedLeader, Info->ClusterStateGeneration, Info->ClusterStateGuid));
     }
 
     void Handle(TEvStateStorage::TEvCleanup::TPtr &ev) {
@@ -987,18 +1063,26 @@ class TStateStorageProxy : public TActor<TStateStorageProxy> {
     }
 
     void Handle(TEvStateStorage::TEvRingGroupPassAway::TPtr& /*ev*/) {
-        // Do nothng 
+        // Do nothng
     }
 
     template<typename TEventPtr>
     void ResolveReplicas(const TEventPtr &ev, ui64 tabletId, const TIntrusivePtr<TStateStorageInfo> &info) const {
         TAutoPtr<TEvStateStorage::TEvResolveReplicasList> reply(new TEvStateStorage::TEvResolveReplicasList());
-        reply->ReplicaGroups.resize(info->RingGroups.size());
+        reply->ClusterStateGeneration = info->ClusterStateGeneration;
+        reply->ClusterStateGuid = info->ClusterStateGuid;
+        reply->ReplicaGroups.reserve(info->RingGroups.size());
         for (ui32 ringGroupIndex : xrange(info->RingGroups.size())) {
+            if (info->RingGroups[ringGroupIndex].State == ERingGroupState::DISCONNECTED) {
+                continue;
+            }
             THolder<TStateStorageInfo::TSelection> selection(new TStateStorageInfo::TSelection());
             info->SelectReplicas(tabletId, selection.Get(), ringGroupIndex);
-            reply->ReplicaGroups[ringGroupIndex].WriteOnly = info->RingGroups[ringGroupIndex].WriteOnly;
-            reply->ReplicaGroups[ringGroupIndex].Replicas.insert(reply->ReplicaGroups[ringGroupIndex].Replicas.end(), selection->SelectedReplicas.Get(), selection->SelectedReplicas.Get() + selection->Sz);
+            reply->ReplicaGroups.resize(reply->ReplicaGroups.size() + 1);
+            auto &rg = reply->ReplicaGroups.back();
+            rg.WriteOnly = info->RingGroups[ringGroupIndex].WriteOnly;
+            rg.State = info->RingGroups[ringGroupIndex].State;
+            rg.Replicas.insert(rg.Replicas.end(), selection->SelectedReplicas.Get(), selection->SelectedReplicas.Get() + selection->Sz);
         }
         reply->ConfigContentHash = info->ContentHash();
         Send(ev->Sender, reply.Release(), 0, ev->Cookie);

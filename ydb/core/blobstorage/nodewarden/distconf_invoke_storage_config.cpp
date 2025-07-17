@@ -362,35 +362,25 @@ namespace NKikimr::NStorage {
 
             if (!res->HasCollectConfigs()) {
                 return "incorrect CollectConfigs response";
-            } else if (Self->CurrentProposedStorageConfig) {
+            } else if (Self->CurrentProposition) {
                 FinishWithError(TResult::RACE, "config proposition request in flight");
+                return std::nullopt;
             } else if (IsScepterExpired()) {
                 return "scepter lost during query execution";
+            } else if (auto r = Self->ProcessCollectConfigs(res->MutableCollectConfigs(), std::nullopt, {}, false); r.ErrorReason) {
+                return *r.ErrorReason;
             } else {
-                auto r = Self->ProcessCollectConfigs(res->MutableCollectConfigs(), std::nullopt);
-                return std::visit<std::optional<TString>>(TOverloaded{
-                    [&](std::monostate&) -> std::optional<TString> {
-                        if (r.IsDistconfDisabledQuorum) {
-                            // distconf is disabled on the majority of nodes; we have just to replace configs
-                            // and then to restart these nodes in order to enable it in future
-                            auto ev = PrepareResult(TResult::CONTINUE_BSC, "proceed with BSC");
-                            ev->Record.MutableReplaceStorageConfig()->SetAllowEnablingDistconf(true);
-                            Finish(Sender, SelfId(), ev.release(), 0, Cookie);
-                        } else {
-                            ConnectToController();
-                        }
-                        return std::nullopt;
-                    },
-                    [&](TString& error) {
-                        return std::move(error);
-                    },
-                    [&](NKikimrBlobStorage::TStorageConfig& /*proposedConfig*/) {
-                        return "unexpected config proposition";
-                    }
-                }, r.Outcome);
+                if (r.IsDistconfDisabledQuorum) {
+                    // distconf is disabled on the majority of nodes; we have just to replace configs
+                    // and then to restart these nodes in order to enable it in future
+                    auto ev = PrepareResult(TResult::CONTINUE_BSC, "proceed with BSC");
+                    ev->Record.MutableReplaceStorageConfig()->SetAllowEnablingDistconf(true);
+                    Finish(Sender, SelfId(), ev.release(), 0, Cookie);
+                } else {
+                    ConnectToController();
+                }
+                return std::nullopt;
             }
-
-            return std::nullopt; // no error or it is already processed
         });
     }
 
@@ -583,33 +573,30 @@ namespace NKikimr::NStorage {
 
         // issue scatter task to collect configs and then bootstrap cluster with specified cluster UUID
         auto done = [this, selfAssemblyUUID = TString(selfAssemblyUUID)](TEvGather *res) -> std::optional<TString> {
-            Y_ABORT_UNLESS(res->HasCollectConfigs());
-            Y_ABORT_UNLESS(Self->StorageConfig); // it can't just disappear
-            if (Self->CurrentProposedStorageConfig) {
-                FinishWithError(TResult::RACE, "config proposition request in flight");
-                return std::nullopt;
-            } else if (Self->StorageConfig->GetGeneration()) {
-                FinishWithError(TResult::RACE, "storage config generation regenerated while collecting configs");
-                return std::nullopt;
+            // we have collected all the necessary configs, return to RELAX'ed state
+            const auto prev = std::exchange(Self->RootState, ERootState::RELAX);
+            Y_ABORT_UNLESS(prev == ERootState::IN_PROGRESS);
+
+            if (!res->HasCollectConfigs()) {
+                return "incorrect response to CollectConfigs";
             }
-            auto r = Self->ProcessCollectConfigs(res->MutableCollectConfigs(), selfAssemblyUUID);
-            return std::visit<std::optional<TString>>(TOverloaded{
-                [&](std::monostate&) {
-                    const ERootState prevState = std::exchange(Self->RootState, ERootState::RELAX);
-                    Y_ABORT_UNLESS(prevState == ERootState::IN_PROGRESS);
-                    Finish(Sender, SelfId(), PrepareResult(TResult::OK, std::nullopt).release(), 0, Cookie);
-                    return std::nullopt;
-                },
-                [&](TString& error) {
-                    const ERootState prevState = std::exchange(Self->RootState, ERootState::RELAX);
-                    Y_ABORT_UNLESS(prevState == ERootState::IN_PROGRESS);
-                    return error;
-                },
-                [&](NKikimrBlobStorage::TStorageConfig& proposedConfig) {
-                    StartProposition(&proposedConfig, false);
-                    return std::nullopt;
-                }
-            }, r.Outcome);
+
+            Y_ABORT_UNLESS(Self->StorageConfig); // it can't just disappear
+            Y_ABORT_UNLESS(!Self->CurrentProposition); // nobody couldn't possibly start proposing anything while we were busy
+
+            if (Self->StorageConfig->GetGeneration()) {
+                FinishWithError(TResult::RACE, "storage config generation regenerated while collecting configs");
+            } else if (auto r = Self->ProcessCollectConfigs(res->MutableCollectConfigs(), selfAssemblyUUID, SelfId(), true);
+                    r.ErrorReason) {
+                return r.ErrorReason;
+            } else if (!Self->CurrentProposition) { // no new proposition has been made
+                Finish(Sender, SelfId(), PrepareResult(TResult::OK, std::nullopt).release(), 0, Cookie);
+            } else {
+                // a new proposition has just been initiated, so we're a bit busy
+                const ERootState prevState = std::exchange(Self->RootState, ERootState::IN_PROGRESS);
+                Y_ABORT_UNLESS(prevState == ERootState::RELAX);
+            }
+            return std::nullopt;
         };
 
         TEvScatter task;

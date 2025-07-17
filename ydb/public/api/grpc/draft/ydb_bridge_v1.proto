@@ -1,0 +1,22 @@
+syntax = "proto3";
+
+package Ydb.Bridge.V1;
+
+option java_package = "com.yandex.ydb.bridge.v1";
+option java_outer_classname = "BridgeGrpc";
+option java_multiple_files = true;
+
+import "ydb/public/api/protos/draft/ydb_bridge.proto";
+
+// Service for managing cluster in bridge mode
+service BridgeService {
+
+    // Get current cluster state
+    // Useful for monitoring and decision-making before state changes
+    rpc GetClusterState(Ydb.Bridge.GetClusterStateRequest) returns (Ydb.Bridge.GetClusterStateResponse);
+
+    // Update cluster state by providing a list of desired pile states
+    // This is the main operation for failover and promotion scenarios
+    rpc UpdateClusterState(Ydb.Bridge.UpdateClusterStateRequest) returns (Ydb.Bridge.UpdateClusterStateResponse);
+
+}

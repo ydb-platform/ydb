@@ -59,6 +59,8 @@ struct TEnvironmentSetup {
         const ui64 PDiskSize = 10_TB;
         const ui64 PDiskChunkSize = 0;
         const bool TrackSharedQuotaInPDiskMock = false;
+        const bool SelfManagementConfig = false;
+        const bool EnableDeepScrubbing = false;
     };
 
     const TSettings Settings;
@@ -382,6 +384,7 @@ struct TEnvironmentSetup {
 //            NKikimrServices::BS_VDISK_PATCH,
 //            NKikimrServices::BS_VDISK_PUT,
 //            NKikimrServices::BS_VDISK_OTHER,
+            NKikimrServices::BS_VDISK_SCRUB,
 //            NKikimrServices::BS_PROXY,
 //            NKikimrServices::BS_PROXY_RANGE,
 //            NKikimrServices::BS_PROXY_GET,
@@ -430,6 +433,10 @@ struct TEnvironmentSetup {
                 warden.reset(new TNodeWardenMockActor(Settings.NodeWardenMockSetup));
             } else {
                 auto config = MakeIntrusive<TNodeWardenConfig>(new TMockPDiskServiceFactory(*this));
+                if (Settings.SelfManagementConfig) {
+                    config->SelfManagementConfig = std::make_optional(NKikimrConfig::TSelfManagementConfig());
+                    config->SelfManagementConfig->SetEnabled(true);
+                }
                 config->BlobStorageConfig.MutableServiceSet()->AddAvailabilityDomains(DomainId);
                 config->VDiskReplPausedAtStart = Settings.VDiskReplPausedAtStart;
                 if (Settings.ReplMaxQuantumBytes) {
@@ -482,6 +489,8 @@ struct TEnvironmentSetup {
                 ADD_ICB_CONTROL("DSProxyControls.MaxNumOfSlowDisks", 2, 1, 2, Settings.MaxNumOfSlowDisks);
                 ADD_ICB_CONTROL("DSProxyControls.MaxNumOfSlowDisksHDD", 2, 1, 2, Settings.MaxNumOfSlowDisks);
                 ADD_ICB_CONTROL("DSProxyControls.MaxNumOfSlowDisksSSD", 2, 1, 2, Settings.MaxNumOfSlowDisks);
+
+                ADD_ICB_CONTROL("VDiskControls.EnableDeepScrubbing", false, false, true, Settings.EnableDeepScrubbing);
                 
 #undef ADD_ICB_CONTROL
 
@@ -586,6 +595,41 @@ struct TEnvironmentSetup {
         if (Settings.Encryption) {
             cmd2->SetEncryptionMode(TBlobStorageGroupInfo::EEncryptionMode::EEM_ENC_V1);
         }
+
+        auto response = Invoke(request);
+        UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
+    }
+
+    void AlterBox(ui32 itemConfigGeneration, ui32 numDrivesPerNode = 0, ui32 numStorageNodes = 0,
+        NKikimrBlobStorage::EPDiskType pdiskType = NKikimrBlobStorage::EPDiskType::ROT) {
+        NKikimrBlobStorage::TConfigRequest request;
+
+        auto *cmd = request.AddCommand()->MutableDefineHostConfig();
+        cmd->SetHostConfigId(1);
+        for (ui32 j = 0; j < (numDrivesPerNode ? numDrivesPerNode : DrivesPerNode); ++j) {
+            auto *drive = cmd->AddDrive();
+            drive->SetPath(Sprintf("SectorMap:%" PRIu32 ":1000", j));
+            drive->SetType(pdiskType);
+        }
+
+        cmd->SetItemConfigGeneration(itemConfigGeneration);
+
+        cmd = request.AddCommand()->MutableDefineHostConfig();
+        cmd->SetHostConfigId(2);
+
+        cmd->SetItemConfigGeneration(itemConfigGeneration);
+
+        auto *cmd1 = request.AddCommand()->MutableDefineBox();
+        cmd1->SetBoxId(1);
+        ui32 index = 0;
+        for (ui32 nodeId : Runtime->GetNodes()) {
+            auto *host = cmd1->AddHost();
+            host->MutableKey()->SetNodeId(nodeId);
+            host->SetHostConfigId(numStorageNodes == 0 || index < numStorageNodes ? 1 : 2);
+            ++index;
+        }
+        
+        cmd1->SetItemConfigGeneration(itemConfigGeneration);
 
         auto response = Invoke(request);
         UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());

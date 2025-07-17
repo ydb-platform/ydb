@@ -753,7 +753,8 @@ class TJsonNodes : public TViewerPipeClient {
     std::vector<TNodeBatch> OriginalNodeBatches;
     bool DumpOriginalNodeBatches = false;
 
-    TFieldsType FieldsRequired;
+    TFieldsType FieldsRequested; // fields that were requested by user
+    TFieldsType FieldsRequired; // fields that are required to calculate the response
     TFieldsType FieldsAvailable;
     const TFieldsType FieldsAll = TFieldsType().set();
     const TFieldsType FieldsNodeInfo = TFieldsType().set(+ENodeFields::NodeInfo)
@@ -1060,6 +1061,7 @@ public:
             NeedSort = false;
             NeedLimit = false;
         }
+        FieldsRequested = FieldsRequired; // no dependent fields
         for (auto field = +ENodeFields::NodeId; field != +ENodeFields::COUNT; ++field) {
             if (FieldsRequired.test(field)) {
                 auto itDependentFields = DependentFields.find(static_cast<ENodeFields>(field));
@@ -3174,33 +3176,33 @@ public:
                 if (FieldsAvailable.test(+ENodeFields::NodeInfo)) {
                     jsonNode.SetNodeId(node->GetNodeId());
                 }
-                if (node->Database) {
+                if (node->Database && FieldsRequested.test(+ENodeFields::Database)) {
                     jsonNode.SetDatabase(node->Database);
                 }
-                if (node->UptimeSeconds) {
+                if (node->UptimeSeconds && FieldsRequested.test(+ENodeFields::Uptime)) {
                     jsonNode.SetUptimeSeconds(*(node->UptimeSeconds));
                 }
                 if (node->Disconnected) {
                     jsonNode.SetDisconnected(node->Disconnected);
                 }
-                if (node->CpuUsage) {
+                if (node->CpuUsage && FieldsRequested.test(+ENodeFields::CPU)) {
                     jsonNode.SetCpuUsage(node->CpuUsage);
                 }
-                if (node->DiskSpaceUsage) {
+                if (node->DiskSpaceUsage && FieldsRequested.test(+ENodeFields::DiskSpaceUsage)) {
                     jsonNode.SetDiskSpaceUsage(node->DiskSpaceUsage);
                 }
-                if (FieldsAvailable.test(+ENodeFields::Connections)) {
+                if (FieldsAvailable.test(+ENodeFields::Connections) && FieldsRequested.test(+ENodeFields::Connections)) {
                     jsonNode.SetConnections(node->Connections);
                 }
-                if (FieldsAvailable.test(+ENodeFields::ConnectStatus)) {
+                if (FieldsAvailable.test(+ENodeFields::ConnectStatus) && FieldsRequested.test(+ENodeFields::ConnectStatus)) {
                     jsonNode.SetConnectStatus(GetViewerFlag(node->ConnectStatus));
                 }
-                if (FieldsAvailable.test(+ENodeFields::NetworkUtilization)) {
+                if (FieldsAvailable.test(+ENodeFields::NetworkUtilization) && FieldsRequested.test(+ENodeFields::NetworkUtilization)) {
                     jsonNode.SetNetworkUtilization(node->NetworkUtilization);
                     jsonNode.SetNetworkUtilizationMin(node->NetworkUtilizationMin);
                     jsonNode.SetNetworkUtilizationMax(node->NetworkUtilizationMax);
                 }
-                if (FieldsAvailable.test(+ENodeFields::ClockSkew)) {
+                if (FieldsAvailable.test(+ENodeFields::ClockSkew) && FieldsRequested.test(+ENodeFields::ClockSkew)) {
                     jsonNode.SetClockSkewUs(node->ClockSkewUs);
                     jsonNode.SetClockSkewMinUs(node->ClockSkewMinUs);
                     jsonNode.SetClockSkewMaxUs(node->ClockSkewMaxUs);
@@ -3208,7 +3210,7 @@ public:
                         jsonNode.SetReverseClockSkewUs(node->ReverseClockSkewUs);
                     }
                 }
-                if (FieldsAvailable.test(+ENodeFields::PingTime)) {
+                if (FieldsAvailable.test(+ENodeFields::PingTime) && FieldsRequested.test(+ENodeFields::PingTime)) {
                     jsonNode.SetPingTimeUs(node->PingTimeUs);
                     jsonNode.SetPingTimeMinUs(node->PingTimeMinUs);
                     jsonNode.SetPingTimeMaxUs(node->PingTimeMaxUs);
@@ -3216,16 +3218,16 @@ public:
                         jsonNode.SetReversePingTimeUs(node->ReversePingTimeUs);
                     }
                 }
-                if (FieldsAvailable.test(+ENodeFields::SendThroughput)) {
+                if (FieldsAvailable.test(+ENodeFields::SendThroughput) && FieldsRequested.test(+ENodeFields::SendThroughput)) {
                     jsonNode.SetSendThroughput(node->SendThroughput);
                 }
-                if (FieldsAvailable.test(+ENodeFields::ReceiveThroughput)) {
+                if (FieldsAvailable.test(+ENodeFields::ReceiveThroughput) && FieldsRequested.test(+ENodeFields::ReceiveThroughput)) {
                     jsonNode.SetReceiveThroughput(node->ReceiveThroughput);
                 }
-                if (FieldsAvailable.test(+ENodeFields::NodeInfo) || FieldsAvailable.test(+ENodeFields::SystemState)) {
+                if ((FieldsAvailable.test(+ENodeFields::NodeInfo) || FieldsAvailable.test(+ENodeFields::SystemState)) && FieldsRequested.test(+ENodeFields::SystemState)) {
                     *jsonNode.MutableSystemState() = std::move(node->SystemState);
                 }
-                if (FieldsAvailable.test(+ENodeFields::PDisks)) {
+                if (FieldsAvailable.test(+ENodeFields::PDisks) && FieldsRequested.test(+ENodeFields::PDisks)) {
                     std::sort(node->PDisks.begin(), node->PDisks.end(), [](const NKikimrWhiteboard::TPDiskStateInfo& a, const NKikimrWhiteboard::TPDiskStateInfo& b) {
                         return a.path() < b.path();
                     });
@@ -3233,7 +3235,7 @@ public:
                         (*jsonNode.AddPDisks()) = std::move(pDisk);
                     }
                 }
-                if (FieldsAvailable.test(+ENodeFields::VDisks)) {
+                if (FieldsAvailable.test(+ENodeFields::VDisks) && FieldsRequested.test(+ENodeFields::VDisks)) {
                     std::sort(node->VDisks.begin(), node->VDisks.end(), [](const NKikimrWhiteboard::TVDiskStateInfo& a, const NKikimrWhiteboard::TVDiskStateInfo& b) {
                         return VDiskIDFromVDiskID(a.vdiskid()) < VDiskIDFromVDiskID(b.vdiskid());
                     });
@@ -3241,7 +3243,7 @@ public:
                         (*jsonNode.AddVDisks()) = std::move(vDisk);
                     }
                 }
-                if (FieldsAvailable.test(+ENodeFields::Tablets)) {
+                if (FieldsAvailable.test(+ENodeFields::Tablets) && FieldsRequested.test(+ENodeFields::Tablets)) {
                     std::sort(node->Tablets.begin(), node->Tablets.end(), [](const NKikimrViewer::TTabletStateInfo& a, const NKikimrViewer::TTabletStateInfo& b) {
                         return a.type() < b.type();
                     });
@@ -3249,13 +3251,7 @@ public:
                         (*jsonNode.AddTablets()) = std::move(tablet);
                     }
                 }
-                if (FieldsAvailable.test(+ENodeFields::SendThroughput)) {
-                    jsonNode.SetSendThroughput(node->SendThroughput);
-                }
-                if (FieldsAvailable.test(+ENodeFields::ReceiveThroughput)) {
-                    jsonNode.SetReceiveThroughput(node->ReceiveThroughput);
-                }
-                if (FieldsRequired.test(+ENodeFields::Peers)) {
+                if (FieldsRequested.test(+ENodeFields::Peers)) {
                     std::sort(node->Peers.begin(), node->Peers.end(), [](const NKikimrWhiteboard::TNodeStateInfo& a, const NKikimrWhiteboard::TNodeStateInfo& b) {
                         return a.peernodeid() < b.peernodeid();
                     });
@@ -3263,7 +3259,7 @@ public:
                         (*jsonNode.AddPeers()) = std::move(peer);
                     }
                 }
-                if (FieldsRequired.test(+ENodeFields::ReversePeers)) {
+                if (FieldsRequested.test(+ENodeFields::ReversePeers)) {
                     std::sort(node->ReversePeers.begin(), node->ReversePeers.end(), [](const NKikimrWhiteboard::TNodeStateInfo& a, const NKikimrWhiteboard::TNodeStateInfo& b) {
                         return a.nodeid() < b.nodeid();
                     });
@@ -3280,7 +3276,13 @@ public:
             }
         }
         AddEvent("RenderingResult");
-        TBase::ReplyAndPassAway(GetHTTPOKJSON(json));
+        TStringStream jsonBody;
+        Proto2Json(json, jsonBody);
+        AddEvent("ResultRendered");
+        if (Span) {
+            Span.Attribute("result_size", TStringBuilder() << jsonBody.Size());
+        }
+        TBase::ReplyAndPassAway(GetHTTPOKJSON(jsonBody.Str()));
     }
 
     static YAML::Node GetSwagger() {

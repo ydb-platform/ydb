@@ -99,6 +99,7 @@ class TArrowData;
 class TEvWriteCommitPrimaryTransactionOperator;
 class TEvWriteCommitSecondaryTransactionOperator;
 class TTxFinishAsyncTransaction;
+class TTxCleanupSchemasWithnoData;
 class TTxRemoveSharedBlobs;
 class TOperationsManager;
 class TWaitEraseTablesTxSubscriber;
@@ -160,6 +161,7 @@ class TColumnShard: public TActor<TColumnShard>, public NTabletFlatExecutor::TTa
     friend class TEvWriteCommitSecondaryTransactionOperator;
     friend class TEvWriteCommitPrimaryTransactionOperator;
     friend class TTxInit;
+    friend class TTxCleanupSchemasWithnoData;
     friend class TTxInitSchema;
     friend class TTxUpdateSchema;
     friend class TTxProposeTransaction;
@@ -179,7 +181,7 @@ class TColumnShard: public TActor<TColumnShard>, public NTabletFlatExecutor::TTa
     friend class TTxMonitoring;
     friend class TTxRemoveSharedBlobs;
     friend class TTxFinishAsyncTransaction;
-    friend class TWaitEraseTablesTxSubscriber;
+    friend class TWaitOnProposeTxSubscriberBase;
     friend class TTxPersistSubDomainOutOfSpace;
     friend class TTxPersistSubDomainPathId;
     friend class TSpaceWatcher;
@@ -292,7 +294,7 @@ class TColumnShard: public TActor<TColumnShard>, public NTabletFlatExecutor::TTa
     void Handle(NOlap::NDataSharing::NEvents::TEvFinishedFromSource::TPtr& ev, const TActorContext& ctx);
     void Handle(NOlap::NDataSharing::NEvents::TEvAckFinishToSource::TPtr& ev, const TActorContext& ctx);
     void Handle(NOlap::NDataSharing::NEvents::TEvAckFinishFromInitiator::TPtr& ev, const TActorContext& ctx);
-    void Handle(NOlap::NDataAccessorControl::TEvAskTabletDataAccessors::TPtr& ev, const TActorContext& ctx);
+    void Handle(NColumnShard::TEvPrivate::TEvAskTabletDataAccessors::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvTxProxySchemeCache::TEvWatchNotifyUpdated::TPtr& ev, const TActorContext& ctx);
 
     void HandleInit(TEvPrivate::TEvTieringModified::TPtr& ev, const TActorContext&);
@@ -450,7 +452,7 @@ protected:
             HFunc(NOlap::NDataSharing::NEvents::TEvFinishedFromSource, Handle);
             HFunc(NOlap::NDataSharing::NEvents::TEvAckFinishToSource, Handle);
             HFunc(NOlap::NDataSharing::NEvents::TEvAckFinishFromInitiator, Handle);
-            HFunc(NOlap::NDataAccessorControl::TEvAskTabletDataAccessors, Handle);
+            HFunc(NColumnShard::TEvPrivate::TEvAskTabletDataAccessors, Handle);
             HFunc(TEvTxProxySchemeCache::TEvWatchNotifyUpdated, Handle);
 
             default:
@@ -504,9 +506,7 @@ private:
     TInstant LastStatsReport;
 
     TActorId ResourceSubscribeActor;
-    TActorId BufferizationInsertionWriteActorId;
     TActorId BufferizationPortionsWriteActorId;
-    TActorId DataAccessorsControlActorId;
     NOlap::NDataAccessorControl::TDataAccessorsManagerContainer DataAccessorsManager;
 
     TActorId StatsReportPipe;
@@ -562,6 +562,8 @@ private:
         const NKikimrTxColumnShard::TDropTable& body, const NOlap::TSnapshot& version, NTabletFlatExecutor::TTransactionContext& txc);
     void RunAlterStore(
         const NKikimrTxColumnShard::TAlterStore& body, const NOlap::TSnapshot& version, NTabletFlatExecutor::TTransactionContext& txc);
+    void RunMoveTable(
+        const NKikimrTxColumnShard::TMoveTable& proto, const NOlap::TSnapshot& version, NTabletFlatExecutor::TTransactionContext& txc);
 
     void SetupCompaction(const std::set<TInternalPathId>& pathIds);
     void StartCompaction(const std::shared_ptr<NPrioritiesQueue::TAllocationGuard>& guard);
@@ -570,6 +572,7 @@ private:
     bool SetupTtl();
     void SetupCleanupPortions();
     void SetupCleanupTables();
+    void SetupCleanupSchemas();
     void SetupGC();
 
     void UpdateIndexCounters();
@@ -611,6 +614,15 @@ public:
 
     const NOlap::IColumnEngine* GetIndexOptional() const {
         return TablesManager.GetPrimaryIndex() ? TablesManager.GetPrimaryIndex().get() : nullptr;
+    }
+
+    NOlap::IColumnEngine* MutableIndexOptional() const {
+        return TablesManager.GetPrimaryIndex() ? TablesManager.GetPrimaryIndex().get() : nullptr;
+    }
+
+    const NOlap::IColumnEngine& GetIndexVerified() const {
+        AFL_VERIFY(TablesManager.GetPrimaryIndex());
+        return *TablesManager.GetPrimaryIndex();
     }
 
     template <class T>

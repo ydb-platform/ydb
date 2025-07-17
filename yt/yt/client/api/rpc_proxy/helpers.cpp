@@ -22,6 +22,8 @@
 
 #include <yt/yt/client/ypath/rich.h>
 
+#include <yt/yt/core/yson/protobuf_helpers.h>
+
 namespace NYT::NApi::NRpcProxy {
 
 using namespace NTableClient;
@@ -422,6 +424,39 @@ void FromProto(
     result->EventTime = TInstant::FromValue(proto.event_time());
 }
 
+void ToProto(
+    NProto::TOperationEvent* proto,
+    const NApi::TOperationEvent& result)
+{
+    proto->set_timestamp(ToProto(result.Timestamp));
+    proto->set_event_type(ConvertOperationEventTypeToProto(result.EventType));
+
+    YT_OPTIONAL_TO_PROTO(proto, incarnation, result.Incarnation);
+
+    if (result.IncarnationSwitchReason) {
+        proto->set_incarnation_switch_reason(ConvertIncarnationSwitchReasonToProto(*result.IncarnationSwitchReason));
+    }
+
+    if (result.IncarnationSwitchInfo) {
+        proto->set_incarnation_switch_info(result.IncarnationSwitchInfo->ToString());
+    }
+}
+
+void FromProto(
+    NApi::TOperationEvent* result,
+    const NProto::TOperationEvent& proto)
+{
+    FromProto(&result->Timestamp, proto.timestamp());
+    result->EventType = ConvertOperationEventTypeFromProto(proto.event_type());
+    result->Incarnation = YT_OPTIONAL_FROM_PROTO(proto, incarnation);
+    if (proto.has_incarnation_switch_reason()) {
+        result->IncarnationSwitchReason = ConvertIncarnationSwitchReasonFromProto(proto.incarnation_switch_reason());
+    }
+    if (proto.has_incarnation_switch_info()) {
+        result->IncarnationSwitchInfo = TYsonString(proto.incarnation_switch_info());
+    }
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 // MISC
 ////////////////////////////////////////////////////////////////////////////////
@@ -618,36 +653,36 @@ void ToProto(NProto::TOperation* protoOperation, const NApi::TOperation& operati
     }
 
     if (operation.BriefSpec) {
-        protoOperation->set_brief_spec(operation.BriefSpec.ToString());
+        protoOperation->set_brief_spec(ToProto(operation.BriefSpec));
     }
     if (operation.Spec) {
-        protoOperation->set_spec(operation.Spec.ToString());
+        protoOperation->set_spec(ToProto(operation.Spec));
     }
     if (operation.ProvidedSpec) {
-        protoOperation->set_provided_spec(operation.ProvidedSpec.ToString());
+        protoOperation->set_provided_spec(ToProto(operation.ProvidedSpec));
     }
     if (operation.ExperimentAssignments) {
-        protoOperation->set_experiment_assignments(operation.ExperimentAssignments.ToString());
+        protoOperation->set_experiment_assignments(ToProto(operation.ExperimentAssignments));
     }
     if (operation.ExperimentAssignmentNames) {
-        protoOperation->set_experiment_assignment_names(operation.ExperimentAssignmentNames.ToString());
+        protoOperation->set_experiment_assignment_names(ToProto(operation.ExperimentAssignmentNames));
     }
     if (operation.FullSpec) {
-        protoOperation->set_full_spec(operation.FullSpec.ToString());
+        protoOperation->set_full_spec(ToProto(operation.FullSpec));
     }
     if (operation.UnrecognizedSpec) {
-        protoOperation->set_unrecognized_spec(operation.UnrecognizedSpec.ToString());
+        protoOperation->set_unrecognized_spec(ToProto(operation.UnrecognizedSpec));
     }
 
     if (operation.BriefProgress) {
-        protoOperation->set_brief_progress(operation.BriefProgress.ToString());
+        protoOperation->set_brief_progress(ToProto(operation.BriefProgress));
     }
     if (operation.Progress) {
-        protoOperation->set_progress(operation.Progress.ToString());
+        protoOperation->set_progress(ToProto(operation.Progress));
     }
 
     if (operation.RuntimeParameters) {
-        protoOperation->set_runtime_parameters(operation.RuntimeParameters.ToString());
+        protoOperation->set_runtime_parameters(ToProto(operation.RuntimeParameters));
     }
 
     if (operation.Suspended) {
@@ -659,37 +694,37 @@ void ToProto(NProto::TOperation* protoOperation, const NApi::TOperation& operati
     }
 
     if (operation.Events) {
-        protoOperation->set_events(operation.Events.ToString());
+        protoOperation->set_events(ToProto(operation.Events));
     }
     if (operation.Result) {
-        protoOperation->set_result(operation.Result.ToString());
+        protoOperation->set_result(ToProto(operation.Result));
     }
 
     if (operation.SlotIndexPerPoolTree) {
-        protoOperation->set_slot_index_per_pool_tree(operation.SlotIndexPerPoolTree.ToString());
+        protoOperation->set_slot_index_per_pool_tree(ToProto(operation.SlotIndexPerPoolTree));
     }
 
     if (operation.SchedulingAttributesPerPoolTree) {
-        protoOperation->set_scheduling_attributes_per_pool_tree(operation.SchedulingAttributesPerPoolTree.ToString());
+        protoOperation->set_scheduling_attributes_per_pool_tree(ToProto(operation.SchedulingAttributesPerPoolTree));
     }
 
     if (operation.TaskNames) {
-        protoOperation->set_task_names(operation.TaskNames.ToString());
+        protoOperation->set_task_names(ToProto(operation.TaskNames));
     }
 
     if (operation.Alerts) {
-        protoOperation->set_alerts(operation.Alerts.ToString());
+        protoOperation->set_alerts(ToProto(operation.Alerts));
     }
     if (operation.AlertEvents) {
-        protoOperation->set_alert_events(operation.AlertEvents.ToString());
+        protoOperation->set_alert_events(ToProto(operation.AlertEvents));
     }
 
     if (operation.ControllerFeatures) {
-        protoOperation->set_controller_features(operation.ControllerFeatures.ToString());
+        protoOperation->set_controller_features(ToProto(operation.ControllerFeatures));
     }
 
     if (operation.OtherAttributes) {
-        protoOperation->set_other_attributes(ConvertToYsonString(operation.OtherAttributes).ToString());
+        protoOperation->set_other_attributes(ToProto(ConvertToYsonString(operation.OtherAttributes)));
     }
 }
 
@@ -849,20 +884,20 @@ void ToProto(NProto::TJob* protoJob, const NApi::TJob& job)
     YT_OPTIONAL_SET_PROTO(protoJob, has_spec, job.HasSpec);
 
     if (job.Error) {
-        protoJob->set_error(job.Error.ToString());
+        protoJob->set_error(ToProto(job.Error));
     }
     if (job.InterruptionInfo) {
-        protoJob->set_interruption_info(job.InterruptionInfo.ToString());
+        protoJob->set_interruption_info(ToProto(job.InterruptionInfo));
     }
 
     if (job.BriefStatistics) {
-        protoJob->set_brief_statistics(job.BriefStatistics.ToString());
+        protoJob->set_brief_statistics(ToProto(job.BriefStatistics));
     }
     if (job.InputPaths) {
-        protoJob->set_input_paths(job.InputPaths.ToString());
+        protoJob->set_input_paths(ToProto(job.InputPaths));
     }
     if (job.CoreInfos) {
-        protoJob->set_core_infos(job.CoreInfos.ToString());
+        protoJob->set_core_infos(ToProto(job.CoreInfos));
     }
     if (job.JobCompetitionId) {
         ToProto(protoJob->mutable_job_competition_id(), job.JobCompetitionId);
@@ -874,24 +909,25 @@ void ToProto(NProto::TJob* protoJob, const NApi::TJob& job)
     YT_OPTIONAL_SET_PROTO(protoJob, has_probing_competitors, job.HasProbingCompetitors);
     YT_OPTIONAL_SET_PROTO(protoJob, is_stale, job.IsStale);
     if (job.ExecAttributes) {
-        protoJob->set_exec_attributes(job.ExecAttributes.ToString());
+        protoJob->set_exec_attributes(ToProto(job.ExecAttributes));
     }
     YT_OPTIONAL_TO_PROTO(protoJob, task_name, job.TaskName);
     YT_OPTIONAL_TO_PROTO(protoJob, pool_tree, job.PoolTree);
     YT_OPTIONAL_TO_PROTO(protoJob, pool, job.Pool);
     YT_OPTIONAL_SET_PROTO(protoJob, job_cookie, job.JobCookie);
     if (job.ArchiveFeatures) {
-        protoJob->set_archive_features(job.ArchiveFeatures.ToString());
+        protoJob->set_archive_features(ToProto(job.ArchiveFeatures));
     }
     YT_OPTIONAL_TO_PROTO(protoJob, monitoring_descriptor, job.MonitoringDescriptor);
     YT_OPTIONAL_SET_PROTO(protoJob, operation_incarnation, job.OperationIncarnation);
     YT_OPTIONAL_TO_PROTO(protoJob, allocation_id, job.AllocationId);
     if (job.Events) {
-        protoJob->set_events(job.Events.ToString());
+        protoJob->set_events(ToProto(job.Events));
     }
     if (job.Statistics) {
-        protoJob->set_statistics(job.Statistics.ToString());
+        protoJob->set_statistics(ToProto(job.Statistics));
     }
+    YT_OPTIONAL_SET_PROTO(protoJob, gang_rank, job.GangRank);
 }
 
 void FromProto(NApi::TJob* job, const NProto::TJob& protoJob)
@@ -994,6 +1030,7 @@ void FromProto(NApi::TJob* job, const NProto::TJob& protoJob)
     } else {
         job->Statistics = TYsonString();
     }
+    job->GangRank = YT_OPTIONAL_FROM_PROTO(protoJob, gang_rank);
 }
 
 void ToProto(
@@ -1260,29 +1297,29 @@ void ToProto(
     }
     YT_OPTIONAL_TO_PROTO(protoQuery, query, query.Query);
     if (query.Files) {
-        protoQuery->set_files(query.Files->ToString());
+        protoQuery->set_files(ToProto(*query.Files));
     }
     YT_OPTIONAL_SET_PROTO(protoQuery, start_time, query.StartTime);
     YT_OPTIONAL_SET_PROTO(protoQuery, finish_time, query.FinishTime);
     if (query.Settings) {
-        protoQuery->set_settings(query.Settings.ToString());
+        protoQuery->set_settings(ToProto(query.Settings));
     }
     YT_OPTIONAL_TO_PROTO(protoQuery, user, query.User);
     if (query.AccessControlObject) {
         protoQuery->set_access_control_object(*query.AccessControlObject);
     }
-    protoQuery->set_access_control_objects(query.AccessControlObjects->ToString());
+    protoQuery->set_access_control_objects(ToProto(*query.AccessControlObjects));
 
     if (query.State) {
         protoQuery->set_state(ConvertQueryStateToProto(*query.State));
     }
     YT_OPTIONAL_SET_PROTO(protoQuery, result_count, query.ResultCount);
     if (query.Progress) {
-        protoQuery->set_progress(query.Progress.ToString());
+        protoQuery->set_progress(ToProto(query.Progress));
     }
     YT_OPTIONAL_TO_PROTO(protoQuery, error, query.Error);
     if (query.Annotations) {
-        protoQuery->set_annotations(query.Annotations.ToString());
+        protoQuery->set_annotations(ToProto(query.Annotations));
     }
     if (query.OtherAttributes) {
         ToProto(protoQuery->mutable_other_attributes(), *query.OtherAttributes);
@@ -1474,6 +1511,54 @@ NScheduler::EOperationState ConvertOperationStateFromProto(
             THROW_ERROR_EXCEPTION("Protobuf contains unknown value for operation state");
     }
     YT_ABORT();
+}
+
+NProto::EOperationEventType ConvertOperationEventTypeToProto(
+    NApi::EOperationEventType operationEventType)
+{
+    switch (operationEventType) {
+        case NApi::EOperationEventType::IncarnationStarted:
+            return NProto::EOperationEventType::OET_INCARNATION_STARTED;
+    }
+}
+
+NApi::EOperationEventType ConvertOperationEventTypeFromProto(
+    NProto::EOperationEventType proto)
+{
+    switch (proto) {
+        case NProto::EOperationEventType::OET_INCARNATION_STARTED:
+            return NApi::EOperationEventType::IncarnationStarted;
+    }
+}
+
+NProto::EIncarnationSwitchReason ConvertIncarnationSwitchReasonToProto(
+    NControllerAgent::EOperationIncarnationSwitchReason operationEventType)
+{
+    switch (operationEventType) {
+        case NYT::NControllerAgent::EOperationIncarnationSwitchReason::JobAborted:
+            return NProto::EIncarnationSwitchReason::ISR_JOB_ABORTED;
+        case NYT::NControllerAgent::EOperationIncarnationSwitchReason::JobFailed:
+            return NProto::EIncarnationSwitchReason::ISR_JOB_FAILED;
+        case NYT::NControllerAgent::EOperationIncarnationSwitchReason::JobInterrupted:
+            return NProto::EIncarnationSwitchReason::ISR_JOB_INTERRUPTED;
+        case NYT::NControllerAgent::EOperationIncarnationSwitchReason::JobLackAfterRevival:
+            return NProto::EIncarnationSwitchReason::ISR_JOB_LACK_AFTER_REVIVAL;
+    }
+}
+
+NControllerAgent::EOperationIncarnationSwitchReason ConvertIncarnationSwitchReasonFromProto(
+    NProto::EIncarnationSwitchReason proto)
+{
+    switch (proto) {
+        case NProto::EIncarnationSwitchReason::ISR_JOB_ABORTED:
+            return NYT::NControllerAgent::EOperationIncarnationSwitchReason::JobAborted;
+        case NProto::EIncarnationSwitchReason::ISR_JOB_FAILED:
+            return NYT::NControllerAgent::EOperationIncarnationSwitchReason::JobFailed;
+        case NProto::EIncarnationSwitchReason::ISR_JOB_INTERRUPTED:
+            return NYT::NControllerAgent::EOperationIncarnationSwitchReason::JobInterrupted;
+        case NProto::EIncarnationSwitchReason::ISR_JOB_LACK_AFTER_REVIVAL:
+            return NYT::NControllerAgent::EOperationIncarnationSwitchReason::JobLackAfterRevival;
+    }
 }
 
 NProto::EJobType ConvertJobTypeToProto(
@@ -1736,6 +1821,28 @@ NQueryTrackerClient::EQueryState ConvertQueryStateFromProto(
     YT_ABORT();
 }
 
+NApi::EJobStderrType ConvertJobStderrTypeFromProto(
+    NProto::EJobStderrType proto)
+{
+    switch (proto) {
+        case NProto::EJobStderrType::JST_USER_JOB_STDERR:
+            return NApi::EJobStderrType::UserJobStderr;
+        case NProto::EJobStderrType::JST_GPU_CHECK_STDERR:
+            return NApi::EJobStderrType::GpuCheckStderr;
+    }
+}
+
+NProto::EJobStderrType ConvertJobStderrTypeToProto(
+    NApi::EJobStderrType jobStderrType)
+{
+    switch (jobStderrType) {
+        case NApi::EJobStderrType::UserJobStderr:
+            return NProto::EJobStderrType::JST_USER_JOB_STDERR;
+        case NApi::EJobStderrType::GpuCheckStderr:
+            return NProto::EJobStderrType::JST_GPU_CHECK_STDERR;
+    }
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 void FillRequest(
@@ -1772,7 +1879,7 @@ void FillRequest(
 {
     YT_VERIFY(sessionWithResults.Session);
 
-    req->set_signed_session(ConvertToYsonString(sessionWithResults.Session).ToString());
+    req->set_signed_session(ToProto(ConvertToYsonString(sessionWithResults.Session)));
     for (const auto& writeResult : sessionWithResults.Results) {
         YT_VERIFY(writeResult);
         req->add_signed_write_results(ConvertToYsonString(writeResult).ToString());
@@ -1802,10 +1909,10 @@ void FillRequest(
     const TSignedWriteFragmentCookiePtr& cookie,
     const TTableFragmentWriterOptions& options)
 {
-    req->set_signed_cookie(ConvertToYsonString(cookie).ToString());
+    req->set_signed_cookie(ToProto(ConvertToYsonString(cookie)));
 
     if (options.Config) {
-        req->set_config(ConvertToYsonString(*options.Config).ToString());
+        req->set_config(ToProto(ConvertToYsonString(*options.Config)));
     }
 }
 
@@ -1838,7 +1945,8 @@ bool IsDynamicTableRetriableError(const TError& error)
         error.FindMatching(NTabletClient::EErrorCode::NoInSyncReplicas) ||
         error.FindMatching(NTabletClient::EErrorCode::TabletNotMounted) ||
         error.FindMatching(NTabletClient::EErrorCode::NoSuchTablet) ||
-        error.FindMatching(NTabletClient::EErrorCode::TabletReplicationEraMismatch);
+        error.FindMatching(NTabletClient::EErrorCode::TabletReplicationEraMismatch) ||
+        error.FindMatching(NTableClient::EErrorCode::UnableToSynchronizeReplicationCard);
 }
 
 bool IsRetriableError(const TError& error, bool retryProxyBanned)

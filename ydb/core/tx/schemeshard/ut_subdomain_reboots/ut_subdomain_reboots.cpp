@@ -1,6 +1,5 @@
-#include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
-
 #include <ydb/core/tx/datashard/datashard.h>
+#include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 
 #include <google/protobuf/text_format.h>
 
@@ -14,6 +13,7 @@ Y_UNIT_TEST_SUITE(SubDomainWithReboots) {
 
     Y_UNIT_TEST(Create) { //+
         TTestWithReboots t(true);
+        t.GetTestEnvOptions().EnableRealSystemViewPaths(false);
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             TVector<TString> userAttrsKeys{"AttrA1", "AttrA2"};
             TUserAttrs userAttrs{{"AttrA1", "ValA1"}, {"AttrA2", "ValA2"}};
@@ -51,6 +51,7 @@ Y_UNIT_TEST_SUITE(SubDomainWithReboots) {
 
     Y_UNIT_TEST(DeclareAndDefine) { //+
         TTestWithReboots t;
+        t.GetTestEnvOptions().EnableRealSystemViewPaths(false);
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             TVector<TString> userAttrsKeys{"AttrA1", "AttrA2"};
             TUserAttrs userAttrs{{"AttrA1", "ValA1"}, {"AttrA2", "ValA2"}};
@@ -91,6 +92,7 @@ Y_UNIT_TEST_SUITE(SubDomainWithReboots) {
 
     Y_UNIT_TEST(CreateWithStoragePools) { //+
         TTestWithReboots t(true);
+        t.GetTestEnvOptions().EnableRealSystemViewPaths(false);
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             AsyncCreateSubDomain(runtime, ++t.TxId, "/MyRoot/DirA",
                                  "PlanResolution: 50 "
@@ -218,6 +220,7 @@ Y_UNIT_TEST_SUITE(SubDomainWithReboots) {
 
     Y_UNIT_TEST(Delete) { //+
         TTestWithReboots t(true);
+        t.GetTestEnvOptions().EnableRealSystemViewPaths(false);
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);
@@ -251,6 +254,7 @@ Y_UNIT_TEST_SUITE(SubDomainWithReboots) {
 
     Y_UNIT_TEST(DeleteWithStoragePools) { //+
         TTestWithReboots t;
+        t.GetTestEnvOptions().EnableRealSystemViewPaths(false);
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);
@@ -292,6 +296,7 @@ Y_UNIT_TEST_SUITE(SubDomainWithReboots) {
 
     Y_UNIT_TEST(DropSplittedTabletInsideWithStoragePools) { //+
         TTestWithReboots t;
+        t.GetTestEnvOptions().EnableRealSystemViewPaths(false);
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);
@@ -385,6 +390,7 @@ Y_UNIT_TEST_SUITE(SubDomainWithReboots) {
 
     Y_UNIT_TEST(SplitTabletInsideWithStoragePools) { //+
         TTestWithReboots t;
+        t.GetTestEnvOptions().EnableRealSystemViewPaths(false);
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);
@@ -460,6 +466,7 @@ Y_UNIT_TEST_SUITE(SubDomainWithReboots) {
 
     Y_UNIT_TEST(CreateTabletInsideWithStoragePools) { //+
         TTestWithReboots t;
+        t.GetTestEnvOptions().EnableRealSystemViewPaths(false);
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);
@@ -515,6 +522,7 @@ Y_UNIT_TEST_SUITE(ForceDropWithReboots) {
 
     Y_UNIT_TEST(ForceDelete) { //+
         TTestWithReboots t(true);
+        t.GetTestEnvOptions().EnableRealSystemViewPaths(false);
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);
@@ -547,6 +555,7 @@ Y_UNIT_TEST_SUITE(ForceDropWithReboots) {
 
     Y_UNIT_TEST(ForceDeleteCreateSubdomainInfly) { //+
         TTestWithReboots t(true);
+        t.GetTestEnvOptions().EnableRealSystemViewPaths(false);
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
 
             AsyncCreateSubDomain(runtime, ++t.TxId, "/MyRoot/DirA",
@@ -573,6 +582,7 @@ Y_UNIT_TEST_SUITE(ForceDropWithReboots) {
 
     Y_UNIT_TEST(ForceDeleteCreateTableInFlyWithRebootAtCommit) { //+
         TTestWithReboots t(true);
+        t.GetTestEnvOptions().EnableRealSystemViewPaths(false);
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             AsyncCreateSubDomain(runtime, ++t.TxId, "/MyRoot/DirA",
                                  "PlanResolution: 50 "
@@ -612,6 +622,7 @@ Y_UNIT_TEST_SUITE(ForceDropWithReboots) {
 
     Y_UNIT_TEST(ForceDeleteCreateTableInFly) { //+
         TTestWithReboots t;
+        t.GetTestEnvOptions().EnableRealSystemViewPaths(false);
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             TestCreateSubDomain(runtime, ++t.TxId, "/MyRoot/DirA",
                                 "PlanResolution: 50 "
@@ -651,6 +662,7 @@ Y_UNIT_TEST_SUITE(ForceDropWithReboots) {
 
     Y_UNIT_TEST(ForceDeleteSplitInFly) { //+
         TTestWithReboots t(true);
+        t.GetTestEnvOptions().EnableRealSystemViewPaths(false);
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);
@@ -708,6 +720,7 @@ Y_UNIT_TEST_SUITE(ForceDropWithReboots) {
 
     Y_UNIT_TEST(ForceDropDeleteInFly) { //+
         TTestWithReboots t;
+        t.GetTestEnvOptions().EnableRealSystemViewPaths(false);
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);

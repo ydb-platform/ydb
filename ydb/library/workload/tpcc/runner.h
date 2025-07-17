@@ -4,14 +4,20 @@
 
 #include <library/cpp/logger/priority.h>
 
+#include <util/datetime/base.h>
+
 #include <stop_token>
 
 namespace NYdb::NTPCC {
 
 constexpr int DEFAULT_WAREHOUSE_COUNT = 1;
-constexpr int DEFAULT_WARMUP_MINUTES = 1; // TODO
-constexpr int DEFAULT_RUN_MINUTES = 2; // TODO
+constexpr TDuration DEFAULT_WARMUP_DURATION = TDuration::Minutes(1); // TODO
+constexpr TDuration DEFAULT_RUN_DURATION = TDuration::Minutes(2); // TODO
+
 constexpr int DEFAULT_MAX_SESSIONS = 100; // TODO
+constexpr int DEFAULT_THREAD_COUNT = 0; // autodetect
+constexpr int DEFAULT_LOAD_THREAD_COUNT = 10;
+
 constexpr int DEFAULT_LOG_LEVEL = 6; // TODO: properly use enum
 
 struct TRunConfig {
@@ -19,6 +25,11 @@ struct TRunConfig {
         None = 0,
         Text,
         Tui,
+    };
+
+    enum class EFormat {
+        Pretty = 0,
+        Json,
     };
 
     TRunConfig() = default;
@@ -35,37 +46,29 @@ struct TRunConfig {
         Path = connectionConfig.Database + '/' + Path;
     }
 
-    void SetDisplayUpdateInterval() {
-        switch (DisplayMode) {
-        case EDisplayMode::None:
-            return;
-        case EDisplayMode::Text:
-            DisplayUpdateInterval = DisplayUpdateTextInterval;
-            return;
-        case EDisplayMode::Tui:
-            DisplayUpdateInterval = DisplayUpdateTuiInterval;
-            return;
-          break;
-        }
-    }
+    void SetDisplay();
 
     int WarehouseCount = DEFAULT_WAREHOUSE_COUNT;
-    int WarmupMinutes = DEFAULT_WARMUP_MINUTES;
-    int RunMinutes = DEFAULT_RUN_MINUTES;
+    TDuration WarmupDuration = DEFAULT_WARMUP_DURATION;
+    TDuration RunDuration = DEFAULT_RUN_DURATION;
 
     int MaxInflight = DEFAULT_MAX_SESSIONS;
 
     TString Path;
 
+    EFormat Format = EFormat::Pretty;
+
     TString JsonResultPath;
 
     // advanced settings (normally, used by developer only)
 
-    int ThreadCount = 0;
+    int ThreadCount = DEFAULT_THREAD_COUNT;
+    int LoadThreadCount = DEFAULT_LOAD_THREAD_COUNT;
     int DriverCount = 0;
     ELogPriority LogPriority = static_cast<ELogPriority>(DEFAULT_LOG_LEVEL);
     bool NoDelays = false;
     bool ExtendedStats = false;
+    bool NoTui = false;
     EDisplayMode DisplayMode = EDisplayMode::None;
 
     // instead of actual transaction just async sleep and return SUCCESS

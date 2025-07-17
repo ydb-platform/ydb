@@ -36,6 +36,7 @@ std::optional<std::vector<NArrow::TSerializedBatch>> TBuildSlicesTask::BuildSlic
 
 void TBuildSlicesTask::ReplyError(const TString& message, const NColumnShard::TEvPrivate::TEvWriteBlobsResult::EErrorClass errorClass) {
     AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_WRITE)("event", "error_on_TBuildSlicesTask")("message", message)("class", (ui32)errorClass);
+    WriteData.GetWriteMetaPtr()->OnStage(NEvWrite::EWriteStage::SlicesError);
     auto writeDataPtr = std::make_shared<NEvWrite::TWriteData>(std::move(WriteData));
     TWritingBuffer buffer(writeDataPtr->GetBlobsAction(), { std::make_shared<TWriteAggregation>(*writeDataPtr) });
     auto result =
@@ -116,6 +117,7 @@ void TBuildSlicesTask::DoExecute(const std::shared_ptr<ITask>& /*taskPtr*/) {
     if (OriginalBatch->num_rows() == 0) {
         NColumnShard::TWriteResult wResult(WriteData.GetWriteMetaPtr(), WriteData.GetSize(), nullptr, true, 0);
         NColumnShard::TInsertedPortions pack({ wResult }, {});
+        WriteData.GetWriteMetaPtr()->OnStage(NEvWrite::EWriteStage::SlicesReady);
         auto result = std::make_unique<NColumnShard::NPrivateEvents::NWrite::TEvWritePortionResult>(
             NKikimrProto::EReplyStatus::OK, nullptr, std::move(pack));
         NActors::TActivationContext::AsActorContext().Send(Context.GetTabletActorId(), result.release());
@@ -140,6 +142,7 @@ void TBuildSlicesTask::DoExecute(const std::shared_ptr<ITask>& /*taskPtr*/) {
         }
         auto writeController = std::make_shared<NOlap::TPortionWriteController>(
             Context.GetTabletActorId(), WriteData.GetBlobsAction(), wResult, std::move(portions));
+        WriteData.GetWriteMetaPtr()->OnStage(NEvWrite::EWriteStage::SlicesReady);
         if (WriteData.GetBlobsAction()->NeedDraftTransaction()) {
             TActorContext::AsActorContext().Send(
                 Context.GetTabletActorId(), std::make_unique<NColumnShard::TEvPrivate::TEvWriteDraft>(writeController));

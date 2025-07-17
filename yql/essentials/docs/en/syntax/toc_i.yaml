@@ -12,7 +12,7 @@ items:
 - { name: INSERT,                       href: insert_into.md }
 - { name: INTO RESULT,                  href: into_result.md }
 - { name: JOIN,                         href: join.md }
-- { name: PRAGMA,                       href: pragma.md }
+- { name: PRAGMA,                       include: { mode: link, path: pragma/toc_p.yaml } }
 - { name: PROCESS,                      href: process.md }
 - { name: REDUCE,                       href: reduce.md }
 - { name: SELECT,                       include: { mode: link, path: select/toc_p.yaml }  }

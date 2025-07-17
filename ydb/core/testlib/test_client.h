@@ -136,6 +136,7 @@ namespace Tests {
         TIntrusivePtr<TFormatFactory> Formats;
         bool EnableMockOnSingleNode = true;
         TAutoPtr<TLogBackend> LogBackend;
+        std::shared_ptr<std::vector<std::string>> AuditLogBackendLines;
         TLoggerInitializer LoggerInitializer;
         TStoragePoolKinds StoragePoolTypes;
         TVector<NKikimrKqp::TKqpSetting> KqpSettings;
@@ -170,6 +171,7 @@ namespace Tests {
         NMiniKQL::TComputationNodeFactory ComputationFactory;
         NYql::IYtGateway::TPtr YtGateway;
         NYql::ISolomonGateway::TPtr SolomonGateway;
+        NYql::IPqGateway::TPtr PqGateway;
         NYql::TTaskTransformFactory DqTaskTransformFactory;
         bool InitializeFederatedQuerySetupFactory = false;
         TString ServerCertFilePath;
@@ -198,6 +200,7 @@ namespace Tests {
         TServerSettings& SetFrFactory(const TAppPrepare::TFnReg& value) { FrFactory = value; return *this; }
         TServerSettings& SetEnableMockOnSingleNode(bool value) { EnableMockOnSingleNode = value; return *this; }
         TServerSettings& SetLogBackend(TAutoPtr<TLogBackend> value) { LogBackend = value; return *this; }
+        TServerSettings& SetAuditLogBackendLines(std::shared_ptr<std::vector<std::string>> value) { AuditLogBackendLines = value; return *this; }
         TServerSettings& SetLoggerInitializer(TLoggerInitializer value) { LoggerInitializer = std::move(value); return *this; }
         TServerSettings& AddStoragePoolType(const TString& poolKind, ui32 encryptionMode = 0);
         TServerSettings& AddStoragePool(const TString& poolKind, const TString& poolName = {}, ui32 numGroups = 1, ui32 encryptionMode = 0);
@@ -234,6 +237,14 @@ namespace Tests {
         TServerSettings& SetInitializeFederatedQuerySetupFactory(bool value) { InitializeFederatedQuerySetupFactory = value; return *this; }
         TServerSettings& SetVerbose(bool value) { Verbose = value; return *this; }
         TServerSettings& SetUseSectorMap(bool value) { UseSectorMap = value; return *this; }
+        TServerSettings& SetScanReaskToResolve(const ui32 count) {
+            AppConfig->MutableTableServiceConfig()->MutableResourceManager()->MutableShardsScanningPolicy()->SetReaskShardRetriesCount(count);
+            return *this;
+        }
+        TServerSettings& SetColumnShardReaderClassName(const TString& className) {
+            AppConfig->MutableColumnShardConfig()->SetReaderClassName(className);
+            return *this;
+        }
         TServerSettings& SetPersQueueGetReadSessionsInfoWorkerFactory(
             std::shared_ptr<NKikimr::NMsgBusProxy::IPersQueueGetReadSessionsInfoWorkerFactory> factory
         ) {
@@ -330,6 +341,8 @@ namespace Tests {
         void SetupConfigurators(ui32 nodeIdx);
         void SetupProxies(ui32 nodeIdx);
         void SetupLogging();
+        void AddSysViewsRosterUpdateObserver();
+        void WaitForSysViewsRosterUpdate();
 
         void Initialize();
 
@@ -351,13 +364,17 @@ namespace Tests {
         void SetupDefaultProfiles();
 
         TIntrusivePtr<::NMonitoring::TDynamicCounters> GetGRpcServerRootCounters() const {
-            return RootGRpc.GRpcServerRootCounters;
+            const auto tenantIt = TenantsGRpc.find(Settings->DomainName);
+            Y_ABORT_UNLESS(tenantIt != TenantsGRpc.end());
+            Y_ABORT_UNLESS(!tenantIt->second.empty());
+            return tenantIt->second.begin()->second.GRpcServerRootCounters;
         }
 
         void ShutdownGRpc() {
-            RootGRpc.Shutdown();
             for (auto& [_, tenantGRpc] : TenantsGRpc) {
-                tenantGRpc.Shutdown();
+                for (auto& [_, nodeGRpc] : tenantGRpc) {
+                    nodeGRpc.Shutdown();
+                }
             }
         }
 
@@ -393,6 +410,9 @@ namespace Tests {
         TAutoPtr<NMsgBusProxy::IMessageBusServer> BusServer;
         NFq::IYqSharedResources::TPtr YqSharedResources;
 
+        TTestActorRuntime::TEventObserverHolder SysViewsRosterUpdateObserver;
+        bool SysViewsRosterUpdateFinished;
+
         struct TGRpcInfo {
             std::unique_ptr<NYdbGrpc::TGRpcServer> GRpcServer;
             TIntrusivePtr<NMonitoring::TDynamicCounters> GRpcServerRootCounters;
@@ -405,8 +425,7 @@ namespace Tests {
             }
         };
 
-        TGRpcInfo RootGRpc;
-        std::unordered_map<TString, TGRpcInfo> TenantsGRpc;
+        std::unordered_map<TString, std::unordered_map<ui32, TGRpcInfo>> TenantsGRpc;  // tenant -> nodeIdx -> GRpcInfo
     };
 
     class TClient {

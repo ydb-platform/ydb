@@ -5,9 +5,9 @@
 #include <ydb/core/tx/datashard/range_ops.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 
+#include <library/cpp/html/pcdata/pcdata.h>
 #include <library/cpp/protobuf/json/proto2json.h>
 
-#include <library/cpp/html/pcdata/pcdata.h>
 #include <util/string/cast.h>
 
 static ui64 TryParseTabletId(TStringBuf tabletIdParam) {
@@ -850,35 +850,44 @@ private:
 
                     << "LockTxId: " << info.LockTxId << Endl
                     << "LockTxStatus: " << NKikimrScheme::EStatus_Name(info.LockTxStatus) << Endl
-                    << "LockTxDone                     " << (info.LockTxDone ? "DONE" : "not done") << Endl
+                    << "LockTxDone: " << (info.LockTxDone ? "DONE" : "not done") << Endl
 
                     << "InitiateTxId: " << info.InitiateTxId << Endl
                     << "InitiateTxStatus: " << NKikimrScheme::EStatus_Name(info.InitiateTxStatus) << Endl
-                    << "InitiateTxDone                 " << (info.InitiateTxDone ? "DONE" : "not done") << Endl
+                    << "InitiateTxDone: " << (info.InitiateTxDone ? "DONE" : "not done") << Endl
 
                     << "ApplyTxId: " << info.ApplyTxId << Endl
                     << "ApplyTxStatus: " << NKikimrScheme::EStatus_Name(info.ApplyTxStatus) << Endl
-                    << "ApplyTxDone                    " << (info.ApplyTxDone ? "DONE" : "not done") << Endl
+                    << "ApplyTxDone: " << (info.ApplyTxDone ? "DONE" : "not done") << Endl
 
                     << "UnlockTxId: " << info.UnlockTxId << Endl
                     << "UnlockTxStatus: " << NKikimrScheme::EStatus_Name(info.UnlockTxStatus) << Endl
-                    << "UnlockTxDone                   " << (info.UnlockTxDone ? "DONE" : "not done") << Endl
+                    << "UnlockTxDone: " << (info.UnlockTxDone ? "DONE" : "not done") << Endl
 
                     << "SnapshotStep: " << info.SnapshotStep << Endl
-                    << "SnapshotTxId: " << info.SnapshotTxId << Endl
+                    << "SnapshotTxId: " << info.SnapshotTxId << Endl;
 
-                    << "Processed: " << info.Processed << Endl
-                    << "Billed: " << info.Billed << Endl;
-
+                TString requestUnitsExplain;
+                ui64 requestUnits = TRUCalculator::Calculate(info.Processed, requestUnitsExplain);
+                str << "Processed: " << info.Processed.ShortDebugString() << Endl
+                    << "Request Units: " << requestUnits << " (" << requestUnitsExplain << ")" << Endl
+                    << "Billed: " << info.Billed.ShortDebugString() << Endl;
             }
 
-            TVector<NScheme::TTypeInfo> keyTypes;
-            if (Self->Tables.contains(info.TablePathId)) {
-                TTableInfo::TPtr tableInfo = Self->Tables.at(info.TablePathId);
-                for (ui32 keyPos: tableInfo->KeyColumnIds) {
-                    keyTypes.push_back(tableInfo->Columns.at(keyPos).PType);
+            auto getKeyTypes = [&](TPathId pathId) {
+                TVector<NScheme::TTypeInfo> keyTypes;
+                
+                auto tableInfo = Self->Tables.FindPtr(pathId);
+                if (!tableInfo) {
+                    return keyTypes;
                 }
-            }
+
+                for (ui32 keyPos: tableInfo->Get()->KeyColumnIds) {
+                    keyTypes.push_back(tableInfo->Get()->Columns.at(keyPos).PType);
+                }
+
+                return keyTypes;
+            };
 
             {
                 TAG(TH3) {str << "Shards : " << info.Shards.size() << "\n";}
@@ -907,23 +916,31 @@ private:
                                 if (Self->ShardInfos.contains(idx)) {
                                     str << Self->ShardInfos.at(idx).TabletID;
                                 } else {
-                                    str << "shard " << idx << " has been dropped";
+                                    str << "deleted shard";
                                 }
                             }
                             TABLED() {
-                                if (keyTypes) {
-                                    str << DebugPrintRange(keyTypes, status.Range.ToTableRange(), *AppData()->TypeRegistry);
+                                if (Self->ShardInfos.contains(idx)) {
+                                    if (auto keyTypes = getKeyTypes(Self->ShardInfos.at(idx).PathId)) {
+                                        str << DebugPrintRange(keyTypes, status.Range.ToTableRange(), *AppData()->TypeRegistry);
+                                    } else {
+                                        str << "deleted table";
+                                    }
                                 } else {
-                                    str << "table has been dropped";
+                                    str << "deleted shard";
                                 }
                             }
                             TABLED() {
-                                if (keyTypes) {
-                                    TSerializedCellVec vec;
-                                    vec.Parse(status.LastKeyAck);
-                                    str << DebugPrintPoint(keyTypes, vec.GetCells(), *AppData()->TypeRegistry);
+                                if (Self->ShardInfos.contains(idx)) {
+                                    if (auto keyTypes = getKeyTypes(Self->ShardInfos.at(idx).PathId)) {
+                                        TSerializedCellVec vec;
+                                        vec.Parse(status.LastKeyAck);
+                                        str << DebugPrintPoint(keyTypes, vec.GetCells(), *AppData()->TypeRegistry);
+                                    } else {
+                                        str << "deleted table";
+                                    }
                                 } else {
-                                    str << "table has been dropped";
+                                    str << "deleted shard";
                                 }
                             }
                             TABLED() {
@@ -939,7 +956,7 @@ private:
                                 str << Self->Generation() << ":" << status.SeqNoRound;
                             }
                             TABLED() {
-                                str << status.Processed;
+                                str << status.Processed.ShortDebugString();
                             }
                         }
                         str << "\n";

@@ -35,7 +35,7 @@
 
 namespace NYql {
 
-static const THashSet<TStringBuf> UNSUPPORTED_YT_PRAGMAS = {"maxrowweight",  "layerpaths", "dockerimage", "operationspec"};
+static const THashSet<TStringBuf> UNSUPPORTED_YT_PRAGMAS = {"maxrowweight",  "layerpaths", "dockerimage", "operationspec", "networkproject", "staticnetworkproject"};
 static const THashSet<TStringBuf> POOL_TREES_WHITELIST = {"physical",  "cloud", "cloud_default"};
 
 using namespace NNodes;
@@ -719,11 +719,17 @@ public:
                         .Settings().Build()
                         .Done().Ptr();
                 }
-                if (content.Raw()->GetConstraint<TSortedConstraintNode>() || content.Raw()->GetConstraint<TDistinctConstraintNode>() || content.Raw()->GetConstraint<TUniqueConstraintNode>()) {
+                auto constraintSet = content.Raw()->GetConstraintSet();
+                constraintSet.FilterConstraints([](const std::string_view& name) {
+                    return name == TSortedConstraintNode::Name()
+                        || name == TUniqueConstraintNode::Name()
+                        || name == TDistinctConstraintNode::Name();
+                });
+                if (constraintSet) {
                     newContent = Build<TCoAssumeConstraints>(ctx, content.Pos())
                         .Input(newContent)
                         .Value()
-                            .Value(NYT::NodeToYsonString(content.Raw()->GetConstraintSet().ToYson(), NYson::EYsonFormat::Text), TNodeFlags::MultilineContent)
+                            .Value(NYT::NodeToYsonString(constraintSet.ToYson(), NYson::EYsonFormat::Text), TNodeFlags::MultilineContent)
                         .Build()
                         .Done().Ptr();
                 }

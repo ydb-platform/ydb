@@ -37,7 +37,7 @@ tasks.withType<KaptGenerateStubsTask>().configureEach {
 
 {%- macro ObjDepends(obj) -%}
 {%-     set taskvar = varprefix + obj['_object_index'] -%}
-{%-     if obj['_parent_object_index'] -%}
+{%-     if obj['_parent_object_index'] and obj['_parent_object_index'] in current_target_object_indexes -%}
 {%-         set parent_taskvar = varprefix + obj['_parent_object_index'] %}
 
 tasks.getByName("{{ parent_taskvar }}").dependsOn({{ taskvar }})

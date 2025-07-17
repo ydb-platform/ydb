@@ -2,9 +2,9 @@
 
 namespace NSQLComplete {
 
-    TSQLv1NarrowingVisitor::TSQLv1NarrowingVisitor(antlr4::TokenStream* tokens, size_t cursorPosition)
-        : Tokens_(tokens)
-        , CursorPosition_(cursorPosition)
+    TSQLv1NarrowingVisitor::TSQLv1NarrowingVisitor(const TParsedInput& input)
+        : Tokens_(input.Tokens)
+        , CursorPosition_(input.Original.CursorPosition)
     {
     }
 
@@ -14,6 +14,10 @@ namespace NSQLComplete {
 
     bool TSQLv1NarrowingVisitor::IsEnclosing(antlr4::tree::ParseTree* tree) const {
         return TextInterval(tree).properlyContains(CursorInterval());
+    }
+
+    ssize_t TSQLv1NarrowingVisitor::CursorPosition() const {
+        return CursorPosition_;
     }
 
     antlr4::misc::Interval TSQLv1NarrowingVisitor::TextInterval(antlr4::tree::ParseTree* tree) const {
@@ -27,7 +31,8 @@ namespace NSQLComplete {
     }
 
     antlr4::misc::Interval TSQLv1NarrowingVisitor::CursorInterval() const {
-        return antlr4::misc::Interval(CursorPosition_, CursorPosition_);
+        auto cursor = CursorPosition();
+        return antlr4::misc::Interval(cursor, cursor);
     }
 
 } // namespace NSQLComplete

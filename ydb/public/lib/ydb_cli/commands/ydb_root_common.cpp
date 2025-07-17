@@ -80,7 +80,7 @@ void TClientCommandRootCommon::ValidateSettings() {
     } else {
         return;
     }
-    exit(EXIT_FAILURE);
+    throw yexception() << "Invalid client settings";
 }
 
 void TClientCommandRootCommon::FillConfig(TConfig& config) {
@@ -635,10 +635,8 @@ int TClientCommandRootCommon::Run(TConfig& config) {
         prompt = "ydb> ";
     }
 
-    TInteractiveCLI interactiveCLI(config, prompt);
-    interactiveCLI.Run();
-
-    return EXIT_SUCCESS;
+    TInteractiveCLI interactiveCLI(prompt);
+    return interactiveCLI.Run(config);
 }
 
 void TClientCommandRootCommon::ParseCredentials(TConfig& config) {

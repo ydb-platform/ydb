@@ -2,9 +2,11 @@
 
 #include "appdata.h"
 #include "runtime.h"
+
 #include <ydb/core/tablet_flat/shared_sausagecache.h>
 #include <ydb/core/util/defs.h>
 #include <ydb/core/base/blobstorage.h>
+#include <ydb/core/base/statestorage.h>
 #include <ydb/core/blobstorage/dsproxy/mock/model.h>
 #include <ydb/core/blobstorage/nodewarden/node_warden.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk.h>
@@ -29,6 +31,7 @@ namespace NFake {
 }
 
     const TBlobStorageGroupType::EErasureSpecies BootGroupErasure = TBlobStorageGroupType::ErasureNone;
+    using TStateStorageSetupper = std::function<void(TTestActorRuntime&, ui32)>;
 
     TTabletStorageInfo* CreateTestTabletInfo(ui64 tabletId, TTabletTypes::EType tabletType,
         TBlobStorageGroupType::EErasureSpecies erasure = BootGroupErasure, ui32 groupId = 0);
@@ -40,7 +43,11 @@ namespace NFake {
 
     void SetupStateStorage(TTestActorRuntime& runtime, ui32 nodeIndex,
                            bool replicasOnFirstNode = false);
-    void SetupCustomStateStorage(TTestActorRuntime &runtime, ui32 NToSelect, ui32 nrings, ui32 ringSize); 
+    void SetupCustomStateStorage(TTestActorRuntime &runtime, ui32 NToSelect, ui32 nrings, ui32 ringSize);
+    TStateStorageSetupper CreateCustomStateStorageSetupper(const TVector<TStateStorageInfo::TRingGroup>& ringGroups, int replicasInRingGroup);
+    TStateStorageSetupper CreateCustomStateStorageSetupper(const TVector<TStateStorageInfo::TRingGroup>& ringGroups,
+                                                           const THashMap<ui32, TVector<ui32>>& pileIdToNodeIds);
+    TStateStorageSetupper CreateDefaultStateStorageSetupper();
     void SetupBSNodeWarden(TTestActorRuntime& runtime, ui32 nodeIndex, TIntrusivePtr<TNodeWardenConfig> nodeWardenConfig);
     void SetupTabletResolver(TTestActorRuntime& runtime, ui32 nodeIndex);
     void SetupTabletPipePerNodeCaches(TTestActorRuntime& runtime, ui32 nodeIndex, bool forceFollowers = false);
@@ -75,5 +82,7 @@ namespace NFake {
         virtual ~TStrandedPDiskServiceFactory()
         {}
     };
+
+    TActorId MakeBoardReplicaID(ui32 node, ui32 replicaIndex);
 
 }

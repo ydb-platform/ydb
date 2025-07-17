@@ -201,7 +201,7 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
 
         ExecSQL(server, edgeActor, "DELETE FROM `/Root/Table` ON (key) VALUES (2), (6);");
 
-        WaitForContent(server, edgeActor, "/Root/Table/continuousBackupImpl", {
+        WaitForContent(server, edgeActor, "/Root/Table/0_continuousBackupImpl", {
             MakeUpsert(1, 100),
             MakeUpsert(5, 200),
             MakeUpsert(6, 300),
@@ -209,7 +209,8 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
             MakeErase(6),
         });
 
-        WaitTxNotification(server, edgeActor, AsyncAlterTakeIncrementalBackup(server, "/Root", "Table", "IncrBackupImpl"));
+        WaitTxNotification(server, edgeActor,
+            AsyncAlterTakeIncrementalBackup(server, "/Root", "Table", "IncrBackupImpl", "1_continuousBackupImpl"));
 
         // Actions below mustn't affect the result
 
@@ -300,6 +301,166 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
                 )"),
             "{ items { uint32_value: 1 } items { uint32_value: 10 } }, "
             "{ items { uint32_value: 3 } items { uint32_value: 30 } }");
+    }
+
+    Y_UNIT_TEST(MultiBackup) {
+        TPortManager portManager;
+        TServer::TPtr server = new TServer(TServerSettings(portManager.GetPort(2134), {}, DefaultPQConfig())
+            .SetUseRealThreads(false)
+            .SetDomainName("Root")
+            .SetEnableChangefeedInitialScan(true)
+        );
+
+        auto& runtime = *server->GetRuntime();
+        const auto edgeActor = runtime.AllocateEdgeActor();
+
+        SetupLogging(runtime);
+        InitRoot(server, edgeActor);
+        CreateShardedTable(server, edgeActor, "/Root", "Table", SimpleTable());
+
+        ExecSQL(server, edgeActor, R"(
+            UPSERT INTO `/Root/Table` (key, value) VALUES
+            (1, 10),
+            (2, 20),
+            (3, 30);
+        )");
+
+        WaitTxNotification(server, edgeActor,
+            AsyncCreateContinuousBackup(server, "/Root", "Table", "0_continuousBackupImpl"));
+
+        ExecSQL(server, edgeActor, R"(
+            UPSERT INTO `/Root/Table` (key, value) VALUES
+            (1, 100),
+            (5, 200),
+            (6, 300);
+        )");
+
+        ExecSQL(server, edgeActor, "DELETE FROM `/Root/Table` ON (key) VALUES (2), (6);");
+
+        WaitForContent(server, edgeActor, "/Root/Table/0_continuousBackupImpl", {
+            MakeUpsert(1, 100),
+            MakeUpsert(5, 200),
+            MakeUpsert(6, 300),
+            MakeErase(2),
+            MakeErase(6),
+        });
+
+        WaitTxNotification(server, edgeActor,
+            AsyncAlterTakeIncrementalBackup(server, "/Root", "Table", "1_IncrBackupImpl", "1_continuousBackupImpl"));
+
+        SimulateSleep(server, TDuration::Seconds(1));
+
+        const char* const result1 = "{ items { uint32_value: 1 } items { uint32_value: 100 } }, "
+            "{ items { uint32_value: 2 } items { null_flag_value: NULL_VALUE } }, "
+            "{ items { uint32_value: 5 } items { uint32_value: 200 } }, "
+            "{ items { uint32_value: 6 } items { null_flag_value: NULL_VALUE } }";
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleExec(runtime, R"(
+                SELECT key, value FROM `/Root/1_IncrBackupImpl`
+                ORDER BY key
+                )"),
+            result1);
+
+        ExecSQL(server, edgeActor, R"(
+            UPSERT INTO `/Root/Table` (key, value) VALUES
+            (2, 2000),
+            (5, 5000),
+            (7, 7000);
+        )");
+
+        ExecSQL(server, edgeActor, "DELETE FROM `/Root/Table` ON (key) VALUES (3), (5), (8);");
+
+        WaitForContent(server, edgeActor, "/Root/Table/1_continuousBackupImpl", {
+            MakeUpsert(2, 2000),
+            MakeUpsert(5, 5000),
+            MakeUpsert(7, 7000),
+            MakeErase(3),
+            MakeErase(5),
+            MakeErase(8),
+        });
+
+        WaitTxNotification(server, edgeActor,
+            AsyncAlterTakeIncrementalBackup(server, "/Root", "Table", "2_IncrBackupImpl", "2_continuousBackupImpl"));
+
+        SimulateSleep(server, TDuration::Seconds(1));
+
+        const char* const result2 = "{ items { uint32_value: 2 } items { uint32_value: 2000 } }, "
+            "{ items { uint32_value: 3 } items { null_flag_value: NULL_VALUE } }, "
+            "{ items { uint32_value: 5 } items { null_flag_value: NULL_VALUE } }, "
+            "{ items { uint32_value: 7 } items { uint32_value: 7000 } }, "
+            "{ items { uint32_value: 8 } items { null_flag_value: NULL_VALUE } }";
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleExec(runtime, R"(
+                SELECT key, value FROM `/Root/2_IncrBackupImpl`
+                ORDER BY key
+                )"),
+            result2);
+
+        ExecSQL(server, edgeActor, R"(
+            UPSERT INTO `/Root/Table` (key, value) VALUES
+            (20, 2000),
+            (50, 5000),
+            (70, 7000);
+        )");
+
+        ExecSQL(server, edgeActor, "DELETE FROM `/Root/Table` ON (key) VALUES (1), (2), (3);");
+
+        WaitForContent(server, edgeActor, "/Root/Table/2_continuousBackupImpl", {
+            MakeUpsert(20, 2000),
+            MakeUpsert(50, 5000),
+            MakeUpsert(70, 7000),
+            MakeErase(1),
+            MakeErase(2),
+            MakeErase(3),
+        });
+
+        WaitTxNotification(server, edgeActor,
+            AsyncAlterTakeIncrementalBackup(server, "/Root", "Table", "3_IncrBackupImpl", "3_continuousBackupImpl"));
+
+        SimulateSleep(server, TDuration::Seconds(1));
+
+        const char* const result3 = "{ items { uint32_value: 1 } items { null_flag_value: NULL_VALUE } }, "
+            "{ items { uint32_value: 2 } items { null_flag_value: NULL_VALUE } }, "
+            "{ items { uint32_value: 3 } items { null_flag_value: NULL_VALUE } }, "
+            "{ items { uint32_value: 20 } items { uint32_value: 2000 } }, "
+            "{ items { uint32_value: 50 } items { uint32_value: 5000 } }, "
+            "{ items { uint32_value: 70 } items { uint32_value: 7000 } }";
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleExec(runtime, R"(
+                SELECT key, value FROM `/Root/3_IncrBackupImpl`
+                ORDER BY key
+                )"),
+            result3);
+
+        // Check increments are unchanged
+
+        ExecSQL(server, edgeActor, R"(
+            UPSERT INTO `/Root/Table` (key, value) VALUES (10, 10000)
+        )");
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleExec(runtime, R"(
+                SELECT key, value FROM `/Root/1_IncrBackupImpl`
+                ORDER BY key
+                )"),
+            result1);
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleExec(runtime, R"(
+                SELECT key, value FROM `/Root/2_IncrBackupImpl`
+                ORDER BY key
+                )"),
+            result2);
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleExec(runtime, R"(
+                SELECT key, value FROM `/Root/3_IncrBackupImpl`
+                ORDER BY key
+                )"),
+            result3);
     }
 
     Y_UNIT_TEST(MultiRestore) {
@@ -430,7 +591,7 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
             (3, 30);
         )");
 
-        WaitTxNotification(server, edgeActor, AsyncCreateContinuousBackup(server, "/Root", "Table"));
+        WaitTxNotification(server, edgeActor, AsyncCreateContinuousBackup(server, "/Root", "Table", "0_continuousBackupImpl"));
 
         ExecSQL(server, edgeActor, R"(
             UPSERT INTO `/Root/Table` (key, value) VALUES
@@ -443,7 +604,8 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
 
         SimulateSleep(server, TDuration::Seconds(1));
 
-        WaitTxNotification(server, edgeActor, AsyncAlterTakeIncrementalBackup(server, "/Root", "Table", "IncrBackupImpl"));
+        WaitTxNotification(server, edgeActor,
+            AsyncAlterTakeIncrementalBackup(server, "/Root", "Table", "IncrBackupImpl", "1_continuousBackupImpl"));
 
         SimulateSleep(server, TDuration::Seconds(1));
 
@@ -469,6 +631,7 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
             .SetDomainName("Root")
             .SetEnableChangefeedInitialScan(true)
             .SetEnableBackupService(true)
+            .SetEnableRealSystemViewPaths(false)
         );
 
         auto& runtime = *server->GetRuntime();
@@ -531,6 +694,95 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
                 "{ items { uint32_value: 1 } items { null_flag_value: NULL_VALUE } }, "
                 "{ items { uint32_value: 2 } items { uint32_value: 200 } }");
         }
+    }
+
+    Y_UNIT_TEST(ComplexBackupBackupCollection) {
+        TPortManager portManager;
+        TServer::TPtr server = new TServer(TServerSettings(portManager.GetPort(2134), {}, DefaultPQConfig())
+            .SetUseRealThreads(false)
+            .SetDomainName("Root")
+            .SetEnableChangefeedInitialScan(true)
+            .SetEnableBackupService(true)
+            .SetEnableRealSystemViewPaths(false)
+        );
+
+        auto& runtime = *server->GetRuntime();
+        const auto edgeActor = runtime.AllocateEdgeActor();
+
+        SetupLogging(runtime);
+        InitRoot(server, edgeActor);
+        CreateShardedTable(server, edgeActor, "/Root", "Table", SimpleTable());
+
+        ExecSQL(server, edgeActor, R"(
+            UPSERT INTO `/Root/Table` (key, value) VALUES
+                (1, 10)
+              , (2, 20)
+              , (3, 30)
+              ;
+            )");
+
+        ExecSQL(server, edgeActor, R"(
+            CREATE BACKUP COLLECTION `MyCollection`
+              ( TABLE `/Root/Table`
+              )
+            WITH
+              ( STORAGE = 'cluster'
+              , INCREMENTAL_BACKUP_ENABLED = 'true'
+              );
+            )", false);
+
+        ExecSQL(server, edgeActor, R"(BACKUP `MyCollection`;)", false);
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleExec(runtime, R"(
+                -- TODO: fix with navigate after proper scheme cache handling
+                SELECT key, value FROM `/Root/.backups/collections/MyCollection/19700101000001Z_full/Table`
+                ORDER BY key
+                )"),
+            KqpSimpleExec(runtime, R"(
+                SELECT key, value FROM `/Root/Table`
+                ORDER BY key
+                )"));
+
+        ExecSQL(server, edgeActor, R"(
+            UPSERT INTO `/Root/Table` (key, value) VALUES
+            (2, 200);
+        )");
+
+        ExecSQL(server, edgeActor, R"(DELETE FROM `/Root/Table` WHERE key=1;)");
+
+        ExecSQL(server, edgeActor, R"(BACKUP `MyCollection` INCREMENTAL;)", false);
+
+        SimulateSleep(server, TDuration::Seconds(1));
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleExec(runtime, R"(
+                -- TODO: fix with navigate after proper scheme cache handling
+                SELECT key, value FROM `/Root/.backups/collections/MyCollection/19700101000002Z_incremental/Table`
+                ORDER BY key
+                )"),
+            "{ items { uint32_value: 1 } items { null_flag_value: NULL_VALUE } }, "
+            "{ items { uint32_value: 2 } items { uint32_value: 200 } }");
+
+        ExecSQL(server, edgeActor, R"(
+            UPSERT INTO `/Root/Table` (key, value) VALUES
+            (3, 300);
+        )");
+
+        ExecSQL(server, edgeActor, R"(DELETE FROM `/Root/Table` WHERE key=2;)");
+
+        ExecSQL(server, edgeActor, R"(BACKUP `MyCollection` INCREMENTAL;)", false);
+
+        SimulateSleep(server, TDuration::Seconds(1));
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleExec(runtime, R"(
+                -- TODO: fix with navigate after proper scheme cache handling
+                SELECT key, value FROM `/Root/.backups/collections/MyCollection/19700101000003Z_incremental/Table`
+                ORDER BY key
+                )"),
+            "{ items { uint32_value: 2 } items { null_flag_value: NULL_VALUE } }, "
+            "{ items { uint32_value: 3 } items { uint32_value: 300 } }");
     }
 
     Y_UNIT_TEST_TWIN(SimpleRestoreBackupCollection, WithIncremental) {

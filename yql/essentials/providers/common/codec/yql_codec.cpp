@@ -485,7 +485,6 @@ TString DataValueToString(const NKikimr::NUdf::TUnboxedValuePod& value, const TD
         case NUdf::EDataSlot::Json:
         case NUdf::EDataSlot::Uuid:
         case NUdf::EDataSlot::Yson:
-        case NUdf::EDataSlot::DyNumber:
             return ToString((TStringBuf)value.AsStringRef());
         case NUdf::EDataSlot::Decimal:
             {
@@ -526,7 +525,12 @@ TString DataValueToString(const NKikimr::NUdf::TUnboxedValuePod& value, const TD
 
         case NUdf::EDataSlot::JsonDocument: {
             NUdf::TUnboxedValue json = ValueToString(EDataSlot::JsonDocument, value);
-            return ToString(TStringBuf(value.AsStringRef()));
+            return ToString(TStringBuf(json.AsStringRef()));
+        }
+
+        case NUdf::EDataSlot::DyNumber: {
+            NUdf::TUnboxedValue res = ValueToString(EDataSlot::DyNumber, value);
+            return ToString(TStringBuf(res.AsStringRef()));
         }
     }
 

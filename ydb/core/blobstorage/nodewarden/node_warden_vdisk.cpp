@@ -196,6 +196,10 @@ namespace NKikimr::NStorage {
         vdiskConfig->DefaultHugeGarbagePerMille = DefaultHugeGarbagePerMille;
         vdiskConfig->HugeDefragFreeSpaceBorderPerMille = HugeDefragFreeSpaceBorderPerMille;
         vdiskConfig->MaxChunksToDefragInflight = MaxChunksToDefragInflight;
+        vdiskConfig->FreshCompMaxInFlightWrites = FreshCompMaxInFlightWrites;
+        vdiskConfig->FreshCompMaxInFlightReads = FreshCompMaxInFlightReads;
+        vdiskConfig->HullCompMaxInFlightWrites = HullCompMaxInFlightWrites;
+        vdiskConfig->HullCompMaxInFlightReads = HullCompMaxInFlightReads;
 
         vdiskConfig->EnableLocalSyncLogDataCutting = EnableLocalSyncLogDataCutting;
         if (deviceType == NPDisk::EDeviceType::DEVICE_TYPE_ROT) {
@@ -250,9 +254,11 @@ namespace NKikimr::NStorage {
 
         vdiskConfig->GroupSizeInUnits = groupInfo->GroupSizeInUnits;
 
+        vdiskConfig->EnableDeepScrubbing = EnableDeepScrubbing;
+
         // issue initial report to whiteboard before creating actor to avoid races
         Send(WhiteboardId, new NNodeWhiteboard::TEvWhiteboard::TEvVDiskStateUpdate(vdiskId, groupInfo->GetStoragePoolName(),
-            vslotId.PDiskId, vslotId.VDiskSlotId, pdiskGuid, kind, donorMode, whiteboardInstanceGuid, std::move(donors)));
+            vslotId.PDiskId, vslotId.VDiskSlotId, pdiskGuid, kind, donorMode, whiteboardInstanceGuid, std::move(donors), vdiskConfig->GroupSizeInUnits));
         vdisk.WhiteboardVDiskId.emplace(vdiskId);
         vdisk.WhiteboardInstanceGuid = whiteboardInstanceGuid;
 

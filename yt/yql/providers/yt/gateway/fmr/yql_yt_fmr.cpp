@@ -228,39 +228,16 @@ public:
     TFuture<void> CloseSession(TCloseSessionOptions&& options) final {
         YQL_LOG_CTX_SCOPE(TStringBuf("Gateway"), __FUNCTION__);
 
-        with_lock(SessionStates_->Mutex) {
-            auto& sessions = SessionStates_->Sessions;
-            auto it = sessions.find(options.SessionId());
-            if (it != sessions.end()) {
-                sessions.erase(it);
-            }
-        }
-        Slave_->CloseSession(std::move(options)).Wait();
-        return MakeFuture();
-    }
-
-    TFuture<void> CleanupSession(TCleanupSessionOptions&& options) final {
-        YQL_LOG_CTX_SCOPE(TStringBuf("Gateway"), __FUNCTION__);
-
         TString sessionId = options.SessionId();
         with_lock(SessionStates_->Mutex) {
             auto& sessions = SessionStates_->Sessions;
             YQL_ENSURE(sessions.contains(sessionId));
-            auto& operationStates = sessions[sessionId].OperationStates;
-
-            auto cancelOperationsFunc = [&] (std::unordered_map<TFmrTableId, TPromise<TFmrOperationResult>>& operationStatuses) {
-                std::vector<TFuture<TDeleteOperationResponse>> cancelOperationsFutures;
-
-                for (auto& [operationId, promise]: operationStatuses) {
-                    cancelOperationsFutures.emplace_back(Coordinator_->DeleteOperation({operationId.Id}));
-                }
-                NThreading::WaitAll(cancelOperationsFutures).GetValueSync();
-            };
-
-            cancelOperationsFunc(operationStates.OperationStatuses);
+            sessions.erase(sessionId);
         }
-        Slave_->CleanupSession(std::move(options)).Wait();
-        return MakeFuture();
+        std::vector<TFuture<void>> futures;
+        futures.emplace_back(Coordinator_->ClearSession({.SessionId = sessionId}));
+        futures.emplace_back(Slave_->CloseSession(std::move(options)));
+        return NThreading::WaitExceptionOrAll(futures);
     }
 
 private:
@@ -498,8 +475,7 @@ private:
 
         auto [mapInputTables, clusterConnections] = GetInputTablesAndConnections(inputTables, std::move(options));
 
-        TString executable = ""; //??? TODO how to extract executable bytecode from options
-        TMapOperationParams mapOperationParams{.Input = mapInputTables,.Output = fmrOutputTables, .Executable = executable};
+        TMapOperationParams mapOperationParams{.Input = mapInputTables,.Output = fmrOutputTables, .SerializedMapJobState = ""}; // TODO - fill
         TStartOperationRequest mapOperationRequest{
             .TaskType = ETaskType::Map,
             .OperationParams = mapOperationParams,

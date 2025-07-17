@@ -23,7 +23,6 @@ config:
       type: SSD
     - path: /dev/disk/by-partlabel/ydb_disk_ssd_03
       type: SSD
-  host_config_id: 1
   hosts:
   - host: ydb-node-zone-a.local       # storage node DNS name
     host_config_id: 1                 # numeric host configuration template identifier

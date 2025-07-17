@@ -1,6 +1,6 @@
 #include "schemeshard__operation_common.h"
-
 #include "schemeshard_private.h"
+
 #include <ydb/core/base/hive.h>
 #include <ydb/core/tx/datashard/datashard.h>
 
@@ -17,6 +17,7 @@ bool IsExpectedTxType(TTxState::ETxType txType) {
     case TTxState::TxAlterCdcStreamAtTableDropSnapshot:
     case TTxState::TxDropCdcStreamAtTable:
     case TTxState::TxDropCdcStreamAtTableDropSnapshot:
+    case TTxState::TxRotateCdcStreamAtTable:
         return true;
     default:
         return false;

@@ -1,6 +1,7 @@
 #pragma once
 #include <ydb/library/actors/core/events.h>
 #include <ydb/library/actors/core/event_local.h>
+#include <ydb/library/yql/providers/generic/connector/api/service/protos/connector.pb.h>
 #include <ydb/library/yql/providers/generic/connector/libcpp/client.h>
 #include <yql/essentials/minikql/mkql_alloc.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>

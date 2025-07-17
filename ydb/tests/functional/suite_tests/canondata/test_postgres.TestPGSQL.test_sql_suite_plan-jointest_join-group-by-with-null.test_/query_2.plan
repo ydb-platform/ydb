@@ -54,6 +54,7 @@
                                         "PlanNodeId": 13,
                                         "Plans": [
                                             {
+                                                "HashFunc": "HashV1",
                                                 "KeyColumns": [
                                                     "t1.q2"
                                                 ],
@@ -120,9 +121,9 @@
                                                                                 "Columns": [
                                                                                     "q1"
                                                                                 ],
-                                                                                "E-Cost": "No estimate",
-                                                                                "E-Rows": "No estimate",
-                                                                                "E-Size": "No estimate",
+                                                                                "E-Cost": "0",
+                                                                                "E-Rows": "0",
+                                                                                "E-Size": "0",
                                                                                 "LookupKeyColumns": [
                                                                                     "q1"
                                                                                 ],
@@ -201,10 +202,6 @@
                                                         "Name": "TableFullScan",
                                                         "Path": "/Root/postgres_jointest/join-group-by-with-null.test_plan/int8_tbl",
                                                         "ReadColumns": [
-                                                            "q1",
-                                                            "q2"
-                                                        ],
-                                                        "ReadRanges": [
                                                             "q1 (-\u221e, +\u221e)",
                                                             "q2 (-\u221e, +\u221e)"
                                                         ],

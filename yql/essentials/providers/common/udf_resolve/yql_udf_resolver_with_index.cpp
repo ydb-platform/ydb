@@ -29,16 +29,16 @@ class TUdfResolverWithIndex : public IUdfResolver {
 
     public:
         TResourceFile(TString alias, const TVector<TString>& modules, TFileLinkPtr link)
-            : Link_(std::move(link))
+            : Link(std::move(link))
         {
-            Import_.FileAlias = alias;
-            Import_.Block = &Block_;
-            Import_.Modules = MakeMaybe(modules);
+            Import.FileAlias = alias;
+            Import.Block = &Block;
+            Import.Modules = MakeMaybe(modules);
 
-            Block_.Type = EUserDataType::PATH;
-            Block_.Data = Link_->GetPath();
-            Block_.Usage.Set(EUserDataBlockUsage::Udf);
-            Block_.FrozenFile = Link_;
+            Block.Type = EUserDataType::PATH;
+            Block.Data = Link->GetPath();
+            Block.Usage.Set(EUserDataBlockUsage::Udf);
+            Block.FrozenFile = Link;
         }
 
         static TResourceFile::TPtr Create(const TString& packageName, const TSet<TString>& modules, TFileLinkPtr link) {
@@ -50,9 +50,9 @@ class TUdfResolverWithIndex : public IUdfResolver {
         }
 
     public:
-        TFileLinkPtr Link_;
-        TUserDataBlock Block_;
-        TImport Import_;
+        TFileLinkPtr Link;
+        TUserDataBlock Block;
+        TImport Import;
     };
 
 public:
@@ -75,7 +75,7 @@ public:
             }
 
             auto file = DownloadFileWithModule(moduleNameStr);
-            return MakeMaybe<TFilePathWithMd5>(file->Link_->GetPath(), file->Link_->GetMd5());
+            return MakeMaybe<TFilePathWithMd5>(file->Link->GetPath(), file->Link->GetMd5());
         }
     }
 
@@ -172,7 +172,7 @@ private:
             return false;
         }
 
-        additionalImport = &file->Import_;
+        additionalImport = &file->Import;
 
         if (info.IsTypeAwareness) {
             function.Name = info.Name;
@@ -246,7 +246,7 @@ private:
             auto p = DownloadedFiles_.emplace(d, file);
             if (!p.second) {
                 // should not happen because UdfIndex handles conflicts
-                ythrow yexception() << "file already downloaded for module " << canonizedModuleName << ", conflicting path " << downloadLink.Path << ", existing local file " << p.first->second->Link_->GetPath();
+                ythrow yexception() << "file already downloaded for module " << canonizedModuleName << ", conflicting path " << downloadLink.Path << ", existing local file " << p.first->second->Link->GetPath();
             }
         }
 

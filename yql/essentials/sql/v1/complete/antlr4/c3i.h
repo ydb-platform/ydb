@@ -37,6 +37,8 @@ namespace NSQLComplete {
             std::unordered_set<TTokenId> IgnoredTokens;
             std::unordered_set<TRuleId> PreferredRules;
             std::unordered_set<TRuleId> IgnoredRules;
+            std::unordered_map<TTokenId, std::unordered_set<TTokenId>> DisabledPreviousByToken;
+            std::unordered_map<TTokenId, std::unordered_set<TTokenId>> ForcedPreviousByToken;
         };
 
         virtual ~IC3Engine() = default;

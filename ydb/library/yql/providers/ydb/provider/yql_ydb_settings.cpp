@@ -14,7 +14,7 @@ TYdbSettings::TConstPtr TYdbConfiguration::Snapshot() const {
 }
 
 bool TYdbConfiguration::HasCluster(TStringBuf cluster) const {
-    return ValidClusters.contains(cluster);
+    return GetValidClusters().contains(cluster);
 }
 
 void TYdbConfiguration::Init(

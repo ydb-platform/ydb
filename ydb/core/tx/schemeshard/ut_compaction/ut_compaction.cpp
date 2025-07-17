@@ -1,8 +1,8 @@
 #include "operation_queue_timer.h"
 
 #include <ydb/core/cms/console/console.h>
-#include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/tx/datashard/datashard.h>
+#include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 
 #include <algorithm>
 #include <random>
@@ -454,6 +454,9 @@ ui64 TestServerless(
     )");
     env.TestWaitNotification(runtime, txId);
 
+    const auto describeResult = DescribePath(runtime, "/MyRoot/Shared");
+    const auto subDomainPathId = describeResult.GetPathId();
+
     TestAlterExtSubDomain(runtime, ++txId, "/MyRoot", R"(
         PlanResolution: 50
         Coordinators: 1
@@ -482,9 +485,9 @@ ui64 TestServerless(
         Name: "User"
         ResourcesDomainKey {
             SchemeShard: %lu
-            PathId: 2
+            PathId: %lu
         }
-    )", schemeshardId), attrs);
+    )", schemeshardId, subDomainPathId), attrs);
     env.TestWaitNotification(runtime, txId);
 
     TestAlterExtSubDomain(runtime, ++txId, "/MyRoot", R"(

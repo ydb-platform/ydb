@@ -346,11 +346,19 @@ namespace TEvDataShard {
         EvInMemoryStateRequest,
         EvInMemoryStateResponse,
 
-        EvForceDataCleanup,
-        EvForceDataCleanupResult,
+        EvVacuum,
+        EvVacuumResult,
 
         EvPrefixKMeansRequest,
         EvPrefixKMeansResponse,
+
+        EvRecomputeKMeansRequest,
+        EvRecomputeKMeansResponse,
+
+        // Request/response that is sent to each shard of unique index impl table during its build process.
+        // Validates uniqueness of data in unique index table.
+        EvValidateUniqueIndexRequest,
+        EvValidateUniqueIndexResponse,
 
         EvEnd
     };
@@ -1509,6 +1517,18 @@ namespace TEvDataShard {
                           TEvDataShard::EvReshuffleKMeansResponse> {
     };
 
+    struct TEvRecomputeKMeansRequest
+        : public TEventPB<TEvRecomputeKMeansRequest,
+                          NKikimrTxDataShard::TEvRecomputeKMeansRequest,
+                          TEvDataShard::EvRecomputeKMeansRequest> {
+    };
+
+    struct TEvRecomputeKMeansResponse
+        : public TEventPB<TEvRecomputeKMeansResponse,
+                          NKikimrTxDataShard::TEvRecomputeKMeansResponse,
+                          TEvDataShard::EvRecomputeKMeansResponse> {
+    };
+
     struct TEvLocalKMeansRequest
         : public TEventPB<TEvLocalKMeansRequest,
                           NKikimrTxDataShard::TEvLocalKMeansRequest,
@@ -1584,21 +1604,21 @@ namespace TEvDataShard {
         }
     };
 
-    struct TEvForceDataCleanup : TEventPB<TEvForceDataCleanup, NKikimrTxDataShard::TEvForceDataCleanup,
-                                          TEvDataShard::EvForceDataCleanup> {
-        TEvForceDataCleanup() = default;
+    struct TEvVacuum : TEventPB<TEvVacuum, NKikimrTxDataShard::TEvVacuum,
+                                          TEvDataShard::EvVacuum> {
+        TEvVacuum() = default;
 
-        TEvForceDataCleanup(ui64 dataCleanupGeneration) {
-            Record.SetDataCleanupGeneration(dataCleanupGeneration);
+        TEvVacuum(ui64 vacuumGeneration) {
+            Record.SetVacuumGeneration(vacuumGeneration);
         }
     };
 
-    struct TEvForceDataCleanupResult : TEventPB<TEvForceDataCleanupResult, NKikimrTxDataShard::TEvForceDataCleanupResult,
-                                                TEvDataShard::EvForceDataCleanupResult> {
-        TEvForceDataCleanupResult() = default;
+    struct TEvVacuumResult : TEventPB<TEvVacuumResult, NKikimrTxDataShard::TEvVacuumResult,
+                                                TEvDataShard::EvVacuumResult> {
+        TEvVacuumResult() = default;
 
-        TEvForceDataCleanupResult(ui64 dataCleanupGeneration, ui64 tabletId, NKikimrTxDataShard::TEvForceDataCleanupResult::EStatus status) {
-            Record.SetDataCleanupGeneration(dataCleanupGeneration);
+        TEvVacuumResult(ui64 vacuumGeneration, ui64 tabletId, NKikimrTxDataShard::TEvVacuumResult::EStatus status) {
+            Record.SetVacuumGeneration(vacuumGeneration);
             Record.SetTabletId(tabletId);
             Record.SetStatus(status);
         }
@@ -1837,6 +1857,20 @@ namespace TEvDataShard {
                           EvInMemoryStateResponse>
     {
         TEvInMemoryStateResponse() = default;
+    };
+
+    struct TEvValidateUniqueIndexRequest
+        : public TEventPB<TEvValidateUniqueIndexRequest,
+                          NKikimrTxDataShard::TEvValidateUniqueIndexRequest,
+                          TEvDataShard::EvValidateUniqueIndexRequest>
+    {
+    };
+
+    struct TEvValidateUniqueIndexResponse
+        : public TEventPB<TEvValidateUniqueIndexResponse,
+                          NKikimrTxDataShard::TEvValidateUniqueIndexResponse,
+                          TEvDataShard::EvValidateUniqueIndexResponse>
+    {
     };
 };
 

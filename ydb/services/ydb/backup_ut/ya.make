@@ -18,6 +18,7 @@ SRCS(
 
 PEERDIR(
     contrib/libs/fmt
+    library/cpp/streams/zstd
     ydb/core/testlib/default
     ydb/core/util
     ydb/core/wrappers/ut_helpers

@@ -153,6 +153,7 @@ message TKeyValueResponse {
             uint32 PayloadId = 4;
         }
         optional string Message = 3;
+        optional uint64 CreationUnixTime = 5;
     }
     message TReadRangeResult {
         // may contain partial (truncated) result if Status == OVERRUN

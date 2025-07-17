@@ -274,7 +274,7 @@ struct TProtoTraits<NChunkClient::TChunkReplicaWithMedium>
 
 ////////////////////////////////////////////////////////////////////////////////
 
-} // namespace
+} // namespace NYT
 
 //! A hasher for TChunkIdWithIndex.
 template <>

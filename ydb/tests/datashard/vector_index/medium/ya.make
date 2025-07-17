@@ -1,5 +1,5 @@
 PY3TEST()
-ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")
+INCLUDE(${ARCADIA_ROOT}/ydb/tests/ydbd_dep.inc)
 
 FORK_SUBTESTS()
 SPLIT_FACTOR(39)
@@ -22,7 +22,6 @@ PEERDIR(
 
 DEPENDS(
     ydb/apps/ydb
-    ydb/apps/ydbd
 )
 
 END()

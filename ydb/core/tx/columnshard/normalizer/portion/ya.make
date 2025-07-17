@@ -18,6 +18,7 @@ SRCS(
     GLOBAL clean_unused_tables_template.cpp
     GLOBAL clean_ttl_preset_setting_info.cpp
     GLOBAL clean_ttl_preset_setting_version_info.cpp
+    GLOBAL copy_blob_ids_to_v2.cpp
 )
 
 PEERDIR(

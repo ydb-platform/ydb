@@ -588,16 +588,17 @@ TBytesStatistics TKqpScanComputeContext::TScanData::TBlockBatchReader::AddData(c
     return TBytesStatistics();
 }
 
-void TKqpScanComputeContext::TScanData::UpdateStats(size_t rows, size_t bytes, TMaybe<ui64> shardId, ui64 waitOutputTime) {
+void TKqpScanComputeContext::TScanData::UpdateStats(size_t rows, size_t bytes, TMaybe<ui64> shardId, ui64 waitOutputTime, bool finished) {
     if (BasicStats) {
         ui64 nowMs = Now().MilliSeconds();
         if (shardId) {
-            const auto& [it, inserted] = BasicStats->ExternalStats.emplace(*shardId, TExternalStats(rows, bytes, nowMs, nowMs, waitOutputTime));
+            const auto& [it, inserted] = BasicStats->ExternalStats.emplace(*shardId, TExternalStats(rows, bytes, nowMs, nowMs, waitOutputTime, finished));
             if (!inserted) {
                 it->second.ExternalRows += rows;
                 it->second.ExternalBytes += bytes;
                 it->second.LastMessageMs = nowMs;
                 it->second.WaitOutputTimeUs = waitOutputTime;
+                it->second.Finished |= finished;
             }
         }
         BasicStats->Rows += rows;
@@ -609,12 +610,12 @@ void TKqpScanComputeContext::TScanData::UpdateStats(size_t rows, size_t bytes, T
     }
 }
 
-ui64 TKqpScanComputeContext::TScanData::AddData(const TVector<TOwnedCellVec>& batch, TMaybe<ui64> shardId, const THolderFactory& holderFactory, ui64 waitOutputTime) {
+ui64 TKqpScanComputeContext::TScanData::AddData(const TVector<TOwnedCellVec>& batch, TMaybe<ui64> shardId, const THolderFactory& holderFactory, ui64 waitOutputTime, bool finished) {
     if (Finished || batch.empty()) {
         return 0;
     }
     TBytesStatistics stats = BatchReader->AddData(batch, shardId, holderFactory);
-    UpdateStats(batch.size(), stats.DataBytes, shardId, waitOutputTime);
+    UpdateStats(batch.size(), stats.DataBytes, shardId, waitOutputTime, finished);
     return stats.AllocatedBytes;
 }
 
@@ -714,7 +715,7 @@ TBytesStatistics TKqpScanComputeContext::TScanData::TBlockBatchReader::AddData(c
 }
 
 ui64 TKqpScanComputeContext::TScanData::AddData(const TBatchDataAccessor& batch, TMaybe<ui64> shardId,
-    const THolderFactory& holderFactory, ui64 waitOutputTime)
+    const THolderFactory& holderFactory, ui64 waitOutputTime, bool finished)
 {
     // RecordBatch hasn't empty method so check the number of rows
     if (Finished || batch.GetRecordsCount() == 0) {
@@ -722,7 +723,7 @@ ui64 TKqpScanComputeContext::TScanData::AddData(const TBatchDataAccessor& batch,
     }
 
     TBytesStatistics stats = BatchReader->AddData(batch, shardId, holderFactory);
-    UpdateStats(batch.GetRecordsCount(), stats.DataBytes, shardId, waitOutputTime);
+    UpdateStats(batch.GetRecordsCount(), stats.DataBytes, shardId, waitOutputTime, finished);
     return stats.AllocatedBytes;
 }
 

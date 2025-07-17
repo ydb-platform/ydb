@@ -106,6 +106,8 @@ public:
             NKikimrNodeBroker::TVersionInfo versionInfo;
             versionInfo.SetSupportDeltaProtocol(true);
             Self->SignalTabletActive(ctx, versionInfo.SerializeAsString());
+
+            Self->UpdateCommittedStateCounters();
         } else {
             Self->Execute(Self->CreateTxMigrateState(std::move(DbChanges)));
         }

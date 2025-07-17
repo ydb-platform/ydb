@@ -6,31 +6,41 @@ namespace NYT::NChunkClient {
 
 TFuture<void> TReadyEventReaderBase::GetReadyEvent() const
 {
-    WaitTimer_.StartIfNotActive();
-    if (ReadyEvent_.IsSet()) {
-        WaitTimer_.Stop();
+    auto guard = Guard(SpinLock_);
+    if (!ReadyEvent_.IsSet()) {
+        WaitTimer_.StartIfNotActive();
     }
     return ReadyEvent_;
 }
 
-const TFuture<void>& TReadyEventReaderBase::ReadyEvent() const
+TFuture<void> TReadyEventReaderBase::ReadyEvent() const
 {
+    auto guard = Guard(SpinLock_);
     return ReadyEvent_;
+}
+
+bool TReadyEventReaderBase::IsReadyEventSetAndOK() const
+{
+    auto guard = Guard(SpinLock_);
+    return ReadyEvent_.IsSet() && ReadyEvent_.Get().IsOK();
 }
 
 void TReadyEventReaderBase::SetReadyEvent(TFuture<void> readyEvent)
 {
-    // We could use TTimingGuard here but we try to not prolong
-    // reader lifetime for such insignificant business as timing.
-    ReadyEvent_ = readyEvent.Apply(BIND([this, weakThis = MakeWeak(this)] {
+    auto newReadyEvent = readyEvent.Apply(BIND([this, weakThis = MakeWeak(this)] {
         if (auto this_ = weakThis.Lock()) {
+            auto guard = Guard(SpinLock_);
             WaitTimer_.Stop();
         }
     }));
+
+    auto guard = Guard(SpinLock_);
+    ReadyEvent_ = std::move(newReadyEvent);
 }
 
 TDuration TReadyEventReaderBase::GetWaitTime() const
 {
+    auto guard = Guard(SpinLock_);
     return WaitTimer_.GetElapsedTime();
 }
 

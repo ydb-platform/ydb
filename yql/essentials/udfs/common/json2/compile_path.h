@@ -45,7 +45,7 @@ namespace NJson2Udf {
         }
 
     private:
-        const size_t MaxParseErrors = 10;
+        const size_t MaxParseErrors_ = 10;
 
         TUnboxedValue Run(
             const IValueBuilder* valueBuilder,
@@ -53,7 +53,7 @@ namespace NJson2Udf {
             Y_UNUSED(valueBuilder);
             try {
                 TIssues issues;
-                const auto jsonPath = NJsonPath::ParseJsonPath(args[0].AsStringRef(), issues, MaxParseErrors);
+                const auto jsonPath = NJsonPath::ParseJsonPath(args[0].AsStringRef(), issues, MaxParseErrors_);
                 if (!issues.Empty()) {
                     ythrow yexception() << "Error parsing jsonpath:" << Endl << issues.ToString();
                 }

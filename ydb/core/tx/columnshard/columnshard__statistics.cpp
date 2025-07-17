@@ -1,6 +1,7 @@
 #include "columnshard.h"
 #include "columnshard_impl.h"
 
+#include "data_accessor/cache_policy/policy.h"
 #include "ydb/core/tx/columnshard/engines/storage/indexes/count_min_sketch/meta.h"
 
 #include <ydb/core/protos/kqp.pb.h>
@@ -112,12 +113,12 @@ private:
     const ui32 PortionsCountLimit = 10000;
     std::shared_ptr<NOlap::NDataAccessorControl::IDataAccessorsManager> DataAccessors;
     std::shared_ptr<TResultAccumulator> Result;
-    const std::shared_ptr<NOlap::TVersionedIndex> VersionedIndex;
+    const std::shared_ptr<const NOlap::TVersionedIndex> VersionedIndex;
 
 public:
     TColumnPortionsAccumulator(const std::shared_ptr<NOlap::IStoragesManager>& storagesManager,
         const std::shared_ptr<TResultAccumulator>& result, const ui32 portionsCountLimit, const std::set<ui32>& originalColumnTags,
-        const std::shared_ptr<NOlap::TVersionedIndex>& vIndex,
+        const std::shared_ptr<const NOlap::TVersionedIndex>& vIndex,
         const std::shared_ptr<NOlap::NDataAccessorControl::IDataAccessorsManager>& dataAccessorsManager)
         : StoragesManager(storagesManager)
         , ColumnTagsRequested(originalColumnTags)
@@ -140,7 +141,7 @@ public:
             for (auto&& [columnId, data] : RangesByColumn) {
                 for (auto&& [storageId, blobs] : data) {
                     for (auto&& b : blobs) {
-                        const TString blob = blobsData.Extract(storageId, b);
+                        const TString blob = blobsData.ExtractVerified(storageId, b);
                         auto sketch = std::unique_ptr<TCountMinSketch>(TCountMinSketch::FromString(blob.data(), blob.size()));
                         auto it = SketchesByColumns.find(columnId);
                         AFL_VERIFY(it != SketchesByColumns.end());
@@ -178,7 +179,7 @@ public:
     private:
         const std::shared_ptr<NOlap::IStoragesManager> StoragesManager;
         const std::shared_ptr<TResultAccumulator> Result;
-        std::shared_ptr<NOlap::TVersionedIndex> VersionedIndex;
+        std::shared_ptr<const NOlap::TVersionedIndex> VersionedIndex;
         const std::set<ui32> ColumnTagsRequested;
         virtual const std::shared_ptr<const TAtomicCounter>& DoGetAbortionFlag() const override {
             return Default<std::shared_ptr<const TAtomicCounter>>();
@@ -240,7 +241,7 @@ public:
 
     public:
         TMetadataSubscriber(const std::shared_ptr<NOlap::IStoragesManager>& storagesManager, const std::shared_ptr<TResultAccumulator>& result,
-            const std::shared_ptr<NOlap::TVersionedIndex>& vIndex, const std::set<ui32>& tags)
+            const std::shared_ptr<const NOlap::TVersionedIndex>& vIndex, const std::set<ui32>& tags)
             : StoragesManager(storagesManager)
             , Result(result)
             , VersionedIndex(vIndex)
@@ -253,7 +254,8 @@ public:
             return;
         }
         Result->AddWaitingTask();
-        std::shared_ptr<NOlap::TDataAccessorsRequest> request = std::make_shared<NOlap::TDataAccessorsRequest>("STATISTICS_FLUSH");
+        std::shared_ptr<NOlap::TDataAccessorsRequest> request =
+            std::make_shared<NOlap::TDataAccessorsRequest>(NOlap::NGeneralCache::TPortionsMetadataCachePolicy::EConsumer::STATISTICS_FLUSH);
         for (auto&& i : Portions) {
             request->AddPortion(i);
         }
@@ -304,10 +306,10 @@ void TColumnShard::Handle(NStat::TEvStatistics::TEvStatisticsRequest::TPtr& ev, 
         columnTagsRequested = std::set<ui32>(allColumnIds.begin(), allColumnIds.end());
     }
 
-    NOlap::TDataAccessorsRequest request("STATISTICS");
+    NOlap::TDataAccessorsRequest request(NOlap::NGeneralCache::TPortionsMetadataCachePolicy::EConsumer::STATISTICS);
     std::shared_ptr<TResultAccumulator> resultAccumulator =
         std::make_shared<TResultAccumulator>(columnTagsRequested, ev->Sender, ev->Cookie, std::move(response));
-    auto versionedIndex = std::make_shared<NOlap::TVersionedIndex>(index.GetVersionedIndex());
+    auto versionedIndex = index.GetVersionedIndexReadonlyCopy();
     TColumnPortionsAccumulator portionsPack(
         StoragesManager, resultAccumulator, 1000, columnTagsRequested, versionedIndex, DataAccessorsManager.GetObjectPtrVerified());
 

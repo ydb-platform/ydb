@@ -192,6 +192,8 @@ runs:
         readarray -d ',' -t test_size < <(printf "%s" "${{ inputs.test_size }}")
         readarray -d ',' -t test_type < <(printf "%s" "${{ inputs.test_type }}")
 
+        export TEST_ICRDMA=1
+
         params=(
           -T
           ${test_size[@]/#/--test-size=} ${test_type[@]/#/--test-type=}
@@ -217,13 +219,16 @@ runs:
             params+=(
               --build "release" --sanitize="address"
             )
+            if [ -z $TEST_RETRY_COUNT ]; then
+              TEST_RETRY_COUNT=1
+            fi
             IS_TEST_RESULT_IGNORED=1
             ;;
           release-tsan)
             params+=(
               --build "release" --sanitize="thread"
             )
-            if [ $TEST_RETRY_COUNT -z ]; then
+            if [ -z $TEST_RETRY_COUNT ]; then
               TEST_RETRY_COUNT=1
             fi
             IS_TEST_RESULT_IGNORED=1
@@ -232,7 +237,7 @@ runs:
             params+=(
               --build "release" --sanitize="memory"
             )
-            if [ $TEST_RETRY_COUNT -z ]; then
+            if [ -z $TEST_RETRY_COUNT ]; then
               TEST_RETRY_COUNT=1
             fi
             IS_TEST_RESULT_IGNORED=1
@@ -245,7 +250,7 @@ runs:
 
         echo "IS_TEST_RESULT_IGNORED=$IS_TEST_RESULT_IGNORED" >> $GITHUB_ENV
 
-        if [ $TEST_RETRY_COUNT -z ]; then
+        if [ -z $TEST_RETRY_COUNT ]; then
           # default is 3 for ordinary build and 1 for sanitizer builds
           TEST_RETRY_COUNT=3
         fi

@@ -98,10 +98,10 @@ void TKeyValueState::Clear() {
     NextLogoBlobCookie = 1;
     Index.clear();
     RefCounts.clear();
-    CompletedCleanupGeneration = 0;
-    CompletedCleanupTrashGeneration = 0;
+    CompletedVacuumGeneration = 0;
+    CompletedVacuumTrashGeneration = 0;
     Trash.clear();
-    TrashForCleanup.clear();
+    TrashForVacuum.clear();
     InFlightForStep.clear();
     CollectOperation.Reset(nullptr);
     IsCollectEventSent = false;
@@ -517,10 +517,10 @@ void TKeyValueState::Load(const TString &key, const TString& value) {
             StoredState = *data;
             break;
         }
-        case EIT_CLEAN_UP_GENERATION: {
+        case EIT_VACUUM_GENERATION: {
             Y_ABORT_UNLESS(value.size() == sizeof(ui64));
-            CompletedCleanupGeneration = *(const ui64 *) value.data();
-            CompletedCleanupTrashGeneration = CompletedCleanupGeneration;
+            CompletedVacuumGeneration = *(const ui64 *) value.data();
+            CompletedVacuumTrashGeneration = CompletedVacuumGeneration;
             break;
         }
         default: {
@@ -736,7 +736,7 @@ void TKeyValueState::SendCutHistory(const TActorContext &ctx, const TTabletStora
     for (const TLogoBlobID& id : Trash) {
         usedBlob(id);
     }
-    for (const auto& [_, bin] : TrashForCleanup) {
+    for (const auto& [_, bin] : TrashForVacuum) {
         for (const TLogoBlobID& id : bin) {
             usedBlob(id);
         }
@@ -977,6 +977,7 @@ void TKeyValueState::ProcessCmd(TIntermediate::TRead &request,
             const TContiguousSpan span(value.GetContiguousSpan());
             legacyResponse->SetValue(span.data(), span.size());
         }
+        legacyResponse->SetCreationUnixTime(request.CreationUnixTime);
     } else {
         legacyResponse->SetMessage(request.Message);
         if (outStatus == NKikimrProto::NODATA) {
@@ -1414,7 +1415,7 @@ void TKeyValueState::CmdTrimLeakedBlobs(THolder<TIntermediate>& intermediate, IS
             } else {
                 bool found = Trash.count(id);
                 if (!found) {
-                    for (const auto& [_, bin] : TrashForCleanup) {
+                    for (const auto& [_, bin] : TrashForVacuum) {
                         if (bin.count(id)) {
                             found = true;
                             break;
@@ -3667,7 +3668,7 @@ void TKeyValueState::RenderHTMLPage(IOutputStream &out) const {
                                 }
                             }
                         };
-                        for (const auto& [generation, bin] : TrashForCleanup) {
+                        for (const auto& [generation, bin] : TrashForVacuum) {
                             printTrashBin(bin);
                         }
                         if (!Trash.empty()) {

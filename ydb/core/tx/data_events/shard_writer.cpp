@@ -58,6 +58,9 @@ namespace NKikimr::NEvWrite {
     void TShardWriter::SendWriteRequest() {
         auto ev = MakeHolder<NEvents::TDataEvents::TEvWrite>(NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
         DataForShard->Serialize(*ev, TableId, SchemaVersion);
+        if (Timeout) {
+            ev->Record.SetTimeoutSeconds(Timeout->Seconds());
+        }
         SendToTablet(std::move(ev));
     }
 

@@ -24,7 +24,7 @@ struct THelpers {
     static void DbEraseTrash(const TLogoBlobID &id, ISimpleDb &db);
     static void DbUpdateTrash(const TLogoBlobID &id, ISimpleDb &db);
     static void DbEraseCollect(ISimpleDb &db);
-    static void DbUpdateCleanUpGeneration(ui64 generation, ISimpleDb &db);
+    static void DbUpdateVacuumGeneration(ui64 generation, ISimpleDb &db);
 
     using TGenerationStep = std::tuple<ui32, ui32>;
     static TGenerationStep GenerationStep(const TLogoBlobID &id);

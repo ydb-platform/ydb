@@ -62,7 +62,8 @@ TRunActorParams::TRunActorParams(
     std::shared_ptr<NYql::NDq::IS3ActorsFactory> s3ActorsFactory,
     const ::NFq::NConfig::TWorkloadManagerConfig& workloadManager,
     NYql::IPqGatewayFactory::TPtr pqGatewayFactory,
-    const std::vector<std::pair<TString, TString>>& taskSensorLabels
+    const std::vector<std::pair<TString, TString>>& taskSensorLabels,
+    const TVector<ui64>& nodeIds
     )
     : YqSharedResources(yqSharedResources)
     , CredentialsProviderFactory(credentialsProviderFactory)
@@ -121,6 +122,7 @@ TRunActorParams::TRunActorParams(
     , WorkloadManager(workloadManager)
     , PqGatewayFactory(std::move(pqGatewayFactory))
     , TaskSensorLabels(taskSensorLabels)
+    , NodeIds(nodeIds)
     {
     }
 
@@ -159,6 +161,7 @@ IOutputStream& operator<<(IOutputStream& out, const TRunActorParams& params) {
                 << " QueryParameters: " << params.QueryParameters.size()
                 << " WorkloadManager: " << params.WorkloadManager.ShortDebugString()
                 << " NextUniqueId: " << params.NextUniqueId
+                << " NodeIds: " << params.NodeIds.size()
                 << "}";
 }
 

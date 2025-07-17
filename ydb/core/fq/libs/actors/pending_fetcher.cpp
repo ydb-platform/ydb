@@ -440,8 +440,6 @@ private:
         computeConnection.set_database(task.compute_connection().database());
         computeConnection.set_usessl(task.compute_connection().usessl());
 
-        LOG_D("NewTask nodes :" << task.nodes());
-
         TRunActorParams params(
             YqSharedResources, CredentialsProviderFactory, S3Gateway, ConnectorClient,
             FunctionRegistry, RandomProvider,
@@ -487,7 +485,8 @@ private:
             S3ActorsFactory,
             ComputeConfig.GetWorkloadManagerConfig(task.scope()),
             PqGatewayFactory,
-            std::vector<std::pair<TString, TString>>{sensorLabels.begin(), sensorLabels.end()}
+            std::vector<std::pair<TString, TString>>{sensorLabels.begin(), sensorLabels.end()},
+            TVector<ui64>{task.node_id().begin(), task.node_id().end()}
             );
 
         auto runActorId =

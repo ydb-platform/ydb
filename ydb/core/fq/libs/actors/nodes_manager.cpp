@@ -93,6 +93,8 @@ private:
         const auto &request = ev->Get()->Record;
         const auto count = request.GetCount();
         auto scheduler = request.GetScheduler();
+        auto filters = request.GetWorkerFilterPerTask();
+        Y_ABORT_UNLESS((ui32)count == (ui32)filters.size(), "count %" PRIu32 ", filters size %" PRIu32, (ui32)count, (ui32)filters.size());
 
         auto response = MakeHolder<NDqs::TEvAllocateWorkersResponse>();
         if (count == 0) {
@@ -105,6 +107,7 @@ private:
             try {
                 auto schedulerSettings = NSc::TValue::FromJsonThrow(scheduler);
                 auto schedulerType = schedulerSettings["type"].GetString();
+
                 if (schedulerType == "single_node") {
                     ScheduleOnSingleNode(request, response);
                 } else {
@@ -126,6 +129,7 @@ private:
     void ScheduleUniformly(const NYql::NDqProto::TAllocateWorkersRequest& request, THolder<NDqs::TEvAllocateWorkersResponse>& response) {
         const auto count = request.GetCount();
         auto resourceId = request.GetResourceId();
+        auto filtersPerTask = request.GetWorkerFilterPerTask();
         if (!resourceId) {
             resourceId = (ui64(++ResourceIdPart) << 32) | SelfId().NodeId();
         }
@@ -142,6 +146,7 @@ private:
             if (totalMemoryLimit == 0) {
                 totalMemoryLimit = MkqlInitialMemoryLimit;
             }
+            TSet<ui64> nodeFilter{filtersPerTask.Get(i).GetNodeId().begin(), filtersPerTask.Get(i).GetNodeId().end()};
             TPeer node = {SelfId().NodeId(), InstanceId + "," + HostName(), 0, 0, 0, DataCenter};
             bool selfPlacement = true;
             if (!Peers.empty()) {
@@ -155,8 +160,9 @@ private:
                     }
 
                     if ((!UseDataCenter || DataCenter.empty() || nextNode.DataCenter.empty() || DataCenter == nextNode.DataCenter) // non empty DC must match
-                         && (nextNode.MemoryLimit == 0 // memory is NOT limited
+                        && (nextNode.MemoryLimit == 0 // memory is NOT limited
                              || nextNode.MemoryLimit >= nextNode.MemoryAllocated + totalMemoryLimit) // or enough
+                        && (nodeFilter.empty() || nodeFilter.contains(nextNode.NodeId))
                     ) {
                         // adjust allocated size to place next tasks correctly, will be reset after next health check
                         nextNode.MemoryAllocated += totalMemoryLimit;

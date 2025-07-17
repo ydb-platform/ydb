@@ -123,7 +123,7 @@ message GetTaskResult {
         map<string, Ydb.TypedValue> parameters = 39;
 
         google.protobuf.Timestamp request_submitted_at = 40;
-        string nodes = 41;
+        repeated uint64 node_id = 41;       // use any nodes if empty 
     }
     repeated Task tasks = 1;
 }

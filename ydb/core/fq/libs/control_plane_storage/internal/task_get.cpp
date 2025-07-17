@@ -297,7 +297,9 @@ void TControlPlaneStorageBase::FillGetTaskResult(Fq::Private::GetTaskResult& res
         *newTask->mutable_execution_limit() = NProtoInterop::CastToProto(ExtractLimit(task));
         *newTask->mutable_request_started_at() = task.Query.meta().started_at();
         *newTask->mutable_request_submitted_at() = task.Query.meta().submitted_at();
-        newTask->set_nodes(task.Node);
+        for (auto nodeId : task.NodeIds) {    
+            newTask->add_node_id(nodeId);
+        }
 
         newTask->set_restart_count(task.RetryCount);
         auto* jobId = newTask->mutable_job_id();
@@ -338,7 +340,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvGetTaskRequ
     const TString owner = request.owner_id();
     const TString hostName = request.host();
     const TString tenantName = request.tenant();
-    const ui32 nodeId = request.node_id();
+    //const ui32 [[maybe_unused]]nodeId = request.node_id();
     const ui64 tasksBatchSize = Config->Proto.GetTasksBatchSize();
     const ui64 numTasksProportion = Config->Proto.GetNumTasksProportion();
 
@@ -413,7 +415,9 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvGetTaskRequ
             auto node = parser.ColumnParser(NODE_COLUMN_NAME).GetOptionalString();
             CPS_LOG_AS_T(*actorSystem, "Node777" << node);
             if (node) {
-                task.Node = *node;
+                for (auto str : SplitString(TString(*node), ",")) {
+                    task.NodeIds.push_back(FromString<ui64>(str));
+                }
             }
             if (!previousOwner.empty()) { // task lease timeout case only, other cases are updated at ping time
                 CPS_LOG_AS_T(*actorSystem, "Task (Query): " << task.QueryId <<  " Lease TIMEOUT, RetryCounterUpdatedAt " << taskInternal.RetryLimiter.RetryCounterUpdatedAt

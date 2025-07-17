@@ -13,7 +13,7 @@ struct TTask {
     FederatedQuery::Internal::QueryInternal Internal;
     ui64 Generation = 0;
     TInstant Deadline;
-    TString Node;
+    TVector<ui64> NodeIds;
 };
 
 class TResponseTasks {

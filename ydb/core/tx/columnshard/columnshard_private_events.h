@@ -136,7 +136,7 @@ struct TEvPrivate {
 
     public:
         TConclusion<std::shared_ptr<NOlap::NReader::IApplyAction>>& MutableResult() {
-            return std::move(Result);
+            return Result;
         }
 
         TEvTaskProcessedResult(

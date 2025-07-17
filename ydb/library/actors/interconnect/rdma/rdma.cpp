@@ -147,7 +147,8 @@ public:
     }
 
     TWrStats GetWrStats() const noexcept override {
-        i32 ready = Returned.load() - Allocated.load();
+        auto allocated = Allocated.load();
+        i32 ready = Returned.load() - allocated;
         Y_ABORT_UNLESS(ready >= 0);
         return TWrStats {
             .Total = static_cast<ui32>(WrBuf.size()),

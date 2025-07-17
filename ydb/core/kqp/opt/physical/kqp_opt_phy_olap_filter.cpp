@@ -791,7 +791,7 @@ TExprBase KqpPushOlapFilter(TExprBase node, TExprContext& ctx, const TKqpOptimiz
         kqpCtx.Config->EnableOlapScalarApply,
         kqpCtx.Config->EnableOlapSubstringPushdown
     };
-    if (!kqpCtx.Config->HasOptEnableOlapPushdown()) {
+    if (!kqpCtx.Config->HasOptEnableOlapPushdown() || !kqpCtx.Config->EnableOlapScalarApply) {
         return node;
     }
 

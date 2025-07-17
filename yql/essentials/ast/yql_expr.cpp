@@ -2750,8 +2750,9 @@ TAstParseResult ConvertToAst(const TExprNode& root, TExprContext& exprContext, c
     return result;
 }
 
-TAstParseResult ConvertToAst(const TExprNode& root, TExprContext& exprContext, ui32 annotationFlags, bool refAtoms) {
+TAstParseResult ConvertToAst(const TExprNode& root, TExprContext& exprContext, ui32 annotationFlags, bool refAtoms, bool allowFreeArgs) {
     TConvertToAstSettings settings;
+    settings.AllowFreeArgs = allowFreeArgs;
     settings.AnnotationFlags = annotationFlags;
     settings.RefAtoms = refAtoms;
     return ConvertToAst(root, exprContext, settings);

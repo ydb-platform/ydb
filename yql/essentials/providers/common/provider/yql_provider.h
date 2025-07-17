@@ -227,7 +227,7 @@ bool FreezeUsedFilesSync(const TExprNode& node, TUserDataTable& files, const TTy
 void WriteColumns(NYson::TYsonWriter& writer, const NNodes::TExprBase& columns);
 
 TString SerializeExpr(TExprContext& ctx, const TExprNode& expr, bool withTypes = false);
-TString ExprToPrettyString(TExprContext& ctx, const TExprNode& expr);
+TString ExprToPrettyString(TExprContext& ctx, const TExprNode& expr, bool allowFreeArgs = false);
 
 void WriteStream(NYson::TYsonWriter& writer, const TExprNode* node, const TExprNode* source);
 void WriteStreams(NYson::TYsonWriter& writer, TStringBuf name, const NNodes::TCoLambda& lambda);

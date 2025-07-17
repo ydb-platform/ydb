@@ -116,6 +116,8 @@ public:
         : TCqCommon(as)
         , Err(false)
     {
+        Returned.store(0);
+        Allocated.store(0);
         WrBuf.reserve(sz);
         // Enumerate all work requests for this CQ
         for (size_t i = 0; i < sz; i++) {
@@ -124,6 +126,7 @@ public:
 
         // Fill queue
         for (size_t i = 0; i < sz; i++) {
+            Returned.fetch_add(1);
             Queue.Enqueue(&WrBuf[i]);
         }
     }
@@ -135,11 +138,21 @@ public:
     }
 
     void ReturnWr(IWr* wr) noexcept override {
+        Returned.fetch_add(1);
         Queue.Enqueue(static_cast<TWr*>(wr));
     }
 
     void NotifyErr() noexcept override {
         Err.store(true, std::memory_order_relaxed);
+    }
+
+    TWrStats GetWrStats() const noexcept override {
+        i32 ready = Returned.load() - Allocated.load();
+        Y_ABORT_UNLESS(ready >= 0);
+        return TWrStats {
+            .Total = static_cast<ui32>(WrBuf.size()),
+            .Ready = static_cast<ui32>(ready),
+        };
     }
 
     void Loop() noexcept {
@@ -168,7 +181,8 @@ public:
         for (size_t i = 0; i < WrBuf.size(); i++) {
             TWr* wr = &WrBuf[i];
             wr->ReplyErr(As);
-            Queue.Enqueue(wr);
+            //This it retminal error. Cq should be recreated.
+            // So no need to return wr in to the queue
         }
     }
 
@@ -176,7 +190,7 @@ public:
         for (size_t i = 0; i < sz; i++, wc++) {
             TWr* wr = &WrBuf[wc->wr_id];
             wr->Reply(As, wc);
-            Queue.Enqueue(wr); 
+            ReturnWr(wr); 
         }
     }
 
@@ -202,6 +216,8 @@ protected:
     // imlementation of Release() methos on IWr* will be musch more difficult
     TLockFreeQueue<TWr*> Queue;
     std::atomic<bool> Err;
+    std::atomic<ui64> Allocated;
+    alignas(64) std::atomic<ui64> Returned; 
 };
 
 class TSimpleCq: public TSimpleCqBase {
@@ -219,6 +235,7 @@ public:
             if (Err.load(std::memory_order_relaxed)) {
                 return TErr();
             }
+            Allocated.fetch_add(1);
             return static_cast<IWr*>(wr);
         } else {
             return  TBusy();
@@ -244,6 +261,7 @@ public:
             if (Err.load(std::memory_order_relaxed)) {
                 return TErr();
             }
+            Allocated.fetch_add(1);
             return static_cast<IWr*>(wr);
         } else {
             return  TBusy();

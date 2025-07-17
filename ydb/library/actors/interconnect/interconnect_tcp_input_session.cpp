@@ -1193,6 +1193,10 @@ namespace NActors {
     void TInputSessionTCP::GenerateHttpInfo(NMon::TEvHttpInfoRes::TPtr ev) {
         TStringStream str;
         ev->Get()->Output(str);
+        NInterconnect::NRdma::ICq::TWrStats wrStats {0, 0};
+        if (RdmaCq) {
+            wrStats = RdmaCq->GetWrStats();
+        }
 
         HTML(str) {
             DIV_CLASS("panel panel-info") {
@@ -1241,6 +1245,8 @@ namespace NActors {
                             MON_VAR(RdmaQp);
                             MON_VAR(RdmaBytesReadScheduled);
                             MON_VAR(RdmaWrReadScheduled);
+                            MON_VAR(wrStats.Total);
+                            MON_VAR(wrStats.Ready);
                         }
                     }
                 }

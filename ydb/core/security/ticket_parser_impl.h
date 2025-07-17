@@ -352,8 +352,6 @@ private:
     std::unordered_map<TString, NLogin::TLoginProvider> LoginProviders;
     bool UseLoginProvider = false;
 
-    THolder<TEvInterconnect::TNodeInfo> NodeInfo = nullptr;
-
     TDerived* GetDerived() {
         return static_cast<TDerived*>(this);
     }
@@ -1558,7 +1556,6 @@ private:
         static const TString XDS_BOOTSTRAP_CONFIG_ENV = "GRPC_XDS_BOOTSTRAP_CONFIG";
         TXdsBootstrapConfigBuilder xdsConfigBuilder(Config.GetXdsBootstrap(), ev->Get()->Node->Location.GetDataCenterId(), ToString(this->SelfId().NodeId()));
         TString conf = xdsConfigBuilder.Build();
-        BLOG_D("+++Config:\n" << conf);
         SetEnv(XDS_BOOTSTRAP_CONFIG_ENV, conf);
     }
 

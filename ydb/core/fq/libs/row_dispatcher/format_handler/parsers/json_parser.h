@@ -12,6 +12,7 @@ struct TJsonParserConfig {
     ui64 BatchSize = 1_MB;
     TDuration LatencyLimit;
     ui64 BufferCellCount = 1000000;  // (number rows) * (number columns) limit
+    ui64 MaxMessageSizeBytes = 15_MB;
 };
 
 TValueStatus<ITopicParser::TPtr> CreateJsonParser(IParsedDataConsumer::TPtr consumer, const TJsonParserConfig& config, const TCountersDesc& counters);

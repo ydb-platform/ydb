@@ -322,14 +322,33 @@ public:
     using TBase = TTopicParserBase;
     using TPtr = TIntrusivePtr<TJsonParser>;
 
+    struct TCounters {
+        const NMonitoring::TDynamicCounterPtr Counters;
+
+        NMonitoring::TDynamicCounters::TCounterPtr SkippedMessagesBySizeLimit;
+
+        explicit TCounters(NMonitoring::TDynamicCounterPtr counters)
+            : Counters(counters)
+        {
+            Register();
+        }
+
+    private:
+        void Register() {
+            SkippedMessagesBySizeLimit = Counters->GetCounter("SkippedMessagesBySizeLimit", true);
+        }
+    };
+
 public:
     TJsonParser(IParsedDataConsumer::TPtr consumer, const TJsonParserConfig& config, const TCountersDesc& counters)
         : TBase(std::move(consumer), __LOCATION__, counters)
         , Config(config)
         , NumberColumns(Consumer->GetColumns().size())
         , MaxNumberRows((config.BufferCellCount - 1) / NumberColumns + 1)
+        , ParserBatchSize(config.BatchSize + config.MaxMessageSizeBytes + simdjson::SIMDJSON_PADDING)
         , LogPrefix("TJsonParser: ")
         , ParsedValues(NumberColumns)
+        , Counters(counters.CountersSubgroup)
     {
         Columns.reserve(NumberColumns);
         for (const auto& column : Consumer->GetColumns()) {
@@ -370,6 +389,12 @@ public:
 
         Y_ENSURE(!Buffer.Finished, "Cannot parse messages with finished buffer");
         for (const auto& message : messages) {
+            if (Y_UNLIKELY(message.GetData().size() > Config.MaxMessageSizeBytes)) {
+                LOG_ROW_DISPATCHER_ERROR("Got message with size " << message.GetData().size() << ", which is larger than allowed limit " << Config.MaxMessageSizeBytes);
+                Counters.SkippedMessagesBySizeLimit->Inc();
+                continue;
+            }
+
             Buffer.AddMessage(message);
             if (Buffer.IsReady() && (Buffer.NumberValues >= MaxNumberRows || Buffer.GetSize() >= Config.BatchSize)) {
                 ParseBuffer();
@@ -417,10 +442,11 @@ protected:
         Y_ENSURE(Buffer.NumberValues <= MaxNumberRows, "Too many values to parse");
 
         const auto [values, size] = Buffer.Finish();
+        Y_ENSURE(size <= ParserBatchSize, "Too large data to parse");
         LOG_ROW_DISPATCHER_TRACE("Do parsing, first offset: " << Buffer.Offsets.front() << ", values:\n" << values);
 
         simdjson::ondemand::document_stream documents;
-        CHECK_JSON_ERROR(Parser.iterate_many(values, size, simdjson::ondemand::DEFAULT_BATCH_SIZE).get(documents)) {
+        CHECK_JSON_ERROR(Parser.iterate_many(values, size, ParserBatchSize).get(documents)) {
             return TStatus::Fail(EStatusId::BAD_REQUEST, TStringBuilder() << "Failed to parse message batch from offset " << Buffer.Offsets.front() << ", json documents was corrupted: " << simdjson::error_message(error) << " Current data batch: " << TruncateString(std::string_view(values, size)));
         }
 
@@ -478,6 +504,7 @@ private:
     const TJsonParserConfig Config;
     const ui64 NumberColumns;
     const ui64 MaxNumberRows;
+    const ui64 ParserBatchSize;  // MUST be larger than message size
     const TString LogPrefix;
 
     TVector<TColumnParser> Columns;
@@ -486,6 +513,8 @@ private:
     TJsonParserBuffer Buffer;
     simdjson::ondemand::parser Parser;
     TVector<TVector<NYql::NUdf::TUnboxedValue>> ParsedValues;
+
+    const TCounters Counters;
 };
 
 }  // anonymous namespace
@@ -506,6 +535,9 @@ TJsonParserConfig CreateJsonParserConfig(const NConfig::TJsonParserConfig& parse
     }
     if (const auto bufferCellCount = parserConfig.GetBufferCellCount()) {
         result.BufferCellCount = bufferCellCount;
+    }
+    if (const auto maxMessageSizeBytes = parserConfig.GetMaxMessageSizeBytes()) {
+        result.MaxMessageSizeBytes = maxMessageSizeBytes;
     }
     result.LatencyLimit = TDuration::MilliSeconds(parserConfig.GetBatchCreationTimeoutMs());
     return result;

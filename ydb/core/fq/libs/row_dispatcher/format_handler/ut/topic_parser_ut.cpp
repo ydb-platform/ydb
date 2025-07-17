@@ -158,15 +158,19 @@ public:
     TJsonParserFixture()
         : TBase()
         , Config({.BatchSize = 1_MB, .LatencyLimit = TDuration::Zero(), .BufferCellCount = 1000})
+        , Counters(MakeIntrusive<NMonitoring::TDynamicCounters>())
     {}
 
 protected:
     TValueStatus<ITopicParser::TPtr> CreateParser() override {
-        return CreateJsonParser(ParserHandler, Config, {});
+        return CreateJsonParser(ParserHandler, Config, {
+            .CountersSubgroup = Counters
+        });
     }
 
 public:
     TJsonParserConfig Config;
+    NMonitoring::TDynamicCounterPtr Counters;
 };
 
 class TRawParserFixture : public TBaseParserFixture {
@@ -417,6 +421,15 @@ Y_UNIT_TEST_SUITE(TestJsonParser) {
         CheckBatchError(R"({"a1": "st""r"})", EStatusId::BAD_REQUEST, TStringBuilder() << "Failed to parse json message for offset " << FIRST_OFFSET + 1 << ", json item was corrupted: TAPE_ERROR: The JSON document has an improper structure");
         CheckBatchError(R"({"a1": "x"} {"a1": "y"})", EStatusId::INTERNAL_ERROR, TStringBuilder() << "Failed to parse json messages, expected 1 json rows from offset " << FIRST_OFFSET + 2 << " but got 2 (expected one json row for each offset from topic API in json each row format, maybe initial data was corrupted or messages is not in json format), current data batch: {\"a1\": \"x\"} {\"a1\": \"y\"}");
         CheckBatchError(R"({)", EStatusId::INTERNAL_ERROR, TStringBuilder() << "Failed to parse json messages, expected 1 json rows from offset " << FIRST_OFFSET + 3 << " but got 0 (expected one json row for each offset from topic API in json each row format, maybe initial data was corrupted or messages is not in json format), current data batch: {");
+    }
+
+    Y_UNIT_TEST_F(MessageSizeValidation, TJsonParserFixture) {
+        Config.MaxMessageSizeBytes = 10;
+
+        CheckSuccess(MakeParser({{"a1", "[OptionalType; [DataType; String]]"}}));
+
+        Parser->ParseMessages({GetMessage(FIRST_OFFSET, R"({"a1": Yelse})")});
+        UNIT_ASSERT_VALUES_EQUAL(Counters->GetCounter("SkippedMessagesBySizeLimit", true)->Val(), 1);
     }
 }
 

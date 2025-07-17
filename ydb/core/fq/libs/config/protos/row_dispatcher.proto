@@ -23,6 +23,7 @@ message TJsonParserConfig {
     uint64 BatchSizeBytes = 1;  // default 1 MiB
     uint64 BatchCreationTimeoutMs = 2;
     uint64 BufferCellCount = 3;  // (number rows) * (number columns) limit, default 10^6
+    uint64 MaxMessageSizeBytes = 4;  // default 15 MiB, messages larger than this limit will be dropped
 }
 
 message TCompileServiceConfig {
@@ -33,7 +34,7 @@ message TRowDispatcherConfig {
     bool Enabled = 1;
     uint64 TimeoutBeforeStartSessionSec = 2;
     uint64 SendStatusPeriodSec = 3;
-    uint64 MaxSessionUsedMemory = 4; 
+    uint64 MaxSessionUsedMemory = 4;
     bool WithoutConsumer = 5;
     TJsonParserConfig JsonParser = 7;
     TCompileServiceConfig CompileService = 8;

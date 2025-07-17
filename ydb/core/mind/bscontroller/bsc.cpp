@@ -2,6 +2,7 @@
 #include "config.h"
 #include "self_heal.h"
 #include "sys_view.h"
+#include "util.h"
 
 namespace NKikimr {
 
@@ -185,9 +186,7 @@ void TBlobStorageController::ApplyBscSettings(const NKikimrConfig::TBlobStorageC
     auto *request = r.MutableRequest();
     auto* command = request->AddCommand();
 
-    auto updateSettings = command->MutableUpdateSettings();
-
-    updateSettings->CopyFrom(bsConfig.GetBscSettings());
+    command->MutableUpdateSettings()->CopyFrom(FromBscConfig(bsConfig.GetBscSettings()));
 
     STLOG(PRI_DEBUG, BS_CONTROLLER, BSC17, "ApplyBSCSettings", (Request, r));
     Send(SelfId(), ev.release());

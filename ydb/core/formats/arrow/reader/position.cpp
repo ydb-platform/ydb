@@ -45,12 +45,22 @@ std::optional<TSortableBatchPosition::TFoundPosition> TSortableBatchPosition::Fi
             return std::nullopt;
         }
     }
-    while ((posFinish != posStart - 1 && position.ReverseSort) || (posFinish != posStart + 1 && !position.ReverseSort)) {
-        if (position.ReverseSort) {
-            AFL_VERIFY(posFinish < posStart - 1)("finish", posFinish)("start", posStart);
+
+    const auto comparePositions = [reverse = position.ReverseSort, &posStart, &posFinish]() -> std::partial_ordering {
+        if (reverse) {
+            if (posFinish + 1 == posStart) {
+                return std::partial_ordering::equivalent;
+            }
+            return posFinish + 1 < posStart ? std::partial_ordering::less : std::partial_ordering::greater;
         } else {
-            AFL_VERIFY(posFinish > posStart + 1)("finish", posFinish)("start", posStart);
+            if (posStart + 1 == posFinish) {
+                return std::partial_ordering::equivalent;
+            }
+            return posStart + 1 < posFinish ? std::partial_ordering::less : std::partial_ordering::greater;
         }
+    };
+
+    while (comparePositions() == std::partial_ordering::less) {
         AFL_VERIFY(guard.InitSortingPosition(0.5 * (posStart + posFinish)));
         const auto comparision = position.Compare(forFound);
         if (cond(comparision)) {
@@ -59,11 +69,7 @@ std::optional<TSortableBatchPosition::TFoundPosition> TSortableBatchPosition::Fi
             posStart = position.Position;
         }
     }
-    if (position.ReverseSort) {
-        AFL_VERIFY(posFinish == posStart - 1)("finish", posFinish)("start", posStart);
-    } else {
-        AFL_VERIFY(posFinish == posStart + 1)("finish", posFinish)("start", posStart);
-    }
+    AFL_VERIFY(comparePositions() == std::partial_ordering::equivalent)("finish", posFinish)("start", posStart)("reverse", position.ReverseSort);
     AFL_VERIFY(guard.InitSortingPosition(posFinish));
     const auto comparision = position.Compare(forFound);
     AFL_VERIFY(cond(comparision));

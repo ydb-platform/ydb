@@ -1,7 +1,8 @@
 #include "kqp_write_actor.h"
 
-#include "kqp_write_table.h"
+#include "kqp_buffer_lookup_actor.h"
 #include "kqp_write_actor_settings.h"
+#include "kqp_write_table.h"
 
 #include <util/generic/singleton.h>
 #include <ydb/core/actorlib_impl/long_timer.h>
@@ -1378,42 +1379,31 @@ private:
     NWilson::TSpan TableWriteActorSpan;
 };
 
-class TKqpTableLookupActor : public TActorBootstrapped<TKqpTableLookupActor> {
-    using TBase = TActorBootstrapped<TKqpTableWriteActor>;
-
-public:
-    TKqpTableLookupActor(){
-        //LogPrefix = TStringBuilder() << "Table: `" << TablePath << "` (" << TableId << "), " << "SessionActorId: " << sessionActorId;
-        //Counters->LookupActorsCount->Inc();
-    }
-
-    void Bootstrap() {
-        LogPrefix = TStringBuilder() << "SelfId: " << this->SelfId() << ", " << LogPrefix;
-
-        //Become(&TKqpTableWriteActor::StateProcessing);
-    }
-
-    static constexpr char ActorName[] = "KQP_TABLE_LOOKUP_ACTOR";
-
-    void AddLookupTask(ui64 cookie, IDataBatchPtr&& request) {
-        Y_UNUSED(cookie, request);
-    }
-
-    std::vector<IDataBatchPtr> ExtractLookupResults(ui64 cookie) {
-        Y_UNUSED(cookie);
-        return {};
-    }
-
-    bool HasLookupTasks(ui64 cookie) const {
-        Y_UNUSED(cookie);
-        return false;
-    }
-
-private:
-    TString LogPrefix;
-};
 
 class TKqpWriteTask {
+private:
+    enum class EState {
+        BUFFERING,
+        LOOKUP_MAIN_TABLE,
+        //LOOKUP_UNIQUE_INDEX,
+        FINISHED,
+    };
+
+    struct TPathWriteInfo {
+        IDataBatchProjectionPtr Projection = nullptr;
+        TKqpTableWriteActor* WriteActor = nullptr;
+    };
+
+    struct TPathLookupInfo {
+        IDataBatchProjectionPtr Projection = nullptr;
+        IKqpBufferTableLookupPtr Lookup = nullptr;
+    };
+
+    struct TWrite {
+        IDataBatchPtr NewBatch;
+        IDataBatchPtr OldBatch;
+    };
+
 public:
     TKqpWriteTask(
             const ui64 cookie,
@@ -1446,32 +1436,25 @@ public:
         Closed = true;
     }
 
-    bool TryFlush() {
-        if (!CanFlush()) {
-            return false;
-        }
-
-        AFL_ENSURE(LookupBatches.empty());
-        AFL_ENSURE(Writes.empty());
-        std::swap(BufferedBatches, LookupBatches);
-
-        return true;
-    }
-
     void Process() {
-        // First, do lookups 
-        if (NeedLookups()) {
-            ProcessLookups();
-        } else {
-            MoveLookupBatchesToWrite();
-        }
+        AFL_ENSURE(!IsFinished());
 
-        // When lookups for buffered data are finished, do writes
-        if (LookupBatches.empty()) {
-            ProcessWrites();
-        }
+        auto stateIteration = [&]() -> bool {
+            switch (State) {
+                case EState::BUFFERING:
+                    return ProcessBuffering();
+                case EState::LOOKUP_MAIN_TABLE:
+                    return ProcessLookupMainTable();
+                //case EState::LOOKUP_UNIQUE_INDEX:
+                //    return ProcessLookupUniqueIndex();
+                case EState::FINISHED:
+                    YQL_ENSURE(false);
+            }
+        };
 
-        if (IsClosed() && IsEmpty() && !IsFinished()) {
+        while (stateIteration());
+
+        if (IsClosed() && IsEmpty()) {
             AFL_ENSURE(GetMemory() == 0);
             CloseWrite();
         }
@@ -1482,7 +1465,7 @@ public:
     }
 
     bool IsEmpty() const {
-        return BufferedBatches.empty() && Writes.empty();
+        return BufferedBatches.empty() && LookupBatches.empty();
     }
 
     bool IsClosed() const {
@@ -1490,11 +1473,7 @@ public:
     }
 
     bool IsFinished() const {
-        return Finished;
-    }
-
-    bool NeedLookups() const {
-        return false;
+        return State == EState::FINISHED;
     }
 
     i64 GetPriority() const {
@@ -1502,59 +1481,86 @@ public:
     }
 
 private:
-    void MoveLookupBatchesToWrite() {
-        AFL_ENSURE(Writes.empty());
-        for (auto& batch : LookupBatches) {
-            Writes.push_back(TWrite {
-                .NewBatch = std::move(batch),
-                .OldBatch = nullptr,
-            });
+    bool ProcessBuffering() {
+        AFL_ENSURE(LookupBatches.empty());
+        if (BufferedBatches.empty()) {
+            return false;
         }
-        LookupBatches.clear();
+
+        if (auto lookupInfoIt = PathLookupInfo.find(PathId); lookupInfoIt != PathLookupInfo.end()) {
+            // Need to lookup main table
+            std::swap(BufferedBatches, LookupBatches);
+            
+            auto& lookupInfo = lookupInfoIt->second;
+            AFL_ENSURE(lookupInfo.Projection);
+            for (const auto& batch : LookupBatches) {
+                StartLookup(lookupInfo, batch);
+            }
+
+            State = EState::LOOKUP_MAIN_TABLE;
+            return true;
+        } else if (!PathLookupInfo.empty()) {
+            // Need to lookup unique indexes
+            AFL_ENSURE(false);
+            return true;
+        } else {
+            // Write
+            std::vector<TWrite> writes;
+            for (auto& batch : BufferedBatches) {
+                writes.push_back(TWrite {
+                    .NewBatch = std::move(batch),
+                    .OldBatch = nullptr,
+                });
+            }
+            BufferedBatches.clear();
+
+            FlushWritesToActors(std::move(writes));
+            State = EState::BUFFERING;
+            return true;
+        }
     }
 
-    bool CanFlush() const {
-        return !BufferedBatches.empty() && LookupBatches.empty() && Writes.empty();
-    }
+    bool ProcessLookupMainTable() {
+        AFL_ENSURE(!LookupBatches.empty());
 
-    void ProcessLookups() {
-        AFL_ENSURE(NeedLookups());
-        SendLookups();
-        ReceiveLookups();
-    }
-
-    void SendLookups() {
         auto& lookupInfo = PathLookupInfo.at(PathId);
-        for (const auto& batch : LookupBatches) {
-            auto lookupBatch = lookupInfo.Projection->Project(batch);
-            PathLookupInfo.at(PathId).LookupActor->AddLookupTask(
-                Cookie, std::move(lookupBatch));
+        AFL_ENSURE(lookupInfo.Lookup->HasLookupTasks(Cookie));
+        auto lookupResult = lookupInfo.Lookup->ExtractResult(Cookie);
+        if (!lookupResult) {
+            return false;
+        }
+        AFL_ENSURE(!lookupInfo.Lookup->HasLookupTasks(Cookie));
+        // TODO: concatenate result with batches
+
+        if (PathLookupInfo.size() > 1) {
+            // Need to lookup unique indexes
+            AFL_ENSURE(false);
+            return true;
+        } else {
+            // Write
+            AFL_ENSURE(false);
+            State = EState::BUFFERING;
+            return true;
         }
     }
 
-    void ReceiveLookups() {
-        auto& lookupInfo = PathLookupInfo.at(PathId);
-        auto lookupResult = lookupInfo.LookupActor->ExtractLookupResults(Cookie);
-        for (const auto& batch : lookupResult) {
-            Y_UNUSED(batch);
-        }
-        if (!lookupInfo.LookupActor->HasLookupTasks(Cookie)) {
-            MoveLookupBatchesToWrite();
-        }
+    void StartLookup(TPathLookupInfo& lookupInfo, const IDataBatchPtr& batch) {
+        auto lookupBatch = lookupInfo.Projection->Project(batch);
+        lookupInfo.Lookup->AddLookupTask(
+            Cookie, lookupBatch);
     }
 
-    void ProcessWrites() {
-        for (auto& write : Writes) {
+    void FlushWritesToActors(std::vector<TWrite>&& writes) {
+        for (auto& write : writes) {
             Memory -= write.NewBatch->GetMemory();
             if (write.OldBatch) {
                 Memory -= write.OldBatch->GetMemory();
             }
-            WriteBatch(std::move(write.NewBatch), std::move(write.OldBatch));
+            WriteBatchToActors(std::move(write.NewBatch), std::move(write.OldBatch));
         }
-        Writes.clear();
     }
 
-    void WriteBatch(IDataBatchPtr newBatch, IDataBatchPtr oldBatch) {
+    void WriteBatchToActors(IDataBatchPtr newBatch, IDataBatchPtr oldBatch) {
         for (auto& [actorPathId, actorInfo] : PathWriteInfo) {
             // At first, write to indexes
             if (PathId != actorPathId) {
@@ -1582,7 +1588,7 @@ private:
         for (auto& [_, actorInfo] : PathWriteInfo) {
             actorInfo.WriteActor->Close(Cookie);
         }
-        Finished = true;
+        State = EState::FINISHED;
     }
 
     const ui64 Cookie;
@@ -1590,31 +1596,16 @@ private:
     const TPathId PathId;
     const NKikimrDataEvents::TEvWrite::TOperation::EOperationType OperationType;
 
-    struct TPathWriteInfo {
-        IDataBatchProjectionPtr Projection = nullptr;
-        TKqpTableWriteActor* WriteActor = nullptr;
-    };
+    EState State = EState::BUFFERING;
 
     THashMap<TPathId, TPathWriteInfo> PathWriteInfo;
-
-    struct TPathLookupInfo {
-        IDataBatchProjectionPtr Projection = nullptr;
-        TKqpTableLookupActor* LookupActor = nullptr;
-    };
-
     THashMap<TPathId, TPathLookupInfo> PathLookupInfo;
 
     bool Closed = false;
-    bool Finished = false;
     i64 Memory = 0;
     std::vector<IDataBatchPtr> BufferedBatches;
 
     std::vector<IDataBatchPtr> LookupBatches;
-    struct TWrite {
-        IDataBatchPtr NewBatch;
-        IDataBatchPtr OldBatch;
-    };
-    std::vector<TWrite> Writes;
 };
 
 class TKqpDirectWriteActor : public TActorBootstrapped<TKqpDirectWriteActor>, public NYql::NDq::IDqComputeActorAsyncOutput, public IKqpTableWriterCallbacks {
@@ -2368,10 +2359,7 @@ public:
     void ProcessTasks() {
         TVector<ui64> finishedCookies;
         for (auto& [cookie, writeTask] : WriteTasks) {
-            do {
-                writeTask.Process();
-            } while (writeTask.TryFlush());
-
+            writeTask.Process();
             if (writeTask.IsFinished()) {
                 finishedCookies.push_back(cookie);
             }

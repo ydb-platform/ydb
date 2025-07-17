@@ -86,14 +86,14 @@ namespace {
 
     TString TreapToString(const TRangeTreap<ui64>& treap) {
         TStringBuilder builder;
-        treap.EachRange(TRangesToString(builder, treap.KeyColumns()));
+        treap.EachRange(TRangesToString(builder, treap.GetComparator().KeyColumns()));
         return builder;
     }
 
     template<class TNeedle>
     TString IntersectionToString(const TRangeTreap<ui64>& treap, const TNeedle& needle) {
         TStringBuilder builder;
-        treap.EachIntersection(needle, TRangesToString(builder, treap.KeyColumns()));
+        treap.EachIntersection(needle, TRangesToString(builder, treap.GetComparator().KeyColumns()));
         return builder;
     }
 
@@ -132,7 +132,7 @@ Y_UNIT_TEST_SUITE(TRangeTreap) {
     Y_UNIT_TEST(Simple) {
         using TRange = TRangeTreeBase::TRange;
         TRangeTreap<ui64> treap;
-        treap.SetKeyTypes(CreateSchema(1));
+        treap.MutableComparator().SetKeyTypes(CreateSchema(1));
 
         treap.AddRange(TRange(CreateKey(1), true, CreateKey(10), true), 42);
         treap.AddRange(TRange(CreateKey(2), true, CreateKey(20), true), 43);
@@ -184,7 +184,7 @@ Y_UNIT_TEST_SUITE(TRangeTreap) {
     Y_UNIT_TEST(Sequential) {
         using TRange = TRangeTreeBase::TRange;
         TRangeTreap<ui64> treap;
-        treap.SetKeyTypes(CreateSchema(1));
+        treap.MutableComparator().SetKeyTypes(CreateSchema(1));
 
         const size_t nRanges = 1000000;
         for (size_t i = 0; i < nRanges; ++i) {
@@ -211,7 +211,7 @@ Y_UNIT_TEST_SUITE(TRangeTreap) {
     Y_UNIT_TEST(Random) {
         using TRange = TRangeTreeBase::TRange;
         TRangeTreap<ui64> treap;
-        treap.SetKeyTypes(CreateSchema(1));
+        treap.MutableComparator().SetKeyTypes(CreateSchema(1));
 
         using TCheckMap = TMap<std::pair<ui64, ui64>, ui64>;
         TCheckMap map; // (left, value) -> right

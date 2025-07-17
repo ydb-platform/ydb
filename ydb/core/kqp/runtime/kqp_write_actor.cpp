@@ -2017,17 +2017,6 @@ class TKqpBufferWriteActor :public TActorBootstrapped<TKqpBufferWriteActor>, pub
     using TTopicTabletTxs = NTopic::TTopicOperationTransactions;
 
 public:
-    enum class EState {
-        WRITING, // Allow to write data to buffer.
-        WAITING_TASKS, // Wait for all write tasks to finish (task can read some data).
-        FLUSHING, // Force flush (for uncommitted changes visibility). Can't accept any writes in this state.
-        PREPARING, // Do preparation for commit. All writers are closed. New writes wouldn't be accepted.
-        COMMITTING, // Do commit. All writers are closed. New writes wouldn't be accepted.
-        ROLLINGBACK, // Do rollback. New writes wouldn't be accepted.
-        FINISHED,
-    };
-
-public:
     TKqpBufferWriteActor(
         TKqpBufferWriterSettings&& settings)
         : SessionActorId(settings.SessionActorId)
@@ -2038,14 +2027,13 @@ public:
         , TxProxyMon(settings.TxProxyMon)
         , BufferWriteActorSpan(TWilsonKqp::BufferWriteActor, NWilson::TTraceId(settings.TraceId), "BufferWriteActor", NWilson::EFlags::AUTO_END)
     {
-        State = EState::WRITING;
         Counters->BufferActorsCount->Inc();
         UpdateTracingState("Write", BufferWriteActorSpan.GetTraceId());
     }
 
     void Bootstrap() {
         LogPrefix = TStringBuilder() << "SelfId: " << this->SelfId() << ", SessionActorId: " << SessionActorId << ", " << LogPrefix;
-        Become(&TKqpBufferWriteActor::StateWrite);
+        Become(&TThis::StateWrite);
     }
 
     static constexpr char ActorName[] = "KQP_BUFFER_WRITE_ACTOR";
@@ -2096,15 +2084,31 @@ public:
         }
     }
 
+    STFUNC(StatePrepare) {
+        try {
+            switch (ev->GetTypeRewrite()) {
+                hFunc(TEvKqpBuffer::TEvTerminate, Handle);
+                hFunc(TEvPersQueue::TEvProposeTransactionResult, HandlePrepare);
+                hFunc(NKikimr::NEvents::TDataEvents::TEvWriteResult, HandlePrepare);
+                hFunc(TEvPipeCache::TEvDeliveryProblem, Handle);
+            default:
+                AFL_ENSURE(false)("unknown message", ev->GetTypeRewrite());
+            }
+        } catch (const TMemoryLimitExceededException&) {
+            ReplyMemoryLimitErrorAndDie();
+        } catch (...) {
+            ReplyCurrentExceptionErrorAndDie();
+        }
+    }
+
     STFUNC(StateCommit) {
         try {
             switch (ev->GetTypeRewrite()) {
                 hFunc(TEvKqpBuffer::TEvTerminate, Handle);
-
                 hFunc(TEvTxProxy::TEvProposeTransactionStatus, Handle);
-                hFunc(TEvPersQueue::TEvProposeTransactionResult, Handle);
-                hFunc(NKikimr::NEvents::TDataEvents::TEvWriteResult, Handle);
-                hFunc(TEvPipeCache::TEvDeliveryProblem, Handle);
+                hFunc(TEvPersQueue::TEvProposeTransactionResult, HandleCommit);
+                hFunc(NKikimr::NEvents::TDataEvents::TEvWriteResult, HandleCommit);
+                hFunc(TEvPipeCache::TEvDeliveryProblem, HandleCommit);
             default:
                 AFL_ENSURE(false)("unknown message", ev->GetTypeRewrite());
             }
@@ -2291,16 +2295,15 @@ public:
     bool NeedToFlush() {
         const bool outOfMemory = GetTotalFreeSpace() <= 0;
         const bool needToFlush = outOfMemory
-            || State == EState::FLUSHING
-            || State == EState::PREPARING
-            || State == EState::COMMITTING
-            || State == EState::ROLLINGBACK;
+            || CurrentStateFunc() == &TThis::StateFlush
+            || CurrentStateFunc() == &TThis::StatePrepare
+            || CurrentStateFunc() == &TThis::StateCommit;
         return needToFlush;
     }
 
     bool NeedToFlushActor(const TKqpTableWriteActor* actor) {
         return NeedToFlush()
-            && (State != EState::FLUSHING
+            && (CurrentStateFunc() != &TThis::StateFlush
                 || !TxId // Flush between queries
                 || actor->FlushBeforeCommit()); // Flush before commit
     }
@@ -2313,9 +2316,9 @@ public:
         }
         ProcessAckQueue();
 
-        if (State == EState::WAITING_TASKS && WriteTasks.empty()) {
+        if (CurrentStateFunc() == &TThis::StateWaitTasks && WriteTasks.empty()) {
             OnAllTasksFinised();
-        } else if (State == EState::FLUSHING) {
+        } else if (CurrentStateFunc() == &TThis::StateFlush) {
             bool isEmpty = true;
             ForEachWriteActor([&](const TKqpTableWriteActor* actor, const TActorId) {
                 if (NeedToFlushActor(actor)) {
@@ -2426,8 +2429,8 @@ public:
 
     bool Flush(NWilson::TTraceId traceId) {
         AFL_ENSURE(WriteTasks.empty());
-        YQL_ENSURE(State == EState::WAITING_TASKS);
-        State = EState::FLUSHING;
+        YQL_ENSURE(CurrentStateFunc() == &TThis::StateWaitTasks);
+        Become(&TThis::StateFlush);
 
         Counters->BufferActorFlushes->Inc();
         UpdateTracingState("Flush", std::move(traceId));
@@ -2483,8 +2486,9 @@ public:
         OperationStartTime = TInstant::Now();
 
         CA_LOG_D("Start prepare for distributed commit");
-        YQL_ENSURE(State == EState::WAITING_TASKS);
-        State = EState::PREPARING;
+        YQL_ENSURE(CurrentStateFunc() == &TThis::StateWaitTasks);
+        Become(&TThis::StatePrepare);
+
         CheckQueuesEmpty();
         AFL_ENSURE(TxId);
         ForEachWriteActor([&](TKqpTableWriteActor* actor, const TActorId) {
@@ -2506,8 +2510,9 @@ public:
         OperationStartTime = TInstant::Now();
 
         CA_LOG_D("Start immediate commit");
-        YQL_ENSURE(State == EState::WAITING_TASKS);
-        State = EState::COMMITTING;
+        YQL_ENSURE(CurrentStateFunc() == &TThis::StateWaitTasks);
+        Become(&TThis::StateCommit);
+
         IsImmediateCommit = true;
         CheckQueuesEmpty();
         ForEachWriteActor([](TKqpTableWriteActor* actor, const TActorId) {
@@ -2526,8 +2531,8 @@ public:
         OperationStartTime = TInstant::Now();
 
         CA_LOG_D("Start distributed commit with TxId=" << *TxId);
-        YQL_ENSURE(State == EState::PREPARING);
-        State = EState::COMMITTING;
+        YQL_ENSURE(CurrentStateFunc() == &TThis::StatePrepare);
+        Become(&TThis::StateCommit);
         CheckQueuesEmpty();
         ForEachWriteActor([](TKqpTableWriteActor* actor, const TActorId) {
             actor->SetDistributedCommit();
@@ -2535,13 +2540,16 @@ public:
         SendCommitToCoordinator();
     }
 
-    void Rollback(NWilson::TTraceId traceId) {
-        Counters->BufferActorRollbacks->Inc();
-        UpdateTracingState("RollBack", std::move(traceId));
+    void Rollback(NWilson::TTraceId traceId) noexcept {
+        try {
+            Counters->BufferActorRollbacks->Inc();
+            UpdateTracingState("RollBack", std::move(traceId));
 
-        CA_LOG_D("Start rollback");
-        State = EState::ROLLINGBACK;
-        SendToExternalShards(true);
+            CA_LOG_D("Start rollback");
+            SendToExternalShards(true);
+        } catch (...) {
+            CA_LOG_E("Failed to rollback transaction. Error: " << CurrentExceptionMessage() << ".");
+        }
     }
 
     void CheckQueuesEmpty() {
@@ -2793,7 +2801,7 @@ public:
         }
     }
 
-    void Handle(TEvPersQueue::TEvProposeTransactionResult::TPtr& ev) {
+    void HandlePrepare(TEvPersQueue::TEvProposeTransactionResult::TPtr& ev) {
         auto& event = ev->Get()->Record;
         const ui64 tabletId = event.GetOrigin();
         
@@ -2805,9 +2813,35 @@ public:
         case NKikimrPQ::TEvProposeTransactionResult::PREPARED:
             ProcessPreparedTopic(ev);
             return;
+        default:
+            HandleError(ev);
+        }
+    }
+
+    void HandleCommit(TEvPersQueue::TEvProposeTransactionResult::TPtr& ev) {
+        auto& event = ev->Get()->Record;
+        const ui64 tabletId = event.GetOrigin();
+        
+        CA_LOG_D("Got ProposeTransactionResult" <<
+              ", PQ tablet: " << tabletId <<
+              ", status: " << NKikimrPQ::TEvProposeTransactionResult_EStatus_Name(event.GetStatus()));
+
+        switch (event.GetStatus()) {
         case NKikimrPQ::TEvProposeTransactionResult::COMPLETE:
             ProcessCompletedTopic(ev);
             return;
+        default:
+            HandleError(ev);
+        }
+    }
+
+    void HandleError(TEvPersQueue::TEvProposeTransactionResult::TPtr& ev) {
+        auto& event = ev->Get()->Record;
+        switch (event.GetStatus()) {
+        case NKikimrPQ::TEvProposeTransactionResult::PREPARED:
+            AFL_ENSURE(false);
+        case NKikimrPQ::TEvProposeTransactionResult::COMPLETE:
+            AFL_ENSURE(false);
         case NKikimrPQ::TEvProposeTransactionResult::ABORTED:
             CA_LOG_E("Got ABORTED ProposeTransactionResult for PQ."
                     << " ShardID=" << ev->Get()->Record.GetOrigin() << ","
@@ -2863,6 +2897,16 @@ public:
 
     void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
         CA_LOG_W("TEvDeliveryProblem was received from tablet: " << ev->Get()->TabletId);
+        ReplyErrorAndDie(
+            NYql::NDqProto::StatusIds::UNAVAILABLE,
+            NYql::TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE,
+            TStringBuilder() << "Kikimr cluster or one of its subsystems was unavailable. Failed to deviler message.",
+            {});
+        return;
+    }
+
+    void HandleCommit(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
+        CA_LOG_W("TEvDeliveryProblem was received from tablet: " << ev->Get()->TabletId);
 
         if (Coordinator == ev->Get()->TabletId) {
             if (ev->Get()->NotDelivered) {
@@ -2887,28 +2931,17 @@ public:
             return;
         }
 
-        if (State == EState::COMMITTING) {
-            ReplyErrorAndDie(
-                NYql::NDqProto::StatusIds::UNDETERMINED,
-                NYql::TIssuesIds::KIKIMR_OPERATION_STATE_UNKNOWN,
-                TStringBuilder() << "State of operation is unknown. Failed to deviler message.",
-                {});
-            return;
-        } else {
-            ReplyErrorAndDie(
-                NYql::NDqProto::StatusIds::UNAVAILABLE,
-                NYql::TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE,
-                TStringBuilder() << "Kikimr cluster or one of its subsystems was unavailable. Failed to deviler message.",
-                {});
-            return;
-        }
+        ReplyErrorAndDie(
+            NYql::NDqProto::StatusIds::UNDETERMINED,
+            NYql::TIssuesIds::KIKIMR_OPERATION_STATE_UNKNOWN,
+            TStringBuilder() << "State of operation is unknown. Failed to deviler message.",
+            {});
+        return;
     }
 
     void Handle(TEvKqpBuffer::TEvTerminate::TPtr&) {
-        if (State != EState::ROLLINGBACK && State != EState::FINISHED) {
-            CancelProposal();
-            Rollback(BufferWriteActorSpan.GetTraceId());
-        }
+        CancelProposal();
+        Rollback(BufferWriteActorSpan.GetTraceId());
         PassAway();
     }
 
@@ -2917,11 +2950,10 @@ public:
         for (auto& [_, writeTask] : WriteTasks) {
             AFL_ENSURE(writeTask.IsClosed());
         }
-        YQL_ENSURE(State == EState::WRITING);
-        State = EState::WAITING_TASKS;
+        YQL_ENSURE(CurrentStateFunc() == &TThis::StateWrite);
+        Become(&TThis::StateWaitTasks);
         UpdateTracingState("WaitTasks", NWilson::TTraceId(ev->TraceId));
 
-        Become(&TKqpBufferWriteActor::StateWaitTasks);
         AfterWaitTasksState = TAfterWaitTasksState{
             .IsCommit = false,
             .TxId = 0,
@@ -2935,11 +2967,10 @@ public:
         for (auto& [_, writeTask] : WriteTasks) {
             AFL_ENSURE(writeTask.IsClosed());
         }
-        YQL_ENSURE(State == EState::WRITING);
-        State = EState::WAITING_TASKS;
+        YQL_ENSURE(CurrentStateFunc() == &TThis::StateWrite);
+        Become(&TThis::StateWaitTasks);
         UpdateTracingState("WaitTasks", NWilson::TTraceId(ev->TraceId));
 
-        Become(&TKqpBufferWriteActor::StateWaitTasks);
         AfterWaitTasksState = TAfterWaitTasksState{
             .IsCommit = true,
             .TxId = ev->Get()->TxId,
@@ -2954,10 +2985,8 @@ public:
         AfterWaitTasksState = std::nullopt;
 
         if (afterWaitTasksState.IsCommit) {
-            Become(&TKqpBufferWriteActor::StateCommit);
             Commit(afterWaitTasksState.TxId, std::move(afterWaitTasksState.TraceId));
         } else {
-            Become(&TKqpBufferWriteActor::StateFlush);
             Flush(std::move(afterWaitTasksState.TraceId));
         }
     }
@@ -2973,13 +3002,7 @@ public:
         PassAway();
     }
 
-    void Handle(NKikimr::NEvents::TDataEvents::TEvWriteResult::TPtr& ev) {
-        auto getIssues = [&ev]() {
-            NYql::TIssues issues;
-            NYql::IssuesFromMessage(ev->Get()->Record.GetIssues(), issues);
-            return issues;
-        };
-
+    void HandlePrepare(NKikimr::NEvents::TDataEvents::TEvWriteResult::TPtr& ev) {
         CA_LOG_D("Recv EvWriteResult (external) from ShardID=" << ev->Get()->Record.GetOrigin()
             << ", Status=" << NKikimrDataEvents::TEvWriteResult::EStatus_Name(ev->Get()->GetStatus())
             << ", TxId=" << ev->Get()->Record.GetTxId()
@@ -2991,6 +3014,50 @@ public:
                 return builder;
             }()
             << ", Cookie=" << ev->Cookie);
+
+        TxManager->AddParticipantNode(ev->Sender.NodeId());
+
+        switch (ev->Get()->GetStatus()) {
+        case NKikimrDataEvents::TEvWriteResult::STATUS_PREPARED: {
+            ProcessWritePreparedShard(ev);
+            return;
+        }
+        default:
+            HandleError(ev);
+        }
+    }
+
+    void HandleCommit(NKikimr::NEvents::TDataEvents::TEvWriteResult::TPtr& ev) {
+        CA_LOG_D("Recv EvWriteResult (external) from ShardID=" << ev->Get()->Record.GetOrigin()
+            << ", Status=" << NKikimrDataEvents::TEvWriteResult::EStatus_Name(ev->Get()->GetStatus())
+            << ", TxId=" << ev->Get()->Record.GetTxId()
+            << ", Locks= " << [&]() {
+                TStringBuilder builder;
+                for (const auto& lock : ev->Get()->Record.GetTxLocks()) {
+                    builder << lock.ShortDebugString();
+                }
+                return builder;
+            }()
+            << ", Cookie=" << ev->Cookie);
+
+        TxManager->AddParticipantNode(ev->Sender.NodeId());
+
+        switch (ev->Get()->GetStatus()) {
+        case NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED: {
+            ProcessWriteCompletedShard(ev);
+            return;
+        }
+        default:
+            HandleError(ev);
+        }
+    }
+
+    void HandleError(NKikimr::NEvents::TDataEvents::TEvWriteResult::TPtr& ev) {
+        auto getIssues = [&ev]() {
+            NYql::TIssues issues;
+            NYql::IssuesFromMessage(ev->Get()->Record.GetIssues(), issues);
+            return issues;
+        };
 
         auto getPathes = [&]() -> TString {
             const auto tableInfo = TxManager->GetShardTableInfo(ev->Get()->Record.GetOrigin());
@@ -3004,9 +3071,6 @@ public:
             return (tableInfo.Pathes.size() == 1 ? "Table: " : "Tables: ")  + builder;
         };
 
-        TxManager->AddParticipantNode(ev->Sender.NodeId());
-
-        // TODO: get rid of copy-paste
         switch (ev->Get()->GetStatus()) {
         case NKikimrDataEvents::TEvWriteResult::STATUS_UNSPECIFIED: {
             CA_LOG_E("Got UNSPECIFIED for tables."
@@ -3022,14 +3086,9 @@ public:
                 getIssues());
             return;
         }
-        case NKikimrDataEvents::TEvWriteResult::STATUS_PREPARED: {
-            ProcessWritePreparedShard(ev);
-            return;
-        }
-        case NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED: {
-            ProcessWriteCompletedShard(ev);
-            return;
-        }
+        case NKikimrDataEvents::TEvWriteResult::STATUS_PREPARED:
+        case NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED:
+            AFL_ENSURE(false);
         case NKikimrDataEvents::TEvWriteResult::STATUS_ABORTED: {
             CA_LOG_E("Got ABORTED for tables."
                     << " ShardID=" << ev->Get()->Record.GetOrigin() << ","
@@ -3196,10 +3255,6 @@ public:
     }
 
     void ProcessPreparedTopic(TEvPersQueue::TEvProposeTransactionResult::TPtr& ev) {
-        if (State != EState::PREPARING) {
-            CA_LOG_D("Ignored topic prepared event.");
-            return;
-        }
         OnMessageReceived(ev->Get()->Record.GetOrigin());
         CA_LOG_D("Got propose prepared result TxId=" << ev->Get()->Record.GetTxId()
             << ", TabletId=" << ev->Get()->Record.GetOrigin()
@@ -3224,10 +3279,6 @@ public:
     void ProcessCompletedTopic(TEvPersQueue::TEvProposeTransactionResult::TPtr& ev) {
         NKikimrPQ::TEvProposeTransactionResult& event = ev->Get()->Record;
 
-        if (State != EState::COMMITTING) {
-            CA_LOG_D("Ignored completed event.");
-            return;
-        }
         OnMessageReceived(event.GetOrigin());
         CA_LOG_D("Got propose completed result" <<
               ", topic tablet: " << event.GetOrigin() <<
@@ -3237,10 +3288,6 @@ public:
     }
 
     void ProcessWritePreparedShard(NKikimr::NEvents::TDataEvents::TEvWriteResult::TPtr& ev) {
-        if (State != EState::PREPARING) {
-            CA_LOG_D("Ignored write prepared event.");
-            return;
-        }
         OnMessageReceived(ev->Get()->Record.GetOrigin());
         CA_LOG_D("Got prepared result TxId=" << ev->Get()->Record.GetTxId()
             << ", TabletId=" << ev->Get()->Record.GetOrigin()
@@ -3263,10 +3310,6 @@ public:
     }
 
     void ProcessWriteCompletedShard(NKikimr::NEvents::TDataEvents::TEvWriteResult::TPtr& ev) {
-        if (State != EState::COMMITTING) {
-            CA_LOG_D("Ignored write completed event.");
-            return;
-        }
         OnMessageReceived(ev->Get()->Record.GetOrigin());
         CA_LOG_D("Got completed result TxId=" << ev->Get()->Record.GetTxId()
             << ", TabletId=" << ev->Get()->Record.GetOrigin()
@@ -3287,9 +3330,6 @@ public:
     }
 
     void OnPrepared(IKqpTransactionManager::TPrepareResult&& preparedInfo, ui64) override {
-        if (State != EState::PREPARING) {
-            return;
-        }
         if (!preparedInfo.Coordinator || (TxManager->GetCoordinator() && preparedInfo.Coordinator != TxManager->GetCoordinator())) {
             CA_LOG_E("Handle TEvWriteResult: unable to select coordinator. Tx canceled, actorId: " << SelfId()
                 << ", previously selected coordinator: " << TxManager->GetCoordinator()
@@ -3312,13 +3352,9 @@ public:
     }
 
     void OnCommitted(ui64 shardId, ui64) override {
-        if (State != EState::COMMITTING) {
-            return;
-        }
         if (TxManager->ConsumeCommitResult(shardId)) {
             CA_LOG_D("Committed TxId=" << TxId.value_or(0));
             OnOperationFinished(Counters->BufferActorCommitLatencyHistogram);
-            State = EState::FINISHED;
             Send<ESendingType::Tail>(ExecuterActorId, new TEvKqpBuffer::TEvResult{
                 BuildStats()
             });
@@ -3334,10 +3370,9 @@ public:
     }
 
     void OnFlushed() {
-        YQL_ENSURE(State == EState::FLUSHING);
+        YQL_ENSURE(CurrentStateFunc() == &TThis::StateFlush);
         UpdateTracingState("Write", BufferWriteActorSpan.GetTraceId());
         OnOperationFinished(Counters->BufferActorFlushLatencyHistogram);
-        State = EState::WRITING; // TODO: use only StateFunc
         Become(&TKqpBufferWriteActor::StateWrite);
 
         ForEachWriteActor([&](TKqpTableWriteActor* actor, const TActorId) {
@@ -3409,20 +3444,17 @@ public:
     }
 
     void ReplyErrorAndDieImpl(NYql::NDqProto::StatusIds::StatusCode statusCode, NYql::TIssues&& issues) {
-        CA_LOG_E("statusCode=" << NYql::NDqProto::StatusIds_StatusCode_Name(statusCode) << ". Issue=" << issues.ToString() << ". sessionActorId=" << SessionActorId << ". isRollback=" << (State == EState::ROLLINGBACK));
+        CA_LOG_E("statusCode=" << NYql::NDqProto::StatusIds_StatusCode_Name(statusCode) << ". Issue=" << issues.ToString() << ". sessionActorId=" << SessionActorId << ".");
 
         Y_ABORT_UNLESS(!HasError);
         HasError = true;
 
         CancelProposal();
-        if (State != EState::ROLLINGBACK) {
-            Rollback(BufferWriteActorSpan.GetTraceId());
-            // Rollback can't finish with error
-            Send<ESendingType::Tail>(SessionActorId, new TEvKqpBuffer::TEvError{
-                statusCode,
-                std::move(issues)
-            });
-        }
+        Rollback(BufferWriteActorSpan.GetTraceId());
+        Send<ESendingType::Tail>(SessionActorId, new TEvKqpBuffer::TEvError{
+            statusCode,
+            std::move(issues)
+        });
         PassAway();
     }
 
@@ -3434,20 +3466,24 @@ public:
         return result;
     }
 
-    void CancelProposal() {
-        if (!TxId || !(State == EState::PREPARING || State == EState::COMMITTING)) {
-            return;
-        }
-        for (const auto& shardId : TxManager->GetShards()) {
-            const auto state = TxManager->GetState(shardId);
-
-            if (state == IKqpTransactionManager::EShardState::PREPARING
-                    || state == IKqpTransactionManager::EShardState::PREPARED
-                    || (state == IKqpTransactionManager::EShardState::EXECUTING && IsImmediateCommit)) {
-                TxManager->SetError(shardId);
-                Send(MakePipePerNodeCacheID(false), new TEvPipeCache::TEvForward(
-                    new TEvDataShard::TEvCancelTransactionProposal(*TxId), shardId, false));
+    void CancelProposal() noexcept {
+        try {
+            if (!TxId || !(CurrentStateFunc() == &TThis::StatePrepare || CurrentStateFunc() == &TThis::StateCommit)) {
+                return;
             }
+            for (const auto& shardId : TxManager->GetShards()) {
+                const auto state = TxManager->GetState(shardId);
+
+                if (state == IKqpTransactionManager::EShardState::PREPARING
+                        || state == IKqpTransactionManager::EShardState::PREPARED
+                        || (state == IKqpTransactionManager::EShardState::EXECUTING && IsImmediateCommit)) {
+                    TxManager->SetError(shardId);
+                    Send(MakePipePerNodeCacheID(false), new TEvPipeCache::TEvForward(
+                        new TEvDataShard::TEvCancelTransactionProposal(*TxId), shardId, false));
+                }
+            }
+        } catch (...) {
+            CA_LOG_E("Failed to cancel transaction proposals. Error: " << CurrentExceptionMessage() << ".");
         }
     }
 
@@ -3500,7 +3536,6 @@ private:
     THashMap<ui64, TKqpWriteTask> WriteTasks;
     TKqpTableWriteActor::TWriteToken CurrentWriteToken = 0;
 
-    EState State;
     bool HasError = false;
     THashMap<TPathId, std::queue<TBufferWriteMessage>> RequestQueues;
 

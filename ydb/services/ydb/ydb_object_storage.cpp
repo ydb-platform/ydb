@@ -13,17 +13,17 @@ void TGRpcYdbObjectStorageService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr lo
 #ifdef ADD_REQUEST
 #error ADD_REQUEST macro already defined
 #endif
-#define ADD_REQUEST(NAME, IN, OUT, CB) \
+#define ADD_REQUEST(NAME, IN, OUT, CB, AUDIT_MODE) \
     MakeIntrusive<TGRpcRequest<Ydb::ObjectStorage::IN, Ydb::ObjectStorage::OUT, TGRpcYdbObjectStorageService>>(this, &Service_, CQ_, \
         [this](NYdbGrpc::IRequestContextBase *ctx) { \
             NGRpcService::ReportGrpcReqToMon(*ActorSystem_, ctx->GetPeer()); \
             ActorSystem_->Send(GRpcRequestProxyId_, \
                 new NGRpcService::TGrpcRequestNoOperationCall<Ydb::ObjectStorage::IN, Ydb::ObjectStorage::OUT> \
-                    (ctx, &CB, NGRpcService::TRequestAuxSettings{NGRpcService::TRateLimiterMode::Off, nullptr})); \
+                    (ctx, &CB, NGRpcService::TRequestAuxSettings{NGRpcService::TRateLimiterMode::Off, nullptr, AUDIT_MODE})); \
         }, &Ydb::ObjectStorage::V1::ObjectStorageService::AsyncService::Request ## NAME, \
         #NAME, logger, getCounterBlock("object-storage-list", #NAME))->Run();
 
-    ADD_REQUEST(List, ListingRequest, ListingResponse, DoObjectStorageListingRequest);
+    ADD_REQUEST(List, ListingRequest, ListingResponse, DoObjectStorageListingRequest, TAuditMode::NonModifying(TAuditMode::TLogClassConfig::Ddl));
 #undef ADD_REQUEST
 }
 

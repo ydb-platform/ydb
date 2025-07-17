@@ -25,12 +25,12 @@ void TConfigGRpcService::InitService(grpc::ServerCompletionQueue* cq, NYdbGrpc::
 void TConfigGRpcService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
     auto getCounterBlock = NGRpcService::CreateCounterCb(Counters, ActorSystem);
 
-    #define SETUP_BS_METHOD(methodName, method, rlMode, requestType) \
-        SETUP_METHOD(methodName, method, rlMode, requestType, Config, config)
+    #define SETUP_BS_METHOD(methodName, method, rlMode, requestType, auditModeFlags) \
+        SETUP_METHOD(methodName, method, rlMode, requestType, Config, config, auditModeFlags)
 
-    SETUP_BS_METHOD(ReplaceConfig, DoReplaceConfig, Rps, CONFIG_REPLACECONFIG);
-    SETUP_BS_METHOD(FetchConfig, DoFetchConfig, Rps, CONFIG_FETCHCONFIG);
-    SETUP_BS_METHOD(BootstrapCluster, DoBootstrapCluster, Rps, CONFIG_BOOTSTRAP);
+    SETUP_BS_METHOD(ReplaceConfig, DoReplaceConfig, Rps, CONFIG_REPLACECONFIG, TAuditMode::Modifying(TAuditMode::TLogClassConfig::ClusterAdmin));
+    SETUP_BS_METHOD(FetchConfig, DoFetchConfig, Rps, CONFIG_FETCHCONFIG, TAuditMode::NonModifying(TAuditMode::TLogClassConfig::ClusterAdmin));
+    SETUP_BS_METHOD(BootstrapCluster, DoBootstrapCluster, Rps, CONFIG_BOOTSTRAP, TAuditMode::Modifying(TAuditMode::TLogClassConfig::ClusterAdmin));
 
     #undef SETUP_BS_METHOD
 }

@@ -22,26 +22,26 @@ void TGRpcDiscoveryService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
 #ifdef ADD_REQUEST
 #error macro already defined
 #endif
-#define ADD_REQUEST(NAME, CB) \
-    MakeIntrusive<TGRpcRequest<Discovery::NAME##Request, Discovery::NAME##Response, TGRpcDiscoveryService>>   \
-        (this, &Service_, CQ_,                                                                                \
-            [this](NYdbGrpc::IRequestContextBase *ctx) {                                                         \
-                NGRpcService::ReportGrpcReqToMon(*ActorSystem_, ctx->GetPeer(), GetSdkBuildInfo(ctx));        \
-                ActorSystem_->Send(GRpcRequestProxyId_,                                                       \
-                    new TGrpcRequestOperationCall<Discovery::NAME##Request, Discovery::NAME##Response>        \
-                        (ctx, CB, TRequestAuxSettings{RLSWITCH(TRateLimiterMode::Rps), nullptr}));                     \
-            }, &Ydb::Discovery::V1::DiscoveryService::AsyncService::Request ## NAME,                          \
+#define ADD_REQUEST(NAME, CB, AUDIT_MODE) \
+    MakeIntrusive<TGRpcRequest<Discovery::NAME##Request, Discovery::NAME##Response, TGRpcDiscoveryService>>     \
+        (this, &Service_, CQ_,                                                                                  \
+            [this](NYdbGrpc::IRequestContextBase *ctx) {                                                        \
+                NGRpcService::ReportGrpcReqToMon(*ActorSystem_, ctx->GetPeer(), GetSdkBuildInfo(ctx));          \
+                ActorSystem_->Send(GRpcRequestProxyId_,                                                         \
+                    new TGrpcRequestOperationCall<Discovery::NAME##Request, Discovery::NAME##Response>          \
+                        (ctx, CB, TRequestAuxSettings{RLSWITCH(TRateLimiterMode::Rps), nullptr, AUDIT_MODE}));  \
+            }, &Ydb::Discovery::V1::DiscoveryService::AsyncService::Request ## NAME,                            \
             #NAME, logger, getCounterBlock("discovery", #NAME))->Run();
 
-    ADD_REQUEST(WhoAmI, &DoWhoAmIRequest)
-    ADD_REQUEST(NodeRegistration, &DoNodeRegistrationRequest)
+    ADD_REQUEST(WhoAmI, &DoWhoAmIRequest, TAuditMode::NonModifying(TAuditMode::TLogClassConfig::Login))
+    ADD_REQUEST(NodeRegistration, &DoNodeRegistrationRequest, TAuditMode::Modifying(TAuditMode::TLogClassConfig::NodeRegistration))
 
 #ifdef ADD_LEGACY_REQUEST
 #error macro already defined
 #endif
 #define ADD_LEGACY_REQUEST(NAME, IN, OUT, ACTION)                                                                     \
     MakeIntrusive<TGRpcRequest<Ydb::Discovery::IN, Ydb::Discovery::OUT, TGRpcDiscoveryService>>(this, &Service_, CQ_, \
-        [this](NYdbGrpc::IRequestContextBase *reqCtx) {                                                                  \
+        [this](NYdbGrpc::IRequestContextBase *reqCtx) {                                                               \
            NGRpcService::ReportGrpcReqToMon(*ActorSystem_, reqCtx->GetPeer(), GetSdkBuildInfo(reqCtx));               \
            ACTION;                                                                                                    \
         }, &Ydb::Discovery::V1::DiscoveryService::AsyncService::Request ## NAME,                                      \

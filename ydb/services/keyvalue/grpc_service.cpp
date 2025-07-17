@@ -25,28 +25,29 @@ void TKeyValueGRpcService::InitService(grpc::ServerCompletionQueue* cq, NYdbGrpc
 void TKeyValueGRpcService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
     auto getCounterBlock = NGRpcService::CreateCounterCb(Counters, ActorSystem);
 
-    #define SETUP_KV_METHOD(methodName, method, rlMode, requestType) \
+    #define SETUP_KV_METHOD(methodName, method, rlMode, requestType, auditModeFlags) \
         SETUP_METHOD( \
             methodName, \
             method, \
             rlMode, \
             requestType, \
             KeyValue, \
-            keyvalue \
+            keyvalue, \
+            auditModeFlags \
         )
 
-    SETUP_KV_METHOD(CreateVolume, DoCreateVolumeKeyValue, Rps, KEYVALUE_CREATEVOLUME);
-    SETUP_KV_METHOD(DropVolume, DoDropVolumeKeyValue, Rps, KEYVALUE_DROPVOLUME);
-    SETUP_KV_METHOD(AlterVolume, DoAlterVolumeKeyValue, Rps, KEYVALUE_ALTERVOLUME);
-    SETUP_KV_METHOD(DescribeVolume, DoDescribeVolumeKeyValue, Rps, KEYVALUE_DESCRIBEVOLUME);
-    SETUP_KV_METHOD(ListLocalPartitions, DoListLocalPartitionsKeyValue, Rps, KEYVALUE_LISTLOCALPARTITIONS);
+    SETUP_KV_METHOD(CreateVolume, DoCreateVolumeKeyValue, Rps, KEYVALUE_CREATEVOLUME, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Ddl));
+    SETUP_KV_METHOD(DropVolume, DoDropVolumeKeyValue, Rps, KEYVALUE_DROPVOLUME, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Ddl));
+    SETUP_KV_METHOD(AlterVolume, DoAlterVolumeKeyValue, Rps, KEYVALUE_ALTERVOLUME, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Ddl));
+    SETUP_KV_METHOD(DescribeVolume, DoDescribeVolumeKeyValue, Rps, KEYVALUE_DESCRIBEVOLUME, TAuditMode::NonModifying(TAuditMode::TLogClassConfig::Ddl));
+    SETUP_KV_METHOD(ListLocalPartitions, DoListLocalPartitionsKeyValue, Rps, KEYVALUE_LISTLOCALPARTITIONS, TAuditMode::NonModifying(TAuditMode::TLogClassConfig::Ddl));
 
-    SETUP_KV_METHOD(AcquireLock, DoAcquireLockKeyValue, Rps, KEYVALUE_ACQUIRELOCK);
-    SETUP_KV_METHOD(ExecuteTransaction, DoExecuteTransactionKeyValue, Rps, KEYVALUE_EXECUTETRANSACTION);
-    SETUP_KV_METHOD(Read, DoReadKeyValue, Rps, KEYVALUE_READ);
-    SETUP_KV_METHOD(ReadRange, DoReadRangeKeyValue, Rps, KEYVALUE_READRANGE);
-    SETUP_KV_METHOD(ListRange, DoListRangeKeyValue, Rps, KEYVALUE_LISTRANGE);
-    SETUP_KV_METHOD(GetStorageChannelStatus, DoGetStorageChannelStatusKeyValue, Rps, KEYVALUE_GETSTORAGECHANNELSTATUS);
+    SETUP_KV_METHOD(AcquireLock, DoAcquireLockKeyValue, Rps, KEYVALUE_ACQUIRELOCK, TAuditMode::NonModifying(TAuditMode::TLogClassConfig::Dml));
+    SETUP_KV_METHOD(ExecuteTransaction, DoExecuteTransactionKeyValue, Rps, KEYVALUE_EXECUTETRANSACTION, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Dml));
+    SETUP_KV_METHOD(Read, DoReadKeyValue, Rps, KEYVALUE_READ, TAuditMode::NonModifying(TAuditMode::TLogClassConfig::Dml));
+    SETUP_KV_METHOD(ReadRange, DoReadRangeKeyValue, Rps, KEYVALUE_READRANGE, TAuditMode::NonModifying(TAuditMode::TLogClassConfig::Dml));
+    SETUP_KV_METHOD(ListRange, DoListRangeKeyValue, Rps, KEYVALUE_LISTRANGE, TAuditMode::NonModifying(TAuditMode::TLogClassConfig::Dml));
+    SETUP_KV_METHOD(GetStorageChannelStatus, DoGetStorageChannelStatusKeyValue, Rps, KEYVALUE_GETSTORAGECHANNELSTATUS, TAuditMode::NonModifying(TAuditMode::TLogClassConfig::Dml));
 
     #undef SETUP_KV_METHOD
 }

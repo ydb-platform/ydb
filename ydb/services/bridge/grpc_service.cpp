@@ -20,16 +20,16 @@ TBridgeGRpcService::~TBridgeGRpcService() = default;
 void TBridgeGRpcService::InitService(grpc::ServerCompletionQueue* cq, NYdbGrpc::TLoggerPtr logger) {
     CQ = cq;
     SetupIncomingRequests(std::move(logger));
-}   
+}
 
 void TBridgeGRpcService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
     auto getCounterBlock = NGRpcService::CreateCounterCb(Counters, ActorSystem);
 
-    #define SETUP_BRIDGE_METHOD(methodName, method, rlMode, requestType) \
-        SETUP_METHOD(methodName, method, rlMode, requestType, Bridge, config)
+    #define SETUP_BRIDGE_METHOD(methodName, method, rlMode, requestType, auditModeFlags) \
+        SETUP_METHOD(methodName, method, rlMode, requestType, Bridge, config, auditModeFlags)
 
-    SETUP_BRIDGE_METHOD(GetClusterState, DoGetClusterState, Rps, BRIDGE_GETCLUSTERSTATE);
-    SETUP_BRIDGE_METHOD(UpdateClusterState, DoUpdateClusterState, Rps, BRIDGE_UPDATECLUSTERSTATE);
+    SETUP_BRIDGE_METHOD(GetClusterState, DoGetClusterState, Rps, BRIDGE_GETCLUSTERSTATE, TAuditMode::NonModifying(TAuditMode::TLogClassConfig::ClusterAdmin));
+    SETUP_BRIDGE_METHOD(UpdateClusterState, DoUpdateClusterState, Rps, BRIDGE_UPDATECLUSTERSTATE, TAuditMode::Modifying(TAuditMode::TLogClassConfig::ClusterAdmin));
 
     #undef SETUP_BRIDGE_METHOD
 }

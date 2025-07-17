@@ -37,7 +37,7 @@ void TGRpcYdbQueryService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
 #ifdef ADD_REQUEST
 #error ADD_REQUEST macro already defined
 #endif
-#define ADD_REQUEST(NAME, IN, OUT, CB, REQUEST_TYPE, ...) \
+#define ADD_REQUEST(NAME, IN, OUT, CB, REQUEST_TYPE, AUDIT_MODE) \
     for (size_t i = 0; i < HandlersPerCompletionQueue; ++i) {  \
         for (auto* cq: CQS) { \
             MakeIntrusive<TGRpcRequest<IN, OUT, TGRpcYdbQueryService>>(this, &Service_, cq, \
@@ -47,7 +47,7 @@ void TGRpcYdbQueryService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
                         new TGrpcRequestNoOperationCall<IN, OUT> \
                             (ctx, &CB, TRequestAuxSettings { \
                                 .RlMode = RLSWITCH(TRateLimiterMode::Rps), \
-                                __VA_OPT__(.AuditModeFlags = __VA_ARGS__,) \
+                                .AuditMode = AUDIT_MODE, \
                                 .RequestType = NJaegerTracing::ERequestType::QUERY_##REQUEST_TYPE, \
                             })); \
                 }, &Ydb::Query::V1::QueryService::AsyncService::Request ## NAME, \
@@ -56,15 +56,15 @@ void TGRpcYdbQueryService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
         }  \
     }
 
-    ADD_REQUEST(ExecuteQuery, ExecuteQueryRequest, ExecuteQueryResponsePart, DoExecuteQuery, EXECUTEQUERY, TAuditModeFlags::Default | TAuditModeFlags::DmlAudit);
-    ADD_REQUEST(ExecuteScript, ExecuteScriptRequest, Ydb::Operations::Operation, DoExecuteScript, EXECUTESCRIPT, TAuditModeFlags::Default | TAuditModeFlags::DmlAudit);
-    ADD_REQUEST(FetchScriptResults, FetchScriptResultsRequest, FetchScriptResultsResponse, DoFetchScriptResults, FETCHSCRIPTRESULTS);
-    ADD_REQUEST(CreateSession, CreateSessionRequest, CreateSessionResponse, DoCreateSession, CREATESESSION);
-    ADD_REQUEST(DeleteSession, DeleteSessionRequest, DeleteSessionResponse, DoDeleteSession, DELETESESSION);
-    ADD_REQUEST(AttachSession, AttachSessionRequest, SessionState, DoAttachSession, ATTACHSESSION);
-    ADD_REQUEST(BeginTransaction, BeginTransactionRequest, BeginTransactionResponse, DoBeginTransaction, BEGINTRANSACTION);
-    ADD_REQUEST(CommitTransaction, CommitTransactionRequest, CommitTransactionResponse, DoCommitTransaction, COMMITTRANSACTION);
-    ADD_REQUEST(RollbackTransaction, RollbackTransactionRequest, RollbackTransactionResponse, DoRollbackTransaction, ROLLBACKTRANSACTION);
+    ADD_REQUEST(ExecuteQuery, ExecuteQueryRequest, ExecuteQueryResponsePart, DoExecuteQuery, EXECUTEQUERY, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Dml));
+    ADD_REQUEST(ExecuteScript, ExecuteScriptRequest, Ydb::Operations::Operation, DoExecuteScript, EXECUTESCRIPT, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Dml));
+    ADD_REQUEST(FetchScriptResults, FetchScriptResultsRequest, FetchScriptResultsResponse, DoFetchScriptResults, FETCHSCRIPTRESULTS, TAuditMode::NonModifying(TAuditMode::TLogClassConfig::Dml));
+    ADD_REQUEST(CreateSession, CreateSessionRequest, CreateSessionResponse, DoCreateSession, CREATESESSION, TAuditMode::NonModifying(TAuditMode::TLogClassConfig::Dml));
+    ADD_REQUEST(DeleteSession, DeleteSessionRequest, DeleteSessionResponse, DoDeleteSession, DELETESESSION, TAuditMode::NonModifying(TAuditMode::TLogClassConfig::Dml));
+    ADD_REQUEST(AttachSession, AttachSessionRequest, SessionState, DoAttachSession, ATTACHSESSION, TAuditMode::NonModifying(TAuditMode::TLogClassConfig::Dml));
+    ADD_REQUEST(BeginTransaction, BeginTransactionRequest, BeginTransactionResponse, DoBeginTransaction, BEGINTRANSACTION, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Dml));
+    ADD_REQUEST(CommitTransaction, CommitTransactionRequest, CommitTransactionResponse, DoCommitTransaction, COMMITTRANSACTION, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Dml));
+    ADD_REQUEST(RollbackTransaction, RollbackTransactionRequest, RollbackTransactionResponse, DoRollbackTransaction, ROLLBACKTRANSACTION, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Dml));
 
 #undef ADD_REQUEST
 }

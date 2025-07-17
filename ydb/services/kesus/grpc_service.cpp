@@ -629,6 +629,7 @@ TKesusGRpcService::TKesusGRpcService(
 
 void TKesusGRpcService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
     using NGRpcService::TRateLimiterMode;
+    using NGRpcService::TAuditMode;
     auto getCounterBlock = NGRpcService::CreateCounterCb(Counters_, ActorSystem_);
     auto getLimiter = CreateLimiterCb(LimiterRegistry_);
 
@@ -636,7 +637,7 @@ void TKesusGRpcService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
 #error ADD_REQUEST macro is already defined
 #endif
 
-#define ADD_REQUEST(NAME, IN, OUT, CB) \
+#define ADD_REQUEST(NAME, IN, OUT, CB, AUDIT_MODE) \
     for (auto* cq : CQS) { \
         MakeIntrusive<NGRpcService::TGRpcRequest<Ydb::Coordination::IN, Ydb::Coordination::OUT, TKesusGRpcService>>( \
             this, \
@@ -646,7 +647,7 @@ void TKesusGRpcService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
                 NGRpcService::ReportGrpcReqToMon(*ActorSystem_, reqCtx->GetPeer()); \
                 ActorSystem_->Send(GRpcRequestProxyId_, \
                     new NGRpcService::TGrpcRequestOperationCall<Ydb::Coordination::IN, Ydb::Coordination::OUT> \
-                        (reqCtx, &CB, NGRpcService::TRequestAuxSettings{RLSWITCH(TRateLimiterMode::Rps), nullptr})); \
+                        (reqCtx, &CB, NGRpcService::TRequestAuxSettings{RLSWITCH(TRateLimiterMode::Rps), nullptr, AUDIT_MODE})); \
             }, \
             &Ydb::Coordination::V1::CoordinationService::AsyncService::Request ## NAME, \
             "Coordination/" #NAME,             \
@@ -654,10 +655,10 @@ void TKesusGRpcService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
             getCounterBlock("coordination", #NAME))->Run(); \
     }
 
-    ADD_REQUEST(CreateNode, CreateNodeRequest, CreateNodeResponse, NGRpcService::DoCreateCoordinationNode);
-    ADD_REQUEST(AlterNode, AlterNodeRequest, AlterNodeResponse, NGRpcService::DoAlterCoordinationNode);
-    ADD_REQUEST(DropNode, DropNodeRequest, DropNodeResponse, NGRpcService::DoDropCoordinationNode);
-    ADD_REQUEST(DescribeNode, DescribeNodeRequest, DescribeNodeResponse, NGRpcService::DoDescribeCoordinationNode);
+    ADD_REQUEST(CreateNode, CreateNodeRequest, CreateNodeResponse, NGRpcService::DoCreateCoordinationNode, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Ddl));
+    ADD_REQUEST(AlterNode, AlterNodeRequest, AlterNodeResponse, NGRpcService::DoAlterCoordinationNode, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Ddl));
+    ADD_REQUEST(DropNode, DropNodeRequest, DropNodeResponse, NGRpcService::DoDropCoordinationNode, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Ddl));
+    ADD_REQUEST(DescribeNode, DescribeNodeRequest, DescribeNodeResponse, NGRpcService::DoDescribeCoordinationNode, TAuditMode::NonModifying(TAuditMode::TLogClassConfig::Ddl));
 
 #undef ADD_REQUEST
 

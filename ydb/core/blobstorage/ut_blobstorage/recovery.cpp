@@ -3,7 +3,7 @@
 #include <ydb/core/driver_lib/version/version.h>
 #include <ydb/core/driver_lib/version/ut/ut_helpers.h>
 
-#include "ut_helpers.h"
+#include <ydb/core/blobstorage/ut_blobstorage/env/ut_helpers.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 

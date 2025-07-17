@@ -212,14 +212,14 @@ public:
                     }
                 }
 
-                if (!BatchOperationSettings.Empty() && info.HasSerializedEndRow()) {
-                    if (ResponseEv->EndRowColumnIds.empty()) {
-                        for (auto keyId : info.GetEndRowColumnIds()) {
-                            ResponseEv->EndRowColumnIds.push_back(keyId);
+                if (!BatchOperationSettings.Empty() && info.HasBatchOperationMaxKey()) {
+                    if (ResponseEv->BatchOperationMaxKeys.empty()) {
+                        for (auto keyId : info.GetBatchOperationKeyIds()) {
+                            ResponseEv->BatchOperationKeyIds.push_back(keyId);
                         }
                     }
 
-                    ResponseEv->SerializedEndRows.emplace_back(info.GetSerializedEndRow());
+                    ResponseEv->BatchOperationMaxKeys.emplace_back(info.GetBatchOperationMaxKey());
                 }
             } else if (data.GetData().template Is<NKikimrKqp::TEvKqpOutputActorResultInfo>()) {
                 NKikimrKqp::TEvKqpOutputActorResultInfo info;

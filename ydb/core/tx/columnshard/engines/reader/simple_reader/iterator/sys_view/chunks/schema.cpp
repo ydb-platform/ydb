@@ -4,8 +4,7 @@
 namespace NKikimr::NOlap::NReader::NSimple::NSysView::NChunks {
 
 std::shared_ptr<ITableMetadataAccessor> TSchemaAdapter::BuildMetadataAccessor(const TString& tableName,
-    const NColumnShard::TSchemeShardLocalPathId externalPathId,
-    const std::optional<NColumnShard::TInternalPathId> internalPathId) const {
+    const NColumnShard::TSchemeShardLocalPathId externalPathId, const std::optional<NColumnShard::TInternalPathId> internalPathId) const {
     return std::make_shared<TAccessor>(tableName, externalPathId, internalPathId);
 }
 
@@ -32,43 +31,7 @@ std::shared_ptr<arrow::Schema> TSchemaAdapter::GetPKSchema() {
 
 TIndexInfo TSchemaAdapter::GetIndexInfo(
     const std::shared_ptr<IStoragesManager>& storagesManager, const std::shared_ptr<TSchemaObjectsCache>& schemaObjectsCache) const {
-    //PrimaryIndexStats
-    static NKikimrSchemeOp::TColumnTableSchema proto = []() {
-        NKikimrSchemeOp::TColumnTableSchema proto;
-        ui32 currentId = 0;
-        const auto pred = [&](const TString& name, const NScheme::TTypeId typeId, const std::optional<ui32> entityId = std::nullopt) {
-            auto* col = proto.AddColumns();
-            col->SetId(entityId.value_or(++currentId));
-            col->SetName(name);
-            col->SetTypeId(typeId);
-        };
-        pred("PathId", NScheme::NTypeIds::Uint64);
-        pred("Kind", NScheme::NTypeIds::Utf8);
-        pred("TabletId", NScheme::NTypeIds::Uint64);
-        pred("Rows", NScheme::NTypeIds::Uint64);
-        pred("RawBytes", NScheme::NTypeIds::Uint64);
-        pred("PortionId", NScheme::NTypeIds::Uint64);
-        pred("ChunkIdx", NScheme::NTypeIds::Uint64);
-        pred("EntityName", NScheme::NTypeIds::Utf8);
-        pred("InternalEntityId", NScheme::NTypeIds::Uint32);
-        pred("BlobId", NScheme::NTypeIds::Utf8);
-        pred("BlobRangeOffset", NScheme::NTypeIds::Uint64);
-        pred("BlobRangeSize", NScheme::NTypeIds::Uint64);
-        pred("Activity", NScheme::NTypeIds::Uint8);
-        pred("TierName", NScheme::NTypeIds::Utf8);
-        pred("EntityType", NScheme::NTypeIds::Utf8);
-        pred("ChunkDetails", NScheme::NTypeIds::Utf8);
-        proto.AddKeyColumnNames("PathId");
-        proto.AddKeyColumnNames("TabletId");
-        proto.AddKeyColumnNames("PortionId");
-        proto.AddKeyColumnNames("InternalEntityId");
-        proto.AddKeyColumnNames("ChunkIdx");
-        return proto;
-    }();
-
-    auto indexInfo = TIndexInfo::BuildFromProto(GetPresetId(), proto, storagesManager, schemaObjectsCache);
-    AFL_VERIFY(indexInfo);
-    return std::move(*indexInfo);
+    return TBase::GetIndexInfo<NKikimr::NSysView::Schema::PrimaryIndexStats>(storagesManager, schemaObjectsCache);
 }
 
 }   // namespace NKikimr::NOlap::NReader::NSimple::NSysView::NChunks

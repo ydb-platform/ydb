@@ -117,6 +117,8 @@ static const THashMap<TStringBuf, ERequestType> NameToRequestType = {
     {"Discovery.WhoAmI", ERequestType::DISCOVERY_WHOAMI},
     {"Discovery.NodeRegistration", ERequestType::DISCOVERY_NODEREGISTRATION},
     {"Discovery.ListEndpoints", ERequestType::DISCOVERY_LISTENDPOINTS},
+
+    {"Topic.Transaction", ERequestType::TOPIC_PROPOSE_TRANSACTION},
 };
 
 struct TRequestDiscriminator {

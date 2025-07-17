@@ -33,7 +33,7 @@ constexpr int C_LAST_RUN_C = 223; // in range [0, 255]
 
 constexpr int FIRST_UNPROCESSED_O_ID = 2101;
 
-constexpr double DISTICT_INITIAL_YTD = 30000.00;
+constexpr double DISTRICT_INITIAL_YTD = 30000.00;
 
 // Transaction weights (percentage of mix)
 constexpr double NEW_ORDER_WEIGHT = 45.0;

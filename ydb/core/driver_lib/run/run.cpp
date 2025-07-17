@@ -481,6 +481,7 @@ void TKikimrRunner::InitializeMonitoring(const TKikimrRunConfig& runConfig, bool
             monConfig.AllowedSIDs.assign(securityConfig.GetMonitoringAllowedSIDs().begin(), securityConfig.GetMonitoringAllowedSIDs().end());
         }
         monConfig.AllowOrigin = appConfig.GetMonitoringConfig().GetAllowOrigin();
+        monConfig.AuditRequests = appConfig.GetMonitoringConfig().GetAuditRequests();
 
         if (ModuleFactories && ModuleFactories->MonitoringFactory) {
             Monitoring = ModuleFactories->MonitoringFactory(std::move(monConfig), appConfig);

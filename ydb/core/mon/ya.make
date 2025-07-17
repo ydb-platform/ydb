@@ -3,6 +3,7 @@ LIBRARY()
 SRCS(
     mon.cpp
     mon.h
+    mon_audit.cpp
     crossref.cpp
     crossref.h
 )

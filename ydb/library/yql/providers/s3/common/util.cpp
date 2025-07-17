@@ -34,7 +34,7 @@ struct TTypeError {
     TString Error = "unsupported type";
 };
 
-std::optional<TTypeError> ValidateJsonListIoType(const TTypeAnnotationNode* type, const std::function<std::optional<TTypeError>(const TTypeAnnotationNode*)>& defaultHandler) {
+std::optional<TTypeError> ValidateJsonListIoType(const TTypeAnnotationNode* type, std::function<std::optional<TTypeError>(const TTypeAnnotationNode*)> defaultHandler) {
     switch (type->GetKind()) {
         case ETypeAnnotationKind::Null:
         case ETypeAnnotationKind::Void:
@@ -139,7 +139,7 @@ std::optional<TTypeError> ValidateClickHouseUdfDataType(const TDataExprType* typ
 }
 
 // Type compatible with ClickHouseClient.ParseBlocks, ClickHouseClient.ParseFormat, ClickHouseClient.SerializeFormat udfs
-std::optional<TTypeError> ValidateGenericIoType(const TTypeAnnotationNode* type, const std::function<std::optional<TTypeError>(const TDataExprType*)>& dataTypeChecker, bool underOptional = false) {
+std::optional<TTypeError> ValidateGenericIoType(const TTypeAnnotationNode* type, std::function<std::optional<TTypeError>(const TDataExprType*)> dataTypeChecker, bool underOptional = false) {
     switch (type->GetKind()) {
         case ETypeAnnotationKind::Optional: {
             if (underOptional) {
@@ -177,7 +177,7 @@ std::optional<TTypeError> ValidateGenericIoType(const TTypeAnnotationNode* type,
     return TTypeError{type};
 }
 
-bool ValidateIoSchema(TPositionHandle pos, const TStructExprType* schemaStructRowType, const TString& info, TExprContext& ctx, const std::function<std::optional<TTypeError>(const TTypeAnnotationNode*)>& typeChecker) {
+bool ValidateIoSchema(TPositionHandle pos, const TStructExprType* schemaStructRowType, const TString& info, TExprContext& ctx, std::function<std::optional<TTypeError>(const TTypeAnnotationNode*)> typeChecker) {
     bool hasErrors = false;
     for (const auto* item : schemaStructRowType->GetItems()) {
         if (const auto error = typeChecker(item->GetItemType())) {

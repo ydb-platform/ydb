@@ -94,7 +94,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                        TStepId, TTxId, TStepId, TTxId,
                        TString, TTxId,
                        ui64, ui64, ui64,
-                       TActorId> TPathRec;
+                       TString, TActorId> TPathRec;
     typedef TDeque<TPathRec> TPathRows;
 
     template <typename SchemaTable, typename TRowSet>
@@ -112,7 +112,8 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             rowSet.template GetValueOrDefault<typename SchemaTable::DirAlterVersion>(1),
             rowSet.template GetValueOrDefault<typename SchemaTable::UserAttrsAlterVersion>(1),
             rowSet.template GetValueOrDefault<typename SchemaTable::ACLVersion>(0),
-            rowSet.template GetValueOrDefault<typename SchemaTable::TempDirOwnerId>()
+            rowSet.template GetValueOrDefault<typename SchemaTable::TempDirOwnerActorId_Deprecated>(),
+            rowSet.template GetValueOrDefault<typename SchemaTable::TempDirOwnerActorId>()
         );
     }
 
@@ -138,6 +139,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
         TPathElement::TPtr path = new TPathElement(pathId, parentPathId, domainId, name, owner);
 
+        TString tempDirOwnerActorId_Deprecated;
         std::tie(
             std::ignore, //pathId
             std::ignore, //parentPathId
@@ -153,11 +155,16 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             path->DirAlterVersion,
             path->UserAttrs->AlterVersion,
             path->ACLVersion,
+            tempDirOwnerActorId_Deprecated,
             path->TempDirOwnerActorId) = rec;
 
         path->PathState = TPathElement::EPathState::EPathStateNoChanges;
         if (path->StepDropped) {
             path->PathState = TPathElement::EPathState::EPathStateNotExist;
+        }
+
+        if (!path->TempDirOwnerActorId) {
+            path->TempDirOwnerActorId.Parse(tempDirOwnerActorId_Deprecated.c_str(), tempDirOwnerActorId_Deprecated.size());
         }
 
         return path;

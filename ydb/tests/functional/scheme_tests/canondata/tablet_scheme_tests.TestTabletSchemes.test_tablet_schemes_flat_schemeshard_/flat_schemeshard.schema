@@ -88,12 +88,12 @@
             },
             {
                 "ColumnId": 17,
-                "ColumnName": "TempDirOwnerActorId",
+                "ColumnName": "TempDirOwnerActorId_Deprecated",
                 "ColumnType": "String"
             },
             {
                 "ColumnId": 18,
-                "ColumnName": "TempDirOwnerId",
+                "ColumnName": "TempDirOwnerActorId",
                 "ColumnType": "ActorID"
             }
         ],
@@ -3625,12 +3625,12 @@
             },
             {
                 "ColumnId": 17,
-                "ColumnName": "TempDirOwnerActorId",
+                "ColumnName": "TempDirOwnerActorId_Deprecated",
                 "ColumnType": "String"
             },
             {
                 "ColumnId": 18,
-                "ColumnName": "TempDirOwnerId",
+                "ColumnName": "TempDirOwnerActorId",
                 "ColumnType": "ActorID"
             }
         ],

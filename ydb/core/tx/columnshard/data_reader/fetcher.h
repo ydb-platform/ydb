@@ -80,7 +80,7 @@ public:
         , ClassCounters(Singleton<TCounters>()->GetClassCounters(Callback->GetClassName()))
         , Guard(ClassCounters->GetGuard(EFetchingStage::Created))
         , Script(script)
-        , CurrentContext(Input.HasMemoryProcessGuard() ? Input.GetMemoryProcessGuardVerified() : nullptr)
+        , CurrentContext(Input.GetMemoryProcessGuardOptional())
         , Environment(environment)
         , ConveyorCategory(conveyorCategory)
     {

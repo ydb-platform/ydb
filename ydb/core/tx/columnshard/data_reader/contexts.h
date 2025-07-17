@@ -268,8 +268,8 @@ public:
         return MemoryProcessGuard;
     }
 
-    bool HasMemoryProcessGuard() const {
-        return !!MemoryProcessGuard;
+    std::shared_ptr<NGroupedMemoryManager::TProcessGuard> GetMemoryProcessGuardOptional() const {
+        return MemoryProcessGuard;
     }
 };
 

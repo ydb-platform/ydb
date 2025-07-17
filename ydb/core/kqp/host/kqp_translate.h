@@ -168,6 +168,7 @@ private:
     TMaybe<TString> ApplicationName = {};
     std::shared_ptr<std::map<TString, Ydb::Type>> QueryParameters = {};
     TMaybe<ui16> SqlVersion = {};
+    NYql::TLangVersion LangVer = NYql::MinLangVersion;
 };
 
 NSQLTranslation::EBindingsMode RemapBindingsMode(NKikimrConfig::TTableServiceConfig::EBindingsMode mode);

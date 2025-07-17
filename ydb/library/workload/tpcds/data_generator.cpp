@@ -113,7 +113,10 @@ TTpcdsWorkloadDataInitializerGenerator::TBulkDataGenerator::TBulkDataGenerator(c
     }
     ds_key_t rowsCount;
     split_work(TableNum, &FirstRow, &rowsCount);
-    rowsCount = std::max(1., rowsCount * Owner.GetScale() / std::ceil(Owner.GetScale()));
+    rowsCount = rowsCount * Owner.GetScale() / std::ceil(Owner.GetScale());
+    if (rowsCount == 0 && Owner.ProcessIndex == 0) {
+        rowsCount = 1;
+    }
     //this magic is needed for SCD to work correctly. See setSCDKeys in ydb/library/benchmarks/gen/tpcds-dbgen/scd.c
     while (FirstRow > 1 && !allowedModules.contains(FirstRow % 6)) {
         --FirstRow;

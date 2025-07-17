@@ -27,7 +27,11 @@ bool TWriteId::operator<(const TWriteId& rhs) const
 
 void TWriteId::ToStream(IOutputStream& s) const
 {
-    s << '{' << NodeId << ", " << KeyId << '}';
+    if (KafkaApiTransaction) {
+        s << "KafkaTransactionWriteId{" << KafkaProducerInstanceId.Id << ", " << KafkaProducerInstanceId.Epoch << '}';
+    } else {
+        s << '{' << NodeId << ", " << KeyId << '}';
+    }
 }
 
 template <class T>

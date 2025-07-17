@@ -587,7 +587,7 @@ Y_UNIT_TEST(GroupedMemoryLimiter_ConfigCS) {
         UNIT_ASSERT_VALUES_EQUAL(static_cast<ui64>(currentHardMemoryLimit * OlapLimits::GroupedMemoryLimiterSoftLimitCoefficient *
                                                    (1.0 - OlapLimits::DeduplicationInScanMemoryFraction) * readExecutionMemoryLimitPercent /
                                                    100), scanLimits->GetLimit());
-        UNIT_ASSERT_VALUES_EQUAL(currentHardMemoryLimit * readExecutionMemoryLimitPercent / 100, scanLimits->GetHardLimit());
+        UNIT_ASSERT_VALUES_EQUAL(currentHardMemoryLimit * (1.0 - OlapLimits::DeduplicationInScanMemoryFraction) * readExecutionMemoryLimitPercent / 100, scanLimits->GetHardLimit());
 
         UNIT_ASSERT_VALUES_EQUAL(static_cast<ui64>(currentHardMemoryLimit * OlapLimits::GroupedMemoryLimiterCompactionLimitCoefficient * OlapLimits::GroupedMemoryLimiterSoftLimitCoefficient * compactionMemoryLimitPercent / 100),
             compactionLimits->GetLimit());

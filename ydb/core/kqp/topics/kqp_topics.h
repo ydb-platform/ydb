@@ -189,6 +189,8 @@ private:
     TMaybe<TString> Consumer_;
     NLongTxService::TLockHandle WriteId_;
     TMaybe<NKafka::TProducerInstanceId> KafkaProducerInstanceId_;
+
+    THashMap<TString, NSchemeCache::TSchemeCacheNavigate::TEntry> CachedNavigateResult_;
 };
 
 }

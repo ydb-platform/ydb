@@ -6,6 +6,7 @@
 #include "console_interaction.h"
 #include "group_geometry_info.h"
 #include "group_layout_checker.h"
+#include "util.h"
 
 #include <library/cpp/streams/zstd/zstd.h>
 
@@ -412,9 +413,7 @@ void TBlobStorageController::ApplyBscSettings(const NKikimrConfig::TBlobStorageC
     auto *request = r.MutableRequest();
     auto* command = request->AddCommand();
 
-    auto updateSettings = command->MutableUpdateSettings();
-
-    updateSettings->CopyFrom(bsConfig.GetBscSettings());
+    command->MutableUpdateSettings()->CopyFrom(FromBscConfig(bsConfig.GetBscSettings()));
 
     STLOG(PRI_DEBUG, BS_CONTROLLER, BSC39, "ApplyBSCSettings", (Request, r));
     Send(SelfId(), ev.release());

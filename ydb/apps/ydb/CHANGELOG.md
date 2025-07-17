@@ -1,3 +1,4 @@
+* Added `ydb workload tpcc check` subcommand, which checks TPC-C data consistency.
 
 ## 2.23.0 ##
 

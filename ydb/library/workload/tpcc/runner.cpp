@@ -9,6 +9,7 @@
 #include "task_queue.h"
 #include "terminal.h"
 #include "transactions.h"
+#include "util.h"
 
 #include <ydb/public/lib/ydb_cli/commands/ydb_command.h>
 #include <ydb/public/lib/ydb_cli/common/interactive.h>
@@ -756,11 +757,6 @@ void TRunConfig::SetDisplay() {
 void RunSync(const NConsoleClient::TClientCommand::TConfig& connectionConfig, const TRunConfig& runConfig) {
     TPCCRunner runner(connectionConfig, runConfig);
     runner.RunSync();
-}
-
-std::stop_source GetGlobalInterruptSource() {
-    static std::stop_source StopByInterrupt;
-    return StopByInterrupt;
 }
 
 } // namespace NYdb::NTPCC

@@ -7,12 +7,11 @@
 
 namespace NKikimr::NOlap::NReader::NSimple::NSysView::NPortions {
 std::shared_ptr<arrow::Array> TSourceData::BuildArrayAccessor(const ui64 columnId, const ui32 recordsCount) const {
-    //        PrimaryIndexPortionStats
-    if (columnId == 1) {
+    if (columnId == NKikimr::NSysView::Schema::PrimaryIndexPortionStats::PathId::ColumnId) {
         return NArrow::TStatusValidator::GetValid(
             arrow::MakeArrayFromScalar(arrow::UInt64Scalar(GetUnifiedPathId().GetSchemeShardLocalPathId().GetRawValue()), recordsCount));
     }
-    if (columnId == 2) {
+    if (columnId == NKikimr::NSysView::Schema::PrimaryIndexPortionStats::Kind::ColumnId) {
         auto builder = NArrow::MakeBuilder(arrow::utf8());
         for (auto&& i : Portions) {
             auto kindString = ::ToString(i->GetProduced());
@@ -20,59 +19,59 @@ std::shared_ptr<arrow::Array> TSourceData::BuildArrayAccessor(const ui64 columnI
         }
         return NArrow::FinishBuilder(std::move(builder));
     }
-    if (columnId == 3) {
+    if (columnId == NKikimr::NSysView::Schema::PrimaryIndexPortionStats::TabletId::ColumnId) {
         return NArrow::TStatusValidator::GetValid(arrow::MakeArrayFromScalar(arrow::UInt64Scalar(GetTabletId()), recordsCount));
     }
-    if (columnId == 4) {
+    if (columnId == NKikimr::NSysView::Schema::PrimaryIndexPortionStats::Rows::ColumnId) {
         auto builder = NArrow::MakeBuilder(arrow::uint64());
         for (auto&& i : Portions) {
             NArrow::Append<arrow::UInt64Type>(*builder, i->GetRecordsCount());
         }
         return NArrow::FinishBuilder(std::move(builder));
     }
-    if (columnId == 5) {
+    if (columnId == NKikimr::NSysView::Schema::PrimaryIndexPortionStats::ColumnRawBytes::ColumnId) {
         auto builder = NArrow::MakeBuilder(arrow::uint64());
         for (auto&& i : Portions) {
             NArrow::Append<arrow::UInt64Type>(*builder, i->GetMeta().GetColumnRawBytes());
         }
         return NArrow::FinishBuilder(std::move(builder));
     }
-    if (columnId == 6) {
+    if (columnId == NKikimr::NSysView::Schema::PrimaryIndexPortionStats::IndexRawBytes::ColumnId) {
         auto builder = NArrow::MakeBuilder(arrow::uint64());
         for (auto&& i : Portions) {
             NArrow::Append<arrow::UInt64Type>(*builder, i->GetMeta().GetIndexRawBytes());
         }
         return NArrow::FinishBuilder(std::move(builder));
     }
-    if (columnId == 7) {
+    if (columnId == NKikimr::NSysView::Schema::PrimaryIndexPortionStats::ColumnBlobBytes::ColumnId) {
         auto builder = NArrow::MakeBuilder(arrow::uint64());
         for (auto&& i : Portions) {
             NArrow::Append<arrow::UInt64Type>(*builder, i->GetMeta().GetColumnBlobBytes());
         }
         return NArrow::FinishBuilder(std::move(builder));
     }
-    if (columnId == 8) {
+    if (columnId == NKikimr::NSysView::Schema::PrimaryIndexPortionStats::IndexBlobBytes::ColumnId) {
         auto builder = NArrow::MakeBuilder(arrow::uint64());
         for (auto&& i : Portions) {
             NArrow::Append<arrow::UInt64Type>(*builder, i->GetMeta().GetIndexBlobBytes());
         }
         return NArrow::FinishBuilder(std::move(builder));
     }
-    if (columnId == 9) {
+    if (columnId == NKikimr::NSysView::Schema::PrimaryIndexPortionStats::PortionId::ColumnId) {
         auto builder = NArrow::MakeBuilder(arrow::uint64());
         for (auto&& i : Portions) {
             NArrow::Append<arrow::UInt64Type>(*builder, i->GetPortionId());
         }
         return NArrow::FinishBuilder(std::move(builder));
     }
-    if (columnId == 10) {
+    if (columnId == NKikimr::NSysView::Schema::PrimaryIndexPortionStats::Activity::ColumnId) {
         auto builder = NArrow::MakeBuilder(arrow::uint8());
         for (auto&& i : Portions) {
             NArrow::Append<arrow::UInt8Type>(*builder, i->HasRemoveSnapshot() ? 0 : 1);
         }
         return NArrow::FinishBuilder(std::move(builder));
     }
-    if (columnId == 11) {
+    if (columnId == NKikimr::NSysView::Schema::PrimaryIndexPortionStats::TierName::ColumnId) {
         auto builder = NArrow::MakeBuilder(arrow::utf8());
         for (auto&& i : Portions) {
             const auto tierName = i->GetTierNameDef(NOlap::NBlobOperations::TGlobal::DefaultStorageId);
@@ -80,11 +79,11 @@ std::shared_ptr<arrow::Array> TSourceData::BuildArrayAccessor(const ui64 columnI
         }
         return NArrow::FinishBuilder(std::move(builder));
     }
-    if (columnId == 12) {
+    if (columnId == NKikimr::NSysView::Schema::PrimaryIndexPortionStats::Stats::ColumnId) {
         const TString statInfo = Default<TString>();
         return NArrow::TStatusValidator::GetValid(arrow::MakeArrayFromScalar(arrow::StringScalar(statInfo), recordsCount));
     }
-    if (columnId == 13) {
+    if (columnId == NKikimr::NSysView::Schema::PrimaryIndexPortionStats::Optimized::ColumnId) {
         auto builder = NArrow::MakeBuilder(arrow::uint8());
         for (auto&& i : Portions) {
             NArrow::Append<arrow::UInt8Type>(*builder, i->HasRuntimeFeature(TPortionInfo::ERuntimeFeature::Optimized) ? 1 : 0);
@@ -92,7 +91,7 @@ std::shared_ptr<arrow::Array> TSourceData::BuildArrayAccessor(const ui64 columnI
         return NArrow::FinishBuilder(std::move(builder));
     }
 
-    if (columnId == 14) {
+    if (columnId == NKikimr::NSysView::Schema::PrimaryIndexPortionStats::CompactionLevel::ColumnId) {
         auto builder = NArrow::MakeBuilder(arrow::uint64());
         for (auto&& i : Portions) {
             NArrow::Append<arrow::UInt64Type>(*builder, i->GetMeta().GetCompactionLevel());
@@ -100,7 +99,7 @@ std::shared_ptr<arrow::Array> TSourceData::BuildArrayAccessor(const ui64 columnI
         return NArrow::FinishBuilder(std::move(builder));
     }
 
-    if (columnId == 15) {
+    if (columnId == NKikimr::NSysView::Schema::PrimaryIndexPortionStats::Details::ColumnId) {
         auto builder = NArrow::MakeBuilder(arrow::utf8());
         for (auto&& i : Portions) {
             NJson::TJsonValue details = NJson::JSON_MAP;

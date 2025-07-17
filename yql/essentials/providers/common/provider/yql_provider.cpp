@@ -1325,8 +1325,8 @@ TString SerializeExpr(TExprContext& ctx, const TExprNode& expr, bool withTypes) 
     return ast.Root->ToString();
 }
 
-TString ExprToPrettyString(TExprContext& ctx, const TExprNode& expr) {
-    auto ast = ConvertToAst(expr, ctx, TExprAnnotationFlags::None, true);
+TString ExprToPrettyString(TExprContext& ctx, const TExprNode& expr, bool AllowFreeArgs) {
+    auto ast = ConvertToAst(expr, ctx, TExprAnnotationFlags::None, true, AllowFreeArgs);
     TStringStream exprStream;
     YQL_ENSURE(ast.Root);
     ast.Root->PrettyPrintTo(exprStream, NYql::TAstPrintFlags::PerLine | NYql::TAstPrintFlags::ShortQuote);

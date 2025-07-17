@@ -444,9 +444,6 @@ def transform_issues_for_ydb(issues: List[Dict[str, Any]], project_fields: Optio
         closed_at = parse_datetime(issue.get('closedAt'))
         now = datetime.now(timezone.utc)
         
-        # Calculate BI metrics
-        body_text = issue.get('body', '') or ''
-
         is_in_project = bool(issue_project_fields)
         
         # Calculate time-based metrics
@@ -472,7 +469,7 @@ def transform_issues_for_ydb(issues: List[Dict[str, Any]], project_fields: Optio
             'title': issue.get('title', ''),
             'url': issue.get('url', ''),
             'state': issue.get('state', ''),
-            'body': body_text,
+            'body': issue.get('body', '') or '',
             'body_text': issue.get('bodyText', ''),
             
             # Time dimensions
@@ -706,7 +703,6 @@ def main():
             with ydb.SessionPool(driver) as pool:
                 # Check and create table if needed
                 def check_and_create_table(session):
-                   # if not check_table_exists(session, full_table_path):
                     create_issues_table(session, table_path)
                     return True
                 

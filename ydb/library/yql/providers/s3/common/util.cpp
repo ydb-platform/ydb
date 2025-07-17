@@ -87,7 +87,7 @@ std::optional<TTypeError> ValidateJsonListIoType(const TTypeAnnotationNode* type
             if (isInput) {
                 return TTypeError{type, TStringBuilder() << "variant type is not supported for S3 reading"};
             }
-            return ValidateJsonListIoType(type->Cast<TVariantExprType>()->GetUnderlyingType(), false);
+            return ValidateJsonListIoType(type->Cast<TVariantExprType>()->GetUnderlyingType(), isInput);
         }
         case ETypeAnnotationKind::Resource: {
             if (type->Cast<TResourceExprType>()->GetTag() != NDom::NodeResourceName) {
@@ -206,7 +206,9 @@ bool ValidateS3ReadSchema(TPositionHandle pos, std::string_view format, const TS
     }
 
     if (format == "json_list"sv) {
-        return ValidateIoSchema(pos, schemaStructRowType, "S3 json_list input format", ctx, std::bind(&ValidateJsonListIoType, std::placeholders::_1, true));
+        return ValidateIoSchema(pos, schemaStructRowType, "S3 json_list input format", ctx, [](const TTypeAnnotationNode* type) {
+            return ValidateJsonListIoType(type, true);
+        });
     }
 
     return ValidateIoSchema(pos, schemaStructRowType, TStringBuilder() << "S3 " << format << " input format", ctx, [enableCoroReadActor](const TTypeAnnotationNode* type) {
@@ -231,7 +233,9 @@ bool ValidateS3WriteSchema(TPositionHandle pos, std::string_view format, const T
     }
 
     if (format == "json_list"sv) {
-        return ValidateIoSchema(pos, schemaStructRowType, "S3 json_list output format", ctx, std::bind(&ValidateJsonListIoType, std::placeholders::_1, false));
+        return ValidateIoSchema(pos, schemaStructRowType, "S3 json_list output format", ctx, [](const TTypeAnnotationNode* type) {
+            return ValidateJsonListIoType(type, false);
+        });
     }
 
     return ValidateIoSchema(pos, schemaStructRowType, TStringBuilder() << "S3 " << format << " output format", ctx, [](const TTypeAnnotationNode* type) {

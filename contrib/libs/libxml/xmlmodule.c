@@ -17,10 +17,12 @@
 #include "libxml.h"
 
 #include <string.h>
+#include <libxml/xmlmodule.h>
 #include <libxml/xmlmemory.h>
 #include <libxml/xmlerror.h>
-#include <libxml/xmlmodule.h>
-#include <libxml/globals.h>
+#include <libxml/xmlstring.h>
+
+#include "private/error.h"
 
 #ifdef LIBXML_MODULES_ENABLED
 
@@ -38,27 +40,6 @@ static int xmlModulePlatformSymbol(void *handle, const char *name, void **result
  *		module memory error handler				*
  *									*
  ************************************************************************/
-
-/**
- * xmlModuleErrMemory:
- * @extra:  extra information
- *
- * Handle an out of memory condition
- */
-static void
-xmlModuleErrMemory(xmlModulePtr module, const char *extra)
-{
-    const char *name = NULL;
-
-    if (module != NULL) {
-        name = (const char *) module->name;
-    }
-
-    __xmlRaiseError(NULL, NULL, NULL, NULL, NULL, XML_FROM_MODULE,
-                    XML_ERR_NO_MEMORY, XML_ERR_FATAL, NULL, 0, extra,
-                    name, NULL, 0, 0,
-                    "Memory allocation failed : %s\n", extra);
-}
 
 /**
  * xmlModuleOpen:
@@ -80,10 +61,8 @@ xmlModuleOpen(const char *name, int options ATTRIBUTE_UNUSED)
     xmlModulePtr module;
 
     module = (xmlModulePtr) xmlMalloc(sizeof(xmlModule));
-    if (module == NULL) {
-        xmlModuleErrMemory(NULL, "creating module");
+    if (module == NULL)
         return (NULL);
-    }
 
     memset(module, 0, sizeof(xmlModule));
 
@@ -91,9 +70,6 @@ xmlModuleOpen(const char *name, int options ATTRIBUTE_UNUSED)
 
     if (module->handle == NULL) {
         xmlFree(module);
-        __xmlRaiseError(NULL, NULL, NULL, NULL, NULL, XML_FROM_MODULE,
-                        XML_MODULE_OPEN, XML_ERR_FATAL, NULL, 0, 0,
-                        name, NULL, 0, 0, "failed to open %s\n", name);
         return(NULL);
     }
 
@@ -120,23 +96,13 @@ xmlModuleSymbol(xmlModulePtr module, const char *name, void **symbol)
 {
     int rc = -1;
 
-    if ((NULL == module) || (symbol == NULL) || (name == NULL)) {
-        __xmlRaiseError(NULL, NULL, NULL, NULL, NULL, XML_FROM_MODULE,
-                        XML_MODULE_OPEN, XML_ERR_FATAL, NULL, 0, 0,
-                        NULL, NULL, 0, 0, "null parameter\n");
+    if ((NULL == module) || (symbol == NULL) || (name == NULL))
         return rc;
-    }
 
     rc = xmlModulePlatformSymbol(module->handle, name, symbol);
 
-    if (rc == -1) {
-        __xmlRaiseError(NULL, NULL, NULL, NULL, NULL, XML_FROM_MODULE,
-                        XML_MODULE_OPEN, XML_ERR_FATAL, NULL, 0, 0,
-                        name, NULL, 0, 0,
-                        "failed to find symbol: %s\n",
-			(name == NULL ? "NULL" : name));
+    if (rc == -1)
         return rc;
-    }
 
     return rc;
 }
@@ -156,22 +122,13 @@ xmlModuleClose(xmlModulePtr module)
 {
     int rc;
 
-    if (NULL == module) {
-        __xmlRaiseError(NULL, NULL, NULL, NULL, NULL, XML_FROM_MODULE,
-                        XML_MODULE_CLOSE, XML_ERR_FATAL, NULL, 0, 0,
-                        NULL, NULL, 0, 0, "null module pointer\n");
+    if (NULL == module)
         return -1;
-    }
 
     rc = xmlModulePlatformClose(module->handle);
 
-    if (rc != 0) {
-        __xmlRaiseError(NULL, NULL, NULL, NULL, NULL, XML_FROM_MODULE,
-                        XML_MODULE_CLOSE, XML_ERR_FATAL, NULL, 0, 0,
-                        (const char *) module->name, NULL, 0, 0,
-                        "failed to close: %s\n", module->name);
+    if (rc != 0)
         return -2;
-    }
 
     rc = xmlModuleFree(module);
     return (rc);
@@ -190,12 +147,8 @@ xmlModuleClose(xmlModulePtr module)
 int
 xmlModuleFree(xmlModulePtr module)
 {
-    if (NULL == module) {
-        __xmlRaiseError(NULL, NULL, NULL, NULL, NULL, XML_FROM_MODULE,
-                        XML_MODULE_CLOSE, XML_ERR_FATAL, NULL, 0, NULL,
-                        NULL, NULL, 0, 0, "null module pointer\n");
+    if (NULL == module)
         return -1;
-    }
 
     xmlFree(module->name);
     xmlFree(module);
@@ -204,9 +157,7 @@ xmlModuleFree(xmlModulePtr module)
 }
 
 #if defined(HAVE_DLOPEN) && !defined(_WIN32)
-#ifdef HAVE_DLFCN_H
 #include <dlfcn.h>
-#endif
 
 #ifndef RTLD_GLOBAL            /* For Tru64 UNIX 4.0 */
 #define RTLD_GLOBAL 0
@@ -257,9 +208,7 @@ xmlModulePlatformSymbol(void *handle, const char *name, void **symbol)
 #else /* ! HAVE_DLOPEN */
 
 #ifdef HAVE_SHLLOAD             /* HAVE_SHLLOAD */
-#ifdef HAVE_DL_H
 #include <dl.h>
-#endif
 /*
  * xmlModulePlatformOpen:
  * returns a handle on success, and zero on error.
@@ -301,7 +250,7 @@ xmlModulePlatformSymbol(void *handle, const char *name, void **symbol)
 #endif /* HAVE_SHLLOAD */
 #endif /* ! HAVE_DLOPEN */
 
-#if defined(_WIN32) && !defined(__CYGWIN__)
+#if defined(_WIN32)
 
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
@@ -340,129 +289,12 @@ xmlModulePlatformClose(void *handle)
 static int
 xmlModulePlatformSymbol(void *handle, const char *name, void **symbol)
 {
-XML_IGNORE_PEDANTIC_WARNINGS
-#ifdef _WIN32_WCE
-    /*
-     * GetProcAddressA seems only available on WinCE
-     */
-    *symbol = GetProcAddressA(handle, name);
-#else
-    *symbol = GetProcAddress(handle, name);
-#endif
+    FARPROC proc = GetProcAddress(handle, name);
+
+    memcpy(symbol, &proc, sizeof(proc));
     return (NULL == *symbol) ? -1 : 0;
-XML_POP_WARNINGS
 }
 
 #endif /* _WIN32 */
 
-#ifdef HAVE_BEOS
-
-#error #include <kernel/image.h>
-
-/*
- * xmlModulePlatformOpen:
- * beos api info: http://www.beunited.org/bebook/The%20Kernel%20Kit/Images.html
- * returns a handle on success, and zero on error.
- */
-
-static void *
-xmlModulePlatformOpen(const char *name)
-{
-    return (void *) load_add_on(name);
-}
-
-/*
- * xmlModulePlatformClose:
- * beos api info: http://www.beunited.org/bebook/The%20Kernel%20Kit/Images.html
- * returns 0 on success, and non-zero on error.
- */
-
-static int
-xmlModulePlatformClose(void *handle)
-{
-    status_t rc;
-
-    rc = unload_add_on((image_id) handle);
-
-    if (rc == B_OK)
-        return 0;
-    else
-        return -1;
-}
-
-/*
- * xmlModulePlatformSymbol:
- * beos api info: http://www.beunited.org/bebook/The%20Kernel%20Kit/Images.html
- * returns 0 on success and the loaded symbol in result, and -1 on error.
- */
-
-static int
-xmlModulePlatformSymbol(void *handle, const char *name, void **symbol)
-{
-    status_t rc;
-
-    rc = get_image_symbol((image_id) handle, name, B_SYMBOL_TYPE_ANY, symbol);
-
-    return (rc == B_OK) ? 0 : -1;
-}
-
-#endif /* HAVE_BEOS */
-
-#ifdef HAVE_OS2
-
-#error #include <os2.h>
-
-/*
- * xmlModulePlatformOpen:
- * os2 api info: http://www.edm2.com/os2api/Dos/DosLoadModule.html
- * returns a handle on success, and zero on error.
- */
-
-static void *
-xmlModulePlatformOpen(const char *name)
-{
-    char errbuf[256];
-    void *handle;
-    int rc;
-
-    rc = DosLoadModule(errbuf, sizeof(errbuf) - 1, name, &handle);
-
-    if (rc)
-        return 0;
-    else
-        return (handle);
-}
-
-/*
- * xmlModulePlatformClose:
- * os2 api info: http://www.edm2.com/os2api/Dos/DosFreeModule.html
- * returns 0 on success, and non-zero on error.
- */
-
-static int
-xmlModulePlatformClose(void *handle)
-{
-    return DosFreeModule(handle);
-}
-
-/*
- * xmlModulePlatformSymbol:
- * os2 api info: http://www.edm2.com/os2api/Dos/DosQueryProcAddr.html
- * returns 0 on success and the loaded symbol in result, and -1 on error.
- */
-
-static int
-xmlModulePlatformSymbol(void *handle, const char *name, void **symbol)
-{
-    int rc;
-
-    rc = DosQueryProcAddr(handle, 0, name, symbol);
-
-    return (rc == NO_ERROR) ? 0 : -1;
-}
-
-#endif /* HAVE_OS2 */
-
-#define bottom_xmlmodule
-#include "elfgcchack.h"
 #endif /* LIBXML_MODULES_ENABLED */

@@ -179,6 +179,7 @@ class BridgeClient(object):
             True if successful, False otherwise
         """
 
+        updates = []
         current_primary_pile_id = self.primary_pile
         if pile_id == current_primary_pile_id:
             synchronized_pile_id = None
@@ -232,15 +233,15 @@ class BridgeClient(object):
             logger.error("Failed to update pile %d to NOT_SYNCHRONIZED using specific pile ids [%d]", pile_id, current_primary_pile_id)
             return False
 
-        logger.info("Switched: pile %d from DISCONNECTED to NOT_SYNCHRONIZED using specific pile ids [%d]", pile_id, primary_pile_id)
+        logger.info("Switched: pile %d from DISCONNECTED to NOT_SYNCHRONIZED using specific pile ids [%d]", pile_id, current_primary_pile_id)
 
         result = self.update_cluster_state_result(updates, specific_pile_ids=[pile_id])
         if result is None:
-            logger.error("Failed to update pile %d to NOT_SYNCHRONIZED using specific pile ids [%d]", disconnected_pile_id, pile_id)
+            logger.error("Failed to update pile %d to NOT_SYNCHRONIZED using specific pile ids [%d]", pile_id, pile_id)
             return False
 
 
-        logger.info("Switched: pile %d from DISCONNECTED to NOT_SYNCHRONIZED using specific pile ids [%d]", disconnected_pile_id, pile_id)
+        logger.info("Switched: pile %d from DISCONNECTED to NOT_SYNCHRONIZED using specific pile ids [%d]", pile_id, pile_id)
         return True
 
     def takedown(self, pile_id, primary_pile_id):

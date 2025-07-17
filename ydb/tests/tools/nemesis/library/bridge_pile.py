@@ -142,7 +142,8 @@ class AbstractBridgePileNemesis(Nemesis, AbstractMonitoredNemesis):
         result = self._bridge_clients[another_pile_id].failover(self._current_pile_id)
 
         if not result:
-            raise Exception("Failed to failover pile %d", self._current_pile_id)
+            self.logger.error("Failed to failover pile %d", self._current_pile_id)
+            raise Exception("Failed to failover pile")
         
         self.logger.info("Bridge state managed successfully")
 
@@ -190,12 +191,13 @@ class AbstractBridgePileNemesis(Nemesis, AbstractMonitoredNemesis):
         self.logger.info("OPERATION: rejoin for pile %d", self._current_pile_id)
         result = self._bridge_clients[another_pile_id].rejoin(self._current_pile_id)
         if not result:
-            raise Exception("Failed to rejoin pile %d", self._current_pile_id)
+            self.logger.error("Failed to rejoin pile %d", self._current_pile_id)
+            raise Exception("Failed to rejoin pile")
 
         self.logger.info("Bridge state restored successfully")
 
 class BridgePileStopNodesNemesis(AbstractBridgePileNemesis):
-    def __init__(self, cluster, schedule=(300, 900), duration=60):
+    def __init__(self, cluster, schedule=(0, 60), duration=60):
         super(BridgePileStopNodesNemesis, self).__init__(
             cluster, schedule=schedule, duration=duration)
 
@@ -203,40 +205,39 @@ class BridgePileStopNodesNemesis(AbstractBridgePileNemesis):
         """Stop nodes and slots in the current pile."""
         async def _async_stop_nodes():
             try:
-                # Stop slots in the current pile
                 stop_tasks = []
+                slots_to_stop = []
                 for slot in self._cluster.slots.values():
                     if slot.bridge_pile_id == self._current_pile_id:
                         self.logger.info("Stopping slot %d on host %s", slot.ic_port, slot.host)
                         task = asyncio.create_task(asyncio.to_thread(slot.ssh_command, "sudo systemctl stop kikimr-multi@%d" % slot.ic_port, raise_on_error=True))
                         stop_tasks.append(task)
+                        slots_to_stop.append(slot)
 
                 slot_results = await asyncio.gather(*stop_tasks, return_exceptions=True)
                 slot_success_count = 0
-                for i, result in enumerate(slot_results):
+                for slot, result in zip(slots_to_stop, slot_results):
                     if isinstance(result, Exception):
-                        self.logger.error("Exception stopping slot: %s", result)
-                        raise
+                        self.logger.error("Exception stopping slot %d on host %s: %s", slot.ic_port, slot.host, result)
+                        # Skip slot failure
+                        continue
                     self.logger.info("Successfully stopped slot %d on host %s", slot.ic_port, slot.host)
                     slot_success_count += 1
 
                 self.logger.info("Stopped %d/%d dynamic slots in pile %d", slot_success_count, len(stop_tasks), self._current_pile_id)
 
-                # Run node.stop() operations in parallel
                 stop_tasks = []
                 for node in self._current_nodes:
                     self.logger.info("Stopping storage node %d on host %s", node.node_id, node.host)
-                    # Wrap the potentially blocking node.stop() call in asyncio.to_thread
                     task = asyncio.create_task(asyncio.to_thread(node.ssh_command, "sudo systemctl stop kikimr", raise_on_error=True))
                     stop_tasks.append(task)
-                
-                # Wait for all stop operations to complete
+
                 node_results = await asyncio.gather(*stop_tasks, return_exceptions=True)
                 node_success_count = 0
                 for i, result in enumerate(node_results):
                     if isinstance(result, Exception):
-                        self.logger.error("Exception stopping node: %s", result)
-                        raise
+                        self.logger.error("Exception stopping node_id %d on host %s: %s", self._current_nodes[i].node_id, self._current_nodes[i].host, result)
+                        raise result
                     self.logger.info("Successfully stopped node %d on host %s", self._current_nodes[i].node_id, self._current_nodes[i].host)
                     node_success_count += 1
 
@@ -246,59 +247,49 @@ class BridgePileStopNodesNemesis(AbstractBridgePileNemesis):
                 self.logger.error("Failed to stop nodes: %s", str(e))
                 raise
 
-        # Run the async operations synchronously
         with asyncio.Runner() as runner:
             runner.run(_async_stop_nodes())
 
     def _extract_specific_fault(self):
         """Start nodes and slots in the current pile."""
         async def _async_start_nodes():
-            try:
-                # Start storage nodes in current pile
-                start_tasks = []
-                for node in self._current_nodes:
-                    self.logger.info("Starting storage node %d on host %s", node.node_id, node.host)
-                    # Use ssh command instead of node.start() for consistency
-                    task = asyncio.create_task(asyncio.to_thread(node.ssh_command, "sudo systemctl start kikimr", raise_on_error=True))
+            start_tasks = []
+            for node in self._current_nodes:
+                self.logger.info("Starting storage node %d on host %s", node.node_id, node.host)
+                task = asyncio.create_task(asyncio.to_thread(node.ssh_command, "sudo systemctl start kikimr", raise_on_error=True))
+                start_tasks.append(task)
+            
+            node_results = await asyncio.gather(*start_tasks, return_exceptions=True)
+            node_success_count = 0
+            for i, result in enumerate(node_results):
+                if isinstance(result, Exception):
+                    self.logger.error("Exception starting node: %s", result)
+                    continue
+                self.logger.info("Successfully started node %d on host %s", self._current_nodes[i].node_id, self._current_nodes[i].host)
+                node_success_count += 1
+
+            self.logger.info("Started %d/%d storage nodes in pile %d", node_success_count, len(start_tasks), self._current_pile_id)
+
+            start_tasks = []
+            slots_to_start = []
+            for slot in self._cluster.slots.values():
+                if slot.bridge_pile_id == self._current_pile_id:
+                    self.logger.info("Starting slot %d on host %s", slot.ic_port, slot.host)
+                    task = asyncio.create_task(asyncio.to_thread(slot.ssh_command, "sudo systemctl start kikimr-multi@%d" % slot.ic_port, raise_on_error=True))
                     start_tasks.append(task)
-                
-                # Wait for all start operations to complete
-                node_results = await asyncio.gather(*start_tasks, return_exceptions=True)
-                node_success_count = 0
-                for i, result in enumerate(node_results):
-                    if isinstance(result, Exception):
-                        self.logger.error("Exception starting node: %s", result)
-                        raise
-                    self.logger.info("Successfully started node %d on host %s", self._current_nodes[i].node_id, self._current_nodes[i].host)
-                    node_success_count += 1
+                    slots_to_start.append(slot)
 
-                self.logger.info("Started %d/%d storage nodes in pile %d", node_success_count, len(start_tasks), self._current_pile_id)
+            slot_results = await asyncio.gather(*start_tasks, return_exceptions=True)
+            slot_success_count = 0
+            for slot, result in zip(slots_to_start, slot_results):
+                if isinstance(result, Exception):
+                    self.logger.error("Exception starting slot %d on host %s: %s", slot.ic_port, slot.host, result)
+                    continue
+                self.logger.info("Successfully started slot %d on host %s", slot.ic_port, slot.host)
+                slot_success_count += 1
 
-                # Start dynamic slots in the current pile
-                start_tasks = []
-                for slot in self._cluster.slots.values():
-                    if slot.bridge_pile_id == self._current_pile_id:
-                        self.logger.info("Starting slot %d on host %s", slot.ic_port, slot.host)
-                        task = asyncio.create_task(asyncio.to_thread(slot.ssh_command, "sudo systemctl start kikimr-multi@%d" % slot.ic_port, raise_on_error=True))
-                        start_tasks.append(task)
+            self.logger.info("Started %d/%d dynamic slots in pile %d", slot_success_count, len(start_tasks), self._current_pile_id)
 
-                # Wait for all start operations to complete
-                slot_results = await asyncio.gather(*start_tasks, return_exceptions=True)
-                slot_success_count = 0
-                for i, result in enumerate(slot_results):
-                    if isinstance(result, Exception):
-                        self.logger.error("Exception starting slot: %s", result)
-                        raise
-                    self.logger.info("Successfully started slot in pile %d", self._current_pile_id)
-                    slot_success_count += 1
-
-                self.logger.info("Started %d/%d dynamic slots in pile %d", slot_success_count, len(start_tasks), self._current_pile_id)
-
-            except Exception as e:
-                self.logger.error("Failed to start nodes: %s", str(e))
-                raise
-
-        # Run the async operations synchronously
         with asyncio.Runner() as runner:
             runner.run(_async_start_nodes())
 
@@ -320,61 +311,49 @@ class BridgePileIptablesBlockPortsNemesis(AbstractBridgePileNemesis):
         """Block YDB ports using iptables on nodes in the current pile."""
         async def _async_block_ports():
             try:
-                # Run block_ports_cmd operations in parallel
                 block_tasks = []
                 for node in self._current_nodes:
                     self.logger.info("Blocking YDB ports on host %s", node.host)
                     task = asyncio.create_task(asyncio.to_thread(node.ssh_command, self._block_ports_cmd, raise_on_error=True))
                     block_tasks.append(task)
                 
-                # Wait for all block_ports_cmd operations to complete
                 results = await asyncio.gather(*block_tasks, return_exceptions=True)
                 success_count = 0
                 for node, result in zip(self._current_nodes, results):
                     if isinstance(result, Exception):
                         self.logger.error("Error blocking YDB ports on host %s: %s", node.host, result)
-                        raise
+                        raise result
                     self.logger.info("Successfully blocked YDB ports on host %s", node.host)
                     success_count += 1
                 
                 self.logger.info("Blocked YDB ports on %d/%d nodes in pile %d", success_count, len(self._current_nodes), self._current_pile_id)
-
             except Exception as e:
                 self.logger.error("Failed to block YDB ports: %s", str(e))
                 raise
 
-        # Run the async operations synchronously
         with asyncio.Runner() as runner:
             runner.run(_async_block_ports())
 
     def _extract_specific_fault(self):
         """Restore YDB ports using iptables on nodes in the current pile."""
         async def _async_restore_ports():
-            try:
-                # Run restore_ports_cmd operations in parallel
-                restore_tasks = []
-                for node in self._current_nodes:
-                    self.logger.info("Restoring YDB ports on host %s", node.host)
-                    task = asyncio.create_task(asyncio.to_thread(node.ssh_command, self._restore_ports_cmd, raise_on_error=True))
-                    restore_tasks.append(task)
+            restore_tasks = []
+            for node in self._current_nodes:
+                self.logger.info("Restoring YDB ports on host %s", node.host)
+                task = asyncio.create_task(asyncio.to_thread(node.ssh_command, self._restore_ports_cmd, raise_on_error=True))
+                restore_tasks.append(task)
 
-                # Wait for all restore_ports_cmd operations to complete
-                results = await asyncio.gather(*restore_tasks, return_exceptions=True)
-                success_count = 0
-                for node, result in zip(self._current_nodes, results):
-                    if isinstance(result, Exception):
-                        self.logger.error("Exception restoring YDB ports on host %s: %s", node.host, result)
-                        raise
-                    self.logger.info("Successfully restored YDB ports on host %s", node.host)
-                    success_count += 1
+            results = await asyncio.gather(*restore_tasks, return_exceptions=True)
+            success_count = 0
+            for node, result in zip(self._current_nodes, results):
+                if isinstance(result, Exception):
+                    self.logger.error("Exception restoring YDB ports on host %s: %s", node.host, result)
+                    continue
+                self.logger.info("Successfully restored YDB ports on host %s", node.host)
+                success_count += 1
 
-                self.logger.info("Restored YDB ports on %d/%d nodes in pile %d", success_count, len(self._current_nodes), self._current_pile_id)
+            self.logger.info("Restored YDB ports on %d/%d nodes in pile %d", success_count, len(self._current_nodes), self._current_pile_id)
 
-            except Exception as e:
-                self.logger.error("Failed to restore YDB ports: %s", str(e))
-                raise
-
-        # Run the async operations synchronously
         with asyncio.Runner() as runner:
             runner.run(_async_restore_ports())
 
@@ -395,7 +374,6 @@ class BridgePileRouteUnreachableNemesis(AbstractBridgePileNemesis):
     def _resolve_hostname_to_ip(self, hostname):
         """Resolve hostname to IP address."""
         try:
-            # Try IPv6 first
             result = socket.getaddrinfo(hostname, None, socket.AF_INET6)
             if result:
                 return result[0][4][0]
@@ -420,69 +398,60 @@ class BridgePileRouteUnreachableNemesis(AbstractBridgePileNemesis):
                         ip = self._resolve_hostname_to_ip(node.host)
                         if ip is None:
                             self.logger.error("Failed to resolve hostname %s to IP address", node.host)
-                            raise
+                            raise Exception("Failed to resolve hostname to IP address")
                         block_cmd = self._block_cmd_template.format(ip, ip)
                         task = asyncio.create_task(asyncio.to_thread(other_node.ssh_command, block_cmd, raise_on_error=True))
                         unreach_tasks.append(task)
 
-                # Wait for all unreach_tasks operations to complete
                 results = await asyncio.gather(*unreach_tasks, return_exceptions=True)
                 success_count = 0
                 for result in results:
                     if isinstance(result, Exception):
                         self.logger.error("Failed to block routes on host %s to current pile %d", other_node.host, self._current_pile_id)
-                        raise
+                        raise result
                     self.logger.info("Successfully blocked routes on host %s to current pile %d", other_node.host, self._current_pile_id)
                     success_count += 1
-                
+
                 self.logger.info("Blocked routes to pile %d: %d/%d operations successful", self._current_pile_id, success_count, len(results))
 
             except Exception as e:
-                self.logger.error("Failed to block routes to current pile %d: %s", self._current_pile_id, str(e))
+                self.logger.error("Failed to block routes: %s", str(e))
                 raise
 
-        # Run the async operations synchronously
         with asyncio.Runner() as runner:
             runner.run(_async_block_routes())
 
     def _extract_specific_fault(self):
         """Restore network routes from other piles to the current pile using ip route."""
         async def _async_restore_routes():
-            try:
-                other_nodes = []
-                for pile_id, nodes in self._bridge_pile_to_nodes.items():
-                    if pile_id != self._current_pile_id:
-                        other_nodes.extend(nodes)
+            other_nodes = []
+            for pile_id, nodes in self._bridge_pile_to_nodes.items():
+                if pile_id != self._current_pile_id:
+                    other_nodes.extend(nodes)
 
-                restore_tasks = []
-                for other_node in other_nodes:
-                    self.logger.info("Restoring routes on host %s to current pile %d", other_node.host, self._current_pile_id)
-                    for node in self._current_nodes:
-                        ip = self._resolve_hostname_to_ip(node.host)
-                        if ip is None:
-                            self.logger.error("Failed to resolve hostname %s to IP address", node.host)
-                            raise
-                        restore_cmd = self._restore_cmd_template.format(ip)
-                        task = asyncio.create_task(asyncio.to_thread(other_node.ssh_command, restore_cmd, raise_on_error=True))
-                        restore_tasks.append(task)
+            restore_tasks = []
+            for other_node in other_nodes:
+                self.logger.info("Restoring routes on host %s to current pile %d", other_node.host, self._current_pile_id)
+                for node in self._current_nodes:
+                    ip = self._resolve_hostname_to_ip(node.host)
+                    if ip is None:
+                        self.logger.error("Failed to resolve hostname %s to IP address", node.host)
+                        continue
+                    restore_cmd = self._restore_cmd_template.format(ip)
+                    task = asyncio.create_task(asyncio.to_thread(other_node.ssh_command, restore_cmd, raise_on_error=True))
+                    restore_tasks.append(task)
 
-                # Wait for all restore_tasks operations to complete
-                results = await asyncio.gather(*restore_tasks)
-                success_count = 0
-                for result in results:
-                    if isinstance(result, Exception):
-                        self.logger.error("Failed to restore routes on host %s to current pile %d", other_node.host, self._current_pile_id)
-                        raise
-                    self.logger.info("Successfully restored routes on host %s to current pile %d", other_node.host, self._current_pile_id)
-                    success_count += 1
-                
-                self.logger.info("Restored routes to pile %d: %d/%d operations successful", self._current_pile_id, success_count, len(results))
+            results = await asyncio.gather(*restore_tasks, return_exceptions=True)
+            success_count = 0
+            for result in results:
+                if isinstance(result, Exception):
+                    self.logger.error("Exception restoring route to current pile %d: %s", self._current_pile_id, result)
+                    continue
+                self.logger.info("Successfully restored route to current pile %d", self._current_pile_id)
+                success_count += 1
+            
+            self.logger.info("Restored routes to pile %d: %d/%d operations successful", self._current_pile_id, success_count, len(results))
 
-            except Exception as e:
-                self.logger.error("Failed to restore routes to current pile %d: %s", self._current_pile_id, str(e))
-                raise
-
-        # Run the async operations synchronously
         with asyncio.Runner() as runner:
             runner.run(_async_restore_routes())
 

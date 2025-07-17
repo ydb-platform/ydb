@@ -117,10 +117,11 @@ class DataCenterStopNodesNemesis(AbstractDataCenterNemesis):
 
                 slot_results = await asyncio.gather(*stop_tasks, return_exceptions=True)
                 slot_success_count = 0
-                for i, result in enumerate(slot_results):
+                for slot, result in zip(self._cluster.slots, slot_results):
                     if isinstance(result, Exception):
-                        self.logger.error("Exception stopping slot: %s", result)
-                        raise
+                        self.logger.error("Exception stopping slot %d on host %s: %s", slot.ic_port, slot.host, result)
+                        # Skip slot failure
+                        continue
                     self.logger.info("Successfully stopped slot %d on host %s", slot.ic_port, slot.host)
                     slot_success_count += 1
 
@@ -136,8 +137,8 @@ class DataCenterStopNodesNemesis(AbstractDataCenterNemesis):
                 node_success_count = 0
                 for i, result in enumerate(node_results):
                     if isinstance(result, Exception):
-                        self.logger.error("Exception stopping node: %s", result)
-                        raise
+                        self.logger.error("Exception stopping storage node_id %d on host %s: %s",  node.node_id, node.host, result)
+                        raise result
                     self.logger.info("Successfully stopped node %d on host %s", node.node_id, node.host)
                     node_success_count += 1
 
@@ -147,51 +148,48 @@ class DataCenterStopNodesNemesis(AbstractDataCenterNemesis):
                 self.logger.error("Failed to stop nodes: %s", str(e))
                 raise
 
-        # Run the async operations synchronously
         with asyncio.Runner() as runner:
             runner.run(_async_stop_nodes())
 
     def _extract_specific_fault(self):
         async def _async_start_nodes():
-            try:
-                start_tasks = []
-                for node in self._current_nodes:
-                    self.logger.info("Starting storage node %d on host %s", node.node_id, node.host)
-                    task = asyncio.create_task(asyncio.to_thread(node.ssh_command, "sudo systemctl start kikimr", raise_on_error=True))
+            start_tasks = []
+            for node in self._current_nodes:
+                self.logger.info("Starting storage node %d on host %s", node.node_id, node.host)
+                task = asyncio.create_task(asyncio.to_thread(node.ssh_command, "sudo systemctl start kikimr", raise_on_error=True))
+                start_tasks.append(task)
+
+            node_results = await asyncio.gather(*start_tasks, return_exceptions=True)
+            node_success_count = 0
+            for i, result in enumerate(node_results):
+                if isinstance(result, Exception):
+                    self.logger.error("Exception starting node: %s", result)
+                    continue
+                self.logger.info("Successfully started node %d on host %s", node.node_id, node.host)
+                node_success_count += 1
+
+            self.logger.info("Started %d/%d storage nodes in dc %s", node_success_count, len(start_tasks), self._current_dc)
+
+            start_tasks = []
+            for slot in self._cluster.slots.values():
+                if slot.datacenter == self._current_dc:
+                    self.logger.info("Starting slot %d on host %s", slot.ic_port, slot.host)
+                    task = asyncio.create_task(asyncio.to_thread(slot.ssh_command, "sudo systemctl start kikimr-multi@%d" % slot.ic_port, raise_on_error=True))
                     start_tasks.append(task)
 
-                node_results = await asyncio.gather(*start_tasks, return_exceptions=True)
-                node_success_count = 0
-                for i, result in enumerate(node_results):
-                    if isinstance(result, Exception):
-                        self.logger.error("Exception starting node: %s", result)
-                        raise
-                    self.logger.info("Successfully started node %d on host %s", node.node_id, node.host)
-                    node_success_count += 1
+            slot_results = await asyncio.gather(*start_tasks, return_exceptions=True)
+            slot_success_count = 0
+            for slot, result in zip(self._cluster.slots, slot_results):
+                if isinstance(result, Exception):
+                    self.logger.error("Exception starting slot %d on host %s: %s", slot.ic_port, slot.host, result)
+                    continue
+                self.logger.info("Successfully started slot %d on host %s", slot.ic_port, slot.host)
+                slot_success_count += 1
 
-                self.logger.info("Started %d/%d storage nodes in dc %s", node_success_count, len(start_tasks), self._current_dc)
+            self.logger.info("Started %d/%d dynamic slots in dc %s", slot_success_count, len(start_tasks), self._current_dc)
 
-                start_tasks = []
-                for slot in self._cluster.slots.values():
-                    if slot.datacenter == self._current_dc:
-                        self.logger.info("Starting slot %d on host %s", slot.ic_port, slot.host)
-                        task = asyncio.create_task(asyncio.to_thread(slot.ssh_command, "sudo systemctl start kikimr-multi@%d" % slot.ic_port, raise_on_error=True))
-                        start_tasks.append(task)
-
-                slot_results = await asyncio.gather(*start_tasks, return_exceptions=True)
-                slot_success_count = 0
-                for i, result in enumerate(slot_results):
-                    if isinstance(result, Exception):
-                        self.logger.error("Exception starting slot: %s", result)
-                        raise
-                    self.logger.info("Successfully started slot %d on host %s", slot.ic_port, slot.host)
-                    slot_success_count += 1
-
-                self.logger.info("Started %d/%d dynamic slots in dc %s", slot_success_count, len(start_tasks), self._current_dc)
-
-            except Exception as e:
-                self.logger.error("Failed to start nodes: %s", str(e))
-                raise
+        with asyncio.Runner() as runner:
+            runner.run(_async_start_nodes())
 
 
 class DataCenterRouteUnreachableNemesis(AbstractDataCenterNemesis):
@@ -216,13 +214,12 @@ class DataCenterRouteUnreachableNemesis(AbstractDataCenterNemesis):
                     task = asyncio.create_task(asyncio.to_thread(node.ssh_command, self._block_ports_cmd, raise_on_error=True))
                     block_tasks.append(task)
                 
-                # Wait for all block_ports_cmd operations to complete
                 results = await asyncio.gather(*block_tasks, return_exceptions=True)
                 success_count = 0
                 for node, result in zip(self._current_nodes, results):
                     if isinstance(result, Exception):
-                        self.logger.error("Error blocking YDB ports on host %s: %s", node.host, result)
-                        raise
+                        self.logger.error("Exception blocking YDB ports on host %s: %s", node.host, result)
+                        raise result
                     self.logger.info("Successfully blocked YDB ports on host %s", node.host)
                     success_count += 1
                 
@@ -232,36 +229,28 @@ class DataCenterRouteUnreachableNemesis(AbstractDataCenterNemesis):
                 self.logger.error("Failed to block YDB ports: %s", str(e))
                 raise
 
-        # Run the async operations synchronously
         with asyncio.Runner() as runner:
             runner.run(_async_block_ports())
 
     def _extract_specific_fault(self):
         async def _async_restore_ports():
-            try:
-                restore_tasks = []
-                for node in self._current_nodes:
-                    self.logger.info("Restoring YDB ports on host %s", node.host)
-                    task = asyncio.create_task(asyncio.to_thread(node.ssh_command, self._restore_ports_cmd, raise_on_error=True))
-                    restore_tasks.append(task)
+            restore_tasks = []
+            for node in self._current_nodes:
+                self.logger.info("Restoring YDB ports on host %s", node.host)
+                task = asyncio.create_task(asyncio.to_thread(node.ssh_command, self._restore_ports_cmd, raise_on_error=True))
+                restore_tasks.append(task)
 
-                # Wait for all restore_ports_cmd operations to complete
-                results = await asyncio.gather(*restore_tasks, return_exceptions=True)
-                success_count = 0
-                for node, result in zip(self._current_nodes, results):
-                    if isinstance(result, Exception):
-                        self.logger.error("Exception restoring YDB ports on host %s: %s", node.host, result)
-                        raise
-                    self.logger.info("Successfully restored YDB ports on host %s", node.host)
-                    success_count += 1
+            results = await asyncio.gather(*restore_tasks, return_exceptions=True)
+            success_count = 0
+            for node, result in zip(self._current_nodes, results):
+                if isinstance(result, Exception):
+                    self.logger.error("Exception restoring YDB ports on host %s: %s", node.host, result)
+                    continue
+                self.logger.info("Successfully restored YDB ports on host %s", node.host)
+                success_count += 1
 
-                self.logger.info("Restored YDB ports on %d/%d nodes in dc %s", success_count, len(self._current_nodes), self._current_dc)
+            self.logger.info("Restored YDB ports on %d/%d nodes in dc %s", success_count, len(self._current_nodes), self._current_dc)
 
-            except Exception as e:
-                self.logger.error("Failed to restore YDB ports: %s", str(e))
-                raise
-
-        # Run the async operations synchronously
         with asyncio.Runner() as runner:
             runner.run(_async_restore_ports())
 
@@ -282,7 +271,6 @@ class DataCenterIptablesBlockPortsNemesis(AbstractDataCenterNemesis):
     def _resolve_hostname_to_ip(self, hostname):
         """Resolve hostname to IP address."""
         try:
-            # Try IPv6 first
             result = socket.getaddrinfo(hostname, None, socket.AF_INET6)
             if result:
                 return result[0][4][0]
@@ -306,19 +294,17 @@ class DataCenterIptablesBlockPortsNemesis(AbstractDataCenterNemesis):
                         ip = self._resolve_hostname_to_ip(node.host)
                         if ip is None:
                             self.logger.error("Failed to resolve hostname %s to IP address", node.host)
-                            raise
+                            raise Exception("Failed to resolve hostname to IP address")
                         block_cmd = self._block_cmd_template.format(ip, ip)
                         task = asyncio.create_task(asyncio.to_thread(other_node.ssh_command, block_cmd, raise_on_error=True))
                         unreach_tasks.append(task)
 
-                # Wait for all unreach_tasks operations to complete
                 results = await asyncio.gather(*unreach_tasks, return_exceptions=True)
                 success_count = 0
                 for result in results:
-                    # ssh_command returns bytes on success, None on failure, Exception on error
                     if isinstance(result, Exception):
                         self.logger.error("Exception blocking route to current dc %s: %s", self._current_dc, result)
-                        raise
+                        raise result
                     self.logger.info("Successfully blocked route to current dc %s", self._current_dc)
                     success_count += 1
                 
@@ -328,48 +314,40 @@ class DataCenterIptablesBlockPortsNemesis(AbstractDataCenterNemesis):
                 self.logger.error("Failed to block routes to current dc %s: %s", self._current_dc, str(e))
                 raise
 
-        # Run the async operations synchronously
         with asyncio.Runner() as runner:
             runner.run(_async_block_routes())
 
     def _extract_specific_fault(self):
         async def _async_restore_routes():
-            try:
-                other_nodes = []
-                for dc, nodes in self._dc_to_nodes.items():
-                    if dc != self._current_dc:
-                        other_nodes.extend(nodes)
+            other_nodes = []
+            for dc, nodes in self._dc_to_nodes.items():
+                if dc != self._current_dc:
+                    other_nodes.extend(nodes)
 
-                restore_tasks = []
-                for other_node in other_nodes:
-                    self.logger.info("Restoring routes on host %s to current dc %s", other_node.host, self._current_dc)
-                    for node in self._current_nodes:
-                        ip = self._resolve_hostname_to_ip(node.host)
-                        if ip is None:
-                            self.logger.error("Failed to resolve hostname %s to IP address", node.host)
-                            raise
-                        restore_cmd = self._restore_cmd_template.format(ip)
-                        task = asyncio.create_task(asyncio.to_thread(other_node.ssh_command, restore_cmd, raise_on_error=True))
-                        restore_tasks.append(task)
+            restore_tasks = []
+            for other_node in other_nodes:
+                self.logger.info("Restoring routes on host %s to current dc %s", other_node.host, self._current_dc)
+                for node in self._current_nodes:
+                    ip = self._resolve_hostname_to_ip(node.host)
+                    if ip is None:
+                        self.logger.error("Failed to resolve hostname %s to IP address", node.host)
+                        continue
+                    restore_cmd = self._restore_cmd_template.format(ip)
+                    task = asyncio.create_task(asyncio.to_thread(other_node.ssh_command, restore_cmd, raise_on_error=True))
+                    restore_tasks.append(task)
 
-                # Wait for all restore_tasks operations to complete
-                results = await asyncio.gather(*restore_tasks, return_exceptions=True)
-                success_count = 0
-                for result in results:
-                    # ssh_command returns bytes on success, None on failure, Exception on error
-                    if isinstance(result, Exception):
-                        self.logger.error("Exception restoring route to current dc %s: %s", self._current_dc, result)
-                        raise
-                    self.logger.info("Successfully restored route to current dc %s", self._current_dc)
-                    success_count += 1
-                
-                self.logger.info("Restored routes to dc %s: %d/%d operations successful", self._current_dc, success_count, len(results))
+            results = await asyncio.gather(*restore_tasks, return_exceptions=True)
+            success_count = 0
+            for result in results:
+                if isinstance(result, Exception):
+                    self.logger.error("Exception restoring route to current dc %s: %s", self._current_dc, result)
+                    continue
+                self.logger.info("Successfully restored route to current dc %s", self._current_dc)
+                success_count += 1
+            
+            self.logger.info("Restored routes to dc %s: %d/%d operations successful", self._current_dc, success_count, len(results))
 
-            except Exception as e:
-                self.logger.error("Failed to restore routes to current dc %s: %s", self._current_dc, str(e))
-                raise
 
-        # Run the async operations synchronously
         with asyncio.Runner() as runner:
             runner.run(_async_restore_routes())
 

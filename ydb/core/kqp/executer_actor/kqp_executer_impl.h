@@ -2339,8 +2339,6 @@ protected:
     ui64 StatFinishInflightBytes = 0;
 
     TMaybe<NBatchOperations::TSettings> BatchOperationSettings;
-
-    bool EnableParallelPointReadConsolidation = false;
 private:
     static constexpr TDuration ResourceUsageUpdateInterval = TDuration::MilliSeconds(100);
 };

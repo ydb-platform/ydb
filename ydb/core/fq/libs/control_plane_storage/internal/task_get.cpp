@@ -127,7 +127,8 @@ std::tuple<TString, NYdb::TParams, std::function<std::pair<TString, NYdb::TParam
     const TDuration& automaticQueriesTtl,
     const TDuration& resultSetsTtl,
     std::shared_ptr<TTenantInfo> tenantInfo,
-    const TRequestCommonCountersPtr& commonCounters)
+    const TRequestCommonCountersPtr& commonCounters,
+    ui32 requestNodeId)
 {
     const auto& task = taskInternal.Task;
 
@@ -189,6 +190,10 @@ std::tuple<TString, NYdb::TParams, std::function<std::pair<TString, NYdb::TParam
 
         if (tenantInfo->TenantState.Value(taskInternal.TenantName, TenantState::Active) != TenantState::Active) {
             // tenant graceful shutdown, task fetch prohibited
+            taskInternal.ShouldSkipTask = true;
+        }
+
+        if (!task.NodeIds.empty() && !task.NodeIds.contains(requestNodeId)) {
             taskInternal.ShouldSkipTask = true;
         }
 
@@ -340,7 +345,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvGetTaskRequ
     const TString owner = request.owner_id();
     const TString hostName = request.host();
     const TString tenantName = request.tenant();
-    //const ui32 [[maybe_unused]]nodeId = request.node_id();
+    const ui32 requestNodeId = request.node_id();
     const ui64 tasksBatchSize = Config->Proto.GetTasksBatchSize();
     const ui64 numTasksProportion = Config->Proto.GetNumTasksProportion();
 
@@ -370,13 +375,6 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvGetTaskRequ
         "FROM `" PENDING_SMALL_TABLE_NAME "`\n"
         "WHERE `" TENANT_COLUMN_NAME "` = $tenant AND `" ASSIGNED_UNTIL_COLUMN_NAME "` < $from ORDER BY `" QUERY_ID_COLUMN_NAME "` DESC LIMIT $tasks_limit;\n"
     );
-
-    //     queryBuilder.AddText(
-    //     "SELECT `" SCOPE_COLUMN_NAME "`, `" QUERY_ID_COLUMN_NAME "`, `" OWNER_COLUMN_NAME "`, `" LAST_SEEN_AT_COLUMN_NAME "`,\n"
-    //     "`" RETRY_COUNTER_COLUMN_NAME "`, `" RETRY_COUNTER_UPDATE_COLUMN_NAME "`, `" RETRY_RATE_COLUMN_NAME "`, `" QUERY_TYPE_COLUMN_NAME "`\n"
-    //     "FROM `" PENDING_SMALL_TABLE_NAME "`\n"
-    //     "WHERE `" TENANT_COLUMN_NAME "` = $tenant AND `" ASSIGNED_UNTIL_COLUMN_NAME "` < $from ORDER BY `" QUERY_ID_COLUMN_NAME "` DESC LIMIT $tasks_limit;\n"
-    // );
 
     auto responseTasks = std::make_shared<TResponseTasks>();
 
@@ -415,9 +413,8 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvGetTaskRequ
             auto node = parser.ColumnParser(NODE_COLUMN_NAME).GetOptionalString();
             CPS_LOG_AS_T(*actorSystem, "Node777" << node);
             if (node) {
-                for (auto str : SplitString(TString(*node), ",")) {
-                    task.NodeIds.push_back(FromString<ui64>(str));
-                }
+                auto nodeIds = Scan<ui64>(SplitString(TString(*node), ","));
+                task.NodeIds = TSet<ui64>(nodeIds.begin(), nodeIds.end());
             }
             if (!previousOwner.empty()) { // task lease timeout case only, other cases are updated at ping time
                 CPS_LOG_AS_T(*actorSystem, "Task (Query): " << task.QueryId <<  " Lease TIMEOUT, RetryCounterUpdatedAt " << taskInternal.RetryLimiter.RetryCounterUpdatedAt
@@ -437,7 +434,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvGetTaskRequ
         for (size_t i = 0; i < numTasks; ++i) {
             auto tupleParams = MakeGetTaskUpdateQuery(tasks[i],
                 responseTasks, now, now + Config->TaskLeaseTtl, Config->Proto.GetDisableCurrentIam(),
-                Config->AutomaticQueriesTtl, Config->ResultSetsTtl, tenantInfo, commonCounters); // using for win32 build
+                Config->AutomaticQueriesTtl, Config->ResultSetsTtl, tenantInfo, commonCounters, requestNodeId); // using for win32 build
             auto readQuery = std::get<0>(tupleParams);
             auto readParams = std::get<1>(tupleParams);
             auto prepareParams = std::get<2>(tupleParams);

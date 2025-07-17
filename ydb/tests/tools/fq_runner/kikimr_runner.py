@@ -125,8 +125,6 @@ class BaseTenant(abc.ABC):
         self.enable_logging("PUBLIC_HTTP")
         self.enable_logging("FQ_CONTROL_PLANE_CONFIG")
         self.enable_logging("FQ_ROW_DISPATCHER", LogLevels.TRACE)
-        self.enable_logging("DB_POOL", LogLevels.TRACE)
-        
         # self.enable_logging("GRPC_SERVER")
 
     @abc.abstractclassmethod

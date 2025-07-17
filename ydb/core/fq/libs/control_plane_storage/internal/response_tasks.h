@@ -1,6 +1,6 @@
 #pragma once
+#include <util/generic/set.h>
 #include <util/system/mutex.h>
-
 #include <ydb/core/fq/libs/control_plane_storage/events/events.h>
 
 namespace NFq {
@@ -13,7 +13,7 @@ struct TTask {
     FederatedQuery::Internal::QueryInternal Internal;
     ui64 Generation = 0;
     TInstant Deadline;
-    TVector<ui64> NodeIds;
+    TSet<ui64> NodeIds;
 };
 
 class TResponseTasks {

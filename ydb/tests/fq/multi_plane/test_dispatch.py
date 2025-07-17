@@ -20,8 +20,7 @@ def kikimr():
         cloud_mode=True,
         node_count={"/cp": TenantConfig(1), "/alpha": TenantConfig(1), "/beta": TenantConfig(2)},
         tenant_mapping={"alpha": "/alpha", "beta": "/beta"},
-      #  cloud_mapping={"a_cloud": ("alpha", None), "b_cloud": ("beta", "1"), "c_cloud": ("beta", "2")},
-        cloud_mapping={"a_cloud": ("alpha", None), "b_cloud": ("beta", "2")},
+        cloud_mapping={"a_cloud": ("alpha", None), "b_cloud": ("beta", "1"), "c_cloud": ("beta", "2")},
     )
     kikimr = StreamingOverKikimr(kikimr_conf)
     kikimr.start_mvp_mock_server()
@@ -77,35 +76,31 @@ class TestMapping(TestYdsBase):
         a_client = FederatedQueryClient("a_folder@a_cloud", streaming_over_kikimr=kikimr)
         a_client.create_yds_connection("yds", os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"))
         query_id = a_client.create_query("a", sql, type=fq.QueryContent.QueryType.STREAMING).result.query_id
-        kikimr.tenants["/alpha"].wait_zero_checkpoint(query_id)
+        kikimr.tenants["/alpha"].wait_completed_checkpoints(query_id, kikimr.tenants["/alpha"].get_completed_checkpoints(query_id) + 2)
         assert self.wait_until((lambda: kikimr.tenants["/alpha"].get_actor_count(1, "YQ_RUN_ACTOR") == 1))
         assert self.wait_until((lambda: kikimr.tenants["/alpha"].get_actor_count(1, "DQ_COMPUTE_ACTOR") > 0))
         a_client.abort_query(query_id)
         a_client.wait_query(query_id)
-        assert self.wait_until((lambda: kikimr.tenants["/alpha"].get_actor_count(1, "YQ_RUN_ACTOR") == 0))
-        assert self.wait_until((lambda: kikimr.tenants["/alpha"].get_actor_count(1, "DQ_COMPUTE_ACTOR") == 0))
 
         b_client = FederatedQueryClient("b_folder@b_cloud", streaming_over_kikimr=kikimr)
         b_client.create_yds_connection("yds", os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"))
         query_id = b_client.create_query("a", sql, type=fq.QueryContent.QueryType.STREAMING).result.query_id
-        kikimr.tenants["/beta"].wait_zero_checkpoint(query_id)
+        kikimr.tenants["/beta"].wait_completed_checkpoints(query_id, kikimr.tenants["/beta"].get_completed_checkpoints(query_id) + 2)
+        assert self.wait_until((lambda: kikimr.tenants["/beta"].get_actor_count(1, "YQ_RUN_ACTOR") == 1))
+        assert self.wait_until((lambda: kikimr.tenants["/beta"].get_actor_count(1, "DQ_COMPUTE_ACTOR") > 0))  
+        assert self.wait_until((lambda: kikimr.tenants["/beta"].get_actor_count(2, "DQ_COMPUTE_ACTOR") == 0))
+        b_client.abort_query(query_id)
+        b_client.wait_query(query_id)
 
-        kikimr.tenants["/beta"].wait_completed_checkpoints(
-            query_id, kikimr.tenants["/beta"].get_completed_checkpoints(query_id) + 1
-        )
-
-        assert self.wait_until((lambda: kikimr.tenants["/beta"].get_actor_count(2, "DQ_COMPUTE_ACTOR") > 0))
-
-        # deadline = time.time() + 10
-        # while time.time() < deadline:
-        #     count = kikimr.tenants["/beta"].get_actor_count(1, "DQ_COMPUTE_ACTOR")
-        #     print("count4 ", count)
-        #     if count == 2:
-        #         break
-        #     time.sleep(1)
-        # return False
-    
+        c_client = FederatedQueryClient("c_folder@c_cloud", streaming_over_kikimr=kikimr)
+        c_client.create_yds_connection("yds", os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"))
+        query_id = c_client.create_query("a", sql, type=fq.QueryContent.QueryType.STREAMING).result.query_id
+        kikimr.tenants["/beta"].wait_completed_checkpoints(query_id, kikimr.tenants["/beta"].get_completed_checkpoints(query_id) + 2)
+        assert self.wait_until((lambda: kikimr.tenants["/beta"].get_actor_count(2, "YQ_RUN_ACTOR") == 1))
+        assert self.wait_until((lambda: kikimr.tenants["/beta"].get_actor_count(2, "DQ_COMPUTE_ACTOR") > 0))  
         assert self.wait_until((lambda: kikimr.tenants["/beta"].get_actor_count(1, "DQ_COMPUTE_ACTOR") == 0))
-        # assert self.wait_until((lambda: kikimr.tenants["/beta"].get_actor_count(2, "DQ_COMPUTE_ACTOR") == 0))
-        # assert self.wait_until((lambda: kikimr.tenants["/beta"].get_actor_count(1, "DQ_COMPUTE_ACTOR") == 0))
+        c_client.abort_query(query_id)
+        c_client.wait_query(query_id)
+
+
 

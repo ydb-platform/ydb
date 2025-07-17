@@ -107,7 +107,6 @@ private:
             try {
                 auto schedulerSettings = NSc::TValue::FromJsonThrow(scheduler);
                 auto schedulerType = schedulerSettings["type"].GetString();
-
                 if (schedulerType == "single_node") {
                     ScheduleOnSingleNode(request, response);
                 } else {

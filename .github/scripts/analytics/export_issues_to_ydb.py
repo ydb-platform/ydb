@@ -386,6 +386,7 @@ def transform_issues_for_ydb(issues: List[Dict[str, Any]], project_fields: Optio
         branch_labels = []
         env = None
         priority = None
+        area = None
         for label in issue.get('labels', {}).get('nodes', []):
             name = label.get('name', '')
             labels.append({
@@ -402,9 +403,12 @@ def transform_issues_for_ydb(issues: List[Dict[str, Any]], project_fields: Optio
             # priority detection
             if name.startswith('prio:'):
                 priority = name
+            # area detection
+            if name.startswith('area:'):
+                area = name
         branch = ';'.join(branch_labels) if branch_labels else None
         max_branch = get_max_branch(branch_labels) if branch_labels else None
-        info = {'branch': branch, 'max_branch': max_branch, 'env': env, 'priority': priority}
+        info = {'branch': branch, 'max_branch': max_branch, 'env': env, 'priority': priority, 'area': area}
         # Issue type from project fields
         issue_type = issue_project_fields.get('type') or issue_project_fields.get('Type')
         
@@ -442,9 +446,7 @@ def transform_issues_for_ydb(issues: List[Dict[str, Any]], project_fields: Optio
         
         # Calculate BI metrics
         body_text = issue.get('body', '') or ''
-        body_length = len(body_text)
-        labels_count = len(labels)
-        assignees_count = len(assignees)
+
         is_in_project = bool(issue_project_fields)
         
         # Calculate time-based metrics

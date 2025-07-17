@@ -11286,7 +11286,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         NThreading::TPromise<void> FinishPromise;
     };
 
-    Y_UNIT_TEST(CleanupTempraryTables) {
+    Y_UNIT_TEST(CleanupTemporaryTables) {
         TKikimrRunner kikimr;
 
         auto& runtime = *kikimr.GetTestServer().GetRuntime();

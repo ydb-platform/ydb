@@ -220,7 +220,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         auto settings = TKikimrSettings()
              .SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
-        TLocalHelper(kikimr).CreateTestOlapTableWithoutStore();
+        TLocalHelper(kikimr).CreateTestOlapStandaloneTable();
 
         {
             //1. QueryService
@@ -1729,7 +1729,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         auto settings = Tests::TServerSettings(mbusport)
             .SetDomainName("Root")
             .SetUseRealThreads(false)
-            .SetNodeCount(2);
+            .SetNodeCount(2).SetColumnShardReaderClassName("SIMPLE");
 
 
         Tests::TServer::TPtr server = new Tests::TServer(settings);
@@ -1814,8 +1814,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         ui16 mbusport = tp.GetPort(2134);
         auto settings = Tests::TServerSettings(mbusport)
             .SetDomainName("Root")
-            .SetUseRealThreads(false)
-            .SetNodeCount(2);
+            .SetUseRealThreads(false).SetNodeCount(2).SetColumnShardReaderClassName("SIMPLE");
 
         Tests::TServer::TPtr server = new Tests::TServer(settings);
 
@@ -1881,8 +1880,8 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         ui16 mbusport = tp.GetPort(2134);
         auto settings = Tests::TServerSettings(mbusport)
             .SetDomainName("Root")
-            .SetUseRealThreads(false)
-            .SetNodeCount(2);
+            .SetUseRealThreads(false).SetNodeCount(2).SetColumnShardReaderClassName(
+                "SIMPLE");
 
         Tests::TServer::TPtr server = new Tests::TServer(settings);
 
@@ -1938,100 +1937,166 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         UNIT_ASSERT(hasResult);
     }
 
-    Y_UNIT_TEST(ManyColumnShardsWithRestarts) {
-        TPortManager tp;
-        ui16 mbusport = tp.GetPort(2134);
-        auto settings = Tests::TServerSettings(mbusport)
-            .SetDomainName("Root")
-            .SetUseRealThreads(false)
-            .SetNodeCount(2);
+    class TManyColumnShardsWithRestartsExecutor {
+    private:
+        virtual void FillSettings(Tests::TServerSettings& settings) const = 0;
+        virtual void OnAfterTest() const = 0;
 
-        Tests::TServer::TPtr server = new Tests::TServer(settings);
-        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
-
-        auto runtime = server->GetRuntime();
-        auto sender = runtime->AllocateEdgeActor();
-
-        InitRoot(server, sender);
-//        Tests::NCommon::TLoggerInit(runtime).Initialize();
-
-        ui32 numShards = NSan::PlainOrUnderSanitizer(100, 10);
-        ui32 numIterations = NSan::PlainOrUnderSanitizer(100, 10);
-        TLocalHelper(*server).SetShardingMethod("HASH_FUNCTION_CLOUD_LOGS").CreateTestOlapTable("largeOlapTable", "largeOlapStore", numShards, numShards);
-        ui32 insertRows = 0;
-
-        for(ui64 i = 0; i < numIterations; ++i) {
-            TLocalHelper(*server).SendDataViaActorSystem("/Root/largeOlapStore/largeOlapTable", 0, 1000000 + i*1000000, 2000);
-            insertRows += 2000;
+        Tests::TServerSettings BuildSettings() {
+            Tests::TServerSettings settings(PortsManager.GetPort(2134));
+            FillSettings(settings);
+            return settings;
         }
 
-        ui64 result = 0;
-        THashSet<TActorId> columnShardScans;
-        bool prevIsFinished = false;
+    protected:
+        TPortManager PortsManager;
 
-        auto captureEvents = [&](TAutoPtr<IEventHandle>& ev) -> auto {
-            switch (ev->GetTypeRewrite()) {
-                case NKqp::TKqpExecuterEvents::EvShardsResolveStatus: {
+    public:
+        void Execute() {
+            auto settings = BuildSettings();
 
-                    auto* msg = ev->Get<NKqp::NShardResolver::TEvShardsResolveStatus>();
-                    for (auto& [shardId, nodeId]: msg->ShardNodes) {
-                        Cerr << "-- nodeId: " << nodeId << Endl;
-                        nodeId = runtime->GetNodeId(0);
-                    }
-                    break;
-                }
+            Tests::TServer::TPtr server = new Tests::TServer(settings);
+            auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
+            auto kqpController = NYDBTest::TControllers::RegisterKqpControllerGuard<NYDBTest::TTestKqpController>();
 
-                case NKqp::TKqpExecuterEvents::EvStreamData: {
-                    auto& record = ev->Get<NKqp::TEvKqpExecuter::TEvStreamData>()->Record;
+            auto runtime = server->GetRuntime();
+            auto sender = runtime->AllocateEdgeActor();
 
-                    Cerr << (TStringBuilder() << "-- EvStreamData: " << record.AsJSON() << Endl);
-                    Cerr.Flush();
+            InitRoot(server, sender);
+            Tests::NCommon::TLoggerInit(runtime).Initialize();
 
-                    Y_ASSERT(record.GetResultSet().rows().size() == 1);
-                    Y_ASSERT(record.GetResultSet().rows().at(0).items().size() == 1);
-                    result = record.GetResultSet().rows().at(0).items().at(0).uint64_value();
+            ui32 numShards = NSan::PlainOrUnderSanitizer(100, 10);
+            ui32 numIterations = NSan::PlainOrUnderSanitizer(100, 10);
+            TLocalHelper(*server)
+                .SetShardingMethod("HASH_FUNCTION_CLOUD_LOGS")
+                .CreateTestOlapTable("largeOlapTable", "largeOlapStore", numShards, numShards);
+            ui32 insertRows = 0;
 
-                    auto resp = MakeHolder<NKqp::TEvKqpExecuter::TEvStreamDataAck>(record.GetSeqNo(), record.GetChannelId());
-                    resp->Record.SetEnough(false);
-                    resp->Record.SetFreeSpace(100);
-                    runtime->Send(new IEventHandle(ev->Sender, sender, resp.Release()));
-                    return TTestActorRuntime::EEventAction::DROP;
-                }
-
-                case NKqp::TKqpComputeEvents::EvScanData: {
-                    auto [it, success] = columnShardScans.emplace(ev->Sender);
-                    auto* msg = ev->Get<NKqp::TEvKqpCompute::TEvScanData>();
-                    if (success) {
-                        // first scan response.
-                        prevIsFinished = msg->Finished;
-                        return TTestActorRuntime::EEventAction::PROCESS;
-                    } else {
-                        if (prevIsFinished) {
-                            Cerr << (TStringBuilder() << "-- EvScanData from " << ev->Sender << ": hijack event" << Endl);
-                            Cerr.Flush();
-                            for (auto&& i : csController->GetShardActualIds()) {
-                                runtime->Send(MakePipePerNodeCacheID(false), NActors::TActorId(), new TEvPipeCache::TEvForward(
-                                    new TEvents::TEvPoisonPill(), i, false));
-                            }
-                        } else {
-                            prevIsFinished = msg->Finished;
-                        }
-                        return TTestActorRuntime::EEventAction::PROCESS;
-                    }
-                    break;
-                }
-
-                default:
-                    break;
+            for (ui64 i = 0; i < numIterations; ++i) {
+                TLocalHelper(*server).SendDataViaActorSystem("/Root/largeOlapStore/largeOlapTable", 0, 1000000 + i * 1000000, 2000);
+                insertRows += 2000;
             }
-            return TTestActorRuntime::EEventAction::PROCESS;
-        };
 
-        runtime->SetObserverFunc(captureEvents);
-        auto streamSender = runtime->AllocateEdgeActor();
-        NDataShard::NKqpHelpers::SendRequest(*runtime, streamSender, NDataShard::NKqpHelpers::MakeStreamRequest(streamSender, "SELECT COUNT(*) FROM `/Root/largeOlapStore/largeOlapTable`;", false));
-        auto ev = runtime->GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(streamSender);
-        UNIT_ASSERT_VALUES_EQUAL(result, insertRows);
+            ui64 result = 0;
+            THashSet<TActorId> columnShardScans;
+            bool prevIsFinished = false;
+
+            bool needCount = true;
+            auto captureEvents = [&](TAutoPtr<IEventHandle>& ev) -> auto {
+                switch (ev->GetTypeRewrite()) {
+                    case NKqp::TKqpExecuterEvents::EvShardsResolveStatus: {
+                        auto* msg = ev->Get<NKqp::NShardResolver::TEvShardsResolveStatus>();
+                        for (auto& [shardId, nodeId] : msg->ShardNodes) {
+                            Cerr << "-- nodeId: " << nodeId << Endl;
+                            nodeId = runtime->GetNodeId(0);
+                        }
+                        break;
+                    }
+
+                    case NKqp::TKqpExecuterEvents::EvStreamData: {
+                        auto& record = ev->Get<NKqp::TEvKqpExecuter::TEvStreamData>()->Record;
+
+                        if (needCount) {
+                            Cerr << (TStringBuilder() << "-- EvStreamData: " << record.AsJSON() << Endl);
+                            Cerr.Flush();
+                            Y_ASSERT(record.GetResultSet().rows().size() == 1);
+                            Y_ASSERT(record.GetResultSet().rows().at(0).items().size() == 1);
+                            result += record.GetResultSet().rows().at(0).items().at(0).uint64_value();
+                        } else {
+                            Cerr << (TStringBuilder() << "-- EvStreamData: " << record.GetResultSet().rows().size() << Endl);
+                            Cerr.Flush();
+                            result += record.GetResultSet().rows().size();
+                        }
+
+                        auto resp = MakeHolder<NKqp::TEvKqpExecuter::TEvStreamDataAck>(record.GetSeqNo(), record.GetChannelId());
+                        resp->Record.SetEnough(false);
+                        resp->Record.SetFreeSpace(100);
+                        runtime->Send(new IEventHandle(ev->Sender, sender, resp.Release()));
+                        return TTestActorRuntime::EEventAction::DROP;
+                    }
+
+                    case NKqp::TKqpComputeEvents::EvScanData: {
+                        auto [it, success] = columnShardScans.emplace(ev->Sender);
+                        auto* msg = ev->Get<NKqp::TEvKqpCompute::TEvScanData>();
+                        if (success) {
+                            // first scan response.
+                            prevIsFinished = msg->Finished;
+                            return TTestActorRuntime::EEventAction::PROCESS;
+                        } else {
+                            if (prevIsFinished) {
+                                Cerr << (TStringBuilder() << "-- EvScanData from " << ev->Sender << ": hijack event" << Endl);
+                                Cerr.Flush();
+                                for (auto&& i : csController->GetShardActualIds()) {
+                                    runtime->Send(MakePipePerNodeCacheID(false), NActors::TActorId(),
+                                        new TEvPipeCache::TEvForward(new TEvents::TEvPoisonPill(), i, false));
+                                }
+                            } else {
+                                prevIsFinished = msg->Finished;
+                            }
+                            return TTestActorRuntime::EEventAction::PROCESS;
+                        }
+                        break;
+                    }
+
+                    default:
+                        break;
+                }
+                return TTestActorRuntime::EEventAction::PROCESS;
+            };
+
+            runtime->SetObserverFunc(captureEvents);
+            {
+                result = 0;
+                auto streamSender = runtime->AllocateEdgeActor();
+                NDataShard::NKqpHelpers::SendRequest(*runtime, streamSender,
+                    NDataShard::NKqpHelpers::MakeStreamRequest(
+                        streamSender, "SELECT COUNT(*) FROM `/Root/largeOlapStore/largeOlapTable`;", false));
+                auto ev = runtime->GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(streamSender);
+                UNIT_ASSERT_VALUES_EQUAL(result, insertRows);
+            }
+            {
+                result = 0;
+                needCount = false;
+                auto streamSender = runtime->AllocateEdgeActor();
+                NDataShard::NKqpHelpers::SendRequest(*runtime, streamSender,
+                    NDataShard::NKqpHelpers::MakeStreamRequest(streamSender, "SELECT * FROM `/Root/largeOlapStore/largeOlapTable`;", false));
+                auto ev = runtime->GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(streamSender);
+                UNIT_ASSERT_VALUES_EQUAL(result, insertRows);
+            }
+            OnAfterTest();
+        }
+    };
+
+    Y_UNIT_TEST(ManyColumnShardsWithRestartsSimple) {
+        class TTestExecutor: public TManyColumnShardsWithRestartsExecutor {
+        private:
+            virtual void OnAfterTest() const override {
+                AFL_VERIFY(NYDBTest::TControllers::GetKqpControllerAs<NYDBTest::TTestKqpController>()->GetInitScanCounter().Val());
+                AFL_VERIFY(!NYDBTest::TControllers::GetKqpControllerAs<NYDBTest::TTestKqpController>()->GetResolvingCounter().Val());
+            }
+            virtual void FillSettings(Tests::TServerSettings& settings) const override {
+                settings.SetDomainName("Root").SetUseRealThreads(false).SetNodeCount(2).SetColumnShardReaderClassName("SIMPLE");
+            }
+        };
+        TTestExecutor().Execute();
+    }
+
+    Y_UNIT_TEST(ManyColumnShardsWithRestartsWithResolving) {
+        class TTestExecutor: public TManyColumnShardsWithRestartsExecutor {
+        private:
+            virtual void OnAfterTest() const override {
+                AFL_VERIFY(NYDBTest::TControllers::GetKqpControllerAs<NYDBTest::TTestKqpController>()->GetInitScanCounter().Val());
+                AFL_VERIFY(NYDBTest::TControllers::GetKqpControllerAs<NYDBTest::TTestKqpController>()->GetResolvingCounter().Val());
+            }
+            virtual void FillSettings(Tests::TServerSettings& settings) const override {
+                settings.SetDomainName("Root")
+                    .SetUseRealThreads(false)
+                    .SetNodeCount(2)
+                    .SetColumnShardReaderClassName("SIMPLE")
+                    .SetScanReaskToResolve(1);
+            }
+        };
+        TTestExecutor().Execute();
     }
 
     Y_UNIT_TEST(PredicatePushdownWithParametersILike) {
@@ -2897,10 +2962,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             tableInserter.AddRow().Add(2).Add("test_res_2").Add("val2").AddNull();
             testHelper.BulkUpsert(testTable, tableInserter);
         }
-//        while (csController->GetCompactionFinishedCounter().Val() == 0) {
-//            Cout << "Wait indexation..." << Endl;
-//            Sleep(TDuration::Seconds(2));
-//        }
         testHelper.ReadData("SELECT * FROM `/Root/ColumnTableTest` WHERE id=2", "[[2;\"test_res_2\";#;[\"val2\"]]]");
     }
 
@@ -3364,7 +3425,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
         csController->SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(1));
         csController->SetOverrideLagForCompactionBeforeTierings(TDuration::Seconds(1));
-        csController->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Indexation);
 
         testHelper.CreateTestOlapTable();
         auto tableClient = kikimr.GetTableClient();
@@ -3386,9 +3446,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), EStatus::SUCCESS, alterResult.GetIssues().ToString());
         }
-
-        csController->EnableBackground(NKikimr::NYDBTest::ICSController::EBackground::Indexation);
-        csController->WaitIndexation(TDuration::Seconds(5));
 
     }
 
@@ -3916,6 +3973,33 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                     GROUP BY DateTime::MakeDatetime(DateTime::StartOf(ts, DateTime::IntervalFromDays(1))) as ts1
                 )", NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+    }
+
+    Y_UNIT_TEST(DropTable) {
+        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
+        csController->SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(1));
+        csController->SetOverrideMaxReadStaleness(TDuration::Seconds(1));
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+        TLocalHelper(kikimr).CreateTestOlapTable();
+        WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, 1000000, 20);
+        auto client = kikimr.GetTableClient();
+        Tests::NCommon::TLoggerInit(kikimr).Initialize();
+
+        {
+            auto result = kikimr.GetQueryClient().ExecuteQuery("DROP TABLE `olapStore/olapTable`", NQuery::TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        csController->WaitCleaning(TDuration::Seconds(5));
+
+        {
+            auto result = kikimr.GetQueryClient()
+                              .ExecuteQuery("SELECT * FROM `olapStore/.sys/store_primary_index_portion_stats`", NQuery::TTxControl::NoTx())
+                              .GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT_EQUAL(result.GetResultSet(0).RowsCount(), 0);
         }
     }
 }

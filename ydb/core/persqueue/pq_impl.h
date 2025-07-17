@@ -206,6 +206,8 @@ private:
         TMaybe<ui64> TxId;
         NKikimrLongTxService::TEvLockStatus::EStatus LongTxSubscriptionStatus = NKikimrLongTxService::TEvLockStatus::STATUS_UNSPECIFIED;
         bool Deleting = false;
+        bool KafkaTransaction = false;
+        TInstant CreatedAt;
     };
 
     THashMap<TWriteId, TTxWriteInfo> TxWrites;
@@ -453,6 +455,7 @@ private:
     TMediatorTimecastEntry::TCPtr MediatorTimeCastEntry;
 
     void DeleteExpiredTransactions(const TActorContext& ctx);
+    void ScheduleDeleteExpiredKafkaTransactions();
     void Handle(TEvPersQueue::TEvCancelTransactionProposal::TPtr& ev, const TActorContext& ctx);
 
     void SetTxCounters();

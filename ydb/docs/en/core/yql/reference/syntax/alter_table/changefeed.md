@@ -24,8 +24,12 @@
    * `DYNAMODB_STREAMS_JSON`: Write data in the [JSON format compatible with Amazon DynamoDB Streams](../../../../concepts/cdc.md#dynamodb-streams-json-record-structure).
 {% endif %}
 * `VIRTUAL_TIMESTAMPS`: Enabling/disabling [virtual timestamps](../../../../concepts/cdc.md#virtual-timestamps). Disabled by default.
+* `BARRIERS_INTERVAL` — [barrier](../../../../concepts/cdc.md#barriers) emission interval. The value type is `Interval`. Disabled by default.
 * `RETENTION_PERIOD`: [Record retention period](../../../../concepts/cdc.md#retention-period). The value type is `Interval` and the default value is 24 hours (`Interval('PT24H')`).
-* `TOPIC_MIN_ACTIVE_PARTITIONS`: [The number of topic partitions](../../../../concepts/cdc.md#topic-partitions). By default, the number of topic partitions is equal to the number of table partitions.
+* `TOPIC_AUTO_PARTITIONING`: [Topic autopartitioning mode](../../../../concepts/cdc.md#topic-partitions):
+    * `ENABLED` – An [autopartitioned topic](../../../../concepts/topic.md#autopartitioning) will be created for this changefeed. The number of partitions in such a topic increases automatically as the table update rate increases. Topic autopartitioning parameters [can be configured](../alter-topic.md#alter-topic).
+    * `DISABLED` – A topic without [autopartitioning](../../../../concepts/topic.md#autopartitioning) will be created for this changefeed. This is the default value.
+* `TOPIC_MIN_ACTIVE_PARTITIONS`: [The initial number of topic partitions](../../../../concepts/cdc.md#topic-partitions). By default, the initial number of topic partitions is equal to the number of table partitions. For autopartitioned topics, the number of partitions increases automatically as the table update rate increases.
 * `INITIAL_SCAN`: Enables/disables [initial table scan](../../../../concepts/cdc.md#initial-scan). Disabled by default.
 {% if audience == "tech" %}
 * `AWS_REGION`: Value to be written to the `awsRegion` field. Used only with the `DYNAMODB_STREAMS_JSON` format.
@@ -60,6 +64,17 @@ ALTER TABLE `series` ADD CHANGEFEED `updates_feed` WITH (
 );
 ```
 
+The example of creating a changefeed with virtual timestamps and barriers every 10 seconds:
+
+```yql
+ALTER TABLE `series` ADD CHANGEFEED `updates_feed` WITH (
+    FORMAT = 'JSON',
+    MODE = 'UPDATES',
+    VIRTUAL_TIMESTAMPS = TRUE,
+    BARRIERS_INTERVAL = Interval('PT10S')
+);
+```
+
 Example of creating a changefeed with initial scan:
 
 ```yql
@@ -67,6 +82,17 @@ ALTER TABLE `series` ADD CHANGEFEED `updates_feed` WITH (
     FORMAT = 'JSON',
     MODE = 'UPDATES',
     INITIAL_SCAN = TRUE
+);
+```
+
+Example of creating a changefeed with autopartitioning:
+
+```yql
+ALTER TABLE `series` ADD CHANGEFEED `updates_feed` WITH (
+    FORMAT = 'JSON',
+    MODE = 'UPDATES',
+    TOPIC_AUTO_PARTITIONING = 'ENABLED',
+    TOPIC_MIN_ACTIVE_PARTITIONS = 2
 );
 ```
 

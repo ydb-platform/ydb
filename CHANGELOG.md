@@ -32,15 +32,39 @@
 * 19522:Add setting to configure drain timeout before node shutdown. #19323 [#19522](https://github.com/ydb-platform/ydb/pull/19522) ([Aleksei Kobzev](https://github.com/kobzonega))
 * 19917:When transaction duration exceeds the topic's message retention period, writing to the topic may result in inconsistent data in the partition. [#19917](https://github.com/ydb-platform/ydb/pull/19917) ([Nikolay Shestakov](https://github.com/nshestakov))
 * 20997:Fix for GROUP BY emitting multiple NULL keys when block processing is enabled [#20997](https://github.com/ydb-platform/ydb/pull/20997) ([Pavel Zuev](https://github.com/pzuev))
-* 20758:Fixed the [KesusQuoterService freeze](https://github.com/ydb-platform/ydb/issues/20747) in case of several unsuccessful attempts to connect to the Kesus tablet. [#20758](https://github.com/ydb-platform/ydb/pull/20758) ([Ilnaz Nizametdinov](https://github.com/CyberROFL))
-* 20706:Fixes #20709. Need to acquire snapshot for dependant reads even in RW transaction. [#20706](https://github.com/ydb-platform/ydb/pull/20706) ([Nikita Vasilev](https://github.com/nikvas0))
 * 20633:Fix for Arrow arena when allocating zero-sized region #20634
 Original commit: 7b5e0194f5ddeab1c864112b1716b70b969ac7b2 [#20633](https://github.com/ydb-platform/ydb/pull/20633) ([Ivan](https://github.com/abyss7))
+* 20242:If the CDC stream was recorded in an auto-partitioned topic, then it could stop after several splits of the topic. In this case, modification of rows in the table would result in the error that the table is overloaded. [#20242](https://github.com/ydb-platform/ydb/pull/20242) ([Nikolay Shestakov](https://github.com/nshestakov))
+* 20155:Fixed use after free in CPU scheduler, fixed verify fail in CS CPU limiter: https://github.com/ydb-platform/ydb/issues/20116 [#20155](https://github.com/ydb-platform/ydb/pull/20155) ([Pisarenko Grigoriy](https://github.com/GrigoriyPA))
+* 20083:Поправил коммит оффсетов сообщений топика при чтении. До фикса пользователь получал ошибку "Unable to navigate:path: 'Root/logbroker-federation/--cut--/stable/guidance' status: PathErrorUnknown\n". Сломали начиная с 25-1-2 [#20083](https://github.com/ydb-platform/ydb/pull/20083) ([Nikolay Shestakov](https://github.com/nshestakov))
 
 ### YDB UI
 
 * None:Fixed an [issue](https://github.com/ydb-platform/ydb-embedded-ui/issues/17226) with Optional<Struct> columns are always shown as NULLs.
 * 17839:[Fixed](https://github.com/ydb-platform/ydb/pull/17839) an [issue](https://github.com/ydb-platform/ydb-embedded-ui/issues/18615) where not all tablets are shown for pers queue group on the tablets tab in diagnostics. #15230 ([Alexey Efimov](https://github.com/adameat))
+* Fixed an [issue](https://github.com/ydb-platform/ydb-embedded-ui/issues/14992) with empty nodes groups for disconnected nodes.
+* Fixed an [issue](https://github.com/ydb-platform/ydb-embedded-ui/issues/14180) when tables storage is 0.
+* Fixed an [issue](https://github.com/ydb-platform/ydb-embedded-ui/issues/15256) with nested databases are childless when navigating from domain.
+* Fixed an [issue](https://github.com/ydb-platform/ydb-embedded-ui/issues/14827) with unstable version numbers in /viewer/nodes handler.
+* Fixed an [issue](https://github.com/ydb-platform/ydb-embedded-ui/issues/15866) with long running queries are terminated because of inactivity on tcp socket.
+* Fixed [issue](https://github.com/ydb-platform/ydb-embedded-ui/issues/15988) with not all follower tablets are shown on tablets tab.
+* Fixed [issue](https://github.com/ydb-platform/ydb-embedded-ui/issues/15863) with long timings on BSC requests in a large cluster.
+* Fixed [issue](https://github.com/ydb-platform/ydb-embedded-ui/issues/15522) with calculating load average on K8S nodes.
+* Fixed an [issue](https://github.com/ydb-platform/ydb-embedded-ui/issues/16895) with long time loading databases page on certain databases due to timeout on graph rendering.
+* Fixed an [issue](https://github.com/ydb-platform/ydb-embedded-ui/issues/17103) with no tablets shown for table index on tablets tab.
+* Fixed an [issue](https://github.com/ydb-platform/ydb-embedded-ui/issues/17226) with Optional<Struct> columns are always shown as NULLs.
+* Fixed an [issue](https://github.com/ydb-platform/ydb/issues/17813) crash in /viewer/storage handler.
+* Fixed an [issue](https://github.com/ydb-platform/ydb-embedded-ui/issues/2164) keep precision of double values on serialization.
+* Fixed long errors on vdisk evict when no pdisks are available.
+* Improved vdisk evict swagger and parameters handling.
+* Fixed handling of metadata cache requests.
+* Improved annotations.
+* Fixes list of nodes and databases in broken environment, closes https://github.com/ydb-platform/ydb/issues/16477
+* Support form-urlencoded in base class.
+* Fixed an [issue](https://github.com/ydb-platform/ydb/issues/18735) storage nodes, some other minor fixes.
+* Fixed an [issue](https://github.com/ydb-platform/ydb/issues/19810) - minimized returned data to avoid large responses.
+* Don't report fake limit as total node memory.
+* Fixed an [issue](https://github.com/ydb-platform/ydb/issues/19676) – make nodes less critical (to make cluster less critical). [#20053](https://github.com/ydb-platform/ydb/pull/20053) ([Alexey Efimov](https://github.com/adameat))
 
 ### Performance
 
@@ -49,4 +73,5 @@ Original commit: 7b5e0194f5ddeab1c864112b1716b70b969ac7b2 [#20633](https://githu
 * 19447:Enhancements to shared threads in the actor system. We stabilized dynamic resizing of thread count in pools. Implemented instant thread pool upscaling to utilize up to 4 cores under sudden bursts of load (this improvement is particularly noticeable in the IC pool) [#19447](https://github.com/ydb-platform/ydb/pull/19447) ([kruall](https://github.com/kruall))
 * 19445:Improved the actor system structures for intensive multithreaded workloads. [#19445](https://github.com/ydb-platform/ydb/pull/19445) ([kruall](https://github.com/kruall))
 * 19910:Enhanced pool scaling when using shared threads and available CPU resources. [#19910](https://github.com/ydb-platform/ydb/pull/19910) ([kruall](https://github.com/kruall))
-
+* 20197:Added early termination optimization for `GraceJoin`: if one side is empty and the join kind guarantees an empty result, the other side is no longer read. [#20197](https://github.com/ydb-platform/ydb/pull/20197) ([Filitov Mikhail](https://github.com/lll-phill-lll))
+* 19926:Significantly improved performance for single-core, dual-core, and triple-core configurations [#19926](https://github.com/ydb-platform/ydb/pull/19926) ([kruall](https://github.com/kruall))

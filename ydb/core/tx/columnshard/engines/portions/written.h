@@ -4,6 +4,7 @@
 namespace NKikimr::NOlap {
 
 class TWrittenPortionInfoConstructor;
+class IDbWrapper;
 
 class TWrittenPortionInfo: public TPortionInfo {
 private:
@@ -12,7 +13,7 @@ private:
     std::optional<TInsertWriteId> InsertWriteId;
     friend class TWrittenPortionInfoConstructor;
 
-    virtual void DoSaveMetaToDatabase(NIceDb::TNiceDb& db) const override;
+    virtual void DoSaveMetaToDatabase(const std::vector<TUnifiedBlobId>& blobIds, NIceDb::TNiceDb& db) const override;
 
     virtual EPortionType GetPortionType() const override {
         return EPortionType::Written;
@@ -42,6 +43,8 @@ private:
 public:
     virtual void FillDefaultColumn(NAssembling::TColumnAssemblingInfo& column, const std::optional<TSnapshot>& defaultSnapshot) const override;
 
+    void CommitToDatabase(IDbWrapper& wrapper);
+
     virtual NSplitter::TEntityGroups GetEntityGroupsByStorageId(
         const TString& /*specialTier*/, const IStoragesManager& storages, const TIndexInfo& /*indexInfo*/) const override {
         NSplitter::TEntityGroups groups(storages.GetDefaultOperator()->GetBlobSplitSettings(), IStoragesManager::DefaultStorageId);
@@ -60,7 +63,7 @@ public:
         return { NBlobOperations::TGlobal::DefaultStorageId };
     }
 
-    virtual std::unique_ptr<TPortionInfoConstructor> BuildConstructor(const bool withMetadata, const bool withMetadataBlobs) const override;
+    virtual std::unique_ptr<TPortionInfoConstructor> BuildConstructor(const bool withMetadata) const override;
 
     TWrittenPortionInfo(TPortionMeta&& meta)
         : TBase(std::move(meta)) {

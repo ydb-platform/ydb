@@ -752,6 +752,62 @@ node_broker_config:
   stable_node_name_prefix: <new prefix>
 ```
 
+
+## `feature_flags` configuration section {#feature_flags}
+
+To enable a {{ ydb-short-name }} feature, set the corresponding feature flag in the `feature_flags` section of the cluster configuration. For example, to enable support for vector indexes and auto-partitioning of topics in the CDC, you need to add the following lines to the configuration:
+
+```yaml
+feature_flags:
+  enable_vector_index: true
+  enable_topic_autopartitioning_for_cdc: true
+```
+
+### Feature flags
+
+| Flag          | Feature |
+|---------------------------| ----------------------------------------------------|
+| `enable_vector_index`                                    | Support for [vector indexes](../../dev/vector-indexes.md) for approximate vector similarity search |
+| `enable_batch_updates`                                   | Support for `BATCH UPDATE` and `BATCH DELETE` statements |
+| `enable_kafka_native_balancing`                          | Client balancing of partitions when reading using the [Kafka protocol](https://kafka.apache.org/documentation/#consumerconfigs_partition.assignment.strategy) |
+| `enable_topic_autopartitioning_for_cdc`                  | [Auto-partitioning topics](../../concepts/cdc.md#topic-partitions) for row-oriented tables in CDC |
+| `enable_access_to_index_impl_tables`                     | Support for [followers (read replicas)](../../yql/reference/syntax/alter_table/indexes.md) for covered secondary indexes |
+| `enable_changefeeds_export`, `enable_changefeeds_import` | Support for changefeeds in backup and restore operations |
+| `enable_view_export`                                     | Support for views in backup and restore operations |
+| `enable_export_auto_dropping`                            | Automatic cleanup of temporary tables and directories during export to S3 |
+| `enable_followers_stats`                                 | System views with information about [history of overloaded partitions](../../dev/system-views.md#top-overload-partitions) |
+| `enable_strict_acl_check`                                | Strict ACL checks — do not allow granting rights to non-existent users and delete users with permissions |
+| `enable_strict_user_management`                          | Strict checks for local users — only the cluster or database administrator can administer local users |
+| `enable_database_admin`                                  | The role of a database administrator |
+
+## Configuring Health Check {#healthcheck-config}
+
+This section configures thresholds and timeout settings used by the {{ ydb-short-name }} [health check service](../ydb-sdk/health-check-api.md). These parameters help configure detection of potential [issues](../ydb-sdk/health-check-api.md#issues), such as excessive restarts or time drift between dynamic nodes.
+
+### Syntax
+
+```yaml
+healthcheck_config:
+  thresholds:
+    node_restarts_yellow: 10
+    node_restarts_orange: 30
+    nodes_time_difference_yellow: 5000
+    nodes_time_difference_orange: 25000
+    tablets_restarts_orange: 30
+  timeout: 20000
+```
+
+### Parameters
+
+| Parameter                                 | Default | Description                                                                   |
+|-------------------------------------------|---------|-------------------------------------------------------------------------------|
+| `thresholds.node_restarts_yellow`         | `10`    | Number of node restarts to trigger a `YELLOW` warning                         |
+| `thresholds.node_restarts_orange`         | `30`    | Number of node restarts to trigger an `ORANGE` alert                          |
+| `thresholds.nodes_time_difference_yellow` | `5000`  | Max allowed time difference (in us) between dynamic nodes for `YELLOW` issue  |
+| `thresholds.nodes_time_difference_orange` | `25000` | Max allowed time difference (in us) between dynamic nodes for `ORANGE` issue  |
+| `thresholds.tablets_restarts_orange`      | `30`    | Number of tablet restarts to trigger an `ORANGE` alert                        |
+| `timeout`                                 | `20000` | Maximum health check response time (in ms)                                    |
+
 ## Sample cluster configurations {#examples}
 
 You can find model cluster configurations for deployment in the [repository](https://github.com/ydb-platform/ydb/tree/main/ydb/deploy/yaml_config_examples/). Check them out before deploying a cluster.

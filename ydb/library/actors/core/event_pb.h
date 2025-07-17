@@ -400,7 +400,7 @@ namespace NActors {
         }
 
         TString ToString() const override {
-            return GetRecord().ShortDebugString();
+            return EventPBBaseToString(TBase::ToStringHeader(),  GetRecord().ShortDebugString());
         }
 
         bool SerializeToArcadiaStream(TChunkSerializer* chunker) const override {

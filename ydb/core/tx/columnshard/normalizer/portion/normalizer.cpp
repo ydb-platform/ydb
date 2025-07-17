@@ -25,7 +25,7 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TPortionsNormalizerBase::DoInit(
         return TConclusionStatus::Fail("Not ready");
     }
 
-    NColumnShard::TTablesManager tablesManager(controller.GetStoragesManager(), std::make_shared<NDataAccessorControl::TLocalManager>(nullptr),
+    NColumnShard::TTablesManager tablesManager(controller.GetStoragesManager(), controller.GetDataAccessorsManager(),
         std::make_shared<TSchemaObjectsCache>(), std::make_shared<TPortionIndexStats>(), 0);
     if (!tablesManager.InitFromDB(db)) {
         ACFL_TRACE("normalizer", "TPortionsNormalizer")("error", "can't initialize tables manager");
@@ -95,13 +95,14 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TPortionsNormalizerBase::DoInit(
 TConclusionStatus TPortionsNormalizerBase::InitPortions(
     const NColumnShard::TTablesManager& tablesManager, NIceDb::TNiceDb& db, THashMap<ui64, TPortionAccessorConstructor>& constructors) {
     TDbWrapper wrapper(db.GetDatabase(), nullptr);
-    if (!wrapper.LoadPortions({}, [&](std::unique_ptr<TPortionInfoConstructor>&& portion, const NKikimrTxColumnShard::TIndexPortionMeta& metaProto) {
-            const TIndexInfo& indexInfo =
-                portion->GetSchema(tablesManager.GetPrimaryIndexAsVerified<TColumnEngineForLogs>().GetVersionedIndex())->GetIndexInfo();
-            AFL_VERIFY(portion->MutableMeta().LoadMetadata(metaProto, indexInfo, DsGroupSelector));
-            const ui64 portionId = portion->GetPortionIdVerified();
-            AFL_VERIFY(constructors.emplace(portionId, TPortionAccessorConstructor(std::move(portion))).second);
-        })) {
+    if (!wrapper.LoadPortions(
+            {}, [&](std::unique_ptr<TPortionInfoConstructor>&& portion, const NKikimrTxColumnShard::TIndexPortionMeta& metaProto) {
+                const TIndexInfo& indexInfo =
+                    portion->GetSchema(tablesManager.GetPrimaryIndexAsVerified<TColumnEngineForLogs>().GetVersionedIndex())->GetIndexInfo();
+                AFL_VERIFY(portion->MutableMeta().LoadMetadata(metaProto, indexInfo, DsGroupSelector));
+                const ui64 portionId = portion->GetPortionIdVerified();
+                AFL_VERIFY(constructors.emplace(portionId, TPortionAccessorConstructor(std::move(portion))).second);
+            })) {
         return TConclusionStatus::Fail("repeated read db");
     }
     return TConclusionStatus::Success();
@@ -116,20 +117,11 @@ TConclusionStatus TPortionsNormalizerBase::InitColumns(
         return TConclusionStatus::Fail("Not ready");
     }
 
-    auto initPortion = [&](TColumnChunkLoadContextV1&& loadContext) {
-        if (!columnsFilter.empty() && !columnsFilter.contains(loadContext.GetAddress().GetColumnId())) {
-            return;
-        }
-        auto it = portions.find(loadContext.GetPortionId());
-        AFL_VERIFY(it != portions.end());
-        it->second.LoadRecord(std::move(loadContext));
-    };
-
     while (!rowset.EndOfSet()) {
-        NOlap::TColumnChunkLoadContextV2 chunkLoadContext(rowset);
-        for (auto&& i : chunkLoadContext.BuildRecordsV1()) {
-            initPortion(std::move(i));
-        }
+        NOlap::TColumnChunkLoadContextV2 chunkLoadContext(rowset, DsGroupSelector);
+        auto it = portions.find(chunkLoadContext.GetPortionId());
+        AFL_VERIFY(it != portions.end());
+        it->second.AddBuildInfo(chunkLoadContext.CreateBuildInfo());
 
         if (!rowset.Next()) {
             return TConclusionStatus::Fail("Not ready");

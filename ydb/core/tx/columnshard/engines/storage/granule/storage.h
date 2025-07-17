@@ -4,7 +4,6 @@
 #include <ydb/core/tx/columnshard/blobs_action/abstract/storage.h>
 #include <ydb/core/tx/columnshard/blobs_action/abstract/storages_manager.h>
 #include <ydb/core/tx/columnshard/counters/engine_logs.h>
-#include <ydb/core/tx/columnshard/data_accessor/events.h>
 #include <ydb/core/tx/columnshard/data_accessor/manager.h>
 #include <ydb/core/tx/columnshard/common/path_id.h>
 
@@ -153,7 +152,6 @@ public:
         if (!it->second->IsErasable()) {
             return false;
         }
-        DataAccessorsManager->UnregisterController(pathId);
         Tables.erase(it);
         return true;
     }
@@ -170,19 +168,6 @@ public:
         }
     }
 
-    std::vector<std::shared_ptr<TGranuleMeta>> GetTables(const std::optional<TInternalPathId> pathIdFrom, const std::optional<TInternalPathId> pathIdTo) const {
-        std::vector<std::shared_ptr<TGranuleMeta>> result;
-        for (auto&& i : Tables) {
-            if (pathIdFrom && i.first < *pathIdFrom) {
-                continue;
-            }
-            if (pathIdTo && i.first > *pathIdTo) {
-                continue;
-            }
-            result.emplace_back(i.second);
-        }
-        return result;
-    }
 
     std::shared_ptr<TPortionInfo> GetPortionOptional(const TInternalPathId pathId, const ui64 portionId) const {
         auto it = Tables.find(pathId);

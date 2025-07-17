@@ -11,52 +11,28 @@ TPlainReadData::TPlainReadData(const std::shared_ptr<TReadContext>& context)
     std::deque<std::shared_ptr<IDataSource>> sources;
     const auto readMetadata = GetReadMetadataVerifiedAs<const TReadMetadata>();
     const auto& portions = GetReadMetadata()->SelectInfo->Portions;
-    const auto& committed = readMetadata->CommittedBlobs;
     ui64 compactedPortionsBytes = 0;
     ui64 insertedPortionsBytes = 0;
     ui64 committedPortionsBytes = 0;
     for (auto&& i : portions) {
         if (i->GetPortionType() == EPortionType::Compacted) {
             compactedPortionsBytes += i->GetTotalBlobBytes();
-        } else {
+        } else if (i->GetProduced() == NPortion::EProduced::INSERTED) {
             insertedPortionsBytes += i->GetTotalBlobBytes();
+        } else {
+            committedPortionsBytes += i->GetTotalBlobBytes();
         }
         sources.emplace_back(std::make_shared<TPortionDataSource>(sourceIdx++, i, SpecialReadContext));
-    }
-    for (auto&& i : committed) {
-        if (i.IsCommitted()) {
-            continue;
-        }
-        if (GetReadMetadata()->IsMyUncommitted(i.GetInsertWriteId())) {
-            continue;
-        }
-        if (GetReadMetadata()->GetPKRangesFilter().CheckPoint(i.GetFirst()) ||
-            GetReadMetadata()->GetPKRangesFilter().CheckPoint(i.GetLast())) {
-            GetReadMetadata()->SetConflictedWriteId(i.GetInsertWriteId());
-        }
-    }
-
-    for (auto&& i : committed) {
-        if (!i.IsCommitted()) {
-            if (GetReadMetadata()->IsWriteConflictable(i.GetInsertWriteId())) {
-                continue;
-            }
-        } else if (!GetReadMetadata()->GetPKRangesFilter().IsUsed(i.GetFirst(), i.GetLast())) {
-            continue;
-        }
-        sources.emplace_back(std::make_shared<TCommittedDataSource>(sourceIdx++, i, SpecialReadContext));
-        committedPortionsBytes += i.GetSize();
     }
     Scanner = std::make_shared<TScanHead>(std::move(sources), SpecialReadContext);
 
     auto& stats = GetReadMetadata()->ReadStats;
     stats->IndexPortions = GetReadMetadata()->SelectInfo->Portions.size();
     stats->IndexBatches = GetReadMetadata()->NumIndexedBlobs();
-    stats->CommittedBatches = readMetadata->CommittedBlobs.size();
     stats->SchemaColumns = (*SpecialReadContext->GetProgramInputColumns() - *SpecialReadContext->GetSpecColumns()).GetColumnsCount();
-    stats->CommittedPortionsBytes = committedPortionsBytes;
     stats->InsertedPortionsBytes = insertedPortionsBytes;
     stats->CompactedPortionsBytes = compactedPortionsBytes;
+    stats->CommittedPortionsBytes = committedPortionsBytes;
 }
 
 std::vector<std::shared_ptr<TPartialReadResult>> TPlainReadData::DoExtractReadyResults(const int64_t /*maxRowsInBatch*/) {

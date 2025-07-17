@@ -100,6 +100,7 @@ std::tuple<NKikimrTxDataShard::TError::EKind, TString> TValidatedWriteTxOperatio
         case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_REPLACE:
         case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INSERT:
         case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPDATE:
+        case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INCREMENT:
             break;
         default:
             return {NKikimrTxDataShard::TError::BAD_ARGUMENT, TStringBuilder() << OperationType << " operation is not supported now"};
@@ -162,6 +163,28 @@ std::tuple<NKikimrTxDataShard::TError::EKind, TString> TValidatedWriteTxOperatio
         }
     }
 
+    if (OperationType == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INCREMENT) {
+        for (size_t i = tableInfo.KeyColumnIds.size(); i < ColumnIds.size(); i++) { // only data columns
+            auto* col = tableInfo.Columns.FindPtr(ColumnIds[i]);
+            if (col->IsKey) {
+                return {NKikimrTxDataShard::TError::BAD_ARGUMENT, TStringBuilder() << "Increment not allowed for key column " << ColumnIds[i]};
+            }
+            auto type = col->Type.GetTypeId();
+            switch (type) {
+                case NScheme::NTypeIds::Uint8:
+                case NScheme::NTypeIds::Int8:
+                case NScheme::NTypeIds::Uint16:
+                case NScheme::NTypeIds::Int16: 
+                case NScheme::NTypeIds::Uint32:
+                case NScheme::NTypeIds::Int32:
+                case NScheme::NTypeIds::Uint64:
+                case NScheme::NTypeIds::Int64:
+                    break;
+                default:
+                    return {NKikimrTxDataShard::TError::BAD_ARGUMENT, TStringBuilder() << "Only integer types are supported by increment, but column " << ColumnIds[i] << " is not"};
+            }        
+        }
+    }
     TableId = TTableId(tableIdRecord.GetOwnerId(), tableIdRecord.GetTableId(), tableIdRecord.GetSchemaVersion());
 
     SetTxKeys(tableInfo, tabletId, keyValidator);

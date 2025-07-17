@@ -24,12 +24,17 @@ ydb/core/kqp/ut/olap KqpOlapSysView.StatsSysViewBytesDictActualization
 ydb/core/kqp/ut/olap KqpOlapSysView.StatsSysViewBytesDictStatActualization
 ydb/core/kqp/ut/olap KqpOlapJson.DuplicationCompactionVariants
 ydb/core/kqp/ut/olap KqpOlapWrite.TierDraftsGCWithRestart
+ydb/core/kqp/ut/batch_operations [*/*] chunk chunk
+ydb/core/kqp/ut/federated_query/large_results KqpScriptExecResults.ExecuteScriptWithLargeFile
+ydb/core/kqp/ut/federated_query/s3 sole chunk chunk
+ydb/core/kqp/ut/indexes KqpMultishardIndex.WriteIntoRenamingSyncIndex
 ydb/core/kqp/ut/olap [*/*] chunk chunk
 ydb/core/kqp/ut/join KqpIndexLookupJoin.LeftJoinRightNullFilter+StreamLookup
 ydb/core/kqp/ut/join KqpIndexLookupJoin.LeftJoinRightNullFilter-StreamLookup
 ydb/core/kqp/ut/query KqpAnalyze.AnalyzeTable+ColumnStore
 ydb/core/kqp/ut/query KqpAnalyze.AnalyzeTable-ColumnStore
 ydb/core/kqp/ut/query KqpStats.SysViewClientLost
+ydb/core/kqp/ut/scan KqpSplit.UndeliveryOnFinishedRead
 ydb/core/kqp/ut/scheme KqpOlapScheme.TenThousandColumns
 ydb/core/kqp/ut/scheme KqpScheme.AlterAsyncReplication
 ydb/core/kqp/ut/scheme [*/*] chunk chunk

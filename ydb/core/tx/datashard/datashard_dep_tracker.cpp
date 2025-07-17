@@ -53,10 +53,10 @@ namespace {
 
 void TDependencyTracker::UpdateSchema(const TPathId& tableId, const TUserTable& tableInfo) {
     auto& state = Tables[tableId.LocalPathId];
-    state.PlannedReads.SetKeyTypes(tableInfo.KeyColumnTypes);
-    state.PlannedWrites.SetKeyTypes(tableInfo.KeyColumnTypes);
-    state.ImmediateReads.SetKeyTypes(tableInfo.KeyColumnTypes);
-    state.ImmediateWrites.SetKeyTypes(tableInfo.KeyColumnTypes);
+    state.PlannedReads.MutableComparator().SetKeyTypes(tableInfo.KeyColumnTypes);
+    state.PlannedWrites.MutableComparator().SetKeyTypes(tableInfo.KeyColumnTypes);
+    state.ImmediateReads.MutableComparator().SetKeyTypes(tableInfo.KeyColumnTypes);
+    state.ImmediateWrites.MutableComparator().SetKeyTypes(tableInfo.KeyColumnTypes);
 }
 
 void TDependencyTracker::RemoveSchema(const TPathId& tableId) {

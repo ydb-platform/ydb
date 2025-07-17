@@ -274,10 +274,6 @@
                                                         "Name": "TableFullScan",
                                                         "Path": "/Root/postgres_jointest/coalesce-and-join.test_plan/a",
                                                         "ReadColumns": [
-                                                            "x",
-                                                            "y"
-                                                        ],
-                                                        "ReadRanges": [
                                                             "x (-\u221e, +\u221e)",
                                                             "y (-\u221e, +\u221e)"
                                                         ],

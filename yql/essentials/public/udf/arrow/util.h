@@ -108,11 +108,10 @@ private:
     arrow::MemoryPool* Pool_;
 };
 
-/// \brief same as arrow::AllocateResizableBuffer, but allows to control zero padding
 template<typename TBuffer = TResizeableBuffer>
-std::unique_ptr<arrow::ResizableBuffer> AllocateResizableBuffer(size_t size, arrow::MemoryPool* pool, bool zeroPad = false) {
+std::unique_ptr<arrow::ResizableBuffer> AllocateResizableBuffer(size_t capacity, arrow::MemoryPool* pool, bool zeroPad = false) {
     std::unique_ptr<TBuffer> result = std::make_unique<TBuffer>(pool);
-    ARROW_OK(result->Reserve(size));
+    ARROW_OK(result->Reserve(capacity));
     if (zeroPad) {
         result->ZeroPadding();
     }

@@ -86,22 +86,26 @@ Y_UNIT_TEST_SUITE(GlobalAnalysisTests) {
         {
             TString query = "SELECT * FROM Concat(#)";
             TGlobalContext ctx = global->Analyze(SharpedInput(query), {});
-            UNIT_ASSERT_VALUES_EQUAL(ctx.EnclosingFunction, "Concat");
+            TFunctionContext expected = {"Concat", 0};
+            UNIT_ASSERT_VALUES_EQUAL(ctx.EnclosingFunction, expected);
         }
         {
             TString query = "SELECT * FROM Concat(a, #)";
             TGlobalContext ctx = global->Analyze(SharpedInput(query), {});
-            UNIT_ASSERT_VALUES_EQUAL(ctx.EnclosingFunction, "Concat");
+            TFunctionContext expected = {"Concat", 1};
+            UNIT_ASSERT_VALUES_EQUAL(ctx.EnclosingFunction, expected);
         }
         {
             TString query = "SELECT * FROM Concat(a#)";
             TGlobalContext ctx = global->Analyze(SharpedInput(query), {});
-            UNIT_ASSERT_VALUES_EQUAL(ctx.EnclosingFunction, "Concat");
+            TFunctionContext expected = {"Concat", 0};
+            UNIT_ASSERT_VALUES_EQUAL(ctx.EnclosingFunction, expected);
         }
         {
             TString query = "SELECT * FROM Concat(#";
             TGlobalContext ctx = global->Analyze(SharpedInput(query), {});
-            UNIT_ASSERT_VALUES_EQUAL(ctx.EnclosingFunction, "Concat");
+            TFunctionContext expected = {"Concat", 0};
+            UNIT_ASSERT_VALUES_EQUAL(ctx.EnclosingFunction, expected);
         }
         {
             TString query = "SELECT * FROM (#)";

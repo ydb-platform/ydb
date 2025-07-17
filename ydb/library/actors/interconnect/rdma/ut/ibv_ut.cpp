@@ -1,10 +1,19 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <contrib/libs/ibdrv/include/infiniband/verbs.h>
+#include <util/system/env.h>
+#include <errno.h>
+
+static bool IsRdmaTestDisabled() {
+    return GetEnv("TEST_ICRDMA").empty();
+}
 
 Y_UNIT_TEST_SUITE(Ibv) {
     Y_UNIT_TEST(ListDevice) {
+        if (IsRdmaTestDisabled()) {
+            Cerr << "RDMA test skipped" << Endl;
+            return;
+        }
         int numDevices = 0;
-        int err;
 
         ibv_device** deviceList  = ibv_get_device_list(&numDevices);
 
@@ -16,16 +25,15 @@ Y_UNIT_TEST_SUITE(Ibv) {
             ibv_context* ctx = ibv_open_device(dev);
             UNIT_ASSERT_C(ctx, "unable to open device");
             ibv_device_attr devAttrs;
-            err = ibv_query_device(ctx, &devAttrs);
-            UNIT_ASSERT(err == 0);
+            UNIT_ASSERT_C(ibv_query_device(ctx, &devAttrs) == 0, strerror(errno));
 
             for (int port = 1; port <= devAttrs.phys_port_cnt; ++port) {
                 ibv_port_attr portAttrs;
-                err = ibv_query_port(ctx, port, &portAttrs);
-                UNIT_ASSERT(err == 0);
+                UNIT_ASSERT_C(ibv_query_port(ctx, port, &portAttrs) == 0, strerror(errno));
                 Cerr << "port " << port << " speed: " << (int)portAttrs.active_speed << Endl;
             }
-            ibv_close_device(ctx);
+
+            UNIT_ASSERT(ibv_close_device(ctx) == 0);
         }
 
         ibv_free_device_list(deviceList);

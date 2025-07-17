@@ -568,6 +568,17 @@
       "name": "Replace"
     }
   ],
+  "Protobuf": [
+    {
+      "name": "Parse"
+    },
+    {
+      "name": "Serialize"
+    },
+    {
+      "name": "TryParse"
+    }
+  ],
   "Re2": [
     {
       "name": "Capture"
@@ -1299,17 +1310,6 @@
     },
     {
       "name": "Zstd"
-    }
-  ],
-  "Protobuf": [
-    {
-      "name": "Parse"
-    },
-    {
-      "name": "Serialize"
-    },
-    {
-      "name": "TryParse"
     }
   ],
   "Streaming": [

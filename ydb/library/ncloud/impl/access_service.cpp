@@ -2,7 +2,7 @@
 #include <ydb/library/actors/core/actorsystem.h>
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/grpc/actor_client/grpc_service_client.h>
-#include <ydb/public/api/client/nc_private/accessservice/access_service.grpc.pb.h>
+#include <ydb/public/api/client/nc_private/iam/v1/access_service.grpc.pb.h>
 
 namespace NNebiusCloud {
 

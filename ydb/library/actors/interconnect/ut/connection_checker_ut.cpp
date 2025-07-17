@@ -77,16 +77,18 @@ namespace {
         std::atomic_uint32_t* const NumIncoming;
         std::atomic_uint32_t* const NumOutgoing;
         std::atomic_uint32_t* const NumNotify;
+        std::atomic_uint32_t* const NumNotifySuccess;
         const bool Reject;
 
     public:
         TCheckerActor(ui32 nodeId, std::atomic_uint32_t *numIncoming, std::atomic_uint32_t *numOutgoing,
-                std::atomic_uint32_t *numNotify, bool reject = false)
+                std::atomic_uint32_t *numNotify, std::atomic_uint32_t *numNotifySuccess, bool reject = false)
             : TActor(&TThis::StateFunc)
             , NodeId(nodeId)
             , NumIncoming(numIncoming)
             , NumOutgoing(numOutgoing)
             , NumNotify(numNotify)
+            , NumNotifySuccess(numNotifySuccess)
             , Reject(reject)
         {}
 
@@ -108,11 +110,12 @@ namespace {
             Y_ABORT_UNLESS(msg.Params.size() == 1);
 
             if (Reject) {
-                Send(ev->Sender, new TEvInterconnect::TEvCheckIncomingConnectionResult("rejected"), 0, ev->Cookie);
+                Send(ev->Sender, new TEvInterconnect::TEvCheckIncomingConnectionResult("rejected", {{"hello", "world"}}),
+                    0, ev->Cookie);
             } else {
                 THashMap<TString, TString> params;
                 params.emplace("hello", "world");
-                Send(ev->Sender, new TEvInterconnect::TEvCheckIncomingConnectionResult(std::move(params)), 0, ev->Cookie);
+                Send(ev->Sender, new TEvInterconnect::TEvCheckIncomingConnectionResult(std::nullopt, std::move(params)), 0, ev->Cookie);
             }
 
             ++*NumIncoming;
@@ -124,6 +127,7 @@ namespace {
             Y_ABORT_UNLESS(msg.Params.size() == 1);
 
             ++*NumNotify;
+            *NumNotifySuccess += msg.Success;
         }
 
         STRICT_STFUNC(StateFunc,
@@ -144,7 +148,8 @@ Y_UNIT_TEST_SUITE(ConnectionChecker) {
         std::atomic_uint32_t numIncoming = 0;
         std::atomic_uint32_t numOutgoing = 0;
         std::atomic_uint32_t numNotify = 0;
-        auto checkerFactory = [&](ui32 nodeId) { return new TCheckerActor(nodeId, &numIncoming, &numOutgoing, &numNotify); };
+        std::atomic_uint32_t numNotifySuccess = 0;
+        auto checkerFactory = [&](ui32 nodeId) { return new TCheckerActor(nodeId, &numIncoming, &numOutgoing, &numNotify, &numNotifySuccess); };
         TTestICCluster testCluster(2, {}, nullptr, nullptr, TTestICCluster::EMPTY, checkerFactory);
         auto pongerId = testCluster.RegisterActor(new TPonger, 1);
         TManualEvent ev;
@@ -155,6 +160,7 @@ Y_UNIT_TEST_SUITE(ConnectionChecker) {
         Y_ABORT_UNLESS(numIncoming.load() > 0);
         Y_ABORT_UNLESS(numOutgoing.load() > 0);
         Y_ABORT_UNLESS(numNotify.load() > 0);
+        Y_ABORT_UNLESS(numNotifySuccess.load() == numNotify.load());
     }
 
     Y_UNIT_TEST(CheckReject) {
@@ -163,7 +169,8 @@ Y_UNIT_TEST_SUITE(ConnectionChecker) {
         std::atomic_uint32_t numIncoming = 0;
         std::atomic_uint32_t numOutgoing = 0;
         std::atomic_uint32_t numNotify = 0;
-        auto checkerFactory = [&](ui32 nodeId) { return new TCheckerActor(nodeId, &numIncoming, &numOutgoing, &numNotify, true); };
+        std::atomic_uint32_t numNotifySuccess = 0;
+        auto checkerFactory = [&](ui32 nodeId) { return new TCheckerActor(nodeId, &numIncoming, &numOutgoing, &numNotify, &numNotifySuccess, true); };
         TTestICCluster testCluster(2, {}, nullptr, nullptr, TTestICCluster::EMPTY, checkerFactory);
         auto pongerId = testCluster.RegisterActor(new TPonger, 1);
         TManualEvent ev;
@@ -173,7 +180,8 @@ Y_UNIT_TEST_SUITE(ConnectionChecker) {
         Y_ABORT_UNLESS(numDisconnected.load() == 100);
         Y_ABORT_UNLESS(numIncoming.load() > 0);
         Y_ABORT_UNLESS(numOutgoing.load() > 0);
-        Y_ABORT_UNLESS(numNotify.load() == 0);
+        Y_ABORT_UNLESS(numNotify.load() > 0);
+        Y_ABORT_UNLESS(numNotifySuccess.load() == 0);
     }
 
 }

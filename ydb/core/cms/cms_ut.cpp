@@ -2409,7 +2409,7 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
             }
             return prev(ev);
         });
-        
+
         env.CheckPermissionRequest("user", true, false, true, true, MODE_MAX_AVAILABILITY, TStatus::ALLOW,
                                     MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(0), 60000000, "storage"));
         env.CheckPermissionRequest("user", true, false, true, true, MODE_MAX_AVAILABILITY, TStatus::ALLOW,
@@ -2418,7 +2418,6 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
                                     MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(1), 60000000, "storage"));
         env.CheckPermissionRequest("user", true, false, true, true, MODE_MAX_AVAILABILITY, TStatus::DISALLOW_TEMP,
                                     MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(9), 60000000, "storage"));
-
     }
 }
 

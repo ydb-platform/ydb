@@ -2,6 +2,7 @@
 
 #include "constants.h"
 #include "data_splitter.h"
+#include "import_tui.h"
 #include "log.h"
 #include "log_backend.h"
 #include "util.h"
@@ -642,56 +643,12 @@ void LoadSmallTables(
 
 //-----------------------------------------------------------------------------
 
-struct TIndexBuildState {
-    TOperation::TOperationId Id;
-    TString Table;
-    TString Name;
-    double Progress = 0.0;
-
-    TIndexBuildState(TOperation::TOperationId id, const TString& table, const TString& name)
-        : Id(id), Table(table), Name(name) {}
-};
-
-struct TLoadState {
-    enum ELoadState {
-        ELOAD_INDEXED_TABLES = 0,
-        ELOAD_TABLES_BUILD_INDICES,
-        EWAIT_INDICES,
-        ESUCCESS
-    };
-
-    explicit TLoadState(std::stop_token stopToken)
-        : State(ELOAD_INDEXED_TABLES)
-        , StopToken(stopToken)
-    {
-    }
-
-    ELoadState State;
-
-    // shared with loader threads
-
-    std::stop_token StopToken;
-
-    std::atomic<size_t> DataSizeLoaded{0};
-
-    std::atomic<size_t> IndexedRangesLoaded{0};
-    std::atomic<size_t> RangesLoaded{0};
-
-    // single threaded
-
-    std::vector<TIndexBuildState> IndexBuildStates;
-    size_t CurrentIndex = 0;
-    size_t ApproximateDataSize = 0;
-};
-
-//-----------------------------------------------------------------------------
-
 void LoadRange(
     TDriver& driver,
     const TString& path,
     int whStart,
     int whEnd,
-    TLoadState& state,
+    TImportState& state,
     google::protobuf::Arena& arena,
     TReallyFastRng32& fastRng,
     TLog* Log)
@@ -823,7 +780,7 @@ TIndexBuildState CreateOpenOrderIndex(NTable::TTableClient& client, const TStrin
     return TIndexBuildState(id, TABLE_OORDER, INDEX_ORDER);
 }
 
-void CreateIndices(TDriver& driver, const TString& path, TLoadState& loadState, TLog* Log) {
+void CreateIndices(TDriver& driver, const TString& path, TImportState& loadState, TLog* Log) {
     NTable::TTableClient client(driver);
 
     loadState.IndexBuildStates = {
@@ -864,19 +821,6 @@ void InterruptHandler(int) {
 
 class TPCCLoader {
 public:
-    struct TCalculatedStatusData {
-        size_t CurrentDataSizeLoaded = 0;
-        double PercentLoaded = 0.0;
-        double InstantSpeedMiBs = 0.0;
-        double AvgSpeedMiBs = 0.0;
-        int ElapsedMinutes = 0;
-        int ElapsedSeconds = 0;
-        int EstimatedTimeLeftMinutes = 0;
-        int EstimatedTimeLeftSeconds = 0;
-        bool IsWaitingForIndices = false;
-        bool IsLoadingTablesAndBuildingIndices = false;
-    };
-
     TPCCLoader(const NConsoleClient::TClientCommand::TConfig& connectionConfig, const TRunConfig& runConfig)
         : ConnectionConfig(connectionConfig)
         , Config(runConfig)
@@ -897,12 +841,6 @@ public:
         Config.SetDisplay();
         CalculateApproximateDataSize();
 
-        // we want to switch buffers and draw UI ASAP to properly display logs
-        // produced after this point and before the first screen update
-        if (Config.DisplayMode == TRunConfig::EDisplayMode::Tui) {
-            UpdateDisplayIfNeeded(Clock::now());
-        }
-
         // TODO: detect number of threads
         if (Config.LoadThreadCount == 0) {
             LOG_W("Automatic calculation of loading threads is not implemented, falling back to the default");
@@ -912,6 +850,14 @@ public:
         // TODO: detect number of threads
         size_t threadCount = std::min(Config.WarehouseCount, Config.LoadThreadCount);
         threadCount = std::max(threadCount, size_t(1));
+
+        // we want to switch buffers and draw UI ASAP to properly display logs
+        // produced after this point and before the first screen update
+        if (Config.DisplayMode == TRunConfig::EDisplayMode::Tui) {
+            LogBackend->StartCapture();
+            TImportDisplayData dataToDisplay(LoadState);
+            Tui = std::make_unique<TImportTui>(Config, *LogBackend, dataToDisplay);
+        }
 
         // TODO: calculate optimal number of drivers (but per thread looks good)
         size_t driverCount = threadCount;
@@ -963,7 +909,7 @@ public:
                 break;
             }
 
-            if (LoadState.State == TLoadState::ESUCCESS) {
+            if (LoadState.State == TImportState::ESUCCESS) {
                 break;
             }
 
@@ -971,7 +917,7 @@ public:
             UpdateDisplayIfNeeded(now);
 
             switch (LoadState.State) {
-            case TLoadState::ELOAD_INDEXED_TABLES: {
+            case TImportState::ELOAD_INDEXED_TABLES: {
                 // Check if all indexed ranges are loaded and start index creation
                 size_t indexedRangesLoaded = LoadState.IndexedRangesLoaded.load(std::memory_order_relaxed);
                 if (indexedRangesLoaded >= threadCount) {
@@ -987,21 +933,21 @@ public:
                     }
 
                     LOG_I("Indexed tables loaded, indices are being built in background. Continuing with remaining tables");
-                    LoadState.State = TLoadState::ELOAD_TABLES_BUILD_INDICES;
+                    LoadState.State = TImportState::ELOAD_TABLES_BUILD_INDICES;
                     lastIndexProgressCheck = now;
                 }
                 break;
             }
-            case TLoadState::ELOAD_TABLES_BUILD_INDICES: {
+            case TImportState::ELOAD_TABLES_BUILD_INDICES: {
                 // Check if all ranges are loaded (work is complete)
                 size_t rangesLoaded = LoadState.RangesLoaded.load(std::memory_order_relaxed);
                 if (rangesLoaded >= threadCount) {
                     LOG_I("All tables loaded successfully. Waiting for indices to be ready");
-                    LoadState.State = TLoadState::EWAIT_INDICES;
+                    LoadState.State = TImportState::EWAIT_INDICES;
                 }
                 [[fallthrough]];
             }
-            case TLoadState::EWAIT_INDICES: {
+            case TImportState::EWAIT_INDICES: {
                 auto timeSinceLastCheck = now - lastIndexProgressCheck;
                 if (timeSinceLastCheck < INDEX_PROGRESS_CHECK_INTERVAL) {
                     break;
@@ -1023,14 +969,14 @@ public:
                     }
                 }
 
-                if (LoadState.State == TLoadState::EWAIT_INDICES && LoadState.CurrentIndex >= LoadState.IndexBuildStates.size()) {
+                if (LoadState.State == TImportState::EWAIT_INDICES && LoadState.CurrentIndex >= LoadState.IndexBuildStates.size()) {
                     LOG_I("Indices created successfully");
-                    LoadState.State = TLoadState::ESUCCESS;
+                    LoadState.State = TImportState::ESUCCESS;
                     continue;
                 }
                 break;
             }
-            case TLoadState::ESUCCESS:
+            case TImportState::ESUCCESS:
                 break;
             }
 
@@ -1057,7 +1003,7 @@ public:
         auto endTs = TInstant::Now();
         auto duration = endTs - startTs;
 
-        if (LoadState.State == TLoadState::ESUCCESS) {
+        if (LoadState.State == TImportState::ESUCCESS) {
             // Calculate average upload speed
             size_t totalDataLoaded = LoadState.DataSizeLoaded.load(std::memory_order_relaxed);
             auto totalElapsedSeconds = duration.Seconds();
@@ -1094,43 +1040,50 @@ private:
         }
 
         // Calculate all status data
-        TCalculatedStatusData data;
-        data.IsWaitingForIndices = !LoadState.IndexBuildStates.empty() && LoadState.State == TLoadState::EWAIT_INDICES;
-        data.IsLoadingTablesAndBuildingIndices = LoadState.State == TLoadState::ELOAD_TABLES_BUILD_INDICES;
+        TImportDisplayData displayData(LoadState);
 
-        if (!data.IsWaitingForIndices) {
-            data.CurrentDataSizeLoaded = LoadState.DataSizeLoaded.load(std::memory_order_relaxed);
+        displayData.StatusData.IsWaitingForIndices =
+            !LoadState.IndexBuildStates.empty() && LoadState.State == TImportState::EWAIT_INDICES;
 
-            data.PercentLoaded = LoadState.ApproximateDataSize > 0 ?
-                (static_cast<double>(data.CurrentDataSizeLoaded) / LoadState.ApproximateDataSize) * 100.0 : 0.0;
+            displayData.StatusData.IsLoadingTablesAndBuildingIndices =
+                LoadState.State == TImportState::ELOAD_TABLES_BUILD_INDICES;
+
+        if (!displayData.StatusData.IsWaitingForIndices) {
+            displayData.StatusData.CurrentDataSizeLoaded = LoadState.DataSizeLoaded.load(std::memory_order_relaxed);
+
+            displayData.StatusData.PercentLoaded = LoadState.ApproximateDataSize > 0 ?
+                (static_cast<double>(
+                    displayData.StatusData.CurrentDataSizeLoaded) / LoadState.ApproximateDataSize) * 100.0 : 0.0;
 
             auto deltaSeconds = std::chrono::duration<double>(delta).count();
-            data.InstantSpeedMiBs = deltaSeconds > 0 ?
-                static_cast<double>(data.CurrentDataSizeLoaded - PreviousDataSizeLoaded) / (1024 * 1024) / deltaSeconds : 0.0;
+            displayData.StatusData.InstantSpeedMiBs = deltaSeconds > 0 ?
+                static_cast<double>(
+                    displayData.StatusData.CurrentDataSizeLoaded - PreviousDataSizeLoaded) / (1024 * 1024) / deltaSeconds : 0.0;
 
             auto totalElapsed = std::chrono::duration<double>(now - StartTime).count();
-            data.AvgSpeedMiBs = totalElapsed > 0 ?
-                static_cast<double>(data.CurrentDataSizeLoaded) / (1024 * 1024) / totalElapsed : 0.0;
+            displayData.StatusData.AvgSpeedMiBs = totalElapsed > 0 ?
+                static_cast<double>(displayData.StatusData.CurrentDataSizeLoaded) / (1024 * 1024) / totalElapsed : 0.0;
 
-            data.ElapsedMinutes = static_cast<int>(totalElapsed / 60);
-            data.ElapsedSeconds = static_cast<int>(totalElapsed) % 60;
+            displayData.StatusData.ElapsedMinutes = static_cast<int>(totalElapsed / 60);
+            displayData.StatusData.ElapsedSeconds = static_cast<int>(totalElapsed) % 60;
 
-            if (data.AvgSpeedMiBs > 0 && data.CurrentDataSizeLoaded < LoadState.ApproximateDataSize) {
-                double remainingBytes = LoadState.ApproximateDataSize - data.CurrentDataSizeLoaded;
-                double remainingSeconds = remainingBytes / (1024 * 1024) / data.AvgSpeedMiBs;
-                data.EstimatedTimeLeftMinutes = static_cast<int>(remainingSeconds / 60);
-                data.EstimatedTimeLeftSeconds = static_cast<int>(remainingSeconds) % 60;
+            if (displayData.StatusData.AvgSpeedMiBs > 0
+                    && displayData.StatusData.CurrentDataSizeLoaded < LoadState.ApproximateDataSize) {
+                double remainingBytes = LoadState.ApproximateDataSize - displayData.StatusData.CurrentDataSizeLoaded;
+                double remainingSeconds = remainingBytes / (1024 * 1024) / displayData.StatusData.AvgSpeedMiBs;
+                displayData.StatusData.EstimatedTimeLeftMinutes = static_cast<int>(remainingSeconds / 60);
+                displayData.StatusData.EstimatedTimeLeftSeconds = static_cast<int>(remainingSeconds) % 60;
             }
 
-            PreviousDataSizeLoaded = data.CurrentDataSizeLoaded;
+            PreviousDataSizeLoaded = displayData.StatusData.CurrentDataSizeLoaded;
         }
 
         switch (Config.DisplayMode) {
         case TRunConfig::EDisplayMode::Text:
-            UpdateDisplayTextMode(data);
+            UpdateDisplayTextMode(displayData.StatusData);
             break;
         case TRunConfig::EDisplayMode::Tui:
-            UpdateDisplayTuiMode(data);
+            Tui->Update(displayData);
             break;
         default:
             ;
@@ -1139,7 +1092,7 @@ private:
         LastDisplayUpdate = now;
     }
 
-    void UpdateDisplayTextMode(const TCalculatedStatusData& data) {
+    void UpdateDisplayTextMode(const TImportStatusData& data) {
         if (!data.IsWaitingForIndices) {
             std::stringstream ss;
             ss << std::fixed << std::setprecision(1) << "Progress: " << data.PercentLoaded << "% "
@@ -1175,135 +1128,12 @@ private:
         }
     }
 
-    void UpdateDisplayTuiMode(const TCalculatedStatusData& data) {
-        using namespace ftxui;
-
-        // fist update is very special: we switch buffers and capture logs to display live logs
-        static bool firstUpdate = true;
-        if (firstUpdate) {
-            LogBackend->StartCapture();
-
-            // Switch to alternate screen buffer (like htop)
-            std::cout << "\033[?1049h";
-            std::cout << "\033[2J\033[H"; // Clear screen and move to top
-            firstUpdate = false;
-        }
-
-        // our header with main information
-
-        std::stringstream headerSs;
-        headerSs << "TPC-C Import: " << Config.WarehouseCount << " warehouses, "
-                 << Config.LoadThreadCount << " threads   Estimated size: "
-                 << GetFormattedSize(LoadState.ApproximateDataSize);
-
-        std::stringstream progressSs;
-        progressSs << std::fixed << std::setprecision(1) << data.PercentLoaded << "% ("
-                   << GetFormattedSize(data.CurrentDataSizeLoaded) << ")";
-
-        std::stringstream speedSs;
-        speedSs << std::fixed << std::setprecision(1)
-                << "Speed: " << data.InstantSpeedMiBs << " MiB/s   "
-                << "Avg: " << data.AvgSpeedMiBs << " MiB/s   "
-                << "Elapsed: " << data.ElapsedMinutes << ":"
-                << std::setfill('0') << std::setw(2) << data.ElapsedSeconds << "   "
-                << "ETA: " << data.EstimatedTimeLeftMinutes << ":"
-                << std::setfill('0') << std::setw(2) << data.EstimatedTimeLeftSeconds;
-
-        // Calculate progress ratio for gauge
-        float progressRatio = static_cast<float>(data.PercentLoaded / 100.0);
-
-        // Left side: Import details
-        auto importDetails = vbox({
-            text(headerSs.str()),
-            hbox({
-                text("Progress: "),
-                gauge(progressRatio) | flex,
-                text("  " + progressSs.str())
-            }),
-            text(speedSs.str())
-        });
-
-        auto topRow = window(text("TPC-C data upload"), hbox({
-            importDetails
-        }));
-
-        // Index progress section (always shown)
-
-        Elements indexElements;
-        TString indexText;
-        if (LoadState.IndexBuildStates.empty()) {
-            indexText = "Index Creation Didn't Start";
-        } else {
-            indexText = "Index Creation";
-        }
-
-        if (LoadState.IndexBuildStates.empty()) {
-            // Index building not started yet, need to leave enough space
-            for (size_t i = 0; i < INDEX_COUNT; ++i) {
-                float indexRatio = static_cast<float>(0.0);
-
-                std::stringstream indexSs;
-                indexSs << std::fixed << std::setprecision(1) << 0.0 << "%";
-
-                indexElements.push_back(
-                    hbox({
-                        text("  [ index " + std::to_string(i + 1) + " ] "),
-                        gauge(indexRatio) | flex,
-                        text(" " + indexSs.str())
-                    })
-                );
-            }
-        } else {
-            // Show progress for each index
-            for (size_t i = 0; i < LoadState.IndexBuildStates.size(); ++i) {
-                const auto& indexState = LoadState.IndexBuildStates[i];
-                float indexRatio = static_cast<float>(indexState.Progress / 100.0);
-
-                std::stringstream indexSs;
-                indexSs << std::fixed << std::setprecision(1) << indexState.Progress << "%";
-
-                indexElements.push_back(
-                    hbox({
-                        text("  [ index " + std::to_string(i + 1) + " ] "),
-                        gauge(indexRatio) | flex,
-                        text(" " + indexSs.str())
-                    })
-                );
-            }
-        }
-
-        auto indicesRow = window(text(indexText), vbox(indexElements));
-
-        // Logs section (last 10 lines, full width)
-
-        Elements logElements;
-        LogBackend->GetLogLines([&](const std::string& line) {
-            logElements.push_back(paragraph(line));
-        });
-
-        auto logsContent = vbox(logElements);
-        auto logsPanel = window(text(" Logs "),
-            logsContent | flex);
-
-        // Main layout - fill the entire screen
-
-        auto layout = vbox({
-            topRow,
-            indicesRow,
-            logsPanel | flex
-        });
-
-        // Render full screen
-
-        std::cout << "\033[H"; // Move cursor to top
-        auto screen = Screen::Create(Dimension::Full(), Dimension::Full());
-        Render(screen, layout);
-        std::cout << screen.ToString();
-    }
-
     void ExitTuiMode() {
         LogBackend->StopCapture();
 
+        Tui.reset();
+
+        // TODO: remove?
         // Switch back to main screen buffer (restore original content)
         std::cout << "\033[?1049l";
         std::cout.flush();
@@ -1320,7 +1150,9 @@ private:
     Clock::time_point LastDisplayUpdate;
     size_t PreviousDataSizeLoaded;
     Clock::time_point StartTime;
-    TLoadState LoadState;
+    TImportState LoadState;
+
+    std::unique_ptr<TImportTui> Tui;
 };
 
 } // anonymous namespace

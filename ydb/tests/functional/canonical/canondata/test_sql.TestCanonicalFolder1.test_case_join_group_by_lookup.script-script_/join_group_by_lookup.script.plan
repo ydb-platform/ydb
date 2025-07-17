@@ -209,9 +209,6 @@
                                                                                 "Name": "TableFullScan",
                                                                                 "Path": "/local/base_join_group_by_lookup_script_script/Input1",
                                                                                 "ReadColumns": [
-                                                                                    "Group"
-                                                                                ],
-                                                                                "ReadRanges": [
                                                                                     "Group (-\u221e, +\u221e)",
                                                                                     "Name (-\u221e, +\u221e)"
                                                                                 ],

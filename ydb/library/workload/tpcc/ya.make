@@ -7,8 +7,11 @@ SRCS(
     histogram.cpp
     init.cpp
     import.cpp
+    import_tui.cpp
     log_backend.cpp
     runner.cpp
+    runner_tui.cpp
+    scroller.cpp
     task_queue.cpp
     terminal.cpp
     transaction_delivery.cpp

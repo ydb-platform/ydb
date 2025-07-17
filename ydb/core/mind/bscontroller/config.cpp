@@ -115,6 +115,7 @@ namespace NKikimr::NBsController {
                 pdisk->SetPDiskCategory(pdiskInfo.Kind.GetRaw());
                 pdisk->SetExpectedSerial(pdiskInfo.ExpectedSerial);
                 pdisk->SetManagementStage(Self->SerialManagementStage);
+                pdisk->SetInferPDiskSlotCountFromUnitSize(pdiskInfo.InferPDiskSlotCountFromUnitSize);
                 if (pdiskInfo.PDiskConfig && !pdisk->MutablePDiskConfig()->ParseFromString(pdiskInfo.PDiskConfig)) {
                     // TODO(alexvru): report this somehow
                 }
@@ -908,6 +909,7 @@ namespace NKikimr::NBsController {
                 drive.SetSharedWithOs(value.SharedWithOs);
                 drive.SetReadCentric(value.ReadCentric);
                 drive.SetKind(value.Kind);
+                drive.SetInferPDiskSlotCountFromUnitSize(value.InferPDiskSlotCountFromUnitSize);
 
                 if (const auto& config = value.PDiskConfig) {
                     NKikimrBlobStorage::TPDiskConfig& pb = *drive.MutablePDiskConfig();
@@ -1044,6 +1046,7 @@ namespace NKikimr::NBsController {
             pb->SetLastSeenSerial(pdisk.LastSeenSerial);
             pb->SetReadOnly(pdisk.Mood == TPDiskMood::ReadOnly);
             pb->SetMaintenanceStatus(pdisk.MaintenanceStatus);
+            pb->SetInferPDiskSlotCountFromUnitSize(pdisk.InferPDiskSlotCountFromUnitSize);
         }
 
         void TBlobStorageController::Serialize(NKikimrBlobStorage::TVSlotId *pb, TVSlotId id) {

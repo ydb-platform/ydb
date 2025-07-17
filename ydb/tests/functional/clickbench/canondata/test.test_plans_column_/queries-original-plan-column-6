@@ -89,9 +89,6 @@
                                                         "Name": "TableFullScan",
                                                         "Path": "/local/clickbench/plans/column/hits",
                                                         "ReadColumns": [
-                                                            "EventDate"
-                                                        ],
-                                                        "ReadRanges": [
                                                             "CounterID (-\u221e, +\u221e)",
                                                             "EventDate (-\u221e, +\u221e)",
                                                             "UserID (-\u221e, +\u221e)",

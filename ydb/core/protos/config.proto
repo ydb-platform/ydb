@@ -1575,6 +1575,12 @@ message TImmediateControlsConfig {
             MinValue: 1,
             MaxValue: 1000,
             DefaultValue: 20 }];
+            
+        optional uint64 EnableDeepScrubbing = 33 [(ControlOptions) = {
+            Description: "Run CheckIntegrity requests during Scrub process instead of usual scrubbing",
+            MinValue: 0,
+            MaxValue: 1,
+            DefaultValue: 0 }];
     }
 
     message TTabletControls {

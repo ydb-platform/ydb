@@ -677,7 +677,9 @@ namespace NKikimr::NStorage {
     }
 
     bool TDistributedConfigKeeper::UpdateConfig(NKikimrBlobStorage::TStorageConfig *config) {
-        (void)config;
+        if (UpdateBridgeConfig(config)) {
+            return true;
+        }
         return false;
     }
 

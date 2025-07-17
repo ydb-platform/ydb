@@ -89,10 +89,16 @@ struct TGetJobSpecOptions
     bool OmitOutputTableSpecs = false;
 };
 
+DEFINE_ENUM(EJobStderrType,
+    ((UserJobStderr)    (0))
+    ((GpuCheckStderr)   (1))
+);
+
 struct TGetJobStderrOptions
     : public TTimeoutOptions
     , public TMasterReadOptions
 {
+    std::optional<EJobStderrType> Type;
     std::optional<i64> Limit;
     std::optional<i64> Offset;
 };

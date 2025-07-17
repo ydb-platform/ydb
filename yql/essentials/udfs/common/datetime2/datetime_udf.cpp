@@ -3004,7 +3004,8 @@ private:
                         break;
                     }
                     default:
-                        ythrow yexception() << "invalid format character: " << *ptr;
+                        throw yexception() << "character '" << *ptr << "' is not a valid format specifier."
+                                           << "\nSee documentation for valid format characters";
                     }
 
                     dataStart = ptr + 1U;

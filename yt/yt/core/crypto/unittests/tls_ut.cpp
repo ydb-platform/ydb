@@ -35,8 +35,9 @@ public:
         GrpcLock = NRpc::NGrpc::TDispatcher::Get()->GetLibraryLock();
         Context = New<TSslContext>();
 
-        Context->AddCertificate(TestCertificate);
-        Context->AddPrivateKey(TestCertificate);
+        Context->AddCertificate(GetTestKeyContent("cert.pem"));
+        Context->AddPrivateKey(GetTestKeyContent("key.pem"));
+        Context->AddCertificateAuthority(GetTestKeyContent("ca.pem"));
         Context->Commit();
 
         Poller = CreateThreadPoolPoller(2, "TlsTest");
@@ -114,7 +115,8 @@ TEST(TTlsTestWithoutFixture, LoadCertificateChain)
 {
     auto grpcLock = NRpc::NGrpc::TDispatcher::Get()->GetLibraryLock();
     auto context = New<TSslContext>();
-    context->AddCertificateChain(TestCertificateChain);
+    auto certificateChain = GetTestKeyContent("ca.pem") + GetTestKeyContent("cert.pem");
+    context->AddCertificateChain(certificateChain);
     context->Commit();
 }
 

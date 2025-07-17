@@ -76,7 +76,7 @@ namespace NProfiling {
     };
 }
 
-class TMemoryProfileGuard: public TMoveOnly {
+class TMemoryProfileGuard: public TNonCopyable {
 private:
     const TString Id;
     ui32 PredTag = 0;

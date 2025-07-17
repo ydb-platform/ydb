@@ -62,16 +62,10 @@ TConclusion<bool> TFetchingScriptCursor::Execute(const std::shared_ptr<IDataSour
             break;
         }
         auto step = Script->GetStep(CurrentStepIdx);
-        const std::optional<TMemoryProfileGuard> mGuard = [&]() -> std::optional<TMemoryProfileGuard> {
-            std::optional<TMemoryProfileGuard> result;
-            if (IS_DEBUG_LOG_ENABLED(NKikimrServices::TX_COLUMNSHARD_SCAN_MEMORY)) {
-                result.emplace("SCAN_PROFILE::FETCHING::" + step->GetName() + "::" + Script->GetBranchName(),
-                    IS_DEBUG_LOG_ENABLED(NKikimrServices::TX_COLUMNSHARD_SCAN_MEMORY));
-                return std::move(result);
-            } else {
-                return result;
-            }
-        }();
+        std::optional<TMemoryProfileGuard> mGuard;
+        if (IS_DEBUG_LOG_ENABLED(NKikimrServices::TX_COLUMNSHARD_SCAN_MEMORY)) {
+            mGuard.emplace("SCAN_PROFILE::FETCHING::" + step->GetName() + "::" + Script->GetBranchName());
+        }
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("scan_step", step->DebugString())("scan_step_idx", CurrentStepIdx)(
             "source_id", source->GetSourceId());
 

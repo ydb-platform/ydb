@@ -11315,12 +11315,12 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         };
 
         const auto finishPromise = NThreading::NewPromise<void>();
-        const auto firstOwner = runtime.Register(new TTestTempTablesAgentActor(finishPromise));
+        const auto firstOwner = runtime.Register(new TTestTempTablesAgentActor(finishPromise), 0, 1);
         const auto firstDir = "first_dir";
         createTempDir(firstDir, firstOwner);
 
         const auto secondDir = "second_dir";
-        createTempDir(secondDir, runtime.Register(new TTestTempTablesAgentActor(NThreading::NewPromise<void>())));
+        createTempDir(secondDir, runtime.Register(new TTestTempTablesAgentActor(NThreading::NewPromise<void>()), 0, 1));
 
         // Directories succesfully created
 

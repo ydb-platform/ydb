@@ -6,6 +6,7 @@
 * 18352:Added database audit logs in console's tablet.[#18352](https://github.com/ydb-platform/ydb/pull/18352) ([flown4qqqq](https://github.com/flown4qqqq))
 * 18298:Limited the creation of ReassignerActor to only one active instance to prevent [SelfHeal](https://ydb.tech/docs/ru/maintenance/manual/selfheal) from overloading BSC. [#18298](https://github.com/ydb-platform/ydb/pull/18298) ([Sergey Belyakov](https://github.com/serbel324))
 * 18294:Changed version format from Year.Major.Minor.Hotfix to Year.Major.Minor.Patch.Hotfix [#18294](https://github.com/ydb-platform/ydb/pull/18294) ([Sergey Belyakov](https://github.com/serbel324))
+* 20705:YMQ: Do not send x-amz-crc32 HTTP header (AWS does not do it) [#20705](https://github.com/ydb-platform/ydb/pull/20705) ([qyryq](https://github.com/qyryq))
 
 ### Bug fixes
 
@@ -26,9 +27,13 @@
 * 20422:Fixed an [issue](https://github.com/ydb-platform/ydb/issues/20420) with timeout during healthcheck. [#20422](https://github.com/ydb-platform/ydb/pull/20422) ([Alexey Efimov](https://github.com/adameat))
 * 20395:Fixed reporting of gRPC metrics of serverless databases. [#20395](https://github.com/ydb-platform/ydb/pull/20395) ([Ilnaz Nizametdinov](https://github.com/CyberROFL))
 * 20355:Eliminated remove data cleanup freezes in case of counter discrepancies. [#20355](https://github.com/ydb-platform/ydb/pull/20355) ([Andrey Molotkov](https://github.com/molotkov-and))
+* 20759:Fixed the [KesusQuoterService freeze](https://github.com/ydb-platform/ydb/issues/20747) in case of several unsuccessful attempts to connect to the Kesus tablet. [#20759](https://github.com/ydb-platform/ydb/pull/20759) ([Ilnaz Nizametdinov](https://github.com/CyberROFL))
+* 20707:[Fixed](https://github.com/ydb-platform/ydb/pull/20707) an [issue](https://github.com/ydb-platform/ydb/issues/20709) where distributed reads could occasionally be processed without a snapshot. Need to acquire snapshot for dependant reads even in RW transaction. ([Nikita Vasilev](https://github.com/nikvas0))
 
 ### Performance
 
 * 19844:Users will receive faster confirmation that the server has written the message thanks to changes the retry policy settings and adds a cache of SchemeNavigate responses.[#19844](https://github.com/ydb-platform/ydb/pull/19844) ([Alek5andr-Kotov](https://github.com/Alek5andr-Kotov))
 * 19916:When transaction duration exceeds the topic's message retention period, writing to the topic may result in inconsistent data in the partition. [#19916](https://github.com/ydb-platform/ydb/pull/19916) ([Nikolay Shestakov](https://github.com/nshestakov))
+* 20848:Significantly improved performance for single-core, dual-core, and triple-core configurations. [#20848](https://github.com/ydb-platform/ydb/pull/20848) ([kruall](https://github.com/kruall))
+* 20704:Enhanced pool scaling when using shared threads and available CPU resources. [#20704](https://github.com/ydb-platform/ydb/pull/20704) ([kruall](https://github.com/kruall))
 

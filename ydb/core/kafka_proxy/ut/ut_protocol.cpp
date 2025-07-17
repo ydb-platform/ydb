@@ -186,6 +186,21 @@ public:
         }
 
         {
+            auto status = client.CreateUser("/Root", "user123", "UsErPassword");
+            UNIT_ASSERT_VALUES_EQUAL(status, NMsgBusProxy::MSTATUS_OK);
+
+            NYdb::NScheme::TSchemeClient schemeClient(*Driver);
+            NYdb::NScheme::TPermissions permissions("ouruser", {"ydb.generic.read", "ydb.generic.write", "ydb.generic.full"});
+
+            auto result = schemeClient
+                              .ModifyPermissions(
+                                  "/Root", NYdb::NScheme::TModifyPermissionsSettings().AddGrantPermissions(permissions))
+                              .ExtractValueSync();
+            Cerr << result.GetIssues().ToString() << "\n";
+            UNIT_ASSERT(result.IsSuccess());
+        }
+
+        {
             // Access Server Mock
             grpc::ServerBuilder builder;
             builder.AddListeningPort(accessServiceEndpoint, grpc::InsecureServerCredentials()).RegisterService(&accessServiceMock);
@@ -2516,6 +2531,24 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         UNIT_ASSERT_VALUES_EQUAL(metadataResponse->Brokers[0].Port, FAKE_SERVERLESS_KAFKA_PROXY_PORT);
     }
 
+    Y_UNIT_TEST(ConsumerTopicAutocreationScenario) {
+        TInsecureTestServer testServer;
+        // TInsecureTestServer testServer("1", false, true);
+        // TKafkaTestClient client(testServer.Port, "ClientA");
+        TClient client(*(testServer.KikimrServer->ServerSettings));
+
+        // NYdb::NScheme::TSchemeClient schemeClient(*testServer->Driver);
+        // NYdb::NScheme::TPermissions permissions("ouruser", {"ydb.generic.read", "ydb.generic.write", "ydb.generic.full"});
+
+        // auto result = schemeClient
+        //                     .ModifyPermissions(
+        //                         "/Root", NYdb::NScheme::TModifyPermissionsSettings().AddGrantPermissions(permissions))
+        //                     .ExtractValueSync();
+        // Cerr << result.GetIssues().ToString() << "\n";
+        // UNIT_ASSERT(result.IsSuccess());
+        // client.DeleteUser("/Root", const TModifyUserOption &options)
+
+    }
 
     Y_UNIT_TEST(DescribeGroupsScenario) {
         TInsecureTestServer testServer("1", false, true);

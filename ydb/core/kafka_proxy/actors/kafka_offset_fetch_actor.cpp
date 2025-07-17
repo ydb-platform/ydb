@@ -247,16 +247,21 @@ void TKafkaOffsetFetchActor::Handle(TEvKafka::TEvCommitedOffsetsResponse::TPtr& 
                     if (topicPartition.ErrorCode == 91) {
                         InflyTopics++;
                         illigalRequestError = true;
-                        // тут запросик
-                        // auto args = std::move(ev->Get()->GetArgs());
-                        // auto& path = std::get<TString>(args);
-                        // auto& settings = std::get<NYdb::NTopic::TAlterTopicSettings>(args);
+
+                        std::pair<TString, TString> consumerTopicRequestsCount = {*consumerGroup.GroupId, *groupTopic.Name};
+                        if (ConsumerTopicRequestsLimit.find(consumerTopicRequestsCount) != ConsumerTopicRequestsLimit.end()) {
+                            ConsumerTopicRequestsLimit[consumerTopicRequestsCount] = 2;
+                        } else {
+                            ui32& requestCounter = ConsumerTopicRequestsLimit[consumerTopicRequestsCount];
+                            if (requestCounter > 0) {
+                                requestCounter--;
+                            } else {
+                                break;
+                            }
+                        }
 
                         auto topicSettings = NYdb::NTopic::TAlterTopicSettings();
-
                         topicSettings.BeginAddConsumer(*consumerGroup.GroupId).EndAddConsumer();
-
-
 
                         auto request = std::make_unique<Ydb::Topic::AlterTopicRequest>();
                         TString p = TStringBuilder() << "/" << DatabasePath << groupTopic.Name;
@@ -265,11 +270,7 @@ void TKafkaOffsetFetchActor::Handle(TEvKafka::TEvCommitedOffsetsResponse::TPtr& 
                             auto* consumer = request.get()->add_add_consumers();
                             consumer->set_name(c.ConsumerName_);
                         }
-                        // for (auto& c : settings.DropConsumers_) {
-                        //     auto* consumer = request.get()->add_drop_consumers();
-                        //     *consumer = c;
-                        // }
-                        KAFKA_LOG_D("HERE");
+
                         KqpCookie++;
                         AlterTopicInf[KqpCookie].TopicName = *groupTopic.Name;
                         AlterTopicInf[KqpCookie].Entities.Consumers->insert(*consumerGroup.GroupId);
@@ -280,8 +281,6 @@ void TKafkaOffsetFetchActor::Handle(TEvKafka::TEvCommitedOffsetsResponse::TPtr& 
                             Send(replyTo, new NKikimr::NReplication::TEvYdbProxy::TEvAlterTopicResponse(std::move(status)), 0, cookie);
                         };
                         NKikimr::NReplication::TLocalProxyActor * actor = new NKikimr::NReplication::TLocalProxyActor(DatabasePath);
-                        // NGRpcService::DoAlterTopicRequest
-                        // NKikimr::NGRpcService::DoAlterTopicRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider &f)
                         NKikimr::NGRpcService::DoAlterTopicRequest(std::make_unique<NKikimr::NReplication::TLocalProxyRequest>(*groupTopic.Name, DatabasePath, std::move(request), callback), *actor);
                         break;
                     }

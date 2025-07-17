@@ -233,14 +233,16 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         auto& record = (*ev)->Get()->Record;
         auto entrySample = record.entries(0);
         if (rewrite) {
-            Ctest << "rewrite\n";
             record.clear_entries();
         }
 
         auto groupId = groupStartId;
         const auto *descriptor = NKikimrBlobStorage::EVDiskStatus_descriptor();
         for (size_t i = 0; i < groupCount; ++i) {
-            static auto vslotId = VCARD_START_ID;
+            static int vslotId;
+            if (rewrite) {
+                vslotId = VCARD_START_ID;
+            }
             auto pdiskId = PDISK_START_ID;
             for (const auto& vslot : vslots) {
                 auto* entry = record.add_entries();
@@ -258,7 +260,6 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
                 entry->mutable_info()->set_vdisk(vslotId);
                 ++vslotId;
                 ++pdiskId;
-                Ctest << "Vdisk " << vslotId << " in group " << groupId << " with status " << descriptor->FindValueByNumber(*vslot.Status)->name() << Endl;
             }
             ++groupId;
         }

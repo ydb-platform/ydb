@@ -130,7 +130,6 @@ public:
 
     class TDurationGuard: TNonCopyable {
     private:
-        const TMonotonic StartInstant = TMonotonic::Now();
         TTraceClient* Owner = nullptr;
         const TString Id;
         TStatInfo* Stat;

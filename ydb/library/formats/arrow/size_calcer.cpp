@@ -251,8 +251,8 @@ public:
 }
 
 ui64 GetArrayDataSize(const std::shared_ptr<arrow::Array>& column) {
-    auto type = column->type();
-    if (type->id() == arrow::Type::DICTIONARY) {
+    auto typeId = column->type_id();
+    if (typeId == arrow::Type::DICTIONARY) {
         auto dictArray = static_pointer_cast<arrow::DictionaryArray>(column);
         return GetDictionarySize(dictArray);
     }

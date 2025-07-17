@@ -49,7 +49,7 @@ TTraceClient::TDurationGuard::TDurationGuard(TTraceClient& owner, const TString&
         it = Owner->Stats.emplace(Id, TStatInfo()).first;
     }
     Stat = &it->second;
-    Stat->Start(StartInstant);
+    Stat->Start(TMonotonic::Now());
 }
 
 TTraceClient::TDurationGuard::TDurationGuard(const TString& id)

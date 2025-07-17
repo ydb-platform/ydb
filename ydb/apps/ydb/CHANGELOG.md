@@ -1,3 +1,4 @@
+* Added ability of `ydb workload tpch` and `ydb workload tpcds` commands to use fraction `--scale` option.
 
 ## 2.23.0 ##
 

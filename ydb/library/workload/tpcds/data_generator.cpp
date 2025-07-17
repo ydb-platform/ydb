@@ -40,7 +40,7 @@ void TTpcdsWorkloadDataInitializerGenerator::ConfigureOpts(NLastGetopt::TOpts& o
 }
 
 TBulkDataGeneratorList TTpcdsWorkloadDataInitializerGenerator::DoGetBulkInitialData() {
-    InitTpcdsGen(GetScale(), GetProcessCount(), GetProcessIndex());
+    InitTpcdsGen(std::ceil(GetScale()), GetProcessCount(), GetProcessIndex());
     const auto tables = GetTables() ? GetTables() : TBulkDataGenerator::TFactory::GetRegisteredKeys();
     TVector<std::shared_ptr<TBulkDataGenerator>> gens;
     for (const auto& table: tables) {
@@ -113,6 +113,7 @@ TTpcdsWorkloadDataInitializerGenerator::TBulkDataGenerator::TBulkDataGenerator(c
     }
     ds_key_t rowsCount;
     split_work(TableNum, &FirstRow, &rowsCount);
+    rowsCount = std::max(1., rowsCount * Owner.GetScale() / std::ceil(Owner.GetScale()));
     //this magic is needed for SCD to work correctly. See setSCDKeys in ydb/library/benchmarks/gen/tpcds-dbgen/scd.c
     while (FirstRow > 1 && !allowedModules.contains(FirstRow % 6)) {
         --FirstRow;

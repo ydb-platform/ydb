@@ -29,7 +29,7 @@ class TpchSuiteBase(LoadSuiteBase):
 
     @classmethod
     def _get_path(cls) -> str:
-        return get_external_param(f'table-path-{cls.suite()}', f'tpch/s{cls.scale}')
+        return get_external_param(f'table-path-{cls.suite()}', f'tpch/s{cls.scale}'.replace('.', '_'))
 
     @classmethod
     def do_setup_class(cls):

@@ -221,7 +221,7 @@ bool TColumnShardScan::ProduceResults() noexcept {
         return false;
     }
 
-    std::shared_ptr<TPartialReadResult> resultOpt = resultConclusion.DetachResult();
+    std::unique_ptr<TPartialReadResult> resultOpt = resultConclusion.DetachResult();
     if (!resultOpt) {
         ACFL_DEBUG("stage", "no data is ready yet")("iterator", ScanIterator->DebugString());
         return false;

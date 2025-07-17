@@ -16,7 +16,7 @@ TPlainReadData::TPlainReadData(const std::shared_ptr<TReadContext>& context)
     stats->SchemaColumns = (*SpecialReadContext->GetProgramInputColumns() - *SpecialReadContext->GetSpecColumns()).GetColumnsCount();
 }
 
-std::vector<std::shared_ptr<TPartialReadResult>> TPlainReadData::DoExtractReadyResults(const int64_t /*maxRowsInBatch*/) {
+std::vector<std::unique_ptr<TPartialReadResult>> TPlainReadData::DoExtractReadyResults(const int64_t /*maxRowsInBatch*/) {
     auto result = std::move(PartialResults);
     PartialResults.clear();
     //    auto result = TPartialReadResult::SplitResults(std::move(PartialResults), maxRowsInBatch);
@@ -36,7 +36,7 @@ TConclusion<bool> TPlainReadData::DoReadNextInterval() {
     return Scanner->BuildNextInterval();
 }
 
-void TPlainReadData::OnIntervalResult(const std::shared_ptr<TPartialReadResult>& result) {
+void TPlainReadData::OnIntervalResult(std::unique_ptr<TPartialReadResult>&& result) {
     //    result->GetResourcesGuardOnly()->Update(result->GetMemorySize());
     ReadyResultsCount += result->GetRecordsCount();
     PartialResults.emplace_back(result);

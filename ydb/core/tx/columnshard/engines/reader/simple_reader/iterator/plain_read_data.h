@@ -14,7 +14,7 @@ private:
     using TBase = IDataReader;
     std::shared_ptr<TScanHead> Scanner;
     std::shared_ptr<TSpecialReadContext> SpecialReadContext;
-    std::vector<std::shared_ptr<TPartialReadResult>> PartialResults;
+    std::vector<std::unique_ptr<TPartialReadResult>> PartialResults;
     ui32 ReadyResultsCount = 0;
 
 protected:
@@ -32,7 +32,7 @@ protected:
         return sb;
     }
 
-    virtual std::vector<std::shared_ptr<TPartialReadResult>> DoExtractReadyResults(const int64_t maxRowsInBatch) override;
+    virtual std::vector<std::unique_ptr<TPartialReadResult>> DoExtractReadyResults(const int64_t maxRowsInBatch) override;
     virtual TConclusion<bool> DoReadNextInterval() override;
 
     virtual void DoAbort() override {
@@ -63,7 +63,7 @@ public:
     }
     virtual void OnSentDataFromInterval(const TPartialSourceAddress& sourceAddress) override;
 
-    void OnIntervalResult(const std::shared_ptr<TPartialReadResult>& result);
+    void OnIntervalResult(const std::unique_ptr<TPartialReadResult>& result);
 
     TPlainReadData(const std::shared_ptr<TReadContext>& context);
     ~TPlainReadData() {

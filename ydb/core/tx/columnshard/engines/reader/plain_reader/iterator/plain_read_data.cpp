@@ -29,7 +29,7 @@ std::vector<std::unique_ptr<TPartialReadResult>> TPlainReadData::DoExtractReadyR
 
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "DoExtractReadyResults")("result", result.size())("count", count)(
         "finished", Scanner->IsFinished());
-    return result;
+    return std::move(result);
 }
 
 TConclusion<bool> TPlainReadData::DoReadNextInterval() {
@@ -39,7 +39,7 @@ TConclusion<bool> TPlainReadData::DoReadNextInterval() {
 void TPlainReadData::OnIntervalResult(std::unique_ptr<TPartialReadResult>&& result) {
     //    result->GetResourcesGuardOnly()->Update(result->GetMemorySize());
     ReadyResultsCount += result->GetRecordsCount();
-    PartialResults.emplace_back(result);
+    PartialResults.emplace_back(std::move(result));
 }
 
 }   // namespace NKikimr::NOlap::NReader::NPlain

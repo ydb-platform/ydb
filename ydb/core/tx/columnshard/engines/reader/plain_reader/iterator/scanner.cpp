@@ -47,14 +47,15 @@ void TScanHead::OnIntervalResult(std::shared_ptr<NGroupedMemoryManager::TAllocat
             AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "interval_result")("interval_idx", intervalIdx)("count",
                 it->second ? it->second->GetRecordsCount() : 0)("merger", interval->HasMerger())("interval_id", interval->GetIntervalId());
         }
-        auto result = it->second;
+        auto result = std::move(it->second);
         ReadyIntervals.erase(it);
+        bool hasResult = !!result;
         if (result) {
-            reader.OnIntervalResult(result);
+            reader.OnIntervalResult(std::move(result));
         }
         if (!interval->HasMerger()) {
             FetchingIntervals.erase(FetchingIntervals.begin());
-        } else if (result) {
+        } else if (hasResult) {
             break;
         } else {
             interval->OnPartSendingComplete();

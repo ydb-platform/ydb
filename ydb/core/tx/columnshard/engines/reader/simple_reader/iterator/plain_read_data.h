@@ -63,7 +63,7 @@ public:
     }
     virtual void OnSentDataFromInterval(const TPartialSourceAddress& sourceAddress) override;
 
-    void OnIntervalResult(const std::unique_ptr<TPartialReadResult>& result);
+    void OnIntervalResult(std::unique_ptr<TPartialReadResult>&& result);
 
     TPlainReadData(const std::shared_ptr<TReadContext>& context);
     ~TPlainReadData() {

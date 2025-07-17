@@ -82,7 +82,7 @@ void TColumnShardScan::HandleScan(NColumnShard::TEvPrivate::TEvTaskProcessedResu
         WaitTime += TInstant::Now() - StartWaitTime;
     }
     auto g = Stats->MakeGuard("task_result", IS_INFO_LOG_ENABLED(NKikimrServices::TX_COLUMNSHARD_SCAN));
-    auto result = ev->Get()->ExtractResult();
+    auto& result = ev->Get()->MutableResult();
     if (result.IsFail()) {
         ACFL_ERROR("event", "TEvTaskProcessedResult")("error", result.GetErrorMessage());
         SendScanError("task_error:" + result.GetErrorMessage());

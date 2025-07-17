@@ -135,13 +135,13 @@ struct TEvPrivate {
         TCounterGuard ScanCounter;
 
     public:
-        TConclusion<std::shared_ptr<NOlap::NReader::IApplyAction>> ExtractResult() {
+        TConclusion<std::shared_ptr<NOlap::NReader::IApplyAction>>& MutableResult() {
             return std::move(Result);
         }
 
         TEvTaskProcessedResult(
-            const TConclusion<std::shared_ptr<NOlap::NReader::IApplyAction>>& result, TCounterGuard&& scanCounters)
-            : Result(result)
+            TConclusion<std::shared_ptr<NOlap::NReader::IApplyAction>>&& result, TCounterGuard&& scanCounters)
+            : Result(std::move(result))
             , ScanCounter(std::move(scanCounters)) {
         }
     };

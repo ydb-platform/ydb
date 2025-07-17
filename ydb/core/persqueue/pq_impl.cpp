@@ -6,6 +6,7 @@
 #include "partition.h"
 #include "read.h"
 #include "utils.h"
+#include "tracing_support.h"
 
 #include <ydb/core/base/tx_processing.h>
 #include <ydb/core/base/feature_flags.h>
@@ -19,6 +20,7 @@
 #include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/sys_view/service/sysview_service.h>
 #include <ydb/core/tablet/tablet_counters.h>
+#include <ydb/core/jaeger_tracing/sampling_throttling_configurator.h>
 #include <library/cpp/json/json_writer.h>
 
 #include <util/generic/strbuf.h>
@@ -3036,6 +3038,8 @@ void TPersQueue::CreatedHook(const TActorContext& ctx)
     IsServerless = AppData(ctx)->FeatureFlags.GetEnableDbCounters(); //TODO: find out it via describe
     CacheActor = ctx.Register(new TPQCacheProxy(ctx.SelfID, TabletID()));
 
+    SamplingControl = AppData(ctx)->TracingConfigurator->GetControl();
+
     ctx.Send(GetNameserviceActorId(), new TEvInterconnect::TEvGetNode(ctx.SelfID.NodeId()));
     InitProcessingParams(ctx);
 }
@@ -3212,10 +3216,7 @@ void TPersQueue::Handle(TEvPersQueue::TEvProposeTransaction::TPtr& ev, const TAc
     const NKikimrPQ::TEvProposeTransaction& event = ev->Get()->GetRecord();
     PQ_LOG_TX_D("Handle TEvPersQueue::TEvProposeTransaction " << event.ShortDebugString());
 
-    NWilson::TSpan span(TWilsonTopic::ExecuteTransaction,
-                        NWilson::TTraceId::NewTraceId(TWilsonTopic::ExecuteTransaction, Max<ui32>()),
-                        "Topic.Transaction",
-                        NWilson::EFlags::AUTO_END);
+    auto span = GenerateSpan("Topic.Transaction", *SamplingControl);
     span.Attribute("TxId", static_cast<i64>(event.GetTxId()));
     span.Attribute("TabletId", static_cast<i64>(TabletID()));
 

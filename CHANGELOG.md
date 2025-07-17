@@ -12,12 +12,11 @@ and timeout (by default, the maximum response time from healthcheck). Documentat
 * 17007:Extended federated query capabilities to support a new external data source [Apache Iceberg](https://iceberg.apache.org). Documentation is under construction YQ-4266 [#17007](https://github.com/ydb-platform/ydb/pull/17007) ([Slusarenko Igor](https://github.com/buhtr))
 * 16076:Added automatic cleanup of temporary tables and directories created during S3 export operations. Previously, users had to manually remove temporary directories and tables that were created as part of the export pipeline. [#16076](https://github.com/ydb-platform/ydb/pull/16076) ([stanislav_shchetinin](https://github.com/stanislav-shchetinin))
 * 18731:Added monitoring counters with constant value 1 for nodes, VDisks and PDisks. [#18731](https://github.com/ydb-platform/ydb/pull/18731) ([Sergey Belyakov](https://github.com/serbel324))
-* 18561:Added miss kafka port support [#18561](https://github.com/ydb-platform/ydb/pull/18561) ([Sergey J](https://github.com/sourcecd))
-* 18376:Added a heuristic that should prevent a tablet that can overload a node on its own from endlessly moving between nodes [#18376](https://github.com/ydb-platform/ydb/pull/18376) ([vporyadke](https://github.com/vporyadke))
-* 18297:Introduce Bridge tech [#18297](https://github.com/ydb-platform/ydb/pull/18297) ([Alexander Rutkovsky](https://github.com/alexvru))
-* 18258:Increase timeout on BS_QUEUE reestablishing session when many actors try to reconnect simultaneously [#18258](https://github.com/ydb-platform/ydb/pull/18258) ([Sergey Belyakov](https://github.com/serbel324))
+* 18561:Added miss kafka port support. [#18561](https://github.com/ydb-platform/ydb/pull/18561) ([Sergey J](https://github.com/sourcecd))
+* 18376:Added a heuristic that should prevent a tablet that can overload a node on its own from endlessly moving between nodes. [#18376](https://github.com/ydb-platform/ydb/pull/18376) ([vporyadke](https://github.com/vporyadke))
+* 18297:Added basic functionality for cluster bridging. [#18297](https://github.com/ydb-platform/ydb/pull/18297) ([Alexander Rutkovsky](https://github.com/alexvru))
+* 18258:Increase timeout on BS_QUEUE reestablishing session when many actors try to reconnect simultaneously. [#18258](https://github.com/ydb-platform/ydb/pull/18258) ([Sergey Belyakov](https://github.com/serbel324))
 * 18137:Implement index-only searches with covering vector indexes (#17770) [#18137](https://github.com/ydb-platform/ydb/pull/18137) ([Vitaliy Filippov](https://github.com/vitalif))
-* 17061:Added of date range parameters (--date-to, --date-from to support uniform PK distribution) for ydb workload log run operations including bulk_upsert, insert, and upsert [#17061](https://github.com/ydb-platform/ydb/pull/17061) ([Emgariko](https://github.com/Emgariko))
 
 ### Bug fixes
 
@@ -27,15 +26,10 @@ and timeout (by default, the maximum response time from healthcheck). Documentat
 * 16423:Changed behavior — `SHOW CREATE TABLE` now fails on views instead of producing wrong output. [#16423](https://github.com/ydb-platform/ydb/pull/16423) ([Daniil Demin](https://github.com/jepett0))
 * 16768:Fixed an issue with topic auto-partitioning when the `max_active_partition` configuration parameter was set via the `ALTER TOPIC` statement. [#16768](https://github.com/ydb-platform/ydb/pull/16768) ([Nikolay Shestakov](https://github.com/nshestakov))
 * 16764:Fixed redirects from cluster endpoints (storage nodes) to database nodes, resolving inconsistent behavior where some system tables were not visible. #16763 [#16764](https://github.com/ydb-platform/ydb/pull/16764) ([Alexey Efimov](https://github.com/adameat))
-* 17157:Viewer API: Fixed the retrieval of tablet list for tables implementing secondary indexes. #17103 [#17157](https://github.com/ydb-platform/ydb/pull/17157) ([Alexey Efimov](https://github.com/adameat))
-* 18752:fix for https://st.yandex-team.ru/YQL-19988 [#18752](https://github.com/ydb-platform/ydb/pull/18752) ([Ivan Sukhov](https://github.com/evanevanevanevannnn))
 * 18698:The issue was missed checks for enabled encryption during zero copy routine. It causes attempt to send data unencrypted via XDC socket.
 https://github.com/ydb-platform/ydb/issues/18546 [#18698](https://github.com/ydb-platform/ydb/pull/18698) ([Daniil Cherednik](https://github.com/dcherednik))
-* 18664:In the table description columns are returned in the same order as they were specified in CREATE TABLE. [#18664](https://github.com/ydb-platform/ydb/pull/18664) ([Ilnaz Nizametdinov](https://github.com/CyberROFL))
-* 18553:fixes list of nodes and databases in broken environment
-closes #16477 [#18553](https://github.com/ydb-platform/ydb/pull/18553) ([Alexey Efimov](https://github.com/adameat))
 
 ### Performance
 
-* 18461:Fixed external sources read tasks placement [#18461](https://github.com/ydb-platform/ydb/pull/18461) ([Pisarenko Grigoriy](https://github.com/GrigoriyPA))
+* 18461:Fixed external sources read tasks placement. [#18461](https://github.com/ydb-platform/ydb/pull/18461) ([Pisarenko Grigoriy](https://github.com/GrigoriyPA))
 

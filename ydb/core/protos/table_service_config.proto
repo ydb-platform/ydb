@@ -8,6 +8,8 @@ message TTableServiceConfig {
         optional uint32 ScanLimit = 3 [default = 16];
         optional bool ParallelScanningAvailable = 4 [default = false];
         optional uint32 ShardSplitFactor = 5 [default = 1];
+        optional uint32 CriticalTotalRetriesCount = 6 [default = 20];
+        optional uint32 ReaskShardRetriesCount = 7 [default = 5];
     }
 
     message TResourceManager {
@@ -388,4 +390,6 @@ message TTableServiceConfig {
 
     optional bool EnableSpillingInHashJoinShuffleConnections = 85 [default = false];
 
+    optional bool EnableOlapScalarApply = 86 [default = true];
+    optional bool EnableOlapSubstringPushdown = 87 [default = true];
 };

@@ -2222,6 +2222,12 @@ message TTxVolatileDetails {
     // When true marks an arbiter for other participants
     // Arbiters hold outgoing readsets until the transaction is decided
     optional bool IsArbiter = 9;
+
+    // When true readset expectations are disabled
+    // This is used when converting non-volatile distributed transactions to
+    // optimistic volatile execution for compatibility with shards which don't
+    // support readset flags.
+    optional bool DisableExpectations = 10;
 }
 
 // Sent by datashard when some overload reason stopped being relevant

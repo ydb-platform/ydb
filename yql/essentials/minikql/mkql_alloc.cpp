@@ -3,9 +3,9 @@
 #include <yql/essentials/public/udf/udf_value.h>
 #include <tuple>
 
-namespace NKikimr {
+namespace NKikimr::NMiniKQL {
 
-namespace NMiniKQL {
+static ui8 ZeroSizeObject alignas(ArrowAlignment)[0];
 
 constexpr ui64 ArrowSizeForArena = (TAllocState::POOL_PAGE_SIZE >> 2);
 
@@ -260,6 +260,11 @@ void TPagedArena::Clear() noexcept {
 }
 
 void* MKQLArrowAllocateOnArena(ui64 size) {
+    Y_ENSURE(size);
+    // If size is zero we can get in trouble: when `page->Offset == page->Size`.
+    // The zero size leads to return `ptr` just after the current page.
+    // Then getting start of page for such pointer returns next page - which may be unmapped or unrelevant to `ptr`.
+
     TAllocState* state = TlsAllocState;
     Y_ENSURE(state);
 
@@ -278,8 +283,8 @@ void* MKQLArrowAllocateOnArena(ui64 size) {
         }
 
         page = (TMkqlArrowHeader*)GetAlignedPage();
-        page->Offset = sizeof(TMkqlArrowHeader);
-        page->Size = pageSize;
+        page->Offset = 0;
+        page->Size = pageSize - sizeof(TMkqlArrowHeader); // for consistency with CleanupArrowList()
         page->UseCount = 1;
 
         if (state->EnableArrowTracking) {
@@ -290,14 +295,20 @@ void* MKQLArrowAllocateOnArena(ui64 size) {
         }
     }
 
-    void* ptr = (ui8*)page + page->Offset;
+    void* ptr = (ui8*)page + page->Offset + sizeof(TMkqlArrowHeader);
     page->Offset += alignedSize;
     ++page->UseCount;
+
+    Y_DEBUG_ABORT_UNLESS(TAllocState::GetPageStart(ptr) == page);
 
     return ptr;
 }
 
 void* MKQLArrowAllocate(ui64 size) {
+    if (Y_UNLIKELY(size == 0)) {
+        return reinterpret_cast<void*>(ZeroSizeObject);
+    }
+
     if (size <= ArrowSizeForArena) {
         return MKQLArrowAllocateOnArena(size);
     }
@@ -351,7 +362,7 @@ void MKQLArrowFreeOnArena(const void* ptr) {
         if (!page->Entry.IsUnlinked()) {
             TAllocState* state = TlsAllocState;
             Y_ENSURE(state);
-            state->OffloadFree(page->Size);
+            state->OffloadFree(page->Size + sizeof(TMkqlArrowHeader));
             page->Entry.Unlink();
 
             auto it = state->ArrowBuffers.find(page);
@@ -366,6 +377,11 @@ void MKQLArrowFreeOnArena(const void* ptr) {
 }
 
 void MKQLArrowFree(const void* mem, ui64 size) {
+    if (Y_UNLIKELY(mem == reinterpret_cast<const void*>(ZeroSizeObject))) {
+        Y_DEBUG_ABORT_UNLESS(size == 0);
+        return;
+    }
+
     if (size <= ArrowSizeForArena) {
         return MKQLArrowFreeOnArena(mem);
     }
@@ -394,6 +410,11 @@ void MKQLArrowFree(const void* mem, ui64 size) {
 }
 
 void MKQLArrowUntrack(const void* mem, ui64 size) {
+    if (Y_UNLIKELY(mem == reinterpret_cast<const void*>(ZeroSizeObject))) {
+        Y_DEBUG_ABORT_UNLESS(size == 0);
+        return;
+    }
+
     TAllocState* state = TlsAllocState;
     Y_ENSURE(state);
     if (!state->EnableArrowTracking) {
@@ -411,7 +432,7 @@ void MKQLArrowUntrack(const void* mem, ui64 size) {
         if (!page->Entry.IsUnlinked()) {
             page->Entry.Unlink(); // unlink page immediately so we don't accidentally free untracked memory within `TAllocState`
             state->ArrowBuffers.erase(it);
-            state->OffloadFree(page->Size);
+            state->OffloadFree(page->Size + sizeof(TMkqlArrowHeader));
         }
 
         return;
@@ -432,6 +453,4 @@ void MKQLArrowUntrack(const void* mem, ui64 size) {
     }
 }
 
-} // NMiniKQL
-
-} // NKikimr
+} // namespace NKikimr::NMiniKQL

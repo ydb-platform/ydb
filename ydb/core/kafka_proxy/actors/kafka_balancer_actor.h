@@ -3,7 +3,7 @@
 #include "actors.h"
 #include "../kafka_consumer_groups_metadata_initializers.h"
 #include "../kafka_consumer_members_metadata_initializers.h"
-#include "../kqp_balance_transaction.h"
+#include "../kqp_helper.h"
 
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/kafka_proxy/kafka_events.h>
@@ -61,10 +61,10 @@ extern const TString UPDATE_GROUP_STATE;
 extern const TString CHECK_MASTER_ALIVE;
 
 struct TGroupStatus {
-    bool Exists;
-    ui64 Generation;
-    ui64 LastSuccessGeneration;
-    ui64 State;
+    bool Exists = false;
+    ui64 Generation = 0;
+    ui64 LastSuccessGeneration = std::numeric_limits<ui64>::max();
+    ui64 State = 0;
     TString MasterId;
     TInstant LastHeartbeat;
     TString ProtocolName;
@@ -143,7 +143,7 @@ public:
         InstanceId = JoinGroupRequestData->GroupInstanceId.value_or("");
         MemberId = JoinGroupRequestData->MemberId.value_or("");
 
-        KAFKA_LOG_ERROR(TStringBuilder() << "JOIN_GROUP request. MemberId# " << MemberId);
+        KAFKA_LOG_D(TStringBuilder() << "JOIN_GROUP request. MemberId# " << MemberId);
 
         if (JoinGroupRequestData->SessionTimeoutMs) {
             SessionTimeoutMs = JoinGroupRequestData->SessionTimeoutMs;

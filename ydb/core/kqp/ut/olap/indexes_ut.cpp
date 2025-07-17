@@ -156,7 +156,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         csController->SetOverrideLagForCompactionBeforeTierings(TDuration::Seconds(1));
         csController->SetOverrideBlobSplitSettings(NOlap::NSplitter::TSplitSettings());
 
-        TLocalHelper(kikimr).CreateTestOlapTableWithoutStore();
+        TLocalHelper(kikimr).CreateTestOlapStandaloneTable();
         auto tableClient = kikimr.GetTableClient();
         auto& client = kikimr.GetTestClient();
 
@@ -246,28 +246,25 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
 
             TAutoPtr<IEventHandle> handle;
 
-            size_t shard = 0;
-            std::set<NColumnShard::TInternalPathId> pathids;
+            std::optional<NColumnShard::TSchemeShardLocalPathId> schemeShardLocalPathId;
             for (auto&& i : csController->GetShardActualIds()) {
                 Cerr << ">>> shard actual id: " << i << Endl;
-                for (auto&& j : csController->GetPathIds(i)) {
-                    Cerr << ">>> path id: " << j << Endl;
-                    pathids.insert(j);
-                }
-                if (++shard == 3) {
-                    break;
+                const auto pathIds = csController->GetPathIdTranslator(i)->GetSchemeShardLocalPathIds();
+                UNIT_ASSERT(pathIds.size() == 1);
+                if (schemeShardLocalPathId.has_value()) {
+                    UNIT_ASSERT(schemeShardLocalPathId == *pathIds.begin());
+                } else {
+                    schemeShardLocalPathId = *pathIds.begin();
                 }
             }
 
-            UNIT_ASSERT(pathids.size() == 1);
-            const auto& pathId = *pathids.begin();
+            UNIT_ASSERT(schemeShardLocalPathId.has_value());
 
-            shard = 0;
-            for (auto&& i : csController->GetShardActualIds()) {
+            size_t shard = 0;
+            for (const auto& [tabletId, pathIdTranslator]: csController->GetActiveTablets()) {
                 auto request = std::make_unique<NStat::TEvStatistics::TEvStatisticsRequest>();
-                request->Record.MutableTable()->MutablePathId()->SetLocalId(pathId.GetRawValue());
-
-                runtime->Send(MakePipePerNodeCacheID(false), sender, new TEvPipeCache::TEvForward(request.release(), i, false));
+                request->Record.MutableTable()->MutablePathId()->SetLocalId(schemeShardLocalPathId->GetRawValue());
+                runtime->Send(MakePipePerNodeCacheID(false), sender, new TEvPipeCache::TEvForward(request.release(), static_cast<ui64>(tabletId), false));
                 if (++shard == 3) {
                     break;
                 }

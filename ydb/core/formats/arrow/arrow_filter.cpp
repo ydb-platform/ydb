@@ -297,6 +297,9 @@ const std::vector<bool>& TColumnFilter::BuildSimpleFilter() const {
 class TMergePolicyAnd {
 private:
 public:
+    static bool HasValue(const bool /*a*/, const bool /*b*/) {
+        return true;
+    }
     static bool Calc(const bool a, const bool b) {
         return a && b;
     }
@@ -307,11 +310,17 @@ public:
             return TColumnFilter::BuildDenyFilter();
         }
     }
+    static TColumnFilter MergeWithSimple(const bool simpleValue, const TColumnFilter& filter) {
+        return MergeWithSimple(filter, simpleValue);
+    }
 };
 
 class TMergePolicyOr {
 private:
 public:
+    static bool HasValue(const bool /*a*/, const bool /*b*/) {
+        return true;
+    }
     static bool Calc(const bool a, const bool b) {
         return a || b;
     }
@@ -320,6 +329,43 @@ public:
             return TColumnFilter::BuildAllowFilter();
         } else {
             return filter;
+        }
+    }
+    static TColumnFilter MergeWithSimple(const bool simpleValue, const TColumnFilter& filter) {
+        return MergeWithSimple(filter, simpleValue);
+    }
+};
+
+class TMergePolicyApplyFilter {
+private:
+public:
+    static bool HasValue(const bool /*a*/, const bool b) {
+        return b;
+    }
+    static bool Calc(const bool a, const bool /*b*/) {
+        return a;
+    }
+    static TColumnFilter MergeWithSimple(const TColumnFilter& filter, const bool simpleValue) {
+        if (simpleValue) {
+            return filter;
+        } else {
+            return TColumnFilter::BuildDenyFilter();
+        }
+    }
+    static TColumnFilter MergeWithSimple(const bool simpleValue, const TColumnFilter& filter) {
+        const auto count = filter.GetRecordsCount();
+        if (simpleValue) {
+            TColumnFilter result = TColumnFilter::BuildAllowFilter();
+            if (count) {
+                result.Add(true, *count);
+            }
+            return result;
+        } else {
+            TColumnFilter result = TColumnFilter::BuildDenyFilter();
+            if (count) {
+                result.Add(false, *count);
+            }
+            return result;
         }
     }
 };
@@ -340,7 +386,7 @@ public:
         if (Filter1.empty() && Filter2.empty()) {
             return TColumnFilter(TMergePolicy::Calc(Filter1.DefaultFilterValue, Filter2.DefaultFilterValue));
         } else if (Filter1.empty()) {
-            return TMergePolicy::MergeWithSimple(Filter2, Filter1.DefaultFilterValue);
+            return TMergePolicy::MergeWithSimple(Filter1.DefaultFilterValue, Filter2);
         } else if (Filter2.empty()) {
             return TMergePolicy::MergeWithSimple(Filter1, Filter2.DefaultFilterValue);
         } else {
@@ -359,7 +405,7 @@ public:
 
             while (it1 != Filter1.Filter.cend() && it2 != Filter2.Filter.cend()) {
                 const ui32 delta = TColumnFilter::CrossSize(pos2, pos2 + *it2, pos1, pos1 + *it1);
-                if (delta) {
+                if (delta && TMergePolicy::HasValue(curValue1, curValue2)) {
                     if (!count || curCurrent != TMergePolicy::Calc(curValue1, curValue2)) {
                         resultFilter.emplace_back(delta);
                         curCurrent = TMergePolicy::Calc(curValue1, curValue2);
@@ -405,10 +451,15 @@ TColumnFilter TColumnFilter::Or(const TColumnFilter& extFilter) const {
     return TMergerImpl(*this, extFilter).Merge<TMergePolicyOr>();
 }
 
+TColumnFilter TColumnFilter::ApplyFilterFrom(const TColumnFilter& extFilter) const {
+    ResetCaches();
+    return TMergerImpl(*this, extFilter).Merge<TMergePolicyApplyFilter>();
+}
+
 TColumnFilter TColumnFilter::CombineSequentialAnd(const TColumnFilter& extFilter) const {
     ResetCaches();
     if (Filter.empty()) {
-        return TMergePolicyAnd::MergeWithSimple(extFilter, DefaultFilterValue);
+        return TMergePolicyAnd::MergeWithSimple(DefaultFilterValue, extFilter);
     } else if (extFilter.Filter.empty()) {
         return TMergePolicyAnd::MergeWithSimple(*this, extFilter.DefaultFilterValue);
     } else {
@@ -467,14 +518,19 @@ TColumnFilter TColumnFilter::CombineSequentialAnd(const TColumnFilter& extFilter
     }
 }
 
-TColumnFilter::TIterator TColumnFilter::GetIterator(const bool reverse, const ui32 expectedSize) const {
+TColumnFilter::TIterator TColumnFilter::GetBegin(const bool reverse, const ui32 expectedSize) const {
+    return GetIterator(reverse, expectedSize, 0);
+}
+
+TColumnFilter::TIterator TColumnFilter::GetIterator(const bool reverse, const ui32 expectedSize, const ui64 startOffset) const {
+    AFL_VERIFY(expectedSize >= startOffset);
     if (IsTotalAllowFilter()) {
-        return TIterator(reverse, expectedSize, true);
+        return TIterator(reverse, expectedSize, true, startOffset);
     } else if (IsTotalDenyFilter()) {
-        return TIterator(reverse, expectedSize, false);
+        return TIterator(reverse, expectedSize, false, startOffset);
     } else {
         AFL_VERIFY(expectedSize == GetRecordsCountVerified())("expected", expectedSize)("count", GetRecordsCountVerified())("reverse", reverse);
-        return TIterator(reverse, Filter, GetStartValue(reverse));
+        return TIterator(reverse, Filter, GetStartValue(reverse), startOffset);
     }
 }
 

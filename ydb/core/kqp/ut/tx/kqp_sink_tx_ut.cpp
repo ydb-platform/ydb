@@ -82,7 +82,7 @@ Y_UNIT_TEST_SUITE(KqpSinkTx) {
             result = session.ExecuteQuery(Q_(R"(
                 SELECT * FROM `/Root/KV` WHERE Value = "New";
             )"), TTxControl::BeginTx(TTxSettings::OnlineRO()).CommitTx()).ExtractValueSync();
-            UNIT_ASSERT(result.IsSuccess());
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
             CompareYson(R"([])", FormatResultSetYson(result.GetResultSet(0)));
 
             auto commitResult = tx.Commit().ExtractValueSync();

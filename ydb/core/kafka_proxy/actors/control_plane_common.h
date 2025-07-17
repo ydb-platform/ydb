@@ -109,6 +109,7 @@ inline std::optional<THolder<TEvKafka::TEvTopicModificationResponse>> ValidateTo
     }
 }
 
+
 template<class T>
 inline std::unordered_set<TString> ExtractDuplicates(
         std::vector<T>& source,
@@ -376,5 +377,16 @@ private:
         SendResultCallback(Convert(status), Issue.GetMessage(), result);
     }
 };
+
+enum class ECleanupPolicy {
+    DELETE,
+    COMPACT,
+    UNKNOWN
+};
+
+ECleanupPolicy ConvertCleanupPolicy(const std::optional<TString>& policy);
+
+std::optional<THolder<TEvKafka::TEvTopicModificationResponse>> ValidateCleanupPolicy(std::optional<ECleanupPolicy> policy,
+                                                                                     const std::optional<TString>& origValue);
 
 } //namespace NKafka

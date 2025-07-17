@@ -6,8 +6,6 @@
 
 #include <util/datetime/base.h>
 
-#include <stop_token>
-
 namespace NYdb::NTPCC {
 
 constexpr int DEFAULT_WAREHOUSE_COUNT = 1;
@@ -77,13 +75,14 @@ struct TRunConfig {
 
     std::chrono::duration<long long> DisplayUpdateInterval;
 
+    // used by check command only
+    bool JustImported = false;
+
     static constexpr auto SleepMsEveryIterationMainLoop = std::chrono::milliseconds(50);
     static constexpr auto DisplayUpdateTextInterval = std::chrono::seconds(5);
     static constexpr auto DisplayUpdateTuiInterval = std::chrono::seconds(1);
 };
 
 void RunSync(const NConsoleClient::TClientCommand::TConfig& connectionConfig, const TRunConfig& runConfig);
-
-std::stop_source GetGlobalInterruptSource();
 
 } // namespace NYdb::NTPCC

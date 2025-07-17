@@ -17,10 +17,11 @@ namespace {
 //-----------------------------------------------------------------------------
 
 using namespace NYdb::NQuery;
+using namespace NThreading;
 
 //-----------------------------------------------------------------------------
 
-void BaseCheckWarehouseTable(TQueryClient& client, const TString& path, int expectedWhNumber) {
+TFuture<void> BaseCheckWarehouseTable(TQueryClient& client, const TString& path, int expectedWhNumber) {
     // W_ID is PK, so we can take just min, max and count to check if all rows present
     TString query = std::format(R"(
         PRAGMA TablePathPrefix("{}");
@@ -30,43 +31,40 @@ void BaseCheckWarehouseTable(TQueryClient& client, const TString& path, int expe
 
     TString fullPath = path + "/" + TABLE_WAREHOUSE;
 
-    auto result = client.RetryQuery([&](TSession session) {
+    return client.RetryQuery([query](TSession session) {
         return session.ExecuteQuery(query, TTxControl::NoTx());
-    }).GetValueSync();
+    }).Apply([fullPath, expectedWhNumber](const TFuture<TExecuteQueryResult>& future) {
+        auto result = future.GetValueSync();
+        ThrowIfError(result, TStringBuilder() << "Failed to count/min/max warehouses in " << fullPath);
 
-    ExitIfError(result, TStringBuilder() << "Failed to count/min/max warehouses in " << fullPath);
-
-    TResultSetParser parser(result.GetResultSet(0));
-    if (!parser.TryNextRow()) {
-        Cerr << "No warehouses found" << Endl;
-        std::exit(1);
-    }
-
-    try {
-        size_t rowCount = parser.ColumnParser("count").GetUint64();
-        if (rowCount == 0) {
-            Cerr << "Zero warehouses in " << fullPath << ": " << Endl;
-            std::exit(1);
+        TResultSetParser parser(result.GetResultSet(0));
+        if (!parser.TryNextRow()) {
+            ythrow yexception() << "No warehouses found";
         }
 
-        int minWh = *parser.ColumnParser("min").GetOptionalInt32();
-        int maxWh = *parser.ColumnParser("max").GetOptionalInt32();
-        if (int(rowCount) != expectedWhNumber || minWh != 1 || maxWh != expectedWhNumber) {
-            Cerr << "Inconsistent table '" << fullPath << "' for " << expectedWhNumber
-                 << " warehouses: minWh=" << minWh
-                 << ", maxWh=" << maxWh
-                 << ", whCount=" << rowCount;
-            std::exit(1);
+        try {
+            size_t rowCount = parser.ColumnParser("count").GetUint64();
+            if (rowCount == 0) {
+                ythrow yexception() << "Zero warehouses in " << fullPath << ": ";
+            }
+
+            int minWh = *parser.ColumnParser("min").GetOptionalInt32();
+            int maxWh = *parser.ColumnParser("max").GetOptionalInt32();
+            if (int(rowCount) != expectedWhNumber || minWh != 1 || maxWh != expectedWhNumber) {
+                ythrow yexception() << "Inconsistent table '" << fullPath << "' for " << expectedWhNumber
+                    << " warehouses: minWh=" << minWh
+                    << ", maxWh=" << maxWh
+                    << ", whCount=" << rowCount;
+            }
+        } catch (const std::exception& e) {
+            ythrow yexception() << "Failed to count/min/max warehouses in " << fullPath << ": " << e.what();
         }
-    } catch (const std::exception& e) {
-        Cerr << "Failed to count/min/max warehouses in " << fullPath << ": " << e.what() << Endl;
-        std::exit(1);
-    }
+    });
 }
 
 //-----------------------------------------------------------------------------
 
-void BaseCheckDistrictTable(TQueryClient& client, const TString& path, int expectedWhNumber) {
+TFuture<void> BaseCheckDistrictTable(TQueryClient& client, const TString& path, int expectedWhNumber) {
     // D_W_ID, D_ID are part of PK, so we can check min/max district IDs and count
     TString query = std::format(R"(
         PRAGMA TablePathPrefix("{}");
@@ -80,53 +78,48 @@ void BaseCheckDistrictTable(TQueryClient& client, const TString& path, int expec
     TString fullPath = path + "/" + TABLE_DISTRICT;
     int expectedCount = expectedWhNumber * DISTRICT_COUNT;
 
-    auto result = client.RetryQuery([&](TSession session) {
+    return client.RetryQuery([query](TSession session) {
         return session.ExecuteQuery(query, TTxControl::NoTx());
-    }).GetValueSync();
+    }).Apply([fullPath, expectedCount, expectedWhNumber](const TFuture<TExecuteQueryResult>& future) {
+        auto result = future.GetValueSync();
+        ThrowIfError(result, TStringBuilder() << "Failed to count/min/max districts in " << fullPath);
 
-    ExitIfError(result, TStringBuilder() << "Failed to count/min/max districts in " << fullPath);
-
-    TResultSetParser parser(result.GetResultSet(0));
-    if (!parser.TryNextRow()) {
-        Cerr << "No districts found" << Endl;
-        std::exit(1);
-    }
-
-    try {
-        size_t rowCount = parser.ColumnParser("count").GetUint64();
-        if (rowCount == 0) {
-            Cerr << "Zero districts in " << fullPath << Endl;
-            std::exit(1);
+        TResultSetParser parser(result.GetResultSet(0));
+        if (!parser.TryNextRow()) {
+            ythrow yexception() << "No districts found";
         }
 
-        int minWh = *parser.ColumnParser("min_w_id").GetOptionalInt32();
-        int maxWh = *parser.ColumnParser("max_w_id").GetOptionalInt32();
-        int minDist = *parser.ColumnParser("min_d_id").GetOptionalInt32();
-        int maxDist = *parser.ColumnParser("max_d_id").GetOptionalInt32();
+        try {
+            size_t rowCount = parser.ColumnParser("count").GetUint64();
+            if (rowCount == 0) {
+                ythrow yexception() << "Zero districts in " << fullPath;
+            }
 
-        if (int(rowCount) != expectedCount) {
-            Cerr << "District count is " << rowCount << " and not " << expectedCount << " in " << fullPath << Endl;
-            std::exit(1);
-        }
+            if (int(rowCount) != expectedCount) {
+                ythrow yexception() << "District count is " << rowCount << " and not " << expectedCount << " in " << fullPath;
+            }
 
-        if (minWh != 1 || maxWh != expectedWhNumber) {
-            Cerr << "District warehouse range is [" << minWh << ", " << maxWh << "] instead of [1, "
-                 << expectedWhNumber << "] in " << fullPath << Endl;
-            std::exit(1);
-        }
+            int minWh = *parser.ColumnParser("min_w_id").GetOptionalInt32();
+            int maxWh = *parser.ColumnParser("max_w_id").GetOptionalInt32();
+            int minDist = *parser.ColumnParser("min_d_id").GetOptionalInt32();
+            int maxDist = *parser.ColumnParser("max_d_id").GetOptionalInt32();
 
-        if (minDist != DISTRICT_LOW_ID || maxDist != DISTRICT_HIGH_ID) {
-            Cerr << "District ID range is [" << minDist << ", " << maxDist << "] instead of ["
-                 << DISTRICT_LOW_ID << ", " << DISTRICT_HIGH_ID << "] in " << fullPath << Endl;
-            std::exit(1);
+            if (minWh != 1 || maxWh != expectedWhNumber) {
+                ythrow yexception() << "District warehouse range is [" << minWh << ", " << maxWh << "] instead of [1, "
+                     << expectedWhNumber << "] in " << fullPath;
+            }
+
+            if (minDist != DISTRICT_LOW_ID || maxDist != DISTRICT_HIGH_ID) {
+                ythrow yexception() << "District ID range is [" << minDist << ", " << maxDist << "] instead of ["
+                     << DISTRICT_LOW_ID << ", " << DISTRICT_HIGH_ID << "] in " << fullPath;
+            }
+        } catch (const std::exception& e) {
+            ythrow yexception() << "Failed to validate districts in " << fullPath << ": " << e.what();
         }
-    } catch (std::exception& e) {
-        Cerr << "Failed to validate districts in " << fullPath << ": " << e.what() << Endl;
-        std::exit(1);
-    }
+    });
 }
 
-void BaseCheckCustomerTable(TQueryClient& client, const TString& path, int expectedWhNumber) {
+TFuture<void> BaseCheckCustomerTable(TQueryClient& client, const TString& path, int expectedWhNumber) {
     // C_W_ID, C_D_ID, C_ID are part of PK
     TString query = std::format(R"(
         PRAGMA TablePathPrefix("{}");
@@ -141,61 +134,55 @@ void BaseCheckCustomerTable(TQueryClient& client, const TString& path, int expec
     TString fullPath = path + "/" + TABLE_CUSTOMER;
     int expectedCount = expectedWhNumber * CUSTOMERS_PER_DISTRICT * DISTRICT_COUNT;
 
-    auto result = client.RetryQuery([&](TSession session) {
+    return client.RetryQuery([query](TSession session) {
         return session.ExecuteQuery(query, TTxControl::NoTx());
-    }).GetValueSync();
+    }).Apply([fullPath, expectedCount, expectedWhNumber](const TFuture<TExecuteQueryResult>& future) {
+        auto result = future.GetValueSync();
+        ThrowIfError(result, TStringBuilder() << "Failed to count/min/max customers in " << fullPath);
 
-    ExitIfError(result, TStringBuilder() << "Failed to count/min/max customers in " << fullPath);
-
-    TResultSetParser parser(result.GetResultSet(0));
-    if (!parser.TryNextRow()) {
-        Cerr << "No customers found" << Endl;
-        std::exit(1);
-    }
-
-    try {
-        size_t rowCount = parser.ColumnParser("count").GetUint64();
-        if (rowCount == 0) {
-            Cerr << "Zero customers in " << fullPath << Endl;
-            std::exit(1);
+        TResultSetParser parser(result.GetResultSet(0));
+        if (!parser.TryNextRow()) {
+            ythrow yexception() << "No customers found";
         }
 
-        if (int(rowCount) != expectedCount) {
-            Cerr << "Customer count is " << rowCount << " and not " << expectedCount << " in " << fullPath << Endl;
-            std::exit(1);
-        }
+        try {
+            size_t rowCount = parser.ColumnParser("count").GetUint64();
+            if (rowCount == 0) {
+                ythrow yexception() << "Zero customers in " << fullPath;
+            }
 
-        int minWh = *parser.ColumnParser("min_w_id").GetOptionalInt32();
-        int maxWh = *parser.ColumnParser("max_w_id").GetOptionalInt32();
-        int minDist = *parser.ColumnParser("min_d_id").GetOptionalInt32();
-        int maxDist = *parser.ColumnParser("max_d_id").GetOptionalInt32();
-        int minCust = *parser.ColumnParser("min_c_id").GetOptionalInt32();
-        int maxCust = *parser.ColumnParser("max_c_id").GetOptionalInt32();
+            if (int(rowCount) != expectedCount) {
+                ythrow yexception() << "Customer count is " << rowCount << " and not " << expectedCount << " in " << fullPath;
+            }
 
-        if (minWh != 1 || maxWh != expectedWhNumber) {
-            Cerr << "Customer warehouse range is [" << minWh << ", " << maxWh << "] instead of [1, "
-                 << expectedWhNumber << "] in " << fullPath << Endl;
-            std::exit(1);
-        }
+            int minWh = *parser.ColumnParser("min_w_id").GetOptionalInt32();
+            int maxWh = *parser.ColumnParser("max_w_id").GetOptionalInt32();
+            int minDist = *parser.ColumnParser("min_d_id").GetOptionalInt32();
+            int maxDist = *parser.ColumnParser("max_d_id").GetOptionalInt32();
+            int minCust = *parser.ColumnParser("min_c_id").GetOptionalInt32();
+            int maxCust = *parser.ColumnParser("max_c_id").GetOptionalInt32();
 
-        if (minDist != DISTRICT_LOW_ID || maxDist != DISTRICT_HIGH_ID) {
-            Cerr << "Customer district range is [" << minDist << ", " << maxDist << "] instead of ["
-                 << DISTRICT_LOW_ID << ", " << DISTRICT_HIGH_ID << "] in " << fullPath << Endl;
-            std::exit(1);
-        }
+            if (minWh != 1 || maxWh != expectedWhNumber) {
+                ythrow yexception() << "Customer warehouse range is [" << minWh << ", " << maxWh << "] instead of [1, "
+                     << expectedWhNumber << "] in " << fullPath;
+            }
 
-        if (minCust != 1 || maxCust != CUSTOMERS_PER_DISTRICT) {
-            Cerr << "Customer ID range is [" << minCust << ", " << maxCust << "] instead of [1, "
-                 << CUSTOMERS_PER_DISTRICT << "] in " << fullPath << Endl;
-            std::exit(1);
+            if (minDist != DISTRICT_LOW_ID || maxDist != DISTRICT_HIGH_ID) {
+                ythrow yexception() << "Customer district range is [" << minDist << ", " << maxDist << "] instead of ["
+                     << DISTRICT_LOW_ID << ", " << DISTRICT_HIGH_ID << "] in " << fullPath;
+            }
+
+            if (minCust != 1 || maxCust != CUSTOMERS_PER_DISTRICT) {
+                ythrow yexception() << "Customer ID range is [" << minCust << ", " << maxCust << "] instead of [1, "
+                     << CUSTOMERS_PER_DISTRICT << "] in " << fullPath;
+            }
+        } catch (const std::exception& e) {
+            ythrow yexception() << "Failed to validate customers in " << fullPath << ": " << e.what();
         }
-    } catch (std::exception& e) {
-        Cerr << "Failed to validate customers in " << fullPath << ": " << e.what() << Endl;
-        std::exit(1);
-    }
+    });
 }
 
-void BaseCheckItemTable(TQueryClient& client, const TString& path) {
+TFuture<void> BaseCheckItemTable(TQueryClient& client, const TString& path) {
     // I_ID is PK, fixed number of items regardless of warehouse count
     TString query = std::format(R"(
         PRAGMA TablePathPrefix("{}");
@@ -205,44 +192,40 @@ void BaseCheckItemTable(TQueryClient& client, const TString& path) {
 
     TString fullPath = path + "/" + TABLE_ITEM;
 
-    auto result = client.RetryQuery([&](TSession session) {
+    return client.RetryQuery([query](TSession session) {
         return session.ExecuteQuery(query, TTxControl::NoTx());
-    }).GetValueSync();
+    }).Apply([fullPath](const TFuture<TExecuteQueryResult>& future) {
+        auto result = future.GetValueSync();
+        ThrowIfError(result, TStringBuilder() << "Failed to count/min/max items in " << fullPath);
 
-    ExitIfError(result, TStringBuilder() << "Failed to count/min/max items in " << fullPath);
-
-    TResultSetParser parser(result.GetResultSet(0));
-    if (!parser.TryNextRow()) {
-        Cerr << "No items found" << Endl;
-        std::exit(1);
-    }
-
-    try {
-        size_t rowCount = parser.ColumnParser("count").GetUint64();
-        if (rowCount == 0) {
-            Cerr << "Zero items in " << fullPath << Endl;
-            std::exit(1);
+        TResultSetParser parser(result.GetResultSet(0));
+        if (!parser.TryNextRow()) {
+            ythrow yexception() << "No items found";
         }
 
-        if (int(rowCount) != ITEM_COUNT) {
-            Cerr << "Item count is " << rowCount << " and not " << ITEM_COUNT << " in " << fullPath << Endl;
-            std::exit(1);
-        }
+        try {
+            size_t rowCount = parser.ColumnParser("count").GetUint64();
+            if (rowCount == 0) {
+                ythrow yexception() << "Zero items in " << fullPath;
+            }
 
-        int minItem = *parser.ColumnParser("min").GetOptionalInt32();
-        int maxItem = *parser.ColumnParser("max").GetOptionalInt32();
-        if (minItem != 1 || maxItem != ITEM_COUNT) {
-            Cerr << "Item ID range is [" << minItem << ", " << maxItem << "] instead of [1, "
-                 << ITEM_COUNT << "] in " << fullPath << Endl;
-            std::exit(1);
+            if (int(rowCount) != ITEM_COUNT) {
+                ythrow yexception() << "Item count is " << rowCount << " and not " << ITEM_COUNT << " in " << fullPath;
+            }
+
+            int minItem = *parser.ColumnParser("min").GetOptionalInt32();
+            int maxItem = *parser.ColumnParser("max").GetOptionalInt32();
+            if (minItem != 1 || maxItem != ITEM_COUNT) {
+                ythrow yexception() << "Item ID range is [" << minItem << ", " << maxItem << "] instead of [1, "
+                     << ITEM_COUNT << "] in " << fullPath;
+            }
+        } catch (const std::exception& e) {
+            ythrow yexception() << "Failed to validate items in " << fullPath << ": " << e.what();
         }
-    } catch (std::exception& e) {
-        Cerr << "Failed to validate items in " << fullPath << ": " << e.what() << Endl;
-        std::exit(1);
-    }
+    });
 }
 
-void BaseCheckStockTable(TQueryClient& client, const TString& path, int expectedWhNumber) {
+TFuture<void> BaseCheckStockTable(TQueryClient& client, const TString& path, int expectedWhNumber) {
     // S_W_ID, S_I_ID are part of PK - check warehouse and item ranges
     TString query = std::format(R"(
         PRAGMA TablePathPrefix("{}");
@@ -255,61 +238,56 @@ void BaseCheckStockTable(TQueryClient& client, const TString& path, int expected
     )", path.c_str(), TABLE_STOCK);
 
     TString fullPath = path + "/" + TABLE_STOCK;
-    int expectedCount = expectedWhNumber * ITEM_COUNT; // 100000 items per warehouse
+    int expectedCount = expectedWhNumber * ITEM_COUNT;
 
-    auto result = client.RetryQuery([&](TSession session) {
+    return client.RetryQuery([query](TSession session) {
         return session.ExecuteQuery(query, TTxControl::NoTx());
-    }).GetValueSync();
+    }).Apply([fullPath, expectedCount, expectedWhNumber](const TFuture<TExecuteQueryResult>& future) {
+        auto result = future.GetValueSync();
+        ThrowIfError(result, TStringBuilder() << "Failed to count/min/max stock in " << fullPath);
 
-    ExitIfError(result, TStringBuilder() << "Failed to count/min/max stock in " << fullPath);
-
-    TResultSetParser parser(result.GetResultSet(0));
-    if (!parser.TryNextRow()) {
-        Cerr << "No stock found" << Endl;
-        std::exit(1);
-    }
-
-    try {
-        size_t rowCount = parser.ColumnParser("count").GetUint64();
-        size_t warehouseCount = parser.ColumnParser("warehouse_count").GetUint64();
-        if (rowCount == 0) {
-            Cerr << "Zero stock in " << fullPath << Endl;
-            std::exit(1);
-        }
-        if (int(rowCount) != expectedCount) {
-            Cerr << "Stock count is " << rowCount << " and not " << expectedCount << " in " << fullPath << Endl;
-            std::exit(1);
+        TResultSetParser parser(result.GetResultSet(0));
+        if (!parser.TryNextRow()) {
+            ythrow yexception() << "No stock found";
         }
 
-        int minWh = *parser.ColumnParser("min_w_id").GetOptionalInt32();
-        int maxWh = *parser.ColumnParser("max_w_id").GetOptionalInt32();
-        int minItem = *parser.ColumnParser("min_i_id").GetOptionalInt32();
-        int maxItem = *parser.ColumnParser("max_i_id").GetOptionalInt32();
+        try {
+            size_t rowCount = parser.ColumnParser("count").GetUint64();
+            size_t warehouseCount = parser.ColumnParser("warehouse_count").GetUint64();
+            if (rowCount == 0) {
+                ythrow yexception() << "Zero stock in " << fullPath;
+            }
 
-        if (int(warehouseCount) != expectedWhNumber) {
-            Cerr << "Stock warehouse count is " << warehouseCount << " and not "
-                 << expectedWhNumber << " in " << fullPath << Endl;
-            std::exit(1);
-        }
+            if (int(rowCount) != expectedCount) {
+                ythrow yexception() << "Stock count is " << rowCount << " and not " << expectedCount << " in " << fullPath;
+            }
 
-        if (minWh != 1 || maxWh != expectedWhNumber) {
-            Cerr << "Stock warehouse range is [" << minWh << ", " << maxWh << "] instead of [1, "
-                 << expectedWhNumber << "] in " << fullPath << Endl;
-            std::exit(1);
-        }
+            int minWh = *parser.ColumnParser("min_w_id").GetOptionalInt32();
+            int maxWh = *parser.ColumnParser("max_w_id").GetOptionalInt32();
+            int minItem = *parser.ColumnParser("min_i_id").GetOptionalInt32();
+            int maxItem = *parser.ColumnParser("max_i_id").GetOptionalInt32();
 
-        if (minItem != 1 || maxItem != ITEM_COUNT) {
-            Cerr << "Stock item range is [" << minItem << ", " << maxItem << "] instead of [1, "
-                 << ITEM_COUNT << "] in " << fullPath << Endl;
-            std::exit(1);
+            if (int(warehouseCount) != expectedWhNumber) {
+                ythrow yexception() << "Stock warehouse count is " << warehouseCount << " and not "
+                     << expectedWhNumber << " in " << fullPath;
+            }
+
+            if (minWh != 1 || maxWh != expectedWhNumber) {
+                ythrow yexception() << "Stock warehouse range is [" << minWh << ", " << maxWh << "] instead of [1, "
+                     << expectedWhNumber << "] in " << fullPath;
+            }
+
+            if (minItem != 1 || maxItem != ITEM_COUNT) {
+                ythrow yexception() << "Stock item range is [" << minItem << ", " << maxItem << "] instead of [1, "
+                     << ITEM_COUNT << "] in " << fullPath;
+            }
+        } catch (const std::exception& e) {
+            ythrow yexception() << "Failed to validate stock in " << fullPath << ": " << e.what();
         }
-    } catch (std::exception& e) {
-        Cerr << "Failed to validate stock in " << fullPath << ": " << e.what() << Endl;
-        std::exit(1);
-    }
+    });
 }
 
-void BaseCheckOorderTable(TQueryClient& client, const TString& path, int expectedWhNumber) {
+TFuture<void> BaseCheckOorderTable(TQueryClient& client, const TString& path, int expectedWhNumber) {
     // O_W_ID, O_D_ID, O_ID are part of PK
     TString query = std::format(R"(
         PRAGMA TablePathPrefix("{}");
@@ -324,60 +302,55 @@ void BaseCheckOorderTable(TQueryClient& client, const TString& path, int expecte
     TString fullPath = path + "/" + TABLE_OORDER;
     int expectedCount = expectedWhNumber * CUSTOMERS_PER_DISTRICT * DISTRICT_COUNT;
 
-    auto result = client.RetryQuery([&](TSession session) {
+    return client.RetryQuery([query](TSession session) {
         return session.ExecuteQuery(query, TTxControl::NoTx());
-    }).GetValueSync();
+    }).Apply([fullPath, expectedCount, expectedWhNumber](const TFuture<TExecuteQueryResult>& future) {
+        auto result = future.GetValueSync();
+        ThrowIfError(result, TStringBuilder() << "Failed to count/min/max orders in " << fullPath);
 
-    ExitIfError(result, TStringBuilder() << "Failed to count/min/max orders in " << fullPath);
-
-    TResultSetParser parser(result.GetResultSet(0));
-    if (!parser.TryNextRow()) {
-        Cerr << "No orders found" << Endl;
-        std::exit(1);
-    }
-
-    try {
-        size_t rowCount = parser.ColumnParser("count").GetUint64();
-        if (rowCount == 0) {
-            Cerr << "Zero orders in " << fullPath << Endl;
-            std::exit(1);
-        }
-        if (int(rowCount) != expectedCount) {
-            Cerr << "Order count is " << rowCount << " and not " << expectedCount << " in " << fullPath << Endl;
-            std::exit(1);
+        TResultSetParser parser(result.GetResultSet(0));
+        if (!parser.TryNextRow()) {
+            ythrow yexception() << "No orders found";
         }
 
-        int minWh = *parser.ColumnParser("min_w_id").GetOptionalInt32();
-        int maxWh = *parser.ColumnParser("max_w_id").GetOptionalInt32();
-        int minDist = *parser.ColumnParser("min_d_id").GetOptionalInt32();
-        int maxDist = *parser.ColumnParser("max_d_id").GetOptionalInt32();
-        int minOrder = *parser.ColumnParser("min_o_id").GetOptionalInt32();
-        int maxOrder = *parser.ColumnParser("max_o_id").GetOptionalInt32();
+        try {
+            size_t rowCount = parser.ColumnParser("count").GetUint64();
+            if (rowCount == 0) {
+                ythrow yexception() << "Zero orders in " << fullPath;
+            }
 
-        if (minWh != 1 || maxWh != expectedWhNumber) {
-            Cerr << "Order warehouse range is [" << minWh << ", " << maxWh << "] instead of [1, "
-                 << expectedWhNumber << "] in " << fullPath << Endl;
-            std::exit(1);
-        }
+            if (int(rowCount) != expectedCount) {
+                ythrow yexception() << "Order count is " << rowCount << " and not " << expectedCount << " in " << fullPath;
+            }
 
-        if (minDist != DISTRICT_LOW_ID || maxDist != DISTRICT_HIGH_ID) {
-            Cerr << "Order district range is [" << minDist << ", " << maxDist << "] instead of ["
-                 << DISTRICT_LOW_ID << ", " << DISTRICT_HIGH_ID << "] in " << fullPath << Endl;
-            std::exit(1);
-        }
+            int minWh = *parser.ColumnParser("min_w_id").GetOptionalInt32();
+            int maxWh = *parser.ColumnParser("max_w_id").GetOptionalInt32();
+            int minDist = *parser.ColumnParser("min_d_id").GetOptionalInt32();
+            int maxDist = *parser.ColumnParser("max_d_id").GetOptionalInt32();
+            int minOrder = *parser.ColumnParser("min_o_id").GetOptionalInt32();
+            int maxOrder = *parser.ColumnParser("max_o_id").GetOptionalInt32();
 
-        if (minOrder != 1 || maxOrder != CUSTOMERS_PER_DISTRICT) {
-            Cerr << "Order ID range is [" << minOrder << ", " << maxOrder << "] instead of [1, "
-                 << CUSTOMERS_PER_DISTRICT << "] in " << fullPath << Endl;
-            std::exit(1);
+            if (minWh != 1 || maxWh != expectedWhNumber) {
+                ythrow yexception() << "Order warehouse range is [" << minWh << ", " << maxWh << "] instead of [1, "
+                     << expectedWhNumber << "] in " << fullPath;
+            }
+
+            if (minDist != DISTRICT_LOW_ID || maxDist != DISTRICT_HIGH_ID) {
+                ythrow yexception() << "Order district range is [" << minDist << ", " << maxDist << "] instead of ["
+                     << DISTRICT_LOW_ID << ", " << DISTRICT_HIGH_ID << "] in " << fullPath;
+            }
+
+            if (minOrder != 1 || maxOrder != CUSTOMERS_PER_DISTRICT) {
+                ythrow yexception() << "Order ID range is [" << minOrder << ", " << maxOrder << "] instead of [1, "
+                     << CUSTOMERS_PER_DISTRICT << "] in " << fullPath;
+            }
+        } catch (const std::exception& e) {
+            ythrow yexception() << "Failed to validate orders in " << fullPath << ": " << e.what();
         }
-    } catch (std::exception& e) {
-        Cerr << "Failed to validate orders in " << fullPath << ": " << e.what() << Endl;
-        std::exit(1);
-    }
+    });
 }
 
-void BaseCheckNewOrderTable(TQueryClient& client, const TString& path, int expectedWhNumber) {
+TFuture<void> BaseCheckNewOrderTable(TQueryClient& client, const TString& path, int expectedWhNumber) {
     // NO_W_ID, NO_D_ID, NO_O_ID are part of PK
     TString query = std::format(R"(
         PRAGMA TablePathPrefix("{}");
@@ -394,62 +367,56 @@ void BaseCheckNewOrderTable(TQueryClient& client, const TString& path, int expec
     TString fullPath = path + "/" + TABLE_NEW_ORDER;
     int expectedCount = expectedWhNumber * newOrdersPerDistrict * DISTRICT_COUNT;
 
-    auto result = client.RetryQuery([&](TSession session) {
+    return client.RetryQuery([query](TSession session) {
         return session.ExecuteQuery(query, TTxControl::NoTx());
-    }).GetValueSync();
+    }).Apply([fullPath, expectedCount, expectedWhNumber](const TFuture<TExecuteQueryResult>& future) {
+        auto result = future.GetValueSync();
+        ThrowIfError(result, TStringBuilder() << "Failed to count/min/max new orders in " << fullPath);
 
-    ExitIfError(result, TStringBuilder() << "Failed to count/min/max new orders in " << fullPath);
-
-    TResultSetParser parser(result.GetResultSet(0));
-    if (!parser.TryNextRow()) {
-        Cerr << "No new orders found" << Endl;
-        std::exit(1);
-    }
-
-    try {
-        size_t rowCount = parser.ColumnParser("count").GetUint64();
-        if (rowCount == 0) {
-            Cerr << "Zero new orders in " << fullPath << Endl;
-            std::exit(1);
+        TResultSetParser parser(result.GetResultSet(0));
+        if (!parser.TryNextRow()) {
+            ythrow yexception() << "No new orders found";
         }
 
-        if (int(rowCount) != expectedCount) {
-            Cerr << "New order count is " << rowCount << " and not " << expectedCount << " in " << fullPath << Endl;
-            std::exit(1);
-        }
+        try {
+            size_t rowCount = parser.ColumnParser("count").GetUint64();
+            if (rowCount == 0) {
+                ythrow yexception() << "Zero new orders in " << fullPath;
+            }
 
-        int minWh = *parser.ColumnParser("min_w_id").GetOptionalInt32();
-        int maxWh = *parser.ColumnParser("max_w_id").GetOptionalInt32();
-        int minDist = *parser.ColumnParser("min_d_id").GetOptionalInt32();
-        int maxDist = *parser.ColumnParser("max_d_id").GetOptionalInt32();
-        int minOrder = *parser.ColumnParser("min_o_id").GetOptionalInt32();
-        int maxOrder = *parser.ColumnParser("max_o_id").GetOptionalInt32();
+            if (int(rowCount) != expectedCount) {
+                ythrow yexception() << "New order count is " << rowCount << " and not " << expectedCount << " in " << fullPath;
+            }
 
-        if (minWh != 1 || maxWh != expectedWhNumber) {
-            Cerr << "New order warehouse range is [" << minWh << ", " << maxWh << "] instead of [1, "
-                 << expectedWhNumber << "] in " << fullPath << Endl;
-            std::exit(1);
-        }
+            int minWh = *parser.ColumnParser("min_w_id").GetOptionalInt32();
+            int maxWh = *parser.ColumnParser("max_w_id").GetOptionalInt32();
+            int minDist = *parser.ColumnParser("min_d_id").GetOptionalInt32();
+            int maxDist = *parser.ColumnParser("max_d_id").GetOptionalInt32();
+            int minOrder = *parser.ColumnParser("min_o_id").GetOptionalInt32();
+            int maxOrder = *parser.ColumnParser("max_o_id").GetOptionalInt32();
 
-        if (minDist != DISTRICT_LOW_ID || maxDist != DISTRICT_HIGH_ID) {
-            Cerr << "New order district range is [" << minDist << ", " << maxDist << "] instead of ["
-                 << DISTRICT_LOW_ID << ", " << DISTRICT_HIGH_ID << "] in " << fullPath << Endl;
-            std::exit(1);
-        }
+            if (minWh != 1 || maxWh != expectedWhNumber) {
+                ythrow yexception() << "New order warehouse range is [" << minWh << ", " << maxWh << "] instead of [1, "
+                     << expectedWhNumber << "] in " << fullPath;
+            }
 
-        // New orders are for orders 2101-3000, so minimum should be FIRST_UNPROCESSED_O_ID
-        if (minOrder < FIRST_UNPROCESSED_O_ID || maxOrder != CUSTOMERS_PER_DISTRICT) {
-            Cerr << "New order ID range is [" << minOrder << ", " << maxOrder << "] instead of ["
-                 << FIRST_UNPROCESSED_O_ID << ", " << CUSTOMERS_PER_DISTRICT << "] in " << fullPath << Endl;
-            std::exit(1);
+            if (minDist != DISTRICT_LOW_ID || maxDist != DISTRICT_HIGH_ID) {
+                ythrow yexception() << "New order district range is [" << minDist << ", " << maxDist << "] instead of ["
+                     << DISTRICT_LOW_ID << ", " << DISTRICT_HIGH_ID << "] in " << fullPath;
+            }
+
+            // New orders are for orders 2101-3000, so minimum should be FIRST_UNPROCESSED_O_ID
+            if (minOrder < FIRST_UNPROCESSED_O_ID || maxOrder != CUSTOMERS_PER_DISTRICT) {
+                ythrow yexception() << "New order ID range is [" << minOrder << ", " << maxOrder << "] instead of ["
+                     << FIRST_UNPROCESSED_O_ID << ", " << CUSTOMERS_PER_DISTRICT << "] in " << fullPath;
+            }
+        } catch (const std::exception& e) {
+            ythrow yexception() << "Failed to validate new orders in " << fullPath << ": " << e.what();
         }
-    } catch (std::exception& e) {
-        Cerr << "Failed to validate new orders in " << fullPath << ": " << e.what() << Endl;
-        std::exit(1);
-    }
+    });
 }
 
-void BaseCheckOrderLineTable(TQueryClient& client, const TString& path, int expectedWhNumber) {
+TFuture<void> BaseCheckOrderLineTable(TQueryClient& client, const TString& path, int expectedWhNumber) {
     // OL_W_ID, OL_D_ID, OL_O_ID, OL_NUMBER are part of PK
     // Check that each district has orders for all order IDs 1-3000
     TString query = std::format(R"(
@@ -469,41 +436,38 @@ void BaseCheckOrderLineTable(TQueryClient& client, const TString& path, int expe
     TString fullPath = path + "/" + TABLE_ORDER_LINE;
     int expectedDistrictCount = expectedWhNumber * DISTRICT_COUNT;
 
-    auto result = client.RetryQuery([&](TSession session) {
+    return client.RetryQuery([query](TSession session) {
         return session.ExecuteQuery(query, TTxControl::NoTx());
-    }).GetValueSync();
+    }).Apply([fullPath, expectedDistrictCount](const TFuture<TExecuteQueryResult>& future) {
+        auto result = future.GetValueSync();
+        ThrowIfError(result, TStringBuilder() << "Failed to check order lines per district in " << fullPath);
 
-    ExitIfError(result, TStringBuilder() << "Failed to check order lines per district in " << fullPath);
-
-    TResultSetParser parser(result.GetResultSet(0));
-    if (!parser.TryNextRow()) {
-        Cerr << "No order line districts found" << Endl;
-        std::exit(1);
-    }
-
-    try {
-        size_t districtCount = parser.ColumnParser("district_count").GetUint64();
-        if (int(districtCount) != expectedDistrictCount) {
-            Cerr << "Order line district count is " << districtCount << " and not "
-                 << expectedDistrictCount << " in " << fullPath << Endl;
-            std::exit(1);
+        TResultSetParser parser(result.GetResultSet(0));
+        if (!parser.TryNextRow()) {
+            ythrow yexception() << "No order line districts found";
         }
 
-        size_t minOrders = *parser.ColumnParser("min_orders").GetOptionalUint64();
-        size_t maxOrders = *parser.ColumnParser("max_orders").GetOptionalUint64();
+        try {
+            size_t districtCount = parser.ColumnParser("district_count").GetUint64();
+            if (int(districtCount) != expectedDistrictCount) {
+                ythrow yexception() << "Order line district count is " << districtCount << " and not "
+                     << expectedDistrictCount << " in " << fullPath;
+            }
 
-        if (minOrders != CUSTOMERS_PER_DISTRICT || maxOrders != CUSTOMERS_PER_DISTRICT) {
-            Cerr << "Order line order count per district is [" << minOrders << ", " << maxOrders << "] instead of ["
-                 << CUSTOMERS_PER_DISTRICT << ", " << CUSTOMERS_PER_DISTRICT << "] in " << fullPath << Endl;
-            std::exit(1);
+            size_t minOrders = *parser.ColumnParser("min_orders").GetOptionalUint64();
+            size_t maxOrders = *parser.ColumnParser("max_orders").GetOptionalUint64();
+
+            if (minOrders != CUSTOMERS_PER_DISTRICT || maxOrders != CUSTOMERS_PER_DISTRICT) {
+                ythrow yexception() << "Order line order count per district is [" << minOrders << ", " << maxOrders << "] instead of ["
+                     << CUSTOMERS_PER_DISTRICT << ", " << CUSTOMERS_PER_DISTRICT << "] in " << fullPath;
+            }
+        } catch (const std::exception& e) {
+            ythrow yexception() << "Failed to validate order lines in " << fullPath << ": " << e.what();
         }
-    } catch (std::exception& e) {
-        Cerr << "Failed to validate order lines in " << fullPath << ": " << e.what() << Endl;
-        std::exit(1);
-    }
+    });
 }
 
-void BaseCheckHistoryTable(TQueryClient& client, const TString& path, int expectedWhNumber) {
+TFuture<void> BaseCheckHistoryTable(TQueryClient& client, const TString& path, int expectedWhNumber) {
     // H_C_W_ID, H_C_NANO_TS are part of PK
     TString query = std::format(R"(
         PRAGMA TablePathPrefix("{}");
@@ -516,49 +480,45 @@ void BaseCheckHistoryTable(TQueryClient& client, const TString& path, int expect
     TString fullPath = path + "/" + TABLE_HISTORY;
     int expectedCount = expectedWhNumber * CUSTOMERS_PER_DISTRICT * DISTRICT_COUNT;
 
-    auto result = client.RetryQuery([&](TSession session) {
+    return client.RetryQuery([query](TSession session) {
         return session.ExecuteQuery(query, TTxControl::NoTx());
-    }).GetValueSync();
+    }).Apply([fullPath, expectedCount, expectedWhNumber](const TFuture<TExecuteQueryResult>& future) {
+        auto result = future.GetValueSync();
+        ThrowIfError(result, TStringBuilder() << "Failed to count/min/max history in " << fullPath);
 
-    ExitIfError(result, TStringBuilder() << "Failed to count/min/max history in " << fullPath);
-
-    TResultSetParser parser(result.GetResultSet(0));
-    if (!parser.TryNextRow()) {
-        Cerr << "No history found" << Endl;
-        std::exit(1);
-    }
-
-    try {
-        size_t rowCount = parser.ColumnParser("count").GetUint64();
-        if (rowCount == 0) {
-            Cerr << "Zero history records in " << fullPath << Endl;
-            std::exit(1);
+        TResultSetParser parser(result.GetResultSet(0));
+        if (!parser.TryNextRow()) {
+            ythrow yexception() << "No history found";
         }
 
-        int minWh = *parser.ColumnParser("min_w_id").GetOptionalInt32();
-        int maxWh = *parser.ColumnParser("max_w_id").GetOptionalInt32();
+        try {
+            size_t rowCount = parser.ColumnParser("count").GetUint64();
+            if (rowCount == 0) {
+                ythrow yexception() << "Zero history records in " << fullPath;
+            }
 
-        if (int(rowCount) != expectedCount) {
-            Cerr << "History count is " << rowCount << " and not " << expectedCount << " in " << fullPath << Endl;
-            std::exit(1);
-        }
+            if (int(rowCount) != expectedCount) {
+                ythrow yexception() << "History count is " << rowCount << " and not " << expectedCount << " in " << fullPath;
+            }
 
-        if (minWh != 1 || maxWh != expectedWhNumber) {
-            Cerr << "History warehouse range is [" << minWh << ", " << maxWh
-                 << "] instead of [1, " << expectedWhNumber << "] in " << fullPath << Endl;
-            std::exit(1);
+            int minWh = *parser.ColumnParser("min_w_id").GetOptionalInt32();
+            int maxWh = *parser.ColumnParser("max_w_id").GetOptionalInt32();
+
+            if (minWh != 1 || maxWh != expectedWhNumber) {
+                ythrow yexception() << "History warehouse range is [" << minWh << ", " << maxWh
+                     << "] instead of [1, " << expectedWhNumber << "] in " << fullPath;
+            }
+        } catch (const std::exception& e) {
+            ythrow yexception() << "Failed to validate history in " << fullPath << ": " << e.what();
         }
-    } catch (std::exception& e) {
-        Cerr << "Failed to validate history in " << fullPath << ": " << e.what() << Endl;
-        std::exit(1);
-    }
+    });
 }
 
 //-----------------------------------------------------------------------------
 
 // based on checks in TPC-C for CockroachDB
 
-void ConsistencyCheck3321(TQueryClient& client, const TString& path) {
+TFuture<void> ConsistencyCheck3321(TQueryClient& client, const TString& path) {
 	// 3.3.2.1 Entries in the WAREHOUSE and DISTRICT tables must satisfy the relationship:
 	// W_YTD = sum (D_YTD)
 
@@ -579,17 +539,17 @@ void ConsistencyCheck3321(TQueryClient& client, const TString& path) {
         LIMIT 1;
     )", path.c_str(), TABLE_DISTRICT, TABLE_WAREHOUSE);
 
-    auto result = client.RetryQuery([&](TSession session) {
+    return client.RetryQuery([query](TSession session) {
         return session.ExecuteQuery(query, TTxControl::NoTx());
-    }).GetValueSync();
+    }).Apply([](const TFuture<TExecuteQueryResult>& future) {
+        auto result = future.GetValueSync();
+        ThrowIfError(result, TStringBuilder() << "Check 3.3.2.1 failed");
 
-    ExitIfError(result, TStringBuilder() << "Check 3.3.2.1 failed");
-
-    TResultSetParser parser(result.GetResultSet(0));
-    if (parser.TryNextRow()) {
-        Cerr << "Check 3.3.2.1 failed: D_W_ID and sum(D_YTD) mismatch" << Endl;
-        std::exit(1);
-    }
+        TResultSetParser parser(result.GetResultSet(0));
+        if (parser.TryNextRow()) {
+            ythrow yexception() << "Check 3.3.2.1 failed: D_W_ID and sum(D_YTD) mismatch";
+        }
+    });
 }
 
 //-----------------------------------------------------------------------------
@@ -607,6 +567,8 @@ public:
     void CheckSync();
 
 private:
+    void WaitCheck(const TFuture<void>& future, const std::string& description);
+
     void BaseCheck(TQueryClient& client);
     void ConsistencyCheck(TQueryClient& client);
 
@@ -617,6 +579,9 @@ private:
     // XXX Log instance owns LogBackend (unfortunately, it accepts THolder with LogBackend)
     TLogBackendWithCapture* LogBackend;
     std::unique_ptr<TLog> Log;
+
+    int FailedChecksCount = 0;
+    std::vector<std::pair<TFuture<void>, std::string>> RunningChecks;
 };
 
 void TPCCChecker::CheckSync() {
@@ -627,12 +592,32 @@ void TPCCChecker::CheckSync() {
     BaseCheck(queryClient);
     ConsistencyCheck(queryClient);
 
+    for (auto& [future, description]: RunningChecks) {
+        WaitCheck(future, description);
+    }
+
     // to flush
     LogBackend->ReopenLog();
 
-    Cout << "Everything is good!" << Endl;
+    if (FailedChecksCount == 0) {
+        Cout << "Everything is good!" << Endl;
+    }
 
     driver.Stop(true);
+}
+
+void TPCCChecker::WaitCheck(const TFuture<void>& future, const std::string& description) {
+    Cout << "Checking " << description << " ";
+    Flush(Cout);
+    try {
+        future.GetValueSync();
+        Cout << "[" << NColorizer::StdOut().GreenColor() << "OK" << NColorizer::StdOut().Default() << "]";
+    } catch (const std::exception& ex) {
+        Cout << "[" << NColorizer::StdOut().RedColor() << "Failed" << NColorizer::StdOut().Default() << "]: "
+            << ex.what();
+        ++FailedChecksCount;
+    }
+    Cout << Endl;
 }
 
 void TPCCChecker::BaseCheck(TQueryClient& client) {
@@ -643,48 +628,28 @@ void TPCCChecker::BaseCheck(TQueryClient& client) {
         std::exit(1);
     }
 
-    LOG_I("Checking " << TABLE_WAREHOUSE << "...");
-    BaseCheckWarehouseTable(client, path, expectedWhNumber);
-    LOG_I(TABLE_WAREHOUSE << " is OK");
-
-    LOG_I("Checking " << TABLE_DISTRICT << "...");
-    BaseCheckDistrictTable(client, path, expectedWhNumber);
-    LOG_I(TABLE_DISTRICT << " is OK");
-
-    LOG_I("Checking " << TABLE_CUSTOMER << "...");
-    BaseCheckCustomerTable(client, path, expectedWhNumber);
-    LOG_I(TABLE_CUSTOMER << " is OK");
-
-    LOG_I("Checking " << TABLE_ITEM << "...");
-    BaseCheckItemTable(client, path);
-    LOG_I(TABLE_ITEM << " is OK");
+    RunningChecks.insert(RunningChecks.end(), {
+        { BaseCheckWarehouseTable(client, path, expectedWhNumber), TABLE_WAREHOUSE },
+        { BaseCheckDistrictTable(client, path, expectedWhNumber), TABLE_DISTRICT },
+        { BaseCheckCustomerTable(client, path, expectedWhNumber), TABLE_CUSTOMER },
+        { BaseCheckItemTable(client, path), TABLE_ITEM },
+        { BaseCheckStockTable(client, path, expectedWhNumber), TABLE_STOCK },
+    });
 
     if (Config.JustImported) {
-        LOG_I("Checking " << TABLE_STOCK << "...");
-        BaseCheckStockTable(client, path, expectedWhNumber);
-        LOG_I(TABLE_STOCK << " is OK");
-
-        LOG_I("Checking " << TABLE_OORDER << "...");
-        BaseCheckOorderTable(client, path, expectedWhNumber);
-        LOG_I(TABLE_OORDER << " is OK");
-
-        LOG_I("Checking " << TABLE_NEW_ORDER << "...");
-        BaseCheckNewOrderTable(client, path, expectedWhNumber);
-        LOG_I(TABLE_NEW_ORDER << " is OK");
-
-        LOG_I("Checking " << TABLE_ORDER_LINE << "...");
-        BaseCheckOrderLineTable(client, path, expectedWhNumber);
-        LOG_I(TABLE_ORDER_LINE << " is OK");
-
-        LOG_I("Checking " << TABLE_HISTORY << "...");
-        BaseCheckHistoryTable(client, path, expectedWhNumber);
-        LOG_I(TABLE_HISTORY << " is OK");
+        RunningChecks.insert(RunningChecks.end(), {
+            { BaseCheckOorderTable(client, path, expectedWhNumber), TABLE_OORDER },
+            { BaseCheckNewOrderTable(client, path, expectedWhNumber), TABLE_NEW_ORDER },
+            { BaseCheckOrderLineTable(client, path, expectedWhNumber), TABLE_ORDER_LINE },
+            { BaseCheckHistoryTable(client, path, expectedWhNumber), TABLE_HISTORY },
+        });
     }
 }
 
 void TPCCChecker::ConsistencyCheck(TQueryClient& client) {
-    LOG_I("Checking 3.3.2.1");
-    ConsistencyCheck3321(client, Config.Path);
+    RunningChecks.insert(RunningChecks.end(), {
+        { ConsistencyCheck3321(client, Config.Path), "3.3.2.1" },
+    });
 }
 
 } // anonymous

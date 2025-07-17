@@ -31,15 +31,4 @@
 * 20240:If the CDC stream was recorded in an auto-partitioned topic, then it could stop after several splits of the topic. In this case, modification of rows in the table would result in the error that the table is overloaded. [#20240](https://github.com/ydb-platform/ydb/pull/20240) ([Nikolay Shestakov](https://github.com/nshestakov))
 * 20072:[Fixed](https://github.com/ydb-platform/ydb/pull/20072) rare freezes of the topic table transaction. [#20072]([Alek5andr-Kotov](https://github.com/Alek5andr-Kotov))
 * 19907:When transaction duration exceeds the topic's message retention period, writing to the topic may result in inconsistent data in the partition. [#19907](https://github.com/ydb-platform/ydb/pull/19907) ([Nikolay Shestakov](https://github.com/nshestakov))
-* 20568:Changes from #20547
-
-Added a check. KQP returns SCHEME_ERROR if there are unknown partitions in the request. [#20568](https://github.com/ydb-platform/ydb/pull/20568) ([Alek5andr-Kotov](https://github.com/Alek5andr-Kotov))
-
-### Performance
-
-* 19843:Changes from #19807
-
-Changed the retry policy settings. Added a cache of SchemeNavigate responses. Users will receive faster confirmation that the server has written the message.
-
-Added logging of requests to KQP. [#19843](https://github.com/ydb-platform/ydb/pull/19843) ([Alek5andr-Kotov](https://github.com/Alek5andr-Kotov))
 

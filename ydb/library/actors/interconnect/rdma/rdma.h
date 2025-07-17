@@ -41,14 +41,22 @@ public:
     virtual ~ICq() = default;
     virtual ibv_cq* GetCq() noexcept = 0;
 
-    struct TBusy {};
-    struct TErr {};
+    struct TBusy {}; // try later
+    struct TErr {};  // fatal error, cq must be recreated. All associated qp failed.
+
     using TAllocResult = std::variant<IWr*, TBusy, TErr>;
+
+    struct TWrStats {
+        ui32 Total; // Total number of work requests
+        ui32 Ready; // Number of work requests ready to allocate
+    };
 
     // Alloc ibv work request and set callback to notify complition.
     // returns TBusy in case of no prepare requests
     // returns TErr in case of fatal CQ error. NOTE!!! The callback might be called in this case with TCqErr 
     virtual TAllocResult AllocWr(std::function<void(NActors::TActorSystem* as, TEvRdmaIoDone*)> cb) noexcept = 0;
+    virtual TWrStats GetWrStats() const noexcept = 0;
+
     static bool IsWrSuccess(const TAllocResult& ar) {
         return std::holds_alternative<IWr*>(ar);
     }

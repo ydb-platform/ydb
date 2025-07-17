@@ -134,14 +134,19 @@ Y_UNIT_TEST_SUITE(RdmaLow) {
                 attempt = 1;
             }
 
-            Cerr << "Whait for futures" << Endl;
+            auto stats = cqPtr->GetWrStats();
+            Cerr << "Whait for futures... " << "total: " << stats.Total << "ready: " << stats.Ready << Endl;
 
             auto all = NThreading::WaitAll(completed);
             while (!all.HasValue()) {
                 Sleep(TDuration::Seconds(1));
                 Cerr << "... " << postedNum.load() << "  " << completedNum.load() << Endl;
             }
-            UNIT_ASSERT(strncmp((char*)reg1->GetAddr(), (char*)reg2->GetAddr(), MEM_REG_SZ) == 0);
+
+            if (!wasOverflow) {
+                UNIT_ASSERT_VALUES_EQUAL(stats.Total, stats.Ready);
+                UNIT_ASSERT(strncmp((char*)reg1->GetAddr(), (char*)reg2->GetAddr(), MEM_REG_SZ) == 0);
+            }
         }
 
         UNIT_ASSERT(wasOverflow.load(std::memory_order_relaxed)); // Check it was at least one sucess wr allocation

@@ -236,6 +236,10 @@ namespace {
             PingTimeHistogram->Collect(value);
         }
 
+        void UpdateRdmaReadTimeHistogram(ui64 value) override {
+            RdmaReadTimeHistogram->Collect(value);
+        }
+
         void UpdateOutputChannelTraffic(ui16 channel, ui64 value) override {
             auto& ch = GetOutputChannel(channel);
             if (ch.OutgoingTraffic) {
@@ -317,6 +321,9 @@ namespace {
 
                 PingTimeHistogram = AdaptiveCounters->GetHistogram(
                     "PingTimeUs", NMonitoring::ExponentialHistogram(18, 2, 125));
+
+                RdmaReadTimeHistogram = AdaptiveCounters->GetHistogram(
+                    "RdmaReadTimeUs", NMonitoring::ExplicitHistogram({0, 5, 10, 20, 50, 100, 200, 1000, 10000}));
             }
 
             if (updateGlobal) {
@@ -379,6 +386,7 @@ namespace {
         NMonitoring::TDynamicCounters::TCounterPtr UsefulWriteWakeups;
         NMonitoring::TDynamicCounters::TCounterPtr SpuriousWriteWakeups;
         NMonitoring::THistogramPtr PingTimeHistogram;
+        NMonitoring::THistogramPtr RdmaReadTimeHistogram;
 
         std::unordered_map<ui16, TOutputChannel> OutputChannels;
         TOutputChannel OtherOutputChannel;
@@ -580,6 +588,10 @@ namespace {
             PingTimeHistogram_->Record(value);
         }
 
+        void UpdateRdmaReadTimeHistogram(ui64 value) override {
+            RdmaReadTimeHistogram_->Record(value);
+        }
+
         void UpdateOutputChannelTraffic(ui16 channel, ui64 value) override {
             auto& ch = GetOutputChannel(channel);
             if (ch.OutgoingTraffic) {
@@ -672,6 +684,8 @@ namespace {
                 InflightDataAmount_ = createRate(AdaptiveMetrics_, "interconnect.inflight_data");
                 PingTimeHistogram_ = AdaptiveMetrics_->HistogramRate(
                         NMonitoring::MakeLabels({{"sensor", "interconnect.ping_time_us"}}), NMonitoring::ExponentialHistogram(18, 2, 125));
+                RdmaReadTimeHistogram_ = AdaptiveMetrics_->HistogramRate(
+                        NMonitoring::MakeLabels({{"sensor", "interconnect.rdma_read_time_us"}}), NMonitoring::ExplicitHistogram({0, 5, 10, 20, 50, 100, 200, 1000, 10000})); 
             }
 
             if (updateGlobal) {
@@ -756,6 +770,8 @@ namespace {
         NMonitoring::IIntGauge* ClockSkewMicrosec_;
 
         NMonitoring::IHistogram* PingTimeHistogram_;
+
+        NMonitoring::IHistogram* RdmaReadTimeHistogram_;
 
         THashMap<ui16, TOutputChannel> OutputChannels_;
         TOutputChannel OtherOutputChannel_;

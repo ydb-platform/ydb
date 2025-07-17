@@ -40,6 +40,9 @@ struct AlterTopicInfo {
     TopicEntities Entities;
 };
 
+struct TPairHash { size_t operator()(const std::pair<TString, TString>& p) const { return CombineHashes(std::hash<TString>()(p.first), std::hash<TString>()(p.second)); } };
+
+
 class TKafkaOffsetFetchActor: public NActors::TActorBootstrapped<TKafkaOffsetFetchActor> {
 
     using TBase = NActors::TActor<TKafkaOffsetFetchActor>;
@@ -87,6 +90,7 @@ private:
     std::unordered_map<TString, ui32> GroupIdToIndex;
     std::unordered_map<ui32, TString> CookieToGroupId;
     std::unordered_map<ui32, AlterTopicInfo> AlterTopicInf;
+    std::unordered_map<std::pair<TString, TString>, ui32, TPairHash> ConsumerTopicRequestsLimit;
     std::unique_ptr<NKafka::TKqpTxHelper> Kqp;
 
     ui32 InflyTopics = 0;

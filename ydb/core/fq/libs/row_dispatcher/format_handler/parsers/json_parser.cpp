@@ -345,7 +345,7 @@ public:
         , Config(config)
         , NumberColumns(Consumer->GetColumns().size())
         , MaxNumberRows((config.BufferCellCount - 1) / NumberColumns + 1)
-        , ParserBatchSize(config.BatchSize + config.MaxMessageSizeBytes + simdjson::SIMDJSON_PADDING)
+        , ParserBatchSize(config.BatchSize + config.MaxMessageSizeBytes + simdjson::SIMDJSON_PADDING)  // ParserBatchSize is calculated to ensure the parser can handle the largest possible 
         , LogPrefix("TJsonParser: ")
         , ParsedValues(NumberColumns)
         , Counters(counters.CountersSubgroup)

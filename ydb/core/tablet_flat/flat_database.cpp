@@ -409,6 +409,26 @@ size_t TDatabase::GetOpenTxCount(ui32 table) const
     return Require(table)->GetOpenTxCount();
 }
 
+size_t TDatabase::GetTxsWithDataCount(ui32 table) const
+{
+    return Require(table)->GetTxsWithDataCount();
+}
+
+size_t TDatabase::GetTxsWithStatusCount(ui32 table) const
+{
+    return Require(table)->GetTxsWithStatusCount();
+}
+
+size_t TDatabase::GetCommittedTxCount(ui32 table) const
+{
+    return Require(table)->GetCommittedTxCount();
+}
+
+size_t TDatabase::GetRemovedTxCount(ui32 table) const
+{
+    return Require(table)->GetRemovedTxCount();
+}
+
 void TDatabase::RemoveRowVersions(ui32 table, const TRowVersion& lower, const TRowVersion& upper)
 {
     if (Y_LIKELY(lower < upper)) {

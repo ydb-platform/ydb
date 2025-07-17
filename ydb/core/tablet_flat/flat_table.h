@@ -186,6 +186,7 @@ public:
     const absl::flat_hash_set<ui64>& GetOpenTxs() const;
     size_t GetOpenTxCount() const;
     size_t GetTxsWithDataCount() const;
+    size_t GetTxsWithStatusCount() const;
     size_t GetCommittedTxCount() const;
     size_t GetRemovedTxCount() const;
 

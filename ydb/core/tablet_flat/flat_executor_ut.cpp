@@ -7917,6 +7917,279 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_Truncate) {
         env.SendFollowerSync(new NFake::TEvExecute{ new TTxCheckRows(false, 4) });
     }
 
+    template<bool WaitForCommit = false>
+    struct TTxLambdaGeneric : public ITransaction {
+        const std::function<bool (TTransactionContext&)> Lambda;
+
+        template<class... TLambdas>
+        TTxLambdaGeneric(TLambdas&&... lambdas)
+            : Lambda([... lambdas = std::forward<TLambdas>(lambdas)](TTransactionContext& txc) {
+                return (lambdas(txc) && ...);
+            })
+        {}
+
+        bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
+            bool commit = Lambda(txc);
+            if (commit && !WaitForCommit) {
+                ctx.Send(ctx.SelfID, new NFake::TEvReturn);
+            }
+            return commit;
+        }
+
+        void Complete(const TActorContext& ctx) override {
+            if (WaitForCommit) {
+                ctx.Send(ctx.SelfID, new NFake::TEvReturn);
+            }
+        }
+    };
+
+    using TTxLambda = TTxLambdaGeneric<false>;
+    using TTxLambdaAndWaitForCommit = TTxLambdaGeneric<true>;
+
+    static auto OpWrite(i64 key, TString value, ui64 txId = 0) {
+        return [key, value, txId](TTransactionContext& txc) {
+            const auto keyCell = NScheme::TInt64::TInstance(key);
+
+            const auto valueCell = NScheme::TString::TInstance(value);
+            NTable::TUpdateOp ops{ TRowsModel::ColumnValueId, NTable::ECellOp::Set, valueCell };
+
+            if (txId == 0) {
+                txc.DB.Update(TRowsModel::TableId, NTable::ERowOp::Upsert, { keyCell }, { ops });
+            } else {
+                txc.DB.UpdateTx(TRowsModel::TableId, NTable::ERowOp::Upsert, { keyCell }, { ops }, txId);
+            }
+            return true;
+        };
+    }
+
+    static auto OpCommitTx(ui64 txId, const TRowVersion& version = TRowVersion::Min()) {
+        return [txId, version](TTransactionContext& txc) {
+            txc.DB.CommitTx(TRowsModel::TableId, txId, version);
+            return true;
+        };
+    }
+
+    static auto OpTruncate() {
+        return [](TTransactionContext& txc) {
+            txc.DB.Truncate(TRowsModel::TableId);
+            return true;
+        };
+    }
+
+    static auto OpReadRows(TString& data, ui64 txId = 0) {
+        return [&data, txId](TTransactionContext& txc) {
+            TStringBuilder builder;
+
+            TVector<NTable::TTag> tags;
+            tags.push_back(TRowsModel::ColumnKeyId);
+            tags.push_back(TRowsModel::ColumnValueId);
+
+            NTable::ITransactionMapPtr txMap;
+            if (txId != 0) {
+                txMap = MakeIntrusive<NTable::TSingleTransactionMap>(txId, TRowVersion::Min());
+            }
+
+            NTable::EReady ready;
+            auto it = txc.DB.IterateRange(TRowsModel::TableId, { }, tags, TRowVersion::Max(), txMap);
+
+            while ((ready = it->Next(NTable::ENext::All)) != NTable::EReady::Gone) {
+                if (ready == NTable::EReady::Page) {
+                    return false;
+                }
+
+                const auto& row = it->Row();
+
+                TString key;
+                DbgPrintValue(key, row.Get(0), NScheme::TTypeInfo(NScheme::TUint64::TypeId));
+
+                TString value;
+                DbgPrintValue(value, row.Get(1), NScheme::TTypeInfo(NScheme::TString::TypeId));
+
+                builder << "Key " << key << " = " << row.GetRowState()
+                    << " value = " << NTable::ECellOp(row.GetCellOp(1)) << " " << value << "\n";
+            }
+
+            data = builder;
+            return true;
+        };
+    }
+
+    Y_UNIT_TEST(PartiallyCommitThenTruncateAndWrite) {
+        TMyEnvBase env;
+        TRowsModel rows;
+
+        env->SetLogPriority(NKikimrServices::TABLET_EXECUTOR, NActors::NLog::PRI_DEBUG);
+
+        // Start the first tablet
+        env.FireTablet(env.Edge, env.Tablet, [&env](const TActorId &tablet, TTabletStorageInfo *info) {
+            return new TTestFlatTablet(env.Edge, tablet, info);
+        });
+        env.WaitForWakeUp();
+
+        // Init schema
+        {
+            TIntrusivePtr<TCompactionPolicy> policy = new TCompactionPolicy();
+            env.SendSync(rows.MakeScheme(std::move(policy)));
+        }
+
+        Cerr << "...inserting initial rows" << Endl;
+        env.SendSync(new NFake::TEvExecute{ new TTxLambda(
+            OpWrite(1, "value1", 101),
+            OpWrite(2, "value2", 102),
+            OpCommitTx(101))
+        });
+
+        Cerr << "...checking rows before compaction" << Endl;
+        {
+            TString data1, data2, data3;
+            env.SendSync(new NFake::TEvExecute{ new TTxLambda(
+                OpReadRows(data1),
+                OpReadRows(data2, 102),
+                [&](TTransactionContext& txc) {
+                    data3 = TStringBuilder()
+                        << "OpenTxCount: " << txc.DB.GetOpenTxCount(TRowsModel::TableId) << "\n"
+                        << "TxsWithDataCount: " << txc.DB.GetTxsWithDataCount(TRowsModel::TableId) << "\n"
+                        << "TxsWithStatusCount: " << txc.DB.GetTxsWithStatusCount(TRowsModel::TableId) << "\n"
+                        << "CommittedTxCount: " << txc.DB.GetCommittedTxCount(TRowsModel::TableId) << "\n"
+                        << "RemovedTxCount: " << txc.DB.GetRemovedTxCount(TRowsModel::TableId) << "\n";
+                    return true;
+                })
+            });
+            UNIT_ASSERT_VALUES_EQUAL(data1,
+                "Key 1 = Upsert value = Set value1\n");
+            UNIT_ASSERT_VALUES_EQUAL(data2,
+                "Key 1 = Upsert value = Set value1\n"
+                "Key 2 = Upsert value = Set value2\n");
+            UNIT_ASSERT_VALUES_EQUAL(data3,
+                "OpenTxCount: 1\n"
+                "TxsWithDataCount: 2\n"
+                "TxsWithStatusCount: 1\n"
+                "CommittedTxCount: 1\n"
+                "RemovedTxCount: 0\n");
+        }
+
+        Cerr << "...compacting table" << Endl;
+        env.SendSync(new NFake::TEvCompact(TRowsModel::TableId));
+        env.WaitFor<NFake::TEvCompacted>();
+
+        Cerr << "...checking rows before truncate" << Endl;
+        {
+            TString data1, data2, data3;
+            env.SendSync(new NFake::TEvExecute{ new TTxLambda(
+                OpReadRows(data1),
+                OpReadRows(data2, 102),
+                [&](TTransactionContext& txc) {
+                    data3 = TStringBuilder()
+                        << "OpenTxCount: " << txc.DB.GetOpenTxCount(TRowsModel::TableId) << "\n"
+                        << "TxsWithDataCount: " << txc.DB.GetTxsWithDataCount(TRowsModel::TableId) << "\n"
+                        << "TxsWithStatusCount: " << txc.DB.GetTxsWithStatusCount(TRowsModel::TableId) << "\n"
+                        << "CommittedTxCount: " << txc.DB.GetCommittedTxCount(TRowsModel::TableId) << "\n"
+                        << "RemovedTxCount: " << txc.DB.GetRemovedTxCount(TRowsModel::TableId) << "\n";
+                    return true;
+                })
+            });
+            UNIT_ASSERT_VALUES_EQUAL(data1,
+                "Key 1 = Upsert value = Set value1\n");
+            UNIT_ASSERT_VALUES_EQUAL(data2,
+                "Key 1 = Upsert value = Set value1\n"
+                "Key 2 = Upsert value = Set value2\n");
+            // Note: data for tx 101 was compacted as committed
+            UNIT_ASSERT_VALUES_EQUAL(data3,
+                "OpenTxCount: 1\n"
+                "TxsWithDataCount: 1\n"
+                "TxsWithStatusCount: 1\n"
+                "CommittedTxCount: 1\n"
+                "RemovedTxCount: 0\n");
+        }
+
+        Cerr << "...truncating and writing to table" << Endl;
+        {
+            TString data1, data2;
+            env.SendSync(new NFake::TEvExecute{ new TTxLambda(
+                OpTruncate(),
+                OpWrite(11, "value11", 111),
+                OpWrite(22, "value22", 122),
+                OpCommitTx(111),
+                OpReadRows(data1),
+                OpReadRows(data2, 122))
+            });
+            UNIT_ASSERT_VALUES_EQUAL(data1,
+                "Key 11 = Upsert value = Set value11\n");
+            UNIT_ASSERT_VALUES_EQUAL(data2,
+                "Key 11 = Upsert value = Set value11\n"
+                "Key 22 = Upsert value = Set value22\n");
+        }
+
+        Cerr << "...checking rows (expecting new data and no metadata for old transactions)" << Endl;
+        {
+            TString data1, data2, data3;
+            env.SendSync(new NFake::TEvExecute{ new TTxLambda(
+                OpReadRows(data1),
+                OpReadRows(data2, 122),
+                [&](TTransactionContext& txc) {
+                    data3 = TStringBuilder()
+                        << "OpenTxCount: " << txc.DB.GetOpenTxCount(TRowsModel::TableId) << "\n"
+                        << "TxsWithDataCount: " << txc.DB.GetTxsWithDataCount(TRowsModel::TableId) << "\n"
+                        << "TxsWithStatusCount: " << txc.DB.GetTxsWithStatusCount(TRowsModel::TableId) << "\n"
+                        << "CommittedTxCount: " << txc.DB.GetCommittedTxCount(TRowsModel::TableId) << "\n"
+                        << "RemovedTxCount: " << txc.DB.GetRemovedTxCount(TRowsModel::TableId) << "\n"
+                        << "Tx 101 " << (txc.DB.HasOpenTx(TRowsModel::TableId, 101) ? "is open" : "is not open") << "\n"
+                        << "Tx 101 " << (txc.DB.HasTxData(TRowsModel::TableId, 101) ? "has data" : "has no data") << "\n"
+                        << "Tx 102 " << (txc.DB.HasOpenTx(TRowsModel::TableId, 102) ? "is open" : "is not open") << "\n"
+                        << "Tx 102 " << (txc.DB.HasTxData(TRowsModel::TableId, 102) ? "has data" : "has no data") << "\n"
+                        << "Tx 111 " << (txc.DB.HasOpenTx(TRowsModel::TableId, 111) ? "is open" : "is not open") << "\n"
+                        << "Tx 111 " << (txc.DB.HasTxData(TRowsModel::TableId, 111) ? "has data" : "has no data") << "\n"
+                        << "Tx 122 " << (txc.DB.HasOpenTx(TRowsModel::TableId, 122) ? "is open" : "is not open") << "\n"
+                        << "Tx 122 " << (txc.DB.HasTxData(TRowsModel::TableId, 122) ? "has data" : "has no data") << "\n";
+                    return true;
+                })
+            });
+            UNIT_ASSERT_VALUES_EQUAL(data1,
+                "Key 11 = Upsert value = Set value11\n");
+            UNIT_ASSERT_VALUES_EQUAL(data2,
+                "Key 11 = Upsert value = Set value11\n"
+                "Key 22 = Upsert value = Set value22\n");
+            UNIT_ASSERT_VALUES_EQUAL(data3,
+                "OpenTxCount: 1\n"
+                "TxsWithDataCount: 2\n"
+                "TxsWithStatusCount: 1\n"
+                "CommittedTxCount: 1\n"
+                "RemovedTxCount: 0\n"
+                "Tx 101 is not open\n"
+                "Tx 101 has no data\n"
+                "Tx 102 is not open\n"
+                "Tx 102 has no data\n"
+                "Tx 111 is not open\n"
+                "Tx 111 has data\n"
+                "Tx 122 is open\n"
+                "Tx 122 has data\n");
+        }
+
+        for (int i = 0; i < 2; ++i) {
+            Cerr << "...restarting tablet" << Endl;
+            env.SendSync(new TEvents::TEvPoison, false, true);
+            env.WaitForGone();
+            env.FireTablet(env.Edge, env.Tablet, [&env](const TActorId &tablet, TTabletStorageInfo *info) {
+                return new TTestFlatTablet(env.Edge, tablet, info);
+            });
+            env.WaitForWakeUp();
+
+            Cerr << "...checking rows (expecting new)" << Endl;
+            {
+                TString data1, data2;
+                env.SendSync(new NFake::TEvExecute{ new TTxLambda(
+                    OpReadRows(data1),
+                    OpReadRows(data2, 122))
+                }, /* retry */ true);
+                UNIT_ASSERT_VALUES_EQUAL(data1,
+                    "Key 11 = Upsert value = Set value11\n");
+                UNIT_ASSERT_VALUES_EQUAL(data2,
+                    "Key 11 = Upsert value = Set value11\n"
+                    "Key 22 = Upsert value = Set value22\n");
+            }
+        }
+    }
+
 }
 
 }

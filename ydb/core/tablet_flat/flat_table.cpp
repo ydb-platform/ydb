@@ -1168,6 +1168,11 @@ size_t TTable::GetTxsWithDataCount() const
     return TxDataRefs.size();
 }
 
+size_t TTable::GetTxsWithStatusCount() const
+{
+    return TxStatusRefs.size();
+}
+
 size_t TTable::GetCommittedTxCount() const
 {
     return CommittedTransactions.Size();

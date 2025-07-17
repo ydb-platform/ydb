@@ -11382,19 +11382,16 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         while (TInstant::Now() < timeout) {
             deleteResult = checkDirectory(firstDir, false);
             if (!deleteResult) {
+                Sleep(TDuration::Seconds(5));
+                const auto& result = checkDirectory(secondDir, true);
+                UNIT_ASSERT_C(result.empty(), result);
                 return;
             }
 
             Sleep(TDuration::MilliSeconds(100));
         }
+
         UNIT_FAIL("Temp dir '" << firstDir << "' still exists, last result: " << deleteResult);
-
-        Sleep(TDuration::Seconds(5));
-
-        {
-            const auto& result = checkDirectory(secondDir, true);
-            UNIT_ASSERT_C(result.empty(), result);
-        }
     }
 }
 

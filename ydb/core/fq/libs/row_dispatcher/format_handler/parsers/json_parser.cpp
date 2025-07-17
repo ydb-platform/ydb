@@ -419,8 +419,20 @@ protected:
         const auto [values, size] = Buffer.Finish();
         LOG_ROW_DISPATCHER_TRACE("Do parsing, first offset: " << Buffer.Offsets.front() << ", values:\n" << values);
 
+        /*
+           Batch size must be at least maximum of document size.
+           Since we are merging several messages before feeding them to
+           `simdjson::iterate_many`, we must specify Buffer.GetSize() as batch
+           size.
+           Suppose we batched two rows:
+           '{"a":"bbbbbbbbbbb"'
+           ',"c":"d"}{"e":"f"}'
+           (both 18 byte size) into buffer
+           '{"a":"bbbbbbbbbbb","c":"d"}{"e":"f"}'
+           Then, after parsing maximum document size will be 27 bytes.
+        */
         simdjson::ondemand::document_stream documents;
-        CHECK_JSON_ERROR(Parser.iterate_many(values, size, simdjson::ondemand::DEFAULT_BATCH_SIZE).get(documents)) {
+        CHECK_JSON_ERROR(Parser.iterate_many(values, size, Buffer.GetSize()).get(documents)) {
             return TStatus::Fail(EStatusId::BAD_REQUEST, TStringBuilder() << "Failed to parse message batch from offset " << Buffer.Offsets.front() << ", json documents was corrupted: " << simdjson::error_message(error) << " Current data batch: " << TruncateString(std::string_view(values, size)));
         }
 

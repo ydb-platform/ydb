@@ -647,13 +647,23 @@ namespace NKikimr {
                 // fill in compaction task or do nothing
                 if (maxRank < RankThreshold) {
                     if (FullCompactionAttrs) {
-                        if (BalanceLevel0.FullCompact(FullCompactionAttrs->FullCompactionLsn))
-                            return ActCompactSsts;
+                        if (BalanceLevel0.FullCompact(FullCompactionAttrs->FullCompactionLsn)) {
+                            if (HullCtx->VCtx->ActorSystem) {
+                                LOG_INFO_S(*HullCtx->VCtx->ActorSystem, NKikimrServices::BS_HULLCOMP,
+                                    HullCtx->VCtx->VDiskLogPrefix << " TStrategyBalance decided to full compact compact level 0");
+                                return ActCompactSsts;
+                            }
+                        }
 
-                        if (BalancePartiallySortedLevels.FullCompact(FullCompactionAttrs->FullCompactionLsn))
+                        if (BalancePartiallySortedLevels.FullCompact(FullCompactionAttrs->FullCompactionLsn)) {
+                            LOG_INFO_S(*HullCtx->VCtx->ActorSystem, NKikimrServices::BS_HULLCOMP,
+                                    HullCtx->VCtx->VDiskLogPrefix << " TStrategyBalance decided to full compact compact sorted level");
                             return ActCompactSsts;
+                        }
 
                         if (BalanceLevelX.FullCompact(*FullCompactionAttrs)) {
+                            LOG_INFO_S(*HullCtx->VCtx->ActorSystem, NKikimrServices::BS_HULLCOMP,
+                                    HullCtx->VCtx->VDiskLogPrefix << " TStrategyBalance decided to full compact compact level x");
                             return ActCompactSsts;
                         }
 

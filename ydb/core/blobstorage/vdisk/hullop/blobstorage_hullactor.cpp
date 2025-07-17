@@ -13,6 +13,23 @@ namespace NKikimr {
     // TFullCompactionState
     ////////////////////////////////////////////////////////////////////////////
     struct TFullCompactionState {
+        class TRateLimitter {
+        public:
+            TRateLimitter(TIntrusivePtr<TVDiskConfig> config) : Config(config) {}
+            bool IsEnable() const {
+                return (TInstant::Now() - LastUpdateTime).Seconds() > (ui32) Config->HullCompFullCompRateSec; 
+            }
+            void Update() {
+                LastUpdateTime = TInstant::Now();
+            }
+        private:
+            TInstant LastUpdateTime = TInstant::Now();
+            TIntrusivePtr<TVDiskConfig> Config;
+        };
+
+        TRateLimitter RateLimitter;
+        bool Force = false;
+
         struct TCompactionRequest {
             EHullDbType Type = EHullDbType::Max;
             ui64 RequestId = 0;
@@ -21,8 +38,10 @@ namespace NKikimr {
         std::deque<TCompactionRequest> Requests;
         std::optional<NHullComp::TFullCompactionAttrs> FullCompactionAttrs;
 
+        TFullCompactionState(TIntrusivePtr<TVDiskConfig> config) : RateLimitter(config) {}
+
         bool Enabled() const {
-            return bool(FullCompactionAttrs);
+            return bool(FullCompactionAttrs) && (Force || RateLimitter.IsEnable());
         }
 
         void FullCompactionTask(
@@ -30,10 +49,14 @@ namespace NKikimr {
                 TInstant now,
                 EHullDbType type,
                 ui64 requestId,
-                const TActorId &recipient)
+                const TActorId &recipient,
+                bool force)
         {
             FullCompactionAttrs.emplace(fullCompactionLsn, now);
             Requests.push_back({type, requestId, recipient});
+            if (force) {
+                Force = true;
+            }
         }
 
         void Compacted(
@@ -50,6 +73,8 @@ namespace NKikimr {
                 }
                 Requests.clear();
                 FullCompactionAttrs.reset();
+                RateLimitter.Update();
+                Force = false;
             }
         }
 
@@ -640,7 +665,7 @@ namespace NKikimr {
                 using E = decltype(msg->Mode);
 
                 case E::FULL:
-                    FullCompactionState.FullCompactionTask(confirmedLsn, ctx.Now(), msg->Type, msg->RequestId, ev->Sender);
+                    FullCompactionState.FullCompactionTask(confirmedLsn, ctx.Now(), msg->Type, msg->RequestId, ev->Sender, msg->Force);
                     break;
 
                 case E::FRESH_ONLY:
@@ -719,6 +744,7 @@ namespace NKikimr {
             , CompactionTask(new TCompactionTask)
             , ActiveActors(RTCtx->LevelIndex->ActorCtx->ActiveActors)
             , LevelStat(HullDs->HullCtx->VCtx->VDiskCounters)
+            , FullCompactionState(Config)
         {}
     };
 

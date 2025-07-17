@@ -42,7 +42,7 @@ struct TTetsEnv {
         VDiskActorId = GroupInfo->GetActorId(0);
 
         DataSmall = FastGenDataForLZ4(128 * 1024, 0);
-        DataLarge = FastGenDataForLZ4(3 * 1024 * 1024, 0);
+        DataLarge = FastGenDataForLZ4(4 * 1024 * 1024, 0);
 
         Sender = Env.Runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
 
@@ -52,10 +52,11 @@ struct TTetsEnv {
         const auto& baseConfig = response.GetStatus(0).GetBaseConfig();
         UNIT_ASSERT_VALUES_EQUAL(GroupInfo->GroupID.GetRawId(), baseConfig.GetGroup(0).GetGroupId());
         PdiskLayout = MakePDiskLayout(baseConfig, GroupInfo->GetTopology(), baseConfig.GetGroup(0).GetGroupId());
-    }
 
-    NMonitoring::TDynamicCounterPtr GetCounters(ui32 nodeId) {
-        return Env.Runtime->GetNode(nodeId)->AppData.get()->Counters;
+        for (ui32 i = 1; i <= Env.Settings.NodeCount; ++i) {
+            Env.SetIcbControl(i, "VDiskControls.MaxChunksToDefragInflight", 50);
+        }
+        Env.Sim(TDuration::Minutes(1));
     }
 
     std::unique_ptr<TEvBlobStorage::TEvPut> GetData(ui32 index) const {
@@ -120,12 +121,29 @@ Y_UNIT_TEST_SUITE(CompDefrag) {
 
     Y_UNIT_TEST(Write) {
         TTetsEnv env;
-        ui32 N = 50000;
+        ui32 N = 70000;
         ui32 batchSize = 1000;
 
+        auto printMetrics = [&]() {
+            auto metrics = env.GetLsmMetrics();
+            Cerr << "Compaction bytes read: " << metrics.CompactionBytesRead << Endl
+                << "Compaction bytes written: " << metrics.CompactionBytesWritten << Endl
+                << "Level Fresh: " << metrics.LevelFresh << Endl
+                << "Level 1: " << metrics.Level1 << Endl
+                << "Level 2: " << metrics.Level2 << Endl
+                << "Level 3: " << metrics.Level3 << Endl
+                << "Huge Used Chunks: " << metrics.HugeUsedChunks << Endl
+                << "Huge Chunks Can Be Freed: " << metrics.HugeChunksCanBeFreed << Endl
+                << "Dsk Space Cur Inplaced Data: " << metrics.DskSpaceCurInplacedData << Endl
+                << "=========================================================" << Endl;
+            return metrics;
+        };
+
         ui64 bytesWrittenSmall = 0, bytesWrittenLarge = 0;
+        std::unordered_map<ui32, ui32> compactionsPerNode;
         std::unordered_set<std::pair<ui32, ui32>> seenParts;
-        env.Env.Runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev) {
+        ui64 compactionBytesWritten = 0;
+        env.Env.Runtime->FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
                 case TEvBlobStorage::EvVPut: {
                     auto put = ev->Get<TEvBlobStorage::TEvVPut>();
@@ -144,111 +162,104 @@ Y_UNIT_TEST_SUITE(CompDefrag) {
                 case TEvBlobStorage::EvDefragStartQuantum: {
                     auto defragStart = ev->Get<TEvDefragStartQuantum>();
                     if (!defragStart->ChunksToDefrag.Chunks.empty()) {
-                        Cerr << "Defrag start quantum: " << defragStart->ChunksToDefrag.ToString() << Endl;
+                        Cerr << nodeId << " : " << "Defrag start quantum: " << defragStart->ChunksToDefrag.ToString() << Endl;
                     }
                     break;
                 }
                 case TEvBlobStorage::EvCompactVDisk: {
+                    compactionsPerNode[nodeId]++;
                     auto compact = ev->Get<TEvCompactVDisk>();
-                    Cerr << "Compact VDisk: " << compact->ModeToString(compact->Mode) << Endl;
+                    Cerr << nodeId << " : " << "Compact VDisk: " << compact->ModeToString(compact->Mode) << Endl;
                     break;
                 }
                 case TEvBlobStorage::EvCompactVDiskResult: {
-                    Cerr << "EvCompactVDiskResult" << Endl;
+                    Cerr << nodeId << " : " << "EvCompactVDiskResult" << Endl;
                     break;
                 }
             }
             return true;
         };
 
-        auto write = [&](ui32 index) {
-            env.SendToDsProxy(env.GetData(index).release());
-        };
-        auto waitForWriteResult = [&]() {
+        { // write data
+            // warm up ds proxy and bs queue
+            env.SendToDsProxy(env.GetData(0).release());
             auto res = env.Env.WaitForEdgeActorEvent<TEvBlobStorage::TEvPutResult>(env.Sender, false);
             UNIT_ASSERT_VALUES_EQUAL(res->Get()->Status, NKikimrProto::OK);
-        };
-
-        // warm up ds proxy and bs queue
-        write(0);
-        waitForWriteResult();
-
-        // write data in batches
-        for (ui32 i = 0; i < N / batchSize; ++i) {
-            for (ui32 j = 0; j < batchSize; ++j) {
-                write(i * batchSize + j);
-            }
-            for (ui32 j = 0; j < batchSize; ++j) {
-                waitForWriteResult();
+    
+            // write data in batches
+            for (ui32 i = 0; i < N / batchSize; ++i) {
+                for (ui32 j = 0; j < batchSize; ++j) {
+                    env.SendToDsProxy(env.GetData(i * batchSize + j).release());
+                }
+                for (ui32 j = 0; j < batchSize; ++j) {
+                    auto res = env.Env.WaitForEdgeActorEvent<TEvBlobStorage::TEvPutResult>(env.Sender, false);
+                    UNIT_ASSERT_VALUES_EQUAL(res->Get()->Status, NKikimrProto::OK);
+                }
             }
         }
 
-        // run full compaction
-        env.Env.Sim(TDuration::Seconds(20));
-        for (ui32 i = 0; i < env.GroupInfo->GetTotalVDisksNum(); ++i) {
-            const TActorId& vdiskId = env.GroupInfo->GetActorId(i);
-            env.Env.CompactVDisk(vdiskId);
+        { // run full compaction
+            env.Env.Sim(TDuration::Seconds(20));
+            for (ui32 i = 0; i < env.GroupInfo->GetTotalVDisksNum(); ++i) {
+                const TActorId& vdiskId = env.GroupInfo->GetActorId(i);
+                env.Env.CompactVDisk(vdiskId);
+            }
+            env.Env.Sim(TDuration::Seconds(20));
         }
-        env.Env.Sim(TDuration::Seconds(20));
 
-        // check metrics
-        auto metrics = env.GetLsmMetrics();
-        Cerr << "Bytes written (small): " << bytesWrittenSmall << Endl
-            << "Bytes written (large): " << bytesWrittenLarge << Endl
-            << "Compaction bytes read: " << metrics.CompactionBytesRead << Endl
-            << "Compaction bytes written: " << metrics.CompactionBytesWritten << Endl
-            << "Level Fresh: " << metrics.LevelFresh << Endl
-            << "Level 1: " << metrics.Level1 << Endl
-            << "Level 2: " << metrics.Level2 << Endl
-            << "Level 3: " << metrics.Level3 << Endl
-            << "Huge Used Chunks: " << metrics.HugeUsedChunks << Endl
-            << "Huge Chunks Can Be Freed: " << metrics.HugeChunksCanBeFreed << Endl
-            << "Dsk Space Cur Inplaced Data: " << metrics.DskSpaceCurInplacedData << Endl
-            << "=========================================================" << Endl;
+        { // check metrics
+            Cerr << "Bytes written (small): " << bytesWrittenSmall << Endl
+                << "Bytes written (large): " << bytesWrittenLarge << Endl;
+            auto metrics = printMetrics();
+            UNIT_ASSERT_VALUE_IN(N * 6, metrics.LevelFresh + metrics.Level1 + metrics.Level2 + metrics.Level3, N * 8);
+            UNIT_ASSERT_VALUE_IN(N * 6, metrics.Level2, N * 8); // everything should be on level 2
+            UNIT_ASSERT_VALUE_IN(bytesWrittenLarge / CHUNK_SIZE, metrics.HugeUsedChunks, std::ceil(bytesWrittenLarge * 1.125 / CHUNK_SIZE));
 
-        UNIT_ASSERT_VALUE_IN(N * 6, metrics.LevelFresh + metrics.Level1 + metrics.Level2 + metrics.Level3, N * 8);
-        UNIT_ASSERT_VALUE_IN(N * 6, metrics.Level2, N * 8); // everything should be on level 2
-        UNIT_ASSERT_VALUE_IN(bytesWrittenLarge / CHUNK_SIZE, metrics.HugeUsedChunks, std::ceil(bytesWrittenLarge * 1.125 / CHUNK_SIZE));
+            compactionBytesWritten = metrics.CompactionBytesWritten;
 
-
-        // remove huge blobs from one of the tablets
-        ui32 tabletIdToRemoveHuge = 1; // remove huge blobs from tablet 1
-        auto keep = std::make_unique<TVector<TLogoBlobID>>();
-        for (ui32 i = 0; i < N; ++i) {
-            auto ev = env.GetData(i);
-            if (ev->Id.TabletID() == tabletIdToRemoveHuge && ev->Buffer.size() < MIN_HUGE_BLOB_SIZE * 4) {
-                keep->push_back(ev->Id);
+            for (auto& [nodeId, count] : compactionsPerNode) {
+                Cerr << "Node " << nodeId << " had " << count << " compactions" << Endl;
+                UNIT_ASSERT_GE(count, 1);
+                count = 0; // reset
             }
         }
-        env.Env.Runtime->WrapInActorContext(env.Sender, [&] {
-            SendToBSProxy(
-                env.Sender, env.GroupInfo->GroupID,
-                new TEvBlobStorage::TEvCollectGarbage(
-                    tabletIdToRemoveHuge, 1, 1, 
-                    0, true, 1, Max<ui32>(),
-                    keep.release(), nullptr, TInstant::Max(), true
-                )
-            );
-        });
-        const auto& res = env.Env.WaitForEdgeActorEvent<TEvBlobStorage::TEvCollectGarbageResult>(env.Sender);
-        UNIT_ASSERT_VALUES_EQUAL(res->Get()->Status, NKikimrProto::OK);
-        env.Env.Sim(TDuration::Minutes(100)); // defrag scheduler runs every 5-5.5 minutes
 
 
-        // check metrics
-        metrics = env.GetLsmMetrics();
-        Cerr << "Bytes written (small): " << bytesWrittenSmall << Endl
-            << "Bytes written (large): " << bytesWrittenLarge << Endl
-            << "Compaction bytes read: " << metrics.CompactionBytesRead << Endl
-            << "Compaction bytes written: " << metrics.CompactionBytesWritten << Endl
-            << "Level Fresh: " << metrics.LevelFresh << Endl
-            << "Level 1: " << metrics.Level1 << Endl
-            << "Level 2: " << metrics.Level2 << Endl
-            << "Level 3: " << metrics.Level3 << Endl
-            << "Huge Used Chunks: " << metrics.HugeUsedChunks << Endl
-            << "Huge Chunks Can Be Freed: " << metrics.HugeChunksCanBeFreed << Endl
-            << "Dsk Space Cur Inplaced Data: " << metrics.DskSpaceCurInplacedData << Endl
-            << "=========================================================" << Endl;
+        { // remove huge blobs from one of the tablets
+            ui32 tabletIdToRemoveHuge = 1; // remove huge blobs from tablet 1
+            auto keep = std::make_unique<TVector<TLogoBlobID>>();
+            for (ui32 i = 0; i < N; ++i) {
+                auto ev = env.GetData(i);
+                if (ev->Id.TabletID() == tabletIdToRemoveHuge && ev->Buffer.size() < MIN_HUGE_BLOB_SIZE * 4) {
+                    keep->push_back(ev->Id);
+                }
+            }
+            env.Env.Runtime->WrapInActorContext(env.Sender, [&] {
+                SendToBSProxy(
+                    env.Sender, env.GroupInfo->GroupID,
+                    new TEvBlobStorage::TEvCollectGarbage(
+                        tabletIdToRemoveHuge, 1, 1, 
+                        0, true, 1, Max<ui32>(),
+                        keep.release(), nullptr, TInstant::Max(), true
+                    )
+                );
+            });
+            const auto& res = env.Env.WaitForEdgeActorEvent<TEvBlobStorage::TEvCollectGarbageResult>(env.Sender);
+            UNIT_ASSERT_VALUES_EQUAL(res->Get()->Status, NKikimrProto::OK);
+            env.Env.Sim(TDuration::Minutes(100)); // defrag scheduler runs every 5-5.5 minutes
+        }
+
+
+        { // check metrics
+            auto metrics = printMetrics();
+
+            for (const auto& [nodeId, count] : compactionsPerNode) {
+                UNIT_ASSERT_GE(count, 1);
+                Cerr << "Node " << nodeId << " had " << count << " compactions" << Endl;
+            }
+            Cerr << "Total compaction bytes written during deletion: " << metrics.CompactionBytesWritten - compactionBytesWritten << Endl
+                << "Amplification to lsm size: " << (metrics.CompactionBytesWritten - compactionBytesWritten) / float(metrics.DskSpaceCurInplacedData) << Endl;
+        }
     }
 
 }

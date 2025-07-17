@@ -14,6 +14,7 @@ constexpr size_t DEFAULT_SHARD_SIZE_MB = 2000;
 
 constexpr int DISTRICT_LOW_ID = 1;
 constexpr int DISTRICT_HIGH_ID = 10;
+constexpr int DISTRICT_COUNT = DISTRICT_HIGH_ID - DISTRICT_LOW_ID + 1;
 
 constexpr int C_ID_C = 259; // in range [0, 1023]
 constexpr int CUSTOMERS_PER_DISTRICT = 3000;
@@ -31,6 +32,8 @@ constexpr int C_LAST_LOAD_C = 157; // in range [0, 255]
 constexpr int C_LAST_RUN_C = 223; // in range [0, 255]
 
 constexpr int FIRST_UNPROCESSED_O_ID = 2101;
+
+constexpr double DISTICT_INITIAL_YTD = 30000.00;
 
 // Transaction weights (percentage of mix)
 constexpr double NEW_ORDER_WEIGHT = 45.0;

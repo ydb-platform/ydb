@@ -78,7 +78,7 @@ void BaseCheckDistrictTable(TQueryClient& client, const TString& path, int expec
     )", path.c_str(), TABLE_DISTRICT);
 
     TString fullPath = path + "/" + TABLE_DISTRICT;
-    int expectedCount = expectedWhNumber * DISTRICT_HIGH_ID; // 10 districts per warehouse
+    int expectedCount = expectedWhNumber * DISTRICT_COUNT;
 
     auto result = client.RetryQuery([&](TSession session) {
         return session.ExecuteQuery(query, TTxControl::NoTx());
@@ -139,7 +139,7 @@ void BaseCheckCustomerTable(TQueryClient& client, const TString& path, int expec
     )", path.c_str(), TABLE_CUSTOMER);
 
     TString fullPath = path + "/" + TABLE_CUSTOMER;
-    int expectedCount = expectedWhNumber * CUSTOMERS_PER_DISTRICT * DISTRICT_HIGH_ID;
+    int expectedCount = expectedWhNumber * CUSTOMERS_PER_DISTRICT * DISTRICT_COUNT;
 
     auto result = client.RetryQuery([&](TSession session) {
         return session.ExecuteQuery(query, TTxControl::NoTx());
@@ -322,7 +322,7 @@ void BaseCheckOorderTable(TQueryClient& client, const TString& path, int expecte
     )", path.c_str(), TABLE_OORDER);
 
     TString fullPath = path + "/" + TABLE_OORDER;
-    int expectedCount = expectedWhNumber * CUSTOMERS_PER_DISTRICT * DISTRICT_HIGH_ID;
+    int expectedCount = expectedWhNumber * CUSTOMERS_PER_DISTRICT * DISTRICT_COUNT;
 
     auto result = client.RetryQuery([&](TSession session) {
         return session.ExecuteQuery(query, TTxControl::NoTx());
@@ -392,7 +392,7 @@ void BaseCheckNewOrderTable(TQueryClient& client, const TString& path, int expec
     const auto newOrdersPerDistrict = CUSTOMERS_PER_DISTRICT - FIRST_UNPROCESSED_O_ID + 1;
 
     TString fullPath = path + "/" + TABLE_NEW_ORDER;
-    int expectedCount = expectedWhNumber * newOrdersPerDistrict * DISTRICT_HIGH_ID;
+    int expectedCount = expectedWhNumber * newOrdersPerDistrict * DISTRICT_COUNT;
 
     auto result = client.RetryQuery([&](TSession session) {
         return session.ExecuteQuery(query, TTxControl::NoTx());
@@ -467,7 +467,7 @@ void BaseCheckOrderLineTable(TQueryClient& client, const TString& path, int expe
     )", path.c_str(), TABLE_ORDER_LINE);
 
     TString fullPath = path + "/" + TABLE_ORDER_LINE;
-    int expectedDistrictCount = expectedWhNumber * DISTRICT_HIGH_ID;
+    int expectedDistrictCount = expectedWhNumber * DISTRICT_COUNT;
 
     auto result = client.RetryQuery([&](TSession session) {
         return session.ExecuteQuery(query, TTxControl::NoTx());
@@ -514,7 +514,7 @@ void BaseCheckHistoryTable(TQueryClient& client, const TString& path, int expect
     )", path.c_str(), TABLE_HISTORY);
 
     TString fullPath = path + "/" + TABLE_HISTORY;
-    int expectedCount = expectedWhNumber * CUSTOMERS_PER_DISTRICT * DISTRICT_HIGH_ID;
+    int expectedCount = expectedWhNumber * CUSTOMERS_PER_DISTRICT * DISTRICT_COUNT;
 
     auto result = client.RetryQuery([&](TSession session) {
         return session.ExecuteQuery(query, TTxControl::NoTx());

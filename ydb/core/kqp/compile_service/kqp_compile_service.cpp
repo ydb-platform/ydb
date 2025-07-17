@@ -330,6 +330,8 @@ private:
 
         bool enableOlapPushdownProjections = TableServiceConfig.GetEnableOlapPushdownProjections();
 
+        ui32 defaultLangVer = TableServiceConfig.GetDefaultLangVer();
+
         TableServiceConfig.Swap(event.MutableConfig()->MutableTableServiceConfig());
         LOG_INFO(*TlsActivationContext, NKikimrServices::KQP_COMPILE_SERVICE, "Updated config");
 
@@ -367,7 +369,8 @@ private:
             TableServiceConfig.GetEnableOlapScalarApply() != enableOlapScalarApply ||
             TableServiceConfig.GetEnableOlapSubstringPushdown() != enableOlapSubstringPushdown ||
             TableServiceConfig.GetEnableIndexStreamWrite() != enableIndexStreamWrite ||
-            TableServiceConfig.GetEnableOlapPushdownProjections() != enableOlapPushdownProjections)
+            TableServiceConfig.GetEnableOlapPushdownProjections() != enableOlapPushdownProjections ||
+            TableServiceConfig.GetDefaultLangVer() != defaultLangVer)
         {
 
             QueryCache->Clear();

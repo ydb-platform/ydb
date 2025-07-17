@@ -1,3 +1,4 @@
+* Added ability of `ydb workload tpch` and `ydb workload tpcds` commands to use fraction `--scale` option.
 * Added `ydb workload tpcc check` subcommand, which checks TPC-C data consistency.
 
 ## 2.23.0 ##

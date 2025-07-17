@@ -154,9 +154,9 @@ public:
         IsStartedByCursor = true;
     }
 
-    void SetCursor(const TFetchingScriptCursor& scriptCursor) {
+    void SetCursor(TFetchingScriptCursor&& scriptCursor) {
         AFL_VERIFY(!ScriptCursor);
-        ScriptCursor = scriptCursor;
+        ScriptCursor = std::move(scriptCursor);
     }
 
     void ContinueCursor(const std::shared_ptr<IDataSource>& sourcePtr);

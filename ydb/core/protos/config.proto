@@ -325,7 +325,7 @@ message TBlobStorageConfig {
     repeated NKikimrBlobStorage.TDefineHostConfig DefineHostConfig = 10;
     optional NKikimrBlobStorage.TDefineBox DefineBox = 11;
 
-    optional NKikimrBlobStorage.TUpdateSettings BscSettings = 12;
+    optional NKikimrBlobStorage.TBscConfig BscSettings = 12;
  }
 
 message TSelfManagementConfig {

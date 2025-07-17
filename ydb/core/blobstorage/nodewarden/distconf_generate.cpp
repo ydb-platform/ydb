@@ -171,14 +171,14 @@ namespace NKikimr::NStorage {
 
             if (baseConfig->HasSettings()) {
                 const auto& settings = baseConfig->GetSettings();
-                if (settings.HasDefaultMaxSlots()) {
-                    defaultMaxSlots = settings.GetDefaultMaxSlots();
+                if (settings.DefaultMaxSlotsSize()) {
+                    defaultMaxSlots = settings.GetDefaultMaxSlots(0);
                 }
-                if (settings.HasPDiskSpaceColorBorder()) {
-                    pdiskSpaceColorBorder.emplace(settings.GetPDiskSpaceColorBorder());
+                if (settings.PDiskSpaceColorBorderSize()) {
+                    pdiskSpaceColorBorder.emplace(settings.GetPDiskSpaceColorBorder(0));
                 }
-                if (settings.HasPDiskSpaceMarginPromille()) {
-                    pdiskSpaceMarginPromille = settings.GetPDiskSpaceMarginPromille();
+                if (settings.PDiskSpaceMarginPromilleSize()) {
+                    pdiskSpaceMarginPromille = settings.GetPDiskSpaceMarginPromille(0);
                 }
             }
 

@@ -183,9 +183,9 @@ message ExecuteQueryRequest {
     // In case when stats_period_ms is specified and is non-zero, query statistics will be additionally sent every stats_period_ms milliseconds beginning from the start of query execution.
     int64 stats_period_ms = 11 [(Ydb.value) = ">= 0"];
 
-    // Type of query result set parts.
-    // It's for get default ResultSet or some result_data with a different type in response stream.
-    Ydb.ResultSet.Type result_set_type = 12;
+    // Format of result set parts.
+    // It's for get ResultSet with Ydb.Value rows or some binary data with schema in the response stream.
+    Ydb.ResultSet.DataFormat output_format = 12;
 }
 
 message ResultSetMeta {

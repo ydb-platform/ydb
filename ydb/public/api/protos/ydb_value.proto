@@ -179,24 +179,31 @@ message Column {
 
 // Represents table-like structure with ordered set of rows and columns
 message ResultSet {
-    enum Type {
+    enum DataFormat {
+        // Default value for empty Query.ExecuteQueryRequest.data_format, cannot be returned as result
         UNSPECIFIED = 0;
-        MESSAGE = 10;
-        ARROW = 20;
+
+        // Default Ydb.Value, it also returns with ResultSet.DataFormat.UNSPECIFIED specified
+        YDB_VALUE = 1;
+
+        // Returns a record batch in ResultSet.data with the schema in ResultSet.arrow_batch_settings
+        ARROW = 2;
     }
 
-    // Metadata of columns
+    // Metadata of columns for any format
     repeated Column columns = 1;
-    // Rows of table
+    // Rows of table, only for YDB_VALUE format
     repeated Value rows = 2;
     // Flag indicates the result was truncated
     bool truncated = 3;
-    // Type of result set data
-    Type type = 4;
+    // Format of rows data
+    DataFormat data_format = 4;
 
-    // Settings for an arrow type of result
-    Ydb.Formats.ArrowBatchSettings arrow_batch_settings = 5;
+    oneof data_format_settings {
+        // Settings for the arrow data format
+        Ydb.Formats.ArrowBatchSettings arrow_batch_settings = 5;
+    }
 
-    // Data for byte formats of result data
+    // Rows of table, only for any binary data format (ARROW)
     bytes data = 1000;
 }

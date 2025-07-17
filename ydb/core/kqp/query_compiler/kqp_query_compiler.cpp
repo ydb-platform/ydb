@@ -1246,6 +1246,10 @@ private:
                 settingsProto.SetIsBatch(true);
             }
 
+            if (const auto isIndexImplTable = settings.IsIndexImplTable().Cast(); isIndexImplTable.StringValue() == "true") {
+                settingsProto.SetIsIndexImplTable(true);
+            }
+
             if (settings.Mode().Cast().StringValue() == "replace") {
                 settingsProto.SetType(NKikimrKqp::TKqpTableSinkSettings::MODE_REPLACE);
             } else if (settings.Mode().Cast().StringValue() == "upsert" || settings.Mode().Cast().StringValue().empty() /* for compatibility, will be removed */) {

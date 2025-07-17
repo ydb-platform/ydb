@@ -17,7 +17,7 @@ TString TXdsBootstrapConfigBuilder::Build() const {
     NProtobufJson::Proto2Json(Config, xdsBootstrapConfigJson, {.FieldNameMode = NProtobufJson::TProto2JsonConfig::FldNameMode::FieldNameSnakeCaseDense});
     BuildFieldNode(&xdsBootstrapConfigJson);
     BuildFieldXdsServers(&xdsBootstrapConfigJson);
-    return NJson::WriteJson(xdsBootstrapConfigJson);
+    return NJson::WriteJson(xdsBootstrapConfigJson, false);
 }
 
 void TXdsBootstrapConfigBuilder::BuildFieldNode(NJson::TJsonValue* json) const {
@@ -48,10 +48,12 @@ void TXdsBootstrapConfigBuilder::BuildFieldXdsServers(NJson::TJsonValue* json) c
         xdsServerJson["channel_creds"].GetArray(&channelCreds);
         xdsServerJson.EraseValue("channel_creds");
         for (auto& channelCredJson : channelCreds) {
-            NJson::TJsonValue typeConfigJson;
-            NJson::TJsonReaderConfig jsonConfig;
-            if (NJson::ReadJsonTree(channelCredJson["config"].GetString(), &jsonConfig, &typeConfigJson)) {
-                channelCredJson["config"] = typeConfigJson;
+            if (channelCredJson.Has("config")) {
+                NJson::TJsonValue typeConfigJson;
+                NJson::TJsonReaderConfig jsonConfig;
+                if (NJson::ReadJsonTree(channelCredJson["config"].GetString(), &jsonConfig, &typeConfigJson)) {
+                    channelCredJson["config"] = typeConfigJson;
+                }
             }
             xdsServerJson["channel_creds"].AppendValue(channelCredJson);
         }

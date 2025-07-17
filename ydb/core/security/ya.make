@@ -33,6 +33,7 @@ END()
 
 RECURSE_FOR_TESTS(
     ut
+    ut_xds_bootstrap_config_builder
 )
 
 RECURSE(

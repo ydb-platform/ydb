@@ -1556,7 +1556,7 @@ private:
 
     void Handle(TEvInterconnect::TEvNodeInfo::TPtr &ev) {
         static const TString XDS_BOOTSTRAP_CONFIG_ENV = "GRPC_XDS_BOOTSTRAP_CONFIG";
-        TXdsBootstrapConfigBuilder xdsConfigBuilder(Config.GetXdsBootstrap(), ev->Get()->Node->Location.GetDataCenterId(), this->SelfId().NodeId());
+        TXdsBootstrapConfigBuilder xdsConfigBuilder(Config.GetXdsBootstrap(), ev->Get()->Node->Location.GetDataCenterId(), ToString(this->SelfId().NodeId()));
         TString conf = xdsConfigBuilder.Build();
         BLOG_D("+++Config:\n" << conf);
         SetEnv(XDS_BOOTSTRAP_CONFIG_ENV, conf);

@@ -15,6 +15,7 @@ namespace NKikimr {
             bool CompactBlocks = false;
             bool CompactBarriers = false;
             TEvCompactVDisk::EMode Mode;
+            bool Force = true;
             TActorId ClientId;
             ui64 ClientCookie = 0;
             std::unique_ptr<TEvCompactVDiskResult> Reply;

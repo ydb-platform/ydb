@@ -146,6 +146,19 @@ namespace NKikimr::NStorage {
         TControlWrapper FreshCompMaxInFlightWrites;
         TControlWrapper HullCompMaxInFlightWrites;
         TControlWrapper HullCompMaxInFlightReads;
+        TControlWrapper HullCompFullCompRateSec;
+        TControlWrapper HullCompThrottlerReadIOPSLimit;
+        TControlWrapper HullCompThrottlerReadIOPSRate;
+        TControlWrapper HullCompThrottlerReadIOPSIntervalMs;
+        TControlWrapper HullCompThrottlerReadBytesLimit;
+        TControlWrapper HullCompThrottlerReadBytesRate;
+        TControlWrapper HullCompThrottlerReadBytesIntervalMs;
+        TControlWrapper HullCompThrottlerWriteIOPSLimit;
+        TControlWrapper HullCompThrottlerWriteIOPSRate;
+        TControlWrapper HullCompThrottlerWriteIOPSIntervalMs;
+        TControlWrapper HullCompThrottlerWriteBytesLimit;
+        TControlWrapper HullCompThrottlerWriteBytesRate;
+        TControlWrapper HullCompThrottlerWriteBytesIntervalMs;
 
         TReplQuoter::TPtr ReplNodeRequestQuoter;
         TReplQuoter::TPtr ReplNodeResponseQuoter;
@@ -191,6 +204,19 @@ namespace NKikimr::NStorage {
             , FreshCompMaxInFlightWrites(10, 1, 1000)
             , HullCompMaxInFlightWrites(10, 1, 1000)
             , HullCompMaxInFlightReads(20, 1, 1000)
+            , HullCompFullCompRateSec(1, 1, 4'000'000)
+            , HullCompThrottlerReadIOPSLimit(0, 0, 4'000'000)
+            , HullCompThrottlerReadIOPSRate(0, 0, 4'000'000)
+            , HullCompThrottlerReadIOPSIntervalMs(60'000, 0, 4'000'000)
+            , HullCompThrottlerReadBytesLimit(0, 0, 4'000'000)
+            , HullCompThrottlerReadBytesRate(0, 0, 4'000'000)
+            , HullCompThrottlerReadBytesIntervalMs(60'000, 1, 4'000'000)
+            , HullCompThrottlerWriteIOPSLimit(0, 0, 4'000'000)
+            , HullCompThrottlerWriteIOPSRate(0, 0, 4'000'000)
+            , HullCompThrottlerWriteIOPSIntervalMs(60'000, 1, 4'000'000)
+            , HullCompThrottlerWriteBytesLimit(0, 0, 4'000'000)
+            , HullCompThrottlerWriteBytesRate(0, 0, 4'000'000)
+            , HullCompThrottlerWriteBytesIntervalMs(60'000, 1, 4'000'000)
             , CostMetricsParametersByMedia({
                 TCostMetricsParameters{200},
                 TCostMetricsParameters{50},

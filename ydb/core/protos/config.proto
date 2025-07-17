@@ -1382,6 +1382,84 @@ message TImmediateControlsConfig {
             MinValue: 1,
             MaxValue: 1000,
             DefaultValue: 20 }];
+
+        optional uint64 HullCompFullCompRateSec = 33 [(ControlOptions) = {
+            Description: "Full compaction will start no more than once during this interval",
+            MinValue: 1,
+            MaxValue: 4000000,
+            DefaultValue: 1 }];
+
+        optional uint64 HullCompThrottlerReadIOPSLimit = 34 [(ControlOptions) = {
+            Description: "Max value for read iops in compaction throttler",
+            MinValue: 0,
+            MaxValue: 4000000,
+            DefaultValue: 0 }];
+
+        optional uint64 HullCompThrottlerReadIOPSRate = 35 [(ControlOptions) = {
+            Description: "Rate value for read iops in compaction throttler",
+            MinValue: 0,
+            MaxValue: 4000000,
+            DefaultValue: 0 }];
+
+        optional uint64 HullCompThrottlerReadIOPSIntervalMs = 36 [(ControlOptions) = {
+            Description: "Rate interval for read iops in compaction throttler",
+            MinValue: 1,
+            MaxValue: 4000000,
+            DefaultValue: 60000 }];
+
+        optional uint64 HullCompThrottlerReadBytesLimit = 37 [(ControlOptions) = {
+            Description: "Max value for read sum requests size in compaction throttler",
+            MinValue: 0,
+            MaxValue: 4000000,
+            DefaultValue: 0 }];
+
+        optional uint64 HullCompThrottlerReadBytesRate = 38 [(ControlOptions) = {
+            Description: "Rate value for read sum requests size in compaction throttler",
+            MinValue: 0,
+            MaxValue: 4000000,
+            DefaultValue: 0 }];
+
+        optional uint64 HullCompThrottlerReadBytesIntervalMs = 39 [(ControlOptions) = {
+            Description: "Rate interval for read sum requests size in compaction throttler",
+            MinValue: 1,
+            MaxValue: 4000000,
+            DefaultValue: 60000 }];
+
+        optional uint64 HullCompThrottlerWriteIOPSLimit = 40 [(ControlOptions) = {
+            Description: "Max value for write iops in compaction throttler",
+            MinValue: 0,
+            MaxValue: 4000000,
+            DefaultValue: 0 }];
+
+        optional uint64 HullCompThrottlerWriteIOPSRate = 41 [(ControlOptions) = {
+            Description: "Rate value for write iops in compaction throttler",
+            MinValue: 0,
+            MaxValue: 4000000,
+            DefaultValue: 0 }];
+
+        optional uint64 HullCompThrottlerWriteIOPSIntervalMs = 42 [(ControlOptions) = {
+            Description: "Rate interval for write iops in compaction throttler",
+            MinValue: 1,
+            MaxValue: 4000000,
+            DefaultValue: 60000 }];
+        
+        optional uint64 HullCompThrottlerWriteBytesLimit = 43 [(ControlOptions) = {
+            Description: "Max value for write sum requests size in compaction throttler",
+            MinValue: 0,
+            MaxValue: 4000000,
+            DefaultValue: 0 }];
+
+        optional uint64 HullCompThrottlerWriteBytesRate = 44 [(ControlOptions) = {
+            Description: "Rate value for write sum requests size in compaction throttler",
+            MinValue: 0,
+            MaxValue: 4000000,
+            DefaultValue: 0 }];
+
+        optional uint64 HullCompThrottlerWriteBytesIntervalMs = 45 [(ControlOptions) = {
+            Description: "Rate interval for write sum requests size in compaction throttler",
+            MinValue: 1,
+            MaxValue: 4000000,
+            DefaultValue: 60000 }];
     }
 
     message TTabletControls {

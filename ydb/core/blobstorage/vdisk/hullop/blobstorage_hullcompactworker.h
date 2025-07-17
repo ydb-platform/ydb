@@ -264,6 +264,107 @@ namespace NKikimr {
         std::optional<TKey> PartitionKey;
 
     public:
+        class TLeakBucket {
+        public:
+            bool Allow(ui32 value, ui32 limit, ui32 leakRate, ui32 intervalMs) {
+                Update(leakRate, intervalMs);
+                if (value > limit) {
+                    return Bucket == 0;
+                }
+                return Bucket + value <= limit;
+            }
+
+            bool Get(ui32 value, ui32 limit, ui32 leakRate, ui32 intervalMs) {
+                Update(leakRate, intervalMs);
+                if (value > limit && Bucket == 0) {
+                    Bucket = value;
+                    return true;
+                }
+                if (Bucket + value <= limit) {
+                    Bucket += value;
+                    return true;
+                }
+                return false;
+            }
+
+        private:
+            void Update(ui32 leakRate, ui32 intervalMs) {
+                auto now = TInstant::Now();
+                auto msSinceLastUpdate = (TInstant::Now() - LastUpdateTime).MilliSeconds();
+                auto intervalsCount = msSinceLastUpdate / intervalMs;
+                ui32 leakedValue = intervalsCount * leakRate;
+                Bucket = std::max((ui32) 0, Bucket - leakedValue);
+                LastUpdateTime = now;
+            }
+
+            TInstant LastUpdateTime = TInstant::Now();
+            ui32 Bucket = 0;
+        };
+
+        template <class TRequest>
+        class TRequestThrottler {
+        public:
+            TRequestThrottler(TIntrusivePtr<TVDiskConfig> config)
+                : Config(config)
+            {}
+
+            bool Get(const NPDisk::TEvChunkRead *msg) {
+                ui32 iopsLimit = Config->HullCompThrottlerReadIOPSLimit;
+                ui32 iopsRate = Config->HullCompThrottlerReadIOPSRate;
+                ui32 iopsIntervalMs = Config->HullCompThrottlerReadIOPSIntervalMs;
+                bool iopsAvailable = !iopsLimit || !iopsRate || IOPSBucket.Allow(1, iopsLimit, iopsRate, iopsIntervalMs);
+                ui32 bytesLimit = Config->HullCompThrottlerReadBytesLimit;
+                ui32 bytesRate = Config->HullCompThrottlerReadBytesRate;
+                ui32 bytesIntervalMs = Config->HullCompThrottlerReadBytesIntervalMs;
+                ui32 size = GetSize(msg);
+                bool bytesAvailable = !bytesLimit || !bytesRate || BytesBucket.Allow(size, bytesLimit, bytesRate, bytesIntervalMs);
+                if (iopsAvailable && bytesAvailable) {
+                    IOPSBucket.Get(1, iopsLimit, iopsRate, iopsIntervalMs);
+                    BytesBucket.Get(size, bytesLimit, bytesRate, bytesIntervalMs);
+                    return true;
+                }
+                return false;
+            }
+
+            bool Get(const NPDisk::TEvChunkWrite *msg) {
+                ui32 iopsLimit = Config->HullCompThrottlerWriteIOPSLimit;
+                ui32 iopsRate = Config->HullCompThrottlerWriteIOPSRate;
+                ui32 iopsIntervalMs = Config->HullCompThrottlerWriteIOPSIntervalMs;
+                bool iopsAvailable = !iopsLimit || !iopsRate || IOPSBucket.Allow(1, iopsLimit, iopsRate, iopsIntervalMs);
+                ui32 bytesLimit = Config->HullCompThrottlerWriteBytesLimit;
+                ui32 bytesRate = Config->HullCompThrottlerWriteBytesRate;
+                ui32 bytesIntervalMs = Config->HullCompThrottlerWriteBytesIntervalMs;
+                ui32 size = GetSize(msg);
+                bool bytesAvailable = !bytesLimit || !bytesRate || BytesBucket.Allow(size, bytesLimit, bytesRate, bytesIntervalMs);
+                if (iopsAvailable && bytesAvailable) {
+                    IOPSBucket.Get(1, iopsLimit, iopsRate, iopsIntervalMs);
+                    BytesBucket.Get(size, bytesLimit, bytesRate, bytesIntervalMs);
+                    return true;
+                }
+                return false;
+            }
+
+        private:
+            ui32 GetSize(const NPDisk::TEvChunkRead *msg) {
+                return msg->Size;
+            }
+
+            ui32 GetSize(const NPDisk::TEvChunkWrite *msg) {
+                return msg->PartsPtr ? msg->PartsPtr->ByteSize() : 0;
+            }
+
+            TIntrusivePtr<TVDiskConfig> Config;
+            TLeakBucket IOPSBucket;
+            TLeakBucket BytesBucket;
+
+        public:
+            std::unique_ptr<TRequest> WaitingRequest;
+        };
+
+        TRequestThrottler<NPDisk::TEvChunkWrite> WriteThrottler;
+        TRequestThrottler<NPDisk::TEvChunkRead> ReadThrottler;
+
+    public:
         THullCompactionWorker(THullCtxPtr hullCtx,
                               TPDiskCtxPtr pdiskCtx,
                               TIntrusivePtr<TLevelIndex> levelIndex,
@@ -290,6 +391,8 @@ namespace NKikimr {
             , Statistics(HullCtx)
             , RestoreDeadline(restoreDeadline)
             , PartitionKey(partitionKey)
+            , WriteThrottler(HullCtx->VCfg)
+            , ReadThrottler(HullCtx->VCfg)
         {
             if (IsFresh) {
                 ChunksToUse = HullCtx->HullSstSizeInChunksFresh;
@@ -674,7 +777,7 @@ namespace NKikimr {
             // there is nothing to do here now, so we return
             const bool flushDone = WriterPtr->FlushNext(FirstLsn, LastLsn, MaxInFlightWrites - InFlightWrites);
             ProcessPendingMessages(msgsForYard);
-            if (!flushDone) {
+            if (!flushDone || WriteThrottler.WaitingRequest) {
                 return false;
             }
 
@@ -696,7 +799,15 @@ namespace NKikimr {
 
             // send new messages until we reach in flight limit
             std::unique_ptr<NPDisk::TEvChunkWrite> msg;
-            while (InFlightWrites < MaxInFlightWrites && (msg = WriterPtr->GetPendingMessage())) {
+            while (InFlightWrites < MaxInFlightWrites) {
+                msg = WriteThrottler.WaitingRequest ? std::move(WriteThrottler.WaitingRequest) : std::move(WriterPtr->GetPendingMessage());
+                if (!msg) {
+                    break;
+                }
+                if (!IsFresh && !WriteThrottler.Get(msg.get())) {
+                    WriteThrottler.WaitingRequest = std::move(msg);
+                    break;
+                }
                 HullCtx->VCtx->CountCompactionCost(*msg);
                 Statistics.Update(msg.get());
                 msgsForYard.push_back(std::move(msg));
@@ -705,8 +816,16 @@ namespace NKikimr {
             }
 
             std::unique_ptr<NPDisk::TEvChunkRead> readMsg;
-            while (InFlightReads < MaxInFlightReads && (readMsg = ReadBatcher.GetPendingMessage(
-                            PDiskCtx->Dsk->Owner, PDiskCtx->Dsk->OwnerRound, NPriRead::HullComp))) {
+            while (InFlightReads < MaxInFlightReads) {
+                readMsg = ReadThrottler.WaitingRequest ? std::move(ReadThrottler.WaitingRequest) : std::move(ReadBatcher.GetPendingMessage(
+                            PDiskCtx->Dsk->Owner, PDiskCtx->Dsk->OwnerRound, NPriRead::HullComp));
+                if (!readMsg) {
+                    break;
+                }
+                if (!IsFresh && !ReadThrottler.Get(readMsg.get())) {
+                    ReadThrottler.WaitingRequest = std::move(readMsg);
+                    break;
+                }
                 HullCtx->VCtx->CountCompactionCost(*readMsg);
                 Statistics.Update(readMsg.get());
                 msgsForYard.push_back(std::move(readMsg));

@@ -197,6 +197,19 @@ void TNodeWarden::Bootstrap() {
         icb->RegisterSharedControl(FreshCompMaxInFlightWrites, "VDiskControls.FreshCompMaxInFlightWrites");
         icb->RegisterSharedControl(HullCompMaxInFlightWrites, "VDiskControls.HullCompMaxInFlightWrites");
         icb->RegisterSharedControl(HullCompMaxInFlightReads, "VDiskControls.HullCompMaxInFlightReads");
+        icb->RegisterSharedControl(HullCompFullCompRateSec, "VDiskControls.HullCompFullCompRateSec");
+        icb->RegisterSharedControl(HullCompThrottlerReadIOPSLimit, "VDiskControls.HullCompThrottlerReadIOPSLimit");
+        icb->RegisterSharedControl(HullCompThrottlerReadIOPSRate, "VDiskControls.HullCompThrottlerReadIOPSRate");
+        icb->RegisterSharedControl(HullCompThrottlerReadIOPSIntervalMs, "VDiskControls.HullCompThrottlerReadIOPSIntervalMs");
+        icb->RegisterSharedControl(HullCompThrottlerReadBytesLimit, "VDiskControls.HullCompThrottlerReadBytesLimit");
+        icb->RegisterSharedControl(HullCompThrottlerReadBytesRate, "VDiskControls.HullCompThrottlerReadBytesRate");
+        icb->RegisterSharedControl(HullCompThrottlerReadBytesIntervalMs, "VDiskControls.HullCompThrottlerReadBytesIntervalMs");
+        icb->RegisterSharedControl(HullCompThrottlerWriteIOPSLimit, "VDiskControls.HullCompThrottlerWriteIOPSLimit");
+        icb->RegisterSharedControl(HullCompThrottlerWriteIOPSRate, "VDiskControls.HullCompThrottlerWriteIOPSRate");
+        icb->RegisterSharedControl(HullCompThrottlerWriteIOPSIntervalMs, "VDiskControls.HullCompThrottlerWriteIOPSIntervalMs");
+        icb->RegisterSharedControl(HullCompThrottlerWriteBytesLimit, "VDiskControls.HullCompThrottlerWriteBytesLimit");
+        icb->RegisterSharedControl(HullCompThrottlerWriteBytesRate, "VDiskControls.HullCompThrottlerWriteBytesRate");
+        icb->RegisterSharedControl(HullCompThrottlerWriteBytesIntervalMs, "VDiskControls.HullCompThrottlerWriteBytesIntervalMs");
 
         icb->RegisterSharedControl(CostMetricsParametersByMedia[NPDisk::DEVICE_TYPE_ROT].BurstThresholdNs,
                 "VDiskControls.BurstThresholdNsHDD");

@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
 import socket
-import collections
 from ydb.tests.library.nemesis.nemesis_core import NemesisProcess
 from ydb.tests.library.nemesis.nemesis_network import NetworkNemesis
 
@@ -31,6 +30,7 @@ def is_first_cluster_node(cluster):
     if len(cluster.hostnames) > 0:
         return cluster.hostnames[0] == socket.gethostname().strip()
     return False
+
 
 def is_bridge_cluster(cluster):
     if cluster.yaml_config is not None and cluster.yaml_config.get('config', {}).get('bridge_config') is not None:

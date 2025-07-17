@@ -36,7 +36,7 @@ class ExternalKiKiMRCluster(KiKiMRClusterInterface):
             ssh_username=None,
             deploy_cluster=False,
             yaml_config=None):
-            
+
         with open(cluster_template, 'r') as r:
             self.__cluster_template = yaml.safe_load(r.read())
         self.__yaml_config = None

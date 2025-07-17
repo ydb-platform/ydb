@@ -44,7 +44,7 @@ class BridgeClient(object):
     def invoke(self, request, method, retry_status_codes=None):
         """
         Invoke a method on the bridge service with retry logic.
-        
+
         Args:
             request: The request object
             method: The method name to call
@@ -53,7 +53,7 @@ class BridgeClient(object):
         """
         if retry_status_codes is None:
             retry_status_codes = [StatusIds.INTERNAL_ERROR, StatusIds.UNAVAILABLE, StatusIds.TIMEOUT]
-            
+
         retry = self.__retry_count
         while True:
             try:
@@ -61,26 +61,26 @@ class BridgeClient(object):
                 metadata = []
                 if self._auth_token:
                     metadata.append(('x-ydb-auth-ticket', self._auth_token))
-                
+
                 response = callee(request, metadata=metadata, timeout=self._timeout)
-                
+
                 # Check if response status should trigger a retry
-                if (hasattr(response, 'operation') and 
-                    hasattr(response.operation, 'status') and
-                    response.operation.status in retry_status_codes):
-                    
-                    logger.debug("Response status %s triggers retry, attempts left: %d", 
-                               response.operation.status, retry - 1)
-                    
+                if (hasattr(response, 'operation') and
+                        hasattr(response.operation, 'status') and
+                        response.operation.status in retry_status_codes):
+
+                    logger.debug("Response status %s triggers retry, attempts left: %d",
+                                 response.operation.status, retry - 1)
+
                     retry -= 1
                     if not retry:
                         return response  # Return the failed response instead of raising
-                    
+
                     time.sleep(self.__retry_sleep_seconds)
                     continue
-                
+
                 return response
-                
+
             except (RuntimeError, grpc.RpcError):
                 retry -= 1
 
@@ -223,7 +223,7 @@ class BridgeClient(object):
         """
 
         # TODO (@apkobzev): Implement split brain recovery
-        
+
         current_primary_pile_id = self.primary_pile
         updates = [
             bridge_api.PileStateUpdate(pile_id=pile_id, state=bridge_api.PileState.NOT_SYNCHRONIZED),
@@ -239,7 +239,6 @@ class BridgeClient(object):
         if result is None:
             logger.error("Failed to update pile %d to NOT_SYNCHRONIZED using specific pile ids [%d]", pile_id, pile_id)
             return False
-
 
         logger.info("Switched: pile %d from DISCONNECTED to NOT_SYNCHRONIZED using specific pile ids [%d]", pile_id, pile_id)
         return True

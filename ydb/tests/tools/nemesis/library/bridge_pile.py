@@ -2,11 +2,9 @@
 
 import asyncio
 import collections
-import logging
 import random
 import time
 import abc
-import threading
 import socket
 from ydb.tests.library.clients.kikimr_bridge_client import bridge_client_factory
 from ydb.tests.tools.nemesis.library.base import AbstractMonitoredNemesis
@@ -66,7 +64,7 @@ class AbstractBridgePileNemesis(Nemesis, AbstractMonitoredNemesis):
         if len(self._bridge_piles) < 2:
             self.logger.error("No bridge piles found in cluster or only one bridge pile found")
             raise Exception("No bridge piles found in cluster or only one bridge pile found")
-        
+
         self._bridge_pile_cycle = self._create_bridge_pile_cycle()
         self._bridge_clients = self._create_bridge_clients()
 
@@ -87,15 +85,15 @@ class AbstractBridgePileNemesis(Nemesis, AbstractMonitoredNemesis):
         except Exception as e:
             self.logger.error("Failed to inject specific fault for %s: %s", self.__class__.__name__, e)
             self.extract_fault()
-            raise
-        
+            raise e
+
         self.logger.info("=== MANAGING BRIDGE STATE ===")
         try:
             self._manage_bridge_state()
         except Exception as e:
             self.logger.error("Failed to manage bridge state for %s: %s", self.__class__.__name__, e)
             self.extract_fault()
-            raise
+            raise e
 
         self.logger.info("=== WAITING FOR %d SECONDS ===", self._duration)
         time.sleep(self._duration)
@@ -115,18 +113,18 @@ class AbstractBridgePileNemesis(Nemesis, AbstractMonitoredNemesis):
         except Exception as e:
             self.logger.error("Failed to restore bridge state: %s", e)
             return
-        
+
         self.on_success_inject_fault()
 
     @abc.abstractmethod
     def _inject_specific_fault(self):
         """Subclass-specific fault injection - to be overridden by subclasses."""
         pass
-    
+
     def _manage_bridge_state(self):
         """Handle bridge state changes common to all bridge pile nemesis."""
         self.logger.info("Current pile being affected: %d", self._current_pile_id)
-        
+
         another_pile_id = None
         for pile_id in self._bridge_piles:
             if pile_id != self._current_pile_id:
@@ -135,8 +133,8 @@ class AbstractBridgePileNemesis(Nemesis, AbstractMonitoredNemesis):
 
         if another_pile_id is None:
             self.logger.error("Could not find another pile for bridge operations")
-            raise
-        
+            raise Exception("Could not find another pile for bridge operations")
+
         self.logger.info("Current bridge state: %s", self._bridge_clients[another_pile_id].per_pile_state)
         self.logger.info("OPERATION: failover (pile_id=%d)", self._current_pile_id)
         result = self._bridge_clients[another_pile_id].failover(self._current_pile_id)
@@ -144,9 +142,8 @@ class AbstractBridgePileNemesis(Nemesis, AbstractMonitoredNemesis):
         if not result:
             self.logger.error("Failed to failover pile %d", self._current_pile_id)
             raise Exception("Failed to failover pile")
-        
-        self.logger.info("Bridge state managed successfully")
 
+        self.logger.info("Bridge state managed successfully")
 
     def extract_fault(self):
         if self._current_pile_id is not None:
@@ -159,20 +156,20 @@ class AbstractBridgePileNemesis(Nemesis, AbstractMonitoredNemesis):
                 self._restore_bridge_state()
             except Exception as e:
                 self.logger.error("Failed to restore bridge state: %s", e)
-            
+
             self._current_pile_id = None
             self._current_nodes = None
-            
+
             self.on_success_extract_fault()
             return True
-            
+
         return False
 
     @abc.abstractmethod
     def _extract_specific_fault(self):
         """Subclass-specific fault extraction - to be overridden by subclasses."""
         pass
-    
+
     def _restore_bridge_state(self):
         """Handle bridge state restoration common to all bridge pile nemesis."""
         self.logger.info("Restoring state for pile: %d", self._current_pile_id)
@@ -185,8 +182,8 @@ class AbstractBridgePileNemesis(Nemesis, AbstractMonitoredNemesis):
 
         if another_pile_id is None:
             self.logger.error("Could not find another pile for bridge restoration operations")
-            raise
-        
+            raise Exception("Could not find another pile for bridge restoration operations")
+
         self.logger.info("Current bridge state: %s", self._bridge_clients[another_pile_id].per_pile_state)
         self.logger.info("OPERATION: rejoin for pile %d", self._current_pile_id)
         result = self._bridge_clients[another_pile_id].rejoin(self._current_pile_id)
@@ -195,6 +192,7 @@ class AbstractBridgePileNemesis(Nemesis, AbstractMonitoredNemesis):
             raise Exception("Failed to rejoin pile")
 
         self.logger.info("Bridge state restored successfully")
+
 
 class BridgePileStopNodesNemesis(AbstractBridgePileNemesis):
     def __init__(self, cluster, schedule=(0, 60), duration=60):
@@ -245,7 +243,7 @@ class BridgePileStopNodesNemesis(AbstractBridgePileNemesis):
 
             except Exception as e:
                 self.logger.error("Failed to stop nodes: %s", str(e))
-                raise
+                raise e
 
         with asyncio.Runner() as runner:
             runner.run(_async_stop_nodes())
@@ -258,7 +256,7 @@ class BridgePileStopNodesNemesis(AbstractBridgePileNemesis):
                 self.logger.info("Starting storage node %d on host %s", node.node_id, node.host)
                 task = asyncio.create_task(asyncio.to_thread(node.ssh_command, "sudo systemctl start kikimr", raise_on_error=True))
                 start_tasks.append(task)
-            
+
             node_results = await asyncio.gather(*start_tasks, return_exceptions=True)
             node_success_count = 0
             for i, result in enumerate(node_results):
@@ -316,7 +314,7 @@ class BridgePileIptablesBlockPortsNemesis(AbstractBridgePileNemesis):
                     self.logger.info("Blocking YDB ports on host %s", node.host)
                     task = asyncio.create_task(asyncio.to_thread(node.ssh_command, self._block_ports_cmd, raise_on_error=True))
                     block_tasks.append(task)
-                
+
                 results = await asyncio.gather(*block_tasks, return_exceptions=True)
                 success_count = 0
                 for node, result in zip(self._current_nodes, results):
@@ -325,11 +323,11 @@ class BridgePileIptablesBlockPortsNemesis(AbstractBridgePileNemesis):
                         raise result
                     self.logger.info("Successfully blocked YDB ports on host %s", node.host)
                     success_count += 1
-                
+
                 self.logger.info("Blocked YDB ports on %d/%d nodes in pile %d", success_count, len(self._current_nodes), self._current_pile_id)
             except Exception as e:
                 self.logger.error("Failed to block YDB ports: %s", str(e))
-                raise
+                raise e
 
         with asyncio.Runner() as runner:
             runner.run(_async_block_ports())
@@ -379,7 +377,7 @@ class BridgePileRouteUnreachableNemesis(AbstractBridgePileNemesis):
                 return result[0][4][0]
         except socket.gaierror:
             pass
-    
+
         return None
 
     def _inject_specific_fault(self):
@@ -416,7 +414,7 @@ class BridgePileRouteUnreachableNemesis(AbstractBridgePileNemesis):
 
             except Exception as e:
                 self.logger.error("Failed to block routes: %s", str(e))
-                raise
+                raise e
 
         with asyncio.Runner() as runner:
             runner.run(_async_block_routes())
@@ -449,11 +447,12 @@ class BridgePileRouteUnreachableNemesis(AbstractBridgePileNemesis):
                     continue
                 self.logger.info("Successfully restored route to current pile %d", self._current_pile_id)
                 success_count += 1
-            
+
             self.logger.info("Restored routes to pile %d: %d/%d operations successful", self._current_pile_id, success_count, len(results))
 
         with asyncio.Runner() as runner:
             runner.run(_async_restore_routes())
+
 
 def bridge_pile_nemesis_list(cluster):
     return [

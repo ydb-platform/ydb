@@ -20,7 +20,7 @@ from . import daemon
 from . import kikimr_config
 from . import kikimr_node_interface
 from . import kikimr_cluster_interface
-
+from ydb.public.api.protos.ydb_status_codes_pb2 import StatusIds
 import ydb.core.protos.blobstorage_config_pb2 as bs
 from ydb.tests.library.predicates.blobstorage import blobstorage_controller_has_started_on_some_node
 
@@ -978,11 +978,11 @@ mon={mon}""".format(
     @property
     def datacenter(self):
         return self.__datacenter
-    
+
     @property
     def rack(self):
         return self.__rack
-    
+
     @property
     def bridge_pile_name(self):
         return self.__bridge_pile_name

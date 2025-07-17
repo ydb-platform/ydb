@@ -7,6 +7,7 @@ import socket
 from ydb.tests.library.nemesis.nemesis_core import Nemesis, Schedule
 from ydb.tests.tools.nemesis.library import base
 
+
 class AbstractDataCenterNemesis(Nemesis, base.AbstractMonitoredNemesis):
     def __init__(self, cluster, schedule=(300, 900), duration=60):
         super(AbstractDataCenterNemesis, self).__init__(schedule=schedule)
@@ -31,20 +32,20 @@ class AbstractDataCenterNemesis(Nemesis, base.AbstractMonitoredNemesis):
                 yield dc
 
     def _validate_datacenters(self, cluster):
-         dc_to_nodes = collections.defaultdict(list)
-         for node in cluster.nodes.values():
-             if node.datacenter is not None:
-                 dc_to_nodes[node.datacenter].append(node)
+        dc_to_nodes = collections.defaultdict(list)
+        for node in cluster.nodes.values():
+            if node.datacenter is not None:
+                dc_to_nodes[node.datacenter].append(node)
 
-         data_centers = list(dc_to_nodes.keys())
-         return dc_to_nodes, data_centers
+        data_centers = list(dc_to_nodes.keys())
+        return dc_to_nodes, data_centers
 
     def prepare_state(self):
         self._dc_to_nodes, self._data_centers = self._validate_datacenters(self._cluster)
         if len(self._data_centers) < 2:
             self.logger.error("No datacenters found in cluster or only one datacenter found")
             raise Exception("No datacenters found in cluster or only one datacenter found")
-        
+
         self._dc_cycle_iterator = self._create_dc_cycle()
 
     def inject_fault(self):
@@ -73,7 +74,7 @@ class AbstractDataCenterNemesis(Nemesis, base.AbstractMonitoredNemesis):
         except Exception as e:
             self.logger.error("Failed to extract specific fault for %s: %s", self.__class__.__name__, e)
             return
-        
+
         self.on_success_inject_fault()
 
     @abc.abstractmethod
@@ -89,12 +90,12 @@ class AbstractDataCenterNemesis(Nemesis, base.AbstractMonitoredNemesis):
             finally:
                 self._current_dc = None
                 self._current_nodes = None
-            
+
             self.on_success_extract_fault()
             return True
-            
+
         return False
-    
+
     @abc.abstractmethod
     def _extract_specific_fault(self):
         pass
@@ -104,7 +105,7 @@ class DataCenterStopNodesNemesis(AbstractDataCenterNemesis):
     def __init__(self, cluster, schedule=(300, 900), duration=60):
         super(DataCenterStopNodesNemesis, self).__init__(
             cluster, schedule=schedule, duration=duration)
-    
+
     def _inject_specific_fault(self):
         async def _async_stop_nodes():
             try:
@@ -132,7 +133,7 @@ class DataCenterStopNodesNemesis(AbstractDataCenterNemesis):
                     self.logger.info("Stopping storage node %d on host %s", node.node_id, node.host)
                     task = asyncio.create_task(asyncio.to_thread(node.ssh_command, "sudo systemctl stop kikimr", raise_on_error=True))
                     stop_tasks.append(task)
-                
+
                 node_results = await asyncio.gather(*stop_tasks, return_exceptions=True)
                 node_success_count = 0
                 for i, result in enumerate(node_results):
@@ -213,7 +214,7 @@ class DataCenterRouteUnreachableNemesis(AbstractDataCenterNemesis):
                     self.logger.info("Blocking YDB ports on host %s", node.host)
                     task = asyncio.create_task(asyncio.to_thread(node.ssh_command, self._block_ports_cmd, raise_on_error=True))
                     block_tasks.append(task)
-                
+
                 results = await asyncio.gather(*block_tasks, return_exceptions=True)
                 success_count = 0
                 for node, result in zip(self._current_nodes, results):
@@ -222,7 +223,7 @@ class DataCenterRouteUnreachableNemesis(AbstractDataCenterNemesis):
                         raise result
                     self.logger.info("Successfully blocked YDB ports on host %s", node.host)
                     success_count += 1
-                
+
                 self.logger.info("Blocked YDB ports on %d/%d nodes in dc %s", success_count, len(self._current_nodes), self._current_dc)
 
             except Exception as e:
@@ -276,7 +277,7 @@ class DataCenterIptablesBlockPortsNemesis(AbstractDataCenterNemesis):
                 return result[0][4][0]
         except socket.gaierror:
             pass
-    
+
         return None
 
     def _inject_specific_fault(self):
@@ -307,7 +308,7 @@ class DataCenterIptablesBlockPortsNemesis(AbstractDataCenterNemesis):
                         raise result
                     self.logger.info("Successfully blocked route to current dc %s", self._current_dc)
                     success_count += 1
-                
+
                 self.logger.info("Blocked routes to dc %s: %d/%d operations successful", self._current_dc, success_count, len(results))
 
             except Exception as e:
@@ -344,9 +345,8 @@ class DataCenterIptablesBlockPortsNemesis(AbstractDataCenterNemesis):
                     continue
                 self.logger.info("Successfully restored route to current dc %s", self._current_dc)
                 success_count += 1
-            
-            self.logger.info("Restored routes to dc %s: %d/%d operations successful", self._current_dc, success_count, len(results))
 
+            self.logger.info("Restored routes to dc %s: %d/%d operations successful", self._current_dc, success_count, len(results))
 
         with asyncio.Runner() as runner:
             runner.run(_async_restore_routes())

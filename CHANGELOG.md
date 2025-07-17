@@ -68,7 +68,7 @@ and timeout (by default, the maximum response time from healthcheck). Documentat
 * 17814:Fixed the incorrect order in which BuildIndex, Export, and Import operations were listed. (#17817) [#17814](https://github.com/ydb-platform/ydb/pull/17814) ([Vitaliy Filippov](https://github.com/vitalif))
 * 17729:Fixed schema version collisions in serverless DBs. #17184 [#17729](https://github.com/ydb-platform/ydb/pull/17729) ([Semyon](https://github.com/swalrus1))
 * 18401:Fixed an [issue](https://github.com/ydb-platform/ydb/issues/18358) where destination tables of `ASYNC REPLICATION` and its changefeeds were saved to local backups. This fix prevents duplication of changefeeds and reduces the amount of space the backup takes on disk. [#18401](https://github.com/ydb-platform/ydb/pull/18401) ([Daniil Demin](https://github.com/jepett0))
-* 18234:Fixed an [issue](https://github.com/ydb-platform/ydb/issues/18358). Don't allow conflicting read-write transactions to violate serializability after shard restarts. [#18234](https://github.com/ydb-platform/ydb/pull/18234) ([Aleksei Borzenkov](https://github.com/snaury))
+* 18234:Fixed an [issue](https://github.com/ydb-platform/ydb/issues/18358) where conflicting read-write transactions violated serializability after shard restarts. [#18234](https://github.com/ydb-platform/ydb/pull/18234) ([Aleksei Borzenkov](https://github.com/snaury))
 
 ### YDB UI
 

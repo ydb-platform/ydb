@@ -529,13 +529,33 @@ public:
 
         auto& ranges = readIt->second;
 
+        for (ui32 i = 0; i < firstUnprocessedQuery; ++i) {
+            auto leftRowIt = PendingLeftRowsByKey.find(ExtractKeyPrefix(ranges[i]));
+            YQL_ENSURE(leftRowIt != PendingLeftRowsByKey.end());
+            leftRowIt->second.PendingReads.erase(prevReadId);
+
+            const bool leftRowProcessed = leftRowIt->second.PendingReads.empty()
+                && leftRowIt->second.RightRowExist;
+            if (leftRowProcessed) {
+                YQL_ENSURE(IsRowSeqNoValid(leftRowIt->second.SeqNo));
+                ResultRowsBySeqNo[leftRowIt->second.SeqNo].Completed = true;
+                PendingLeftRowsByKey.erase(leftRowIt);
+            }
+        }
+
         if (lastProcessedKey) {
             YQL_ENSURE(firstUnprocessedQuery < ranges.size());
             auto unprocessedRange = ranges[firstUnprocessedQuery];
             YQL_ENSURE(!unprocessedRange.Point);
 
-            unprocessedRanges.emplace_back(*lastProcessedKey, false,
+            auto leftRowIt = PendingLeftRowsByKey.find(ExtractKeyPrefix(unprocessedRange));
+            YQL_ENSURE(leftRowIt != PendingLeftRowsByKey.end());
+            leftRowIt->second.PendingReads.erase(prevReadId);
+
+            TOwnedTableRange range(*lastProcessedKey, false,
                 unprocessedRange.GetOwnedTo(), unprocessedRange.InclusiveTo);
+
+            unprocessedRanges.emplace_back(std::move(range));
             ++firstUnprocessedQuery;
         }
 
@@ -598,6 +618,8 @@ public:
 
             auto partitions = GetRangePartitioning(partitioning, GetKeyColumnTypes(), range);
             for (auto [shardId, range] : partitions) {
+                YQL_ENSURE(PendingLeftRowsByKey.contains(ExtractKeyPrefix(range)));
+
                 if (range.Point) {
                     pointsPerShard[shardId].push_back(std::move(range));
                 } else {
@@ -629,7 +651,7 @@ public:
                 std::vector <std::pair<ui64, TOwnedTableRange>> partitions;
                 if (joinKey.size() < KeyColumns.size()) {
                     // build prefix range [[key_prefix, NULL, ..., NULL], [key_prefix, +inf, ..., +inf])
-                    std::vector <TCell> fromCells(KeyColumns.size());
+                    std::vector<TCell> fromCells(KeyColumns.size() - joinKey.size());
                     fromCells.insert(fromCells.begin(), joinKey.begin(), joinKey.end());
                     bool fromInclusive = true;
                     bool toInclusive = false;
@@ -724,18 +746,17 @@ public:
         if (record.GetFinished()) {
             for (const auto& key : pendingKeysIt->second) {
                 auto leftRowIt = PendingLeftRowsByKey.find(ExtractKeyPrefix(key));
-                if (leftRowIt != PendingLeftRowsByKey.end()) {
-                    leftRowIt->second.PendingReads.erase(record.GetReadId());
+                YQL_ENSURE(leftRowIt != PendingLeftRowsByKey.end());
+                leftRowIt->second.PendingReads.erase(record.GetReadId());
 
-                    // row is considered processed when all reads are finished
-                    // and at least one right row is found
-                    const bool leftRowProcessed = leftRowIt->second.PendingReads.empty()
-                        && leftRowIt->second.RightRowExist;
-                    if (leftRowProcessed) {
-                        YQL_ENSURE(IsRowSeqNoValid(leftRowIt->second.SeqNo));
-                        ResultRowsBySeqNo[leftRowIt->second.SeqNo].Completed = true;
-                        PendingLeftRowsByKey.erase(leftRowIt);
-                    }
+                // row is considered processed when all reads are finished
+                // and at least one right row is found
+                const bool leftRowProcessed = leftRowIt->second.PendingReads.empty()
+                    && leftRowIt->second.RightRowExist;
+                if (leftRowProcessed) {
+                    YQL_ENSURE(IsRowSeqNoValid(leftRowIt->second.SeqNo));
+                    ResultRowsBySeqNo[leftRowIt->second.SeqNo].Completed = true;
+                    PendingLeftRowsByKey.erase(leftRowIt);
                 }
             }
 
@@ -764,8 +785,14 @@ public:
             auto unprocessedRange = ranges[firstUnprocessedQuery];
             YQL_ENSURE(!unprocessedRange.Point);
 
-            UnprocessedKeys.emplace_back(*lastProcessedKey, false,
+            TOwnedTableRange range(*lastProcessedKey, false,
                 unprocessedRange.GetOwnedTo(), unprocessedRange.InclusiveTo);
+
+            auto leftRowIt = PendingLeftRowsByKey.find(ExtractKeyPrefix(range));
+            YQL_ENSURE(leftRowIt != PendingLeftRowsByKey.end());
+            leftRowIt->second.PendingReads.erase(readId);
+
+            UnprocessedKeys.emplace_back(std::move(range));
             ++firstUnprocessedQuery;
         }
 
@@ -787,10 +814,8 @@ public:
 
         // we should process left rows that haven't matches on the right
         for (auto leftRowIt = PendingLeftRowsByKey.begin(); leftRowIt != PendingLeftRowsByKey.end();) {
-            const bool leftRowShouldBeProcessed = leftRowIt->second.PendingReads.empty()
-                && !leftRowIt->second.RightRowExist;
-
-            if (leftRowShouldBeProcessed) {
+            if (leftRowIt->second.PendingReads.empty()) {
+                YQL_ENSURE(!leftRowIt->second.RightRowExist);
                 TReadResultStats rowStats;
                 auto resultRow = TryBuildResultRow(leftRowIt->second, {}, rowStats);
                 YQL_ENSURE(IsRowSeqNoValid(leftRowIt->second.SeqNo));

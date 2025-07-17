@@ -5,7 +5,16 @@ package Ydb.Formats;
 option java_package = "com.yandex.ydb.formats";
 
 message ArrowBatchSettings {
+    enum Compression {
+        UNSPECIFIED = 0;
+        UNCOMPRESSED = 1;
+        LZ4_FRAME = 2;
+        ZSTD = 3;
+    }
+
     bytes schema = 1;
+
+    Compression compression = 2;
 }
 
 message CsvSettings {

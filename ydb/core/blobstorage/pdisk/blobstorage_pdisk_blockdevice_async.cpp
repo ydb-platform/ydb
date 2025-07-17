@@ -34,7 +34,9 @@ namespace NKikimr {
 namespace NPDisk {
 
 LWTRACE_USING(BLOBSTORAGE_PROVIDER);
-
+namespace {
+    std::atomic<int> frees;
+}
 constexpr ui64 MaxWaitingNoops = 256;
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -1000,6 +1002,7 @@ protected:
     }
 
     void FreeOperation(IAsyncIoOperation *op) {
+        Cerr << "free operation " << frees.fetch_add(1) << Endl;
         TCompletionAction *action = static_cast<TCompletionAction*>(op->GetCookie());
 
         if (action->FlushAction) {

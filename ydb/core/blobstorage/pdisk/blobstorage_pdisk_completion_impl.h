@@ -205,7 +205,6 @@ class TChunkWritePiece;
 
 class TCompletionChunkWritePart : public TCompletionAction {
     TPDisk *PDisk;
-    TIntrusivePtr<TChunkWrite> ChunkWrite;
     ui32 PieceShift;
     ui32 PieceSize;
     TCompletionChunkWrite* CumulativeCompletion;

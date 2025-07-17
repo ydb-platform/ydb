@@ -584,6 +584,8 @@ public:
 
     TChunkWritePiece(TPDisk *pdisk, TIntrusivePtr<TChunkWrite> &write, ui32 pieceShift, ui32 pieceSize, NWilson::TSpan span);
 
+    ~TChunkWritePiece();
+
     ERequestType GetType() const override {
         return ERequestType::RequestChunkWritePiece;
     }

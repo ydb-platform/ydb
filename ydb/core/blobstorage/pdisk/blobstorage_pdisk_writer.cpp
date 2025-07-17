@@ -23,26 +23,17 @@ void TBufferedWriter::TBlockDeviceWrite::DoCall(IBlockDevice &BlockDevice) {
     BlockDevice.PwriteAsync(source, sizeToWrite, DirtyFrom, Buffer.Release(), ReqId, &TraceId);
 }
 
-TCompletionAction* TBufferedWriter::TBlockDeviceWrite::GetCompletionAction() {
-    return nullptr;
-}
-
 ////////////////////////////////////////////////////////////////////////////
 // TBlockDeviceFlush
 ////////////////////////////////////////////////////////////////////////////
-TBufferedWriter::TBlockDeviceFlush::TBlockDeviceFlush(const TReqId& ReqId, TCompletionAction *action) 
-    : TBlockDeviceAction(ReqId), CompletionAction(action) 
+TBufferedWriter::TBlockDeviceFlush::TBlockDeviceFlush(const TReqId& ReqId, TCompletionAction* Completion) 
+    : TBlockDeviceAction(ReqId), Completion(THolder<TCompletionAction>(Completion))
 {
 }
 
 void TBufferedWriter::TBlockDeviceFlush::DoCall(IBlockDevice &BlockDevice) {
-    BlockDevice.FlushAsync(CompletionAction, ReqId);
+    BlockDevice.FlushAsync(Completion.Release(), ReqId);
 }
-
-TCompletionAction* TBufferedWriter::TBlockDeviceFlush::GetCompletionAction() {
-    return CompletionAction;
-}
-
 
 ////////////////////////////////////////////////////////////////////////////
 // BufferedWriter
@@ -152,7 +143,6 @@ void TBufferedWriter::Obliterate() {
 }
 
 void TBufferedWriter::WriteToBlockDevice() {
-    Y_ENSURE(WithDelayedFlush);
     while (!BlockDeviceActions.empty()) {
         const auto& action = BlockDeviceActions.front();
         action->DoCall(BlockDevice);
@@ -161,19 +151,9 @@ void TBufferedWriter::WriteToBlockDevice() {
 }
 
 TBufferedWriter::~TBufferedWriter() {
-    
-    //if TBufferedWriter with delayed flush is aborted, all delayed disk operations are not executed (but the last flush).
-    //we can pass custom deleter to TChunkWriter to not call last flush on abort.
-    WithDelayedFlush = false; 
-    while (!BlockDeviceActions.empty()) {
-        const auto& action = BlockDeviceActions.front();
-        if (action->GetCompletionAction()) {
-            Y_ENSURE(false);
-            action->GetCompletionAction()->Release(ActorSystem);
-        }
-        BlockDeviceActions.pop();
+    if (WithDelayedFlush) {
+        WriteToBlockDevice();
     }
-
     Flush(LastReqId, nullptr, nullptr, 0);
 }
 

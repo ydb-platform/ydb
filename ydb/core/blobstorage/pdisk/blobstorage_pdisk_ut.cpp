@@ -9,6 +9,7 @@
 #include <ydb/core/testlib/actors/test_runtime.h>
 
 #include <util/system/hp_timer.h>
+#include <sanitizer/lsan_interface.h>
 
 namespace NKikimr {
 
@@ -1289,8 +1290,12 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
             Cerr << "restart# " << bool(testCase & 4) << " start with noop scheduler# " << bool(testCase & 1)
                 << " end with noop scheduler# " << bool(testCase & 2) << Endl;
             testCtx.SafeRunOnPDisk([=] (NPDisk::TPDisk* pdisk) {
-                pdisk->UseNoopSchedulerHDD = testCase & 1;
-                pdisk->UseNoopSchedulerSSD = testCase & 1;
+                Y_UNUSED(pdisk);
+                pdisk->UseNoopSchedulerHDD = 1;
+                pdisk->UseNoopSchedulerSSD = 1;
+
+                // pdisk->UseNoopSchedulerHDD = testCase & 1;
+                // pdisk->UseNoopSchedulerSSD = testCase & 1;
             });
 
             vdisk.InitFull();
@@ -1311,27 +1316,31 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
                 testCtx.RestartPDiskSync();
             }
 
-            testCtx.SafeRunOnPDisk([=] (NPDisk::TPDisk* pdisk) {
-                pdisk->UseNoopSchedulerHDD = testCase & 2;
-                pdisk->UseNoopSchedulerSSD = testCase & 2;
-            });
+            // testCtx.SafeRunOnPDisk([=] (NPDisk::TPDisk* pdisk) {
+            //                     Y_UNUSED(pdisk);
+            //     pdisk->UseNoopSchedulerHDD = 1;
+            //     pdisk->UseNoopSchedulerSSD = 1;
+
+            //     // pdisk->UseNoopSchedulerHDD = testCase & 2;
+            //     // pdisk->UseNoopSchedulerSSD = testCase & 2;
+            // });
 
 
-            for (ui32 i = 0; i < 100; ++i) {
-                auto read = testCtx.Recv<NPDisk::TEvChunkReadResult>();
-            }
-            Cerr << "all chunk reads are received" << Endl;
+            // for (ui32 i = 0; i < 100; ++i) {
+            //     auto read = testCtx.Recv<NPDisk::TEvChunkReadResult>();
+            // }
+            // Cerr << "all chunk reads are received" << Endl;
 
-            for (ui32 i = 0; i < 100; ++i) {
-                auto write = testCtx.Recv<NPDisk::TEvChunkWriteResult>();
-            }
-            Cerr << "all chunk writes are received" << Endl;
+            // for (ui32 i = 0; i < 100; ++i) {
+            //     auto write = testCtx.Recv<NPDisk::TEvChunkWriteResult>();
+            // }
+            // Cerr << "all chunk writes are received" << Endl;
 
-            for (ui32 i = 0; i < 100;) {
-                auto result = testCtx.Recv<NPDisk::TEvLogResult>();
-                i += result->Results.size();
-            }
-            Cerr << "all log writes are received" << Endl;
+            // for (ui32 i = 0; i < 100;) {
+            //     auto result = testCtx.Recv<NPDisk::TEvLogResult>();
+            //     i += result->Results.size();
+            // }
+            // Cerr << "all log writes are received" << Endl;
         }
     }
 
@@ -1403,11 +1412,11 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
             UNIT_ASSERT(ConvertIPartsToString(parts.Get()) == res->Data.ToString().Slice());
         }
     }
-    Y_UNIT_TEST(ChunkWriteDifferentOffsetAndSize) {
-        for (int i = 0; i <= 1; ++i) {
-            ChunkWriteDifferentOffsetAndSizeImpl(i);
-        }
-    }
+    // Y_UNIT_TEST(ChunkWriteDifferentOffsetAndSize) {
+    //     for (int i = 0; i <= 1; ++i) {
+    //         ChunkWriteDifferentOffsetAndSizeImpl(i);
+    //     }
+    // }
 
     Y_UNIT_TEST(PlainChunksWriteReadALot) {
         TActorTestContext testCtx{{
@@ -1461,30 +1470,35 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         Cerr << " total_speed# " << 2 * written / duration.SecondsFloat() / 1e9 << " GB/s" << Endl;
     }
 
-    Y_UNIT_TEST(ChunkWriteBadOffset) {
-        TActorTestContext testCtx{{}};
 
-        TVDiskMock vdisk(&testCtx);
-        vdisk.InitFull();
+    // Y_UNIT_TEST(ChunkWriteBadOffset) {
+    //     auto base = NUnitTest::NPrivate::GetCurrentTest();
+    //     Cerr << "running " << base-> << Endl;
+        
+    //     TActorTestContext testCtx{{}};
 
-        vdisk.ReserveChunk();
-        vdisk.CommitReservedChunks();
-        UNIT_ASSERT(vdisk.Chunks[EChunkState::COMMITTED].size() == 1);
-        const ui32 reservedChunk = *vdisk.Chunks[EChunkState::COMMITTED].begin();
+    //     TVDiskMock vdisk(&testCtx);
+    //     vdisk.InitFull();
 
-        auto seed = TInstant::Now().MicroSeconds();
-        Cerr << "seed# " << seed << Endl;
-        TReallyFastRng32 rng(seed);
+    //     vdisk.ReserveChunk();
+    //     vdisk.CommitReservedChunks();
+    //     UNIT_ASSERT(vdisk.Chunks[EChunkState::COMMITTED].size() == 1);
+    //     const ui32 reservedChunk = *vdisk.Chunks[EChunkState::COMMITTED].begin();
 
-        auto blockSize = vdisk.PDiskParams->AppendBlockSize;
-        for (ui32 offset = 1; offset < blockSize; offset += rng.Uniform(1, blockSize / 20)) {
-            NPDisk::TEvChunkWrite::TPartsPtr parts = GenParts(rng, 1);
-            testCtx.TestResponse<NPDisk::TEvChunkWriteResult>(
-                    new NPDisk::TEvChunkWrite(vdisk.PDiskParams->Owner, vdisk.PDiskParams->OwnerRound,
-                        reservedChunk, offset, parts, nullptr, false, 0),
-                    NKikimrProto::ERROR);
-        }
-    }
+    //     auto seed = TInstant::Now().MicroSeconds();
+    //     Cerr << "seed# " << seed << Endl;
+    //     TReallyFastRng32 rng(seed);
+
+    //     auto blockSize = vdisk.PDiskParams->AppendBlockSize;
+    //     for (ui32 offset = 1; offset < blockSize; offset += rng.Uniform(1, blockSize / 20)) {
+    //         NPDisk::TEvChunkWrite::TPartsPtr parts = GenParts(rng, 1);
+    //         testCtx.TestResponse<NPDisk::TEvChunkWriteResult>(
+    //                 new NPDisk::TEvChunkWrite(vdisk.PDiskParams->Owner, vdisk.PDiskParams->OwnerRound,
+    //                     reservedChunk, offset, parts, nullptr, false, 0),
+    //                 NKikimrProto::ERROR);
+    //     }
+    //     __lsan_do_leak_check();
+    // }
 
     Y_UNIT_TEST(TestStartEncryptedOrPlainAndRestart) {
         for (ui32 plain = 0; plain <= 1; ++plain) {

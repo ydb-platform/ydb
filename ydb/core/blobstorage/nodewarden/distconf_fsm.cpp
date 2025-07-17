@@ -50,6 +50,10 @@ namespace NKikimr::NStorage {
     }
 
     void TDistributedConfigKeeper::UnbecomeRoot() {
+        if (StateStorageSelfHealActor) {
+            Send(new IEventHandle(TEvents::TSystem::Poison, 0, StateStorageSelfHealActor.value(), SelfId(), nullptr, 0));
+            StateStorageSelfHealActor.reset();
+        }
         DisconnectFromConsole();
     }
 
@@ -69,6 +73,11 @@ namespace NKikimr::NStorage {
         }
         RootState = ERootState::ERROR_TIMEOUT;
         ErrorReason = reason;
+        if (CurrentProposition) {
+            for (TActorId actorId : CurrentProposition->ActorIds) {
+                Send(actorId, new TEvPrivate::TEvConfigProposed(reason));
+            }
+        }
         CurrentProposition.reset();
         CurrentSelfAssemblyUUID.reset();
         ApplyConfigUpdateToDynamicNodes(true);
@@ -403,12 +412,11 @@ namespace NKikimr::NStorage {
         };
 
         auto finishWithError = [&](TString error) {
-            if (CurrentProposition) {
+            if (CurrentProposition && CurrentProposition->FromActor) {
                 for (TActorId actorId : CurrentProposition->ActorIds) {
                     Send(actorId, new TEvPrivate::TEvConfigProposed(error));
                 }
-            }
-            if (!CurrentProposition || !CurrentProposition->FromActor) {
+            } else {
                 SwitchToError(error);
             }
         };
@@ -427,6 +435,9 @@ namespace NKikimr::NStorage {
             for (TActorId actorId : proposition.ActorIds) {
                 Send(actorId, new TEvPrivate::TEvConfigProposed);
             }
+            if (proposition.CheckSyncersAfterCommit) {
+                IssueQuerySyncers();
+            }
 
             // check if we need to update this config
             NKikimrBlobStorage::TStorageConfig proposedConfig = *StorageConfig;
@@ -434,14 +445,12 @@ namespace NKikimr::NStorage {
                 if (auto error = StartProposition(&proposedConfig, &*StorageConfig, {}, {}, false)) {
                     SwitchToError(*error);
                 }
+            } else if (proposition.FromActor) {
+                const auto prev = std::exchange(RootState, ERootState::RELAX);
+                Y_ABORT_UNLESS(prev == ERootState::IN_PROGRESS);
             } else {
-                if (!proposition.FromActor) {
-                    ConfigsCollected = true;
-                    CheckIfDone();
-                }
-                if (proposition.CheckSyncersAfterCommit) {
-                    IssueQuerySyncers();
-                }
+                ConfigsCollected = true;
+                CheckIfDone();
             }
         } else {
             STLOG(PRI_DEBUG, BS_NODE, NWDC47, "no quorum for ProposedStorageConfig", (Record, *res),
@@ -674,10 +683,13 @@ namespace NKikimr::NStorage {
         }
         UpdateFingerprint(configToPropose);
 
-        STLOG(PRI_INFO, BS_NODE, NWDC60, "ProcessCollectConfigs proposing config",
+        STLOG(PRI_INFO, BS_NODE, NWDC60, "StartProposition",
             (ConfigToPropose, *configToPropose),
             (PropositionBase, propositionBase),
-            (StorageConfig, StorageConfig.get()));
+            (StorageConfig, StorageConfig.get()),
+            (SpecificBridgePileIds, specificBridgePileIds),
+            (ActorId, actorId),
+            (CheckSyncersAfterCommit, checkSyncersAfterCommit));
 
         if (propositionBase) {
             if (auto error = ValidateConfig(*propositionBase)) {

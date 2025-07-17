@@ -1,8 +1,9 @@
 name: Regression-run
 
 on:
-  schedule:
-    - cron: "55 23 * * *"  # At 23:55 every day
+  # Commented due to low confidence and high resource requirements
+  # schedule:
+  #   - cron: "55 23 * * *"  # At 23:55 every day
   workflow_dispatch:
     inputs:
       use_default_branches:

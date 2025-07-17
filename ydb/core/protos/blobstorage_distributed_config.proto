@@ -236,6 +236,10 @@ message TEvNodeConfigInvokeOnRoot {
         optional bool Recommended = 1;
     }
 
+    message TSelfHealStateStorage {
+        optional uint32 WaitForConfigStep = 1;
+    }
+
     message TAdvanceGeneration
     {}
 
@@ -298,6 +302,7 @@ message TEvNodeConfigInvokeOnRoot {
         TStateStorageConfig ReconfigStateStorage = 12;
         TGetStateStorageConfig GetStateStorageConfig = 13;
         TNotifyBridgeSyncFinished NotifyBridgeSyncFinished = 14;
+        TSelfHealStateStorage SelfHealStateStorage = 15;
     }
 }
 

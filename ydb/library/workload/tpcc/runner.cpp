@@ -3,6 +3,7 @@
 #include "constants.h"
 #include "log.h"
 #include "log_backend.h"
+#include "path_checker.h"
 #include "runner_display_data.h"
 #include "runner_tui.h"
 #include "task_queue.h"
@@ -135,12 +136,14 @@ TPCCRunner::TPCCRunner(const NConsoleClient::TClientCommand::TConfig& connection
         std::exit(1);
     }
 
+    CheckPathForRun(connectionConfig, Config.Path, Config.WarehouseCount);
+
     const size_t terminalsCount = Config.WarehouseCount * TERMINALS_PER_WAREHOUSE;
 
     size_t threadCount = 0;
     if (Config.ThreadCount == 0) {
         // here we calculate max possible efficient thread number
-        const size_t networkThreadCount = NConsoleClient::TYdbCommand::GetNetworkThreadNum(ConnectionConfig);
+        const size_t networkThreadCount = ConnectionConfig.GetNetworkThreadNum();
         const size_t maxTerminalThreadCount = cpuCount > networkThreadCount ? cpuCount - networkThreadCount : 1;
         threadCount = std::min(maxTerminalThreadCount, terminalsCount);
 
@@ -153,7 +156,7 @@ TPCCRunner::TPCCRunner(const NConsoleClient::TClientCommand::TConfig& connection
     }
 
     // The number of terminals might be hundreds of thousands.
-    // For now, we don't have more than 32 network threads (check TYdbCommand::GetNetworkThreadNum()),
+    // For now, we don't have more than 32 network threads (check TClientCommand::TConfig::GetNetworkThreadNum()),
     // so that maxTerminalThreads will be around more or less around 100.
     const size_t driverCount = Config.DriverCount == 0 ? threadCount : Config.DriverCount;
 
@@ -572,14 +575,8 @@ void TPCCRunner::CalculateStatusData(Clock::time_point now, TRunDisplayData& dat
 }
 
 void TPCCRunner::ExitTuiMode() {
-    LogBackend->StopCapture();
-
     Tui.reset();
-
-    // TODO: remove?
-    // Switch back to main screen buffer (restore original content)
-    std::cout << "\033[?1049l";
-    std::cout.flush();
+    LogBackend->StopCaptureAndFlush(Cerr);
 }
 
 void TPCCRunner::PrintTransactionStatisticsPretty(IOutputStream& os) {

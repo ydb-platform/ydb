@@ -1,9 +1,9 @@
-* Fixed `ydb tools restore` not being able to restore local backups on Windows.
-
-* Limited width of tables in benchmark reports.
 
 ## 2.23.0 ##
 
+* Added connection check and hotkeys description in interactive mode.
+* Fixed `ydb tools restore` not being able to restore local backups on Windows.
+* Limited width of tables in benchmark reports.
 * Added `ydb workload vector select` to benchmark RPS and recall of vector index.
 * Added trivial columns completion in interactive mode.
 * Added the "ydb tools infer csv" command to generate a `CREATE TABLE` SQL query from a CSV file with data.

@@ -165,8 +165,6 @@ message TStaticNameserviceConfig {
         repeated TEndpoint Endpoint = 7;
 
         optional NActorsInterconnect.TNodeLocation WalleLocation = 8 [deprecated=true];
-
-        optional string BridgePileName = 9; // realm name for bridged installations (starting from 0)
     }
 
     repeated TNode Node = 1;
@@ -273,6 +271,7 @@ message TDomainsConfig {
         repeated string ViewerAllowedSIDs = 6;
         repeated string RegisterDynamicNodeAllowedSIDs = 8;
         repeated string BootstrapAllowedSIDs = 9;
+        repeated string DatabaseAllowedSIDs = 10;
 
         message TUser {
             optional string Name = 1;
@@ -1759,7 +1758,6 @@ message TAuditConfig {
         TXT = 2;                        // Outputs audit log in format: "<time>: k1=v1, k2=v2, ..." where <time> is ISO 8601 format time string, k1, k2, ..., kn - fields of audit log message and v1, v2, ..., vn are their values
         JSON_LOG_COMPATIBLE = 3;        // Outputs audit log in format: "{"@timestamp": "<ISO 8601 time>", "@log_type": "audit", "k1": "v1", "k2": "v2", ...}" where @timestamp is ISO 8601 format time string, k1, k2, ..., kn - fields of audit log message and v1, v2, ..., vn are their values // Suitable for output both debug log and audit log to the same destination (stderr)
         FORMAT_4 = 4;                   // Reserved
-        YANDEX_CLOUD_EVENTS = 5;        // Reserved for Yandex.Cloud environment. Defaults to JSON elsewhere
     }
 
     message TStderrBackend {

@@ -2,8 +2,10 @@
 
 #include <vector>
 
+#include <library/cpp/resource/resource.h>
 #include <util/folder/path.h>
 #include <util/folder/dirut.h>
+#include <util/string/strip.h>
 
 #include <ydb/public/lib/ydb_cli/common/query_stats.h>
 #include <ydb/public/lib/ydb_cli/commands/interactive/line_reader.h>
@@ -11,9 +13,13 @@
 #include <ydb/public/lib/ydb_cli/commands/ydb_service_table.h>
 #include <ydb/public/lib/ydb_cli/commands/ydb_sql.h>
 
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
+
 namespace NYdb::NConsoleClient {
 
 namespace {
+
+const char* VersionResourceName = "version.txt";
 
 std::string ToLower(std::string_view value) {
     size_t value_size = value.size();
@@ -124,16 +130,64 @@ void ParseSetCommand(const std::vector<Token>& tokens, InteractiveCLIState& inte
 
 } // namespace
 
-TInteractiveCLI::TInteractiveCLI(TClientCommand::TConfig& config, std::string prompt)
-    : Config(config)
-    , Prompt(std::move(prompt))
+TInteractiveCLI::TInteractiveCLI(std::string prompt)
+    : Prompt(std::move(prompt))
 {
 }
 
-void TInteractiveCLI::Run() {
+int TInteractiveCLI::Run(TClientCommand::TConfig& config) {
+    std::string cliVersion;
+    try {
+        cliVersion = StripString(NResource::Find(TStringBuf(VersionResourceName)));
+    } catch (const std::exception& e) {
+        cliVersion.clear();
+    }
+
+    NColorizer::TColors colors = NColorizer::AutoColors(Cout);
+    Cout << "Welcome to YDB CLI";
+    if (!cliVersion.empty()) {
+        Cout << " " << colors.BoldColor() << cliVersion << colors.OldColor() ;
+    }
+    Cout << " interactive mode";
+
+    auto driver = TDriver(config.CreateDriverConfig());
+    NQuery::TQueryClient client(driver);
+    auto selectVersionResult = client.RetryQuery([](NQuery::TSession session) {
+        return session.ExecuteQuery("SELECT version() AS version;", NQuery::TTxControl::NoTx());
+    }).GetValueSync();
+    std::string serverVersion;
+    if (selectVersionResult.IsSuccess()) {
+        try {
+            auto parser = selectVersionResult.GetResultSetParser(0);
+            parser.TryNextRow();
+            serverVersion = parser.ColumnParser("version").GetString();
+        } catch (const std::exception& e) {
+            Cerr << Endl << "Couldn't parse server version: " << e.what() << Endl;
+        }
+    }
+    if (!serverVersion.empty()) {
+        Cout << " (YDB Server " << colors.BoldColor() << serverVersion << colors.OldColor() << ")" << Endl;
+    } else {
+        Cout << Endl;
+        auto select1Status = client.RetryQuerySync([](NQuery::TSession session) {
+            return session.ExecuteQuery("SELECT 1;", NQuery::TTxControl::NoTx()).GetValueSync();
+        });
+        if (!select1Status.IsSuccess()) {
+            Cerr << "Couldn't connect to YDB server:" << Endl << select1Status << Endl;
+            return EXIT_FAILURE;
+        }
+    }
+
+    Cout << colors.BoldColor() << "Hotkeys:" << colors.OldColor() << Endl
+        << "  " << colors.BoldColor() << "Up and Down arrow keys" << colors.OldColor() << ": navigate through query history." << Endl
+        << "  " << colors.BoldColor() << "TAB" << colors.OldColor() << ": complete the current word based on YQL syntax." << Endl
+        << "  " << colors.BoldColor() << "Ctrl+R" << colors.OldColor() << ": search for a query in history containing a specified substring." << Endl
+        << "  " << colors.BoldColor() << "Ctrl+D" << colors.OldColor() << ": exit interactive mode." << Endl
+        << Endl;
+
     TFsPath homeDirPath(HomeDir);
     TString historyFilePath(homeDirPath / ".ydb_history");
-    std::unique_ptr<ILineReader> lineReader = CreateLineReader(Prompt, historyFilePath, Config);
+    std::unique_ptr<ILineReader> lineReader = CreateLineReader(Prompt, historyFilePath, config);
 
     InteractiveCLIState interactiveCLIState;
 
@@ -167,7 +221,7 @@ void TInteractiveCLI::Run() {
                 }
 
                 TCommandExplain explainCommand(explainQuery, "data", printAst);
-                explainCommand.Run(Config);
+                explainCommand.Run(config);
                 continue;
             }
 
@@ -175,7 +229,7 @@ void TInteractiveCLI::Run() {
             TString queryLowerCase = to_lower(query);
             if (queryLowerCase == "quit" || queryLowerCase == "exit") {
                 std::cout << "Bye" << std::endl;
-                return;
+                return EXIT_SUCCESS;
             }
 
             TString queryStatsMode(NTable::QueryStatsModeToString(interactiveCLIState.CollectStatsMode));
@@ -183,7 +237,7 @@ void TInteractiveCLI::Run() {
             sqlCommand.SetScript(std::move(query));
             sqlCommand.SetCollectStatsMode(std::move(queryStatsMode));
             sqlCommand.SetSyntax("yql");
-            sqlCommand.Run(Config);
+            sqlCommand.Run(config);
         } catch (NStatusHelpers::TYdbErrorException& error) {
             Cerr << error;
         } catch (yexception& error) {
@@ -194,6 +248,7 @@ void TInteractiveCLI::Run() {
     }
 
     std::cout << std::endl << "Bye" << std::endl;
+    return EXIT_SUCCESS;
 }
 
 } // namespace NYdb::NConsoleClient

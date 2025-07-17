@@ -16,7 +16,6 @@ public:
         , Event(resolvedEv->Get()->Request)
         , ScopeId(resolvedEv->Get()->ScopeId)
         , ServicedSubDomain(resolvedEv->Get()->ServicedSubDomain)
-        , BridgePileId(resolvedEv->Get()->BridgePileId)
         , ResolveError(std::move(resolvedEv->Get()->Error))
         , NodeId(0)
         , ExtendLease(false)
@@ -120,12 +119,12 @@ public:
                              TStringBuilder() << "Another location is registered for "
                              << host << ":" << port,
                              ctx);
+            } else if (node.Location.GetBridgePileName() != loc.GetBridgePileName()) {
+                return Error(TStatus::WRONG_REQUEST, "Can't change bridge pile for the node", ctx);
             } else if (node.Location != loc) {
                 Self->Dirty.UpdateLocation(node, loc);
                 Self->Dirty.DbAddNode(node, txc);
                 SetLocation = true;
-            } else if (node.BridgePileId != node.BridgePileId) {
-                return Error(TStatus::WRONG_REQUEST, "Can't change bridge pile for the node", ctx);
             }
 
             if (!node.IsFixed() && rec.GetFixedNodeId()) {
@@ -170,7 +169,6 @@ public:
             Node->Expire = expire;
             Node->Version = Self->Dirty.Epoch.Version + 1;
             Node->State = ENodeState::Active;
-            Node->BridgePileId = BridgePileId;
 
             if (Self->EnableStableNodeNames) {
                 Node->ServicedSubDomain = ServicedSubDomain;
@@ -243,7 +241,6 @@ private:
     TEvNodeBroker::TEvRegistrationRequest::TPtr Event;
     const NActors::TScopeId ScopeId;
     const TSubDomainKey ServicedSubDomain;
-    const std::optional<TBridgePileId> BridgePileId;
     TString ResolveError;
     TAutoPtr<TEvNodeBroker::TEvRegistrationResponse> Response;
     THolder<TNodeInfo> Node;

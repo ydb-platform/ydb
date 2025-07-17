@@ -110,29 +110,27 @@ public:
 
             if (node.Address != rec.GetAddress()
                     || node.ResolveHost != rec.GetResolveHost()) {
-                LOG_WARN_S(ctx, NKikimrServices::NODE_BROKER,
-                            "Another address is registered for " << host << ":" << port
-                            << " resolvehost=" << node.ResolveHost
-                            << " address=" << node.Address
-                            << " rec_resolvehost=" << rec.GetResolveHost()
-                            << " rec_address=" << rec.GetAddress());
+                auto errorText = TStringBuilder()
+                                << "Another address is registered for "
+                                << host << ":" << port
+                                << " resolvehost=" << node.ResolveHost
+                                << " address=" << node.Address
+                                << " rec_resolvehost=" << rec.GetResolveHost()
+                                << " rec_address=" << rec.GetAddress();
 
-                return Error(TStatus::WRONG_REQUEST,
-                             TStringBuilder() << "Another address is registered for "
-                             << host << ":" << port,
-                             ctx);
+                LOG_WARN_S(ctx, NKikimrServices::NODE_BROKER, errorText);
+                return Error(TStatus::WRONG_REQUEST, std::move(errorText), ctx);
             }
 
             if (node.Location != loc && node.Location != TNodeLocation()) {
-                LOG_WARN_S(ctx, NKikimrServices::NODE_BROKER,
-                            "Another location is registered for " << host << ":" << port
-                            << " location=" << node.Location.ToString()
-                            << " rec_location=" << loc.ToString());
+                auto errorText = TStringBuilder()
+                                << "Another location is registered for "
+                                << host << ":" << port
+                                << " location=" << node.Location.ToString()
+                                << " rec_location=" << loc.ToString();
 
-                return Error(TStatus::WRONG_REQUEST,
-                             TStringBuilder() << "Another location is registered for "
-                             << host << ":" << port,
-                             ctx);
+                LOG_WARN_S(ctx, NKikimrServices::NODE_BROKER, errorText);
+                return Error(TStatus::WRONG_REQUEST, std::move(errorText), ctx);
             } else if (node.Location != loc) {
                 Self->Dirty.UpdateLocation(node, loc);
                 Self->Dirty.DbAddNode(node, txc);

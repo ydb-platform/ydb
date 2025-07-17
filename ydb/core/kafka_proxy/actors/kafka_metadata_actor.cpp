@@ -5,6 +5,8 @@
 #include <ydb/core/grpc_services/grpc_endpoint.h>
 #include <ydb/core/base/statestorage.h>
 #include <ydb/core/persqueue/list_all_topics_actor.h>
+#include <ydb/core/kafka_proxy/actors/kafka_create_topics_actor.h>
+#include <ydb/core/kafka_proxy/kafka_messages.cpp>
 
 namespace NKafka {
 using namespace NKikimr;
@@ -252,11 +254,36 @@ void TKafkaMetadataActor::HandleLocationResponse(TEvLocationResponse::TPtr ev, c
             KAFKA_LOG_D("Describe topic '" << topic.Name << "' location finishied successful");
             PendingTopicResponses.emplace(index, locationResponse);
         } else {
-            KAFKA_LOG_ERROR("Describe topic '" << topic.Name << "' location finishied with error: Code=" << locationResponse->Status << ", Issues=" << locationResponse->Issues.ToOneLineString());
-            AddTopicError(topic, ConvertErrorCode(locationResponse->Status));
+            // ! мб тут create?
+            // TCreateTopicsRequestData create_topic_request;
+            // std::shared_ptr<TCreateTopicsRequestData> create_topic_request;
+            // std::shared_ptr<TApiMessage> request = std::move(CreateRequest(CREATE_TOPICS));
+            // request->Write(TKafkaWritable &writable, TKafkaVersion version)
+            auto message = std::make_shared<NKafka::TCreateTopicsRequestData>();
+            TCreateTopicsRequestData::TCreatableTopic topic_to_create;
+            topic_to_create.Name = topic.Name;
+            message->Topics.push_back(topic_to_create);
+
+
+            // TMessagePtr<TCreateTopicsRequestData>  topic_request(create_topic_request);
+
+            // create_topic_request.Topics.push_back(topic_to_create);
+            // topic_request->Topics.push_back(topic_to_create);
+
+            // request.Topics.push_back()
+            // KAFKA_LOG_ERROR("Describe topic '" << topic.Name << "' location finishied with error: Code=" << locationResponse->Status << ", Issues=" << locationResponse->Issues.ToOneLineString());
+            // AddTopicError(topic, ConvertErrorCode(locationResponse->Status));
+            ctx.Register(new TKafkaCreateTopicsActor(Context,
+                0,
+                TMessagePtr<NKafka::TCreateTopicsRequestData>({}, message)
+            ));
         }
     }
     RespondIfRequired(ctx);
+}
+
+void TKafkaMetadataActor::Handle(const TEvKafka::TEvTopicModificationResponse::TPtr&, const TActorContext&) {
+    KAFKA_LOG_D("Entered TEvTopicModificationResponse");
 }
 
 void TKafkaMetadataActor::AddBroker(ui64 nodeId, const TString& host, ui64 port) {

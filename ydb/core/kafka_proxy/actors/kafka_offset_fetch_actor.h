@@ -3,6 +3,18 @@
 #include "../kqp_helper.h"
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/core/tx/replication/ydb_proxy/ydb_proxy.h>
+#include <ydb/core/tx/replication/ydb_proxy/local_proxy/local_proxy.h>
+#include <ydb/core/tx/replication/ydb_proxy/local_proxy/local_proxy_request.h>
+#include <ydb/public/api/protos/ydb_topic.pb.h>
+#include <ydb/public/api/protos/ydb_persqueue_v1.pb.h>
+#include <ydb/core/grpc_services/base/base.h>
+#include <ydb/services/persqueue_v1/grpc_pq_schema.h>
+
+#include <ydb/core/grpc_services/service_scheme.h>
+#include <ydb/core/grpc_services/service_topic.h>
+#include <ydb/library/yverify_stream/yverify_stream.h>
+#include <ydb/public/api/protos/ydb_table.pb.h>
 
 namespace NKafka {
 
@@ -21,6 +33,11 @@ const TString FETCH_ASSIGNMENTS = R"sql(
 struct TopicEntities {
     std::shared_ptr<TSet<TString>> Consumers = std::make_shared<TSet<TString>>();
     std::shared_ptr<TSet<ui32>> Partitions = std::make_shared<TSet<ui32>>();
+};
+
+struct AlterTopicInfo {
+    TString TopicName;
+    TopicEntities Entities;
 };
 
 class TKafkaOffsetFetchActor: public NActors::TActorBootstrapped<TKafkaOffsetFetchActor> {
@@ -42,12 +59,14 @@ public:
             HFunc(TEvKafka::TEvCommitedOffsetsResponse, Handle);
             HFunc(NKqp::TEvKqp::TEvQueryResponse, Handle);
             HFunc(NKqp::TEvKqp::TEvCreateSessionResponse, Handle);
+            HFunc(NKikimr::NReplication::TEvYdbProxy::TEvAlterTopicResponse, Handle);
         }
     }
 
     void Handle(TEvKafka::TEvCommitedOffsetsResponse::TPtr& ev, const TActorContext& ctx);
     void Handle(NKqp::TEvKqp::TEvCreateSessionResponse::TPtr& ev, const TActorContext& ctx);
     void Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr ev, const TActorContext& ctx);
+    void Handle(NKikimr::NReplication::TEvYdbProxy::TEvAlterTopicResponse::TPtr& ev, const TActorContext& ctx);
     void ExtractPartitions(const TString& group, const NKafka::TOffsetFetchRequestData::TOffsetFetchRequestGroup::TOffsetFetchRequestTopics& topic);
     void ParseGroupsAssignments(NKqp::TEvKqp::TEvQueryResponse::TPtr ev, std::vector<std::pair<std::optional<TString>, TConsumerProtocolAssignment>>& assignments);
     TOffsetFetchResponseData::TPtr GetOffsetFetchResponse();
@@ -67,6 +86,7 @@ private:
     std::unordered_map<TString, TAutoPtr<TEvKafka::TEvCommitedOffsetsResponse>> TopicsToResponses;
     std::unordered_map<TString, ui32> GroupIdToIndex;
     std::unordered_map<ui32, TString> CookieToGroupId;
+    std::unordered_map<ui32, AlterTopicInfo> AlterTopicInf;
     std::unique_ptr<NKafka::TKqpTxHelper> Kqp;
 
     ui32 InflyTopics = 0;

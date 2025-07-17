@@ -231,6 +231,7 @@ public:
                 case EILSEQ:    return EIoResult::InvalidSequence;
                 case ENODATA:   return EIoResult::NoData;
                 case EREMOTEIO:   return EIoResult::RemoteIOError;
+                case ENODEV:    return EIoResult::NoDevice;
                 default: Y_FAIL_S(PDiskInfo << " unexpected error in " << info << ", error# " << -ret
                                  << " strerror# " << strerror(-ret));
             }

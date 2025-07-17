@@ -10,6 +10,8 @@ PEERDIR(
     ydb/core/kqp/workload_service/actors
     ydb/core/testlib
 
+    ydb/library/aclib
+
     ydb/tests/tools/kqprun/runlib
     ydb/tests/tools/kqprun/src/proto
 

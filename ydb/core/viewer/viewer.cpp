@@ -25,6 +25,16 @@
 #include <yql/essentials/public/issue/yql_issue_message.h>
 #include <ydb/public/api/protos/ydb_monitoring.pb.h>
 
+template<>
+void Out<std::vector<ui32>>(IOutputStream& o, const std::vector<ui32>& v) {
+    for (size_t i = 0; i < v.size(); ++i) {
+        if (i > 0) {
+            o << ',';
+        }
+        o << v[i];
+    }
+}
+
 namespace NKikimr::NViewer {
 
 using namespace NNodeWhiteboard;
@@ -55,17 +65,35 @@ public:
         Become(&TThis::StateWork);
         NActors::TMon* mon = AppData(ctx)->Mon;
         if (mon) {
+            TVector<TString> databaseAllowedSIDs;
             TVector<TString> viewerAllowedSIDs;
             TVector<TString> monitoringAllowedSIDs;
             {
+                const auto& protoAllowedSIDs = KikimrRunConfig.AppConfig.GetDomainsConfig().GetSecurityConfig().GetDatabaseAllowedSIDs();
+                for (const auto& sid : protoAllowedSIDs) {
+                    databaseAllowedSIDs.emplace_back(sid);
+                }
+            }
+            {
                 const auto& protoAllowedSIDs = KikimrRunConfig.AppConfig.GetDomainsConfig().GetSecurityConfig().GetViewerAllowedSIDs();
                 for (const auto& sid : protoAllowedSIDs) {
+                    databaseAllowedSIDs.emplace_back(sid);
                     viewerAllowedSIDs.emplace_back(sid);
                 }
             }
             {
                 const auto& protoAllowedSIDs = KikimrRunConfig.AppConfig.GetDomainsConfig().GetSecurityConfig().GetMonitoringAllowedSIDs();
                 for (const auto& sid : protoAllowedSIDs) {
+                    databaseAllowedSIDs.emplace_back(sid);
+                    viewerAllowedSIDs.emplace_back(sid);
+                    monitoringAllowedSIDs.emplace_back(sid);
+                }
+            }
+            {
+                const auto& protoAllowedSIDs = KikimrRunConfig.AppConfig.GetDomainsConfig().GetSecurityConfig().GetAdministrationAllowedSIDs();
+                for (const auto& sid : protoAllowedSIDs) {
+                    databaseAllowedSIDs.emplace_back(sid);
+                    viewerAllowedSIDs.emplace_back(sid);
                     monitoringAllowedSIDs.emplace_back(sid);
                 }
             }
@@ -74,28 +102,10 @@ public:
                 .ActorSystem = ctx.ActorSystem(),
                 .ActorId = ctx.SelfID,
                 .UseAuth = true,
-                .AllowedSIDs = viewerAllowedSIDs,
+                .AllowedSIDs = databaseAllowedSIDs,
             });
             mon->RegisterActorPage({
                 .RelPath = "viewer/capabilities",
-                .ActorSystem = ctx.ActorSystem(),
-                .ActorId = ctx.SelfID,
-                .UseAuth = false,
-            });
-            mon->RegisterActorPage({
-                .RelPath = "viewer/json/capabilities", // temporary handling of old paths
-                .ActorSystem = ctx.ActorSystem(),
-                .ActorId = ctx.SelfID,
-                .UseAuth = false,
-            });
-            mon->RegisterActorPage({
-                .RelPath = "viewer/whoami",
-                .ActorSystem = ctx.ActorSystem(),
-                .ActorId = ctx.SelfID,
-                .UseAuth = false,
-            });
-            mon->RegisterActorPage({
-                .RelPath = "viewer/json/whoami", // temporary handling of old paths
                 .ActorSystem = ctx.ActorSystem(),
                 .ActorId = ctx.SelfID,
                 .UseAuth = false,
@@ -158,14 +168,14 @@ public:
                 .ActorSystem = ctx.ActorSystem(),
                 .ActorId = ctx.SelfID,
                 .UseAuth = true,
-                .AllowedSIDs = viewerAllowedSIDs,
+                .AllowedSIDs = databaseAllowedSIDs,
             });
             mon->RegisterActorPage({
                 .RelPath = "storage",
                 .ActorSystem = ctx.ActorSystem(),
                 .ActorId = ctx.SelfID,
                 .UseAuth = true,
-                .AllowedSIDs = viewerAllowedSIDs,
+                .AllowedSIDs = databaseAllowedSIDs,
             });
             if (!KikimrRunConfig.AppConfig.GetMonitoringConfig().GetHideHttpEndpoint()) {
                 auto whiteboardServiceId = NNodeWhiteboard::MakeNodeWhiteboardServiceId(ctx.SelfID.NodeId());
@@ -229,7 +239,7 @@ public:
     TString GetHTTPFORBIDDEN(const TRequestState& request, TString type, TString response) override;
     TString GetHTTPNOTFOUND(const TRequestState& request) override;
     TString GetHTTPINTERNALERROR(const TRequestState& request, TString contentType = {}, TString response = {}) override;
-    TString GetHTTPFORWARD(const TRequestState& request, const TString& location) override;
+    TString GetHTTPFORWARD(const TRequestState& request, const TString& location, const TString& candidates) override;
 
     bool CheckAccessAdministration(const TRequestState& request) override {
         auto userTokenObject = request.GetUserTokenObject();
@@ -239,6 +249,18 @@ public:
             }
         }
         return IsTokenAllowed(userTokenObject, AppData()->DomainsConfig.GetSecurityConfig().GetAdministrationAllowedSIDs());
+    }
+
+    bool CheckAccessViewer(const TRequestState& request) override {
+        auto userTokenObject = request.GetUserTokenObject();
+        if (!KikimrRunConfig.AppConfig.GetDomainsConfig().GetSecurityConfig().GetEnforceUserTokenRequirement()) {
+            if (!KikimrRunConfig.AppConfig.GetDomainsConfig().GetSecurityConfig().GetEnforceUserTokenCheckRequirement() || userTokenObject.empty()) {
+                return true;
+            }
+        }
+        return IsTokenAllowed(userTokenObject, AppData()->DomainsConfig.GetSecurityConfig().GetViewerAllowedSIDs())
+            || IsTokenAllowed(userTokenObject, AppData()->DomainsConfig.GetSecurityConfig().GetMonitoringAllowedSIDs())
+            || IsTokenAllowed(userTokenObject, AppData()->DomainsConfig.GetSecurityConfig().GetAdministrationAllowedSIDs());
     }
 
     static bool IsStaticGroup(ui32 groupId) {
@@ -311,6 +333,14 @@ public:
         }
     }
 
+    static TString GetAddressWithoutPort(const TString& address) {
+        auto pos = address.rfind(':');
+        if (pos != TString::npos) {
+            return address.substr(0, pos);
+        }
+        return address;
+    }
+
     TString MakeForward(const TRequestState& request, const std::vector<ui32>& nodes) override {
         if (nodes.empty()) {
             return GetHTTPBADREQUEST(request, "text/plain", "Couldn't resolve database nodes");
@@ -319,14 +349,21 @@ public:
             return GetHTTPBADREQUEST(request, "text/plain", "Can't do double forward");
         }
         // we expect that nodes order is the same for all requests
-        ui64 hash = std::hash<TString>()(request.GetRemoteAddr());
+        TString address = GetAddressWithoutPort(request.GetRemoteAddr());
+        ui64 hash = std::hash<TString>()(address);
         auto it = std::next(nodes.begin(), hash % nodes.size());
 
+        TStringBuilder candidates;
+        if (FromStringWithDefault<bool>(request.GetHeader("X-Get-Forwarded-Candidates"), false)) {
+            candidates << "X-Forwarded-Remote-Addr: " << address << "\r\n";
+            candidates << "X-Forwarded-Candidates: " << nodes << "\r\n";
+            candidates << "X-Forwarded-Hash: " << hash << "\r\n";
+        }
         TStringBuilder redirect;
         redirect << "/node/";
         redirect << *it;
         redirect << request.GetUri();
-        return GetHTTPFORWARD(request, redirect);
+        return GetHTTPFORWARD(request, redirect, candidates);
     }
 
     std::unordered_map<TString, TActorId> RunningQueries;
@@ -907,10 +944,11 @@ TString TViewer::GetHTTPINTERNALERROR(const TRequestState& request, TString cont
     return res;
 }
 
-TString TViewer::GetHTTPFORWARD(const TRequestState& request, const TString& location) {
+TString TViewer::GetHTTPFORWARD(const TRequestState& request, const TString& location, const TString& candidates) {
     TStringBuilder res;
     res << "HTTP/1.1 307 Temporary Redirect\r\n"
         << "Location: " << location << "\r\n"
+        << candidates
         << "Connection: Keep-Alive\r\n"
         << "Content-Length: 0\r\n";
     FillCORS(res, request);

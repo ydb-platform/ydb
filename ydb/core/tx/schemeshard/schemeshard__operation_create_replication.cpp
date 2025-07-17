@@ -1,7 +1,7 @@
-#include "schemeshard__operation_part.h"
-#include "schemeshard__operation_common.h"
-#include "schemeshard_impl.h"
 #include "schemeshard__op_traits.h"
+#include "schemeshard__operation_common.h"
+#include "schemeshard__operation_part.h"
+#include "schemeshard_impl.h"
 
 #include <ydb/core/mind/hive/hive.h>
 #include <ydb/core/tx/replication/controller/public_events.h>
@@ -149,6 +149,7 @@ public:
                 ev->Record.MutableOperationId()->SetTxId(ui64(OperationId.GetTxId()));
                 ev->Record.MutableOperationId()->SetPartId(ui32(OperationId.GetSubTxId()));
                 ev->Record.MutableConfig()->CopyFrom(alterData->Description.GetConfig());
+                ev->Record.SetDatabase(TPath::Init(context.SS->RootPathId(), context.SS).PathString());
 
                 LOG_D(DebugHint() << "Send TEvCreateReplication to controller"
                     << ": tabletId# " << tabletId
@@ -392,7 +393,7 @@ public:
 
             if (checks) {
                 checks
-                    .IsValidLeafName()
+                    .IsValidLeafName(context.UserToken.Get())
                     .DepthLimit()
                     .PathsLimit()
                     .DirChildrenLimit()

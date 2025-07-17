@@ -13,6 +13,7 @@ import "ydb/core/protos/tx.proto";
 import "ydb/core/protos/flat_scheme_op.proto";
 import "ydb/core/protos/table_stats.proto";
 import "ydb/core/protos/subdomains.proto";
+import "ydb/core/protos/sys_view_types.proto";
 import "ydb/core/protos/query_stats.proto";
 import "ydb/public/api/protos/ydb_issue_message.proto";
 import "ydb/public/api/protos/ydb_status_codes.proto";
@@ -152,6 +153,7 @@ message TKqpTransaction {
         // reserved 4
         optional string SysViewInfo = 5;
         optional uint32 TableKind = 6;      // NKikimr::NKqp::ETableKind
+        optional NKikimrSysView.TSysViewDescription SysViewDescription = 7;
     }
 
     // Data-query task meta
@@ -435,6 +437,13 @@ message TDropCdcStreamNotice {
     optional TSnapshot DropSnapshot = 4;
 }
 
+message TRotateCdcStreamNotice {
+    optional NKikimrProto.TPathID PathId = 1;
+    optional uint64 TableSchemaVersion = 2;
+    optional NKikimrProto.TPathID OldStreamPathId = 3;
+    optional NKikimrSchemeOp.TCdcStreamDescription NewStreamDescription = 4;
+}
+
 message TAsyncIndexInfo {
 }
 
@@ -496,6 +505,7 @@ message TFlatSchemeTransaction {
     optional TCreateCdcStreamNotice CreateCdcStreamNotice = 18;
     optional TAlterCdcStreamNotice AlterCdcStreamNotice = 19;
     optional TDropCdcStreamNotice DropCdcStreamNotice = 20;
+    optional TRotateCdcStreamNotice RotateCdcStreamNotice = 24;
     optional TMoveIndex MoveIndex = 21;
 
     optional NKikimrSchemeOp.TRestoreIncrementalBackup CreateIncrementalRestoreSrc = 22;
@@ -1431,7 +1441,7 @@ message TEvConditionalEraseRowsResponse {
 }
 
 message TEvBuildIndexCreateRequest {
-    optional uint64 BuildIndexId = 1;          // unique id of build index process
+    optional uint64 Id = 1;          // unique id of build index process
 
     optional uint64 TabletId = 2;
     optional uint64 OwnerId = 3;
@@ -1460,7 +1470,7 @@ message TEvBuildIndexCreateRequest {
 }
 
 message TEvBuildIndexProgressResponse {
-    optional uint64 BuildIndexId = 1;
+    optional uint64 Id = 1;
 
     optional uint64 TabletId = 2;
     optional uint64 OwnerId = 3;
@@ -1514,14 +1524,14 @@ message TEvSampleKResponse {
     optional NKikimrIndexBuilder.EBuildStatus Status = 4;
     repeated Ydb.Issue.IssueMessage Issues = 5;
 
-    optional uint64 ReadRows = 6;
-    optional uint64 ReadBytes = 7;
-
     optional uint64 RequestSeqNoGeneration = 8;
     optional uint64 RequestSeqNoRound = 9;
 
     repeated uint64 Probabilities = 10;
     repeated bytes Rows = 11;
+
+    reserved 6 to 7;
+    optional NKikimrIndexBuilder.TMeteringStats MeteringStats = 12;
 }
 
 enum EKMeansState {
@@ -1556,14 +1566,12 @@ message TEvLocalKMeansRequest {
     optional uint32 K = 10;
     optional uint32 NeedsRounds = 14;
 
-    // id of parent cluster
     optional uint64 ParentFrom = 15;
     optional uint64 ParentTo = 21;
-    // [Child ... Child + K * (ParentFrom - ParentTo + 1)) ids reserved for this kmeans clusters
     optional uint64 Child = 16;
 
     optional string LevelName = 17;
-    optional string PostingName = 18;
+    optional string OutputName = 18;
 
     optional string EmbeddingColumn = 19;
     repeated string DataColumns = 20;
@@ -1583,10 +1591,8 @@ message TEvLocalKMeansResponse {
     optional NKikimrIndexBuilder.EBuildStatus Status = 6;
     repeated Ydb.Issue.IssueMessage Issues = 7;
 
-    optional uint64 UploadRows = 8;
-    optional uint64 UploadBytes = 9;
-    optional uint64 ReadRows = 10;
-    optional uint64 ReadBytes = 11;
+    reserved 8 to 11;
+    optional NKikimrIndexBuilder.TMeteringStats MeteringStats = 12;
 }
 
 message TEvReshuffleKMeansRequest {
@@ -1612,7 +1618,7 @@ message TEvReshuffleKMeansRequest {
     // centroids of clusters
     repeated string Clusters = 12;
 
-    optional string PostingName = 13;
+    optional string OutputName = 13;
 
     optional string EmbeddingColumn = 14;
     repeated string DataColumns = 15;
@@ -1632,10 +1638,69 @@ message TEvReshuffleKMeansResponse {
     optional NKikimrIndexBuilder.EBuildStatus Status = 6;
     repeated Ydb.Issue.IssueMessage Issues = 7;
 
-    optional uint64 UploadRows = 8;
-    optional uint64 UploadBytes = 9;
-    optional uint64 ReadRows = 10;
-    optional uint64 ReadBytes = 11;
+    reserved 8 to 11;
+    optional NKikimrIndexBuilder.TMeteringStats MeteringStats = 12;
+}
+
+message TEvRecomputeKMeansRequest {
+    optional uint64 Id = 1;
+
+    optional uint64 TabletId = 2;
+    optional NKikimrProto.TPathID PathId = 3;
+
+    optional uint64 SnapshotTxId = 4;
+    optional uint64 SnapshotStep = 5;
+
+    optional uint64 SeqNoGeneration = 6;
+    optional uint64 SeqNoRound = 7;
+
+    optional Ydb.Table.VectorIndexSettings Settings = 8;
+
+    // id of parent cluster
+    optional uint64 Parent = 9;
+    // centroids of clusters
+    repeated string Clusters = 10;
+
+    optional string EmbeddingColumn = 11;
+}
+
+message TEvRecomputeKMeansResponse {
+    optional uint64 Id = 1;
+
+    optional uint64 TabletId = 2;
+    optional NKikimrProto.TPathID PathId = 3;
+
+    optional uint64 RequestSeqNoGeneration = 4;
+    optional uint64 RequestSeqNoRound = 5;
+
+    optional NKikimrIndexBuilder.EBuildStatus Status = 6;
+    repeated Ydb.Issue.IssueMessage Issues = 7;
+
+    // recomputed clusters and cluster sizes (row counts for every cluster)
+    repeated bytes Clusters = 10;
+    repeated uint64 ClusterSizes = 11;
+
+    reserved 8 to 9;
+    optional NKikimrIndexBuilder.TMeteringStats MeteringStats = 12;
+}
+
+message TEvIncrementalRestoreResponse {
+    enum Status {
+        SUCCESS = 0;
+        RETRY = 1;
+        ERROR = 2;
+    }
+    
+    optional uint64 TxId = 1;
+    optional uint64 TableId = 2;
+    optional uint64 OperationId = 3;
+    optional uint32 IncrementalIdx = 4;
+    optional Status RestoreStatus = 5;
+    optional string ErrorMessage = 6;
+    optional uint64 ProcessedRows = 7;
+    optional uint64 ProcessedBytes = 8;
+    optional bytes LastProcessedKey = 9;
+    optional uint64 ShardIdx = 10;
 }
 
 message TEvPrefixKMeansRequest {
@@ -1660,7 +1725,7 @@ message TEvPrefixKMeansRequest {
     optional uint64 Child = 11;
 
     optional string LevelName = 12;
-    optional string PostingName = 13;
+    optional string OutputName = 13;
     optional string PrefixName = 14;
 
     optional string EmbeddingColumn = 15;
@@ -1668,6 +1733,8 @@ message TEvPrefixKMeansRequest {
     optional uint32 PrefixColumns = 17;
 
     optional NKikimrIndexBuilder.TIndexBuildScanSettings ScanSettings = 18;
+
+    repeated string SourcePrimaryKeyColumns = 19;
 }
 
 message TEvPrefixKMeansResponse {
@@ -1682,10 +1749,8 @@ message TEvPrefixKMeansResponse {
     optional NKikimrIndexBuilder.EBuildStatus Status = 6;
     repeated Ydb.Issue.IssueMessage Issues = 7;
 
-    optional uint64 UploadRows = 8;
-    optional uint64 UploadBytes = 9;
-    optional uint64 ReadRows = 10;
-    optional uint64 ReadBytes = 11;
+    reserved 8 to 11;
+    optional NKikimrIndexBuilder.TMeteringStats MeteringStats = 12;
 }
 
 message TEvCdcStreamScanRequest {
@@ -2189,6 +2254,12 @@ message TTxVolatileDetails {
     // When true marks an arbiter for other participants
     // Arbiters hold outgoing readsets until the transaction is decided
     optional bool IsArbiter = 9;
+
+    // When true readset expectations are disabled
+    // This is used when converting non-volatile distributed transactions to
+    // optimistic volatile execution for compatibility with shards which don't
+    // support readset flags.
+    optional bool DisableExpectations = 10;
 }
 
 // Sent by datashard when some overload reason stopped being relevant
@@ -2330,20 +2401,51 @@ message TEvInMemoryStateResponse {
 // Once the operation is done, any deleted data not used initially
 // will be included in garbage collection requests for the blobstorage.
 // Note: deleted data may still be used for a while, e.g. for history for MVCC.
-message TEvForceDataCleanup {
-    optional uint64 DataCleanupGeneration = 1; // increasing sequence
+message TEvVacuum {
+    optional uint64 VacuumGeneration = 1; // increasing sequence
 }
 
-// Returns DataCleanupGeneration of the last successfully completed TEvForceDataCleanup request.
-// Intermediate requests and corresponding TEvForceDataCleanupResult's may be skipped.
-message TEvForceDataCleanupResult {
+// Returns VacuumCleanupGeneration of the last successfully completed TEvVacuum request.
+// Intermediate requests and corresponding TEvVacuumResult's may be skipped.
+message TEvVacuumResult {
     enum EStatus {
         UNKNOWN = 0;
         OK = 1;
         WRONG_SHARD_STATE = 2;
         BORROWED = 3;
     };
-    optional uint64 DataCleanupGeneration = 1; // from corresponding request (or greater)
+    optional uint64 VacuumGeneration = 1; // from corresponding request (or greater)
     optional uint64 TabletId = 2;
     optional EStatus Status = 3;
+}
+
+message TEvValidateUniqueIndexRequest {
+    optional uint64 Id = 1; // unique id of build index process
+
+    optional uint64 TabletId = 2;
+    optional uint64 OwnerId = 3;
+    optional uint64 PathId = 4;
+
+    repeated string IndexColumns = 5; // key columns that is needed to transfer in terms of target table
+
+    optional uint64 SeqNoGeneration = 6; // monotonically increasing sequence, first part
+    optional uint64 SeqNoRound = 7; // monotonically increasing sequence, second part
+}
+
+message TEvValidateUniqueIndexResponse {
+    optional uint64 Id = 1;
+
+    optional uint64 TabletId = 2;
+
+    optional NKikimrIndexBuilder.EBuildStatus Status = 3;
+    repeated Ydb.Issue.IssueMessage Issues = 4;
+
+    optional uint64 RequestSeqNoGeneration = 5;
+    optional uint64 RequestSeqNoRound = 6;
+
+    // Rows that are required to perform cross shard validation
+    optional bytes FirstIndexKey = 7; // absent if no data in shard
+    optional bytes LastIndexKey = 8; // absent if no data in shard
+
+    optional NKikimrIndexBuilder.TMeteringStats MeteringStats = 9;
 }

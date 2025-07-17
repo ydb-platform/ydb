@@ -85,13 +85,12 @@ namespace NKikimr {
         str << "{Id# " << Id << "}";
     }
 
-    THullCtx::THullCtx(TVDiskContextPtr vctx, ui32 chunkSize, ui32 compWorthReadSize, bool freshCompaction,
-            bool gcOnlySynced, bool allowKeepFlags, bool barrierValidation, ui32 hullSstSizeInChunksFresh,
-            ui32 hullSstSizeInChunksLevel, double hullCompFreeSpaceThreshold, ui32 freshCompMaxInFlightWrites,
-            ui32 freshCompMaxInFlightReads, ui32 hullCompMaxInFlightWrites, ui32 hullCompMaxInFlightReads,
-            double hullCompReadBatchEfficiencyThreshold, TDuration hullCompStorageRatioCalcPeriod,
-            TDuration hullCompStorageRatioMaxCalcDuration, bool addHeader)
+    THullCtx::THullCtx(TVDiskContextPtr vctx, const TIntrusivePtr<TVDiskConfig> vcfg, ui32 chunkSize, ui32 compWorthReadSize,
+            bool freshCompaction, bool gcOnlySynced, bool allowKeepFlags, bool barrierValidation, ui32 hullSstSizeInChunksFresh,
+            ui32 hullSstSizeInChunksLevel, double hullCompFreeSpaceThreshold, double hullCompReadBatchEfficiencyThreshold,
+            TDuration hullCompStorageRatioCalcPeriod, TDuration hullCompStorageRatioMaxCalcDuration, bool addHeader)
         : VCtx(std::move(vctx))
+        , VCfg(vcfg)
         , IngressCache(TIngressCache::Create(VCtx->Top, VCtx->ShortSelfVDisk))
         , ChunkSize(chunkSize)
         , CompWorthReadSize(compWorthReadSize)
@@ -102,10 +101,6 @@ namespace NKikimr {
         , HullSstSizeInChunksFresh(hullSstSizeInChunksFresh)
         , HullSstSizeInChunksLevel(hullSstSizeInChunksLevel)
         , HullCompFreeSpaceThreshold(hullCompFreeSpaceThreshold)
-        , FreshCompMaxInFlightWrites(freshCompMaxInFlightWrites)
-        , FreshCompMaxInFlightReads(freshCompMaxInFlightReads)
-        , HullCompMaxInFlightWrites(hullCompMaxInFlightWrites)
-        , HullCompMaxInFlightReads(hullCompMaxInFlightReads)
         , HullCompReadBatchEfficiencyThreshold(hullCompReadBatchEfficiencyThreshold)
         , HullCompStorageRatioCalcPeriod(hullCompStorageRatioCalcPeriod)
         , HullCompStorageRatioMaxCalcDuration(hullCompStorageRatioMaxCalcDuration)

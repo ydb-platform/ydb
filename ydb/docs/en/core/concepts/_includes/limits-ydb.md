@@ -49,6 +49,7 @@ The table below lists the limits that apply to query execution.
 | Maximum number of sessions per cluster node | 1,000 | The limit on the number of sessions that clients can create with each {{ ydb-short-name }} node. | OVERLOADED |
 | Maximum query text length | 10 KB | The maximum allowable length of YQL query text. | BAD_REQUEST |
 | Maximum size of parameter values | 50 MB | The maximum total size of parameters passed when executing a previously prepared query. | BAD_REQUEST |
+| Maximum size of a row | 50 MB | The maximum total size of all fields of a single row returned or produced by the query. | PRECONDITION_FAILED |
 
 {% cut "Legacy Limits" %}
 
@@ -60,9 +61,3 @@ In previous versions of {{ ydb-short-name }}, queries were typically executed us
 | Maximum query result size | 50 MB | The complete results of some queries may exceed the set limit. If this occurs, the query will fail and return no data. | PRECONDITION_FAILED |
 
 {% endcut %}
-
-## Topic Limits {#topic}
-
-| Parameter | Value |
-| :--- | :--- |
-| Maximum size of a transmitted message | 12 MB |

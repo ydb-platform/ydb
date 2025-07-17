@@ -21,19 +21,7 @@ TConclusion<std::shared_ptr<IStepFunction>> TProgramBuilder::MakeFunction(const 
     const NKikimrSSA::TProgram::TAssignment::TFunction& func, std::shared_ptr<NArrow::NSSA::IKernelLogic>& kernelLogic,
     std::vector<TColumnChainInfo>& arguments) const {
     if (const auto& kernelName = func.GetKernelName(); !kernelName.empty()) {
-        if (kernelName == "String.AsciiEqualsIgnoreCase") {
-            kernelLogic = std::make_shared<TLogicMatchString>(TIndexCheckOperation::EOperation::Contains, false, false);
-        } else if (kernelName == "String.AsciiContainsIgnoreCase") {
-            kernelLogic = std::make_shared<TLogicMatchString>(TIndexCheckOperation::EOperation::Contains, false, false);
-        } else if (kernelName == "String.AsciiContainsIgnoreCase") {
-            kernelLogic = std::make_shared<TLogicMatchString>(TIndexCheckOperation::EOperation::Contains, false, false);
-        } else if (kernelName == "String.AsciiStartsWithIgnoreCase") {
-            kernelLogic = std::make_shared<TLogicMatchString>(TIndexCheckOperation::EOperation::StartsWith, false, false);
-        } else if (kernelName == "String.AsciiEndsWithIgnoreCase") {
-            kernelLogic = std::make_shared<TLogicMatchString>(TIndexCheckOperation::EOperation::EndsWith, false, false);
-        } else {
-            kernelLogic.reset(IKernelLogic::TFactory::Construct(kernelName));
-        }
+        kernelLogic.reset(IKernelLogic::TFactory::Construct(kernelName));
     } else if (func.HasYqlOperationId()) {
         kernelLogic = std::make_shared<TSimpleKernelLogic>(func.GetYqlOperationId());
     } else {

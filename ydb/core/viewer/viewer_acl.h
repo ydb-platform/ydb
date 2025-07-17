@@ -217,11 +217,6 @@ public:
         if (NeedToRedirect()) {
             return;
         }
-        if (Params.Has("path")) {
-            CacheResult = MakeRequestSchemeCacheNavigate(Params.Get("path"));
-        } else {
-            return ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "Parameter 'path' is required"));
-        }
         MergeRules = FromStringWithDefault<bool>(Params.Get("merge_rules"), MergeRules);
         if (Params.Has("dialect")) {
             static const std::unordered_map<TString, const TDialect*> dialects = {
@@ -230,13 +225,20 @@ public:
                 {"ydb", &YdbDialect},
                 {"yql", &YqlDialect},
             };
-            auto& dialect = Params.Get("dialect");
+            const auto& dialect = Params.Get("dialect");
             auto it = dialects.find(dialect);
             if (it != dialects.end()) {
                 Dialect = it->second;
             } else {
                 return ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "Unknown dialect"));
             }
+        }
+        if (FromStringWithDefault<bool>(Params.Get("list_permissions"))) {
+            return ReplyWithListAndPassAway();
+        } else if (Params.Has("path")) {
+            CacheResult = MakeRequestSchemeCacheNavigate(Params.Get("path"));
+        } else {
+            return ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "Parameter 'path' is required"));
         }
         Become(&TThis::StateRequestedDescribe, Timeout, new TEvents::TEvWakeup());
     }
@@ -427,6 +429,58 @@ public:
         }
     }
 
+    static bool IsLegacy(TString name) {
+        name.to_lower();
+        return name.find("legacy") != TString::npos;
+    }
+
+    void ReplyWithListAndPassAway() {
+        NJson::TJsonValue jsonRoot(NJson::JSON_MAP);
+        NJson::TJsonValue& root = jsonRoot["AvailablePermissions"];
+        NJson::TJsonValue& accessRules = root["AccessRules"] = NJson::TJsonValue(NJson::JSON_ARRAY);
+        for (auto itAccessRule = Dialect->AccessRules.begin(); itAccessRule != Dialect->AccessRules.end(); ++itAccessRule) {
+            auto [mask, name] = *itAccessRule;
+            NJson::TJsonValue& accessRule = accessRules.AppendValue({});
+            accessRule["Name"] = name;
+            accessRule["Mask"] = mask;
+            NJson::TJsonValue& subAccessRules = (accessRule["AccessRules"] = NJson::TJsonValue(NJson::JSON_ARRAY));
+            for (auto itSubAccessRule = std::next(itAccessRule); itSubAccessRule != Dialect->AccessRules.end(); ++itSubAccessRule) {
+                const auto& [subMask, subName] = *itSubAccessRule;
+                if (IsLegacy(subName)) {
+                    continue; // skip legacy rules
+                }
+                if ((mask & subMask) == subMask) {
+                    subAccessRules.AppendValue(subName);
+                    mask &= ~subMask; // remove submask from mask
+                }
+            }
+            NJson::TJsonValue& subAccessRights = (accessRule["AccessRights"] = NJson::TJsonValue(NJson::JSON_ARRAY));
+            for (auto itSubAccessRight = Dialect->AccessRights.begin(); itSubAccessRight != Dialect->AccessRights.end(); ++itSubAccessRight) {
+                const auto& [subMask, subName] = *itSubAccessRight;
+                if (IsLegacy(subName)) {
+                    continue; // skip legacy rights
+                }
+                if ((mask & subMask) == subMask) {
+                    subAccessRights.AppendValue(subName);
+                    mask &= ~subMask; // remove submask from mask
+                }
+            }
+        }
+        NJson::TJsonValue& accessRights = root["AccessRights"] = NJson::TJsonValue(NJson::JSON_ARRAY);
+        for (const auto& [mask, name] : Dialect->AccessRights) {
+            NJson::TJsonValue& accessRight = accessRights.AppendValue({});
+            accessRight["Name"] = name;
+            accessRight["Mask"] = mask;
+        }
+        NJson::TJsonValue& inheritanceTypes = root["InheritanceTypes"] = NJson::TJsonValue(NJson::JSON_ARRAY);
+        for (const auto& [mask, name] : Dialect->InheritanceTypes) {
+            NJson::TJsonValue& inheritanceType = inheritanceTypes.AppendValue({});
+            inheritanceType["Name"] = name;
+            inheritanceType["Mask"] = mask;
+        }
+        ReplyAndPassAway(GetHTTPOKJSON(jsonRoot));
+    }
+
     void ReplyAndPassAway() override {
         NKikimrViewer::TMetaInfo metaInfo;
         if (CacheResult.IsError()) {
@@ -498,11 +552,11 @@ public:
                   - ydb-short
                   - ydb
                   - yql
-              - name: timeout
+              - name: list_permissions
                 in: query
-                description: timeout in ms
+                description: lists all available permissions in specified dialect
                 required: false
-                type: integer
+                type: boolean
             responses:
                 200:
                     description: OK
@@ -598,11 +652,11 @@ public:
                   - ydb-short
                   - ydb
                   - yql
-              - name: timeout
+              - name: list_permissions
                 in: query
-                description: timeout in ms
+                description: lists all available permissions in specified dialect
                 required: false
-                type: integer
+                type: boolean
             requestBody:
                 description: Access rights changes
                 required: true

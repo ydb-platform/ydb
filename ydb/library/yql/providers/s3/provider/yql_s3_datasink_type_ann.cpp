@@ -2,7 +2,6 @@
 
 #include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
 #include <yql/essentials/core/yql_opt_utils.h>
-#include <ydb/library/yql/providers/s3/actors/yql_arrow_column_converters.h>
 #include <ydb/library/yql/providers/s3/common/util.h>
 #include <ydb/library/yql/providers/s3/expr_nodes/yql_s3_expr_nodes.h>
 
@@ -439,9 +438,14 @@ private:
                         return nullptr;
                     }
                 } else {
-                    ctx.AddError(TIssue(ctx.GetPosition(key->Pos()), "Missed key column."));
+                    ctx.AddError(TIssue(ctx.GetPosition(key->Pos()), TStringBuilder() << "Missing key column for partitioning: '" << key->Content() << "'. Please ensure the column is included in the schema."));
                     return nullptr;
                 }
+            }
+
+            if (structType->GetSize() <= keysCount) {
+                ctx.AddError(TIssue(ctx.GetPosition(format.Pos()), TStringBuilder() << "Write schema contains no columns except partitioning columns."));
+                return nullptr;
             }
 
             TTypeAnnotationNode::TListType itemTypes(keysCount + 1U, ctx.MakeType<TDataExprType>(EDataSlot::Utf8));

@@ -1,28 +1,31 @@
+#include <ydb/public/api/protos/ydb_export.pb.h>
+
 #include <ydb/core/backup/common/encryption.h>
 #include <ydb/core/metering/metering.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/tablet_flat/shared_cache_events.h>
 #include <ydb/core/testlib/actors/block_events.h>
+#include <ydb/core/testlib/audit_helpers/audit_helper.h>
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/schemeshard/schemeshard_billing_helpers.h>
-#include <ydb/core/tx/schemeshard/ut_helpers/auditlog_helpers.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/util/aws.h>
 #include <ydb/core/wrappers/s3_wrapper.h>
 #include <ydb/core/wrappers/ut_helpers/s3_mock.h>
-#include <ydb/public/api/protos/ydb_export.pb.h>
+
+#include <library/cpp/testing/hook/hook.h>
 
 #include <util/string/builder.h>
 #include <util/string/cast.h>
 #include <util/string/printf.h>
 #include <util/system/env.h>
 
-#include <library/cpp/testing/hook/hook.h>
-
 using namespace NSchemeShardUT_Private;
 using namespace NKikimr::NWrappers::NTestHelpers;
 
 using TTablesWithAttrs = TVector<std::pair<TString, TMap<TString, TString>>>;
+
+using namespace NKikimr::Tests;
 
 namespace {
 
@@ -170,7 +173,7 @@ namespace {
                   UNIT_ASSERT(exportDirDesc.GetPathDescription().ChildrenSize() >= 1);
                   UNIT_ASSERT_EQUAL(exportDirDesc.GetPathDescription().GetChildren(0).GetName(), "0");
               }
-          } 
+          }
 
           UNIT_ASSERT(foundExportDir);
           UNIT_ASSERT(foundOriginalTable);
@@ -621,7 +624,7 @@ namespace {
 
         void ShouldCheckQuotas(const TSchemeLimits& limits, Ydb::StatusIds::StatusCode expectedFailStatus) {
             const TString userSID = "user@builtin";
-            EnvOptions().SystemBackupSIDs({userSID});
+            EnvOptions().SystemBackupSIDs({userSID}).EnableRealSystemViewPaths(false);
             Env(); // Init test env
 
             SetSchemeshardSchemaLimits(Runtime(), limits);
@@ -653,7 +656,7 @@ namespace {
           EnvOptions().EnablePermissionsExport(enablePermissions);
           Env();
           ui64 txId = 100;
-    
+
           TestCreatePQGroup(Runtime(), ++txId, "/MyRoot", R"(
               Name: "Topic"
               TotalGroupCount: 2
@@ -665,7 +668,7 @@ namespace {
               }
           )");
           Env().TestWaitNotification(Runtime(), txId);
-    
+
           auto request = Sprintf(R"(
               ExportToS3Settings {
                 endpoint: "localhost:%d"
@@ -676,11 +679,11 @@ namespace {
                 }
               }
           )", S3Port());
-    
+
           auto schemeshardId = TTestTxConfig::SchemeShard;
           TestExport(Runtime(), schemeshardId, ++txId, "/MyRoot", request, "", "", Ydb::StatusIds::SUCCESS);
           Env().TestWaitNotification(Runtime(), txId, schemeshardId);
-    
+
           TestGetExport(Runtime(), schemeshardId, txId, "/MyRoot", Ydb::StatusIds::SUCCESS);
           UNIT_ASSERT(HasS3File("/create_topic.pb"));
           UNIT_ASSERT_STRINGS_EQUAL(GetS3FileContent("/create_topic.pb"), R"(partitioning_settings {
@@ -705,7 +708,7 @@ supported_codecs {
 partition_write_speed_bytes_per_second: 50000000
 partition_write_burst_bytes: 50000000
 )");
-    
+
           if (enablePermissions) {
             UNIT_ASSERT(HasS3File("/permissions.pb"));
             UNIT_ASSERT_STRINGS_EQUAL(GetS3FileContent("/permissions.pb"), R"(actions {
@@ -713,7 +716,7 @@ partition_write_burst_bytes: 50000000
 }
 )");
           }
-        
+
         };
 
     protected:
@@ -2440,7 +2443,7 @@ partitioning_settings {
 
         const auto* metadataChecksum = S3Mock().GetData().FindPtr("/metadata.json.sha256");
         UNIT_ASSERT(metadataChecksum);
-        UNIT_ASSERT_VALUES_EQUAL(*metadataChecksum, "b72575244ae0cce8dffd45f3537d1e412bfe39de4268f4f85f529cb529870903 metadata.json");
+        UNIT_ASSERT_VALUES_EQUAL(*metadataChecksum, "29c79eb8109b4142731fc894869185d6c0e99c4b2f605ea3fc726b0328b8e316 metadata.json");
 
         const auto* schemeChecksum = S3Mock().GetData().FindPtr("/scheme.pb.sha256");
         UNIT_ASSERT(schemeChecksum);
@@ -2507,7 +2510,7 @@ partitioning_settings {
 
         const auto* metadataChecksum = S3Mock().GetData().FindPtr("/metadata.json.sha256");
         UNIT_ASSERT(metadataChecksum);
-        UNIT_ASSERT_VALUES_EQUAL(*metadataChecksum, "b72575244ae0cce8dffd45f3537d1e412bfe39de4268f4f85f529cb529870903 metadata.json");
+        UNIT_ASSERT_VALUES_EQUAL(*metadataChecksum, "fbb85825fb12c5f38661864db884ba3fd1512fc4b0a2a41960d7d62d19318ab6 metadata.json");
 
         const auto* schemeChecksum = S3Mock().GetData().FindPtr("/scheme.pb.sha256");
         UNIT_ASSERT(schemeChecksum);
@@ -2899,7 +2902,7 @@ attributes {
               }
             }
         )", S3Port());
-        
+
         Env();
         Runtime().GetAppData().FeatureFlags.SetEnableExportAutoDropping(false);
 

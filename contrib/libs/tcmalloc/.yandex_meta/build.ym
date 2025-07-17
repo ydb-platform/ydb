@@ -17,6 +17,7 @@ no_percpu_cache/ya.make
 no_percpu_cache/aligned_alloc.c
 numa_256k/ya.make
 numa_large_pages/ya.make
+profile_marshaller/ya.make
 small_but_slow/ya.make
 tcmalloc/internal/ya.make
 {% endblock %}
@@ -49,6 +50,7 @@ IF (NOT DLL_FOR)
         no_percpu_cache
         numa_256k
         numa_large_pages
+        profile_marshaller
         small_but_slow
         tcmalloc/internal
     )

@@ -376,6 +376,14 @@ TString TViewerPipeClient::GetError(const TEvTxUserProxy::TEvProposeTransactionS
     return TStringBuilder() << ev.Record.GetStatus();
 }
 
+bool TViewerPipeClient::IsSuccess(const NKqp::TEvGetScriptExecutionOperationResponse& ev) {
+    return ev.Status == Ydb::StatusIds::SUCCESS;
+}
+
+TString TViewerPipeClient::GetError(const NKqp::TEvGetScriptExecutionOperationResponse& ev) {
+    return Ydb::StatusIds_StatusCode_Name(ev.Status);
+}
+
 void TViewerPipeClient::RequestHiveDomainStats(NNodeWhiteboard::TTabletId hiveId) {
     TActorId pipeClient = ConnectTabletPipe(hiveId);
     THolder<TEvHive::TEvRequestHiveDomainStats> request = MakeHolder<TEvHive::TEvRequestHiveDomainStats>();
@@ -608,8 +616,7 @@ TViewerPipeClient::TRequestResponse<TEvBlobStorage::TEvControllerSelectGroupsRes
     return MakeRequestToPipe<TEvBlobStorage::TEvControllerSelectGroupsResult>(pipeClient, request.Release(), cookie);
 }
 
-void TViewerPipeClient::RequestBSControllerPDiskRestart(ui32 nodeId, ui32 pdiskId, bool force) {
-    TActorId pipeClient = ConnectTabletPipe(GetBSControllerId());
+TViewerPipeClient::TRequestResponse<TEvBlobStorage::TEvControllerConfigResponse> TViewerPipeClient::RequestBSControllerPDiskRestart(ui32 nodeId, ui32 pdiskId, bool force) {
     THolder<TEvBlobStorage::TEvControllerConfigRequest> request = MakeHolder<TEvBlobStorage::TEvControllerConfigRequest>();
     auto* restartPDisk = request->Record.MutableRequest()->AddCommand()->MutableRestartPDisk();
     restartPDisk->MutableTargetPDiskId()->SetNodeId(nodeId);
@@ -617,11 +624,16 @@ void TViewerPipeClient::RequestBSControllerPDiskRestart(ui32 nodeId, ui32 pdiskI
     if (force) {
         request->Record.MutableRequest()->SetIgnoreDegradedGroupsChecks(true);
     }
-    SendRequestToPipe(pipeClient, request.Release());
+    auto response = MakeRequestToTablet<TEvBlobStorage::TEvControllerConfigResponse>(GetBSControllerId(), request.Release());
+    if (response.Span) {
+        response.Span.Attribute("node_id", nodeId);
+        response.Span.Attribute("pdisk_id", pdiskId);
+        response.Span.Attribute("force", force);
+    }
+    return response;
 }
 
-void TViewerPipeClient::RequestBSControllerVDiskEvict(ui32 groupId, ui32 groupGeneration, ui32 failRealmIdx, ui32 failDomainIdx, ui32 vdiskIdx, bool force) {
-    TActorId pipeClient = ConnectTabletPipe(GetBSControllerId());
+TViewerPipeClient::TRequestResponse<TEvBlobStorage::TEvControllerConfigResponse> TViewerPipeClient::RequestBSControllerVDiskEvict(ui32 groupId, ui32 groupGeneration, ui32 failRealmIdx, ui32 failDomainIdx, ui32 vdiskIdx, bool force) {
     THolder<TEvBlobStorage::TEvControllerConfigRequest> request = MakeHolder<TEvBlobStorage::TEvControllerConfigRequest>();
     auto* evictVDisk = request->Record.MutableRequest()->AddCommand()->MutableReassignGroupDisk();
     evictVDisk->SetGroupId(groupId);
@@ -632,7 +644,11 @@ void TViewerPipeClient::RequestBSControllerVDiskEvict(ui32 groupId, ui32 groupGe
     if (force) {
         request->Record.MutableRequest()->SetIgnoreDegradedGroupsChecks(true);
     }
-    SendRequestToPipe(pipeClient, request.Release());
+    auto response = MakeRequestToTablet<TEvBlobStorage::TEvControllerConfigResponse>(GetBSControllerId(), request.Release());
+    if (response.Span) {
+        response.Span.Attribute("vdisk_id", TStringBuilder() << groupId << '-' << groupGeneration << '-' << failRealmIdx << '-' << failDomainIdx << '-' << vdiskIdx);
+    }
+    return response;
 }
 
 TViewerPipeClient::TRequestResponse<NSysView::TEvSysView::TEvGetPDisksResponse> TViewerPipeClient::RequestBSControllerPDiskInfo(ui32 nodeId, ui32 pdiskId) {
@@ -760,15 +776,14 @@ TViewerPipeClient::TRequestResponse<NSysView::TEvSysView::TEvGetStorageStatsResp
     return RequestBSControllerStorageStats();
 }
 
-void TViewerPipeClient::RequestBSControllerPDiskUpdateStatus(const NKikimrBlobStorage::TUpdateDriveStatus& driveStatus, bool force) {
-    TActorId pipeClient = ConnectTabletPipe(GetBSControllerId());
+TViewerPipeClient::TRequestResponse<TEvBlobStorage::TEvControllerConfigResponse> TViewerPipeClient::RequestBSControllerPDiskUpdateStatus(const NKikimrBlobStorage::TUpdateDriveStatus& driveStatus, bool force) {
     THolder<TEvBlobStorage::TEvControllerConfigRequest> request = MakeHolder<TEvBlobStorage::TEvControllerConfigRequest>();
     auto* updateDriveStatus = request->Record.MutableRequest()->AddCommand()->MutableUpdateDriveStatus();
     updateDriveStatus->CopyFrom(driveStatus);
     if (force) {
         request->Record.MutableRequest()->SetIgnoreDegradedGroupsChecks(true);
     }
-    SendRequestToPipe(pipeClient, request.Release());
+    return MakeRequestToTablet<TEvBlobStorage::TEvControllerConfigResponse>(GetBSControllerId(), request.Release());
 }
 
 THolder<NSchemeCache::TSchemeCacheNavigate> TViewerPipeClient::SchemeCacheNavigateRequestBuilder (
@@ -874,6 +889,7 @@ void TViewerPipeClient::RequestTxProxyDescribe(const TString& path, const NKikim
     if (HttpEvent && !HttpEvent->Get()->UserToken.empty()) {
         request->Record.SetUserToken(HttpEvent->Get()->UserToken);
     }
+    request->Record.MutableDescribePath()->MutableOptions()->CopyFrom(options);
     SendRequest(MakeTxProxyID(), request.Release());
 }
 
@@ -1200,6 +1216,10 @@ bool TViewerPipeClient::NeedToRedirect() {
         Direct |= (Database == AppData()->TenantName) || Database.empty(); // we're already on the right node or don't use database filter
         if (Database) {
             RedirectToDatabase(Database); // to find some dynamic node and redirect query there
+            return true;
+        }
+        if (!Viewer->CheckAccessViewer(request)) {
+            ReplyAndPassAway(GetHTTPFORBIDDEN("text/html", "<html><body><h1>403 Forbidden</h1></body></html>"), "Access denied");
             return true;
         }
     }

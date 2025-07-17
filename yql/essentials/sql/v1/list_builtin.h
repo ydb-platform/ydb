@@ -20,8 +20,8 @@ public:
                      const TString& opName,
                      const TVector<TNodePtr>& args)
         : TCallNode(pos, opName, args.size(), args.size(), args)
-        , OpName(opName)
-        , Args(args)
+        , OpName_(opName)
+        , Args_(args)
     {}
 
     bool DoInit(TContext& ctx, ISource* src) override = 0;
@@ -29,9 +29,9 @@ public:
     TAstNode* Translate(TContext& ctx) const override;
 
 protected:
-    const TString OpName;
-    TVector<TNodePtr> Args;
-    TNodePtr Node;
+    const TString OpName_;
+    TVector<TNodePtr> Args_;
+    TNodePtr Node_;
 
     inline TNodePtr GetIdentityLambda();
 };
@@ -40,17 +40,17 @@ class TListSortBuiltin final: public TListBuiltin {
 public:
     TListSortBuiltin(TPosition pos, const TVector<TNodePtr>& args, bool asc)
         : TListBuiltin(pos, "ListSort", args)
-        , Asc(asc)
+        , Asc_(asc)
     {}
 
     bool DoInit(TContext& ctx, ISource* src) override;
 
     TNodePtr DoClone() const final {
-        return new TListSortBuiltin(Pos, CloneContainer(Args), Asc);
+        return new TListSortBuiltin(Pos_, CloneContainer(Args_), Asc_);
     }
 
 private:
-    const bool Asc;
+    const bool Asc_;
 };
 
 class TListExtractBuiltin final: public TListBuiltin {
@@ -62,7 +62,7 @@ public:
     bool DoInit(TContext& ctx, ISource* src) override;
 
     TNodePtr DoClone() const final {
-        return new TListExtractBuiltin(Pos, CloneContainer(Args));
+        return new TListExtractBuiltin(Pos_, CloneContainer(Args_));
     }
 };
 
@@ -83,16 +83,16 @@ public:
                     const TVector<TNodePtr>& args,
                     bool flat)
         : TListProcessBuiltin(pos, flat ? "ListFlatMap" : "ListMap", args)
-        , Flat(flat)
+        , Flat_(flat)
     {}
 
     bool DoInit(TContext& ctx, ISource* src) override;
 
     TNodePtr DoClone() const final {
-        return new TListMapBuiltin(Pos, CloneContainer(Args), Flat);
+        return new TListMapBuiltin(Pos_, CloneContainer(Args_), Flat_);
     }
 private:
-    bool Flat;
+    bool Flat_;
 };
 
 class TListFilterBuiltin final: public TListProcessBuiltin {
@@ -106,7 +106,7 @@ public:
     bool DoInit(TContext& ctx, ISource* src) override;
 
     TNodePtr DoClone() const final {
-        return new TListFilterBuiltin(Pos, OpName, CloneContainer(Args));
+        return new TListFilterBuiltin(Pos_, OpName_, CloneContainer(Args_));
     }
 protected:
     virtual TNodePtr GetFilterLambda();
@@ -123,7 +123,7 @@ public:
     void DoUpdateState() const override;
 
     TNodePtr DoClone() const final {
-        return new TListCreateBuiltin(Pos, CloneContainer(Args));
+        return new TListCreateBuiltin(Pos_, CloneContainer(Args_));
     }
 };
 
@@ -138,7 +138,7 @@ public:
     void DoUpdateState() const override;
 
     TNodePtr DoClone() const final {
-        return new TDictCreateBuiltin(Pos, CloneContainer(Args));
+        return new TDictCreateBuiltin(Pos_, CloneContainer(Args_));
     }
 };
 
@@ -153,7 +153,7 @@ public:
     void DoUpdateState() const override;
 
     TNodePtr DoClone() const final {
-        return new TSetCreateBuiltin(Pos, CloneContainer(Args));
+        return new TSetCreateBuiltin(Pos_, CloneContainer(Args_));
     }
 };
 

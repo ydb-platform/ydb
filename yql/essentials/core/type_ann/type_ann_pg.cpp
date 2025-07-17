@@ -5187,7 +5187,7 @@ IGraphTransformer::TStatus PgSelectWrapper(const TExprNode::TPtr& input, TExprNo
                 } else {
                     const TTypeAnnotationNode* expectedType = ctx.Expr.MakeType<TOptionalExprType>(
                     ctx.Expr.MakeType<TDataExprType>(EDataSlot::Int64));
-                    auto convertStatus = TryConvertTo(data, *expectedType, ctx.Expr);
+                    auto convertStatus = TryConvertTo(data, *expectedType, ctx.Expr, {}, ctx.Types.UseTypeDiffForConvertToError);
                     if (convertStatus.Level == IGraphTransformer::TStatus::Error) {
                         ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(data->Pos()), "Mismatch argument types"));
                         return IGraphTransformer::TStatus::Error;
@@ -5685,8 +5685,8 @@ IGraphTransformer::TStatus PgInWrapper(const TExprNode::TPtr& input, TExprNode::
     };
 
     struct TPgListCommonTypeConversion {
-        ui32 targetType = 0;
-        TExprNodeList items;
+        ui32 TargetType = 0;
+        TExprNodeList Items;
     };
 
     bool castRequired = false;
@@ -5698,7 +5698,7 @@ IGraphTransformer::TStatus PgInWrapper(const TExprNode::TPtr& input, TExprNode::
         THashMap<ui32, TPgListCommonTypeConversion> elemsByType;
         for (size_t i = 1; i < input->ChildrenSize(); ++i) {
             auto& elemsOfType = elemsByType[pgTypes[i]];
-            if (elemsOfType.items.empty()) {
+            if (elemsOfType.Items.empty()) {
                 const NPg::TTypeDesc* elemCommonType;
                 if (const auto issue = NPg::LookupCommonType({pgTypes[0], pgTypes[i]},
                     posGetter, elemCommonType))
@@ -5706,23 +5706,23 @@ IGraphTransformer::TStatus PgInWrapper(const TExprNode::TPtr& input, TExprNode::
                     ctx.Expr.AddError(*issue);
                     return IGraphTransformer::TStatus::Error;
                 }
-                elemsOfType.targetType = elemCommonType->TypeId;
+                elemsOfType.TargetType = elemCommonType->TypeId;
 
-                elemsOfType.items.push_back((lhsTypeId == elemsOfType.targetType)
+                elemsOfType.Items.push_back((lhsTypeId == elemsOfType.TargetType)
                     ? input->HeadPtr()
-                    : WrapWithPgCast(input->HeadPtr(), elemsOfType.targetType, ctx.Expr));
+                    : WrapWithPgCast(input->HeadPtr(), elemsOfType.TargetType, ctx.Expr));
             }
             const auto rhsItemTypeId = input->Child(i)->GetTypeAnn()->Cast<TPgExprType>()->GetId();
-            elemsOfType.items.push_back((rhsItemTypeId == elemsOfType.targetType)
+            elemsOfType.Items.push_back((rhsItemTypeId == elemsOfType.TargetType)
                 ? input->Child(i)
-                : WrapWithPgCast(input->Child(i), elemsOfType.targetType, ctx.Expr));
+                : WrapWithPgCast(input->Child(i), elemsOfType.TargetType, ctx.Expr));
         }
         TExprNodeList orClausesOfIn;
         orClausesOfIn.reserve(elemsByType.size());
 
         for (auto& elemsOfType: elemsByType) {
             auto& conversion = elemsOfType.second;
-            orClausesOfIn.push_back(BuildUniTypePgIn(std::move(conversion.items), ctx));
+            orClausesOfIn.push_back(BuildUniTypePgIn(std::move(conversion.Items), ctx));
         }
         output = ctx.Expr.Builder(input->Pos())
             .Callable("Or")

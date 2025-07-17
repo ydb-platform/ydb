@@ -15,6 +15,7 @@ struct TJsonVDiskRequestHelper<TEvGetLogoBlobRequest, TEvGetLogoBlobResponse>  {
         bool internals = cgi.Has("internals");
         TString from = cgi.Get("from");
         TString to = cgi.Get("to");
+        bool need_data = cgi.Has("need_data");
 
         auto assign_blob_id = [] (NKikimrVDisk::LogoBlobId *id, const TLogoBlobID &blobId) {
             const ui64 *raw = blobId.GetRaw();
@@ -38,6 +39,7 @@ struct TJsonVDiskRequestHelper<TEvGetLogoBlobRequest, TEvGetLogoBlobResponse>  {
 
         auto req = std::make_unique<TEvGetLogoBlobRequest>();
         req->Record.set_show_internals(internals);
+        req->Record.set_need_data(need_data);
 
         NKikimrVDisk::LogoBlobIdRange *range = req->Record.mutable_range();
         if (from) {
@@ -68,6 +70,11 @@ struct TJsonVDiskRequestHelper<TEvGetLogoBlobRequest, TEvGetLogoBlobResponse>  {
             - name: internals
               in: query
               description: return ingress of each blob
+              required: false
+              type: boolean
+            - name: need_data
+              in: query
+              description: return data for each blob encoded in base64
               required: false
               type: boolean
         )___";

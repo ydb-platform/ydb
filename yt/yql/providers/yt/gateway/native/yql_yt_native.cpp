@@ -1002,8 +1002,7 @@ public:
             if (auto outputOp = opBase.Maybe<TYtOutputOpBase>()) {
                 execCtx->SetOutput(outputOp.Cast().Output());
             }
-
-            ReportBlockStatus(opBase, execCtx);
+            execCtx->ReportNodeBlockStatus();
 
             TFuture<void> future;
             if (auto op = opBase.Maybe<TYtSort>()) {
@@ -5964,6 +5963,10 @@ private:
                 ctx->CodeSnippets_.emplace_back("code",
                     ConvertToAst(*root, *exprCtx, 0, true).Root->ToString(TAstPrintFlags::ShortQuote | TAstPrintFlags::PerLine | TAstPrintFlags::AdaptArbitraryContent));
             }
+
+            if (TYtOutputOpBase::Match(root)) {
+                ctx->BlockStatus = DetermineBlockStatus(TYtOutputOpBase(root));
+            }
         }
         return ctx;
     }
@@ -5992,47 +5995,32 @@ private:
         return Nothing();
     }
 
-    static void ReportBlockStatus(const TYtOpBase& op, const TExecContext<TRunOptions>::TPtr& execCtx) {
-        if (execCtx->Options_.PublicId().Empty()) {
-            return;
-        }
-
-        auto opPublicId = *execCtx->Options_.PublicId();
-
-        TOperationProgress::EOpBlockStatus status;
+    static TOperationProgress::EOpBlockStatus DetermineBlockStatus(const TYtOutputOpBase& op) {
         if (auto map = op.Maybe<TYtMap>()) {
-            status = DetermineProgramBlockStatus(map.Cast().Mapper().Body().Ref());
-        } else if (auto map = op.Maybe<TYtReduce>()) {
-            status = DetermineProgramBlockStatus(map.Cast().Reducer().Body().Ref());
-        } else if (auto map = op.Maybe<TYtMapReduce>()) {
-            status = DetermineProgramBlockStatus(map.Cast().Reducer().Body().Ref());
-            if (auto mapLambda = map.Cast().Mapper().Maybe<TCoLambda>()) {
+            return DetermineProgramBlockStatus(map.Cast().Mapper().Body().Ref());
+        } else if (auto reduce = op.Maybe<TYtReduce>()) {
+            return DetermineProgramBlockStatus(reduce.Cast().Reducer().Body().Ref());
+        } else if (auto mapReduce = op.Maybe<TYtMapReduce>()) {
+            auto status = DetermineProgramBlockStatus(mapReduce.Cast().Reducer().Body().Ref());
+            if (auto mapLambda = mapReduce.Cast().Mapper().Maybe<TCoLambda>()) {
                 status = TOperationProgress::CombineBlockStatuses(status, DetermineProgramBlockStatus(mapLambda.Cast().Body().Ref()));
             }
+            return status;
         } else if (auto fill = op.Maybe<TYtFill>()) {
-            status = DetermineProgramBlockStatus(fill.Cast().Content().Body().Ref());
+            return DetermineProgramBlockStatus(fill.Cast().Content().Body().Ref());
         } else if (op.Maybe<TYtSort>()) {
-            return;
+            return TOperationProgress::EOpBlockStatus::None;
         } else if (op.Maybe<TYtCopy>()) {
-            return;
+            return TOperationProgress::EOpBlockStatus::None;
         } else if (op.Maybe<TYtMerge>()) {
-            return;
+            return TOperationProgress::EOpBlockStatus::None;
         } else if (op.Maybe<TYtTouch>()) {
-            return;
-        } else if (op.Maybe<TYtDropTable>()) {
-            return;
-        } else if (op.Maybe<TYtStatOut>()) {
-            return;
+            return TOperationProgress::EOpBlockStatus::None;
         } else if (op.Maybe<TYtDqProcessWrite>()) {
-            return;
+            return TOperationProgress::EOpBlockStatus::None;
         } else {
             YQL_ENSURE(false, "unknown operation: " << op.Ref().Content());
         }
-
-        YQL_CLOG(INFO, ProviderYt) << "Reporting " << status << " block status for operation " << op.Ref().Content() << " with public id #" << opPublicId;
-        auto p = TOperationProgress(TString(YtProviderName), opPublicId, TOperationProgress::EState::InProgress);
-        p.BlockStatus = status;
-        execCtx->Session_->ProgressWriter_(p);
     }
 
 private:

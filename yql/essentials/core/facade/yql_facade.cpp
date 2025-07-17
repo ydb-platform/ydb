@@ -163,7 +163,7 @@ TProgramFactory::TProgramFactory(
 }
 
 void TProgramFactory::UnrepeatableRandom() {
-    UseUnrepeatableRandom = true;
+    UseUnrepeatableRandom_ = true;
 }
 
 void TProgramFactory::EnableRangeComputeFor() {
@@ -176,6 +176,10 @@ void TProgramFactory::SetLanguageVersion(TLangVersion version) {
 
 void TProgramFactory::SetMaxLanguageVersion(TLangVersion version) {
     MaxLangVer_ = version;
+}
+
+void TProgramFactory::SetVolatileResults() {
+    VolatileResults_ = true;
 }
 
 void TProgramFactory::AddUserDataTable(const TUserDataTable& userDataTable) {
@@ -245,7 +249,7 @@ TProgramPtr TProgramFactory::Create(
         const TQContext& qContext,
         TMaybe<TString> gatewaysForMerge)
 {
-    auto randomProvider = UseRepeatableRandomAndTimeProviders_ && !UseUnrepeatableRandom && hiddenMode == EHiddenMode::Disable ?
+    auto randomProvider = UseRepeatableRandomAndTimeProviders_ && !UseUnrepeatableRandom_ && hiddenMode == EHiddenMode::Disable ?
         CreateDeterministicRandomProvider(1) : CreateDefaultRandomProvider();
     auto timeProvider = UseRepeatableRandomAndTimeProviders_ ?
         CreateDeterministicTimeProvider(10000000) : CreateDefaultTimeProvider();
@@ -258,7 +262,7 @@ TProgramPtr TProgramFactory::Create(
     auto udfResolver = UdfResolver_;
 
     if (UdfResolverLogfile_) {
-        udfResolver = NCommon::CreateUdfResolverDecoratorWithLogger(udfResolver, *UdfResolverLogfile_, sessionId);
+        udfResolver = NCommon::CreateUdfResolverDecoratorWithLogger(FunctionRegistry_, udfResolver, *UdfResolverLogfile_, sessionId);
     }
 
     if (udfIndex) {
@@ -267,7 +271,7 @@ TProgramPtr TProgramFactory::Create(
 
     // make UserDataTable_ copy here
     return new TProgram(FunctionRegistry_, randomProvider, timeProvider, NextUniqueId_, DataProvidersInit_,
-        LangVer_, MaxLangVer_, UserDataTable_, Credentials_, moduleResolver, urlListerManager,
+        LangVer_, MaxLangVer_, VolatileResults_, UserDataTable_, Credentials_, moduleResolver, urlListerManager,
         udfResolver, udfIndex, udfIndexPackageSet, FileStorage_, UrlPreprocessing_,
         GatewaysConfig_, filename, sourceCode, sessionId, Runner_, EnableRangeComputeFor_, ArrowResolver_, hiddenMode,
         qContext, gatewaysForMerge);
@@ -284,6 +288,7 @@ TProgram::TProgram(
         const TVector<TDataProviderInitializer>& dataProvidersInit,
         TLangVersion langVer,
         TLangVersion maxLangVer,
+        bool volatileResults,
         const TUserDataTable& userDataTable,
         const TCredentials::TPtr& credentials,
         const IModuleResolver::TPtr& modules,
@@ -313,6 +318,7 @@ TProgram::TProgram(
     , DataProvidersInit_(dataProvidersInit)
     , LangVer_(langVer)
     , MaxLangVer_(maxLangVer)
+    , VolatileResults_(volatileResults)
     , Credentials_(MakeIntrusive<NYql::TCredentials>(*credentials))
     , UrlListerManager_(urlListerManager)
     , UdfResolver_(udfResolver)
@@ -622,6 +628,10 @@ void TProgram::SetLanguageVersion(TLangVersion version) {
 
 void TProgram::SetMaxLanguageVersion(TLangVersion version) {
     MaxLangVer_ = version;
+}
+
+void TProgram::SetVolatileResults() {
+    VolatileResults_ = true;
 }
 
 void TProgram::AddCredentials(const TVector<std::pair<TString, TCredential>>& credentials) {
@@ -1989,6 +1999,7 @@ TTypeAnnotationContextPtr TProgram::BuildTypeAnnotationContext(const TString& us
     auto typeAnnotationContext = MakeIntrusive<TTypeAnnotationContext>();
 
     typeAnnotationContext->LangVer = LangVer_;
+    typeAnnotationContext->UseTypeDiffForConvertToError = true;
     typeAnnotationContext->UserDataStorage = UserDataStorage_;
     typeAnnotationContext->Credentials = Credentials_;
     typeAnnotationContext->Modules = Modules_;
@@ -2086,6 +2097,12 @@ TTypeAnnotationContextPtr TProgram::BuildTypeAnnotationContext(const TString& us
         ResultProviderConfig_ = MakeIntrusive<TResultProviderConfig>(*typeAnnotationContext,
             *FunctionRegistry_, ResultType_, ToString((ui32)resultFormat), writerFactory);
         ResultProviderConfig_->SupportsResultPosition = SupportsResultPosition_;
+        if (VolatileResults_) {
+            constexpr ui64 BytesLimitForVolatileResults = 10*1024*1024;
+            ResultProviderConfig_->FillSettings.AllResultsBytesLimit = BytesLimitForVolatileResults;
+            ResultProviderConfig_->FillSettings.RowsLimitPerWrite.Clear();
+        }
+
         auto resultProvider = CreateResultProvider(ResultProviderConfig_);
         typeAnnotationContext->AddDataSink(ResultProviderName, resultProvider);
         typeAnnotationContext->AvailablePureResultDataSources = resultProviderDataSources;

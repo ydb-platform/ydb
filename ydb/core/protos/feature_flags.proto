@@ -168,12 +168,12 @@ message TFeatureFlags {
     optional bool EnableExternalDataSourcesOnServerless = 143 [default = true];
     optional bool EnableSparsedColumns = 144 [default = false];
     optional bool EnableParameterizedDecimal = 145 [default = true];
-    optional bool EnableImmediateWritingOnBulkUpsert = 146 [default = true];
+    optional bool EnableImmediateWritingOnBulkUpsert = 146 [default = true, deprecated = true];
     optional bool EnableInsertWriteIdSpecialColumnCompatibility = 147 [default = false];
-    optional bool EnableTopicAutopartitioningForCDC = 148 [default = false];
-    optional bool EnableWritePortionsOnInsert = 149 [default = true];
+    optional bool EnableTopicAutopartitioningForCDC = 148 [default = true];
+    optional bool EnableWritePortionsOnInsert = 149 [default = true, deprecated = true];
     optional bool EnableFollowerStats = 150 [default = true];
-    optional bool EnableTopicAutopartitioningForReplication = 151 [default = false];
+    optional bool EnableTopicAutopartitioningForReplication = 151 [default = true];
     optional bool EnableDriveSerialsDiscovery = 152 [default = false];
     optional bool EnableSeparateDiskSpaceQuotas = 153 [default = false];
     optional bool EnableAntlr4Parser = 154 [default = true];
@@ -182,10 +182,10 @@ message TFeatureFlags {
     optional bool EnableScaleRecommender = 157 [default = false];
     optional bool EnableVDiskThrottling = 158 [default = false];
     optional bool EnableDataShardInMemoryStateMigration = 159 [default = true];
-    optional bool EnableDataShardInMemoryStateMigrationAcrossGenerations = 160 [default = false];
+    optional bool EnableDataShardInMemoryStateMigrationAcrossGenerations = 160 [default = true];
     optional bool DisableLocalDBEraseCache = 161 [default = false];
     optional bool EnableChecksumsExport = 162 [default = false];
-    optional bool EnableTopicTransfer = 163 [default = false];
+    optional bool EnableTopicTransfer = 163 [default = true];
     optional bool EnableViewExport = 164 [default = false];
     optional bool EnableColumnStore = 165 [default = false];
     optional bool EnableStrictAclCheck = 166 [default = false];
@@ -210,4 +210,11 @@ message TFeatureFlags {
     optional bool EnableThrottlingReport = 184 [default = true];
     optional bool EnableNodeBrokerDeltaProtocol = 185 [default = false];
     optional bool EnableAccessToIndexImplTables = 186 [default = false];
+    optional bool EnableAddUniqueIndex = 187 [default = false];
+    optional bool EnableSharedMetadataAccessorCache = 188 [default = true, deprecated = true];
+    optional bool RequireDbPrefixInSecretName = 189 [default = false];
+    optional bool EnableSystemNamesProtection = 190 [default = false];
+    optional bool EnableRealSystemViewPaths = 191 [default = false, (RequireRestart) = true];
+    optional bool EnableCSSchemasCollapsing = 192 [default = true];
+    optional bool EnableMoveColumnTable = 193 [default = false];
 }

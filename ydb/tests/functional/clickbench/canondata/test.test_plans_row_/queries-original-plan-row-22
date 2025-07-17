@@ -60,6 +60,7 @@
                                                 "PlanNodeId": 8,
                                                 "Plans": [
                                                     {
+                                                        "HashFunc": "HashV1",
                                                         "KeyColumns": [
                                                             "SearchPhrase"
                                                         ],
@@ -106,17 +107,14 @@
                                                                                         "Name": "TableFullScan",
                                                                                         "Path": "/local/clickbench/plans/row/hits",
                                                                                         "ReadColumns": [
-                                                                                            "SearchPhrase",
-                                                                                            "Title",
-                                                                                            "URL",
-                                                                                            "UserID"
-                                                                                        ],
-                                                                                        "ReadRanges": [
                                                                                             "CounterID (-\u221e, +\u221e)",
                                                                                             "EventDate (-\u221e, +\u221e)",
                                                                                             "UserID (-\u221e, +\u221e)",
                                                                                             "EventTime (-\u221e, +\u221e)",
-                                                                                            "WatchID (-\u221e, +\u221e)"
+                                                                                            "WatchID (-\u221e, +\u221e)",
+                                                                                            "SearchPhrase",
+                                                                                            "Title",
+                                                                                            "URL"
                                                                                         ],
                                                                                         "Scan": "Parallel",
                                                                                         "Table": "clickbench/plans/row/hits"
@@ -164,6 +162,7 @@
                                                                                 "Plans": [
                                                                                     {
                                                                                         "CTE Name": "Filter-TableFullScan_9",
+                                                                                        "HashFunc": "HashV1",
                                                                                         "KeyColumns": [
                                                                                             "SearchPhrase",
                                                                                             "UserID"

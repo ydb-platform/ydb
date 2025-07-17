@@ -1,17 +1,18 @@
 #include "schemeshard_info_types.h"
+
 #include "schemeshard_path.h"
 #include "schemeshard_utils.h"  // for IsValidColumnName
 
 #include <ydb/core/base/appdata.h>
-#include <ydb/core/base/tx_processing.h>
 #include <ydb/core/base/channel_profiles.h>
+#include <ydb/core/base/tx_processing.h>
 #include <ydb/core/engine/minikql/flat_local_tx_factory.h>
 #include <ydb/core/engine/mkql_proto.h>
+#include <ydb/core/protos/config.pb.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/tablet/tablet_counters_aggregator.h>
 #include <ydb/core/tablet/tablet_counters_protobuf.h>
 #include <ydb/core/util/pb.h>
-#include <ydb/core/protos/config.pb.h>
 
 #include <yql/essentials/minikql/mkql_type_ops.h>
 
@@ -297,7 +298,7 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
 
     if (source) {
         for (const auto& col : source->Columns) {
-            Y_ABORT_UNLESS(col.first == col.second.Id);
+            Y_ENSURE(col.first == col.second.Id);
             // There could be columns with same name. Only one of them can be active.
             if (col.second.IsDropped())
                 continue;
@@ -717,7 +718,7 @@ void TTableInfo::ResetDescriptionCache() {
 }
 
 TVector<ui32> TTableInfo::FillDescriptionCache(TPathElement::TPtr pathInfo) {
-    Y_ABORT_UNLESS(pathInfo && pathInfo->IsTable());
+    Y_ENSURE(pathInfo && pathInfo->IsTable());
 
     TVector<ui32> keyColumnIds;
     for (auto& col : Columns) {
@@ -765,7 +766,7 @@ inline THashMap<ui32, size_t> DeduplicateRepeatedById(
     const TGetId& getId,
     const TPreferred& preferred)
 {
-    Y_ABORT_UNLESS(items, "Unexpected nullptr items");
+    Y_ENSURE(items, "Unexpected nullptr items");
 
     int size = items->size();
     THashMap<ui32, size_t> posById;
@@ -1381,7 +1382,7 @@ bool TPartitionConfigMerger::VerifyAlterParams(
     }
 
     if (wasStorageConfig) {
-        Y_ABORT_UNLESS(isStorageConfig); // by inherit logic
+        Y_ENSURE(isStorageConfig); // by inherit logic
 
         auto& srcStorage = *wasStorageConfig;
         auto& cfgStorage = *isStorageConfig;
@@ -1430,7 +1431,7 @@ bool TPartitionConfigMerger::VerifyAlterParams(
         const auto* srcFamily = srcFamilies.Value(family.GetId(), nullptr);
 
         if (srcFamily && srcFamily->HasStorageConfig()) {
-            Y_ABORT_UNLESS(family.HasStorageConfig()); // by inherit logic
+            Y_ENSURE(family.HasStorageConfig()); // by inherit logic
 
             const auto& srcStorage = srcFamily->GetStorageConfig();
             const auto& dstStorage = family.GetStorageConfig();
@@ -1504,7 +1505,7 @@ bool TPartitionConfigMerger::VerifyCommandOnFrozenTable(const NKikimrSchemeOp::T
 }
 
 void TTableInfo::FinishAlter() {
-    Y_ABORT_UNLESS(AlterData, "No alter data at Alter complete");
+    Y_ENSURE(AlterData, "No alter data at Alter complete");
     AlterVersion = AlterData->AlterVersion;
     NextColumnId = AlterData->NextColumnId;
     for (const auto& col : AlterData->Columns) {
@@ -1614,20 +1615,20 @@ void TTableInfo::FinishAlter() {
 
 #if 1 // legacy
 TString TTableInfo::SerializeAlterExtraData() const {
-    Y_ABORT_UNLESS(AlterData);
+    Y_ENSURE(AlterData);
     NKikimrSchemeOp::TAlterExtraData alterExtraData;
     alterExtraData.MutablePartitionConfig()->CopyFrom(AlterData->PartitionConfigDiff());
     TString str;
     bool serializeRes = alterExtraData.SerializeToString(&str);
-    Y_ABORT_UNLESS(serializeRes);
+    Y_ENSURE(serializeRes);
     return str;
 }
 
 void TTableInfo::DeserializeAlterExtraData(const TString& str) {
-    Y_ABORT_UNLESS(AlterData);
+    Y_ENSURE(AlterData);
     NKikimrSchemeOp::TAlterExtraData alterExtraData;
     bool deserializeRes = ParseFromStringNoSizeLimit(alterExtraData, str);
-    Y_ABORT_UNLESS(deserializeRes);
+    Y_ENSURE(deserializeRes);
     AlterData->PartitionConfigDiff().Swap(alterExtraData.MutablePartitionConfig());
 }
 #endif
@@ -1690,7 +1691,7 @@ void TTableInfo::SetPartitioning(TVector<TTableShardInfo>&& newPartitioning) {
     }
 
     if (Partitions.empty()) {
-        Y_ABORT_UNLESS(SplitOpsInFlight.empty());
+        Y_ENSURE(SplitOpsInFlight.empty());
     }
 
     Stats.PartitionStats.swap(newPartitionStats);
@@ -1817,11 +1818,11 @@ void TAggregatedStats::UpdateTableStats(TShardIdx shardIdx, const TPathId& pathI
 }
 
 void TTableInfo::RegisterSplitMergeOp(TOperationId opId, const TTxState& txState) {
-    Y_ABORT_UNLESS(txState.TxType == TTxState::TxSplitTablePartition || txState.TxType == TTxState::TxMergeTablePartition);
-    Y_ABORT_UNLESS(txState.SplitDescription);
+    Y_ENSURE(txState.TxType == TTxState::TxSplitTablePartition || txState.TxType == TTxState::TxMergeTablePartition);
+    Y_ENSURE(txState.SplitDescription);
 
     if (SplitOpsInFlight.empty()) {
-        Y_VERIFY_S(Partitions.size() == ExpectedPartitionCount,
+        Y_ENSURE(Partitions.size() == ExpectedPartitionCount,
                    "info "
                        << "ExpectedPartitionCount: " << ExpectedPartitionCount
                        << " Partitions.size(): " << Partitions.size());
@@ -1834,7 +1835,7 @@ void TTableInfo::RegisterSplitMergeOp(TOperationId opId, const TTxState& txState
         ExpectedPartitionCount -= srcCount;
     }
 
-    Y_ABORT_UNLESS(!SplitOpsInFlight.contains(opId));
+    Y_ENSURE(!SplitOpsInFlight.contains(opId));
     SplitOpsInFlight.emplace(opId);
     ShardsInSplitMergeByOpId.emplace(opId, TVector<TShardIdx>());
 
@@ -1847,8 +1848,8 @@ void TTableInfo::RegisterSplitMergeOp(TOperationId opId, const TTxState& txState
 bool TTableInfo::IsShardInSplitMergeOp(TShardIdx idx) const {
     if (ShardsInSplitMergeByShards.contains(idx)) {
         TOperationId opId = ShardsInSplitMergeByShards.at(idx);
-        Y_ABORT_UNLESS(ShardsInSplitMergeByOpId.contains(opId));
-        Y_ABORT_UNLESS(SplitOpsInFlight.contains(opId));
+        Y_ENSURE(ShardsInSplitMergeByOpId.contains(opId));
+        Y_ENSURE(SplitOpsInFlight.contains(opId));
     }
 
     return ShardsInSplitMergeByShards.contains(idx);
@@ -1856,7 +1857,7 @@ bool TTableInfo::IsShardInSplitMergeOp(TShardIdx idx) const {
 
 
 void TTableInfo::AbortSplitMergeOp(TOperationId opId) {
-    Y_ABORT_UNLESS(SplitOpsInFlight.contains(opId));
+    Y_ENSURE(SplitOpsInFlight.contains(opId));
     for (const auto& shardIdx: ShardsInSplitMergeByOpId.at(opId)) {
         ShardsInSplitMergeByShards.erase(shardIdx);
     }
@@ -1868,7 +1869,7 @@ void TTableInfo::FinishSplitMergeOp(TOperationId opId) {
     AbortSplitMergeOp(opId);
 
     if (SplitOpsInFlight.empty()) {
-        Y_VERIFY_S(Partitions.size() == ExpectedPartitionCount,
+        Y_ENSURE(Partitions.size() == ExpectedPartitionCount,
                    "info "
                        << "ExpectedPartitionCount: " << ExpectedPartitionCount
                        << " Partitions.size(): " << Partitions.size());
@@ -2161,7 +2162,7 @@ bool TExportInfo::AllItemsAreDropped() const {
 }
 
 void TExportInfo::AddNotifySubscriber(const TActorId &actorId) {
-    Y_ABORT_UNLESS(!IsFinished());
+    Y_ENSURE(!IsFinished());
     Subscribers.insert(actorId);
 }
 
@@ -2199,18 +2200,17 @@ bool TImportInfo::IsFinished() const {
 }
 
 void TImportInfo::AddNotifySubscriber(const TActorId &actorId) {
-    Y_ABORT_UNLESS(!IsFinished());
+    Y_ENSURE(!IsFinished());
     Subscribers.insert(actorId);
 }
 
-TIndexBuildInfo::TShardStatus::TShardStatus(TSerializedTableRange range, TString lastKeyAck, size_t shardsCount)
+TIndexBuildInfo::TShardStatus::TShardStatus(TSerializedTableRange range, TString lastKeyAck)
     : Range(std::move(range))
     , LastKeyAck(std::move(lastKeyAck))
-    , Index(shardsCount)
 {}
 
 void TIndexBuildInfo::SerializeToProto(TSchemeShard* ss, NKikimrSchemeOp::TIndexBuildConfig* result) const {
-    Y_ABORT_UNLESS(IsBuildIndex());
+    Y_ENSURE(IsBuildIndex());
     result->SetTable(TPath::Init(TablePathId, ss).PathString());
 
     auto& index = *result->MutableIndex();
@@ -2238,7 +2238,7 @@ void TIndexBuildInfo::SerializeToProto(TSchemeShard* ss, NKikimrSchemeOp::TIndex
 }
 
 void TIndexBuildInfo::SerializeToProto([[maybe_unused]] TSchemeShard* ss, NKikimrIndexBuilder::TColumnBuildSettings* result) const {
-    Y_ABORT_UNLESS(IsBuildColumns());
+    Y_ENSURE(IsBuildColumns());
     Y_ASSERT(!TargetName.empty());
     result->SetTable(TargetName);
     for(const auto& column : BuildColumns) {
@@ -2246,56 +2246,221 @@ void TIndexBuildInfo::SerializeToProto([[maybe_unused]] TSchemeShard* ss, NKikim
     }
 }
 
-void TIndexBuildInfo::AddParent(const TSerializedTableRange& range, TShardIdx shard) {
-    if (KMeans.Parent == 0) {
-        // For Parent == 0 only single kmeans needed, so there is only two options:
-        // 1. It fits entirely in the single shard => local kmeans for single shard
-        // 2. It doesn't fit entirely in the single shard => global kmeans for all shards
-        return;
-    }
-    const auto [parentFrom, parentTo] = KMeans.RangeToBorders(range);
-    // TODO(mbkkt) We can make it more granular
+ui64 TIndexBuildInfo::TKMeans::ParentEnd() const noexcept {  // included
+    return ChildBegin - 1;
+}
+ui64 TIndexBuildInfo::TKMeans::ChildEnd() const noexcept {  // included
+    return ChildBegin + ChildCount() - 1;
+}
 
-    // if new range is not intersect with other ranges, it's local
+ui64 TIndexBuildInfo::TKMeans::ParentCount() const noexcept {
+    return ParentEnd() - ParentBegin + 1;
+}
+ui64 TIndexBuildInfo::TKMeans::ChildCount() const noexcept {
+    return ParentCount() * K;
+}
+
+TString TIndexBuildInfo::TKMeans::DebugString() const {
+    return TStringBuilder()
+        << "{ "
+        << "State = " << State
+        << ", Level = " << Level << " / " << Levels
+        << ", K = " << K
+        << ", Round = " << Round
+        << ", Parent = [" << ParentBegin << ".." << Parent << ".." << ParentEnd() << "]"
+        << ", Child = [" << ChildBegin << ".." << Child << ".." << ChildEnd() << "]"
+        << ", TableSize = " << TableSize
+        << " }";
+}
+
+bool TIndexBuildInfo::TKMeans::NeedsAnotherLevel() const noexcept {
+    return Level < Levels;
+}
+bool TIndexBuildInfo::TKMeans::NeedsAnotherParent() const noexcept {
+    return Parent < ParentEnd();
+}
+
+bool TIndexBuildInfo::TKMeans::NextParent() noexcept {
+    if (!NeedsAnotherParent()) {
+        return false;
+    }
+    ++Parent;
+    Child += K;
+    return true;
+}
+
+bool TIndexBuildInfo::TKMeans::NextLevel() noexcept {
+    if (!NeedsAnotherLevel()) {
+        return false;
+    }
+    NextLevel(ChildCount());
+    return true;
+}
+
+void TIndexBuildInfo::TKMeans::PrefixIndexDone(ui64 shards) {
+    Y_ENSURE(NeedsAnotherLevel());
+    // There's two worst cases, but in both one shard contains TableSize rows
+    // 1. all rows have unique prefix (*), in such case we need 1 id for each row (parent, id in prefix table)
+    // 2. all unique prefixes have size K, so we have TableSize/K parents + TableSize childs
+    // * it doesn't work now, because now prefix should have at least K embeddings, but it's bug
+    NextLevel((2 * TableSize) * shards);
+    Parent = ParentEnd();
+}
+
+void TIndexBuildInfo::TKMeans::Set(ui32 level,
+    NTableIndex::TClusterId parentBegin, NTableIndex::TClusterId parent,
+    NTableIndex::TClusterId childBegin, NTableIndex::TClusterId child,
+    ui32 state, ui64 tableSize, ui32 round) {
+    Level = level;
+    Round = round;
+    ParentBegin = parentBegin;
+    Parent = parent;
+    ChildBegin = childBegin;
+    Child = child;
+    State = static_cast<EState>(state);
+    TableSize = tableSize;
+}
+
+NKikimrTxDataShard::EKMeansState TIndexBuildInfo::TKMeans::GetUpload() const {
+    if (Level == 1) {
+        if (NeedsAnotherLevel()) {
+            return NKikimrTxDataShard::EKMeansState::UPLOAD_MAIN_TO_BUILD;
+        } else {
+            return NKikimrTxDataShard::EKMeansState::UPLOAD_MAIN_TO_POSTING;
+        }
+    } else {
+        if (NeedsAnotherLevel()) {
+            return NKikimrTxDataShard::EKMeansState::UPLOAD_BUILD_TO_BUILD;
+        } else {
+            return NKikimrTxDataShard::EKMeansState::UPLOAD_BUILD_TO_POSTING;
+        }
+    }
+}
+
+TString TIndexBuildInfo::TKMeans::WriteTo(bool needsBuildTable) const {
+    using namespace NTableIndex::NTableVectorKmeansTreeIndex;
+    TString name = PostingTable;
+    if (needsBuildTable || NeedsAnotherLevel()) {
+        name += Level % 2 != 0 ? BuildSuffix0 : BuildSuffix1;
+    }
+    return name;
+}
+
+TString TIndexBuildInfo::TKMeans::ReadFrom() const {
+    Y_ENSURE(Level > 1);
+    using namespace NTableIndex::NTableVectorKmeansTreeIndex;
+    TString name = PostingTable;
+    name += Level % 2 != 0 ? BuildSuffix1 : BuildSuffix0;
+    return name;
+}
+
+std::pair<NTableIndex::TClusterId, NTableIndex::TClusterId> TIndexBuildInfo::TKMeans::RangeToBorders(const TSerializedTableRange& range) const {
+    const NTableIndex::TClusterId minParent = ParentBegin;
+    const NTableIndex::TClusterId maxParent = ParentEnd();
+    const NTableIndex::TClusterId parentFrom = [&, from = range.From.GetCells()] {
+        if (!from.empty()) {
+            if (!from[0].IsNull()) {
+                return from[0].AsValue<NTableIndex::TClusterId>() + static_cast<NTableIndex::TClusterId>(from.size() == 1);
+            }
+        }
+        return minParent;
+    }();
+    const NTableIndex::TClusterId parentTo = [&, to = range.To.GetCells()] {
+        if (!to.empty()) {
+            if (!to[0].IsNull()) {
+                return to[0].AsValue<NTableIndex::TClusterId>() - static_cast<NTableIndex::TClusterId>(to.size() != 1 && to[1].IsNull());
+            }
+        }
+        return maxParent;
+    }();
+    Y_ENSURE(minParent <= parentFrom, "minParent(" << minParent << ") > parentFrom(" << parentFrom << ") " << DebugString());
+    Y_ENSURE(parentFrom <= parentTo, "parentFrom(" << parentFrom << ") > parentTo(" << parentTo << ") " << DebugString());
+    Y_ENSURE(parentTo <= maxParent, "parentTo(" << parentTo << ") > maxParent(" << maxParent << ") " << DebugString());
+    return {parentFrom, parentTo};
+}
+
+TString TIndexBuildInfo::TKMeans::RangeToDebugStr(const TSerializedTableRange& range) const {
+    auto toStr = [&](const TSerializedCellVec& v) -> TString {
+        const auto cells = v.GetCells();
+        if (cells.empty()) {
+            return "inf";
+        }
+        if (cells[0].IsNull()) {
+            return "-inf";
+        }
+        auto str = TStringBuilder{} << "{ count: " << cells.size();
+        if (Level > 1) {
+            str << ", parent: " << cells[0].AsValue<NTableIndex::TClusterId>();
+            if (cells.size() != 1 && cells[1].IsNull()) {
+                str << ", pk: null";
+            }
+        }
+        return str << " }";
+    };
+    return TStringBuilder{} << "{ From: " << toStr(range.From) << ", To: " << toStr(range.To) << " }";
+}
+
+void TIndexBuildInfo::TKMeans::NextLevel(ui64 childCount) noexcept {
+    ParentBegin = ChildBegin;
+    Parent = ParentBegin;
+    ChildBegin = ParentBegin + childCount;
+    Child = ChildBegin;
+    ++Level;
+}
+
+void TIndexBuildInfo::AddParent(const TSerializedTableRange& range, TShardIdx shard) {
+    // For Parent == 0 only single kmeans needed, so there are two options:
+    // 1. It fits entirely in the single shard => local kmeans for single shard
+    // 2. It doesn't fit entirely in the single shard => global kmeans for all shards
+    auto [parentFrom, parentTo] = KMeans.Parent == 0
+        ? std::pair<NTableIndex::TClusterId, NTableIndex::TClusterId>{0, 0}
+        : KMeans.RangeToBorders(range);
+
     auto itFrom = Cluster2Shards.lower_bound(parentFrom);
     if (itFrom == Cluster2Shards.end() || parentTo < itFrom->second.From) {
-        Cluster2Shards.emplace_hint(itFrom, parentTo, TClusterShards{.From = parentFrom, .Local = shard});
+        // The new range does not intersect with other ranges, just add it with 1 shard
+        Cluster2Shards.emplace_hint(itFrom, parentTo, TClusterShards{.From = parentFrom, .Shards = {shard}});
         return;
     }
 
-    // otherwise, this range is global and we need to merge all intersecting ranges
-    auto itTo = parentTo < itFrom->first ? itFrom : Cluster2Shards.lower_bound(parentTo);
-    if (itTo == Cluster2Shards.end()) {
-        itTo = Cluster2Shards.rbegin().base();
+    for (auto it = itFrom; it != Cluster2Shards.end() && it->second.From <= parentTo && it->first >= parentFrom; it++) {
+        // The new shard may only intersect with existing shards by its starting or ending edge
+        Y_ENSURE(it->second.From == parentTo || it->first == parentFrom);
     }
-    if (itTo->first < parentTo) {
-        const bool needsToReplaceFrom = itFrom == itTo;
-        auto node = Cluster2Shards.extract(itTo);
-        node.key() = parentTo;
-        itTo = Cluster2Shards.insert(Cluster2Shards.end(), std::move(node));
-        itFrom = needsToReplaceFrom ? itTo : itFrom;
-    }
-    auto& [toFrom, toLocal, toGlobal] = itTo->second;
 
-    toFrom = std::min(toFrom, parentFrom);
-    if (toLocal != InvalidShardIdx) {
-        toGlobal.emplace_back(toLocal);
-        toLocal = InvalidShardIdx;
-    }
-    toGlobal.emplace_back(shard);
-
-    while (itFrom != itTo) {
-        const auto& [fromFrom, fromLocal, fromGlobal] = itFrom->second;
-        toFrom = std::min(toFrom, fromFrom);
-        if (fromLocal != InvalidShardIdx) {
-            Y_ASSERT(fromGlobal.empty());
-            toGlobal.emplace_back(fromLocal);
-        } else {
-            Y_ASSERT(!fromGlobal.empty());
-            toGlobal.insert(toGlobal.end(), fromGlobal.begin(), fromGlobal.end());
+    if (parentFrom == itFrom->first) {
+        // Intersects by parentFrom
+        if (itFrom->second.From < itFrom->first) {
+            Cluster2Shards.emplace_hint(itFrom, itFrom->first-1, itFrom->second);
+            itFrom->second.From = parentFrom;
         }
-        itFrom = Cluster2Shards.erase(itFrom);
+        itFrom->second.Shards.push_back(shard);
+        // Increment to also check intersection by parentTo
+        itFrom++;
+        if (parentTo == parentFrom) {
+            return;
+        }
+        parentFrom++;
     }
+
+    if (itFrom != Cluster2Shards.end() && parentTo == itFrom->second.From) {
+        // Intersects by parentTo
+        if (itFrom->second.From < itFrom->first) {
+            auto endShards = itFrom->second.Shards;
+            endShards.push_back(shard);
+            Cluster2Shards.emplace_hint(itFrom, parentTo, TClusterShards{.From = parentTo, .Shards = std::move(endShards)});
+            itFrom->second.From = parentTo+1;
+        } else {
+            itFrom->second.Shards.push_back(shard);
+        }
+        if (parentTo == parentFrom) {
+            return;
+        }
+        parentTo--;
+    }
+
+    // Add the remaining range
+    Cluster2Shards.emplace_hint(itFrom, parentTo, TClusterShards{.From = parentFrom, .Shards = {shard}});
 }
 
 TColumnFamiliesMerger::TColumnFamiliesMerger(NKikimrSchemeOp::TPartitionConfig &container)
@@ -2464,39 +2629,6 @@ bool TTopicInfo::FillKeySchema(const TString& tabletConfig) {
 
     TString unused;
     return FillKeySchema(proto, unused);
-}
-
-TBillingStats::TBillingStats(ui64 readRows, ui64 readBytes, ui64 uploadRows, ui64 uploadBytes)
-    : UploadRows{uploadRows}
-    , UploadBytes{uploadBytes}
-    , ReadRows{readRows}
-    , ReadBytes{readBytes}
-{
-}
-
-TBillingStats TBillingStats::operator -(const TBillingStats &other) const {
-    Y_ABORT_UNLESS(UploadRows >= other.UploadRows);
-    Y_ABORT_UNLESS(UploadBytes >= other.UploadBytes);
-    Y_ABORT_UNLESS(ReadRows >= other.ReadRows);
-    Y_ABORT_UNLESS(ReadBytes >= other.ReadBytes);
-
-    return {UploadRows - other.UploadRows, UploadBytes - other.UploadBytes,
-            ReadRows - other.ReadRows, ReadBytes - other.ReadBytes};
-}
-
-TBillingStats TBillingStats::operator +(const TBillingStats &other) const {
-    return {UploadRows + other.UploadRows, UploadBytes + other.UploadBytes,
-            ReadRows + other.ReadRows, ReadBytes + other.ReadBytes};
-}
-
-TString TBillingStats::ToString() const {
-    return TStringBuilder()
-            << "{"
-            << " upload rows: " << UploadRows
-            << ", upload bytes: " << UploadBytes
-            << ", read rows: " << ReadRows
-            << ", read bytes: " << ReadBytes
-            << " }";
 }
 
 TSequenceInfo::TSequenceInfo(

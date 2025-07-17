@@ -1,6 +1,7 @@
 #include "dynamic_nameserver_impl.h"
 
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/base/counters.h>
 #include <ydb/core/base/nameservice.h>
 #include <ydb/core/mon/mon.h>
 #include <ydb/library/services/services.pb.h>
@@ -91,6 +92,7 @@ private:
                 ResetInterconnectProxyConfig(NodeId, ctx);
                 ListNodesCache->Invalidate(); // node was erased
             }
+            Owner->UpdateCounters();
             OnError(rec.GetStatus().GetReason(), ctx);
             return;
         }
@@ -105,6 +107,7 @@ private:
             ResetInterconnectProxyConfig(NodeId, ctx);
         Config->DynamicNodes.emplace(NodeId, node);
 
+        Owner->UpdateCounters();
         OnSuccess(ctx);
     }
 
@@ -240,6 +243,13 @@ void TDynamicNameserver::Bootstrap(const TActorContext &ctx)
         OpenPipe(domain->DomainUid);
     }
 
+    auto counters = GetServiceCounters(AppData(ctx)->Counters, "utils")->GetSubgroup("component", "nameserver");
+    ActiveDynamicNodesCounter = counters->GetCounter("ActiveDynamicNodes");
+    ExpiredDynamicNodesCounter = counters->GetCounter("ExpireDynamicNodes");
+    StaticNodesCounter = counters->GetCounter("StaticNodes");
+    EpochVersionCounter = counters->GetCounter("EpochVersion");
+    UpdateCounters();
+
     Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), new TEvNodeWardenQueryStorageConfig(true));
 
     Become(&TDynamicNameserver::StateFunc);
@@ -248,6 +258,8 @@ void TDynamicNameserver::Bootstrap(const TActorContext &ctx)
 void TDynamicNameserver::Handle(TEvNodeWardenStorageConfig::TPtr ev) {
     Y_ABORT_UNLESS(ev->Get()->Config);
     const auto& config = *ev->Get()->Config;
+
+    BridgeInfo = std::move(ev->Get()->BridgeInfo);
 
     if (ev->Get()->SelfManagementEnabled) {
         // self-management through distconf is enabled and we are operating based on their tables, so apply them now
@@ -280,6 +292,7 @@ void TDynamicNameserver::ReplaceNameserverSetup(TIntrusivePtr<TTableNameserverSe
         for (const auto& subscriber : StaticNodeChangeSubscribers) {
             TActivationContext::Send(new IEventHandle(SelfId(), subscriber, new TEvInterconnect::TEvListNodes));
         }
+        UpdateCounters();
     }
 }
 
@@ -388,11 +401,29 @@ void TDynamicNameserver::SendNodesList(TActorId recipient, const TActorContext &
     if (ListNodesCache->NeedUpdate(now)) {
         auto newNodes = MakeIntrusive<TIntrusiveVector<TEvInterconnect::TNodeInfo>>();
         auto newExpire = TInstant::Max();
+        const bool bridgeModeEnabled = AppData()->BridgeConfig && AppData()->BridgeConfig->PilesSize();
+        auto newPileMap = bridgeModeEnabled
+            ?  std::make_shared<TEvInterconnect::TEvNodesInfo::TPileMap>()
+            : nullptr;
+        if (newPileMap) {
+            newPileMap->resize(AppData()->BridgeConfig->PilesSize());
+        }
+        THashMap<TString, size_t> pileNameMap;
+        if (bridgeModeEnabled) {
+            for (size_t i = 0; i < AppData()->BridgeConfig->PilesSize(); ++i) {
+                pileNameMap.emplace(AppData()->BridgeConfig->GetPiles(i).GetName(), i);
+            }
+        }
 
         for (const auto &pr : StaticConfig->StaticNodeTable) {
             newNodes->emplace_back(pr.first,
                                    pr.second.Address, pr.second.Host, pr.second.ResolveHost,
                                    pr.second.Port, pr.second.Location, true);
+            if (newPileMap && BridgeInfo) {
+                if (const auto *pile = BridgeInfo->GetPileForNode(pr.first)) {
+                    newPileMap->at(pile->BridgePileId.GetRawId()).push_back(pr.first);
+                }
+            }
         }
 
         for (auto &config : DynamicConfigs) {
@@ -402,14 +433,27 @@ void TDynamicNameserver::SendNodesList(TActorId recipient, const TActorContext &
                                            pr.second.Host, pr.second.ResolveHost,
                                            pr.second.Port, pr.second.Location, false);
                     newExpire = std::min(newExpire, pr.second.Expire);
+                    if (newPileMap) {
+                        TNodeLocation location(pr.second.Location);
+                        const auto& bridgePileName = location.GetBridgePileName();
+                        if (bridgePileName && pileNameMap.contains(*bridgePileName)) {
+                            newPileMap->at(pileNameMap[*bridgePileName]).push_back(pr.first);
+                        }
+                    }
                 }
             }
         }
 
-        ListNodesCache->Update(newNodes, newExpire);
+        if (newPileMap) {
+            for (auto& pile : *newPileMap) {
+                std::ranges::sort(pile);
+            }
+        }
+
+        ListNodesCache->Update(std::move(newNodes), newExpire, std::move(newPileMap));
     }
 
-    ctx.Send(recipient, new TEvInterconnect::TEvNodesInfo(ListNodesCache->GetNodes()));
+    ctx.Send(recipient, new TEvInterconnect::TEvNodesInfo(ListNodesCache->GetNodes(), ListNodesCache->GetPileMap()));
 }
 
 void TDynamicNameserver::SendNodesList(const TActorContext &ctx)
@@ -495,6 +539,8 @@ void TDynamicNameserver::UpdateState(const NKikimrNodeBroker::TNodesInfo &rec,
         }
         config->Epoch = rec.GetEpoch();
     }
+
+    UpdateCounters();
 }
 
 void TDynamicNameserver::OnPipeDestroyed(ui32 domain, const TActorContext &ctx)
@@ -517,6 +563,18 @@ void TDynamicNameserver::OnPipeDestroyed(ui32 domain, const TActorContext &ctx)
     SyncInProgress = false;
 
     OpenPipe(DynamicConfigs[domain]->NodeBrokerPipe);
+}
+
+void TDynamicNameserver::UpdateCounters() {
+    auto info = AppData()->DomainsInfo;
+    if (info->Domain) {
+        const auto &config = DynamicConfigs[info->Domain->DomainUid];
+
+        *EpochVersionCounter = config->Epoch.Version;
+        *ActiveDynamicNodesCounter = config->DynamicNodes.size();
+        *ExpiredDynamicNodesCounter = config->ExpiredNodes.size();
+        *StaticNodesCounter = StaticConfig->StaticNodeTable.size();
+    }
 }
 
 void TDynamicNameserver::Handle(TEvInterconnect::TEvResolveNode::TPtr &ev,
@@ -782,6 +840,8 @@ void TDynamicNameserver::Handle(TEvNodeBroker::TEvUpdateNodes::TPtr &ev, const T
                 break;
         }
     }
+
+    UpdateCounters();
 }
 
 void TDynamicNameserver::Handle(TEvNodeBroker::TEvSyncNodesResponse::TPtr &ev, const TActorContext &ctx)
@@ -935,14 +995,17 @@ TListNodesCache::TListNodesCache()
 {}
 
 
-void TListNodesCache::Update(TIntrusiveVector<TEvInterconnect::TNodeInfo>::TConstPtr newNodes, TInstant newExpire) {
-    Nodes = newNodes;
+void TListNodesCache::Update(TIntrusiveVector<TEvInterconnect::TNodeInfo>::TConstPtr newNodes, TInstant newExpire,
+        std::shared_ptr<const TEvInterconnect::TEvNodesInfo::TPileMap>&& newPileMap) {
+    Nodes = std::move(newNodes);
     Expire = newExpire;
+    PileMap = std::move(newPileMap);
 }
 
 void TListNodesCache::Invalidate() {
     Nodes = nullptr;
     Expire = TInstant::Zero();
+    PileMap = nullptr;
 }
 
 bool TListNodesCache::NeedUpdate(TInstant now) const {
@@ -951,6 +1014,10 @@ bool TListNodesCache::NeedUpdate(TInstant now) const {
 
 TIntrusiveVector<TEvInterconnect::TNodeInfo>::TConstPtr TListNodesCache::GetNodes() const {
     return Nodes;
+}
+
+std::shared_ptr<const TEvInterconnect::TEvNodesInfo::TPileMap> TListNodesCache::GetPileMap() const {
+    return PileMap;
 }
 
 } // NNodeBroker

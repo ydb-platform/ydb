@@ -52,10 +52,11 @@ namespace NKikimr::NDataShard {
         ui64 CommitOrder;
         ui64 TxId;
         EVolatileTxState State = EVolatileTxState::Waiting;
-        bool AddCommitted = false;
-        bool CommitOrdered = false;
-        bool IsArbiter = false;
-        bool IsArbiterOnHold = false;
+        ui32 AddCommitted : 1 = false;
+        ui32 CommitOrdered : 1 = false;
+        ui32 IsArbiter : 1 = false;
+        ui32 IsArbiterOnHold : 1 = false;
+        ui32 DisableExpectations : 1 = false;
         TRowVersion Version;
         absl::flat_hash_set<ui64> CommitTxIds;
         absl::flat_hash_set<ui64> Dependencies;

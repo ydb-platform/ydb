@@ -6,9 +6,10 @@ import requests
 import yaml
 import ydb
 from ydb.tests.olap.lib.utils import get_external_param
+from ydb.tests.olap.lib.remote_execution import execute_command, deploy_binaries_to_hosts
 from copy import deepcopy
 from time import sleep, time
-from typing import List, Optional, Callable
+from typing import List, Optional, Callable, Dict, Any, Union
 from enum import Enum
 
 LOGGER = logging.getLogger()
@@ -37,8 +38,13 @@ class YdbCluster:
         def __init__(self, desc: dict):
             ss = desc.get('SystemState', {})
             self.host: str = ss.get('Host', '')
-            ports = {e.get('Name', ''): int(e.get('Address', '0').split(':')[-1]) for e in ss.get('Endpoints', [])}
+            ports = {
+                e.get('Name', ''): int(e.get('Address', '0').split(':')[-1])
+                for e in ss.get('Endpoints', [])
+            }
             self.ic_port: int = ports.get('ic', 0)
+            self.mon_port: int = ports.get('http-mon', 0)
+            self.grpc_port: int = ports.get('grpc', 0)
             self.disconnected: bool = desc.get('Disconnected', False)
             self.version: str = ss.get('Version', '')
             self.start_time: float = 0.001 * int(ss.get('StartTime', time() * 1000))
@@ -52,7 +58,8 @@ class YdbCluster:
 
         @property
         def slot(self) -> str:
-            return f'{"static" if self.role == YdbCluster.Node.Role.STORAGE else self.ic_port}@{self.host}'
+            role_prefix = "static" if self.role == YdbCluster.Node.Role.STORAGE else self.ic_port
+            return f'{role_prefix}@{self.host}'
 
     _ydb_driver = None
     _results_driver = None
@@ -60,9 +67,19 @@ class YdbCluster:
     ydb_endpoint = get_external_param('ydb-endpoint', 'grpc://ydb-olap-testing-vla-0002.search.yandex.net:2135')
     ydb_database = get_external_param('ydb-db', 'olap-testing/kikimr/testing/acceptance-2').lstrip('/')
     ydb_mon_port = 8765
-    tables_path = get_external_param('tables-path', 'olap_yatests')
+    _tables_path = get_external_param('tables-path', 'olap_yatests').rstrip('/')
     _monitoring_urls: list[YdbCluster.MonitoringUrl] = None
     _dyn_nodes_count: Optional[int] = None
+
+    @classmethod
+    def get_tables_path(cls, subpath: str = '') -> str:
+        if cls._tables_path and subpath:
+            return f'{cls._tables_path}/{subpath}'
+        return subpath if subpath else cls._tables_path
+
+    @classmethod
+    def get_full_tables_path(cls, subpath: str = '') -> str:
+        return f'/{cls.ydb_database}/{cls.get_tables_path(subpath)}'
 
     @classmethod
     def get_monitoring_urls(cls) -> list[YdbCluster.MonitoringUrl]:
@@ -88,7 +105,9 @@ class YdbCluster:
         return f'http://{host}:{cls.ydb_mon_port}'
 
     @classmethod
-    def get_cluster_nodes(cls, path: Optional[str] = None, db_only: bool = False) -> list[YdbCluster.Node]:
+    def get_cluster_nodes(cls, path: Optional[str] = None, db_only: bool = False,
+                          role: Optional[YdbCluster.Node.Role] = None
+                          ) -> list[YdbCluster.Node]:
         try:
             url = f'{cls._get_service_url()}/viewer/json/nodes?'
             if db_only or path is not None:
@@ -96,20 +115,46 @@ class YdbCluster:
             if path is not None:
                 url += f'&path={path}&tablets=true'
             headers = {}
-            # token = os.getenv('OLAP_YDB_OAUTH', None)
-            # if token is not None:
-            #    headers['Authorization'] = token
             response = requests.get(url, headers=headers)
             response.raise_for_status()
             data = response.json()
             if not isinstance(data, dict):
                 raise Exception(f'Incorrect response type: {data}')
-            return [YdbCluster.Node(n) for n in data.get('Nodes', [])]
+
+            # Create nodes from the response
+            nodes = [YdbCluster.Node(n) for n in data.get('Nodes', [])]
+
+            # Filter nodes by role if specified
+            if role is not None:
+                nodes = [node for node in nodes if node.role == role]
+
+            return nodes
         except requests.HTTPError as e:
             LOGGER.error(f'{e.strerror}: {e.response.content}')
         except Exception as e:
             LOGGER.error(e)
         return []
+
+    @classmethod
+    def get_metrics(cls, metrics: dict[str, dict[str, str]], db_only: bool = False, role: Optional[YdbCluster.Node.Role] = None) -> dict[str, dict[str, float]]:
+        def sensor_has_labels(sensor, labels: dict[str, str]) -> bool:
+            for k, v in labels.items():
+                if sensor.get('labels', {}).get(k, '') != v:
+                    return False
+            return True
+        nodes = cls.get_cluster_nodes(db_only=db_only, role=role)
+        result = {}
+        for node in nodes:
+            response = requests.get(f'http://{node.host}:{node.mon_port}/counters/counters=tablets/json')
+            response.raise_for_status()
+            sensor_values = {}
+            for name, labels in metrics.items():
+                for sensor in response.json()['sensors']:
+                    if sensor_has_labels(sensor, labels):
+                        sensor_values.setdefault(name, 0.)
+                        sensor_values[name] += sensor['value']
+            result[node.slot] = sensor_values
+        return result
 
     @classmethod
     def get_cluster_info(cls):
@@ -170,7 +215,9 @@ class YdbCluster:
         return cls._ydb_driver
 
     @classmethod
-    def list_directory(cls, root_path: str, rel_path: str, kind_order_key: Optional[Callable[[ydb.SchemeEntryType], int]] = None) -> List[ydb.SchemeEntry]:
+    def list_directory(cls, root_path: str, rel_path: str,
+                       kind_order_key: Optional[Callable[[ydb.SchemeEntryType], int]] = None
+                       ) -> List[ydb.SchemeEntry]:
         path = f'{root_path}/{rel_path}' if root_path else rel_path
         LOGGER.info(f'list {path}')
         result = []
@@ -192,8 +239,8 @@ class YdbCluster:
         return cls.get_ydb_driver().scheme_client.describe_path(path)
 
     @classmethod
-    def _get_tables(cls, path):
-        full_path = f'/{cls.ydb_database}/{path}'
+    def get_tables(cls, path):
+        full_path = cls.get_full_tables_path(path)
         LOGGER.info(f'get_tables {full_path}')
         result = []
         self_descr = cls._describe_path_impl(full_path)
@@ -249,6 +296,30 @@ class YdbCluster:
         return cls._dyn_nodes_count
 
     @classmethod
+    @allure.step('Deploy binaries to cluster nodes')
+    def deploy_binaries_to_nodes(
+        cls,
+        binary_files: list,
+        target_dir: str = '/tmp/stress_binaries/'
+    ) -> Dict[str, Dict[str, Any]]:
+        """
+        Разворачивает бинарные файлы на всех нодах кластера
+
+        Args:
+            binary_files: список путей к бинарным файлам
+            target_dir: директория для размещения файлов на нодах
+
+        Returns:
+            Dict: словарь с результатами деплоя по хостам
+        """
+        # Получаем уникальные хосты из нод кластера
+        nodes = cls.get_cluster_nodes(db_only=True)
+        hosts = list(set(node.host for node in nodes))
+
+        # Используем утилитную функцию для развертывания
+        return deploy_binaries_to_hosts(binary_files, hosts, target_dir)
+
+    @classmethod
     @allure.step('Check if YDB alive')
     def check_if_ydb_alive(cls, timeout=10, balanced_paths=None) -> tuple[str, str]:
         def _check_node(n: YdbCluster.Node):
@@ -282,10 +353,10 @@ class YdbCluster:
                 errors.append(f'Only {ok_node_count} from {nodes_count} dynnodes are ok: {",".join(node_errors)}')
             paths_to_balance = []
             if isinstance(balanced_paths, str):
-                paths_to_balance += cls._get_tables(balanced_paths)
+                paths_to_balance += cls.get_tables(balanced_paths)
             elif isinstance(balanced_paths, list):
                 for path in balanced_paths:
-                    paths_to_balance += cls._get_tables(path)
+                    paths_to_balance += cls.get_tables(path)
             for p in paths_to_balance:
                 table_nodes = cls.get_cluster_nodes(p)
                 min = None
@@ -328,3 +399,253 @@ class YdbCluster:
                 break
             sleep(1)
         return error
+
+    @classmethod
+    @allure.step('Kill processes on cluster nodes')
+    def kill_processes_on_nodes(
+        cls,
+        process_names: Union[str, list[str]],
+        target_dir: Optional[str] = None,
+        nodes: Optional[list[YdbCluster.Node]] = None
+    ) -> Dict[str, Dict[str, Any]]:
+        """
+        Останавливает процессы с указанными именами на нодах кластера
+
+        Args:
+            process_names: имя процесса или список имен процессов для остановки
+            target_dir: директория, в которой искать процессы (опционально)
+            nodes: список нод для обработки (если None, используются все ноды кластера)
+
+        Returns:
+            Dict: словарь с результатами остановки процессов по хостам
+        """
+        if isinstance(process_names, str):
+            process_names = [process_names]
+
+        if nodes is None:
+            nodes = cls.get_cluster_nodes()
+
+        results = {}
+        processed_hosts = set()
+
+        for node in nodes:
+            # Избегаем дублирования обработки одного хоста
+            if node.host in processed_hosts:
+                continue
+            processed_hosts.add(node.host)
+
+            node_results = {}
+            allure.attach(f"Node: {node.host}", "Processing Node", attachment_type=allure.attachment_type.TEXT)
+
+            for process_name in process_names:
+                try:
+                    result = cls._kill_process_on_node(node, process_name, target_dir)
+                    node_results[process_name] = result
+
+                    if result['killed_count'] > 0:
+                        allure.attach(
+                            f"Successfully killed {result['killed_count']} processes "
+                            f"'{process_name}' on {node.host}",
+                            f"Kill {process_name} on {node.host}",
+                            attachment_type=allure.attachment_type.TEXT
+                        )
+                    else:
+                        allure.attach(
+                            f"No processes '{process_name}' found on {node.host}",
+                            f"Kill {process_name} on {node.host}",
+                            attachment_type=allure.attachment_type.TEXT
+                        )
+
+                except Exception as e:
+                    error_msg = str(e)
+                    node_results[process_name] = {
+                        'success': False,
+                        'error': error_msg,
+                        'killed_count': 0
+                    }
+
+                    allure.attach(
+                        f"Exception when killing '{process_name}' on {node.host}: {error_msg}",
+                        f"Kill {process_name} on {node.host} failed",
+                        attachment_type=allure.attachment_type.TEXT
+                    )
+
+            results[node.host] = node_results
+
+        return results
+
+    @classmethod
+    def _kill_process_on_node(cls, node: YdbCluster.Node, process_name: str,
+                              target_dir: Optional[str] = None) -> Dict[str, Any]:
+        """
+        Останавливает процессы с указанным именем на конкретной ноде используя ps и kill
+
+        Args:
+            node: нода для обработки
+            process_name: имя процесса для остановки
+            target_dir: директория, в которой искать процессы (опционально)
+
+        Returns:
+            Dict: результат остановки процессов
+        """
+        result = {
+            'success': False,
+            'killed_count': 0,
+            'found_processes': [],
+            'commands_executed': []
+        }
+
+        try:
+            # Создаем список паттернов для поиска
+            search_patterns = [process_name]
+
+            # Если указана директория, добавляем поиск по полному пути
+            if target_dir:
+                full_path = os.path.join(target_dir, process_name)
+                search_patterns.append(full_path)
+                # Также ищем любые процессы из указанной директории
+                search_patterns.append(target_dir)
+
+            all_found_pids = set()
+
+            for pattern in search_patterns:
+                try:
+                    # Ищем процессы с помощью ps -aux | grep
+                    # Используем [p]attern чтобы исключить сам grep из результатов
+                    escaped_pattern = pattern.replace('[', r'\[').replace(']', r'\]')
+                    if len(escaped_pattern) > 0:
+                        first_char = escaped_pattern[0]
+                        rest_pattern = escaped_pattern[1:]
+                        grep_pattern = f"[{first_char}]{rest_pattern}"
+                    else:
+                        grep_pattern = escaped_pattern
+
+                    ps_cmd = f"ps -aux | grep '{grep_pattern}'"
+                    result_exec = execute_command(node.host, ps_cmd, raise_on_error=False)
+                    stdout = result_exec.stdout
+                    stderr = result_exec.stderr
+
+                    result['commands_executed'].append({
+                        'command': ps_cmd,
+                        'stdout': stdout,
+                        'stderr': stderr,
+                        'pattern': pattern
+                    })
+
+                    if stdout.strip():
+                        # Парсим вывод ps для извлечения PID
+                        lines = stdout.strip().split('\n')
+                        found_pids = []
+
+                        for line in lines:
+                            if line.strip():
+                                # Формат ps -aux: USER PID %CPU %MEM VSZ RSS TTY STAT START TIME COMMAND
+                                parts = line.split(None, 10)  # Разделяем на максимум 11 частей
+                                if len(parts) >= 2:
+                                    try:
+                                        pid = int(parts[1])
+                                        command = parts[10] if len(parts) > 10 else ""
+
+                                        # Дополнительная проверка, что это действительно наш процесс
+                                        if pattern in command:
+                                            found_pids.append(pid)
+                                            all_found_pids.add(pid)
+                                            result['found_processes'].append({
+                                                'pid': pid,
+                                                'command': command,
+                                                'pattern': pattern,
+                                                'user': parts[0] if len(parts) > 0 else "unknown"
+                                            })
+                                    except (ValueError, IndexError):
+                                        # Пропускаем строки, которые не удается распарсить
+                                        continue
+
+                        LOGGER.info(f"Found {len(found_pids)} processes matching pattern '{pattern}' on {node.host}")
+
+                except Exception as e:
+                    LOGGER.warning(f"Error searching for pattern '{pattern}' on {node.host}: {e}")
+                    result['commands_executed'].append({
+                        'command': ps_cmd,
+                        'error': str(e),
+                        'pattern': pattern
+                    })
+
+            # Теперь убиваем все найденные процессы
+            killed_count = 0
+            if all_found_pids:
+                pids_list = list(all_found_pids)
+
+                # Сначала пробуем мягкое завершение (SIGTERM)
+                for signal_type, signal_name in [('TERM', 'SIGTERM'), ('KILL', 'SIGKILL')]:
+                    if not pids_list:  # Если все процессы уже завершены
+                        break
+
+                    pids_str = ' '.join(map(str, pids_list))
+                    kill_cmd = f"kill -{signal_type} {pids_str}"
+
+                    try:
+                        kill_result = execute_command(node.host, kill_cmd, raise_on_error=False)
+                        stdout = kill_result.stdout
+                        stderr = kill_result.stderr
+
+                        result['commands_executed'].append({
+                            'command': kill_cmd,
+                            'stdout': stdout,
+                            'stderr': stderr,
+                            'signal': signal_name
+                        })
+
+                        LOGGER.info(f"Sent {signal_name} to {len(pids_list)} processes on {node.host}")
+
+                        # Ждем немного и проверяем, какие процессы еще живы
+                        sleep(1)
+
+                        # Проверяем, какие процессы еще существуют
+                        still_alive = []
+                        for pid in pids_list:
+                            check_cmd = f"kill -0 {pid}"
+                            stderr_check = execute_command(node.host, check_cmd, raise_on_error=False).stderr
+                            # kill -0 возвращает 0 если процесс существует
+                            if "No such process" not in stderr_check:
+                                still_alive.append(pid)
+
+                        # Подсчитываем убитые процессы
+                        newly_killed = len(pids_list) - len(still_alive)
+                        killed_count += newly_killed
+                        pids_list = still_alive
+
+                        LOGGER.info(
+                            f"After {signal_name}: {newly_killed} processes killed,"
+                            " {len(still_alive)} still alive on {node.host}"
+                        )
+
+                        # Если это был SIGTERM и остались живые процессы, переходим к SIGKILL
+                        if signal_type == 'TERM' and still_alive:
+                            LOGGER.warning(f"Some processes didn't respond to SIGTERM, will try SIGKILL on {node.host}")
+                            sleep(2)  # Даем больше времени перед SIGKILL
+                            continue
+                        else:
+                            break
+
+                    except Exception as e:
+                        LOGGER.error(f"Error executing kill command '{kill_cmd}' on {node.host}: {e}")
+                        result['commands_executed'].append({
+                            'command': kill_cmd,
+                            'error': str(e),
+                            'signal': signal_name
+                        })
+                        break
+
+            result['killed_count'] = killed_count
+            result['success'] = True
+
+            if killed_count > 0:
+                LOGGER.info(f"Successfully killed {killed_count} processes matching '{process_name}' on {node.host}")
+            else:
+                LOGGER.info(f"No processes matching '{process_name}' found on {node.host}")
+
+        except Exception as e:
+            result['error'] = str(e)
+            LOGGER.error(f"Error killing processes '{process_name}' on {node.host}: {e}")
+
+        return result

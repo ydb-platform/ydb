@@ -8,23 +8,6 @@
 
 namespace NSQLComplete {
 
-    const TVector<TStringBuf> FilteredByPrefix(const TString& prefix, const TNameIndex& index Y_LIFETIME_BOUND) {
-        TNameIndexEntry normalized = {
-            .Normalized = NormalizeName(prefix),
-            .Original = "",
-        };
-
-        auto range = std::ranges::equal_range(
-            std::begin(index), std::end(index),
-            normalized, NameIndexCompareLimit(normalized.Normalized.size()));
-
-        TVector<TStringBuf> filtered;
-        for (const TNameIndexEntry& entry : range) {
-            filtered.emplace_back(TStringBuf(entry.Original));
-        }
-        return filtered;
-    }
-
     const TVector<TStringBuf> FilteredByPrefix(
         const TString& prefix,
         const TVector<TString>& sorted Y_LIFETIME_BOUND) {
@@ -37,7 +20,18 @@ namespace NSQLComplete {
     template <class T, class S = TStringBuf>
     void AppendAs(TVector<TGenericName>& target, const TVector<S>& source) {
         for (const auto& element : source) {
-            target.emplace_back(T{TString(element)});
+            T name;
+
+            TString* content = nullptr;
+            if constexpr (std::is_same_v<TKeyword, T>) {
+                content = &name.Content;
+            } else {
+                content = &name.Identifier;
+            }
+
+            *content = element;
+
+            target.emplace_back(std::move(name));
         }
     }
 
@@ -48,17 +42,17 @@ namespace NSQLComplete {
         const TNameConstraints& constraints,
         TVector<TGenericName>& out) {
         T name;
-        name.Indentifier = prefix;
+        name.Identifier = prefix;
         name = std::get<T>(constraints.Qualified(std::move(name)));
 
-        AppendAs<T>(out, FilteredByPrefix(name.Indentifier, index));
+        AppendAs<T>(out, FilteredByPrefix(name.Identifier, index, NormalizeName));
         out = constraints.Unqualified(std::move(out));
     }
 
     class IRankingNameService: public INameService {
     private:
-        auto Ranking(TNameRequest request) const {
-            return [request = std::move(request), this](auto f) {
+        auto Ranking(const TNameRequest& request) const {
+            return [request, this](auto f) {
                 TNameResponse response = f.ExtractValue();
                 Ranking_->CropToSortedPrefix(
                     response.RankedNames,
@@ -74,11 +68,11 @@ namespace NSQLComplete {
         {
         }
 
-        NThreading::TFuture<TNameResponse> Lookup(TNameRequest request) const override {
+        NThreading::TFuture<TNameResponse> Lookup(const TNameRequest& request) const override {
             return LookupAllUnranked(request).Apply(Ranking(request));
         }
 
-        virtual NThreading::TFuture<TNameResponse> LookupAllUnranked(TNameRequest request) const = 0;
+        virtual NThreading::TFuture<TNameResponse> LookupAllUnranked(const TNameRequest& request) const = 0;
 
     private:
         IRanking::TPtr Ranking_;
@@ -91,25 +85,25 @@ namespace NSQLComplete {
         {
         }
 
-        NThreading::TFuture<TNameResponse> LookupAllUnranked(TNameRequest request) const override {
+        NThreading::TFuture<TNameResponse> LookupAllUnranked(const TNameRequest& request) const override {
+            TVector<TString> keywords = request.Keywords;
+
             TNameResponse response;
-            Sort(request.Keywords, NoCaseCompare);
-            AppendAs<TKeyword>(
-                response.RankedNames,
-                FilteredByPrefix(request.Prefix, request.Keywords));
+            Sort(keywords, NoCaseCompare);
+            AppendAs<TKeyword>(response.RankedNames, FilteredByPrefix(request.Prefix, keywords));
             return NThreading::MakeFuture<TNameResponse>(std::move(response));
         }
     };
 
     class TPragmaNameService: public IRankingNameService {
     public:
-        explicit TPragmaNameService(IRanking::TPtr ranking, TVector<TString> pragmas)
+        TPragmaNameService(IRanking::TPtr ranking, TVector<TString> pragmas)
             : IRankingNameService(std::move(ranking))
             , Pragmas_(BuildNameIndex(std::move(pragmas), NormalizeName))
         {
         }
 
-        NThreading::TFuture<TNameResponse> LookupAllUnranked(TNameRequest request) const override {
+        NThreading::TFuture<TNameResponse> LookupAllUnranked(const TNameRequest& request) const override {
             TNameResponse response;
             if (request.Constraints.Pragma) {
                 NameIndexScan<TPragmaName>(
@@ -127,41 +121,92 @@ namespace NSQLComplete {
 
     class TTypeNameService: public IRankingNameService {
     public:
-        explicit TTypeNameService(IRanking::TPtr ranking, TVector<TString> types)
+        TTypeNameService(IRanking::TPtr ranking, TVector<TString> types)
             : IRankingNameService(std::move(ranking))
-            , Types_(BuildNameIndex(std::move(types), NormalizeName))
+            , SimpleTypes_(BuildNameIndex(std::move(types), NormalizeName))
+            , ContainerTypes_(BuildNameIndex(
+                  {
+                      "Optional",
+                      "Tuple",
+                      "Struct",
+                      "Variant",
+                      "List",
+                      "Stream",
+                      "Flow",
+                      "Dict",
+                      "Set",
+                      "Enum",
+                      "Resource",
+                      "Tagged",
+                      "Callable",
+                  }, NormalizeName))
+            , ParameterizedTypes_(BuildNameIndex(
+                  {
+                      "Decimal",
+                  }, NormalizeName))
         {
         }
 
-        NThreading::TFuture<TNameResponse> LookupAllUnranked(TNameRequest request) const override {
+        NThreading::TFuture<TNameResponse> LookupAllUnranked(const TNameRequest& request) const override {
             TNameResponse response;
             if (request.Constraints.Type) {
-                NameIndexScan<TTypeName>(
-                    Types_,
-                    request.Prefix,
-                    request.Constraints,
-                    response.RankedNames);
+                NameIndexScan<TTypeName>(SimpleTypes_, request.Prefix, request.Constraints, response.RankedNames);
+
+                size_t previousSize = response.RankedNames.size();
+                NameIndexScan<TTypeName>(ContainerTypes_, request.Prefix, request.Constraints, response.RankedNames);
+                for (size_t i = previousSize; i < response.RankedNames.size(); ++i) {
+                    std::get<TTypeName>(response.RankedNames[i]).Kind = TTypeName::EKind::Container;
+                }
+
+                previousSize = response.RankedNames.size();
+                NameIndexScan<TTypeName>(ParameterizedTypes_, request.Prefix, request.Constraints, response.RankedNames);
+                for (size_t i = previousSize; i < response.RankedNames.size(); ++i) {
+                    std::get<TTypeName>(response.RankedNames[i]).Kind = TTypeName::EKind::Parameterized;
+                }
             }
             return NThreading::MakeFuture<TNameResponse>(std::move(response));
         }
 
     private:
-        TNameIndex Types_;
+        TNameIndex SimpleTypes_;
+        TNameIndex ContainerTypes_;
+        TNameIndex ParameterizedTypes_;
     };
 
     class TFunctionNameService: public IRankingNameService {
     public:
-        explicit TFunctionNameService(IRanking::TPtr ranking, TVector<TString> functions)
+        TFunctionNameService(IRanking::TPtr ranking, TVector<TString> functions)
             : IRankingNameService(std::move(ranking))
             , Functions_(BuildNameIndex(std::move(functions), NormalizeName))
+            , TableFunctions_(BuildNameIndex(
+                  {
+                      "CONCAT",
+                      "RANGE",
+                      "LIKE",
+                      "REGEXP",
+                      "FILTER",
+                      "FOLDER",
+                      "WalkFolders",
+                      "EACH",
+                  }, NormalizeName))
         {
         }
 
-        NThreading::TFuture<TNameResponse> LookupAllUnranked(TNameRequest request) const override {
+        NThreading::TFuture<TNameResponse> LookupAllUnranked(const TNameRequest& request) const override {
             TNameResponse response;
-            if (request.Constraints.Function) {
+            if (auto function = request.Constraints.Function) {
+                const TNameIndex* index = nullptr;
+                switch (function->ReturnType) {
+                    case ENodeKind::Any: {
+                        index = &Functions_;
+                    } break;
+                    case ENodeKind::Table: {
+                        index = &TableFunctions_;
+                    } break;
+                }
+
                 NameIndexScan<TFunctionName>(
-                    Functions_,
+                    *index,
                     request.Prefix,
                     request.Constraints,
                     response.RankedNames);
@@ -171,11 +216,12 @@ namespace NSQLComplete {
 
     private:
         TNameIndex Functions_;
+        TNameIndex TableFunctions_;
     };
 
     class THintNameService: public IRankingNameService {
     public:
-        explicit THintNameService(
+        THintNameService(
             IRanking::TPtr ranking,
             THashMap<EStatementKind, TVector<TString>> hints)
             : IRankingNameService(std::move(ranking))
@@ -189,7 +235,7 @@ namespace NSQLComplete {
         {
         }
 
-        NThreading::TFuture<TNameResponse> LookupAllUnranked(TNameRequest request) const override {
+        NThreading::TFuture<TNameResponse> LookupAllUnranked(const TNameRequest& request) const override {
             TNameResponse response;
             if (request.Constraints.Hint) {
                 const auto stmt = request.Constraints.Hint->Statement;

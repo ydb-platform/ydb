@@ -1,6 +1,6 @@
 #include "http.h"
 
-#include <contrib/restricted/http-parser/http_parser.h>
+#include <contrib/deprecated/http-parser/http_parser.h>
 
 namespace NYT::NHttp {
 

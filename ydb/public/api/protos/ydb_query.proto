@@ -186,6 +186,8 @@ message ExecuteQueryRequest {
 
 message ResultSetMeta {
     repeated Ydb.Column columns = 1;
+    uint64 number_rows = 2;
+    bool finished = 3;
 }
 
 message ExecuteQueryResponsePart {
@@ -225,6 +227,7 @@ message ExecuteScriptRequest {
 enum ExecStatus {
     EXEC_STATUS_UNSPECIFIED = 0;
     EXEC_STATUS_STARTING = 10;
+    EXEC_STATUS_RUNNING = 15;
     EXEC_STATUS_ABORTED = 20;
     EXEC_STATUS_CANCELLED = 30;
     EXEC_STATUS_COMPLETED = 40;

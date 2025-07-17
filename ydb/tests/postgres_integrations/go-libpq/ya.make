@@ -40,10 +40,9 @@ ELSE()
 ENDIF()
 
 
-ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")
+INCLUDE(${ARCADIA_ROOT}/ydb/tests/ydbd_dep.inc)
 ENV(YDB_ALLOCATE_PGWIRE_PORT="true")
 DEPENDS(
-    ydb/apps/ydbd
 )
 
 TEST_SRCS(

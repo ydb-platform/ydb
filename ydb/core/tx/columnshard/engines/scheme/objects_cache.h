@@ -74,7 +74,7 @@ public:
         return it->second;
     }
 
-    TSchemasCache::TEntryGuard UpsertIndexInfo(const ui64 presetId, TIndexInfo&& indexInfo);
+    TSchemasCache::TEntryGuard UpsertIndexInfo(TIndexInfo&& indexInfo);
 };
 
 class TSchemaCachesManager {

@@ -4,7 +4,7 @@
 
 namespace NKikimr::NOlap {
 
-NKikimr::TConclusionStatus IMerger::Finish() {
+NKikimr::NOlap::IMerger::TYdbConclusionStatus IMerger::Finish() {
     while (!IncomingFinished) {
         auto result = OnIncomingOnly(IncomingPosition);
         if (result.IsFail()) {
@@ -12,10 +12,10 @@ NKikimr::TConclusionStatus IMerger::Finish() {
         }
         IncomingFinished = !IncomingPosition.NextPosition(1);
     }
-    return TConclusionStatus::Success();
+    return TYdbConclusionStatus::Success();
 }
 
-NKikimr::TConclusionStatus IMerger::AddExistsDataOrdered(const std::shared_ptr<arrow::Table>& data) {
+NKikimr::NOlap::IMerger::TYdbConclusionStatus IMerger::AddExistsDataOrdered(const std::shared_ptr<arrow::Table>& data) {
     AFL_VERIFY(data);
     NArrow::NMerger::TRWSortableBatchPosition existsPosition(data, 0, Schema->GetPKColumnNames(),
         Schema->GetIndexInfo().GetColumnSTLNames(false), false);
@@ -40,10 +40,10 @@ NKikimr::TConclusionStatus IMerger::AddExistsDataOrdered(const std::shared_ptr<a
         }
     }
     AFL_VERIFY(exsistFinished);
-    return TConclusionStatus::Success();
+    return TYdbConclusionStatus::Success();
 }
 
-NKikimr::TConclusionStatus TUpdateMerger::OnEqualKeys(const NArrow::NMerger::TSortableBatchPosition& exists, const NArrow::NMerger::TSortableBatchPosition& incoming) {
+NKikimr::NOlap::IMerger::TYdbConclusionStatus TUpdateMerger::OnEqualKeys(const NArrow::NMerger::TSortableBatchPosition& exists, const NArrow::NMerger::TSortableBatchPosition& incoming) {
     auto rGuard = Builder.StartRecord();
     AFL_VERIFY(Schema->GetIndexInfo().GetColumnIds(false).size() == exists.GetData().GetColumns().size())
         ("index", Schema->GetIndexInfo().GetColumnIds(false).size())("exists", exists.GetData().GetColumns().size());
@@ -57,7 +57,7 @@ NKikimr::TConclusionStatus TUpdateMerger::OnEqualKeys(const NArrow::NMerger::TSo
                 rGuard.Add(*exists.GetData().GetPositionAddress(columnIdx).GetArray(), idxChunk);
             }
         }
-    return TConclusionStatus::Success();
+    return TYdbConclusionStatus::Success();
 }
 
 TUpdateMerger::TUpdateMerger(const NArrow::TContainerWithIndexes<arrow::RecordBatch>& incoming,

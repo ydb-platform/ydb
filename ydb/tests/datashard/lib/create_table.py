@@ -1,22 +1,22 @@
 from ydb.tests.datashard.lib.types_of_variables import cleanup_type_name
 
 
-def create_table_sql_request(table_name: str, columns: dict[str, dict[str]], pk_colums: dict[str, dict[str]], index_colums: dict[str, dict[str]], unique: str, sync: str) -> str:
+def create_table_sql_request(table_name: str, columns: dict[str, dict[str]], pk_columns: dict[str, dict[str]], index_columns: dict[str, dict[str]], unique: str, sync: str) -> str:
     create_columns = []
     for prefix in columns.keys():
         if (prefix != "ttl_" or columns[prefix][0] != "") and len(columns[prefix]) != 0:
             create_columns.append(", ".join(
                 f"{prefix}{cleanup_type_name(type_name)} {type_name}" for type_name in columns[prefix]))
     create_primary_key = []
-    for prefix in pk_colums.keys():
-        if len(pk_colums[prefix]) != 0:
+    for prefix in pk_columns.keys():
+        if len(pk_columns[prefix]) != 0:
             create_primary_key.append(", ".join(
-                f"{prefix}{cleanup_type_name(type_name)}" for type_name in pk_colums[prefix]))
+                f"{prefix}{cleanup_type_name(type_name)}" for type_name in pk_columns[prefix]))
     create_index = []
-    for prefix in index_colums.keys():
-        if len(index_colums[prefix]) != 0:
+    for prefix in index_columns.keys():
+        if len(index_columns[prefix]) != 0:
             create_index.append(", ".join(
-                f"INDEX idx_{prefix}{cleanup_type_name(type_name)} GLOBAL {unique} {sync} ON ({prefix}{cleanup_type_name(type_name)})" for type_name in index_colums[prefix]))
+                f"INDEX idx_{prefix}{cleanup_type_name(type_name)} GLOBAL {unique} {sync} ON ({prefix}{cleanup_type_name(type_name)})" for type_name in index_columns[prefix]))
     sql_create = f"""
         CREATE TABLE `{table_name}` (
             {", ".join(create_columns)},

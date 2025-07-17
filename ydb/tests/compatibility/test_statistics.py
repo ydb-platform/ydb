@@ -2,7 +2,7 @@
 import pytest
 import random
 import threading
-from ydb.tests.library.compatibility.fixtures import RestartToAnotherVersionFixture
+from ydb.tests.library.compatibility.fixtures import RestartToAnotherVersionFixture, RollingUpgradeAndDowngradeFixture
 from ydb.tests.oss.ydb_sdk_import import ydb
 
 TABLE_NAME = "table"
@@ -121,9 +121,11 @@ class TestStatisticsTLI(RestartToAnotherVersionFixture):
         self.check_partition_stats()
 
 
-class TestStatisticsFollowers(RestartToAnotherVersionFixture):
+class TestStatisticsFollowersRollingUpdate(RollingUpgradeAndDowngradeFixture):
     @pytest.fixture(autouse=True, scope="function")
     def setup(self):
+        if min(self.versions) < (25, 1):
+            pytest.skip("Only available since 25-1")
 
         yield from self.setup_cluster(
             extra_feature_flags={
@@ -166,18 +168,14 @@ class TestStatisticsFollowers(RestartToAnotherVersionFixture):
                 WITH (
                     AUTO_PARTITIONING_BY_SIZE = ENABLED,
                     AUTO_PARTITIONING_PARTITION_SIZE_MB = 1,
-                    READ_REPLICAS_SETTINGS = "PER_AZ:1"
+                    READ_REPLICAS_SETTINGS = "ANY_AZ:1"
                 );
             """
             session_pool.execute_with_retries(query)
 
-    def test_statistics_followers(self):
+    def test_example(self):
         self.create_table()
 
-        self.write_data()
-        self.check_statistics()
-
-        self.change_cluster_version()
-
-        self.write_data()
-        self.check_statistics()
+        for _ in self.roll():
+            self.write_data()
+            self.check_statistics()

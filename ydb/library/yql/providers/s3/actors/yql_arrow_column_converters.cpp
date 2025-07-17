@@ -788,7 +788,7 @@ void BuildColumnConverters(std::shared_ptr<arrow::Schema> outputSchema, std::sha
         const auto& targetField = outputSchema->field(i);
         auto srcFieldIndex = dataSchema->GetFieldIndex(targetField->name());
         if (srcFieldIndex == -1) {
-            throw parquet::ParquetException(TStringBuilder() << "Missing field: " << targetField->name());
+            throw parquet::ParquetException(TStringBuilder() << "Missing field: " << targetField->name() << ", found fields in arrow file: " << dataSchema->ToString());
         };
         auto targetType = targetField->type();
         auto originalType = dataSchema->field(srcFieldIndex)->type();

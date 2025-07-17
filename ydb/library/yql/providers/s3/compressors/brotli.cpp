@@ -4,7 +4,7 @@
 #include <util/generic/size_literals.h>
 #include <yql/essentials/utils/exceptions.h>
 #include <yql/essentials/utils/yql_panic.h>
-#include <contrib/libs/brotli/include/brotli/encode.h>
+#include <contrib/libs/brotli/c/include/brotli/encode.h>
 #include <ydb/library/yql/dq/actors/protos/dq_status_codes.pb.h>
 
 namespace NYql {

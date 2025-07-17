@@ -1,9 +1,8 @@
-#include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
-#include <ydb/core/tx/schemeshard/schemeshard_effective_acl.h>
-
 #include <ydb/core/protos/blockstore_config.pb.h>
-#include <ydb/core/protos/table_stats.pb.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
+#include <ydb/core/protos/table_stats.pb.h>
+#include <ydb/core/tx/schemeshard/schemeshard_effective_acl.h>
+#include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 
 #include <util/generic/size_literals.h>
 #include <util/string/cast.h>
@@ -55,7 +54,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
     Y_UNIT_TEST(MkRmDir) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
         ui64 txId = 100;
 
         TestMkDir(runtime, ++txId, "/", "DirA", {NKikimrScheme::StatusPathDoesNotExist});
@@ -575,7 +574,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
     Y_UNIT_TEST(ModifyACL) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
         ui64 txId = 100;
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot"),
@@ -632,7 +631,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
     Y_UNIT_TEST(NameFormat) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
         ui64 txId = 100;
 
         TestCreateTable(runtime, ++txId, "/MyRoot",
@@ -718,7 +717,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
     Y_UNIT_TEST(CreateTable) { //+
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
         ui64 txId = 100;
 
         AsyncMkDir(runtime, ++txId, "/MyRoot", "DirA");
@@ -1079,7 +1078,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
     Y_UNIT_TEST(ConsistentCopyTable) { //+
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
         ui64 txId = 100;
 
         AsyncMkDir(runtime, ++txId, "/MyRoot", "DirA");
@@ -1294,7 +1293,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
     Y_UNIT_TEST(ConsistentCopyTableAwait) { //+
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
         ui64 txId = 100;
 
         AsyncMkDir(runtime, ++txId, "/MyRoot", "DirA");
@@ -2377,7 +2376,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
     Y_UNIT_TEST(CreateIndexedTableAndForceDrop) { //+
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
         ui64 txId = 100;
 
         TestMkDir(runtime, ++txId, "/MyRoot", "DirA");
@@ -2424,7 +2423,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
     Y_UNIT_TEST(CreateIndexedTableAndForceDropSimultaneously) { //+
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
         ui64 txId = 100;
 
         TestMkDir(runtime, ++txId, "/MyRoot", "DirA");
@@ -2466,7 +2465,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
     Y_UNIT_TEST(DropIndexedTableAndForceDropSimultaneously) { //+
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
         ui64 txId = 100;
 
         TestMkDir(runtime, ++txId, "/MyRoot", "DirA");
@@ -2825,7 +2824,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
     Y_UNIT_TEST(DependentOps) { //+
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
         ui64 txId = 123;
 
         ++txId;
@@ -2992,7 +2991,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
     Y_UNIT_TEST(CopyTableTwiceSimultaneously) { //+
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
         ui64 txId = 123;
 
         TestCreateTable(runtime, ++txId, "/MyRoot",
@@ -3309,7 +3308,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
     Y_UNIT_TEST(CopyTableWithAlterConfig) { //+
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
         ui64 txId = 100;
 
         TestCreateTable(runtime, ++txId, "/MyRoot", R"(
@@ -3587,7 +3586,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
     Y_UNIT_TEST(CopyTableForBackup) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
         ui64 txId = 100;
 
         bool splitStarted = false;
@@ -4535,17 +4534,17 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                 )");
         env.TestWaitNotification(runtime, txId);
 
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"),
-                           {NLs::CheckColumns("Table", cols, dropCols, keyCol)});
+        const auto describeResult = DescribePath(runtime, "/MyRoot/Table");
+        const auto tablePathId = describeResult.GetPathId();
+        TestDescribeResult(describeResult, {NLs::CheckColumns("Table", cols, dropCols, keyCol)});
+        TStringBuilder schema;
+        schema << "Id_Deprecated: " << tablePathId << Endl <<
+            R"(Columns { Name: "add_1"  Type: "Uint32"})" << Endl <<
+            R"(Columns { Name: "add_2"  Type: "Uint64"})";
 
-        Cdbg << "AlterTable: add column" << Endl;
         cols.insert("add_1");
         cols.insert("add_2");
-        TestAlterTable(runtime, ++txId, "not used",
-                R"(Id_Deprecated: 2
-                    Columns { Name: "add_1"  Type: "Uint32"}
-                    Columns { Name: "add_2"  Type: "Uint64"})"
-                );
+        TestAlterTable(runtime, ++txId, "not used", schema);
         env.TestWaitNotification(runtime, txId);
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"),
@@ -4571,12 +4570,15 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                         )");
         env.TestWaitNotification(runtime, txId);
 
+        const auto describeResult = DescribePath(runtime, "/MyRoot/Table");
+        const auto tablePathId = describeResult.GetPathId();
+
         ui64 datashardTabletId = TTestTxConfig::FakeHiveTablets;
         UNIT_ASSERT_VALUES_EQUAL(GetTxReadSizeLimit(runtime, datashardTabletId), 100);
         UNIT_ASSERT_VALUES_EQUAL(GetExecutorCacheSize(runtime, datashardTabletId), 42);
 
         { // ChannelProfileId
-            NKikimrSchemeOp::TTableDescription tableDescription = GetDatashardSchema(runtime, datashardTabletId, 2);
+            NKikimrSchemeOp::TTableDescription tableDescription = GetDatashardSchema(runtime, datashardTabletId, tablePathId);
             UNIT_ASSERT_VALUES_EQUAL(tableDescription.GetPartitionConfig().GetChannelProfileId(), 1);
         }
 
@@ -4641,7 +4643,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         env.TestWaitNotification(runtime, txId);
 
         { // ChannelProfileId
-            NKikimrSchemeOp::TTableDescription tableDescription = GetDatashardSchema(runtime, datashardTabletId, 2);
+            NKikimrSchemeOp::TTableDescription tableDescription = GetDatashardSchema(runtime, datashardTabletId, tablePathId);
             UNIT_ASSERT_VALUES_EQUAL(tableDescription.GetPartitionConfig().GetChannelProfileId(), 1);
         }
 
@@ -4702,8 +4704,11 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         )");
         env.TestWaitNotification(runtime, txId);
 
+        const auto describeResult = DescribePath(runtime, "/MyRoot/Table");
+        const auto tablePathId = describeResult.GetPathId();
+
         for (ui64 tabletId : tabletIds) {
-            NKikimrSchemeOp::TTableDescription tableDescription = GetDatashardSchema(runtime, tabletId, 2);
+            NKikimrSchemeOp::TTableDescription tableDescription = GetDatashardSchema(runtime, tabletId, tablePathId);
             auto partConfig = tableDescription.GetPartitionConfig();
             Cdbg << ToString(partConfig) << Endl;
             UNIT_ASSERT_VALUES_EQUAL(tableDescription.ColumnsSize(), 4);
@@ -4756,7 +4761,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         env.TestWaitNotification(runtime, txId);
 
         for (ui64 tabletId : tabletIds) {
-            NKikimrSchemeOp::TTableDescription tableDescription = GetDatashardSchema(runtime, tabletId, 2);
+            NKikimrSchemeOp::TTableDescription tableDescription = GetDatashardSchema(runtime, tabletId, tablePathId);
             auto partConfig = tableDescription.GetPartitionConfig();
             //Cdbg << ToString(partConfig) << Endl;
             UNIT_ASSERT_VALUES_EQUAL(tableDescription.ColumnsSize(), 4);
@@ -4781,7 +4786,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
     Y_UNIT_TEST(MultipleColumnFamilies) { //+
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
         ui64 txId = 100;
 
         TestAlterSubDomain(runtime, ++txId,  "/", R"(
@@ -5426,10 +5431,10 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
             }
         };
 
-        auto checkSchema = [&] (const TSchemaChecker& checker) {
+        auto checkSchema = [&] (const ui64 localPathId, const TSchemaChecker& checker) {
             Cerr << "Checking tablets for Table1" << Endl;
             for (ui64 tabletId : {TTestTxConfig::FakeHiveTablets+0, TTestTxConfig::FakeHiveTablets+1, TTestTxConfig::FakeHiveTablets+2}) {
-                NKikimrSchemeOp::TTableDescription tableDescription = GetDatashardSchema(runtime, tabletId, 2);
+                NKikimrSchemeOp::TTableDescription tableDescription = GetDatashardSchema(runtime, tabletId, localPathId);
                 checker(tableDescription);
             }
 
@@ -5471,12 +5476,16 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                             })");
         env.TestWaitNotification(runtime, txId);
 
-        checkSchema({
-            "After initial create",
-            { { 0 }, { 1 } },
-            { { 0, "default", 0 }, { 1, "alt", 1 } },
-            { { 0, 1 }, { 1, 2 } }
-        });
+        const auto describeResult = DescribePath(runtime, "/MyRoot/Table1");
+        const auto tablePathId = describeResult.GetPathId();
+
+        checkSchema(tablePathId,
+            {
+                "After initial create",
+                { { 0 }, { 1 } },
+                { { 0, "default", 0 }, { 1, "alt", 1 } },
+                { { 0, 1 }, { 1, 2 } }
+            });
 
         // Trying to move default column family to the same storage should add default name
         TestAlterTable(runtime, ++txId, "/MyRoot", R"(
@@ -5491,12 +5500,13 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                             })");
         env.TestWaitNotification(runtime, txId);
 
-        checkSchema({
-            "After no-op move of default family",
-            { { 0 }, { 1 } },
-            { { 0, "default", 0 }, { 1, "alt", 1 } },
-            { { 0, 1 }, { 1, 2 } }
-        });
+        checkSchema(tablePathId,
+            {
+                "After no-op move of default family",
+                { { 0 }, { 1 } },
+                { { 0, "default", 0 }, { 1, "alt", 1 } },
+                { { 0, 1 }, { 1, 2 } }
+            });
 
         // Trying to move alt column family to the same storage should succeed without changes
         TestAlterTable(runtime, ++txId, "/MyRoot", R"(
@@ -5511,12 +5521,13 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                             })");
         env.TestWaitNotification(runtime, txId);
 
-        checkSchema({
-            "After no-op move of alt family",
-            { { 0 }, { 1 } },
-            { { 0, "default", 0 }, { 1, "alt", 1 } },
-            { { 0, 1 }, { 1, 2 } }
-        });
+        checkSchema(tablePathId,
+            {
+                "After no-op move of alt family",
+                { { 0 }, { 1 } },
+                { { 0, "default", 0 }, { 1, "alt", 1 } },
+                { { 0, 1 }, { 1, 2 } }
+            });
 
         // Trying to move default column family to a different storage
         TestAlterTable(runtime, ++txId, "/MyRoot", R"(
@@ -5531,12 +5542,13 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                             })");
         env.TestWaitNotification(runtime, txId);
 
-        checkSchema({
-            "After moving default family to hdd-3",
-            { { 0 }, { 1 } },
-            { { 0, "default", 0 }, { 1, "alt", 1 } },
-            { { 0, 3 }, { 1, 2 } }
-        });
+        checkSchema(tablePathId,
+            {
+                "After moving default family to hdd-3",
+                { { 0 }, { 1 } },
+                { { 0, "default", 0 }, { 1, "alt", 1 } },
+                { { 0, 3 }, { 1, 2 } }
+            });
 
         // Trying to move alt column family to the same different storage should combine rooms
         TestAlterTable(runtime, ++txId, "/MyRoot", R"(
@@ -5551,12 +5563,13 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                             })");
         env.TestWaitNotification(runtime, txId);
 
-        checkSchema({
-            "After moving alt family to hdd-3",
-            { { 0 }, { 1 } },
-            { { 0, "default", 0 }, { 1, "alt", 0 } },
-            { { 0, 3 } }
-        });
+        checkSchema(tablePathId,
+            {
+                "After moving alt family to hdd-3",
+                { { 0 }, { 1 } },
+                { { 0, "default", 0 }, { 1, "alt", 0 } },
+                { { 0, 3 } }
+            });
 
         // Trying to move alt column family to some older storage should reuse existing channel
         TestAlterTable(runtime, ++txId, "/MyRoot", R"(
@@ -5571,12 +5584,13 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                             })");
         env.TestWaitNotification(runtime, txId);
 
-        checkSchema({
-            "After moving alt family to hdd-1",
-            { { 0 }, { 1 } },
-            { { 0, "default", 0 }, { 1, "alt", 1 } },
-            { { 0, 3 }, { 1, 1 } }
-        });
+        checkSchema(tablePathId,
+            {
+                "After moving alt family to hdd-1",
+                { { 0 }, { 1 } },
+                { { 0, "default", 0 }, { 1, "alt", 1 } },
+                { { 0, 3 }, { 1, 1 } }
+            });
     }
 
     NLs::TCheckFunc CheckCompactionPolicy(NKikimr::NLocalDb::TCompactionPolicyPtr expectedPolicy) {
@@ -5660,7 +5674,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
     Y_UNIT_TEST(AlterTableFollowers) { //+
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
         ui64 txId = 100;
 
         TestCreateTable(runtime, ++txId, "/MyRoot", R"(
@@ -6216,11 +6230,11 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
             };
         };
 
-        auto checkSchema = [&](TVector<int> tabletIdxs, TVector<TString> columns) {
+        auto checkSchema = [&](const ui64 localPathId, TVector<int> tabletIdxs, TVector<TString> columns) {
             auto checker = schemaChecker(std::move(columns));
             for (int tabletIdx : tabletIdxs) {
                 ui64 tabletId = TTestTxConfig::FakeHiveTablets + tabletIdx;
-                NKikimrSchemeOp::TTableDescription tableDescription = GetDatashardSchema(runtime, tabletId, 2);
+                NKikimrSchemeOp::TTableDescription tableDescription = GetDatashardSchema(runtime, tabletId, localPathId);
                 checker(tableDescription);
             }
         };
@@ -6240,7 +6254,10 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                             )");
         env.TestWaitNotification(runtime, txId);
 
-        checkSchema({ 0, 1, 2 }, { "Key", "Value" });
+        const auto describeResult = DescribePath(runtime, "/MyRoot/Table1");
+        const auto tablePathId = describeResult.GetPathId();
+
+        checkSchema(tablePathId, { 0, 1, 2 }, { "Key", "Value" });
 
         // Alter table adding more volumes
         TestAlterTable(runtime, ++txId, "/MyRoot", R"(
@@ -6250,7 +6267,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                             )");
         env.TestWaitNotification(runtime, txId);
 
-        checkSchema({ 0, 1, 2 }, { "Key", "Value", "Add1", "Add2" });
+        checkSchema(tablePathId, { 0, 1, 2 }, { "Key", "Value", "Add1", "Add2" });
 
         // Split the middle tablet in two
         TestSplitTable(runtime, ++txId, "/MyRoot/Table1", R"(
@@ -6261,7 +6278,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                             )");
         env.TestWaitNotification(runtime, txId);
 
-        checkSchema({ 0, 3, 4, 2 }, { "Key", "Value", "Add1", "Add2" });
+        checkSchema(tablePathId, { 0, 3, 4, 2 }, { "Key", "Value", "Add1", "Add2" });
     }
 
     Y_UNIT_TEST(AlterTableSettings) { //+
@@ -6376,7 +6393,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
     Y_UNIT_TEST(CreatePersQueueGroup) { //+
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
         ui64 txId = 1000;
 
         AsyncMkDir(runtime, ++txId, "/MyRoot", "DirA");
@@ -6424,7 +6441,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
     Y_UNIT_TEST(AlterPersQueueGroup) { //+
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
         ui64 txId = 1000;
 
         TestCreatePQGroup(runtime, ++txId, "/MyRoot",
@@ -6847,7 +6864,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
     Y_UNIT_TEST(DropTableById) { //+
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
         ui64 txId = 1000;
 
         TString tcfg = "Name: \"Table\""
@@ -6861,10 +6878,11 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         TestCreateTable(runtime, ++txId, "/MyRoot", tcfg);
         env.TestWaitNotification(runtime, txId);
 
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"),
-                           {NLs::Finished});
+        const auto describeResult = DescribePath(runtime, "/MyRoot/Table");
+        const auto tablePathId = describeResult.GetPathId();
+        TestDescribeResult(describeResult, {NLs::Finished});
 
-        TestDropTable(runtime, ++txId, 2);
+        TestDropTable(runtime, ++txId, tablePathId);
         env.TestWaitNotification(runtime, txId);
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"),
@@ -7513,7 +7531,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
     Y_UNIT_TEST(ManyDirs) { //+
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
 
         ui64 num = 500;
         ui64 txId = 123;
@@ -7543,7 +7561,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
     Y_UNIT_TEST(NestedDirs) { //+
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
 
         ui64 txId = 123;
         TSchemeLimits limits;
@@ -7694,7 +7712,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
     Y_UNIT_TEST(CreateBlockStoreVolume) { //+
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+       TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
         ui64 txId = 100;
 
         NKikimrSchemeOp::TBlockStoreVolumeDescription vdescr;
@@ -7748,7 +7766,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
     Y_UNIT_TEST(CreateBlockStoreVolumeWithVolumeChannelsProfiles) { //+
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
         ui64 txId = 100;
 
         NKikimrSchemeOp::TBlockStoreVolumeDescription vdescr;
@@ -7778,7 +7796,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
     Y_UNIT_TEST(CreateBlockStoreVolumeWithNonReplicatedPartitions) { //+
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
         ui64 txId = 100;
 
         NKikimrSchemeOp::TBlockStoreVolumeDescription vdescr;
@@ -7800,7 +7818,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
     Y_UNIT_TEST(AlterBlockStoreVolume) { //+
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, /* nchannels */ 6);
+        TTestEnv env(runtime, TTestEnvOptions().NChannels(6).EnableRealSystemViewPaths(false));
         ui64 txId = 100;
 
         NKikimrSchemeOp::TBlockStoreVolumeDescription vdescr;
@@ -8172,7 +8190,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
     Y_UNIT_TEST(AlterBlockStoreVolumeWithNonReplicatedPartitions) { //+
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
         ui64 txId = 100;
 
         NKikimrSchemeOp::TBlockStoreVolumeDescription vdescr;
@@ -8224,7 +8242,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
     Y_UNIT_TEST(DropBlockStoreVolume) { //+
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
         ui64 txId = 100;
 
         TestDropBlockStoreVolume(runtime, ++txId, "/MyRoot", "BSVolume", 0, {NKikimrScheme::StatusPathDoesNotExist});
@@ -8259,7 +8277,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
     Y_UNIT_TEST(DropBlockStoreVolumeWithNonReplicatedPartitions) { //+
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
         ui64 txId = 100;
 
         NKikimrSchemeOp::TBlockStoreVolumeDescription vdescr;
@@ -8295,7 +8313,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
     Y_UNIT_TEST(DropBlockStoreVolume2) { //+
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
         ui64 txId = 100;
 
         // Create volume with 1 partition
@@ -8335,7 +8353,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
     Y_UNIT_TEST(DropBlockStoreVolumeWithFillGeneration) { //+
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
         ui64 txId = 100;
 
         auto createVolume = [&](const TString& volumeName, bool isFillFinished = false) {
@@ -9078,7 +9096,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
     Y_UNIT_TEST(CreateAlterBlockStoreVolumeWithInvalidPoolKinds) { //+
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, /* nchannels */ 6);
+        TTestEnv env(runtime, TTestEnvOptions().NChannels(6).EnableRealSystemViewPaths(false));
         ui64 txId = 100;
 
         NKikimrSchemeOp::TBlockStoreVolumeDescription vdescr;
@@ -9123,7 +9141,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
     Y_UNIT_TEST(CreateDropKesus) { //+
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
         ui64 txId = 100;
 
         // Create two kesus nodes
@@ -9210,7 +9228,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
     Y_UNIT_TEST(CreateDropSolomon) { //+
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
         ui64 txId = 100;
 
         TestCreateSolomon(runtime, ++txId, "/MyRoot", "Name: \"Solomon\" "
@@ -9274,7 +9292,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
     Y_UNIT_TEST(AdoptDropSolomon) { //+
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
         ui64 txId = 100;
 
         TestCreateSolomon(runtime, ++txId, "/MyRoot", "Name: \"JunkSolomon\" "
@@ -9312,7 +9330,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
     Y_UNIT_TEST(CreateAlterDropSolomon) { //+
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
         ui64 txId = 100;
 
         TestCreateSolomon(runtime, ++txId, "/MyRoot", "Name: \"Solomon\" "
@@ -9579,7 +9597,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
     Y_UNIT_TEST(RejectAlterSolomon) { //+
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
         ui64 txId = 100;
 
         TestCreateSolomon(runtime, ++txId, "/MyRoot", "Name: \"Solomon\" "
@@ -9686,7 +9704,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
     Y_UNIT_TEST(SimultaneousDropForceDrop) { //+
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
         ui64 txId = 100;
 
         TestCreateTable(runtime, ++txId, "/MyRoot", R"(
@@ -10078,9 +10096,20 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         env.TestWaitTabletDeletion(runtime, xrange(TTestTxConfig::FakeHiveTablets+2, TTestTxConfig::FakeHiveTablets+10));
     }
 
-    Y_UNIT_TEST(RejectSystemViewPath) {
+    Y_UNIT_TEST_FLAG(RejectSystemViewPath, EnableSystemNamesProtection) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableSystemViews(true));
+        TTestEnv env(runtime, TTestEnvOptions().EnableSystemNamesProtection(EnableSystemNamesProtection)
+                                               .EnableRealSystemViewPaths(false));
+
+        // Make AdministrationAllowedSIDs not empty to deny anonymous user cluster admin privilege
+        // (this test follows the suite of many others to use anonymous user to do stuff).
+        runtime.GetAppData().AdministrationAllowedSIDs.push_back("thou-shalt-not-pass");
+        // Then, when EnableSystemNamesProtection == false, .sys should be impossible to create because of special check,
+        // and when EnableSystemNamesProtection == true, .sys should be impossible to create because client is not an admin.
+        //
+        // EnableSystemNamesProtection == true allow cluster admin to create any reserved names
+        // and there is whole other ut_system_names testsuite that tests behavior around creation of system names.
+
         ui64 txId = 100;
 
         TestCreateTable(runtime, ++txId, "/MyRoot",
@@ -10529,7 +10558,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
     Y_UNIT_TEST(ListNotCreatedIndexCase) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
         ui64 txId = 100;
 
         TVector<THolder<IEventHandle>> suppressed;
@@ -10613,7 +10642,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
     Y_UNIT_TEST(ConsistentCopyAfterDropIndexes) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
         ui64 txId = 100;
 
         TestCreateTable(runtime, ++txId, "/MyRoot", R"(
@@ -11725,6 +11754,9 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         // TODO: validate no stream created
 
         if (WithIncremental) {
+            // Pass time to prevent stream names clashing
+            runtime.AdvanceCurrentTime(TDuration::Seconds(1));
+
             TestBackupIncrementalBackupCollection(runtime, ++txId, "/MyRoot", R"(
                 Name: ".backups/collections/MyCollection1"
             )");

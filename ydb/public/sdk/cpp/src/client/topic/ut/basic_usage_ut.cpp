@@ -1,5 +1,7 @@
-#include "ut_utils/managed_executor.h"
 #include "ut_utils/topic_sdk_test_setup.h"
+
+#include <ydb/public/sdk/cpp/tests/integration/topic/utils/managed_executor.h>
+
 #include <ydb/public/sdk/cpp/src/client/persqueue_public/ut/ut_utils/ut_utils.h>
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
@@ -18,15 +20,19 @@
 
 #include <util/stream/zlib.h>
 
-#include <future>
 
-namespace NYdb::NTopic::NTests {
+using namespace std::chrono_literals;
 
-void WriteAndReadToEndWithRestarts(TReadSessionSettings readSettings, TWriteSessionSettings writeSettings, const std::string& message, ui32 count, TTopicSdkTestSetup& setup, TIntrusivePtr<TManagedExecutor> decompressor) {
+static const bool EnableDirectRead = !std::string{std::getenv("PQ_EXPERIMENTAL_DIRECT_READ") ? std::getenv("PQ_EXPERIMENTAL_DIRECT_READ") : ""}.empty();
+
+
+namespace NYdb::inline Dev::NTopic::NTests {
+
+void WriteAndReadToEndWithRestarts(TReadSessionSettings readSettings, TWriteSessionSettings writeSettings, const std::string& message, std::uint32_t count, TTopicSdkTestSetup& setup, TIntrusivePtr<TManagedExecutor> decompressor) {
     auto client = setup.MakeClient();
     auto session = client.CreateSimpleBlockingWriteSession(writeSettings);
 
-    for (ui32 i = 1; i <= count; ++i) {
+    for (std::uint32_t i = 1; i <= count; ++i) {
         bool res = session->Write(message);
         UNIT_ASSERT(res);
     }
@@ -40,7 +46,7 @@ void WriteAndReadToEndWithRestarts(TReadSessionSettings readSettings, TWriteSess
 
     auto WaitTasks = [&](auto f, size_t c) {
         while (f() < c) {
-            Sleep(TDuration::MilliSeconds(100));
+            std::this_thread::sleep_for(100ms);
         };
     };
     auto WaitPlannedTasks = [&](auto e, size_t count) {
@@ -65,7 +71,7 @@ void WriteAndReadToEndWithRestarts(TReadSessionSettings readSettings, TWriteSess
         size_t completed = e->GetExecutedCount();
 
         setup.GetServer().KillTopicPqrbTablet(setup.GetTopicPath());
-        Sleep(TDuration::MilliSeconds(100));
+        std::this_thread::sleep_for(100ms);
 
         e->StartFuncs(tasks);
         WaitExecutedTasks(e, completed + n);
@@ -86,7 +92,7 @@ void WriteAndReadToEndWithRestarts(TReadSessionSettings readSettings, TWriteSess
 
     ReadSession = topicClient.CreateReadSession(readSettings);
 
-    ui32 i = 0;
+    std::uint32_t i = 0;
     while (AtomicGet(lastOffset) + 1 < count) {
         RunTasks(decompressor, {i++});
     }
@@ -96,28 +102,34 @@ void WriteAndReadToEndWithRestarts(TReadSessionSettings readSettings, TWriteSess
 
 Y_UNIT_TEST_SUITE(BasicUsage) {
     Y_UNIT_TEST(ReadWithoutConsumerWithRestarts) {
+        if (EnableDirectRead) {
+            // TODO(qyryq) Enable the test when LOGBROKER-9364 is done.
+            return;
+        }
         TTopicSdkTestSetup setup(TEST_CASE_NAME);
         auto compressor = new TSyncExecutor();
         auto decompressor = CreateThreadPoolManagedExecutor(1);
 
         TReadSessionSettings readSettings;
-        TTopicReadSettings topic = TEST_TOPIC;
+        TTopicReadSettings topic = setup.GetTopicPath();
         topic.AppendPartitionIds(0);
         readSettings
             .WithoutConsumer()
             .MaxMemoryUsageBytes(1_MB)
             .DecompressionExecutor(decompressor)
-            .AppendTopics(topic);
+            .AppendTopics(topic)
+            // .DirectRead(EnableDirectRead)
+            ;
 
         TWriteSessionSettings writeSettings;
         writeSettings
-            .Path(TEST_TOPIC)
+            .Path(setup.GetTopicPath())
             .MessageGroupId(TEST_MESSAGE_GROUP_ID)
             .Codec(NTopic::ECodec::RAW)
             .CompressionExecutor(compressor);
 
 
-        ui32 count = 700;
+        std::uint32_t count = 700;
         std::string message(2'000, 'x');
 
         WriteAndReadToEndWithRestarts(readSettings, writeSettings, message, count, setup, decompressor);
@@ -130,19 +142,21 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
 
         TReadSessionSettings readSettings;
         readSettings
-            .ConsumerName(TEST_CONSUMER)
+            .ConsumerName(setup.GetConsumerName())
             .MaxMemoryUsageBytes(1_MB)
             .DecompressionExecutor(decompressor)
-            .AppendTopics(TEST_TOPIC);
+            .AppendTopics(setup.GetTopicPath())
+            // .DirectRead(EnableDirectRead)
+            ;
 
         TWriteSessionSettings writeSettings;
         writeSettings
-            .Path(TEST_TOPIC).MessageGroupId(TEST_MESSAGE_GROUP_ID)
-            .Codec(NTopic::ECodec::RAW)
+            .Path(setup.GetTopicPath()).MessageGroupId(TEST_MESSAGE_GROUP_ID)
+            .Codec(ECodec::RAW)
             .CompressionExecutor(compressor);
 
 
-        ui32 count = 700;
+        std::uint32_t count = 700;
         std::string message(2'000, 'x');
 
         WriteAndReadToEndWithRestarts(readSettings, writeSettings, message, count, setup, decompressor);
@@ -152,25 +166,25 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
 
         TTopicSdkTestSetup setup(TEST_CASE_NAME);
 
-        NTopic::TWriteSessionSettings writeSettings;
+        TWriteSessionSettings writeSettings;
         writeSettings.Path(setup.GetTopicPath()).MessageGroupId(TEST_MESSAGE_GROUP_ID);
         writeSettings.Path(setup.GetTopicPath()).ProducerId(TEST_MESSAGE_GROUP_ID);
-        writeSettings.Codec(NTopic::ECodec::RAW);
-        NTopic::IExecutor::TPtr executor = new NTopic::TSyncExecutor();
+        writeSettings.Codec(ECodec::RAW);
+        IExecutor::TPtr executor = new TSyncExecutor();
         writeSettings.CompressionExecutor(executor);
 
-        ui64 count = 100u;
+        std::uint64_t count = 100u;
 
         auto client = setup.MakeClient();
         auto session = client.CreateSimpleBlockingWriteSession(writeSettings);
 
-        TString messageBase = "message----";
+        std::string messageBase = "message----";
 
         for (auto i = 0u; i < count; i++) {
             auto res = session->Write(messageBase);
             UNIT_ASSERT(res);
             if (i % 10 == 0) {
-                setup.GetServer().KillTopicPqTablets(setup.GetTopicPath());
+                setup.GetServer().KillTopicPqTablets(setup.GetFullTopicPath());
             }
         }
         session->Close();
@@ -186,6 +200,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         UNIT_ASSERT_VALUES_EQUAL(stats->GetEndOffset(), count);
 
     }
+
 } // Y_UNIT_TEST_SUITE(BasicUsage)
 
 } // namespace

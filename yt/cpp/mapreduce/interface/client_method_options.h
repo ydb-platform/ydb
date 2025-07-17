@@ -50,6 +50,21 @@ enum class EComplexTypeMode : int
     Positional /* "positional" */,
 };
 
+/// Base class for options dealing with access tracking suppression.
+template <typename TDerived>
+struct TSuppressableAccessTrackingOptions
+{
+    /// @cond Doxygen_Suppress
+    using TSelf = TDerived;
+    /// @endcond
+
+    /// @brief Whether to disable update of access_time on read/write operations.
+    FLUENT_FIELD_DEFAULT(bool, SuppressAccessTracking, false);
+
+    /// @brief Whether to disable update of modification on read/write operations.
+    FLUENT_FIELD_DEFAULT(bool, SuppressModificationTracking, false);
+};
+
 ///
 /// @brief Options for @ref NYT::ICypressClient::Create
 ///
@@ -118,6 +133,7 @@ struct TMasterReadOptions
 /// @see https://ytsaurus.tech/docs/en/api/commands.html#exists
 struct TExistsOptions
     : public TMasterReadOptions<TExistsOptions>
+    , public TSuppressableAccessTrackingOptions<TExistsOptions>
 {
 };
 
@@ -127,6 +143,7 @@ struct TExistsOptions
 /// @see https://ytsaurus.tech/docs/en/api/commands.html#get
 struct TGetOptions
     : public TMasterReadOptions<TGetOptions>
+    , public TSuppressableAccessTrackingOptions<TGetOptions>
 {
     /// @brief Attributes that should be fetched with each node.
     FLUENT_FIELD_OPTION(TAttributeFilter, AttributeFilter);
@@ -140,6 +157,7 @@ struct TGetOptions
 ///
 /// @see https://ytsaurus.tech/docs/en/api/commands.html#set
 struct TSetOptions
+    : public TSuppressableAccessTrackingOptions<TSetOptions>
 {
     /// @cond Doxygen_Suppress
     using TSelf = TSetOptions;
@@ -157,6 +175,7 @@ struct TSetOptions
 ///
 /// @see https://ytsaurus.tech/docs/en/api/commands.html#multiset_attributes
 struct TMultisetAttributesOptions
+    : public TSuppressableAccessTrackingOptions<TMultisetAttributesOptions>
 {
     /// @cond Doxygen_Suppress
     using TSelf = TMultisetAttributesOptions;
@@ -171,6 +190,7 @@ struct TMultisetAttributesOptions
 /// @see https://ytsaurus.tech/docs/en/api/commands.html#list
 struct TListOptions
     : public TMasterReadOptions<TListOptions>
+    , public TSuppressableAccessTrackingOptions<TListOptions>
 {
     /// @cond Doxygen_Suppress
     using TSelf = TListOptions;
@@ -277,6 +297,7 @@ struct TConcatenateOptions
 ///
 /// @see https://ytsaurus.tech/docs/en/api/commands.html#read_blob_table
 struct TBlobTableReaderOptions
+    : public TSuppressableAccessTrackingOptions<TBlobTableReaderOptions>
 {
     /// @cond Doxygen_Suppress
     using TSelf = TBlobTableReaderOptions;
@@ -477,6 +498,7 @@ struct TIOOptions
 /// @brief Options for reading file from YT.
 struct TFileReaderOptions
     : public TIOOptions<TFileReaderOptions>
+    , public TSuppressableAccessTrackingOptions<TFileReaderOptions>
 {
     ///
     /// @brief Offset to start reading from.
@@ -670,6 +692,7 @@ public:
 /// Options for @ref NYT::IClient::CreateTableReader
 struct TTableReaderOptions
     : public TIOOptions<TTableReaderOptions>
+    , public TSuppressableAccessTrackingOptions<TTableReaderOptions>
 {
     /// @deprecated Size of internal client buffer.
     FLUENT_FIELD_DEFAULT(size_t, SizeLimit, 4 << 20);
@@ -688,6 +711,7 @@ struct TTableReaderOptions
 
 /// Options for @ref NYT::IClient::CreatePartitionTableReader
 struct TTablePartitionReaderOptions
+    : public TSuppressableAccessTrackingOptions<TTablePartitionReaderOptions>
 {
     /// @cond Doxygen_Suppress
     using TSelf = TTablePartitionReaderOptions;
@@ -1027,6 +1051,7 @@ struct TLookupRowsOptions
 ///
 /// @see https://ytsaurus.tech/docs/en/api/commands#select_rows
 struct TSelectRowsOptions
+    : public TSuppressableAccessTrackingOptions<TSelectRowsOptions>
 {
     /// @cond Doxygen_Suppress
     using TSelf = TSelectRowsOptions;
@@ -1133,9 +1158,9 @@ struct TCreateClientOptions
     /// @brief Proxy Address to be used for connection
     FLUENT_FIELD_OPTION(TString, ProxyAddress);
 
-    /// @brief Use unix domain socket for connection.
+    /// @brief Job proxy unix domain socket used for connection.
     /// Typically you will need this option when the RPC proxy is enabled within the job proxy.
-    FLUENT_FIELD_DEFAULT(bool, UseProxyUnixDomainSocket, false);
+    FLUENT_FIELD_OPTION(TString, JobProxySocketPath);
 };
 
 ///

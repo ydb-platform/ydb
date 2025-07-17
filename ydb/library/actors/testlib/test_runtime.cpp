@@ -1886,6 +1886,14 @@ namespace NActors {
         return actorId.ToString();
     }
 
+    void TTestActorRuntimeBase::SimulateSleep(TDuration duration) {
+        if (!SleepEdgeActor) {
+            SleepEdgeActor = AllocateEdgeActor();
+        }
+        Schedule(new IEventHandle(SleepEdgeActor, SleepEdgeActor, new TEvents::TEvWakeup()), duration);
+        GrabEdgeEventRethrow<TEvents::TEvWakeup>(SleepEdgeActor);
+    }
+
     struct TStrandingActorDecoratorContext : public TThrRefBase {
         TStrandingActorDecoratorContext()
             : Queue(new TQueueType)

@@ -65,12 +65,11 @@ class YdbWorkloadLog:
             else:
                 raise TypeError("missing date_from")
 
-    def _call(self, command: list[str], wait=False):
+    def _call(self, command: list[str], wait=False, timeout=None):
         logging.info(f'YdbWorkloadLog execute {' '.join(command)} with wait = {wait}')
-        yatest.common.execute(command=command, wait=wait)
+        yatest.common.execute(command=command, wait=wait, timeout=timeout)
 
     def create_table(self, table_name: str):
-        logging.info('YdbWorkloadLog init table')
         command = self.begin_command + ["init", "--path", table_name, "--store", "column", "--ttl", "1000"]
         self._call(command=command, wait=True)
 
@@ -90,7 +89,7 @@ class YdbWorkloadLog:
             command = command + ["--timestamp_deviation", str(self.timestamp_deviation)]
         else:
             command = command + ["--date-from", str(self.date_from), "--date-to", str(self.date_to)]
-        self._call(command=command, wait=wait)
+        self._call(command=command, wait=wait, timeout=max(2 * seconds, 60))
 
     # seconds - Seconds to run workload
     # threads - Number of parallel threads in workload
@@ -129,13 +128,14 @@ class TestLogScenario(object):
         logger.info(yatest.common.execute([ydb_path, "-V"], wait=True).stdout.decode("utf-8"))
         config = KikimrConfigGenerator(
             extra_feature_flags={"enable_immediate_writing_on_bulk_upsert": True},
+            column_shard_config={"alter_object_enabled": True},
             additional_log_configs={"TX_COLUMNSHARD_SCAN": LogLevels.TRACE},
         )
         cls.cluster = KiKiMR(config)
         cls.cluster.start()
         node = cls.cluster.nodes[1]
         cls.ydb_client = YdbClient(endpoint=f"grpc://{node.host}:{node.port}", database=f"/{config.domain_name}")
-        cls.ydb_client.wait_connection()
+        cls.ydb_client.wait_connection(timeout=60)
 
     def get_row_count(self) -> int:
         return self.ydb_client.query(f"select count(*) as Rows from `{self.table_name}`")[0].rows[0]["Rows"]
@@ -161,7 +161,7 @@ class TestLogScenario(object):
     def test_log_deviation(self, timestamp_deviation: int):
         """As per https://github.com/ydb-platform/ydb/issues/13530"""
 
-        wait_time: int = int(get_external_param("wait_seconds", "30"))
+        wait_time: int = int(get_external_param("wait_seconds", "3"))
         self.table_name: str = "log"
 
         ydb_workload: YdbWorkloadLog = YdbWorkloadLog(
@@ -171,7 +171,10 @@ class TestLogScenario(object):
             timestamp_deviation=timestamp_deviation,
         )
         ydb_workload.create_table(self.table_name)
-        ydb_workload.bulk_upsert(seconds=10, threads=10, rows=500, wait=True)
+
+        # deduplication for simple reader will be added in #15043
+        self.ydb_client.query(f"ALTER OBJECT `/{self.ydb_client.database}/{self.table_name}` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `SCAN_READER_POLICY_NAME`=`SIMPLE`) ")
+        ydb_workload.bulk_upsert(seconds=wait_time, threads=10, rows=500, wait=True)
         logging.info(f"Count rows after insert {self.get_row_count()} before wait")
 
         assert self.get_row_count() != 0

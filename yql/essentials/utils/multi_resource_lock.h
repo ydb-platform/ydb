@@ -18,7 +18,7 @@ private:
             return RefCount() == 1;
         }
 
-        TMutex Mutex_;
+        TMutex Mutex;
     };
 
 public:
@@ -29,7 +29,7 @@ public:
             , ResourceId_(std::move(resourceId))
         {
             Y_ENSURE(Lock_);
-            Lock_->Mutex_.Acquire();
+            Lock_->Mutex.Acquire();
         }
 
         TResourceLock(TResourceLock&& other)
@@ -47,7 +47,7 @@ public:
                 return;
             }
 
-            Lock_->Mutex_.Release();
+            Lock_->Mutex.Release();
             // decrement ref count before TryCleanup
             Lock_ = nullptr;
             Owner_.TryCleanup(ResourceId_);

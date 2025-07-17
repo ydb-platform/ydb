@@ -188,13 +188,6 @@
                                                                         "Name": "TableFullScan",
                                                                         "Path": "/Root/sqllogictest_select1-4.test_plan/t1",
                                                                         "ReadColumns": [
-                                                                            "a",
-                                                                            "b",
-                                                                            "c",
-                                                                            "d",
-                                                                            "e"
-                                                                        ],
-                                                                        "ReadRanges": [
                                                                             "a (-\u221e, +\u221e)",
                                                                             "b (-\u221e, +\u221e)",
                                                                             "c (-\u221e, +\u221e)",
@@ -317,13 +310,6 @@
                                                         "Name": "TableFullScan",
                                                         "Path": "/Root/sqllogictest_select1-4.test_plan/t1",
                                                         "ReadColumns": [
-                                                            "a",
-                                                            "b",
-                                                            "c",
-                                                            "d",
-                                                            "e"
-                                                        ],
-                                                        "ReadRanges": [
                                                             "a (-\u221e, +\u221e)",
                                                             "b (-\u221e, +\u221e)",
                                                             "c (-\u221e, +\u221e)",

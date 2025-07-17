@@ -330,6 +330,7 @@ message TTableDescription {
         TTableIncrementalBackupConfig IncrementalBackupConfig = 43;
     }
 
+    // For kqp internal use only
     optional bool Temporary = 41;
 
     // This flag is create-only, and has to be set up
@@ -337,6 +338,8 @@ message TTableDescription {
     // It won't be present on describes and won't be preserved
     optional bool SystemColumnNamesAllowed = 42;
     optional bool AllowUnderSameOperation = 44 [default = false];
+    // Create only as-well. Used for CopyTable to create table in desired state instead of default
+    optional EPathState PathState = 46;
 }
 
 message TDictionaryEncodingSettings {
@@ -573,6 +576,7 @@ message TCompactionSelectorConstructorContainer {
 
 message TCompactionPlannerConstructorContainer {
     optional string ClassName = 1;
+    optional uint64 NodePortionsCountLimit = 2;
 
     message TLOptimizer {
 
@@ -588,10 +592,15 @@ message TCompactionPlannerConstructorContainer {
         repeated TCompactionSelectorConstructorContainer Selectors = 2;
     }
 
+    message TTilingOptimizer {
+        optional string Json = 1;
+    }
+
     oneof Implementation {
         TLOptimizer LBuckets = 20;
         TSOptimizer SBuckets = 21;
         TLCOptimizer LCBuckets = 22;
+        TTilingOptimizer Tiling = 23;
     }
 }
 
@@ -906,6 +915,9 @@ message TColumnTableDescription {
 
     // Channels for standalone column table
     optional TColumnStorageConfig StorageConfig = 13;
+
+    // For kqp internal use only
+    optional bool Temporary = 14;
 }
 
 message TAlterColumnTable {
@@ -1025,6 +1037,7 @@ message TCdcStreamDescription {
     // Set to '0' to disable resolved timestamps
     optional uint64 ResolvedTimestampsIntervalMs = 10;
     optional TCdcStreamScanProgress ScanProgress = 11;
+    optional bool SchemaChanges = 12;
 }
 
 message TCreateCdcStream {
@@ -1060,7 +1073,14 @@ message TDropCdcStream {
     optional string StreamName = 2;
 }
 
+message TRotateCdcStream {
+    optional string TableName = 1;
+    optional string OldStreamName = 2;
+    optional TCreateCdcStream NewStream = 3;
+}
+
 message TContinuousBackupDescription {
+    optional string StreamName = 1;
 }
 
 message TCreateContinuousBackup {
@@ -1076,6 +1096,7 @@ message TAlterContinuousBackup {
 
     message TTakeIncrementalBackup {
         optional string DstPath = 1;
+        optional string DstStreamPath = 2;
     }
 
     oneof Action {
@@ -1162,6 +1183,7 @@ message TIndexCreationConfig {
 message TGenericTxInFlyExtraData {
     message TTxCopyTableExtraData {
         optional NKikimrProto.TPathID CdcPathId = 1;
+        optional NKikimrSchemeOp.EPathState TargetPathTargetState = 2;
     }
 
     // we do not use oneof here as far as we want to combine some subops rarely
@@ -1221,6 +1243,8 @@ message TCopyTableConfig { //TTableDescription implemets copying a table in orig
     // additionally creates cdc stream on src table consistently with taking snapshot
     optional TCreateCdcStream CreateSrcCdcStream = 6;
     optional bool AllowUnderSameOperation = 7 [default = false];
+
+    optional NKikimrSchemeOp.EPathState TargetPathTargetState = 8;
 }
 
 message TConsistentTableCopyingConfig {
@@ -1732,6 +1756,7 @@ message TModifyScheme {
     optional TCreateCdcStream CreateCdcStream = 45;
     optional TAlterCdcStream AlterCdcStream = 46;
     optional TDropCdcStream DropCdcStream = 47;
+    optional TRotateCdcStream RotateCdcStream = 83;
     optional TMove MoveTable = 48;
     optional TMove MoveTableIndex = 49;
     optional TSequenceDescription Sequence = 51;
@@ -1785,6 +1810,8 @@ message TModifyScheme {
     optional TMove MoveSequence = 77;
 
     optional TSysViewDescription CreateSysView = 81;
+
+    optional TChangePathState ChangePathState = 82;
 
     // Some entries are grouped by semantics, so are out of order
 }
@@ -1878,6 +1905,8 @@ enum EPathState {
     EPathStateRestore = 10;
     EPathStateMoving = 11;
     EPathStateOutgoingIncrementalRestore = 12;
+    EPathStateAwaitingOutgoingIncrementalRestore = 13;
+    EPathStateIncomingIncrementalRestore = 14;
 }
 
 message TPathVersion {
@@ -2221,4 +2250,19 @@ message TExportMetadata {
 message TSysViewDescription {
     optional string Name = 1;
     optional NKikimrSysView.ESysViewType Type = 2;
+    optional NKikimrProto.TPathID SourceObject = 3;
+}
+
+message TLongIncrementalRestoreOp {
+    optional uint64 TxId = 1;
+    optional NKikimrProto.TPathID BackupCollectionPathId = 2;
+    optional string Id = 3;
+    repeated string TablePathList = 4;
+    optional string FullBackupTrimmedName = 5;
+    repeated string IncrementalBackupTrimmedNames = 6;
+}
+
+message TChangePathState {
+    optional string Path = 1;
+    optional EPathState TargetState = 2;
 }

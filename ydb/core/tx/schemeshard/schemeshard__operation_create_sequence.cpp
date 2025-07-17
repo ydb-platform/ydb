@@ -1,6 +1,7 @@
-#include "schemeshard__operation_part.h"
 #include "schemeshard__operation_common.h"
+#include "schemeshard__operation_part.h"
 #include "schemeshard_impl.h"
+#include "schemeshard__op_traits.h"
 
 #include <ydb/core/mind/hive/hive.h>
 #include <ydb/core/tx/sequenceshard/public/events.h>
@@ -440,7 +441,7 @@ public:
             }
 
             if (checks) {
-                checks.IsValidLeafName();
+                checks.IsValidLeafName(context.UserToken.Get());
 
                 if (!parentPath->IsTable()) {
                     checks.DepthLimit();
@@ -599,6 +600,30 @@ public:
 };
 
 }
+
+using TTag = TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateSequence>;
+
+namespace NOperation {
+
+template <>
+std::optional<TString> GetTargetName<TTag>(
+    TTag,
+    const TTxTransaction& tx)
+{
+    return tx.GetSequence().GetName();
+}
+
+template <>
+bool SetName<TTag>(
+    TTag,
+    TTxTransaction& tx,
+    const TString& name)
+{
+    tx.MutableSequence()->SetName(name);
+    return true;
+}
+
+} // namespace NOperation
 
 ISubOperation::TPtr CreateNewSequence(TOperationId id, const TTxTransaction& tx) {
     return MakeSubOperation<TCreateSequence>(id ,tx);

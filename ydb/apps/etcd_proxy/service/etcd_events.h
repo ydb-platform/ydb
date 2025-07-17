@@ -38,6 +38,9 @@ enum Ev : ui32 {
     Changes,
     Cancel,
 
+    RequestRevision,
+    ReturnRevision,
+
     End
 };
 
@@ -64,18 +67,17 @@ struct TEvSubscribe : public NActors::TEventLocal<TEvSubscribe, Ev::Subscribe> {
 };
 
 struct TChange {
-    TChange(std::string&& key, i64 revision, TData&& oldData, TData&& newData = {})
-        : Key(std::move(key)), Revision(revision), OldData(std::move(oldData)), NewData(std::move(newData))
+    TChange(std::string&& key, TData&& oldData = {}, TData&& newData = {})
+        : Key(std::move(key)), OldData(std::move(oldData)), NewData(std::move(newData))
     {}
 
     struct TOrder {
         bool operator()(const TChange& lhs, const TChange& rhs) const {
-            return lhs.Revision < rhs.Revision;
+            return lhs.NewData.Modified < rhs.NewData.Modified;
         }
     };
 
     std::string Key;
-    i64 Revision = 0LL;
     TData OldData, NewData;
 };
 
@@ -109,6 +111,25 @@ public:
     }
 private:
     const TIntrusivePtr<IStreamCtx> Ctx_;
+};
+
+using TKeysSet = std::set<std::pair<std::string, std::string>>;
+
+struct TEvRequestRevision : public NActors::TEventLocal<TEvRequestRevision, Ev::RequestRevision> {
+    explicit TEvRequestRevision(TKeysSet&& keysSet = {})
+        : KeysSet(std::move(keysSet))
+    {}
+
+    TKeysSet KeysSet;
+};
+
+using TGuard = std::shared_ptr<void>;
+
+struct TEvReturnRevision : public NActors::TEventLocal<TEvReturnRevision, Ev::ReturnRevision> {
+    explicit TEvReturnRevision(const i64 revision, const TGuard& guard = {}) : Revision(revision), Guard(std::move(guard)) {}
+
+    const i64 Revision;
+    const TGuard Guard;
 };
 
 using TEvWatchRequest = TEtcdRequestStreamWrapper<Ev::Watch, etcdserverpb::WatchRequest, etcdserverpb::WatchResponse>;

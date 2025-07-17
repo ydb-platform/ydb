@@ -6,12 +6,11 @@
 #include <yql/essentials/core/file_storage/download/download_config.h>
 #include <yql/essentials/core/file_storage/defs/downloader.h>
 #include <yql/essentials/utils/fetch/fetch.h>
-#include <yql/essentials/utils/log/log.h>
 #include <yql/essentials/utils/log/context.h>
 #include <yql/essentials/utils/md5_stream.h>
 #include <yql/essentials/utils/retry.h>
 #include <yql/essentials/utils/yql_panic.h>
-
+#include <yql/essentials/utils/log/log.h>
 #include <library/cpp/digest/md5/md5.h>
 #include <library/cpp/http/misc/httpcodes.h>
 
@@ -30,11 +29,20 @@ public:
         : UseFakeChecksums(GetEnv("YQL_LOCAL") == "1")
     {
         Configure(config, "http");
-
     }
     ~THttpDownloader() = default;
 
     void DoConfigure(const THttpDownloaderConfig& cfg) {
+        Policy_ = IRetryPolicy<unsigned>::GetExponentialBackoffPolicy(
+            DefaultClassifyHttpCode,
+            TDuration::MilliSeconds(cfg.GetMinDelayMs()),
+            TDuration::MilliSeconds(cfg.GetMinLongDelayMs()),
+            TDuration::MilliSeconds(cfg.GetMaxDelayMs()),
+            cfg.GetMaxRetries(),
+            TDuration::MilliSeconds(cfg.GetMaxTotalDelayTimeMs()),
+            cfg.GetScale()
+        );
+        Redirects_ = cfg.GetMaxRedirects();
         SocketTimeoutMs = cfg.GetSocketTimeoutMs();
     }
 
@@ -50,7 +58,7 @@ public:
     }
 
     std::tuple<NYql::NFS::TDataProvider, TString, TString> Download(const THttpURL& url, const TString& token, const TString& oldEtag, const TString& oldLastModified) final {
-        TFetchResultPtr fr1 = FetchWithETagAndLastModified(url, token, oldEtag, oldLastModified, SocketTimeoutMs);
+        TFetchResultPtr fr1 = FetchWithETagAndLastModified(url, token, oldEtag, oldLastModified, SocketTimeoutMs, Redirects_, Policy_);
         switch (fr1->GetRetCode()) {
         case HTTP_NOT_MODIFIED:
             return std::make_tuple(NYql::NFS::TDataProvider{}, TString{}, TString{});
@@ -70,7 +78,7 @@ public:
     }
 
 private:
-    static TFetchResultPtr FetchWithETagAndLastModified(const THttpURL& url, const TString& token, const TString& oldEtag, const TString& oldLastModified, ui32 socketTimeoutMs) {
+    static TFetchResultPtr FetchWithETagAndLastModified(const THttpURL& url, const TString& token, const TString& oldEtag, const TString& oldLastModified, ui32 socketTimeoutMs, size_t redirects, const IRetryPolicy<unsigned>::TPtr& policy) {
         // more details about ETag and ModifiedSince: https://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.26
         THttpHeaders headers;
         if (!token.empty()) {
@@ -85,7 +93,7 @@ private:
         }
 
         try {
-            return Fetch(url, headers, TDuration::MilliSeconds(socketTimeoutMs));
+            return Fetch(url, headers, TDuration::MilliSeconds(socketTimeoutMs), redirects, policy);
         } catch (const std::exception& e) {
             // remap exception type to leverage retry logic
             throw TDownloadError() << e.what();
@@ -152,7 +160,9 @@ private:
 
 private:
     const bool UseFakeChecksums = false;
+    IRetryPolicy<unsigned>::TPtr Policy_;
     ui32 SocketTimeoutMs = 300000;
+    size_t Redirects_ = 10;
 };
 
 NYql::NFS::IDownloaderPtr MakeHttpDownloader(const TFileStorageConfig& config) {

@@ -72,7 +72,7 @@ TExprNode::TPtr TRuleBasedOptimizer::Optimize(TOpRoot & root,  TExprContext& ctx
     }
     YQL_CLOG(TRACE, CoreDq) << "New RBO finished, generating physical plan";
 
-    return ConvertToPhysical(root, ctx);
+    return ConvertToPhysical(root, ctx, TypeCtx, TypeAnnTransformer, PeepholeTransformer, Config);
 }
 
 }

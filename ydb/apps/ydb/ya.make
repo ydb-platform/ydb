@@ -4,6 +4,13 @@ IF(BUILD_TYPE == RELEASE)
     STRIP()
 ENDIF()
 
+IF (OS_WINDOWS)
+    CFLAGS(
+        -DUNICODE
+        -D_UNICODE
+    )
+ENDIF()
+
 SRCS(
     main.cpp
 )

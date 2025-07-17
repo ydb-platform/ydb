@@ -1,7 +1,12 @@
 LIBRARY()
 
+IF (USE_HDRF_SCHEDULER)
+    CFLAGS(GLOBAL -DUSE_HDRF_SCHEDULER)
+ENDIF()
+
 SRCS(
     control.cpp
+    kqp_batch_operations.cpp
     kqp_event_ids.h
     kqp_event_impl.cpp
     kqp_lwtrace_probes.cpp
@@ -27,9 +32,10 @@ SRCS(
 PEERDIR(
     ydb/core/base
     ydb/core/engine
+    ydb/core/protos
+    ydb/core/scheme
     ydb/core/kqp/expr_nodes
     ydb/core/kqp/common/simple
-    ydb/core/kqp/common/batch
     ydb/core/kqp/common/compilation
     ydb/core/kqp/common/events
     ydb/core/kqp/common/shutdown
@@ -55,11 +61,11 @@ YQL_LAST_ABI_VERSION()
 
 GENERATE_ENUM_SERIALIZATION(kqp_tx_info.h)
 GENERATE_ENUM_SERIALIZATION(kqp_yql.h)
+GENERATE_ENUM_SERIALIZATION(kqp_resolve.h)
 
 END()
 
 RECURSE(
-    batch
     compilation
     events
     simple

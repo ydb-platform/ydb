@@ -71,6 +71,7 @@ public:
         const NJson::TJsonValue* lastMessageNode = nullptr,
         const NJson::TJsonValue* waitTimeUsNode = nullptr);
     TSingleMetric(std::shared_ptr<TSummaryMetric> summary, ui64 value);
+    TSingleMetric(std::shared_ptr<TSummaryMetric> summary);
 
     std::shared_ptr<TSummaryMetric> Summary;
     TAggregation Details;
@@ -124,12 +125,15 @@ public:
     TString Estimations;
 };
 
+class TPlan;
+
 class TStage {
 
 public:
-    TStage(const TString& nodeType) : NodeType(nodeType) {
+    TStage(TPlan* plan, const TString& nodeType) : Plan(plan), NodeType(nodeType) {
     }
 
+    TPlan* Plan;
     TString NodeType;
     std::vector<std::shared_ptr<TConnection>> Connections;
     ui32 IndentX = 0;
@@ -300,6 +304,8 @@ public:
     ui64 UpdateTime = 0;
     std::vector<std::pair<std::string, std::shared_ptr<TConnection>>> CteRefs;
     std::vector<std::pair<std::string, std::pair<std::shared_ptr<TStage>, ui32>>> MemberRefs;
+    TString CtePlanRef;
+    TPlan* CtePlan = nullptr;
     TPlanViewConfig& Config;
     std::map<std::string, std::shared_ptr<TStage>>& CteStages;
     std::map<std::string, std::string>& CteSubPlans;
@@ -310,12 +316,13 @@ class TPlanVisualizer {
 public:
 
     void LoadPlans(const TString& plans, bool simplified = false);
+    void LoadPlans(const NJson::TJsonValue& root);
     void LoadPlan(const TString& planNodeType, const NJson::TJsonValue& root);
     void PostProcessPlans();
     TString PrintSvg();
     TString PrintSvgSafe();
 
-    std::vector<TPlan> Plans;
+    std::vector<std::shared_ptr<TPlan>> Plans;
     ui64 MaxTime = 1000;
     ui64 BaseTime = 0;
     ui64 UpdateTime = 0;

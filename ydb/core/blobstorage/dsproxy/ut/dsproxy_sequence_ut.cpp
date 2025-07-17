@@ -425,7 +425,7 @@ Y_UNIT_TEST(TestBlock42PutWithChangingSlowDisk) {
     TBlobStorageGroupType type = {TErasureType::Erasure4Plus2Block};
     TTestBasicRuntime runtime(1, false);
     Setup(runtime, type);
-    TTestState testState(runtime, type, DSProxyEnv.Info);
+    TTestState testState(runtime, DSProxyEnv.Info);
 
     TLogoBlobID blobId(72075186224047637, 1, 863, 1, 786, 24576);
 
@@ -500,7 +500,7 @@ Y_UNIT_TEST(TestBlock42PutWithChangingSlowDisk) {
 void MakeTestMultiPutItemStatuses(TTestBasicRuntime &runtime, const TBlobStorageGroupType &type,
                                   const TBatchedVec<NKikimrProto::EReplyStatus> &statuses) {
     TString data("xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx");
-    TTestState testState(runtime, type, DSProxyEnv.Info);
+    TTestState testState(runtime, DSProxyEnv.Info);
 
     TVector<TLogoBlobID> blobIds = {
         TLogoBlobID(72075186224047637, 1, 863, 1, 786, 24576),
@@ -599,7 +599,7 @@ Y_UNIT_TEST(TestGivenBlock42GroupGenerationGreaterThanVDiskGenerations) {
     Setup(runtime, type);
 
     TString data("xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx");
-    TTestState testState(runtime, type, DSProxyEnv.Info);
+    TTestState testState(runtime, DSProxyEnv.Info);
 
     TVector<TLogoBlobID> blobIds = {
         TLogoBlobID(72075186224047637, 1, 863, 1, 786, 24576),
@@ -649,7 +649,7 @@ Y_UNIT_TEST(TestGivenMirror3DCGetWithFirstSlowDisk) {
 
     TLogoBlobID blobId = TLogoBlobID(72075186224047637, 1, 2194, 1, 142, 12288);
 
-    TTestState testState(runtime, type, DSProxyEnv.Info);
+    TTestState testState(runtime, DSProxyEnv.Info);
 
     TEvBlobStorage::TEvGet::TPtr ev = testState.CreateGetRequest({blobId}, false);
     TActorId getActorId = runtime.Register(DSProxyEnv.CreateGetRequestActor(ev, NKikimrBlobStorage::TabletLog).release());

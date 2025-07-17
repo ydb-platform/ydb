@@ -36,16 +36,16 @@ using namespace NYT::NYTree;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TEnumerationDescription::TEnumerationDescription(const TString& name)
+TEnumerationDescription::TEnumerationDescription(const std::string& name)
     : Name_(name)
 { }
 
-const TString& TEnumerationDescription::GetEnumerationName() const
+const std::string& TEnumerationDescription::GetEnumerationName() const
 {
     return Name_;
 }
 
-const TString& TEnumerationDescription::GetValueName(i32 value) const
+const std::string& TEnumerationDescription::GetValueName(i32 value) const
 {
     if (auto valueName = TryGetValueName(value)) {
         return *valueName;
@@ -55,7 +55,7 @@ const TString& TEnumerationDescription::GetValueName(i32 value) const
         << TErrorAttribute("value", value);
 }
 
-const TString* TEnumerationDescription::TryGetValueName(i32 value) const
+const std::string* TEnumerationDescription::TryGetValueName(i32 value) const
 {
     auto it = ValueToName_.find(value);
     if (it == ValueToName_.end()) {
@@ -83,7 +83,7 @@ std::optional<i32> TEnumerationDescription::TryGetValue(TStringBuf valueName) co
     return it->second;
 }
 
-void TEnumerationDescription::Add(TString name, i32 value)
+void TEnumerationDescription::Add(std::string name, i32 value)
 {
     if (NameToValue_.find(name) != NameToValue_.end()) {
         THROW_ERROR_EXCEPTION("Enumeration %v already has value %v",
@@ -174,7 +174,7 @@ private:
 ////////////////////////////////////////////////////////////////////////////////
 
 static TEnumerationDescription CreateEnumerationMap(
-    const TString& enumName,
+    const std::string& enumName,
     const IMapNodePtr& enumerationConfig)
 {
     TEnumerationDescription result(enumName);
@@ -183,12 +183,10 @@ static TEnumerationDescription CreateEnumerationMap(
         const auto& valueNode = enumValue.second;
         switch (valueNode->GetType()) {
             case ENodeType::Uint64:
-                // TODO(babenko): migrate to std::string
-                result.Add(TString(name), valueNode->GetValue<ui64>());
+                result.Add(name, valueNode->GetValue<ui64>());
                 break;
             case ENodeType::Int64:
-                // TODO(babenko): migrate to std::string
-                result.Add(TString(name), valueNode->GetValue<i64>());
+                result.Add(name, valueNode->GetValue<i64>());
                 break;
             default:
                 THROW_ERROR_EXCEPTION("Invalid specification of %Qv enumeration: expected type \"int64\" or \"uint64\", actual type %Qlv",
@@ -386,7 +384,7 @@ void ValidateSimpleType(
 
     auto validateLogicalType = [&] (auto... expectedTypes) {
         if ((... && (logicalType != expectedTypes))) {
-            auto typeNameList = std::vector<TString>{FormatEnum(expectedTypes)...};
+            auto typeNameList = std::vector<std::string>{FormatEnum(expectedTypes)...};
             throwMismatchError(Format("expected logical type to be one of %v", typeNameList));
         }
     };
@@ -1007,14 +1005,14 @@ void TProtobufFormatDescriptionBase<TType>::InitFromProtobufSchema(
         const auto& enumerationConfigMap = config->Enumerations;
         for (const auto& [name_, field] : enumerationConfigMap->GetChildren()) {
             // TODO(babenko): migrate to std::string
-            auto name = TString(name_);
+            auto name = std::string(name_);
             if (field->GetType() != ENodeType::Map) {
                 THROW_ERROR_EXCEPTION(R"(Invalid enumeration specification type: expected "map", found %Qlv)",
                     field->GetType());
             }
             const auto& enumerationConfig = field->AsMap();
             // TODO(babenko): migrate to std::string
-            EnumerationDescriptionMap_.emplace(name, CreateEnumerationMap(TString(TimestampColumnName), enumerationConfig));
+            EnumerationDescriptionMap_.emplace(name, CreateEnumerationMap(std::string(TimestampColumnName), enumerationConfig));
         }
     }
 
@@ -1046,7 +1044,7 @@ void TProtobufFormatDescriptionBase<TType>::InitFromProtobufSchema(
 ////////////////////////////////////////////////////////////////////////////////
 
 template <typename TType>
-TProtobufTypeBuilder<TType>::TProtobufTypeBuilder(const THashMap<TString, TEnumerationDescription>& enumerations)
+TProtobufTypeBuilder<TType>::TProtobufTypeBuilder(const THashMap<std::string, TEnumerationDescription>& enumerations)
     : Enumerations_(enumerations)
 { }
 

@@ -10,6 +10,7 @@ import "ydb/library/mkql_proto/protos/minikql.proto";
 import "ydb/library/yql/dq/proto/dq_tasks.proto";
 import "ydb/public/api/protos/ydb_value.proto";
 import "ydb/core/protos/index_builder.proto";
+import "ydb/core/protos/sys_view_types.proto";
 
 message TKqpPhyExternalBinding {
 }
@@ -109,6 +110,7 @@ message TKqpPhyTable {
     EKqpPhyTableKind Kind = 2;
     map<uint32, TKqpPhyColumn> Columns = 3;
     repeated TKqpPhyColumnId KeyColumns = 4;
+    optional NKikimrSysView.TSysViewDescription SysViewInfo = 5;
 }
 
 message TKqpPhyParamValue {
@@ -507,6 +509,7 @@ message TKqpSchemeOperation {
         NKikimrSchemeOp.TModifyScheme CreateTransfer = 51;
         NKikimrSchemeOp.TModifyScheme AlterTransfer = 52;
         NKikimrSchemeOp.TModifyScheme DropTransfer = 53;
+        NKikimrSchemeOp.TModifyScheme AlterDatabase = 54;
     }
 }
 
@@ -579,4 +582,9 @@ message TKqpPhyQuery {
     string QueryDiagnostics = 10;
 
     repeated TKqpTableInfo ViewInfos = 11;
+
+    optional bool EnableOltpSink = 12;
+    optional bool EnableOlapSink = 13;
+    optional bool EnableHtapTx = 14;
+    optional bool ForceImmediateEffectsExecution = 15;
 }

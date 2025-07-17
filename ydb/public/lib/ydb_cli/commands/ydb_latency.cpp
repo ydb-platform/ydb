@@ -4,6 +4,7 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
 
 #include <library/cpp/histogram/hdr/histogram.h>
+#include <library/cpp/json/json_writer.h>
 
 #include <util/generic/serialized_enum.h>
 #include <util/system/info.h>
@@ -23,6 +24,9 @@ constexpr int DEFAULT_INTERVAL_SECONDS = 5;
 constexpr int DEFAULT_MIN_INFLIGHT = 1;
 constexpr int DEFAULT_MAX_INFLIGHT = 128;
 const std::vector<double> DEFAULT_PERCENTILES = {50.0, 90, 99.0};
+
+constexpr int ERRORS_THRESHOLD_PERCENT = 1;
+constexpr TDuration RUN_TIME_THRESHOLD = TDuration::Seconds(2);
 
 constexpr TCommandLatency::EFormat DEFAULT_FORMAT = TCommandLatency::EFormat::Plain;
 constexpr TCommandPing::EPingKind DEFAULT_RUN_KIND = TCommandPing::EPingKind::AllKinds;
@@ -70,7 +74,8 @@ void Evaluate(
     ui64 warmupSeconds,
     ui64 intervalSeconds,
     int threadCount,
-    TCallableFactory factory)
+    TCallableFactory factory,
+    std::function<bool()> isInterrupted)
 {
     std::atomic<bool> startMeasure{false};
     std::atomic<bool> stop{false};
@@ -79,11 +84,24 @@ void Evaluate(
     volatile auto clockRate = NHPTimer::GetClockRate();
     Y_UNUSED(clockRate);
 
-    auto timer = std::thread([&startMeasure, &stop, warmupSeconds, intervalSeconds]() {
-        std::this_thread::sleep_for(std::chrono::seconds(warmupSeconds));
+    auto timer = std::thread([&startMeasure, &stop, warmupSeconds, intervalSeconds, isInterrupted]() {
+        // Warmup phase with interruption checks
+        for (ui64 elapsed = 0; elapsed < warmupSeconds && !isInterrupted(); elapsed++) {
+            std::this_thread::sleep_for(std::chrono::seconds(1));
+        }
+
+        if (isInterrupted()) {
+            stop.store(true, std::memory_order_relaxed);
+            return;
+        }
+
         startMeasure.store(true, std::memory_order_relaxed);
 
-        std::this_thread::sleep_for(std::chrono::seconds(intervalSeconds));
+        // Measurement phase with interruption checks
+        for (ui64 elapsed = 0; elapsed < intervalSeconds && !isInterrupted(); elapsed++) {
+            std::this_thread::sleep_for(std::chrono::seconds(1));
+        }
+
         stop.store(true, std::memory_order_relaxed);
     });
 
@@ -104,7 +122,7 @@ void Evaluate(
                 return;
             }
 
-            while (!startMeasure.load(std::memory_order_relaxed)) {
+            while (!startMeasure.load(std::memory_order_relaxed) && !stop.load(std::memory_order_relaxed)) {
                 try {
                     requester();
                 } catch (...) {
@@ -200,7 +218,6 @@ void TCommandLatency::Parse(TConfig& config) {
     TClientCommand::Parse(config);
 
     if (MaxInflight >= 2) {
-        config.IsNetworkIntensive = true;
         config.UsePerChannelTcpConnection = true;
     }
 
@@ -234,7 +251,7 @@ int TCommandLatency::Run(TConfig& config) {
     };
 
     // note that each thread (normally) will have own driver: we enforce each thread to has own gRPC channel and own
-    // TCP connection (config.IsNetworkIntensive set). This helps to avoid bottleneck here, in the client,
+    // TCP connection (config.UsePerChannelTcpConnection set). This helps to avoid bottleneck here, in the client,
     // in case of low latency network between the client and the server
 
     auto plainGrpcPingFactory = [&getDebugClient] () {
@@ -320,21 +337,35 @@ int TCommandLatency::Run(TConfig& config) {
     for (const auto& [taskKind, factory]: runTasks) {
         for (int threadCount = MinInflight; threadCount <= MaxInflight && !IsInterrupted(); ) {
             TEvaluateResult result;
-            Evaluate(result, DEFAULT_WARMUP_SECONDS, IntervalSeconds, threadCount, factory);
+            TDuration warmupTime = TDuration::Seconds(DEFAULT_WARMUP_SECONDS);
+            auto startTs = TInstant::Now();
+            Evaluate(result, warmupTime.Seconds(), IntervalSeconds, threadCount, factory, [this]() { return this->IsInterrupted(); });
+            auto endTs = TInstant::Now();
 
             bool skip = false;
             if (result.ErrorCount) {
                 auto totalRequests = result.ErrorCount + result.OkCount;
                 double errorsPercent = 100.0 * result.ErrorCount / totalRequests;
-                if (errorsPercent >= 1) {
+                if (errorsPercent >= ERRORS_THRESHOLD_PERCENT) {
                     Cerr << "Skipping " << taskKind << ", threads=" << threadCount
                         << ": error rate=" << errorsPercent << "%" << Endl;
                     skip = true;
                 }
             }
 
+            auto totalTimePassed = endTs - startTs;
+            TDuration runTimePassed;
+            if (totalTimePassed > warmupTime) {
+                runTimePassed = totalTimePassed - warmupTime;
+            }
+            if (runTimePassed < RUN_TIME_THRESHOLD) {
+                Cerr << "Skipping " << taskKind << ", threads=" << threadCount
+                    << ": to short run time=" << runTimePassed << ", threshold=" << RUN_TIME_THRESHOLD << Endl;
+                skip = true;
+            }
+
             if (!skip) {
-                ui64 throughput = result.OkCount / IntervalSeconds;
+                ui64 throughput = result.OkCount / runTimePassed.Seconds();
                 ui64 throughputPerThread = throughput / threadCount;
 
                 if (Format == EFormat::Plain) {
@@ -412,6 +443,63 @@ int TCommandLatency::Run(TConfig& config) {
             }
             Cout << Endl;
         }
+    }
+
+    if (Format == EFormat::JSON) {
+        NJson::TJsonWriter jsonWriter(&Cout, false);
+        jsonWriter.OpenMap();
+
+        // RawResults section
+
+        jsonWriter.WriteKey("RawResults");
+        jsonWriter.OpenArray();
+
+        TMap<TCommandPing::EPingKind, std::vector<const TResult*>> resultsByKind;
+        for (const auto& result : results) {
+            resultsByKind[result.Kind].push_back(&result);
+        }
+
+        for (const auto& [kind, kindResults] : resultsByKind) {
+            jsonWriter.OpenMap();
+            jsonWriter.WriteKey(ToString(kind));
+            jsonWriter.OpenArray();
+
+            for (const auto* result : kindResults) {
+                jsonWriter.OpenMap();
+                jsonWriter.Write("Inflight", result->ThreadCount);
+                jsonWriter.Write("Throughput", result->Throughput);
+
+                // Add percentile latencies
+                for (auto percentile : Percentiles) {
+                    jsonWriter.Write(TStringBuilder() << "p" << percentile, result->LatencyHistogramUs.GetValueAtPercentile(percentile));
+                }
+
+                jsonWriter.CloseMap();
+            }
+
+            jsonWriter.CloseArray();
+            jsonWriter.CloseMap();
+        }
+
+        jsonWriter.CloseArray();
+
+        // Max throughputs
+
+        jsonWriter.WriteKey("Throughputs");
+        jsonWriter.OpenMap();
+
+        for (const auto& [kind, vec] : throughputs) {
+            int maxThroughput = *std::max_element(vec.begin(), vec.end());
+            jsonWriter.Write(ToString(kind), maxThroughput);
+        }
+
+        jsonWriter.CloseMap();
+        jsonWriter.CloseMap();
+        jsonWriter.Flush();
+    }
+
+    if (IsInterrupted()) {
+        Cerr << "Interrupted" << Endl;
     }
 
     return 0;

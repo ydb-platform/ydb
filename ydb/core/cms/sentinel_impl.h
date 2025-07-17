@@ -111,6 +111,7 @@ private:
 struct TNodeInfo {
     TString Host;
     NActors::TNodeLocation Location;
+    TMaybeFail<ui32> PileId;
     THashSet<NKikimrCms::EMarker> Markers;
 
     bool HasFaultyMarker() const;
@@ -153,6 +154,7 @@ public:
     TDistribution ByDataCenter;
     TDistribution ByRoom;
     TDistribution ByRack;
+    TDistribution ByPile;
     THashMap<TString, TNodeIDSet> NodeByRack;
     TDistribution BadByNode;
 
@@ -172,7 +174,8 @@ class TGuardian : public TClusterMap {
     }
 
 public:
-    explicit TGuardian(TSentinelState::TPtr state, ui32 dataCenterRatio = 100, ui32 roomRatio = 100, ui32 rackRatio = 100, ui32 faultyPDisksThresholdPerNode = 0);
+    explicit TGuardian(TSentinelState::TPtr state, ui32 dataCenterRatio = 100, ui32 roomRatio = 100,
+                       ui32 rackRatio = 100, ui32 pileRatio = 100, ui32 faultyPDisksThresholdPerNode = 0);
 
     TPDiskIDSet GetAllowedPDisks(const TClusterMap& all, TString& issues, TPDiskIgnoredMap& disallowed) const;
 
@@ -180,6 +183,7 @@ private:
     const ui32 DataCenterRatio;
     const ui32 RoomRatio;
     const ui32 RackRatio;
+    const ui32 PileRatio;
     const ui32 FaultyPDisksThresholdPerNode;
 
 }; // TGuardian

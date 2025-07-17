@@ -1,9 +1,9 @@
 #include "ydb_workload.h"
 #include "ydb_workload_import.h"
+#include "ydb_workload_tpcc.h"
 
 #include "topic_workload/topic_workload.h"
 #include "transfer_workload/transfer_workload.h"
-#include "query_workload.h"
 #include "ydb_benchmark.h"
 
 #include <ydb/library/yverify_stream/yverify_stream.h>
@@ -47,8 +47,7 @@ TCommandWorkload::TCommandWorkload()
 {
     AddCommand(std::make_unique<TCommandWorkloadTopic>());
     AddCommand(std::make_unique<TCommandWorkloadTransfer>());
-    AddCommand(std::make_unique<TCommandQueryWorkload>());
-    //AddCommand(std::make_unique<TCommandTPCC>());
+    AddCommand(std::make_unique<TCommandTPCC>());
     for (const auto& key: NYdbWorkload::TWorkloadFactory::GetRegisteredKeys()) {
         AddCommand(std::make_unique<TWorkloadCommandRoot>(key.c_str()));
     }
@@ -347,13 +346,18 @@ TWorkloadCommandRun::TWorkloadCommandRun(NYdbWorkload::TWorkloadParams& params, 
     : TWorkloadCommand(workload.CommandName, std::initializer_list<TString>(), workload.Description)
     , Params(params)
     , Type(workload.Type)
-{}
+{
+}
 
 int TWorkloadCommandRun::Run(TConfig& config) {
     PrepareForRun(config);
+    Params.SetClients(QueryClient.get(), nullptr, TableClient.get(), nullptr);
     Params.DbPath = config.Database;
+    Params.Verbose = config.IsVerbose();
     auto workloadGen = Params.CreateGenerator();
     Params.Validate(NYdbWorkload::TWorkloadParams::ECommandType::Run, Type);
+    Params.Init();
+    workloadGen->Init();
     return RunWorkload(*workloadGen, Type);
 }
 
@@ -368,7 +372,11 @@ TWorkloadCommandBase::TWorkloadCommandBase(const TString& name, NYdbWorkload::TW
     , CommandType(commandType)
     , Params(params)
     , Type(type)
-{}
+{
+    if (const auto desc = Params.GetDescription(CommandType, Type)) {
+        Description = desc;
+    }
+}
 
 void TWorkloadCommandBase::Config(TConfig& config) {
     TYdbCommand::Config(config);
@@ -385,11 +393,14 @@ int TWorkloadCommandBase::Run(TConfig& config) {
         TopicClient = MakeHolder<NTopic::TTopicClient>(*Driver);
         SchemeClient = MakeHolder<NScheme::TSchemeClient>(*Driver);
         QueryClient = MakeHolder<NQuery::TQueryClient>(*Driver);
+        Params.SetClients(QueryClient.Get(), SchemeClient.Get(), TableClient.Get(), TopicClient.Get());
     }
     Params.DbPath = config.Database;
+    Params.Verbose = config.IsVerbose();
     auto workloadGen = Params.CreateGenerator();
     auto result = DoRun(*workloadGen, config);
     if (!DryRun) {
+        Params.SetClients(nullptr, nullptr, nullptr, nullptr);
         TableClient->Stop().Wait();
         QueryClient.Reset();
         SchemeClient.Reset();
@@ -413,9 +424,24 @@ void TWorkloadCommandBase::CleanTables(NYdbWorkload::IWorkloadQueryGenerator& wo
             Cout << "Remove " << fullPath << Endl;
         } else {
             NStatusHelpers::ThrowOnErrorOrPrintIssues(RemovePathRecursive(*Driver.Get(), fullPath, settings));
+            RmParentIfEmpty(path, config);
         }
         Cout << "Remove path " << path << "...Ok"  << Endl;
     }
+}
+
+void TWorkloadCommandBase::RmParentIfEmpty(TStringBuf path, TConfig& config) {
+    path.RNextTok('/');
+    if (!path) {
+        return;
+    }
+    auto fullPath = std::string(config.Database.c_str()) + "/" + std::string(path.cbegin(), path.cend());
+    auto lsResult = SchemeClient->ListDirectory(fullPath).GetValueSync();
+    if (lsResult.IsSuccess() && lsResult.GetChildren().empty() && lsResult.GetEntry().Type == NScheme::ESchemeEntryType::Directory) {
+        Cout << "Folder " << path << " is empty, remove it..." << Endl;
+        NStatusHelpers::ThrowOnErrorOrPrintIssues(SchemeClient->RemoveDirectory(fullPath).GetValueSync());
+    }
+    RmParentIfEmpty(path, config);
 }
 
 std::unique_ptr<TClientCommand> TWorkloadCommandRoot::CreateRunCommand(const NYdbWorkload::IWorkloadQueryGenerator::TWorkloadType& workload) {
@@ -433,12 +459,12 @@ TWorkloadCommandRoot::TWorkloadCommandRoot(const TString& key)
       )
     , Params(NYdbWorkload::TWorkloadFactory::MakeHolder(key))
 {
+    if (const auto desc = Params->GetDescription(NYdbWorkload::TWorkloadParams::ECommandType::Root, 0)) {
+        Description = desc;
+    }
     AddCommand(std::make_unique<TWorkloadCommandInit>(*Params));
-    {
-        auto initializers = Params->CreateDataInitializers();
-        if (!initializers.empty()) {
-            AddCommand(std::make_unique<TWorkloadCommandImport>(*Params, std::move(initializers)));
-        }
+    if (auto import = TWorkloadCommandImport::Create(*Params)) {
+        AddCommand(std::move(import));
     }
     auto supportedWorkloads = Params->CreateGenerator()->GetSupportedWorkloadTypes();
     switch (supportedWorkloads.size()) {
@@ -519,12 +545,6 @@ TWorkloadCommandClean::TWorkloadCommandClean(NYdbWorkload::TWorkloadParams& para
 int TWorkloadCommandClean::DoRun(NYdbWorkload::IWorkloadQueryGenerator& workloadGen, TConfig& config) {
     CleanTables(workloadGen, config);
     return EXIT_SUCCESS;
-}
-
-NTable::TSession TWorkloadCommandInit::GetSession() {
-    NTable::TCreateSessionResult result = TableClient->GetSession(NTable::TCreateSessionSettings()).GetValueSync();
-    NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
-    return result.GetSession();
 }
 
 } // namespace NYdb::NConsoleClient

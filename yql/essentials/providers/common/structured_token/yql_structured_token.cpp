@@ -10,12 +10,12 @@
 namespace NYql {
 
 TStructuredToken::TStructuredToken(TMap<TString, TString>&& data)
-    : Data(std::move(data)) {
+    : Data_(std::move(data)) {
 
 }
 
 TString TStructuredToken::GetField(const TString& name) const {
-    return Data.at(name);
+    return Data_.at(name);
 }
 
 TString TStructuredToken::GetFieldOrDefault(const TString& name, const TString& defaultValue) const {
@@ -23,21 +23,21 @@ TString TStructuredToken::GetFieldOrDefault(const TString& name, const TString& 
 }
 
 TMaybe<TString> TStructuredToken::FindField(const TString& name) const {
-    auto* r = Data.FindPtr(name);
+    auto* r = Data_.FindPtr(name);
     return r ? MakeMaybe(*r) : Nothing();
 }
 
 bool TStructuredToken::HasField(const TString& name) const {
-    return Data.contains(name);
+    return Data_.contains(name);
 }
 
 TStructuredToken& TStructuredToken::SetField(const TString& name, const TString& value) {
-    Data[name] = value;
+    Data_[name] = value;
     return *this;
 }
 
 TStructuredToken& TStructuredToken::ClearField(const TString& name) {
-    Data.erase(name);
+    Data_.erase(name);
     return *this;
 }
 
@@ -49,7 +49,7 @@ TString TStructuredToken::ToJson() const {
     NJson::TJsonWriter writer(&output, false, true, true);
     writer.OpenMap();
 
-    for (auto&[k, v] : Data) {
+    for (auto&[k, v] : Data_) {
         if (!IsUtf8(v)) {
             writer.Write(k + "(base64)", Base64Encode(TStringBuf(v)));
         } else {

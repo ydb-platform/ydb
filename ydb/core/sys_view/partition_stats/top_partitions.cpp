@@ -3,6 +3,10 @@
 #include <ydb/core/sys_view/common/events.h>
 #include <ydb/core/sys_view/common/processor_scan.h>
 
+namespace {
+    using NKikimrSysView::ESysViewType;
+}
+
 namespace NKikimr::NSysView {
 
 using namespace NActors;
@@ -60,7 +64,7 @@ struct TTopPartitionsByCpuExtractorMap :
         }});
         insert({S::FollowerId::ColumnId, [] (const E& entry) {
             return TCell::Make<ui32>(entry.GetInfo().GetFollowerId());
-        }});        
+        }});
     }
 };
 
@@ -107,12 +111,13 @@ struct TTopPartitionsByTliExtractorMap :
         }});
         insert({S::FollowerId::ColumnId, [] (const E& entry) {
             return TCell::Make<ui32>(entry.GetInfo().GetFollowerId());
-        }});        
+        }});
     }
 };
 
-THolder<NActors::IActor> CreateTopPartitionsByCpuScan(const NActors::TActorId& ownerId, ui32 scanId, const TTableId& tableId,
-    const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns)
+THolder<NActors::IActor> CreateTopPartitionsByCpuScan(const NActors::TActorId& ownerId, ui32 scanId,
+    const NKikimrSysView::TSysViewDescription& sysViewInfo, const TTableRange& tableRange,
+    const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns)
 {
     using TTopPartitionsByCpuScan = TProcessorScan<
         NKikimrSysView::TTopPartitionsEntry,
@@ -125,19 +130,20 @@ THolder<NActors::IActor> CreateTopPartitionsByCpuScan(const NActors::TActorId& o
         ui32
     >;
 
-    static const std::map<TStringBuf, NKikimrSysView::EStatsType> nameToStatus = {
-        {TopPartitionsByCpu1MinuteName, NKikimrSysView::TOP_PARTITIONS_BY_CPU_ONE_MINUTE},
-        {TopPartitionsByCpu1HourName, NKikimrSysView::TOP_PARTITIONS_BY_CPU_ONE_HOUR},
+    static const std::map<ESysViewType, NKikimrSysView::EStatsType> nameToStatus = {
+        {ESysViewType::ETopPartitionsByCpuOneMinute, NKikimrSysView::TOP_PARTITIONS_BY_CPU_ONE_MINUTE},
+        {ESysViewType::ETopPartitionsByCpuOneHour, NKikimrSysView::TOP_PARTITIONS_BY_CPU_ONE_HOUR},
     };
 
-    auto statusIter = nameToStatus.find(tableId.SysViewInfo.ConstRef());
+    auto statusIter = nameToStatus.find(sysViewInfo.GetType());
     Y_ABORT_UNLESS(statusIter != nameToStatus.end());
 
-    return MakeHolder<TTopPartitionsByCpuScan>(ownerId, scanId, tableId, tableRange, columns, statusIter->second);
+    return MakeHolder<TTopPartitionsByCpuScan>(ownerId, scanId, sysViewInfo, tableRange, columns, statusIter->second);
 }
 
-THolder<NActors::IActor> CreateTopPartitionsByTliScan(const NActors::TActorId& ownerId, ui32 scanId, const TTableId& tableId,
-    const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns)
+THolder<NActors::IActor> CreateTopPartitionsByTliScan(const NActors::TActorId& ownerId, ui32 scanId,
+    const NKikimrSysView::TSysViewDescription& sysViewInfo, const TTableRange& tableRange,
+    const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns)
 {
     using TTopPartitionsByTliScan = TProcessorScan<
         NKikimrSysView::TTopPartitionsEntry,
@@ -150,15 +156,15 @@ THolder<NActors::IActor> CreateTopPartitionsByTliScan(const NActors::TActorId& o
         ui32
     >;
 
-    static const std::map<TStringBuf, NKikimrSysView::EStatsType> nameToStatus = {
-        {TopPartitionsByTli1MinuteName, NKikimrSysView::TOP_PARTITIONS_BY_TLI_ONE_MINUTE},
-        {TopPartitionsByTli1HourName, NKikimrSysView::TOP_PARTITIONS_BY_TLI_ONE_HOUR},
+    static const std::map<ESysViewType, NKikimrSysView::EStatsType> nameToStatus = {
+        {ESysViewType::ETopPartitionsByTliOneMinute, NKikimrSysView::TOP_PARTITIONS_BY_TLI_ONE_MINUTE},
+        {ESysViewType::ETopPartitionsByTliOneHour, NKikimrSysView::TOP_PARTITIONS_BY_TLI_ONE_HOUR},
     };
 
-    auto statusIter = nameToStatus.find(tableId.SysViewInfo.ConstRef());
+    auto statusIter = nameToStatus.find(sysViewInfo.GetType());
     Y_ABORT_UNLESS(statusIter != nameToStatus.end());
 
-    return MakeHolder<TTopPartitionsByTliScan>(ownerId, scanId, tableId, tableRange, columns, statusIter->second);
+    return MakeHolder<TTopPartitionsByTliScan>(ownerId, scanId, sysViewInfo, tableRange, columns, statusIter->second);
 }
 
 } // NKikimr::NSysView

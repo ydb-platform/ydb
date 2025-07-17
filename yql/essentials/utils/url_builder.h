@@ -19,8 +19,8 @@ public:
 
     TString Build() const;
 private:
-    std::vector<TParam> Params;
-    TString MainUri;
+    std::vector<TParam> Params_;
+    TString MainUri_;
 };
 
 } // NYql

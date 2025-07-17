@@ -274,7 +274,10 @@ private:
                         // RPC reader fallback to YT
                         fallback = true;
                         rpcReaderFalledBack = true;
-                    } else if (line.Contains("Attachments stream write timed out") || line.Contains("No alive peers found")) {
+                    } else if (rpcReaderFalledBack && (line.Contains("Attachments stream write timed out") 
+                                            || line.Contains("No alive peers found") || line.Contains("Connection reset by peer") 
+                                            || line.Contains("Connection timed out")))
+                    {
                         // RPC reader DQ retry
                         retry = true;
                     } else if (line.Contains("Transaction") && line.Contains("aborted")) {

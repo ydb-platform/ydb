@@ -7,12 +7,15 @@ This module performs the return type inference, according to symbolic types,
 from pythran.analyses import LazynessAnalysis, StrictAliases, YieldPoints
 from pythran.analyses import LocalNodeDeclarations, Immediates, RangeValues
 from pythran.analyses import Ancestors
+from pythran.analyses.aliases import ContainerOf
 from pythran.config import cfg
 from pythran.cxxtypes import TypeBuilder, ordered_set
 from pythran.intrinsic import UserFunction, Class
 from pythran.passmanager import ModuleAnalysis
+from pythran.errors import PythranSyntaxError
 from pythran.tables import operator_to_lambda, MODULES
-from pythran.types.conversion import pytype_to_ctype
+from pythran.typing import List, Dict, Set, Tuple, NDArray, Union
+from pythran.types.conversion import pytype_to_ctype, PYTYPE_TO_CTYPE_TABLE
 from pythran.types.reorder import Reorder
 from pythran.utils import attr_to_path, cxxid, isnum, isextslice
 
@@ -21,40 +24,201 @@ from functools import reduce
 import gast as ast
 from itertools import islice
 from copy import deepcopy
+import numpy as np
+
+alias_to_type = {
+    MODULES['builtins']['int'] : int,
+    MODULES['builtins']['bool'] : bool,
+    MODULES['builtins']['float'] : float,
+    MODULES['builtins']['str'] : str,
+    MODULES['builtins']['complex'] : complex,
+    MODULES['builtins']['dict'] : Dict,
+    MODULES['builtins']['list'] : List,
+    MODULES['builtins']['set'] : Set,
+    MODULES['builtins']['tuple'] : Tuple,
+    MODULES['builtins']['type'] : type,
+    MODULES['builtins']['None'] : type(None),
+    MODULES['numpy']['intc']: np.intc,
+    MODULES['numpy']['intp']: np.intp,
+    MODULES['numpy']['int64']: np.int64,
+    MODULES['numpy']['int32']: np.int32,
+    MODULES['numpy']['int16']: np.int16,
+    MODULES['numpy']['int8']: np.int8,
+    MODULES['numpy']['uintc']: np.uintc,
+    MODULES['numpy']['uintp']: np.uintp,
+    MODULES['numpy']['uint64']: np.uint64,
+    MODULES['numpy']['uint32']: np.uint32,
+    MODULES['numpy']['uint16']: np.uint16,
+    MODULES['numpy']['uint8']: np.uint8,
+    MODULES['numpy']['float32']: np.float32,
+    MODULES['numpy']['float64']: np.float64,
+    MODULES['numpy']['complex64']: np.complex64,
+    MODULES['numpy']['complex128']: np.complex128,
+    MODULES['numpy']['ndarray']: NDArray,
+}
+try:
+    alias_to_type[MODULES['numpy']['float128']] = np.float128
+    alias_to_type[MODULES['numpy']['complex256']] = np.complex256
+except AttributeError:
+    pass
+
+def alias_key(a):
+    if hasattr(a, 'path'):
+        return a.path
+    if hasattr(a, 'name'):
+        return a.name,
+    if hasattr(a, 'id'):
+        return a.id,
+    if isinstance(a, ast.Subscript):
+        return ('subscript:',) + alias_key(a.value) + alias_key(a.slice)
+    if isinstance(a, ast.Attribute):
+        return ('attr:', a.attr) + alias_key(a.value)
+    if isinstance(a, ast.Call):
+        return ('call:',) + alias_key(a.func)
+    if isinstance(a, ContainerOf):
+        return sum((alias_key(c) for c in sorted(a.containees, key=alias_key)), ())
+    if isinstance(a, ast.Constant):
+        return ('cst:', str(a.value))
+    # FIXME: how could we order those?
+    return str(id(a)),
+
+
+
+class TypeAnnotationParser(ast.NodeVisitor):
+
+    class TypeOf:
+        def __init__(self, val):
+            self.val = val
+
+    class UnionOf:
+        def __init__(self, lhs, rhs):
+            self.lhs = lhs
+            self.rhs = rhs
+
+    def __init__(self, type_visitor):
+        self.type_visitor = type_visitor
+        self.aliases = self.type_visitor.strict_aliases
+
+    def extract(self, node):
+        node_aliases = self.aliases[node]
+        if len(node_aliases) > 1:
+            raise PythranSyntaxError("Ambiguous identifier in type annotation",
+                                     node)
+        if not node_aliases:
+            raise PythranSyntaxError("Unbound identifier in type annotation",
+                                     node)
+        node_alias, = node_aliases
+        if node_alias not in alias_to_type:
+            raise PythranSyntaxError("Unsupported identifier in type annotation",
+                                     node)
+
+        return alias_to_type[node_alias]
+
+
+    def visit_Attribute(self, node):
+        return self.extract(node)
+
+    def visit_Name(self, node):
+        return self.extract(node)
+
+    def visit_Constant(self, node):
+        return node.value
+
+    def visit_Call(self, node):
+        func = self.visit(node.func)
+        if func is not type:
+            raise PythranSyntaxError("Expecting a type or a call to `type(...)`",
+                                     node)
+        if len(node.args) != 1:
+            raise PythranSyntaxError("`type` only supports a single argument",
+                                     node)
+        self.type_visitor.visit(node.args[0])
+        return self.TypeOf(self.type_visitor.result[node.args[0]])
+
+    def visit_Tuple(self, node):
+        return tuple([self.visit(elt) for elt in node.elts])
+
+    def visit_BinOp(self, node):
+        if not isinstance(node.op, ast.BitOr):
+            raise PythranSyntaxError("Unsupported operation between type operands",
+                                     node)
+        left = self.visit(node.left)
+        right = self.visit(node.right)
+        return self.UnionOf(left, right)
+
+    def visit_Subscript(self, node):
+        value = self.visit(node.value)
+        slice_ = self.visit(node.slice)
+        if issubclass(value, NDArray):
+            dtype, ndims = slice_
+            return value[tuple([dtype, *([slice(0)] * ndims)])]
+        else:
+            return value[slice_]
+
+
+def build_type(builder, t):
+    """ Python -> pythonic type binding. """
+    if t is None:
+        return builder.NamedType(pytype_to_ctype(type(None)))
+    elif isinstance(t, List):
+        return builder.ListType(build_type(builder, t.__args__[0]))
+    elif isinstance(t, Set):
+        return builder.SetType(build_type(builder, t.__args__[0]))
+    elif isinstance(t, Dict):
+        tkey, tvalue = t.__args__
+        return builder.DictType(build_type(builder, tkey), build_type(builder,
+                                                                      tvalue))
+    elif isinstance(t, Tuple):
+        return builder.TupleType(*[build_type(builder, p) for p in t.__args__])
+    elif isinstance(t, NDArray):
+        return builder.NDArrayType(build_type(builder, t.__args__[0]), len(t.__args__) - 1)
+    elif isinstance(t, TypeAnnotationParser.TypeOf):
+        return t.val
+    elif isinstance(t, TypeAnnotationParser.UnionOf):
+        return builder.CombinedTypes(build_type(builder, t.lhs),
+                                     build_type(builder, t.rhs))
+    elif t in PYTYPE_TO_CTYPE_TABLE:
+        return builder.NamedType(PYTYPE_TO_CTYPE_TABLE[t])
+    else:
+        raise NotImplementedError("build_type on {}".format(type(t)))
+
+
+def parse_type_annotation(type_visitor, ann):
+    tap = TypeAnnotationParser(type_visitor)
+    typ = tap.visit(ann)
+    return build_type(type_visitor.builder, typ)
 
 
 class UnboundableRValue(Exception):
     pass
 
 
-class Types(ModuleAnalysis):
+class Types(ModuleAnalysis[Reorder, StrictAliases, LazynessAnalysis,
+                           Immediates, RangeValues, Ancestors]):
 
     """ Infer symbolic type for all AST node. """
+    class ResultType(dict):
+        def __init__(self):
+            self.builder = TypeBuilder()
+
+        def copy(self):
+            other = TypeResult()
+            other.update(self.items())
+            other.builder = self.builder
+            return other
+
 
     def __init__(self):
-
+        super().__init__()
         self.max_seq_size = cfg.getint('typing',
                                        'max_heterogeneous_sequence_size')
-
-        class TypeResult(dict):
-            def __init__(self):
-                self.builder = TypeBuilder()
-
-            def copy(self):
-                other = TypeResult()
-                other.update(self.items())
-                other.builder = self.builder
-                return other
-
-        self.result = TypeResult()
         self.builder = self.result.builder
         self.result["bool"] = self.builder.NamedType("bool")
         self.combiners = defaultdict(UserFunction)
         self.current_global_declarations = dict()
         self.max_recompute = 1  # max number of use to be lazy
-        ModuleAnalysis.__init__(self, Reorder, StrictAliases, LazynessAnalysis,
-                                Immediates, RangeValues, Ancestors)
         self.curr_locals_declaration = None
+        self.ptype_count = 0
 
     def combined(self, *types):
         all_types = ordered_set()
@@ -69,6 +233,16 @@ class Types(ModuleAnalysis):
         elif len(all_types) == 1:
             return next(iter(all_types))
         else:
+            all_types = all_types[:cfg.getint('typing', 'max_combiner')]
+            if {type(ty) for ty in all_types} == {self.builder.ListType}:
+                return self.builder.ListType(self.combined(*[ty.of for ty in all_types]))
+            if {type(ty) for ty in all_types} == {self.builder.SetType}:
+                return self.builder.SetType(self.combined(*[ty.of for ty in all_types]))
+            if {type(ty) for ty in all_types} == {self.builder.Assignable}:
+                return self.builder.Assignable(self.combined(*[ty.of for ty in all_types]))
+            if {type(ty) for ty in all_types} == {self.builder.Lazy}:
+                return self.builder.Lazy(self.combined(*[ty.of for ty in all_types]))
+
             return self.builder.CombinedTypes(*all_types)
 
 
@@ -97,37 +271,41 @@ class Types(ModuleAnalysis):
             register(mname, module)
         super(Types, self).prepare(node)
 
-    def run(self, node):
-        super(Types, self).run(node)
+    def visit_Module(self, node):
+        self.generic_visit(node)
         for head in self.current_global_declarations.values():
             if head not in self.result:
                 self.result[head] = "pythonic::types::none_type"
-        return self.result
 
     def register(self, fname, nid, ptype):
         """register ptype as a local typedef"""
         # Too many of them leads to memory burst
-        if len(self.typedefs[fname, nid]) < cfg.getint('typing', 'max_combiner'):
+        if len(self.typedefs[fname, nid]) < cfg.getint('typing',
+                                                       'max_interprocedural_combiner'):
             self.typedefs[fname, nid].append(ptype)
             return True
         return False
 
     def node_to_id(self, n, depth=()):
+        name, depth = self.node_to_name(n, depth)
+        return name.id, depth
+
+    def node_to_name(self, n, depth=()):
         if isinstance(n, ast.Name):
-            return (n.id, depth)
+            return (n, depth)
         elif isinstance(n, ast.Subscript):
             if isinstance(n.slice, ast.Slice):
-                return self.node_to_id(n.value, depth)
+                return self.node_to_name(n.value, depth)
             else:
                 index = n.slice.value if isnum(n.slice) else None
-                return self.node_to_id(n.value, depth + (index,))
+                return self.node_to_name(n.value, depth + (index,))
         # use alias information if any
         elif isinstance(n, ast.Call):
-            for alias in self.strict_aliases[n]:
+            for alias in self.sorted_strict_aliases(n):
                 if alias is n:  # no specific alias info
                     continue
                 try:
-                    return self.node_to_id(alias, depth)
+                    return self.node_to_name(alias, depth)
                 except UnboundableRValue:
                     continue
         raise UnboundableRValue()
@@ -156,97 +334,129 @@ class Types(ModuleAnalysis):
             op = lambda x: x
 
         node_aliases = ordered_set([node])
-        node_aliases.extend(self.strict_aliases.get(node, ()))
+        if node in self.strict_aliases:
+            node_aliases.extend(self.sorted_strict_aliases(node))
         for a in node_aliases:
             self.combine_(a, op, othernode)
 
     def combine_(self, node, op, othernode):
+        # This comes from an assignment,so we must check where the value is
+        # assigned
+        name = None
         try:
-            # This comes from an assignment,so we must check where the value is
-            # assigned
-            try:
-                node_id, depth = self.node_to_id(node)
-                if depth:
-                    node = ast.Name(node_id, ast.Load(), None, None)
-                    former_op = op
+            name, depth = self.node_to_name(node)
+            if depth:
+                former_op = op
 
-                    # update the type to reflect container nesting
-                    def merge_container_type(ty, index):
-                        # integral index make it possible to correctly
-                        # update tuple type
-                        if isinstance(index, int):
-                            kty = self.builder.NamedType(
-                                    'std::integral_constant<long,{}>'
-                                    .format(index))
-                            return self.builder.IndexableContainerType(kty,
-                                                                       ty)
-                        elif isinstance(index, float):
-                            kty = self.builder.NamedType('double')
-                            return self.builder.IndexableContainerType(kty,
-                                                                       ty)
+                # update the type to reflect container nesting
+                def merge_container_type(ty, index):
+                    # integral index make it possible to correctly
+                    # update tuple type
+                    if isinstance(index, int):
+                        kty = self.builder.NamedType(
+                                'std::integral_constant<long,{}>'
+                                .format(index))
+                        return self.builder.IndexableContainerType(kty,
+                                                                   ty)
+                    elif isinstance(index, float):
+                        kty = self.builder.NamedType('double')
+                        return self.builder.IndexableContainerType(kty,
+                                                                   ty)
+                    else:
+                        # FIXME: what about other key types?
+                        return self.builder.ContainerType(ty)
+
+                for node_alias in self.sorted_strict_aliases(name,
+                                                             extra=[name]):
+                    def traverse_alias(alias, l):
+                        if isinstance(alias, ContainerOf):
+                            for containee in sorted(alias.containees,
+                                                    key=alias_key):
+                                traverse_alias(containee, l + 1)
                         else:
-                            # FIXME: what about other key types?
-                            return self.builder.ContainerType(ty)
+                            def local_op(*args):
+                                return reduce(merge_container_type,
+                                              depth[:-l] if l else depth,
+                                              former_op(*args))
+                            if len(depth) > l:
+                                self.combine_(alias, local_op, othernode)
 
-                    def op(*args):
-                        return reduce(merge_container_type, depth,
-                                      former_op(*args))
-
-                self.name_to_nodes[node_id].append(node)
-            except UnboundableRValue:
-                pass
-
-            # perform inter procedural combination
-            if self.isargument(node):
-                node_id, _ = self.node_to_id(node)
-                if node not in self.result:
-                    self.result[node] = op(self.result[othernode])
-                assert self.result[node], "found an alias with a type"
-
-                parametric_type = self.builder.PType(self.current,
-                                                     self.result[othernode])
-
-                if self.register(self.current, node_id, parametric_type):
-
-                    current_function = self.combiners[self.current]
-
-                    def translator_generator(args, op):
-                        ''' capture args for translator generation'''
-                        def interprocedural_type_translator(s, n):
-                            translated_othernode = ast.Name(
-                                '__fake__', ast.Load(), None, None)
-                            s.result[translated_othernode] = (
-                                parametric_type.instanciate(
-                                    s.current,
-                                    [s.result[arg] for arg in n.args]))
-
-                            # look for modified argument
-                            for p, effective_arg in enumerate(n.args):
-                                formal_arg = args[p]
-                                if formal_arg.id == node_id:
-                                    translated_node = effective_arg
-                                    break
-                            try:
-                                s.combine(translated_node,
-                                          op,
-                                          translated_othernode)
-                            except NotImplementedError:
-                                pass
-                                # this may fail when the effective
-                                # parameter is an expression
-                            except UnboundLocalError:
-                                pass
-                                # this may fail when translated_node
-                                # is a default parameter
-                        return interprocedural_type_translator
-
-                    translator = translator_generator(self.current.args.args, op)
-                    current_function.add_combiner(translator)
-            else:
-                self.update_type(node, op, self.result[othernode])
-
+                    traverse_alias(node_alias, 0)
+                return
         except UnboundableRValue:
             pass
+
+        if isinstance(node, ContainerOf):
+            def containeeop(*args):
+                container_type = op(*args)
+                if isinstance(container_type, self.builder.IndexableType):
+                    raise NotImplementedError
+                if isinstance(container_type, (self.builder.ListType,
+                                               self.builder.SetType)):
+                    return container_type.of
+                return self.builder.ElementType(
+                        0 if np.isnan(node.index) else node.index,
+                        container_type)
+
+            for containee in sorted(node.containees, key=alias_key):
+                try:
+                    self.combine(containee, containeeop, othernode)
+                except NotImplementedError:
+                    pass
+
+        # perform inter procedural combination
+        if self.isargument(node):
+            node_id, _ = self.node_to_id(node)
+            if node not in self.result:
+                self.result[node] = op(self.result[othernode])
+            self.name_to_nodes[name.id].append(node)
+            assert self.result[node], "found an alias with a type"
+
+            parametric_type = self.builder.PType(self.current,
+                                                 self.result[othernode],
+                                                 self.ptype_count)
+            self.ptype_count += 1
+
+            if self.register(self.current, node_id, parametric_type):
+
+                current_function = self.combiners[self.current]
+
+                def translator_generator(args, op):
+                    ''' capture args for translator generation'''
+                    def interprocedural_type_translator(s, n):
+                        translated_othernode = ast.Name(
+                            '__fake__', ast.Load(), None, None)
+                        s.result[translated_othernode] = (
+                            parametric_type.instanciate(
+                                s.current,
+                                [s.result[arg] for arg in n.args]))
+
+                        # look for modified argument
+                        for p, effective_arg in enumerate(n.args):
+                            formal_arg = args[p]
+                            if formal_arg.id == node_id:
+                                translated_node = effective_arg
+                                break
+                        try:
+                            s.combine(translated_node,
+                                      op,
+                                      translated_othernode)
+                        except NotImplementedError:
+                            pass
+                            # this may fail when the effective
+                            # parameter is an expression
+                        except UnboundLocalError:
+                            pass
+                            # this may fail when translated_node
+                            # is a default parameter
+                    return interprocedural_type_translator
+
+                translator = translator_generator(self.current.args.args, op)
+                current_function.add_combiner(translator)
+        else:
+            self.update_type(node, op, self.result[othernode])
+            if name is not None:
+                self.name_to_nodes[name.id].append(node)
 
     def update_type(self, node, ty_builder, *args):
         if ty_builder is None:
@@ -280,10 +490,14 @@ class Types(ModuleAnalysis):
 
         for delayed_node in self.delayed_nodes:
             delayed_type = self.result[delayed_node]
+            if not isinstance(delayed_type, self.builder.LType):
+                continue
             all_types = ordered_set(self.result[ty] for ty in
                                     self.name_to_nodes[delayed_node.id])
             final_type = self.combined(*all_types)
             delayed_type.final_type = final_type
+            if final_type is delayed_type.orig:
+                self.result[delayed_node] = delayed_type.orig
 
         # propagate type information through all aliases
         for name, nodes in self.name_to_nodes.items():
@@ -305,11 +519,25 @@ class Types(ModuleAnalysis):
         for k in self.curr_locals_declaration:
             self.result[k] = self.get_qualifier(k)(self.result[k])
 
+    def assignable(self, ty):
+        if isinstance(ty, (self.builder.Assignable, self.builder.ListType,
+                           self.builder.NamedType)):
+            return ty
+        else:
+            return self.builder.Assignable(ty)
+
+    def lazy(self, ty):
+        if isinstance(ty, (self.builder.Lazy, self.builder.ListType,
+                           self.builder.NamedType)):
+            return ty
+        else:
+            return self.builder.Lazy(ty)
+
     def get_qualifier(self, node):
         lazy_res = self.lazyness_analysis[node.id]
-        return (self.builder.Lazy
+        return (self.lazy
                 if lazy_res <= self.max_recompute
-                else self.builder.Assignable)
+                else self.assignable)
 
     def visit_Return(self, node):
         """ Compute return type and merges with others possible return type."""
@@ -331,38 +559,38 @@ class Types(ModuleAnalysis):
             if t in self.curr_locals_declaration:
                 self.result[t] = self.get_qualifier(t)(self.result[t])
             if isinstance(t, ast.Subscript):
-                if self.visit_AssignedSubscript(t):
-                    for alias in self.strict_aliases[t.value]:
-                        fake = ast.Subscript(alias, t.slice, ast.Store())
-                        self.combine(fake, None, node.value)
+                self.visit_AssignedSubscript(t)
 
     def visit_AnnAssign(self, node):
+        node_type = parse_type_annotation(self, node.annotation)
+        t = node.target
+        if node_type:
+            self.result[t] = node_type
         if not node.value:
-            # FIXME: replace this by actually setting the node type from the
-            # annotation
-            self.curr_locals_declaration.remove(node.target)
+            self.curr_locals_declaration.remove(t)
             return
         self.visit(node.value)
-        t = node.target
-        self.combine(t, None, node.value)
+        if node_type:
+            # A bit odd, isn't it? :-)
+            self.combine(t, None, t)
+        else:
+            self.combine(t, None, node.value)
         if t in self.curr_locals_declaration:
             self.result[t] = self.get_qualifier(t)(self.result[t])
+
         if isinstance(t, ast.Subscript):
-            if self.visit_AssignedSubscript(t):
-                for alias in self.strict_aliases[t.value]:
-                    fake = ast.Subscript(alias, t.slice, ast.Store())
-                    self.combine(fake, None, node.value)
+            self.visit_AssignedSubscript(t)
 
     def visit_AugAssign(self, node):
-        self.visit(node.value)
-
+        # No visit_AssignedSubscript as the container should already have been
+        # populated.
         if isinstance(node.target, ast.Subscript):
-            if self.visit_AssignedSubscript(node.target):
-                for alias in self.strict_aliases[node.target.value]:
-                    fake = ast.Subscript(alias, node.target.slice, ast.Store())
-                    self.combine(fake, None, node.value)
+            self.visit(node.target)
+            self.visit(node.value)
         else:
-            self.combine(node.target, None, node.value)
+            tmp = ast.BinOp(deepcopy(node.target), node.op, node.value)
+            self.visit(tmp)
+            self.combine(node.target, None, tmp)
 
 
     def visit_For(self, node):
@@ -417,18 +645,21 @@ class Types(ModuleAnalysis):
                              self.result[left],
                              self.result[right])
 
+    def sorted_strict_aliases(self, func, extra=[]):
+        return sorted(self.strict_aliases[func] | set(extra), key=alias_key)
+
     def visit_Call(self, node):
         self.generic_visit(node)
 
         func = node.func
 
-        for alias in self.strict_aliases[func]:
+        for alias in self.sorted_strict_aliases(func):
             # this comes from a bind
             if isinstance(alias, ast.Call):
                 a0 = alias.args[0]
                 # by construction of the bind construct
                 assert len(self.strict_aliases[a0]) == 1
-                bounded_function = next(iter(self.strict_aliases[a0]))
+                bounded_function = next(iter(self.sorted_strict_aliases(a0)))
                 fake_name = deepcopy(a0)
                 fake_node = ast.Call(fake_name, alias.args[1:] + node.args,
                                      [])
@@ -444,7 +675,7 @@ class Types(ModuleAnalysis):
         def last_chance():
             # maybe we can get saved if we have a hint about
             # the called function return type
-            for alias in self.strict_aliases[func]:
+            for alias in self.sorted_strict_aliases(func):
                 if alias is self.current and alias in self.result:
                     # great we have a (partial) type information
                     self.result[node] = self.result[alias]
@@ -563,13 +794,12 @@ class Types(ModuleAnalysis):
 
     def visit_AssignedSubscript(self, node):
         if isinstance(node.slice, ast.Slice):
-            return False
+            return
         elif isextslice(node.slice):
-            return False
+            return
         else:
             self.visit(node.slice)
             self.combine(node.value, self.builder.IndexableType, node.slice)
-            return True
 
     def delayed(self, node):
         fallback_type = self.combined(*[self.result[n] for n in

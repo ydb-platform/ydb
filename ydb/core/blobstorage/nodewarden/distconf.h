@@ -4,21 +4,29 @@
 #include "node_warden.h"
 #include "node_warden_events.h"
 
+#include <ydb/core/protos/bridge.pb.h>
 #include <util/generic/hash_multi_map.h>
 #include <ydb/core/mind/bscontroller/group_mapper.h>
 
 namespace NKikimr::NStorage {
 
     struct TNodeIdentifier : std::tuple<TString, ui32, ui32> {
+        std::optional<TBridgePileId> BridgePileId;
+
         TNodeIdentifier() = default;
 
-        TNodeIdentifier(TString host, ui32 port, ui32 nodeId)
+        TNodeIdentifier(TString host, ui32 port, ui32 nodeId, std::optional<TBridgePileId> bridgePileId)
             : std::tuple<TString, ui32, ui32>(std::move(host), port, nodeId)
+            , BridgePileId(bridgePileId)
         {}
 
         TNodeIdentifier(const NKikimrBlobStorage::TNodeIdentifier& proto)
             : std::tuple<TString, ui32, ui32>(proto.GetHost(), proto.GetPort(), proto.GetNodeId())
-        {}
+        {
+            if (proto.HasBridgePileId()) {
+                BridgePileId.emplace(TBridgePileId::FromProto(&proto, &NKikimrBlobStorage::TNodeIdentifier::GetBridgePileId));
+            }
+        }
 
         ui32 NodeId() const {
             return std::get<2>(*this);
@@ -28,6 +36,9 @@ namespace NKikimr::NStorage {
             proto->SetHost(std::get<0>(*this));
             proto->SetPort(std::get<1>(*this));
             proto->SetNodeId(std::get<2>(*this));
+            if (BridgePileId) {
+                BridgePileId->CopyToProto(proto, &NKikimrBlobStorage::TNodeIdentifier::SetBridgePileId);
+            }
         }
     };
 
@@ -76,6 +87,7 @@ namespace NKikimr::NStorage {
                EvStorageConfigLoaded,
                EvStorageConfigStored,
                EvReconnect,
+               EvConfigProposed,
             };
 
             struct TEvStorageConfigLoaded : TEventLocal<TEvStorageConfigLoaded, EvStorageConfigLoaded> {
@@ -86,6 +98,16 @@ namespace NKikimr::NStorage {
 
             struct TEvStorageConfigStored : TEventLocal<TEvStorageConfigStored, EvStorageConfigStored> {
                 std::vector<std::tuple<TString, bool, std::optional<ui64>>> StatusPerPath;
+            };
+
+            struct TEvConfigProposed : TEventLocal<TEvConfigProposed, EvConfigProposed> {
+                std::optional<TString> ErrorReason;
+
+                TEvConfigProposed() = default;
+
+                TEvConfigProposed(TString errorReason)
+                    : ErrorReason(std::move(errorReason))
+                {}
             };
         };
 
@@ -150,7 +172,7 @@ namespace NKikimr::NStorage {
 
         struct TScatterTask {
             const std::optional<TBinding> Origin;
-            const std::weak_ptr<TScepter> Scepter;
+            const ui64 ScepterCounter;
             const TActorId ActorId;
 
             THashSet<ui32> PendingNodes;
@@ -160,9 +182,9 @@ namespace NKikimr::NStorage {
             std::vector<TEvGather> CollectedResponses; // from bound nodes
 
             TScatterTask(const std::optional<TBinding>& origin, TEvScatter&& request,
-                    const std::shared_ptr<TScepter>& scepter, TActorId actorId)
+                    ui64 scepterCounter, TActorId actorId)
                 : Origin(origin)
-                , Scepter(scepter)
+                , ScepterCounter(scepterCounter)
                 , ActorId(actorId)
             {
                 Request.Swap(&request);
@@ -178,7 +200,7 @@ namespace NKikimr::NStorage {
         TBridgeInfo::TPtr BridgeInfo;
 
         // currently active storage config
-        std::optional<NKikimrBlobStorage::TStorageConfig> StorageConfig;
+        std::shared_ptr<const NKikimrBlobStorage::TStorageConfig> StorageConfig;
         TString MainConfigYaml; // the part we have to push (unless this is storage-only) to console
         std::optional<ui64> MainConfigYamlVersion;
         TString MainConfigFetchYaml; // the part we would get is we fetch from console
@@ -186,10 +208,10 @@ namespace NKikimr::NStorage {
         std::optional<TString> StorageConfigYaml; // set if dedicated storage yaml is enabled; otherwise nullopt
 
         // base config from config file
-        NKikimrBlobStorage::TStorageConfig BaseConfig;
+        std::shared_ptr<const NKikimrBlobStorage::TStorageConfig> BaseConfig;
 
         // initial config based on config file and stored committed configs
-        NKikimrBlobStorage::TStorageConfig InitialConfig;
+        std::shared_ptr<const NKikimrBlobStorage::TStorageConfig> InitialConfig;
         std::vector<TString> DrivesToRead;
 
         // proposed storage configuration of the cluster
@@ -236,6 +258,8 @@ namespace NKikimr::NStorage {
         using TScatterTasks = THashMap<ui64, TScatterTask>;
         TScatterTasks ScatterTasks;
 
+        std::optional<TActorId> StateStorageSelfHealActor;
+
         // root node operation
         enum class ERootState {
             INITIAL,
@@ -245,10 +269,28 @@ namespace NKikimr::NStorage {
         };
         static constexpr TDuration ErrorTimeout = TDuration::Seconds(3);
         ERootState RootState = ERootState::INITIAL;
-        std::optional<NKikimrBlobStorage::TStorageConfig> CurrentProposedStorageConfig;
+
+        struct TProposition {
+            NKikimrBlobStorage::TStorageConfig StorageConfig; // storage config being proposed
+            THashSet<TBridgePileId> SpecificBridgePileIds; // a set of piles making up required quorum
+            bool FromActor; // was this proposition started by invoke actor
+            std::vector<TActorId> ActorIds; // actors waiting for notification after proposition has been complete
+            bool CheckSyncersAfterCommit; // shall we check Bridge syncers after commit has been made
+        };
+        std::optional<TProposition> CurrentProposition;
+
         std::shared_ptr<TScepter> Scepter;
+        ui64 ScepterCounter = 0; // increased every time Scepter gets changed
+        bool ScepterlessOperationInProgress = false; // when a leader operation is running while no Scepter is acquired
         TString ErrorReason;
         std::optional<TString> CurrentSelfAssemblyUUID;
+        bool ConfigsCollected = false;
+
+        // bridge-related logic
+        std::set<std::tuple<ui32, TGroupId, TBridgePileId>> WorkingSyncersByNode;
+        std::set<std::tuple<TGroupId, TBridgePileId, ui32>> WorkingSyncers;
+        bool SyncerArrangeInFlight = false;
+        bool SyncerArrangePending = false;
 
         // subscribed IC sessions
         struct TSessionSubscription {
@@ -280,6 +322,14 @@ namespace NKikimr::NStorage {
         std::optional<std::tuple<ui64, ui32>> ProposedConfigHashVersion;
         std::vector<std::tuple<TActorId, TString, ui64>> ConsoleConfigValidationQ;
 
+        // cache subsystem
+        struct TCacheItem {
+            ui32 Generation; // item generation
+            std::optional<TString> Value; // item binary value
+        };
+        THashMap<TString, TCacheItem> Cache;
+        std::set<std::tuple<TString, TActorId>> CacheSubscriptions;
+
         friend void ::Out<ERootState>(IOutputStream&, ERootState);
 
     public:
@@ -287,8 +337,8 @@ namespace NKikimr::NStorage {
             return NKikimrServices::TActivity::NODEWARDEN_DISTRIBUTED_CONFIG;
         }
 
-        TDistributedConfigKeeper(TIntrusivePtr<TNodeWardenConfig> cfg, const NKikimrBlobStorage::TStorageConfig& baseConfig,
-            bool isSelfStatic);
+        TDistributedConfigKeeper(TIntrusivePtr<TNodeWardenConfig> cfg,
+            std::shared_ptr<const NKikimrBlobStorage::TStorageConfig> baseConfig, bool isSelfStatic);
 
         void Bootstrap();
         void PassAway() override;
@@ -297,6 +347,7 @@ namespace NKikimr::NStorage {
         bool ApplyStorageConfig(const NKikimrBlobStorage::TStorageConfig& config);
         void HandleConfigConfirm(STATEFN_SIG);
         void ReportStorageConfigToNodeWarden(ui64 cookie);
+        void Handle(TEvNodeWardenUpdateConfigFromPeer::TPtr ev);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // PDisk configuration retrieval and storing
@@ -309,6 +360,7 @@ namespace NKikimr::NStorage {
 
         static TString CalculateFingerprint(const NKikimrBlobStorage::TStorageConfig& config);
         static void UpdateFingerprint(NKikimrBlobStorage::TStorageConfig *config);
+        static void UpdateBridgeFingerprint(NKikimrBridge::TClusterState *state);
         static bool CheckFingerprint(const NKikimrBlobStorage::TStorageConfig& config);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -348,19 +400,21 @@ namespace NKikimr::NStorage {
         void CheckRootNodeStatus();
         void BecomeRoot();
         void UnbecomeRoot();
+        void CheckIfDone();
         void HandleErrorTimeout();
         void ProcessGather(TEvGather *res);
-        bool HasQuorum() const;
+        bool HasConnectedNodeQuorum(const NKikimrBlobStorage::TStorageConfig& config,
+            const THashSet<TBridgePileId>& specificBridgePileIds = {}) const;
         void ProcessCollectConfigs(TEvGather::TCollectConfigs *res);
 
         struct TProcessCollectConfigsResult {
-            std::variant<std::monostate, TString, NKikimrBlobStorage::TStorageConfig> Outcome;
+            std::optional<TString> ErrorReason;
             bool IsDistconfDisabledQuorum = false;
         };
         TProcessCollectConfigsResult ProcessCollectConfigs(TEvGather::TCollectConfigs *res,
-            std::optional<TStringBuf> selfAssemblyUUID);
+            std::optional<TStringBuf> selfAssemblyUUID, TActorId actorId, bool allowProposition);
 
-        std::optional<TString> ProcessProposeStorageConfig(TEvGather::TProposeStorageConfig *res);
+        void ProcessProposeStorageConfig(TEvGather::TProposeStorageConfig *res);
 
         struct TExConfigError : yexception {};
 
@@ -376,7 +430,7 @@ namespace NKikimr::NStorage {
             bool convertToDonor, bool ignoreVSlotQuotaCheck, bool isSelfHealReasonDecommit,
             std::optional<TBridgePileId> bridgePileId);
 
-        void GenerateStateStorageConfig(NKikimrConfig::TDomainsConfig::TStateStorage *ss,
+        static void GenerateStateStorageConfig(NKikimrConfig::TDomainsConfig::TStateStorage *ss,
             const NKikimrBlobStorage::TStorageConfig& baseConfig);
         bool UpdateConfig(NKikimrBlobStorage::TStorageConfig *config);
 
@@ -387,6 +441,29 @@ namespace NKikimr::NStorage {
         void Perform(TEvGather::TProposeStorageConfig *response, const TEvScatter::TProposeStorageConfig& request, TScatterTask& task);
 
         void SwitchToError(const TString& reason);
+
+        std::optional<TString> StartProposition(NKikimrBlobStorage::TStorageConfig *configToPropose,
+            const NKikimrBlobStorage::TStorageConfig *propositionBase, THashSet<TBridgePileId>&& specificBridgePileIds,
+            TActorId actorId, bool checkSyncersAfterCommit);
+
+        ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+        // Bridge ops
+
+        // preparation (may be async)
+        void PrepareScatterTask(ui64 cookie, TScatterTask& task, const TEvScatter::TManageSyncers& request);
+        void Handle(TEvNodeWardenManageSyncersResult::TPtr ev);
+
+        // execute per-node action
+        void Perform(TEvGather::TManageSyncers *response, const TEvScatter::TManageSyncers& request, TScatterTask& task);
+
+        // handle gather result (when completed all along the cluster)
+        void ProcessManageSyncers(TEvGather::TManageSyncers *res);
+
+        void RearrangeSyncing();
+        void OnSyncerUnboundNode(ui32 nodeId);
+        void IssueQuerySyncers();
+
+        bool UpdateBridgeConfig(NKikimrBlobStorage::TStorageConfig *config);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Scatter/gather logic
@@ -432,7 +509,7 @@ namespace NKikimr::NStorage {
         void ApplyConfigUpdateToDynamicNodes(bool drop);
         void OnDynamicNodeDisconnected(ui32 nodeId, TActorId sessionId);
         void HandleDynamicConfigSubscribe(STATEFN_SIG);
-        void PushConfigToDynamicNode(TActorId actorId, TActorId sessionId);
+        void PushConfigToDynamicNode(TActorId actorId, TActorId sessionId, bool addCache);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Event delivery
@@ -446,6 +523,18 @@ namespace NKikimr::NStorage {
         // Monitoring
 
         void Handle(NMon::TEvHttpInfo::TPtr ev);
+
+        ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+        // Cache update
+
+        void ApplyCacheUpdates(NKikimrBlobStorage::TCacheUpdate *cacheUpdate, ui32 senderNodeId);
+
+        void AddCacheUpdate(NKikimrBlobStorage::TCacheUpdate *cacheUpdate, THashMap<TString, TCacheItem>::const_iterator it,
+            bool addValue);
+
+        void Handle(TEvNodeWardenUpdateCache::TPtr ev);
+        void Handle(TEvNodeWardenQueryCache::TPtr ev);
+        void Handle(TEvNodeWardenUnsubscribeFromCache::TPtr ev);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Console interaction
@@ -543,207 +632,6 @@ namespace NKikimr::NStorage {
         }
     }
 
-    template<typename T>
-    bool HasDiskQuorum(const NKikimrBlobStorage::TStorageConfig& config, T&& generateSuccessful) {
-        // generate set of all required drives
-        THashMap<TString, std::tuple<ui32, ui32>> status; // dc -> {ok, err}
-        THashMap<ui32, const NKikimrBlobStorage::TNodeIdentifier*> nodeMap;
-        THashSet<std::tuple<TNodeIdentifier, TString>> allDrives;
-        auto cb = [&status, &allDrives](const auto& node, const auto& drive) {
-            auto& [ok, err] = status[TNodeLocation(node.GetLocation()).GetDataCenterId()];
-            ++err;
-            allDrives.emplace(node, drive.GetPath());
-        };
-        EnumerateConfigDrives(config, 0, cb, &nodeMap);
-
-        // process responses
-        generateSuccessful([&](const TNodeIdentifier& node, const TString& path, std::optional<ui64> /*guid*/) {
-            const auto it = nodeMap.find(node.NodeId());
-            if (it == nodeMap.end() || TNodeIdentifier(*it->second) != node) { // unexpected node answers
-                return;
-            }
-            if (!allDrives.erase(std::make_tuple(node, path))) { // unexpected drive
-                return;
-            }
-            auto& [ok, err] = status[TNodeLocation(it->second->GetLocation()).GetDataCenterId()];
-            Y_ABORT_UNLESS(err);
-            ++ok;
-            --err;
-        });
-
-        // calculate number of good and bad datacenters
-        ui32 ok = 0;
-        ui32 err = 0;
-        for (const auto& [_, value] : status) {
-            const auto [dcOk, dcErr] = value;
-            ++(dcOk > dcErr ? ok : err);
-        }
-
-        // strict datacenter majority
-        return ok > err;
-    }
-
-    template<typename T>
-    bool HasNodeQuorum(const NKikimrBlobStorage::TStorageConfig& config, T&& generateSuccessful) {
-        // generate set of all nodes
-        THashMap<TString, std::tuple<ui32, ui32>> status; // dc -> {ok, err}
-        THashMap<ui32, const NKikimrBlobStorage::TNodeIdentifier*> nodeMap;
-        for (const auto& node : config.GetAllNodes()) {
-            auto& [ok, err] = status[TNodeLocation(node.GetLocation()).GetDataCenterId()];
-            ++err;
-            nodeMap.emplace(node.GetNodeId(), &node);
-        }
-
-        // process responses
-        std::set<TNodeIdentifier> seen;
-        generateSuccessful([&](const TNodeIdentifier& node) {
-            const auto& [_, inserted] = seen.insert(node);
-            Y_ABORT_UNLESS(inserted);
-
-            const auto it = nodeMap.find(node.NodeId());
-            if (it == nodeMap.end() || TNodeIdentifier(*it->second) != node) { // unexpected node answers
-                return;
-            }
-            auto& [ok, err] = status[TNodeLocation(it->second->GetLocation()).GetDataCenterId()];
-            Y_ABORT_UNLESS(err);
-            ++ok;
-            --err;
-        });
-
-        // calculate number of good and bad datacenters
-        ui32 ok = 0;
-        ui32 err = 0;
-        for (const auto& [_, value] : status) {
-            const auto [dcOk, dcErr] = value;
-            ++(dcOk > dcErr ? ok : err);
-        }
-
-        // strict datacenter majority
-        return ok > err;
-    }
-
-    template<typename T>
-    bool HasStorageQuorum(const NKikimrBlobStorage::TStorageConfig& config, T&& generateSuccessful,
-            const TNodeWardenConfig& nwConfig, bool allowUnformatted) {
-        auto makeError = [&](TString error) -> bool {
-            STLOG(PRI_CRIT, BS_NODE, NWDC41, "configuration incorrect", (Error, error));
-            Y_DEBUG_ABORT("%s", error.c_str());
-            return false;
-        };
-        if (!config.HasBlobStorageConfig()) { // no storage config at all -- however, this is quite strange
-            return makeError("no BlobStorageConfig section in config");
-        }
-        const auto& bsConfig = config.GetBlobStorageConfig();
-        if (!bsConfig.HasServiceSet()) { // maybe this is initial configuration
-            return !config.GetGeneration() || makeError("non-initial configuration with missing ServiceSet");
-        }
-        const auto& ss = bsConfig.GetServiceSet();
-
-        // build map of group infos
-        struct TGroupRecord {
-            TIntrusivePtr<TBlobStorageGroupInfo> Info;
-            TBlobStorageGroupInfo::TGroupVDisks Confirmed; // a set of confirmed group disks
-
-            TGroupRecord(TIntrusivePtr<TBlobStorageGroupInfo>&& info)
-                : Info(std::move(info))
-                , Confirmed(&Info->GetTopology())
-            {}
-        };
-        THashMap<ui32, TGroupRecord> groups;
-        for (const auto& group : ss.GetGroups()) {
-            const ui32 groupId = group.GetGroupID();
-            if (TGroupID(groupId).ConfigurationType() != EGroupConfigurationType::Static) {
-                return makeError("nonstatic group id in static configuration section");
-            }
-
-            TStringStream err;
-            TIntrusivePtr<TBlobStorageGroupInfo> info = TBlobStorageGroupInfo::Parse(group, &nwConfig.StaticKey, &err);
-            if (!info) {
-                return makeError(TStringBuilder() << "failed to parse static group " << groupId << ": " << err.Str());
-            }
-
-            if (const auto [it, inserted] = groups.emplace(groupId, std::move(info)); !inserted) {
-                return makeError("duplicate group id in static configuration section");
-            }
-        }
-
-        // fill in pdisk map
-        THashMap<std::tuple<ui32, ui32, ui64>, TString> pdiskIdToPath; // (nodeId, pdiskId, pdiskGuid) -> path
-        for (const auto& pdisk : ss.GetPDisks()) {
-            const auto [it, inserted] = pdiskIdToPath.emplace(std::make_tuple(pdisk.GetNodeID(), pdisk.GetPDiskID(),
-                pdisk.GetPDiskGuid()), pdisk.GetPath());
-            if (!inserted) {
-                return makeError("duplicate pdisk in static configuration section");
-            }
-        }
-
-        // create confirmation map
-        THashMultiMap<std::tuple<ui32, TString, std::optional<ui64>>, TVDiskID> confirm;
-        for (const auto& vdisk : ss.GetVDisks()) {
-            if (!vdisk.HasVDiskID() || !vdisk.HasVDiskLocation()) {
-                return makeError("incorrect TVDisk record");
-            }
-            if (vdisk.GetEntityStatus() == NKikimrBlobStorage::EEntityStatus::DESTROY) {
-                continue;
-            }
-            if (vdisk.HasDonorMode()) {
-                continue;
-            }
-            const auto vdiskId = VDiskIDFromVDiskID(vdisk.GetVDiskID());
-            const auto it = groups.find(vdiskId.GroupID.GetRawId());
-            if (it == groups.end()) {
-                return makeError(TStringBuilder() << "VDisk " << vdiskId << " does not match any static group");
-            }
-            const TGroupRecord& group = it->second;
-            if (vdiskId.GroupGeneration != group.Info->GroupGeneration) {
-                return makeError(TStringBuilder() << "VDisk " << vdiskId << " group generation mismatch");
-            }
-            const auto& location = vdisk.GetVDiskLocation();
-            const auto jt = pdiskIdToPath.find(std::make_tuple(location.GetNodeID(), location.GetPDiskID(),
-                location.GetPDiskGuid()));
-            if (jt == pdiskIdToPath.end()) {
-                return makeError(TStringBuilder() << "VDisk " << vdiskId << " points to incorrect PDisk record");
-            }
-            confirm.emplace(std::make_tuple(location.GetNodeID(), jt->second, location.GetPDiskGuid()), vdiskId);
-            if (allowUnformatted) {
-                confirm.emplace(std::make_tuple(location.GetNodeID(), jt->second, std::nullopt), vdiskId);
-            }
-        }
-
-        // process responded nodes
-        generateSuccessful([&](const TNodeIdentifier& node, const TString& path, std::optional<ui64> guid) {
-            const auto key = std::make_tuple(node.NodeId(), path, guid);
-            const auto [begin, end] = confirm.equal_range(key);
-            for (auto it = begin; it != end; ++it) {
-                const TVDiskID& vdiskId = it->second;
-                TGroupRecord& group = groups.at(vdiskId.GroupID.GetRawId());
-                group.Confirmed |= {&group.Info->GetTopology(), vdiskId};
-            }
-        });
-
-        // scan all groups and find ones without quorum
-        for (const auto& [groupId, group] : groups) {
-            if (group.Info->IsBridged()) {
-                continue;
-            }
-            if (const auto& checker = group.Info->GetQuorumChecker(); !checker.CheckQuorumForGroup(group.Confirmed)) {
-                return false;
-            }
-        }
-
-        return true; // all group meet their quorums
-    }
-
-    // Ensure configuration has quorum in both disk and storage ways for current and previous configuration.
-    template<typename T>
-    bool HasConfigQuorum(const NKikimrBlobStorage::TStorageConfig& config, T&& generateSuccessful,
-            const TNodeWardenConfig& nwConfig, bool mindPrev = true) {
-        return HasDiskQuorum(config, generateSuccessful) &&
-            HasStorageQuorum(config, generateSuccessful, nwConfig, true) && (!mindPrev || !config.HasPrevConfig() || (
-            HasDiskQuorum(config.GetPrevConfig(), generateSuccessful) &&
-            HasStorageQuorum(config.GetPrevConfig(), generateSuccessful, nwConfig, false)));
-    }
-
     std::optional<TString> ValidateConfigUpdate(const NKikimrBlobStorage::TStorageConfig& current,
             const NKikimrBlobStorage::TStorageConfig& proposed);
 
@@ -751,6 +639,11 @@ namespace NKikimr::NStorage {
 
     std::optional<TString> DecomposeConfig(const TString& configComposite, TString *mainConfigYaml,
         ui64 *mainConfigVersion, TString *mainConfigFetchYaml);
+
+    std::optional<TString> UpdateClusterState(NKikimrBlobStorage::TStorageConfig *config);
+
+    TBridgeInfo::TPtr GenerateBridgeInfo(const NKikimrBlobStorage::TStorageConfig& config,
+        const TNodeWardenConfig *cfg, ui32 selfNodeId);
 
 } // NKikimr::NStorage
 

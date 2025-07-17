@@ -27,7 +27,7 @@ std::optional<std::vector<TColumnChunkLoadContext>> GetChunksToRewrite(
             return std::nullopt;
         }
     }
-    AFL_CRIT(NKikimrServices::TX_COLUMNSHARD)("tasks_for_rewrite", chunksToRewrite.size());
+    AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("tasks_for_rewrite", chunksToRewrite.size());
     return chunksToRewrite;
 }
 

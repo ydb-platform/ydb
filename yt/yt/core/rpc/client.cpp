@@ -105,8 +105,7 @@ TSharedRefArray TClientRequest::Serialize()
     auto headerlessMessage = GetHeaderlessMessage();
 
     if (!retry) {
-        auto output = CreateRequestMessage(Header_, headerlessMessage);
-        return std::move(output);
+        return CreateRequestMessage(Header_, headerlessMessage);
     }
 
     if (StreamingEnabled_) {
@@ -116,8 +115,7 @@ TSharedRefArray TClientRequest::Serialize()
     auto patchedHeader = Header_;
     patchedHeader.set_retry(true);
 
-    auto output = CreateRequestMessage(patchedHeader, headerlessMessage);
-    return std::move(output);
+    return CreateRequestMessage(patchedHeader, headerlessMessage);
 }
 
 IClientRequestControlPtr TClientRequest::Send(IClientResponseHandlerPtr responseHandler)
@@ -158,6 +156,11 @@ bool TClientRequest::IsAttachmentCompressionEnabled() const
 {
     auto attachmentCodecId = GetEffectiveAttachmentCompressionCodec();
     return attachmentCodecId != NCompression::ECodec::None;
+}
+
+bool TClientRequest::HasAttachments() const
+{
+    return !Attachments_.empty();
 }
 
 NCompression::ECodec TClientRequest::GetEffectiveAttachmentCompressionCodec() const
@@ -219,6 +222,11 @@ std::string TClientRequest::GetService() const
 std::string TClientRequest::GetMethod() const
 {
     return FromProto<std::string>(Header_.method());
+}
+
+const std::string& TClientRequest::GetRequestInfo() const
+{
+    return RequestInfo_;
 }
 
 void TClientRequest::DeclareClientFeature(int featureId)
@@ -360,6 +368,11 @@ TClientContextPtr TClientRequest::CreateClientContext()
         RequestAttachmentsStream_,
         ResponseAttachmentsStream_,
         MemoryUsageTracker_ ? MemoryUsageTracker_ : Channel_->GetChannelMemoryTracker());
+}
+
+void TClientRequest::SetRawRequestInfo(std::string requestInfo)
+{
+    RequestInfo_ = std::move(requestInfo);
 }
 
 void TClientRequest::OnPullRequestAttachmentsStream()

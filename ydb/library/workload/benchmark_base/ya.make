@@ -9,8 +9,10 @@ SRCS(
 )
 
 PEERDIR(
+    contrib/libs/apache/arrow
     library/cpp/streams/factory/open_by_signature
     ydb/library/accessor
+    ydb/library/formats/arrow/validation
     ydb/library/workload/abstract
     ydb/library/yaml_json
     ydb/public/api/protos

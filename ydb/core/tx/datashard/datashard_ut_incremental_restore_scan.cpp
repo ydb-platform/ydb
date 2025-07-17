@@ -21,8 +21,16 @@ class TDriverMock
 public:
     std::optional<NTable::EScan> LastScan;
 
-    void Touch(NTable::EScan scan) noexcept {
+    void Touch(NTable::EScan scan) override {
         LastScan = scan;
+    }
+
+    void Throw(const std::exception& exc) override {
+        Y_ENSURE(false, exc.what());
+    }
+
+    ui64 GetTotalCpuTimeUs() const override {
+        return 0;
     }
 };
 
@@ -178,7 +186,7 @@ Y_UNIT_TEST_SUITE(IncrementalRestoreScan) {
             table,
             targetPathId,
             txId,
-            {}).Release();
+            NStreamScan::TLimits()).Release();
 
         TDriverMock driver;
 
@@ -197,7 +205,7 @@ Y_UNIT_TEST_SUITE(IncrementalRestoreScan) {
 
         actorExec.Execute([&]() {
             UNIT_ASSERT(driver.LastScan && *driver.LastScan == NTable::EScan::Final);
-            scan->Finish(NTable::EAbort::None);
+            scan->Finish(NTable::EStatus::Done);
         });
 
         runtime.GrabEdgeEventRethrow<TEvIncrementalRestoreScan::TEvFinished>(sender);

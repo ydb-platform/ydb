@@ -12,6 +12,18 @@ bool TClientCommand::PROGRESS_REQUESTS = false; // display progress of long requ
 
 using namespace NUtils;
 
+namespace {
+    void PrintUsageAndThrowHelpPrinted(const NLastGetopt::TOptsParser* parser) {
+        parser->PrintUsage();
+        throw TNeedToExitWithCode(EXIT_SUCCESS);
+    }
+
+    void PrintSvnVersionAndThrowHelpPrinted(const NLastGetopt::TOptsParser* parser) {
+        parser->PrintUsage();
+        throw TNeedToExitWithCode(EXIT_SUCCESS);
+    }
+}
+
 TClientCommand::TClientCommand(
     const TString& name,
     const std::initializer_list<TString>& aliases,
@@ -22,12 +34,18 @@ TClientCommand::TClientCommand(
         , Description(description)
         , Visible(visible)
         , Parent(nullptr)
-        , Opts(NLastGetopt::TOpts::Default())
 {
-    HideOption("svnrevision");
-    Opts.GetOpts().AddHelpOption('h');
+    Opts.GetOpts().Opts_.clear();
+    Opts.AddLongOption('V', "svnrevision", "print svn version")
+        .HasArg(NLastGetopt::EHasArg::NO_ARGUMENT)
+        .IfPresentDisableCompletion()
+        .Handler(&PrintSvnVersionAndThrowHelpPrinted)
+        .Hidden();
     NColorizer::TColors colors = NColorizer::AutoColors(Cout);
-    ChangeOptionDescription("help", TStringBuilder() << "Print usage, " << colors.Green() << "-hh" << colors.OldColor() << " for detailed help");
+    Opts.AddLongOption('h', "help", TStringBuilder() << "Print usage, " << colors.Green() << "-hh" << colors.OldColor() << " for detailed help")
+        .HasArg(NLastGetopt::EHasArg::NO_ARGUMENT)
+        .IfPresentDisableCompletion()
+        .Handler(&PrintUsageAndThrowHelpPrinted);
     auto terminalWidth = GetTerminalWidth();
     size_t lineLength = terminalWidth ? *terminalWidth : Max<size_t>();
     Opts.GetOpts().SetWrap(Max(Opts.GetOpts().Wrap_, static_cast<ui32>(lineLength)));
@@ -157,11 +175,15 @@ std::pair<int, const char**> TClientCommand::TOptsParseOneLevelResult::GetArgv(T
         }
         ++_argc;
     }
+    if (_argc > config.ArgC) {
+        // This is possible if the last option should have an argument, but it is not provided
+        _argc = config.ArgC;
+    }
     return std::pair(_argc, const_cast<const char**>(config.ArgV));
 }
 
 TClientCommand::TOptsParseOneLevelResult::TOptsParseOneLevelResult(TConfig& config, std::pair<int, const char**> argv)
-    : TOptionsParseResult(config.Opts, argv.first, argv.second, config.ThrowOnOptsParseError)
+    : TOptionsParseResult(config.Opts, argv.first, argv.second)
 {
 }
 
@@ -231,12 +253,21 @@ int TClientCommand::Run(TConfig& config) {
 }
 
 int TClientCommand::Process(TConfig& config) {
-    Prepare(config);
-    return ValidateAndRun(config);
+    try {
+        Prepare(config);
+        return ValidateAndRun(config);
+    } catch (const TNeedToExitWithCode& e) {
+        return e.GetCode();
+    }
+    catch (const NYdb::NConsoleClient::TMisuseException& e) {
+        Cerr << e.what() << Endl;
+        Cerr << "Try \"--help\" option for more info." << Endl;
+        return EXIT_FAILURE;
+    }
 }
 
 void TClientCommand::SaveParseResult(TConfig& config) {
-    ParseResult = std::make_shared<TOptionsParseResult>(config.Opts, config.ArgC, (const char**)config.ArgV, config.ThrowOnOptsParseError);
+    ParseResult = std::make_shared<TOptionsParseResult>(config.Opts, config.ArgC, (const char**)config.ArgV);
 
     // Parse options from env and apply default parameters.
     // Parsing from profiles is only supported at high level commands and occure in ExtractParams() stage.
@@ -335,7 +366,8 @@ void TClientCommand::RenderCommandDescription(
     bool renderTree,
     const NColorizer::TColors& colors,
     RenderEntryType type,
-    TString prefix
+    TString prefix,
+    bool shortForm
 ) {
     Y_UNUSED(renderTree);
     if (Hidden && type != BEGIN) {
@@ -356,7 +388,14 @@ void TClientCommand::RenderCommandDescription(
             stream << TString(DESCRIPTION_ALIGNMENT - namePartLength, ' ');
         else
             stream << ' ';
-        stream << Description;
+        if (shortForm) {
+            TStringBuf descr(Description), line;
+            while (descr.ReadLine(line) && line.empty()) {
+            }
+            stream << line;
+        } else {
+            stream << Description;
+        }
         if (!Aliases.empty()) {
             stream << " (aliases: ";
             for (auto it = Aliases.begin(); it != Aliases.end(); ++it) {
@@ -419,7 +458,7 @@ void TClientCommandTree::Config(TConfig& config) {
     stream << Endl << Endl
         << colors.BoldColor() << "Description" << colors.OldColor() << ": " << Description << Endl << Endl
         << colors.BoldColor() << "Subcommands" << colors.OldColor() << ":" << Endl;
-    RenderCommandDescription(stream, config.HelpCommandVerbosiltyLevel > 1, colors);
+    RenderCommandDescription(stream, config.HelpCommandVerbosiltyLevel > 1, colors, BEGIN, "", true);
     stream << Endl;
     PrintParentOptions(stream, config, colors);
     config.Opts->SetCmdLineDescr(stream.Str());
@@ -494,9 +533,10 @@ void TClientCommandTree::RenderCommandDescription(
     bool renderTree,
     const NColorizer::TColors& colors,
     RenderEntryType type,
-    TString prefix
+    TString prefix,
+    bool shortForm
 ) {
-    TClientCommand::RenderCommandDescription(stream, false, colors, type, prefix);
+    TClientCommand::RenderCommandDescription(stream, false, colors, type, prefix, shortForm);
     if (type == BEGIN || renderTree) {
         if (type == MIDDLE) {
             prefix += "│  ";
@@ -513,7 +553,7 @@ void TClientCommandTree::RenderCommandDescription(
 
         for (auto it = visibleSubCommands.begin(); it != visibleSubCommands.end(); ++it) {
             bool lastCommand = (std::next(it) == visibleSubCommands.end());
-            (*it)->RenderCommandDescription(stream, renderTree, colors, lastCommand ? END : MIDDLE, prefix);
+            (*it)->RenderCommandDescription(stream, renderTree, colors, lastCommand ? END : MIDDLE, prefix, shortForm);
         }
     }
 }

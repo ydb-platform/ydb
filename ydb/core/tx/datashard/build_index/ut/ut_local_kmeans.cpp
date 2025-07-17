@@ -1,10 +1,12 @@
+#include "ut_helpers.h"
+
 #include <ydb/core/base/table_index.h>
+#include <ydb/core/protos/index_builder.pb.h>
 #include <ydb/core/testlib/test_client.h>
 #include <ydb/core/tx/datashard/ut_common/datashard_ut_common.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/tx/tx_proxy/upload_rows.h>
-#include <ydb/core/protos/index_builder.pb.h>
 
 #include <yql/essentials/public/issue/yql_issue_message.h>
 
@@ -24,10 +26,9 @@ Y_UNIT_TEST_SUITE(TTxDataShardLocalKMeansScan) {
 
     static void DoBadRequest(Tests::TServer::TPtr server, TActorId sender,
         std::function<void(NKikimrTxDataShard::TEvLocalKMeansRequest&)> setupRequest,
-        TString expectedError, bool expectedErrorSubstring = false)
+        const TString& expectedError, bool expectedErrorSubstring = false, NKikimrIndexBuilder::EBuildStatus expectedStatus = NKikimrIndexBuilder::EBuildStatus::BAD_REQUEST)
     {
         auto id = sId.fetch_add(1, std::memory_order_relaxed);
-        auto& runtime = *server->GetRuntime();
         auto snapshot = CreateVolatileSnapshot(server, {kMainTable});
         auto datashards = GetTableShards(server, sender, kMainTable);
         TTableId tableId = ResolveTableId(server, sender, kMainTable);
@@ -69,23 +70,11 @@ Y_UNIT_TEST_SUITE(TTxDataShardLocalKMeansScan) {
         rec.SetEmbeddingColumn("embedding");
 
         rec.SetLevelName(kLevelTable);
-        rec.SetPostingName(kPostingTable);
+        rec.SetOutputName(kPostingTable);
 
         setupRequest(rec);
 
-        runtime.SendToPipe(datashards[0], sender, ev.release(), 0, GetPipeConfigWithRetries());
-
-        TAutoPtr<IEventHandle> handle;
-        auto reply = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvLocalKMeansResponse>(handle);
-        UNIT_ASSERT_VALUES_EQUAL(reply->Record.GetStatus(), NKikimrIndexBuilder::EBuildStatus::BAD_REQUEST);
-        
-        NYql::TIssues issues;
-        NYql::IssuesFromMessage(reply->Record.GetIssues(), issues);
-        if (expectedErrorSubstring) {
-            UNIT_ASSERT_STRING_CONTAINS(issues.ToOneLineString(), expectedError);
-        } else {
-            UNIT_ASSERT_VALUES_EQUAL(issues.ToOneLineString(), expectedError);
-        }
+        NKikimr::DoBadRequest<TEvDataShard::TEvLocalKMeansResponse>(server, sender, std::move(ev), datashards[0], expectedError, expectedErrorSubstring, expectedStatus);
     }
 
     static std::tuple<TString, TString> DoLocalKMeans(
@@ -138,7 +127,7 @@ Y_UNIT_TEST_SUITE(TTxDataShardLocalKMeansScan) {
                 rec.AddDataColumns("data");
 
                 rec.SetLevelName(kLevelTable);
-                rec.SetPostingName(kPostingTable);
+                rec.SetOutputName(kPostingTable);
 
                 rec.MutableScanSettings()->SetMaxBatchRows(maxBatchRows);
             };
@@ -289,13 +278,23 @@ Y_UNIT_TEST_SUITE(TTxDataShardLocalKMeansScan) {
             request.SetParentFrom(100);
             request.SetParentTo(99);
         }, "{ <main>: Error: Parent from 100 should be less or equal to parent to 99 }");
+        DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvLocalKMeansRequest& request) {
+            request.SetParentFrom(0);
+            request.SetParentTo(0);
+            request.SetUpload(NKikimrTxDataShard::UPLOAD_BUILD_TO_POSTING);
+        }, "{ <main>: Error: Wrong upload for zero parent }");
+        DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvLocalKMeansRequest& request) {
+            request.SetParentFrom(100);
+            request.SetParentTo(200);
+            request.SetUpload(NKikimrTxDataShard::UPLOAD_MAIN_TO_BUILD);
+        }, "{ <main>: Error: Wrong upload for non-zero parent }");
 
         DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvLocalKMeansRequest& request) {
             request.ClearLevelName();
         }, "{ <main>: Error: Empty level table name }");
         DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvLocalKMeansRequest& request) {
-            request.ClearPostingName();
-        }, "{ <main>: Error: Empty posting table name }");
+            request.ClearOutputName();
+        }, "{ <main>: Error: Empty output table name }");
 
         DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvLocalKMeansRequest& request) {
             request.SetEmbeddingColumn("some");
@@ -341,10 +340,9 @@ Y_UNIT_TEST_SUITE(TTxDataShardLocalKMeansScan) {
                 "(4, \"\x65\x65\3\", \"four\"),"
                 "(5, \"\x75\x75\3\", \"five\");");
 
-        // TODO: https://github.com/ydb-platform/ydb/issues/18656
-        // DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvLocalKMeansRequest& request) {
-        //     request.SetChild(Max<ui64>() - 100);
-        // }, TStringBuilder() << "");
+        DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvLocalKMeansRequest& request) {
+            request.SetChild(Max<ui64>() - 100);
+        }, "Condition violated: `(parent & PostingParentFlag) == 0'", true, NKikimrIndexBuilder::EBuildStatus::BUILD_ERROR);
     }
 
     Y_UNIT_TEST (MainToPosting) {
@@ -763,14 +761,14 @@ Y_UNIT_TEST_SUITE(TTxDataShardLocalKMeansScan) {
 
         { // ParentFrom = 39 ParentTo = 39
             for (ui32 maxBatchRows : {0, 1, 4, 5, 6, 50000}) {
-                auto [level, posting] = DoLocalKMeans(server, sender, 
+                auto [level, posting] = DoLocalKMeans(server, sender,
                     39, 39, 111, 2,
                     NKikimrTxDataShard::EKMeansState::UPLOAD_BUILD_TO_BUILD, VectorIndexSettings::VECTOR_TYPE_UINT8, VectorIndexSettings::DISTANCE_MANHATTAN,
                     maxBatchRows);
-                UNIT_ASSERT_VALUES_EQUAL(level, 
+                UNIT_ASSERT_VALUES_EQUAL(level,
                     "__ydb_parent = 39, __ydb_id = 40, __ydb_centroid = 00\3\n"
                     "__ydb_parent = 39, __ydb_id = 41, __ydb_centroid = 22\3\n");
-                UNIT_ASSERT_VALUES_EQUAL(posting, 
+                UNIT_ASSERT_VALUES_EQUAL(posting,
                     "__ydb_parent = 40, key = 1, embedding = 00\3, data = one\n"
                     "__ydb_parent = 41, key = 2, embedding = 22\3, data = two\n");
                 recreate();
@@ -779,14 +777,14 @@ Y_UNIT_TEST_SUITE(TTxDataShardLocalKMeansScan) {
 
         { // ParentFrom = 40 ParentTo = 40
             for (ui32 maxBatchRows : {0, 1, 4, 5, 6, 50000}) {
-                auto [level, posting] = DoLocalKMeans(server, sender, 
+                auto [level, posting] = DoLocalKMeans(server, sender,
                     40, 40, 111, 2,
                     NKikimrTxDataShard::EKMeansState::UPLOAD_BUILD_TO_BUILD, VectorIndexSettings::VECTOR_TYPE_UINT8, VectorIndexSettings::DISTANCE_MANHATTAN,
                     maxBatchRows);
-                UNIT_ASSERT_VALUES_EQUAL(level, 
+                UNIT_ASSERT_VALUES_EQUAL(level,
                     "__ydb_parent = 40, __ydb_id = 41, __ydb_centroid = 11\3\n"
                     "__ydb_parent = 40, __ydb_id = 42, __ydb_centroid = mm\3\n");
-                UNIT_ASSERT_VALUES_EQUAL(posting, 
+                UNIT_ASSERT_VALUES_EQUAL(posting,
                     "__ydb_parent = 41, key = 1, embedding = \x30\x30\3, data = one\n"
                     "__ydb_parent = 41, key = 2, embedding = \x31\x31\3, data = two\n"
                     "__ydb_parent = 41, key = 3, embedding = \x32\x32\3, data = three\n"
@@ -798,14 +796,14 @@ Y_UNIT_TEST_SUITE(TTxDataShardLocalKMeansScan) {
 
         { // ParentFrom = 41 ParentTo = 41
             for (ui32 maxBatchRows : {0, 1, 4, 5, 6, 50000}) {
-                auto [level, posting] = DoLocalKMeans(server, sender, 
+                auto [level, posting] = DoLocalKMeans(server, sender,
                     41, 41, 111, 2,
                     NKikimrTxDataShard::EKMeansState::UPLOAD_BUILD_TO_BUILD, VectorIndexSettings::VECTOR_TYPE_UINT8, VectorIndexSettings::DISTANCE_MANHATTAN,
                     maxBatchRows);
-                UNIT_ASSERT_VALUES_EQUAL(level, 
+                UNIT_ASSERT_VALUES_EQUAL(level,
                     "__ydb_parent = 41, __ydb_id = 42, __ydb_centroid = uu\3\n"
                     "__ydb_parent = 41, __ydb_id = 43, __ydb_centroid = vv\3\n");
-                UNIT_ASSERT_VALUES_EQUAL(posting, 
+                UNIT_ASSERT_VALUES_EQUAL(posting,
                     "__ydb_parent = 42, key = 5, embedding = uu\3, data = five2\n"
                     "__ydb_parent = 43, key = 6, embedding = vv\3, data = six\n");
                 recreate();
@@ -814,16 +812,16 @@ Y_UNIT_TEST_SUITE(TTxDataShardLocalKMeansScan) {
 
         { // ParentFrom = 39 ParentTo = 40
             for (ui32 maxBatchRows : {0, 1, 4, 5, 6, 50000}) {
-                auto [level, posting] = DoLocalKMeans(server, sender, 
+                auto [level, posting] = DoLocalKMeans(server, sender,
                     39, 40, 111, 2,
                     NKikimrTxDataShard::EKMeansState::UPLOAD_BUILD_TO_BUILD, VectorIndexSettings::VECTOR_TYPE_UINT8, VectorIndexSettings::DISTANCE_MANHATTAN,
                     maxBatchRows);
-                UNIT_ASSERT_VALUES_EQUAL(level, 
+                UNIT_ASSERT_VALUES_EQUAL(level,
                     "__ydb_parent = 39, __ydb_id = 41, __ydb_centroid = 00\3\n"
                     "__ydb_parent = 39, __ydb_id = 42, __ydb_centroid = 22\3\n"
                     "__ydb_parent = 40, __ydb_id = 43, __ydb_centroid = 11\3\n"
                     "__ydb_parent = 40, __ydb_id = 44, __ydb_centroid = mm\3\n");
-                UNIT_ASSERT_VALUES_EQUAL(posting, 
+                UNIT_ASSERT_VALUES_EQUAL(posting,
                     "__ydb_parent = 41, key = 1, embedding = 00\3, data = one\n"
                     "__ydb_parent = 42, key = 2, embedding = 22\3, data = two\n"
                     "__ydb_parent = 43, key = 1, embedding = \x30\x30\3, data = one\n"
@@ -837,16 +835,16 @@ Y_UNIT_TEST_SUITE(TTxDataShardLocalKMeansScan) {
 
         {  // ParentFrom = 40 ParentTo = 41
             for (ui32 maxBatchRows : {0, 1, 4, 5, 6, 50000}) {
-                auto [level, posting] = DoLocalKMeans(server, sender, 
+                auto [level, posting] = DoLocalKMeans(server, sender,
                     40, 41, 111, 2,
                     NKikimrTxDataShard::EKMeansState::UPLOAD_BUILD_TO_BUILD, VectorIndexSettings::VECTOR_TYPE_UINT8, VectorIndexSettings::DISTANCE_MANHATTAN,
                     maxBatchRows);
-                UNIT_ASSERT_VALUES_EQUAL(level, 
+                UNIT_ASSERT_VALUES_EQUAL(level,
                     "__ydb_parent = 40, __ydb_id = 42, __ydb_centroid = 11\3\n"
                     "__ydb_parent = 40, __ydb_id = 43, __ydb_centroid = mm\3\n"
                     "__ydb_parent = 41, __ydb_id = 44, __ydb_centroid = uu\3\n"
                     "__ydb_parent = 41, __ydb_id = 45, __ydb_centroid = vv\3\n");
-                UNIT_ASSERT_VALUES_EQUAL(posting, 
+                UNIT_ASSERT_VALUES_EQUAL(posting,
                     "__ydb_parent = 42, key = 1, embedding = \x30\x30\3, data = one\n"
                     "__ydb_parent = 42, key = 2, embedding = \x31\x31\3, data = two\n"
                     "__ydb_parent = 42, key = 3, embedding = \x32\x32\3, data = three\n"
@@ -860,18 +858,18 @@ Y_UNIT_TEST_SUITE(TTxDataShardLocalKMeansScan) {
 
         {  // ParentFrom = 39 ParentTo = 41
             for (ui32 maxBatchRows : {0, 1, 4, 5, 6, 50000}) {
-                auto [level, posting] = DoLocalKMeans(server, sender, 
+                auto [level, posting] = DoLocalKMeans(server, sender,
                     39, 41, 111, 2,
                     NKikimrTxDataShard::EKMeansState::UPLOAD_BUILD_TO_BUILD, VectorIndexSettings::VECTOR_TYPE_UINT8, VectorIndexSettings::DISTANCE_MANHATTAN,
                     maxBatchRows);
-                UNIT_ASSERT_VALUES_EQUAL(level, 
+                UNIT_ASSERT_VALUES_EQUAL(level,
                         "__ydb_parent = 39, __ydb_id = 42, __ydb_centroid = 00\3\n"
                         "__ydb_parent = 39, __ydb_id = 43, __ydb_centroid = 22\3\n"
                         "__ydb_parent = 40, __ydb_id = 44, __ydb_centroid = 11\3\n"
                         "__ydb_parent = 40, __ydb_id = 45, __ydb_centroid = mm\3\n"
                         "__ydb_parent = 41, __ydb_id = 46, __ydb_centroid = uu\3\n"
                         "__ydb_parent = 41, __ydb_id = 47, __ydb_centroid = vv\3\n");
-                UNIT_ASSERT_VALUES_EQUAL(posting, 
+                UNIT_ASSERT_VALUES_EQUAL(posting,
                     "__ydb_parent = 42, key = 1, embedding = 00\3, data = one\n"
                     "__ydb_parent = 43, key = 2, embedding = 22\3, data = two\n"
                     "__ydb_parent = 44, key = 1, embedding = \x30\x30\3, data = one\n"
@@ -887,18 +885,18 @@ Y_UNIT_TEST_SUITE(TTxDataShardLocalKMeansScan) {
 
         {  // ParentFrom = 30 ParentTo = 50
             for (ui32 maxBatchRows : {0, 1, 4, 5, 6, 50000}) {
-                auto [level, posting] = DoLocalKMeans(server, sender, 
+                auto [level, posting] = DoLocalKMeans(server, sender,
                     30, 50, 111, 2,
                     NKikimrTxDataShard::EKMeansState::UPLOAD_BUILD_TO_BUILD, VectorIndexSettings::VECTOR_TYPE_UINT8, VectorIndexSettings::DISTANCE_MANHATTAN,
                     maxBatchRows);
-                UNIT_ASSERT_VALUES_EQUAL(level, 
+                UNIT_ASSERT_VALUES_EQUAL(level,
                         "__ydb_parent = 39, __ydb_id = 69, __ydb_centroid = 00\3\n"
                         "__ydb_parent = 39, __ydb_id = 70, __ydb_centroid = 22\3\n"
                         "__ydb_parent = 40, __ydb_id = 71, __ydb_centroid = 11\3\n"
                         "__ydb_parent = 40, __ydb_id = 72, __ydb_centroid = mm\3\n"
                         "__ydb_parent = 41, __ydb_id = 73, __ydb_centroid = uu\3\n"
                         "__ydb_parent = 41, __ydb_id = 74, __ydb_centroid = vv\3\n");
-                UNIT_ASSERT_VALUES_EQUAL(posting, 
+                UNIT_ASSERT_VALUES_EQUAL(posting,
                     "__ydb_parent = 69, key = 1, embedding = 00\3, data = one\n"
                     "__ydb_parent = 70, key = 2, embedding = 22\3, data = two\n"
                     "__ydb_parent = 71, key = 1, embedding = \x30\x30\3, data = one\n"
@@ -914,7 +912,7 @@ Y_UNIT_TEST_SUITE(TTxDataShardLocalKMeansScan) {
 
         {  // ParentFrom = 30 ParentTo = 31
             for (ui32 maxBatchRows : {0, 1, 4, 5, 6, 50000}) {
-                auto [level, posting] = DoLocalKMeans(server, sender, 
+                auto [level, posting] = DoLocalKMeans(server, sender,
                     30, 31, 111, 2,
                     NKikimrTxDataShard::EKMeansState::UPLOAD_BUILD_TO_BUILD, VectorIndexSettings::VECTOR_TYPE_UINT8, VectorIndexSettings::DISTANCE_MANHATTAN,
                     maxBatchRows);
@@ -926,7 +924,7 @@ Y_UNIT_TEST_SUITE(TTxDataShardLocalKMeansScan) {
 
         {  // ParentFrom = 100 ParentTo = 101
             for (ui32 maxBatchRows : {0, 1, 4, 5, 6, 50000}) {
-                auto [level, posting] = DoLocalKMeans(server, sender, 
+                auto [level, posting] = DoLocalKMeans(server, sender,
                     100, 101, 111, 2,
                     NKikimrTxDataShard::EKMeansState::UPLOAD_BUILD_TO_BUILD, VectorIndexSettings::VECTOR_TYPE_UINT8, VectorIndexSettings::DISTANCE_MANHATTAN,
                     maxBatchRows);

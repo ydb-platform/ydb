@@ -102,7 +102,6 @@
   - note.h
   - opcdef.h
   - paper.h
-  - pire/config.h
   - pth.h
   - rtl.h
   - shlib-compat.h

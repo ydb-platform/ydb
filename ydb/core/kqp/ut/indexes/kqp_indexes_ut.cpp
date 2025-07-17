@@ -55,7 +55,7 @@ TIntrusivePtr<IKqpHost> CreateKikimrQueryProcessor(TIntrusivePtr<IKqpGateway> ga
     UNIT_ASSERT(TryParseFromTextFormat(defaultSettingsStream, defaultSettings));
     kikimrConfig->Init(defaultSettings.GetDefaultSettings(), cluster, settings, true);
 
-    auto federatedQuerySetup = std::make_optional<TKqpFederatedQuerySetup>({NYql::IHTTPGateway::Make(), nullptr, nullptr, nullptr, {}, {}, {}, nullptr, {}, nullptr, nullptr, {}, nullptr});
+    auto federatedQuerySetup = std::make_optional<TKqpFederatedQuerySetup>({NYql::IHTTPGateway::Make(), nullptr, nullptr, nullptr, {}, {}, {}, nullptr, {}, nullptr, nullptr, {}, nullptr, {}, nullptr, nullptr, nullptr});
     return NKqp::CreateKqpHost(gateway, cluster, "/Root", kikimrConfig, moduleResolver,
                                federatedQuerySetup, nullptr, nullptr, NKikimrConfig::TQueryServiceConfig(), {}, funcRegistry, funcRegistry, keepConfigChanges, nullptr, actorSystem, nullptr);
 }
@@ -2544,7 +2544,8 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
     Y_UNIT_TEST(SecondaryIndexInsert1) {
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
-            .SetKqpSettings({setting});
+            .SetKqpSettings({setting})
+            .SetWithSampleTables(false);
         TKikimrRunner kikimr(serverSettings);
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);

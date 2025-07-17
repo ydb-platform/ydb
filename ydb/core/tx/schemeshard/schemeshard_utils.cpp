@@ -1,9 +1,9 @@
-#include <ydb/core/base/table_vector_index.h>
-#include <ydb/core/persqueue/utils.h>
+#include "schemeshard_utils.h"
 
 #include "schemeshard_info_types.h"
 
-#include "schemeshard_utils.h"
+#include <ydb/core/base/table_vector_index.h>
+#include <ydb/core/persqueue/utils.h>
 
 namespace NKikimr {
 namespace NSchemeShard {

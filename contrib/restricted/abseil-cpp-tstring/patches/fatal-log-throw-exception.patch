@@ -1,0 +1,107 @@
+--- contrib/restricted/abseil-cpp-tstring/y_absl/log/internal/log_message.cc	(index)
++++ contrib/restricted/abseil-cpp-tstring/y_absl/log/internal/log_message.cc	(working tree)
+@@ -61,6 +61,13 @@ extern "C" Y_ABSL_ATTRIBUTE_WEAK void Y_ABSL_INTERNAL_C_SYMBOL(
+   // Default - Do nothing
+ }
+ 
++static int IsFatalErrorsThrow = true;
++namespace y_absl {
++    bool FatalErrorsThrowException() {
++        return IsFatalErrorsThrow;
++    }
++}
++
+ namespace y_absl {
+ Y_ABSL_NAMESPACE_BEGIN
+ namespace log_internal {
+@@ -545,12 +552,29 @@ void LogMessage::Die() {
+   }
+ }
+ 
++class FatalException : public std::exception {
++ public:
++  FatalException(const char* filename, int line, const TString& message)
++      : filename_(filename), line_(line), message_(message) {}
++  virtual ~FatalException() throw() {}
++  const char* what() const throw() override { return message_.c_str(); }
++  const char* filename() const { return filename_; }
++  int line() const { return line_; }
++  const TString& message() const { return message_; }
++
++ private:
++  const char* filename_;
++  const int line_;
++  const TString message_;
++};
++
+ void LogMessage::SendToLog() {
+-  if (IsFatal()) PrepareToDie();
++  if (IsFatal() && !::y_absl::FatalErrorsThrowException()) PrepareToDie();
++
+   // Also log to all registered sinks, even if OnlyLogToStderr() is set.
+   log_internal::LogToSinks(data_->entry, y_absl::MakeSpan(data_->extra_sinks),
+                            data_->extra_sinks_only);
+-  if (IsFatal()) Die();
++  if (IsFatal() && !::y_absl::FatalErrorsThrowException()) Die();
+ }
+ 
+ void LogMessage::LogBacktraceIfNeeded() {
+@@ -633,7 +661,14 @@ template void LogMessage::CopyToEncodedBuffer<
+ #endif
+ 
+ LogMessageFatal::LogMessageFatal(const char* file, int line)
+-    : LogMessage(file, line, y_absl::LogSeverity::kFatal) {}
++    : LogMessage(file, line, y_absl::LogSeverity::kFatal), file_{file}, line_{line} {}
++
++LogMessageFatal& LogMessageFatal::TryThrow() {
++    if (::y_absl::FatalErrorsThrowException()) {
++        throw FatalException(file_, line_, "LogMessageFatal exception");
++    }
++    return *this;
++}
+ 
+ LogMessageFatal::LogMessageFatal(const char* file, int line,
+                                  y_absl::string_view failure_msg)
+@@ -643,6 +678,7 @@ LogMessageFatal::LogMessageFatal(const char* file, int line,
+ 
+ LogMessageFatal::~LogMessageFatal() {
+   Flush();
++  if (!::y_absl::FatalErrorsThrowException())
+   FailWithoutStackTrace();
+ }
+ 
+--- contrib/restricted/abseil-cpp-tstring/y_absl/log/internal/log_message.h	(index)
++++ contrib/restricted/abseil-cpp-tstring/y_absl/log/internal/log_message.h	(working tree)
+@@ -354,7 +354,11 @@ class LogMessageFatal final : public LogMessage {
+   LogMessageFatal(const char* file, int line) Y_ABSL_ATTRIBUTE_COLD;
+   LogMessageFatal(const char* file, int line,
+                   y_absl::string_view failure_msg) Y_ABSL_ATTRIBUTE_COLD;
+-  [[noreturn]] ~LogMessageFatal();
++  LogMessageFatal& TryThrow() Y_ABSL_ATTRIBUTE_COLD;
++  ~LogMessageFatal();
++ private:
++  const char* file_ {nullptr};
++  int line_ = 0;
+ };
+ 
+ // `LogMessageDebugFatal` ensures the process will exit in failure after logging
+--- contrib/restricted/abseil-cpp-tstring/y_absl/log/internal/strip.h	(index)
++++ contrib/restricted/abseil-cpp-tstring/y_absl/log/internal/strip.h	(working tree)
+@@ -74,7 +74,7 @@
+   ::y_absl::log_internal::LogMessage(     \
+       __FILE__, __LINE__, ::y_absl::log_internal::LogMessage::ErrorTag{})
+ #define Y_ABSL_LOGGING_INTERNAL_LOG_FATAL \
+-  ::y_absl::log_internal::LogMessageFatal(__FILE__, __LINE__)
++  ::y_absl::log_internal::LogMessageFatal(__FILE__, __LINE__).TryThrow()
+ #define Y_ABSL_LOGGING_INTERNAL_LOG_QFATAL \
+   ::y_absl::log_internal::LogMessageQuietlyFatal(__FILE__, __LINE__)
+ #define Y_ABSL_LOGGING_INTERNAL_LOG_DFATAL \
+@@ -92,7 +92,7 @@
+ // These special cases dispatch to special-case constructors that allow us to
+ // avoid an extra function call and shrink non-LTO binaries by a percent or so.
+ #define Y_ABSL_LOG_INTERNAL_CHECK(failure_message) \
+-  ::y_absl::log_internal::LogMessageFatal(__FILE__, __LINE__, failure_message)
++  ::y_absl::log_internal::LogMessageFatal(__FILE__, __LINE__, failure_message).TryThrow()
+ #define Y_ABSL_LOG_INTERNAL_QCHECK(failure_message)                  \
+   ::y_absl::log_internal::LogMessageQuietlyFatal(__FILE__, __LINE__, \
+                                                failure_message)

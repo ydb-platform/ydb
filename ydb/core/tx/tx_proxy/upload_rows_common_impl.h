@@ -106,7 +106,7 @@ TActorId DoLongTxWriteSameMailbox(const TActorContext& ctx, const TActorId& repl
     const NLongTxService::TLongTxId& longTxId, const TString& dedupId,
     const TString& databaseName, const TString& path,
     std::shared_ptr<const NSchemeCache::TSchemeCacheNavigate> navigateResult, std::shared_ptr<arrow::RecordBatch> batch,
-    std::shared_ptr<NYql::TIssues> issues, const bool noTxWrite);
+    std::shared_ptr<NYql::TIssues> issues);
 
 template <NKikimrServices::TActivity::EType DerivedActivityType>
 class TUploadRowsBase : public TActorBootstrapped<TUploadRowsBase<DerivedActivityType>> {
@@ -148,7 +148,6 @@ private:
     NLongTxService::TLongTxId LongTxId;
     TUploadCounters UploadCounters;
     TUploadCounters::TGuard UploadCountersGuard;
-    bool ImmediateWrite = false;
 
 protected:
     enum class EUploadSource {
@@ -209,7 +208,6 @@ public:
 
     void Bootstrap(const NActors::TActorContext& ctx) {
         StartTime = TAppData::TimeProvider->Now();
-        ImmediateWrite = AppData(ctx)->FeatureFlags.GetEnableImmediateWritingOnBulkUpsert();
         OnBeforeStart(ctx);
         ResolveTable(GetTable(), ctx);
     }
@@ -581,6 +579,30 @@ private:
             ctx);
     }
 
+    bool IsTimestampColumnsArePositive(const std::shared_ptr<arrow::RecordBatch>& batch, TString& error) {
+        if (!batch) {
+            return true;
+        }
+        for (int i = 0; i < batch->num_columns(); ++i) {
+            std::shared_ptr<arrow::Array> column = batch->column(i);
+            std::shared_ptr<arrow::DataType> type = column->type();
+            std::string columnName = batch->schema()->field(i)->name();
+            if (type->id() == arrow::Type::TIMESTAMP) {
+                auto timestampArray = std::static_pointer_cast<arrow::TimestampArray>(column);
+                for (int64_t j = 0; j < timestampArray->length(); ++j) {
+                    if (timestampArray->IsValid(j)) {
+                        int64_t timestampValue = timestampArray->Value(j);
+                        if (timestampValue < 0) {
+                            error = TStringBuilder{} << "Negative timestamp value found at column " << columnName << ", row " << j << ", value " << timestampValue;
+                            return false;
+                        }
+                    }
+                }
+            }
+        }
+        return true;
+    }
+
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx) {
         Span && Span.Event("DataSerialization");
         const NSchemeCache::TSchemeCacheNavigate& request = *ev->Get()->Request;
@@ -601,6 +623,11 @@ private:
         }
 
         // TODO: fast fail for all tables?
+        if (isColumnTable && HasAppData() && !AppDataVerified().ColumnShardConfig.GetProxyWritingEnabled()) {
+            return ReplyWithError(TUploadStatus(Ydb::StatusIds::UNAVAILABLE, TUploadStatus::ECustomSubcode::DELIVERY_PROBLEM,
+                                      "cannot perform writes: disabled by config"),
+                ctx);
+        }
         if (isColumnTable && DiskQuotaExceeded) {
             return ReplyWithError(TUploadStatus(Ydb::StatusIds::UNAVAILABLE, TUploadStatus::ECustomSubcode::DISK_QUOTA_EXCEEDED,
                                       "cannot perform writes: database is out of disk space"),
@@ -683,6 +710,11 @@ private:
 
                 break;
             }
+        }
+
+        TString error;
+        if (!IsTimestampColumnsArePositive(Batch, error)) {
+            return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, error, ctx);
         }
 
         if (Batch) {
@@ -825,7 +857,7 @@ private:
         ui32 batchNo = 0;
         TString dedupId = ToString(batchNo);
         DoLongTxWriteSameMailbox(
-            ctx, ctx.SelfID, LongTxId, dedupId, GetDatabase(), GetTable(), ResolveNamesResult, Batch, Issues, ImmediateWrite);
+            ctx, ctx.SelfID, LongTxId, dedupId, GetDatabase(), GetTable(), ResolveNamesResult, Batch, Issues);
     }
 
     void RollbackLongTx(const TActorContext& ctx) {
@@ -851,10 +883,8 @@ private:
                 RaiseIssue(issue);
             }
             return ReplyWithResult(status, ctx);
-        } else if (ImmediateWrite) {
-            return ReplyWithResult(status, ctx);
         } else {
-            CommitLongTx(ctx);
+            return ReplyWithResult(status, ctx);
         }
     }
 
@@ -1240,7 +1270,6 @@ private:
         if (LongTxId != NLongTxService::TLongTxId()) {
             // LongTxId is reset after successful commit
             // If it si still there it means we need to rollback
-            Y_DEBUG_ABORT_UNLESS(status != ::Ydb::StatusIds::SUCCESS || ImmediateWrite);
             RollbackLongTx(ctx);
         }
         Span.EndOk();

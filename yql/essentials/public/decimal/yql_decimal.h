@@ -212,21 +212,21 @@ struct TDecimal {
 template<typename TRight>
 class TDecimalMultiplicator {
 protected:
-    const TInt128 Bound;
+    const TInt128 Bound_;
 
 public:
     TDecimalMultiplicator(
         ui8 precision,
         ui8 scale = 0 /* unused */)
-        : Bound(GetDivider(precision))
-    { 
+        : Bound_(GetDivider(precision))
+    {
         Y_UNUSED(scale);
     }
 
     TInt128 Do(TInt128 left, TRight right) const {
-        TInt128 mul = Mul(left, right);        
+        TInt128 mul = Mul(left, right);
 
-        if (mul > -Bound && mul < +Bound)
+        if (mul > -Bound_ && mul < +Bound_)
             return mul;
 
         return IsNan(mul) ? Nan() : (mul > 0 ? +Inf() : -Inf());
@@ -236,23 +236,23 @@ public:
 template<>
 class TDecimalMultiplicator<TInt128> {
 protected:
-    const TInt128 Bound;
-    const TInt128 Divider;
+    const TInt128 Bound_;
+    const TInt128 Divider_;
 
 public:
     TDecimalMultiplicator(
         ui8 precision,
         ui8 scale)
-        : Bound(GetDivider(precision))
-        , Divider(GetDivider(scale))
+        : Bound_(GetDivider(precision))
+        , Divider_(GetDivider(scale))
     { }
 
     TInt128 Do(TInt128 left, TInt128 right) const {
-        TInt128 mul = Divider > 1 ?
-            MulAndDivNormalDivider(left, right, Divider):
+        TInt128 mul = Divider_ > 1 ?
+            MulAndDivNormalDivider(left, right, Divider_):
             Mul(left, right);
 
-        if (mul > -Bound && mul < +Bound)
+        if (mul > -Bound_ && mul < +Bound_)
             return mul;
 
         return IsNan(mul) ? Nan() : (mul > 0 ? +Inf() : -Inf());
@@ -265,7 +265,7 @@ public:
     TDecimalDivisor(
         ui8 precision = 0 /* unused */,
         ui8 scale = 0 /* unused */)
-    { 
+    {
         Y_UNUSED(precision);
         Y_UNUSED(scale);
     }
@@ -278,20 +278,20 @@ public:
 template<>
 class TDecimalDivisor<TInt128> {
 protected:
-    const TInt128 Bound;
-    const TInt128 Divider;
+    const TInt128 Bound_;
+    const TInt128 Divider_;
 
 public:
     TDecimalDivisor(
         ui8 precision,
         ui8 scale)
-        : Bound(GetDivider(precision))
-        , Divider(GetDivider(scale))
+        : Bound_(GetDivider(precision))
+        , Divider_(GetDivider(scale))
     { }
 
     TInt128 Do(TInt128 left, TInt128 right) const {
-        TInt128 div = MulAndDivNormalMultiplier(left, Divider, right);
-        if (div > -Bound && div < +Bound) {
+        TInt128 div = MulAndDivNormalMultiplier(left, Divider_, right);
+        if (div > -Bound_ && div < +Bound_) {
             return div;
         }
 
@@ -302,27 +302,27 @@ public:
 template<typename TRight>
 class TDecimalRemainder {
 protected:
-    const TInt128 Bound;
-    const TInt128 Divider;
+    const TInt128 Bound_;
+    const TInt128 Divider_;
 
 public:
     TDecimalRemainder(
         ui8 precision,
         ui8 scale)
-        : Bound(NYql::NDecimal::GetDivider(precision - scale))
-        , Divider(NYql::NDecimal::GetDivider(scale))
+        : Bound_(NYql::NDecimal::GetDivider(precision - scale))
+        , Divider_(NYql::NDecimal::GetDivider(scale))
     { }
 
     TInt128 Do(TInt128 left, TRight right) const {
         if constexpr (std::is_signed<TRight>::value) {
-            if (TInt128(right) >= +Bound || TInt128(right) <= -Bound)
+            if (TInt128(right) >= +Bound_ || TInt128(right) <= -Bound_)
                 return left;
         } else {
-            if (TInt128(right) >= Bound)
+            if (TInt128(right) >= Bound_)
                 return left;
         }
 
-        return Mod(left, Mul(Divider, right));
+        return Mod(left, Mul(Divider_, right));
     }
 };
 

@@ -125,6 +125,7 @@ public:
             const auto& rightCleanType = RemoveOptionality(*rightItemType);
             resultItemType = CommonType<true>(pos, &leftCleanType, &rightCleanType, ExprContext);
         }
+        YQL_ENSURE(resultItemType);
 
         if ((ETypeAnnotationKind::Optional == leftItemType->GetKind() && !optionalityFromRight) || ETypeAnnotationKind::Optional == rightItemType->GetKind()) {
             resultItemType = ExprContext.MakeType<TOptionalExprType>(resultItemType);
@@ -202,7 +203,9 @@ public:
     bool CheckYqlCompatibleArgType(const TExprBase& expression) const {
         if (const auto maybe = expression.Maybe<TCoAtom>()) {
             if (const auto type = GetColumnTypeByName(maybe.Cast().Value()); type->GetKind() == ETypeAnnotationKind::Data) {
-                if (const auto info = GetDataTypeInfo(type->Cast<TDataExprType>()->GetSlot()); !(info.Features & (NUdf::EDataTypeFeatures::StringType | NUdf::EDataTypeFeatures::NumericType))) {
+                if (const auto info = GetDataTypeInfo(type->Cast<TDataExprType>()->GetSlot());
+                    !(info.Features & (NUdf::EDataTypeFeatures::StringType | NUdf::EDataTypeFeatures::NumericType | NUdf::EDataTypeFeatures::DateType |
+                                       NUdf::EDataTypeFeatures::TimeIntervalType))) {
                     return false;
                 }
             }
@@ -233,6 +236,19 @@ public:
         }
         return type;
     }
+
+    void AddColumnNameForProjectionKernelId(const std::string &columnName, ui32 id) {
+        KqpColumnNameToProjectionId.emplace(columnName, id);
+    }
+
+    bool GetProjectionKernelIdForColumn(const std::string &columnName, ui32 &id) {
+        if (KqpColumnNameToProjectionId.contains(columnName)) {
+            id = KqpColumnNameToProjectionId[columnName];
+            return true;
+        }
+        return false;
+    }
+
 private:
     const TTypeAnnotationNode* GetColumnTypeByName(const std::string_view &name) const {
         auto *rowItemType = GetSeqItemType(Row.Ptr()->GetTypeAnn());
@@ -253,6 +269,7 @@ private:
     TExprContext& ExprContext;
     TIntrusivePtr<NMiniKQL::IMutableFunctionRegistry> YqlKernelsFuncRegistry;
     std::unique_ptr<TKernelRequestBuilder> YqlKernelRequestBuilder;
+    THashMap<std::string, ui32> KqpColumnNameToProjectionId;
 };
 
 std::unordered_map<std::string, EAggFunctionType> TKqpOlapCompileContext::AggFuncTypesMap = {
@@ -294,7 +311,8 @@ ui64 ConvertValueToColumn(const TCoDataCtor& value, TKqpOlapCompileContext& ctx)
         ssaValue->MutableConstant()->SetInt16(FromString<i16>(nodeValue));
     } else if (value.Maybe<TCoInt32>() || value.Maybe<TCoDate32>()) {
         ssaValue->MutableConstant()->SetInt32(FromString<i32>(nodeValue));
-    } else if (value.Maybe<TCoInt64>() || value.Maybe<TCoInterval64>() || value.Maybe<TCoDatetime64>() || value.Maybe<TCoTimestamp64>()) {
+    } else if (value.Maybe<TCoInt64>() || value.Maybe<TCoInterval64>() || value.Maybe<TCoDatetime64>() || value.Maybe<TCoTimestamp64>() ||
+               value.Maybe<TCoInterval>()) {
         ssaValue->MutableConstant()->SetInt64(FromString<i64>(nodeValue));
     } else if (value.Maybe<TCoUint8>()) {
         ssaValue->MutableConstant()->SetUint8(FromString<ui8>(nodeValue));
@@ -305,9 +323,11 @@ ui64 ConvertValueToColumn(const TCoDataCtor& value, TKqpOlapCompileContext& ctx)
     } else if (value.Maybe<TCoUint64>()) {
         ssaValue->MutableConstant()->SetUint64(FromString<ui64>(nodeValue));
     } else if (value.Maybe<TCoTimestamp>()) {
-        ssaValue->MutableConstant()->SetTimestamp(FromString<ui64>(nodeValue));
+        ssaValue->MutableConstant()->SetUint64(FromString<ui64>(nodeValue));
     } else if (value.Maybe<TCoDate>()) {
-        ssaValue->MutableConstant()->SetTimestamp(FromString<ui16>(nodeValue));
+        ssaValue->MutableConstant()->SetUint16(FromString<ui16>(nodeValue));
+    } else if (value.Maybe<TCoDatetime>()) {
+        ssaValue->MutableConstant()->SetUint32(FromString<ui32>(nodeValue));
     } else {
         YQL_ENSURE(false, "Unsupported content: " << value.Ref().Content());
     }
@@ -929,6 +949,15 @@ void CompileAggregates(const TKqpOlapAgg& aggNode, TKqpOlapCompileContext& ctx) 
     }
 }
 
+void CompileProjections(const TKqpOlapProjections& projectionsNode, TKqpOlapCompileContext& ctx) {
+    auto projections = projectionsNode.Projections();
+    for (const auto& child : projections) {
+        auto projection = child.Cast<TKqpOlapProjection>();
+        auto generatedColumnIdAndType = GetOrCreateColumnIdAndType(projection.OlapOperation(), ctx);
+        ctx.AddColumnNameForProjectionKernelId(std::string(projection.ColumnName()), generatedColumnIdAndType.Id);
+    }
+}
+
 void CompileFinalProjection(TKqpOlapCompileContext& ctx) {
     auto resultColNames = ctx.GetResultColNames();
     if (resultColNames.empty()) {
@@ -937,8 +966,10 @@ void CompileFinalProjection(TKqpOlapCompileContext& ctx) {
 
     auto* projection = ctx.CreateProjection();
     for (auto colName : resultColNames) {
-        auto colId = ctx.GetColumnId(colName);
-
+        ui32 colId;
+        if (!ctx.GetProjectionKernelIdForColumn(colName, colId)) {
+            colId = ctx.GetColumnId(colName);
+        }
         auto* projCol = projection->AddColumns();
         projCol->SetId(colId);
     }
@@ -963,6 +994,8 @@ void CompileOlapProgramImpl(TExprBase operation, TKqpOlapCompileContext& ctx) {
             CompileFilter(maybeFilter.Cast(), ctx);
         } else if (auto maybeAgg = operation.Maybe<TKqpOlapAgg>()) {
             CompileAggregates(maybeAgg.Cast(), ctx);
+        } else if (auto maybeProjections = operation.Maybe<TKqpOlapProjections>()) {
+            CompileProjections(maybeProjections.Cast(), ctx);
         }
         return;
     }

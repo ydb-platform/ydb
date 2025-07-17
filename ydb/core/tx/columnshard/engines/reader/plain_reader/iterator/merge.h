@@ -61,7 +61,6 @@ private:
 protected:
     std::shared_ptr<arrow::Table> ResultBatch;
     std::shared_ptr<arrow::RecordBatch> LastPK;
-    const NColumnShard::TCounterGuard Guard;
     std::shared_ptr<TSpecialReadContext> Context;
     mutable std::unique_ptr<NArrow::NMerger::TMergePartialStream> Merger;
     std::shared_ptr<TMergingContext> MergingContext;
@@ -83,9 +82,8 @@ private:
 
 public:
     TBaseMergeTask(const std::shared_ptr<TMergingContext>& mergingContext, const std::shared_ptr<TSpecialReadContext>& readContext)
-        : TBase(readContext->GetCommonContext()->GetScanActorId())
+        : TBase(readContext->GetCommonContext()->GetScanActorId(), readContext->GetCommonContext()->GetCounters().GetMergeTasksGuard())
         , IAllocation(TValidator::CheckNotNull(mergingContext)->GetIntervalChunkMemory())
-        , Guard(readContext->GetCommonContext()->GetCounters().GetMergeTasksGuard())
         , Context(readContext)
         , MergingContext(mergingContext)
         , IntervalIdx(MergingContext->GetIntervalIdx()) {

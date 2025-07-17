@@ -28,6 +28,27 @@ Y_UNIT_TEST_SUITE(ColumnFilter) {
         UNIT_ASSERT_VALUES_EQUAL(JoinSeq(",", resultVec), "1,1,1,0,1,0,0");
     }
 
+    Y_UNIT_TEST(ApplyFilterToFilter) {
+        TColumnFilter filter1({ true, true, true, false, true, true, false });
+        TColumnFilter filter2({ false, true, true, true, true, false, false });
+
+        {
+            auto result = filter1.ApplyFilterFrom(filter2);
+
+            UNIT_ASSERT_VALUES_EQUAL(result.GetRecordsCountVerified(), 4);
+            auto resultVec = result.BuildSimpleFilter();
+            UNIT_ASSERT_VALUES_EQUAL(JoinSeq(",", resultVec), "1,1,0,1");
+        }
+
+        {
+            auto result = filter2.ApplyFilterFrom(filter1);
+
+            UNIT_ASSERT_VALUES_EQUAL(result.GetRecordsCountVerified(), 5);
+            auto resultVec = result.BuildSimpleFilter();
+            UNIT_ASSERT_VALUES_EQUAL(JoinSeq(",", resultVec), "0,1,1,1,0");
+        }
+    }
+
     Y_UNIT_TEST(FilterSlice) {
         TColumnFilter filter({ true, true, true, false, true, true, false });
         {

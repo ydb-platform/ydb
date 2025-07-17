@@ -15,7 +15,7 @@ protected:
     TBulkDataGeneratorList DoGetBulkInitialData() override;
 
 private:
-    TFsPath DataPath;
+    TFsPath SuitePath;
     TSet<TString> TablesForUpload;
 };
 

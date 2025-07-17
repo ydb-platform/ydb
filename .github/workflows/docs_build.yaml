@@ -21,3 +21,4 @@ jobs:
         with:
           revision: "pr-${{ github.event.pull_request.number }}-${{ github.event.pull_request.head.sha }}"
           src-root: "./ydb/docs"
+          cli-version: stable

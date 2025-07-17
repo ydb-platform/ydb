@@ -56,7 +56,7 @@ TTransaction::TTransaction(
     , Timeout_(timeout)
     , PingAncestors_(pingAncestors)
     , PingPeriod_(pingPeriod)
-    , StickyProxyAddress_(stickyParameters ? std::move(stickyParameters->ProxyAddress) : TString())
+    , StickyProxyAddress_(stickyParameters ? std::optional(stickyParameters->ProxyAddress) : std::nullopt)
     , SequenceNumberSourceId_(sequenceNumberSourceId)
     , Logger(RpcProxyClientLogger().WithTag("TransactionId: %v, %v",
         Id_,
@@ -320,6 +320,7 @@ TFuture<TTransactionCommitResult> TTransaction::Commit(const TTransactionCommitO
                 ToProto(req->mutable_transaction_id(), GetId());
                 ToProto(req->mutable_additional_participant_cell_ids(), AdditionalParticipantCellIds_);
                 ToProto(req->mutable_prerequisite_options(), options);
+                req->set_max_allowed_commit_timestamp(options.MaxAllowedCommitTimestamp);
                 return req->Invoke();
             }))
         .Apply(
@@ -1167,7 +1168,7 @@ TTransactionStartOptions TTransaction::PatchTransactionId(const TTransactionStar
 
 ////////////////////////////////////////////////////////////////////////////////
 
-const TString& TTransaction::GetStickyProxyAddress() const
+const std::optional<std::string>& TTransaction::GetStickyProxyAddress() const
 {
     return StickyProxyAddress_;
 }

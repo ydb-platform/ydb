@@ -41,28 +41,28 @@ public:
     }
 
     void Cleanup() override {
-        Value = {};
+        Value_ = {};
     }
 
     template <typename TCtx>
     void Set(const TIntrusivePtr<TCtx>& ctx, TValueType val) {
-        Value = std::move(val);
+        Value_ = std::move(val);
         ctx->CleanupList.PushBack(this);
     }
 
     bool IsSet() const {
-        return !!Value;
+        return !!Value_;
     }
 
     const TValueType& Get() const {
-        if (!Value) {
+        if (!Value_) {
             throw yexception() << "Trying to use python wrap object with destroyed yql value";
         }
-        return Value;
+        return Value_;
     }
 
 private:
-    TValueType Value;
+    TValueType Value_;
 };
 
 struct TPyContext: public TSimpleRefCount<TPyContext> {

@@ -200,6 +200,7 @@ YT_DEFINE_ERROR_ENUM(
     ((StringLikeValueLengthLimitExceeded)(326))
     ((NameTableUpdateFailed)             (327))
     ((InvalidTableChunkFormat)           (328))
+    ((UnableToSynchronizeReplicationCard)(329))
 );
 
 DEFINE_ENUM(EControlAttribute,

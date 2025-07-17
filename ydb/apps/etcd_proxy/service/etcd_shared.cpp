@@ -2,6 +2,12 @@
 
 namespace NEtcd {
 
+void TSharedStuff::UpdateRevision(i64 revision) {
+    auto stored = Revision.load();
+    while (revision > stored && !Revision.compare_exchange_weak(stored, revision))
+        continue;
+}
+
 std::string IncrementKey(std::string key) {
     for (auto i = key.size(); i > 0u;) {
         if (const auto k = key[--i]; ~k) {

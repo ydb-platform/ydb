@@ -70,6 +70,7 @@ std::optional<NSplitter::TSimpleSerializationStat> TColumnLoader::TryBuildColumn
         if constexpr (switcher.IsCType) {
             using CType = typename decltype(switcher)::ValueType;
             result = NSplitter::TSimpleSerializationStat(std::max<ui32>(1, sizeof(CType) / 2), 1, sizeof(CType));
+            result->SetOrigination(NSplitter::TSimpleSerializationStat::EOrigination::Loader);
         }
         return true;
     });

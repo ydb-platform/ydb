@@ -156,6 +156,7 @@ message TEvCreateReplication {
     optional NKikimrProto.TPathID PathId = 1;
     optional TOperationId OperationId = 2;
     optional TReplicationConfig Config = 3;
+    optional string Database = 4;
 }
 
 message TEvCreateReplicationResult {
@@ -223,6 +224,7 @@ message TEvDescribeReplicationResult {
     optional TConsistencySettings ConsistencySettings = 5;
     repeated TReplicationConfig.TTargetSpecific.TTarget Targets = 3;
     optional TReplicationState State = 4;
+    optional TReplicationConfig.TTransferSpecific TransferSpecific = 6;
 }
 
 message TControllerIdentity {
@@ -273,6 +275,7 @@ message TRunWorkerCommand {
     }
 
     optional TConsistencySettings ConsistencySettings = 3;
+    optional string Database = 5;
 }
 
 message TEvRunWorker {

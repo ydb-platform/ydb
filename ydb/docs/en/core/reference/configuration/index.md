@@ -123,6 +123,12 @@ hosts:
 
 When deploying {{ ydb-short-name }} with a Kubernetes operator, the entire `hosts` section is generated automatically, replacing any user-specified content in the configuration passed to the operator. All Storage nodes use `host_config_id` = `1`, for which the [correct configuration](#host-configs-k8s) must be specified.
 
+## log_config: Logging configuration {#log-config}
+
+The `log_config` section controls how {{ ydb-short-name }} processes and manages logs. It allows you to customize logging levels, formats, and destinations for different components.
+
+For detailed information about log configuration options, see [{#T}](log_config.md).
+
 ## domains_config: Cluster domain {#domains-config}
 
 This section contains the configuration of the {{ ydb-short-name }} cluster root domain, including the [Blob Storage](#domains-blob) (binary object storage) and [State Storage](#domains-state) configurations.
@@ -454,6 +460,33 @@ By default, the prefix is `slot-`. To override the prefix, add the following to 
 node_broker_config:
   stable_node_name_prefix: <new prefix>
 ```
+
+## `feature_flags` configuration section {#feature_flags}
+
+To enable a {{ ydb-short-name }} feature, set the corresponding feature flag in the `feature_flags` section of the cluster configuration. For example, to enable support for vector indexes and auto-partitioning of topics in the CDC, you need to add the following lines to the configuration:
+
+```yaml
+feature_flags:
+  enable_vector_index: true
+  enable_topic_autopartitioning_for_cdc: true
+```
+
+### Feature flags
+
+| Flag          | Feature |
+|---------------------------| ----------------------------------------------------|
+| `enable_vector_index`                                    | Support for [vector indexes](../../dev/vector-indexes.md) for approximate vector similarity search |
+| `enable_batch_updates`                                   | Support for `BATCH UPDATE` and `BATCH DELETE` statements |
+| `enable_kafka_native_balancing`                          | Client balancing of partitions when reading using the [Kafka protocol](https://kafka.apache.org/documentation/#consumerconfigs_partition.assignment.strategy) |
+| `enable_topic_autopartitioning_for_cdc`                  | [Auto-partitioning topics](../../concepts/cdc.md#topic-partitions) for row-oriented tables in CDC |
+| `enable_access_to_index_impl_tables`                     | Support for [followers (read replicas)](../../yql/reference/syntax/alter_table/indexes.md) for covered secondary indexes |
+| `enable_changefeeds_export`, `enable_changefeeds_import` | Support for changefeeds in backup and restore operations |
+| `enable_view_export`                                     | Support for views in backup and restore operations |
+| `enable_export_auto_dropping`                            | Automatic cleanup of temporary tables and directories during export to S3 |
+| `enable_followers_stats`                                 | System views with information about [history of overloaded partitions](../../dev/system-views.md#top-overload-partitions) |
+| `enable_strict_acl_check`                                | Strict ACL checks — do not allow granting rights to non-existent users and delete users with permissions |
+| `enable_strict_user_management`                          | Strict checks for local users — only the cluster or database administrator can administer local users |
+| `enable_database_admin`                                  | The role of a database administrator |
 
 ## Configuring Health Check {#healthcheck-config}
 

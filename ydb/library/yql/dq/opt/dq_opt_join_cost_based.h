@@ -24,7 +24,8 @@ NYql::NNodes::TExprBase DqOptimizeEquiJoinWithCosts(
     ui32 optLevel,
     IOptimizerNew& opt,
     const TProviderCollectFunction& providerCollect,
-    const TOptimizerHints& hints = {}
+    const TOptimizerHints& hints = {},
+    bool enableShuffleElimination = false
 );
 
 NYql::NNodes::TExprBase DqOptimizeEquiJoinWithCosts(
@@ -35,9 +36,23 @@ NYql::NNodes::TExprBase DqOptimizeEquiJoinWithCosts(
     IOptimizerNew& opt,
     const TProviderCollectFunction& providerCollect,
     int& equiJoinCounter,
-    const TOptimizerHints& hints = {}
+    const TOptimizerHints& hints = {},
+    bool enableShuffleElimination = false
 );
 
-IOptimizerNew* MakeNativeOptimizerNew(IProviderContext& ctx, const ui32 maxDPHypDPTableSize, TExprContext& ectx, bool enableShuffleElimination);
+void CollectInterestingOrderingsFromJoinTree(
+    const NYql::NNodes::TExprBase& equiJoinNode,
+    TFDStorage& fdStorage,
+    TTypeAnnotationContext& typeCtx
+);
+
+IOptimizerNew* MakeNativeOptimizerNew(
+    IProviderContext& ctx,
+    const ui32 maxDPHypDPTableSize,
+    TExprContext& ectx,
+    bool enableShuffleElimination,
+    TSimpleSharedPtr<TOrderingsStateMachine> orderingsFSM = nullptr,
+    TTableAliasMap* tableAliases = nullptr
+);
 
 } // namespace NYql::NDq

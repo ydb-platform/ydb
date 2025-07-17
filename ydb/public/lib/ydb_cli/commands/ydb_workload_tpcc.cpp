@@ -1,9 +1,14 @@
 #include "ydb_workload_tpcc.h"
 
+#include <ydb/library/workload/tpcc/check.h>
+#include <ydb/library/workload/tpcc/clean.h>
+#include <ydb/library/workload/tpcc/import.h>
+#include <ydb/library/workload/tpcc/init.h>
 #include <ydb/library/workload/tpcc/runner.h>
 
 #include <ydb/public/lib/ydb_cli/commands/ydb_command.h>
 
+#include <util/generic/serialized_enum.h>
 #include <util/system/info.h>
 
 namespace NYdb::NConsoleClient {
@@ -12,9 +17,135 @@ namespace {
 
 //-----------------------------------------------------------------------------
 
-constexpr int DEFAULT_WAREHOUSE_COUNT = 1;
-constexpr int DEFAULT_WARMUP_SECONDS = 60; // TODO
-constexpr int DEFAULT_RUN_SECONDS = 60; // TODO
+class TCommandTPCCClean
+    : public TYdbCommand
+{
+public:
+    TCommandTPCCClean(std::shared_ptr<NTPCC::TRunConfig> runConfig);
+    ~TCommandTPCCClean() = default;
+
+    int Run(TConfig& config) override;
+
+private:
+    std::shared_ptr<NTPCC::TRunConfig> RunConfig;
+};
+
+TCommandTPCCClean::TCommandTPCCClean(std::shared_ptr<NTPCC::TRunConfig> runConfig)
+    : TYdbCommand("clean", {}, "Drop tables created by benchmark")
+    , RunConfig(std::move(runConfig))
+{
+}
+
+int TCommandTPCCClean::Run(TConfig& connectionConfig) {
+    RunConfig->SetFullPath(connectionConfig);
+    NTPCC::CleanSync(connectionConfig, *RunConfig);
+    return 0;
+}
+
+//-----------------------------------------------------------------------------
+
+class TCommandTPCCInit
+    : public TYdbCommand
+{
+public:
+    TCommandTPCCInit(std::shared_ptr<NTPCC::TRunConfig> runConfig);
+    ~TCommandTPCCInit() = default;
+
+    void Config(TConfig& config) override;
+    int Run(TConfig& config) override;
+
+private:
+    std::shared_ptr<NTPCC::TRunConfig> RunConfig;
+};
+
+TCommandTPCCInit::TCommandTPCCInit(std::shared_ptr<NTPCC::TRunConfig> runConfig)
+    : TYdbCommand("init", {}, "Create and initialize tables for benchmark")
+    , RunConfig(std::move(runConfig))
+{
+}
+
+void TCommandTPCCInit::Config(TConfig& config) {
+    TYdbCommand::Config(config);
+
+    config.Opts->AddLongOption(
+        'w', "warehouses", TStringBuilder() << "Number of warehouses")
+            .RequiredArgument("INT").Required().StoreResult(&RunConfig->WarehouseCount);
+
+    config.Opts->AddLongOption(
+        "log-level", TStringBuilder() << "Log level from 0 to 8, default is 6 (INFO)")
+            .Optional().StoreMappedResult(&RunConfig->LogPriority, [](const TString& v) {
+                return FromString<ELogPriority>(v);
+            }).DefaultValue(RunConfig->LogPriority).Hidden();
+}
+
+int TCommandTPCCInit::Run(TConfig& connectionConfig) {
+    RunConfig->SetFullPath(connectionConfig);
+    NTPCC::InitSync(connectionConfig, *RunConfig);
+    return 0;
+}
+
+//-----------------------------------------------------------------------------
+
+class TCommandTPCCImport
+    : public TYdbCommand
+{
+public:
+    TCommandTPCCImport(std::shared_ptr<NTPCC::TRunConfig> runConfig);
+    ~TCommandTPCCImport() = default;
+
+    void Config(TConfig& config) override;
+    int Run(TConfig& config) override;
+
+private:
+    std::shared_ptr<NTPCC::TRunConfig> RunConfig;
+};
+
+TCommandTPCCImport::TCommandTPCCImport(std::shared_ptr<NTPCC::TRunConfig> runConfig)
+    : TYdbCommand("import", {}, "Fill tables with initial benchmark data")
+    , RunConfig(std::move(runConfig))
+{
+}
+
+void TCommandTPCCImport::Config(TConfig& config) {
+    TYdbCommand::Config(config);
+
+    config.Opts->AddLongOption(
+        'w', "warehouses", TStringBuilder() << "Number of warehouses")
+            .RequiredArgument("INT").Required().StoreResult(&RunConfig->WarehouseCount);
+
+    // TODO: detect automatically
+    config.Opts->AddLongOption(
+        "threads", TStringBuilder() << "Number of threads loading the data")
+            .RequiredArgument("INT").StoreResult(&RunConfig->LoadThreadCount).DefaultValue(RunConfig->LoadThreadCount);
+
+    config.Opts->AddLongOption(
+        "no-tui", TStringBuilder() << "Disable TUI, which is enabled by default in interactive mode")
+            .Optional().StoreTrue(&RunConfig->NoTui);
+
+    // advanced hidden options (mainly for developers)
+
+    auto logLevelOpt = config.Opts->AddLongOption(
+        "log-level", TStringBuilder() << "Log level from 0 to 8, default is 6 (INFO)")
+            .Optional().StoreMappedResult(&RunConfig->LogPriority, [](const TString& v) {
+                return FromString<ELogPriority>(v);
+            }).DefaultValue(RunConfig->LogPriority);
+
+    auto connectionsOpt = config.Opts->AddLongOption(
+        "connections", TStringBuilder() << "Number of SDK driver/client instances (default: auto)")
+            .RequiredArgument("INT").StoreResult(&RunConfig->DriverCount).DefaultValue(0);
+
+    // for now. Later might be "config.HelpCommandVerbosiltyLevel <= 1" or advanced section
+    if (true) {
+        logLevelOpt.Hidden();
+        connectionsOpt.Hidden();
+    }
+}
+
+int TCommandTPCCImport::Run(TConfig& connectionConfig) {
+    RunConfig->SetFullPath(connectionConfig);
+    NTPCC::ImportSync(connectionConfig, *RunConfig);
+    return 0;
+}
 
 //-----------------------------------------------------------------------------
 
@@ -22,56 +153,145 @@ class TCommandTPCCRun
     : public TYdbCommand
 {
 public:
-    TCommandTPCCRun();
-    ~TCommandTPCCRun();
+    TCommandTPCCRun(std::shared_ptr<NTPCC::TRunConfig> runConfig);
+    ~TCommandTPCCRun() = default;
 
-    virtual void Config(TConfig& config) override;
-    virtual void Parse(TConfig& config) override;
-    virtual int Run(TConfig& config) override;
+    void Config(TConfig& config) override;
+    int Run(TConfig& config) override;
 
 private:
-    int WarehouseCount;
-    int WarmupSeconds;
-    int RunSeconds;
+    std::shared_ptr<NTPCC::TRunConfig> RunConfig;
 };
 
-TCommandTPCCRun::TCommandTPCCRun()
-    : TYdbCommand("run", {}, "run benchmark")
-    , WarehouseCount(DEFAULT_WAREHOUSE_COUNT)
-    , WarmupSeconds(DEFAULT_WARMUP_SECONDS)
-    , RunSeconds(DEFAULT_RUN_SECONDS)
+TCommandTPCCRun::TCommandTPCCRun(std::shared_ptr<NTPCC::TRunConfig> runConfig)
+    : TYdbCommand("run", {}, "Run the benchmark")
+    , RunConfig(std::move(runConfig))
 {
 }
 
-TCommandTPCCRun::~TCommandTPCCRun() {
-}
-
 void TCommandTPCCRun::Config(TConfig& config) {
+    TYdbCommand::Config(config);
+
     config.Opts->AddLongOption(
         'w', "warehouses", TStringBuilder() << "Number of warehouses")
-            .RequiredArgument("INT").StoreResult(&WarehouseCount).DefaultValue(DEFAULT_WAREHOUSE_COUNT);
+            .RequiredArgument("INT").Required().StoreResult(&RunConfig->WarehouseCount);
+
+    // TODO: default value should be auto
     config.Opts->AddLongOption(
-        "warmup", TStringBuilder() << "Warmup time in seconds")
-            .RequiredArgument("INT").StoreResult(&WarmupSeconds).DefaultValue(DEFAULT_WARMUP_SECONDS);
+        "warmup", TStringBuilder() << "Warmup time. Example: 10s, 5m, 1h")
+            .RequiredArgument("DURATION").StoreResult(&RunConfig->WarmupDuration).DefaultValue(RunConfig->WarmupDuration);
+
     config.Opts->AddLongOption(
-        't', "time", TStringBuilder() << "Execution time in seconds")
-            .RequiredArgument("INT").StoreResult(&RunSeconds).DefaultValue(DEFAULT_RUN_SECONDS);
+        't', "time", TStringBuilder() << "Execution time. Example: 10s, 5m, 1h")
+            .RequiredArgument("DURATION").StoreResult(&RunConfig->RunDuration).DefaultValue(RunConfig->RunDuration);
+
+    // TODO: default value should be auto
+    config.Opts->AddLongOption(
+        'm', "max-sessions", TStringBuilder() << "Soft limit on number of DB sessions")
+            .RequiredArgument("INT").StoreResult(&RunConfig->MaxInflight).DefaultValue(RunConfig->MaxInflight);
+
+    // TODO: detect automatically
+    config.Opts->AddLongOption(
+        "threads", TStringBuilder() << "Number of threads executing queries (by default autodected)")
+            .RequiredArgument("INT").StoreResult(&RunConfig->ThreadCount);
+
+    config.Opts->AddLongOption(
+        'f', "format", TStringBuilder() << "Output format: " << GetEnumAllNames<NTPCC::TRunConfig::EFormat>())
+            .OptionalArgument("STRING").StoreResult(&RunConfig->Format).DefaultValue(RunConfig->Format);
+
+    config.Opts->AddLongOption(
+        "no-tui", TStringBuilder() << "Disable TUI, which is enabled by default in interactive mode")
+            .Optional().StoreTrue(&RunConfig->NoTui);
+
+    // advanced hidden options (mainly for developers)
+
+    auto extendedStatsOpt = config.Opts->AddLongOption(
+        "extended-stats", TStringBuilder() << "Print additional statistics")
+            .Optional().StoreTrue(&RunConfig->ExtendedStats);
+
+    auto logLevelOpt = config.Opts->AddLongOption(
+        "log-level", TStringBuilder() << "Log level from 0 to 8, default is 6 (INFO)")
+            .Optional().StoreMappedResult(&RunConfig->LogPriority, [](const TString& v) {
+                return FromString<ELogPriority>(v);
+            }).DefaultValue(RunConfig->LogPriority);
+
+    auto connectionsOpt = config.Opts->AddLongOption(
+        "connections", TStringBuilder() << "Number of SDK driver/client instances (default: auto)")
+            .RequiredArgument("INT").StoreResult(&RunConfig->DriverCount).DefaultValue(0);
+
+    auto noDelaysOpt = config.Opts->AddLongOption(
+        "no-delays", TStringBuilder() << "Disable TPC-C keying/thinking delays")
+            .Optional().StoreTrue(&RunConfig->NoDelays);
+
+    auto simulateOpt = config.Opts->AddLongOption(
+        "simulate", TStringBuilder() << "Simulate transaction execution (delay is simulated transaction latency ms)")
+            .OptionalArgument("INT").StoreResult(&RunConfig->SimulateTransactionMs).DefaultValue(0);
+
+    auto simulateSelect1Opt = config.Opts->AddLongOption(
+        "simulate-select1", TStringBuilder() << "Instead of real queries, execute specified number of SELECT 1 queries")
+            .OptionalArgument("INT").StoreResult(&RunConfig->SimulateTransactionSelect1Count).DefaultValue(0);
+
+    // for now. Later might be "config.HelpCommandVerbosiltyLevel <= 1" or advanced section
+    if (true) {
+        extendedStatsOpt.Hidden();
+        logLevelOpt.Hidden();
+        connectionsOpt.Hidden();
+        noDelaysOpt.Hidden();
+        simulateOpt.Hidden();
+        simulateSelect1Opt.Hidden();
+    }
 }
 
-void TCommandTPCCRun::Parse(TConfig& config) {
-    TClientCommand::Parse(config);
-
-    // TODO: validate config?
+int TCommandTPCCRun::Run(TConfig& connectionConfig) {
+    RunConfig->SetFullPath(connectionConfig);
+    NTPCC::RunSync(connectionConfig, *RunConfig);
+    return 0;
 }
 
-int TCommandTPCCRun::Run(TConfig& config) {
-    NTPCC::TRunConfig tpccConfig(config);
-    tpccConfig.WarehouseCount = WarehouseCount;
-    tpccConfig.WarmupSeconds = WarmupSeconds;
-    tpccConfig.RunSeconds = RunSeconds;
+//-----------------------------------------------------------------------------
 
-    NTPCC::RunSync(tpccConfig);
+class TCommandTPCCCheck
+    : public TYdbCommand
+{
+public:
+    TCommandTPCCCheck(std::shared_ptr<NTPCC::TRunConfig> runConfig);
+    ~TCommandTPCCCheck() = default;
 
+    void Config(TConfig& config) override;
+    int Run(TConfig& config) override;
+
+private:
+    std::shared_ptr<NTPCC::TRunConfig> RunConfig;
+};
+
+TCommandTPCCCheck::TCommandTPCCCheck(std::shared_ptr<NTPCC::TRunConfig> runConfig)
+    : TYdbCommand("check", {}, "Check TPC-C data consistency")
+    , RunConfig(std::move(runConfig))
+{
+}
+
+void TCommandTPCCCheck::Config(TConfig& config) {
+    TYdbCommand::Config(config);
+
+    config.Opts->AddLongOption(
+        'w', "warehouses", TStringBuilder() << "Number of warehouses")
+            .RequiredArgument("INT").Required().StoreResult(&RunConfig->WarehouseCount);
+
+    config.Opts->AddLongOption(
+        "just-imported", TStringBuilder() << "Turns on additional checks. "
+                << "Should be used only when data has been just imported and no runs have been done yet.")
+            .Optional().StoreTrue(&RunConfig->JustImported);
+
+    config.Opts->AddLongOption(
+        "log-level", TStringBuilder() << "Log level from 0 to 8, default is 6 (INFO)")
+            .Optional().StoreMappedResult(&RunConfig->LogPriority, [](const TString& v) {
+                return FromString<ELogPriority>(v);
+            }).DefaultValue(RunConfig->LogPriority).Hidden();
+}
+
+int TCommandTPCCCheck::Run(TConfig& connectionConfig) {
+    RunConfig->SetFullPath(connectionConfig);
+    NTPCC::CheckSync(connectionConfig, *RunConfig);
     return 0;
 }
 
@@ -80,9 +300,22 @@ int TCommandTPCCRun::Run(TConfig& config) {
 //-----------------------------------------------------------------------------
 
 TCommandTPCC::TCommandTPCC()
-    : TClientCommandTree("tpcc", {}, "YDB TPC-C workload")
+    : TClientCommandTree("tpcc", {}, "YDB TPC-C benchmark")
+    , RunConfig(std::make_shared<NTPCC::TRunConfig>())
 {
-    AddCommand(std::make_unique<TCommandTPCCRun>());
+    AddCommand(std::make_unique<TCommandTPCCRun>(RunConfig));
+    AddCommand(std::make_unique<TCommandTPCCClean>(RunConfig));
+    AddCommand(std::make_unique<TCommandTPCCInit>(RunConfig));
+    AddCommand(std::make_unique<TCommandTPCCImport>(RunConfig));
+    AddCommand(std::make_unique<TCommandTPCCCheck>(RunConfig));
+}
+
+void TCommandTPCC::Config(TConfig& config) {
+    TClientCommandTree::Config(config);
+
+    config.Opts->AddLongOption(
+        'p', "path", TStringBuilder() << "Database path where benchmark tables are located")
+            .RequiredArgument("STRING").StoreResult(&RunConfig->Path);
 }
 
 } // namespace NYdb::NConsoleClient

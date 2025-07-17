@@ -499,10 +499,12 @@ public:
     {
         static auto poller = NConcurrency::CreateThreadPoolPoller(4, "HttpChannelTest");
         auto credentials = New<NHttps::TClientCredentialsConfig>();
+        credentials->CertificateAuthority = New<NCrypto::TPemBlobConfig>();
+        credentials->CertificateAuthority->Value = RootCert;
         credentials->PrivateKey = New<NCrypto::TPemBlobConfig>();
         credentials->PrivateKey->Value = ClientKey;
-        credentials->CertChain = New<NCrypto::TPemBlobConfig>();
-        credentials->CertChain->Value = ClientCert;
+        credentials->CertificateChain = New<NCrypto::TPemBlobConfig>();
+        credentials->CertificateChain->Value = ClientCert;
         return NHttp::CreateHttpChannel(address, poller, EnableSsl, credentials);
     }
 
@@ -521,8 +523,8 @@ public:
             config->Credentials = New<NHttps::TServerCredentialsConfig>();
             config->Credentials->PrivateKey = New<NCrypto::TPemBlobConfig>();
             config->Credentials->PrivateKey->Value = ServerKey;
-            config->Credentials->CertChain = New<NCrypto::TPemBlobConfig>();
-            config->Credentials->CertChain->Value = ServerCert;
+            config->Credentials->CertificateChain = New<NCrypto::TPemBlobConfig>();
+            config->Credentials->CertificateChain->Value = ServerCert;
             httpServer = NYT::NHttps::CreateServer(config, 4);
         } else {
             httpServer = NYT::NHttp::CreateServer(config, 4);

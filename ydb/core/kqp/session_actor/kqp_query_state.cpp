@@ -404,7 +404,7 @@ std::unique_ptr<TEvKqp::TEvCompileRequest> TKqpQueryState::BuildCompileSplittedR
     return std::make_unique<TEvKqp::TEvCompileRequest>(UserToken, ClientAddress, uid, std::move(query), false,
         false, perStatementResult, compileDeadline, DbCounters, gUCSettingsPtr, ApplicationName, std::move(cookie),
         UserRequestContext, std::move(Orbit), TempTablesState, GetCollectDiagnostics(), statementAst,
-        false, SplittedCtx.get(), SplittedExprs.at(NextSplittedExpr));
+        false, SplittedCtx, SplittedExprs.at(NextSplittedExpr));
 }
 
 bool TKqpQueryState::ProcessingLastStatementPart() {
@@ -435,8 +435,8 @@ bool TKqpQueryState::PrepareNextStatementPart() {
     return true;
 }
 
-void TKqpQueryState::AddOffsetsToTransaction() {
-    YQL_ENSURE(HasTopicOperations());
+void TKqpQueryState::FillTopicOperations() {
+    YQL_ENSURE(HasTopicOperations() || HasKafkaApiOperations());
 
     const auto& operations = GetTopicOperationsFromRequest();
 
@@ -464,6 +464,14 @@ void TKqpQueryState::AddOffsetsToTransaction() {
                 }
             }
         }
+    }
+
+    const auto& kafkaOperations = GetKafkaApiOperationsFromRequest();
+    for (auto& partitionInTx : kafkaOperations.GetPartitionsInTxn()) {
+        TopicOperations.AddKafkaApiWriteOperation(partitionInTx.GetTopicPath(), partitionInTx.GetPartitionId(), {kafkaOperations.GetProducerId(), kafkaOperations.GetProducerEpoch()});
+    }
+    for (auto& offsetInTxn : kafkaOperations.GetOffsetsInTxn()) {
+        TopicOperations.AddKafkaApiReadOperation(offsetInTxn.GetTopicPath(), offsetInTxn.GetPartitionId(), offsetInTxn.GetConsumerName(), offsetInTxn.GetOffset());
     }
 }
 

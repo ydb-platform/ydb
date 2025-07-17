@@ -444,8 +444,8 @@ public:
         return std::min(Filter->GetFilteredCount().value_or(recordsCount), defLimit);
     }
 
-    std::shared_ptr<NArrow::TColumnFilter> GetAppliedFilter() const {
-        return UseFilter ? Filter : nullptr;
+    const std::shared_ptr<NArrow::TColumnFilter>& GetAppliedFilter() const {
+        return UseFilter ? Filter : Default<std::shared_ptr<NArrow::TColumnFilter>>();
     }
 
     std::shared_ptr<NArrow::TColumnFilter> GetNotAppliedFilter() const {
@@ -453,6 +453,9 @@ public:
     }
 
     void AddFilter(const TColumnFilter& filter) {
+        if (filter.IsTotalAllowFilter()) {
+            return;
+        }
         if (!UseFilter) {
             *Filter = Filter->And(filter);
         } else {

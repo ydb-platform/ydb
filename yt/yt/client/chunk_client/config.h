@@ -421,6 +421,9 @@ struct TMultiChunkWriterConfig
     i64 DesiredChunkWeight;
     i64 MaxMetaSize;
 
+    // For testing purposes only.
+    std::optional<TDuration> TestingDelayBeforeChunkClose;
+
     REGISTER_YSON_STRUCT(TMultiChunkWriterConfig);
 
     static void Register(TRegistrar registrar);

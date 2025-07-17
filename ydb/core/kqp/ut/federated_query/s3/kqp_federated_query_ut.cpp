@@ -2820,7 +2820,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
         const auto result = db.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
         const auto& issues = result.GetIssues().ToString();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::GENERIC_ERROR, issues);
-        UNIT_ASSERT_STRING_CONTAINS(issues, "variant type is not supported for S3 reading");
+        UNIT_ASSERT_STRING_CONTAINS(issues, "Field 'data' has incompatible with S3 json_list input format type: Variant");
     }
 }
 

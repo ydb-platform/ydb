@@ -4,6 +4,7 @@
 #include "partition_util.h"
 #include "partition.h"
 #include "partition_log.h"
+#include "tracing_support.h"
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/blobstorage.h>
@@ -175,7 +176,9 @@ void AddCheckDiskRequest(TEvKeyValue::TEvRequest *request, ui32 numChannels) {
 TPartition::TPartition(ui64 tabletId, const TPartitionId& partition, const TActorId& tablet, ui32 tabletGeneration, const TActorId& blobCache,
                        const NPersQueue::TTopicConverterPtr& topicConverter, TString dcId, bool isServerless,
                        const NKikimrPQ::TPQTabletConfig& tabletConfig, const TTabletCountersBase& counters, bool subDomainOutOfSpace, ui32 numChannels,
-                       const TActorId& writeQuoterActorId, bool newPartition, TVector<TTransaction> distrTxs)
+                       const TActorId& writeQuoterActorId,
+                       TIntrusivePtr<NJaegerTracing::TSamplingThrottlingControl> samplingControl,
+                       bool newPartition, TVector<TTransaction> distrTxs)
     : Initializer(this)
     , TabletID(tabletId)
     , TabletGeneration(tabletGeneration)
@@ -217,6 +220,7 @@ TPartition::TPartition(ui64 tabletId, const TPartitionId& partition, const TActo
     , WriteBufferIsFullCounter(nullptr)
     , WriteLagMs(TDuration::Minutes(1), 100)
     , LastEmittedHeartbeat(TRowVersion::Min())
+    , SamplingControl(samplingControl)
 {
     TabletCounters.Populate(Counters);
 
@@ -1943,10 +1947,7 @@ void TPartition::ProcessTxsAndUserActs(const TActorContext& ctx)
 
         AddCmdDeleteRangeForAllKeys(*PersistRequest);
 
-        KVWriteSpan = NWilson::TSpan(TWilsonTopic::ExecuteTransaction,
-                                     NWilson::TTraceId::NewTraceId(TWilsonTopic::ExecuteTransaction, Max<ui32>()),
-                                     "Topic.Partition.Persist",
-                                     NWilson::EFlags::AUTO_END);
+        KVWriteSpan = GenerateSpan("Topic.Partition.Persist", *SamplingControl);
 
         ctx.Send(Tablet, PersistRequest.Release(),
                  0, 0,
@@ -2156,17 +2157,16 @@ void TPartition::RunPersist() {
         WriteInfosApplied.clear();
         //Done with counters.
 
-        KVWriteSpan = NWilson::TSpan(TWilsonTopic::ExecuteTransaction,
-                                     NWilson::TTraceId::NewTraceId(TWilsonTopic::ExecuteTransaction, Max<ui32>()),
-                                     "Topic.Partition.RunPersist",
-                                     NWilson::EFlags::AUTO_END);
+        KVWriteSpan = GenerateSpan("Topic.Partition.RunPersist", *SamplingControl);
 
         for (auto& traceId : TxForPersistTraceIds) {
             TxForPersistSpans.emplace_back(TWilsonTopic::ExecuteTransaction,
                                            std::move(traceId),
                                            "Topic.Partition.Persist",
                                            NWilson::EFlags::AUTO_END);
-            TxForPersistSpans.back().Link(KVWriteSpan.GetTraceId());
+            if (KVWriteSpan) {
+                TxForPersistSpans.back().Link(KVWriteSpan.GetTraceId());
+            }
         }
         TxForPersistTraceIds.clear();
 

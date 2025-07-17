@@ -3648,7 +3648,7 @@ void TPersQueue::BeginWriteTxs(const TActorContext& ctx)
     PQ_LOG_D("Send TEvKeyValue::TEvRequest (WRITE_TX_COOKIE)");
     ctx.Send(ctx.SelfID, request.Release(),
              0, 0,
-             WriteTxsSpan ? WriteTxsSpan.GetTraceId() : NWilson::TTraceId());
+             WriteTxsSpan.GetTraceId());
 
     TryReturnTabletStateAll(ctx);
 }
@@ -3831,10 +3831,7 @@ void TPersQueue::ProcessWriteTxs(const TActorContext& ctx,
     Y_ABORT_UNLESS(!WriteTxsInProgress, "PQ %" PRIu64, TabletID());
 
     if (!WriteTxs.empty() && !WriteTxsSpan) {
-        WriteTxsSpan = NWilson::TSpan(TWilsonTopic::ExecuteTransaction,
-                                      NWilson::TTraceId::NewTraceId(TWilsonTopic::ExecuteTransaction, Max<ui32>()),
-                                      "Topic.Transaction.WriteTxs",
-                                      NWilson::EFlags::AUTO_END);
+        WriteTxsSpan = GenerateSpan("Topic.Transaction.WriteTxs", *SamplingControl);
     }
 
     for (auto& [txId, state] : WriteTxs) {
@@ -3859,10 +3856,7 @@ void TPersQueue::ProcessDeleteTxs(const TActorContext& ctx,
     Y_ABORT_UNLESS(!WriteTxsInProgress, "PQ %" PRIu64, TabletID());
 
     if (!DeleteTxs.empty() && !WriteTxsSpan) {
-        WriteTxsSpan = NWilson::TSpan(TWilsonTopic::ExecuteTransaction,
-                                      NWilson::TTraceId::NewTraceId(TWilsonTopic::ExecuteTransaction, Max<ui32>()),
-                                      "Topic.Transaction.WriteTxs",
-                                      NWilson::EFlags::AUTO_END);
+        WriteTxsSpan = GenerateSpan("Topic.Transaction.WriteTxs", *SamplingControl);
     }
 
     for (ui64 txId : DeleteTxs) {
@@ -4849,6 +4843,7 @@ TPartition* TPersQueue::CreatePartitionActor(const TPartitionId& partitionId,
                           SubDomainOutOfSpace,
                           (ui32)channels,
                           GetPartitionQuoter(partitionId),
+                          SamplingControl,
                           newPartition);
 }
 

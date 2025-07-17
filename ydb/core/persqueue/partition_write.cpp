@@ -453,12 +453,12 @@ void TPartition::OnHandleWriteResponse(const TActorContext& ctx)
 {
     KVWriteInProgress = false;
 
-    if (KVWriteSpan) {
-        for (auto& span : TxForPersistSpans) {
-            span.End();
-        }
-        TxForPersistSpans.clear();
+    for (auto& span : TxForPersistSpans) {
+        span.End();
+    }
+    TxForPersistSpans.clear();
 
+    if (KVWriteSpan) {
         KVWriteSpan.End();
         KVWriteSpan = {};
     }

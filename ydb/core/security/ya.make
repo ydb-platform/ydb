@@ -8,6 +8,7 @@ SRCS(
     ticket_parser_impl.h
     ticket_parser.cpp
     ticket_parser.h
+    xds_bootstrap_config_builder.cpp
 )
 
 PEERDIR(

@@ -1,6 +1,7 @@
 #pragma once
 #include "ticket_parser_log.h"
 #include "ticket_parser_settings.h"
+#include "xds_bootstrap_config_builder.h"
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/counters.h>
@@ -12,6 +13,7 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
+#include <ydb/library/actors/interconnect/interconnect.h>
 #include <ydb/library/grpc/actor_client/grpc_service_cache.h>
 #include <ydb/library/ncloud/impl/access_service.h>
 #include <ydb/library/security/util.h>
@@ -23,9 +25,6 @@
 #include <ydb/library/ycloud/impl/user_account_service.h>
 
 #include <library/cpp/digest/md5/md5.h>
-#include <library/cpp/protobuf/json/proto2json.h>
-#include <library/cpp/json/json_writer.h>
-#include <library/cpp/json/json_reader.h>
 
 #include <util/generic/queue.h>
 #include <util/stream/file.h>
@@ -33,8 +32,6 @@
 #include <util/system/env.h>
 
 #include <util/string/join.h>
-
-#include <ydb/library/actors/interconnect/interconnect.h>
 
 namespace NKikimr {
 
@@ -1558,8 +1555,11 @@ private:
     }
 
     void Handle(TEvInterconnect::TEvNodeInfo::TPtr &ev) {
-        NodeInfo.Reset(ev->Get()->Node);
-        BuildXdsBootstrapConfig();
+        static const TString XDS_BOOTSTRAP_CONFIG_ENV = "GRPC_XDS_BOOTSTRAP_CONFIG";
+        TXdsBootstrapConfigBuilder xdsConfigBuilder(Config.GetXdsBootstrap(), ev->Get()->Node->Location.GetDataCenterId(), this->SelfId().NodeId());
+        TString conf = xdsConfigBuilder.Build();
+        BLOG_D("+++Config:\n" << conf);
+        SetEnv(XDS_BOOTSTRAP_CONFIG_ENV, conf);
     }
 
     void Handle(NMon::TEvHttpInfo::TPtr& ev) {
@@ -2094,54 +2094,6 @@ protected:
         CounterTicketsCacheMiss = counters->GetCounter("TicketsCacheMiss", true);
         CounterTicketsBuildTime = counters->GetHistogram("TicketsBuildTimeMs",
                                                          NMonitoring::ExplicitHistogram({0, 1, 5, 10, 50, 100, 500, 1000, 2000, 5000, 10000, 30000, 60000}));
-    }
-
-    void BuildNodeFieldInXdsBootstrapConfig(NJson::TJsonValue* json) const {
-        NJson::TJsonValue& nodeJson = (*json)["node"];
-        if (Config.GetXdsBootstrap().GetNode().HasMeta()) {
-            nodeJson.EraseValue("meta");
-            NJson::TJsonValue metadataJson;
-            NJson::TJsonReaderConfig jsonConfig;
-            if (NJson::ReadJsonTree(Config.GetXdsBootstrap().GetNode().GetMeta(), &jsonConfig, &metadataJson)) {
-                nodeJson["metadata"] = metadataJson;
-            }
-        }
-        if (!Config.GetXdsBootstrap().GetNode().HasId()) {
-            nodeJson["id"] = ToString(this->SelfId().NodeId());
-        }
-        if (!Config.GetXdsBootstrap().GetNode().GetLocality().HasZone()) {
-            nodeJson["locality"]["zone"] = NodeInfo->Location.GetDataCenterId();
-        }
-    }
-
-    void BuildFieldXdsServersInXdsBootstrapConfig(NJson::TJsonValue* json) const {
-        NJson::TJsonValue& xdsServersJson = *json;
-        NJson::TJsonValue::TArray xdsServers;
-        xdsServersJson["xds_servers"].GetArray(&xdsServers);
-        xdsServersJson.EraseValue("xds_servers");
-        for (auto& xdsServerJson : xdsServers) {
-            NJson::TJsonValue::TArray channelCreds;
-            xdsServerJson["channel_creds"].GetArray(&channelCreds);
-            xdsServerJson.EraseValue("channel_creds");
-            for (auto& channelCredJson : channelCreds) {
-                NJson::TJsonValue typeConfigJson;
-                NJson::TJsonReaderConfig jsonConfig;
-                if (NJson::ReadJsonTree(channelCredJson["config"].GetString(), &jsonConfig, &typeConfigJson)) {
-                    channelCredJson["config"] = typeConfigJson;
-                }
-                xdsServerJson["channel_creds"].AppendValue(channelCredJson);
-            }
-            xdsServersJson["xds_servers"].AppendValue(xdsServerJson);
-        }
-    }
-
-    void BuildXdsBootstrapConfig() const {
-        static const TString XDS_BOOTSTRAP_CONFIG_ENV = "GRPC_XDS_BOOTSTRAP_CONFIG";
-        NJson::TJsonValue xdsBootstrapConfigJson;
-        NProtobufJson::Proto2Json(Config.GetXdsBootstrap(), xdsBootstrapConfigJson, {.FieldNameMode = NProtobufJson::TProto2JsonConfig::FldNameMode::FieldNameSnakeCaseDense});
-        BuildNodeFieldInXdsBootstrapConfig(&xdsBootstrapConfigJson);
-        BuildFieldXdsServersInXdsBootstrapConfig(&xdsBootstrapConfigJson);
-        SetEnv(XDS_BOOTSTRAP_CONFIG_ENV, NJson::WriteJson(xdsBootstrapConfigJson));
     }
 
     void FillAccessServiceSettings(NGrpcActorClient::TGrpcClientSettings& settings) {

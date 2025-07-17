@@ -220,25 +220,25 @@ void TPartition::UpdateWriteBufferIsFullState(const TInstant& now) {
 void TPartition::Handle(TEvPQ::TEvReserveBytes::TPtr& ev, const TActorContext& ctx) {
     PQ_LOG_T("TPartition::HandleOnWrite TEvReserveBytes.");
     
-        const TString& ownerCookie = ev->Get()->OwnerCookie;
-        TStringBuf owner = TOwnerInfo::GetOwnerFromOwnerCookie(ownerCookie);
-        const ui64& messageNo = ev->Get()->MessageNo;
+    const TString& ownerCookie = ev->Get()->OwnerCookie;
+    TStringBuf owner = TOwnerInfo::GetOwnerFromOwnerCookie(ownerCookie);
+    const ui64& messageNo = ev->Get()->MessageNo;
 
-        auto it = Owners.find(owner);
-        if (it == Owners.end() || it->second.OwnerCookie != ownerCookie) {
-            ReplyError(ctx, ev->Get()->Cookie, NPersQueue::NErrorCode::BAD_REQUEST, "ReserveRequest from dead ownership session");
-            return;
-        }
+    auto it = Owners.find(owner);
+    if (it == Owners.end() || it->second.OwnerCookie != ownerCookie) {
+        ReplyError(ctx, ev->Get()->Cookie, NPersQueue::NErrorCode::BAD_REQUEST, "ReserveRequest from dead ownership session");
+        return;
+    }
 
-        if (messageNo != it->second.NextMessageNo) {
-            ReplyError(ctx, ev->Get()->Cookie, NPersQueue::NErrorCode::BAD_REQUEST,
-                TStringBuilder() << "reorder in reserve requests, waiting " << it->second.NextMessageNo << ", but got " << messageNo);
-            DropOwner(it, ctx);
-            ProcessChangeOwnerRequests(ctx);
-            return;
-        }
+    if (messageNo != it->second.NextMessageNo) {
+        ReplyError(ctx, ev->Get()->Cookie, NPersQueue::NErrorCode::BAD_REQUEST,
+            TStringBuilder() << "reorder in reserve requests, waiting " << it->second.NextMessageNo << ", but got " << messageNo);
+        DropOwner(it, ctx);
+        ProcessChangeOwnerRequests(ctx);
+        return;
+    }
 
-        ++it->second.NextMessageNo;
+    ++it->second.NextMessageNo;
     ReserveRequests.push_back(ev->Release());
     ProcessReserveRequests(ctx);
 }

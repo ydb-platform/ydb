@@ -9,6 +9,7 @@ TEST_SRCS(
     test_distconf.py
     test_config_migration.py
     test_configuration_version.py
+    test_distconf_sentinel_node_status.py
 )
 
 SPLIT_FACTOR(10)

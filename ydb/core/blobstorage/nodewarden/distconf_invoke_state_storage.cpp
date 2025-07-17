@@ -8,9 +8,9 @@ namespace NKikimr::NStorage {
 
     void TInvokeRequestHandlerActor::GetRecommendedStateStorageConfig(NKikimrBlobStorage::TStateStorageConfig* currentConfig) {
         const NKikimrBlobStorage::TStorageConfig &config = *Self->StorageConfig;
-        GenerateStateStorageConfig(currentConfig->MutableStateStorageConfig(), config);
-        GenerateStateStorageConfig(currentConfig->MutableStateStorageBoardConfig(), config);
-        GenerateStateStorageConfig(currentConfig->MutableSchemeBoardConfig(), config);
+        Self->GenerateStateStorageConfig(currentConfig->MutableStateStorageConfig(), config);
+        Self->GenerateStateStorageConfig(currentConfig->MutableStateStorageBoardConfig(), config);
+        Self->GenerateStateStorageConfig(currentConfig->MutableSchemeBoardConfig(), config);
     }
 
     bool TInvokeRequestHandlerActor::AdjustRingGroupActorIdOffsetInRecommendedStateStorageConfig(NKikimrBlobStorage::TStateStorageConfig* currentConfig) {
@@ -88,7 +88,21 @@ namespace NKikimr::NStorage {
         Finish(Sender, SelfId(), ev.release(), 0, Cookie);
     }
 
-    void TInvokeRequestHandlerActor::SelfHealStateStorage(const TQuery::TSelfHealStateStorage& cmd) {
+    void TInvokeRequestHandlerActor::SelfHealBadNodesListUpdate(const TQuery::TSelfHealBadNodesListUpdate& cmd) {
+        if (!RunCommonChecks()) {
+            return;
+        }
+        Self->SelfHealBadNodes.clear();
+        for(auto nodeId : cmd.GetBadNodes()) {
+            Self->SelfHealBadNodes.insert(nodeId);
+        }
+        STLOG(PRI_DEBUG, BS_NODE, NW52, "SelfHealBadNodes: " << (Self->SelfHealBadNodes));
+        if (cmd.GetEnableSelfHealStateStorage()) {
+            SelfHealStateStorage(cmd.GetWaitForConfigStep());
+        }
+    }
+
+    void TInvokeRequestHandlerActor::SelfHealStateStorage(bool waitForConfigStep) {
         if (!RunCommonChecks()) {
             return;
         }
@@ -138,7 +152,7 @@ namespace NKikimr::NStorage {
             return;
         }
 
-        Self->StateStorageSelfHealActor = Register(new TStateStorageSelfhealActor(Sender, Cookie, TDuration::Seconds(cmd.GetWaitForConfigStep()), std::move(currentConfig), std::move(targetConfig)));
+        Self->StateStorageSelfHealActor = Register(new TStateStorageSelfhealActor(Sender, Cookie, TDuration::Seconds(waitForConfigStep), std::move(currentConfig), std::move(targetConfig)));
         auto ev = PrepareResult(TResult::OK, std::nullopt);
         Finish(Sender, SelfId(), ev.release(), 0, Cookie);
     }

@@ -240,6 +240,12 @@ message TEvNodeConfigInvokeOnRoot {
         optional uint32 WaitForConfigStep = 1;
     }
 
+    message TSelfHealBadNodesListUpdate {
+        optional bool EnableSelfHealStateStorage = 1;
+        optional uint32 WaitForConfigStep = 2;
+        repeated uint32 BadNodes = 3;
+    }
+
     message TAdvanceGeneration
     {}
 
@@ -303,6 +309,7 @@ message TEvNodeConfigInvokeOnRoot {
         TGetStateStorageConfig GetStateStorageConfig = 13;
         TNotifyBridgeSyncFinished NotifyBridgeSyncFinished = 14;
         TSelfHealStateStorage SelfHealStateStorage = 15;
+        TSelfHealBadNodesListUpdate SelfHealBadNodesListUpdate = 16;
     }
 }
 

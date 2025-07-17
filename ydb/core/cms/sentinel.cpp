@@ -10,6 +10,7 @@
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <ydb/library/services/services.pb.h>
+#include <ydb/core/blobstorage/nodewarden/node_warden_events.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
@@ -18,6 +19,7 @@
 #include <util/generic/algorithm.h>
 #include <util/string/builder.h>
 #include <util/string/join.h>
+
 
 namespace NKikimr::NCms {
 
@@ -712,6 +714,13 @@ class TStateUpdater: public TUpdaterBase<TEvSentinel::TEvStateUpdated, TStateUpd
         return false;
     }
 
+    void MarkNode(ui32 nodeId, TNodeInfo::ENodeStatus status) {
+        auto node = SentinelState->Nodes.find(nodeId);
+        if (node != SentinelState->Nodes.end()) {
+            node->second.AddState(status);
+        }
+    }
+
     void MarkNodePDisks(ui32 nodeId, EPDiskState state, bool skipTouched = false) {
         bool isNodeLocked = IsNodeLocked(nodeId);
         auto it = SentinelState->PDisks.lower_bound(TPDiskID(nodeId, 0));
@@ -751,6 +760,8 @@ class TStateUpdater: public TUpdaterBase<TEvSentinel::TEvStateUpdated, TStateUpd
             return;
         }
 
+        MarkNode(nodeId, TNodeInfo::ENodeStatus::GOOD);
+
         if (!record.PDiskStateInfoSize()) {
             LOG_E("There is no pdisk info"
                 << ": nodeId# " << nodeId);
@@ -774,7 +785,6 @@ class TStateUpdater: public TUpdaterBase<TEvSentinel::TEvStateUpdated, TStateUpd
 
             MarkNodePDisks(nodeId, NKikimrBlobStorage::TPDiskState::Missing, true);
         }
-
         MaybeReply();
     }
 
@@ -795,6 +805,8 @@ class TStateUpdater: public TUpdaterBase<TEvSentinel::TEvStateUpdated, TStateUpd
             return;
         }
 
+        MarkNode(nodeId, TNodeInfo::ENodeStatus::BAD);
+
         LOG_E("Cannot get pdisks state"
             << ": nodeId# " << nodeId
             << ", reason# " << reason);
@@ -808,7 +820,6 @@ class TStateUpdater: public TUpdaterBase<TEvSentinel::TEvStateUpdated, TStateUpd
                 MarkNodePDisks(nodeId, NKikimrBlobStorage::TPDiskState::Unknown);
                 break;
         }
-
         MaybeReply();
     }
 
@@ -821,6 +832,7 @@ class TStateUpdater: public TUpdaterBase<TEvSentinel::TEvStateUpdated, TStateUpd
 
             MarkNodePDisks(nodeId, NKikimrBlobStorage::TPDiskState::Timeout);
             AcceptNodeReply(nodeId);
+            MarkNode(nodeId, TNodeInfo::ENodeStatus::BAD);
         }
 
         MaybeReply();
@@ -1114,6 +1126,21 @@ class TSentinel: public TActorBootstrapped<TSentinel> {
         );
 
         SendBSCRequests();
+        SendDistconfRequest();
+    }
+
+    void SendDistconfRequest() {
+        auto request = std::make_unique<NKikimr::NStorage::TEvNodeConfigInvokeOnRoot>();
+        auto *updateRequest = request->Record.MutableSelfHealBadNodesListUpdate();
+        updateRequest->SetWaitForConfigStep(Config.StateStorageSelfHealWaitForConfigStep);
+        updateRequest->SetEnableSelfHealStateStorage(Config.EnableSelfHealStateStorage);
+        for (auto &[nodeId, node] : SentinelState->Nodes) {
+            node.Compute();
+            if (!node.GetCurrentState()) {
+                updateRequest->AddBadNodes(nodeId);
+            }
+        }
+        Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), request.release());
     }
 
     void SendBSCRequests() {

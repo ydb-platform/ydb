@@ -621,7 +621,7 @@ ISolomonAccessorClient::Make(
         defaultReplica = it->second;
     }
 
-    ui64 maxApiInflight;
+    ui64 maxApiInflight = 40;
     if (auto it = settings.find("maxApiInflight"); it != settings.end()) {
         maxApiInflight = FromString<ui64>(it->second);
     }

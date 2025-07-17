@@ -571,6 +571,7 @@ domains_config:
         node: [1, 2, 3, 4, 5, 6, 7, 8]
         nto_select: 5
       ssid: 1
+  ```
 
 - `block-4-2` + Auth
 
@@ -595,6 +596,7 @@ domains_config:
       ssid: 1
     security_config:
       enforce_user_token_requirement: true
+  ```
 
 - `mirror-3-dc`
 
@@ -1109,6 +1111,7 @@ resource_broker_config: !inherit
     limit:
       cpu: 4
 ```
+
 ## Секция конфигурации `feature_flags` {#feature_flags}
 
 Для включения определённой функциональности в {{ ydb-short-name }}, нужно добавить соответствующий функциональный флаг в секцию `feature_flags` конфигурации кластера. Например, для включения поддержки векторных индексов и автопартиционирования топиков в CDC, нужно добавить следующие строки в конфигурацию:
@@ -1118,6 +1121,7 @@ feature_flags:
   enable_vector_index: true
   enable_topic_autopartitioning_for_cdc: true
 ```
+
 ### Функциональные флаги
 
 | Флаг          | Функция |

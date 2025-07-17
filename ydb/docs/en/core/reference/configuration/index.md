@@ -643,7 +643,7 @@ auth_config:
   #...
 ```
 
-| Parameter | Description | Default value
+| Parameter | Description | Default value |
 |:---|:---|:---:|
 | `min_length` | Minimal length of the password | 0 |
 | `min_lower_case_count` | Minimal count of letters in lower case | 0 |

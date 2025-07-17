@@ -31,38 +31,38 @@ Cumulative metrics (`RowReads`, `RowUpdate`, `LockAcquired`, etc.) store accumul
 
 Table structure:
 
-Column | Description | Data type | Instant/Cumulative
---- | --- | --- | ---
-`OwnerId` | ID of the SchemeShard table.<br/>Key: `0`. | `Uint64` | Instant
-`PathId` | ID of the SchemeShard path.<br/>Key: `1`. | `Uint64` | Instant
-`PartIdx` | Partition sequence number.<br/>Key: `2`. | `Uint64` | Instant
-`FollowerId` | ID of the partition tablet [follower](../concepts/glossary.md#tablet-follower). A value of 0 means the leader.<br/>Key: `3`.| `Uint32` | Instant
-`DataSize` | Approximate partition size in bytes. | `Uint64` | Instant
-`RowCount` | Approximate number of rows. | `Uint64` | Instant
-`IndexSize` | Partition index size in bytes. | `Uint64` | Instant
-`CPUCores` | Instantaneous value of the load on the partition (the share of the CPU core time spent by the actor of the partition). | `Double` | Instant
-`TabletId` | ID of the partition tablet. | `Uint64` | Instant
-`Path` | Full path to the table. | `Utf8` | Instant
-`NodeId` | ID of the partition node. | `Uint32` | Instant
-`StartTime` | Last time of the launch of the partition tablet. | `Timestamp` | Instant
-`AccessTime` | Last time of reading from the partition. | `Timestamp` | Instant
-`UpdateTime` | Last time of writing to the partition. | `Timestamp` | Instant
-`RowReads` | Number of point reads. | `Uint64` | Cumulative
-`RowUpdates` | Number of rows written. | `Uint64` | Cumulative
-`RowDeletes` | Number of rows deleted. | `Uint64` | Cumulative
-`RangeReads` | Number of range reads. | `Uint64` | Cumulative
-`RangeReadRows` | Number of rows read in ranges. | `Uint64` | Cumulative
-`InFlightTxCount` | Number of in-flight transactions. | `Uint64` | Instant
-`ImmediateTxCompleted` | Number of completed [single-shard transactions](../concepts/glossary.md#transactions). | `Uint32` | Cumulative
-`CoordinatedTxCompleted` | Number of completed [distributed transactions](../concepts/glossary.md#transactions). | `Uint64` | Cumulative
-`TxRejectedByOverload` | Number of transactions cancelled due to [overload](../troubleshooting/performance/queries/overloaded-errors.md). | `Uint64` | Cumulative
-`TxRejectedByOutOfStorage` | Number of transactions cancelled due to lack of storage space. | `Uint64` | Cumulative
-`LastTtlRunTime` | Launch time of the last TTL erasure procedure | `Timestamp` | Instant
-`LastTtlRowsProcessed` | Number of rows checked during the last TTL erasure procedure | `Uint64` | Instant
-`LastTtlRowsErased` | Number of rows deleted during the last TTL erasure procedure | `Uint64` | Instant
-`LocksAcquired` | Number of [locks](../contributor/datashard-locks-and-change-visibility.md) acquired. | `Uint64` | Cumulative
-`LocksWholeShard` | The number of ["whole shard" locks](../contributor/datashard-locks-and-change-visibility.md#limitations) taken. | `Uint64` | Cumulative
-`LocksBroken` | Number of [broken locks](../contributor/datashard-locks-and-change-visibility.md#high-level-overview). | `Uint64` | Cumulative
+| Column | Description | Data type | Instant/Cumulative |
+| --- | --- | --- | --- |
+| `OwnerId` | ID of the SchemeShard table.<br/>Key: `0`. | `Uint64` | Instant |
+| `PathId` | ID of the SchemeShard path.<br/>Key: `1`. | `Uint64` | Instant |
+| `PartIdx` | Partition sequence number.<br/>Key: `2`. | `Uint64` | Instant |
+| `FollowerId` | ID of the partition tablet [follower](../concepts/glossary.md#tablet-follower). A value of 0 means the leader.<br/>Key: `3`.| `Uint32` | Instant |
+| `DataSize` | Approximate partition size in bytes. | `Uint64` | Instant |
+| `RowCount` | Approximate number of rows. | `Uint64` | Instant |
+| `IndexSize` | Partition index size in bytes. | `Uint64` | Instant |
+| `CPUCores` | Instantaneous value of the load on the partition (the share of the CPU core time spent by the actor of the partition). | `Double` | Instant |
+| `TabletId` | ID of the partition tablet. | `Uint64` | Instant |
+| `Path` | Full path to the table. | `Utf8` | Instant |
+| `NodeId` | ID of the partition node. | `Uint32` | Instant |
+| `StartTime` | Last time of the launch of the partition tablet. | `Timestamp` | Instant |
+| `AccessTime` | Last time of reading from the partition. | `Timestamp` | Instant |
+| `UpdateTime` | Last time of writing to the partition. | `Timestamp` | Instant |
+| `RowReads` | Number of point reads. | `Uint64` | Cumulative |
+| `RowUpdates` | Number of rows written. | `Uint64` | Cumulative |
+| `RowDeletes` | Number of rows deleted. | `Uint64` | Cumulative |
+| `RangeReads` | Number of range reads. | `Uint64` | Cumulative |
+| `RangeReadRows` | Number of rows read in ranges. | `Uint64` | Cumulative |
+| `InFlightTxCount` | Number of in-flight transactions. | `Uint64` | Instant |
+| `ImmediateTxCompleted` | Number of completed [single-shard transactions](../concepts/glossary.md#transactions). | `Uint32` | Cumulative |
+| `CoordinatedTxCompleted` | Number of completed [distributed transactions](../concepts/glossary.md#transactions). | `Uint64` | Cumulative |
+| `TxRejectedByOverload` | Number of transactions cancelled due to [overload](../troubleshooting/performance/queries/overloaded-errors.md). | `Uint64` | Cumulative |
+| `TxRejectedByOutOfStorage` | Number of transactions cancelled due to lack of storage space. | `Uint64` | Cumulative |
+| `LastTtlRunTime` | Launch time of the last TTL erasure procedure | `Timestamp` | Instant |
+| `LastTtlRowsProcessed` | Number of rows checked during the last TTL erasure procedure | `Uint64` | Instant |
+| `LastTtlRowsErased` | Number of rows deleted during the last TTL erasure procedure | `Uint64` | Instant |
+| `LocksAcquired` | Number of [locks](../contributor/datashard-locks-and-change-visibility.md) acquired. | `Uint64` | Cumulative |
+| `LocksWholeShard` | The number of ["whole shard" locks](../contributor/datashard-locks-and-change-visibility.md#limitations) taken. | `Uint64` | Cumulative |
+| `LocksBroken` | Number of [broken locks](../contributor/datashard-locks-and-change-visibility.md#high-level-overview). | `Uint64` | Cumulative |
 
 ### Example queries {#partitions-examples}
 
@@ -340,6 +340,7 @@ ORDER BY IntervalEnd desc, CPUCores desc
 ## Users, groups, and access rights {#auth}
 
 The following system views contain information about users, access groups, user membership in groups, as well as information about access rights granted to groups or directly to users.
+
 ## History of partitions with broken locks {#top-tli-partitions}
 
 The following system views contain a history of moments with a non-zero number of broken [locks](../contributor/datashard-locks-and-change-visibility.md) `LocksBroken` in individual partitions of DB tables:

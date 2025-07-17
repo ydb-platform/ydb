@@ -107,7 +107,7 @@ class TKafkaTestClient {
 
         TMessagePtr<TListGroupsResponseData> ListGroups(TListGroupsRequestData request);
 
-        TMessagePtr<TListGroupsResponseData> ListGroups(const std::vector<std::optional<TString>>& statesFilter);
+        TMessagePtr<TListGroupsResponseData> ListGroups(const std::vector<std::optional<TString>>& statesFilter = {});
 
         TMessagePtr<TDescribeGroupsResponseData> DescribeGroups(TDescribeGroupsRequestData& request);
 

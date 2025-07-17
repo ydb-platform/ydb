@@ -395,7 +395,7 @@ public:
 
     bool HandleError(TEvPQ::TEvError *ev, const TActorContext& ctx)
     {
-        PQ_LOG_D("Answer error topic: '" << TopicName << "'" <<
+        PQ_LOG_ERROR("Answer error topic: '" << TopicName << "'" <<
                  " partition: " << Partition <<
                  " messageNo: " << MessageNo <<
                  " requestId: " << ReqId <<
@@ -2704,10 +2704,18 @@ void TPersQueue::HandleEventForSupportivePartition(const ui64 responseCookie,
         }
     } else {
         if (!req.GetNeedSupportivePartition()) {
+            // missing supportivce partition in kafka transaction means that we already committed and deleted transaction for current producerId + producerEpoch
+            NPersQueue::NErrorCode::EErrorCode errorCode = writeId.KafkaApiTransaction ?
+                NPersQueue::NErrorCode::KAFKA_TRANSACTION_MISSING_SUPPORTIVE_PARTITION : 
+                NPersQueue::NErrorCode::PRECONDITION_FAILED;
+            TString error = writeId.KafkaApiTransaction ?
+                "Kafka transaction and there is no supportive partition for current producerId and producerEpoch. It means GetOwnership request was not called from TPartitionWriter" :
+                "lost messages";
+
             ReplyError(ctx,
                        responseCookie,
-                       NPersQueue::NErrorCode::PRECONDITION_FAILED,
-                       "lost messages");
+                       errorCode,
+                       error);
             return;
         }
 

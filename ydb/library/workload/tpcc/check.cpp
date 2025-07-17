@@ -96,7 +96,8 @@ TFuture<void> BaseCheckDistrictTable(TQueryClient& client, const TString& path, 
             }
 
             if (int(rowCount) != expectedCount) {
-                ythrow yexception() << "District count is " << rowCount << " and not " << expectedCount << " in " << fullPath;
+                ythrow yexception() << "District count is " << rowCount << " and not "
+                    << expectedCount << " in " << fullPath;
             }
 
             int minWh = *parser.ColumnParser("min_w_id").GetOptionalInt32();
@@ -152,7 +153,8 @@ TFuture<void> BaseCheckCustomerTable(TQueryClient& client, const TString& path, 
             }
 
             if (int(rowCount) != expectedCount) {
-                ythrow yexception() << "Customer count is " << rowCount << " and not " << expectedCount << " in " << fullPath;
+                ythrow yexception() << "Customer count is " << rowCount << " and not "
+                    << expectedCount << " in " << fullPath;
             }
 
             int minWh = *parser.ColumnParser("min_w_id").GetOptionalInt32();
@@ -259,7 +261,8 @@ TFuture<void> BaseCheckStockTable(TQueryClient& client, const TString& path, int
             }
 
             if (int(rowCount) != expectedCount) {
-                ythrow yexception() << "Stock count is " << rowCount << " and not " << expectedCount << " in " << fullPath;
+                ythrow yexception() << "Stock count is " << rowCount << " and not "
+                    << expectedCount << " in " << fullPath;
             }
 
             int minWh = *parser.ColumnParser("min_w_id").GetOptionalInt32();
@@ -320,7 +323,8 @@ TFuture<void> BaseCheckOorderTable(TQueryClient& client, const TString& path, in
             }
 
             if (int(rowCount) != expectedCount) {
-                ythrow yexception() << "Order count is " << rowCount << " and not " << expectedCount << " in " << fullPath;
+                ythrow yexception() << "Order count is " << rowCount << " and not "
+                    << expectedCount << " in " << fullPath;
             }
 
             int minWh = *parser.ColumnParser("min_w_id").GetOptionalInt32();
@@ -385,7 +389,8 @@ TFuture<void> BaseCheckNewOrderTable(TQueryClient& client, const TString& path, 
             }
 
             if (int(rowCount) != expectedCount) {
-                ythrow yexception() << "New order count is " << rowCount << " and not " << expectedCount << " in " << fullPath;
+                ythrow yexception() << "New order count is " << rowCount << " and not "
+                    << expectedCount << " in " << fullPath;
             }
 
             int minWh = *parser.ColumnParser("min_w_id").GetOptionalInt32();
@@ -458,7 +463,8 @@ TFuture<void> BaseCheckOrderLineTable(TQueryClient& client, const TString& path,
             size_t maxOrders = *parser.ColumnParser("max_orders").GetOptionalUint64();
 
             if (minOrders != CUSTOMERS_PER_DISTRICT || maxOrders != CUSTOMERS_PER_DISTRICT) {
-                ythrow yexception() << "Order line order count per district is [" << minOrders << ", " << maxOrders << "] instead of ["
+                ythrow yexception() << "Order line order count per district is ["
+                     << minOrders << ", " << maxOrders << "] instead of ["
                      << CUSTOMERS_PER_DISTRICT << ", " << CUSTOMERS_PER_DISTRICT << "] in " << fullPath;
             }
         } catch (const std::exception& e) {
@@ -498,7 +504,8 @@ TFuture<void> BaseCheckHistoryTable(TQueryClient& client, const TString& path, i
             }
 
             if (int(rowCount) != expectedCount) {
-                ythrow yexception() << "History count is " << rowCount << " and not " << expectedCount << " in " << fullPath;
+                ythrow yexception() << "History count is " << rowCount << " and not "
+                    << expectedCount << " in " << fullPath;
             }
 
             int minWh = *parser.ColumnParser("min_w_id").GetOptionalInt32();
@@ -518,6 +525,20 @@ TFuture<void> BaseCheckHistoryTable(TQueryClient& client, const TString& path, i
 
 // based on checks in TPC-C for CockroachDB
 
+TFuture<void> CheckNoRows(TQueryClient& client, const TString& query) {
+    return client.RetryQuery([query](TSession session) {
+        return session.ExecuteQuery(query, TTxControl::NoTx());
+    }).Apply([](const TFuture<TExecuteQueryResult>& future) {
+        auto result = future.GetValueSync();
+        ThrowIfError(result, TStringBuilder() << "query failed");
+
+        TResultSetParser parser(result.GetResultSet(0));
+        if (parser.TryNextRow()) {
+            ythrow yexception();
+        }
+    });
+}
+
 TFuture<void> ConsistencyCheck3321(TQueryClient& client, const TString& path) {
 	// 3.3.2.1 Entries in the WAREHOUSE and DISTRICT tables must satisfy the relationship:
 	// W_YTD = sum (D_YTD)
@@ -525,12 +546,9 @@ TFuture<void> ConsistencyCheck3321(TQueryClient& client, const TString& path) {
     TString query = std::format(R"(
         PRAGMA TablePathPrefix("{}");
 
-        $districtData = SELECT
-            D_W_ID, sum(D_YTD) AS sum_d_ytd
-        FROM
-            `{}`
-        GROUP BY
-            D_W_ID;
+        $districtData = SELECT D_W_ID, sum(D_YTD) AS sum_d_ytd
+        FROM `{}`
+        GROUP BY D_W_ID;
 
         SELECT w.W_ID as w_id, w.W_YTD as w_ytd, d.sum_d_ytd as sum_d_ytd
         FROM `{}` as w
@@ -539,17 +557,82 @@ TFuture<void> ConsistencyCheck3321(TQueryClient& client, const TString& path) {
         LIMIT 1;
     )", path.c_str(), TABLE_DISTRICT, TABLE_WAREHOUSE);
 
-    return client.RetryQuery([query](TSession session) {
-        return session.ExecuteQuery(query, TTxControl::NoTx());
-    }).Apply([](const TFuture<TExecuteQueryResult>& future) {
-        auto result = future.GetValueSync();
-        ThrowIfError(result, TStringBuilder() << "Check 3.3.2.1 failed");
+    return CheckNoRows(client, query);
+}
 
-        TResultSetParser parser(result.GetResultSet(0));
-        if (parser.TryNextRow()) {
-            ythrow yexception() << "Check 3.3.2.1 failed: D_W_ID and sum(D_YTD) mismatch";
-        }
-    });
+TFuture<void> ConsistencyCheck3322(TQueryClient& client, const TString& path) {
+	// Entries in the DISTRICT, ORDER, and NEW-ORDER tables must satisfy the relationship:
+	// D_NEXT_O_ID - 1 = max(O_ID) = max(NO_O_ID)
+
+    TString query = std::format(R"(
+        PRAGMA TablePathPrefix("{}");
+
+        $district_data = SELECT D_W_ID, D_ID, D_NEXT_O_ID
+        FROM `{}`
+        ORDER BY D_W_ID, D_ID;
+
+        $order_data = SELECT O_W_ID, O_D_ID, MAX(O_ID) as max_o_id
+        FROM `{}`
+        GROUP BY O_W_ID, O_D_ID
+        ORDER BY O_W_ID, O_D_ID;
+
+        $new_order_data = SELECT NO_W_ID, NO_D_ID, MAX(NO_O_ID) as max_no_o_id
+        FROM `{}`
+        GROUP BY NO_W_ID, NO_D_ID
+        ORDER BY NO_W_ID, NO_D_ID;
+
+        SELECT * FROM $district_data as d
+        LEFT JOIN $order_data as o ON d.D_W_ID = o.O_W_ID AND d.D_ID = o.O_D_ID
+        LEFT JOIN $new_order_data as no ON d.D_W_ID = no.NO_W_ID AND d.D_ID = no.NO_D_ID
+        WHERE (d.D_NEXT_O_ID - 1) != o.max_o_id OR o.max_o_id != no.max_no_o_id
+        LIMIT 1;
+    )", path.c_str(), TABLE_DISTRICT, TABLE_OORDER, TABLE_NEW_ORDER);
+
+    return CheckNoRows(client, query);
+}
+
+TFuture<void> ConsistencyCheck3323(TQueryClient& client, const TString& path) {
+	// max(NO_O_ID) - min(NO_O_ID) + 1 = # of rows in new_order for each warehouse/district
+
+    TString query = std::format(R"(
+        PRAGMA TablePathPrefix("{}");
+
+        $aggregation = SELECT
+            NO_W_ID, NO_D_ID, (count(*) - (max(NO_O_ID) - min(NO_O_ID) + 1)) as delta
+        FROM
+            `{}`
+        GROUP BY
+            NO_W_ID, NO_D_ID;
+
+        SELECT delta from $aggregation WHERE delta != 0 LIMIT 1;
+    )", path.c_str(), TABLE_NEW_ORDER);
+
+    return CheckNoRows(client, query);
+}
+
+TFuture<void> ConsistencyCheck3324(TQueryClient& client, const TString& path) {
+	// sum(O_OL_CNT) = [number of rows in the ORDER-LINE table for this district]
+
+    TString query = std::format(R"(
+        PRAGMA TablePathPrefix("{}");
+
+        $order_data = SELECT O_W_ID, O_D_ID, SUM(O_OL_CNT) as sum_ol_cnt
+        FROM `{}`
+        GROUP BY O_W_ID, O_D_ID
+        ORDER BY O_W_ID, O_D_ID;
+
+        $order_line_data = SELECT OL_W_ID, OL_D_ID, COUNT(*) as ol_count
+        FROM `{}`
+        GROUP BY OL_W_ID, OL_D_ID
+        ORDER BY OL_W_ID, OL_D_ID;
+
+        SELECT * FROM $order_data as o
+        FULL JOIN $order_line_data as ol ON o.O_W_ID = ol.OL_W_ID AND o.O_D_ID = ol.OL_D_ID
+        WHERE o.sum_ol_cnt != ol.ol_count
+        LIMIT 1;
+    )", path.c_str(), TABLE_OORDER, TABLE_ORDER_LINE);
+
+    return CheckNoRows(client, query);
 }
 
 //-----------------------------------------------------------------------------
@@ -570,7 +653,8 @@ private:
     void WaitCheck(const TFuture<void>& future, const std::string& description);
 
     void BaseCheck(TQueryClient& client);
-    void ConsistencyCheck(TQueryClient& client);
+    void ConsistencyCheckPart1(TQueryClient& client);
+    void ConsistencyCheckPart2(TQueryClient& client);
 
 private:
     NConsoleClient::TClientCommand::TConfig ConnectionConfig;
@@ -589,14 +673,31 @@ void TPCCChecker::CheckSync() {
     TDriver driver = NConsoleClient::TYdbCommand::CreateDriver(connectionConfigCopy);
     TQueryClient queryClient(driver);
 
-    BaseCheck(queryClient);
-    ConsistencyCheck(queryClient);
+    // Each member starts multiple async checks. To evenly load the cluster we
+    // split checks into such "batches" and execute batch-by-batch
+    std::vector<void (TPCCChecker::*)(TQueryClient&)> checkFunctions = {
+        &TPCCChecker::BaseCheck,
+        &TPCCChecker::ConsistencyCheckPart1,
+        &TPCCChecker::ConsistencyCheckPart2
+    };
 
-    for (auto& [future, description]: RunningChecks) {
-        WaitCheck(future, description);
+    for (auto& checkFunction : checkFunctions) {
+        (this->*checkFunction)(queryClient);
+
+        for (auto& [future, description]: RunningChecks) {
+            WaitCheck(future, description);
+        }
+
+        if (FailedChecksCount != 0) {
+            Cout << "Some checks failed, aborting!" << Endl;
+            driver.Stop(true);
+            std::exit(1);
+        }
+
+        RunningChecks.clear();
     }
 
-    // to flush
+    // to flush any pending logs
     LogBackend->ReopenLog();
 
     if (FailedChecksCount == 0) {
@@ -646,9 +747,17 @@ void TPCCChecker::BaseCheck(TQueryClient& client) {
     }
 }
 
-void TPCCChecker::ConsistencyCheck(TQueryClient& client) {
+void TPCCChecker::ConsistencyCheckPart1(TQueryClient& client) {
     RunningChecks.insert(RunningChecks.end(), {
         { ConsistencyCheck3321(client, Config.Path), "3.3.2.1" },
+        { ConsistencyCheck3322(client, Config.Path), "3.3.2.2" },
+    });
+}
+
+void TPCCChecker::ConsistencyCheckPart2(TQueryClient& client) {
+    RunningChecks.insert(RunningChecks.end(), {
+        { ConsistencyCheck3323(client, Config.Path), "3.3.2.3" },
+        { ConsistencyCheck3324(client, Config.Path), "3.3.2.4" },
     });
 }
 

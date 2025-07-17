@@ -1003,6 +1003,11 @@ TStorageSettingsBuilder& TStorageSettingsBuilder::SetStoreExternalBlobs(bool ena
     return *this;
 }
 
+TStorageSettingsBuilder& TStorageSettingsBuilder::SetExternalDataChannelsCount(uint32_t count) {
+    Impl_->Proto.set_external_data_channels_count(count);
+    return *this;
+}
+
 TStorageSettings TStorageSettingsBuilder::Build() const {
     return TStorageSettings(Impl_->Proto);
 }

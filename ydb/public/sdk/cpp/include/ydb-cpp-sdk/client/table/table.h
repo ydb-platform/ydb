@@ -790,6 +790,7 @@ public:
     TStorageSettingsBuilder& SetTabletCommitLog1(const std::string& media);
     TStorageSettingsBuilder& SetExternal(const std::string& media);
     TStorageSettingsBuilder& SetStoreExternalBlobs(bool enabled);
+    TStorageSettingsBuilder& SetExternalDataChannelsCount(uint32_t count);
 
     TStorageSettings Build() const;
 
@@ -861,6 +862,11 @@ public:
 
     TTableStorageSettingsBuilder& SetStoreExternalBlobs(bool enabled) {
         Builder_.SetStoreExternalBlobs(enabled);
+        return *this;
+    }
+
+    TTableStorageSettingsBuilder& SetExternalDataChannelsCount(uint32_t count) {
+        Builder_.SetExternalDataChannelsCount(count);
         return *this;
     }
 
@@ -1478,6 +1484,11 @@ public:
 
     TAlterStorageSettingsBuilder& SetStoreExternalBlobs(bool enabled) {
         Builder_.SetStoreExternalBlobs(enabled);
+        return *this;
+    }
+
+    TAlterStorageSettingsBuilder& SetExternalDataChannelsCount(uint32_t count) {
+        Builder_.SetExternalDataChannelsCount(count);
         return *this;
     }
 

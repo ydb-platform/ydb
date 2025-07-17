@@ -409,7 +409,7 @@ message TPDiskLocation {
 message TRestartPDisk {
     oneof PDisk {
         NKikimrBlobStorage.TPDiskId TargetPDiskId = 1;
-        TPDiskLocation TargetPDiskLocation = 2;   
+        TPDiskLocation TargetPDiskLocation = 2;
     }
 }
 
@@ -426,6 +426,15 @@ message TStopPDisk {
         NKikimrBlobStorage.TPDiskId TargetPDiskId = 1;
         TPDiskLocation TargetPDiskLocation = 2;
     }
+}
+
+message TMovePDisk {
+    message TPDisk {
+        NKikimrBlobStorage.TPDiskId TargetPDiskId = 1;
+        TPDiskLocation TargetPDiskLocation = 2;
+    }
+    TPDisk SourcePDisk = 1;
+    TPDisk DestinationPDisk = 2;
 }
 
 message TSetScrubPeriodicity {
@@ -592,6 +601,7 @@ message TConfigRequest {
             TSetPDiskReadOnly SetPDiskReadOnly = 49;
             TStopPDisk StopPDisk = 50;
             TGetInterfaceVersion GetInterfaceVersion = 51;
+            TMovePDisk MovePDisk = 53;
 
             // commands intended for internal use
             TReassignGroupDisk ReassignGroupDisk = 19;

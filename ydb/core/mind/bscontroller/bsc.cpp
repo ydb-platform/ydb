@@ -833,6 +833,7 @@ ui32 TBlobStorageController::GetEventPriority(IEventHandle *ev) {
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kSetPDiskReadOnly:
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kStopPDisk:
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kGetInterfaceVersion:
+                    case NKikimrBlobStorage::TConfigRequest::TCommand::kMovePDisk:
                         return 2; // read-write commands go with higher priority as they are needed to keep cluster intact
 
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kReadHostConfig:

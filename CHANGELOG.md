@@ -13,6 +13,7 @@
 * 18371:merge to [stable-25-1](https://github.com/ydb-platform/ydb/tree/stable-25-1) [#18371](https://github.com/ydb-platform/ydb/pull/18371) ([Andrei Rykov](https://github.com/StekPerepolnen))
 * 19310:Added ability to enable followers (read replicas) for covered secondary indexes. [#19310](https://github.com/ydb-platform/ydb/pull/19310) ([azevaykin](https://github.com/azevaykin))
 * 19504:Implemented a [vector index](./dev/vector-indexes.md) for approximate vector search. [#19504](https://github.com/ydb-platform/ydb/pull/19504) ([kungurtsev](https://github.com/kunga))
+* 20691:YMQ: Do not send x-amz-crc32 HTTP header (AWS does not do it) [#20691](https://github.com/ydb-platform/ydb/pull/20691) ([qyryq](https://github.com/qyryq))
 
 ### Bug fixes
 
@@ -30,13 +31,16 @@
 * 18794:[Fixed](https://github.com/db-platform/adb/pull/18794) a rare [bug](https://github.com/ydb-platform/ydb/issues/18615) with PQ tablet restarts. [#18794](https://github.com/ydb-platform/ydb/pull/18794) ([Alek5andr-Kotov](https://github.com/Alek5andr-Kotov))
 * 19522:Add setting to configure drain timeout before node shutdown. #19323 [#19522](https://github.com/ydb-platform/ydb/pull/19522) ([Aleksei Kobzev](https://github.com/kobzonega))
 * 19917:When transaction duration exceeds the topic's message retention period, writing to the topic may result in inconsistent data in the partition. [#19917](https://github.com/ydb-platform/ydb/pull/19917) ([Nikolay Shestakov](https://github.com/nshestakov))
+* 20997:Fix for GROUP BY emitting multiple NULL keys when block processing is enabled [#20997](https://github.com/ydb-platform/ydb/pull/20997) ([Pavel Zuev](https://github.com/pzuev))
+* 20633:Fix for Arrow arena when allocating zero-sized region #20634
+Original commit: 7b5e0194f5ddeab1c864112b1716b70b969ac7b2 [#20633](https://github.com/ydb-platform/ydb/pull/20633) ([Ivan](https://github.com/abyss7))
 * 20242:If the CDC stream was recorded in an auto-partitioned topic, then it could stop after several splits of the topic. In this case, modification of rows in the table would result in the error that the table is overloaded. [#20242](https://github.com/ydb-platform/ydb/pull/20242) ([Nikolay Shestakov](https://github.com/nshestakov))
 * 20155:Fixed use after free in CPU scheduler, fixed verify fail in CS CPU limiter: https://github.com/ydb-platform/ydb/issues/20116 [#20155](https://github.com/ydb-platform/ydb/pull/20155) ([Pisarenko Grigoriy](https://github.com/GrigoriyPA))
 * 20083:Поправил коммит оффсетов сообщений топика при чтении. До фикса пользователь получал ошибку "Unable to navigate:path: 'Root/logbroker-federation/--cut--/stable/guidance' status: PathErrorUnknown\n". Сломали начиная с 25-1-2 [#20083](https://github.com/ydb-platform/ydb/pull/20083) ([Nikolay Shestakov](https://github.com/nshestakov))
 
 ### YDB UI
-* Added [diagnostics](https://github.com/ydb-platform/ydb-embedded-ui/issues/2017) and [statistics](https://github.com/ydb-platform/ydb-embedded-ui/issues/15884) for long running queries.
-* [Improved](https://github.com/ydb-platform/ydb-embedded-ui/issues/16766) tracing for describe handler.
+
+* None:Fixed an [issue](https://github.com/ydb-platform/ydb-embedded-ui/issues/17226) with Optional<Struct> columns are always shown as NULLs.
 * 17839:[Fixed](https://github.com/ydb-platform/ydb/pull/17839) an [issue](https://github.com/ydb-platform/ydb-embedded-ui/issues/18615) where not all tablets are shown for pers queue group on the tablets tab in diagnostics. #15230 ([Alexey Efimov](https://github.com/adameat))
 * Fixed an [issue](https://github.com/ydb-platform/ydb-embedded-ui/issues/14992) with empty nodes groups for disconnected nodes.
 * Fixed an [issue](https://github.com/ydb-platform/ydb-embedded-ui/issues/14180) when tables storage is 0.
@@ -61,7 +65,6 @@
 * Fixed an [issue](https://github.com/ydb-platform/ydb/issues/19810) - minimized returned data to avoid large responses.
 * Don't report fake limit as total node memory.
 * Fixed an [issue](https://github.com/ydb-platform/ydb/issues/19676) – make nodes less critical (to make cluster less critical). [#20053](https://github.com/ydb-platform/ydb/pull/20053) ([Alexey Efimov](https://github.com/adameat))
-
 
 ### Performance
 

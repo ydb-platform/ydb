@@ -40,10 +40,10 @@ public:
             return {};
         }
         auto result = std::move(Data.front());
-        AFL_VERIFY(RecordsCount >= result->GetResultBatch().num_rows());
         RecordsCount -= result->GetResultBatch().num_rows();
+        AFL_VERIFY(RecordsCount >= 0);
         Data.pop_front();
-        return result;
+        return std::move(result);
     }
     bool empty() const {
         return Data.empty();

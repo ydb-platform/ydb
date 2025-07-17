@@ -61,7 +61,7 @@ public:
         }
     };
 
-    std::shared_ptr<NReader::NSimple::IDataSource> Construct(const std::shared_ptr<NReader::NSimple::TSpecialReadContext>& context) {
+    std::shared_ptr<NReader::NSimple::IDataSource> Construct(const std::shared_ptr<NReader::NCommon::TSpecialReadContext>& context) {
         AFL_VERIFY(SourceId);
         auto tasks = Granule->GetOptimizerPlanner().GetTasksDescription();
         return std::make_shared<TSourceData>(
@@ -86,8 +86,7 @@ private:
     virtual std::shared_ptr<NReader::NCommon::IDataSource> DoExtractNext(
         const std::shared_ptr<NReader::NCommon::TSpecialReadContext>& context) override {
         AFL_VERIFY(Constructors.size());
-        std::shared_ptr<NReader::NCommon::IDataSource> result =
-            Constructors.front().Construct(std::static_pointer_cast<NReader::NSimple::TSpecialReadContext>(context));
+        std::shared_ptr<NReader::NCommon::IDataSource> result = Constructors.front().Construct(context);
         Constructors.pop_front();
         return result;
     }

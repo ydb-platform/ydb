@@ -149,6 +149,7 @@ private:
     THolder<NKqp::TEvKqpCompute::TEvScanData> Result;
     std::shared_ptr<IScanCursor> CurrentLastReadKey;
     bool Finished = false;
+    ui32 BuildResultCounter = 0;
     std::optional<TMonotonic> LastResultInstant;
 
     class TBlobStats {

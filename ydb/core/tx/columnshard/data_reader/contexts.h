@@ -41,14 +41,17 @@ public:
     }
 
     ui64 GetMemoryProcessId() const {
+        AFL_VERIFY(MemoryProcessGuard);
         return MemoryProcessGuard->GetProcessId();
     }
 
     ui64 GetMemoryScopeId() const {
+        AFL_VERIFY(MemoryScopeGuard);
         return MemoryScopeGuard->GetScopeId();
     }
 
     ui64 GetMemoryGroupId() const {
+        AFL_VERIFY(MemoryGroupGuard);
         return MemoryGroupGuard->GetGroupId();
     }
 
@@ -88,9 +91,10 @@ public:
     TCurrentContext(const std::shared_ptr<NGroupedMemoryManager::TProcessGuard>& memoryProcessGuard)
         : MemoryProcessGuard(memoryProcessGuard)
     {
-        AFL_VERIFY(MemoryProcessGuard);
-        MemoryScopeGuard = MemoryProcessGuard->BuildScopeGuard(MemoryScopeIdCounter.Inc());
-        MemoryGroupGuard = MemoryScopeGuard->BuildGroupGuard();
+        if (memoryProcessGuard) {
+            MemoryScopeGuard = MemoryProcessGuard->BuildScopeGuard(MemoryScopeIdCounter.Inc());
+            MemoryGroupGuard = MemoryScopeGuard->BuildGroupGuard();
+        }
     }
 
     void SetPortionAccessors(std::vector<TPortionDataAccessor>&& acc) {
@@ -252,12 +256,21 @@ private:
     YDB_READONLY_DEF(std::shared_ptr<ISnapshotSchema>, ActualSchema);
     YDB_READONLY(NBlobOperations::EConsumer, Consumer, NBlobOperations::EConsumer::UNDEFINED);
     YDB_READONLY_DEF(TString, ExternalTaskId);
-    YDB_READONLY_DEF(std::shared_ptr<NGroupedMemoryManager::TProcessGuard>, MemoryProcessGuard);
+    std::shared_ptr<NGroupedMemoryManager::TProcessGuard> MemoryProcessGuard;
 
 public:
     TRequestInput(const std::vector<TPortionInfo::TConstPtr>& portions, const std::shared_ptr<const TVersionedIndex>& versions,
         const NBlobOperations::EConsumer consumer, const TString& externalTaskId,
         const std::shared_ptr<NGroupedMemoryManager::TProcessGuard>& memoryProcessGuard);
+
+    std::shared_ptr<NGroupedMemoryManager::TProcessGuard> GetMemoryProcessGuardVerified() const {
+        AFL_VERIFY(MemoryProcessGuard);
+        return MemoryProcessGuard;
+    }
+
+    bool HasMemoryProcessGuard() const {
+        return !!MemoryProcessGuard;
+    }
 };
 
 }   // namespace NKikimr::NOlap::NDataFetcher

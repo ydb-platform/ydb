@@ -1413,6 +1413,7 @@ namespace NKikimr {
             req.CompactBlocks = bool(ev->Get()->Mask & Mask(EHullDbType::Blocks));
             req.CompactBarriers = bool(ev->Get()->Mask & Mask(EHullDbType::Barriers));
             req.Mode = ev->Get()->Mode;
+            req.Force = ev->Get()->Force;
             req.ClientId = ev->Sender;
             req.ClientCookie = ev->Cookie;
             req.Reply = std::make_unique<TEvCompactVDiskResult>();

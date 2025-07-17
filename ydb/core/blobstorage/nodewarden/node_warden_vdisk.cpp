@@ -186,6 +186,19 @@ namespace NKikimr::NStorage {
         vdiskConfig->FreshCompMaxInFlightWrites = FreshCompMaxInFlightWrites;
         vdiskConfig->HullCompMaxInFlightWrites = HullCompMaxInFlightWrites;
         vdiskConfig->HullCompMaxInFlightReads = HullCompMaxInFlightReads;
+        vdiskConfig->HullCompFullCompRateSec = HullCompFullCompRateSec;
+        vdiskConfig->HullCompThrottlerReadIOPSLimit = HullCompThrottlerReadIOPSLimit;
+        vdiskConfig->HullCompThrottlerReadIOPSRate = HullCompThrottlerReadIOPSRate;
+        vdiskConfig->HullCompFullCompRateSec = HullCompFullCompRateSec;
+        vdiskConfig->HullCompThrottlerReadBytesLimit = HullCompThrottlerReadBytesLimit;
+        vdiskConfig->HullCompThrottlerReadBytesRate = HullCompThrottlerReadBytesRate;
+        vdiskConfig->HullCompThrottlerReadBytesIntervalMs = HullCompThrottlerReadBytesIntervalMs;
+        vdiskConfig->HullCompThrottlerWriteIOPSLimit = HullCompThrottlerWriteIOPSLimit;
+        vdiskConfig->HullCompThrottlerWriteIOPSRate = HullCompThrottlerWriteIOPSRate;
+        vdiskConfig->HullCompThrottlerWriteIOPSIntervalMs = HullCompThrottlerWriteIOPSIntervalMs;
+        vdiskConfig->HullCompThrottlerWriteBytesLimit = HullCompThrottlerWriteBytesLimit;
+        vdiskConfig->HullCompThrottlerWriteBytesRate = HullCompThrottlerWriteBytesRate;
+        vdiskConfig->HullCompThrottlerWriteBytesIntervalMs = HullCompThrottlerWriteBytesIntervalMs;
 
         vdiskConfig->EnableLocalSyncLogDataCutting = EnableLocalSyncLogDataCutting;
         if (deviceType == NPDisk::EDeviceType::DEVICE_TYPE_ROT) {

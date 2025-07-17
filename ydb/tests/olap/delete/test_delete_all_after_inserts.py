@@ -97,7 +97,7 @@ class TestDeleteAllAfterInserts(DeleteTestBase):
                 if reversed:
                     assert row["id1"] < prev_row["id1"]
                 else:
-                    assert row["id1"] < prev_row["id1"]
+                    assert row["id1"] > prev_row["id1"]
             prev_row = row
 
     def _test_update_all(self, rows_to_insert, insert_iterations, all_rows_ids=None):

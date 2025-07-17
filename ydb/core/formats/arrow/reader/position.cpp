@@ -46,21 +46,23 @@ std::optional<TSortableBatchPosition::TFoundPosition> TSortableBatchPosition::Fi
         }
     }
 
-    const auto comparePositions = [reverse = position.ReverseSort, &posStart, &posFinish]() -> std::partial_ordering {
-        if (reverse) {
-            if (posFinish + 1 == posStart) {
-                return std::partial_ordering::equivalent;
+    const auto checkBoundIsFound = position.ReverseSort ?
+        [](const ui64 start, const ui64 finish) -> bool {
+            if (finish + 1 == start) {
+                return true;
             }
-            return posFinish + 1 < posStart ? std::partial_ordering::less : std::partial_ordering::greater;
-        } else {
-            if (posStart + 1 == posFinish) {
-                return std::partial_ordering::equivalent;
+            AFL_VERIFY(finish + 1 < start)("finish", finish)("start", start);
+            return false;
+        } :
+        [](const ui64 start, const ui64 finish) -> bool {
+            if (start + 1 == finish) {
+                return true;
             }
-            return posStart + 1 < posFinish ? std::partial_ordering::less : std::partial_ordering::greater;
-        }
-    };
+            AFL_VERIFY(start + 1 < finish)("start", start)("finish", finish);
+            return false;
+        };
 
-    while (comparePositions() == std::partial_ordering::less) {
+    while (!checkBoundIsFound(posStart, posFinish)) {
         AFL_VERIFY(guard.InitSortingPosition(0.5 * (posStart + posFinish)));
         const auto comparision = position.Compare(forFound);
         if (cond(comparision)) {
@@ -69,7 +71,7 @@ std::optional<TSortableBatchPosition::TFoundPosition> TSortableBatchPosition::Fi
             posStart = position.Position;
         }
     }
-    AFL_VERIFY(comparePositions() == std::partial_ordering::equivalent)("finish", posFinish)("start", posStart)("reverse", position.ReverseSort);
+    AFL_VERIFY(checkBoundIsFound(posStart, posFinish))("finish", posFinish)("start", posStart)("reverse", position.ReverseSort);
     AFL_VERIFY(guard.InitSortingPosition(posFinish));
     const auto comparision = position.Compare(forFound);
     AFL_VERIFY(cond(comparision));

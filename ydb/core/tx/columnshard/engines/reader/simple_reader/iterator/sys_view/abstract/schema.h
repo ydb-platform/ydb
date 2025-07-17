@@ -32,7 +32,7 @@ protected:
             };
             NTable::TScheme::TTableSchema schema;
             NIceDb::NHelpers::TStaticSchemaFiller<TSysViewSchema>::Fill(schema);
-            for (ui32 i = 1; i < schema.Columns.size(); ++i) {
+            for (ui32 i = 1; i <= schema.Columns.size(); ++i) {
                 auto it = schema.Columns.find(i);
                 AFL_VERIFY(it != schema.Columns.end());
                 pred(it->second.Name, it->second.PType.GetTypeId());

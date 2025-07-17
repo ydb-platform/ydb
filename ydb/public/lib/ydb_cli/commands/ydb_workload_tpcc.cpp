@@ -278,7 +278,8 @@ void TCommandTPCCCheck::Config(TConfig& config) {
             .RequiredArgument("INT").Required().StoreResult(&RunConfig->WarehouseCount);
 
     config.Opts->AddLongOption(
-        "just-imported", TStringBuilder() << "Data has been just imported, no runs done")
+        "just-imported", TStringBuilder() << "Turns on additional checks. "
+                << "Should be used only when data has been just imported and no runs have been done yet.")
             .Optional().StoreTrue(&RunConfig->JustImported);
 
     config.Opts->AddLongOption(

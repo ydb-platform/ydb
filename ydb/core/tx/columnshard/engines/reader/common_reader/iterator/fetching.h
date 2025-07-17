@@ -356,8 +356,7 @@ public:
         : TBase("PROGRAM_EXECUTION")
         , Program(program) {
         for (auto&& i : Program->GetNodes()) {
-            Signals.emplace(
-                i.first, std::make_shared<TFetchingStepSignals>(TFetchingStepsSignalsCollection::GetSignals(i.second->GetSignalCategoryName())));
+            Signals.emplace(i.first, TFetchingStepsSignalsCollection::GetSignals(i.second->GetSignalCategoryName()));
         }
     }
 };

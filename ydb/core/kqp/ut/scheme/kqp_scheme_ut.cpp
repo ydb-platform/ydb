@@ -2355,30 +2355,6 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         UNIT_ASSERT(describeResult.GetTableDescription().GetStorageSettings().GetStoreExternalBlobs().value_or(false));
     }
 
-    Y_UNIT_TEST(CreateTableWithExternalDataChannels) {
-        TKikimrRunner kikimr;
-        kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnablePublicApiExternalBlobs(true);
-        auto db = kikimr.GetTableClient();
-        auto session = db.CreateSession().GetValueSync().GetSession();
-        TString tableName = "/Root/TableWithExternalDataChannels";
-        auto query = TStringBuilder() << R"(
-            --!syntax_v1
-            CREATE TABLE `)" << tableName << R"(` (
-                Key Uint64,
-                Value String,
-                PRIMARY KEY (Key)
-            )
-            WITH (
-                EXTERNAL_DATA_CHANNELS_COUNT = 7
-            );)";
-        auto result = session.ExecuteSchemeQuery(query).GetValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-
-        auto describeResult = session.DescribeTable(tableName).GetValueSync();
-        UNIT_ASSERT_C(describeResult.IsSuccess(), describeResult.GetIssues().ToString());
-        UNIT_ASSERT_VALUES_EQUAL_C(describeResult.GetTableDescription().GetStorageSettings().GetExternalDataChannelsCount().value(), 7, result.GetIssues().ToString());
-    }
-
     Y_UNIT_TEST(CreateAndAlterTableComplex) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();

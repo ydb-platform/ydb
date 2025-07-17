@@ -325,6 +325,8 @@ struct Schema : NIceDb::Schema {
         struct LayoutCorrect : Column<16, NScheme::NTypeIds::Bool> {};
         struct OperatingStatus : Column<17, NScheme::NTypeIds::Utf8> {};
         struct ExpectedStatus : Column<18, NScheme::NTypeIds::Utf8> {};
+        struct ProxyGroupId : Column<19, NScheme::NTypeIds::Uint32> {};
+        struct BridgePileId : Column<20, NScheme::NTypeIds::Uint32> {};
 
         using TKey = TableKey<GroupId>;
         using TColumns = TableColumns<
@@ -343,7 +345,9 @@ struct Schema : NIceDb::Schema {
             GetFastLatency,
             LayoutCorrect,
             OperatingStatus,
-            ExpectedStatus>;
+            ExpectedStatus,
+            ProxyGroupId,
+            BridgePileId>;
     };
 
     struct StoragePools : Table<7> {

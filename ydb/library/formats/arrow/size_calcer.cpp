@@ -258,7 +258,7 @@ ui64 GetArrayDataSize(const std::shared_ptr<arrow::Array>& column) {
     }
 
     TSizeVisitor visitor(column);
-    auto status = arrow::VisitTypeInline(*type, &visitor);
+    auto status = arrow::VisitTypeIdInline(*type, &visitor);
     Y_VERIFY_S(status.ok(), "Failed to calculate array size: " << status.ToString());
 
     ui64 bytes = visitor.GetBytes();

@@ -61,6 +61,8 @@ namespace {
                 Ctx->Runtime->SetScheduledLimit(5'000);
                 Ctx->Runtime->SetLogPriority(NKikimrServices::KAFKA_PROXY, NLog::PRI_TRACE);
                 Ctx->Runtime->SetLogPriority(NKikimrServices::PQ_WRITE_PROXY, NLog::PRI_TRACE);
+                Ctx->Runtime->SetLogPriority(NKikimrServices::PERSQUEUE, NLog::PRI_DEBUG);
+                Ctx->Runtime->SetLogPriority(NKikimrServices::PQ_TX, NLog::PRI_DEBUG);
                 TContext::TPtr kafkaContext = std::make_shared<TContext>(KafkaConfig);
                 kafkaContext->DatabasePath = "/Root/PQ";
                 ActorId = Ctx->Runtime->Register(CreateKafkaProduceActor(kafkaContext));
@@ -102,6 +104,7 @@ namespace {
 
             void AssertCorrectOptsInPartitionWriter(const TActorId& writerId, const TProducerInstanceId& producerInstanceId, const TMaybe<TString>& transactionalId) {
                 NKikimr::NPQ::TPartitionWriter* writer = dynamic_cast<NKikimr::NPQ::TPartitionWriter*>(Ctx->Runtime->FindActor(writerId));
+                UNIT_ASSERT(writer);
                 const TPartitionWriterOpts& writerOpts = writer->GetOpts();
 
                 UNIT_ASSERT_VALUES_EQUAL(*writerOpts.KafkaProducerInstanceId, producerInstanceId);
@@ -110,6 +113,16 @@ namespace {
                 } else {
                     UNIT_ASSERT(transactionalId.Empty());
                 }
+            }
+
+            THolder<TEvPersQueue::TEvResponse> CreateLostMessagesErrorResponse(ui64 cookie) {
+                auto event = MakeHolder<TEvPersQueue::TEvResponse>();
+                NKikimrClient::TResponse record;
+                record.SetErrorReason("lost messages");
+                record.SetErrorCode(::NPersQueue::NErrorCode::EErrorCode::KAFKA_TRANSACTION_MISSING_SUPPORTIVE_PARTITION);
+                record.MutablePartitionResponse()->SetCookie(cookie);
+                event->Record = record;
+                return event;
             }
         };
 
@@ -168,6 +181,53 @@ namespace {
             };
             UNIT_ASSERT(Ctx->Runtime->DispatchEvents(options3));
             UNIT_ASSERT_VALUES_EQUAL(poisonPillReceiver, firstPartitionWriterId);
+        }
+
+        Y_UNIT_TEST(OnProduceWithTransactionalId_andLostMessagesError_shouldRecreatePartitionWriterAndRetryProduce) {
+            i64 producerId = 1;
+            i32 producerEpoch = 2;
+            TActorId firstWriteRequestReceiver;
+            TActorId poisonPillReceiver;
+            TActorId secondWriteRequestReceiver;
+            int writeRequestsCounter = 0;
+            int poisonPillCounter = 0;
+            auto observer = [&](TAutoPtr<IEventHandle>& input) {
+                Cout << input->ToString() << Endl;
+                if (auto* event = input->CastAsLocal<TEvPartitionWriter::TEvWriteRequest>()) {
+                    if (writeRequestsCounter == 0) {
+                        firstWriteRequestReceiver = input->Recipient;
+                        AssertCorrectOptsInPartitionWriter(firstWriteRequestReceiver, {producerId, producerEpoch}, TransactionalId);
+                    } else if (writeRequestsCounter == 1) {
+                        secondWriteRequestReceiver = input->Recipient;
+                        AssertCorrectOptsInPartitionWriter(secondWriteRequestReceiver, {producerId, producerEpoch}, TransactionalId);
+                    }
+                    writeRequestsCounter++;
+                } else if (auto* event = input->CastAsLocal<TEvPersQueue::TEvRequest>()) {
+                    if (event->Record.GetPartitionRequest().HasCmdReserveBytes()) {
+                        Ctx->Runtime->Send(new IEventHandle(firstWriteRequestReceiver, input->Sender, CreateLostMessagesErrorResponse(event->Record.GetPartitionRequest().GetCookie()).Release()));
+                        return TTestActorRuntimeBase::EEventAction::DROP;
+                    }
+                } else if (auto* event = input->CastAsLocal<TEvents::TEvPoison>()) {
+                    if (poisonPillCounter == 0) { // only first poison pill goes to writer
+                        poisonPillReceiver = input->Recipient;
+                        poisonPillCounter++;
+                    } // we are not interested in all subsequent
+                }
+
+                return TTestActorRuntimeBase::EEventAction::PROCESS;
+            };
+            Ctx->Runtime->SetObserverFunc(observer);
+            
+            SendProduce(TransactionalId, producerId, producerEpoch);
+
+            TDispatchOptions options;
+            options.CustomFinalCondition = [&writeRequestsCounter, &poisonPillCounter]() {
+                return writeRequestsCounter > 1 && poisonPillCounter > 0;
+            };
+            UNIT_ASSERT(Ctx->Runtime->DispatchEvents(options));
+
+            UNIT_ASSERT_VALUES_UNEQUAL(firstWriteRequestReceiver, secondWriteRequestReceiver);
+            UNIT_ASSERT_VALUES_EQUAL(firstWriteRequestReceiver, poisonPillReceiver);
         }
 
         Y_UNIT_TEST(OnProduceWithoutTransactionalId_shouldNotKillOldWriter) {

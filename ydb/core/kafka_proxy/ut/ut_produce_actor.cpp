@@ -115,10 +115,10 @@ namespace {
                 }
             }
 
-            THolder<TEvPersQueue::TEvResponse> CreateLostMessagesErrorResponse(ui64 cookie) {
+            THolder<TEvPersQueue::TEvResponse> CreateMissingSupPartitionErrorResponse(ui64 cookie) {
                 auto event = MakeHolder<TEvPersQueue::TEvResponse>();
                 NKikimrClient::TResponse record;
-                record.SetErrorReason("lost messages");
+                record.SetErrorReason("expected test error");
                 record.SetErrorCode(::NPersQueue::NErrorCode::EErrorCode::KAFKA_TRANSACTION_MISSING_SUPPORTIVE_PARTITION);
                 record.MutablePartitionResponse()->SetCookie(cookie);
                 event->Record = record;
@@ -204,7 +204,7 @@ namespace {
                     writeRequestsCounter++;
                 } else if (auto* event = input->CastAsLocal<TEvPersQueue::TEvRequest>()) {
                     if (event->Record.GetPartitionRequest().HasCmdReserveBytes()) {
-                        Ctx->Runtime->Send(new IEventHandle(firstWriteRequestReceiver, input->Sender, CreateLostMessagesErrorResponse(event->Record.GetPartitionRequest().GetCookie()).Release()));
+                        Ctx->Runtime->Send(new IEventHandle(firstWriteRequestReceiver, input->Sender, CreateMissingSupPartitionErrorResponse(event->Record.GetPartitionRequest().GetCookie()).Release()));
                         return TTestActorRuntimeBase::EEventAction::DROP;
                     }
                 } else if (auto* event = input->CastAsLocal<TEvents::TEvPoison>()) {

@@ -362,7 +362,7 @@ namespace NKikimr::NBsController {
                             disintegratedByExpectedStatus.push_back(overlay->first);
                             errors = true;
                         }
-                     }
+                    }
                 }
             }
 

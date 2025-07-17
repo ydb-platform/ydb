@@ -1,4 +1,5 @@
 #include "mon.h"
+#include "mon_audit.h"
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/interconnect.h>
 #include <ydb/library/actors/http/http_proxy.h>
@@ -366,6 +367,7 @@ public:
     NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr Event;
     THttpMonRequestContainer Container;
     TIntrusivePtr<TActorMonPage> ActorMonPage;
+    TAuditParts AuditParts;
 
     THttpMonLegacyActorRequest(NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr event, TIntrusivePtr<TActorMonPage> actorMonPage)
         : Event(std::move(event))
@@ -393,6 +395,7 @@ public:
     }
 
     void ReplyWith(NHttp::THttpOutgoingResponsePtr response) {
+        AuditRequest(Event, ActorMonPage->AuditPolicy, AuditParts);
         Send(Event->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(response));
     }
 
@@ -522,6 +525,7 @@ public:
         }
         TString serializedToken;
         if (result && result->UserToken) {
+            AddUserTokenAuditParts(result->UserToken, AuditParts);
             serializedToken = result->UserToken->GetSerializedToken();
         }
         Send(ActorMonPage->TargetActorId, new NMon::TEvHttpInfo(
@@ -1026,15 +1030,14 @@ protected:
 class THttpMonAuthorizedActorRequest : public TActorBootstrapped<THttpMonAuthorizedActorRequest> {
 public:
     NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr Event;
-    TActorId TargetActorId;
+    TMon::TRegisterHandlerFields& Fields;
     TMon::TRequestAuthorizer Authorizer;
-    TVector<TString> AllowedSIDs;
+    TAuditParts AuditParts;
 
-    THttpMonAuthorizedActorRequest(NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr event, TActorId targetActorId, TMon::TRequestAuthorizer authorizer, const TVector<TString>& allowedSIDs)
+    THttpMonAuthorizedActorRequest(NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr event, TMon::TRegisterHandlerFields& fields, TMon::TRequestAuthorizer authorizer)
         : Event(std::move(event))
-        , TargetActorId(targetActorId)
+        , Fields(fields)
         , Authorizer(std::move(authorizer))
-        , AllowedSIDs(allowedSIDs)
     {}
 
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
@@ -1050,7 +1053,9 @@ public:
                 return;
             }
         }
-        Forward(Event, TargetActorId);
+
+        AuditRequest(Event, Fields.AuditPolicy);
+        Forward(Event, Fields.Handler);
         PassAway();
     }
 
@@ -1136,6 +1141,7 @@ public:
         response << "Content-Length: " << body.size() << "\r\n";
         response << "\r\n";
         response << body;
+        AuditRequest(Event, Fields.AuditPolicy);
         Send(Event->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(request->CreateResponseString(response)));
         PassAway();
     }
@@ -1158,11 +1164,14 @@ public:
         if (result.UserToken) {
             Event->Get()->UserToken = result.UserToken->GetSerializedToken();
         }
-        Forward(Event, TargetActorId);
+        AddUserTokenAuditParts(result.UserToken, AuditParts);
+        AuditRequest(Event, Fields.AuditPolicy, AuditParts);
+        Forward(Event, Fields.Handler);
         PassAway();
     }
 
     void HandleUndelivered(TEvents::TEvUndelivered::TPtr&) {
+        AuditRequest(Event, Fields.AuditPolicy);
         NHttp::THttpIncomingRequestPtr request = Event->Get()->Request;
         Send(Event->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(
             request->CreateResponseServiceUnavailable(TStringBuilder() << "Auth actor is not available")));
@@ -1174,7 +1183,7 @@ public:
         if (result.Status != Ydb::StatusIds::SUCCESS) {
             return ReplyErrorAndPassAway(result);
         }
-        if (IsTokenAllowed(result.UserToken.Get(), AllowedSIDs)) {
+        if (IsTokenAllowed(result.UserToken.Get(), Fields.AllowedSIDs)) {
             SendRequest(result);
         } else {
             return ReplyForbiddenAndPassAway("SID is not allowed");
@@ -1277,10 +1286,11 @@ public:
             auto it = Handlers.find(TString(url));
             if (it != Handlers.end()) {
                 if (it->second.UseAuth) {
-                    Register(new THttpMonAuthorizedActorRequest(std::move(ev), it->second.Handler, Authorizer, it->second.AllowedSIDs));
-                } else {
-                    Forward(ev, it->second.Handler);
+                    Register(new THttpMonAuthorizedActorRequest(std::move(ev), it->second, Authorizer));
+                    return;
                 }
+                AuditRequest(ev, it->second.AuditPolicy);
+                Forward(ev, it->second.Handler);
                 return;
             } else {
                 if (url.EndsWith('/')) {
@@ -1296,6 +1306,7 @@ public:
             }
         }
 
+        AuditRequest(ev, it->second.AuditPolicy);
         Register(new THttpMonLegacyIndexRequest(std::move(ev), IndexMonPage.Get()));
     }
 
@@ -1452,7 +1463,8 @@ NMonitoring::IMonPage* TMon::RegisterActorPage(TRegisterActorPageFields fields) 
         fields.ActorId,
         fields.AllowedSIDs ? fields.AllowedSIDs : Config.AllowedSIDs,
         fields.UseAuth ? Config.Authorizer : TRequestAuthorizer(),
-        fields.MonServiceName);
+        fields.MonServiceName,
+        fields.AuditPolicy);
     if (fields.Index) {
         fields.Index->Register(page);
         if (fields.SortPages) {

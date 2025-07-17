@@ -84,13 +84,16 @@ namespace NInterconnect::NRdma {
 
     struct TEvRdmaReadDone : NActors::TEventLocal<TEvRdmaReadDone, (ui32)ERdma::EvRdmaReadDone> {
         std::unique_ptr<NInterconnect::NRdma::TEvRdmaIoDone> Event;
-        ui16 Channel;
+        const NActors::TMonotonic ReadScheduledTs;
+        const ui16 Channel;
 
         TEvRdmaReadDone(
             std::unique_ptr<NInterconnect::NRdma::TEvRdmaIoDone> event,
+            NActors::TMonotonic readScheduledTs,
             ui16 channel
         )
             : Event(std::move(event))
+            , ReadScheduledTs(readScheduledTs)
             , Channel(channel)
         {}
     };

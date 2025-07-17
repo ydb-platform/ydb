@@ -69,8 +69,9 @@ namespace NActors {
         using namespace NInterconnect::NRdma;
 
         Y_DEBUG_ABORT_UNLESS(memReg.GetSize() >= offset + cred.GetSize());
-        auto reply = [notify, channel](NActors::TActorSystem* as, TEvRdmaIoDone* ioDone) {
-            TEvRdmaReadDone* rdmaReadDone = new TEvRdmaReadDone(std::unique_ptr<TEvRdmaIoDone>(ioDone), channel);
+        TMonotonic cur = TMonotonic::Now();
+        auto reply = [notify, channel, cur](NActors::TActorSystem* as, TEvRdmaIoDone* ioDone) {
+            TEvRdmaReadDone* rdmaReadDone = new TEvRdmaReadDone(std::unique_ptr<TEvRdmaIoDone>(ioDone), cur, channel);
                 as->Send(new IEventHandle(notify, TActorId(), rdmaReadDone));
         };
 
@@ -295,6 +296,9 @@ namespace NActors {
             LOG_ERROR_IC_SESSION("ICRDMA", "Rdma IO failed %d", ev->Get()->Event->GetErrCode());
             throw TExDestroySession({TDisconnectReason::RdmaError()});
         }
+        TMonotonic cur = TMonotonic::Now();
+        TDuration passed = cur - ev->Get()->ReadScheduledTs;
+        Metrics->UpdateRdmaReadTimeHistogram(passed.MicroSeconds());
         ProcessEvents(GetPerChannelContext(ev->Get()->Channel));
     }
 

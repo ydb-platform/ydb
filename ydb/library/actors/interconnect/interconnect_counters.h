@@ -47,6 +47,7 @@ public:
     TString GetHumanFriendlyPeerHostName() const {
         return HumanFriendlyPeerHostName.value_or(TString());
     }
+    virtual void UpdateRdmaReadTimeHistogram(ui64 value) = 0;
 
 protected:
     std::optional<TString> DataCenterId;

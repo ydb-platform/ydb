@@ -7700,6 +7700,106 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_Truncate) {
         }
     }
 
+    Y_UNIT_TEST(CompactThenTruncate) {
+        TMyEnvBase env;
+        TRowsModel rows;
+
+        env->SetLogPriority(NKikimrServices::TABLET_EXECUTOR, NActors::NLog::PRI_DEBUG);
+
+        // Start the first tablet
+        env.FireTablet(env.Edge, env.Tablet, [&env](const TActorId &tablet, TTabletStorageInfo *info) {
+            return new TTestFlatTablet(env.Edge, tablet, info);
+        });
+        env.WaitForWakeUp();
+
+        // Init schema
+        {
+            TIntrusivePtr<TCompactionPolicy> policy = new TCompactionPolicy();
+            env.SendSync(rows.MakeScheme(std::move(policy)));
+        }
+
+        // Insert 100 rows
+        Cerr << "...inserting rows" << Endl;
+        env.SendSync(rows.MakeRows(100, 0, 100));
+
+        // Force a full compaction for a table
+        Cerr << "...compacting table" << Endl;
+        env.SendSync(new NFake::TEvCompact(TRowsModel::TableId));
+        env.WaitFor<NFake::TEvCompacted>();
+
+        Cerr << "...checking rows (expecting old)" << Endl;
+        env.SendSync(new NFake::TEvExecute{ new TTxCheckRows(true, 0) });
+
+        Cerr << "...truncating table" << Endl;
+        env.SendSync(new NFake::TEvExecute{ new TTxTruncateAndWrite(0) });
+
+        Cerr << "...checking rows (expecting nothing)" << Endl;
+        env.SendSync(new NFake::TEvExecute{ new TTxCheckRows(false, 0) });
+
+        for (int i = 0; i < 2; ++i) {
+            Cerr << "...restarting tablet" << Endl;
+            env.SendSync(new TEvents::TEvPoison, false, true);
+            env.WaitForGone();
+            env.FireTablet(env.Edge, env.Tablet, [&env](const TActorId &tablet, TTabletStorageInfo *info) {
+                return new TTestFlatTablet(env.Edge, tablet, info);
+            });
+            env.WaitForWakeUp();
+
+            Cerr << "...checking rows (expecting nothing)" << Endl;
+            env.SendSync(new NFake::TEvExecute{ new TTxCheckRows(false, 0) }, /* retry */ true);
+        }
+    }
+
+    Y_UNIT_TEST(CompactThenTruncateAndWrite) {
+        TMyEnvBase env;
+        TRowsModel rows;
+
+        env->SetLogPriority(NKikimrServices::TABLET_EXECUTOR, NActors::NLog::PRI_DEBUG);
+
+        // Start the first tablet
+        env.FireTablet(env.Edge, env.Tablet, [&env](const TActorId &tablet, TTabletStorageInfo *info) {
+            return new TTestFlatTablet(env.Edge, tablet, info);
+        });
+        env.WaitForWakeUp();
+
+        // Init schema
+        {
+            TIntrusivePtr<TCompactionPolicy> policy = new TCompactionPolicy();
+            env.SendSync(rows.MakeScheme(std::move(policy)));
+        }
+
+        // Insert 100 rows
+        Cerr << "...inserting rows" << Endl;
+        env.SendSync(rows.MakeRows(100, 0, 100));
+
+        // Force a full compaction for a table
+        Cerr << "...compacting table" << Endl;
+        env.SendSync(new NFake::TEvCompact(TRowsModel::TableId));
+        env.WaitFor<NFake::TEvCompacted>();
+
+        Cerr << "...checking rows (expecting old)" << Endl;
+        env.SendSync(new NFake::TEvExecute{ new TTxCheckRows(true, 0) });
+
+        Cerr << "...truncating and writing to table" << Endl;
+        env.SendSync(new NFake::TEvExecute{ new TTxTruncateAndWrite(4) });
+
+        Cerr << "...checking rows (expecting new)" << Endl;
+        env.SendSync(new NFake::TEvExecute{ new TTxCheckRows(false, 4) });
+
+        for (int i = 0; i < 2; ++i) {
+            Cerr << "...restarting tablet" << Endl;
+            env.SendSync(new TEvents::TEvPoison, false, true);
+            env.WaitForGone();
+            env.FireTablet(env.Edge, env.Tablet, [&env](const TActorId &tablet, TTabletStorageInfo *info) {
+                return new TTestFlatTablet(env.Edge, tablet, info);
+            });
+            env.WaitForWakeUp();
+
+            Cerr << "...checking rows (expecting new)" << Endl;
+            env.SendSync(new NFake::TEvExecute{ new TTxCheckRows(false, 4) }, /* retry */ true);
+        }
+    }
+
     Y_UNIT_TEST(TruncateAtFollower) {
         TMyEnvBase env;
         TRowsModel rows;

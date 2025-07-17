@@ -219,6 +219,7 @@ class TDataShard
     class TTxCdcStreamEmitHeartbeats;
     class TTxUpdateFollowerReadEdge;
     class TTxRemoveSchemaSnapshots;
+    class TTxIncrementalRestore;
     class TTxCleanupUncommitted;
     class TTxVacuum;
     class TTxCompleteVacuum;

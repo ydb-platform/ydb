@@ -235,8 +235,8 @@ message TKqpTransaction {
 
 message TEvKqpInputActorResultInfo {
     repeated NKikimrDataEvents.TLock Locks = 1;
-    optional string SerializedEndRow = 2;
-    repeated uint32 EndRowColumnIds = 3;
+    optional string BatchOperationMaxKey = 2;
+    repeated uint32 BatchOperationKeyIds = 3;
 }
 
 message TKqpReadRangesSourceSettings {
@@ -1682,6 +1682,25 @@ message TEvRecomputeKMeansResponse {
 
     reserved 8 to 9;
     optional NKikimrIndexBuilder.TMeteringStats MeteringStats = 12;
+}
+
+message TEvIncrementalRestoreResponse {
+    enum Status {
+        SUCCESS = 0;
+        RETRY = 1;
+        ERROR = 2;
+    }
+    
+    optional uint64 TxId = 1;
+    optional uint64 TableId = 2;
+    optional uint64 OperationId = 3;
+    optional uint32 IncrementalIdx = 4;
+    optional Status RestoreStatus = 5;
+    optional string ErrorMessage = 6;
+    optional uint64 ProcessedRows = 7;
+    optional uint64 ProcessedBytes = 8;
+    optional bytes LastProcessedKey = 9;
+    optional uint64 ShardIdx = 10;
 }
 
 message TEvPrefixKMeansRequest {

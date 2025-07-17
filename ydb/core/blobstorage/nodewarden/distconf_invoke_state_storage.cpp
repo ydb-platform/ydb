@@ -8,9 +8,9 @@ namespace NKikimr::NStorage {
 
     void TInvokeRequestHandlerActor::GetRecommendedStateStorageConfig(NKikimrBlobStorage::TStateStorageConfig* currentConfig) {
         const NKikimrBlobStorage::TStorageConfig &config = *Self->StorageConfig;
-        GenerateStateStorageConfig(currentConfig->MutableStateStorageConfig(), config);
-        GenerateStateStorageConfig(currentConfig->MutableStateStorageBoardConfig(), config);
-        GenerateStateStorageConfig(currentConfig->MutableSchemeBoardConfig(), config);
+        Self->GenerateStateStorageConfig(currentConfig->MutableStateStorageConfig(), config);
+        Self->GenerateStateStorageConfig(currentConfig->MutableStateStorageBoardConfig(), config);
+        Self->GenerateStateStorageConfig(currentConfig->MutableSchemeBoardConfig(), config);
     }
 
     void TInvokeRequestHandlerActor::AdjustRingGroupActorIdOffsetInRecommendedStateStorageConfig(NKikimrBlobStorage::TStateStorageConfig* currentConfig) {
@@ -81,9 +81,20 @@ namespace NKikimr::NStorage {
         });
     }
 
-    void TInvokeRequestHandlerActor::SelfHealStateStorage(const TQuery::TSelfHealStateStorage& cmd) {
+    void TInvokeRequestHandlerActor::SelfHealBadNodesListUpdate(const TQuery::TSelfHealBadNodesListUpdate& cmd) {
         RunCommonChecks();
+        Self->SelfHealBadNodes.clear();
+        for(auto nodeId : cmd.GetBadNodes()) {
+            Self->SelfHealBadNodes.insert(nodeId);
+        }
+        STLOG(PRI_DEBUG, BS_NODE, NW52, "SelfHealBadNodes: " << (Self->SelfHealBadNodes));
+        if (cmd.GetEnableSelfHealStateStorage()) {
+            SelfHealStateStorage(cmd.GetWaitForConfigStep());
+        }
+    }
 
+    void TInvokeRequestHandlerActor::SelfHealStateStorage(bool waitForConfigStep) {
+        RunCommonChecks();
         if (Self->StateStorageSelfHealActor) {
             Self->Send(new IEventHandle(TEvents::TSystem::Poison, 0, Self->StateStorageSelfHealActor.value(), Self->SelfId(), nullptr, 0));
             Self->StateStorageSelfHealActor.reset();
@@ -128,8 +139,8 @@ namespace NKikimr::NStorage {
         AdjustRingGroupActorIdOffsetInRecommendedStateStorageConfig(&targetConfig);
 
         Self->StateStorageSelfHealActor = Register(new TStateStorageSelfhealActor(Sender, Cookie,
-            TDuration::Seconds(cmd.GetWaitForConfigStep()), std::move(currentConfig), std::move(targetConfig)));
-
+            TDuration::Seconds(waitForConfigStep), std::move(currentConfig), std::move(targetConfig)));
+        auto ev = PrepareResult(TResult::OK, std::nullopt);
         FinishWithSuccess();
     }
 

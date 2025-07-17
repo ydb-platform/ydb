@@ -2,6 +2,7 @@
 import logging
 from hamcrest import assert_that
 import requests
+import time
 
 from ydb.tests.library.common.types import Erasure
 import ydb.tests.library.common.cms as cms
@@ -59,8 +60,9 @@ class KiKiMRDistConfNodeStatusTest(object):
         return requests.post(url, headers={'content-type': 'application/json'}, json=json_req).json()
 
     def do_request_config(self):
-        cfg = self.do_request({"GetStateStorageConfig": {}})["StateStorageConfig"]
-        return cfg
+        cfg = self.do_request({"GetStateStorageConfig": {}})
+        logger.info(f"Config: {cfg}")
+        return cfg["StateStorageConfig"]
 
     def test_state_storage(self):
         self.do_test("StateStorage")
@@ -81,9 +83,8 @@ class TestKiKiMRDistConfSelfHealNodeDisconnected(KiKiMRDistConfNodeStatusTest):
         rg = self.do_request_config()[f"{configName}Config"]["RingGroups"][0]
         assert_eq(rg["NToSelect"], 9)
         assert_eq(len(rg["Ring"]), 9)
-        time.sleep(70)
+        time.sleep(20)
         rg2 = self.do_request_config()[f"{configName}Config"]["RingGroups"][0]
         assert_eq(rg["NToSelect"], 9)
         assert_eq(len(rg["Ring"]), 9)
-        assert_ne(len(rg, rg2))
-
+        assert_that(rg != rg2)

@@ -573,6 +573,9 @@ namespace NKikimr::NStorage {
         std::map<std::optional<TBridgePileId>, THashMap<TString, std::vector<std::tuple<ui32, TNodeLocation>>>> nodes;
 
         for (const auto& node : baseConfig.GetAllNodes()) {
+            if(SelfHealBadNodes.contains(node.GetNodeId())) {
+                continue;
+            }
             std::optional<TBridgePileId> pileId = node.HasBridgePileId()
                 ? std::make_optional(TBridgePileId::FromProto(&node, &NKikimrBlobStorage::TNodeIdentifier::GetBridgePileId))
                 : std::nullopt;

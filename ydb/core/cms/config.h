@@ -37,8 +37,10 @@ struct TCmsSentinelConfig {
 
     TMaybeFail<EPDiskStatus> EvictVDisksStatus;
 
+    bool EnableSelfHealStateStorage;
     ui32 NodeBadStateLimit;
     ui32 NodeGoodStateLimit;
+    ui32 StateStorageSelfHealWaitForConfigStep;
 
     void Serialize(NKikimrCms::TCmsConfig::TSentinelConfig &config) const {
         config.SetEnable(Enable);
@@ -51,6 +53,8 @@ struct TCmsSentinelConfig {
         config.SetChangeStatusRetries(ChangeStatusRetries);
         config.SetDefaultStateLimit(DefaultStateLimit);
         config.SetGoodStateLimit(GoodStateLimit);
+        config.SetStateStorageSelfHealWaitForConfigStep(StateStorageSelfHealWaitForConfigStep);
+        config.SetEnableSelfHealStateStorage(EnableSelfHealStateStorage);
         config.SetDataCenterRatio(DataCenterRatio);
         config.SetRoomRatio(RoomRatio);
         config.SetRackRatio(RackRatio);
@@ -80,6 +84,8 @@ struct TCmsSentinelConfig {
 
         NodeBadStateLimit = config.GetNodeBadStateLimit();
         NodeGoodStateLimit = config.GetNodeGoodStateLimit();
+        StateStorageSelfHealWaitForConfigStep = config.GetStateStorageSelfHealWaitForConfigStep();
+        EnableSelfHealStateStorage = config.GetEnableSelfHealStateStorage();
 
         auto newStateLimits = LoadStateLimits(config);
         StateLimits.swap(newStateLimits);

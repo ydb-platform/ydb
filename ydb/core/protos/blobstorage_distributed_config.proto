@@ -240,6 +240,12 @@ message TEvNodeConfigInvokeOnRoot {
         optional uint32 WaitForConfigStep = 1;
     }
 
+    message TSelfHealBadNodesListUpdate {
+        optional bool EnableSelfHealStateStorage = 1;
+        optional uint32 WaitForConfigStep = 2;
+        repeated uint32 BadNodes = 3;
+    }
+
     message TAdvanceGeneration
     {}
 
@@ -319,6 +325,7 @@ message TEvNodeConfigInvokeOnRoot {
         TMergeUnsyncedPileConfig MergeUnsyncedPileConfig = 16;
         TNegotiateUnsyncedConnection NegotiateUnsyncedConnection = 17;
         TAdvanceClusterStateGeneration AdvanceClusterStateGeneration = 18;
+        TSelfHealBadNodesListUpdate SelfHealBadNodesListUpdate = 19;
     }
 }
 

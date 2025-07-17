@@ -9,6 +9,7 @@ namespace NKikimr::NOlap::NReader::NSimple::NSysView::NSchemas {
 
 class TSchemaAdapter: public NAbstract::ISchemaAdapter {
 private:
+    using TBase = NAbstract::ISchemaAdapter;
     static const inline auto Registrator1 = TFactory::TRegistrator<TSchemaAdapter>("store_primary_index_schema_stats");
     static const inline auto Registrator2 = TFactory::TRegistrator<TSchemaAdapter>("primary_index_schema_stats");
 

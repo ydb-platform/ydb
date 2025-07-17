@@ -408,6 +408,12 @@ void TDynamicNameserver::SendNodesList(TActorId recipient, const TActorContext &
         if (newPileMap) {
             newPileMap->resize(AppData()->BridgeConfig->PilesSize());
         }
+        THashMap<TString, size_t> pileNameMap;
+        if (bridgeModeEnabled) {
+            for (size_t i = 0; i < AppData()->BridgeConfig->PilesSize(); ++i) {
+                pileNameMap.emplace(AppData()->BridgeConfig->GetPiles(i).GetName(), i);
+            }
+        }
 
         for (const auto &pr : StaticConfig->StaticNodeTable) {
             newNodes->emplace_back(pr.first,
@@ -427,8 +433,12 @@ void TDynamicNameserver::SendNodesList(TActorId recipient, const TActorContext &
                                            pr.second.Host, pr.second.ResolveHost,
                                            pr.second.Port, pr.second.Location, false);
                     newExpire = std::min(newExpire, pr.second.Expire);
-                    if (pr.second.BridgePileId && newPileMap) {
-                        newPileMap->at(pr.second.BridgePileId->GetRawId()).push_back(pr.first);
+                    if (newPileMap) {
+                        TNodeLocation location(pr.second.Location);
+                        const auto& bridgePileName = location.GetBridgePileName();
+                        if (bridgePileName && pileNameMap.contains(*bridgePileName)) {
+                            newPileMap->at(pileNameMap[*bridgePileName]).push_back(pr.first);
+                        }
                     }
                 }
             }

@@ -235,8 +235,8 @@ message TKqpTransaction {
 
 message TEvKqpInputActorResultInfo {
     repeated NKikimrDataEvents.TLock Locks = 1;
-    optional string SerializedEndRow = 2;
-    repeated uint32 EndRowColumnIds = 3;
+    optional string BatchOperationMaxKey = 2;
+    repeated uint32 BatchOperationKeyIds = 3;
 }
 
 message TKqpReadRangesSourceSettings {

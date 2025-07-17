@@ -174,7 +174,7 @@ class YamlConfigurator(object):
 
     @property
     def hosts_bridge_piles(self):
-        return {host.get('host'): host.get('bridge_pile_name') for host in self.static_config_dict.get('hosts', [])}
+        return {host.get('host'): host.get('location', {}).get('bridge_pile_name') for host in self.static_config_dict.get('hosts', [])}
 
     @property
     def group_hosts_by_datacenter(self):

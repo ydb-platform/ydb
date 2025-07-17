@@ -556,6 +556,44 @@ void BaseCheckHistoryTable(TQueryClient& client, const TString& path, int expect
 
 //-----------------------------------------------------------------------------
 
+// based on checks in TPC-C for CockroachDB
+
+void ConsistencyCheck3321(TQueryClient& client, const TString& path) {
+	// 3.3.2.1 Entries in the WAREHOUSE and DISTRICT tables must satisfy the relationship:
+	// W_YTD = sum (D_YTD)
+
+    TString query = std::format(R"(
+        PRAGMA TablePathPrefix("{}");
+
+        $districtData = SELECT
+            D_W_ID, sum(D_YTD) AS sum_d_ytd
+        FROM
+            `{}`
+        GROUP BY
+            D_W_ID;
+
+        SELECT w.W_ID as w_id, w.W_YTD as w_ytd, d.sum_d_ytd as sum_d_ytd
+        FROM `{}` as w
+        FULL JOIN $districtData as d on w.W_ID = d.D_W_ID
+        WHERE ABS(w.W_YTD - d.sum_d_ytd) > 1e-6
+        LIMIT 1;
+    )", path.c_str(), TABLE_DISTRICT, TABLE_WAREHOUSE);
+
+    auto result = client.RetryQuery([&](TSession session) {
+        return session.ExecuteQuery(query, TTxControl::NoTx());
+    }).GetValueSync();
+
+    ExitIfError(result, TStringBuilder() << "Check 3.3.2.1 failed");
+
+    TResultSetParser parser(result.GetResultSet(0));
+    if (parser.TryNextRow()) {
+        Cerr << "Check 3.3.2.1 failed: D_W_ID and sum(D_YTD) mismatch" << Endl;
+        std::exit(1);
+    }
+}
+
+//-----------------------------------------------------------------------------
+
 class TPCCChecker {
 public:
     TPCCChecker(const NConsoleClient::TClientCommand::TConfig& connectionConfig, const TRunConfig& runConfig)
@@ -570,6 +608,7 @@ public:
 
 private:
     void BaseCheck(TQueryClient& client);
+    void ConsistencyCheck(TQueryClient& client);
 
 private:
     NConsoleClient::TClientCommand::TConfig ConnectionConfig;
@@ -586,6 +625,7 @@ void TPCCChecker::CheckSync() {
     TQueryClient queryClient(driver);
 
     BaseCheck(queryClient);
+    ConsistencyCheck(queryClient);
 
     // to flush
     LogBackend->ReopenLog();
@@ -640,6 +680,11 @@ void TPCCChecker::BaseCheck(TQueryClient& client) {
         BaseCheckHistoryTable(client, path, expectedWhNumber);
         LOG_I(TABLE_HISTORY << " is OK");
     }
+}
+
+void TPCCChecker::ConsistencyCheck(TQueryClient& client) {
+    LOG_I("Checking 3.3.2.1");
+    ConsistencyCheck3321(client, Config.Path);
 }
 
 } // anonymous

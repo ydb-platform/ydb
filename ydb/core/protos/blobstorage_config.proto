@@ -408,7 +408,7 @@ message TPDiskLocation {
 message TRestartPDisk {
     oneof PDisk {
         NKikimrBlobStorage.TPDiskId TargetPDiskId = 1;
-        TPDiskLocation TargetPDiskLocation = 2;   
+        TPDiskLocation TargetPDiskLocation = 2;
     }
 }
 
@@ -457,10 +457,34 @@ message TSetPDiskSpaceMarginPromille {
     uint32 PDiskSpaceMarginPromille = 1;
 }
 
+message TClusterBalancingSettings {
+    optional bool Enable = 1;
+    optional uint64 IterationIntervalMs = 2;
+    optional uint32 MaxReplicatingPDisks = 3;
+    optional uint32 MaxReplicatingVDisks = 4;
+}
+
 message TUpdateSettings {
-    // each value may be specified either one time, or zero times; when it is specified, its value is written to State
-    // and applied immediately; when no value specified, setting kept unchanged; if value is specified more than one
-    // time, then last value is applied
+    // when value is specified, its value is written to State
+    // and applied immediately; when no value specified, setting kept unchanged
+    repeated uint32 DefaultMaxSlots = 1;
+    repeated bool EnableSelfHeal = 2;
+    repeated bool EnableDonorMode = 3;
+    repeated uint64 ScrubPeriodicitySeconds = 4;
+    repeated uint32 PDiskSpaceMarginPromille = 5;
+    repeated uint32 GroupReserveMin = 6;
+    repeated uint32 GroupReservePartPPM = 7;
+    repeated uint32 MaxScrubbedDisksAtOnce = 8;
+    repeated NKikimrBlobStorage.TPDiskSpaceColor.E PDiskSpaceColorBorder = 9;
+    repeated bool EnableGroupLayoutSanitizer = 10;
+    // TODO
+    // repeated TSerialManagementStage.E SerialManagementStage = 11;
+    repeated bool AllowMultipleRealmsOccupation = 12;
+    repeated bool UseSelfHealLocalPolicy = 13;
+    repeated bool TryToRelocateBrokenDisksLocallyFirst = 14;
+}
+
+message TBscConfig {
     optional uint32 DefaultMaxSlots = 1;
     optional bool EnableSelfHeal = 2;
     optional bool EnableDonorMode = 3;
@@ -476,6 +500,7 @@ message TUpdateSettings {
     optional bool AllowMultipleRealmsOccupation = 12;
     optional bool UseSelfHealLocalPolicy = 13;
     optional bool TryToRelocateBrokenDisksLocallyFirst = 14;
+    optional TClusterBalancingSettings ClusterBalancingSettings = 15;
 }
 
 message TBoxStoragePoolId {

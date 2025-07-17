@@ -57,6 +57,7 @@ SRCS(
     update_group_latencies.cpp
     update_last_seen_ready.cpp
     update_seen_operational.cpp
+    util.cpp
     virtual_group.cpp
 )
 

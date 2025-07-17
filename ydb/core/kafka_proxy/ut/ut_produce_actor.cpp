@@ -63,7 +63,6 @@ namespace {
                 Ctx->Runtime->SetLogPriority(NKikimrServices::KAFKA_PROXY, NLog::PRI_TRACE);
                 Ctx->Runtime->SetLogPriority(NKikimrServices::PQ_WRITE_PROXY, NLog::PRI_TRACE);
                 Ctx->Runtime->SetLogPriority(NKikimrServices::PERSQUEUE, NLog::PRI_DEBUG);
-                Ctx->Runtime->SetLogPriority(NKikimrServices::PQ_TX, NLog::PRI_DEBUG);
                 TContext::TPtr kafkaContext = std::make_shared<TContext>(KafkaConfig);
                 kafkaContext->DatabasePath = "/Root/PQ";
                 ActorId = Ctx->Runtime->Register(CreateKafkaProduceActor(kafkaContext));

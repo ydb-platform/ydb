@@ -204,7 +204,6 @@ NKikimr::Tests::TServerSettings TTopicSdkTestSetup::MakeServerSettings()
         runtime.SetLogPriority(NKikimrServices::PQ_MIRRORER, NActors::NLog::PRI_DEBUG);
         runtime.SetLogPriority(NKikimrServices::PQ_METACACHE, NActors::NLog::PRI_DEBUG);
         runtime.SetLogPriority(NKikimrServices::PERSQUEUE, NActors::NLog::PRI_DEBUG);
-        runtime.SetLogPriority(NKikimrServices::PQ_TX, NActors::NLog::PRI_DEBUG);
         runtime.SetLogPriority(NKikimrServices::PERSQUEUE_CLUSTER_TRACKER, NActors::NLog::PRI_DEBUG);
     });
 

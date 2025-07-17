@@ -19,16 +19,6 @@
 * 18296:Fixed replication continuing to consume disk space when storage was low, which caused VDisks to become read-only. [#18296](https://github.com/ydb-platform/ydb/pull/18296) ([Sergey Belyakov](https://github.com/serbel324))
 * 18938:In the table description columns are returned in the same order as they were specified in CREATE TABLE. [#18938](https://github.com/ydb-platform/ydb/pull/18938) ([Ilnaz Nizametdinov](https://github.com/CyberROFL))
 * 18794:[Fixed](https://github.com/db-platform/adb/pull/18794) a rare [bug](https://github.com/ydb-platform/ydb/issues/18615) with PQ tablet restarts. [#18794](https://github.com/ydb-platform/ydb/pull/18794) ([Alek5andr-Kotov](https://github.com/Alek5andr-Kotov))
-* 20569:Changes from #20547
-
-Added a check. KQP returns SCHEME_ERROR if there are unknown partitions in the request. [#20569](https://github.com/ydb-platform/ydb/pull/20569) ([Alek5andr-Kotov](https://github.com/Alek5andr-Kotov))
-* 20558:Fixed memory travel when consumer commit offset to the topic with autopartitioning enabled [#20558](https://github.com/ydb-platform/ydb/pull/20558) ([Nikolay Shestakov](https://github.com/nshestakov))
-* 20421:fixes timeout on healthcheck, closes #20420 [#20421](https://github.com/ydb-platform/ydb/pull/20421) ([Alexey Efimov](https://github.com/adameat))
-* 20397:Fixed reporting of gRPC metrics of serverless databases. [#20397](https://github.com/ydb-platform/ydb/pull/20397) ([Ilnaz Nizametdinov](https://github.com/CyberROFL))
-* 20388:[Ticket](https://github.com/ydb-platform/ydb/issues/20152)
-[PR to main](https://github.com/ydb-platform/ydb/pull/20166) [#20388](https://github.com/ydb-platform/ydb/pull/20388) ([Evgenik2](https://github.com/Evgenik2))
-* 20352:Allows to remove data cleanup freezes in case of counter discrepancies [#20352](https://github.com/ydb-platform/ydb/pull/20352) ([Andrey Molotkov](https://github.com/molotkov-and))
-* 20283:Режим доступности Force теперь игнорирует лимиты недоступных узлов. Фиксит [#18604](https://github.com/ydb-platform/ydb/issues/18604). [#20283](https://github.com/ydb-platform/ydb/pull/20283) ([Ilia Shakhov](https://github.com/pixcc))
 
 ### Performance
 

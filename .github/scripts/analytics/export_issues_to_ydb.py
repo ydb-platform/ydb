@@ -404,7 +404,7 @@ def transform_issues_for_ydb(issues: List[Dict[str, Any]], project_fields: Optio
             if name.startswith('prio:'):
                 priority = name
             # area detection
-            if name.startswith('area:'):
+            if name.startswith('area/'):
                 area = name
         branch = ';'.join(branch_labels) if branch_labels else None
         max_branch = get_max_branch(branch_labels) if branch_labels else None

@@ -14,6 +14,7 @@
 #include "read_quoter.h"
 
 #include <ydb/core/keyvalue/keyvalue_events.h>
+#include <ydb/core/jaeger_tracing/sampling_throttling_control.h>
 #include <ydb/library/persqueue/counter_time_keeper/counter_time_keeper.h>
 
 #include <ydb/library/actors/core/actor.h>
@@ -52,6 +53,7 @@ struct TTransaction {
         : Tx(tx)
         , Predicate(predicate)
         , SupportivePartitionActor(tx->SupportivePartitionActor)
+        , CalcPredicateSpan(std::move(tx->Span))
     {
         Y_ABORT_UNLESS(Tx);
     }
@@ -105,6 +107,10 @@ struct TTransaction {
     bool WriteInfoApplied = false;
     TString Message;
     ECommitState State = ECommitState::Pending;
+
+    NWilson::TSpan CalcPredicateSpan;
+    NWilson::TSpan GetWriteInfoSpan;
+    NWilson::TSpan CommitSpan;
 };
 
 class TPartition : public TActorBootstrapped<TPartition> {
@@ -350,7 +356,8 @@ private:
                               NKikimrPQ::TEvProposeTransactionResult::EStatus statusCode,
                               NKikimrPQ::TError::EKind kind,
                               const TString& reason);
-    void ScheduleReplyCommitDone(ui64 step, ui64 txId);
+    void ScheduleReplyCommitDone(ui64 step, ui64 txId,
+                                 NWilson::TSpan&& commitSpan);
     void ScheduleDropPartitionLabeledCounters(const TString& group);
     void SchedulePartitionConfigChanged();
 
@@ -455,7 +462,9 @@ public:
     TPartition(ui64 tabletId, const TPartitionId& partition, const TActorId& tablet, ui32 tabletGeneration, const TActorId& blobCache,
                const NPersQueue::TTopicConverterPtr& topicConverter, TString dcId, bool isServerless,
                const NKikimrPQ::TPQTabletConfig& config, const TTabletCountersBase& counters, bool SubDomainOutOfSpace, ui32 numChannels,
-               const TActorId& writeQuoterActorId, bool newPartition = false,
+               const TActorId& writeQuoterActorId,
+               TIntrusivePtr<NJaegerTracing::TSamplingThrottlingControl> samplingControl,
+               bool newPartition = false,
                TVector<TTransaction> distrTxs = {});
 
     void Bootstrap(const TActorContext& ctx);
@@ -988,6 +997,11 @@ private:
     void UpdateAvgWriteBytes(ui64 size, const TInstant& now);
 
     size_t WriteNewSizeFromSupportivePartitions = 0;
+
+    TIntrusivePtr<NJaegerTracing::TSamplingThrottlingControl> SamplingControl;
+    NWilson::TSpan KVWriteSpan;
+    TDeque<NWilson::TTraceId> TxForPersistTraceIds;
+    TDeque<NWilson::TSpan> TxForPersistSpans;
 };
 
 } // namespace NKikimr::NPQ

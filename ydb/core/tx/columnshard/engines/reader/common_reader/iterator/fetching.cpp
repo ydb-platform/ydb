@@ -22,7 +22,7 @@ bool TStepAction::DoApply(IDataReader& owner) const {
     return true;
 }
 
-TConclusionStatus TStepAction::DoExecuteImpl() {
+TConclusion<bool> TStepAction::DoExecuteImpl() {
     FOR_DEBUG_LOG(NKikimrServices::COLUMNSHARD_SCAN_EVLOG, Source->AddEvent("step_action"));
     if (Source->GetContext()->IsAborted()) {
         return TConclusionStatus::Success();
@@ -32,9 +32,10 @@ TConclusionStatus TStepAction::DoExecuteImpl() {
         return executeResult;
     }
     if (*executeResult) {
+        AFL_VERIFY(!FinishedFlag);
         FinishedFlag = true;
     }
-    return TConclusionStatus::Success();
+    return FinishedFlag;
 }
 
 TStepAction::TStepAction(const std::shared_ptr<IDataSource>& source, TFetchingScriptCursor&& cursor, const NActors::TActorId& ownerActorId,

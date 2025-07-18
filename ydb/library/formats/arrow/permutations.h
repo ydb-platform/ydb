@@ -13,6 +13,7 @@ private:
     YDB_READONLY_DEF(std::shared_ptr<arrow::Table>, RecordBatch);
     YDB_READONLY_DEF(std::vector<std::vector<ui32>>, SplittedByShards);
 public:
+    TShardedRecordBatch(std::shared_ptr<arrow::Table>&& batch);
     TShardedRecordBatch(const std::shared_ptr<arrow::Table>& batch);
     TShardedRecordBatch(const std::shared_ptr<arrow::RecordBatch>& batch);
 

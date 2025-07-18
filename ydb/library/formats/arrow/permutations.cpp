@@ -128,6 +128,11 @@ TShardedRecordBatch::TShardedRecordBatch(const std::shared_ptr<arrow::Table>& ba
     AFL_VERIFY(RecordBatch);
 }
 
+TShardedRecordBatch::TShardedRecordBatch(std::shared_ptr<arrow::Table>&& batch)
+    : RecordBatch(std::move(batch)) {
+    AFL_VERIFY(RecordBatch);
+}
+
 TShardedRecordBatch::TShardedRecordBatch(const std::shared_ptr<arrow::Table>& batch, std::vector<std::vector<ui32>>&& splittedByShards)
     : RecordBatch(batch)
     , SplittedByShards(std::move(splittedByShards)) {

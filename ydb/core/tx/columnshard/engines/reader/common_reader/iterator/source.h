@@ -272,6 +272,12 @@ public:
         return ResourceGuards;
     }
 
+    std::vector<std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>>& ExtractResourceGuards() {
+        auto result = std::move(ResourceGuards);
+        ResourceGuards.clear();
+        return std::move(result);
+    }
+
     virtual THashMap<TChunkAddress, TString> DecodeBlobAddresses(NBlobOperations::NRead::TCompositeReadBlobs&& blobsOriginal) const = 0;
 
     bool IsSourceInMemory() const {

@@ -327,7 +327,7 @@ private:
 
 protected:
     virtual bool DoApply(IDataReader& owner) const override;
-    virtual TConclusionStatus DoExecuteImpl() override;
+    virtual TConclusion<bool> DoExecuteImpl() override;
 
 public:
     virtual TString GetTaskClassIdentifier() const override {

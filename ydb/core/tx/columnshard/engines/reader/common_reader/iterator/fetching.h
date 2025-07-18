@@ -114,10 +114,6 @@ public:
         SumDuration.Add(d.MicroSeconds());
         Signals->AddExecutionDuration(d);
     }
-    void AddDataSize(const ui64 size) {
-        SumSize.Add(size);
-        Signals->AddBytes(size);
-    }
 
     virtual ~IFetchingStep() = default;
 
@@ -149,10 +145,6 @@ public:
     TFetchingScript(const TString& branchName, std::vector<std::shared_ptr<IFetchingStep>>&& steps)
         : BranchName(branchName)
         , Steps(std::move(steps)) {
-    }
-
-    void AddStepDataSize(const ui32 index, const ui64 size) {
-        GetStep(index)->AddDataSize(size);
     }
 
     void AddStepDuration(const ui32 index, const TDuration d) {

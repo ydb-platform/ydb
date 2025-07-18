@@ -559,7 +559,7 @@ struct TEnvironmentSetup {
     }
 
     void CreateBoxAndPool(ui32 numDrivesPerNode = 0, ui32 numGroups = 0, ui32 numStorageNodes = 0,
-            NKikimrBlobStorage::EPDiskType pdiskType = NKikimrBlobStorage::EPDiskType::ROT) {
+            NKikimrBlobStorage::EPDiskType pdiskType = NKikimrBlobStorage::EPDiskType::ROT, const std::optional<NKikimrBlobStorage::TGroupGeometry>& geometry = std::nullopt) {
         NKikimrBlobStorage::TConfigRequest request;
 
         auto *cmd = request.AddCommand()->MutableDefineHostConfig();
@@ -594,6 +594,10 @@ struct TEnvironmentSetup {
         cmd2->AddPDiskFilter()->AddProperty()->SetType(pdiskType);
         if (Settings.Encryption) {
             cmd2->SetEncryptionMode(TBlobStorageGroupInfo::EEncryptionMode::EEM_ENC_V1);
+        }
+
+        if (geometry) {
+            cmd2->MutableGeometry()->CopyFrom(*geometry);
         }
 
         auto response = Invoke(request);

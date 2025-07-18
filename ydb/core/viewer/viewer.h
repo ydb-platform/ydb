@@ -296,7 +296,7 @@ public:
     virtual TString GetHTTPFORBIDDEN(const TRequestState& request, TString contentType = {}, TString response = {}) = 0;
     virtual TString GetHTTPNOTFOUND(const TRequestState& request) = 0;
     virtual TString GetHTTPINTERNALERROR(const TRequestState& request, TString contentType = {}, TString response = {}) = 0;
-    virtual TString GetHTTPFORWARD(const TRequestState& request, const TString& location) = 0;
+    virtual TString GetHTTPFORWARD(const TRequestState& request, const TString& location, const TString& candidates) = 0;
     virtual bool CheckAccessViewer(const TRequestState& request) = 0;
     virtual bool CheckAccessAdministration(const TRequestState& request) = 0;
     virtual void TranslateFromBSC2Human(const NKikimrBlobStorage::TConfigResponse& response, TString& bscError, bool& forceRetryPossible) = 0;

@@ -235,10 +235,10 @@ bool TColumnShardScan::ProduceResults() noexcept {
     }
 
     {
-        const auto shardedBatch = result.ExtractShardedBatch();
-        const auto batch = shardedBatch.ExtractRecordBatch();
+        auto shardedBatch = result.ExtractShardedBatch();
+        auto batch = shardedBatch.ExtractRecordBatch();
         ACFL_DEBUG("stage", "ready result")("iterator", ScanIterator->DebugString())("columns", batch->num_columns())(
-            "rows", result.GetRecordsCount());
+            "rows", batch->num_rows());
 
         AFL_VERIFY(DataFormat == NKikimrDataEvents::FORMAT_ARROW);
 

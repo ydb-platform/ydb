@@ -18,6 +18,11 @@ items:
   include:
     mode: link
     path: dev/toc_p.yaml
+- name: Для аналитиков
+  href: analyst/index.md
+  include:
+    mode: link
+    path: analyst/toc_p.yaml
 - name: Для инженеров безопасности
   href: security/index.md
   include:

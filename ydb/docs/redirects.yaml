@@ -436,6 +436,14 @@ common:
   - from: /reference/configuration/node-authentication.md
     to: /reference/configuration/client_certificate_authorization.md
 
+# Redirects for the olap section
+
+  - from: /olap/(.*)$
+    to: /analyst/$1
+  - from: /olap/datasets/(.*)$
+    to: /analyst/datasets/$1
+
+
 ru:
   - from: /postgresql/index.md
     to: /postgresql/intro.md

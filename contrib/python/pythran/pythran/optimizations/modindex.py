@@ -9,7 +9,8 @@ import gast as ast
 from copy import deepcopy
 
 
-class ModIndex(Transformation):
+class ModIndex(Transformation[UseDefChains, Ancestors, Aliases, RangeValues,
+                              Identifiers]):
     '''
     Simplify modulo on loop index
 
@@ -33,8 +34,7 @@ class ModIndex(Transformation):
     '''
 
     def __init__(self):
-        Transformation.__init__(self, UseDefChains, Ancestors, Aliases,
-                                RangeValues, Identifiers)
+        super().__init__()
         self.loops_mod = dict()
 
     def single_def(self, node):

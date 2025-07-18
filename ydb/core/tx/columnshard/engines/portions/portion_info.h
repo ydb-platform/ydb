@@ -80,7 +80,6 @@ public:
     };
 
 private:
-    friend class TPortionDataAccessor;
     friend class TPortionInfoConstructor;
     friend class TCompactedPortionInfo;
     friend class TWrittenPortionInfo;
@@ -97,6 +96,47 @@ private:
     TPortionMeta Meta;
     TRuntimeFeatures RuntimeFeatures = 0;
 
+    virtual void DoSaveMetaToDatabase(const std::vector<TUnifiedBlobId>& blobIds, NIceDb::TNiceDb& db) const = 0;
+
+    virtual bool DoIsVisible(const TSnapshot& snapshot, const bool checkCommitSnapshot) const = 0;
+    virtual TString DoDebugString(const bool /*withDetails*/) const {
+        return "";
+    }
+
+public:
+    struct TPortionAddressComparator {
+        bool operator()(const TPortionInfo::TConstPtr& left, const TPortionInfo::TConstPtr& right) const {
+            return left->GetAddress() < right->GetAddress();
+        }
+        bool operator()(const TPortionInfo::TPtr& left, const TPortionInfo::TPtr& right) const {
+            return left->GetAddress() < right->GetAddress();
+        }
+    };
+
+    class TReversablePortionAddressComparator {
+    private:
+        const bool Reverse = false;
+
+    public:
+        TReversablePortionAddressComparator(const bool reverse)
+            : Reverse(reverse) {
+        }
+        bool operator()(const TPortionInfo::TConstPtr& left, const TPortionInfo::TConstPtr& right) const {
+            if (!Reverse) {
+                return left->GetAddress() < right->GetAddress();
+            } else {
+                return right->GetAddress() < left->GetAddress();
+            }
+        }
+        bool operator()(const TPortionInfo::TPtr& left, const TPortionInfo::TPtr& right) const {
+            if (!Reverse) {
+                return left->GetAddress() < right->GetAddress();
+            } else {
+                return right->GetAddress() < left->GetAddress();
+            }
+        }
+    };
+
     void FullValidation() const {
         AFL_VERIFY(PathId);
         AFL_VERIFY(PortionId);
@@ -106,14 +146,6 @@ private:
 
     TConclusionStatus DeserializeFromProto(const NKikimrColumnShardDataSharingProto::TPortionInfo& proto);
 
-    virtual void DoSaveMetaToDatabase(NIceDb::TNiceDb& db) const = 0;
-
-    virtual bool DoIsVisible(const TSnapshot& snapshot, const bool checkCommitSnapshot) const = 0;
-    virtual TString DoDebugString(const bool /*withDetails*/) const {
-        return "";
-    }
-
-public:
     virtual EPortionType GetPortionType() const = 0;
     virtual bool IsCommitted() const = 0;
     NPortion::TPortionInfoForCompaction GetCompactionInfo() const {
@@ -149,16 +181,12 @@ public:
         return (GetRecordsCount() / 10000 + 1) * sizeof(TColumnRecord) * columnsCount;
     }
 
-    void SaveMetaToDatabase(NIceDb::TNiceDb& db) const {
+    void SaveMetaToDatabase(const std::vector<TUnifiedBlobId>& blobIds, NIceDb::TNiceDb& db) const {
         FullValidation();
-        DoSaveMetaToDatabase(db);
+        DoSaveMetaToDatabase(blobIds, db);
     }
 
-    virtual std::unique_ptr<TPortionInfoConstructor> BuildConstructor(const bool withMetadata, const bool withMetadataBlobs) const = 0;
-
-    const std::vector<TUnifiedBlobId>& GetBlobIds() const {
-        return Meta.GetBlobIds();
-    }
+    virtual std::unique_ptr<TPortionInfoConstructor> BuildConstructor(const bool withMetadata) const = 0;
 
     ui32 GetCompactionLevel() const {
         return GetMeta().GetCompactionLevel();
@@ -227,18 +255,6 @@ public:
         return (RuntimeFeatures & (TRuntimeFeatures)feature);
     }
 
-    const TBlobRange RestoreBlobRange(const TBlobRangeLink16& linkRange) const {
-        return linkRange.RestoreRange(GetBlobId(linkRange.GetBlobIdxVerified()));
-    }
-
-    const TUnifiedBlobId& GetBlobId(const TBlobRangeLink16::TLinkId linkId) const {
-        return Meta.GetBlobId(linkId);
-    }
-
-    ui32 GetBlobIdsCount() const {
-        return Meta.GetBlobIdsCount();
-    }
-
     ui64 GetTxVolume() const {
         return 1024;
     }
@@ -246,7 +262,7 @@ public:
     ui64 GetApproxChunksCount(const ui32 schemaColumnsCount) const;
     ui64 GetMetadataMemorySize() const;
 
-    void SerializeToProto(NKikimrColumnShardDataSharingProto::TPortionInfo& proto) const;
+    void SerializeToProto(const std::vector<TUnifiedBlobId>& blobIds, NKikimrColumnShardDataSharingProto::TPortionInfo& proto) const;
 
     TInternalPathId GetPathId() const {
         return PathId;
@@ -377,7 +393,6 @@ public:
     }
 
     bool IsVisible(const TSnapshot& snapshot, const bool checkCommitSnapshot = true) const {
-
         const bool visible = (!RemoveSnapshot.Valid() || snapshot < RemoveSnapshot) && DoIsVisible(snapshot, checkCommitSnapshot);
 
         AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "IsVisible")("analyze_portion", DebugString())("visible", visible)(

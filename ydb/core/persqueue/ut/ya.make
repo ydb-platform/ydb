@@ -17,6 +17,7 @@ ENDIF()
 
 PEERDIR(
     library/cpp/getopt
+    library/cpp/json
     library/cpp/regex/pcre
     library/cpp/svnversion
     ydb/core/persqueue/ut/common

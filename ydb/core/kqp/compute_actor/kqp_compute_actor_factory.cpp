@@ -3,6 +3,7 @@
 
 #include <ydb/core/kqp/common/kqp_resolve.h>
 #include <ydb/core/kqp/rm_service/kqp_resource_estimation.h>
+#include <ydb/core/kqp/runtime/scheduler/new/fwd.h>
 
 namespace NKikimr::NKqp::NComputeActor {
 
@@ -81,6 +82,7 @@ struct TMemoryQuotaManager : public NYql::NDq::TGuaranteeQuotaManager {
 class TKqpCaFactory : public IKqpNodeComputeActorFactory {
     std::shared_ptr<NRm::IKqpResourceManager> ResourceManager_;
     NYql::NDq::IDqAsyncIoFactory::TPtr AsyncIoFactory;
+    NScheduler::TSchedulableTaskFactory SchedulableTaskFactory;
     const std::optional<TKqpFederatedQuerySetup> FederatedQuerySetup;
 
     std::atomic<ui64> MkqlLightProgramMemoryLimit = 0;
@@ -94,9 +96,11 @@ public:
     TKqpCaFactory(const NKikimrConfig::TTableServiceConfig::TResourceManager& config,
         std::shared_ptr<NRm::IKqpResourceManager> resourceManager,
         NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory,
+        NScheduler::TSchedulableTaskFactory schedulableTaskFactory,
         const std::optional<TKqpFederatedQuerySetup> federatedQuerySetup)
         : ResourceManager_(resourceManager)
         , AsyncIoFactory(asyncIoFactory)
+        , SchedulableTaskFactory(schedulableTaskFactory)
         , FederatedQuerySetup(federatedQuerySetup)
     {
         ApplyConfig(config);
@@ -120,12 +124,21 @@ public:
         memoryLimits.MinMemAllocSize = MinMemAllocSize.load();
         memoryLimits.MinMemFreeSize = MinMemFreeSize.load();
         memoryLimits.ArrayBufferMinFillPercentage = args.Task->GetArrayBufferMinFillPercentage();
+        if (args.Task->HasBufferPageAllocSize()) {
+            memoryLimits.BufferPageAllocSize = args.Task->GetBufferPageAllocSize();
+        }
 
         auto estimation = ResourceManager_->EstimateTaskResources(*args.Task, args.NumberOfTasks);
         NRm::TKqpResourcesRequest resourcesRequest;
         resourcesRequest.MemoryPool = args.MemoryPool;
         resourcesRequest.ExecutionUnits = 1;
-        resourcesRequest.Memory =  memoryLimits.MkqlLightProgramMemoryLimit;
+        resourcesRequest.Memory = memoryLimits.MkqlLightProgramMemoryLimit;
+
+        auto&& schedulableOptions = args.SchedulableOptions;
+#if defined(USE_HDRF_SCHEDULER)
+        schedulableOptions.SchedulableTask = SchedulableTaskFactory(args.TxId);
+        schedulableOptions.IsSchedulable = !args.TxInfo->PoolId.empty() && args.TxInfo->PoolId != NResourcePool::DEFAULT_POOL_ID;
+#endif
 
         TIntrusivePtr<NRm::TTaskState> task = MakeIntrusive<NRm::TTaskState>(args.Task->GetId(), args.TxInfo->CreatedAt);
 
@@ -214,12 +227,12 @@ public:
 
         if (tableKind == ETableKind::Datashard || tableKind == ETableKind::Olap) {
             YQL_ENSURE(args.ComputesByStages);
-            auto& info = args.ComputesByStages->UpsertTaskWithScan(*args.Task, meta, !AppData()->FeatureFlags.GetEnableSeparationComputeActorsFromRead());
+            auto& info = args.ComputesByStages->UpsertTaskWithScan(*args.Task, meta);
             IActor* computeActor = CreateKqpScanComputeActor(
                 args.ExecuterId, args.TxId,
                 args.Task, AsyncIoFactory, runtimeSettings, memoryLimits,
                 std::move(args.TraceId), std::move(args.Arena),
-                std::move(args.SchedulingOptions), args.BlockTrackingMode);
+                std::move(schedulableOptions), args.BlockTrackingMode);
             TActorId result = TlsActivationContext->Register(computeActor);
             info.MutableActorIds().emplace_back(result);
             return result;
@@ -230,7 +243,7 @@ public:
             }
             IActor* computeActor = ::NKikimr::NKqp::CreateKqpComputeActor(args.ExecuterId, args.TxId, args.Task, AsyncIoFactory,
                 runtimeSettings, memoryLimits, std::move(args.TraceId), std::move(args.Arena), FederatedQuerySetup, GUCSettings,
-                std::move(args.SchedulingOptions), args.BlockTrackingMode, std::move(args.UserToken), args.Database);
+                std::move(schedulableOptions), args.BlockTrackingMode, std::move(args.UserToken), args.Database);
             return args.ShareMailbox ? TlsActivationContext->AsActorContext().RegisterWithSameMailbox(computeActor) :
                 TlsActivationContext->AsActorContext().Register(computeActor);
         }
@@ -240,9 +253,10 @@ public:
 std::shared_ptr<IKqpNodeComputeActorFactory> MakeKqpCaFactory(const NKikimrConfig::TTableServiceConfig::TResourceManager& config,
         std::shared_ptr<NRm::IKqpResourceManager> resourceManager,
         NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory,
+        NScheduler::TSchedulableTaskFactory schedulableTaskFactory,
         const std::optional<TKqpFederatedQuerySetup> federatedQuerySetup)
 {
-    return std::make_shared<TKqpCaFactory>(config, resourceManager, asyncIoFactory, federatedQuerySetup);
+    return std::make_shared<TKqpCaFactory>(config, resourceManager, asyncIoFactory, schedulableTaskFactory, federatedQuerySetup);
 }
 
-}
+} // namespace NKikimr::NKqp::NComputeActor

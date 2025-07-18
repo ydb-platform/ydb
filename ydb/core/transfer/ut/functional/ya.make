@@ -20,6 +20,7 @@ SRCS(
 
 INCLUDE(${ARCADIA_ROOT}/ydb/public/tools/ydb_recipe/recipe.inc)
 
+#TIMEOUT(60)
 SIZE(MEDIUM)
 
 IF (SANITIZER_TYPE)

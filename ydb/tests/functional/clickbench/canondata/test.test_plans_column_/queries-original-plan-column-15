@@ -60,6 +60,7 @@
                                                 "PlanNodeId": 3,
                                                 "Plans": [
                                                     {
+                                                        "HashFunc": "HashV1",
                                                         "KeyColumns": [
                                                             "UserID"
                                                         ],
@@ -75,9 +76,6 @@
                                                                         "Name": "TableFullScan",
                                                                         "Path": "/local/clickbench/plans/column/hits",
                                                                         "ReadColumns": [
-                                                                            "UserID"
-                                                                        ],
-                                                                        "ReadRanges": [
                                                                             "CounterID (-\u221e, +\u221e)",
                                                                             "EventDate (-\u221e, +\u221e)",
                                                                             "UserID (-\u221e, +\u221e)",

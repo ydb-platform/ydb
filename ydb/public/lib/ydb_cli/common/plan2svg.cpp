@@ -122,13 +122,13 @@ TString FormatTooltip(TStringBuilder& builder, const TString& prefix, TSingleMet
             total = metric->Summary->Value;
         }
         if (total) {
-            builder << ' ' << metric->Details.Sum * 100 / total << "%, ";
+            builder << ' ' << metric->Details.Sum * 100 / total << "%,";
         }
         if (metric->Details.Count > 1) {
-            builder << "\u2211" << result << ", " << format(metric->Details.Min) << " | "
+            builder << " \u2211" << result << ", " << format(metric->Details.Min) << " | "
             << format(metric->Details.Avg) << " | " << format(metric->Details.Max);
         } else {
-            builder << result;
+            builder << ' ' << result;
         }
     }
     return result;
@@ -219,11 +219,26 @@ void TMetricHistory::Load(const NJson::TJsonValue& node, ui64 explicitMinTime, u
     std::vector<ui64> values;
 
     bool even = true;
+    bool first_item = true;
+    ui64 last_time = 0;
 
     for (const auto& subNode : node.GetArray()) {
         ui64 i = subNode.GetIntegerSafe();
-        if (even) times.push_back(i);
-        else values.push_back(i);
+        if (even) {
+            if (first_item) {
+                first_item = false;
+            } else {
+                // time should increase monotonously
+                if (i <= last_time) {
+                    // just ignore tail otherwise
+                    break;
+                }
+            }
+            times.push_back(i);
+            last_time = i;
+        } else {
+            values.push_back(i);
+        }
         even = !even;
     }
 
@@ -357,6 +372,11 @@ TSingleMetric::TSingleMetric(std::shared_ptr<TSummaryMetric> summary, ui64 value
     Summary->Add(Details.Sum);
 }
 
+TSingleMetric::TSingleMetric(std::shared_ptr<TSummaryMetric> summary)
+    : Summary(summary) {
+    Summary->Add(Details.Sum);
+}
+
 TString ParseColumns(const NJson::TJsonValue* node) {
     TStringBuilder builder;
     builder << '(';
@@ -448,9 +468,13 @@ void TPlan::ResolveCteRefs() {
                                     Min0(cteRef.second->Stage.MinTime, cteRef.second->InputBytes->MinTime);
                                     Max0(cteRef.second->Stage.MaxTime, cteRef.second->InputBytes->MaxTime);
                                     Max0(MaxTime, cteRef.second->InputBytes->MaxTime);
+                                } else {
+                                    cteRef.second->InputBytes = std::make_shared<TSingleMetric>(InputBytes);
                                 }
                                 if (auto* rowsNode = pushNode->GetValueByPath("Rows")) {
                                     cteRef.second->InputRows = std::make_shared<TSingleMetric>(InputRows, *rowsNode);
+                                } else {
+                                    cteRef.second->InputRows = std::make_shared<TSingleMetric>(InputRows);
                                 }
                             }
                         }
@@ -474,9 +498,13 @@ void TPlan::ResolveCteRefs() {
                                     Min0(cteRef.second->FromStage->MinTime, cteRef.second->CteOutputBytes->MinTime);
                                     Max0(cteRef.second->FromStage->MaxTime, cteRef.second->CteOutputBytes->MaxTime);
                                     Max0(MaxTime, cteRef.second->CteOutputBytes->MaxTime);
+                                } else {
+                                    cteRef.second->CteOutputBytes = std::make_shared<TSingleMetric>(OutputBytes);
                                 }
                                 if (auto* rowsNode = popNode->GetValueByPath("Rows")) {
                                     cteRef.second->CteOutputRows = std::make_shared<TSingleMetric>(OutputRows, *rowsNode);
+                                } else {
+                                    cteRef.second->CteOutputRows = std::make_shared<TSingleMetric>(OutputRows);
                                 }
                             }
                         }
@@ -677,7 +705,7 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
                         }
                     }
                     info = builder;
-                } else if (name == "TableFullScan") {
+                } else if (name == "TableFullScan" || name == "TablePointLookup" || name == "TableRangeScan") {
                     TStringBuilder builder;
                     if (auto* tableNode = subNode.GetValueByPath("Table")) {
                         auto table = tableNode->GetStringSafe();
@@ -688,26 +716,24 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
                         builder << table;
                     }
                     builder << ParseColumns(subNode.GetValueByPath("ReadColumns"));
+
+                    if (name == "TableRangeScan") {
+                        builder << ": ";
+                        if (auto* readRangesNode = subNode.GetValueByPath("ReadRanges")) {
+                            bool firstRange = true;
+                            for (const auto& subNode : readRangesNode->GetArray()) {
+                                if (firstRange) {
+                                    firstRange = false;
+                                } else {
+                                    builder << ", ";
+                                }
+                                builder << subNode.GetStringSafe();
+                            }
+                        }
+                    }
+
                     info = builder;
                     externalOperator = true;
-                } else if (name == "TablePointLookup" || name == "TableRangeScan") {
-                    auto connection = std::make_shared<TConnection>(*stage, "Table", stage->PlanNodeId);
-                    stage->Connections.push_back(connection);
-                    Stages.push_back(std::make_shared<TStage>(this, "External"));
-                    connection->FromStage = Stages.back();
-                    Stages.back()->External = true;
-                    TStringBuilder builder;
-                    if (auto* tableNode = subNode.GetValueByPath("Table")) {
-                        auto table = tableNode->GetStringSafe();
-                        auto n = table.find_last_of('/');
-                        if (n != table.npos) {
-                            table = table.substr(n + 1);
-                        }
-                        builder << table;
-                        info = table;
-                    }
-                    builder << ParseColumns(subNode.GetValueByPath("ReadColumns"));
-                    Stages.back()->Operators.emplace_back(name, builder);
                 } else if (name == "TopSort" || name == "Top") {
                     TStringBuilder builder;
                     if (auto* limitNode = subNode.GetValueByPath("Limit")) {
@@ -790,7 +816,7 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
                         }
                     }
 
-                    if (name == "TableFullScan") {
+                    if (name == "TableFullScan" || name == "TableRangeScan") {
                         Y_ENSURE(externalOperator);
                         if (stage->IngressName) {
                             ythrow yexception() << "Plan stage already has Ingress [" << stage->IngressName << "]";
@@ -816,9 +842,13 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
                                         );
                                         Min0(stage->MinTime, stage->IngressBytes->MinTime);
                                         Max0(stage->MaxTime, stage->IngressBytes->MaxTime);
+                                    } else {
+                                        stage->IngressBytes = std::make_shared<TSingleMetric>(IngressBytes);
                                     }
                                     if (auto* rowsNode = ingressNode->GetValueByPath("Rows")) {
                                         stage->IngressRows = std::make_shared<TSingleMetric>(IngressRows, *rowsNode);
+                                    } else {
+                                        stage->IngressRows = std::make_shared<TSingleMetric>(IngressRows);
                                     }
                                 }
                             }
@@ -865,6 +895,9 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
                     if (auto* partitionCountNode = externalNode->GetValueByPath("PartitionCount")) {
                         externalStage->Tasks = partitionCountNode->GetIntegerSafe();
                     }
+                    if (auto* finishedPartitionCountNode = externalNode->GetValueByPath("FinishedPartitionCount")) {
+                        externalStage->FinishedTasks = finishedPartitionCountNode->GetIntegerSafe();
+                    }
                 }
             }
         }
@@ -905,12 +938,20 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
                                 );
                                 Min0(stage->MinTime, stage->OutputBytes->MinTime);
                                 Max0(stage->MaxTime, stage->OutputBytes->MaxTime);
+                            } else {
+                                stage->OutputBytes = std::make_shared<TSingleMetric>(OutputBytes);
                             }
                             if (auto* rowsNode = popNode->GetValueByPath("Rows")) {
                                 stage->OutputRows = std::make_shared<TSingleMetric>(OutputRows, *rowsNode);
 
                                 if (!stage->Operators.front().OutputRows) {
                                     stage->Operators.front().OutputRows = std::make_shared<TSingleMetric>(OperatorOutputRows, *rowsNode);
+                                }
+                            } else {
+                                stage->OutputRows = std::make_shared<TSingleMetric>(OutputRows);
+
+                                if (!stage->Operators.front().OutputRows) {
+                                    stage->Operators.front().OutputRows = std::make_shared<TSingleMetric>(OperatorOutputRows);
                                 }
                             }
                         }
@@ -1044,6 +1085,8 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
                                                     Min0(stage->MinTime, connection->InputBytes->MinTime);
                                                     Max0(stage->MaxTime, connection->InputBytes->MaxTime);
                                                     inputBytes += connection->InputBytes->Details.Sum;
+                                                } else {
+                                                    connection->InputBytes = std::make_shared<TSingleMetric>(InputBytes);
                                                 }
                                                 if (auto* rowsNode = pushNode->GetValueByPath("Rows")) {
                                                     connection->InputRows = std::make_shared<TSingleMetric>(InputRows, *rowsNode);
@@ -1054,6 +1097,8 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
                                                             op.ExtraInputRows = std::make_shared<TSingleMetric>(OperatorInputRows, *rowsNode);
                                                         }
                                                     }
+                                                } else {
+                                                    connection->InputRows = std::make_shared<TSingleMetric>(InputRows);
                                                 }
                                             }
                                         }
@@ -1102,10 +1147,14 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
                                     );
                                     Min0(stage->MinTime, stage->IngressBytes->MinTime);
                                     Max0(stage->MaxTime, stage->IngressBytes->MaxTime);
+                                } else {
+                                    stage->IngressBytes = std::make_shared<TSingleMetric>(IngressBytes);
                                 }
                                 if (auto* rowsNode = ingressNode->GetValueByPath("Rows")) {
                                     stage->IngressRows = std::make_shared<TSingleMetric>(IngressRows, *rowsNode);
                                     ingressRowsNode = rowsNode;
+                                } else {
+                                    stage->IngressRows = std::make_shared<TSingleMetric>(IngressRows);
                                 }
                             }
                         }
@@ -1464,7 +1513,9 @@ void TPlan::PrintStageSummary(TStringBuilder& background, TStringBuilder&, ui32 
         x0 += INTERNAL_WIDTH;
         width -= INTERNAL_WIDTH;
     }
-    if (metric->Summary && metric->Summary->Max) {
+    if (metric->Details.Sum == 0) {
+        width = 0;
+    } else if (metric->Summary && metric->Summary->Max) {
         width = metric->Details.Sum * width / metric->Summary->Max;
     }
     if (tooltip) {
@@ -1513,26 +1564,28 @@ void TPlan::PrintStageSummary(TStringBuilder& background, TStringBuilder&, ui32 
         TStringBuilder warn;
         TString w = "";
 
-        if (metric->Details.Count != taskCount) {
+        if (metric->Details.Count != taskCount && (metric->Details.Sum || metric->Details.Count)) {
             warn << "Only " << metric->Details.Count << " task(s) of " << taskCount << " reported this metric";
             w = ToString(metric->Details.Count);
         }
 
-        // We define SKEW as following:
-        //   1. Max > 4 * Min, i.e. there is LARGE DIFFERENCE between minimal and maximal metric values
-        // or
-        //   1. Max > 2 * Min, i.e. there is SIGNIFICANT DIFFERENCE between minimal and maximal metric values
-        //   2. (Max - Avg) > 2 * (Avg - Min), i.e. OVERLOADED tasks are in MINORITY
-        // Skewing ration (x2 and x4) may be tuned later
-
-        if ((metric->Details.Max > 4 * metric->Details.Min) || (metric->Details.Max > 2 * metric->Details.Min
-            && metric->Details.Max - metric->Details.Avg > 2 * (metric->Details.Avg - metric->Details.Min))) {
-            if (w) {
-                warn << ", ";
-            } else {
-                w = "S";
+        // SKEW is not reported for small values (less than 10% of max per graph)
+        if (metric->Summary && metric->Details.Sum * 10 >= metric->Summary->Max) {
+            // Define SKEW as following:
+            //   1. Max > 4 * Min, i.e. there is LARGE DIFFERENCE between minimal and maximal metric values
+            // or
+            //   1. Max > 2 * Min, i.e. there is SIGNIFICANT DIFFERENCE between minimal and maximal metric values
+            //   2. (Max - Avg) > 2 * (Avg - Min), i.e. OVERLOADED tasks are in MINORITY
+            // Skewing ratio (x2 and x4) may be tuned later
+            if ((metric->Details.Max > 4 * metric->Details.Min) || (metric->Details.Max > 2 * metric->Details.Min
+                && metric->Details.Max - metric->Details.Avg > 2 * (metric->Details.Avg - metric->Details.Min))) {
+                if (w) {
+                    warn << ", ";
+                } else {
+                    w = "S";
+                }
+                warn << "Significant skew in metric";
             }
-            warn << "Significant skew in metric";
         }
 
         if (w) {
@@ -1659,8 +1712,17 @@ void TPlan::PrintSvg(ui64 maxTime, ui32 timelineDelta, ui32& offsetY, TStringBui
         auto pw = MaxTime * (Config.TimelineWidth - timelineDelta) / maxTime;
 
         if (s->External) {
-        canvas
-            << "<g><title>External Source, partitions: " << s->Tasks << "</title>" << Endl
+            canvas
+            << "<g><title>External Source, partitions: " << s->Tasks << ", finished: " << s->FinishedTasks << "</title>" << Endl;
+            if (s->FinishedTasks && s->FinishedTasks <= s->Tasks) {
+                auto finishedHeight = s->Height * s->FinishedTasks / s->Tasks;
+                auto xx = Config.TaskLeft + Config.TaskWidth / 8;
+                canvas
+                << "<line x1='" << xx << "' y1='" << s->OffsetY + offsetY + s->Height - finishedHeight
+                << "' x2='" << xx << "' y2='" << s->OffsetY + offsetY + s->Height
+                << "' stroke-width='" << Config.TaskWidth / 4 << "' stroke='" << Config.Palette.StageText << "' stroke-dasharray='1,1' />" << Endl;
+            }
+            canvas
             << "  <text text-anchor='end' font-family='Verdana' font-size='" << INTERNAL_TEXT_HEIGHT << "px' fill='" << Config.Palette.StageText
             << "' x='" << Config.TaskLeft + Config.TaskWidth - 2
             << "' y='" << s->OffsetY + s->Height / 2 + offsetY + INTERNAL_TEXT_HEIGHT / 2 << "'>" << s->Tasks << "</text>" << Endl
@@ -2173,13 +2235,17 @@ void TPlanVisualizer::LoadPlans(const TString& plans, bool simplified) {
     NJson::TJsonValue jsonNode;
     if (NJson::ReadJsonTree(plans, &jsonConfig, &jsonNode)) {
         if (auto* topNode = jsonNode.GetValueByPath(simplified ? "SimplifiedPlan" : "Plan")) {
-            if (auto* subNode = topNode->GetValueByPath("Plans")) {
-                for (auto& plan : subNode->GetArray()) {
-                    if (auto* typeNode = plan.GetValueByPath("Node Type")) {
-                        auto nodeType = typeNode->GetStringSafe();
-                        LoadPlan(nodeType, plan);
-                    }
-                }
+            LoadPlans(*topNode);
+        }
+    }
+}
+
+void TPlanVisualizer::LoadPlans(const NJson::TJsonValue& root) {
+    if (auto* subNode = root.GetValueByPath("Plans")) {
+        for (auto& plan : subNode->GetArray()) {
+            if (auto* typeNode = plan.GetValueByPath("Node Type")) {
+                auto nodeType = typeNode->GetStringSafe();
+                LoadPlan(nodeType, plan);
             }
         }
     }

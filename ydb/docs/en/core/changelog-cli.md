@@ -1,6 +1,15 @@
 # {{ ydb-short-name }} CLI changelog
 
-## Version 2.22.0
+## Version 2.22.1 {#2-22-1}
+
+Released on June 17, 2025. To update to version **2.22.1**, select the [Downloads](downloads/index.md#ydb-cli) section.
+
+### Bug fixes
+
+* Fixed an issue where the certificate was not read from a file if the path to the file was specified in the [profile](./reference/ydb-cli/profile/index.md) with the `ca-file` field.
+* Fixed an issue where the `{{ ydb-cli }} workload query import` and `{{ ydb-cli }} workload clickbench import files` [commands](./reference/ydb-cli/workload-click-bench.md) displayed number of rows instead of number of bytes in progress state.
+
+## Version 2.22.0 {#2-22-0}
 
 Released on June 4, 2025. To update to version **2.22.0**, select the [Downloads](downloads/index.md#ydb-cli) section.
 
@@ -19,7 +28,7 @@ Released on June 4, 2025. To update to version **2.22.0**, select the [Downloads
 
 * Fixed an issue where the `{{ ydb-cli }} workload * clean` [commands](./reference/ydb-cli/commands/workload) were deleting all contents from the target directory, instead of just the tables created by the init command.
 
-## Version 2.21.0
+## Version 2.21.0 {#2-21-0}
 
 Released on May 22, 2025. To update to version **2.21.0**, select the [Downloads](downloads/index.md#ydb-cli) section.
 

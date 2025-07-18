@@ -100,18 +100,62 @@ namespace {
         return permissionsSettings;
     }
 
+    bool ParseInteger(const TMaybeNode<TExprBase>& value, ui64& extracted) {
+        if (!value.Maybe<TCoIntegralCtor>()) {
+            return false;
+        }
+        bool hasSign;
+        bool isSigned;
+        ExtractIntegralValue(value.Ref(), false, hasSign, isSigned, extracted);
+        if (hasSign || extracted == 0) {
+            return false;
+        }
+        return true;
+    }
+
     TAlterDatabaseSettings ParseAlterDatabaseSettings(TKiAlterDatabase alterDatabase) {
         TAlterDatabaseSettings alterDatabaseSettings;
         YQL_ENSURE(alterDatabase.DatabasePath().Value().size() > 0);
         alterDatabaseSettings.DatabasePath = alterDatabase.DatabasePath().Value();
+        auto& schemeLimits = alterDatabaseSettings.SchemeLimits;
 
         for (auto setting : alterDatabase.Settings()) {
             const auto& name = setting.Name().Value();
 
             if (name == "owner") {
                 alterDatabaseSettings.Owner = setting.Value().Cast<TCoAtom>().StringValue();
-            } else {
-                YQL_ENSURE(false);
+            }
+            if (name == "MAX_SHARDS") {
+                ui64 value;
+                YQL_ENSURE(ParseInteger(setting.Value(), value));
+                if (!schemeLimits) {
+                    schemeLimits.emplace();
+                }
+                schemeLimits->SetMaxShards(value);
+            }
+            if (name == "MAX_SHARDS_IN_PATH") {
+                ui64 value;
+                YQL_ENSURE(ParseInteger(setting.Value(), value));
+                if (!schemeLimits) {
+                    schemeLimits.emplace();
+                }
+                schemeLimits->SetMaxShardsInPath(value);
+            }
+            if (name == "MAX_PATHS") {
+                ui64 value;
+                YQL_ENSURE(ParseInteger(setting.Value(), value));
+                if (!schemeLimits) {
+                    schemeLimits.emplace();
+                }
+                schemeLimits->SetMaxPaths(value);
+            }
+            if (name == "MAX_CHILDREN_IN_DIR") {
+                ui64 value;
+                YQL_ENSURE(ParseInteger(setting.Value(), value));
+                if (!schemeLimits) {
+                    schemeLimits.emplace();
+                }
+                schemeLimits->SetMaxChildrenInDir(value);
             }
         }
 
@@ -1103,14 +1147,7 @@ public:
                 return SyncError();
             }
 
-            bool truncated = false;
-            auto yson = EncodeResultToYson(literalResult.Result, truncated);
-            if (truncated) {
-                ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), "EvaluteExpr result is too big and was truncated"));
-                input->SetState(TExprNode::EState::Error);
-                return SyncError();
-            }
-
+            auto yson = literalResult.BinaryResult;
             output = input;
             input->SetState(TExprNode::EState::ExecutionComplete);
             input->SetResult(ctx.NewAtom(input->Pos(), yson));
@@ -2393,9 +2430,9 @@ public:
                 return SyncError();
             }
 
-            if (const auto& x = settings.Settings.StaticCredentials; x && (!x->Password || !x->PasswordSecretName)) {
+            if (const auto& x = settings.Settings.StaticCredentials; x && !x->Password && !x->PasswordSecretName) {
                 ctx.AddError(TIssue(ctx.GetPosition(createReplication.Pos()),
-                    "PASSWORD or PASSWORD_SECRET_NAME are not provided"));
+                    "Neither PASSWORD nor PASSWORD_SECRET_NAME are provided"));
                 return SyncError();
             }
 
@@ -2480,7 +2517,7 @@ public:
                 return SyncError();
             }
 
-            if (!settings.Settings.ConnectionString && (!settings.Settings.Endpoint || !settings.Settings.Database)) {
+            if (!settings.Settings.Endpoint ^ !settings.Settings.Database) {
                 ctx.AddError(TIssue(ctx.GetPosition(createTransfer.Pos()),
                     "Neither CONNECTION_STRING nor ENDPOINT/DATABASE are provided"));
                 return SyncError();
@@ -2492,9 +2529,9 @@ public:
                 return SyncError();
             }
 
-            if (const auto& x = settings.Settings.StaticCredentials; x && (!x->Password || !x->PasswordSecretName)) {
+            if (const auto& x = settings.Settings.StaticCredentials; x && !x->Password && !x->PasswordSecretName) {
                 ctx.AddError(TIssue(ctx.GetPosition(createTransfer.Pos()),
-                    "PASSWORD or PASSWORD_SECRET_NAME are not provided"));
+                    "Neither PASSWORD nor PASSWORD_SECRET_NAME are provided"));
                 return SyncError();
             }
 

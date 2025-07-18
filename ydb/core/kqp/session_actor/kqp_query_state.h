@@ -129,6 +129,7 @@ public:
     TInstant ContinueTime;
     NYql::TKikimrQueryDeadlines QueryDeadlines;
     TKqpQueryStats QueryStats;
+    TString QueryAst;
     bool KeepSession = false;
     TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
     TString ClientAddress;
@@ -250,6 +251,10 @@ public:
         return RequestEv->HasTopicOperations();
     }
 
+    bool HasKafkaApiOperations() const {
+        return RequestEv->HasKafkaApiOperations();
+    }
+
     bool GetQueryKeepInCache() const {
         return RequestEv->GetQueryKeepInCache();
     }
@@ -334,6 +339,10 @@ public:
 
     const ::NKikimrKqp::TTopicOperationsRequest& GetTopicOperationsFromRequest() const {
         return RequestEv->GetTopicOperations();
+    }
+
+    const ::NKikimrKqp::TKafkaApiOperationsRequest& GetKafkaApiOperationsFromRequest() const {
+        return RequestEv->GetKafkaApiOperations();
     }
 
     bool NeedPersistentSnapshot() const {
@@ -432,11 +441,11 @@ public:
         return true;
     }
 
-    TKqpPhyTxHolder::TConstPtr GetCurrentPhyTx(bool isBatchQuery, NMiniKQL::TTypeEnvironment& txTypeEnv) {
+    TKqpPhyTxHolder::TConstPtr GetCurrentPhyTx(NMiniKQL::TTypeEnvironment& txTypeEnv) {
         const auto& phyQuery = PreparedQuery->GetPhysicalQuery();
         auto tx = PreparedQuery->GetPhyTxOrEmpty(CurrentTx);
 
-        if (TxCtx->CanDeferEffects() && !isBatchQuery) {
+        if (TxCtx->CanDeferEffects()) {
             // Olap sinks require separate tnx with commit.
             while (tx && tx->GetHasEffects() && !TxCtx->HasOlapTable) {
                 QueryData->PrepareParameters(tx, PreparedQuery, txTypeEnv);
@@ -582,7 +591,7 @@ public:
     }
 
     //// Topic ops ////
-    void AddOffsetsToTransaction();
+    void FillTopicOperations();
     bool TryMergeTopicOffsets(const NTopic::TTopicOperations &operations, TString& message);
     std::unique_ptr<NSchemeCache::TSchemeCacheNavigate> BuildSchemeCacheNavigate();
     bool IsAccessDenied(const NSchemeCache::TSchemeCacheNavigate& response, TString& message);

@@ -1,4 +1,5 @@
 #pragma once
+#include <ydb/core/tx/columnshard/common/path_id.h>
 #include "ro_controller.h"
 
 #include <ydb/core/tx/columnshard/blob.h>
@@ -27,7 +28,6 @@ private:
     YDB_ACCESSOR_DEF(std::optional<TDuration>, OverrideCompactionActualizationLag);
     YDB_ACCESSOR_DEF(std::optional<TDuration>, OverrideTasksActualizationLag);
     YDB_ACCESSOR_DEF(std::optional<TDuration>, OverrideMaxReadStaleness);
-    YDB_ACCESSOR_DEF(std::optional<bool>, OverrideAllowMergeFull);
     YDB_ACCESSOR(std::optional<ui64>, OverrideMemoryLimitForPortionReading, 100);
     YDB_ACCESSOR(std::optional<ui64>, OverrideLimitForPortionsMetadataAsk, 1);
     YDB_ACCESSOR(std::optional<NOlap::NSplitter::TSplitSettings>, OverrideBlobSplitSettings, NOlap::NSplitter::TSplitSettings::BuildForTests());
@@ -48,7 +48,57 @@ private:
     std::set<EBackground> DisabledBackgrounds;
 
     TMutex ActiveTabletsMutex;
-    std::set<ui64> ActiveTablets;
+
+    bool ForcedGenerateInternalPathId = true;
+
+    using TInternalPathId = NKikimr::NColumnShard::TInternalPathId;
+    using TSchemeShardLocalPathId = NKikimr::NColumnShard::TSchemeShardLocalPathId;
+    using TUnifiedPathId =  NKikimr::NColumnShard::TUnifiedPathId;
+
+    class TPathIdTranslator: public NOlap::IPathIdTranslator {
+        THashMap<TInternalPathId,TSchemeShardLocalPathId> InternalToSchemeShardLocal;
+        THashMap<TSchemeShardLocalPathId, TInternalPathId> SchemeShardLocalToInternal;
+    public:
+        void AddPathId(const TUnifiedPathId& pathId) {
+            AFL_VERIFY(InternalToSchemeShardLocal.emplace(pathId.InternalPathId, pathId.SchemeShardLocalPathId).second);
+            AFL_VERIFY(SchemeShardLocalToInternal.emplace(pathId.SchemeShardLocalPathId, pathId.InternalPathId).second);
+        }
+        void DeletePathId(const TUnifiedPathId& pathId) {
+            InternalToSchemeShardLocal.erase(pathId.InternalPathId);
+            SchemeShardLocalToInternal.erase(pathId.SchemeShardLocalPathId);
+        }
+    public:
+        THashSet<TInternalPathId> GetInternalPathIds() const {
+            THashSet<TInternalPathId> result;
+            for (const auto& [internalPathId, schemeShardLocalPathId]: InternalToSchemeShardLocal) {
+                result.emplace(internalPathId);
+            }
+            return result;
+        }
+        THashSet<TSchemeShardLocalPathId> GetSchemeShardLocalPathIds() const {
+            THashSet<TSchemeShardLocalPathId> result;
+            for (const auto& [internalPathId, schemeShardLocalPathId]: InternalToSchemeShardLocal) {
+                result.emplace(schemeShardLocalPathId);
+            }
+            return result;
+        }
+
+    public: //NOlap::IPathIdTranslator
+        virtual std::optional<TSchemeShardLocalPathId> ResolveSchemeShardLocalPathIdOptional(const TInternalPathId internalPathId) const override {
+            if (const auto* p = InternalToSchemeShardLocal.FindPtr(internalPathId)) {
+                return {*p};
+            }
+            return std::nullopt;
+        }
+        virtual std::optional<TInternalPathId> ResolveInternalPathIdOptional(const TSchemeShardLocalPathId schemeShardLocalPathId) const override  {
+            if (const auto* p = SchemeShardLocalToInternal.FindPtr(schemeShardLocalPathId)) {
+                return {*p};
+            }
+            return std::nullopt;
+        }
+    };
+    THashMap<ui64, std::shared_ptr<TPathIdTranslator>> ActiveTablets;
+
 
     THashMap<TString, std::shared_ptr<NOlap::NDataLocks::ILock>> ExternalLocks;
 
@@ -242,9 +292,6 @@ protected:
 
 public:
     virtual bool CheckPortionsToMergeOnCompaction(const ui64 /*memoryAfterAdd*/, const ui32 currentSubsetsCount) override {
-        if (OverrideAllowMergeFull && *OverrideAllowMergeFull) {
-            return false;
-        }
         return currentSubsetsCount > 1;
     }
 
@@ -287,8 +334,6 @@ public:
         return result;
     }
 
-    std::vector<NKikimr::NColumnShard::TInternalPathId> GetPathIds(const ui64 tabletId) const;
-
     void SetExpectedShardsCount(const ui32 value) {
         ExpectedShardsCount = value;
     }
@@ -310,7 +355,7 @@ public:
 
     void OnSwitchToWork(const ui64 tabletId) override {
         TGuard<TMutex> g(ActiveTabletsMutex);
-        ActiveTablets.emplace(tabletId);
+        ActiveTablets.emplace(tabletId, std::make_shared<TPathIdTranslator>());
     }
 
     void OnCleanupActors(const ui64 tabletId) override {
@@ -318,9 +363,9 @@ public:
         ActiveTablets.erase(tabletId);
     }
 
-    ui64 GetActiveTabletsCount() const {
+    THashMap<ui64, std::shared_ptr<TPathIdTranslator>> GetActiveTablets() const {
         TGuard<TMutex> g(ActiveTabletsMutex);
-        return ActiveTablets.size();
+        return ActiveTablets;
     }
 
     bool IsActiveTablet(const ui64 tabletId) const {
@@ -332,8 +377,39 @@ public:
         RestartOnLocalDbTxCommitted = std::move(txInfo);
     }
 
+    const std::shared_ptr<TPathIdTranslator> GetPathIdTranslator(const ui64 tabletId) {
+        TGuard<TMutex> g(ActiveTabletsMutex);
+        const auto* tablet = ActiveTablets.FindPtr(tabletId);
+        if (!tablet) {
+            return nullptr;
+        }
+        return *tablet;
+    }
+
     virtual void OnAfterLocalTxCommitted(
         const NActors::TActorContext& ctx, const ::NKikimr::NColumnShard::TColumnShard& shard, const TString& txInfo) override;
+
+
+    virtual void OnAddPathId(const ui64 tabletId, const TUnifiedPathId& pathId) override {
+        TGuard<TMutex> g(ActiveTabletsMutex);
+        auto* tablet = ActiveTablets.FindPtr(tabletId);
+        AFL_VERIFY(tablet);
+        (*tablet)->AddPathId(pathId);
+    }
+    virtual void OnDeletePathId(const ui64 tabletId, const TUnifiedPathId& pathId) override {
+        auto* tablet = ActiveTablets.FindPtr(tabletId);
+        AFL_VERIFY(tablet);
+        (*tablet)->DeletePathId(pathId);
+    }
+
+    virtual bool IsForcedGenerateInternalPathId() const override {
+        return ForcedGenerateInternalPathId;
+    }
+
+    void SetForcedGenerateInternalPathId(const bool value) {
+        ForcedGenerateInternalPathId = value;
+    }
+
 };
 
 }

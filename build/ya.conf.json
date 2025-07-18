@@ -39,19 +39,19 @@
             "formula": {
                 "by_platform": {
                     "darwin-arm64": {
-                        "uri": "sbr:8110637457"
+                        "uri": "sbr:9001701041"
                     },
                     "darwin-x86_64": {
-                        "uri": "sbr:8110637758"
+                        "uri": "sbr:9001702459"
                     },
                     "linux-aarch64": {
-                        "uri": "sbr:8110637017"
+                        "uri": "sbr:9001699599"
                     },
                     "linux-x86_64": {
-                        "uri": "sbr:8110638456"
+                        "uri": "sbr:9001705785"
                     },
                     "win32-x86_64": {
-                        "uri": "sbr:8110638108"
+                        "uri": "sbr:9001704491"
                     }
                 }
             }
@@ -1307,6 +1307,16 @@
                     },
                     "target": {
                         "arch": "x86_64",
+                        "os": "FREEBSD"
+                    }
+                },
+                {
+                    "default": true,
+                    "host": {
+                        "os": "LINUX"
+                    },
+                    "target": {
+                        "arch": "x86_64",
                         "os": "LINUX"
                     }
                 },
@@ -2446,8 +2456,7 @@
             "description": "Python styler, Python 3 only"
         },
         "bloat": {
-            "description": "Run bloat tool",
-            "visible": false
+            "description": "Run bloat tool"
         },
         "buf": {
             "description": "Protobuf lint and breaking change detector"

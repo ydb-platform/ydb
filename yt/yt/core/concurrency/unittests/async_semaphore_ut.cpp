@@ -82,7 +82,7 @@ TEST(TAsyncSemaphoreTest, OverdraftSlots)
                 .Run());
         }
 
-        // Concurrently with "fat" requests above decrease total slots count in semaphore.
+        // Concurrently with "fat" requests above decrease total slot count in semaphore.
         futures.push_back(BIND([
             &semaphore,
             barrierFuture = barrierPromise.ToFuture()

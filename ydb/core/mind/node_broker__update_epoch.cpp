@@ -36,6 +36,8 @@ public:
         Self->PrepareUpdateNodesLog();
         Self->ProcessDelayedListNodesRequests();
         Self->ScheduleProcessSubscribersQueue(ctx);
+
+        Self->UpdateCommittedStateCounters();
     }
 
 private:

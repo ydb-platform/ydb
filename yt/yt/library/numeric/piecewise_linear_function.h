@@ -5,6 +5,8 @@
 
 #include <library/cpp/testing/gtest/friend.h>
 
+#include <library/cpp/yt/string/format.h>
+
 #include <util/system/yassert.h>
 #include <util/generic/algorithm.h>
 #include <util/generic/yexception.h>
@@ -433,6 +435,9 @@ private:
 
 template <class TValue>
 bool operator==(const TPiecewiseLinearFunction<TValue>& lhs, const TPiecewiseLinearFunction<TValue>& rhs);
+
+template <class TValue>
+void FormatValue(TStringBuilderBase* builder, const TPiecewiseLinearFunction<TValue>& func, TStringBuf spec);
 
 ////////////////////////////////////////////////////////////////////////////////
 

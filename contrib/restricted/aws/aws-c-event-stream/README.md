@@ -70,4 +70,4 @@ Total message overhead, including the prelude and both checksums, is 16 bytes.
 
 The following diagram shows the components that make up a message and a header. There are multiple headers per message.
 
-![Encoding Diagram](docs/encoding.png)
+![Encoding Diagram](docs/images/encoding.png)

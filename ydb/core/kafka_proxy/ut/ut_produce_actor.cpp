@@ -9,7 +9,7 @@ namespace {
 
     class TDummySchemeCacheActor : public TActor<TDummySchemeCacheActor> {
         public:
-            TDummySchemeCacheActor(ui64 pqTabletId) : 
+            TDummySchemeCacheActor(ui64 pqTabletId) :
                 TActor<TDummySchemeCacheActor>(&TDummySchemeCacheActor::StateFunc),
                 PqTabletId(pqTabletId) {}
 
@@ -52,10 +52,10 @@ namespace {
             const TString KeyToProduce = "record-key";
             const TString ValueToProduce = "record-value";
             TString TransactionalId = "123";
-            
+
             void SetUp(NUnitTest::TTestContext&) override {
                 Ctx.ConstructInPlace();
-                
+
                 Ctx->Prepare();
                 PQTabletPrepare({.partitions=1}, {}, *Ctx);
                 Ctx->Runtime->SetScheduledLimit(5'000);
@@ -73,7 +73,7 @@ namespace {
                 Ctx->Finalize();
             }
 
-            void SendProduce(TMaybe<TString> transactionalId = {}, ui64 producerId = 0, ui16 producerEpoch = 0) {
+            void SendProduce(TMaybe<TString> transactionalId = {}, ui64 producerId = 0, ui16 producerEpoch = 0, i32 baseSequence = 0) {
                 auto message = std::make_shared<NKafka::TProduceRequestData>();
                 if (transactionalId) {
                     message->TransactionalId = transactionalId->data();
@@ -88,7 +88,7 @@ namespace {
 
                 TKafkaRecordBatch batch;
                 records->BaseOffset = 3;
-                records->BaseSequence = 5;
+                records->BaseSequence = baseSequence;
                 records->Magic = 2; // Current supported
                 records->Records.resize(1);
                 records->Records[0].Key = TKafkaRawBytes(KeyToProduce.data(), KeyToProduce.size());
@@ -202,7 +202,7 @@ namespace {
             // produce with new epoch
             SendProduce({}, producerId, producerEpoch + 1);
 
-            // assert we registered didn't register new writer for new producer epoch
+            // assert we didn't register new writer for new producer epoch
             TDispatchOptions options2;
             options2.CustomFinalCondition = [&writeRequestsCounter]() {
                 return writeRequestsCounter > 1;
@@ -211,7 +211,7 @@ namespace {
             TActorId secondPartitionWriterId = writeRequestReceiver;
             UNIT_ASSERT_VALUES_EQUAL(secondPartitionWriterId, firstPartitionWriterId);
 
-            // assert we don't send poison pill to old writer
+            // assert we don't send poison pill to the writer
             TDispatchOptions options3;
             options3.CustomFinalCondition = [&poisonPillCounter]() {
                 return poisonPillCounter > 0;

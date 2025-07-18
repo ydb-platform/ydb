@@ -1,16 +1,18 @@
 #include "ls_checks.h"
 
+#include <ydb/public/api/protos/ydb_cms.pb.h>
+#include <ydb/public/api/protos/ydb_coordination.pb.h>
+#include <ydb/public/lib/scheme_types/scheme_type_id.h>
+
 #include <ydb/core/engine/mkql_proto.h>
+#include <ydb/core/protos/bind_channel_storage_pool.pb.h>
+#include <ydb/core/protos/blockstore_config.pb.h>
+#include <ydb/core/protos/pqconfig.pb.h>
 #include <ydb/core/scheme/scheme_tablecell.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
+
 #include <ydb/library/login/protos/login.pb.h>
-#include <ydb/public/lib/scheme_types/scheme_type_id.h>
-#include <ydb/public/api/protos/ydb_cms.pb.h>
-#include <ydb/core/protos/pqconfig.pb.h>
-#include <ydb/core/protos/blockstore_config.pb.h>
-#include <ydb/core/protos/bind_channel_storage_pool.pb.h>
-#include <ydb/public/api/protos/ydb_coordination.pb.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -792,6 +794,20 @@ TCheckFunc DomainLimitsIs(ui64 maxPaths, ui64 maxShards, ui64 maxPQPartitions) {
                       "pq partitions limit mismatch, domain with id " << domain.GetDomainKey().GetPathId() <<
                           " has limit " << pqPartitionsLimit <<
                           " but expected " << maxPQPartitions);
+    };
+}
+
+TCheckFunc SchemeLimits(const NKikimrSubDomains::TSchemeLimits& expected) {
+    return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
+        UNIT_ASSERT_VALUES_EQUAL(record.GetStatus(), NKikimrScheme::StatusSuccess);
+        const auto& domain = record.GetPathDescription().GetDomainDescription();
+        const auto& actual = domain.GetSchemeLimits();
+
+        UNIT_ASSERT_C(google::protobuf::util::MessageDifferencer::Equals(actual, expected),
+            "scheme limits mismatch, domain with id " << domain.GetDomainKey().GetPathId()
+                << " has limits: " << actual.ShortDebugString().Quote()
+                << ", but expected limits are: " << expected.ShortDebugString().Quote()
+        );
     };
 }
 

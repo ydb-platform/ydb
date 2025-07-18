@@ -29,7 +29,7 @@ void TScanHead::OnIntervalResult(std::shared_ptr<NGroupedMemoryManager::TAllocat
             gGuard = itInterval->second->GetGroupGuard();
         }
         std::vector<std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>> guards = { std::move(allocationGuard) };
-        AFL_VERIFY(ReadyIntervals.emplace(intervalIdx, std::make_shared<TPartialReadResult>(guards, std::move(gGuard), *newBatch,
+        AFL_VERIFY(ReadyIntervals.emplace(intervalIdx, std::make_unique<TPartialReadResult>(guards, std::move(gGuard), *newBatch,
             std::make_shared<TPlainScanCursor>(std::make_shared<NArrow::TSimpleRow>(lastPK, 0)), Context->GetCommonContext(), callbackIdxSubscriver)).second);
     } else {
         AFL_VERIFY(ReadyIntervals.emplace(intervalIdx, nullptr).second);
@@ -47,14 +47,15 @@ void TScanHead::OnIntervalResult(std::shared_ptr<NGroupedMemoryManager::TAllocat
             AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "interval_result")("interval_idx", intervalIdx)("count",
                 it->second ? it->second->GetRecordsCount() : 0)("merger", interval->HasMerger())("interval_id", interval->GetIntervalId());
         }
-        auto result = it->second;
+        auto result = std::move(it->second);
         ReadyIntervals.erase(it);
+        bool hasResult = !!result;
         if (result) {
-            reader.OnIntervalResult(result);
+            reader.OnIntervalResult(std::move(result));
         }
         if (!interval->HasMerger()) {
             FetchingIntervals.erase(FetchingIntervals.begin());
-        } else if (result) {
+        } else if (hasResult) {
             break;
         } else {
             interval->OnPartSendingComplete();
@@ -103,7 +104,7 @@ TConclusionStatus TScanHead::Start() {
     return TConclusionStatus::Success();
 }
 
-TScanHead::TScanHead(std::deque<std::shared_ptr<IDataSource>>&& sources, const std::shared_ptr<TSpecialReadContext>& context)
+TScanHead::TScanHead(std::unique_ptr<NCommon::ISourcesConstructor>&& sources, const std::shared_ptr<TSpecialReadContext>& context)
     : Context(context) {
     if (HasAppData()) {
         if (AppDataVerified().ColumnShardConfig.HasMaxInFlightIntervalsOnRequest()) {
@@ -116,11 +117,10 @@ TScanHead::TScanHead(std::deque<std::shared_ptr<IDataSource>>&& sources, const s
     } else {
         InFlightLimit = MaxInFlight;
     }
-    while (sources.size()) {
-        auto source = sources.front();
+    while (!sources->IsFinished()) {
+        auto source = std::static_pointer_cast<IDataSource>(sources->ExtractNext(context));
         BorderPoints[source->GetStart()].AddStart(source);
         BorderPoints[source->GetFinish()].AddFinish(source);
-        sources.pop_front();
     }
 }
 

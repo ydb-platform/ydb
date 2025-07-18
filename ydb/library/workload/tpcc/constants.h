@@ -14,12 +14,13 @@ constexpr size_t DEFAULT_SHARD_SIZE_MB = 2000;
 
 constexpr int DISTRICT_LOW_ID = 1;
 constexpr int DISTRICT_HIGH_ID = 10;
+constexpr int DISTRICT_COUNT = DISTRICT_HIGH_ID - DISTRICT_LOW_ID + 1;
 
 constexpr int C_ID_C = 259; // in range [0, 1023]
 constexpr int CUSTOMERS_PER_DISTRICT = 3000;
 
 constexpr int OL_I_ID_C = 7911; // in range [0, 8191]
-constexpr int ITEMS_COUNT = 100000;
+constexpr int ITEM_COUNT = 100000;
 
 constexpr int INVALID_ITEM_ID = -12345;
 
@@ -29,6 +30,10 @@ constexpr int MAX_ITEMS = 15;
 
 constexpr int C_LAST_LOAD_C = 157; // in range [0, 255]
 constexpr int C_LAST_RUN_C = 223; // in range [0, 255]
+
+constexpr int FIRST_UNPROCESSED_O_ID = 2101;
+
+constexpr double DISTRICT_INITIAL_YTD = 30000.00;
 
 // Transaction weights (percentage of mix)
 constexpr double NEW_ORDER_WEIGHT = 45.0;
@@ -66,8 +71,36 @@ constexpr const char* TABLE_STOCK = "stock";
 constexpr const char* TABLE_ORDER_LINE = "order_line";
 constexpr const char* TABLE_HISTORY = "history";
 
+constexpr std::array<const char*, 9> TPCC_TABLES = {
+    TABLE_CUSTOMER,
+    TABLE_WAREHOUSE,
+    TABLE_DISTRICT,
+    TABLE_NEW_ORDER,
+    TABLE_OORDER,
+    TABLE_ITEM,
+    TABLE_STOCK,
+    TABLE_ORDER_LINE,
+    TABLE_HISTORY
+};
+
 // Index/View names
 constexpr const char* INDEX_CUSTOMER_NAME = "idx_customer_name";
 constexpr const char* INDEX_ORDER = "idx_order";
+
+constexpr const size_t INDEX_COUNT = 2;
+
+// don't change order!
+enum class ETransactionType {
+    NewOrder = 0,
+    Delivery = 1,
+    OrderStatus = 2,
+    Payment = 3,
+    StockLevel = 4
+};
+
+constexpr const size_t TUI_LOG_LINES = 1000;
+
+// lower limit, real number is higher
+constexpr const size_t WAREHOUSES_PER_CPU_CORE = 1500;
 
 } // namespace NYdb::NTPCC

@@ -184,7 +184,10 @@ TQueryInfoList TQueryGenerator::GetInitialData() {
 }
 
 TVector<std::string> TQueryGenerator::GetCleanPaths() const {
-    return { Params.GetPath().c_str() };
+    if (Params.GetPath()) {
+        return { Params.GetPath().c_str() };
+    }
+    return {};
 }
 
 } // namespace NQuery

@@ -1,6 +1,7 @@
 #include "abstract.h"
 
 #include <ydb/core/tx/columnshard/engines/predicate/filter.h>
+#include <ydb/core/tx/columnshard/engines/reader/simple_reader/iterator/context.h>
 
 namespace NKikimr::NOlap::NReader::NSimple {
 

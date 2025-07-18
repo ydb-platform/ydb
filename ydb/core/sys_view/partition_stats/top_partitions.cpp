@@ -115,8 +115,8 @@ struct TTopPartitionsByTliExtractorMap :
     }
 };
 
-THolder<NActors::IActor> CreateTopPartitionsByCpuScan(const NActors::TActorId& ownerId, ui32 scanId, const TTableId& tableId,
-    const ESysViewType sysViewType, const TTableRange& tableRange,
+THolder<NActors::IActor> CreateTopPartitionsByCpuScan(const NActors::TActorId& ownerId, ui32 scanId,
+    const NKikimrSysView::TSysViewDescription& sysViewInfo, const TTableRange& tableRange,
     const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns)
 {
     using TTopPartitionsByCpuScan = TProcessorScan<
@@ -135,14 +135,14 @@ THolder<NActors::IActor> CreateTopPartitionsByCpuScan(const NActors::TActorId& o
         {ESysViewType::ETopPartitionsByCpuOneHour, NKikimrSysView::TOP_PARTITIONS_BY_CPU_ONE_HOUR},
     };
 
-    auto statusIter = nameToStatus.find(sysViewType);
+    auto statusIter = nameToStatus.find(sysViewInfo.GetType());
     Y_ABORT_UNLESS(statusIter != nameToStatus.end());
 
-    return MakeHolder<TTopPartitionsByCpuScan>(ownerId, scanId, tableId, tableRange, columns, statusIter->second);
+    return MakeHolder<TTopPartitionsByCpuScan>(ownerId, scanId, sysViewInfo, tableRange, columns, statusIter->second);
 }
 
-THolder<NActors::IActor> CreateTopPartitionsByTliScan(const NActors::TActorId& ownerId, ui32 scanId, const TTableId& tableId,
-    const ESysViewType sysViewType, const TTableRange& tableRange,
+THolder<NActors::IActor> CreateTopPartitionsByTliScan(const NActors::TActorId& ownerId, ui32 scanId,
+    const NKikimrSysView::TSysViewDescription& sysViewInfo, const TTableRange& tableRange,
     const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns)
 {
     using TTopPartitionsByTliScan = TProcessorScan<
@@ -161,10 +161,10 @@ THolder<NActors::IActor> CreateTopPartitionsByTliScan(const NActors::TActorId& o
         {ESysViewType::ETopPartitionsByTliOneHour, NKikimrSysView::TOP_PARTITIONS_BY_TLI_ONE_HOUR},
     };
 
-    auto statusIter = nameToStatus.find(sysViewType);
+    auto statusIter = nameToStatus.find(sysViewInfo.GetType());
     Y_ABORT_UNLESS(statusIter != nameToStatus.end());
 
-    return MakeHolder<TTopPartitionsByTliScan>(ownerId, scanId, tableId, tableRange, columns, statusIter->second);
+    return MakeHolder<TTopPartitionsByTliScan>(ownerId, scanId, sysViewInfo, tableRange, columns, statusIter->second);
 }
 
 } // NKikimr::NSysView

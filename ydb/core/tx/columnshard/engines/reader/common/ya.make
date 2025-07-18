@@ -6,6 +6,7 @@ SRCS(
     description.cpp
     result.cpp
     stats.cpp
+    comparable.cpp
 )
 
 PEERDIR(

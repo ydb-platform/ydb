@@ -568,107 +568,107 @@ NUdf::TUnboxedValue DecodeImpl(TType* type, TStringBuf& input, const THolderFact
 } // NDetail
 
 void TPresortCodec::AddType(NUdf::EDataSlot slot, bool isOptional, bool isDesc) {
-    Types.push_back({slot, isOptional, isDesc});
+    Types_.push_back({slot, isOptional, isDesc});
 }
 
 void TPresortEncoder::Start() {
-    Output.clear();
-    Current = 0;
+    Output_.clear();
+    Current_ = 0;
 }
 
 void TPresortEncoder::Start(TStringBuf prefix) {
-    Output.clear();
+    Output_.clear();
     auto data = reinterpret_cast<const ui8*>(prefix.data());
-    Output.insert(Output.begin(), data, data + prefix.size());
-    Current = 0;
+    Output_.insert(Output_.begin(), data, data + prefix.size());
+    Current_ = 0;
 }
 
 void TPresortEncoder::Encode(const NUdf::TUnboxedValuePod& value) {
-    auto& type = Types[Current++];
+    auto& type = Types_[Current_++];
 
     if (type.IsDesc) {
         if (type.IsOptional) {
             auto hasValue = (bool)value;
-            NDetail::EncodeBool<true>(Output, hasValue);
+            NDetail::EncodeBool<true>(Output_, hasValue);
             if (!hasValue) {
                 return;
             }
         }
-        NDetail::Encode<true>(Output, type.Slot, value);
+        NDetail::Encode<true>(Output_, type.Slot, value);
     } else {
         if (type.IsOptional) {
             auto hasValue = (bool)value;
-            NDetail::EncodeBool<false>(Output, hasValue);
+            NDetail::EncodeBool<false>(Output_, hasValue);
             if (!hasValue) {
                 return;
             }
         }
-        NDetail::Encode<false>(Output, type.Slot, value);
+        NDetail::Encode<false>(Output_, type.Slot, value);
     }
 }
 
 TStringBuf TPresortEncoder::Finish() {
-    MKQL_ENSURE(Current == Types.size(), "not all fields were encoded");
-    return TStringBuf((const char*)Output.data(), Output.size());
+    MKQL_ENSURE(Current_ == Types_.size(), "not all fields were encoded");
+    return TStringBuf((const char*)Output_.data(), Output_.size());
 }
 
 
 void TPresortDecoder::Start(TStringBuf input) {
-    Input = input;
-    Current = 0;
+    Input_ = input;
+    Current_ = 0;
 }
 
 NUdf::TUnboxedValue TPresortDecoder::Decode() {
-    auto& type = Types[Current++];
+    auto& type = Types_[Current_++];
 
     if (type.IsDesc) {
-        if (type.IsOptional && !NDetail::DecodeBool<true>(Input)) {
+        if (type.IsOptional && !NDetail::DecodeBool<true>(Input_)) {
             return NUdf::TUnboxedValuePod();
         }
-        return NDetail::Decode<true>(Input, type.Slot, Buffer);
+        return NDetail::Decode<true>(Input_, type.Slot, Buffer_);
     } else {
-        if (type.IsOptional && !NDetail::DecodeBool<false>(Input)) {
+        if (type.IsOptional && !NDetail::DecodeBool<false>(Input_)) {
             return NUdf::TUnboxedValuePod();
         }
-        return NDetail::Decode<false>(Input, type.Slot, Buffer);
+        return NDetail::Decode<false>(Input_, type.Slot, Buffer_);
     }
 }
 
 void TPresortDecoder::Finish() {
-    MKQL_ENSURE(Current == Types.size(), "not all fields were decoded");
-    MKQL_ENSURE(Input.empty(), "buffer is not empty");
+    MKQL_ENSURE(Current_ == Types_.size(), "not all fields were decoded");
+    MKQL_ENSURE(Input_.empty(), "buffer is not empty");
 }
 
 TGenericPresortEncoder::TGenericPresortEncoder(TType* type)
-    : Type(type)
+    : Type_(type)
 {}
 
 TStringBuf TGenericPresortEncoder::Encode(const NUdf::TUnboxedValue& value, bool desc) {
-    Output.clear();
-    NDetail::EncodeValue(Type, value, Output);
+    Output_.clear();
+    NDetail::EncodeValue(Type_, value, Output_);
     if (desc) {
-        for (auto& x : Output) {
+        for (auto& x : Output_) {
             x = ~x;
         }
     }
 
-    return TStringBuf((const char*)Output.data(), Output.size());
+    return TStringBuf((const char*)Output_.data(), Output_.size());
 }
 
 NUdf::TUnboxedValue TGenericPresortEncoder::Decode(TStringBuf buf, bool desc, const THolderFactory& factory) {
     if (desc) {
-        Output.assign(buf.begin(), buf.end());
-        for (auto& x : Output) {
+        Output_.assign(buf.begin(), buf.end());
+        for (auto& x : Output_) {
             x = ~x;
         }
 
-        auto newBuf = TStringBuf(reinterpret_cast<const char*>(Output.data()), Output.size());
-        auto ret = NDetail::DecodeImpl(Type, newBuf, factory, Buffer);
-        Output.clear();
+        auto newBuf = TStringBuf(reinterpret_cast<const char*>(Output_.data()), Output_.size());
+        auto ret = NDetail::DecodeImpl(Type_, newBuf, factory, Buffer_);
+        Output_.clear();
         MKQL_ENSURE(newBuf.empty(), "buffer must be empty");
         return ret;
     } else {
-        auto ret = NDetail::DecodeImpl(Type, buf, factory, Buffer);
+        auto ret = NDetail::DecodeImpl(Type_, buf, factory, Buffer_);
         MKQL_ENSURE(buf.empty(), "buffer is not empty");
         return ret;
     }

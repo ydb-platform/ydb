@@ -4,8 +4,8 @@
 
 namespace NKikimr::NOlap {
 
-TSchemaObjectsCache::TSchemasCache::TEntryGuard TSchemaObjectsCache::UpsertIndexInfo(const ui64 presetId, TIndexInfo&& indexInfo) {
-    const TSchemaVersionId versionId(presetId, indexInfo.GetVersion());
+TSchemaObjectsCache::TSchemasCache::TEntryGuard TSchemaObjectsCache::UpsertIndexInfo(TIndexInfo&& indexInfo) {
+    const TSchemaVersionId versionId(indexInfo.GetPresetId(), indexInfo.GetVersion());
     return SchemasByVersion.Upsert(versionId, std::move(indexInfo));
 }
 

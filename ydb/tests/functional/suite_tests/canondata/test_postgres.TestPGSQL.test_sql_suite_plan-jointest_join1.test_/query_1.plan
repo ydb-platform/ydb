@@ -76,9 +76,9 @@
                                                     "i",
                                                     "k"
                                                 ],
-                                                "E-Cost": "No estimate",
-                                                "E-Rows": "No estimate",
-                                                "E-Size": "No estimate",
+                                                "E-Cost": "0",
+                                                "E-Rows": "0",
+                                                "E-Size": "0",
                                                 "LookupKeyColumns": [
                                                     "i"
                                                 ],
@@ -150,9 +150,6 @@
                                                         "Name": "TableFullScan",
                                                         "Path": "/Root/postgres_jointest/join1.test_plan/J1_TBL",
                                                         "ReadColumns": [
-                                                            "i"
-                                                        ],
-                                                        "ReadRanges": [
                                                             "i (-\u221e, +\u221e)",
                                                             "j (-\u221e, +\u221e)",
                                                             "t (-\u221e, +\u221e)"

@@ -15,9 +15,15 @@ void WriteNullToColumn(const std::string& tableType);
 void Upsert_DifferentBatch(const std::string& tableType);
 void Upsert_OneBatch(const std::string& tableType);
 
+void ColumnType_Bool(const std::string& tableType);
 void ColumnType_Date(const std::string& tableType);
+void ColumnType_Int8(const std::string& tableType);
+void ColumnType_Int16(const std::string& tableType);
+void ColumnType_Int32(const std::string& tableType);
+void ColumnType_Int64(const std::string& tableType);
 void ColumnType_Double(const std::string& tableType);
 void ColumnType_Utf8_LongValue(const std::string& tableType);
+void ColumnType_Uuid(const std::string& tableType);
 
 void MessageField_MessageGroupId(const std::string& tableType);
 void MessageField_Partition(const std::string& tableType);

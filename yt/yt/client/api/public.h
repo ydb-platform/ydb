@@ -1,5 +1,7 @@
 #pragma once
 
+#include <yt/yt/client/chaos_client/public.h>
+
 #include <yt/yt/client/object_client/public.h>
 
 #include <yt/yt/client/table_client/public.h>
@@ -55,6 +57,7 @@ YT_DEFINE_ERROR_ENUM(
     ((NoSuchAttribute)                                   (1920))
     ((FormatDisabled)                                    (1925))
     ((ClusterLivenessCheckFailed)                        (1926))
+    ((UnsupportedArchiveVersion)                         (1927))
 );
 
 DEFINE_ENUM(ERowModificationType,
@@ -141,6 +144,7 @@ DECLARE_REFCOUNTED_STRUCT(IConnection)
 DECLARE_REFCOUNTED_STRUCT(IClientBase)
 DECLARE_REFCOUNTED_STRUCT(IClient)
 DECLARE_REFCOUNTED_STRUCT(IInternalClient)
+DECLARE_REFCOUNTED_STRUCT(IDynamicTableTransaction)
 DECLARE_REFCOUNTED_STRUCT(ITransaction)
 DECLARE_REFCOUNTED_STRUCT(IPrerequisite)
 DECLARE_REFCOUNTED_STRUCT(IStickyTransactionPool)
@@ -198,6 +202,7 @@ DECLARE_REFCOUNTED_STRUCT(TTableBackupManifest)
 DECLARE_REFCOUNTED_STRUCT(TBackupManifest)
 
 DECLARE_REFCOUNTED_STRUCT(TListOperationsAccessFilter)
+DECLARE_REFCOUNTED_STRUCT(TListOperationsContext)
 
 DECLARE_REFCOUNTED_STRUCT(TShuffleHandle)
 

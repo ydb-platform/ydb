@@ -60,6 +60,9 @@ NNodes::TExprBase DqPushFlatmapToStage(NNodes::TExprBase node, TExprContext& ctx
 NNodes::TExprBase DqPushCombineToStage(NNodes::TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx,
     const TParentsMap& parentsMap, bool allowStageMultiUsage = true);
 
+NNodes::TExprBase DqPushCombineToStageDependsOnOtherStage(NNodes::TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx,
+    const TParentsMap& parentsMap, bool allowStageMultiUsage = true);
+
 NNodes::TExprBase DqPushAggregateCombineToStage(NNodes::TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx,
     const TParentsMap& parentsMap, bool allowStageMultiUsage = true);
 

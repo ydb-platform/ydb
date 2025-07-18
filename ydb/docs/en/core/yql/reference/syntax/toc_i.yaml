@@ -10,6 +10,8 @@ items:
 - { name: ALTER TOPIC,                  href: alter-topic.md,                when: feature_topic_control_plane }
 - { name: ALTER USER,                   href: alter-user.md,                 when: feature_user_and_group }
 - { name: ANALYZE,                      href: analyze.md,                    when: backend_name == "YDB" }
+- { name: BATCH DELETE,                 href: batch-delete.md,               when: feature_batch_operations }
+- { name: BATCH UPDATE,                 href: batch-update.md,               when: feature_batch_operations }
 - { name: CREATE ASYNC REPLICATION,     href: create-async-replication.md,   when: feature_async_replication }
 - { name: CREATE GROUP,                 href: create-group.md,               when: feature_user_and_group }
 - { name: CREATE OBJECT TYPE SECRET,    href: create-object-type-secret.md,  when: feature_federated_queries}
@@ -39,6 +41,7 @@ items:
 - { name: SELECT,                       include: { mode: link, path: select/toc_p.yaml }  }
 - { name: SELECT STREAM,                href: select_stream.md,              when: feature_mapreduce and process_command == "PROCESS STREAM" }
 - { name: SUBQUERY,                     href: subquery.md,                   when: feature_subquery }
+- { name: SHOW CREATE,                  href: show_create.md }
 - { name: UPDATE,                       href: update.md,                     when: feature_map_tables }
 - { name: UPSERT,                       href: upsert_into.md,                when: feature_upsert }
 - { name: USE,                          href: use.md,                        when: feature_mapreduce }

@@ -86,6 +86,15 @@ TDataType* UnpackOptionalData(TRuntimeNode data, bool& isOptional) {
     return UnpackOptionalData(data.GetStaticType(), isOptional);
 }
 
+TType* UnpackOptionalBlockItemType(TBlockType* type, const TTypeEnvironment& env) {
+    MKQL_ENSURE(type->IsBlock(), "Expected block type.");
+    bool isOptional;
+    auto* unpackedType = UnpackOptional(type->GetItemType(), isOptional);
+    MKQL_ENSURE(isOptional, "Must be optional type.");
+
+    return TBlockType::Create(unpackedType, type->GetShape(), env);
+}
+
 TDataType* UnpackOptionalData(TType* type, bool& isOptional) {
     auto unpackedType = UnpackOptional(type, isOptional);
     MKQL_ENSURE(unpackedType->IsData(),
@@ -106,55 +115,55 @@ TBlockType::EShape GetResultShape(const TVector<TType*>& types) {
     return result;
 }
 
-TTupleLiteralBuilder::TTupleLiteralBuilder(const TTypeEnvironment& env) : Env(env)
+TTupleLiteralBuilder::TTupleLiteralBuilder(const TTypeEnvironment& env) : Env_(env)
 {}
 
 void TTupleLiteralBuilder::Reserve(ui32 size) {
-    Types.reserve(size);
-    Values.reserve(size);
+    Types_.reserve(size);
+    Values_.reserve(size);
 }
 
 TTupleLiteralBuilder& TTupleLiteralBuilder::Add(TRuntimeNode value) {
-    Types.push_back(value.GetRuntimeType());
-    Values.push_back(value);
+    Types_.push_back(value.GetRuntimeType());
+    Values_.push_back(value);
     return *this;
 }
 
 TTupleLiteral* TTupleLiteralBuilder::Build() {
-    const auto& type = TTupleType::Create(Types.size(), Types.data(), Env);
-    return TTupleLiteral::Create(Values.size(), Values.data(), type, Env);
+    const auto& type = TTupleType::Create(Types_.size(), Types_.data(), Env_);
+    return TTupleLiteral::Create(Values_.size(), Values_.data(), type, Env_);
 }
 
 void TTupleLiteralBuilder::Clear() {
-    Values.clear();
-    Types.clear();
+    Values_.clear();
+    Types_.clear();
 }
 
 TStructTypeBuilder::TStructTypeBuilder(const TTypeEnvironment& env)
-    : Env(&env)
+    : Env_(&env)
 {
 }
 
 void TStructTypeBuilder::Reserve(ui32 size) {
-    Members.reserve(size);
+    Members_.reserve(size);
 }
 
 TStructTypeBuilder& TStructTypeBuilder::Add(const TStringBuf& name, TType* type, ui32* index) {
-    Members.push_back(TStructMember(Env->InternName(name).Str(), type, index));
+    Members_.push_back(TStructMember(Env_->InternName(name).Str(), type, index));
     return *this;
 }
 
 TStructType* TStructTypeBuilder::Build() {
-    if (Members.empty())
-        return Env->GetEmptyStructLazy()->GetType();
+    if (Members_.empty())
+        return Env_->GetEmptyStructLazy()->GetType();
 
-    Sort(Members.begin(), Members.end());
-    return TStructType::Create(Members.size(), Members.data(), *Env);
+    Sort(Members_.begin(), Members_.end());
+    return TStructType::Create(Members_.size(), Members_.data(), *Env_);
 }
 
 void TStructTypeBuilder::FillIndexes() {
     ui32 index = 0;
-    for (const TStructMember& member: Members) {
+    for (const TStructMember& member: Members_) {
         if (member.Index) {
             *(member.Index) = index++;
         }
@@ -162,34 +171,34 @@ void TStructTypeBuilder::FillIndexes() {
 }
 
 void TStructTypeBuilder::Clear() {
-    Members.clear();
+    Members_.clear();
 }
 
 TStructLiteralBuilder::TStructLiteralBuilder(const TTypeEnvironment& env)
-    : Env(&env)
+    : Env_(&env)
 {
 }
 
 void TStructLiteralBuilder::Reserve(ui32 size) {
-    Members.reserve(size);
-    Values.reserve(size);
+    Members_.reserve(size);
+    Values_.reserve(size);
 }
 
 TStructLiteralBuilder& TStructLiteralBuilder::Add(const TStringBuf& name, TRuntimeNode value) {
     TType* valueType = value.GetStaticType();
-    Members.push_back(TStructMember(Env->InternName(name).Str(), valueType));
-    Values.push_back(value);
+    Members_.push_back(TStructMember(Env_->InternName(name).Str(), valueType));
+    Values_.push_back(value);
     return *this;
 }
 
 TStructLiteral* TStructLiteralBuilder::Build() {
-    Y_DEBUG_ABORT_UNLESS(Members.size() == Values.size());
-    if (Members.empty())
-        return Env->GetEmptyStructLazy();
+    Y_DEBUG_ABORT_UNLESS(Members_.size() == Values_.size());
+    if (Members_.empty())
+        return Env_->GetEmptyStructLazy();
 
-    TVector<std::pair<TStringBuf, ui32>> sortedIndicies(Members.size());
-    for (ui32 i = 0, e = Members.size(); i < e; ++i) {
-        sortedIndicies[i] = std::make_pair(Members[i].Name, i);
+    TVector<std::pair<TStringBuf, ui32>> sortedIndicies(Members_.size());
+    for (ui32 i = 0, e = Members_.size(); i < e; ++i) {
+        sortedIndicies[i] = std::make_pair(Members_[i].Name, i);
     }
 
     Sort(sortedIndicies.begin(), sortedIndicies.end(),
@@ -197,202 +206,202 @@ TStructLiteral* TStructLiteralBuilder::Build() {
             return x.first < y.first;
     });
 
-    TVector<TStructMember> sortedMembers(Members.size());
-    TVector<TRuntimeNode> sortedValues(Members.size());
+    TVector<TStructMember> sortedMembers(Members_.size());
+    TVector<TRuntimeNode> sortedValues(Members_.size());
 
-    for (ui32 i = 0, e = Members.size(); i < e; ++i) {
-        sortedMembers[i] = Members[sortedIndicies[i].second];
-        sortedValues[i] = Values[sortedIndicies[i].second];
+    for (ui32 i = 0, e = Members_.size(); i < e; ++i) {
+        sortedMembers[i] = Members_[sortedIndicies[i].second];
+        sortedValues[i] = Values_[sortedIndicies[i].second];
     }
 
-    auto type = TStructType::Create(sortedMembers.size(), sortedMembers.data(), *Env);
-    return TStructLiteral::Create(sortedValues.size(), sortedValues.data(), type, *Env);
+    auto type = TStructType::Create(sortedMembers.size(), sortedMembers.data(), *Env_);
+    return TStructLiteral::Create(sortedValues.size(), sortedValues.data(), type, *Env_);
 }
 
 void TStructLiteralBuilder::Clear() {
-    Members.clear();
+    Members_.clear();
 }
 
 TListLiteralBuilder::TListLiteralBuilder(const TTypeEnvironment& env, TType* type)
-    : Env(&env)
-    , Type(type)
+    : Env_(&env)
+    , Type_(type)
 {}
 
 TListLiteralBuilder& TListLiteralBuilder::Add(TRuntimeNode item) {
-    Items.push_back(item);
+    Items_.push_back(item);
     return *this;
 }
 
 TListLiteral* TListLiteralBuilder::Build() {
-    auto type = TListType::Create(Type, *Env);
-    return TListLiteral::Create(Items.data(), Items.size(), type, *Env);
+    auto type = TListType::Create(Type_, *Env_);
+    return TListLiteral::Create(Items_.data(), Items_.size(), type, *Env_);
 }
 
 void TListLiteralBuilder::Clear() {
-    Items.clear();
+    Items_.clear();
 }
 
 TDictLiteralBuilder::TDictLiteralBuilder(const TTypeEnvironment& env, TType* keyType, TType* payloadType)
-    : Env(&env)
-    , KeyType(keyType)
-    , PayloadType(payloadType)
+    : Env_(&env)
+    , KeyType_(keyType)
+    , PayloadType_(payloadType)
 {
 }
 
 void TDictLiteralBuilder::Reserve(ui32 size) {
-    Items.reserve(size);
+    Items_.reserve(size);
 }
 
 TDictLiteralBuilder& TDictLiteralBuilder::Add(TRuntimeNode key, TRuntimeNode payload) {
-    Items.push_back(std::make_pair(key, payload));
+    Items_.push_back(std::make_pair(key, payload));
     return *this;
 }
 
 TDictLiteral* TDictLiteralBuilder::Build() {
-    auto type = TDictType::Create(KeyType, PayloadType, *Env);
-    return TDictLiteral::Create(Items.size(), Items.data(), type, *Env);
+    auto type = TDictType::Create(KeyType_, PayloadType_, *Env_);
+    return TDictLiteral::Create(Items_.size(), Items_.data(), type, *Env_);
 }
 
 void TDictLiteralBuilder::Clear() {
-    Items.clear();
+    Items_.clear();
 }
 
 TCallableTypeBuilder::TCallableTypeBuilder(const TTypeEnvironment& env, const TStringBuf& name, TType* returnType)
-    : Env(&env)
-    , Name(Env->InternName(name))
-    , ReturnType(returnType)
-    , OptionalArgsCount(0)
-    , HasPayload(false)
+    : Env_(&env)
+    , Name_(Env_->InternName(name))
+    , ReturnType_(returnType)
+    , OptionalArgsCount_(0)
+    , HasPayload_(false)
 {}
 
 void TCallableTypeBuilder::Reserve(ui32 size) {
-    Arguments.reserve(size);
-    ArgNames.reserve(size);
-    ArgFlags.reserve(size);
+    Arguments_.reserve(size);
+    ArgNames_.reserve(size);
+    ArgFlags_.reserve(size);
 }
 
 TCallableTypeBuilder& TCallableTypeBuilder::Add(TType *type) {
-    Arguments.push_back(type);
-    ArgNames.emplace_back();
-    ArgFlags.emplace_back();
+    Arguments_.push_back(type);
+    ArgNames_.emplace_back();
+    ArgFlags_.emplace_back();
     return *this;
 }
 
 TCallableTypeBuilder& TCallableTypeBuilder::SetArgumentName(const TStringBuf& name) {
-    MKQL_ENSURE(!ArgNames.empty(), "No arguments");
-    HasPayload = true;
-    ArgNames.back() = name;
+    MKQL_ENSURE(!ArgNames_.empty(), "No arguments");
+    HasPayload_ = true;
+    ArgNames_.back() = name;
     return *this;
 }
 
 TCallableTypeBuilder& TCallableTypeBuilder::SetArgumentFlags(ui64 flags) {
-    MKQL_ENSURE(!ArgFlags.empty(), "No arguments");
-    HasPayload = true;
-    ArgFlags.back() = flags;
+    MKQL_ENSURE(!ArgFlags_.empty(), "No arguments");
+    HasPayload_ = true;
+    ArgFlags_.back() = flags;
     return *this;
 }
 
 TCallableTypeBuilder& TCallableTypeBuilder::SetOptionalArgs(ui32 count) {
-    OptionalArgsCount = count;
+    OptionalArgsCount_ = count;
     return *this;
 }
 
 TCallableTypeBuilder& TCallableTypeBuilder::SetPayload(const TStringBuf& data) {
-    HasPayload = true;
-    FuncPayload = data;
+    HasPayload_ = true;
+    FuncPayload_ = data;
     return *this;
 }
 
 TCallableType* TCallableTypeBuilder::Build() {
     TNode* payload = nullptr;
-    if (HasPayload) {
-        payload = BuildCallableTypePayload(ArgNames, ArgFlags, FuncPayload, *Env);
+    if (HasPayload_) {
+        payload = BuildCallableTypePayload(ArgNames_, ArgFlags_, FuncPayload_, *Env_);
     }
 
-    auto ret = TCallableType::Create(ReturnType, Name.Str(), Arguments.size(), Arguments.data(), payload, *Env);
-    ret->SetOptionalArgumentsCount(OptionalArgsCount);
+    auto ret = TCallableType::Create(ReturnType_, Name_.Str(), Arguments_.size(), Arguments_.data(), payload, *Env_);
+    ret->SetOptionalArgumentsCount(OptionalArgsCount_);
     return ret;
 }
 
 void TCallableTypeBuilder::Clear() {
-    Arguments.clear();
-    ArgNames.clear();
-    ArgFlags.clear();
-    OptionalArgsCount = 0;
-    HasPayload = false;
-    FuncPayload = TStringBuf();
+    Arguments_.clear();
+    ArgNames_.clear();
+    ArgFlags_.clear();
+    OptionalArgsCount_ = 0;
+    HasPayload_ = false;
+    FuncPayload_ = TStringBuf();
 }
 
 TCallableBuilder::TCallableBuilder(const TTypeEnvironment& env, const TStringBuf& name, TType* returnType, bool disableMerge)
-    : Env(&env)
-    , Name(Env->InternName(name))
-    , ReturnType(returnType)
-    , DisableMerge(disableMerge)
-    , OptionalArgsCount(0)
-    , HasPayload(false)
+    : Env_(&env)
+    , Name_(Env_->InternName(name))
+    , ReturnType_(returnType)
+    , DisableMerge_(disableMerge)
+    , OptionalArgsCount_(0)
+    , HasPayload_(false)
 {}
 
 void TCallableBuilder::Reserve(ui32 size) {
-    Arguments.reserve(size);
-    Inputs.reserve(size);
-    ArgNames.reserve(size);
-    ArgFlags.reserve(size);
+    Arguments_.reserve(size);
+    Inputs_.reserve(size);
+    ArgNames_.reserve(size);
+    ArgFlags_.reserve(size);
 }
 
 TCallableBuilder& TCallableBuilder::Add(TRuntimeNode input) {
     TType* inputType = input.GetStaticType();
-    Arguments.push_back(inputType);
-    Inputs.push_back(input);
-    ArgNames.emplace_back();
-    ArgFlags.emplace_back();
+    Arguments_.push_back(inputType);
+    Inputs_.push_back(input);
+    ArgNames_.emplace_back();
+    ArgFlags_.emplace_back();
     return *this;
 }
 
 TCallableBuilder& TCallableBuilder::SetOptionalArgs(ui32 count) {
-    OptionalArgsCount = count;
+    OptionalArgsCount_ = count;
     return *this;
 }
 
 TCallableBuilder& TCallableBuilder::SetTypePayload(const TStringBuf& data) {
-    HasPayload = true;
-    FuncPayload = data;
+    HasPayload_ = true;
+    FuncPayload_ = data;
     return *this;
 }
 
 TCallableBuilder& TCallableBuilder::SetArgumentName(const TStringBuf& name) {
-    MKQL_ENSURE(!ArgNames.empty(), "No arguments");
-    HasPayload = true;
-    ArgNames.back() = name;
+    MKQL_ENSURE(!ArgNames_.empty(), "No arguments");
+    HasPayload_ = true;
+    ArgNames_.back() = name;
     return *this;
 }
 
 TCallableBuilder& TCallableBuilder::SetArgumentFlags(ui64 flags) {
-    MKQL_ENSURE(!ArgFlags.empty(), "No arguments");
-    HasPayload = true;
-    ArgFlags.back() = flags;
+    MKQL_ENSURE(!ArgFlags_.empty(), "No arguments");
+    HasPayload_ = true;
+    ArgFlags_.back() = flags;
     return *this;
 }
 
 TCallable* TCallableBuilder::Build() {
     TNode* payload = nullptr;
-    if (HasPayload) {
-        payload = BuildCallableTypePayload(ArgNames, ArgFlags, FuncPayload, *Env);
+    if (HasPayload_) {
+        payload = BuildCallableTypePayload(ArgNames_, ArgFlags_, FuncPayload_, *Env_);
     }
 
-    auto type = TCallableType::Create(ReturnType, Name.Str(), Arguments.size(), Arguments.data(), payload, *Env);
-    type->SetOptionalArgumentsCount(OptionalArgsCount);
-    if (DisableMerge)
+    auto type = TCallableType::Create(ReturnType_, Name_.Str(), Arguments_.size(), Arguments_.data(), payload, *Env_);
+    type->SetOptionalArgumentsCount(OptionalArgsCount_);
+    if (DisableMerge_)
         type->DisableMerge();
-    return TCallable::Create(Inputs.size(), Inputs.data(), type, *Env);
+    return TCallable::Create(Inputs_.size(), Inputs_.data(), type, *Env_);
 }
 
 void TCallableBuilder::Clear() {
-    Arguments.clear();
-    Inputs.clear();
-    ArgNames.clear();
-    ArgFlags.clear();
-    OptionalArgsCount = 0;
-    FuncPayload = TStringBuf();
+    Arguments_.clear();
+    Inputs_.clear();
+    ArgNames_.clear();
+    ArgFlags_.clear();
+    OptionalArgsCount_ = 0;
+    FuncPayload_ = TStringBuf();
 }
 
 }

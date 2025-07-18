@@ -16,13 +16,15 @@
 #include <ydb/services/metadata/manager/abstract.h>
 #include <ydb/services/persqueue_v1/actors/events.h>
 
-#include <ydb/core/external_sources/external_source_factory.h>
-#include <ydb/core/kqp/query_data/kqp_query_data.h>
-#include <ydb/core/kqp/query_data/kqp_prepared_query.h>
 #include <ydb/core/base/table_index.h>
+#include <ydb/core/external_sources/external_source_factory.h>
+#include <ydb/core/kqp/query_data/kqp_prepared_query.h>
+#include <ydb/core/kqp/query_data/kqp_query_data.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/protos/kqp.pb.h>
 #include <ydb/core/protos/kqp_stats.pb.h>
+#include <ydb/core/protos/subdomains.pb.h>
+#include <ydb/core/protos/sys_view_types.pb.h>
 #include <ydb/core/protos/yql_translation_settings.pb.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
 
@@ -487,7 +489,7 @@ struct TKikimrTableMetadata : public TThrRefBase {
     EKikimrTableKind Kind = EKikimrTableKind::Unspecified;
     ETableType TableType = ETableType::Table;
     EStoreType StoreType = EStoreType::Row;
-    TMaybe<NKikimrSysView::ESysViewType> SysViewType;
+    TMaybe<NKikimrSysView::TSysViewDescription> SysViewInfo;
     bool IsIndexImplTable = false;
 
     // If writes are disabled, query that writes to table must finish with error.
@@ -678,6 +680,7 @@ struct TKikimrTableMetadata : public TThrRefBase {
 struct TAlterDatabaseSettings {
     TString DatabasePath;
     std::optional<TString> Owner;
+    std::optional<NKikimrSubDomains::TSchemeLimits> SchemeLimits;
 };
 
 struct TCreateUserSettings {
@@ -1087,6 +1090,7 @@ public:
     };
 
     struct TExecuteLiteralResult : public TGenericResult {
+        TString BinaryResult;
         NKikimrMiniKQL::TResult Result;
     };
 

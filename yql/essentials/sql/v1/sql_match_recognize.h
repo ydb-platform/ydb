@@ -31,8 +31,8 @@ private:
     TVector<TNamedFunction> ParseDefinitions(const TRule_row_pattern_definition_list& node);
 
 private:
-    THashSet<TString> PatternVarNames;
-    TNodePtr PatternVars;
+    THashSet<TString> PatternVarNames_;
+    TNodePtr PatternVars_;
 };
 
 } // namespace NSQLTranslationV1

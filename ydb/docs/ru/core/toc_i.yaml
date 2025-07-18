@@ -63,6 +63,7 @@ items:
     path: toc_changelog.yaml
 - name: Обучение
   labeled: true
+  when: audience != "tech"
   items:
     - name: Курс для администраторов
       href: "https://yandex.cloud/ru/training/ydb-admin?utm_medium=owned&utm_source=oss_docs"

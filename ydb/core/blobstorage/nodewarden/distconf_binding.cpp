@@ -78,6 +78,9 @@ namespace NKikimr::NStorage {
 
                 STLOG(PRI_DEBUG, BS_NODE, NWDC29, "Initiated bind", (NodeId, nodeId), (Binding, Binding),
                     (SessionId, sessionId));
+
+                // abort any pending queries
+                OpQueueOnError("binding is in progress");
             } else if (closest != TMonotonic::Max() && !Scheduled) {
                 STLOG(PRI_DEBUG, BS_NODE, NWDC30, "Delaying bind");
                 TActivationContext::Schedule(closest, new IEventHandle(TEvents::TSystem::Wakeup, 0, SelfId(), {}, nullptr, 0));
@@ -283,6 +286,8 @@ namespace NKikimr::NStorage {
             FanOutReversePush(nullptr);
 
             UnsubscribeQueue.insert(binding.NodeId);
+
+            UpdateRootStateToConnectionChecker();
         }
     }
 
@@ -318,6 +323,7 @@ namespace NKikimr::NStorage {
                 STLOG(PRI_DEBUG, BS_NODE, NWDC13, "Binding updated", (Binding, Binding), (PrevRootNodeId, prevRootNodeId),
                     (ConfigUpdate, configUpdate));
                 FanOutReversePush(configUpdate ? StorageConfig.get() : nullptr, record.GetRecurseConfigUpdate());
+                UpdateRootStateToConnectionChecker();
             }
         }
 
@@ -563,6 +569,8 @@ namespace NKikimr::NStorage {
             DirectBoundNodes.erase(it);
 
             UnsubscribeQueue.insert(nodeId);
+
+            OnSyncerUnboundNode(nodeId);
 
             CheckRootNodeStatus();
         }

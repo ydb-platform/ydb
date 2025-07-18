@@ -139,7 +139,7 @@ namespace NKikimr::NStorage {
                 {"direct_bound_nodes", getDirectBoundNodes()},
                 {"root_state", TString(TStringBuilder() << RootState)},
                 {"error_reason", ErrorReason},
-                {"has_quorum", HasQuorum()},
+                {"has_quorum", StorageConfig && HasConnectedNodeQuorum(*StorageConfig)},
                 {"scepter", Scepter ? NJson::TJsonMap{
                     {"id", Scepter->Id},
                 } : NJson::TJsonValue{NJson::JSON_NULL}},
@@ -160,6 +160,13 @@ namespace NKikimr::NStorage {
                     }
                     DIV_CLASS("panel-body") {
                         out << "Self-management enabled: " << (SelfManagementEnabled ? "yes" : "no") << "<br/>";
+                        out << "Self pile id: ";
+                        if (BridgeInfo) {
+                            out << BridgeInfo->SelfNodePile->BridgePileId;
+                        } else {
+                            out << "<none>";
+                        }
+                        out << "<br/>";
                     }
                 }
 
@@ -224,7 +231,7 @@ namespace NKikimr::NStorage {
                         if (ErrorReason) {
                            out << "ErrorReason: " << ErrorReason << "<br/>";
                         }
-                        out << "Quorum: " << (HasQuorum() ? "yes" : "no") << "<br/>";
+                        out << "Quorum: " << (StorageConfig && HasConnectedNodeQuorum(*StorageConfig) ? "yes" : "no") << "<br/>";
                         out << "Scepter: " << (Scepter ? ToString(Scepter->Id) : "null") << "<br/>";
                     }
                 }

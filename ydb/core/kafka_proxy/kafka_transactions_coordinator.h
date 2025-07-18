@@ -2,6 +2,8 @@
 
 #include "kafka_events.h"
 #include "kafka_producer_instance_id.h"
+#include "ydb/core/base/appdata_fwd.h"
+#include "ydb/core/base/feature_flags.h"
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 
@@ -18,6 +20,11 @@ namespace NKafka {
 
         using TBase = NActors::TActorBootstrapped<TTransactionsCoordinator>;
 
+        struct TProducerInstance {
+            TProducerInstanceId Id;
+            ui64 TxnTimeoutMs;
+        };
+        
         struct TTransactionalRequest {
             TString TransactionalId;
             TProducerInstanceId ProducerState;
@@ -74,7 +81,7 @@ namespace NKafka {
             TMaybe<TString> GetTxnRequestError(const TTransactionalRequest& request);
             TString GetProducerIsOutdatedError(const TString& transactionalId, const TProducerInstanceId& currentProducerState, const TProducerInstanceId& newProducerState);
 
-            std::unordered_map<TString, TProducerInstanceId> ProducersByTransactionalId;
+            std::unordered_map<TString, TProducerInstance> ProducersByTransactionalId;
             std::unordered_map<TString, TActorId> TxnActorByTransactionalId;
     };
 
@@ -86,5 +93,21 @@ namespace NKafka {
         static const char x[12] = "kafka_txns";
         return TActorId(nodeId, TStringBuf(x, 12));
     };
+
+    inline bool IsTransactionalApiKey(i16 apiKey) {
+        switch (apiKey) {
+            case ADD_PARTITIONS_TO_TXN:
+            case ADD_OFFSETS_TO_TXN:
+            case TXN_OFFSET_COMMIT:
+            case END_TXN:
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    inline bool TransactionsEnabled() {
+        return NKikimr::AppData()->FeatureFlags.GetEnableKafkaTransactions();
+    }
     
 } // namespace NKafka

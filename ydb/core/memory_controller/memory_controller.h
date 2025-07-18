@@ -13,6 +13,7 @@ namespace NKikimr::NMemory {
 struct TResourceBrokerConfig {
     ui64 LimitBytes = 0;
     ui64 QueryExecutionLimitBytes = 0;
+    ui64 ColumnTablesCompactionLimitBytes = 0;
 
     auto operator<=>(const TResourceBrokerConfig&) const = default;
 
@@ -20,6 +21,7 @@ struct TResourceBrokerConfig {
         TStringBuilder result;
         result << "LimitBytes: " << LimitBytes;
         result << " QueryExecutionLimitBytes: " << QueryExecutionLimitBytes;
+        result << " ColumnTablesCompactionLimitBytes: " << ColumnTablesCompactionLimitBytes;
         return result;
     }
 };

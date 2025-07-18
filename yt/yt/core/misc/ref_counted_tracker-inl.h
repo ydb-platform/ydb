@@ -29,7 +29,7 @@ struct TRefCountedTracker::TLocalSlot
 
 struct TRefCountedTracker::TGlobalSlot
 {
-    #define XX(name) std::atomic<size_t> name = {0};
+    #define XX(name) std::atomic<size_t> name = 0;
     ENUMERATE_SLOT_FIELDS()
     #undef XX
 

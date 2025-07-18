@@ -4,7 +4,7 @@
 
 #include <ydb/core/tx/columnshard/engines/filter.h>
 #include <ydb/core/tx/columnshard/engines/reader/simple_reader/duplicates/events.h>
-#include <ydb/core/tx/conveyor/usage/service.h>
+#include <ydb/core/tx/conveyor_composite/usage/service.h>
 #include <ydb/core/tx/limiter/grouped_memory/usage/service.h>
 
 #include <ydb/library/formats/arrow/simple_arrays_cache.h>
@@ -103,7 +103,7 @@ TConclusion<bool> TDetectInMem::DoExecuteInplace(const std::shared_ptr<IDataSour
     FOR_DEBUG_LOG(NKikimrServices::COLUMNSHARD_SCAN_EVLOG, source->AddEvent("sdmem"));
     const auto& commonContext = *source->GetContext()->GetCommonContext();
     auto task = std::make_shared<TStepAction>(source, std::move(cursor), commonContext.GetScanActorId(), false);
-    NConveyor::TScanServiceOperator::SendTaskToExecute(task, commonContext.GetConveyorProcessId());
+    NConveyorComposite::TScanServiceOperator::SendTaskToExecute(task, commonContext.GetConveyorProcessId());
     return false;
 }
 
@@ -112,7 +112,7 @@ class TApplySourceResult: public IApplyAction {
 private:
     using TBase = IDataTasksProcessor::ITask;
     YDB_READONLY_DEF(std::shared_ptr<IDataSource>, Source);
-    TFetchingScriptCursor Step;
+    mutable TFetchingScriptCursor Step;
 
 public:
     TApplySourceResult(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step)
@@ -122,7 +122,7 @@ public:
 
     virtual bool DoApply(IDataReader& indexedDataRead) const override {
         auto* plainReader = static_cast<TPlainReadData*>(&indexedDataRead);
-        Source->SetCursor(Step);
+        Source->SetCursor(std::move(Step));
         Source->StartSyncSection();
         plainReader->MutableScanner().GetResultSyncPoint()->OnSourcePrepared(Source, *plainReader);
         return true;
@@ -186,7 +186,7 @@ TConclusion<bool> TPrepareResultStep::DoExecuteInplace(const std::shared_ptr<IDa
         TFetchingScriptCursor cursor(plan, 0);
         const auto& commonContext = *context->GetCommonContext();
         auto task = std::make_shared<TStepAction>(source, std::move(cursor), commonContext.GetScanActorId(), false);
-        NConveyor::TScanServiceOperator::SendTaskToExecute(task, commonContext.GetConveyorProcessId());
+        NConveyorComposite::TScanServiceOperator::SendTaskToExecute(task, commonContext.GetConveyorProcessId());
         return false;
     } else {
         return true;
@@ -205,7 +205,7 @@ void TDuplicateFilter::TFilterSubscriber::OnFilterReady(NArrow::TColumnFilter&& 
         source->MutableStageData().AddFilter(std::move(filter));
         Step.Next();
         auto task = std::make_shared<TStepAction>(source, std::move(Step), source->GetContext()->GetCommonContext()->GetScanActorId(), false);
-        NConveyor::TScanServiceOperator::SendTaskToExecute(task, source->GetContext()->GetCommonContext()->GetConveyorProcessId());
+        NConveyorComposite::TScanServiceOperator::SendTaskToExecute(task, source->GetContext()->GetCommonContext()->GetConveyorProcessId());
     }
 }
 

@@ -436,11 +436,11 @@ TRestoreClient::TRestoreClient(const TDriver& driver, const std::shared_ptr<TLog
 TRestoreResult TRestoreClient::Restore(const TString& fsPath, const TString& dbPath, const TRestoreSettings& settings) {
     LOG_I("Restore " << fsPath.Quote() << " to " << dbPath.Quote());
 
-    // find existing items
-    TFsPath dbBasePath = dbPath;
+    // Find first existing path on the way from the dbPath to the root of the cluster.
+    TPathSplitUnix dbPathSplit(dbPath);
 
     while (true) {
-        auto result = DescribePath(SchemeClient, dbBasePath);
+        auto result = DescribePath(SchemeClient, dbPathSplit.Reconstruct());
 
         if (result.GetStatus() == EStatus::SUCCESS) {
             break;
@@ -448,17 +448,23 @@ TRestoreResult TRestoreClient::Restore(const TString& fsPath, const TString& dbP
 
         if (result.GetStatus() != EStatus::SCHEME_ERROR) {
             LOG_E("Error finding db base path: " << result.GetIssues().ToOneLineString());
-            return Result<TRestoreResult>(dbBasePath, EStatus::SCHEME_ERROR, "Can not find existing path");
+            return Result<TRestoreResult>(dbPathSplit.Reconstruct(), EStatus::SCHEME_ERROR, "Can not find existing path");
         }
 
-        dbBasePath = dbBasePath.Parent();
+        if (std::ssize(dbPathSplit) <= 1) {
+            LOG_E("Can not resolve cluster root: " << result.GetIssues().ToOneLineString());
+            return Result<TRestoreResult>(dbPathSplit.Reconstruct(), EStatus::SCHEME_ERROR, "Can not find existing path");
+        }
+
+        dbPathSplit.pop_back();
     }
 
-    LOG_D("Resolved db base path: " << dbBasePath.GetPath().Quote());
+    const TString dbBasePath = dbPathSplit.Reconstruct();
+    LOG_D("Resolved db base path: " << dbBasePath.Quote());
 
     auto oldDirectoryList = RecursiveList(SchemeClient, dbBasePath);
     if (const auto& status = oldDirectoryList.Status; !status.IsSuccess()) {
-        LOG_E("Error listing db base path: " << dbBasePath.GetPath().Quote() << ": " << status.GetIssues().ToOneLineString());
+        LOG_E("Error listing db base path: " << dbBasePath.Quote() << ": " << status.GetIssues().ToOneLineString());
         return Result<TRestoreResult>(dbBasePath, EStatus::SCHEME_ERROR, "Can not list existing directory");
     }
 
@@ -936,7 +942,14 @@ namespace {
     }
 
     TString GetDbPath(const TFsPath& fsPath, const TFsPath& fsBackupRoot, const TString& dbRestoreRoot) {
-        return JoinFsPaths(dbRestoreRoot, fsPath.RelativeTo(fsBackupRoot));
+        auto relativeFsPath = fsPath.RelativeTo(fsBackupRoot);
+        const auto& split = relativeFsPath.PathSplit();
+        if (split.empty()) {
+            return dbRestoreRoot;
+        }
+        TPathSplitUnix canonicalSplit;
+        canonicalSplit.AppendMany(split.begin(), split.end());
+        return Join('/', dbRestoreRoot, canonicalSplit.Reconstruct());
     }
 
     TRestoreResult ListBackupEntries(const TFsPath& fsBackupRoot, const TString& dbRestoreRoot, TVector<TFsBackupEntry>& backupEntries) {
@@ -990,7 +1003,8 @@ namespace {
         for (const auto& [fsPath, dbPath, type] : in) {
             NJson::TJsonMap entry;
             entry["type"] = TStringBuilder() << type;
-            entry["path"] = fsPath.GetPath();
+            entry["dbPath"] = dbPath;
+            entry["fsPath"] = fsPath.GetPath();
             out.AppendValue(entry);
         }
         return out;
@@ -1060,7 +1074,10 @@ TRestoreResult TRestoreClient::RestoreFolder(
         if (type == ESchemeEntryType::Directory && oldEntries.contains(dbPath)) {
             continue;
         }
-        Y_ENSURE(dbPath.StartsWith(dbRestoreRoot), "dbPath must be built by appending a relative path to dbRestoreRoot");
+        Y_ENSURE(dbPath.StartsWith(dbRestoreRoot),
+            "Implementation error, dbPath: " << dbPath.Quote()
+                << " must be built by appending a relative path to dbRestoreRoot: " << dbRestoreRoot.Quote()
+        );
         if (auto result = Restore(type, fsPath, dbRestoreRoot, dbPath.substr(dbRestoreRoot.size()), settings, oldEntries.contains(dbPath), true); !result.IsSuccess()) {
             return result;
         }

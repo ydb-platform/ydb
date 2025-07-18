@@ -411,6 +411,8 @@ void TQueryPlanPrinter::PrintPretty(const NJson::TJsonValue& plan) {
     }
 }
 
+
+
 void TQueryPlanPrinter::PrintPrettyImpl(const NJson::TJsonValue& plan, TVector<TString>& offsets) {
     static const TString edge = "|  ";
     static const TString noEdge = "   ";
@@ -490,8 +492,8 @@ void TQueryPlanPrinter::PrintSimplifyJson(const NJson::TJsonValue& plan) {
 }
 
 void TQueryPlanPrinter::PrintPrettyTable(const NJson::TJsonValue& plan) {
-    static const TVector<TString> explainColumnNames = {"Operation", "E-Cost", "E-Rows", "E-Size"};
-    static const TVector<TString> explainAnalyzeColumnNames = {"Operation", "A-Cpu", "A-Rows", "E-Cost", "E-Rows", "E-Size"};
+    static const TVector<TString> explainColumnNames = {"E-Cost", "E-Rows", "E-Size", "Operation"};
+    static const TVector<TString> explainAnalyzeColumnNames = {"A-Cpu", "A-Rows", "E-Cost", "E-Rows", "E-Size", "Operation"};
 
     if (plan.GetMapSafe().contains("SimplifiedPlan")) {
         auto queryPlan = plan.GetMapSafe().at("SimplifiedPlan");
@@ -549,26 +551,40 @@ TString FormatPrettyTableDouble(TString stringValue) {
     return ToString(stream.str());
 }
 
-void TQueryPlanPrinter::PrintPrettyTableImpl(const NJson::TJsonValue& plan, TString& offset, TPrettyTable& table) {
+void TQueryPlanPrinter::PrintPrettyTableImpl(const NJson::TJsonValue& plan, TString& offset, TPrettyTable& table, bool isLast, TVector<bool> hasMore) {
     const auto& node = plan.GetMapSafe();
 
     auto& newRow = table.AddRow();
 
     NColorizer::TColors colors = NColorizer::AutoColors(Output);
-    TStringBuf color;
-    switch(offset.size() % 3) {
-        case 0:
-            color = colors.LightRed();
-            break;
-        case 1:
-            color = colors.LightGreen();
-            break;
-        case 2:
-            color = colors.LightBlue();
-            break;
-        default:
-            color = colors.Default();
-            break;
+
+    bool hasChildren = node.contains("Plans") && !node.at("Plans").GetArraySafe().empty();
+
+    TStringBuilder arrowOffset;
+    for (size_t i = 0; i < hasMore.size(); ++i) {
+        if (hasMore[i]) {
+            arrowOffset << "│ ";
+        } else {
+            arrowOffset << "  ";
+        }
+    }
+
+    if (offset.empty()) {
+        arrowOffset << "┌> ";
+    } else {
+        if (isLast) {
+            if (hasChildren) {
+                arrowOffset << "└─┬> ";
+            } else {
+                arrowOffset << "└──> ";
+            }
+        } else {
+            if (hasChildren) {
+                arrowOffset << "├─┬> ";
+            } else {
+                arrowOffset << "├──> ";
+            }
+        }
     }
 
     if (node.contains("Operators")) {
@@ -610,37 +626,44 @@ void TQueryPlanPrinter::PrintPrettyTableImpl(const NJson::TJsonValue& plan, TStr
 
             TStringBuilder operation;
             if (info.empty()) {
-                operation << offset << color << " -> " << colors.LightCyan() << op.GetMapSafe().at("Name").GetString() << colors.Default();
+                operation << arrowOffset << colors.LightCyan() << op.GetMapSafe().at("Name").GetString() << colors.Default();
             } else {
-                operation << offset << color << " -> " << colors.LightCyan() << op.GetMapSafe().at("Name").GetString() << colors.Default()
+                operation << arrowOffset << colors.LightCyan() << op.GetMapSafe().at("Name").GetString() << colors.Default()
                      << " (" << JoinStrings(info, ", ") << ")";
             }
 
-            newRow.Column(0, std::move(operation));
             if (AnalyzeMode) {
-                newRow.Column(1, std::move(aCpu));
-                newRow.Column(2, std::move(aRows));
-                newRow.Column(3, std::move(eCost));
-                newRow.Column(4, std::move(eRows));
-                newRow.Column(5, std::move(eSize));
+                newRow.Column(0, std::move(aCpu));
+                newRow.Column(1, std::move(aRows));
+                newRow.Column(2, std::move(eCost));
+                newRow.Column(3, std::move(eRows));
+                newRow.Column(4, std::move(eSize));
             }
             else {
-                newRow.Column(1, std::move(eCost));
-                newRow.Column(2, std::move(eRows));
-                newRow.Column(3, std::move(eSize));
+                newRow.Column(0, std::move(eCost));
+                newRow.Column(1, std::move(eRows));
+                newRow.Column(2, std::move(eSize));
             }
+            newRow.WriteToLastColumn(std::move(operation));
         }
     } else {
         TStringBuilder operation;
-        operation << offset << color << " -> " << colors.LightCyan() << node.at("Node Type").GetString() << colors.Default();
-        newRow.Column(0, std::move(operation));
+        operation << arrowOffset << colors.LightCyan() << node.at("Node Type").GetString() << colors.Default();
+        newRow.WriteToLastColumn(std::move(operation));
     }
 
     if (node.contains("Plans")) {
         auto& plans = node.at("Plans").GetArraySafe();
-        for (auto subplan : plans) {
+        for (size_t i = 0; i < plans.size(); ++i) {
+            bool isLastChild = (i == plans.size() - 1);
+
+            TVector<bool> newHasMore = hasMore;
+            if (!offset.empty()) {
+                newHasMore.push_back(!isLast);
+            }
+
             offset += "  ";
-            PrintPrettyTableImpl(subplan, offset, table);
+            PrintPrettyTableImpl(plans[i], offset, table, isLastChild, newHasMore);
             offset.resize(offset.size() - 2);
         }
     }

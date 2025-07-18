@@ -140,14 +140,18 @@ message TConfigItem {
         BackgroundCleaningConfigItem = 77;
         MetadataCacheConfigItem = 80;
         MemoryControllerConfigItem = 81;
-        GroupedMemoryLimiterConfig = 82;
+        ScanGroupedMemoryLimiterConfig = 82;
         ReplicationConfigItem = 83;
         CompPrioritiesConfig = 85;
         HealthCheckConfigItem = 89;
         WorkloadManagerConfigItem = 90;
+        CompGroupedMemoryLimiterConfig = 92;
 
         NamedConfigsItem = 100;
         ClusterYamlConfigItem = 101;
+
+        CompositeConveyorConfigItem = 109;
+        PortionsMetadataCacheItem = 110;
 
         // synthetic kinds for audit purposes only
         DatabaseYamlConfigChangeItem = 32767;

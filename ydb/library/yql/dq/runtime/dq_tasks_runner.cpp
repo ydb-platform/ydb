@@ -299,6 +299,17 @@ public:
         SpillerFactory = spillerFactory;
     }
 
+    TString GetOutputDebugString() override {
+        if (AllocatedHolder->Output) {
+            switch (AllocatedHolder->Output->GetFillLevel()) {
+                case NoLimit:   return "";
+                case SoftLimit: return TStringBuilder() << "Output.FillLimit == SoftLimit " << AllocatedHolder->Output->DebugString();
+                case HardLimit: return TStringBuilder() << "Output.FillLimit == HardLimit " << AllocatedHolder->Output->DebugString();
+            }
+        }
+        return "";
+    }
+
     bool UseSeparatePatternAlloc(const TDqTaskSettings& taskSettings) const {
         return Context.PatternCache &&
             (Settings.OptLLVM == "OFF" || taskSettings.IsLLVMDisabled() || Settings.UseCacheForLLVM);
@@ -683,6 +694,7 @@ public:
                     settings.MaxChunkBytes = memoryLimits.OutputChunkMaxSize;
                     settings.ChunkSizeLimit = memoryLimits.ChunkSizeLimit;
                     settings.ArrayBufferMinFillPercentage = memoryLimits.ArrayBufferMinFillPercentage;
+                    settings.BufferPageAllocSize = memoryLimits.BufferPageAllocSize;
                     settings.TransportVersion = outputChannelDesc.GetTransportVersion();
                     settings.Level = StatsModeToCollectStatsLevel(Settings.StatsMode);
 
@@ -975,7 +987,7 @@ private:
         if (isWide) {
             wideBuffer.resize(AllocatedHolder->OutputWideType->GetElementsCount());
         }
-        while (!AllocatedHolder->Output->IsFull()) {
+        while (AllocatedHolder->Output->GetFillLevel() == NoLimit) {
             NUdf::TUnboxedValue value;
             NUdf::EFetchStatus fetchStatus;
             if (isWide) {

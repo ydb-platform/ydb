@@ -46,6 +46,7 @@ message Node {
     // version defines YDB version for current Node.
     // For example, 'ydb-stable-24-1'.
     string version = 9;
+    uint32 pile_id = 10;
 }
 
 message ListClusterNodesRequest {

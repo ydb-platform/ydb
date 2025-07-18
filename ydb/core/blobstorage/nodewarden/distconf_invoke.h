@@ -7,11 +7,15 @@ namespace NKikimr::NStorage {
     class TDistributedConfigKeeper::TInvokeRequestHandlerActor : public TActorBootstrapped<TInvokeRequestHandlerActor> {
         TDistributedConfigKeeper* const Self;
         const std::weak_ptr<TLifetimeToken> LifetimeToken;
-        const std::weak_ptr<TScepter> Scepter;
+        const ui64 InvokeActorQueueGeneration;
         std::unique_ptr<TEventHandle<TEvNodeConfigInvokeOnRoot>> Event;
         const TActorId Sender;
         const ui64 Cookie;
         const TActorId RequestSessionId;
+
+        bool BeginRegistered = false;
+
+        bool CheckSyncersAfterCommit = false;
 
         TActorId ParentId;
         ui32 WaitingReplyFromNode = 0;
@@ -25,8 +29,35 @@ namespace NKikimr::NStorage {
 
         std::shared_ptr<TLifetimeToken> RequestHandlerToken = std::make_shared<TLifetimeToken>();
 
+        THashSet<TBridgePileId> SpecificBridgePileIds;
+        std::optional<NKikimrBlobStorage::TStorageConfig> SwitchBridgeNewConfig;
+
+        std::optional<NKikimrBlobStorage::TStorageConfig> MergedConfig;
+
+        std::optional<NKikimrBlobStorage::TStorageConfig> ReplaceConfig;
+
+    public: // Error handling
+        struct TExError : yexception {
+            bool IsCritical = false; // the one what would case Y_ABORT if in debug mode
+            TResult::EStatus Status = TResult::ERROR;
+        };
+
+        struct TExCriticalError : TExError {
+            TExCriticalError() { IsCritical = true; }
+        };
+
+        struct TExRace : TExError {
+            TExRace() { Status = TResult::RACE; }
+        };
+
+        struct TExNoQuorum : TExError {
+            TExNoQuorum() { Status = TResult::NO_QUORUM; }
+        };
+
     public:
         TInvokeRequestHandlerActor(TDistributedConfigKeeper *self, std::unique_ptr<TEventHandle<TEvNodeConfigInvokeOnRoot>>&& ev);
+        TInvokeRequestHandlerActor(TDistributedConfigKeeper *self);
+        TInvokeRequestHandlerActor(TDistributedConfigKeeper *self, NKikimrBlobStorage::TStorageConfig&& config);
 
         void Bootstrap(TActorId parentId);
 
@@ -45,6 +76,7 @@ namespace NKikimr::NStorage {
         // Query execution logic
 
         void ExecuteQuery();
+        void ExecuteInitialRootAction();
         void IssueScatterTask(TEvScatter&& task, TGatherCallback callback);
         void Handle(TEvNodeConfigGather::TPtr ev);
 
@@ -84,8 +116,12 @@ namespace NKikimr::NStorage {
 
         void ReassignStateStorageNode(const TQuery::TReassignStateStorageNode& cmd);
         void ReconfigStateStorage(const NKikimrBlobStorage::TStateStorageConfig& cmd);
-        void GetStateStorageConfig();
+        void SelfHealStateStorage(const TQuery::TSelfHealStateStorage& cmd);
+        void GetStateStorageConfig(const TQuery::TGetStateStorageConfig& cmd);
 
+        void GetCurrentStateStorageConfig(NKikimrBlobStorage::TStateStorageConfig* currentConfig);
+        void GetRecommendedStateStorageConfig(NKikimrBlobStorage::TStateStorageConfig* currentConfig);
+        bool AdjustRingGroupActorIdOffsetInRecommendedStateStorageConfig(NKikimrBlobStorage::TStateStorageConfig* currentConfig);
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Storage configuration YAML manipulation
 
@@ -121,14 +157,28 @@ namespace NKikimr::NStorage {
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Bridge mode
 
-        void SwitchBridgeClusterState(const NKikimrBridge::TClusterState& newClusterState);
+        std::optional<TString> ValidateSwitchBridgeClusterState(const NKikimrBridge::TClusterState& newClusterState);
+        void SwitchBridgeClusterState();
+        NKikimrBlobStorage::TStorageConfig GetSwitchBridgeNewConfig(const NKikimrBridge::TClusterState& newClusterState);
+
+        void NotifyBridgeSyncFinished(const TQuery::TNotifyBridgeSyncFinished& cmd);
+
+        bool PrepareMergeUnsyncedPileConfig(const TQuery::TMergeUnsyncedPileConfig& cmd);
+        void MergeUnsyncedPileConfig();
+
+        void NegotiateUnsyncedConnection(const TQuery::TNegotiateUnsyncedConnection& cmd);
+
+        bool PrepareAdvanceClusterStateGeneration(const TQuery::TAdvanceClusterStateGeneration& cmd);
+        void AdvanceClusterStateGeneration();
+
+        bool GenerateSpecificBridgePileIds();
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Configuration proposition
 
         void AdvanceGeneration();
-        void StartProposition(NKikimrBlobStorage::TStorageConfig *config, bool updateFields = true);
-        bool CheckConfigUpdate(const NKikimrBlobStorage::TStorageConfig& proposed);
+        void StartProposition(NKikimrBlobStorage::TStorageConfig *config, bool forceGeneration = false,
+            const NKikimrBlobStorage::TStorageConfig *propositionBase = nullptr);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Query termination and result delivery
@@ -151,6 +201,26 @@ namespace NKikimr::NStorage {
         void PassAway() override;
 
         STFUNC(StateFunc);
+
+        ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+        // Notifications from distconf
+
+        void OnNoQuorum();
+        void OnError(const TString& errorReason);
+        void OnBeginOperation();
+        void OnConfigProposed(const std::optional<TString>& errorReason);
+
+        template<typename T>
+        void Wrap(T&& callback) {
+            try {
+                callback();
+            } catch (const TExError& error) {
+                FinishWithError(error.Status, error.what());
+                if (error.IsCritical) {
+                    Y_DEBUG_ABORT("critical error during query processing: %s", error.what());
+                }
+            }
+        }
     };
 
 } // NKikimr::NStorage

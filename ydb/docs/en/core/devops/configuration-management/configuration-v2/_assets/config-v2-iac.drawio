@@ -1,0 +1,97 @@
+<mxfile host="app.diagrams.net" agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36" version="27.0.9">
+  <diagram name="Config V2 Overview" id="lWMOCSeivi1WlLokOeo3">
+    <mxGraphModel dx="1191" dy="1160" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="850" pageHeight="1100" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="TQIL6B2LIMa1BMv2OIPw-67" value="" style="shape=database;html=1;" parent="1" vertex="1">
+          <mxGeometry x="460" y="576" width="220" height="164" as="geometry" />
+        </mxCell>
+        <mxCell id="TQIL6B2LIMa1BMv2OIPw-45" value="DevOps&lt;div&gt;Engineer&lt;/div&gt;" style="shape=umlActor;verticalLabelPosition=bottom;verticalAlign=top;html=1;outlineConnect=0;" parent="1" vertex="1">
+          <mxGeometry x="50" y="571" width="70" height="150" as="geometry" />
+        </mxCell>
+        <mxCell id="TQIL6B2LIMa1BMv2OIPw-47" value="&lt;b&gt;config.yaml&lt;/b&gt;&lt;div&gt;&amp;nbsp;&lt;span style=&quot;background-color: transparent; color: light-dark(rgb(0, 0, 0), rgb(255, 255, 255));&quot;&gt;&amp;nbsp;copy for editing&lt;/span&gt;&lt;/div&gt;" style="shape=note;whiteSpace=wrap;html=1;backgroundOutline=1;darkOpacity=0.05;" parent="1" vertex="1">
+          <mxGeometry x="180" y="611" width="130" height="90" as="geometry" />
+        </mxCell>
+        <mxCell id="TQIL6B2LIMa1BMv2OIPw-50" value="" style="endArrow=block;html=1;rounded=0;exitX=0;exitY=0;exitDx=130;exitDy=30;exitPerimeter=0;strokeWidth=3;endFill=1;spacingTop=20;entryX=0;entryY=0.656;entryDx=0;entryDy=0;entryPerimeter=0;" parent="1" target="TQIL6B2LIMa1BMv2OIPw-68" edge="1">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="310" y="681" as="sourcePoint" />
+            <mxPoint x="460" y="680" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="TQIL6B2LIMa1BMv2OIPw-51" value="&lt;font style=&quot;font-size: 14px;&quot;&gt;commit&lt;/font&gt;" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];spacing=2;spacingTop=30;" parent="TQIL6B2LIMa1BMv2OIPw-50" vertex="1" connectable="0">
+          <mxGeometry x="-0.2267" relative="1" as="geometry">
+            <mxPoint x="-5" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="TQIL6B2LIMa1BMv2OIPw-52" value="" style="endArrow=none;html=1;rounded=0;exitX=0;exitY=0;exitDx=130;exitDy=30;exitPerimeter=0;strokeWidth=3;endFill=1;entryX=0.008;entryY=0.256;entryDx=0;entryDy=0;entryPerimeter=0;startArrow=block;startFill=1;" parent="1" target="TQIL6B2LIMa1BMv2OIPw-68" edge="1">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="310" y="645.5" as="sourcePoint" />
+            <mxPoint x="461.95000000000005" y="645" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="TQIL6B2LIMa1BMv2OIPw-53" value="&lt;span style=&quot;font-size: 14px;&quot;&gt;checkout&lt;/span&gt;" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];spacing=0;spacingTop=0;spacingBottom=30;" parent="TQIL6B2LIMa1BMv2OIPw-52" vertex="1" connectable="0">
+          <mxGeometry x="-0.2267" relative="1" as="geometry">
+            <mxPoint x="1" y="1" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="TQIL6B2LIMa1BMv2OIPw-66" value="&lt;b&gt;YDB Cluster&lt;/b&gt;&lt;br&gt;&lt;div&gt;source of truth&lt;/div&gt;" style="ellipse;shape=cloud;whiteSpace=wrap;html=1;shadow=0;sketch=1;curveFitting=1;jiggle=2;fillColor=#dae8fc;strokeColor=#6c8ebf;" parent="1" vertex="1">
+          <mxGeometry x="382.5" y="900" width="385" height="110" as="geometry" />
+        </mxCell>
+        <mxCell id="TQIL6B2LIMa1BMv2OIPw-68" value="&lt;b&gt;config.yaml&lt;/b&gt;&lt;div&gt;target version&lt;/div&gt;" style="shape=note;whiteSpace=wrap;html=1;backgroundOutline=1;darkOpacity=0.05;" parent="1" vertex="1">
+          <mxGeometry x="510" y="621" width="130" height="90" as="geometry" />
+        </mxCell>
+        <mxCell id="TQIL6B2LIMa1BMv2OIPw-69" value="&lt;b&gt;&lt;font style=&quot;font-size: 16px;&quot;&gt;Source Code Repository&lt;/font&gt;&lt;/b&gt;" style="text;html=1;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;" parent="1" vertex="1">
+          <mxGeometry x="520" y="583" width="110" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="TQIL6B2LIMa1BMv2OIPw-70" value="&lt;font style=&quot;font-size: 14px;&quot;&gt;&lt;b&gt;CI/CD&lt;/b&gt;&lt;/font&gt;" style="shape=database;html=1;" parent="1" vertex="1">
+          <mxGeometry x="460" y="790" width="220" height="44" as="geometry" />
+        </mxCell>
+        <mxCell id="TQIL6B2LIMa1BMv2OIPw-71" value="" style="endArrow=none;html=1;rounded=0;exitX=0.645;exitY=-0.068;exitDx=0;exitDy=0;exitPerimeter=0;strokeWidth=3;endFill=1;entryX=0.008;entryY=0.256;entryDx=0;entryDy=0;entryPerimeter=0;startArrow=block;startFill=1;spacingLeft=30;" parent="1" edge="1">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="610.9000000000001" y="787.008" as="sourcePoint" />
+            <mxPoint x="610" y="711" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="TQIL6B2LIMa1BMv2OIPw-72" value="&lt;span style=&quot;font-size: 14px;&quot;&gt;checkout&lt;/span&gt;" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];spacing=0;spacingTop=0;spacingBottom=30;" parent="TQIL6B2LIMa1BMv2OIPw-71" vertex="1" connectable="0">
+          <mxGeometry x="-0.2267" relative="1" as="geometry">
+            <mxPoint x="1" y="12" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="TQIL6B2LIMa1BMv2OIPw-73" value="" style="endArrow=block;html=1;rounded=0;strokeWidth=3;endFill=1;spacingTop=20;entryX=0;entryY=0.656;entryDx=0;entryDy=0;entryPerimeter=0;exitX=0.414;exitY=0;exitDx=0;exitDy=0;exitPerimeter=0;" parent="1" edge="1">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="541.0799999999999" y="790" as="sourcePoint" />
+            <mxPoint x="540" y="711" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="TQIL6B2LIMa1BMv2OIPw-74" value="&lt;font style=&quot;font-size: 14px;&quot;&gt;commit&lt;/font&gt;" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];spacing=2;spacingTop=30;" parent="TQIL6B2LIMa1BMv2OIPw-73" vertex="1" connectable="0">
+          <mxGeometry x="-0.2267" relative="1" as="geometry">
+            <mxPoint x="-1" y="-19" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="TQIL6B2LIMa1BMv2OIPw-77" value="" style="endArrow=none;html=1;rounded=0;strokeWidth=3;endFill=1;entryX=0.008;entryY=0.256;entryDx=0;entryDy=0;entryPerimeter=0;startArrow=block;startFill=1;spacingLeft=30;exitX=0.596;exitY=0.145;exitDx=0;exitDy=0;exitPerimeter=0;" parent="1" source="TQIL6B2LIMa1BMv2OIPw-66" edge="1">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="610" y="910" as="sourcePoint" />
+            <mxPoint x="609.5" y="834" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="TQIL6B2LIMa1BMv2OIPw-78" value="&lt;span style=&quot;font-size: 14px;&quot;&gt;replace&lt;/span&gt;" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];spacing=0;spacingTop=0;spacingBottom=30;" parent="TQIL6B2LIMa1BMv2OIPw-77" vertex="1" connectable="0">
+          <mxGeometry x="-0.2267" relative="1" as="geometry">
+            <mxPoint x="1" y="6" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="TQIL6B2LIMa1BMv2OIPw-79" value="" style="endArrow=block;html=1;rounded=0;strokeWidth=3;endFill=1;spacingTop=20;entryX=0;entryY=0.656;entryDx=0;entryDy=0;entryPerimeter=0;" parent="1" edge="1">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="540" y="910" as="sourcePoint" />
+            <mxPoint x="539.5" y="834" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="TQIL6B2LIMa1BMv2OIPw-80" value="&lt;font style=&quot;font-size: 14px;&quot;&gt;fetch&lt;/font&gt;" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];spacing=2;spacingTop=30;" parent="TQIL6B2LIMa1BMv2OIPw-79" vertex="1" connectable="0">
+          <mxGeometry x="-0.2267" relative="1" as="geometry">
+            <mxPoint x="-1" y="-21" as="offset" />
+          </mxGeometry>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

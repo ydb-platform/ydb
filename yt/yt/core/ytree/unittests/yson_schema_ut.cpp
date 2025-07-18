@@ -58,6 +58,7 @@ struct TTestYsonStruct
     : public TYsonStruct
 {
     TString MyString;
+    std::string MyStdString;
     TTestSubStructPtr Sub;
     std::vector<TTestSubStructLite> SubList;
     std::vector<TString> MyStringList;
@@ -77,6 +78,7 @@ struct TTestYsonStruct
     static void Register(TRegistrar registrar)
     {
         registrar.Parameter("my_string", &TThis::MyString);
+        registrar.Parameter("my_std_string", &TThis::MyStdString);
         registrar.Parameter("sub", &TThis::Sub)
             .DefaultNew();
         registrar.Parameter("sub_list", &TThis::SubList)
@@ -251,6 +253,7 @@ TEST(TYsonStructSchemaTest, TestYsonStruct)
                 {name="my_enum";type={type_name="enum";enum_name="ETestEnum";values=["value0";"value1";]}};
                 {name="my_char";type="int8";};
                 {name="my_ushort";type="uint16";};
+                {name="my_std_string";type="string";required=%true;};
                 {name="nullable_int";type={type_name="optional";item="int64";}};
                 {
                     name="sub_list";

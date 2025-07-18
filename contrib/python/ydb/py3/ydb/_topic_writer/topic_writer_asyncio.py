@@ -26,6 +26,7 @@ from .. import (
     _apis,
     issues,
 )
+from .._utilities import AtomicCounter
 from .._errors import check_retriable_error
 from .._topic_common import common as topic_common
 from ..retries import RetrySettings
@@ -82,7 +83,7 @@ class WriterAsyncIO:
         if self._closed or self._loop.is_closed():
             return
         try:
-            logger.warning("Topic writer was not closed properly. Consider using method close().")
+            logger.debug("Topic writer was not closed properly. Consider using method close().")
             task = self._loop.create_task(self.close(flush=False))
             topic_common.wrap_set_name_for_asyncio_task(task, task_name="close writer")
         except BaseException:
@@ -92,9 +93,11 @@ class WriterAsyncIO:
         if self._closed:
             return
 
+        logger.debug("Close topic writer")
         self._closed = True
 
         await self._reconnector.close(flush)
+        logger.debug("Topic writer was closed")
 
     async def write_with_ack(
         self,
@@ -108,6 +111,10 @@ class WriterAsyncIO:
 
         For wait with timeout use asyncio.wait_for.
         """
+        logger.debug(
+            "write_with_ack %s messages",
+            len(messages) if isinstance(messages, list) else 1,
+        )
         futures = await self.write_with_ack_future(messages)
         if not isinstance(futures, list):
             futures = [futures]
@@ -129,6 +136,10 @@ class WriterAsyncIO:
 
         For wait with timeout use asyncio.wait_for.
         """
+        logger.debug(
+            "write_with_ack_future %s messages",
+            len(messages) if isinstance(messages, list) else 1,
+        )
         input_single_message = not isinstance(messages, list)
         converted_messages = []
         if isinstance(messages, list):
@@ -153,6 +164,10 @@ class WriterAsyncIO:
 
         For wait with timeout use asyncio.wait_for.
         """
+        logger.debug(
+            "write %s messages",
+            len(messages) if isinstance(messages, list) else 1,
+        )
         await self.write_with_ack_future(messages)
 
     async def flush(self):
@@ -162,6 +177,7 @@ class WriterAsyncIO:
 
         For wait with timeout use asyncio.wait_for.
         """
+        logger.debug("flush writer")
         return await self._reconnector.flush()
 
     async def wait_init(self) -> PublicWriterInitInfo:
@@ -170,6 +186,7 @@ class WriterAsyncIO:
 
         For wait with timeout use asyncio.wait_for()
         """
+        logger.debug("wait writer init")
         return await self._reconnector.wait_init()
 
 
@@ -225,6 +242,8 @@ class TxWriterAsyncIO(WriterAsyncIO):
 
 
 class WriterAsyncIOReconnector:
+    _static_id_counter = AtomicCounter()
+
     _closed: bool
     _loop: asyncio.AbstractEventLoop
     _credentials: Union[ydb.credentials.Credentials, None]
@@ -260,6 +279,7 @@ class WriterAsyncIOReconnector:
         self, driver: SupportedDriverType, settings: WriterSettings, tx: Optional["BaseQueryTxContext"] = None
     ):
         self._closed = False
+        self._id = WriterAsyncIOReconnector._static_id_counter.inc_and_get()
         self._loop = asyncio.get_running_loop()
         self._driver = driver
         self._credentials = driver._credentials
@@ -307,12 +327,13 @@ class WriterAsyncIOReconnector:
         ]
 
         self._state_changed = asyncio.Event()
+        logger.debug("init writer reconnector id=%s", self._id)
 
     async def close(self, flush: bool):
         if self._closed:
             return
         self._closed = True
-        logger.debug("Close writer reconnector")
+        logger.debug("Close writer reconnector id=%s", self._id)
 
         if flush:
             await self.flush()
@@ -328,6 +349,8 @@ class WriterAsyncIOReconnector:
             self._check_stop()
         except TopicWriterStopped:
             pass
+
+        logger.debug("Writer reconnector id=%s was closed", self._id)
 
     async def wait_init(self) -> PublicWriterInitInfo:
         while True:
@@ -418,12 +441,18 @@ class WriterAsyncIOReconnector:
             # noinspection PyBroadException
             stream_writer = None
             try:
+                logger.debug("writer reconnector %s connect attempt %s", self._id, attempt)
                 tx_identity = None if self._tx is None else self._tx._tx_identity()
                 stream_writer = await WriterAsyncIOStream.create(
                     self._driver,
                     self._init_message,
                     self._settings.update_token_interval,
                     tx_identity=tx_identity,
+                )
+                logger.debug(
+                    "writer reconnector %s connected stream %s",
+                    self._id,
+                    stream_writer._id,
                 )
                 try:
                     if self._init_info is None:
@@ -458,6 +487,11 @@ class WriterAsyncIOReconnector:
                     return
 
                 await asyncio.sleep(err_info.sleep_timeout_seconds)
+                logger.debug(
+                    "writer reconnector %s retry in %s seconds",
+                    self._id,
+                    err_info.sleep_timeout_seconds,
+                )
 
             except (asyncio.CancelledError, Exception) as err:
                 self._stop(err)
@@ -476,6 +510,12 @@ class WriterAsyncIOReconnector:
                 messages = await self._messages_for_encode.get()
                 while not self._messages_for_encode.empty():
                     messages.extend(self._messages_for_encode.get_nowait())
+
+                logger.debug(
+                    "writer reconnector %s encode %s messages",
+                    self._id,
+                    len(messages),
+                )
 
                 batch_codec = await self._codec_selector(messages)
                 await self._encode_data_inplace(batch_codec, messages)
@@ -582,6 +622,8 @@ class WriterAsyncIOReconnector:
         while True:
             resp = await writer.receive()
 
+            logger.debug("writer reconnector %s received %s acks", self._id, len(resp.acks))
+
             for ack in resp.acks:
                 self._handle_receive_ack(ack)
 
@@ -604,20 +646,37 @@ class WriterAsyncIOReconnector:
         else:
             raise TopicWriterError("internal error - receive unexpected ack message.")
         message_future.set_result(result)
+        logger.debug(
+            "writer reconnector %s ack seqno=%s result=%s",
+            self._id,
+            ack.seq_no,
+            type(result).__name__,
+        )
 
     async def _send_loop(self, writer: "WriterAsyncIOStream"):
         try:
+            logger.debug("writer reconnector %s send loop start", self._id)
             messages = list(self._messages)
 
             last_seq_no = 0
             for m in messages:
                 writer.write([m])
+                logger.debug(
+                    "writer reconnector %s sent buffered message seqno=%s",
+                    self._id,
+                    m.seq_no,
+                )
                 last_seq_no = m.seq_no
 
             while True:
                 m = await self._new_messages.get()  # type: InternalMessage
                 if m.seq_no > last_seq_no:
                     writer.write([m])
+                    logger.debug(
+                        "writer reconnector %s sent message seqno=%s",
+                        self._id,
+                        m.seq_no,
+                    )
         except asyncio.CancelledError:
             # the loop task cancelled be parent code, for example for reconnection
             # no need to stop all work.
@@ -639,7 +698,7 @@ class WriterAsyncIOReconnector:
             f.set_exception(reason)
 
         self._state_changed.set()
-        logger.info("Stop topic writer: %s" % reason)
+        logger.info("Stop topic writer %s: %s" % (self._id, reason))
 
     async def flush(self):
         if not self._messages_future:
@@ -650,6 +709,8 @@ class WriterAsyncIOReconnector:
 
 
 class WriterAsyncIOStream:
+    _static_id_counter = AtomicCounter()
+
     # todo slots
     _closed: bool
 
@@ -674,6 +735,7 @@ class WriterAsyncIOStream:
         tx_identity: Optional[TransactionIdentity] = None,
     ):
         self._closed = False
+        self._id = WriterAsyncIOStream._static_id_counter.inc_and_get()
 
         self._update_token_interval = update_token_interval
         self._get_token_function = get_token_function
@@ -686,12 +748,14 @@ class WriterAsyncIOStream:
         if self._closed:
             return
         self._closed = True
+        logger.debug("writer stream %s close", self._id)
 
         if self._update_token_task:
             self._update_token_task.cancel()
             await asyncio.wait([self._update_token_task])
 
         self._stream.close()
+        logger.debug("writer stream %s was closed", self._id)
 
     @staticmethod
     async def create(
@@ -711,6 +775,11 @@ class WriterAsyncIOStream:
             tx_identity=tx_identity,
         )
         await writer._start(stream, init_request)
+        logger.debug(
+            "writer stream %s started seqno=%s",
+            writer._id,
+            writer.last_seqno,
+        )
         return writer
 
     async def receive(self) -> StreamWriteMessage.WriteResponse:
@@ -727,6 +796,7 @@ class WriterAsyncIOStream:
             raise Exception("Unknown message while read writer answers: %s" % item)
 
     async def _start(self, stream: IGrpcWrapperAsyncIO, init_message: StreamWriteMessage.InitRequest):
+        logger.debug("writer stream %s send init request", self._id)
         stream.write(StreamWriteMessage.FromClient(init_message))
 
         resp = await stream.receive()
@@ -736,6 +806,11 @@ class WriterAsyncIOStream:
 
         self.last_seqno = resp.last_seq_no
         self.supported_codecs = [PublicCodec(codec) for codec in resp.supported_codecs]
+        logger.debug(
+            "writer stream %s init done last_seqno=%s",
+            self._id,
+            self.last_seqno,
+        )
 
         self._stream = stream
 
@@ -755,6 +830,8 @@ class WriterAsyncIOStream:
         if self._closed:
             raise RuntimeError("Can not write on closed stream.")
 
+        logger.debug("writer stream %s send %s messages", self._id, len(messages))
+
         for request in messages_to_proto_requests(messages, self._tx_identity):
             self._stream.write(request)
 
@@ -764,6 +841,7 @@ class WriterAsyncIOStream:
             token = self._get_token_function()
             if asyncio.iscoroutine(token):
                 token = await token
+            logger.debug("writer stream %s update token", self._id)
             await self._update_token(token=token)
 
     async def _update_token(self, token: str):
@@ -771,5 +849,6 @@ class WriterAsyncIOStream:
         try:
             msg = StreamWriteMessage.FromClient(UpdateTokenRequest(token))
             self._stream.write(msg)
+            logger.debug("writer stream %s token sent", self._id)
         finally:
             self._update_token_event.clear()

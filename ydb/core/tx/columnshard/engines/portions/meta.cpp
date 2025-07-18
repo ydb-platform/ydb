@@ -10,7 +10,8 @@
 
 namespace NKikimr::NOlap {
 
-NKikimrTxColumnShard::TIndexPortionMeta TPortionMeta::SerializeToProto(const NPortion::EProduced produced) const {
+NKikimrTxColumnShard::TIndexPortionMeta TPortionMeta::SerializeToProto(const std::vector<TUnifiedBlobId>& blobIds, const NPortion::EProduced produced) const {
+    AFL_VERIFY(blobIds.size());
     FullValidation();
     NKikimrTxColumnShard::TIndexPortionMeta portionMeta;
     portionMeta.SetTierName(TierName);
@@ -51,7 +52,7 @@ NKikimrTxColumnShard::TIndexPortionMeta TPortionMeta::SerializeToProto(const NPo
 
     RecordSnapshotMin.SerializeToProto(*portionMeta.MutableRecordSnapshotMin());
     RecordSnapshotMax.SerializeToProto(*portionMeta.MutableRecordSnapshotMax());
-    for (auto&& i : GetBlobIds()) {
+    for (auto&& i : blobIds) {
         *portionMeta.AddBlobIds() = i.GetLogoBlobId().AsBinaryString();
     }
     return portionMeta;

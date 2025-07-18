@@ -54,6 +54,7 @@ SRCS(
     concurrency/async_stream.cpp
     concurrency/config.cpp
     GLOBAL concurrency/configure_fiber_manager.cpp
+    concurrency/context_switch_aware_periodic_yielder.cpp
     concurrency/coroutine.cpp
     concurrency/delayed_executor.cpp
     concurrency/execution_stack.cpp
@@ -135,6 +136,7 @@ SRCS(
     misc/histogram.cpp
     misc/adjusted_exponential_moving_average.cpp
     misc/id_generator.cpp
+    misc/inotify.cpp
     misc/fair_share_hierarchical_queue.cpp
     misc/linear_probe.cpp
     misc/relaxed_mpsc_queue.cpp
@@ -200,9 +202,11 @@ SRCS(
     rpc/helpers.cpp
     rpc/local_channel.cpp
     rpc/local_server.cpp
-    rpc/message.cpp
     rpc/message_format.cpp
+    rpc/message.cpp
     rpc/null_channel.cpp
+    rpc/overload_controller.cpp
+    rpc/overload_controlling_service_base.cpp
     rpc/peer_discovery.cpp
     rpc/per_key_request_queue_provider.cpp
     rpc/protocol_version.cpp
@@ -213,8 +217,8 @@ SRCS(
     rpc/roaming_channel.cpp
     rpc/serialized_channel.cpp
     rpc/server_detail.cpp
-    rpc/service.cpp
     rpc/service_detail.cpp
+    rpc/service.cpp
     rpc/static_channel_factory.cpp
     rpc/stream.cpp
     rpc/throttling_channel.cpp
@@ -250,6 +254,7 @@ SRCS(
     yson/null_consumer.cpp
     yson/parser.cpp
     yson/producer.cpp
+    yson/protobuf_helpers.cpp
     yson/protobuf_interop.cpp
     yson/protobuf_interop_options.cpp
     yson/protobuf_interop_unknown_fields.cpp

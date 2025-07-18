@@ -49,7 +49,7 @@ struct TPyStream {
 };
 
 #if PY_MAJOR_VERSION >= 3
-#define Py_TPFLAGS_HAVE_ITER 0
+#define Py_TPFLAGS_HAVE_ITER 0 // NOLINT(readability-identifier-naming)
 #endif
 
 PyTypeObject PyStreamType = {

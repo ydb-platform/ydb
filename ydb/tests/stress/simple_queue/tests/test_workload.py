@@ -1,25 +1,22 @@
 # -*- coding: utf-8 -*-
 import pytest
 
-from ydb.tests.library.harness.kikimr_runner import KiKiMR
-from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
-from ydb.tests.library.common.types import Erasure
 from ydb.tests.stress.simple_queue.workload import Workload
+from ydb.tests.library.stress.fixtures import StressFixture
 
 
-class TestYdbWorkload(object):
-    @classmethod
-    def setup_class(cls):
-        config_generator = KikimrConfigGenerator(erasure=Erasure.MIRROR_3_DC)
-        config_generator.yaml_config["table_service_config"]["allow_olap_data_query"] = True
-        cls.cluster = KiKiMR(config_generator)
-        cls.cluster.start()
-
-    @classmethod
-    def teardown_class(cls):
-        cls.cluster.stop()
+class TestYdbWorkload(StressFixture):
+    @pytest.fixture(autouse=True, scope="function")
+    def setup(self):
+        yield from self.setup_cluster(
+            table_service_config={
+                "allow_olap_data_query": True,
+                "enable_oltp_sink": True,
+                "enable_batch_updates": True,
+            }
+        )
 
     @pytest.mark.parametrize('mode', ['row', 'column'])
     def test(self, mode: str):
-        with Workload(f'grpc://localhost:{self.cluster.nodes[1].grpc_port}', '/Root', 60, mode) as workload:
+        with Workload(self.endpoint, self.database, 60, mode) as workload:
             workload.start()

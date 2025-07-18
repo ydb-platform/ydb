@@ -579,6 +579,63 @@ TExprNode::TPtr BuildYtEquiJoinPremap(TExprBase list, TMaybeNode<TCoLambda> prem
     return {};
 }
 
+TExprBase BuildMapForPruneKeys(
+    const TExprBase node,
+    const TExprNode::TPtr extractorLambda,
+    bool isOrdered,
+    const TString& cluster,
+    const TExprNode::TPtr newWorld,
+    const TYtSectionList newInput,
+    const TTypeAnnotationNode* outItemType,
+    TExprContext& ctx,
+    const TYtState::TPtr& state) {
+
+    auto pruneKeysCallable = isOrdered ? "PruneAdjacentKeys" : "PruneKeys";
+    auto mapper = ctx.Builder(node.Pos())
+        .Lambda()
+            .Param("stream")
+            .Callable(pruneKeysCallable)
+                .Arg(0, "stream")
+                .Add(1, extractorLambda)
+            .Seal()
+        .Seal()
+        .Build();
+
+    TVector<TYtOutTable> outTables = ConvertOutTablesWithSortAware(mapper, isOrdered, node.Pos(),
+        outItemType, ctx, state, node.Ref().GetConstraintSet());
+
+    auto settingsBuilder = Build<TCoNameValueTupleList>(ctx, node.Pos());
+    if (isOrdered) {
+        settingsBuilder
+            .Add()
+                .Name()
+                    .Value(ToString(EYtSettingType::Ordered))
+                .Build()
+            .Build();
+    }
+    if (state->Configuration->UseFlow.Get().GetOrElse(DEFAULT_USE_FLOW)) {
+        settingsBuilder
+            .Add()
+                .Name()
+                    .Value(ToString(EYtSettingType::Flow))
+                .Build()
+            .Build();
+    }
+
+    auto map = Build<TYtMap>(ctx, node.Pos())
+        .World(newWorld)
+        .DataSink(MakeDataSink(node.Pos(), cluster, ctx))
+        .Input(newInput)
+        .Output()
+            .Add(outTables)
+        .Build()
+        .Settings(settingsBuilder.Done())
+        .Mapper(std::move(mapper))
+        .Done();
+
+    return WrapOp(map, ctx);
+}
+
 // label -> pair(<asc sort keys>, <inputs matched by keys>)
 THashMap<TStringBuf, std::pair<TVector<TStringBuf>, ui32>> CollectTableSortKeysUsage(const TYtState::TPtr& state, const TCoEquiJoin& equiJoin) {
     THashMap<TStringBuf, std::pair<TVector<TStringBuf>, ui32>> tableSortKeys;

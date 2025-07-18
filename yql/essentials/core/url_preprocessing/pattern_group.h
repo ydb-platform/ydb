@@ -17,7 +17,7 @@ public:
     TMaybe<TString> Match(const TString& s) const;
 
 private:
-    TMap<TString, std::pair<TRegExMatch, TString>> CompiledPatterns;
+    TMap<TString, std::pair<TRegExMatch, TString>> CompiledPatterns_;
 };
 
 }

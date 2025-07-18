@@ -65,106 +65,106 @@ struct TGenericPairCompare {
 
 template <typename TValue, typename TCompare, typename TAllocator>
 class TTopKeeperContainer {
-    TTopKeeper<TValue, TCompare, true, TAllocator> Keeper;
+    TTopKeeper<TValue, TCompare, true, TAllocator> Keeper_;
     using TOrderedSet = TMultiSet<TValue, TCompare, TAllocator>;
-    TMaybe<TOrderedSet> OrderedSet;
-    size_t MaxSize = 0;
-    bool Finalized = false;
-    TCompare Compare;
+    TMaybe<TOrderedSet> OrderedSet_;
+    size_t MaxSize_ = 0;
+    bool Finalized_ = false;
+    TCompare Compare_;
 public:
     explicit TTopKeeperContainer(TCompare compare)
-        : Keeper(0, compare)
-        , Compare(compare)
+        : Keeper_(0, compare)
+        , Compare_(compare)
     {}
 
     TVector<TValue, TAllocator> GetInternal() {
-        if (OrderedSet) {
+        if (OrderedSet_) {
             TVector<TValue, TAllocator> result;
-            std::copy(OrderedSet->begin(), OrderedSet->end(), std::back_inserter(result));
+            std::copy(OrderedSet_->begin(), OrderedSet_->end(), std::back_inserter(result));
             return result;
         }
-        Finalized = true;
-        return Keeper.GetInternal();
+        Finalized_ = true;
+        return Keeper_.GetInternal();
     }
 
     void Insert(const TValue& value) {
-        if (MaxSize == 0) {
+        if (MaxSize_ == 0) {
             return;
         }
-        if (Finalized && !OrderedSet) {
-            const auto& items = Keeper.Extract();
-            OrderedSet = TOrderedSet{items.begin(), items.end(), Compare};
+        if (Finalized_ && !OrderedSet_) {
+            const auto& items = Keeper_.Extract();
+            OrderedSet_ = TOrderedSet{items.begin(), items.end(), Compare_};
         }
-        if (OrderedSet) {
-            if (OrderedSet->size() < MaxSize) {
-                OrderedSet->insert(value);
+        if (OrderedSet_) {
+            if (OrderedSet_->size() < MaxSize_) {
+                OrderedSet_->insert(value);
                 return;
             }
-            Y_ENSURE(OrderedSet->size() == MaxSize);
-            Y_ENSURE(!OrderedSet->empty());
-            auto last = --OrderedSet->end();
-            if (Compare(value, *last)) {
-                OrderedSet->erase(last);
-                OrderedSet->insert(value);
+            Y_ENSURE(OrderedSet_->size() == MaxSize_);
+            Y_ENSURE(!OrderedSet_->empty());
+            auto last = --OrderedSet_->end();
+            if (Compare_(value, *last)) {
+                OrderedSet_->erase(last);
+                OrderedSet_->insert(value);
             }
             return;
         }
-        Keeper.Insert(value);
+        Keeper_.Insert(value);
     }
 
     bool IsEmpty() const {
-        return OrderedSet ? OrderedSet->empty() : Keeper.IsEmpty();
+        return OrderedSet_ ? OrderedSet_->empty() : Keeper_.IsEmpty();
     }
 
     size_t GetSize() const {
-        return OrderedSet ? OrderedSet->size() : Keeper.GetSize();
+        return OrderedSet_ ? OrderedSet_->size() : Keeper_.GetSize();
     }
 
     size_t GetMaxSize() const {
-        return MaxSize;
+        return MaxSize_;
     }
 
     void SetMaxSize(size_t newMaxSize) {
-        MaxSize = newMaxSize;
-        if (Finalized && !OrderedSet) {
-            auto items = Keeper.Extract();
+        MaxSize_ = newMaxSize;
+        if (Finalized_ && !OrderedSet_) {
+            auto items = Keeper_.Extract();
             auto begin = items.begin();
-            auto end = begin + Min(MaxSize, items.size());
-            OrderedSet = TOrderedSet{begin, end, Compare};
+            auto end = begin + Min(MaxSize_, items.size());
+            OrderedSet_ = TOrderedSet{begin, end, Compare_};
         }
-        if (OrderedSet) {
-            while (OrderedSet->size() > MaxSize) {
-                auto last = --OrderedSet->end();
-                OrderedSet->erase(last);
+        if (OrderedSet_) {
+            while (OrderedSet_->size() > MaxSize_) {
+                auto last = --OrderedSet_->end();
+                OrderedSet_->erase(last);
             }
             return;
         }
 
-        Keeper.SetMaxSize(MaxSize);
+        Keeper_.SetMaxSize(MaxSize_);
     }
 };
 
 template <typename TCompare>
 class TTopKeeperWrapperBase {
 protected:
-    TTopKeeperContainer<TUnboxedValue, TCompare, TUnboxedValue::TAllocator> Keeper;
+    TTopKeeperContainer<TUnboxedValue, TCompare, TUnboxedValue::TAllocator> Keeper_;
 
 protected:
     explicit TTopKeeperWrapperBase(TCompare compare)
-        : Keeper(compare)
+        : Keeper_(compare)
     {}
 
     void Init(const TUnboxedValuePod& value, ui32 maxSize) {
-        Keeper.SetMaxSize(maxSize);
+        Keeper_.SetMaxSize(maxSize);
         AddValue(value);
     }
 
     void Merge(TTopKeeperWrapperBase& left, TTopKeeperWrapperBase& right) {
-        Keeper.SetMaxSize(left.Keeper.GetMaxSize());
-        for (const auto& item : left.Keeper.GetInternal()) {
+        Keeper_.SetMaxSize(left.Keeper_.GetMaxSize());
+        for (const auto& item : left.Keeper_.GetInternal()) {
             AddValue(item);
         }
-        for (const auto& item : right.Keeper.GetInternal()) {
+        for (const auto& item : right.Keeper_.GetInternal()) {
             AddValue(item);
         }
     }
@@ -173,7 +173,7 @@ protected:
         auto maxSize = serialized.GetElement(0).Get<ui32>();
         auto list = serialized.GetElement(1);
 
-        Keeper.SetMaxSize(maxSize);
+        Keeper_.SetMaxSize(maxSize);
         const auto listIter = list.GetListIterator();
         for (TUnboxedValue current; listIter.Next(current);) {
             AddValue(current);
@@ -182,20 +182,20 @@ protected:
 
 public:
     void AddValue(const TUnboxedValuePod& value) {
-        Keeper.Insert(TUnboxedValuePod(value));
+        Keeper_.Insert(TUnboxedValuePod(value));
     }
 
     TUnboxedValue Serialize(const IValueBuilder* builder) {
         TUnboxedValue* values = nullptr;
-        auto list = builder->NewArray(Keeper.GetSize(), values);
+        auto list = builder->NewArray(Keeper_.GetSize(), values);
 
-        for (const auto& item : Keeper.GetInternal()) {
+        for (const auto& item : Keeper_.GetInternal()) {
             *values++ = item;
         }
 
         TUnboxedValue* items = nullptr;
         auto result = builder->NewArray(2U, items);
-        items[0] = TUnboxedValuePod((ui32)Keeper.GetMaxSize());
+        items[0] = TUnboxedValuePod((ui32)Keeper_.GetMaxSize());
         items[1] = list;
 
         return result;
@@ -203,9 +203,9 @@ public:
 
     TUnboxedValue GetResult(const IValueBuilder* builder) {
         TUnboxedValue* values = nullptr;
-        auto list = builder->NewArray(Keeper.GetSize(), values);
+        auto list = builder->NewArray(Keeper_.GetSize(), values);
 
-        for (const auto& item : Keeper.GetInternal()) {
+        for (const auto& item : Keeper_.GetInternal()) {
             *values++ = item;
         }
         return list;
@@ -215,24 +215,24 @@ public:
 template <typename TCompare>
 class TTopKeeperPairWrapperBase {
 protected:
-    TTopKeeperContainer<TUnboxedValuePair, TCompare, TStdAllocatorForUdf<TUnboxedValuePair>> Keeper;
+    TTopKeeperContainer<TUnboxedValuePair, TCompare, TStdAllocatorForUdf<TUnboxedValuePair>> Keeper_;
 
 protected:
     explicit TTopKeeperPairWrapperBase(TCompare compare)
-        : Keeper(compare)
+        : Keeper_(compare)
     {}
 
     void Init(const TUnboxedValuePod& key, const TUnboxedValuePod& payload, ui32 maxSize) {
-        Keeper.SetMaxSize(maxSize);
+        Keeper_.SetMaxSize(maxSize);
         AddValue(key, payload);
     }
 
     void Merge(TTopKeeperPairWrapperBase& left, TTopKeeperPairWrapperBase& right) {
-        Keeper.SetMaxSize(left.Keeper.GetMaxSize());
-        for (const auto& item : left.Keeper.GetInternal()) {
+        Keeper_.SetMaxSize(left.Keeper_.GetMaxSize());
+        for (const auto& item : left.Keeper_.GetInternal()) {
             AddValue(item.first, item.second);
         }
-        for (const auto& item : right.Keeper.GetInternal()) {
+        for (const auto& item : right.Keeper_.GetInternal()) {
             AddValue(item.first, item.second);
         }
     }
@@ -241,7 +241,7 @@ protected:
         auto maxSize = serialized.GetElement(0).Get<ui32>();
         auto list = serialized.GetElement(1);
 
-        Keeper.SetMaxSize(maxSize);
+        Keeper_.SetMaxSize(maxSize);
         const auto listIter = list.GetListIterator();
         for (TUnboxedValue current; listIter.Next(current);) {
             AddValue(current.GetElement(0), current.GetElement(1));
@@ -250,14 +250,14 @@ protected:
 
 public:
     void AddValue(const TUnboxedValuePod& key, const TUnboxedValuePod& payload) {
-        Keeper.Insert(std::make_pair(TUnboxedValuePod(key), TUnboxedValuePod(payload)));
+        Keeper_.Insert(std::make_pair(TUnboxedValuePod(key), TUnboxedValuePod(payload)));
     }
 
     TUnboxedValue Serialize(const IValueBuilder* builder) {
         TUnboxedValue* values = nullptr;
-        auto list = builder->NewArray(Keeper.GetSize(), values);
+        auto list = builder->NewArray(Keeper_.GetSize(), values);
 
-        for (const auto& item : Keeper.GetInternal()) {
+        for (const auto& item : Keeper_.GetInternal()) {
             TUnboxedValue* items = nullptr;
             auto pair = builder->NewArray(2U, items);
             items[0] = item.first;
@@ -267,7 +267,7 @@ public:
 
         TUnboxedValue* items = nullptr;
         auto result = builder->NewArray(2U, items);
-        items[0] = TUnboxedValuePod((ui32)Keeper.GetMaxSize());
+        items[0] = TUnboxedValuePod((ui32)Keeper_.GetMaxSize());
         items[1] = list;
 
         return result;
@@ -275,9 +275,9 @@ public:
 
     TUnboxedValue GetResult(const IValueBuilder* builder) {
         TUnboxedValue* values = nullptr;
-        auto list = builder->NewArray(Keeper.GetSize(), values);
+        auto list = builder->NewArray(Keeper_.GetSize(), values);
 
-        for (const auto& item : Keeper.GetInternal()) {
+        for (const auto& item : Keeper_.GetInternal()) {
             *values++ = item.second;
         }
         return list;

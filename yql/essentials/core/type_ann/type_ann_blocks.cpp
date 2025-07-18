@@ -222,6 +222,35 @@ IGraphTransformer::TStatus BlockExistsWrapper(const TExprNode::TPtr& input, TExp
     return IGraphTransformer::TStatus::Ok;
 }
 
+IGraphTransformer::TStatus BlockValidUnwrapWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+    Y_UNUSED(output);
+
+    if (!EnsureArgsCount(*input, 1, ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    auto& arg = *input->Child(0);
+
+    if (!EnsureComputable(arg, ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    // Arg type must be block.
+    if (!EnsureBlockOrScalarType(arg, ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    // Arg type must be optional.
+    bool argItemIsScalar;
+    const auto* argItemType = GetBlockItemType(*arg.GetTypeAnn(), argItemIsScalar);
+    if (!EnsureOptionalType(arg.Pos(), *argItemType, ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    input->SetTypeAnn(UnpackOptionalBlockItemType(*arg.GetTypeAnn(), ctx.Expr, /*convertToScalar=*/false));
+    return IGraphTransformer::TStatus::Ok;
+}
+
 IGraphTransformer::TStatus BlockCoalesceWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
     Y_UNUSED(output);
     if (!EnsureArgsCount(*input, 2U, ctx.Expr)) {
@@ -968,7 +997,7 @@ IGraphTransformer::TStatus ListFromBlocksWrapper(const TExprNode::TPtr& input, T
     return IGraphTransformer::TStatus::Ok;
 }
 
-IGraphTransformer::TStatus WideSkipTakeBlocksWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+IGraphTransformer::TStatus WideSkipTakeBlocksWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
     if (!EnsureArgsCount(*input, 2U, ctx.Expr)) {
         return IGraphTransformer::TStatus::Error;
     }
@@ -980,7 +1009,7 @@ IGraphTransformer::TStatus WideSkipTakeBlocksWrapper(const TExprNode::TPtr& inpu
 
     output = input;
     const TTypeAnnotationNode* expectedType = ctx.Expr.MakeType<TDataExprType>(EDataSlot::Uint64);
-    auto convertStatus = TryConvertTo(input->ChildRef(1), *expectedType, ctx.Expr);
+    auto convertStatus = TryConvertTo(input->ChildRef(1), *expectedType, ctx.Expr, {}, ctx.Types.UseTypeDiffForConvertToError);
     if (convertStatus.Level == IGraphTransformer::TStatus::Error) {
         ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Child(1)->Pos()), "Can not convert argument to Uint64"));
         return IGraphTransformer::TStatus::Error;
@@ -994,19 +1023,19 @@ IGraphTransformer::TStatus WideSkipTakeBlocksWrapper(const TExprNode::TPtr& inpu
     return IGraphTransformer::TStatus::Ok;
 }
 
-IGraphTransformer::TStatus WideTopBlocksWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+IGraphTransformer::TStatus WideTopBlocksWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
     if (!EnsureArgsCount(*input, 3U, ctx.Expr)) {
         return IGraphTransformer::TStatus::Error;
     }
 
     TTypeAnnotationNode::TListType blockItemTypes;
-    if (!EnsureWideFlowBlockType(input->Head(), blockItemTypes, ctx.Expr)) {
+    if (!EnsureWideStreamBlockType(input->Head(), blockItemTypes, ctx.Expr)) {
         return IGraphTransformer::TStatus::Error;
     }
 
     output = input;
     const TTypeAnnotationNode* expectedType = ctx.Expr.MakeType<TDataExprType>(EDataSlot::Uint64);
-    auto convertStatus = TryConvertTo(input->ChildRef(1), *expectedType, ctx.Expr);
+    auto convertStatus = TryConvertTo(input->ChildRef(1), *expectedType, ctx.Expr, {}, ctx.Types.UseTypeDiffForConvertToError);
     if (convertStatus.Level == IGraphTransformer::TStatus::Error) {
         ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Child(1)->Pos()), "Can not convert argument to Uint64"));
         return IGraphTransformer::TStatus::Error;
@@ -1031,7 +1060,7 @@ IGraphTransformer::TStatus WideSortBlocksWrapper(const TExprNode::TPtr& input, T
     }
 
     TTypeAnnotationNode::TListType blockItemTypes;
-    if (!EnsureWideFlowBlockType(input->Head(), blockItemTypes, ctx.Expr)) {
+    if (!EnsureWideStreamBlockType(input->Head(), blockItemTypes, ctx.Expr)) {
         return IGraphTransformer::TStatus::Error;
     }
 

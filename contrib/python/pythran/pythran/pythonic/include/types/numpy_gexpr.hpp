@@ -1026,6 +1026,12 @@ template <class Arg, class... S, class O>
 struct __combined<O, pythonic::types::numpy_gexpr<Arg, S...>> {
   using type = pythonic::types::numpy_gexpr<Arg, S...>;
 };
+
+template <class Arg, class... S, class O>
+struct __combined<O &, pythonic::types::numpy_gexpr<Arg, S...>> {
+  using type = pythonic::types::numpy_gexpr<Arg, S...>;
+};
+
 template <class Arg, class... S>
 struct __combined<pythonic::types::none_type,
                   pythonic::types::numpy_gexpr<Arg, S...>> {

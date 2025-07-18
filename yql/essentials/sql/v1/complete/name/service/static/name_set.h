@@ -16,9 +16,6 @@ namespace NSQLComplete {
         THashMap<EStatementKind, TVector<TString>> Hints;
     };
 
-    // TODO(YQL-19747): Mirate YDB CLI to TNameSet
-    using NameSet = TNameSet;
-
     TNameSet Pruned(TNameSet names, const TFrequencyData& frequency);
 
     TNameSet LoadDefaultNameSet();

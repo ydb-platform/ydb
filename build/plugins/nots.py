@@ -274,6 +274,10 @@ class PluginLogger(object):
 logger = PluginLogger()
 
 
+def _parse_list_var(unit: UnitType, var_name: str, sep: str) -> list[str]:
+    return [x.strip() for x in unit.get(var_name).removeprefix(f"${var_name}").split(sep) if x.strip()]
+
+
 def _with_report_configure_error(fn):
     """
     Handle exceptions, report them as ymake configure error
@@ -525,20 +529,33 @@ def on_ts_configure(unit: NotsUnitType) -> None:
 @_with_report_configure_error
 def on_setup_build_env(unit: NotsUnitType) -> None:
     build_env_var = unit.get("TS_BUILD_ENV")
-    if not build_env_var:
-        return
+    build_env_defaults_list = _parse_list_var(
+        unit, "TS_BUILD_ENV_DEFAULTS_LIST", unit.get("TS_BUILD_ENV_DEFAULTS_LIST_SEP")
+    )
 
     options = []
-    for name in build_env_var.split(","):
-        options.append("--env")
-        value = unit.get(f"TS_ENV_{name}")
-        if value is None:
-            ymake.report_configure_error(f"Env var '{name}' is provided in a list, but var value is not provided")
+    names = set()
+    if build_env_var:
+        for name in build_env_var.split(","):
+            value = unit.get(f"TS_ENV_{name}")
+            if value is None:
+                ymake.report_configure_error(f"Env var '{name}' is provided in a list, but var value is not provided")
+                continue
+            double_quote_escaped_value = value.replace('"', '\\"')
+            options.append("--env")
+            options.append(f'"{name}={double_quote_escaped_value}"')
+            names.add(name)
+
+    for env_default in build_env_defaults_list:
+        name, value = env_default.split("=", 1)
+        if name in names:
             continue
         double_quote_escaped_value = value.replace('"', '\\"')
+        options.append("--env")
         options.append(f'"{name}={double_quote_escaped_value}"')
 
     unit.set(["NOTS_TOOL_BUILD_ENV", " ".join(options)])
+    logger.print_vars("NOTS_TOOL_BUILD_ENV")
 
 
 def __set_append(unit: NotsUnitType, var_name: str, value: UnitType.PluginArgs, delimiter: str = " ") -> None:
@@ -804,9 +821,6 @@ def on_prepare_deps_configure(unit: NotsUnitType) -> None:
 
 
 def _node_modules_bundle_needed(unit: NotsUnitType, arc_path: str) -> bool:
-    if unit.get("TS_LOCAL_CLI") == "yes":
-        return False
-
     if unit.get("_WITH_NODE_MODULES") == "yes":
         return True
 

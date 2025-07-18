@@ -33,7 +33,7 @@ namespace NKikimr::NBsController {
         {}
 
         void Handle(TEvBlobStorage::TEvControllerShredRequest::TPtr ev) {
-            STLOG(PRI_DEBUG, BS_SHRED, BSSCxx, "received TEvControllerShredRequest", (Record, ev->Get()->Record));
+            STLOG(PRI_DEBUG, BS_SHRED, BSSC00, "received TEvControllerShredRequest", (Record, ev->Get()->Record));
             Self->Execute(new TTxUpdateShred(this, ev));
         }
 
@@ -102,7 +102,7 @@ namespace NKikimr::NBsController {
             }
 
             for (auto& [nodeId, ev] : outbox) {
-                STLOG(PRI_DEBUG, BS_SHRED, BSSCxx, "issuing TEvControllerNodeServiceSetUpdate", (NodeId, nodeId),
+                STLOG(PRI_DEBUG, BS_SHRED, BSSC01, "issuing TEvControllerNodeServiceSetUpdate", (NodeId, nodeId),
                     (Record, ev->Record));
                 Self->Send(MakeBlobStorageNodeWardenID(nodeId), ev.release());
             }
@@ -123,7 +123,7 @@ namespace NKikimr::NBsController {
         }
 
         void OnShredFinished(TPDiskId pdiskId, TPDiskInfo& pdiskInfo, ui64 generation, TTransactionContext& txc) {
-            STLOG(PRI_DEBUG, BS_SHRED, BSSCxx, "shred finished", (PDiskId, pdiskId), (Generation, generation),
+            STLOG(PRI_DEBUG, BS_SHRED, BSSC02, "shred finished", (PDiskId, pdiskId), (Generation, generation),
                 (ShredInProgress, pdiskInfo.ShredInProgress), (ShredComplete, pdiskInfo.ShredComplete),
                 (CurrentGeneration, GetCurrentGeneration()));
 
@@ -151,7 +151,7 @@ namespace NKikimr::NBsController {
         }
 
         void OnShredAborted(TPDiskId pdiskId, TPDiskInfo& pdiskInfo) {
-            STLOG(PRI_DEBUG, BS_SHRED, BSSCxx, "shred aborted", (PDiskId, pdiskId),
+            STLOG(PRI_DEBUG, BS_SHRED, BSSC03, "shred aborted", (PDiskId, pdiskId),
                 (ShredInProgress, pdiskInfo.ShredInProgress), (ShredComplete, pdiskInfo.ShredComplete));
 
             EndShredForPDisk(pdiskId, pdiskInfo);

@@ -1,11 +1,10 @@
-#include <library/cpp/containers/stack_vector/stack_vec.h>
-#include <library/cpp/testing/unittest/registar.h>
-
+#include <ydb/core/protos/table_stats.pb.h>
 #include <ydb/core/scheme/scheme_tablecell.h>
 #include <ydb/core/scheme_types/scheme_type_info.h>
 #include <ydb/core/scheme_types/scheme_type_registry.h>
 
-#include <ydb/core/protos/table_stats.pb.h>
+#include <library/cpp/containers/stack_vector/stack_vec.h>
+#include <library/cpp/testing/unittest/registar.h>
 
 
 namespace NKikimr::NSchemeShard {

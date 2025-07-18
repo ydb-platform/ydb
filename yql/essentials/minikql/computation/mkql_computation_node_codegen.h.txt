@@ -288,7 +288,7 @@ protected:
     {}
 
     Value* CreateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const final {
-        return CreateGetValueImpl(this->Node, ctx, block);
+        return CreateGetValueImpl(this->Node_, ctx, block);
     }
 };
 
@@ -537,7 +537,7 @@ protected:
     {}
 
     Value* CreateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const final {
-        return CreateGetValueImpl(*this->Stateless, this->GetRepresentation(), this->ValueIndex, MakeName(), ctx, block);
+        return CreateGetValueImpl(*this->Stateless_, this->GetRepresentation(), this->ValueIndex_, MakeName(), ctx, block);
     }
 };
 
@@ -569,7 +569,7 @@ protected:
     {}
 
     Value* CreateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const final {
-        return CreateGetValueImpl(*this->Stateless, this->GetRepresentation(), this->ValueIndex, MakeName(), ctx, block);
+        return CreateGetValueImpl(*this->Stateless_, this->GetRepresentation(), this->ValueIndex_, MakeName(), ctx, block);
     }
 };
 

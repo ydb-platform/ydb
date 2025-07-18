@@ -1,4 +1,24 @@
+* Added ability of `ydb workload tpch` and `ydb workload tpcds` commands to use fraction `--scale` option.
+* Added `ydb workload tpcc check` subcommand, which checks TPC-C data consistency.
+
+## 2.23.0 ##
+
+* Added connection check and hotkeys description in interactive mode.
+* Fixed `ydb tools restore` not being able to restore local backups on Windows.
+* Limited width of tables in benchmark reports.
+* Added `ydb workload vector select` to benchmark RPS and recall of vector index.
+* Added trivial columns completion in interactive mode.
+* Added the "ydb tools infer csv" command to generate a `CREATE TABLE` SQL query from a CSV file with data.
+* Fix inline hints
+* Added named expressions completion in interactive mode, cache schema responses.
+* Added processing of special values `null`, `/dev/null`, `stdout`, `cout`, `console`, `stderr` and `cerr` of `--output` option in `ydb workload * run` command.
+* Fixed bug when `ydb wokrload` commands did not work with absolute paths.
+* Added TPC-C benchmark as `ydb workload tpcc`.
+
+## 2.22.1 ##
+
 * Fixed bug with state working in commnads `ydb workload query import` and `ydb workload clickbench import files`.
+* Fixed bug with parsing certificate files from profile.
 
 ## 2.22.0 ##
 

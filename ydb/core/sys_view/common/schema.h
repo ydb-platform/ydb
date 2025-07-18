@@ -36,10 +36,12 @@ constexpr TStringBuf TabletsName = "hive_tablets";
 constexpr TStringBuf QueryMetricsName = "query_metrics_one_minute";
 
 constexpr TStringBuf StorePrimaryIndexStatsName = "store_primary_index_stats";
+constexpr TStringBuf StorePrimaryIndexSchemaStatsName = "store_primary_index_schema_stats";
 constexpr TStringBuf StorePrimaryIndexPortionStatsName = "store_primary_index_portion_stats";
 constexpr TStringBuf StorePrimaryIndexGranuleStatsName = "store_primary_index_granule_stats";
 constexpr TStringBuf StorePrimaryIndexOptimizerStatsName = "store_primary_index_optimizer_stats";
 constexpr TStringBuf TablePrimaryIndexStatsName = "primary_index_stats";
+constexpr TStringBuf TablePrimaryIndexSchemaStatsName = "primary_index_schema_stats";
 constexpr TStringBuf TablePrimaryIndexPortionStatsName = "primary_index_portion_stats";
 constexpr TStringBuf TablePrimaryIndexGranuleStatsName = "primary_index_granule_stats";
 constexpr TStringBuf TablePrimaryIndexOptimizerStatsName = "primary_index_optimizer_stats";
@@ -323,6 +325,8 @@ struct Schema : NIceDb::Schema {
         struct LayoutCorrect : Column<16, NScheme::NTypeIds::Bool> {};
         struct OperatingStatus : Column<17, NScheme::NTypeIds::Utf8> {};
         struct ExpectedStatus : Column<18, NScheme::NTypeIds::Utf8> {};
+        struct ProxyGroupId : Column<19, NScheme::NTypeIds::Uint32> {};
+        struct BridgePileId : Column<20, NScheme::NTypeIds::Uint32> {};
 
         using TKey = TableKey<GroupId>;
         using TColumns = TableColumns<
@@ -341,7 +345,9 @@ struct Schema : NIceDb::Schema {
             GetFastLatency,
             LayoutCorrect,
             OperatingStatus,
-            ExpectedStatus>;
+            ExpectedStatus,
+            ProxyGroupId,
+            BridgePileId>;
     };
 
     struct StoragePools : Table<7> {
@@ -461,7 +467,8 @@ struct Schema : NIceDb::Schema {
         struct BlobRangeSize : Column<12, NScheme::NTypeIds::Uint64> {};
         struct Activity : Column<13, NScheme::NTypeIds::Uint8> {};
         struct TierName: Column<14, NScheme::NTypeIds::Utf8> {};
-        struct EntityType: Column<15, NScheme::NTypeIds::Utf8> {};
+        struct EntityType : Column<15, NScheme::NTypeIds::Utf8> {};
+        struct ChunkDetails : Column<16, NScheme::NTypeIds::Utf8> {};
 
         using TKey = TableKey<PathId, TabletId, PortionId, InternalEntityId, ChunkIdx>;
         using TColumns = TableColumns<
@@ -479,7 +486,8 @@ struct Schema : NIceDb::Schema {
             BlobRangeSize,
             Activity,
             TierName,
-            EntityType
+            EntityType,
+            ChunkDetails
             >;
     };
 
@@ -604,6 +612,7 @@ struct Schema : NIceDb::Schema {
         struct PortionsCount: Column<3, NScheme::NTypeIds::Uint64> {};
         struct HostName: Column<4, NScheme::NTypeIds::Utf8> {};
         struct NodeId: Column<5, NScheme::NTypeIds::Uint64> {};
+        struct InternalPathId: Column<6, NScheme::NTypeIds::Uint64> {};
 
         using TKey = TableKey<PathId, TabletId>;
         using TColumns = TableColumns<
@@ -611,7 +620,8 @@ struct Schema : NIceDb::Schema {
             TabletId,
             PortionsCount,
             HostName,
-            NodeId
+            NodeId,
+            InternalPathId
         >;
     };
 
@@ -802,6 +812,26 @@ struct Schema : NIceDb::Schema {
             IndexSize,
             FollowerId>;
     };
+
+    struct PrimaryIndexSchemaStats : Table<24> {
+        struct TabletId : Column<1, NScheme::NTypeIds::Uint64> {};
+        struct PresetId : Column<2, NScheme::NTypeIds::Uint64> {};
+        struct SchemaVersion : Column<3, NScheme::NTypeIds::Uint64> {};
+        struct SchemaSnapshotPlanStep : Column<4, NScheme::NTypeIds::Uint64> {};
+        struct SchemaSnapshotTxId : Column<5, NScheme::NTypeIds::Uint64> {};
+        struct SchemaDetails : Column<6, NScheme::NTypeIds::Utf8> {};
+
+        using TKey = TableKey<TabletId, PresetId, SchemaVersion>;
+        using TColumns = TableColumns<
+            TabletId,
+            PresetId,
+            SchemaVersion,
+            SchemaSnapshotPlanStep,
+            SchemaSnapshotTxId,
+            SchemaDetails
+        >;
+    };
+
 };
 
 bool MaybeSystemViewPath(const TVector<TString>& path);
@@ -837,11 +867,13 @@ public:
     virtual bool IsSystemView(const TStringBuf viewName) const = 0;
 
     virtual TVector<TString> GetSystemViewNames(ETarget target) const = 0;
+
+    virtual const THashMap<TString, NKikimrSysView::ESysViewType>& GetSystemViewsTypes(ETarget target) const = 0;
 };
 
-ISystemViewResolver* CreateSystemViewResolver();
+THolder<ISystemViewResolver> CreateSystemViewResolver();
 
-ISystemViewResolver* CreateSystemViewRewrittenResolver();
+THolder<ISystemViewResolver> CreateSystemViewRewrittenResolver();
 
 } // NSysView
 } // NKikimr

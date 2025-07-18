@@ -3,6 +3,7 @@ import subprocess
 import sys
 import logging
 import time
+import pytest
 
 import ydb
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
@@ -241,3 +242,55 @@ class TestYdbWorkload(object):
         self.upsert_until_overload(lambda i: self.upsert_test_chunk(session, table_path, 0, retries=0), timeout_seconds=200)
 
         assert self.wait_for(lambda: self.try_upsert_test_chunk(session, table_path, 1), 300), "can't write after overload by duplicates"
+
+    @link_test_case("#14696")
+    @pytest.mark.skip(reason="https://github.com/ydb-platform/ydb/issues/19629")
+    def test_delete_after_overloaded(self):
+        self.database_name = os.path.join('/Root', 'test')
+
+        self.cluster.create_database(
+            self.database_name,
+            storage_pool_units_count={
+                'hdd': 1
+            },
+        )
+
+        self.cluster.register_and_start_slots(self.database_name, count=1)
+        self.cluster.wait_tenant_up(self.database_name)
+
+        self.alter_database_quotas(self.cluster.nodes[1], self.database_name, """
+            data_size_hard_quota: 40000000
+            data_size_soft_quota: 40000000
+        """)
+
+        session = self.make_session()
+        table_path = os.path.join(self.database_name, 'huge')
+
+        self.create_test_table(session, table_path)
+
+        session.execute_with_retries(
+            f"""
+            ALTER OBJECT `{table_path}` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `COMPACTION_PLANNER.CLASS_NAME`=`lc-buckets`, `COMPACTION_PLANNER.FEATURES`=`
+                {{"levels" : [{{"class_name" : "OneLayer", "portions_live_duration" : "200s", "expected_blobs_size" : 1000000000000, "portions_count_available" : 2}},
+                                {{"class_name" : "OneLayer"}}]}}`);
+            """
+        )
+
+        self.upsert_until_overload(lambda i: self.upsert_test_chunk(session, table_path, i, retries=0))
+
+        for i in range(100):
+            while True:
+                try:
+                    self.delete_test_chunk(session, table_path, i, retries=10)
+                    break
+                except (ydb.issues.Overloaded, ydb.issues.Unavailable):
+                    time.sleep(1)
+
+        def can_write():
+            try:
+                self.upsert_test_chunk(session, table_path, 0, retries=0)
+                return True
+            except (ydb.issues.Overloaded, ydb.issues.Unavailable):
+                return False
+
+        assert self.wait_for(can_write, 300)

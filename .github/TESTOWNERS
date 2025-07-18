@@ -96,6 +96,7 @@
 /ydb/core/ymq @ydb-platform/Topics
 /ydb/core/http_proxy @ydb-platform/Topics
 /ydb/core/tx/schemeshard/ut_pq_reboots @ydb-platform/Topics
+/ydb/core/transfer @ydb-platform/Topics
 
 #YDB Analytics TEAM:???
 

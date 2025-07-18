@@ -693,7 +693,7 @@ namespace {
     }
 } // namespace
 
-    IGraphTransformer::TStatus FilterWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+    IGraphTransformer::TStatus FilterWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
         if (!EnsureMinMaxArgsCount(*input, 2U, 3U, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
@@ -710,7 +710,7 @@ namespace {
 
         if (input->ChildrenSize() > 2U) {
             const auto expectedType = ctx.Expr.MakeType<TDataExprType>(EDataSlot::Uint64);
-            const auto convertStatus = TryConvertTo(input->TailRef(), *expectedType, ctx.Expr);
+            const auto convertStatus = TryConvertTo(input->TailRef(), *expectedType, ctx.Expr, {}, ctx.Types.UseTypeDiffForConvertToError);
             if (convertStatus.Level == IGraphTransformer::TStatus::Error) {
                 ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Tail().Pos()),
                     TStringBuilder() << "Mismatch 'limit' type. Expected Uint64, got: " << *input->Tail().GetTypeAnn()));
@@ -1963,7 +1963,7 @@ namespace {
     template
     IGraphTransformer::TStatus ListAllAnyWrapper<false>(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx);
 
-    IGraphTransformer::TStatus PrependWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+    IGraphTransformer::TStatus PrependWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
         if (!EnsureArgsCount(*input, 2, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
@@ -1978,7 +1978,7 @@ namespace {
         }
 
         auto expectedType = input->Tail().GetTypeAnn()->Cast<TListExprType>()->GetItemType();
-        auto convertStatus = TryConvertTo(input->HeadRef(), *expectedType, ctx.Expr);
+        auto convertStatus = TryConvertTo(input->HeadRef(), *expectedType, ctx.Expr, {}, ctx.Types.UseTypeDiffForConvertToError);
         if (convertStatus.Level == IGraphTransformer::TStatus::Error) {
             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Head().Pos()), "Mismatch type of item being prepended and list"));
             return IGraphTransformer::TStatus::Error;
@@ -1990,7 +1990,7 @@ namespace {
         return IGraphTransformer::TStatus::Ok;
     }
 
-    IGraphTransformer::TStatus AppendWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+    IGraphTransformer::TStatus AppendWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
         if (!EnsureArgsCount(*input, 2, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
@@ -2005,7 +2005,7 @@ namespace {
         }
 
         auto expectedType = input->Head().GetTypeAnn()->Cast<TListExprType>()->GetItemType();
-        auto convertStatus = TryConvertTo(input->TailRef(), *expectedType, ctx.Expr);
+        auto convertStatus = TryConvertTo(input->TailRef(), *expectedType, ctx.Expr, {}, ctx.Types.UseTypeDiffForConvertToError);
         if (convertStatus.Level == IGraphTransformer::TStatus::Error) {
             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Tail().Pos()), "Mismatch type of item being appended and list"));
             return IGraphTransformer::TStatus::Error;
@@ -2255,7 +2255,7 @@ namespace {
         return IGraphTransformer::TStatus::Ok;
     }
 
-    IGraphTransformer::TStatus ListFromRangeWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+    IGraphTransformer::TStatus ListFromRangeWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
         if (!EnsureMinMaxArgsCount(*input, 2U, 3U, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
@@ -2367,7 +2367,9 @@ namespace {
             if (!commonType)
                 return IGraphTransformer::TStatus::Error;
 
-            if (const auto status = TryConvertTo(input->ChildRef(0U), *commonType, ctx.Expr).Combine(TryConvertTo(input->ChildRef(1U), *commonType, ctx.Expr)); status != IGraphTransformer::TStatus::Ok)
+            if (const auto status = TryConvertTo(input->ChildRef(0U), *commonType, ctx.Expr, {}, ctx.Types.UseTypeDiffForConvertToError)
+                .Combine(TryConvertTo(input->ChildRef(1U), *commonType, ctx.Expr, {}, ctx.Types.UseTypeDiffForConvertToError));
+                status != IGraphTransformer::TStatus::Ok)
                 return status;
 
             if (stepIsOpt && ETypeAnnotationKind::Optional != commonType->GetKind()) {
@@ -2489,7 +2491,7 @@ namespace {
         return IGraphTransformer::TStatus::Ok;
     }
 
-    IGraphTransformer::TStatus ReplicateWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+    IGraphTransformer::TStatus ReplicateWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
         Y_UNUSED(output);
         if (!EnsureArgsCount(*input, 2, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
@@ -2500,7 +2502,7 @@ namespace {
         }
 
         const TTypeAnnotationNode* expectedType = ctx.Expr.MakeType<TDataExprType>(EDataSlot::Uint64);
-        auto convertStatus = TryConvertTo(input->TailRef(), *expectedType, ctx.Expr);
+        auto convertStatus = TryConvertTo(input->TailRef(), *expectedType, ctx.Expr, {}, ctx.Types.UseTypeDiffForConvertToError);
         if (convertStatus.Level == IGraphTransformer::TStatus::Error) {
             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Child(1)->Pos()), "Mismatch argument types"));
             return IGraphTransformer::TStatus::Error;
@@ -2759,8 +2761,8 @@ namespace {
         return IGraphTransformer::TStatus::Ok;
     }
 
-    IGraphTransformer::TStatus UnionAllWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
-        const bool checkHashes = input->IsCallable("Union");
+    IGraphTransformer::TStatus SelectOpWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+        const bool checkHashes = !input->IsCallable("UnionAll") && !input->IsCallable("UnionMerge");
         switch (input->ChildrenSize()) {
             case 0U:
                 output = ctx.Expr.NewCallable(input->Pos(), "EmptyList", {});
@@ -2768,16 +2770,35 @@ namespace {
             case 1U:
                 output = input->HeadPtr();
                 return IGraphTransformer::TStatus::Repeat;
+            case 2U:
+                break;
             default:
+                if (!input->Content().StartsWith("Union")) {
+                    ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), TStringBuilder()
+                            << "Only Union, UnionAll, and UnionMerge may use more than 2 inputs. Invalid Callable: " << input->Content()));
+                    return IGraphTransformer::TStatus::Error;
+                }
                 break;
         }
 
         const bool hasEmptyLists = AnyOf(input->Children(), IsEmptyList);
         if (hasEmptyLists) {
-            auto children = input->ChildrenList();
-            EraseIf(children, IsEmptyList);
-            output = ctx.Expr.ChangeChildren(*input, std::move(children));
-            return IGraphTransformer::TStatus::Repeat;
+            if (input->Content().StartsWith("Union")) {
+                auto children = input->ChildrenList();
+                EraseIf(children, IsEmptyList);
+                output = ctx.Expr.ChangeChildren(*input, std::move(children));
+                return IGraphTransformer::TStatus::Repeat;
+            } else {
+                if (input->Content().StartsWith("Intersect")) {
+                    output = ctx.Expr.NewCallable(input->Pos(), "EmptyList", {});
+                    return IGraphTransformer::TStatus::Repeat;
+                } else if (input->Content().StartsWith("Except")) {
+                    // the first input is empty -> output is empty
+                    // the second input is empty -> output is the first input
+                    output = input->HeadPtr();
+                    return IGraphTransformer::TStatus::Repeat;
+                }
+            }
         }
 
         std::unordered_map<std::string_view, std::pair<const TTypeAnnotationNode*, ui32>> members;
@@ -2879,7 +2900,7 @@ namespace {
         return IGraphTransformer::TStatus::Ok;
     }
 
-    IGraphTransformer::TStatus UnionAllPositionalWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
+    IGraphTransformer::TStatus SelectOpPositionalWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
         Y_UNUSED(output);
         if (!ctx.Types.OrderedColumns) {
             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), TStringBuilder()
@@ -3038,7 +3059,7 @@ namespace {
     }
 
     template<bool IsStrict>
-    IGraphTransformer::TStatus ListExtendWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+    IGraphTransformer::TStatus ListExtendWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
         if (!input->ChildrenSize()) {
             output = ctx.Expr.NewCallable(input->Pos(), "EmptyList", {});
             return IGraphTransformer::TStatus::Repeat;
@@ -3070,7 +3091,7 @@ namespace {
 
         if constexpr (!IsStrict) {
             if (const auto commonType = CommonTypeForChildren(*input, ctx.Expr)) {
-                if (const auto status = ConvertChildrenToType(input, commonType, ctx.Expr); status != IGraphTransformer::TStatus::Ok)
+                if (const auto status = ConvertChildrenToType(input, commonType, ctx.Expr, ctx.Types.UseTypeDiffForConvertToError); status != IGraphTransformer::TStatus::Ok)
                     return status;
             } else
                 return IGraphTransformer::TStatus::Error;
@@ -3079,8 +3100,8 @@ namespace {
         return ListAutomapArgs(input, output, ctx, "OrderedExtend");
     }
 
-    template IGraphTransformer::TStatus ListExtendWrapper<true>(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx);
-    template IGraphTransformer::TStatus ListExtendWrapper<false>(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx);
+    template IGraphTransformer::TStatus ListExtendWrapper<true>(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx);
+    template IGraphTransformer::TStatus ListExtendWrapper<false>(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx);
 
     IGraphTransformer::TStatus ListUnionAllWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
         return ListAutomapArgs(input, output, ctx, "UnionAll");
@@ -3239,7 +3260,7 @@ namespace {
         return IGraphTransformer::TStatus::Ok;
     }
 
-    IGraphTransformer::TStatus TopWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+    IGraphTransformer::TStatus TopWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
         if (!EnsureArgsCount(*input, 4, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
@@ -3255,7 +3276,7 @@ namespace {
         }
 
         const TTypeAnnotationNode* expectedType = ctx.Expr.MakeType<TDataExprType>(EDataSlot::Uint64);
-        const auto convertStatus = TryConvertTo(input->ChildRef(1), *expectedType, ctx.Expr);
+        const auto convertStatus = TryConvertTo(input->ChildRef(1), *expectedType, ctx.Expr, {}, ctx.Types.UseTypeDiffForConvertToError);
         if (convertStatus.Level == IGraphTransformer::TStatus::Error) {
             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Child(1)->Pos()), "Mismatch argument types"));
             return IGraphTransformer::TStatus::Error;
@@ -3270,7 +3291,7 @@ namespace {
         return IGraphTransformer::TStatus::Ok;
     }
 
-    IGraphTransformer::TStatus KeepTopWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+    IGraphTransformer::TStatus KeepTopWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
         if (!EnsureArgsCount(*input, 5, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
@@ -3285,7 +3306,8 @@ namespace {
         }
 
         const TTypeAnnotationNode* expectedType = ctx.Expr.MakeType<TDataExprType>(EDataSlot::Uint64);
-        if (const auto convertStatus = TryConvertTo(input->ChildRef(0), *expectedType, ctx.Expr); convertStatus.Level == IGraphTransformer::TStatus::Error) {
+        if (const auto convertStatus = TryConvertTo(input->ChildRef(0), *expectedType, ctx.Expr, {}, ctx.Types.UseTypeDiffForConvertToError);
+            convertStatus.Level == IGraphTransformer::TStatus::Error) {
             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Head().Pos()), "Mismatch argument types"));
             return IGraphTransformer::TStatus::Error;
         }
@@ -3776,7 +3798,8 @@ namespace {
         return IGraphTransformer::TStatus::Ok;
     }
 
-    IGraphTransformer::TStatus TakeWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+    IGraphTransformer::TStatus TakeWrapperImpl(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx,
+        bool useTypeDiffForConvertToError) {
         if (!EnsureArgsCount(*input, 2, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
@@ -3791,7 +3814,7 @@ namespace {
         }
 
         const TTypeAnnotationNode* expectedType = ctx.Expr.MakeType<TDataExprType>(EDataSlot::Uint64);
-        auto convertStatus = TryConvertTo(input->ChildRef(1), *expectedType, ctx.Expr);
+        auto convertStatus = TryConvertTo(input->ChildRef(1), *expectedType, ctx.Expr, {}, useTypeDiffForConvertToError);
         if (convertStatus.Level == IGraphTransformer::TStatus::Error) {
             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Child(1)->Pos()), "Mismatch argument types"));
             return IGraphTransformer::TStatus::Error;
@@ -3803,6 +3826,14 @@ namespace {
 
         input->SetTypeAnn(input->Head().GetTypeAnn());
         return IGraphTransformer::TStatus::Ok;
+    }
+
+    IGraphTransformer::TStatus TakeWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+        return TakeWrapperImpl(input, output, ctx, false);
+    }
+
+    IGraphTransformer::TStatus TakeWrapperEx(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
+        return TakeWrapperImpl(input, output, ctx, ctx.Types.UseTypeDiffForConvertToError);
     }
 
     IGraphTransformer::TStatus FoldWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
@@ -4298,7 +4329,7 @@ namespace {
         return IGraphTransformer::TStatus::Ok;
     }
 
-    IGraphTransformer::TStatus EnumerateWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+    IGraphTransformer::TStatus EnumerateWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
         if (!EnsureMinArgsCount(*input, 1, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
@@ -4318,7 +4349,7 @@ namespace {
 
         const TTypeAnnotationNode* expectedType = ctx.Expr.MakeType<TDataExprType>(EDataSlot::Uint64);
         if (input->ChildrenSize() > 1) {
-            auto convertStatus = TryConvertTo(input->ChildRef(1), *expectedType, ctx.Expr);
+            auto convertStatus = TryConvertTo(input->ChildRef(1), *expectedType, ctx.Expr, {}, ctx.Types.UseTypeDiffForConvertToError);
             if (convertStatus.Level == IGraphTransformer::TStatus::Error) {
                 ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Child(1)->Pos()), "Mismatch argument types"));
                 return IGraphTransformer::TStatus::Error;
@@ -4330,7 +4361,7 @@ namespace {
         }
 
         if (input->ChildrenSize() > 2) {
-            auto convertStatus = TryConvertTo(input->ChildRef(2), *expectedType, ctx.Expr);
+            auto convertStatus = TryConvertTo(input->ChildRef(2), *expectedType, ctx.Expr, {}, ctx.Types.UseTypeDiffForConvertToError);
             if (convertStatus.Level == IGraphTransformer::TStatus::Error) {
                 ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Child(2)->Pos()), "Mismatch argument types"));
                 return IGraphTransformer::TStatus::Error;
@@ -6559,7 +6590,7 @@ namespace {
         return IGraphTransformer::TStatus::Ok;
     }
 
-    IGraphTransformer::TStatus WinLeadLagWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+    IGraphTransformer::TStatus WinLeadLagWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
         if (!EnsureMinArgsCount(*input, 2, ctx.Expr) || !EnsureMaxArgsCount(*input, 3, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
@@ -6586,7 +6617,7 @@ namespace {
 
         auto status = ConvertToLambda(lambdaValue, ctx.Expr, 1);
         if (argCount > 2) {
-            status = status.Combine(TryConvertTo(input->ChildRef(2), *winOffsetType, ctx.Expr));
+            status = status.Combine(TryConvertTo(input->ChildRef(2), *winOffsetType, ctx.Expr, {}, ctx.Types.UseTypeDiffForConvertToError));
         }
         if (status.Level != IGraphTransformer::TStatus::Ok) {
             return status;
@@ -6652,7 +6683,7 @@ namespace {
         return IGraphTransformer::TStatus::Ok;
     }
 
-    IGraphTransformer::TStatus WinNTileWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+    IGraphTransformer::TStatus WinNTileWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
         Y_UNUSED(output);
         if (!EnsureArgsCount(*input, 2, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
@@ -6663,7 +6694,7 @@ namespace {
         }
 
         auto expectedType = ctx.Expr.MakeType<TDataExprType>(EDataSlot::Int64);
-        auto status = TryConvertTo(input->ChildRef(1), *expectedType, ctx.Expr);
+        auto status = TryConvertTo(input->ChildRef(1), *expectedType, ctx.Expr, {}, ctx.Types.UseTypeDiffForConvertToError);
         if (status.Level != IGraphTransformer::TStatus::Ok) {
             return status;
         }

@@ -313,8 +313,9 @@ def create_mute_issues(all_tests, file_path, close_issues=True):
     
     # Check and close issues if needed
     closed_issues = []
+    partially_unmuted_issues = []
     if close_issues:
-        closed_issues = close_unmuted_issues(muted_tests_set)
+        closed_issues, partially_unmuted_issues = close_unmuted_issues(muted_tests_set)
     
     # First, collect all tests into temporary dictionary
     for test in all_tests:
@@ -380,25 +381,60 @@ def create_mute_issues(all_tests, file_path, close_issues=True):
     
     # Add closed issues section if any
     if closed_issues:
-        formatted_results.append("CLOSED ISSUES:")
-        for issue in closed_issues:
-            formatted_results.append(f"Closed {issue['url']}")
-            formatted_results.append("Unmuted tests:")
-            for test in issue['tests']:
-                formatted_results.append(f"  - {test}")
+        formatted_results.append("🔒 **CLOSED ISSUES**")
+        formatted_results.append("─────────────────────────────")
         formatted_results.append("")
-        formatted_results.append("CREATED ISSUES:")
+        for issue in closed_issues:
+            formatted_results.append(f"✅ **Closed** {issue['url']}")
+            formatted_results.append("   📝 **Unmuted tests:**")
+            for test in issue['tests']:
+                formatted_results.append(f"   • `{test}`")
+            formatted_results.append("")
     
-    # Add created issues
-    current_owner = None
-    for result in results:
-        if current_owner != result['owner']:
-            if formatted_results and formatted_results[-1] != "":  # Add blank line between owner groups if last line is not empty
-                formatted_results.append('')
-            current_owner = result['owner']
-            # Add owner header with team URL
-            formatted_results.append(f"TEAM:@ydb-platform/{current_owner} @https://github.com/orgs/ydb-platform/teams/{current_owner}")
-        formatted_results.append(result['message'])
+    # Add partially unmuted issues section if any
+    if partially_unmuted_issues:
+        if closed_issues:
+            formatted_results.append("─────────────────────────────")
+            formatted_results.append("")
+        formatted_results.append("🔓 **PARTIALLY UNMUTED ISSUES**")
+        formatted_results.append("─────────────────────────────")
+        formatted_results.append("")
+        for issue in partially_unmuted_issues:
+            formatted_results.append(f"⚠️ **Partially unmuted** {issue['url']}")
+            formatted_results.append("   📝 **Unmuted tests:**")
+            for test in issue['unmuted_tests']:
+                formatted_results.append(f"   • `{test}`")
+            formatted_results.append("   🔒 **Still muted tests:**")
+            for test in issue['still_muted_tests']:
+                formatted_results.append(f"   • `{test}`")
+            formatted_results.append("")
+    
+    # Add created issues section if any
+    if results:
+        if closed_issues or partially_unmuted_issues:
+            formatted_results.append("─────────────────────────────")
+            formatted_results.append("")
+        formatted_results.append("🆕 **CREATED ISSUES**")
+        formatted_results.append("─────────────────────────────")
+        formatted_results.append("")
+    
+        # Add created issues
+        current_owner = None
+        for result in results:
+            if current_owner != result['owner']:
+                if formatted_results and formatted_results[-1] != "":
+                    formatted_results.append('')
+                    formatted_results.append('')
+                current_owner = result['owner']
+                # Add owner header with team URL
+                formatted_results.append(f"👥 **TEAM** @ydb-platform/{current_owner}")
+                formatted_results.append(f"   https://github.com/orgs/ydb-platform/teams/{current_owner}")
+                formatted_results.append("   ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄")
+            
+            # Extract issue URL and title
+            issue_url = result['message'].split('url ')[-1]
+            title = result['message'].split("'")[1]
+            formatted_results.append(f"   🎯 {issue_url} - `{title}`")
 
     print("\n\n")
     print("\n".join(formatted_results))

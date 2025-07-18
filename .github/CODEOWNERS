@@ -35,9 +35,6 @@
 /ydb/library/yql/tests/sql/solomon @ydb-platform/fq
 /ydb/library/yql/tests/sql/suites/solomon @ydb-platform/fq
 /ydb/library/yql/udfs/common/clickhouse/client @ydb-platform/fq
-
-/ydb/library/yql/yt @Krock21 @Krisha11 @zlobober @gritukan
-
 /ydb/services/fq/ @ydb-platform/fq
 
 /ydb/core/kafka_proxy @ydb-platform/Topics

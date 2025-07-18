@@ -75,7 +75,7 @@ private:
     std::map<NArrow::NMerger::TSortableBatchPosition, TDataSourceEndpoint> BorderPoints;
     std::optional<NArrow::NMerger::TSortableBatchPosition> CurrentStart;
     std::map<ui32, std::shared_ptr<TFetchingInterval>> FetchingIntervals;
-    THashMap<ui32, std::shared_ptr<TPartialReadResult>> ReadyIntervals;
+    THashMap<ui32, std::unique_ptr<TPartialReadResult>> ReadyIntervals;
     ui32 SegmentIdxCounter = 0;
     std::vector<TIntervalStat> IntervalStats;
     ui64 InFlightLimit = 1;
@@ -110,7 +110,7 @@ public:
 
     TConclusionStatus Start();
 
-    TScanHead(std::deque<std::shared_ptr<IDataSource>>&& sources, const std::shared_ptr<TSpecialReadContext>& context);
+    TScanHead(std::unique_ptr<NCommon::ISourcesConstructor>&& sources, const std::shared_ptr<TSpecialReadContext>& context);
 
     [[nodiscard]] TConclusion<bool> BuildNextInterval();
 

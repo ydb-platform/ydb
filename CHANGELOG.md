@@ -11,11 +11,11 @@ and timeout (by default, the maximum response time from healthcheck). Documentat
 * 17148:Extended federated query capabilities to support a new external data source [Prometheus](https://en.wikipedia.org/wiki/Prometheus_(software)). Documentation is under construction YQ-4261 [#17148](https://github.com/ydb-platform/ydb/pull/17148) ([Stepan](https://github.com/pstpn))
 * 17007:Extended federated query capabilities to support a new external data source [Apache Iceberg](https://iceberg.apache.org). Documentation is under construction YQ-4266 [#17007](https://github.com/ydb-platform/ydb/pull/17007) ([Slusarenko Igor](https://github.com/buhtr))
 * 19315:Introduce distconf cache for group info propagation. [#19315](https://github.com/ydb-platform/ydb/pull/19315) ([Alexander Rutkovsky](https://github.com/alexvru))
-* 19227:* YDB FQ: enable `REGEXP` pushdown for `Utf8` columns. [#19227](https://github.com/ydb-platform/ydb/pull/19227) ([Vitaly Isaev](https://github.com/vitalyisaev2))
+* 19227:YDB FQ: enable `REGEXP` pushdown for `Utf8` columns. [#19227](https://github.com/ydb-platform/ydb/pull/19227) ([Vitaly Isaev](https://github.com/vitalyisaev2))
 * 19216:Added basic checks for group names when creating or renaming them: they may consists of Latin letters in both cases, digits, underscore and hyphen. [#19216](https://github.com/ydb-platform/ydb/pull/19216) ([yurikiselev](https://github.com/yurikiselev))
-* 19111:Добавление возможности указывать размер нарезкий порций на zero layer [#19111](https://github.com/ydb-platform/ydb/pull/19111) ([Oleg Doronin](https://github.com/dorooleg))
-* 18988:Support pile identifiers for dynamic nodes too [#18988](https://github.com/ydb-platform/ydb/pull/18988) ([Alexander Rutkovsky](https://github.com/alexvru))
-* 18859:Support Board reconfiguration via distconf api [#18859](https://github.com/ydb-platform/ydb/pull/18859) ([Evgenik2](https://github.com/Evgenik2))
+* 19111:Added support for specify the size of sliced portions on the zero layer. [#19111](https://github.com/ydb-platform/ydb/pull/19111) ([Oleg Doronin](https://github.com/dorooleg))
+* 18988:2DC:added support pile identifiers for dynamic nodes. [#18988](https://github.com/ydb-platform/ydb/pull/18988) ([Alexander Rutkovsky](https://github.com/alexvru))
+* 18859:Reconfiguration of StateStorage: added support Board reconfiguration via DistConf. [#18859](https://github.com/ydb-platform/ydb/pull/18859) ([Evgenik2](https://github.com/Evgenik2))
 
 ### Bug fixes
 
@@ -29,5 +29,3 @@ and timeout (by default, the maximum response time from healthcheck). Documentat
 * 16764:Fixed redirects from cluster endpoints (storage nodes) to database nodes, resolving inconsistent behavior where some system tables were not visible. #16763 [#16764](https://github.com/ydb-platform/ydb/pull/16764) ([Alexey Efimov](https://github.com/adameat))
 * 17198:Fixed an issue with UUID data type handling in YDB CLI backup/restore operations. [#17198](https://github.com/ydb-platform/ydb/pull/17198) ([Semyon Danilov](https://github.com/SammyVimes))
 * 17157:Viewer API: Fixed the retrieval of tablet list for tables implementing secondary indexes. #17103 [#17157](https://github.com/ydb-platform/ydb/pull/17157) ([Alexey Efimov](https://github.com/adameat))
-* 19424:Fixed missing step in EvReadSetAck, enabled skipped tests related to the fix [#19424](https://github.com/ydb-platform/ydb/pull/19424) ([Vladilen](https://github.com/Vladilen))
-

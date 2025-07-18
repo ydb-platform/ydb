@@ -785,6 +785,7 @@ class TStateUpdater: public TUpdaterBase<TEvSentinel::TEvStateUpdated, TStateUpd
 
             MarkNodePDisks(nodeId, NKikimrBlobStorage::TPDiskState::Missing, true);
         }
+        
         MaybeReply();
     }
 
@@ -820,6 +821,7 @@ class TStateUpdater: public TUpdaterBase<TEvSentinel::TEvStateUpdated, TStateUpd
                 MarkNodePDisks(nodeId, NKikimrBlobStorage::TPDiskState::Unknown);
                 break;
         }
+
         MaybeReply();
     }
 

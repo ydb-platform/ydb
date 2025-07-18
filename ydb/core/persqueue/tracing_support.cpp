@@ -21,4 +21,14 @@ NWilson::TSpan GenerateSpan(const TStringBuf name, NJaegerTracing::TSamplingThro
     return {};
 }
 
+NWilson::TSpan GenerateSpan(const TStringBuf name, ui8 verbosity)
+{
+    return {
+        TWilsonTopic::ExecuteTransaction,
+        NWilson::TTraceId::NewTraceId(verbosity, Max<ui32>()),
+        TString(name),
+        NWilson::EFlags::AUTO_END
+    };
+}
+
 }

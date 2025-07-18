@@ -37,20 +37,35 @@ private:
     std::shared_ptr<IScanCursor> ScanCursor;
     YDB_READONLY_DEF(std::optional<TPartialSourceAddress>, NotFinishedInterval);
     const NColumnShard::TCounterGuard Guard;
+    bool Extracted = false;
 
 public:
     void Cut(const ui32 limit) {
+        AFL_VERIFY(!Extracted);
         ResultBatch.Cut(limit);
     }
 
+    const std::shared_ptr<arrow::Table>& GetResultBatch() const {
+        AFL_VERIFY(!Extracted);
+        return ResultBatch;
+    }
+
     ui64 GetRecordsCount() const {
+        AFL_VERIFY(!Extracted);
         return ResultBatch.GetRecordsCount();
+    }
+
+    std::shared_ptr<arrow::Schema> GetResultSchema() const {
+        AFL_VERIFY(!Extracted);
+        return ResultBatch.GetResultSchema();
     }
 
     static std::vector<std::shared_ptr<TPartialReadResult>> SplitResults(
         std::vector<std::shared_ptr<TPartialReadResult>>&& resultsExt, const ui32 maxRecordsInResult);
 
     NArrow::TShardedRecordBatch ExtractShardedBatch() {
+        AFL_VERIFY(!Extracted);
+        Extracted = true;
         return std::move(ResultBatch);
     }
 

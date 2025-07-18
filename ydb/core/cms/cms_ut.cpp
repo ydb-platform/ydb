@@ -2368,6 +2368,21 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         ev->Swap(newEv);
     }
 
+    ::google::protobuf::RepeatedPtrField< ::Ydb::Maintenance::Node> RequestMaintenanceState(TCmsTestEnv& env)
+    {
+        TAutoPtr<TEvCms::TEvListClusterNodesRequest> event = new TEvCms::TEvListClusterNodesRequest;
+        env.SendToPipe(env.CmsId, env.GetSender(), event.Release(), 0, GetPipeConfigWithRetries());
+
+        TAutoPtr<IEventHandle> handle;
+        auto reply = env.GrabEdgeEventRethrow<TEvCms::TEvListClusterNodesResponse>(handle);
+        UNIT_ASSERT(reply);
+
+        const auto &rec = reply->Record;
+        UNIT_ASSERT_VALUES_EQUAL(rec.GetStatus(), Ydb::StatusIds::SUCCESS);
+
+        return rec.GetResult().nodes();
+    }
+
     Y_UNIT_TEST(BridgeModeCollectInfo)
     {
         TTestEnvOpts opts(16);
@@ -2395,6 +2410,26 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         for (const auto [nodeId, pileId] : info.NodeIdToPileId) {
             // In ChangePileMap, nodes are distributed among piles based on the parity.
             UNIT_ASSERT(nodeId % opts.PileCount == pileId);
+        }
+        for (const auto& [nodeId, node] : info.AllNodes()) {
+            UNIT_ASSERT(node->PileId);
+            UNIT_ASSERT_EQUAL(nodeId % opts.PileCount, node->PileId);
+        }
+
+        // auto state = env.RequestState();
+        // for (const auto& host : state.GetHosts()) {
+        //     const ui32 correctPileId = host.GetNodeId() % opts.PileCount;
+        //     // UNIT_ASSERT(host.GetPileId());
+        //     // UNIT_ASSERT_EQUAL(correctPileId, host.GetPileId());
+        //     // UNIT_ASSERT(host.GetLocation().GetBridgePileName());
+        //     // UNIT_ASSERT_EQUAL(correctPileId, static_cast<ui32>(host.GetLocation().GetBridgePileName()[1] - '0'));
+        // }
+
+        auto listNodes = RequestMaintenanceState(env);
+
+        for (const auto& node : listNodes) {
+            Cerr << "NodeId: " << node.node_id() << Endl;
+            // UNIT_ASSERT(node.location().bridge_pile_name());
         }
     }
 

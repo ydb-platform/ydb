@@ -56,6 +56,7 @@ private:
         Aborted = true;
         SourcesConstructor->Abort();
         FetchingInFlightSources.clear();
+        NextSource.reset();
     }
     virtual bool DoIsFinished() const override {
         return !NextSource && SourcesConstructor->IsFinished() && FetchingInFlightSources.empty();

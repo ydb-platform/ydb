@@ -55,6 +55,8 @@ private:
     THarmonizerCpuConsumption CpuConsumption;
     THarmonizerStats Stats;
     float ProcessingBudget = 0.0;
+    std::atomic<float> SharedFreeCpu = 0.0;
+    std::atomic<float> Budget = 0.0;
 
     void PullStats(ui64 ts);
     void PullSharedInfo();
@@ -289,6 +291,8 @@ void THarmonizer::ProcessHoggishState() {
 void THarmonizer::HarmonizeImpl(ui64 ts) {
     HARMONIZER_DEBUG_PRINT("HarmonizeImpl", "Iteration", Iteration.fetch_add(1, std::memory_order_relaxed));
     Y_UNUSED(ts);
+    Budget.store(CpuConsumption.Budget, std::memory_order_relaxed);
+    SharedFreeCpu.store(SharedInfo.FreeCpu, std::memory_order_relaxed);
 
     for (size_t poolIdx = 0; poolIdx < Pools.size(); ++poolIdx) {
         TPoolInfo &pool = *Pools[poolIdx];
@@ -497,8 +501,8 @@ THarmonizerStats THarmonizer::GetStats() const {
         .MinElapsedCpu = MinElapsedCpu.load(std::memory_order_relaxed),
         .AvgAwakeningTimeUs = WaitingInfo.AvgAwakeningTimeUs.load(std::memory_order_relaxed),
         .AvgWakingUpTimeUs = WaitingInfo.AvgWakingUpTimeUs.load(std::memory_order_relaxed),
-        .Budget = CpuConsumption.Budget,
-        .SharedFreeCpu = SharedInfo.FreeCpu,
+        .Budget = Budget.load(std::memory_order_relaxed),
+        .SharedFreeCpu = SharedFreeCpu.load(std::memory_order_relaxed),
     };
 }
 

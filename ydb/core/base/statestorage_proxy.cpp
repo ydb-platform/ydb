@@ -524,7 +524,9 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
 
         TEvStateStorage::TEvReplicaInfo *msg = ev->Get();
 
-        CheckConfigVersion(ev->Sender, msg);
+        if (!CheckConfigVersion(ev->Sender, msg)) {
+            return;
+        }
 
         const ui64 cookie = msg->Record.GetCookie();
         Y_ABORT_UNLESS(cookie < Replicas);

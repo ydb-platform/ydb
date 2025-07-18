@@ -3,6 +3,7 @@
 #include "constants.h"
 #include "data_splitter.h"
 #include "log.h"
+#include "path_checker.h"
 
 #include <ydb/public/lib/ydb_cli/commands/ydb_command.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
@@ -77,6 +78,8 @@ void InitSync(const NConsoleClient::TClientCommand::TConfig& connectionConfig, c
     auto connectionConfigCopy = connectionConfig;
     auto driver = NConsoleClient::TYdbCommand::CreateDriver(connectionConfigCopy);
     NQuery::TQueryClient client(driver);
+
+    CheckPathForInit(connectionConfig, runConfig.Path);
 
     TDataSplitter dataSplitter(runConfig.WarehouseCount);
 

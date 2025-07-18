@@ -54,7 +54,6 @@ class DataService(DataServiceServicer):
         response_query.query_name = "query"
 
         timeseries = response_query.timeseries_vector.values.add()
-        timeseries.name = "name"
         for key, value in labels.items():
             timeseries.labels[key] = str(value)
         timeseries.type = MetricType.RATE

@@ -62,7 +62,7 @@ public:
         }
     };
 
-    std::shared_ptr<NReader::NSimple::IDataSource> Construct(const std::shared_ptr<NReader::NSimple::TSpecialReadContext>& context);
+    std::shared_ptr<NReader::NSimple::IDataSource> Construct(const std::shared_ptr<NCommon::TSpecialReadContext>& context);
 };
 
 class TConstructor: public NAbstract::ISourcesConstructor {

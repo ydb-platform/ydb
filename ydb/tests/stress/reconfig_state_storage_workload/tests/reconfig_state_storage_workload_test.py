@@ -26,8 +26,13 @@ class ReconfigStateStorageWorkloadTest(object):
                 'BOARD_LOOKUP': LogLevels.DEBUG,
                 'DISCOVERY': LogLevels.DEBUG,
                 'INTERCONNECT': LogLevels.INFO,
-                'SCHEME_BOARD_SUBSCRIBER': LogLevels.DEBUG,
+                'FLAT_TX_SCHEMESHARD': LogLevels.DEBUG,
                 'SCHEME_BOARD_POPULATOR': LogLevels.DEBUG,
+                'SCHEME_BOARD_REPLICA': LogLevels.DEBUG,
+                'SCHEME_BOARD_SUBSCRIBER': LogLevels.DEBUG,
+                'TX_PROXY_SCHEME_CACHE': LogLevels.DEBUG,
+                'KQP_COMPILE_ACTOR': LogLevels.DEBUG,
+                'CMS_TENANTS': LogLevels.DEBUG,
                 # 'STATESTORAGE': LogLevels.DEBUG,
             }
         ))

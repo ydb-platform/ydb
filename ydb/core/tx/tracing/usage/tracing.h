@@ -13,13 +13,14 @@ private:
     YDB_ACCESSOR_DEF(TDuration, Duration);
     YDB_ACCESSOR(ui32, Count, 0);
     YDB_ACCESSOR(ui32, StatCount, 0);
-    YDB_ACCESSOR_DEF(std::optional<TInstant>, First);
-    YDB_ACCESSOR_DEF(std::optional<TInstant>, Last);
-    YDB_ACCESSOR_DEF(std::optional<TInstant>, ActualStart);
+    YDB_ACCESSOR_DEF(std::optional<TMonotonic>, First);
+    YDB_ACCESSOR_DEF(std::optional<TMonotonic>, Last);
+    YDB_ACCESSOR_DEF(std::optional<TMonotonic>, ActualStart);
+
 public:
     TStatInfo() = default;
 
-    NJson::TJsonValue ToJson(const TString& name, const TInstant finishInstant) const {
+    NJson::TJsonValue ToJson(const TString& name, const TMonotonic finishInstant) const {
         NJson::TJsonValue result = NJson::JSON_MAP;
         result.InsertValue("name", name);
         result.InsertValue("d_finished", Duration.MicroSeconds());
@@ -41,11 +42,11 @@ public:
         }
         return result;
     }
-    TInstant GetLastVerified() const;
+    TMonotonic GetLastVerified() const;
 
-    TInstant GetFirstVerified() const;
+    TMonotonic GetFirstVerified() const;
 
-    TDuration GetCurrentDuration(const TInstant now) const {
+    TDuration GetCurrentDuration(const TMonotonic now) const {
         return ActualStart ? now - *ActualStart : TDuration::Zero();
     }
 
@@ -53,7 +54,7 @@ public:
         return !!ActualStart;
     }
 
-    void Start(const TInstant start) {
+    void Start(const TMonotonic start) {
         if (!First || *First > start) {
             First = start;
         }
@@ -61,7 +62,7 @@ public:
         ActualStart = start;
     }
 
-    void Finish(const TInstant value) {
+    void Finish(const TMonotonic value) {
         if (!Last || *Last < value) {
             Last = value;
         }
@@ -82,8 +83,8 @@ private:
     THashMap<TString, std::shared_ptr<TTraceClient>> Children;
     THashMap<TString, TStatInfo> Stats;
     TStatInfo ActualStat;
-    TInstant GetFinishInstant() const {
-        return ActualStat.GetLast().value_or(TInstant::Now());
+    TMonotonic GetFinishInstant() const {
+        return ActualStat.GetLast().value_or(TMonotonic::Now());
     }
 
     NJson::TJsonValue ToJsonImpl(THashSet<TString>& readyIds) const;
@@ -96,14 +97,14 @@ public:
     bool CheckChildrenFree() const;
 
     void Finish() {
-        ActualStat.Finish(TInstant::Now());
+        ActualStat.Finish(TMonotonic::Now());
     }
 
     TTraceClient(const TString& id, const TString& parentId)
         : ClientId(id)
         , ParentId(parentId)
     {
-        ActualStat.Start(TInstant::Now());
+        ActualStat.Start(TMonotonic::Now());
     }
 
     void Dump() const;
@@ -129,12 +130,11 @@ public:
 
     class TDurationGuard: TNonCopyable {
     private:
-        const TInstant StartInstant = TInstant::Now();
         TTraceClient* Owner = nullptr;
         const TString Id;
         TStatInfo* Stat;
     public:
-        TDurationGuard(TTraceClient& owner, const TString& id);
+        TDurationGuard(TTraceClient& owner, const TString& id, const bool isNotFake);
         TDurationGuard(const TString& id);
         TStatInfo& GetStatInfo() {
             AFL_VERIFY(Stat);
@@ -143,11 +143,11 @@ public:
         ~TDurationGuard();
     };
 
-    static TTraceClient::TDurationGuard MakeContextGuard(const TString& id);
+    static TTraceClient::TDurationGuard MakeContextGuard(const TString& id, const bool isNotFake = true);
     static TTraceClient::TDurationGuard* GetContextGuard();
 
-    TDurationGuard MakeGuard(const TString& id) {
-        return TDurationGuard(*this, id);
+    TDurationGuard MakeGuard(const TString& id, const bool isNotFake = true) {
+        return TDurationGuard(*this, id, isNotFake);
     }
 
     static TTraceClientGuard GetClient(const TString& type, const TString& clientId, const TString& parentId);

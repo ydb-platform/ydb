@@ -69,6 +69,7 @@ message NodeLocation {
     optional uint32 body_num = 4 [deprecated=true];
     optional uint32 body = 100500 [deprecated=true]; // for compatibility with WalleLocation
 
+    optional string bridge_pile_name = 5;
     optional string data_center = 10;
     optional string module = 20;
     optional string rack = 30;
@@ -83,7 +84,6 @@ message NodeInfo {
     optional string address = 5;
     optional NodeLocation location = 6;
     optional uint64 expire = 7;
-    optional uint32 bridge_pile_id = 8;
 }
 
 message NodeRegistrationRequest {
@@ -95,7 +95,6 @@ message NodeRegistrationRequest {
     optional string domain_path = 6;
     optional bool fixed_node_id = 7;
     optional string path = 8;
-    optional string bridge_pile_name = 9;
 }
 
 message NodeRegistrationResult {

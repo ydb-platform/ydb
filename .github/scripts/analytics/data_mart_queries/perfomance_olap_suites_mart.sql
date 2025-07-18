@@ -7,11 +7,13 @@ $fail_tests = SELECT
     ListConcat(
         ListSort(
             AGG_LIST(
-                SubString(CAST(Test AS String), 
-                    if(
-                        StartsWith(Test, '_'),
-                        1U,
-                        if(StartsWith(Test, 'Query'), 5U, 0U)
+                IF(
+                    Test = "_Verification",
+                    "Infrastructure error",
+                    IF(
+                        StartsWith(Test, 'Query'),
+                        SubString(CAST(Test AS String), 5U),
+                        CAST(Test AS String)
                     )
                 )
             )
@@ -31,12 +33,10 @@ $diff_tests = SELECT
     ListConcat(
         ListSort(
             AGG_LIST(
-                SubString(CAST(Test AS String),
-                    if(
-                        StartsWith(Test, '_'),
-                        1U,
-                        if(StartsWith(Test, 'Query'), 5U, 0U)
-                     )
+                IF(
+                    StartsWith(Test, 'Query'),
+                    SubString(CAST(Test AS String), 5U),
+                    CAST(Test AS String)
                 )
             )
         ),
@@ -93,7 +93,37 @@ SELECT
     s.Begin AS Begin,
     s.End AS End,
     d.DiffTests AS DiffTests,
-    f.FailTests AS FailTests
+    f.FailTests AS FailTests,
+    CASE
+        WHEN s.Db LIKE '%sas%' THEN 'sas'
+        WHEN s.Db LIKE '%vla%' THEN 'vla'
+        ELSE 'other'
+    END AS DbDc,
+
+    CASE
+        WHEN s.Db LIKE '%load%' THEN 'column'
+        WHEN s.Db LIKE '%/s3%' THEN 's3'
+        WHEN s.Db LIKE '%/row%' THEN 'row'
+        ELSE 'other'
+    END AS DbType,
+
+    CASE
+        WHEN s.Db LIKE '%sas-daily%' THEN 'sas_small_'
+        WHEN s.Db LIKE '%sas-perf%' THEN 'sas_big_'
+        WHEN s.Db LIKE '%sas%' THEN 'sas_'
+        WHEN s.Db LIKE '%vla-acceptance%' THEN 'vla_small_'
+        WHEN s.Db LIKE '%vla-perf%' THEN 'vla_big_'
+        WHEN s.Db LIKE '%vla4-8154%' THEN 'vla_8154_'
+        WHEN s.Db LIKE '%vla4-8161%' THEN 'vla_8161_'
+        WHEN s.Db LIKE '%vla%' THEN 'vla_'
+        ELSE 'new_db_'
+    END || CASE
+        WHEN s.Db LIKE '%load%' THEN 'column'
+        WHEN s.Db LIKE '%/s3%' THEN 's3'
+        WHEN s.Db LIKE '%/row%' THEN 'row'
+        ELSE 'other'
+    END AS DbAlias,
+    SubString(CAST(s.Version AS String), 0U, FIND(CAST(s.Version AS String), '.')) As Branch
 FROM $suites AS s
 LEFT JOIN $diff_tests AS d ON s.RunId = d.RunId AND s.Db = d.Db AND s.Suite = d.Suite
 LEFT JOIN $fail_tests AS f ON s.RunId = f.RunId AND s.Db = f.Db AND s.Suite = f.Suite

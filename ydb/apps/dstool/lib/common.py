@@ -248,6 +248,15 @@ def get_vslot_extended_id(vslot):
     return *get_vslot_id(vslot.VSlotId), *get_vdisk_id(vslot)
 
 
+def get_pdisk_inferred_settings(pdisk):
+    if (pdisk.PDiskMetrics.HasField('SlotCount')):
+        return pdisk.PDiskMetrics.SlotCount, pdisk.PDiskMetrics.SlotSizeInUnits
+    elif (pdisk.InferPDiskSlotCountFromUnitSize != 0):
+        return 0, 0
+    else:
+        return pdisk.ExpectedSlotCount, pdisk.PDiskConfig.SlotSizeInUnits
+
+
 class Location(typing.NamedTuple):
     dc: int
     room: int

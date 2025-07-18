@@ -19,7 +19,7 @@ ISyncPoint::ESourceAction TSyncPointResult::OnSourceReady(const std::shared_ptr<
             "source_idx", source->GetSourceIdx())("table", resultChunk->GetTable()->num_rows())("is_finished", isFinished);
         auto cursor = Collection->BuildCursor(source, resultChunk->GetStartIndex() + resultChunk->GetRecordsCount(),
             Context->GetCommonContext()->GetReadMetadata()->GetTabletId());
-        reader.OnIntervalResult(std::make_shared<TPartialReadResult>(source->GetResourceGuards(), source->GetGroupGuard(),
+        reader.OnIntervalResult(std::make_unique<TPartialReadResult>(source->GetResourceGuards(), source->GetGroupGuard(),
             resultChunk->GetTable(), cursor, Context->GetCommonContext(), partialSourceAddress));
     } else if (!isFinished) {
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "continue_source")("source_id", source->GetSourceId())(

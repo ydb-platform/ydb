@@ -209,7 +209,6 @@ namespace NKikimr {
             void ConstructFromRowset(const TRowset &rowset, TRow &row) const {
                 std::visit(TOverloaded{
                     [&](typename TColumn::Type TRow::*x) {
-                        Y_ABORT_UNLESS(rowset.template HaveValue<TColumn>());
                         row.*x = rowset.template GetValue<TColumn>();
                     },
                     [&](TMaybe<typename TColumn::Type> TRow::*x) {

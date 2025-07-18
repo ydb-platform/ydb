@@ -15,9 +15,9 @@ public:
         return Value;
     }
 
-    TReplaceKeyAdapter(const NArrow::TSimpleRow& rk, const bool reverse)
+    TReplaceKeyAdapter(NArrow::TSimpleRow&& rk, const bool reverse)
         : Reverse(reverse)
-        , Value(rk) {
+        , Value(std::move(rk)) {
     }
 
     std::partial_ordering Compare(const TReplaceKeyAdapter& item) const;

@@ -155,17 +155,6 @@ namespace NKikimr::NStorage {
         config->SetFingerprint(digest.data(), digest.size());
     }
 
-    void TDistributedConfigKeeper::UpdateBridgeFingerprint(NKikimrBridge::TClusterState *state) {
-        state->ClearFingerprint();
-
-        TString s;
-        const bool success = state->SerializeToString(&s);
-        Y_ABORT_UNLESS(success);
-
-        auto digest = NOpenSsl::NSha1::Calc(s.data(), s.size());
-        state->SetFingerprint(digest.data(), digest.size());
-    }
-
     bool TDistributedConfigKeeper::CheckFingerprint(const NKikimrBlobStorage::TStorageConfig& config) {
         return CalculateFingerprint(config) == config.GetFingerprint();
     }

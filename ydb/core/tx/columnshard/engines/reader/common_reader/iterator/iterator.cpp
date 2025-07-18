@@ -11,7 +11,7 @@ TColumnShardScanIterator::TColumnShardScanIterator(const std::shared_ptr<TReadCo
     IndexedData = ReadMetadata->BuildReader(Context);
 }
 
-TConclusion<std::shared_ptr<TPartialReadResult>> TColumnShardScanIterator::GetBatch() {
+TConclusion<std::unique_ptr<TPartialReadResult>> TColumnShardScanIterator::GetBatch() {
     FillReadyResults();
     return ReadyResults.pop_front();
 }

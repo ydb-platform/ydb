@@ -12,6 +12,7 @@ namespace NActors {
     public:
         struct TKeys {
             enum E : int {
+                BridgePileName = 5,
                 DataCenter = 10,
                 Module = 20,
                 Rack = 30,
@@ -88,6 +89,17 @@ namespace NActors {
         TLegacyValue GetLegacyValue() const;
 
         const std::vector<std::pair<TKeys::E, TString>>& GetItems() const { return Items; }
+
+        const std::optional<TString> GetBridgePileName() const {
+            if (Items.empty()) {
+                return std::nullopt;
+            }
+
+            auto& [key, value] = Items.front();
+            return key == TKeys::BridgePileName
+                ? std::make_optional(value)
+                : std::nullopt;
+        }
 
         bool HasKey(TKeys::E key) const {
             auto comp = [](const auto& p, TKeys::E value) { return p.first < value; };

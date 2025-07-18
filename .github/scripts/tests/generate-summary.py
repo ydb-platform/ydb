@@ -287,11 +287,9 @@ def render_testlist_html(rows, fn, build_preset, branch):
                     if history[test.full_name][x]["status"] == "passed"
                 ]
             )
-    # sorting, 
-    # at first - show tests with passed resuts in history
-    # at second - sorted by test name
+    # sorted by test name
     for current_status in status_for_history:
-        status_test.get(current_status,[]).sort(key=lambda val: (-val.count_of_passed, val.full_name))
+        status_test.get(current_status,[]).sort(key=lambda val: (val.full_name, ))
 
     buid_preset_params = '--build unknown_build_type'
     if build_preset == 'release-asan' :

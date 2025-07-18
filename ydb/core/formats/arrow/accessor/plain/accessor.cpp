@@ -32,24 +32,12 @@ void TTrivialArray::Reallocate() {
 
 std::shared_ptr<arrow::Array> TTrivialArray::BuildArrayFromOptionalScalar(
     const std::shared_ptr<arrow::Scalar>& scalar, const std::shared_ptr<arrow::DataType>& typePtr) {
+    AFL_VERIFY(!!typePtr);
     if (scalar) {
         AFL_VERIFY(scalar->type->id() == typePtr->id());
-        auto builder = NArrow::MakeBuilder(scalar->type, 1);
-        TStatusValidator::Validate(builder->AppendScalar(*scalar));
-        return NArrow::FinishBuilder(std::move(builder));
+        return BuildArrayFromScalar(scalar);
     } else {
-        std::shared_ptr<arrow::Array> result;
-        NArrow::SwitchType(typePtr->id(), [&](const auto& /*type*/) {
-            static const std::shared_ptr<arrow::Array> arrResult = [&]() {
-                auto builder = NArrow::MakeBuilder(typePtr, 1);
-                TStatusValidator::Validate(builder->AppendNull());
-                return NArrow::FinishBuilder(std::move(builder));
-            }();
-            result = arrResult;
-            return true;
-        });
-        AFL_VERIFY(result);
-        return result;
+        return TStatusValidator::GetValid(arrow::MakeArrayOfNull(typePtr, 1));
     }
 }
 

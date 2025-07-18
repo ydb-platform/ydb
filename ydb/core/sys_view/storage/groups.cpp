@@ -39,6 +39,8 @@ public:
             {T::LayoutCorrect::ColumnId, {E::kInfoFieldNumber, V::kLayoutCorrectFieldNumber}},
             {T::OperatingStatus::ColumnId, {E::kInfoFieldNumber, V::kOperatingStatusFieldNumber}},
             {T::ExpectedStatus::ColumnId, {E::kInfoFieldNumber, V::kExpectedStatusFieldNumber}},
+            {T::ProxyGroupId::ColumnId, {E::kInfoFieldNumber, V::kProxyGroupIdFieldNumber}},
+            {T::BridgePileId::ColumnId, {E::kInfoFieldNumber, V::kBridgePileIdFieldNumber}},
         };
         return fieldMap;
     }

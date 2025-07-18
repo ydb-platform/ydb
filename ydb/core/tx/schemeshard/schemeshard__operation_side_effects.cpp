@@ -784,10 +784,10 @@ void TSideEffects::DoPersistDeleteShards(TSchemeShard *ss, NTabletFlatExecutor::
 void TSideEffects::DoUpdateTempDirsToMakeState(TSchemeShard* ss, const TActorContext &ctx) {
     for (auto& [ownerActorId, tempDirs]: TempDirsToMakeState) {
 
-        auto& TempDirsByOwner = ss->TempDirsState.TempDirsByOwner;
+        auto& tempDirsByOwner = ss->TempDirsState.TempDirsByOwner;
         auto& nodeStates = ss->TempDirsState.NodeStates;
 
-        const auto it = TempDirsByOwner.find(ownerActorId);
+        const auto it = tempDirsByOwner.find(ownerActorId);
 
         const auto nodeId = ownerActorId.NodeId();
 
@@ -801,12 +801,12 @@ void TSideEffects::DoUpdateTempDirsToMakeState(TSchemeShard* ss, const TActorCon
             itNodeStates->second.Owners.insert(ownerActorId);
         }
 
-        if (it == TempDirsByOwner.end()) {
+        if (it == tempDirsByOwner.end()) {
             ctx.Send(new IEventHandle(ownerActorId, ss->SelfId(),
                 new TEvSchemeShard::TEvOwnerActorAck(),
                 IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession));
 
-            auto& currentDirsTables = TempDirsByOwner[ownerActorId];
+            auto& currentDirsTables = tempDirsByOwner[ownerActorId];
 
             for (auto& pathId : tempDirs) {
                 currentDirsTables.insert(std::move(pathId));
@@ -822,9 +822,9 @@ void TSideEffects::DoUpdateTempDirsToMakeState(TSchemeShard* ss, const TActorCon
 
 void TSideEffects::DoUpdateTempDirsToRemoveState(TSchemeShard* ss, const TActorContext& ctx) {
     for (auto& [ownerActorId, tempDirs]: TempDirsToRemoveState) {
-        auto& TempDirsByOwner = ss->TempDirsState.TempDirsByOwner;
-        const auto it = TempDirsByOwner.find(ownerActorId);
-        if (it == TempDirsByOwner.end()) {
+        auto& tempDirsByOwner = ss->TempDirsState.TempDirsByOwner;
+        const auto it = tempDirsByOwner.find(ownerActorId);
+        if (it == tempDirsByOwner.end()) {
             continue;
         }
 
@@ -839,7 +839,7 @@ void TSideEffects::DoUpdateTempDirsToRemoveState(TSchemeShard* ss, const TActorC
         }
 
         if (it->second.empty()) {
-            TempDirsByOwner.erase(it);
+            tempDirsByOwner.erase(it);
 
             auto& nodeStates = ss->TempDirsState.NodeStates;
 

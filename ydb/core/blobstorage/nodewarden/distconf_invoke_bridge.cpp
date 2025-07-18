@@ -76,7 +76,6 @@ namespace NKikimr::NStorage {
     NKikimrBlobStorage::TStorageConfig TInvokeRequestHandlerActor::GetSwitchBridgeNewConfig(
             const NKikimrBridge::TClusterState& newClusterState) {
         NKikimrBlobStorage::TStorageConfig config = *Self->StorageConfig;
-        config.SetGeneration(config.GetGeneration() + 1);
         auto *clusterState = config.MutableClusterState();
         size_t changedPileIndex = Max<size_t>();
         for (size_t i = 0; i < clusterState->PerPileStateSize(); ++i) {
@@ -130,6 +129,7 @@ namespace NKikimr::NStorage {
                     state->SetBridgePileId(changedPileIndex);
                 }
                 state->SetUnsyncedBSC(true);
+                state->SetUnsyncedStorageConfig(true);
                 if (config.HasBlobStorageConfig()) {
                     if (const auto& bsConfig = config.GetBlobStorageConfig(); bsConfig.HasServiceSet()) {
                         const auto& ss = bsConfig.GetServiceSet();
@@ -152,7 +152,6 @@ namespace NKikimr::NStorage {
                 Y_ABORT();
         }
 
-        TDistributedConfigKeeper::UpdateBridgeFingerprint(config.MutableClusterState());
         return config;
     }
 
@@ -168,7 +167,6 @@ namespace NKikimr::NStorage {
         }
 
         NKikimrBlobStorage::TStorageConfig config = *Self->StorageConfig;
-        config.SetGeneration(config.GetGeneration() + 1);
 
         auto *clusterState = config.MutableClusterState();
         auto *history = config.MutableClusterStateHistory();
@@ -246,8 +244,108 @@ namespace NKikimr::NStorage {
                 Y_ABORT();
         }
 
-        TDistributedConfigKeeper::UpdateBridgeFingerprint(config.MutableClusterState());
         StartProposition(&config);
+    }
+
+    bool TInvokeRequestHandlerActor::PrepareMergeUnsyncedPileConfig(const TQuery::TMergeUnsyncedPileConfig& cmd) {
+        NKikimrBlobStorage::TStorageConfig& config = SwitchBridgeNewConfig.emplace(*Self->StorageConfig);
+        const auto& pileConfig = cmd.GetPileConfig();
+
+        // TODO(alexvru): merge fields from pileConfig into config regarding that pile
+
+        if (pileConfig.GetGeneration() < config.GetGeneration()) {
+            FinishWithError(TResult::RACE, "no merging needed");
+            return false;
+        }
+
+        config.SetGeneration(pileConfig.GetGeneration() + 1);
+        return GenerateSpecificBridgePileIds();
+    }
+
+    void TInvokeRequestHandlerActor::MergeUnsyncedPileConfig() {
+        if (RunCommonChecks()) {
+            StartProposition(&SwitchBridgeNewConfig.value(), /*forceGeneration=*/ true);
+        }
+    }
+
+    void TInvokeRequestHandlerActor::NegotiateUnsyncedConnection(const TQuery::TNegotiateUnsyncedConnection& cmd) {
+        (void)cmd;
+    }
+
+    bool TInvokeRequestHandlerActor::PrepareAdvanceClusterStateGeneration(const TQuery::TAdvanceClusterStateGeneration& cmd) {
+        NKikimrBlobStorage::TStorageConfig& config = SwitchBridgeNewConfig.emplace(*Self->StorageConfig);
+
+        auto *clusterState = config.MutableClusterState();
+        if (cmd.GetGeneration() <= clusterState->GetGeneration()) {
+            FinishWithError(TResult::RACE, "generation already increased");
+            return false;
+        }
+
+        clusterState->SetGeneration(cmd.GetGeneration());
+
+        auto *history = config.MutableClusterStateHistory();
+        auto *entry = history->AddUnsyncedEntries();
+        entry->MutableClusterState()->CopyFrom(*clusterState);
+        entry->SetOperationGuid(RandomNumber<ui64>());
+        for (ui32 i = 0; i < Self->Cfg->BridgeConfig->PilesSize(); ++i) {
+            entry->AddUnsyncedPiles(i); // all piles are unsynced by default
+        }
+
+        return GenerateSpecificBridgePileIds();
+    }
+
+    void TInvokeRequestHandlerActor::AdvanceClusterStateGeneration() {
+        if (RunCommonChecks()) {
+            StartProposition(&SwitchBridgeNewConfig.value());
+        }
+    }
+
+    bool TInvokeRequestHandlerActor::GenerateSpecificBridgePileIds() {
+        Y_ABORT_UNLESS(SwitchBridgeNewConfig);
+        const auto& config = *SwitchBridgeNewConfig;
+        const auto& clusterState = config.GetClusterState();
+
+        THashSet<TBridgePileId> pilesWithUnsyncedStorageConfig;
+        if (config.HasClusterStateHistory()) {
+            for (const auto& item : config.GetClusterStateHistory().GetPileSyncState()) {
+                if (item.GetUnsyncedStorageConfig()) {
+                    pilesWithUnsyncedStorageConfig.insert(TBridgePileId::FromProto(&item,
+                        &std::decay_t<decltype(item)>::GetBridgePileId));
+                }
+            }
+        }
+        for (size_t i = 0; i < clusterState.PerPileStateSize(); ++i) {
+            const auto bridgePileId = TBridgePileId::FromValue(i);
+            switch (clusterState.GetPerPileState(i)) {
+                case NKikimrBridge::TClusterState::DISCONNECTED:
+                    break; // quorum definitely not required from this one
+
+                case NKikimrBridge::TClusterState::SYNCHRONIZED:
+                    if (pilesWithUnsyncedStorageConfig.contains(bridgePileId)) {
+                        Y_DEBUG_ABORT();
+                        FinishWithError(TResult::ERROR, "incorrect cluster history state unsynced entry");
+                        return false;
+                    }
+                    SpecificBridgePileIds.insert(bridgePileId);
+                    break;
+
+                case NKikimrBridge::TClusterState::NOT_SYNCHRONIZED:
+                    if (!pilesWithUnsyncedStorageConfig.contains(bridgePileId)) {
+                        SpecificBridgePileIds.insert(bridgePileId);
+                    }
+                    break;
+
+                case NKikimrBridge::TClusterState_EPileState_TClusterState_EPileState_INT_MIN_SENTINEL_DO_NOT_USE_:
+                case NKikimrBridge::TClusterState_EPileState_TClusterState_EPileState_INT_MAX_SENTINEL_DO_NOT_USE_:
+                    Y_ABORT();
+            }
+        }
+        if (SpecificBridgePileIds.empty()) {
+            FinishWithError(TResult::ERROR, "incorrect cluster state");
+            return false;
+        }
+
+        return true;
     }
 
 } // NKikimr::NStorage

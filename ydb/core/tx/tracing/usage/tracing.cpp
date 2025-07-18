@@ -19,9 +19,9 @@ NTls::TValue<std::vector<TTraceClient*>> GuardedClients;
 NTls::TValue<std::vector<TTraceClient::TDurationGuard*>> Guards;
 }
 
-TTraceClient::TDurationGuard TTraceClient::MakeContextGuard(const TString& id) {
+TTraceClient::TDurationGuard TTraceClient::MakeContextGuard(const TString& id, const bool isNotFake) {
     if (GuardedClients.Get().size()) {
-        return GuardedClients.Get().back()->MakeGuard(id);
+        return GuardedClients.Get().back()->MakeGuard(id, isNotFake);
     } else {
         return TTraceClient::TDurationGuard(id);
     }
@@ -35,10 +35,13 @@ TTraceClient::TDurationGuard* TTraceClient::GetContextGuard() {
     }
 }
 
-TTraceClient::TDurationGuard::TDurationGuard(TTraceClient& owner, const TString& id)
-    : Owner(&owner)
-    , Id(id)
+TTraceClient::TDurationGuard::TDurationGuard(TTraceClient& owner, const TString& id, const bool isNotFake)
+    : Id(id)
 {
+    if (!isNotFake) {
+        return;
+    }
+    Owner = &owner;
     GuardedClients.Get().emplace_back(Owner);
     Guards.Get().emplace_back(this);
     auto it = Owner->Stats.find(Id);
@@ -46,7 +49,7 @@ TTraceClient::TDurationGuard::TDurationGuard(TTraceClient& owner, const TString&
         it = Owner->Stats.emplace(Id, TStatInfo()).first;
     }
     Stat = &it->second;
-    Stat->Start(StartInstant);
+    Stat->Start(TMonotonic::Now());
 }
 
 TTraceClient::TDurationGuard::TDurationGuard(const TString& id)
@@ -60,7 +63,7 @@ TTraceClient::TDurationGuard::~TDurationGuard() {
     AFL_VERIFY(GuardedClients.Get().size() && GuardedClients.Get().back()->GetClientId() == Owner->GetClientId());
     GuardedClients.Get().pop_back();
     Guards.Get().pop_back();
-    Stat->Finish(TInstant::Now());
+    Stat->Finish(TMonotonic::Now());
 }
 
 TTraceClientGuard TTraceClient::GetClientUnique(const TString& type, const TString& clientId, const TString& parentId) {
@@ -82,7 +85,7 @@ NJson::TJsonValue TTraceClient::ToJsonImpl(THashSet<TString>& readyIds) const {
         result.InsertValue("ids", JoinSeq(",", readyIds));
         return result;
     }
-    const TInstant finishInstant = GetFinishInstant();
+    const TMonotonic finishInstant = GetFinishInstant();
     NJson::TJsonValue result = NJson::JSON_MAP;
     result.InsertValue("id", ClientId);
     result.InsertValue("full", ActualStat.ToJson("_full_task", finishInstant));
@@ -90,7 +93,7 @@ NJson::TJsonValue TTraceClient::ToJsonImpl(THashSet<TString>& readyIds) const {
         result.InsertValue("parent_id", ParentId);
     }
     if (Stats.size()) {
-        const TInstant startInstant = ActualStat.GetFirstVerified();
+        const TMonotonic startInstant = ActualStat.GetFirstVerified();
         std::map<ui64, std::vector<TString>> points;
         for (auto&& i : Stats) {
             points[(i.second.GetFirstVerified() - startInstant).MilliSeconds()].emplace_back("f_" + i.first);
@@ -150,12 +153,12 @@ bool TTraceClient::CheckChildrenFree() const {
     return true;
 }
 
-TInstant TStatInfo::GetFirstVerified() const {
+TMonotonic TStatInfo::GetFirstVerified() const {
     AFL_VERIFY(First);
     return *First;
 }
 
-TInstant TStatInfo::GetLastVerified() const {
+TMonotonic TStatInfo::GetLastVerified() const {
     AFL_VERIFY(Last);
     return *Last;
 }

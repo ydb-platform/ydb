@@ -1,0 +1,98 @@
+syntax = "proto3";
+
+package yandex.cloud.events.ymq;
+
+import "google/rpc/status.proto";
+import "ydb/public/api/client/yc_public/events/common.proto";
+import "ydb/public/api/client/yc_public/common/validation.proto";
+import "ydb/public/api/client/yc_public/events/options.proto";
+
+option go_package = "ymq";
+option java_package = "yandex.cloud.api.events.ymq";
+
+message CreateQueue {
+    option (include) = true;
+
+    Authentication authentication = 1 [(required) = true];
+    Authorization authorization = 2 [(required) = true];
+
+    EventMetadata event_metadata = 3 [(required) = true];
+    RequestMetadata request_metadata = 4 [(required) = true];
+
+    EventStatus event_status = 5 [(required) = true];
+    EventDetails details = 6 [(required) = true];
+    RequestParameters request_parameters = 7 [(required) = true];
+    google.rpc.Status error = 8;
+    Response response = 9;
+
+    message Response {
+        // empty
+    }
+
+    message EventDetails {
+        map<string, string> labels = 1;
+        string name = 2;
+    }
+
+    message RequestParameters {
+        // empty
+    }
+}
+
+message UpdateQueue {
+    option (include) = true;
+
+    Authentication authentication = 1 [(required) = true];
+    Authorization authorization = 2 [(required) = true];
+
+    EventMetadata event_metadata = 3 [(required) = true];
+    RequestMetadata request_metadata = 4 [(required) = true];
+
+    EventStatus event_status = 5 [(required) = true];
+    EventDetails details = 6 [(required) = true];
+    RequestParameters request_parameters = 7 [(required) = true];
+    google.rpc.Status error = 8;
+    Response response = 9;
+
+    message Response {
+        // empty
+    }
+
+    message EventDetails {
+        map<string, string> labels = 1;
+        string name = 2;
+    }
+
+    message RequestParameters {
+        // empty
+    }
+}
+
+message DeleteQueue {
+    option (include) = true;
+
+    Authentication authentication = 1 [(required) = true];
+    Authorization authorization = 2 [(required) = true];
+
+    EventMetadata event_metadata = 3 [(required) = true];
+    RequestMetadata request_metadata = 4 [(required) = true];
+
+    EventStatus event_status = 5 [(required) = true];
+    EventDetails details = 6 [(required) = true];
+    RequestParameters request_parameters = 7 [(required) = true];
+    google.rpc.Status error = 8;
+    Response response = 9;
+
+    message Response {
+        // empty
+    }
+
+    message EventDetails {
+        map<string, string> labels = 1;
+        string name = 2;
+    }
+
+    message RequestParameters {
+        // empty
+    }
+}

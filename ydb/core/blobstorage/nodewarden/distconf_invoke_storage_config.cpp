@@ -349,38 +349,28 @@ namespace NKikimr::NStorage {
     }
 
     void TInvokeRequestHandlerActor::TryEnableDistconf() {
-        const ERootState prevState = std::exchange(Self->RootState, ERootState::IN_PROGRESS);
-        Y_ABORT_UNLESS(prevState == ERootState::RELAX);
-
         TEvScatter task;
         task.MutableCollectConfigs();
         IssueScatterTask(std::move(task), [this](TEvGather *res) -> std::optional<TString> {
             Y_ABORT_UNLESS(Self->StorageConfig); // it can't just disappear
-
-            const ERootState prevState = std::exchange(Self->RootState, ERootState::RELAX);
-            Y_ABORT_UNLESS(prevState == ERootState::IN_PROGRESS);
+            Y_ABORT_UNLESS(!Self->CurrentProposition);
 
             if (!res->HasCollectConfigs()) {
                 return "incorrect CollectConfigs response";
-            } else if (Self->CurrentProposition) {
-                FinishWithError(TResult::RACE, "config proposition request in flight");
-                return std::nullopt;
-            } else if (IsScepterExpired()) {
-                return "scepter lost during query execution";
-            } else if (auto r = Self->ProcessCollectConfigs(res->MutableCollectConfigs(), std::nullopt, {}, false); r.ErrorReason) {
+            } else if (auto r = Self->ProcessCollectConfigs(res->MutableCollectConfigs(), std::nullopt); r.ErrorReason) {
                 return *r.ErrorReason;
+            } else if (r.ConfigToPropose) {
+                return "unexpected config proposition";
+            } else if (r.IsDistconfDisabledQuorum) {
+                // distconf is disabled on the majority of nodes; we have just to replace configs
+                // and then to restart these nodes in order to enable it in future
+                auto ev = PrepareResult(TResult::CONTINUE_BSC, "proceed with BSC");
+                ev->Record.MutableReplaceStorageConfig()->SetAllowEnablingDistconf(true);
+                Finish(Sender, SelfId(), ev.release(), 0, Cookie);
             } else {
-                if (r.IsDistconfDisabledQuorum) {
-                    // distconf is disabled on the majority of nodes; we have just to replace configs
-                    // and then to restart these nodes in order to enable it in future
-                    auto ev = PrepareResult(TResult::CONTINUE_BSC, "proceed with BSC");
-                    ev->Record.MutableReplaceStorageConfig()->SetAllowEnablingDistconf(true);
-                    Finish(Sender, SelfId(), ev.release(), 0, Cookie);
-                } else {
-                    ConnectToController();
-                }
-                return std::nullopt;
+                ConnectToController();
             }
+            return std::nullopt;
         });
     }
 
@@ -568,15 +558,8 @@ namespace NKikimr::NStorage {
             return FinishWithError(TResult::ERROR, "SelfAssemblyUUID can't be empty");
         }
 
-        const ERootState prevState = std::exchange(Self->RootState, ERootState::IN_PROGRESS);
-        Y_ABORT_UNLESS(prevState == ERootState::RELAX);
-
         // issue scatter task to collect configs and then bootstrap cluster with specified cluster UUID
         auto done = [this, selfAssemblyUUID = TString(selfAssemblyUUID)](TEvGather *res) -> std::optional<TString> {
-            // we have collected all the necessary configs, return to RELAX'ed state
-            const auto prev = std::exchange(Self->RootState, ERootState::RELAX);
-            Y_ABORT_UNLESS(prev == ERootState::IN_PROGRESS);
-
             if (!res->HasCollectConfigs()) {
                 return "incorrect response to CollectConfigs";
             }
@@ -586,15 +569,12 @@ namespace NKikimr::NStorage {
 
             if (Self->StorageConfig->GetGeneration()) {
                 FinishWithError(TResult::RACE, "storage config generation regenerated while collecting configs");
-            } else if (auto r = Self->ProcessCollectConfigs(res->MutableCollectConfigs(), selfAssemblyUUID, SelfId(), true);
-                    r.ErrorReason) {
+            } else if (auto r = Self->ProcessCollectConfigs(res->MutableCollectConfigs(), selfAssemblyUUID); r.ErrorReason) {
                 return r.ErrorReason;
-            } else if (!Self->CurrentProposition) { // no new proposition has been made
+            } else if (r.ConfigToPropose) {
+                StartProposition(&r.ConfigToPropose.value());
+            } else { // no new proposition has been made
                 Finish(Sender, SelfId(), PrepareResult(TResult::OK, std::nullopt).release(), 0, Cookie);
-            } else {
-                // a new proposition has just been initiated, so we're a bit busy
-                const ERootState prevState = std::exchange(Self->RootState, ERootState::IN_PROGRESS);
-                Y_ABORT_UNLESS(prevState == ERootState::RELAX);
             }
             return std::nullopt;
         };

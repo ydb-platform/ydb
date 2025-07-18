@@ -290,7 +290,7 @@ private:
             if (counters.LimitMaxBytes) {
                 counters.LimitMaxBytes->Set(consumer.MaxBytes);
             }
-            SetMemoryStats(consumer, memoryStats, limitBytes);
+            AddMemoryStats(consumer, memoryStats, limitBytes);
 
             ApplyLimit(consumer, limitBytes);
         }
@@ -371,10 +371,12 @@ private:
             case EMemoryConsumerKind::SharedCache:
             case EMemoryConsumerKind::BlobCache:
             case EMemoryConsumerKind::DataAccessorCache:
+            case EMemoryConsumerKind::ColumnDataCache:
                 Send(consumer.ActorId, new TEvConsumerLimit(limitBytes));
                 break;
             case EMemoryConsumerKind::ScanGroupedMemoryLimiter:
             case EMemoryConsumerKind::CompGroupedMemoryLimiter:
+            case EMemoryConsumerKind::DeduplicationGroupedMemoryLimiter:
                 Send(consumer.ActorId, new TEvConsumerLimit(limitBytes * NKikimr::NOlap::TGlobalLimits::GroupedMemoryLimiterSoftLimitCoefficient, limitBytes));
                 break;
         }
@@ -463,37 +465,42 @@ private:
         }).first->second;
     }
 
-    void SetMemoryStats(const TConsumerState& consumer, NKikimrMemory::TMemoryStats& stats, ui64 limitBytes) const {
+    void AddMemoryStats(const TConsumerState& consumer, NKikimrMemory::TMemoryStats& stats, ui64 limitBytes) const {
         switch (consumer.Kind) {
             case EMemoryConsumerKind::MemTable: {
+                AFL_VERIFY(!stats.HasMemTableConsumption());
+                AFL_VERIFY(!stats.HasMemTableLimit());
                 stats.SetMemTableConsumption(consumer.Consumption);
                 stats.SetMemTableLimit(limitBytes);
                 break;
             }
             case EMemoryConsumerKind::SharedCache: {
+                AFL_VERIFY(!stats.HasSharedCacheConsumption());
+                AFL_VERIFY(!stats.HasSharedCacheLimit());
                 stats.SetSharedCacheConsumption(consumer.Consumption);
                 stats.SetSharedCacheLimit(limitBytes);
                 break;
             }
-            case EMemoryConsumerKind::ScanGroupedMemoryLimiter: {
-                stats.SetColumnTablesReadExecutionConsumption(consumer.Consumption);
-                stats.SetColumnTablesReadExecutionLimit(limitBytes);
+            case EMemoryConsumerKind::ScanGroupedMemoryLimiter:
+            case EMemoryConsumerKind::DeduplicationGroupedMemoryLimiter: {
+                stats.SetColumnTablesReadExecutionConsumption(stats.GetColumnTablesReadExecutionConsumption() + consumer.Consumption);
+                stats.SetColumnTablesReadExecutionLimit(stats.GetColumnTablesReadExecutionLimit() + limitBytes);
                 break;
             }
             case EMemoryConsumerKind::CompGroupedMemoryLimiter: {
+                AFL_VERIFY(!stats.HasColumnTablesCompactionConsumption());
+                AFL_VERIFY(!stats.HasColumnTablesCompactionLimit());
                 stats.SetColumnTablesCompactionConsumption(consumer.Consumption);
                 stats.SetColumnTablesCompactionLimit(limitBytes);
                 break;
             }
             case EMemoryConsumerKind::DataAccessorCache:
+            case EMemoryConsumerKind::ColumnDataCache:
             case EMemoryConsumerKind::BlobCache: {
-                stats.SetColumnTablesCacheConsumption(
-                    (stats.HasColumnTablesCacheConsumption() ? stats.GetColumnTablesCacheConsumption() : 0) + consumer.Consumption);
-                stats.SetColumnTablesCacheLimit((stats.HasColumnTablesCacheLimit() ? stats.GetColumnTablesCacheLimit() : 0) + limitBytes);
+                stats.SetColumnTablesCacheConsumption(stats.GetColumnTablesCacheConsumption() + consumer.Consumption);
+                stats.SetColumnTablesCacheLimit(stats.GetColumnTablesCacheLimit() + limitBytes);
                 break;
             }
-            default:
-                Y_ABORT("Unhandled consumer");
         }
     }
 
@@ -513,7 +520,12 @@ private:
                 break;
             }
             case EMemoryConsumerKind::ScanGroupedMemoryLimiter: {
-                result.ExactLimit = GetColumnTablesReadExecutionLimitBytes(Config, hardLimitBytes);
+                result.ExactLimit = GetColumnTablesReadExecutionLimitBytes(Config, hardLimitBytes) *
+                                    (1.0 - NKikimr::NOlap::TGlobalLimits::DeduplicationInScanMemoryFraction);
+                break;
+            }
+            case EMemoryConsumerKind::DeduplicationGroupedMemoryLimiter: {
+                result.ExactLimit = GetColumnTablesReadExecutionLimitBytes(Config, hardLimitBytes) * NKikimr::NOlap::TGlobalLimits::DeduplicationInScanMemoryFraction;
                 break;
             }
             case EMemoryConsumerKind::CompGroupedMemoryLimiter: {
@@ -529,8 +541,10 @@ private:
                 result.ExactLimit = GetColumnTablesCacheLimitBytes(Config, hardLimitBytes) * NKikimr::NOlap::TGlobalLimits::DataAccessorCoefficient;
                 break;
             }
-            default:
-                Y_ABORT("Unhandled consumer");
+            case EMemoryConsumerKind::ColumnDataCache: {
+                result.ExactLimit = GetColumnTablesCacheLimitBytes(Config, hardLimitBytes) * NKikimr::NOlap::TGlobalLimits::ColumnDataCacheCoefficient;
+                break;
+            }
         }
 
         if (result.MinBytes > result.MaxBytes) {

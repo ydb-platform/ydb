@@ -252,7 +252,13 @@ protected:
 
 
     void Handle(TEvIncrementalRestoreScan::TEvFinished::TPtr& ev, TOperation::TPtr op, const TActorContext& ctx) {
-        Y_UNUSED(ev, op, ctx);
+        LOG_INFO_S(ctx, NKikimrServices::TX_DATASHARD, 
+                   "IncrementalRestoreScan finished for txId: " << ev->Get()->TxId 
+                   << " at DataShard: " << DataShard.TabletID());
+        
+        // Additional completion handling can be added here if needed
+        // (e.g., updating operation status, sending additional notifications)
+        
         ResetWaiting(op);
     }
 

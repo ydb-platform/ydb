@@ -70,10 +70,10 @@ namespace NKikimr {
 
     std::unique_ptr<ICacheAccessor> CreateFileCacheAccessor(const TString& templ, const std::unordered_map<char, TString>& vars);
 
-    inline TActorId MakeDistconfConnectionCheckerActorId() {
+    inline TActorId MakeDistconfBridgeConnectionCheckerActorId() {
         return TActorId(0, TStringBuf("DistConfCCkr", 12));
     }
 
-    IActor *CreateDistconfConnectionCheckerActor();
+    IActor *CreateDistconfBridgeConnectionCheckerActor(TBridgePileId selfBridgePileId);
 
 } // NKikimr

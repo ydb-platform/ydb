@@ -51,11 +51,13 @@ private:
         Cleared = true;
         SourcesConstructor->Clear();
         FetchingInFlightSources.clear();
+        NextSource.reset();
     }
     virtual void DoAbort() override {
         Aborted = true;
         SourcesConstructor->Abort();
         FetchingInFlightSources.clear();
+        NextSource.reset();
     }
     virtual bool DoIsFinished() const override {
         return !NextSource && SourcesConstructor->IsFinished() && FetchingInFlightSources.empty();

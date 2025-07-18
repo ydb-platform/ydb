@@ -112,7 +112,7 @@ class TApplySourceResult: public IApplyAction {
 private:
     using TBase = IDataTasksProcessor::ITask;
     YDB_READONLY_DEF(std::shared_ptr<IDataSource>, Source);
-    TFetchingScriptCursor Step;
+    mutable TFetchingScriptCursor Step;
 
 public:
     TApplySourceResult(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step)
@@ -122,7 +122,7 @@ public:
 
     virtual bool DoApply(IDataReader& indexedDataRead) const override {
         auto* plainReader = static_cast<TPlainReadData*>(&indexedDataRead);
-        Source->SetCursor(Step);
+        Source->SetCursor(std::move(Step));
         Source->StartSyncSection();
         plainReader->MutableScanner().GetResultSyncPoint()->OnSourcePrepared(Source, *plainReader);
         return true;

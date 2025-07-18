@@ -325,6 +325,8 @@ struct Schema : NIceDb::Schema {
         struct LayoutCorrect : Column<16, NScheme::NTypeIds::Bool> {};
         struct OperatingStatus : Column<17, NScheme::NTypeIds::Utf8> {};
         struct ExpectedStatus : Column<18, NScheme::NTypeIds::Utf8> {};
+        struct ProxyGroupId : Column<19, NScheme::NTypeIds::Uint32> {};
+        struct BridgePileId : Column<20, NScheme::NTypeIds::Uint32> {};
 
         using TKey = TableKey<GroupId>;
         using TColumns = TableColumns<
@@ -343,7 +345,9 @@ struct Schema : NIceDb::Schema {
             GetFastLatency,
             LayoutCorrect,
             OperatingStatus,
-            ExpectedStatus>;
+            ExpectedStatus,
+            ProxyGroupId,
+            BridgePileId>;
     };
 
     struct StoragePools : Table<7> {
@@ -463,7 +467,8 @@ struct Schema : NIceDb::Schema {
         struct BlobRangeSize : Column<12, NScheme::NTypeIds::Uint64> {};
         struct Activity : Column<13, NScheme::NTypeIds::Uint8> {};
         struct TierName: Column<14, NScheme::NTypeIds::Utf8> {};
-        struct EntityType: Column<15, NScheme::NTypeIds::Utf8> {};
+        struct EntityType : Column<15, NScheme::NTypeIds::Utf8> {};
+        struct ChunkDetails : Column<16, NScheme::NTypeIds::Utf8> {};
 
         using TKey = TableKey<PathId, TabletId, PortionId, InternalEntityId, ChunkIdx>;
         using TColumns = TableColumns<
@@ -481,7 +486,8 @@ struct Schema : NIceDb::Schema {
             BlobRangeSize,
             Activity,
             TierName,
-            EntityType
+            EntityType,
+            ChunkDetails
             >;
     };
 

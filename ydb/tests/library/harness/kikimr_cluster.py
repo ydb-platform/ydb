@@ -36,8 +36,10 @@ class ExternalKiKiMRCluster(KiKiMRClusterInterface):
             ssh_username=None,
             deploy_cluster=False,
             yaml_config=None):
+
         with open(cluster_template, 'r') as r:
             self.__cluster_template = yaml.safe_load(r.read())
+        self.__yaml_config = None
         if yaml_config is not None:
             with open(yaml_config, 'r') as r:
                 self.__yaml_config = yaml.safe_load(r.read())
@@ -49,10 +51,10 @@ class ExternalKiKiMRCluster(KiKiMRClusterInterface):
         self.__deploy_cluster = deploy_cluster
 
         if yaml_config is not None:
-            self.__hosts = [host.get('name', host.get('host')) for host in self.__yaml_config.get('config', {}).get('hosts')]
+            self.__hosts = self.__yaml_config.get('config', {}).get('hosts')
         else:
             # Backward compatibility for cluster_template
-            self.__hosts = [host.get('name', host.get('host')) for host in self.__cluster_template.get('hosts')]
+            self.__hosts = self.__cluster_template.get('hosts')
 
         self.__slot_count = 0
         for domain in self.__cluster_template['domains']:
@@ -62,7 +64,11 @@ class ExternalKiKiMRCluster(KiKiMRClusterInterface):
 
     @property
     def config(self):
-        return self.__config
+        return self.__cluster_template
+
+    @property
+    def yaml_config(self):
+        return self.__yaml_config
 
     def add_storage_pool(self, erasure=None):
         raise NotImplementedError()
@@ -187,6 +193,23 @@ class ExternalKiKiMRCluster(KiKiMRClusterInterface):
 
         self._start()
 
+    def _get_bridge_pile_id(self, node):
+        if self.__yaml_config is None:
+            return None
+
+        bridge_config = self.__yaml_config.get('config', {}).get('bridge_config', None)
+        if bridge_config is None:
+            return None
+
+        bridge_pile_name = node.get('bridge_pile_name', None)
+        if bridge_pile_name is None:
+            return None
+
+        for pile_id, pile in enumerate(bridge_config.get('piles', [])):
+            if pile.get('name') == bridge_pile_name:
+                return pile_id
+        return None
+
     @property
     def nodes(self):
         return {
@@ -195,14 +218,18 @@ class ExternalKiKiMRCluster(KiKiMRClusterInterface):
                 kikimr_path=self.__kikimr_path,
                 kikimr_next_path=self.__kikimr_next_path,
                 node_id=node_id,
-                host=host,
+                host=node.get('name', node.get('host')),
+                rack=node.get('location', {}).get('rack', None),
+                datacenter=node.get('location', {}).get('data_center', None),
+                bridge_pile_name=node.get('bridge_pile_name', None),
+                bridge_pile_id=self._get_bridge_pile_id(node),
                 ssh_username=self.__ssh_username,
                 port=DEFAULT_GRPC_PORT,
                 mon_port=DEFAULT_MON_PORT,
                 ic_port=DEFAULT_INTERCONNECT_PORT,
                 mbus_port=DEFAULT_MBUS_PORT,
                 configurator=None,
-            ) for node_id, host in zip(itertools.count(start=1), self.__hosts)
+            ) for node_id, node in zip(itertools.count(start=1), self.__hosts)
         }
 
     @property
@@ -227,6 +254,10 @@ class ExternalKiKiMRCluster(KiKiMRClusterInterface):
                         kikimr_next_path=self.__kikimr_next_path,
                         node_id=node_id,
                         host=node.host,
+                        rack=node.rack,
+                        datacenter=node.datacenter,
+                        bridge_pile_name=node.bridge_pile_name,
+                        bridge_pile_id=node.bridge_pile_id,
                         ssh_username=self.__ssh_username,
                         port=grpc_port,
                         mon_port=mon_port,

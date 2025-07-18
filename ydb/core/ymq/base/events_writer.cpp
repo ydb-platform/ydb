@@ -90,3 +90,12 @@ IEventsWriterWrapper::TPtr TSqsEventsWriterFactory::CreateEventsWriter(const NKi
     }
     return new TNullEventsWriter();
 }
+
+IEventsWriterWrapper::TPtr TSqsEventsWriterFactory::CreateCloudEventsWriter(const NKikimrConfig::TSqsConfig& config, const NMonitoring::TDynamicCounterPtr& counters) const {
+    const auto& cloudEventsCfg = config.GetCloudEventsConfig();
+    if (cloudEventsCfg.HasUnifiedAgentUri()) {
+        return new TUaEventsWriter(cloudEventsCfg.GetUnifiedAgentUri(), counters);
+    } else {
+        return new TNullEventsWriter();
+    }
+}

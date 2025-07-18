@@ -9,6 +9,9 @@ defaults:
   run:
     shell: bash
 
+env:
+  GH_TOKEN: ${{ secrets.YDBOT_TOKEN }}
+
 jobs:
   main:
     name: Checkout, setup and collect testowners
@@ -27,6 +30,11 @@ jobs:
         python3 -m pip install ydb ydb[yc] codeowners pandas
     - name: Collect testowners
       run: python3 .github/scripts/analytics/upload_testowners.py
+    - name: Export GitHub issues
+      env:
+        GITHUB_TOKEN: ${{ env.GH_TOKEN }}
+      continue-on-error: true
+      run: python3 .github/scripts/analytics/export_issues_to_ydb.py
 
   matrix-job:
     name: Test collection on ${{ matrix.branch }}

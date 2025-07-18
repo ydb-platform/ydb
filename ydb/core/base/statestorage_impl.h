@@ -1,7 +1,11 @@
 #pragma once
+
+#include "statestorage.h"
+
 #include <ydb/core/scheme/scheme_pathid.h>
 #include <ydb/core/protos/base.pb.h>
-#include "statestorage.h"
+
+#include <util/string/join.h>
 
 namespace NKikimr {
 
@@ -149,6 +153,15 @@ struct TEvStateStorage::TEvResolveReplicasList : public TEventLocal<TEvResolveRe
         TVector<TActorId> Replicas;
         bool WriteOnly;
         ERingGroupState State;
+
+        TString ToString() const {
+            TStringStream str;
+            str << "{Replicas: [" << JoinSeq(", ", Replicas) << "]"
+                << " WriteOnly: " << WriteOnly
+                << " State: " << static_cast<int>(State)
+                << "}";
+            return str.Str();
+        }
     };
 
     TVector<TReplicaGroup> ReplicaGroups;
@@ -167,6 +180,14 @@ struct TEvStateStorage::TEvResolveReplicasList : public TEventLocal<TEvResolveRe
             result.insert(result.end(), r.Replicas.begin(), r.Replicas.end());
         }
         return result;
+    }
+
+    TString ToString() const override {
+        TStringStream str;
+        str << "{EvResolveReplicasList"
+            << " ReplicaGroups: [" << JoinSeq(", ", ReplicaGroups) << "]"
+            << "}";
+        return str.Str();
     }
 };
 
@@ -398,4 +419,8 @@ struct TEvStateStorage::TEvReplicaBoardInfoUpdate : public TEventPB<TEvStateStor
     }
 };
 
+}
+
+Y_DECLARE_OUT_SPEC(inline, NKikimr::TEvStateStorage::TEvResolveReplicasList::TReplicaGroup, o, x) {
+    o << x.ToString();
 }

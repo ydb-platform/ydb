@@ -239,6 +239,8 @@ class RollingUpgradeAndDowngradeFixture:
         for i in range(1, len(self.cluster.nodes) + 1):
             self.endpoints.append("grpc://%s:%s" % ('localhost', self.cluster.nodes[i].port))
 
+        self.endpoint = self.endpoints[0]
+
         self.driver = ydb.Driver(
             ydb.DriverConfig(
                 self.endpoints[0],

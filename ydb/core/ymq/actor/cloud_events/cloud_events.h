@@ -1,6 +1,9 @@
 #pragma once
 
+#include <ydb/core/ymq/actor/cloud_events/proto/ymq.pb.h>
+
 #include <ydb/core/kqp/common/kqp.h>
+#include <ydb/core/ymq/base/events_writer_iface.h>
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
@@ -12,12 +15,19 @@
 
 namespace NKikimr::NSQS {
 namespace NCloudEvents {
+    using TCreateQueueEvent = yandex::cloud::events::ymq::CreateQueue;
+    using TUpdateQueueEvent = yandex::cloud::events::ymq::UpdateQueue;
+    using TDeleteQueueEvent = yandex::cloud::events::ymq::DeleteQueue;
+    using EStatus = yandex::cloud::events::EventStatus;
+
     class TEventIdGenerator {
     public:
         static ui64 Generate();
     };
 
     struct TEventInfo {
+        static constexpr TStringBuf ResourceType = "message-queue";
+
         TString UserSID;
         TString MaskedToken;
         TString AuthType;
@@ -25,7 +35,9 @@ namespace NCloudEvents {
         ui64 OriginalId;
         TString Id;
         TString Type;
-        ui64 CreatedAt;
+
+        TInstant CreatedAt;
+
         TString CloudId;
         TString FolderId;
         TString ResourceId;
@@ -42,9 +54,32 @@ namespace NCloudEvents {
         TString Permission;
     };
 
-    class TAuditSender {
+    template<typename TProtoEvent>
+    class TFiller {
+    protected:
+        const TEventInfo& EventInfo;    // Be careful with reference
+        TProtoEvent& Ev;                // Be careful with reference
+
+        void FillAuthentication();
+        void FillAuthorization();
+        void FillEventMetadata();
+        void FillRequestMetadata();
+        void FillStatus();
+        void FillDetails();
     public:
-        static void Send(const TEventInfo& evInfo);
+        void Fill();
+
+        TFiller(const TEventInfo& eventInfo, TProtoEvent& ev)
+        : EventInfo(eventInfo)
+        , Ev(ev)
+        {}
+    };
+
+    class TAuditSender {
+        template<typename TProtoEvent>
+        static void SendProto(const TProtoEvent& ev, IEventsWriterWrapper::TPtr);
+    public:
+        static void Send(const TEventInfo& evInfo, IEventsWriterWrapper::TPtr);
     };
 
     class TProcessor : public NActors::TActorBootstrapped<TProcessor> {
@@ -61,6 +96,7 @@ namespace NCloudEvents {
         const TString SelectQuery;
         const TString DeleteQuery;
 
+        IEventsWriterWrapper::TPtr EventsWriter;
 
         TString GetFullTablePath() const;
         TString GetInitSelectQuery() const;
@@ -81,8 +117,11 @@ namespace NCloudEvents {
         TProcessor(
             const TString& root,
             const TString& database,
-            const TDuration& retryTimeout
+            const TDuration& retryTimeout,
+            IEventsWriterWrapper::TPtr eventsWriter
         );
+        
+        ~TProcessor();
 
         void Bootstrap();
 

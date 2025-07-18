@@ -37,7 +37,7 @@ struct Schema : NIceDb::Schema {
         struct ServicedSubDomain : Column<13, NScheme::NTypeIds::String> { using Type = NKikimrSubDomains::TDomainKey; };
         struct SlotIndex : Column<14, NScheme::NTypeIds::Uint32> {};
         struct AuthorizedByCertificate : Column<15, NScheme::NTypeIds::Bool> {};
-        struct BridgePileId : Column<16, NScheme::NTypeIds::Uint32> {};
+        //struct BridgePileId : Column<16, NScheme::NTypeIds::Uint32> {};
 
         using TKey = TableKey<ID>;
         using TColumns = TableColumns<
@@ -51,8 +51,7 @@ struct Schema : NIceDb::Schema {
             Location,
             ServicedSubDomain,
             SlotIndex,
-            AuthorizedByCertificate,
-            BridgePileId
+            AuthorizedByCertificate
         >;
     };
 

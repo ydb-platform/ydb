@@ -124,7 +124,7 @@ public:
 
     void SyncTableColumns(const std::vector<std::shared_ptr<arrow::Field>>& fields, const ISnapshotSchema& schema, const ui32 recordsCount);
 
-    std::shared_ptr<NArrow::TColumnFilter> GetAppliedFilter() const {
+    const std::shared_ptr<NArrow::TColumnFilter>& GetAppliedFilter() const {
         return Table->GetAppliedFilter();
     }
 

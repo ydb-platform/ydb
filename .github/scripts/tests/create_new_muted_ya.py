@@ -161,15 +161,15 @@ def is_unmute_candidate(test, unmute_stats):
     """Проверяет, является ли тест кандидатом на размьют"""
     if not unmute_stats:
         return False
-    unmute_runs = unmute_stats.get('pass_count', 0) + unmute_stats.get('fail_count', 0)
-    unmute_fails = unmute_stats.get('fail_count', 0)
+    unmute_runs = unmute_stats.get('pass_count', 0) + unmute_stats.get('fail_count', 0) + unmute_stats.get('mute_count', 0)
+    unmute_fails = unmute_stats.get('fail_count', 0) + unmute_stats.get('mute_count', 0)
     return unmute_runs > 4 and unmute_fails == 0
 
 def is_delete_candidate(test, delete_stats):
     """Проверяет, является ли тест кандидатом на удаление из mute"""
     if not delete_stats:
         return False
-    delete_runs = delete_stats.get('pass_count', 0) + delete_stats.get('fail_count', 0)
+    delete_runs = delete_stats.get('pass_count', 0) + delete_stats.get('fail_count', 0) + delete_stats.get('mute_count', 0)
     return delete_runs == 0
 
 def create_file_set(aggregated_for_mute, filter_func, mute_check=None, use_wildcards=False, resolution=None):
@@ -255,34 +255,45 @@ def apply_and_add_mutes(aggregated_for_mute, aggregated_for_unmute, aggregated_f
         to_delete_set = set(to_delete)
         all_muted_ya_set = set(all_muted_ya)
         
+         # Создаем словари для быстрого поиска debug-строк
+        all_muted_ya_debug_dict = dict(zip(all_muted_ya, all_muted_ya_debug))
+        to_mute_debug_dict = dict(zip(to_mute, to_mute_debug))
+        
         # 5. muted_ya+to_mute
         muted_ya_plus_to_mute = sorted(list(all_muted_ya_set | to_mute_set))
-        muted_ya_plus_to_mute_debug = [d for t, d in zip(all_muted_ya, all_muted_ya_debug) if t in muted_ya_plus_to_mute]
-        muted_ya_plus_to_mute_debug += [d for t, d in zip(to_mute, to_mute_debug) if t in muted_ya_plus_to_mute and t not in all_muted_ya_set]
+        muted_ya_plus_to_mute_debug = []
+        for test in muted_ya_plus_to_mute:
+            if test in all_muted_ya_debug_dict:
+                muted_ya_plus_to_mute_debug.append(all_muted_ya_debug_dict[test])
+            elif test in to_mute_debug_dict:
+                muted_ya_plus_to_mute_debug.append(to_mute_debug_dict[test])
         write_file_set(os.path.join(output_path, 'muted_ya+to_mute.txt'), muted_ya_plus_to_mute, muted_ya_plus_to_mute_debug)
         
         # 6. muted_ya-to_unmute
         muted_ya_minus_to_unmute = [t for t in all_muted_ya if t not in to_unmute_set]
-        muted_ya_minus_to_unmute_debug = [d for t, d in zip(all_muted_ya, all_muted_ya_debug) if t not in to_unmute_set]
+        muted_ya_minus_to_unmute_debug = [all_muted_ya_debug_dict[t] for t in muted_ya_minus_to_unmute if t in all_muted_ya_debug_dict]
         write_file_set(os.path.join(output_path, 'muted_ya-to_unmute.txt'), muted_ya_minus_to_unmute, muted_ya_minus_to_unmute_debug)
         
         # 7. muted_ya-to_delete
         muted_ya_minus_to_delete = [t for t in all_muted_ya if t not in to_delete_set]
-        muted_ya_minus_to_delete_debug = [d for t, d in zip(all_muted_ya, all_muted_ya_debug) if t not in to_delete_set]
+        muted_ya_minus_to_delete_debug = [all_muted_ya_debug_dict[t] for t in muted_ya_minus_to_delete if t in all_muted_ya_debug_dict]
         write_file_set(os.path.join(output_path, 'muted_ya-to_delete.txt'), muted_ya_minus_to_delete, muted_ya_minus_to_delete_debug)
         
-        # 8. muted_ya-to_delete-to_unmute
+        # 8. muted_ya-to-delete-to-unmute
         muted_ya_minus_to_delete_to_unmute = [t for t in all_muted_ya if t not in to_delete_set and t not in to_unmute_set]
-        muted_ya_minus_to_delete_to_unmute_debug = [d for t, d in zip(all_muted_ya, all_muted_ya_debug) if t not in to_delete_set and t not in to_unmute_set]
-        write_file_set(os.path.join(output_path, 'muted_ya-to_delete-to_unmute.txt'), muted_ya_minus_to_delete_to_unmute, muted_ya_minus_to_delete_to_unmute_debug)
+        muted_ya_minus_to_delete_to_unmute_debug = [all_muted_ya_debug_dict[t] for t in muted_ya_minus_to_delete_to_unmute if t in all_muted_ya_debug_dict]
+        write_file_set(os.path.join(output_path, 'muted_ya-to-delete-to-unmute.txt'), muted_ya_minus_to_delete_to_unmute, muted_ya_minus_to_delete_to_unmute_debug)
         
-        # 9. muted_ya-to_delete-to_unmute+to_mute
+        # 9. muted_ya-to-delete-to-unmute+to_mute
         muted_ya_minus_to_delete_to_unmute_set = set(muted_ya_minus_to_delete_to_unmute)
         muted_ya_minus_to_delete_to_unmute_plus_to_mute = sorted(list(muted_ya_minus_to_delete_to_unmute_set | to_mute_set))
-        # debug: из muted_ya_minus_to_delete_to_unmute_debug + to_mute_debug (если их нет в muted_ya)
-        muted_ya_minus_to_delete_to_unmute_plus_to_mute_debug = [d for t, d in zip(muted_ya_minus_to_delete_to_unmute, muted_ya_minus_to_delete_to_unmute_debug) if t in muted_ya_minus_to_delete_to_unmute_plus_to_mute]
-        muted_ya_minus_to_delete_to_unmute_plus_to_mute_debug += [d for t, d in zip(to_mute, to_mute_debug) if t in muted_ya_minus_to_delete_to_unmute_plus_to_mute and t not in muted_ya_minus_to_delete_to_unmute_set]
-        write_file_set(os.path.join(output_path, 'muted_ya-to_delete-to_unmute+to_mute.txt'), muted_ya_minus_to_delete_to_unmute_plus_to_mute, muted_ya_minus_to_delete_to_unmute_plus_to_mute_debug)
+        muted_ya_minus_to_delete_to_unmute_plus_to_mute_debug = []
+        for test in muted_ya_minus_to_delete_to_unmute_plus_to_mute:
+            if test in muted_ya_minus_to_delete_to_unmute_set and test in all_muted_ya_debug_dict:
+                muted_ya_minus_to_delete_to_unmute_plus_to_mute_debug.append(all_muted_ya_debug_dict[test])
+            elif test in to_mute_debug_dict:
+                muted_ya_minus_to_delete_to_unmute_plus_to_mute_debug.append(to_mute_debug_dict[test])
+        write_file_set(os.path.join(output_path, 'muted_ya-to-delete-to-unmute+to_mute.txt'), muted_ya_minus_to_delete_to_unmute_plus_to_mute, muted_ya_minus_to_delete_to_unmute_plus_to_mute_debug)
         
         # Логирование итоговых результатов
         logging.info(f"To mute: {len(to_mute)}")

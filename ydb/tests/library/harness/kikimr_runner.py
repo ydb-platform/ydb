@@ -21,9 +21,8 @@ from . import daemon
 from . import kikimr_config
 from . import kikimr_node_interface
 from . import kikimr_cluster_interface
-
-import ydb.core.protos.blobstorage_config_pb2 as bs
 from ydb.public.api.protos.ydb_status_codes_pb2 import StatusIds
+import ydb.core.protos.blobstorage_config_pb2 as bs
 from ydb.tests.library.predicates.blobstorage import blobstorage_controller_has_started_on_some_node
 
 
@@ -880,6 +879,10 @@ class KikimrExternalNode(daemon.ExternalNodeDaemon, kikimr_node_interface.NodeIn
             kikimr_next_path,
             node_id,
             host,
+            datacenter,
+            rack,
+            bridge_pile_name,
+            bridge_pile_id,
             ssh_username,
             port,
             mon_port,
@@ -895,6 +898,10 @@ class KikimrExternalNode(daemon.ExternalNodeDaemon, kikimr_node_interface.NodeIn
         self.__grpc_port = port
         self.__mon_port = mon_port
         self.__ic_port = ic_port
+        self.__datacenter = datacenter
+        self.__rack = rack
+        self.__bridge_pile_name = bridge_pile_name
+        self.__bridge_pile_id = bridge_pile_id
         self.__configurator = configurator
         self.__mbus_port = mbus_port
         self.logger = logger.getChild(self.__class__.__name__)
@@ -983,6 +990,22 @@ mon={mon}""".format(
     @property
     def host(self):
         return self.__host
+
+    @property
+    def datacenter(self):
+        return self.__datacenter
+
+    @property
+    def rack(self):
+        return self.__rack
+
+    @property
+    def bridge_pile_name(self):
+        return self.__bridge_pile_name
+
+    @property
+    def bridge_pile_id(self):
+        return self.__bridge_pile_id
 
     @property
     def port(self):

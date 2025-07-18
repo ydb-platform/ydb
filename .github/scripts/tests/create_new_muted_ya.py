@@ -148,6 +148,8 @@ def create_debug_string(test, resolution, success_rate=None):
         debug_string += f", pass_count {test.get('pass_count')}, fail_count {test.get('fail_count')}, total_runs {runs}, resolution {resolution}"
     elif resolution == 'flaky':
         debug_string += f", pass_count {test.get('pass_count')}, fail count {test.get('fail_count')}"
+    elif resolution == 'muted_ya':
+        debug_string += f", pass_count {test.get('pass_count')}, fail_count {test.get('fail_count')}, total_runs {runs}, resolution {resolution}"
     
     return debug_string + "\n"
 
@@ -247,7 +249,7 @@ def apply_and_add_mutes(aggregated_for_mute, aggregated_for_unmute, aggregated_f
         
         # 4. muted_ya (все замьюченные сейчас)
         all_muted_ya, all_muted_ya_debug = create_file_set(
-            aggregated_for_mute, lambda test: mute_check(test.get('suite_folder'), test.get('test_name')) if mute_check else True , use_wildcards=True
+            aggregated_for_mute, lambda test: mute_check(test.get('suite_folder'), test.get('test_name')) if mute_check else True, use_wildcards=True, resolution='muted_ya'
         )
         write_file_set(os.path.join(output_path, 'muted_ya.txt'), all_muted_ya, all_muted_ya_debug)
         to_mute_set = set(to_mute)

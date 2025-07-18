@@ -20,6 +20,15 @@ If consistency or freshness requirement for data read by a transaction can be re
 * *Stale Read-Only*: Read operations within a transaction may return results that are slightly out-of-date (lagging by fractions of a second). Each individual read returns consistent data, but no consistency between different reads is guaranteed.
 * *Snapshot Read-Only*: All the read operations within a transaction access the database snapshot. All the data reads are consistent. The snapshot is taken when the transaction begins, meaning the transaction sees all changes committed before it began.
 
+### Implicit Transaction Control {#implicit}
+
+In addition to explicit transaction management, {{ ydb-short-name }} supports *Implicit Transaction Control* mode (no transaction), where the server automatically handles transaction lifecycle without requiring explicit transaction creation. This mode provides universal support for all query types with the following characteristics:
+
+* DDL queries — executed outside of a transaction context. Multistatement operations are supported only when all statements are DDL. Changes are not rolled back if errors occur.
+* DML queries — automatically wrapped in a transaction in *Serializable* mode. Multistatement operations are supported only when all statements are DML. Changes are committed on success or rolled back on error.
+* Other query types:
+  * `BATCH UPDATE`, `BATCH DELETE FROM` — executed outside of a transaction context. Multistatement operations are not supported. Changes are not rolled back if errors occur.
+
 The transaction execution mode is specified in its settings when creating the transaction. See the examples for the {{ ydb-short-name }} SDK in the [{#T}](../../recipes/ydb-sdk/tx-control.md).
 
 ## YQL Language {#language-yql}

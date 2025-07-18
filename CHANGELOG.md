@@ -18,7 +18,7 @@ and timeout (by default, the maximum response time from healthcheck). Documentat
 * 19678:- Added support for [idempotent producers](https://cwiki.apache.org/confluence/display/KAFKA/Idempotent+Producer) to the YDB implementation of the Apache Kafka protocol. [#19678](https://github.com/ydb-platform/ydb/pull/19678) ([qyryq](https://github.com/qyryq))
 * 19444:Introduced a new UnorderedData protocol for full synchronization, which allows taking a full index snapshot only once per full sync session. The new protocol will be used to send DoNotKeep flags from Phantom Flag Storage, which will be sent without relying on the linear order. For now the new protocol is disabled by default. [#19444](https://github.com/ydb-platform/ydb/pull/19444) ([Sergey Belyakov](https://github.com/serbel324))
 * 19337:* Introduced two new Distributed Storage parameters — `GroupSizeInUnits` property of storage groups and `SlotSizeInUnits` of PDisks. Docs: #19364 [#19337](https://github.com/ydb-platform/ydb/pull/19337) ([Yaroslav Dynnikov](https://github.com/rosik))
-* 18955:Added new external data source to ydb topics.
+* 18955:Added a new external data source to YDB topics.
 Example:
 ```
   CREATE OBJECT token_secret (TYPE SECRET) WITH (value = "...");
@@ -62,7 +62,7 @@ Fix for KIKIMR-23489 [#20223](https://github.com/ydb-platform/ydb/pull/20223) ([
 fixes https://github.com/ydb-platform/ydb/issues/20294 [#20175](https://github.com/ydb-platform/ydb/pull/20175) ([pilik](https://github.com/pashandor789))
 * 20157:Fixed use after free in CPU scheduler, fixed verify fail in CS CPU limiter: https://github.com/ydb-platform/ydb/issues/20116 [#20157](https://github.com/ydb-platform/ydb/pull/20157) ([Pisarenko Grigoriy](https://github.com/GrigoriyPA))
 * 20138:Issue: https://github.com/ydb-platform/ydb/issues/20139 [#20138](https://github.com/ydb-platform/ydb/pull/20138) ([Semyon Danilov](https://github.com/SammyVimes))
-* 20084:Поправил коммит оффсетов сообщений топика при чтении. До фикса пользователь получал ошибку "Unable to navigate:path: 'Root/logbroker-federation/--cut--/stable/guidance' status: PathErrorUnknown\n"
+* 20084:Fixed an issue where committing message offsets when reading a topic might result in the following error: "Unable to navigate:path: 'Root/logbroker-federation/--cut--/stable/guidance' status: PathErrorUnknown"
 Сломали начиная с 25-1-2 [#20084](https://github.com/ydb-platform/ydb/pull/20084) ([Nikolay Shestakov](https://github.com/nshestakov))
 
 ### Performance

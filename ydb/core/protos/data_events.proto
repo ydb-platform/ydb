@@ -94,6 +94,7 @@ message TEvWrite {
             OPERATION_UPDATE = 3;
             OPERATION_UPSERT = 4;
             OPERATION_REPLACE = 5;
+            OPERATION_INCREMENT = 6;
         }
 
         optional EOperationType Type = 1;
@@ -102,6 +103,8 @@ message TEvWrite {
         optional uint64 PayloadIndex = 4;
         optional EDataFormat PayloadFormat = 5;
         optional string PayloadSchema = 6;
+        optional uint32 DefaultFilledColumnCount = 7;
+        optional bool IsBulk = 8;
     }
 
     // Transaction operations
@@ -123,6 +126,7 @@ message TEvWrite {
     optional uint32 GranuleShardingVersionId = 9;
 
     optional ELockMode LockMode = 10;
+    optional uint64 TimeoutSeconds = 11;
 }
 
 message TEvWriteResult {

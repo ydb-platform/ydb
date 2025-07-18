@@ -22,6 +22,7 @@ namespace NKikimr {
 // Call this method once at the start of the process - to enable usage of default allocator.
 void UseDefaultAllocator();
 #endif
+void UseDefaultArrowAllocator();
 
 struct TAlignedPagePoolCounters {
     explicit TAlignedPagePoolCounters(::NMonitoring::TDynamicCounterPtr countersRoot = nullptr, const TString& name = TString());
@@ -70,11 +71,11 @@ public:
 
     explicit TAlignedPagePoolImpl(const TSourceLocation& location,
             const TAlignedPagePoolCounters& counters = TAlignedPagePoolCounters())
-        : Counters(counters)
-        , DebugInfo(location)
+        : Counters_(counters)
+        , DebugInfo_(location)
     {
-        if (Counters.PoolsCntr) {
-            ++(*Counters.PoolsCntr);
+        if (Counters_.PoolsCntr) {
+            ++(*Counters_.PoolsCntr);
         }
     }
 
@@ -87,15 +88,15 @@ public:
     ~TAlignedPagePoolImpl();
 
     inline size_t GetAllocated() const noexcept {
-        return TotalAllocated;
+        return TotalAllocated_;
     }
 
     inline size_t GetUsed() const noexcept {
-        return TotalAllocated - GetFreePageCount() * POOL_PAGE_SIZE;
+        return TotalAllocated_ - GetFreePageCount() * POOL_PAGE_SIZE;
     }
 
     inline size_t GetFreePageCount() const noexcept {
-        return FreePages.size();
+        return FreePages_.size();
     }
 
     static inline const void* GetPageStart(const void* addr) noexcept {
@@ -111,31 +112,31 @@ public:
     void ReturnPage(void* addr) noexcept;
 
     void Swap(TAlignedPagePoolImpl& other) {
-        DoSwap(FreePages, other.FreePages);
-        DoSwap(AllPages, other.AllPages);
-        DoSwap(ActiveBlocks, other.ActiveBlocks);
-        DoSwap(TotalAllocated, other.TotalAllocated);
-        DoSwap(PeakAllocated, other.PeakAllocated);
-        DoSwap(PeakUsed, other.PeakUsed);
-        DoSwap(Limit, other.Limit);
-        DoSwap(AllocCount, other.AllocCount);
-        DoSwap(PageAllocCount, other.PageAllocCount);
-        DoSwap(PageHitCount, other.PageHitCount);
-        DoSwap(PageGlobalHitCount, other.PageGlobalHitCount);
-        DoSwap(PageMissCount, other.PageMissCount);
-        DoSwap(OffloadedAllocCount, other.OffloadedAllocCount);
-        DoSwap(OffloadedBytes, other.OffloadedBytes);
-        DoSwap(OffloadedActiveBytes, other.OffloadedActiveBytes);
-        DoSwap(Counters, other.Counters);
-        DoSwap(CheckLostMem, other.CheckLostMem);
-        DoSwap(AllocNotifyCallback, other.AllocNotifyCallback);
-        DoSwap(IncreaseMemoryLimitCallback, other.IncreaseMemoryLimitCallback);
+        DoSwap(FreePages_, other.FreePages_);
+        DoSwap(AllPages_, other.AllPages_);
+        DoSwap(ActiveBlocks_, other.ActiveBlocks_);
+        DoSwap(TotalAllocated_, other.TotalAllocated_);
+        DoSwap(PeakAllocated_, other.PeakAllocated_);
+        DoSwap(PeakUsed_, other.PeakUsed_);
+        DoSwap(Limit_, other.Limit_);
+        DoSwap(AllocCount_, other.AllocCount_);
+        DoSwap(PageAllocCount_, other.PageAllocCount_);
+        DoSwap(PageHitCount_, other.PageHitCount_);
+        DoSwap(PageGlobalHitCount_, other.PageGlobalHitCount_);
+        DoSwap(PageMissCount_, other.PageMissCount_);
+        DoSwap(OffloadedAllocCount_, other.OffloadedAllocCount_);
+        DoSwap(OffloadedBytes_, other.OffloadedBytes_);
+        DoSwap(OffloadedActiveBytes_, other.OffloadedActiveBytes_);
+        DoSwap(Counters_, other.Counters_);
+        DoSwap(CheckLostMem_, other.CheckLostMem_);
+        DoSwap(AllocNotifyCallback_, other.AllocNotifyCallback_);
+        DoSwap(IncreaseMemoryLimitCallback_, other.IncreaseMemoryLimitCallback_);
     }
 
     void PrintStat(size_t usedPages, IOutputStream& out) const;
 
     TString GetDebugInfo() const {
-        return ToString(DebugInfo);
+        return ToString(DebugInfo_);
     }
 
     void* GetBlock(size_t size);
@@ -143,39 +144,39 @@ public:
     void ReturnBlock(void* ptr, size_t size) noexcept;
 
     size_t GetPeakAllocated() const noexcept {
-        return PeakAllocated;
+        return PeakAllocated_;
     }
 
     size_t GetPeakUsed() const noexcept {
-        return PeakUsed;
+        return PeakUsed_;
     }
 
     ui64 GetAllocCount() const noexcept {
-        return AllocCount;
+        return AllocCount_;
     }
 
     ui64 GetPageAllocCount() const noexcept {
-        return PageAllocCount;
+        return PageAllocCount_;
     }
 
     ui64 GetPageHitCount() const noexcept {
-        return PageHitCount;
+        return PageHitCount_;
     }
 
     ui64 GetPageGlobalHitCount() const noexcept {
-        return PageGlobalHitCount;
+        return PageGlobalHitCount_;
     }
 
     ui64 GetPageMissCount() const noexcept {
-        return PageMissCount;
+        return PageMissCount_;
     }
 
     ui64 GetOffloadedAllocCount() const noexcept {
-        return OffloadedAllocCount;
+        return OffloadedAllocCount_;
     }
 
     ui64 GetOffloadedBytes() const noexcept {
-        return OffloadedBytes;
+        return OffloadedBytes_;
     }
 
     void OffloadAlloc(ui64 size);
@@ -186,49 +187,49 @@ public:
     static ui64 GetGlobalPagePoolSize();
 
     ui64 GetLimit() const noexcept {
-        return Limit;
+        return Limit_;
     }
 
     void SetLimit(size_t limit) noexcept {
-        Limit = limit;
+        Limit_ = limit;
     }
 
     void ReleaseFreePages();
 
     void DisableStrictAllocationCheck() noexcept {
-        CheckLostMem = false;
+        CheckLostMem_ = false;
     }
 
     using TAllocNotifyCallback = std::function<void()>;
     void SetAllocNotifyCallback(TAllocNotifyCallback&& callback, ui64 notifyBytes = 0) {
-        AllocNotifyCallback = std::move(callback);
-        AllocNotifyBytes = notifyBytes;
-        AllocNotifyCurrentBytes = 0;
+        AllocNotifyCallback_ = std::move(callback);
+        AllocNotifyBytes_ = notifyBytes;
+        AllocNotifyCurrentBytes_ = 0;
     }
 
     using TIncreaseMemoryLimitCallback = std::function<void(ui64 currentLimit, ui64 required)>;
 
     void SetIncreaseMemoryLimitCallback(TIncreaseMemoryLimitCallback&& callback) {
-        IncreaseMemoryLimitCallback = std::move(callback);
+        IncreaseMemoryLimitCallback_ = std::move(callback);
     }
 
     static void ResetGlobalsUT();
 
     void SetMaximumLimitValueReached(bool isReached) noexcept {
-        IsMaximumLimitValueReached = isReached;
+        IsMaximumLimitValueReached_ = isReached;
     }
 
     bool GetMaximumLimitValueReached() const noexcept {
-        return IsMaximumLimitValueReached;
+        return IsMaximumLimitValueReached_;
     }
 
     bool IsMemoryYellowZoneEnabled() const noexcept {
-        return IsMemoryYellowZoneReached;
+        return IsMemoryYellowZoneReached_;
     }
 
     void ForcefullySetMemoryYellowZone(bool isEnabled) noexcept {
-        IsMemoryYellowZoneReached = isEnabled;
-        IsMemoryYellowZoneForcefullyChanged = true;
+        IsMemoryYellowZoneReached_ = isEnabled;
+        IsMemoryYellowZoneForcefullyChanged_ = true;
     }
 
 #if defined(ALLOW_DEFAULT_ALLOCATOR)
@@ -238,14 +239,15 @@ public:
         return false;
     }
 #endif
+    static bool IsDefaultArrowAllocatorUsed();
 
 protected:
     void* Alloc(size_t size);
     void Free(void* ptr, size_t size) noexcept;
 
     void UpdatePeaks() {
-        PeakAllocated = Max(PeakAllocated, GetAllocated());
-        PeakUsed = Max(PeakUsed, GetUsed());
+        PeakAllocated_ = Max(PeakAllocated_, GetAllocated());
+        PeakUsed_ = Max(PeakUsed_, GetUsed());
 
         UpdateMemoryYellowZone();
     }
@@ -258,49 +260,49 @@ protected:
 
     void* GetPageImpl();
 protected:
-    std::stack<void*, std::vector<void*>> FreePages;
-    std::unordered_set<void*> AllPages;
-    std::unordered_map<void*, size_t> ActiveBlocks;
-    size_t TotalAllocated = 0;
-    size_t PeakAllocated = 0;
-    size_t PeakUsed = 0;
-    size_t Limit = 0;
+    std::stack<void*, std::vector<void*>> FreePages_;
+    std::unordered_set<void*> AllPages_;
+    std::unordered_map<void*, size_t> ActiveBlocks_;
+    size_t TotalAllocated_ = 0;
+    size_t PeakAllocated_ = 0;
+    size_t PeakUsed_ = 0;
+    size_t Limit_ = 0;
 
-    ui64 AllocCount = 0;
-    ui64 PageAllocCount = 0;
-    ui64 PageHitCount = 0;
-    ui64 PageGlobalHitCount = 0;
-    ui64 PageMissCount = 0;
+    ui64 AllocCount_ = 0;
+    ui64 PageAllocCount_ = 0;
+    ui64 PageHitCount_ = 0;
+    ui64 PageGlobalHitCount_ = 0;
+    ui64 PageMissCount_ = 0;
 
-    ui64 OffloadedAllocCount = 0;
-    ui64 OffloadedBytes = 0;
-    ui64 OffloadedActiveBytes = 0;
+    ui64 OffloadedAllocCount_ = 0;
+    ui64 OffloadedBytes_ = 0;
+    ui64 OffloadedActiveBytes_ = 0;
 
-    TAlignedPagePoolCounters Counters;
-    bool CheckLostMem = true;
+    TAlignedPagePoolCounters Counters_;
+    bool CheckLostMem_ = true;
 
-    TAllocNotifyCallback AllocNotifyCallback;
-    ui64 AllocNotifyBytes = 0;
-    ui64 AllocNotifyCurrentBytes = 0;
+    TAllocNotifyCallback AllocNotifyCallback_;
+    ui64 AllocNotifyBytes_ = 0;
+    ui64 AllocNotifyCurrentBytes_ = 0;
 
-    TIncreaseMemoryLimitCallback IncreaseMemoryLimitCallback;
-    const TSourceLocation DebugInfo;
+    TIncreaseMemoryLimitCallback IncreaseMemoryLimitCallback_;
+    const TSourceLocation DebugInfo_;
 
     // Indicates when memory limit is almost reached.
-    bool IsMemoryYellowZoneReached = false;
+    bool IsMemoryYellowZoneReached_ = false;
     // Indicates that memory yellow zone was enabled or disabled forcefully.
     // If the value of this variable is true, then the limits specified below will not be applied and
     // changing the value can only be done manually.
-    bool IsMemoryYellowZoneForcefullyChanged = false;
+    bool IsMemoryYellowZoneForcefullyChanged_ = false;
     // This theshold is used to determine is memory limit is almost reached.
     // If TIncreaseMemoryLimitCallback is set this thresholds should be ignored.
     // The yellow zone turns on when memory consumption reaches 80% and turns off when consumption drops below 50%.
-    const ui8 EnableMemoryYellowZoneThreshold = 80;
-    const ui8 DisableMemoryYellowZoneThreshold = 50;
+    const ui8 EnableMemoryYellowZoneThreshold_ = 80;
+    const ui8 DisableMemoryYellowZoneThreshold_ = 50;
 
     // This flag indicates that value of memory limit reached it's maximum.
     // Next TryIncreaseLimit call most likely will return false.
-    bool IsMaximumLimitValueReached = false;
+    bool IsMaximumLimitValueReached_ = false;
 };
 
 using TAlignedPagePool = TAlignedPagePoolImpl<>;

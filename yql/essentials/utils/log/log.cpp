@@ -26,9 +26,9 @@ namespace {
 class TLimitedLogBackend final : public TLogBackend {
 public:
     TLimitedLogBackend(TAutoPtr<TLogBackend> b, TAtomic& flag, ui64 limit) noexcept
-        : Backend(b)
-        , Flag(flag)
-        , Limit(limit)
+        : Backend_(b)
+        , Flag_(flag)
+        , Limit_(limit)
     {
     }
 
@@ -36,24 +36,24 @@ public:
     }
 
     void ReopenLog() final {
-        Backend->ReopenLog();
+        Backend_->ReopenLog();
     }
 
     void WriteData(const TLogRecord& rec) final {
-        const auto remaining = AtomicGet(Limit);
-        const bool final = remaining > 0 && AtomicSub(Limit, rec.Len) <= 0;
+        const auto remaining = AtomicGet(Limit_);
+        const bool final = remaining > 0 && AtomicSub(Limit_, rec.Len) <= 0;
         if (remaining > 0 || rec.Priority <= TLOG_WARNING) {
-            Backend->WriteData(rec);
+            Backend_->WriteData(rec);
         }
         if (final) {
-            AtomicSet(Flag, 1);
+            AtomicSet(Flag_, 1);
         }
     }
 
 private:
-    THolder<TLogBackend> Backend;
-    TAtomic& Flag;
-    TAtomic Limit;
+    THolder<TLogBackend> Backend_;
+    TAtomic& Flag_;
+    TAtomic Limit_;
 };
 
 class TEmergencyLogOutput: public IOutputStream {

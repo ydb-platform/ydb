@@ -90,6 +90,7 @@ public:
     bool AssumeYdbOnClusterWithSlash = false;
     bool TestSqlFormat = false;
     bool TestLexers = false;
+    bool TestComplete = false;
     THashMap<TString, NSQLTranslation::TTableBindingSettings> Bindings;
 
     bool PrintAst = false;
@@ -118,6 +119,7 @@ public:
 
     THashSet<TString> GatewayTypes;
     TString UdfResolverPath;
+    TString UdfResolverLog;
     bool UdfResolverFilterSyscalls = false;
     bool ScanUdfs = false;
     THolder<NYqlMountConfig::TMountConfig> MountConfig;

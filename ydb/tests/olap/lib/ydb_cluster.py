@@ -43,6 +43,8 @@ class YdbCluster:
                 for e in ss.get('Endpoints', [])
             }
             self.ic_port: int = ports.get('ic', 0)
+            self.mon_port: int = ports.get('http-mon', 0)
+            self.grpc_port: int = ports.get('grpc', 0)
             self.disconnected: bool = desc.get('Disconnected', False)
             self.version: str = ss.get('Version', '')
             self.start_time: float = 0.001 * int(ss.get('StartTime', time() * 1000))
@@ -65,9 +67,19 @@ class YdbCluster:
     ydb_endpoint = get_external_param('ydb-endpoint', 'grpc://ydb-olap-testing-vla-0002.search.yandex.net:2135')
     ydb_database = get_external_param('ydb-db', 'olap-testing/kikimr/testing/acceptance-2').lstrip('/')
     ydb_mon_port = 8765
-    tables_path = get_external_param('tables-path', 'olap_yatests')
+    _tables_path = get_external_param('tables-path', 'olap_yatests').rstrip('/')
     _monitoring_urls: list[YdbCluster.MonitoringUrl] = None
     _dyn_nodes_count: Optional[int] = None
+
+    @classmethod
+    def get_tables_path(cls, subpath: str = '') -> str:
+        if cls._tables_path and subpath:
+            return f'{cls._tables_path}/{subpath}'
+        return subpath if subpath else cls._tables_path
+
+    @classmethod
+    def get_full_tables_path(cls, subpath: str = '') -> str:
+        return f'/{cls.ydb_database}/{cls.get_tables_path(subpath)}'
 
     @classmethod
     def get_monitoring_urls(cls) -> list[YdbCluster.MonitoringUrl]:
@@ -122,6 +134,27 @@ class YdbCluster:
         except Exception as e:
             LOGGER.error(e)
         return []
+
+    @classmethod
+    def get_metrics(cls, metrics: dict[str, dict[str, str]], db_only: bool = False, role: Optional[YdbCluster.Node.Role] = None) -> dict[str, dict[str, float]]:
+        def sensor_has_labels(sensor, labels: dict[str, str]) -> bool:
+            for k, v in labels.items():
+                if sensor.get('labels', {}).get(k, '') != v:
+                    return False
+            return True
+        nodes = cls.get_cluster_nodes(db_only=db_only, role=role)
+        result = {}
+        for node in nodes:
+            response = requests.get(f'http://{node.host}:{node.mon_port}/counters/counters=tablets/json')
+            response.raise_for_status()
+            sensor_values = {}
+            for name, labels in metrics.items():
+                for sensor in response.json()['sensors']:
+                    if sensor_has_labels(sensor, labels):
+                        sensor_values.setdefault(name, 0.)
+                        sensor_values[name] += sensor['value']
+            result[node.slot] = sensor_values
+        return result
 
     @classmethod
     def get_cluster_info(cls):
@@ -206,8 +239,8 @@ class YdbCluster:
         return cls.get_ydb_driver().scheme_client.describe_path(path)
 
     @classmethod
-    def _get_tables(cls, path):
-        full_path = f'/{cls.ydb_database}/{path}'
+    def get_tables(cls, path):
+        full_path = cls.get_full_tables_path(path)
         LOGGER.info(f'get_tables {full_path}')
         result = []
         self_descr = cls._describe_path_impl(full_path)
@@ -267,7 +300,7 @@ class YdbCluster:
     def deploy_binaries_to_nodes(
         cls,
         binary_files: list,
-        target_dir: str = '/tmp/binaries/'
+        target_dir: str = '/tmp/stress_binaries/'
     ) -> Dict[str, Dict[str, Any]]:
         """
         Разворачивает бинарные файлы на всех нодах кластера
@@ -320,10 +353,10 @@ class YdbCluster:
                 errors.append(f'Only {ok_node_count} from {nodes_count} dynnodes are ok: {",".join(node_errors)}')
             paths_to_balance = []
             if isinstance(balanced_paths, str):
-                paths_to_balance += cls._get_tables(balanced_paths)
+                paths_to_balance += cls.get_tables(balanced_paths)
             elif isinstance(balanced_paths, list):
                 for path in balanced_paths:
-                    paths_to_balance += cls._get_tables(path)
+                    paths_to_balance += cls.get_tables(path)
             for p in paths_to_balance:
                 table_nodes = cls.get_cluster_nodes(p)
                 min = None
@@ -488,7 +521,9 @@ class YdbCluster:
                         grep_pattern = escaped_pattern
 
                     ps_cmd = f"ps -aux | grep '{grep_pattern}'"
-                    stdout, stderr = execute_command(node.host, ps_cmd, raise_on_error=False)
+                    result_exec = execute_command(node.host, ps_cmd, raise_on_error=False)
+                    stdout = result_exec.stdout
+                    stderr = result_exec.stderr
 
                     result['commands_executed'].append({
                         'command': ps_cmd,
@@ -549,7 +584,9 @@ class YdbCluster:
                     kill_cmd = f"kill -{signal_type} {pids_str}"
 
                     try:
-                        stdout, stderr = execute_command(node.host, kill_cmd, raise_on_error=False)
+                        kill_result = execute_command(node.host, kill_cmd, raise_on_error=False)
+                        stdout = kill_result.stdout
+                        stderr = kill_result.stderr
 
                         result['commands_executed'].append({
                             'command': kill_cmd,
@@ -567,7 +604,7 @@ class YdbCluster:
                         still_alive = []
                         for pid in pids_list:
                             check_cmd = f"kill -0 {pid}"
-                            stdout_check, stderr_check = execute_command(node.host, check_cmd, raise_on_error=False)
+                            stderr_check = execute_command(node.host, check_cmd, raise_on_error=False).stderr
                             # kill -0 возвращает 0 если процесс существует
                             if "No such process" not in stderr_check:
                                 still_alive.append(pid)

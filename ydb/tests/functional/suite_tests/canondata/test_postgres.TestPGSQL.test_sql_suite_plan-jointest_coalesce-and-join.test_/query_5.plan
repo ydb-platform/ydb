@@ -29,18 +29,8 @@
                                 "PlanNodeType": "Connection",
                                 "Plans": [
                                     {
-                                        "Node Type": "TopSort-LeftJoin (MapJoin)",
+                                        "Node Type": "LeftJoin (MapJoin)",
                                         "Operators": [
-                                            {
-                                                "Inputs": [
-                                                    {
-                                                        "InternalOperatorId": 1
-                                                    }
-                                                ],
-                                                "Limit": "1001",
-                                                "Name": "TopSort",
-                                                "TopSortBy": "argument.xx.pkxx"
-                                            },
                                             {
                                                 "Condition": "xx.pkxx = Q._equijoin_column_0",
                                                 "Inputs": [
@@ -64,9 +54,6 @@
                                                         "Name": "TableFullScan",
                                                         "Path": "/Root/postgres_jointest/coalesce-and-join.test_plan/xx",
                                                         "ReadColumns": [
-                                                            "pkxx"
-                                                        ],
-                                                        "ReadRanges": [
                                                             "pkxx (-\u221e, +\u221e)"
                                                         ],
                                                         "ReadRangesPointPrefixLen": "0",
@@ -96,9 +83,6 @@
                                                                         "Name": "TableFullScan",
                                                                         "Path": "/Root/postgres_jointest/coalesce-and-join.test_plan/yy",
                                                                         "ReadColumns": [
-                                                                            "pkxx"
-                                                                        ],
-                                                                        "ReadRanges": [
                                                                             "pkxx (-\u221e, +\u221e)",
                                                                             "pkyy (-\u221e, +\u221e)"
                                                                         ],

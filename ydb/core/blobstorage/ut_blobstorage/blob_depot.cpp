@@ -145,4 +145,13 @@ Y_UNIT_TEST_SUITE(BlobDepot) {
         TestVerifiedRandom(tenv, 8, 15, tenv.RegularGroups[0], 1000, 500, 10, { 10, 10, 3, 3, 2, 1, 1, 3, 3, 0 });
         // no blob depot restarts performed
     }
+
+    Y_UNIT_TEST(CheckIntegrity) {
+        ui32 seed;
+        LoadSeed(seed);
+        TBlobDepotTestEnvironment tenv(seed, 1, 8, TBlobStorageGroupType::Erasure4Plus2Block);
+
+        TestBasicCheckIntegrity(tenv, 1, tenv.RegularGroups[0]);
+        TestBasicCheckIntegrity(tenv, 1, tenv.BlobDepot);
+    }
 }

@@ -5,6 +5,7 @@
 #include <ydb/core/base/hive.h>
 #include <ydb/core/base/domain.h>
 #include <ydb/core/base/tablet_pipe.h>
+#include <ydb/core/blobstorage/base/blobstorage_events.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <ydb/library/services/services.pb.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
@@ -83,6 +84,7 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
     const TActorId Owner;
     const ui64 HiveId;
     TVector<TSubDomainKey> ServicedDomains;
+    std::optional<TBridgePileId> BridgePileId;
 
     TActorId HivePipeClient;
     bool Connected;
@@ -206,6 +208,9 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
         }
         if (const TString& nodeName = AppData(ctx)->NodeName; !nodeName.empty()) {
             request->Record.SetName(nodeName);
+        }
+        if (BridgePileId) {
+            request->Record.SetBridgePileId(BridgePileId->GetRawId());
         }
 
         NTabletPipe::SendData(ctx, HivePipeClient, request.Release());
@@ -902,23 +907,50 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
         }
     }
 
+    void SendDrain(const TActorContext &ctx) {
+        LOG_NOTICE_S(ctx, NKikimrServices::LOCAL, "Send drain node to hive: " << HiveId << ". Online tablets: " << OnlineTablets.size());
+        SentDrainNode = true;
+        LastDrainRequest->OnSend();
+        UpdateEstimate();
+        NTabletPipe::SendData(ctx, HivePipeClient, new TEvHive::TEvDrainNode(SelfId().NodeId()));
+        ctx.Schedule(DRAIN_NODE_TIMEOUT, new TEvPrivate::TEvLocalDrainTimeout());
+    }
+
     void HandleDrain(TEvLocal::TEvLocalDrainNode::TPtr &ev, const TActorContext &ctx) {
         if (!HivePipeClient) {
             TryToRegister(ctx);
         }
 
         if (!SentDrainNode) {
-            LOG_NOTICE_S(ctx, NKikimrServices::LOCAL, "Send drain node to hive: " << HiveId << ". Online tablets: " << OnlineTablets.size());
-            SentDrainNode = true;
-            ev->Get()->DrainProgress->OnSend();
             LastDrainRequest = ev->Get()->DrainProgress;
-            UpdateEstimate();
-            NTabletPipe::SendData(ctx, HivePipeClient, new TEvHive::TEvDrainNode(SelfId().NodeId()));
-            ctx.Schedule(DRAIN_NODE_TIMEOUT, new TEvPrivate::TEvLocalDrainTimeout());
-            ev->Get()->DrainProgress->OnReceive();
+            SendDrain(ctx);
+            LastDrainRequest->OnReceive();
         } else {
             ev->Get()->DrainProgress->OnReceive();
         }
+    }
+
+    void HandleInit(TEvLocal::TEvLocalDrainNode::TPtr &ev, const TActorContext&) {
+        LastDrainRequest = ev->Get()->DrainProgress;
+        LastDrainRequest->OnReceive();
+    }
+
+    void Handle(TEvNodeWardenStorageConfig::TPtr &ev, const TActorContext &ctx) {
+        auto bridgeInfo = ev->Get()->BridgeInfo;
+        if (bridgeInfo == nullptr) {
+            // There will be an update with bridge info later
+            return;
+        }
+        auto pileInfo = bridgeInfo->SelfNodePile;
+        if (pileInfo) {
+            BridgePileId = pileInfo->BridgePileId;
+        }
+        TryToRegister(ctx);
+        if (LastDrainRequest) {
+            SendDrain(ctx);
+        }
+        Send(SelfId(), new TEvPrivate::TEvUpdateSystemUsage());
+        Become(&TThis::StateWork);
     }
 
     void UpdateCacheQuota() {
@@ -973,10 +1005,16 @@ public:
 
     void Bootstrap(const TActorContext &ctx) {
         LOG_DEBUG(ctx, NKikimrServices::LOCAL, "TLocalNodeRegistrar::Bootstrap");
-        Send(SelfId(), new TEvPrivate::TEvUpdateSystemUsage());
         StartTime = ctx.Now();
-        TryToRegister(ctx);
-        Become(&TThis::StateWork);
+        const TActorId wardenId = MakeBlobStorageNodeWardenID(SelfId().NodeId());
+        if (IsBridgeMode(ctx)) {
+            Send(wardenId, new TEvNodeWardenQueryStorageConfig(true));
+            Become(&TThis::StateInit);
+        } else {
+            TryToRegister(ctx);
+            Send(SelfId(), new TEvPrivate::TEvUpdateSystemUsage());
+            Become(&TThis::StateWork);
+        }
     }
 
     STFUNC(StateWork) {
@@ -1005,6 +1043,19 @@ public:
             CFunc(TEvents::TSystem::PoisonPill, HandlePoison);
             default:
                 LOG_DEBUG(*TlsActivationContext, NKikimrServices::LOCAL, "TLocalNodeRegistrar: Unhandled in StateWork type: %" PRIx32
+                    " event: %s", ev->GetTypeRewrite(), ev->ToString().data());
+                break;
+        }
+    }
+
+    STFUNC(StateInit) {
+        switch(ev->GetTypeRewrite()) {
+            HFunc(TEvNodeWardenStorageConfig, Handle);
+            HFunc(TEvLocal::TEvEnumerateTablets, Handle);
+            HFunc(TEvLocal::TEvLocalDrainNode, HandleInit);
+            CFunc(TEvents::TSystem::PoisonPill, HandlePoison);
+            default:
+                Y_DEBUG_ABORT("TLocalNodeRegistrar: Unhandled in StateInit type: %" PRIx32
                     " event: %s", ev->GetTypeRewrite(), ev->ToString().data());
                 break;
         }

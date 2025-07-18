@@ -148,7 +148,6 @@
                 ],
                 "name": "Root/dedicated_db",
                 "owner": "user1",
-                "size_bytes": "not-zero-number-text",
                 "type": "DATABASE"
             }
         },
@@ -255,7 +254,6 @@
                 ],
                 "name": "Root/dedicated_db",
                 "owner": "user1",
-                "size_bytes": "not-zero-number-text",
                 "type": "DATABASE"
             }
         },
@@ -353,9 +351,142 @@
                 ],
                 "name": "Root/dedicated_db",
                 "owner": "user1",
-                "size_bytes": "not-zero-number-text",
                 "type": "DATABASE"
             }
+        }
+    },
+    "test.test_security": {
+        "cluster_nodes_database": {
+            "status_code": 403,
+            "text": "<html><body><h1>403 Forbidden</h1></body></html>"
+        },
+        "cluster_nodes_monitoring": {
+            "FieldsAvailable": "0000000000000000000110100000011",
+            "FieldsRequired": "0000000000000000000000000000001",
+            "FoundNodes": "3",
+            "Nodes": [
+                {
+                    "NodeId": 1
+                },
+                {
+                    "NodeId": 50001
+                },
+                {
+                    "NodeId": 50000
+                }
+            ],
+            "TotalNodes": "3"
+        },
+        "cluster_nodes_root": {
+            "FieldsAvailable": "0000000000000000000110100000011",
+            "FieldsRequired": "0000000000000000000000000000001",
+            "FoundNodes": "3",
+            "Nodes": [
+                {
+                    "NodeId": 1
+                },
+                {
+                    "NodeId": 50001
+                },
+                {
+                    "NodeId": 50000
+                }
+            ],
+            "TotalNodes": "3"
+        },
+        "cluster_nodes_viewer": {
+            "FieldsAvailable": "0000000000000000000110100000011",
+            "FieldsRequired": "0000000000000000000000000000001",
+            "FoundNodes": "3",
+            "Nodes": [
+                {
+                    "NodeId": 1
+                },
+                {
+                    "NodeId": 50001
+                },
+                {
+                    "NodeId": 50000
+                }
+            ],
+            "TotalNodes": "3"
+        },
+        "database_nodes_database": {
+            "FieldsAvailable": "0000000010000000000110100000011",
+            "FieldsRequired": "0000000000000000000000000000001",
+            "FoundNodes": "1",
+            "Nodes": [
+                {
+                    "NodeId": 50000
+                }
+            ],
+            "TotalNodes": "1"
+        },
+        "database_nodes_monitoring": {
+            "FieldsAvailable": "0000000010000000000110100000011",
+            "FieldsRequired": "0000000000000000000000000000001",
+            "FoundNodes": "1",
+            "Nodes": [
+                {
+                    "NodeId": 50000
+                }
+            ],
+            "TotalNodes": "1"
+        },
+        "database_nodes_root": {
+            "FieldsAvailable": "0000000010000000000110100000011",
+            "FieldsRequired": "0000000000000000000000000000001",
+            "FoundNodes": "1",
+            "Nodes": [
+                {
+                    "NodeId": 50000
+                }
+            ],
+            "TotalNodes": "1"
+        },
+        "database_nodes_viewer": {
+            "FieldsAvailable": "0000000010000000000110100000011",
+            "FieldsRequired": "0000000000000000000000000000001",
+            "FoundNodes": "1",
+            "Nodes": [
+                {
+                    "NodeId": 50000
+                }
+            ],
+            "TotalNodes": "1"
+        },
+        "down_node_database": {
+            "status_code": 403,
+            "text": "<html><body><h1>403 Forbidden</h1><p><main>: Error: SID is not allowed\n</p></body></html>"
+        },
+        "down_node_monitoring": {
+            "Down": false,
+            "NodeId": 1
+        },
+        "down_node_root": {
+            "Down": false,
+            "NodeId": 1
+        },
+        "down_node_viewer": {
+            "status_code": 403,
+            "text": "<html><body><h1>403 Forbidden</h1><p><main>: Error: SID is not allowed\n</p></body></html>"
+        },
+        "restart_pdisk_database": {
+            "status_code": 403,
+            "text": "<html><body><h1>403 Forbidden</h1><p><main>: Error: SID is not allowed\n</p></body></html>"
+        },
+        "restart_pdisk_monitoring": {
+            "status_code": 403,
+            "text": "<html><body><h1>403 Forbidden</h1></body></html>"
+        },
+        "restart_pdisk_root": {
+            "debugMessage": "text",
+            "error": "Calling this operation could cause at least 4 groups (2181038080, 2181038081, 2181038082, ...2181038083) to go into a dead state",
+            "result": false
+        },
+        "restart_pdisk_viewer": {
+            "status_code": 403,
+            "text": "<html><body><h1>403 Forbidden</h1><p><main>: Error: SID is not allowed\n</p></body></html>"
         }
     },
     "test.test_storage_groups": {
@@ -840,7 +971,7 @@
                     "ProducerId": "not-zero-number-text",
                     "SeqNo": 12,
                     "StorageSize": 38,
-                    "TimestampDiff": "not-zero-number",
+                    "TimestampDiff": "number",
                     "WriteTimestamp": "not-zero-number"
                 },
                 {
@@ -852,7 +983,7 @@
                     "ProducerId": "not-zero-number-text",
                     "SeqNo": 13,
                     "StorageSize": 38,
-                    "TimestampDiff": "not-zero-number",
+                    "TimestampDiff": "number",
                     "WriteTimestamp": "not-zero-number"
                 },
                 {
@@ -864,7 +995,7 @@
                     "ProducerId": "not-zero-number-text",
                     "SeqNo": 14,
                     "StorageSize": 38,
-                    "TimestampDiff": "not-zero-number",
+                    "TimestampDiff": "number",
                     "WriteTimestamp": "not-zero-number"
                 },
                 {
@@ -876,7 +1007,7 @@
                     "ProducerId": "not-zero-number-text",
                     "SeqNo": 15,
                     "StorageSize": 38,
-                    "TimestampDiff": "not-zero-number",
+                    "TimestampDiff": "number",
                     "WriteTimestamp": "not-zero-number"
                 },
                 {
@@ -888,7 +1019,7 @@
                     "ProducerId": "not-zero-number-text",
                     "SeqNo": 16,
                     "StorageSize": 38,
-                    "TimestampDiff": "not-zero-number",
+                    "TimestampDiff": "number",
                     "WriteTimestamp": "not-zero-number"
                 }
             ],
@@ -907,7 +1038,7 @@
                     "ProducerId": "not-zero-number-text",
                     "SeqNo": 1,
                     "StorageSize": 9,
-                    "TimestampDiff": "not-zero-number",
+                    "TimestampDiff": "number",
                     "WriteTimestamp": "not-zero-number"
                 },
                 {
@@ -919,7 +1050,7 @@
                     "ProducerId": "not-zero-number-text",
                     "SeqNo": 2,
                     "StorageSize": 9,
-                    "TimestampDiff": "not-zero-number",
+                    "TimestampDiff": "number",
                     "WriteTimestamp": "not-zero-number"
                 },
                 {
@@ -931,7 +1062,7 @@
                     "ProducerId": "not-zero-number-text",
                     "SeqNo": 3,
                     "StorageSize": 9,
-                    "TimestampDiff": "not-zero-number",
+                    "TimestampDiff": "number",
                     "WriteTimestamp": "not-zero-number"
                 }
             ],
@@ -960,7 +1091,7 @@
                     "ProducerId": "not-zero-number-text",
                     "SeqNo": 11,
                     "StorageSize": 37,
-                    "TimestampDiff": "not-zero-number",
+                    "TimestampDiff": "number",
                     "WriteTimestamp": "not-zero-number"
                 }
             ],
@@ -979,7 +1110,7 @@
                     "ProducerId": "not-zero-number-text",
                     "SeqNo": 21,
                     "StorageSize": 38,
-                    "TimestampDiff": "not-zero-number",
+                    "TimestampDiff": "number",
                     "WriteTimestamp": "not-zero-number"
                 }
             ],
@@ -998,7 +1129,7 @@
                     "ProducerId": "not-zero-number-text",
                     "SeqNo": 1,
                     "StorageSize": 9,
-                    "TimestampDiff": "not-zero-number",
+                    "TimestampDiff": "number",
                     "WriteTimestamp": "not-zero-number"
                 },
                 {
@@ -1010,7 +1141,7 @@
                     "ProducerId": "not-zero-number-text",
                     "SeqNo": 2,
                     "StorageSize": 9,
-                    "TimestampDiff": "not-zero-number",
+                    "TimestampDiff": "number",
                     "WriteTimestamp": "not-zero-number"
                 },
                 {
@@ -1022,7 +1153,7 @@
                     "ProducerId": "not-zero-number-text",
                     "SeqNo": 3,
                     "StorageSize": 9,
-                    "TimestampDiff": "not-zero-number",
+                    "TimestampDiff": "number",
                     "WriteTimestamp": "not-zero-number"
                 },
                 {
@@ -1034,7 +1165,7 @@
                     "ProducerId": "not-zero-number-text",
                     "SeqNo": 4,
                     "StorageSize": 9,
-                    "TimestampDiff": "not-zero-number",
+                    "TimestampDiff": "number",
                     "WriteTimestamp": "not-zero-number"
                 },
                 {
@@ -1046,7 +1177,7 @@
                     "ProducerId": "not-zero-number-text",
                     "SeqNo": 5,
                     "StorageSize": 9,
-                    "TimestampDiff": "not-zero-number",
+                    "TimestampDiff": "number",
                     "WriteTimestamp": "not-zero-number"
                 }
             ],
@@ -1065,7 +1196,7 @@
                     "ProducerId": "not-zero-number-text",
                     "SeqNo": 21,
                     "StorageSize": 38,
-                    "TimestampDiff": "not-zero-number",
+                    "TimestampDiff": "number",
                     "WriteTimestamp": "not-zero-number"
                 }
             ],
@@ -1924,7 +2055,7 @@
                         "Subject": "user1"
                     }
                 ],
-                "Owner": "root@builtin",
+                "Owner": "root",
                 "Path": "/Root/dedicated_db"
             }
         },
@@ -2011,7 +2142,7 @@
                         "Subject": "DATABASE-ADMINS"
                     }
                 ],
-                "Owner": "root@builtin",
+                "Owner": "root",
                 "Path": "/Root/dedicated_db"
             }
         },
@@ -2281,7 +2412,7 @@
     },
     "test.test_viewer_check_access": {
         "/Root": {
-            "read": true
+            "read": false
         },
         "/Root/dedicated_db": {
             "read": true
@@ -2405,7 +2536,7 @@
                         "CreateStep": "not-zero-number-text",
                         "CreateTxId": "not-zero-number-text",
                         "Name": "dedicated_db",
-                        "Owner": "root@builtin",
+                        "Owner": "root",
                         "ParentPathId": "1",
                         "PathId": "not-zero-number-text",
                         "PathState": 2,
@@ -2418,7 +2549,7 @@
                         "CreateStep": "not-zero-number-text",
                         "CreateTxId": "not-zero-number-text",
                         "Name": "serverless_db",
-                        "Owner": "root@builtin",
+                        "Owner": "root",
                         "ParentPathId": "1",
                         "PathId": "not-zero-number-text",
                         "PathState": 3,
@@ -2431,7 +2562,7 @@
                         "CreateStep": "not-zero-number-text",
                         "CreateTxId": "not-zero-number-text",
                         "Name": "shared_db",
-                        "Owner": "root@builtin",
+                        "Owner": "root",
                         "ParentPathId": "1",
                         "PathId": "not-zero-number-text",
                         "PathState": 2,
@@ -2472,16 +2603,48 @@
                         "PathId": "not-zero-number-text",
                         "SchemeShard": "72057594046678944"
                     },
+                    "SchemeLimits": {
+                        "ExtraPathSymbolsAllowed": "!\"#$%&'()*+,-.:;<=>?@[\\]^_`{|}~",
+                        "MaxAclBytesSize": "10240",
+                        "MaxChildrenInDir": "100000",
+                        "MaxColumnTableColumns": "10000",
+                        "MaxConsistentCopyTargets": "10000",
+                        "MaxDepth": "32",
+                        "MaxExports": "10",
+                        "MaxImports": "10",
+                        "MaxPQPartitions": "1000000",
+                        "MaxPathElementLength": "255",
+                        "MaxPaths": "10000",
+                        "MaxShards": "200000",
+                        "MaxShardsInPath": "35000",
+                        "MaxTableCdcStreams": "5",
+                        "MaxTableColumnNameLength": "255",
+                        "MaxTableColumns": "200",
+                        "MaxTableIndices": "20",
+                        "MaxTableKeyColumns": "30"
+                    },
                     "SchemeShardId_Depricated": "72057594046678944",
                     "SecurityState": {
                         "Audience": "/Root",
+                        "PublicKeys": "not-empty-array",
                         "Sids": [
                             {
+                                "Name": "monitoring",
+                                "Type": 1
+                            },
+                            {
+                                "Name": "viewer",
+                                "Type": 1
+                            },
+                            {
                                 "Members": [
+                                    "monitoring",
+                                    "viewer",
                                     "root",
                                     "DATABASE-ADMINS",
                                     "ADMINS",
                                     "DDL-ADMINS",
+                                    "database",
                                     "ACCESS-ADMINS",
                                     "DATA-WRITERS",
                                     "DATA-READERS",
@@ -2491,11 +2654,22 @@
                                 "Type": 2
                             },
                             {
+                                "Name": "database",
+                                "Type": 1
+                            },
+                            {
                                 "Members": [
                                     "DDL-ADMINS",
                                     "DATA-READERS"
                                 ],
                                 "Name": "METADATA-READERS",
+                                "Type": 2
+                            },
+                            {
+                                "Members": [
+                                    "root"
+                                ],
+                                "Name": "ADMINS",
                                 "Type": 2
                             },
                             {
@@ -2517,13 +2691,6 @@
                                     "DATABASE-ADMINS"
                                 ],
                                 "Name": "DDL-ADMINS",
-                                "Type": 2
-                            },
-                            {
-                                "Members": [
-                                    "root"
-                                ],
-                                "Name": "ADMINS",
                                 "Type": 2
                             },
                             {
@@ -2569,7 +2736,7 @@
                     "PathState": 2,
                     "PathSubType": 0,
                     "PathType": 1,
-                    "PathVersion": "12",
+                    "PathVersion": "16",
                     "SchemeshardId": "72057594046678944"
                 }
             },
@@ -2653,6 +2820,26 @@
                         "PathId": "not-zero-number-text",
                         "SchemeShard": "72057594046678944"
                     },
+                    "SchemeLimits": {
+                        "ExtraPathSymbolsAllowed": "!\"#$%&'()*+,-.:;<=>?@[\\]^_`{|}~",
+                        "MaxAclBytesSize": "10240",
+                        "MaxChildrenInDir": "100000",
+                        "MaxColumnTableColumns": "10000",
+                        "MaxConsistentCopyTargets": "10000",
+                        "MaxDepth": "32",
+                        "MaxExports": "10",
+                        "MaxImports": "10",
+                        "MaxPQPartitions": "1000000",
+                        "MaxPathElementLength": "255",
+                        "MaxPaths": "10000",
+                        "MaxShards": "200000",
+                        "MaxShardsInPath": "35000",
+                        "MaxTableCdcStreams": "5",
+                        "MaxTableColumnNameLength": "255",
+                        "MaxTableColumns": "200",
+                        "MaxTableIndices": "20",
+                        "MaxTableKeyColumns": "30"
+                    },
                     "SchemeShardId_Depricated": "72057594046678944",
                     "SecurityState": {
                         "Audience": "/Root/dedicated_db"
@@ -2673,7 +2860,7 @@
                     "CreateTxId": "not-zero-number-text",
                     "EffectiveACL": "text",
                     "Name": "Root/dedicated_db",
-                    "Owner": "root@builtin",
+                    "Owner": "root",
                     "ParentPathId": "1",
                     "PathId": "not-zero-number-text",
                     "PathState": 2,
@@ -2745,6 +2932,26 @@
                         "PathId": "not-zero-number-text",
                         "SchemeShard": "72057594046678944"
                     },
+                    "SchemeLimits": {
+                        "ExtraPathSymbolsAllowed": "!\"#$%&'()*+,-.:;<=>?@[\\]^_`{|}~",
+                        "MaxAclBytesSize": "10240",
+                        "MaxChildrenInDir": "100000",
+                        "MaxColumnTableColumns": "10000",
+                        "MaxConsistentCopyTargets": "10000",
+                        "MaxDepth": "32",
+                        "MaxExports": "10",
+                        "MaxImports": "10",
+                        "MaxPQPartitions": "1000000",
+                        "MaxPathElementLength": "255",
+                        "MaxPaths": "10000",
+                        "MaxShards": "200000",
+                        "MaxShardsInPath": "35000",
+                        "MaxTableCdcStreams": "5",
+                        "MaxTableColumnNameLength": "255",
+                        "MaxTableColumns": "200",
+                        "MaxTableIndices": "20",
+                        "MaxTableKeyColumns": "30"
+                    },
                     "SchemeShardId_Depricated": "72057594046678944",
                     "SecurityState": {
                         "Audience": "/Root/serverless_db"
@@ -2767,7 +2974,7 @@
                     "CreateTxId": "not-zero-number-text",
                     "EffectiveACL": "text",
                     "Name": "Root/serverless_db",
-                    "Owner": "root@builtin",
+                    "Owner": "root",
                     "ParentPathId": "1",
                     "PathId": "not-zero-number-text",
                     "PathState": 2,
@@ -2857,6 +3064,26 @@
                         "PathId": "not-zero-number-text",
                         "SchemeShard": "72057594046678944"
                     },
+                    "SchemeLimits": {
+                        "ExtraPathSymbolsAllowed": "!\"#$%&'()*+,-.:;<=>?@[\\]^_`{|}~",
+                        "MaxAclBytesSize": "10240",
+                        "MaxChildrenInDir": "100000",
+                        "MaxColumnTableColumns": "10000",
+                        "MaxConsistentCopyTargets": "10000",
+                        "MaxDepth": "32",
+                        "MaxExports": "10",
+                        "MaxImports": "10",
+                        "MaxPQPartitions": "1000000",
+                        "MaxPathElementLength": "255",
+                        "MaxPaths": "10000",
+                        "MaxShards": "200000",
+                        "MaxShardsInPath": "35000",
+                        "MaxTableCdcStreams": "5",
+                        "MaxTableColumnNameLength": "255",
+                        "MaxTableColumns": "200",
+                        "MaxTableIndices": "20",
+                        "MaxTableKeyColumns": "30"
+                    },
                     "SchemeShardId_Depricated": "72057594046678944",
                     "SecurityState": {
                         "Audience": "/Root/shared_db"
@@ -2877,7 +3104,7 @@
                     "CreateTxId": "not-zero-number-text",
                     "EffectiveACL": "text",
                     "Name": "Root/shared_db",
-                    "Owner": "root@builtin",
+                    "Owner": "root",
                     "ParentPathId": "1",
                     "PathId": "not-zero-number-text",
                     "PathState": 2,
@@ -2934,8 +3161,6 @@
             "FoundNodes": "1",
             "Nodes": [
                 {
-                    "CpuUsage": "not-zero-number",
-                    "Database": "/Root",
                     "NodeId": 1,
                     "SystemState": {
                         "ChangeTime": "not-zero-number-text",
@@ -3003,8 +3228,7 @@
                         "StartTime": "not-zero-number-text",
                         "SystemState": "Green",
                         "TotalSessions": "number"
-                    },
-                    "UptimeSeconds": "number"
+                    }
                 }
             ],
             "TotalNodes": "1"
@@ -3015,8 +3239,6 @@
             "FoundNodes": "1",
             "Nodes": [
                 {
-                    "CpuUsage": "not-zero-number",
-                    "Database": "/Root/dedicated_db",
                     "NodeId": 50000,
                     "SystemState": {
                         "ChangeTime": "not-zero-number-text",
@@ -3082,8 +3304,7 @@
                             "/Root/dedicated_db"
                         ],
                         "TotalSessions": "number"
-                    },
-                    "UptimeSeconds": "number"
+                    }
                 }
             ],
             "TotalNodes": "1"
@@ -3094,8 +3315,6 @@
             "FoundNodes": "1",
             "Nodes": [
                 {
-                    "CpuUsage": "not-zero-number",
-                    "Database": "/Root/shared_db",
                     "NodeId": 50001,
                     "SystemState": {
                         "ChangeTime": "not-zero-number-text",
@@ -3161,8 +3380,7 @@
                             "/Root/shared_db"
                         ],
                         "TotalSessions": "number"
-                    },
-                    "UptimeSeconds": "number"
+                    }
                 }
             ],
             "Problems": [
@@ -3176,8 +3394,6 @@
             "FoundNodes": "1",
             "Nodes": [
                 {
-                    "CpuUsage": "not-zero-number",
-                    "Database": "/Root/shared_db",
                     "NodeId": 50001,
                     "SystemState": {
                         "ChangeTime": "not-zero-number-text",
@@ -3243,8 +3459,7 @@
                             "/Root/shared_db"
                         ],
                         "TotalSessions": "number"
-                    },
-                    "UptimeSeconds": "number"
+                    }
                 }
             ],
             "TotalNodes": "1"
@@ -4238,8 +4453,6 @@
             "MaximumDisksPerNode": "1",
             "Nodes": [
                 {
-                    "CpuUsage": "not-zero-number",
-                    "DiskSpaceUsage": "not-zero-number",
                     "NodeId": 1,
                     "SystemState": {
                         "ChangeTime": "not-zero-number-text",
@@ -4311,8 +4524,6 @@
                     "UptimeSeconds": "number"
                 },
                 {
-                    "CpuUsage": "not-zero-number",
-                    "Database": "/Root/shared_db",
                     "NodeId": 50001,
                     "SystemState": {
                         "ChangeTime": "not-zero-number-text",
@@ -4382,8 +4593,6 @@
                     "UptimeSeconds": "number"
                 },
                 {
-                    "CpuUsage": "not-zero-number",
-                    "Database": "/Root/dedicated_db",
                     "NodeId": 50000,
                     "SystemState": {
                         "ChangeTime": "not-zero-number-text",
@@ -5164,8 +5373,6 @@
             "MaximumSlotsPerDisk": "5",
             "Nodes": [
                 {
-                    "CpuUsage": "not-zero-number",
-                    "Database": "/Root",
                     "NodeId": 1,
                     "SystemState": {
                         "ChangeTime": "not-zero-number-text",
@@ -5233,8 +5440,7 @@
                         "StartTime": "not-zero-number-text",
                         "SystemState": "Green",
                         "TotalSessions": "number"
-                    },
-                    "UptimeSeconds": "number"
+                    }
                 }
             ],
             "TotalNodes": "1"
@@ -5246,7 +5452,6 @@
             "MaximumSlotsPerDisk": "5",
             "Nodes": [
                 {
-                    "CpuUsage": "not-zero-number",
                     "NodeId": 1,
                     "SystemState": {
                         "ChangeTime": "not-zero-number-text",
@@ -5314,8 +5519,7 @@
                         "StartTime": "not-zero-number-text",
                         "SystemState": "Green",
                         "TotalSessions": "number"
-                    },
-                    "UptimeSeconds": "number"
+                    }
                 }
             ],
             "TotalNodes": "1"
@@ -5327,7 +5531,6 @@
             "MaximumSlotsPerDisk": "5",
             "Nodes": [
                 {
-                    "CpuUsage": "not-zero-number",
                     "NodeId": 1,
                     "SystemState": {
                         "ChangeTime": "not-zero-number-text",
@@ -5395,8 +5598,7 @@
                         "StartTime": "not-zero-number-text",
                         "SystemState": "Green",
                         "TotalSessions": "number"
-                    },
-                    "UptimeSeconds": "number"
+                    }
                 }
             ],
             "Problems": [
@@ -5411,7 +5613,6 @@
             "MaximumSlotsPerDisk": "5",
             "Nodes": [
                 {
-                    "CpuUsage": "not-zero-number",
                     "NodeId": 1,
                     "SystemState": {
                         "ChangeTime": "not-zero-number-text",
@@ -5479,8 +5680,7 @@
                         "StartTime": "not-zero-number-text",
                         "SystemState": "Green",
                         "TotalSessions": "number"
-                    },
-                    "UptimeSeconds": "number"
+                    }
                 }
             ],
             "TotalNodes": "1"
@@ -7976,7 +8176,7 @@
                     50000
                 ],
                 "Overall": "Green",
-                "Owner": "root@builtin",
+                "Owner": "root",
                 "PoolStats": [
                     {
                         "Name": "System",
@@ -8036,7 +8236,7 @@
                 "Metrics": "not-empty-object",
                 "Name": "/Root/serverless_db",
                 "Overall": "Green",
-                "Owner": "root@builtin",
+                "Owner": "root",
                 "ResourceId": "72057594046678944-7",
                 "State": "RUNNING",
                 "StateStats": [
@@ -8063,7 +8263,7 @@
                     50001
                 ],
                 "Overall": "Green",
-                "Owner": "root@builtin",
+                "Owner": "root",
                 "PoolStats": [
                     {
                         "Name": "System",
@@ -8181,7 +8381,7 @@
                         50000
                     ],
                     "Overall": "Green",
-                    "Owner": "root@builtin",
+                    "Owner": "root",
                     "PoolStats": [
                         {
                             "Name": "System",
@@ -8244,7 +8444,7 @@
                     "Id": "72057594046678944-8",
                     "Metrics": "not-empty-object",
                     "Name": "/Root/serverless_db",
-                    "Owner": "root@builtin",
+                    "Owner": "root",
                     "ResourceId": "72057594046678944-7",
                     "State": "RUNNING",
                     "StateStats": [
@@ -8275,7 +8475,7 @@
                         50001
                     ],
                     "Overall": "Green",
-                    "Owner": "root@builtin",
+                    "Owner": "root",
                     "PoolStats": [
                         {
                             "Name": "System",
@@ -8507,5 +8707,58 @@
     },
     "test.test_wait_for_cluster_ready": {
         "wait_good": true
+    },
+    "test.test_whoami_database": {
+        "status_code": 403,
+        "text": "<html><body><h1>403 Forbidden</h1></body></html>"
+    },
+    "test.test_whoami_monitoring": {
+        "AuthType": "Login",
+        "GroupSIDs": [
+            "USERS",
+            "all-users@well-known"
+        ],
+        "IsAdministrationAllowed": false,
+        "IsDatabaseAllowed": true,
+        "IsMonitoringAllowed": true,
+        "IsTokenRequired": false,
+        "IsViewerAllowed": true,
+        "OriginalUserToken": "text",
+        "UserSID": "monitoring"
+    },
+    "test.test_whoami_root": {
+        "AuthType": "Login",
+        "GroupSIDs": [
+            "all-users@well-known",
+            "DATA-WRITERS",
+            "DDL-ADMINS",
+            "METADATA-READERS",
+            "ADMINS",
+            "USERS",
+            "DATABASE-ADMINS",
+            "ACCESS-ADMINS",
+            "DATA-READERS"
+        ],
+        "IsAdministrationAllowed": true,
+        "IsDatabaseAllowed": true,
+        "IsMonitoringAllowed": true,
+        "IsTokenRequired": false,
+        "IsViewerAllowed": true,
+        "OriginalUserToken": "text",
+        "UserSID": "root"
+    },
+    "test.test_whoami_viewer": {
+        "AuthType": "Login",
+        "GroupSIDs": [
+            "USERS",
+            "all-users@well-known"
+        ],
+        "IsAdministrationAllowed": false,
+        "IsDatabaseAllowed": true,
+        "IsMonitoringAllowed": false,
+        "IsTokenRequired": false,
+        "IsViewerAllowed": true,
+        "OriginalUserToken": "text",
+        "UserSID": "viewer"
     }
 }

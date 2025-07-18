@@ -623,6 +623,11 @@ private:
         }
 
         // TODO: fast fail for all tables?
+        if (isColumnTable && HasAppData() && !AppDataVerified().ColumnShardConfig.GetProxyWritingEnabled()) {
+            return ReplyWithError(TUploadStatus(Ydb::StatusIds::UNAVAILABLE, TUploadStatus::ECustomSubcode::DELIVERY_PROBLEM,
+                                      "cannot perform writes: disabled by config"),
+                ctx);
+        }
         if (isColumnTable && DiskQuotaExceeded) {
             return ReplyWithError(TUploadStatus(Ydb::StatusIds::UNAVAILABLE, TUploadStatus::ECustomSubcode::DISK_QUOTA_EXCEEDED,
                                       "cannot perform writes: database is out of disk space"),

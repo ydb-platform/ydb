@@ -24,7 +24,12 @@
 #include <ydb/public/api/grpc/ydb_query_v1.grpc.pb.h>
 #include <ydb/public/api/protos/ydb_query.pb.h>
 
-namespace NYdb::NTopic::NTests {
+#include <thread>
+
+
+using namespace std::chrono_literals;
+
+namespace NYdb::inline Dev::NTopic::NTests {
 
 const auto TEST_MESSAGE_GROUP_ID_1 = TEST_MESSAGE_GROUP_ID + "_1";
 const auto TEST_MESSAGE_GROUP_ID_2 = TEST_MESSAGE_GROUP_ID + "_2";
@@ -89,79 +94,58 @@ protected:
 
     std::unique_ptr<ISession> CreateSession();
 
-    TTopicReadSessionPtr CreateReader();
-
-    void StartPartitionSession(TTopicReadSessionPtr reader, TTransactionBase& tx, ui64 offset);
-    void StartPartitionSession(TTopicReadSessionPtr reader, ui64 offset);
-
     struct TReadMessageSettings {
         TTransactionBase& Tx;
         bool CommitOffsets = false;
-        std::optional<ui64> Offset;
+        std::optional<std::uint64_t> Offset;
     };
 
-    void ReadMessage(TTopicReadSessionPtr reader, TTransactionBase& tx, ui64 offset);
-    void ReadMessage(TTopicReadSessionPtr reader, const TReadMessageSettings& settings);
+    void CreateTopic(const std::string& path = TEST_TOPIC,
+                     const std::string& consumer = TEST_CONSUMER,
+                     std::size_t partitionCount = 1,
+                     std::optional<size_t> maxPartitionCount = std::nullopt,
+                     const TDuration retention = TDuration::Hours(1),
+                     bool important = false);
 
-    void WriteMessage(const TString& message);
-    void WriteMessages(const TVector<TString>& messages,
-                       const TString& topic, const TString& groupId,
-                       TTransactionBase& tx);
+    void AddConsumer(const std::string& topicPath, const std::vector<std::string>& consumers);
 
-    void CreateTopic(const TString& path = TString{TEST_TOPIC},
-                     const TString& consumer = TEST_CONSUMER,
-                     size_t partitionCount = 1,
-                     std::optional<size_t> maxPartitionCount = std::nullopt);
-    TTopicDescription DescribeTopic(const TString& path);
+    void SetPartitionWriteSpeed(const std::string& topicName, std::size_t bytesPerSeconds);
 
-    void AddConsumer(const TString& topicPath, const TVector<TString>& consumers);
-    void AlterAutoPartitioning(const TString& topicPath,
-                               ui64 minActivePartitions,
-                               ui64 maxActivePartitions,
-                               EAutoPartitioningStrategy strategy,
-                               TDuration stabilizationWindow,
-                               ui64 downUtilizationPercent,
-                               ui64 upUtilizationPercent);
-    void SetPartitionWriteSpeed(const std::string& topicPath,
-                                size_t bytesPerSeconds);
+    TTopicWriteSessionPtr CreateTopicWriteSession(const std::string& topicPath,
+                                                  const std::string& messageGroupId,
+                                                  std::optional<std::uint32_t> partitionId);
+    TTopicWriteSessionContext& GetTopicWriteSession(const std::string& topicPath,
+                                                    const std::string& messageGroupId,
+                                                    std::optional<std::uint32_t> partitionId);
 
-    void WriteToTopicWithInvalidTxId(bool invalidTxId);
+    TTopicReadSessionPtr CreateTopicReadSession(const std::string& topicPath,
+                                                const std::string& consumerName,
+                                                std::optional<std::uint32_t> partitionId);
+    TTopicReadSessionPtr GetTopicReadSession(const std::string& topicPath,
+                                             const std::string& consumerName,
+                                             std::optional<std::uint32_t> partitionId);
 
-    TTopicWriteSessionPtr CreateTopicWriteSession(const TString& topicPath,
-                                                  const TString& messageGroupId,
-                                                  std::optional<ui32> partitionId);
-    TTopicWriteSessionContext& GetTopicWriteSession(const TString& topicPath,
-                                                    const TString& messageGroupId,
-                                                    std::optional<ui32> partitionId);
-
-    TTopicReadSessionPtr CreateTopicReadSession(const TString& topicPath,
-                                                const TString& consumerName,
-                                                TMaybe<ui32> partitionId);
-    TTopicReadSessionPtr GetTopicReadSession(const TString& topicPath,
-                                             const TString& consumerName,
-                                             TMaybe<ui32> partitionId);
-
-    void WriteToTopic(const TString& topicPath,
-                      const TString& messageGroupId,
-                      const TString& message,
+    void WriteToTopic(const std::string& topicPath,
+                      const std::string& messageGroupId,
+                      const std::string& message,
                       TTransactionBase* tx = nullptr,
-                      std::optional<ui32> partitionId = std::nullopt);
-    TVector<TString> ReadFromTopic(const TString& topicPath,
-                                   const TString& consumerName,
+                      std::optional<std::uint32_t> partitionId = std::nullopt);
+    std::vector<std::string> ReadFromTopic(const std::string& topicPath,
+                                   const std::string& consumerName,
                                    const TDuration& duration,
                                    TTransactionBase* tx = nullptr,
-                                   TMaybe<ui32> partitionId = Nothing());
-    void WaitForAcks(const TString& topicPath,
-                     const TString& messageGroupId,
-                     size_t writtenInTxCount = Max<size_t>());
-    void WaitForSessionClose(const TString& topicPath,
-                             const TString& messageGroupId,
+                                   std::optional<std::uint32_t> partitionId = std::nullopt);
+    void WaitForAcks(const std::string& topicPath,
+                     const std::string& messageGroupId,
+                     std::size_t writtenInTxCount = std::numeric_limits<std::size_t>::max());
+    void WaitForSessionClose(const std::string& topicPath,
+                             const std::string& messageGroupId,
                              NYdb::EStatus status);
-    void CloseTopicWriteSession(const TString& topicPath,
-                                const TString& messageGroupId,
+    void CloseTopicWriteSession(const std::string& topicPath,
+                                const std::string& messageGroupId,
                                 bool force = false);
-    void CloseTopicReadSession(const TString& topicPath,
-                               const TString& consumerName);
+    void CloseTopicReadSession(const std::string& topicPath,
+                               const std::string& consumerName);
 
     enum EEndOfTransaction {
         Commit,
@@ -170,46 +154,45 @@ protected:
     };
 
     struct TTransactionCompletionTestDescription {
-        TVector<TString> Topics;
+        std::vector<std::string> Topics;
         EEndOfTransaction EndOfTransaction = Commit;
     };
 
     void TestTheCompletionOfATransaction(const TTransactionCompletionTestDescription& d);
-    void RestartLongTxService();
-    void RestartPQTablet(const TString& topicPath, ui32 partition);
-    void DumpPQTabletKeys(const TString& topicName, ui32 partition);
-    void PQTabletPrepareFromResource(const TString& topicPath,
-                                     ui32 partitionId,
-                                     const TString& resourceName);
+    void RestartPQTablet(const std::string& topicPath, std::uint32_t partition);
+    void DumpPQTabletKeys(const std::string& topicName, std::uint32_t partition);
+    void PQTabletPrepareFromResource(const std::string& topicPath,
+                                     std::uint32_t partitionId,
+                                     const std::string& resourceName);
 
-    void DeleteSupportivePartition(const TString& topicName,
-                                   ui32 partition);
+    void DeleteSupportivePartition(const std::string& topicName,
+                                   std::uint32_t partition);
 
     struct TTableRecord {
         TTableRecord() = default;
-        TTableRecord(const TString& key, const TString& value);
+        TTableRecord(const std::string& key, const std::string& value);
 
-        TString Key;
-        TString Value;
+        std::string Key;
+        std::string Value;
     };
 
-    TVector<TTableRecord> MakeTableRecords();
-    TString MakeJsonDoc(const TVector<TTableRecord>& records);
+    std::vector<TTableRecord> MakeTableRecords();
+    std::string MakeJsonDoc(const std::vector<TTableRecord>& records);
 
-    void CreateTable(const TString& path);
-    void UpsertToTable(const TString& tablePath,
-                      const TVector<TTableRecord>& records,
+    void CreateTable(const std::string& path);
+    void UpsertToTable(const std::string& tablePath,
+                      const std::vector<TTableRecord>& records,
                       ISession& session,
                       TTransactionBase* tx);
-    void InsertToTable(const TString& tablePath,
-                      const TVector<TTableRecord>& records,
+    void InsertToTable(const std::string& tablePath,
+                      const std::vector<TTableRecord>& records,
                       ISession& session,
                       TTransactionBase* tx);
-    void DeleteFromTable(const TString& tablePath,
-                      const TVector<TTableRecord>& records,
+    void DeleteFromTable(const std::string& tablePath,
+                      const std::vector<TTableRecord>& records,
                       ISession& session,
                       TTransactionBase* tx);
-    size_t GetTableRecordsCount(const TString& tablePath);
+    size_t GetTableRecordsCount(const std::string& tablePath);
 
     enum ERestartPQTabletMode {
         ERestartNo,
@@ -226,25 +209,17 @@ protected:
 
     void TestTxWithBigBlobs(const TTestTxWithBigBlobsParams& params);
 
-    void WriteMessagesInTx(size_t big, size_t small);
+    void WriteMessagesInTx(std::size_t big, size_t small);
 
     const TDriver& GetDriver() const;
     NTable::TTableClient& GetTableClient();
 
-    void CheckTabletKeys(const TString& topicName);
-    void DumpPQTabletKeys(const TString& topicName);
+    void CheckTabletKeys(const std::string& topicName);
+    void DumpPQTabletKeys(const std::string& topicName);
 
-    TVector<TString> Read_Exactly_N_Messages_From_Topic(const TString& topicPath,
-                                                        const TString& consumerName,
+    std::vector<std::string> Read_Exactly_N_Messages_From_Topic(const std::string& topicPath,
+                                                        const std::string& consumerName,
                                                         size_t count);
-
-    void TestSessionAbort();
-
-    void TestTwoSessionOneConsumer();
-
-    void TestOffsetsCannotBePromotedWhenReadingInATransaction();
-
-    void TestWriteToTopicTwoWriteSession();
 
     void TestWriteRandomSizedMessagesInWideTransactions();
 
@@ -254,19 +229,9 @@ protected:
 
     void TestWriteToTopic1();
 
-    void TestWriteToTopic2();
-
-    void TestWriteToTopic3();
-
     void TestWriteToTopic4();
 
-    void TestWriteToTopic5();
-
-    void TestWriteToTopic6();
-
     void TestWriteToTopic7();
-
-    void TestWriteToTopic8();
 
     void TestWriteToTopic9();
 
@@ -280,43 +245,15 @@ protected:
 
     void TestWriteToTopic14();
 
-    void TestWriteToTopic15();
-
     void TestWriteToTopic16();
 
-    void TestWriteToTopic17();
-
     void TestWriteToTopic24();
-
-    void TestWriteToTopic25();
 
     void TestWriteToTopic26();
 
     void TestWriteToTopic27();
 
-    void TestWriteToTopic28();
-
-    void TestWriteToTopic29();
-
-    void TestWriteToTopic30();
-
-    void TestWriteToTopic31();
-
-    void TestWriteToTopic32();
-
-    void TestWriteToTopic33();
-
-    void TestWriteToTopic34();
-
-    void TestWriteToTopic35();
-
-    void TestWriteToTopic36();
-
-    void TestWriteToTopic37();
-
     void TestWriteToTopic38();
-
-    void TestWriteToTopic39();
 
     void TestWriteToTopic40();
 
@@ -334,27 +271,25 @@ protected:
 
     void TestWriteToTopic47();
 
-    void TestWriteToTopic48();
-
     void TestWriteToTopic50();
 
     struct TAvgWriteBytes {
-        ui64 PerSec = 0;
-        ui64 PerMin = 0;
-        ui64 PerHour = 0;
-        ui64 PerDay = 0;
+        std::uint64_t PerSec = 0;
+        std::uint64_t PerMin = 0;
+        std::uint64_t PerHour = 0;
+        std::uint64_t PerDay = 0;
     };
 
-    TAvgWriteBytes GetAvgWriteBytes(const TString& topicPath,
-                                    ui32 partitionId);
+    TAvgWriteBytes GetAvgWriteBytes(const std::string& topicPath,
+                                    std::uint32_t partitionId);
 
-    void CheckAvgWriteBytes(const TString& topicPath,
-                            ui32 partitionId,
-                            size_t minSize, size_t maxSize);
+    void CheckAvgWriteBytes(const std::string& topicPath,
+                            std::uint32_t partitionId,
+                            std::size_t minSize, std::size_t maxSize);
 
-    void SplitPartition(const TString& topicPath,
-                        ui32 partitionId,
-                        const TString& boundary);
+    void SplitPartition(const std::string& topicPath,
+                        std::uint32_t partitionId,
+                        const std::string& boundary);
 
     virtual bool GetEnableOltpSink() const;
     virtual bool GetEnableOlapSink() const;
@@ -390,9 +325,9 @@ private:
         void CommitTx(TTransactionBase& tx, EStatus status = EStatus::SUCCESS) override;
         void RollbackTx(TTransactionBase& tx, EStatus status = EStatus::SUCCESS) override;
 
-        void Close() override;
-
         TAsyncStatus AsyncCommitTx(TTransactionBase& tx) override;
+
+        void Close() override;
 
     private:
         NTable::TSession Init(NTable::TTableClient& client);
@@ -419,9 +354,9 @@ private:
         void CommitTx(TTransactionBase& tx, EStatus status = EStatus::SUCCESS) override;
         void RollbackTx(TTransactionBase& tx, EStatus status = EStatus::SUCCESS) override;
 
-        void Close() override;
-
         TAsyncStatus AsyncCommitTx(TTransactionBase& tx) override;
+
+        void Close() override;
 
     private:
         NQuery::TSession Init(NQuery::TQueryClient& client);
@@ -436,32 +371,30 @@ private:
     template<class E>
     E ReadEvent(TTopicReadSessionPtr reader);
 
-    ui64 GetTopicTabletId(const TActorId& actorId,
-                          const TString& topicPath,
-                          ui32 partition);
+    std::uint64_t GetTopicTabletId(const TActorId& actorId,
+                                   const std::string& topicPath,
+                                   std::uint32_t partition);
     std::vector<std::string> GetTabletKeys(const TActorId& actorId,
-                                           ui64 tabletId);
-    std::vector<std::string> GetPQTabletDataKeys(const TActorId& actorId,
-                                                 ui64 tabletId);
+                                           std::uint64_t tabletId);
     NPQ::TWriteId GetTransactionWriteId(const TActorId& actorId,
-                                        ui64 tabletId);
+                                        std::uint64_t tabletId);
     void SendLongTxLockStatus(const TActorId& actorId,
-                              ui64 tabletId,
+                              std::uint64_t tabletId,
                               const NPQ::TWriteId& writeId,
                               NKikimrLongTxService::TEvLockStatus::EStatus status);
     void WaitForTheTabletToDeleteTheWriteInfo(const TActorId& actorId,
-                                              ui64 tabletId,
+                                              std::uint64_t tabletId,
                                               const NPQ::TWriteId& writeId);
 
-    ui64 GetSchemeShardTabletId(const TActorId& actorId);
+    std::uint64_t GetSchemeShardTabletId(const TActorId& actorId);
 
     std::unique_ptr<TTopicSdkTestSetup> Setup;
     std::unique_ptr<TDriver> Driver;
     std::unique_ptr<NTable::TTableClient> TableClient;
     std::unique_ptr<NQuery::TQueryClient> QueryClient;
 
-    THashMap<std::pair<TString, TString>, TTopicWriteSessionContext> TopicWriteSessions;
-    THashMap<TString, TTopicReadSessionPtr> TopicReadSessions;
+    std::unordered_map<std::pair<std::string, std::string>, TTopicWriteSessionContext> TopicWriteSessions;
+    std::unordered_map<std::string, TTopicReadSessionPtr> TopicReadSessions;
 
     ui64 SchemaTxId = 1000;
 };
@@ -487,7 +420,7 @@ protected:
     }
 };
 
-TFixture::TTableRecord::TTableRecord(const TString& key, const TString& value) :
+TFixture::TTableRecord::TTableRecord(const std::string& key, const std::string& value) :
     Key(key),
     Value(value)
 {
@@ -528,7 +461,7 @@ void TFixture::NotifySchemeShard(const TFeatureFlags& flags)
     auto& runtime = Setup->GetRuntime();
     auto actorId = runtime.AllocateEdgeActor();
 
-    ui64 ssId = GetSchemeShardTabletId(actorId);
+    std::uint64_t ssId = GetSchemeShardTabletId(actorId);
 
     runtime.SendToPipe(ssId, actorId, request.release());
     runtime.GrabEdgeEvent<NConsole::TEvConsole::TEvConfigNotificationResponse>();
@@ -580,7 +513,7 @@ std::unique_ptr<TTransactionBase> TFixture::TTableSession::BeginTx()
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
             return std::make_unique<NTable::TTransaction>(result.GetTransaction());
         }
-        Sleep(TDuration::MilliSeconds(100));
+        std::this_thread::sleep_for(100ms);
     }
 }
 
@@ -593,7 +526,7 @@ void TFixture::TTableSession::CommitTx(TTransactionBase& tx, EStatus status)
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), status, result.GetIssues().ToString());
             return;
         }
-        Sleep(TDuration::MilliSeconds(100));
+        std::this_thread::sleep_for(100ms);
     }
 }
 
@@ -606,7 +539,7 @@ void TFixture::TTableSession::RollbackTx(TTransactionBase& tx, EStatus status)
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), status, result.GetIssues().ToString());
             return;
         }
-        Sleep(TDuration::MilliSeconds(100));
+        std::this_thread::sleep_for(100ms);
     }
 }
 
@@ -673,7 +606,7 @@ std::unique_ptr<TTransactionBase> TFixture::TQuerySession::BeginTx()
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
             return std::make_unique<NQuery::TTransaction>(result.GetTransaction());
         }
-        Sleep(TDuration::MilliSeconds(100));
+        std::this_thread::sleep_for(100ms);
     }
 }
 
@@ -686,7 +619,7 @@ void TFixture::TQuerySession::CommitTx(TTransactionBase& tx, EStatus status)
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), status, result.GetIssues().ToString());
             return;
         }
-        Sleep(TDuration::MilliSeconds(100));
+        std::this_thread::sleep_for(100ms);
     }
 }
 
@@ -699,7 +632,7 @@ void TFixture::TQuerySession::RollbackTx(TTransactionBase& tx, EStatus status)
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), status, result.GetIssues().ToString());
             return;
         }
-        Sleep(TDuration::MilliSeconds(100));
+        std::this_thread::sleep_for(100ms);
     }
 }
 
@@ -707,11 +640,11 @@ void TFixture::TQuerySession::Close()
 {
     // SDK doesn't provide a method to close the session for Query Client, so we use grpc API directly
     auto credentials = grpc::InsecureChannelCredentials();
-    auto channel = grpc::CreateChannel(TString(Endpoint_), credentials);
+    auto channel = grpc::CreateChannel(TStringType(Endpoint_), credentials);
     auto stub = Ydb::Query::V1::QueryService::NewStub(channel);
 
     grpc::ClientContext context;
-    context.AddMetadata("x-ydb-database", TString(Database_));
+    context.AddMetadata("x-ydb-database", TStringType(Database_));
 
     Ydb::Query::DeleteSessionRequest request;
     request.set_session_id(Session_.GetId());
@@ -754,50 +687,6 @@ std::unique_ptr<TFixture::ISession> TFixture::CreateSession()
     return nullptr;
 }
 
-auto TFixture::CreateReader() -> TTopicReadSessionPtr
-{
-    NTopic::TTopicClient client(GetDriver());
-    TReadSessionSettings options;
-    options.ConsumerName(TEST_CONSUMER);
-    options.AppendTopics(TEST_TOPIC);
-    return client.CreateReadSession(options);
-}
-
-void TFixture::StartPartitionSession(TTopicReadSessionPtr reader, TTransactionBase& tx, ui64 offset)
-{
-    auto event = ReadEvent<NTopic::TReadSessionEvent::TStartPartitionSessionEvent>(reader, tx);
-    UNIT_ASSERT_VALUES_EQUAL(event.GetCommittedOffset(), offset);
-    event.Confirm();
-}
-
-void TFixture::StartPartitionSession(TTopicReadSessionPtr reader, ui64 offset)
-{
-    auto event = ReadEvent<NTopic::TReadSessionEvent::TStartPartitionSessionEvent>(reader);
-    UNIT_ASSERT_VALUES_EQUAL(event.GetCommittedOffset(), offset);
-    event.Confirm();
-}
-
-void TFixture::ReadMessage(TTopicReadSessionPtr reader, TTransactionBase& tx, ui64 offset)
-{
-    TReadMessageSettings settings {
-        .Tx = tx,
-        .CommitOffsets = false,
-        .Offset = offset
-    };
-    ReadMessage(reader, settings);
-}
-
-void TFixture::ReadMessage(TTopicReadSessionPtr reader, const TReadMessageSettings& settings)
-{
-    auto event = ReadEvent<NTopic::TReadSessionEvent::TDataReceivedEvent>(reader, settings.Tx);
-    if (settings.Offset.has_value()) {
-        UNIT_ASSERT_VALUES_EQUAL(event.GetMessages()[0].GetOffset(), *settings.Offset);
-    }
-    if (settings.CommitOffsets) {
-        event.Commit();
-    }
-}
-
 template<class E>
 E TFixture::ReadEvent(TTopicReadSessionPtr reader, TTransactionBase& tx)
 {
@@ -827,49 +716,18 @@ E TFixture::ReadEvent(TTopicReadSessionPtr reader)
     return *ev;
 }
 
-void TFixture::WriteMessage(const TString& message)
+void TFixture::CreateTopic(const std::string& path,
+                           const std::string& consumer,
+                           std::size_t partitionCount,
+                           std::optional<size_t> maxPartitionCount,
+                           const TDuration retention,
+                           bool important)
 {
-    NTopic::TWriteSessionSettings options;
-    options.Path(TEST_TOPIC);
-    options.MessageGroupId(TEST_MESSAGE_GROUP_ID);
-
-    NTopic::TTopicClient client(GetDriver());
-    auto session = client.CreateSimpleBlockingWriteSession(options);
-    UNIT_ASSERT(session->Write(message));
-    session->Close();
+    Setup->CreateTopic(path, consumer, partitionCount, maxPartitionCount, retention, important);
 }
 
-void TFixture::WriteMessages(const TVector<TString>& messages,
-                             const TString& topic, const TString& groupId,
-                             TTransactionBase& tx)
-{
-    NTopic::TWriteSessionSettings options;
-    options.Path(topic);
-    options.MessageGroupId(groupId);
-
-    NTopic::TTopicClient client(GetDriver());
-    auto session = client.CreateSimpleBlockingWriteSession(options);
-
-    for (auto& message : messages) {
-        NTopic::TWriteMessage params(message);
-        params.Tx(tx);
-        UNIT_ASSERT(session->Write(std::move(params)));
-    }
-
-    UNIT_ASSERT(session->Close());
-}
-
-void TFixture::CreateTopic(const TString& path,
-                           const TString& consumer,
-                           size_t partitionCount,
-                           std::optional<size_t> maxPartitionCount)
-
-{
-    Setup->CreateTopic(path, consumer, partitionCount, maxPartitionCount);
-}
-
-void TFixture::AddConsumer(const TString& topicPath,
-                           const TVector<TString>& consumers)
+void TFixture::AddConsumer(const std::string& topicPath,
+                           const std::vector<std::string>& consumers)
 {
     NTopic::TTopicClient client(GetDriver());
     NTopic::TAlterTopicSettings settings;
@@ -882,49 +740,15 @@ void TFixture::AddConsumer(const TString& topicPath,
     UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 }
 
-void TFixture::AlterAutoPartitioning(const TString& topicPath,
-                                     ui64 minActivePartitions,
-                                     ui64 maxActivePartitions,
-                                     EAutoPartitioningStrategy strategy,
-                                     TDuration stabilizationWindow,
-                                     ui64 downUtilizationPercent,
-                                     ui64 upUtilizationPercent)
-{
-    NTopic::TTopicClient client(GetDriver());
-    NTopic::TAlterTopicSettings settings;
-
-    settings
-        .BeginAlterPartitioningSettings()
-            .MinActivePartitions(minActivePartitions)
-            .MaxActivePartitions(maxActivePartitions)
-            .BeginAlterAutoPartitioningSettings()
-                .Strategy(strategy)
-                .StabilizationWindow(stabilizationWindow)
-                .DownUtilizationPercent(downUtilizationPercent)
-                .UpUtilizationPercent(upUtilizationPercent)
-            .EndAlterAutoPartitioningSettings()
-        .EndAlterTopicPartitioningSettings()
-        ;
-
-    auto result = client.AlterTopic(topicPath, settings).GetValueSync();
-    UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-}
-
-void TFixture::SetPartitionWriteSpeed(const std::string& topicPath,
-                                      size_t bytesPerSeconds)
+void TFixture::SetPartitionWriteSpeed(const std::string& topicName, std::size_t bytesPerSeconds)
 {
     NTopic::TTopicClient client(GetDriver());
     NTopic::TAlterTopicSettings settings;
 
     settings.SetPartitionWriteSpeedBytesPerSecond(bytesPerSeconds);
 
-    auto result = client.AlterTopic(topicPath, settings).GetValueSync();
-    UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-}
-
-TTopicDescription TFixture::DescribeTopic(const TString& path)
-{
-    return Setup->DescribeTopic(path);
+    auto result = client.AlterTopic(Setup->GetTopicPath(topicName), settings).GetValueSync();
+    Y_ENSURE_BT(result.IsSuccess(), ToString(static_cast<TStatus>(result)));
 }
 
 const TDriver& TFixture::GetDriver() const
@@ -937,243 +761,9 @@ NTable::TTableClient& TFixture::GetTableClient()
     return *TableClient;
 }
 
-void TFixture::WriteToTopicWithInvalidTxId(bool invalidTxId)
-{
-    auto session = CreateSession();
-    auto tx = session->BeginTx();
-
-    NTopic::TWriteSessionSettings options;
-    options.Path(TEST_TOPIC);
-    options.MessageGroupId(TEST_MESSAGE_GROUP_ID);
-
-    NTopic::TTopicClient client(GetDriver());
-    auto writeSession = client.CreateWriteSession(options);
-
-    auto event = writeSession->GetEvent(true);
-    UNIT_ASSERT(event && std::holds_alternative<TWriteSessionEvent::TReadyToAcceptEvent>(event.value()));
-    auto token = std::move(std::get<TWriteSessionEvent::TReadyToAcceptEvent>(event.value()).ContinuationToken);
-
-    NTopic::TWriteMessage params("message");
-    params.Tx(*tx);
-
-    if (invalidTxId) {
-        session->CommitTx(*tx, EStatus::SUCCESS);
-    } else {
-        session->Close();
-    }
-
-    writeSession->Write(std::move(token), std::move(params));
-
-    while (true) {
-        event = writeSession->GetEvent(true);
-        UNIT_ASSERT(event.has_value());
-        auto& v = event.value();
-        if (auto e = std::get_if<TWriteSessionEvent::TAcksEvent>(&v); e) {
-            UNIT_ASSERT(false);
-        } else if (auto e = std::get_if<TWriteSessionEvent::TReadyToAcceptEvent>(&v); e) {
-            ;
-        } else if (auto e = std::get_if<TSessionClosedEvent>(&v); e) {
-            break;
-        }
-    }
-}
-
-void TFixture::TestSessionAbort()
-{
-    {
-        auto reader = CreateReader();
-        auto session = CreateSession();
-        auto tx = session->BeginTx();
-
-        StartPartitionSession(reader, *tx, 0);
-
-        WriteMessage("message #0");
-        ReadMessage(reader, *tx, 0);
-
-        WriteMessage("message #1");
-        ReadMessage(reader, *tx, 1);
-    }
-
-    {
-        auto session = CreateSession();
-        auto tx = session->BeginTx();
-        auto reader = CreateReader();
-
-        StartPartitionSession(reader, *tx, 0);
-
-        ReadMessage(reader, *tx, 0);
-
-        session->CommitTx(*tx, EStatus::SUCCESS);
-    }
-
-    {
-        auto reader = CreateReader();
-
-        StartPartitionSession(reader, 2);
-    }
-}
-
-Y_UNIT_TEST_F(SessionAbort_Table, TFixtureTable)
-{
-    TestSessionAbort();
-}
-
-Y_UNIT_TEST_F(SessionAbort_Query, TFixtureQuery)
-{
-    TestSessionAbort();
-}
-
-void TFixture::TestTwoSessionOneConsumer()
-{
-    WriteMessage("message #0");
-
-    auto session1 = CreateSession();
-    auto tx1 = session1->BeginTx();
-
-    {
-        auto reader = CreateReader();
-        StartPartitionSession(reader, *tx1, 0);
-        ReadMessage(reader, *tx1, 0);
-    }
-
-    auto session2 = CreateSession();
-    auto tx2 = session2->BeginTx();
-
-    {
-        auto reader = CreateReader();
-        StartPartitionSession(reader, *tx2, 0);
-        ReadMessage(reader, *tx2, 0);
-    }
-
-    session2->CommitTx(*tx2, EStatus::SUCCESS);
-    session1->CommitTx(*tx1, EStatus::ABORTED);
-}
-
-Y_UNIT_TEST_F(TwoSessionOneConsumer_Table, TFixtureTable)
-{
-    TestTwoSessionOneConsumer();
-}
-
-Y_UNIT_TEST_F(TwoSessionOneConsumer_Query, TFixtureQuery)
-{
-    TestTwoSessionOneConsumer();
-}
-
-void TFixture::TestOffsetsCannotBePromotedWhenReadingInATransaction()
-{
-    WriteMessage("message");
-
-    auto session = CreateSession();
-    auto tx = session->BeginTx();
-
-    auto reader = CreateReader();
-    StartPartitionSession(reader, *tx, 0);
-
-    UNIT_ASSERT_EXCEPTION(ReadMessage(reader, {.Tx = *tx, .CommitOffsets = true}), yexception);
-}
-
-Y_UNIT_TEST_F(Offsets_Cannot_Be_Promoted_When_Reading_In_A_Transaction_Table, TFixtureTable)
-{
-    TestOffsetsCannotBePromotedWhenReadingInATransaction();
-}
-
-Y_UNIT_TEST_F(Offsets_Cannot_Be_Promoted_When_Reading_In_A_Transaction_Query, TFixtureQuery)
-{
-    TestOffsetsCannotBePromotedWhenReadingInATransaction();
-}
-
-Y_UNIT_TEST_F(WriteToTopic_Invalid_Session_Table, TFixtureTable)
-{
-    WriteToTopicWithInvalidTxId(false);
-}
-
-Y_UNIT_TEST_F(WriteToTopic_Invalid_Session_Query, TFixtureQuery)
-{
-    WriteToTopicWithInvalidTxId(false);
-}
-
-//Y_UNIT_TEST_F(WriteToTopic_Invalid_Tx, TFixture)
-//{
-//    WriteToTopicWithInvalidTxId(true);
-//}
-
-void TFixture::TestWriteToTopicTwoWriteSession()
-{
-    TString topicPath[2] = {
-        TString{TEST_TOPIC},
-        TString{TEST_TOPIC} + "_2"
-    };
-
-    CreateTopic(topicPath[1]);
-
-    auto createWriteSession = [](NTopic::TTopicClient& client, const TString& topicPath) {
-        NTopic::TWriteSessionSettings options;
-        options.Path(topicPath);
-        options.MessageGroupId(TEST_MESSAGE_GROUP_ID);
-
-        return client.CreateWriteSession(options);
-    };
-
-    auto writeMessage = [](auto& ws, const TString& message, auto& tx) {
-        NTopic::TWriteMessage params(message);
-        params.Tx(*tx);
-
-        auto event = ws->GetEvent(true);
-        UNIT_ASSERT(event && std::holds_alternative<TWriteSessionEvent::TReadyToAcceptEvent>(event.value()));
-        auto token = std::move(std::get<TWriteSessionEvent::TReadyToAcceptEvent>(event.value()).ContinuationToken);
-
-        ws->Write(std::move(token), std::move(params));
-    };
-
-    auto session = CreateSession();
-    auto tx = session->BeginTx();
-
-    NTopic::TTopicClient client(GetDriver());
-
-    auto ws0 = createWriteSession(client, topicPath[0]);
-    auto ws1 = createWriteSession(client, topicPath[1]);
-
-    writeMessage(ws0, "message-1", tx);
-    writeMessage(ws1, "message-2", tx);
-
-    size_t acks = 0;
-
-    while (acks < 2) {
-        auto event = ws0->GetEvent(false);
-        if (!event) {
-            event = ws1->GetEvent(false);
-            if (!event) {
-                Sleep(TDuration::MilliSeconds(10));
-                continue;
-            }
-        }
-
-        auto& v = event.value();
-        if (auto e = std::get_if<TWriteSessionEvent::TAcksEvent>(&v); e) {
-            ++acks;
-        } else if (auto e = std::get_if<TWriteSessionEvent::TReadyToAcceptEvent>(&v); e) {
-            ;
-        } else if (auto e = std::get_if<TSessionClosedEvent>(&v); e) {
-            break;
-        }
-    }
-
-    UNIT_ASSERT_VALUES_EQUAL(acks, 2);
-}
-
-Y_UNIT_TEST_F(WriteToTopic_Two_WriteSession_Table, TFixtureTable)
-{
-    TestWriteToTopicTwoWriteSession();
-}
-
-Y_UNIT_TEST_F(WriteToTopic_Two_WriteSession_Query, TFixtureQuery)
-{
-    TestWriteToTopicTwoWriteSession();
-}
-
-auto TFixture::CreateTopicWriteSession(const TString& topicPath,
-                                       const TString& messageGroupId,
-                                       std::optional<ui32> partitionId) -> TTopicWriteSessionPtr
+auto TFixture::CreateTopicWriteSession(const std::string& topicPath,
+                                       const std::string& messageGroupId,
+                                       std::optional<std::uint32_t> partitionId) -> TTopicWriteSessionPtr
 {
     NTopic::TTopicClient client(GetDriver());
     NTopic::TWriteSessionSettings options;
@@ -1185,11 +775,11 @@ auto TFixture::CreateTopicWriteSession(const TString& topicPath,
     return client.CreateWriteSession(options);
 }
 
-auto TFixture::GetTopicWriteSession(const TString& topicPath,
-                                    const TString& messageGroupId,
-                                     std::optional<ui32> partitionId) -> TTopicWriteSessionContext&
+auto TFixture::GetTopicWriteSession(const std::string& topicPath,
+                                    const std::string& messageGroupId,
+                                    std::optional<std::uint32_t> partitionId) -> TTopicWriteSessionContext&
 {
-    std::pair<TString, TString> key(topicPath, messageGroupId);
+    std::pair<std::string, std::string> key(topicPath, messageGroupId);
     auto i = TopicWriteSessions.find(key);
 
     if (i == TopicWriteSessions.end()) {
@@ -1204,20 +794,20 @@ auto TFixture::GetTopicWriteSession(const TString& topicPath,
     return i->second;
 }
 
-NTopic::TTopicReadSettings MakeTopicReadSettings(const TString& topicPath,
-                                                 TMaybe<ui32> partitionId)
+NTopic::TTopicReadSettings MakeTopicReadSettings(const std::string& topicPath,
+                                                 std::optional<std::uint32_t> partitionId)
 {
     TTopicReadSettings options;
     options.Path(topicPath);
-    if (partitionId.Defined()) {
+    if (partitionId) {
         options.AppendPartitionIds(*partitionId);
     }
     return options;
 }
 
-NTopic::TReadSessionSettings MakeTopicReadSessionSettings(const TString& topicPath,
-                                                          const TString& consumerName,
-                                                          TMaybe<ui32> partitionId)
+NTopic::TReadSessionSettings MakeTopicReadSessionSettings(const std::string& topicPath,
+                                                          const std::string& consumerName,
+                                                          std::optional<std::uint32_t> partitionId)
 {
     NTopic::TReadSessionSettings options;
     options.AppendTopics(MakeTopicReadSettings(topicPath, partitionId));
@@ -1225,9 +815,9 @@ NTopic::TReadSessionSettings MakeTopicReadSessionSettings(const TString& topicPa
     return options;
 }
 
-auto TFixture::CreateTopicReadSession(const TString& topicPath,
-                                      const TString& consumerName,
-                                      TMaybe<ui32> partitionId) -> TTopicReadSessionPtr
+auto TFixture::CreateTopicReadSession(const std::string& topicPath,
+                                      const std::string& consumerName,
+                                      std::optional<std::uint32_t> partitionId) -> TTopicReadSessionPtr
 {
     NTopic::TTopicClient client(GetDriver());
     return client.CreateReadSession(MakeTopicReadSessionSettings(topicPath,
@@ -1235,9 +825,9 @@ auto TFixture::CreateTopicReadSession(const TString& topicPath,
                                                                  partitionId));
 }
 
-auto TFixture::GetTopicReadSession(const TString& topicPath,
-                                   const TString& consumerName,
-                                   TMaybe<ui32> partitionId) -> TTopicReadSessionPtr
+auto TFixture::GetTopicReadSession(const std::string& topicPath,
+                                   const std::string& consumerName,
+                                   std::optional<std::uint32_t> partitionId) -> TTopicReadSessionPtr
 {
     TTopicReadSessionPtr session;
 
@@ -1300,11 +890,11 @@ void TFixture::TTopicWriteSessionContext::Write(const std::string& message, TTra
     ContinuationToken = std::nullopt;
 }
 
-void TFixture::CloseTopicWriteSession(const TString& topicPath,
-                                      const TString& messageGroupId,
+void TFixture::CloseTopicWriteSession(const std::string& topicPath,
+                                      const std::string& messageGroupId,
                                       bool force)
 {
-    std::pair<TString, TString> key(topicPath, messageGroupId);
+    std::pair<std::string, std::string> key(topicPath, messageGroupId);
     auto i = TopicWriteSessions.find(key);
 
     UNIT_ASSERT(i != TopicWriteSessions.end());
@@ -1315,18 +905,18 @@ void TFixture::CloseTopicWriteSession(const TString& topicPath,
     TopicWriteSessions.erase(key);
 }
 
-void TFixture::CloseTopicReadSession(const TString& topicPath,
-                                     const TString& consumerName)
+void TFixture::CloseTopicReadSession(const std::string& topicPath,
+                                     const std::string& consumerName)
 {
     Y_UNUSED(consumerName);
     TopicReadSessions.erase(topicPath);
 }
 
-void TFixture::WriteToTopic(const TString& topicPath,
-                            const TString& messageGroupId,
-                            const TString& message,
+void TFixture::WriteToTopic(const std::string& topicPath,
+                            const std::string& messageGroupId,
+                            const std::string& message,
                             TTransactionBase* tx,
-                            std::optional<ui32> partitionId)
+                            std::optional<std::uint32_t> partitionId)
 {
     TTopicWriteSessionContext& context = GetTopicWriteSession(topicPath, messageGroupId, partitionId);
     context.WaitForContinuationToken();
@@ -1334,13 +924,13 @@ void TFixture::WriteToTopic(const TString& topicPath,
     context.Write(message, tx);
 }
 
-TVector<TString> TFixture::ReadFromTopic(const TString& topicPath,
-                                         const TString& consumerName,
+std::vector<std::string> TFixture::ReadFromTopic(const std::string& topicPath,
+                                         const std::string& consumerName,
                                          const TDuration& duration,
                                          TTransactionBase* tx,
-                                         TMaybe<ui32> partitionId)
+                                         std::optional<std::uint32_t> partitionId)
 {
-    TVector<TString> messages;
+    std::vector<std::string> messages;
 
     TInstant end = TInstant::Now() + duration;
     TDuration remain = duration;
@@ -1359,7 +949,7 @@ TVector<TString> TFixture::ReadFromTopic(const TString& topicPath,
 
         for (auto& event : session->GetEvents(settings)) {
             if (auto* e = std::get_if<NTopic::TReadSessionEvent::TDataReceivedEvent>(&event)) {
-                Cerr << e->HasCompressedMessages() << " " << e->GetMessagesCount() << Endl;
+                std::cerr << e->HasCompressedMessages() << " " << e->GetMessagesCount() << std::endl;
                 for (auto& m : e->GetMessages()) {
                     messages.emplace_back(m.GetData());
                 }
@@ -1376,9 +966,9 @@ TVector<TString> TFixture::ReadFromTopic(const TString& topicPath,
     return messages;
 }
 
-void TFixture::WaitForAcks(const TString& topicPath, const TString& messageGroupId, size_t writtenInTxCount)
+void TFixture::WaitForAcks(const std::string& topicPath, const std::string& messageGroupId, std::size_t writtenInTxCount)
 {
-    std::pair<TString, TString> key(topicPath, messageGroupId);
+    std::pair<std::string, std::string> key(topicPath, messageGroupId);
     auto i = TopicWriteSessions.find(key);
     UNIT_ASSERT(i != TopicWriteSessions.end());
 
@@ -1392,16 +982,16 @@ void TFixture::WaitForAcks(const TString& topicPath, const TString& messageGroup
 
     UNIT_ASSERT((context.WrittenAckCount + context.WrittenInTxAckCount) == context.WriteCount);
 
-    if (writtenInTxCount != Max<size_t>()) {
+    if (writtenInTxCount != std::numeric_limits<std::size_t>::max()) {
         UNIT_ASSERT_VALUES_EQUAL(context.WrittenInTxAckCount, writtenInTxCount);
     }
 }
 
-void TFixture::WaitForSessionClose(const TString& topicPath,
-                                   const TString& messageGroupId,
+void TFixture::WaitForSessionClose(const std::string& topicPath,
+                                   const std::string& messageGroupId,
                                    NYdb::EStatus status)
 {
-    std::pair<TString, TString> key(topicPath, messageGroupId);
+    std::pair<std::string, std::string> key(topicPath, messageGroupId);
     auto i = TopicWriteSessions.find(key);
     UNIT_ASSERT(i != TopicWriteSessions.end());
 
@@ -1438,7 +1028,7 @@ void TFixture::WaitForSessionClose(const TString& topicPath,
     UNIT_ASSERT(context.AckCount() <= context.WriteCount);
 }
 
-ui64 TFixture::GetSchemeShardTabletId(const TActorId& actorId)
+std::uint64_t TFixture::GetSchemeShardTabletId(const TActorId& actorId)
 {
     auto navigate = std::make_unique<NSchemeCache::TSchemeCacheNavigate>();
     navigate->DatabaseName = "/Root";
@@ -1469,13 +1059,13 @@ ui64 TFixture::GetSchemeShardTabletId(const TActorId& actorId)
     return front.Self->Info.GetSchemeshardId();
 }
 
-ui64 TFixture::GetTopicTabletId(const TActorId& actorId, const TString& topicPath, ui32 partition)
+std::uint64_t TFixture::GetTopicTabletId(const TActorId& actorId, const std::string& topicPath, std::uint32_t partition)
 {
     auto navigate = std::make_unique<NSchemeCache::TSchemeCacheNavigate>();
     navigate->DatabaseName = "/Root";
 
     NSchemeCache::TSchemeCacheNavigate::TEntry entry;
-    entry.Path = SplitPath(topicPath);
+    entry.Path = SplitPath(TString{topicPath});
     entry.SyncVersion = true;
     entry.ShowPrivatePath = true;
     entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpList;
@@ -1509,11 +1099,11 @@ ui64 TFixture::GetTopicTabletId(const TActorId& actorId, const TString& topicPat
 
     UNIT_FAIL("unknown partition");
 
-    return Max<ui64>();
+    return std::numeric_limits<std::uint64_t>::max();
 }
 
 std::vector<std::string> TFixture::GetTabletKeys(const TActorId& actorId,
-                                                 ui64 tabletId)
+                                                 std::uint64_t tabletId)
 {
     auto request = std::make_unique<NKikimr::TEvKeyValue::TEvRequest>();
     request->Record.SetCookie(12345);
@@ -1547,26 +1137,6 @@ std::vector<std::string> TFixture::GetTabletKeys(const TActorId& actorId,
     return keys;
 }
 
-std::vector<std::string> TFixture::GetPQTabletDataKeys(const TActorId& actorId,
-                                                       ui64 tabletId)
-{
-    using namespace NKikimr::NPQ;
-
-    std::vector<std::string> keys;
-
-    for (const auto& key : GetTabletKeys(actorId, tabletId)) {
-        if (key.empty() ||
-            ((std::tolower(key.front()) != TKeyPrefix::TypeData) &&
-             (std::tolower(key.front()) != TKeyPrefix::TypeTmpData))) {
-            continue;
-        }
-
-        keys.push_back(key);
-    }
-
-    return keys;
-}
-
 size_t TFixture::GetPQCacheRenameKeysCount()
 {
     using namespace NKikimr::NPQ;
@@ -1584,24 +1154,11 @@ size_t TFixture::GetPQCacheRenameKeysCount()
     return result->RenamedKeys;
 }
 
-void TFixture::RestartLongTxService()
+std::vector<std::string> TFixture::Read_Exactly_N_Messages_From_Topic(const std::string& topicPath,
+                                                                      const std::string& consumerName,
+                                                                      std::size_t limit)
 {
-    auto& runtime = Setup->GetRuntime();
-    TActorId edge = runtime.AllocateEdgeActor();
-
-    for (ui32 node = 0; node < runtime.GetNodeCount(); ++node) {
-        runtime.Send(NKikimr::NLongTxService::MakeLongTxServiceID(runtime.GetNodeId(node)), edge,
-                     new TEvents::TEvPoison(),
-                     0,
-                     true);
-    }
-}
-
-TVector<TString> TFixture::Read_Exactly_N_Messages_From_Topic(const TString& topicPath,
-                                                              const TString& consumerName,
-                                                              size_t limit)
-{
-    TVector<TString> result;
+    std::vector<std::string> result;
 
     while (result.size() < limit) {
         auto messages = ReadFromTopic(topicPath, consumerName, TDuration::Seconds(2));
@@ -1821,8 +1378,8 @@ void TFixture::TestWriteToTopic26()
     // the test verifies a transaction in which data is read from a partition of one topic and written to
     // another partition of this topic
     //
-    const ui32 PARTITION_0 = 0;
-    const ui32 PARTITION_1 = 1;
+    const std::uint32_t PARTITION_0 = 0;
+    const std::uint32_t PARTITION_1 = 1;
 
     CreateTopic("topic_A", TEST_CONSUMER, 2);
 
@@ -1880,12 +1437,12 @@ void TFixture::TestWriteToTopic27()
     }
 }
 
-auto TFixture::GetAvgWriteBytes(const TString& topicName,
-                                ui32 partitionId) -> TAvgWriteBytes
+auto TFixture::GetAvgWriteBytes(const std::string& topicName,
+                                std::uint32_t partitionId) -> TAvgWriteBytes
 {
     auto& runtime = Setup->GetRuntime();
     TActorId edge = runtime.AllocateEdgeActor();
-    ui64 tabletId = GetTopicTabletId(edge, "/Root/" + topicName, partitionId);
+    std::uint64_t tabletId = GetTopicTabletId(edge, "/Root/" + topicName, partitionId);
 
     runtime.SendToPipe(tabletId, edge, new NKikimr::TEvPersQueue::TEvStatus());
     auto response = runtime.GrabEdgeEvent<NKikimr::TEvPersQueue::TEvStatusResponse>();
@@ -1894,7 +1451,7 @@ auto TFixture::GetAvgWriteBytes(const TString& topicName,
 
     TAvgWriteBytes result;
 
-    for (size_t i = 0; i < response->Record.PartResultSize(); ++i) {
+    for (std::size_t i = 0; i < response->Record.PartResultSize(); ++i) {
         const auto& partition = response->Record.GetPartResult(i);
         if (partition.GetPartition() == static_cast<int>(partitionId)) {
             result.PerSec = partition.GetAvgWriteSpeedPerSec();
@@ -1928,286 +1485,8 @@ bool TFixture::GetAllowOlapDataQuery() const
     return false;
 }
 
-Y_UNIT_TEST_F(WriteToTopic_Demo_1_Table, TFixtureTable)
-{
-    TestWriteToTopic1();
-}
-
-Y_UNIT_TEST_F(WriteToTopic_Demo_1_Query, TFixtureQuery)
-{
-    TestWriteToTopic1();
-}
-
-void TFixture::TestWriteToTopic2()
-{
-    CreateTopic("topic_A");
-    CreateTopic("topic_B");
-
-    auto session = CreateSession();
-    auto tx = session->BeginTx();
-
-    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID_1, "message #1", tx.get());
-    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID_1, "message #2", tx.get());
-    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID_1, "message #3", tx.get());
-    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID_1, "message #4", tx.get());
-
-    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID_2, "message #5");
-    WriteToTopic("topic_B", TEST_MESSAGE_GROUP_ID_2, "message #6");
-
-    WriteToTopic("topic_B", TEST_MESSAGE_GROUP_ID_1, "message #7", tx.get());
-    WriteToTopic("topic_B", TEST_MESSAGE_GROUP_ID_1, "message #8", tx.get());
-    WriteToTopic("topic_B", TEST_MESSAGE_GROUP_ID_1, "message #9", tx.get());
-
-    {
-        auto messages = ReadFromTopic("topic_A", TEST_CONSUMER, TDuration::Seconds(2));
-        UNIT_ASSERT_VALUES_EQUAL(messages.size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(messages[0], "message #5");
-    }
-
-    {
-        auto messages = ReadFromTopic("topic_B", TEST_CONSUMER, TDuration::Seconds(2));
-        UNIT_ASSERT_VALUES_EQUAL(messages.size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(messages[0], "message #6");
-    }
-
-    session->CommitTx(*tx, EStatus::SUCCESS);
-
-    {
-        auto messages = Read_Exactly_N_Messages_From_Topic("topic_A", TEST_CONSUMER, 4);
-        UNIT_ASSERT_VALUES_EQUAL(messages[0], "message #1");
-        UNIT_ASSERT_VALUES_EQUAL(messages[3], "message #4");
-    }
-
-    {
-        auto messages = Read_Exactly_N_Messages_From_Topic("topic_B", TEST_CONSUMER, 3);
-        UNIT_ASSERT_VALUES_EQUAL(messages[0], "message #7");
-        UNIT_ASSERT_VALUES_EQUAL(messages[2], "message #9");
-    }
-}
-
-Y_UNIT_TEST_F(WriteToTopic_Demo_2_Table, TFixtureTable)
-{
-    TestWriteToTopic2();
-}
-
-Y_UNIT_TEST_F(WriteToTopic_Demo_2_Query, TFixtureQuery)
-{
-    TestWriteToTopic2();
-}
-
-void TFixture::TestWriteToTopic3()
-{
-    CreateTopic("topic_A");
-    CreateTopic("topic_B");
-
-    auto session = CreateSession();
-    auto tx = session->BeginTx();
-
-    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, "message #1", tx.get());
-    WriteToTopic("topic_B", TEST_MESSAGE_GROUP_ID, "message #2", tx.get());
-
-    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, "message #3");
-
-    auto messages = ReadFromTopic("topic_A", TEST_CONSUMER, TDuration::Seconds(2));
-    UNIT_ASSERT_VALUES_EQUAL(messages.size(), 1);
-    UNIT_ASSERT_VALUES_EQUAL(messages[0], "message #3");
-
-    session->CommitTx(*tx, EStatus::ABORTED);
-
-    tx = session->BeginTx();
-
-    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, "message #1", tx.get());
-    WriteToTopic("topic_B", TEST_MESSAGE_GROUP_ID, "message #2", tx.get());
-
-    session->CommitTx(*tx, EStatus::SUCCESS);
-
-    messages = ReadFromTopic("topic_A", TEST_CONSUMER, TDuration::Seconds(2));
-    UNIT_ASSERT_VALUES_EQUAL(messages.size(), 1);
-    UNIT_ASSERT_VALUES_EQUAL(messages[0], "message #1");
-
-    messages = ReadFromTopic("topic_B", TEST_CONSUMER, TDuration::Seconds(2));
-    UNIT_ASSERT_VALUES_EQUAL(messages.size(), 1);
-    UNIT_ASSERT_VALUES_EQUAL(messages[0], "message #2");
-}
-
-Y_UNIT_TEST_F(WriteToTopic_Demo_3_Table, TFixtureTable)
-{
-    TestWriteToTopic3();
-}
-
-Y_UNIT_TEST_F(WriteToTopic_Demo_3_Query, TFixtureQuery)
-{
-    TestWriteToTopic3();
-}
-
-Y_UNIT_TEST_F(WriteToTopic_Demo_4_Table, TFixtureTable)
-{
-    TestWriteToTopic4();
-}
-
-Y_UNIT_TEST_F(WriteToTopic_Demo_4_Query, TFixtureQuery)
-{
-    TestWriteToTopic4();
-}
-
-void TFixture::TestWriteToTopic5()
-{
-    CreateTopic("topic_A");
-    CreateTopic("topic_B");
-
-    auto session = CreateSession();
-
-    {
-        auto tx_1 = session->BeginTx();
-
-        WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, "message #1", tx_1.get());
-        WriteToTopic("topic_B", TEST_MESSAGE_GROUP_ID, "message #2", tx_1.get());
-
-        session->CommitTx(*tx_1, EStatus::SUCCESS);
-    }
-
-    {
-        auto tx_2 = session->BeginTx();
-
-        WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, "message #3", tx_2.get());
-        WriteToTopic("topic_B", TEST_MESSAGE_GROUP_ID, "message #4", tx_2.get());
-
-        session->CommitTx(*tx_2, EStatus::SUCCESS);
-    }
-
-    {
-        auto messages = Read_Exactly_N_Messages_From_Topic("topic_A", TEST_CONSUMER, 2);
-        UNIT_ASSERT_VALUES_EQUAL(messages[0], "message #1");
-        UNIT_ASSERT_VALUES_EQUAL(messages[1], "message #3");
-    }
-
-    {
-        auto messages = Read_Exactly_N_Messages_From_Topic("topic_B", TEST_CONSUMER, 2);
-        UNIT_ASSERT_VALUES_EQUAL(messages[0], "message #2");
-        UNIT_ASSERT_VALUES_EQUAL(messages[1], "message #4");
-    }
-}
-
-Y_UNIT_TEST_F(WriteToTopic_Demo_5_Table, TFixtureTable)
-{
-    TestWriteToTopic5();
-}
-
-Y_UNIT_TEST_F(WriteToTopic_Demo_5_Query, TFixtureQuery)
-{
-    TestWriteToTopic5();
-}
-
-void TFixture::TestWriteToTopic6()
-{
-    CreateTopic("topic_A");
-
-    auto session = CreateSession();
-    auto tx = session->BeginTx();
-
-    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, "message #1", tx.get());
-    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, "message #2", tx.get());
-
-    {
-        auto messages = ReadFromTopic("topic_A", TEST_CONSUMER, TDuration::Seconds(2));
-        UNIT_ASSERT_VALUES_EQUAL(messages.size(), 0);
-    }
-
-    session->CommitTx(*tx, EStatus::SUCCESS);
-
-    {
-        auto messages = Read_Exactly_N_Messages_From_Topic("topic_A", TEST_CONSUMER, 2);
-        UNIT_ASSERT_VALUES_EQUAL(messages[0], "message #1");
-        UNIT_ASSERT_VALUES_EQUAL(messages[1], "message #2");
-    }
-
-    DescribeTopic("topic_A");
-}
-
-Y_UNIT_TEST_F(WriteToTopic_Demo_6_Table, TFixtureTable)
-{
-    TestWriteToTopic6();
-}
-
-Y_UNIT_TEST_F(WriteToTopic_Demo_6_Query, TFixtureQuery)
-{
-    TestWriteToTopic6();
-}
-
-Y_UNIT_TEST_F(WriteToTopic_Demo_7_Table, TFixtureTable)
-{
-    TestWriteToTopic7();
-}
-
-Y_UNIT_TEST_F(WriteToTopic_Demo_7_Query, TFixtureQuery)
-{
-    TestWriteToTopic7();
-}
-
-void TFixture::TestWriteToTopic8()
-{
-    CreateTopic("topic_A");
-
-    auto session = CreateSession();
-    auto tx = session->BeginTx();
-
-    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, "message #1", tx.get());
-
-    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, "message #2");
-
-    {
-        auto messages = ReadFromTopic("topic_A", TEST_CONSUMER, TDuration::Seconds(2));
-        UNIT_ASSERT_VALUES_EQUAL(messages.size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(messages[0], "message #2");
-    }
-
-    session->CommitTx(*tx, EStatus::ABORTED);
-
-    tx = session->BeginTx();
-
-    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, "message #1", tx.get());
-
-    session->CommitTx(*tx, EStatus::SUCCESS);
-
-    {
-        auto messages = ReadFromTopic("topic_A", TEST_CONSUMER, TDuration::Seconds(2));
-        UNIT_ASSERT_VALUES_EQUAL(messages.size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(messages[0], "message #1");
-    }
-}
-
-Y_UNIT_TEST_F(WriteToTopic_Demo_8_Table, TFixtureTable)
-{
-    TestWriteToTopic8();
-}
-
-Y_UNIT_TEST_F(WriteToTopic_Demo_8_Query, TFixtureQuery)
-{
-    TestWriteToTopic8();
-}
-
-Y_UNIT_TEST_F(WriteToTopic_Demo_9_Table, TFixtureTable)
-{
-    TestWriteToTopic9();
-}
-
-Y_UNIT_TEST_F(WriteToTopic_Demo_9_Query, TFixtureQuery)
-{
-    TestWriteToTopic9();
-}
-
-Y_UNIT_TEST_F(WriteToTopic_Demo_10_Table, TFixtureTable)
-{
-    TestWriteToTopic10();
-}
-
-Y_UNIT_TEST_F(WriteToTopic_Demo_10_Query, TFixtureQuery)
-{
-    TestWriteToTopic10();
-}
-
 NPQ::TWriteId TFixture::GetTransactionWriteId(const TActorId& actorId,
-                                              ui64 tabletId)
+                                              std::uint64_t tabletId)
 {
     auto request = std::make_unique<NKikimr::TEvKeyValue::TEvRequest>();
     request->Record.SetCookie(12345);
@@ -2236,7 +1515,7 @@ NPQ::TWriteId TFixture::GetTransactionWriteId(const TActorId& actorId,
 }
 
 void TFixture::SendLongTxLockStatus(const TActorId& actorId,
-                                    ui64 tabletId,
+                                    std::uint64_t tabletId,
                                     const NPQ::TWriteId& writeId,
                                     NKikimrLongTxService::TEvLockStatus::EStatus status)
 {
@@ -2248,7 +1527,7 @@ void TFixture::SendLongTxLockStatus(const TActorId& actorId,
 }
 
 void TFixture::WaitForTheTabletToDeleteTheWriteInfo(const TActorId& actorId,
-                                                    ui64 tabletId,
+                                                    std::uint64_t tabletId,
                                                     const NPQ::TWriteId& writeId)
 {
     while (true) {
@@ -2285,25 +1564,25 @@ void TFixture::WaitForTheTabletToDeleteTheWriteInfo(const TActorId& actorId,
             break;
         }
 
-        Sleep(TDuration::MilliSeconds(100));
+        std::this_thread::sleep_for(100ms);
     }
 }
 
-void TFixture::RestartPQTablet(const TString& topicName, ui32 partition)
+void TFixture::RestartPQTablet(const std::string& topicName, std::uint32_t partition)
 {
     auto& runtime = Setup->GetRuntime();
     TActorId edge = runtime.AllocateEdgeActor();
-    ui64 tabletId = GetTopicTabletId(edge, "/Root/" + topicName, partition);
+    std::uint64_t tabletId = GetTopicTabletId(edge, "/Root/" + topicName, partition);
     runtime.SendToPipe(tabletId, edge, new TEvents::TEvPoison());
 
-    Sleep(TDuration::Seconds(2));
+    std::this_thread::sleep_for(2s);
 }
 
-void TFixture::DeleteSupportivePartition(const TString& topicName, ui32 partition)
+void TFixture::DeleteSupportivePartition(const std::string& topicName, std::uint32_t partition)
 {
     auto& runtime = Setup->GetRuntime();
     TActorId edge = runtime.AllocateEdgeActor();
-    ui64 tabletId = GetTopicTabletId(edge, "/Root/" + topicName, partition);
+    std::uint64_t tabletId = GetTopicTabletId(edge, "/Root/" + topicName, partition);
     NPQ::TWriteId writeId = GetTransactionWriteId(edge, tabletId);
 
     SendLongTxLockStatus(edge, tabletId, writeId, NKikimrLongTxService::TEvLockStatus::STATUS_NOT_FOUND);
@@ -2311,13 +1590,13 @@ void TFixture::DeleteSupportivePartition(const TString& topicName, ui32 partitio
     WaitForTheTabletToDeleteTheWriteInfo(edge, tabletId, writeId);
 }
 
-void TFixture::CheckTabletKeys(const TString& topicName)
+void TFixture::CheckTabletKeys(const std::string& topicName)
 {
     auto& runtime = Setup->GetRuntime();
     TActorId edge = runtime.AllocateEdgeActor();
-    ui64 tabletId = GetTopicTabletId(edge, "/Root/" + topicName, 0);
+    std::uint64_t tabletId = GetTopicTabletId(edge, "/Root/" + topicName, 0);
 
-    const THashSet<char> types {
+    const std::unordered_set<char> types {
         NPQ::TKeyPrefix::TypeInfo,
         NPQ::TKeyPrefix::TypeData,
         NPQ::TKeyPrefix::TypeTmpData,
@@ -2347,41 +1626,41 @@ void TFixture::CheckTabletKeys(const TString& topicName)
             break;
         }
 
-        Sleep(TDuration::MilliSeconds(100));
+        std::this_thread::sleep_for(100ms);
     }
 
     if (found) {
-        Cerr << "keys for tablet " << tabletId << ":" << Endl;
+        std::cerr << "keys for tablet " << tabletId << ":" << std::endl;
         for (const auto& k : keys) {
-            Cerr << k << Endl;
+            std::cerr << k << std::endl;
         }
-        Cerr << "=============" << Endl;
+        std::cerr << "=============" << std::endl;
 
         UNIT_FAIL("unexpected keys for tablet " << tabletId);
     }
 }
 
-void TFixture::DumpPQTabletKeys(const TString& topicName)
+void TFixture::DumpPQTabletKeys(const std::string& topicName)
 {
     auto& runtime = Setup->GetRuntime();
     TActorId edge = runtime.AllocateEdgeActor();
-    ui64 tabletId = GetTopicTabletId(edge, "/Root/" + topicName, 0);
+    std::uint64_t tabletId = GetTopicTabletId(edge, "/Root/" + topicName, 0);
     auto keys = GetTabletKeys(edge, tabletId);
     for (const auto& key : keys) {
-        Cerr << key << Endl;
+        std::cerr << key << std::endl;
     }
 }
 
-void TFixture::PQTabletPrepareFromResource(const TString& topicPath,
-                                           ui32 partitionId,
-                                           const TString& resourceName)
+void TFixture::PQTabletPrepareFromResource(const std::string& topicPath,
+                                           std::uint32_t partitionId,
+                                           const std::string& resourceName)
 {
     auto& runtime = Setup->GetRuntime();
     TActorId edge = runtime.AllocateEdgeActor();
-    ui64 tabletId = GetTopicTabletId(edge, "/Root/" + topicPath, partitionId);
+    std::uint64_t tabletId = GetTopicTabletId(edge, "/Root/" + topicPath, partitionId);
 
     auto request = MakeHolder<TEvKeyValue::TEvRequest>();
-    size_t count = 0;
+    std::size_t count = 0;
 
     for (TStringStream stream(NResource::Find(resourceName)); true; ++count) {
         TString key, encoded;
@@ -2410,7 +1689,7 @@ void TFixture::PQTabletPrepareFromResource(const TString& topicPath,
 
     UNIT_ASSERT_VALUES_EQUAL(response->Record.WriteResultSize(), count);
 
-    for (size_t i = 0; i < response->Record.WriteResultSize(); ++i) {
+    for (std::size_t i = 0; i < response->Record.WriteResultSize(); ++i) {
         const auto &result = response->Record.GetWriteResult(i);
         UNIT_ASSERT(result.HasStatus());
         UNIT_ASSERT_EQUAL(result.GetStatus(), NKikimrProto::OK);
@@ -2445,7 +1724,7 @@ void TFixture::TestTheCompletionOfATransaction(const TTransactionCompletionTestD
         }
     }
 
-    Sleep(TDuration::Seconds(5));
+    std::this_thread::sleep_for(std::chrono::seconds(5));
 
     for (auto& topic : d.Topics) {
         CheckTabletKeys(topic);
@@ -2546,37 +1825,6 @@ Y_UNIT_TEST_F(WriteToTopic_Demo_14_Query, TFixtureQuery)
     TestWriteToTopic14();
 }
 
-void TFixture::TestWriteToTopic15()
-{
-    // the session of writing to the topic can be closed before the commit
-    CreateTopic("topic_A");
-
-    auto session = CreateSession();
-    auto tx = session->BeginTx();
-
-    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID_1, "message #1", tx.get());
-    CloseTopicWriteSession("topic_A", TEST_MESSAGE_GROUP_ID_1);
-
-    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID_2, "message #2", tx.get());
-    CloseTopicWriteSession("topic_A", TEST_MESSAGE_GROUP_ID_2);
-
-    session->CommitTx(*tx, EStatus::SUCCESS);
-
-    auto messages = Read_Exactly_N_Messages_From_Topic("topic_A", TEST_CONSUMER, 2);
-    UNIT_ASSERT_VALUES_EQUAL(messages[0], "message #1");
-    UNIT_ASSERT_VALUES_EQUAL(messages[1], "message #2");
-}
-
-Y_UNIT_TEST_F(WriteToTopic_Demo_15_Table, TFixtureTable)
-{
-    TestWriteToTopic15();
-}
-
-Y_UNIT_TEST_F(WriteToTopic_Demo_15_Query, TFixtureQuery)
-{
-    TestWriteToTopic15();
-}
-
 void TFixture::TestWriteToTopic16()
 {
     CreateTopic("topic_A");
@@ -2606,51 +1854,6 @@ Y_UNIT_TEST_F(WriteToTopic_Demo_16_Query, TFixtureQuery)
     TestWriteToTopic16();
 }
 
-void TFixture::TestWriteToTopic17()
-{
-    // TODO(abcdef): temporarily deleted
-    return;
-
-    CreateTopic("topic_A");
-
-    auto session = CreateSession();
-    auto tx = session->BeginTx();
-
-    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, TString(22'000'000, 'x'));
-    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, TString(100, 'x'));
-    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, TString(200, 'x'));
-    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, TString(300, 'x'));
-    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, TString(10'000'000, 'x'));
-
-    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, TString( 6'000'000, 'x'), tx.get());
-    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, TString(20'000'000, 'x'), tx.get());
-    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, TString( 7'000'000, 'x'), tx.get());
-
-    session->CommitTx(*tx, EStatus::SUCCESS);
-
-    //RestartPQTablet("topic_A", 0);
-
-    auto messages = Read_Exactly_N_Messages_From_Topic("topic_A", TEST_CONSUMER, 8);
-    UNIT_ASSERT_VALUES_EQUAL(messages[0].size(), 22'000'000);
-    UNIT_ASSERT_VALUES_EQUAL(messages[1].size(),        100);
-    UNIT_ASSERT_VALUES_EQUAL(messages[2].size(),        200);
-    UNIT_ASSERT_VALUES_EQUAL(messages[3].size(),        300);
-    UNIT_ASSERT_VALUES_EQUAL(messages[4].size(), 10'000'000);
-    UNIT_ASSERT_VALUES_EQUAL(messages[5].size(),  6'000'000);
-    UNIT_ASSERT_VALUES_EQUAL(messages[6].size(), 20'000'000);
-    UNIT_ASSERT_VALUES_EQUAL(messages[7].size(),  7'000'000);
-}
-
-Y_UNIT_TEST_F(WriteToTopic_Demo_17_Table, TFixtureTable)
-{
-    TestWriteToTopic17();
-}
-
-Y_UNIT_TEST_F(WriteToTopic_Demo_17_Query, TFixtureQuery)
-{
-    TestWriteToTopic17();
-}
-
 void TFixture::TestTxWithBigBlobs(const TTestTxWithBigBlobsParams& params)
 {
     size_t oldHeadMsgCount = 0;
@@ -2663,17 +1866,17 @@ void TFixture::TestTxWithBigBlobs(const TTestTxWithBigBlobsParams& params)
     auto tx = session->BeginTx();
 
     for (size_t i = 0; i < params.OldHeadCount; ++i) {
-        WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, TString(100'000, 'x'));
+        WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, std::string(100'000, 'x'));
         ++oldHeadMsgCount;
     }
 
     for (size_t i = 0; i < params.BigBlobsCount; ++i) {
-        WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, TString(7'000'000, 'x'), tx.get());
+        WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, std::string(7'000'000, 'x'), tx.get());
         ++bigBlobMsgCount;
     }
 
     for (size_t i = 0; i < params.NewHeadCount; ++i) {
-        WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, TString(100'000, 'x'), tx.get());
+        WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, std::string(100'000, 'x'), tx.get());
         ++newHeadMsgCount;
     }
 
@@ -2687,7 +1890,7 @@ void TFixture::TestTxWithBigBlobs(const TTestTxWithBigBlobsParams& params)
         RestartPQTablet("topic_A", 0);
     }
 
-    TVector<TString> messages;
+    std::vector<std::string> messages;
     for (size_t i = 0; (i < 10) && (messages.size() < (oldHeadMsgCount + bigBlobMsgCount + newHeadMsgCount)); ++i) {
         auto block = ReadFromTopic("topic_A", TEST_CONSUMER, TDuration::Seconds(2));
         for (auto& m : block) {
@@ -2742,11 +1945,11 @@ Y_UNIT_TEST_WITH_REBOOTS(WriteToTopic_Demo_21,  0, 2, 10);
 Y_UNIT_TEST_WITH_REBOOTS(WriteToTopic_Demo_22,  0, 0, 10);
 Y_UNIT_TEST_WITH_REBOOTS(WriteToTopic_Demo_23,  0, 2,  0);
 
-void TFixture::CreateTable(const TString& tablePath)
+void TFixture::CreateTable(const std::string& tablePath)
 {
     UNIT_ASSERT(!tablePath.empty());
 
-    TString path = (tablePath[0] != '/') ? ("/Root/" + tablePath) : tablePath;
+    std::string path = (tablePath[0] != '/') ? ("/Root/" + tablePath) : tablePath;
 
     auto createSessionResult = GetTableClient().CreateSession().ExtractValueSync();
     UNIT_ASSERT_C(createSessionResult.IsSuccess(), createSessionResult.GetIssues().ToString());
@@ -2761,9 +1964,9 @@ void TFixture::CreateTable(const TString& tablePath)
     UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 }
 
-auto TFixture::MakeTableRecords() -> TVector<TTableRecord>
+auto TFixture::MakeTableRecords() -> std::vector<TTableRecord>
 {
-    TVector<TTableRecord> records;
+    std::vector<TTableRecord> records;
     records.emplace_back("key-1", "value-1");
     records.emplace_back("key-2", "value-2");
     records.emplace_back("key-3", "value-3");
@@ -2771,7 +1974,7 @@ auto TFixture::MakeTableRecords() -> TVector<TTableRecord>
     return records;
 }
 
-auto TFixture::MakeJsonDoc(const TVector<TTableRecord>& records) -> TString
+auto TFixture::MakeJsonDoc(const std::vector<TTableRecord>& records) -> std::string
 {
     auto makeJsonObject = [](const TTableRecord& r) {
         return Sprintf(R"({"key":"%s", "value":"%s"})",
@@ -2783,7 +1986,7 @@ auto TFixture::MakeJsonDoc(const TVector<TTableRecord>& records) -> TString
         return "[]";
     }
 
-    TString s = "[";
+    std::string s = "[";
 
     s += makeJsonObject(records.front());
     for (auto i = records.begin() + 1; i != records.end(); ++i) {
@@ -2795,15 +1998,15 @@ auto TFixture::MakeJsonDoc(const TVector<TTableRecord>& records) -> TString
     return s;
 }
 
-void TFixture::UpsertToTable(const TString& tablePath,
-                            const TVector<TTableRecord>& records,
-                            ISession& session,
-                            TTransactionBase* tx)
+void TFixture::UpsertToTable(const std::string& tablePath,
+                             const std::vector<TTableRecord>& records,
+                             ISession& session,
+                             TTransactionBase* tx)
 {
-    TString query = Sprintf("DECLARE $key AS Utf8;"
-                            "DECLARE $value AS Utf8;"
-                            "UPSERT INTO `%s` (key, value) VALUES ($key, $value);",
-                            tablePath.data());
+    auto query = Sprintf("DECLARE $key AS Utf8;"
+                         "DECLARE $value AS Utf8;"
+                         "UPSERT INTO `%s` (key, value) VALUES ($key, $value);",
+                         tablePath.data());
 
     for (const auto& r : records) {
         auto params = TParamsBuilder()
@@ -2815,15 +2018,15 @@ void TFixture::UpsertToTable(const TString& tablePath,
     }
 }
 
-void TFixture::InsertToTable(const TString& tablePath,
-                            const TVector<TTableRecord>& records,
-                            ISession& session,
-                            TTransactionBase* tx)
+void TFixture::InsertToTable(const std::string& tablePath,
+                             const std::vector<TTableRecord>& records,
+                             ISession& session,
+                             TTransactionBase* tx)
 {
-    TString query = Sprintf("DECLARE $key AS Utf8;"
-                            "DECLARE $value AS Utf8;"
-                            "INSERT INTO `%s` (key, value) VALUES ($key, $value);",
-                            tablePath.data());
+    auto query = Sprintf("DECLARE $key AS Utf8;"
+                         "DECLARE $value AS Utf8;"
+                         "INSERT INTO `%s` (key, value) VALUES ($key, $value);",
+                         tablePath.data());
 
     for (const auto& r : records) {
         auto params = TParamsBuilder()
@@ -2835,15 +2038,15 @@ void TFixture::InsertToTable(const TString& tablePath,
     }
 }
 
-void TFixture::DeleteFromTable(const TString& tablePath,
-                            const TVector<TTableRecord>& records,
+void TFixture::DeleteFromTable(const std::string& tablePath,
+                            const std::vector<TTableRecord>& records,
                             ISession& session,
                             TTransactionBase* tx)
 {
-    TString query = Sprintf("DECLARE $key AS Utf8;"
-                            "DECLARE $value AS Utf8;"
-                            "DELETE FROM `%s` ON (key, value) VALUES ($key, $value);",
-                            tablePath.data());
+    auto query = Sprintf("DECLARE $key AS Utf8;"
+                         "DECLARE $value AS Utf8;"
+                         "DELETE FROM `%s` ON (key, value) VALUES ($key, $value);",
+                         tablePath.data());
 
     for (const auto& r : records) {
         auto params = TParamsBuilder()
@@ -2855,10 +2058,10 @@ void TFixture::DeleteFromTable(const TString& tablePath,
     }
 }
 
-size_t TFixture::GetTableRecordsCount(const TString& tablePath)
+std::size_t TFixture::GetTableRecordsCount(const std::string& tablePath)
 {
-    TString query = Sprintf(R"(SELECT COUNT(*) FROM `%s`)",
-                            tablePath.data());
+    auto query = Sprintf(R"(SELECT COUNT(*) FROM `%s`)",
+                         tablePath.data());
     auto session = CreateSession();
     auto tx = session->BeginTx();
 
@@ -2880,53 +2083,6 @@ Y_UNIT_TEST_F(WriteToTopic_Demo_24_Query, TFixtureQuery)
     TestWriteToTopic24();
 }
 
-void TFixture::TestWriteToTopic25()
-{
-    //
-    // the test verifies a transaction in which data is read from one topic and written to another
-    //
-    CreateTopic("topic_A");
-    CreateTopic("topic_B");
-
-    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, "message #1");
-    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, "message #2");
-    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, "message #3");
-
-    auto session = CreateSession();
-    auto tx = session->BeginTx();
-
-    auto messages = ReadFromTopic("topic_A", TEST_CONSUMER, TDuration::Seconds(2), tx.get());
-    UNIT_ASSERT_VALUES_EQUAL(messages.size(), 3);
-
-    for (const auto& m : messages) {
-        WriteToTopic("topic_B", TEST_MESSAGE_GROUP_ID, m, tx.get());
-    }
-
-    session->CommitTx(*tx, EStatus::SUCCESS);
-
-    Read_Exactly_N_Messages_From_Topic("topic_B", TEST_CONSUMER, 3);
-}
-
-Y_UNIT_TEST_F(WriteToTopic_Demo_25_Table, TFixtureTable)
-{
-    TestWriteToTopic25();
-}
-
-Y_UNIT_TEST_F(WriteToTopic_Demo_25_Query, TFixtureQuery)
-{
-    TestWriteToTopic25();
-}
-
-Y_UNIT_TEST_F(WriteToTopic_Demo_26_Table, TFixtureTable)
-{
-    TestWriteToTopic26();
-}
-
-Y_UNIT_TEST_F(WriteToTopic_Demo_26_Query, TFixtureQuery)
-{
-    TestWriteToTopic26();
-}
-
 Y_UNIT_TEST_F(WriteToTopic_Demo_27_Table, TFixtureTable)
 {
     TestWriteToTopic27();
@@ -2937,197 +2093,22 @@ Y_UNIT_TEST_F(WriteToTopic_Demo_27_Query, TFixtureQuery)
     TestWriteToTopic27();
 }
 
-void TFixture::TestWriteToTopic28()
+void TFixture::WriteMessagesInTx(std::size_t big, std::size_t small)
 {
-    // The test verifies that the `WriteInflightSize` is correctly considered for the main partition.
-    // Writing to the service partition does not change the `WriteInflightSize` of the main one.
-    CreateTopic("topic_A", TEST_CONSUMER);
+    CreateTopic("topic_A");
 
     auto session = CreateSession();
     auto tx = session->BeginTx();
 
-    TString message(16'000, 'a');
-
-    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID_1, TString(16'000, 'a'), tx.get(), 0);
-
-    session->CommitTx(*tx, EStatus::SUCCESS);
-
-    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID_2, TString(20'000, 'b'), nullptr, 0);
-
-    auto messages = ReadFromTopic("topic_A", TEST_CONSUMER, TDuration::Seconds(2), nullptr, 0);
-    UNIT_ASSERT_VALUES_EQUAL(messages.size(), 2);
-}
-
-Y_UNIT_TEST_F(WriteToTopic_Demo_28_Table, TFixtureTable)
-{
-    TestWriteToTopic28();
-}
-
-Y_UNIT_TEST_F(WriteToTopic_Demo_28_Query, TFixtureQuery)
-{
-    TestWriteToTopic28();
-}
-
-void TFixture::WriteMessagesInTx(size_t big, size_t small)
-{
-    CreateTopic("topic_A", TEST_CONSUMER);
-
-    auto session = CreateSession();
-    auto tx = session->BeginTx();
-
-    for (size_t i = 0; i < big; ++i) {
-        WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, TString(7'000'000, 'x'), tx.get(), 0);
+    for (std::size_t i = 0; i < big; ++i) {
+        WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, std::string(7'000'000, 'x'), tx.get(), 0);
     }
 
-    for (size_t i = 0; i < small; ++i) {
-        WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, TString(16'384, 'x'), tx.get(), 0);
+    for (std::size_t i = 0; i < small; ++i) {
+        WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, std::string(16'384, 'x'), tx.get(), 0);
     }
 
     session->CommitTx(*tx, EStatus::SUCCESS);
-}
-
-void TFixture::TestWriteToTopic29()
-{
-    WriteMessagesInTx(1, 0);
-    WriteMessagesInTx(1, 0);
-}
-
-Y_UNIT_TEST_F(WriteToTopic_Demo_29_Table, TFixtureTable)
-{
-    TestWriteToTopic29();
-}
-
-Y_UNIT_TEST_F(WriteToTopic_Demo_29_Query, TFixtureQuery)
-{
-    TestWriteToTopic29();
-}
-
-void TFixture::TestWriteToTopic30()
-{
-    WriteMessagesInTx(1, 0);
-    WriteMessagesInTx(0, 1);
-}
-
-Y_UNIT_TEST_F(WriteToTopic_Demo_30_Table, TFixtureTable)
-{
-    TestWriteToTopic30();
-}
-
-Y_UNIT_TEST_F(WriteToTopic_Demo_30_Query, TFixtureQuery)
-{
-    TestWriteToTopic30();
-}
-
-void TFixture::TestWriteToTopic31()
-{
-    WriteMessagesInTx(1, 0);
-    WriteMessagesInTx(1, 1);
-}
-
-Y_UNIT_TEST_F(WriteToTopic_Demo_31_Table, TFixtureTable)
-{
-    TestWriteToTopic31();
-}
-
-Y_UNIT_TEST_F(WriteToTopic_Demo_31_Query, TFixtureQuery)
-{
-    TestWriteToTopic31();
-}
-
-void TFixture::TestWriteToTopic32()
-{
-    WriteMessagesInTx(0, 1);
-    WriteMessagesInTx(1, 0);
-}
-
-Y_UNIT_TEST_F(WriteToTopic_Demo_32_Table, TFixtureTable)
-{
-    TestWriteToTopic32();
-}
-
-Y_UNIT_TEST_F(WriteToTopic_Demo_32_Query, TFixtureQuery)
-{
-    TestWriteToTopic32();
-}
-
-void TFixture::TestWriteToTopic33()
-{
-    WriteMessagesInTx(0, 1);
-    WriteMessagesInTx(0, 1);
-}
-
-Y_UNIT_TEST_F(WriteToTopic_Demo_33_Table, TFixtureTable)
-{
-    TestWriteToTopic33();
-}
-
-Y_UNIT_TEST_F(WriteToTopic_Demo_33_Query, TFixtureQuery)
-{
-    TestWriteToTopic33();
-}
-
-void TFixture::TestWriteToTopic34()
-{
-    WriteMessagesInTx(0, 1);
-    WriteMessagesInTx(1, 1);
-}
-
-Y_UNIT_TEST_F(WriteToTopic_Demo_34_Table, TFixtureTable)
-{
-    TestWriteToTopic34();
-}
-
-Y_UNIT_TEST_F(WriteToTopic_Demo_34_Query, TFixtureQuery)
-{
-    TestWriteToTopic34();
-}
-
-void TFixture::TestWriteToTopic35()
-{
-    WriteMessagesInTx(1, 1);
-    WriteMessagesInTx(1, 0);
-}
-
-Y_UNIT_TEST_F(WriteToTopic_Demo_35_Table, TFixtureTable)
-{
-    TestWriteToTopic35();
-}
-
-Y_UNIT_TEST_F(WriteToTopic_Demo_35_Query, TFixtureQuery)
-{
-    TestWriteToTopic35();
-}
-
-void TFixture::TestWriteToTopic36()
-{
-    WriteMessagesInTx(1, 1);
-    WriteMessagesInTx(0, 1);
-}
-
-Y_UNIT_TEST_F(WriteToTopic_Demo_36_Table, TFixtureTable)
-{
-    TestWriteToTopic36();
-}
-
-Y_UNIT_TEST_F(WriteToTopic_Demo_36_Query, TFixtureQuery)
-{
-    TestWriteToTopic36();
-}
-
-void TFixture::TestWriteToTopic37()
-{
-    WriteMessagesInTx(1, 1);
-    WriteMessagesInTx(1, 1);
-}
-
-Y_UNIT_TEST_F(WriteToTopic_Demo_37_Table, TFixtureTable)
-{
-    TestWriteToTopic37();
-}
-
-Y_UNIT_TEST_F(WriteToTopic_Demo_37_Query, TFixtureQuery)
-{
-    TestWriteToTopic37();
 }
 
 void TFixture::TestWriteToTopic38()
@@ -3149,77 +2130,17 @@ Y_UNIT_TEST_F(WriteToTopic_Demo_38_Query, TFixtureQuery)
     TestWriteToTopic38();
 }
 
-void TFixture::TestWriteToTopic39()
-{
-    CreateTopic("topic_A", TEST_CONSUMER);
-
-    auto session = CreateSession();
-    auto tx = session->BeginTx();
-
-    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, "message #1", tx.get());
-    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, "message #2", tx.get());
-
-    AddConsumer("topic_A", {"consumer"});
-
-    session->CommitTx(*tx, EStatus::SUCCESS);
-
-    Read_Exactly_N_Messages_From_Topic("topic_A", "consumer", 2);
-}
-
-Y_UNIT_TEST_F(WriteToTopic_Demo_39_Table, TFixtureTable)
-{
-    TestWriteToTopic39();
-}
-
-Y_UNIT_TEST_F(WriteToTopic_Demo_39_Query, TFixtureQuery)
-{
-    TestWriteToTopic39();
-}
-
-Y_UNIT_TEST_F(ReadRuleGeneration, TFixtureNoClient)
-{
-    // There was a server
-    NotifySchemeShard({.EnablePQConfigTransactionsAtSchemeShard = false});
-
-    // Users have created their own topic on it
-    CreateTopic(TString{TEST_TOPIC});
-
-    // And they wrote their messages into it
-    WriteToTopic(TString{TEST_TOPIC}, TEST_MESSAGE_GROUP_ID, "message-1");
-    WriteToTopic(TString{TEST_TOPIC}, TEST_MESSAGE_GROUP_ID, "message-2");
-    WriteToTopic(TString{TEST_TOPIC}, TEST_MESSAGE_GROUP_ID, "message-3");
-
-    // And he had a consumer
-    AddConsumer(TString{TEST_TOPIC}, {"consumer-1"});
-
-    // We read messages from the topic and committed offsets
-    Read_Exactly_N_Messages_From_Topic(TString{TEST_TOPIC}, "consumer-1", 3);
-    CloseTopicReadSession(TString{TEST_TOPIC}, "consumer-1");
-
-    // And then the Logbroker team turned on the feature flag
-    NotifySchemeShard({.EnablePQConfigTransactionsAtSchemeShard = true});
-
-    // Users continued to write to the topic
-    WriteToTopic(TString{TEST_TOPIC}, TEST_MESSAGE_GROUP_ID, "message-4");
-
-    // Users have added new consumers
-    AddConsumer(TString{TEST_TOPIC}, {"consumer-2"});
-
-    // And they wanted to continue reading their messages
-    Read_Exactly_N_Messages_From_Topic(TString{TEST_TOPIC}, "consumer-1", 1);
-}
-
 void TFixture::TestWriteToTopic40()
 {
     // The recording stream will run into a quota. Before the commit, the client will receive confirmations
     // for some of the messages. The `CommitTx` call will wait for the rest.
-    CreateTopic("topic_A", TEST_CONSUMER);
+    CreateTopic("topic_A");
 
     auto session = CreateSession();
     auto tx = session->BeginTx();
 
-    for (size_t k = 0; k < 100; ++k) {
-        WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, TString(1'000'000, 'a'), tx.get());
+    for (std::size_t k = 0; k < 100; ++k) {
+        WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, std::string(1'000'000, 'a'), tx.get());
     }
 
     session->CommitTx(*tx, EStatus::SUCCESS);
@@ -3240,13 +2161,13 @@ Y_UNIT_TEST_F(WriteToTopic_Demo_40_Query, TFixtureQuery)
 void TFixture::TestWriteToTopic41()
 {
     // If the recording session does not wait for confirmations, the commit will fail
-    CreateTopic("topic_A", TEST_CONSUMER);
+    CreateTopic("topic_A");
 
     auto session = CreateSession();
     auto tx = session->BeginTx();
 
-    for (size_t k = 0; k < 100; ++k) {
-        WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, TString(1'000'000, 'a'), tx.get());
+    for (std::size_t k = 0; k < 100; ++k) {
+        WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, std::string(1'000'000, 'a'), tx.get());
     }
 
     CloseTopicWriteSession("topic_A", TEST_MESSAGE_GROUP_ID, true); // force close
@@ -3266,13 +2187,13 @@ Y_UNIT_TEST_F(WriteToTopic_Demo_41_Query, TFixtureQuery)
 
 void TFixture::TestWriteToTopic42()
 {
-    CreateTopic("topic_A", TEST_CONSUMER);
+    CreateTopic("topic_A");
 
     auto session = CreateSession();
     auto tx = session->BeginTx();
 
-    for (size_t k = 0; k < 100; ++k) {
-        WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, TString(1'000'000, 'a'), tx.get());
+    for (std::size_t k = 0; k < 100; ++k) {
+        WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, std::string(1'000'000, 'a'), tx.get());
     }
 
     CloseTopicWriteSession("topic_A", TEST_MESSAGE_GROUP_ID); // gracefully close
@@ -3296,13 +2217,13 @@ void TFixture::TestWriteToTopic43()
 {
     // The recording stream will run into a quota. Before the commit, the client will receive confirmations
     // for some of the messages. The `ExecuteDataQuery` call will wait for the rest.
-    CreateTopic("topic_A", TEST_CONSUMER);
+    CreateTopic("topic_A");
 
     auto session = CreateSession();
     auto tx = session->BeginTx();
 
-    for (size_t k = 0; k < 100; ++k) {
-        WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, TString(1'000'000, 'a'), tx.get());
+    for (std::size_t k = 0; k < 100; ++k) {
+        WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, std::string(1'000'000, 'a'), tx.get());
     }
 
     session->Execute("SELECT 1", tx.get());
@@ -3322,20 +2243,20 @@ Y_UNIT_TEST_F(WriteToTopic_Demo_43_Query, TFixtureQuery)
 
 void TFixture::TestWriteToTopic44()
 {
-    CreateTopic("topic_A", TEST_CONSUMER);
+    CreateTopic("topic_A");
 
     auto session = CreateSession();
 
     auto [_, tx] = session->ExecuteInTx("SELECT 1", false);
 
-    for (size_t k = 0; k < 100; ++k) {
-        WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, TString(1'000'000, 'a'), tx.get());
+    for (std::size_t k = 0; k < 100; ++k) {
+        WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, std::string(1'000'000, 'a'), tx.get());
     }
 
     WaitForAcks("topic_A", TEST_MESSAGE_GROUP_ID);
 
     auto messages = ReadFromTopic("topic_A", TEST_CONSUMER, TDuration::Seconds(60));
-    UNIT_ASSERT_VALUES_EQUAL(messages.size(), 0);
+    UNIT_ASSERT_EQUAL(messages.size(), 0u);
 
     session->Execute("SELECT 2", tx.get());
 
@@ -3352,9 +2273,42 @@ Y_UNIT_TEST_F(WriteToTopic_Demo_44_Query, TFixtureQuery)
     TestWriteToTopic44();
 }
 
-void TFixture::CheckAvgWriteBytes(const TString& topicPath,
-                                  ui32 partitionId,
-                                  size_t minSize, size_t maxSize)
+Y_UNIT_TEST_F(ReadRuleGeneration, TFixtureNoClient)
+{
+    // There was a server
+    NotifySchemeShard({.EnablePQConfigTransactionsAtSchemeShard = false});
+
+    // Users have created their own topic on it
+    CreateTopic(TEST_TOPIC);
+
+    // And they wrote their messages into it
+    WriteToTopic(TEST_TOPIC, TEST_MESSAGE_GROUP_ID, "message-1");
+    WriteToTopic(TEST_TOPIC, TEST_MESSAGE_GROUP_ID, "message-2");
+    WriteToTopic(TEST_TOPIC, TEST_MESSAGE_GROUP_ID, "message-3");
+
+    // And he had a consumer
+    AddConsumer(TEST_TOPIC, {"consumer-1"});
+
+    // We read messages from the topic and committed offsets
+    Read_Exactly_N_Messages_From_Topic(TEST_TOPIC, "consumer-1", 3);
+    CloseTopicReadSession(TEST_TOPIC, "consumer-1");
+
+    // And then the Logbroker team turned on the feature flag
+    NotifySchemeShard({.EnablePQConfigTransactionsAtSchemeShard = true});
+
+    // Users continued to write to the topic
+    WriteToTopic(TEST_TOPIC, TEST_MESSAGE_GROUP_ID, "message-4");
+
+    // Users have added new consumers
+    AddConsumer(TEST_TOPIC, {"consumer-2"});
+
+    // And they wanted to continue reading their messages
+    Read_Exactly_N_Messages_From_Topic(TEST_TOPIC, "consumer-1", 1);
+}
+
+void TFixture::CheckAvgWriteBytes(const std::string& topicPath,
+                                  std::uint32_t partitionId,
+                                  std::size_t minSize, std::size_t maxSize)
 {
 #define UNIT_ASSERT_AVGWRITEBYTES(v, minSize, maxSize) \
     UNIT_ASSERT_LE_C(minSize, v, ", actual " << minSize << " > " << v); \
@@ -3370,15 +2324,15 @@ void TFixture::CheckAvgWriteBytes(const TString& topicPath,
 #undef UNIT_ASSERT_AVGWRITEBYTES
 }
 
-void TFixture::SplitPartition(const TString& topicName,
-                              ui32 partitionId,
-                              const TString& boundary)
+void TFixture::SplitPartition(const std::string& topicName,
+                              std::uint32_t partitionId,
+                              const std::string& boundary)
 {
     NKikimr::NPQ::NTest::SplitPartition(Setup->GetRuntime(),
                                         ++SchemaTxId,
-                                        topicName,
+                                        TString(topicName),
                                         partitionId,
-                                        boundary);
+                                        TString(boundary));
 }
 
 void TFixture::TestWriteToTopic45()
@@ -3389,7 +2343,7 @@ void TFixture::TestWriteToTopic45()
     auto session = CreateSession();
     auto tx = session->BeginTx();
 
-    TString message(1'000, 'x');
+    std::string message(1'000, 'x');
 
     WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID_1, message, tx.get(), 0);
     WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID_1, message, tx.get(), 0);
@@ -3398,8 +2352,8 @@ void TFixture::TestWriteToTopic45()
 
     session->CommitTx(*tx, EStatus::SUCCESS);
 
-    size_t minSize = (message.size() + TEST_MESSAGE_GROUP_ID_1.size()) * 2;
-    size_t maxSize = minSize + 200;
+    std::size_t minSize = (message.size() + TEST_MESSAGE_GROUP_ID_1.size()) * 2;
+    std::size_t maxSize = minSize + 200;
 
     CheckAvgWriteBytes("topic_A", 0, minSize, maxSize);
 
@@ -3428,7 +2382,7 @@ void TFixture::TestWriteToTopic46()
     auto session = CreateSession();
     auto tx = session->BeginTx();
 
-    TString message(1'000, 'x');
+    std::string message(1'000, 'x');
 
     WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID_1, message, tx.get(), 0);
     WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID_1, message, tx.get(), 0);
@@ -3459,7 +2413,7 @@ void TFixture::TestWriteToTopic47()
     // The `split` operation of the topic partition does not affect the reading in the transaction.
     CreateTopic("topic_A", TEST_CONSUMER, 2, 10);
 
-    TString message(1'000, 'x');
+    std::string message(1'000, 'x');
 
     WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID_1, message, nullptr, 0);
     WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID_1, message, nullptr, 0);
@@ -3496,46 +2450,6 @@ Y_UNIT_TEST_F(WriteToTopic_Demo_47_Query, TFixtureQuery)
     TestWriteToTopic47();
 }
 
-void TFixture::TestWriteToTopic48()
-{
-    // the commit of a transaction affects the split of the partition
-    CreateTopic("topic_A", TEST_CONSUMER, 2, 10);
-    AlterAutoPartitioning("topic_A", 2, 10, EAutoPartitioningStrategy::ScaleUp, TDuration::Seconds(2), 1, 2);
-
-    auto session = CreateSession();
-    auto tx = session->BeginTx();
-
-    TString message(1_MB, 'x');
-
-    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID_1, message, tx.get(), 0);
-    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID_1, message, tx.get(), 0);
-    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID_3, message, tx.get(), 0);
-    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID_3, message, tx.get(), 0);
-
-    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID_2, message, tx.get(), 1);
-    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID_2, message, tx.get(), 1);
-    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID_4, message, tx.get(), 1);
-    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID_4, message, tx.get(), 1);
-
-    session->CommitTx(*tx, EStatus::SUCCESS);
-
-    Sleep(TDuration::Seconds(5));
-
-    auto topicDescription = DescribeTopic("topic_A");
-
-    UNIT_ASSERT_GT(topicDescription.GetTotalPartitionsCount(), 2);
-}
-
-Y_UNIT_TEST_F(WriteToTopic_Demo_48_Table, TFixtureTable)
-{
-    TestWriteToTopic48();
-}
-
-Y_UNIT_TEST_F(WriteToTopic_Demo_48_Query, TFixtureQuery)
-{
-    TestWriteToTopic48();
-}
-
 void TFixture::TestWriteToTopic50()
 {
     // TODO(abcdef): temporarily deleted
@@ -3546,7 +2460,7 @@ void TFixture::TestWriteToTopic50()
     CreateTopic("topic_A", TEST_CONSUMER);
     CreateTopic("topic_B", TEST_CONSUMER);
 
-    TString message(128_KB, 'x');
+    std::string message(128_KB, 'x');
 
     WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID_1, message);
     WaitForAcks("topic_A", TEST_MESSAGE_GROUP_ID_1);
@@ -3565,7 +2479,7 @@ void TFixture::TestWriteToTopic50()
 
     session->CommitTx(*tx, EStatus::SUCCESS);
 
-    Sleep(TDuration::Seconds(5));
+    std::this_thread::sleep_for(5s);
 
     UNIT_ASSERT_VALUES_EQUAL(GetPQCacheRenameKeysCount(), 0);
 
@@ -3583,7 +2497,7 @@ void TFixture::TestWriteToTopic50()
 
     session->CommitTx(*tx, EStatus::SUCCESS);
 
-    Sleep(TDuration::Seconds(5));
+    std::this_thread::sleep_for(5s);
 
     UNIT_ASSERT_VALUES_EQUAL(GetPQCacheRenameKeysCount(), 1);
 }
@@ -3598,10 +2512,230 @@ Y_UNIT_TEST_F(WriteToTopic_Demo_50_Query, TFixtureQuery)
     TestWriteToTopic50();
 }
 
+void TFixture::TestWriteRandomSizedMessagesInWideTransactions()
+{
+    // The test verifies the simultaneous execution of several transactions. There is a topic
+    // with PARTITIONS_COUNT partitions. In each transaction, the test writes to all the partitions.
+    // The size of the messages is random. Such that both large blobs in the body and small ones in
+    // the head of the partition are obtained. Message sizes are multiples of 500 KB. This way we
+    // will make sure that when committing transactions, the division into blocks is taken into account.
+
+    const std::size_t PARTITIONS_COUNT = 20;
+    const std::size_t TXS_COUNT = 10;
+
+    CreateTopic("topic_A", TEST_CONSUMER, PARTITIONS_COUNT);
+
+    SetPartitionWriteSpeed("topic_A", 50'000'000);
+
+    std::vector<std::unique_ptr<TFixture::ISession>> sessions;
+    std::vector<std::unique_ptr<TTransactionBase>> transactions;
+
+    // We open TXS_COUNT transactions and write messages to the topic.
+    for (std::size_t i = 0; i < TXS_COUNT; ++i) {
+        sessions.push_back(CreateSession());
+        auto& session = sessions.back();
+
+        transactions.push_back(session->BeginTx());
+        auto& tx = transactions.back();
+
+        for (std::size_t j = 0; j < PARTITIONS_COUNT; ++j) {
+            std::string sourceId = TEST_MESSAGE_GROUP_ID;
+            sourceId += "_";
+            sourceId += ToString(i);
+            sourceId += "_";
+            sourceId += ToString(j);
+
+            std::size_t count = RandomNumber<std::size_t>(20) + 3;
+            WriteToTopic("topic_A", sourceId, std::string(512 * 1000 * count, 'x'), tx.get(), j);
+
+            WaitForAcks("topic_A", sourceId);
+        }
+    }
+
+    // We are doing an asynchronous commit of transactions. They will be executed simultaneously.
+    std::vector<TAsyncStatus> futures;
+
+    for (std::size_t i = 0; i < TXS_COUNT; ++i) {
+        futures.push_back(sessions[i]->AsyncCommitTx(*transactions[i]));
+    }
+
+    // All transactions must be completed successfully.
+    for (std::size_t i = 0; i < TXS_COUNT; ++i) {
+        futures[i].Wait();
+        const auto& result = futures[i].GetValueSync();
+        UNIT_ASSERT_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+}
+
+Y_UNIT_TEST_F(Write_Random_Sized_Messages_In_Wide_Transactions_Table, TFixtureTable)
+{
+    TestWriteRandomSizedMessagesInWideTransactions();
+}
+
+Y_UNIT_TEST_F(Write_Random_Sized_Messages_In_Wide_Transactions_Query, TFixtureQuery)
+{
+    TestWriteRandomSizedMessagesInWideTransactions();
+}
+
+void TFixture::TestWriteOnlyBigMessagesInWideTransactions()
+{
+    // The test verifies the simultaneous execution of several transactions. There is a topic `topic_A` and
+    // it contains a `PARTITIONS_COUNT' of partitions. In each transaction, the test writes to all partitions.
+    // The size of the messages is chosen so that only large blobs are recorded in the transaction and there
+    // are no records in the head. Thus, we verify that transaction bundling is working correctly.
+
+    const std::size_t PARTITIONS_COUNT = 20;
+    const std::size_t TXS_COUNT = 100;
+
+    CreateTopic("topic_A", TEST_CONSUMER, PARTITIONS_COUNT);
+
+    SetPartitionWriteSpeed("topic_A", 50'000'000);
+
+    std::vector<std::unique_ptr<TFixture::ISession>> sessions;
+    std::vector<std::unique_ptr<TTransactionBase>> transactions;
+
+    // We open TXS_COUNT transactions and write messages to the topic.
+    for (std::size_t i = 0; i < TXS_COUNT; ++i) {
+        sessions.push_back(CreateSession());
+        auto& session = sessions.back();
+
+        transactions.push_back(session->BeginTx());
+        auto& tx = transactions.back();
+
+        for (std::size_t j = 0; j < PARTITIONS_COUNT; ++j) {
+            std::string sourceId = TEST_MESSAGE_GROUP_ID;
+            sourceId += "_";
+            sourceId += ToString(i);
+            sourceId += "_";
+            sourceId += ToString(j);
+
+            WriteToTopic("topic_A", sourceId, std::string(6'500'000, 'x'), tx.get(), j);
+
+            WaitForAcks("topic_A", sourceId);
+        }
+    }
+
+    // We are doing an asynchronous commit of transactions. They will be executed simultaneously.
+    std::vector<TAsyncStatus> futures;
+
+    for (std::size_t i = 0; i < TXS_COUNT; ++i) {
+        futures.push_back(sessions[i]->AsyncCommitTx(*transactions[i]));
+    }
+
+    // All transactions must be completed successfully.
+    for (std::size_t i = 0; i < TXS_COUNT; ++i) {
+        futures[i].Wait();
+        const auto& result = futures[i].GetValueSync();
+        UNIT_ASSERT_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+}
+
+Y_UNIT_TEST_F(Write_Only_Big_Messages_In_Wide_Transactions_Table, TFixtureTable)
+{
+    TestWriteOnlyBigMessagesInWideTransactions();
+}
+
+Y_UNIT_TEST_F(Write_Only_Big_Messages_In_Wide_Transactions_Query, TFixtureQuery)
+{
+    TestWriteOnlyBigMessagesInWideTransactions();
+}
+
+void TFixture::TestTransactionsConflictOnSeqNo()
+{
+    const std::uint32_t PARTITIONS_COUNT = 20;
+    const std::size_t TXS_COUNT = 100;
+
+    CreateTopic("topic_A", TEST_CONSUMER, PARTITIONS_COUNT);
+
+    SetPartitionWriteSpeed("topic_A", 50'000'000);
+
+    auto session = CreateSession();
+    std::vector<std::shared_ptr<NTopic::ISimpleBlockingWriteSession>> topicWriteSessions;
+
+    for (std::uint32_t i = 0; i < PARTITIONS_COUNT; ++i) {
+        std::string sourceId = TEST_MESSAGE_GROUP_ID;
+        sourceId += "_";
+        sourceId += ToString(i);
+
+        NTopic::TTopicClient client(GetDriver());
+        NTopic::TWriteSessionSettings options;
+        options.Path(Setup->GetTopicPath("topic_A"));
+        options.ProducerId(sourceId);
+        options.MessageGroupId(sourceId);
+        options.PartitionId(i);
+        options.Codec(ECodec::RAW);
+
+        auto session = client.CreateSimpleBlockingWriteSession(options);
+
+        topicWriteSessions.push_back(std::move(session));
+    }
+
+    std::vector<std::unique_ptr<TFixture::ISession>> sessions;
+    std::vector<std::unique_ptr<TTransactionBase>> transactions;
+
+    for (std::size_t i = 0; i < TXS_COUNT; ++i) {
+        sessions.push_back(CreateSession());
+        auto& session = sessions.back();
+
+        transactions.push_back(session->BeginTx());
+        auto& tx = transactions.back();
+
+        for (std::size_t j = 0; j < PARTITIONS_COUNT; ++j) {
+            std::string sourceId = TEST_MESSAGE_GROUP_ID;
+            sourceId += "_";
+            sourceId += ToString(j);
+
+            for (std::size_t k = 0, count = RandomNumber<std::size_t>(20) + 1; k < count; ++k) {
+                const std::string data(RandomNumber<std::size_t>(1'000) + 100, 'x');
+                NTopic::TWriteMessage params(data);
+                params.Tx(*tx);
+
+                topicWriteSessions[j]->Write(std::move(params));
+            }
+        }
+    }
+
+    std::vector<TAsyncStatus> futures;
+
+    for (std::size_t i = 0; i < TXS_COUNT; ++i) {
+        futures.push_back(sessions[i]->AsyncCommitTx(*transactions[i]));
+    }
+
+    // Some transactions should end with the error `ABORTED`
+    std::size_t successCount = 0;
+
+    for (std::size_t i = 0; i < TXS_COUNT; ++i) {
+        futures[i].Wait();
+        const auto& result = futures[i].GetValueSync();
+        switch (result.GetStatus()) {
+        case EStatus::SUCCESS:
+            ++successCount;
+            break;
+        case EStatus::ABORTED:
+            break;
+        default:
+            UNIT_FAIL("unexpected status: " + ToString(static_cast<TStatus>(result)));
+            break;
+        }
+    }
+
+    UNIT_ASSERT_UNEQUAL(successCount, TXS_COUNT);
+}
+
+Y_UNIT_TEST_F(Transactions_Conflict_On_SeqNo_Table, TFixtureTable)
+{
+    TestTransactionsConflictOnSeqNo();
+}
+
+Y_UNIT_TEST_F(Transactions_Conflict_On_SeqNo_Query, TFixtureQuery)
+{
+    TestTransactionsConflictOnSeqNo();
+}
+
 class TFixtureSinks : public TFixture {
 protected:
-    void CreateRowTable(const TString& path);
-    void CreateColumnTable(const TString& tablePath);
+    void CreateRowTable(const std::string& path);
+    void CreateColumnTable(const std::string& tablePath);
 
     bool GetEnableOltpSink() const override;
     bool GetEnableOlapSink() const override;
@@ -3636,16 +2770,16 @@ protected:
     }
 };
 
-void TFixtureSinks::CreateRowTable(const TString& path)
+void TFixtureSinks::CreateRowTable(const std::string& path)
 {
     CreateTable(path);
 }
 
-void TFixtureSinks::CreateColumnTable(const TString& tablePath)
+void TFixtureSinks::CreateColumnTable(const std::string& tablePath)
 {
     UNIT_ASSERT(!tablePath.empty());
 
-    TString path = (tablePath[0] != '/') ? ("/Root/" + tablePath) : tablePath;
+    std::string path = (tablePath[0] != '/') ? ("/Root/" + tablePath) : tablePath;
 
     auto createSessionResult = GetTableClient().CreateSession().ExtractValueSync();
     UNIT_ASSERT_C(createSessionResult.IsSuccess(), createSessionResult.GetIssues().ToString());
@@ -4193,226 +3327,6 @@ Y_UNIT_TEST_F(Sinks_Olap_WriteToTopicAndTable_4_Table, TFixtureSinksTable)
 Y_UNIT_TEST_F(Sinks_Olap_WriteToTopicAndTable_4_Query, TFixtureSinksQuery)
 {
     TestSinksOlapWriteToTopicAndTable4();
-}
-
-void TFixture::TestWriteRandomSizedMessagesInWideTransactions()
-{
-    // The test verifies the simultaneous execution of several transactions. There is a topic
-    // with PARTITIONS_COUNT partitions. In each transaction, the test writes to all the partitions.
-    // The size of the messages is random. Such that both large blobs in the body and small ones in
-    // the head of the partition are obtained. Message sizes are multiples of 500 KB. This way we
-    // will make sure that when committing transactions, the division into blocks is taken into account.
-
-    const size_t PARTITIONS_COUNT = 20;
-    const size_t TXS_COUNT = 10;
-
-    CreateTopic("topic_A", TEST_CONSUMER, PARTITIONS_COUNT);
-
-    SetPartitionWriteSpeed("topic_A", 50'000'000);
-
-    std::vector<std::unique_ptr<TFixture::ISession>> sessions;
-    std::vector<std::unique_ptr<TTransactionBase>> transactions;
-
-    // We open TXS_COUNT transactions and write messages to the topic.
-    for (size_t i = 0; i < TXS_COUNT; ++i) {
-        sessions.push_back(CreateSession());
-        auto& session = sessions.back();
-
-        transactions.push_back(session->BeginTx());
-        auto& tx = transactions.back();
-
-        for (size_t j = 0; j < PARTITIONS_COUNT; ++j) {
-            TString sourceId = TEST_MESSAGE_GROUP_ID;
-            sourceId += "_";
-            sourceId += ToString(i);
-            sourceId += "_";
-            sourceId += ToString(j);
-
-            size_t count = RandomNumber<size_t>(20) + 3;
-            WriteToTopic("topic_A", sourceId, TString(512 * 1000 * count, 'x'), tx.get(), j);
-
-            WaitForAcks("topic_A", sourceId);
-        }
-    }
-
-    // We are doing an asynchronous commit of transactions. They will be executed simultaneously.
-    std::vector<TAsyncStatus> futures;
-
-    for (size_t i = 0; i < TXS_COUNT; ++i) {
-        futures.push_back(sessions[i]->AsyncCommitTx(*transactions[i]));
-    }
-
-    // All transactions must be completed successfully.
-    for (size_t i = 0; i < TXS_COUNT; ++i) {
-        futures[i].Wait();
-        const auto& result = futures[i].GetValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-    }
-}
-
-Y_UNIT_TEST_F(Write_Random_Sized_Messages_In_Wide_Transactions_Table, TFixtureTable)
-{
-    TestWriteRandomSizedMessagesInWideTransactions();
-}
-
-Y_UNIT_TEST_F(Write_Random_Sized_Messages_In_Wide_Transactions_Query, TFixtureQuery)
-{
-    TestWriteRandomSizedMessagesInWideTransactions();
-}
-
-void TFixture::TestWriteOnlyBigMessagesInWideTransactions()
-{
-    // The test verifies the simultaneous execution of several transactions. There is a topic `topic_A` and
-    // it contains a `PARTITIONS_COUNT' of partitions. In each transaction, the test writes to all partitions.
-    // The size of the messages is chosen so that only large blobs are recorded in the transaction and there
-    // are no records in the head. Thus, we verify that transaction bundling is working correctly.
-
-    const size_t PARTITIONS_COUNT = 20;
-    const size_t TXS_COUNT = 100;
-
-    CreateTopic("topic_A", TEST_CONSUMER, PARTITIONS_COUNT);
-
-    SetPartitionWriteSpeed("topic_A", 50'000'000);
-
-    std::vector<std::unique_ptr<TFixture::ISession>> sessions;
-    std::vector<std::unique_ptr<TTransactionBase>> transactions;
-
-    // We open TXS_COUNT transactions and write messages to the topic.
-    for (size_t i = 0; i < TXS_COUNT; ++i) {
-        sessions.push_back(CreateSession());
-        auto& session = sessions.back();
-
-        transactions.push_back(session->BeginTx());
-        auto& tx = transactions.back();
-
-        for (size_t j = 0; j < PARTITIONS_COUNT; ++j) {
-            TString sourceId = TEST_MESSAGE_GROUP_ID;
-            sourceId += "_";
-            sourceId += ToString(i);
-            sourceId += "_";
-            sourceId += ToString(j);
-
-            WriteToTopic("topic_A", sourceId, TString(6'500'000, 'x'), tx.get(), j);
-
-            WaitForAcks("topic_A", sourceId);
-        }
-    }
-
-    // We are doing an asynchronous commit of transactions. They will be executed simultaneously.
-    std::vector<TAsyncStatus> futures;
-
-    for (size_t i = 0; i < TXS_COUNT; ++i) {
-        futures.push_back(sessions[i]->AsyncCommitTx(*transactions[i]));
-    }
-
-    // All transactions must be completed successfully.
-    for (size_t i = 0; i < TXS_COUNT; ++i) {
-        futures[i].Wait();
-        const auto& result = futures[i].GetValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-    }
-}
-
-Y_UNIT_TEST_F(Write_Only_Big_Messages_In_Wide_Transactions_Table, TFixtureTable)
-{
-    TestWriteOnlyBigMessagesInWideTransactions();
-}
-
-Y_UNIT_TEST_F(Write_Only_Big_Messages_In_Wide_Transactions_Query, TFixtureQuery)
-{
-    TestWriteOnlyBigMessagesInWideTransactions();
-}
-
-void TFixture::TestTransactionsConflictOnSeqNo()
-{
-    const ui32 PARTITIONS_COUNT = 20;
-    const size_t TXS_COUNT = 100;
-
-    CreateTopic("topic_A", TEST_CONSUMER, PARTITIONS_COUNT);
-
-    SetPartitionWriteSpeed("topic_A", 50'000'000);
-
-    auto session = CreateSession();
-    std::vector<std::shared_ptr<NTopic::ISimpleBlockingWriteSession>> topicWriteSessions;
-
-    for (ui32 i = 0; i < PARTITIONS_COUNT; ++i) {
-        TString sourceId = TEST_MESSAGE_GROUP_ID;
-        sourceId += "_";
-        sourceId += ToString(i);
-
-        NTopic::TTopicClient client(GetDriver());
-        NTopic::TWriteSessionSettings options;
-        options.Path("topic_A");
-        options.ProducerId(sourceId);
-        options.MessageGroupId(sourceId);
-        options.PartitionId(i);
-        options.Codec(ECodec::RAW);
-
-        auto session = client.CreateSimpleBlockingWriteSession(options);
-
-        topicWriteSessions.push_back(std::move(session));
-    }
-
-    std::vector<std::unique_ptr<TFixture::ISession>> sessions;
-    std::vector<std::unique_ptr<TTransactionBase>> transactions;
-
-    for (size_t i = 0; i < TXS_COUNT; ++i) {
-        sessions.push_back(CreateSession());
-        auto& session = sessions.back();
-
-        transactions.push_back(session->BeginTx());
-        auto& tx = transactions.back();
-
-        for (size_t j = 0; j < PARTITIONS_COUNT; ++j) {
-            TString sourceId = TEST_MESSAGE_GROUP_ID;
-            sourceId += "_";
-            sourceId += ToString(j);
-
-            for (size_t k = 0, count = RandomNumber<size_t>(20) + 1; k < count; ++k) {
-                const std::string data(RandomNumber<size_t>(1'000) + 100, 'x');
-                NTopic::TWriteMessage params(data);
-                params.Tx(*tx);
-
-                topicWriteSessions[j]->Write(std::move(params));
-            }
-        }
-    }
-
-    std::vector<TAsyncStatus> futures;
-
-    for (size_t i = 0; i < TXS_COUNT; ++i) {
-        futures.push_back(sessions[i]->AsyncCommitTx(*transactions[i]));
-    }
-
-    // Some transactions should end with the error `ABORTED`
-    size_t successCount = 0;
-
-    for (size_t i = 0; i < TXS_COUNT; ++i) {
-        futures[i].Wait();
-        const auto& result = futures[i].GetValueSync();
-        switch (result.GetStatus()) {
-        case EStatus::SUCCESS:
-            ++successCount;
-            break;
-        case EStatus::ABORTED:
-            break;
-        default:
-            UNIT_FAIL("unexpected status: " << static_cast<const NYdb::TStatus&>(result));
-            break;
-        }
-    }
-
-    UNIT_ASSERT_VALUES_UNEQUAL(successCount, TXS_COUNT);
-}
-
-Y_UNIT_TEST_F(Transactions_Conflict_On_SeqNo_Table, TFixtureTable)
-{
-    TestTransactionsConflictOnSeqNo();
-}
-
-Y_UNIT_TEST_F(Transactions_Conflict_On_SeqNo_Query, TFixtureQuery)
-{
-    TestTransactionsConflictOnSeqNo();
 }
 
 Y_UNIT_TEST_F(The_Transaction_Starts_On_One_Version_And_Ends_On_The_Other, TFixtureNoClient)

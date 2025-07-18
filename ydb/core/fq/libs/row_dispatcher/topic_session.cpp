@@ -115,6 +115,9 @@ private:
                 InitialOffset = *offset;
             }
             Y_UNUSED(TDuration::TryParse(ev->Get()->Record.GetSource().GetReconnectPeriod(), ReconnectPeriod));
+            for (const auto& sensor : ev->Get()->Record.GetSource().GetTaskSensorLabel()) {
+                Counters = Counters->GetSubgroup(sensor.GetLabel(), sensor.GetValue());
+            }
             auto queryGroup = Counters->GetSubgroup("query_id", QueryId);
             auto readSubGroup = queryGroup->GetSubgroup("read_group", SanitizeLabel(readGroup));
             FilteredDataRate = readSubGroup->GetCounter("FilteredDataRate", true);
@@ -214,7 +217,7 @@ private:
         // Metrics
         ui64 InitialOffset = 0;
         TStats FilteredStat;
-        const ::NMonitoring::TDynamicCounterPtr Counters;
+        ::NMonitoring::TDynamicCounterPtr Counters;
         NMonitoring::TDynamicCounters::TCounterPtr FilteredDataRate;    // filtered
         NMonitoring::TDynamicCounters::TCounterPtr RestartSessionByOffsetsByQuery;
     };
@@ -843,7 +846,11 @@ void TTopicSession::SendSessionError(TActorId readActorId, TStatus status, bool 
     LOG_ROW_DISPATCHER_WARN("SendSessionError to " << readActorId << ", status: " << status.GetErrorMessage());
     auto event = std::make_unique<TEvRowDispatcher::TEvSessionError>();
     event->Record.SetStatusCode(status.GetStatus());
+    event->Record.SetPartitionId(PartitionId);
     NYql::IssuesToMessage(status.GetErrorDescription(), event->Record.MutableIssues());
+    auto& issue = *event->Record.AddIssues();
+    issue.set_message(TStringBuilder() << "Topic " << TopicPathPartition);
+    issue.set_severity(NYql::TSeverityIds::S_INFO);
     event->ReadActorId = readActorId;
     event->IsFatalError = isFatalError;
     Send(RowDispatcherActorId, event.release());

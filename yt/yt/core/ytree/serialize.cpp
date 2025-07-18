@@ -3,10 +3,11 @@
 #include "size.h"
 #include "tree_visitor.h"
 
-#include <yt/yt/core/misc/blob.h>
 #include <yt/yt/core/misc/protobuf_helpers.h>
 
 #include <library/cpp/yt/misc/cast.h>
+
+#include <library/cpp/yt/memory/blob.h>
 
 #include <google/protobuf/io/zero_copy_stream_impl_lite.h>
 

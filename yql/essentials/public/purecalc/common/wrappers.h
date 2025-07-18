@@ -50,21 +50,21 @@ namespace NYql::NPureCalc::NPrivate {
     template <typename T, typename C>
     class TNonOwningConsumer final: public IConsumer<T> {
     private:
-        C Consumer;
+        C Consumer_;
 
     public:
         explicit TNonOwningConsumer(const C& consumer)
-            : Consumer(consumer)
+            : Consumer_(consumer)
         {
         }
 
     public:
         void OnObject(T t) override {
-            Consumer->OnObject(t);
+            Consumer_->OnObject(t);
         }
 
         void OnFinish() override {
-            Consumer->OnFinish();
+            Consumer_->OnFinish();
         }
     };
 }

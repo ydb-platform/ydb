@@ -376,4 +376,66 @@ void TDispatcherDynamicConfig::Register(TRegistrar registrar)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+void TServiceMethod::Register(TRegistrar registrar)
+{
+    registrar.Parameter("service", &TThis::Service)
+        .Default();
+    registrar.Parameter("method", &TThis::Method)
+        .Default();
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void TServiceMethodConfig::Register(TRegistrar registrar)
+{
+    registrar.Parameter("service", &TThis::Service)
+        .Default();
+    registrar.Parameter("method", &TThis::Method)
+        .Default();
+    registrar.Parameter("max_window", &TThis::MaxWindow)
+        .Default(1'024);
+    registrar.Parameter("waiting_timeout_fraction", &TThis::WaitingTimeoutFraction)
+        .Default(0.5);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void TOverloadTrackerConfigBase::Register(TRegistrar registrar)
+{
+    registrar.Parameter("methods_to_throttle", &TThis::MethodsToThrottle)
+        .Default();
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void TOverloadTrackerMeanWaitTimeConfig::Register(TRegistrar registrar)
+{
+    registrar.Parameter("mean_wait_time_threshold", &TThis::MeanWaitTimeThreshold)
+        .Default(TDuration::MilliSeconds(20));
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void TOverloadTrackerBacklogQueueFillFractionConfig::Register(TRegistrar registrar)
+{
+    registrar.Parameter("backlog_queue_fill_fraction_threshold", &TThis::BacklogQueueFillFractionThreshold)
+        .Default(0.9);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void TOverloadControllerConfig::Register(TRegistrar registrar)
+{
+    registrar.Parameter("enabled", &TThis::Enabled)
+        .Default(false);
+    registrar.Parameter("trackers", &TThis::Trackers)
+        .Default();
+    registrar.Parameter("methods", &TThis::Methods)
+        .Default();
+    registrar.Parameter("load_adjusting_period", &TThis::LoadAdjustingPeriod)
+        .Default(TDuration::MilliSeconds(100));
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 } // namespace NYT::NRpc

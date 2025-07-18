@@ -7,14 +7,13 @@ SRCS(
     cube.cpp
     exporter.cpp
     helpers.cpp
-    percpu.cpp
     producer.cpp
     proxy.cpp
     GLOBAL registry.cpp
     remote.cpp
-    sensor.cpp
     sensor_service.cpp
     sensor_set.cpp
+    sensor.cpp
     tag_registry.cpp
 
     sensor_dump.proto

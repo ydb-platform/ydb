@@ -33,17 +33,17 @@ public:
     TCoFrameBound GetFirst() const;
     TCoFrameBound GetLast() const;
 
-    bool IsNonEmpty() const { return NeverEmpty; }
-    bool IsCompact() const { return Compact; }
-    EFrameType GetFrameType() const { return Type; }
+    bool IsNonEmpty() const { return NeverEmpty_; }
+    bool IsCompact() const { return Compact_; }
+    EFrameType GetFrameType() const { return Type_; }
 private:
-    EFrameType Type = FrameByRows;
-    TExprNode::TPtr First;
-    TMaybe<i32> FirstOffset;
-    TExprNode::TPtr Last;
-    TMaybe<i32> LastOffset;
-    bool NeverEmpty = false;
-    bool Compact = false;
+    EFrameType Type_ = FrameByRows;
+    TExprNode::TPtr First_;
+    TMaybe<i32> FirstOffset_;
+    TExprNode::TPtr Last_;
+    TMaybe<i32> LastOffset_;
+    bool NeverEmpty_ = false;
+    bool Compact_ = false;
 };
 
 struct TSessionWindowParams {
@@ -56,7 +56,7 @@ struct TSessionWindowParams {
         , Update(nullptr)
         , SortTraits(nullptr)
     {}
-    
+
     void Reset();
 
     TExprNode::TPtr Traits;

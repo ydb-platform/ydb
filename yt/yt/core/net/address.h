@@ -25,7 +25,7 @@ namespace NYT::NNet {
 ////////////////////////////////////////////////////////////////////////////////
 
 //! Constructs an address of the form |hostName:port|.
-TString BuildServiceAddress(TStringBuf hostName, int port);
+std::string BuildServiceAddress(TStringBuf hostName, int port);
 
 //! Parses service address into host name and port number.
 //! Both #hostName and #port can be |NULL|.

@@ -3,7 +3,6 @@ import ydb
 import os
 import threading
 import logging
-import traceback
 
 ydb.interceptor.monkey_patch_event_handler()
 
@@ -22,7 +21,11 @@ class YdbClient:
 
     def query(self, statement, is_ddl):
         if self.use_query_service:
-            return self.session_pool.execute_with_retries(statement)
+            try:
+                return self.session_pool.execute_with_retries(statement)
+            except Exception as e:
+                logger.error(f"Error: {e} while executing query: {statement}")
+                raise e
         else:
             if is_ddl:
                 return self.session_pool.retry_operation_sync(lambda session: session.execute_scheme(statement))
@@ -31,9 +34,14 @@ class YdbClient:
 
     def drop_table(self, path_to_table):
         if self.use_query_service:
-            self.session_pool.execute_with_retries(f"DROP TABLE `{path_to_table}`")
+            self.query(f"DROP TABLE `{path_to_table}`", True)
         else:
             self.session_pool.retry_operation_sync(lambda session: session.drop_table(path_to_table))
+
+    def replace_index(self, table, src, dst):
+        self.driver.table_client.alter_table(path=table, rename_indexes=[
+            ydb.RenameIndexItem(source_name=src, destination_name=dst, replace_destination=True)
+        ])
 
     def describe(self, path):
         try:
@@ -91,11 +99,7 @@ class WorkloadBase:
             try:
                 f()
             except Exception as e:
-                logger.error(f"FATAL: {e}")
-                stack = "Traceback: "
-                for line in traceback.format_stack():
-                    stack += line.strip()
-                logger.error(stack)
+                logger.exception(f"FATAL: {e}")
                 os._exit(1)
 
         for f in funcs:
@@ -103,6 +107,9 @@ class WorkloadBase:
             t.start()
             self.workload_threads.append(t)
 
-    def join(self):
+    def join(self, timeout=None):
         for t in self.workload_threads:
-            t.join()
+            t.join(timeout)
+
+    def is_alive(self):
+        return any(t.is_alive() for t in self.workload_threads)

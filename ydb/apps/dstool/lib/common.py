@@ -23,6 +23,8 @@ import ydb.core.protos.msgbus_pb2 as kikimr_msgbus
 import ydb.core.protos.blobstorage_config_pb2 as kikimr_bsconfig
 import ydb.core.protos.blobstorage_base3_pb2 as kikimr_bs3
 import ydb.core.protos.cms_pb2 as kikimr_cms
+import ydb.public.api.protos.draft.ydb_bridge_pb2 as ydb_bridge
+from ydb.public.api.grpc.draft import ydb_bridge_v1_pb2_grpc as bridge_grpc_server
 from ydb.apps.dstool.lib.arg_parser import print_error_with_usage
 import typing
 
@@ -246,6 +248,15 @@ def get_vslot_extended_id(vslot):
     return *get_vslot_id(vslot.VSlotId), *get_vdisk_id(vslot)
 
 
+def get_pdisk_inferred_settings(pdisk):
+    if (pdisk.PDiskMetrics.HasField('SlotCount')):
+        return pdisk.PDiskMetrics.SlotCount, pdisk.PDiskMetrics.SlotSizeInUnits
+    elif (pdisk.InferPDiskSlotCountFromUnitSize != 0):
+        return 0, 0
+    else:
+        return pdisk.ExpectedSlotCount, pdisk.PDiskConfig.SlotSizeInUnits
+
+
 class Location(typing.NamedTuple):
     dc: int
     room: int
@@ -466,7 +477,7 @@ def fetch(path, params={}, explicit_host=None, fmt='json', host=None, cache=True
 
 
 @query_random_host_with_retry(request_type='grpc')
-def invoke_grpc(func, *params, explicit_host=None, endpoint=None):
+def invoke_grpc(func, *params, explicit_host=None, endpoint=None, stub_factory=kikimr_grpc.TGRpcServerStub):
     options = [
         ('grpc.max_receive_message_length', 256 << 20),  # 256 MiB
     ]
@@ -477,7 +488,7 @@ def invoke_grpc(func, *params, explicit_host=None, endpoint=None):
 
     def work(channel):
         try:
-            stub = kikimr_grpc.TGRpcServerStub(channel)
+            stub = stub_factory(channel)
             res = getattr(stub, func)(*params)
             if connection_params.debug:
                 print('INFO: result <<< %s >>>' % text_format.MessageToString(res, as_one_line=True), file=sys.stderr)
@@ -549,6 +560,37 @@ def cms_host_restart_request(user, host, reason, duration_usec, max_avail):
         return None
     else:
         return '%s: %s' % (kikimr_cms.TStatus.ECode.Name(response.Status.Code), response.Status.Reason)
+
+
+def get_piles_info():
+    request = ydb_bridge.GetClusterStateRequest()
+    response = invoke_grpc('GetClusterState', request, stub_factory=bridge_grpc_server.BridgeServiceStub)
+    result = ydb_bridge.GetClusterStateResult()
+    response.operation.result.Unpack(result)
+    return result
+
+
+def promote_pile(pile_id):
+    request = ydb_bridge.UpdateClusterStateRequest()
+    request.updates.add().CopyFrom(ydb_bridge.PileStateUpdate(
+        pile_id=pile_id,
+        state=ydb_bridge.PileState.PROMOTE
+    ))
+    invoke_grpc('UpdateClusterState', request, stub_factory=bridge_grpc_server.BridgeServiceStub)
+
+
+def set_primary_pile(primary_pile_id, synchronized_piles):
+    request = ydb_bridge.UpdateClusterStateRequest()
+    request.updates.add().CopyFrom(ydb_bridge.PileStateUpdate(
+        pile_id=primary_pile_id,
+        state=ydb_bridge.PileState.PRIMARY
+    ))
+    for pile_id in synchronized_piles:
+        request.updates.add().CopyFrom(ydb_bridge.PileStateUpdate(
+            pile_id=pile_id,
+            state=ydb_bridge.PileState.SYNCHRONIZED
+        ))
+    invoke_grpc('UpdateClusterState', request, stub_factory=bridge_grpc_server.BridgeServiceStub)
 
 
 def create_bsc_request(args):

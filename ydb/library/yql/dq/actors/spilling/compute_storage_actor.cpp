@@ -83,7 +83,7 @@ protected:
     }
 
     void SendInternal(const TActorId& recipient, IEventBase* ev, TEventFlags flags = IEventHandle::FlagTrackDelivery) {
-        if (!Send(recipient, ev, flags)) FailWithError("Event was not sent");
+        Send(recipient, ev, flags);
     }
 
 private:

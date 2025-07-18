@@ -6,6 +6,7 @@
 #include <yql/essentials/providers/common/udf_resolve/yql_outproc_udf_resolver.h>
 #include <yql/essentials/providers/common/udf_resolve/yql_simple_udf_resolver.h>
 #include <yql/essentials/providers/common/udf_resolve/yql_udf_resolver_with_index.h>
+#include <yql/essentials/providers/common/udf_resolve/yql_udf_resolver_logger.h>
 #include <yql/essentials/core/yql_user_data_storage.h>
 #include <yql/essentials/core/yql_udf_resolver.h>
 #include <yql/essentials/core/yql_udf_index.h>
@@ -40,6 +41,7 @@
 #include <yql/essentials/protos/yql_mount.pb.h>
 #include <yql/essentials/protos/pg_ext.pb.h>
 #include <yql/essentials/sql/settings/translation_settings.h>
+#include <yql/essentials/sql/v1/complete/check/check_complete.h>
 #include <yql/essentials/sql/v1/format/sql_format.h>
 #include <yql/essentials/sql/v1/sql.h>
 #include <yql/essentials/sql/sql.h>
@@ -278,6 +280,7 @@ void TFacadeRunOptions::Parse(int argc, const char *argv[]) {
             NKikimr::NMiniKQL::FindUdfsInDir(dir, &UdfsPaths);
         });
     opts.AddLongOption("udf-resolver", "Path to udf-resolver").Optional().RequiredArgument("PATH").StoreResult(&UdfResolverPath);
+    opts.AddLongOption("udf-resolver-log", "Path to udf resolver log").Optional().RequiredArgument("PATH").StoreResult(&UdfResolverLog);
     opts.AddLongOption("udf-resolver-filter-syscalls", "Filter syscalls in udf resolver").Optional().NoArgument().SetFlag(&UdfResolverFilterSyscalls);
     opts.AddLongOption("scan-udfs", "Scan specified udfs with external udf-resolver to use static function registry").NoArgument().SetFlag(&ScanUdfs);
 
@@ -438,6 +441,7 @@ void TFacadeRunOptions::Parse(int argc, const char *argv[]) {
         opts.AddLongOption("test-antlr4", "Check antlr4 parser").NoArgument().SetFlag(&TestAntlr4);
         opts.AddLongOption("test-format", "Compare formatted query's AST with the original query's AST (only syntaxVersion=1 is supported)").NoArgument().SetFlag(&TestSqlFormat);
         opts.AddLongOption("test-lexers", "Compare lexers").NoArgument().SetFlag(&TestLexers);
+        opts.AddLongOption("test-complete", "check completion engine").NoArgument().SetFlag(&TestComplete);
         opts.AddLongOption("validate-result-format", "Check that result-format can parse Result").NoArgument().SetFlag(&ValidateResultFormat);
     }
 
@@ -598,17 +602,49 @@ int TFacadeRunner::DoMain(int argc, const char *argv[]) {
     }
     IModuleResolver::TPtr moduleResolver;
     TModuleResolver::TModuleChecker moduleChecker;
-    if (RunOptions_.TestLexers) {
-        moduleChecker = [](const TString& query, const TString& fileName, TExprContext& ctx) {
-            TIssues issues;
-            if (!NSQLTranslationV1::CheckLexers(TPosition(0, 0, fileName), query, issues)) {
-                auto issue = TIssue(TPosition(0, 0, fileName), "Lexers mismatched");
-                for (const auto& i : issues) {
-                    issue.AddSubIssue(MakeIntrusive<TIssue>(i));
+    if (RunOptions_.TestLexers || RunOptions_.TestComplete) {
+        moduleChecker = [
+            lexers, parsers,
+            testLexers = RunOptions_.TestLexers,
+            testComplete = RunOptions_.TestComplete,
+            clusters = ClusterMapping_](const TString& query, const TString& fileName, TExprContext& ctx) {
+
+            if (testLexers) {
+                TIssues issues;
+                if (!NSQLTranslationV1::CheckLexers(TPosition(0, 0, fileName), query, issues)) {
+                    auto issue = TIssue(TPosition(0, 0, fileName), "Lexers mismatched");
+                    for (const auto& i : issues) {
+                        issue.AddSubIssue(MakeIntrusive<TIssue>(i));
+                    }
+
+                    ctx.AddError(issue);
+                    return false;
+                }
+            }
+
+            if (testComplete) {
+                google::protobuf::Arena arena;
+
+                NSQLTranslation::TTranslationSettings settings;
+                settings.Arena = &arena;
+                settings.ClusterMapping = clusters;
+                settings.SyntaxVersion = 1;
+
+                auto ast = NSQLTranslationV1::SqlToYql(lexers, parsers, query, settings);
+                if (!ast.IsOk()) {
+                    return true;
                 }
 
-                ctx.AddError(issue);
-                return false;
+                TIssues issues;
+                if (!NSQLComplete::CheckComplete(query, *ast.Root, issues)) {
+                    auto issue = TIssue(TPosition(0, 0, fileName), "Completion failed");
+                    for (const auto& i : issues) {
+                        issue.AddSubIssue(MakeIntrusive<TIssue>(i));
+                    }
+
+                    ctx.AddError(issue);
+                    return false;
+                }
             }
 
             return true;
@@ -666,12 +702,19 @@ int TFacadeRunner::DoMain(int argc, const char *argv[]) {
             RunOptions_.PrintInfo(TStringBuilder() << TInstant::Now().ToStringLocalUpToSeconds() << " UdfIndex done.");
         }
 
+        if (RunOptions_.UdfResolverLog) {
+            udfResolver = NCommon::CreateUdfResolverDecoratorWithLogger(FuncRegistry_.Get(), udfResolver, RunOptions_.UdfResolverLog, RunOptions_.OperationId);
+        }
+
         udfResolver = NCommon::CreateUdfResolverWithIndex(udfIndex, udfResolver, FileStorage_);
         RunOptions_.PrintInfo(TStringBuilder() << TInstant::Now().ToStringLocalUpToSeconds() << " Udfs scanned");
     } else {
         udfResolver = FileStorage_ && RunOptions_.UdfResolverPath
             ? NCommon::CreateOutProcUdfResolver(FuncRegistry_.Get(), FileStorage_, RunOptions_.UdfResolverPath, {}, {}, RunOptions_.UdfResolverFilterSyscalls, {})
             : NCommon::CreateSimpleUdfResolver(FuncRegistry_.Get(), FileStorage_, true);
+        if (RunOptions_.UdfResolverLog) {
+            udfResolver = NCommon::CreateUdfResolverDecoratorWithLogger(FuncRegistry_.Get(), udfResolver, RunOptions_.UdfResolverLog, RunOptions_.OperationId);
+        }
     }
 
     TVector<TDataProviderInitializer> dataProvidersInit;
@@ -794,6 +837,18 @@ int TFacadeRunner::DoRun(TProgramFactory& factory) {
             TIssues issues;
             if (!NSQLTranslationV1::CheckLexers({}, RunOptions_.ProgramText, issues)) {
                 *RunOptions_.ErrStream << "Lexers mismatched" << Endl;
+                issues.PrintTo(*RunOptions_.ErrStream);
+                return -1;
+            }
+        }
+        if (!fail && RunOptions_.TestComplete && 1 == RunOptions_.SyntaxVersion) {
+            TIssues issues;
+            if (!NSQLComplete::CheckComplete(
+                    RunOptions_.ProgramText,
+                    program->ExprRoot(),
+                    program->ExprCtx(),
+                    issues)) {
+                *RunOptions_.ErrStream << "Completion failed" << Endl;
                 issues.PrintTo(*RunOptions_.ErrStream);
                 return -1;
             }

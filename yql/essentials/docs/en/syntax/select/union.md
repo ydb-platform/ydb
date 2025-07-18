@@ -19,7 +19,7 @@ SELECT key FROM T2 -- returns the set of distinct keys in the tables
 
 Concatenating results of multiple `SELECT` statements (or subqueries).
 
-Two `UNION ALL` modes are supported: by column names (the default mode) and by column positions (corresponds to the ANSI SQL standard and is enabled by the [PRAGMA](../pragma.md#positionalunionall)).
+Two `UNION ALL` modes are supported: by column names (the default mode) and by column positions (corresponds to the ANSI SQL standard and is enabled by the [PRAGMA](../pragma/global.md#positionalunionall)).
 
 In the "by name" mode, the output of the resulting data schema uses the following rules:
 

@@ -567,7 +567,7 @@ Y_UNIT_TEST_SUITE(KqpProxy) {
 
             // Wait until KQP proxy is set up
             NYdb::EStatus scriptStatus;
-            NYdb::NQuery::TQueryClient client(connection);            
+            NYdb::NQuery::TQueryClient client(connection);
             do {
                 auto executeScrptsResult = client.ExecuteScript("SELECT 42").ExtractValueSync();
                 scriptStatus = executeScrptsResult.Status().GetStatus();
@@ -659,7 +659,8 @@ Y_UNIT_TEST_SUITE(KqpProxy) {
         checkCache(sharedTennant, sharedTennant, 1);
 
         const auto& serverlessTennant = ydb->GetSettings().GetServerlessTenantName();
-        checkCache(serverlessTennant, TStringBuilder() << ":4:" << serverlessTennant, 1);
+        const auto serverlessTenantPathId = ydb->GetServerlessTenantPathId();
+        checkCache(serverlessTennant, TStringBuilder() << ":" << serverlessTenantPathId << ":" << serverlessTennant, 1);
     }
 
 } // namspace NKqp

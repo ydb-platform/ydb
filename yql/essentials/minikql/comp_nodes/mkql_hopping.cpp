@@ -261,7 +261,7 @@ public:
         , StateType(stateType)
         , Packer(mutables)
     {
-        Stateless = false;
+        Stateless_ = false;
     }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {

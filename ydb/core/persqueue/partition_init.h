@@ -140,6 +140,8 @@ public:
 
     void Execute(const TActorContext& ctx) override;
     void Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActorContext& ctx) override;
+
+    void PostProcessing(const TActorContext& ctx);
 };
 
 class TInitDataRangeStep: public TBaseKVStep {

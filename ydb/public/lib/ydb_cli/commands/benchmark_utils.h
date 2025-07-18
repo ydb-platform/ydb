@@ -93,5 +93,6 @@ TQueryBenchmarkResult Explain(const TString& query, NQuery::TQueryClient & clien
 NJson::TJsonValue GetQueryLabels(TStringBuf queryId);
 NJson::TJsonValue GetSensorValue(TStringBuf sensor, TDuration& value, TStringBuf queryId);
 NJson::TJsonValue GetSensorValue(TStringBuf sensor, double value, TStringBuf queryId);
+size_t GetBenchmarkTableWidth();
 
 } // NYdb::NConsoleClient::BenchmarkUtils

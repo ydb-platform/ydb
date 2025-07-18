@@ -126,6 +126,7 @@ public:
         virtual void Restore(const TString& cluster) = 0;
         virtual bool IsRuntime() const = 0;
         virtual bool IsPerCluster() const = 0;
+        virtual bool IsDeprecated() const = 0;
 
     protected:
         TString Name_;
@@ -177,17 +178,17 @@ public:
         }
 
         void FreezeDefault() override {
-            Defaul_ = Setting_;
+            Default_ = Setting_;
         }
 
         void Restore(const TString& cluster) override {
-            if (!Defaul_) {
+            if (!Default_) {
                 ythrow yexception() << "Cannot restore " << Name_.Quote() << " setting without freeze";
             }
             if (ALL_CLUSTERS == cluster) {
-                Setting_ = Defaul_.GetRef();
+                Setting_ = Default_.GetRef();
             } else {
-                if (auto value = NPrivate::GetValue(Defaul_.GetRef(), cluster)) {
+                if (auto value = NPrivate::GetValue(Default_.GetRef(), cluster)) {
                     Setting_[cluster] = *value;
                 } else {
                     Setting_.Clear();
@@ -202,6 +203,10 @@ public:
 
         bool IsPerCluster() const override {
             return Setting_.IsPerCluster();
+        }
+
+        bool IsDeprecated() const override {
+            return Deprecated_;
         }
 
         TSettingHandlerImpl& Lower(TType lower) {
@@ -293,7 +298,7 @@ public:
 
         TSettingHandlerImpl& ValueSetterWithRestore(TValueCallback&& hook) {
             ValueSetter_ = [this, hook = std::move(hook)] (const TString& cluster, TType value) {
-                if (Defaul_) {
+                if (Default_) {
                     Restore(cluster);
                 }
                 hook(cluster, value);
@@ -303,7 +308,7 @@ public:
 
         TSettingHandlerImpl& ValueSetterWithRestore(const TValueCallback& hook) {
             ValueSetter_ = [this, hook] (const TString& cluster, TType value) {
-                if (Defaul_) {
+                if (Default_) {
                     Restore(cluster);
                 }
                 hook(cluster, value);
@@ -316,18 +321,20 @@ public:
             return *this;
         }
 
-        TSettingHandlerImpl& Deprecated() {
-            Warning_ = TStringBuilder() << "Pragma \"" << Name_ << "\" is deprecated and has no effect";
+        TSettingHandlerImpl& Deprecated(const TString& message = {}) {
+            Warning_ = message ? message : (TStringBuilder() << "Pragma \"" << Name_ << "\" is deprecated and has no effect");
+            Deprecated_ = true;
             return *this;
         }
 
     private:
         TConfSetting<TType, SettingType>& Setting_;
-        TMaybe<TConfSetting<TType, SettingType>> Defaul_;
+        TMaybe<TConfSetting<TType, SettingType>> Default_;
         ::NYql::NPrivate::TParser<TType> Parser_;
         TValueCallback ValueSetter_;
         TVector<TValueCallback> Validators_;
         TString Warning_;
+        bool Deprecated_ = false;
     };
 
     TSettingDispatcher() = default;
@@ -352,12 +359,12 @@ public:
     template <typename TType, EConfSettingType SettingType>
     TSettingHandlerImpl<TType, SettingType>& AddSetting(const TString& name, TConfSetting<TType, SettingType>& setting) {
         TIntrusivePtr<TSettingHandlerImpl<TType, SettingType>> handler = new TSettingHandlerImpl<TType, SettingType>(name, setting);
-        if (!Handlers.insert({NormalizeName(name), handler}).second) {
+        if (!Handlers_.insert({NormalizeName(name), handler}).second) {
             ythrow yexception() << "Duplicate configuration setting name " << name.Quote();
         }
 
         if (!name.StartsWith('_')) {
-            Names.insert(name);
+            Names_.insert(name);
         }
 
         return *handler;
@@ -402,9 +409,12 @@ public:
     void Enumerate(std::function<void(std::string_view)> callback);
 
 protected:
-    THashSet<TString> ValidClusters;
-    THashMap<TString, TSettingHandler::TPtr> Handlers;
-    TSet<TString> Names;
+    // FIXME switch usages to an acesssor
+    const THashSet<TString>& GetValidClusters() const;
+
+    THashSet<TString> ValidClusters; // NOLINT(readability-identifier-naming)
+    THashMap<TString, TSettingHandler::TPtr> Handlers_;
+    TSet<TString> Names_;
 };
 
 } // namespace NCommon

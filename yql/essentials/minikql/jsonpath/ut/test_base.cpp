@@ -5,12 +5,12 @@
 using namespace NKikimr::NBinaryJson;
 
 TJsonPathTestBase::TJsonPathTestBase()
-    : FunctionRegistry(CreateFunctionRegistry(CreateBuiltinRegistry()))
-    , Alloc(__LOCATION__)
-    , Env(Alloc)
-    , MemInfo("Memory")
-    , HolderFactory(Alloc.Ref(), MemInfo, FunctionRegistry.Get())
-    , ValueBuilder(HolderFactory)
+    : FunctionRegistry_(CreateFunctionRegistry(CreateBuiltinRegistry()))
+    , Alloc_(__LOCATION__)
+    , Env_(Alloc_)
+    , MemInfo_("Memory")
+    , HolderFactory_(Alloc_.Ref(), MemInfo_, FunctionRegistry_.Get())
+    , ValueBuilder_(HolderFactory_)
 {
 }
 
@@ -19,7 +19,7 @@ TIssueCode TJsonPathTestBase::C(TIssuesIds::EIssueCode code) {
 }
 
 TUnboxedValue TJsonPathTestBase::ParseJson(TStringBuf raw) {
-    return TryParseJsonDom(raw, &ValueBuilder);
+    return TryParseJsonDom(raw, &ValueBuilder_);
 }
 
 void TJsonPathTestBase::RunTestCase(const TString& rawJson, const TString& rawJsonPath, const TVector<TString>& expectedResult) {
@@ -31,17 +31,17 @@ void TJsonPathTestBase::RunTestCase(const TString& rawJson, const TString& rawJs
         auto binaryJsonRoot = TValue(reader->GetRootCursor());
 
         TIssues issues;
-        const TJsonPathPtr jsonPath = ParseJsonPath(rawJsonPath, issues, MAX_PARSE_ERRORS);
+        const TJsonPathPtr jsonPath = ParseJsonPath(rawJsonPath, issues, MaxParseErrors_);
         UNIT_ASSERT_C(issues.Empty(), "Parse errors found");
 
         for (const auto& json : {unboxedValueJson, binaryJsonRoot}) {
-            const auto result = ExecuteJsonPath(jsonPath, json, TVariablesMap{}, &ValueBuilder);
+            const auto result = ExecuteJsonPath(jsonPath, json, TVariablesMap{}, &ValueBuilder_);
             UNIT_ASSERT_C(!result.IsError(), "Runtime errors found");
 
             const auto& nodes = result.GetNodes();
             UNIT_ASSERT_VALUES_EQUAL(nodes.size(), expectedResult.size());
             for (size_t i = 0; i < nodes.size(); i++) {
-                const auto converted = nodes[i].ConvertToUnboxedValue(&ValueBuilder);
+                const auto converted = nodes[i].ConvertToUnboxedValue(&ValueBuilder_);
                 UNIT_ASSERT_VALUES_EQUAL(SerializeJsonDom(converted), expectedResult[i]);
             }
         }
@@ -82,11 +82,11 @@ void TJsonPathTestBase::RunRuntimeErrorTestCase(const TString& rawJson, const TS
         auto binaryJsonRoot = TValue(reader->GetRootCursor());
 
         TIssues issues;
-        const TJsonPathPtr jsonPath = ParseJsonPath(rawJsonPath, issues, MAX_PARSE_ERRORS);
+        const TJsonPathPtr jsonPath = ParseJsonPath(rawJsonPath, issues, MaxParseErrors_);
         UNIT_ASSERT_C(issues.Empty(), "Parse errors found");
 
         for (const auto& json : {unboxedValueJson, binaryJsonRoot}) {
-            const auto result = ExecuteJsonPath(jsonPath, json, TVariablesMap{}, &ValueBuilder);
+            const auto result = ExecuteJsonPath(jsonPath, json, TVariablesMap{}, &ValueBuilder_);
             UNIT_ASSERT_C(result.IsError(), "Expected runtime error");
             UNIT_ASSERT_VALUES_EQUAL(result.GetError().GetCode(), error);
         }
@@ -126,7 +126,7 @@ void TJsonPathTestBase::RunVariablesTestCase(const TString& rawJson, const THash
         }
 
         TIssues issues;
-        const TJsonPathPtr jsonPath = ParseJsonPath(rawJsonPath, issues, MAX_PARSE_ERRORS);
+        const TJsonPathPtr jsonPath = ParseJsonPath(rawJsonPath, issues, MaxParseErrors_);
         UNIT_ASSERT_C(issues.Empty(), "Parse errors found");
 
         TVector<std::pair<TValue, TVariablesMap>> testCases = {
@@ -134,13 +134,13 @@ void TJsonPathTestBase::RunVariablesTestCase(const TString& rawJson, const THash
             {binaryJsonRoot, binaryJsonVariables},
         };
         for (const auto& testCase : testCases) {
-            const auto result = ExecuteJsonPath(jsonPath, testCase.first, testCase.second, &ValueBuilder);
+            const auto result = ExecuteJsonPath(jsonPath, testCase.first, testCase.second, &ValueBuilder_);
             UNIT_ASSERT_C(!result.IsError(), "Runtime errors found");
 
             const auto& nodes = result.GetNodes();
             UNIT_ASSERT_VALUES_EQUAL(nodes.size(), expectedResult.size());
             for (size_t i = 0; i < nodes.size(); i++) {
-                const auto converted = nodes[i].ConvertToUnboxedValue(&ValueBuilder);
+                const auto converted = nodes[i].ConvertToUnboxedValue(&ValueBuilder_);
                 UNIT_ASSERT_VALUES_EQUAL(SerializeJsonDom(converted), expectedResult[i]);
             }
         }

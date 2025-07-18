@@ -9,9 +9,17 @@ import yatest.common
 import shutil
 import allure
 from time import time
-from typing import Union, Optional, Tuple, List, Dict, Any
+from typing import Union, Optional, Tuple, List, Dict, Any, NamedTuple
 
 LOGGER = logging.getLogger(__name__)
+
+
+class ExecutionResult(NamedTuple):
+
+    stdout: str
+    stderr: str
+    is_timeout: bool
+    exit_code: Optional[int] = None
 
 
 class RemoteExecutor:
@@ -52,8 +60,7 @@ class RemoteExecutor:
         filtered_lines = []
         for line in stderr.splitlines():
             if (
-                not line.startswith('Warning: Permanently added') and
-                not line.startswith('(!) New version of YDB CL')
+                not line.startswith('Warning: Permanently added') and not line.startswith('(!) New version of YDB CL')
             ):
                 filtered_lines.append(line)
 
@@ -116,7 +123,7 @@ class RemoteExecutor:
     def execute_command(
         cls, host: str, cmd: Union[str, list], raise_on_error: bool = True,
         timeout: Optional[float] = None, raise_on_timeout: bool = True
-    ) -> Tuple[str, str]:
+    ) -> ExecutionResult:
         """
         Выполняет команду на хосте через SSH или локально
 
@@ -128,14 +135,14 @@ class RemoteExecutor:
             raise_on_timeout: вызывать ли исключение при таймауте (по умолчанию True)
 
         Returns:
-            Tuple[str, str]: (stdout, stderr) - вывод команды
+            ExecutionResult: результат выполнения команды
         """
 
         def _handle_timeout_error(
             e: yatest.common.ExecutionTimeoutError,
             full_cmd: Union[str, list],
             is_local: bool
-        ) -> Tuple[str, str]:
+        ) -> ExecutionResult:
             """Обрабатывает ошибки таймаута"""
             cmd_type = "Local" if is_local else "SSH"
             timeout_info = f"{cmd_type} command timed out after {timeout} seconds on {host}"
@@ -173,13 +180,17 @@ class RemoteExecutor:
             if raise_on_timeout:
                 raise subprocess.TimeoutExpired(full_cmd, timeout, output=stdout, stderr=stderr)
 
-            return (f"{timeout_info}\n{stdout}" if stdout else timeout_info, stderr)
+            return ExecutionResult(
+                stdout=f"{timeout_info}\n{stdout}" if stdout else timeout_info,
+                stderr=stderr,
+                is_timeout=True
+            )
 
         def _handle_execution_error(
             e: yatest.common.ExecutionError,
             full_cmd: Union[str, list],
             is_local: bool
-        ) -> Tuple[str, str]:
+        ) -> ExecutionResult:
             """Обрабатывает ошибки выполнения"""
             cmd_type = "Local" if is_local else "SSH"
             stdout = ""
@@ -220,9 +231,14 @@ class RemoteExecutor:
             if stderr:
                 LOGGER.error(f"Command stderr:\n{stderr}")
 
-            return stdout, stderr
+            return ExecutionResult(
+                stdout=stdout,
+                stderr=stderr,
+                is_timeout=False,
+                exit_code=exit_code
+            )
 
-        def _execute_local_command(cmd: Union[str, list]) -> Tuple[str, str]:
+        def _execute_local_command(cmd: Union[str, list]) -> ExecutionResult:
             """Выполняет команду локально"""
             LOGGER.info(f"Detected localhost ({host}), executing command locally: {cmd}")
 
@@ -242,10 +258,19 @@ class RemoteExecutor:
                           if hasattr(execution, 'std_err') and execution.std_err else "")
 
                 exit_code = getattr(execution, 'exit_code', getattr(execution, 'returncode', 0))
+                # Если команда завершилась с ошибкой, но stderr пустой, добавляем синтетическое сообщение
+                if exit_code != 0 and not stderr.strip():
+                    stderr = f"Command failed with exit code {exit_code}, but stderr is empty"
+                    LOGGER.warning(f"Local command failed with exit code {exit_code} but produced no stderr output on {host}")
                 if exit_code != 0 and raise_on_error:
                     raise subprocess.CalledProcessError(exit_code, full_cmd, stdout, stderr)
 
-                return stdout, stderr
+                return ExecutionResult(
+                    stdout=stdout,
+                    stderr=stderr,
+                    is_timeout=False,
+                    exit_code=exit_code
+                )
 
             except yatest.common.ExecutionTimeoutError as e:
                 return _handle_timeout_error(e, full_cmd, is_local=True)
@@ -255,9 +280,14 @@ class RemoteExecutor:
                 if raise_on_error:
                     raise
                 LOGGER.error(f"Unexpected error executing local command on {host}: {e}")
-                return "", ""
+                return ExecutionResult(
+                    stdout="",
+                    stderr="",
+                    is_timeout=False,
+                    exit_code=None
+                )
 
-        def _execute_ssh_command(cmd: Union[str, list]) -> Tuple[str, str]:
+        def _execute_ssh_command(cmd: Union[str, list]) -> ExecutionResult:
             """Выполняет команду через SSH"""
             LOGGER.info(f"Executing SSH command on {host}: {cmd}")
 
@@ -292,10 +322,19 @@ class RemoteExecutor:
                 stderr = cls._filter_ssh_warnings(stderr)
 
                 exit_code = getattr(execution, 'exit_code', getattr(execution, 'returncode', 0))
+                # Если команда завершилась с ошибкой, но stderr пустой, добавляем синтетическое сообщение
+                if exit_code != 0 and not stderr.strip():
+                    stderr = f"Command failed with exit code {exit_code}, but stderr is empty"
+                    LOGGER.warning(f"SSH command failed with exit code {exit_code} but produced no stderr output on {host}")
                 if exit_code != 0 and raise_on_error:
                     raise subprocess.CalledProcessError(exit_code, full_cmd, stdout, stderr)
 
-                return stdout, stderr
+                return ExecutionResult(
+                    stdout=stdout,
+                    stderr=stderr,
+                    is_timeout=False,
+                    exit_code=exit_code
+                )
 
             except yatest.common.ExecutionTimeoutError as e:
                 return _handle_timeout_error(e, full_cmd, is_local=False)
@@ -305,7 +344,12 @@ class RemoteExecutor:
                 if raise_on_error:
                     raise
                 LOGGER.error(f"Unexpected error executing SSH command on {host}: {e}")
-                return "", ""
+                return ExecutionResult(
+                    stdout="",
+                    stderr="",
+                    is_timeout=False,
+                    exit_code=None
+                )
 
         # Основная логика: выбираем локальное или SSH выполнение
         if cls._is_localhost(host):
@@ -318,7 +362,7 @@ class RemoteExecutor:
 def execute_command(
     host: str, cmd: Union[str, list], raise_on_error: bool = True,
     timeout: Optional[float] = None, raise_on_timeout: bool = True
-) -> Tuple[str, str]:
+) -> ExecutionResult:
     """
     Удобная функция для выполнения команды на хосте
 
@@ -330,9 +374,30 @@ def execute_command(
         raise_on_timeout: вызывать ли исключение при таймауте
 
     Returns:
-        Tuple[str, str]: (stdout, stderr) - вывод команды
+        ExecutionResult: результат выполнения команды
     """
     return RemoteExecutor.execute_command(host, cmd, raise_on_error, timeout, raise_on_timeout)
+
+
+def execute_command_legacy(
+    host: str, cmd: Union[str, list], raise_on_error: bool = True,
+    timeout: Optional[float] = None, raise_on_timeout: bool = True
+) -> Tuple[str, str]:
+    """
+    Backward compatibility функция для старого API
+
+    Args:
+        host: имя хоста для выполнения команды
+        cmd: команда для выполнения (строка или список)
+        raise_on_error: вызывать ли исключение при ошибке
+        timeout: таймаут выполнения команды в секундах
+        raise_on_timeout: вызывать ли исключение при таймауте
+
+    Returns:
+        Tuple[str, str]: (stdout, stderr) - вывод команды
+    """
+    result = RemoteExecutor.execute_command(host, cmd, raise_on_error, timeout, raise_on_timeout)
+    return result.stdout, result.stderr
 
 
 def is_localhost(hostname: str) -> bool:
@@ -348,37 +413,17 @@ def is_localhost(hostname: str) -> bool:
     return RemoteExecutor._is_localhost(hostname)
 
 
-def mkdir(host: str, path: str, raise_on_error: bool = False) -> str:
+def ensure_directory_with_permissions(host: str, path: str, raise_on_error: bool = True) -> bool:
     """
-    Создает директорию на хосте
-
-    Args:
-        host: имя хоста
-        path: путь к создаваемой директории
-        raise_on_error: вызывать ли исключение при ошибке
-
-    Returns:
-        str: вывод команды
+    Создает директорию и устанавливает права 777
     """
-    stdout, stderr = execute_command(host, f"mkdir -p {path}", raise_on_error)
-    return stdout
-
-
-def chmod(host: str, path: str, mode: str = "+x", raise_on_error: bool = True) -> str:
-    """
-    Изменяет права доступа к файлу на хосте
-
-    Args:
-        host: имя хоста
-        path: путь к файлу
-        mode: права доступа (по умолчанию +x)
-        raise_on_error: вызывать ли исключение при ошибке
-
-    Returns:
-        str: вывод команды
-    """
-    stdout, stderr = execute_command(host, f"chmod {mode} {path}", raise_on_error)
-    return stdout
+    try:
+        execute_command(host, f"sudo mkdir -p {path} && sudo chmod 777 {path}", raise_on_error=False)
+        return True
+    except Exception as e:
+        if raise_on_error:
+            raise RuntimeError(f"Failed to ensure directory {path}: {e}") from e
+        return False
 
 
 def copy_file(local_path: str, host: str, remote_path: str, raise_on_error: bool = True) -> str:
@@ -392,211 +437,71 @@ def copy_file(local_path: str, host: str, remote_path: str, raise_on_error: bool
         raise_on_error: вызывать ли исключение при ошибке
 
     Returns:
-        str: вывод команды копирования
+        str: результат копирования или None при ошибке
     """
-    # Проверяем существование локального файла
     if not os.path.exists(local_path):
         error_msg = f"Local file does not exist: {local_path}"
-        LOGGER.error(error_msg)
         if raise_on_error:
             raise FileNotFoundError(error_msg)
         return None
 
-    # Логируем размер файла для диагностики
     try:
-        file_size = os.path.getsize(local_path)
-        LOGGER.debug(f"File size: {file_size} bytes")
-    except OSError as e:
-        LOGGER.warning(f"Could not get file size: {e}")
+        if is_localhost(host):
+            return _copy_file_unified(local_path, host, remote_path, is_local=True)
+        else:
+            return _copy_file_unified(local_path, host, remote_path, is_local=False)
+    except Exception as e:
+        if raise_on_error:
+            raise
+        LOGGER.error(f"Failed to copy {local_path} to {host}:{remote_path}: {e}")
+        return None
 
-    # Проверяем, является ли хост localhost
-    if is_localhost(host):
-        LOGGER.info(f"Detected localhost ({host}), copying file locally: {local_path} -> {remote_path}")
 
+def _copy_file_unified(local_path: str, host: str, remote_path: str, is_local: bool) -> str:
+    """
+    Единая логика копирования файлов для локального и удаленного хостов
+    """
+    # Создаем целевую директорию
+    remote_dir = os.path.dirname(remote_path)
+    if remote_dir and remote_dir != '/':
+        execute_command(host, f"sudo mkdir -p {remote_dir} && sudo chmod 777 {remote_dir}", raise_on_error=False)
+
+    if is_local:
+        # Локальное копирование
         try:
-            # Создаем директорию назначения, если она не существует
-            remote_dir = os.path.dirname(remote_path)
-            if remote_dir and not os.path.exists(remote_dir):
-                os.makedirs(remote_dir, exist_ok=True)
-                LOGGER.debug(f"Created directory: {remote_dir}")
-
-            # Проверяем, не является ли целевой файл занятым
-            if os.path.exists(remote_path):
-                try:
-                    # Пытаемся открыть файл для записи, чтобы проверить, не занят ли он
-                    with open(remote_path, 'r+b'):
-                        pass
-                except (OSError, IOError) as e:
-                    if "Text file busy" in str(e) or "Resource temporarily unavailable" in str(e):
-                        # Генерируем новое имя файла с постфиксом
-                        timestamp = int(time())
-                        remote_filename = os.path.basename(remote_path)
-                        new_remote_filename = f"{remote_filename}.{timestamp}"
-                        remote_path = os.path.join(remote_dir, new_remote_filename)
-                        LOGGER.warning(f"Target file is busy, using new filename: {remote_path}")
-
-            # Копируем файл
             shutil.copy2(local_path, remote_path)
+            return f"Local copy successful: {remote_path}"
+        except PermissionError:
+            # Используем временный файл и sudo
+            import tempfile
+            with tempfile.NamedTemporaryFile(delete=False, prefix="deploy_") as tmp_file:
+                temp_path = tmp_file.name
+            shutil.copy2(local_path, temp_path)
+            execute_command("localhost", f"sudo mv {temp_path} {remote_path}")
+            return f"Local copy with sudo successful: {remote_path}"
+    else:
+        # Удаленное копирование через SCP + временный файл
+        timestamp = int(time())
+        filename = os.path.basename(local_path)
+        tmp_path = f"/tmp/{filename}.{timestamp}.tmp"
 
-            # Проверяем, что файл скопирован успешно
-            if os.path.exists(remote_path):
-                copied_size = os.path.getsize(remote_path)
-                original_size = os.path.getsize(local_path)
-                if copied_size == original_size:
-                    LOGGER.info(f"Successfully copied file locally: {local_path} -> {remote_path}")
-                    return f"Local copy successful: {remote_path}"
-                else:
-                    error_msg = f"File size mismatch after copy: original={original_size}, copied={copied_size}"
-                    LOGGER.error(error_msg)
-                    if raise_on_error:
-                        raise IOError(error_msg)
-                    return None
-            else:
-                error_msg = f"File was not created at destination: {remote_path}"
-                LOGGER.error(error_msg)
-                if raise_on_error:
-                    raise IOError(error_msg)
-                return None
-
-        except Exception as e:
-            error_msg = f"Error copying file locally: {e}"
-            LOGGER.error(error_msg)
-            if raise_on_error:
-                raise IOError(error_msg) from e
-            return None
-
-    # Для удаленных хостов используем SCP
-    def _try_scp_copy(target_path: str) -> Tuple[bool, str, str]:
-        """
-        Попытка копирования файла через SCP
-
-        Returns:
-            Tuple[bool, str, str]: (success, stdout, stderr)
-        """
-        # Формируем SCP команду
+        # SCP в /tmp
         scp_cmd = ['scp', "-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null"]
 
-        # Добавляем SSH пользователя, если указан
         ssh_user = os.getenv('SSH_USER')
-        scp_host = host
-        if ssh_user is not None:
-            scp_host = f"{ssh_user}@{scp_host}"
+        scp_host = f"{ssh_user}@{host}" if ssh_user else host
 
-        # Добавляем ключ SSH, если указан
         ssh_key_file = os.getenv('SSH_KEY_FILE')
-        if ssh_key_file is not None:
+        if ssh_key_file:
             scp_cmd += ['-i', ssh_key_file]
 
-        # Добавляем источник и назначение
-        scp_cmd += [local_path, f"{scp_host}:{target_path}"]
+        scp_cmd += [local_path, f"{scp_host}:{tmp_path}"]
 
-        LOGGER.info(f"Copying {local_path} to {scp_host}:{target_path}")
+        yatest.common.execute(scp_cmd, wait=True, check_exit_code=True)
 
-        try:
-            # Выполняем SCP напрямую через yatest.common.execute
-            execution = yatest.common.execute(
-                scp_cmd,
-                wait=True,
-                check_exit_code=False
-            )
-
-            stdout = (RemoteExecutor._safe_decode(execution.std_out)
-                      if hasattr(execution, 'std_out') and execution.std_out else "")
-            stderr = (RemoteExecutor._safe_decode(execution.std_err)
-                      if hasattr(execution, 'std_err') and execution.std_err else "")
-
-            # Фильтруем SSH предупреждения из stderr
-            stderr_filtered = RemoteExecutor._filter_ssh_warnings(stderr)
-
-            # Логируем детальную информацию
-            if stdout:
-                LOGGER.debug(f"SCP stdout: {stdout}")
-            if stderr_filtered:
-                LOGGER.warning(f"SCP stderr: {stderr_filtered}")
-
-            # Проверяем exit code
-            exit_code = getattr(execution, 'exit_code', getattr(execution, 'returncode', 0))
-            return exit_code == 0, stdout, stderr_filtered
-
-        except yatest.common.ExecutionError as e:
-            # Извлекаем stdout и stderr из результата выполнения
-            stdout = ""
-            stderr = ""
-            if hasattr(e, 'execution_result') and e.execution_result:
-                if hasattr(e.execution_result, 'std_out') and e.execution_result.std_out:
-                    stdout = RemoteExecutor._safe_decode(e.execution_result.std_out)
-                if hasattr(e.execution_result, 'std_err') and e.execution_result.std_err:
-                    stderr = RemoteExecutor._safe_decode(e.execution_result.std_err)
-
-            stderr_filtered = RemoteExecutor._filter_ssh_warnings(stderr)
-            if stderr_filtered:
-                LOGGER.warning(f"SCP stderr: {stderr_filtered}")
-
-            return False, stdout, stderr_filtered
-
-        except Exception as e:
-            LOGGER.error(f"Unexpected error during SCP: {e}")
-            return False, "", str(e)
-
-    LOGGER.info(f"Copying {local_path} to {host} via SCP")
-
-    # Первая попытка копирования с оригинальным именем
-    success, stdout, stderr_filtered = _try_scp_copy(remote_path)
-
-    if success:
-        return stdout
-
-    # Проверяем, является ли ошибка "Text file busy"
-    if "Text file busy" in stderr_filtered:
-        LOGGER.warning(f"File {remote_path} is busy, trying with postfix")
-
-        # Генерируем новое имя файла с постфиксом
-        timestamp = int(time())
-
-        # Разделяем путь на директорию и имя файла
-        remote_dir = os.path.dirname(remote_path)
-        remote_filename = os.path.basename(remote_path)
-
-        # Добавляем постфикс к имени файла
-        new_remote_filename = f"{remote_filename}.{timestamp}"
-        new_remote_path = os.path.join(remote_dir, new_remote_filename)
-
-        LOGGER.info(f"Retrying copy with new filename: {new_remote_path}")
-
-        # Вторая попытка с новым именем
-        success, stdout, stderr_filtered = _try_scp_copy(new_remote_path)
-
-        if success:
-            LOGGER.info(f"Successfully copied file with postfix: {new_remote_path}")
-            return stdout
-
-    # Если копирование не удалось, обрабатываем ошибку
-    error_msg = "SCP command failed"
-    if stderr_filtered:
-        error_msg += f". Error: {stderr_filtered}"
-
-        # Анализируем частые ошибки для более понятной диагностики
-        if "Permission denied" in stderr_filtered:
-            error_msg += "\nPossible causes: SSH key authentication failed"
-        elif "No such file or directory" in stderr_filtered:
-            error_msg += "\nPossible causes: Remote directory doesn't exist or remote host unreachable"
-        elif "Connection refused" in stderr_filtered:
-            error_msg += "\nPossible causes: SSH service not running on remote host or wrong port"
-        elif "Host key verification failed" in stderr_filtered:
-            error_msg += "\nPossible causes: SSH host key verification issue"
-        elif "Network is unreachable" in stderr_filtered:
-            error_msg += "\nPossible causes: Network connectivity issue to remote host"
-
-    LOGGER.error(error_msg)
-
-    if raise_on_error:
-        raise subprocess.CalledProcessError(
-            1,
-            ['scp', local_path, f"{host}:{remote_path}"],
-            stdout,
-            stderr_filtered
-        )
-    return None
+        # Перемещаем из /tmp в целевое место
+        execute_command(host, f"sudo mv {tmp_path} {remote_path}")
+        return f"SCP copy successful: {remote_path}"
 
 
 def deploy_binary(local_path: str, host: str, target_dir: str, make_executable: bool = True) -> dict:
@@ -612,48 +517,42 @@ def deploy_binary(local_path: str, host: str, target_dir: str, make_executable: 
     Returns:
         dict: результат деплоя
     """
-    import os
-
     binary_name = os.path.basename(local_path)
     target_path = os.path.join(target_dir, binary_name)
-    result = {
-        'name': binary_name,
-        'path': target_path,
-        'success': False
-    }
 
     try:
         # Создаем директорию
-        mkdir(host, target_dir)
+        ensure_directory_with_permissions(host, target_dir, raise_on_error=False)
 
         # Копируем файл
-        copy_file(local_path, host, target_path)
+        copy_result = copy_file(local_path, host, target_path)
+        if copy_result is None:
+            raise Exception("File copy failed")
 
-        # Делаем файл исполняемым, если нужно
+        # Делаем исполняемым
         if make_executable:
-            chmod(host, target_path)
+            execute_command(host, f"sudo chmod +x {target_path}", raise_on_error=False)
 
-        # Проверяем, что файл скопирован успешно
-        stdout, stderr = execute_command(host, f"ls -la {target_path}")
-
-        result.update({
+        return {
+            'name': binary_name,
+            'path': target_path,
             'success': True,
-            'output': stdout
-        })
-
-        return result
+            'output': f'Deployed {binary_name} to {target_path}'
+        }
     except Exception as e:
-        result.update({
+        return {
+            'name': binary_name,
+            'path': target_path,
+            'success': False,
             'error': str(e)
-        })
-        return result
+        }
 
 
 @allure.step('Deploy binaries to hosts')
 def deploy_binaries_to_hosts(
     binary_files: List[str],
     hosts: List[str],
-    target_dir: str = '/tmp/binaries/'
+    target_dir: str = '/tmp/stress_binaries/'
 ) -> Dict[str, Dict[str, Any]]:
     """
     Разворачивает бинарные файлы на указанных хостах
@@ -667,55 +566,40 @@ def deploy_binaries_to_hosts(
         Dict: словарь с результатами деплоя по хостам
     """
     results = {}
-    processed_hosts = set()
 
-    for host in hosts:
-        # Избегаем дублирования обработки одного хоста
-        if host in processed_hosts:
-            continue
-        processed_hosts.add(host)
-
+    for host in set(hosts):  # Автоматическое удаление дубликатов
         host_results = {}
-        allure.attach(f"Host: {host}", "Host Info", attachment_type=allure.attachment_type.TEXT)
 
-        # Создаем директорию на хосте
-        mkdir(host, target_dir)
+        # Создаем директорию на хосте один раз
+        ensure_directory_with_permissions(host, target_dir, raise_on_error=False)
 
         # Копируем каждый бинарный файл
         for binary_file in binary_files:
-            try:
-                result = deploy_binary(binary_file, host, target_dir)
-                host_results[os.path.basename(binary_file)] = result
+            result = deploy_binary(binary_file, host, target_dir)
+            host_results[os.path.basename(binary_file)] = result
+            # Логируем только критичные события
+            if not result['success']:
+                LOGGER.error(f"Failed to deploy {result['name']} to {host}: {result.get('error', 'Unknown error')}")
 
-                if result['success']:
-                    allure.attach(
-                        f"Successfully deployed {result['name']} to {host}:"
-                        f"{result['path']}\n{result.get('output', '')}",
-                        f"Deploy {result['name']} to {host}",
-                        attachment_type=allure.attachment_type.TEXT
-                    )
-                else:
-                    allure.attach(
-                        f"Failed to deploy {result['name']} to {host}: "
-                        f"{result.get('error', 'Unknown error')}",
-                        f"Deploy {result['name']} to {host} failed",
-                        attachment_type=allure.attachment_type.TEXT
-                    )
-            except Exception as e:
-                error_msg = str(e)
-                host_results[os.path.basename(binary_file)] = {
-                    'success': False,
-                    'error': error_msg
-                }
-
-                allure.attach(
-                    f"Exception when deploying {os.path.basename(binary_file)} "
-                    f"to {host}: {error_msg}",
-                    f"Deploy {os.path.basename(binary_file)} to {host} failed",
-                    attachment_type=allure.attachment_type.TEXT
-                )
-
-        # Store the host results in the main results dictionary
         results[host] = host_results
+
+    return results
+
+
+def fix_binaries_directory_permissions(hosts: List[str], target_dir: str = '/tmp/stress_binaries/') -> Dict[str, bool]:
+    """
+    Исправляет права доступа к директории binaries на всех указанных хостах
+    """
+    results = {}
+
+    for host in hosts:
+        try:
+            success = ensure_directory_with_permissions(host, target_dir, raise_on_error=False)
+            results[host] = success
+            if not success:
+                LOGGER.error(f"Failed to fix permissions for {target_dir} on {host}")
+        except Exception as e:
+            LOGGER.error(f"Error fixing permissions on {host}: {e}")
+            results[host] = False
 
     return results

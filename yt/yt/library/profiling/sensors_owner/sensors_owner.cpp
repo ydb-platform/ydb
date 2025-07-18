@@ -199,6 +199,21 @@ TIntrusivePtr<TSensorsOwner::TState> TSensorsOwner::GetDefaultState()
     return state;
 }
 
+const TSensorsOwner& TSensorsOwner::WithHot(bool value) const
+{
+    struct TChild
+    {
+        using TKey = bool;
+
+        TSensorsOwner SensorsOwner;
+
+        TChild(const TProfiler& profiler, bool value)
+            : SensorsOwner(profiler.WithHot(value))
+        { }
+    };
+    return Get<TChild>(value).SensorsOwner;
+}
+
 const TSensorsOwner& GetRootSensorsOwner()
 {
     struct TLocalType

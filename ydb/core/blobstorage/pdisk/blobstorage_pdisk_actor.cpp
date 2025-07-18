@@ -373,6 +373,8 @@ public:
             StartPDiskThread();
             P_LOG(PRI_WARN, BSP01, "Device formatting done");
         } else {
+            RealtimeFlag.RemoveSources();
+            DeviceFlag.RemoveSources();
             PDisk.Reset(new TPDisk(PCtx, Cfg, PDiskCounters));
             PDisk->Initialize();
             Y_VERIFY_S(PDisk->PDiskThread.Running(), PCtx->PDiskLogPrefix);
@@ -536,6 +538,8 @@ public:
             StartPDiskThread();
             P_LOG(PRI_WARN, BSP01, "Format chunks reencryption finished");
         } else {
+            RealtimeFlag.RemoveSources();
+            DeviceFlag.RemoveSources();
             PDisk.Reset(new TPDisk(PCtx, Cfg, PDiskCounters));
             PDisk->Initialize();
             Y_VERIFY_S(PDisk->PDiskThread.Running(), PCtx->PDiskLogPrefix);
@@ -694,6 +698,10 @@ public:
         PDisk->Mon.YardSlay.CountResponse();
     }
 
+    void InitHandle(NPDisk::TEvYardResize::TPtr &ev) {
+        Y_UNUSED(ev);
+    }
+
     void InitHandle(NPDisk::TEvShredPDisk::TPtr &ev) {
         const NPDisk::TEvShredPDisk &evShredPDisk = *ev->Get();
         InitQueue.emplace_back(ev->Sender, evShredPDisk.ShredGeneration, ev->Cookie);
@@ -725,7 +733,7 @@ public:
 
     void ErrorHandle(NPDisk::TEvCheckSpace::TPtr &ev) {
         PDisk->Mon.CheckSpace.CountRequest();
-        Send(ev->Sender, new NPDisk::TEvCheckSpaceResult(NKikimrProto::CORRUPTED, 0, 0, 0, 0, 0, StateErrorReason));
+        Send(ev->Sender, new NPDisk::TEvCheckSpaceResult(NKikimrProto::CORRUPTED, 0, 0, 0, 0, 0, 0u, StateErrorReason));
         PDisk->Mon.CheckSpace.CountResponse();
     }
 
@@ -830,6 +838,10 @@ public:
         Send(ev->Sender, new NPDisk::TEvSlayResult(NKikimrProto::CORRUPTED, 0,
                     evSlay.VDiskId, evSlay.SlayOwnerRound, evSlay.PDiskId, evSlay.VSlotId, str.Str()));
         PDisk->Mon.YardSlay.CountResponse();
+    }
+
+    void ErrorHandle(NPDisk::TEvYardResize::TPtr &ev) {
+        Y_UNUSED(ev);
     }
 
     void ErrorHandle(NPDisk::TEvChunkReserve::TPtr &ev) {
@@ -969,6 +981,11 @@ public:
 
     void Handle(NPDisk::TEvSlay::TPtr &ev) {
         auto* request = PDisk->ReqCreator.CreateFromEv<TSlay>(*ev->Get(), ev->Sender);
+        PDisk->InputRequest(request);
+    }
+
+    void Handle(NPDisk::TEvYardResize::TPtr &ev) {
+        TYardResize* request = PDisk->ReqCreator.CreateFromEv<TYardResize>(*ev->Get(), ev->Sender);
         PDisk->InputRequest(request);
     }
 
@@ -1127,6 +1144,8 @@ public:
         if (NeedToStopOnPoison && PDisk) {
             PDisk->InputRequest(PDisk->ReqCreator.CreateFromArgs<TStopDevice>());
         }
+        RealtimeFlag.RemoveSources();
+        DeviceFlag.RemoveSources();
         PDisk.Reset();
         PassAway();
         P_LOG(PRI_NOTICE, BSP01, "HandlePoison, PDiskThread stopped");
@@ -1474,6 +1493,7 @@ public:
             hFunc(NPDisk::TEvPreShredCompactVDiskResult, InitHandle);
             hFunc(NPDisk::TEvShredVDiskResult, InitHandle);
             hFunc(NPDisk::TEvContinueShred, InitHandle);
+            hFunc(NPDisk::TEvYardResize, InitHandle);
 
             hFunc(TEvReadMetadata, Handle);
             hFunc(TEvWriteMetadata, Handle);
@@ -1506,6 +1526,7 @@ public:
             hFunc(NPDisk::TEvPreShredCompactVDiskResult, Handle);
             hFunc(NPDisk::TEvShredVDiskResult, Handle);
             hFunc(NPDisk::TEvContinueShred, Handle);
+            hFunc(NPDisk::TEvYardResize, Handle);
 
             cFunc(NActors::TEvents::TSystem::PoisonPill, HandlePoison);
             hFunc(NMon::TEvHttpInfo, Handle);
@@ -1542,6 +1563,7 @@ public:
             hFunc(NPDisk::TEvPreShredCompactVDiskResult, ErrorHandle);
             hFunc(NPDisk::TEvShredVDiskResult, ErrorHandle);
             hFunc(NPDisk::TEvContinueShred, ErrorHandle);
+            hFunc(NPDisk::TEvYardResize, ErrorHandle);
 
             cFunc(NActors::TEvents::TSystem::PoisonPill, HandlePoison);
             hFunc(NMon::TEvHttpInfo, Handle);

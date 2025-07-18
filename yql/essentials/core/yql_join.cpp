@@ -348,6 +348,18 @@ namespace {
         for (auto i = 0U; i < leftKeyTypes.size(); ++i) {
             auto leftKeyType = leftKeyTypes[i];
             auto rightKeyType = rightKeyTypes[i];
+            if (leftKeyType->HasErrors()) {
+                TErrorTypeVisitor visitor(ctx);
+                leftKeyType->Accept(visitor);
+                return IGraphTransformer::TStatus::Error;
+            }
+
+            if (rightKeyType->HasErrors()) {
+                TErrorTypeVisitor visitor(ctx);
+                rightKeyType->Accept(visitor);
+                return IGraphTransformer::TStatus::Error;
+            }
+
             if (isMultiget) {
                 if (ETypeAnnotationKind::Optional == leftKeyType->GetKind()) {
                     leftKeyType = leftKeyType->Cast<TOptionalExprType>()->GetItemType();
@@ -2097,6 +2109,71 @@ void GetPruneKeysColumnsForJoinLeaves(const TCoEquiJoinTuple& joinTree, THashMap
             }
         }
     }
+}
+
+TExprNode::TPtr DropAnyOverJoinInputs(TExprNode::TPtr joinTree, const TJoinLabels& labels, const THashMap<TStringBuf, THashSet<TStringBuf>>& keyColumnsByLabel, TExprContext& ctx) {
+    const auto& joinType = joinTree->Child(TCoEquiJoinTuple::idx_Type)->Content();
+    auto settings = GetEquiJoinLinkSettings(*joinTree->Child(TCoEquiJoinTuple::idx_Options));
+    bool settingsChanged = false;
+
+    auto canDropAny = [&](const TStringBuf& label, const TStringBuf& joinType, bool leftSide) {
+        auto input = labels.FindInput(label);
+        YQL_ENSURE(input.Defined());
+
+        auto it = keyColumnsByLabel.find(label);
+        YQL_ENSURE(it != keyColumnsByLabel.end());
+        auto& keyColumns = it->second;
+
+        if ((*input)->Distinct && (*input)->Distinct->ContainsCompleteSet({keyColumns.begin(), keyColumns.end()})) {
+            return true;
+        }
+
+        if ((*input)->Unique && (*input)->Unique->ContainsCompleteSet({keyColumns.begin(), keyColumns.end()})) {
+            if (joinType == "Inner" ||
+                (
+                    leftSide
+                    ? (joinType == "Right" || joinType == "RightSemi" || joinType == "RightOnly")
+                    : (joinType == "Left" || joinType == "LeftSemi" || joinType == "LeftOnly")
+                )
+            ) {
+                return true;
+            }
+        }
+
+        return false;
+    };
+
+    auto left = joinTree->ChildPtr(TCoEquiJoinTuple::idx_LeftScope);
+    if (!left->IsAtom()) {
+        auto newLeaf = DropAnyOverJoinInputs(left, labels, keyColumnsByLabel, ctx);
+        if (newLeaf != left) {
+            joinTree = ctx.ChangeChild(*joinTree, TCoEquiJoinTuple::idx_LeftScope, std::move(newLeaf));
+        }
+    } else {
+        if (settings.LeftHints.contains("any") && canDropAny(left->Content(), joinType, true)) {
+            settings.LeftHints.erase("any");
+            settingsChanged = true;
+        }
+    }
+
+    auto right = joinTree->ChildPtr(TCoEquiJoinTuple::idx_RightScope);
+    if (!right->IsAtom()) {
+        auto newLeaf = DropAnyOverJoinInputs(right, labels, keyColumnsByLabel, ctx);
+        if (newLeaf != right) {
+            joinTree = ctx.ChangeChild(*joinTree, TCoEquiJoinTuple::idx_RightScope, std::move(newLeaf));
+        }
+    } else {
+        if (settings.RightHints.contains("any") && canDropAny(right->Content(), joinType, false)) {
+            settings.RightHints.erase("any");
+            settingsChanged = true;
+        }
+    }
+
+    if (settingsChanged) {
+        joinTree = ctx.ChangeChild(*joinTree, TCoEquiJoinTuple::idx_Options, BuildEquiJoinLinkSettings(settings, ctx));
+    }
+
+    return joinTree;
 }
 
 } // namespace NYql

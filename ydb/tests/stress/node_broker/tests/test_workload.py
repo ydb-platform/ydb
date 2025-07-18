@@ -1,30 +1,50 @@
 # -*- coding: utf-8 -*-
 import os
 import yatest
+import pytest
 
-from ydb.tests.library.harness.kikimr_runner import KiKiMR
-from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.common.types import Erasure
 from ydb.tests.library.harness.util import LogLevels
 
 
-class TestYdbWorkload(object):
-    @classmethod
-    def setup_class(cls):
-        cls.cluster = KiKiMR(
-            KikimrConfigGenerator(
-                erasure=Erasure.MIRROR_3_DC,
-                additional_log_configs={
-                    "NODE_BROKER": LogLevels.TRACE,
-                    "NAMESERVICE": LogLevels.TRACE,
-                },
-            )
-        )
-        cls.cluster.start()
+from ydb.tests.library.stress.fixtures import StressFixture
 
-    @classmethod
-    def teardown_class(cls):
-        cls.cluster.stop()
+
+class TestYdbWorkload(StressFixture):
+    @pytest.fixture(autouse=True, scope="function")
+    def setup(self):
+        yield from self.setup_cluster(
+            erasure=Erasure.MIRROR_3_DC,
+            additional_log_configs={
+                "NODE_BROKER": LogLevels.TRACE,
+                "NAMESERVICE": LogLevels.TRACE,
+            },
+        )
+
+    def test(self):
+        cmd = [
+            yatest.common.binary_path(os.getenv("YDB_TEST_PATH")),
+            "--endpoint", self.endpoint,
+            "--mon-endpoint", self.mon_endpoint,
+            "--database", self.database,
+            "--duration", "120",
+        ]
+        yatest.common.execute(cmd, wait=True)
+
+
+class TestDeltaProtocol(StressFixture):
+    @pytest.fixture(autouse=True, scope="function")
+    def setup(self):
+        yield from self.setup_cluster(
+            erasure=Erasure.MIRROR_3_DC,
+            additional_log_configs={
+                "NODE_BROKER": LogLevels.TRACE,
+                "NAMESERVICE": LogLevels.TRACE,
+            },
+            extra_feature_flags={
+                "enable_node_broker_delta_protocol": True
+            }
+        )
 
     def test(self):
         cmd = [

@@ -1,12 +1,10 @@
 #include "registry.h"
 
 #include "sensor.h"
-#include "percpu.h"
+
+#include <yt/yt/library/profiling/percpu.h>
 
 #include <yt/yt/core/misc/protobuf_helpers.h>
-
-#include <yt/yt/library/profiling/impl.h>
-#include <yt/yt/library/profiling/sensor.h>
 
 #include <library/cpp/yt/assert/assert.h>
 

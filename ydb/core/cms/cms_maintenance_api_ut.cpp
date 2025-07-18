@@ -268,6 +268,55 @@ Y_UNIT_TEST_SUITE(TMaintenanceApiTest) {
             env.CheckRequest("user", "user-r-1", false, NKikimrCms::TStatus::TStatus::WRONG_REQUEST);
         }
     }
+
+    Y_UNIT_TEST(ForceAvailabilityMode) {
+        TCmsTestEnv env(8);
+
+        NKikimrCms::TCmsConfig config;
+        config.MutableClusterLimits()->SetDisabledNodesLimit(1);
+        config.MutableClusterLimits()->SetDisabledNodesRatioLimit(30);
+        config.MutableTenantLimits()->SetDisabledNodesLimit(1);
+        config.MutableTenantLimits()->SetDisabledNodesRatioLimit(30);
+        env.SetCmsConfig(config);
+
+        auto response = env.CheckMaintenanceTaskCreate(
+            "task-1",
+            Ydb::StatusIds::SUCCESS,
+            Ydb::Maintenance::AVAILABILITY_MODE_FORCE,
+            MakeActionGroup(
+                MakeLockAction(env.GetNodeId(0), TDuration::Minutes(10))
+            ),
+            MakeActionGroup(
+                MakeLockAction(env.GetNodeId(1), TDuration::Minutes(10))
+            ),
+            MakeActionGroup(
+                MakeLockAction(env.GetNodeId(2), TDuration::Minutes(10))
+            ),
+            MakeActionGroup(
+                MakeLockAction(env.GetNodeId(3), TDuration::Minutes(10))
+            ),
+            MakeActionGroup(
+                MakeLockAction(env.GetNodeId(4), TDuration::Minutes(10))
+            ),
+            MakeActionGroup(
+                MakeLockAction(env.GetNodeId(5), TDuration::Minutes(10))
+            ),
+            MakeActionGroup(
+                MakeLockAction(env.GetNodeId(6), TDuration::Minutes(10))
+            ),
+            MakeActionGroup(
+                MakeLockAction(env.GetNodeId(7), TDuration::Minutes(10))
+            )
+        );
+
+        // Everything is allowed to perform maintenance regardless of the failure model
+        UNIT_ASSERT_VALUES_EQUAL(response.action_group_states().size(), 8);
+        for (size_t i = 0; i < 8; ++i) {
+            UNIT_ASSERT_VALUES_EQUAL(response.action_group_states(i).action_states().size(), 1);
+            const auto& a = response.action_group_states(i).action_states(0);
+            UNIT_ASSERT_VALUES_EQUAL(a.status(), ActionState::ACTION_STATUS_PERFORMED);
+        }
+    }
 }
 
 } // namespace NKikimr::NCmsTest 

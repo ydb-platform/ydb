@@ -1,9 +1,38 @@
 {%- macro JvmArgs(jvm_args) -%}
-{%-     if jvm_args|length %}
+{%-     if jvm_args|length -%}
+{%-         set jnis_args = jvm_args|select('startsWith', 'jnis=') -%}
+{%-         set other_jvm_args = jvm_args|reject('startsWith', 'jnis=') -%}
+{%-         set ep_jvm_args = other_jvm_args|select('eq', '--enable-preview') -%}
+{%-         set ea_jvm_args = other_jvm_args|select('eq', '-ea') -%}
+{%-         set other_jvm_args = other_jvm_args|reject('eq', '--enable-preview')|reject('eq', '-ea') -%}
+{%-         if jnis_args|length %}
+    val library_path = listOf(
+{%-             for jnis_arg in jnis_args -%}
+{%-                 set jnis = split(jnis_arg|replace('jnis=', ''), ',') -%}
+{%-                 for jni in jnis -%}
+{%-                     set path_and_name = rsplit(jni, "/", 2) %}
+        "$arcadia_root/{{ path_and_name[0] }}",
+{%-                 endfor -%}
+{%-             endfor %}
+    ).joinToString(":")
+{%          endif %}
     jvmArgs = mutableListOf(
-{%-         for jvm_arg in jvm_args %}
-        "{{ jvm_arg }}",
-{%-         endfor %}
+{%-         if jnis_args|length -%}
+{#-             Increase heap, else happened java.lang.OutOfMemoryError #}
+        "-Xmx2048m",
+        "-Djava.library.path=$library_path",
+{%-         endif -%}
+{%-         if ep_jvm_args|length %}
+        "{{ ep_jvm_args|first }}",
+{%-         endif -%}
+{%-         if ea_jvm_args|length %}
+        "{{ ea_jvm_args|first }}",
+{%-         endif -%}
+{%-         if other_jvm_args|length -%}
+{%-             for jvm_arg in other_jvm_args %}
+        "{{ jvm_arg|replace("$", "\\$") }}",
+{%-             endfor -%}
+{%-         endif %}
     )
 {%      endif -%}
 {%- endmacro -%}
@@ -12,6 +41,9 @@
 {%- if target.enable_preview -%}
 {%-     set jvm_args = jvm_args + ["--enable-preview"] -%}
 {%- endif -%}
+{%- if jnis|length -%}
+{%-     set jvm_args = jvm_args + ["jnis=" + jnis|join(",")] -%}
+{%- endif %}
 {%- if target.jvm_args|length %}
 {%-     set jvm_args = jvm_args + target.jvm_args -%}
 {%- endif -%}
@@ -26,7 +58,7 @@ tasks.withType<JavaExec> {
 
 {%- set test_jvm_args = jvm_args -%}
 {%- set extra_jvm_args = extra_targets|selectattr('jvm_args')|map(attribute='jvm_args')|sum -%}
-{%- if extra_jvm_args|length %}
+{%- if extra_jvm_args|length and test_jvm_args|join('|') != extra_jvm_args|join('|') %}
 {%-     set test_jvm_args = test_jvm_args + extra_jvm_args -%}
 {%- endif -%}
 {%- if test_jvm_args|length %}

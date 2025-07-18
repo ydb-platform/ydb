@@ -63,6 +63,7 @@ Y_UNIT_TEST_SUITE(TDataSplitterTest) {
         int itemsPerShard = ITEM_COUNT / minShardCount;
         itemsPerShard = std::max(minItemsPerShard, itemsPerShard);
         int expectedItemSplits = (ITEM_COUNT - 1) / itemsPerShard;
+        UNIT_ASSERT(expectedItemSplits >= 0);
         UNIT_ASSERT_VALUES_EQUAL(itemSplits.size(), expectedItemSplits);
 
         // Heavy tables - check based on PER_WAREHOUSE_MB
@@ -73,6 +74,7 @@ Y_UNIT_TEST_SUITE(TDataSplitterTest) {
         int stockWarehousesPerShard2 = (1000 + minShardCount - 1) / minShardCount;
         stockWarehousesPerShard = std::min(stockWarehousesPerShard, stockWarehousesPerShard2);
         int expectedStockSplits = (1000 - 1) / stockWarehousesPerShard;
+        UNIT_ASSERT(expectedStockSplits > 0);
         UNIT_ASSERT_VALUES_EQUAL(stockSplits.size(), expectedStockSplits);
         if (!stockSplits.empty()) {
             UNIT_ASSERT_VALUES_EQUAL(stockSplits[0], 1 + stockWarehousesPerShard);
@@ -85,12 +87,14 @@ Y_UNIT_TEST_SUITE(TDataSplitterTest) {
         int customerWarehousesPerShard2 = (1000 + minShardCount - 1) / minShardCount;
         customerWarehousesPerShard = std::min(customerWarehousesPerShard, customerWarehousesPerShard2);
         int expectedCustomerSplits = (1000 - 1) / customerWarehousesPerShard;
+        UNIT_ASSERT(expectedCustomerSplits > 0);
         UNIT_ASSERT_VALUES_EQUAL(customerSplits.size(), expectedCustomerSplits);
 
         // Light tables
         auto warehouseSplits = splitter.GetSplitKeys(TABLE_WAREHOUSE);
         int lightWarehousesPerShard = (1000 + minShardCount - 1) / minShardCount;
         int expectedLightSplits = (1000 - 1) / lightWarehousesPerShard;
+        UNIT_ASSERT(expectedLightSplits > 0);
         UNIT_ASSERT_VALUES_EQUAL(warehouseSplits.size(), expectedLightSplits);
     }
 

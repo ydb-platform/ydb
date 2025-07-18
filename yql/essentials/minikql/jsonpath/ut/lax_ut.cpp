@@ -52,7 +52,7 @@ public:
         };
 
         for (const auto& testCase : testCases) {
-            for (const auto mode : LAX_MODES) {
+            for (const auto mode : LaxModes_) {
                 RunTestCase(testCase.Json, mode + testCase.JsonPath, testCase.Result);
             }
         }
@@ -65,7 +65,7 @@ public:
         };
 
         for (const auto& testCase : testCases) {
-            for (const auto mode : LAX_MODES) {
+            for (const auto mode : LaxModes_) {
                 RunTestCase(testCase.Json, mode + testCase.JsonPath, testCase.Result);
             }
         }
@@ -109,7 +109,7 @@ public:
         };
 
         for (const auto& testCase : testCases) {
-            for (const auto mode : LAX_MODES) {
+            for (const auto mode : LaxModes_) {
                 RunTestCase(testCase.Json, mode + testCase.JsonPath, testCase.Result);
             }
         }
@@ -127,7 +127,7 @@ public:
         };
 
         for (const auto& testCase : testCases) {
-            for (const auto mode : LAX_MODES) {
+            for (const auto mode : LaxModes_) {
                 RunTestCase(testCase.Json, mode + testCase.JsonPath, testCase.Result);
             }
         }
@@ -156,7 +156,7 @@ public:
         };
 
         for (const auto& testCase : testCases) {
-            for (const auto mode : LAX_MODES) {
+            for (const auto mode : LaxModes_) {
                 RunTestCase(testCase.Json, mode + testCase.JsonPath, testCase.Result);
             }
         }
@@ -174,7 +174,7 @@ public:
         };
 
         for (const auto& testCase : testCases) {
-            for (const auto mode : LAX_MODES) {
+            for (const auto mode : LaxModes_) {
                 RunTestCase(testCase.Json, mode + testCase.JsonPath, testCase.Result);
             }
         }
@@ -189,7 +189,7 @@ public:
         };
 
         for (const auto& testCase : testCases) {
-            for (const auto mode : LAX_MODES) {
+            for (const auto mode : LaxModes_) {
                 RunTestCase(testCase.Json, mode + testCase.JsonPath, testCase.Result);
             }
         }
@@ -210,7 +210,7 @@ public:
         };
 
         for (const auto& testCase : testCases) {
-            for (const auto mode : LAX_MODES) {
+            for (const auto mode : LaxModes_) {
                 RunTestCase(testCase.Json, mode + testCase.JsonPath, testCase.Result);
             }
         }
@@ -227,7 +227,7 @@ public:
         };
 
         for (const auto& testCase : testCases) {
-            for (const auto mode : LAX_MODES) {
+            for (const auto mode : LaxModes_) {
                 RunTestCase(testCase.Json, mode + testCase.JsonPath, testCase.Result);
             }
         }
@@ -241,7 +241,7 @@ public:
         };
 
         for (const auto& testCase : testCases) {
-            for (const auto mode : LAX_MODES) {
+            for (const auto mode : LaxModes_) {
                 RunTestCase(testCase.Json, mode + testCase.JsonPath, testCase.Result);
             }
         }
@@ -258,7 +258,7 @@ public:
         };
 
         for (const auto& testCase : testCases) {
-            for (const auto mode : LAX_MODES) {
+            for (const auto mode : LaxModes_) {
                 RunTestCase(testCase.Json, mode + testCase.JsonPath, testCase.Result);
             }
         }
@@ -273,7 +273,7 @@ public:
         };
 
         for (const auto& testCase : testCases) {
-            for (const auto mode : LAX_MODES) {
+            for (const auto mode : LaxModes_) {
                 RunTestCase(testCase.Json, mode + testCase.JsonPath, testCase.Result);
             }
         }
@@ -281,3 +281,4 @@ public:
 };
 
 UNIT_TEST_SUITE_REGISTRATION(TJsonPathLaxTest);
+

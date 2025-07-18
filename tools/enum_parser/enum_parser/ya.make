@@ -1,5 +1,8 @@
 PROGRAM(enum_parser)
 
+NO_PROFILE_RUNTIME()
+NO_CLANG_COVERAGE()
+
 SRCS(
     main.cpp
 )

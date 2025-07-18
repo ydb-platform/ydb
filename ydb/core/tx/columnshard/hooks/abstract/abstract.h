@@ -68,7 +68,8 @@ public:
         Compaction,
         TTL,
         Cleanup,
-        GC
+        GC,
+        CleanupSchemas
     };
     YDB_ACCESSOR(bool, InterruptionOnLockedTransactions, false);
 
@@ -163,6 +164,9 @@ public:
             return AppDataVerified().ColumnShardConfig;
         }
         return DefaultConfig;
+    }
+
+    virtual void OnCleanupSchemasFinished() {
     }
 
     const NOlap::NSplitter::TSplitSettings& GetBlobSplitSettings(
@@ -357,6 +361,10 @@ public:
         return {};
     }
 
+    virtual bool IsForcedGenerateInternalPathId() const {
+        return false;
+    }
+
     virtual void OnAddPathId(const ui64 /* tabletId */, const NColumnShard::TUnifiedPathId& /* pathId */) {
     }
     virtual void OnDeletePathId(const ui64 /* tabletId */, const NColumnShard::TUnifiedPathId& /* pathId */) {
@@ -364,9 +372,38 @@ public:
 
 };
 
+class IKqpController {
+public:
+    using TPtr = std::shared_ptr<IKqpController>;
+
+    virtual ~IKqpController() = default;
+
+    virtual void OnInitTabletScan(const ui64 /*tabletId*/) {
+    }
+
+    virtual void OnInitTabletResolving(const ui64 /*tabletId*/) {
+    }
+};
+
+class TTestKqpController: public IKqpController {
+private:
+    YDB_READONLY_DEF(TAtomicCounter, InitScanCounter);
+    YDB_READONLY_DEF(TAtomicCounter, ResolvingCounter);
+
+public:
+    virtual void OnInitTabletScan(const ui64 /*tabletId*/) override {
+        InitScanCounter.Inc();
+    }
+
+    virtual void OnInitTabletResolving(const ui64 /*tabletId*/) override {
+        ResolvingCounter.Inc();
+    }
+};
+
 class TControllers {
 private:
     ICSController::TPtr CSController = std::make_shared<ICSController>();
+    IKqpController::TPtr KqpController = std::make_shared<IKqpController>();
 
 public:
     template <class TController>
@@ -413,6 +450,23 @@ public:
     template <class T>
     static T* GetControllerAs() {
         auto controller = Singleton<TControllers>()->CSController;
+        return dynamic_cast<T*>(controller.get());
+    }
+
+    template <class T, class... Types>
+    static TGuard<T> RegisterKqpControllerGuard(Types... args) {
+        auto result = std::make_shared<T>(args...);
+        Singleton<TControllers>()->KqpController = result;
+        return result;
+    }
+
+    static IKqpController::TPtr GetKqpController() {
+        return Singleton<TControllers>()->KqpController;
+    }
+
+    template <class T>
+    static T* GetKqpControllerAs() {
+        auto controller = Singleton<TControllers>()->KqpController;
         return dynamic_cast<T*>(controller.get());
     }
 };

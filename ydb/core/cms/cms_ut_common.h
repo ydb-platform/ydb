@@ -94,6 +94,7 @@ struct TTestEnvOpts {
     bool EnableSingleCompositeActionGroup;
     bool EnableDynamicGroups;
     bool IsBridgeMode;
+    bool EnableSimpleStateStorageConfig;
 
     using TNodeLocationCallback = std::function<TNodeLocation(ui32)>;
     TNodeLocationCallback NodeLocationCallback;
@@ -118,6 +119,7 @@ struct TTestEnvOpts {
         , EnableSingleCompositeActionGroup(true)
         , EnableDynamicGroups(false)
         , IsBridgeMode(false)
+        , EnableSimpleStateStorageConfig(false)
     {
     }
 
@@ -146,9 +148,10 @@ struct TTestEnvOpts {
         return *this;
     }
 
-    TTestEnvOpts& WithBridgeMode(ui32 pileCount = 2) {
+    TTestEnvOpts& WithBridgeMode(ui32 pileCount = 2, bool enableSimpleStateStorageConfig = false) {
         IsBridgeMode = true;
         PileCount = pileCount;
+        EnableSimpleStateStorageConfig = enableSimpleStateStorageConfig;
         return *this;
     }
 };

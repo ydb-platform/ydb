@@ -1,11 +1,10 @@
 #pragma once
-#include <ydb/core/tx/columnshard/common/snapshot.h>
 #include <ydb/core/tx/columnshard/counters/scan.h>
 #include <ydb/core/tx/columnshard/engines/predicate/filter.h>
-#include <ydb/core/tx/columnshard/resource_subscriber/task.h>
 #include <ydb/core/tx/limiter/grouped_memory/usage/abstract.h>
 #include <ydb/core/tx/program/program.h>
 
+#include <ydb/library/formats/arrow/permutations.h>
 #include <ydb/library/yql/dq/actors/protos/dq_stats.pb.h>
 
 namespace NKikimr::NOlap::NReader {
@@ -22,9 +21,7 @@ public:
     TPartialSourceAddress(const ui32 sourceId, const ui32 sourceIdx, const ui32 syncPointIndex)
         : SourceId(sourceId)
         , SourceIdx(sourceIdx)
-        , SyncPointIndex(syncPointIndex)
-    {
-    
+        , SyncPointIndex(syncPointIndex) {
     }
 };
 

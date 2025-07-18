@@ -10,7 +10,9 @@ enum class EMemoryConsumerKind {
     ScanGroupedMemoryLimiter,
     CompGroupedMemoryLimiter,
     BlobCache,
-    DataAccessorCache
+    DataAccessorCache,
+    ColumnDataCache,
+    DeduplicationGroupedMemoryLimiter,
 };
 
 struct IMemoryConsumer : public TThrRefBase {

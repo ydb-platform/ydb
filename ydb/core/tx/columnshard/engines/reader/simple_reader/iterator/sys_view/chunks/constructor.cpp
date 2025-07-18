@@ -3,26 +3,23 @@
 
 namespace NKikimr::NOlap::NReader::NSimple::NSysView::NChunks {
 
-std::shared_ptr<IDataSource> TPortionDataConstructor::Construct(const std::shared_ptr<NReader::NSimple::TSpecialReadContext>& context) {
+std::shared_ptr<IDataSource> TPortionDataConstructor::Construct(const std::shared_ptr<NReader::NCommon::TSpecialReadContext>& context) {
     AFL_VERIFY(SourceId);
     return std::make_shared<TSourceData>(
         SourceId, SourceIdx, PathId, TabletId, Portion, std::move(Start), std::move(Finish), context, std::move(Schema));
 }
 
-std::shared_ptr<NKikimr::NOlap::NReader::NCommon::IDataSource> TConstructor::DoExtractNext(
-    const std::shared_ptr<NReader::NCommon::TSpecialReadContext>& context) {
+std::shared_ptr<NCommon::IDataSource> TConstructor::DoExtractNext(const std::shared_ptr<NReader::NCommon::TSpecialReadContext>& context) {
     AFL_VERIFY(Constructors.size());
     Constructors.front().SetIndex(CurrentSourceIdx);
     ++CurrentSourceIdx;
     if (Sorting == ERequestSorting::NONE) {
-        std::shared_ptr<NReader::NCommon::IDataSource> result =
-            Constructors.front().Construct(std::static_pointer_cast<NReader::NSimple::TSpecialReadContext>(context));
+        std::shared_ptr<NReader::NCommon::IDataSource> result = Constructors.front().Construct(context);
         Constructors.pop_front();
         return result;
     } else {
         std::pop_heap(Constructors.begin(), Constructors.end(), TPortionDataConstructor::TComparator(Sorting == ERequestSorting::DESC));
-        std::shared_ptr<NReader::NCommon::IDataSource> result =
-            Constructors.back().Construct(std::static_pointer_cast<NReader::NSimple::TSpecialReadContext>(context));
+        std::shared_ptr<NReader::NCommon::IDataSource> result = Constructors.back().Construct(context);
         Constructors.pop_back();
         return result;
     }

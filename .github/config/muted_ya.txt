@@ -32,30 +32,18 @@ ydb/core/kqp/ut/federated_query/large_results KqpScriptExecResults.ExecuteScript
 ydb/core/kqp/ut/federated_query/s3 unittest.sole chunk
 ydb/core/kqp/ut/indexes KqpMultishardIndex.WriteIntoRenamingAsyncIndex
 ydb/core/kqp/ut/indexes KqpMultishardIndex.WriteIntoRenamingSyncIndex
-ydb/core/kqp/ut/olap KqpDecimalColumnShard.TestAggregation
-ydb/core/kqp/ut/olap KqpDecimalColumnShard.TestFilterCompare
-ydb/core/kqp/ut/olap KqpDecimalColumnShard.TestFilterEqual
-ydb/core/kqp/ut/olap KqpDecimalColumnShard.TestFilterNulls
-ydb/core/kqp/ut/olap KqpDecimalColumnShard.TestJoinByDecimal
-ydb/core/kqp/ut/olap KqpDecimalColumnShard.TestJoinById
-ydb/core/kqp/ut/olap KqpDecimalColumnShard.TestOrderByDecimal
-ydb/core/kqp/ut/olap KqpDecimalColumnShard.TestSimpleQueries
-ydb/core/kqp/ut/olap unittest.[*/*] chunk
 ydb/core/kqp/ut/opt KqpKv.ReadRows_TimeoutCancelsReads
 ydb/core/kqp/ut/query KqpAnalyze.AnalyzeTable+ColumnStore
 ydb/core/kqp/ut/query KqpAnalyze.AnalyzeTable-ColumnStore
 ydb/core/kqp/ut/query KqpLimits.StreamWrite+Allowed
 ydb/core/kqp/ut/query KqpStats.DeferredEffects+UseSink
 ydb/core/kqp/ut/query KqpStats.SysViewClientLost
+ydb/core/kqp/ut/scan KqpSplit.StreamLookupJoinDeliveryProblemAfterFirstResult
 ydb/core/kqp/ut/scheme KqpOlapScheme.AddPgColumnWithStore
 ydb/core/kqp/ut/scheme KqpOlapScheme.TenThousandColumns
-ydb/core/kqp/ut/scheme KqpOlapTypes.Decimal
-ydb/core/kqp/ut/scheme KqpOlapTypes.Decimal35
-ydb/core/kqp/ut/scheme KqpOlapTypes.DecimalCsv
 ydb/core/kqp/ut/scheme unittest.[*/*] chunk
 ydb/core/kqp/ut/service unittest.[*/*] chunk
 ydb/core/kqp/ut/yql KqpScripting.StreamExecuteYqlScriptScanOperationTmeoutBruteForce
-ydb/core/mind/hive/ut THiveTest.TestBridgeDisconnectWithReboots
 ydb/core/mind/hive/ut unittest.[*/*] chunk
 ydb/core/quoter/ut QuoterWithKesusTest.PrefetchCoefficient
 ydb/core/statistics/aggregator/ut AnalyzeColumnshard.AnalyzeRebootColumnShard
@@ -66,9 +54,6 @@ ydb/core/transfer/ut/large TransferLarge.Transfer100KM_10P_LocalRead_TopicAutoPa
 ydb/core/transfer/ut/large TransferLarge.Transfer100KM_10P_RowTable_TopicAutoPartitioning
 ydb/core/transfer/ut/large TransferLarge.Transfer1KM_1KP_RowTable_TopicAutoPartitioning
 ydb/core/tx/conveyor_composite/ut CompositeConveyorTests.TestUniformDistribution
-ydb/core/tx/datashard/ut_incremental_backup IncrementalBackup.ComplexRestoreBackupCollection+WithIncremental
-ydb/core/tx/datashard/ut_incremental_backup IncrementalBackup.MultiRestore
-ydb/core/tx/datashard/ut_incremental_backup IncrementalBackup.SimpleRestoreBackupCollection+WithIncremental
 ydb/core/tx/schemeshard/ut_background_cleaning TSchemeshardBackgroundCleaningTest.SchemeshardBackgroundCleaningTestCreateCleanManyTables
 ydb/core/tx/schemeshard/ut_login_large TSchemeShardLoginLargeTest.RemoveLogin_Many
 ydb/core/tx/tiering/ut ColumnShardTiers.TTLUsage
@@ -330,6 +315,5 @@ ydb/tests/stress/reconfig_state_storage_workload/tests flake8.sole chunk
 ydb/tests/stress/reconfig_state_storage_workload/tests import_test.sole chunk
 ydb/tests/stress/reconfig_state_storage_workload/tests py3test.sole chunk
 ydb/tests/stress/reconfig_state_storage_workload/tests test_board_workload.py.TestReconfigStateStorageBoardWorkload.test_state_storage_board
-ydb/tests/stress/reconfig_state_storage_workload/tests test_scheme_board_workload.py.TestReconfigSchemeBoardWorkload.test_scheme_board
 ydb/tests/stress/reconfig_state_storage_workload/tests test_state_storage_workload.py.TestReconfigStateStorageWorkload.test_state_storage
 ydb/tools/stress_tool/ut TDeviceTestTool.PDiskTestLogWrite

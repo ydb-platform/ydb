@@ -4,6 +4,7 @@
 #include "node_warden.h"
 #include "node_warden_events.h"
 
+#include <ydb/core/protos/bridge.pb.h>
 #include <util/generic/hash_multi_map.h>
 #include <ydb/core/mind/bscontroller/group_mapper.h>
 
@@ -257,6 +258,8 @@ namespace NKikimr::NStorage {
         using TScatterTasks = THashMap<ui64, TScatterTask>;
         TScatterTasks ScatterTasks;
 
+        std::optional<TActorId> StateStorageSelfHealActor;
+
         // root node operation
         enum class ERootState {
             INITIAL,
@@ -357,6 +360,7 @@ namespace NKikimr::NStorage {
 
         static TString CalculateFingerprint(const NKikimrBlobStorage::TStorageConfig& config);
         static void UpdateFingerprint(NKikimrBlobStorage::TStorageConfig *config);
+        static void UpdateBridgeFingerprint(NKikimrBridge::TClusterState *state);
         static bool CheckFingerprint(const NKikimrBlobStorage::TStorageConfig& config);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////

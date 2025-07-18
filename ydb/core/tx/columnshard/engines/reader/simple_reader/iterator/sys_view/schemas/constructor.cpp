@@ -10,8 +10,8 @@ TConstructor::TConstructor(
     const TColumnEngineForLogs* engineImpl = dynamic_cast<const TColumnEngineForLogs*>(&engine);
     std::vector<ISnapshotSchema::TPtr> schemasAll;
     for (auto&& i : engineImpl->GetVersionedSchemas().GetPresetVersionedIndex()) {
-        for (auto&& [_, s] : i.second->GetSnapshotByVersions()) {
-            schemasAll.emplace_back(s);
+        for (auto&& [_, s] : i.second->GetSchemaByVersion()) {
+            schemasAll.emplace_back(s.GetSchema());
         }
     }
     const auto pred = [](const ISnapshotSchema::TPtr& l, const ISnapshotSchema::TPtr& r) {

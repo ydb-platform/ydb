@@ -59,7 +59,7 @@ public:
         }
     };
 
-    std::shared_ptr<NReader::NSimple::IDataSource> Construct(const std::shared_ptr<NReader::NSimple::TSpecialReadContext>& context) {
+    std::shared_ptr<NReader::NSimple::IDataSource> Construct(const std::shared_ptr<NReader::NCommon::TSpecialReadContext>& context) {
         AFL_VERIFY(SourceId);
         return std::make_shared<TSourceData>(
             SourceId, SourceIdx, PathId, TabletId, std::move(Portions), std::move(Start), std::move(Finish), context);

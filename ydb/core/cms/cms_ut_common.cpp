@@ -654,7 +654,13 @@ TCmsTestEnv::TCmsTestEnv(const TTestEnvOpts &options)
             options.PileCount - 1,
             TStateStorageInfo::TRingGroup{.State = SYNCHRONIZED, .NToSelect = options.NToSelect}
         );
-        auto setuper = CreateCustomStateStorageSetupper(ringGroups, options.NRings * options.RingSize);
+        THashMap<ui32, TVector<ui32>> ringGroupIdToNodeIds;
+        for (ui32 i = 1; i <= GetNodeCount(); ++i) {
+            ringGroupIdToNodeIds[i % options.PileCount].push_back(i - 1);
+        }
+        auto setuper = options.EnableSimpleStateStorageConfig 
+                                              ? CreateCustomStateStorageSetupper(ringGroups, 3) 
+                                              : CreateCustomStateStorageSetupper(ringGroups, ringGroupIdToNodeIds);
 
         for (ui32 nodeIndex = 0; nodeIndex < GetNodeCount(); ++nodeIndex) {
             setuper(*this, nodeIndex);

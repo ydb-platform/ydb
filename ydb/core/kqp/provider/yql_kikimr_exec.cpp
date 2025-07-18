@@ -1147,14 +1147,7 @@ public:
                 return SyncError();
             }
 
-            bool truncated = false;
-            auto yson = EncodeResultToYson(literalResult.Result, truncated);
-            if (truncated) {
-                ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), "EvaluteExpr result is too big and was truncated"));
-                input->SetState(TExprNode::EState::Error);
-                return SyncError();
-            }
-
+            auto yson = literalResult.BinaryResult;
             output = input;
             input->SetState(TExprNode::EState::ExecutionComplete);
             input->SetResult(ctx.NewAtom(input->Pos(), yson));
@@ -2437,9 +2430,9 @@ public:
                 return SyncError();
             }
 
-            if (const auto& x = settings.Settings.StaticCredentials; x && (!x->Password || !x->PasswordSecretName)) {
+            if (const auto& x = settings.Settings.StaticCredentials; x && !x->Password && !x->PasswordSecretName) {
                 ctx.AddError(TIssue(ctx.GetPosition(createReplication.Pos()),
-                    "PASSWORD or PASSWORD_SECRET_NAME are not provided"));
+                    "Neither PASSWORD nor PASSWORD_SECRET_NAME are provided"));
                 return SyncError();
             }
 
@@ -2536,9 +2529,9 @@ public:
                 return SyncError();
             }
 
-            if (const auto& x = settings.Settings.StaticCredentials; x && (!x->Password || !x->PasswordSecretName)) {
+            if (const auto& x = settings.Settings.StaticCredentials; x && !x->Password && !x->PasswordSecretName) {
                 ctx.AddError(TIssue(ctx.GetPosition(createTransfer.Pos()),
-                    "PASSWORD or PASSWORD_SECRET_NAME are not provided"));
+                    "Neither PASSWORD nor PASSWORD_SECRET_NAME are provided"));
                 return SyncError();
             }
 

@@ -1200,6 +1200,7 @@ Y_UNIT_TEST_SUITE(TOlap) {
     Y_UNIT_TEST(MoveTableStats) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
+        runtime.GetAppData().FeatureFlags.SetEnableMoveColumnTable(true);
 
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
         csController->SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(1));

@@ -165,6 +165,9 @@ namespace NKikimr::NStorage {
             case TQuery::kGetStateStorageConfig:
                 return GetStateStorageConfig(record.GetGetStateStorageConfig());
 
+            case TQuery::kSelfHealStateStorage:
+                return SelfHealStateStorage(record.GetSelfHealStateStorage());
+
             case TQuery::kNotifyBridgeSyncFinished:
                 return NotifyBridgeSyncFinished(record.GetNotifyBridgeSyncFinished());
         }
@@ -209,7 +212,6 @@ namespace NKikimr::NStorage {
     void TInvokeRequestHandlerActor::AdvanceGeneration() {
         if (RunCommonChecks()) {
             NKikimrBlobStorage::TStorageConfig config = *Self->StorageConfig;
-            config.SetGeneration(config.GetGeneration() + 1);
             StartProposition(&config);
         }
     }
@@ -275,10 +277,15 @@ namespace NKikimr::NStorage {
     }
 
     void TInvokeRequestHandlerActor::Handle(TEvPrivate::TEvConfigProposed::TPtr ev) {
+        STLOG(PRI_DEBUG, BS_NODE, NWDC64, "TEvConfigProposed", (SelfId, SelfId()), (ErrorReason, ev->Get()->ErrorReason),
+            (WaitingForOtherProposition, WaitingForOtherProposition), (RootState, Self->RootState));
+
         if (std::exchange(WaitingForOtherProposition, false)) {
             // try to restart query
-            Bootstrap(ParentId);
-        } else if (ev->Get()->ErrorReason) {
+            return Bootstrap(ParentId);
+        }
+
+        if (ev->Get()->ErrorReason) {
             FinishWithError(TResult::ERROR, TStringBuilder() << "Config proposition failed: " << *ev->Get()->ErrorReason);
         } else {
             Finish(Sender, SelfId(), PrepareResult(TResult::OK, std::nullopt).release(), 0, Cookie);
@@ -291,15 +298,15 @@ namespace NKikimr::NStorage {
     bool TInvokeRequestHandlerActor::RunCommonChecks() {
         if (!Self->StorageConfig) {
             FinishWithError(TResult::ERROR, "no agreed StorageConfig");
-        } else if (Self->CurrentProposition) {
-            Self->CurrentProposition->ActorIds.push_back(SelfId());
-            WaitingForOtherProposition = true;
         } else if (Self->RootState != (IsScepterlessOperation ? ERootState::INITIAL : ERootState::RELAX)) {
             FinishWithError(TResult::RACE, "something going on with default FSM");
         } else if (auto error = ValidateConfig(*Self->StorageConfig)) {
             FinishWithError(TResult::ERROR, TStringBuilder() << "current config validation failed: " << *error);
         } else if (IsScepterExpired()) {
             FinishWithError(TResult::RACE, "scepter lost during query execution");
+        } else if (Self->CurrentProposition) {
+            Self->CurrentProposition->ActorIds.push_back(SelfId());
+            WaitingForOtherProposition = true;
         } else {
             return true;
         }

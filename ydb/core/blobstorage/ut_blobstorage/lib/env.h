@@ -559,7 +559,7 @@ struct TEnvironmentSetup {
     }
 
     void CreateBoxAndPool(ui32 numDrivesPerNode = 0, ui32 numGroups = 0, ui32 numStorageNodes = 0,
-            NKikimrBlobStorage::EPDiskType pdiskType = NKikimrBlobStorage::EPDiskType::ROT) {
+            NKikimrBlobStorage::EPDiskType pdiskType = NKikimrBlobStorage::EPDiskType::ROT, const std::optional<NKikimrBlobStorage::TGroupGeometry>& geometry = std::nullopt) {
         NKikimrBlobStorage::TConfigRequest request;
 
         auto *cmd = request.AddCommand()->MutableDefineHostConfig();
@@ -594,6 +594,10 @@ struct TEnvironmentSetup {
         cmd2->AddPDiskFilter()->AddProperty()->SetType(pdiskType);
         if (Settings.Encryption) {
             cmd2->SetEncryptionMode(TBlobStorageGroupInfo::EEncryptionMode::EEM_ENC_V1);
+        }
+
+        if (geometry) {
+            cmd2->MutableGeometry()->CopyFrom(*geometry);
         }
 
         auto response = Invoke(request);
@@ -908,9 +912,9 @@ struct TEnvironmentSetup {
         NKikimrBlobStorage::TConfigRequest request;
         auto *cmd = request.AddCommand();
         auto *us = cmd->MutableUpdateSettings();
-        us->SetEnableSelfHeal(selfHeal);
-        us->SetEnableDonorMode(donorMode);
-        us->SetEnableGroupLayoutSanitizer(groupLayoutSanitizer);
+        us->AddEnableSelfHeal(selfHeal);
+        us->AddEnableDonorMode(donorMode);
+        us->AddEnableGroupLayoutSanitizer(groupLayoutSanitizer);
         auto response = Invoke(request);
         UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
     }

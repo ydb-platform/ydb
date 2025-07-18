@@ -68,12 +68,12 @@ class TFetchingStepsSignalsCollection: public NColumnShard::TCommonCountersOwner
 private:
     using TBase = NColumnShard::TCommonCountersOwner;
     TMutex Mutex;
-    THashMap<TString, TFetchingStepSignals> Collection;
-    TFetchingStepSignals GetSignalsImpl(const TString& name) {
+    THashMap<TString, std::shared_ptr<TFetchingStepSignals>> Collection;
+    std::shared_ptr<TFetchingStepSignals> GetSignalsImpl(const TString& name) {
         TGuard<TMutex> g(Mutex);
         auto it = Collection.find(name);
         if (it == Collection.end()) {
-            it = Collection.emplace(name, TFetchingStepSignals(CreateSubGroup("step_name", name))).first;
+            it = Collection.emplace(name, std::make_shared<TFetchingStepSignals>(CreateSubGroup("step_name", name))).first;
         }
         return it->second;
     }
@@ -83,7 +83,7 @@ public:
         : TBase("ScanSteps") {
     }
 
-    static TFetchingStepSignals GetSignals(const TString& name) {
+    static std::shared_ptr<TFetchingStepSignals> GetSignals(const TString& name) {
         return Singleton<TFetchingStepsSignalsCollection>()->GetSignalsImpl(name);
     }
 };
@@ -93,7 +93,7 @@ private:
     YDB_READONLY_DEF(TString, Name);
     TAtomicCounter SumDuration;
     TAtomicCounter SumSize;
-    TFetchingStepSignals Signals;
+    std::shared_ptr<TFetchingStepSignals> Signals;
 
 protected:
     virtual TConclusion<bool> DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const = 0;
@@ -112,11 +112,11 @@ public:
 
     void AddExecutionDuration(const TDuration d) {
         SumDuration.Add(d.MicroSeconds());
-        Signals.AddExecutionDuration(d);
+        Signals->AddExecutionDuration(d);
     }
     void AddDataSize(const ui64 size) {
         SumSize.Add(size);
-        Signals.AddBytes(size);
+        Signals->AddBytes(size);
     }
 
     virtual ~IFetchingStep() = default;
@@ -143,6 +143,7 @@ private:
     std::vector<std::shared_ptr<IFetchingStep>> Steps;
     TAtomic StartInstant;
     TAtomic FinishInstant;
+    bool Started = false;
 
 public:
     TFetchingScript(const TString& branchName, std::vector<std::shared_ptr<IFetchingStep>>&& steps)
@@ -160,7 +161,10 @@ public:
     }
 
     void OnExecute() {
-        AtomicCas(&StartInstant, TMonotonic::Now().MicroSeconds(), 0);
+        if (!Started) {
+            AtomicSet(StartInstant, TMonotonic::Now().MicroSeconds());
+            Started = true;
+        }
     }
 
     TString DebugString() const;
@@ -352,8 +356,7 @@ public:
         : TBase("PROGRAM_EXECUTION")
         , Program(program) {
         for (auto&& i : Program->GetNodes()) {
-            Signals.emplace(
-                i.first, std::make_shared<TFetchingStepSignals>(TFetchingStepsSignalsCollection::GetSignals(i.second->GetSignalCategoryName())));
+            Signals.emplace(i.first, TFetchingStepsSignalsCollection::GetSignals(i.second->GetSignalCategoryName()));
         }
     }
 };

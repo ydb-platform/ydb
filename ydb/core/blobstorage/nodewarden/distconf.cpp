@@ -36,8 +36,11 @@ namespace NKikimr::NStorage {
             }
 
             for (const auto& item : Cfg->NameserviceConfig.GetNode()) {
-                if (item.HasBridgePileName()) {
-                    if (const auto it = pileNames.find(item.GetBridgePileName()); it != pileNames.end()) {
+                const TNodeLocation location = item.HasLocation() ? TNodeLocation(item.GetLocation())
+                    : item.HasWalleLocation() ? TNodeLocation(item.GetWalleLocation())
+                    : TNodeLocation();
+                if (const auto& bridgePileName = location.GetBridgePileName()) {
+                    if (const auto it = pileNames.find(*bridgePileName); it != pileNames.end()) {
                         pileMap->at(it->second).push_back(item.GetNodeId());
                     }
                 }
@@ -535,10 +538,22 @@ namespace NKikimr::NStorage {
         }
 
         if (cfg->DynamicNodeConfig && cfg->DynamicNodeConfig->HasNodeInfo()) {
-            if (const auto& nodeInfo = cfg->DynamicNodeConfig->GetNodeInfo(); nodeInfo.HasBridgePileId()) {
-                const ui32 pileId = nodeInfo.GetBridgePileId();
-                Y_ABORT_UNLESS(pileId < bridgeInfo->Piles.size());
-                bridgeInfo->SelfNodePile = &bridgeInfo->Piles[pileId];
+            const auto& nodeInfo = cfg->DynamicNodeConfig->GetNodeInfo();
+            if (!nodeInfo.HasLocation()) {
+                Y_ABORT("missing Location in dynamic TNodeInfo");
+            }
+            const auto& bridgePileName = TNodeLocation(nodeInfo.GetLocation()).GetBridgePileName();
+            if (!bridgePileName) {
+                Y_ABORT("missing BridgePileName in dynamic TNodeLocation");
+            }
+            for (ui32 pileId = 0; pileId < AppData()->BridgeConfig->PilesSize(); ++pileId) {
+                if (AppData()->BridgeConfig->GetPiles(pileId).GetName() == bridgePileName) {
+                    bridgeInfo->SelfNodePile = &bridgeInfo->Piles[pileId];
+                    break;
+                }
+            }
+            if (!bridgeInfo->SelfNodePile) {
+                Y_ABORT("incorrect bridge pile name in dynamic TNodeLocation: %s", bridgePileName->c_str());
             }
         }
 

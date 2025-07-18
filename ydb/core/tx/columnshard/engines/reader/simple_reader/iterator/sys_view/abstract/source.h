@@ -49,21 +49,6 @@ private:
         return false;
     }
 
-    virtual void DoAssembleAccessor(
-        const NArrow::NSSA::TProcessorContext& context, const ui32 columnId, const TString& /*subColumnName*/) override {
-        const ui32 recordsCount = GetRecordsCount();
-        if (columnId == (ui64)IIndexInfo::ESpecialColumn::PLAN_STEP || columnId == (ui64)IIndexInfo::ESpecialColumn::TX_ID ||
-            columnId == (ui64)IIndexInfo::ESpecialColumn::WRITE_ID) {
-            context.GetResources()->AddVerified(columnId,
-                std::make_shared<NArrow::NAccessor::TTrivialArray>(
-                    NArrow::TThreadSimpleArraysCache::GetConst(arrow::uint64(), std::make_shared<arrow::UInt64Scalar>(0), recordsCount)),
-                true);
-        } else {
-            context.GetResources()->AddVerified(
-                columnId, std::make_shared<NArrow::NAccessor::TTrivialArray>(BuildArrayAccessor(columnId, recordsCount)), true);
-        }
-    }
-
     virtual TConclusion<std::shared_ptr<NArrow::NSSA::IFetchLogic>> DoStartFetchData(
         const NArrow::NSSA::TProcessorContext& /*context*/, const NArrow::NSSA::IDataSource::TDataAddress& /*addr*/) override {
         return std::shared_ptr<NArrow::NSSA::IFetchLogic>();
@@ -158,19 +143,26 @@ private:
         return TConclusionStatus::Fail("incorrect method usage DoCheckHeader");
     }
 
-    virtual ui32 GetRecordsCountVirtual() const override {
-        if (HasStageData()) {
-            return GetStageData().GetPortionAccessor().GetRecordsVerified().size() +
-                   GetStageData().GetPortionAccessor().GetIndexesVerified().size();
+protected:
+    virtual void DoAssembleAccessor(const NArrow::NSSA::TProcessorContext& context, const ui32 columnId, const TString& subColumnName) override {
+        const ui32 recordsCount = GetRecordsCount();
+        AFL_VERIFY(!subColumnName);
+        if (columnId == (ui64)IIndexInfo::ESpecialColumn::PLAN_STEP || columnId == (ui64)IIndexInfo::ESpecialColumn::TX_ID ||
+            columnId == (ui64)IIndexInfo::ESpecialColumn::WRITE_ID) {
+            context.GetResources()->AddVerified(columnId,
+                std::make_shared<NArrow::NAccessor::TTrivialArray>(
+                    NArrow::TThreadSimpleArraysCache::GetConst(arrow::uint64(), std::make_shared<arrow::UInt64Scalar>(0), recordsCount)),
+                true);
         } else {
-            return GetStageResult().GetBatch()->GetRecordsCount();
+            context.GetResources()->AddVerified(
+                columnId, std::make_shared<NArrow::NAccessor::TTrivialArray>(BuildArrayAccessor(columnId, recordsCount)), true);
         }
     }
 
 public:
     TSourceData(const ui32 sourceId, const ui32 sourceIdx, const ui64 tabletId, const NOlap::TSnapshot& minSnapshot,
         const NOlap::TSnapshot& maxSnapshot, NArrow::TSimpleRow&& start, NArrow::TSimpleRow&& finish, const std::optional<ui32> recordsCount,
-        const std::shared_ptr<NReader::NSimple::TSpecialReadContext>& context)
+        const std::shared_ptr<NReader::NCommon::TSpecialReadContext>& context)
         : TBase(sourceId, sourceIdx, context, std::move(start), std::move(finish), minSnapshot, maxSnapshot, recordsCount, std::nullopt, false)
         , TabletId(tabletId) {
     }
@@ -188,7 +180,7 @@ public:
 
     TTabletSourceData(const ui32 sourceId, const ui32 sourceIdx, const ui64 tabletId, NArrow::TSimpleRow&& start, NArrow::TSimpleRow&& finish,
         const std::optional<ui32> recordsCount, const NOlap::TSnapshot& minSnapshot, const NOlap::TSnapshot& maxSnapshot,
-        const std::shared_ptr<NReader::NSimple::TSpecialReadContext>& context)
+        const std::shared_ptr<NReader::NCommon::TSpecialReadContext>& context)
         : TBase(sourceId, sourceIdx, tabletId, minSnapshot, maxSnapshot, std::move(start), std::move(finish), recordsCount, context) {
     }
 };
@@ -205,7 +197,7 @@ public:
 
     TPathSourceData(const ui32 sourceId, const ui32 sourceIdx, const NColumnShard::TUnifiedPathId& pathId, const ui64 tabletId,
         NArrow::TSimpleRow&& start, NArrow::TSimpleRow&& finish, const std::optional<ui32> recordsCount, const NOlap::TSnapshot& minSnapshot,
-        const NOlap::TSnapshot& maxSnapshot, const std::shared_ptr<NReader::NSimple::TSpecialReadContext>& context)
+        const NOlap::TSnapshot& maxSnapshot, const std::shared_ptr<NReader::NCommon::TSpecialReadContext>& context)
         : TBase(sourceId, sourceIdx, tabletId, minSnapshot, maxSnapshot, std::move(start), std::move(finish), recordsCount, context)
         , UnifiedPathId(pathId) {
     }

@@ -90,8 +90,15 @@ def do(args):
         row['Kind'] = pdisk.Kind
         row['Guid'] = pdisk.Guid
         row['NumStaticSlots'] = pdisk.NumStaticSlots
-        row['ExpectedSlotCount'] = pdisk.ExpectedSlotCount
-        row['SlotSizeInUnits'] = pdisk.PDiskConfig.SlotSizeInUnits
+        if (pdisk.PDiskMetrics.HasField('SlotCount')):
+            row['ExpectedSlotCount'] = pdisk.PDiskMetrics.SlotCount
+            row['SlotSizeInUnits'] = pdisk.PDiskMetrics.SlotSizeInUnits
+        elif (pdisk.InferPDiskSlotCountFromUnitSize != 0):
+            row['ExpectedSlotCount'] = 0
+            row['SlotSizeInUnits'] = 0
+        else:
+            row['ExpectedSlotCount'] = pdisk.ExpectedSlotCount
+            row['SlotSizeInUnits'] = pdisk.PDiskConfig.SlotSizeInUnits
         row['PDiskConfig'] = text_format.MessageToString(pdisk.PDiskConfig, as_one_line=True)
         row['AvailableSize'] = pdisk.PDiskMetrics.AvailableSize
         row['TotalSize'] = pdisk.PDiskMetrics.TotalSize

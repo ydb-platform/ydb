@@ -17,6 +17,7 @@ bool IsExpectedTxType(TTxState::ETxType txType) {
     case TTxState::TxAlterCdcStreamAtTableDropSnapshot:
     case TTxState::TxDropCdcStreamAtTable:
     case TTxState::TxDropCdcStreamAtTableDropSnapshot:
+    case TTxState::TxRotateCdcStreamAtTable:
         return true;
     default:
         return false;

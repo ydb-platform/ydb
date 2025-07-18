@@ -5,6 +5,7 @@
 #include "import_tui.h"
 #include "log.h"
 #include "log_backend.h"
+#include "path_checker.h"
 #include "util.h"
 
 #include <ydb/public/lib/ydb_cli/commands/ydb_command.h>
@@ -838,6 +839,8 @@ public:
             std::exit(1);
         }
 
+        CheckPathForImport(ConnectionConfig, Config.Path);
+
         Config.SetDisplay();
         CalculateApproximateDataSize();
 
@@ -1129,14 +1132,8 @@ private:
     }
 
     void ExitTuiMode() {
-        LogBackend->StopCapture();
-
         Tui.reset();
-
-        // TODO: remove?
-        // Switch back to main screen buffer (restore original content)
-        std::cout << "\033[?1049l";
-        std::cout.flush();
+        LogBackend->StopCaptureAndFlush(Cerr);
     }
 
 private:

@@ -209,8 +209,11 @@ private:
 
         std::vector<TReadState*> GetShardReads(ui64 shardId) {
             auto it = ReadsPerShard.find(shardId);
-            YQL_ENSURE(it != ReadsPerShard.end());
             std::vector<TReadState*> result;
+            if (it == ReadsPerShard.end()) {
+                return result;
+            }
+
             for(ui64 readId: it->second.Reads) {
                 auto it = Reads.find(readId);
                 YQL_ENSURE(it != Reads.end());

@@ -17,7 +17,6 @@ and timeout (by default, the maximum response time from healthcheck). Documentat
 * 16834:Enabled pushdown of string types in Generic provider. [#16834](https://github.com/ydb-platform/ydb/pull/16834) ([Vitaly Isaev](https://github.com/vitalyisaev2))
 * 16076:Added automatic cleanup of temporary tables and directories created during S3 export operations. Previously, users had to manually remove temporary directories and tables that were created as part of the export pipeline. [#16076](https://github.com/ydb-platform/ydb/pull/16076) ([stanislav_shchetinin](https://github.com/stanislav-shchetinin))
 * 18731:Added monitoring counters with the constant value of 1 for nodes, VDisks, and PDisks. [#18731](https://github.com/ydb-platform/ydb/pull/18731) ([Sergey Belyakov](https://github.com/serbel324))
-* 18561:Added miss kafka port support. [#18561](https://github.com/ydb-platform/ydb/pull/18561) ([Sergey J](https://github.com/sourcecd))
 * 18376:Added a heuristic that should prevent a tablet that can overload a node on its own from endlessly moving between nodes. [#18376](https://github.com/ydb-platform/ydb/pull/18376) ([vporyadke](https://github.com/vporyadke))
 * 18297:Added basic functionality for cluster bridging. [#18297](https://github.com/ydb-platform/ydb/pull/18297) ([Alexander Rutkovsky](https://github.com/alexvru))
 * 18258:Increased the timeout on BS_QUEUE reestablishing session when many actors try to reconnect simultaneously. [#18258](https://github.com/ydb-platform/ydb/pull/18258) ([Sergey Belyakov](https://github.com/serbel324))

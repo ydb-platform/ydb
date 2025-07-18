@@ -86,9 +86,9 @@ namespace NSQLHighlight {
     }
 
     template <>
-    TUnit MakeUnit<EUnitKind::BindParamterIdentifier>(Syntax& s) {
+    TUnit MakeUnit<EUnitKind::BindParameterIdentifier>(Syntax& s) {
         return {
-            .Kind = EUnitKind::BindParamterIdentifier,
+            .Kind = EUnitKind::BindParameterIdentifier,
             .Patterns = {
                 {s.Concat({"DOLLAR", "ID_PLAIN"})},
             },
@@ -231,7 +231,7 @@ namespace NSQLHighlight {
         h.Units.emplace_back(MakeUnit<EUnitKind::Keyword>(s));
         h.Units.emplace_back(MakeUnit<EUnitKind::Punctuation>(s));
         h.Units.emplace_back(MakeUnit<EUnitKind::QuotedIdentifier>(s));
-        h.Units.emplace_back(MakeUnit<EUnitKind::BindParamterIdentifier>(s));
+        h.Units.emplace_back(MakeUnit<EUnitKind::BindParameterIdentifier>(s));
         h.Units.emplace_back(MakeUnit<EUnitKind::FunctionIdentifier>(s));
         h.Units.emplace_back(MakeUnit<EUnitKind::TypeIdentifier>(s));
         h.Units.emplace_back(MakeUnit<EUnitKind::Identifier>(s));
@@ -256,8 +256,8 @@ void Out<NSQLHighlight::EUnitKind>(IOutputStream& out, NSQLHighlight::EUnitKind 
         case NSQLHighlight::EUnitKind::QuotedIdentifier:
             out << "quoted-identifier";
             break;
-        case NSQLHighlight::EUnitKind::BindParamterIdentifier:
-            out << "bind-paramter-identifier";
+        case NSQLHighlight::EUnitKind::BindParameterIdentifier:
+            out << "bind-parameter-identifier";
             break;
         case NSQLHighlight::EUnitKind::TypeIdentifier:
             out << "type-identifier";

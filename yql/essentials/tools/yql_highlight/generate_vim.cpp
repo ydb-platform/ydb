@@ -66,8 +66,8 @@ namespace NSQLHighlight {
                     return "yqlPunctuation";
                 case EUnitKind::QuotedIdentifier:
                     return "yqlQuotedIdentifier";
-                case EUnitKind::BindParamterIdentifier:
-                    return "yqlBindParamterIdentifier";
+                case EUnitKind::BindParameterIdentifier:
+                    return "yqlBindParameterIdentifier";
                 case EUnitKind::TypeIdentifier:
                     return "yqlTypeIdentifier";
                 case EUnitKind::FunctionIdentifier:
@@ -103,7 +103,7 @@ namespace NSQLHighlight {
                     return {"Operator"};
                 case EUnitKind::QuotedIdentifier:
                     return {"Special", "Underlined"};
-                case EUnitKind::BindParamterIdentifier:
+                case EUnitKind::BindParameterIdentifier:
                     return {"Identifier"};
                 case EUnitKind::TypeIdentifier:
                     return {"Type"};

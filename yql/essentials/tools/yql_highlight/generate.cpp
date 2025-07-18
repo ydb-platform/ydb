@@ -6,7 +6,7 @@ namespace NSQLHighlight {
         return (kind != EUnitKind::Comment) &&
                (kind != EUnitKind::StringLiteral) &&
                (kind != EUnitKind::QuotedIdentifier) &&
-               (kind != EUnitKind::BindParamterIdentifier);
+               (kind != EUnitKind::BindParameterIdentifier);
     }
 
     bool IsIgnored(EUnitKind kind) {

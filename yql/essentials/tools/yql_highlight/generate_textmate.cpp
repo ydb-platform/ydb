@@ -44,7 +44,7 @@ namespace NSQLHighlight {
                     return "keyword.operator.custom";
                 case EUnitKind::QuotedIdentifier:
                     return "string.quoted.double.custom";
-                case EUnitKind::BindParamterIdentifier:
+                case EUnitKind::BindParameterIdentifier:
                     return "variable.other.dollar.custom";
                 case EUnitKind::TypeIdentifier:
                     return "entity.name.type";

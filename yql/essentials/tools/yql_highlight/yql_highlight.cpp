@@ -37,7 +37,7 @@ int RunHighlighter() {
         {EUnitKind::Keyword, NColorizer::BLUE},
         {EUnitKind::Punctuation, NColorizer::DARK_WHITE},
         {EUnitKind::QuotedIdentifier, NColorizer::DARK_CYAN},
-        {EUnitKind::BindParamterIdentifier, NColorizer::YELLOW},
+        {EUnitKind::BindParameterIdentifier, NColorizer::YELLOW},
         {EUnitKind::TypeIdentifier, NColorizer::GREEN},
         {EUnitKind::FunctionIdentifier, NColorizer::MAGENTA},
         {EUnitKind::Identifier, NColorizer::DEFAULT},

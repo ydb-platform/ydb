@@ -195,7 +195,7 @@ class AbstractBridgePileNemesis(Nemesis, AbstractMonitoredNemesis):
 
 
 class BridgePileStopNodesNemesis(AbstractBridgePileNemesis):
-    def __init__(self, cluster, schedule=(0, 60), duration=60):
+    def __init__(self, cluster, schedule=(300, 900), duration=60):
         super(BridgePileStopNodesNemesis, self).__init__(
             cluster, schedule=schedule, duration=duration)
 

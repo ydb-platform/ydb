@@ -174,7 +174,7 @@ public:
       * Calls callback for each range with the given point
       */
     template <class TCallback>
-    void EachIntersection(TValueTraits::TKeyView point, TCallback&& callback) const {
+    void EachIntersection(TKeyView point, TCallback&& callback) const {
         EachIntersection(TRange(point, true, point, true), callback);
     }
 

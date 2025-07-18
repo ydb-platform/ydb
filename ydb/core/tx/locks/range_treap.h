@@ -12,10 +12,16 @@
 namespace NKikimr {
 namespace NDataShard {
 
+struct TRangeTreapTraits {
+    using TKey = TOwnedCellVec;
+    using TKeyView = TConstArrayRef<TCell>;
+    using TRange = NRangeTreap::TRange<TKey, TKeyView>;
+    using TOwnedRange = NRangeTreap::TOwnedRange<TKey>;
+    using TBorder = NRangeTreap::TBorder<TConstArrayRef<TCell>>;
+};
+
 class TRangeTreeOwnedCellVecComparator {
 private:
-    using TBorder = NRangeTreap::TBorder<TConstArrayRef<TCell>>;
-
     TVector<NScheme::TTypeInfo> KeyTypes;
 
 private:
@@ -33,7 +39,7 @@ private:
     }
 
 public:
-    int Compare(const TBorder& lhs, const TBorder& rhs) const {
+    int Compare(const TRangeTreapTraits::TBorder& lhs, const TRangeTreapTraits::TBorder& rhs) const {
         return ComparePrefixBorders(KeyTypes, lhs.GetKey(), GetPrefixMode(lhs.GetMode()), rhs.GetKey(), GetPrefixMode(rhs.GetMode()));
     }
 
@@ -53,8 +59,6 @@ public:
 
 template <class TValue>
 struct TRangeTreapDefaultValueTraits {
-    using TKeyView = TConstArrayRef<NKikimr::TCell>;
-
     static bool Less(const TValue& a, const TValue& b) {
         return a < b;
     }
@@ -62,13 +66,6 @@ struct TRangeTreapDefaultValueTraits {
     static bool Equal(const TValue& a, const TValue& b) {
         return a == b;
     }
-};
-
-struct TRangeTreapTraits {
-    using TKey = TOwnedCellVec;
-    using TKeyView = TConstArrayRef<TCell>;
-    using TRange = NRangeTreap::TRange<TKey, TKeyView>;
-    using TOwnedRange = NRangeTreap::TOwnedRange<TKey>;
 };
 
 template <class TValue, class TTypeTraits = TRangeTreapDefaultValueTraits<TValue>>

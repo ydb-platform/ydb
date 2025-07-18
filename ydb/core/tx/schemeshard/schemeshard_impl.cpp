@@ -2129,7 +2129,7 @@ void TSchemeShard::PersistPath(NIceDb::TNiceDb& db, const TPathId& pathId) {
                     NIceDb::TUpdate<Schema::Paths::DirAlterVersion>(elem->DirAlterVersion),
                     NIceDb::TUpdate<Schema::Paths::UserAttrsAlterVersion>(elem->UserAttrs->AlterVersion),
                     NIceDb::TUpdate<Schema::Paths::ACLVersion>(elem->ACLVersion),
-                    NIceDb::TUpdate<Schema::Paths::TempDirOwnerActorId>(elem->TempDirOwnerActorId.ToString())
+                    NIceDb::TUpdate<Schema::Paths::TempDirOwnerActorId>(elem->TempDirOwnerActorId)
                     );
     } else {
         db.Table<Schema::MigratedPaths>().Key(pathId.OwnerId, pathId.LocalPathId).Update(
@@ -2147,7 +2147,7 @@ void TSchemeShard::PersistPath(NIceDb::TNiceDb& db, const TPathId& pathId) {
                     NIceDb::TUpdate<Schema::MigratedPaths::DirAlterVersion>(elem->DirAlterVersion),
                     NIceDb::TUpdate<Schema::MigratedPaths::UserAttrsAlterVersion>(elem->UserAttrs->AlterVersion),
                     NIceDb::TUpdate<Schema::MigratedPaths::ACLVersion>(elem->ACLVersion),
-                    NIceDb::TUpdate<Schema::MigratedPaths::TempDirOwnerActorId>(elem->TempDirOwnerActorId.ToString())
+                    NIceDb::TUpdate<Schema::MigratedPaths::TempDirOwnerActorId>(elem->TempDirOwnerActorId)
                     );
     }
 }

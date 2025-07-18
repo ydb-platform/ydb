@@ -10694,7 +10694,12 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
     };
 
     Y_UNIT_TEST(CleanupTemporaryTables) {
-        TKikimrRunner kikimr;
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableFeatureFlags()->SetEnableTempTables(true);
+
+        TKikimrRunner kikimr(TKikimrSettings()
+            .SetFeatureFlags(appConfig.GetFeatureFlags())
+            .SetAppConfig(appConfig));
 
         auto& runtime = *kikimr.GetTestServer().GetRuntime();
 

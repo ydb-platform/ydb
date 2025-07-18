@@ -28,6 +28,8 @@ struct TEnvironmentSetup {
 
     using TIcbControlKey = std::pair<ui32, TString>;  // { nodeId, name }
 
+    static const std::initializer_list<ui32> DebugLogComponents;
+
     std::unordered_map<TIcbControlKey, TControlWrapper> IcbControls;
 
     struct TSettings {
@@ -367,41 +369,7 @@ struct TEnvironmentSetup {
         Runtime->SetLogPriority(NKikimrServices::BOOTSTRAPPER, prio);
         Runtime->SetLogPriority(NKikimrServices::BS_NODE, prio);
 
-        std::initializer_list<ui32> debug{
-//            NKikimrServices::BS_CONTROLLER,
-//            NKikimrServices::BS_SELFHEAL,
-//            NKikimrServices::BS_PDISK,
-//            NKikimrServices::BS_SKELETON,
-//            NKikimrServices::BS_HULLCOMP,
-//            NKikimrServices::BS_HULLRECS,
-//            NKikimrServices::BS_HULLHUGE,
-//            NKikimrServices::BS_REPL,
-//            NKikimrServices::BS_SYNCER,
-//            NKikimrServices::BS_SYNCLOG,
-//            NKikimrServices::BS_SYNCJOB,
-//            NKikimrServices::BS_QUEUE,
-//            NKikimrServices::BS_VDISK_GET,
-//            NKikimrServices::BS_VDISK_PATCH,
-//            NKikimrServices::BS_VDISK_PUT,
-//            NKikimrServices::BS_VDISK_OTHER,
-//            NKikimrServices::BS_VDISK_SCRUB,
-//            NKikimrServices::BS_PROXY,
-//            NKikimrServices::BS_PROXY_RANGE,
-//            NKikimrServices::BS_PROXY_GET,
-//            NKikimrServices::BS_PROXY_PUT,
-//            NKikimrServices::BS_PROXY_PATCH,
-//            NKikimrServices::BS_PROXY_INDEXRESTOREGET,
-//            NKikimrServices::BS_PROXY_STATUS,
-            NActorsServices::TEST,
-//            NKikimrServices::BLOB_DEPOT,
-//            NKikimrServices::BLOB_DEPOT_AGENT,
-//            NKikimrServices::HIVE,
-//            NKikimrServices::LOCAL,
-//            NActorsServices::INTERCONNECT,
-//            NActorsServices::INTERCONNECT_SESSION,
-//            NKikimrServices::BS_VDISK_BALANCING,
-        };
-        for (const auto& comp : debug) {
+        for (const auto& comp : DebugLogComponents) {
             Runtime->SetLogPriority(comp, NLog::PRI_DEBUG);
         }
 
@@ -1108,5 +1076,4 @@ struct TEnvironmentSetup {
             it->second = value;
         }
     }
-
 };

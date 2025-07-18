@@ -107,29 +107,22 @@ public:
             auto &node = Self->Dirty.Nodes.find(it->second)->second;
             NodeId = node.NodeId;
 
-            if (node.Address != rec.GetAddress()
-                    || node.ResolveHost != rec.GetResolveHost()) {
-                auto errorText = TStringBuilder()
-                                << "Another address is registered for "
-                                << host << ":" << port
-                                << " resolvehost=" << node.ResolveHost
-                                << " address=" << node.Address
-                                << " rec_resolvehost=" << rec.GetResolveHost()
-                                << " rec_address=" << rec.GetAddress();
+            if (node.Address != rec.GetAddress() || node.ResolveHost != rec.GetResolveHost()) {
+                auto errorText = TStringBuilder() << "Another address is registered for " << host << ":" << port
+                    << ", expected (address, resolve host) = (" << node.Address << ", " << node.ResolveHost << ")"
+                    << ", got (address, resolve host) = (" << rec.GetAddress() << ", " << rec.GetResolveHost() << ")";
 
                 LOG_WARN_S(ctx, NKikimrServices::NODE_BROKER, errorText);
-                return Error(TStatus::WRONG_REQUEST, std::move(errorText), ctx);
+                return Error(TStatus::WRONG_REQUEST, errorText, ctx);
             }
 
             if (node.Location != loc && node.Location != TNodeLocation()) {
-                auto errorText = TStringBuilder()
-                                << "Another location is registered for "
-                                << host << ":" << port
-                                << " location=" << node.Location.ToString()
-                                << " rec_location=" << loc.ToString();
+                auto errorText = TStringBuilder() << "Another location is registered for " << host << ":" << port
+                    << ", expected = " << node.Location.ToString()
+                    << ", got = " << loc.ToString();
 
                 LOG_WARN_S(ctx, NKikimrServices::NODE_BROKER, errorText);
-                return Error(TStatus::WRONG_REQUEST, std::move(errorText), ctx);
+                return Error(TStatus::WRONG_REQUEST, errorText, ctx);
             } else if (node.Location.GetBridgePileName() != loc.GetBridgePileName()) {
                 return Error(TStatus::WRONG_REQUEST, "Can't change bridge pile for the node", ctx);
             } else if (node.Location != loc) {

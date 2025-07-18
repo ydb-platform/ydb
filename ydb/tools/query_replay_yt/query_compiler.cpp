@@ -264,12 +264,13 @@ public:
 class TReplayCompileActor: public TActorBootstrapped<TReplayCompileActor> {
 public:
     TReplayCompileActor(TIntrusivePtr<TModuleResolverState> moduleResolverState, const NMiniKQL::IFunctionRegistry* functionRegistry,
-        NYql::IHTTPGateway::TPtr httpGateway, bool enableAntlr4Parser)
+        NYql::IHTTPGateway::TPtr httpGateway, bool enableAntlr4Parser, const NYT::TNode& row = NYT::TNode())
         : ModuleResolverState(moduleResolverState)
         , KqpSettings()
         , Config(MakeIntrusive<TKikimrConfiguration>())
         , FunctionRegistry(functionRegistry)
         , HttpGateway(std::move(httpGateway))
+        , OriginalRow(row)
     {
         Config->EnableAntlr4Parser = enableAntlr4Parser;
         Config->DefaultCostBasedOptimizationLevel = 2;
@@ -546,7 +547,7 @@ private:
     }
 
     void Reply(const Ydb::StatusIds::StatusCode& status, const TIssues& issues, const std::optional<TString>& queryPlan = std::nullopt) {
-        std::unique_ptr<TQueryReplayEvents::TEvCompileResponse> ev = std::make_unique<TQueryReplayEvents::TEvCompileResponse>(true);
+        std::unique_ptr<TQueryReplayEvents::TEvCompileResponse> ev = std::make_unique<TQueryReplayEvents::TEvCompileResponse>(true, OriginalRow);
         Y_UNUSED(queryPlan);
         if (status != Ydb::StatusIds::SUCCESS) {
             ev->Success = false;
@@ -696,10 +697,11 @@ private:
     NJson::TJsonValue ReplayDetails;
     std::shared_ptr<TStaticTableMetadataLoader> MetadataLoader;
     NYql::IHTTPGateway::TPtr HttpGateway;
+    NYT::TNode OriginalRow = NYT::TNode();
 };
 
 IActor* CreateQueryCompiler(TIntrusivePtr<TModuleResolverState> moduleResolverState,
-    const NMiniKQL::IFunctionRegistry* functionRegistry, NYql::IHTTPGateway::TPtr httpGateway, bool enableAntlr4Parser)
+    const NMiniKQL::IFunctionRegistry* functionRegistry, NYql::IHTTPGateway::TPtr httpGateway, bool enableAntlr4Parser, const NYT::TNode& row = NYT::TNode())
 {
-    return new TReplayCompileActor(moduleResolverState, functionRegistry, httpGateway, enableAntlr4Parser);
+    return new TReplayCompileActor(moduleResolverState, functionRegistry, httpGateway, enableAntlr4Parser, row);
 }

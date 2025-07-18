@@ -259,6 +259,7 @@ namespace NKikimr::NStorage {
         TScatterTasks ScatterTasks;
 
         std::optional<TActorId> StateStorageSelfHealActor;
+        std::unordered_set<ui32> SelfHealBadNodes;
 
         // root node operation
         enum class ERootState {
@@ -430,7 +431,7 @@ namespace NKikimr::NStorage {
             bool convertToDonor, bool ignoreVSlotQuotaCheck, bool isSelfHealReasonDecommit,
             std::optional<TBridgePileId> bridgePileId);
 
-        static void GenerateStateStorageConfig(NKikimrConfig::TDomainsConfig::TStateStorage *ss,
+        void GenerateStateStorageConfig(NKikimrConfig::TDomainsConfig::TStateStorage *ss,
             const NKikimrBlobStorage::TStorageConfig& baseConfig);
         bool UpdateConfig(NKikimrBlobStorage::TStorageConfig *config);
 

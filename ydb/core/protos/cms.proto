@@ -466,8 +466,13 @@ message TCmsConfig {
         optional bool DryRun = 13;
         repeated TStateLimit StateLimits = 14;
         optional EEvictVDisksStatus EvictVDisksStatus = 15;
-        
+
         optional uint32 GoodStateLimit = 16 [default = 5];
+
+        optional bool EnableSelfHealStateStorage = 19 [default = true];
+        optional uint32 NodeGoodStateLimit = 20 [default = 10];
+        optional uint32 NodeBadStateLimit = 21 [default = 10];
+        optional uint32 StateStorageSelfHealWaitForConfigStep = 22 [default = 60];
     }
 
     message TLogConfig {

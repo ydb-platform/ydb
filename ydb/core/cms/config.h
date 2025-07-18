@@ -37,6 +37,11 @@ struct TCmsSentinelConfig {
 
     TMaybeFail<EPDiskStatus> EvictVDisksStatus;
 
+    bool EnableSelfHealStateStorage;
+    ui32 NodeBadStateLimit;
+    ui32 NodeGoodStateLimit;
+    ui32 StateStorageSelfHealWaitForConfigStep;
+
     void Serialize(NKikimrCms::TCmsConfig::TSentinelConfig &config) const {
         config.SetEnable(Enable);
         config.SetDryRun(DryRun);
@@ -48,6 +53,8 @@ struct TCmsSentinelConfig {
         config.SetChangeStatusRetries(ChangeStatusRetries);
         config.SetDefaultStateLimit(DefaultStateLimit);
         config.SetGoodStateLimit(GoodStateLimit);
+        config.SetStateStorageSelfHealWaitForConfigStep(StateStorageSelfHealWaitForConfigStep);
+        config.SetEnableSelfHealStateStorage(EnableSelfHealStateStorage);
         config.SetDataCenterRatio(DataCenterRatio);
         config.SetRoomRatio(RoomRatio);
         config.SetRackRatio(RackRatio);
@@ -74,6 +81,11 @@ struct TCmsSentinelConfig {
         RackRatio = config.GetRackRatio();
         PileRatio = config.GetPileRatio();
         FaultyPDisksThresholdPerNode = config.GetFaultyPDisksThresholdPerNode();
+
+        NodeBadStateLimit = config.GetNodeBadStateLimit();
+        NodeGoodStateLimit = config.GetNodeGoodStateLimit();
+        StateStorageSelfHealWaitForConfigStep = config.GetStateStorageSelfHealWaitForConfigStep();
+        EnableSelfHealStateStorage = config.GetEnableSelfHealStateStorage();
 
         auto newStateLimits = LoadStateLimits(config);
         StateLimits.swap(newStateLimits);
@@ -221,7 +233,7 @@ struct TCmsConfig {
     TCmsLogConfig LogConfig;
 
     TCmsConfig() {
-        Deserialize(NKikimrCms::TCmsConfig());
+        Deserialize(NKikimrCms::TCmsConfig(), true);
     }
 
     TCmsConfig(const NKikimrCms::TCmsConfig &config) {
@@ -238,14 +250,28 @@ struct TCmsConfig {
         LogConfig.Serialize(*config.MutableLogConfig());
     }
 
-    void Deserialize(const NKikimrCms::TCmsConfig &config) {
-        DefaultRetryTime = TDuration::MicroSeconds(config.GetDefaultRetryTime());
-        DefaultPermissionDuration = TDuration::MicroSeconds(config.GetDefaultPermissionDuration());
-        InfoCollectionTimeout = TDuration::MicroSeconds(config.GetInfoCollectionTimeout());
-        TenantLimits.CopyFrom(config.GetTenantLimits());
-        ClusterLimits.CopyFrom(config.GetClusterLimits());
-        SentinelConfig.Deserialize(config.GetSentinelConfig());
-        LogConfig.Deserialize(config.GetLogConfig());
+    void Deserialize(const NKikimrCms::TCmsConfig &config, bool deserializeDefault = false) {
+        if (deserializeDefault || config.HasDefaultRetryTime()) {
+            DefaultRetryTime = TDuration::MicroSeconds(config.GetDefaultRetryTime());
+        }
+        if (deserializeDefault || config.HasDefaultPermissionDuration()) {
+            DefaultPermissionDuration = TDuration::MicroSeconds(config.GetDefaultPermissionDuration());
+        }
+        if (deserializeDefault || config.HasInfoCollectionTimeout()) {
+            InfoCollectionTimeout = TDuration::MicroSeconds(config.GetInfoCollectionTimeout());
+        }
+        if (deserializeDefault || config.HasTenantLimits()) {
+            TenantLimits.CopyFrom(config.GetTenantLimits());
+        }
+        if (deserializeDefault || config.HasClusterLimits()) {
+            ClusterLimits.CopyFrom(config.GetClusterLimits());
+        }
+        if (deserializeDefault || config.HasSentinelConfig()) {
+            SentinelConfig.Deserialize(config.GetSentinelConfig());
+        }
+        if (deserializeDefault || config.HasLogConfig()) {
+            LogConfig.Deserialize(config.GetLogConfig());
+        }
     }
 
     bool IsLogEnabled(ui32 recordType) const {

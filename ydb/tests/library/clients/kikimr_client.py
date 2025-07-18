@@ -173,8 +173,10 @@ class KiKiMRMessageBusClient(object):
             'SchemeOperationStatus'
         )
 
-    def bind_storage_pools(self, domain_name, spools):
+    def bind_storage_pools(self, domain_name, spools, token=None):
         request = msgbus.TSchemeOperation()
+        if token:
+            request.SecurityToken = token
         scheme_transaction = request.Transaction
         scheme_operation = scheme_transaction.ModifyScheme
         scheme_operation.WorkingDir = '/'

@@ -1,5 +1,6 @@
 #include "yql_yt_request_options.h"
 #include <yt/cpp/mapreduce/common/helpers.h>
+#include <yt/cpp/mapreduce/interface/serialize.h>
 
 namespace NYql::NFmr {
 
@@ -19,7 +20,133 @@ TTaskState::TPtr MakeTaskState(ETaskStatus taskStatus, const TString& taskId, co
     return MakeIntrusive<TTaskState>(taskStatus, taskId, taskErrorMessage, stats);
 }
 
+//////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+// Helper serialization functions
+
+void SaveRichPath(IOutputStream* buffer, const NYT::TRichYPath& path) {
+    TString serializedPath = NYT::NodeToYsonString(NYT::PathToNode(path));
+    ::Save(buffer, serializedPath);
+}
+void LoadRichPath(IInputStream* buffer, NYT::TRichYPath& path) {
+    TString serializedPath;
+    ::Load(buffer, serializedPath);
+    auto node = NYT::NodeFromYsonString(serializedPath);
+    NYT::Deserialize(path, node);
+}
+
+void TYtTableTaskRef::Save(IOutputStream* buffer) const {
+    ::Save(buffer, RichPaths.size());
+    for (auto& path: RichPaths) {
+        SaveRichPath(buffer, path);
+    }
+    ::Save(buffer, FilePaths);
+}
+
+void TYtTableTaskRef::Load(IInputStream* buffer) {
+    ui64 richPathsSize;
+    ::Load(buffer, richPathsSize);
+    std::vector<NYT::TRichYPath> richPaths;
+
+    for (ui64 i = 0; i < richPathsSize; ++i) {
+        NYT::TRichYPath path;
+        LoadRichPath(buffer, path);
+        richPaths.emplace_back(path);
+    }
+    RichPaths = richPaths;
+    ::Load(buffer, FilePaths);
+}
+
+void TTableRange::Save(IOutputStream* buffer) const {
+    ::SaveMany(
+        buffer,
+        PartId,
+        MinChunk,
+        MaxChunk
+    );
+}
+
+void TTableRange::Load(IInputStream* buffer) {
+    ::LoadMany(
+        buffer,
+        PartId,
+        MinChunk,
+        MaxChunk
+    );
+}
+
+void TFmrTableInputRef::Save(IOutputStream* buffer) const {
+    ::SaveMany(
+        buffer,
+        TableId,
+        TableRanges
+    );
+}
+
+void TFmrTableInputRef::Load(IInputStream* buffer) {
+    ::LoadMany(
+        buffer,
+        TableId,
+        TableRanges
+    );
+}
+
+void TTaskTableInputRef::Save(IOutputStream* buffer) const {
+    ::Save(buffer, Inputs);
+}
+
+void TTaskTableInputRef::Load(IInputStream* buffer) {
+    ::Load(buffer, Inputs);
+}
+
+void TFmrTableOutputRef::Save(IOutputStream* buffer) const {
+    ::SaveMany(
+        buffer,
+        TableId,
+        PartId
+    );
+}
+
+void TFmrTableOutputRef::Load(IInputStream* buffer) {
+    ::LoadMany(
+        buffer,
+        TableId,
+        PartId
+    );
+}
+
+void TClusterConnection::Save(IOutputStream* buffer) const {
+    ::SaveMany(
+        buffer,
+        TransactionId,
+        YtServerName,
+        Token
+    );
+}
+
+void TClusterConnection::Load(IInputStream* buffer) {
+    ::LoadMany(
+        buffer,
+        TransactionId,
+        YtServerName,
+        Token
+    );
+}
+
+void TFmrTableId::Save(IOutputStream* buffer) const {
+    ::Save(buffer, Id);
+}
+
+void TFmrTableId::Load(IInputStream* buffer) {
+    ::Load(buffer, Id);
+}
+
 } // namespace NYql::NFmr
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+// Helper output operators for structs
+
 
 template<>
 void Out<NYql::NFmr::TFmrTableId>(IOutputStream& out, const NYql::NFmr::TFmrTableId& tableId) {

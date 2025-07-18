@@ -210,6 +210,15 @@ message TPQConfig {
     optional uint64 BalancerStatsWakeupIntervalSec = 55 [default = 5];
 
     optional uint64 MaxWriteSessionBytesInflight = 57 [default = 1000000];
+
+    message TCompactionConfig {
+        optional uint32 BlobsCount = 1 [default = 300];
+        optional uint32 BlobsSize = 2 [default = 8388608]; // 8mb
+        optional uint32 MaxBlobsCount = 3 [default = 1000];
+        optional uint64 MaxWTimeLagSec = 4 [default = 300]; // 5min
+    }
+
+    optional TCompactionConfig CompactionConfig = 58;
 }
 
 message TChannelProfile {
@@ -456,10 +465,13 @@ message TMessageGroupInfo {
     optional uint64 Offset = 2;
     optional uint64 WriteTimestamp = 3; // TInstant::TValue
     optional uint64 CreateTimestamp = 4; // TInstant::TValue
+    optional uint32 ProducerEpoch = 10;  // For idempotent producer in Kafka protocol
+
     optional bool Explicit = 5;
     optional TPartitionKeyRange KeyRange = 6;
     optional EState State = 7;
     optional THeartbeat LastHeartbeat = 8;
+
 }
 
 message TBootstrapConfig {
@@ -506,42 +518,6 @@ message TUpdateBalancerConfig { //for schemeshard use only
 
     repeated TTablet Tablets = 10;
     optional uint64 SubDomainPathId = 13;
-}
-
-message TDescribe {
-}
-
-message TDescribeResponse {
-    optional string TopicName = 1;
-    optional uint32 Version = 2;
-    optional TPQTabletConfig Config = 3;
-    optional uint32 PartitionPerTablet = 4;
-    optional uint64 SchemeShardId = 6;
-    optional uint64 BalancerTabletId = 7;
-
-    optional bytes SecurityObject = 8; //NACLibProto.TSecurityObject
-
-    message TPartition {
-        optional uint32 Partition = 1;
-        optional uint64 TabletId = 2;
-    }
-
-    repeated TPartition Partitions = 5;
-}
-
-message TCheckACL {
-    optional EOperation Operation = 2;
-    optional NPersQueueCommon.Credentials Auth = 4; //leaved for compatibility
-    optional string User = 5;
-    optional bytes Token = 6;
-}
-
-message TCheckACLResponse {
-    optional EAccess Access = 1;
-    optional string Topic = 2;
-    optional string Path = 3;
-
-    optional string Error = 4;
 }
 
 enum EOperation {
@@ -911,6 +887,7 @@ message TUserInfo {
     optional uint64 ReadRuleGeneration = 6;
     optional uint64 PartitionSessionId = 7;
     optional bool AnyCommits = 8;
+    optional string CommittedMetadata = 9;
 }
 
 message TPartitionClientInfo {
@@ -956,6 +933,11 @@ message TYdsShardIterator {
     optional ETopicKind Kind = 7;
 }
 
+message TKafkaProducerInstanceId {
+    optional int64 Id = 1;
+    optional int32 Epoch = 2;
+};
+
 message TPartitionOperation {
     optional uint32 PartitionId = 1;
     optional uint64 CommitOffsetsBegin = 2;
@@ -967,11 +949,15 @@ message TPartitionOperation {
     optional bool KillReadSession = 8;
     optional bool OnlyCheckCommitedToFinish = 9;
     optional string ReadSessionId = 10;
+    optional bool KafkaTransaction = 11 [default = false];
+    optional TKafkaProducerInstanceId KafkaProducerInstanceId = 12;
 };
 
 message TWriteId {
     optional uint64 NodeId = 1;
     optional fixed64 KeyId = 2;
+    optional bool KafkaTransaction = 3 [default = false];
+    optional TKafkaProducerInstanceId KafkaProducerInstanceId = 4;
 };
 
 message TDataTransaction {
@@ -1174,6 +1160,8 @@ message TTabletTxInfo {
         optional TWriteId WriteId = 1;
         optional uint32 OriginalPartitionId = 2;
         optional uint32 InternalPartitionId = 3;
+        optional bool KafkaTransaction = 4 [default = false];
+        optional uint64 CreatedAt = 5;
     };
 
     optional uint64 PlanStep = 2;

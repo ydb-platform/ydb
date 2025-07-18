@@ -28,9 +28,11 @@ SET(ORIG_SOURCES
     mkql_block_compress_ut.cpp
     mkql_block_coalesce_ut.cpp
     mkql_block_exists_ut.cpp
+    mkql_block_logical_ut.cpp
     mkql_block_skiptake_ut.cpp
     mkql_block_map_join_ut_utils.cpp
     mkql_block_map_join_ut.cpp
+    mkql_block_test_helper.cpp
     mkql_block_top_sort_ut.cpp
     mkql_blocks_ut.cpp
     mkql_combine_ut.cpp
@@ -83,8 +85,6 @@ SET(ORIG_SOURCES
 )
 
 PEERDIR(
-    yql/essentials/core/arrow_kernels/request
-    yql/essentials/core/arrow_kernels/registry
     yql/essentials/public/udf
     yql/essentials/public/udf/arrow
     yql/essentials/public/udf/service/exception_policy

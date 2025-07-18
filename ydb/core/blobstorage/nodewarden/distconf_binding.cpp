@@ -10,7 +10,7 @@ namespace NKikimr::NStorage {
         const ui32 selfNodeId = SelfId().NodeId();
         for (const auto& item : ev->Get()->Nodes) {
             if (item.NodeId == selfNodeId) {
-                SelfNode = TNodeIdentifier(item.ResolveHost, item.Port, selfNodeId);
+                SelfNode = TNodeIdentifier(item.ResolveHost, item.Port, selfNodeId, std::nullopt);
                 Y_ABORT_UNLESS(IsSelfStatic == item.IsStatic);
             }
             if (item.IsStatic) {
@@ -64,7 +64,7 @@ namespace NKikimr::NStorage {
     void TDistributedConfigKeeper::IssueNextBindRequest() {
         Y_DEBUG_ABORT_UNLESS(IsSelfStatic);
         CheckRootNodeStatus();
-        if (RootState == ERootState::INITIAL && !Binding && AllBoundNodes.size() < NodeIds.size()) {
+        if (RootState == ERootState::INITIAL && !ScepterlessOperationInProgress && !Binding && AllBoundNodes.size() < NodeIds.size()) {
             const TMonotonic now = TActivationContext::Monotonic();
             TMonotonic closest;
             if (std::optional<ui32> nodeId = BindQueue.Pick(now, &closest)) {
@@ -101,6 +101,10 @@ namespace NKikimr::NStorage {
             auto *boundNode = record.AddBoundNodes();
             nodeId.Serialize(boundNode->MutableNodeId());
             boundNode->MutableMeta()->CopyFrom(node.Configs.back());
+        }
+
+        for (auto it = Cache.begin(); it != Cache.end(); ++it) {
+            AddCacheUpdate(record.MutableCacheUpdate(), it, false);
         }
 
         SendEvent(*Binding, std::move(ev));
@@ -316,6 +320,22 @@ namespace NKikimr::NStorage {
                 FanOutReversePush(configUpdate ? StorageConfig.get() : nullptr, record.GetRecurseConfigUpdate());
             }
         }
+
+        // process cache updates, if needed
+        if (record.HasCacheUpdate()) {
+            auto *cacheUpdate = record.MutableCacheUpdate();
+            ApplyCacheUpdates(cacheUpdate, senderNodeId);
+
+            if (cacheUpdate->RequestedKeysSize()) {
+                auto ev = std::make_unique<TEvNodeConfigPush>();
+                for (const TString& key : cacheUpdate->GetRequestedKeys()) {
+                    if (const auto it = Cache.find(key); it != Cache.end()) {
+                        AddCacheUpdate(ev->Record.MutableCacheUpdate(), it, true);
+                    }
+                }
+                SendEvent(*Binding, std::move(ev));
+            }
+        }
     }
 
     void TDistributedConfigKeeper::UpdateBound(ui32 refererNodeId, TNodeIdentifier nodeId, const TStorageConfigMeta& meta, TEvNodeConfigPush *msg) {
@@ -425,8 +445,32 @@ namespace NKikimr::NStorage {
         const auto [it, inserted] = DirectBoundNodes.try_emplace(senderNodeId, ev->Cookie, ev->InterconnectSession);
         TBoundNode& info = it->second;
         if (inserted) {
-            SendEvent(senderNodeId, info, std::make_unique<TEvNodeConfigReversePush>(GetRootNodeId(),
-                StorageConfig.get(), false));
+            auto response = std::make_unique<TEvNodeConfigReversePush>(GetRootNodeId(), StorageConfig.get(), false);
+            if (record.GetInitial() && record.HasCacheUpdate()) {
+                auto *cache = record.MutableCacheUpdate();
+
+                // scan existing cache keys to find the ones we need to ask and to report others
+                THashSet<TString> keysToReport;
+                for (const auto& [key, value] : Cache) {
+                    keysToReport.insert(key);
+                }
+                for (const auto& item : cache->GetKeyValuePairs()) {
+                    keysToReport.erase(item.GetKey());
+                    const auto it = Cache.find(item.GetKey());
+                    if (it == Cache.end() || it->second.Generation < item.GetGeneration()) {
+                        response->Record.MutableCacheUpdate()->AddRequestedKeys(item.GetKey());
+                    } else if (item.GetGeneration() < it->second.Generation) {
+                        AddCacheUpdate(response->Record.MutableCacheUpdate(), it, true);
+                    }
+                }
+                for (const TString& key : keysToReport) {
+                    const auto it = Cache.find(key);
+                    Y_ABORT_UNLESS(it != Cache.end());
+                    AddCacheUpdate(response->Record.MutableCacheUpdate(), it, true);
+                }
+            }
+
+            SendEvent(senderNodeId, info, std::move(response));
             for (auto& [cookie, task] : ScatterTasks) {
                 IssueScatterTaskForNode(senderNodeId, info, cookie, task);
             }
@@ -463,6 +507,11 @@ namespace NKikimr::NStorage {
                     (NodeId, nodeId));
                 Y_DEBUG_ABORT();
             }
+        }
+
+        // process cache items
+        if (!record.GetInitial() && record.HasCacheUpdate()) {
+            ApplyCacheUpdates(record.MutableCacheUpdate(), senderNodeId);
         }
 
         if (pushEv && pushEv->IsUseful()) {
@@ -514,6 +563,8 @@ namespace NKikimr::NStorage {
             DirectBoundNodes.erase(it);
 
             UnsubscribeQueue.insert(nodeId);
+
+            OnSyncerUnboundNode(nodeId);
 
             CheckRootNodeStatus();
         }

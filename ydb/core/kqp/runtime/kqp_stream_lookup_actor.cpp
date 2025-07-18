@@ -152,8 +152,6 @@ private:
         const ui64 Id;
         const ui64 ShardId;
         EReadState State;
-        TMaybe<TOwnedCellVec> LastProcessedKey;
-        ui32 FirstUnprocessedQuery = 0;
         ui64 LastSeqNo = 0;
     };
 
@@ -211,8 +209,11 @@ private:
 
         std::vector<TReadState*> GetShardReads(ui64 shardId) {
             auto it = ReadsPerShard.find(shardId);
-            YQL_ENSURE(it != ReadsPerShard.end());
             std::vector<TReadState*> result;
+            if (it == ReadsPerShard.end()) {
+                return result;
+            }
+
             for(ui64 readId: it->second.Reads) {
                 auto it = Reads.find(readId);
                 YQL_ENSURE(it != Reads.end());
@@ -281,6 +282,11 @@ private:
     i64 GetAsyncInputData(NKikimr::NMiniKQL::TUnboxedValueBatch& batch, TMaybe<TInstant>&, bool& finished, i64 freeSpace) final {
         YQL_ENSURE(!batch.IsWide(), "Wide stream is not supported");
 
+        if (ResolveShardsInProgress) {
+            finished = false;
+            return 0;
+        }
+
         auto replyResultStats = StreamLookupWorker->ReplyResult(batch, freeSpace);
         ReadRowsCount += replyResultStats.ReadRowsCount;
         ReadBytesCount += replyResultStats.ReadBytesCount;
@@ -346,8 +352,11 @@ private:
     }
 
     void Handle(TEvTxProxySchemeCache::TEvResolveKeySetResult::TPtr& ev) {
-        ResoleShardsInProgress = false;
         CA_LOG_D("TEvResolveKeySetResult was received for table: " << StreamLookupWorker->GetTablePath());
+        if (!ResolveShardsInProgress) {
+            return;
+        }
+        ResolveShardsInProgress = false;
         if (ev->Get()->Request->ErrorCount > 0) {
             TString errorMsg = TStringBuilder() << "Failed to get partitioning for table: "
                 << StreamLookupWorker->GetTablePath();
@@ -363,6 +372,8 @@ private:
         Partitioning = resultSet[0].KeyDescription->Partitioning;
 
         ProcessInputRows();
+
+        Send(ComputeActorId, new TEvNewAsyncInputDataArrived(InputIndex));
     }
 
     void Handle(TEvDataShard::TEvReadResult::TPtr& ev) {
@@ -439,7 +450,7 @@ private:
                 break;
             case Ydb::StatusIds::NOT_FOUND:
             {
-                StreamLookupWorker->ResetRowsProcessing(read.Id, read.FirstUnprocessedQuery, read.LastProcessedKey);
+                StreamLookupWorker->ResetRowsProcessing(read.Id);
                 CA_LOG_D("NOT_FOUND was received from tablet: " << read.ShardId << ". "
                     << getIssues().ToOneLineString());
                 Reads.erase(read);
@@ -478,19 +489,6 @@ private:
         if (record.GetFinished()) {
             Reads.erase(read);
         } else {
-            YQL_ENSURE(record.HasContinuationToken(), "Successful TEvReadResult should contain continuation token");
-            NKikimrTxDataShard::TReadContinuationToken continuationToken;
-            bool parseResult = continuationToken.ParseFromString(record.GetContinuationToken());
-            YQL_ENSURE(parseResult, "Failed to parse continuation token");
-            read.FirstUnprocessedQuery = continuationToken.GetFirstUnprocessedQuery();
-
-            if (continuationToken.HasLastProcessedKey()) {
-                TSerializedCellVec lastKey(continuationToken.GetLastProcessedKey());
-                read.LastProcessedKey = TOwnedCellVec(lastKey.GetCells());
-            } else {
-                read.LastProcessedKey.Clear();
-            }
-
             Counters->SentIteratorAcks->Inc();
             THolder<TEvDataShard::TEvReadAck> request(new TEvDataShard::TEvReadAck());
             request->Record.SetReadId(record.GetReadId());
@@ -544,21 +542,25 @@ private:
         if (!Partitioning) {
             LookupActorStateSpan.EndError("timeout exceeded");
             CA_LOG_D("Retry attempt to resolve shards for table: " << StreamLookupWorker->GetTablePath());
-            ResoleShardsInProgress = false;
+            ResolveShardsInProgress = false;
             ResolveTableShards();
         }
     }
 
     void Handle(TEvPrivate::TEvRetryRead::TPtr& ev) {
         auto readIt = Reads.find(ev->Get()->ReadId);
-        YQL_ENSURE(readIt != Reads.end(), "Unexpected readId: " << ev->Get()->ReadId);
+        if (readIt == Reads.end()) {
+            CA_LOG_D("received retry request for already finished/non-existing read, read_id: " << ev->Get()->ReadId);
+            return;
+        }
+
         auto& read = readIt->second;
 
         YQL_ENSURE(read.State != EReadState::Blocked || read.LastSeqNo <= ev->Get()->LastSeqNo);
 
         if ((read.State == EReadState::Running && read.LastSeqNo <= ev->Get()->LastSeqNo) || read.State == EReadState::Blocked) {
             if (ev->Get()->InstantStart) {
-                auto requests = StreamLookupWorker->RebuildRequest(read.Id, read.FirstUnprocessedQuery, read.LastProcessedKey, ReadId);
+                auto requests = StreamLookupWorker->RebuildRequest(read.Id, ReadId);
                 for (auto& request : requests) {
                     StartTableRead(read.ShardId, std::move(request));
                 }
@@ -660,14 +662,14 @@ private:
         ++TotalRetryAttempts;
 
         if (Reads.CheckShardRetriesExeeded(failedRead)) {
-            StreamLookupWorker->ResetRowsProcessing(failedRead.Id, failedRead.FirstUnprocessedQuery, failedRead.LastProcessedKey);
+            StreamLookupWorker->ResetRowsProcessing(failedRead.Id);
             Reads.erase(failedRead);
             return ResolveTableShards();
         }
 
         auto delay = Reads.CalcDelayForShard(failedRead, allowInstantRetry);
         if (delay == TDuration::Zero()) {
-            auto requests = StreamLookupWorker->RebuildRequest(failedRead.Id, failedRead.FirstUnprocessedQuery, failedRead.LastProcessedKey, ReadId);
+            auto requests = StreamLookupWorker->RebuildRequest(failedRead.Id, ReadId);
             for (auto& request : requests) {
                 StartTableRead(failedRead.ShardId, std::move(request));
             }
@@ -681,7 +683,7 @@ private:
     }
 
     void ResolveTableShards() {
-        if (ResoleShardsInProgress) {
+        if (ResolveShardsInProgress) {
             return;
         }
 
@@ -691,7 +693,7 @@ private:
         }
 
         CA_LOG_D("Resolve shards for table: " << StreamLookupWorker->GetTablePath());
-        ResoleShardsInProgress = true;
+        ResolveShardsInProgress = true;
 
         Partitioning.reset();
 
@@ -767,7 +769,7 @@ private:
     ui64 ReadId = 0;
     size_t TotalRetryAttempts = 0;
     size_t TotalResolveShardsAttempts = 0;
-    bool ResoleShardsInProgress = false;
+    bool ResolveShardsInProgress = false;
 
     // stats
     ui64 ReadRowsCount = 0;

@@ -12,19 +12,24 @@ from time import time_ns
 class ResultsProcessor:
     class Endpoint:
         def __init__(self, ep: str, db: str, table: str, key: str, iam_file: str) -> None:
+            self._endpoint = ep
             self._driver = YdbCluster._create_ydb_driver(ep, db, oauth=key, iam_file=iam_file)
             self._db = db
             self._table = table
 
         def send_data(self, data):
             try:
+                logging.info(f"[ResultsProcessor] Sending data to YDB endpoint: {self._endpoint}, db: {self._db}, table: {self._table}")
+                logging.debug(f"[ResultsProcessor] Data: {json.dumps(data)[:1000]}" + ("..." if len(json.dumps(data)) > 1000 else ""))
+                logging.info(f"[ResultsProcessor] Columns types: {ResultsProcessor._columns_types}")
                 ydb.retry_operation_sync(
                     lambda: self._driver.table_client.bulk_upsert(
                         os.path.join(self._db, self._table), [data], ResultsProcessor._columns_types
                     )
                 )
+                logging.info(f"[ResultsProcessor] Data sent successfully to {os.path.join(self._db, self._table)}")
             except BaseException as e:
-                logging.error(f'Exception while send results: {e}')
+                logging.error(f'[ResultsProcessor] Exception while send results: {e}')
 
     _endpoints : list[ResultsProcessor.Endpoint] = None
     _run_id : int = None
@@ -76,7 +81,7 @@ class ResultsProcessor:
 
     @staticmethod
     def get_cluster_id():
-        run_id = get_external_param('run-id', YdbCluster.tables_path)
+        run_id = get_external_param('run-id', YdbCluster.get_tables_path())
         return os.path.join(YdbCluster.ydb_endpoint, YdbCluster.ydb_database, run_id)
 
     @classmethod
@@ -107,6 +112,31 @@ class ResultsProcessor:
             return None
 
         info = {'cluster': YdbCluster.get_cluster_info()}
+
+        # Добавляем дополнительную информацию о кластере
+        try:
+            nodes = YdbCluster.get_cluster_nodes(db_only=True)
+            cluster_info = info['cluster']
+            cluster_info['endpoint'] = YdbCluster.ydb_endpoint
+            cluster_info['nodes_count'] = len(nodes)
+            cluster_info['nodes_info'] = []
+
+            # Собираем информацию о нодах
+            for node in nodes:
+                node_info = {
+                    'host': node.host,
+                    'role': str(node.role),
+                    'version': node.version,
+                    'start_time': node.start_time,
+                    'disconnected': node.disconnected
+                }
+                cluster_info['nodes_info'].append(node_info)
+
+        except Exception as e:
+            logging.warning(f"Could not collect detailed cluster info: {e}")
+            # Добавляем базовую информацию
+            info['cluster']['endpoint'] = YdbCluster.ydb_endpoint
+            info['cluster']['error'] = str(e)
 
         report_url = os.getenv('ALLURE_RESOURCE_URL', None)
         if report_url is None:

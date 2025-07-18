@@ -27,7 +27,7 @@ struct TStringComparer
 
 struct TStringHasher
 {
-    ui64 operator()(const TString& node, ui64 index) const
+    size_t operator()(const TString& node, ui64 index) const
     {
         return MultiHash(node, index);
     }
@@ -35,7 +35,7 @@ struct TStringHasher
 
 struct TCustomStringHasher
 {
-    ui64 operator()(const TString& node, int index) const
+    size_t operator()(const TString& node, int index) const
     {
         if (index == 0) {
             if (node == "a") {
@@ -56,7 +56,7 @@ struct TCustomStringHasher
     }
 };
 
-TEST(TConsistentHashingRing, CheckCollision)
+TEST(TConsistentHashingRingTest, CheckCollision)
 {
     TConsistentHashingRing<TString, TString, TStringComparer, TCustomStringHasher, 1> ring;
     ring.AddFile("a", 1);
@@ -71,7 +71,7 @@ void CheckServers(const TCompactVector<TString, 1>& src, const std::vector<TStri
     EXPECT_TRUE(std::equal(src.begin(), src.end(), target.begin()));
 }
 
-TEST(TConsistentHashingRing, AddRemove)
+TEST(TConsistentHashingRingTest, AddRemove)
 {
     TConsistentHashingRing<TString, TString, TStringComparer, TCustomStringHasher, 1> ring;
     ring.AddFile("a", 1);
@@ -109,7 +109,7 @@ TEST(TConsistentHashingRing, AddRemove)
     CheckServers(ring.GetServersForFile("g", 1), {"f"});
 }
 
-TEST(TConsistentHashingRing, AddRemoveManyReplicas)
+TEST(TConsistentHashingRingTest, AddRemoveManyReplicas)
 {
     TConsistentHashingRing<TString, TString, TStringComparer, TCustomStringHasher, 1> ring;
 
@@ -153,7 +153,7 @@ TEST(TConsistentHashingRing, AddRemoveManyReplicas)
     CheckServers(ring.GetServersForFile("f", 2), {"c", "c"});
 }
 
-TEST(TConsistentHashingRing, CheckConsistency)
+TEST(TConsistentHashingRingTest, CheckConsistency)
 {
     TConsistentHashingRing<TString, TString, TStringComparer, TCustomStringHasher, 1> ring;
 
@@ -170,33 +170,33 @@ TEST(TConsistentHashingRing, CheckConsistency)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static constexpr size_t STRING_SIZE = 5;
+constexpr int StringSize = 5;
 
-static constexpr size_t MOD = 531977;
+constexpr size_t Mod = 531977;
 
-static constexpr size_t NODE_MULTIPLIER = 446179;
-static constexpr size_t INDEX_MULTIPLIER = 389891;
+constexpr size_t NodeMultiplier = 446179;
+constexpr size_t IndexMultiplier = 389891;
 
-static constexpr const char* POSSIBLE_SYMBOLS = "ABCDEFGHIGKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
-static constexpr size_t POSSIBLE_SYMBOLS_COUNT = std::char_traits<char>::length(POSSIBLE_SYMBOLS);
+constexpr const char* PossibleSymbols = "ABCDEFGHIGKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
+constexpr size_t PossibleSymbolsCount = std::char_traits<char>::length(PossibleSymbols);
 
 struct THasher
 {
-    ui64 operator()(int node, int index) const
+    size_t operator()(int node, int index) const
     {
-        return (NODE_MULTIPLIER * node + INDEX_MULTIPLIER * index) % MOD;
+        return (NodeMultiplier * node + IndexMultiplier * index) % Mod;
     }
 };
 
 class TUniformGenerator
 {
 public:
-    explicit TUniformGenerator(size_t minValue = 0, size_t maxValue = MOD)
-    : Generator_(RandomDevice_())
-    , Distribution_(minValue, maxValue)
+    explicit TUniformGenerator(size_t minValue = 0, size_t maxValue = Mod)
+        : Generator_(RandomDevice_())
+        , Distribution_(minValue, maxValue)
     { }
 
-    ui64 operator()(size_t maxValue = MOD)
+    ui64 operator()(size_t maxValue = Mod)
     {
         return Distribution_(Generator_) % maxValue;
     }
@@ -284,19 +284,19 @@ template <typename GS, typename GF, typename GQ>
 double GetPercentageInconsistentFiles(
     GS serverGenerator,
     GF fileGenerator,
-    size_t fileCount,
-    size_t serverCount,
-    size_t queryCount,
+    int fileCount,
+    int serverCount,
+    int queryCount,
     GQ queryGenerator,
-    size_t candidateCount,
-    size_t batchSize = 1)
+    int candidateCount,
+    int batchSize = 1)
 {
     TConsistentHashingRing<TString, TString, TStringComparer, TStringHasher, 3> ring;
 
     TCrpItemsContainer servers;
     TCrpItemsContainer files;
 
-    for (size_t i = 0; i < fileCount; ++i) {
+    for (int i = 0; i < fileCount; ++i) {
         auto generatedFile = fileGenerator();
         while (!files.Insert(generatedFile)) {
             generatedFile = fileGenerator();
@@ -304,7 +304,7 @@ double GetPercentageInconsistentFiles(
         ring.AddFile(generatedFile.first, generatedFile.second);
     }
 
-    for (size_t i = 0; i < serverCount; ++i) {
+    for (int i = 0; i < serverCount; ++i) {
         auto generatedServer = serverGenerator();
         while (!servers.Insert(generatedServer)) {
             generatedServer = serverGenerator();
@@ -316,7 +316,7 @@ double GetPercentageInconsistentFiles(
         std::map<TCrpItemWithToken, TCompactVector<TString, 1>> serversBefore;
         for (const auto& file : files) {
             auto candidates = ring.GetServersForFile(file.first, file.second);
-            candidates.resize(std::min(static_cast<size_t>(file.second), candidateCount));
+            candidates.resize(std::min(file.second, candidateCount));
             serversBefore[file] = candidates;
         }
 
@@ -342,7 +342,7 @@ double GetPercentageInconsistentFiles(
         int result = 0;
         for (const auto& elem : files) {
             auto candidates = ring.GetServersForFile(elem.first, elem.second);
-            candidates.resize(std::min(static_cast<size_t>(elem.second), candidateCount));
+            candidates.resize(std::min(elem.second, candidateCount));
             result += (serversBefore[elem] != candidates);
         }
         return result;
@@ -351,7 +351,7 @@ double GetPercentageInconsistentFiles(
     TUniformGenerator generator;
     int maxDisplacedFileCount = 0;
     std::vector<std::pair<EQueryType, TCrpItemWithToken>> batch;
-    for (size_t i = 0; i < queryCount; ++i) {
+    for (int i = 0; i < queryCount; ++i) {
         auto [queryType, itemWithToken] = queryGenerator();
         auto item = std::pair<EQueryType, TCrpItemWithToken>(queryType, itemWithToken);
         switch (queryType) {
@@ -384,7 +384,7 @@ double GetPercentageInconsistentFiles(
         }
 
         batch.emplace_back(queryType, std::move(itemWithToken));
-        if (batch.size() == batchSize) {
+        if (std::ssize(batch) == batchSize) {
             maxDisplacedFileCount = std::max(maxDisplacedFileCount, countDisplaced(std::move(batch)));
             batch.clear();
         }
@@ -399,19 +399,19 @@ TCrpItemWithToken GenerateItem() {
     auto generator = TUniformGenerator();
 
     TString buffer;
-    for (size_t i = 0; i < STRING_SIZE; ++i) {
-        buffer.push_back(POSSIBLE_SYMBOLS[generator(POSSIBLE_SYMBOLS_COUNT)]);
+    for (int i = 0; i < StringSize; ++i) {
+        buffer.push_back(PossibleSymbols[generator(PossibleSymbolsCount)]);
     }
 
     int tokenCount = 1 + generator(5);
     return TCrpItemWithToken(buffer, tokenCount);
 }
 
-TEST(TConsistentHashingRing, AddAndRemoveStress)
+TEST(TConsistentHashingRingTest, AddAndRemoveStress)
 {
     auto generator = TUniformGenerator();
 
-    auto generateQuery = [&] () {
+    auto generateQuery = [&] {
         auto file = GenerateItem();
         return std::pair<EQueryType, TCrpItemWithToken>(static_cast<EQueryType>(generator(4)), file);
     };
@@ -427,18 +427,18 @@ TEST(TConsistentHashingRing, AddAndRemoveStress)
     EXPECT_LE(result, 0.07);
 }
 
-TEST(TConsistentHashingRing, AdditionBarrierStress)
+TEST(TConsistentHashingRingTest, AdditionBarrierStress)
 {
     auto generator = TUniformGenerator();
 
-    size_t queriesGenerated = 0;
-    const size_t barrierAfter = 1000;
-    const size_t cntAddings = 180;
+    int queriesGenerated = 0;
+    constexpr int BarrierAfter = 1000;
+    constexpr int CntAddings = 180;
 
     auto generateQuery = [&] () {
         ++queriesGenerated;
         auto item = GenerateItem();
-        if (queriesGenerated >= barrierAfter && queriesGenerated < cntAddings + barrierAfter) {
+        if (queriesGenerated >= BarrierAfter && queriesGenerated < CntAddings + BarrierAfter) {
             return std::pair<EQueryType, TCrpItemWithToken>(EQueryType::AddServer, item);
         }
         return std::pair<EQueryType, TCrpItemWithToken>(static_cast<EQueryType>(generator(4)), item);
@@ -455,18 +455,18 @@ TEST(TConsistentHashingRing, AdditionBarrierStress)
     EXPECT_LE(result, 0.07);
 }
 
-TEST(TConsistentHashingRing, ServerAdditionBarrierStress)
+TEST(TConsistentHashingRingTest, ServerAdditionBarrierStress)
 {
     auto generator = TUniformGenerator();
 
-    size_t queriesGenerated = 0;
-    const size_t queriesBeforeBarrier = 1000;
-    const size_t additionalServerCount = 180;
+    int queriesGenerated = 0;
+    constexpr int QueriesBeforeBarrier = 1000;
+    constexpr int AdditionalServerCount = 180;
 
     auto generateQuery = [&] () {
         ++queriesGenerated;
         auto item = GenerateItem();
-        if (queriesGenerated >= queriesBeforeBarrier && queriesGenerated < additionalServerCount + queriesBeforeBarrier) {
+        if (queriesGenerated >= QueriesBeforeBarrier && queriesGenerated < AdditionalServerCount + QueriesBeforeBarrier) {
             return std::pair<EQueryType, TCrpItemWithToken>(EQueryType::AddServer, item);
         }
         return std::pair<EQueryType, TCrpItemWithToken>(static_cast<EQueryType>(generator(2)), item);
@@ -483,18 +483,18 @@ TEST(TConsistentHashingRing, ServerAdditionBarrierStress)
     EXPECT_LE(result, 0.05);
 }
 
-TEST(TConsistentHashingRing, FilesAdditionBarrierStress)
+TEST(TConsistentHashingRingTest, FilesAdditionBarrierStress)
 {
     auto generator = TUniformGenerator();
 
-    size_t queriesGenerated = 0;
-    const size_t queriesBeforeBarrier = 100;
-    const size_t additionalServerCount = 180;
+    int queriesGenerated = 0;
+    constexpr int QueriesBeforeBarrier = 100;
+    constexpr int AdditionalServerCount = 180;
 
     auto generateQuery = [&] () {
         ++queriesGenerated;
         auto item = GenerateItem();
-        if (queriesGenerated >= queriesBeforeBarrier && queriesGenerated < additionalServerCount + queriesBeforeBarrier) {
+        if (queriesGenerated >= QueriesBeforeBarrier && queriesGenerated < AdditionalServerCount + QueriesBeforeBarrier) {
             return std::pair<EQueryType, TCrpItemWithToken>(EQueryType::AddServer, item);
         }
         return std::pair<EQueryType, TCrpItemWithToken>(static_cast<EQueryType>(2 + generator(2)), item);
@@ -537,7 +537,7 @@ std::pair<EQueryType, TCrpItemWithToken> GenerateQuery() {
     return std::pair<EQueryType, TCrpItemWithToken>(queryType, item);
 }
 
-TEST(TConsistentHashingRing, ManyNodesSimultaneouslyStress)
+TEST(TConsistentHashingRingTest, ManyNodesSimultaneouslyStress)
 {
     auto singleReplicaResult = GetPercentageInconsistentFiles(
         /*serverGenerator*/ GenerateItem,
@@ -563,16 +563,16 @@ TEST(TConsistentHashingRing, ManyNodesSimultaneouslyStress)
     EXPECT_GE(multipleReplicaResult, 0.3);
 }
 
-TEST(TConsistentHashingRing, SmallTokenCount)
+TEST(TConsistentHashingRingTest, SmallTokenCount)
 {
-    const size_t testCases = 4;
+    constexpr int TestCases = 4;
 
     auto singleReplicaLargeResult = 0.0;
     auto manyReplicasLargeResult = 0.0;
     auto singleReplicaSmallResult = 0.0;
     auto manyReplicasSmallResult = 0.0;
 
-    for (size_t i = 0; i < testCases; ++i) {
+    for (int i = 0; i < TestCases; ++i) {
         singleReplicaLargeResult += GetPercentageInconsistentFiles(
             /*serverGenerator*/ GenerateItem,
             /*fileGenerator*/ GenerateFile<100>,
@@ -581,7 +581,7 @@ TEST(TConsistentHashingRing, SmallTokenCount)
             /*queryCount*/ 600,
             /*queryGenerator*/ GenerateQuery<100, 40, 250>,
             /*candidateCount*/ 1,
-            /*batchSize*/ 200) / testCases;
+            /*batchSize*/ 200) / TestCases;
 
         manyReplicasLargeResult += GetPercentageInconsistentFiles(
             /*serverGenerator*/ GenerateItem,
@@ -591,7 +591,7 @@ TEST(TConsistentHashingRing, SmallTokenCount)
             /*queryCount*/ 600,
             /*queryGenerator*/ GenerateQuery<101, 40, 250>,
             /*candidateCount*/ 3,
-            /*batchSize*/ 200) / testCases;
+            /*batchSize*/ 200) / TestCases;
 
         singleReplicaSmallResult += GetPercentageInconsistentFiles(
             /*serverGenerator*/ GenerateItem,
@@ -601,7 +601,7 @@ TEST(TConsistentHashingRing, SmallTokenCount)
             /*queryCount*/ 600,
             /*queryGenerator*/ GenerateQuery<10, 40, 250>,
             /*candidateCount*/ 1,
-            /*batchSize*/ 200) / testCases;
+            /*batchSize*/ 200) / TestCases;
 
         manyReplicasSmallResult += GetPercentageInconsistentFiles(
             /*serverGenerator*/ GenerateItem,
@@ -611,7 +611,7 @@ TEST(TConsistentHashingRing, SmallTokenCount)
             /*queryCount*/ 600,
             /*queryGenerator*/ GenerateQuery<11, 40, 250>,
             /*candidateCount*/ 3,
-            /*batchSize*/ 200) / testCases;
+            /*batchSize*/ 200) / TestCases;
     }
 
     EXPECT_LE(std::fabs(singleReplicaLargeResult - singleReplicaSmallResult), 0.12);

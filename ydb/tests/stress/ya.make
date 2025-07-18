@@ -1,10 +1,15 @@
 RECURSE(
+    cdc
     kv
     log
     mixedpy
+    node_broker
     olap_workload
     oltp_workload
+    reconfig_state_storage_workload
+    s3_backups
     simple_queue
+    show_create/view
     statistics_workload
     transfer
 )

@@ -75,8 +75,7 @@ def test_create_cimultidict_proxy_from_nonmultidict(
     with pytest.raises(
         TypeError,
         match=(
-            "ctor requires CIMultiDict or CIMultiDictProxy instance, "
-            "not <class 'dict'>"
+            "ctor requires CIMultiDict or CIMultiDictProxy instance, not <class 'dict'>"
         ),
     ):
         multidict_module.CIMultiDictProxy({})

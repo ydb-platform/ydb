@@ -8,9 +8,9 @@ SRCS(
     adjusted_exponential_moving_average_ut.cpp
     algorithm_helpers_ut.cpp
     arithmetic_formula_ut.cpp
-    atomic_ptr_ut.cpp
     async_expiring_cache_ut.cpp
     async_slru_cache_ut.cpp
+    atomic_ptr_ut.cpp
     backoff_strategy_ut.cpp
     bit_packed_integer_vector_ut.cpp
     bitmap_ut.cpp
@@ -20,6 +20,7 @@ SRCS(
     codicil_ut.cpp
     collection_helpers_ut.cpp
     concurrent_cache_ut.cpp
+    configurable_singleton_ut.cpp
     consistent_hashing_ut.cpp
     default_map_ut.cpp
     digest_ut.cpp
@@ -36,6 +37,7 @@ SRCS(
     hash_filter_ut.cpp
     hazard_ptr_ut.cpp
     heap_ut.cpp
+    hedging_manager_ut.cpp
     histogram_ut.cpp
     hyperloglog_ut.cpp
     intern_registry_ut.cpp
@@ -44,11 +46,10 @@ SRCS(
     lru_cache_ut.cpp
     maybe_inf_ut.cpp
     moving_average_ut.cpp
-    mpsc_fair_share_queue_ut.cpp
-    mpsc_stack_ut.cpp
-    mpsc_queue_ut.cpp
-    relaxed_mpsc_queue_ut.cpp
     mpl_ut.cpp
+    mpsc_fair_share_queue_ut.cpp
+    mpsc_queue_ut.cpp
+    mpsc_stack_ut.cpp
     pattern_formatter_ut.cpp
     persistent_queue_ut.cpp
     pool_allocator_ut.cpp
@@ -56,23 +57,23 @@ SRCS(
     random_ut.cpp
     range_helpers_ut.cpp
     ref_counted_tracker_ut.cpp
+    relaxed_mpsc_queue_ut.cpp
     ring_queue_ut.cpp
     skip_list_ut.cpp
     slab_allocator_ut.cpp
     sliding_window_ut.cpp
-    sync_cache_ut.cpp
     spsc_queue_ut.cpp
     statistic_path_ut.cpp
     statistics_ut.cpp
+    sync_cache_ut.cpp
     sync_expiring_cache_ut.cpp
     time_formula_ut.cpp
+    three_level_stable_vector_ut.cpp
     tls_destructor_ut.cpp
     tls_expiring_cache_ut.cpp
     topological_ordering_ut.cpp
     yverify_ut.cpp
     zerocopy_output_writer_ut.cpp
-    hedging_manager_ut.cpp
-    configurable_singleton_ut.cpp
 
     proto/ref_counted_tracker_ut.proto
 )

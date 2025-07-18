@@ -22,7 +22,7 @@ protected:
     virtual void DoOnFinish(NColumnShard::TColumnShard& self, TChangesFinishContext& context) override;
     virtual void DoDebugString(TStringOutput& out) const override;
     virtual void DoCompile(TFinalizationContext& context) override;
-    virtual TPortionMeta::EProduced GetResultProducedClass() const = 0;
+    virtual NPortion::EProduced GetResultProducedClass() const = 0;
     virtual void OnAbortEmergency() override {
         NeedGranuleStatusProvide = false;
     }

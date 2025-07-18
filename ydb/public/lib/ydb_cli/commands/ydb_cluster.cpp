@@ -1,5 +1,6 @@
 #include "ydb_cluster.h"
 
+#include "ydb_bridge.h"
 #include "ydb_dynamic_config.h"
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/config/config.h>
@@ -20,6 +21,7 @@ TCommandCluster::TCommandCluster()
     AddCommand(std::make_unique<NDynamicConfig::TCommandConfig>(false, true));
     AddCommand(std::make_unique<TCommandClusterDump>());
     AddCommand(std::make_unique<TCommandClusterRestore>());
+    AddHiddenCommand(std::make_unique<TCommandBridge>(true));
 }
 
 TCommandClusterBootstrap::TCommandClusterBootstrap()

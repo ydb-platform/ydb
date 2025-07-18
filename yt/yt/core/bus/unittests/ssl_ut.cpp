@@ -1,4 +1,5 @@
 #include <yt/yt/core/test_framework/framework.h>
+#include <yt/yt/core/test_framework/test_key.h>
 
 #include <yt/yt/core/bus/bus.h>
 #include <yt/yt/core/bus/client.h>
@@ -52,9 +53,9 @@ class TSslTest
 {
 public:
     NTesting::TPortHolder Port;
-    TString AddressWithHostName;
-    TString AddressWithIpV4;
-    TString AddressWithIpV6;
+    std::string AddressWithHostName;
+    std::string AddressWithIpV4;
+    std::string AddressWithIpV6;
 
     TPemBlobConfigPtr CACert;
     TPemBlobConfigPtr PrivateKey;
@@ -73,16 +74,16 @@ public:
         AddressWithIpV4 = Format("127.0.0.1:%v", Port);
         AddressWithIpV6 = Format("[::1]:%v", Port);
 
-        CACert = TPemBlobConfig::CreateFileReference(SRC_("testdata/ca.pem"));
-        PrivateKey = TPemBlobConfig::CreateFileReference(SRC_("testdata/key.pem"));
-        CertificateChain = TPemBlobConfig::CreateFileReference(SRC_("testdata/cert.pem"));
-        CACertWithIPInSAN = TPemBlobConfig::CreateFileReference(SRC_("testdata/ca_with_ip_in_san.pem"));
-        PrivateKeyWithIpInSAN = TPemBlobConfig::CreateFileReference(SRC_("testdata/key_with_ip_in_san.pem"));
-        CertificateChainWithIpInSAN = TPemBlobConfig::CreateFileReference(SRC_("testdata/cert_with_ip_in_san.pem"));
+        CACert = CreateTestKeyFile("ca.pem");
+        PrivateKey = CreateTestKeyFile("key.pem");
+        CertificateChain = CreateTestKeyFile("cert.pem");
+        CACertWithIPInSAN = CreateTestKeyFile("ca_with_ip_in_san.pem");
+        PrivateKeyWithIpInSAN = CreateTestKeyFile("key_with_ip_in_san.pem");
+        CertificateChainWithIpInSAN = CreateTestKeyFile("cert_with_ip_in_san.pem");
 
-        CACertEC = TPemBlobConfig::CreateFileReference(SRC_("testdata/ca_ec.pem"));
-        PrivateKeyEC = TPemBlobConfig::CreateFileReference(SRC_("testdata/key_ec.pem"));
-        CertificateChainEC = TPemBlobConfig::CreateFileReference(SRC_("testdata/cert_ec.pem"));
+        CACertEC = CreateTestKeyFile("ca_ec.pem");
+        PrivateKeyEC = CreateTestKeyFile("key_ec.pem");
+        CertificateChainEC = CreateTestKeyFile("cert_ec.pem");
     }
 };
 
@@ -472,6 +473,135 @@ TEST_F(TSslTest, FullVerificationByAlternativeHostName)
             .Get()
             .ThrowOnError();
     }
+}
+
+TEST_F(TSslTest, MutualVerificationSuccess)
+{
+    auto serverConfig = TBusServerConfig::CreateTcp(Port);
+    serverConfig->EncryptionMode = EEncryptionMode::Required;
+    serverConfig->VerificationMode = EVerificationMode::Full;
+    serverConfig->CertificateAuthority = CACert;
+    serverConfig->CertificateChain = CertificateChain;
+    serverConfig->PrivateKey = PrivateKey;
+    auto server = CreateBusServer(serverConfig);
+    server->Start(New<TEmptyBusHandler>());
+
+    auto clientConfig = TBusClientConfig::CreateTcp(AddressWithHostName);
+    clientConfig->EncryptionMode = EEncryptionMode::Required;
+    clientConfig->VerificationMode = EVerificationMode::Full;
+    clientConfig->CertificateAuthority = CACert;
+    clientConfig->CertificateChain = CertificateChain;
+    clientConfig->PrivateKey = PrivateKey;
+    auto client = CreateBusClient(clientConfig);
+
+    auto bus = client->CreateBus(New<TEmptyBusHandler>());
+    bus->GetReadyFuture().Get().ThrowOnError();
+    EXPECT_TRUE(bus->IsEncrypted());
+
+    auto message = CreateMessage(1);
+    auto sendFuture = bus->Send(message, {.TrackingLevel = EDeliveryTrackingLevel::Full});
+    sendFuture.Get().ThrowOnError();
+
+    server->Stop()
+        .Get()
+        .ThrowOnError();
+}
+
+TEST_F(TSslTest, MutualVerificationFailedWithoutClientCertificate)
+{
+    auto serverConfig = TBusServerConfig::CreateTcp(Port);
+    serverConfig->EncryptionMode = EEncryptionMode::Required;
+    serverConfig->VerificationMode = EVerificationMode::Full;
+    serverConfig->CertificateAuthority = CACert;
+    serverConfig->CertificateChain = CertificateChain;
+    serverConfig->PrivateKey = PrivateKey;
+    auto server = CreateBusServer(serverConfig);
+    server->Start(New<TEmptyBusHandler>());
+
+    auto clientConfig = TBusClientConfig::CreateTcp(AddressWithHostName);
+    clientConfig->EncryptionMode = EEncryptionMode::Required;
+    clientConfig->VerificationMode = EVerificationMode::Full;
+    clientConfig->CertificateAuthority = CACert;
+    // Not sending client certificate.
+    auto client = CreateBusClient(clientConfig);
+
+    auto bus = client->CreateBus(New<TEmptyBusHandler>());
+    auto error = bus->GetReadyFuture().Get();
+
+    if (!error.IsOK()) {
+        // Client should get error after BUS handshake and avoid TLS handshake.
+        EXPECT_EQ(error.GetCode(), EErrorCode::SslError);
+        EXPECT_THROW_MESSAGE_HAS_SUBSTR(
+            error.ThrowOnError(),
+            NYT::TErrorException,
+            "Server requested TLS/SSL client certificate for connection");
+    } else {
+        // Check that connection is terminated by server after TLS handshake.
+        EXPECT_TRUE(bus->IsEncrypted());
+
+        auto message = CreateMessage(1);
+        auto sendFuture = bus->Send(message, {.TrackingLevel = EDeliveryTrackingLevel::Full});
+        auto error = sendFuture.Get();
+        EXPECT_EQ(error.GetCode(), EErrorCode::SslError);
+        EXPECT_THROW_MESSAGE_HAS_SUBSTR(
+            error.ThrowOnError(),
+            NYT::TErrorException,
+            "alert certificate required");
+
+        THROW_ERROR_EXCEPTION("Mutual TLS failed only after TLS handshake");
+    }
+
+    server->Stop()
+        .Get()
+        .ThrowOnError();
+}
+
+TEST_F(TSslTest, MutualVerificationFailedWithWrongClientCertificate)
+{
+    auto serverConfig = TBusServerConfig::CreateTcp(Port);
+    serverConfig->EncryptionMode = EEncryptionMode::Required;
+    serverConfig->VerificationMode = EVerificationMode::Full;
+    serverConfig->CertificateAuthority = CACert;
+    serverConfig->CertificateChain = CertificateChain;
+    serverConfig->PrivateKey = PrivateKey;
+    auto server = CreateBusServer(serverConfig);
+    server->Start(New<TEmptyBusHandler>());
+
+    auto clientConfig = TBusClientConfig::CreateTcp(AddressWithHostName);
+    clientConfig->EncryptionMode = EEncryptionMode::Required;
+    clientConfig->VerificationMode = EVerificationMode::Full;
+    clientConfig->CertificateAuthority = CACert;
+    // Send client certificate signed by different authority.
+    clientConfig->CertificateChain = CertificateChainWithIpInSAN;
+    clientConfig->PrivateKey = PrivateKeyWithIpInSAN;
+    auto client = CreateBusClient(clientConfig);
+
+    auto bus = client->CreateBus(New<TEmptyBusHandler>());
+    auto error = bus->GetReadyFuture().Get();
+    if (!error.IsOK()) {
+        // Connection could be terminated on TLS handshake.
+        EXPECT_EQ(error.GetCode(), EErrorCode::SslError);
+        EXPECT_THROW_MESSAGE_HAS_SUBSTR(
+            error.ThrowOnError(),
+            NYT::TErrorException,
+            "alert unknown ca");
+    } else {
+        // For TLS1.3 connection is terminated after TLS handshake.
+        EXPECT_TRUE(bus->IsEncrypted());
+
+        auto message = CreateMessage(1);
+        auto sendFuture = bus->Send(message, {.TrackingLevel = EDeliveryTrackingLevel::Full});
+        auto error = sendFuture.Get();
+        EXPECT_EQ(error.GetCode(), EErrorCode::SslError);
+        EXPECT_THROW_MESSAGE_HAS_SUBSTR(
+            error.ThrowOnError(),
+            NYT::TErrorException,
+            "alert unknown ca");
+    }
+
+    server->Stop()
+        .Get()
+        .ThrowOnError();
 }
 
 TEST_F(TSslTest, ServerCipherList)

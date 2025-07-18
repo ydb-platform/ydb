@@ -39,7 +39,7 @@ TQueryInfoList TClickbenchWorkloadGenerator::GetWorkload(int type) {
     TString resourceName = "click_bench_queries.sql";
     if (Params.GetSyntax() == TWorkloadBaseParams::EQuerySyntax::PG) {
         resourceName = "click_bench_queries_pg.sql";
-    } else if (Params.IsCheckCanonical()) {
+    } else if (Params.GetCheckCanonical()) {
         resourceName = "queries-deterministic.sql";
     }
     queries = StringSplitter(NResource::Find(resourceName)).Split(';').ToList<TString>();
@@ -54,7 +54,7 @@ TQueryInfoList TClickbenchWorkloadGenerator::GetWorkload(int type) {
         result.emplace_back();
         result.back().Query = query;
         const auto resultKey = "click_bench_canonical/q" + ToString(i) + ".result";
-        if (Params.IsCheckCanonical() && NResource::Has(resultKey)) {
+        if (Params.GetCheckCanonical() && NResource::Has(resultKey)) {
             result.back().ExpectedResult = NResource::Find(resultKey);
         }
     }
@@ -69,8 +69,6 @@ void TClickbenchWorkloadParams::ConfigureOpts(NLastGetopt::TOpts& opts, const EC
     TWorkloadBaseParams::ConfigureOpts(opts, commandType, workloadType);
     switch (commandType) {
     case TWorkloadParams::ECommandType::Run:
-        opts.AddLongOption('c', "check-canonical", "Use deterministic queries and check results with canonical ones.")
-            .NoArgument().StoreTrue(&CheckCanonicalFlag);
         opts.AddLongOption( "syntax", "Query syntax [" + GetEnumAllNames<EQuerySyntax>() + "].")
             .StoreResult(&Syntax).DefaultValue(Syntax);
         break;

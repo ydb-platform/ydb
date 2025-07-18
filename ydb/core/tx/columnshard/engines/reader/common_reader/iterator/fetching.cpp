@@ -5,6 +5,7 @@
 #include "source.h"
 #include "sub_columns_fetching.h"
 
+#include <ydb/core/kqp/runtime/scheduler/new/kqp_schedulable_actor.h>
 #include <ydb/core/tx/columnshard/blobs_reader/actor.h>
 
 #include <util/string/builder.h>
@@ -38,10 +39,9 @@ TConclusionStatus TStepAction::DoExecuteImpl() {
 
 TStepAction::TStepAction(const std::shared_ptr<IDataSource>& source, TFetchingScriptCursor&& cursor, const NActors::TActorId& ownerActorId,
     const bool changeSyncSection)
-    : TBase(ownerActorId)
+    : TBase(ownerActorId, source->GetContext()->GetCommonContext()->GetCounters().GetAssembleTasksGuard())
     , Source(source)
-    , Cursor(std::move(cursor))
-    , CountersGuard(Source->GetContext()->GetCommonContext()->GetCounters().GetAssembleTasksGuard()) {
+    , Cursor(std::move(cursor)) {
     if (changeSyncSection) {
         Source->StartAsyncSection();
     } else {
@@ -62,13 +62,28 @@ TConclusion<bool> TFetchingScriptCursor::Execute(const std::shared_ptr<IDataSour
             break;
         }
         auto step = Script->GetStep(CurrentStepIdx);
-        TMemoryProfileGuard mGuard("SCAN_PROFILE::FETCHING::" + step->GetName() + "::" + Script->GetBranchName(),
-            IS_DEBUG_LOG_ENABLED(NKikimrServices::TX_COLUMNSHARD_SCAN_MEMORY));
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("scan_step", step->DebugString())("scan_step_idx", CurrentStepIdx)("source_id", source->GetSourceId());
+        std::optional<TMemoryProfileGuard> mGuard;
+        if (IS_DEBUG_LOG_ENABLED(NKikimrServices::TX_COLUMNSHARD_SCAN_MEMORY)) {
+            mGuard.emplace("SCAN_PROFILE::FETCHING::" + step->GetName() + "::" + Script->GetBranchName());
+        }
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("scan_step", step->DebugString())("scan_step_idx", CurrentStepIdx)(
+            "source_id", source->GetSourceId());
+
+        auto& schedulableTask = source->GetContext()->GetCommonContext()->GetSchedulableTask();
+        if (schedulableTask) {
+            schedulableTask->IncreaseExtraUsage();
+        }
 
         const TMonotonic startInstant = TMonotonic::Now();
         const TConclusion<bool> resultStep = step->ExecuteInplace(source, *this);
-        FlushDuration(TMonotonic::Now() - startInstant);
+        const auto executionTime = TMonotonic::Now() - startInstant;
+        source->GetContext()->GetCommonContext()->GetCounters().AddExecutionDuration(executionTime);
+
+        if (schedulableTask) {
+            schedulableTask->DecreaseExtraUsage(executionTime);
+        }
+
+        FlushDuration(executionTime);
         if (!resultStep) {
             return resultStep;
         }

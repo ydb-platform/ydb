@@ -1,6 +1,36 @@
 # {{ ydb-short-name }} CLI changelog
 
-## Version 2.21.0
+## Version 2.22.1 {#2-22-1}
+
+Released on June 17, 2025. To update to version **2.22.1**, select the [Downloads](downloads/index.md#ydb-cli) section.
+
+### Bug fixes
+
+* Fixed an issue where the certificate was not read from a file if the path to the file was specified in the [profile](./reference/ydb-cli/profile/index.md) with the `ca-file` field.
+* Fixed an issue where the `{{ ydb-cli }} workload query import` and `{{ ydb-cli }} workload clickbench import files` [commands](./reference/ydb-cli/workload-click-bench.md) displayed number of rows instead of number of bytes in progress state.
+
+## Version 2.22.0 {#2-22-0}
+
+Released on June 4, 2025. To update to version **2.22.0**, select the [Downloads](downloads/index.md#ydb-cli) section.
+
+### Features
+
+* Added scheme object names completion in interactive mode.
+* Enhanced the capabilities of the `{{ ydb-cli }} workload query` command: added `{{ ydb-cli }} workload query init`, `{{ ydb-cli }} workload query import`, and `{{ ydb-cli }} workload query clean` commands, and modified the `{{ ydb-cli }} workload query run` command. Using these commands, you can initialize tables, populate them with data, perform load testing, and clean up the data afterwards.
+* Added the `--threads` option to the `{{ ydb-cli }} workload clickbench run`, `{{ ydb-cli }} workload tpch run`, and `{{ ydb-cli }} workload tpcds run` [commands](./reference/ydb-cli/workload-click-bench.md). This option allows to specify the number of threads sending the queries.
+* **_(Requires server v25.1+)_** **_(Experimental)_** Added the `{{ ydb-cli }} admin cluster config version` [command](./reference/ydb-cli/commands/configuration/cluster/index.md#list) to show the configuration version (V1/V2) on nodes.
+
+### Backward incompatible changes
+
+* Removed the `--executor` option from the `{{ ydb-cli }} workload * run` [commands](./reference/ydb-cli/commands/workload). The `generic` executor is now always used.
+
+### Bug fixes
+
+* Fixed an issue where the `{{ ydb-cli }} workload * clean` [commands](./reference/ydb-cli/commands/workload) were deleting all contents from the target directory, instead of just the tables created by the init command.
+
+## Version 2.21.0 {#2-21-0}
+
+Released on May 22, 2025. To update to version **2.21.0**, select the [Downloads](downloads/index.md#ydb-cli) section.
 
 ### Features
 

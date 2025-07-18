@@ -71,7 +71,7 @@ public:
 
 private:
     TLockFreeStack<TObject*> PooledObjects_;
-    std::atomic<int> PoolSize_ = {0};
+    std::atomic<int> PoolSize_ = 0;
 
     //! Calls #TPooledObjectTraits::Clean and returns the instance back into the pool.
     void Reclaim(TObject* obj);

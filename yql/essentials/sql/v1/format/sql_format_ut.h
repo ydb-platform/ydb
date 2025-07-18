@@ -23,6 +23,8 @@ Y_UNIT_TEST(DotAfterDigits) {
 Y_UNIT_TEST(AlterDatabase) {
     TCases cases {
         {"use plato;alter database `/Root/test` owner to user1;", "USE plato;\n\nALTER DATABASE `/Root/test` OWNER TO user1;\n"},
+        {"use plato;alter database `/Root/test` set (key1 = 1);", "USE plato;\n\nALTER DATABASE `/Root/test` SET (key1 = 1);\n"},
+        {"use plato;alter database `/Root/test` set (\n\tkey1 = 1,\n\tkey2 = \"2\"\n);", "USE plato;\n\nALTER DATABASE `/Root/test` SET (key1 = 1, key2 = '2');\n"}
     };
 
     TSetup setup;
@@ -415,14 +417,14 @@ Y_UNIT_TEST(AsyncReplication) {
 
 Y_UNIT_TEST(Transfer) {
     TCases cases = {
-        {"create transfer user from topic1 to table1 with (user='foo')",
-            "CREATE TRANSFER user FROM topic1 TO table1 WITH (user = 'foo');\n"},
         {"alter transfer user set (user='foo')",
             "ALTER TRANSFER user SET (user = 'foo');\n"},
         {"drop transfer user",
             "DROP TRANSFER user;\n"},
         {"drop transfer user cascade",
             "DROP TRANSFER user CASCADE;\n"},
+        {"create transfer user from topic1 to table1 using ($x) -> { $y = cast($x as String); return $y ; }",
+            "CREATE TRANSFER user FROM topic1 TO table1 USING ($x) -> {\n    $y = CAST($x AS String);\n    RETURN $y;\n};\n"},
         {"create transfer user from topic1 to table1 using ($x) -> { $y = cast($x as String); return $y ; } with (user='foo')",
             "CREATE TRANSFER user FROM topic1 TO table1 USING ($x) -> {\n    $y = CAST($x AS String);\n    RETURN $y;\n} WITH (user = 'foo');\n"},
         {"create transfer user from topic1 to table1 using $xxx with (user='foo')",
@@ -529,6 +531,10 @@ Y_UNIT_TEST(AlterTable) {
             "ALTER TABLE user\n\tADD CHANGEFEED user WITH (virtual_timestamps = FALSE)\n;\n"},
         {"alter table user add changefeed user with (barriers_interval = Interval(\"PT1S\"))",
             "ALTER TABLE user\n\tADD CHANGEFEED user WITH (barriers_interval = Interval('PT1S'))\n;\n"},
+        {"alter table user add changefeed user with (schema_changes = TruE)",
+            "ALTER TABLE user\n\tADD CHANGEFEED user WITH (schema_changes = TRUE)\n;\n"},
+        {"alter table user add changefeed user with (schema_changes = fAlSe)",
+            "ALTER TABLE user\n\tADD CHANGEFEED user WITH (schema_changes = FALSE)\n;\n"},
         {"alter table user add changefeed user with (topic_min_active_partitions = 1)",
             "ALTER TABLE user\n\tADD CHANGEFEED user WITH (topic_min_active_partitions = 1)\n;\n"},
         {"alter table user add changefeed user with (topic_auto_partitioning = 'ENABLED', topic_min_active_partitions = 1, topic_max_active_partitions = 7)",
@@ -1536,6 +1542,46 @@ Y_UNIT_TEST(Union) {
             "SELECT\n\t1\nUNION ALL\n(\n\tSELECT\n\t\t2\n);\n"},
         {"select 1 union distinct select 2 union select 3 union distinct select 4 union select 5",
             "SELECT\n\t1\nUNION DISTINCT\nSELECT\n\t2\nUNION\nSELECT\n\t3\nUNION DISTINCT\nSELECT\n\t4\nUNION\nSELECT\n\t5\n;\n"},
+    };
+
+    TSetup setup;
+    setup.Run(cases);
+}
+
+Y_UNIT_TEST(Intersect) {
+    TCases cases = {
+        {"select 1 intersect all select 2 intersect select 3 intersect all select 4 intersect select 5",
+            "SELECT\n\t1\nINTERSECT ALL\nSELECT\n\t2\nINTERSECT\nSELECT\n\t3\nINTERSECT ALL\nSELECT\n\t4\nINTERSECT\nSELECT\n\t5\n;\n"},
+        {"select 1 intersect all (select 2)",
+            "SELECT\n\t1\nINTERSECT ALL\n(\n\tSELECT\n\t\t2\n);\n"},
+        {"select 1 intersect distinct select 2 intersect select 3 intersect distinct select 4 intersect select 5",
+            "SELECT\n\t1\nINTERSECT DISTINCT\nSELECT\n\t2\nINTERSECT\nSELECT\n\t3\nINTERSECT DISTINCT\nSELECT\n\t4\nINTERSECT\nSELECT\n\t5\n;\n"},
+    };
+
+    TSetup setup;
+    setup.Run(cases);
+}
+
+Y_UNIT_TEST(Except) {
+    TCases cases = {
+        {"select 1 except all select 2 except select 3 except all select 4 except select 5",
+            "SELECT\n\t1\nEXCEPT ALL\nSELECT\n\t2\nEXCEPT\nSELECT\n\t3\nEXCEPT ALL\nSELECT\n\t4\nEXCEPT\nSELECT\n\t5\n;\n"},
+        {"select 1 except all (select 2)",
+            "SELECT\n\t1\nEXCEPT ALL\n(\n\tSELECT\n\t\t2\n);\n"},
+        {"select 1 except distinct select 2 except select 3 except distinct select 4 except select 5",
+            "SELECT\n\t1\nEXCEPT DISTINCT\nSELECT\n\t2\nEXCEPT\nSELECT\n\t3\nEXCEPT DISTINCT\nSELECT\n\t4\nEXCEPT\nSELECT\n\t5\n;\n"},
+    };
+
+    TSetup setup;
+    setup.Run(cases);
+}
+
+Y_UNIT_TEST(UnionIntersectExcept) {
+    TCases cases = {
+        {"select 1 union select 2 intersect select 3 except select 4",
+         "SELECT\n\t1\nUNION\nSELECT\n\t2\nINTERSECT\nSELECT\n\t3\nEXCEPT\nSELECT\n\t4\n;\n"},
+        {"select 1 intersect select 2 union select 3 except select 4",
+         "SELECT\n\t1\nINTERSECT\nSELECT\n\t2\nUNION\nSELECT\n\t3\nEXCEPT\nSELECT\n\t4\n;\n"},
     };
 
     TSetup setup;

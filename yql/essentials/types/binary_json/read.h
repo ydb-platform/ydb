@@ -54,16 +54,16 @@ private:
     template <typename T>
     T ReadPOD(ui32 offset) const {
         static_assert(std::is_pod_v<T>, "Type must be POD");
-        Y_ENSURE(offset + sizeof(T) <= Buffer.size(),
-            TStringBuilder() << "Not enough space in buffer to read value (" << offset << " + " << sizeof(T) << " > " << Buffer.size() << ")");
-        return ReadUnaligned<T>(Buffer.data() + offset);
+        Y_ENSURE(offset + sizeof(T) <= Buffer_.size(),
+            TStringBuilder() << "Not enough space in buffer to read value (" << offset << " + " << sizeof(T) << " > " << Buffer_.size() << ")");
+        return ReadUnaligned<T>(Buffer_.data() + offset);
     }
 
-    TStringBuf Buffer;
-    THeader Header;
-    ui32 TreeStart;
-    ui32 StringSEntryStart;
-    ui32 StringCount;
+    TStringBuf Buffer_;
+    THeader Header_;
+    ui32 TreeStart_;
+    ui32 StringSEntryStart_;
+    ui32 StringCount_;
 };
 
 using TBinaryJsonReaderPtr = TIntrusivePtr<TBinaryJsonReader>;
@@ -84,8 +84,8 @@ public:
     double GetNumber() const;
 
 private:
-    TBinaryJsonReaderPtr Reader;
-    TEntry Entry;
+    TBinaryJsonReaderPtr Reader_;
+    TEntry Entry_;
 };
 
 /**
@@ -100,9 +100,9 @@ public:
     bool HasNext() const;
 
 private:
-    TBinaryJsonReaderPtr Reader;
-    ui32 Offset;
-    ui32 EndOffset;
+    TBinaryJsonReaderPtr Reader_;
+    ui32 Offset_;
+    ui32 EndOffset_;
 };
 
 /**
@@ -117,10 +117,10 @@ public:
     bool HasNext() const;
 
 private:
-    TBinaryJsonReaderPtr Reader;
-    ui32 KeyOffset;
-    ui32 ValueOffset;
-    ui32 ValueEndOffset;
+    TBinaryJsonReaderPtr Reader_;
+    ui32 KeyOffset_;
+    ui32 ValueOffset_;
+    ui32 ValueEndOffset_;
 };
 
 /**
@@ -158,9 +158,9 @@ public:
     TObjectIterator GetObjectIterator() const;
 
 private:
-    TBinaryJsonReaderPtr Reader;
-    ui32 StartOffset;
-    TMeta Meta;
+    TBinaryJsonReaderPtr Reader_;
+    ui32 StartOffset_;
+    TMeta Meta_;
 };
 
 NUdf::TUnboxedValue ReadContainerToJsonDom(const TContainerCursor& cursor, const NUdf::IValueBuilder* valueBuilder);

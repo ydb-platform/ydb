@@ -66,15 +66,18 @@ public:
             TEvResolvedRegistrationRequest(
                     TEvNodeBroker::TEvRegistrationRequest::TPtr request,
                     NActors::TScopeId scopeId,
-                    TSubDomainKey servicedSubDomain)
+                    TSubDomainKey servicedSubDomain,
+                    TString error)
                 : Request(request)
                 , ScopeId(scopeId)
                 , ServicedSubDomain(servicedSubDomain)
+                , Error(std::move(error))
             {}
 
             TEvNodeBroker::TEvRegistrationRequest::TPtr Request;
             NActors::TScopeId ScopeId;
             TSubDomainKey ServicedSubDomain;
+            TString Error;
         };
 
         struct TEvProcessSubscribersQueue : public TEventLocal<TEvProcessSubscribersQueue, EvProcessSubscribersQueue> {};
@@ -297,6 +300,8 @@ private:
     TSubscriberInfo& AddSubscriber(TActorId subscriberId, TActorId pipeServerId, ui64 seqNo, ui64 version, const TActorContext &ctx);
     void RemoveSubscriber(TActorId subscriber, const TActorContext &ctx);
     bool HasOutdatedSubscription(TActorId subscriber, ui64 newSeqNo) const;
+
+    void UpdateCommittedStateCounters();
 
     void Handle(TEvConsole::TEvConfigNotificationRequest::TPtr &ev,
                 const TActorContext &ctx);

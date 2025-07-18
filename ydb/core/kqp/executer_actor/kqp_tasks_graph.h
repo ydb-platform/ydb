@@ -86,6 +86,16 @@ struct TStageInfoMeta {
     THolder<TKeyDesc> ShardKey;
     NSchemeCache::ETableKind ShardKind = NSchemeCache::ETableKind::KindUnknown;
 
+    struct TIndexMeta {
+        TTableId TableId;
+        TString TablePath;
+        TIntrusiveConstPtr<TTableConstInfo> TableConstInfo;
+
+        THolder<TKeyDesc> ShardKey;
+    };
+
+    TVector<TIndexMeta> IndexMetas;
+
     ////////////////////////////////////////////////////////////////////////////////////////////////
 
     TColumnShardHashV1Params ColumnShardHashV1Params;

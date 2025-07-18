@@ -1,9 +1,9 @@
 #include "schemeshard_build_index.h"
-#include "schemeshard_xxport__helpers.h"
 #include "schemeshard_build_index_helpers.h"
 #include "schemeshard_build_index_tx_base.h"
 #include "schemeshard_impl.h"
 #include "schemeshard_utils.h"  // for NTableIndex::CommonCheck
+#include "schemeshard_xxport__helpers.h"
 
 #include <ydb/core/ydb_convert/table_settings.h>
 
@@ -14,7 +14,7 @@ using namespace NTabletFlatExecutor;
 class TSchemeShard::TIndexBuilder::TTxCreate: public TSchemeShard::TIndexBuilder::TTxSimple<TEvIndexBuilder::TEvCreateRequest, TEvIndexBuilder::TEvCreateResponse> {
 public:
     explicit TTxCreate(TSelf* self, TEvIndexBuilder::TEvCreateRequest::TPtr& ev)
-        : TTxSimple(self, ev, TXTYPE_CREATE_INDEX_BUILD)
+        : TTxSimple(self, TIndexBuildId(ev->Get()->Record.GetTxId()), ev, TXTYPE_CREATE_INDEX_BUILD)
     {}
 
     bool DoExecute(TTransactionContext& txc, const TActorContext& ctx) override {
@@ -24,10 +24,9 @@ public:
 
         Response = MakeHolder<TEvIndexBuilder::TEvCreateResponse>(request.GetTxId());
 
-        const auto id = TIndexBuildId(request.GetTxId());
-        if (Self->IndexBuilds.contains(id)) {
+        if (Self->IndexBuilds.contains(BuildId)) {
             return Reply(Ydb::StatusIds::ALREADY_EXISTS, TStringBuilder()
-                << "Index build with id '" << id << "' already exists");
+                << "Index build with id '" << BuildId << "' already exists");
         }
 
         const TString& uid = GetUid(request.GetOperationParams());
@@ -83,7 +82,9 @@ public:
             }
         }
 
-        TIndexBuildInfo::TPtr buildInfo = new TIndexBuildInfo(id, uid);
+        TIndexBuildInfo::TPtr buildInfo = new TIndexBuildInfo();
+        buildInfo->Id = BuildId;
+        buildInfo->Uid = uid;
         buildInfo->DomainPathId = domainPath.Base()->PathId;
         buildInfo->TablePathId = tablePath.Base()->PathId;
 
@@ -115,7 +116,11 @@ public:
                 }
 
                 checks
-                    .IsValidLeafName()
+                    //NOTE: empty userToken here means that index is forbidden from getting a name
+                    // thats system reserved or starts with a system reserved prefix.
+                    // Even an cluster admin or the system inself will not be able to force a reserved name for this index.
+                    // If that will become an issue at some point, then a real userToken should be passed here.
+                    .IsValidLeafName(/*userToken*/ nullptr)
                     .PathsLimit(2) // index and impl-table
                     .DirChildrenLimit();
 
@@ -198,14 +203,14 @@ public:
 
         Self->PersistBuildIndexState(db, *buildInfo);
 
-        auto [it, emplaced] = Self->IndexBuilds.emplace(id, buildInfo);
+        auto [it, emplaced] = Self->IndexBuilds.emplace(BuildId, buildInfo);
         Y_ASSERT(emplaced);
         if (uid) {
             std::tie(std::ignore, emplaced) = Self->IndexBuildsByUid.emplace(uid, buildInfo);
             Y_ASSERT(emplaced);
         }
 
-        Progress(id);
+        Progress(BuildId);
 
         return true;
     }
@@ -245,6 +250,11 @@ private:
             buildInfo.SpecializedIndexDescription = vectorIndexKmeansTreeDescription;
             buildInfo.KMeans.K = std::max<ui32>(2, vectorIndexKmeansTreeDescription.GetSettings().clusters());
             buildInfo.KMeans.Levels = buildInfo.IsBuildPrefixedVectorIndex() + std::max<ui32>(1, vectorIndexKmeansTreeDescription.GetSettings().levels());
+            buildInfo.KMeans.Rounds = NTableIndex::NTableVectorKmeansTreeIndex::DefaultKMeansRounds;
+            buildInfo.Clusters = NKikimr::NKMeans::CreateClusters(vectorIndexKmeansTreeDescription.GetSettings().settings(), buildInfo.KMeans.Rounds, explain);
+            if (!buildInfo.Clusters) {
+                return false;
+            }
             break;
         }
         case Ydb::Table::TableIndex::TypeCase::TYPE_NOT_SET:

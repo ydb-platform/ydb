@@ -1,14 +1,4 @@
-#include <util/generic/algorithm.h>
-
-#include <ydb/library/protobuf_printer/security_printer.h>
-
-#include <ydb/core/base/appdata.h>
-#include <ydb/core/tablet/tablet_exception.h>
-#include <ydb/core/tablet/tablet_exception.h>
-#include <ydb/core/tablet_flat/flat_cxx_database.h>
-#include <ydb/core/tablet_flat/tablet_flat_executor.h>
-
-#include "schemeshard__operation_part.h"
+#include "schemeshard__operation.h"
 
 #include "schemeshard__dispatch_op.h"
 #include "schemeshard__operation_db_changes.h"
@@ -19,9 +9,16 @@
 #include "schemeshard_impl.h"
 #include "schemeshard_operation_factory.h"
 
+#include <ydb/core/base/appdata.h>
+#include <ydb/core/tablet/tablet_exception.h>
+#include <ydb/core/tablet_flat/flat_cxx_database.h>
+#include <ydb/core/tablet_flat/tablet_flat_executor.h>
 #include <ydb/core/tx/schemeshard/generated/dispatch_op.h>
 
-#include "schemeshard__operation.h"
+#include <ydb/library/protobuf_printer/security_printer.h>
+
+#include <util/generic/algorithm.h>
+#include <util/string/builder.h>
 
 namespace NKikimr::NSchemeShard {
 
@@ -41,6 +38,14 @@ std::tuple<TMaybe<NACLib::TUserToken>, bool> ParseUserToken(const TString& token
     }
 
     return std::make_tuple(result, parseError);
+}
+
+TString FormatSourceLocationInfo(const NKikimr::NCompat::TSourceLocation& location) {
+    TString locationInfo = "";
+    if (const char* fileName = location.file_name(); fileName && *fileName && location.line() > 0) {
+        locationInfo = TStringBuilder() << " (GetDB first called at " << fileName << ":" << location.line() << ")";
+    }
+    return locationInfo;
 }
 
 struct TSchemeShard::TTxOperationProposeCancelTx: public NTabletFlatExecutor::TTransactionBase<TSchemeShard> {
@@ -85,14 +90,6 @@ struct TSchemeShard::TTxOperationProposeCancelTx: public NTabletFlatExecutor::TT
         OnComplete.ApplyOnComplete(Self, ctx);
     }
 };
-
-NKikimrScheme::TEvModifySchemeTransaction GetRecordForPrint(const NKikimrScheme::TEvModifySchemeTransaction& record) {
-    auto recordForPrint = record;
-    if (record.HasUserToken()) {
-        recordForPrint.SetUserToken("***hide token***");
-    }
-    return recordForPrint;
-}
 
 bool TSchemeShard::ProcessOperationParts(
     const TVector<ISubOperation::TPtr>& parts,
@@ -151,6 +148,9 @@ bool TSchemeShard::ProcessOperationParts(
                                 << ", tx message: " << SecureDebugString(record));
             }
 
+            auto firstGetDbLocation = context.GetFirstGetDbLocation();
+            TString locationInfo = FormatSourceLocationInfo(firstGetDbLocation);
+
             Y_VERIFY_S(context.IsUndoChangesSafe(),
                         "Operation is aborted and all changes should be reverted"
                             << ", but context.IsUndoChangesSafe is false, which means some direct writes have been done"
@@ -159,6 +159,7 @@ bool TSchemeShard::ProcessOperationParts(
                             << ", already accepted parts: " << operation->Parts.size()
                             << ", propose result status: " << NKikimrScheme::EStatus_Name(response->Record.GetStatus())
                             << ", with reason: " << response->Record.GetReason()
+                            << ", first GetDB called at: " << locationInfo
                             << ", tx message: " << SecureDebugString(record));
 
             AbortOperationPropose(txId, context);
@@ -170,11 +171,15 @@ bool TSchemeShard::ProcessOperationParts(
         if (prevProposeUndoSafe && !context.IsUndoChangesSafe()) {
             prevProposeUndoSafe = false;
 
+            auto firstGetDbLocation = context.GetFirstGetDbLocation();
+            TString locationInfo = FormatSourceLocationInfo(firstGetDbLocation);
+
             LOG_WARN_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                 "Operation part proposed ok, but propose itself is undo unsafe"
                     << ", suboperation type: " << NKikimrSchemeOp::EOperationType_Name(part->GetTransaction().GetOperationType())
                     << ", opId: " << part->GetOperationId()
                     << ", at schemeshard:  " << selfId
+                    << ", first GetDB called at: " << locationInfo
             );
         }
     }
@@ -855,10 +860,6 @@ bool CreateDirs(const TTxTransaction& tx, const TPath& parentPath, TPath path, T
                 .NotResolved();
         }
 
-        if (checks) {
-            checks.IsValidLeafName();
-        }
-
         if (!checks) {
             result.Status = checks.GetStatus();
             result.Reason = checks.GetError();
@@ -951,10 +952,6 @@ TOperation::TSplitTransactionsResult TOperation::SplitIntoTransactions(const TTx
                     .NotResolved();
             }
 
-            if (checks && !exists) {
-                checks.IsValidLeafName();
-            }
-
             if (!checks) {
                 result.Status = checks.GetStatus();
                 result.Reason = checks.GetError();
@@ -1028,6 +1025,7 @@ TOperation::TSplitTransactionsResult TOperation::SplitIntoTransactions(const TTx
 }
 
 ISubOperation::TPtr TOperation::RestorePart(TTxState::ETxType txType, TTxState::ETxState txState, TOperationContext& context) const {
+    TTxState* state = context.SS->FindTx(NextPartId());
     switch (txType) {
     case TTxState::ETxType::TxMkDir:
         return CreateMkDir(NextPartId(), txState);
@@ -1040,7 +1038,7 @@ ISubOperation::TPtr TOperation::RestorePart(TTxState::ETxType txType, TTxState::
     case TTxState::ETxType::TxCreateTable:
         return CreateNewTable(NextPartId(), txState);
     case TTxState::ETxType::TxCopyTable:
-        return CreateCopyTable(NextPartId(), txState);
+        return CreateCopyTable(NextPartId(), txState, state);
     case TTxState::ETxType::TxAlterTable:
         return CreateAlterTable(NextPartId(), txState);
     case TTxState::ETxType::TxSplitTablePartition:
@@ -1166,6 +1164,10 @@ ISubOperation::TPtr TOperation::RestorePart(TTxState::ETxType txType, TTxState::
         return CreateDropCdcStreamAtTable(NextPartId(), txState, false);
     case TTxState::ETxType::TxDropCdcStreamAtTableDropSnapshot:
         return CreateDropCdcStreamAtTable(NextPartId(), txState, true);
+    case TTxState::ETxType::TxRotateCdcStream:
+        return CreateRotateCdcStreamImpl(NextPartId(), txState);
+    case TTxState::ETxType::TxRotateCdcStreamAtTable:
+        return CreateRotateCdcStreamAtTable(NextPartId(), txState);
 
     // Sequences
     case TTxState::ETxType::TxCreateSequence:
@@ -1267,6 +1269,13 @@ ISubOperation::TPtr TOperation::RestorePart(TTxState::ETxType txType, TTxState::
         return CreateNewSysView(NextPartId(), txState);
     case TTxState::ETxType::TxDropSysView:
         return CreateDropSysView(NextPartId(), txState);
+
+    // ChangePathState
+    case TTxState::ETxType::TxChangePathState:
+        return CreateChangePathState(NextPartId(), txState);
+
+    case TTxState::ETxType::TxCreateLongIncrementalRestoreOp:
+        return CreateLongIncrementalRestoreOpControlPlane(NextPartId(), txState);
 
     case TTxState::ETxType::TxInvalid:
         Y_UNREACHABLE();
@@ -1464,6 +1473,11 @@ TVector<ISubOperation::TPtr> TDefaultOperationFactory::MakeOperationParts(
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropCdcStreamImpl:
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropCdcStreamAtTable:
         Y_ABORT("multipart operations are handled before, also they require transaction details");
+    case NKikimrSchemeOp::EOperationType::ESchemeOpRotateCdcStream:
+        return CreateRotateCdcStream(op.NextPartId(), tx, context);
+    case NKikimrSchemeOp::EOperationType::ESchemeOpRotateCdcStreamImpl:
+    case NKikimrSchemeOp::EOperationType::ESchemeOpRotateCdcStreamAtTable:
+        Y_ABORT("multipart operations are handled before, also they require transaction details");
 
     case NKikimrSchemeOp::EOperationType::ESchemeOp_DEPRECATED_35:
         Y_ABORT("impossible");
@@ -1566,12 +1580,18 @@ TVector<ISubOperation::TPtr> TDefaultOperationFactory::MakeOperationParts(
         return CreateBackupIncrementalBackupCollection(op.NextPartId(), tx, context);
     case NKikimrSchemeOp::EOperationType::ESchemeOpRestoreBackupCollection:
         return CreateRestoreBackupCollection(op.NextPartId(), tx, context);
+    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateLongIncrementalRestoreOp:
+        return {CreateLongIncrementalRestoreOpControlPlane(op.NextPartId(), tx)};
 
     // SysView
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateSysView:
         return {CreateNewSysView(op.NextPartId(), tx)};
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropSysView:
         return {CreateDropSysView(op.NextPartId(), tx)};
+
+    // ChangePathState
+    case NKikimrSchemeOp::EOperationType::ESchemeOpChangePathState:
+        return CreateChangePathState(op.NextPartId(), tx, context);
     }
 
     Y_UNREACHABLE();

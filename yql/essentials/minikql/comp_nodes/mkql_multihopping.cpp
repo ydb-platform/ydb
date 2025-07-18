@@ -474,7 +474,7 @@ public:
         , UseIHash(false)
         , Watermark(watermark)
     {
-        Stateless = false;
+        Stateless_ = false;
         bool encoded;
         GetDictionaryKeyTypes(keyType, KeyTypes, IsTuple, encoded, UseIHash);
         Y_ABORT_UNLESS(!encoded, "TODO");

@@ -18,9 +18,11 @@ public:
     {
         const auto timezones = NTi::GetTimezones();
         TzBuffer_.resize(timezones.size());
+        MaxPossibleTzSize_ = 0;
         for (int index = 0; index < std::ssize(timezones); ++index) {
             TzBuffer_[index] = std::string(timezones[index]);
             if (!timezones[index].empty()) {
+                MaxPossibleTzSize_ = std::max(MaxPossibleTzSize_, static_cast<int>(std::ssize(timezones[index])));
                 NameToTimezoneIndex_[std::string_view(TzBuffer_[index])] = index;
             }
         }
@@ -58,11 +60,17 @@ public:
             THROW_ERROR_EXCEPTION("Invalid timezone name")
                 << TErrorAttribute("timezone_name", timezoneName);
         }
-     }
+    }
+
+    int GetMaxPossibleTzSize() const
+    {
+        return MaxPossibleTzSize_;
+    }
 
 private:
     THashMap<std::string_view, int> NameToTimezoneIndex_;
     std::vector<std::string> TzBuffer_;
+    int MaxPossibleTzSize_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -155,6 +163,11 @@ inline std::string_view GetTzName(int tzIndex)
 inline int GetTzIndex(std::string_view tzName)
 {
     return Singleton<TTzRegistry>()->GetTzIndex(tzName);
+}
+
+inline int GetMaxPossibleTzStringSize()
+{
+    return Singleton<TTzRegistry>()->GetMaxPossibleTzSize() + sizeof(i64);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

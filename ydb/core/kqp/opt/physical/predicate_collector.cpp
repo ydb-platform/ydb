@@ -10,10 +10,10 @@ using namespace NYql;
 using namespace NYql::NNodes;
 
 THashMap<TString, TString> IgnoreCaseSubstringMatchFunctions = {
-    {"EqualsIgnoreCase", "String.AsciiEqualsIgnoreCase"},
-    {"StartsWithIgnoreCase", "String.AsciiStartsWithIgnoreCase"},
-    {"EndsWithIgnoreCase", "String.AsciiEndsWithIgnoreCase"},
-    {"StringContainsIgnoreCase", "String.AsciiContainsIgnoreCase"}
+    {"EqualsIgnoreCase", "String._yql_AsciiEqualsIgnoreCase"},
+    {"StartsWithIgnoreCase", "String._yql_AsciiStartsWithIgnoreCase"},
+    {"EndsWithIgnoreCase", "String._yql_AsciiEndsWithIgnoreCase"},
+    {"StringContainsIgnoreCase", "String._yql_AsciiContainsIgnoreCase"}
 };
 
 namespace {
@@ -23,36 +23,14 @@ bool IsSupportedPredicate(const TCoCompare& predicate) {
 }
 
 bool IsSupportedDataType(const TCoDataCtor& node, bool allowOlapApply) {
-    if (node.Maybe<TCoBool>() ||
-        node.Maybe<TCoFloat>() ||
-        node.Maybe<TCoDouble>() ||
-        node.Maybe<TCoInt8>() ||
-        node.Maybe<TCoInt16>() ||
-        node.Maybe<TCoInt32>() ||
-        node.Maybe<TCoInt64>() ||
-        node.Maybe<TCoUint8>() ||
-        node.Maybe<TCoUint16>() ||
-        node.Maybe<TCoUint32>() ||
-        node.Maybe<TCoUint64>() ||
-        node.Maybe<TCoUtf8>() ||
-        node.Maybe<TCoString>()
-    ) {
+    Y_UNUSED(allowOlapApply);
+    if (node.Maybe<TCoBool>() || node.Maybe<TCoFloat>() || node.Maybe<TCoDouble>() || node.Maybe<TCoInt8>() || node.Maybe<TCoInt16>() ||
+        node.Maybe<TCoInt32>() || node.Maybe<TCoInt64>() || node.Maybe<TCoUint8>() || node.Maybe<TCoUint16>() || node.Maybe<TCoUint32>() ||
+        node.Maybe<TCoUint64>() || node.Maybe<TCoUtf8>() || node.Maybe<TCoString>() || node.Maybe<TCoDate>() || node.Maybe<TCoDate32>() ||
+        node.Maybe<TCoDatetime>() || node.Maybe<TCoDatetime64>() || node.Maybe<TCoTimestamp64>() || node.Maybe<TCoInterval64>() || node.Maybe<TCoInterval>() ||
+        node.Maybe<TCoTimestamp>()) {
         return true;
     }
-
-    if (allowOlapApply) {
-        if (node.Maybe<TCoDate>() || 
-          node.Maybe<TCoDate32>() ||
-          node.Maybe<TCoDatetime>() ||
-          node.Maybe<TCoDatetime64>() || 
-          node.Maybe<TCoTimestamp>() || 
-          node.Maybe<TCoTimestamp64>() || 
-          node.Maybe<TCoInterval>() || 
-          node.Maybe<TCoInterval64>()) {
-            return true;
-        }
-    }
-
     return false;
 }
 
@@ -103,7 +81,7 @@ bool IsMemberColumn(const TExprBase& node, const TExprNode* lambdaArg) {
 
 bool IsGoodTypeForArithmeticPushdown(const TTypeAnnotationNode& type, bool allowOlapApply) {
     const auto features = NUdf::GetDataTypeInfo(RemoveOptionality(type).Cast<TDataExprType>()->GetSlot()).Features;
-    return NUdf::EDataTypeFeatures::NumericType & features
+    return (NUdf::EDataTypeFeatures::NumericType & features)
         || (allowOlapApply && ((NUdf::EDataTypeFeatures::ExtDateType |
             NUdf::EDataTypeFeatures::DateType |
             NUdf::EDataTypeFeatures::TimeIntervalType) & features) && !(NUdf::EDataTypeFeatures::TzDateType & features));
@@ -114,11 +92,12 @@ bool IsGoodTypeForComparsionPushdown(const TTypeAnnotationNode& type, bool allow
     if (features & NUdf::EDataTypeFeatures::DecimalType) {
         return false;
     }
-    return (NUdf::EDataTypeFeatures::CanCompare  & features)
-        && (((NUdf::EDataTypeFeatures::NumericType | NUdf::EDataTypeFeatures::StringType) & features) ||
-            (allowOlapApply && ((NUdf::EDataTypeFeatures::ExtDateType |
-                                NUdf::EDataTypeFeatures::DateType |
-                                NUdf::EDataTypeFeatures::TimeIntervalType) & features) && !(NUdf::EDataTypeFeatures::TzDateType & features)));
+    return (NUdf::EDataTypeFeatures::CanCompare & features) &&
+           (((NUdf::EDataTypeFeatures::NumericType | NUdf::EDataTypeFeatures::StringType | NUdf::EDataTypeFeatures::DateType |
+              NUdf::EDataTypeFeatures::TimeIntervalType) & features) ||
+            (allowOlapApply &&
+             ((NUdf::EDataTypeFeatures::ExtDateType | NUdf::EDataTypeFeatures::DateType | NUdf::EDataTypeFeatures::TimeIntervalType) & features) &&
+             !(NUdf::EDataTypeFeatures::TzDateType & features)));
 }
 
 bool CanPushdownStringUdf(const TExprNode& udf, bool pushdownSubstring) {
@@ -127,14 +106,14 @@ bool CanPushdownStringUdf(const TExprNode& udf, bool pushdownSubstring) {
     }
     const auto& name = udf.Head().Content();
     static const THashSet<TString> substringMatchUdfs = {
-        "String.AsciiEqualsIgnoreCase",
+        "String._yql_AsciiEqualsIgnoreCase",
 
         "String.Contains",
-        "String.AsciiContainsIgnoreCase",
+        "String._yql_AsciiContainsIgnoreCase",
         "String.StartsWith",
-        "String.AsciiStartsWithIgnoreCase",
+        "String._yql_AsciiStartsWithIgnoreCase",
         "String.EndsWith",
-        "String.AsciiEndsWithIgnoreCase"
+        "String._yql_AsciiEndsWithIgnoreCase"
     };
     return substringMatchUdfs.contains(name);
 }
@@ -210,7 +189,7 @@ bool CheckExpressionNodeForPushdown(const TExprBase& node, const TExprNode* lamb
     } else if (const auto maybeJsonValue = node.Maybe<TCoJsonValue>()) {
         const auto jsonOp = maybeJsonValue.Cast();
         return jsonOp.Json().Maybe<TCoMember>() && jsonOp.JsonPath().Maybe<TCoUtf8>();
-    } else if (node.Maybe<TCoNull>() || node.Maybe<TCoParameter>()) {
+    } else if (node.Maybe<TCoNull>() || node.Maybe<TCoParameter>() || node.Maybe<TCoJust>()) {
         return true;
     }
 
@@ -269,6 +248,7 @@ bool IsGoodTypesForPushdownCompare(const TTypeAnnotationNode& typeOne, const TTy
 }
 
 bool CheckComparisonParametersForPushdown(const TCoCompare& compare, const TExprNode* lambdaArg, const TExprBase& input, const TPushdownOptions& options) {
+
     const auto* inputType = input.Ref().GetTypeAnn();
     switch (inputType->GetKind()) {
         case ETypeAnnotationKind::Flow:

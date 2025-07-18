@@ -1,0 +1,47 @@
+name: Sync from stable
+
+on:
+  schedule:
+    - cron: '0 5 * * *' # At 05:00 every day
+  workflow_dispatch:
+
+permissions:
+  contents: write
+env:
+  GH_TOKEN: ${{ secrets.YDBOT_TOKEN }}
+
+jobs:
+  sync-branches:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - prestable_branch: prestable-25-2
+            stable_branch: stable-25-1
+          - prestable_branch: prestable-25-3
+            stable_branch: main
+
+    steps:
+      - name: Verify prestable branch
+        if: ${{ ! startsWith(matrix.prestable_branch, 'pre') }}
+        run: |
+          echo "Dangerous prestable branch name, expected prefix 'pre'"
+          exit 1
+        
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Git user
+        run: |
+          git config user.name YDBot
+          git config user.email ydbot@ydb.tech
+          git config --local github.token ${{ env.GH_TOKEN }}
+
+      - name: Sync ${{ matrix.stable_branch }} to ${{ matrix.prestable_branch }}
+        run: |
+          git checkout ${{ matrix.prestable_branch }}
+          git merge --no-ff origin/${{ matrix.stable_branch }}
+          git push origin ${{ matrix.prestable_branch }}

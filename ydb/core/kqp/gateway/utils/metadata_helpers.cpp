@@ -1,6 +1,7 @@
 #include "metadata_helpers.h"
 
 #include <ydb/core/kqp/gateway/actors/scheme.h>
+#include <ydb/core/protos/schemeshard/operations.pb.h>
 
 namespace NKikimr::NKqp {
 
@@ -32,15 +33,15 @@ TAsyncStatus SendSchemeRequest(const NKikimrSchemeOp::TModifyScheme& schemeTx, c
     auto promise = NThreading::NewPromise<NKqp::TSchemeOpRequestHandler::TResult>();
     context.GetActorSystem()->Register(new TSchemeOpRequestHandler(request.release(), promise, schemeTx.GetFailedOnAlreadyExists(), schemeTx.GetSuccessOnNotExist()));
 
-    return promise.GetFuture().Apply([](const NThreading::TFuture<NKqp::TSchemeOpRequestHandler::TResult>& f) {
+    return promise.GetFuture().Apply([operationType = schemeTx.GetOperationType()](const NThreading::TFuture<NKqp::TSchemeOpRequestHandler::TResult>& f) {
         try {
             auto response = f.GetValue();
             if (response.Success()) {
                 return TYqlConclusionStatus::Success();
             }
-            return TYqlConclusionStatus::Fail(response.Status(), response.Issues().ToString());
+            return TYqlConclusionStatus::Fail(response.Status(), TStringBuilder() << "Failed to execute " << NKikimrSchemeOp::EOperationType_Name(operationType) << ": " << response.Issues().ToString());
         } catch (...) {
-            return TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_SCHEME_ERROR, TStringBuilder() << "Scheme error: " << CurrentExceptionMessage());
+            return TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_SCHEME_ERROR, TStringBuilder() << "Failed to execute " << NKikimrSchemeOp::EOperationType_Name(operationType) << ", got scheme error: " << CurrentExceptionMessage());
         }
     });
 }

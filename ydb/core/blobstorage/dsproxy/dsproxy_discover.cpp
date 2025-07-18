@@ -790,17 +790,6 @@ class TBlobStorageGroupDiscoverRequest : public TBlobStorageGroupRequestActor {
 
                     DSP_LOG_ALERT_S("BSD18", str.Str());
 
-                    if (FromLeader) {
-                        Sleep(TDuration::Seconds(1));
-
-                        str << " logacc# ";
-                        LogCtx.LogAcc.Output(str);
-                        str << " verboseNoData# ";
-                        str << msg->DebugInfo;
-
-                        Y_ABORT_UNLESS(false, "%s", str.Str().data());
-                    }
-
                     IsGetDataDone = true;
                     if (IsGetBlockDone) {
                         DSP_LOG_ERROR_S("BSD19", "Handle TEvGetResult Die. status# "

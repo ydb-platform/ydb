@@ -1,10 +1,13 @@
 #pragma once
 #include "schemeshard_identificators.h"
 
+#include <ydb/public/api/protos/ydb_status_codes.pb.h>
+
 #include <ydb/core/protos/flat_scheme_op.pb.h>
+
 #include <ydb/library/actors/core/event_local.h>
 #include <ydb/library/actors/core/events.h>
-#include <ydb/public/api/protos/ydb_status_codes.pb.h>
+#include <ydb/library/login/login.h>
 
 #include <util/datetime/base.h>
 
@@ -36,12 +39,17 @@ namespace TEvPrivate {
         EvPersistTableStats,
         EvConsoleConfigsTimeout,
         EvRunCdcStreamScan,
+        EvRunIncrementalRestore,
+        EvProgressIncrementalRestore,
         EvPersistTopicStats,
         EvSendBaseStatsToSA,
         EvRunBackgroundCleaning,
         EvRetryNodeSubscribe,
         EvRunDataErasure,
         EvRunTenantDataErasure,
+        EvAddNewShardToDataErasure,
+        EvVerifyPassword,
+        EvLoginFinalize,
         EvEnd
     };
 
@@ -254,6 +262,33 @@ namespace TEvPrivate {
         {}
     };
 
+    struct TEvRunIncrementalRestore: public TEventLocal<TEvRunIncrementalRestore, EvRunIncrementalRestore> {
+        const TPathId BackupCollectionPathId;
+        const TOperationId OperationId;
+        const TVector<TString> IncrementalBackupNames;
+
+        TEvRunIncrementalRestore(const TPathId& backupCollectionPathId, const TOperationId& operationId, const TVector<TString>& incrementalBackupNames)
+            : BackupCollectionPathId(backupCollectionPathId)
+            , OperationId(operationId)
+            , IncrementalBackupNames(incrementalBackupNames)
+        {}
+
+        // Backward compatibility constructor
+        TEvRunIncrementalRestore(const TPathId& backupCollectionPathId)
+            : BackupCollectionPathId(backupCollectionPathId)
+            , OperationId(0, 0)
+            , IncrementalBackupNames()
+        {}
+    };
+
+    struct TEvProgressIncrementalRestore : public TEventLocal<TEvProgressIncrementalRestore, EvProgressIncrementalRestore> {
+        ui64 OperationId;
+        
+        explicit TEvProgressIncrementalRestore(ui64 operationId)
+            : OperationId(operationId)
+        {}
+    };
+
     struct TEvSendBaseStatsToSA: public TEventLocal<TEvSendBaseStatsToSA, EvSendBaseStatsToSA> {
     };
 
@@ -263,6 +298,59 @@ namespace TEvPrivate {
         explicit TEvRetryNodeSubscribe(ui32 nodeId)
             : NodeId(nodeId)
         { }
+    };
+
+    struct TEvAddNewShardToDataErasure : public TEventLocal<TEvAddNewShardToDataErasure, EvAddNewShardToDataErasure> {
+        const std::vector<TShardIdx> Shards;
+
+        TEvAddNewShardToDataErasure(std::vector<TShardIdx>&& shards)
+            : Shards(std::move(shards))
+        {}
+    };
+
+    struct TEvVerifyPassword : public NActors::TEventLocal<TEvVerifyPassword, EvVerifyPassword> {
+    public:
+        TEvVerifyPassword(
+            const NLogin::TLoginProvider::TLoginUserRequest& request,
+            const NLogin::TLoginProvider::TPasswordCheckResult& checkResult,
+            const NActors::TActorId source,
+            const TString& passwordHash
+        )
+            : Request(request)
+            , CheckResult(checkResult)
+            , Source(source)
+            , PasswordHash(passwordHash)
+        {}
+
+    public:
+        const NLogin::TLoginProvider::TLoginUserRequest Request;
+        NLogin::TLoginProvider::TPasswordCheckResult CheckResult;
+        const NActors::TActorId Source; // actorId of the initial schemeshard client which requested user login
+        const TString PasswordHash;
+    };
+
+    struct TEvLoginFinalize : public NActors::TEventLocal<TEvLoginFinalize, EvLoginFinalize> {
+    public:
+        TEvLoginFinalize(
+            const NLogin::TLoginProvider::TLoginUserRequest& request,
+            const NLogin::TLoginProvider::TPasswordCheckResult& checkResult,
+            const NActors::TActorId source,
+            const TString& passwordHash,
+            const bool needUpdateCache
+        )
+            : Request(request)
+            , CheckResult(checkResult)
+            , Source(source)
+            , PasswordHash(passwordHash)
+            , NeedUpdateCache(needUpdateCache)
+        {}
+
+    public:
+        const NLogin::TLoginProvider::TLoginUserRequest Request;
+        const NLogin::TLoginProvider::TPasswordCheckResult CheckResult;
+        const NActors::TActorId Source; // actorId of the initial schemeshard client which requested user login
+        const TString PasswordHash;
+        const bool NeedUpdateCache;
     };
 }; // TEvPrivate
 

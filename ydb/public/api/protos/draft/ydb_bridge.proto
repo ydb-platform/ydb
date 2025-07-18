@@ -1,0 +1,53 @@
+syntax = "proto3";
+option cc_enable_arenas = true;
+
+package Ydb.Bridge;
+
+option java_package = "com.yandex.ydb.bridge.proto";
+option java_outer_classname = "BridgeProtos";
+option java_multiple_files = true;
+
+import "ydb/public/api/protos/ydb_operation.proto";
+
+// State of a pile in relation to primary
+enum PileState {
+    DISCONNECTED = 0; // disconnected from the cluster (no connectivity to other piles)
+    NOT_SYNCHRONIZED = 1; // not synchronized with primary, cannot be promoted
+    SYNCHRONIZED = 2; // fully synchronized with primary, may be promoted
+    PROMOTE = 3; // pile is being promoted to primary
+    PRIMARY = 4; // pile is primary
+}
+
+// Pair of pile id and pile state
+message PileStateUpdate {
+    uint32 pile_id = 1;
+    PileState state = 2;
+}
+
+message GetClusterStateRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+}
+
+message GetClusterStateResponse {
+    Ydb.Operations.Operation operation = 1;
+}
+
+message GetClusterStateResult {
+    // Current cluster state
+    repeated PileStateUpdate per_pile_state = 1;
+}
+
+message UpdateClusterStateRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+    // List of desired pile states to update
+    repeated PileStateUpdate updates = 2;
+    // If set, acquire quorum only for specific pile(s)
+    repeated uint32 specific_pile_ids = 3;
+}
+
+message UpdateClusterStateResponse {
+    Ydb.Operations.Operation operation = 1;
+}
+
+message UpdateClusterStateResult {
+}

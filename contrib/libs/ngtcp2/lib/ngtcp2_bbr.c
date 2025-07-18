@@ -401,26 +401,28 @@ static void bbr_check_startup_high_loss(ngtcp2_cc_bbr *bbr) {
 }
 
 static void bbr_init_pacing_rate(ngtcp2_cc_bbr *bbr, ngtcp2_conn_stat *cstat) {
-  cstat->pacing_interval =
-    (cstat->first_rtt_sample_ts == UINT64_MAX ? NGTCP2_MILLISECONDS
-                                              : cstat->smoothed_rtt) *
+  cstat->pacing_interval_m =
+    ((cstat->first_rtt_sample_ts == UINT64_MAX ? NGTCP2_MILLISECONDS
+                                               : cstat->smoothed_rtt)
+     << 10) *
     100 / NGTCP2_BBR_STARTUP_PACING_GAIN_H / bbr->initial_cwnd;
 }
 
 static void bbr_set_pacing_rate_with_gain(ngtcp2_cc_bbr *bbr,
                                           ngtcp2_conn_stat *cstat,
                                           uint64_t pacing_gain_h) {
-  ngtcp2_duration interval;
+  uint64_t interval_m;
 
   if (bbr->bw == 0) {
     return;
   }
 
-  interval = NGTCP2_SECONDS * 100 * 100 / pacing_gain_h / bbr->bw /
-             (100 - NGTCP2_BBR_PACING_MARGIN_PERCENT);
+  interval_m = (NGTCP2_SECONDS << 10) * 100 * 100 / pacing_gain_h / bbr->bw /
+               (100 - NGTCP2_BBR_PACING_MARGIN_PERCENT);
+  interval_m = ngtcp2_max_uint64(interval_m, 1);
 
-  if (bbr->full_bw_reached || interval < cstat->pacing_interval) {
-    cstat->pacing_interval = interval;
+  if (bbr->full_bw_reached || interval_m < cstat->pacing_interval_m) {
+    cstat->pacing_interval_m = interval_m;
   }
 }
 
@@ -1277,10 +1279,9 @@ static void bbr_set_send_quantum(ngtcp2_cc_bbr *bbr, ngtcp2_conn_stat *cstat) {
   size_t send_quantum = 64 * 1024;
   (void)bbr;
 
-  if (cstat->pacing_interval) {
-    send_quantum = ngtcp2_min_size(
-      send_quantum, (size_t)(NGTCP2_MILLISECONDS / cstat->pacing_interval));
-  }
+  send_quantum =
+    ngtcp2_min_size(send_quantum, (size_t)((NGTCP2_MILLISECONDS << 10) /
+                                           cstat->pacing_interval_m));
 
   cstat->send_quantum =
     ngtcp2_max_size(send_quantum, 2 * cstat->max_tx_udp_payload_size);

@@ -42,54 +42,22 @@ void AddRowToLevel(TBufferData& buffer, TClusterId parent, TClusterId child, con
     std::array<TCell, 1> data;
     data[0] = TCell{embedding};
 
-    buffer.AddRow(TSerializedCellVec{pk}, TSerializedCellVec::Serialize(data));
+    buffer.AddRow(pk, data);
 }
 
-void AddRowMainToBuild(TBufferData& buffer, TClusterId parent, TArrayRef<const TCell> key, TArrayRef<const TCell> row) {
-    EnsureNoPostingParentFlag(parent);
+void AddRowToData(TBufferData& buffer, TClusterId parent, TArrayRef<const TCell> sourcePk,
+    TArrayRef<const TCell> dataColumns, TArrayRef<const TCell> origKey, bool isPostingLevel) {
+    if (isPostingLevel) {
+        parent = SetPostingParentFlag(parent);
+    } else {
+        EnsureNoPostingParentFlag(parent);
+    }
 
-    std::array<TCell, 1> cells;
-    cells[0] = TCell::Make(parent);
-    auto pk = TSerializedCellVec::Serialize(cells);
-    TSerializedCellVec::UnsafeAppendCells(key, pk);
-    buffer.AddRow(TSerializedCellVec{std::move(pk)}, TSerializedCellVec::Serialize(row),
-        TSerializedCellVec{key});
-}
+    TVector<TCell> pk(::Reserve(sourcePk.size() + 1));
+    pk.push_back(TCell::Make(parent));
+    pk.insert(pk.end(), sourcePk.begin(), sourcePk.end());
 
-void AddRowMainToPosting(TBufferData& buffer, TClusterId parent, TArrayRef<const TCell> key, TArrayRef<const TCell> row, ui32 dataPos)
-{
-    parent = SetPostingParentFlag(parent);
-
-    std::array<TCell, 1> cells;
-    cells[0] = TCell::Make(parent);
-    auto pk = TSerializedCellVec::Serialize(cells);
-    TSerializedCellVec::UnsafeAppendCells(key, pk);
-    buffer.AddRow(TSerializedCellVec{std::move(pk)}, TSerializedCellVec::Serialize(row.Slice(dataPos)),
-        TSerializedCellVec{key});
-}
-
-void AddRowBuildToBuild(TBufferData& buffer, TClusterId parent, TArrayRef<const TCell> key, TArrayRef<const TCell> row, ui32 prefixColumns)
-{
-    EnsureNoPostingParentFlag(parent);
-
-    std::array<TCell, 1> cells;
-    cells[0] = TCell::Make(parent);
-    auto pk = TSerializedCellVec::Serialize(cells);
-    TSerializedCellVec::UnsafeAppendCells(key.Slice(prefixColumns), pk);
-    buffer.AddRow(TSerializedCellVec{std::move(pk)}, TSerializedCellVec::Serialize(row),
-        TSerializedCellVec{key});
-}
-
-void AddRowBuildToPosting(TBufferData& buffer, TClusterId parent, TArrayRef<const TCell> key, TArrayRef<const TCell> row, ui32 dataPos, ui32 prefixColumns)
-{
-    parent = SetPostingParentFlag(parent);
-
-    std::array<TCell, 1> cells;
-    cells[0] = TCell::Make(parent);
-    auto pk = TSerializedCellVec::Serialize(cells);
-    TSerializedCellVec::UnsafeAppendCells(key.Slice(prefixColumns), pk);
-    buffer.AddRow(TSerializedCellVec{std::move(pk)}, TSerializedCellVec::Serialize(row.Slice(dataPos)),
-        TSerializedCellVec{key});
+    buffer.AddRow(pk, dataColumns, origKey);
 }
 
 TTags MakeScanTags(const TUserTable& table, const TProtoStringType& embedding, 
@@ -114,12 +82,11 @@ TTags MakeScanTags(const TUserTable& table, const TProtoStringType& embedding,
 
 std::shared_ptr<NTxProxy::TUploadTypes> MakeOutputTypes(const TUserTable& table, NKikimrTxDataShard::EKMeansState uploadState,
     const TProtoStringType& embedding, const google::protobuf::RepeatedPtrField<TProtoStringType>& data,
-    ui32 prefixColumns)
+    const google::protobuf::RepeatedPtrField<TProtoStringType>& pkColumns)
 {
     auto types = GetAllTypes(table);
 
     auto result = std::make_shared<NTxProxy::TUploadTypes>();
-    result->reserve(1 + 1 + std::min((table.KeyColumnTypes.size() - prefixColumns) + data.size(), types.size()));
 
     Ydb::Type type;
     type.set_type_id(NTableIndex::ClusterIdType);
@@ -133,8 +100,14 @@ std::shared_ptr<NTxProxy::TUploadTypes> MakeOutputTypes(const TUserTable& table,
             types.erase(it);
         }
     };
-    for (const auto& column : table.KeyColumnIds | std::views::drop(prefixColumns)) {
-        addType(table.Columns.at(column).Name);
+    if (pkColumns.size()) {
+        for (const auto& column : pkColumns) {
+            addType(column);
+        }
+    } else {
+        for (const auto& column : table.KeyColumnIds) {
+            addType(table.Columns.at(column).Name);
+        }
     }
     switch (uploadState) {
         case NKikimrTxDataShard::EKMeansState::UPLOAD_MAIN_TO_BUILD:

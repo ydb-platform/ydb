@@ -48,11 +48,12 @@ public:
         return NKikimrServices::TActivity::KQP_SYSTEM_VIEW_SCAN;
     }
 
-    TAuthScanBase(const NActors::TActorId& ownerId, ui32 scanId, const TTableId& tableId,
+    TAuthScanBase(const NActors::TActorId& ownerId, ui32 scanId,
+        const NKikimrSysView::TSysViewDescription& sysViewInfo,
         const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns,
         TIntrusiveConstPtr<NACLib::TUserToken> userToken,
         bool requireUserAdministratorAccess, bool applyPathTableRange)
-        : TBase(ownerId, scanId, tableId, tableRange, columns)
+        : TBase(ownerId, scanId, sysViewInfo, tableRange, columns)
         , UserToken(std::move(userToken))
         , RequireUserAdministratorAccess(requireUserAdministratorAccess)
     {

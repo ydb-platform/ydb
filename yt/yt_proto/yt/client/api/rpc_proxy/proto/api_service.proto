@@ -69,13 +69,9 @@ enum EReplicaConsistency
 
 enum EMasterReadKind
 {
-    // These options cover the majority of cases.
     MRK_LEADER = 0;
     MRK_FOLLOWER = 1;
     MRK_CACHE = 2;
-
-    // These are advanced options. Typically you don't need these.
-    MRK_MASTER_SIDE_CACHE = 3;
 }
 
 enum ERowsetKind
@@ -135,6 +131,19 @@ enum EOperationState
     OS_FAILING = 15;
     OS_FAILED = 16;
     OS_REVIVE_INITIALIZING = 17;
+}
+
+enum EOperationEventType
+{
+    OET_INCARNATION_STARTED = 0;
+}
+
+enum EIncarnationSwitchReason
+{
+    ISR_JOB_ABORTED = 0;
+    ISR_JOB_FAILED = 1;
+    ISR_JOB_INTERRUPTED = 2;
+    ISR_JOB_LACK_AFTER_REVIVAL = 3;
 }
 
 enum EOperationSortDirection
@@ -310,6 +319,12 @@ enum EQueryState
     QS_COMPLETED = 6;
     QS_FAILING = 7;
     QS_FAILED = 8;
+}
+
+enum EJobStderrType
+{
+    JST_USER_JOB_STDERR = 0;
+    JST_GPU_CHECK_STDERR = 1;
 }
 
 // COMPAT(max42).
@@ -2042,6 +2057,17 @@ message TRspAlterReplicationCard
 
 ////////////////////////////////////////////////////////////////////////////////
 
+message TReqPingChaosLease
+{
+    required NYT.NProto.TGuid chaos_lease_id = 1; // NChaosClient::TChaosLeaseId
+    optional bool ping_ancestors = 2 [default = true];
+}
+
+message TRspPingChaosLease
+{ }
+
+////////////////////////////////////////////////////////////////////////////////
+
 message TFetchChunkSpecConfig
 {
     optional int32 max_chunk_per_fetch = 1;
@@ -2379,6 +2405,23 @@ message TRspPatchOperationSpec
 
 ////////////////////////////////////////////////////////////////////////////////
 
+message TReqListOperationEvents
+{
+    oneof operation_id_or_alias {
+        NYT.NProto.TGuid operation_id = 1;
+        string operation_alias = 2;
+    }
+    optional EOperationEventType event_type = 3;
+    optional uint64 limit = 4 [default = 1000];
+}
+
+message TRspListOperationEvents
+{
+    repeated TOperationEvent events = 1;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 message TReqGetOperation
 {
     oneof operation_id_or_alias {
@@ -2561,6 +2604,7 @@ message TReqGetJobStderr
     required NYT.NProto.TGuid job_id = 2;
     optional int64 limit = 4;
     optional int64 offset = 5;
+    optional EJobStderrType type = 6;
 }
 
 message TRspGetJobStderr
@@ -3215,6 +3259,15 @@ message TListOperationsResult
     optional TPoolTreeCounts pool_tree_counts = 8;
 }
 
+message TOperationEvent
+{
+    optional uint64 timestamp = 1; // TInstant
+    optional EOperationEventType event_type = 2;
+    optional string incarnation = 3;
+    optional EIncarnationSwitchReason incarnation_switch_reason = 4;
+    optional bytes incarnation_switch_info = 5; // YSON
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 message TJob
@@ -3254,6 +3307,7 @@ message TJob
     optional NNodeTrackerClient.NProto.TAddressMap addresses = 33;
     optional bytes events = 34; // YSON
     optional bytes statistics = 35; // YSON
+    optional int64 gang_rank = 36;
 }
 
 message TListJobsStatistics
@@ -3607,7 +3661,7 @@ message TRspStartShuffle
 
 message TReqReadShuffleData
 {
-    message IndexRange
+    message TIndexRange
     {
         required int32 begin = 1;
         required int32 end = 2;
@@ -3616,7 +3670,7 @@ message TReqReadShuffleData
     required bytes signed_shuffle_handle = 1; // Opaque TSignature with YSON-serialized TShuffleHandle
     optional bytes reader_config = 2; // YSON-serialized TTableReaderConfig
     required int32 partition_index = 3;
-    optional IndexRange writer_index_range = 4;
+    optional TIndexRange writer_index_range = 4;
 }
 
 message TRspReadShuffleData

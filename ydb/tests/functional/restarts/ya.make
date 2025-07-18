@@ -17,9 +17,8 @@ ELSE()
     SIZE(MEDIUM)
 ENDIF()
 
-ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")
+INCLUDE(${ARCADIA_ROOT}/ydb/tests/ydbd_dep.inc)
 DEPENDS(
-    ydb/apps/ydbd
 )
 
 PEERDIR(

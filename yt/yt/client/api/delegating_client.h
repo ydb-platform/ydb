@@ -331,6 +331,15 @@ public:
         const TAlterReplicationCardOptions& options),
         (replicationCardId, options))
 
+    DELEGATE_METHOD(TFuture<IPrerequisitePtr>, StartChaosLease, (
+        const TChaosLeaseStartOptions& options),
+        (options));
+
+    DELEGATE_METHOD(TFuture<IPrerequisitePtr>, AttachChaosLease, (
+        NChaosClient::TChaosLeaseId chaosLeaseId,
+        const TChaosLeaseAttachOptions& options),
+        (chaosLeaseId, options));
+
     DELEGATE_METHOD(TFuture<NYson::TYsonString>, GetTablePivotKeys, (
         const NYPath::TYPath& path,
         const TGetTablePivotKeysOptions& options),
@@ -426,14 +435,14 @@ public:
 
     // Security
     DELEGATE_METHOD(TFuture<void>, AddMember, (
-        const TString& group,
-        const TString& member,
+        const std::string& group,
+        const std::string& member,
         const TAddMemberOptions& options),
         (group, member, options))
 
     DELEGATE_METHOD(TFuture<void>, RemoveMember, (
-        const TString& group,
-        const TString& member,
+        const std::string& group,
+        const std::string& member,
         const TRemoveMemberOptions& options),
         (group, member, options))
 
@@ -547,6 +556,11 @@ public:
         NJobTrackerClient::TJobId jobId,
         const TGetJobFailContextOptions& options),
         (operationIdOrAlias, jobId, options))
+
+    DELEGATE_METHOD(TFuture<std::vector<TOperationEvent>>, ListOperationEvents, (
+        const NScheduler::TOperationIdOrAlias& operationIdOrAlias,
+        const TListOperationEventsOptions& options),
+        (operationIdOrAlias, options))
 
     DELEGATE_METHOD(TFuture<TListOperationsResult>, ListOperations, (
         const TListOperationsOptions& options),

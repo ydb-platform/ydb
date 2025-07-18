@@ -28,7 +28,7 @@ struct TRequestScopeCounters : public virtual TThrRefBase {
         Ok      = subgroup->GetCounter("Ok", true);
         Error   = subgroup->GetCounter("Error", true);
         Timeout = subgroup->GetCounter("Timeout", true);
-        Timeout = subgroup->GetCounter("Retry", true);
+        Retry   = subgroup->GetCounter("Retry", true);
     }
 
     virtual ~TRequestScopeCounters() override {

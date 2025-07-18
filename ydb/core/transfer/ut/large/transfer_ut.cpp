@@ -1,5 +1,6 @@
 #include <thread>
 
+#include <util/generic/guid.h>
 #include <ydb/core/transfer/ut/common/utils.h>
 
 using namespace NReplicationTest;
@@ -7,14 +8,13 @@ using namespace NReplicationTest;
 Y_UNIT_TEST_SUITE(TransferLarge)
 {
 
-    auto CreateWriter(MainTestCase& setup, const size_t partitionId) {
-        Cerr << "CREATE PARTITION WRITER " << partitionId << Endl << Flush;
+    auto CreateWriter(MainTestCase& setup, const size_t writerId) {
+        Cerr << "CREATE PARTITION WRITER " << writerId << Endl << Flush;
 
-        TString producerId = TStringBuilder() << "producer-" << partitionId;
+        TString producerId = TStringBuilder() << "writer-" << writerId << "-" << CreateGuidAsString();
 
         TWriteSessionSettings writeSettings;
         writeSettings.Path(setup.TopicName);
-        writeSettings.PartitionId(partitionId);
         writeSettings.DeduplicationEnabled(true);
         writeSettings.ProducerId(producerId);
         writeSettings.MessageGroupId(producerId);
@@ -23,10 +23,10 @@ Y_UNIT_TEST_SUITE(TransferLarge)
         return client.CreateSimpleBlockingWriteSession(writeSettings);
     }
 
-    void Write(MainTestCase& setup, const size_t partitionId, const size_t messageCount, const size_t messageSize) {
-        auto writer = CreateWriter(setup, partitionId);
+    void Write(MainTestCase& setup, const size_t writerId, const size_t messageCount, const size_t messageSize) {
+        auto writer = CreateWriter(setup, writerId);
 
-        Cerr << "PARTITION " << partitionId << " START WRITE " << messageCount << " MESSAGES" << Endl << Flush;
+        Cerr << "PARTITION " << writerId << " START WRITE " << messageCount << " MESSAGES" << Endl << Flush;
 
         TString msg(messageSize, '*');
         for (size_t i = 0; i < messageCount;) {
@@ -40,30 +40,42 @@ Y_UNIT_TEST_SUITE(TransferLarge)
             }
         }
 
-        writer->Close(TDuration::Minutes(1));
-        Cerr << "PARTITION " << partitionId << " ALL MESSAGES HAVE BEEN WRITEN" << Endl << Flush;
+        //writer->Close(TDuration::Minutes(1));
+        writer->Close();
+        Cerr << "PARTITION " << writerId << " ALL MESSAGES HAVE BEEN WRITTEN" << Endl << Flush;
     }
 
-    void CheckAllMessagesHaveBeenWritten(MainTestCase& setup, const size_t expected)  {
-        // Check all messages have been writen
-        auto d = setup.DescribeTopic();
-        for (auto& p : d.GetTopicDescription().GetPartitions()) {
-            UNIT_ASSERT_VALUES_EQUAL_C(expected, p.GetPartitionStats()->GetEndOffset(), "Partition " << p.GetPartitionId());
-        }
-    }
-
-    void WaitAllMessagesHaveBeenCommitted(MainTestCase& setup, const size_t expected, const TDuration timeout = TDuration::Seconds(10)) {
+    void WaitAllMessagesHaveBeenCommitted(MainTestCase& setup, size_t expected, const TDuration timeout = TDuration::Seconds(10)) {
         TInstant endTime = TInstant::Now() + timeout;
+
         bool allPartitionsHaveBeenCommitted = false;
 
         while(TInstant::Now() < endTime) {
+            std::map<size_t, size_t> offsets;
+            {
+                auto d = setup.DescribeTopic();
+                for (auto& p : d.GetTopicDescription().GetPartitions()) {
+                    offsets[p.GetPartitionId()] = p.GetPartitionStats()->GetEndOffset();
+                }
+            }
+
+            size_t messages = 0;
+            for (auto& [partitionId, count] : offsets) {
+                Cerr << "PARTITION " << partitionId << " END OFFSET " << count << Endl << Flush;
+                messages += count;
+            }
+
+            Cerr << "ALL MESSAGES " << messages << " EXPECTED " << expected << Endl << Flush;
+            UNIT_ASSERT_VALUES_EQUAL(expected, messages);
+
             auto d = setup.DescribeConsumer();
             auto& p = d.GetConsumerDescription().GetPartitions();
             allPartitionsHaveBeenCommitted = AllOf(p.begin(), p.end(), [&](auto& x) {
-                Cerr << "WAIT COMMITTED expected=" << expected
+                Cerr << "WAIT COMMITTED partition=" << x.GetPartitionId() 
+                    << " expected=" << offsets[x.GetPartitionId()]
                     << " read=" <<  x.GetPartitionConsumerStats()->GetLastReadOffset()
                     << " committed=" << x.GetPartitionConsumerStats()->GetCommittedOffset() << Endl << Flush;
-                return x.GetPartitionConsumerStats()->GetCommittedOffset() == expected;
+                return x.GetPartitionConsumerStats()->GetCommittedOffset() == offsets[x.GetPartitionId()];
             });
 
             if (allPartitionsHaveBeenCommitted) {
@@ -76,7 +88,13 @@ Y_UNIT_TEST_SUITE(TransferLarge)
         UNIT_ASSERT_C(allPartitionsHaveBeenCommitted, "Partitions haven`t been commited to end");
     }
 
-    void CheckSourceTableIsValid(MainTestCase& setup, const size_t partitionCount, size_t expectedOffset) {
+    void CheckSourceTableIsValid(MainTestCase& setup) {
+        std::map<size_t, size_t> offsets;
+        auto d = setup.DescribeTopic();
+        for (auto& p : d.GetTopicDescription().GetPartitions()) {
+            offsets[p.GetPartitionId()] = p.GetPartitionStats()->GetEndOffset();
+        }
+
         auto r = setup.ExecuteQuery(Sprintf(R"(
             SELECT a.Partition, a.Offset, b.Offset
             FROM %s AS a
@@ -89,20 +107,17 @@ Y_UNIT_TEST_SUITE(TransferLarge)
         )", setup.TableName.data(), setup.TableName.data()));
 
         const auto proto = NYdb::TProtoAccessor::GetProto(r.GetResultSet(0));
-        UNIT_ASSERT_VALUES_EQUAL(partitionCount, proto.rows_size());
         for (size_t i = 0; i < (size_t)proto.rows_size(); ++i) {
             auto& row = proto.rows(i);
             auto partition = row.items(0).uint32_value();
             auto offset = row.items(1).uint64_value();
 
             Cerr << "RESULT PARTITION=" << partition << " OFFSET=" << offset << Endl << Flush;
-
-            UNIT_ASSERT_VALUES_EQUAL(i, partition);
-            UNIT_ASSERT_VALUES_EQUAL_C(expectedOffset - 1, offset, "Partition " << i);
+            UNIT_ASSERT_VALUES_EQUAL_C(offsets[partition] - 1, offset, "Partition " << i);
         }
     }
 
-    void BigTransfer(const std::string tableType, const size_t partitionCount, const size_t messageCount, const size_t messageSize) {
+    void BigTransfer(const std::string tableType, const size_t threadsCount, const size_t messageCount, const size_t messageSize, bool autopartitioning, bool localTopic = false) {
         MainTestCase testCase(std::nullopt, tableType);
         testCase.CreateTable(R"(
                 CREATE TABLE `%s` (
@@ -114,7 +129,20 @@ Y_UNIT_TEST_SUITE(TransferLarge)
                     STORE = %s
                 );
             )");
-        testCase.CreateTopic(partitionCount);
+        if (autopartitioning) {
+            testCase.CreateTopic({
+                .MinPartitionCount = std::max<ui64>(1, threadsCount >> 4),
+                .MaxPartitionCount = threadsCount << 2,
+                .AutoPartitioningEnabled = true
+            });
+        } else {
+            testCase.CreateTopic(threadsCount);
+
+        }
+
+        auto settings = MainTestCase::CreateTransferSettings::WithBatching(TDuration::Seconds(1), 8_MB);
+        settings.LocalTopic = localTopic;
+
         testCase.CreateTransfer(R"(
                 $l = ($x) -> {
                     return [
@@ -125,63 +153,117 @@ Y_UNIT_TEST_SUITE(TransferLarge)
                         |>
                     ];
                 };
-            )", MainTestCase::CreateTransferSettings::WithBatching(TDuration::Seconds(1), 8_MB));
+            )", settings);
 
         std::vector<std::thread> writerThreads;
-        writerThreads.reserve(partitionCount);
-        for (size_t i = 0; i < partitionCount; ++i) {
+        writerThreads.reserve(threadsCount);
+        for (size_t i = 0; i < threadsCount; ++i) {
             writerThreads.emplace_back([&, i = i]() {
                 Write(testCase, i, messageCount, messageSize);
             });
             Sleep(TDuration::MilliSeconds(25));
         }
 
-        for (size_t i = 0; i < partitionCount; ++i) {
+        for (size_t i = 0; i < threadsCount; ++i) {
             Cerr << "WAIT THREAD " << i << Endl << Flush;
             writerThreads[i].join();
         }
 
         Cerr << "WAIT REPLICATION FINISHED" << Endl << Flush;
 
-        CheckAllMessagesHaveBeenWritten(testCase, messageCount);
-        testCase.CheckReplicationState(TReplicationDescription::EState::Running);
-        WaitAllMessagesHaveBeenCommitted(testCase, messageCount);
+        Sleep(TDuration::Seconds(3));
 
-        CheckSourceTableIsValid(testCase, partitionCount, messageCount);
+        testCase.CheckReplicationState(TReplicationDescription::EState::Running);
+        Cerr << "WaitAllMessagesHaveBeenCommitted" << Endl << Flush;
+        WaitAllMessagesHaveBeenCommitted(testCase, messageCount * threadsCount);
+
+        CheckSourceTableIsValid(testCase);
 
         testCase.DropTransfer();
         testCase.DropTable();
         testCase.DropTopic();
     }
 
+    //
+    // Topic autopartitioning is disabled
+    //
+
     Y_UNIT_TEST(Transfer1KM_1P_ColumnTable)
     {
-        BigTransfer("COLUMN", 1, 1000, 64);
+        BigTransfer("COLUMN", 1, 1000, 64, false);
     }
 
     Y_UNIT_TEST(Transfer1KM_1KP_ColumnTable)
     {
-        BigTransfer("COLUMN", 1000, 1000, 64);
+        BigTransfer("COLUMN", 1000, 1000, 64, false);
     }
 
     Y_UNIT_TEST(Transfer100KM_10P_ColumnTable)
     {
-        BigTransfer("COLUMN", 10, 100000, 64);
+        BigTransfer("COLUMN", 10, 100000, 64, false);
     }
 
     Y_UNIT_TEST(Transfer1KM_1P_RowTable)
     {
-        BigTransfer("ROW", 1, 1000, 64);
+        BigTransfer("ROW", 1, 1000, 64, false);
     }
 
     Y_UNIT_TEST(Transfer1KM_1KP_RowTable)
     {
-        BigTransfer("ROW", 1000, 1000, 64);
+        BigTransfer("ROW", 1000, 1000, 64, false);
     }
 
     Y_UNIT_TEST(Transfer100KM_10P_RowTable)
     {
-        BigTransfer("ROW", 10, 100000, 64);
+        BigTransfer("ROW", 10, 100000, 64, false);
+    }
+
+    //
+    // Topic autopartitioning is enabled
+    //
+
+    Y_UNIT_TEST(Transfer1KM_1P_ColumnTable_TopicAutoPartitioning)
+    {
+        BigTransfer("COLUMN", 1, 1000, 64, true);
+    }
+
+    Y_UNIT_TEST(Transfer1KM_1KP_ColumnTable_TopicAutoPartitioning)
+    {
+        BigTransfer("COLUMN", 1000, 1000, 64, true);
+    }
+
+    Y_UNIT_TEST(Transfer100KM_10P_ColumnTable_TopicAutoPartitioning)
+    {
+        BigTransfer("COLUMN", 10, 100000, 64, true);
+    }
+
+    Y_UNIT_TEST(Transfer1KM_1P_RowTable_TopicAutoPartitioning)
+    {
+        BigTransfer("ROW", 1, 1000, 64, true);
+    }
+
+    Y_UNIT_TEST(Transfer1KM_1KP_RowTable_TopicAutoPartitioning)
+    {
+        BigTransfer("ROW", 1000, 1000, 64, true);
+    }
+
+    Y_UNIT_TEST(Transfer100KM_10P_RowTable_TopicAutoPartitioning)
+    {
+        BigTransfer("ROW", 10, 100000, 64, true);
+    }
+
+    //
+    // LocalRead
+    //
+
+    Y_UNIT_TEST(Transfer100KM_10P_LocalRead)
+    {
+        BigTransfer("ROW", 10, 100000, 64, false, true);
+    }
+
+    Y_UNIT_TEST(Transfer100KM_10P_LocalRead_TopicAutoPartitioning)
+    {
+        BigTransfer("ROW", 10, 100000, 64, true, true);
     }
 
 }

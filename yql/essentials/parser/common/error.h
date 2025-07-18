@@ -22,8 +22,8 @@ namespace NAST {
         virtual void AddError(ui32 line, ui32 col, const TString& message) = 0;
 
     protected:
-        const size_t MaxErrors;
-        size_t NumErrors;
+        const size_t MaxErrors_;
+        size_t NumErrors_;
     };
 
     class TErrorOutput: public IErrorCollector {

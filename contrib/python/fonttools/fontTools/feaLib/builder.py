@@ -29,6 +29,7 @@ from fontTools.otlLib.builder import (
     PairPosBuilder,
     SinglePosBuilder,
     ChainContextualRule,
+    AnySubstBuilder,
 )
 from fontTools.otlLib.error import OpenTypeLibError
 from fontTools.varLib.varStore import OnlineVarStoreBuilder
@@ -866,13 +867,22 @@ class Builder(object):
         for lookup in self.lookups_:
             if lookup.table != tag:
                 continue
-            lookup.lookup_index = len(lookups)
-            self.lookup_locations[tag][str(lookup.lookup_index)] = LookupDebugInfo(
-                location=str(lookup.location),
-                name=self.get_lookup_name_(lookup),
-                feature=None,
-            )
-            lookups.append(lookup)
+            name = self.get_lookup_name_(lookup)
+            resolved = lookup.promote_lookup_type(is_named_lookup=name is not None)
+            if resolved is None:
+                raise FeatureLibError(
+                    "Within a named lookup block, all rules must be of "
+                    "the same lookup type and flag",
+                    lookup.location,
+                )
+            for l in resolved:
+                lookup.lookup_index = len(lookups)
+                self.lookup_locations[tag][str(lookup.lookup_index)] = LookupDebugInfo(
+                    location=str(lookup.location),
+                    name=name,
+                    feature=None,
+                )
+                lookups.append(l)
         otLookups = []
         for l in lookups:
             try:
@@ -1196,10 +1206,10 @@ class Builder(object):
 
     def set_lookup_flag(self, location, value, markAttach, markFilter):
         value = value & 0xFF
-        if markAttach:
+        if markAttach is not None:
             markAttachClass = self.getMarkAttachClass_(location, markAttach)
             value = value | (markAttachClass << 8)
-        if markFilter:
+        if markFilter is not None:
             markFilterSet = self.getMarkFilterSet_(location, markFilter)
             value = value | 0x10
             self.lookupflag_markFilterSet_ = markFilterSet
@@ -1294,6 +1304,24 @@ class Builder(object):
 
     # GSUB rules
 
+    def add_any_subst_(self, location, mapping):
+        lookup = self.get_lookup_(location, AnySubstBuilder)
+        for key, value in mapping.items():
+            if key in lookup.mapping:
+                if value == lookup.mapping[key]:
+                    log.info(
+                        'Removing duplicate substitution from "%s" to "%s" at %s',
+                        ", ".join(key),
+                        ", ".join(value),
+                        location,
+                    )
+                else:
+                    raise FeatureLibError(
+                        'Already defined substitution for "%s"' % ", ".join(key),
+                        location,
+                    )
+            lookup.mapping[key] = value
+
     # GSUB 1
     def add_single_subst(self, location, prefix, suffix, mapping, forceChain):
         if self.cur_feature_name_ == "aalt":
@@ -1305,24 +1333,11 @@ class Builder(object):
         if prefix or suffix or forceChain:
             self.add_single_subst_chained_(location, prefix, suffix, mapping)
             return
-        lookup = self.get_lookup_(location, SingleSubstBuilder)
-        for from_glyph, to_glyph in mapping.items():
-            if from_glyph in lookup.mapping:
-                if to_glyph == lookup.mapping[from_glyph]:
-                    log.info(
-                        "Removing duplicate single substitution from glyph"
-                        ' "%s" to "%s" at %s',
-                        from_glyph,
-                        to_glyph,
-                        location,
-                    )
-                else:
-                    raise FeatureLibError(
-                        'Already defined rule for replacing glyph "%s" by "%s"'
-                        % (from_glyph, lookup.mapping[from_glyph]),
-                        location,
-                    )
-            lookup.mapping[from_glyph] = to_glyph
+
+        self.add_any_subst_(
+            location,
+            {(key,): (value,) for key, value in mapping.items()},
+        )
 
     # GSUB 2
     def add_multiple_subst(
@@ -1331,21 +1346,10 @@ class Builder(object):
         if prefix or suffix or forceChain:
             self.add_multi_subst_chained_(location, prefix, glyph, suffix, replacements)
             return
-        lookup = self.get_lookup_(location, MultipleSubstBuilder)
-        if glyph in lookup.mapping:
-            if replacements == lookup.mapping[glyph]:
-                log.info(
-                    "Removing duplicate multiple substitution from glyph"
-                    ' "%s" to %s%s',
-                    glyph,
-                    replacements,
-                    f" at {location}" if location else "",
-                )
-            else:
-                raise FeatureLibError(
-                    'Already defined substitution for glyph "%s"' % glyph, location
-                )
-        lookup.mapping[glyph] = replacements
+        self.add_any_subst_(
+            location,
+            {(glyph,): tuple(replacements)},
+        )
 
     # GSUB 3
     def add_alternate_subst(self, location, prefix, glyph, suffix, replacement):
@@ -1375,9 +1379,6 @@ class Builder(object):
                 location, prefix, glyphs, suffix, replacement
             )
             return
-        else:
-            lookup = self.get_lookup_(location, LigatureSubstBuilder)
-
         if not all(glyphs):
             raise FeatureLibError("Empty glyph class in substitution", location)
 
@@ -1386,8 +1387,10 @@ class Builder(object):
         # substitutions to be specified on target sequences that contain
         # glyph classes, the implementation software will enumerate
         # all specific glyph sequences if glyph classes are detected"
-        for g in itertools.product(*glyphs):
-            lookup.ligatures[g] = replacement
+        self.add_any_subst_(
+            location,
+            {g: (replacement,) for g in itertools.product(*glyphs)},
+        )
 
     # GSUB 5/6
     def add_chain_context_subst(self, location, prefix, glyphs, suffix, lookups):
@@ -1445,6 +1448,13 @@ class Builder(object):
             sub = self.get_chained_lookup_(location, LigatureSubstBuilder)
 
         for g in itertools.product(*glyphs):
+            existing = sub.ligatures.get(g, replacement)
+            if existing != replacement:
+                raise FeatureLibError(
+                    f"Conflicting ligature sub rules: '{g}' maps to '{existing}' and '{replacement}'",
+                    location,
+                )
+
             sub.ligatures[g] = replacement
 
         chain.rules.append(ChainContextualRule(prefix, glyphs, suffix, [sub]))

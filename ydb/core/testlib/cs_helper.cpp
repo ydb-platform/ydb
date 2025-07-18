@@ -24,7 +24,6 @@ void THelperSchemaless::ExecuteModifyScheme(NKikimrSchemeOp::TModifyScheme& modi
     TActorId sender = Server.GetRuntime()->AllocateEdgeActor();
     Server.GetRuntime()->Send(new IEventHandle(MakeTxProxyID(), sender, request.release()));
     auto ev = Server.GetRuntime()->GrabEdgeEventRethrow<TEvTxUserProxy::TEvProposeTransactionStatus>(sender);
-    Cerr << ev->Get()->Record.DebugString() << Endl;
     auto status = ev->Get()->Record.GetStatus();
     ui64 txId = ev->Get()->Record.GetTxId();
     UNIT_ASSERT(status != TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecError);
@@ -100,7 +99,6 @@ void THelperSchemaless::SendDataViaActorSystem(TString testTable, ui64 pathIdBeg
     SendDataViaActorSystem(testTable, batch);
 }
 
-//
 
 std::shared_ptr<arrow::Schema> THelper::GetArrowSchema() const {
     std::vector<std::shared_ptr<arrow::Field>> fields;
@@ -175,6 +173,29 @@ std::shared_ptr<arrow::RecordBatch> THelper::TestArrowBatch(ui64 pathIdBegin, ui
     }
 
 }
+
+void THelper::SetForcedCompaction(const TString& storeName) {
+    //In some tests we expect, that a compaction will start immidiately
+    //For now, we use l-bucket optimizer for this purpose
+    //In the future it should be replaced with lc-bucket or more sophisticated compaction optimizer planner
+    auto request = std::make_unique<TEvTxUserProxy::TEvProposeTransaction>();
+    request->Record.SetExecTimeoutPeriod(Max<ui64>());
+    NKikimrSchemeOp::TModifyScheme modyfySchemeOp;
+    modyfySchemeOp.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpAlterColumnStore);
+    modyfySchemeOp.SetWorkingDir(ROOT_PATH);
+    NKikimrSchemeOp::TAlterColumnStore* alterColumnStore = modyfySchemeOp.MutableAlterColumnStore();
+    alterColumnStore->SetName(storeName);
+    auto schemaPreset = alterColumnStore->AddAlterSchemaPresets();
+    schemaPreset->SetName("default");
+    auto schemaOptions = schemaPreset->MutableAlterSchema()->MutableOptions();
+    schemaOptions->SetSchemeNeedActualization(false);
+    auto plannerConstructot =schemaOptions->MutableCompactionPlannerConstructor();
+    plannerConstructot->SetClassName("l-buckets");
+    *plannerConstructot->MutableLBuckets() = NKikimrSchemeOp::TCompactionPlannerConstructorContainer::TLOptimizer{};
+
+    ExecuteModifyScheme(modyfySchemeOp);
+}
+
 
 TString THelper::GetTestTableSchema() const {
     TStringBuilder sb;

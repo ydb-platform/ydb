@@ -364,13 +364,19 @@ sort_specification: expr (ASC | DESC)?;
 
 sort_specification_list: sort_specification (COMMA sort_specification)*;
 
-select_stmt: select_kind_parenthesis (select_op select_kind_parenthesis)*;
+select_stmt: select_stmt_intersect (union_op select_stmt_intersect)*;
 
-select_unparenthesized_stmt: select_kind_partial (select_op select_kind_parenthesis)*;
+select_stmt_intersect: select_kind_parenthesis (intersect_op select_kind_parenthesis)*;
+
+select_unparenthesized_stmt: select_unparenthesized_stmt_intersect (union_op select_stmt_intersect)*;
+
+select_unparenthesized_stmt_intersect: select_kind_partial (intersect_op select_kind_parenthesis)*;
 
 select_kind_parenthesis: select_kind_partial | LPAREN select_kind_partial RPAREN;
 
-select_op: (UNION | INTERSECT | EXCEPT) (DISTINCT | ALL)?;
+union_op: UNION (DISTINCT | ALL)?;
+
+intersect_op: (INTERSECT | EXCEPT) (DISTINCT | ALL)?;
 
 select_kind_partial: select_kind
   (LIMIT expr ((OFFSET | COMMA) expr)?)?
@@ -685,7 +691,19 @@ backup_collection_settings_entry: an_id EQUALS table_setting_value;
 backup_stmt: BACKUP object_ref (INCREMENTAL)?;
 restore_stmt: RESTORE object_ref (AT STRING_VALUE)?;
 
-alter_database_stmt: ALTER DATABASE an_id_schema OWNER TO role_name;
+alter_database_stmt: ALTER DATABASE an_id_schema alter_database_action;
+alter_database_action:
+    OWNER TO role_name
+  | set_database_settings
+;
+set_database_settings: SET LPAREN database_settings RPAREN;
+database_settings: database_setting (COMMA database_setting)*;
+database_setting: an_id EQUALS database_setting_value;
+database_setting_value:
+    bool_value
+  | integer
+  | STRING_VALUE
+;
 
 table_inherits: INHERITS LPAREN simple_table_ref_core (COMMA simple_table_ref_core)* RPAREN;
 table_partition_by: PARTITION BY HASH pure_column_list;
@@ -923,8 +941,8 @@ lambda_or_parameter:
 ;
 
 create_transfer_stmt: CREATE TRANSFER object_ref
-    FROM object_ref TO object_ref (USING lambda_or_parameter)?
-    WITH LPAREN transfer_settings RPAREN
+    FROM object_ref TO object_ref USING lambda_or_parameter
+    (WITH LPAREN transfer_settings RPAREN)?
 ;
 
 transfer_settings: transfer_settings_entry (COMMA transfer_settings_entry)*;

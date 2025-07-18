@@ -780,6 +780,13 @@ bool TNodeBroker::HasOutdatedSubscription(TActorId subscriber, ui64 newSeqNo) co
     return false;
 }
 
+void TNodeBroker::UpdateCommittedStateCounters() {
+    TabletCounters->Simple()[COUNTER_ACTIVE_NODES].Set(Committed.Nodes.size());
+    TabletCounters->Simple()[COUNTER_EXPIRED_NODES].Set(Committed.ExpiredNodes.size());
+    TabletCounters->Simple()[COUNTER_REMOVED_NODES].Set(Committed.RemovedNodes.size());
+    TabletCounters->Simple()[COUNTER_EPOCH_VERSION].Set(Committed.Epoch.Version);
+}
+
 void TNodeBroker::TState::LoadConfigFromProto(const NKikimrNodeBroker::TConfig &config)
 {
     Config = config;
@@ -1492,6 +1499,7 @@ void TNodeBroker::Handle(TEvNodeBroker::TEvRegistrationRequest::TPtr &ev,
         TActorId ReplyTo;
         NActors::TScopeId ScopeId;
         TSubDomainKey ServicedSubDomain;
+        TString Error;
 
     public:
         static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
@@ -1507,6 +1515,27 @@ void TNodeBroker::Handle(TEvNodeBroker::TEvRegistrationRequest::TPtr &ev,
             Become(&TThis::StateFunc);
 
             auto& record = Ev->Get()->Record;
+
+            if (const auto& bridgePileName = TNodeLocation(record.GetLocation()).GetBridgePileName()) {
+                if (AppData()->BridgeConfig && AppData()->BridgeConfig->PilesSize()) {
+                    const auto& bridge = *AppData()->BridgeConfig;
+                    const auto& piles = bridge.GetPiles();
+                    bool found = false;
+                    for (int i = 0; i < piles.size(); ++i) {
+                        if (piles[i].GetName() == *bridgePileName) {
+                            found = true;
+                            break;
+                        }
+                    }
+                    if (!found) {
+                        Error = TStringBuilder() << "Incorrect bridge pile name " << *bridgePileName;
+                    }
+                } else {
+                    Error = "Bridge pile specified while bridge mode is disabled";
+                }
+            } else if (AppData()->BridgeConfig && AppData()->BridgeConfig->PilesSize()) {
+                Error = "Bridge pile not specified while bridge mode is enabled";
+            }
 
             if (record.HasPath()) {
                 auto req = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
@@ -1557,7 +1586,7 @@ void TNodeBroker::Handle(TEvNodeBroker::TEvRegistrationRequest::TPtr &ev,
                 << ": scope id# " << ScopeIdToString(ScopeId)
                 << ": serviced subdomain# " << ServicedSubDomain);
 
-            Send(ReplyTo, new TEvPrivate::TEvResolvedRegistrationRequest(Ev, ScopeId, ServicedSubDomain));
+            Send(ReplyTo, new TEvPrivate::TEvResolvedRegistrationRequest(Ev, ScopeId, ServicedSubDomain, std::move(Error)));
             Die(ctx);
         }
 

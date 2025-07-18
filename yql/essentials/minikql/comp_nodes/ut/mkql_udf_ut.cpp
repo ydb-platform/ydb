@@ -2,6 +2,7 @@
 #include <yql/essentials/public/udf/udf_helpers.h>
 #include <yql/essentials/minikql/mkql_node_serialization.h>
 #include <yql/essentials/minikql/mkql_node_cast.h>
+#include <yql/essentials/minikql/datetime/datetime64.h>
 
 namespace NKikimr {
 namespace NMiniKQL {
@@ -528,6 +529,376 @@ Y_UNIT_TEST_SUITE(TMiniKQLUdfTest) {
         UNIT_ASSERT(iterator.Next(result));
         UNIT_ASSERT_STRINGS_EQUAL(TStringBuf(result.AsStringRef()), "Canary is still alive");
         UNIT_ASSERT(!iterator.Next(result));
+    }
+} // Y_UNIT_TEST_SUITE
+
+// XXX: Test the hack with on-the-fly argument convertion for the
+// call of the Datetime::Format UDF with the basic date resource
+// parameter against the underline function, expecting the
+// extended date resource as an argument.
+
+namespace {
+
+extern const char TMResourceName[] = "DateTime2.TM";
+extern const char TM64ResourceName[] = "DateTime2.TM64";
+
+enum class EBuilds {
+    A, // DateTime::Format build with the single parameter: basic
+       // DateTime resource representing the timestamp argument.
+    B, // DateTime::Format build with two parameters:
+       // * the required one with the **basic** resource.
+       // * the optional one to tweak the Format behaviour.
+    C, // DateTime::Format build with two parameters:
+       // * the required one with the **extended** resource.
+       // * the optional one to tweak the Format behaviour.
+};
+
+template<const char* TResourceName, typename TValue,
+         typename TStorage = std::conditional_t<TResourceName == TMResourceName,
+                                                NYql::DateTime::TTMStorage,
+                                                NYql::DateTime::TTM64Storage>>
+TStorage& Reference(TValue& value) {
+    return *reinterpret_cast<TStorage*>(value.GetRawPtr());
+}
+
+template<const char* TResourceName, typename TValue,
+         typename TStorage = std::conditional_t<TResourceName == TMResourceName,
+                                                NYql::DateTime::TTMStorage,
+                                                NYql::DateTime::TTM64Storage>>
+const TStorage& Reference(const TValue& value) {
+    return *reinterpret_cast<const TStorage*>(value.GetRawPtr());
+}
+
+static TRuntimeNode NewDateTimeNode(const NYql::NUdf::TStringRef& dateLiteral,
+                                    const TTypeEnvironment& env)
+{
+    const auto dtval = ValueFromString(NYql::NUdf::EDataSlot::Datetime, dateLiteral);
+    return TRuntimeNode(BuildDataLiteral(dtval, NUdf::TDataType<NYql::NUdf::TDatetime>::Id, env), true);
+}
+
+template<enum EBuilds Build, bool LoweredRuntimeVersion>
+class TTestDateTime2Format : public NYql::NUdf::TBoxedValue {
+static_assert(Build != EBuilds::A || LoweredRuntimeVersion,
+              "Build 'A' provides only the 'lowered' runtime version");
+public:
+    static const NYql::NUdf::TStringRef& Name() {
+        static auto name = NYql::NUdf::TStringRef::Of("Format");
+        return name;
+    }
+
+    static bool DeclareSignature(const NYql::NUdf::TStringRef& name,
+                                 NYql::NUdf::TType*,
+                                 NYql::NUdf::IFunctionTypeInfoBuilder& builder,
+                                 bool typesOnly)
+    {
+        if (Name() != name) {
+            return false;
+        }
+
+        // FIXME: The condition below is required to untie the
+        // Gordian knot with the upgrade, when two MiniKQL
+        // runtimes with different versions are being used.
+        // See YQL-19967 for more info.
+        if (LoweredRuntimeVersion && typesOnly) {
+            builder.SimpleSignature<char*(NYql::NUdf::TAutoMap<NYql::NUdf::TResource<TMResourceName>>)>();
+            builder.RunConfig<char*>();
+            return true;
+        }
+
+        switch (Build) {
+        case EBuilds::A:
+            builder.SimpleSignature<char*(NYql::NUdf::TAutoMap<NYql::NUdf::TResource<TMResourceName>>)>();
+            builder.RunConfig<char*>();
+            break;
+        case EBuilds::B:
+            builder.OptionalArgs(1).Args()->Add<char*>()
+                .Add<NYql::NUdf::TOptional<bool>>().Name("AlwaysWriteFractionalSeconds");
+            builder.Returns(
+                builder.SimpleSignatureType<char*(NYql::NUdf::TAutoMap<NYql::NUdf::TResource<TMResourceName>>)>());
+            break;
+        case EBuilds::C:
+            builder.OptionalArgs(1).Args()->Add<char*>()
+                .Add<NYql::NUdf::TOptional<bool>>().Name("AlwaysWriteFractionalSeconds");
+            builder.Returns(
+                builder.SimpleSignatureType<char*(NYql::NUdf::TAutoMap<NYql::NUdf::TResource<TM64ResourceName>>)>());
+            break;
+        }
+
+        if (!typesOnly) {
+            builder.Implementation(new TTestDateTime2Format);
+        }
+
+        return true;
+    }
+
+private:
+    NYql::NUdf::TUnboxedValue Run(const NYql::NUdf::IValueBuilder*,
+                                  const NYql::NUdf::TUnboxedValuePod* args)
+    const override {
+        bool alwaysWriteFractionalSeconds = false;
+
+        if constexpr (Build != EBuilds::A) {
+            if (auto val = args[1]) {
+                alwaysWriteFractionalSeconds = val.Get<bool>();
+            }
+        }
+
+        return NYql::NUdf::TUnboxedValuePod(new TTestDateTime2Formatter(args[0], alwaysWriteFractionalSeconds));
+    }
+
+    class TTestDateTime2Formatter : public NYql::NUdf::TBoxedValue {
+    public:
+        TTestDateTime2Formatter(NYql::NUdf::TUnboxedValue format, bool alwaysWriteFractionalSeconds)
+            : Format_(format)
+        {
+            UNIT_ASSERT(!alwaysWriteFractionalSeconds);
+        }
+
+    private:
+        NYql::NUdf::TUnboxedValue Run(const NYql::NUdf::IValueBuilder* valueBuilder,
+                                      const NYql::NUdf::TUnboxedValuePod* args)
+        const override {
+            TStringBuilder result;
+            result << Format_.AsStringRef() << ": ";
+            if constexpr (Build == EBuilds::C) {
+                const auto storage = Reference<TM64ResourceName>(args[0]);
+                result << storage.Day << "/" << storage.Month << "/"
+                       << storage.Year << " " << storage.Hour << ":"
+                       << storage.Minute << ":" << storage.Second;
+            } else {
+                const auto storage = Reference<TMResourceName>(args[0]);
+                result << storage.Day << "/" << storage.Month << "/"
+                       << storage.Year << " " << storage.Hour << ":"
+                       << storage.Minute << ":" << storage.Second;
+            }
+            result << ".";
+            return valueBuilder->NewString(result);
+        }
+
+        const NYql::NUdf::TUnboxedValue Format_;
+    };
+};
+
+template<bool LoweredRuntimeVersion>
+class TTestDateTime2Convert : public NYql::NUdf::TBoxedValue {
+public:
+    static const NYql::NUdf::TStringRef& Name() {
+        static auto name = NYql::NUdf::TStringRef::Of("Convert");
+        return name;
+    }
+
+    static bool DeclareSignature(const NYql::NUdf::TStringRef& name,
+                                 NYql::NUdf::TType*,
+                                 NYql::NUdf::IFunctionTypeInfoBuilder& builder,
+                                 bool typesOnly)
+    {
+        if (Name() != name) {
+            return false;
+        }
+
+        if (LoweredRuntimeVersion && typesOnly) {
+            builder.SimpleSignature<NYql::NUdf::TResource<TMResourceName>(NYql::NUdf::TAutoMap<NYql::NUdf::TResource<TMResourceName>>)>()
+                   .IsStrict();
+            return true;
+        }
+
+        builder.SimpleSignature<NYql::NUdf::TResource<TM64ResourceName>(NYql::NUdf::TAutoMap<NYql::NUdf::TResource<TMResourceName>>)>()
+               .IsStrict();
+
+        if (!typesOnly) {
+            builder.Implementation(new TTestDateTime2Convert);
+        }
+
+        return true;
+    }
+
+private:
+    NYql::NUdf::TUnboxedValue Run(const NYql::NUdf::IValueBuilder*,
+                                  const NYql::NUdf::TUnboxedValuePod* args)
+    const override {
+        NYql::NUdf::TUnboxedValuePod result(0);
+        auto& arg = Reference<TMResourceName>(args[0]);
+        auto& storage = Reference<TM64ResourceName>(result);
+        storage.From(arg);
+        return result;
+    }
+};
+
+class TTestDateTime2Split : public NYql::NUdf::TBoxedValue {
+public:
+    explicit TTestDateTime2Split(NYql::NUdf::TSourcePosition pos)
+        : Pos_(pos)
+    {}
+
+    static const NYql::NUdf::TStringRef& Name() {
+        static auto name = NYql::NUdf::TStringRef::Of("Split");
+        return name;
+    }
+
+    static bool DeclareSignature(const NYql::NUdf::TStringRef& name,
+                                 NYql::NUdf::TType*,
+                                 NYql::NUdf::IFunctionTypeInfoBuilder& builder,
+                                 bool typesOnly)
+    {
+        if (Name() != name) {
+            return false;
+        }
+        builder.SimpleSignature<NYql::NUdf::TResource<TMResourceName>(NYql::NUdf::TAutoMap<NYql::NUdf::TDatetime>)>()
+               .IsStrict();
+        if (!typesOnly) {
+            builder.Implementation(new TTestDateTime2Split(builder.GetSourcePosition()));
+        }
+
+        return true;
+    }
+
+private:
+    NYql::NUdf::TUnboxedValue Run(const NYql::NUdf::IValueBuilder* valueBuilder,
+                                  const NYql::NUdf::TUnboxedValuePod* args)
+    const override try {
+        EMPTY_RESULT_ON_EMPTY_ARG(0);
+
+        auto& builder = valueBuilder->GetDateBuilder();
+        NYql::NUdf::TUnboxedValuePod result(0);
+        auto& storage = Reference<TMResourceName>(result);
+        storage.FromDatetime(builder, args[0].Get<ui32>());
+        return result;
+    } catch (const std::exception& e) {
+        UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data());
+    }
+
+    const NYql::NUdf::TSourcePosition Pos_;
+};
+
+// Here are the short description for the versions:
+// * A is an old version with DateTime::Format function using
+//   runconfig signature.
+// * B is a new version with DateTime::Format function using
+//   currying signature with basic DateTime resource type for
+//   closure argument.
+// * C is a new version with DateTime::Format function using
+//   currying signature with extended DateTime resource type
+//   for closure argument.
+SIMPLE_MODULE(TTestADateTime2Module, TTestDateTime2Format<EBuilds::A, true>,
+                                     TTestDateTime2Split)
+SIMPLE_MODULE(TTestB1DateTime2Module, TTestDateTime2Format<EBuilds::B, true>,
+                                      TTestDateTime2Convert<true>,
+                                      TTestDateTime2Split)
+SIMPLE_MODULE(TTestB2DateTime2Module, TTestDateTime2Format<EBuilds::B, false>,
+                                      TTestDateTime2Convert<false>,
+                                      TTestDateTime2Split)
+SIMPLE_MODULE(TTestC1DateTime2Module, TTestDateTime2Format<EBuilds::C, true>,
+                                      TTestDateTime2Convert<true>,
+                                      TTestDateTime2Split)
+SIMPLE_MODULE(TTestC2DateTime2Module, TTestDateTime2Format<EBuilds::C, false>,
+                                      TTestDateTime2Convert<false>,
+                                      TTestDateTime2Split)
+
+template<bool LLVM, class TCompileModule, class TRunModule>
+static void TestDateTimeFormat() {
+    // Create the test setup, using compileModule implementation
+    // for DateTime2 UDF.
+    TVector<TUdfModuleInfo> modules;
+    modules.emplace_back(TUdfModuleInfo{"", "DateTime2", new TCompileModule()});
+    TSetup<LLVM> compileSetup(GetTestFactory(), std::move(modules));
+    TProgramBuilder& pb = *compileSetup.PgmBuilder;
+
+    // Build the graph, using the compileModule setup.
+    const auto dttype = pb.NewDataType(NUdf::EDataSlot::Datetime);
+    const auto dtnode = NewDateTimeNode("2009-09-01T15:37:19Z", *compileSetup.Env);
+    const auto format = pb.NewDataLiteral<NUdf::EDataSlot::String>("Canary is alive");
+
+    // Build the runtime node for formatter (i.e. DateTime2.Format
+    // resulting closure), considering its declared signature.
+    TRuntimeNode formatter;
+    if constexpr (std::is_same_v<TCompileModule, TTestADateTime2Module> ||
+                  std::is_same_v<TCompileModule, TTestB1DateTime2Module> ||
+                  std::is_same_v<TCompileModule, TTestC1DateTime2Module>)
+    {
+        formatter = pb.Udf("DateTime2.Format", format);
+    } else {
+        formatter = pb.Apply(pb.Udf("DateTime2.Format"), {format});
+    }
+
+    const auto list = pb.NewList(dttype, {dtnode});
+    const auto pgmReturn = pb.Map(list, [&pb, formatter](const TRuntimeNode item) {
+        auto resource = pb.Apply(pb.Udf("DateTime2.Split"), {item});
+        if constexpr (std::is_same_v<TCompileModule, TTestC2DateTime2Module>) {
+            resource = pb.Apply(pb.Udf("DateTime2.Convert"), {resource});
+        }
+        return pb.Apply(formatter, {resource});
+    });
+
+    // Create the test setup, using runModule implementation for
+    // DateTime2 UDF.
+    TVector<TUdfModuleInfo> runModules;
+    runModules.emplace_back(TUdfModuleInfo{"", "DateTime2", new TRunModule()});
+    TSetup<LLVM> runSetup(GetTestFactory(), std::move(runModules));
+
+    // Move the graph from the one setup to another as a
+    // serialized bytecode sequence.
+    const auto bytecode = SerializeRuntimeNode(pgmReturn, *compileSetup.Env);
+    const auto root = DeserializeRuntimeNode(bytecode, *runSetup.Env);
+
+    // Run the graph, using the runModule setup.
+    const auto graph = runSetup.BuildGraph(root);
+    const auto iterator = graph->GetValue().GetListIterator();
+
+    NUdf::TUnboxedValue result;
+    UNIT_ASSERT(iterator.Next(result));
+    UNIT_ASSERT_STRINGS_EQUAL(TStringBuf(result.AsStringRef()), "Canary is alive: 1/9/2009 15:37:19.");
+    UNIT_ASSERT(!iterator.Next(result));
+}
+
+} // namespace
+
+// The main idea for the test below: check whether all hacks,
+// introduced to the core components and DateTime UDF (that is
+// partially stubbed above) works fine for the following
+// "compile/execute" matrix:
+// +-------------------------------------------+
+// | compile \ execute | A | B1 | C1 | B2 | C2 |
+// +-------------------+---+----+----+----+----+
+// |         A         | + | +  | +  | -  | -  |
+// +-------------------+---+----+----+----+----+
+// |         B1        | + | +  | +  | +  | -  |
+// +-------------------+---+----+----+----+----+
+// |         C1        | + | +  | +  | -  | +  |
+// +-------------------+---+----+----+----+----+
+// |         B2        | - | +  | -  | +  | -  |
+// +-------------------+---+----+----+----+----+
+// |         C2        | - | -  | +  | -  | +  |
+// +-------------------+---+----+----+----+----+
+Y_UNIT_TEST_SUITE(TMiniKQLDatetimeFormatTest) {
+    Y_UNIT_TEST_LLVM(AtoB1) {
+        TestDateTimeFormat<LLVM, TTestADateTime2Module, TTestB1DateTime2Module>();
+    }
+    Y_UNIT_TEST_LLVM(B1toA) {
+        TestDateTimeFormat<LLVM, TTestB1DateTime2Module, TTestADateTime2Module>();
+    }
+    Y_UNIT_TEST_LLVM(B1toB2) {
+        TestDateTimeFormat<LLVM, TTestB1DateTime2Module, TTestB2DateTime2Module>();
+    }
+    Y_UNIT_TEST_LLVM(B2toB1) {
+        TestDateTimeFormat<LLVM, TTestB2DateTime2Module, TTestB1DateTime2Module>();
+    }
+    Y_UNIT_TEST_LLVM(AtoC1) {
+        TestDateTimeFormat<LLVM, TTestADateTime2Module, TTestC1DateTime2Module>();
+    }
+    Y_UNIT_TEST_LLVM(C1toA) {
+        TestDateTimeFormat<LLVM, TTestC1DateTime2Module, TTestADateTime2Module>();
+    }
+    Y_UNIT_TEST_LLVM(B1toC1) {
+        TestDateTimeFormat<LLVM, TTestB1DateTime2Module, TTestC1DateTime2Module>();
+    }
+    Y_UNIT_TEST_LLVM(C1toB1) {
+        TestDateTimeFormat<LLVM, TTestC1DateTime2Module, TTestB1DateTime2Module>();
+    }
+    Y_UNIT_TEST_LLVM(C1toC2) {
+        TestDateTimeFormat<LLVM, TTestC1DateTime2Module, TTestC2DateTime2Module>();
+    }
+    Y_UNIT_TEST_LLVM(C2toC1) {
+        TestDateTimeFormat<LLVM, TTestC2DateTime2Module, TTestC1DateTime2Module>();
     }
 } // Y_UNIT_TEST_SUITE
 

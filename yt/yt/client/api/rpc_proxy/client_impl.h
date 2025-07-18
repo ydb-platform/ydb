@@ -125,6 +125,7 @@ public:
         const std::vector<NYPath::TYPath>& movableTables,
         const NApi::TBalanceTabletCellsOptions& options) override;
 
+    // Chaos.
     TFuture<NChaosClient::TReplicationCardPtr> GetReplicationCard(
         NChaosClient::TReplicationCardId replicationCardId,
         const TGetReplicationCardOptions& options = {}) override;
@@ -136,6 +137,13 @@ public:
     TFuture<void> AlterReplicationCard(
         NChaosClient::TReplicationCardId replicationCardId,
         const TAlterReplicationCardOptions& options = {}) override;
+
+    TFuture<NApi::IPrerequisitePtr> AttachChaosLease(
+        NChaosClient::TChaosLeaseId chaosLeaseId,
+        const TChaosLeaseAttachOptions& options = {}) override;
+
+    TFuture<NApi::IPrerequisitePtr> StartChaosLease(
+        const TChaosLeaseStartOptions& options = {}) override;
 
     // Distributed table client
     TFuture<ITableFragmentWriterPtr> CreateTableFragmentWriter(
@@ -201,13 +209,13 @@ public:
         const TGetCurrentUserOptions& options) override;
 
     TFuture<void> AddMember(
-        const TString& group,
-        const TString& member,
+        const std::string& group,
+        const std::string& member,
         const NApi::TAddMemberOptions& options) override;
 
     TFuture<void> RemoveMember(
-        const TString& group,
-        const TString& member,
+        const std::string& group,
+        const std::string& member,
         const NApi::TRemoveMemberOptions& options) override;
 
     TFuture<TCheckPermissionResponse> CheckPermission(
@@ -302,6 +310,10 @@ public:
         const NScheduler::TOperationIdOrAlias& operationIdOrAlias,
         NJobTrackerClient::TJobId jobId,
         const NApi::TGetJobFailContextOptions& options) override;
+
+    TFuture<std::vector<TOperationEvent>> ListOperationEvents(
+        const NScheduler::TOperationIdOrAlias& operationIdOrAlias,
+        const TListOperationEventsOptions& options) override;
 
     TFuture<NApi::TListOperationsResult> ListOperations(
         const NApi::TListOperationsOptions& options) override;

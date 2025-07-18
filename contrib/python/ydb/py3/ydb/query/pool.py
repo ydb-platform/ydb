@@ -1,4 +1,5 @@
 import logging
+from concurrent import futures
 from typing import (
     Callable,
     Optional,
@@ -36,14 +37,17 @@ class QuerySessionPool:
         size: int = 100,
         *,
         query_client_settings: Optional[QueryClientSettings] = None,
+        workers_threads_count: int = 4,
     ):
         """
         :param driver: A driver instance.
         :param size: Max size of Session Pool.
         :param query_client_settings: ydb.QueryClientSettings object to configure QueryService behavior
+        :param workers_threads_count: A number of threads in executor used for *_async methods
         """
 
         self._driver = driver
+        self._tp = futures.ThreadPoolExecutor(workers_threads_count)
         self._queue = queue.Queue()
         self._current_size = 0
         self._size = size
@@ -72,7 +76,7 @@ class QuerySessionPool:
         try:
             if self._should_stop.is_set():
                 logger.error("An attempt to take session from closed session pool.")
-                raise RuntimeError("An attempt to take session from closed session pool.")
+                raise issues.SessionPoolClosed()
 
             session = None
             try:
@@ -132,6 +136,9 @@ class QuerySessionPool:
         :return: Result sets or exception in case of execution errors.
         """
 
+        if self._should_stop.is_set():
+            raise issues.SessionPoolClosed()
+
         retry_settings = RetrySettings() if retry_settings is None else retry_settings
 
         def wrapped_callee():
@@ -139,6 +146,38 @@ class QuerySessionPool:
                 return callee(session, *args, **kwargs)
 
         return retry_operation_sync(wrapped_callee, retry_settings)
+
+    def retry_tx_async(
+        self,
+        callee: Callable,
+        tx_mode: Optional[BaseQueryTxMode] = None,
+        retry_settings: Optional[RetrySettings] = None,
+        *args,
+        **kwargs,
+    ) -> futures.Future:
+        """Asynchronously execute a transaction in a retriable way."""
+
+        if self._should_stop.is_set():
+            raise issues.SessionPoolClosed()
+
+        return self._tp.submit(
+            self.retry_tx_sync,
+            callee,
+            tx_mode,
+            retry_settings,
+            *args,
+            **kwargs,
+        )
+
+    def retry_operation_async(
+        self, callee: Callable, retry_settings: Optional[RetrySettings] = None, *args, **kwargs
+    ) -> futures.Future:
+        """Asynchronously execute a retryable operation."""
+
+        if self._should_stop.is_set():
+            raise issues.SessionPoolClosed()
+
+        return self._tp.submit(self.retry_operation_sync, callee, retry_settings, *args, **kwargs)
 
     def retry_tx_sync(
         self,
@@ -160,6 +199,9 @@ class QuerySessionPool:
 
         :return: Result sets or exception in case of execution errors.
         """
+
+        if self._should_stop.is_set():
+            raise issues.SessionPoolClosed()
 
         tx_mode = tx_mode if tx_mode else _ydb_query_public.QuerySerializableReadWrite()
         retry_settings = RetrySettings() if retry_settings is None else retry_settings
@@ -194,6 +236,9 @@ class QuerySessionPool:
         :return: Result sets or exception in case of execution errors.
         """
 
+        if self._should_stop.is_set():
+            raise issues.SessionPoolClosed()
+
         retry_settings = RetrySettings() if retry_settings is None else retry_settings
 
         def wrapped_callee():
@@ -203,11 +248,34 @@ class QuerySessionPool:
 
         return retry_operation_sync(wrapped_callee, retry_settings)
 
+    def execute_with_retries_async(
+        self,
+        query: str,
+        parameters: Optional[dict] = None,
+        retry_settings: Optional[RetrySettings] = None,
+        *args,
+        **kwargs,
+    ) -> futures.Future:
+        """Asynchronously execute a query with retries."""
+
+        if self._should_stop.is_set():
+            raise issues.SessionPoolClosed()
+
+        return self._tp.submit(
+            self.execute_with_retries,
+            query,
+            parameters,
+            retry_settings,
+            *args,
+            **kwargs,
+        )
+
     def stop(self, timeout=None):
         acquire_timeout = timeout if timeout is not None else -1
         acquired = self._lock.acquire(timeout=acquire_timeout)
         try:
             self._should_stop.set()
+            self._tp.shutdown(wait=True)
             while True:
                 try:
                     session = self._queue.get_nowait()

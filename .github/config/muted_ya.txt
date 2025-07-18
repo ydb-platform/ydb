@@ -1,145 +1,176 @@
 ydb/apps/ydb/ut YdbWorkloadTransferTopicToTable.Default_Run
+ydb/core/blobstorage/dsproxy/ut TBlobStorageProxySequenceTest.TestBlock42PutWithChangingSlowDisk
 ydb/core/blobstorage/dsproxy/ut TDSProxyPutTest.TestBlock42PutStatusOkWith_2_0_VdiskErrors
 ydb/core/blobstorage/dsproxy/ut_fat TBlobStorageProxyTest.TestBatchedPutRequestDoesNotContainAHugeBlob
+ydb/core/blobstorage/pdisk/ut TPDiskTest.FailedToFormatDiskInfoUpdate
+ydb/core/blobstorage/pdisk/ut TPDiskTest.PDiskSlotSizeInUnits
+ydb/core/blobstorage/ut_blobstorage GroupReconfiguration.BsControllerDoesNotDisableGroupNoRequestsToNodesWVDisks
+ydb/core/blobstorage/ut_blobstorage NodeDisconnected.BsQueueRetries
+ydb/core/blobstorage/ut_blobstorage/ut_group_reconfiguration GroupReconfigurationRace.Test_block42
 ydb/core/blobstorage/ut_blobstorage/ut_huge HugeBlobOnlineSizeChange.Compaction
-ydb/core/blobstorage/ut_blobstorage/ut_huge [*/*] chunk chunk
+ydb/core/blobstorage/ut_blobstorage/ut_huge unittest.[*/*] chunk
 ydb/core/blobstorage/ut_blobstorage/ut_scrub BlobScrubbing.block42
 ydb/core/blobstorage/ut_blobstorage/ut_scrub BlobScrubbing.mirror3dc
 ydb/core/blobstorage/ut_blobstorage/ut_scrub BlobScrubbing.mirror3of4
+ydb/core/blobstorage/ut_blobstorage/ut_statestorage TStateStorageRingGroupState.TestProxyConfigMismatch
+ydb/core/blobstorage/ut_vdisk TBsLocalRecovery.WriteRestartReadHugeDecreased
 ydb/core/blobstorage/ut_vdisk TBsVDiskGC.GCPutKeepBarrierSync
 ydb/core/blobstorage/ut_vdisk TBsVDiskManyPutGet.ManyPutRangeGetCompactionIndexOnly
-ydb/core/blobstorage/ut_vdisk [*/*] chunk chunk
+ydb/core/blobstorage/ut_vdisk unittest.[*/*] chunk
 ydb/core/cms/ut_sentinel_unstable TSentinelUnstableTests.BSControllerCantChangeStatus
-ydb/core/external_sources/s3/ut sole chunk chunk
-ydb/core/fq/libs/row_dispatcher/ut sole chunk chunk
+ydb/core/external_sources/s3/ut unittest.sole chunk
+ydb/core/fq/libs/row_dispatcher/ut unittest.sole chunk
 ydb/core/keyvalue/ut_trace TKeyValueTracingTest.ReadHuge
 ydb/core/keyvalue/ut_trace TKeyValueTracingTest.ReadSmall
 ydb/core/keyvalue/ut_trace TKeyValueTracingTest.WriteHuge
 ydb/core/keyvalue/ut_trace TKeyValueTracingTest.WriteSmall
-ydb/core/kqp/ut/batch_operations [*/*] chunk chunk
-ydb/core/kqp/ut/cost KqpCost.OlapWriteRow
+ydb/core/kqp/ut/batch_operations unittest.[*/*] chunk
+ydb/core/kqp/ut/cost KqpCost.VectorIndexLookup+useSink
+ydb/core/kqp/ut/cost KqpCost.VectorIndexLookup-useSink
+ydb/core/kqp/ut/data_integrity KqpDataIntegrityTrails.UpsertEvWriteQueryService-isOlap+useOltpSink
 ydb/core/kqp/ut/federated_query/large_results KqpScriptExecResults.ExecuteScriptWithLargeFile
-ydb/core/kqp/ut/federated_query/s3 sole chunk chunk
-ydb/core/kqp/ut/olap KqpOlap.PredicatePushdown
+ydb/core/kqp/ut/federated_query/s3 unittest.sole chunk
+ydb/core/kqp/ut/indexes KqpMultishardIndex.WriteIntoRenamingAsyncIndex
 ydb/core/kqp/ut/indexes KqpMultishardIndex.WriteIntoRenamingSyncIndex
-ydb/core/kqp/ut/olap KqpOlapDictionary.DifferentPages
-ydb/core/kqp/ut/olap KqpOlapJson.BloomMixIndexesVariants
-ydb/core/kqp/ut/olap KqpOlapJson.BloomNGrammIndexesVariants
-ydb/core/kqp/ut/olap KqpOlapJson.CompactionVariants
-ydb/core/kqp/ut/olap KqpOlapJson.DuplicationCompactionVariants
-ydb/core/kqp/ut/olap KqpOlapJson.SwitchAccessorCompactionVariants
-ydb/core/kqp/ut/olap KqpOlapWrite.TierDraftsGCWithRestart
-ydb/core/kqp/ut/olap [*/*] chunk chunk
+ydb/core/kqp/ut/opt KqpKv.ReadRows_TimeoutCancelsReads
 ydb/core/kqp/ut/query KqpAnalyze.AnalyzeTable+ColumnStore
 ydb/core/kqp/ut/query KqpAnalyze.AnalyzeTable-ColumnStore
 ydb/core/kqp/ut/query KqpLimits.StreamWrite+Allowed
 ydb/core/kqp/ut/query KqpStats.DeferredEffects+UseSink
 ydb/core/kqp/ut/query KqpStats.SysViewClientLost
-ydb/core/kqp/ut/runtime KqpScanSpilling.HandleErrorsCorrectly
-ydb/core/kqp/ut/runtime KqpScanSpilling.SpillingInRuntimeNodes-EnabledSpilling
-ydb/core/kqp/ut/scheme [*/*] chunk chunk
-ydb/core/kqp/ut/service [*/*] chunk chunk
+ydb/core/kqp/ut/scan KqpSplit.StreamLookupJoinDeliveryProblemAfterFirstResult
+ydb/core/kqp/ut/scheme KqpOlapScheme.AddPgColumnWithStore
+ydb/core/kqp/ut/scheme KqpOlapScheme.TenThousandColumns
+ydb/core/kqp/ut/scheme unittest.[*/*] chunk
+ydb/core/kqp/ut/service unittest.[*/*] chunk
 ydb/core/kqp/ut/yql KqpScripting.StreamExecuteYqlScriptScanOperationTmeoutBruteForce
+ydb/core/mind/hive/ut unittest.[*/*] chunk
 ydb/core/quoter/ut QuoterWithKesusTest.PrefetchCoefficient
 ydb/core/statistics/aggregator/ut AnalyzeColumnshard.AnalyzeRebootColumnShard
-ydb/core/tx/datashard/ut_incremental_backup IncrementalBackup.ComplexRestoreBackupCollection+WithIncremental
+ydb/core/sys_view/ut SystemView.AuthGroupMembers_Access
+ydb/core/sys_view/ut SystemView.ShowCreateTableChangefeeds
+ydb/core/transfer/ut/large TransferLarge.Transfer100KM_10P_LocalRead
+ydb/core/transfer/ut/large TransferLarge.Transfer100KM_10P_LocalRead_TopicAutoPartitioning
+ydb/core/transfer/ut/large TransferLarge.Transfer100KM_10P_RowTable_TopicAutoPartitioning
+ydb/core/transfer/ut/large TransferLarge.Transfer1KM_1KP_RowTable_TopicAutoPartitioning
+ydb/core/tx/conveyor_composite/ut CompositeConveyorTests.TestUniformDistribution
 ydb/core/tx/schemeshard/ut_background_cleaning TSchemeshardBackgroundCleaningTest.SchemeshardBackgroundCleaningTestCreateCleanManyTables
-ydb/core/tx/schemeshard/ut_index_build VectorIndexBuildTest.BaseCase
 ydb/core/tx/schemeshard/ut_login_large TSchemeShardLoginLargeTest.RemoveLogin_Many
-ydb/core/tx/schemeshard/ut_move_reboots TSchemeShardMoveRebootsTest.WithData
-ydb/core/tx/schemeshard/ut_move_reboots TSchemeShardMoveRebootsTest.WithDataAndPersistentPartitionStats
 ydb/core/tx/tiering/ut ColumnShardTiers.TTLUsage
+ydb/core/viewer/tests test.py.test_topic_data
 ydb/core/viewer/tests test.py.test_transfer_describe
 ydb/core/viewer/ut Viewer.TabletMerging
-ydb/core/viewer/ut Viewer.TabletMergingPacked
 ydb/library/actors/interconnect/ut_fat InterconnectZcLocalOp.ZcDisabledAfterHiddenCopy
 ydb/library/actors/interconnect/ut_fat InterconnectZcLocalOp.ZcIsDisabledByDefault
 ydb/library/actors/interconnect/ut_huge_cluster HugeCluster.AllToAll
-ydb/library/actors/interconnect/ut_huge_cluster sole chunk chunk
-ydb/library/yaml_config/ut_transform test_transform.py.TestYamlConfigTransformations.test_basic[args1-dump_ds_init]
-ydb/library/yql/dq/opt/ut sole chunk chunk
-ydb/library/yql/dq/opt/ut InterestingOrderingsShuffle.Join64ChainImitation
+ydb/library/actors/interconnect/ut_huge_cluster unittest.sole chunk
+ydb/library/yql/dq/opt/ut unittest.sole chunk
+ydb/library/yql/tests/sql/dq_file/part11 py2_flake8.sole chunk
+ydb/library/yql/tests/sql/dq_file/part11 pytest.[*/*] chunk
+ydb/library/yql/tests/sql/dq_file/part11 test.py.test[pg-tpch-q02-default.txt-ForceBlocks]
+ydb/mvp/oidc_proxy/ut unittest.sole chunk
+ydb/public/sdk/cpp/src/client/federated_topic/ut BasicUsage.PropagateSessionClosed
+ydb/public/sdk/cpp/src/client/federated_topic/ut unittest.[*/*] chunk
 ydb/public/sdk/cpp/src/client/topic/ut TxUsage.Sinks_Oltp_WriteToTopicAndTable_6_Query
 ydb/public/sdk/cpp/src/client/topic/ut TxUsage.Sinks_Oltp_WriteToTopicAndTable_6_Table
 ydb/public/sdk/cpp/src/client/topic/ut TxUsage.Sinks_Oltp_WriteToTopic_3_Query
-ydb/public/sdk/cpp/src/client/topic/ut TxUsage.WriteToTopic_Demo_25_Query
-ydb/public/sdk/cpp/src/client/topic/ut TxUsage.WriteToTopic_Demo_26_Query
+ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut TxUsage.Sinks_Olap_WriteToTopicAndTable_4_Query
+ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut TxUsage.Sinks_Olap_WriteToTopicAndTable_4_Table
 ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut TxUsage.Sinks_Oltp_WriteToTopicAndTable_6_Query
 ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut TxUsage.Sinks_Oltp_WriteToTopicAndTable_6_Table
 ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut TxUsage.Sinks_Oltp_WriteToTopic_3_Query
-ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut TxUsage.WriteToTopic_Demo_25_Query
-ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut TxUsage.WriteToTopic_Demo_26_Query
-ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut [*/*] chunk chunk
+ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut unittest.[*/*] chunk
 ydb/public/sdk/cpp/tests/integration/sessions_pool YdbSdkSessionsPool.StressTestSync/0
 ydb/public/sdk/cpp/tests/integration/sessions_pool YdbSdkSessionsPool.StressTestSync/1
-ydb/services/ydb/sdk_sessions_ut [*/*] chunk chunk
-ydb/services/ydb/table_split_ut [*/*] chunk chunk
+ydb/public/sdk/cpp/tests/integration/topic TxUsageQuery.WriteToTopic_Demo_26
+ydb/public/sdk/cpp/tests/integration/topic/with_direct_read DirectReadWithClient.ManyMessages
+ydb/public/sdk/cpp/tests/integration/topic/with_direct_read TxUsageQuery.WriteToTopic_Demo_26
+ydb/public/sdk/cpp/tests/integration/topic/with_direct_read gtest.[*/*] chunk
+ydb/services/persqueue_v1/ut TPersQueueTest.CacheHead
+ydb/services/persqueue_v1/ut TPersQueueTest.LOGBROKER_7820
+ydb/services/persqueue_v1/ut TPersQueueTest.TopicServiceCommitOffsetBadOffsets
+ydb/services/persqueue_v1/ut unittest.[*/*] chunk
+ydb/services/persqueue_v1/ut/new_schemecache_ut TPersQueueNewSchemeCacheTest.TestReadAtTimestamp_3
+ydb/services/ydb/backup_ut BackupRestore.RestoreReplicationThatDoesNotUseSecret
+ydb/services/ydb/backup_ut CommonEncryptionRequirementsTest.CommonEncryptionRequirements
+ydb/services/ydb/table_split_ut unittest.[*/*] chunk
+ydb/services/ydb/ut TGRpcAuthentication.NoDescribeRights
 ydb/services/ydb/ut YdbLogStore.AlterLogTable
+ydb/tests/compatibility [test_compatibility.py */*] chunk chunk
+ydb/tests/compatibility [test_example.py */*] chunk chunk
 ydb/tests/compatibility [test_statistics.py */*] chunk chunk
-ydb/tests/compatibility sole chunk chunk
-ydb/tests/compatibility test_compatibility.py.TestCompatibility.test_simple[last_stable_to_current-column]
-ydb/tests/compatibility test_compatibility.py.TestCompatibility.test_simple[last_stable_to_current_mixed-column]
-ydb/tests/compatibility test_compatibility.py.TestCompatibility.test_tpch1[24-4_to_25-1-column-date64]
-ydb/tests/compatibility test_compatibility.py.TestCompatibility.test_tpch1[24-4_to_25-1-column]
-ydb/tests/compatibility test_compatibility.py.TestCompatibility.test_tpch1[24-4_to_25-1-row]
-ydb/tests/compatibility test_compatibility.py.TestCompatibility.test_tpch1[25-1_to_24-4-column-date64]
-ydb/tests/compatibility test_compatibility.py.TestCompatibility.test_tpch1[25-1_to_24-4-column]
-ydb/tests/compatibility test_compatibility.py.TestCompatibility.test_tpch1[25-1_to_24-4-row]
-ydb/tests/compatibility test_compatibility.py.TestCompatibility.test_tpch1[25-1_to_25-1-column-date64]
-ydb/tests/compatibility test_compatibility.py.TestCompatibility.test_tpch1[25-1_to_25-1-column]
-ydb/tests/compatibility test_compatibility.py.TestCompatibility.test_tpch1[25-1_to_25-1-row]
-ydb/tests/compatibility test_compatibility.py.TestCompatibility.test_tpch1[25-1_to_current-column-date64]
-ydb/tests/compatibility test_compatibility.py.TestCompatibility.test_tpch1[25-1_to_current-column]
-ydb/tests/compatibility test_compatibility.py.TestCompatibility.test_tpch1[25-1_to_current-row]
-ydb/tests/compatibility test_compatibility.py.TestCompatibility.test_tpch1[current_to_25-1-column-date64]
-ydb/tests/compatibility test_compatibility.py.TestCompatibility.test_tpch1[current_to_25-1-column]
-ydb/tests/compatibility test_compatibility.py.TestCompatibility.test_tpch1[current_to_25-1-row]
-ydb/tests/compatibility test_compatibility.py.TestCompatibility.test_tpch1[current_to_current-row]
-ydb/tests/compatibility test_compatibility.py.TestCompatibility.test_tpch1[current_to_last_stable-column]
-ydb/tests/compatibility test_compatibility.py.TestCompatibility.test_tpch1[current_to_last_stable-row]
-ydb/tests/compatibility test_compatibility.py.TestCompatibility.test_tpch1[last_stable_to_current-column]
-ydb/tests/compatibility test_compatibility.py.TestCompatibility.test_tpch1[last_stable_to_current-row]
-ydb/tests/compatibility test_compatibility.py.TestCompatibility.test_tpch1[last_stable_to_current_mixed-column]
-ydb/tests/compatibility test_compatibility.py.TestCompatibility.test_tpch1[last_stable_to_current_mixed-row]
-ydb/tests/compatibility test_datetime2.py.TestDatetime2.test_all[25-1_and_24-4]
-ydb/tests/compatibility test_datetime2.py.TestDatetime2.test_all[current_and_25-1]
-ydb/tests/compatibility test_datetime2.py.TestDatetime2Format.test_simple[25-1_and_24-4]
-ydb/tests/compatibility test_datetime2.py.TestDatetime2Format.test_simple[current_and_25-1]
-ydb/tests/compatibility test_example.py.TestExampleRollingUpdate.test_example
-ydb/tests/compatibility test_example.py.TestExampleRollingUpdate.test_example[24-4_to_25-1]
-ydb/tests/compatibility test_example.py.TestExampleRollingUpdate.test_example[25-1_to_current]
-ydb/tests/compatibility test_rolling.py.TestRolling.test_kv[24-4_to_25-1-column]
-ydb/tests/compatibility test_rolling.py.TestRolling.test_kv[24-4_to_25-1-row]
-ydb/tests/compatibility test_rolling.py.TestRolling.test_kv[25-1_to_current-column]
-ydb/tests/compatibility test_rolling.py.TestRolling.test_kv[25-1_to_current-row]
-ydb/tests/compatibility test_rolling.py.TestRolling.test_kv[column]
-ydb/tests/compatibility test_statistics.py.TestStatisticsFollowers.test_statistics_followers[24-4_to_25-1]
-ydb/tests/compatibility test_statistics.py.TestStatisticsFollowers.test_statistics_followers[25-1_to_24-4]
-ydb/tests/compatibility test_stress.py.TestStress.test_kv[current_and_25-1-column]
-ydb/tests/compatibility test_stress.py.TestStress.test_kv[current_and_last_stable-column]
-ydb/tests/compatibility test_stress.py.TestStress.test_log[25-1_and_24-4-column]
-ydb/tests/compatibility test_stress.py.TestStress.test_log[current-column]
-ydb/tests/compatibility test_stress.py.TestStress.test_log[current_and_25-1-column]
-ydb/tests/compatibility test_stress.py.TestStress.test_log[current_and_last_stable-column]
-ydb/tests/compatibility test_stress.py.TestStress.test_tpch1[25-1-column-date64]
-ydb/tests/compatibility test_stress.py.TestStress.test_tpch1[25-1-column]
-ydb/tests/compatibility test_stress.py.TestStress.test_tpch1[25-1-row]
-ydb/tests/compatibility test_stress.py.TestStress.test_tpch1[25-1_and_24-4-column-date64]
-ydb/tests/compatibility test_stress.py.TestStress.test_tpch1[25-1_and_24-4-column]
-ydb/tests/compatibility test_stress.py.TestStress.test_tpch1[current_and_25-1-column-date64]
-ydb/tests/compatibility test_stress.py.TestStress.test_tpch1[current_and_25-1-column]
-ydb/tests/compatibility test_stress.py.TestStress.test_tpch1[current_and_25-1-row]
-ydb/tests/compatibility test_stress.py.TestStress.test_tpch1[current_and_last_stable-column]
-ydb/tests/compatibility test_stress.py.TestStress.test_tpch1[current_and_last_stable-row]
-ydb/tests/compatibility test_stress.py.TestStress.test_tpch1[last_stable-column]
-ydb/tests/compatibility test_stress.py.TestStress.test_tpch1[last_stable-row]
-ydb/tests/compatibility udf.test_datetime2.py.TestDatetime2.test_all[25-1_and_24-4]
-ydb/tests/compatibility udf.test_datetime2.py.TestDatetime2.test_all[current_and_25-1]
-ydb/tests/fq/control_plane_storage [*/*] chunk chunk
+ydb/tests/compatibility [test_transfer.py */*] chunk chunk
+ydb/tests/compatibility flake8.sole chunk
+ydb/tests/compatibility import_test.sole chunk
+ydb/tests/compatibility py3test.[test_compatibility.py */*] chunk
+ydb/tests/compatibility py3test.[test_transfer.py */*] chunk
+ydb/tests/compatibility test_batch_operations.py.TestBatchOperations.test_batch_delete[rolling_stable-24-4_to_stable-25-1-2]
+ydb/tests/compatibility test_batch_operations.py.TestBatchOperations.test_batch_delete[rolling_stable-25-1-2_to_current]
+ydb/tests/compatibility test_batch_operations.py.TestBatchOperations.test_batch_update[rolling_stable-24-4_to_stable-25-1-2]
+ydb/tests/compatibility test_batch_operations.py.TestBatchOperations.test_batch_update[rolling_stable-25-1-2_to_current]
+ydb/tests/compatibility test_batch_operations.py.TestBatchOperations.test_batch_update[rolling_stable-25-1_to_current]
+ydb/tests/compatibility test_compatibility.py.TestCompatibility.test_simple[restart_stable-25-1-2_to_current-column]
+ydb/tests/compatibility test_compatibility.py.TestCompatibility.test_tpch1[restart_current_to_current-row]
+ydb/tests/compatibility test_compatibility.py.TestCompatibility.test_tpch1[restart_current_to_stable-25-1-2-column-date64]
+ydb/tests/compatibility test_compatibility.py.TestCompatibility.test_tpch1[restart_current_to_stable-25-1-2-column]
+ydb/tests/compatibility test_compatibility.py.TestCompatibility.test_tpch1[restart_current_to_stable-25-1-2-row]
+ydb/tests/compatibility test_compatibility.py.TestCompatibility.test_tpch1[restart_current_to_stable-25-1-column-date64]
+ydb/tests/compatibility test_compatibility.py.TestCompatibility.test_tpch1[restart_current_to_stable-25-1-column]
+ydb/tests/compatibility test_compatibility.py.TestCompatibility.test_tpch1[restart_current_to_stable-25-1-row]
+ydb/tests/compatibility test_compatibility.py.TestCompatibility.test_tpch1[restart_stable-24-4_to_stable-25-1-2-column-date64]
+ydb/tests/compatibility test_compatibility.py.TestCompatibility.test_tpch1[restart_stable-24-4_to_stable-25-1-2-column]
+ydb/tests/compatibility test_compatibility.py.TestCompatibility.test_tpch1[restart_stable-24-4_to_stable-25-1-2-row]
+ydb/tests/compatibility test_compatibility.py.TestCompatibility.test_tpch1[restart_stable-25-1-2_to_current-column-date64]
+ydb/tests/compatibility test_compatibility.py.TestCompatibility.test_tpch1[restart_stable-25-1-2_to_current-column]
+ydb/tests/compatibility test_compatibility.py.TestCompatibility.test_tpch1[restart_stable-25-1-2_to_current-row]
+ydb/tests/compatibility test_compatibility.py.TestCompatibility.test_tpch1[restart_stable-25-1-2_to_stable-24-4-column-date64]
+ydb/tests/compatibility test_compatibility.py.TestCompatibility.test_tpch1[restart_stable-25-1-2_to_stable-24-4-column]
+ydb/tests/compatibility test_compatibility.py.TestCompatibility.test_tpch1[restart_stable-25-1-2_to_stable-24-4-row]
+ydb/tests/compatibility test_compatibility.py.TestCompatibility.test_tpch1[restart_stable-25-1-2_to_stable-25-1-2-column-date64]
+ydb/tests/compatibility test_compatibility.py.TestCompatibility.test_tpch1[restart_stable-25-1-2_to_stable-25-1-2-column]
+ydb/tests/compatibility test_compatibility.py.TestCompatibility.test_tpch1[restart_stable-25-1-2_to_stable-25-1-2-row]
+ydb/tests/compatibility test_compatibility.py.TestCompatibility.test_tpch1[restart_stable-25-1_to_current-column-date64]
+ydb/tests/compatibility test_compatibility.py.TestCompatibility.test_tpch1[restart_stable-25-1_to_current-column]
+ydb/tests/compatibility test_compatibility.py.TestCompatibility.test_tpch1[restart_stable-25-1_to_current-row]
+ydb/tests/compatibility test_compatibility.py.TestCompatibility.test_tpch1[restart_stable-25-1_to_stable-25-1-column-date64]
+ydb/tests/compatibility test_compatibility.py.TestCompatibility.test_tpch1[restart_stable-25-1_to_stable-25-1-column]
+ydb/tests/compatibility test_compatibility.py.TestCompatibility.test_tpch1[restart_stable-25-1_to_stable-25-1-row]
+ydb/tests/compatibility test_rolling.py.TestRolling.test_kv[rolling_stable-24-4_to_stable-25-1-2-column]
+ydb/tests/compatibility test_rolling.py.TestRolling.test_kv[rolling_stable-24-4_to_stable-25-1-2-row]
+ydb/tests/compatibility test_rolling.py.TestRolling.test_kv[rolling_stable-25-1-2_to_current-column]
+ydb/tests/compatibility test_rolling.py.TestRolling.test_kv[rolling_stable-25-1_to_current-column]
+ydb/tests/compatibility test_stress.py.TestStress.test_kv[mixed_current_and_stable-25-1-2-column]
+ydb/tests/compatibility test_stress.py.TestStress.test_log[mixed_current-column]
+ydb/tests/compatibility test_stress.py.TestStress.test_log[mixed_current_and_stable-25-1-2-column]
+ydb/tests/compatibility test_stress.py.TestStress.test_log[mixed_current_and_stable-25-1-column]
+ydb/tests/compatibility test_stress.py.TestStress.test_log[mixed_stable-25-1-2_and_stable-24-4-column]
+ydb/tests/compatibility test_stress.py.TestStress.test_log[mixed_stable-25-1-column]
+ydb/tests/compatibility test_stress.py.TestStress.test_tpch1[mixed_current-row]
+ydb/tests/compatibility test_stress.py.TestStress.test_tpch1[mixed_current_and_stable-25-1-2-column-date64]
+ydb/tests/compatibility test_stress.py.TestStress.test_tpch1[mixed_current_and_stable-25-1-2-column]
+ydb/tests/compatibility test_stress.py.TestStress.test_tpch1[mixed_current_and_stable-25-1-2-row]
+ydb/tests/compatibility test_stress.py.TestStress.test_tpch1[mixed_current_and_stable-25-1-column-date64]
+ydb/tests/compatibility test_stress.py.TestStress.test_tpch1[mixed_current_and_stable-25-1-column]
+ydb/tests/compatibility test_stress.py.TestStress.test_tpch1[mixed_stable-25-1-2-column-date64]
+ydb/tests/compatibility test_stress.py.TestStress.test_tpch1[mixed_stable-25-1-2-column]
+ydb/tests/compatibility test_stress.py.TestStress.test_tpch1[mixed_stable-25-1-2-row]
+ydb/tests/compatibility test_stress.py.TestStress.test_tpch1[mixed_stable-25-1-2_and_stable-24-4-column-date64]
+ydb/tests/compatibility test_stress.py.TestStress.test_tpch1[mixed_stable-25-1-2_and_stable-24-4-column]
+ydb/tests/compatibility test_stress.py.TestStress.test_tpch1[mixed_stable-25-1-2_and_stable-24-4-row]
+ydb/tests/compatibility test_stress.py.TestStress.test_tpch1[mixed_stable-25-1-column-date64]
+ydb/tests/compatibility test_stress.py.TestStress.test_tpch1[mixed_stable-25-1-column]
+ydb/tests/compatibility test_stress.py.TestStress.test_tpch1[mixed_stable-25-1-row]
+ydb/tests/compatibility test_transfer.py.TestTransferRestartToAnotherVersion.test_transfer[restart_current_to_stable-25-1-2-row-False]
+ydb/tests/compatibility test_transfer.py.TestTransferRestartToAnotherVersion.test_transfer[restart_current_to_stable-25-1-row-False]
+ydb/tests/compatibility test_transfer.py.TestTransferRollingUpdate.test_transfer[rolling_stable-25-1-2_to_current-row-False]
+ydb/tests/compatibility test_transfer.py.TestTransferRollingUpdate.test_transfer[rolling_stable-25-1_to_current-row-False]
+ydb/tests/datashard/vector_index/large test_vector_index.py.TestVectorIndex.test_vector_index
+ydb/tests/datashard/vector_index/large test_vector_index_large_levels_and_clusters.py.TestVectorIndexLargeLevelsAndClusters.test_vecot_index_large_levels_and_clusters
+ydb/tests/fq/control_plane_storage unittest.[*/*] chunk
 ydb/tests/fq/mem_alloc test_scheduling.py.TestSchedule.test_skip_busy[kikimr0]
 ydb/tests/fq/multi_plane [test_retry.py] chunk chunk
 ydb/tests/fq/multi_plane [test_retry_high_rate.py] chunk chunk
-ydb/tests/fq/yds [*/*] chunk chunk
+ydb/tests/fq/yds py3test.[*/*] chunk
 ydb/tests/fq/yds test_2_selects_limit.py.TestSelectLimit.test_select_same[v1]
 ydb/tests/fq/yds test_2_selects_limit.py.TestSelectLimit.test_select_sequence[v1]
 ydb/tests/fq/yds test_mem_alloc.py.TestMemAlloc.test_hop_alloc[v1]
@@ -147,18 +178,40 @@ ydb/tests/fq/yds test_mem_alloc.py.TestMemAlloc.test_join_alloc[v1]
 ydb/tests/fq/yds test_recovery.py.TestRecovery.test_ic_disconnection
 ydb/tests/fq/yds test_select_limit_db_id.py.TestSelectLimitWithDbId.test_select_same_with_id[v1-mvp_external_ydb_endpoint0]
 ydb/tests/fq/yds test_yds_bindings.py.TestBindings.test_yds_insert[v1]
+ydb/tests/functional/bridge [test_bridge.py */*] chunk chunk
+ydb/tests/functional/bridge test_bridge.py.TestBridgeBasic.test_update_and_get_cluster_state
+ydb/tests/functional/bridge test_bridge.py.TestBridgeValidation.test_invalid_updates[updates0-no_updates]
+ydb/tests/functional/bridge test_bridge.py.TestBridgeValidation.test_invalid_updates[updates1-multiple_primary_piles_in_request]
+ydb/tests/functional/bridge test_bridge.py.TestBridgeValidation.test_invalid_updates[updates2-no_primary_pile_in_result]
+ydb/tests/functional/bridge test_bridge.py.TestBridgeValidation.test_invalid_updates[updates3-duplicate_pile_update]
+ydb/tests/functional/bridge test_bridge.py.TestBridgeValidation.test_invalid_updates[updates4-invalid_pile_id]
+ydb/tests/functional/bridge test_bridge.py.flake8
 ydb/tests/functional/config [test_distconf.py */*] chunk chunk
+ydb/tests/functional/config [test_distconf_generate_config.py */*] chunk chunk
 ydb/tests/functional/config test_config_migration.py.TestConfigMigrationToV2.test_migration_to_v2
 ydb/tests/functional/config test_distconf.py.TestKiKiMRDistConfBasic.test_cluster_expand_with_distconf
+ydb/tests/functional/config test_distconf.py.TestKiKiMRDistConfBasic.test_cluster_expand_with_seed_nodes
 ydb/tests/functional/config test_distconf.py.TestKiKiMRDistConfBasic.test_cluster_is_operational_with_distconf
-ydb/tests/functional/config test_distconf.py.TestKiKiMRDistConfReassignStateStorageMultipleRingGroup.test_cluster_change_state_storage
+ydb/tests/functional/config test_distconf_generate_config.py.TestKiKiMRDistConfGenerateConfig2Nodes.test
+ydb/tests/functional/config test_distconf_generate_config.py.TestKiKiMRDistConfGenerateConfig3Nodes.test
+ydb/tests/functional/config test_distconf_generate_config.py.TestKiKiMRDistConfGenerateConfig6Nodes.test
+ydb/tests/functional/config test_distconf_generate_config.py.TestKiKiMRDistConfGenerateConfig8Nodes.test
+ydb/tests/functional/config test_distconf_generate_config.py.TestKiKiMRDistConfGenerateConfig9Nodes.test
+ydb/tests/functional/config test_distconf_reassign_state_storage.py.TestKiKiMRDistConfReassignStateStorage.test_cluster_change_state_storage
+ydb/tests/functional/config test_distconf_reassign_state_storage.py.TestKiKiMRDistConfReassignStateStorageBadCases.test_cluster_change_state_storage
+ydb/tests/functional/config test_distconf_reassign_state_storage.py.TestKiKiMRDistConfReassignStateStorageMultipleRingGroup.test_cluster_change_state_storage
+ydb/tests/functional/config test_distconf_reassign_state_storage.py.TestKiKiMRDistConfReassignStateStorageNoChanges.test_cluster_change_state_storage
+ydb/tests/functional/config test_distconf_reassign_state_storage.py.TestKiKiMRDistConfReassignStateStorageToTheSameConfig.test_cluster_change_state_storage
+ydb/tests/functional/encryption test_encryption.py.TestEncryption.test_simple_encryption
 ydb/tests/functional/hive test_drain.py.TestHive.test_drain_on_stop
 ydb/tests/functional/rename [test_rename.py */*] chunk chunk
-ydb/tests/functional/serializable sole chunk chunk
+ydb/tests/functional/serializable flake8.sole chunk
+ydb/tests/functional/serializable import_test.sole chunk
+ydb/tests/functional/serializable py3test.sole chunk
 ydb/tests/functional/serverless test_serverless.py.test_database_with_disk_quotas[enable_alter_database_create_hive_first--false]
 ydb/tests/functional/serverless test_serverless.py.test_database_with_disk_quotas[enable_alter_database_create_hive_first--true]
 ydb/tests/functional/suite_tests [test_postgres.py */*] chunk chunk
-ydb/tests/functional/suite_tests test_postgres.py.TestPGSQL.test_sql_suite[results-select.test]
+ydb/tests/functional/tenants test_dynamic_tenants.py.test_create_and_drop_tenants[enable_alter_database_create_hive_first--true]
 ydb/tests/functional/tenants test_dynamic_tenants.py.test_create_and_drop_the_same_tenant2[enable_alter_database_create_hive_first--false]
 ydb/tests/functional/tenants test_dynamic_tenants.py.test_create_and_drop_the_same_tenant2[enable_alter_database_create_hive_first--true]
 ydb/tests/functional/tenants test_tenants.py.TestTenants.test_create_drop_create_table3[enable_alter_database_create_hive_first--false]
@@ -168,59 +221,25 @@ ydb/tests/functional/tenants test_tenants.py.TestTenants.test_list_database_abov
 ydb/tests/functional/tenants test_tenants.py.TestTenants.test_stop_start[enable_alter_database_create_hive_first--false]
 ydb/tests/functional/tenants test_tenants.py.TestTenants.test_stop_start[enable_alter_database_create_hive_first--true]
 ydb/tests/functional/tpc/large [test_tpcds.py] chunk chunk
-ydb/tests/functional/tpc/large sole chunk chunk
-ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS1.test_tpcds[14]
-ydb/tests/functional/ydb_cli test_ydb_impex.py.TestImpex.test_big_dataset[tsv-additional_args3-column]
-ydb/tests/olap [*/*] chunk chunk
-ydb/tests/olap sole chunk chunk
-ydb/tests/olap test_log_scenario.py.TestLogScenario.test_log_deviation[1051200]
-ydb/tests/olap test_log_scenario.py.TestLogScenario.test_log_deviation[180]
-ydb/tests/olap/scenario sole chunk chunk
-ydb/tests/olap/scenario test_alter_compression.py.TestAlterCompression.test[alter_compression]
+ydb/tests/functional/tpc/large flake8.sole chunk
+ydb/tests/functional/tpc/large import_test.sole chunk
+ydb/tests/functional/ydb_cli test_ydb_backup.py.TestDatabaseBackup.test_database_backup
+ydb/tests/functional/ydb_cli test_ydb_backup.py.TestDatabaseBackupRestore.test_database_backup_restore
+ydb/tests/olap flake8.sole chunk
+ydb/tests/olap import_test.sole chunk
+ydb/tests/olap py3test.[*/*] chunk
+ydb/tests/olap/scenario flake8.sole chunk
+ydb/tests/olap/scenario import_test.sole chunk
 ydb/tests/olap/scenario test_alter_tiering.py.TestAlterTiering.test[many_tables]
-ydb/tests/olap/scenario test_insert.py.TestInsert.test[read_data_during_bulk_upsert]
-ydb/tests/olap/scenario test_insert.py.TestInsert.test_multi[read_data_during_bulk_upsert]
 ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[Test64BitErrorChecking]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestAppendEncodedText]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestAppendEscapedTextExistingBuffer]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestAppendEscapedText]
 ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestArrayScanBackend]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestArrayScanner]
 ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestArrayValueBackend]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestArrayValuer]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestBadConn]
 ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestBinaryByteSliceToInt]
 ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestBinaryByteSlicetoUUID]
 ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestBindError]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestBoolArrayScanBytes]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestBoolArrayScanEmpty]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestBoolArrayScanError]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestBoolArrayScanNil]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestBoolArrayScanString]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestBoolArrayScanUnsupported]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestBoolArrayValue]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestByteSliceToText]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestByteaArrayScanBytes]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestByteaArrayScanEmpty]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestByteaArrayScanError]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestByteaArrayScanNil]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestByteaArrayScanString]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestByteaArrayScanUnsupported]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestByteaArrayValue]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestByteaOutputFormatEncoding]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestByteaOutputFormats]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestCloseBadConn]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestCommitInFailedTransactionWithCancelContext]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestCommitInFailedTransaction]
 ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestCommit]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestConnClose]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestConnExecDeadlock]
 ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestConnListen]
 ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestConnPing]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestConnPrepareContext/context.Background]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestConnPrepareContext/context.WithTimeout]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestConnPrepareContext/context.WithTimeout_exceeded]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestConnPrepareContext]
 ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestConnUnlistenAll]
 ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestConnUnlisten]
 ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestConnectorWithNoticeHandler_Simple]
@@ -232,148 +251,51 @@ ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generate
 ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestCopyInBinaryError]
 ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestCopyInMultipleValues]
 ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestCopyInRaiseStmtTrigger]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestCopyInSchemaStmt]
 ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestCopyInStmtAffectedRows]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestCopyInStmt]
 ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestCopyInTypes]
 ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestCopyInWrongType]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestCopyOutsideOfTxnError]
 ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestCopyRespLoopConnectionError]
 ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestCopySyntaxError]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestDataTypeLength]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestDataTypeName]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestDataTypePrecisionScale]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestDataType]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestDecodeBool]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestDecodeUUIDBackend]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestDecodeUUIDBinaryError]
 ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestEmptyQuery]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestEmptyResultSetColumns]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestEncodeAndParseTs]
 ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestEncodeDecode]
 ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestErrorClass]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestErrorDuringStartupClosesConn]
 ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestErrorDuringStartup]
 ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestErrorOnExec]
 ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestErrorOnQueryRowSimpleQuery]
 ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestErrorOnQuery]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestErrorSQLState]
 ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestExec]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestFloat32ArrayScanBytes]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestFloat32ArrayScanEmpty]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestFloat32ArrayScanError]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestFloat32ArrayScanNil]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestFloat32ArrayScanString]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestFloat32ArrayScanUnsupported]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestFloat32ArrayValue]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestFloat64ArrayScanBytes]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestFloat64ArrayScanEmpty]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestFloat64ArrayScanError]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestFloat64ArrayScanNil]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestFloat64ArrayScanString]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestFloat64ArrayScanUnsupported]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestFloat64ArrayValue]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestFormatAndParseTimestamp]
 ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestFormatTsBackend]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestFormatTs]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestFullParseURL]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestGenericArrayScanDelimiter]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestGenericArrayScanErrors]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestGenericArrayScanScannerArrayBytes]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestGenericArrayScanScannerArrayString]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestGenericArrayScanScannerSliceBytes]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestGenericArrayScanScannerSliceEmpty]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestGenericArrayScanScannerSliceNil]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestGenericArrayScanScannerSliceString]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestGenericArrayScanUnsupported]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestGenericArrayValueErrors]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestGenericArrayValueUnsupported]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestGenericArrayValue]
 ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestHasCorrectRootGroupPermissions]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestIPv6LoopbackParseURL]
 ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestInfinityTimestamp]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestInt32ArrayScanBytes]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestInt32ArrayScanEmpty]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestInt32ArrayScanError]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestInt32ArrayScanNil]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestInt32ArrayScanString]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestInt32ArrayScanUnsupported]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestInt32ArrayValue]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestInt64ArrayScanBytes]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestInt64ArrayScanEmpty]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestInt64ArrayScanError]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestInt64ArrayScanNil]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestInt64ArrayScanString]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestInt64ArrayScanUnsupported]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestInt64ArrayValue]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestInvalidProtocolParseURL]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestIsUTF8]
 ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestIssue1046]
 ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestIssue1062]
 ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestIssue186]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestIssue196]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestIssue282]
 ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestIssue494]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestIssue617]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestListenerClose]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestListenerConnCloseWhileQueryIsExecuting]
 ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestListenerFailedQuery]
 ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestListenerListen]
 ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestListenerPing]
 ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestListenerReconnect]
 ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestListenerUnlistenAll]
 ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestListenerUnlisten]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestMinimalURL]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestMultipleEmptyResult]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestMultipleResult]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestMultipleSimpleQuery]
 ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestNewConnector_Connect]
 ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestNewConnector_Driver]
 ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestNewConnector_WorksWithOpenDB]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestNewListenerConn]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestNoData]
 ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestNotifyExtra]
 ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestNullAfterNonNull]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestOpenURL]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestParameterCountMismatch]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestParseArrayError]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestParseArray]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestParseComplete]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestParseEnviron]
 ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestParseErrorInExtendedQuery]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestParseOpts]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestParseTsErrors]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestParseTs]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestPgpass]
 ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestPing]
 ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestQueryCancelRace]
 ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestQueryCancelledReused]
 ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestQueryRowBugWorkaround]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestQuickClose]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestQuoteIdentifier]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestQuoteLiteral]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestReadFloatPrecision]
 ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestReconnect]
 ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestReturning]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestRowsCloseBeforeDone]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestRowsColumnTypes]
 ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestRowsResultTag]
 ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestRuntimeParameters]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestSNISupport/SNI_is_not_passed_when_disabled]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestSNISupport/SNI_is_not_set_for_IPv4]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestSNISupport/SNI_is_passed_when_asked_for]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestSNISupport/SNI_is_set_by_default]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestSNISupport]
 ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestSSLClientCertificates]
 ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestSSLConnection]
 ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestSSLRequireWithRootCert]
 ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestSSLVerifyCA]
 ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestSSLVerifyFull]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestScanNilTimestamp]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestScanTimestamp]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestSimpleParseURL]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestSimpleQuery]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestStatment]
 ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestStmtExecContext/context.Background]
 ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestStmtExecContext/context.WithTimeout]
 ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestStmtExecContext/context.WithTimeout_exceeded]
@@ -382,41 +304,16 @@ ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generate
 ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestStmtQueryContext/context.WithTimeout]
 ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestStmtQueryContext/context.WithTimeout_exceeded]
 ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestStmtQueryContext]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestStringArrayScanBytes]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestStringArrayScanEmpty]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestStringArrayScanError]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestStringArrayScanNil]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestStringArrayScanString]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestStringArrayScanUnsupported]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestStringArrayValue]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestStringToBytea]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestStringToUUID]
 ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestStringWithNul]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestTextByteSliceToInt]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestTextByteSliceToUUID]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestTextDecodeIntoString]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestTimeWithTimezone/11:59:59+00:00_=>_0000-01-01T11:59:59Z]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestTimeWithTimezone/11:59:59+04:00_=>_0000-01-01T11:59:59+04:00]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestTimeWithTimezone/11:59:59+04:01:02_=>_0000-01-01T11:59:59+04:01]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestTimeWithTimezone/11:59:59-04:01:02_=>_0000-01-01T11:59:59-04:01]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestTimeWithTimezone/24:00+00_=>_0000-01-02T00:00:00Z]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestTimeWithTimezone/24:00-04:00_=>_0000-01-02T00:00:00-04:00]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestTimeWithTimezone/24:00:00+00_=>_0000-01-02T00:00:00Z]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestTimeWithTimezone/24:00:00.0+00_=>_0000-01-02T00:00:00Z]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestTimeWithTimezone/24:00:00.000000+00_=>_0000-01-02T00:00:00Z]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestTimeWithTimezone/24:00Z_=>_0000-01-02T00:00:00Z]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestTimeWithTimezone]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestTimeWithoutTimezone/11:59:59_=>_0000-01-01T11:59:59Z]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestTimeWithoutTimezone/24:00:00.000000_=>_0000-01-02T00:00:00Z]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestTimeWithoutTimezone/24:00:00.0_=>_0000-01-02T00:00:00Z]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestTimeWithoutTimezone/24:00:00_=>_0000-01-02T00:00:00Z]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestTimeWithoutTimezone/24:00_=>_0000-01-02T00:00:00Z]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestTimeWithoutTimezone]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestTimestampWithOutTimezone]
 ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestTimestampWithTimeZone]
 ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestTxOptions]
 ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestXactMultiStmt]
-ydb/tests/sql/large sole chunk chunk
+ydb/tests/sql/large flake8.sole chunk
+ydb/tests/sql/large import_test.sole chunk
 ydb/tests/stress/log/tests test_workload.py.TestYdbLogWorkload.test[column]
-ydb/tests/stress/mixedpy test_mixed.py.TestYdbMixedWorkload.test[column]
+ydb/tests/stress/reconfig_state_storage_workload/tests flake8.sole chunk
+ydb/tests/stress/reconfig_state_storage_workload/tests import_test.sole chunk
+ydb/tests/stress/reconfig_state_storage_workload/tests py3test.sole chunk
+ydb/tests/stress/reconfig_state_storage_workload/tests test_board_workload.py.TestReconfigStateStorageBoardWorkload.test_state_storage_board
+ydb/tests/stress/reconfig_state_storage_workload/tests test_state_storage_workload.py.TestReconfigStateStorageWorkload.test_state_storage
 ydb/tools/stress_tool/ut TDeviceTestTool.PDiskTestLogWrite

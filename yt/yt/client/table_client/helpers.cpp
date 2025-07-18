@@ -791,6 +791,19 @@ void FromUnversionedValue(TError* value, TUnversionedValue unversionedValue)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+void ToUnversionedCompositeValue(
+    TUnversionedValue* unversionedValue,
+    NYson::TYsonStringBuf value,
+    const TRowBufferPtr& rowBuffer,
+    int id,
+    EValueFlags flags)
+{
+    YT_VERIFY(value.GetType() == EYsonType::Node);
+    *unversionedValue = rowBuffer->CaptureValue(MakeUnversionedCompositeValue(value.AsStringBuf(), id, flags));
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 void ProtobufToUnversionedValueImpl(
     TUnversionedValue* unversionedValue,
     const Message& value,
@@ -1687,7 +1700,7 @@ void SetBit(TMutableRef bitmap, i64 index, bool value)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TString EscapeCAndSingleQuotes(TStringBuf str)
+std::string EscapeCAndSingleQuotes(TStringBuf str)
 {
     auto escaped = TString();
     escaped.reserve(str.size() * 2);

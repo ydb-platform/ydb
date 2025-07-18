@@ -8,7 +8,10 @@ See also [{#T}](yandex-enterprise-database.md).
 
 #|
 || Version |  Release date | Download | Changelog ||
+|| **v25.1** | > | > | > ||
+|| v.25.1.2.7-rc | 14.07.25 | [Binary file](https://binaries.ydb.tech/release/25.1.2.7-rc/ydbd-25.1.2.7-rc-linux-amd64.tar.gz) | [See list](../changelog-server.md#25-1-2-7-rc) ||
 || **v24.4** | > | > | > ||
+|| v.24.4.4.12  | 03.06.25 | [Binary file](https://binaries.ydb.tech/release/24.4.4.12/ydbd-24.4.4.12-linux-amd64.tar.gz) | [See list](../changelog-server.md#24-4-4-12) ||
 || v.24.4.4.2   | 15.04.25 | [Binary file](https://binaries.ydb.tech/release/24.4.4.2/ydbd-24.4.4.2-linux-amd64.tar.gz) | [See list](../changelog-server.md#24-4-4-2) ||
 || **v24.3** | > | > | > ||
 || v.24.3.15.5   | 06.02.25 | [Binary file](https://binaries.ydb.tech/release/24.3.15.5/ydbd-24.3.15.5-linux-amd64.tar.gz) | [See list](../changelog-server.md#24-3-15-5) ||
@@ -31,7 +34,10 @@ See also [{#T}](yandex-enterprise-database.md).
 
 #|
 || Version |  Release date | Download | Changelog ||
+|| **v25.1** | > | > | > ||
+|| v.25.1.2.7-rc  | 14.07.25  | `cr.yandex/crptqonuodf51kdj7a7d/ydb:25.1.2.7-rc` | [See list](../changelog-server.md#25-1-2-7-rc) ||
 || **v24.4** | > | > | > ||
+|| v.24.4.4.12 | 03.06.25 | `cr.yandex/crptqonuodf51kdj7a7d/ydb:24.4.4.12` | [See list](../changelog-server.md#24-4-4-12) ||
 || v.24.4.4.2  | 15.04.25 | `cr.yandex/crptqonuodf51kdj7a7d/ydb:24.4.4.2` | [See list](../changelog-server.md#24-4-4-2) ||
 || **v24.3** | > | > | > ||
 || v.24.3.15.5  | 06.02.25 | `cr.yandex/crptqonuodf51kdj7a7d/ydb:24.3.15.5` | [See list](../changelog-server.md#24-3-15-5) ||
@@ -54,7 +60,10 @@ See also [{#T}](yandex-enterprise-database.md).
 
 #|
 || Version |  Release date | Link | Changelog ||
+|| **v25.1** | > | > | > ||
+|| v.25.1.2.7-rc  | 14.07.25 | [https://github.com/ydb-platform/ydb/tree/25.1.2.7-rc](https://github.com/ydb-platform/ydb/tree/25.1.2.7-rc) | [See list](../changelog-server.md#25-1-2-7-rc) ||
 || **v24.4** | > | > | > ||
+|| v.24.4.4.12  | 03.06.25 | [https://github.com/ydb-platform/ydb/tree/24.4.4.12](https://github.com/ydb-platform/ydb/tree/24.4.4.12) | [See list](../changelog-server.md#24-4-4-12) ||
 || v.24.4.4.2  | 15.04.25 | [https://github.com/ydb-platform/ydb/tree/24.4.4.2](https://github.com/ydb-platform/ydb/tree/24.4.4.2) | [See list](../changelog-server.md#24-4-4-2) ||
 || **v24.3** | > | > | > ||
 || v.24.3.15.5  | 06.02.25 | [https://github.com/ydb-platform/ydb/tree/24.3.15.5](https://github.com/ydb-platform/ydb/tree/24.3.15.5) | [See list](../changelog-server.md#24-3-15-5) ||

@@ -41,6 +41,8 @@ public:
                     "Using new subscription id=" << SubscriptionId);
 
         Self->Committed.ConfigSubscriptionId = SubscriptionId;
+
+        Self->UpdateCommittedStateCounters();
     }
 
 private:

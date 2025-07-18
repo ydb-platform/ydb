@@ -251,6 +251,12 @@ enum ESimpleCounters {
     COUNTER_SYS_VIEW_COUNT = 196                    [(CounterOpts) = {Name: "SysViewCount"}];
     COUNTER_IN_FLIGHT_OPS_TxCreateSysView = 197     [(CounterOpts) = {Name: "InFlightOps/CreateSysView"}];
     COUNTER_IN_FLIGHT_OPS_TxDropSysView = 198       [(CounterOpts) = {Name: "InFlightOps/DropSysView"}];
+
+    COUNTER_IN_FLIGHT_OPS_TxCreateLongIncrementalRestoreOp = 199       [(CounterOpts) = {Name: "InFlightOps/CreateLongIncrementalRestoreOp"}];
+    COUNTER_IN_FLIGHT_OPS_TxChangePathState = 200                     [(CounterOpts) = {Name: "InFlightOps/ChangePathState"}];
+
+    COUNTER_IN_FLIGHT_OPS_TxRotateCdcStream = 201        [(CounterOpts) = {Name: "InFlightOps/RotateCdcStream"}];
+    COUNTER_IN_FLIGHT_OPS_TxRotateCdcStreamAtTable = 202 [(CounterOpts) = {Name: "InFlightOps/RotateCdcStreamAtTable"}];
 }
 
 enum ECumulativeCounters {
@@ -404,6 +410,12 @@ enum ECumulativeCounters {
 
     COUNTER_FINISHED_OPS_TxCreateSysView = 119              [(CounterOpts) = {Name: "FinishedOps/CreateSysView"}];
     COUNTER_FINISHED_OPS_TxDropSysView = 120                [(CounterOpts) = {Name: "FinishedOps/DropSysView"}];
+
+    COUNTER_FINISHED_OPS_TxCreateLongIncrementalRestoreOp = 121       [(CounterOpts) = {Name: "FinishedOps/CreateLongIncrementalRestoreOp"}];
+    COUNTER_FINISHED_OPS_TxChangePathState = 122                     [(CounterOpts) = {Name: "FinishedOps/ChangePathState"}];
+
+    COUNTER_FINISHED_OPS_TxRotateCdcStream = 123        [(CounterOpts) = {Name: "FinishedOps/RotateCdcStream"}];
+    COUNTER_FINISHED_OPS_TxRotateCdcStreamAtTable = 124 [(CounterOpts) = {Name: "FinishedOps/RotateCdcStreamAtTable"}];
 }
 
 enum EPercentileCounters {
@@ -645,4 +657,9 @@ enum ETxTypes {
 
     TXTYPE_ADD_SHARDS_DATA_ERASURE = 98 [(TxTypeOpts) = {Name: "TxAddShardsDataErasure"}];
     TXTYPE_CANCEL_SHARDS_DATA_ERASURE = 99 [(TxTypeOpts) = {Name: "TxCancelShardsDataErasure"}];
+
+    TXTYPE_LOGIN_FINALIZE = 100 [(TxTypeOpts) = {Name: "TxLoginFinalize"}];
+
+    TXTYPE_PROGRESS_INCREMENTAL_RESTORE = 101 [(TxTypeOpts) = {Name: "TxProgressIncrementalRestore"}];
+    TXTYPE_INCREMENTAL_RESTORE_SHARD_RESPONSE = 102 [(TxTypeOpts) = {Name: "TxIncrementalRestoreShardResponse"}];
 }

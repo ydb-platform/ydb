@@ -140,6 +140,39 @@ std::vector<TValueExample> GetPrimitiveValueExamples()
         TValueExample{Yson(), "qux", R"("qux")"},
 
         TValueExample{Decimal(3, 2), NDecimal::TDecimal::TextToBinary("3.14", 3, 2), R"("\x80\x00\x01\x3a")"},
+
+        TValueExample{
+            TzDate(),
+            TString(TStringBuf("\x00\x2a\x45\x75\x72\x6f\x70\x65\x2f\x4d\x6f\x73\x63\x6f\x77"sv)),
+            TString(TStringBuf(R"("\x00\x2a\x45\x75\x72\x6f\x70\x65\x2f\x4d\x6f\x73\x63\x6f\x77")"))
+        },
+
+        TValueExample{
+            TzDatetime(),
+            TString(TStringBuf("\x00\x00\x00\x2a\x45\x75\x72\x6f\x70\x65\x2f\x4d\x6f\x73\x63\x6f\x77"sv)),
+            TString(TStringBuf(R"("\x00\x00\x00\x2a\x45\x75\x72\x6f\x70\x65\x2f\x4d\x6f\x73\x63\x6f\x77")"))
+        },
+        TValueExample{
+            TzTimestamp(),
+            TString(TStringBuf("\x00\x00\x00\x00\x00\x00\x00\x2a\x45\x75\x72\x6f\x70\x65\x2f\x4d\x6f\x73\x63\x6f\x77"sv)),
+            TString(TStringBuf(R"("\x00\x00\x00\x00\x00\x00\x00\x2a\x45\x75\x72\x6f\x70\x65\x2f\x4d\x6f\x73\x63\x6f\x77")"))
+        },
+        TValueExample{
+            TzDate32(),
+            TString(TStringBuf("\x00\x00\x00\x2a\x45\x75\x72\x6f\x70\x65\x2f\x4d\x6f\x73\x63\x6f\x77"sv)),
+            TString(TStringBuf(R"("\x00\x00\x00\x2a\x45\x75\x72\x6f\x70\x65\x2f\x4d\x6f\x73\x63\x6f\x77")"))
+        },
+        TValueExample{
+            TzDatetime64(),
+            TString(TStringBuf("\x00\x00\x00\x00\x00\x00\x00\x2a\x45\x75\x72\x6f\x70\x65\x2f\x4d\x6f\x73\x63\x6f\x77"sv)),
+            TString(TStringBuf(R"("\x00\x00\x00\x00\x00\x00\x00\x2a\x45\x75\x72\x6f\x70\x65\x2f\x4d\x6f\x73\x63\x6f\x77")"))
+        },
+        TValueExample{
+            TzTimestamp64(),
+            TString(TStringBuf("\x00\x00\x00\x00\x00\x00\x00\x2a\x45\x75\x72\x6f\x70\x65\x2f\x4d\x6f\x73\x63\x6f\x77"sv)),
+            TString(TStringBuf(R"("\x00\x00\x00\x00\x00\x00\x00\x2a\x45\x75\x72\x6f\x70\x65\x2f\x4d\x6f\x73\x63\x6f\x77")"))
+        },
+
     };
 
     THashSet<ESimpleLogicalValueType> allValueTypes;
@@ -151,11 +184,10 @@ std::vector<TValueExample> GetPrimitiveValueExamples()
             allValueTypes.erase(example.LogicalType->AsSimpleTypeRef().GetElement());
         }
     }
-    // TODO(nadya02): YT-15805: Support tz types.
-    // if (!allValueTypes.empty()) {
-    //     THROW_ERROR_EXCEPTION("PrimitiveTypeExample variable doesn't contain values: %v",
-    //         allValueTypes);
-    // }
+    if (!allValueTypes.empty()) {
+        THROW_ERROR_EXCEPTION("PrimitiveTypeExample variable doesn't contain values: %v",
+            allValueTypes);
+    }
     return valueExamples;
 }
 

@@ -1,27 +1,25 @@
 # -*- coding: utf-8 -*-
 import os
-
 import pytest
-
 import yatest
 
-from ydb.tests.library.harness.kikimr_runner import KiKiMR
-from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
+from ydb.tests.library.stress.fixtures import StressFixture
 
 
-class TestYdbLogWorkload(object):
-    @classmethod
-    def setup_class(cls):
-        cls.cluster = KiKiMR(KikimrConfigGenerator())
-        cls.cluster.start()
+class TestYdbLogWorkload(StressFixture):
+    @pytest.fixture(autouse=True, scope="function")
+    def setup(self):
+        yield from self.setup_cluster(
+            column_shard_config={
+                'disabled_on_scheme_shard': False,
+            })
 
-    @classmethod
-    def get_command_prefix(cls, subcmds: list[str], path: str) -> list[str]:
+    def get_command_prefix(self, subcmds: list[str], path: str) -> list[str]:
         return [
             yatest.common.binary_path(os.getenv('YDB_CLI_BINARY')),
             '--verbose',
-            '--endpoint', 'grpc://localhost:%d' % cls.cluster.nodes[1].grpc_port,
-            '--database=/Root',
+            '--endpoint', self.endpoint,
+            '--database={}'.format(self.database),
             'workload', 'log'
         ] + subcmds + [
             '--path', path
@@ -35,10 +33,6 @@ class TestYdbLogWorkload(object):
             '--key-cols', '4',
             '--len', '200',
         ]
-
-    @classmethod
-    def teardown_class(cls):
-        cls.cluster.stop()
 
     @pytest.mark.parametrize('store_type', ['row', 'column'])
     def test(self, store_type):

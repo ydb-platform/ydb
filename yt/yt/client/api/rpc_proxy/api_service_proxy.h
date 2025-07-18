@@ -83,6 +83,7 @@ public:
 
     // Chaos
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, AlterReplicationCard);
+    DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, PingChaosLease);
 
     // Queues
     // COMPAT(nadya73): For compatability with old versions of clients.
@@ -112,6 +113,7 @@ public:
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, PatchOperationSpec);
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, GetOperation);
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, ListOperations);
+    DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, ListOperationEvents);
 
     // Jobs
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, ListJobs);

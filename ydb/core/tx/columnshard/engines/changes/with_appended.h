@@ -72,14 +72,14 @@ public:
     void AddMovePortions(const std::vector<std::shared_ptr<TPortionInfo>>& portions) {
         PortionsToMove.AddPortions(portions);
         for (auto&& i : portions) {
-            PortionsToAccess->AddPortion(i);
+            PortionsToAccess.emplace_back(i);
         }
     }
 
     void AddPortionToRemove(const TPortionInfo::TConstPtr& info, const bool addIntoDataAccessRequest = true) {
         AFL_VERIFY(PortionsToRemove.AddPortion(info));
         if (addIntoDataAccessRequest) {
-            PortionsToAccess->AddPortion(info);
+            PortionsToAccess.emplace_back(info);
         }
     }
 

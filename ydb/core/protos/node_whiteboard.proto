@@ -146,6 +146,7 @@ message TPDiskStateInfo {
     optional uint32 ExpectedSlotCount = 22 [(DefaultField) = true];
     optional uint64 EnforcedDynamicSlotSize = 23 [(DefaultField) = true];
     optional uint32 NumActiveSlots = 24 [(DefaultField) = true];
+    optional uint32 SlotSizeInUnits = 25;
 }
 
 message TEvPDiskStateRequest {
@@ -230,6 +231,8 @@ message TVDiskStateInfo {
     optional uint64 ReadThroughput = 22 [(DefaultField) = true];
     // Write bytes per second to PDisk for TEvVPut blobs and replication bytes only
     optional uint64 WriteThroughput = 23 [(DefaultField) = true];
+
+    optional uint32 GroupSizeInUnits = 32;
 }
 
 message TEvVDiskStateRequest {
@@ -263,6 +266,7 @@ message TBSGroupStateInfo {
     optional uint64 BlobDepotId = 21 [(DefaultField) = true]; // if set, then this is virtual group
     optional bool NoVDisksInGroup = 22 [(DefaultField) = true];
     optional uint64 BlobDepotOnlineTime = 23 [(DefaultField) = true];
+    optional uint32 GroupSizeInUnits = 24;
 }
 
 message TEvBSGroupStateRequest {

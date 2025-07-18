@@ -2,8 +2,13 @@ import hashlib
 import json
 import os
 import shutil
+import sys
 
-from .constants import PNPM_PRE_LOCKFILE_FILENAME
+from .constants import (
+    PNPM_PRE_LOCKFILE_FILENAME,
+    LOCAL_PNPM_INSTALL_HASH_FILENAME,
+    LOCAL_PNPM_INSTALL_MUTEX_FILENAME,
+)
 from .lockfile import PnpmLockfile
 from .utils import build_lockfile_path, build_pre_lockfile_path, build_ws_config_path
 from .workspace import PnpmWorkspace
@@ -25,6 +30,113 @@ from ..base.utils import (
     home_dir,
     s_rooted,
 )
+
+
+"""
+Creates a decorator that synchronizes access to a function using a mutex file.
+
+The decorator uses file locking (fcntl.LOCK_EX) to ensure only one process can execute the decorated function at a time.
+The lock is released (fcntl.LOCK_UN) when the function completes.
+
+Args:
+    mutex_filename (str): Path to the file used as a mutex lock.
+
+Returns:
+    function: A decorator function that applies the synchronization logic.
+"""
+
+
+def sync_mutex_file(mutex_filename):
+    def decorator(function):
+        def wrapper(*args, **kwargs):
+            import fcntl
+
+            with open(mutex_filename, "w+") as mutex:
+                fcntl.lockf(mutex, fcntl.LOCK_EX)
+                result = function(*args, **kwargs)
+                fcntl.lockf(mutex, fcntl.LOCK_UN)
+
+            return result
+
+        return wrapper
+
+    return decorator
+
+
+"""
+Calculates the MD5 hash of multiple files.
+
+Reads files in chunks of 64KB and updates the MD5 hash incrementally. Files are processed in sorted order to ensure consistent results.
+
+Args:
+    files (list): List of file paths to be hashed.
+
+Returns:
+    str: Hexadecimal MD5 hash digest of the concatenated file contents.
+"""
+
+
+def hash_files(files):
+    BUF_SIZE = 65536  # read in 64kb chunks
+    md5 = hashlib.md5()
+    for filename in sorted(files):
+        with open(filename, 'rb') as f:
+            while True:
+                data = f.read(BUF_SIZE)
+                if not data:
+                    break
+                md5.update(data)
+
+    return md5.hexdigest()
+
+
+"""
+Creates a decorator that runs the decorated function only if specified files have changed.
+
+The decorator checks the hash of provided files against a saved hash from previous runs.
+If hashes differ (files changed) or no saved hash exists, runs the decorated function
+and updates the saved hash. If hashes are the same, skips the function execution.
+
+Args:
+    files_to_hash: List of files to track for changes.
+    hash_storage_filename: Path to file where hash state is stored.
+
+Returns:
+    A decorator function that implements the described behavior.
+"""
+
+
+def hashed_by_files(files_to_hash, paths_to_exist, hash_storage_filename):
+    def decorator(function):
+        def wrapper(*args, **kwargs):
+            all_paths_exist = True
+            for p in paths_to_exist:
+                if not os.path.exists(p):
+                    sys.stderr.write(f"Path {p} does not exist\n")
+                    all_paths_exist = False
+                    break
+
+            current_state_hash = hash_files(files_to_hash)
+            saved_hash = None
+            if all_paths_exist and os.path.exists(hash_storage_filename):
+                with open(hash_storage_filename, "r") as f:
+                    saved_hash = f.read()
+
+            if saved_hash == current_state_hash:
+                return None
+            else:
+                sys.stderr.write(
+                    f"Saved hash {saved_hash} != current hash {current_state_hash} for {hash_storage_filename}\n"
+                )
+                result = function(*args, **kwargs)
+                with open(hash_storage_filename, "w+") as f:
+                    f.write(current_state_hash)
+
+            return result
+
+        return wrapper
+
+    return decorator
 
 
 class PnpmPackageManager(BasePackageManager):
@@ -101,7 +213,7 @@ class PnpmPackageManager(BasePackageManager):
                 os.makedirs(os.path.dirname(dst), exist_ok=True)
                 shutil.copy(src, dst)
 
-        self._run_pnpm_install(store_dir, virtual_store_dir, nm_store_path)
+        self._run_pnpm_install(store_dir, virtual_store_dir, nm_store_path, True)
 
         # Write node_modules.json to prevent extra `pnpm install` running 1
         with open(os.path.join(nm_store_path, "node_modules.json"), "w") as f:
@@ -132,12 +244,12 @@ class PnpmPackageManager(BasePackageManager):
 
             self._create_local_node_modules(nm_store_path, store_dir, virtual_store_dir)
 
-        self._run_pnpm_install(store_dir, virtual_store_dir, self.build_path)
+        self._run_pnpm_install(store_dir, virtual_store_dir, self.build_path, local_cli)
 
         self._run_apply_addons_if_need(yatool_prebuilder_path, virtual_store_dir)
         self._replace_internal_lockfile_with_original(virtual_store_dir)
 
-        if not local_cli and nm_bundle:
+        if nm_bundle:
             bundle_node_modules(
                 build_root=self.build_root,
                 node_modules_path=self._nm_path(),
@@ -145,27 +257,76 @@ class PnpmPackageManager(BasePackageManager):
                 bundle_path=os.path.join(self.build_path, NODE_MODULES_WORKSPACE_BUNDLE_FILENAME),
             )
 
-    @timeit
-    def _run_pnpm_install(self, store_dir: str, virtual_store_dir: str, cwd: str):
-        install_cmd = [
-            "install",
-            "--frozen-lockfile",
-            "--ignore-pnpmfile",
-            "--ignore-scripts",
-            "--no-verify-store-integrity",
-            "--offline",
-            "--config.confirmModulesPurge=false",  # hack for https://st.yandex-team.ru/FBP-1295
-            "--package-import-method",
-            "hardlink",
-            # "--registry" will be set later inside self._exec_command()
-            "--store-dir",
-            store_dir,
-            "--strict-peer-dependencies",
-            "--virtual-store-dir",
-            virtual_store_dir,
-        ]
+    """
+    Runs pnpm install command with specified parameters in an exclusive and hashed manner.
 
-        self._exec_command(install_cmd, cwd=cwd)
+    This method executes the pnpm install command with various flags and options, ensuring it's run exclusively
+    using a mutex file and only if the specified files have changed (using a hash check). The command is executed
+    in the given working directory (cwd) with the provided store and virtual store directories.
+
+    Args:
+        store_dir (str): Path to the store directory where packages will be stored.
+        virtual_store_dir (str): Path to the virtual store directory.
+        cwd (str): Working directory where the command will be executed.
+
+    Note:
+        Uses file locking via fcntl to ensure exclusive execution.
+        The command execution is hashed based on the pnpm-lock.yaml file.
+    """
+
+    @timeit
+    def _run_pnpm_install(self, store_dir: str, virtual_store_dir: str, cwd: str, local_cli: bool):
+        # Use fcntl to lock a temp file
+
+        def execute_install_cmd():
+            install_cmd = [
+                "install",
+                "--frozen-lockfile",
+                "--ignore-pnpmfile",
+                "--ignore-scripts",
+                "--no-verify-store-integrity",
+                "--offline",
+                "--config.confirmModulesPurge=false",  # hack for https://st.yandex-team.ru/FBP-1295
+                "--package-import-method",
+                "hardlink",
+                # "--registry" will be set later inside self._exec_command()
+                "--store-dir",
+                store_dir,
+                "--strict-peer-dependencies",
+                "--virtual-store-dir",
+                virtual_store_dir,
+            ]
+
+            self._exec_command(install_cmd, cwd=cwd)
+
+        if local_cli:
+            files_to_hash = [build_pre_lockfile_path(self.build_path)]
+            paths_to_exist = [build_nm_path(cwd)]
+            hash_file = os.path.join(build_nm_store_path(self.module_path), LOCAL_PNPM_INSTALL_HASH_FILENAME)
+            mutex_file = os.path.join(build_nm_store_path(self.module_path), LOCAL_PNPM_INSTALL_MUTEX_FILENAME)
+            execute_cmd_hashed = hashed_by_files(files_to_hash, paths_to_exist, hash_file)(execute_install_cmd)
+            execute_hashed_cmd_exclusively = sync_mutex_file(mutex_file)(execute_cmd_hashed)
+            execute_hashed_cmd_exclusively()
+
+        else:
+            execute_install_cmd()
+
+    """
+    Calculate inputs, outputs and resources for dependency preparation phase.
+
+    Args:
+        store_path: Path to the store where tarballs will be stored.
+        has_deps: Boolean flag indicating whether the module has dependencies.
+
+    Returns:
+        tuple[list[str], list[str], list[str]]: A tuple containing three lists:
+            - ins: List of input file paths
+            - outs: List of output file paths
+            - resources: List of package URIs (when has_deps is True)
+
+    Note:
+        Uses @timeit decorator to measure execution time of this method.
+    """
 
     @timeit
     def calc_prepare_deps_inouts_and_resources(

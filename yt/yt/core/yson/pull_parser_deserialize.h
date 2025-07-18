@@ -146,11 +146,11 @@ void Deserialize(
     std::enable_if_t<ArePullParserDeserializable<T...>(), void*> = nullptr);
 
 // For any associative container.
-template <template<typename...> class C, class... T, class K = typename C<T...>::key_type>
+template <NMpl::CAssociative TContainer>
 void Deserialize(
-    C<T...>& value,
+    TContainer& value,
     TYsonPullParserCursor* cursor,
-    std::enable_if_t<ArePullParserDeserializable<typename NDetail::TRemoveConst<typename C<T...>::value_type>::Type>(), void*> = nullptr);
+    std::enable_if_t<ArePullParserDeserializable<typename NDetail::TRemoveConst<typename TContainer::value_type>::Type>(), void*> = nullptr);
 
 template <class E, class T, E Min, E Max>
 void Deserialize(

@@ -5,6 +5,10 @@ FORK_SUBTESTS()
 SPLIT_FACTOR(60)
 SIZE(MEDIUM)
 
+IF (SANITIZER_TYPE)
+    REQUIREMENTS(ram:16)
+ENDIF()
+
 PEERDIR(
     contrib/libs/apache/arrow
     ydb/core/base

@@ -28,6 +28,10 @@ namespace {
         ui64 MinStep;
         ui64 MaxStep;
     };
+
+    bool ShouldShowSendReadSetAction(const TDistributedTransaction& tx) {
+        return tx.State == NKikimrPQ::TTransaction_EState_WAIT_RS;
+    }
 }
 
 
@@ -209,8 +213,70 @@ bool TPersQueue::OnRenderAppHtmlPageTx(NMon::TEvRemoteHttpInfo::TPtr ev, const T
         auto* tx = Txs.FindPtr(txId);
         if (tx) {
             HTML_APP_PAGE(str, "PersQueue Tablet " << TabletID() << " (" << TopicName << ") Transaction id " << txId) {
-                PRE() {
-                    str << SecureDebugStringMultiline(tx->Serialize());
+               LAYOUT_ROW() {
+                    LAYOUT_COLUMN() {
+                        PROPERTIES("Transaction info") {
+                            PROPERTY("Transaction id", txId);
+                            PROPERTY("State", NKikimrPQ::TTransaction_EState_Name(tx->State));
+                            PROPERTY("Step", tx->Step);
+                            PROPERTY("Topic", TopicName);
+                        }
+                    }
+                }
+                LAYOUT_ROW() {
+                    LAYOUT_COLUMN() {
+                        PRE() {
+                            str << SecureDebugStringMultiline(tx->Serialize());
+                        }
+                    }
+                }
+                LAYOUT_ROW() {
+                    LAYOUT_COLUMN() {
+                        TABLE_SORTABLE_CLASS("table") {
+                            CAPTION() {str << "Predicates";}
+                            TABLEHEAD() {
+                                TABLER() {
+                                    TABLEH() {str << "TabletID";}
+                                    TABLEH() {str << "Predicate value";}
+                                    TABLEH() {str << "Action";}
+                                }
+                            }
+                            TABLEBODY() {
+                                for (const auto& [tabletID, predicate] : tx->PredicatesReceived) {
+                                    TABLER() {
+                                        TABLED() {
+                                            HREF(TStringBuilder() << "?TabletID=" << tabletID << "&TxId=" << txId) {
+                                                str << tabletID;
+                                            }
+                                        }
+                                        const TStringBuf cls = predicate.HasPredicate() ? (predicate.GetPredicate() ? "success"sv : "danger"sv) : ""sv;
+                                        TABLED_CLASS(cls) {
+                                            if (predicate.HasPredicate()) {
+                                                str << (predicate.GetPredicate() ? "TRUE"sv : "FALSE"sv);
+                                            }
+                                        }
+                                        TABLED() {
+                                            if (!predicate.HasPredicate() && ShouldShowSendReadSetAction(*tx)) {
+                                                str << RenderSendReadSetHtmlForms(*tx, MakeArrayRef(&tabletID, 1));
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                LAYOUT_ROW() {
+                    LAYOUT_COLUMN() {
+                        size_t readSetPending = 0;
+                        for (const auto& [tabletID, predicate] : tx->PredicatesReceived) {
+                            readSetPending += !predicate.HasPredicate();
+                        }
+                        if (readSetPending > 0 && ShouldShowSendReadSetAction(*tx)) {
+                             str << "Send ReadSet for all " << readSetPending << " waiting tablets";
+                             str << RenderSendReadSetHtmlForms(*tx, Nothing());
+                        }
+                    }
                 }
             }
         } else {
@@ -226,6 +292,10 @@ bool TPersQueue::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TAc
 {
     if (!ev) {
         return true;
+    }
+
+    if (ev->Get()->Cgi().Has("SendReadSet")) {
+        return OnSendReadSetToYourself(ev, ctx);
     }
 
     if (ev->Get()->Cgi().Has("kv")) {

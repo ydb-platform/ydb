@@ -18,9 +18,10 @@
 #include <yql/essentials/public/issue/yql_issue_message.h>
 
 #include <ydb/core/ydb_convert/ydb_convert.h>
+#include <ydb/core/ydb_convert/table_description.h>
+
 #include <util/generic/algorithm.h>
 #include <util/string/builder.h>
-#include <ydb/core/ydb_convert/table_description.h>
 
 namespace NKikimr::NDataShard {
 
@@ -150,12 +151,12 @@ protected:
     }
 
     template <typename TAddRow>
-    EScan FeedImpl(TArrayRef<const TCell> key, const TRow& /*row*/, TAddRow&& addRow) {
-        LOG_T("Feed key " << DebugPrintPoint(KeyTypes, key, *AppData()->TypeRegistry) << " " << Debug());
+    EScan FeedImpl([[maybe_unused]] TArrayRef<const TCell> key, const TRow& /*row*/, TAddRow&& addRow) {
+        // LOG_T("Feed key " << DebugPrintPoint(KeyTypes, key, *AppData()->TypeRegistry) << " " << Debug());
 
         addRow();
 
-        if (!HasReachedLimits(ReadBuf, ScanSettings)) {
+        if (!ReadBuf.HasReachedLimits(ScanSettings)) {
             return EScan::Feed;
         }
 
@@ -238,10 +239,7 @@ public:
         }
 
         TAutoPtr<TEvDataShard::TEvBuildIndexProgressResponse> progress = new TEvDataShard::TEvBuildIndexProgressResponse;
-        progress->Record.SetId(BuildIndexId);
-        progress->Record.SetTabletId(DataShardId);
-        progress->Record.SetRequestSeqNoGeneration(SeqNo.Generation);
-        progress->Record.SetRequestSeqNoRound(SeqNo.Round);
+        FillScanResponseCommonFields(*progress, BuildIndexId, DataShardId, SeqNo);
 
         if (status == EStatus::Exception) {
             progress->Record.SetStatus(NKikimrIndexBuilder::EBuildStatus::BUILD_ERROR);
@@ -288,8 +286,8 @@ public:
         return TStringBuilder() << "TBuildIndexScan TabletId: " << DataShardId << " Id: " << BuildIndexId
             << ", requested range: " << DebugPrintRange(KeyTypes, RequestedRange.ToTableRange(), *AppData()->TypeRegistry)
             << ", last acked point: " << DebugPrintPoint(KeyTypes, LastUploadedKey.GetCells(), *AppData()->TypeRegistry)
-            << Stats.ToString()
-            << UploadStatus.ToString();
+            << " " << Stats.ToString()
+            << " " << UploadStatus.ToString();
     }
 
     EScan PageFault() override {
@@ -325,7 +323,7 @@ private:
     }
 
     void Handle(TEvTxUserProxy::TEvUploadRowsResponse::TPtr& ev, const TActorContext& ctx) {
-        LOG_T("Handle TEvUploadRowsResponse "
+        LOG_D("Handle TEvUploadRowsResponse "
               << Debug()
               << " Uploader: " << Uploader.ToString()
               << " ev->Sender: " << ev->Sender.ToString());
@@ -344,20 +342,18 @@ private:
         UploadStatus.Issues.AddIssues(ev->Get()->Issues);
 
         if (UploadStatus.IsSuccess()) {
-            Stats.Aggr(&WriteBuf);
+            Stats.Aggr(WriteBuf.GetRows(), WriteBuf.GetRowCellBytes());
             LastUploadedKey = WriteBuf.ExtractLastKey();
 
             //send progress
             TAutoPtr<TEvDataShard::TEvBuildIndexProgressResponse> progress = new TEvDataShard::TEvBuildIndexProgressResponse;
-            progress->Record.SetId(BuildIndexId);
-            progress->Record.SetTabletId(DataShardId);
-            progress->Record.SetRequestSeqNoGeneration(SeqNo.Generation);
-            progress->Record.SetRequestSeqNoRound(SeqNo.Round);
+            FillScanResponseCommonFields(*progress, BuildIndexId, DataShardId, SeqNo);
 
             // TODO(mbkkt) ReleaseBuffer isn't possible, we use LastUploadedKey for logging
             progress->Record.SetLastKeyAck(LastUploadedKey.GetBuffer());
             progress->Record.SetRowsDelta(WriteBuf.GetRows());
-            progress->Record.SetBytesDelta(WriteBuf.GetBytes());
+            // TODO: use GetRowCellBytes method?
+            progress->Record.SetBytesDelta(WriteBuf.GetBufferBytes());
             WriteBuf.Clear();
 
             progress->Record.SetStatus(NKikimrIndexBuilder::EBuildStatus::IN_PROGRESS);
@@ -365,7 +361,7 @@ private:
 
             this->Send(ProgressActorId, progress.Release());
 
-            if (HasReachedLimits(ReadBuf, ScanSettings)) {
+            if (ReadBuf.HasReachedLimits(ScanSettings)) {
                 ReadBuf.FlushTo(WriteBuf);
                 Upload();
             }
@@ -437,14 +433,15 @@ public:
             const auto rowCells = *row;
 
             ReadBuf.AddRow(
-                TSerializedCellVec(rowCells.Slice(0, TargetDataColumnPos)),
-                TSerializedCellVec::Serialize(rowCells.Slice(TargetDataColumnPos)),
-                TSerializedCellVec(key));
+                rowCells.Slice(0, TargetDataColumnPos),
+                rowCells.Slice(TargetDataColumnPos),
+                key);
         });
     }
 };
 
 class TBuildColumnsScan final: public TBuildScanUpload<NKikimrServices::TActivity::BUILD_COLUMNS_SCAN_ACTOR> {
+    TVector<TCell> Value;
     TString ValueSerialized;
 
 public:
@@ -463,21 +460,19 @@ public:
         UploadMode = NTxProxy::EUploadRowsMode::UpsertIfExists;
 
         TMemoryPool valueDataPool(256);
-        TVector<TCell> cells;
         TString err;
-        Y_ENSURE(BuildExtraColumns(cells, columnBuildSettings, err, valueDataPool));
-        ValueSerialized = TSerializedCellVec::Serialize(cells);
+        Y_ENSURE(BuildExtraColumns(Value, columnBuildSettings, err, valueDataPool));
+        ValueSerialized = TSerializedCellVec::Serialize(Value);
     }
 
     EScan Feed(TArrayRef<const TCell> key, const TRow& row) final {
         return FeedImpl(key, row, [&] {
-            TSerializedCellVec pk(key);
-            auto pkTarget = pk;
-            auto valueTarget = ValueSerialized;
+            auto valueSerializedCopy = ValueSerialized;
             ReadBuf.AddRow(
-                std::move(pkTarget),
-                std::move(valueTarget),
-                std::move(pk));
+                key,
+                Value,
+                std::move(valueSerializedCopy),
+                key);
         });
     }
 };
@@ -534,12 +529,9 @@ void TDataShard::HandleSafe(TEvDataShard::TEvBuildIndexCreateRequest::TPtr& ev, 
 
     try {
         auto response = MakeHolder<TEvDataShard::TEvBuildIndexProgressResponse>();
-        response->Record.SetId(request.GetId());
-        response->Record.SetTabletId(TabletID());
-        response->Record.SetRequestSeqNoGeneration(seqNo.Generation);
-        response->Record.SetRequestSeqNoRound(seqNo.Round);
+        FillScanResponseCommonFields(*response, request.GetId(), TabletID(), seqNo);
 
-        LOG_N("Starting TBuildIndexScan TabletId: " << TabletID() 
+        LOG_N("Starting TBuildIndexScan TabletId: " << TabletID()
             << " " << request.ShortDebugString()
             << " row version " << rowVersion);
 
@@ -603,7 +595,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvBuildIndexCreateRequest::TPtr& ev, 
                 << " scanRange: " << DebugPrintRange(userTable.KeyColumnTypes, scanRange, *AppData()->TypeRegistry));
         }
 
-        if (!request.HasTargetName()) {
+        if (!request.GetTargetName()) {
             badRequest(TStringBuilder() << "Empty target table name");
         }
 

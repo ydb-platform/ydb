@@ -107,8 +107,7 @@ class TestStress(MixedClusterFixture):
     @pytest.mark.parametrize("store_type", ["row", "column"])
     def test_simple_queue(self, store_type: str):
         with Workload(f"grpc://localhost:{self.cluster.nodes[1].grpc_port}", "/Root", 180, store_type) as workload:
-            for handle in workload.loop():
-                handle()
+            workload.start()
 
     @pytest.mark.parametrize("store_type", ["row", "column"])
     def test_kv(self, store_type):

@@ -1,17 +1,17 @@
-#include "schemeshard_xxport__tx_base.h"
-#include "schemeshard_xxport__helpers.h"
+#include "schemeshard_audit_log.h"
 #include "schemeshard_export.h"
 #include "schemeshard_export_flow_proposals.h"
 #include "schemeshard_export_helpers.h"
 #include "schemeshard_export_uploaders.h"
-#include "schemeshard_audit_log.h"
 #include "schemeshard_impl.h"
-
-#include <ydb/core/backup/common/encryption.h>
+#include "schemeshard_xxport__helpers.h"
+#include "schemeshard_xxport__tx_base.h"
 
 #include <ydb/public/api/protos/ydb_export.pb.h>
 #include <ydb/public/api/protos/ydb_issue_message.pb.h>
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
+
+#include <ydb/core/backup/common/encryption.h>
 
 #include <util/generic/algorithm.h>
 #include <util/generic/ptr.h>
@@ -387,10 +387,17 @@ private:
             // to do: enable view checksum validation
             constexpr bool EnableChecksums = false;
             metadata.SetVersion(EnableChecksums ? 1 : 0);
+            metadata.SetEnablePermissions(exportInfo.EnablePermissions);
+
+            TMaybe<NBackup::TEncryptionIV> iv;
+            if (exportSettings.has_encryption_settings()) {
+                iv = NBackup::TEncryptionIV::FromBinaryString(exportInfo.ExportMetadata.GetSchemaMapping(itemIdx).GetIV());
+            }
 
             item.SchemeUploader = ctx.Register(CreateSchemeUploader(
                 Self->SelfId(), exportInfo.Id, itemIdx, item.SourcePathId,
-                exportSettings, databaseRoot, metadata.Serialize(), exportInfo.EnablePermissions
+                exportSettings, databaseRoot, metadata.Serialize(), exportInfo.EnablePermissions,
+                iv
             ));
             Self->RunningExportSchemeUploaders.emplace(item.SchemeUploader);
         }

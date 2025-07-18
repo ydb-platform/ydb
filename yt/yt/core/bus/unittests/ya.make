@@ -15,11 +15,8 @@ PEERDIR(
     yt/yt/core
     yt/yt/core/test_framework
     library/cpp/testing/common
+    library/cpp/resource
 )
-
-EXPLICIT_DATA()
-
-DATA(arcadia/yt/yt/core/bus/unittests/testdata)
 
 REQUIREMENTS(
     cpu:4

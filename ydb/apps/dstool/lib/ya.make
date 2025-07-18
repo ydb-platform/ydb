@@ -18,12 +18,14 @@ PY_SRCS(
     dstool_cmd_pdisk_restart.py
     dstool_cmd_pdisk_set.py
     dstool_cmd_pdisk_stop.py
+    dstool_cmd_pdisk_move.py
 
     dstool_cmd_vdisk_evict.py
     dstool_cmd_vdisk_list.py
     dstool_cmd_vdisk_set_read_only.py
     dstool_cmd_vdisk_remove_donor.py
     dstool_cmd_vdisk_wipe.py
+    dstool_cmd_vdisk_compact.py
 
     dstool_cmd_group_add.py
     dstool_cmd_group_check.py
@@ -53,6 +55,9 @@ PY_SRCS(
 
 PEERDIR(
     ydb/core/protos
+    ydb/public/api/protos
+    ydb/public/api/grpc
+    ydb/public/api/grpc/draft
 )
 
 END()

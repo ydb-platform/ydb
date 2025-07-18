@@ -8,14 +8,13 @@ TEST_SRCS(
 
 SIZE(MEDIUM)
 
-ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")
+INCLUDE(${ARCADIA_ROOT}/ydb/tests/ydbd_dep.inc)
 
 PEERDIR(
     ydb/tests/library
 )
 
 DEPENDS(
-    ydb/apps/ydbd
 )
 
 

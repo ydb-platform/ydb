@@ -174,8 +174,8 @@ void TNodeWarden::ApplyStateStorageConfig(const NKikimrBlobStorage::TStorageConf
     FETCH_CONFIG(stateStorage, StateStorage)
     FETCH_CONFIG(board, StateStorageBoard)
     FETCH_CONFIG(schemeBoard, SchemeBoard)
-    
-    STLOG(PRI_DEBUG, BS_NODE, NW52, "ApplyStateStorageConfig",
+
+    STLOG(PRI_DEBUG, BS_NODE, NW55, "ApplyStateStorageConfig",
         (StateStorageConfig, StorageConfig->GetStateStorageConfig()),
         (NewStateStorageInfo, *stateStorageInfo),
         (CurrentStateStorageInfo, StateStorageInfo.Get()),
@@ -196,16 +196,20 @@ void TNodeWarden::ApplyStateStorageConfig(const NKikimrBlobStorage::TStorageConf
             };
             return g1.Rings.size() == g2.Rings.size()
                 && g1.NToSelect == g2.NToSelect
+                && g1.WriteOnly == g2.WriteOnly
+                && g1.State == g2.State
                 && std::equal(g1.Rings.begin(), g1.Rings.end(), g2.Rings.begin(), equalRing);
         };
         return prev.RingGroups.size() != cur.RingGroups.size()
             || !std::equal(prev.RingGroups.begin(), prev.RingGroups.end(), cur.RingGroups.begin(), equalGroup)
             || prev.StateStorageVersion != cur.StateStorageVersion
+            || prev.ClusterStateGeneration != cur.ClusterStateGeneration
+            || prev.ClusterStateGuid != cur.ClusterStateGuid
             || prev.CompatibleVersions.size() != cur.CompatibleVersions.size()
             || !std::equal(prev.CompatibleVersions.begin(), prev.CompatibleVersions.end(), cur.CompatibleVersions.begin());
     };
 
-    
+
     TActorSystem *as = TActivationContext::ActorSystem();
     const bool changedStateStorage = !StateStorageProxyConfigured || changed(*StateStorageInfo, *stateStorageInfo);
     const bool changedBoard = !StateStorageProxyConfigured || changed(*BoardInfo, *boardInfo);
@@ -243,8 +247,10 @@ void TNodeWarden::ApplyStateStorageConfig(const NKikimrBlobStorage::TStorageConf
                                 AppData()->SystemPoolId));
                         } else if (which == &StateStorageInfo && !newActorIds.contains(replicaId)) {
                             Send(replicaId, new TEvStateStorage::TEvUpdateGroupConfig(info, nullptr, nullptr));
-                        } else {
-                            // TODO(alexvru): update other kinds of replicas
+                        } else if (which == &BoardInfo && !newActorIds.contains(replicaId)) {
+                            Send(replicaId, new TEvStateStorage::TEvUpdateGroupConfig(nullptr, info, nullptr));
+                        } else if (which == &SchemeBoardInfo && !newActorIds.contains(replicaId)) {
+                            Send(replicaId, new TEvStateStorage::TEvUpdateGroupConfig(nullptr, nullptr, info));
                         }
                         newActorIds.insert(replicaId);
                     }
@@ -323,6 +329,13 @@ void TNodeWarden::HandleIncrHugeInit(NIncrHuge::TEvIncrHugeInit::TPtr ev) {
 
     // forward to just created service
     TActivationContext::Send(ev->Forward(keeperId));
+}
+
+void TNodeWarden::Handle(TEvNodeWardenNotifyConfigMismatch::TPtr ev) {
+    //TODO: config mismatch with node
+    auto *msg = ev->Get();
+    STLOG(PRI_INFO, BS_NODE, NW51, "TEvNodeWardenNotifyConfigMismatch: NodeId: " << msg->NodeId
+        << " ClusterStateGeneration: " << msg->ClusterStateGeneration << " ClusterStateGuid: " << msg->ClusterStateGuid);
 }
 
 void TNodeWarden::Handle(TEvNodeWardenQueryBaseConfig::TPtr ev) {

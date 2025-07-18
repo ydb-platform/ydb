@@ -1,1 +1,122 @@
-{"read":{"yt":{"hints":[{"name":"infer_scheme"},{"name":"inferscheme"},{"name":"infer_schema"},{"name":"inferschema"},{"name":"force_infer_schema"},{"name":"forceinferschema"},{"name":"inline"},{"name":"xlock"},{"name":"unordered"},{"name":"non_unique"},{"name":"nonUnique"},{"name":"ignore_type_v3"},{"name":"ignoretypev3"}]}},"insert":{"yt":{"hints":[{"name":"truncate"},{"name":"compression_codec"},{"name":"compressioncodec"},{"name":"erasure_codec"},{"name":"erasurecodec"},{"name":"expiration"},{"name":"replication_factor"},{"name":"replicationfactor"},{"name":"user_attrs"},{"name":"userattrs"},{"name":"media"},{"name":"primary_medium"},{"name":"primarymedium"},{"name":"keep_meta"},{"name":"keepmeta"},{"name":"monotonic_keys"},{"name":"monotonickeys"},{"name":"column_groups"},{"name":"columngroups"},{"name":"security_tags"},{"name":"securitytags"}]}},"replace":{},"upsert":{},"update":{},"delete":{},"create_table":{},"create_view":{}}
+{
+  "read": {
+    "yt": {
+      "hints": [
+        {
+          "name": "infer_scheme"
+        },
+        {
+          "name": "inferscheme"
+        },
+        {
+          "name": "infer_schema"
+        },
+        {
+          "name": "inferschema"
+        },
+        {
+          "name": "force_infer_schema"
+        },
+        {
+          "name": "forceinferschema"
+        },
+        {
+          "name": "inline"
+        },
+        {
+          "name": "xlock"
+        },
+        {
+          "name": "unordered"
+        },
+        {
+          "name": "non_unique"
+        },
+        {
+          "name": "nonUnique"
+        },
+        {
+          "name": "ignore_type_v3"
+        },
+        {
+          "name": "ignoretypev3"
+        }
+      ]
+    }
+  },
+  "insert": {
+    "yt": {
+      "hints": [
+        {
+          "name": "truncate"
+        },
+        {
+          "name": "compression_codec"
+        },
+        {
+          "name": "compressioncodec"
+        },
+        {
+          "name": "erasure_codec"
+        },
+        {
+          "name": "erasurecodec"
+        },
+        {
+          "name": "expiration"
+        },
+        {
+          "name": "replication_factor"
+        },
+        {
+          "name": "replicationfactor"
+        },
+        {
+          "name": "user_attrs"
+        },
+        {
+          "name": "userattrs"
+        },
+        {
+          "name": "media"
+        },
+        {
+          "name": "primary_medium"
+        },
+        {
+          "name": "primarymedium"
+        },
+        {
+          "name": "keep_meta"
+        },
+        {
+          "name": "keepmeta"
+        },
+        {
+          "name": "monotonic_keys"
+        },
+        {
+          "name": "monotonickeys"
+        },
+        {
+          "name": "column_groups"
+        },
+        {
+          "name": "columngroups"
+        },
+        {
+          "name": "security_tags"
+        },
+        {
+          "name": "securitytags"
+        }
+      ]
+    }
+  },
+  "replace": {},
+  "upsert": {},
+  "update": {},
+  "delete": {},
+  "create_table": {},
+  "create_view": {}
+}

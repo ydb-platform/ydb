@@ -2,7 +2,7 @@
 
 A mechanism for putting part of the query into a separate attached file. To use the mechanism, you need to set the following pragma in the query:
 
-* [PRAGMA Library](pragma.md#library) &mdash; marks the attached file as available for import.
+* [PRAGMA Library](pragma/file.md#library) &mdash; marks the attached file as available for import.
 
 ## EXPORT
 
@@ -20,7 +20,7 @@ A mechanism for putting part of the query into a separate attached file. To use 
 
 {% note warning %}
 
-The file linked by the [PRAGMA Library](pragma.md#library) must be attached to the query. __You can't use [PRAGMA File](pragma.md#file) for this purpose__.
+The file linked by the [PRAGMA Library](pragma/file.md#library) must be attached to the query. __You can't use [PRAGMA File](pragma/file.md#file) for this purpose__.
 
 {% endnote %}
 

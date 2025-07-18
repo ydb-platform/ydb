@@ -63,8 +63,10 @@ public:
     arrow::Status Exec(arrow::compute::KernelContext* ctx, const arrow::compute::ExecBatch& batch, arrow::Datum* res) const {
         auto firstDatum = batch.values[0];
         auto secondDatum = batch.values[1];
-        MKQL_ENSURE(!firstDatum.is_scalar() || !secondDatum.is_scalar(), "Expected at least one array");
-
+        if (firstDatum.is_scalar() && secondDatum.is_scalar()) {
+            *res = CalcScalarScalar(firstDatum, secondDatum);
+            return arrow::Status::OK();
+        }
         if (IsAllEqualsTo(firstDatum, false)) {
             // false AND ... = false
             if (firstDatum.is_array()) {
@@ -104,6 +106,30 @@ public:
     }
 
 private:
+    arrow::Datum CalcScalarScalar(const arrow::Datum& firstDatum, const arrow::Datum& secondDatum) const {
+        const auto& first = firstDatum.scalar_as<arrow::UInt8Scalar>();
+        const auto& second = secondDatum.scalar_as<arrow::UInt8Scalar>();
+
+        if (first.is_valid && second.is_valid) {
+            bool result = bool((first.value & second.value) & 1u);
+            return MakeScalarDatum(result);
+        }
+
+        if (!first.is_valid && !second.is_valid) {
+            return firstDatum;
+        }
+
+        if (!first.is_valid) {
+            // null and true -> null
+            // null and false -> false
+            return second.value ? firstDatum : secondDatum;
+        } else {
+            // true and null -> null
+            // false and null -> false
+            return first.value ? secondDatum : firstDatum;
+        }
+    }
+
     arrow::Datum CalcScalarArray(arrow::MemoryPool* pool, ui8 value, bool valid, const std::shared_ptr<arrow::ArrayData>& arr) const {
         bool first_true = valid && value;
         bool first_false = valid && !value;
@@ -198,8 +224,10 @@ public:
     arrow::Status Exec(arrow::compute::KernelContext* ctx, const arrow::compute::ExecBatch& batch, arrow::Datum* res) const {
         auto firstDatum = batch.values[0];
         auto secondDatum = batch.values[1];
-        MKQL_ENSURE(!firstDatum.is_scalar() || !secondDatum.is_scalar(), "Expected at least one array");
-
+        if (firstDatum.is_scalar() && secondDatum.is_scalar()) {
+            *res = CalcScalarScalar(firstDatum, secondDatum);
+            return arrow::Status::OK();
+        }
         if (IsAllEqualsTo(firstDatum, true)) {
             // true OR ... = true
             if (firstDatum.is_array()) {
@@ -239,6 +267,30 @@ public:
     }
 
 private:
+    arrow::Datum CalcScalarScalar(const arrow::Datum& firstDatum, const arrow::Datum& secondDatum) const {
+        const auto& first = firstDatum.scalar_as<arrow::UInt8Scalar>();
+        const auto& second = secondDatum.scalar_as<arrow::UInt8Scalar>();
+
+        if (first.is_valid && second.is_valid) {
+            bool result = bool((first.value | second.value) & 1u);
+            return MakeScalarDatum(result);
+        }
+
+        if (!first.is_valid && !second.is_valid) {
+            return firstDatum;
+        }
+
+        if (!first.is_valid) {
+            // null or true -> true
+            // null or false -> null
+            return second.value ? secondDatum : firstDatum;
+        } else {
+            // true or null -> true
+            // false or null -> null
+            return first.value ? firstDatum : secondDatum;
+        }
+    }
+
     arrow::Datum CalcScalarArray(arrow::MemoryPool* pool, ui8 value, bool valid, const std::shared_ptr<arrow::ArrayData>& arr) const {
         bool first_true = valid && value;
         bool first_false = valid && !value;
@@ -334,7 +386,10 @@ public:
     arrow::Status Exec(arrow::compute::KernelContext* ctx, const arrow::compute::ExecBatch& batch, arrow::Datum* res) const {
         auto firstDatum = batch.values[0];
         auto secondDatum = batch.values[1];
-        MKQL_ENSURE(!firstDatum.is_scalar() || !secondDatum.is_scalar(), "Expected at least one array");
+        if (firstDatum.is_scalar() && secondDatum.is_scalar()) {
+            *res = CalcScalarScalar(firstDatum, secondDatum);
+            return arrow::Status::OK();
+        }
         if (firstDatum.null_count() == firstDatum.length()) {
             if (firstDatum.is_array()) {
                 *res = firstDatum;
@@ -369,6 +424,18 @@ public:
     }
 
 private:
+    arrow::Datum CalcScalarScalar(const arrow::Datum& firstDatum, const arrow::Datum& secondDatum) const {
+        const auto& first = firstDatum.scalar_as<arrow::UInt8Scalar>();
+        const auto& second = secondDatum.scalar_as<arrow::UInt8Scalar>();
+
+        if (first.is_valid && second.is_valid) {
+            bool result = bool((first.value ^ second.value) & 1u);
+            return MakeScalarDatum(result);
+        }
+
+        return first.is_valid ? secondDatum : firstDatum;
+    }
+
     arrow::Datum CalcScalarArray(arrow::MemoryPool* pool, ui8 value, const std::shared_ptr<arrow::ArrayData>& arr) const {
         std::shared_ptr<arrow::Buffer> bitmap = CopyBitmap(pool, arr->buffers[0], arr->offset, arr->length);
         std::shared_ptr<arrow::Buffer> data = ARROW_RESULT(arrow::AllocateBuffer(arr->length, pool));
@@ -402,6 +469,11 @@ class TNotBlockExec {
 public:
     arrow::Status Exec(arrow::compute::KernelContext* ctx, const arrow::compute::ExecBatch& batch, arrow::Datum* res) const {
         const auto& input = batch.values[0];
+        if (input.is_scalar()) {
+            const auto& arg = input.scalar_as<arrow::UInt8Scalar>();
+            *res = arg.is_valid ? MakeScalarDatum(bool(~arg.value & 1u)) : input;
+            return arrow::Status::OK();
+        }
         MKQL_ENSURE(input.is_array(), "Expected array");
         const auto& arr = *input.array();
         if (arr.GetNullCount() == arr.length) {
@@ -457,7 +529,7 @@ IComputationNode* WrapBlockLogical(std::string_view name, TCallable& callable, c
         kernel = MakeKernel<TXorBlockExec>(argsTypes, callable.GetType()->GetReturnType());
     }
 
-    return new TBlockFuncNode(ctx.Mutables, name, std::move(argsNodes), argsTypes, *kernel, kernel);
+    return new TBlockFuncNode(ctx.Mutables, ToDatumValidateMode(ctx.ValidateMode), name, std::move(argsNodes), argsTypes, callable.GetType()->GetReturnType(), *kernel, kernel);
 }
 
 } // namespace
@@ -487,7 +559,7 @@ IComputationNode* WrapBlockNot(TCallable& callable, const TComputationNodeFactor
     TVector<TType*> argsTypes = { callable.GetInput(0).GetStaticType() };
 
     auto kernel = MakeKernel<TNotBlockExec>(argsTypes, argsTypes[0]);
-    return new TBlockFuncNode(ctx.Mutables, "Not", std::move(argsNodes), argsTypes, *kernel, kernel);
+    return new TBlockFuncNode(ctx.Mutables, ToDatumValidateMode(ctx.ValidateMode), "Not", std::move(argsNodes), argsTypes, callable.GetType()->GetReturnType(), *kernel, kernel);
 }
 
 

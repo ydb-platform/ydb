@@ -1,6 +1,6 @@
 # Выгрузка в файловую систему
 
-## Кластер
+## Кластер {#cluster}
 
 Команда `admin сluster dump` выгружает в клиентскую файловую систему метаданные кластера, в описанном в статье [{#T}](../file-structure.md) формате:
 
@@ -14,7 +14,7 @@
 
 [Конфигурация кластера](../../../../devops/configuration-management/configuration-v2/config-overview.md) выгружается отдельно с помощью команды `{{ ydb-cli }} admin cluster config fetch`.
 
-## База данных
+## База данных {#db}
 
 Команда `admin database dump` выгружает в клиентскую файловую систему данные и метаданные базы данных, в описанном в статье [{#T}](../file-structure.md) формате:
 
@@ -28,7 +28,7 @@
 
 [Конфигурация базы данных](../../../../devops/configuration-management/configuration-v2/config-overview.md) выгружается отдельно с помощью команды `{{ ydb-cli }} admin database config fetch`.
 
-## Объекты схемы данных
+## Объекты схемы данных {#schema-objects}
 
 Команда `tools dump` выгружает в клиентскую файловую систему данные и информацию об объектах схемы данных, в описанном в статье [{#T}](../file-structure.md) формате:
 

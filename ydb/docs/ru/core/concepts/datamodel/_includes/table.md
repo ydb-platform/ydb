@@ -195,7 +195,7 @@ CREATE TABLE article (
 
 ### Импорт и экспорт данных в S3
 
-{{ ydb-short-name }} поддерживает импорт и экспорт данных из строковых таблиц в объектное хранилище класса S3 с использованием {{ ydb-short-name }} CLI.
+{{ ydb-short-name }} поддерживает импорт и экспорт данных из строковых таблиц в S3-совместимые объектные хранилища с использованием {{ ydb-short-name }} CLI.
 
 Подробнее см. в статьях [{#T}](../../../reference/ydb-cli/export-import/import-s3.md) и [{#T}](../../../reference/ydb-cli/export-import/export-s3.md).
 

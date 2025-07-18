@@ -33,7 +33,7 @@ CREATE EXTERNAL TABLE `s3_test_data` (
 
 - `key, value` - список колонок данных и их типов, список допустимых типов описан в разделе [{#T}](formats.md#types);
 - `bucket` - имя [внешнего источника данных](../../datamodel/external_data_source.md) к S3 ({{ objstorage-name }});
-- `folder` - путь внутри бакета с данными. Поддерживаются wildcards `*`, подробнее [в разделе](external_data_source.md#path_format);
+- `folder` - путь внутри бакета с данными. Поддерживаются wildcards, подробнее [в разделе](external_data_source.md#path_format);
 - `csv_with_names` - один из [допустимых типов хранения данных](formats.md);
 - `gzip` - один из [допустимых алгоритмов сжатия](formats.md#compression).
 

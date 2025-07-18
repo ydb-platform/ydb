@@ -56,6 +56,40 @@ WITH
 
 {% endcut %}
 
+{% cut "Пример данных для типов List и Tuple" %}
+
+```text
+ListCol,TupleCol
+"[1,2]",5,"Attr1"
+"[2,3,0]",7,"Attr2"
+```
+
+Запрос для чтения данных:
+
+```yql
+SELECT
+    *
+FROM `external_source`.`path`
+WITH
+(
+    FORMAT = "csv_with_names",
+    SCHEMA =
+    (
+        ListCol List<Int32>,
+        TupleCol Tuple<Int32, Utf8>
+    )
+)
+```
+
+Результат выполнения запроса:
+
+|#|ListCol|TupleCol|
+|-|-|-|
+|1|[1, 2]|(5, "Attr1")|
+|2|[2, 3, 0]|(7, "Attr2")|
+
+{% endcut %}
+
 ### Формат tsv_with_names {#tsv_with_names}
 
 Данный формат основан на формате [TSV](https://ru.wikipedia.org/wiki/TSV). Данные размещены в колонках, разделены символами табуляции (код `0x9`), в первой строке файла находятся имена колонок.
@@ -93,6 +127,40 @@ WITH
 |-|-|-|-|-|
 |1|Man_1|Model_1|3000|1997|
 |2|Man_2|Model_2|4900|1999|
+
+{% endcut %}
+
+{% cut "Пример данных для типов List и Tuple" %}
+
+```text
+ListCol TupleCol
+[1,2]   (5,'Attr1')
+[2,3,0] (7,'Attr2')
+```
+
+Запрос для чтения данных:
+
+```yql
+SELECT
+    *
+FROM `external_source`.`path`
+WITH
+(
+    FORMAT = "tsv_with_names",
+    SCHEMA =
+    (
+        ListCol List<Int32>,
+        TupleCol Tuple<Int32, Utf8>
+    )
+)
+```
+
+Результат выполнения запроса:
+
+|#|ListCol|TupleCol|
+|-|-|-|
+|1|[1, 2]|(5, "Attr1")|
+|2|[2, 3, 0]|(7, "Attr2")|
 
 {% endcut %}
 
@@ -144,6 +212,53 @@ WITH
 
 {% endcut %}
 
+{% cut "Пример данных для типов List, Tuple, Struct и Dict" %}
+
+```json
+[
+    {
+        "ListCol": [1, 2],
+        "TupleCol": [5, "Attr1"],
+        "StructCol": { "Key": 1, "Value": "a" },
+        "DictCol": { "Description": "Model_1", "Type": "A" }
+    },
+    {
+        "ListCol": [2, 3, 0],
+        "TupleCol": [7, "Attr2"],
+        "StructCol": { "Key": 2, "Value": "b" },
+        "DictCol": { "Description": "Model_2" }
+    }
+]
+```
+
+Запрос для чтения данных:
+
+```yql
+SELECT
+    *
+FROM `external_source`.`path`
+WITH
+(
+    FORMAT = "json_list",
+    SCHEMA =
+    (
+        ListCol List<Int32>,
+        TupleCol Tuple<Int32, Utf8>,
+        StructCol Struct<`Key`: Int32, `Value`: Utf8>,
+        DictCol Dict<Utf8, Utf8>
+    )
+)
+```
+
+Результат выполнения запроса:
+
+|#|ListCol|TupleCol|StructCol|DictCol|
+|-|-|-|-|-|
+|1|[1, 2]|(5, "Attr1")|("Key": 1, "Value": a)|{"Description": "Model_1", "Type": "A"}|
+|2|[2, 3, 0]|(7, "Attr2")|("Key": 2, "Value": "b")|{"Description": "Model_2"}|
+
+{% endcut %}
+
 ### Формат json_each_row {#json_each_row}
 
 Данный формат основан на [JSON-представлении](https://ru.wikipedia.org/wiki/JSON) данных. В этом формате внутри каждого файла на каждой отдельной строке файла должен находиться объект в корректном JSON-представлении, но эти объекты не объединены в JSON-список. Такой формат используется при передаче данных через потоковые системы, например, Apache Kafka или [Топики {{ydb-full-name}}](../../topic.md).
@@ -183,6 +298,39 @@ WITH
 
 {% endcut %}
 
+{% cut "Пример данных для типов List и Tuple" %}
+
+```json
+{ "ListCol": [1, 2], "TupleCol": [5, "Attr1"] }
+{ "ListCol": [2, 3, 0], "TupleCol": [7, "Attr2"] }
+```
+
+Запрос для чтения данных:
+
+```yql
+SELECT
+    *
+FROM `external_source`.`path`
+WITH
+(
+    FORMAT = "json_each_row",
+    SCHEMA =
+    (
+        ListCol List<Int32>,
+        TupleCol Tuple<Int32, Utf8>
+    )
+)
+```
+
+Результат выполнения запроса:
+
+|#|ListCol|TupleCol|
+|-|-|-|
+|1|[1, 2]|(5, "Attr1")|
+|2|[2, 3, 0]|(7, "Attr2")|
+
+{% endcut %}
+
 ### Формат json_as_string {#json_as_string}
 
 Данный формат основан на [JSON-представлении](https://ru.wikipedia.org/wiki/JSON) данных. Формат `json_as_string` не разбивает входной JSON-документ на поля, а представляет каждую строку файла в виде одного объекта JSON (или одной строки). Такой формат удобен, если список полей не одинаков во всех строках, а может изменяться.
@@ -195,8 +343,8 @@ WITH
 Пример корректных данных (данные представлены в виде списка объектов JSON):
 
 ```json
-{ "Year": 1997, "Manufacturer": "Man_1", "Model": "Model_1", "Price": 3000.0 }
-{ "Year": 1999, "Manufacturer": "Man_2", "Model": "Model_2", "Price": 4900.00 }
+{ "Year": 1997, "Attrs": { "Manufacturer": "Man_1", "Model": "Model_1" }, "Price": 3000.0 }
+{ "Year": 1999, "Attrs": { "Manufacturer": "Man_2", "Model": "Model_2" }, "Price": 4900.00 }
 ```
 
 В этом формате [схема](external_data_source.md#schema) читаемых данных должна состоять только из одной колонки.
@@ -205,7 +353,10 @@ WITH
 
 ```yql
 SELECT
-    *
+    CAST(JSON_VALUE(Data, "$.Year") AS Int32) AS Year,
+    JSON_VALUE(Data, "$.Attrs.Manufacturer") AS Manufacturer,
+    JSON_VALUE(Data, "$.Attrs.Model") AS Model,
+    CAST(JSON_VALUE(Data, "$.Price") AS Double) AS Price
 FROM `external_source`.`path`
 WITH
 (
@@ -219,10 +370,10 @@ WITH
 
 Результат выполнения запроса:
 
-|#|Data|
-|-|-|
-|1|`{"Manufacturer": "Man_1", "Model": "Model_1", "Price": 3000, "Year": 1997}`|
-|2|`{"Manufacturer": "Man_2", "Model": "Model_2", "Price": 4900, "Year": 1999}`|
+|#|Manufacturer|Model|Price|Year|
+|-|-|-|-|-|
+|1|Man_1|Model_1|3000|1997|
+|2|Man_2|Model_2|4900|1999|
 
 {% endcut %}
 
@@ -242,7 +393,7 @@ WITH
 
 {% note info %}
 
-Запись в формате Parquet возможна только с использованием алгоритма сжатия [Snappy](https://ru.wikipedia.org/wiki/Snappy_(библиотека)).
+Запись в формате Parquet возможна только с использованием алгоритма сжатия [Snappy](https://ru.wikipedia.org/wiki/Snappy_(библиотека)). При записи типы `List` и `Tuple` переводятся соответственно в логические parquet типы `List` и `Struct`.
 
 {% endnote %}
 
@@ -278,31 +429,50 @@ WITH
 
 Данный формат позволяет считывать содержимое файлов как есть, в "сыром" виде. Считанные таким образом данные можно обработать средствами [YQL](../../../yql/reference/udf/list/string), разделив на строки и столбцы.
 
-Этот формат стоит использовать, если встроенных возможностей парсинга исходных данных в {{ ydb-full-name }} не достаточно. В этом формате [схема](external_data_source.md#schema) данных для чтения и записи должна состоять только из одной колонки.
+Этот формат стоит использовать, если встроенных возможностей парсинга исходных данных в {{ ydb-full-name }} недостаточно. В этом формате [схема](external_data_source.md#schema) данных для чтения и записи должна состоять только из одной колонки с одним из разрешённых типом данных, подробнее см. [ниже](#types).
 
 {% cut "Пример запроса" %}
 
+Для парсинга следующих данных, где строки разделены точкой с запятой, а значения запятой:
+
+```text
+1997,Man_1,Model_1,3000.00;
+1999,Man_2,Model_2,4900.00;
+```
+
+Можно использовать запрос:
+
 ```yql
-SELECT
-    *
-FROM `external_source`.`path`
+$input = SELECT
+    String::SplitToList(        -- разделение каждой строки по ','
+        String::Strip(RowData), -- удаление всех пробельных символов из начала и конца строк
+        ","
+    ) AS Row
+FROM external_source.`tmp.txt`
 WITH
 (
     FORMAT = "raw",
     SCHEMA =
     (
-        Data String
+        FileData Utf8
     )
 )
+FLATTEN LIST BY (String::SplitToList(FileData, ";", TRUE AS SkipEmpty) AS RowData); -- разделение файла по ';'
+
+SELECT -- Получение нужных колонок
+    CAST(Row[0] AS Int32) AS Year,
+    Row[1] AS Manufacturer,
+    Row[2] AS Model,
+    CAST(Row[3] AS Double) AS Price
+FROM $input
 ```
 
 Результат выполнения запроса:
 
-```text
-Year,Manufacturer,Model,Price
-1997,Man_1,Model_1,3000.00
-1999,Man_2,Model_2,4900.00
-```
+|#|Manufacturer|Model|Price|Year|
+|-|-|-|-|-|
+|1|Man_1|Model_1|3000|1997|
+|2|Man_2|Model_2|4900|1999|
 
 {% endcut %}
 
@@ -350,7 +520,7 @@ Year,Manufacturer,Model,Price
 |`Date32`, `Datetime64`, `Timestamp64`,<br/>`Interval64`,<br/>`TzDate32`, `TzDateTime64`, `TzTimestamp64`||||||✓   |    |
 |`Optional<T>`                        |✓            |✓              |✓       |✓            |✓             |✓     |✓   |
 |`List<T>`, `Tuple<Type1, ..., TypeN>`|✓            |✓              |✓       |✓            |              |       |    |
-|`Struct<Name1:Type1, ..., NameN:TypeN>`,<br/>`Variant<Name1:Type1, Name2:Type2>`,<br/>`Dict<String, Type>`, `Dict<Utf8, Type>`|||✓|||||
+|`Struct<Name1:Type1, ..., NameN:TypeN>`,<br/>`Dict<String, Type>`, `Dict<Utf8, Type>`|||✓| |              |       |    |
 
 Таблица всех поддерживаемых типов при записи в S3:
 
@@ -369,6 +539,6 @@ Year,Manufacturer,Model,Price
 |`List<T>`, `Tuple<Type1, ..., TypeN>`|✓            |✓              |✓       |✓            |✓      |    |
 |`Struct<Name1:Type1, ..., NameN:TypeN>`,<br/>`Variant<Name1:Type1, Name2:Type2>`,<br/>`Dict<String, Type>`, `Dict<Utf8, Type>`|||✓||||
 
-Подробнее про контейнерные типы `List`, `Tuple`, `Struct`, `Variant` и `Dict` см. в [документации по YQL](../../../yql/reference/types/containers.md).
+Примеры представления сложных типов данных в различных форматах приведены выше в разделе [Поддерживаемые форматы данных](#formats). Подробнее про контейнерные типы `List`, `Tuple`, `Struct`, `Variant` и `Dict` см. в [документации по YQL](../../../yql/reference/types/containers.md).
 
 Для всех форматов чтения из S3 и записи в S3, кроме `json_list`, разрешено использовать тип `Optional<T>` только когда `T` - [примитивный YQL тип](../../../yql/reference/types/primitive.md). Подробнее про опциональные типы см. в статье [{#T}](../../../yql/reference/types/optional.md).

@@ -85,7 +85,7 @@ WHERE
 Где:
 
 * `object_storage_external_datasource_name` — название внешнего источника данных, ведущего на бакет с S3 ({{ objstorage-full-name }}).
-* `file_path` — путь к файлу или файлам внутри бакета. Поддерживаются wildcards `*`, подробнее [в разделе](#path_format).
+* `file_path` — путь к файлу или файлам внутри бакета. Поддерживаются wildcards, подробнее [в разделе](#path_format).
 * `file_format` — [формат данных](formats.md#formats) в файлах, обязательно.
 * `compression` — опциональный [формат сжатия](formats.md#compression_formats) файлов.
 * `schema_definition` — [описание схемы хранимых данных](#schema) в файлах, обязательно.
@@ -139,7 +139,7 @@ WHERE
 Где:
 
 * `object_storage_external_datasource_name` — название внешнего источника данных, ведущего на S3 бакет ({{ objstorage-full-name }}).
-* `file_path` — путь к файлу или файлам внутри бакета. Поддерживаются wildcards `*`, подробнее [ниже](#path_format).
+* `file_path` — путь к файлу или файлам внутри бакета. Поддерживаются wildcards, подробнее [ниже](#path_format).
 * `file_format` — [формат данных](formats.md#formats) в файлах. Поддерживаются все форматы, кроме `raw` и `json_as_string`.
 * `compression` — опциональный [формат сжатия](formats.md#compression_formats) файлов.
 

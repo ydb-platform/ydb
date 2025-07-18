@@ -6,7 +6,7 @@
 {{ ydb-cli }} [connection options] import s3 [options]
 ```
 
-{% note warning %}
+{% note info %}
 
 Импорт таблиц из S3 с использованием [внешних таблиц](../../../../concepts/datamodel/external_table.md) описан в статье [{#T}](../../../../concepts/federated_query/s3/external_table.md#import-from-s3).
 

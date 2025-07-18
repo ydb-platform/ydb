@@ -1,6 +1,6 @@
 |Имя параметра|Описание|Принимаемые значения|
 |----|----|---|
-|`file_pattern`|Шаблон имени файла|Строка шаблона имени. Поддерживаются wildcards `*`.|
+|`file_pattern`|Шаблон имени файла|Строка шаблона имени. Поддерживаются wildcards.|
 |`data.interval.unit`|Единица измерения для парсинга типа `Interval`|`MICROSECONDS`, `MILLISECONDS`, `SECONDS`, `MINUTES`, `HOURS`, `DAYS`, `WEEKS`|
 |`data.datetime.format_name`|Предопределенный формат, в котором записаны данные типа `Datetime`|`POSIX`, `ISO`|
 |`data.datetime.format`|Шаблон, определяющий как записаны данные типа `Datetime`|Строка форматирования, например: `%Y-%m-%dT%H-%M`|

@@ -193,15 +193,15 @@ message TFeatureFlags {
     // deny non-administrators the privilege of administering local users and groups
     optional bool EnableStrictUserManagement = 168 [default = false];
     optional bool EnableDatabaseAdmin = 169 [default = false];
-    optional bool EnableChangefeedsImport = 170 [default = false];
+    optional bool EnableChangefeedsImport = 170 [default = true];
     optional bool EnablePermissionsExport = 171 [default = false];
     optional bool EnableDataErasure = 172 [default = false];
-    optional bool EnableChangefeedsExport = 174 [default = false];
+    optional bool EnableChangefeedsExport = 174 [default = true];
     optional bool EnableKafkaNativeBalancing = 175 [default = false];
     optional bool EnableKafkaTransactions = 177 [default = false];
     optional bool SwitchToConfigV2 = 179 [default = false];
     optional bool SwitchToConfigV1 = 180 [default = false];
-    optional bool EnableExportAutoDropping = 183 [default = false];
+    optional bool EnableExportAutoDropping = 183 [default = true];
     optional bool EnableThrottlingReport = 184 [default = false];
     optional bool EnableNodeBrokerDeltaProtocol = 185 [default = false];
     optional bool EnableAccessToIndexImplTables = 186 [default = true];

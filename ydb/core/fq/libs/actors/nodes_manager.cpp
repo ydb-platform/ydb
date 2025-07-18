@@ -128,7 +128,7 @@ private:
     void ScheduleUniformly(const NYql::NDqProto::TAllocateWorkersRequest& request, THolder<NDqs::TEvAllocateWorkersResponse>& response) {
         const auto count = request.GetCount();
         auto resourceId = request.GetResourceId();
-        auto filtersPerTask = request.GetWorkerFilterPerTask();
+        const auto& filtersPerTask = request.GetWorkerFilterPerTask();
         if (!resourceId) {
             resourceId = (ui64(++ResourceIdPart) << 32) | SelfId().NodeId();
         }
@@ -145,7 +145,8 @@ private:
             if (totalMemoryLimit == 0) {
                 totalMemoryLimit = MkqlInitialMemoryLimit;
             }
-            TSet<ui64> nodeFilter{filtersPerTask.Get(i).GetNodeId().begin(), filtersPerTask.Get(i).GetNodeId().end()};
+            const auto& nodeIdProto =  filtersPerTask.Get(i).GetNodeId();
+            TSet<ui64> nodeFilter{nodeIdProto.begin(), nodeIdProto.end()};
             TPeer node = {SelfId().NodeId(), InstanceId + "," + HostName(), 0, 0, 0, DataCenter};
             bool selfPlacement = true;
             if (!Peers.empty()) {

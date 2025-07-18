@@ -43,15 +43,6 @@ public:
         ResultBatch.Cut(limit);
     }
 
-    const arrow::Table& GetResultBatch() const {
-        return *ResultBatch.GetRecordBatch();
-    }
-
-    const std::shared_ptr<arrow::Table>& GetResultBatchPtrVerified() const {
-        AFL_VERIFY(ResultBatch.GetRecordBatch());
-        return ResultBatch.GetRecordBatch();
-    }
-
     ui64 GetMemorySize() const {
         return ResultBatch.GetMemorySize();
     }

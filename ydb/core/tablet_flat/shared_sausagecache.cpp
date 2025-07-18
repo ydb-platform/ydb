@@ -26,13 +26,6 @@ namespace NKikimr::NSharedCache {
 using namespace NTabletFlatExecutor;
 
 struct TRequest : public TSimpleRefCount<TRequest>, public TIntrusiveListItem<TRequest> {
-    TRequest(TIntrusiveConstPtr<NPageCollection::IPageCollection> pageCollection, NWilson::TTraceId &&traceId)
-        : Label(pageCollection->Label())
-        , PageCollection(std::move(pageCollection))
-        , TraceId(std::move(traceId))
-    {
-    }
-
     bool IsResponded() const {
         return !Sender;
     }
@@ -41,7 +34,7 @@ struct TRequest : public TSimpleRefCount<TRequest>, public TIntrusiveListItem<TR
         Sender = {};
     }
 
-    const TLogoBlobID Label;
+    TLogoBlobID Label;
     TActorId Sender;
     NBlockIO::EPriority Priority;
     TIntrusiveConstPtr<NPageCollection::IPageCollection> PageCollection;
@@ -50,6 +43,7 @@ struct TRequest : public TSimpleRefCount<TRequest>, public TIntrusiveListItem<TR
     ui64 PendingBlocks = 0;
     TVector<TEvResult::TLoaded> ReadyPages;
     TDeque<TPageId> QueuePagesToRequest; // FIXME: store first pending page index
+    TIntrusivePtr<NPageCollection::TPagesWaitPad> WaitPad;
     NWilson::TTraceId TraceId;
 };
 
@@ -489,12 +483,16 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
             }
         }
 
-        auto request = MakeIntrusive<TRequest>(std::move(msg->Fetch->PageCollection), std::move(msg->Fetch->TraceId));
+        auto request = MakeIntrusive<TRequest>();
+        request->Label = msg->Fetch->PageCollection->Label();
+        request->PageCollection = std::move(msg->Fetch->PageCollection);
         request->Sender = ev->Sender;
         request->Priority = msg->Priority;
         request->EventCookie = ev->Cookie;
         request->RequestCookie = msg->Fetch->Cookie;
         request->ReadyPages = std::move(readyPages);
+        request->WaitPad = std::move(msg->Fetch->WaitPad);
+        request->TraceId = std::move(msg->Fetch->TraceId);
         Counters.PendingRequests->Inc();
 
         if (pendingPages) {
@@ -568,7 +566,8 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
                 } else {
                     AddInFlyPages(pagesToRequest.size(), pagesToRequestBytes);
                     // fetch cookie -> requested size
-                    auto *fetch = new NPageCollection::TFetch(pagesToRequestBytes, request->PageCollection, std::move(pagesToRequest), std::move(request->TraceId));
+                    auto *fetch = new NPageCollection::TFetch(pagesToRequestBytes, request->PageCollection, std::move(pagesToRequest));
+                    fetch->TraceId = std::move(request->TraceId);
                     NBlockIO::Start(this, request->Sender, NO_QUEUE_COOKIE, request->Priority, fetch);
                 }
             }
@@ -577,8 +576,8 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
                 << " owner " << ev->Sender
                 << " cookie " << ev->Cookie
                 << " class " << msg->Priority
-                <<  " from cache " << msg->Fetch->Pages);
-            SendResult(request);
+                << " from cache " << msg->Fetch->Pages);
+            SendResult(*request);
         }
 
         DoGC();
@@ -647,7 +646,8 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
                     AddInFlyPages(toLoad.size(), sizeToLoad);
                     // fetch cookie -> requested size;
                     // event cookie -> queue type
-                    auto *fetch = new NPageCollection::TFetch(sizeToLoad, request.PageCollection, std::move(toLoad), request.TraceId.GetTraceId());
+                    auto *fetch = new NPageCollection::TFetch(sizeToLoad, request.PageCollection, std::move(toLoad));
+                    fetch->TraceId = request.TraceId.GetTraceId();
                     NBlockIO::Start(this, request.Sender, (&queue == &AsyncRequests ? ASYNC_QUEUE_COOKIE : SCAN_QUEUE_COOKIE), request.Priority, fetch);
                 }
             }
@@ -1038,33 +1038,33 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
             readyPage.Page = TSharedPageRef::MakeUsed(page, SharedCachePages->GCList);
 
             if (--request->PendingBlocks == 0) {
-                SendResult(request);
+                SendResult(*request);
             }
         }
         collection.PendingRequests.erase(pendingRequestsIt);
     }
 
-    void SendResult(const TIntrusivePtr<TRequest> &request) {
-        if (request->IsResponded()) {
+    void SendResult(TRequest &request) {
+        if (request.IsResponded()) {
             return;
         }
 
-        TAutoPtr<NSharedCache::TEvResult> result =
-            new NSharedCache::TEvResult(std::move(request->PageCollection), request->RequestCookie, NKikimrProto::OK);
-        result->Pages = std::move(request->ReadyPages);
+        TAutoPtr<NSharedCache::TEvResult> result = new NSharedCache::TEvResult(std::move(request.PageCollection), request.RequestCookie, NKikimrProto::OK);
+        result->Pages = std::move(request.ReadyPages);
+        result->WaitPad = std::move(request.WaitPad);
 
         LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TABLET_SAUSAGECACHE, "Send page collection result " << result->PageCollection->Label()
-            << " owner " << request->Sender
-            << " class " << request->Priority
+            << " owner " << request.Sender
+            << " class " << request.Priority
             << " pages " << result->Pages
-            << " cookie " << request->EventCookie);
+            << " cookie " << request.EventCookie);
 
-        Send(request->Sender, result.Release(), 0, request->EventCookie);
+        Send(request.Sender, result.Release(), 0, request.EventCookie);
         Counters.PendingRequests->Dec();
         Counters.SucceedRequests->Inc();
         StatBioReqs += 1;
 
-        request->MarkResponded();
+        request.MarkResponded();
     }
 
     void SendError(TRequest &request, NKikimrProto::EReplyStatus error) {
@@ -1072,8 +1072,8 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
             return;
         }
 
-        TAutoPtr<NSharedCache::TEvResult> result =
-            new NSharedCache::TEvResult(std::move(request.PageCollection), request.RequestCookie, error);
+        TAutoPtr<NSharedCache::TEvResult> result = new NSharedCache::TEvResult(std::move(request.PageCollection), request.RequestCookie, error);
+        result->WaitPad = std::move(request.WaitPad);
 
         LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TABLET_SAUSAGECACHE, "Send page collection error " << result->PageCollection->Label()
             << " owner " << request.Sender
@@ -1207,7 +1207,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         if (pagesToRequest) {
             AddInFlyPages(pagesToRequest.size(), pagesToRequestBytes);
             // fetch cookie -> requested size
-            auto *fetch = new NPageCollection::TFetch(pagesToRequestBytes, std::move(pageCollection), std::move(pagesToRequest), NWilson::TTraceId());
+            auto *fetch = new NPageCollection::TFetch(pagesToRequestBytes, std::move(pageCollection), std::move(pagesToRequest));
             // TODO: add some counters for these fetches?
             NBlockIO::Start(this, owner, NO_QUEUE_COOKIE, NBlockIO::EPriority::Bulk, fetch);
         }

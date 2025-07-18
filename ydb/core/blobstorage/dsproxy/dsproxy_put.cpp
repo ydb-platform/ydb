@@ -298,6 +298,8 @@ class TBlobStorageGroupPutRequest : public TBlobStorageGroupRequestActor {
                 GetTotalTimeMs(record.GetTimestamps()),
                 GetVDiskTimeMs(record.GetTimestamps()),
                 GetTotalTimeMs(record.GetTimestamps()) - GetVDiskTimeMs(record.GetTimestamps()),
+                record.GetMsgQoS().GetExecTimeStats().GetInSenderQueue() / 1000.0,
+                record.GetMsgQoS().GetExecTimeStats().GetInQueue() / 1000.0,
                 NKikimrBlobStorage::EPutHandleClass_Name(PutImpl.GetPutHandleClass()),
                 NKikimrProto::EReplyStatus_Name(status));
         if (RootCauseTrack.IsOn) {

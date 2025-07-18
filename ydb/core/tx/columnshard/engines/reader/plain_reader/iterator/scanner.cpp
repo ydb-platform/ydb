@@ -29,7 +29,7 @@ void TScanHead::OnIntervalResult(std::shared_ptr<NGroupedMemoryManager::TAllocat
             gGuard = itInterval->second->GetGroupGuard();
         }
         std::vector<std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>> guards = { std::move(allocationGuard) };
-        AFL_VERIFY(ReadyIntervals.emplace(intervalIdx, std::make_shared<TPartialReadResult>(guards, std::move(gGuard), *newBatch,
+        AFL_VERIFY(ReadyIntervals.emplace(intervalIdx, std::make_unique<TPartialReadResult>(guards, std::move(gGuard), *newBatch,
             std::make_shared<TPlainScanCursor>(std::make_shared<NArrow::TSimpleRow>(lastPK, 0)), Context->GetCommonContext(), callbackIdxSubscriver)).second);
     } else {
         AFL_VERIFY(ReadyIntervals.emplace(intervalIdx, nullptr).second);
@@ -47,14 +47,15 @@ void TScanHead::OnIntervalResult(std::shared_ptr<NGroupedMemoryManager::TAllocat
             AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "interval_result")("interval_idx", intervalIdx)("count",
                 it->second ? it->second->GetRecordsCount() : 0)("merger", interval->HasMerger())("interval_id", interval->GetIntervalId());
         }
-        auto result = it->second;
+        auto result = std::move(it->second);
         ReadyIntervals.erase(it);
+        bool hasResult = !!result;
         if (result) {
-            reader.OnIntervalResult(result);
+            reader.OnIntervalResult(std::move(result));
         }
         if (!interval->HasMerger()) {
             FetchingIntervals.erase(FetchingIntervals.begin());
-        } else if (result) {
+        } else if (hasResult) {
             break;
         } else {
             interval->OnPartSendingComplete();

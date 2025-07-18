@@ -151,6 +151,11 @@ ui64 TShardedRecordBatch::GetRecordsCount() const {
     return RecordBatch->num_rows();
 }
 
+const std::shared_ptr<arrow::Table>& TShardedRecordBatch::GetRecordBatch() const {
+    AFL_VERIFY(RecordBatch);
+    return RecordBatch;
+}
+
 std::vector<std::shared_ptr<arrow::Table>> TShardingSplitIndex::Apply(const std::shared_ptr<arrow::Table>& input) {
     AFL_VERIFY(input);
     AFL_VERIFY(input->num_rows() == RecordsCount);

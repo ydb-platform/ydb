@@ -19,6 +19,7 @@ public:
 
     std::shared_ptr<arrow::Schema> GetResultSchema() const;
     std::shared_ptr<arrow::Table> ExtractRecordBatch();
+    const std::shared_ptr<arrow::Table>& GetRecordBatch() const;
 
     void Cut(const ui32 limit) {
         RecordBatch = RecordBatch->Slice(0, limit);

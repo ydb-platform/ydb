@@ -2963,6 +2963,11 @@ TString AddExecStatsToTxPlan(const TString& txPlanJson, const NYql::NDqProto::TD
                     stats["UpdateTimeMs"] = updateTimeUs;
                 }
 
+                auto& introspections = stats.InsertValue("Introspections", NJson::JSON_ARRAY);
+                for (const auto& intro : (*stat)->GetIntrospections()) {
+                    introspections.AppendValue(intro);
+                }
+
                 stats["StageDurationUs"] = (*stat)->GetStageDurationUs();
 
                 if ((*stat)->GetBaseTimeMs()) {

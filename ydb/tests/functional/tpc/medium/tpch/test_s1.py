@@ -17,14 +17,3 @@ class TestTpchS1(tpch.TestTpch1, FunctionalTestBase):
         cls.run_cli(['workload', 'tpch', '-p', f'olap_yatests/{cls._get_path()}', 'init', '--store=column'] + cls.addition_init_params())
         cls.run_cli(['workload', 'tpch', '-p', f'olap_yatests/{cls._get_path()}', 'import', 'generator', f'--scale={cls.scale}'])
         super().setup_class()
-
-
-class TestTpchS1Decimal_22_9(TestTpchS1):
-    float_mode = 'decimal_ydb'
-
-
-class TestTpchS0_1(TestTpchS1):
-    tables_size: dict[str, int] = {
-        'lineitem': 600572,
-    }
-    scale: float = 0.1

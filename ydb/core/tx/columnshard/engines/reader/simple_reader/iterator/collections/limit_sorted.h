@@ -51,6 +51,7 @@ private:
         Cleared = true;
         SourcesConstructor->Clear();
         FetchingInFlightSources.clear();
+        NextSource.reset();
     }
     virtual void DoAbort() override {
         Aborted = true;

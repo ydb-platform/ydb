@@ -6,7 +6,7 @@
 
 namespace NKikimr {
 
-TString MakeData(ui32 dataSize);
+TString MakeData(ui32 dataSize, ui32 step = 1);
 
 template<typename Int1 = ui32, typename Int2 = ui32>
 inline Int1 GenerateRandom(Int1 min, Int2 max) {
@@ -278,7 +278,26 @@ public:
         GroupId = group.GetGroupId();
     }
 
-    void AllocateEdgeActor() {
+    void AllocateEdgeActor(bool findNodeWithoutVDisks = false) {
+        ui32 chosenNodeId = 0;
+        if (!findNodeWithoutVDisks) {
+            chosenNodeId = NodeCount;
+        } else {
+            std::set<ui32> nodesWithoutVDisks;
+            for (ui32 nodeId = 1; nodeId <= NodeCount; ++nodeId) {
+                nodesWithoutVDisks.insert(nodeId);
+            }
+    
+            for (const auto& vslot : BaseConfig.GetVSlot()) {
+                nodesWithoutVDisks.erase(vslot.GetVSlotId().GetNodeId());
+            }
+
+            if (!nodesWithoutVDisks.empty()) {
+                chosenNodeId = *nodesWithoutVDisks.begin();
+            }
+        }
+
+        Y_VERIFY_S(chosenNodeId != 0, "No available nodes to allocate");
         Edge = Env->Runtime->AllocateEdgeActor(NodeCount);
     }
 
@@ -323,7 +342,7 @@ public:
         // must be specified when using ECookieStrategy::WithSamePlacement
         std::optional<TBlobStorageGroupType> Erasure = std::nullopt;
 
-        ui64 TabletId = 5000;
+        ui64 TabletId = 123218421;
         ui32 Channel = 1;
         ui32 Generation = 1;
         ui32 Step = 1;

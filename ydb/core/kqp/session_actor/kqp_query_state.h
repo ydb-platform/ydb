@@ -440,11 +440,11 @@ public:
         return true;
     }
 
-    TKqpPhyTxHolder::TConstPtr GetCurrentPhyTx(NMiniKQL::TTypeEnvironment& txTypeEnv, bool isBatchQuery = false) {
+    TKqpPhyTxHolder::TConstPtr GetCurrentPhyTx(NMiniKQL::TTypeEnvironment& txTypeEnv) {
         const auto& phyQuery = PreparedQuery->GetPhysicalQuery();
         auto tx = PreparedQuery->GetPhyTxOrEmpty(CurrentTx);
 
-        if (TxCtx->CanDeferEffects() && !isBatchQuery) {
+        if (TxCtx->CanDeferEffects()) {
             // Olap sinks require separate tnx with commit.
             while (tx && tx->GetHasEffects() && !TxCtx->HasOlapTable) {
                 QueryData->PrepareParameters(tx, PreparedQuery, txTypeEnv);

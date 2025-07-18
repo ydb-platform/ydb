@@ -44,6 +44,8 @@ struct TKikimrSettings {
     /* No op just to avoid errors in Cloud Logging until they remove this from their queries */
     NCommon::TConfSetting<bool, false> KqpPushOlapProcess;
 
+    NCommon::TConfSetting<bool, false> KqpForceImmediateEffectsExecution;
+
     /* Compile time */
     NCommon::TConfSetting<ui64, false> _CommitPerShardKeysSizeLimitBytes;
     NCommon::TConfSetting<TString, false> _DefaultCluster;

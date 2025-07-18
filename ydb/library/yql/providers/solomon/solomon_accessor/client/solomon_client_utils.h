@@ -17,11 +17,8 @@ template <typename T>
 class TSolomonClientResponse {
 public:
     TSolomonClientResponse();
-    explicit TSolomonClientResponse(const TString& error);
+    explicit TSolomonClientResponse(const TString& error, EStatus status = STATUS_FATAL_ERROR);
     explicit TSolomonClientResponse(T&& result);
-
-    TSolomonClientResponse(const TSolomonClientResponse&) = default;
-    TSolomonClientResponse(TSolomonClientResponse&&) = default;
 
 public:
     EStatus Status;

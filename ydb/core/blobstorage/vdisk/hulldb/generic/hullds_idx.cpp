@@ -17,6 +17,7 @@ namespace NKikimr {
             case StateCompPolicyAtWork: return "Policy At Work";
             case StateCompInProgress:   return "Compaction In Progress";
             case StateWaitCommit:       return "Committing";
+            case StateWaitPreCompact:   return "Waiting Huge Blob Pre-compaction";
             default:                    return "UNKNOWN";
         }
     }

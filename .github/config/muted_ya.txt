@@ -34,7 +34,6 @@ ydb/core/kqp/ut/join KqpIndexLookupJoin.LeftJoinRightNullFilter-StreamLookup
 ydb/core/kqp/ut/query KqpAnalyze.AnalyzeTable+ColumnStore
 ydb/core/kqp/ut/query KqpAnalyze.AnalyzeTable-ColumnStore
 ydb/core/kqp/ut/query KqpStats.SysViewClientLost
-ydb/core/kqp/ut/scan KqpSplit.UndeliveryOnFinishedRead
 ydb/core/kqp/ut/scheme KqpOlapScheme.TenThousandColumns
 ydb/core/kqp/ut/scheme KqpScheme.AlterAsyncReplication
 ydb/core/kqp/ut/scheme [*/*] chunk chunk

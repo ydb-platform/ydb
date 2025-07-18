@@ -13,8 +13,8 @@ TSolomonClientResponse<T>::TSolomonClientResponse()
     : Status(STATUS_RETRIABLE_ERROR) {}
 
 template <typename T>
-TSolomonClientResponse<T>::TSolomonClientResponse(const TString& error)
-    : Status(STATUS_FATAL_ERROR)
+TSolomonClientResponse<T>::TSolomonClientResponse(const TString& error, EStatus status)
+    : Status(status)
     , Error(error) {}
 
 template <typename T>

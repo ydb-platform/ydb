@@ -6,23 +6,33 @@ namespace NKikimr::NStorage {
 
     using TInvokeRequestHandlerActor = TDistributedConfigKeeper::TInvokeRequestHandlerActor;
 
-    std::optional<TString> TInvokeRequestHandlerActor::ValidateSwitchBridgeClusterState(const NKikimrBridge::TClusterState& newClusterState) {
+    void TInvokeRequestHandlerActor::NeedBridgeMode() {
         if (!Self->Cfg->BridgeConfig) {
-            return "Bridge mode is not enabled";
+            throw TExError() << "Bridge mode is not enabled";
+        }
+    }
+
+    void TInvokeRequestHandlerActor::PrepareSwitchBridgeClusterState(const TQuery::TSwitchBridgeClusterState& cmd) {
+        NeedBridgeMode();
+
+        const auto& newClusterState = cmd.GetNewClusterState();
+
+        for (ui32 bridgePileId : cmd.GetSpecificBridgePileIds()) {
+            SpecificBridgePileIds.insert(TBridgePileId::FromValue(bridgePileId));
         }
 
         // check new config alone
         const ui32 numPiles = Self->Cfg->BridgeConfig->PilesSize();
         if (newClusterState.PerPileStateSize() != numPiles) {
-            return "incorrect number of per-pile states in new config";
+            throw TExError() << "Incorrect number of per-pile states in new config";
         } else if (newClusterState.GetPrimaryPile() >= numPiles) {
-            return "incorrect primary pile";
+            throw TExError() << "Incorrect primary pile";
         } else if (newClusterState.GetPromotedPile() >= numPiles) {
-            return "incorrect promoted pile";
+            throw TExError() << "Incorrect promoted pile";
         } else if (newClusterState.GetPerPileState(newClusterState.GetPrimaryPile()) != NKikimrBridge::TClusterState::SYNCHRONIZED) {
-            return "incorrect primary pile state";
+            throw TExError() << "Incorrect primary pile state";
         } else if (newClusterState.GetPerPileState(newClusterState.GetPromotedPile()) != NKikimrBridge::TClusterState::SYNCHRONIZED) {
-            return "incorrect promoted pile state";
+            throw TExError() << "Incorrect promoted pile state";
         }
 
         if (Self->StorageConfig->HasClusterState()) {
@@ -41,11 +51,11 @@ namespace NKikimr::NStorage {
 
                         case NKikimrBridge::TClusterState::SYNCHRONIZED:
                             // invalid transition from any state
-                            return "can't switch to SYNCHRONIZED directly";
+                            throw TExError() << "Can't switch to SYNCHRONIZED directly";
 
                         case NKikimrBridge::TClusterState::NOT_SYNCHRONIZED:
                             if (currentState == NKikimrBridge::TClusterState::SYNCHRONIZED) {
-                                return "invalid transition from SYNCHRONIZED to NOT_SYNCHRONIZED";
+                                throw TExError() << "Invalid transition from SYNCHRONIZED to NOT_SYNCHRONIZED";
                             }
                             break;
 
@@ -56,21 +66,20 @@ namespace NKikimr::NStorage {
                 }
             }
             if (numDifferent > 1) {
-                return "too many state changes in new configuration";
-            }
-            if (current.GetGeneration() + 1 != newClusterState.GetGeneration()) {
-                return TStringBuilder() << "new cluster state generation# "
-                    << newClusterState.GetGeneration() << " expected# " << current.GetGeneration() + 1;
+                throw TExError() << "Too many state changes in new configuration";
+            } else if (current.GetGeneration() + 1 != newClusterState.GetGeneration()) {
+                throw TExError() << "New cluster state generation# " << newClusterState.GetGeneration()
+                    << " expected# " << current.GetGeneration() + 1;
             }
         }
 
-        return std::nullopt; // no error
+        SwitchBridgeNewConfig.emplace(GetSwitchBridgeNewConfig(newClusterState));
     }
 
     void TInvokeRequestHandlerActor::SwitchBridgeClusterState() {
-        if (RunCommonChecks()) {
-            StartProposition(&SwitchBridgeNewConfig.value());
-        }
+        RunCommonChecks();
+        Y_ABORT_UNLESS(SwitchBridgeNewConfig);
+        StartProposition(&SwitchBridgeNewConfig.value());
     }
 
     NKikimrBlobStorage::TStorageConfig TInvokeRequestHandlerActor::GetSwitchBridgeNewConfig(
@@ -156,14 +165,13 @@ namespace NKikimr::NStorage {
     }
 
     void TInvokeRequestHandlerActor::NotifyBridgeSyncFinished(const TQuery::TNotifyBridgeSyncFinished& cmd) {
-        if (!RunCommonChecks()) {
-            return;
-        } else if (!Self->Cfg->BridgeConfig) {
-            return FinishWithError(TResult::ERROR, "Bridge mode is not enabled");
+        RunCommonChecks();
+        if (!Self->Cfg->BridgeConfig) {
+            throw TExError() << "Bridge mode is not enabled";
         } else if (Self->Cfg->BridgeConfig->PilesSize() <= cmd.GetBridgePileId()) {
-            return FinishWithError(TResult::ERROR, "BridgePileId out of bounds");
+            throw TExError() << "BridgePileId out of bounds";
         } else if (Self->StorageConfig->GetClusterState().GetGeneration() != cmd.GetGeneration()) {
-            return FinishWithError(TResult::ERROR, "generation mismatch");
+            throw TExError() << "Generation mismatch";
         }
 
         NKikimrBlobStorage::TStorageConfig config = *Self->StorageConfig;
@@ -182,14 +190,14 @@ namespace NKikimr::NStorage {
             }
         }
         if (!state) {
-            return FinishWithError(TResult::ERROR, "unsynced pile not found");
+            throw TExError() << "Unsynced pile not found";
         }
 
         switch (cmd.GetStatus()) {
             case TQuery::TNotifyBridgeSyncFinished::Success:
                 if (cmd.HasBSC()) {
                     if (!cmd.GetBSC()) {
-                        return FinishWithError(TResult::ERROR, "incorrect request");
+                        throw TExError() << "Incorrect request";
                     }
                     state->SetUnsyncedBSC(false);
                 }
@@ -247,38 +255,40 @@ namespace NKikimr::NStorage {
         StartProposition(&config);
     }
 
-    bool TInvokeRequestHandlerActor::PrepareMergeUnsyncedPileConfig(const TQuery::TMergeUnsyncedPileConfig& cmd) {
+    void TInvokeRequestHandlerActor::PrepareMergeUnsyncedPileConfig(const TQuery::TMergeUnsyncedPileConfig& cmd) {
+        NeedBridgeMode();
+
         NKikimrBlobStorage::TStorageConfig& config = SwitchBridgeNewConfig.emplace(*Self->StorageConfig);
         const auto& pileConfig = cmd.GetPileConfig();
 
         // TODO(alexvru): merge fields from pileConfig into config regarding that pile
 
         if (pileConfig.GetGeneration() < config.GetGeneration()) {
-            FinishWithError(TResult::RACE, "no merging needed");
-            return false;
+            throw TExError() << "No merging needed";
         }
 
         config.SetGeneration(pileConfig.GetGeneration() + 1);
-        return GenerateSpecificBridgePileIds();
+        GenerateSpecificBridgePileIds();
     }
 
     void TInvokeRequestHandlerActor::MergeUnsyncedPileConfig() {
-        if (RunCommonChecks()) {
-            StartProposition(&SwitchBridgeNewConfig.value(), /*forceGeneration=*/ true);
-        }
+        RunCommonChecks();
+        Y_ABORT_UNLESS(SwitchBridgeNewConfig);
+        StartProposition(&SwitchBridgeNewConfig.value(), /*forceGeneration=*/ true);
     }
 
     void TInvokeRequestHandlerActor::NegotiateUnsyncedConnection(const TQuery::TNegotiateUnsyncedConnection& cmd) {
         (void)cmd;
     }
 
-    bool TInvokeRequestHandlerActor::PrepareAdvanceClusterStateGeneration(const TQuery::TAdvanceClusterStateGeneration& cmd) {
+    void TInvokeRequestHandlerActor::PrepareAdvanceClusterStateGeneration(const TQuery::TAdvanceClusterStateGeneration& cmd) {
+        NeedBridgeMode();
+
         NKikimrBlobStorage::TStorageConfig& config = SwitchBridgeNewConfig.emplace(*Self->StorageConfig);
 
         auto *clusterState = config.MutableClusterState();
         if (cmd.GetGeneration() <= clusterState->GetGeneration()) {
-            FinishWithError(TResult::RACE, "generation already increased");
-            return false;
+            throw TExError() << "Generation already increased";
         }
 
         clusterState->SetGeneration(cmd.GetGeneration());
@@ -291,16 +301,16 @@ namespace NKikimr::NStorage {
             entry->AddUnsyncedPiles(i); // all piles are unsynced by default
         }
 
-        return GenerateSpecificBridgePileIds();
+        GenerateSpecificBridgePileIds();
     }
 
     void TInvokeRequestHandlerActor::AdvanceClusterStateGeneration() {
-        if (RunCommonChecks()) {
-            StartProposition(&SwitchBridgeNewConfig.value());
-        }
+        RunCommonChecks();
+        Y_ABORT_UNLESS(SwitchBridgeNewConfig);
+        StartProposition(&SwitchBridgeNewConfig.value());
     }
 
-    bool TInvokeRequestHandlerActor::GenerateSpecificBridgePileIds() {
+    void TInvokeRequestHandlerActor::GenerateSpecificBridgePileIds() {
         Y_ABORT_UNLESS(SwitchBridgeNewConfig);
         const auto& config = *SwitchBridgeNewConfig;
         const auto& clusterState = config.GetClusterState();
@@ -323,8 +333,7 @@ namespace NKikimr::NStorage {
                 case NKikimrBridge::TClusterState::SYNCHRONIZED:
                     if (pilesWithUnsyncedStorageConfig.contains(bridgePileId)) {
                         Y_DEBUG_ABORT();
-                        FinishWithError(TResult::ERROR, "incorrect cluster history state unsynced entry");
-                        return false;
+                        throw TExError() << "Incorrect cluster history state unsynced entry";
                     }
                     SpecificBridgePileIds.insert(bridgePileId);
                     break;
@@ -341,11 +350,8 @@ namespace NKikimr::NStorage {
             }
         }
         if (SpecificBridgePileIds.empty()) {
-            FinishWithError(TResult::ERROR, "incorrect cluster state");
-            return false;
+            throw TExError() << "Incorrect cluster state";
         }
-
-        return true;
     }
 
 } // NKikimr::NStorage

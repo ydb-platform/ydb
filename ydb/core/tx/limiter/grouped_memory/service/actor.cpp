@@ -13,7 +13,7 @@ void TMemoryLimiterActor::Bootstrap() {
 }
 
 void TMemoryLimiterActor::Handle(NEvents::TEvExternal::TEvStartTask::TPtr& ev) {
-    const int index = AcquireManager(ev->Get()->GetExternalProcessId());
+    const size_t index = AcquireManager(ev->Get()->GetExternalProcessId());
     for (auto&& i : ev->Get()->GetAllocations()) {
         Managers[index]->RegisterAllocation(ev->Get()->GetExternalProcessId(), ev->Get()->GetExternalScopeId(), ev->Get()->GetExternalGroupId(), i,
             ev->Get()->GetStageFeaturesIdx());
@@ -21,43 +21,43 @@ void TMemoryLimiterActor::Handle(NEvents::TEvExternal::TEvStartTask::TPtr& ev) {
 }
 
 void TMemoryLimiterActor::Handle(NEvents::TEvExternal::TEvFinishTask::TPtr& ev) {
-    const int index = ReleaseManager(ev->Get()->GetExternalProcessId());
+    const size_t index = ReleaseManager(ev->Get()->GetExternalProcessId());
     Managers[index]->UnregisterAllocation(ev->Get()->GetExternalProcessId(), ev->Get()->GetExternalScopeId(), ev->Get()->GetAllocationId());
 }
 
 void TMemoryLimiterActor::Handle(NEvents::TEvExternal::TEvUpdateTask::TPtr& ev) {
-    const int index = GetManager(ev->Get()->GetExternalProcessId());
+    const size_t index = GetManager(ev->Get()->GetExternalProcessId());
     Managers[index]->UpdateAllocation(
         ev->Get()->GetExternalProcessId(), ev->Get()->GetExternalScopeId(), ev->Get()->GetAllocationId(), ev->Get()->GetVolume());
 }
 
 void TMemoryLimiterActor::Handle(NEvents::TEvExternal::TEvFinishGroup::TPtr& ev) {
-    const int index = ReleaseManager(ev->Get()->GetExternalProcessId());
+    const size_t index = ReleaseManager(ev->Get()->GetExternalProcessId());
     Managers[index]->UnregisterGroup(ev->Get()->GetExternalProcessId(), ev->Get()->GetExternalScopeId(), ev->Get()->GetExternalGroupId());
 }
 
 void TMemoryLimiterActor::Handle(NEvents::TEvExternal::TEvStartGroup::TPtr& ev) {
-    const int index = AcquireManager(ev->Get()->GetExternalProcessId());
+    const size_t index = AcquireManager(ev->Get()->GetExternalProcessId());
     Managers[index]->RegisterGroup(ev->Get()->GetExternalProcessId(), ev->Get()->GetExternalScopeId(), ev->Get()->GetExternalGroupId());
 }
 
 void TMemoryLimiterActor::Handle(NEvents::TEvExternal::TEvFinishProcess::TPtr& ev) {
-    const int index = ReleaseManager(ev->Get()->GetExternalProcessId());
+    const size_t index = ReleaseManager(ev->Get()->GetExternalProcessId());
     Managers[index]->UnregisterProcess(ev->Get()->GetExternalProcessId());
 }
 
 void TMemoryLimiterActor::Handle(NEvents::TEvExternal::TEvStartProcess::TPtr& ev) {
-    const int index = AcquireManager(ev->Get()->GetExternalProcessId());
+    const size_t index = AcquireManager(ev->Get()->GetExternalProcessId());
     Managers[index]->RegisterProcess(ev->Get()->GetExternalProcessId(), ev->Get()->GetStages());
 }
 
 void TMemoryLimiterActor::Handle(NEvents::TEvExternal::TEvFinishProcessScope::TPtr& ev) {
-    const int index = ReleaseManager(ev->Get()->GetExternalProcessId());
+    const size_t index = ReleaseManager(ev->Get()->GetExternalProcessId());
     Managers[index]->UnregisterProcessScope(ev->Get()->GetExternalProcessId(), ev->Get()->GetExternalScopeId());
 }
 
 void TMemoryLimiterActor::Handle(NEvents::TEvExternal::TEvStartProcessScope::TPtr& ev) {
-    const int index = AcquireManager(ev->Get()->GetExternalProcessId());
+    const size_t index = AcquireManager(ev->Get()->GetExternalProcessId());
     Managers[index]->RegisterProcessScope(ev->Get()->GetExternalProcessId(), ev->Get()->GetExternalScopeId());
 }
 
@@ -73,10 +73,10 @@ void TMemoryLimiterActor::Handle(NMemory::TEvConsumerLimit::TPtr& ev) {
     }
 }
 
-int TMemoryLimiterActor::AcquireManager(ui64 externalProcessId) {
+size_t TMemoryLimiterActor::AcquireManager(ui64 externalProcessId) {
     auto it = ProcessMapping.find(externalProcessId);
     if (it == ProcessMapping.end()) {
-        ui64 index = LoadQueue.Top();
+        size_t index = LoadQueue.Top();
         LoadQueue.ChangeLoad(index, +1);
         auto& stats = ProcessMapping[externalProcessId];
         stats.Counter++;
@@ -89,7 +89,7 @@ int TMemoryLimiterActor::AcquireManager(ui64 externalProcessId) {
     return stats.ManagerIndex;
 }
 
-int TMemoryLimiterActor::ReleaseManager(ui64 externalProcessId) {
+size_t TMemoryLimiterActor::ReleaseManager(ui64 externalProcessId) {
     auto it = ProcessMapping.find(externalProcessId);
     AFL_VERIFY(it != ProcessMapping.end());
     size_t id = it->second.ManagerIndex;
@@ -101,7 +101,7 @@ int TMemoryLimiterActor::ReleaseManager(ui64 externalProcessId) {
     return id;
 }
 
-int TMemoryLimiterActor::GetManager(ui64 externalProcessId) {
+size_t TMemoryLimiterActor::GetManager(ui64 externalProcessId) {
     auto it = ProcessMapping.find(externalProcessId);
     AFL_VERIFY(it != ProcessMapping.end());
     return it->second.ManagerIndex;

@@ -27,9 +27,7 @@ public:
 
     const T& Top() {
         auto loadLevelIt = Load.begin();
-        if (loadLevelIt == Load.end()) {
-            ythrow yexception() << "Load queue is empty. Please add at least one element to load queue";
-        }
+        AFL_VERIFY(loadLevelIt != Load.end())("error", "Load queue is empty. Please add at least one element to load queue");
         return *loadLevelIt->second.begin();
     }
 
@@ -38,17 +36,14 @@ public:
             return;
         }
         auto it = Items.find(item);
-        if (it == Items.end()) {
-            return;
-        }
-        TLoad load = it->second;
+        AFL_VERIFY(it != Items.end())("error", "Load item is not found");
+        TLoad& load = it->second;
         auto loadLevelIt = Load.find(load);
         loadLevelIt->second.erase(item);
         if (loadLevelIt->second.empty()) {
             Load.erase(loadLevelIt);
         }
         load += delta;
-        it->second = load;
         Load[load].emplace(item);
     }
 };
@@ -58,10 +53,9 @@ class TManager;
 class TMemoryLimiterActor: public NActors::TActorBootstrapped<TMemoryLimiterActor> {
 private:
     TVector<std::shared_ptr<TManager>> Managers;
-    TLoadQueue<i64> LoadQueue;
-
+    TLoadQueue<size_t> LoadQueue;
     struct TProcessStats {
-        int ManagerIndex = 0;
+        size_t ManagerIndex = 0;
         int Counter = 0;
     };
     TMap<ui64, TProcessStats> ProcessMapping;
@@ -114,9 +108,9 @@ public:
         }
     }
 private:
-    int AcquireManager(ui64 externalProcessId);
-    int ReleaseManager(ui64 externalProcessId);
-    int GetManager(ui64 externalProcessId);
+    size_t AcquireManager(ui64 externalProcessId);
+    size_t ReleaseManager(ui64 externalProcessId);
+    size_t GetManager(ui64 externalProcessId);
 };
 
 }   // namespace NKikimr::NOlap::NGroupedMemoryManager

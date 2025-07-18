@@ -264,12 +264,12 @@ namespace NKikimr {
                 Sublog.Log() << "Defrag quantum started {nothing} \n";
             } else {
                 Sublog.Log() << "Defrag quantum started"
-                            << " {#chunksSize: " << chunksToDefrag->Chunks.size()
-                            << " #foundChunks" << chunksToDefrag->FoundChunksToDefrag
-                            << " #estimatedSlots" << chunksToDefrag->EstimatedSlotsCount
-                            << " #isShred" << chunksToDefrag->IsShred
-                            << " #chunksToShred" << chunksToDefrag->ChunksToShred.size()
-                            << "}\n";
+                            << " {chunksSize# " << chunksToDefrag->Chunks.size()
+                            << " foundChunks# " << chunksToDefrag->FoundChunksToDefrag
+                            << " estimatedSlots# " << chunksToDefrag->EstimatedSlotsCount
+                            << " isShred# " << chunksToDefrag->IsShred
+                            << " chunksToShred# " << chunksToDefrag->ChunksToShred.size()
+                            << " }\n";
             }
             ++TotalDefragRuns;
             InProgress = true;

@@ -49,6 +49,7 @@ namespace TEvPrivate {
         EvAddNewShardToDataErasure,
         EvVerifyPassword,
         EvLoginFinalize,
+        EvContinuousBackupCleanerResult,
         EvEnd
     };
 
@@ -332,6 +333,18 @@ namespace TEvPrivate {
         const TString PasswordHash;
         const bool NeedUpdateCache;
     };
+
+    struct TEvContinuousBackupCleanerResult : public NActors::TEventLocal<TEvContinuousBackupCleanerResult, EvContinuousBackupCleanerResult> {
+    public:
+        TEvContinuousBackupCleanerResult(bool success, const TString& error = "")
+            : Success(success)
+            , Error(error)
+        {}
+
+        const bool Success = false;
+        const TString Error;
+    };
+
 }; // TEvPrivate
 
 } // NSchemeShard

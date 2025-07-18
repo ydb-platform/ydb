@@ -125,8 +125,7 @@ private:
         const auto& readResult = record.GetPartitionResponse().GetCmdReadResult();
 
         if (!readResult.ResultSize()) {
-            Y_ABORT_UNLESS(PQTablet);
-            Send(PQTablet, CreateReadRequest().Release());
+            Send(Worker, new TEvWorker::TEvDataEnd(Partition, {}, {}));
             return;
         }
 

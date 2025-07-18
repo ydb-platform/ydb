@@ -54,6 +54,7 @@ namespace TEvPersQueue {
         EvGetPartitionsLocationResponse,
         EvReadingPartitionFinished,
         EvReadingPartitionStarted,
+        EvOffloadStatus,
         EvResponse = EvRequest + 256,
         EvInternalEvents = EvResponse + 256,
         EvEnd
@@ -266,6 +267,8 @@ namespace TEvPersQueue {
             Record.SetPartitionId(partitionId);
         }
     };
+
+    struct TEvOffloadStatus : TEventPB<TEvOffloadStatus, NKikimrPQ::TEvOffloadStatus, EvOffloadStatus> {};
 
 };
 } //NKikimr

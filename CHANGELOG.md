@@ -29,7 +29,10 @@ and timeout (by default, the maximum response time from healthcheck). Documentat
 * 17952:Implemented storage of access resource ID for cluster information as the `container_id` user attribute in the root database. Users can check permissions on this resource to access cluster-related information. [#17952](https://github.com/ydb-platform/ydb/pull/17952) ([Andrei Rykov](https://github.com/StekPerepolnen))
 * 17804:Added CPU limit per process in CS for integration with Workload Manager. [#17804](https://github.com/ydb-platform/ydb/pull/17804) ([Pisarenko Grigoriy](https://github.com/GrigoriyPA))
 * 17751:Added `Create Time`, `End Time`, and `Created By` (user SID) tracking for BuildIndex operations. [#17751](https://github.com/ydb-platform/ydb/pull/17751) ([Vitaliy Filippov](https://github.com/vitalif))
-
+* 18683:Added support for creating compacted topics for Kafka API. [#18683](https://github.com/ydb-platform/ydb/pull/18683) ([FloatingCrowbar](https://github.com/FloatingCrowbar))
+* 17663:Added optimizations for reading from Solomon. [#17663](https://github.com/ydb-platform/ydb/pull/17663) ([Ivan Sukhov](https://github.com/evanevanevanevannnn))
+* 17525:Implemented automatic reconfiguration of StateStorage (change the number of rings or the number of replicas in a ring) in case of a node failure or load changes without downtime of the entire group. [#17525](https://github.com/ydb-platform/ydb/pull/17525) ([Evgenik2](https://github.com/Evgenik2))
+* 17421:Added support for runtime results during script execution. [#17421](https://github.com/ydb-platform/ydb/pull/17421) ([Pisarenko Grigoriy](https://github.com/GrigoriyPA))
 
 ### Bug fixes
 
@@ -75,6 +78,10 @@ and timeout (by default, the maximum response time from healthcheck). Documentat
 * 17729:Fixed schema version collisions in serverless DBs. #17184 [#17729](https://github.com/ydb-platform/ydb/pull/17729) ([Semyon](https://github.com/swalrus1))
 * 18401:Fixed an [issue](https://github.com/ydb-platform/ydb/issues/18358) where destination tables of `ASYNC REPLICATION` and its changefeeds were saved to local backups. This fix prevents duplication of changefeeds and reduces the amount of space the backup takes on disk. [#18401](https://github.com/ydb-platform/ydb/pull/18401) ([Daniil Demin](https://github.com/jepett0))
 * 18234:Fixed an [issue](https://github.com/ydb-platform/ydb/issues/18358) where conflicting read-write transactions violated serializability after shard restarts. [#18234](https://github.com/ydb-platform/ydb/pull/18234) ([Aleksei Borzenkov](https://github.com/snaury))
+* 19048:Fixed the [issue](https://github.com/ydb-platform/ydb/issues/19044) causing a crash when the PassAway function was invoked twice. [#19048](https://github.com/ydb-platform/ydb/pull/19048) ([Alexey Efimov](https://github.com/adameat))
+* 18924:Fixed a race condition between YardInit and Slay when a group (and therefore a VDisk) is created and then immediately deleted, removing "phantom vdisks" from pdisks. [#18924](https://github.com/ydb-platform/ydb/pull/18924) ([Semyon Danilov](https://github.com/SammyVimes))
+* 18764:Fixed an [issue](https://github.com/ydb-platform/ydb/issues/18747) with a timestamp push down in OLAP. [#18764](https://github.com/ydb-platform/ydb/pull/18764) ([Oleg Doronin](https://github.com/dorooleg))
+
 
 ### YDB UI
 
@@ -89,4 +96,4 @@ and timeout (by default, the maximum response time from healthcheck). Documentat
 * 17794:Enabled the multi broadcast functionality in the table service by default. [#17794](https://github.com/ydb-platform/ydb/pull/17794) ([Олег](https://github.com/iddqdex))
 * 17884:Increased the number of filter types pushed into column shards, resulting in improved performance.[#17884](https://github.com/ydb-platform/ydb/pull/17884) ([Pavel Velikhov](https://github.com/pavelvelikhov))
 * 18461:Corrected the task placement logic for read operations from external sources. [#18461](https://github.com/ydb-platform/ydb/pull/18461) ([Pisarenko Grigoriy](https://github.com/GrigoriyPA))
-
+* 18765:Optimized the process of copying TStorageConfig when sending a changed configuration to subscribers. [#18765](https://github.com/ydb-platform/ydb/pull/18765) ([Alexander Rutkovsky](https://github.com/alexvru))

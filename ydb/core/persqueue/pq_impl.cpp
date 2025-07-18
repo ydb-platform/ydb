@@ -3830,8 +3830,8 @@ void TPersQueue::ProcessWriteTxs(const TActorContext& ctx,
 {
     Y_ABORT_UNLESS(!WriteTxsInProgress, "PQ %" PRIu64, TabletID());
 
-    if (!WriteTxs.empty() && !WriteTxsSpan) {
-        WriteTxsSpan = GenerateSpan("Topic.Transaction.WriteTxs", *SamplingControl);
+    if (!WriteTxs.empty() && HasTxPersistSpan && !WriteTxsSpan) {
+        WriteTxsSpan = GenerateSpan("Topic.Transaction.WriteTxs", WriteTxsSpanVerbosity);
     }
 
     for (auto& [txId, state] : WriteTxs) {
@@ -3855,8 +3855,8 @@ void TPersQueue::ProcessDeleteTxs(const TActorContext& ctx,
 {
     Y_ABORT_UNLESS(!WriteTxsInProgress, "PQ %" PRIu64, TabletID());
 
-    if (!DeleteTxs.empty() && !WriteTxsSpan) {
-        WriteTxsSpan = GenerateSpan("Topic.Transaction.WriteTxs", *SamplingControl);
+    if (!DeleteTxs.empty() && HasTxDeleteSpan && !WriteTxsSpan) {
+        WriteTxsSpan = GenerateSpan("Topic.Transaction.WriteTxs", WriteTxsSpanVerbosity);
     }
 
     for (ui64 txId : DeleteTxs) {
@@ -4623,6 +4623,11 @@ void TPersQueue::WriteTx(TDistributedTransaction& tx, NKikimrPQ::TTransaction::E
 {
     WriteTxs[tx.TxId] = state;
 
+    if (auto traceId = tx.GetExecuteSpanTraceId(); traceId) {
+        HasTxPersistSpan = true;
+        WriteTxsSpanVerbosity = traceId.GetVerbosity();
+    }
+
     tx.WriteInProgress = true;
 }
 
@@ -4631,6 +4636,11 @@ void TPersQueue::DeleteTx(TDistributedTransaction& tx)
     PQ_LOG_TX_D("add an TxId " << tx.TxId << " to the list for deletion");
 
     DeleteTxs.insert(tx.TxId);
+
+    if (auto traceId = tx.GetExecuteSpanTraceId(); traceId) {
+        HasTxDeleteSpan = true;
+        WriteTxsSpanVerbosity = traceId.GetVerbosity();
+    }
 
     ChangeTxState(tx, NKikimrPQ::TTransaction::DELETING);
 
@@ -4661,6 +4671,9 @@ void TPersQueue::CheckChangedTxStates(const TActorContext& ctx)
 
         TryExecuteTxs(ctx, *tx);
     }
+
+    HasTxPersistSpan = false;
+    HasTxDeleteSpan = false;
 
     if (WriteTxsSpan) {
         WriteTxsSpan.End();

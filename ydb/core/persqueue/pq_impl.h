@@ -580,6 +580,10 @@ private:
     NWilson::TSpan WriteTxsSpan;
 
     void InitPipeClientCache();
+
+    bool HasTxPersistSpan = false;
+    bool HasTxDeleteSpan = false;
+    ui8 WriteTxsSpanVerbosity = 0;
 };
 
 

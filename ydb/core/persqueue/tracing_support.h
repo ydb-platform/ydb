@@ -7,5 +7,6 @@
 namespace NKikimr::NPQ {
 
 NWilson::TSpan GenerateSpan(const TStringBuf name, NJaegerTracing::TSamplingThrottlingControl& tracingControl);
+NWilson::TSpan GenerateSpan(const TStringBuf name, ui8 verbosity);
 
 }

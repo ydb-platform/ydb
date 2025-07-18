@@ -1947,7 +1947,7 @@ void TPartition::ProcessTxsAndUserActs(const TActorContext& ctx)
 
         AddCmdDeleteRangeForAllKeys(*PersistRequest);
 
-        KVWriteSpan = GenerateSpan("Topic.Partition.Persist", *SamplingControl);
+        KVWriteSpan = GenerateSpan("Topic.Partition.Delete", *SamplingControl);
 
         ctx.Send(Tablet, PersistRequest.Release(),
                  0, 0,
@@ -2157,16 +2157,17 @@ void TPartition::RunPersist() {
         WriteInfosApplied.clear();
         //Done with counters.
 
-        KVWriteSpan = GenerateSpan("Topic.Partition.RunPersist", *SamplingControl);
+        if (!TxForPersistTraceIds.empty()) {
+            KVWriteSpan = GenerateSpan("Topic.Partition.Persist",
+                                       TxForPersistTraceIds.front().GetVerbosity());
+        }
 
         for (auto& traceId : TxForPersistTraceIds) {
             TxForPersistSpans.emplace_back(TWilsonTopic::ExecuteTransaction,
                                            std::move(traceId),
-                                           "Topic.Partition.Persist",
+                                           "Topic.Partition.TxPersist",
                                            NWilson::EFlags::AUTO_END);
-            if (KVWriteSpan) {
-                TxForPersistSpans.back().Link(KVWriteSpan.GetTraceId());
-            }
+            TxForPersistSpans.back().Link(KVWriteSpan.GetTraceId());
         }
         TxForPersistTraceIds.clear();
 
@@ -3228,7 +3229,9 @@ void TPartition::ScheduleReplyPropose(const NKikimrPQ::TEvProposeTransaction& ev
 
 void TPartition::ScheduleReplyCommitDone(ui64 step, ui64 txId, NWilson::TSpan&& commitSpan)
 {
-    TxForPersistTraceIds.push_back(commitSpan.GetTraceId());
+    if (auto traceId = commitSpan.GetTraceId(); traceId) {
+        TxForPersistTraceIds.push_back(traceId);
+    }
 
     auto event = MakeCommitDone(step, txId);
     event->Span = std::move(commitSpan);

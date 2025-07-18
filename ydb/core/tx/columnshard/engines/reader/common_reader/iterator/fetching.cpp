@@ -14,11 +14,10 @@
 namespace NKikimr::NOlap::NReader::NCommon {
 
 bool TStepAction::DoApply(IDataReader& owner) const {
-    if (FinishedFlag) {
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "apply");
-        Source->StartSyncSection();
-        Source->OnSourceFetchingFinishedSafe(owner, Source);
-    }
+    AFL_VERIFY(FinishedFlag);
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "apply");
+    Source->StartSyncSection();
+    Source->OnSourceFetchingFinishedSafe(owner, Source);
     return true;
 }
 
@@ -29,6 +28,8 @@ TConclusion<bool> TStepAction::DoExecuteImpl() {
     }
     auto executeResult = Cursor.Execute(Source);
     if (executeResult.IsFail()) {
+        AFL_VERIFY(!FinishedFlag);
+        FinishedFlag = true;
         return executeResult;
     }
     if (*executeResult) {

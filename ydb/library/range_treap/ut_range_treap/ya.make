@@ -1,4 +1,4 @@
-UNITTEST_FOR(ydb/core/tx/locks)
+UNITTEST_FOR(ydb/library/range_treap)
 
 FORK_SUBTESTS()
 
@@ -12,11 +12,9 @@ ELSE()
 ENDIF()
 
 PEERDIR(
-    ydb/core/tx/datashard/ut_common
     library/cpp/getopt
     library/cpp/regex/pcre
     library/cpp/svnversion
-    ydb/core/kqp/ut/common
     ydb/core/testlib/default
     ydb/core/tx
     yql/essentials/public/udf/service/exception_policy

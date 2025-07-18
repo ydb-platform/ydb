@@ -9,10 +9,8 @@
 namespace NKikimr {
 namespace NRangeTreap {
 
-template <class TKey, class TValue>
+template <class TValue>
 struct TDefaultValueTraits {
-    using TKeyView = const TKey;
-
     static bool Less(const TValue& a, const TValue& b) {
         return a < b;
     }
@@ -22,13 +20,13 @@ struct TDefaultValueTraits {
     }
 };
 
-template <class TKey, class TValue, class TKeyView = TKey, class TValueTraits = TDefaultValueTraits<TKey, TValue>,
-    class TBorderComparator = TDefaultBorderComparator<typename TValueTraits::TKeyView>>
+template <class TKey, class TValue, class TKeyView = TKey, class TValueTraits = TDefaultValueTraits<TValue>,
+    class TBorderComparator = TDefaultBorderComparator<TKey, TKeyView>>
 class TRangeTreap {
 public:
     using TBorder = TBorder<TKeyView>;
-    using TRange = TRange<TKey, TKeyView>;
-    using TOwnedRange = TOwnedRange<TKey>;
+    using TOwnedRange = TRange<TKey>;
+    using TRange = TRange<TKeyView>;
 
     struct TStats {
         size_t Comparisons = 0;
@@ -115,6 +113,17 @@ private:
         }
     };
 
+    TOwnedRange MakeOwnedRange(const TRange& rangeView) {
+        TKey leftKey = Comparator.MakeOwnedKey(rangeView.LeftKey);
+        TKey rightKey;
+        if (!Comparator.IsEqualFast(rangeView.LeftKey, rangeView.RightKey)) {
+            rightKey = Comparator.MakeOwnedKey(rangeView.RightKey);
+        } else {
+            rightKey = leftKey;
+        }
+        return TOwnedRange(std::move(leftKey), rangeView.LeftInclusive, std::move(rightKey), rangeView.RightInclusive);
+    }
+
 public:
     /**
       * Clears the tree
@@ -128,8 +137,10 @@ public:
     /**
       * Adds mapping from the given range to the given value
       */
-    void AddRange(const TRange& range, TValue value) {
-        AddRange(range.ToOwnedRange(), std::move(value));
+    void AddRange(const TRange& range, TValue value)
+        requires(!std::is_convertible_v<TRange, TOwnedRange>)
+    {
+        AddRange(MakeOwnedRange(range), std::move(value));
     }
 
     /**
@@ -518,8 +529,8 @@ private:
 
 public:
     /**
-          * Validates all invariants for the tree, used for tests
-          */
+      * Validates all invariants for the tree, used for tests
+      */
     void Validate() const {
         if (Root) {
             Y_ENSURE(Root->Parent == nullptr, "Root must not have a parent");

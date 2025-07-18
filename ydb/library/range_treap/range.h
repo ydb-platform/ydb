@@ -5,13 +5,13 @@
 namespace NKikimr::NRangeTreap {
 
 template <class TKey>
-struct TOwnedRange {
+struct TRange {
     TKey LeftKey;
     TKey RightKey;
     bool LeftInclusive;
     bool RightInclusive;
 
-    TOwnedRange(TKey leftKey, bool leftInclusive, TKey rightKey, bool rightInclusive) noexcept
+    TRange(TKey leftKey, bool leftInclusive, TKey rightKey, bool rightInclusive) noexcept
         : LeftKey(std::move(leftKey))
         , RightKey(std::move(rightKey))
         , LeftInclusive(leftInclusive)
@@ -20,73 +20,25 @@ struct TOwnedRange {
     }
 };
 
-template <class TKey, class TKeyView>
-struct TRange {
-    TKeyView LeftKey;
-    TKeyView RightKey;
-    bool LeftInclusive;
-    bool RightInclusive;
-
-    TRange(TKeyView leftKey, bool leftInclusive, TKeyView rightKey, bool rightInclusive) noexcept
-        : LeftKey(leftKey)
-        , RightKey(rightKey)
-        , LeftInclusive(leftInclusive)
-        , RightInclusive(rightInclusive)
-    {
-    }
-
-    TOwnedRange<TKey> ToOwnedRange() const {
-        TKey leftKey(LeftKey);
-        TKey rightKey;
-        if (LeftKey.data() != RightKey.data() || LeftKey.size() != RightKey.size()) {
-            rightKey = TOwnedCellVec(RightKey);
-        } else {
-            rightKey = leftKey;
-        }
-        return TOwnedRange(std::move(leftKey), LeftInclusive, std::move(rightKey), RightInclusive);
-    }
-};
-
-enum EBorderMode: ui8 {
-    LeftExclusive = 0,
+enum class EBorderMode: ui8 {
+    RightExclusive = 0,
     LeftInclusive = 1,
-    RightExclusive = 2,
-    RightInclusive = 3,
+    RightInclusive = 2,
+    LeftExclusive = 3,
 };
 
 class TBorderModeTraits {
 public:
     static bool IsInclusive(EBorderMode mode) noexcept {
-        return mode & FlagInclusive;
+        return mode == EBorderMode::LeftInclusive || mode == EBorderMode::RightInclusive;
     }
 
     static bool IsRight(EBorderMode mode) noexcept {
-        return mode & FlagRight;
+        return (ui8)mode & 1 == 0;
     }
 
-    static std::strong_ordering CompareEqualPoint(const EBorderMode lhs, const EBorderMode rhs) {
-        if (lhs == rhs) {
-            return std::strong_ordering::equal;
-        }
-        if (!IsInclusive(lhs)) {
-            if (IsRight(lhs)) {
-                return std::strong_ordering::greater;
-            } else {
-                return std::strong_ordering::less;
-            }
-        }
-        if (!IsInclusive(rhs)) {
-            if (IsRight(rhs)) {
-                return std::strong_ordering::less;
-            } else {
-                return std::strong_ordering::greater;
-            }
-        }
-        if (IsRight(rhs)) {
-            return std::strong_ordering::less;
-        } else {
-            return std::strong_ordering::greater;
-        }
+    static int CompareEqualPoint(const EBorderMode lhs, const EBorderMode rhs) {
+        return (int)lhs - (int)rhs;
     }
 
 private:
@@ -120,19 +72,31 @@ public:
     }
 };
 
-template <class TKeyView>
+template <class TKey, class TKeyView>
 class TDefaultBorderComparator {
     using TBorder = TBorder<TKeyView>;
 
 public:
-    static std::strong_ordering Compare(const TBorder& lhs, const TBorder& rhs) {
+    static int Compare(const TBorder& lhs, const TBorder& rhs) {
         if (lhs.GetKey() < rhs.GetKey()) {
-            return std::strong_ordering::less;
+            return -1;
         }
         if (lhs.GetKey() > rhs.GetKey()) {
-            return std::strong_ordering::greater;
+            return 1;
         }
         return TBorderModeTraits::CompareEqualPoint(lhs.GetMode(), rhs.GetMode());
+    }
+
+    static void ValidateKey(const TKey& /*key*/) {
+        // Do nothing
+    }
+
+    static TKey MakeOwnedKey(const TKeyView& keyView) {
+        return TKey(keyView);
+    }
+
+    static bool IsEqualFast(const TKeyView& lhs, const TKeyView& rhs) {
+        return lhs == rhs;
     }
 };
 

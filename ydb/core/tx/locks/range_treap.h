@@ -15,8 +15,8 @@ namespace NDataShard {
 struct TRangeTreapTraits {
     using TKey = TOwnedCellVec;
     using TKeyView = TConstArrayRef<TCell>;
-    using TRange = NRangeTreap::TRange<TKey, TKeyView>;
-    using TOwnedRange = NRangeTreap::TOwnedRange<TKey>;
+    using TRange = NRangeTreap::TRange<TKeyView>;
+    using TOwnedRange = NRangeTreap::TRange<TKey>;
     using TBorder = NRangeTreap::TBorder<TConstArrayRef<TCell>>;
 };
 
@@ -27,13 +27,13 @@ private:
 private:
     static EPrefixMode GetPrefixMode(const NRangeTreap::EBorderMode mode) {
         switch (mode) {
-            case NRangeTreap::LeftExclusive:
+            case NRangeTreap::EBorderMode::LeftExclusive:
                 return EPrefixMode::PrefixModeLeftBorderNonInclusive;
-            case NRangeTreap::LeftInclusive:
+            case NRangeTreap::EBorderMode::LeftInclusive:
                 return EPrefixMode::PrefixModeLeftBorderInclusive;
-            case NRangeTreap::RightExclusive:
+            case NRangeTreap::EBorderMode::RightExclusive:
                 return EPrefixMode::PrefixModeRightBorderNonInclusive;
-            case NRangeTreap::RightInclusive:
+            case NRangeTreap::EBorderMode::RightInclusive:
                 return EPrefixMode::PrefixModeRightBorderInclusive;
         }
     }
@@ -47,6 +47,14 @@ public:
         Y_ENSURE(key.size() <= KeyTypes.size(), "Range key is too large");
     }
 
+    TOwnedCellVec MakeOwnedKey(const TConstArrayRef<TCell>& keyView) {
+        return TOwnedCellVec(keyView);
+    }
+
+    bool IsEqualFast(const TConstArrayRef<TCell>& lhs, const TConstArrayRef<TCell>& rhs) {
+        return lhs.data() == rhs.data() && lhs.size() == rhs.size();
+    }
+
     void SetKeyTypes(const TVector<NScheme::TTypeInfo>& keyTypes) {
         Y_ENSURE(keyTypes.size() >= KeyTypes.size(), "Number of key columns must not decrease over time");
         KeyTypes = keyTypes;
@@ -57,18 +65,7 @@ public:
     }
 };
 
-template <class TValue>
-struct TRangeTreapDefaultValueTraits {
-    static bool Less(const TValue& a, const TValue& b) {
-        return a < b;
-    }
-
-    static bool Equal(const TValue& a, const TValue& b) {
-        return a == b;
-    }
-};
-
-template <class TValue, class TTypeTraits = TRangeTreapDefaultValueTraits<TValue>>
+template <class TValue, class TTypeTraits = NRangeTreap::TDefaultValueTraits<TValue>>
 using TRangeTreap = NKikimr::NRangeTreap::TRangeTreap<TRangeTreapTraits::TKey, TValue, TRangeTreapTraits::TKeyView, TTypeTraits,
     TRangeTreeOwnedCellVecComparator>;
 

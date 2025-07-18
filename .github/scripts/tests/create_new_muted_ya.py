@@ -57,6 +57,7 @@ def execute_query(branch='main', build_type='relwithdebinfo', days_window=1):
       SUM(t.pass_count) as pass_count,
       SUM(t.fail_count) as fail_count,
       SUM(t.mute_count) as mute_count,
+      SUM(t.skip_count) as skip_count,
       o.owners as owner
     FROM `{table_name}` t
     LEFT JOIN `{owners_table}` o
@@ -171,7 +172,7 @@ def is_delete_candidate(test, delete_stats):
     """Проверяет, является ли тест кандидатом на удаление из mute"""
     if not delete_stats:
         return False
-    delete_runs = delete_stats.get('pass_count', 0) + delete_stats.get('fail_count', 0) + delete_stats.get('mute_count', 0)
+    delete_runs = delete_stats.get('pass_count', 0) + delete_stats.get('fail_count', 0) + delete_stats.get('mute_count', 0) + delete_stats.get('skip_count', 0)
     return delete_runs == 0
 
 def create_file_set(aggregated_for_mute, filter_func, mute_check=None, use_wildcards=False, resolution=None):

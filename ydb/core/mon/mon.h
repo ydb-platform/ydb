@@ -53,12 +53,6 @@ public:
     void Register(NMonitoring::IMonPage* page);
     NMonitoring::TIndexMonPage* RegisterIndexPage(const TString& path, const TString& title);
 
-    enum class EAuditPolicy : ui8 {
-        None,
-        Always,
-        PostOnly,
-    };
-
     struct TRegisterActorPageFields {
         TString Title;
         TString RelPath;
@@ -70,7 +64,6 @@ public:
         TVector<TString> AllowedSIDs;
         bool SortPages = true;
         TString MonServiceName = "utils";
-        TMon::EAuditPolicy AuditPolicy = TMon::EAuditPolicy::Always;
     };
 
     NMonitoring::IMonPage* RegisterActorPage(TRegisterActorPageFields fields);
@@ -84,7 +77,6 @@ public:
         TActorId Handler;
         bool UseAuth = true;
         TVector<TString> AllowedSIDs;
-        TMon::EAuditPolicy AuditPolicy = TMon::EAuditPolicy::Always;
     };
 
     void RegisterActorHandler(const TRegisterHandlerFields& fields);

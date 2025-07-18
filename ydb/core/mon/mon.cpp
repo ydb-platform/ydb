@@ -395,7 +395,8 @@ public:
     }
 
     void ReplyWith(NHttp::THttpOutgoingResponsePtr response) {
-        AuditRequest(Event, ActorMonPage->AuditPolicy, AuditParts);
+        Cerr << "iiiii ReplyWith audit " << Event->Get()->Request->URL << Endl;
+        AuditRequest(Event, AuditParts);
         Send(Event->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(response));
     }
 
@@ -503,6 +504,8 @@ public:
         response << "Content-Length: " << body.size() << "\r\n";
         response << "\r\n";
         response << body;
+
+        AddErrorStatusAuditParts(httpError);
         ReplyWith(request->CreateResponseString(response));
         PassAway();
     }
@@ -1054,7 +1057,7 @@ public:
             }
         }
 
-        AuditRequest(Event, Fields.AuditPolicy);
+        AuditRequest(Event);
         Forward(Event, Fields.Handler);
         PassAway();
     }
@@ -1141,7 +1144,7 @@ public:
         response << "Content-Length: " << body.size() << "\r\n";
         response << "\r\n";
         response << body;
-        AuditRequest(Event, Fields.AuditPolicy);
+        AuditRequest(Event);
         Send(Event->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(request->CreateResponseString(response)));
         PassAway();
     }
@@ -1165,13 +1168,13 @@ public:
             Event->Get()->UserToken = result.UserToken->GetSerializedToken();
         }
         AddUserTokenAuditParts(result.UserToken, AuditParts);
-        AuditRequest(Event, Fields.AuditPolicy, AuditParts);
+        AuditRequest(Event, AuditParts);
         Forward(Event, Fields.Handler);
         PassAway();
     }
 
     void HandleUndelivered(TEvents::TEvUndelivered::TPtr&) {
-        AuditRequest(Event, Fields.AuditPolicy);
+        AuditRequest(Event);
         NHttp::THttpIncomingRequestPtr request = Event->Get()->Request;
         Send(Event->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(
             request->CreateResponseServiceUnavailable(TStringBuilder() << "Auth actor is not available")));
@@ -1289,7 +1292,7 @@ public:
                     Register(new THttpMonAuthorizedActorRequest(std::move(ev), it->second, Authorizer));
                     return;
                 }
-                AuditRequest(ev, it->second.AuditPolicy);
+                AuditRequest(ev);
                 Forward(ev, it->second.Handler);
                 return;
             } else {
@@ -1306,7 +1309,7 @@ public:
             }
         }
 
-        AuditRequest(ev, it->second.AuditPolicy);
+        AuditRequest(ev);
         Register(new THttpMonLegacyIndexRequest(std::move(ev), IndexMonPage.Get()));
     }
 
@@ -1463,8 +1466,7 @@ NMonitoring::IMonPage* TMon::RegisterActorPage(TRegisterActorPageFields fields) 
         fields.ActorId,
         fields.AllowedSIDs ? fields.AllowedSIDs : Config.AllowedSIDs,
         fields.UseAuth ? Config.Authorizer : TRequestAuthorizer(),
-        fields.MonServiceName,
-        fields.AuditPolicy);
+        fields.MonServiceName);
     if (fields.Index) {
         fields.Index->Register(page);
         if (fields.SortPages) {

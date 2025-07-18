@@ -1081,7 +1081,8 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsert) {
 
         {
             auto res = TestUpsertRow(client, "/Root/ui8/Value_index/indexImplTable", 1, 2);
-            UNIT_ASSERT_VALUES_EQUAL(res.GetStatus(), EStatus::SCHEME_ERROR);
+            UNIT_ASSERT_VALUES_EQUAL(res.GetStatus(), EStatus::BAD_REQUEST);
+            UNIT_ASSERT_STRING_CONTAINS_C(res.GetIssues().ToString(), "Writing to index implementation tables is not allowed", res.GetIssues().ToString());
         }
     }
 

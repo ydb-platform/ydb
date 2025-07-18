@@ -22,7 +22,7 @@ private:
 
     YDB_READONLY_FLAG(HasCondense, false);
     YDB_READONLY(ui32, NodesCount, 0);
-    
+
     YDB_READONLY_FLAG(HasSort, false);
     YDB_READONLY_FLAG(HasMapJoin, false);
     YDB_READONLY_FLAG(HasUdf, false);
@@ -45,7 +45,8 @@ public:
     bool DeserializeFromKqpSettings(const NYql::NDqProto::TProgram::TSettings& kqpProto);
     static ui32 GetUsableThreads();
     bool NeedLLVM() const;
-    ui32 CalcTasksOptimalCount(const ui32 availableThreadsCount, const std::optional<ui32> previousStageTasksCount) const;
+    ui32 CalcTasksOptimalCount(const ui32 availableThreadsCount, const std::optional<ui32> previousStageTasksCount,
+        TVector<TString>& introspections) const;
 };
 
 }

@@ -8,6 +8,7 @@
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
 #include <ydb/public/api/protos/draft/persqueue_error_codes.pb.h>
 #include <ydb/public/lib/base/msgbus_status.h>
+#include <ydb/core/jaeger_tracing/sampling_throttling_configurator.h>
 
 #include <ydb/library/actors/core/actorid.h>
 #include <ydb/library/actors/core/event.h>
@@ -388,6 +389,7 @@ TPartition* TPartitionFixture::CreatePartitionActor(const TPartitionId& id,
                 *TabletCounters
         ));
     }
+    auto samplingControl = Ctx->Runtime->GetAppData(0).TracingConfigurator->GetControl();
     auto* actor = new NPQ::TPartition(Ctx->TabletId,
                                      id,
                                      Ctx->Edge,
@@ -401,6 +403,7 @@ TPartition* TPartitionFixture::CreatePartitionActor(const TPartitionId& id,
                                      false,
                                      1,
                                      quoterId,
+                                     std::move(samplingControl),
                                      newPartition,
                                      std::move(txs));
     ActorId = Ctx->Runtime->Register(actor);

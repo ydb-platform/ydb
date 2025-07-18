@@ -1040,6 +1040,9 @@ public:
         }
 
         QueryState->TxCtx->SetTempTables(QueryState->TempTablesState);
+        if (phyQuery.GetForceImmediateEffectsExecution()) {
+            Counters->ForcedImmediateEffectsExecution->Inc();
+        }
         QueryState->TxCtx->ApplyPhysicalQuery(phyQuery, QueryState->Commit);
         auto [success, issues] = QueryState->TxCtx->ApplyTableOperations(phyQuery.GetTableOps(), phyQuery.GetTableInfos(),
             EKikimrQueryType::Dml);

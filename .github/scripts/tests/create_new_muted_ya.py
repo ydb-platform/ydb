@@ -57,7 +57,7 @@ def execute_query(branch='main', build_type='relwithdebinfo', days_window=1):
       SUM(t.pass_count) as pass_count,
       SUM(t.fail_count) as fail_count,
       SUM(t.mute_count) as mute_count,
-      o.owners as owners
+      o.owners as owner
     FROM `{table_name}` t
     LEFT JOIN `{owners_table}` o
       ON t.full_name = o.full_name
@@ -223,7 +223,7 @@ def apply_and_add_mutes(aggregated_for_mute, aggregated_for_unmute, aggregated_f
             return is_flaky_test(test)
         
         to_mute, to_mute_debug = create_file_set(
-            aggregated_for_mute, is_mute_candidate, resolution='to_mute'
+            aggregated_for_mute, is_mute_candidate, use_wildcards=True, resolution='to_mute'
         )
         write_file_set(os.path.join(output_path, 'to_mute.txt'), to_mute, to_mute_debug)
         

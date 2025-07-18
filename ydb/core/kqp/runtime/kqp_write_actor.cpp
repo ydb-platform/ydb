@@ -1395,8 +1395,8 @@ private:
     };
 
     struct TPathLookupInfo {
-        IDataBatchProjectionPtr Projection = nullptr;
-        IKqpBufferTableLookupPtr Lookup = nullptr;
+        TVector<ui32> KeyIndexes;
+        IKqpBufferTableLookup* Lookup = nullptr;
     };
 
     struct TWrite {
@@ -1465,7 +1465,7 @@ public:
     }
 
     bool IsEmpty() const {
-        return BufferedBatches.empty() && LookupBatches.empty();
+        return BufferedBatches.empty() && ProcessBatches.empty();
     }
 
     bool IsClosed() const {
@@ -1482,29 +1482,31 @@ public:
 
 private:
     bool ProcessBuffering() {
-        AFL_ENSURE(LookupBatches.empty());
+        AFL_ENSURE(ProcessBatches.empty());
+        AFL_ENSURE(ProcessCells.empty());
         if (BufferedBatches.empty()) {
             return false;
         }
 
         if (auto lookupInfoIt = PathLookupInfo.find(PathId); lookupInfoIt != PathLookupInfo.end()) {
             // Need to lookup main table
-            std::swap(BufferedBatches, LookupBatches);
-            
+            std::swap(BufferedBatches, ProcessBatches);
+
             auto& lookupInfo = lookupInfoIt->second;
-            AFL_ENSURE(lookupInfo.Projection);
-            for (const auto& batch : LookupBatches) {
-                StartLookup(lookupInfo, batch);
-            }
+            AFL_ENSURE(lookupInfo.KeyIndexes.empty());
+
+            ProcessCells = GetSortedUniqueRows(ProcessBatches, lookupInfo.Lookup->GetKeyColumnTypes());
+
+            lookupInfo.Lookup->AddLookupTask(
+                Cookie, CutColumns(ProcessCells, lookupInfo.Lookup->GetKeyColumnTypes().size()));
 
             State = EState::LOOKUP_MAIN_TABLE;
-            return true;
         } else if (!PathLookupInfo.empty()) {
             // Need to lookup unique indexes
             AFL_ENSURE(false);
-            return true;
         } else {
-            // Write
+            // Write without lookups .
+            // We don't do uncessary copy here.
             std::vector<TWrite> writes;
             for (auto& batch : BufferedBatches) {
                 writes.push_back(TWrite {
@@ -1512,42 +1514,34 @@ private:
                     .OldBatch = nullptr,
                 });
             }
-            BufferedBatches.clear();
-
             FlushWritesToActors(std::move(writes));
+
+            BufferedBatches.clear();
             State = EState::BUFFERING;
-            return true;
         }
+        return true;
     }
 
     bool ProcessLookupMainTable() {
-        AFL_ENSURE(!LookupBatches.empty());
+        AFL_ENSURE(!ProcessBatches.empty());
+        AFL_ENSURE(!ProcessCells.empty());
 
         auto& lookupInfo = PathLookupInfo.at(PathId);
-        AFL_ENSURE(lookupInfo.Lookup->HasLookupTasks(Cookie));
-        auto lookupResult = lookupInfo.Lookup->ExtractResult(Cookie);
-        if (!lookupResult) {
+        if (!lookupInfo.Lookup->ExtractResult(Cookie, [](TConstArrayRef<TCell> cells){
+            Y_UNUSED(cells);
+        })) {
             return false;
         }
-        AFL_ENSURE(!lookupInfo.Lookup->HasLookupTasks(Cookie));
-        // TODO: concatenate result with batches
 
         if (PathLookupInfo.size() > 1) {
             // Need to lookup unique indexes
             AFL_ENSURE(false);
-            return true;
         } else {
             // Write
             AFL_ENSURE(false);
             State = EState::BUFFERING;
-            return true;
         }
-    }
-
-    void StartLookup(TPathLookupInfo& lookupInfo, const IDataBatchPtr& batch) {
-        auto lookupBatch = lookupInfo.Projection->Project(batch);
-        lookupInfo.Lookup->AddLookupTask(
-            Cookie, lookupBatch);
+        return true;
     }
 
     void FlushWritesToActors(std::vector<TWrite>&& writes) {
@@ -1603,9 +1597,10 @@ private:
 
     bool Closed = false;
     i64 Memory = 0;
-    std::vector<IDataBatchPtr> BufferedBatches;
 
-    std::vector<IDataBatchPtr> LookupBatches;
+    std::vector<IDataBatchPtr> BufferedBatches;
+    std::vector<IDataBatchPtr> ProcessBatches;
+    std::vector<TConstArrayRef<TCell>> ProcessCells;
 };
 
 class TKqpDirectWriteActor : public TActorBootstrapped<TKqpDirectWriteActor>, public NYql::NDq::IDqComputeActorAsyncOutput, public IKqpTableWriterCallbacks {

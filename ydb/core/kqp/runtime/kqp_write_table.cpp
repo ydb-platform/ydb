@@ -1132,7 +1132,7 @@ std::vector<TConstArrayRef<TCell>> GetSortedUniqueRows(
         rows.insert(rows.end(), batchRows.begin(), batchRows.end());
     }
 
-    std::sort(
+    std::stable_sort(
         rows.begin(),
         rows.end(),
         [&keyColumnTypes](const TConstArrayRef<TCell>& lhs, const TConstArrayRef<TCell>& rhs) {
@@ -1150,6 +1150,16 @@ std::vector<TConstArrayRef<TCell>> GetSortedUniqueRows(
 
     rows.erase(rowsToEraseBegin, rows.end());
     return rows;
+}
+
+std::vector<TConstArrayRef<TCell>> CutColumns(
+       const std::vector<TConstArrayRef<TCell>>& rows, const ui32 columnsCount) {
+    std::vector<TConstArrayRef<TCell>> result;
+    result.reserve(rows.size());
+    for (const auto& row : rows) {
+        result.emplace_back(row.data(), columnsCount);
+    }
+    return result;
 }
 
 IDataBatcherPtr CreateColumnDataBatcher(const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> inputColumns,

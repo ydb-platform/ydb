@@ -494,6 +494,8 @@ en:
 
   - from: /maintenance/manual/index.md
     to: /devops/deployment-options/manual/index.md
+  - from: /maintenance/manual/cms.md
+    to: /devops/deployment-options/manual/cms.md
 
   - from: /public-materials/videos/2017.md
     to: /public-materials/videos/2022.md

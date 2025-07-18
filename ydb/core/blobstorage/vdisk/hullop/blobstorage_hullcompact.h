@@ -150,6 +150,11 @@ namespace NKikimr {
             // when done, continue with other state
             if (done) {
                 Finalize(ctx);
+                return;
+            }
+            if (!PendingResponses) {
+                ui32 secondsBeforeNextAvailableRequest = Worker.GetSecondsBeforeNextRequest();
+                ctx.Schedule(TDuration::Seconds(secondsBeforeNextAvailableRequest), new TEvents::TEvWakeup);
             }
         }
 
@@ -162,6 +167,10 @@ namespace NKikimr {
             } else {
                 return false;
             }
+        }
+
+        void HandleWakeup(const TActorContext& ctx) {
+            MainCycle(ctx);
         }
 
         // the same logic for every yard response: apply response and restart main cycle
@@ -234,6 +243,7 @@ namespace NKikimr {
             HFunc(NPDisk::TEvChunkReadResult, HandleYardResponse)
             HFunc(TEvRestoreCorruptedBlobResult, Handle)
             HFunc(TEvents::TEvPoisonPill, HandlePoison)
+            CFunc(TEvents::TSystem::Wakeup, HandleWakeup)
         )
         ///////////////////////// WORK: END /////////////////////////////////////////////////
 
@@ -314,7 +324,8 @@ namespace NKikimr {
                         ui64 lastLsn,
                         TDuration restoreDeadline,
                         std::optional<TKey> partitionKey,
-                        bool allowGarbageCollection)
+                        bool allowGarbageCollection,
+                        bool isFullCompaction)
             : TActorBootstrapped<TThis>()
             , HullCtx(std::move(hullCtx))
             , PDiskCtx(rtCtx->PDiskCtx)
@@ -327,7 +338,7 @@ namespace NKikimr {
             , Gcmp(CreateGcMap<TKey, TMemRec>(HullCtx, mergeElementsApproximation, allowGarbageCollection))
             , It(it)
             , Worker(HullCtx, PDiskCtx, rtCtx->LevelIndex, it, (bool)FreshSegment, firstLsn, lastLsn, restoreDeadline,
-                    partitionKey)
+                    partitionKey, isFullCompaction)
             , CompactionID(TAppData::RandomProvider->GenRand64())
             , SkeletonId(rtCtx->SkeletonId)
         {}

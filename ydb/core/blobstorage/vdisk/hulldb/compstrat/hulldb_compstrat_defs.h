@@ -286,6 +286,7 @@ namespace NKikimr {
             TDeleteSsts DeleteSsts;
             TMoveSsts MoveSsts;
             TCompactSsts CompactSsts;
+            bool IsFullCompaction;
             // this field contains
             // * original std::optional<TFullCompactionAttrs>
             // * if 'first' was set, than result of full compaction: second=true -- full compaction has been finished

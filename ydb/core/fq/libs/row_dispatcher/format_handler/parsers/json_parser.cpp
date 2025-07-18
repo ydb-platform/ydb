@@ -432,7 +432,7 @@ protected:
            Then, after parsing maximum document size will be 27 bytes.
         */
         simdjson::ondemand::document_stream documents;
-        CHECK_JSON_ERROR(Parser.iterate_many(values, size, Buffer.GetSize()).get(documents)) {
+        CHECK_JSON_ERROR(Parser.iterate_many(values, size, size).get(documents)) {
             return TStatus::Fail(EStatusId::BAD_REQUEST, TStringBuilder() << "Failed to parse message batch from offset " << Buffer.Offsets.front() << ", json documents was corrupted: " << simdjson::error_message(error) << " Current data batch: " << TruncateString(std::string_view(values, size)));
         }
 

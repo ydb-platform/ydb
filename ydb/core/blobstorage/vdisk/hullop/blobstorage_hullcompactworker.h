@@ -266,35 +266,37 @@ namespace NKikimr {
     public:
         class TLeakBucket {
         public:
-            bool Allow(ui32 value, ui32 limit, ui32 leakRate, ui32 intervalMs) {
-                Update(leakRate, intervalMs);
-                if (value > limit) {
-                    return Bucket == 0;
-                }
-                return Bucket + value <= limit;
-            }
-
-            bool Get(ui32 value, ui32 limit, ui32 leakRate, ui32 intervalMs) {
-                Update(leakRate, intervalMs);
-                if (value > limit && Bucket == 0) {
+            bool Get(ui32 value, ui32 leakRateInSecond) {
+                Update(leakRateInSecond);
+                if (value > leakRateInSecond && Bucket == 0) {
                     Bucket = value;
                     return true;
                 }
-                if (Bucket + value <= limit) {
+                if (Bucket + value <= leakRateInSecond) {
                     Bucket += value;
                     return true;
                 }
                 return false;
             }
 
+            ui32 GetSecondsBeforeNextRequest(ui32 value, ui32 leakRateInSecond) {
+                Update(leakRateInSecond);
+                if (Bucket + value <= leakRateInSecond) {
+                    return 0;
+                }
+                if (value > leakRateInSecond) {
+                    return Bucket / leakRateInSecond;
+                }
+                ui32 needToLeak = Bucket + value - leakRateInSecond;
+                return (needToLeak + leakRateInSecond - 1) / leakRateInSecond;
+            }
+
         private:
-            void Update(ui32 leakRate, ui32 intervalMs) {
-                auto now = TInstant::Now();
-                auto msSinceLastUpdate = (TInstant::Now() - LastUpdateTime).MilliSeconds();
-                auto intervalsCount = msSinceLastUpdate / intervalMs;
-                ui32 leakedValue = intervalsCount * leakRate;
-                Bucket = std::max((ui32) 0, Bucket - leakedValue);
-                LastUpdateTime = now;
+            void Update(ui32 leakRateInSecond) {
+                auto intervalsCount = (TInstant::Now() - LastUpdateTime).Seconds();
+                ui32 leakedValue = intervalsCount * leakRateInSecond;
+                Bucket = Bucket > leakedValue ? Bucket - leakedValue : 0;
+                LastUpdateTime = LastUpdateTime + TDuration::Seconds(intervalsCount);
             }
 
             TInstant LastUpdateTime = TInstant::Now();
@@ -304,44 +306,25 @@ namespace NKikimr {
         template <class TRequest>
         class TRequestThrottler {
         public:
-            TRequestThrottler(TIntrusivePtr<TVDiskConfig> config)
+            TRequestThrottler(TIntrusivePtr<TVDiskConfig> config, bool enable)
                 : Config(config)
+                , Enable(enable)
             {}
 
-            bool Get(const NPDisk::TEvChunkRead *msg) {
-                ui32 iopsLimit = Config->HullCompThrottlerReadIOPSLimit;
-                ui32 iopsRate = Config->HullCompThrottlerReadIOPSRate;
-                ui32 iopsIntervalMs = Config->HullCompThrottlerReadIOPSIntervalMs;
-                bool iopsAvailable = !iopsLimit || !iopsRate || IOPSBucket.Allow(1, iopsLimit, iopsRate, iopsIntervalMs);
-                ui32 bytesLimit = Config->HullCompThrottlerReadBytesLimit;
-                ui32 bytesRate = Config->HullCompThrottlerReadBytesRate;
-                ui32 bytesIntervalMs = Config->HullCompThrottlerReadBytesIntervalMs;
-                ui32 size = GetSize(msg);
-                bool bytesAvailable = !bytesLimit || !bytesRate || BytesBucket.Allow(size, bytesLimit, bytesRate, bytesIntervalMs);
-                if (iopsAvailable && bytesAvailable) {
-                    IOPSBucket.Get(1, iopsLimit, iopsRate, iopsIntervalMs);
-                    BytesBucket.Get(size, bytesLimit, bytesRate, bytesIntervalMs);
+            bool Get(const TRequest *msg) {
+                if (!Enable) {
                     return true;
                 }
-                return false;
+                ui32 bytesRate = Config->HullCompThrottlerBytesRate;
+                ui32 size = GetSize(msg);
+                return !bytesRate || BytesBucket.Get(size, bytesRate);
             }
 
-            bool Get(const NPDisk::TEvChunkWrite *msg) {
-                ui32 iopsLimit = Config->HullCompThrottlerWriteIOPSLimit;
-                ui32 iopsRate = Config->HullCompThrottlerWriteIOPSRate;
-                ui32 iopsIntervalMs = Config->HullCompThrottlerWriteIOPSIntervalMs;
-                bool iopsAvailable = !iopsLimit || !iopsRate || IOPSBucket.Allow(1, iopsLimit, iopsRate, iopsIntervalMs);
-                ui32 bytesLimit = Config->HullCompThrottlerWriteBytesLimit;
-                ui32 bytesRate = Config->HullCompThrottlerWriteBytesRate;
-                ui32 bytesIntervalMs = Config->HullCompThrottlerWriteBytesIntervalMs;
-                ui32 size = GetSize(msg);
-                bool bytesAvailable = !bytesLimit || !bytesRate || BytesBucket.Allow(size, bytesLimit, bytesRate, bytesIntervalMs);
-                if (iopsAvailable && bytesAvailable) {
-                    IOPSBucket.Get(1, iopsLimit, iopsRate, iopsIntervalMs);
-                    BytesBucket.Get(size, bytesLimit, bytesRate, bytesIntervalMs);
-                    return true;
+            ui32 GetSecondsBeforeNextRequest() {
+                if (!WaitingRequest) {
+                    return 0;
                 }
-                return false;
+                return GetSecondsBeforeNextRequest(WaitingRequest.get());
             }
 
         private:
@@ -353,7 +336,18 @@ namespace NKikimr {
                 return msg->PartsPtr ? msg->PartsPtr->ByteSize() : 0;
             }
 
+            ui32 GetSecondsBeforeNextRequest(const TRequest *msg) {
+                if (!Enable) {
+                    return 0;
+                }
+                ui32 bytesRate = Config->HullCompThrottlerBytesRate;
+                ui32 size = GetSize(msg);
+                ui32 bytesTyme = !bytesRate ? 0 : BytesBucket.GetSecondsBeforeNextRequest(size, bytesRate);
+                return bytesTyme;
+            }
+
             TIntrusivePtr<TVDiskConfig> Config;
+            bool Enable;
             TLeakBucket IOPSBucket;
             TLeakBucket BytesBucket;
 
@@ -373,7 +367,8 @@ namespace NKikimr {
                               ui64 firstLsn,
                               ui64 lastLsn,
                               TDuration restoreDeadline,
-                              std::optional<TKey> partitionKey)
+                              std::optional<TKey> partitionKey,
+                              bool isFullCompaction)
             : HullCtx(std::move(hullCtx))
             , PDiskCtx(std::move(pdiskCtx))
             , GType(HullCtx->VCtx->Top->GType)
@@ -391,8 +386,8 @@ namespace NKikimr {
             , Statistics(HullCtx)
             , RestoreDeadline(restoreDeadline)
             , PartitionKey(partitionKey)
-            , WriteThrottler(HullCtx->VCfg)
-            , ReadThrottler(HullCtx->VCfg)
+            , WriteThrottler(HullCtx->VCfg, !isFresh && isFullCompaction)
+            , ReadThrottler(HullCtx->VCfg, !isFresh && isFullCompaction)
         {
             if (IsFresh) {
                 ChunksToUse = HullCtx->HullSstSizeInChunksFresh;
@@ -620,6 +615,10 @@ namespace NKikimr {
             AllocatedChunks.insert(AllocatedChunks.end(), msg->ChunkIds.begin(), msg->ChunkIds.end());
         }
 
+        ui32 GetSecondsBeforeNextRequest() {
+            return std::min(WriteThrottler.GetSecondsBeforeNextRequest(), ReadThrottler.GetSecondsBeforeNextRequest());
+        }
+
         const TVector<TIntrusivePtr<TLevelSegment>>& GetLevelSegments() { return LevelSegments; }
         const TVector<TChunkIdx>& GetCommitChunks() const { return CommitChunks; }
         const TDiskPartVec& GetFreedHugeBlobs() const { return FreedHugeBlobs; }
@@ -804,7 +803,7 @@ namespace NKikimr {
                 if (!msg) {
                     break;
                 }
-                if (!IsFresh && !WriteThrottler.Get(msg.get())) {
+                if (!WriteThrottler.Get(msg.get())) {
                     WriteThrottler.WaitingRequest = std::move(msg);
                     break;
                 }
@@ -822,7 +821,7 @@ namespace NKikimr {
                 if (!readMsg) {
                     break;
                 }
-                if (!IsFresh && !ReadThrottler.Get(readMsg.get())) {
+                if (!ReadThrottler.Get(readMsg.get())) {
                     ReadThrottler.WaitingRequest = std::move(readMsg);
                     break;
                 }

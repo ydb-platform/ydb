@@ -131,7 +131,7 @@ namespace NKikimr {
         ui64 lastLsn = freshSegment->GetLastLsn();
         std::unique_ptr<TFreshCompaction> compaction(new TFreshCompaction(
                 hullCtx, rtCtx, freshSegment, freshSegmentSnap, std::move(barriersSnap), std::move(levelSnap),
-                mergeElementsApproximation, it, firstLsn, lastLsn, TDuration::Max(), {}, allowGarbageCollection));
+                mergeElementsApproximation, it, firstLsn, lastLsn, TDuration::Max(), {}, allowGarbageCollection, false));
 
         LOG_INFO(ctx, NKikimrServices::BS_HULLCOMP,
                 VDISKP(hullCtx->VCtx->VDiskLogPrefix,
@@ -258,7 +258,7 @@ namespace NKikimr {
             }
         }
 
-        void RunLevelCompaction(const TActorContext &ctx, TVector<TOrderedLevelSegmentsPtr> &vec) {
+        void RunLevelCompaction(const TActorContext &ctx, TVector<TOrderedLevelSegmentsPtr> &vec, bool isFullCompaction) {
             RTCtx->LevelIndex->SetCompState(TLevelIndexBase::StateCompInProgress);
 
             // set up lsns + find out number of elements to merge
@@ -281,7 +281,7 @@ namespace NKikimr {
             std::unique_ptr<TLevelCompaction> compaction(new TLevelCompaction(
                     HullDs->HullCtx, RTCtx, nullptr, nullptr, std::move(barriersSnap), std::move(levelSnap),
                     mergeElementsApproximation, it, firstLsn, lastLsn, TDuration::Minutes(2), {},
-                    AllowGarbageCollection));
+                    AllowGarbageCollection, isFullCompaction));
             NActors::TActorId actorId = RunInBatchPool(ctx, compaction.release());
             ActiveActors.Insert(actorId, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
         }
@@ -338,7 +338,7 @@ namespace NKikimr {
                     LOG_INFO(ctx, NKikimrServices::BS_HULLCOMP,
                              VDISKP(HullDs->HullCtx->VCtx, "%s: level scheduled",
                                 PDiskSignatureForHullDbKey<TKey>().ToString().data()));
-                    RunLevelCompaction(ctx, CompactionTask->CompactSsts.CompactionChains);
+                    RunLevelCompaction(ctx, CompactionTask->CompactSsts.CompactionChains, CompactionTask->IsFullCompaction);
                     break;
                 }
                 default:

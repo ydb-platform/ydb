@@ -23,12 +23,14 @@ namespace NKikimr {
                     TSublog<> &sublog,
                     const TBoundariesConstPtr &boundaries,
                     const TLevelSliceSnapshot &sliceSnap,
-                    TCompactSsts &compactSsts)
+                    TCompactSsts &compactSsts,
+                    bool &isFullCompaction)
                 : HullCtx(std::move(hullCtx))
                 , Sublog(sublog)
                 , Boundaries(boundaries)
                 , SliceSnap(sliceSnap)
                 , CompactSsts(compactSsts)
+                , IsFullCompaction(isFullCompaction)
             {}
 
             struct TLess {
@@ -92,6 +94,7 @@ namespace NKikimr {
             TBoundariesConstPtr Boundaries;
             const TLevelSliceSnapshot &SliceSnap;
             TCompactSsts &CompactSsts;
+            bool &IsFullCompaction;
         };
 
         ////////////////////////////////////////////////////////////////////////////
@@ -110,8 +113,9 @@ namespace NKikimr {
                     TSublog<> &sublog,
                     const TBoundariesConstPtr &boundaries,
                     const TLevelSliceSnapshot &sliceSnap,
-                    TCompactSsts &compactSsts)
-                : TBase(std::move(hullCtx), sublog, boundaries, sliceSnap, compactSsts)
+                    TCompactSsts &compactSsts,
+                    bool &isFullCompaction)
+                : TBase(std::move(hullCtx), sublog, boundaries, sliceSnap, compactSsts, isFullCompaction)
             {}
 
             double CalculateRank() const {
@@ -186,6 +190,7 @@ namespace NKikimr {
                 if (added > 0) {
                     Sublog.Log() << "TBalanceLevel0::FullCompact: added# "
                         << added << " targetLevel# " << CompactSsts.TargetLevel <<  "\n";
+                    IsFullCompaction = true;
                 }
 
                 return added > 0;
@@ -197,6 +202,7 @@ namespace NKikimr {
             using TBase::Boundaries;
             using TBase::SliceSnap;
             using TBase::CompactSsts;
+            using TBase::IsFullCompaction;
         };
 
 
@@ -217,8 +223,9 @@ namespace NKikimr {
                     TSublog<> &sublog,
                     const TBoundariesConstPtr &boundaries,
                     const TLevelSliceSnapshot &sliceSnap,
-                    TCompactSsts &compactSsts)
-                : TBase(std::move(hullCtx), sublog, boundaries, sliceSnap, compactSsts)
+                    TCompactSsts &compactSsts,
+                    bool &isFullCompaction)
+                : TBase(std::move(hullCtx), sublog, boundaries, sliceSnap, compactSsts, isFullCompaction)
             {}
 
             struct TRank {
@@ -358,6 +365,7 @@ namespace NKikimr {
                             // required ssts
                             Compact();
                             Sublog.Log() << "TBalancePartiallySortedLevels::FullCompact: level# " << (i + 1) <<  "\n";
+                            IsFullCompaction = true;
                             return true;
                         }
                     }
@@ -372,6 +380,7 @@ namespace NKikimr {
             using TBase::Boundaries;
             using TBase::SliceSnap;
             using TBase::CompactSsts;
+            using TBase::IsFullCompaction;
         };
 
 
@@ -393,8 +402,9 @@ namespace NKikimr {
                     TSublog<> &sublog,
                     const TBoundariesConstPtr &boundaries,
                     const TLevelSliceSnapshot &sliceSnap,
-                    TCompactSsts &compactSsts)
-                : TBase(std::move(hullCtx), sublog, boundaries, sliceSnap, compactSsts)
+                    TCompactSsts &compactSsts,
+                    bool &isFullCompaction)
+                : TBase(std::move(hullCtx), sublog, boundaries, sliceSnap, compactSsts, isFullCompaction)
             {}
 
             void CalculateRanks(std::vector<double> &ranks) {
@@ -492,6 +502,7 @@ namespace NKikimr {
                                     << " sstsAtThisLevel# " << srcSegs.size()
                                     << " otherLevelsNum# " << otherLevelsNum << "\n";
                                 CompactSst(srcLevel, it);
+                                IsFullCompaction = true;
                                 return true;
                             }
                         }
@@ -517,6 +528,7 @@ namespace NKikimr {
                                     << " sstsAtThisLevel# " << srcSegs.size() << "\n";
 
                                 TUtils::SqueezeOneSst(SliceSnap, TLevelSstPtr(srcLevel, *it), CompactSsts);
+                                IsFullCompaction = true;
                                 return true;
                             }
                         }
@@ -532,6 +544,7 @@ namespace NKikimr {
             using TBase::Boundaries;
             using TBase::SliceSnap;
             using TBase::CompactSsts;
+            using TBase::IsFullCompaction;
             using typename TBase::TLess;
         };
 
@@ -566,10 +579,12 @@ namespace NKikimr {
                 , RankThreshold(params.RankThreshold)
                 , FullCompactionAttrs(params.FullCompactionAttrs)
                 , Sublog({})
-                , BalanceLevel0(HullCtx, Sublog, params.Boundaries, LevelSnap.SliceSnap, Task->CompactSsts)
+                , BalanceLevel0(HullCtx, Sublog, params.Boundaries, LevelSnap.SliceSnap, Task->CompactSsts,
+                        Task->IsFullCompaction)
                 , BalancePartiallySortedLevels(HullCtx, Sublog, params.Boundaries, LevelSnap.SliceSnap,
-                        Task->CompactSsts)
-                , BalanceLevelX(HullCtx, Sublog, params.Boundaries, LevelSnap.SliceSnap, Task->CompactSsts)
+                        Task->CompactSsts, Task->IsFullCompaction)
+                , BalanceLevelX(HullCtx, Sublog, params.Boundaries, LevelSnap.SliceSnap, Task->CompactSsts,
+                        Task->IsFullCompaction)
             {}
 
             EAction Select() {

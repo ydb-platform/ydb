@@ -209,6 +209,7 @@ private:
     void ScheduleOnSingleNode(const NYql::NDqProto::TAllocateWorkersRequest& request, THolder<NDqs::TEvAllocateWorkersResponse>& response) {
         const auto count = request.GetCount();
         auto resourceId = request.GetResourceId();
+        const auto& filtersPerTask = request.GetWorkerFilterPerTask();
         if (!resourceId) {
             resourceId = (ui64(++ResourceIdPart) << 32) | SelfId().NodeId();
         }
@@ -220,25 +221,29 @@ private:
             }
             std::shuffle(SingleNodeScheduler.NodeOrder.begin(), SingleNodeScheduler.NodeOrder.end(), std::default_random_engine(TInstant::Now().MicroSeconds()));
         }
-
-        TVector<TPeer> nodes;
-        for (ui32 i = 0; i < count; ++i) {
-            if (!Peers.empty()) {
-                Y_ABORT_UNLESS(NextPeer < Peers.size(), "NextPeer %" PRIu32 ", Peers size %" PRIu32, (ui32)NextPeer, (ui32)Peers.size());
-                nodes.push_back(Peers[SingleNodeScheduler.NodeOrder[NextPeer]]);
-            } else {
-                TPeer node = {SelfId().NodeId(), InstanceId + "," + HostName(), 0, 0, 0, DataCenter};
-                nodes.push_back(node);
+        const auto& nodeIdProto =  filtersPerTask.Get(0).GetNodeId();
+        TSet<ui64> nodeFilter{nodeIdProto.begin(), nodeIdProto.end()};
+        TPeer node = {SelfId().NodeId(), InstanceId + "," + HostName(), 0, 0, 0, DataCenter};
+        
+        if (!Peers.empty()) {
+            for (ui32 i = 0; i < Peers.size(); ++i) {
+                auto nextNode = Peers[SingleNodeScheduler.NodeOrder[NextPeer]];
+                if (nodeFilter.empty() || nodeFilter.contains(nextNode.NodeId)) {
+                    Y_ABORT_UNLESS(NextPeer < Peers.size(), "NextPeer %" PRIu32 ", Peers size %" PRIu32, (ui32)NextPeer, (ui32)Peers.size());
+                    node = nextNode;
+                    break;
+                }
+                if (++NextPeer >= Peers.size()) {
+                    NextPeer = 0;
+                }
             }
         }
-        if (++NextPeer >= Peers.size()) {
-            NextPeer = 0;
-        }
+        Cerr << "  found  " << node.NodeId << Endl;
 
         response->Record.ClearError();
         auto& group = *response->Record.MutableNodes();
         group.SetResourceId(resourceId);
-        for (const auto& node : nodes) {
+        for (ui32 i = 0; i < count; ++i) {
             auto* worker = group.AddWorker();
             *worker->MutableGuid() = node.InstanceId;
             worker->SetNodeId(node.NodeId);

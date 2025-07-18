@@ -3,6 +3,7 @@
 
 import pytest
 import os
+import time
 
 from ydb.tests.tools.fq_runner.kikimr_runner import StreamingOverKikimr
 from ydb.tests.tools.fq_runner.kikimr_runner import StreamingOverKikimrConfig
@@ -102,9 +103,11 @@ class TestMapping(TestYdsBase):
         c_client.wait_query(query_id)
 
     def test_mapping_with_nodes_with_scheduler(self, kikimr):
-        self.init_topics("test_mapping_with_nodes", create_output=False)
-        sql = R'''SELECT Data FROM yds.`{input_topic}` LIMIT 1'''.format(input_topic=self.input_topic)
-
+        self.init_topics("test_mapping_with_nodes_with_scheduler", create_output=False)
+        sql = R'''
+            pragma dq.Scheduler=@@{{"type": "single_node"}}@@;
+            SELECT Data FROM yds.`{input_topic}` LIMIT 1'''.format(input_topic=self.input_topic)
+        time.sleep(1)
         a_client = FederatedQueryClient("a_folder@a_cloud", streaming_over_kikimr=kikimr)
         a_client.create_yds_connection("yds", os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"))
         query_id = a_client.create_query("a", sql, type=fq.QueryContent.QueryType.STREAMING).result.query_id

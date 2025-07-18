@@ -1706,9 +1706,6 @@ private:
         TStringStream stream;
         SerializeToTextFormat(workerFilter, stream);
         apply("WorkerFilter", stream.Str());
-        // auto* attr = dqSettings.Add();
-        // attr->SetName("WorkerFilter");
-        // attr->SetValue(stream.Str());
 
         switch (Params.QueryType) {
         case FederatedQuery::QueryContent::STREAMING: {

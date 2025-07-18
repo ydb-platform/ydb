@@ -28,7 +28,7 @@ struct TTenantInfo {
 
     struct TMapping {
         TString Vtenant;
-        TString Node;       // empty - all nodes.
+        TString NodeIds;       // empty - all nodes.
     };
 
     THashMap<TString /* subject type */, THashMap<TString /* subject id */, TMapping /* mapping */>> SubjectMapping;
@@ -44,11 +44,15 @@ struct TTenantInfo {
         : ComputeConfig(computeConfig)
     {}
 
+    struct TMapResult {
+        TString TenantName;
+        TString NodeIds;
+    };
     // this method must be thread safe
-    std::pair<TString, TString> Assign(const TString& cloudId, const TString& scope, FederatedQuery::QueryContent::QueryType queryType, const TString& DefaultTenantName = "") const {
+    TMapResult Assign(const TString& cloudId, const TString& scope, FederatedQuery::QueryContent::QueryType queryType, const TString& DefaultTenantName = "") const {
         auto pinTenants = ComputeConfig.GetPinTenantNames(queryType, scope);
         if (pinTenants) {
-            return std::make_pair(pinTenants[MultiHash(cloudId) % pinTenants.size()], "");
+            return TMapResult{pinTenants[MultiHash(cloudId) % pinTenants.size()], ""};
         }
 
         TMapping empty;
@@ -67,7 +71,7 @@ struct TTenantInfo {
         auto tenant = vTenant.Vtenant ? TenantMapping.Value(vTenant.Vtenant, DefaultTenantName) : DefaultTenantName;
         // CPS_LOG_D("AssignTenantName: {" << cloudId << ", " << scope << "} => " << tenant);
         // Cerr << "AssignTenantName: {" << cloudId << ", " << scope << "} => " << tenant << Endl;
-        return std::make_pair(tenant, vTenant.Node);
+        return TMapResult{tenant, vTenant.NodeIds};
     }
 };
 

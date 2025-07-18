@@ -28,13 +28,14 @@ struct TTaskInternal {
     TInstant Deadline;
     TString TenantName;
     TString NewTenantName;
+    TString NewNodeIds;
 };
 
 std::pair<TString, NYdb::TParams> MakeSql(const TTaskInternal& taskInternal, const TInstant& nowTimestamp, const TInstant& taskLeaseUntil) {
 
     if (taskInternal.ShouldSkipTask) {
 
-        if (taskInternal.NewTenantName) {
+        if (taskInternal.NewTenantName || !taskInternal.NewNodeIds.empty()) {
             const auto& task = taskInternal.Task;
             TSqlQueryBuilder queryBuilder(taskInternal.TablePathPrefix, "GetTask(move)");
             queryBuilder.AddString("tenant", taskInternal.TenantName);
@@ -51,6 +52,7 @@ std::pair<TString, NYdb::TParams> MakeSql(const TTaskInternal& taskInternal, con
             queryBuilder.AddUint64("generation", task.Generation);
             queryBuilder.AddTimestamp("retry_counter_update_time", taskInternal.RetryLimiter.RetryCounterUpdatedAt);
             queryBuilder.AddDouble("retry_rate", taskInternal.RetryLimiter.RetryRate);
+            queryBuilder.AddString("node", taskInternal.NewNodeIds);
 
             // update queries
             queryBuilder.AddText(
@@ -68,9 +70,9 @@ std::pair<TString, NYdb::TParams> MakeSql(const TTaskInternal& taskInternal, con
             queryBuilder.AddText(
                 "UPSERT INTO `" PENDING_SMALL_TABLE_NAME "`\n"
                 "(`" TENANT_COLUMN_NAME "`, `" SCOPE_COLUMN_NAME "`, `" QUERY_ID_COLUMN_NAME "`,  `" QUERY_TYPE_COLUMN_NAME "`, `" LAST_SEEN_AT_COLUMN_NAME "`, `" ASSIGNED_UNTIL_COLUMN_NAME "`,\n"
-                "`" RETRY_RATE_COLUMN_NAME "`, `" RETRY_COUNTER_COLUMN_NAME "`, `" RETRY_COUNTER_UPDATE_COLUMN_NAME "`, `" HOST_NAME_COLUMN_NAME "`, `" OWNER_COLUMN_NAME "`)\n"
+                "`" RETRY_RATE_COLUMN_NAME "`, `" RETRY_COUNTER_COLUMN_NAME "`, `" RETRY_COUNTER_UPDATE_COLUMN_NAME "`, `" HOST_NAME_COLUMN_NAME "`, `" OWNER_COLUMN_NAME "`,  `" NODE_COLUMN_NAME "`)\n"
                 "VALUES\n"
-                "    ($new_tenant, $scope, $query_id, $query_type, $now, $zero_timestamp, $retry_rate, $retry_counter, $retry_counter_update_time, \"\", \"\");"
+                "    ($new_tenant, $scope, $query_id, $query_type, $now, $zero_timestamp, $retry_rate, $retry_counter, $retry_counter_update_time, \"\", \"\", $node);"
             );
 
             const auto query = queryBuilder.Build();
@@ -193,16 +195,18 @@ std::tuple<TString, NYdb::TParams, std::function<std::pair<TString, NYdb::TParam
             taskInternal.ShouldSkipTask = true;
         }
 
-        if (!task.NodeIds.empty() && !task.NodeIds.contains(requestNodeId)) {
+        if (!task.NodeIdsSet.empty() && !task.NodeIdsSet.contains(requestNodeId)) {
             taskInternal.ShouldSkipTask = true;
         }
 
         if (tenantInfo) {
-            auto tenant = tenantInfo->Assign(taskInternal.Task.Internal.cloud_id(), task.Scope, taskInternal.Task.Query.content().type(), taskInternal.TenantName);
-            if (tenant.first != taskInternal.TenantName) {
+            auto mapResult = tenantInfo->Assign(taskInternal.Task.Internal.cloud_id(), task.Scope, taskInternal.Task.Query.content().type(), taskInternal.TenantName);
+            if (mapResult.TenantName != taskInternal.TenantName
+                || mapResult.NodeIds != task.NodeIds) {
                 // mapping changed, reassign tenant
                 taskInternal.ShouldSkipTask = true;
-                taskInternal.NewTenantName = tenant.first;
+                taskInternal.NewTenantName = mapResult.TenantName;
+                taskInternal.NewNodeIds = mapResult.NodeIds;
             }
         }
 
@@ -414,7 +418,8 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvGetTaskRequ
             CPS_LOG_AS_T(*actorSystem, "Node777" << node);
             if (node) {
                 auto nodeIds = Scan<ui64>(SplitString(TString(*node), ","));
-                task.NodeIds = TSet<ui64>(nodeIds.begin(), nodeIds.end());
+                task.NodeIdsSet = TSet<ui64>(nodeIds.begin(), nodeIds.end());
+                task.NodeIds = *node;
             }
             if (!previousOwner.empty()) { // task lease timeout case only, other cases are updated at ping time
                 CPS_LOG_AS_T(*actorSystem, "Task (Query): " << task.QueryId <<  " Lease TIMEOUT, RetryCounterUpdatedAt " << taskInternal.RetryLimiter.RetryCounterUpdatedAt

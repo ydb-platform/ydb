@@ -47,7 +47,7 @@ public:
 
     const std::shared_ptr<arrow::Table>& GetResultBatch() const {
         AFL_VERIFY(!Extracted);
-        return ResultBatch.GetResultBatch();
+        return ResultBatch.GetRecordBatch();
     }
 
     ui64 GetRecordsCount() const {

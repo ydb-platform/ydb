@@ -30,6 +30,7 @@ RECURSE(
     planner
     pretty_types_print
     protobuf_printer
+    range_treap
     query_actor
     schlab
     security

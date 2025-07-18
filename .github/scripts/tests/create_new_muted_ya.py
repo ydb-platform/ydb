@@ -142,7 +142,7 @@ def create_debug_string(test, resolution, success_rate=None):
     testcase = test.get('test_name')
     runs = test.get('pass_count', 0) + test.get('fail_count', 0)
     
-    debug_string = f"{testsuite} {testcase} # owner {test.get('owner', 'N/A')} success_rate {success_rate}%, days in state N/A"
+    debug_string = f"{testsuite} {testcase} # owner {test.get('owner', 'N/A')} success_rate {success_rate}%"
     
     if resolution in ['to_mute', 'to_unmute', 'to_delete']:
         debug_string += f", pass_count {test.get('pass_count')}, fail_count {test.get('fail_count')}, total_runs {runs}, resolution {resolution}"
@@ -247,7 +247,7 @@ def apply_and_add_mutes(aggregated_for_mute, aggregated_for_unmute, aggregated_f
         
         # 4. muted_ya (все замьюченные сейчас)
         all_muted_ya, all_muted_ya_debug = create_file_set(
-            aggregated_for_mute, lambda test: mute_check(test.get('suite_folder'), test.get('test_name')) if mute_check else True
+            aggregated_for_mute, lambda test: mute_check(test.get('suite_folder'), test.get('test_name')) if mute_check else True , use_wildcards=True
         )
         write_file_set(os.path.join(output_path, 'muted_ya.txt'), all_muted_ya, all_muted_ya_debug)
         to_mute_set = set(to_mute)

@@ -76,6 +76,7 @@ namespace NKikimr::NStorage {
             ++ScepterCounter;
             UpdateRootStateToConnectionChecker();
         }
+        Y_ABORT_UNLESS(RootState != ERootState::ERROR_TIMEOUT);
         RootState = ERootState::ERROR_TIMEOUT;
         ErrorReason = reason;
         OpQueueOnError(reason);
@@ -89,6 +90,7 @@ namespace NKikimr::NStorage {
 
     void TDistributedConfigKeeper::HandleErrorTimeout() {
         STLOG(PRI_DEBUG, BS_NODE, NWDC20, "Error timeout hit");
+        Y_ABORT_UNLESS(RootState == ERootState::ERROR_TIMEOUT);
         Y_ABORT_UNLESS(!Scepter);
         Y_ABORT_UNLESS(InvokeQ.empty());
         RootState = ERootState::INITIAL;
@@ -712,7 +714,7 @@ namespace NKikimr::NStorage {
             if (auto error = ValidateConfig(*propositionBase)) {
                 return TStringBuilder() << "failed to propose configuration, base config contains errors: " << *error;
             }
-            if (auto error = ValidateConfigUpdate(*propositionBase, *configToPropose)) {
+            if (auto error = ValidateConfigUpdate(*propositionBase, *configToPropose, forceGeneration)) {
                 return TStringBuilder() << "incorrect config proposed: " << *error
                     << " Base# " << SingleLineProto(*propositionBase)
                     << " Proposed# " << SingleLineProto(*configToPropose);

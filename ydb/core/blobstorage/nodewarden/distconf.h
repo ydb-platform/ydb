@@ -660,7 +660,7 @@ namespace NKikimr::NStorage {
     }
 
     std::optional<TString> ValidateConfigUpdate(const NKikimrBlobStorage::TStorageConfig& current,
-            const NKikimrBlobStorage::TStorageConfig& proposed);
+            const NKikimrBlobStorage::TStorageConfig& proposed, bool forceGeneration);
 
     std::optional<TString> ValidateConfig(const NKikimrBlobStorage::TStorageConfig& config);
 

@@ -5,6 +5,8 @@
 namespace NKikimr::NStorage {
 
     class TDistributedConfigKeeper::TInvokeRequestHandlerActor : public TActorBootstrapped<TInvokeRequestHandlerActor> {
+        friend class TDistributedConfigKeeper;
+
         TDistributedConfigKeeper* const Self;
         const std::weak_ptr<TLifetimeToken> LifetimeToken;
         const ui64 InvokeActorQueueGeneration;
@@ -23,7 +25,7 @@ namespace NKikimr::NStorage {
         using TQuery = NKikimrBlobStorage::TEvNodeConfigInvokeOnRoot;
         using TResult = NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult;
 
-        using TGatherCallback = std::function<std::optional<TString>(TEvGather*)>;
+        using TGatherCallback = std::function<void(TEvGather*)>;
         ui64 NextScatterCookie = 1;
         THashMap<ui64, TGatherCallback> ScatterTasks;
 
@@ -121,7 +123,7 @@ namespace NKikimr::NStorage {
 
         void GetCurrentStateStorageConfig(NKikimrBlobStorage::TStateStorageConfig* currentConfig);
         void GetRecommendedStateStorageConfig(NKikimrBlobStorage::TStateStorageConfig* currentConfig);
-        bool AdjustRingGroupActorIdOffsetInRecommendedStateStorageConfig(NKikimrBlobStorage::TStateStorageConfig* currentConfig);
+        void AdjustRingGroupActorIdOffsetInRecommendedStateStorageConfig(NKikimrBlobStorage::TStateStorageConfig* currentConfig);
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Storage configuration YAML manipulation
 
@@ -157,21 +159,24 @@ namespace NKikimr::NStorage {
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Bridge mode
 
-        std::optional<TString> ValidateSwitchBridgeClusterState(const NKikimrBridge::TClusterState& newClusterState);
+        void NeedBridgeMode();
+
+        void PrepareSwitchBridgeClusterState(const TQuery::TSwitchBridgeClusterState& cmd);
         void SwitchBridgeClusterState();
+
         NKikimrBlobStorage::TStorageConfig GetSwitchBridgeNewConfig(const NKikimrBridge::TClusterState& newClusterState);
 
         void NotifyBridgeSyncFinished(const TQuery::TNotifyBridgeSyncFinished& cmd);
 
-        bool PrepareMergeUnsyncedPileConfig(const TQuery::TMergeUnsyncedPileConfig& cmd);
+        void PrepareMergeUnsyncedPileConfig(const TQuery::TMergeUnsyncedPileConfig& cmd);
         void MergeUnsyncedPileConfig();
 
         void NegotiateUnsyncedConnection(const TQuery::TNegotiateUnsyncedConnection& cmd);
 
-        bool PrepareAdvanceClusterStateGeneration(const TQuery::TAdvanceClusterStateGeneration& cmd);
+        void PrepareAdvanceClusterStateGeneration(const TQuery::TAdvanceClusterStateGeneration& cmd);
         void AdvanceClusterStateGeneration();
 
-        bool GenerateSpecificBridgePileIds();
+        void GenerateSpecificBridgePileIds();
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Configuration proposition
@@ -183,10 +188,22 @@ namespace NKikimr::NStorage {
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Query termination and result delivery
 
-        bool RunCommonChecks();
+        void RunCommonChecks();
 
         std::unique_ptr<TEvNodeConfigInvokeOnRootResult> PrepareResult(TResult::EStatus status, std::optional<TStringBuf> errorReason);
         void FinishWithError(TResult::EStatus status, const TString& errorReason);
+
+        template<typename T>
+        void FinishWithSuccess(T&& callback, TResult::EStatus status = TResult::OK,
+                std::optional<TStringBuf> errorReason = std::nullopt) {
+            auto ev = PrepareResult(status, errorReason);
+            callback(&ev->Record);
+            Finish(Sender, SelfId(), ev.release(), Cookie);
+        }
+
+        void FinishWithSuccess() {
+            FinishWithSuccess([&](auto* /*record*/) {});
+        }
 
         template<typename... TArgs>
         void Finish(TArgs&&... args) {

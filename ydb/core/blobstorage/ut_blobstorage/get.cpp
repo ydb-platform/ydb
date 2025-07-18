@@ -134,8 +134,9 @@ Y_UNIT_TEST_SUITE(Get) {
                 Cerr << "TEvChunkReadResult: " << ev->ToString() << Endl;
                 auto* res = ev->CastAsLocal<NPDisk::TEvChunkReadResult>();
                 auto buf = res->Data.ToString();
-                auto newBuf = memPool->AllocRcBuf(buf.size());
-                std::memcpy(newBuf.UnsafeGetDataMut(), buf.GetData(), buf.GetSize());
+                auto newBuf = memPool->AllocRcBuf(buf.size(), NInterconnect::NRdma::IMemPool::EMPTY);
+                UNIT_ASSERT(newBuf);
+                std::memcpy(newBuf->UnsafeGetDataMut(), buf.GetData(), buf.GetSize());
                 res->Data = TBufferWithGaps(0, std::move(newBuf));
                 res->Data.Commit();
             } else if (ev->GetTypeRewrite() == TEvBlobStorage::EvVGetResult) {

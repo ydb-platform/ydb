@@ -14,6 +14,7 @@ namespace NInterconnect::NRdma {
     class IMemPool;
     class TMemRegion;
     class TChunk;
+    class TMemPoolImpl;
 
     using TChunkPtr = TIntrusivePtr<TChunk>;
 
@@ -64,18 +65,26 @@ namespace NInterconnect::NRdma {
 
     class IMemPool {
     public:
+        enum Flags : ui32 {
+            EMPTY = 0,
+            PAGE_ALIGNED = 1,    // Page alignment allocation
+            BLOCK_MODE = 1 << 1  // Block ant retry to allocate if allocation fail
+        };
+        
         friend class TChunk;
+        friend class TMemPoolImpl;
 
         virtual ~IMemPool() = default;
 
-        TMemRegionPtr Alloc(int size) noexcept;
-        TRcBuf AllocRcBuf(int size) noexcept;
+        TMemRegionPtr Alloc(int size, ui32 flags) noexcept;
+        std::optional<TRcBuf> AllocRcBuf(int size, ui32 flags) noexcept;
         virtual int GetMaxAllocSz() const noexcept = 0;
 
     protected:
-        virtual TMemRegion* AllocImpl(int size) noexcept = 0;
+        virtual TMemRegion* AllocImpl(int size, ui32 flags) noexcept = 0;
         virtual void Free(TMemRegion&& mr, TChunk& chunk) noexcept = 0;
         virtual void NotifyDealocated() noexcept = 0;
+        void RetryAlloc(TMemRegion** region, int size, ui32 flags) noexcept;
     };
 
     std::shared_ptr<IMemPool> CreateDummyMemPool() noexcept;

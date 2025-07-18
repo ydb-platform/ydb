@@ -270,12 +270,7 @@ public:
         IExecutorPool *pool = CreateTestExecutorPool(nodeId);
         setup->Executors[0].Reset(pool);
         auto memPool = NInterconnect::NRdma::CreateDummyMemPool();
-        setup->RcBufAllocator = [memPool](ui32 size, ui32 headRoom, ui32 tailRoom) -> TRcBuf {
-            TRcBuf buf = memPool->AllocRcBuf(size + headRoom + tailRoom);
-            buf.TrimFront(size + tailRoom);
-            buf.TrimBack(size);
-            return buf;
-        };
+        setup->RcBufAllocator = std::make_shared<TRdmaAllocatorWithFallback>(memPool);
 
         // we create this actor for correct service lookup through ActorSystem
         setup->LocalServices.emplace_back(LoggerSettings_->LoggerActorId, TActorSetupCmd(

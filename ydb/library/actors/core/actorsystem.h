@@ -91,10 +91,13 @@ namespace NActors {
     using TRcBufAllocator = std::function<TRcBuf(size_t size, size_t headRoom, size_t tailRoom)>;
     class TRdmaAllocatorWithFallback : public IRcBufAllocator {
     public:
-        TRdmaAllocatorWithFallback(TRcBufAllocator cb) noexcept;
-        TRcBuf AllocRcBuf(size_t size, size_t headRoom, size_t tailRoom) noexcept;
+        TRdmaAllocatorWithFallback(std::shared_ptr<NInterconnect::NRdma::IMemPool>  memPool) noexcept;
+        TRcBuf AllocRcBuf(size_t size, size_t headRoom, size_t tailRoom) noexcept override;
+        TRcBuf AllocPageAlignedRcBuf(size_t size, size_t tailRoom) noexcept override;
     private:
-        TRcBufAllocator Allocator;
+        template<bool pageAligned>
+        std::optional<TRcBuf> TryAllocRdmaRcBuf(size_t size, size_t headRoom, size_t tailRoom) noexcept;
+        std::shared_ptr<NInterconnect::NRdma::IMemPool> RdmaMemPool;
     };
 
     struct TActorSystemSetup {
@@ -115,7 +118,7 @@ namespace NActors {
         using TLocalServices = TVector<std::pair<TActorId, TActorSetupCmd>>;
         TLocalServices LocalServices;
 
-        TRcBufAllocator RcBufAllocator = nullptr;
+        std::shared_ptr<IRcBufAllocator> RcBufAllocator;
 
         ui32 GetExecutorsCount() const {
             return Executors ? ExecutorsCount : CpuManager.GetExecutorsCount();
@@ -167,7 +170,7 @@ namespace NActors {
         THolder<NSchedulerQueue::TQueueType> ScheduleQueue;
         mutable TTicketLock ScheduleLock;
 
-        mutable TRdmaAllocatorWithFallback RcBufAllocator;
+        mutable IRcBufAllocator* RcBufAllocator;
 
         friend class TExecutorThread;
 
@@ -325,8 +328,8 @@ namespace NActors {
         void GetExecutorPoolState(i16 poolId, TExecutorPoolState &state) const;
         void GetExecutorPoolStates(std::vector<TExecutorPoolState> &states) const;
 
-        TRdmaAllocatorWithFallback* GetRcBufAllocator() const {
-            return &RcBufAllocator;
+        IRcBufAllocator* GetRcBufAllocator() const {
+            return RcBufAllocator;
         }
     };
 }

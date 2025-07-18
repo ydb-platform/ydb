@@ -1758,12 +1758,7 @@ namespace NActors {
 
         if (UseRdmaAllocator) {
             auto memPool = NInterconnect::NRdma::CreateIncrementalMemPool();
-            setup->RcBufAllocator = [memPool](ui32 size, ui32 headRoom, ui32 tailRoom) -> TRcBuf {
-                TRcBuf buf = memPool->AllocRcBuf(size + headRoom + tailRoom);
-                buf.TrimFront(size + tailRoom);
-                buf.TrimBack(size);
-                return buf;
-            };
+            setup->RcBufAllocator = std::make_shared<TRdmaAllocatorWithFallback>(memPool);
         }
 
         InitActorSystemSetup(*setup, node);

@@ -731,7 +731,7 @@ namespace NActors {
             }
 
             NInterconnect::NRdma::TMemRegionPtr mr; 
-            mr = std::move(Common->RdmaMemPool->Alloc(cred.GetSize()));
+            mr = std::move(Common->RdmaMemPool->Alloc(cred.GetSize(), NInterconnect::NRdma::IMemPool::EMPTY));
             if (!mr) {
                 TString err("Unable to allocate memory region for handshake rdma read");
                 LOG_LOG_IC_X(NActorsServices::INTERCONNECT, "ICRDMA", NLog::PRI_WARN,
@@ -799,7 +799,7 @@ namespace NActors {
         }
 
         NInterconnect::NRdma::TMemRegionPtr SetupRdmaHandshakeRegion(NActorsInterconnect::TRdmaHandshake& proto) {
-            auto region = Common->RdmaMemPool->Alloc(RdmaHandshakeRegionSize);
+            auto region = Common->RdmaMemPool->Alloc(RdmaHandshakeRegionSize, NInterconnect::NRdma::IMemPool::EMPTY);
             if (!region) {
                 LOG_LOG_IC_X(NActorsServices::INTERCONNECT, "ICRDMA", NLog::PRI_WARN,
                     "Unable to allocate memory region to perform rdma handshake");

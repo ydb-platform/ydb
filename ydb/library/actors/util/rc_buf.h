@@ -1154,6 +1154,7 @@ class IRcBufAllocator {
 public:
     virtual ~IRcBufAllocator() = default;
     virtual TRcBuf AllocRcBuf(size_t size, size_t headRoom, size_t tailRoom) noexcept = 0;
+    virtual TRcBuf AllocPageAlignedRcBuf(size_t size, size_t tailRoom) noexcept = 0;
 };
 
 IRcBufAllocator* GetDefaultRcBufAllocator() noexcept;

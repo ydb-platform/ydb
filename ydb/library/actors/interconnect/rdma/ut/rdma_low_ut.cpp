@@ -14,7 +14,7 @@ static const size_t MEM_REG_SZ = 4096;
 
 
 static NInterconnect::NRdma::TMemRegionPtr AllocSourceRegion(std::shared_ptr<IMemPool> memPool) {
-    auto reg = memPool->Alloc(MEM_REG_SZ);
+    auto reg = memPool->Alloc(MEM_REG_SZ, IMemPool::BLOCK_MODE);
     memset(reg->GetAddr(), 0, MEM_REG_SZ);
     const char* testString = "-_RMDA_YDB_INTERCONNRCT_-";
     strncpy((char*)reg->GetAddr(), testString, MEM_REG_SZ);
@@ -26,7 +26,7 @@ Y_UNIT_TEST_SUITE(RdmaLow) {
         auto rdma = InitLocalRdmaStuff(bindTo);
         
         auto reg1 = AllocSourceRegion(rdma->MemPool);
-        auto reg2 = rdma->MemPool->Alloc(MEM_REG_SZ);
+        auto reg2 = rdma->MemPool->Alloc(MEM_REG_SZ, 0);
 
         ReadOneMemRegion(rdma, rdma->Qp2, reg1->GetAddr(), reg1->GetRKey(rdma->Ctx->GetDeviceIndex()), MEM_REG_SZ, reg2);
 
@@ -81,7 +81,7 @@ Y_UNIT_TEST_SUITE(RdmaLow) {
             const size_t inflight = 40;
             std::vector<NThreading::TFuture<bool>> completed;
             completed.reserve(inflight);
-            auto reg2 = memPool->Alloc(MEM_REG_SZ);
+            auto reg2 = memPool->Alloc(MEM_REG_SZ, 0);
 
             bool wasAlloc = false;
 

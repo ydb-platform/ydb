@@ -1134,13 +1134,17 @@ class TSentinel: public TActorBootstrapped<TSentinel> {
         auto *updateRequest = request->Record.MutableSelfHealBadNodesListUpdate();
         updateRequest->SetWaitForConfigStep(Config.StateStorageSelfHealWaitForConfigStep);
         updateRequest->SetEnableSelfHealStateStorage(Config.EnableSelfHealStateStorage);
+        bool needSelfHeal = false;
         for (auto &[nodeId, node] : SentinelState->Nodes) {
-            node.Compute();
+            needSelfHeal |= node.Compute();
             if (!node.GetCurrentState()) {
                 updateRequest->AddBadNodes(nodeId);
             }
         }
-        Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), request.release());
+        if (needSelfHeal) {
+            LOG_D("Sending self heal request");
+            Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), request.release());
+        }
     }
 
     void SendBSCRequests() {

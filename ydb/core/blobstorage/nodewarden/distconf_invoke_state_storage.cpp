@@ -130,7 +130,7 @@ namespace NKikimr::NStorage {
             TIntrusivePtr<TStateStorageInfo> oldSSInfo;
             oldSSInfo = (*buildFunc)(ss);
             newSSInfo = (*buildFunc)(*(targetConfig.*ssMutableFunc)());
-            STLOG(PRI_DEBUG, BS_NODE, NW52, "needReconfig " << (oldSSInfo->RingGroups == newSSInfo->RingGroups));
+            STLOG(PRI_DEBUG, BS_NODE, NW52, "needReconfig " << (oldSSInfo->RingGroups != newSSInfo->RingGroups));
             if (oldSSInfo->RingGroups == newSSInfo->RingGroups) {
                 (targetConfig.*clearFunc)();
                 return false;
@@ -380,3 +380,14 @@ namespace NKikimr::NStorage {
     }
 
 } // NKikimr::NStorage
+
+Y_DECLARE_OUT_SPEC(inline, std::unordered_set<ui32>, o, x) {
+    o << '[';
+    for (auto it = x.begin(); it != x.end(); ++it) {
+        if (it != x.begin()) {
+            o << ',';
+        }
+        o << *it;
+    }
+    o << ']';
+}

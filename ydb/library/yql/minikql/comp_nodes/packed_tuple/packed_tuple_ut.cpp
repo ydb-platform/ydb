@@ -23,7 +23,7 @@ namespace NPackedTuple {
 
 using namespace std::chrono_literals;
 
-static volatile bool IsVerbose = false;
+static volatile bool IsVerbose = true;
 #define CTEST (IsVerbose ? Cerr : Cnull)
 
 namespace {
@@ -135,8 +135,6 @@ Y_UNIT_TEST(Pack) {
     std::vector<ui64> col3(NTuples1, 0);
     std::vector<ui32> col4(NTuples1, 0);
 
-    std::vector<ui8> res(Tuples1DataBytes + 64, 0);
-
     for (ui32 i = 0; i < NTuples1; ++i) {
         col1[i] = i;
         col2[i] = i;
@@ -151,32 +149,282 @@ Y_UNIT_TEST(Pack) {
     cols[2] = (ui8*) col3.data();
     cols[3] = (ui8*) col4.data();
 
-    std::chrono::steady_clock::time_point begin02 = std::chrono::steady_clock::now();
-
+    
     std::vector<ui8> colValid1((NTuples1 + 7)/8, ~0);
     std::vector<ui8> colValid2((NTuples1 + 7)/8, ~0);
     std::vector<ui8> colValid3((NTuples1 + 7)/8, ~0);
     std::vector<ui8> colValid4((NTuples1 + 7)/8, ~0);
     const ui8 *colsValid[4] = {
-            colValid1.data(),
-            colValid2.data(),
-            colValid3.data(),
-            colValid4.data(),
+        colValid1.data(),
+        colValid2.data(),
+        colValid3.data(),
+        colValid4.data(),
     };
-
+    
     std::vector<ui8, TMKQLAllocator<ui8>> overflow;
+
+    std::vector<ui8> res(Tuples1DataBytes, 0);
+    std::chrono::steady_clock::time_point begintp = std::chrono::steady_clock::now();
     tl->Pack(cols, colsValid, res.data(), overflow, 0, NTuples1);
-    std::chrono::steady_clock::time_point end02 = std::chrono::steady_clock::now();
-    ui64 microseconds = std::chrono::duration_cast<std::chrono::microseconds>(end02 - begin02).count();
+    std::chrono::steady_clock::time_point endtp = std::chrono::steady_clock::now();
+    ui64 microseconds = std::chrono::duration_cast<std::chrono::microseconds>(endtp - begintp).count();
     if (microseconds == 0) microseconds = 1;
 
     CTEST  << "Time for " << (NTuples1) << " transpose (external cycle)= " << microseconds  << "[microseconds]" << Endl;
+    CTEST  << "Data size = " << Tuples1DataBytes / (1024 * 1024) << "[MB]" << Endl;
+    CTEST  << "Calculating pack speed = " << Tuples1DataBytes / microseconds << "MB/sec" << Endl;
+    CTEST  << Endl;
+
+    static const ui32 NLogBuckets = 3;
+
+    auto resesData = [&]{
+        std::array<std::vector<ui8, TMKQLAllocator<ui8>>, 1u << NLogBuckets> result;
+        for (auto& bres : result) {
+            bres.resize((Tuples1DataBytes >> NLogBuckets) * 9 / 8, 0);
+            bres.resize(0);
+        }
+        return result;
+    }();
+    std::array<std::vector<ui8, TMKQLAllocator<ui8>>, 1u << NLogBuckets> overflowsData;
+
+    auto reses = TPaddedPtr(resesData.data(), sizeof(resesData[0]));
+    auto overflows = TPaddedPtr(overflowsData.data(), sizeof(overflowsData[0]));
+
+    begintp = std::chrono::steady_clock::now();
+    tl->BucketPack(cols, colsValid, reses, overflows, 0, NTuples1, NLogBuckets);
+    endtp = std::chrono::steady_clock::now();
+    microseconds = std::chrono::duration_cast<std::chrono::microseconds>(endtp - begintp).count();
+    if (microseconds == 0) microseconds = 1;
+
+    CTEST  << "Time for " << (NTuples1) << " transpose in " << (1u << NLogBuckets) << "(external cycle)= " << microseconds  << "[microseconds]" << Endl;
+    CTEST  << "Data size = " << Tuples1DataBytes / (1024 * 1024) << "[MB]" << Endl;
+    CTEST  << "Calculating bucketed pack speed = " << Tuples1DataBytes / microseconds << "MB/sec" << Endl;
+    CTEST  << Endl;
+
+    const size_t bressize = std::accumulate(resesData.begin(), resesData.end(), 0, [](size_t lhs, const auto& rhs) {
+        return lhs + rhs.size();
+    });
+    UNIT_ASSERT_EQUAL(res.size(), bressize);
+
+    ui32 hashsum = 0;
+    for (size_t i = 0; i < res.size(); i += tl->TotalRowSize) {
+        hashsum += ReadUnaligned<ui32>(res.data() + i);
+    }
+    ui32 bhashsum = 0;
+    for (const auto& bres : resesData) {
+        for (size_t i = 0; i < bres.size(); i += tl->TotalRowSize) {
+            bhashsum += ReadUnaligned<ui32>(bres.data() + i);
+        }
+    }
+    UNIT_ASSERT_EQUAL(hashsum, bhashsum);
+}
+
+Y_UNIT_TEST(PackMany) {
+
+    TScopedAlloc alloc(__LOCATION__);
+
+    constexpr size_t cols_types_num = 4;
+    constexpr size_t cols_cnts[cols_types_num] = {0, 20, 10, 6}; // both Key and Payload
+    const ui64 NTuples1 = 1e6 * 2;
+
+    constexpr size_t cols_sizes[cols_types_num] = {1, 2, 4, 8};
+    constexpr size_t cols_num =
+        2 * [&]<size_t... Is>(const std::index_sequence<Is...> &) {
+            return (... + cols_cnts[Is]);
+        }(std::make_index_sequence<cols_types_num>{});
+
+    [&]<size_t... Is>(const std::index_sequence<Is...>&) {
+        CTEST << "Row: [crc32]";
+        ((cols_cnts[Is] ? CTEST << " [" << cols_sizes[Is] << "]x" <<  cols_cnts[Is] : CTEST), ...);
+        CTEST << " [mask byte]x" << (cols_num + 7) / 8;
+        ((cols_cnts[Is] ? CTEST << " [" << cols_sizes[Is] << "]x" <<  cols_cnts[Is] : CTEST), ...);
+        CTEST << Endl;
+    }(std::make_index_sequence<cols_types_num>{});
+    
+    std::vector<TColumnDesc> columns;
+    for (size_t ind = 0; ind != cols_types_num; ++ind) {
+        TColumnDesc desc;
+        desc.DataSize = cols_sizes[ind];
+
+        desc.Role = EColumnRole::Key;
+        for (size_t cnt = 0; cnt != cols_cnts[ind]; ++cnt) {
+            columns.push_back(desc);
+        }
+        desc.Role = EColumnRole::Payload;
+        for (size_t cnt = 0; cnt != cols_cnts[ind]; ++cnt) {
+            columns.push_back(desc);
+        }
+    }
+
+    UNIT_ASSERT_EQUAL(cols_num, columns.size());
+
+    auto tl = TTupleLayout::Create(columns);
+    CTEST << "Row size: " << tl->TotalRowSize << Endl;
+
+    const ui64 Tuples1DataBytes = (tl->TotalRowSize) * NTuples1;
+
+    std::vector<ui8> cols_vecs[cols_num];
+    for (size_t col = 0; col != cols_num; ++col) {
+        const size_t size = columns[col].DataSize * NTuples1;
+        cols_vecs[col].resize(size, 0);
+        for (ui32 i = 0; i < size; ++i) {
+            cols_vecs[col][i] = i;
+        }
+        for (ui32 i = 0; i < NTuples1; ++i) {
+            cols_vecs[col][i * columns[col].DataSize] = i;
+        }
+    }
+
+    const ui8* cols[cols_num];
+    [&]<size_t... Is>(const std::index_sequence<Is...>&) {
+        ((cols[Is] = cols_vecs[Is].data()), ...);
+    }(std::make_index_sequence<cols_num>{});
+
+    std::vector<ui8> cols_valid_vecs[cols_num];
+    for (size_t col = 0; col != cols_num; ++col) {
+        cols_valid_vecs[col].resize((NTuples1 + 7)/8, ~0);
+    }
+
+    const ui8* cols_valid[cols_num];
+    [&]<size_t... Is>(const std::index_sequence<Is...>&) {
+        ((cols_valid[Is] = cols_valid_vecs[Is].data()), ...);
+    }(std::make_index_sequence<cols_num>{});
+
+    std::vector<ui8> res(Tuples1DataBytes + 64, 0);
+    std::vector<ui8, TMKQLAllocator<ui8>> overflow;
+
+    std::chrono::steady_clock::time_point begin02 = std::chrono::steady_clock::now();
+    tl->Pack(cols, cols_valid, res.data(), overflow, 0, NTuples1);
+    std::chrono::steady_clock::time_point end02 = std::chrono::steady_clock::now();
+
+    ui64 microseconds = std::chrono::duration_cast<std::chrono::microseconds>(end02 - begin02).count();
+    if (microseconds == 0) microseconds = 1;
+
+    for (size_t ind = 0; ind != NTuples1; ++ind) {
+        UNIT_ASSERT_EQUAL((ui8)ind, res.data()[tl->TotalRowSize * ind + 4]);
+    }
+
+    CTEST  << "Time for " << (NTuples1) << " transpose (external cycle)= " << microseconds  << "[microseconds]" << Endl;
     CTEST  << "Data size =  " << Tuples1DataBytes / (1024 * 1024) << "[MB]" << Endl;
-    CTEST  << "Calculating speed = " << Tuples1DataBytes / microseconds << "MB/sec" << Endl;
+    CTEST  << "Calculating pack-many speed = " << Tuples1DataBytes / microseconds << "[MB/sec]" << Endl;
     CTEST  << Endl;
 
     UNIT_ASSERT(true);
 
+}
+
+Y_UNIT_TEST(UnpackMany) {
+
+    TScopedAlloc alloc(__LOCATION__);
+
+    constexpr size_t cols_types_num = 4;
+    constexpr size_t cols_cnts[cols_types_num] = {0, 20, 10, 6}; // both Key and Payload
+    const ui64 NTuples1 = 1e6 * 2;
+
+    constexpr size_t cols_sizes[cols_types_num] = {1, 2, 4, 8};
+    constexpr size_t cols_num =
+        2 * [&]<size_t... Is>(const std::index_sequence<Is...> &) {
+            return (... + cols_cnts[Is]);
+        }(std::make_index_sequence<cols_types_num>{});
+
+    [&]<size_t... Is>(const std::index_sequence<Is...>&) {
+        CTEST << "Row: [crc32]";
+        ((cols_cnts[Is] ? CTEST << " [" << cols_sizes[Is] << "]x" <<  cols_cnts[Is] : CTEST), ...);
+        CTEST << " [mask byte]x" << (cols_num + 7) / 8;
+        ((cols_cnts[Is] ? CTEST << " [" << cols_sizes[Is] << "]x" <<  cols_cnts[Is] : CTEST), ...);
+        CTEST << Endl;
+    }(std::make_index_sequence<cols_types_num>{});
+    
+    std::vector<TColumnDesc> columns;
+    for (size_t ind = 0; ind != cols_types_num; ++ind) {
+        TColumnDesc desc;
+        desc.DataSize = cols_sizes[ind];
+
+        desc.Role = EColumnRole::Key;
+        for (size_t cnt = 0; cnt != cols_cnts[ind]; ++cnt) {
+            columns.push_back(desc);
+        }
+        desc.Role = EColumnRole::Payload;
+        for (size_t cnt = 0; cnt != cols_cnts[ind]; ++cnt) {
+            columns.push_back(desc);
+        }
+    }
+
+    UNIT_ASSERT_EQUAL(cols_num, columns.size());
+
+    auto tl = TTupleLayout::Create(columns);
+    CTEST << "Row size: " << tl->TotalRowSize << Endl;
+
+    const ui64 Tuples1DataBytes = (tl->TotalRowSize) * NTuples1;
+
+    std::vector<ui8> cols_vecs[cols_num];
+    for (size_t col = 0; col != cols_num; ++col) {
+        const size_t size = columns[col].DataSize * NTuples1;
+        cols_vecs[col].resize(size, 0);
+        for (ui32 i = 0; i < size; ++i) {
+            cols_vecs[col][i] = i;
+        }
+    }
+
+    const ui8* cols[cols_num];
+    [&]<size_t... Is>(const std::index_sequence<Is...>&) {
+        ((cols[Is] = cols_vecs[Is].data()), ...);
+    }(std::make_index_sequence<cols_num>{});
+
+    std::vector<ui8> cols_valid_vecs[cols_num];
+    for (size_t col = 0; col != cols_num; ++col) {
+        cols_valid_vecs[col].resize((NTuples1 + 7)/8, ~0);
+    }
+
+    const ui8* cols_valid[cols_num];
+    [&]<size_t... Is>(const std::index_sequence<Is...>&) {
+        ((cols_valid[Is] = cols_valid_vecs[Is].data()), ...);
+    }(std::make_index_sequence<cols_num>{});
+
+    std::vector<ui8> res(Tuples1DataBytes + 64, 0);
+    std::vector<ui8, TMKQLAllocator<ui8>> overflow;
+    tl->Pack(cols, cols_valid, res.data(), overflow, 0, NTuples1);
+
+    std::vector<ui8> cols_new_vecs[cols_num];
+    for (size_t col = 0; col != cols_num; ++col) {
+        const size_t size = columns[col].DataSize * NTuples1;
+        cols_new_vecs[col].resize(size, 13);
+    }
+
+    ui8* cols_new[cols_num];
+    [&]<size_t... Is>(const std::index_sequence<Is...>&) {
+        ((cols_new[Is] = cols_new_vecs[Is].data()), ...);
+    }(std::make_index_sequence<cols_num>{});
+
+    std::vector<ui8> cols_new_valid_vecs[cols_num];
+    for (size_t col = 0; col != cols_num; ++col) {
+        cols_new_valid_vecs[col].resize((NTuples1 + 7)/8, 13);
+    }
+
+    ui8* cols_new_valid[cols_num];
+    [&]<size_t... Is>(const std::index_sequence<Is...>&) {
+        ((cols_new_valid[Is] = cols_new_valid_vecs[Is].data()), ...);
+    }(std::make_index_sequence<cols_num>{});
+
+
+    std::chrono::steady_clock::time_point begin02 = std::chrono::steady_clock::now();
+    tl->Unpack(cols_new, cols_new_valid, res.data(), overflow, 0, NTuples1);
+    std::chrono::steady_clock::time_point end02 = std::chrono::steady_clock::now();
+    ui64 microseconds = std::chrono::duration_cast<std::chrono::microseconds>(end02 - begin02).count();
+
+    if (microseconds == 0) microseconds = 1;
+
+    CTEST  << "Time for " << (NTuples1) << " transpose (external cycle)= " << microseconds  << "[microseconds]" << Endl;
+    CTEST  << "Data size =  " << Tuples1DataBytes / (1024 * 1024) << "[MB]" << Endl;
+    CTEST  << "Calculating unpack-many speed = " << Tuples1DataBytes / microseconds << "[MB/sec]" << Endl;
+    CTEST  << Endl;
+
+    [&]<size_t... Is>(const std::index_sequence<Is...>&) {
+        const bool data_check = ((std::memcmp(cols[Is], cols_new[Is], cols_vecs[Is].size()) == 0) && ...);
+        UNIT_ASSERT(data_check);
+        const bool valid_check = ((std::memcmp(cols_valid[Is], cols_new_valid[Is], cols_valid_vecs[Is].size()) == 0) && ...);
+        UNIT_ASSERT(valid_check); 
+    }(std::make_index_sequence<cols_num>{});
 }
 
 Y_UNIT_TEST(Unpack) {
@@ -215,9 +463,9 @@ Y_UNIT_TEST(Unpack) {
 
     for (ui32 i = 0; i < NTuples1; ++i) {
         col1[i] = i;
-        col2[i] = i;
-        col3[i] = i;
-        col4[i] = i;
+        col2[i] = i ^ 1;
+        col3[i] = i ^ 7;
+        col4[i] = i ^ 13;
     }
 
     const ui8* cols[4];
@@ -273,7 +521,7 @@ Y_UNIT_TEST(Unpack) {
 
     CTEST  << "Time for " << (NTuples1) << " transpose (external cycle)= " << microseconds  << "[microseconds]" << Endl;
     CTEST  << "Data size =  " << Tuples1DataBytes / (1024 * 1024) << "[MB]" << Endl;
-    CTEST  << "Calculating speed = " << Tuples1DataBytes / microseconds << "MB/sec" << Endl;
+    CTEST  << "Calculating unpack speed = " << Tuples1DataBytes / microseconds << "MB/sec" << Endl;
     CTEST  << Endl;
 
     UNIT_ASSERT(std::memcmp(col1.data(), col1_new.data(), sizeof(ui64) * col1.size()) == 0);
@@ -394,16 +642,35 @@ Y_UNIT_TEST(PackVarSize) {
             colValid.data(),
     };
 
-    std::chrono::steady_clock::time_point begin02 = std::chrono::steady_clock::now();
+    auto begintp = std::chrono::steady_clock::now();
     tl->Pack(cols, colsValid, res.data(), overflow, 0, NTuples1);
-    std::chrono::steady_clock::time_point end02 = std::chrono::steady_clock::now();
-    ui64 microseconds = std::chrono::duration_cast<std::chrono::microseconds>(end02 - begin02).count();
+    auto endtp = std::chrono::steady_clock::now();
+    ui64 microseconds = std::chrono::duration_cast<std::chrono::microseconds>(endtp - begintp).count();
 
     if (microseconds == 0)
         microseconds = 1;
 
     CTEST  << "Time for " << (NTuples1) << " transpose (external cycle)= " << microseconds  << "[microseconds]" << Endl;
-#ifndef NDEBUG
+
+    constexpr ui32 NLogBuckets = 2;
+
+    std::array<std::vector<ui8, TMKQLAllocator<ui8>>, 1u << NLogBuckets> resesData;
+    std::array<std::vector<ui8, TMKQLAllocator<ui8>>, 1u << NLogBuckets> overflowsData;
+
+    auto reses = TPaddedPtr(resesData.data(), sizeof(resesData[0]));
+    auto overflows = TPaddedPtr(overflowsData.data(), sizeof(overflowsData[0]));
+
+    begintp = std::chrono::steady_clock::now();
+    tl->BucketPack(cols, colsValid, reses, overflows, 0, NTuples1, NLogBuckets);
+    endtp = std::chrono::steady_clock::now();
+    microseconds = std::chrono::duration_cast<std::chrono::microseconds>(endtp - begintp).count();
+
+    if (microseconds == 0)
+        microseconds = 1;
+
+    CTEST  << "Time for " << (NTuples1) << " transpose in " << (1u << NLogBuckets) << " (external cycle)= " << microseconds  << "[microseconds]" << Endl;
+
+    #ifndef NDEBUG
     CTEST << "Result size = " << Tuples1DataBytes << Endl;
     CTEST << "Result = ";
     for (ui32 i = 0; i < Tuples1DataBytes; ++i)
@@ -418,30 +685,30 @@ Y_UNIT_TEST(PackVarSize) {
     static const ui8 expected_data[54*3] = {
         // row1
 
-        0xe2,0x47,0x16,0x6c, // hash
+        0x29,0x8f,0xdf,0xc0, // hash
         0x1, 0, 0, 0x20, // col1
         0x1, 0, 0, 0, 0, 0, 0, 0x10, // col2
         0x3, 0x61, 0x62, 0x63, 0, 0, 0, 0, 0, // vcol1
         0x3, 0x41, 0x42, 0x43, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, // vcol2
-        0x3f, //NULL bitmap
+        0xff, //NULL bitmap
         0x1, 0, 0, 0x40, // col3
         0x1, 0, 0, 0, 0, 0, 0, 0x30, // col4
         // row2
-        0xc2, 0x1c, 0x1b, 0xa8, // hash
+        0x42, 0xb2, 0x58, 0xc0, // hash
         0x2, 0, 0, 0x20, // col1
         0x2, 0, 0, 0, 0, 0, 0, 0x10, // col2
         0xff,  0, 0, 0, 0,  0xf, 0, 0, 0, // vcol1 [overflow offset, overflow size]
         0xf, 0x61, 0x62, 0x63, 0x64, 0x65, 0x66, 0x67, 0x68, 0x69, 0x6a, 0x6b, 0x6c, 0x6d, 0x6e, 0x6f, // vcol2
-        0x3f, // NULL bitmap
+        0xff, // NULL bitmap
         0x2, 0, 0, 0x40, // col3
         0x2, 0, 0, 0, 0, 0, 0, 0x30, // col4
         // row3
-        0xfa, 0x49, 0x5, 0xe9, // hash
+        0xc3, 0xc9, 0xc4, 0x64, // hash
         0x3, 0, 0, 0x20, // col1
         0x3, 0, 0, 0, 0, 0, 0, 0x10, // col2
         0xff,  0xf, 0, 0, 0,  0xa, 0, 0, 0, // vcol1 [overflow offset, overflow size]
         0xa, 0x7a, 0x79, 0x78, 0x77, 0x76, 0x75, 0x74, 0x73, 0x70, 0x72,  0, 0, 0, 0, 0, // vcol2
-        0x3f, // NULL bitmap
+        0xff, // NULL bitmap
         0x3, 0, 0, 0x40, // col3
         0x3, 0, 0, 0, 0, 0, 0, 0x30, // col4
     };
@@ -449,12 +716,33 @@ Y_UNIT_TEST(PackVarSize) {
         0x41, 0x42, 0x43, 0x44, 0x45, 0x46, 0x47, 0x48, 0x49, 0x4a, 0x4b, 0x4c, 0x4d, 0x4e, 0x4f,
         0x5a, 0x59, 0x58, 0x57, 0x56, 0x55, 0x54, 0x53, 0x50, 0x52,
     };
+
     UNIT_ASSERT_VALUES_EQUAL(sizeof(expected_data), tl->TotalRowSize*NTuples1);
     UNIT_ASSERT_VALUES_EQUAL(overflow.size(), sizeof(expected_overflow));
     for (ui32 i = 0; i < sizeof(expected_data); ++i)
         UNIT_ASSERT_VALUES_EQUAL(expected_data[i], res[i]);
     for (ui32 i = 0; i < sizeof(expected_overflow); ++i)
         UNIT_ASSERT_VALUES_EQUAL(expected_overflow[i], overflow[i]);
+
+
+    UNIT_ASSERT_VALUES_EQUAL(resesData[0].size(), 0);
+    UNIT_ASSERT_VALUES_EQUAL(overflowsData[0].size(), 0);
+    UNIT_ASSERT_VALUES_EQUAL(resesData[2].size(), 0);
+    UNIT_ASSERT_VALUES_EQUAL(overflowsData[2].size(), 0);
+
+    UNIT_ASSERT_VALUES_EQUAL(resesData[1].size(), tl->TotalRowSize);
+    UNIT_ASSERT_VALUES_EQUAL(overflowsData[1].size(), 10);
+    for (ui32 i = 0; i < 54; ++i) if (!(i >= 17 && i <= 20))
+        UNIT_ASSERT_VALUES_EQUAL(expected_data[2 * tl->TotalRowSize + i], resesData[1][i]);
+    for (ui32 i = 0; i < 10; ++i)
+        UNIT_ASSERT_VALUES_EQUAL(expected_overflow[15 + i], overflowsData[1][i]);
+
+    UNIT_ASSERT_VALUES_EQUAL(resesData[3].size(), 2 * tl->TotalRowSize);
+    UNIT_ASSERT_VALUES_EQUAL(overflowsData[3].size(), 15);
+    for (ui32 i = 0; i < 2 * 54; ++i) if (!(i % 54 >= 17 && i % 54 <= 20))
+        UNIT_ASSERT_VALUES_EQUAL(expected_data[0 * tl->TotalRowSize + i], resesData[3][i]);
+    for (ui32 i = 0; i < 15; ++i)
+        UNIT_ASSERT_VALUES_EQUAL(expected_overflow[0 + i], overflowsData[3][i]);
 }
 
 Y_UNIT_TEST(UnpackVarSize) {
@@ -554,7 +842,7 @@ Y_UNIT_TEST(UnpackVarSize) {
     std::vector<ui8> colValid((NTuples1 + 7)/8, ~0);
     const ui8 *colsValid[8] = {
             colValid.data(),
-            colValid.data(),
+            nullptr,
             colValid.data(),
             nullptr,
             colValid.data(),
@@ -711,9 +999,10 @@ Y_UNIT_TEST(PackVarSizeBig) {
     cols[3] = (ui8*) vcol1data.data();
 
     std::vector<ui8> colValid((NTuples1 + 7)/8, ~0);
+    std::vector<ui8> colInvalid((NTuples1 + 7)/8, 0);
     const ui8 *colsValid[2 + 1*2] = {
-            colValid.data(),
-            colValid.data(),
+            nullptr,
+            colInvalid.data(),
             colValid.data(),
             nullptr,
     };
@@ -739,7 +1028,7 @@ Y_UNIT_TEST(PackVarSizeBig) {
 #endif
     static const ui8 expected_data[263*2] = {
             // row1
-            0xe1,0x22,0x63,0xf5, // hash
+            0x27,0xd1,0xce,0x49, // hash
             0x11, // col1
             0x1, 0x20, // col2
             0xff,  0, 0, 0, 0,   0xb, 0, 0, 0, // vcol2 [ overflow offset, overflow size ]
@@ -774,9 +1063,9 @@ Y_UNIT_TEST(PackVarSizeBig) {
             0x62, 0x62, 0x62, 0x62, 0x62, 0x62, 0x62, 0x62,
             0x62, 0x62, 0x61, 0x62, 0x63, 0x64, 0x65, 0x66,
             0x67, 0x68, 0x69, 0x6a, 0x6b, 0x6c,
-            0x7, // NULL bitmap
+            ui8(~0x2), // NULL bitmap
             // row 2
-            0xab,0xa5,0x5f,0xd4, // hash
+            0x96,0x27,0x88,0xaa, // hash
             0x12, // col1
             0x2, 0x20, // col2
             0xfe, 0x7a, 0x61, 0x61, 0x61, 0x61, 0x61, 0x61,
@@ -811,7 +1100,7 @@ Y_UNIT_TEST(PackVarSizeBig) {
             0x62, 0x62, 0x62, 0x62, 0x62, 0x62, 0x62, 0x62,
             0x62, 0x62, 0x62, 0x62, 0x62, 0x62, 0x62, 0x62,
             0x62, 0x62, 0x72, 0x73, 0x74, 0x75, 0x76,
-            0x7, // NULLs bitmap
+            ui8(~0x2), // NULLs bitmap
     };
     static const ui8 expected_overflow[11] = {
             0x6e, 0x6d, 0x6f, 0x72, 0x73, 0x74, 0x75, 0x76, 0x77, 0x78, 0x79,

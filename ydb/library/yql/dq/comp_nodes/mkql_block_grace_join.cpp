@@ -1,18 +1,18 @@
 #include "mkql_block_grace_join.h"
-#include "block_layout_converter.h"
-#include "mkql_resource_meter.h"
-#include "mkql_block_grace_join_policy.h"
 
 #include <yql/essentials/minikql/mkql_type_builder.h>
 #include <yql/essentials/minikql/computation/mkql_block_builder.h>
 #include <yql/essentials/minikql/computation/mkql_block_reader.h>
 #include <yql/essentials/minikql/computation/mkql_block_impl.h>
+#include <yql/essentials/minikql/computation/block_layout_converter.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders_codegen.h>
+#include <yql/essentials/minikql/computation/mkql_resource_meter.h>
 #include <yql/essentials/minikql/computation/mkql_vector_spiller_adapter.h>
 
 #include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/minikql/mkql_program_builder.h>
+#include <yql/essentials/minikql/mkql_block_grace_join_policy.h>
 
 #include <ydb/library/yql/minikql/comp_nodes/packed_tuple/accumulator.h>
 #include <ydb/library/yql/minikql/comp_nodes/packed_tuple/cardinality.h>
@@ -2275,8 +2275,8 @@ private:
 
 } // namespace
 
-IComputationNode* WrapDqBlockHashJoin(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
-    MKQL_ENSURE(callable.GetInputsCount() == 5, "Expected 7 args");
+IComputationNode* WrapBlockGraceJoinCore(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
+    MKQL_ENSURE(callable.GetInputsCount() == 9, "Expected 9 args");
 
     const auto joinType = callable.GetType()->GetReturnType();
     MKQL_ENSURE(joinType->IsStream(), "Expected WideStream as a resulting stream");
@@ -2321,7 +2321,21 @@ IComputationNode* WrapDqBlockHashJoin(TCallable& callable, const TComputationNod
     }
     const THashSet<ui32> leftKeySet(leftKeyColumns.cbegin(), leftKeyColumns.cend());
 
-    const auto rightKeyColumnsLiteral = callable.GetInput(4);
+    const auto leftKeyDropsLiteral = callable.GetInput(4);
+    const auto leftKeyDropsTuple = AS_VALUE(TTupleLiteral, leftKeyDropsLiteral);
+    THashSet<ui32> leftKeyDrops;
+    leftKeyDrops.reserve(leftKeyDropsTuple->GetValuesCount());
+    for (ui32 i = 0; i < leftKeyDropsTuple->GetValuesCount(); i++) {
+        const auto item = AS_VALUE(TDataLiteral, leftKeyDropsTuple->GetValue(i));
+        leftKeyDrops.emplace(item->AsValue().Get<ui32>());
+    }
+
+    for (const auto& drop : leftKeyDrops) {
+        MKQL_ENSURE(leftKeySet.contains(drop),
+                    "Only key columns has to be specified in drop column set");
+    }
+
+    const auto rightKeyColumnsLiteral = callable.GetInput(5);
     const auto rightKeyColumnsTuple = AS_VALUE(TTupleLiteral, rightKeyColumnsLiteral);
     TVector<ui32> rightKeyColumns;
     rightKeyColumns.reserve(rightKeyColumnsTuple->GetValuesCount());
@@ -2331,40 +2345,43 @@ IComputationNode* WrapDqBlockHashJoin(TCallable& callable, const TComputationNod
     }
     const THashSet<ui32> rightKeySet(rightKeyColumns.cbegin(), rightKeyColumns.cend());
 
-    THashMap<ui32, ui32> rightRenames;
-    THashMap<ui32, ui32> leftRenames;
+    const auto rightKeyDropsLiteral = callable.GetInput(6);
+    const auto rightKeyDropsTuple = AS_VALUE(TTupleLiteral, rightKeyDropsLiteral);
+    THashSet<ui32> rightKeyDrops;
+    rightKeyDrops.reserve(rightKeyDropsTuple->GetValuesCount());
+    for (ui32 i = 0; i < rightKeyDropsTuple->GetValuesCount(); i++) {
+        const auto item = AS_VALUE(TDataLiteral, rightKeyDropsTuple->GetValue(i));
+        rightKeyDrops.emplace(item->AsValue().Get<ui32>());
+    }
 
-    // Process leftRenames (argument 5) - same as in mkql_grace_join.cpp
-    // const auto leftRenamesLiteral = callable.GetInput(5);
-    // const auto leftRenamesTuple = AS_VALUE(TTupleLiteral, leftRenamesLiteral);
-    // for (ui32 i = 0; i + 1 < leftRenamesTuple->GetValuesCount(); i += 2) {
-    //     const auto fromItem = AS_VALUE(TDataLiteral, leftRenamesTuple->GetValue(i));
-    //     const auto toItem = AS_VALUE(TDataLiteral, leftRenamesTuple->GetValue(i + 1));
-    //     leftRenames[fromItem->AsValue().Get<ui32>()] = toItem->AsValue().Get<ui32>();
-    // }
-
-    // // Process rightRenames (argument 6) - same as in mkql_grace_join.cpp
-    // const auto rightRenamesLiteral = callable.GetInput(6);
-    // const auto rightRenamesTuple = AS_VALUE(TTupleLiteral, rightRenamesLiteral);
-    // for (ui32 i = 0; i + 1 < rightRenamesTuple->GetValuesCount(); i += 2) {
-    //     const auto fromItem = AS_VALUE(TDataLiteral, rightRenamesTuple->GetValue(i));
-    //     const auto toItem = AS_VALUE(TDataLiteral, rightRenamesTuple->GetValue(i + 1));
-    //     rightRenames[fromItem->AsValue().Get<ui32>()] = toItem->AsValue().Get<ui32>();
-    // }
+    for (const auto& drop : rightKeyDrops) {
+        MKQL_ENSURE(rightKeySet.contains(drop),
+                    "Only key columns has to be specified in drop column set");
+    }
 
     MKQL_ENSURE(leftKeyColumns.size() == rightKeyColumns.size(), "Key columns mismatch");
 
+    [[maybe_unused]] const auto rightAnyNode = callable.GetInput(7);
+
+    const auto untypedPolicyNode = callable.GetInput(8);
+    const auto untypedPolicy = AS_VALUE(TDataLiteral, untypedPolicyNode)->AsValue().Get<ui64>();
+    const auto policy = static_cast<IBlockGraceJoinPolicy*>(reinterpret_cast<void*>(untypedPolicy));
+
     // XXX: Mind the last wide item, containing block length.
-    // Build output mapping using renames instead of keydrops
     TVector<ui32> leftIOMap;
     for (size_t i = 0; i < leftStreamItems.size() - 1; i++) {
+        if (leftKeyDrops.contains(i)) {
+            continue;
+        }
         leftIOMap.push_back(i);
     }
 
-    // XXX: Mind the last wide item, containing block length.  
-    // Build output mapping using renames instead of keydrops
+    // XXX: Mind the last wide item, containing block length.
     TVector<ui32> rightIOMap;
     for (size_t i = 0; i < rightStreamItems.size() - 1; i++) {
+        if (rightKeyDrops.contains(i)) {
+            continue;
+        }
         rightIOMap.push_back(i);
     }
 
@@ -2382,7 +2399,7 @@ IComputationNode* WrapDqBlockHashJoin(TCallable& callable, const TComputationNod
         std::move(rightIOMap),
         leftStream,
         rightStream,
-        &globalDefaultPolicy
+        policy ? policy : &globalDefaultPolicy
     );
 }
 

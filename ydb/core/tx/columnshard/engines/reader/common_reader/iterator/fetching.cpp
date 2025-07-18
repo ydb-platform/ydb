@@ -24,7 +24,9 @@ bool TStepAction::DoApply(IDataReader& owner) const {
 TConclusion<bool> TStepAction::DoExecuteImpl() {
     FOR_DEBUG_LOG(NKikimrServices::COLUMNSHARD_SCAN_EVLOG, Source->AddEvent("step_action"));
     if (Source->GetContext()->IsAborted()) {
-        return TConclusionStatus::Success();
+        AFL_VERIFY(!FinishedFlag);
+        FinishedFlag = true;
+        return true;
     }
     auto executeResult = Cursor.Execute(Source);
     if (executeResult.IsFail()) {

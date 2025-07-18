@@ -78,7 +78,7 @@ public:
 
     explicit TPartialReadResult(NArrow::TShardedRecordBatch&& batch, std::shared_ptr<IScanCursor>&& scanCursor,
         const std::shared_ptr<TReadContext>& context, const std::optional<TPartialSourceAddress> notFinishedInterval)
-        : TPartialReadResult({}, nullptr, batch, std::move(scanCursor), context, notFinishedInterval) {
+        : TPartialReadResult({}, nullptr, std::move(batch), std::move(scanCursor), context, notFinishedInterval) {
     }
 };
 

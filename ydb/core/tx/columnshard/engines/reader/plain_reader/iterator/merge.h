@@ -97,7 +97,7 @@ private:
     THashMap<ui32, std::shared_ptr<IDataSource>> Sources;
 
 protected:
-    virtual TConclusionStatus DoExecuteImpl() override;
+    virtual TConclusion<bool> DoExecuteImpl() override;
 
 public:
     virtual TString GetTaskClassIdentifier() const override {
@@ -113,7 +113,7 @@ private:
     using TBase = TBaseMergeTask;
 
 protected:
-    virtual TConclusionStatus DoExecuteImpl() override;
+    virtual TConclusion<bool> DoExecuteImpl() override;
 
 public:
     virtual TString GetTaskClassIdentifier() const override {

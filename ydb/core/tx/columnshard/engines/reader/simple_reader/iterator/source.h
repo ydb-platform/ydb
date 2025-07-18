@@ -138,7 +138,7 @@ public:
         return SourceGroupGuard;
     }
 
-    std::shared_ptr<NGroupedMemoryManager::TGroupGuard>&& ExtractGroupGuard() {
+    std::shared_ptr<NGroupedMemoryManager::TGroupGuard> ExtractGroupGuard() {
         AFL_VERIFY(SourceGroupGuard);
         auto result = std::move(SourceGroupGuard);
         SourceGroupGuard = nullptr;

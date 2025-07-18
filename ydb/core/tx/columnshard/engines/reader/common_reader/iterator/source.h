@@ -272,7 +272,7 @@ public:
         return ResourceGuards;
     }
 
-    std::vector<std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>>& ExtractResourceGuards() {
+    std::vector<std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>> ExtractResourceGuards() {
         auto result = std::move(ResourceGuards);
         ResourceGuards.clear();
         return std::move(result);

@@ -6,7 +6,7 @@ LICENSE(BSD-3-Clause)
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(2025-06-26b)
+VERSION(2025-07-17)
 
 PEERDIR(
     contrib/libs/re2

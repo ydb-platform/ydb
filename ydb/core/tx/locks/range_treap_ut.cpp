@@ -53,7 +53,7 @@ namespace {
         }
     }
 
-    void PrintRange(TStringBuilder& builder, const TRangeTreeBase::TRange& range, ui64 value, size_t columns) {
+    void PrintRange(TStringBuilder& builder, const TRangeTreapTraits::TRange& range, ui64 value, size_t columns) {
         builder << (range.LeftInclusive ? '[' : '(');
         PrintKey(builder, range.LeftKey, columns);
         builder << ", ";
@@ -70,7 +70,7 @@ namespace {
             , Columns(columns)
         { }
 
-        void operator()(const TRangeTreeBase::TRange& range, ui64 value) {
+        void operator()(const TRangeTreapTraits::TRange& range, ui64 value) {
             if (Index++) {
                 Builder << ',';
                 Builder << ' ';
@@ -130,7 +130,7 @@ namespace {
 Y_UNIT_TEST_SUITE(TRangeTreap) {
 
     Y_UNIT_TEST(Simple) {
-        using TRange = TRangeTreeBase::TRange;
+        using TRange = TRangeTreapTraits::TRange;
         TRangeTreap<ui64> treap;
         treap.MutableComparator().SetKeyTypes(CreateSchema(1));
 
@@ -182,7 +182,7 @@ Y_UNIT_TEST_SUITE(TRangeTreap) {
     }
 
     Y_UNIT_TEST(Sequential) {
-        using TRange = TRangeTreeBase::TRange;
+        using TRange = TRangeTreapTraits::TRange;
         TRangeTreap<ui64> treap;
         treap.MutableComparator().SetKeyTypes(CreateSchema(1));
 
@@ -209,7 +209,7 @@ Y_UNIT_TEST_SUITE(TRangeTreap) {
     }
 
     Y_UNIT_TEST(Random) {
-        using TRange = TRangeTreeBase::TRange;
+        using TRange = TRangeTreapTraits::TRange;
         TRangeTreap<ui64> treap;
         treap.MutableComparator().SetKeyTypes(CreateSchema(1));
 

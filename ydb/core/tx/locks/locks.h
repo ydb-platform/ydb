@@ -519,7 +519,7 @@ public:
 
     template<class TCallback>
     void ForEachRangeLock(TCallback&& callback) {
-        Ranges.EachRange([&callback](const TRangeTreeBase::TRange&, TLockInfo* lock) {
+        Ranges.EachRange([&callback](const TRangeTreapTraits::TRange&, TLockInfo* lock) {
             callback(lock);
         });
     }

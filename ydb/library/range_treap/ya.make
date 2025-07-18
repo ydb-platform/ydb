@@ -1,6 +1,7 @@
 LIBRARY()
 
 SRCS(
+    range.cpp
     range_treap.cpp
 )
 

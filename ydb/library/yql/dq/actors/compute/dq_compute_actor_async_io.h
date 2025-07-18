@@ -291,6 +291,7 @@ public:
         std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc;
         IRandomProvider *const RandomProvider;
         NWilson::TTraceId TraceId;
+        ::NMonitoring::TDynamicCounterPtr TaskCounters;
     };
 
     struct TInputTransformArguments {

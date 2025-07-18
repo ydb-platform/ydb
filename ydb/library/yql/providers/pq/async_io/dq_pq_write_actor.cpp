@@ -100,7 +100,11 @@ class TDqPqWriteActor : public NActors::TActor<TDqPqWriteActor>, public IDqCompu
         TMetrics(const TTxId& txId, ui64 taskId, const ::NMonitoring::TDynamicCounterPtr& counters)
             : TxId(std::visit([](auto arg) { return ToString(arg); }, txId))
             , Counters(counters) {
-            SubGroup = Counters->GetSubgroup("sink", "PqSink");
+            if (Counters) {
+                SubGroup = Counters->GetSubgroup("sink", "PqSink");
+            } else {
+                SubGroup = MakeIntrusive<::NMonitoring::TDynamicCounters>();
+            }
             auto sink = SubGroup->GetSubgroup("tx_id", TxId);
             auto task = sink->GetSubgroup("task_id", ToString(taskId));
             LastAckLatency = task->GetCounter("LastAckLatencyMs");
@@ -565,7 +569,7 @@ void RegisterDqPqWriteActorFactory(TDqAsyncIoFactory& factory, NYdb::TDriver dri
                 driver,
                 credentialsFactory,
                 args.Callback,
-                counters,
+                counters ? counters : args.TaskCounters,
                 pqGateway
             );
         });

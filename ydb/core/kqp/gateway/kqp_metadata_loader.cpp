@@ -1018,20 +1018,22 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
 
                                 auto path = databaseName + "/" + *externalPath;
 
-                                GetSchemeEntryType(
-                                    FederatedQuerySetup,
-                                    source.DataSourceLocation,
-                                    databaseName,
-                                    useTls,
-                                    structuredTokenJson,
-                                    path)
-                                    .Subscribe([externalDataSourceMetadata, f = loadDynamicMetadata] (const NThreading::TFuture<TGetSchemeEntryResult>& result) mutable {
-                                        TGetSchemeEntryResult type = result.GetValue();
-                                        if (type == NYdb::NScheme::ESchemeEntryType::Topic) {
-                                            externalDataSourceMetadata.Metadata->ExternalSource.Type = ToString(NKikimr::NExternalSource::YdbTopicsType);
-                                        }
-                                        f();
-                                    });
+                                with_lock(Lock) {
+                                    GetSchemeEntryType(
+                                        FederatedQuerySetup,
+                                        source.DataSourceLocation,
+                                        databaseName,
+                                        useTls,
+                                        structuredTokenJson,
+                                        path)
+                                        .Subscribe([externalDataSourceMetadata, f = loadDynamicMetadata, p = path] (const NThreading::TFuture<TGetSchemeEntryResult>& result) mutable {
+                                            TGetSchemeEntryResult type = result.GetValue();
+                                            if (type == NYdb::NScheme::ESchemeEntryType::Topic) {
+                                                externalDataSourceMetadata.Metadata->ExternalSource.Type = ToString(NKikimr::NExternalSource::YdbTopicsType);
+                                            }
+                                            f();
+                                        });
+                                }
                             } else {
                                 loadDynamicMetadata();
                             }

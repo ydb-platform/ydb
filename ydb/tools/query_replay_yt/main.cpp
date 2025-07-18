@@ -55,7 +55,7 @@ class TQueryReplayMapper
 
     NYql::IHTTPGateway::TPtr HttpGateway;
     TVector<TString> UdfFiles;
-    ui32 ActorSystemThreadsCount = 5;
+    ui32 ActorSystemThreadsCount = 20;
     NActors::NLog::EPriority YqlLogPriority = NActors::NLog::EPriority::PRI_ERROR;
     bool EnableAntlr4Parser;
 
@@ -141,68 +141,92 @@ public:
         Y_ABORT_UNLESS(GetYqlDefaultModuleResolver(ModuleResolverState->ExprCtx, ModuleResolverState->ModuleResolver));
     }
 
-    THolder<TQueryReplayEvents::TEvCompileResponse> RunReplay(NJson::TJsonValue&& json) {
-        TString queryType = json["query_type"].GetStringSafe();
-        if (queryType == "QUERY_TYPE_AST_SCAN" || queryType == "QUERY_TYPE_AST_DML") {
-            return nullptr;
-        }
-
-        if (queryType == "QUERY_TYPE_SQL_GENERIC_SCRIPT") {
-            return nullptr;
-        }
-
-        auto compileActorId = ActorSystem->Register(CreateQueryCompiler(ModuleResolverState, FunctionRegistry.Get(), HttpGateway, EnableAntlr4Parser));
-
+    NThreading::TFuture<THolder<TQueryReplayEvents::TEvCompileResponse>> RunReplay(NJson::TJsonValue&& json, const NYT::TNode& row = NYT::TNode()) {
+        auto compileActorId = ActorSystem->Register(CreateQueryCompiler(ModuleResolverState, FunctionRegistry.Get(), HttpGateway, EnableAntlr4Parser, row));
         auto future = ActorSystem->Ask<TQueryReplayEvents::TEvCompileResponse>(
             compileActorId,
             THolder(new TQueryReplayEvents::TEvCompileRequest(std::move(json))),
-            TDuration::Seconds(600));
+            TDuration::Seconds(60));
+        return future;
+    }
 
-        return future.ExtractValueSync();
+    void AddRowToResult(THolder<TQueryReplayEvents::TEvCompileResponse>&& response, NYT::TTableWriter<NYT::TNode>* out) {
+        if (response == nullptr)
+            return;
+
+        auto status = response.Get()->Status;
+        const auto& row = response.Get()->Row;
+
+        TString failReason = GetFailReason(status);
+
+        if (failReason == "unspecified" || status == TQueryReplayEvents::MissingTableMetadata) {
+            return;
+        }
+
+        NYT::TNode result;
+        result = result("query_id", row["query_id"].AsString());
+
+        result = result("created_at", row["created_at"].AsString());
+        result = result("query_cluster", row["query_cluster"].AsString());
+        result = result("query_database", row["query_database"].AsString());
+
+        result = result("query_plan", row["query_plan"].AsString());
+        result = result("query_syntax", row["query_syntax"].AsString());
+        result = result("query_text", row["query_text"].AsString());
+
+        result = result("query_type", row["query_type"].AsString());
+        result = result("table_metadata", row["table_metadata"].AsString());
+        result = result("version", row["version"].AsString());
+
+        result = result("fail_reason", failReason);
+        result = result("extra_message", response.Get()->Message);
+        result = result("new_query_plan", response.Get()->Plan);
+
+        out->AddRow(result);
     }
 
     void Do(NYT::TTableReader<NYT::TNode>* in, NYT::TTableWriter<NYT::TNode>* out) override {
-        for (; in->IsValid(); in->Next()) {
-            const auto& row = in->GetRow();
-            NJson::TJsonValue json(NJson::JSON_MAP);
-            for (const auto& [key, child]: row.AsMap()) {
-                if (key == "_logfeller_timestamp")
+        std::vector<NThreading::TFuture<THolder<TQueryReplayEvents::TEvCompileResponse>>> PendingReplays;
+
+        while(!PendingReplays.empty() || in->IsValid()) {
+            if (PendingReplays.size() > ActorSystemThreadsCount || !in->IsValid()) {
+                NThreading::WaitAll(PendingReplays).Wait(TDuration::Seconds(30));
+                std::vector<NThreading::TFuture<THolder<TQueryReplayEvents::TEvCompileResponse>>> waitResult;
+                for(auto&& replay: PendingReplays) {
+                    if (replay.HasValue() || replay.HasException()) {
+                        auto result = replay.ExtractValueSync();
+                        AddRowToResult(std::move(result), out);
+                    } else {
+                        waitResult.emplace_back(std::move(replay));
+                    }
+                }
+
+                std::swap(PendingReplays, waitResult);
+            }
+
+            if (in->IsValid()) {
+                NYT::TNode row = in->GetRow();
+                in->Next();
+
+                NJson::TJsonValue json(NJson::JSON_MAP);
+                for (const auto& [key, child]: row.AsMap()) {
+                    if (key == "_logfeller_timestamp")
+                        continue;
+                    json.InsertValue(key, NJson::TJsonValue(child.AsString()));
+                }
+
+
+                TString queryType = json["query_type"].GetStringSafe();
+                if (queryType == "QUERY_TYPE_AST_SCAN" ||
+                    queryType == "QUERY_TYPE_AST_DML" ||
+                    queryType == "QUERY_TYPE_SQL_GENERIC_SCRIPT")
+                {
                     continue;
-                json.InsertValue(key, NJson::TJsonValue(child.AsString()));
+                }
+
+                auto response = RunReplay(std::move(json));
+                PendingReplays.push_back(std::move(response));
             }
-
-            auto response = RunReplay(std::move(json));
-            if (response == nullptr)
-                continue;
-
-            auto status = response.Get()->Status;
-
-            TString failReason = GetFailReason(status);
-
-            if (failReason == "unspecified" || status == TQueryReplayEvents::MissingTableMetadata) {
-                continue;
-            }
-
-            NYT::TNode result;
-            result = result("query_id", row["query_id"].AsString());
-
-            result = result("created_at", row["created_at"].AsString());
-            result = result("query_cluster", row["query_cluster"].AsString());
-            result = result("query_database", row["query_database"].AsString());
-
-            result = result("query_plan", row["query_plan"].AsString());
-            result = result("query_syntax", row["query_syntax"].AsString());
-            result = result("query_text", row["query_text"].AsString());
-
-            result = result("query_type", row["query_type"].AsString());
-            result = result("table_metadata", row["table_metadata"].AsString());
-            result = result("version", row["version"].AsString());
-
-            result = result("fail_reason", failReason);
-            result = result("extra_message", response.Get()->Message);
-            result = result("new_query_plan", response.Get()->Plan);
-
-            out->AddRow(result);
         }
     }
 
@@ -259,14 +283,15 @@ int main(int argc, const char** argv) {
 	     << UnescapeC(queryJson["query_text"].GetStringSafe()) << Endl;
         auto TableMetadata = ExtractStaticMetadata(queryJson);
         Cerr << "Tables: " << Endl;
-	for(auto& [name, meta]: TableMetadata) {
+
+	    for(auto& [name, meta]: TableMetadata) {
             Cerr << "TableName: " << name << Endl;
             NKikimrKqp::TKqpTableMetadataProto protoDescription;
             meta->ToMessage(&protoDescription);
             Cerr << protoDescription.Utf8DebugString() << Endl;
         }
 
-        auto result = fakeMapper.RunReplay(std::move(queryJson));
+        auto result = fakeMapper.RunReplay(std::move(queryJson)).ExtractValueSync();
 
         auto status = result.Get()->Status;
         TString failReason = TQueryReplayMapper::GetFailReason(status);
@@ -296,6 +321,7 @@ int main(int argc, const char** argv) {
     if (!config.CoreTablePath.empty()) {
         spec.CoreTablePath(config.CoreTablePath);
     }
+    spec.JobCount(5000);
     spec.MaxFailedJobCount(10000);
 
     client->Map(spec, new TQueryReplayMapper(config.UdfFiles, config.ActorSystemThreadsCount, config.EnableAntlr4Parser, config.YqlLogLevel));

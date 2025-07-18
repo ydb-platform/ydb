@@ -926,10 +926,12 @@ TExprBase KqpPushOlapProjections(TExprBase node, TExprContext& ctx, const TKqpOp
 TExprBase KqpPushOlapFilter(TExprBase node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx,
     TTypeAnnotationContext& typesCtx)
 {
+    Y_UNUSED(typesCtx);
     const auto pushdownOptions = TPushdownOptions{
         kqpCtx.Config->EnableOlapScalarApply,
         kqpCtx.Config->EnableOlapSubstringPushdown
     };
+
     if (!kqpCtx.Config->HasOptEnableOlapPushdown()) {
         return node;
     }
@@ -974,27 +976,19 @@ TExprBase KqpPushOlapFilter(TExprBase node, TExprContext& ctx, const TKqpOptimiz
     if (pushdownOptions.AllowOlapApply) {
         TVector<TOLAPPredicateNode> remainingAfterApply;
         for(const auto& p: remaining) {
-            const auto recoveredOptinalIfForNonPushedDownPredicates = Build<TCoOptionalIf>(ctx, node.Pos())
+            const auto optionalIfWrapper = Build<TCoOptionalIf>(ctx, node.Pos())
                 .Predicate(p.ExprNode)
                 .Value(value)
-            .Build();
-            TExprNode::TPtr afterPeephole;
-            bool hasNonDeterministicFunctions;
-            if (const auto status = PeepHoleOptimizeNode(recoveredOptinalIfForNonPushedDownPredicates.Value().Ptr(), afterPeephole, ctx, typesCtx, nullptr, hasNonDeterministicFunctions);
-                status != IGraphTransformer::TStatus::Ok) {
-                YQL_CLOG(ERROR, ProviderKqp) << "Peephole OLAP failed." << Endl << ctx.IssueManager.GetIssues().ToString();
-                return node;
-            }
-            const TCoIf simplified(std::move(afterPeephole));
-            predicate = simplified.Predicate();
-            value = simplified.ThenValue().Cast<TCoJust>().Input();
+            .Done();
 
+            predicate = optionalIfWrapper.Predicate();
             TOLAPPredicateNode predicateTree;
             predicateTree.ExprNode = predicate.Ptr();
-            CollectPredicates(predicate, predicateTree, &lambdaArg, read.Process().Body(), {true, pushdownOptions.PushdownSubstring});
+            CollectPredicates(predicate, predicateTree, &lambdaArg, read.Process().Body(),
+                              {pushdownOptions.AllowOlapApply, pushdownOptions.PushdownSubstring});
 
             YQL_ENSURE(predicateTree.IsValid(), "Collected OLAP predicates are invalid");
-            auto [pushable, remaining] = SplitForPartialPushdown(predicateTree, true);
+            auto [pushable, remaining] = SplitForPartialPushdown(predicateTree, pushdownOptions.AllowOlapApply);
             for (const auto& p: pushable) {
                 if (p.CanBePushed) {
                     auto pred = PredicatePushdown(TExprBase(p.ExprNode), lambdaArg, ctx, node.Pos(), pushdownOptions.AllowOlapApply);
@@ -1016,7 +1010,6 @@ TExprBase KqpPushOlapFilter(TExprBase node, TExprContext& ctx, const TKqpOptimiz
     }
 
     const auto& pushedFilter = TFilterOpsLevels::Merge(pushedPredicates, ctx, node.Pos());
-
     const auto remainingFilter = CombinePredicatesWithAnd(remaining, ctx, node.Pos(), false, true);
 
     TMaybeNode<TExprBase> olapFilter;

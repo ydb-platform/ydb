@@ -209,6 +209,18 @@ namespace NKikimr::NStorage {
         void OnError(const TString& errorReason);
         void OnBeginOperation();
         void OnConfigProposed(const std::optional<TString>& errorReason);
+
+        template<typename T>
+        void Wrap(T&& callback) {
+            try {
+                callback();
+            } catch (const TExError& error) {
+                FinishWithError(error.Status, error.what());
+                if (error.IsCritical) {
+                    Y_DEBUG_ABORT("critical error during query processing: %s", error.what());
+                }
+            }
+        }
     };
 
 } // NKikimr::NStorage

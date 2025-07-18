@@ -97,19 +97,16 @@ namespace NKikimr::NStorage {
     }
 
     void TInvokeRequestHandlerActor::OnNoQuorum() {
-        throw TExNoQuorum() << "no quorum obtained";
+        Wrap([&] {
+            throw TExNoQuorum() << "no quorum obtained";
+        });
     }
 
     void TInvokeRequestHandlerActor::OnBeginOperation() {
         BeginRegistered = true;
-        try {
+        Wrap([&] {
             ExecuteQuery();
-        } catch (const TExError& error) {
-            FinishWithError(error.Status, error.what());
-            if (error.IsCritical) {
-                Y_DEBUG_ABORT("critical error during query processing: %s", error.what());
-            }
-        }
+        });
     }
 
     void TInvokeRequestHandlerActor::Handle(TEvNodeConfigInvokeOnRootResult::TPtr ev) {
@@ -439,7 +436,7 @@ namespace NKikimr::NStorage {
         if (LifetimeToken.expired()) {
             return FinishWithError(TResult::ERROR, "distributed config keeper terminated");
         }
-        try {
+        Wrap([&] {
             STRICT_STFUNC_BODY(
                 hFunc(TEvNodeConfigInvokeOnRootResult, Handle);
                 hFunc(TEvNodeConfigGather, Handle);
@@ -455,12 +452,7 @@ namespace NKikimr::NStorage {
                 hFunc(TEvBlobStorage::TEvControllerConfigResponse, Handle);
                 hFunc(TEvBlobStorage::TEvControllerDistconfResponse, Handle);
             )
-        } catch (const TExError& error) {
-            FinishWithError(error.Status, error.what());
-            if (error.IsCritical) {
-                Y_DEBUG_ABORT("critical error during query processing: %s", error.what());
-            }
-        }
+        });
     }
 
     void TDistributedConfigKeeper::Handle(TEvNodeConfigInvokeOnRoot::TPtr ev) {

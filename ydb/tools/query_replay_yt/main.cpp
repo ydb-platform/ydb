@@ -215,7 +215,6 @@ public:
                     json.InsertValue(key, NJson::TJsonValue(child.AsString()));
                 }
 
-
                 TString queryType = json["query_type"].GetStringSafe();
                 if (queryType == "QUERY_TYPE_AST_SCAN" ||
                     queryType == "QUERY_TYPE_AST_DML" ||
@@ -224,7 +223,7 @@ public:
                     continue;
                 }
 
-                auto response = RunReplay(std::move(json));
+                auto response = RunReplay(std::move(json), std::move(row));
                 PendingReplays.push_back(std::move(response));
             }
         }
@@ -311,7 +310,7 @@ int main(int argc, const char** argv) {
     spec.AddOutput<NYT::TNode>(NYT::TRichYPath(config.DstPath).Schema(OutputSchema()));
 
     auto userJobSpec = NYT::TUserJobSpec();
-    userJobSpec.MemoryLimit(5_GB);
+    userJobSpec.MemoryLimit(3_GB);
 
     for(const auto& [udf, udfInJob]: GetJobFiles(config.UdfFiles)) {
         userJobSpec.AddLocalFile(udf, NYT::TAddLocalFileOptions().PathInJob(udfInJob));
@@ -321,8 +320,8 @@ int main(int argc, const char** argv) {
     if (!config.CoreTablePath.empty()) {
         spec.CoreTablePath(config.CoreTablePath);
     }
-    spec.JobCount(5000);
-    spec.MaxFailedJobCount(10000);
+    spec.JobCount(1500);
+    spec.MaxFailedJobCount(100);
 
     client->Map(spec, new TQueryReplayMapper(config.UdfFiles, config.ActorSystemThreadsCount, config.EnableAntlr4Parser, config.YqlLogLevel));
 

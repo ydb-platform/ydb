@@ -159,11 +159,7 @@ class PnpmPackageManager(BasePackageManager):
 
     @staticmethod
     def get_local_pnpm_store():
-        return os.path.join(home_dir(), ".cache", "pnpm-9-store")
-
-    @staticmethod
-    def get_local_old_pnpm_store():
-        return os.path.join(home_dir(), ".cache", "pnpm-store")
+        return os.path.join(os.getenv("NOTS_STORE_PATH", home_dir()), ".cache", "pnpm-9-store")
 
     @timeit
     def _get_file_hash(self, path: str):

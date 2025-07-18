@@ -49,14 +49,15 @@ def execute_query(branch='main', build_type='relwithdebinfo', days_window=1):
     
     query_string = f'''
     SELECT
-      t.test_name,
-      t.suite_folder,
-      t.full_name,
-      t.build_type,
-      t.branch,
+      t.test_name as test_name,
+      t.suite_folder as suite_folder,
+      t.full_name as full_name,
+      t.build_type as build_type,
+      t.branch as branch,
       SUM(t.pass_count) as pass_count,
       SUM(t.fail_count) as fail_count,
-      o.owners
+      SUM(t.mute_count) as mute_count,
+      o.owners as owners
     FROM `{table_name}` t
     LEFT JOIN `{owners_table}` o
       ON t.full_name = o.full_name

@@ -6,6 +6,7 @@
 #include <ydb/core/tx/columnshard/columnshard_private_events.h>
 #include <ydb/core/tx/columnshard/counters/scan.h>
 #include <ydb/core/tx/columnshard/data_accessor/manager.h>
+#include <ydb/core/tx/columnshard/engines/reader/common/result.h>
 #include <ydb/core/tx/columnshard/resource_subscriber/task.h>
 #include <ydb/core/tx/conveyor/usage/abstract.h>
 #include <ydb/core/tx/conveyor/usage/config.h>
@@ -15,7 +16,6 @@
 
 namespace NKikimr::NOlap::NReader {
 
-class TPartialReadResult;
 class TPartialSourceAddress;
 
 class TComputeShardingPolicy {
@@ -162,7 +162,7 @@ protected:
     virtual TString DoDebugString(const bool verbose) const = 0;
     virtual void DoAbort() = 0;
     virtual bool DoIsFinished() const = 0;
-    virtual std::vector<std::shared_ptr<TPartialReadResult>> DoExtractReadyResults(const int64_t maxRowsInBatch) = 0;
+    virtual std::vector<std::unique_ptr<TPartialReadResult>> DoExtractReadyResults(const int64_t maxRowsInBatch) = 0;
     virtual TConclusion<bool> DoReadNextInterval() = 0;
 
 public:
@@ -207,7 +207,7 @@ public:
         return *result;
     }
 
-    std::vector<std::shared_ptr<TPartialReadResult>> ExtractReadyResults(const int64_t maxRowsInBatch) {
+    std::vector<std::unique_ptr<TPartialReadResult>> ExtractReadyResults(const int64_t maxRowsInBatch) {
         return DoExtractReadyResults(maxRowsInBatch);
     }
 

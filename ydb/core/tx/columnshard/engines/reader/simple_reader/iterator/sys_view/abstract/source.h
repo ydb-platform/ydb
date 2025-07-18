@@ -162,7 +162,7 @@ protected:
 public:
     TSourceData(const ui32 sourceId, const ui32 sourceIdx, const ui64 tabletId, const NOlap::TSnapshot& minSnapshot,
         const NOlap::TSnapshot& maxSnapshot, NArrow::TSimpleRow&& start, NArrow::TSimpleRow&& finish, const std::optional<ui32> recordsCount,
-        const std::shared_ptr<NReader::NSimple::TSpecialReadContext>& context)
+        const std::shared_ptr<NReader::NCommon::TSpecialReadContext>& context)
         : TBase(sourceId, sourceIdx, context, std::move(start), std::move(finish), minSnapshot, maxSnapshot, recordsCount, std::nullopt, false)
         , TabletId(tabletId) {
     }
@@ -180,7 +180,7 @@ public:
 
     TTabletSourceData(const ui32 sourceId, const ui32 sourceIdx, const ui64 tabletId, NArrow::TSimpleRow&& start, NArrow::TSimpleRow&& finish,
         const std::optional<ui32> recordsCount, const NOlap::TSnapshot& minSnapshot, const NOlap::TSnapshot& maxSnapshot,
-        const std::shared_ptr<NReader::NSimple::TSpecialReadContext>& context)
+        const std::shared_ptr<NReader::NCommon::TSpecialReadContext>& context)
         : TBase(sourceId, sourceIdx, tabletId, minSnapshot, maxSnapshot, std::move(start), std::move(finish), recordsCount, context) {
     }
 };
@@ -197,7 +197,7 @@ public:
 
     TPathSourceData(const ui32 sourceId, const ui32 sourceIdx, const NColumnShard::TUnifiedPathId& pathId, const ui64 tabletId,
         NArrow::TSimpleRow&& start, NArrow::TSimpleRow&& finish, const std::optional<ui32> recordsCount, const NOlap::TSnapshot& minSnapshot,
-        const NOlap::TSnapshot& maxSnapshot, const std::shared_ptr<NReader::NSimple::TSpecialReadContext>& context)
+        const NOlap::TSnapshot& maxSnapshot, const std::shared_ptr<NReader::NCommon::TSpecialReadContext>& context)
         : TBase(sourceId, sourceIdx, tabletId, minSnapshot, maxSnapshot, std::move(start), std::move(finish), recordsCount, context)
         , UnifiedPathId(pathId) {
     }

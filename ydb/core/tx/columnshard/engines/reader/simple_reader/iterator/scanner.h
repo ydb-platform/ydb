@@ -43,12 +43,15 @@ public:
     void Abort();
 
     bool IsFinished() const {
+        if (!SourcesCollection->IsFinished()) {
+            return false;
+        }
         for (auto&& i : SyncPoints) {
             if (!i->IsFinished()) {
                 return false;
             }
         }
-        return SourcesCollection->IsFinished();
+        return true;
     }
 
     const TReadContext& GetContext() const;

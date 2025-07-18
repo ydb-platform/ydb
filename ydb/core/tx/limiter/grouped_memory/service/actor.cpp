@@ -68,8 +68,10 @@ void TMemoryLimiterActor::Handle(NMemory::TEvConsumerRegistered::TPtr& ev) {
 }
 
 void TMemoryLimiterActor::Handle(NMemory::TEvConsumerLimit::TPtr& ev) {
+    ui64 limitBytes = ev->Get()->LimitBytes / (Config.GetCountBuckets() ? Config.GetCountBuckets() : 1);
+    std::optional<ui64> hardLimitBytes = ev->Get()->HardLimitBytes ? *ev->Get()->HardLimitBytes / (Config.GetCountBuckets() ? Config.GetCountBuckets() : 1) : ev->Get()->HardLimitBytes;
     for (auto& manager: Managers) {
-        manager->UpdateMemoryLimits(ev->Get()->LimitBytes / Config.GetCountBuckets(), ev->Get()->HardLimitBytes ? *ev->Get()->HardLimitBytes / Config.GetCountBuckets() : ev->Get()->HardLimitBytes);
+        manager->UpdateMemoryLimits(limitBytes, hardLimitBytes);
     }
 }
 

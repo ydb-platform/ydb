@@ -114,10 +114,6 @@ std::shared_ptr<arrow::Array> CopyRecords(const std::shared_ptr<arrow::Array>& s
     return result;
 }
 
-ui64 TShardedRecordBatch::GetMemorySize() const {
-    return NArrow::GetTableMemorySize(RecordBatch);
-}
-
 TShardedRecordBatch::TShardedRecordBatch(const std::shared_ptr<arrow::RecordBatch>& batch) {
     AFL_VERIFY(batch);
     RecordBatch = TStatusValidator::GetValid(arrow::Table::FromRecordBatches(batch->schema(), { batch }));
@@ -145,7 +141,7 @@ std::shared_ptr<arrow::Table> TShardedRecordBatch::ExtractRecordBatch() {
     return std::move(RecordBatch);
 }
 
-const std::shared_ptr<arrow::Schema>& TShardedRecordBatch::GetResultSchema() const {
+std::shared_ptr<arrow::Schema> TShardedRecordBatch::GetResultSchema() const {
     AFL_VERIFY(RecordBatch);
     return RecordBatch->schema();
 }

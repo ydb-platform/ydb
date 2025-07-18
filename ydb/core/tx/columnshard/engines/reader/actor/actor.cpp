@@ -235,7 +235,7 @@ bool TColumnShardScan::ProduceResults() noexcept {
     }
 
     {
-        const auto& shardedBatch = result.GetShardedBatch();
+        const auto shardedBatch = result.ExtractShardedBatch();
         const auto batch = shardedBatch.ExtractRecordBatch();
         ACFL_DEBUG("stage", "ready result")("iterator", ScanIterator->DebugString())("columns", batch->num_columns())(
             "rows", result.GetRecordsCount());

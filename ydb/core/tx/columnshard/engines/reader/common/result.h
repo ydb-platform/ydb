@@ -43,10 +43,6 @@ public:
         ResultBatch.Cut(limit);
     }
 
-    ui64 GetMemorySize() const {
-        return ResultBatch.GetMemorySize();
-    }
-
     ui64 GetRecordsCount() const {
         return ResultBatch.GetRecordsCount();
     }
@@ -54,8 +50,8 @@ public:
     static std::vector<std::shared_ptr<TPartialReadResult>> SplitResults(
         std::vector<std::shared_ptr<TPartialReadResult>>&& resultsExt, const ui32 maxRecordsInResult);
 
-    const NArrow::TShardedRecordBatch& GetShardedBatch() const {
-        return ResultBatch;
+    NArrow::TShardedRecordBatch ExtractShardedBatch() {
+        return std::move(ResultBatch);
     }
 
     const std::shared_ptr<IScanCursor>& GetScanCursor() const {

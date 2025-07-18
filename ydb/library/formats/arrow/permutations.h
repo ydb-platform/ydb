@@ -17,7 +17,7 @@ public:
     TShardedRecordBatch(const std::shared_ptr<arrow::Table>& batch);
     TShardedRecordBatch(const std::shared_ptr<arrow::RecordBatch>& batch);
 
-    const std::shared_ptr<arrow::Schema>& GetResultSchema() const;
+    std::shared_ptr<arrow::Schema> GetResultSchema() const;
     std::shared_ptr<arrow::Table> ExtractRecordBatch();
 
     void Cut(const ui32 limit) {

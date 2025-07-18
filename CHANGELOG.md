@@ -33,6 +33,12 @@ and timeout (by default, the maximum response time from healthcheck). Documentat
 * 17663:Added optimizations for reading from Solomon. [#17663](https://github.com/ydb-platform/ydb/pull/17663) ([Ivan Sukhov](https://github.com/evanevanevanevannnn))
 * 17525:Implemented automatic reconfiguration of StateStorage (change the number of rings or the number of replicas in a ring) in case of a node failure or load changes without downtime of the entire group. [#17525](https://github.com/ydb-platform/ydb/pull/17525) ([Evgenik2](https://github.com/Evgenik2))
 * 17421:Added support for runtime results during script execution. [#17421](https://github.com/ydb-platform/ydb/pull/17421) ([Pisarenko Grigoriy](https://github.com/GrigoriyPA))
+* 19315:Added distconf cache for group info propagation. [#19315](https://github.com/ydb-platform/ydb/pull/19315) ([Alexander Rutkovsky](https://github.com/alexvru))
+* 19227:Added support for `REGEXP` pushdown operations on `Utf8` columns during federated query execution. [#19227](https://github.com/ydb-platform/ydb/pull/19227) ([Vitaly Isaev](https://github.com/vitalyisaev2))
+* 19216:Added basic checks for group names when creating or renaming them: the names may consists of lower and upper case Latin characters, digits, underscores and hyphens. [#19216](https://github.com/ydb-platform/ydb/pull/19216) ([yurikiselev](https://github.com/yurikiselev))
+* 19111:Added support for defining the size of sliced portions on the zero layer. [#19111](https://github.com/ydb-platform/ydb/pull/19111) ([Oleg Doronin](https://github.com/dorooleg))
+* 18988:Added support for pile identifiers in dynamic nodes within the 2-dc cluster topology. [#18988](https://github.com/ydb-platform/ydb/pull/18988) ([Alexander Rutkovsky](https://github.com/alexvru))
+* 18859:Added support for Board reconfiguration in StateStorage via DistConf. [#18859](https://github.com/ydb-platform/ydb/pull/18859) ([Evgenik2](https://github.com/Evgenik2))
 
 ### Bug fixes
 

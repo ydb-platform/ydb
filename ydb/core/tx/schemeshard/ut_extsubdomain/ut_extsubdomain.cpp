@@ -27,10 +27,14 @@ std::vector<NKikimrHive::TTabletInfo> GetSubdomainTabletsFromHive(TTestActorRunt
     TActorId senderA = runtime.AllocateEdgeActor();
     runtime.SendToPipe(hiveTablet, senderA, new TEvHive::TEvRequestHiveInfo());
     TAutoPtr<IEventHandle> handle;
-    TEvHive::TEvResponseHiveInfo* response = runtime.GrabEdgeEventRethrow<TEvHive::TEvResponseHiveInfo>(handle);
+    auto event = runtime.GrabEdgeEventRethrow<TEvHive::TEvResponseHiveInfo>(handle);
+    UNIT_ASSERT(event);
+    const auto& response = event->Record;
+
+    Cerr << "TEST: GetSubdomainTabletsFromHive: " << response.ShortDebugString() << Endl;
 
     std::vector<NKikimrHive::TTabletInfo> result;
-    std::copy_if(response->Record.GetTablets().begin(), response->Record.GetTablets().end(),
+    std::copy_if(response.GetTablets().begin(), response.GetTablets().end(),
         std::back_inserter(result),
         [&subdomainPathId] (auto& tablet) {
             return (tablet.GetObjectDomain().GetSchemeShard() == subdomainPathId.GetSchemeShard()
@@ -41,29 +45,30 @@ std::vector<NKikimrHive::TTabletInfo> GetSubdomainTabletsFromHive(TTestActorRunt
     return result;
 }
 
-// // Debug
-// NKikimrMiniKQL::TResult ReadLocalTableRecords(TTestActorRuntime& runtime, ui64 tabletId, const TString& tableName, const TString& keyColumn) {
-//     const auto query = Sprintf(
-//         R"(
-//             (
-//                 (let range '('('%s (Null) (Void))))
-//                 (let fields '('%s))
-//                 (return (AsList
-//                     (SetResult 'Result (SelectRange '%s range fields '()))
-//                 ))
-//             )
-//         )",
-//         keyColumn.c_str(),
-//         keyColumn.c_str(),
-//         tableName.c_str()
-//     );
-//     auto result = LocalMiniKQL(runtime, tabletId, query);
-//     // Result: Value { Struct { Optional { Struct { List {
-//     //     Struct { Optional { Uint64: 2 } } }
-//     //     ...
-//     // } } } } }
-//     return result;
-// };
+// Debug
+[[maybe_unused]]
+NKikimrMiniKQL::TResult ReadLocalTableRecords(TTestActorRuntime& runtime, ui64 tabletId, const TString& tableName, const TString& keyColumn) {
+    const auto query = Sprintf(
+        R"(
+            (
+                (let range '('('%s (Null) (Void))))
+                (let fields '('%s))
+                (return (AsList
+                    (SetResult 'Result (SelectRange '%s range fields '()))
+                ))
+            )
+        )",
+        keyColumn.c_str(),
+        keyColumn.c_str(),
+        tableName.c_str()
+    );
+    auto result = LocalMiniKQL(runtime, tabletId, query);
+    // Result: Value { Struct { Optional { Struct { List {
+    //     Struct { Optional { Uint64: 2 } } }
+    //     ...
+    // } } } } }
+    return result;
+};
 
 }  // anonymous namespace
 
@@ -1667,12 +1672,13 @@ Y_UNIT_TEST_SUITE(TSchemeShardExtSubDomainTest) {
 
         // check that extsubdomain's path is really erased from the root schemeshard
 
-        // // Debug
-        // const auto result = ReadLocalTableRecords(runtime, TTestTxConfig::SchemeShard, "SubDomains", "PathId");
-        // const auto records = NKikimr::NClient::TValue::Create(result)[0]["List"];
-        // // Cerr << "TEST: " << records.GetValueText<NKikimr::NClient::TFormatJSON>() << Endl;
-        // // Cerr << "TEST: " << records.DumpToString() << Endl;
-        // UNIT_ASSERT_VALUES_EQUAL(records.Size(), 1);
+        {
+            const auto result = ReadLocalTableRecords(runtime, TTestTxConfig::SchemeShard, "SystemShardsToDelete", "ShardIdx");
+            const auto records = NKikimr::NClient::TValue::Create(result)[0]["List"];
+            // Cerr << "TEST: SystemShardsToDelete: " << records.GetValueText<NKikimr::NClient::TFormatJSON>() << Endl;
+            // Cerr << "TEST: " << records.DumpToString() << Endl;
+            UNIT_ASSERT_VALUES_EQUAL(records.Size(), 0);
+        }
 
         UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "SubDomains", "PathId", subdomainPathId.GetPathId()));
         UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "Paths", "Id", subdomainPathId.GetPathId()));

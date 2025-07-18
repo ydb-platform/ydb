@@ -258,12 +258,22 @@ namespace NKikimr {
                 [](TEvDefragStartQuantum::TPtr& ev) -> T { return std::move(ev->Get()->ChunksToDefrag); },
                 [](TEvHullShredDefrag::TPtr& ev) -> T { return TChunksToDefrag::Shred(ev->Get()->ChunksToShred); }
             };
+            auto chunksToDefrag = std::visit(getChunksToDefrag, task.Request);
 
-            Sublog.Log() << "Defrag quantum started\n";
+            if (!chunksToDefrag) {
+                Sublog.Log() << "Defrag quantum started {nothing} \n";
+            } else {
+                Sublog.Log() << "Defrag quantum started"
+                            << " {#chunksSize: " << chunksToDefrag->Chunks.size()
+                            << " #foundChunks" << chunksToDefrag->FoundChunksToDefrag
+                            << " #estimatedSlots" << chunksToDefrag->EstimatedSlotsCount
+                            << " #isShred" << chunksToDefrag->IsShred
+                            << " #chunksToShred" << chunksToDefrag->ChunksToShred.size()
+                            << "}\n";
+            }
             ++TotalDefragRuns;
             InProgress = true;
-            ActiveActors.Insert(ctx.Register(CreateDefragQuantumActor(DCtx, GInfo->GetVDiskId(DCtx->VCtx->ShortSelfVDisk),
-                std::visit(getChunksToDefrag, task.Request))), __FILE__, __LINE__, ctx,
+            ActiveActors.Insert(ctx.Register(CreateDefragQuantumActor(DCtx, GInfo->GetVDiskId(DCtx->VCtx->ShortSelfVDisk), chunksToDefrag)), __FILE__, __LINE__, ctx,
                 NKikimrServices::BLOBSTORAGE);
         }
 

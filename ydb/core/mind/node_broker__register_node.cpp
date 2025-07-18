@@ -80,18 +80,22 @@ public:
             auto &node = Self->Dirty.Nodes.find(it->second)->second;
             NodeId = node.NodeId;
 
-            if (node.Address != rec.GetAddress()
-                || node.ResolveHost != rec.GetResolveHost())
-                return Error(TStatus::WRONG_REQUEST,
-                             TStringBuilder() << "Another address is registered for "
-                             << host << ":" << port,
-                             ctx);
+            if (node.Address != rec.GetAddress() || node.ResolveHost != rec.GetResolveHost()) {
+                auto errorText = TStringBuilder() << "Another address is registered for " << host << ":" << port
+                    << ", expected (address, resolve host) = (" << node.Address << ", " << node.ResolveHost << ")"
+                    << ", got (address, resolve host) = (" << rec.GetAddress() << ", " << rec.GetResolveHost() << ")";
+
+                LOG_WARN_S(ctx, NKikimrServices::NODE_BROKER, errorText);
+                return Error(TStatus::WRONG_REQUEST, errorText, ctx);
+            }
 
             if (node.Location != loc && node.Location != TNodeLocation()) {
-                return Error(TStatus::WRONG_REQUEST,
-                             TStringBuilder() << "Another location is registered for "
-                             << host << ":" << port,
-                             ctx);
+                auto errorText = TStringBuilder() << "Another location is registered for " << host << ":" << port
+                    << ", expected = " << node.Location.ToString()
+                    << ", got = " << loc.ToString();
+
+                LOG_WARN_S(ctx, NKikimrServices::NODE_BROKER, errorText);
+                return Error(TStatus::WRONG_REQUEST, errorText, ctx);
             } else if (node.Location != loc) {
                 node.Location = loc;
                 Self->Dirty.DbUpdateNodeLocation(node, txc);

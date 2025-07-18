@@ -2,6 +2,7 @@ LIBRARY()
 
 SRCS(
     control.cpp
+    kqp_batch_operations.cpp
     kqp_event_ids.h
     kqp_event_impl.cpp
     kqp_lwtrace_probes.cpp
@@ -27,9 +28,10 @@ SRCS(
 PEERDIR(
     ydb/core/base
     ydb/core/engine
+    ydb/core/protos
+    ydb/core/scheme
     ydb/core/kqp/expr_nodes
     ydb/core/kqp/common/simple
-    ydb/core/kqp/common/batch
     ydb/core/kqp/common/compilation
     ydb/core/kqp/common/events
     ydb/core/kqp/common/shutdown
@@ -60,7 +62,6 @@ GENERATE_ENUM_SERIALIZATION(kqp_resolve.h)
 END()
 
 RECURSE(
-    batch
     compilation
     events
     simple

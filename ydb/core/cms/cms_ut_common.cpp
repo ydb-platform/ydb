@@ -825,6 +825,22 @@ TCmsTestEnv::RequestState(const NKikimrCms::TClusterStateRequest &request,
     return rec.GetState();
 }
 
+TCmsTestEnv::TListNodes
+TCmsTestEnv::RequestListNodes()
+{
+    TAutoPtr<TEvCms::TEvListClusterNodesRequest> event = new TEvCms::TEvListClusterNodesRequest;
+    SendToPipe(CmsId, GetSender(), event.Release(), 0, GetPipeConfigWithRetries());
+
+    TAutoPtr<IEventHandle> handle;
+    auto reply = GrabEdgeEventRethrow<TEvCms::TEvListClusterNodesResponse>(handle);
+    UNIT_ASSERT(reply);
+
+    const auto &rec = reply->Record;
+    UNIT_ASSERT_VALUES_EQUAL(rec.GetStatus(), Ydb::StatusIds::SUCCESS);
+
+    return rec.GetResult().nodes();
+}
+
 std::pair<TString, TVector<TString>>
 TCmsTestEnv::ExtractPermissions(const NKikimrCms::TPermissionResponse &response)
 {

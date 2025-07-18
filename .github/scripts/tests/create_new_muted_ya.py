@@ -62,7 +62,7 @@ def execute_query(branch='main', build_type='relwithdebinfo', days_window=1):
       ON t.full_name = o.full_name
     WHERE t.date_window >= Date('{start_date}') AND t.date_window <= Date('{end_date}')
       AND t.branch = '{branch}' AND t.build_type = '{build_type}'
-    GROUP BY test_name, suite_folder, full_name, build_type, branch, owners
+    GROUP BY t.test_name, t.suite_folder, t.full_name, t.build_type, t.branch, o.owners
     '''
     
     logging.info(f"SQL Query:\n{query_string}")

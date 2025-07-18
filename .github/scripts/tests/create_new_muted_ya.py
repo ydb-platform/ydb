@@ -115,6 +115,101 @@ def add_lines_to_file(file_path, lines_to_add):
     except Exception as e:
         logging.error(f"Error adding lines to {file_path}: {e}")
 
+def calculate_success_rate(test):
+    """Вычисляет success rate для теста"""
+    runs = test.get('pass_count', 0) + test.get('fail_count', 0)
+    return round((test.get('pass_count', 0) / runs * 100) if runs > 0 else 0, 1)
+
+def create_test_string(test, use_wildcards=False):
+    """Создает строку теста с опциональными wildcards"""
+    testsuite = test.get('suite_folder')
+    testcase = test.get('test_name')
+    test_string = f"{testsuite} {testcase}\n"
+    if use_wildcards:
+        test_string = re.sub(r'\d+/(\d+)\]', r'*/*]', test_string)
+    return test_string
+
+def create_debug_string(test, resolution, success_rate=None):
+    """Создает debug строку для теста"""
+    if success_rate is None:
+        success_rate = calculate_success_rate(test)
+    
+    testsuite = test.get('suite_folder')
+    testcase = test.get('test_name')
+    runs = test.get('pass_count', 0) + test.get('fail_count', 0)
+    
+    debug_string = f"{testsuite} {testcase} # owner {test.get('owner', 'N/A')} success_rate {success_rate}%, days in state N/A"
+    
+    if resolution in ['to_mute', 'to_unmute', 'to_delete']:
+        debug_string += f", pass_count {test.get('pass_count')}, fail_count {test.get('fail_count')}, total_runs {runs}, resolution {resolution}"
+    elif resolution == 'flaky':
+        debug_string += f", pass_count {test.get('pass_count')}, fail count {test.get('fail_count')}"
+    
+    return debug_string + "\n"
+
+def is_flaky_test(test):
+    """Проверяет, является ли тест flaky"""
+    fails = test.get('fail_count', 0)
+    runs = test.get('pass_count', 0) + fails
+    return (fails >= 2) or (fails >= 1 and runs <= 10)
+
+def is_deleted_test(test):
+    """Проверяет, является ли тест удаленным (нет запусков)"""
+    return test.get('fail_count', 0) == 0 and test.get('pass_count', 0) == 0
+
+def is_stable_test(test):
+    """Проверяет, является ли тест стабильным"""
+    return test.get('muted_stable_n_days_today', False)
+
+def is_unmute_candidate(test, unmute_stats):
+    """Проверяет, является ли тест кандидатом на размьют"""
+    if not unmute_stats:
+        return False
+    unmute_runs = unmute_stats.get('pass_count', 0) + unmute_stats.get('fail_count', 0)
+    unmute_fails = unmute_stats.get('fail_count', 0)
+    return unmute_runs > 4 and unmute_fails == 0
+
+def is_delete_candidate(test, delete_stats):
+    """Проверяет, является ли тест кандидатом на удаление из mute"""
+    if not delete_stats:
+        return False
+    delete_runs = delete_stats.get('pass_count', 0) + delete_stats.get('fail_count', 0)
+    return delete_runs == 0
+
+def create_file_set(aggregated_for_mute, filter_func, mute_check=None, use_wildcards=False, resolution=None):
+    """Создает набор тестов для файла на основе фильтра"""
+    result_set = set()
+    debug_list = []
+    
+    for test in aggregated_for_mute:
+        testsuite = test.get('suite_folder')
+        testcase = test.get('test_name')
+        
+        if not testsuite or not testcase:
+            continue
+            
+        # Проверяем mute_check если передан
+        if mute_check and not mute_check(testsuite, testcase):
+            continue
+            
+        # Применяем фильтр
+        if filter_func(test):
+            test_string = create_test_string(test, use_wildcards)
+            result_set.add(test_string)
+            
+            if resolution:
+                debug_string = create_debug_string(test, resolution)
+                debug_list.append(debug_string)
+    
+    return sorted(result_set), sorted(debug_list)
+
+def write_file_set(file_path, test_set, debug_list=None):
+    """Записывает набор тестов в файл"""
+    add_lines_to_file(file_path, test_set)
+    if debug_list:
+        debug_path = file_path.replace('.txt', '_debug.txt')
+        add_lines_to_file(debug_path, debug_list)
+    logging.info(f"Created {os.path.basename(file_path)} with {len(test_set)} tests")
 
 def apply_and_add_mutes(aggregated_for_mute, aggregated_for_unmute, aggregated_for_delete, output_path, mute_check):
     output_path = os.path.join(output_path, 'mute_update')
@@ -127,201 +222,81 @@ def apply_and_add_mutes(aggregated_for_mute, aggregated_for_unmute, aggregated_f
     logging.info(f"Processing {len(aggregated_for_mute)} tests for mute analysis")
 
     try:
-        # Определяем категории тестов для дополнительных файлов
-        deleted_tests = set(
-            f"{test.get('suite_folder')} {test.get('test_name')}\n" for test in aggregated_for_mute if test.get('fail_count', 0) == 0 and test.get('pass_count', 0) == 0
+        # 1. Базовые категории тестов
+        deleted_tests, _ = create_file_set(aggregated_for_mute, is_deleted_test)
+        stable_tests, _ = create_file_set(aggregated_for_mute, is_stable_test)
+        flaky_tests, _ = create_file_set(aggregated_for_mute, is_flaky_test, use_wildcards=True)
+        
+        # 2. Кандидаты на mute
+        def is_mute_candidate(test):
+            return is_flaky_test(test)
+        
+        muted_candidates, muted_candidates_debug = create_file_set(
+            aggregated_for_mute, is_mute_candidate, resolution='to_mute'
         )
+        write_file_set(os.path.join(output_path, 'to_mute.txt'), muted_candidates, muted_candidates_debug)
         
-        muted_stable_tests = set(
-            f"{test.get('suite_folder')} {test.get('test_name')}\n"
-            for test in aggregated_for_mute
-            if test.get('muted_stable_n_days_today')
+        # 3. Кандидаты на размьют
+        def is_unmute_candidate_wrapper(test):
+            return is_unmute_candidate(test, aggregated_for_unmute.get(test.get('full_name')))
+        
+        unmuted_candidates, unmuted_candidates_debug = create_file_set(
+            aggregated_for_mute, is_unmute_candidate_wrapper, mute_check, resolution='to_unmute'
         )
+        write_file_set(os.path.join(output_path, 'to_unmute.txt'), unmuted_candidates, unmuted_candidates_debug)
         
-        flaky_tests = set(
-            re.sub(r'\d+/(\d+)\]', r'*/*]', f"{test.get('suite_folder')} {test.get('test_name')}\n")
-            for test in aggregated_for_mute
-            if (test.get('fail_count', 0) >= 2) or (test.get('fail_count', 0) >= 1 and (test.get('pass_count', 0) + test.get('fail_count', 0)) <= 10)
+        # 4. Кандидаты на удаление из mute
+        def is_delete_candidate_wrapper(test):
+            return is_delete_candidate(test, aggregated_for_delete.get(test.get('full_name')))
+        
+        deleted_from_mute, deleted_from_mute_debug = create_file_set(
+            aggregated_for_mute, is_delete_candidate_wrapper, mute_check, resolution='to_delete'
         )
-
-        # Кандидаты на mute (по новым правилам)
-        muted_candidates = set()
-        muted_candidates_debug = []
-        for test in aggregated_for_mute:
-            runs = test.get('pass_count', 0) + test.get('fail_count', 0)
-            fails = test.get('fail_count', 0)
-            test_string = f"{test.get('suite_folder')} {test.get('test_name')}\n"
-            # Вычисляем success_rate
-            success_rate = round((test.get('pass_count', 0) / runs * 100) if runs > 0 else 0, 1)
-            test_string_debug = f"{test.get('suite_folder')} {test.get('test_name')} # owner {test.get('owner', 'N/A')} success_rate {success_rate}%, days in state N/A, pass_count {test.get('pass_count')}, fail_count {test.get('fail_count')}, total_runs {runs}, resolution to_mute\n"
-            if (fails >= 2) or (fails >= 1 and runs <= 10):
-                muted_candidates.add(test_string)
-                muted_candidates_debug.append(test_string_debug)
-        muted_candidates = sorted(muted_candidates)
-        muted_candidates_debug = sorted(muted_candidates_debug)
-        add_lines_to_file(os.path.join(output_path, 'to_mute.txt'), muted_candidates)
-        add_lines_to_file(os.path.join(output_path, 'to_mute_debug.txt'), muted_candidates_debug)
-        logging.info(f"Created to_mute.txt with {len(muted_candidates)} candidates")
-        logging.info(f"Created to_mute_debug.txt with {len(muted_candidates_debug)} candidates")
-
-        # Кандидаты на размьют (по новым правилам: за 2 дня >4 запусков и нет падений)
-        unmuted_candidates = set()
-        unmuted_candidates_debug = []
-        for test in aggregated_for_mute:
-            testsuite = test.get('suite_folder')
-            testcase = test.get('test_name')
-            test_string = f"{testsuite} {testcase}\n"
-            # Проверяем только тесты, которые уже в muted_ya
-            if testsuite and testcase and mute_check(testsuite, testcase):
-                unmute_stats = aggregated_for_unmute.get(test.get('full_name'))
-                if unmute_stats:
-                    unmute_runs = unmute_stats.get('pass_count', 0) + unmute_stats.get('fail_count', 0)
-                    unmute_fails = unmute_stats.get('fail_count', 0)
-                    if unmute_runs > 4 and unmute_fails == 0:
-                        # Вычисляем success_rate для unmute
-                        unmute_total_runs = test.get('pass_count', 0) + test.get('fail_count', 0)
-                        unmute_success_rate = round((test.get('pass_count', 0) / unmute_total_runs * 100) if unmute_total_runs > 0 else 0, 1)
-                        test_string_debug = f"{testsuite} {testcase} # owner {test.get('owner', 'N/A')} success_rate {unmute_success_rate}%, days in state N/A, pass_count {test.get('pass_count')}, fail_count {test.get('fail_count')}, total_runs {unmute_total_runs}, resolution to_unmute\n"
-                        unmuted_candidates.add(test_string)
-                        unmuted_candidates_debug.append(test_string_debug)
-        unmuted_candidates = sorted(unmuted_candidates)
-        unmuted_candidates_debug = sorted(unmuted_candidates_debug)
-        add_lines_to_file(os.path.join(output_path, 'to_unmute.txt'), unmuted_candidates)
-        add_lines_to_file(os.path.join(output_path, 'to_unmute_debug.txt'), unmuted_candidates_debug)
-        logging.info(f"Created to_unmute.txt with {len(unmuted_candidates)} candidates")
-        logging.info(f"Created to_unmute_debug.txt with {len(unmuted_candidates_debug)} candidates")
-
-        # Кандидаты на удаление из mute (по новым правилам: за 7 дней нет запусков)
-        deleted_from_mute = set()
-        deleted_from_mute_debug = []
-        for test in aggregated_for_mute:
-            testsuite = test.get('suite_folder')
-            testcase = test.get('test_name')
-            test_string = f"{testsuite} {testcase}\n"
-            # Проверяем только тесты, которые уже в muted_ya
-            if testsuite and testcase and mute_check(testsuite, testcase):
-                delete_stats = aggregated_for_delete.get(test.get('full_name'))
-                delete_runs = delete_stats.get('pass_count', 0) + delete_stats.get('fail_count', 0) if delete_stats else 0
-                if delete_runs == 0:
-                    # Вычисляем success_rate для delete
-                    delete_total_runs = test.get('pass_count', 0) + test.get('fail_count', 0)
-                    delete_success_rate = round((test.get('pass_count', 0) / delete_total_runs * 100) if delete_total_runs > 0 else 0, 1)
-                    test_string_debug = f"{testsuite} {testcase} # owner {test.get('owner', 'N/A')} success_rate {delete_success_rate}%, days in state N/A, pass_count {test.get('pass_count')}, fail_count {test.get('fail_count')}, total_runs {delete_total_runs}, resolution to_delete\n"
-                    deleted_from_mute.add(test_string)
-                    deleted_from_mute_debug.append(test_string_debug)
-        deleted_from_mute = sorted(deleted_from_mute)
-        deleted_from_mute_debug = sorted(deleted_from_mute_debug)
-        add_lines_to_file(os.path.join(output_path, 'to_delete.txt'), deleted_from_mute)
-        add_lines_to_file(os.path.join(output_path, 'to_delete_debug.txt'), deleted_from_mute_debug)
-        logging.info(f"Created to_delete.txt with {len(deleted_from_mute)} candidates")
-        logging.info(f"Created to_delete_debug.txt with {len(deleted_from_mute_debug)} candidates")
-
-        # Дополнительные файлы для анализа
-        # 1. muted_ya - deleted
-        muted_ya_minus_deleted = set()
-        muted_ya_minus_deleted_debug = []
-        for test in aggregated_for_mute:
-            testsuite = test.get('suite_folder')
-            testcase = test.get('test_name')
-            if testsuite and testcase and mute_check(testsuite, testcase):
-                test_string = f"{testsuite} {testcase}\n"
-                # Вычисляем success_rate для muted_ya_minus_deleted
-                deleted_total_runs = test.get('pass_count', 0) + test.get('fail_count', 0)
-                deleted_success_rate = round((test.get('pass_count', 0) / deleted_total_runs * 100) if deleted_total_runs > 0 else 0, 1)
-                test_string_debug = f"{testsuite} {testcase} # owner {test.get('owner', 'N/A')} success_rate {deleted_success_rate}%, days in state N/A\n"
-                if test_string not in deleted_tests:
-                    muted_ya_minus_deleted.add(test_string)
-                    muted_ya_minus_deleted_debug.append(test_string_debug)
+        write_file_set(os.path.join(output_path, 'to_delete.txt'), deleted_from_mute, deleted_from_mute_debug)
         
-        muted_ya_minus_deleted = sorted(muted_ya_minus_deleted)
-        add_lines_to_file(os.path.join(output_path, 'muted_ya-deleted.txt'), muted_ya_minus_deleted)
-        muted_ya_minus_deleted_debug = sorted(muted_ya_minus_deleted_debug)
-        add_lines_to_file(os.path.join(output_path, 'muted_ya-deleted_debug.txt'), muted_ya_minus_deleted_debug)
-        logging.info(f"Created muted_ya-deleted.txt with {len(muted_ya_minus_deleted)} tests")
-
-        # 2. muted_ya - stable
-        muted_ya_minus_stable = set()
-        muted_ya_minus_stable_debug = []
-        for test in aggregated_for_mute:
-            testsuite = test.get('suite_folder')
-            testcase = test.get('test_name')
-            if testsuite and testcase and mute_check(testsuite, testcase):
-                test_string = f"{testsuite} {testcase}\n"
-                # Вычисляем success_rate для muted_ya_minus_stable
-                stable_total_runs = test.get('pass_count', 0) + test.get('fail_count', 0)
-                stable_success_rate = round((test.get('pass_count', 0) / stable_total_runs * 100) if stable_total_runs > 0 else 0, 1)
-                test_string_debug = f"{testsuite} {testcase} # owner {test.get('owner', 'N/A')} success_rate {stable_success_rate}%, days in state N/A\n"
-                if test_string not in muted_stable_tests:
-                    muted_ya_minus_stable.add(test_string)
-                    muted_ya_minus_stable_debug.append(test_string_debug)
+        # 5. Дополнительные файлы для анализа
+        # muted_ya - deleted
+        def is_muted_not_deleted(test):
+            test_string = create_test_string(test)
+            return test_string not in deleted_tests
         
-        muted_ya_minus_stable = sorted(muted_ya_minus_stable)
-        add_lines_to_file(os.path.join(output_path, 'muted_ya-stable.txt'), muted_ya_minus_stable)
-        muted_ya_minus_stable_debug = sorted(muted_ya_minus_stable_debug)
-        add_lines_to_file(os.path.join(output_path, 'muted_ya-stable_debug.txt'), muted_ya_minus_stable_debug)
-        logging.info(f"Created muted_ya-stable.txt with {len(muted_ya_minus_stable)} tests")
-
-        # 3. muted_ya - stable - deleted
-        muted_ya_minus_stable_minus_deleted = set()
-        muted_ya_minus_stable_minus_deleted_debug = []
-        for test in aggregated_for_mute:
-            testsuite = test.get('suite_folder')
-            testcase = test.get('test_name')
-            if testsuite and testcase and mute_check(testsuite, testcase):
-                test_string = f"{testsuite} {testcase}\n"
-                # Вычисляем success_rate для muted_ya_minus_stable_minus_deleted
-                stable_deleted_total_runs = test.get('pass_count', 0) + test.get('fail_count', 0)
-                stable_deleted_success_rate = round((test.get('pass_count', 0) / stable_deleted_total_runs * 100) if stable_deleted_total_runs > 0 else 0, 1)
-                test_string_debug = f"{testsuite} {testcase} # owner {test.get('owner', 'N/A')} success_rate {stable_deleted_success_rate}%, days in state N/A\n"
-                if test_string not in muted_stable_tests and test_string not in deleted_tests:
-                    muted_ya_minus_stable_minus_deleted.add(test_string)
-                    muted_ya_minus_stable_minus_deleted_debug.append(test_string_debug)
+        muted_ya_minus_deleted, muted_ya_minus_deleted_debug = create_file_set(
+            aggregated_for_mute, is_muted_not_deleted, mute_check
+        )
+        write_file_set(os.path.join(output_path, 'muted_ya-deleted.txt'), muted_ya_minus_deleted, muted_ya_minus_deleted_debug)
         
-        muted_ya_minus_stable_minus_deleted = sorted(muted_ya_minus_stable_minus_deleted)
-        add_lines_to_file(os.path.join(output_path, 'muted_ya-stable-deleted.txt'), muted_ya_minus_stable_minus_deleted)
-        muted_ya_minus_stable_minus_deleted_debug = sorted(muted_ya_minus_stable_minus_deleted_debug)
-        add_lines_to_file(os.path.join(output_path, 'muted_ya-stable-deleted_debug.txt'), muted_ya_minus_stable_minus_deleted_debug)
-        logging.info(f"Created muted_ya-stable-deleted.txt with {len(muted_ya_minus_stable_minus_deleted)} tests")
-
-        # 4. muted_ya - stable - deleted + flaky
-        muted_ya_minus_stable_minus_deleted_plus_flaky = set()
-        muted_ya_minus_stable_minus_deleted_plus_flaky_debug = []
+        # muted_ya - stable
+        def is_muted_not_stable(test):
+            test_string = create_test_string(test)
+            return test_string not in stable_tests
         
-        # Добавляем тесты из muted_ya - stable - deleted
-        for test in aggregated_for_mute:
-            testsuite = test.get('suite_folder')
-            testcase = test.get('test_name')
-            if testsuite and testcase and mute_check(testsuite, testcase):
-                test_string = f"{testsuite} {testcase}\n"
-                # Вычисляем success_rate для muted_ya_minus_stable_minus_deleted_plus_flaky
-                flaky_total_runs = test.get('pass_count', 0) + test.get('fail_count', 0)
-                flaky_success_rate = round((test.get('pass_count', 0) / flaky_total_runs * 100) if flaky_total_runs > 0 else 0, 1)
-                test_string_debug = f"{testsuite} {testcase} # owner {test.get('owner', 'N/A')} success_rate {flaky_success_rate}%, days in state N/A\n"
-                if test_string not in muted_stable_tests and test_string not in deleted_tests:
-                    muted_ya_minus_stable_minus_deleted_plus_flaky.add(test_string)
-                    muted_ya_minus_stable_minus_deleted_plus_flaky_debug.append(test_string_debug)
+        muted_ya_minus_stable, muted_ya_minus_stable_debug = create_file_set(
+            aggregated_for_mute, is_muted_not_stable, mute_check
+        )
+        write_file_set(os.path.join(output_path, 'muted_ya-stable.txt'), muted_ya_minus_stable, muted_ya_minus_stable_debug)
         
-        # Добавляем flaky тесты (если их еще нет)
-        for test in aggregated_for_mute:
-            testsuite = test.get('suite_folder')
-            testcase = test.get('test_name')
-            if testsuite and testcase:
-                test_string = re.sub(r'\d+/(\d+)\]', r'*/*]', f"{testsuite} {testcase}\n")
-                # Вычисляем success_rate для flaky тестов
-                flaky_test_total_runs = test.get('pass_count', 0) + test.get('fail_count', 0)
-                flaky_test_success_rate = round((test.get('pass_count', 0) / flaky_test_total_runs * 100) if flaky_test_total_runs > 0 else 0, 1)
-                test_string_debug = re.sub(r'\d+/(\d+)\]', r'*/*]', f"{testsuite} {testcase}") + f" # owner {test.get('owner', 'N/A')} success_rate {flaky_test_success_rate}%, days in state N/A, pass_count {test.get('pass_count')}, fail count {test.get('fail_count')}\n"
-                if (test.get('fail_count', 0) >= 2) or (test.get('fail_count', 0) >= 1 and (test.get('pass_count', 0) + test.get('fail_count', 0)) <= 10):
-                    if test_string not in muted_ya_minus_stable_minus_deleted_plus_flaky:
-                        muted_ya_minus_stable_minus_deleted_plus_flaky.add(test_string)
-                        muted_ya_minus_stable_minus_deleted_plus_flaky_debug.append(test_string_debug)
+        # muted_ya - stable - deleted
+        def is_muted_not_stable_not_deleted(test):
+            test_string = create_test_string(test)
+            return test_string not in stable_tests and test_string not in deleted_tests
         
-        muted_ya_minus_stable_minus_deleted_plus_flaky = sorted(muted_ya_minus_stable_minus_deleted_plus_flaky)
-        add_lines_to_file(os.path.join(output_path, 'muted_ya-stable-deleted+flaky.txt'), muted_ya_minus_stable_minus_deleted_plus_flaky)
-        muted_ya_minus_stable_minus_deleted_plus_flaky_debug = sorted(muted_ya_minus_stable_minus_deleted_plus_flaky_debug)
-        add_lines_to_file(os.path.join(output_path, 'muted_ya-stable-deleted+flaky_debug.txt'), muted_ya_minus_stable_minus_deleted_plus_flaky_debug)
-        logging.info(f"Created muted_ya-stable-deleted+flaky.txt with {len(muted_ya_minus_stable_minus_deleted_plus_flaky)} tests")
-
+        muted_ya_minus_stable_minus_deleted, muted_ya_minus_stable_minus_deleted_debug = create_file_set(
+            aggregated_for_mute, is_muted_not_stable_not_deleted, mute_check
+        )
+        write_file_set(os.path.join(output_path, 'muted_ya-stable-deleted.txt'), muted_ya_minus_stable_minus_deleted, muted_ya_minus_stable_minus_deleted_debug)
+        
+        # muted_ya - stable - deleted + flaky
+        def is_muted_not_stable_not_deleted_or_flaky(test):
+            test_string = create_test_string(test)
+            is_muted_not_stable_not_deleted = test_string not in stable_tests and test_string not in deleted_tests
+            return is_muted_not_stable_not_deleted or is_flaky_test(test)
+        
+        muted_ya_minus_stable_minus_deleted_plus_flaky, muted_ya_minus_stable_minus_deleted_plus_flaky_debug = create_file_set(
+            aggregated_for_mute, is_muted_not_stable_not_deleted_or_flaky, mute_check, use_wildcards=True
+        )
+        write_file_set(os.path.join(output_path, 'muted_ya-stable-deleted+flaky.txt'), muted_ya_minus_stable_minus_deleted_plus_flaky, muted_ya_minus_stable_minus_deleted_plus_flaky_debug)
+        
+        # Логирование итоговых результатов
         logging.info(f"Muted candidates: {len(muted_candidates)}")
         logging.info(f"Unmuted candidates: {len(unmuted_candidates)}")
         logging.info(f"Deleted from mute: {len(deleted_from_mute)}")
@@ -329,6 +304,7 @@ def apply_and_add_mutes(aggregated_for_mute, aggregated_for_unmute, aggregated_f
         logging.info(f"Muted_ya - stable: {len(muted_ya_minus_stable)}")
         logging.info(f"Muted_ya - stable - deleted: {len(muted_ya_minus_stable_minus_deleted)}")
         logging.info(f"Muted_ya - stable - deleted + flaky: {len(muted_ya_minus_stable_minus_deleted_plus_flaky)}")
+        
     except (KeyError, TypeError) as e:
         logging.error(f"Error processing test data: {e}. Check your query results for valid keys.")
         return []

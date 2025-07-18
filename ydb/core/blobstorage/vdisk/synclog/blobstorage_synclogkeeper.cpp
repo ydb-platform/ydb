@@ -2,6 +2,7 @@
 #include "blobstorage_synclogkeeper_state.h"
 #include "blobstorage_synclog.h"
 #include "blobstorage_synclog_private_events.h"
+#include "blobstorage_synclog_public_events.h"
 
 #include <ydb/core/blobstorage/vdisk/common/blobstorage_dblogcutter.h>
 #include <ydb/core/blobstorage/vdisk/common/sublog.h>
@@ -247,6 +248,14 @@ namespace NKikimr {
                 ctx.Send(ev->Sender, response.release(), 0, ev->Cookie);
             }
 
+            void Handle(TEvPhantomFlagStorageAddFlagsFromSnapshot::TPtr ev) {
+                KeepState.AddFlagsToPhantomFlagStorage(std::move(ev->Get()->Flags));
+            }
+
+            void Handle(TEvPhantomFlagStorageGetSnapshot::TPtr ev) {
+                Send(ev->Sender, new TEvPhantomFlagStorageGetSnapshotResult(KeepState.GetPhantomFlagStorageSnapshot()));
+            }
+
             STRICT_STFUNC(StateFunc,
                 HFunc(TEvSyncLogPut, Handle)
                 HFunc(TEvSyncLogPutSst, Handle)
@@ -259,6 +268,8 @@ namespace NKikimr {
                 HFunc(NPDisk::TEvCutLog, Handle)
                 HFunc(TEvents::TEvPoisonPill, Handle)
                 HFunc(TEvListChunks, Handle)
+                hFunc(TEvPhantomFlagStorageAddFlagsFromSnapshot, Handle)
+                hFunc(TEvPhantomFlagStorageGetSnapshot, Handle)
             )
 
         public:
@@ -271,8 +282,8 @@ namespace NKikimr {
                     std::unique_ptr<TSyncLogRepaired> repaired)
                 : TActorBootstrapped<TSyncLogKeeperActor>()
                 , SlCtx(std::move(slCtx))
-                , KeepState(SlCtx->VCtx, std::move(repaired), SlCtx->SyncLogMaxMemAmount, SlCtx->SyncLogMaxDiskAmount,
-                    SlCtx->SyncLogMaxEntryPointSize)
+                , KeepState(SlCtx, std::move(repaired), SlCtx->SyncLogMaxMemAmount, SlCtx->SyncLogMaxDiskAmount,
+                    SlCtx->SyncLogMaxEntryPointSize, SelfId())
             {}
         };
 

@@ -39,7 +39,6 @@ SRCS(
     monitoring.cpp
     multiget.cpp
     patch.cpp
-    phantom_blobs.cpp
     recovery.cpp
     sanitize_groups.cpp
     scrub_fast.cpp
@@ -74,6 +73,7 @@ RECURSE_FOR_TESTS(
     ut_huge
     ut_read_only_vdisk
     ut_osiris
+    ut_phantom_blobs
     ut_replication
     ut_scrub
     ut_statestorage

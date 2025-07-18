@@ -81,6 +81,7 @@ namespace NKikimr {
         bool KeepUnconditionally(EMode ingressMode) const;
         void SetKeep(EMode ingressMode, ECollectMode mode);
         int GetCollectMode(EMode ingressMode) const;
+        bool IsDoNotKeep(const TBlobStorageGroupType& gtype) const;
         // Returns vector of parts we have heard about, i.e. main_vec | handoff1 | ... | handoffN
         NMatrix::TVectorType PartsWeKnowAbout(TBlobStorageGroupType gtype) const;
         // Returns vector of parts we MUST have locally according to Ingress, i.e. parts we have

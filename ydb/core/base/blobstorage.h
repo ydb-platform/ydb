@@ -764,6 +764,9 @@ struct TEvBlobStorage {
         EvReleaseSyncToken,
         EvBSQueueResetConnection, // for test purposes
         EvYardResize,                                           // 268 636 340
+        EvPhantomFlagStorageAddFlagsFromSnapshot,
+        EvPhantomFlagStorageGetSnapshot,
+        EvPhantomFlagStorageGetSnapshotResult,
 
         EvYardInitResult = EvPut + 9 * 512,                     /// 268 636 672
         EvLogResult,

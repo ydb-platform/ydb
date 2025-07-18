@@ -18,28 +18,28 @@ namespace NKikimr::NSchemeShard {
 
 class TSchemeShard;
 
-class TDataErasureManager {
+class TShredManager {
 protected:
     TSchemeShard* const SchemeShard;
-    EDataErasureStatus Status = EDataErasureStatus::UNSPECIFIED;
+    EShredStatus Status = EShredStatus::UNSPECIFIED;
     ui64 Generation = 0;
     bool Running = false;
 
-    ui64 CounterDataErasureOk = 0;
-    ui64 CounterDataErasureTimeout = 0;
+    ui64 CounterShredOk = 0;
+    ui64 CounterShredTimeout = 0;
 
 public:
-    TDataErasureManager(TSchemeShard* const schemeShard);
+    TShredManager(TSchemeShard* const schemeShard);
 
-    virtual ~TDataErasureManager() = default;
+    virtual ~TShredManager() = default;
 
     virtual void UpdateConfig(const NKikimrConfig::TDataErasureConfig& config) = 0;
     virtual void Start();
     virtual void Stop();
     virtual void ClearOperationQueue() = 0;
-    virtual void ClearWaitingDataErasureRequests(NIceDb::TNiceDb& db) = 0;
-    virtual void ClearWaitingDataErasureRequests() = 0;
-    virtual void WakeupToRunDataErasure(TEvSchemeShard::TEvWakeupToRunDataErasure::TPtr& ev, const NActors::TActorContext& ctx) = 0;
+    virtual void ClearWaitingShredRequests(NIceDb::TNiceDb& db) = 0;
+    virtual void ClearWaitingShredRequests() = 0;
+    virtual void WakeupToRunShred(TEvSchemeShard::TEvWakeupToRunShred::TPtr& ev, const NActors::TActorContext& ctx) = 0;
     virtual void Run(NIceDb::TNiceDb& db) = 0;
     virtual void Continue() = 0;
     virtual void HandleDisconnect(TTabletId tabletId, const TActorId& clientId, const TActorContext& ctx) = 0;
@@ -51,13 +51,13 @@ public:
     virtual bool Restore(NIceDb::TNiceDb& db) = 0;
     virtual bool Remove(const TPathId& pathId) = 0;
     virtual bool Remove(const TShardIdx& shardIdx) = 0;
-    virtual void HandleNewPartitioning(const std::vector<TShardIdx>& dataErasureShards, NIceDb::TNiceDb& db) = 0;
+    virtual void HandleNewPartitioning(const std::vector<TShardIdx>& shredShards, NIceDb::TNiceDb& db) = 0;
     virtual void SyncBscGeneration(NIceDb::TNiceDb& db, ui64 currentBscGeneration) = 0;
 
     void Clear();
 
-    EDataErasureStatus GetStatus() const;
-    void SetStatus(const EDataErasureStatus& status);
+    EShredStatus GetStatus() const;
+    void SetStatus(const EShredStatus& status);
 
     void IncGeneration();
     void SetGeneration(ui64 generation);
@@ -66,38 +66,38 @@ public:
     bool IsRunning() const;
 };
 
-//////////////////// TRootDataErasureManager ////////////////////
+//////////////////// TRootShredManager ////////////////////
 
-class TRootDataErasureManager : public TDataErasureManager {
+class TRootShredManager : public TShredManager {
 private:
 using TQueue = NOperationQueue::TOperationQueueWithTimer<
     TPathId,
     TFifoQueue<TPathId>,
-    TEvPrivate::EvRunDataErasure,
+    TEvPrivate::EvRunShred,
     NKikimrServices::FLAT_TX_SCHEMESHARD,
-    NKikimrServices::TActivity::DATA_ERASURE>;
+    NKikimrServices::TActivity::SCHEMESHARD_SHRED>;
 
     class TStarter : public TQueue::IStarter {
     public:
-        TStarter(TRootDataErasureManager* const manager);
+        TStarter(TRootShredManager* const manager);
 
         NOperationQueue::EStartStatus StartOperation(const TPathId&) override;
         void OnTimeout(const TPathId&) override;
 
     private:
-        TRootDataErasureManager* const Manager;
+        TRootShredManager* const Manager;
     };
 
 private:
     TStarter Starter;
     TQueue* Queue = nullptr;
-    THashMap<TPathId, EDataErasureStatus> WaitingDataErasureTenants;
+    THashMap<TPathId, EShredStatus> WaitingShredTenants;
     THashMap<TPathId, TActorId> ActivePipes;
 
-    TDuration DataErasureInterval;
-    TDuration DataErasureBSCInterval;
+    TDuration ShredInterval;
+    TDuration ShredBSCInterval;
     TDuration CurrentWakeupInterval;
-    bool IsDataErasureWakeupScheduled = false;
+    bool IsShredWakeupScheduled = false;
     bool IsRequestToBSCScheduled = false;
     TInstant StartTime;
     TInstant FinishTime;
@@ -106,15 +106,15 @@ private:
     bool IsManualStartup = false;
 
 public:
-    TRootDataErasureManager(TSchemeShard* const schemeShard, const NKikimrConfig::TDataErasureConfig& config);
+    TRootShredManager(TSchemeShard* const schemeShard, const NKikimrConfig::TDataErasureConfig& config);
 
     void UpdateConfig(const NKikimrConfig::TDataErasureConfig& config) override;
     void Start() override;
     void Stop() override;
     void ClearOperationQueue() override;
-    void ClearWaitingDataErasureRequests(NIceDb::TNiceDb& db) override;
-    void ClearWaitingDataErasureRequests() override;
-    void WakeupToRunDataErasure(TEvSchemeShard::TEvWakeupToRunDataErasure::TPtr& ev, const NActors::TActorContext& ctx) override;
+    void ClearWaitingShredRequests(NIceDb::TNiceDb& db) override;
+    void ClearWaitingShredRequests() override;
+    void WakeupToRunShred(TEvSchemeShard::TEvWakeupToRunShred::TPtr& ev, const NActors::TActorContext& ctx) override;
     void Run(NIceDb::TNiceDb& db) override;
     void Continue() override;
     void HandleDisconnect(TTabletId tabletId, const TActorId& clientId, const TActorContext& ctx) override;
@@ -126,57 +126,57 @@ public:
     bool Restore(NIceDb::TNiceDb& db) override;
     bool Remove(const TPathId& pathId) override;
     bool Remove(const TShardIdx& shardIdx) override;
-    void HandleNewPartitioning(const std::vector<TShardIdx>& dataErasureShards, NIceDb::TNiceDb& db) override;
+    void HandleNewPartitioning(const std::vector<TShardIdx>& shredShards, NIceDb::TNiceDb& db) override;
     void SyncBscGeneration(NIceDb::TNiceDb& db, ui64 currentBscGeneration) override;
 
 private:
     static TQueue::TConfig ConvertConfig(const NKikimrConfig::TDataErasureConfig& config);
 
-    void ScheduleDataErasureWakeup();
-    NOperationQueue::EStartStatus StartDataErasure(const TPathId& pathId);
+    void ScheduleShredWakeup();
+    NOperationQueue::EStartStatus StartShred(const TPathId& pathId);
     void OnTimeout(const TPathId& pathId);
     void Enqueue(const TPathId& pathId);
     void UpdateMetrics();
 };
 
-//////////////////// TTenantDataErasureManager ////////////////////
+//////////////////// TTenantShredManager ////////////////////
 
-class TTenantDataErasureManager : public TDataErasureManager {
+class TTenantShredManager : public TShredManager {
 private:
 using TQueue = NOperationQueue::TOperationQueueWithTimer<
         TShardIdx,
         TFifoQueue<TShardIdx>,
-        TEvPrivate::EvRunTenantDataErasure,
+        TEvPrivate::EvRunTenantShred,
         NKikimrServices::FLAT_TX_SCHEMESHARD,
-        NKikimrServices::TActivity::TENANT_DATA_ERASURE>;
+        NKikimrServices::TActivity::SCHEMESHARD_TENANT_SHRED>;
 
     class TStarter : public TQueue::IStarter {
     public:
-        TStarter(TTenantDataErasureManager* const manager);
+        TStarter(TTenantShredManager* const manager);
 
         NOperationQueue::EStartStatus StartOperation(const TShardIdx& shardIdx) override;
         void OnTimeout(const TShardIdx& shardIdx) override;
 
     private:
-        TTenantDataErasureManager* const Manager;
+        TTenantShredManager* const Manager;
     };
 
 private:
     TStarter Starter;
     TQueue* Queue = nullptr;
-    THashMap<TShardIdx, EDataErasureStatus> WaitingDataErasureShards;
+    THashMap<TShardIdx, EShredStatus> WaitingShredShards;
     THashMap<TShardIdx, TActorId> ActivePipes;
 
 public:
-    TTenantDataErasureManager(TSchemeShard* const schemeShard, const NKikimrConfig::TDataErasureConfig& config);
+    TTenantShredManager(TSchemeShard* const schemeShard, const NKikimrConfig::TDataErasureConfig& config);
 
     void UpdateConfig(const NKikimrConfig::TDataErasureConfig& config) override;
     void Start() override;
     void Stop() override;
     void ClearOperationQueue() override;
-    void ClearWaitingDataErasureRequests(NIceDb::TNiceDb& db) override;
-    void ClearWaitingDataErasureRequests() override;
-    void WakeupToRunDataErasure(TEvSchemeShard::TEvWakeupToRunDataErasure::TPtr& ev, const NActors::TActorContext& ctx) override;
+    void ClearWaitingShredRequests(NIceDb::TNiceDb& db) override;
+    void ClearWaitingShredRequests() override;
+    void WakeupToRunShred(TEvSchemeShard::TEvWakeupToRunShred::TPtr& ev, const NActors::TActorContext& ctx) override;
     void Run(NIceDb::TNiceDb& db) override;
     void Continue() override;
     void HandleDisconnect(TTabletId tabletId, const TActorId& clientId, const TActorContext& ctx) override;
@@ -188,13 +188,13 @@ public:
     bool Restore(NIceDb::TNiceDb& db) override;
     bool Remove(const TPathId& pathId) override;
     bool Remove(const TShardIdx& shardIdx) override;
-    void HandleNewPartitioning(const std::vector<TShardIdx>& dataErasureShards, NIceDb::TNiceDb& db) override;
+    void HandleNewPartitioning(const std::vector<TShardIdx>& shredShards, NIceDb::TNiceDb& db) override;
     void SyncBscGeneration(NIceDb::TNiceDb& db, ui64 currentBscGeneration) override;
 
 private:
     static TQueue::TConfig ConvertConfig(const NKikimrConfig::TDataErasureConfig& config);
 
-    NOperationQueue::EStartStatus StartDataErasure(const TShardIdx& shardIdx);
+    NOperationQueue::EStartStatus StartShred(const TShardIdx& shardIdx);
     void OnTimeout(const TShardIdx& shardIdx);
     void Enqueue(const TShardIdx& shardIdx);
     void UpdateMetrics();

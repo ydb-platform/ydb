@@ -84,7 +84,7 @@ namespace NSchemeShard {
 extern const ui64 NEW_TABLE_ALTER_VERSION;
 extern ui64 gVectorIndexSeed; // for tests only
 
-class TDataErasureManager;
+class TShredManager;
 
 // Forward declaration for incremental restore context
 struct TIncrementalRestoreState;
@@ -356,7 +356,7 @@ public:
     bool EnableResourcePoolsOnServerless = false;
     bool EnableVectorIndex = false;
     bool EnableExternalDataSourcesOnServerless = false;
-    bool EnableDataErasure = false;
+    bool EnableShred = false;
     bool EnableExternalSourceSchemaInference = false;
     bool EnableMoveColumnTable = false;
 
@@ -1079,32 +1079,32 @@ public:
     template <EventBasePtr TEvPtr>
     NTabletFlatExecutor::ITransaction* CreateTxOperationReply(TOperationId id, TEvPtr& ev);
 
-    struct TTxDataErasureManagerInit;
-    NTabletFlatExecutor::ITransaction* CreateTxDataErasureManagerInit();
+    struct TTxShredManagerInit;
+    NTabletFlatExecutor::ITransaction* CreateTxShredManagerInit();
 
-    struct TTxRunDataErasure;
-    NTabletFlatExecutor::ITransaction* CreateTxRunDataErasure(bool isNewDataErasure);
+    struct TTxRunShred;
+    NTabletFlatExecutor::ITransaction* CreateTxRunShred(bool isNewShred);
 
-    struct TTxAddNewShardToDataErasure;
-    NTabletFlatExecutor::ITransaction* CreateTxAddNewShardToDataErasure(TEvPrivate::TEvAddNewShardToDataErasure::TPtr& ev);
+    struct TTxAddNewShardToShred;
+    NTabletFlatExecutor::ITransaction* CreateTxAddNewShardToShred(TEvPrivate::TEvAddNewShardToShred::TPtr& ev);
 
-    struct TTxCancelDataErasureShards;
-    NTabletFlatExecutor::ITransaction* CreateTxCancelDataErasureShards(const std::vector<TShardIdx>& oldShards);
+    struct TTxCancelShredShards;
+    NTabletFlatExecutor::ITransaction* CreateTxCancelShredShards(const std::vector<TShardIdx>& oldShards);
 
-    struct TTxRunTenantDataErasure;
-    NTabletFlatExecutor::ITransaction* CreateTxRunTenantDataErasure(TEvSchemeShard::TEvTenantDataErasureRequest::TPtr& ev);
-
-    template <typename TEvType>
-    struct TTxCompleteDataErasureShard;
+    struct TTxRunTenantShred;
+    NTabletFlatExecutor::ITransaction* CreateTxRunTenantShred(TEvSchemeShard::TEvTenantShredRequest::TPtr& ev);
 
     template <typename TEvType>
-    NTabletFlatExecutor::ITransaction* CreateTxCompleteDataErasureShard(TEvType& ev);
+    struct TTxCompleteShredShard;
 
-    struct TTxCompleteDataErasureTenant;
-    NTabletFlatExecutor::ITransaction* CreateTxCompleteDataErasureTenant(TEvSchemeShard::TEvTenantDataErasureResponse::TPtr& ev);
+    template <typename TEvType>
+    NTabletFlatExecutor::ITransaction* CreateTxCompleteShredShard(TEvType& ev);
 
-    struct TTxCompleteDataErasureBSC;
-    NTabletFlatExecutor::ITransaction* CreateTxCompleteDataErasureBSC(TEvBlobStorage::TEvControllerShredResponse::TPtr& ev);
+    struct TTxCompleteShredTenant;
+    NTabletFlatExecutor::ITransaction* CreateTxCompleteShredTenant(TEvSchemeShard::TEvTenantShredResponse::TPtr& ev);
+
+    struct TTxCompleteShredBSC;
+    NTabletFlatExecutor::ITransaction* CreateTxCompleteShredBSC(TEvBlobStorage::TEvControllerShredResponse::TPtr& ev);
 
     void PublishToSchemeBoard(THashMap<TTxId, TDeque<TPathId>>&& paths, const TActorContext& ctx);
     void PublishToSchemeBoard(TTxId txId, TDeque<TPathId>&& paths, const TActorContext& ctx);
@@ -1217,16 +1217,16 @@ public:
     void Handle(TEvDataShard::TEvMigrateSchemeShardResponse::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvCompactTableResult::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvDataShard::TEvCompactBorrowedResult::TPtr &ev, const TActorContext &ctx);
-    void Handle(TEvSchemeShard::TEvTenantDataErasureRequest::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvSchemeShard::TEvTenantShredRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvVacuumResult::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvKeyValue::TEvVacuumResponse__HandlePtr& ev, const TActorContext& ctx);
-    void Handle(TEvSchemeShard::TEvTenantDataErasureResponse::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvPrivate::TEvAddNewShardToDataErasure::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvSchemeShard::TEvTenantShredResponse::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPrivate::TEvAddNewShardToShred::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvBlobStorage::TEvControllerShredResponse::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvBlobDepot::TEvApplyConfigResult::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvSchemeShard::TEvDataErasureInfoRequest::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvSchemeShard::TEvDataErasureManualStartupRequest::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvSchemeShard::TEvWakeupToRunDataErasureBSC::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvSchemeShard::TEvShredInfoRequest::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvSchemeShard::TEvShredManualStartupRequest::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvSchemeShard::TEvWakeupToRunShredBSC::TPtr& ev, const TActorContext& ctx);
 
 
     void Handle(TEvSchemeShard::TEvProcessingRequest::TPtr& ev, const TActorContext& ctx);
@@ -1588,11 +1588,11 @@ public:
     void ConnectToSA();
     TDuration SendBaseStatsToSA();
 
-    THolder<TDataErasureManager> CreateDataErasureManager(const NKikimrConfig::TDataErasureConfig& config);
-    void ConfigureDataErasureManager(const NKikimrConfig::TDataErasureConfig& config);
-    void StartStopDataErasure();
-    void MarkFirstRunRootDataErasureManager();
-    void RunDataErasure(bool isNewDataErasure);
+    THolder<TShredManager> CreateShredManager(const NKikimrConfig::TDataErasureConfig& config);
+    void ConfigureShredManager(const NKikimrConfig::TDataErasureConfig& config);
+    void StartStopShred();
+    void MarkFirstRunRootShredManager();
+    void RunShred(bool isNewShred);
 
 public:
     void ChangeStreamShardsCount(i64 delta) override;
@@ -1616,7 +1616,7 @@ public:
     NLogin::TLoginProvider LoginProvider;
     TActorId LoginHelper;
 
-    THolder<TDataErasureManager> DataErasureManager = nullptr;
+    THolder<TShredManager> ShredManager = nullptr;
 
 private:
     void OnDetach(const TActorContext &ctx) override;

@@ -1,4 +1,4 @@
-#include "schemeshard__data_erasure_manager.h"
+#include "schemeshard__shred_manager.h"
 #include "schemeshard_impl.h"
 #include "schemeshard_utils.h"  // for PQGroupReserve
 
@@ -1884,9 +1884,9 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
         }
 
-        // Read Running data erasure for tenants
+        // Read Running shred for tenants
         {
-            if (!Self->DataErasureManager->Restore(db)) {
+            if (!Self->ShredManager->Restore(db)) {
                 return false;
             }
         }

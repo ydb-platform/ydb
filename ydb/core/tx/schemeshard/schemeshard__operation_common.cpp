@@ -1,6 +1,6 @@
 #include "schemeshard__operation_common.h"
 
-#include "schemeshard__data_erasure_manager.h"
+#include "schemeshard__shred_manager.h"
 
 #include <ydb/core/blob_depot/events.h>
 #include <ydb/core/blockstore/core/blockstore.h>
@@ -973,8 +973,8 @@ void UpdatePartitioningForCopyTable(TOperationId operationId, TTxState &txState,
         newShardsIdx.push_back(part.ShardIdx);
     }
     context.SS->SetPartitioning(txState.TargetPathId, dstTableInfo, std::move(newPartitioning));
-    if (context.SS->EnableDataErasure && context.SS->DataErasureManager->GetStatus() == EDataErasureStatus::IN_PROGRESS) {
-        context.OnComplete.Send(context.SS->SelfId(), new TEvPrivate::TEvAddNewShardToDataErasure(std::move(newShardsIdx)));
+    if (context.SS->EnableShred && context.SS->ShredManager->GetStatus() == EShredStatus::IN_PROGRESS) {
+        context.OnComplete.Send(context.SS->SelfId(), new TEvPrivate::TEvAddNewShardToShred(std::move(newShardsIdx)));
     }
 
     ui32 newShardCout = dstTableInfo->GetPartitions().size();

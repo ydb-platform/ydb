@@ -260,7 +260,7 @@ public:
 
         appData->CompactionConfig = Config.GetCompactionConfig();
         appData->BackgroundCleaningConfig = Config.GetBackgroundCleaningConfig();
-        appData->DataErasureConfig = Config.GetDataErasureConfig();
+        appData->ShredConfig = Config.GetDataErasureConfig();
     }
 };
 

@@ -17,10 +17,7 @@ public:
     TShardedRecordBatch(const std::shared_ptr<arrow::Table>& batch);
     TShardedRecordBatch(const std::shared_ptr<arrow::RecordBatch>& batch);
 
-    std::shared_ptr<arrow::Table> ExtractRecordBatch() {
-        AFL_VERIFY(!!RecordBatch);
-        return std::move(RecordBatch);
-    }
+    std::shared_ptr<arrow::Table> ExtractRecordBatch();
 
     void Cut(const ui32 limit) {
         RecordBatch = RecordBatch->Slice(0, limit);

@@ -140,6 +140,11 @@ TShardedRecordBatch::TShardedRecordBatch(const std::shared_ptr<arrow::Table>& ba
     AFL_VERIFY(SplittedByShards.size());
 }
 
+std::shared_ptr<arrow::Table> TShardedRecordBatch::ExtractRecordBatch() {
+    AFL_VERIFY(!!RecordBatch);
+    return std::move(RecordBatch);
+}
+
 std::vector<std::shared_ptr<arrow::Table>> TShardingSplitIndex::Apply(const std::shared_ptr<arrow::Table>& input) {
     AFL_VERIFY(input);
     AFL_VERIFY(input->num_rows() == RecordsCount);

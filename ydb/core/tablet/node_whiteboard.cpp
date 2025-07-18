@@ -65,6 +65,11 @@ public:
         SystemStateInfo.SetStartTime(ctx.Now().MilliSeconds());
         ctx.Send(ctx.SelfID, new TEvPrivate::TEvUpdateRuntimeStats());
 
+        if (IsBridgeMode(ctx)) {
+            const TActorId wardenId = MakeBlobStorageNodeWardenID(SelfId().NodeId());
+            ctx.Send(wardenId, new TEvNodeWardenQueryStorageConfig(true));
+        }
+
         auto utils = NKikimr::GetServiceCounters(NKikimr::AppData()->Counters, "utils");
         UserTime = utils->GetCounter("Process/UserTime", true);
         SysTime = utils->GetCounter("Process/SystemTime", true);
@@ -98,6 +103,7 @@ protected:
     ui64 SumNetworkWriteThroughput = 0;
     NKikimrWhiteboard::TSystemStateInfo SystemStateInfo;
     THolder<NTracing::ITraceCollection> TabletIntrospectionData;
+    TString BridgePileName;
 
     NMonitoring::TDynamicCounters::TCounterPtr MaxClockSkewWithPeerUsCounter;
     NMonitoring::TDynamicCounters::TCounterPtr MaxClockSkewPeerIdCounter;
@@ -572,6 +578,7 @@ protected:
         HFunc(TEvPrivate::TEvSendListNodes, Handle);
         HFunc(TEvPrivate::TEvUpdateRuntimeStats, Handle);
         HFunc(TEvPrivate::TEvCleanupDeadTablets, Handle);
+        HFunc(TEvNodeWardenStorageConfig, Handle);
     )
 
     void Handle(TEvWhiteboard::TEvTabletStateUpdate::TPtr &ev, const TActorContext &ctx) {
@@ -585,6 +592,16 @@ protected:
         }
     }
 
+    bool ShouldReportClockSkew(const NKikimrWhiteboard::TNodeStateInfo &info, const TActorContext &ctx) {
+        if (!info.GetSameScope()) {
+            return false;
+        }
+        if (!IsBridgeMode(ctx)) {
+            return true;
+        }
+        return BridgePileName == info.GetPeerBridgePileName();
+    }
+
     void Handle(TEvWhiteboard::TEvNodeStateUpdate::TPtr &ev, const TActorContext &ctx) {
         auto& nodeStateInfo = NodeStateInfo[ev->Get()->Record.GetPeerName()];
         ui64 previousChangeTime = nodeStateInfo.GetChangeTime();
@@ -596,7 +613,7 @@ protected:
         } else {
             nodeStateInfo.ClearWriteThroughput();
         }
-        if (ev->Get()->Record.GetSameScope()) {
+        if (ShouldReportClockSkew(info, ctx)) {
             i64 skew = ev->Get()->Record.GetClockSkewUs();
             if (abs(skew) > abs(MaxClockSkewWithPeerUs)) {
                 MaxClockSkewWithPeerUs = skew;
@@ -1251,6 +1268,15 @@ protected:
             }
         }
         ctx.Schedule(TDuration::Seconds(60), new TEvPrivate::TEvCleanupDeadTablets());
+    }
+
+    void Handle(TEvNodeWardenStorageConfig::TPtr &ev, const TActorContext &ctx) {
+        const auto& bridgeInfo = ev->Get()->BridgeInfo();
+        if (bridgeInfo) {
+            size_t bridgePileId = bridgeInfo->SelfNodePile->BridgePileId.GetRawId();
+            Y_ABORT_UNLESS(bridgePileId < ApData(ctx)->BridgeConfig->PilesSize());
+            BridgePileName = ApData(ctx)->BridgeConfig->GetPiles(bridgePileId);
+        }
     }
 };
 

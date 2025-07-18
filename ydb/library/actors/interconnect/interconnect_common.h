@@ -89,6 +89,7 @@ namespace NActors {
         double Utilization;
         ui64 ConnectTime;
         ui64 BytesWrittenToSocket;
+        TString PeerBridgePileName;
     };
 
     struct TChannelSettings {
@@ -128,6 +129,7 @@ namespace NActors {
         std::unordered_map<ui16, TString> ChannelName;
         std::optional<ui32> OutgoingHandshakeInflightLimit;
         std::vector<TActorId> ConnectionCheckerActorIds; // a list of actors used for checking connection params
+        TString BridgePileName;
 
         struct TVersionInfo {
             TString Tag; // version tag for this node

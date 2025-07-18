@@ -115,6 +115,7 @@ namespace NActors {
                 Metrics = Common->Metrics ? CreateInterconnectMetrics(Common) : CreateInterconnectCounters(Common);
             }
             Metrics->SetPeerInfo(PeerNodeId, name, info.Location.GetDataCenterId());
+            BridgePileName = info.Location.GetBridgePileName();
 
             LOG_DEBUG_IC("ICP02", "configured for host %s", name.data());
 

@@ -11,34 +11,15 @@ and timeout (by default, the maximum response time from healthcheck). Documentat
 * 17148:Extended federated query capabilities to support a new external data source [Prometheus](https://en.wikipedia.org/wiki/Prometheus_(software)). Documentation is under construction YQ-4261 [#17148](https://github.com/ydb-platform/ydb/pull/17148) ([Stepan](https://github.com/pstpn))
 * 17007:Extended federated query capabilities to support a new external data source [Apache Iceberg](https://iceberg.apache.org). Documentation is under construction YQ-4266 [#17007](https://github.com/ydb-platform/ydb/pull/17007) ([Slusarenko Igor](https://github.com/buhtr))
 * 16076:Added automatic cleanup of temporary tables and directories created during S3 export operations. Previously, users had to manually remove temporary directories and tables that were created as part of the export pipeline. [#16076](https://github.com/ydb-platform/ydb/pull/16076) ([stanislav_shchetinin](https://github.com/stanislav-shchetinin))
-* 20284:Added GeneralCache limit control to MemoryController [#20284](https://github.com/ydb-platform/ydb/pull/20284) ([Vladilen](https://github.com/Vladilen))
 * 20176:Added automatic creation and deletion of a service consumer for topic compaction. [#20176](https://github.com/ydb-platform/ydb/pull/20176) ([FloatingCrowbar](https://github.com/FloatingCrowbar))
-* 19994:Added CS Group Memory Limiter and Blob cache configuration to MemoryController (#19708) [#19994](https://github.com/ydb-platform/ydb/pull/19994) ([Vladilen](https://github.com/Vladilen))
-* 19989:Added the RequireDbPrefixInSecretName flag [#19989](https://github.com/ydb-platform/ydb/pull/19989) ([Oleg Doronin](https://github.com/dorooleg))
-* 19678:- Added support for [idempotent producers](https://cwiki.apache.org/confluence/display/KAFKA/Idempotent+Producer) to the YDB implementation of the Apache Kafka protocol. [#19678](https://github.com/ydb-platform/ydb/pull/19678) ([qyryq](https://github.com/qyryq))
+* 19994:Added CS Group Memory Limiter and Blob cache configuration to MemoryController. (#19708) [#19994](https://github.com/ydb-platform/ydb/pull/19994) ([Vladilen](https://github.com/Vladilen))
+* 19678:Added support for [idempotent producers](https://cwiki.apache.org/confluence/display/KAFKA/Idempotent+Producer) to the YDB implementation of the Apache Kafka protocol. [#19678](https://github.com/ydb-platform/ydb/pull/19678) ([qyryq](https://github.com/qyryq))
 * 19444:Introduced a new UnorderedData protocol for full synchronization, which allows taking a full index snapshot only once per full sync session. The new protocol will be used to send DoNotKeep flags from Phantom Flag Storage, which will be sent without relying on the linear order. For now the new protocol is disabled by default. [#19444](https://github.com/ydb-platform/ydb/pull/19444) ([Sergey Belyakov](https://github.com/serbel324))
 * 19337:* Introduced two new Distributed Storage parameters — `GroupSizeInUnits` property of storage groups and `SlotSizeInUnits` of PDisks. Docs: #19364 [#19337](https://github.com/ydb-platform/ydb/pull/19337) ([Yaroslav Dynnikov](https://github.com/rosik))
-* 18955:Added a new external data source to YDB topics.
-Example:
-```
-  CREATE OBJECT token_secret (TYPE SECRET) WITH (value = "...");
-
-  CREATE EXTERNAL DATA SOURCE `source_name` WITH (
-      SOURCE_TYPE="Ydb",
-      LOCATION="ydb.serverless.yandexcloud.net:2135",
-      DATABASE_NAME="/ru-central1/b1gtl2kg13him37quoo6/etni8pumlo8mo3e0cemr",
-      AUTH_METHOD="TOKEN",
-      USE_TLS="true",
-      TOKEN_SECRET_NAME="token_secret");
-
-   SELECT * FROM `source_name`.`topic_name`
-      WITH (
-           FORMAT="json_each_row",
-           SCHEMA=(cnt UInt64 NOT NULL,  k String NOT NULL))
-      LIMIT 1;
-```
-... [#18955](https://github.com/ydb-platform/ydb/pull/18955) ([Dmitry Kardymon](https://github.com/kardymonds))
+* 18955:Added a new external data source to YDB topics. [#18955](https://github.com/ydb-platform/ydb/pull/18955) ([Dmitry Kardymon](https://github.com/kardymonds))
 * 18544:Added shared metadata cache. Now all column shards on the same node share the same metadata cache by default. To disable the shared metadata cache, use the `EnableSharedMetadataAccessorCache` flag. The default cache size is 1 GB, this value can be changed in the `SharedMetadataAccessorCacheSize` parameter. [#18544](https://github.com/ydb-platform/ydb/pull/18544) ([Iurii Kravchenko](https://github.com/XJIE6))
+* 19680:Implemented the select load type for the vector workload test. [#19680](https://github.com/ydb-platform/ydb/pull/19680) ([azevaykin](https://github.com/azevaykin))
+* 20040:Enabled verbose memory limit by default in recipe [#20040](https://github.com/ydb-platform/ydb/pull/20040) ([Ivan](https://github.com/abyss7))
 
 ### Bug fixes
 
@@ -52,8 +33,6 @@ Example:
 * 16764:Fixed redirects from cluster endpoints (storage nodes) to database nodes, resolving inconsistent behavior where some system tables were not visible. #16763 [#16764](https://github.com/ydb-platform/ydb/pull/16764) ([Alexey Efimov](https://github.com/adameat))
 * 17198:Fixed an issue with UUID data type handling in YDB CLI backup/restore operations. [#17198](https://github.com/ydb-platform/ydb/pull/17198) ([Semyon Danilov](https://github.com/SammyVimes))
 * 17157:Viewer API: Fixed the retrieval of tablet list for tables implementing secondary indexes. #17103 [#17157](https://github.com/ydb-platform/ydb/pull/17157) ([Alexey Efimov](https://github.com/adameat))
-* 20307:[Ticket](https://github.com/ydb-platform/ydb/issues/20293) [#20307](https://github.com/ydb-platform/ydb/pull/20307) ([Evgenik2](https://github.com/Evgenik2))
-* 20243:Fixed an issue where a CDC stream recorded in an auto-partitioned topic could stop working after the topic was split several times. When this happened, modifying rows in the table would result in a “table is overloaded” error. [#20243](https://github.com/ydb-platform/ydb/pull/20243) ([Nikolay Shestakov](https://github.com/nshestakov))
 * 20238:CS fixed race in CPU limiter [#20238](https://github.com/ydb-platform/ydb/pull/20238) ([Pisarenko Grigoriy](https://github.com/GrigoriyPA))
 * 20223:Do not fold SafeCast because it could produce unexpected result
 Fix for KIKIMR-23489 [#20223](https://github.com/ydb-platform/ydb/pull/20223) ([Denis Khalikov](https://github.com/denis0x0D))
@@ -75,22 +54,3 @@ fixes https://github.com/ydb-platform/ydb/issues/20294 [#20175](https://github.c
 * 20048:Improved performance of upsert operations for tables with defaults. Upsert operations now ignore the last DefaulFilledColumnsCnt columns if a row exist. This logic allows QP to avoid reading rows to check if it exists (the whole operation with default columns is processed at a shard). [#20048](https://github.com/ydb-platform/ydb/pull/20048) ([r314-git](https://github.com/r314-git))
 * 19724:Added the `buffer_page_alloc_size` configuration parameter with the default value of 4Kb [#19724](https://github.com/ydb-platform/ydb/pull/19724) ([Ivan](https://github.com/abyss7))
 * 19687:Password verification is extracted to a separate actor from `TSchemeShard` local transaction. [#19687](https://github.com/ydb-platform/ydb/pull/19687) ([Yury Kiselev](https://github.com/yurikiselev))
-
-### YDB UI
-
-* 20040:Enabled verbose memory limit by default in recipe [#20040](https://github.com/ydb-platform/ydb/pull/20040) ([Ivan](https://github.com/abyss7))
-* 19680:Implemented the select load type for the vector workload test.
-
-Supported options:
-  --table VAL             Table name.                          Default: "vector_index_workload".
-  --index VAL             Index name.                          Default: "index".
-  --targets VAL           Number of vectors to search as targets.                          Default: 100.
-  --limit VAL             Number of top vectors to return.                          Default: 5.
-  --kmeans-tree-clusters VAL                          Number of top clusters during search.                          Default: 1.
-  --recall-threads VAL    Number of threads for concurrent queries during recall  measurement.                          Default: 10.
-  --recall                Measure recall metrics. It trains on 'targets' vector  by bruce-force search.  Default: 0.
-
-  
-Example of usage:
-`ydb  workload vector run select --table wikipedia --index prefix_index --recall` [#19680](https://github.com/ydb-platform/ydb/pull/19680) ([azevaykin](https://github.com/azevaykin))
-

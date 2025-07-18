@@ -47,14 +47,6 @@ public:
         Y_ENSURE(key.size() <= KeyTypes.size(), "Range key is too large");
     }
 
-    TOwnedCellVec MakeOwnedKey(const TConstArrayRef<TCell>& keyView) {
-        return TOwnedCellVec(keyView);
-    }
-
-    bool IsEqualFast(const TConstArrayRef<TCell>& lhs, const TConstArrayRef<TCell>& rhs) {
-        return lhs.data() == rhs.data() && lhs.size() == rhs.size();
-    }
-
     void SetKeyTypes(const TVector<NScheme::TTypeInfo>& keyTypes) {
         Y_ENSURE(keyTypes.size() >= KeyTypes.size(), "Number of key columns must not decrease over time");
         KeyTypes = keyTypes;

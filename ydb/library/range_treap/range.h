@@ -90,14 +90,6 @@ public:
     static void ValidateKey(const TKey& /*key*/) {
         // Do nothing
     }
-
-    static TKey MakeOwnedKey(const TKeyView& keyView) {
-        return TKey(keyView);
-    }
-
-    static bool IsEqualFast(const TKeyView& lhs, const TKeyView& rhs) {
-        return lhs == rhs;
-    }
 };
 
 }   // namespace NKikimr::NRangeTreap

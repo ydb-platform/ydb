@@ -113,17 +113,6 @@ private:
         }
     };
 
-    TOwnedRange MakeOwnedRange(const TRange& rangeView) {
-        TKey leftKey = Comparator.MakeOwnedKey(rangeView.LeftKey);
-        TKey rightKey;
-        if (!Comparator.IsEqualFast(rangeView.LeftKey, rangeView.RightKey)) {
-            rightKey = Comparator.MakeOwnedKey(rangeView.RightKey);
-        } else {
-            rightKey = leftKey;
-        }
-        return TOwnedRange(std::move(leftKey), rangeView.LeftInclusive, std::move(rightKey), rangeView.RightInclusive);
-    }
-
 public:
     /**
       * Clears the tree
@@ -132,15 +121,6 @@ public:
         Values.clear();
         Root.Reset();
         Size_ = 0;
-    }
-
-    /**
-      * Adds mapping from the given range to the given value
-      */
-    void AddRange(const TRange& range, TValue value)
-        requires(!std::is_convertible_v<TRange, TOwnedRange>)
-    {
-        AddRange(MakeOwnedRange(range), std::move(value));
     }
 
     /**

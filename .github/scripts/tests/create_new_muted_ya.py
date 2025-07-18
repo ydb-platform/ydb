@@ -40,6 +40,7 @@ def execute_query(branch='main', build_type='relwithdebinfo', days_window=1):
     start_date = today - datetime.timedelta(days=days_window-1)
     end_date = today
     table_name = 'test_results/analytics/flaky_tests_window_1_days'
+    owners_table = 'test_results/analytics/testowners'
     
     query_start_time = datetime.datetime.now()
     logging.info(f"Executing query for branch='{branch}', build_type='{build_type}', days_window={days_window}")
@@ -48,18 +49,20 @@ def execute_query(branch='main', build_type='relwithdebinfo', days_window=1):
     
     query_string = f'''
     SELECT
-      test_name,
-      suite_folder,
-      full_name,
-      build_type,
-      branch,
-      SUM(pass_count) as pass_count,
-      SUM(fail_count) as fail_count,
-      MAX(owners) as owner
-    FROM `{table_name}`
-    WHERE date_window >= Date('{start_date}') AND date_window <= Date('{end_date}')
-      AND branch = '{branch}' AND build_type = '{build_type}'
-    GROUP BY test_name, suite_folder, full_name, build_type, branch
+      t.test_name,
+      t.suite_folder,
+      t.full_name,
+      t.build_type,
+      t.branch,
+      SUM(t.pass_count) as pass_count,
+      SUM(t.fail_count) as fail_count,
+      o.owners
+    FROM `{table_name}` t
+    LEFT JOIN `{owners_table}` o
+      ON t.full_name = o.full_name
+    WHERE t.date_window >= Date('{start_date}') AND t.date_window <= Date('{end_date}')
+      AND t.branch = '{branch}' AND t.build_type = '{build_type}'
+    GROUP BY test_name, suite_folder, full_name, build_type, branch, owners
     '''
     
     logging.info(f"SQL Query:\n{query_string}")
@@ -153,14 +156,6 @@ def is_flaky_test(test):
     runs = test.get('pass_count', 0) + fails
     return (fails >= 2) or (fails >= 1 and runs <= 10)
 
-def is_deleted_test(test):
-    """Проверяет, является ли тест удаленным (нет запусков)"""
-    return test.get('fail_count', 0) == 0 and test.get('pass_count', 0) == 0
-
-def is_stable_test(test):
-    """Проверяет, является ли тест стабильным"""
-    return test.get('muted_stable_n_days_today', False)
-
 def is_unmute_candidate(test, unmute_stats):
     """Проверяет, является ли тест кандидатом на размьют"""
     if not unmute_stats:
@@ -222,94 +217,88 @@ def apply_and_add_mutes(aggregated_for_mute, aggregated_for_unmute, aggregated_f
     logging.info(f"Processing {len(aggregated_for_mute)} tests for mute analysis")
 
     try:
-        # 1. Базовые категории тестов
-        deleted_tests, _ = create_file_set(aggregated_for_mute, is_deleted_test)
-        stable_tests, _ = create_file_set(aggregated_for_mute, is_stable_test)
-        flaky_tests, _ = create_file_set(aggregated_for_mute, is_flaky_test, use_wildcards=True)
-        
-        # 2. Кандидаты на mute
+        # 1. Кандидаты на mute
         def is_mute_candidate(test):
             return is_flaky_test(test)
         
-        muted_candidates, muted_candidates_debug = create_file_set(
+        to_mute, to_mute_debug = create_file_set(
             aggregated_for_mute, is_mute_candidate, resolution='to_mute'
         )
-        write_file_set(os.path.join(output_path, 'to_mute.txt'), muted_candidates, muted_candidates_debug)
+        write_file_set(os.path.join(output_path, 'to_mute.txt'), to_mute, to_mute_debug)
         
-        # 3. Кандидаты на размьют
+        # 2. Кандидаты на размьют
         def is_unmute_candidate_wrapper(test):
             return is_unmute_candidate(test, aggregated_for_unmute.get(test.get('full_name')))
         
-        unmuted_candidates, unmuted_candidates_debug = create_file_set(
+        to_unmute, to_unmute_debug = create_file_set(
             aggregated_for_mute, is_unmute_candidate_wrapper, mute_check, resolution='to_unmute'
         )
-        write_file_set(os.path.join(output_path, 'to_unmute.txt'), unmuted_candidates, unmuted_candidates_debug)
+        write_file_set(os.path.join(output_path, 'to_unmute.txt'), to_unmute, to_unmute_debug)
         
-        # 4. Кандидаты на удаление из mute
+        # 3. Кандидаты на удаление из mute (to_delete)
         def is_delete_candidate_wrapper(test):
             return is_delete_candidate(test, aggregated_for_delete.get(test.get('full_name')))
         
-        deleted_from_mute, deleted_from_mute_debug = create_file_set(
+        to_delete, to_delete_debug = create_file_set(
             aggregated_for_mute, is_delete_candidate_wrapper, mute_check, resolution='to_delete'
         )
-        write_file_set(os.path.join(output_path, 'to_delete.txt'), deleted_from_mute, deleted_from_mute_debug)
+        write_file_set(os.path.join(output_path, 'to_delete.txt'), to_delete, to_delete_debug)
         
-        # 5. Дополнительные файлы для анализа
-        # muted_ya - deleted
-        def is_muted_not_deleted(test):
-            test_string = create_test_string(test)
-            return test_string not in deleted_tests
-        
-        muted_ya_minus_deleted, muted_ya_minus_deleted_debug = create_file_set(
-            aggregated_for_mute, is_muted_not_deleted, mute_check
+        # 4. muted_ya (все замьюченные сейчас)
+        all_muted_ya, all_muted_ya_debug = create_file_set(
+            aggregated_for_mute, lambda test: mute_check(test.get('suite_folder'), test.get('test_name')) if mute_check else True
         )
-        write_file_set(os.path.join(output_path, 'muted_ya-deleted.txt'), muted_ya_minus_deleted, muted_ya_minus_deleted_debug)
+        write_file_set(os.path.join(output_path, 'muted_ya.txt'), all_muted_ya, all_muted_ya_debug)
+        to_mute_set = set(to_mute)
+        to_unmute_set = set(to_unmute)
+        to_delete_set = set(to_delete)
+        all_muted_ya_set = set(all_muted_ya)
         
-        # muted_ya - stable
-        def is_muted_not_stable(test):
-            test_string = create_test_string(test)
-            return test_string not in stable_tests
+        # 5. muted_ya+to_mute
+        muted_ya_plus_to_mute = sorted(list(all_muted_ya_set | to_mute_set))
+        muted_ya_plus_to_mute_debug = [d for t, d in zip(all_muted_ya, all_muted_ya_debug) if t in muted_ya_plus_to_mute]
+        muted_ya_plus_to_mute_debug += [d for t, d in zip(to_mute, to_mute_debug) if t in muted_ya_plus_to_mute and t not in all_muted_ya_set]
+        write_file_set(os.path.join(output_path, 'muted_ya+to_mute.txt'), muted_ya_plus_to_mute, muted_ya_plus_to_mute_debug)
         
-        muted_ya_minus_stable, muted_ya_minus_stable_debug = create_file_set(
-            aggregated_for_mute, is_muted_not_stable, mute_check
-        )
-        write_file_set(os.path.join(output_path, 'muted_ya-stable.txt'), muted_ya_minus_stable, muted_ya_minus_stable_debug)
+        # 6. muted_ya-to_unmute
+        muted_ya_minus_to_unmute = [t for t in all_muted_ya if t not in to_unmute_set]
+        muted_ya_minus_to_unmute_debug = [d for t, d in zip(all_muted_ya, all_muted_ya_debug) if t not in to_unmute_set]
+        write_file_set(os.path.join(output_path, 'muted_ya-to_unmute.txt'), muted_ya_minus_to_unmute, muted_ya_minus_to_unmute_debug)
         
-        # muted_ya - stable - deleted
-        def is_muted_not_stable_not_deleted(test):
-            test_string = create_test_string(test)
-            return test_string not in stable_tests and test_string not in deleted_tests
+        # 7. muted_ya-to_delete
+        muted_ya_minus_to_delete = [t for t in all_muted_ya if t not in to_delete_set]
+        muted_ya_minus_to_delete_debug = [d for t, d in zip(all_muted_ya, all_muted_ya_debug) if t not in to_delete_set]
+        write_file_set(os.path.join(output_path, 'muted_ya-to_delete.txt'), muted_ya_minus_to_delete, muted_ya_minus_to_delete_debug)
         
-        muted_ya_minus_stable_minus_deleted, muted_ya_minus_stable_minus_deleted_debug = create_file_set(
-            aggregated_for_mute, is_muted_not_stable_not_deleted, mute_check
-        )
-        write_file_set(os.path.join(output_path, 'muted_ya-stable-deleted.txt'), muted_ya_minus_stable_minus_deleted, muted_ya_minus_stable_minus_deleted_debug)
+        # 8. muted_ya-to_delete-to_unmute
+        muted_ya_minus_to_delete_to_unmute = [t for t in all_muted_ya if t not in to_delete_set and t not in to_unmute_set]
+        muted_ya_minus_to_delete_to_unmute_debug = [d for t, d in zip(all_muted_ya, all_muted_ya_debug) if t not in to_delete_set and t not in to_unmute_set]
+        write_file_set(os.path.join(output_path, 'muted_ya-to_delete-to_unmute.txt'), muted_ya_minus_to_delete_to_unmute, muted_ya_minus_to_delete_to_unmute_debug)
         
-        # muted_ya - stable - deleted + flaky
-        def is_muted_not_stable_not_deleted_or_flaky(test):
-            test_string = create_test_string(test)
-            is_muted_not_stable_not_deleted = test_string not in stable_tests and test_string not in deleted_tests
-            return is_muted_not_stable_not_deleted or is_flaky_test(test)
-        
-        muted_ya_minus_stable_minus_deleted_plus_flaky, muted_ya_minus_stable_minus_deleted_plus_flaky_debug = create_file_set(
-            aggregated_for_mute, is_muted_not_stable_not_deleted_or_flaky, mute_check, use_wildcards=True
-        )
-        write_file_set(os.path.join(output_path, 'muted_ya-stable-deleted+flaky.txt'), muted_ya_minus_stable_minus_deleted_plus_flaky, muted_ya_minus_stable_minus_deleted_plus_flaky_debug)
+        # 9. muted_ya-to_delete-to_unmute+to_mute
+        muted_ya_minus_to_delete_to_unmute_set = set(muted_ya_minus_to_delete_to_unmute)
+        muted_ya_minus_to_delete_to_unmute_plus_to_mute = sorted(list(muted_ya_minus_to_delete_to_unmute_set | to_mute_set))
+        # debug: из muted_ya_minus_to_delete_to_unmute_debug + to_mute_debug (если их нет в muted_ya)
+        muted_ya_minus_to_delete_to_unmute_plus_to_mute_debug = [d for t, d in zip(muted_ya_minus_to_delete_to_unmute, muted_ya_minus_to_delete_to_unmute_debug) if t in muted_ya_minus_to_delete_to_unmute_plus_to_mute]
+        muted_ya_minus_to_delete_to_unmute_plus_to_mute_debug += [d for t, d in zip(to_mute, to_mute_debug) if t in muted_ya_minus_to_delete_to_unmute_plus_to_mute and t not in muted_ya_minus_to_delete_to_unmute_set]
+        write_file_set(os.path.join(output_path, 'muted_ya-to_delete-to_unmute+to_mute.txt'), muted_ya_minus_to_delete_to_unmute_plus_to_mute, muted_ya_minus_to_delete_to_unmute_plus_to_mute_debug)
         
         # Логирование итоговых результатов
-        logging.info(f"Muted candidates: {len(muted_candidates)}")
-        logging.info(f"Unmuted candidates: {len(unmuted_candidates)}")
-        logging.info(f"Deleted from mute: {len(deleted_from_mute)}")
-        logging.info(f"Muted_ya - deleted: {len(muted_ya_minus_deleted)}")
-        logging.info(f"Muted_ya - stable: {len(muted_ya_minus_stable)}")
-        logging.info(f"Muted_ya - stable - deleted: {len(muted_ya_minus_stable_minus_deleted)}")
-        logging.info(f"Muted_ya - stable - deleted + flaky: {len(muted_ya_minus_stable_minus_deleted_plus_flaky)}")
+        logging.info(f"To mute: {len(to_mute)}")
+        logging.info(f"To unmute: {len(to_unmute)}")
+        logging.info(f"To delete: {len(to_delete)}")
+        logging.info(f"Muted_ya: {len(all_muted_ya)}")
+        logging.info(f"muted_ya+to_mute: {len(muted_ya_plus_to_mute)}")
+        logging.info(f"muted_ya-to_unmute: {len(muted_ya_minus_to_unmute)}")
+        logging.info(f"muted_ya-to_delete: {len(muted_ya_minus_to_delete)}")
+        logging.info(f"muted_ya-to_delete-to_unmute: {len(muted_ya_minus_to_delete_to_unmute)}")
+        logging.info(f"muted_ya-to_delete-to_unmute+to_mute: {len(muted_ya_minus_to_delete_to_unmute_plus_to_mute)}")
         
     except (KeyError, TypeError) as e:
         logging.error(f"Error processing test data: {e}. Check your query results for valid keys.")
         return []
 
-    return len(muted_candidates)
+    return len(to_mute)
 
 
 

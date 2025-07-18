@@ -22,6 +22,9 @@
 
 #include <util/generic/serialized_enum.h>
 #include <util/digest/numeric.h>
+#include <util/stream/output.h>
+
+#include <atomic>
 
 #include <yql/essentials/public/udf/arrow/util.h>
 #include <yql/essentials/public/udf/arrow/block_item_hasher.h>
@@ -32,6 +35,11 @@
 #include <chrono>
 #include <optional>
 
+// Специализация для вывода атомных переменных в поток
+// template<>
+// inline IOutputStream& operator<<(IOutputStream& out, const std::atomic<long>& atomic_val) {
+//     return out << atomic_val.load();
+// }
 namespace NKikimr::NMiniKQL {
 
 namespace {
@@ -94,6 +102,35 @@ size_t CalculateExpectedOverflowSize(const NPackedTuple::TTupleLayout* layout, s
     // Lets expect that there will be no more than 10% of var sized values with length
     // bigger than 64 bytes.
     return varSizedCount * nTuples * 64 / 10;
+}
+
+void EnsureOverflowCapacity(IBlockLayoutConverter::TPackResult& packResult, size_t blockSize, const char* context) {
+    // Calculate estimated size needed for this block
+    size_t estimatedOverflowForBlock = blockSize * 100; // Conservative estimate: 100 bytes per tuple for variable-sized data
+    size_t currentOverflowSize = static_cast<size_t>(packResult.Overflow.size());
+    size_t currentCapacity = static_cast<size_t>(packResult.Overflow.capacity());
+    size_t requiredCapacity = currentOverflowSize + estimatedOverflowForBlock;
+    
+    // If we need more capacity, reserve it now
+    if (requiredCapacity > currentCapacity) {
+        // Prevent overflow buffer from becoming too large (more than 100MB)
+        constexpr size_t MAX_OVERFLOW_SIZE = 100 * 1024 * 1024; // 100 MB
+        if (requiredCapacity > MAX_OVERFLOW_SIZE) {
+            Cerr << "ERROR: Overflow buffer size would exceed maximum limit in " << context << ": " 
+                 << requiredCapacity << " bytes (max: " << MAX_OVERFLOW_SIZE << " bytes). "
+                 << "This indicates abnormally large variable-sized data." << Endl;
+            Cerr << "WARNING: Continuing with smaller buffer to gather more diagnostic data..." << Endl;
+            // Don't throw, just use smaller capacity
+            requiredCapacity = MAX_OVERFLOW_SIZE;
+        }
+        
+        size_t newCapacity = std::max(requiredCapacity * 2, currentCapacity * 2); // At least double
+        newCapacity = std::min(newCapacity, MAX_OVERFLOW_SIZE); // Cap at maximum
+        
+        Cerr << "DEBUGGING: Pre-emptively expanding overflow capacity in " << context << " from " << currentCapacity 
+             << " to " << newCapacity << " (estimated need: " << requiredCapacity << ")" << Endl;
+        packResult.Overflow.reserve(newCapacity);
+    }
 }
 
 // -------------------------------------------------------------------
@@ -400,6 +437,13 @@ class TExternalPayloadStorage : public TComputationValue<TExternalPayloadStorage
         static std::pair<TBlock, TBlock> SplitBlock(
             const TBlock& block, TExternalPayloadStorage& payloadStorage, const THashSet<ui32>& keyColumnsSet)
         {
+            // Validate key column indices
+            for (ui32 keyCol : keyColumnsSet) {
+                if (keyCol >= block.Columns.size()) {
+                    throw yexception() << "Key column index " << keyCol << " out of bounds, block has " << static_cast<size_t>(block.Columns.size()) << " columns";
+                }
+            }
+            
             TBlock keyBlock;
             TBlock payloadBlock;
             for (size_t i = 0; i < block.Columns.size(); ++i) {
@@ -412,6 +456,11 @@ class TExternalPayloadStorage : public TComputationValue<TExternalPayloadStorage
             }
             keyBlock.Size = block.Size;
             payloadBlock.Size = block.Size;
+
+            // Validate that we have at least one key column
+            if (keyBlock.Columns.empty()) {
+                throw yexception() << "No key columns found in block";
+            }
 
             // Init index column
             auto* rawDataBuffer = payloadStorage.IndirectionIndexes.array()->GetMutableValues<ui64>(1);
@@ -581,9 +630,9 @@ public:
     bool HasEnoughMemory() const {
         /// TODO: vector size probably should be compared with extrenal parameter
         ///       not with its own capacity
-        return ProbePackedInput.Overflow.capacity() == 0 ||
-               ProbePackedInput.Overflow.size() * 5 <
-                   ProbePackedInput.Overflow.capacity() * 4;
+        return static_cast<size_t>(ProbePackedInput.Overflow.capacity()) == 0 ||
+               static_cast<size_t>(ProbePackedInput.Overflow.size()) * 5 <
+                   static_cast<size_t>(ProbePackedInput.Overflow.capacity()) * 4;
     }
 
     bool HasBlocks() const {
@@ -712,9 +761,11 @@ public:
         // Create converters
         TVector<TType*> leftItemTypes;
         MakeTupleConverter(ctx, IsBuildIndirected_, *leftItemTypesArg, BuildKeyColumnsSet_, &leftItemTypes, &BuildExternalPayloadStorage_, &BuildConverter_);
+        Cerr << "DEBUGGING: THashJoin created BuildConverter_ @" << static_cast<void*>(BuildConverter_.get()) << " [HashJoin@" << static_cast<void*>(this) << "]" << Endl;
 
         TVector<TType*> rightItemTypes;
         MakeTupleConverter(ctx, IsProbeIndirected_, *rightItemTypesArg, ProbeKeyColumnsSet_, &rightItemTypes, &ProbeExternalPayloadStorage_, &ProbeConverter_);
+        Cerr << "DEBUGGING: THashJoin created ProbeConverter_ @" << static_cast<void*>(ProbeConverter_.get()) << " [HashJoin@" << static_cast<void*>(this) << "]" << Endl;
 
         Table_.SetTupleLayout(BuildConverter_->GetTupleLayout());
 
@@ -728,13 +779,36 @@ public:
             buildPayloadStorage, probePayloadStorage, wasSwapped);
         auto& joinState = *static_cast<TJoinState*>(JoinState_.AsBoxed().Get());
 
+        // CRITICAL: Ensure BuildPackedInput is completely clean
+        // Pack() метод работает в аккумулятивном режиме - добавляет данные к существующим!
+        // Без сброса nTuples=0, новые данные добавляются к старым от предыдущего HashJoin
+        joinState.BuildPackedInput.PackedTuples.clear();
+        joinState.BuildPackedInput.Overflow.clear(); 
+        joinState.BuildPackedInput.NTuples = 0;  // ← КЛЮЧЕВОЕ: сброс счетчика!
+        
+        Cerr << "DEBUGGING: BuildPackedInput cleared - PackedTuples.size()=" << static_cast<size_t>(joinState.BuildPackedInput.PackedTuples.size())
+             << ", PackedTuples.capacity()=" << static_cast<size_t>(joinState.BuildPackedInput.PackedTuples.capacity())
+             << ", Overflow.size()=" << static_cast<size_t>(joinState.BuildPackedInput.Overflow.size()) 
+             << ", Overflow.capacity()=" << static_cast<size_t>(joinState.BuildPackedInput.Overflow.capacity())
+             << ", NTuples=" << joinState.BuildPackedInput.NTuples 
+             << " [HashJoin@" << static_cast<void*>(this) << "]" << Endl;
+        
         // Reserve buffers for overflow
         size_t nTuplesBuild = 0;
         for (auto& block: BuildData_) {
             nTuplesBuild += block.Size;
         }
-        joinState.BuildPackedInput.Overflow.reserve(
-            CalculateExpectedOverflowSize(BuildConverter_->GetTupleLayout(), nTuplesBuild));
+        size_t overflowReserveSize = CalculateExpectedOverflowSize(BuildConverter_->GetTupleLayout(), nTuplesBuild);
+        Cerr << "DEBUGGING: Reserving overflow memory: " << static_cast<size_t>(overflowReserveSize) << " bytes" << Endl;
+        joinState.BuildPackedInput.Overflow.reserve(overflowReserveSize);
+
+        // Reserve memory for build input PackedTuples
+        size_t reserveSize = nTuplesBuild * BuildConverter_->GetTupleLayout()->TotalRowSize;
+        Cerr << "DEBUGGING: Reserving PackedTuples memory: nTuplesBuild=" << static_cast<size_t>(nTuplesBuild) 
+             << ", TotalRowSize=" << static_cast<size_t>(BuildConverter_->GetTupleLayout()->TotalRowSize) 
+             << ", reserveSize=" << static_cast<size_t>(reserveSize) << Endl;
+        joinState.BuildPackedInput.PackedTuples.reserve(reserveSize);
+        Cerr << "DEBUGGING: PackedTuples reserved, capacity=" << static_cast<size_t>(joinState.BuildPackedInput.PackedTuples.capacity()) << Endl;
 
         size_t nTuplesProbe = CalcMaxBlockLength(rightItemTypes, false) * 4; // Lets assume that average join selectivity eq 25%, so we have to fetch 4 blocks in general to fill output properly
         joinState.ProbePackedInput.Overflow.reserve(
@@ -760,17 +834,376 @@ public:
             globalResourceMeter.UpdateStageSpentTime(JoinName_, "Build", spent);
         };
 
+        // Check if we have any data to build index from
+        Cerr << "DEBUGGING: BuildIndex started, BuildData_ size: " << static_cast<size_t>(BuildData_.size()) 
+             << " [HashJoin@" << static_cast<void*>(this) << "]" << Endl;
+        if (BuildData_.empty()) {
+            Cerr << "DEBUGGING: BuildData_ is empty, returning" << Endl;
+            return; // Nothing to build
+        }
+
         auto& joinState = *static_cast<TJoinState*>(JoinState_.AsBoxed().Get());
-        auto payloadStorage = IsBuildIndirected_ ? static_cast<TExternalPayloadStorage*>(BuildExternalPayloadStorage_.AsBoxed().Get()) : nullptr; 
+        auto payloadStorage = IsBuildIndirected_ ? static_cast<TExternalPayloadStorage*>(BuildExternalPayloadStorage_.AsBoxed().Get()) : nullptr;
+        
+                Cerr << "DEBUGGING: Using JoinState@" << static_cast<void*>(&joinState)
+             << ", BuildPackedInput@" << static_cast<void*>(&joinState.BuildPackedInput)
+             << " [HashJoin@" << static_cast<void*>(this) << "]" << Endl;
+        Cerr << "DEBUGGING: BuildPackedInput buffers - PackedTuples.data()=" << static_cast<void*>(joinState.BuildPackedInput.PackedTuples.data())
+             << ", Overflow.data()=" << static_cast<void*>(joinState.BuildPackedInput.Overflow.data()) << Endl;
+        Cerr << "DEBUGGING: BuildConverter_ address: " << static_cast<void*>(BuildConverter_.get()) << Endl; 
+
+        // Validate converter is properly initialized
+        if (!BuildConverter_) {
+            throw yexception() << "BuildConverter is not initialized";
+        }
+        if (!BuildConverter_->GetTupleLayout()) {
+            throw yexception() << "BuildConverter TupleLayout is not initialized";
+        }
+        
+        auto* layout = BuildConverter_->GetTupleLayout();
+        Cerr << "DEBUGGING: Converter validated, TupleLayout TotalRowSize: " << layout->TotalRowSize << Endl;
+        Cerr << "DEBUGGING: IsBuildIndirected_: " << IsBuildIndirected_ << Endl;
+        
+                 // Debug TupleLayout structure
+         Cerr << "DEBUGGING: TupleLayout columns: " << static_cast<size_t>(layout->Columns.size()) << Endl;
+         for (size_t i = 0; i < layout->Columns.size(); ++i) {
+             const auto& col = layout->Columns[i];
+             Cerr << "  Column[" << i << "]: role=" << (int)col.Role 
+                  << ", sizeType=" << (int)col.SizeType
+                  << ", offset=" << col.Offset << Endl;
+         }
+        Cerr << "DEBUGGING: Initial PackedTuples capacity: " << static_cast<size_t>(joinState.BuildPackedInput.PackedTuples.capacity()) 
+             << ", size: " << static_cast<size_t>(joinState.BuildPackedInput.PackedTuples.size()) << Endl;
 
         for (auto& block: BuildData_) {
+            // Add validation checks
+            if (block.Size == 0) {
+                continue; // Skip empty blocks
+            }
+            if (block.Columns.empty()) {
+                continue; // Skip blocks without columns
+            }
+            
+            // Validate that all columns have correct length
+            for (const auto& column : block.Columns) {
+                if (!column.array() || column.array()->length != static_cast<int64_t>(block.Size)) {
+                                    throw yexception() << "Invalid column length: expected " << static_cast<size_t>(block.Size)
+                    << ", got " << (column.array() ? column.array()->length : -1);
+                }
+            }
+
             if (IsBuildIndirected_) {
                 auto [keyBlock, payloadBlock] = TExternalPayloadStorage::SplitBlock(
                                                     block, *payloadStorage, BuildKeyColumnsSet_);
+                
+                // Validate key block before packing
+                if (keyBlock.Size == 0 || keyBlock.Columns.empty()) {
+                    continue; // Skip empty key blocks
+                }
+                
+                // SIMPLE DEBUG
+                Cerr << "DEBUGGING: About to call Pack() - keyBlock.Size=" << static_cast<size_t>(keyBlock.Size) << ", nTuples=" << joinState.BuildPackedInput.NTuples << Endl;
+                
+                // DETAILED DATA ANALYSIS
+                Cerr << "=== BLOCK DATA ANALYSIS (indirected) ===" << Endl;
+                Cerr << "Block has " << static_cast<size_t>(keyBlock.Columns.size()) << " columns, " << static_cast<size_t>(keyBlock.Size) << " rows" << Endl;
+                
+                for (size_t i = 0; i < keyBlock.Columns.size(); ++i) {
+                    auto& col = keyBlock.Columns[i];
+                    Cerr << "Column[" << i << "]: ";
+                    
+                    if (!col.array()) {
+                        Cerr << "NULL ARRAY!" << Endl;
+                        continue;
+                    }
+                    
+                    auto array = col.array();
+                    Cerr << "type=" << array->type->ToString() 
+                         << ", length=" << static_cast<int64_t>(array->length) 
+                         << ", null_count=" << static_cast<int64_t>(array->null_count) << Endl;
+                    
+                    // Show sample values for different types
+                    if (array->length > 0) {
+                        try {
+                            if (array->type->id() == arrow::Type::INT64) {
+                                auto int64Array = std::static_pointer_cast<arrow::Int64Array>(arrow::MakeArray(array));
+                                Cerr << "  Sample values: ";
+                                for (int64_t j = 0; j < std::min<int64_t>(5, array->length); ++j) {
+                                    if (!int64Array->IsNull(j)) {
+                                        Cerr << int64Array->Value(j);
+                                    } else {
+                                        Cerr << "NULL";
+                                    }
+                                    if (j < std::min<int64_t>(4, array->length - 1)) Cerr << ", ";
+                                }
+                                Cerr << Endl;
+                            } else if (array->type->id() == arrow::Type::INT32) {
+                                auto int32Array = std::static_pointer_cast<arrow::Int32Array>(arrow::MakeArray(array));
+                                Cerr << "  Sample values: ";
+                                for (int64_t j = 0; j < std::min<int64_t>(5, array->length); ++j) {
+                                    if (!int32Array->IsNull(j)) {
+                                        Cerr << int32Array->Value(j);
+                                    } else {
+                                        Cerr << "NULL";
+                                    }
+                                    if (j < std::min<int64_t>(4, array->length - 1)) Cerr << ", ";
+                                }
+                                Cerr << Endl;
+                            } else if (array->type->id() == arrow::Type::STRING) {
+                                auto stringArray = std::static_pointer_cast<arrow::StringArray>(arrow::MakeArray(array));
+                                
+                                // Calculate string statistics
+                                size_t totalLength = 0;
+                                size_t minLength = SIZE_MAX;
+                                size_t maxLength = 0;
+                                size_t nullCount = 0;
+                                
+                                for (int64_t j = 0; j < array->length; ++j) {
+                                    if (!stringArray->IsNull(j)) {
+                                        auto str = stringArray->GetString(j);
+                                        size_t len = str.length();
+                                        totalLength += len;
+                                        minLength = std::min(minLength, len);
+                                        maxLength = std::max(maxLength, len);
+                                    } else {
+                                        nullCount++;
+                                    }
+                                }
+                                
+                                double avgLength = (array->length - nullCount) > 0 ? 
+                                    static_cast<double>(totalLength) / (array->length - nullCount) : 0.0;
+                                
+                                Cerr << "  String stats: total_len=" << static_cast<size_t>(totalLength) 
+                                     << ", avg_len=" << avgLength
+                                     << ", min_len=" << (minLength == SIZE_MAX ? 0 : minLength)
+                                     << ", max_len=" << static_cast<size_t>(maxLength) 
+                                     << ", nulls=" << static_cast<size_t>(nullCount) << Endl;
+                                
+                                Cerr << "  Sample values: ";
+                                for (int64_t j = 0; j < std::min<int64_t>(3, array->length); ++j) {
+                                    if (!stringArray->IsNull(j)) {
+                                        auto str = stringArray->GetString(j);
+                                        if (str.length() > 30) {
+                                            Cerr << "\"" << str.substr(0, 27) << "...\" (len=" << static_cast<size_t>(str.length()) << ")";
+                                        } else {
+                                            Cerr << "\"" << str << "\"";
+                                        }
+                                    } else {
+                                        Cerr << "NULL";
+                                    }
+                                    if (j < std::min<int64_t>(2, array->length - 1)) Cerr << ", ";
+                                }
+                                Cerr << Endl;
+                            } else if (array->type->id() == arrow::Type::DOUBLE) {
+                                auto doubleArray = std::static_pointer_cast<arrow::DoubleArray>(arrow::MakeArray(array));
+                                Cerr << "  Sample values: ";
+                                for (int64_t j = 0; j < std::min<int64_t>(5, array->length); ++j) {
+                                    if (!doubleArray->IsNull(j)) {
+                                        Cerr << doubleArray->Value(j);
+                                    } else {
+                                        Cerr << "NULL";
+                                    }
+                                    if (j < std::min<int64_t>(4, array->length - 1)) Cerr << ", ";
+                                }
+                                Cerr << Endl;
+                            } else {
+                                Cerr << "  [Unsupported type for sample display]" << Endl;
+                            }
+                        } catch (const std::exception& e) {
+                            Cerr << "  [Error reading sample values: " << e.what() << "]" << Endl;
+                        } catch (...) {
+                            Cerr << "  [Unknown error reading sample values]" << Endl;
+                        }
+                    }
+                }
+                Cerr << "=== END BLOCK DATA ANALYSIS ===" << Endl;
+
+                // Ensure we have enough overflow capacity before packing
+                EnsureOverflowCapacity(joinState.BuildPackedInput, keyBlock.Size, "indirected pack");
+                
                 BuildConverter_->Pack(keyBlock.Columns, joinState.BuildPackedInput);
+                
+                Cerr << "DEBUGGING: Pack completed successfully" << Endl;
                 payloadStorage->AddBlock(std::move(payloadBlock));
             } else {
+                // Detailed logging before Pack (non-indirected case)
+                Cerr << "DEBUGGING: About to pack block (non-indirected) with " << static_cast<size_t>(block.Columns.size()) << " columns, size=" << static_cast<size_t>(block.Size) 
+                     << " [HashJoin@" << static_cast<void*>(this) << "]" << Endl;
+                for (size_t i = 0; i < block.Columns.size(); ++i) {
+                    auto& col = block.Columns[i];
+                    Cerr << "  Column[" << i << "]: " << (col.array() ? "valid" : "null")
+                         << ", length=" << (col.array() ? col.array()->length : -1);
+                    
+                    // For variable-sized columns (5-8), inspect the actual data
+                    if (col.array() && i >= 5 && i <= 8) {
+                        auto array = col.array();
+                        auto type = array->type;
+                        Cerr << ", type=" << type->ToString();
+                        
+                        // Check if this is a string/binary array
+                        if (type->id() == arrow::Type::STRING || type->id() == arrow::Type::BINARY) {
+                            auto stringArray = std::static_pointer_cast<arrow::StringArray>(arrow::MakeArray(array));
+                            
+                            // Calculate total string data size
+                            size_t totalDataSize = 0;
+                            if (stringArray->value_data()) {
+                                totalDataSize = stringArray->value_data()->size();
+                            }
+                            
+                            size_t avgStringLength = array->length > 0 ? totalDataSize / array->length : 0;
+                            Cerr << ", total_data_size=" << totalDataSize << ", avg_string_len=" << avgStringLength;
+                            
+                            // Show first few strings for inspection
+                            if (array->length > 0) {
+                                Cerr << ", first_values=[";
+                                for (int64_t j = 0; j < std::min<int64_t>(3, array->length); ++j) {
+                                    if (!stringArray->IsNull(j)) {
+                                        auto str = stringArray->GetString(j);
+                                        if (str.length() > 50) {
+                                            Cerr << "\"" << str.substr(0, 47) << "...\" (len=" << static_cast<size_t>(str.length()) << ")";
+                                        } else {
+                                            Cerr << "\"" << str << "\"";
+                                        }
+                                        if (j < std::min<int64_t>(2, array->length - 1)) Cerr << ", ";
+                                    } else {
+                                        Cerr << "NULL";
+                                        if (j < std::min<int64_t>(2, array->length - 1)) Cerr << ", ";
+                                    }
+                                }
+                                Cerr << "]";
+                            }
+                        }
+                    }
+                    Cerr << Endl;
+                }
+                
+                // Ensure we have enough overflow capacity before packing
+                EnsureOverflowCapacity(joinState.BuildPackedInput, block.Size, "non-indirected pack");
+
+                // SIMPLE DEBUG (non-indirected)
+                Cerr << "DEBUGGING: About to call Pack() (non-indirected) - block.Size=" << static_cast<size_t>(block.Size) << ", nTuples=" << joinState.BuildPackedInput.NTuples << Endl;
+
+                // DETAILED DATA ANALYSIS
+                Cerr << "=== BLOCK DATA ANALYSIS (non-indirected) ===" << Endl;
+                Cerr << "Block has " << static_cast<size_t>(block.Columns.size()) << " columns, " << static_cast<size_t>(block.Size) << " rows" << Endl;
+                
+                for (size_t i = 0; i < block.Columns.size(); ++i) {
+                    auto& col = block.Columns[i];
+                    Cerr << "Column[" << i << "]: ";
+                    
+                    if (!col.array()) {
+                        Cerr << "NULL ARRAY!" << Endl;
+                        continue;
+                    }
+                    
+                    auto array = col.array();
+                    Cerr << "type=" << array->type->ToString() 
+                         << ", length=" << static_cast<int64_t>(array->length) 
+                         << ", null_count=" << static_cast<int64_t>(array->null_count) << Endl;
+                    
+                    // Show sample values for different types
+                    if (array->length > 0) {
+                        try {
+                            if (array->type->id() == arrow::Type::INT64) {
+                                auto int64Array = std::static_pointer_cast<arrow::Int64Array>(arrow::MakeArray(array));
+                                Cerr << "  Sample values: ";
+                                for (int64_t j = 0; j < std::min<int64_t>(5, array->length); ++j) {
+                                    if (!int64Array->IsNull(j)) {
+                                        Cerr << int64Array->Value(j);
+                                    } else {
+                                        Cerr << "NULL";
+                                    }
+                                    if (j < std::min<int64_t>(4, array->length - 1)) Cerr << ", ";
+                                }
+                                Cerr << Endl;
+                            } else if (array->type->id() == arrow::Type::INT32) {
+                                auto int32Array = std::static_pointer_cast<arrow::Int32Array>(arrow::MakeArray(array));
+                                Cerr << "  Sample values: ";
+                                for (int64_t j = 0; j < std::min<int64_t>(5, array->length); ++j) {
+                                    if (!int32Array->IsNull(j)) {
+                                        Cerr << int32Array->Value(j);
+                                    } else {
+                                        Cerr << "NULL";
+                                    }
+                                    if (j < std::min<int64_t>(4, array->length - 1)) Cerr << ", ";
+                                }
+                                Cerr << Endl;
+                            } else if (array->type->id() == arrow::Type::STRING) {
+                                auto stringArray = std::static_pointer_cast<arrow::StringArray>(arrow::MakeArray(array));
+                                
+                                // Calculate string statistics
+                                size_t totalLength = 0;
+                                size_t minLength = SIZE_MAX;
+                                size_t maxLength = 0;
+                                size_t nullCount = 0;
+                                
+                                for (int64_t j = 0; j < array->length; ++j) {
+                                    if (!stringArray->IsNull(j)) {
+                                        auto str = stringArray->GetString(j);
+                                        size_t len = str.length();
+                                        totalLength += len;
+                                        minLength = std::min(minLength, len);
+                                        maxLength = std::max(maxLength, len);
+                                    } else {
+                                        nullCount++;
+                                    }
+                                }
+                                
+                                double avgLength = (array->length - nullCount) > 0 ? 
+                                    static_cast<double>(totalLength) / (array->length - nullCount) : 0.0;
+                                
+                                Cerr << "  String stats: total_len=" << static_cast<size_t>(totalLength) 
+                                     << ", avg_len=" << avgLength
+                                     << ", min_len=" << (minLength == SIZE_MAX ? 0 : minLength)
+                                     << ", max_len=" << static_cast<size_t>(maxLength) 
+                                     << ", nulls=" << static_cast<size_t>(nullCount) << Endl;
+                                
+                                Cerr << "  Sample values: ";
+                                for (int64_t j = 0; j < std::min<int64_t>(3, array->length); ++j) {
+                                    if (!stringArray->IsNull(j)) {
+                                        auto str = stringArray->GetString(j);
+                                        if (str.length() > 30) {
+                                            Cerr << "\"" << str.substr(0, 27) << "...\" (len=" << static_cast<size_t>(str.length()) << ")";
+                                        } else {
+                                            Cerr << "\"" << str << "\"";
+                                        }
+                                    } else {
+                                        Cerr << "NULL";
+                                    }
+                                    if (j < std::min<int64_t>(2, array->length - 1)) Cerr << ", ";
+                                }
+                                Cerr << Endl;
+                            } else if (array->type->id() == arrow::Type::DOUBLE) {
+                                auto doubleArray = std::static_pointer_cast<arrow::DoubleArray>(arrow::MakeArray(array));
+                                Cerr << "  Sample values: ";
+                                for (int64_t j = 0; j < std::min<int64_t>(5, array->length); ++j) {
+                                    if (!doubleArray->IsNull(j)) {
+                                        Cerr << doubleArray->Value(j);
+                                    } else {
+                                        Cerr << "NULL";
+                                    }
+                                    if (j < std::min<int64_t>(4, array->length - 1)) Cerr << ", ";
+                                }
+                                Cerr << Endl;
+                            } else {
+                                Cerr << "  [Unsupported type for sample display]" << Endl;
+                            }
+                        } catch (const std::exception& e) {
+                            Cerr << "  [Error reading sample values: " << e.what() << "]" << Endl;
+                        } catch (...) {
+                            Cerr << "  [Unknown error reading sample values]" << Endl;
+                        }
+                    }
+                }
+                Cerr << "=== END BLOCK DATA ANALYSIS ===" << Endl;
+
+                // Ensure we have enough overflow capacity before packing
+                EnsureOverflowCapacity(joinState.BuildPackedInput, block.Size, "non-indirected pack");
+
+                
                 BuildConverter_->Pack(block.Columns, joinState.BuildPackedInput);
+                
+                Cerr << "DEBUGGING: Pack completed successfully (non-indirected)" << Endl;
             }
         }
         BuildData_.clear(); // we don't need this data anymore, so don't waste memory
@@ -1038,9 +1471,11 @@ public:
         // Create converters
         TVector<TType*> leftItemTypes;
         MakeTupleConverter(ctx, isLeftIndirected, *leftItemTypesArg, leftKeyColumnsSet, &leftItemTypes, &LeftExternalPayloadStorage_, &LeftConverter_);
+        Cerr << "DEBUGGING: Created LeftConverter_ @" << static_cast<void*>(LeftConverter_.get()) << " [HashJoin@" << static_cast<void*>(this) << "]" << Endl;
 
         TVector<TType*> rightItemTypes;
         MakeTupleConverter(ctx, isRightIndirected, *rightItemTypesArg, rightKeyColumnsSet, &rightItemTypes, &RightExternalPayloadStorage_, &RightConverter_);
+        Cerr << "DEBUGGING: Created RightConverter_ @" << static_cast<void*>(RightConverter_.get()) << " [HashJoin@" << static_cast<void*>(this) << "]" << Endl;
         
         const size_t leftTupleSize = leftRowsNum * LeftConverter_->GetTupleLayout()->TotalRowSize;
         const size_t rightTupleSize = rightRowsNum * RightConverter_->GetTupleLayout()->TotalRowSize;
@@ -2071,9 +2506,20 @@ private:
 
             switch (Policy_->PickAlgorithm(lTuples, rTuples)) {
             case EJoinAlgo::HashJoin:
-                MakeHashJoin();
-                GetHashJoin()->BuildIndex();
-                SwitchModeTo(EMode::HashJoin);
+                try {
+                    Cerr << "DEBUGGING: Creating HashJoin..." << Endl;
+                    MakeHashJoin();
+                    Cerr << "DEBUGGING: HashJoin created, calling BuildIndex..." << Endl;
+                    GetHashJoin()->BuildIndex();
+                    Cerr << "DEBUGGING: BuildIndex completed, switching mode..." << Endl;
+                    SwitchModeTo(EMode::HashJoin);
+                } catch (const std::exception& e) {
+                    Cerr << "DEBUGGING: Exception in HashJoin creation/build: " << e.what() << Endl;
+                    throw;
+                } catch (...) {
+                    Cerr << "DEBUGGING: Unknown exception in HashJoin creation/build" << Endl;
+                    throw;
+                }
                 break;
 
             case EJoinAlgo::InMemoryGraceJoin:
@@ -2126,11 +2572,18 @@ private:
 
     void MakeHashJoin() {
         auto newJoinName = "BlockGraceJoin::HashJoin";
+        Cerr << "DEBUGGING: MakeHashJoin starting..." << Endl;
+        Cerr << "DEBUGGING: TempStorage_ valid: " << (TempStorage_ ? "yes" : "no") << Endl;
+        Cerr << "DEBUGGING: LeftKeyColumns size: " << static_cast<size_t>(LeftKeyColumns_.size()) << Endl;
+        Cerr << "DEBUGGING: RightKeyColumns size: " << static_cast<size_t>(RightKeyColumns_.size()) << Endl;
+        
         Join_ = Ctx_.HolderFactory.Create<THashJoin>(
             Ctx_, newJoinName, &ResultItemTypes_,
             &LeftStream_, &LeftItemTypes_, &LeftKeyColumns_, LeftIOMap_,
             &RightStream_, &RightItemTypes_, &RightKeyColumns_, RightIOMap_,
             Policy_, std::move(TempStorage_));
+        
+        Cerr << "DEBUGGING: THashJoin created successfully" << Endl;
         globalResourceMeter.MergeHistoryPages(JoinName_, newJoinName);
         JoinName_ = newJoinName;
     }
@@ -2387,3 +2840,4 @@ IComputationNode* WrapDqBlockHashJoin(TCallable& callable, const TComputationNod
 }
 
 } // namespace NKikimr::NMiniKQL
+

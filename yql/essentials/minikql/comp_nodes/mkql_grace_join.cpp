@@ -1236,6 +1236,7 @@ class TGraceJoinWrapper : public TStatefulWideFlowCodegeneratorNode<TGraceJoinWr
 }
 
 IComputationNode* WrapGraceJoinCommon(TCallable& callable, const TComputationNodeFactoryContext& ctx, bool isSelfJoin, bool isSpillingAllowed) {
+    Cerr << "MISHA WRAP GJ" << Endl;
     const auto leftFlowNodeIndex = 0;
     const auto rightFlowNodeIndex = 1;
     const auto joinKindNodeIndex = isSelfJoin ? 1 : 2;

@@ -1,3 +1,4 @@
+
 #include "block_layout_converter.h"
 
 #include <yql/essentials/minikql/arrow/arrow_util.h>
@@ -517,11 +518,47 @@ public:
         auto tuplesToPack = columns.front().array()->length;
         nTuples += tuplesToPack;
         auto newSize = (TupleLayout_->TotalRowSize) * nTuples;
+        
+        Cerr << "=== DETAILED PACK DEBUG ===" << Endl;
+        Cerr << "  TotalRowSize: " << static_cast<size_t>(TupleLayout_->TotalRowSize) << Endl;
+        Cerr << "  nTuples (before): " << static_cast<size_t>(nTuples - tuplesToPack) << Endl;
+        Cerr << "  tuplesToPack: " << static_cast<size_t>(tuplesToPack) << Endl;
+        Cerr << "  nTuples (after): " << static_cast<size_t>(nTuples) << Endl;
+        Cerr << "  currentSize: " << static_cast<size_t>(currentSize) << " bytes" << Endl;
+        Cerr << "  newSize: " << static_cast<size_t>(newSize) << " bytes" << Endl;
+        Cerr << "  packedTuples.size() before resize: " << static_cast<size_t>(packedTuples.size()) << Endl;
+        Cerr << "  packedTuples.capacity() before resize: " << static_cast<size_t>(packedTuples.capacity()) << Endl;
+        Cerr << "  overflow.size(): " << static_cast<size_t>(overflow.size()) << Endl;
+        Cerr << "  overflow.capacity(): " << static_cast<size_t>(overflow.capacity()) << Endl;
+        Cerr << "  overflow.data(): " << static_cast<void*>(overflow.data()) << Endl;
+        
         packedTuples.resize(newSize, 0);
+        
+        Cerr << "  packedTuples.size() after resize: " << static_cast<size_t>(packedTuples.size()) << Endl;
+        Cerr << "  packedTuples.data(): " << static_cast<void*>(packedTuples.data()) << Endl;
+        Cerr << "  packedTuples.data() + currentSize: " << static_cast<void*>(packedTuples.data() + currentSize) << Endl;
+        Cerr << "  columnsData.size(): " << static_cast<size_t>(columnsData.size()) << Endl;
+        Cerr << "  columnsNullBitmap.size(): " << static_cast<size_t>(columnsNullBitmap.size()) << Endl;
+        
+        // Проверка валидности указателей
+        if (packedTuples.data() + currentSize + (TupleLayout_->TotalRowSize * tuplesToPack) > packedTuples.data() + packedTuples.size()) {
+            Cerr << "ERROR: Pack destination pointer would exceed buffer bounds!" << Endl;
+            Cerr << "  Write end would be at: " << static_cast<void*>(packedTuples.data() + currentSize + (TupleLayout_->TotalRowSize * tuplesToPack)) << Endl;
+            Cerr << "  Buffer end is at: " << static_cast<void*>(packedTuples.data() + packedTuples.size()) << Endl;
+            throw yexception() << "Pack buffer overflow detected";
+        }
+        
+        Cerr << "  About to call TupleLayout_->Pack()..." << Endl;
 
         TupleLayout_->Pack(
             columnsData.data(), columnsNullBitmap.data(),
             packedTuples.data() + currentSize, overflow, 0, tuplesToPack);
+            
+        Cerr << "  TupleLayout_->Pack() completed successfully" << Endl;
+        Cerr << "  overflow.size() after Pack: " << static_cast<size_t>(overflow.size()) << Endl;
+        Cerr << "  overflow.data() after Pack: " << static_cast<void*>(overflow.data()) << Endl;
+        Cerr << "  TupleLayout_ address: " << static_cast<void*>(TupleLayout_.get()) << Endl;
+        Cerr << "=== END DETAILED PACK DEBUG ===" << Endl;
     }
 
     void BucketPack(const TVector<arrow::Datum>& columns, TPaddedPtr<TPackResult> packs, ui32 bucketsLogNum) override {
@@ -604,3 +641,4 @@ IBlockLayoutConverter::TPtr MakeBlockLayoutConverter(
 }
 
 } // namespace NKikimr::NMiniKQL
+

@@ -60,7 +60,7 @@ Filling with data is performed using the `import` command. This command is speci
 
 For a detailed description, see the relevant reference sections:
 
-* [tpch import](../../reference/ydb-cli/workload-tpcc.md#load)
+* [tpcc import](../../reference/ydb-cli/workload-tpcc.md#load)
 * [tpch import](../../reference/ydb-cli/workload-tpch.md#load)
 * [tpcds import](../../reference/ydb-cli/workload-tpcds.md#load)
 * [clickbench import](../../reference/ydb-cli/workload-click-bench.md#load)
@@ -109,7 +109,7 @@ After all necessary testing has been completed, the benchmark's data can be remo
 
 For a detailed description, see the corresponding sections:
 
-* [tpcc clean](../../reference/ydb-cli/workload-tpch.md#cleanup)
+* [tpcc clean](../../reference/ydb-cli/workload-tpcc.md#cleanup)
 * [tpch clean](../../reference/ydb-cli/workload-tpch.md#cleanup)
 * [tpcds clean](../../reference/ydb-cli/workload-tpcds.md#cleanup)
 * [clickbench clean](../../reference/ydb-cli/workload-click-bench.md#cleanup)

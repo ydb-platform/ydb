@@ -8,7 +8,7 @@ As a result, the benchmark generates a workload of concurrent distributed transa
 
 Here is a quick start snippet:
 ```
-{{ ydb-cli }} workload tpcс --path tpcс/10wh init -w 10
+{{ ydb-cli }} workload tpcc --path tpcc/10wh init -w 10
 {{ ydb-cli }} workload tpcc --path tpcc/10wh import -w 10
 {{ ydb-cli }} workload tpcc --path tpcc/10wh run -w 10
 ```
@@ -18,7 +18,7 @@ Here is a quick start snippet:
 All commands support the common `--path` option, which specifies the path to the directory containing tables in the database:
 
 ```bash
-{{ ydb-cli }} workload tpcс --path tpcс/10wh ...
+{{ ydb-cli }} workload tpcc --path tpcc/10wh ...
 ```
 
 ### Available options {#common_options}

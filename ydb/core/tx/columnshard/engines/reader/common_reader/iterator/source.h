@@ -68,7 +68,7 @@ public:
     }
 
     void Start(const std::shared_ptr<IDataSource>& source, const std::shared_ptr<NArrow::NSSA::NGraph::NExecution::TCompiledGraph>& program,
-        const TFetchingScriptCursor& step);
+        TFetchingScriptCursor&& step);
 
     const TFetchingStepSignals& GetCurrentStepSignalsVerified() const {
         AFL_VERIFY(!!CurrentStepSignals);

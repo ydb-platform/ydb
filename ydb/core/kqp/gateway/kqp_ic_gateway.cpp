@@ -107,6 +107,7 @@ void PrepareLiteralRequest(IKqpGateway::TExecPhysicalRequest& literalRequest, NK
     auto& stageProgram = *stage.MutableProgram();
     stageProgram.SetRuntimeVersion(NYql::NDqProto::RUNTIME_VERSION_YQL_1_0);
     stageProgram.SetRaw(program);
+    stageProgram.SetLangVer(NYql::MinLangVersion);
     stage.SetOutputsCount(1);
 
     auto& taskResult = *transaction.AddResults();

@@ -192,6 +192,8 @@ NSQLTranslation::TTranslationSettings TKqpTranslationSettingsBuilder::Build(NYql
     settings.PgParser = UsePgParser && *UsePgParser;
     settings.Antlr4Parser = false;
     settings.EmitReadsForExists = true;
+    settings.LangVer = LangVer;
+    settings.BackportMode = NYql::EBackportCompatibleFeaturesMode::Released;
     if (settings.PgParser) {
         settings.AutoParametrizeEnabled = IsEnablePgConstsToParams ;
         settings.AutoParametrizeValuesStmt = IsEnablePgConstsToParams;

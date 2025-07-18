@@ -1124,6 +1124,8 @@ public:
 
         SessionCtx = MakeIntrusive<TKikimrSessionContext>(FuncRegistry, config, TAppData::TimeProvider, TAppData::RandomProvider, userToken, nullptr, userRequestContext);
 
+        TypesCtx->LangVer = NYql::MinLangVersion;
+        TypesCtx->BackportMode = NYql::EBackportCompatibleFeaturesMode::Released;
         SessionCtx->SetDatabase(database);
         SessionCtx->SetDatabaseId(Gateway->GetDatabaseId());
         SessionCtx->SetCluster(cluster);

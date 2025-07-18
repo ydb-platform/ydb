@@ -931,6 +931,7 @@ private:
         auto& programProto = *stageProto.MutableProgram();
         programProto.SetRuntimeVersion(NYql::NDqProto::ERuntimeVersion::RUNTIME_VERSION_YQL_1_0);
         programProto.SetRaw(programBytecode);
+        programProto.SetLangVer(TypesCtx.LangVer);
 
         stagePredictor.SerializeToKqpSettings(*programProto.MutableSettings());
 

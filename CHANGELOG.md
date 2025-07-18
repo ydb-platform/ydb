@@ -6,8 +6,7 @@
 * 15693:Added a health check configuration that administrators can customize: the number of node restarts, tablets, the time difference between database dynodes,
 and timeout (by default, the maximum response time from healthcheck). Documentation is under construction. [#15693](https://github.com/ydb-platform/ydb/pull/15693) ([Andrei Rykov](https://github.com/StekPerepolnen))
 * 17394:Added counters to the spilling IO queue to track the number of waiting operations. Documentation is under construction #17599. [#17394](https://github.com/ydb-platform/ydb/pull/17394) ([Filitov Mikhail](https://github.com/lll-phill-lll))
-* 17362:Added support for [Google Breakpad](https://chromium.googlesource.com/breakpad/breakpad) inside YDB. Now you can set a minidumps path using an environment variable.
-[#17362](https://github.com/ydb-platform/ydb/pull/17362) ([Олег](https://github.com/iddqdex))
+* 17362:Added support for [Google Breakpad](https://chromium.googlesource.com/breakpad/breakpad) inside YDB. Now you can set a minidumps path using an environment variable. [#17362](https://github.com/ydb-platform/ydb/pull/17362) ([Олег](https://github.com/iddqdex))
 * 17148:Extended federated query capabilities to support a new external data source [Prometheus](https://en.wikipedia.org/wiki/Prometheus_(software)). Documentation is under construction YQ-4261 [#17148](https://github.com/ydb-platform/ydb/pull/17148) ([Stepan](https://github.com/pstpn))
 * 17007:Extended federated query capabilities to support a new external data source [Apache Iceberg](https://iceberg.apache.org). Documentation is under construction YQ-4266 [#17007](https://github.com/ydb-platform/ydb/pull/17007) ([Slusarenko Igor](https://github.com/buhtr))
 * 16652:Added support for creating external data sources for iceberg tables. [#16652](https://github.com/ydb-platform/ydb/pull/16652) ([Slusarenko Igor](https://github.com/buhtr))
@@ -17,6 +16,11 @@ and timeout (by default, the maximum response time from healthcheck). Documentat
 * 16857:Added information about the processing lag of committed messages to `DescribeConsumer`. [#16857](https://github.com/ydb-platform/ydb/pull/16857) ([Nikolay Shestakov](https://github.com/nshestakov))
 * 16834:Enabled pushdown of string types in Generic provider. [#16834](https://github.com/ydb-platform/ydb/pull/16834) ([Vitaly Isaev](https://github.com/vitalyisaev2))
 * 16076:Added automatic cleanup of temporary tables and directories created during S3 export operations. Previously, users had to manually remove temporary directories and tables that were created as part of the export pipeline. [#16076](https://github.com/ydb-platform/ydb/pull/16076) ([stanislav_shchetinin](https://github.com/stanislav-shchetinin))
+* 18731:Added monitoring counters with the constant value of 1 for nodes, VDisks, and PDisks. [#18731](https://github.com/ydb-platform/ydb/pull/18731) ([Sergey Belyakov](https://github.com/serbel324))
+* 18376:Added a heuristic that should prevent a tablet that can overload a node on its own from endlessly moving between nodes. [#18376](https://github.com/ydb-platform/ydb/pull/18376) ([vporyadke](https://github.com/vporyadke))
+* 18297:Added basic functionality for cluster bridging. [#18297](https://github.com/ydb-platform/ydb/pull/18297) ([Alexander Rutkovsky](https://github.com/alexvru))
+* 18258:Increased the timeout on BS_QUEUE reestablishing session when many actors try to reconnect simultaneously. [#18258](https://github.com/ydb-platform/ydb/pull/18258) ([Sergey Belyakov](https://github.com/serbel324))
+* 18137:Added support for vector indexes in index-only searching (#17770). [#18137](https://github.com/ydb-platform/ydb/pull/18137) ([Vitaliy Filippov](https://github.com/vitalif))
 * 18214:Added support for importing topic configurations from S3. [#18214](https://github.com/ydb-platform/ydb/pull/18214) ([stanislav_shchetinin](https://github.com/stanislav-shchetinin))
 * 18138:Added support for exporting topic configurations to S3. [#18138](https://github.com/ydb-platform/ydb/pull/18138) ([stanislav_shchetinin](https://github.com/stanislav-shchetinin))
 * 18095:Added audit logging to track `create tenant` database actions within the console tablet. [#18095](https://github.com/ydb-platform/ydb/pull/18095) ([flown4qqqq](https://github.com/flown4qqqq))
@@ -25,6 +29,7 @@ and timeout (by default, the maximum response time from healthcheck). Documentat
 * 17952:Implemented storage of access resource ID for cluster information as the `container_id` user attribute in the root database. Users can check permissions on this resource to access cluster-related information. [#17952](https://github.com/ydb-platform/ydb/pull/17952) ([Andrei Rykov](https://github.com/StekPerepolnen))
 * 17804:Added CPU limit per process in CS for integration with Workload Manager. [#17804](https://github.com/ydb-platform/ydb/pull/17804) ([Pisarenko Grigoriy](https://github.com/GrigoriyPA))
 * 17751:Added `Create Time`, `End Time`, and `Created By` (user SID) tracking for BuildIndex operations. [#17751](https://github.com/ydb-platform/ydb/pull/17751) ([Vitaliy Filippov](https://github.com/vitalif))
+
 
 ### Bug fixes
 
@@ -46,6 +51,7 @@ and timeout (by default, the maximum response time from healthcheck). Documentat
 * 16016:Fixed rare node failures during read session balancing. https://github.com/ydb-platform/ydb/issues/16017 [#16016](https://github.com/ydb-platform/ydb/pull/16016) ([Nikolay Shestakov](https://github.com/nshestakov))
 * 16423:Changed behavior — `SHOW CREATE TABLE` now fails on views instead of producing wrong output. [#16423](https://github.com/ydb-platform/ydb/pull/16423) ([Daniil Demin](https://github.com/jepett0))
 * 16764:Fixed redirects from cluster endpoints (storage nodes) to database nodes, resolving inconsistent behavior where some system tables were not visible. #16763 [#16764](https://github.com/ydb-platform/ydb/pull/16764) ([Alexey Efimov](https://github.com/adameat))
+* 18698:Fixed an issue where checks for enabled encryption were missing during the zero copy routine. This issue resulted in attempts to send unencrypted data via an XDC socket. https://github.com/ydb-platform/ydb/issues/18546 [#18698](https://github.com/ydb-platform/ydb/pull/18698) ([Daniil Cherednik](https://github.com/dcherednik))
 * 17157:Viewer API: Fixed the retrieval of tablet list for tables implementing secondary indexes. #17103 [#17157](https://github.com/ydb-platform/ydb/pull/17157) ([Alexey Efimov](https://github.com/adameat))
 * 17230:Added more information to the error message that occurs during Generic::TPartition parsing. [#17230](https://github.com/ydb-platform/ydb/pull/17230) ([Vitaly Isaev](https://github.com/vitalyisaev2))
 * 17157:Fixed an issue with filters for tablets on nodes. Resolves issue #17103. [#17157](https://github.com/ydb-platform/ydb/pull/17157) ([Alexey Efimov](https://github.com/adameat))
@@ -82,3 +88,5 @@ and timeout (by default, the maximum response time from healthcheck). Documentat
 * 17533:Extended constant folding to include deterministic UDFs, while non-deterministic UDFs are identified through a blacklist. [#17533](https://github.com/ydb-platform/ydb/pull/17533) ([Pavel Velikhov](https://github.com/pavelvelikhov))
 * 17794:Enabled the multi broadcast functionality in the table service by default. [#17794](https://github.com/ydb-platform/ydb/pull/17794) ([Олег](https://github.com/iddqdex))
 * 17884:Increased the number of filter types pushed into column shards, resulting in improved performance.[#17884](https://github.com/ydb-platform/ydb/pull/17884) ([Pavel Velikhov](https://github.com/pavelvelikhov))
+* 18461:Corrected the task placement logic for read operations from external sources. [#18461](https://github.com/ydb-platform/ydb/pull/18461) ([Pisarenko Grigoriy](https://github.com/GrigoriyPA))
+

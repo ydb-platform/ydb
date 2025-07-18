@@ -174,6 +174,12 @@ public:
      */
     size_t GetOpenTxCount(ui32 table) const;
 
+    // Exposed for tests
+    size_t GetTxsWithDataCount(ui32 table) const;
+    size_t GetTxsWithStatusCount(ui32 table) const;
+    size_t GetCommittedTxCount(ui32 table) const;
+    size_t GetRemovedTxCount(ui32 table) const;
+
     /**
      * Remove row versions [lower, upper) from the given table
      *
@@ -202,6 +208,7 @@ public:
     TAlter& Alter(); /* Begin DDL ALTER script */
 
     TEpoch TxSnapTable(ui32 table);
+    void Truncate(ui32 table);
 
     const TScheme& GetScheme() const noexcept;
 

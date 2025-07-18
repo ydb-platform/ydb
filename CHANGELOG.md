@@ -32,7 +32,7 @@ and timeout (by default, the maximum response time from healthcheck). Documentat
 * 18683:Added support for creating compacted topics for Kafka API. [#18683](https://github.com/ydb-platform/ydb/pull/18683) ([FloatingCrowbar](https://github.com/FloatingCrowbar))
 * 17663:Added optimizations for reading from Solomon. [#17663](https://github.com/ydb-platform/ydb/pull/17663) ([Ivan Sukhov](https://github.com/evanevanevanevannnn))
 * 17525:Implemented automatic reconfiguration of StateStorage (change the number of rings or the number of replicas in a ring) in case of a node failure or load changes without downtime of the entire group. [#17525](https://github.com/ydb-platform/ydb/pull/17525) ([Evgenik2](https://github.com/Evgenik2))
-* 17421:Supported runtime results for script executions. [#17421](https://github.com/ydb-platform/ydb/pull/17421) ([Pisarenko Grigoriy](https://github.com/GrigoriyPA))
+* 17421:Added support for runtime results during script execution. [#17421](https://github.com/ydb-platform/ydb/pull/17421) ([Pisarenko Grigoriy](https://github.com/GrigoriyPA))
 
 ### Bug fixes
 

@@ -51,6 +51,7 @@ def execute_query(branch='main', build_type='relwithdebinfo', days_window=1):
         full_name, 
         build_type, 
         branch, 
+        date_window,
         pass_count, 
         fail_count, 
         mute_count, 
@@ -154,7 +155,7 @@ def is_flaky_test(test):
     runs = test.get('pass_count', 0) + fails
     return (fails >= 2) or (fails >= 1 and runs <= 10)
 
-def is_unmute_candidate(test, unmute_stats):
+def is_unmute_candidate(unmute_stats):
     """Проверяет, является ли тест кандидатом на размьют"""
     if not unmute_stats:
         return False
@@ -162,7 +163,7 @@ def is_unmute_candidate(test, unmute_stats):
     unmute_fails = unmute_stats.get('fail_count', 0) + unmute_stats.get('mute_count', 0)
     return unmute_runs > 4 and unmute_fails == 0
 
-def is_delete_candidate(test, delete_stats):
+def is_delete_candidate(delete_stats):
     """Проверяет, является ли тест кандидатом на удаление из mute"""
     if not delete_stats:
         return False
@@ -226,16 +227,49 @@ def apply_and_add_mutes(aggregated_for_mute, aggregated_for_unmute, aggregated_f
         
         # 2. Кандидаты на размьют
         def is_unmute_candidate_wrapper(test):
-            return is_unmute_candidate(test, aggregated_for_unmute.get(test.get('full_name')))
+            return is_unmute_candidate(aggregated_for_unmute.get(test.get('full_name')))
         
         to_unmute, to_unmute_debug = create_file_set(
             aggregated_for_mute, is_unmute_candidate_wrapper, mute_check, resolution='to_unmute'
         )
+        
+        # Для wildcard-паттернов: проверяем, что ВСЕ chunk'и подходят под условия размьюта
+        wildcard_unmute_candidates = []
+        wildcard_unmute_debug = []
+        
+        # Группируем тесты по wildcard-паттернам
+        wildcard_groups = {}
+        for test in aggregated_for_mute:
+            if mute_check and mute_check(test.get('suite_folder'), test.get('test_name')):
+                wildcard_pattern = create_test_string(test, use_wildcards=True)
+                if wildcard_pattern not in wildcard_groups:
+                    wildcard_groups[wildcard_pattern] = []
+                wildcard_groups[wildcard_pattern].append(test)
+        
+        # Проверяем каждый wildcard-паттерн
+        for wildcard_pattern, chunks in wildcard_groups.items():
+            # Если ВСЕ chunk'и подходят под условия размьюта
+            all_chunks_unmutable = all(
+                is_unmute_candidate(chunk)
+                for chunk in chunks
+            )
+            
+            if all_chunks_unmutable:
+                wildcard_unmute_candidates.append(wildcard_pattern)
+                # Берем debug-строку первого chunk'а
+                if chunks:
+                    debug_string = create_debug_string(chunks[0], 'to_unmute')
+                    wildcard_unmute_debug.append(debug_string)
+        
+        # Объединяем обычные и wildcard кандидаты
+        to_unmute = sorted(list(set(to_unmute) | set(wildcard_unmute_candidates)))
+        to_unmute_debug = sorted(list(set(to_unmute_debug) | set(wildcard_unmute_debug)))
+        
         write_file_set(os.path.join(output_path, 'to_unmute.txt'), to_unmute, to_unmute_debug)
         
         # 3. Кандидаты на удаление из mute (to_delete)
         def is_delete_candidate_wrapper(test):
-            return is_delete_candidate(test, aggregated_for_delete.get(test.get('full_name')))
+            return is_delete_candidate(aggregated_for_delete.get(test.get('full_name')))
         
         to_delete, to_delete_debug = create_file_set(
             aggregated_for_mute, is_delete_candidate_wrapper, mute_check, resolution='to_delete'
@@ -291,6 +325,44 @@ def apply_and_add_mutes(aggregated_for_mute, aggregated_for_unmute, aggregated_f
             elif test in to_mute_debug_dict:
                 muted_ya_minus_to_delete_to_unmute_plus_to_mute_debug.append(to_mute_debug_dict[test])
         write_file_set(os.path.join(output_path, 'muted_ya-to-delete-to-unmute+to_mute.txt'), muted_ya_minus_to_delete_to_unmute_plus_to_mute, muted_ya_minus_to_delete_to_unmute_plus_to_mute_debug)
+        
+        # 10. muted_ya_changes - файл с изменениями
+        muted_ya_changes = []
+        muted_ya_changes_debug = []
+        
+        # Тесты для добавления (+++)
+        for test in to_mute:
+            muted_ya_changes.append(f"+++ {test}")
+            # Находим соответствующую debug-строку
+            if test in to_mute_debug_dict:
+                muted_ya_changes_debug.append(f"+++ {to_mute_debug_dict[test]}")
+        
+        # Тесты для размьюта (---)
+        for test in to_unmute:
+            muted_ya_changes.append(f"--- {test}")
+            # Находим соответствующую debug-строку из all_muted_ya_debug_dict
+            if test in all_muted_ya_debug_dict:
+                muted_ya_changes_debug.append(f"--- {all_muted_ya_debug_dict[test]}")
+        
+        # Тесты для удаления (xxx)
+        for test in to_delete:
+            muted_ya_changes.append(f"xxx {test}")
+            # Находим соответствующую debug-строку из all_muted_ya_debug_dict
+            if test in all_muted_ya_debug_dict:
+                muted_ya_changes_debug.append(f"xxx {all_muted_ya_debug_dict[test]}")
+        
+        # Тесты без изменений (без префикса)
+        unchanged_tests = [t for t in all_muted_ya if t not in to_unmute_set and t not in to_delete_set]
+        for test in unchanged_tests:
+            muted_ya_changes.append(test)
+            if test in all_muted_ya_debug_dict:
+                muted_ya_changes_debug.append(all_muted_ya_debug_dict[test])
+        
+        # Сортируем по алфавиту
+        muted_ya_changes = sorted(muted_ya_changes)
+        muted_ya_changes_debug = sorted(muted_ya_changes_debug)
+        
+        write_file_set(os.path.join(output_path, 'muted_ya_changes.txt'), muted_ya_changes, muted_ya_changes_debug)
         
         # Логирование итоговых результатов
         logging.info(f"To mute: {len(to_mute)}")
@@ -500,18 +572,66 @@ def mute_worker(args):
     mute_check.load(muted_ya_path)
     logging.info(f"Loaded muted_ya.txt with {len(mute_check.regexps)} test patterns")
 
-    logging.info("Executing queries for different time windows...")
+    logging.info("Executing single query for 7 days window...")
     
-    logging.info("Executing query for mute candidates (3 days)...")
-    aggregated_for_mute = execute_query(args.branch, days_window=3)
+    # Один запрос за максимальный период (7 дней)
+    all_data = execute_query(args.branch, days_window=7)
+    logging.info(f"Query returned {len(all_data)} test records")
     
-    logging.info("Executing query for unmute candidates (2 days)...")
-    aggregated_for_unmute = execute_query(args.branch, days_window=2)
+    # Локальная фильтрация по временным окнам
+    today = datetime.date.today()
     
-    logging.info("Executing query for delete candidates (7 days)...")
-    aggregated_for_delete = execute_query(args.branch, days_window=7)
+    # Преобразуем даты в числа дней (как в БД)
+    base_date = datetime.date(1970, 1, 1)  # предполагаемая базовая дата
     
-    logging.info(f"Query results: mute={len(aggregated_for_mute)}, unmute={len(aggregated_for_unmute)}, delete={len(aggregated_for_delete)}")
+    # Для mute: последние 3 дня
+    mute_start = today - datetime.timedelta(days=2)
+    mute_start_days = (mute_start - base_date).days
+    mute_data = [test for test in all_data if test.get('date_window', 0) >= mute_start_days]
+    
+    # Для unmute: последние 2 дня  
+    unmute_start = today - datetime.timedelta(days=1)
+    unmute_start_days = (unmute_start - base_date).days
+    unmute_data = [test for test in all_data if test.get('date_window', 0) >= unmute_start_days]
+    
+    # Для delete: все 7 дней (уже есть в all_data)
+    delete_data = all_data
+    
+    # Агрегируем данные по full_name для каждого периода
+    def aggregate_data(data_list):
+        aggregated = {}
+        for test in data_list:
+            full_name = test.get('full_name')
+            if full_name not in aggregated:
+                aggregated[full_name] = {
+                    'test_name': test.get('test_name'),
+                    'suite_folder': test.get('suite_folder'),
+                    'full_name': full_name,
+                    'build_type': test.get('build_type'),
+                    'branch': test.get('branch'),
+                    'pass_count': 0,
+                    'fail_count': 0,
+                    'mute_count': 0,
+                    'skip_count': 0,
+                    'owner': test.get('owner'),
+                    'is_muted': test.get('is_muted'),
+                    'state': test.get('state'),
+                    'days_in_state': test.get('days_in_state')
+                }
+            
+            # Суммируем статистику
+            aggregated[full_name]['pass_count'] += test.get('pass_count', 0)
+            aggregated[full_name]['fail_count'] += test.get('fail_count', 0)
+            aggregated[full_name]['mute_count'] += test.get('mute_count', 0)
+            aggregated[full_name]['skip_count'] += test.get('skip_count', 0)
+        
+        return list(aggregated.values())
+    
+    aggregated_for_mute = aggregate_data(mute_data)
+    aggregated_for_unmute = aggregate_data(unmute_data)
+    aggregated_for_delete = aggregate_data(delete_data)
+    
+    logging.info(f"Filtered data: mute={len(aggregated_for_mute)}, unmute={len(aggregated_for_unmute)}, delete={len(aggregated_for_delete)}")
     
     if args.mode == 'update_muted_ya':
         output_path = args.output_folder

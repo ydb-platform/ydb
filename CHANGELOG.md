@@ -15,10 +15,10 @@ and timeout (by default, the maximum response time from healthcheck). Documentat
 * 19817:Added CS compaction ResourceBroker queues configuration to MemoryController. [#19817](https://github.com/ydb-platform/ydb/pull/19817) ([Vladilen](https://github.com/Vladilen))
 * 19735:Added Accept header to oidc white list. [#19735](https://github.com/ydb-platform/ydb/pull/19735) ([Andrei Rykov](https://github.com/StekPerepolnen))
 * 19653:OIDC needs pass tracing headers [#19653](https://github.com/ydb-platform/ydb/pull/19653) ([Andrei Rykov](https://github.com/StekPerepolnen))
-* 19642:Added ColumnShard update/delete rows and bytes statistics, fixed and unmuted related unit test [#19642](https://github.com/ydb-platform/ydb/pull/19642) ([Vladilen](https://github.com/Vladilen))
+* 19642:Added ColumnShard update/delete rows and bytes statistics. [#19642](https://github.com/ydb-platform/ydb/pull/19642) ([Vladilen](https://github.com/Vladilen))
 * 19618:Re-implement the KQP scheduler for CPU using HDRF model. [#19618](https://github.com/ydb-platform/ydb/pull/19618) ([Ivan](https://github.com/abyss7))
-* 19600:healthcheck api can now report if cluster is in not bootstrapped state under configuration v2 [#19600](https://github.com/ydb-platform/ydb/pull/19600) ([vporyadke](https://github.com/vporyadke))
-* 19580:Enable changing scheme limits (MAX_SHARDS, MAX_PATHS, ...) with YQL. ([Daniil Demin](https://github.com/jepett0))
+* 19600:Healthcheck API can now report if cluster is in not bootstrapped state under configuration v2. [#19600](https://github.com/ydb-platform/ydb/pull/19600) ([vporyadke](https://github.com/vporyadke))
+* 19580:Added support fo changing [schema object limits](./concepts/limits-ydb#schema-object) (MAX_SHARDS, MAX_PATHS, ...) with YQL. ([Daniil Demin](https://github.com/jepett0))
 * 19567:Added new operation increment, support Integer types only. [#19567](https://github.com/ydb-platform/ydb/pull/19567) ([r314-git](https://github.com/r314-git))
 * 18333:Added audit logs for YMQ events in common ydb format. [#18333](https://github.com/ydb-platform/ydb/pull/18333) ([flown4qqqq](https://github.com/flown4qqqq))
 

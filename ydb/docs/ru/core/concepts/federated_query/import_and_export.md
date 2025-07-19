@@ -4,7 +4,7 @@
 
 {{ ydb-full-name }} позволяет импортировать данные из любых внешних источников в таблицы базы данных. Для импорта данных нужно использовать запрос чтения из [внешнего источника данных](../datamodel/external_data_source.md) или [внешней таблицы](../datamodel/external_table.md) и записи в {{ ydb-short-name }} таблицу. Список поддерживаемых вариантов записи данных для строковых и колоночных таблиц, поддерживающих массивно параллельный импорт неограниченного объёма данных:
 
-|Операция|[Строковые таблицы](./datamodel/table.md#row-oriented-tables)|[Колоночные таблицы](../datamodel/table.md#column-oriented-tables)|
+|Операция|[Строковые таблицы](../datamodel/table.md#row-oriented-tables)|[Колоночные таблицы](../datamodel/table.md#column-oriented-tables)|
 |--------|-----------------|------------------|
 |[CREATE TABLE ... AS SELECT](../../yql/reference/syntax/create_table/index.md)|✓|✓|
 |[UPSERT](../../yql/reference/syntax/upsert_into.md)||✓|

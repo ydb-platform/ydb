@@ -19,6 +19,6 @@ class TOffloadConfig;
 
 namespace NKikimr::NPQ {
 
-NActors::IActor* CreateOffloadActor(NActors::TActorId parentTablet, TPartitionId partition, const NKikimrPQ::TOffloadConfig& config);
+NActors::IActor* CreateOffloadActor(NActors::TActorId parentTablet, ui64 tabletId, TPartitionId partition, const NKikimrPQ::TOffloadConfig& config);
 
 } // namespace NKikimr::NPQ

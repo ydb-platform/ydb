@@ -6,6 +6,7 @@
 #include "olap/bg_tasks/events/global.h"
 #include "schemeshard.h"
 #include "schemeshard__data_erasure_manager.h"
+#include "schemeshard_continuous_backup_cleaner.h"
 #include "schemeshard_svp_migration.h"
 
 #include <ydb/core/base/appdata.h>
@@ -4869,6 +4870,9 @@ void TSchemeShard::Die(const TActorContext &ctx) {
     for (TActorId schemeQueryExecutor : RunningImportSchemeQueryExecutors) {
         ctx.Send(schemeQueryExecutor, new TEvents::TEvPoisonPill());
     }
+    for (TActorId continuousBackupCleaner : RunningContinuousBackupCleaners) {
+        ctx.Send(continuousBackupCleaner, new TEvents::TEvPoisonPill());
+    }
 
     IndexBuildPipes.Shutdown(ctx);
     CdcStreamScanPipes.Shutdown(ctx);
@@ -5265,6 +5269,9 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
         HFuncTraced(TEvSchemeShard::TEvDataErasureManualStartupRequest, Handle);
         HFuncTraced(TEvBlobStorage::TEvControllerShredResponse, Handle);
         HFuncTraced(TEvSchemeShard::TEvWakeupToRunDataErasureBSC, Handle);
+
+        HFuncTraced(TEvPersQueue::TEvOffloadStatus, Handle);
+        HFuncTraced(TEvPrivate::TEvContinuousBackupCleanerResult, Handle);
 
     default:
         if (!HandleDefaultEvents(ev, SelfId())) {
@@ -8018,6 +8025,56 @@ void TSchemeShard::Handle(TEvBlobStorage::TEvControllerShredResponse::TPtr& ev, 
 
 void TSchemeShard::Handle(TEvSchemeShard::TEvWakeupToRunDataErasureBSC::TPtr&, const TActorContext&) {
     DataErasureManager->SendRequestToBSC();
+}
+
+void TSchemeShard::Handle(TEvPersQueue::TEvOffloadStatus::TPtr& ev, const TActorContext&) {
+    auto tabletId = TTabletId(ev->Get()->Record.GetTabletId());
+    auto shardIdx = GetShardIdx(tabletId);
+    if (shardIdx == InvalidShardIdx) {
+        return;
+    }
+
+    Y_ABORT_UNLESS(ShardInfos.contains(shardIdx));
+    const auto& shardInfo = ShardInfos.at(shardIdx);
+    Y_ABORT_UNLESS(shardInfo.TabletType == ETabletType::PersQueue);
+
+    Y_ABORT_UNLESS(Topics.contains(shardInfo.PathId));
+    const auto& topic = Topics.at(shardInfo.PathId);
+
+    ui32 partitionId = ev->Get()->Record.GetPartitionId();
+    Y_ABORT_UNLESS(topic->Partitions.contains(partitionId));
+
+    topic->OffloadDonePartitions.insert(partitionId);
+    if (topic->OffloadDonePartitions.size() == topic->TotalPartitionCount) {
+        Y_ABORT_UNLESS(PathsById.contains(shardInfo.PathId));
+        const auto& topicPath = PathsById.at(shardInfo.PathId);
+        const auto& streamPath = PathsById.at(topicPath->ParentPathId);
+        const auto& tablePath = PathsById.at(streamPath->ParentPathId);
+        const auto& workingDir = PathToString(PathsById.at(tablePath->ParentPathId));
+
+        LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::FLAT_TX_SCHEMESHARD,
+            "Starting continuous backup cleaner:"
+            << " workingDir# " << workingDir
+            << " table# " << tablePath->Name
+            << " stream# " << streamPath->Name);
+
+        auto cleaner = CreateContinuousBackupCleaner(
+            TxAllocatorClient,
+            SelfId(),
+            workingDir,
+            tablePath->Name,
+            streamPath->Name
+        );
+        RunningContinuousBackupCleaners.insert(Register(cleaner));
+    }
+}
+
+void TSchemeShard::Handle(TEvPrivate::TEvContinuousBackupCleanerResult::TPtr& ev, const TActorContext&) {
+    RunningContinuousBackupCleaners.erase(ev->Sender);
+    if (!ev->Get()->Success) {
+        LOG_ERROR_S(TlsActivationContext->AsActorContext(), NKikimrServices::FLAT_TX_SCHEMESHARD,
+            "Continuous backup cleaner has failed: " << ev->Get()->Error);
+    }
 }
 
 void TSchemeShard::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext&) {

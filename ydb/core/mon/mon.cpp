@@ -1026,15 +1026,14 @@ protected:
 class THttpMonAuthorizedActorRequest : public TActorBootstrapped<THttpMonAuthorizedActorRequest> {
 public:
     NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr Event;
-    TActorId TargetActorId;
+    TMon::TRegisterHandlerFields& Fields;
     TMon::TRequestAuthorizer Authorizer;
-    TVector<TString> AllowedSIDs;
+    NHttp::TEvHttpProxy::TEvSubscribeForCancel::TPtr CancelSubscriber;
 
-    THttpMonAuthorizedActorRequest(NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr event, TActorId targetActorId, TMon::TRequestAuthorizer authorizer, const TVector<TString>& allowedSIDs)
+    THttpMonAuthorizedActorRequest(NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr event, TMon::TRegisterHandlerFields& fields, TMon::TRequestAuthorizer authorizer)
         : Event(std::move(event))
-        , TargetActorId(targetActorId)
+        , Fields(fields)
         , Authorizer(std::move(authorizer))
-        , AllowedSIDs(allowedSIDs)
     {}
 
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
@@ -1042,7 +1041,8 @@ public:
     }
 
     void Bootstrap() {
-        if (Authorizer) {
+        Send(Event->Sender, new NHttp::TEvHttpProxy::TEvSubscribeForCancel(), IEventHandle::FlagTrackDelivery);
+        if (Fields.UseAuth && Authorizer) {
             NActors::IEventHandle* handle = Authorizer(SelfId(), Event->Get()->Request.Get());
             if (handle) {
                 Send(handle);
@@ -1050,8 +1050,12 @@ public:
                 return;
             }
         }
-        Forward(Event, TargetActorId);
-        PassAway();
+        Send(new IEventHandle(Fields.Handler, SelfId(), Event->ReleaseBase().Release(), IEventHandle::FlagTrackDelivery, Event->Cookie));
+        Become(&THttpMonAuthorizedActorRequest::StateWork);
+    }
+
+    void ReplyWith(NHttp::THttpOutgoingResponsePtr response) {
+        Send(Event->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(response));
     }
 
     bool CredentialsProvided() {
@@ -1136,7 +1140,7 @@ public:
         response << "Content-Length: " << body.size() << "\r\n";
         response << "\r\n";
         response << body;
-        Send(Event->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(request->CreateResponseString(response)));
+        ReplyWith(request->CreateResponseString(response));
         PassAway();
     }
 
@@ -1158,14 +1162,25 @@ public:
         if (result.UserToken) {
             Event->Get()->UserToken = result.UserToken->GetSerializedToken();
         }
-        Forward(Event, TargetActorId);
+        Send(new IEventHandle(Fields.Handler, SelfId(), Event->ReleaseBase().Release(), IEventHandle::FlagTrackDelivery, Event->Cookie));
+
         PassAway();
     }
 
-    void HandleUndelivered(TEvents::TEvUndelivered::TPtr&) {
+    void Cancelled() {
+        if (CancelSubscriber) {
+            Send(CancelSubscriber->Sender, new NHttp::TEvHttpProxy::TEvRequestCancelled(), 0, CancelSubscriber->Cookie);
+        }
+        PassAway();
+    }
+
+    void HandleUndelivered(TEvents::TEvUndelivered::TPtr& ev) {
+        if (ev->Get()->SourceType == NHttp::TEvHttpProxy::EvSubscribeForCancel) {
+            return Cancelled();
+        }
         NHttp::THttpIncomingRequestPtr request = Event->Get()->Request;
-        Send(Event->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(
-            request->CreateResponseServiceUnavailable(TStringBuilder() << "Auth actor is not available")));
+        ReplyWith(request->CreateResponseServiceUnavailable(
+            TStringBuilder() << "Auth actor is not available"));
         PassAway();
     }
 
@@ -1174,17 +1189,43 @@ public:
         if (result.Status != Ydb::StatusIds::SUCCESS) {
             return ReplyErrorAndPassAway(result);
         }
-        if (IsTokenAllowed(result.UserToken.Get(), AllowedSIDs)) {
+        if (IsTokenAllowed(result.UserToken.Get(), Fields.AllowedSIDs)) {
             SendRequest(result);
         } else {
             return ReplyForbiddenAndPassAway("SID is not allowed");
         }
     }
 
+    void Handle(NHttp::TEvHttpProxy::TEvHttpOutgoingResponse::TPtr& ev) {
+        ReplyWith(ev->Get()->Response);
+        if (ev->Get()->Response->IsDone()) {
+            return PassAway();
+        }
+    }
+
+    void Handle(NHttp::TEvHttpProxy::TEvHttpOutgoingDataChunk::TPtr& ev) {
+        Send(Event->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingDataChunk(ev->Get()->DataChunk), 0, Event->Cookie);
+        if (ev->Get()->DataChunk && ev->Get()->DataChunk->IsEndOfData()) {
+            PassAway();
+        }
+    }
+
+    void Handle(NHttp::TEvHttpProxy::TEvSubscribeForCancel::TPtr& ev) {
+        CancelSubscriber = std::move(ev);
+    }
+
+    void Handle(NHttp::TEvHttpProxy::TEvRequestCancelled::TPtr& /* ev */) {
+        Cancelled();
+    }
+
     STATEFN(StateWork) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvents::TEvUndelivered, HandleUndelivered);
             hFunc(NKikimr::NGRpcService::TEvRequestAuthAndCheckResult, Handle);
+            hFunc(NHttp::TEvHttpProxy::TEvHttpOutgoingResponse, Handle);
+            hFunc(NHttp::TEvHttpProxy::TEvHttpOutgoingDataChunk, Handle);
+            hFunc(NHttp::TEvHttpProxy::TEvSubscribeForCancel, Handle);
+            hFunc(NHttp::TEvHttpProxy::TEvRequestCancelled, Handle)
         }
     }
 };
@@ -1276,11 +1317,7 @@ public:
         while (!url.empty()) {
             auto it = Handlers.find(TString(url));
             if (it != Handlers.end()) {
-                if (it->second.UseAuth) {
-                    Register(new THttpMonAuthorizedActorRequest(std::move(ev), it->second.Handler, Authorizer, it->second.AllowedSIDs));
-                } else {
-                    Forward(ev, it->second.Handler);
-                }
+                Register(new THttpMonAuthorizedActorRequest(std::move(ev), it->second, Authorizer));
                 return;
             } else {
                 if (url.EndsWith('/')) {

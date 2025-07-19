@@ -49,7 +49,38 @@ WHERE
 
 ## Синтаксис для внешних источников данных {#syntax-external-data-source}
 
-Расширенное партицирование называется "partition projection" и на уровне [внешних источников данных](../../datamodel/external_data_source.md) задается через параметр `projection` в формате JSON.
+Расширенное партицирование называется "partition projection" и на уровне [внешних источников данных](../../datamodel/external_data_source.md) задается через параметр `projection` в формате JSON. В общем виде настройка расширенного партицирования для [внешних источников данных](../../datamodel/external_data_source.md) выглядит следующим образом:
+
+```yql
+SELECT
+    *
+FROM
+    <object_storage_external_datasource_name>.<path>
+WITH
+(
+    SCHEMA =
+    (
+        <field1> <type1>,
+        <field2> <type2> NOT NULL,
+        <field3> <type3> NOT NULL
+    ),
+    PARTITIONED_BY = (field2, field3),
+    PROJECTION = @@ {
+        "projection.enabled": <"true"|"false">,
+
+        "projection.<field2>.type": "<type>",
+        "projection.<field2>....": "<extended_properties>",
+
+        "projection.<field3>.type": "<type>",
+        "projection.<field3>....": "<extended_properties>",
+
+        "storage.location.template": ".../${<field3>}/${<field2>}/..."
+    } @@,
+    <format_settings>
+)
+WHERE
+    <filter>
+```
 
 Пример указания расширенного партицирования:
 
@@ -92,42 +123,34 @@ WHERE
 
 В примере выше указывается, что данные существуют за каждый год и каждый месяц с 2010 по 2022 годы, при этом в бакете данные размещены в каталогах вида `2022/12`. Если данные за какой-то период отсутствуют внутри бакета, то это не приводит к ошибкам, запрос выполнится успешно, а данные будут пропущены в расчетах.
 
-В общем виде настройка расширенного партицирования для [внешних источников данных](../../datamodel/external_data_source.md) выглядит следующим образом:
-
-```yql
-SELECT
-    *
-FROM
-    <object_storage_external_datasource_name>.<path>
-WITH
-(
-    SCHEMA =
-    (
-        <field1> <type1>,
-        <field2> <type2> NOT NULL,
-        <field3> <type3> NOT NULL
-    ),
-    PARTITIONED_BY = (field2, field3),
-    PROJECTION = @@ {
-        "projection.enabled": <"true"|"false">,
-
-        "projection.<field2>.type": "<type>",
-        "projection.<field2>....": "<extended_properties>",
-
-        "projection.<field3>.type": "<type>",
-        "projection.<field3>....": "<extended_properties>",
-
-        "storage.location.template": ".../${<field3>}/${<field2>}/..."
-    } @@,
-    <format_settings>
-)
-WHERE
-    <filter>
-```
-
 ## Синтаксис для внешних таблиц {#syntax-external-table}
 
-Рекомендованным способом работы с расширенным партицированием данных является использование [внешних таблиц](../../datamodel/external_table.md). Для них можно перечислить список настроек «partition projection» при создании таблицы:
+Рекомендованным способом работы с расширенным партицированием данных является использование [внешних таблиц](../../datamodel/external_table.md). Для них можно перечислить список настроек «partition projection» при создании таблицы. В общем виде синтаксис создания внешних таблиц с настройками расширенного партицирования выглядит следующим образом:
+
+```yql
+CREATE EXTERNAL TABLE <external_table> (
+    <field1> <type1>,
+    <field2> <type2> NOT NULL,
+    <field3> <type3> NOT NULL
+) WITH (
+    DATA_SOURCE = "<object_storage_external_datasource_name>",
+    LOCATION = "<path>",
+    PARTITIONED_BY = "['<field2>', '<field3>']",
+    `projection.enabled` = <"true"|"false">,
+
+    `projection.<field2>.type` = "<type>",
+    `projection.<field2>....` = "<extended_properties>",
+
+    `projection.<field3>.type` = "<type>",
+    `projection.<field3>....` = "<extended_properties>",
+
+    `storage.location.template` = ".../${<field3>}/${<field2>}/...",
+
+    <format_settings>
+);
+```
+
+Пример указания расширенного партицирования при создании [внешней таблицы](../../datamodel/external_table.md):
 
 ```yql
 CREATE EXTERNAL TABLE `objectstorage_data` (
@@ -166,31 +189,6 @@ FROM
 WHERE
     year=2021
     AND month=02
-```
-
-В общем виде синтаксис создания внешних таблиц с настройками расширенного партицирования выглядит следующим образом:
-
-```yql
-CREATE EXTERNAL TABLE <external_table> (
-    <field1> <type1>,
-    <field2> <type2> NOT NULL,
-    <field3> <type3> NOT NULL
-) WITH (
-    DATA_SOURCE = "<object_storage_external_datasource_name>",
-    LOCATION = "<path>",
-    PARTITIONED_BY = "['<field2>', '<field3>']",
-    `projection.enabled` = <"true"|"false">,
-
-    `projection.<field2>.type` = "<type>",
-    `projection.<field2>....` = "<extended_properties>",
-
-    `projection.<field3>.type` = "<type>",
-    `projection.<field3>....` = "<extended_properties>",
-
-    `storage.location.template` = ".../${<field3>}/${<field2>}/...",
-
-    <format_settings>
-);
 ```
 
 ## Описание полей {#field_types}

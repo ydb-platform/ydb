@@ -329,6 +329,13 @@ NYql::NNodes::TCoUtf8 RemoveJsonPathUnnecessaryQuote(const NYql::NNodes::TCoUtf8
     return node;
 }
 
+TExprBase UnwrapOptionalTKqpOlapApplyColumnArg(const TExprBase& node) {
+    if (const auto& maybeColumnArg = node.Maybe<TKqpOlapApplyColumnArg>()) {
+        return maybeColumnArg.Cast().ColumnName();
+    }
+    return node;
+}
+
 } //namespace
 
 std::vector<TExprBase> ConvertComparisonNode(const TExprBase& nodeIn, const TExprNode& argument, TExprContext& ctx, TPositionHandle pos, bool allowApply)
@@ -351,7 +358,10 @@ std::vector<TExprBase> ConvertComparisonNode(const TExprBase& nodeIn, const TExp
         }
 
         if (auto maybeMember = node.Maybe<TCoMember>()) {
-            return maybeMember.Cast().Name();
+            return Build<TKqpOlapApplyColumnArg>(ctx, pos)
+                .TableRowType(ExpandType(argument.Pos(), *argument.GetTypeAnn(), ctx))
+                .ColumnName(maybeMember.Cast().Name())
+            .Done();
         }
 
         if (auto maybeJsonValue = node.Maybe<TCoJsonValue>()) {
@@ -397,8 +407,8 @@ std::vector<TExprBase> ConvertComparisonNode(const TExprBase& nodeIn, const TExp
             if (const auto params = ExtractBinaryFunctionParameters(arithmetic, argument, ctx, pos, allowApply)) {
                 return Build<TKqpOlapFilterBinaryOp>(ctx, pos)
                         .Operator().Value(arithmetic.Ref().Content(), TNodeFlags::Default).Build()
-                        .Left(params->first)
-                        .Right(params->second)
+                        .Left(UnwrapOptionalTKqpOlapApplyColumnArg(params->first))
+                        .Right(UnwrapOptionalTKqpOlapApplyColumnArg(params->second))
                         .Done();
             }
         }
@@ -410,7 +420,7 @@ std::vector<TExprBase> ConvertComparisonNode(const TExprBase& nodeIn, const TExp
                 YQL_ENSURE(oper.to_lower());
                 return Build<TKqpOlapFilterUnaryOp>(ctx, pos)
                         .Operator().Value(oper, TNodeFlags::Default).Build()
-                        .Arg(params.front())
+                        .Arg(UnwrapOptionalTKqpOlapApplyColumnArg(params.front()))
                         .Done();
             }
         }
@@ -540,8 +550,8 @@ TExprBase BuildOneElementComparison(const std::pair<TExprBase, TExprBase>& param
 
     return Build<TKqpOlapFilterBinaryOp>(ctx, pos)
         .Operator().Value(compareOperator, TNodeFlags::Default).Build()
-        .Left(parameter.first)
-        .Right(parameter.second)
+        .Left(UnwrapOptionalTKqpOlapApplyColumnArg(parameter.first))
+        .Right(UnwrapOptionalTKqpOlapApplyColumnArg(parameter.second))
         .Done();
 }
 
@@ -602,8 +612,8 @@ TMaybeNode<TExprBase> ComparisonPushdown(const std::vector<std::pair<TExprBase, 
         for (ui32 j = 0; j < i; ++j) {
             andConditions.emplace_back(Build<TKqpOlapFilterBinaryOp>(ctx, pos)
                 .Operator().Value("eq", TNodeFlags::Default).Build()
-                .Left(parameters[j].first)
-                .Right(parameters[j].second)
+                .Left(UnwrapOptionalTKqpOlapApplyColumnArg(parameters[j].first))
+                .Right(UnwrapOptionalTKqpOlapApplyColumnArg(parameters[j].second))
                 .Done());
         }
 

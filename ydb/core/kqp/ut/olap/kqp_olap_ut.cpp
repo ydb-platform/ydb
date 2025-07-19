@@ -1459,6 +1459,104 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         UNIT_ASSERT_C(ast.find("KqpOlapFilter") != std::string::npos,
                         TStringBuilder() << "Predicate wasn't pushed down. Query: " << query);
     }
+
+    Y_UNIT_TEST(PredicatePushdown_SimpleAsciiILike) {
+        auto settings = TKikimrSettings()
+            .SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+
+        {
+            auto tableClient = kikimr.GetTableClient();
+            auto session = tableClient.CreateSession().GetValueSync().GetSession();
+            const auto res = session.ExecuteSchemeQuery(R"(
+                CREATE TABLE `/Root/foo` (
+                    id Int64 NOT NULL,
+                    str String,
+                    u_str Utf8,
+                    json JsonDocument,
+                    PRIMARY KEY(id)
+                )
+                WITH (STORE = COLUMN);
+            )").GetValueSync();
+            UNIT_ASSERT(res.IsSuccess());
+        }
+
+        auto queryClient = kikimr.GetQueryClient();
+        auto session = queryClient.GetSession().GetValueSync().GetSession();
+        {
+            const auto res = session.ExecuteQuery(R"(
+                INSERT INTO `/Root/foo` (id, str, u_str) VALUES 
+                    (1, "hello", "hello")
+            )", NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues());
+        }
+
+        std::vector<TString> predicates = {
+            "str ILIKE 'hell%'",
+            "str ILIKE 'Hell%'",
+            "str ILIKE 'Hello%'",
+            "str ILIKE '%lo'",
+            "str ILIKE '%Lo'",
+            "str ILIKE '%Lo%'",
+            "str ILIKE '%eLLo%'",
+            "str ILIKE '%HeLLo%'",
+            "str ILIKE '%LLL%'",
+            "u_str ILIKE 'hell%'",
+            "u_str ILIKE 'Hell%'",
+            "u_str ILIKE 'Hello%'",
+            "u_str ILIKE '%lo'",
+            "u_str ILIKE '%Lo'",
+            "u_str ILIKE '%Lo%'",
+            "u_str ILIKE '%eLLo%'",
+            "u_str ILIKE '%HeLLo%'",
+            "u_str ILIKE '%LLL%'",
+        };
+
+        std::vector<TString> expectedResults = {
+            "[[1]]",
+            "[[1]]",
+            "[[1]]",
+            "[[1]]",
+            "[[1]]",
+            "[[1]]",
+            "[[1]]",
+            "[[1]]",
+            "[]",
+            "[[1]]",
+            "[[1]]",
+            "[[1]]",
+            "[[1]]",
+            "[[1]]",
+            "[[1]]",
+            "[[1]]",
+            "[[1]]",
+            "[]",
+        };
+
+        UNIT_ASSERT_EQUAL(expectedResults.size(), predicates.size());
+
+        for (ui32 i = 0; i < predicates.size(); ++i) {
+            const auto& query = TString(R"(
+                PRAGMA OptimizeSimpleILike;
+                PRAGMA AnsiLike;
+                SELECT id FROM `/Root/foo` WHERE 
+                )") + predicates[i];
+            Cerr
+                << "QUERY " << i << Endl
+                << query << Endl;
+
+            const auto res = session
+                                 .ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(),
+                                     NYdb::NQuery::TExecuteQuerySettings().StatsMode(NQuery::EStatsMode::Full))
+                                 .ExtractValueSync();
+            UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues());
+
+            const auto ast = res.GetStats()->GetAst();
+            UNIT_ASSERT_C(ast->find("KqpOlapFilter") != std::string::npos, TStringBuilder() << "ILIKE not pushed down. Query: " << query);
+            CompareYson(FormatResultSetYson(res.GetResultSet(0)), expectedResults[i]);
+        }
+    }
+
     Y_UNIT_TEST(PredicatePushdown_MixStrictAndNotStrict) {
         auto settings = TKikimrSettings()
             .SetWithSampleTables(false);

@@ -22,7 +22,15 @@ private:
     YDB_READONLY(ui32, PointIndex, 0);
     YDB_READONLY_DEF(TString, PointName);
     std::optional<ui32> LastSourceIdx;
-    virtual void OnAddSource(const std::shared_ptr<IDataSource>& /*source*/) {
+    virtual std::shared_ptr<IDataSource> OnAddSource(const std::shared_ptr<IDataSource>& source) {
+        SourcesSequentially.emplace_back(source);
+        if (!source->HasFetchingPlan()) {
+            source->InitFetchingPlan(Context->GetColumnsFetchingPlan(source));
+        }
+        return source;
+    }
+    virtual std::shared_ptr<IDataSource> DoOnSourceFinished() {
+        return nullptr;
     }
     virtual bool IsSourcePrepared(const std::shared_ptr<IDataSource>& source) const = 0;
     virtual ESourceAction OnSourceReady(const std::shared_ptr<IDataSource>& source, TPlainReadData& reader) = 0;
@@ -76,6 +84,7 @@ public:
     }
 
     void AddSource(const std::shared_ptr<IDataSource>& source);
+    void OnSourceFinished();
 
     void OnSourcePrepared(const std::shared_ptr<IDataSource>& sourceInput, TPlainReadData& reader);
 };

@@ -15,6 +15,10 @@ public:
         return Value;
     }
 
+    NArrow::TSimpleRow CopyValue() const {
+        return Value;
+    }
+
     TReplaceKeyAdapter(NArrow::TSimpleRow&& rk, const bool reverse)
         : Reverse(reverse)
         , Value(std::move(rk)) {

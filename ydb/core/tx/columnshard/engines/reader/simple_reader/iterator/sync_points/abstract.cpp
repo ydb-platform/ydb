@@ -24,7 +24,9 @@ void ISyncPoint::OnSourcePrepared(const std::shared_ptr<IDataSource>& sourceInpu
         switch (OnSourceReady(source, reader)) {
             case ESourceAction::Finish: {
                 AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "finish_source")("source_id", source->GetSourceId());
-                reader.GetScanner().MutableSourcesCollection().OnSourceFinished(source);
+                if (Collection) {
+                    Collection->OnSourceFinished(source);
+                }
                 SourcesSequentially.pop_front();
                 break;
             }
@@ -33,8 +35,8 @@ void ISyncPoint::OnSourcePrepared(const std::shared_ptr<IDataSource>& sourceInpu
                 if (Next) {
                     source->ResetSourceFinishedFlag();
                     Next->AddSource(source);
-                } else {
-                    reader.GetScanner().MutableSourcesCollection().OnSourceFinished(source);
+                } else if (Collection) {
+                    Collection->OnSourceFinished(source);
                 }
                 SourcesSequentially.pop_front();
                 break;
@@ -44,6 +46,9 @@ void ISyncPoint::OnSourcePrepared(const std::shared_ptr<IDataSource>& sourceInpu
                 return;
             }
         }
+    }
+    if (SourcesSequentially.empty()) {
+        Next->OnSourceFinished();
     }
 }
 
@@ -67,7 +72,13 @@ void ISyncPoint::Continue(const TPartialSourceAddress& continueAddress, TPlainRe
     SourcesSequentially.front()->ContinueCursor(SourcesSequentially.front());
 }
 
-void ISyncPoint::AddSource(const std::shared_ptr<IDataSource>& source) {
+void ISyncPoint::OnSourceFinished() {
+    if (auto genSource = DoOnSourceFinished()) {
+        genSource->StartProcessing(genSource);
+    }
+}
+
+void ISyncPoint::AddSource(std::shared_ptr<IDataSource>&& source) {
     const NActors::TLogContextGuard gLogging = NActors::TLogContextBuilder::Build()("sync_point", GetPointName())("event", "add_source");
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("source_id", source->GetSourceId());
     AFL_VERIFY(!AbortFlag);
@@ -82,12 +93,9 @@ void ISyncPoint::AddSource(const std::shared_ptr<IDataSource>& source) {
         AFL_VERIFY(*LastSourceIdx < source->GetSourceIdx())("idx_last", *LastSourceIdx)("idx_new", source->GetSourceIdx());
     }
     LastSourceIdx = source->GetSourceIdx();
-    SourcesSequentially.emplace_back(source);
-    if (!source->HasFetchingPlan()) {
-        source->InitFetchingPlan(Context->GetColumnsFetchingPlan(source));
+    if (auto genSource = OnAddSource(source)) {
+        genSource->StartProcessing(genSource);
     }
-    OnAddSource(source);
-    source->StartProcessing(source);
 }
 
 }   // namespace NKikimr::NOlap::NReader::NSimple

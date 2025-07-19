@@ -67,6 +67,16 @@ CH::AggFunctionId TWithKeysAggregationOption::GetHouseFunction(const EAggregate 
     return CH::AggFunctionId::AGG_UNSPECIFIED;
 }
 
+TString TWithKeysAggregationOption::DebugString() const {
+    TStringBuilder sb;
+    std::vector<ui32> ids;
+    for (auto&& i : Inputs) {
+        ids.emplace_back(i.GetColumnId());
+    }
+    sb << "{" << Output.GetColumnId() << "(" << AggregationId << ")" << ":[" << JoinSeq(",", ids) << "]}";
+    return sb;
+}
+
 TConclusion<IResourceProcessor::EExecutionResult> TWithKeysAggregationProcessor::DoExecute(
     const TProcessorContext& context, const TExecutionNodeContext& /*nodeContext*/) const {
     CH::GroupByOptions funcOpts;

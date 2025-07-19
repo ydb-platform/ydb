@@ -117,10 +117,11 @@ private:
 
     std::vector<TSourceIterator> Iterators;
 
-    virtual void OnAddSource(const std::shared_ptr<IDataSource>& source) override {
+    virtual std::shared_ptr<IDataSource> OnAddSource(const std::shared_ptr<IDataSource>& source) override {
         AFL_VERIFY(FetchedCount < Limit);
         Iterators.emplace_back(TSourceIterator(source));
         std::push_heap(Iterators.begin(), Iterators.end());
+        return TBase::OnAddSource(source);
     }
 
     virtual void DoAbort() override {

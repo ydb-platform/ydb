@@ -1405,6 +1405,10 @@ void FillStorageSettingsImpl(TYdbProto& out,
                 if (externalThreshold != 0 && externalThreshold != Max<ui32>()) {
                     settings->set_store_external_blobs(Ydb::FeatureFlag::ENABLED);
                 }
+
+                if (const auto externalChannelsCount = family.GetStorageConfig().GetExternalChannelsCount()) {
+                    settings->set_external_data_channels_count(externalChannelsCount);
+                }
             }
 
             // Check legacy settings for enabled external blobs

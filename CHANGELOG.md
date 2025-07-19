@@ -11,16 +11,10 @@ and timeout (by default, the maximum response time from healthcheck). Documentat
 * 17148:Extended federated query capabilities to support a new external data source [Prometheus](https://en.wikipedia.org/wiki/Prometheus_(software)). Documentation is under construction YQ-4261 [#17148](https://github.com/ydb-platform/ydb/pull/17148) ([Stepan](https://github.com/pstpn))
 * 17007:Extended federated query capabilities to support a new external data source [Apache Iceberg](https://iceberg.apache.org). Documentation is under construction YQ-4266 [#17007](https://github.com/ydb-platform/ydb/pull/17007) ([Slusarenko Igor](https://github.com/buhtr))
 * 16076:Added automatic cleanup of temporary tables and directories created during S3 export operations. Previously, users had to manually remove temporary directories and tables that were created as part of the export pipeline. [#16076](https://github.com/ydb-platform/ydb/pull/16076) ([stanislav_shchetinin](https://github.com/stanislav-shchetinin))
-* 21007:Config section to enable default allocator on start:
-
-```
-allocator_config:
-  enable_default_allocator: true
-``` [#21007](https://github.com/ydb-platform/ydb/pull/21007) ([Ivan](https://github.com/abyss7))
+* 21007:Added support for enable default allocator for Arrow in config. (https://github.com/ydb-platform/ydb/pull/21007) ([Ivan](https://github.com/abyss7))
 * 20753:https://github.com/ydb-platform/ydb/issues/20767 
 Return CORS headers on 403, mon. Pages show Network Error without CORS; we need CORS so the client can interpret the received response [#20753](https://github.com/ydb-platform/ydb/pull/20753) ([Andrei Rykov](https://github.com/StekPerepolnen))
-* 20738:Added stats for grouped limiter and caches [#20738](https://github.com/ydb-platform/ydb/pull/20738) ([Vladilen](https://github.com/Vladilen))
-* 20676:increasing wait time [#20676](https://github.com/ydb-platform/ydb/pull/20676) ([Oleg Doronin](https://github.com/dorooleg))
+* 20738:Added stats for grouped limiter and caches. [#20738](https://github.com/ydb-platform/ydb/pull/20738) ([Vladilen](https://github.com/Vladilen))
 * 20525:YMQ: Do not send x-amz-crc32 HTTP header (AWS does not do it) [#20525](https://github.com/ydb-platform/ydb/pull/20525) ([qyryq](https://github.com/qyryq))
 
 ### Bug fixes

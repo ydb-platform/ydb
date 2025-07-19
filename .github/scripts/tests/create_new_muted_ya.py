@@ -39,32 +39,31 @@ def execute_query(branch='main', build_type='relwithdebinfo', days_window=1):
     today = datetime.date.today()
     start_date = today - datetime.timedelta(days=days_window-1)
     end_date = today
-    table_name = 'test_results/analytics/flaky_tests_window_1_days'
-    owners_table = 'test_results/analytics/testowners'
     
     query_start_time = datetime.datetime.now()
     logging.info(f"Executing query for branch='{branch}', build_type='{build_type}', days_window={days_window}")
     logging.info(f"Date range: {start_date} to {end_date}")
-    logging.info(f"Table: {table_name}")
     
     query_string = f'''
-    SELECT
-      t.test_name as test_name,
-      t.suite_folder as suite_folder,
-      t.full_name as full_name,
-      t.build_type as build_type,
-      t.branch as branch,
-      SUM(t.pass_count) as pass_count,
-      SUM(t.fail_count) as fail_count,
-      SUM(t.mute_count) as mute_count,
-      SUM(t.skip_count) as skip_count,
-      o.owners as owner
-    FROM `{table_name}` t
-    LEFT JOIN `{owners_table}` o
-      ON t.full_name = o.full_name
-    WHERE t.date_window >= Date('{start_date}') AND t.date_window <= Date('{end_date}')
-      AND t.branch = '{branch}' AND t.build_type = '{build_type}'
-    GROUP BY t.test_name, t.suite_folder, t.full_name, t.build_type, t.branch, o.owners
+    SELECT 
+        test_name, 
+        suite_folder, 
+        full_name, 
+        build_type, 
+        branch, 
+        pass_count, 
+        fail_count, 
+        mute_count, 
+        skip_count, 
+        success_rate, 
+        owner, 
+        is_muted, 
+        state, 
+        days_in_state
+    FROM `test_results/analytics/tests_monitor`
+    WHERE date_window = CurrentUtcDate() 
+        AND branch = '{branch}' 
+        AND build_type = '{build_type}'
     '''
     
     logging.info(f"SQL Query:\n{query_string}")

@@ -37,6 +37,8 @@ items:
       href: table-ttl-reset.md
     - name: Deleting a table
       href: table-drop.md
+    - name: Generating CREATE TABLE from a file
+      href: tools-infer.md
   - name: Operations with data
     items:
     - name: Getting a query execution plan and AST

@@ -47,7 +47,7 @@ void ISyncPoint::OnSourcePrepared(const std::shared_ptr<IDataSource>& sourceInpu
             }
         }
     }
-    if (SourcesSequentially.empty()) {
+    if (SourcesSequentially.empty() && Next) {
         Next->OnSourceFinished();
     }
 }

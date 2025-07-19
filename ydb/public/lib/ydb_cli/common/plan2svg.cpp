@@ -1800,36 +1800,6 @@ void TPlan::PrintSvg(ui64 maxTime, ui32 timelineDelta, ui32& offsetY, TStringBui
         auto px = tx0 + TimeOffset * (Config.TimelineWidth - timelineDelta) / maxTime;
         auto pw = MaxTime * (Config.TimelineWidth - timelineDelta) / maxTime;
 
-        if (s->External) {
-            s->Builder
-            << "<g><title>External Source, partitions: " << s->Tasks << ", finished: " << s->FinishedTasks << "</title>" << Endl;
-            if (s->FinishedTasks && s->FinishedTasks <= s->Tasks) {
-                auto finishedHeight = s->Height * s->FinishedTasks / s->Tasks;
-                auto xx = Config.TaskLeft + Config.TaskWidth / 8;
-                s->Builder
-                << "<line x1='" << xx << "' y1='" << s->OffsetY + offsetY + s->Height - finishedHeight
-                << "' x2='" << xx << "' y2='" << s->OffsetY + offsetY + s->Height
-                << "' stroke-width='" << Config.TaskWidth / 4 << "' stroke='" << Config.Palette.StageText << "' stroke-dasharray='1,1' />" << Endl;
-            }
-            s->Builder
-            << "  " << SvgTextE(Config.TaskLeft + Config.TaskWidth - 2, s->OffsetY + s->Height / 2 + offsetY + INTERNAL_TEXT_HEIGHT / 2, ToString(s->Tasks))
-            << "</g>" << Endl;
-        } else {
-            s->Builder
-            << "<g><title>Stage " << s->PhysicalStageId << ", tasks: " << s->Tasks << ", finished: " << s->FinishedTasks << "</title>" << Endl;
-            if (s->FinishedTasks && s->FinishedTasks <= s->Tasks) {
-                auto finishedHeight = s->Height * s->FinishedTasks / s->Tasks;
-                auto xx = Config.TaskLeft + Config.TaskWidth / 8;
-                s->Builder
-                << "<line x1='" << xx << "' y1='" << s->OffsetY + offsetY + s->Height - finishedHeight
-                << "' x2='" << xx << "' y2='" << s->OffsetY + offsetY + s->Height
-                << "' stroke-width='" << Config.TaskWidth / 4 << "' stroke='" << Config.Palette.StageText << "' stroke-dasharray='1,1' />" << Endl;
-            }
-            s->Builder
-            << "  " << SvgTextE(Config.TaskLeft + Config.TaskWidth - 2, s->OffsetY + s->Height / 2 + offsetY + INTERNAL_TEXT_HEIGHT / 2, ToString(s->Tasks))
-            << "</g>" << Endl;
-        }
-
         if (s->EgressBytes) {
             TStringBuilder& builder = s->External ? StageToExternalConnection[s.get()]->Builder : s->Builder;
 
@@ -2064,6 +2034,36 @@ void TPlan::PrintSvg(ui64 maxTime, ui32 timelineDelta, ui32& offsetY, TStringBui
             if (s->SpillingComputeTime && !s->SpillingComputeTime->History.Deriv.empty()) {
                 PrintDeriv(s->Builder, s->SpillingComputeTime->History, px, y0, pw, INTERNAL_HEIGHT, "Spilling Compute", Config.Palette.SpillingTimeMedium);
             }
+        }
+
+        if (s->External) {
+            s->Builder
+            << "<g><title>External Source, partitions: " << s->Tasks << ", finished: " << s->FinishedTasks << "</title>" << Endl;
+            if (s->FinishedTasks && s->FinishedTasks <= s->Tasks) {
+                auto finishedHeight = s->Height * s->FinishedTasks / s->Tasks;
+                auto xx = Config.TaskLeft + Config.TaskWidth / 8;
+                s->Builder
+                << "<line x1='" << xx << "' y1='" << s->OffsetY + offsetY + s->Height - finishedHeight
+                << "' x2='" << xx << "' y2='" << s->OffsetY + offsetY + s->Height
+                << "' stroke-width='" << Config.TaskWidth / 4 << "' stroke='" << Config.Palette.StageText << "' stroke-dasharray='1,1' />" << Endl;
+            }
+            s->Builder
+            << "  " << SvgTextE(Config.TaskLeft + Config.TaskWidth - 2, s->OffsetY + s->Height / 2 + offsetY + INTERNAL_TEXT_HEIGHT / 2, ToString(s->Tasks))
+            << "</g>" << Endl;
+        } else {
+            s->Builder
+            << "<g><title>Stage " << s->PhysicalStageId << ", tasks: " << s->Tasks << ", finished: " << s->FinishedTasks << "</title>" << Endl;
+            if (s->FinishedTasks && s->FinishedTasks <= s->Tasks) {
+                auto finishedHeight = s->Height * s->FinishedTasks / s->Tasks;
+                auto xx = Config.TaskLeft + Config.TaskWidth / 8;
+                s->Builder
+                << "<line x1='" << xx << "' y1='" << s->OffsetY + offsetY + s->Height - finishedHeight
+                << "' x2='" << xx << "' y2='" << s->OffsetY + offsetY + s->Height
+                << "' stroke-width='" << Config.TaskWidth / 4 << "' stroke='" << Config.Palette.StageText << "' stroke-dasharray='1,1' />" << Endl;
+            }
+            s->Builder
+            << "  " << SvgTextE(Config.TaskLeft + Config.TaskWidth - 2, s->OffsetY + s->Height / 2 + offsetY + INTERNAL_TEXT_HEIGHT / 2, ToString(s->Tasks))
+            << "</g>" << Endl;
         }
 
         y0 += INTERNAL_HEIGHT + INTERNAL_GAP_Y;

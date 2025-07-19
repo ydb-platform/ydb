@@ -687,6 +687,12 @@ private:
     struct TSourceIdPostPersistInfo {
         ui64 SeqNo = 0;
         ui64 Offset = 0;
+        TMaybe<i16> ProducerEpoch = 0;
+    };
+
+    struct TSeqNoProducerEpoch {
+        ui64 SeqNo = 0;
+        TMaybe<i16> ProducerEpoch = 0;
     };
 
     THashSet<TString> TxAffectedSourcesIds;
@@ -694,7 +700,7 @@ private:
     THashSet<TString> TxAffectedConsumers;
     THashSet<TString> SetOffsetAffectedConsumers;
     THashMap<TString, TSourceIdPostPersistInfo> TxSourceIdForPostPersist;
-    THashMap<TString, ui64> TxInflightMaxSeqNoPerSourceId;
+    THashMap<TString, TSeqNoProducerEpoch> TxInflightMaxSeqNoPerSourceId;
 
 
     ui32 MaxBlobSize;

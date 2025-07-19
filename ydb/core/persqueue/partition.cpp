@@ -23,6 +23,55 @@
 #include <util/string/escape.h>
 #include <util/system/byteorder.h>
 
+
+namespace NKafka {
+
+    // IsDuplicate is only needed for Kafka protocol deduplication.
+    // baseSequence field in Kafka protocol has type int32 and the numbers loop back from the maximum possible value back to 0.
+    // I.e. the next seqno after int32max is 0.
+    // To decide if we got a duplicate seqno or an out of order seqno,
+    // we are comparing the difference between maxSeqNo and seqNo with MAX_SEQNO_DIFFERENCE_UNTIL_OUT_OF_ORDER.
+    // The value of MAX_SEQNO_DIFFERENCE_UNTIL_OUT_OF_ORDER is half of the int32 range.
+    bool IsDuplicate(ui64 maxSeqNo, ui64 seqNo) {
+        if (maxSeqNo < seqNo) {
+            maxSeqNo += 1ul << 31;
+        }
+        return maxSeqNo - seqNo < MAX_SEQNO_DIFFERENCE_UNTIL_OUT_OF_ORDER;
+    }
+
+    // InSequence is only needed for Kafka protocol deduplication.
+    bool InSequence(ui64 maxSeqNo, ui64 seqNo) {
+        return (maxSeqNo + 1 == seqNo) || (maxSeqNo == std::numeric_limits<i32>::max() && seqNo == 0);
+    }
+
+    ECheckDeduplicationResult CheckDeduplication(i16 lastEpoch, ui64 lastSeqNo, i16 messageEpoch, ui64 messageSeqNo) {
+        if (lastEpoch > messageEpoch) {
+            return ECheckDeduplicationResult::INVALID_PRODUCER_EPOCH;
+        }
+
+        if (lastEpoch < messageEpoch) {
+            if (messageSeqNo == 0) {
+                // Only the first ever epoch for a given producerId is allowed to have the first seqNo != 0.
+                return ECheckDeduplicationResult::OK;
+            }
+            return ECheckDeduplicationResult::OUT_OF_ORDER_SEQUENCE_NUMBER;
+        }
+
+        if (InSequence(lastSeqNo, messageSeqNo)) {
+            return ECheckDeduplicationResult::OK;
+        }
+
+        if (IsDuplicate(lastSeqNo, messageSeqNo)) {
+            // Kafka sends successful answer in response to requests
+            // that exactly match some of the last 5 batches (that may contain multiple records each).
+
+            return ECheckDeduplicationResult::DUPLICATE_SEQUENCE_NUMBER;
+        }
+
+        return ECheckDeduplicationResult::OUT_OF_ORDER_SEQUENCE_NUMBER;
+    }
+}
+
 namespace {
 
 template <class T>
@@ -54,6 +103,15 @@ template<class E>
 auto GetStepAndTxId(const E& event)
 {
     return GetStepAndTxId(event.Step, event.TxId);
+}
+
+bool SeqnoViolation(TMaybe<i16> lastEpoch, ui64 lastSeqNo, TMaybe<i16> messageEpoch, ui64 messageSeqNo) {
+    bool isKafkaRequest = lastEpoch.Defined() && messageEpoch.Defined();
+    if (isKafkaRequest) {
+        return NKafka::ECheckDeduplicationResult::OK != NKafka::CheckDeduplication(*lastEpoch, lastSeqNo, *messageEpoch, messageSeqNo);
+    } else {
+        return messageSeqNo <= lastSeqNo;
+    }
 }
 
 bool TPartition::LastOffsetHasBeenCommited(const TUserInfoBase& userInfo) const {
@@ -1358,10 +1416,9 @@ TPartition::EProcessResult TPartition::ApplyWriteInfoResponse(TTransaction& tx) 
             }
             txSourceIds.insert(s.first);
         }
-        auto inFlightIter = TxInflightMaxSeqNoPerSourceId.find(s.first);
 
-        if (!inFlightIter.IsEnd()) {
-            if (s.second.MinSeqNo <= inFlightIter->second) {
+        if (auto inFlightIter = TxInflightMaxSeqNoPerSourceId.find(s.first); !inFlightIter.IsEnd()) {
+            if (SeqnoViolation(inFlightIter->second.ProducerEpoch, inFlightIter->second.SeqNo, s.second.ProducerEpoch, s.second.MinSeqNo)) {
                 tx.Predicate = false;
                 tx.Message = TStringBuilder() << "MinSeqNo violation failure on " << s.first;
                 tx.WriteInfoApplied = true;
@@ -1369,14 +1426,13 @@ TPartition::EProcessResult TPartition::ApplyWriteInfoResponse(TTransaction& tx) 
             }
         }
 
-        auto existing = knownSourceIds.find(s.first);
-        if (existing.IsEnd())
-            continue;
-        if (s.second.MinSeqNo <= existing->second.SeqNo) {
-            tx.Predicate = false;
-            tx.Message = TStringBuilder() << "MinSeqNo violation failure on " << s.first;
-            tx.WriteInfoApplied = true;
-            break;
+        if (auto existing = knownSourceIds.find(s.first); !existing.IsEnd()) {
+            if (SeqnoViolation(existing->second.ProducerEpoch, existing->second.SeqNo, s.second.ProducerEpoch, s.second.MinSeqNo)) {
+                tx.Predicate = false;
+                tx.Message = TStringBuilder() << "MinSeqNo violation failure on " << s.first;
+                tx.WriteInfoApplied = true;
+                break;
+            }
         }
     }
     if (ret == EProcessResult::Continue && tx.Predicate.GetOrElse(true)) {
@@ -2508,10 +2564,12 @@ void TPartition::CommitWriteOperations(TTransaction& t)
         return;
     }
     for (const auto& s : t.WriteInfo->SrcIdInfo) {
-        auto [iter, ins] = TxInflightMaxSeqNoPerSourceId.emplace(s.first, s.second.SeqNo);
+        auto pair = TSeqNoProducerEpoch{s.second.SeqNo, s.second.ProducerEpoch};
+        auto [iter, ins] = TxInflightMaxSeqNoPerSourceId.emplace(s.first, pair);
         if (!ins) {
-            Y_ABORT_UNLESS(iter->second < s.second.SeqNo);
-            iter->second = s.second.SeqNo;
+            bool ok = !SeqnoViolation(iter->second.ProducerEpoch, iter->second.SeqNo, s.second.ProducerEpoch, s.second.SeqNo);
+            Y_ABORT_UNLESS(ok);
+            iter->second = pair;
         }
     }
     const auto& ctx = ActorContext();
@@ -2619,10 +2677,11 @@ void TPartition::CommitWriteOperations(TTransaction& t)
     for (const auto& [srcId, info] : t.WriteInfo->SrcIdInfo) {
         auto& sourceIdBatch = Parameters->SourceIdBatch;
         auto sourceId = sourceIdBatch.GetSource(srcId);
-        sourceId.Update(info.SeqNo, info.Offset + oldHeadOffset, CurrentTimestamp);
+        sourceId.Update(info.SeqNo, info.Offset + oldHeadOffset, CurrentTimestamp, info.ProducerEpoch);
         auto& persistInfo = TxSourceIdForPostPersist[srcId];
         persistInfo.SeqNo = info.SeqNo;
         persistInfo.Offset = info.Offset + oldHeadOffset;
+        persistInfo.ProducerEpoch = info.ProducerEpoch;
     }
 
     Parameters->FirstCommitWriteOperations = false;

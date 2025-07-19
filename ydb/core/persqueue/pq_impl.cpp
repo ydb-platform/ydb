@@ -927,7 +927,7 @@ void TPersQueue::InitTxWrites(const NKikimrPQ::TTabletTxInfo& info,
             SubscribeWriteId(writeId, ctx);
         }
 
-        // this branch will be executed only if EnableKafkaTransactions feature flag is enabled, cause 
+        // this branch will be executed only if EnableKafkaTransactions feature flag is enabled, cause
         // sending transactional requests through Kafka API is restricted by feature flag here: ydb/core/kafka_proxy/kafka_connection.cpp
         if (txWrite.GetKafkaTransaction() && txWrite.HasCreatedAt()) {
             writeInfo.KafkaTransaction = true;
@@ -3184,7 +3184,7 @@ void TPersQueue::DeleteExpiredTransactions(const TActorContext& ctx)
 void TPersQueue::ScheduleDeleteExpiredKafkaTransactions() {
     TDuration kafkaTxnTimeout = TDuration::MilliSeconds(
         AppData()->KafkaProxyConfig.GetTransactionTimeoutMs() + KAFKA_TRANSACTION_DELETE_DELAY_MS);
-    
+
     auto txnExpired = [kafkaTxnTimeout](const TTxWriteInfo& txWriteInfo) {
         return txWriteInfo.KafkaTransaction && txWriteInfo.CreatedAt + kafkaTxnTimeout < TAppData::TimeProvider->Now();
     };
@@ -3978,17 +3978,17 @@ void TPersQueue::ScheduleProposeTransactionResult(const TDistributedTransaction&
 {
     PQ_LOG_D("schedule TEvProposeTransactionResult(PREPARED)");
     auto event = std::make_unique<TEvPersQueue::TEvProposeTransactionResult>();
-    
+
     event->Record.SetOrigin(TabletID());
     event->Record.SetStatus(NKikimrPQ::TEvProposeTransactionResult::PREPARED);
     event->Record.SetTxId(tx.TxId);
     event->Record.SetMinStep(tx.MinStep);
     event->Record.SetMaxStep(tx.MaxStep);
-    
+
     if (ProcessingParams) {
         event->Record.MutableDomainCoordinators()->CopyFrom(ProcessingParams->GetCoordinators());
     }
-    
+
     RepliesToActor.emplace_back(tx.SourceActor, std::move(event));
 }
 

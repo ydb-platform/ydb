@@ -8,7 +8,7 @@
 - `AWS_SECRET_ACCESS_KEY_SECRET_NAME` — ссылка на имя [секрета](../../datamodel/secrets.md), в котором хранится `AWS_SECRET_ACCESS_KEY`.
 - `AWS_REGION` — регион, из которого будет происходить чтение, например `ru-central-1`.
 
-Для настройки соединения с публичным бакетом достаточно выполнить следующий SQL-запрос. Запрос создаст внешнее подключение с именем `object_storage`, которое будет указывать на конкретный S3-бакет с именем `bucket`.
+Для настройки соединения с публичным бакетом достаточно выполнить следующий SQL-запрос. Запрос создаст внешний источник данных с именем `object_storage`, который будет указывать на конкретный S3-бакет с именем `bucket`.
 
 ```yql
 CREATE EXTERNAL DATA SOURCE object_storage WITH (
@@ -21,11 +21,11 @@ CREATE EXTERNAL DATA SOURCE object_storage WITH (
 Для настройки соединения с приватным бакетом необходимо выполнить несколько SQL-запросов. Сначала нужно создать [секреты](../../datamodel/secrets.md), содержащие `AWS_ACCESS_KEY_ID` и `AWS_SECRET_ACCESS_KEY`.
 
 ```yql
-    CREATE OBJECT aws_access_id (TYPE SECRET) WITH (value=`<id>`);
-    CREATE OBJECT aws_access_key (TYPE SECRET) WITH (value=`<key>`);
+CREATE OBJECT aws_access_id (TYPE SECRET) WITH (value=`<id>`);
+CREATE OBJECT aws_access_key (TYPE SECRET) WITH (value=`<key>`);
 ```
 
-Следующим шагом создаётся внешнее подключение с именем `object_storage`, которое будет указывать на конкретный S3-бакет с именем `bucket`, а также использовать `AUTH_METHOD="AWS"`, для которого заполняются параметры `AWS_ACCESS_KEY_ID_SECRET_NAME`, `AWS_SECRET_ACCESS_KEY_SECRET_NAME`, `AWS_REGION`. Значения этих параметров описаны выше.
+Следующим шагом создаётся внешний источник данных с именем `object_storage`, который будет указывать на конкретный S3-бакет с именем `bucket`, а также использовать `AUTH_METHOD="AWS"`, для которого задаются параметры `AWS_ACCESS_KEY_ID_SECRET_NAME`, `AWS_SECRET_ACCESS_KEY_SECRET_NAME`, `AWS_REGION`. Значения этих параметров описаны выше.
 
 ```yql
 CREATE EXTERNAL DATA SOURCE object_storage WITH (
@@ -38,7 +38,7 @@ CREATE EXTERNAL DATA SOURCE object_storage WITH (
 );
 ```
 
-## Использование внешнего подключения к S3-бакету {#external-data-source-settings}
+## Использование внешнего источника данных для S3-бакета {#external-data-source-settings}
 
 При работе с {{ objstorage-full-name }} с помощью [внешних источников данных](../../datamodel/external_data_source.md) удобно выполнять прототипирование, первоначальную настройку подключений к данным.
 
@@ -70,24 +70,26 @@ WITH
 SELECT
   <expression>
 FROM
-  <object_storage_connection_name>.`<file_path>`
-WITH(
+  <object_storage_external_datasource_name>.`<file_path>`
+WITH
+(
   FORMAT = "<file_format>",
   COMPRESSION = "<compression>",
   SCHEMA = (<schema_definition>),
-  <format_settings>)
+  <format_settings>
+)
 WHERE
   <filter>;
 ```
 
 Где:
 
-* `object_storage_connection_name` — название внешнего источника данных, ведущего на бакет с S3 ({{ objstorage-full-name }}).
-* `file_path` — путь к файлу или файлам внутри бакета. Поддерживаются wildcards `*`, подробнее [в разделе](#path_format).
-* `file_format` — [формат данных](formats.md#formats) в файлах.
-* `compression` — [формат сжатия](formats.md#compression_formats) файлов.
-* `schema_definition` — [описание схемы хранимых данных](#schema) в файлах.
-* `format_settings` — опциональные [параметры форматирования](#format_settings)
+* `object_storage_external_datasource_name` — название внешнего источника данных, ведущего на бакет с S3 ({{ objstorage-full-name }}).
+* `file_path` — путь к файлу или файлам внутри бакета. Поддерживаются wildcards, подробнее [в разделе](#path_format).
+* `file_format` — [формат данных](formats.md#formats) в файлах, обязательно.
+* `compression` — опциональный [формат сжатия](formats.md#compression_formats) файлов.
+* `schema_definition` — [описание схемы хранимых данных](#schema) в файлах, обязательно.
+* `format_settings` — опциональные [параметры форматирования](#format_settings).
 
 ### Описание схемы данных {#schema}
 
@@ -105,6 +107,8 @@ Year Int32 NOT NULL
 
 Если поле данных помечено как обязательное, `NOT NULL`, но это поле отсутствует в обрабатываемом файле, то работа с таким файлом будет завершена с ошибкой. Если поле помечено как необязательное, `NULL`, то при отсутствии поля в обрабатываемом файле ошибки не возникнет, но поле примет значение `NULL`. Ключевое слово `NULL` в необязательных полях является опциональным.
 
+Список поддерживаемых типов данных, которые можно указать в схеме в зависимости от формата данных, приведён в разделе [{#T}](formats.md#types).
+
 ### Автоматический вывод схемы данных {#inference}
 
 {{ ydb-short-name }} может автоматически определять схему данных в файлах бакета, чтобы вам не пришлось указывать все поля схемы вручную.
@@ -121,29 +125,39 @@ Year Int32 NOT NULL
 SELECT
   <expression>
 FROM
-  <object_storage_connection_name>.`<file_path>`
-WITH(
+  <object_storage_external_datasource_name>.`<file_path>`
+WITH
+(
   FORMAT = "<file_format>",
   COMPRESSION = "<compression>",
-  WITH_INFER = "true")
+  WITH_INFER = "true"
+)
 WHERE
   <filter>;
 ```
 
 Где:
 
-* `object_storage_connection_name` — название внешнего источника данных, ведущего на S3 бакет ({{ objstorage-full-name }}).
-* `file_path` — путь к файлу или файлам внутри бакета. Поддерживаются wildcards `*`, подробнее [ниже](#path_format).
+* `object_storage_external_datasource_name` — название внешнего источника данных, ведущего на S3 бакет ({{ objstorage-full-name }}).
+* `file_path` — путь к файлу или файлам внутри бакета. Поддерживаются wildcards, подробнее [ниже](#path_format).
 * `file_format` — [формат данных](formats.md#formats) в файлах. Поддерживаются все форматы, кроме `raw` и `json_as_string`.
-* `compression` — [формат сжатия](formats.md#compression_formats) файлов.
+* `compression` — опциональный [формат сжатия](formats.md#compression_formats) файлов.
 
 В результате выполнения такого запроса будут автоматически выведены названия и типы полей.
 
-### Форматы путей к данным задаваемых в параметре `file_path` {#path_format}
+Ограничения для автоматического вывода схемы:
+
+* Вывод схемы делается по данным только из одного файла.
+* Для форматов данных `csv_with_names`, `tsv_with_names`, `json_list`, `json_each_row` вывод схемы выполняется по первым 10 МБ данных из файла.
+* Вывод схемы для файлов с форматом `parquet` возможен только в случае, если размер метаданных файла не превышает 10 МБ.
+
+### Форматы путей к данным {#path_format}
 
 В {{ ydb-full-name }} поддерживаются следующие пути к данным:
 
 {% include [!](_includes/path_format.md) %}
+
+Такие же значения можно использовать для параметра `file_pattern`.
 
 ### Параметры форматирования {#format_settings}
 
@@ -151,7 +165,9 @@ WHERE
 
 {% include [!](_includes/format_settings.md) %}
 
-Параметр `file_pattern` можно использовать только в том случае, если `file_path` – путь к каталогу. В строках форматирования можно использовать любые шаблонные переменные, поддерживаемые функцией [`strftime`(C99)](https://en.cppreference.com/w/c/chrono/strftime). В {{ ydb-full-name }} поддерживаются следующие форматы типов `Datetime` и `Timestamp`:
+Подробное описание поддерживаемых wildcards для параметра `file_pattern` приведено [выше](#path_format). Параметр `file_pattern` можно использовать только в том случае, если `file_path` — путь к каталогу.
+
+В строках форматирования для даты и времени можно использовать любые шаблонные переменные, поддерживаемые функцией [`strftime` (C99)](https://en.cppreference.com/w/c/chrono/strftime). В {{ ydb-full-name }} поддерживаются следующие форматы типов `Datetime` и `Timestamp`:
 
 {% include [!](_includes/date_formats.md) %}
 
@@ -163,10 +179,10 @@ WHERE
 SELECT
   *
 FROM
-  connection.`folder/`
+  external_source.`folder/`
 WITH(
   FORMAT = "csv_with_names",
-  COMPRESSION="gzip"
+  COMPRESSION = "gzip"
   SCHEMA =
   (
     Id Int32 NOT NULL,
@@ -175,15 +191,15 @@ WITH(
     TripDistance Double NOT NULL,
     UserComment Utf8
   ),
-  FILE_PATTERN="*.csv.gz",
-  `DATA.DATE.FORMAT`="%Y-%m-%d",
-  CSV_DELIMITER='/'
+  FILE_PATTERN = "*.csv.gz",
+  `DATA.DATE.FORMAT` = "%Y-%m-%d",
+  CSV_DELIMITER = "/"
 );
 ```
 
 Где:
 
-* `connection` — название внешнего источника данных, ведущего на бакет S3 ({{ objstorage-full-name }}).
+* `external_source` — название внешнего источника данных, ведущего на бакет S3 ({{ objstorage-full-name }}).
 * `folder/` — путь к папке с данными в бакете S3 ({{ objstorage-full-name }}).
 * `SCHEMA` — описание схемы данных в файле.
 * `*.csv.gz` — шаблон имени файлов с данными.

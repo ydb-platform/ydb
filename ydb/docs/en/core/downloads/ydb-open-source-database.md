@@ -1,3 +1,5 @@
+<!-- markdownlint-disable no-emphasis-as-heading -->
+
 # Download {{ ydb-short-name }} Open-Source Database
 
 {{ ydb-short-name }} Open-Source Database (`ydbd`) is an executable file for running a node in the [{{ ydb-short-name }} cluster](../concepts/glossary.md#cluster). It is distributed under the [Apache 2.0 license](https://github.com/ydb-platform/ydb/blob/main/LICENSE).

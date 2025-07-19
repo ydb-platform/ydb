@@ -418,6 +418,13 @@ private:
     using TBase = IDataSource;
     YDB_READONLY_DEF(std::vector<std::shared_ptr<IDataSource>>, Sources);
 
+    void DoBuildStageResult(const std::shared_ptr<NCommon::IDataSource>& /*sourcePtr*/) override {
+        const ui32 recordsCount = GetStageData().GetTable()->GetRecordsCountActualVerified();
+        StageResult = std::make_unique<TFetchedResult>(ExtractStageData(), *GetContext()->GetCommonContext()->GetResolver());
+        StageResult->SetPages({ TPortionDataAccessor::TReadPage(0, recordsCount, 0) });
+        StageResult->SetResultChunk(StageResult->GetBatch()->BuildTableVerified(), 0, recordsCount);
+    }
+
     virtual void InitUsedRawBytes() override {
         AFL_VERIFY(false);
     }

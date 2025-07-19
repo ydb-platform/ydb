@@ -674,6 +674,25 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
         return true;
     }
 
+    bool LoadSystemShardsToDelete(NIceDb::TNiceDb& db, TShardsToDeleteRows& shardsToDelete) const {
+        {
+            auto rowSet = db.Table<Schema::SystemShardsToDelete>().Range().Select();
+            if (!rowSet.IsReady()) {
+                return false;
+            }
+            while (!rowSet.EndOfSet()) {
+                const auto shardIdx = Self->MakeLocalId(rowSet.GetValue<Schema::SystemShardsToDelete::ShardIdx>());
+                shardsToDelete.emplace_back(shardIdx);
+
+                if (!rowSet.Next()) {
+                    return false;
+                }
+            }
+        }
+
+        return true;
+    }
+
     typedef std::tuple<TOperationId, TShardIdx, TTxState::ETxState> TTxShardRec;
     typedef TVector<TTxShardRec> TTxShardsRows;
 
@@ -3844,6 +3863,23 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             }
         }
 
+        // Read system shards to delete
+        {
+            TShardsToDeleteRows shardsToDelete;
+            if (!LoadSystemShardsToDelete(db, shardsToDelete)) {
+                return false;
+            }
+
+            LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                         "TTxInit for SystemShardToDelete"
+                             << ", read records: " << shardsToDelete.size()
+                             << ", at schemeshard: " << Self->TabletID());
+
+            for (auto& rec: shardsToDelete) {
+                OnComplete.DeleteSystemShard(std::get<0>(rec));
+            }
+        }
+
         // Read backup settings
         {
             TBackupSettingsRows backupSettings;
@@ -5265,14 +5301,14 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                             if (op.HasFullBackupTrimmedName()) {
                                 TString fullBackupName = op.GetFullBackupTrimmedName() + "_full";
                                 TString fullBackupPath = backupCollectionPathStr + "/" + fullBackupName;
-                                
+
                                 // Set state for each table in the full backup
                                 for (const auto& tablePath : op.GetTablePathList()) {
                                     TPath originalTablePath = TPath::Resolve(tablePath, Self);
                                     if (originalTablePath.IsResolved()) {
                                         TString tableName = originalTablePath.LeafName();
                                         TString fullBackupTablePath = fullBackupPath + "/" + tableName;
-                                        
+
                                         TPath fullBackupTableResolvedPath = TPath::Resolve(fullBackupTablePath, Self);
                                         if (fullBackupTableResolvedPath.IsResolved() && Self->PathsById.contains(fullBackupTableResolvedPath.Base()->PathId)) {
                                             auto backupTablePathElement = Self->PathsById.at(fullBackupTableResolvedPath.Base()->PathId);
@@ -5286,14 +5322,14 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                             for (const auto& trimmedIncrName : op.GetIncrementalBackupTrimmedNames()) {
                                 TString incrBackupName = trimmedIncrName + "_incremental";
                                 TString incrBackupPath = backupCollectionPathStr + "/" + incrBackupName;
-                                
+
                                 // Set state for each table in the incremental backup
                                 for (const auto& tablePath : op.GetTablePathList()) {
                                     TPath originalTablePath = TPath::Resolve(tablePath, Self);
                                     if (originalTablePath.IsResolved()) {
                                         TString tableName = originalTablePath.LeafName();
                                         TString incrBackupTablePath = incrBackupPath + "/" + tableName;
-                                        
+
                                         TPath incrBackupTableResolvedPath = TPath::Resolve(incrBackupTablePath, Self);
                                         if (incrBackupTableResolvedPath.IsResolved() && Self->PathsById.contains(incrBackupTableResolvedPath.Base()->PathId)) {
                                             auto backupTablePathElement = Self->PathsById.at(incrBackupTableResolvedPath.Base()->PathId);

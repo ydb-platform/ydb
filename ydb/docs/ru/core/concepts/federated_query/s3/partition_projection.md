@@ -49,7 +49,7 @@ WHERE
 
 ## Синтаксис для внешних источников данных {#syntax-external-data-source}
 
-Расширенное партицирование называется "partition projection" и на уровне [внешних источников данных](../../datamodel/external_data_source.md) задается через параметр `projection` в формате JSON. В общем виде настройка расширенного партицирования для [внешних источников данных](../../datamodel/external_data_source.md) выглядит следующим образом:
+Расширенное партицирование называется «partition projection» и на уровне [внешних источников данных](../../datamodel/external_data_source.md) задается через параметр `projection` в формате JSON. В общем виде настройка расширенного партицирования для [внешних источников данных](../../datamodel/external_data_source.md) выглядит следующим образом:
 
 ```yql
 SELECT

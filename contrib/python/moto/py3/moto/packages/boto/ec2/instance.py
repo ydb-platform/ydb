@@ -24,43 +24,12 @@
 """
 Represents an EC2 Instance
 """
+from typing import Any
 from moto.packages.boto.ec2.ec2object import EC2Object, TaggedEC2Object
 from moto.packages.boto.ec2.image import ProductCodes
 
 
-class InstanceState(object):
-    """
-    The state of the instance.
-
-    :ivar code: The low byte represents the state. The high byte is an
-        opaque internal value and should be ignored.  Valid values:
-
-        * 0 (pending)
-        * 16 (running)
-        * 32 (shutting-down)
-        * 48 (terminated)
-        * 64 (stopping)
-        * 80 (stopped)
-
-    :ivar name: The name of the state of the instance.  Valid values:
-
-        * "pending"
-        * "running"
-        * "shutting-down"
-        * "terminated"
-        * "stopping"
-        * "stopped"
-    """
-
-    def __init__(self, code=0, name=None):
-        self.code = code
-        self.name = name
-
-    def __repr__(self):
-        return "%s(%d)" % (self.name, self.code)
-
-
-class InstancePlacement(object):
+class InstancePlacement:
     """
     The location where the instance launched.
 
@@ -72,12 +41,12 @@ class InstancePlacement(object):
         runs on single-tenant hardware.
     """
 
-    def __init__(self, zone=None, group_name=None, tenancy=None):
+    def __init__(self, zone: Any = None, group_name: Any = None, tenancy: Any = None):
         self.zone = zone
         self.group_name = group_name
         self.tenancy = tenancy
 
-    def __repr__(self):
+    def __repr__(self) -> Any:
         return self.zone
 
 
@@ -93,14 +62,14 @@ class Reservation(EC2Object):
                      Reservation.
     """
 
-    def __init__(self, connection=None):
-        super(Reservation, self).__init__(connection)
-        self.id = None
+    def __init__(self, reservation_id: Any) -> None:
+        super().__init__(connection=None)
+        self.id = reservation_id
         self.owner_id = None
-        self.groups = []
-        self.instances = []
+        self.groups: Any = []
+        self.instances: Any = []
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return "Reservation:%s" % self.id
 
 
@@ -159,16 +128,12 @@ class Instance(TaggedEC2Object):
         profile id and arn associated with this instance.
     """
 
-    def __init__(self, connection=None):
-        super(Instance, self).__init__(connection)
-        self.id = None
+    def __init__(self, connection: Any = None):
+        super().__init__(connection)
         self.dns_name = None
         self.public_dns_name = None
         self.private_dns_name = None
         self.key_name = None
-        self.instance_type = None
-        self.launch_time = None
-        self.image_id = None
         self.kernel = None
         self.ramdisk = None
         self.product_codes = ProductCodes()
@@ -177,7 +142,6 @@ class Instance(TaggedEC2Object):
         self.monitoring_state = None
         self.spot_instance_request_id = None
         self.subnet_id = None
-        self.lifecycle = None
         self.private_ip_address = None
         self.ip_address = None
         self.requester_id = None
@@ -185,33 +149,31 @@ class Instance(TaggedEC2Object):
         self.persistent = False
         self.root_device_name = None
         self.root_device_type = None
-        self.block_device_mapping = None
         self.state_reason = None
         self.group_name = None
         self.client_token = None
         self.eventsSet = None
-        self.groups = []
+        self.groups: Any = []
         self.platform = None
-        self.interfaces = []
+        self.interfaces: Any = []
         self.hypervisor = None
         self.virtualization_type = None
         self.architecture = None
         self.instance_profile = None
         self._previous_state = None
-        self._state = InstanceState()
         self._placement = InstancePlacement()
 
-    def __repr__(self):
-        return "Instance:%s" % self.id
+    def __repr__(self) -> str:
+        return "Instance:%s" % self.id  # type: ignore
 
     @property
-    def state(self):
-        return self._state.name
+    def state(self) -> str:
+        return self._state.name  # type: ignore
 
     @property
-    def state_code(self):
-        return self._state.code
+    def state_code(self) -> str:
+        return self._state.code  # type: ignore
 
     @property
-    def placement(self):
+    def placement(self) -> str:
         return self._placement.zone

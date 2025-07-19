@@ -282,10 +282,14 @@ TKeepAliveHttpClient::THttpCode TKeepAliveHttpClient::DoRequestReliable(const T&
         const bool haveNewConnection = CreateNewConnectionIfNeeded();
         const bool couldRetry = !haveNewConnection && i == 0; // Actually old connection could be already closed by server,
                                                               // so we should try one more time in this case.
-        TManualEvent cancellationEndEvent;
-        cancellation.Future().Subscribe([&](auto&) {
-            Connection->Shutdown();
-            cancellationEndEvent.Signal();
+        TAtomicSharedPtr<TManualEvent> cancellationEndEvent = MakeAtomicShared<TManualEvent>();
+        auto cancelSub = cancellation.Future().Subscribe([this, cancellationEndEvent](auto&) {
+            if (cancellationEndEvent.RefCount() > 1) {
+                if (Connection && Connection->IsOk()) {
+                    Connection->Shutdown();
+                }
+                cancellationEndEvent->Signal();
+            }
         });
 
         try {
@@ -298,7 +302,7 @@ TKeepAliveHttpClient::THttpCode TKeepAliveHttpClient::DoRequestReliable(const T&
             return code;
         } catch (const TSystemError& e) {
             if (cancellation.IsCancellationRequested()) {
-                cancellationEndEvent.WaitI();
+                cancellationEndEvent->WaitI();
                 cancellation.ThrowIfCancellationRequested();
             }
             Connection.Reset();
@@ -307,7 +311,7 @@ TKeepAliveHttpClient::THttpCode TKeepAliveHttpClient::DoRequestReliable(const T&
             }
         } catch (const THttpReadException&) { // Actually old connection is already closed by server
             if (cancellation.IsCancellationRequested()) {
-                cancellationEndEvent.WaitI();
+                cancellationEndEvent->WaitI();
                 cancellation.ThrowIfCancellationRequested();
             }
             Connection.Reset();
@@ -316,7 +320,7 @@ TKeepAliveHttpClient::THttpCode TKeepAliveHttpClient::DoRequestReliable(const T&
             }
         } catch (const std::exception&) {
             if (cancellation.IsCancellationRequested()) {
-                cancellationEndEvent.WaitI();
+                cancellationEndEvent->WaitI();
                 cancellation.ThrowIfCancellationRequested();
             }
             Connection.Reset();

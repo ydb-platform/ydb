@@ -232,7 +232,7 @@ private:
     bool HeadersLogged_ = false;
     TInstant LastProgressLogTime_;
 
-    static const THashSet<TString, TCaseInsensitiveStringHasher, TCaseInsensitiveStringEqualityComparer> FilteredHeaders_;
+    static const THashSet<TString, TCaseInsensitiveStringHasher, TCaseInsensitiveStringEqualComparer> FilteredHeaders_;
 
     bool ConnectionClose_ = false;
 

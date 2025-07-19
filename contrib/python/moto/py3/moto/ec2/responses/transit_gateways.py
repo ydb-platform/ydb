@@ -2,7 +2,7 @@ from ._base_response import EC2BaseResponse
 
 
 class TransitGateways(EC2BaseResponse):
-    def create_transit_gateway(self):
+    def create_transit_gateway(self) -> str:
         description = self._get_param("Description") or None
         options = self._get_multi_param_dict("Options")
         tags = self._get_multi_param("TagSpecification")
@@ -32,13 +32,13 @@ class TransitGateways(EC2BaseResponse):
         template = self.response_template(CREATE_TRANSIT_GATEWAY_RESPONSE)
         return template.render(transit_gateway=transit_gateway)
 
-    def delete_transit_gateway(self):
+    def delete_transit_gateway(self) -> str:
         transit_gateway_id = self._get_param("TransitGatewayId")
         transit_gateway = self.ec2_backend.delete_transit_gateway(transit_gateway_id)
         template = self.response_template(DELETE_TRANSIT_GATEWAY_RESPONSE)
         return template.render(transit_gateway=transit_gateway)
 
-    def describe_transit_gateways(self):
+    def describe_transit_gateways(self) -> str:
         transit_gateway_ids = self._get_multi_param("TransitGatewayIds")
         filters = self._filters_from_querystring()
         transit_gateways = self.ec2_backend.describe_transit_gateways(
@@ -47,7 +47,7 @@ class TransitGateways(EC2BaseResponse):
         template = self.response_template(DESCRIBE_TRANSIT_GATEWAY_RESPONSE)
         return template.render(transit_gateways=transit_gateways)
 
-    def modify_transit_gateway(self):
+    def modify_transit_gateway(self) -> str:
         transit_gateway_id = self._get_param("TransitGatewayId")
         description = self._get_param("Description") or None
         options = self._get_multi_param_dict("Options")
@@ -64,6 +64,7 @@ CREATE_TRANSIT_GATEWAY_RESPONSE = """<CreateTransitGatewayResponse xmlns="http:/
     <requestId>151283df-f7dc-4317-89b4-01c9888b1d45</requestId>
     <transitGateway>
         <transitGatewayId>{{ transit_gateway.id }}</transitGatewayId>
+        <transitGatewayArn>{{ transit_gateway.arn }}</transitGatewayArn>
         <ownerId>{{ transit_gateway.owner_id }}</ownerId>
         <description>{{ transit_gateway.description or '' }}</description>
         <createTime>{{ transit_gateway.create_time }}</createTime>
@@ -122,7 +123,7 @@ DESCRIBE_TRANSIT_GATEWAY_RESPONSE = """<DescribeTransitGatewaysResponse xmlns="h
                     </item>
                 {% endfor %}
             </tagSet>
-            <transitGatewayArn>arn:aws:ec2:us-east-1:{{ transit_gateway.owner_id }}:transit-gateway/{{ transit_gateway.id }}</transitGatewayArn>
+            <transitGatewayArn>{{ transit_gateway.arn }}</transitGatewayArn>
             <transitGatewayId>{{ transit_gateway.id }}</transitGatewayId>
         </item>
     {% endfor %}
@@ -166,7 +167,7 @@ MODIFY_TRANSIT_GATEWAY_RESPONSE = """<ModifyTransitGatewaysResponse xmlns="http:
                 </item>
             {% endfor %}
         </tagSet>
-        <transitGatewayArn>arn:aws:ec2:us-east-1:{{ transit_gateway.owner_id }}:transit-gateway/{{ transit_gateway.id }}</transitGatewayArn>
+        <transitGatewayArn>{{ transit_gateway.arn }}</transitGatewayArn>
         <transitGatewayId>{{ transit_gateway.id }}</transitGatewayId>
     </item>
     </transitGatewaySet>

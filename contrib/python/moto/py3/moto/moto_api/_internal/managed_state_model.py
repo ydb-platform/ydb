@@ -1,5 +1,6 @@
 from datetime import datetime, timedelta
 from moto.moto_api import state_manager
+from typing import List, Tuple, Optional
 
 
 class ManagedState:
@@ -7,7 +8,7 @@ class ManagedState:
     Subclass this class to configure state-transitions
     """
 
-    def __init__(self, model_name, transitions):
+    def __init__(self, model_name: str, transitions: List[Tuple[Optional[str], str]]):
         # Indicate the possible transitions for this model
         # Example: [(initializing,queued), (queued, starting), (starting, ready)]
         self._transitions = transitions
@@ -23,11 +24,11 @@ class ManagedState:
         # Name of this model. This will be used in the API
         self.model_name = model_name
 
-    def advance(self):
+    def advance(self) -> None:
         self._tick += 1
 
     @property
-    def status(self):
+    def status(self) -> Optional[str]:
         """
         Transitions the status as appropriate before returning
         """
@@ -51,15 +52,15 @@ class ManagedState:
         return self._status
 
     @status.setter
-    def status(self, value):
+    def status(self, value: str) -> None:
         self._status = value
 
-    def _get_next_status(self, previous):
+    def _get_next_status(self, previous: Optional[str]) -> Optional[str]:
         return next(
             (nxt for prev, nxt in self._transitions if previous == prev), previous
         )
 
-    def _get_last_status(self, previous):
+    def _get_last_status(self, previous: Optional[str]) -> Optional[str]:
         next_state = self._get_next_status(previous)
         while next_state != previous:
             previous = next_state

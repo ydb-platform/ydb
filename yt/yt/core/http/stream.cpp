@@ -24,8 +24,7 @@ constinit const auto Logger = HttpLogger;
 
 namespace {
 
-using TFilteredHeaderMap = THashSet<std::string, TCaseInsensitiveStringHasher, TCaseInsensitiveStringEqualityComparer>;
-YT_DEFINE_GLOBAL(const TFilteredHeaderMap, FilteredHeaders, {
+YT_DEFINE_GLOBAL(const THeaders::THeaderNames, FilteredHeaders, {
     "transfer-encoding",
     "content-length",
     "connection",

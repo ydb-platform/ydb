@@ -962,23 +962,11 @@ private:
                 }
                 if (error.IsOK()) {
                     message = TrackMemory(MemoryUsageTracker_, std::move(message));
-                    if (MemoryUsageTracker_->IsExceeded()) {
-                        auto error = TError(
-                            NRpc::EErrorCode::ResponseMemoryPressure,
-                            "Response is dropped due to high memory pressure");
-                        requestControl->ProfileError(error);
-                        NotifyError(
-                            requestControl,
-                            responseHandler,
-                            TStringBuf("Response is dropped due to high memory pressure"),
-                            error);
-                    } else {
-                        NotifyResponse(
-                            requestId,
-                            requestControl,
-                            responseHandler,
-                            std::move(message));
-                    }
+                    NotifyResponse(
+                        requestId,
+                        requestControl,
+                        responseHandler,
+                        std::move(message));
                 } else {
                     requestControl->ProfileError(error);
                     if (error.GetCode() == EErrorCode::PoisonPill) {

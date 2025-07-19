@@ -227,16 +227,16 @@ namespace NSQLHighlight {
         Syntax s = MakeSyntax(grammar);
 
         THighlighting h;
+        h.Units.emplace_back(MakeUnit<EUnitKind::Comment>(s));
         h.Units.emplace_back(MakeUnit<EUnitKind::Keyword>(s));
         h.Units.emplace_back(MakeUnit<EUnitKind::Punctuation>(s));
         h.Units.emplace_back(MakeUnit<EUnitKind::QuotedIdentifier>(s));
         h.Units.emplace_back(MakeUnit<EUnitKind::BindParamterIdentifier>(s));
-        h.Units.emplace_back(MakeUnit<EUnitKind::TypeIdentifier>(s));
         h.Units.emplace_back(MakeUnit<EUnitKind::FunctionIdentifier>(s));
+        h.Units.emplace_back(MakeUnit<EUnitKind::TypeIdentifier>(s));
         h.Units.emplace_back(MakeUnit<EUnitKind::Identifier>(s));
         h.Units.emplace_back(MakeUnit<EUnitKind::Literal>(s));
         h.Units.emplace_back(MakeUnit<EUnitKind::StringLiteral>(s));
-        h.Units.emplace_back(MakeUnit<EUnitKind::Comment>(s));
         h.Units.emplace_back(MakeUnit<EUnitKind::Whitespace>(s));
 
         return h;

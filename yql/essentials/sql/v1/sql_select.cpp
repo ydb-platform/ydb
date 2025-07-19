@@ -1374,7 +1374,7 @@ template <typename TRule>
              std::same_as<TRule, TRule_select_unparenthesized_stmt>
 TSourcePtr TSqlSelect::BuildStmt(const TRule& node, TPosition& pos) {
     TBuildExtra extra;
-    auto result = BuildUnion(node, pos, extra);
+    auto result = BuildUnionException(node, pos, extra);
     pos = extra.FirstPos;
     if (!result) {
         return nullptr;
@@ -1423,7 +1423,7 @@ TSourcePtr TSqlSelect::BuildStmt(const TRule& node, TPosition& pos) {
 template <typename TRule>
     requires std::same_as<TRule, TRule_select_stmt> ||
              std::same_as<TRule, TRule_select_unparenthesized_stmt>
-TSourcePtr TSqlSelect::BuildUnion(const TRule& node, TPosition& pos, TSqlSelect::TBuildExtra& extra) {
+TSourcePtr TSqlSelect::BuildUnionException(const TRule& node, TPosition& pos, TSqlSelect::TBuildExtra& extra) {
     const TSelectKindPlacement firstPlacement = {
         .IsFirstInSelectOp = true,
         .IsLastInSelectOp = node.GetBlock2().empty(),
@@ -1431,9 +1431,9 @@ TSourcePtr TSqlSelect::BuildUnion(const TRule& node, TPosition& pos, TSqlSelect:
 
     TSourcePtr first;
     if constexpr (std::is_same_v<TRule, TRule_select_stmt>) {
-        first = BuildExceptionIntersection(node.GetRule_select_stmt_intersect1(), pos, firstPlacement, extra);
+        first = BuildIntersection(node.GetRule_select_stmt_intersect1(), pos, firstPlacement, extra);
     } else if constexpr (std::is_same_v<TRule, TRule_select_unparenthesized_stmt>) {
-        first = BuildExceptionIntersection(node.GetRule_select_unparenthesized_stmt_intersect1(), pos, firstPlacement, extra);
+        first = BuildIntersection(node.GetRule_select_unparenthesized_stmt_intersect1(), pos, firstPlacement, extra);
     } else {
         static_assert(false, "Change implementation according to grammar changes.");
     }
@@ -1443,25 +1443,31 @@ TSourcePtr TSqlSelect::BuildUnion(const TRule& node, TPosition& pos, TSqlSelect:
     }
 
     TVector<TSourcePtr> sources = {std::move(first)};
+    TString lastOp = "";
     bool isLastAllQualified = false;
 
     const auto& tail = node.GetBlock2();
     for (int i = 0; i < tail.size(); ++i) {
         const auto& nextBlock = tail[i];
 
+        TString nextOp = ToLowerUTF8(Token(nextBlock.GetRule_union_op1().GetToken1()));
         bool isNextAllQualified = IsAllQualifiedOp(nextBlock.GetRule_union_op1());
 
         TSelectKindPlacement nextPlacement = {
             .IsFirstInSelectOp = false,
             .IsLastInSelectOp = (i + 1 == tail.size()),
         };
-        TSourcePtr next = BuildExceptionIntersection(nextBlock.GetRule_select_stmt_intersect2(), pos, nextPlacement, extra);
+        TSourcePtr next = BuildIntersection(nextBlock.GetRule_select_stmt_intersect2(), pos, nextPlacement, extra);
         if (!next) {
             return nullptr;
         }
 
-        if (i != 0 && isLastAllQualified != isNextAllQualified) {
-            auto source = BuildSelectOp(pos, std::move(sources), "union", isLastAllQualified, /* settings = */ {});
+        bool areArgsInflattable = ((isLastAllQualified != isNextAllQualified) ||
+                                   (lastOp != nextOp) ||
+                                   (nextOp != "union"));
+
+        if ((i != 0) && areArgsInflattable) {
+            auto source = BuildSelectOp(pos, std::move(sources), lastOp, isLastAllQualified, /* settings = */ {});
             Y_ENSURE(source);
 
             sources.clear();
@@ -1469,6 +1475,7 @@ TSourcePtr TSqlSelect::BuildUnion(const TRule& node, TPosition& pos, TSqlSelect:
         }
 
         sources.emplace_back(std::move(next));
+        lastOp = std::move(nextOp);
         isLastAllQualified = isNextAllQualified;
     }
 
@@ -1483,13 +1490,13 @@ TSourcePtr TSqlSelect::BuildUnion(const TRule& node, TPosition& pos, TSqlSelect:
         outermostSettings.Label = extra.Last.Settings.Label;
     }
 
-    return BuildSelectOp(pos, std::move(sources), "union", isLastAllQualified, outermostSettings);
+    return BuildSelectOp(pos, std::move(sources), lastOp, isLastAllQualified, outermostSettings);
 }
 
 template <typename TRule>
     requires std::same_as<TRule, TRule_select_stmt_intersect> ||
              std::same_as<TRule, TRule_select_unparenthesized_stmt_intersect>
-TSourcePtr TSqlSelect::BuildExceptionIntersection(
+TSourcePtr TSqlSelect::BuildIntersection(
     const TRule& node,
     TPosition& pos,
     TSelectKindPlacement placement,

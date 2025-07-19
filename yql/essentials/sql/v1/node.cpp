@@ -1709,8 +1709,8 @@ void IAggregation::DoUpdateState() const {
     State_.Set(ENodeState::OverWindowDistinct, AggMode_ == EAggregateMode::OverWindowDistinct);
 }
 
-const TString* IAggregation::GetGenericKey() const {
-    return nullptr;
+TMaybe<TString> IAggregation::GetGenericKey() const {
+    return Nothing();
 }
 
 void IAggregation::Join(IAggregation*) {

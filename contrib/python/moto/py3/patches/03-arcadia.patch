@@ -1,6 +1,6 @@
 --- contrib/python/moto/py3/moto/s3/responses.py	(index)
 +++ contrib/python/moto/py3/moto/s3/responses.py	(working tree)
-@@ -343,7 +343,10 @@ class ResponseObject(_TemplateEnvironmentMixin, ActionAuthenticatorMixin):
+@@ -362,7 +362,10 @@ class S3Response(BaseResponse):
          #
          # Workaround - manually reverse the encoding.
          # Keep the + encoded, ensuring that parse_qsl doesn't replace it, and parse_qsl will unquote it afterwards
@@ -9,7 +9,6 @@
 +        # YQ-1825: Replace was commented out as the version of `Werkzeug`
 +        # that we are using is 2.0.3 (lesser than 2.1.0) and workaround is not needed
 +        qs = (parsed_url.query or "") #.replace("+", "%2B")
-         querystring = parse_qs(qs, keep_blank_values=True)
-         return querystring
- 
+         return parse_qs(qs, keep_blank_values=True)
 
+     def _bucket_response_head(

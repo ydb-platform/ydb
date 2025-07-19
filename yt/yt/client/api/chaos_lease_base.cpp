@@ -3,9 +3,13 @@
 #include "connection.h"
 #include "client.h"
 
+#include <yt/yt/client/object_client/helpers.h>
+
 #include <yt/yt/core/rpc/public.h>
 
 namespace NYT::NApi {
+
+using namespace NObjectClient;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -23,7 +27,7 @@ TChaosLeaseBase::TChaosLeaseBase(
     , Timeout_(timeout)
     , PingAncestors_(pingAncestors)
     , PingPeriod_(pingPeriod)
-    , Logger(logger.WithTag("ChaosLease: %v, %v",
+    , Logger(logger.WithTag("ChaosLeaseId: %v, %v",
         Id_,
         Client_->GetConnection()->GetLoggingTag()))
 { }
@@ -83,7 +87,7 @@ TFuture<void> TChaosLeaseBase::Abort(const TPrerequisiteAbortOptions& options)
         AbortPromise_ = NewPromise<void>();
     }
 
-    auto chaosLeasePath = Format("#%v", GetId());
+    auto chaosLeasePath = FromObjectId(GetId());
     auto removeOptions = TRemoveNodeOptions{
         .Force = options.Force,
     };
@@ -110,11 +114,11 @@ TFuture<void> TChaosLeaseBase::Abort(const TPrerequisiteAbortOptions& options)
 
                     auto abortPromise = std::exchange(AbortPromise_, TPromise<void>());
 
-                    if (abortError.IsOK() && !Aborted_.IsFired()) {
+                    guard.Release();
+
+                    if (abortError.IsOK()) {
                         Aborted_.Fire(TError("Chaos lease aborted by user request"));
                     }
-
-                    guard.Release();
 
                     abortPromise.Set(std::move(abortError));
                 }

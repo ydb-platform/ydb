@@ -247,8 +247,8 @@ public:
     TRuntimeNode FromBlocks(TRuntimeNode flow);
     TRuntimeNode WideFromBlocks(TRuntimeNode flow);
     TRuntimeNode ListFromBlocks(TRuntimeNode list);
-    TRuntimeNode WideSkipBlocks(TRuntimeNode flow, TRuntimeNode count);
-    TRuntimeNode WideTakeBlocks(TRuntimeNode flow, TRuntimeNode count);
+    TRuntimeNode WideSkipBlocks(TRuntimeNode stream, TRuntimeNode count);
+    TRuntimeNode WideTakeBlocks(TRuntimeNode stream, TRuntimeNode count);
     TRuntimeNode WideTopBlocks(TRuntimeNode flow, TRuntimeNode count, const std::vector<std::pair<ui32, TRuntimeNode>>& keys);
     TRuntimeNode WideTopSortBlocks(TRuntimeNode flow, TRuntimeNode count, const std::vector<std::pair<ui32, TRuntimeNode>>& keys);
     TRuntimeNode WideSortBlocks(TRuntimeNode flow, const std::vector<std::pair<ui32, TRuntimeNode>>& keys);

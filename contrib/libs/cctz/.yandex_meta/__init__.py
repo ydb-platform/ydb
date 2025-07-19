@@ -1,5 +1,5 @@
 from devtools.yamaker.modules import Linkable, Switch, Words
-from devtools.yamaker.project import GNUMakeNixProject
+from devtools.yamaker.project import CMakeNinjaNixProject
 
 
 def post_install(self):
@@ -10,18 +10,22 @@ def post_install(self):
             Switch(OS_DARWIN=Linkable(LDFLAGS=[Words("-framework", "CoreFoundation")])),
         )
         # Recurse to manual ya.make's.
-        m.RECURSE |= {"test", "tzdata"}
+        m.RECURSE |= {"tzdata"}
+
+    with self.yamakes["test"] as test:
+        test.module = "GTEST"
+        test.GTEST = []
+        test.CFLAGS.remove("-DGTEST_LINKED_AS_SHARED_LIBRARY=1")
+        test.PEERDIR.add(f"{self.arcdir}/tzdata")
+        test.PEERDIR.remove("contrib/restricted/googletest/googletest")
+        test.EXPLICIT_DATA = True
 
 
-cctz = GNUMakeNixProject(
+cctz = CMakeNinjaNixProject(
     arcdir="contrib/libs/cctz",
     nixattr="cctz",
     keep_paths=[
-        "test/ya.make",
         "tzdata",
-    ],
-    copy_sources=[
-        "src/*_test.cc",
     ],
     disable_includes=[
         "fuchsia/intl/cpp/fidl.h",
@@ -29,7 +33,22 @@ cctz = GNUMakeNixProject(
         "lib/fdio/directory.h",
     ],
     use_full_libnames=True,
-    install_targets=["libcctz"],
+    install_targets=[
+        "libcctz",
+        "civil_time_test",
+        "time_zone_format_test",
+        "time_zone_lookup_test",
+    ],
+    put={
+        "libcctz": ".",
+        "civil_time_test": "test",
+    },
+    put_with={
+        "civil_time_test": [
+            "time_zone_format_test",
+            "time_zone_lookup_test",
+        ],
+    },
     addincl_global={".": {"./include"}},
     post_install=post_install,
 )

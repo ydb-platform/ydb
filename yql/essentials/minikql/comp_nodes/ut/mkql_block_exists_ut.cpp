@@ -62,11 +62,11 @@ void DoBlockExistsOffset(size_t length, size_t offset) {
             pb.Nth(item, 3)
         };
     });
-    node = pb.ToFlow(pb.WideToBlocks(pb.FromFlow(node)));
+    node = pb.WideToBlocks(pb.FromFlow(node));
     if (offset > 0) {
         node = pb.WideSkipBlocks(node, pb.NewDataLiteral<ui64>(offset));
     }
-    node = pb.WideMap(node, [&](TRuntimeNode::TList items) -> TRuntimeNode::TList {
+    node = pb.WideMap(pb.ToFlow(node), [&](TRuntimeNode::TList items) -> TRuntimeNode::TList {
         return {
             items[0],
             pb.BlockExists(items[1]),

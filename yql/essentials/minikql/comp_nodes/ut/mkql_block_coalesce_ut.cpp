@@ -272,7 +272,7 @@ void BlockCoalesceGraphTest(size_t length, size_t offset) {
 
     node = pb.ToFlow(pb.WideToBlocks(pb.FromFlow(node)));
     if (offset > 0) {
-        node = pb.WideSkipBlocks(node, pb.NewDataLiteral<ui64>(offset));
+        node = pb.ToFlow(pb.WideSkipBlocks(pb.FromFlow(node), pb.NewDataLiteral<ui64>(offset)));
     }
     node = pb.WideMap(node, [&](TRuntimeNode::TList items) -> TRuntimeNode::TList {
         Y_ENSURE(items.size() == 3);

@@ -1,9 +1,9 @@
 --- contrib/python/moto/py3/moto/core/responses.py
 +++ contrib/python/moto/py3/moto/core/responses.py
-@@ -344,6 +344,7 @@ class BaseResponse(_TemplateEnvironmentMixin, ActionAuthenticatorMixin):
+@@ -427,6 +427,7 @@ class BaseResponse(_TemplateEnvironmentMixin, ActionAuthenticatorMixin):
              return "AKIAEXAMPLE"
 
-     def get_current_account(self):
+     def get_current_account(self) -> str:
 +        return "123456789012"
          # PRIO 1: Check if we have a Environment Variable set
          if "MOTO_ACCOUNT_ID" in os.environ:

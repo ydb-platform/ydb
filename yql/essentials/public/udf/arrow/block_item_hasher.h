@@ -57,6 +57,14 @@ public:
     }
 };
 
+template <bool Nullable>
+class TFixedSizeBlockItemHasher<NYql::NUuid::TUuid, Nullable> : public TBlockItemHasherBase<TFixedSizeBlockItemHasher<NYql::NUuid::TUuid, Nullable>, Nullable> {
+public:
+    ui64 DoHash(TBlockItem value) const {
+        return GetValueHash<TDataType<NUdf::TUuid>::Slot>(NUdf::TUnboxedValuePod(value.GetUuid()));
+    }
+};
+
 template <typename T, bool Nullable>
 class TTzDateBlockItemHasher : public TBlockItemHasherBase<TTzDateBlockItemHasher<T, Nullable>, Nullable> {
 public:

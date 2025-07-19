@@ -336,6 +336,7 @@ bool TOlapColumnBase::IsAllowedPkType(ui32 typeId) {
         case NYql::NProto::Timestamp64:
         case NYql::NProto::Interval64:
         case NYql::NProto::Decimal:
+        case NYql::NProto::Uuid:
             return true;
         default:
             return false;

@@ -181,7 +181,8 @@ NKikimr::TConclusionStatus TSchemaTransactionOperator::ValidateTableSchema(const
         //NTypeIds::Double,
         NTypeIds::String,
         NTypeIds::Utf8,
-        NTypeIds::Decimal
+        NTypeIds::Decimal,
+        NTypeIds::Uuid
     };
 
     if (!schema.KeyColumnNamesSize()) {

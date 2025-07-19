@@ -28,7 +28,7 @@ public:
         using TBase = NConveyor::ITask;
         const NActors::TActorId OwnerId;
         NColumnShard::TCounterGuard Guard;
-        virtual TConclusionStatus DoExecuteImpl() = 0;
+        virtual TConclusion<bool> DoExecuteImpl() = 0;
 
     protected:
         virtual void DoExecute(const std::shared_ptr<NConveyor::ITask>& taskPtr) override final;

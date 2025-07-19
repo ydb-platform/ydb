@@ -157,7 +157,6 @@ void TManager::SetMemoryConsumer(TIntrusivePtr<NMemory::IMemoryConsumer> consume
 
 void TManager::UpdateMemoryLimits(const ui64 limit, const std::optional<ui64>& hardLimit) {
     AFL_ENSURE(DefaultStage);
-
     bool isLimitIncreased = false;
     DefaultStage->UpdateMemoryLimits(limit, hardLimit, isLimitIncreased);
     if (isLimitIncreased) {

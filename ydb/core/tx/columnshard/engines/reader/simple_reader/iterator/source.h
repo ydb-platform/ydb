@@ -138,6 +138,13 @@ public:
         return SourceGroupGuard;
     }
 
+    std::shared_ptr<NGroupedMemoryManager::TGroupGuard> ExtractGroupGuard() {
+        AFL_VERIFY(SourceGroupGuard);
+        auto result = std::move(SourceGroupGuard);
+        SourceGroupGuard = nullptr;
+        return std::move(result);
+    }
+
     ui64 GetMemoryGroupId() const {
         AFL_VERIFY(SourceGroupGuard);
         return SourceGroupGuard->GetGroupId();

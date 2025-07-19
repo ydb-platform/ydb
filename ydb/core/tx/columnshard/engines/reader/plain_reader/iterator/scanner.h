@@ -104,7 +104,7 @@ public:
     }
 
     void OnIntervalResult(std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>&& allocationGuard,
-        const std::optional<NArrow::TShardedRecordBatch>& batch,
+        std::optional<NArrow::TShardedRecordBatch>&& batch,
         const std::shared_ptr<arrow::RecordBatch>& lastPK, std::unique_ptr<NArrow::NMerger::TMergePartialStream>&& merger,
         const ui32 intervalIdx, TPlainReadData& reader);
 

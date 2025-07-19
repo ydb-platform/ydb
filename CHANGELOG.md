@@ -41,6 +41,16 @@ and timeout (by default, the maximum response time from healthcheck). Documentat
 * 18859:Added support for Board reconfiguration in StateStorage via DistConf. [#18859](https://github.com/ydb-platform/ydb/pull/18859) ([Evgenik2](https://github.com/Evgenik2))
 * 19134:Added the `running` status to script execution statuses (improved output for the get script execution operation). [#19134](https://github.com/ydb-platform/ydb/pull/19134) ([Pisarenko Grigoriy](https://github.com/GrigoriyPA))
 * 18444:Added support for a new external data source [OpenSearch](https://opensearch.org/) in federated queries. [#18444](https://github.com/ydb-platform/ydb/pull/18444) ([Arslan Giniyatullin](https://github.com/Arslanka))
+* 19893:Implemented new robust algorithm for HDRF scheduler that don't allow to execute more tasks than demand allows. [#19893](https://github.com/ydb-platform/ydb/pull/19893) ([Ivan](https://github.com/abyss7))
+* 19817:Added CS compaction ResourceBroker queues configuration to MemoryController. [#19817](https://github.com/ydb-platform/ydb/pull/19817) ([Vladilen](https://github.com/Vladilen))
+* 19735:Added Accept header to oidc white list. [#19735](https://github.com/ydb-platform/ydb/pull/19735) ([Andrei Rykov](https://github.com/StekPerepolnen))
+* 19653:OIDC needs pass tracing headers [#19653](https://github.com/ydb-platform/ydb/pull/19653) ([Andrei Rykov](https://github.com/StekPerepolnen))
+* 19642:Added ColumnShard update/delete rows and bytes statistics. [#19642](https://github.com/ydb-platform/ydb/pull/19642) ([Vladilen](https://github.com/Vladilen))
+* 19618:Re-implement the KQP scheduler for CPU using HDRF model. [#19618](https://github.com/ydb-platform/ydb/pull/19618) ([Ivan](https://github.com/abyss7))
+* 19600:Healthcheck API can now report if cluster is in not bootstrapped state under configuration v2. [#19600](https://github.com/ydb-platform/ydb/pull/19600) ([vporyadke](https://github.com/vporyadke))
+* 19580:Added support fo changing [schema object limits](./concepts/limits-ydb#schema-object) (MAX_SHARDS, MAX_PATHS, ...) with YQL. ([Daniil Demin](https://github.com/jepett0))
+* 19567:Added new operation increment, support Integer types only. [#19567](https://github.com/ydb-platform/ydb/pull/19567) ([r314-git](https://github.com/r314-git))
+* 18333:Added audit logs for YMQ events in common ydb format. [#18333](https://github.com/ydb-platform/ydb/pull/18333) ([flown4qqqq](https://github.com/flown4qqqq))
 
 ### Bug fixes
 
@@ -90,6 +100,8 @@ and timeout (by default, the maximum response time from healthcheck). Documentat
 * 18924:Fixed a race condition between YardInit and Slay when a group (and therefore a VDisk) is created and then immediately deleted, removing "phantom vdisks" from pdisks. [#18924](https://github.com/ydb-platform/ydb/pull/18924) ([Semyon Danilov](https://github.com/SammyVimes))
 * 18764:Fixed an [issue](https://github.com/ydb-platform/ydb/issues/18747) with a timestamp push down in OLAP. [#18764](https://github.com/ydb-platform/ydb/pull/18764) ([Oleg Doronin](https://github.com/dorooleg))
 * 19466:Fixed float sum aggregation in arrow::Kernel. [#19466](https://github.com/ydb-platform/ydb/pull/19466) ([Oleg Doronin](https://github.com/dorooleg))
+* 19781:Fixed an [issue](https://github.com/ydb-platform/ydb/issues/19799) - VERIFY in CMS when trying to lock pdisk without vdisks twice. [#19781](https://github.com/ydb-platform/ydb/pull/19781) ([Semyon Danilov](https://github.com/SammyVimes))
+* 19762:Fixed a [bug](https://github.com/ydb-platform/ydb/issues/19619) with absolute paths in workloads. [#19762](https://github.com/ydb-platform/ydb/pull/19762) ([Олег](https://github.com/iddqdex))
 
 ### YDB UI
 

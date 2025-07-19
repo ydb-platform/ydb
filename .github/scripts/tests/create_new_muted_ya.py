@@ -145,12 +145,7 @@ def create_debug_string(test, resolution, success_rate=None):
     
     debug_string = f"{testsuite} {testcase} # owner {test.get('owner', 'N/A')} success_rate {success_rate}%"
     
-    if resolution in ['to_mute', 'to_unmute', 'to_delete']:
-        debug_string += f", pass_count {test.get('pass_count')}, fail_count {test.get('fail_count')}, total_runs {runs}, resolution {resolution}"
-    elif resolution == 'flaky':
-        debug_string += f", pass_count {test.get('pass_count')}, fail count {test.get('fail_count')}"
-    elif resolution == 'muted_ya':
-        debug_string += f", pass_count {test.get('pass_count')}, fail_count {test.get('fail_count')}, total_runs {runs}, resolution {resolution}"
+    debug_string += f", p-{test.get('pass_count')}, f-{test.get('fail_count')},m-{test.get('mute_count')}, s-{test.get('skip_count')}, total {runs}, resolution {resolution}"
     
     return debug_string + "\n"
 

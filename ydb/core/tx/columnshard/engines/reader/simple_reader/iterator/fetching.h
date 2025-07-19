@@ -42,6 +42,30 @@ public:
 
 class IDataSource;
 
+class TStepAggregationSources : public IFetchingStep {
+private:
+    const std::shared_ptr<NArrow::NSSA::IResourcesAggregator> Aggregator;
+
+public:
+    TStepAggregationSources(const std::shared_ptr<NArrow::NSSA::IResourceProcessor>& proc)
+        : Processor(proc) {
+    }
+
+    virtual TConclusion<bool> DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const override {
+        AFL_VERIFY(source->GetType() == IDataSource::EType::Aggregation);
+        auto* aggrSource = static_cast<const TAggregationDataSource*>(source.get());
+        auto conclusion = Aggregator->Execute(aggrSource->GetSources(), GetFetchedData()->GetTable());
+        if (conclusion.IsFail()) {
+            return conclusion;
+        }
+        const ui32 recordsCount = GetStageData().GetTable()->GetRecordsCount();
+        StageResult = std::make_unique<TFetchedResult>(ExtractStageData(), *GetContext()->GetCommonContext()->GetResolver());
+        StageResult->SetPages({ TPortionDataAccessor::TReadPage(0, recordsCount, 0) });
+        StageResult->SetResultChunk(StageResult->GetBatch()->BuildTableVerified());
+        return true;
+    }
+};
+
 class TDetectInMemStep: public IFetchingStep {
 private:
     using TBase = IFetchingStep;

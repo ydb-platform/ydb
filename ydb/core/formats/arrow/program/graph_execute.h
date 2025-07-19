@@ -142,6 +142,18 @@ private:
     bool IsFilterRoot(const ui32 identifier) const;
 
 public:
+    std::shared_ptr<IResourcesAggregator> GetResultsAggregationProcessor() const {
+        if (ResultRoot->GetProcessor()->GetType() != EProcessorType::Projection) {
+            return nullptr;
+        }
+        for (auto&& i : ResultRoot->GetInputEdges()) {
+            if (i->GetProcessor()->IsAggregation()) {
+                return i->GetProcessor()->BuildResultsAggregator();
+            }
+        }
+        return nullptr;
+    }
+
     const THashMap<ui64, std::shared_ptr<TNode>>& GetNodes() const {
         return Nodes;
     }

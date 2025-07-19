@@ -281,6 +281,17 @@ public:
 
 class TProcessorContext;
 
+class IResourcesAggregator {
+private:
+    virtual TConclusionStatus DoExecute(
+        const std::vector<IDataSource>& sources, const std::shared_ptr<TAccessorsCollection>& collectionResult) const = 0;
+
+public:
+    TConclusionStatus Execute(const std::vector<IDataSource>& sources, const std::shared_ptr<TAccessorsCollection>& collectionResult) const {
+        return DoExecute(sources, collectionResult);
+    }
+};
+
 class IResourceProcessor {
 public:
     enum class EExecutionResult {
@@ -307,6 +318,10 @@ private:
     }
 
 public:
+    virtual std::shared_ptr<IResourcesAggregator> BuildResultsAggregator() const {
+        return nullptr;
+    }
+
     TString GetSignalCategoryName() const {
         return DoGetSignalCategoryName();
     }

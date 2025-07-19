@@ -10,10 +10,56 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 
 namespace NKikimr::NOlap::NGroupedMemoryManager {
+
+namespace {
+
+template<class T>
+class TLoadQueue {
+    using TLoad = i64;
+    std::map<TLoad, std::set<T>> Load;
+    std::map<T, TLoad> Items;
+
+public:
+    void Add(const T& item) {
+        Load[0].emplace(item);
+        Items[item] = 0;
+    }
+
+    const T& Top() {
+        auto loadLevelIt = Load.begin();
+        AFL_VERIFY(loadLevelIt != Load.end())("error", "Load queue is empty. Please add at least one element to load queue");
+        return *loadLevelIt->second.begin();
+    }
+
+    void ChangeLoad(const T& item, i64 delta) {
+        if (delta == 0) {
+            return;
+        }
+        auto it = Items.find(item);
+        AFL_VERIFY(it != Items.end())("error", "Load item is not found");
+        TLoad& load = it->second;
+        auto loadLevelIt = Load.find(load);
+        loadLevelIt->second.erase(item);
+        if (loadLevelIt->second.empty()) {
+            Load.erase(loadLevelIt);
+        }
+        load += delta;
+        Load[load].emplace(item);
+    }
+};
+
+}
 class TManager;
 class TMemoryLimiterActor: public NActors::TActorBootstrapped<TMemoryLimiterActor> {
 private:
-    std::shared_ptr<TManager> Manager;
+    TVector<std::shared_ptr<TManager>> Managers;
+    TLoadQueue<size_t> LoadQueue;
+    struct TProcessStats {
+        size_t ManagerIndex = 0;
+        int Counter = 0;
+    };
+    TMap<ui64, TProcessStats> ProcessMapping;
+
     const TConfig Config;
     const TString Name;
     const std::shared_ptr<TCounters> Signals;
@@ -61,6 +107,10 @@ public:
                 AFL_VERIFY(false)("ev_type", ev->GetTypeName());
         }
     }
+private:
+    size_t AcquireManager(ui64 externalProcessId);
+    size_t ReleaseManager(ui64 externalProcessId);
+    size_t GetManager(ui64 externalProcessId);
 };
 
 }   // namespace NKikimr::NOlap::NGroupedMemoryManager

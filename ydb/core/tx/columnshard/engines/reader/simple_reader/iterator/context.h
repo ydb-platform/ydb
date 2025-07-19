@@ -30,18 +30,18 @@ private:
     std::shared_ptr<TFetchingScript> AskAccumulatorsScript;
 
     virtual std::shared_ptr<TFetchingScript> DoGetColumnsFetchingPlan(const std::shared_ptr<NCommon::IDataSource>& source) override;
-    std::optional<std::shared_ptr<TFetchingScript>> SourcesAggregationScript;
+    mutable std::optional<std::shared_ptr<TFetchingScript>> SourcesAggregationScript;
 
 public:
-    std::shared_ptr<TFetchingScript> GetSourcesAggregationScript() {
+    std::shared_ptr<TFetchingScript> GetSourcesAggregationScript() const {
         if (!SourcesAggregationScript) {
             auto aggrProc = GetReadMetadata()->GetProgram().GetChainVerified()->GetResultsAggregationProcessor();
             if (!aggrProc) {
                 SourcesAggregationScript = nullptr;
             } else {
-                TFetchingScriptBuilder builder(*this);
+                NCommon::TFetchingScriptBuilder builder(*this);
                 builder.AddStep(std::make_shared<TStepAggregationSources>(aggrProc));
-                SourcesAggregationScript = builder.Build();
+                SourcesAggregationScript = std::move(builder).Build();
             }
         }
         return *SourcesAggregationScript;

@@ -34,7 +34,7 @@ void ISyncPoint::OnSourcePrepared(const std::shared_ptr<IDataSource>& sourceInpu
                 AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "provide_source")("source_id", source->GetSourceId());
                 if (Next) {
                     source->ResetSourceFinishedFlag();
-                    Next->AddSource(source);
+                    Next->AddSource(std::move(source));
                 } else if (Collection) {
                     Collection->OnSourceFinished(source);
                 }

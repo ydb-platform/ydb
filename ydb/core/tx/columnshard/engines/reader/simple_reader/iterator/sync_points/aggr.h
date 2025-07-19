@@ -9,7 +9,6 @@ class TSyncPointResultsAggregationControl: public ISyncPoint {
 private:
     using TBase = ISyncPoint;
 
-    const ui32 MemoryLimit;
     std::vector<std::shared_ptr<IDataSource>> SourcesToAggregate;
     const std::shared_ptr<TFetchingScript> AggregationScript;
     ui32 SourcesCount = 0;
@@ -18,7 +17,7 @@ private:
         if (SourcesToAggregate.empty()) {
             return nullptr;
         }
-        auto result = std::make_shared<TAggregationDataSource>(std::move(SourcesToAggregate), SourcesCount);
+        auto result = std::make_shared<TAggregationDataSource>(std::move(SourcesToAggregate), Context);
         ++SourcesCount;
         SourcesToAggregate.clear();
         SourcesSequentially.emplace_back(result);
@@ -30,7 +29,7 @@ private:
         return source->IsSyncSection() && source->HasStageData();
     }
 
-    virtual std::shared_ptr<IDataSource> OnSourceFinished() override {
+    virtual std::shared_ptr<IDataSource> DoOnSourceFinished() override {
         return Flush();
     }
 
@@ -59,9 +58,9 @@ private:
         auto resultChunk = source->MutableStageResult().ExtractResultChunk();
         AFL_VERIFY(source->GetStageResult().IsFinished());
         if (resultChunk && resultChunk->HasData()) {
-            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "has_result")("source_id", source->GetLastSourceId())(
-                "source_idx", source->GetSourceIdx())("table", resultChunk->GetTable()->num_rows())("is_finished", isFinished);
-            auto cursor = std::make_shared<TNotSortedSimpleScanCursor>(aggrSource->GetLastSourceId(), source->GetLastSourceRecordsCount());
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "has_result")("source_id", aggrSource->GetLastSourceId())(
+                "source_idx", source->GetSourceIdx())("table", resultChunk->GetTable()->num_rows());
+            auto cursor = std::make_shared<TNotSortedSimpleScanCursor>(aggrSource->GetLastSourceId(), aggrSource->GetLastSourceRecordsCount());
             reader.OnIntervalResult(std::make_unique<TPartialReadResult>(source->ExtractResourceGuards(), source->ExtractGroupGuard(),
                 resultChunk->ExtractTable(), std::move(cursor), Context->GetCommonContext(), std::nullopt));
         }

@@ -4,6 +4,7 @@
 #include "collections/full_scan_sorted.h"
 #include "collections/limit_sorted.h"
 #include "collections/not_sorted.h"
+#include "sync_points/aggr.h"
 #include "sync_points/limit.h"
 #include "sync_points/result.h"
 
@@ -49,7 +50,7 @@ TConclusion<bool> TScanHead::BuildNextInterval() {
     bool changed = false;
     while (SourcesCollection->HasData() && SourcesCollection->CheckInFlightLimits()) {
         auto source = SourcesCollection->ExtractNext();
-        SyncPoints.front()->AddSource(source);
+        SyncPoints.front()->AddSource(std::move(source));
         changed = true;
     }
     return changed;

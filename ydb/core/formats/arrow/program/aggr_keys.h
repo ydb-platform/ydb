@@ -49,7 +49,7 @@ private:
         return result;
     }
 
-    virtual std::shared_ptr<IStepFunction> BuildResultsAggregator() const {
+    virtual std::shared_ptr<IStepFunction> BuildResultsAggregator() const override {
         AFL_VERIFY(!GetFunctionOptions());
         return std::make_shared<TAggregateFunction>(TAggregationsHelper::GetSecondaryAggregationId(AggregationType), GetFunctionOptions());
     }

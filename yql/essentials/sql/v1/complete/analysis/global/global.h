@@ -9,6 +9,7 @@
 #include <util/generic/string.h>
 #include <util/generic/vector.h>
 #include <util/generic/hash.h>
+#include <util/generic/hash_set.h>
 
 namespace NSQLComplete {
 
@@ -17,36 +18,33 @@ namespace NSQLComplete {
         TString Cluster;
     };
 
-    template <std::regular T>
-    struct TAliased: T {
-        TString Alias;
+    struct TFunctionContext {
+        TString Name;
+        size_t ArgumentNumber = 0;
 
-        TAliased(TString alias, T value)
-            : T(std::move(value))
-            , Alias(std::move(alias))
-        {
-        }
-
-        TAliased(T value)
-            : T(std::move(value))
-        {
-        }
-
-        friend bool operator==(const TAliased& lhs, const TAliased& rhs) = default;
+        friend bool operator==(const TFunctionContext& lhs, const TFunctionContext& rhs) = default;
     };
 
+    // TODO(YQL-19747): Try to refactor to use Map/Set data structures
     struct TColumnContext {
         TVector<TAliased<TTableId>> Tables;
+        TVector<TColumnId> Columns;
+        THashMap<TString, THashSet<TString>> WithoutByTableAlias;
 
-        TVector<TTableId> TablesWithAlias(TStringBuf alias) const;
+        bool IsAsterisk() const;
+        TColumnContext ExtractAliased(TMaybe<TStringBuf> alias);
+        TColumnContext Renamed(TStringBuf alias) &&;
 
         friend bool operator==(const TColumnContext& lhs, const TColumnContext& rhs) = default;
+        friend TColumnContext operator|(TColumnContext lhs, TColumnContext rhs);
+
+        static TColumnContext Asterisk();
     };
 
     struct TGlobalContext {
         TMaybe<TUseContext> Use;
         TVector<TString> Names;
-        TMaybe<TString> EnclosingFunction;
+        TMaybe<TFunctionContext> EnclosingFunction;
         TMaybe<TColumnContext> Column;
     };
 

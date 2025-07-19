@@ -57,11 +57,15 @@ message TEvUpdate {
 
 message TEvDelete {
     optional fixed64 TabletID = 1;
+    optional uint64 ClusterStateGeneration = 2;
+    optional fixed64 ClusterStateGuid = 3;
 };
 
 message TEvCleanup {
     optional fixed64 TabletID = 1;
     optional NActorsProto.TActorId ProposedLeader = 2;
+    optional uint64 ClusterStateGeneration = 3;
+    optional fixed64 ClusterStateGuid = 4;
 }
 
 message TEvRegisterFollower {
@@ -117,9 +121,13 @@ message TEvReplicaBoardLookup {
 };
 
 message TEvReplicaBoardCleanup {
+    optional uint64 ClusterStateGeneration = 1;
+    optional fixed64 ClusterStateGuid = 2;
 };
 
 message TEvReplicaBoardUnsubscribe {
+    optional uint64 ClusterStateGeneration = 1;
+    optional fixed64 ClusterStateGuid = 2;
 };
 
 message TBoardEntryInfo {

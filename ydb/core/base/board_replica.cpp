@@ -252,6 +252,7 @@ class TBoardReplicaActor : public TActorBootstrapped<TBoardReplicaActor> {
     }
 
     void Handle(TEvStateStorage::TEvReplicaBoardCleanup::TPtr &ev) {
+        CheckConfigVersion(ev->Sender, ev->Get());
         auto ownerIt = IndexOwner.find(ev->Sender);
         if (ownerIt == IndexOwner.end()) // do nothing, already removed?
             return;
@@ -385,7 +386,7 @@ class TBoardReplicaActor : public TActorBootstrapped<TBoardReplicaActor> {
 
     void Handle(TEvStateStorage::TEvReplicaBoardUnsubscribe::TPtr& ev) {
         const auto& sender = ev->Sender;
-
+        CheckConfigVersion(sender, ev->Get());
         CleanupSubscriber(sender, ev->InterconnectSession);
     }
 

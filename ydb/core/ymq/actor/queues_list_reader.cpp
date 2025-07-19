@@ -1,5 +1,5 @@
 #include "queues_list_reader.h"
-#include "cfg.h"
+#include <ydb/core/ymq/actor/cfg/cfg.h>
 #include "executor.h"
 #include "events.h"
 

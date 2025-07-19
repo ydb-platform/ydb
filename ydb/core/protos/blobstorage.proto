@@ -540,6 +540,7 @@ message TEvVAssimilate {
     optional NKikimrProto.TLogoBlobID SkipBlobsUpTo = 12; // the same behaviour
 
     optional bool IgnoreDecommitState = 13 [default = false]; // do not check if VDisk belongs to a being-decommitted group
+    optional bool Reverse = 14 [default = false]; // generate records in reverse order
 }
 
 message TEvVAssimilateResult {
@@ -788,8 +789,18 @@ enum ESyncFullStage {
     Blocks = 2;
     Barriers = 3;
 }
+// Legacy protocol relies on linear order of blobs, barriers and blocks,
+// because it uses new snapshot on every TEvVSyncFull event and so it requires
+// these keys to know, where to continue from.
+// New protocol takes snapshot only once and then sends portions of unordered
+// data until it reaches the end.
+enum EFullSyncProtocol {
+    Legacy = 1;
+    UnorderedData = 2;
+}
 
 message TEvVSyncFull {
+
     optional TSyncState SyncState = 1;
 
     optional NKikimrBlobStorage.TVDiskID SourceVDiskID = 2; // sync this vdisk with ...
@@ -798,10 +809,16 @@ message TEvVSyncFull {
 
     optional uint64 Cookie = 5;
 
+    /////////////////////////////////////////////////////////////////////////////////
+    // Fields [11, 12, 13, 14] are used in legacy FullSync protocol.
     optional ESyncFullStage Stage = 11;
     optional NKikimrProto.TLogoBlobID LogoBlobFrom = 12;
     optional uint64 BlockTabletFrom = 13;
     optional TBarrierKey BarrierFrom = 14;
+    /////////////////////////////////////////////////////////////////////////////////
+
+    // If specified use new FullSync protocol, otherwise use the legacy protocol
+    optional EFullSyncProtocol Protocol = 20;
 }
 
 message TEvVSyncFullResult {
@@ -813,10 +830,17 @@ message TEvVSyncFullResult {
     optional NKikimrBlobStorage.TVDiskID VDiskID = 6;
     optional uint64 Cookie = 7;
 
+    /////////////////////////////////////////////////////////////////////////////////
+    // Fields [11, 12, 13, 14] are used in legacy FullSync protocol.
+    // Read comment in TEvVSyncFull message for details
     optional ESyncFullStage Stage = 11;
     optional NKikimrProto.TLogoBlobID LogoBlobFrom = 12;
     optional uint64 BlockTabletFrom = 13;
     optional TBarrierKey BarrierFrom = 14;
+    /////////////////////////////////////////////////////////////////////////////////
+
+    // If specified use new FullSync protocol, otherwise use the legacy protocol
+    optional EFullSyncProtocol Protocol = 20;
 }
 
 message THandoffDelLogoBlob {
@@ -1014,6 +1038,10 @@ message TNodeWardenServiceSet {
         optional TPDiskSpaceColor.E SpaceColorBorder = 13;
         optional bool ReadOnly = 14;
         optional bool Stop = 15;
+
+        // If not zero, NodeWarded infers PDiskConfig ExpectedSlotCount and SlotSizeInUnits (if unset)
+        // from drive size and this value
+        optional uint64 InferPDiskSlotCountFromUnitSize = 16;
     }
 
     message TVDisk {

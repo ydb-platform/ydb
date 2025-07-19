@@ -9,7 +9,7 @@ TExprNode::TPtr ExpandPgSelect(const TExprNode::TPtr& node, TExprContext& ctx, T
 TExprNode::TPtr ExpandPgSelectSublink(const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx,
     ui32 subLinkId, const TExprNode::TListType& outerInputs, const TVector<TString>& outerInputAliases);
 
-TExprNode::TPtr ExpandPositionalUnionAll(const TExprNode& input, const TVector<TColumnOrder>& columnOrders,
+TExprNode::TPtr ExpandPositionalSelectOp(const TExprNode& input, const TVector<TColumnOrder>& columnOrders,
     TExprNode::TListType children, TExprContext& ctx, TOptimizeContext& optCtx);
 
 TExprNode::TPtr NormalizeColumnOrder(const TExprNode::TPtr& node, const TColumnOrder& sourceColumnOrder,

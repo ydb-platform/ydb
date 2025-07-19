@@ -41,14 +41,14 @@ const NReWrapper::IRePtr& TJsonPathItem::GetRegex() const {
 }
 
 TJsonPathReader::TJsonPathReader(const TJsonPathPtr path)
-    : Path(path)
-    , InitialPos(0)
-    , Mode(ReadMode(InitialPos))
+    : Path_(path)
+    , InitialPos_(0)
+    , Mode_(ReadMode(InitialPos_))
 {
 }
 
 const TJsonPathItem& TJsonPathReader::ReadFirst() {
-    return ReadFromPos(InitialPos);
+    return ReadFromPos(InitialPos_);
 }
 
 const TJsonPathItem& TJsonPathReader::ReadInput(const TJsonPathItem& item) {
@@ -82,18 +82,18 @@ const TJsonPathItem& TJsonPathReader::ReadPrefix(const TJsonPathItem& node) {
 }
 
 EJsonPathMode TJsonPathReader::GetMode() const {
-    return Mode;
+    return Mode_;
 }
 
 const TJsonPathItem& TJsonPathReader::ReadFromPos(TUint pos) {
-    YQL_ENSURE(pos < Path->Size());
+    YQL_ENSURE(pos < Path_->Size());
 
-    const auto it = ItemCache.find(pos);
-    if (it != ItemCache.end()) {
+    const auto it = ItemCache_.find(pos);
+    if (it != ItemCache_.end()) {
         return it->second;
     }
 
-    TJsonPathItem& result = ItemCache[pos];
+    TJsonPathItem& result = ItemCache_[pos];
     result.Type = ReadType(pos);
 
     const auto row = ReadUint(pos);
@@ -214,7 +214,7 @@ EJsonPathMode TJsonPathReader::ReadMode(TUint& pos) {
 
 const TStringBuf TJsonPathReader::ReadString(TUint& pos) {
     TUint length = ReadUint(pos);
-    TStringBuf result(Path->Begin() + pos, length);
+    TStringBuf result(Path_->Begin() + pos, length);
     pos += length;
     return result;
 }
@@ -448,8 +448,8 @@ void TJsonPathBuilder::VisitMethodCall(const TMethodCallNode& node) {
 }
 
 TJsonPathPtr TJsonPathBuilder::ShrinkAndGetResult() {
-    Result->ShrinkToFit();
-    return Result;
+    Result_->ShrinkToFit();
+    return Result_;
 }
 
 void TJsonPathBuilder::VisitStartsWithPredicate(const TStartsWithPredicateNode& node) {
@@ -563,25 +563,25 @@ void TJsonPathBuilder::WriteFinishPosition() {
 
 void TJsonPathBuilder::WriteString(TStringBuf value) {
     WriteUint(value.size());
-    Result->Append(value.data(), value.size());
+    Result_->Append(value.data(), value.size());
 }
 
 void TJsonPathBuilder::RewriteUintSequence(const TVector<TUint>& sequence, TUint offset) {
     const auto length = sequence.size() * sizeof(TUint);
     Y_ASSERT(offset + length < CurrentEndPos());
 
-    MemCopy(Result->Data() + offset, reinterpret_cast<const char*>(sequence.data()), length);
+    MemCopy(Result_->Data() + offset, reinterpret_cast<const char*>(sequence.data()), length);
 }
 
 void TJsonPathBuilder::WriteUintSequence(const TVector<TUint>& sequence) {
     const auto length = sequence.size() * sizeof(TUint);
-    Result->Append(reinterpret_cast<const char*>(sequence.data()), length);
+    Result_->Append(reinterpret_cast<const char*>(sequence.data()), length);
 }
 
 void TJsonPathBuilder::RewriteUint(TUint value, TUint offset) {
     Y_ASSERT(offset + sizeof(TUint) < CurrentEndPos());
 
-    MemCopy(Result->Data() + offset, reinterpret_cast<const char*>(&value), sizeof(TUint));
+    MemCopy(Result_->Data() + offset, reinterpret_cast<const char*>(&value), sizeof(TUint));
 }
 
 void TJsonPathBuilder::WriteUint(TUint value) {
@@ -597,7 +597,7 @@ void TJsonPathBuilder::WriteBool(bool value) {
 }
 
 TUint TJsonPathBuilder::CurrentEndPos() const {
-    return Result->Size();
+    return Result_->Size();
 }
 
 

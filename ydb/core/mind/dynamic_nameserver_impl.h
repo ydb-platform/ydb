@@ -85,11 +85,9 @@ struct TDynamicConfig : public TThrRefBase {
                          const TString &resolveHost,
                          ui16 port,
                          const TNodeLocation &location,
-                         TInstant expire,
-                         std::optional<TBridgePileId> bridgePileId)
+                         TInstant expire)
             : TNodeInfo(address, host, resolveHost, port, location)
             , Expire(expire)
-            , BridgePileId(bridgePileId)
         {
         }
 
@@ -99,10 +97,7 @@ struct TDynamicConfig : public TThrRefBase {
                                info.GetResolveHost(),
                                (ui16)info.GetPort(),
                                TNodeLocation(info.GetLocation()),
-                               TInstant::MicroSeconds(info.GetExpire()),
-                               info.HasBridgePileId()
-                                   ? std::make_optional(TBridgePileId::FromProto(&info, &NKikimrNodeBroker::TNodeInfo::GetBridgePileId))
-                                   : std::nullopt)
+                               TInstant::MicroSeconds(info.GetExpire()))
         {
         }
 
@@ -119,7 +114,6 @@ struct TDynamicConfig : public TThrRefBase {
         }
 
         TInstant Expire;
-        std::optional<TBridgePileId> BridgePileId;
     };
 
     THashMap<ui32, TDynamicNodeInfo> DynamicNodes;
@@ -261,6 +255,8 @@ private:
     void OnPipeDestroyed(ui32 domain,
                          const TActorContext &ctx);
 
+    void UpdateCounters();
+
     void Handle(TEvInterconnect::TEvResolveNode::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvResolveAddress::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvInterconnect::TEvListNodes::TPtr &ev, const TActorContext &ctx);
@@ -305,6 +301,11 @@ private:
     bool SyncInProgress = false;
     ui64 SyncCookie = 0;
     ui64 SeqNo = 0;
+
+    ::NMonitoring::TDynamicCounters::TCounterPtr StaticNodesCounter;
+    ::NMonitoring::TDynamicCounters::TCounterPtr ActiveDynamicNodesCounter;
+    ::NMonitoring::TDynamicCounters::TCounterPtr ExpiredDynamicNodesCounter;
+    ::NMonitoring::TDynamicCounters::TCounterPtr EpochVersionCounter;
 };
 
 } // NNodeBroker

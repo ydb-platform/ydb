@@ -1,5 +1,7 @@
 #include "schema.h"
 
+#include <library/cpp/case_insensitive_string/case_insensitive_string.h>
+
 #include <util/charset/utf8.h>
 
 namespace NSQLComplete {
@@ -11,8 +13,8 @@ namespace NSQLComplete {
             static auto FilterEntriesByName(TString name) {
                 return [name = std::move(name)](auto f) {
                     TVector<TFolderEntry> entries = f.ExtractValue();
-                    EraseIf(entries, [prefix = ToLowerUTF8(name)](const TFolderEntry& entry) {
-                        return !entry.Name.StartsWith(prefix);
+                    EraseIf(entries, [prefix = TCaseInsensitiveStringBuf(name)](const TFolderEntry& entry) {
+                        return !TCaseInsensitiveStringBuf(entry.Name).StartsWith(prefix);
                     });
                     return entries;
                 };
@@ -49,8 +51,8 @@ namespace NSQLComplete {
             static auto FilterColumnsByName(TString name) {
                 return [name = std::move(name)](auto f) {
                     return f.ExtractValue().Transform([&](auto&& table) {
-                        EraseIf(table.Columns, [prefix = ToLowerUTF8(name)](const TString& name) {
-                            return !name.StartsWith(prefix);
+                        EraseIf(table.Columns, [prefix = TCaseInsensitiveStringBuf(name)](const TString& name) {
+                            return !TCaseInsensitiveStringBuf(name).StartsWith(prefix);
                         });
                         return table;
                     });

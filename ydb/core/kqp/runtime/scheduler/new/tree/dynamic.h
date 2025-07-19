@@ -34,10 +34,12 @@ namespace NKikimr::NKqp::NScheduler::NHdrf::NDynamic {
 
     struct TTreeElementBase : public TStaticAttributes {
         std::atomic<ui64> Usage = 0;
+        std::atomic<ui64> UsageExtra = 0;
         std::atomic<ui64> Demand = 0;
         std::atomic<ui64> Throttle = 0;
 
         std::atomic<ui64> BurstUsage = 0;
+        std::atomic<ui64> BurstUsageExtra = 0;
         std::atomic<ui64> BurstThrottle = 0;
 
         TTreeElementBase* Parent = nullptr;
@@ -70,6 +72,8 @@ namespace NKikimr::NKqp::NScheduler::NHdrf::NDynamic {
 
         std::atomic<ui64> CurrentTasksTime = 0; // sum of average execution time for all active tasks
         std::atomic<ui64> WaitingTasksTime = 0; // sum of average execution time for all throttled tasks
+
+        NMonitoring::THistogramPtr Delay; // TODO: hacky counter for delays from queries - initialize from pool
 
     private:
         const TQueryId Id;

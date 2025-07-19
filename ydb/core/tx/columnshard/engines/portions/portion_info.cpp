@@ -52,7 +52,7 @@ ui64 TPortionInfo::GetApproxChunksCount(const ui32 schemaColumnsCount) const {
     return schemaColumnsCount * (GetRecordsCount() / 10000 + 1);
 }
 
-void TPortionInfo::SerializeToProto(NKikimrColumnShardDataSharingProto::TPortionInfo& proto) const {
+void TPortionInfo::SerializeToProto(const std::vector<TUnifiedBlobId>& blobIds, NKikimrColumnShardDataSharingProto::TPortionInfo& proto) const {
     PathId.ToProto(proto);
     proto.SetPortionId(PortionId);
     proto.SetSchemaVersion(GetSchemaVersionVerified());
@@ -60,7 +60,7 @@ void TPortionInfo::SerializeToProto(NKikimrColumnShardDataSharingProto::TPortion
         *proto.MutableRemoveSnapshot() = RemoveSnapshot.SerializeToProto();
     }
 
-    *proto.MutableMeta() = Meta.SerializeToProto(GetProduced());
+    *proto.MutableMeta() = Meta.SerializeToProto(blobIds, GetProduced());
 }
 
 TConclusionStatus TPortionInfo::DeserializeFromProto(const NKikimrColumnShardDataSharingProto::TPortionInfo& proto) {

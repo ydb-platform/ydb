@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: fonttools
-Version: 4.58.1
+Version: 4.58.4
 Summary: Tools to manipulate font files
 Home-page: http://github.com/fonttools/fonttools
 Author: Just van Rossum
@@ -387,6 +387,22 @@ Have fun!
 
 Changelog
 ~~~~~~~~~
+
+4.58.4 (released 2025-06-13)
+----------------------------
+
+- [feaLib] Allow for empty MarkFilter & MarkAttach sets (#3856).
+
+4.58.3 (released 2025-06-13)
+----------------------------
+
+- [feaLib] Fixed iterable check for Python 3.13.4 and newer (#3854, #3855).
+
+4.58.2 (released 2025-06-06)
+----------------------------
+
+- [ttLib.reorderGlyphs] Handle CFF2 when reordering glyphs (#3852)
+- [subset] Copy name IDs in use before scrapping or scrambling them for webfonts (#3853)
 
 4.58.1 (released 2025-05-28)
 ----------------------------

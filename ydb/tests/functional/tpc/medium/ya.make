@@ -4,11 +4,10 @@ ENV(YDB_HARD_MEMORY_LIMIT_BYTES="107374182400")
 TEST_SRCS(
     test_clean.py
     test_clickbench.py
-    test_workload_simple_queue.py
-    test_workload_oltp.py
+    #test_workload_simple_queue.py
+    #test_workload_oltp.py
     test_external.py
     test_diff_processing.py
-    test_tpch.py
     test_upload.py
     test_import_csv.py
 )

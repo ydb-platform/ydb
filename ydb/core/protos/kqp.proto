@@ -823,6 +823,7 @@ message TKqpTableSinkSettings {
     repeated string InputColumns = 18; // Only for MODE_FILL
     repeated TKqpTableSinkIndexSettings Indexes = 19;
     repeated TKqpColumnMetadataProto LookupColumns = 20;
+    optional bool IsIndexImplTable = 21;
 }
 
 message TKqpStreamLookupSettings {

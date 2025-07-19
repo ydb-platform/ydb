@@ -194,6 +194,28 @@ TOptimizerStatistics TBaseProviderContext::ComputeJoinStatsV1(
     return stats;
 }
 
+TOptimizerStatistics TBaseProviderContext::ComputeJoinStatsV2(
+    const TOptimizerStatistics& leftStats,
+    const TOptimizerStatistics& rightStats,
+    const TVector<NDq::TJoinColumn>& leftJoinKeys,
+    const TVector<NDq::TJoinColumn>& rightJoinKeys,
+    EJoinAlgoType joinAlgo,
+    EJoinKind joinKind,
+    TCardinalityHints::TCardinalityHint* maybeHint,
+    bool shuffleLeftSide,
+    bool shuffleRightSide,
+    TCardinalityHints::TCardinalityHint* maybeBytesHint
+) const {
+
+    auto stats = ComputeJoinStatsV1(leftStats, rightStats, leftJoinKeys, rightJoinKeys, joinAlgo, joinKind, maybeHint, shuffleLeftSide, shuffleRightSide);
+
+    if (maybeBytesHint) {
+        stats.ByteSize = maybeBytesHint->ApplyHint(stats.ByteSize);
+    }
+
+    return stats;
+}
+
 /**
  * Compute the cost and output cardinality of a join
  *
@@ -333,6 +355,12 @@ TVector<TString> TOptimizerHints::GetUnappliedString() {
     }
 
     for (const auto& hint: CardinalityHints->Hints) {
+        if (!hint.Applied) {
+            res.push_back(hint.StringRepr);
+        }
+    }
+
+    for (const auto& hint: BytesHints->Hints) {
         if (!hint.Applied) {
             res.push_back(hint.StringRepr);
         }

@@ -29,12 +29,6 @@ ENDIF()
 
 NO_COMPILER_WARNINGS()
 
-IF (Y_ABSL_DONT_USE_DEBUG)
-    CFLAGS(
-        -DY_ABSL_DONT_USE_DEBUG_LIBRARY=1
-    )
-ENDIF()
-
 SRCS(
     y_absl/base/internal/cycleclock.cc
     y_absl/base/internal/low_level_alloc.cc

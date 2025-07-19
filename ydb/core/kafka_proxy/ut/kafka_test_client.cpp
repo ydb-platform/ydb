@@ -17,8 +17,10 @@ TKafkaTestClient::TKafkaTestClient(ui16 port, const TString clientName)
     , ClientName(clientName) {
 }
 
-TMessagePtr<TApiVersionsResponseData> TKafkaTestClient::ApiVersions() {
-    Cerr << ">>>>> ApiVersionsRequest\n";
+TMessagePtr<TApiVersionsResponseData> TKafkaTestClient::ApiVersions(bool silent) {
+    if (!silent) {
+        Cerr << ">>>>> ApiVersionsRequest\n";
+    }
 
     TRequestHeaderData header = Header(NKafka::EApiKey::API_VERSIONS, 2);
 
@@ -26,15 +28,22 @@ TMessagePtr<TApiVersionsResponseData> TKafkaTestClient::ApiVersions() {
     request.ClientSoftwareName = "SuperTest";
     request.ClientSoftwareVersion = "3100.7.13";
 
-    return WriteAndRead<TApiVersionsResponseData>(header, request);
+    return WriteAndRead<TApiVersionsResponseData>(header, request, silent);
 }
 
-TMessagePtr<TMetadataResponseData> TKafkaTestClient::Metadata(const TVector<TString>& topics) {
+// YDB ignores AllowAutoTopicCreation, i.e. it never creates a new topic implicitly.
+// But in Apache Kafka the default behavior is to create a new topic, if there is no one at the moment of the request.
+// With this flag, allowAutoTopicCreation, you can stop this behavior in Apache Kafka.
+TMessagePtr<TMetadataResponseData> TKafkaTestClient::Metadata(const TVector<TString>& topics, std::optional<bool> allowAutoTopicCreation) {
     Cerr << ">>>>> MetadataRequest\n";
 
-    TRequestHeaderData header = Header(NKafka::EApiKey::METADATA, 9);
+    TRequestHeaderData header = Header(NKafka::EApiKey::METADATA, 12);
 
     TMetadataRequestData request;
+    if (allowAutoTopicCreation.has_value()) {
+        // If allowAutoTopicCreation does not have a value, use the default value (= true).
+        request.AllowAutoTopicCreation = allowAutoTopicCreation.value() ? 1 : 0;
+    }
     request.Topics.reserve(topics.size());
     for (auto topicName : topics) {
         NKafka::TMetadataRequestData::TMetadataRequestTopic topic;
@@ -70,14 +79,14 @@ TMessagePtr<TSaslAuthenticateResponseData> TKafkaTestClient::SaslAuthenticate(co
     return WriteAndRead<TSaslAuthenticateResponseData>(header, request);
 }
 
-TMessagePtr<TInitProducerIdResponseData> TKafkaTestClient::InitProducerId(const TString& transactionalId) {
+TMessagePtr<TInitProducerIdResponseData> TKafkaTestClient::InitProducerId(const std::optional<TString>& transactionalId, ui64 txnTimeoutMs) {
     Cerr << ">>>>> TInitProducerIdRequestData\n";
 
     TRequestHeaderData header = Header(NKafka::EApiKey::INIT_PRODUCER_ID, 4);
 
     TInitProducerIdRequestData request;
     request.TransactionalId = transactionalId;
-    request.TransactionTimeoutMs = 5000;
+    request.TransactionTimeoutMs = txnTimeoutMs;
 
     return WriteAndRead<TInitProducerIdResponseData>(header, request);
 }
@@ -120,6 +129,7 @@ TMessagePtr<TProduceResponseData> TKafkaTestClient::Produce(const TString& topic
     TRequestHeaderData header = Header(NKafka::EApiKey::PRODUCE, 9);
 
     TProduceRequestData request;
+    request.Acks = -1;
     request.TopicData.resize(1);
     request.TopicData[0].Name = topicName;
     request.TopicData[0].PartitionData.resize(msgs.size());
@@ -135,10 +145,10 @@ TMessagePtr<TProduceResponseData> TKafkaTestClient::Produce(const TString& topic
     return WriteAndRead<TProduceResponseData>(header, request);
 }
 
-TMessagePtr<TProduceResponseData> TKafkaTestClient::Produce(const TTopicPartition& topicPartition, 
-                                                            const std::vector<std::pair<TString, TString>>& keyValueMessages, 
-                                                            ui32 baseSequence, 
-                                                            const std::optional<TProducerInstanceId>& producerInstanceId, 
+TMessagePtr<TProduceResponseData> TKafkaTestClient::Produce(const TTopicPartition& topicPartition,
+                                                            const std::vector<std::pair<TString, TString>>& keyValueMessages,
+                                                            ui32 baseSequence,
+                                                            const std::optional<TProducerInstanceId>& producerInstanceId,
                                                             const std::optional<TString>& transactionalId) {
     TKafkaRecordBatch batch;
     batch.BaseSequence = baseSequence;
@@ -162,7 +172,6 @@ TMessagePtr<TListOffsetsResponseData> TKafkaTestClient::ListOffsets(std::vector<
     Cerr << ">>>>> TListOffsetsRequestData\n";
 
     TRequestHeaderData header = Header(NKafka::EApiKey::LIST_OFFSETS, 4);
-
     TListOffsetsRequestData request;
     request.IsolationLevel = 0;
     request.ReplicaId = 0;
@@ -204,7 +213,7 @@ TMessagePtr<TJoinGroupResponseData> TKafkaTestClient::JoinGroup(std::vector<TStr
     writable << version;
     subscribtion.Write(writable, version);
 
-    protocol.Metadata = TKafkaRawBytes(buf.GetBuffer().data(), buf.GetBuffer().size());
+    protocol.Metadata = TKafkaRawBytes(buf.GetFrontBuffer().data(), buf.GetFrontBuffer().size());
 
     request.Protocols.push_back(protocol);
     return WriteAndRead<TJoinGroupResponseData>(header, request);
@@ -384,7 +393,7 @@ std::vector<NKafka::TSyncGroupRequestData::TSyncGroupRequestAssignment> TKafkaTe
             consumerAssignment.Write(writable, ASSIGNMENT_VERSION);
             NKafka::TSyncGroupRequestData::TSyncGroupRequestAssignment syncAssignment;
             syncAssignment.MemberId = member.MemberId;
-            syncAssignment.AssignmentStr = TString(buf.GetBuffer().data(), buf.GetBuffer().size());
+            syncAssignment.AssignmentStr = TString(buf.GetFrontBuffer().data(), buf.GetFrontBuffer().size());
             syncAssignment.Assignment = syncAssignment.AssignmentStr;
 
             assignments.push_back(std::move(syncAssignment));
@@ -421,14 +430,43 @@ TMessagePtr<TOffsetFetchResponseData> TKafkaTestClient::OffsetFetch(TOffsetFetch
     return WriteAndRead<TOffsetFetchResponseData>(header, request);
 }
 
+TMessagePtr<TListGroupsResponseData> TKafkaTestClient::ListGroups(TListGroupsRequestData request) {
+    Cerr << ">>>>> TListGroupsResponseData\n";
+    TRequestHeaderData header = Header(NKafka::EApiKey::LIST_GROUPS, 4);
+    return WriteAndRead<TListGroupsResponseData>(header, request);
+}
+
+TMessagePtr<TListGroupsResponseData> TKafkaTestClient::ListGroups(const std::vector<std::optional<TString>>& statesFilter) {
+    Cerr << ">>>>> TListGroupsResponseData\n";
+    TRequestHeaderData header = Header(NKafka::EApiKey::LIST_GROUPS, 4);
+    TListGroupsRequestData request;
+    request.StatesFilter = statesFilter;
+    return WriteAndRead<TListGroupsResponseData>(header, request);
+}
+
+TMessagePtr<TDescribeGroupsResponseData> TKafkaTestClient::DescribeGroups(TDescribeGroupsRequestData& request) {
+    Cerr << ">>>>> TDescribeGroupsResponseData\n";
+    TRequestHeaderData header = Header(NKafka::EApiKey::DESCRIBE_GROUPS, 5);
+    return WriteAndRead<TDescribeGroupsResponseData>(header, request);
+}
+
+TMessagePtr<TDescribeGroupsResponseData> TKafkaTestClient::DescribeGroups(const std::vector<std::optional<TString>>& groups) {
+    Cerr << ">>>>> TDescribeGroupsResponseData\n";
+    TRequestHeaderData header = Header(NKafka::EApiKey::DESCRIBE_GROUPS, 5);
+    TDescribeGroupsRequestData request;
+    request.Groups = groups;
+    return WriteAndRead<TDescribeGroupsResponseData>(header, request);
+}
+
 TMessagePtr<TFetchResponseData> TKafkaTestClient::Fetch(const std::vector<std::pair<TString, std::vector<i32>>>& topics, i64 offset) {
     Cerr << ">>>>> TFetchRequestData\n";
 
     TRequestHeaderData header = Header(NKafka::EApiKey::FETCH, 3);
 
     TFetchRequestData request;
-    request.MaxBytes = 1024;
+    request.MaxWaitMs = 1000;
     request.MinBytes = 1;
+    request.ReplicaId = -1;
 
     for (auto& topic: topics) {
         NKafka::TFetchRequestData::TFetchTopic topicReq {};
@@ -437,13 +475,49 @@ TMessagePtr<TFetchResponseData> TKafkaTestClient::Fetch(const std::vector<std::p
             NKafka::TFetchRequestData::TFetchTopic::TFetchPartition partitionReq {};
             partitionReq.FetchOffset = offset;
             partitionReq.Partition = partition;
-            partitionReq.PartitionMaxBytes = 1024;
+            partitionReq.PartitionMaxBytes = 1_MB;
             topicReq.Partitions.push_back(partitionReq);
         }
         request.Topics.push_back(topicReq);
     }
 
     return WriteAndRead<TFetchResponseData>(header, request);
+}
+
+TMessagePtr<TFetchResponseData> TKafkaTestClient::Fetch(const std::vector<std::pair<TKafkaUuid, std::vector<i32>>>& topics, i64 offset) {
+    Cerr << ">>>>> TFetchRequestData\n";
+
+    TRequestHeaderData header = Header(NKafka::EApiKey::FETCH, 13);
+
+    TFetchRequestData request;
+    request.MaxWaitMs = 1000;
+    request.MinBytes = 1;
+    request.ReplicaId = -1;
+
+    for (auto& topic: topics) {
+        NKafka::TFetchRequestData::TFetchTopic topicReq {};
+        topicReq.TopicId = topic.first;
+        for (auto& partition: topic.second) {
+            NKafka::TFetchRequestData::TFetchTopic::TFetchPartition partitionReq {};
+            partitionReq.FetchOffset = offset;
+            partitionReq.Partition = partition;
+            partitionReq.PartitionMaxBytes = 1_MB;
+            topicReq.Partitions.push_back(partitionReq);
+        }
+        request.Topics.push_back(topicReq);
+    }
+
+    return WriteAndRead<TFetchResponseData>(header, request);
+}
+
+void TKafkaTestClient::ValidateNoDataInTopics(const std::vector<std::pair<TString, std::vector<i32>>>& topics, i64 offset) {
+    auto fetchResponse = Fetch(topics, offset);
+    UNIT_ASSERT_VALUES_EQUAL(fetchResponse->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
+    for (ui32 topicIndex = 0; topicIndex < topics.size(); topicIndex++) {
+        for (ui32 partitionIndex = 0; partitionIndex < topics[topicIndex].second.size(); partitionIndex++) {
+            UNIT_ASSERT(!fetchResponse->Responses[topicIndex].Partitions[partitionIndex].Records.has_value());
+        }
+    }
 }
 
 TMessagePtr<TCreateTopicsResponseData> TKafkaTestClient::CreateTopics(std::vector<TTopicConfig> topicsToCreate, bool validateOnly) {
@@ -457,6 +531,7 @@ TMessagePtr<TCreateTopicsResponseData> TKafkaTestClient::CreateTopics(std::vecto
         NKafka::TCreateTopicsRequestData::TCreatableTopic topic;
         topic.Name = topicToCreate.Name;
         topic.NumPartitions = topicToCreate.PartitionsNumber;
+        topic.ReplicationFactor = topicToCreate.ReplicationFactor;
 
         auto addConfig = [&topic](std::optional<TString> configValue, TString configName) {
             if (configValue.has_value()) {
@@ -640,7 +715,7 @@ void TKafkaTestClient::AuthenticateToKafka() {
         auto msg = ApiVersions();
 
         UNIT_ASSERT_VALUES_EQUAL(msg->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
-        UNIT_ASSERT_VALUES_EQUAL(msg->ApiKeys.size(), 18u);
+        UNIT_ASSERT_VALUES_EQUAL(msg->ApiKeys.size(), EXPECTED_API_KEYS_COUNT);
     }
 
     {
@@ -672,31 +747,35 @@ ui32 TKafkaTestClient::NextCorrelation() {
 }
 
 template <std::derived_from<TApiMessage> T>
-TMessagePtr<T> TKafkaTestClient::WriteAndRead(TRequestHeaderData& header, TApiMessage& request) {
-    Write(So, &header, &request);
+TMessagePtr<T> TKafkaTestClient::WriteAndRead(TRequestHeaderData& header, TApiMessage& request, bool silent) {
+    Write(So, &header, &request, silent);
     return Read<T>(Si, &header);
 }
 
-void TKafkaTestClient::Write(TSocketOutput& so, TApiMessage* request, TKafkaVersion version) {
+void TKafkaTestClient::Write(TSocketOutput& so, TApiMessage* request, TKafkaVersion version, bool silent) {
     TWritableBuf sb(nullptr, request->Size(version) + 1000);
     TKafkaWritable writable(sb);
     request->Write(writable, version);
-    so.Write(sb.Data(), sb.Size());
+    so.Write(sb.GetFrontBuffer().data(), sb.GetFrontBuffer().size());
 
-    Print(sb.GetBuffer());
+    if (!silent) {
+        Print(sb.GetFrontBuffer());
+    }
 }
 
-void TKafkaTestClient::Write(TSocketOutput& so, TRequestHeaderData* header, TApiMessage* request) {
+void TKafkaTestClient::Write(TSocketOutput& so, TRequestHeaderData* header, TApiMessage* request, bool silent) {
     TKafkaVersion version = header->RequestApiVersion;
     TKafkaVersion headerVersion = RequestHeaderVersion(request->ApiKey(), version);
 
     TKafkaInt32 size = header->Size(headerVersion) + request->Size(version);
-    Cerr << ">>>>> Size=" << size << Endl;
+    if (!silent) {
+        Cerr << ">>>>> Size=" << size << Endl;
+    }
     NKafka::NormalizeNumber(size);
     so.Write(&size, sizeof(size));
 
-    Write(so, header, headerVersion);
-    Write(so, request, version);
+    Write(so, header, headerVersion, silent);
+    Write(so, request, version, silent);
 
     so.Flush();
 }

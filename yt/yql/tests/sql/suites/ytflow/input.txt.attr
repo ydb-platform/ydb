@@ -47,4 +47,5 @@
         ]
     };
     "_yql_dynamic" = %true;
+    "_yql_dynamic_native_write" = %true;
 }

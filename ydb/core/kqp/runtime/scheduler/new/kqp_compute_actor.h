@@ -38,12 +38,7 @@ namespace NKikimr::NKqp::NScheduler {
         void PassAway() override {
             if (!PassedAway) {
                 PassedAway = true;
-
-                if (IsExecuted()) {
-                    StopExecution();
-                } else if (IsThrottled()) {
-                    Resume(Now());
-                }
+                StopExecution();
             }
 
             TBase::PassAway();
@@ -63,7 +58,7 @@ namespace NKikimr::NKqp::NScheduler {
 
             const auto now = Now();
 
-            if (StartExecution(IsThrottled() ? Resume(now) : TDuration::Zero())) {
+            if (StartExecution(now)) {
                 TBase::DoExecuteImpl();
                 if (!PassedAway) {
                     StopExecution();
@@ -71,12 +66,7 @@ namespace NKikimr::NKqp::NScheduler {
                 return;
             }
 
-            auto delay = CalculateDelay(now);
-
-            if (!IsThrottled()) {
-                Throttle(now);
-            }
-            this->Schedule(delay, new NActors::TEvents::TEvWakeup(TAG_WAKEUP_RESUME));
+            this->Schedule(CalculateDelay(now), new NActors::TEvents::TEvWakeup(TAG_WAKEUP_RESUME));
         }
 
     private:

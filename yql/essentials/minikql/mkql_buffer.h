@@ -85,8 +85,8 @@ class TPagedBuffer : private TNonCopyable {
     TPagedBuffer() = default;
 
     explicit TPagedBuffer(size_t pageAllocSize)
-        : PageAllocSize(pageAllocSize)
-        , PageCapacity(pageAllocSize - sizeof(TBufferPage))
+        : PageAllocSize_(pageAllocSize)
+        , PageCapacity_(pageAllocSize - sizeof(TBufferPage))
     {
         Y_ENSURE(IsValidPageAllocSize(pageAllocSize));
     }
@@ -100,7 +100,7 @@ class TPagedBuffer : private TNonCopyable {
             while (curr) {
                 auto drop = curr;
                 curr = curr->Next_;
-                TBufferPage::Free(drop, PageAllocSize);
+                TBufferPage::Free(drop, PageAllocSize_);
             }
         }
     }
@@ -194,7 +194,7 @@ class TPagedBuffer : private TNonCopyable {
         // TODO: not wasted or never called?
         Tail_ = Head_;
         ClosedPagesSize_ = HeadReserve_ = 0;
-        TailSize_ = (-size_t(Tail_ == nullptr)) & PageCapacity;
+        TailSize_ = (-size_t(Tail_ == nullptr)) & PageCapacity_;
     }
 
     inline void EraseBack(size_t len) {
@@ -206,7 +206,7 @@ class TPagedBuffer : private TNonCopyable {
     }
 
     inline void Advance(size_t len) {
-        if (Y_LIKELY(TailSize_ + len <= PageCapacity)) {
+        if (Y_LIKELY(TailSize_ + len <= PageCapacity_)) {
             TailSize_ += len;
 #if defined(PROFILE_MEMORY_ALLOCATIONS)
             TotalBytesWastedCounter->Sub(len);
@@ -214,7 +214,7 @@ class TPagedBuffer : private TNonCopyable {
             return;
         }
 
-        MKQL_ENSURE(len <= PageCapacity, "Advance() size too big");
+        MKQL_ENSURE(len <= PageCapacity_, "Advance() size too big");
         AppendPage();
         TailSize_ = len;
 #if defined(PROFILE_MEMORY_ALLOCATIONS)
@@ -229,12 +229,12 @@ class TPagedBuffer : private TNonCopyable {
 
     inline void Append(const char* data, size_t size) {
         while (size) {
-            if (TailSize_ == PageCapacity) {
+            if (TailSize_ == PageCapacity_) {
                 AppendPage();
             }
-            Y_DEBUG_ABORT_UNLESS(TailSize_ < PageCapacity);
+            Y_DEBUG_ABORT_UNLESS(TailSize_ < PageCapacity_);
 
-            size_t avail = PageCapacity - TailSize_;
+            size_t avail = PageCapacity_ - TailSize_;
             size_t chunk = std::min(avail, size);
             std::memcpy(Pos(), data, chunk);
             TailSize_ += chunk;
@@ -250,14 +250,14 @@ class TPagedBuffer : private TNonCopyable {
 private:
     void AppendPage();
 
-    const size_t PageAllocSize = TBufferPage::DefaultPageAllocSize;
-    const size_t PageCapacity = TBufferPage::DefaultPageCapacity;
+    const size_t PageAllocSize_ = TBufferPage::DefaultPageAllocSize;
+    const size_t PageCapacity_ = TBufferPage::DefaultPageCapacity;
 
     char* Head_ = nullptr;
     char* Tail_ = nullptr;
 
     // TailSize_ is initialized as if last page is full, this way we can simplifiy check in Advance()
-    size_t TailSize_ = PageCapacity;
+    size_t TailSize_ = PageCapacity_;
     size_t HeadReserve_ = 0;
     size_t ClosedPagesSize_ = 0;
 };

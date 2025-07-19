@@ -174,6 +174,9 @@ class KikimrConfigGenerator(object):
             explicit_hosts_and_host_configs=False,
             table_service_config=None,  # dict[name]=value
             bridge_config=None,
+            memory_controller_config=None,
+            verbose_memory_limit_exception=False,
+            enable_static_auth=False,
     ):
         if extra_feature_flags is None:
             extra_feature_flags = []
@@ -214,14 +217,7 @@ class KikimrConfigGenerator(object):
         self._rings_count = rings_count
         self.__node_ids = list(range(1, nodes + 1))
         self.n_to_select = n_to_select
-        if self.n_to_select is None:
-            if erasure == Erasure.MIRROR_3_DC:
-                self.n_to_select = 9
-            else:
-                self.n_to_select = min(5, nodes)
         self.state_storage_rings = state_storage_rings
-        if self.state_storage_rings is None:
-            self.state_storage_rings = copy.deepcopy(self.__node_ids[: 9 if erasure == Erasure.MIRROR_3_DC else 8])
         self.__use_in_memory_pdisks = _use_in_memory_pdisks_var(pdisk_store_path, use_in_memory_pdisks)
         self.__pdisks_directory = os.getenv('YDB_PDISKS_DIRECTORY')
         self.static_erasure = erasure
@@ -273,6 +269,9 @@ class KikimrConfigGenerator(object):
 
         if "table_service_config" not in self.yaml_config:
             self.yaml_config["table_service_config"] = {}
+
+        if verbose_memory_limit_exception:
+            self.yaml_config["table_service_config"]["resource_manager"]["verbose_memory_limit_exception"] = True
 
         if table_service_config:
             self.yaml_config["table_service_config"].update(table_service_config)
@@ -435,8 +434,13 @@ class KikimrConfigGenerator(object):
         if default_user_sid:
             security_config_root["security_config"]["default_user_sids"] = [default_user_sid]
 
+        if memory_controller_config:
+            self.yaml_config["memory_controller_config"] = memory_controller_config
+
         if os.getenv("YDB_HARD_MEMORY_LIMIT_BYTES"):
-            self.yaml_config["memory_controller_config"] = {"hard_limit_bytes": int(os.getenv("YDB_HARD_MEMORY_LIMIT_BYTES"))}
+            if "memory_controller_config" not in self.yaml_config:
+                self.yaml_config["memory_controller_config"] = {}
+            self.yaml_config["memory_controller_config"]["hard_limit_bytes"] = int(os.getenv("YDB_HARD_MEMORY_LIMIT_BYTES"))
 
         if os.getenv("YDB_CHANNEL_BUFFER_SIZE"):
             self.yaml_config["table_service_config"]["resource_manager"]["channel_buffer_size"] = int(os.getenv("YDB_CHANNEL_BUFFER_SIZE"))
@@ -531,6 +535,11 @@ class KikimrConfigGenerator(object):
             security_config = self.yaml_config["domains_config"]["security_config"]
             security_config.setdefault("administration_allowed_sids", []).append(self.__default_clusteradmin)
             security_config.setdefault("default_access", []).append('+F:{}'.format(self.__default_clusteradmin))
+        self.__enable_static_auth = enable_static_auth
+
+    @property
+    def enable_static_auth(self):
+        return self.__enable_static_auth
 
     @property
     def default_clusteradmin(self):
@@ -690,9 +699,17 @@ class KikimrConfigGenerator(object):
         return self.__node_ids
 
     def _add_state_storage_config(self):
+        if self.use_self_management and self.n_to_select is None and self.state_storage_rings is None:
+            return
+        if self.n_to_select is None:
+            if self.static_erasure == Erasure.MIRROR_3_DC:
+                self.n_to_select = 9
+            else:
+                self.n_to_select = min(5, len(self.__node_ids))
+        if self.state_storage_rings is None:
+            self.state_storage_rings = copy.deepcopy(self.__node_ids[: 9 if self.static_erasure == Erasure.MIRROR_3_DC else 8])
         self.yaml_config["domains_config"]["state_storage"] = []
         self.yaml_config["domains_config"]["state_storage"].append({"ssid" : 1, "ring" : {"nto_select" : self.n_to_select, "ring" : []}})
-
         for ring in self.state_storage_rings:
             self.yaml_config["domains_config"]["state_storage"][0]["ring"]["ring"].append({"node" : ring if isinstance(ring, list) else [ring], "use_ring_specific_node_selection" : True})
 
@@ -775,8 +792,9 @@ class KikimrConfigGenerator(object):
                 "host_config_id": host_config_id,
             }
             if self.bridge_config:
-                host_dict["bridge_pile_name"] = self.bridge_config.get("piles", [])[node_id % len(self.bridge_config.get("piles", []))].get("name")
-
+                host_dict["location"] = {"bridge_pile_name": self.bridge_config.get("piles", [])[node_id % len(self.bridge_config.get("piles", []))].get("name")}
+            elif self.static_erasure == Erasure.MIRROR_3_DC:
+                host_dict["location"] = {"data_center": "zone-%d" % (node_id % 3)}
             hosts.append(host_dict)
 
         self.yaml_config["host_configs"] = host_configs

@@ -263,6 +263,8 @@ class TStateStorageReplica : public TActorBootstrapped<TStateStorageReplica> {
         const ui64 tabletId = record.GetTabletID();
         const TActorId proposedLeader = ActorIdFromProto(record.GetProposedLeader());
 
+        CheckConfigVersion(ev->Sender, ev->Get());
+
         auto tabletIt = Tablets.find(tabletId);
         if (tabletIt == Tablets.end() || tabletIt->second.CurrentLeader != proposedLeader)
             return;
@@ -280,6 +282,8 @@ class TStateStorageReplica : public TActorBootstrapped<TStateStorageReplica> {
         TEvStateStorage::TEvReplicaDelete *msg = ev->Get();
         BLOG_D("Replica::Handle ev: " << msg->ToString());
         const ui64 tabletId = msg->Record.GetTabletID();
+
+        CheckConfigVersion(ev->Sender, msg);
 
         auto tabletIt = Tablets.find(tabletId);
         if (tabletIt == Tablets.end()) {

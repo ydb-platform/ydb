@@ -3,6 +3,9 @@ PY3TEST()
 TEST_SRCS(
     test_config_with_metadata.py
     test_generate_dynamic_config.py
+    test_distconf_generate_config.py
+    test_distconf_reassign_state_storage.py
+    test_distconf_self_heal.py
     test_distconf.py
     test_config_migration.py
     test_configuration_version.py
@@ -10,17 +13,14 @@ TEST_SRCS(
 
 SPLIT_FACTOR(10)
 
-IF (SANITIZER_TYPE)
-    REQUIREMENTS(ram:16 cpu:4)
-ENDIF()
+REQUIREMENTS(ram:32 cpu:32)
+SIZE(LARGE)
+TAG(ya:fat)
 
 IF (SANITIZER_TYPE == "thread")
     TIMEOUT(1800)
-    SIZE(LARGE)
-    TAG(ya:fat)
 ELSE()
     TIMEOUT(600)
-    SIZE(MEDIUM)
 ENDIF()
 
 
@@ -32,6 +32,7 @@ DEPENDS(
 )
 
 PEERDIR(
+    contrib/python/requests
     ydb/tests/library
     ydb/tests/library/clients
 )

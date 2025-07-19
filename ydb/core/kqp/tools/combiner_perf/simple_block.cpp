@@ -4,6 +4,7 @@
 #include "streams.h"
 #include "printout.h"
 #include "subprocess.h"
+#include "kqp_setup.h"
 
 #include <yql/essentials/minikql/comp_nodes/ut/mkql_computation_node_ut.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
@@ -28,11 +29,11 @@ namespace {
 template<bool LLVM, bool Spilling>
 TRunResult RunTestOverGraph(const TRunParams& params, const bool measureReferenceMemory)
 {
-    TSetup<LLVM, Spilling> setup(GetPerfTestFactory());
+    TKqpSetup<LLVM, Spilling> setup(GetPerfTestFactory());
 
     auto sampler = CreateBlockSamplerFromParams(params);
 
-    TProgramBuilder& pb = *setup.PgmBuilder;
+    TDqProgramBuilder& pb = setup.GetKqpBuilder();
 
     auto keyBaseType = sampler->BuildKeyType(*setup.Env);
     auto valueBaseType = sampler->BuildValueType(*setup.Env);
@@ -43,11 +44,11 @@ TRunResult RunTestOverGraph(const TRunParams& params, const bool measureReferenc
     const auto streamItemType = pb.NewMultiType({keyBlockType, valueBlockType, blockSizeBlockType});
     const auto streamType = pb.NewStreamType(streamItemType);
     const auto streamResultItemType = pb.NewMultiType({keyBlockType, valueBlockType, blockSizeBlockType});
-    const auto streamResultType = pb.NewStreamType(streamResultItemType);
+    [[maybe_unused]] const auto streamResultType = pb.NewStreamType(streamResultItemType);
     const auto streamCallable = TCallableBuilder(pb.GetTypeEnvironment(), "TestList", streamType).Build();
 
     // TODO: This should be generated in the sampler
-    ui32 keys[] = {0};
+    [[maybe_unused]] ui32 keys[] = {0};
     TAggInfo aggs[] = {
         TAggInfo{
             .Name = "sum",
@@ -55,6 +56,7 @@ TRunResult RunTestOverGraph(const TRunParams& params, const bool measureReferenc
         }
     };
 
+    /*
     auto pgmReturn = pb.Collect(pb.NarrowMap(pb.ToFlow(
         pb.BlockCombineHashed(
             TRuntimeNode(streamCallable, false),
@@ -63,6 +65,23 @@ TRunResult RunTestOverGraph(const TRunParams& params, const bool measureReferenc
             TArrayRef(aggs, 1),
             streamResultType
         )),
+        [&](TRuntimeNode::TList items) -> TRuntimeNode { return pb.NewTuple(items); } // NarrowMap handler
+    ));
+    */
+
+    auto pgmReturn = pb.Collect(pb.NarrowMap(
+        pb.DqHashCombine(
+            pb.ToFlow(TRuntimeNode(streamCallable, false)),
+            params.WideCombinerMemLimit,
+            [&](TRuntimeNode::TList items) -> TRuntimeNode::TList { return { items.front() }; },
+            [&](TRuntimeNode::TList, TRuntimeNode::TList items) -> TRuntimeNode::TList { return { items.back() } ; },
+            [&](TRuntimeNode::TList, TRuntimeNode::TList items, TRuntimeNode::TList state) -> TRuntimeNode::TList {
+                return {pb.AggrAdd(state.front(), items.back())};
+            },
+            [&](TRuntimeNode::TList keys, TRuntimeNode::TList state) -> TRuntimeNode::TList {
+                return {keys.front(), state.front()};
+            }
+        ),
         [&](TRuntimeNode::TList items) -> TRuntimeNode { return pb.NewTuple(items); } // NarrowMap handler
     ));
 

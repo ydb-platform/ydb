@@ -280,7 +280,7 @@ void ComputeStatistics(const std::shared_ptr<TJoinOptimizerNode>& join, IProvide
         ComputeStatistics(static_pointer_cast<TJoinOptimizerNode>(join->RightArg), ctx);
     }
     join->Stats = TOptimizerStatistics(
-        ctx.ComputeJoinStatsV1(
+        ctx.ComputeJoinStatsV2(
             join->LeftArg->Stats,
             join->RightArg->Stats,
             join->LeftJoinKeys,
@@ -289,7 +289,8 @@ void ComputeStatistics(const std::shared_ptr<TJoinOptimizerNode>& join, IProvide
             join->JoinType,
             nullptr,
             false,
-            false
+            false,
+            nullptr
         )
     );
 }
@@ -526,6 +527,10 @@ void CollectInterestingOrderingsFromJoinTree(
 
     auto equiJoin = equiJoinNode.Cast<TCoEquiJoin>();
     auto stats = typeCtx.GetStats(equiJoinNode.Raw());
+    TTableAliasMap* tableAliases = nullptr;
+    if (stats) {
+        tableAliases = stats->TableAliases.Get();
+    }
 
     TVector<std::shared_ptr<TRelOptimizerNode>> rels;
     for (size_t i = 0; i < equiJoin.ArgCount() - 2; ++i) {
@@ -559,13 +564,13 @@ void CollectInterestingOrderingsFromJoinTree(
     interestingOrderingIdxes.reserve(hypergraph.GetEdges().size());
     for (const auto& edge: hypergraph.GetEdges()) {
         for (const auto& [lhs, rhs]: Zip(edge.LeftJoinKeys, edge.RightJoinKeys)) {
-            fdStorage.AddFD(lhs, rhs, TFunctionalDependency::EEquivalence, false, nullptr);
+            fdStorage.AddFD(lhs, rhs, TFunctionalDependency::EEquivalence, false, tableAliases);
         }
 
         TString idx;
-        idx = ToString(fdStorage.AddInterestingOrdering(edge.LeftJoinKeys, TOrdering::EShuffle, nullptr));
+        idx = ToString(fdStorage.AddInterestingOrdering(edge.LeftJoinKeys, TOrdering::EShuffle, tableAliases));
         interestingOrderingIdxes.insert(std::move(idx));
-        idx = ToString(fdStorage.AddInterestingOrdering(edge.RightJoinKeys, TOrdering::EShuffle, nullptr));
+        idx = ToString(fdStorage.AddInterestingOrdering(edge.RightJoinKeys, TOrdering::EShuffle, tableAliases));
         interestingOrderingIdxes.insert(std::move(idx));
     }
 
@@ -608,7 +613,7 @@ TExprBase DqOptimizeEquiJoinWithCosts(
     YQL_ENSURE(equiJoin.ArgCount() >= 4);
 
     auto stats = typesCtx.GetStats(equiJoin.Raw());
-    if (stats) {
+    if (stats && stats->CBOFired) {
         return node;
     }
 
@@ -676,6 +681,7 @@ TExprBase DqOptimizeEquiJoinWithCosts(
 
     // rewrite the join tree and record the output statistics
     TExprBase res = RearrangeEquiJoinTree(ctx, equiJoin, joinTree);
+    joinTree->Stats.CBOFired = true;
     typesCtx.SetStats(res.Raw(), std::make_shared<TOptimizerStatistics>(joinTree->Stats));
     return res;
 

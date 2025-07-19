@@ -4,7 +4,6 @@ from .conftest import LoadSuiteBase
 from os import getenv
 from ydb.tests.olap.lib.ydb_cli import WorkloadType, CheckCanonicalPolicy
 from ydb.tests.olap.lib.utils import get_external_param
-from ydb.tests.olap.lib.ydb_cluster import YdbCluster
 
 
 class TpcdsSuiteBase(LoadSuiteBase):
@@ -27,18 +26,14 @@ class TpcdsSuiteBase(LoadSuiteBase):
         return result
 
     @classmethod
-    def _get_path(cls, full: bool = True) -> str:
-        if full:
-            tpcds_path = get_external_param('table-path-tpcds', YdbCluster.get_tables_path('tpcds'))
-        else:
-            tpcds_path = 'tpcds'
-        return get_external_param(f'table-path-{cls.suite()}', f'{tpcds_path}/s{cls.scale}')
+    def _get_path(cls) -> str:
+        return get_external_param(f'table-path-{cls.suite()}', f'tpcds/s{cls.scale}'.replace('.', '_'))
 
     @classmethod
     def do_setup_class(cls):
         if not cls.verify_data or getenv('NO_VERIFY_DATA', '0') == '1' or getenv('NO_VERIFY_DATA_TPCH', '0') == '1' or getenv(f'NO_VERIFY_DATA_TPCH_{cls.scale}'):
             return
-        cls.check_tables_size(folder=cls._get_path(False), tables=cls._get_tables_size())
+        cls.check_tables_size(folder=cls._get_path(), tables=cls._get_tables_size())
 
     @pytest.mark.parametrize('query_num', [i for i in range(1, 100)])
     def test_tpcds(self, query_num: int):

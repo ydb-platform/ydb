@@ -28,6 +28,9 @@ class TestOverlappingPortions(object):
                 "memory_limit": 100 * 1024 * 1024,
                 "hard_memory_limit": 100 * 1024 * 1024,
             },
+            memory_controller_config={
+                "column_tables_read_execution_limit_bytes": 100 * 1024 * 1024
+            },
         )
         cls.cluster = KiKiMR(config)
         cls.cluster.start()

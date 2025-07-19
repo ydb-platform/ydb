@@ -2848,32 +2848,30 @@ public:
     }
 
     TNodePtr Build(TContext& ctx) override {
-        TPtr res;
+        TString op;
+
         if (Operator_ == "union") {
-            if (QuantifierAll_) {
-                if (ctx.EmitUnionMerge) {
-                    res = ctx.PositionalUnionAll ? Y("UnionMergePositional") : Y("UnionMerge");
-                } else {
-                    res = ctx.PositionalUnionAll ? Y("UnionAllPositional") : Y("UnionAll");
-                }
-            } else {
-                res = ctx.PositionalUnionAll ? Y("UnionPositional") : Y("Union");
-            }
+            op = "Union";
         } else if (Operator_ == "intersect") {
-            if (QuantifierAll_) {
-                res = Y("IntersectAll");
-            } else {
-                res = Y("Intersect");
-            }
+            op = "Intersect";
         } else if (Operator_ == "except") {
-            if (QuantifierAll_) {
-                res = Y("ExceptAll");
-            } else {
-                res = Y("Except");
-            }
+            op = "Except";
         } else {
             Y_ABORT("Invalid operator: %s", Operator_.c_str());
         }
+
+        if (QuantifierAll_) {
+            if (Operator_ != "union" || !ctx.EmitUnionMerge) {
+                op += "All";
+            } else {
+                op += "Merge";
+            }
+        }
+        if (ctx.PositionalUnionAll) {
+            op += "Positional";
+        }
+
+        TPtr res = Y(op);
 
         for (auto& s: Sources_) {
             auto input = s->Build(ctx);

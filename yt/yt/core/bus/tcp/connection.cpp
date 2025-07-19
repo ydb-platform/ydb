@@ -1325,6 +1325,16 @@ bool TTcpConnection::OnHandshakePacketReceived()
                 << TErrorAttribute("mode", EncryptionMode_)
                 << TErrorAttribute("other_mode", otherEncryptionMode));
         } else {
+            if (ConnectionType_ == EConnectionType::Client &&
+                handshake.has_verification_mode() &&
+                handshake.verification_mode() != static_cast<int>(EVerificationMode::None) &&
+                !Config_->CertificateChain)
+            {
+                // Fail connection earlier to avoid wasting time on TLS handshake.
+                Abort(TError(NBus::EErrorCode::SslError, "Server requested TLS/SSL client certificate for connection"));
+                return true;
+            }
+
             EstablishSslSession_ = true;
             // Expect ssl ack from the other side.
             RemainingSslAckPacketBytes_ = GetSslAckPacketSize();
@@ -2036,6 +2046,14 @@ bool TTcpConnection::DoSslHandshake()
     switch (SSL_get_error(Ssl_.get(), result)) {
         case SSL_ERROR_NONE:
             YT_LOG_DEBUG("TLS/SSL connection has been established by SSL_do_handshake");
+            if (VerificationMode_ != EVerificationMode::None) {
+                NCrypto::TX509Ptr peerCertificate(SSL_get_peer_certificate(Ssl_.get()));
+                if (!peerCertificate) {
+                    Abort(TError(NBus::EErrorCode::SslError, "TLS/SSL peer certificate is not available"));
+                }
+                YT_LOG_DEBUG("TLS/SSL peer certificate (FingerprintSHA256: %v)",
+                    NCrypto::GetFingerprintSHA256(peerCertificate));
+            }
             MaxFragmentsPerWrite_ = 1;
             SslState_ = ESslState::Established;
             ReadyPromise_.TrySet();
@@ -2173,8 +2191,8 @@ void TTcpConnection::TryEstablishSslSession()
             }
             [[fallthrough]];
         case EVerificationMode::Ca: {
-            // Enable verification of the peer's certificate with the CA.
-            SSL_set_verify(Ssl_.get(), SSL_VERIFY_PEER, /*callback*/ nullptr);
+            // Request and verify peer certificate, terminate connection if certificate is not provided.
+            SSL_set_verify(Ssl_.get(), SSL_VERIFY_PEER | SSL_VERIFY_FAIL_IF_NO_PEER_CERT, /*callback*/ nullptr);
             break;
         }
         case EVerificationMode::None:

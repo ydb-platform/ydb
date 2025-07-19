@@ -151,6 +151,7 @@ message TConfigItem {
         ClusterYamlConfigItem = 101;
 
         CompositeConveyorConfigItem = 109;
+        PortionsMetadataCacheItem = 110;
 
         // synthetic kinds for audit purposes only
         DatabaseYamlConfigChangeItem = 32767;

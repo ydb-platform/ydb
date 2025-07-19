@@ -10,11 +10,30 @@ using namespace NKikimr::NKqp;
 using namespace NYql::NDq;
 
 namespace {
+    THashSet<TString> notAllowedDataTypeForSafeCast{"JsonDocument", "DyNumber"};
+
+    bool IsSuitableToExtractExpr(const TExprNode::TPtr &input) {
+        if (auto maybeSafeCast = TExprBase(input).Maybe<TCoSafeCast>()) {
+            auto maybeDataType = maybeSafeCast.Cast().Type().Maybe<TCoDataType>();
+            if (!maybeDataType) {
+                if (const auto maybeOptionalType = maybeSafeCast.Cast().Type().Maybe<TCoOptionalType>()) {
+                    maybeDataType = maybeOptionalType.Cast().ItemType().Maybe<TCoDataType>();
+                }
+            }
+            return (maybeDataType && !notAllowedDataTypeForSafeCast.contains(maybeDataType.Cast().Type().Value()));
+        }
+        return true;
+    }
+
     /**
      * Traverse a lambda and create a mapping from nodes to nodes wrapped in EvaluateExpr callable
      * We check for literals specifically, since they shouldn't be evaluated
      */
     void ExtractConstantExprs(const TExprNode::TPtr& input, TNodeOnNodeOwnedMap& replaces, TExprContext& ctx, bool foldUdfs = true) {
+        if (!IsSuitableToExtractExpr(input)) {
+            return;
+        }
+
         if (TCoLambda::Match(input.Get())) {
             auto lambda = TExprBase(input).Cast<TCoLambda>();
             return ExtractConstantExprs(lambda.Body().Ptr(), replaces, ctx);

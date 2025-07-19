@@ -6,34 +6,33 @@
 
 #include <ydb/public/sdk/cpp/src/client/topic/common/trace_lazy.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
-#include <ydb/public/sdk/cpp/src/client/topic/ut/ut_utils/trace.h>
+#include <ydb/public/sdk/cpp/tests/integration/topic/utils/trace.h>
 
 #include <ydb/public/sdk/cpp/src/client/persqueue_public/persqueue.h>
 
 #include <ydb/public/sdk/cpp/src/client/topic/impl/common.h>
 #include <ydb/public/sdk/cpp/src/client/persqueue_public/impl/write_session.h>
 
+#include <ydb/public/sdk/cpp/tests/integration/topic/utils/local_partition.h>
+
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/testing/unittest/tests_data.h>
 
-#include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
-#include <ydb/core/tx/schemeshard/ut_helpers/test_env.h>
-
 #include <format>
 
-using namespace NYdb;
+
 using namespace NYdb::NPersQueue::NTests;
 
-namespace NYdb::NTopic::NTests {
+namespace NYdb::inline Dev::NTopic::NTests {
 
     Y_UNIT_TEST_SUITE(LocalPartition) {
-        std::shared_ptr<TTopicSdkTestSetup> CreateSetup(const TString& testCaseName, ui32 nodeCount = 1, bool createTopic = true) {
+        std::shared_ptr<TTopicSdkTestSetup> CreateSetup(const std::string& testCaseName, std::uint32_t nodeCount = 1, bool createTopic = true) {
             NKikimr::Tests::TServerSettings settings = TTopicSdkTestSetup::MakeServerSettings();
             settings.SetNodeCount(nodeCount);
             return std::make_shared<TTopicSdkTestSetup>(testCaseName, settings, createTopic);
         }
 
-        TTopicSdkTestSetup CreateSetupForSplitMerge(const TString& testCaseName) {
+        TTopicSdkTestSetup CreateSetupForSplitMerge(const std::string& testCaseName) {
             NKikimrConfig::TFeatureFlags ff;
             ff.SetEnableTopicSplitMerge(true);
             ff.SetEnablePQConfigTransactionsAtSchemeShard(true);
@@ -45,171 +44,7 @@ namespace NYdb::NTopic::NTests {
             return setup;
         }
 
-        NYdb::TDriverConfig CreateConfig(const TTopicSdkTestSetup& setup, TString discoveryAddr)
-        {
-            NYdb::TDriverConfig config = setup.MakeDriverConfig();
-            config.SetEndpoint(discoveryAddr);
-            return config;
-        }
-
-        TWriteSessionSettings CreateWriteSessionSettings()
-        {
-            return TWriteSessionSettings()
-                .Path(TEST_TOPIC)
-                .ProducerId(TEST_MESSAGE_GROUP_ID)
-                .PartitionId(0)
-                .DirectWriteToPartition(true);
-        }
-
-        TReadSessionSettings CreateReadSessionSettings()
-        {
-            return TReadSessionSettings()
-                .ConsumerName(TEST_CONSUMER)
-                .AppendTopics(TEST_TOPIC);
-        }
-
-        void WriteMessage(TTopicClient& client)
-        {
-            Cerr << "=== Write message" << Endl;
-
-            auto writeSession = client.CreateSimpleBlockingWriteSession(CreateWriteSessionSettings());
-            UNIT_ASSERT(writeSession->Write("message"));
-            writeSession->Close();
-        }
-
-        void ReadMessage(TTopicClient& client, ui64 expectedCommitedOffset = 1)
-        {
-            Cerr << "=== Read message" << Endl;
-
-            auto readSession = client.CreateReadSession(CreateReadSessionSettings());
-
-            std::optional<TReadSessionEvent::TEvent> event = readSession->GetEvent(true);
-            UNIT_ASSERT(event);
-            auto startPartitionSession = std::get_if<TReadSessionEvent::TStartPartitionSessionEvent>(&event.value());
-            UNIT_ASSERT_C(startPartitionSession, DebugString(*event));
-
-            startPartitionSession->Confirm();
-
-            event = readSession->GetEvent(true);
-            UNIT_ASSERT(event);
-            auto dataReceived = std::get_if<TReadSessionEvent::TDataReceivedEvent>(&event.value());
-            UNIT_ASSERT_C(dataReceived, DebugString(*event));
-
-            dataReceived->Commit();
-
-            auto& messages = dataReceived->GetMessages();
-            UNIT_ASSERT(messages.size() == 1);
-            UNIT_ASSERT(messages[0].GetData() == "message");
-
-            event = readSession->GetEvent(true);
-            UNIT_ASSERT(event);
-            auto commitOffsetAck = std::get_if<TReadSessionEvent::TCommitOffsetAcknowledgementEvent>(&event.value());
-            UNIT_ASSERT_C(commitOffsetAck, DebugString(*event));
-            UNIT_ASSERT_VALUES_EQUAL(commitOffsetAck->GetCommittedOffset(), expectedCommitedOffset);
-        }
-
-        template <class TService>
-        std::unique_ptr<grpc::Server> StartGrpcServer(const TString& address, TService& service) {
-            grpc::ServerBuilder builder;
-            builder.AddListeningPort(address, grpc::InsecureServerCredentials());
-            builder.RegisterService(&service);
-            return builder.BuildAndStart();
-        }
-
-        class TMockDiscoveryService: public Ydb::Discovery::V1::DiscoveryService::Service {
-        public:
-            TMockDiscoveryService()
-            {
-                ui16 discoveryPort = TPortManager().GetPort();
-                DiscoveryAddr = TStringBuilder() << "0.0.0.0:" << discoveryPort;
-                Cerr << "==== TMockDiscovery server started on port " << discoveryPort << Endl;
-                Server = ::NYdb::NTopic::NTests::NTestSuiteLocalPartition::StartGrpcServer(DiscoveryAddr, *this);
-            }
-
-            void SetGoodEndpoints(TTopicSdkTestSetup& setup)
-            {
-                std::lock_guard lock(Lock);
-                Cerr << "=== TMockDiscovery set good endpoint nodes " << Endl;
-                SetEndpointsLocked(setup.GetRuntime().GetNodeId(0), setup.GetRuntime().GetNodeCount(), setup.GetServer().GrpcPort);
-            }
-
-            // Call this method only after locking the Lock.
-            void SetEndpointsLocked(ui32 firstNodeId, ui32 nodeCount, ui16 port)
-            {
-                Cerr << "==== TMockDiscovery add endpoints, firstNodeId " << firstNodeId << ", nodeCount " << nodeCount << ", port " << port << Endl;
-
-                MockResults.clear_endpoints();
-                if (nodeCount > 0)
-                {
-                    Ydb::Discovery::EndpointInfo* endpoint = MockResults.add_endpoints();
-                    endpoint->set_address(TStringBuilder() << "localhost");
-                    endpoint->set_port(port);
-                    endpoint->set_node_id(firstNodeId);
-                }
-                if (nodeCount > 1)
-                {
-                    Ydb::Discovery::EndpointInfo* endpoint = MockResults.add_endpoints();
-                    endpoint->set_address(TStringBuilder() << "ip6-localhost"); // name should be different
-                    endpoint->set_port(port);
-                    endpoint->set_node_id(firstNodeId + 1);
-                }
-                if (nodeCount > 2) {
-                    UNIT_FAIL("Unsupported count of nodes");
-                }
-            }
-
-            void SetEndpoints(ui32 firstNodeId, ui32 nodeCount, ui16 port)
-            {
-                std::lock_guard lock(Lock);
-                SetEndpointsLocked(firstNodeId, nodeCount, port);
-            }
-
-            grpc::Status ListEndpoints(grpc::ServerContext* context, const Ydb::Discovery::ListEndpointsRequest* request, Ydb::Discovery::ListEndpointsResponse* response) override {
-                std::lock_guard lock(Lock);
-                UNIT_ASSERT(context);
-
-                if (Delay)
-                {
-                    Cerr << "==== Delay " << Delay << " before ListEndpoints request" << Endl;
-                    TInstant start = TInstant::Now();
-                    while (start + Delay < TInstant::Now())
-                    {
-                        if (context->IsCancelled())
-                            return grpc::Status::CANCELLED;
-                        Sleep(TDuration::MilliSeconds(100));
-                    }
-                }
-
-                Cerr << " ==== ListEndpoints request: " << request->ShortDebugString() << Endl;
-
-                auto* op = response->mutable_operation();
-                op->set_ready(true);
-                op->set_status(Ydb::StatusIds::SUCCESS);
-                op->mutable_result()->PackFrom(MockResults);
-
-                Cerr << "==== ListEndpoints response: " << response->ShortDebugString() << Endl;
-
-                return grpc::Status::OK;
-            }
-
-            TString GetDiscoveryAddr() const {
-                return DiscoveryAddr;
-            }
-
-            void SetDelay(TDuration delay) {
-                Delay = delay;
-            }
-
-        private:
-            Ydb::Discovery::ListEndpointsResult MockResults;
-            TString DiscoveryAddr;
-            std::unique_ptr<grpc::Server> Server;
-            TAdaptiveLock Lock;
-
-            TDuration Delay = {};
-        };
-
-        auto Start(TString testCaseName, std::shared_ptr<TMockDiscoveryService> mockDiscoveryService = {})
+        auto Start(const std::string& testCaseName, std::shared_ptr<TMockDiscoveryService> mockDiscoveryService = {})
         {
             struct Result {
                 std::shared_ptr<TTopicSdkTestSetup> Setup;
@@ -236,10 +71,10 @@ namespace NYdb::NTopic::NTests {
             auto [setup, client, discovery] = Start(TEST_CASE_NAME);
 
             for (size_t i = 1; i <= 10; ++i) {
-                Cerr << "=== Restart attempt " << i << Endl;
-                setup->GetServer().KillTopicPqTablets(setup->GetTopicPath());
-                WriteMessage(*client);
-                ReadMessage(*client, i);
+                std::cerr << "=== Restart attempt " << i << std::endl;
+                setup->GetServer().KillTopicPqTablets(setup->GetFullTopicPath());
+                WriteMessage(*setup, *client);
+                ReadMessage(*setup, *client, i);
             }
         }
 
@@ -255,7 +90,7 @@ namespace NYdb::NTopic::NTests {
             TTopicClient client(driver);
             auto retryPolicy = std::make_shared<TYdbPqTestRetryPolicy>();
             auto sessionSettings = TWriteSessionSettings()
-                .Path(TEST_TOPIC)
+                .Path(setup->GetTopicPath())
                 .MessageGroupId(TEST_MESSAGE_GROUP_ID)
                 .DirectWriteToPartition(true)
                 .RetryPolicy(retryPolicy);
@@ -264,7 +99,7 @@ namespace NYdb::NTopic::NTests {
             retryPolicy->ExpectBreakDown();
             auto writeSession = client.CreateSimpleBlockingWriteSession(sessionSettings);
             UNIT_ASSERT(writeSession->Write("message"));
-            setup->GetServer().KillTopicPqTablets(setup->GetTopicPath());
+            setup->GetServer().KillTopicPqTablets(setup->GetFullTopicPath());
             retryPolicy->WaitForRepairSync();
             writeSession->Close();
 
@@ -297,7 +132,7 @@ namespace NYdb::NTopic::NTests {
             // But at first we only add node 1 to the discovery service.
             auto setup = CreateSetup(TEST_CASE_NAME, 2, /* createTopic = */ false);
             setup->GetServer().AnnoyingClient->MarkNodeInHive(setup->GetServer().GetRuntime(), 0, false);
-            setup->CreateTopic(TString{TEST_TOPIC}, TEST_CONSUMER, 1);
+            setup->CreateTopic(setup->GetTopicPath(), setup->GetConsumerName(), 1);
             setup->GetServer().AnnoyingClient->MarkNodeInHive(setup->GetServer().GetRuntime(), 0, true);
             TMockDiscoveryService discovery;
             discovery.SetEndpoints(setup->GetRuntime().GetNodeId(0), 1, setup->GetServer().GrpcPort);
@@ -308,7 +143,7 @@ namespace NYdb::NTopic::NTests {
             TTopicClient client(driver);
             auto retryPolicy = std::make_shared<TYdbPqTestRetryPolicy>();
             auto sessionSettings = TWriteSessionSettings()
-                .Path(TEST_TOPIC)
+                .Path(setup->GetTopicPath())
                 .MessageGroupId(TEST_MESSAGE_GROUP_ID)
                 .DirectWriteToPartition(true)
                 .RetryPolicy(retryPolicy);
@@ -346,7 +181,7 @@ namespace NYdb::NTopic::NTests {
             auto setup = CreateSetup(TEST_CASE_NAME, 2, /* createTopic = */ false);
             // Make the node 1 unavailable.
             setup->GetServer().AnnoyingClient->MarkNodeInHive(setup->GetServer().GetRuntime(), 0, false);
-            setup->CreateTopic(TString{TEST_TOPIC}, TEST_CONSUMER, 2);
+            setup->CreateTopic(setup->GetTopicPath(), setup->GetConsumerName(), 2);
 
             TMockDiscoveryService discovery;
             discovery.SetGoodEndpoints(*setup);
@@ -357,7 +192,7 @@ namespace NYdb::NTopic::NTests {
             TTopicClient client(driver);
             auto retryPolicy = std::make_shared<TYdbPqTestRetryPolicy>();
             auto sessionSettings = TWriteSessionSettings()
-                .Path(TEST_TOPIC)
+                .Path(setup->GetTopicPath())
                 .MessageGroupId(TEST_MESSAGE_GROUP_ID)
                 .DirectWriteToPartition(true)
                 .RetryPolicy(retryPolicy);
@@ -413,7 +248,7 @@ namespace NYdb::NTopic::NTests {
                 // Allow UpdateRow only, no DescribeSchema permission.
                 NACLib::TDiffACL acl;
                 acl.AddAccess(NACLib::EAccessType::Allow, NACLib::UpdateRow, authToken);
-                setup->GetServer().AnnoyingClient->ModifyACL("/Root", TString{TEST_TOPIC}, acl.SerializeAsString());
+                setup->GetServer().AnnoyingClient->ModifyACL("/Root", setup->GetTopicPath(), acl.SerializeAsString());
             }
 
             TMockDiscoveryService discovery;
@@ -426,7 +261,7 @@ namespace NYdb::NTopic::NTests {
             TTopicClient client(driver);
 
             auto sessionSettings = TWriteSessionSettings()
-                .Path(TEST_TOPIC)
+                .Path(setup->GetTopicPath())
                 .ProducerId(TEST_MESSAGE_GROUP_ID)
                 .MessageGroupId(TEST_MESSAGE_GROUP_ID)
                 .DirectWriteToPartition(true);
@@ -450,7 +285,7 @@ namespace NYdb::NTopic::NTests {
 
         Y_UNIT_TEST(WithoutPartitionWithSplit) {
             auto setup = CreateSetupForSplitMerge(TEST_CASE_NAME);
-            setup.CreateTopic(TString{TEST_TOPIC}, TEST_CONSUMER, 1, 100);
+            setup.CreateTopic(setup.GetTopicPath(), setup.GetConsumerName(), 1, 100);
 
             TMockDiscoveryService discovery;
             discovery.SetGoodEndpoints(setup);
@@ -460,7 +295,7 @@ namespace NYdb::NTopic::NTests {
             TDriver driver(driverConfig);
             TTopicClient client(driver);
             auto writeSettings = TWriteSessionSettings()
-                                .Path(TEST_TOPIC)
+                                .Path(setup.GetTopicPath())
                                 .ProducerId(TEST_MESSAGE_GROUP_ID)
                                 .MessageGroupId(TEST_MESSAGE_GROUP_ID)
                                 .DirectWriteToPartition(true);

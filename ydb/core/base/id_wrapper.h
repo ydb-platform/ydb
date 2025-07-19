@@ -78,6 +78,9 @@ public:
 
     T GetRawId() const { return Raw; }
 
+    static const TIdWrapper Min() { return FromValue(::Min<T>()); }
+    static const TIdWrapper Max() { return FromValue(::Max<T>()); }
+
     friend std::hash<TIdWrapper<T, Tag>>;
 
     friend THash<TIdWrapper<T, Tag>>;

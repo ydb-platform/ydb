@@ -199,7 +199,7 @@ namespace NKikimr::NBlobDepot {
             (SelfId, SelfId()));
         Y_ABORT_UNLESS(Self->Config.GetIsDecommittingGroup());
         SendToBSProxy(SelfId(), Self->Config.GetVirtualGroupId(), new TEvBlobStorage::TEvAssimilate(SkipBlocksUpTo,
-            SkipBarriersUpTo, SkipBlobsUpTo));
+            SkipBarriersUpTo, SkipBlobsUpTo, false, false));
     }
 
     void TAssimilator::Handle(TEvBlobStorage::TEvAssimilateResult::TPtr ev) {

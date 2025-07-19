@@ -41,6 +41,7 @@ public:
 class TWorkloadGeneratorBase : public IWorkloadQueryGenerator {
 public:
     explicit TWorkloadGeneratorBase(const TWorkloadBaseParams& params);
+    void Init() override final {};
     std::string GetDDLQueries() const override final;
     TVector<std::string> GetCleanPaths() const override final;
 

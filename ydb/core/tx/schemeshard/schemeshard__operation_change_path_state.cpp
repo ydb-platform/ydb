@@ -1,7 +1,8 @@
 #include "schemeshard__operation_change_path_state.h"
+
+#include "schemeshard__operation_base.h"
 #include "schemeshard__operation_common.h"
 #include "schemeshard__operation_states.h"
-#include "schemeshard__operation_base.h"
 
 #define LOG_I(stream) LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
 #define LOG_N(stream) LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
@@ -73,14 +74,9 @@ public:
             << ", opId: " << OperationId);
         TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxChangePathState, path.GetPathIdForDomain());
         
-        // Set the target path that will have its state changed
         txState.TargetPathId = path.Base()->PathId;
-        
-        // Set TargetPathTargetState instead of changing path state immediately
-        NIceDb::TNiceDb db(context.GetDB());
         txState.TargetPathTargetState = static_cast<NKikimrSchemeOp::EPathState>(changePathState.GetTargetState());
         
-        // Set the path state directly to allow the operation to proceed
         path.Base()->PathState = *txState.TargetPathTargetState;
         context.DbChanges.PersistPath(path.Base()->PathId);
         
@@ -94,8 +90,10 @@ public:
         return result;
     }
 
-    void AbortPropose(TOperationContext&) override {
-        Y_ABORT("no AbortPropose for TChangePathStateOp");
+    void AbortPropose(TOperationContext& context) override {
+        LOG_N("TChangePathStateOp AbortPropose"
+            << ", opId: " << OperationId);
+        // Nothing to cleanup since Propose hasn't committed anything yet
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {

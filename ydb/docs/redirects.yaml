@@ -90,7 +90,43 @@ common:
   - from: /deploy/manual/deploy-ydb-federated-query.md
     to: /devops/manual/federated-queries/index.md
 
-# Dev-related redirects
+  # Redirects for Deployment Options
+  - from: /devops/(ansible|kubernetes|manual)/(.*)$
+    to: /devops/deployment-options/$1/$2
+
+  # Redirects for Observability
+  - from: /devops/manual/(monitoring|logging)\.md$
+    to: /devops/observability/$1.md
+  - from: /devops/manual/system-views.md
+    to: /devops/observability/system-views.md
+
+  # Redirects for Maintenance
+  - from: /devops/manual/upgrade.md
+    to: /devops/concepts/versioning.md
+  - from: /devops/manual/maintenance-without-downtime.md
+    to: /devops/concepts/maintenance-without-downtime.md
+
+  # Redirect for backup-and-recovery
+  - from: /devops/manual/backup-and-recovery.md
+    to: /devops/backup-and-recovery.md
+
+  # Redirect for deprecated instructions
+  - from: /devops/manual/state-storage-move.md
+    to: /devops/configuration-management/configuration-v1/state-storage-move.md
+  - from: /devops/manual/static-group-move.md
+    to: /devops/configuration-management/configuration-v1/static-group-move.md
+
+  # Redirect for system-requirements
+  - from: /devops/system-requirements.md
+    to: /devops/concepts/system-requirements.md
+  - from: /cluster/system-requirements.md
+    to: /devops/concepts/system-requirements.md
+
+  # Redirects for maintenance folder
+  - from: /maintenance/(.*)$
+    to: /devops/deployment-options/manual/$1
+
+  # Dev-related redirects
   - from: /db/index.md
     to: /dev/index.md
   - from: /troubleshooting/system_views.md
@@ -408,42 +444,6 @@ ru:
   - from: /postgresql/docker-connect.md
     to: /postgresql/connect.md
 
-  # Redirects for Deployment Options
-  - from: /devops/(ansible|kubernetes|manual)/(.*)$
-    to: /devops/deployment-options/$1/$2
-
-  # Redirects for Observability
-  - from: /devops/manual/(monitoring|logging)\.md$
-    to: /devops/observability/$1.md
-  - from: /devops/manual/system-views.md
-    to: /devops/observability/system-views.md
-
-  # Redirects for Maintenance
-  - from: /devops/manual/upgrade.md
-    to: /devops/concepts/versioning.md
-  - from: /devops/manual/maintenance-without-downtime.md
-    to: /devops/concepts/maintenance-without-downtime.md
-
-  # Redirects for Federated Queries
-  - from: /devops/manual/federated-queries/(.*)$
-    to: /devops/deployment-options/manual/federated-queries/$1
-
-  # Redirect for backup-and-recovery
-  - from: /devops/manual/backup-and-recovery.md
-    to: /devops/backup-and-recovery.md
-
-  # Redirect for deprecated instructions
-  - from: /devops/manual/state-storage-move.md
-    to: /devops/configuration-management/configuration-v1/state-storage-move.md
-  - from: /devops/manual/static-group-move.md
-    to: /devops/configuration-management/configuration-v1/static-group-move.md
-
-  # Redirect for system-requirements
-  - from: /devops/system-requirements.md
-    to: /devops/concepts/system-requirements.md
-  - from: /cluster/system-requirements.md
-    to: /devops/concepts/system-requirements.md
-
 en:
   - from: /cluster/system-requirements.md
     to: /devops/system-requirements.md
@@ -456,3 +456,20 @@ en:
     to: /devops/deployment-options/manual/index.md
   - from: /maintenance/manual/cms.md
     to: /devops/deployment-options/manual/cms.md
+
+  - from: /public-materials/videos/2017.md
+    to: /public-materials/videos/2022.md
+  - from: /public-materials/videos/2018.md
+    to: /public-materials/videos/2022.md
+  - from: /public-materials/videos/2019.md
+    to: /public-materials/videos/2022.md
+  - from: /public-materials/videos/2020.md
+    to: /public-materials/videos/2022.md
+  - from: /public-materials/videos/2021.md
+    to: /public-materials/videos/2022.md
+  - from: /public-materials/publications/2021.md
+    to: /public-materials/publications/2023.md
+  - from: /public-materials/publications/2025.md
+    to: /public-materials/publications/2024.md
+  - from: /public-materials/podcasts.md
+    to: /public-materials/videos.md

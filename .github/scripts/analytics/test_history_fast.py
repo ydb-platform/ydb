@@ -121,7 +121,7 @@ def get_missed_data_for_upload(driver, full_table_path):
         all_data.run_timestamp >= CurrentUtcDate() - 6*Interval("P1D")
         and String::Contains(all_data.test_name, '.flake8')  = FALSE
         and (CASE 
-            WHEN String::Contains(all_data.test_name, 'chunk chunk') OR String::Contains(all_data.test_name, 'chunk+chunk') THEN TRUE
+            WHEN String::Contains(all_data.test_name, 'sole chunk') OR String::Contains(all_data.test_name, 'chunk+chunk')  OR String::Contains(all_data.test_name, '] chunk') THEN TRUE
             ELSE FALSE
             END) = FALSE
         and (all_data.branch = 'main' or all_data.branch like 'stable-%')

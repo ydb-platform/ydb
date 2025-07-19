@@ -87,9 +87,9 @@
                                                                     "n",
                                                                     "name"
                                                                 ],
-                                                                "E-Cost": "No estimate",
-                                                                "E-Rows": "No estimate",
-                                                                "E-Size": "No estimate",
+                                                                "E-Cost": "0",
+                                                                "E-Rows": "0",
+                                                                "E-Size": "0",
                                                                 "LookupKeyColumns": [
                                                                     "name"
                                                                 ],
@@ -164,10 +164,6 @@
                                                         "Name": "TableFullScan",
                                                         "Path": "/Root/postgres_jointest/join2.test_plan/t2",
                                                         "ReadColumns": [
-                                                            "n",
-                                                            "name"
-                                                        ],
-                                                        "ReadRanges": [
                                                             "name (-\u221e, +\u221e)",
                                                             "n (-\u221e, +\u221e)"
                                                         ],

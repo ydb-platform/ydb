@@ -37,9 +37,13 @@ public:
         : TClientImplCommon(std::move(connections), settings)
     {}
 
-    TAsyncStatus UpdateClusterState(const std::vector<TPileStateUpdate>& updates, const TUpdateClusterStateSettings& settings) {
+    TAsyncStatus UpdateClusterState(const std::vector<TPileStateUpdate>& updates,
+            const std::vector<std::uint32_t>& specificPileIds, const TUpdateClusterStateSettings& settings) {
         auto request = MakeOperationRequest<Ydb::Bridge::UpdateClusterStateRequest>(settings);
         UpdatesToProto(updates, &request);
+        for (auto specificPileId : specificPileIds) {
+            request.add_specific_pile_ids(specificPileId);
+        }
 
         return RunSimple<Ydb::Bridge::V1::BridgeService, Ydb::Bridge::UpdateClusterStateRequest, Ydb::Bridge::UpdateClusterStateResponse>(
             std::move(request),
@@ -81,8 +85,9 @@ TBridgeClient::TBridgeClient(const TDriver& driver, const TCommonClientSettings&
 
 TBridgeClient::~TBridgeClient() = default;
 
-TAsyncStatus TBridgeClient::UpdateClusterState(const std::vector<TPileStateUpdate>& updates, const TUpdateClusterStateSettings& settings) {
-    return Impl_->UpdateClusterState(updates, settings);
+TAsyncStatus TBridgeClient::UpdateClusterState(const std::vector<TPileStateUpdate>& updates,
+        const std::vector<std::uint32_t>& specificPileIds, const TUpdateClusterStateSettings& settings) {
+    return Impl_->UpdateClusterState(updates, specificPileIds, settings);
 }
 
 TAsyncGetClusterStateResult TBridgeClient::GetClusterState(const TGetClusterStateSettings& settings) {

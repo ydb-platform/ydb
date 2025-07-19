@@ -40,6 +40,7 @@ TConclusionStatus TZeroLevelConstructor::DoDeserializeFromJson(const NJson::TJso
         }
         PortionsCountLimit = jsonValue.GetUInteger();
     }
+
     if (json.Has("portions_size_limit")) {
         const auto& jsonValue = json["portions_size_limit"];
         if (!jsonValue.IsUInteger()) {

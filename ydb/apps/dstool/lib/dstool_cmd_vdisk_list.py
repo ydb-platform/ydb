@@ -113,7 +113,7 @@ def do(args):
             row['VDiskIdx'] = vslot.VDiskIdx
             row['VDiskKind'] = vslot.VDiskKind
             row['GroupSizeInUnits'] = group_map[group].GroupSizeInUnits
-            row['PDiskSlotSizeInUnits'] = pdisk.PDiskConfig.SlotSizeInUnits
+            _, row['PDiskSlotSizeInUnits'] = common.get_pdisk_inferred_settings(pdisk)
             row['UsedSize'] = vslot.VDiskMetrics.AllocatedSize
             row['AvailableSize'] = vslot.VDiskMetrics.AvailableSize
             row['TotalSize'] = row['UsedSize'] + row['AvailableSize']

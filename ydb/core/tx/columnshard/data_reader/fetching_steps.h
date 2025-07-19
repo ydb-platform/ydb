@@ -40,7 +40,7 @@ private:
 
     virtual IFetchingStep::EStepResult DoExecute(const std::shared_ptr<TPortionsDataFetcher>& fetchingContext) const override {
         fetchingContext->SetStage(EFetchingStage::AskAccessorResources);
-        auto request = std::make_shared<TDataAccessorsRequest>(::ToString(fetchingContext->GetInput().GetConsumer()));
+        auto request = std::make_shared<TDataAccessorsRequest>(fetchingContext->GetInput().GetConsumer());
         for (auto&& i : fetchingContext->GetInput().GetPortions()) {
             request->AddPortion(i->GetPortionInfo());
         }
@@ -89,7 +89,7 @@ private:
     virtual IFetchingStep::EStepResult DoExecute(const std::shared_ptr<TPortionsDataFetcher>& fetchingContext) const override {
         fetchingContext->SetStage(EFetchingStage::AskAccessors);
         std::shared_ptr<TDataAccessorsRequest> request =
-            std::make_shared<TDataAccessorsRequest>(::ToString(fetchingContext->GetInput().GetConsumer()));
+            std::make_shared<TDataAccessorsRequest>(fetchingContext->GetInput().GetConsumer());
         request->RegisterSubscriber(std::make_shared<TSubscriber>(fetchingContext));
         for (auto&& i : fetchingContext->GetInput().GetPortions()) {
             request->AddPortion(i->GetPortionInfo());
@@ -104,7 +104,6 @@ public:
 class TAskDataResourceStep: public IFetchingStep {
 private:
     std::shared_ptr<NReader::NCommon::TColumnsSetIds> ColumnIds;
-    std::optional<ui64> MemoryUsage;
 
     class TSubscriber: public NGroupedMemoryManager::IAllocation {
     private:
@@ -131,7 +130,7 @@ private:
     virtual IFetchingStep::EStepResult DoExecute(const std::shared_ptr<TPortionsDataFetcher>& fetchingContext) const override {
         fetchingContext->SetStage(EFetchingStage::AskDataResources);
         const std::vector<TPortionDataAccessor>& accessors = fetchingContext->GetCurrentContext().GetPortionAccessors();
-        const ui64 memory = fetchingContext->GetNecessaryDataMemory(ColumnIds, accessors);
+        const ui64 memory = GetNecessaryDataMemory(fetchingContext, ColumnIds, accessors);
         if (!memory) {
             return IFetchingStep::EStepResult::Continue;
         }
@@ -139,11 +138,64 @@ private:
         return IFetchingStep::EStepResult::Detached;
     }
 
+protected:
+    virtual ui64 GetNecessaryDataMemory(const std::shared_ptr<TPortionsDataFetcher>& fetchingContext,
+        const std::shared_ptr<NReader::NCommon::TColumnsSetIds>& columnIds, const std::vector<TPortionDataAccessor>& acc) const = 0;
+
 public:
     TAskDataResourceStep(const std::shared_ptr<NReader::NCommon::TColumnsSetIds>& columnIds)
         : ColumnIds(columnIds)
     {
     }
+};
+
+class TAskBlobDataResourceStep: public TAskDataResourceStep {
+private:
+    virtual ui64 GetNecessaryDataMemory(const std::shared_ptr<TPortionsDataFetcher>& /*fetchingContext*/,
+        const std::shared_ptr<NReader::NCommon::TColumnsSetIds>& columnIds, const std::vector<TPortionDataAccessor>& acc) const override {
+        ui64 memory = 0;
+        for (auto&& a : acc) {
+            if (columnIds) {
+                memory += a.GetColumnBlobBytes(columnIds->GetColumnIds());
+            } else {
+                memory += a.GetPortionInfo().GetTotalBlobBytes();
+            }
+        }
+        return memory;
+    }
+
+public:
+    using TAskDataResourceStep::TAskDataResourceStep;
+};
+
+class TAskRawDataResourceStep: public TAskDataResourceStep {
+private:
+    virtual ui64 GetNecessaryDataMemory(const std::shared_ptr<TPortionsDataFetcher>& /*fetchingContext*/,
+        const std::shared_ptr<NReader::NCommon::TColumnsSetIds>& columnIds, const std::vector<TPortionDataAccessor>& acc) const override {
+        ui64 memory = 0;
+        for (auto&& a : acc) {
+            if (columnIds) {
+                memory += a.GetColumnRawBytes(columnIds->GetColumnIds());
+            } else {
+                memory += a.GetPortionInfo().GetTotalRawBytes();
+            }
+        }
+        return memory;
+    }
+
+public:
+    using TAskDataResourceStep::TAskDataResourceStep;
+};
+
+class TAskUsageResourceStep: public TAskDataResourceStep {
+private:
+    virtual ui64 GetNecessaryDataMemory(const std::shared_ptr<TPortionsDataFetcher>& fetchingContext,
+        const std::shared_ptr<NReader::NCommon::TColumnsSetIds>& columnIds, const std::vector<TPortionDataAccessor>& acc) const override {
+        return fetchingContext->GetNecessaryDataMemory(columnIds, acc);
+    }
+
+public:
+    using TAskDataResourceStep::TAskDataResourceStep;
 };
 
 class TAskGeneralResourceStep: public IFetchingStep {
@@ -250,6 +302,37 @@ public:
     TAskDataStep(const std::shared_ptr<NReader::NCommon::TColumnsSetIds>& columnIds)
         : ColumnIds(columnIds) {
     }
+};
+
+class TAssembleDataStep: public IFetchingStep {
+private:
+    virtual IFetchingStep::EStepResult DoExecute(const std::shared_ptr<TPortionsDataFetcher>& fetchingContext) const override {
+        auto& context = fetchingContext->MutableCurrentContext();
+        std::vector<NArrow::TGeneralContainer> result;
+        std::vector<ISnapshotSchema::TPtr> schemas;
+        for (const auto& portion : fetchingContext->GetInput().GetPortions()) {
+            schemas.emplace_back(portion->GetSchema());
+        }
+        std::vector<TPortionDataAccessor> accessors = context.ExtractPortionAccessors();
+        auto blobs = TPortionDataAccessor::DecodeBlobAddresses(accessors, schemas, context.ExtractBlobs());
+        for (ui64 i = 0; i < fetchingContext->GetInput().GetPortions().size(); ++i) {
+            AFL_VERIFY(i < context.GetPortionAccessors().size());
+            const auto& accessor = accessors[i];
+            const auto& portion = fetchingContext->GetInput().GetPortions()[i];
+            AFL_VERIFY(accessor.GetPortionInfo().GetAddress() == portion->GetPortionInfo()->GetAddress());
+
+            std::shared_ptr<NArrow::TGeneralContainer> container =
+                accessor.PrepareForAssemble(*portion->GetSchema(), *portion->GetSchema(), blobs[i])
+                    .AssembleToGeneralContainer({})
+                    .DetachResult();
+            result.emplace_back(std::move(*container));
+        }
+        context.SetAssembledData(std::move(result));
+        return EStepResult::Continue;
+    }
+
+public:
+    TAssembleDataStep() = default;
 };
 
 }   // namespace NKikimr::NOlap::NDataFetcher

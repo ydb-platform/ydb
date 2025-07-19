@@ -11,6 +11,8 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/scheme/scheme.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 
+#include <google/protobuf/arena.h>
+
 #include <ydb/public/api/protos/ydb_formats.pb.h>
 #include <ydb/public/api/protos/ydb_table.pb.h>
 #include <ydb/public/lib/json_value/ydb_json_value.h>
@@ -18,6 +20,7 @@
 #include <ydb/public/lib/ydb_cli/common/recursive_list.h>
 #include <ydb/public/lib/ydb_cli/common/interactive.h>
 #include <ydb/public/lib/ydb_cli/common/progress_bar.h>
+#include <ydb/public/lib/ydb_cli/common/print_utils.h>
 #include <ydb/public/lib/ydb_cli/commands/ydb_common.h>
 #include <ydb/public/lib/ydb_cli/dump/util/util.h>
 #include <ydb/public/lib/ydb_cli/import/cli_arrow_helpers.h>
@@ -25,6 +28,7 @@
 #include <library/cpp/string_utils/csv/csv.h>
 #include <library/cpp/threading/future/async.h>
 #include <library/cpp/yaml/as/tstring.h>
+#include <ydb/library/formats/arrow/csv/table/table.h>
 
 #include <util/folder/path.h>
 #include <util/generic/vector.h>
@@ -50,6 +54,7 @@
 #include <unistd.h>
 #endif
 
+#include <ydb/public/lib/ydb_cli/commands/ydb_command.h>
 
 namespace NYdb {
 namespace NConsoleClient {
@@ -157,14 +162,6 @@ void InitCsvParser(TCsvParser& parser,
     if (columnTypes) {
         parser.BuildLineType();
     }
-}
-
-FHANDLE GetStdinFileno() {
-#if defined(_win32_)
-    return GetStdHandle(STD_INPUT_HANDLE);
-#elif defined(_unix_)
-    return STDIN_FILENO;
-#endif
 }
 
 class TMaxInflightGetter {
@@ -555,6 +552,16 @@ private:
                               std::shared_ptr<TProgressFile> progressFile);
     TAsyncStatus UpsertTValueBuffer(const TString& dbPath, TValueBuilder& builder);
     TAsyncStatus UpsertTValueBuffer(const TString& dbPath, std::function<TValue()>&& buildFunc);
+
+    TAsyncStatus UpsertTValueBufferParquet(
+        const TString& dbPath,
+        std::shared_ptr<arrow::RecordBatch> batch,
+        const arrow::ipc::IpcWriteOptions& writeOptions
+    );
+
+    TAsyncStatus UpsertTValueBufferOnArena(
+        const TString& dbPath, std::function<TValue(google::protobuf::Arena*)>&& buildFunc);
+
     TStatus UpsertJson(IInputStream &input, const TString &dbPath, std::optional<ui64> inputSizeHint,
                        ProgressCallbackFunc & progressCallback);
     TStatus UpsertParquet(const TString& filename, const TString& dbPath, ProgressCallbackFunc & progressCallback);
@@ -672,7 +679,7 @@ TStatus TImportFileClient::TImpl::Import(const TVector<TString>& filePaths, cons
     auto start = TInstant::Now();
 
 
-    TThreadPool jobPool;
+    TThreadPool jobPool(IThreadPool::TParams().SetThreadNamePrefix("FileWorker"));
     jobPool.Start(filePathsSize);
     TVector<NThreading::TFuture<TStatus>> asyncResults;
 
@@ -925,6 +932,107 @@ TAsyncStatus TImportFileClient::TImpl::UpsertTValueBuffer(const TString& dbPath,
         });
 }
 
+inline TAsyncStatus TImportFileClient::TImpl::UpsertTValueBufferParquet(
+    const TString& dbPath,
+    std::shared_ptr<arrow::RecordBatch> batch,
+    const arrow::ipc::IpcWriteOptions& writeOptions
+) {
+    if (!RequestsInflight->try_acquire()) {
+        if (Settings.Verbose_ && Settings.NewlineDelimited_) {
+            if (!InformedAboutLimit.exchange(true)) {
+                Cerr << (TStringBuilder() << "@ (each '@' means max request inflight is reached and a worker thread is waiting for "
+                "any response from database)" << Endl);
+            } else {
+                Cerr << '@';
+            }
+        }
+        RequestsInflight->acquire();
+    }
+
+    auto retryFunc = [parquet = NYdb_cli::NArrow::SerializeBatch(batch, writeOptions),
+            schema = NYdb_cli::NArrow::SerializeSchema(*batch->schema()),
+            dbPath](NTable::TTableClient& client) {
+        return client.BulkUpsert(dbPath, NTable::EDataFormat::ApacheArrow, parquet, schema)
+            .Apply([](const NTable::TAsyncBulkUpsertResult& result) {
+                return TStatus(result.GetValueSync());
+            });
+    };
+
+    return TableClient->RetryOperation(std::move(retryFunc), RetrySettings)
+        .Apply([this](const TAsyncStatus& asyncStatus) {
+            NYdb::TStatus status = asyncStatus.GetValueSync();
+            if (!status.IsSuccess()) {
+                if (!Failed.exchange(true)) {
+                    ErrorStatus = MakeHolder<TStatus>(status);
+                }
+            }
+            RequestsInflight->release();
+            return asyncStatus;
+        });
+}
+
+inline TAsyncStatus TImportFileClient::TImpl::UpsertTValueBufferOnArena(
+    const TString& dbPath, std::function<TValue(google::protobuf::Arena*)>&& buildFunc) {
+    auto arena = std::make_shared<google::protobuf::Arena>();
+
+    // For the first attempt values are built before acquiring request inflight semaphore
+    std::optional<TValue> prebuiltValue = buildFunc(arena.get());
+
+    auto retryFunc = [this, &dbPath, buildFunc = std::move(buildFunc),
+                                prebuiltValue = std::move(prebuiltValue), arena = std::move(arena)]
+            (NYdb::NTable::TTableClient& tableClient) mutable -> TAsyncStatus {
+        auto buildTValueAndSendRequest = [this, &buildFunc, &dbPath, &tableClient, &prebuiltValue, arena]() {
+            // For every retry attempt after first request build value from strings again
+            // to prevent copying data in retryFunc in a happy way when there is only one request
+            std::unique_ptr<TValue> builtValue;
+            if (prebuiltValue.has_value()) {
+                // Sending first request with prebuilt value
+                builtValue = std::make_unique<TValue>(std::move(prebuiltValue.value()));
+                prebuiltValue = std::nullopt;
+            } else {
+                // Building value from strings again for retry
+                arena->Reset();
+                builtValue = std::make_unique<TValue>(buildFunc(arena.get()));
+            }
+
+            auto settings = UpsertSettings;
+            settings.Arena(arena.get());
+            return tableClient.BulkUpsert(
+                dbPath, std::move(*builtValue), settings)
+                .Apply([](const NYdb::NTable::TAsyncBulkUpsertResult& bulkUpsertResult) {
+                    NYdb::TStatus status = bulkUpsertResult.GetValueSync();
+                    return NThreading::MakeFuture(status);
+                });
+        };
+        // Running heavy building task on processing pool:
+        return NThreading::Async(std::move(buildTValueAndSendRequest), *ProcessingPool);
+    };
+
+    if (!RequestsInflight->try_acquire()) {
+        if (Settings.Verbose_ && Settings.NewlineDelimited_) {
+            if (!InformedAboutLimit.exchange(true)) {
+                Cerr << (TStringBuilder() << "@ (each '@' means max request inflight is reached and a worker thread is waiting for "
+                "any response from database)" << Endl);
+            } else {
+                Cerr << '@';
+            }
+        }
+        RequestsInflight->acquire();
+    }
+
+    return TableClient->RetryOperation(std::move(retryFunc), RetrySettings)
+        .Apply([this](const TAsyncStatus& asyncStatus) {
+            NYdb::TStatus status = asyncStatus.GetValueSync();
+            if (!status.IsSuccess()) {
+                if (!Failed.exchange(true)) {
+                    ErrorStatus = MakeHolder<TStatus>(status);
+                }
+            }
+            RequestsInflight->release();
+            return asyncStatus;
+        });
+}
+
 TStatus TImportFileClient::TImpl::UpsertCsv(IInputStream& input,
                                      const TString& dbPath,
                                      const TString& filePath,
@@ -986,30 +1094,108 @@ TStatus TImportFileClient::TImpl::UpsertCsv(IInputStream& input,
         }
     };
 
+    // Note: table = dbPath (path to the table on the server)
+    auto columns = DbTableInfo->GetTableColumns();
+
+    const Ydb::Formats::CsvSettings csvSettings = ([this]() {
+        Ydb::Formats::CsvSettings settings;
+        settings.set_delimiter(Settings.Delimiter_);
+        settings.set_header(Settings.Header_);
+        if (Settings.NullValue_.has_value()) {
+            settings.set_null_value(Settings.NullValue_.value());
+        }
+        settings.set_skip_rows(Settings.SkipRows_);
+        return settings;
+    }());
+
+    auto writeOptions = arrow::ipc::IpcWriteOptions::Defaults();
+    constexpr auto codecType = arrow::Compression::type::ZSTD;
+    writeOptions.codec = *arrow::util::Codec::Create(codecType);
+
     auto upsertCsvFunc = [&](std::vector<TString>&& buffer, ui64 row, std::shared_ptr<TImportBatchStatus> batchStatus) {
-        auto buildFunc = [&, buffer = std::move(buffer), row, this] () mutable {
-            try {
-                return parser.BuildList(buffer, filePath, row);
-            } catch (const std::exception& e) {
-                if (!Failed.exchange(true)) {
-                    ErrorStatus = MakeHolder<TStatus>(MakeStatus(EStatus::INTERNAL_ERROR, e.what()));
+        switch (Settings.SendFormat_) {
+            case ESendFormat::Default:
+            case ESendFormat::TValue:
+                {
+                    auto buildOnArenaFunc = [&, buffer = std::move(buffer), row, this] (google::protobuf::Arena* arena) mutable {
+                        try {
+                            return parser.BuildListOnArena(buffer, filePath, arena, row);
+                        } catch (const std::exception& e) {
+                            if (!Failed.exchange(true)) {
+                                ErrorStatus = MakeHolder<TStatus>(MakeStatus(EStatus::INTERNAL_ERROR, e.what()));
+                            }
+                            jobInflightManager->ReleaseJob();
+                            throw;
+                        }
+                    };
+
+                    UpsertTValueBufferOnArena(dbPath, std::move(buildOnArenaFunc))
+                        .Apply([&, batchStatus](const TAsyncStatus& asyncStatus) {
+                            jobInflightManager->ReleaseJob();
+                            if (asyncStatus.GetValueSync().IsSuccess()) {
+                                batchStatus->Completed = true;
+                                if (!FileProgressPool->AddFunc(saveProgressIfAny) && !Failed.exchange(true)) {
+                                    ErrorStatus = MakeHolder<TStatus>(MakeStatus(EStatus::INTERNAL_ERROR,
+                                        "Couldn't add worker func to save progress"));
+                                }
+                            }
+                            return asyncStatus;
+                        });
                 }
-                jobInflightManager->ReleaseJob();
-                throw;
-            }
-        };
-        UpsertTValueBuffer(dbPath, std::move(buildFunc))
-            .Apply([&, batchStatus](const TAsyncStatus& asyncStatus) {
-                jobInflightManager->ReleaseJob();
-                if (asyncStatus.GetValueSync().IsSuccess()) {
-                    batchStatus->Completed = true;
-                    if (!FileProgressPool->AddFunc(saveProgressIfAny) && !Failed.exchange(true)) {
-                        ErrorStatus = MakeHolder<TStatus>(MakeStatus(EStatus::INTERNAL_ERROR,
-                            "Couldn't add worker func to save progress"));
+                break;
+            case ESendFormat::ApacheArrow:
+                {
+                    const i64 estimatedCsvLineLength = (!buffer.empty() ? 2 * buffer.front().size() : 10'000);
+                    TStringBuilder data;
+                    data.reserve((buffer.size() + (Settings.Header_ ? 1 : 0)) * estimatedCsvLineLength);
+                    // insert header if it is present in the given csv file
+                    if (Settings.Header_) {
+                        data << parser.GetHeaderRow() << Endl;
+                    }
+                    data << JoinSeq("\n", buffer) << Endl;
+
+                    // if header is present, it is expected to be the first line of the data
+                    TString error;
+                    auto arrowCsv = NKikimr::NFormats::TArrowCSVTable::Create(columns, Settings.Header_);
+                    if (arrowCsv.ok()) {
+                        if (auto batch = arrowCsv->ReadSingleBatch(data, csvSettings, error)) {
+                            if (!error) {
+                                // batch was read successfully, sending data via Apache Arrow
+                                UpsertTValueBufferParquet(dbPath, std::move(batch), writeOptions)
+                                    .Apply([&, batchStatus](const TAsyncStatus& asyncStatus) {
+                                        jobInflightManager->ReleaseJob();
+                                        if (asyncStatus.GetValueSync().IsSuccess()) {
+                                            batchStatus->Completed = true;
+                                            if (!FileProgressPool->AddFunc(saveProgressIfAny) && !Failed.exchange(true)) {
+                                                ErrorStatus = MakeHolder<TStatus>(MakeStatus(EStatus::INTERNAL_ERROR,
+                                                    "Couldn't add worker func to save progress"));
+                                            }
+                                        }
+                                        return asyncStatus;
+                                    });
+                            } else {
+                                error = "Error while reading a batch from Apache Arrow: " + error;
+                            }
+                        } else {
+                            error = "Could not read a batch from Apache Arrow";
+                        }
+                    } else {
+                        error = arrowCsv.status().ToString();
+                    }
+
+                    if (!error.empty()) {
+                        if (!Failed.exchange(true)) {
+                            ErrorStatus = MakeHolder<TStatus>(MakeStatus(EStatus::INTERNAL_ERROR, error));
+                        }
                     }
                 }
-                return asyncStatus;
-            });
+                break;
+            default:
+                if (!Failed.exchange(true)) {
+                    ErrorStatus = MakeHolder<TStatus>(MakeStatus(EStatus::INTERNAL_ERROR,
+                        (TStringBuilder() << "Unknown send format: " << Settings.SendFormat_).c_str()));
+                }
+        }
     };
 
     for (ui32 i = 0; i < rowsToSkip; ++i) {
@@ -1037,7 +1223,7 @@ TStatus TImportFileClient::TImpl::UpsertCsv(IInputStream& input,
             line.erase(line.size() - Settings.Delimiter_.size());
         }
 
-        buffer.push_back(line);
+        buffer.push_back(std::move(line));
 
         if (readBytes >= nextReadBorder && Settings.Verbose_) {
             nextReadBorder += VerboseModeStepSize;

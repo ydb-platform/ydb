@@ -14,7 +14,56 @@ using namespace NKikimr;
 using namespace NSchemeShard;
 using namespace NSchemeShardUT_Private;
 
-Y_UNIT_TEST_SUITE (VectorIndexBuildTest) {
+namespace {
+    // to check cpu converted to request units it should be big enough
+    const ui64 CpuTimeUsMultiplier = 150;
+
+    template<class TEvType>
+    bool MakeCpuMeteringDeterministic(const TEvType& ev) {
+        auto stats = ev->Get()->Record.MutableMeteringStats();
+        UNIT_ASSERT(stats->HasCpuTimeUs());
+        stats->SetCpuTimeUs((stats->GetReadRows() + stats->GetUploadRows()) * CpuTimeUsMultiplier);
+        return false;
+    }
+
+    auto MakeCpuMeteringDeterministic(TTestBasicRuntime& runtime) {
+        return std::make_tuple(
+            MakeHolder<TBlockEvents<TEvDataShard::TEvSampleKResponse>>(runtime, [&](const auto& ev) {
+                return MakeCpuMeteringDeterministic(ev);
+            }),
+            MakeHolder<TBlockEvents<TEvIndexBuilder::TEvUploadSampleKResponse>>(runtime, [&](const auto& ev) {
+                // special internal Scheme Shard event, no cpu, but AddRead/AddUpload helpers will fix it
+                auto stats = ev->Get()->Record.MutableMeteringStats();
+                UNIT_ASSERT(!stats->HasCpuTimeUs() || stats->GetCpuTimeUs() == (stats->GetReadRows() + stats->GetUploadRows()) * CpuTimeUsMultiplier);
+                stats->SetCpuTimeUs((stats->GetReadRows() + stats->GetUploadRows()) * CpuTimeUsMultiplier);
+                return false;
+            }),
+            MakeHolder<TBlockEvents<TEvDataShard::TEvRecomputeKMeansResponse>>(runtime, [&](const auto& ev) {
+                return MakeCpuMeteringDeterministic(ev);
+            }),
+            MakeHolder<TBlockEvents<TEvDataShard::TEvReshuffleKMeansResponse>>(runtime, [&](const auto& ev) {
+                return MakeCpuMeteringDeterministic(ev);
+            }),
+            MakeHolder<TBlockEvents<TEvDataShard::TEvLocalKMeansResponse>>(runtime, [&](const auto& ev) {
+                return MakeCpuMeteringDeterministic(ev);
+            })
+        );
+    }
+
+    void AddRead(TMeteringStats& stats, ui64 rows, ui64 bytes) {
+        stats.SetReadRows(stats.GetReadRows() + rows);
+        stats.SetReadBytes(stats.GetReadBytes() + bytes);
+        stats.SetCpuTimeUs(stats.GetCpuTimeUs() + rows * CpuTimeUsMultiplier); // see MakeCpuMeteringDeterministic
+    }
+
+    void AddUpload(TMeteringStats& stats, ui64 rows, ui64 bytes) {
+        stats.SetUploadRows(stats.GetUploadRows() + rows);
+        stats.SetUploadBytes(stats.GetUploadBytes() + bytes);
+        stats.SetCpuTimeUs(stats.GetCpuTimeUs() + rows * CpuTimeUsMultiplier); // see MakeCpuMeteringDeterministic
+    }
+}
+
+Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
     Y_UNIT_TEST(CreateAndDrop) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
@@ -43,7 +92,7 @@ Y_UNIT_TEST_SUITE (VectorIndexBuildTest) {
             {NLs::PathExist, NLs::IndexesCount(0), NLs::PathVersionEqual(3)});
 
         ui64 buildIndexTx = ++txId;
-        TestBuildVectorIndex(runtime, buildIndexTx, tenantSchemeShard, "/MyRoot/ServerLessDB", "/MyRoot/ServerLessDB/Table", "index1", "embedding");
+        TestBuildVectorIndex(runtime, buildIndexTx, tenantSchemeShard, "/MyRoot/ServerLessDB", "/MyRoot/ServerLessDB/Table", "index1", {"embedding"});
         env.TestWaitNotification(runtime, buildIndexTx, tenantSchemeShard);
 
         auto buildIndexOperations = TestListBuildIndex(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB");
@@ -111,7 +160,7 @@ Y_UNIT_TEST_SUITE (VectorIndexBuildTest) {
 
         WriteVectorTableRows(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB/Table", 0, 0, 200, {1, 5, 3, 4});
 
-        TestBuildVectorIndex(runtime, ++txId, tenantSchemeShard, "/MyRoot/ServerLessDB", "/MyRoot/ServerLessDB/Table", "index2", "embedding");
+        TestBuildVectorIndex(runtime, ++txId, tenantSchemeShard, "/MyRoot/ServerLessDB", "/MyRoot/ServerLessDB/Table", "index2", {"embedding"});
         env.TestWaitNotification(runtime, txId, tenantSchemeShard);
 
         TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB/Table"),
@@ -318,13 +367,14 @@ Y_UNIT_TEST_SUITE (VectorIndexBuildTest) {
         }
     }
 
-    Y_UNIT_TEST(CommonDB) {
+    Y_UNIT_TEST(Metering_CommonDB) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
         runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
+        auto deterministicMetering = MakeCpuMeteringDeterministic(runtime);
 
         TestCreateExtSubDomain(runtime, ++txId, "/MyRoot", "Name: \"CommonDB\"");
         env.TestWaitNotification(runtime, txId);
@@ -372,7 +422,7 @@ Y_UNIT_TEST_SUITE (VectorIndexBuildTest) {
 
         // Initiate index build:
         ui64 buildIndexTx = ++txId;
-        TestBuildVectorIndex(runtime, buildIndexTx, tenantSchemeShard, "/MyRoot/CommonDB", "/MyRoot/CommonDB/Table", "index1", "embedding");
+        TestBuildVectorIndex(runtime, buildIndexTx, tenantSchemeShard, "/MyRoot/CommonDB", "/MyRoot/CommonDB/Table", "index1", {"embedding"});
         {
             auto buildIndexOperations = TestListBuildIndex(runtime, tenantSchemeShard, "/MyRoot/CommonDB");
             UNIT_ASSERT_VALUES_EQUAL(buildIndexOperations.EntriesSize(), 1);
@@ -386,11 +436,10 @@ Y_UNIT_TEST_SUITE (VectorIndexBuildTest) {
         }
 
         // Wait and check Filling state:
-        TBlockEvents<TEvDataShard::TEvSampleKResponse> sampleKBlocker(runtime, [&](const auto&) {
+        TBlockEvents<TEvDataShard::TEvLocalKMeansResponse> localKBlocker(runtime, [&](const auto&) {
             return true;
         });
-        runtime.WaitFor("sampleK", [&]{ return sampleKBlocker.size(); });
-        sampleKBlocker.Stop().Unblock();
+        runtime.WaitFor("localK", [&]{ return localKBlocker.size(); });
         {
             auto buildIndexOperations = TestListBuildIndex(runtime, tenantSchemeShard, "/MyRoot/CommonDB");
             UNIT_ASSERT_VALUES_EQUAL(buildIndexOperations.EntriesSize(), 1);
@@ -405,6 +454,7 @@ Y_UNIT_TEST_SUITE (VectorIndexBuildTest) {
                 NLs::PathExist,
                 NLs::IndexState(NKikimrSchemeOp::EIndexState::EIndexStateWriteOnly)});
         }
+        localKBlocker.Stop().Unblock();
 
         // Wait Done state:
         env.TestWaitNotification(runtime, buildIndexTx, tenantSchemeShard);
@@ -426,13 +476,14 @@ Y_UNIT_TEST_SUITE (VectorIndexBuildTest) {
         UNIT_ASSERT_VALUES_EQUAL(meteringBlocker.size(), 0);
     }
 
-    Y_UNIT_TEST_FLAG(ServerLessDB, smallScanBuffer) {
+    Y_UNIT_TEST_FLAG(Metering_ServerLessDB, smallScanBuffer) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
         runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
+        auto deterministicMetering = MakeCpuMeteringDeterministic(runtime);
 
         ui64 tenantSchemeShard = 0;
         TestCreateServerLessDb(runtime, env, txId, tenantSchemeShard);
@@ -469,44 +520,39 @@ Y_UNIT_TEST_SUITE (VectorIndexBuildTest) {
         });
         TString previousBillId = "0-0-0-0";
 
-        ui64 uploadRows = 0, uploadBytes = 0, readRows = 0, readBytes = 0;
-        ui64 expectedUploadRows = 0, expectedUploadBytes = 0, expectedReadRows = 0, expectedReadBytes = 0;
+        TMeteringStats billingStats = TMeteringStatsHelper::ZeroValue();
+        TMeteringStats expectedBillingStats = TMeteringStatsHelper::ZeroValue();
         auto logBillingStats = [&]() {
-            Cerr << "BillingStats:"
-                << " uploadRows: " << uploadRows << " uploadBytes: " << uploadBytes
-                << " readRows: " << readRows << " readBytes: " << readBytes
-                << Endl;
+            Cerr << "BillingStats: " << billingStats << Endl;
         };
 
         TBlockEvents<TEvDataShard::TEvSampleKResponse> sampleKBlocker(runtime, [&](const auto& ev) {
             auto response = ev->Get()->Record;
-            readRows += response.GetReadRows();
-            readBytes += response.GetReadBytes();
+            billingStats += response.GetMeteringStats();
+            return true;
+        });
+
+        TBlockEvents<TEvDataShard::TEvRecomputeKMeansResponse> recomputeKBlocker(runtime, [&](const auto& ev) {
+            auto response = ev->Get()->Record;
+            billingStats += response.GetMeteringStats();
             return true;
         });
 
         TBlockEvents<TEvIndexBuilder::TEvUploadSampleKResponse> uploadSampleKBlocker(runtime, [&](const auto& ev) {
             auto response = ev->Get()->Record;
-            uploadRows += response.GetUploadRows();
-            uploadBytes += response.GetUploadBytes();
+            billingStats += response.GetMeteringStats();
             return true;
         });
 
         TBlockEvents<TEvDataShard::TEvReshuffleKMeansResponse> reshuffleBlocker(runtime, [&](const auto& ev) {
             auto response = ev->Get()->Record;
-            uploadRows += response.GetUploadRows();
-            uploadBytes += response.GetUploadBytes();
-            readRows += response.GetReadRows();
-            readBytes += response.GetReadBytes();
+            billingStats += response.GetMeteringStats();
             return true;
         });
 
         TBlockEvents<TEvDataShard::TEvLocalKMeansResponse> localKMeansBlocker(runtime, [&](const auto& ev) {
             auto response = ev->Get()->Record;
-            uploadRows += response.GetUploadRows();
-            uploadBytes += response.GetUploadBytes();
-            readRows += response.GetReadRows();
-            readBytes += response.GetReadBytes();
+            billingStats += response.GetMeteringStats();
             return true;
         });
 
@@ -535,30 +581,33 @@ Y_UNIT_TEST_SUITE (VectorIndexBuildTest) {
             sampleKBlocker.Unblock();
         }
         // SAMPLE reads table once, no writes:
-        expectedReadRows += tableRows;
-        expectedReadBytes += tableBytes;
+        AddRead(expectedBillingStats, tableRows, tableBytes);
         logBillingStats();
-        UNIT_ASSERT_VALUES_EQUAL(uploadRows, expectedUploadRows);
-        UNIT_ASSERT_VALUES_EQUAL(uploadBytes, expectedUploadBytes);
-        UNIT_ASSERT_VALUES_EQUAL(readRows, expectedReadRows);
-        UNIT_ASSERT_VALUES_EQUAL(readBytes, expectedReadBytes);
+        UNIT_ASSERT_VALUES_EQUAL(billingStats.ShortDebugString(), expectedBillingStats.ShortDebugString());
+
+        // every RECOMPUTE round reads table once, no writes; there are 3 recompute rounds:
+        for (ui32 round = 0; round < 3; round++) {
+            for (ui32 shard = 0; shard < 3; shard++) {
+                runtime.WaitFor("recomputeK", [&]{ return recomputeKBlocker.size(); });
+                recomputeKBlocker.Unblock();
+            }
+            AddRead(expectedBillingStats, tableRows, tableBytes);
+            logBillingStats();
+            UNIT_ASSERT_VALUES_EQUAL(billingStats.ShortDebugString(), expectedBillingStats.ShortDebugString());
+        }
 
         runtime.WaitFor("uploadSampleK", [&]{ return uploadSampleKBlocker.size(); });
         // upload SAMPLE writes K level rows, no reads:
-        expectedUploadRows += K;
-        expectedUploadBytes += K * levelRowBytes;
+        AddUpload(expectedBillingStats, K, K * levelRowBytes);
         logBillingStats();
-        UNIT_ASSERT_VALUES_EQUAL(uploadRows, expectedUploadRows);
-        UNIT_ASSERT_VALUES_EQUAL(uploadBytes, expectedUploadBytes);
-        UNIT_ASSERT_VALUES_EQUAL(readRows, expectedReadRows);
-        UNIT_ASSERT_VALUES_EQUAL(readBytes, expectedReadBytes);
+        UNIT_ASSERT_VALUES_EQUAL(billingStats.ShortDebugString(), expectedBillingStats.ShortDebugString());
         uploadSampleKBlocker.Unblock();
 
         runtime.WaitFor("metering", [&]{ return meteringBlocker.size(); });
         {
             auto newBillId = TStringBuilder()
-                << expectedUploadRows << "-" << expectedReadRows << "-"
-                << expectedUploadBytes << "-" << expectedReadBytes;
+                << expectedBillingStats.GetUploadRows() << "-" << expectedBillingStats.GetReadRows() << "-"
+                << expectedBillingStats.GetUploadBytes() << "-" << expectedBillingStats.GetReadBytes();
             auto expectedId = TStringBuilder()
                 << "109-72075186233409549-2-" << previousBillId << "-" << newBillId;
             auto expectedBill = TBillRecord()
@@ -577,37 +626,30 @@ Y_UNIT_TEST_SUITE (VectorIndexBuildTest) {
             reshuffleBlocker.Unblock();
         }
         // RESHUFFLE reads and writes table once:
-        expectedUploadRows += tableRows;
-        expectedUploadBytes += buildBytes;
-        expectedReadRows += tableRows;
-        expectedReadBytes += tableBytes;
+        AddUpload(expectedBillingStats, tableRows, buildBytes);
+        AddRead(expectedBillingStats, tableRows, tableBytes);
         logBillingStats();
-        UNIT_ASSERT_VALUES_EQUAL(uploadRows, expectedUploadRows);
-        UNIT_ASSERT_VALUES_EQUAL(uploadBytes, expectedUploadBytes);
-        UNIT_ASSERT_VALUES_EQUAL(readRows, expectedReadRows);
-        UNIT_ASSERT_VALUES_EQUAL(readBytes, expectedReadBytes);
+        UNIT_ASSERT_VALUES_EQUAL(billingStats.ShortDebugString(), expectedBillingStats.ShortDebugString());
 
         for (ui32 shard = 0; shard < 4; shard++) {
             runtime.WaitFor("localKMeans", [&]{ return localKMeansBlocker.size(); });
             localKMeansBlocker.Unblock();
         }
-        // KMEANS writes build table once and forms K * K level rows:
-        expectedUploadRows += tableRows + K * K;
-        expectedUploadBytes += postingBytes + K * K * levelRowBytes;
+        // KMEANS writes build table once and forms at least K, at most K * K level rows
+        // (depending on clustering uniformity; it's not so good on test data)
+        AddUpload(expectedBillingStats, tableRows, postingBytes);
+        UNIT_ASSERT(billingStats.GetUploadRows() >= expectedBillingStats.GetUploadRows() + K);
+        const ui64 level2clusters = billingStats.GetUploadRows() - expectedBillingStats.GetUploadRows();
+        AddUpload(expectedBillingStats, level2clusters, level2clusters * levelRowBytes);
         if (smallScanBuffer) {
-            // KMEANS reads build table five times (SAMPLE + KMEANS * 3 + UPLOAD):
-            expectedReadRows += tableRows * 5;
-            expectedReadBytes += buildBytes * 5;
+            // KMEANS reads build table 5 times (SAMPLE + KMEANS * 3 + UPLOAD):
+            AddRead(expectedBillingStats, tableRows * 5, buildBytes * 5);
         } else {
             // KMEANS reads build table once:
-            expectedReadRows += tableRows;
-            expectedReadBytes += buildBytes;
+            AddRead(expectedBillingStats, tableRows, buildBytes);
         }
         logBillingStats();
-        UNIT_ASSERT_VALUES_EQUAL(uploadRows, expectedUploadRows);
-        UNIT_ASSERT_VALUES_EQUAL(uploadBytes, expectedUploadBytes);
-        UNIT_ASSERT_VALUES_EQUAL(readRows, expectedReadRows);
-        UNIT_ASSERT_VALUES_EQUAL(readBytes, expectedReadBytes);
+        UNIT_ASSERT_VALUES_EQUAL(billingStats.ShortDebugString(), expectedBillingStats.ShortDebugString());
 
         env.TestWaitNotification(runtime, buildIndexTx, tenantSchemeShard);
         {
@@ -628,8 +670,8 @@ Y_UNIT_TEST_SUITE (VectorIndexBuildTest) {
         runtime.WaitFor("metering", [&]{ return meteringBlocker.size(); });
         {
             auto newBillId = TStringBuilder()
-                << expectedUploadRows << "-" << expectedReadRows << "-"
-                << expectedUploadBytes << "-" << expectedReadBytes;
+                << expectedBillingStats.GetUploadRows() << "-" << expectedBillingStats.GetReadRows() << "-"
+                << expectedBillingStats.GetUploadBytes() << "-" << expectedBillingStats.GetReadBytes();
             auto expectedId = TStringBuilder()
                 << "109-72075186233409549-2-" << previousBillId << "-" << newBillId;
             auto expectedBill = TBillRecord()
@@ -641,6 +683,228 @@ Y_UNIT_TEST_SUITE (VectorIndexBuildTest) {
             UNIT_ASSERT_VALUES_EQUAL(meteringBlocker[0]->Get()->MeteringJson, expectedBill.ToString());
             previousBillId = newBillId;
             meteringBlocker.Stop().Unblock();
+        }
+    }
+
+    Y_UNIT_TEST_FLAG(Metering_ServerLessDB_Restarts, doRestarts) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
+        auto deterministicMetering = MakeCpuMeteringDeterministic(runtime);
+
+        ui64 tenantSchemeShard = 0;
+        TestCreateServerLessDb(runtime, env, txId, tenantSchemeShard);
+
+        TestCreateTable(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB", R"(
+            Name: "Table"
+            Columns { Name: "key"       Type: "Uint32" }
+            Columns { Name: "embedding" Type: "String" }
+            Columns { Name: "prefix"    Type: "Uint32" }
+            Columns { Name: "value"     Type: "String" }
+            KeyColumnNames: ["key"]
+            SplitBoundary { KeyPrefix { Tuple { Optional { Uint32: 50 } } } }
+            SplitBoundary { KeyPrefix { Tuple { Optional { Uint32: 150 } } } }
+        )");
+        env.TestWaitNotification(runtime, txId, tenantSchemeShard);
+
+        // Write data directly into shards
+        const ui32 K = 4;
+        const ui32 tableRows = 200;
+        const ui64 tableRowBytes = 9; // key:Uint32 (4 bytes), embedding:String (5 bytes)
+        const ui64 tableBytes = tableRows * tableRowBytes;
+        const ui64 shardRows = 50;
+        const ui64 tableShardBytes = shardRows * tableRowBytes;
+        const ui64 buildRowBytes = 17; // parent:Uint64 (8 bytes), key:Uint32 (4 bytes), embedding:String (5 bytes)
+        const ui64 buildBytes = tableRows * buildRowBytes;
+        const ui64 buildShardBytes = shardRows * buildRowBytes;
+        const ui64 postingRowBytes = 12; // parent:Uint64 (8 bytes), key:Uint32 (4 bytes)
+        const ui64 postingBytes = tableRows * postingRowBytes;
+        const ui64 levelRowBytes = 21; // parent:Uint64 (8 bytes), id:Uint64 (8 bytes), embedding:String (5 bytes)
+        WriteVectorTableRows(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB/Table", 0, 0, 50);
+        WriteVectorTableRows(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB/Table", 1, 50, 150);
+        WriteVectorTableRows(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB/Table", 2, 150, 200);
+
+        TBlockEvents<NMetering::TEvMetering::TEvWriteMeteringJson> meteringBlocker(runtime, [&](const auto& ev) {
+            Cerr << "TEvWriteMeteringJson " << ev->Get()->MeteringJson << Endl;
+            return true;
+        });
+        TString previousBillId = "0-0-0-0";
+        TMeteringStats billedStats = TMeteringStatsHelper::ZeroValue();
+        TMeteringStats expectedBillingStats = TMeteringStatsHelper::ZeroValue();
+
+        TBlockEvents<TEvDataShard::TEvReshuffleKMeansResponse> reshuffleBlocker(runtime, [&](const auto&) {
+            return true;
+        });
+
+        TBlockEvents<TEvDataShard::TEvLocalKMeansResponse> localKMeansBlocker(runtime, [&](const auto&) {
+            return doRestarts;
+        });
+
+        // Build vector index with max_shards_in_flight(1) to guarantee deterministic metering data
+        ui64 buildIndexTx = ++txId;
+        {
+            auto sender = runtime.AllocateEdgeActor();
+            auto request = CreateBuildIndexRequest(buildIndexTx, "/MyRoot/ServerLessDB", "/MyRoot/ServerLessDB/Table", TBuildIndexConfig{
+                "index1", NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree, {"embedding"}, {}
+            });
+            auto settings = request->Record.MutableSettings();
+            settings->set_max_shards_in_flight(1);
+            settings->MutableScanSettings()->SetMaxBatchRows(1);
+            auto kmeansSettings = request->Record.MutableSettings()->mutable_index()->Mutableglobal_vector_kmeans_tree_index();
+            kmeansSettings->Mutablevector_settings()->Setlevels(2);
+            kmeansSettings->Mutablevector_settings()->Setclusters(K);
+            ForwardToTablet(runtime, tenantSchemeShard, sender, request);
+        }
+
+        runtime.WaitFor("reshuffle", [&]{ return reshuffleBlocker.size(); });
+        // SAMPLE reads table once, no writes:
+        AddRead(expectedBillingStats, tableRows, tableBytes);
+        // every RECOMPUTE round reads table once, no writes; there are 3 recompute rounds:
+        AddRead(expectedBillingStats, tableRows * 3, tableBytes * 3);
+        // upload SAMPLE writes K level rows, no reads:
+        AddUpload(expectedBillingStats, K, K * levelRowBytes);
+        {
+            auto buildIndexHtml = TestGetBuildIndexHtml(runtime, tenantSchemeShard, buildIndexTx);
+            Cout << "BuildIndex 1 " << buildIndexHtml << Endl;
+            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml,  "Processed: " + expectedBillingStats.ShortDebugString());
+            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml, TStringBuilder() << "Request Units: 130 (ReadTable: 128, BulkUpsert: 2, " 
+                << "CPU: " << expectedBillingStats.GetCpuTimeUs() / 1500 << ")");
+            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml,  "Billed: " + billedStats.ShortDebugString());
+        }
+        runtime.WaitFor("metering", [&]{ return meteringBlocker.size(); });
+        {
+            auto newBillId = TStringBuilder()
+                << expectedBillingStats.GetUploadRows() << "-" << expectedBillingStats.GetReadRows() << "-"
+                << expectedBillingStats.GetUploadBytes() << "-" << expectedBillingStats.GetReadBytes();
+            auto expectedId = TStringBuilder()
+                << "109-72075186233409549-2-" << previousBillId << "-" << newBillId;
+            auto expectedBill = TBillRecord()
+                .Id(expectedId)
+                .CloudId("CLOUD_ID_VAL").FolderId("FOLDER_ID_VAL").ResourceId("DATABASE_ID_VAL")
+                .SourceWt(TInstant::Seconds(10))
+                .Usage(TBillRecord::RequestUnits(130, TInstant::Seconds(0), TInstant::Seconds(10)));
+            UNIT_ASSERT_VALUES_EQUAL(meteringBlocker.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(meteringBlocker[0]->Get()->MeteringJson, expectedBill.ToString());
+            previousBillId = newBillId;
+            billedStats = expectedBillingStats;
+            meteringBlocker.Unblock();
+        }
+        if (doRestarts) {
+            RebootTablet(runtime, tenantSchemeShard, runtime.AllocateEdgeActor());
+        }
+        {
+            auto buildIndexHtml = TestGetBuildIndexHtml(runtime, tenantSchemeShard, buildIndexTx);
+            Cout << "BuildIndex 2 " << buildIndexHtml << Endl;
+            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml,  "Processed: " + expectedBillingStats.ShortDebugString());
+            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml, TStringBuilder() << "Request Units: 130 (ReadTable: 128, BulkUpsert: 2, " 
+                << "CPU: " << expectedBillingStats.GetCpuTimeUs() / 1500 << ")");
+            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml,  "Billed: " + billedStats.ShortDebugString());
+        }
+
+        reshuffleBlocker.Unblock();
+        runtime.WaitFor("reshuffle", [&]{ return reshuffleBlocker.size(); });
+        // shard RESHUFFLE reads and writes once:
+        TMeteringStats shardReshuffleBillingStats = TMeteringStatsHelper::ZeroValue();
+        AddUpload(shardReshuffleBillingStats, shardRows, buildShardBytes);
+        AddRead(shardReshuffleBillingStats, shardRows, tableShardBytes);
+        expectedBillingStats += shardReshuffleBillingStats;
+        {
+            auto buildIndexHtml = TestGetBuildIndexHtml(runtime, tenantSchemeShard, buildIndexTx);
+            Cout << "BuildIndex 3 " << buildIndexHtml << Endl;
+            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml,  "Processed: " + expectedBillingStats.ShortDebugString());
+            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml, TStringBuilder() << "Request Units: 155 (ReadTable: 128, BulkUpsert: 27, " 
+                << "CPU: " << expectedBillingStats.GetCpuTimeUs() / 1500 << ")");
+            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml,  "Billed: " + billedStats.ShortDebugString());
+            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml, "<td>" + shardReshuffleBillingStats.ShortDebugString());
+        }
+        runtime.WaitFor("metering", [&]{ return meteringBlocker.size(); });
+        {
+            auto newBillId = TStringBuilder()
+                << expectedBillingStats.GetUploadRows() << "-" << expectedBillingStats.GetReadRows() << "-"
+                << expectedBillingStats.GetUploadBytes() << "-" << expectedBillingStats.GetReadBytes();
+            auto expectedId = TStringBuilder()
+                << "109-72075186233409549-2-" << previousBillId << "-" << newBillId;
+            auto expectedBill = TBillRecord()
+                .Id(expectedId)
+                .CloudId("CLOUD_ID_VAL").FolderId("FOLDER_ID_VAL").ResourceId("DATABASE_ID_VAL")
+                .SourceWt(TInstant::Seconds(20))
+                .Usage(TBillRecord::RequestUnits(153, TInstant::Seconds(10), TInstant::Seconds(20)));
+            UNIT_ASSERT_VALUES_EQUAL(meteringBlocker.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(meteringBlocker[0]->Get()->MeteringJson, expectedBill.ToString());
+            previousBillId = newBillId;
+            billedStats = expectedBillingStats;
+            meteringBlocker.Unblock();
+        }
+        if (doRestarts) {
+            RebootTablet(runtime, tenantSchemeShard, runtime.AllocateEdgeActor());
+        }
+        {
+            auto buildIndexHtml = TestGetBuildIndexHtml(runtime, tenantSchemeShard, buildIndexTx);
+            Cout << "BuildIndex 4 " << buildIndexHtml << Endl;
+            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml,  "Processed: " + expectedBillingStats.ShortDebugString());
+            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml, TStringBuilder() << "Request Units: 155 (ReadTable: 128, BulkUpsert: 27, " 
+                << "CPU: " << expectedBillingStats.GetCpuTimeUs() / 1500 << ")");
+            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml,  "Billed: " + billedStats.ShortDebugString());
+            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml, "<td>" + shardReshuffleBillingStats.ShortDebugString());
+        }
+
+        reshuffleBlocker.Stop().Unblock();
+        // RESHUFFLE reads and writes table once:
+        expectedBillingStats -= shardReshuffleBillingStats; // already added
+        AddUpload(expectedBillingStats, tableRows, buildBytes);
+        AddRead(expectedBillingStats, tableRows, tableBytes);
+    
+        if (doRestarts) {
+            runtime.WaitFor("localKMeans", [&]{ return localKMeansBlocker.size(); });
+            RebootTablet(runtime, tenantSchemeShard, runtime.AllocateEdgeActor());
+            localKMeansBlocker.Stop().Unblock();
+        }
+
+        env.TestWaitNotification(runtime, buildIndexTx, tenantSchemeShard);
+        // KMEANS writes build table once and forms K * K level rows:
+        AddUpload(expectedBillingStats, tableRows + K * K, postingBytes + K * K * levelRowBytes);
+        // KMEANS reads build table 5 times (SAMPLE + KMEANS * 3 + UPLOAD):
+        AddRead(expectedBillingStats, tableRows * 5, buildBytes * 5);
+        {
+            auto buildIndexHtml = TestGetBuildIndexHtml(runtime, tenantSchemeShard, buildIndexTx);
+            Cout << "BuildIndex 5 " << buildIndexHtml << Endl;
+            Cout << expectedBillingStats.ShortDebugString() << Endl;
+            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml,  "Processed: " + expectedBillingStats.ShortDebugString());
+            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml, TStringBuilder() << "Request Units: 338 (ReadTable: 128, BulkUpsert: 210, " 
+                << "CPU: " << expectedBillingStats.GetCpuTimeUs() / 1500 << ")");
+            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml,  "Billed: " + expectedBillingStats.ShortDebugString());
+        }
+        runtime.WaitFor("metering", [&]{ return meteringBlocker.size(); });
+        {
+            auto newBillId = TStringBuilder()
+                << expectedBillingStats.GetUploadRows() << "-" << expectedBillingStats.GetReadRows() << "-"
+                << expectedBillingStats.GetUploadBytes() << "-" << expectedBillingStats.GetReadBytes();
+            auto expectedId = TStringBuilder()
+                << "109-72075186233409549-2-" << previousBillId << "-" << newBillId;
+            auto expectedBill = TBillRecord()
+                .Id(expectedId)
+                .CloudId("CLOUD_ID_VAL").FolderId("FOLDER_ID_VAL").ResourceId("DATABASE_ID_VAL")
+                .SourceWt(TInstant::Seconds(20))
+                .Usage(TBillRecord::RequestUnits(311, TInstant::Seconds(20), TInstant::Seconds(20)));
+            UNIT_ASSERT_VALUES_EQUAL(meteringBlocker.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(meteringBlocker[0]->Get()->MeteringJson, expectedBill.ToString());
+            previousBillId = newBillId;
+            billedStats = expectedBillingStats;
+            meteringBlocker.Unblock();
+        }
+        if (doRestarts) {
+            RebootTablet(runtime, tenantSchemeShard, runtime.AllocateEdgeActor());
+        }
+        {
+            auto buildIndexHtml = TestGetBuildIndexHtml(runtime, tenantSchemeShard, buildIndexTx);
+            Cout << "BuildIndex 6 " << buildIndexHtml << Endl;
+            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml,  "Processed: " + expectedBillingStats.ShortDebugString());
+            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml, TStringBuilder() << "Request Units: 338 (ReadTable: 128, BulkUpsert: 210, " 
+                << "CPU: " << expectedBillingStats.GetCpuTimeUs() / 1500 << ")");
+            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml,  "Billed: " + expectedBillingStats.ShortDebugString());
         }
     }
 
@@ -774,7 +1038,6 @@ Y_UNIT_TEST_SUITE (VectorIndexBuildTest) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
-
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
         runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
 
@@ -1051,7 +1314,7 @@ Y_UNIT_TEST_SUITE (VectorIndexBuildTest) {
             );
             UNIT_ASSERT_STRING_CONTAINS(buildIndexOperation.DebugString(), "One of the shards report BUILD_ERROR");
             UNIT_ASSERT_STRING_CONTAINS(buildIndexOperation.DebugString(), "Error: Datashard test fail");
-            UNIT_ASSERT_STRING_CONTAINS(buildIndexOperation.DebugString(), "Processed: { upload rows: 0, upload bytes: 0, read rows: 0, read bytes: 0 } }");
+            UNIT_ASSERT_STRING_CONTAINS(buildIndexOperation.DebugString(), "Processed: UploadRows: 0 UploadBytes: 0 ReadRows: 0 ReadBytes: 0");
         }
 
         RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
@@ -1065,7 +1328,7 @@ Y_UNIT_TEST_SUITE (VectorIndexBuildTest) {
             );
             UNIT_ASSERT_STRING_CONTAINS(buildIndexOperation.DebugString(), "One of the shards report BUILD_ERROR");
             UNIT_ASSERT_STRING_CONTAINS(buildIndexOperation.DebugString(), "Error: Datashard test fail");
-            UNIT_ASSERT_STRING_CONTAINS(buildIndexOperation.DebugString(), "Processed: { upload rows: 0, upload bytes: 0, read rows: 0, read bytes: 0 } }");
+            UNIT_ASSERT_STRING_CONTAINS(buildIndexOperation.DebugString(), "Processed: UploadRows: 0 UploadBytes: 0 ReadRows: 0 ReadBytes: 0");
         }
     }
 }

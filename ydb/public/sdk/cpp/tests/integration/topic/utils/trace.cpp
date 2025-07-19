@@ -4,6 +4,7 @@
 
 #include <mutex>
 
+
 namespace NYdb::inline Dev::NTopic::NTests {
 
 std::string_view SkipSpaces(std::string_view& b) {

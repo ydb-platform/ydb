@@ -101,6 +101,7 @@ public:
 
     void SetTabletId(ui64 value);
     ui64 GetTabletId() const;
+    bool HasTabletId() const;
 
     TMaybe<TString> GetTopicName() const;
 
@@ -164,6 +165,7 @@ public:
     bool ProcessSchemeCacheNavigate(const NSchemeCache::TSchemeCacheNavigate::TResultSet& results,
                                     Ydb::StatusIds_StatusCode& status,
                                     TString& message);
+    void CacheSchemeCacheNavigate(const NSchemeCache::TSchemeCacheNavigate::TResultSet& results);
 
     void BuildTopicTxs(TTopicOperationTransactions &txs);
 
@@ -176,6 +178,8 @@ public:
 
     size_t GetSize() const;
 
+    bool HasThisPartitionAlreadyBeenAdded(const TString& topic, ui32 partitionId);
+
 private:
     THashMap<TTopicPartition, TTopicPartitionOperations, TTopicPartition::THash> Operations_;
     bool HasReadOperations_ = false;
@@ -185,6 +189,8 @@ private:
     TMaybe<TString> Consumer_;
     NLongTxService::TLockHandle WriteId_;
     TMaybe<NKafka::TProducerInstanceId> KafkaProducerInstanceId_;
+
+    THashMap<TString, NSchemeCache::TSchemeCacheNavigate::TEntry> CachedNavigateResult_;
 };
 
 }

@@ -36,6 +36,7 @@ public:
     friend class TOptionsParseResult;
 
 public:
+    TClientCommandOptions();
     TClientCommandOptions(NLastGetopt::TOpts opts);
 
     // Current command title
@@ -128,6 +129,8 @@ public:
 
     TClientCommandOption& AddLongName(const TString& name);
 
+    TClientCommandOption& IfPresentDisableCompletion();
+
     const NLastGetopt::EHasArg& GetHasArg() const;
 
     // Store result. If option is file name, stores the contents of file in result.
@@ -197,6 +200,7 @@ public:
 
     TClientCommandOption& Handler(THandler);
     TClientCommandOption& Validator(TValidator);
+    TClientCommandOption& Handler(void (*f)(const NLastGetopt::TOptsParser*));
 
     // YDB CLI specific options
 
@@ -354,21 +358,16 @@ private:
 
 class TCommandOptsParseResult: public NLastGetopt::TOptsParseResult {
 public:
-    TCommandOptsParseResult(const NLastGetopt::TOpts* options, int argc, const char* argv[], bool throwOnParseError = false)
-        : ThrowOnParseError(throwOnParseError) {
+    TCommandOptsParseResult(const NLastGetopt::TOpts* options, int argc, const char* argv[]) {
         Init(options, argc, argv);
     }
 
     virtual ~TCommandOptsParseResult() = default;
 
     void HandleError() const override {
-        if (ThrowOnParseError) {
-            throw;
-        }
-        NLastGetopt::TOptsParseResult::HandleError();
+        // Throwing exception to override default behaviour (exit with error code) to be able to handle error in a custom way
+        throw;
     }
-private:
-    bool ThrowOnParseError;
 };
 
 class TOptionsParseResult {
@@ -378,7 +377,7 @@ public:
     using TConnectionParamsLogger = std::function<void(const TString& /*paramName*/, const TString& /*value*/, const TString& /*sourceText*/)>;
 
 public:
-    TOptionsParseResult(const TClientCommandOptions* options, int argc, const char** argv, bool throwOnParseError = false);
+    TOptionsParseResult(const TClientCommandOptions* options, int argc, const char** argv);
 
     // Parses from profile and env. Returns erros if they occur during parsing
     std::vector<TString> ParseFromProfilesAndEnv(std::shared_ptr<IProfile> explicitProfile, std::shared_ptr<IProfile> activeProfile);

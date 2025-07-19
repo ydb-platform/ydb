@@ -46,6 +46,7 @@ public:
     TLineReader(std::string prompt, std::string historyFilePath, TClientCommand::TConfig& config);
 
     std::optional<std::string> ReadLine() override;
+    void ClearHints() override;
 
 private:
     void AddToHistory(const std::string& line);
@@ -73,7 +74,7 @@ TLineReader::TLineReader(std::string prompt, std::string historyFilePath, TClien
         return YQLCompleter->ApplyHeavy(Rx.get_state().text(), prefix, contextLen);
     });
 
-    Rx.set_hint_delay(500);
+    Rx.set_hint_delay(100);
     Rx.set_hint_callback([this](const std::string& prefix, int& contextLen, TColor&) {
         return YQLCompleter->ApplyLight(Rx.get_state().text(), prefix, contextLen);
     });
@@ -120,6 +121,11 @@ TLineReader::TLineReader(std::string prompt, std::string historyFilePath, TClien
     if (!Rx.history_load(HistoryFilePath)) {
         Rx.print("Loading history failed: %s\n", strerror(errno));
     }
+}
+
+void TLineReader::ClearHints() {
+    std::cout << std::endl;
+    Rx.invoke(replxx::Replxx::ACTION::CLEAR_SELF, 0);
 }
 
 std::optional<std::string> TLineReader::ReadLine() {

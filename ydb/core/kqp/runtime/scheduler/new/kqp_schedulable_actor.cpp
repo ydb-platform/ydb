@@ -21,39 +21,60 @@ TSchedulableTask::~TSchedulableTask() {
     --Query->Demand;
 }
 
-bool TSchedulableTask::TryIncreaseUsage(const TDuration& burstThrottle) {
+// TODO: referring to the pool's fair-share and usage - query's fair-share is ignored.
+bool TSchedulableTask::TryIncreaseUsage() {
     const auto snapshot = Query->GetSnapshot();
-    ui64 newUsage = Query->Usage.load();
+    auto pool = Query->Parent;
+    ui64 newUsage = pool->Usage.load();
     bool increased = false;
 
-    while (!increased && newUsage < snapshot->Parent->Demand) {
-        increased = Query->Usage.compare_exchange_weak(newUsage, newUsage + 1);
+    while (!increased && newUsage < snapshot->Parent->FairShare) {
+        increased = pool->Usage.compare_exchange_weak(newUsage, newUsage + 1);
     }
 
     if (!increased) {
         return false;
     }
 
-    Query->BurstThrottle += burstThrottle.MicroSeconds();
-    for (TTreeElementBase* parent = Query->Parent; parent; parent = parent->Parent) {
+    ++Query->Usage;
+    for (TTreeElementBase* parent = pool->Parent; parent; parent = parent->Parent) {
         ++parent->Usage;
-        parent->BurstThrottle += burstThrottle.MicroSeconds();
     }
 
     return true;
 }
 
-void TSchedulableTask::IncreaseUsage(const TDuration& burstThrottle) {
+// TODO: referring to the pool's fair-share and usage - query's fair-share is ignored.
+void TSchedulableTask::IncreaseUsage() {
     for (TTreeElementBase* parent = Query.get(); parent; parent = parent->Parent) {
         ++parent->Usage;
-        parent->BurstThrottle += burstThrottle.MicroSeconds();
     }
 }
 
+// TODO: referring to the pool's fair-share and usage - query's fair-share is ignored.
 void TSchedulableTask::DecreaseUsage(const TDuration& burstUsage) {
     for (TTreeElementBase* parent = Query.get(); parent; parent = parent->Parent) {
         --parent->Usage;
         parent->BurstUsage += burstUsage.MicroSeconds();
+    }
+}
+
+void TSchedulableTask::IncreaseExtraUsage() {
+    for (TTreeElementBase* parent = Query.get(); parent; parent = parent->Parent) {
+        ++parent->UsageExtra;
+    }
+}
+
+void TSchedulableTask::DecreaseExtraUsage(const TDuration& burstUsageExtra) {
+    for (TTreeElementBase* parent = Query.get(); parent; parent = parent->Parent) {
+        --parent->UsageExtra;
+        parent->BurstUsageExtra += burstUsageExtra.MicroSeconds();
+    }
+}
+
+void TSchedulableTask::IncreaseBurstThrottle(const TDuration& burstThrottle) {
+    for (TTreeElementBase* parent = Query.get(); parent; parent = parent->Parent) {
+        parent->BurstThrottle += burstThrottle.MicroSeconds();
     }
 }
 
@@ -88,68 +109,59 @@ bool TSchedulableActorHelper::IsSchedulable() const {
     return Schedulable;
 }
 
-bool TSchedulableActorHelper::StartExecution(const TDuration& burstThrottle) {
+bool TSchedulableActorHelper::StartExecution(TMonotonic now) {
     Y_ASSERT(!Executed);
-    Y_ASSERT(!Throttled);
 
     Y_DEFER {
+        if (Throttled) {
+            SchedulableTask->IncreaseBurstThrottle(now - StartThrottle);
+        }
+
         Timer.Reset();
-        SchedulableTask->Query->CurrentTasksTime += LastExecutionTime.MicroSeconds();
+        if (Executed) {
+            if (Throttled) {
+                Resume();
+            }
+
+            SchedulableTask->Query->CurrentTasksTime += LastExecutionTime.MicroSeconds();
+        } else {
+            if (!Throttled) {
+                Throttled = true;
+                SchedulableTask->Query->WaitingTasksTime += LastExecutionTime.MicroSeconds();
+                SchedulableTask->IncreaseThrottle();
+            }
+            StartThrottle = now;
+            ++ExecuteAttempts;
+        }
     };
 
     if (IsSchedulable() && SchedulableTask->Query->GetSnapshot()) {
         // TODO: check heuristics if we should execute this task.
-        return Executed = SchedulableTask->TryIncreaseUsage(burstThrottle);
+        Executed = SchedulableTask->TryIncreaseUsage();
+        return Executed;
     }
 
-    SchedulableTask->IncreaseUsage(burstThrottle);
-    return Executed = true;
-}
-
-bool TSchedulableActorHelper::IsExecuted() const {
+    SchedulableTask->IncreaseUsage();
+    Executed = true;
     return Executed;
 }
 
 void TSchedulableActorHelper::StopExecution() {
-    Y_ASSERT(Executed);
-    Y_ASSERT(!Throttled);
+    if (Executed) {
+        Y_ASSERT(!Throttled);
 
-    TDuration timePassed = TDuration::MicroSeconds(Timer.Passed() * 1'000'000);
-    SchedulableTask->Query->CurrentTasksTime -= LastExecutionTime.MicroSeconds();
-    LastExecutionTime = timePassed;
-    SchedulableTask->DecreaseUsage(timePassed);
-    Executed = false;
-}
-
-void TSchedulableActorHelper::Throttle(TMonotonic now) {
-    Y_ASSERT(!Executed);
-    Y_ASSERT(!Throttled);
-
-    Throttled = true;
-    SchedulableTask->Query->WaitingTasksTime += LastExecutionTime.MicroSeconds();
-    SchedulableTask->IncreaseThrottle();
-    StartThrottle = now;
-    ++ExecuteAttempts;
-}
-
-bool TSchedulableActorHelper::IsThrottled() const {
-    return Throttled;
-}
-
-TDuration TSchedulableActorHelper::Resume(TMonotonic now) {
-    Y_ASSERT(!Executed);
-    Y_ASSERT(Throttled);
-
-    Throttled = false;
-    SchedulableTask->Query->WaitingTasksTime -= LastExecutionTime.MicroSeconds();
-    SchedulableTask->DecreaseThrottle();
-    ExecuteAttempts = 0;
-
-    return now - StartThrottle;
+        TDuration timePassed = TDuration::MicroSeconds(Timer.Passed() * 1'000'000);
+        SchedulableTask->Query->CurrentTasksTime -= LastExecutionTime.MicroSeconds();
+        LastExecutionTime = timePassed;
+        SchedulableTask->DecreaseUsage(timePassed);
+        Executed = false;
+    } else if (Throttled) {
+        Resume();
+    }
 }
 
 TDuration TSchedulableActorHelper::CalculateDelay(TMonotonic) const {
-    const auto MaxDelay = TDuration::Seconds(5);
+    const auto MaxDelay = TDuration::Seconds(3);
     const auto MinDelay = TDuration::MicroSeconds(10);
     const auto AttemptBonus = TDuration::MicroSeconds(5);
 
@@ -170,7 +182,20 @@ TDuration TSchedulableActorHelper::CalculateDelay(TMonotonic) const {
         + (RandomNumber<ui64>() % 100)                    // random delay
     ;
 
-    return Min(MaxDelay, Max(MinDelay, TDuration::MicroSeconds(Max<i64>(0, delay))));
+    auto delayDuration = Min(MaxDelay, Max(MinDelay, TDuration::MicroSeconds(Max<i64>(0, delay))));
+    if (query->Delay) {
+        query->Delay->Collect(delayDuration.MicroSeconds());
+    }
+    return delayDuration;
+}
+
+void TSchedulableActorHelper::Resume() {
+    Y_ASSERT(Throttled);
+
+    Throttled = false;
+    SchedulableTask->Query->WaitingTasksTime -= LastExecutionTime.MicroSeconds();
+    SchedulableTask->DecreaseThrottle();
+    ExecuteAttempts = 0;
 }
 
 } // namespace NKikimr::NKqp::NScheduler

@@ -329,7 +329,7 @@ private:
     void InitSession(const TActorContext& ctx);
     void RegisterSession(const TString& topic, const TActorId& pipe, const TVector<ui32>& groups, const TActorContext& ctx);
     void CloseSession(PersQueue::ErrorCode::ErrorCode code, const TString& reason, const TActorContext& ctx);
-    void SendLockPartitionToSelf(ui32 partitionId, TString topicName, TTopicHolder topic, const TActorContext& ctx);
+    void SendLockPartitionToSelf(ui32 partitionId, TString topicName, const TTopicHolder::TPtr& topic, const TActorContext& ctx);
 
     void SetupBytesReadByUserAgentCounter();
     void SetupCounters();
@@ -399,7 +399,7 @@ private:
     ui64 NextAssignId;
     TPartitionsMap Partitions; // assignId -> info
 
-    THashMap<TString, TTopicHolder> Topics; // topic -> info
+    THashMap<TString, TTopicHolder::TPtr> Topics; // topic -> info
     THashMap<TString, NPersQueue::TTopicConverterPtr> FullPathToConverter; // PrimaryFullPath -> Converter, for balancer replies matching
     THashSet<TString> TopicsToResolve;
     THashMap<TString, TVector<ui32>> TopicGroups;

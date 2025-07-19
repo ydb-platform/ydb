@@ -1,9 +1,9 @@
+#include "schemeshard__data_erasure_manager.h"
 #include "schemeshard_impl.h"
 #include "schemeshard_utils.h"  // for PQGroupReserve
-#include "schemeshard__data_erasure_manager.h"
 
-#include <ydb/core/protos/table_stats.pb.h>  // for TStoragePoolsStats
 #include <ydb/core/protos/s3_settings.pb.h>
+#include <ydb/core/protos/table_stats.pb.h>  // for TStoragePoolsStats
 #include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/tablet/tablet_exception.h>
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
@@ -94,7 +94,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                        TStepId, TTxId, TStepId, TTxId,
                        TString, TTxId,
                        ui64, ui64, ui64,
-                       TString> TPathRec;
+                       TString, TActorId> TPathRec;
     typedef TDeque<TPathRec> TPathRows;
 
     template <typename SchemaTable, typename TRowSet>
@@ -112,6 +112,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             rowSet.template GetValueOrDefault<typename SchemaTable::DirAlterVersion>(1),
             rowSet.template GetValueOrDefault<typename SchemaTable::UserAttrsAlterVersion>(1),
             rowSet.template GetValueOrDefault<typename SchemaTable::ACLVersion>(0),
+            rowSet.template GetValueOrDefault<typename SchemaTable::TempDirOwnerActorId_Deprecated>(),
             rowSet.template GetValueOrDefault<typename SchemaTable::TempDirOwnerActorId>()
         );
     }
@@ -138,7 +139,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
         TPathElement::TPtr path = new TPathElement(pathId, parentPathId, domainId, name, owner);
 
-        TString tempDirOwnerActorId;
+        TString tempDirOwnerActorId_Deprecated;
         std::tie(
             std::ignore, //pathId
             std::ignore, //parentPathId
@@ -154,14 +155,17 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             path->DirAlterVersion,
             path->UserAttrs->AlterVersion,
             path->ACLVersion,
-            tempDirOwnerActorId) = rec;
+            tempDirOwnerActorId_Deprecated,
+            path->TempDirOwnerActorId) = rec;
 
         path->PathState = TPathElement::EPathState::EPathStateNoChanges;
         if (path->StepDropped) {
             path->PathState = TPathElement::EPathState::EPathStateNotExist;
         }
 
-        path->TempDirOwnerActorId.Parse(tempDirOwnerActorId.c_str(), tempDirOwnerActorId.size());
+        if (!path->TempDirOwnerActorId) {
+            path->TempDirOwnerActorId.Parse(tempDirOwnerActorId_Deprecated.c_str(), tempDirOwnerActorId_Deprecated.size());
+        }
 
         return path;
     }
@@ -3616,6 +3620,13 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                             txState.TargetPathTargetState = proto.GetTxCopyTableExtraData().GetTargetPathTargetState();
                         }
                     }
+                } else if (txState.TxType == TTxState::TxRotateCdcStreamAtTable) {
+                    if (!extraData.empty()) {
+                        NKikimrSchemeOp::TGenericTxInFlyExtraData proto;
+                        bool deserializeRes = ParseFromStringNoSizeLimit(proto, extraData);
+                        Y_ABORT_UNLESS(deserializeRes);
+                        txState.CdcPathId = TPathId::FromProto(proto.GetTxCopyTableExtraData().GetCdcPathId());
+                    }
                 }
 
                 Y_ABORT_UNLESS(txState.TxType != TTxState::TxInvalid);
@@ -4662,9 +4673,13 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                             rowset.GetValue<Schema::KMeansTreeProgress::ChildBegin>(),
                             rowset.GetValue<Schema::KMeansTreeProgress::Child>(),
                             rowset.GetValue<Schema::KMeansTreeProgress::State>(),
-                            rowset.GetValue<Schema::KMeansTreeProgress::TableSize>()
+                            rowset.GetValue<Schema::KMeansTreeProgress::TableSize>(),
+                            rowset.GetValue<Schema::KMeansTreeProgress::Round>()
                         );
                         buildInfo.Sample.Rows.reserve(buildInfo.KMeans.K * 2);
+                        if (buildInfo.KMeans.State == TIndexBuildInfo::TKMeans::Recompute) {
+                            buildInfo.Clusters->SetRound(buildInfo.KMeans.Round);
+                        }
                     });
 
                     if (!rowset.Next()) {
@@ -4699,6 +4714,65 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
                 LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                              "KMeansTreeSample records: " << sampleCount
+                             << ", at schemeshard: " << Self->TabletID());
+            }
+
+            // read kmeans tree aggregated clusters
+            {
+                auto rowset = db.Table<Schema::KMeansTreeClusters>().Range().Select();
+                if (!rowset.IsReady()) {
+                    return false;
+                }
+
+                TVector<TString> clusters;
+                TVector<ui32> sizes, oldSizes;
+                TIndexBuildId lastId;
+                size_t clusterCount = 0;
+                auto fill = [&]() {
+                    if (!clusters.size()) {
+                        return;
+                    }
+                    fillBuildInfoByIdSafe(lastId, "KMeansTreeClusters", [&](TIndexBuildInfo& buildInfo) {
+                        Y_ENSURE(clusters.size() <= buildInfo.KMeans.K);
+                        bool ok = buildInfo.Clusters->SetClusters(std::move(clusters));
+                        Y_ENSURE(ok);
+                        const auto & clusters = buildInfo.Clusters->GetClusters();
+                        for (size_t i = 0; i < clusters.size(); i++) {
+                            buildInfo.Clusters->AggregateToCluster(i, clusters[i], sizes[i]);
+                            buildInfo.Clusters->SetClusterSize(i, oldSizes[i]);
+                        }
+                    });
+                    clusters.clear();
+                    sizes.clear();
+                    oldSizes.clear();
+                };
+                while (!rowset.EndOfSet()) {
+                    TIndexBuildId id = rowset.GetValue<Schema::KMeansTreeClusters::Id>();
+                    if (id != lastId) {
+                        fill();
+                        lastId = id;
+                    }
+                    auto num = rowset.GetValue<Schema::KMeansTreeClusters::Row>();
+                    auto data = rowset.GetValue<Schema::KMeansTreeClusters::Data>();
+                    auto size = rowset.GetValue<Schema::KMeansTreeClusters::Size>();
+                    auto oldSize = rowset.GetValue<Schema::KMeansTreeClusters::OldSize>();
+                    if (clusters.size() <= num) {
+                        clusters.resize(num+1);
+                        sizes.resize(num+1);
+                        oldSizes.resize(num+1);
+                    }
+                    clusters[num] = data;
+                    sizes[num] = size;
+                    oldSizes[num] = oldSize;
+                    clusterCount++;
+                    if (!rowset.Next()) {
+                        return false;
+                    }
+                }
+                fill();
+
+                LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                             "KMeansTreeCluster records: " << clusterCount
                              << ", at schemeshard: " << Self->TabletID());
             }
 
@@ -5141,6 +5215,135 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             for (auto& part: operation->Parts) {
                 TOperationContext context{Self, txc, ctx, OnComplete, MemChanges, DbChanges};
                 part->ProgressState(context);
+            }
+        }
+
+        // Read incremental restore operations
+        {
+            auto rowset = db.Table<Schema::IncrementalRestoreOperations>().Select();
+            if (!rowset.IsReady()) {
+                return false;
+            }
+
+            while (!rowset.EndOfSet()) {
+                TTxId txId = rowset.GetValue<Schema::IncrementalRestoreOperations::Id>();
+                TString serializedOp = rowset.GetValue<Schema::IncrementalRestoreOperations::Operation>();
+
+                NKikimrSchemeOp::TLongIncrementalRestoreOp op;
+                Y_ABORT_UNLESS(op.ParseFromString(serializedOp));
+
+                TOperationId opId(txId, 0);
+                Self->LongIncrementalRestoreOps[opId] = op;
+
+                // Restore table path states based on the operation
+                if (op.HasBackupCollectionPathId()) {
+                    TPathId backupCollectionPathId = TPathId(
+                        op.GetBackupCollectionPathId().GetOwnerId(),
+                        op.GetBackupCollectionPathId().GetLocalId()
+                    );
+
+                    // Set target tables to EPathStateIncomingIncrementalRestore
+                    for (const auto& tablePath : op.GetTablePathList()) {
+                        TPath resolvedPath = TPath::Resolve(tablePath, Self);
+                        if (resolvedPath.IsResolved() && Self->PathsById.contains(resolvedPath.Base()->PathId)) {
+                            auto targetPathElement = Self->PathsById.at(resolvedPath.Base()->PathId);
+                            targetPathElement->PathState = TPathElement::EPathState::EPathStateIncomingIncrementalRestore;
+                        }
+                    }
+
+                    // Set source backup collection to EPathStateOutgoingIncrementalRestore if it exists locally
+                    if (Self->PathsById.contains(backupCollectionPathId)) {
+                        auto sourcePath = Self->PathsById.at(backupCollectionPathId);
+                        sourcePath->PathState = TPathElement::EPathState::EPathStateOutgoingIncrementalRestore;
+
+                        // Get the backup collection path to construct backup table paths
+                        TPath backupCollectionPath = TPath::Init(backupCollectionPathId, Self);
+                        if (backupCollectionPath.IsResolved()) {
+                            TString backupCollectionPathStr = backupCollectionPath.PathString();
+
+                            // Set full backup table states using trimmed names
+                            if (op.HasFullBackupTrimmedName()) {
+                                TString fullBackupName = op.GetFullBackupTrimmedName() + "_full";
+                                TString fullBackupPath = backupCollectionPathStr + "/" + fullBackupName;
+                                
+                                // Set state for each table in the full backup
+                                for (const auto& tablePath : op.GetTablePathList()) {
+                                    TPath originalTablePath = TPath::Resolve(tablePath, Self);
+                                    if (originalTablePath.IsResolved()) {
+                                        TString tableName = originalTablePath.LeafName();
+                                        TString fullBackupTablePath = fullBackupPath + "/" + tableName;
+                                        
+                                        TPath fullBackupTableResolvedPath = TPath::Resolve(fullBackupTablePath, Self);
+                                        if (fullBackupTableResolvedPath.IsResolved() && Self->PathsById.contains(fullBackupTableResolvedPath.Base()->PathId)) {
+                                            auto backupTablePathElement = Self->PathsById.at(fullBackupTableResolvedPath.Base()->PathId);
+                                            backupTablePathElement->PathState = TPathElement::EPathState::EPathStateOutgoingIncrementalRestore;
+                                        }
+                                    }
+                                }
+                            }
+
+                            // Set incremental backup table states using trimmed names
+                            for (const auto& trimmedIncrName : op.GetIncrementalBackupTrimmedNames()) {
+                                TString incrBackupName = trimmedIncrName + "_incremental";
+                                TString incrBackupPath = backupCollectionPathStr + "/" + incrBackupName;
+                                
+                                // Set state for each table in the incremental backup
+                                for (const auto& tablePath : op.GetTablePathList()) {
+                                    TPath originalTablePath = TPath::Resolve(tablePath, Self);
+                                    if (originalTablePath.IsResolved()) {
+                                        TString tableName = originalTablePath.LeafName();
+                                        TString incrBackupTablePath = incrBackupPath + "/" + tableName;
+                                        
+                                        TPath incrBackupTableResolvedPath = TPath::Resolve(incrBackupTablePath, Self);
+                                        if (incrBackupTableResolvedPath.IsResolved() && Self->PathsById.contains(incrBackupTableResolvedPath.Base()->PathId)) {
+                                            auto backupTablePathElement = Self->PathsById.at(incrBackupTableResolvedPath.Base()->PathId);
+                                            backupTablePathElement->PathState = TPathElement::EPathState::EPathStateAwaitingOutgoingIncrementalRestore;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                    "TTxInit loaded LongIncrementalRestoreOp"
+                        << ", txId: " << txId
+                        << ", operationId: " << opId
+                        << ", at schemeshard: " << Self->TabletID());
+
+                if (!rowset.Next()) {
+                    return false;
+                }
+            }
+
+            // Check for orphaned incremental restore operations during restart
+            for (const auto& [opId, op] : Self->LongIncrementalRestoreOps) {
+                TTxId txId = opId.GetTxId();
+                bool controlOperationExists = false;
+                
+                for (const auto& [txOpId, txState] : Self->TxInFlight) {
+                    if (txOpId.GetTxId() == txId) {
+                        controlOperationExists = true;
+                        break;
+                    }
+                }
+                
+                if (!controlOperationExists) {
+                    TPathId backupCollectionPathId;
+                    backupCollectionPathId.OwnerId = op.GetBackupCollectionPathId().GetOwnerId();
+                    backupCollectionPathId.LocalPathId = op.GetBackupCollectionPathId().GetLocalId();
+                    
+                    LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                        "TTxInit detected orphaned incremental restore operation during recovery"
+                            << ", operationId: " << opId
+                            << ", txId: " << txId
+                            << ", backupCollectionPathId: " << backupCollectionPathId
+                            << ", scheduling TTxProgress to continue operation"
+                            << ", at schemeshard: " << Self->TabletID());
+                    
+                    OnComplete.Send(Self->SelfId(), new TEvPrivate::TEvRunIncrementalRestore(backupCollectionPathId));
+                }
             }
         }
 

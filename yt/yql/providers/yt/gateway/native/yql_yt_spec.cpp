@@ -510,7 +510,7 @@ void FillSpec(NYT::TNode& spec,
         spec["max_speculative_job_count_per_task"] = i64(*val);
     }
 
-    if (auto val = settings->NetworkProject.Get(cluster)) {
+    if (auto val = settings->NetworkProject.Get(cluster).OrElse(settings->StaticNetworkProject.Get(cluster))) {
         if (opProps.HasFlags(EYtOpProp::WithMapper)) {
             spec["mapper"]["network_project"] = *val;
         }
@@ -622,6 +622,9 @@ void FillUserJobSpecImpl(NYT::TUserJobSpec& spec,
         spec.AddEnvironment("LD_LIBRARY_PATH", ".");
     }
 
+    if (settings->UseDefaultArrowAllocatorInJobs.Get().GetOrElse(false)) {
+        spec.AddEnvironment("YQL_USE_DEFAULT_ARROW_ALLOCATOR", "1");
+    }
 
     if (!localRun) {
         for (size_t i = 0; i < mrJobSystemLibs.size(); i++) {

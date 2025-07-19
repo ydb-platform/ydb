@@ -1,16 +1,13 @@
 #include "setup/fixture.h"
+
+#include "utils/local_partition.h"
 #include "utils/trace.h"
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
 
-#include <ydb/public/api/grpc/ydb_discovery_v1.grpc.pb.h>
-
 #include <library/cpp/logger/stream.h>
 
-#include <grpc++/grpc++.h>
-
 #include <format>
-#include <thread>
 
 namespace NYdb::inline Dev::NTopic::NTests {
 
@@ -155,168 +152,16 @@ private:
     mutable std::mutex Lock;
 };
 
-class LocalPartition : public TTopicTestFixture {
-protected:
-    TDriverConfig CreateConfig(const std::string& discoveryAddr) {
-        NYdb::TDriverConfig config = MakeDriverConfig();
-        config.SetEndpoint(discoveryAddr);
-        return config;
-    }
-
-    TWriteSessionSettings CreateWriteSessionSettings() {
-        return TWriteSessionSettings()
-            .Path(GetTopicPath())
-            .ProducerId("test-producer")
-            .PartitionId(0)
-            .DirectWriteToPartition(true);
-    }
-
-    TReadSessionSettings CreateReadSessionSettings() {
-        return TReadSessionSettings()
-            .ConsumerName(GetConsumerName())
-            .AppendTopics(GetTopicPath());
-    }
-
-    void WriteMessage(TTopicClient& client) {
-        std::cerr << "=== Write message" << std::endl;
-
-        auto writeSession = client.CreateSimpleBlockingWriteSession(CreateWriteSessionSettings());
-        EXPECT_TRUE(writeSession->Write("message"));
-        writeSession->Close();
-    }
-
-    void ReadMessage(TTopicClient& client, ui64 expectedCommitedOffset = 1) {
-        std::cerr << "=== Read message" << std::endl;
-
-        auto readSession = client.CreateReadSession(CreateReadSessionSettings());
-
-        std::optional<TReadSessionEvent::TEvent> event = readSession->GetEvent(true);
-        EXPECT_TRUE(event);
-        auto startPartitionSession = std::get_if<TReadSessionEvent::TStartPartitionSessionEvent>(&event.value());
-        EXPECT_TRUE(startPartitionSession) << DebugString(*event);
-
-        startPartitionSession->Confirm();
-
-        event = readSession->GetEvent(true);
-        EXPECT_TRUE(event) << DebugString(*event);
-        auto dataReceived = std::get_if<TReadSessionEvent::TDataReceivedEvent>(&event.value());
-        EXPECT_TRUE(dataReceived) << DebugString(*event);
-
-        dataReceived->Commit();
-
-        auto& messages = dataReceived->GetMessages();
-        EXPECT_EQ(messages.size(), 1u);
-        EXPECT_EQ(messages[0].GetData(), "message");
-
-        event = readSession->GetEvent(true);
-        EXPECT_TRUE(event) << DebugString(*event);
-        auto commitOffsetAck = std::get_if<TReadSessionEvent::TCommitOffsetAcknowledgementEvent>(&event.value());
-        EXPECT_TRUE(commitOffsetAck) << DebugString(*event);
-        EXPECT_EQ(commitOffsetAck->GetCommittedOffset(), expectedCommitedOffset);
-    }
-};
-
-class TMockDiscoveryService: public Ydb::Discovery::V1::DiscoveryService::Service {
-public:
-    TMockDiscoveryService() {
-        int discoveryPort = 0;
-
-        grpc::ServerBuilder builder;
-        builder.AddListeningPort("0.0.0.0:0", grpc::InsecureServerCredentials(), &discoveryPort);
-        builder.RegisterService(this);
-        Server = builder.BuildAndStart();
-
-        DiscoveryAddr = "0.0.0.0:" + std::to_string(discoveryPort);
-        std::cerr << "==== TMockDiscovery server started on port " << discoveryPort << std::endl;
-    }
-
-    void SetGoodEndpoints(TTopicTestFixture& fixture) {
-        std::lock_guard lock(Lock);
-        std::cerr << "==== TMockDiscovery set good endpoint nodes " << std::endl;
-
-        auto nodeIds = fixture.GetNodeIds();
-        SetEndpointsLocked(nodeIds[0], nodeIds.size(), fixture.GetPort());
-    }
-
-    // Call this method only after locking the Lock.
-    void SetEndpointsLocked(std::uint32_t firstNodeId, std::uint32_t nodeCount, std::uint16_t port) {
-        std::cerr << "==== TMockDiscovery add endpoints, firstNodeId " << firstNodeId << ", nodeCount " << nodeCount << ", port " << port << std::endl;
-
-        MockResults.clear_endpoints();
-        if (nodeCount > 0) {
-            Ydb::Discovery::EndpointInfo* endpoint = MockResults.add_endpoints();
-            endpoint->set_address(TStringBuilder() << "localhost");
-            endpoint->set_port(port);
-            endpoint->set_node_id(firstNodeId);
-        }
-        if (nodeCount > 1) {
-            Ydb::Discovery::EndpointInfo* endpoint = MockResults.add_endpoints();
-            endpoint->set_address(TStringBuilder() << "ip6-localhost"); // name should be different
-            endpoint->set_port(port);
-            endpoint->set_node_id(firstNodeId + 1);
-        }
-        if (nodeCount > 2) {
-            EXPECT_TRUE(false) << "Unsupported count of nodes";
-        }
-    }
-
-    void SetEndpoints(std::uint32_t firstNodeId, std::uint32_t nodeCount, std::uint16_t port) {
-        std::lock_guard lock(Lock);
-        SetEndpointsLocked(firstNodeId, nodeCount, port);
-    }
-
-    grpc::Status ListEndpoints(grpc::ServerContext* context, const Ydb::Discovery::ListEndpointsRequest* request, Ydb::Discovery::ListEndpointsResponse* response) override {
-        std::lock_guard lock(Lock);
-        EXPECT_TRUE(context);
-
-        if (Delay != std::chrono::milliseconds::zero()) {
-            std::cerr << "==== Delay " << Delay << " before ListEndpoints request" << std::endl;
-            auto start = std::chrono::steady_clock::now();
-            while (start + Delay < std::chrono::steady_clock::now()) {
-                if (context->IsCancelled()) {
-                    return grpc::Status::CANCELLED;
-                }
-                std::this_thread::sleep_for(std::chrono::milliseconds(100));
-            }
-        }
-
-        std::cerr << "==== ListEndpoints request: " << request->ShortDebugString() << std::endl;
-
-        auto* op = response->mutable_operation();
-        op->set_ready(true);
-        op->set_status(Ydb::StatusIds::SUCCESS);
-        op->mutable_result()->PackFrom(MockResults);
-
-        std::cerr << "==== ListEndpoints response: " << response->ShortDebugString() << std::endl;
-
-        return grpc::Status::OK;
-    }
-
-    std::string GetDiscoveryAddr() const {
-        return DiscoveryAddr;
-    }
-
-    void SetDelay(std::chrono::milliseconds delay) {
-        Delay = delay;
-    }
-
-private:
-    Ydb::Discovery::ListEndpointsResult MockResults;
-    std::string DiscoveryAddr;
-    std::unique_ptr<grpc::Server> Server;
-    std::mutex Lock;
-
-    std::chrono::milliseconds Delay = {};
-};
+class LocalPartition : public TTopicTestFixture {};
 
 TEST_F(LocalPartition, TEST_NAME(Basic)) {
     TMockDiscoveryService discovery;
     discovery.SetGoodEndpoints(*this);
-    TDriver driver(CreateConfig(discovery.GetDiscoveryAddr()));
+    TDriver driver(CreateConfig(*this, discovery.GetDiscoveryAddr()));
     TTopicClient client(driver);
 
-    WriteMessage(client);
-    ReadMessage(client);
+    WriteMessage(*this, client);
+    ReadMessage(*this, client);
 }
 
 TEST_F(LocalPartition, TEST_NAME(DescribeBadPartition)) {
@@ -327,7 +172,7 @@ TEST_F(LocalPartition, TEST_NAME(DescribeBadPartition)) {
     auto retryPolicy = std::make_shared<TYdbPqTestRetryPolicy>();
 
     // Set non-existing partition
-    auto writeSettings = CreateWriteSessionSettings();
+    auto writeSettings = CreateWriteSessionSettings(*this);
     writeSettings.RetryPolicy(retryPolicy);
     writeSettings.PartitionId(1);
 
@@ -335,7 +180,7 @@ TEST_F(LocalPartition, TEST_NAME(DescribeBadPartition)) {
     retryPolicy->ExpectBreakDown();
 
     std::cerr << "=== Create write session\n";
-    TTopicClient client(TDriver(CreateConfig(discovery.GetDiscoveryAddr())));
+    TTopicClient client(TDriver(CreateConfig(*this, discovery.GetDiscoveryAddr())));
     auto writeSession = client.CreateWriteSession(writeSettings);
 
     std::cerr << "=== Wait for retries\n";
@@ -360,14 +205,14 @@ TEST_F(LocalPartition, TEST_NAME(DiscoveryServiceBadPort)) {
 
     auto retryPolicy = std::make_shared<TYdbPqTestRetryPolicy>();
 
-    auto writeSettings = CreateWriteSessionSettings();
+    auto writeSettings = CreateWriteSessionSettings(*this);
     writeSettings.RetryPolicy(retryPolicy);
 
     retryPolicy->Initialize();
     retryPolicy->ExpectBreakDown();
 
     std::cerr << "=== Create write session\n";
-    TTopicClient client(TDriver(CreateConfig(discovery.GetDiscoveryAddr())));
+    TTopicClient client(TDriver(CreateConfig(*this, discovery.GetDiscoveryAddr())));
     auto writeSession = client.CreateWriteSession(writeSettings);
 
     std::cerr << "=== Wait for retries\n";
@@ -388,14 +233,14 @@ TEST_F(LocalPartition, TEST_NAME(DiscoveryServiceBadNodeId)) {
 
     auto retryPolicy = std::make_shared<TYdbPqTestRetryPolicy>();
 
-    auto writeSettings = CreateWriteSessionSettings();
+    auto writeSettings = CreateWriteSessionSettings(*this);
     writeSettings.RetryPolicy(retryPolicy);
 
     retryPolicy->Initialize();
     retryPolicy->ExpectBreakDown();
 
     std::cerr << "=== Create write session\n";
-    TTopicClient client(TDriver(CreateConfig(discovery.GetDiscoveryAddr())));
+    TTopicClient client(TDriver(CreateConfig(*this, discovery.GetDiscoveryAddr())));
     auto writeSession = client.CreateWriteSession(writeSettings);
 
     std::cerr << "=== Wait for retries\n";
@@ -416,14 +261,14 @@ TEST_F(LocalPartition, TEST_NAME(DescribeHang)) {
 
     auto retryPolicy = std::make_shared<TYdbPqTestRetryPolicy>(std::chrono::days(1));
 
-    auto writeSettings = CreateWriteSessionSettings();
+    auto writeSettings = CreateWriteSessionSettings(*this);
     writeSettings.RetryPolicy(retryPolicy);
 
     retryPolicy->Initialize();
     retryPolicy->ExpectBreakDown();
 
     std::cerr << "=== Create write session\n";
-    TTopicClient client(TDriver(CreateConfig(discovery.GetDiscoveryAddr())));
+    TTopicClient client(TDriver(CreateConfig(*this, discovery.GetDiscoveryAddr())));
     auto writeSession = client.CreateWriteSession(writeSettings);
 
     std::cerr << "=== Close write session\n";
@@ -436,8 +281,8 @@ TEST_F(LocalPartition, TEST_NAME(DiscoveryHang)) {
     discovery.SetDelay(std::chrono::days(1));
 
     std::cerr << "=== Create write session\n";
-    TTopicClient client(TDriver(CreateConfig(discovery.GetDiscoveryAddr())));
-    auto writeSession = client.CreateWriteSession(CreateWriteSessionSettings());
+    TTopicClient client(TDriver(CreateConfig(*this, discovery.GetDiscoveryAddr())));
+    auto writeSession = client.CreateWriteSession(CreateWriteSessionSettings(*this));
 
     std::cerr << "=== Close write session\n";
     writeSession->Close();
@@ -447,7 +292,7 @@ TEST_F(LocalPartition, TEST_NAME(WithoutPartition)) {
     // Direct write without partition: happy way.
     TMockDiscoveryService discovery;
     discovery.SetGoodEndpoints(*this);
-    auto driverConfig = CreateConfig(discovery.GetDiscoveryAddr());
+    auto driverConfig = CreateConfig(*this, discovery.GetDiscoveryAddr());
     auto* tracingBackend = new TTracingBackend();
     std::vector<std::unique_ptr<TLogBackend>> underlyingBackends;
     underlyingBackends.push_back(std::make_unique<TStreamLogBackend>(&Cerr));
@@ -457,8 +302,8 @@ TEST_F(LocalPartition, TEST_NAME(WithoutPartition)) {
     TTopicClient client(driver);
     auto sessionSettings = TWriteSessionSettings()
         .Path(GetTopicPath())
-        .ProducerId("test-message-group")
-        .MessageGroupId("test-message-group")
+        .ProducerId(TEST_MESSAGE_GROUP_ID)
+        .MessageGroupId(TEST_MESSAGE_GROUP_ID)
         .DirectWriteToPartition(true);
     auto writeSession = client.CreateSimpleBlockingWriteSession(sessionSettings);
     ASSERT_TRUE(writeSession->Write("message"));
@@ -489,7 +334,7 @@ TEST_F(LocalPartition, TEST_NAME(WithoutPartitionDeadNode)) {
     // This test emulates a situation, when InitResponse directs us to an inaccessible node.
     TMockDiscoveryService discovery;
     discovery.SetEndpoints(GetNodeIds()[0], 1, 0);
-    auto driverConfig = CreateConfig(discovery.GetDiscoveryAddr());
+    auto driverConfig = CreateConfig(*this, discovery.GetDiscoveryAddr());
     auto* tracingBackend = new TTracingBackend();
     std::vector<std::unique_ptr<TLogBackend>> underlyingBackends;
     underlyingBackends.push_back(std::make_unique<TStreamLogBackend>(&Cerr));
@@ -500,7 +345,7 @@ TEST_F(LocalPartition, TEST_NAME(WithoutPartitionDeadNode)) {
     auto retryPolicy = std::make_shared<TYdbPqTestRetryPolicy>();
     auto sessionSettings = TWriteSessionSettings()
         .Path(GetTopicPath())
-        .MessageGroupId("test-message-group")
+        .MessageGroupId(TEST_MESSAGE_GROUP_ID)
         .DirectWriteToPartition(true)
         .PartitionId(0)
         .RetryPolicy(retryPolicy);

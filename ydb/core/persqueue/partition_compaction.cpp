@@ -5,7 +5,7 @@
 
 namespace NKikimr::NPQ {
 
-bool TPartition::ExecRequestForCompaction(TWriteMsg& p, TProcessParametersBase& parameters, TEvKeyValue::TEvRequest* request)
+bool TPartition::ExecRequestForCompaction(TWriteMsg& p, TProcessParametersBase& parameters, TEvKeyValue::TEvRequest* request, ui64 blobCreationUnixTime)
 {
     const auto& ctx = ActorContext();
 
@@ -85,7 +85,7 @@ bool TPartition::ExecRequestForCompaction(TWriteMsg& p, TProcessParametersBase& 
     auto newWrite = CompactionBlobEncoder.PartitionedBlob.Add(std::move(blob));
 
     if (newWrite && !newWrite->Value.empty()) {
-        AddCmdWrite(newWrite, request, LastRequestedBlobCreationUnixTime, ctx);
+        AddCmdWrite(newWrite, request, blobCreationUnixTime, ctx);
 
         PQ_LOG_D("Topic '" << TopicName() <<
                 "' partition " << Partition <<
@@ -263,10 +263,12 @@ void TPartition::BlobsForCompactionWereRead(const TVector<NPQ::TRequestedBlob>& 
 
     Y_ABORT_UNLESS(CompactionBlobEncoder.NewHead.GetBatches().empty());
 
+    ui64 blobCreationUnixTime = 0;
+
     for (const auto& requestedBlob : blobs) {
         TMaybe<ui64> firstBlobOffset = requestedBlob.Offset;
 
-        LastRequestedBlobCreationUnixTime = requestedBlob.CreationUnixTime;
+        blobCreationUnixTime = requestedBlob.CreationUnixTime;
 
         for (TBlobIterator it(requestedBlob.Key, requestedBlob.Value); it.IsValid(); it.Next()) {
             TBatch batch = it.GetBatch();
@@ -293,7 +295,7 @@ void TPartition::BlobsForCompactionWereRead(const TVector<NPQ::TRequestedBlob>& 
                 }, std::nullopt};
                 msg.Internal = true;
 
-                ExecRequestForCompaction(msg, parameters, compactionRequest.Get());
+                ExecRequestForCompaction(msg, parameters, compactionRequest.Get(), blobCreationUnixTime);
 
                 firstBlobOffset = Nothing();
             }
@@ -306,7 +308,7 @@ void TPartition::BlobsForCompactionWereRead(const TVector<NPQ::TRequestedBlob>& 
 
     CompactionBlobEncoder.HeadCleared = parameters.HeadCleared;
 
-    EndProcessWritesForCompaction(compactionRequest.Get(), ctx);
+    EndProcessWritesForCompaction(compactionRequest.Get(), blobCreationUnixTime, ctx);
 
     // for debugging purposes
     //DumpKeyValueRequest(compactionRequest->Record);
@@ -365,7 +367,7 @@ void TPartition::BlobsForCompactionWereWrite()
     TryRunCompaction();
 }
 
-void TPartition::EndProcessWritesForCompaction(TEvKeyValue::TEvRequest* request, const TActorContext& ctx)
+void TPartition::EndProcessWritesForCompaction(TEvKeyValue::TEvRequest* request, ui64 blobCreationUnixTime, const TActorContext& ctx)
 {
     if (CompactionBlobEncoder.HeadCleared) {
         Y_ABORT_UNLESS(!CompactionBlobEncoder.CompactedKeys.empty() || CompactionBlobEncoder.Head.PackedSize == 0,
@@ -397,7 +399,7 @@ void TPartition::EndProcessWritesForCompaction(TEvKeyValue::TEvRequest* request,
             << CompactionBlobEncoder.NewHead.GetNextOffset() << " " << key.ToString()
             << " size " << res.second << " WTime " << ctx.Now().MilliSeconds()
     );
-    AddNewCompactionWriteBlob(res, request, ctx);
+    AddNewCompactionWriteBlob(res, request, blobCreationUnixTime, ctx);
 
     CompactionBlobEncoder.HaveData = true;
 }
@@ -464,7 +466,7 @@ std::pair<TKey, ui32> TPartition::GetNewCompactionWriteKey(const bool headCleare
     return GetNewCompactionWriteKeyImpl(headCleared, needCompaction, headSize);
 }
 
-void TPartition::AddNewCompactionWriteBlob(std::pair<TKey, ui32>& res, TEvKeyValue::TEvRequest* request, const TActorContext& ctx)
+void TPartition::AddNewCompactionWriteBlob(std::pair<TKey, ui32>& res, TEvKeyValue::TEvRequest* request, ui64 blobCreationUnixTime, const TActorContext& ctx)
 {
     const auto& key = res.first;
 
@@ -473,7 +475,7 @@ void TPartition::AddNewCompactionWriteBlob(std::pair<TKey, ui32>& res, TEvKeyVal
     auto write = request->Record.AddCmdWrite();
     write->SetKey(key.Data(), key.Size());
     write->SetValue(valueD);
-    write->SetCreationUnixTime(LastRequestedBlobCreationUnixTime);
+    write->SetCreationUnixTime(blobCreationUnixTime);
 
     bool isInline = key.IsHead() && valueD.size() < MAX_INLINE_SIZE;
 
@@ -546,7 +548,7 @@ TInstant TPartition::GetFirstUncompactedBlobTimestamp() const
     if (BlobEncoder.DataKeysBody.empty()) {
         return ctx.Now();
     }
-    if (BlobEncoder.DataKeysBody.size() < GetBodyKeysCountLimit()) {
+    if (BlobEncoder.DataKeysBody.size() <= GetBodyKeysCountLimit()) {
         return BlobEncoder.DataKeysBody.front().Timestamp;
     }
 

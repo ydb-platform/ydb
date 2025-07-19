@@ -92,6 +92,8 @@ TAsyncStatus TTransaction::TImpl::Rollback(const TRollbackTxSettings& settings)
 
 void TTransaction::TImpl::AddPrecommitCallback(TPrecommitTransactionCallback cb)
 {
+    std::lock_guard lock(PrecommitCallbacksMutex);
+
     if (!ChangesAreAccepted) {
         ythrow TContractViolation("Changes are no longer accepted");
     }
@@ -101,6 +103,8 @@ void TTransaction::TImpl::AddPrecommitCallback(TPrecommitTransactionCallback cb)
 
 void TTransaction::TImpl::AddOnFailureCallback(TOnFailureTransactionCallback cb)
 {
+    std::lock_guard lock(OnFailureCallbacksMutex);
+
     if (!ChangesAreAccepted) {
         ythrow TContractViolation("Changes are no longer accepted");
     }

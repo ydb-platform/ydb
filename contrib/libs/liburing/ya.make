@@ -2,9 +2,9 @@
 
 LIBRARY()
 
-VERSION(2.10)
+VERSION(2.11)
 
-ORIGINAL_SOURCE(https://github.com/axboe/liburing/archive/liburing-2.10.tar.gz)
+ORIGINAL_SOURCE(https://github.com/axboe/liburing/archive/liburing-2.11.tar.gz)
 
 LICENSE(
     "(GPL-2.0-only WITH Linux-syscall-note OR MIT)" AND
@@ -92,6 +92,7 @@ RECURSE(
     test/fc2a85cb02ef.t
     test/fd-install.t
     test/fd-pass.t
+    test/fdinfo-sqpoll.t
     test/fdinfo.t
     test/fifo-nonblock-read.t
     test/file-exit-unreg.t
@@ -109,6 +110,7 @@ RECURSE(
     test/fpos.t
     test/fsnotify.t
     test/fsync.t
+    test/futex-kill.t
     test/futex.t
     test/hardlink.t
     test/ignore-single-mmap.t

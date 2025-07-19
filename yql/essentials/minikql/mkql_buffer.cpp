@@ -47,14 +47,14 @@ void TPagedBuffer::AppendPage() {
             page = next;
             page->Clear();
         } else {
-            page = TBufferPage::Allocate(PageAllocSize);
+            page = TBufferPage::Allocate(PageAllocSize_);
             tailPage->Next_ = page;
         }
         tailPage->Size_ = TailSize_;
         ClosedPagesSize_ += TailSize_;
     } else {
         Y_DEBUG_ABORT_UNLESS(Head_ == nullptr);
-        page = TBufferPage::Allocate(PageAllocSize);
+        page = TBufferPage::Allocate(PageAllocSize_);
         Head_ = page->Data();
     }
     TailSize_ = 0;

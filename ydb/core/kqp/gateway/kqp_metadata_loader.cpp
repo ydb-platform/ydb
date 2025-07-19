@@ -13,6 +13,8 @@
 #include <ydb/library/actors/core/log.h>
 #include <yql/essentials/utils/signals/utils.h>
 
+#include <yql/essentials/providers/common/structured_token/yql_token_builder.h>
+#include <ydb/library/yql/providers/common/token_accessor/client/factory.h>
 
 namespace NKikimr::NKqp {
 
@@ -958,47 +960,80 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
                             externalDataSourceMetadata.Metadata->ExternalSource.TableLocation = *externalPath;
                         }
                         LoadExternalDataSourceSecretValues(entry, userToken, ActorSystem)
-                            .Subscribe([promise, externalDataSourceMetadata, settings](const TFuture<TEvDescribeSecretsResponse::TDescription>& result) mutable
+                            .Subscribe([promise, externalDataSourceMetadata, settings, table, database, externalPath, this](const TFuture<TEvDescribeSecretsResponse::TDescription>& result) mutable
                         {
                             UpdateExternalDataSourceSecretsValue(externalDataSourceMetadata, result.GetValue());
                             if (!externalDataSourceMetadata.Success()) {
                                 promise.SetValue(externalDataSourceMetadata);
                                 return;
                             }
-
-                            NExternalSource::IExternalSource::TPtr externalSource;
-                            if (settings.ExternalSourceFactory) {
-                                try {
-                                    externalSource = settings.ExternalSourceFactory->GetOrCreate(externalDataSourceMetadata.Metadata->ExternalSource.Type);
-                                } catch (const std::exception& exception) {
-                                    TTableMetadataResult wrapper;
-                                    wrapper.SetException(yexception() << "couldn't get external source with type " << externalDataSourceMetadata.Metadata->ExternalSource.Type << ", " <<  exception.what());
-                                    promise.SetValue(wrapper);
-                                    return;
-                                }
-                            }
-
-                            if (externalSource && externalSource->CanLoadDynamicMetadata()) {
-                                auto externalSourceMeta = ConvertToExternalSourceMetadata(*externalDataSourceMetadata.Metadata);
-                                externalSourceMeta->Attributes = settings.ReadAttributes; // attributes, collected from AST
-                                externalSource->LoadDynamicMetadata(std::move(externalSourceMeta))
-                                    .Subscribe([promise = std::move(promise), externalDataSourceMetadata](const TFuture<std::shared_ptr<NExternalSource::TMetadata>>& result) mutable {
+                          
+                            auto loadDynamicMetadata = [promise, externalDataSourceMetadata, settings, table, database, externalPath] () mutable {
+                                NExternalSource::IExternalSource::TPtr externalSource;
+                                if (settings.ExternalSourceFactory) {
+                                    try {
+                                        externalSource = settings.ExternalSourceFactory->GetOrCreate(externalDataSourceMetadata.Metadata->ExternalSource.Type);
+                                    } catch (const std::exception& exception) {
                                         TTableMetadataResult wrapper;
-                                        try {
-                                            auto& dynamicMetadata = result.GetValue();
-                                            if (!dynamicMetadata->Changed || EnrichMetadata(*externalDataSourceMetadata.Metadata, *dynamicMetadata)) {
-                                                wrapper.SetSuccess();
-                                                wrapper.Metadata = externalDataSourceMetadata.Metadata;
-                                            } else {
-                                                wrapper.SetException(yexception() << "couldn't enrich metadata with dynamically loaded part");
-                                            }
-                                        } catch (const std::exception& exception) {
-                                            wrapper.SetException(yexception() << "couldn't load table metadata: " << exception.what());
-                                        }
+                                        wrapper.SetException(yexception() << "couldn't get external source with type " << externalDataSourceMetadata.Metadata->ExternalSource.Type << ", " <<  exception.what());
                                         promise.SetValue(wrapper);
+                                        return;
+                                    }
+                                }
+
+                                if (externalSource && externalSource->CanLoadDynamicMetadata()) {
+                                    auto externalSourceMeta = ConvertToExternalSourceMetadata(*externalDataSourceMetadata.Metadata);
+                                    externalSourceMeta->Attributes = settings.ReadAttributes; // attributes, collected from AST
+                                    externalSource->LoadDynamicMetadata(std::move(externalSourceMeta))
+                                    .Subscribe([promise, externalDataSourceMetadata](const TFuture<std::shared_ptr<NExternalSource::TMetadata>>& result) mutable {
+                                            TTableMetadataResult wrapper;
+                                            try {
+                                                auto& dynamicMetadata = result.GetValue();
+                                                if (!dynamicMetadata->Changed || EnrichMetadata(*externalDataSourceMetadata.Metadata, *dynamicMetadata)) {
+                                                    wrapper.SetSuccess();
+                                                    wrapper.Metadata = externalDataSourceMetadata.Metadata;
+                                                } else {
+                                                    wrapper.SetException(yexception() << "couldn't enrich metadata with dynamically loaded part");
+                                                }
+                                            } catch (const std::exception& exception) {
+                                                wrapper.SetException(yexception() << "couldn't load table metadata: " << exception.what());
+                                            }
+                                            promise.SetValue(wrapper);
+                                        });
+                                } else {
+                                    promise.SetValue(externalDataSourceMetadata);
+                                }
+                            };
+                            if (externalDataSourceMetadata.Metadata->ExternalSource.Type == ToString(NYql::EDatabaseType::Ydb) && externalPath) {
+                                auto& source = externalDataSourceMetadata.Metadata->ExternalSource;
+                                THashMap<TString, TString> properties = {source.Properties.GetProperties().begin(), source.Properties.GetProperties().end()};
+                                    
+                                auto token = source.Token;
+                                auto secretName = source.DataSourceAuth.GetToken().GetTokenSecretName();
+                                auto structuredTokenJson = NYql::ComposeStructuredTokenJsonForTokenAuthWithSecret(secretName, token);
+                                auto databaseName = properties.Value("database_name", "");
+                                TString useTlsStr = properties.Value("use_tls", "false");
+                                useTlsStr.to_lower();
+                                bool useTls = useTlsStr == "true"sv;
+
+                                auto path = databaseName + "/" + *externalPath;
+
+                                GetSchemeEntryType(
+                                    FederatedQuerySetup,
+                                    source.DataSourceLocation,
+                                    databaseName,
+                                    useTls,
+                                    structuredTokenJson,
+                                    path)
+                                    .Subscribe([externalDataSourceMetadata, f = loadDynamicMetadata] (const NThreading::TFuture<TGetSchemeEntryResult>& result) mutable {
+                                        TGetSchemeEntryResult type = result.GetValue();
+                                        if (type == NYdb::NScheme::ESchemeEntryType::Topic) {
+                                            externalDataSourceMetadata.Metadata->ExternalSource.Type = ToString(NKikimr::NExternalSource::YdbTopicsType);
+                                        }
+                                        f();
                                     });
                             } else {
-                                promise.SetValue(externalDataSourceMetadata);
+                                loadDynamicMetadata();
                             }
                         });
                         break;

@@ -14,10 +14,15 @@ struct TSchedulableTask {
     explicit TSchedulableTask(const NHdrf::NDynamic::TQueryPtr& query);
     ~TSchedulableTask();
 
-    bool TryIncreaseUsage(const TDuration& burstThrottle);
-    void IncreaseUsage(const TDuration& burstThrottle);
+    bool TryIncreaseUsage();
+    void IncreaseUsage();
     void DecreaseUsage(const TDuration& burstUsage);
 
+    // Account extra usage which doesn't affect scheduling
+    void IncreaseExtraUsage();
+    void DecreaseExtraUsage(const TDuration& burstUsage);
+
+    void IncreaseBurstThrottle(const TDuration& burstThrottle);
     void IncreaseThrottle();
     void DecreaseThrottle();
 
@@ -37,17 +42,14 @@ protected:
     static TMonotonic Now();
     bool IsSchedulable() const;
 
-    bool StartExecution(const TDuration& burstThrottle);
-    bool IsExecuted() const;
+    bool StartExecution(TMonotonic now);
     void StopExecution();
-
-    void Throttle(TMonotonic now);
-    bool IsThrottled() const;
-    TDuration Resume(TMonotonic now);
 
     TDuration CalculateDelay(TMonotonic now) const;
 
 private:
+    void Resume();
+
     TSchedulableTaskPtr SchedulableTask;
     const bool Schedulable;
     THPTimer Timer;

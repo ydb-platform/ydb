@@ -26,23 +26,33 @@ private:
     std::optional<std::vector<TPortionDataAccessor>> Accessors;
     YDB_READONLY_DEF(std::vector<std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>>, ResourceGuards);
     std::shared_ptr<NGroupedMemoryManager::TProcessGuard> MemoryProcessGuard;
-    std::shared_ptr<NGroupedMemoryManager::TScopeGuard> MemoryProcessScopeGuard;
-    std::shared_ptr<NGroupedMemoryManager::TGroupGuard> MemoryProcessGroupGuard;
-    static inline TAtomicCounter Counter = 0;
-    const ui64 MemoryProcessId = Counter.Inc();
+    std::shared_ptr<NGroupedMemoryManager::TScopeGuard> MemoryScopeGuard;
+    std::shared_ptr<NGroupedMemoryManager::TGroupGuard> MemoryGroupGuard;
     std::optional<NBlobOperations::NRead::TCompositeReadBlobs> Blobs;
+    std::optional<std::vector<NArrow::TGeneralContainer>> AssembledData;
+    inline static TAtomicCounter MemoryScopeIdCounter = 0;
 
 public:
+    void Abort() {
+        if (Blobs) {
+            Blobs->Clear();
+            Blobs.reset();
+        }
+    }
+
     ui64 GetMemoryProcessId() const {
-        return MemoryProcessId;
+        AFL_VERIFY(MemoryProcessGuard);
+        return MemoryProcessGuard->GetProcessId();
     }
 
     ui64 GetMemoryScopeId() const {
-        return MemoryProcessScopeGuard->GetScopeId();
+        AFL_VERIFY(MemoryScopeGuard);
+        return MemoryScopeGuard->GetScopeId();
     }
 
     ui64 GetMemoryGroupId() const {
-        return MemoryProcessGroupGuard->GetGroupId();
+        AFL_VERIFY(MemoryGroupGuard);
+        return MemoryGroupGuard->GetGroupId();
     }
 
     void SetBlobs(NBlobOperations::NRead::TCompositeReadBlobs&& blobs) {
@@ -59,20 +69,32 @@ public:
         AFL_VERIFY(!!Blobs);
         auto result = std::move(*Blobs);
         Blobs.reset();
-        return result;
+        return std::move(result);
     }
 
     void ResetBlobs() {
         Blobs.reset();
     }
 
-    TCurrentContext() {
-        static std::shared_ptr<NGroupedMemoryManager::TStageFeatures> stageFeatures =
-            NGroupedMemoryManager::TCompMemoryLimiterOperator::BuildStageFeatures("DEFAULT", 1000000000);
+    void SetAssembledData(std::vector<NArrow::TGeneralContainer>&& data) {
+        AFL_VERIFY(!AssembledData);
+        AssembledData = std::move(data);
+    }
 
-        MemoryProcessGuard = NGroupedMemoryManager::TCompMemoryLimiterOperator::BuildProcessGuard(MemoryProcessId, { stageFeatures });
-        MemoryProcessScopeGuard = NGroupedMemoryManager::TCompMemoryLimiterOperator::BuildScopeGuard(MemoryProcessId, 1);
-        MemoryProcessGroupGuard = NGroupedMemoryManager::TCompMemoryLimiterOperator::BuildGroupGuard(MemoryProcessId, 1);
+    std::vector<NArrow::TGeneralContainer> ExtractAssembledData() {
+        AFL_VERIFY(!!AssembledData);
+        auto result = std::move(*AssembledData);
+        AssembledData.reset();
+        return result;
+    }
+
+    TCurrentContext(const std::shared_ptr<NGroupedMemoryManager::TProcessGuard>& memoryProcessGuard)
+        : MemoryProcessGuard(memoryProcessGuard)
+    {
+        if (memoryProcessGuard) {
+            MemoryScopeGuard = MemoryProcessGuard->BuildScopeGuard(MemoryScopeIdCounter.Inc());
+            MemoryGroupGuard = MemoryScopeGuard->BuildGroupGuard();
+        }
     }
 
     void SetPortionAccessors(std::vector<TPortionDataAccessor>&& acc) {
@@ -80,7 +102,7 @@ public:
         Accessors = std::move(acc);
     }
 
-    const std::vector<TPortionDataAccessor> GetPortionAccessors() const {
+    const std::vector<TPortionDataAccessor>& GetPortionAccessors() const {
         AFL_VERIFY(Accessors);
         return *Accessors;
     }
@@ -107,20 +129,8 @@ public:
     virtual ~IFetchCallback() = default;
 
     virtual ui64 GetNecessaryDataMemory(
-        const std::shared_ptr<NReader::NCommon::TColumnsSetIds>& columnIds, const std::vector<TPortionDataAccessor>& acc) const {
-        ui64 memory = 0;
-        for (auto&& a : acc) {
-            if (columnIds) {
-                memory += a.GetColumnBlobBytes(columnIds->GetColumnIds());
-            } else {
-                memory += a.GetPortionInfo().GetTotalBlobBytes();
-            }
-        }
-        return memory;
-    }
-
-    virtual std::optional<ui64> GetMemoryForUsage() const {
-        return std::nullopt;
+        const std::shared_ptr<NReader::NCommon::TColumnsSetIds>& /*columnIds*/, const std::vector<TPortionDataAccessor>& /*acc*/) const {
+        return 0;
     }
 
     virtual bool IsAborted() const = 0;
@@ -246,17 +256,20 @@ private:
     YDB_READONLY_DEF(std::shared_ptr<ISnapshotSchema>, ActualSchema);
     YDB_READONLY(NBlobOperations::EConsumer, Consumer, NBlobOperations::EConsumer::UNDEFINED);
     YDB_READONLY_DEF(TString, ExternalTaskId);
+    std::shared_ptr<NGroupedMemoryManager::TProcessGuard> MemoryProcessGuard;
 
 public:
-    TRequestInput(const std::vector<TPortionInfo::TConstPtr>& portions, const std::shared_ptr<TVersionedIndex>& versions,
-        const NBlobOperations::EConsumer consumer, const TString& externalTaskId)
-        : Consumer(consumer)
-        , ExternalTaskId(externalTaskId) {
-        AFL_VERIFY(portions.size());
-        ActualSchema = versions->GetLastSchema();
-        for (auto&& i : portions) {
-            Portions.emplace_back(std::make_shared<TFullPortionInfo>(i, versions->GetSchemaVerified(i->GetSchemaVersionVerified())));
-        }
+    TRequestInput(const std::vector<TPortionInfo::TConstPtr>& portions, const std::shared_ptr<const TVersionedIndex>& versions,
+        const NBlobOperations::EConsumer consumer, const TString& externalTaskId,
+        const std::shared_ptr<NGroupedMemoryManager::TProcessGuard>& memoryProcessGuard);
+
+    std::shared_ptr<NGroupedMemoryManager::TProcessGuard> GetMemoryProcessGuardVerified() const {
+        AFL_VERIFY(MemoryProcessGuard);
+        return MemoryProcessGuard;
+    }
+
+    std::shared_ptr<NGroupedMemoryManager::TProcessGuard> GetMemoryProcessGuardOptional() const {
+        return MemoryProcessGuard;
     }
 };
 

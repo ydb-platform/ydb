@@ -1,7 +1,11 @@
 #pragma once
+
+#include "statestorage.h"
+
 #include <ydb/core/scheme/scheme_pathid.h>
 #include <ydb/core/protos/base.pb.h>
-#include "statestorage.h"
+
+#include <util/string/join.h>
 
 namespace NKikimr {
 
@@ -87,6 +91,16 @@ struct TEvStateStorage::TEvUpdateGroupConfig : public TEventLocal<TEvUpdateGroup
         , BoardConfig(board)
         , SchemeBoardConfig(scheme)
     {}
+
+    TString ToString() const override {
+        TStringStream str;
+        str << "{EvUpdateGroupConfig"
+            << " GroupConfig: " << (GroupConfig ? GroupConfig->ToString() : "empty")
+            << " BoardConfig: " << (BoardConfig ? BoardConfig->ToString() : "empty")
+            << " SchemeBoardConfig: " << (SchemeBoardConfig ? SchemeBoardConfig->ToString() : "empty")
+            << "}";
+        return str.Str();
+    }
 };
 
 struct TEvStateStorage::TEvResolveReplicas : public TEventLocal<TEvResolveReplicas, EvResolveReplicas> {
@@ -139,8 +153,17 @@ struct TEvStateStorage::TEvResolveReplicasList : public TEventLocal<TEvResolveRe
         TVector<TActorId> Replicas;
         bool WriteOnly;
         ERingGroupState State;
+
+        TString ToString() const {
+            TStringStream str;
+            str << "{Replicas: [" << JoinSeq(", ", Replicas) << "]"
+                << " WriteOnly: " << WriteOnly
+                << " State: " << static_cast<int>(State)
+                << "}";
+            return str.Str();
+        }
     };
-    
+
     TVector<TReplicaGroup> ReplicaGroups;
     ui32 ConfigContentHash = Max<ui32>();
     ui64 ClusterStateGeneration;
@@ -157,6 +180,14 @@ struct TEvStateStorage::TEvResolveReplicasList : public TEventLocal<TEvResolveRe
             result.insert(result.end(), r.Replicas.begin(), r.Replicas.end());
         }
         return result;
+    }
+
+    TString ToString() const override {
+        TStringStream str;
+        str << "{EvResolveReplicasList"
+            << " ReplicaGroups: [" << JoinSeq(", ", ReplicaGroups) << "]"
+            << "}";
+        return str.Str();
     }
 };
 
@@ -256,9 +287,11 @@ struct TEvStateStorage::TEvReplicaDelete : public TEventPB<TEvStateStorage::TEvR
     TEvReplicaDelete()
     {}
 
-    TEvReplicaDelete(ui64 tabletId)
+    TEvReplicaDelete(ui64 tabletId, ui64 clusterStateGeneration, ui64 clusterStateGuid)
     {
         Record.SetTabletID(tabletId);
+        Record.SetClusterStateGeneration(clusterStateGeneration);
+        Record.SetClusterStateGuid(clusterStateGuid);
     }
 
     TString ToString() const {
@@ -273,9 +306,11 @@ struct TEvStateStorage::TEvReplicaCleanup : public TEventPB<TEvStateStorage::TEv
     TEvReplicaCleanup()
     {}
 
-    TEvReplicaCleanup(ui64 tabletId, TActorId proposedLeader)
+    TEvReplicaCleanup(ui64 tabletId, TActorId proposedLeader, ui64 clusterStateGeneration, ui64 clusterStateGuid)
     {
         Record.SetTabletID(tabletId);
+        Record.SetClusterStateGeneration(clusterStateGeneration);
+        Record.SetClusterStateGuid(clusterStateGuid);
         ActorIdToProto(proposedLeader, Record.MutableProposedLeader());
     }
 };
@@ -333,11 +368,23 @@ struct TEvStateStorage::TEvReplicaBoardLookup : public TEventPB<TEvStateStorage:
 struct TEvStateStorage::TEvReplicaBoardCleanup : public TEventPB<TEvStateStorage::TEvReplicaBoardCleanup, NKikimrStateStorage::TEvReplicaBoardCleanup, TEvStateStorage::EvReplicaBoardCleanup> {
     TEvReplicaBoardCleanup()
     {}
+
+    TEvReplicaBoardCleanup(ui64 clusterStateGeneration, ui64 clusterStateGuid)
+    {
+        Record.SetClusterStateGeneration(clusterStateGeneration);
+        Record.SetClusterStateGuid(clusterStateGuid);
+    }
 };
 
 struct TEvStateStorage::TEvReplicaBoardUnsubscribe : public TEventPB<TEvStateStorage::TEvReplicaBoardUnsubscribe, NKikimrStateStorage::TEvReplicaBoardUnsubscribe, TEvStateStorage::EvReplicaBoardUnsubscribe> {
     TEvReplicaBoardUnsubscribe()
     {}
+
+    TEvReplicaBoardUnsubscribe(ui64 clusterStateGeneration, ui64 clusterStateGuid)
+    {
+        Record.SetClusterStateGeneration(clusterStateGeneration);
+        Record.SetClusterStateGuid(clusterStateGuid);
+    }
 };
 
 struct TEvStateStorage::TEvReplicaBoardPublishAck : public TEventPB<TEvStateStorage::TEvReplicaBoardPublishAck, NKikimrStateStorage::TEvReplicaBoardPublishAck, TEvStateStorage::EvReplicaBoardPublishAck> {
@@ -372,4 +419,8 @@ struct TEvStateStorage::TEvReplicaBoardInfoUpdate : public TEventPB<TEvStateStor
     }
 };
 
+}
+
+Y_DECLARE_OUT_SPEC(inline, NKikimr::TEvStateStorage::TEvResolveReplicasList::TReplicaGroup, o, x) {
+    o << x.ToString();
 }

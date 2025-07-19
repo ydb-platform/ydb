@@ -2,6 +2,7 @@
 
 #include <format>
 #include <ydb/core/kqp/counters/kqp_counters.h>
+#include <ydb/core/tx/schemeshard/schemeshard_impl.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 
 #include <library/cpp/json/json_reader.h>
@@ -305,6 +306,225 @@ Y_UNIT_TEST_SUITE(KqpCost) {
         UNIT_ASSERT_VALUES_EQUAL(readsByTable.at("/Root/SecondaryKeys/Index/indexImplTable").second, 16);
     }
 
+    Y_UNIT_TEST_TWIN(VectorIndexLookup, useSink) {
+        TKikimrRunner kikimr(GetAppConfig(true, false, useSink));
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        kikimr.GetTestServer().GetRuntime()->GetAppData().FeatureFlags.SetEnableVectorIndex(true);
+        kikimr.GetTestServer().GetRuntime()->GetAppData().FeatureFlags.SetEnableAccessToIndexImplTables(true);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_INFO);
+        NSchemeShard::gVectorIndexSeed = 1337;
+
+        { // 1. CREATE TABLE
+            auto result = session.ExecuteSchemeQuery(R"(
+                --!syntax_v1
+                CREATE TABLE `/Root/Vectors` (
+                    Key Int32,
+                    Value Int32,
+                    Prefix Int32,
+                    Embedding String,
+                    PRIMARY KEY (Key)
+                );
+            )").GetValueSync();
+
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
+        }
+
+        { // 2. UPSERT VALUES
+            for (ui32 key = 0; key < 100; key++) {
+                TString embedding = "00\x03";
+                embedding[0] = 'a' + key % 26;
+                embedding[1] = 'A' + (key * 17) % 26;
+
+                auto query = Sprintf(R"(
+                    UPSERT INTO `/Root/Vectors` (Key, Value, Prefix, Embedding) VALUES
+                        (%u, %u, %u, "%s");
+                )", key, key * 10, key % 10, embedding.c_str());
+
+                auto result = session.ExecuteDataQuery(query,
+                    TTxControl::BeginTx().CommitTx()).GetValueSync();
+
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
+            }
+        }
+
+        { // 4a. ADD INDEX ON (Embedding) --- vector_idx
+            auto result = session.ExecuteSchemeQuery(R"(
+                ALTER TABLE `/Root/Vectors`
+                    ADD INDEX vector_idx
+                    GLOBAL USING vector_kmeans_tree
+                    ON (Embedding)
+                    WITH (distance=cosine, vector_type="uint8", vector_dimension=2, levels=3, clusters=2);
+            )").GetValueSync();
+
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
+        }
+
+        { // 4b. ADD INDEX ON (Embedding) COVER (Embedding, Value) --- vector_idx_covered
+            auto result = session.ExecuteSchemeQuery(R"(
+                ALTER TABLE `/Root/Vectors`
+                    ADD INDEX vector_idx_covered
+                    GLOBAL USING vector_kmeans_tree
+                    ON (Embedding) COVER (Embedding, Value)
+                    WITH (distance=cosine, vector_type="uint8", vector_dimension=2, levels=3, clusters=2);
+            )").GetValueSync();
+
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
+        }
+
+        { // 4c. ADD INDEX ON (Embedding) --- vector_idx_prefixed
+            auto result = session.ExecuteSchemeQuery(R"(
+                ALTER TABLE `/Root/Vectors`
+                    ADD INDEX vector_idx_prefixed
+                    GLOBAL USING vector_kmeans_tree
+                    ON (Prefix, Embedding)
+                    WITH (distance=cosine, vector_type="uint8", vector_dimension=2, levels=2, clusters=2);
+            )").GetValueSync();
+
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
+        }
+
+        auto debugPringTable = [&](const TString& name) {
+            auto query = Q_(Sprintf(R"(
+                SELECT * FROM `%s`
+            )", name.c_str()));
+
+            auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx(), GetDataQuerySettings()).ExtractValueSync();
+        
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
+
+            Cerr << name << ":" << Endl;
+            Cerr << NYdb::FormatResultSetYson(result.GetResultSet(0)) << Endl;
+        };
+
+        auto checkSelect = [&](auto query, TMap<TString, ui64> expectedReadsByTable) {
+            auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx(), GetDataQuerySettings()).ExtractValueSync();
+        
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
+
+            auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+
+            TMap<TString, ui64> readsByTable;
+            for (const auto& queryPhase : stats.query_phases()) {
+                for(const auto& tableAccess: queryPhase.table_access()) {
+                    readsByTable[tableAccess.name()] += tableAccess.reads().rows();
+                }
+            }
+
+            for (const auto& kvp : readsByTable) {
+                debugPringTable(kvp.first);
+            }
+
+            UNIT_ASSERT_VALUES_EQUAL_C(expectedReadsByTable, readsByTable, query);
+        };
+
+        { // 5x. SELECT VIEW PRIMARY KEY
+            // SELECT Key
+            checkSelect(Q_(R"(
+                SELECT Key FROM `/Root/Vectors` VIEW PRIMARY KEY
+                    ORDER BY Knn::CosineDistance(Embedding, "pQ\x03")
+                    LIMIT 10;
+            )"), {
+                {"/Root/Vectors", 100} // full scan
+            });
+
+            // SELECT Key, Value --- same stats
+            checkSelect(Q_(R"(
+                SELECT Key, Value FROM `/Root/Vectors` VIEW PRIMARY KEY
+                    ORDER BY Knn::CosineDistance(Embedding, "pQ\x03")
+                    LIMIT 10;
+            )"), {
+                {"/Root/Vectors", 100}
+            });
+        }
+
+        { // 5a. SELECT VIEW vector_idx
+            // SELECT Key
+            checkSelect(Q_(R"(
+                SELECT Key FROM `/Root/Vectors` VIEW vector_idx
+                    ORDER BY Knn::CosineDistance(Embedding, "pQ\x03")
+                    LIMIT 10;
+            )"), {
+                {"/Root/Vectors/vector_idx/indexImplLevelTable", 6}, // about levels * clusters = 3 * 2 = 6
+                {"/Root/Vectors/vector_idx/indexImplPostingTable", 12}, // about rows / clusters^levels = 100 / 2^3 = 12.5
+                {"/Root/Vectors", 12} // same as posting
+            });
+
+            // SELECT Key, Value --- same stats
+            checkSelect(Q_(R"(
+                SELECT Key, Value FROM `/Root/Vectors` VIEW vector_idx
+                    ORDER BY Knn::CosineDistance(Embedding, "pQ\x03")
+                    LIMIT 10;
+            )"), {
+                {"/Root/Vectors/vector_idx/indexImplLevelTable", 6},
+                {"/Root/Vectors/vector_idx/indexImplPostingTable", 12},
+                {"/Root/Vectors", 12}
+            });
+
+            // KMeansTreeSearchTopSize = 2 --- about twice more
+            checkSelect(Q_(R"(
+                pragma ydb.KMeansTreeSearchTopSize = "2";
+                SELECT Key FROM `/Root/Vectors` VIEW vector_idx
+                    ORDER BY Knn::CosineDistance(Embedding, "pQ\x03")
+                    LIMIT 10;
+            )"), {
+                {"/Root/Vectors/vector_idx/indexImplLevelTable", 10},
+                {"/Root/Vectors/vector_idx/indexImplPostingTable", 24},
+                {"/Root/Vectors", 24}
+            });
+        }
+
+        { // 5b. SELECT VIEW vector_idx_covered
+            // SELECT Key
+            checkSelect(Q_(R"(
+                SELECT Key FROM `/Root/Vectors` VIEW vector_idx_covered
+                    ORDER BY Knn::CosineDistance(Embedding, "pQ\x03")
+                    LIMIT 10;
+            )"), {
+                {"/Root/Vectors/vector_idx_covered/indexImplLevelTable", 6}, // about levels * clusters = 3 * 2 = 6
+                {"/Root/Vectors/vector_idx_covered/indexImplPostingTable", 12}, // about rows / clusters^levels = 100 / 2^3 = 12.5
+                // no main table
+            });
+
+            // SELECT Key, Value --- same stats
+            checkSelect(Q_(R"(
+                SELECT Key, Value FROM `/Root/Vectors` VIEW vector_idx_covered
+                    ORDER BY Knn::CosineDistance(Embedding, "pQ\x03")
+                    LIMIT 10;
+            )"), {
+                {"/Root/Vectors/vector_idx_covered/indexImplLevelTable", 6},
+                {"/Root/Vectors/vector_idx_covered/indexImplPostingTable", 12},
+            });
+
+            // KMeansTreeSearchTopSize = 2 --- about twice more
+            checkSelect(Q_(R"(
+                pragma ydb.KMeansTreeSearchTopSize = "2";
+                SELECT Key FROM `/Root/Vectors` VIEW vector_idx_covered
+                    ORDER BY Knn::CosineDistance(Embedding, "pQ\x03")
+                    LIMIT 10;
+            )"), {
+                {"/Root/Vectors/vector_idx_covered/indexImplLevelTable", 10},
+                {"/Root/Vectors/vector_idx_covered/indexImplPostingTable", 24},
+            });
+        }
+
+        { // 5c. SELECT VIEW vector_idx_prefixed
+            // SELECT Key
+            checkSelect(Q_(R"(
+                SELECT Key FROM `/Root/Vectors` VIEW vector_idx_prefixed
+                    WHERE Prefix = 7
+                    ORDER BY Knn::CosineDistance(Embedding, "pQ\x03")
+                    LIMIT 10;
+            )"), {
+                {"/Root/Vectors/vector_idx_prefixed/indexImplPrefixTable", 1},
+                {"/Root/Vectors/vector_idx_prefixed/indexImplLevelTable", 4},
+                {"/Root/Vectors/vector_idx_prefixed/indexImplPostingTable", 4}, // about rows / 10 / clusters^levels = 100 / 10 / 2^2 = 2.5
+                {"/Root/Vectors", 4} // same as posting
+            });
+        }
+    }
+
     Y_UNIT_TEST(PointLookup) {
         TKikimrRunner kikimr(GetAppConfig());
         auto db = kikimr.GetTableClient();
@@ -412,7 +632,6 @@ Y_UNIT_TEST_SUITE(KqpCost) {
         auto result = session.ExecuteDataQuery(query, txControl, GetDataQuerySettings()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
 
-        Cerr << "PONOS" << Endl;
         Cerr << result.GetQueryPlan() << Endl;
 
         CompareYson(R"(

@@ -7,6 +7,7 @@
 #include <yql/essentials/sql/v1/complete/sql_complete.h>
 #include <yql/essentials/sql/v1/complete/name/cache/local/cache.h>
 #include <yql/essentials/sql/v1/complete/name/object/simple/cached/schema.h>
+#include <yql/essentials/sql/v1/complete/name/service/impatient/name_service.h>
 #include <yql/essentials/sql/v1/complete/name/service/schema/name_service.h>
 #include <yql/essentials/sql/v1/complete/name/service/static/name_service.h>
 #include <yql/essentials/sql/v1/complete/name/service/union/name_service.h>
@@ -116,6 +117,7 @@ namespace NYdb::NConsoleClient {
                 case NSQLComplete::ECandidateKind::TableName:
                     return Color.identifier.quoted;
                 case NSQLComplete::ECandidateKind::BindingName:
+                case NSQLComplete::ECandidateKind::ColumnName:
                     return Color.identifier.variable;
                 default:
                     return replxx::Replxx::Color::DEFAULT;
@@ -138,16 +140,22 @@ namespace NYdb::NConsoleClient {
         };
     }
 
-    NSQLComplete::ISchemaListCache::TPtr MakeSchemaCache() {
+    NSQLComplete::TSchemaCaches MakeSchemaCaches() {
         using TKey = NSQLComplete::TSchemaDescribeCacheKey;
-        using TValue = TVector<NSQLComplete::TFolderEntry>;
 
-        return NSQLComplete::MakeLocalCache<TKey, TValue>(
-            NMonotonic::CreateDefaultMonotonicTimeProvider(),
-            {
-                .ByteCapacity = 1 * 1024 * 1024,
-                .TTL = TDuration::Seconds(8),
-            });
+        auto time = NMonotonic::CreateDefaultMonotonicTimeProvider();
+
+        NSQLComplete::TLocalCacheConfig config = {
+            .ByteCapacity = 1 * 1024 * 1024,
+            .TTL = TDuration::Seconds(8),
+        };
+
+        return {
+            .List = NSQLComplete::MakeLocalCache<
+                TKey, TVector<NSQLComplete::TFolderEntry>>(time, config),
+            .DescribeTable = NSQLComplete::MakeLocalCache<
+                TKey, TMaybe<NSQLComplete::TTableDetails>>(time, config),
+        };
     }
 
     IYQLCompleter::TPtr MakeYQLCompleter(
@@ -156,25 +164,33 @@ namespace NYdb::NConsoleClient {
 
         auto ranking = NSQLComplete::MakeDefaultRanking(NSQLComplete::LoadFrequencyData());
 
-        TVector<NSQLComplete::INameService::TPtr> services = {
-            NSQLComplete::MakeStaticNameService(
-                NSQLComplete::LoadDefaultNameSet(), ranking),
+        auto statics = NSQLComplete::MakeStaticNameService(NSQLComplete::LoadDefaultNameSet(), ranking);
 
+        auto schema =
             NSQLComplete::MakeSchemaNameService(
                 NSQLComplete::MakeSimpleSchema(
                     NSQLComplete::MakeCachedSimpleSchema(
-                        MakeSchemaCache(),
+                        MakeSchemaCaches(),
                         /* zone = */ "",
-                        MakeYDBSchema(std::move(driver), std::move(database), isVerbose)))),
-        };
+                        MakeYDBSchema(std::move(driver), std::move(database), isVerbose))));
 
-        auto service = NSQLComplete::MakeUnionNameService(std::move(services), std::move(ranking));
+        auto heavy = NSQLComplete::MakeUnionNameService(
+            {
+                statics,
+                schema,
+            }, ranking);
+
+        auto light = NSQLComplete::MakeUnionNameService(
+            {
+                statics,
+                NSQLComplete::MakeImpatientNameService(schema),
+            }, ranking);
 
         auto config = NSQLComplete::MakeYDBConfiguration();
 
         return IYQLCompleter::TPtr(new TYQLCompleter(
-            /* heavyEngine = */ NSQLComplete::MakeSqlCompletionEngine(lexer, service, config),
-            /* lightEngine = */ NSQLComplete::MakeSqlCompletionEngine(lexer, service, config),
+            /* heavyEngine = */ NSQLComplete::MakeSqlCompletionEngine(lexer, heavy, config),
+            /* lightEngine = */ NSQLComplete::MakeSqlCompletionEngine(lexer, light, config),
             std::move(color)));
     }
 

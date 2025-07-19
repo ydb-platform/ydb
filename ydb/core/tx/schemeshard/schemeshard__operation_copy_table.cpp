@@ -1,15 +1,14 @@
-#include "schemeshard__operation_part.h"
-#include "schemeshard__operation_common.h"
-#include "schemeshard__operation_states.h"
 #include "schemeshard__data_erasure_manager.h"
+#include "schemeshard__operation_common.h"
+#include "schemeshard__operation_part.h"
+#include "schemeshard__operation_states.h"
+#include "schemeshard_cdc_stream_common.h"
 #include "schemeshard_impl.h"
 #include "schemeshard_tx_infly.h"
-#include "schemeshard_cdc_stream_common.h"
-
 #include "schemeshard_utils.h"  // for TransactionTemplate
 
-#include <ydb/core/mind/hive/hive.h>
 #include <ydb/core/base/subdomain.h>
+#include <ydb/core/mind/hive/hive.h>
 
 namespace {
 
@@ -446,7 +445,7 @@ public:
                 }
 
                 checks
-                    .IsValidLeafName()
+                    .IsValidLeafName(context.UserToken.Get())
                     .IsTheSameDomain(srcPath)
                     .PathShardsLimit(maxShardsToCreate)
                     .IsValidACL(acl);

@@ -289,7 +289,7 @@ Y_UNIT_TEST_SUITE(TSentinelBaseTests) {
                     location.SetUnit(ToString(id));
 
                     state->ClusterInfo->AddNode(TEvInterconnect::TNodeInfo(id, name, name, name, 10000, TNodeLocation(location)), nullptr);
-                    sentinelState->Nodes[id] = NSentinel::TNodeInfo{name, NActors::TNodeLocation(location), {}};
+                    sentinelState->Nodes[id] = NSentinel::TNodeInfo{name, NActors::TNodeLocation(location), Nothing(), {}};
 
                     for (ui64 npdisk : xrange(pdisksPerNode)) {
                         NKikimrBlobStorage::TBaseConfig::TPDisk pdisk;
@@ -382,7 +382,7 @@ Y_UNIT_TEST_SUITE(TSentinelBaseTests) {
         auto [state, sentinelState] = MockCmsState(1, 8, 1, disksPerNode, true, false);
         TClusterMap all(sentinelState);
 
-        TGuardian changed(sentinelState, 100, 100, 100, maxFaultyDisksPerNode);
+        TGuardian changed(sentinelState, 100, 100, 100, 100, maxFaultyDisksPerNode);
 
         const auto& nodes = state->ClusterInfo->AllNodes();
 
@@ -591,6 +591,91 @@ Y_UNIT_TEST_SUITE(TSentinelTests) {
             // after pdisk becomes Normal
             env.SetPDiskState(pdisks, NKikimrBlobStorage::TPDiskState::Normal, EPDiskStatus::ACTIVE);
         }
+    }
+
+    Y_UNIT_TEST(PDiskPileGuardHalfPile) {
+        TTestEnv env(8, 4);
+        env.MockBridgeModePiles(2);
+
+        auto pdisks = env.PDisksForRandomPile();
+
+        // erase exactly half of pile
+        std::erase_if(pdisks, [&](TPDiskID id){ return id.NodeId - env.GetFirstNodeId() <= 4; });
+
+        // disks should become INACTIVE immediately after disk is broken
+        env.SetPDiskState(pdisks, ErrorStates[0], EPDiskStatus::INACTIVE);
+        for (ui32 i = 1; i < DefaultErrorStateLimit - 1; ++i) {
+            env.SetPDiskState(pdisks, ErrorStates[0]);
+        }
+        // for half of pile pdisks are expected to become FAULTY
+        env.SetPDiskState(pdisks, ErrorStates[0], EPDiskStatus::FAULTY);
+
+        env.SetPDiskState(pdisks, NKikimrBlobStorage::TPDiskState::Normal, EPDiskStatus::INACTIVE);
+        for (ui32 i = 1; i < DefaultStateLimit - 1; ++i) {
+            env.SetPDiskState(pdisks, NKikimrBlobStorage::TPDiskState::Normal);
+        }
+        env.SetPDiskState(pdisks, NKikimrBlobStorage::TPDiskState::Normal, EPDiskStatus::ACTIVE);
+    }
+
+    Y_UNIT_TEST(PDiskPileGuardFullPile) {
+        TTestEnv env(8, 4);
+        env.MockBridgeModePiles(2);
+
+        auto pdisks = env.PDisksForRandomPile();
+
+        // disks should become INACTIVE immediately after disk is broken
+        env.SetPDiskState(pdisks, ErrorStates[0], EPDiskStatus::INACTIVE);
+        for (ui32 i = 1; i < DefaultErrorStateLimit; ++i) {
+            env.SetPDiskState(pdisks, ErrorStates[0]);
+        }
+
+        // for full pile pdisks are not expected to become FAULTY, so they become ACTIVE immediately
+        // after pdisk becomes Normal
+        env.SetPDiskState(pdisks, NKikimrBlobStorage::TPDiskState::Normal, EPDiskStatus::ACTIVE);
+    }
+
+    Y_UNIT_TEST(PDiskPileGuardConfig) {
+        NKikimrCms::TCmsConfig config;
+        config.MutableSentinelConfig()->SetPileRatio(30);
+        TTestEnv env(8, 4, config);
+        env.MockBridgeModePiles(2);
+
+        auto pdisks = env.PDisksForRandomPile();
+
+        // erase exactly half of pile
+        std::erase_if(pdisks, [&](TPDiskID id){ return id.NodeId - env.GetFirstNodeId() <= 4; });
+
+        // disks should become INACTIVE immediately after disk is broken
+        env.SetPDiskState(pdisks, ErrorStates[0], EPDiskStatus::INACTIVE);
+        for (ui32 i = 1; i < DefaultErrorStateLimit; ++i) {
+            env.SetPDiskState(pdisks, ErrorStates[0]);
+        }
+
+        // for half of pile pdisks are not expected to become FAULTY because of config,
+        // so they become ACTIVE immediatetly after pdisk becomes Normal
+        env.SetPDiskState(pdisks, NKikimrBlobStorage::TPDiskState::Normal, EPDiskStatus::ACTIVE);
+    }
+
+    Y_UNIT_TEST(PDiskPileGuardWithoutBridgeMode) {
+        NKikimrCms::TCmsConfig config;
+        config.MutableSentinelConfig()->SetPileRatio(1); // very low ratio
+        TTestEnv env(8, 4, config);
+
+        auto pdisks = env.PDisksForRandomNode();
+
+        // disks should become INACTIVE immediately after disk is broken
+        env.SetPDiskState(pdisks, ErrorStates[0], EPDiskStatus::INACTIVE);
+        for (ui32 i = 1; i < DefaultErrorStateLimit - 1; ++i) {
+            env.SetPDiskState(pdisks, ErrorStates[0]);
+        }
+        // Without bridge mode pdisks are expected to become FAULTY
+        env.SetPDiskState(pdisks, ErrorStates[0], EPDiskStatus::FAULTY);
+
+        env.SetPDiskState(pdisks, NKikimrBlobStorage::TPDiskState::Normal, EPDiskStatus::INACTIVE);
+        for (ui32 i = 1; i < DefaultStateLimit - 1; ++i) {
+            env.SetPDiskState(pdisks, NKikimrBlobStorage::TPDiskState::Normal);
+        }
+        env.SetPDiskState(pdisks, NKikimrBlobStorage::TPDiskState::Normal, EPDiskStatus::ACTIVE);
     }
 
     Y_UNIT_TEST(PDiskFaultyGuard) {

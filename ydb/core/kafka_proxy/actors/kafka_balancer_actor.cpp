@@ -360,19 +360,6 @@ void TKafkaBalancerActor::JoinStepCheckGroupState(NKqp::TEvKqp::TEvQueryResponse
 void TKafkaBalancerActor::JoinStepCreateNewOrJoinGroup(NKqp::TEvKqp::TEvQueryResponse::TPtr ev, const TActorContext& ctx) {
     Kqp->SetTxId(ev->Get()->Record.GetResponse().GetTxMeta().id());
     auto groupStatus = ParseGroupState(ev);
-    LastSuccessGeneration = groupStatus->LastSuccessGeneration;
-
-    KAFKA_LOG_I(TStringBuilder() << "Check group before join status."
-        "\n memberId: " << MemberId <<
-        "\n instanceId: " << InstanceId <<
-        "\n group: " << GroupId <<
-        "\n exists: " << groupStatus->Exists <<
-        "\n protocolType: " << groupStatus->ProtocolType <<
-        "\n protocolName: " << groupStatus->ProtocolName <<
-        "\n master: " << groupStatus->MasterId <<
-        "\n generation: " << groupStatus->Generation <<
-        "\n lastSuccessGeneration: " << groupStatus->LastSuccessGeneration <<
-        "\n state: " << groupStatus->State);
 
     if (!groupStatus) {
         SendJoinGroupResponseFail(ctx, CorrelationId,
@@ -388,12 +375,27 @@ void TKafkaBalancerActor::JoinStepCreateNewOrJoinGroup(NKqp::TEvKqp::TEvQueryRes
         return;
     }
 
+    if (groupStatus->Exists) {
+        KAFKA_LOG_I(TStringBuilder() << "Check group before join status."
+            "\n memberId: " << MemberId <<
+            "\n instanceId: " << InstanceId <<
+            "\n group: " << GroupId <<
+            "\n exists: " << groupStatus->Exists <<
+            "\n protocolType: " << groupStatus->ProtocolType <<
+            "\n protocolName: " << groupStatus->ProtocolName <<
+            "\n master: " << groupStatus->MasterId <<
+            "\n generation: " << groupStatus->Generation <<
+            "\n lastSuccessGeneration: " << groupStatus->LastSuccessGeneration <<
+            "\n state: " << groupStatus->State);
+    }
+
     if (!groupStatus->Exists) {
         KqpReqCookie++;
         IsMaster = true;
         Master = MemberId;
         GenerationId = 0;
         CurrentStep = JOIN_CHECK_GROUPS_COUNT;
+        LastSuccessGeneration = std::numeric_limits<ui64>::max();
         NYdb::TParamsBuilder params = BuildCheckGroupsCountParams();
         Kqp->SendYqlRequest(Sprintf(CHECK_GROUPS_COUNT.c_str(), TKafkaConsumerGroupsMetaInitManager::GetInstant()->GetStorageTablePath().c_str()), params.Build(), KqpReqCookie, ctx);
     } else if (groupStatus->State != GROUP_STATE_JOIN) {

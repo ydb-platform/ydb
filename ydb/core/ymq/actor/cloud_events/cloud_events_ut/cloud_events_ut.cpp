@@ -1,13 +1,7 @@
-#include <library/cpp/testing/unittest/registar.h>
 #include <util/string/builder.h>
 #include <ydb/core/ymq/actor/cloud_events/cloud_events.h>
-#include <ydb/core/ymq/actor/queue_schema.h>
-
-
 #include <ydb/core/testlib/test_client.h>
-#include <ydb/core/ymq/actor/index_events_processor.h>
 #include <library/cpp/testing/unittest/registar.h>
-#include <util/stream/file.h>
 
 namespace NKikimr::NSQS {
 
@@ -58,7 +52,8 @@ private:
             Processor = new NCloudEvents::TProcessor(
                 SchemePath,
                 TString(),
-                retryTimeout
+                retryTimeout,
+                nullptr
             );
             ProcessorId = runtime->Register(Processor);
             runtime->EnableScheduleForActor(ProcessorId, true);
@@ -85,12 +80,12 @@ private:
                 .AddNullableColumn("Type", EPrimitiveType::Utf8)
                 .AddNullableColumn("CloudId", EPrimitiveType::Utf8)
                 .AddNullableColumn("FolderId", EPrimitiveType::Utf8)
+                .AddNullableColumn("ResourceId", EPrimitiveType::Utf8)
                 .AddNullableColumn("UserSID", EPrimitiveType::Utf8)
                 .AddNullableColumn("MaskedToken", EPrimitiveType::Utf8)
                 .AddNullableColumn("AuthType", EPrimitiveType::Utf8)
                 .AddNullableColumn("PeerName", EPrimitiveType::Utf8)
                 .AddNullableColumn("RequestId", EPrimitiveType::Utf8)
-                .AddNullableColumn("IdempotencyId", EPrimitiveType::Utf8)
                 .AddNullableColumn("Labels", EPrimitiveType::Utf8)
                 .SetPrimaryKeyColumns({"CreatedAt", "Id"})
             .Build();
@@ -128,19 +123,17 @@ private:
             const TString& type,
             const TString& cloudId,
             const TString& folderId,
+            const TString& resourceId,
             const TString& userSID,
             const TString& token,
             const TString& authType,
             const TString& peerName,
             const TString& requestId,
-            const TString& idempotencyId,
             const TString& labels
         )
         {
             TStringBuilder queryBuilder;
-            ui64 createdAt = std::chrono::time_point_cast<std::chrono::microseconds>
-                                      (std::chrono::high_resolution_clock::now())
-                                      .time_since_epoch().count();
+            auto createdAt = TInstant::Now().MilliSeconds();
 
             queryBuilder
                 << "UPSERT INTO" << "`" << FullTablePath
@@ -151,12 +144,12 @@ private:
                     << "Type,"
                     << "CloudId,"
                     << "FolderId,"
+                    << "ResourceId,"
                     << "UserSID,"
                     << "MaskedToken,"
                     << "AuthType,"
                     << "PeerName,"
                     << "RequestId,"
-                    << "IdempotencyId,"
                     << "Labels"
                 << ")"
                 << "VALUES"
@@ -167,12 +160,12 @@ private:
                     << "'" << type << "'" << ","                                                  // DeleteMessageQueue or CreateMessageQueue or UpdateMessageQueue
                     << "'" << cloudId << "'" << ","
                     << "'" << folderId << "'" << ","
+                    << "'" << resourceId << "'" << ","
                     << "'" << userSID << "'" << ","
                     << "'" << token << "'" << ","
                     << "'" << authType << "'" << ","
                     << "'" << peerName << "'" << ","
                     << "'" << requestId << "'" << ","
-                    << "'" << idempotencyId << "'" << ","
                     << "'" << labels << "'" 
                 << ");";
 
@@ -204,12 +197,12 @@ private:
         TString queueName = "queue1";
         TString cloudId = "cloud1";
         TString folderId = "folder1";
+        TString resourceId = "/Root/sqs/folder/queue1";
         TString sid = "username";
         TString token = "maskedToken123";
         TString authType = "authtype";
         TString peerName = "localhost:8000";
         TString requestId = "req1";
-        TString idempotencyKey = "idemp1";
         TString labels = "{\"k1\" : \"v1\"}";
 
         Sleep(TDuration::Seconds(1));
@@ -219,12 +212,12 @@ private:
             "CreateMessageQueue",
             cloudId,
             folderId,
+            resourceId,
             sid,
             token,
             authType,
             peerName,
             requestId,
-            idempotencyKey,
             labels
         );
 
@@ -233,12 +226,12 @@ private:
             "UpdateMessageQueue",
             cloudId,
             folderId,
+            resourceId,
             sid,
             token,
             authType,
             peerName,
             requestId,
-            idempotencyKey,
             labels
         );
 
@@ -247,12 +240,12 @@ private:
             "DeleteMessageQueue",
             cloudId,
             folderId,
+            resourceId,
             sid,
             token,
             authType,
             peerName,
             requestId,
-            idempotencyKey,
             labels
         );
 
@@ -267,9 +260,9 @@ private:
 
         EWaitState state = EWaitState::Create;
 
-        [[maybe_unused]] int createCount = 0;
-        [[maybe_unused]] int updateCount = 0;
-        [[maybe_unused]] int deleteCount = 0;
+        int createCount = 0;
+        int updateCount = 0;
+        int deleteCount = 0;
 
         for (const auto& line : *AuditLinesPtr) {
             std::cerr << line << std::endl;
@@ -313,4 +306,98 @@ private:
     }
 };
 UNIT_TEST_SUITE_REGISTRATION(TCloudEventsProcessorTests);
+
+Y_UNIT_TEST_SUITE(ProtoTests) {
+    NCloudEvents::TEventInfo CreateEventInfo(
+        const TString& eventType
+    ) {
+        NCloudEvents::TEventInfo event;
+        TString queueName = "queue-name-12345";
+
+        event.UserSID = "service-account-id-789";
+        event.MaskedToken = "masked_token_abc123";
+        event.AuthType = "service_account";
+        event.OriginalId = 1234567890;
+        event.Id = "e-" + eventType + "-0001";
+        event.Type = eventType;
+        event.CreatedAt = TInstant::Now();
+        event.CloudId = "cloud-12345";
+        event.FolderId = "folder-67890";
+        event.ResourceId = queueName;
+        event.RemoteAddress = "192.168.1.100";
+        event.RequestId = "req-" + queueName + "-001";
+        event.IdempotencyId = "idemp-" + queueName;
+        event.QueueName = queueName;
+        if (event.Type == "CreateMessageQueue") {
+            event.Permission = "ymq.queues.create";
+        } else if (event.Type == "UpdateMessageQueue") {
+            event.Permission = "ymq.queues.setAttributes";
+        } else if (event.Type == "DeleteMessageQueue") {
+            event.Permission = "ymq.queues.delete";
+        }
+        event.Labels = "{\"k1\" : \"v1\"}";
+        return event;
+    }
+
+    template <typename TEvent>
+    void TestEventFilling(const TString& eventType, const TString& expectedPermission) {
+        auto evInfo = CreateEventInfo(eventType);
+        TEvent ev;
+        NCloudEvents::TFiller<TEvent> filler(evInfo, ev);
+        filler.Fill();
+
+        UNIT_ASSERT(ev.authentication().authenticated() == true);
+        UNIT_ASSERT_EQUAL(ev.authentication().subject_id(), evInfo.UserSID);
+        UNIT_ASSERT_EQUAL(ev.authentication().subject_type(), ::yandex::cloud::events::Authentication::SERVICE_ACCOUNT);
+        UNIT_ASSERT_EQUAL(ev.authentication().token_info().masked_iam_token(), evInfo.MaskedToken);
+
+        UNIT_ASSERT(ev.authorization().authorized() == true);
+        UNIT_ASSERT_EQUAL(ev.authorization().permissions_size(), 1);
+        const auto& perm = ev.authorization().permissions(0);
+        UNIT_ASSERT_EQUAL(perm.permission(), expectedPermission);
+        UNIT_ASSERT_EQUAL(perm.resource_type(), evInfo.ResourceType);
+        UNIT_ASSERT_EQUAL(perm.resource_id(), evInfo.ResourceId);
+
+        UNIT_ASSERT_EQUAL(ev.event_metadata().event_id(), evInfo.Id);
+        UNIT_ASSERT_EQUAL(ev.event_metadata().event_type(), "yandex.cloud.events.ymq." + eventType);
+        UNIT_ASSERT_EQUAL(static_cast<ui64>(ev.event_metadata().created_at().seconds()), evInfo.CreatedAt.Seconds());
+        UNIT_ASSERT_EQUAL(ev.event_metadata().cloud_id(), evInfo.CloudId);
+        UNIT_ASSERT_EQUAL(ev.event_metadata().folder_id(), evInfo.FolderId);
+
+        UNIT_ASSERT_EQUAL(ev.request_metadata().remote_address(), evInfo.RemoteAddress);
+        UNIT_ASSERT_EQUAL(ev.request_metadata().request_id(), evInfo.RequestId);
+        UNIT_ASSERT_EQUAL(ev.request_metadata().idempotency_id(), evInfo.IdempotencyId);
+
+        UNIT_ASSERT_EQUAL(ev.event_status(), yandex::cloud::events::EventStatus::DONE);
+        UNIT_ASSERT(!ev.has_error());
+
+        const auto& details = ev.details();
+        UNIT_ASSERT_EQUAL(details.name(), evInfo.QueueName);
+        UNIT_ASSERT_EQUAL(details.labels_size(), 1);
+        UNIT_ASSERT(details.labels().contains("k1"));
+        UNIT_ASSERT_EQUAL(details.labels().at("k1"), "v1");
+    }
+
+    Y_UNIT_TEST(CreateQueueFiller) {
+        TestEventFilling<NCloudEvents::TCreateQueueEvent>(
+            "CreateMessageQueue", 
+            "ymq.queues.create"
+        );
+    }
+
+    Y_UNIT_TEST(UpdateQueueFiller) {
+        TestEventFilling<NCloudEvents::TUpdateQueueEvent>(
+            "UpdateMessageQueue", 
+            "ymq.queues.setAttributes"
+        );
+    }
+
+    Y_UNIT_TEST(DeleteQueueFiller) {
+        TestEventFilling<NCloudEvents::TDeleteQueueEvent>(
+            "DeleteMessageQueue", 
+            "ymq.queues.delete"
+        );
+    }
+}
+
 } // NKikimr::NSQS

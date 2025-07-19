@@ -1,7 +1,6 @@
-#include "schemeshard__operation_part.h"
 #include "schemeshard__operation_common.h"
+#include "schemeshard__operation_part.h"
 #include "schemeshard_impl.h"
-
 #include "schemeshard_utils.h"  // for PQGroupReserve
 
 #include <ydb/core/base/subdomain.h>

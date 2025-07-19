@@ -436,7 +436,7 @@ bool TKqpQueryState::PrepareNextStatementPart() {
 }
 
 void TKqpQueryState::FillTopicOperations() {
-    YQL_ENSURE(HasTopicOperations());
+    YQL_ENSURE(HasTopicOperations() || HasKafkaApiOperations());
 
     const auto& operations = GetTopicOperationsFromRequest();
 

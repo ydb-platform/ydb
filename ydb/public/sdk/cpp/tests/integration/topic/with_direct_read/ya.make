@@ -34,6 +34,7 @@ SRCS(
     ../describe_topic.cpp
     ../direct_read.cpp
     ../local_partition.cpp
+    ../topic_to_table.cpp
 )
 
 END()

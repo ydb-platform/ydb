@@ -8,11 +8,11 @@ import uuid
 import sys
 import os
 
-# import pytest
+import pytest
 import yatest
 
 from ydb.tests.library.sqs.test_base import KikimrSqsTestBase, get_test_with_sqs_tenant_installation
-# from ydb.tests.library.sqs.test_base import IS_FIFO_PARAMS, TABLES_FORMAT_PARAMS
+from ydb.tests.library.sqs.test_base import IS_FIFO_PARAMS, TABLES_FORMAT_PARAMS
 
 import random
 import string
@@ -90,20 +90,22 @@ class TestCloudEvents(get_test_with_sqs_tenant_installation(KikimrSqsTestBase)):
         result = audit_data.replace('\r\n', '\n')
         return result.split('\n')
 
-    def test_create_update_delete_one_queue(self):
+    @pytest.mark.parametrize(**IS_FIFO_PARAMS)
+    @pytest.mark.parametrize(**TABLES_FORMAT_PARAMS)
+    def test_create_update_delete_one_queue(self, is_fifo, tables_format):
         capture_audit = CaptureFileOutput(self.audit_file)
 
         cloud_queue_name = ""
 
         with capture_audit:
-            self._init_with_params()
+            self._init_with_params(is_fifo, tables_format)
 
             self._sqs_api = self._create_api_for_user(
                 self._username, raise_on_error=True, force_private=False,
                 iam_token=self.iam_token, folder_id=self.folder_id
             )
 
-            queue_url1 = self._sqs_api.create_queue(self.queue_name, is_fifo=False)
+            queue_url1 = self._sqs_api.create_queue(self.queue_name, is_fifo=is_fifo)
             time.sleep(1)
 
             cloud_queue_name = queue_url1.split('/')[-2]
@@ -162,15 +164,16 @@ class TestCloudEvents(get_test_with_sqs_tenant_installation(KikimrSqsTestBase)):
                 assert log.count(f'"permission":"{permission}"') == 1
                 assert log.count('"id":') == 1 and log.count(f'"id":"{none_value}"') == 0
                 assert log.count('"reason":') == 0
-                # assert log.count('"idempotency_id":') == 1 and log.count(f'"idempotency_id":"{none_value}"') == 0             # todo
+                assert log.count('"idempotency_id":') == 1 and log.count(f'"idempotency_id":"{none_value}"') == 0
                 assert log.count(f'"cloud_id":"{self.cloud_id}"') == 1
                 assert log.count('"masked_token":') == 1 and log.count(f'"masked_token":"{none_value}"') == 0
                 assert log.count(f'"auth_type":"{none_value}"') == 1                                                            # there is no auth_type in mock verison of cloud sqs
-                # assert log.count('"remote_address":') == 1 and log.count(f'"remote_address":"{none_value}"') == 0             # todo
+                assert log.count('"remote_address":') == 1 and log.count(f'"remote_address":"{none_value}"') == 0
                 assert log.count(f'"folder_id":"{self.folder_id}"') == 1
+                assert log.count(f'"resource_id":"{cloud_queue_name}"') == 1
                 assert log.count('"created_at":') == 1 and log.count(f'"created_at":"{none_value}"') == 0
                 assert log.count('"status":"SUCCESS"') == 1
                 assert log.count('"subject":"fake_user_sid@as"') == 1                                                           # there is mock verison of cloud sqs
-                assert log.count(f'"queue":"{cloud_queue_name}"') == 1
+                assert log.count('"queue":') == 1
                 assert log.count('"labels"') == 1
                 assert log.count('"component":"ymq"') == 1

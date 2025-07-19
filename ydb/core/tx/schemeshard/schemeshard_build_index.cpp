@@ -1,4 +1,5 @@
 #include "schemeshard_build_index.h"
+
 #include "schemeshard_impl.h"
 
 namespace NKikimr {
@@ -33,6 +34,10 @@ void TSchemeShard::Handle(TEvDataShard::TEvSampleKResponse::TPtr& ev, const TAct
 }
 
 void TSchemeShard::Handle(TEvDataShard::TEvReshuffleKMeansResponse::TPtr& ev, const TActorContext& ctx) {
+    Execute(CreateTxReply(ev), ctx);
+}
+
+void TSchemeShard::Handle(TEvDataShard::TEvRecomputeKMeansResponse::TPtr& ev, const TActorContext& ctx) {
     Execute(CreateTxReply(ev), ctx);
 }
 
@@ -224,7 +229,8 @@ void TSchemeShard::PersistBuildIndexProcessed(NIceDb::TNiceDb& db, const TIndexB
         NIceDb::TUpdate<Schema::IndexBuild::UploadRowsProcessed>(indexInfo.Processed.GetUploadRows()),
         NIceDb::TUpdate<Schema::IndexBuild::UploadBytesProcessed>(indexInfo.Processed.GetUploadBytes()),
         NIceDb::TUpdate<Schema::IndexBuild::ReadRowsProcessed>(indexInfo.Processed.GetReadRows()),
-        NIceDb::TUpdate<Schema::IndexBuild::ReadBytesProcessed>(indexInfo.Processed.GetReadBytes())
+        NIceDb::TUpdate<Schema::IndexBuild::ReadBytesProcessed>(indexInfo.Processed.GetReadBytes()),
+        NIceDb::TUpdate<Schema::IndexBuild::CpuTimeUsProcessed>(indexInfo.Processed.GetCpuTimeUs())
     );
 }
 
@@ -233,7 +239,8 @@ void TSchemeShard::PersistBuildIndexBilled(NIceDb::TNiceDb& db, const TIndexBuil
         NIceDb::TUpdate<Schema::IndexBuild::UploadRowsBilled>(indexInfo.Billed.GetUploadRows()),
         NIceDb::TUpdate<Schema::IndexBuild::UploadBytesBilled>(indexInfo.Billed.GetUploadBytes()),
         NIceDb::TUpdate<Schema::IndexBuild::ReadRowsBilled>(indexInfo.Billed.GetReadRows()),
-        NIceDb::TUpdate<Schema::IndexBuild::ReadBytesBilled>(indexInfo.Billed.GetReadBytes())
+        NIceDb::TUpdate<Schema::IndexBuild::ReadBytesBilled>(indexInfo.Billed.GetReadBytes()),
+        NIceDb::TUpdate<Schema::IndexBuild::CpuTimeUsBilled>(indexInfo.Processed.GetCpuTimeUs())
     );
 }
 
@@ -246,7 +253,8 @@ void TSchemeShard::PersistBuildIndexUploadProgress(NIceDb::TNiceDb& db, TIndexBu
         NIceDb::TUpdate<Schema::IndexBuildShardStatus::UploadRowsProcessed>(shardStatus.Processed.GetUploadRows()),
         NIceDb::TUpdate<Schema::IndexBuildShardStatus::UploadBytesProcessed>(shardStatus.Processed.GetUploadBytes()),
         NIceDb::TUpdate<Schema::IndexBuildShardStatus::ReadRowsProcessed>(shardStatus.Processed.GetReadRows()),
-        NIceDb::TUpdate<Schema::IndexBuildShardStatus::ReadBytesProcessed>(shardStatus.Processed.GetReadBytes())
+        NIceDb::TUpdate<Schema::IndexBuildShardStatus::ReadBytesProcessed>(shardStatus.Processed.GetReadBytes()),
+        NIceDb::TUpdate<Schema::IndexBuildShardStatus::CpuTimeUsProcessed>(shardStatus.Processed.GetCpuTimeUs())
     );
 }
 
@@ -269,7 +277,8 @@ void TSchemeShard::PersistBuildIndexUploadReset(NIceDb::TNiceDb& db, TIndexBuild
         NIceDb::TUpdate<Schema::IndexBuildShardStatus::UploadRowsProcessed>(shardStatus.Processed.GetUploadRows()),
         NIceDb::TUpdate<Schema::IndexBuildShardStatus::UploadBytesProcessed>(shardStatus.Processed.GetUploadBytes()),
         NIceDb::TUpdate<Schema::IndexBuildShardStatus::ReadRowsProcessed>(shardStatus.Processed.GetReadRows()),
-        NIceDb::TUpdate<Schema::IndexBuildShardStatus::ReadBytesProcessed>(shardStatus.Processed.GetReadBytes())
+        NIceDb::TUpdate<Schema::IndexBuildShardStatus::ReadBytesProcessed>(shardStatus.Processed.GetReadBytes()),
+        NIceDb::TUpdate<Schema::IndexBuildShardStatus::CpuTimeUsProcessed>(shardStatus.Processed.GetCpuTimeUs())
     );
 }
 
@@ -284,6 +293,73 @@ void TSchemeShard::PersistBuildIndexSampleForget(NIceDb::TNiceDb& db, const TInd
     Y_ASSERT(info.IsBuildVectorIndex());
     for (ui32 row = 0; row < info.KMeans.K * 2; ++row) {
         db.Table<Schema::KMeansTreeSample>().Key(info.Id, row).Delete();
+    }
+}
+
+void TSchemeShard::PersistBuildIndexSampleToClusters(NIceDb::TNiceDb& db, TIndexBuildInfo& info) {
+    TVector<TString> clusters;
+    for (const auto& [_, row] : info.Sample.Rows) {
+        clusters.push_back(TString(TSerializedCellVec::ExtractCell(row, 0).AsBuf()));
+    }
+    for (ui32 i = info.KMeans.K; i <= 2*info.KMeans.K; i++) {
+        db.Table<Schema::KMeansTreeSample>().Key(info.Id, i).Delete();
+    }
+    for (ui32 i = 0; i < info.Sample.Rows.size(); i++) {
+        db.Table<Schema::KMeansTreeClusters>().Key(info.Id, i).Update(
+            NIceDb::TUpdate<Schema::KMeansTreeClusters::OldSize>(0),
+            NIceDb::TUpdate<Schema::KMeansTreeClusters::Size>(0),
+            NIceDb::TUpdate<Schema::KMeansTreeClusters::Data>(clusters[i])
+        );
+    }
+    for (ui32 i = info.Sample.Rows.size(); i < info.KMeans.K; i++) {
+        db.Table<Schema::KMeansTreeClusters>().Key(info.Id, i).Delete();
+    }
+    bool ok = info.Clusters->SetClusters(std::move(clusters));
+    Y_ENSURE(ok);
+}
+
+void TSchemeShard::PersistBuildIndexClustersToSample(NIceDb::TNiceDb& db, TIndexBuildInfo& info) {
+    info.Sample.Clear();
+    const auto & clusters = info.Clusters->GetClusters();
+    const auto & sizes = info.Clusters->GetClusterSizes();
+    for (ui32 i = 0; i < clusters.size(); i++) {
+        auto sampleRow = TSerializedCellVec::Serialize(TVector<TCell>{TCell(clusters[i])});
+        info.Sample.Add(i+1, sampleRow);
+        db.Table<Schema::KMeansTreeSample>().Key(info.Id, i).Update(
+            NIceDb::TUpdate<Schema::KMeansTreeSample::Probability>(i+1),
+            NIceDb::TUpdate<Schema::KMeansTreeSample::Data>(sampleRow)
+        );
+        db.Table<Schema::KMeansTreeClusters>().Key(info.Id, i).Update(
+            NIceDb::TUpdate<Schema::KMeansTreeClusters::OldSize>(sizes[i]),
+            NIceDb::TUpdate<Schema::KMeansTreeClusters::Size>(0),
+            NIceDb::TUpdate<Schema::KMeansTreeClusters::Data>(clusters[i])
+        );
+    }
+    for (ui32 i = clusters.size(); i < 2*info.KMeans.K; ++i) {
+        db.Table<Schema::KMeansTreeSample>().Key(info.Id, i).Delete();
+    }
+    for (ui32 i = clusters.size(); i < info.KMeans.K; i++) {
+        db.Table<Schema::KMeansTreeClusters>().Key(info.Id, i).Delete();
+    }
+}
+
+void TSchemeShard::PersistBuildIndexClustersUpdate(NIceDb::TNiceDb& db, const TIndexBuildInfo& info) {
+    auto& newClusters = info.Clusters->GetClusters();
+    auto& newSizes = info.Clusters->GetNextClusterSizes();
+    for (ui32 i = 0; i < newClusters.size(); i++) {
+        if (newSizes[i] > 0) {
+            db.Table<Schema::KMeansTreeClusters>().Key(info.Id, i).Update(
+                NIceDb::TUpdate<Schema::KMeansTreeClusters::Size>(newSizes[i]),
+                NIceDb::TUpdate<Schema::KMeansTreeClusters::Data>(newClusters[i])
+            );
+        }
+    }
+}
+
+void TSchemeShard::PersistBuildIndexClustersForget(NIceDb::TNiceDb& db, const TIndexBuildInfo& info) {
+    Y_ASSERT(info.IsBuildVectorIndex());
+    for (ui32 row = 0; row < info.KMeans.K; ++row) {
+        db.Table<Schema::KMeansTreeClusters>().Key(info.Id, row).Delete();
     }
 }
 
@@ -311,6 +387,7 @@ void TSchemeShard::PersistBuildIndexForget(NIceDb::TNiceDb& db, const TIndexBuil
     if (info.IsBuildVectorIndex()) {
         db.Table<Schema::KMeansTreeProgress>().Key(info.Id).Delete();
         PersistBuildIndexSampleForget(db, info);
+        PersistBuildIndexClustersForget(db, info);
     }
 }
 

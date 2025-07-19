@@ -3,7 +3,6 @@ import pytest
 from .conftest import LoadSuiteBase, LoadSuiteParallel
 from os import getenv
 from ydb.tests.olap.lib.ydb_cli import WorkloadType, YdbCliHelper, CheckCanonicalPolicy
-from ydb.tests.olap.lib.ydb_cluster import YdbCluster
 from ydb.tests.olap.lib.utils import get_external_param
 
 
@@ -12,7 +11,7 @@ QUERY_NAMES = [f'Query{query_num:02d}' for query_num in range(0, 43)]
 
 class TestClickbench(LoadSuiteBase):
     workload_type: WorkloadType = WorkloadType.Clickbench
-    path = get_external_param('table-path-clickbench', YdbCluster.get_tables_path('clickbench/hits'))
+    path = get_external_param('table-path-clickbench', 'clickbench/hits')
 
     @classmethod
     def do_setup_class(cls):
@@ -41,13 +40,21 @@ class TestClickbench(LoadSuiteBase):
         if fail_count > 0:
             pytest.fail(f'{fail_count} verification queries failed')
 
+    def _test_impl(self, query_name):
+        self.run_workload_test(self.path, query_name=query_name)
+
     @pytest.mark.parametrize('query_name', QUERY_NAMES)
     def test_clickbench(self, query_name):
-        self.run_workload_test(self.path, query_name=query_name)
+        self._test_impl(query_name)
 
 
 class TestClickbenchPg(TestClickbench):
     query_syntax = 'pg'
+
+    def _test_impl(self, query_name):
+        if query_name in {'Query18', 'Query28', 'Query39'}:
+            pytest.xfail('https://github.com/ydb-platform/ydb/issues/8630')
+        self.run_workload_test(self.path, query_name=query_name)
 
 
 class ClickbenchParallelBase(LoadSuiteParallel):
@@ -58,7 +65,7 @@ class ClickbenchParallelBase(LoadSuiteParallel):
         return QUERY_NAMES
 
     def get_path() -> str:
-        return get_external_param('table-path-clickbench', YdbCluster.get_tables_path('clickbench/hits'))
+        return get_external_param('table-path-clickbench', 'clickbench/hits')
 
     @classmethod
     def do_setup_class(cls):

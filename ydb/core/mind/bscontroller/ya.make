@@ -5,6 +5,7 @@ SRCS(
     bsc.h
     bsc_audit.h
     bsc_audit.cpp
+    cluster_balancing.cpp
     cmds_box.cpp
     cmds_drive_status.cpp
     cmds_host_config.cpp
@@ -63,6 +64,7 @@ SRCS(
     update_group_latencies.cpp
     update_last_seen_ready.cpp
     update_seen_operational.cpp
+    util.cpp
     virtual_group.cpp
     yaml_config_helpers.h
 )

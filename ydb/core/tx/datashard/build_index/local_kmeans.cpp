@@ -132,7 +132,6 @@ public:
         , Clusters(std::move(clusters))
     {
         LOG_I("Create " << Debug());
-        Clusters->Init(request.GetK(), request.GetNeedsRounds());
 
         const auto& embedding = request.GetEmbeddingColumn();
         const auto& data = request.GetDataColumns();
@@ -171,8 +170,9 @@ public:
     TAutoPtr<IDestructable> Finish(EStatus status) final
     {
         auto& record = Response->Record;
-        record.SetReadRows(ReadRows);
-        record.SetReadBytes(ReadBytes);
+        record.MutableMeteringStats()->SetReadRows(ReadRows);
+        record.MutableMeteringStats()->SetReadBytes(ReadBytes);
+        record.MutableMeteringStats()->SetCpuTimeUs(Driver->GetTotalCpuTimeUs());
 
         Uploader.Finish(record, status);
 
@@ -240,7 +240,7 @@ public:
         if (PrefixColumns && !Prefix) {
             Prefix = TSerializedCellVec{key.subspan(0, PrefixColumns)};
             auto newParent = key.at(0).template AsValue<ui64>();
-            Child += (newParent - Parent) * Clusters->GetK();
+            Child += (newParent - Parent) * K;
             Parent = newParent;
         }
 
@@ -278,7 +278,7 @@ protected:
             HFunc(TEvTxUserProxy::TEvUploadRowsResponse, Handle);
             CFunc(TEvents::TSystem::Wakeup, HandleWakeup);
             default:
-                LOG_E("StateWork unexpected event type: " << ev->GetTypeRewrite() 
+                LOG_E("StateWork unexpected event type: " << ev->GetTypeRewrite()
                     << " event: " << ev->ToString() << " " << Debug());
         }
     }
@@ -380,13 +380,12 @@ protected:
             }
             bool ok = Clusters->SetClusters(std::move(rows));
             Y_ENSURE(ok);
-            Clusters->InitAggregatedClusters();
+            Clusters->SetRound(1);
             return false; // do KMEANS
         }
 
         if (State == EState::KMEANS) {
-            if (Clusters->RecomputeClusters()) {
-                Clusters->RemoveEmptyClusters();
+            if (Clusters->NextRound()) {
                 FormLevelRows();
                 State = UploadState;
                 return false; // do UPLOAD_*
@@ -444,7 +443,7 @@ protected:
     void FeedKMeans(TArrayRef<const TCell> row)
     {
         if (auto pos = Clusters->FindCluster(row, EmbeddingPos); pos) {
-            Clusters->AggregateToCluster(*pos, row.at(EmbeddingPos).Data());
+            Clusters->AggregateToCluster(*pos, row.at(EmbeddingPos).AsRef());
         }
     }
 
@@ -536,12 +535,9 @@ void TDataShard::HandleSafe(TEvDataShard::TEvLocalKMeansRequest::TPtr& ev, const
 
     try {
         auto response = MakeHolder<TEvDataShard::TEvLocalKMeansResponse>();
-        response->Record.SetId(id);
-        response->Record.SetTabletId(TabletID());
-        response->Record.SetRequestSeqNoGeneration(seqNo.Generation);
-        response->Record.SetRequestSeqNoRound(seqNo.Round);
+        FillScanResponseCommonFields(*response, id, TabletID(), seqNo);
 
-        LOG_N("Starting TLocalKMeansScan TabletId: " << TabletID() 
+        LOG_N("Starting TLocalKMeansScan TabletId: " << TabletID()
             << " " << request.ShortDebugString()
             << " row version " << rowVersion);
 
@@ -611,7 +607,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvLocalKMeansRequest::TPtr& ev, const
         const auto parentTo = request.GetParentTo();
         NTable::TLead lead;
         if (parentFrom == 0) {
-            if (request.GetUpload() == NKikimrTxDataShard::UPLOAD_BUILD_TO_BUILD 
+            if (request.GetUpload() == NKikimrTxDataShard::UPLOAD_BUILD_TO_BUILD
                 || request.GetUpload() == NKikimrTxDataShard::UPLOAD_BUILD_TO_POSTING)
             {
                 badRequest("Wrong upload for zero parent");
@@ -619,7 +615,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvLocalKMeansRequest::TPtr& ev, const
             lead.To({}, NTable::ESeek::Lower);
         } else if (parentFrom > parentTo) {
             badRequest(TStringBuilder() << "Parent from " << parentFrom << " should be less or equal to parent to " << parentTo);
-        } else if (request.GetUpload() == NKikimrTxDataShard::UPLOAD_MAIN_TO_BUILD 
+        } else if (request.GetUpload() == NKikimrTxDataShard::UPLOAD_MAIN_TO_BUILD
             || request.GetUpload() == NKikimrTxDataShard::UPLOAD_MAIN_TO_POSTING)
         {
             badRequest("Wrong upload for non-zero parent");
@@ -638,10 +634,10 @@ void TDataShard::HandleSafe(TEvDataShard::TEvLocalKMeansRequest::TPtr& ev, const
             lead.Until(range.To, true);
         }
 
-        if (!request.HasLevelName()) {
+        if (!request.GetLevelName()) {
             badRequest(TStringBuilder() << "Empty level table name");
         }
-        if (!request.HasOutputName()) {
+        if (!request.GetOutputName()) {
             badRequest(TStringBuilder() << "Empty output table name");
         }
 
@@ -661,7 +657,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvLocalKMeansRequest::TPtr& ev, const
 
         // 3. Validating vector index settings
         TString error;
-        auto clusters = NKikimr::NKMeans::CreateClusters(request.GetSettings(), error);
+        auto clusters = NKikimr::NKMeans::CreateClusters(request.GetSettings(), request.GetNeedsRounds(), error);
         if (!clusters) {
             badRequest(error);
             auto sent = trySendBadRequest();

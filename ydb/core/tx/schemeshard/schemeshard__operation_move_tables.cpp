@@ -1,14 +1,12 @@
-#include "schemeshard__operation_part.h"
 #include "schemeshard__operation_common.h"
-#include "schemeshard_path_element.h"
-
+#include "schemeshard__operation_part.h"
 #include "schemeshard_impl.h"
-
+#include "schemeshard_path_element.h"
 #include "schemeshard_utils.h"  // for TransactionTemplate
 
 #include <ydb/core/base/path.h>
-#include <ydb/core/protos/flat_tx_scheme.pb.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
+#include <ydb/core/protos/flat_tx_scheme.pb.h>
 
 namespace NKikimr {
 namespace NSchemeShard {
@@ -33,6 +31,9 @@ TVector<ISubOperation::TPtr> CreateConsistentMoveTable(TOperationId nextId, cons
     {
         if (!srcPath->IsTable() && !srcPath->IsColumnTable()) {
             return {CreateReject(nextId, NKikimrScheme::StatusPreconditionFailed, "Cannot move non-tables")};
+        }
+        if (srcPath->IsColumnTable() && !AppData()->FeatureFlags.GetEnableMoveColumnTable()) {
+            return {CreateReject(nextId, NKikimrScheme::StatusPreconditionFailed, "RENAME is prohibited for column tables")};
         }
         TPath::TChecker checks = srcPath.Check();
         checks.IsResolved()

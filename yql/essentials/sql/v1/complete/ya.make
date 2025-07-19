@@ -1,6 +1,8 @@
 LIBRARY()
 
 SRCS(
+    configuration.cpp
+    name_mapping.cpp
     sql_complete.cpp
 )
 
@@ -16,6 +18,7 @@ PEERDIR(
     # TODO(YQL-19747): extract NameIndex
     yql/essentials/sql/v1/complete/name/service/ranking
     yql/essentials/sql/v1/complete/name/service/binding
+    yql/essentials/sql/v1/complete/name/service/column
 )
 
 END()

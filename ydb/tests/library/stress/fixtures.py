@@ -4,7 +4,6 @@ from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.harness.param_constants import kikimr_driver_path
 
-from ydb.tests.library.common.types import Erasure
 from ydb.tests.oss.ydb_sdk_import import ydb
 
 
@@ -15,18 +14,19 @@ class StressFixture:
 
     def setup_cluster(self, **kwargs):
         self.config = KikimrConfigGenerator(
-            erasure=Erasure.MIRROR_3_DC,
             binary_paths=self.all_binary_paths,
             **kwargs,
         )
 
         self.cluster = KiKiMR(self.config)
         self.cluster.start()
+        self.database = "/Root"
         self.endpoint = "grpc://%s:%s" % ('localhost', self.cluster.nodes[1].port)
+        self.mon_endpoint = f"http://localhost:{self.cluster.nodes[1].mon_port}"
 
         self.driver = ydb.Driver(
             ydb.DriverConfig(
-                database='/Root',
+                database=self.database,
                 endpoint=self.endpoint
             )
         )

@@ -80,7 +80,7 @@ Y_UNIT_TEST_SUITE(LocalCacheTests) {
 
         auto entry = cache->Get("1").GetValueSync();
 
-        UNIT_ASSERT_VALUES_EQUAL(entry.Value, "");
+        UNIT_ASSERT_VALUES_EQUAL(entry.Value, Nothing());
         UNIT_ASSERT_VALUES_EQUAL(entry.IsExpired, true);
     }
 

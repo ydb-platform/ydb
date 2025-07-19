@@ -1,1 +1,1361 @@
-{"DateTime":[{"name":"Convert"},{"name":"EndOf"},{"name":"EndOfDay"},{"name":"EndOfMonth"},{"name":"EndOfQuarter"},{"name":"EndOfWeek"},{"name":"EndOfYear"},{"name":"Format"},{"name":"FromMicroseconds"},{"name":"FromMicroseconds64"},{"name":"FromMilliseconds"},{"name":"FromMilliseconds64"},{"name":"FromSeconds"},{"name":"FromSeconds64"},{"name":"GetDayOfMonth"},{"name":"GetDayOfWeek"},{"name":"GetDayOfWeekName"},{"name":"GetDayOfYear"},{"name":"GetHour"},{"name":"GetMicrosecondOfSecond"},{"name":"GetMillisecondOfSecond"},{"name":"GetMinute"},{"name":"GetMonth"},{"name":"GetMonthName"},{"name":"GetSecond"},{"name":"GetTimezoneId"},{"name":"GetTimezoneName"},{"name":"GetWeekOfYear"},{"name":"GetWeekOfYearIso8601"},{"name":"GetYear"},{"name":"Interval64FromDays"},{"name":"Interval64FromHours"},{"name":"Interval64FromMicroseconds"},{"name":"Interval64FromMilliseconds"},{"name":"Interval64FromMinutes"},{"name":"Interval64FromSeconds"},{"name":"IntervalFromDays"},{"name":"IntervalFromHours"},{"name":"IntervalFromMicroseconds"},{"name":"IntervalFromMilliseconds"},{"name":"IntervalFromMinutes"},{"name":"IntervalFromSeconds"},{"name":"MakeDate"},{"name":"MakeDate32"},{"name":"MakeDatetime"},{"name":"MakeDatetime64"},{"name":"MakeTimestamp"},{"name":"MakeTimestamp64"},{"name":"MakeTzDate"},{"name":"MakeTzDate32"},{"name":"MakeTzDatetime"},{"name":"MakeTzDatetime64"},{"name":"MakeTzTimestamp"},{"name":"MakeTzTimestamp64"},{"name":"Parse"},{"name":"Parse64"},{"name":"ParseHttp"},{"name":"ParseIso8601"},{"name":"ParseRfc822"},{"name":"ParseX509"},{"name":"ShiftMonths"},{"name":"ShiftQuarters"},{"name":"ShiftYears"},{"name":"Split"},{"name":"StartOf"},{"name":"StartOfDay"},{"name":"StartOfMonth"},{"name":"StartOfQuarter"},{"name":"StartOfWeek"},{"name":"StartOfYear"},{"name":"TimeOfDay"},{"name":"ToDays"},{"name":"ToHours"},{"name":"ToMicroseconds"},{"name":"ToMilliseconds"},{"name":"ToMinutes"},{"name":"ToSeconds"},{"name":"Update"}],"Digest":[{"name":"Argon2"},{"name":"Blake2B"},{"name":"CityHash"},{"name":"CityHash128"},{"name":"Crc32c"},{"name":"Crc64"},{"name":"FarmHashFingerprint"},{"name":"FarmHashFingerprint128"},{"name":"FarmHashFingerprint2"},{"name":"FarmHashFingerprint32"},{"name":"FarmHashFingerprint64"},{"name":"Fnv32"},{"name":"Fnv64"},{"name":"HighwayHash"},{"name":"IntHash64"},{"name":"Md5HalfMix"},{"name":"Md5Hex"},{"name":"Md5Raw"},{"name":"MurMurHash"},{"name":"MurMurHash2A"},{"name":"MurMurHash2A32"},{"name":"MurMurHash32"},{"name":"NumericHash"},{"name":"Sha1"},{"name":"Sha256"},{"name":"Sha512"},{"name":"SipHash"},{"name":"SuperFastHash"},{"name":"XXH3"},{"name":"XXH3_128"}],"Hyperscan":[{"name":"BacktrackingGrep"},{"name":"BacktrackingMatch"},{"name":"Capture"},{"name":"Grep"},{"name":"Match"},{"name":"MultiGrep"},{"name":"MultiMatch"},{"name":"Replace"}],"Ip":[{"name":"ConvertToIPv6"},{"name":"FromString"},{"name":"GetSubnet"},{"name":"GetSubnetByMask"},{"name":"IsEmbeddedIPv4"},{"name":"IsIPv4"},{"name":"IsIPv6"},{"name":"SubnetFromString"},{"name":"SubnetMatch"},{"name":"SubnetToString"},{"name":"ToFixedIPv6String"},{"name":"ToString"}],"Json":[{"name":"GetField"}],"Math":[{"name":"Abs"},{"name":"Acos"},{"name":"Asin"},{"name":"Asinh"},{"name":"Atan"},{"name":"Atan2"},{"name":"Cbrt"},{"name":"Ceil"},{"name":"Cos"},{"name":"Cosh"},{"name":"E"},{"name":"Eps"},{"name":"Erf"},{"name":"ErfInv"},{"name":"ErfcInv"},{"name":"Exp"},{"name":"Exp2"},{"name":"Fabs"},{"name":"Floor"},{"name":"Fmod"},{"name":"FuzzyEquals"},{"name":"Hypot"},{"name":"IsFinite"},{"name":"IsInf"},{"name":"IsNaN"},{"name":"Ldexp"},{"name":"Lgamma"},{"name":"Log"},{"name":"Log10"},{"name":"Log2"},{"name":"Mod"},{"name":"NearbyInt"},{"name":"Pi"},{"name":"Pow"},{"name":"Rem"},{"name":"Remainder"},{"name":"Rint"},{"name":"Round"},{"name":"RoundDownward"},{"name":"RoundToNearest"},{"name":"RoundTowardZero"},{"name":"RoundUpward"},{"name":"Sigmoid"},{"name":"Sin"},{"name":"Sinh"},{"name":"Sqrt"},{"name":"Tan"},{"name":"Tanh"},{"name":"Tgamma"},{"name":"Trunc"}],"Pire":[{"name":"Capture"},{"name":"Grep"},{"name":"Match"},{"name":"MultiGrep"},{"name":"MultiMatch"},{"name":"Replace"}],"Re2":[{"name":"Capture"},{"name":"Count"},{"name":"Escape"},{"name":"FindAndConsume"},{"name":"Grep"},{"name":"Match"},{"name":"Options"},{"name":"PatternFromLike"},{"name":"Replace"}],"Re2posix":[{"name":"Capture"},{"name":"Count"},{"name":"Escape"},{"name":"FindAndConsume"},{"name":"Grep"},{"name":"Match"},{"name":"Options"},{"name":"PatternFromLike"},{"name":"Replace"}],"String":[{"name":"AsciiContainsIgnoreCase"},{"name":"AsciiEndsWithIgnoreCase"},{"name":"AsciiEqualsIgnoreCase"},{"name":"AsciiStartsWithIgnoreCase"},{"name":"AsciiToLower"},{"name":"AsciiToTitle"},{"name":"AsciiToUpper"},{"name":"Base32Decode"},{"name":"Base32Encode"},{"name":"Base32StrictDecode"},{"name":"Base64Decode"},{"name":"Base64Encode"},{"name":"Base64EncodeUrl"},{"name":"Base64StrictDecode"},{"name":"Bin"},{"name":"BinText"},{"name":"CgiEscape"},{"name":"CgiUnescape"},{"name":"Collapse"},{"name":"CollapseText"},{"name":"Contains"},{"name":"DecodeHtml"},{"name":"EncodeHtml"},{"name":"EndsWith"},{"name":"EndsWithIgnoreCase"},{"name":"EscapeC"},{"name":"FromByteList"},{"name":"HasPrefix"},{"name":"HasPrefixIgnoreCase"},{"name":"HasSuffix"},{"name":"HasSuffixIgnoreCase"},{"name":"Hex"},{"name":"HexDecode"},{"name":"HexEncode"},{"name":"HexText"},{"name":"HumanReadableBytes"},{"name":"HumanReadableDuration"},{"name":"HumanReadableQuantity"},{"name":"IsAscii"},{"name":"IsAsciiAlnum"},{"name":"IsAsciiAlpha"},{"name":"IsAsciiDigit"},{"name":"IsAsciiHex"},{"name":"IsAsciiLower"},{"name":"IsAsciiSpace"},{"name":"IsAsciiUpper"},{"name":"JoinFromList"},{"name":"LeftPad"},{"name":"LevensteinDistance"},{"name":"Prec"},{"name":"RemoveAll"},{"name":"RemoveFirst"},{"name":"RemoveLast"},{"name":"ReplaceAll"},{"name":"ReplaceFirst"},{"name":"ReplaceLast"},{"name":"ReverseBits"},{"name":"ReverseBytes"},{"name":"RightPad"},{"name":"SBin"},{"name":"SHex"},{"name":"SplitToList"},{"name":"StartsWith"},{"name":"StartsWithIgnoreCase"},{"name":"Strip"},{"name":"ToByteList"},{"name":"UnescapeC"}],"Unicode":[{"name":"Find"},{"name":"Fold"},{"name":"FromCodePointList"},{"name":"GetLength"},{"name":"IsAlnum"},{"name":"IsAlpha"},{"name":"IsAscii"},{"name":"IsDigit"},{"name":"IsHex"},{"name":"IsLower"},{"name":"IsSpace"},{"name":"IsUnicodeSet"},{"name":"IsUpper"},{"name":"IsUtf"},{"name":"JoinFromList"},{"name":"LevensteinDistance"},{"name":"Normalize"},{"name":"NormalizeNFC"},{"name":"NormalizeNFD"},{"name":"NormalizeNFKC"},{"name":"NormalizeNFKD"},{"name":"RFind"},{"name":"RemoveAll"},{"name":"RemoveFirst"},{"name":"RemoveLast"},{"name":"ReplaceAll"},{"name":"ReplaceFirst"},{"name":"ReplaceLast"},{"name":"Reverse"},{"name":"SplitToList"},{"name":"Strip"},{"name":"Substring"},{"name":"ToCodePointList"},{"name":"ToLower"},{"name":"ToTitle"},{"name":"ToUint64"},{"name":"ToUpper"},{"name":"Translit"},{"name":"TryToUint64"}],"Url":[{"name":"BuildQueryString"},{"name":"CanBePunycodeHostName"},{"name":"CutQueryStringAndFragment"},{"name":"CutScheme"},{"name":"CutWWW"},{"name":"CutWWW2"},{"name":"Decode"},{"name":"Encode"},{"name":"ForceHostNameToPunycode"},{"name":"ForcePunycodeToHostName"},{"name":"GetCGIParam"},{"name":"GetDomain"},{"name":"GetDomainLevel"},{"name":"GetFragment"},{"name":"GetHost"},{"name":"GetHostPort"},{"name":"GetOwner"},{"name":"GetPath"},{"name":"GetPort"},{"name":"GetScheme"},{"name":"GetSchemeHost"},{"name":"GetSchemeHostPort"},{"name":"GetSignificantDomain"},{"name":"GetTLD"},{"name":"GetTail"},{"name":"HostNameToPunycode"},{"name":"IsAllowedByRobotsTxt"},{"name":"IsKnownTLD"},{"name":"IsWellKnownTLD"},{"name":"Normalize"},{"name":"NormalizeWithDefaultHttpScheme"},{"name":"Parse"},{"name":"PunycodeToHostName"},{"name":"QueryStringToDict"},{"name":"QueryStringToList"}],"Yson":[{"name":"Attributes"},{"name":"Contains"},{"name":"ConvertTo"},{"name":"ConvertToBool"},{"name":"ConvertToBoolDict"},{"name":"ConvertToBoolList"},{"name":"ConvertToDict"},{"name":"ConvertToDouble"},{"name":"ConvertToDoubleDict"},{"name":"ConvertToDoubleList"},{"name":"ConvertToInt64"},{"name":"ConvertToInt64Dict"},{"name":"ConvertToInt64List"},{"name":"ConvertToList"},{"name":"ConvertToString"},{"name":"ConvertToStringDict"},{"name":"ConvertToStringList"},{"name":"ConvertToUint64"},{"name":"ConvertToUint64Dict"},{"name":"ConvertToUint64List"},{"name":"Equals"},{"name":"From"},{"name":"GetHash"},{"name":"GetLength"},{"name":"IsBool"},{"name":"IsDict"},{"name":"IsDouble"},{"name":"IsEntity"},{"name":"IsInt64"},{"name":"IsList"},{"name":"IsString"},{"name":"IsUint64"},{"name":"Lookup"},{"name":"LookupBool"},{"name":"LookupDict"},{"name":"LookupDouble"},{"name":"LookupInt64"},{"name":"LookupList"},{"name":"LookupString"},{"name":"LookupUint64"},{"name":"Options"},{"name":"Parse"},{"name":"ParseJson"},{"name":"ParseJsonDecodeUtf8"},{"name":"Serialize"},{"name":"SerializeJson"},{"name":"SerializePretty"},{"name":"SerializeText"},{"name":"WithAttributes"},{"name":"YPath"},{"name":"YPathBool"},{"name":"YPathDict"},{"name":"YPathDouble"},{"name":"YPathInt64"},{"name":"YPathList"},{"name":"YPathString"},{"name":"YPathUint64"}],"Compress":[{"name":"BZip2"},{"name":"Brotli"},{"name":"Gzip"},{"name":"Lz4"},{"name":"Lzf"},{"name":"Lzma"},{"name":"Lzo"},{"name":"Lzq"},{"name":"Snappy"},{"name":"Zlib"},{"name":"Zstd"}],"Decompress":[{"name":"BZip2"},{"name":"Brotli"},{"name":"Gzip"},{"name":"Lz4"},{"name":"Lzf"},{"name":"Lzma"},{"name":"Lzo"},{"name":"Lzq"},{"name":"Snappy"},{"name":"Xz"},{"name":"Zlib"},{"name":"Zstd"}],"Protobuf":[{"name":"Parse"},{"name":"Serialize"},{"name":"TryParse"}],"Streaming":[{"name":"Process"},{"name":"ProcessInline"}],"TryDecompress":[{"name":"BZip2"},{"name":"Brotli"},{"name":"Gzip"},{"name":"Lz4"},{"name":"Lzf"},{"name":"Lzma"},{"name":"Lzo"},{"name":"Lzq"},{"name":"Snappy"},{"name":"Xz"},{"name":"Zlib"},{"name":"Zstd"}]}
+{
+  "DateTime": [
+    {
+      "name": "Convert"
+    },
+    {
+      "name": "EndOf"
+    },
+    {
+      "name": "EndOfDay"
+    },
+    {
+      "name": "EndOfMonth"
+    },
+    {
+      "name": "EndOfQuarter"
+    },
+    {
+      "name": "EndOfWeek"
+    },
+    {
+      "name": "EndOfYear"
+    },
+    {
+      "name": "Format"
+    },
+    {
+      "name": "FromMicroseconds"
+    },
+    {
+      "name": "FromMicroseconds64"
+    },
+    {
+      "name": "FromMilliseconds"
+    },
+    {
+      "name": "FromMilliseconds64"
+    },
+    {
+      "name": "FromSeconds"
+    },
+    {
+      "name": "FromSeconds64"
+    },
+    {
+      "name": "GetDayOfMonth"
+    },
+    {
+      "name": "GetDayOfWeek"
+    },
+    {
+      "name": "GetDayOfWeekName"
+    },
+    {
+      "name": "GetDayOfYear"
+    },
+    {
+      "name": "GetHour"
+    },
+    {
+      "name": "GetMicrosecondOfSecond"
+    },
+    {
+      "name": "GetMillisecondOfSecond"
+    },
+    {
+      "name": "GetMinute"
+    },
+    {
+      "name": "GetMonth"
+    },
+    {
+      "name": "GetMonthName"
+    },
+    {
+      "name": "GetSecond"
+    },
+    {
+      "name": "GetTimezoneId"
+    },
+    {
+      "name": "GetTimezoneName"
+    },
+    {
+      "name": "GetWeekOfYear"
+    },
+    {
+      "name": "GetWeekOfYearIso8601"
+    },
+    {
+      "name": "GetYear"
+    },
+    {
+      "name": "Interval64FromDays"
+    },
+    {
+      "name": "Interval64FromHours"
+    },
+    {
+      "name": "Interval64FromMicroseconds"
+    },
+    {
+      "name": "Interval64FromMilliseconds"
+    },
+    {
+      "name": "Interval64FromMinutes"
+    },
+    {
+      "name": "Interval64FromSeconds"
+    },
+    {
+      "name": "IntervalFromDays"
+    },
+    {
+      "name": "IntervalFromHours"
+    },
+    {
+      "name": "IntervalFromMicroseconds"
+    },
+    {
+      "name": "IntervalFromMilliseconds"
+    },
+    {
+      "name": "IntervalFromMinutes"
+    },
+    {
+      "name": "IntervalFromSeconds"
+    },
+    {
+      "name": "MakeDate"
+    },
+    {
+      "name": "MakeDate32"
+    },
+    {
+      "name": "MakeDatetime"
+    },
+    {
+      "name": "MakeDatetime64"
+    },
+    {
+      "name": "MakeTimestamp"
+    },
+    {
+      "name": "MakeTimestamp64"
+    },
+    {
+      "name": "MakeTzDate"
+    },
+    {
+      "name": "MakeTzDate32"
+    },
+    {
+      "name": "MakeTzDatetime"
+    },
+    {
+      "name": "MakeTzDatetime64"
+    },
+    {
+      "name": "MakeTzTimestamp"
+    },
+    {
+      "name": "MakeTzTimestamp64"
+    },
+    {
+      "name": "Parse"
+    },
+    {
+      "name": "Parse64"
+    },
+    {
+      "name": "ParseHttp"
+    },
+    {
+      "name": "ParseIso8601"
+    },
+    {
+      "name": "ParseRfc822"
+    },
+    {
+      "name": "ParseX509"
+    },
+    {
+      "name": "ShiftMonths"
+    },
+    {
+      "name": "ShiftQuarters"
+    },
+    {
+      "name": "ShiftYears"
+    },
+    {
+      "name": "Split"
+    },
+    {
+      "name": "StartOf"
+    },
+    {
+      "name": "StartOfDay"
+    },
+    {
+      "name": "StartOfMonth"
+    },
+    {
+      "name": "StartOfQuarter"
+    },
+    {
+      "name": "StartOfWeek"
+    },
+    {
+      "name": "StartOfYear"
+    },
+    {
+      "name": "TimeOfDay"
+    },
+    {
+      "name": "ToDays"
+    },
+    {
+      "name": "ToHours"
+    },
+    {
+      "name": "ToMicroseconds"
+    },
+    {
+      "name": "ToMilliseconds"
+    },
+    {
+      "name": "ToMinutes"
+    },
+    {
+      "name": "ToSeconds"
+    },
+    {
+      "name": "Update"
+    }
+  ],
+  "Digest": [
+    {
+      "name": "Argon2"
+    },
+    {
+      "name": "Blake2B"
+    },
+    {
+      "name": "CityHash"
+    },
+    {
+      "name": "CityHash128"
+    },
+    {
+      "name": "Crc32c"
+    },
+    {
+      "name": "Crc64"
+    },
+    {
+      "name": "FarmHashFingerprint"
+    },
+    {
+      "name": "FarmHashFingerprint128"
+    },
+    {
+      "name": "FarmHashFingerprint2"
+    },
+    {
+      "name": "FarmHashFingerprint32"
+    },
+    {
+      "name": "FarmHashFingerprint64"
+    },
+    {
+      "name": "Fnv32"
+    },
+    {
+      "name": "Fnv64"
+    },
+    {
+      "name": "HighwayHash"
+    },
+    {
+      "name": "IntHash64"
+    },
+    {
+      "name": "Md5HalfMix"
+    },
+    {
+      "name": "Md5Hex"
+    },
+    {
+      "name": "Md5Raw"
+    },
+    {
+      "name": "MurMurHash"
+    },
+    {
+      "name": "MurMurHash2A"
+    },
+    {
+      "name": "MurMurHash2A32"
+    },
+    {
+      "name": "MurMurHash32"
+    },
+    {
+      "name": "NumericHash"
+    },
+    {
+      "name": "Sha1"
+    },
+    {
+      "name": "Sha256"
+    },
+    {
+      "name": "Sha512"
+    },
+    {
+      "name": "SipHash"
+    },
+    {
+      "name": "SuperFastHash"
+    },
+    {
+      "name": "XXH3"
+    },
+    {
+      "name": "XXH3_128"
+    }
+  ],
+  "Hyperscan": [
+    {
+      "name": "BacktrackingGrep"
+    },
+    {
+      "name": "BacktrackingMatch"
+    },
+    {
+      "name": "Capture"
+    },
+    {
+      "name": "Grep"
+    },
+    {
+      "name": "Match"
+    },
+    {
+      "name": "MultiGrep"
+    },
+    {
+      "name": "MultiMatch"
+    },
+    {
+      "name": "Replace"
+    }
+  ],
+  "Ip": [
+    {
+      "name": "ConvertToIPv6"
+    },
+    {
+      "name": "FromString"
+    },
+    {
+      "name": "GetSubnet"
+    },
+    {
+      "name": "GetSubnetByMask"
+    },
+    {
+      "name": "IsEmbeddedIPv4"
+    },
+    {
+      "name": "IsIPv4"
+    },
+    {
+      "name": "IsIPv6"
+    },
+    {
+      "name": "SubnetFromString"
+    },
+    {
+      "name": "SubnetMatch"
+    },
+    {
+      "name": "SubnetToString"
+    },
+    {
+      "name": "ToFixedIPv6String"
+    },
+    {
+      "name": "ToString"
+    }
+  ],
+  "Json": [
+    {
+      "name": "GetField"
+    }
+  ],
+  "Math": [
+    {
+      "name": "Abs"
+    },
+    {
+      "name": "Acos"
+    },
+    {
+      "name": "Asin"
+    },
+    {
+      "name": "Asinh"
+    },
+    {
+      "name": "Atan"
+    },
+    {
+      "name": "Atan2"
+    },
+    {
+      "name": "Cbrt"
+    },
+    {
+      "name": "Ceil"
+    },
+    {
+      "name": "Cos"
+    },
+    {
+      "name": "Cosh"
+    },
+    {
+      "name": "E"
+    },
+    {
+      "name": "Eps"
+    },
+    {
+      "name": "Erf"
+    },
+    {
+      "name": "ErfInv"
+    },
+    {
+      "name": "ErfcInv"
+    },
+    {
+      "name": "Exp"
+    },
+    {
+      "name": "Exp2"
+    },
+    {
+      "name": "Fabs"
+    },
+    {
+      "name": "Floor"
+    },
+    {
+      "name": "Fmod"
+    },
+    {
+      "name": "FuzzyEquals"
+    },
+    {
+      "name": "Hypot"
+    },
+    {
+      "name": "IsFinite"
+    },
+    {
+      "name": "IsInf"
+    },
+    {
+      "name": "IsNaN"
+    },
+    {
+      "name": "Ldexp"
+    },
+    {
+      "name": "Lgamma"
+    },
+    {
+      "name": "Log"
+    },
+    {
+      "name": "Log10"
+    },
+    {
+      "name": "Log2"
+    },
+    {
+      "name": "Mod"
+    },
+    {
+      "name": "NearbyInt"
+    },
+    {
+      "name": "Pi"
+    },
+    {
+      "name": "Pow"
+    },
+    {
+      "name": "Rem"
+    },
+    {
+      "name": "Remainder"
+    },
+    {
+      "name": "Rint"
+    },
+    {
+      "name": "Round"
+    },
+    {
+      "name": "RoundDownward"
+    },
+    {
+      "name": "RoundToNearest"
+    },
+    {
+      "name": "RoundTowardZero"
+    },
+    {
+      "name": "RoundUpward"
+    },
+    {
+      "name": "Sigmoid"
+    },
+    {
+      "name": "Sin"
+    },
+    {
+      "name": "Sinh"
+    },
+    {
+      "name": "Sqrt"
+    },
+    {
+      "name": "Tan"
+    },
+    {
+      "name": "Tanh"
+    },
+    {
+      "name": "Tgamma"
+    },
+    {
+      "name": "Trunc"
+    }
+  ],
+  "Pire": [
+    {
+      "name": "Capture"
+    },
+    {
+      "name": "Grep"
+    },
+    {
+      "name": "Match"
+    },
+    {
+      "name": "MultiGrep"
+    },
+    {
+      "name": "MultiMatch"
+    },
+    {
+      "name": "Replace"
+    }
+  ],
+  "Protobuf": [
+    {
+      "name": "Parse"
+    },
+    {
+      "name": "Serialize"
+    },
+    {
+      "name": "TryParse"
+    }
+  ],
+  "Re2": [
+    {
+      "name": "Capture"
+    },
+    {
+      "name": "Count"
+    },
+    {
+      "name": "Escape"
+    },
+    {
+      "name": "FindAndConsume"
+    },
+    {
+      "name": "Grep"
+    },
+    {
+      "name": "Match"
+    },
+    {
+      "name": "Options"
+    },
+    {
+      "name": "PatternFromLike"
+    },
+    {
+      "name": "Replace"
+    }
+  ],
+  "Re2posix": [
+    {
+      "name": "Capture"
+    },
+    {
+      "name": "Count"
+    },
+    {
+      "name": "Escape"
+    },
+    {
+      "name": "FindAndConsume"
+    },
+    {
+      "name": "Grep"
+    },
+    {
+      "name": "Match"
+    },
+    {
+      "name": "Options"
+    },
+    {
+      "name": "PatternFromLike"
+    },
+    {
+      "name": "Replace"
+    }
+  ],
+  "String": [
+    {
+      "name": "AsciiContainsIgnoreCase"
+    },
+    {
+      "name": "AsciiEndsWithIgnoreCase"
+    },
+    {
+      "name": "AsciiEqualsIgnoreCase"
+    },
+    {
+      "name": "AsciiStartsWithIgnoreCase"
+    },
+    {
+      "name": "AsciiToLower"
+    },
+    {
+      "name": "AsciiToTitle"
+    },
+    {
+      "name": "AsciiToUpper"
+    },
+    {
+      "name": "Base32Decode"
+    },
+    {
+      "name": "Base32Encode"
+    },
+    {
+      "name": "Base32StrictDecode"
+    },
+    {
+      "name": "Base64Decode"
+    },
+    {
+      "name": "Base64Encode"
+    },
+    {
+      "name": "Base64EncodeUrl"
+    },
+    {
+      "name": "Base64StrictDecode"
+    },
+    {
+      "name": "Bin"
+    },
+    {
+      "name": "BinText"
+    },
+    {
+      "name": "CgiEscape"
+    },
+    {
+      "name": "CgiUnescape"
+    },
+    {
+      "name": "Collapse"
+    },
+    {
+      "name": "CollapseText"
+    },
+    {
+      "name": "Contains"
+    },
+    {
+      "name": "DecodeHtml"
+    },
+    {
+      "name": "EncodeHtml"
+    },
+    {
+      "name": "EndsWith"
+    },
+    {
+      "name": "EndsWithIgnoreCase"
+    },
+    {
+      "name": "EscapeC"
+    },
+    {
+      "name": "FromByteList"
+    },
+    {
+      "name": "HasPrefix"
+    },
+    {
+      "name": "HasPrefixIgnoreCase"
+    },
+    {
+      "name": "HasSuffix"
+    },
+    {
+      "name": "HasSuffixIgnoreCase"
+    },
+    {
+      "name": "Hex"
+    },
+    {
+      "name": "HexDecode"
+    },
+    {
+      "name": "HexEncode"
+    },
+    {
+      "name": "HexText"
+    },
+    {
+      "name": "HumanReadableBytes"
+    },
+    {
+      "name": "HumanReadableDuration"
+    },
+    {
+      "name": "HumanReadableQuantity"
+    },
+    {
+      "name": "IsAscii"
+    },
+    {
+      "name": "IsAsciiAlnum"
+    },
+    {
+      "name": "IsAsciiAlpha"
+    },
+    {
+      "name": "IsAsciiDigit"
+    },
+    {
+      "name": "IsAsciiHex"
+    },
+    {
+      "name": "IsAsciiLower"
+    },
+    {
+      "name": "IsAsciiSpace"
+    },
+    {
+      "name": "IsAsciiUpper"
+    },
+    {
+      "name": "JoinFromList"
+    },
+    {
+      "name": "LeftPad"
+    },
+    {
+      "name": "LevensteinDistance"
+    },
+    {
+      "name": "Prec"
+    },
+    {
+      "name": "RemoveAll"
+    },
+    {
+      "name": "RemoveFirst"
+    },
+    {
+      "name": "RemoveLast"
+    },
+    {
+      "name": "ReplaceAll"
+    },
+    {
+      "name": "ReplaceFirst"
+    },
+    {
+      "name": "ReplaceLast"
+    },
+    {
+      "name": "ReverseBits"
+    },
+    {
+      "name": "ReverseBytes"
+    },
+    {
+      "name": "RightPad"
+    },
+    {
+      "name": "SBin"
+    },
+    {
+      "name": "SHex"
+    },
+    {
+      "name": "SplitToList"
+    },
+    {
+      "name": "StartsWith"
+    },
+    {
+      "name": "StartsWithIgnoreCase"
+    },
+    {
+      "name": "Strip"
+    },
+    {
+      "name": "ToByteList"
+    },
+    {
+      "name": "UnescapeC"
+    }
+  ],
+  "Unicode": [
+    {
+      "name": "Find"
+    },
+    {
+      "name": "Fold"
+    },
+    {
+      "name": "FromCodePointList"
+    },
+    {
+      "name": "GetLength"
+    },
+    {
+      "name": "IsAlnum"
+    },
+    {
+      "name": "IsAlpha"
+    },
+    {
+      "name": "IsAscii"
+    },
+    {
+      "name": "IsDigit"
+    },
+    {
+      "name": "IsHex"
+    },
+    {
+      "name": "IsLower"
+    },
+    {
+      "name": "IsSpace"
+    },
+    {
+      "name": "IsUnicodeSet"
+    },
+    {
+      "name": "IsUpper"
+    },
+    {
+      "name": "IsUtf"
+    },
+    {
+      "name": "JoinFromList"
+    },
+    {
+      "name": "LevensteinDistance"
+    },
+    {
+      "name": "Normalize"
+    },
+    {
+      "name": "NormalizeNFC"
+    },
+    {
+      "name": "NormalizeNFD"
+    },
+    {
+      "name": "NormalizeNFKC"
+    },
+    {
+      "name": "NormalizeNFKD"
+    },
+    {
+      "name": "RFind"
+    },
+    {
+      "name": "RemoveAll"
+    },
+    {
+      "name": "RemoveFirst"
+    },
+    {
+      "name": "RemoveLast"
+    },
+    {
+      "name": "ReplaceAll"
+    },
+    {
+      "name": "ReplaceFirst"
+    },
+    {
+      "name": "ReplaceLast"
+    },
+    {
+      "name": "Reverse"
+    },
+    {
+      "name": "SplitToList"
+    },
+    {
+      "name": "Strip"
+    },
+    {
+      "name": "Substring"
+    },
+    {
+      "name": "ToCodePointList"
+    },
+    {
+      "name": "ToLower"
+    },
+    {
+      "name": "ToTitle"
+    },
+    {
+      "name": "ToUint64"
+    },
+    {
+      "name": "ToUpper"
+    },
+    {
+      "name": "Translit"
+    },
+    {
+      "name": "TryToUint64"
+    }
+  ],
+  "Url": [
+    {
+      "name": "BuildQueryString"
+    },
+    {
+      "name": "CanBePunycodeHostName"
+    },
+    {
+      "name": "CutQueryStringAndFragment"
+    },
+    {
+      "name": "CutScheme"
+    },
+    {
+      "name": "CutWWW"
+    },
+    {
+      "name": "CutWWW2"
+    },
+    {
+      "name": "Decode"
+    },
+    {
+      "name": "Encode"
+    },
+    {
+      "name": "ForceHostNameToPunycode"
+    },
+    {
+      "name": "ForcePunycodeToHostName"
+    },
+    {
+      "name": "GetCGIParam"
+    },
+    {
+      "name": "GetDomain"
+    },
+    {
+      "name": "GetDomainLevel"
+    },
+    {
+      "name": "GetFragment"
+    },
+    {
+      "name": "GetHost"
+    },
+    {
+      "name": "GetHostPort"
+    },
+    {
+      "name": "GetOwner"
+    },
+    {
+      "name": "GetPath"
+    },
+    {
+      "name": "GetPort"
+    },
+    {
+      "name": "GetScheme"
+    },
+    {
+      "name": "GetSchemeHost"
+    },
+    {
+      "name": "GetSchemeHostPort"
+    },
+    {
+      "name": "GetSignificantDomain"
+    },
+    {
+      "name": "GetTLD"
+    },
+    {
+      "name": "GetTail"
+    },
+    {
+      "name": "HostNameToPunycode"
+    },
+    {
+      "name": "IsAllowedByRobotsTxt"
+    },
+    {
+      "name": "IsKnownTLD"
+    },
+    {
+      "name": "IsWellKnownTLD"
+    },
+    {
+      "name": "Normalize"
+    },
+    {
+      "name": "NormalizeWithDefaultHttpScheme"
+    },
+    {
+      "name": "Parse"
+    },
+    {
+      "name": "PunycodeToHostName"
+    },
+    {
+      "name": "QueryStringToDict"
+    },
+    {
+      "name": "QueryStringToList"
+    }
+  ],
+  "Yson": [
+    {
+      "name": "Attributes"
+    },
+    {
+      "name": "Contains"
+    },
+    {
+      "name": "ConvertTo"
+    },
+    {
+      "name": "ConvertToBool"
+    },
+    {
+      "name": "ConvertToBoolDict"
+    },
+    {
+      "name": "ConvertToBoolList"
+    },
+    {
+      "name": "ConvertToDict"
+    },
+    {
+      "name": "ConvertToDouble"
+    },
+    {
+      "name": "ConvertToDoubleDict"
+    },
+    {
+      "name": "ConvertToDoubleList"
+    },
+    {
+      "name": "ConvertToInt64"
+    },
+    {
+      "name": "ConvertToInt64Dict"
+    },
+    {
+      "name": "ConvertToInt64List"
+    },
+    {
+      "name": "ConvertToList"
+    },
+    {
+      "name": "ConvertToString"
+    },
+    {
+      "name": "ConvertToStringDict"
+    },
+    {
+      "name": "ConvertToStringList"
+    },
+    {
+      "name": "ConvertToUint64"
+    },
+    {
+      "name": "ConvertToUint64Dict"
+    },
+    {
+      "name": "ConvertToUint64List"
+    },
+    {
+      "name": "Equals"
+    },
+    {
+      "name": "From"
+    },
+    {
+      "name": "GetHash"
+    },
+    {
+      "name": "GetLength"
+    },
+    {
+      "name": "IsBool"
+    },
+    {
+      "name": "IsDict"
+    },
+    {
+      "name": "IsDouble"
+    },
+    {
+      "name": "IsEntity"
+    },
+    {
+      "name": "IsInt64"
+    },
+    {
+      "name": "IsList"
+    },
+    {
+      "name": "IsString"
+    },
+    {
+      "name": "IsUint64"
+    },
+    {
+      "name": "Lookup"
+    },
+    {
+      "name": "LookupBool"
+    },
+    {
+      "name": "LookupDict"
+    },
+    {
+      "name": "LookupDouble"
+    },
+    {
+      "name": "LookupInt64"
+    },
+    {
+      "name": "LookupList"
+    },
+    {
+      "name": "LookupString"
+    },
+    {
+      "name": "LookupUint64"
+    },
+    {
+      "name": "Options"
+    },
+    {
+      "name": "Parse"
+    },
+    {
+      "name": "ParseJson"
+    },
+    {
+      "name": "ParseJsonDecodeUtf8"
+    },
+    {
+      "name": "Serialize"
+    },
+    {
+      "name": "SerializeJson"
+    },
+    {
+      "name": "SerializePretty"
+    },
+    {
+      "name": "SerializeText"
+    },
+    {
+      "name": "WithAttributes"
+    },
+    {
+      "name": "YPath"
+    },
+    {
+      "name": "YPathBool"
+    },
+    {
+      "name": "YPathDict"
+    },
+    {
+      "name": "YPathDouble"
+    },
+    {
+      "name": "YPathInt64"
+    },
+    {
+      "name": "YPathList"
+    },
+    {
+      "name": "YPathString"
+    },
+    {
+      "name": "YPathUint64"
+    }
+  ],
+  "Compress": [
+    {
+      "name": "BZip2"
+    },
+    {
+      "name": "Brotli"
+    },
+    {
+      "name": "Gzip"
+    },
+    {
+      "name": "Lz4"
+    },
+    {
+      "name": "Lzf"
+    },
+    {
+      "name": "Lzma"
+    },
+    {
+      "name": "Lzo"
+    },
+    {
+      "name": "Lzq"
+    },
+    {
+      "name": "Snappy"
+    },
+    {
+      "name": "Zlib"
+    },
+    {
+      "name": "Zstd"
+    }
+  ],
+  "Decompress": [
+    {
+      "name": "BZip2"
+    },
+    {
+      "name": "Brotli"
+    },
+    {
+      "name": "Gzip"
+    },
+    {
+      "name": "Lz4"
+    },
+    {
+      "name": "Lzf"
+    },
+    {
+      "name": "Lzma"
+    },
+    {
+      "name": "Lzo"
+    },
+    {
+      "name": "Lzq"
+    },
+    {
+      "name": "Snappy"
+    },
+    {
+      "name": "Xz"
+    },
+    {
+      "name": "Zlib"
+    },
+    {
+      "name": "Zstd"
+    }
+  ],
+  "Streaming": [
+    {
+      "name": "Process"
+    },
+    {
+      "name": "ProcessInline"
+    }
+  ],
+  "TryDecompress": [
+    {
+      "name": "BZip2"
+    },
+    {
+      "name": "Brotli"
+    },
+    {
+      "name": "Gzip"
+    },
+    {
+      "name": "Lz4"
+    },
+    {
+      "name": "Lzf"
+    },
+    {
+      "name": "Lzma"
+    },
+    {
+      "name": "Lzo"
+    },
+    {
+      "name": "Lzq"
+    },
+    {
+      "name": "Snappy"
+    },
+    {
+      "name": "Xz"
+    },
+    {
+      "name": "Zlib"
+    },
+    {
+      "name": "Zstd"
+    }
+  ]
+}

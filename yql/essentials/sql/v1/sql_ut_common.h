@@ -911,7 +911,7 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
 
     Y_UNIT_TEST(SelectOrderByExpressionAsc) {
         NYql::TAstParseResult res = SqlToYql("select i.key, i.subkey from plato.Input as i order by cast(key as uint32) % cast(i.subkey as uint32) asc");
-        UNIT_ASSERT(res.Root);
+        UNIT_ASSERT_C(res.Root, res.Issues.ToString());
         TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
             if (word == "Sort") {
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("\"%MayWarn\""));
@@ -1805,7 +1805,7 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
     Y_UNIT_TEST(IntersectAllTest) {
         NSQLTranslation::TTranslationSettings settings;
         settings.LangVer = 202503;
-        NYql::TAstParseResult res = SqlToYqlWithSettings("SELECT key FROM plato.Input INTERSECT ALL select subkey FROM plato.Input;", settings);
+        NYql::TAstParseResult res = SqlToYqlWithSettings("SELECT key FROM plato.Input INTERSECT ALL SELECT subkey FROM plato.Input;", settings);
         UNIT_ASSERT(res.Root);
 
         TWordCountHive elementStat = {{TString("IntersectAll"), 0}};
@@ -1816,7 +1816,7 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
     Y_UNIT_TEST(IntersectTest) {
         NSQLTranslation::TTranslationSettings settings;
         settings.LangVer = 202503;
-        NYql::TAstParseResult res = SqlToYqlWithSettings("SELECT key FROM plato.Input INTERSECT select subkey FROM plato.Input;", settings);
+        NYql::TAstParseResult res = SqlToYqlWithSettings("SELECT key FROM plato.Input INTERSECT SELECT subkey FROM plato.Input;", settings);
         UNIT_ASSERT(res.Root);
 
         TWordCountHive elementStat = {{TString("Intersect"), 0}};
@@ -1827,7 +1827,7 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
     Y_UNIT_TEST(IntersectDistinctTest) {
         NSQLTranslation::TTranslationSettings settings;
         settings.LangVer = 202503;
-        NYql::TAstParseResult res = SqlToYqlWithSettings("SELECT key FROM plato.Input INTERSECT DISTINCT select subkey FROM plato.Input;", settings);
+        NYql::TAstParseResult res = SqlToYqlWithSettings("SELECT key FROM plato.Input INTERSECT DISTINCT SELECT subkey FROM plato.Input;", settings);
         UNIT_ASSERT(res.Root);
 
         TWordCountHive elementStat = {{TString("Intersect"), 0}};
@@ -1835,12 +1835,61 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Intersect"]);
     }
 
+    Y_UNIT_TEST(IntersectAllPositionalTest) {
+        NSQLTranslation::TTranslationSettings settings;
+        settings.LangVer = 202503;
+        NYql::TAstParseResult res = SqlToYqlWithSettings("PRAGMA PositionalUnionAll; SELECT key FROM plato.Input INTERSECT ALL SELECT subkey FROM plato.Input;", settings);
+        UNIT_ASSERT(res.Root);
+
+        TWordCountHive elementStat = {{TString("IntersectAllPositional"), 0}};
+        VerifyProgram(res, elementStat, {});
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["IntersectAllPositional"]);
+    }
+
+    Y_UNIT_TEST(IntersectDistinctPositionalTest) {
+        NSQLTranslation::TTranslationSettings settings;
+        settings.LangVer = 202503;
+        NYql::TAstParseResult res = SqlToYqlWithSettings("PRAGMA PositionalUnionAll; SELECT key FROM plato.Input INTERSECT DISTINCT SELECT subkey FROM plato.Input;", settings);
+        UNIT_ASSERT(res.Root);
+
+        TWordCountHive elementStat = {{TString("IntersectPositional"), 0}};
+        VerifyProgram(res, elementStat, {});
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["IntersectPositional"]);
+    }
+
+    Y_UNIT_TEST(MultipleIntersectTest) {
+        NSQLTranslation::TTranslationSettings settings;
+        settings.LangVer = 202503;
+
+        NYql::TAstParseResult res = SqlToYqlWithSettings("SELECT key FROM plato.Input INTERSECT SELECT subkey FROM plato.Input INTERSECT SELECT subkey FROM plato.Input;", settings);
+        UNIT_ASSERT(res.Root);
+
+        TWordCountHive elementStat = {{TString("Intersect"), 0}};
+        VerifyProgram(res, elementStat, {});
+        UNIT_ASSERT_VALUES_EQUAL(2, elementStat["Intersect"]);
+
+        res = SqlToYqlWithSettings("SELECT key FROM plato.Input INTERSECT SELECT subkey FROM plato.Input INTERSECT ALL SELECT subkey FROM plato.Input;", settings);
+        UNIT_ASSERT(res.Root);
+
+        elementStat = {{TString("Intersect"), 0}};
+        VerifyProgram(res, elementStat, {});
+        UNIT_ASSERT_VALUES_EQUAL(2, elementStat["Intersect"]);
+
+        res = SqlToYqlWithSettings("SELECT key FROM plato.Input INTERSECT SELECT subkey FROM plato.Input UNION SELECT subkey FROM plato.Input;", settings);
+        UNIT_ASSERT(res.Root);
+
+        elementStat = {{TString("Intersect"), 0}, {TString("Union"), 0}};
+        VerifyProgram(res, elementStat, {});
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Intersect"]);
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Union"]);
+    }
+
     // EXCEPT
 
     Y_UNIT_TEST(ExceptAllTest) {
         NSQLTranslation::TTranslationSettings settings;
         settings.LangVer = 202503;
-        NYql::TAstParseResult res = SqlToYqlWithSettings("SELECT key FROM plato.Input EXCEPT ALL select subkey FROM plato.Input;", settings);
+        NYql::TAstParseResult res = SqlToYqlWithSettings("SELECT key FROM plato.Input EXCEPT ALL SELECT subkey FROM plato.Input;", settings);
         UNIT_ASSERT(res.Root);
 
         TWordCountHive elementStat = {{TString("ExceptAll"), 0}};
@@ -1851,7 +1900,7 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
     Y_UNIT_TEST(ExceptTest) {
         NSQLTranslation::TTranslationSettings settings;
         settings.LangVer = 202503;
-        NYql::TAstParseResult res = SqlToYqlWithSettings("SELECT key FROM plato.Input EXCEPT select subkey FROM plato.Input;", settings);
+        NYql::TAstParseResult res = SqlToYqlWithSettings("SELECT key FROM plato.Input EXCEPT SELECT subkey FROM plato.Input;", settings);
         UNIT_ASSERT(res.Root);
 
         TWordCountHive elementStat = {{TString("Except"), 0}};
@@ -1862,12 +1911,61 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
     Y_UNIT_TEST(ExceptDistinctTest) {
         NSQLTranslation::TTranslationSettings settings;
         settings.LangVer = 202503;
-        NYql::TAstParseResult res = SqlToYqlWithSettings("SELECT key FROM plato.Input EXCEPT DISTINCT select subkey FROM plato.Input;", settings);
+        NYql::TAstParseResult res = SqlToYqlWithSettings("SELECT key FROM plato.Input EXCEPT DISTINCT SELECT subkey FROM plato.Input;", settings);
         UNIT_ASSERT(res.Root);
 
         TWordCountHive elementStat = {{TString("Except"), 0}};
         VerifyProgram(res, elementStat, {});
         UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Except"]);
+    }
+
+    Y_UNIT_TEST(ExceptAllPositionalTest) {
+        NSQLTranslation::TTranslationSettings settings;
+        settings.LangVer = 202503;
+        NYql::TAstParseResult res = SqlToYqlWithSettings("PRAGMA PositionalUnionAll; SELECT key FROM plato.Input EXCEPT ALL SELECT subkey FROM plato.Input;", settings);
+        UNIT_ASSERT(res.Root);
+
+        TWordCountHive elementStat = {{TString("ExceptAllPositional"), 0}};
+        VerifyProgram(res, elementStat, {});
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["ExceptAllPositional"]);
+    }
+
+    Y_UNIT_TEST(ExceptDistinctPositionalTest) {
+        NSQLTranslation::TTranslationSettings settings;
+        settings.LangVer = 202503;
+        NYql::TAstParseResult res = SqlToYqlWithSettings("PRAGMA PositionalUnionAll; SELECT key FROM plato.Input EXCEPT DISTINCT SELECT subkey FROM plato.Input;", settings);
+        UNIT_ASSERT(res.Root);
+
+        TWordCountHive elementStat = {{TString("ExceptPositional"), 0}};
+        VerifyProgram(res, elementStat, {});
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["ExceptPositional"]);
+    }
+
+    Y_UNIT_TEST(MultipleExceptTest) {
+        NSQLTranslation::TTranslationSettings settings;
+        settings.LangVer = 202503;
+
+        NYql::TAstParseResult res = SqlToYqlWithSettings("SELECT key FROM plato.Input EXCEPT SELECT subkey FROM plato.Input EXCEPT SELECT subkey FROM plato.Input;", settings);
+        UNIT_ASSERT(res.Root);
+
+        TWordCountHive elementStat = {{TString("Except"), 0}};
+        VerifyProgram(res, elementStat, {});
+        UNIT_ASSERT_VALUES_EQUAL(2, elementStat["Except"]);
+
+        res = SqlToYqlWithSettings("SELECT key FROM plato.Input EXCEPT SELECT subkey FROM plato.Input EXCEPT ALL SELECT subkey FROM plato.Input;", settings);
+        UNIT_ASSERT(res.Root);
+
+        elementStat = {{TString("Except"), 0}};
+        VerifyProgram(res, elementStat, {});
+        UNIT_ASSERT_VALUES_EQUAL(2, elementStat["Except"]);
+
+        res = SqlToYqlWithSettings("SELECT key FROM plato.Input EXCEPT SELECT subkey FROM plato.Input UNION SELECT subkey FROM plato.Input;", settings);
+        UNIT_ASSERT(res.Root);
+
+        elementStat = {{TString("Except"), 0}, {TString("Union"), 0}};
+        VerifyProgram(res, elementStat, {});
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Except"]);
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Union"]);
     }
 
 

@@ -192,6 +192,8 @@
 #include <ydb/core/tx/conveyor_composite/service/service.h>
 #include <ydb/core/tx/conveyor_composite/usage/config.h>
 #include <ydb/core/tx/conveyor_composite/usage/service.h>
+#include <ydb/core/tx/columnshard/data_accessor/cache_policy/policy.h>
+#include <ydb/core/tx/general_cache/usage/service.h>
 #include <ydb/core/tx/priorities/usage/config.h>
 #include <ydb/core/tx/priorities/usage/service.h>
 
@@ -728,9 +730,38 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
 
             if (Config.HasBridgeConfig()) {
                 // when we work in Bridge mode, we need special actor to ensure connectivity check between nodes
-                const TActorId actorId = MakeDistconfConnectionCheckerActorId();
-                setup->LocalServices.emplace_back(actorId, TActorSetupCmd(CreateDistconfConnectionCheckerActor(),
-                    TMailboxType::ReadAsFilled, interconnectPoolId));
+                const auto& bridge = Config.GetBridgeConfig();
+                TString name;
+
+                if (Config.GetDynamicNodeConfig().HasNodeInfo()) {
+                    const auto& nodeInfo = Config.GetDynamicNodeConfig().GetNodeInfo();
+                    Y_ABORT_UNLESS(nodeInfo.HasLocation());
+                    const auto& bridgePileName = TNodeLocation(nodeInfo.GetLocation()).GetBridgePileName();
+                    Y_ABORT_UNLESS(bridgePileName);
+                    name = *bridgePileName;
+                } else {
+                    const auto it = table->StaticNodeTable.find(NodeId);
+                    Y_ABORT_UNLESS(it != table->StaticNodeTable.end());
+                    const auto& entry = it->second;
+                    const auto& bridgePileName = entry.Location.GetBridgePileName();
+                    Y_ABORT_UNLESS(bridgePileName);
+                    name = *bridgePileName;
+                }
+
+                size_t i;
+                for (i = 0; i < bridge.PilesSize(); ++i) {
+                    if (bridge.GetPiles(i).GetName() == name) {
+                        break;
+                    }
+                }
+                Y_ABORT_UNLESS(i != bridge.PilesSize());
+                const auto selfBridgePileId = TBridgePileId::FromValue(i);
+
+                const TActorId actorId = MakeDistconfBridgeConnectionCheckerActorId();
+                setup->LocalServices.emplace_back(actorId, TActorSetupCmd(
+                    CreateDistconfBridgeConnectionCheckerActor(selfBridgePileId),
+                    TMailboxType::ReadAsFilled,
+                    interconnectPoolId));
                 icCommon->ConnectionCheckerActorIds.push_back(actorId);
             }
 
@@ -1643,11 +1674,10 @@ TGRpcServicesInitializer::TGRpcServicesInitializer(
 void TGRpcServicesInitializer::InitializeServices(NActors::TActorSystemSetup* setup,
                                                   const NKikimr::TAppData* appData)
 {
-    auto& systemConfig = Config.GetActorSystemConfig();
     bool hasASCfg = Config.HasActorSystemConfig();
+    bool useAutoConfig = !hasASCfg || NeedToUseAutoConfig(Config.GetActorSystemConfig());
 
-    if (!hasASCfg || (systemConfig.HasUseAutoConfig() && systemConfig.GetUseAutoConfig())) {
-
+    if (useAutoConfig) {
         NAutoConfigInitializer::ApplyAutoConfig(Config.MutableGRpcConfig(), Config.GetActorSystemConfig());
     }
 
@@ -2267,6 +2297,29 @@ void TCompPrioritiesInitializer::InitializeServices(NActors::TActorSystemSetup* 
     }
 }
 
+TGeneralCachePortionsMetadataInitializer::TGeneralCachePortionsMetadataInitializer(const TKikimrRunConfig& runConfig)
+    : IKikimrServicesInitializer(runConfig) {
+}
+
+void TGeneralCachePortionsMetadataInitializer::InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) {
+    auto serviceConfig = NGeneralCache::NPublic::TConfig::BuildFromProto(Config.GetPortionsMetadataCache());
+    if (serviceConfig.IsFail()) {
+        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("error", "cannot parse portions metadata cache config")("action", "default_usage")(
+            "error", serviceConfig.GetErrorMessage())("default", NGeneralCache::NPublic::TConfig::BuildDefault().DebugString());
+        serviceConfig = NGeneralCache::NPublic::TConfig::BuildDefault();
+    }
+    AFL_VERIFY(!serviceConfig.IsFail());
+
+    TIntrusivePtr<::NMonitoring::TDynamicCounters> tabletGroup = GetServiceCounters(appData->Counters, "tablets");
+    TIntrusivePtr<::NMonitoring::TDynamicCounters> conveyorGroup = tabletGroup->GetSubgroup("type", "TX_GENERAL_CACHE_PORTIONS_METADATA");
+
+    auto service = NGeneralCache::TServiceOperator<NOlap::NGeneralCache::TPortionsMetadataCachePolicy>::CreateService(*serviceConfig, conveyorGroup);
+
+    setup->LocalServices.push_back(
+        std::make_pair(NGeneralCache::TServiceOperator<NOlap::NGeneralCache::TPortionsMetadataCachePolicy>::MakeServiceId(NodeId),
+            TActorSetupCmd(service, TMailboxType::HTSwap, appData->UserPoolId)));
+}
+
 TCompositeConveyorInitializer::TCompositeConveyorInitializer(const TKikimrRunConfig& runConfig)
 	: IKikimrServicesInitializer(runConfig) {
 }
@@ -2858,7 +2911,7 @@ void TKafkaProxyServiceInitializer::InitializeServices(NActors::TActorSystemSetu
             TActorSetupCmd(CreateDiscoveryCache(NGRpcService::KafkaEndpointId),
                 TMailboxType::HTSwap, appData->UserPoolId)
         );
-        
+
         setup->LocalServices.emplace_back(
             NKafka::MakeTransactionsServiceID(NodeId),
             TActorSetupCmd(NKafka::CreateTransactionsCoordinator(),

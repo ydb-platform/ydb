@@ -35,6 +35,13 @@ class TImportClient;
 
 namespace NConsoleClient {
 
+// EDataFormat to be used in operations related to structured data
+enum class ESendFormat {
+    Default /* "default" */,
+    TValue /* "tvalue" */,
+    ApacheArrow /* "arrow" */
+};
+
 struct TImportFileSettings : public TOperationRequestSettings<TImportFileSettings> {
     using TSelf = TImportFileSettings;
 
@@ -60,6 +67,7 @@ struct TImportFileSettings : public TOperationRequestSettings<TImportFileSetting
     FLUENT_SETTING_DEFAULT(TString, Delimiter, DefaultDelimiter);
     FLUENT_SETTING_DEFAULT(std::optional<TString>, NullValue, std::nullopt);
     FLUENT_SETTING_DEFAULT(bool, Verbose, false);
+    FLUENT_SETTING_DEFAULT(ESendFormat, SendFormat, ESendFormat::Default);
 };
 
 class TImportFileClient {

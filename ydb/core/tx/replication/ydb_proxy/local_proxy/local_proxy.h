@@ -26,6 +26,7 @@ private:
     void Handle(TEvYdbProxy::TEvCommitOffsetRequest::TPtr& ev);
     void Handle(TEvYdbProxy::TEvCreateTopicReaderRequest::TPtr& ev);
     void Handle(TEvYdbProxy::TEvDescribePathRequest::TPtr& ev);
+    void Handle(TEvYdbProxy::TEvDescribeTableRequest::TPtr& ev);
     void Handle(TEvYdbProxy::TEvDescribeTopicRequest::TPtr& ev);
 
     STATEFN(StateWork);

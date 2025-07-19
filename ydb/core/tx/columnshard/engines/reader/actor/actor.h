@@ -35,15 +35,16 @@ public:
         const std::shared_ptr<NDataAccessorControl::IDataAccessorsManager>& dataAccessorsManager,
         const TComputeShardingPolicy& computeShardingPolicy, ui32 scanId, ui64 txId, ui32 scanGen, ui64 requestCookie, ui64 tabletId,
         TDuration timeout, const TReadMetadataBase::TConstPtr& readMetadataRange, NKikimrDataEvents::EDataFormat dataFormat,
-        const NColumnShard::TScanCounters& scanCountersPool, const NConveyorComposite::TCPULimitsConfig& cpuLimits);
+        const NColumnShard::TScanCounters& scanCountersPool, const NConveyorComposite::TCPULimitsConfig& cpuLimits,
+        NKqp::NScheduler::TSchedulableTaskPtr schedulableTask);
 
     void Bootstrap(const TActorContext& ctx);
 
 private:
     STATEFN(StateScan) {
-        auto g = Stats->MakeGuard("processing");
-        TLogContextGuard gLogging(NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD_SCAN) ("SelfId", SelfId())("TabletId",
-            TabletId)("ScanId", ScanId)("TxId", TxId)("ScanGen", ScanGen)("task_identifier", ReadMetadataRange->GetScanIdentifier()));
+        auto g = Stats->MakeGuard("processing", IS_INFO_LOG_ENABLED(NKikimrServices::TX_COLUMNSHARD_SCAN));
+        //        TLogContextGuard gLogging(NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD_SCAN) ("SelfId", SelfId())("TabletId",
+        //            TabletId)("ScanId", ScanId)("TxId", TxId)("ScanGen", ScanGen)("task_identifier", ReadMetadataRange->GetScanIdentifier()));
         switch (ev->GetTypeRewrite()) {
             hFunc(NKqp::TEvKqpCompute::TEvScanDataAck, HandleScan);
             hFunc(NKqp::TEvKqpCompute::TEvScanPing, HandleScan);
@@ -131,6 +132,7 @@ private:
     const NKikimrDataEvents::EDataFormat DataFormat;
     const ui64 TabletId;
     const NConveyorComposite::TCPULimitsConfig CPULimits;
+    NKqp::NScheduler::TSchedulableTaskPtr SchedulableTask;
 
     TReadMetadataBase::TConstPtr ReadMetadataRange;
     std::unique_ptr<TScanIteratorBase> ScanIterator;
@@ -147,6 +149,7 @@ private:
     THolder<NKqp::TEvKqpCompute::TEvScanData> Result;
     std::shared_ptr<IScanCursor> CurrentLastReadKey;
     bool Finished = false;
+    ui32 BuildResultCounter = 0;
     std::optional<TMonotonic> LastResultInstant;
 
     class TBlobStats {
@@ -193,6 +196,8 @@ private:
     ui64 PacksSum = 0;
     ui64 Bytes = 0;
     ui32 PageFaults = 0;
+    TInstant StartWaitTime;
+    TDuration WaitTime;
 };
 
 }   // namespace NKikimr::NOlap::NReader

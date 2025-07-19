@@ -24,6 +24,7 @@ SRCS(
     format.h
     fragmented_buffer.cpp
     fragmented_buffer.h
+    frequently_called_hptimer.h
     gen_step.cpp
     gen_step.h
     hazard.cpp

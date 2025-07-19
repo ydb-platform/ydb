@@ -299,6 +299,11 @@ protected:
         }
         THolder<TEvHttpProxy::TEvReportSensors> sensors(BuildIncomingRequestSensors(request, response));
         Send(Endpoint->Owner, sensors.Release());
+        if (Requests.empty()) {
+            ALOG_ERROR(HttpLog, "(#" << TSocketImpl::GetRawSocket() << "," << Address << ") connection closed - no request found for response");
+            PassAway();
+            return false; // no request to respond to
+        }
         if (request == Requests.front() && CurrentResponse == nullptr) {
             CurrentResponse = response;
             return FlushOutput();

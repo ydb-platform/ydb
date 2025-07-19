@@ -77,7 +77,7 @@ namespace NYql {
         ClusterNamesToClusterConfigs[clusterName] = clusterConfig;
 
         // Add cluster to the list of valid clusters
-        this->ValidClusters.insert(clusterConfig.GetName());
+        this->AddValidCluster(clusterConfig.GetName());
     }
 
     // Structured tokens are used to access MDB API. They can be constructed either from IAM tokens, or from SA credentials.
@@ -105,7 +105,7 @@ namespace NYql {
     }
 
     bool TGenericConfiguration::HasCluster(TStringBuf cluster) const {
-        return ValidClusters.contains(cluster);
+        return GetValidClusters().contains(cluster);
     }
 
 } // namespace NYql

@@ -58,7 +58,7 @@ const TVector<NKikimrSchemeOp::TColumnDescription> EXTENDED_COLUMNS = {
     Col("col5", NScheme::NTypeIds::Interval)
 };
 
-const TVector<TString> TEST_TABLE_PATH = { ".test", "test_table" };
+const TVector<TString> TEST_TABLE_PATH = { "test", "test_table" };
 
 const TVector<TString> TEST_KEY_COLUMNS = {"col1"};
 
@@ -349,15 +349,18 @@ Y_UNIT_TEST_SUITE(TableCreation) {
 
         constexpr i32 requests = 2;
 
+        auto uniqueTablePath = TEST_TABLE_PATH;
         TVector<TActorId> edgeActors;
         for (i32 i = 0; i < requests; ++i) {
-            edgeActors.push_back(ydb.CreateTableInDbAsync(DEFAULT_COLUMNS, { ".test", "test_table" + ToString(i)}));
+            uniqueTablePath.back() = TEST_TABLE_PATH.back() + ToString(i);
+            edgeActors.push_back(ydb.CreateTableInDbAsync(DEFAULT_COLUMNS, uniqueTablePath));
         }
 
         ydb.WaitTableCreation(std::move(edgeActors));
 
         for(i32 i = 0; i < requests; i++) {
-            ydb.VerifyColumnsList({".test", "test_table" + ToString(i)});
+            uniqueTablePath.back() = TEST_TABLE_PATH.back() + ToString(i);
+            ydb.VerifyColumnsList(uniqueTablePath);
         }
     }
 
@@ -367,17 +370,20 @@ Y_UNIT_TEST_SUITE(TableCreation) {
         constexpr i32 tables = 2;
         constexpr i32 requests = 20;
 
+        auto uniqueTablePath = TEST_TABLE_PATH;
         TVector<TActorId> edgeActors;
         for (i32 i = 0; i < tables; ++i) {
-            for (i32 j = 0; j < requests; ++j){
-                edgeActors.push_back(ydb.CreateTableInDbAsync(DEFAULT_COLUMNS, { ".test", "test_table" + ToString(i)}));
+            uniqueTablePath.back() = TEST_TABLE_PATH.back() + ToString(i);
+            for (i32 j = 0; j < requests; ++j) {
+                edgeActors.push_back(ydb.CreateTableInDbAsync(DEFAULT_COLUMNS, uniqueTablePath));
             }
         }
 
         ydb.WaitTableCreation(std::move(edgeActors));
 
         for(i32 i = 0; i < tables; i++) {
-            ydb.VerifyColumnsList({".test", "test_table" + ToString(i)});
+            uniqueTablePath.back() = TEST_TABLE_PATH.back() + ToString(i);
+            ydb.VerifyColumnsList(uniqueTablePath);
         }
     }
 

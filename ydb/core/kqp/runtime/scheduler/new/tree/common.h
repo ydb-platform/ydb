@@ -51,6 +51,9 @@ namespace NKikimr::NKqp::NScheduler::NHdrf {
         NMonitoring::TDynamicCounters::TCounterPtr FairShare;
         NMonitoring::TDynamicCounters::TCounterPtr InFlight;
         NMonitoring::TDynamicCounters::TCounterPtr Waiting;
+        NMonitoring::TDynamicCounters::TCounterPtr InFlightExtra;
+        NMonitoring::TDynamicCounters::TCounterPtr UsageExtra;
+        NMonitoring::THistogramPtr                 Delay;
     };
 
 } // namespace NKikimr::NKqp::NScheduler::NHdrf

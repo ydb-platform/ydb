@@ -493,6 +493,93 @@ std::optional<std::pair<TString, TString>> FindOneSecureParam(const TExprNode::T
     return *secureParams.begin();
 }
 
+TIssues ApplyOverridePlannerSettings(const TString& overridePlannerJson, NKqpProto::TKqpPhyQuery& queryProto) {
+    TIssues issues;
+    NJson::TJsonValue jsonNode;
+    try {
+        NJson::TJsonReaderConfig jsonConfig;
+        NJson::ReadJsonTree(overridePlannerJson, &jsonConfig, &jsonNode, true);
+        if (!jsonNode.IsArray()) {
+            issues.AddIssue("Expected array json value");
+            return issues;
+        }
+    } catch (const std::exception& e) {
+        issues.AddIssue(TStringBuilder() << "Failed to parse json: " << e.what());
+        return issues;
+    }
+
+    const auto extractUint = [](const NJson::TJsonValue& node, ui32* result) -> TString {
+        if (!node.IsUInteger()) {
+            return "Expected non negative integer json value";
+        }
+
+        *result = node.GetUIntegerSafe();
+        return "";
+    };
+
+    THashSet<std::pair<ui32, ui32>> updatedStages;
+    const auto& jsonArray = jsonNode.GetArray();
+    for (size_t i = 0; i < jsonArray.size(); ++i) {
+        const auto& stageOverride = jsonArray[i];
+        if (!stageOverride.IsMap()) {
+            issues.AddIssue(TStringBuilder() << "Expected map json value for stage override " << i);
+            continue;
+        }
+
+        ui32 txId = 0;
+        ui32 stageId = 0;
+        std::optional<ui32> tasks;
+        for (const auto& [key, value] : stageOverride.GetMap()) {
+            ui32* result = nullptr;
+            if (key == "tx") {
+                result = &txId;
+            } else if (key == "stage") {
+                result = &stageId;
+            } else if (key == "tasks") {
+                tasks = 0;
+                result = &(*tasks);
+            } else {
+                issues.AddIssue(TStringBuilder() << "Unknown key '" << key << "' in stage override " << i);
+                continue;
+            }
+
+            if (const auto& error = extractUint(value, result)) {
+                issues.AddIssue(TStringBuilder() << error << " for key '" << key << "' in stage override " << i);
+                continue;
+            }
+        }
+
+        if (!updatedStages.emplace(txId, stageId).second) {
+            issues.AddIssue(TStringBuilder() << "Duplicate stage override " << i << " for tx " << txId << " and stage " << stageId);
+            continue;
+        }
+
+        if (!tasks) {
+            issues.AddIssue(TStringBuilder() << "Missing stage settings for tx " << txId << " and stage " << stageId << " in stage override " << i);
+            continue;
+        }
+
+        auto& txs = *queryProto.MutableTransactions();
+        if (txId >= static_cast<ui32>(txs.size())) {
+            issues.AddIssue(TStringBuilder() << "Invalid tx id: " << txId << " in stage override " << i << ", number of transactions in query: " << txs.size());
+            continue;
+        }
+
+        auto& stages = *txs[txId].MutableStages();
+        if (stageId >= static_cast<ui32>(stages.size())) {
+            issues.AddIssue(TStringBuilder() << "Invalid stage id: " << stageId << " in stage override " << i << ", number of stages in transaction " << txId << ": " << stages.size());
+            continue;
+        }
+
+        auto& stage = stages[stageId];
+        if (tasks) {
+            stage.SetTaskCount(*tasks);
+        }
+    }
+
+    return issues;
+}
+
 class TKqpQueryCompiler : public IKqpQueryCompiler {
 public:
     TKqpQueryCompiler(const TString& cluster, const TIntrusivePtr<TKikimrTablesData> tablesData,
@@ -523,6 +610,12 @@ public:
         YQL_ENSURE(querySettings.Type);
         queryProto.SetType(GetPhyQueryType(*querySettings.Type));
 
+        queryProto.SetEnableOltpSink(Config->EnableOltpSink);
+        queryProto.SetEnableOlapSink(Config->EnableOlapSink);
+        queryProto.SetEnableHtapTx(Config->EnableHtapTx);
+        queryProto.SetForceImmediateEffectsExecution(
+            Config->KqpForceImmediateEffectsExecution.Get().GetOrElse(false));
+
         for (const auto& queryBlock : dataQueryBlocks) {
             auto queryBlockSettings = TKiDataQueryBlockSettings::Parse(queryBlock);
             if (queryBlockSettings.HasUncommittedChangesRead) {
@@ -545,30 +638,14 @@ public:
             CompileTransaction(tx, *queryProto.AddTransactions(), ctx);
         }
 
-        auto overridePlanner = Config->OverridePlanner.Get();
-        if (overridePlanner) {
-            NJson::TJsonReaderConfig jsonConfig;
-            NJson::TJsonValue jsonNode;
-            if (NJson::ReadJsonTree(*overridePlanner, &jsonConfig, &jsonNode)) {
-                for (auto& stageOverride : jsonNode.GetArray()) {
-                    ui32 txId = 0;
-                    if (auto* txNode = stageOverride.GetValueByPath("tx")) {
-                        txId = txNode->GetIntegerSafe();
-                    }
-                    if (txId < static_cast<ui32>(queryProto.GetTransactions().size())) {
-                        auto& tx = *queryProto.MutableTransactions(txId);
-                        ui32 stageId = 0;
-                        if (auto* stageNode = stageOverride.GetValueByPath("stage")) {
-                            stageId = stageNode->GetIntegerSafe();
-                        }
-                        if (stageId < static_cast<ui32>(tx.GetStages().size())) {
-                            auto& stage = *tx.MutableStages(stageId);
-                            if (auto* tasksNode = stageOverride.GetValueByPath("tasks")) {
-                                stage.SetTaskCount(tasksNode->GetIntegerSafe());
-                            }
-                        }
-                    }
+        if (const auto overridePlanner = Config->OverridePlanner.Get()) {
+            if (const auto& issues = ApplyOverridePlannerSettings(*overridePlanner, queryProto)) {
+                NYql::TIssue rootIssue("Invalid override planner settings");
+                rootIssue.SetCode(NYql::DEFAULT_ERROR, NYql::TSeverityIds::S_INFO);
+                for (auto issue : issues) {
+                    rootIssue.AddSubIssue(MakeIntrusive<NYql::TIssue>(issue.SetCode(NYql::DEFAULT_ERROR, NYql::TSeverityIds::S_INFO)));
                 }
+                ctx.AddError(rootIssue);
             }
         }
 
@@ -597,10 +674,10 @@ public:
             YQL_ENSURE(type->GetKind() == ETypeAnnotationKind::Struct);
 
             NKikimrMiniKQL::TType kikimrProto;
+            auto typeBuilder = NKikimr::NMiniKQL::TTypeBuilder(TypeEnv);
+            NKikimr::NMiniKQL::TType* resultType = NYql::NCommon::BuildType(result.Pos(), *type, typeBuilder);
 
-            if (!NYql::ExportTypeToKikimrProto(*type, kikimrProto, ctx)) {
-                return false;
-            }
+            ExportTypeToProto(resultType, kikimrProto);
 
             auto resultMetaColumns = queryBindingProto.MutableResultSetMeta()->Mutablecolumns();
             for (size_t i = 0; i < kikimrProto.GetStruct().MemberSize(); i++) {
@@ -1313,6 +1390,10 @@ private:
 
             if (const auto isBatch = settings.IsBatch().Cast(); isBatch.StringValue() == "true") {
                 settingsProto.SetIsBatch(true);
+            }
+
+            if (const auto isIndexImplTable = settings.IsIndexImplTable().Cast(); isIndexImplTable.StringValue() == "true") {
+                settingsProto.SetIsIndexImplTable(true);
             }
 
             internalSinkProto.MutableSettings()->PackFrom(settingsProto);

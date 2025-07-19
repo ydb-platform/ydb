@@ -29,18 +29,8 @@
                                 "PlanNodeType": "Connection",
                                 "Plans": [
                                     {
-                                        "Node Type": "TopSort-LeftJoin (MapJoin)",
+                                        "Node Type": "LeftJoin (MapJoin)",
                                         "Operators": [
-                                            {
-                                                "Inputs": [
-                                                    {
-                                                        "InternalOperatorId": 1
-                                                    }
-                                                ],
-                                                "Limit": "1001",
-                                                "Name": "TopSort",
-                                                "TopSortBy": "argument.c.name"
-                                            },
                                             {
                                                 "Condition": "c.a = ss.a.code",
                                                 "Inputs": [
@@ -64,11 +54,8 @@
                                                         "Name": "TableFullScan",
                                                         "Path": "/Root/postgres_jointest/join4.test_plan/c",
                                                         "ReadColumns": [
-                                                            "a",
-                                                            "name"
-                                                        ],
-                                                        "ReadRanges": [
-                                                            "name (-\u221e, +\u221e)"
+                                                            "name (-\u221e, +\u221e)",
+                                                            "a"
                                                         ],
                                                         "ReadRangesPointPrefixLen": "0",
                                                         "Scan": "Parallel",
@@ -111,9 +98,6 @@
                                                                         "Name": "TableFullScan",
                                                                         "Path": "/Root/postgres_jointest/join4.test_plan/a",
                                                                         "ReadColumns": [
-                                                                            "code"
-                                                                        ],
-                                                                        "ReadRanges": [
                                                                             "code (-\u221e, +\u221e)"
                                                                         ],
                                                                         "ReadRangesPointPrefixLen": "0",
@@ -180,9 +164,6 @@
                                                                                                         "Name": "TableFullScan",
                                                                                                         "Path": "/Root/postgres_jointest/join4.test_plan/b",
                                                                                                         "ReadColumns": [
-                                                                                                            "a"
-                                                                                                        ],
-                                                                                                        "ReadRanges": [
                                                                                                             "a (-\u221e, +\u221e)",
                                                                                                             "num (-\u221e, +\u221e)"
                                                                                                         ],
@@ -212,7 +193,7 @@
                                     }
                                 ],
                                 "SortColumns": [
-                                    "c.name (Asc)"
+                                    "name (Asc)"
                                 ]
                             }
                         ]

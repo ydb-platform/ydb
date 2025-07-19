@@ -3,6 +3,7 @@
 #include "common.h"
 #include "client_command_options.h"
 
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/credentials.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/oauth2_token_exchange/from_file.h>
 
@@ -13,6 +14,7 @@
 #include <util/generic/vector.h>
 #include <util/charset/utf8.h>
 #include <util/string/type.h>
+#include <util/system/info.h>
 #include <string>
 
 namespace NYdb {
@@ -173,8 +175,6 @@ public:
         TCredentialsGetter CredentialsGetter;
         std::shared_ptr<ICredentialsProviderFactory> SingletonCredentialsProviderFactory = nullptr;
 
-        bool ThrowOnOptsParseError = false;
-
         TConfig(int argc, char** argv)
             : ArgC(argc)
             , ArgV(argv)
@@ -270,7 +270,52 @@ public:
         void PrintHelpAndExit() {
             NLastGetopt::TOptsParser parser(&Opts->GetOpts(), ArgC, ArgV);
             parser.PrintUsage(Cerr);
-            throw TMisuseWithHelpException();
+            throw TNeedToExitWithCode(EXIT_FAILURE);
+        }
+
+        TDriverConfig CreateDriverConfig() {
+            auto driverConfig = TDriverConfig()
+                .SetEndpoint(Address)
+                .SetDatabase(Database)
+                .SetCredentialsProviderFactory(GetSingletonCredentialsProviderFactory())
+                .SetUsePerChannelTcpConnection(UsePerChannelTcpConnection);
+        
+            if (EnableSsl) {
+                driverConfig.UseSecureConnection(CaCerts);
+            }
+        
+            if (IsNetworkIntensive) {
+                size_t networkThreadNum = GetNetworkThreadNum();
+                driverConfig.SetNetworkThreadsNum(networkThreadNum);
+            }
+        
+            if (SkipDiscovery) {
+                driverConfig.SetDiscoveryMode(EDiscoveryMode::Off);
+            }
+        
+            driverConfig.UseClientCertificate(ClientCert, ClientCertPrivateKey);
+        
+            return driverConfig;
+        }
+
+        size_t GetNetworkThreadNum() {
+            if (IsNetworkIntensive) {
+                size_t cpuCount = NSystemInfo::CachedNumberOfCpus();
+                if (cpuCount >= 64) {
+                    // doubtfully there is a reason to have more. Even this is too much.
+                    return 32;
+                } else if (cpuCount >= 32 && cpuCount < 64) {
+                    // leave the half of CPUs to the client's logic
+                    return cpuCount / 2;
+                } else if (cpuCount >= 16 && cpuCount < 32) {
+                    // Originally here we had a constant value 16.
+                    // To not break things this heuristic tries to use this constant as well.
+                    return 16;
+                } else {
+                    return std::min(size_t(2), cpuCount / 2);
+                }
+            }
+            return 1; // TODO: check default
         }
 
     private:

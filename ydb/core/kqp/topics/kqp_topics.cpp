@@ -269,11 +269,12 @@ void TTopicPartitionOperations::Merge(const TTopicPartitionOperations& rhs)
 {
     Y_ENSURE(Topic_.Empty() || Topic_ == rhs.Topic_);
     Y_ENSURE(Partition_.Empty() || Partition_ == rhs.Partition_);
-    Y_ENSURE(TabletId_.Empty() || TabletId_ == rhs.TabletId_);
 
     if (Topic_.Empty()) {
         Topic_ = rhs.Topic_;
         Partition_ = rhs.Partition_;
+    }
+    if (TabletId_.Empty()) {
         TabletId_ = rhs.TabletId_;
     }
 
@@ -292,6 +293,11 @@ ui64 TTopicPartitionOperations::GetTabletId() const
     Y_ENSURE(TabletId_.Defined());
 
     return *TabletId_;
+}
+
+bool TTopicPartitionOperations::HasTabletId() const
+{
+    return TabletId_.Defined();
 }
 
 void TTopicPartitionOperations::SetTabletId(ui64 value)
@@ -534,10 +540,65 @@ bool TTopicOperations::ProcessSchemeCacheNavigate(const NSchemeCache::TSchemeCac
         }
     }
 
+    for (const auto& [key, operations] : Operations_) {
+        if (!operations.HasTabletId()) {
+            builder << "Topic '" << key.Topic_ << "'. Unknown partition " << key.Partition_;
+
+            status = Ydb::StatusIds::SCHEME_ERROR;
+            message = std::move(builder);
+
+            return false;
+        }
+    }
+
     status = Ydb::StatusIds::SUCCESS;
     message = "";
 
     return true;
+}
+
+bool TTopicOperations::HasThisPartitionAlreadyBeenAdded(const TString& topicPath, ui32 partitionId)
+{
+    if (Operations_.contains({topicPath, partitionId})) {
+        return true;
+    }
+    if (!CachedNavigateResult_.contains(topicPath)) {
+        return false;
+    }
+
+    const NSchemeCache::TSchemeCacheNavigate::TEntry& entry =
+        CachedNavigateResult_.at(topicPath);
+    const NKikimrSchemeOp::TPersQueueGroupDescription& description =
+        entry.PQGroupInfo->Description;
+
+    TString path = CanonizePath(entry.Path);
+    Y_ABORT_UNLESS(path == topicPath,
+                   "path=%s, topicPath=%s",
+                   path.data(), topicPath.data());
+
+    for (const auto& partition : description.GetPartitions()) {
+        if (partition.GetPartitionId() == partitionId) {
+            TTopicPartition key{topicPath, partitionId};
+            Operations_[key].SetTabletId(partition.GetTabletId());
+            return true;
+        }
+    }
+
+    return false;
+}
+
+void TTopicOperations::CacheSchemeCacheNavigate(const NSchemeCache::TSchemeCacheNavigate::TResultSet& results)
+{
+    for (const auto& result : results) {
+        if (result.Kind != NSchemeCache::TSchemeCacheNavigate::KindTopic) {
+            continue;
+        }
+        if (!result.PQGroupInfo) {
+            continue;
+        }
+        TString path = CanonizePath(result.Path);
+        CachedNavigateResult_[path] = result;
+    }
 }
 
 void TTopicOperations::BuildTopicTxs(TTopicOperationTransactions& txs)

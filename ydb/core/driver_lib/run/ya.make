@@ -106,6 +106,8 @@ PEERDIR(
     ydb/core/tx
     ydb/core/tx/columnshard
     ydb/core/tx/conveyor/service
+    ydb/core/tx/general_cache
+    ydb/core/tx/columnshard/data_accessor/cache_policy
     ydb/core/tx/coordinator
     ydb/core/tx/datashard
     ydb/core/tx/limiter/grouped_memory/usage
@@ -139,7 +141,6 @@ PEERDIR(
     ydb/library/grpc/server/actors
     ydb/library/pdisk_io
     ydb/library/security
-    ydb/library/signal_backtrace
     ydb/library/yql/providers/pq/cm_client
     ydb/library/slide_limiter/service
     ydb/library/yql/providers/s3/actors
@@ -178,6 +179,12 @@ PEERDIR(
     yt/yql/providers/yt/comp_nodes/dq/llvm16
     yt/yql/providers/yt/comp_nodes/llvm16
 )
+
+IF (NOT OS_WINDOWS)
+    PEERDIR(
+        ydb/library/signal_backtrace
+    )
+ENDIF()
 
 YQL_LAST_ABI_VERSION()
 

@@ -225,7 +225,7 @@ namespace arrow {
 
 template <>
 struct TypeTraits<typename NKikimr::NMiniKQL::TPrimitiveDataType<NYql::NDecimal::TInt128>::TResult> {
-    static inline std::shared_ptr<DataType> type_singleton() {
+    static inline std::shared_ptr<DataType> type_singleton() { // NOLINT(readability-identifier-naming)
         return arrow::fixed_size_binary(16);
     }
 };

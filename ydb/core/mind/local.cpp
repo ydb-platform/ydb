@@ -937,11 +937,13 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
 
     void Handle(TEvNodeWardenStorageConfig::TPtr &ev, const TActorContext &ctx) {
         auto bridgeInfo = ev->Get()->BridgeInfo;
-        if (bridgeInfo) {
-            auto pileInfo = bridgeInfo->SelfNodePile;
-            if (pileInfo) {
-                BridgePileId = pileInfo->BridgePileId;
-            }
+        if (bridgeInfo == nullptr) {
+            // There will be an update with bridge info later
+            return;
+        }
+        auto pileInfo = bridgeInfo->SelfNodePile;
+        if (pileInfo) {
+            BridgePileId = pileInfo->BridgePileId;
         }
         TryToRegister(ctx);
         if (LastDrainRequest) {
@@ -1005,8 +1007,14 @@ public:
         LOG_DEBUG(ctx, NKikimrServices::LOCAL, "TLocalNodeRegistrar::Bootstrap");
         StartTime = ctx.Now();
         const TActorId wardenId = MakeBlobStorageNodeWardenID(SelfId().NodeId());
-        Send(wardenId, new TEvNodeWardenQueryStorageConfig(true));
-        Become(&TThis::StateInit);
+        if (IsBridgeMode(ctx)) {
+            Send(wardenId, new TEvNodeWardenQueryStorageConfig(true));
+            Become(&TThis::StateInit);
+        } else {
+            TryToRegister(ctx);
+            Send(SelfId(), new TEvPrivate::TEvUpdateSystemUsage());
+            Become(&TThis::StateWork);
+        }
     }
 
     STFUNC(StateWork) {

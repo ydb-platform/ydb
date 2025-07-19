@@ -45,6 +45,7 @@ struct TAppData::TImpl {
     NKikimrStream::TStreamingConfig StreamingConfig;
     NKikimrPQ::TPQConfig PQConfig;
     NKikimrPQ::TPQClusterDiscoveryConfig PQClusterDiscoveryConfig;
+    NKikimrConfig::TKafkaProxyConfig KafkaProxyConfig;
     NKikimrNetClassifier::TNetClassifierConfig NetClassifierConfig;
     NKikimrNetClassifier::TNetClassifierDistributableConfig NetClassifierDistributableConfig;
     NKikimrConfig::TSqsConfig SqsConfig;
@@ -106,6 +107,7 @@ TAppData::TAppData(
     , StreamingConfig(Impl->StreamingConfig)
     , PQConfig(Impl->PQConfig)
     , PQClusterDiscoveryConfig(Impl->PQClusterDiscoveryConfig)
+    , KafkaProxyConfig(Impl->KafkaProxyConfig)
     , NetClassifierConfig(Impl->NetClassifierConfig)
     , NetClassifierDistributableConfig(Impl->NetClassifierDistributableConfig)
     , SqsConfig(Impl->SqsConfig)
@@ -135,7 +137,7 @@ TAppData::TAppData(
     , HealthCheckConfig(Impl->HealthCheckConfig)
     , WorkloadManagerConfig(Impl->WorkloadManagerConfig)
     , QueryServiceConfig(Impl->QueryServiceConfig)
-    , BridgeConfig(&Impl->BridgeConfig)
+    , BridgeConfig(Impl->BridgeConfig)
     , KikimrShouldContinue(kikimrShouldContinue)
     , TracingConfigurator(MakeIntrusive<NJaegerTracing::TSamplingThrottlingConfigurator>(TimeProvider, RandomProvider))
 {}

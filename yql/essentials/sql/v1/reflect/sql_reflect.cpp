@@ -37,6 +37,11 @@ namespace NSQLReflect {
 
         TVector<TString> lines;
         Split(text, "\n", lines);
+        for (auto& line : lines) {
+            if (!line.empty() && line.back() == '\r') {
+                line.pop_back();
+            }
+        }
         return lines;
     }
 

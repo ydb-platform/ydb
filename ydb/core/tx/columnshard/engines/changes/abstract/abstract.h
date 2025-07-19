@@ -240,10 +240,10 @@ class TGranuleMeta;
 
 class TDataAccessorsInitializationContext {
 private:
-    YDB_READONLY_DEF(std::shared_ptr<TVersionedIndex>, VersionedIndex);
+    YDB_READONLY_DEF(std::shared_ptr<const TVersionedIndex>, VersionedIndex);
 
 public:
-    TDataAccessorsInitializationContext(const std::shared_ptr<TVersionedIndex>& versionedIndex)
+    TDataAccessorsInitializationContext(const std::shared_ptr<const TVersionedIndex>& versionedIndex)
         : VersionedIndex(versionedIndex) {
         AFL_VERIFY(VersionedIndex);
     }
@@ -285,7 +285,7 @@ protected:
         return DoBuildDataLock();
     }
 
-    std::shared_ptr<TDataAccessorsRequest> PortionsToAccess = std::make_shared<TDataAccessorsRequest>(TaskIdentifier);
+    std::vector<TPortionInfo::TConstPtr> PortionsToAccess;
     virtual void OnDataAccessorsInitialized(const TDataAccessorsInitializationContext& context) = 0;
 
 public:
@@ -300,9 +300,8 @@ public:
         ActivityFlag = flag;
     }
 
-    std::shared_ptr<TDataAccessorsRequest> ExtractDataAccessorsRequest() {
-        AFL_VERIFY(!!PortionsToAccess);
-        return std::move(PortionsToAccess);
+    const std::vector<TPortionInfo::TConstPtr>& GetPortionsToAccess() const {
+        return PortionsToAccess;
     }
 
     const TPortionDataAccessor& GetPortionDataAccessor(const ui64 portionId) const {

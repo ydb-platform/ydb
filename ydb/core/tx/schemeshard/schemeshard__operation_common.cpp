@@ -1,4 +1,5 @@
 #include "schemeshard__operation_common.h"
+
 #include "schemeshard__data_erasure_manager.h"
 
 #include <ydb/core/blob_depot/events.h>
@@ -470,6 +471,9 @@ bool TDone::Process(TOperationContext& context) {
         if (srcPath->PathState == TPathElement::EPathState::EPathStateCopying) {
             context.OnComplete.ReleasePathState(OperationId, srcPath->PathId, TPathElement::EPathState::EPathStateNoChanges);
         }
+        if (txState->TxType == TTxState::TxRotateCdcStream) {
+            context.OnComplete.ReleasePathState(OperationId, srcPath->PathId, TPathElement::EPathState::EPathStateNoChanges);
+        }
     }
 
     // OlapStore tracks all tables that are under operation, make sure to unlink
@@ -794,6 +798,8 @@ void UpdatePartitioningForTableModification(TOperationId operationId, TTxState &
     } else if (txState.TxType == TTxState::TxDropCdcStreamAtTable) {
         commonShardOp = TTxState::ConfigureParts;
     } else if (txState.TxType == TTxState::TxDropCdcStreamAtTableDropSnapshot) {
+        commonShardOp = TTxState::ConfigureParts;
+    } else if (txState.TxType == TTxState::TxRotateCdcStreamAtTable) {
         commonShardOp = TTxState::ConfigureParts;
     } else if (txState.TxType == TTxState::TxRestoreIncrementalBackupAtTable) {
         commonShardOp = TTxState::ConfigureParts;

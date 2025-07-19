@@ -129,7 +129,24 @@ public:
     }
 };
 
+
 }   // namespace
+
+TConclusion<bool> TStepAggregationSources::DoExecuteInplace(
+    const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& /*step*/) const {
+    AFL_VERIFY(source->GetType() == IDataSource::EType::Aggregation);
+    auto* aggrSource = static_cast<const TAggregationDataSource*>(source.get());
+    std::vector<std::shared_ptr<NArrow::NSSA::IDataSource>> sources;
+    for (auto&& i : aggrSource->GetSources()) {
+        sources.emplace_back(i);
+    }
+    auto conclusion = Aggregator->Execute(sources, source->GetStageData().GetTable());
+    if (conclusion.IsFail()) {
+        return conclusion;
+    }
+    source->BuildStageResult(source);
+    return true;
+}
 
 TConclusion<bool> TBuildResultStep::DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const {
     auto context = source->GetContext();

@@ -13,6 +13,8 @@ class TAccessorsCollection;
 
 namespace NKikimr::NArrow::NSSA {
 
+class IDataSource;
+
 class IMemoryCalculationPolicy {
 public:
     enum class EStage {
@@ -45,7 +47,8 @@ public:
     virtual EStage GetStage() const override {
         return EStage::Fetching;
     }
-    virtual ui64 GetReserveMemorySize(const ui64 blobsSize, const ui64 rawSize, const std::optional<ui32> limit, const ui32 recordsCount) const override {
+    virtual ui64 GetReserveMemorySize(
+        const ui64 blobsSize, const ui64 rawSize, const std::optional<ui32> limit, const ui32 recordsCount) const override {
         if (limit) {
             return std::max<ui64>(blobsSize, rawSize * (1.0 * *limit) / recordsCount);
         } else {
@@ -281,6 +284,18 @@ public:
 
 class TProcessorContext;
 
+class IResourcesAggregator {
+private:
+    virtual TConclusionStatus DoExecute(
+        const std::vector<std::shared_ptr<IDataSource>>& sources, const std::shared_ptr<TAccessorsCollection>& collectionResult) const = 0;
+
+public:
+    TConclusionStatus Execute(
+        const std::vector<std::shared_ptr<IDataSource>>& sources, const std::shared_ptr<TAccessorsCollection>& collectionResult) const {
+        return DoExecute(sources, collectionResult);
+    }
+};
+
 class IResourceProcessor {
 public:
     enum class EExecutionResult {
@@ -307,6 +322,10 @@ private:
     }
 
 public:
+    virtual std::shared_ptr<IResourcesAggregator> BuildResultsAggregator() const {
+        return nullptr;
+    }
+
     TString GetSignalCategoryName() const {
         return DoGetSignalCategoryName();
     }

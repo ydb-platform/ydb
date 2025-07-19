@@ -21,7 +21,6 @@ using EMemType = NCommon::EMemType;
 using TFetchingScriptCursor = NCommon::TFetchingScriptCursor;
 using TStepAction = NCommon::TStepAction;
 
-
 class IFetchingStep: public NCommon::IFetchingStep {
 private:
     using TBase = NCommon::IFetchingStep;
@@ -41,6 +40,20 @@ public:
 };
 
 class IDataSource;
+
+class TStepAggregationSources: public IFetchingStep {
+private:
+    using TBase = IFetchingStep;
+    const std::shared_ptr<NArrow::NSSA::IResourcesAggregator> Aggregator;
+
+public:
+    TStepAggregationSources(const std::shared_ptr<NArrow::NSSA::IResourcesAggregator>& proc)
+        : TBase("AGGREGATION")
+        , Aggregator(proc) {
+    }
+
+    virtual TConclusion<bool> DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const override;
+};
 
 class TDetectInMemStep: public IFetchingStep {
 private:

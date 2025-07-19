@@ -65,7 +65,7 @@ protected:
     mutable std::unique_ptr<NArrow::NMerger::TMergePartialStream> Merger;
     std::shared_ptr<TMergingContext> MergingContext;
     const ui32 IntervalIdx;
-    std::optional<NArrow::TShardedRecordBatch> ShardedBatch;
+    mutable std::optional<NArrow::TShardedRecordBatch> ShardedBatch;
     std::shared_ptr<NGroupedMemoryManager::TAllocationGuard> AllocationGuard;
 
     [[nodiscard]] std::optional<NArrow::NMerger::TCursor> DrainMergerLinearScan(const std::optional<ui32> resultBufferLimit);
@@ -97,7 +97,7 @@ private:
     THashMap<ui32, std::shared_ptr<IDataSource>> Sources;
 
 protected:
-    virtual TConclusionStatus DoExecuteImpl() override;
+    virtual TConclusion<bool> DoExecuteImpl() override;
 
 public:
     virtual TString GetTaskClassIdentifier() const override {
@@ -113,7 +113,7 @@ private:
     using TBase = TBaseMergeTask;
 
 protected:
-    virtual TConclusionStatus DoExecuteImpl() override;
+    virtual TConclusion<bool> DoExecuteImpl() override;
 
 public:
     virtual TString GetTaskClassIdentifier() const override {

@@ -14,27 +14,31 @@
 namespace NKikimr::NOlap::NReader::NCommon {
 
 bool TStepAction::DoApply(IDataReader& owner) const {
-    if (FinishedFlag) {
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "apply");
-        Source->StartSyncSection();
-        Source->OnSourceFetchingFinishedSafe(owner, Source);
-    }
+    AFL_VERIFY(FinishedFlag);
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "apply");
+    Source->StartSyncSection();
+    Source->OnSourceFetchingFinishedSafe(owner, Source);
     return true;
 }
 
-TConclusionStatus TStepAction::DoExecuteImpl() {
+TConclusion<bool> TStepAction::DoExecuteImpl() {
     FOR_DEBUG_LOG(NKikimrServices::COLUMNSHARD_SCAN_EVLOG, Source->AddEvent("step_action"));
     if (Source->GetContext()->IsAborted()) {
-        return TConclusionStatus::Success();
+        AFL_VERIFY(!FinishedFlag);
+        FinishedFlag = true;
+        return true;
     }
     auto executeResult = Cursor.Execute(Source);
     if (executeResult.IsFail()) {
+        AFL_VERIFY(!FinishedFlag);
+        FinishedFlag = true;
         return executeResult;
     }
     if (*executeResult) {
+        AFL_VERIFY(!FinishedFlag);
         FinishedFlag = true;
     }
-    return TConclusionStatus::Success();
+    return FinishedFlag;
 }
 
 TStepAction::TStepAction(const std::shared_ptr<IDataSource>& source, TFetchingScriptCursor&& cursor, const NActors::TActorId& ownerActorId,

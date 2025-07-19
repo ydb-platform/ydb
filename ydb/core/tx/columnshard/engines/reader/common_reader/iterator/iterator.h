@@ -20,7 +20,7 @@ public:
             << "records_count:" << RecordsCount << ";"
             ;
         if (Data.size()) {
-            sb << "schema=" << Data.front()->GetResultBatch().schema()->ToString() << ";";
+            sb << "schema=" << Data.front()->GetResultSchema()->ToString() << ";";
         }
         return sb;
     }
@@ -31,7 +31,7 @@ public:
     }
     const std::unique_ptr<TPartialReadResult>& emplace_back(std::unique_ptr<TPartialReadResult>&& v) {
         AFL_VERIFY(!!v);
-        RecordsCount += v->GetResultBatch().num_rows();
+        RecordsCount += v->GetRecordsCount();
         Data.emplace_back(std::move(v));
         return Data.back();
     }
@@ -40,7 +40,7 @@ public:
             return {};
         }
         auto result = std::move(Data.front());
-        RecordsCount -= result->GetResultBatch().num_rows();
+        RecordsCount -= result->GetRecordsCount();
         AFL_VERIFY(RecordsCount >= 0);
         Data.pop_front();
         return std::move(result);

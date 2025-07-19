@@ -87,7 +87,7 @@ public:
 class TConnection {
 
 public:
-    TConnection(TStage& stage, const TString& nodeType, ui32 stagePlanNodeId) : Stage(stage), NodeType(nodeType), StagePlanNodeId(stagePlanNodeId) {
+    TConnection(TStage& stage, const TString& nodeType, ui32 planNodeId) : Stage(stage), NodeType(nodeType), PlanNodeId(planNodeId) {
     }
 
     TStage& Stage;
@@ -103,7 +103,8 @@ public:
     std::shared_ptr<TSingleMetric> CteOutputBytes;
     std::shared_ptr<TSingleMetric> CteOutputRows;
     const NJson::TJsonValue* StatsNode = nullptr;
-    const ui32 StagePlanNodeId;
+    const ui32 PlanNodeId;
+    TStringBuilder Builder;
 };
 
 class TOperatorInfo {
@@ -119,9 +120,10 @@ public:
     std::shared_ptr<TSingleMetric> InputRows;
     std::shared_ptr<TSingleMetric> ExtraInputRows;
     std::shared_ptr<TSingleMetric> InputThroughput;
-    TString InputPlanNodeId;
-    TString ExtraInputPlanNodeId;
-    std::optional<ui32> ExtraStageId;
+    ui32 InputPlanNodeId = 0;
+    ui32 ExtraInputPlanNodeId = 0;
+    std::optional<ui32> RightStageId;
+    std::optional<ui32> LeftStageId;
     TString Estimations;
 };
 
@@ -160,7 +162,9 @@ public:
     std::vector<TOperatorInfo> Operators;
     ui64 BaseTime = 0;
     ui32 PlanNodeId = 0;
+    ui32 OutputPlanNodeId = 0;
     ui32 PhysicalStageId = 0;
+    ui32 OutputPhysicalStageId = 0; // only first/main, not CTE-clone
     ui32 Tasks = 0;
     ui32 FinishedTasks = 0;
     const NJson::TJsonValue* StatsNode = nullptr;
@@ -168,6 +172,8 @@ public:
     ui64 MaxTime = 0;
     ui64 UpdateTime = 0;
     bool External = false;
+    TStringBuilder Builder;
+    TConnection* IngressConnection = nullptr;
 };
 
 struct TColorPalette {
@@ -257,16 +263,17 @@ public:
     }
 
     void Load(const NJson::TJsonValue& node);
-    void LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& node, ui32 parentPlanNodeId);
+    void LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& node, TConnection* outputConnection);
     void LoadSource(const NJson::TJsonValue& node, std::vector<TOperatorInfo>& stageOperators, const NJson::TJsonValue* ingressRowsNode);
     void MarkStageIndent(ui32 indentX, ui32& offsetY, std::shared_ptr<TStage> stage);
     void MarkLayout();
     void ResolveCteRefs();
-    void PrintTimeline(TStringBuilder& background, TStringBuilder& canvas, const TString& title, TAggregation& firstMessage, TAggregation& lastMessage, ui32 x, ui32 y, ui32 w, ui32 h, const TString& color);
+    void ResolveOperatorInputs();
+    void PrintTimeline(TStringBuilder& background, TStringBuilder& canvas, const TString& title, TAggregation& firstMessage, TAggregation& lastMessage, ui32 x, ui32 y, ui32 w, ui32 h, const TString& color, bool backgroundRect = false);
     void PrintWaitTime(TStringBuilder& canvas, std::shared_ptr<TSingleMetric> metric, ui32 x, ui32 y, ui32 w, ui32 h, const TString& fillColor);
     void PrintDeriv(TStringBuilder& canvas, TMetricHistory& history, ui32 x, ui32 y, ui32 w, ui32 h, const TString& title, const TString& lineColor, const TString& fillColor = "");
     void PrintValues(TStringBuilder& canvas, std::shared_ptr<TSingleMetric> metric, ui32 x, ui32 y, ui32 w, ui32 h, const TString& title, const TString& lineColor, const TString& fillColor = "");
-    void PrintStageSummary(TStringBuilder& background, TStringBuilder&, ui32 viewLeft, ui32 viewWidth, ui32 y0, ui32 h, std::shared_ptr<TSingleMetric> metric, const TString& mediumColor, const TString& lightColor, const TString& textSum, const TString& tooltip, ui32 taskCount, const TString& iconRef, const TString& iconScale);
+    void PrintStageSummary(TStringBuilder& background, ui32 viewLeft, ui32 viewWidth, ui32 y0, ui32 h, std::shared_ptr<TSingleMetric> metric, const TString& mediumColor, const TString& lightColor, const TString& textSum, const TString& tooltip, ui32 taskCount, const TString& iconRef, const TString& iconColor, const TString& iconScale, bool backgroundRect = false, const TString& peerId = "");
     void PrintSvg(ui64 maxTime, ui32 timelineDelta, ui32& offsetY, TStringBuilder& background, TStringBuilder& canvas);
     TString NodeType;
     std::vector<std::shared_ptr<TStage>> Stages;
@@ -309,6 +316,8 @@ public:
     TPlanViewConfig& Config;
     std::map<std::string, std::shared_ptr<TStage>>& CteStages;
     std::map<std::string, std::string>& CteSubPlans;
+    std::unordered_map<ui32, TConnection*> NodeToConnection;
+    std::unordered_map<TStage*, TConnection*> StageToExternalConnection;
 };
 
 class TPlanVisualizer {

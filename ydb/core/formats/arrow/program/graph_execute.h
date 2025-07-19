@@ -143,7 +143,7 @@ private:
 
 public:
     std::shared_ptr<IResourcesAggregator> GetResultsAggregationProcessor() const {
-        if (ResultRoot->GetProcessor()->GetType() != EProcessorType::Projection) {
+        if (ResultRoot->GetProcessor()->GetProcessorType() != EProcessorType::Projection) {
             return nullptr;
         }
         for (auto&& i : ResultRoot->GetInputEdges()) {

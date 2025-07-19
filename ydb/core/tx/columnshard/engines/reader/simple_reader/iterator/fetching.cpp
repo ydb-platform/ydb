@@ -129,7 +129,27 @@ public:
     }
 };
 
+
 }   // namespace
+
+TConclusion<bool> TStepAggregationSources::DoExecuteInplace(
+    const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& /*step*/) const {
+    AFL_VERIFY(source->GetType() == IDataSource::EType::Aggregation);
+    auto* aggrSource = static_cast<const TAggregationDataSource*>(source.get());
+    std::vector<std::shared_ptr<NArrow::NSSA::IDataSource>> sources;
+    for (auto&& i : aggrSource->GetSources()) {
+        sources.emplace_back(i);
+    }
+    auto conclusion = Aggregator->Execute(sources, source->GetStageData().GetTable());
+    if (conclusion.IsFail()) {
+        return conclusion;
+    }
+    const ui32 recordsCount = source->GetStageData().GetTable()->GetRecordsCount();
+    StageResult = std::make_unique<TFetchedResult>(source->ExtractStageData(), *GetContext()->GetCommonContext()->GetResolver());
+    StageResult->SetPages({ TPortionDataAccessor::TReadPage(0, recordsCount, 0) });
+    StageResult->SetResultChunk(StageResult->GetBatch()->BuildTableVerified());
+    return true;
+}
 
 TConclusion<bool> TBuildResultStep::DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const {
     auto context = source->GetContext();

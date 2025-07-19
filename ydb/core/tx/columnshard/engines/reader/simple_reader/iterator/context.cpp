@@ -102,7 +102,7 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::BuildColumnsFetchingPlan(c
         const auto& chainProgram = GetReadMetadata()->GetProgram().GetChainVerified();
         acc.AddStep(std::make_shared<NCommon::TProgramStep>(chainProgram));
     }
-    if (!Context->GetSourcesAggregationScript()) {
+    if (!GetSourcesAggregationScript()) {
         acc.AddStep(std::make_shared<NCommon::TBuildStageResultStep>());
         acc.AddStep(std::make_shared<TPrepareResultStep>());
     }

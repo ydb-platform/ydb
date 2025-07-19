@@ -50,8 +50,16 @@ public:
 };
 
 class IDataSource: public NCommon::IDataSource {
+public:
+    enum class EType {
+        SysInfo,
+        Portion,
+        Aggregation
+    };
+
 private:
     using TBase = NCommon::IDataSource;
+    YDB_READONLY(EType, Type, EType::Portion);
     const TReplaceKeyAdapter Start;
     const TReplaceKeyAdapter Finish;
     virtual NJson::TJsonValue DoDebugJson() const = 0;
@@ -232,10 +240,11 @@ public:
 
     bool OnIntervalFinished(const ui32 intervalIdx);
 
-    IDataSource(const ui64 sourceId, const ui32 sourceIdx, const std::shared_ptr<NCommon::TSpecialReadContext>& context,
+    IDataSource(const EType type, const ui64 sourceId, const ui32 sourceIdx, const std::shared_ptr<NCommon::TSpecialReadContext>& context,
         NArrow::TSimpleRow&& start, NArrow::TSimpleRow&& finish, const TSnapshot& recordSnapshotMin, const TSnapshot& recordSnapshotMax,
         const std::optional<ui32> recordsCount, const std::optional<ui64> shardingVersion, const bool hasDeletions)
         : TBase(sourceId, sourceIdx, context, recordSnapshotMin, recordSnapshotMax, recordsCount, shardingVersion, hasDeletions)
+        , Type(type)
         , Start(context->GetReadMetadata()->IsDescSorted() ? std::move(finish) : std::move(start), context->GetReadMetadata()->IsDescSorted())
         , Finish(context->GetReadMetadata()->IsDescSorted() ? std::move(start) : std::move(finish), context->GetReadMetadata()->IsDescSorted()) {
         if (context->GetReadMetadata()->IsDescSorted()) {
@@ -407,7 +416,7 @@ public:
 class TAggregationDataSource: public IDataSource {
 private:
     using TBase = IDataSource;
-    const std::vector<std::shared_ptr<IDataSource>> Sources;
+    YDB_READONLY_DEF(std::vector<std::shared_ptr<IDataSource>>, Sources);
 
     virtual void InitUsedRawBytes() override {
         AFL_VERIFY(false);
@@ -451,7 +460,7 @@ private:
     }
     virtual void DoAssembleAccessor(
         const NArrow::NSSA::TProcessorContext& /*context*/, const ui32 /*columnId*/, const TString& /*subColumnName*/) override {
-        return TConclusionStatus::Fail("not implemented DoAssembleAccessor for TAggregationDataSource");
+        AFL_VERIFY(false);
     }
     virtual TConclusion<std::shared_ptr<NArrow::NSSA::IFetchLogic>> DoStartFetchData(
         const NArrow::NSSA::TProcessorContext& /*context*/, const TDataAddress& /*addr*/) override {
@@ -477,6 +486,14 @@ private:
     }
 
 public:
+    ui64 GetLastSourceId() const {
+        return Sources.back()->GetSourceId();
+    }
+
+    ui64 GetLastSourceRecordsCount() const {
+        return Sources.back()->GetRecordsCount();
+    }
+
     virtual TString GetEntityStorageId(const ui32 /*entityId*/) const override {
         AFL_VERIFY(false);
         return "";
@@ -497,7 +514,7 @@ public:
         return Default<std::shared_ptr<ISnapshotSchema>>();
     }
 
-    virtual ui64 PredictAccessorsSize(const std::set<ui32>& entityIds) const override {
+    virtual ui64 PredictAccessorsSize(const std::set<ui32>& /*entityIds*/) const override {
         AFL_VERIFY(false);
         return 0;
     }
@@ -553,10 +570,9 @@ public:
         return NArrow::TSimpleRow(nullptr, 0);
     }
 
-    TAggregationDataSource(
-        const ui32 sourceIdx, std::vector<std::shared_ptr<IDataSource>>&& sources, const std::shared_ptr<NCommon::TSpecialReadContext>& context)
-        : TBase(sources->back()->GetSourceId(), sources->back()->GetSourceIdx(), context, sources->front()->GetStart().CopyValue(),
-              sources->back()->GetFinish().CopyValue(), TSnapshot::Zero(), TSnapshot::Zero(), std::nullopt, std::nullopt, false)
+    TAggregationDataSource(std::vector<std::shared_ptr<IDataSource>>&& sources, const std::shared_ptr<NCommon::TSpecialReadContext>& context)
+        : TBase(EType::Aggregation, sources.back()->GetSourceId(), sources.back()->GetSourceIdx(), context, sources.front()->GetStart().CopyValue(),
+              sources.back()->GetFinish().CopyValue(), TSnapshot::Zero(), TSnapshot::Zero(), std::nullopt, std::nullopt, false)
         , Sources(std::move(sources)) {
         AFL_VERIFY(Sources.size());
     }

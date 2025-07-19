@@ -15,20 +15,7 @@ enum class EAggregate {
 
 class TAggregationsHelper {
 public:
-    static EAggregate GetSecondaryAggregationId(const EAggregate aggr) {
-        switch (aggr) {
-            case EAggregate::Unspecified:
-                AFL_VERIFY(false);
-            case EAggregate::Min:
-            case EAggregate::Max:
-            case EAggregate::Sum:
-            case EAggregate::Some:
-                return AggregationId;
-            case EAggregate::NumRows:
-            case EAggregate::Count:
-                return EAggregate::Sum;
-        }
-    }
+    static EAggregate GetSecondaryAggregationId(const EAggregate aggr);
 };
 
 }   // namespace NKikimr::NArrow::NSSA::NAggregation

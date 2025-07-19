@@ -18,7 +18,7 @@ and timeout (by default, the maximum response time from healthcheck). Documentat
 ### UI
 
 * 20432:Fixed an [issue](https://github.com/ydb-platform/ydb/issues/20431) pdisk info timeout when target node is disconnected (dead). [#20432](https://github.com/ydb-platform/ydb/pull/20432) ([Alexey Efimov](https://github.com/adameat))
-* * 17157:Viewer API: Fixed the retrieval of tablet list for tables implementing secondary indexes. #17103 [#17157](https://github.com/ydb-platform/ydb/pull/17157) ([Alexey Efimov](https://github.com/adameat))
+* 17157:Viewer API: Fixed the retrieval of tablet list for tables implementing secondary indexes. #17103 [#17157](https://github.com/ydb-platform/ydb/pull/17157) ([Alexey Efimov](https://github.com/adameat))
 
 ### Bug fixes
 

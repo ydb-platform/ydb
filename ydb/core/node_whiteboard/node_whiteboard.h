@@ -65,6 +65,9 @@ struct TEvWhiteboard{
         EvVDiskDropDonors,
         EvClockSkewUpdate,
         EvMemoryStatsUpdate,
+        EvBridgeInfoUpdate,
+        EvBridgeInfoRequest,
+        EvBridgeInfoResponse,
         EvEnd
     };
 
@@ -473,6 +476,10 @@ struct TEvWhiteboard{
 
     struct TEvSignalBodyRequest : TEventPB<TEvSignalBodyRequest, NKikimrWhiteboard::TEvSignalBodyRequest, EvSignalBodyRequest> {};
     struct TEvSignalBodyResponse : TEventPB<TEvSignalBodyResponse, NKikimrWhiteboard::TEvSignalBodyResponse, EvSignalBodyResponse> {};
+
+    struct TEvBridgeInfoUpdate : public TEventPB<TEvBridgeInfoUpdate, NKikimrWhiteboard::TBridgeInfo, EvBridgeInfoUpdate> {};
+    struct TEvBridgeInfoRequest : public TEventPB<TEvBridgeInfoRequest, NKikimrWhiteboard::TEvBridgeInfoRequest, EvBridgeInfoRequest> {};
+    struct TEvBridgeInfoResponse : public TEventPB<TEvBridgeInfoResponse, NKikimrWhiteboard::TEvBridgeInfoResponse, EvBridgeInfoResponse> {};
 };
 
 inline TActorId MakeNodeWhiteboardServiceId(ui32 node) {

@@ -39,6 +39,8 @@ and timeout (by default, the maximum response time from healthcheck). Documentat
 * 19111:Added support for defining the size of sliced portions on the zero layer. [#19111](https://github.com/ydb-platform/ydb/pull/19111) ([Oleg Doronin](https://github.com/dorooleg))
 * 18988:Added support for pile identifiers in dynamic nodes within the 2-dc cluster topology. [#18988](https://github.com/ydb-platform/ydb/pull/18988) ([Alexander Rutkovsky](https://github.com/alexvru))
 * 18859:Added support for Board reconfiguration in StateStorage via DistConf. [#18859](https://github.com/ydb-platform/ydb/pull/18859) ([Evgenik2](https://github.com/Evgenik2))
+* 19134:Added the `running` status to script execution statuses (improved output for the get script execution operation). [#19134](https://github.com/ydb-platform/ydb/pull/19134) ([Pisarenko Grigoriy](https://github.com/GrigoriyPA))
+* 18444:Added support for a new external data source [OpenSearch](https://opensearch.org/) in federated queries. [#18444](https://github.com/ydb-platform/ydb/pull/18444) ([Arslan Giniyatullin](https://github.com/Arslanka))
 
 ### Bug fixes
 
@@ -87,7 +89,7 @@ and timeout (by default, the maximum response time from healthcheck). Documentat
 * 19048:Fixed the [issue](https://github.com/ydb-platform/ydb/issues/19044) causing a crash when the PassAway function was invoked twice. [#19048](https://github.com/ydb-platform/ydb/pull/19048) ([Alexey Efimov](https://github.com/adameat))
 * 18924:Fixed a race condition between YardInit and Slay when a group (and therefore a VDisk) is created and then immediately deleted, removing "phantom vdisks" from pdisks. [#18924](https://github.com/ydb-platform/ydb/pull/18924) ([Semyon Danilov](https://github.com/SammyVimes))
 * 18764:Fixed an [issue](https://github.com/ydb-platform/ydb/issues/18747) with a timestamp push down in OLAP. [#18764](https://github.com/ydb-platform/ydb/pull/18764) ([Oleg Doronin](https://github.com/dorooleg))
-
+* 19466:Fixed float sum aggregation in arrow::Kernel. [#19466](https://github.com/ydb-platform/ydb/pull/19466) ([Oleg Doronin](https://github.com/dorooleg))
 
 ### YDB UI
 

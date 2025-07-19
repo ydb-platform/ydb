@@ -193,13 +193,6 @@ CREATE TABLE article (
 
 О том, как добавить, изменить, получить текущие значения или удалить атрибуты читайте в статье [{#T}](../../../dev/custom-attributes.md).
 
-### Импорт и экспорт данных в S3
-
-{{ ydb-short-name }} поддерживает импорт и экспорт данных из строковых таблиц в S3-совместимые объектные хранилища с использованием {{ ydb-short-name }} CLI.
-
-Подробнее см. в статьях [{#T}](../../../reference/ydb-cli/export-import/import-s3.md) и [{#T}](../../../reference/ydb-cli/export-import/export-s3.md).
-
-
 ## Колоночные таблицы {#column-oriented-tables}
 
 {% note warning %}
@@ -266,9 +259,3 @@ AUTO_PARTITIONING_MIN_PARTITIONS_COUNT определяет минимально
 Значение по умолчанию: 64.
 
 С учетом, что остальные параметры партицирования игнорируются, это же значение определяет и верхнее число партиций.
-
-### Импорт и экспорт данных в S3
-
-{{ ydb-short-name }} поддерживает экспорт данных из колоночных таблиц в объектное хранилище S3, а также импорт из S3 в новые колоночные таблицы с помощью синтаксиса [CREATE TABLE ... AS SELECT](../../../yql/reference/syntax/create_table/index.md). Это позволяет быстро переносить большие объёмы данных между хранилищами и {{ ydb-short-name }}.
-
-Подробнее см. в статьях [{#T}](../../federated_query/s3/external_table.md#import-from-s3) и [{#T}](../../federated_query/s3/write_data.md#export-to-s3).

@@ -119,7 +119,22 @@ month=03
 
 ## Синтаксис для внешних таблиц {#syntax-external-table}
 
-Рекомендованным способом работы с партицированием данных является использование [внешних таблиц](../../datamodel/external_table.md). Для них в параметре `partitioned_by` задаётся список колонок в JSON-формате при создании таблицы:
+Рекомендованным способом работы с партицированием данных является использование [внешних таблиц](../../datamodel/external_table.md). Для них в параметре `partitioned_by` задаётся список колонок в JSON-формате при создании таблицы.
+
+```yql
+CREATE EXTERNAL TABLE <external_table> (
+    <field1> <type1>,
+    <field2> <type2> NOT NULL,
+    <field3> <type3> NOT NULL
+) WITH (
+    DATA_SOURCE = "<object_storage_external_datasource_name>",
+    LOCATION = "<path>",
+    PARTITIONED_BY = "['<field2>', '<field3>']",
+    <format_settings>
+);
+```
+
+Пример создания внешней таблицы с партицированием по колонкам `year` и `month`:
 
 ```yql
 CREATE EXTERNAL TABLE `objectstorage_data` (
@@ -144,21 +159,6 @@ FROM
 WHERE
     year=2021
     AND month=02
-```
-
-В общем виде синтаксис создания внешних таблиц с настройками партицирования выглядит следующим образом:
-
-```yql
-CREATE EXTERNAL TABLE <external_table> (
-    <field1> <type1>,
-    <field2> <type2> NOT NULL,
-    <field3> <type3> NOT NULL
-) WITH (
-    DATA_SOURCE = "<object_storage_external_datasource_name>",
-    LOCATION = "<path>",
-    PARTITIONED_BY = "['<field2>', '<field3>']",
-    <format_settings>
-);
 ```
 
 Запрещено создавать таблицу, схема которой состоит только из колонок партицирования.

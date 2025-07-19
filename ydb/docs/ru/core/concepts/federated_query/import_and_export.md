@@ -16,7 +16,7 @@
 
 {% endnote %}
 
-Ниже приведён пример импорта данных из [внешней таблицы](../datamodel/external_table.md) указывающей на S3-совместимое хранилище в новою [колоночную таблицу](../datamodel/table.md#column-oriented-tables) с помощью команды [CREATE TABLE ... AS SELECT](../../../yql/reference/syntax/create_table/index.md). Параметры для создаваемой таблицы могут быть перечислены в секции `WITH`, подробнее см. в статье [{#T}](../../../yql/reference/syntax/create_table/with.md).
+Ниже приведён пример импорта данных из [внешней таблицы](../datamodel/external_table.md) указывающей на S3-совместимое хранилище в новую [колоночную таблицу](../datamodel/table.md#column-oriented-tables) с помощью команды [CREATE TABLE ... AS SELECT](../../../yql/reference/syntax/create_table/index.md). Параметры для создаваемой таблицы могут быть перечислены в секции `WITH`, подробнее см. в статье [{#T}](../../../yql/reference/syntax/create_table/with.md).
 
 ```yql
 CREATE TABLE column_table (

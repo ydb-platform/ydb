@@ -144,10 +144,7 @@ TConclusion<bool> TStepAggregationSources::DoExecuteInplace(
     if (conclusion.IsFail()) {
         return conclusion;
     }
-    const ui32 recordsCount = source->GetStageData().GetTable()->GetRecordsCount();
-    StageResult = std::make_unique<TFetchedResult>(source->ExtractStageData(), *GetContext()->GetCommonContext()->GetResolver());
-    StageResult->SetPages({ TPortionDataAccessor::TReadPage(0, recordsCount, 0) });
-    StageResult->SetResultChunk(StageResult->GetBatch()->BuildTableVerified());
+    source->BuildStageResult(source);
     return true;
 }
 

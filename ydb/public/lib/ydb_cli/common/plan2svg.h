@@ -318,6 +318,7 @@ public:
     std::map<std::string, std::string>& CteSubPlans;
     std::unordered_map<ui32, TConnection*> NodeToConnection;
     std::unordered_map<TStage*, TConnection*> StageToExternalConnection;
+    std::unordered_set<ui32> NodeToSource;
 };
 
 class TPlanVisualizer {

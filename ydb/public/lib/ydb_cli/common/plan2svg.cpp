@@ -558,9 +558,9 @@ void TPlan::ResolveCteRefs() {
 void TPlan::ResolveOperatorInputs() {
     for (auto& s : Stages) {
         for (auto& o : s->Operators) {
-            if (o.InputPlanNodeId) {
+            if (o.InputPlanNodeId && !NodeToSource.contains(o.InputPlanNodeId)) {
                 o.RightStageId = NodeToConnection.at(o.InputPlanNodeId)->FromStage->PhysicalStageId;
-                if (o.ExtraInputPlanNodeId) {
+                if (o.ExtraInputPlanNodeId && !NodeToSource.contains(o.ExtraInputPlanNodeId)) {
                     o.LeftStageId = NodeToConnection.at(o.ExtraInputPlanNodeId)->FromStage->PhysicalStageId;
                 }
             }
@@ -1198,6 +1198,8 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
                 }
             } else if (planNodeType == "") {
                 if (subNodeType == "Source") {
+                    NodeToSource.insert(connectionPlanNodeId);
+
                     if (stage->IngressName) {
                         ythrow yexception() << "Plan stage already has Ingress [" << stage->IngressName << "]";
                     }

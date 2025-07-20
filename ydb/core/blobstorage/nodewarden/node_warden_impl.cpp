@@ -366,8 +366,6 @@ void TNodeWarden::Bootstrap() {
         const TIntrusivePtr<NKikimr::TControlBoard>& icb = actorSystem->AppData<TAppData>()->Icb;
 
 
-
-=======
         TControlBoard::RegisterLocalControl(EnablePutBatching, icb->BlobStorage.EnablePutBatching);
         TControlBoard::RegisterLocalControl(EnableVPatch, icb->BlobStorage.EnableVPatch);
         TControlBoard::RegisterSharedControl(EnableLocalSyncLogDataCutting, icb->VDiskControls.EnableLocalSyncLogDataCutting);
@@ -421,7 +419,7 @@ void TNodeWarden::Bootstrap() {
         TControlBoard::RegisterSharedControl(MaxNumOfSlowDisksHDD, icb->DSProxyControls.MaxNumOfSlowDisksHDD);
         TControlBoard::RegisterSharedControl(MaxNumOfSlowDisksSSD, icb->DSProxyControls.MaxNumOfSlowDisksSSD);
 
-        TControlBoard::RegisterSharedControl(EnableDeepScrubbingm, icb->VDiskControls.EnableDeepScrubbing);
+        TControlBoard::RegisterSharedControl(EnableDeepScrubbing, icb->VDiskControls.EnableDeepScrubbing);
 
         TControlBoard::RegisterSharedControl(LongRequestThresholdMs, icb->DSProxyControls.LongRequestThresholdMs);
         TControlBoard::RegisterSharedControl(ReportingControllerBucketSize, icb->DSProxyControls.RequestReportingSettings.BucketSize);

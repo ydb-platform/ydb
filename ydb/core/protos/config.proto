@@ -1183,7 +1183,7 @@ message TQueryServiceConfig {
 // field options.
 message TImmediateControlOptions {
     optional string Description = 1;
-    optional uint64 MinValue = 2;
+    optional int64 MinValue = 2;
     optional uint64 MaxValue = 3;
     optional uint64 DefaultValue = 4;
 }
@@ -1660,7 +1660,7 @@ message TImmediateControlsConfig {
             MinValue: 1,
             MaxValue: 1000,
             DefaultValue: 10 }];
-        
+
         optional uint64 HullCompMaxInFlightWrites = 31 [(ControlOptions) = {
             Description: "Max writes inflight for level compaction",
             MinValue: 1,
@@ -1672,7 +1672,7 @@ message TImmediateControlsConfig {
             MinValue: 1,
             MaxValue: 1000,
             DefaultValue: 20 }];
-            
+
         optional uint64 EnableDeepScrubbing = 33 [(ControlOptions) = {
             Description: "Run CheckIntegrity requests during Scrub process instead of usual scrubbing",
             MinValue: 0,
@@ -1910,6 +1910,22 @@ message TImmediateControlsConfig {
         }];
     }
 
+    message TGroupMapperControls {
+        optional uint64 GroupSizeInUnitsLargerThanPDiskPenalty = 1 [(ControlOptions) = {
+            Description: "Group size in units larger than pdisk penalty",
+            MinValue: -1000,
+            MaxValue: 1000,
+            DefaultValue: 10
+        }];
+
+        optional uint64 GroupSizeInUnitsSmallerThanPDiskPenalty = 2 [(ControlOptions) = {
+            Description: "Group size in units smaller than penalty in pdisk",
+            MinValue: -1000,
+            MaxValue: 1000,
+            DefaultValue: 20
+        }];
+    }
+
     optional TDataShardControls DataShardControls = 1;
     optional TTxLimitControls TxLimitControls = 2;
     optional TCoordinatorControls CoordinatorControls = 3;
@@ -1926,6 +1942,7 @@ message TImmediateControlsConfig {
     optional TGRpcControls GRpcControls = 14;
     optional TKQPSessionControls KQPSessionControls = 15;
     optional TColumnShardControls ColumnShardControls = 16;
+    optional TGroupMapperControls GroupMapperControls = 17;
 };
 
 message TMeteringConfig {

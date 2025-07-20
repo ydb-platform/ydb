@@ -93,7 +93,7 @@ public:
     }
 
     TRequest(THashSet<TAddress>&& addresses, std::shared_ptr<ICallback>&& callback, const EConsumer consumer)
-        : Callback(callback)
+        : Callback(std::move(callback))
         , Consumer(consumer) {
         for (auto&& i : addresses) {
             Wait[TPolicy::GetSourceId(i)].emplace(i);

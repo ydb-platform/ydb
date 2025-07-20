@@ -41,6 +41,15 @@ and timeout (by default, the maximum response time from healthcheck). Documentat
 * 18859:Added support for Board reconfiguration in StateStorage via DistConf. [#18859](https://github.com/ydb-platform/ydb/pull/18859) ([Evgenik2](https://github.com/Evgenik2))
 * 19134:Added the `running` status to script execution statuses (improved output for the get script execution operation). [#19134](https://github.com/ydb-platform/ydb/pull/19134) ([Pisarenko Grigoriy](https://github.com/GrigoriyPA))
 * 18444:Added support for a new external data source [OpenSearch](https://opensearch.org/) in federated queries. [#18444](https://github.com/ydb-platform/ydb/pull/18444) ([Arslan Giniyatullin](https://github.com/Arslanka))
+* 21183:In addition to https://github.com/ydb-platform/ydb/pull/18333 and https://github.com/ydb-platform/ydb/pull/20231.
+
+There is implements the function of writing to the unified agent for cloud events in YMQ.
+
+In addition, a mapper was implemented that turns a C++ structure into a protobuf structure in order to serialize it and send it to a unified agent. [#21183](https://github.com/ydb-platform/ydb/pull/21183) ([flown4qqqq](https://github.com/flown4qqqq))
+* 21172:raw bytes have been supported [#21172](https://github.com/ydb-platform/ydb/pull/21172) ([Oleg Doronin](https://github.com/dorooleg))
+* 21010:Add more attributes to DSProxy and VDisk spans to make it easier to find them in the metrics explorer. [#21010](https://github.com/ydb-platform/ydb/pull/21010) ([Sergey Belyakov](https://github.com/serbel324))
+* 20966:- Introduced new Distributed Storage parameter `InferPDiskSlotCountFromUnitSize` that infers `ExpectedSlotCount` and `SlotSizeInUnits` from this value and drive size. [#20966](https://github.com/ydb-platform/ydb/pull/20966) ([Yaroslav Dynnikov](https://github.com/rosik))
+* 19684:Adds a command to move pdisk from one node to another, if both nodes have access to the underlying drive. This way we can skip data synchronization, since new disk will just use data of the "old" disk [#19684](https://github.com/ydb-platform/ydb/pull/19684) ([Semyon Danilov](https://github.com/SammyVimes))
 
 ### Bug fixes
 
@@ -63,9 +72,8 @@ and timeout (by default, the maximum response time from healthcheck). Documentat
 * 16423:Changed behavior — `SHOW CREATE TABLE` now fails on views instead of producing wrong output. [#16423](https://github.com/ydb-platform/ydb/pull/16423) ([Daniil Demin](https://github.com/jepett0))
 * 16764:Fixed redirects from cluster endpoints (storage nodes) to database nodes, resolving inconsistent behavior where some system tables were not visible. #16763 [#16764](https://github.com/ydb-platform/ydb/pull/16764) ([Alexey Efimov](https://github.com/adameat))
 * 18698:Fixed an issue where checks for enabled encryption were missing during the zero copy routine. This issue resulted in attempts to send unencrypted data via an XDC socket. https://github.com/ydb-platform/ydb/issues/18546 [#18698](https://github.com/ydb-platform/ydb/pull/18698) ([Daniil Cherednik](https://github.com/dcherednik))
-* 17157:Viewer API: Fixed the retrieval of tablet list for tables implementing secondary indexes. #17103 [#17157](https://github.com/ydb-platform/ydb/pull/17157) ([Alexey Efimov](https://github.com/adameat))
-* 17230:Added more information to the error message that occurs during Generic::TPartition parsing. [#17230](https://github.com/ydb-platform/ydb/pull/17230) ([Vitaly Isaev](https://github.com/vitalyisaev2))
 * 17157:Fixed an issue with filters for tablets on nodes. Resolves issue #17103. [#17157](https://github.com/ydb-platform/ydb/pull/17157) ([Alexey Efimov](https://github.com/adameat))
+* 17230:Added more information to the error message that occurs during Generic::TPartition parsing. [#17230](https://github.com/ydb-platform/ydb/pull/17230) ([Vitaly Isaev](https://github.com/vitalyisaev2))
 * 17009:Fixed an [issue](https://github.com/ydb-platform/ydb/issues/16938) with compiling a `JOIN` operation, in which one side was an empty constant. [#17009](https://github.com/ydb-platform/ydb/pull/17009) ([Nikita Vasilev](https://github.com/nikvas0))
 * 16901:Changed the error response in the RateLimiter service from INTERNAL_ERROR to SCHEME_ERROR when using non-existent coordination nodes or resources. https://github.com/ydb-platform/ydb/issues/16914 [#16901](https://github.com/ydb-platform/ydb/pull/16901) ([Vasily Gerasimov](https://github.com/UgnineSirdis))
 * 17606:Fixed an issue with the check for unknown StatusV2 in the VDisks healthcheck. (https://github.com/ydb-platform/ydb/issues/17619) Fixed a forward compatibility issue. [#17606](https://github.com/ydb-platform/ydb/pull/17606) ([Andrei Rykov](https://github.com/StekPerepolnen))
@@ -90,6 +98,9 @@ and timeout (by default, the maximum response time from healthcheck). Documentat
 * 18924:Fixed a race condition between YardInit and Slay when a group (and therefore a VDisk) is created and then immediately deleted, removing "phantom vdisks" from pdisks. [#18924](https://github.com/ydb-platform/ydb/pull/18924) ([Semyon Danilov](https://github.com/SammyVimes))
 * 18764:Fixed an [issue](https://github.com/ydb-platform/ydb/issues/18747) with a timestamp push down in OLAP. [#18764](https://github.com/ydb-platform/ydb/pull/18764) ([Oleg Doronin](https://github.com/dorooleg))
 * 19466:Fixed float sum aggregation in arrow::Kernel. [#19466](https://github.com/ydb-platform/ydb/pull/19466) ([Oleg Doronin](https://github.com/dorooleg))
+* 20946:Issue: https://github.com/ydb-platform/ydb/issues/20945 [#20946](https://github.com/ydb-platform/ydb/pull/20946) ([Semyon Danilov](https://github.com/SammyVimes))
+* 20519:We have issue when VDisk hangs in endless local recovery if ChunkRead request fails, because it causes Loader actor to switch to terminate state without notifying its parents. This change will allow loader actor to terminate properly on PDisk errors, and LocalRecovery to get notified about this error and to finish with proper status.
+https://github.com/ydb-platform/ydb/issues/20520 [#20519](https://github.com/ydb-platform/ydb/pull/20519) ([Sergey Belyakov](https://github.com/serbel324))
 
 ### YDB UI
 
@@ -105,3 +116,4 @@ and timeout (by default, the maximum response time from healthcheck). Documentat
 * 17884:Increased the number of filter types pushed into column shards, resulting in improved performance.[#17884](https://github.com/ydb-platform/ydb/pull/17884) ([Pavel Velikhov](https://github.com/pavelvelikhov))
 * 18461:Corrected the task placement logic for read operations from external sources. [#18461](https://github.com/ydb-platform/ydb/pull/18461) ([Pisarenko Grigoriy](https://github.com/GrigoriyPA))
 * 18765:Optimized the process of copying TStorageConfig when sending a changed configuration to subscribers. [#18765](https://github.com/ydb-platform/ydb/pull/18765) ([Alexander Rutkovsky](https://github.com/alexvru))
+

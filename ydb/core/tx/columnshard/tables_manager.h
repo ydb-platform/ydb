@@ -295,8 +295,15 @@ public:
 
     std::vector<TSchemasChain> ExtractSchemasToClean() const;
 
-    std::optional<TUnifiedPathId> GetTabletPathId() const {
-        return TabletPathId;
+    std::optional<TUnifiedPathId> GetTabletPathIdOptional() const {
+      return TabletPathId;
+    }
+
+    TUnifiedPathId GetTabletPathIdVerified() const {
+      AFL_VERIFY(TabletPathId.has_value());
+      AFL_VERIFY(TabletPathId->InternalPathId.IsValid());
+      AFL_VERIFY(TabletPathId->SchemeShardLocalPathId.IsValid());
+      return *TabletPathId;
     }
 
     const std::unique_ptr<TTableLoadTimeCounters>& GetLoadTimeCounters() const {

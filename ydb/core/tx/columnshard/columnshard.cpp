@@ -413,11 +413,11 @@ void TColumnShard::FillColumnTableStats(const TActorContext& ctx, std::unique_pt
 void TColumnShard::SendPeriodicStats() {
     LOG_S_DEBUG("Send periodic stats.");
 
-    if (!CurrentSchemeShardId || !TablesManager.GetTabletPathId().has_value()) {
+    if (!CurrentSchemeShardId || !TablesManager.GetTabletPathIdOptional()) {
         LOG_S_DEBUG("Disabled periodic stats at tablet " << TabletID());
         return;
     }
-    const auto& tabletSchemeShardLocalPathId = TablesManager.GetTabletPathId()->SchemeShardLocalPathId;
+    const auto& tabletSchemeShardLocalPathId = TablesManager.GetTabletPathIdVerified().SchemeShardLocalPathId;
 
     const TActorContext& ctx = ActorContext();
     const TInstant now = TAppData::TimeProvider->Now();

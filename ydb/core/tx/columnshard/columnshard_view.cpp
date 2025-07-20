@@ -134,7 +134,7 @@ TString TTxMonitoring::RenderMainPage() {
     html << "<b>LastSchemaSeqNoGeneration :</b> " << Self->LastSchemaSeqNo.Generation << "<br />";
     html << "<b>LastSchemaSeqNoRound :</b> " << Self->LastSchemaSeqNo.Round << "<br />";
     html << "<b>LastExportNumber :</b> " << Self->LastExportNo << "<br />";
-    if (const auto& tabletPathId = Self->TablesManager.GetTabletPathId()) {
+    if (const auto& tabletPathId = Self->TablesManager.GetTabletPathIdOptional()) {
         html << "<b>SchemeShardLocalPathId :</b> " << tabletPathId->SchemeShardLocalPathId << "<br />";
         html << "<b>InternalPathId :</b> " << tabletPathId->InternalPathId << "<br />";
     } else {

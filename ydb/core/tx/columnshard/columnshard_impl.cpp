@@ -413,8 +413,7 @@ void TColumnShard::RunAlterStore(const NKikimrTxColumnShard::TAlterStore& proto,
 
     AFL_VERIFY(proto.HasStorePathId());
     const auto& storeSchemeShardLocalPathId = NColumnShard::TSchemeShardLocalPathId::FromProto(proto);
-    AFL_VERIFY(TablesManager.GetTabletPathId());
-    const auto& tabletSchemeShardLocalPathId = TablesManager.GetTabletPathId()->SchemeShardLocalPathId;
+    const auto& tabletSchemeShardLocalPathId = TablesManager.GetTabletPathIdVerified().SchemeShardLocalPathId;
     AFL_VERIFY(tabletSchemeShardLocalPathId == storeSchemeShardLocalPathId)("tablet_path_id", tabletSchemeShardLocalPathId)(
         "store_path_id", storeSchemeShardLocalPathId);
 

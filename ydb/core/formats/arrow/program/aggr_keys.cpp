@@ -213,12 +213,12 @@ private:
     const EAggregate AggregationType;
     virtual TConclusionStatus DoExecute(const std::vector<std::shared_ptr<TAccessorsCollection>>& sources,
         const std::shared_ptr<TAccessorsCollection>& collectionResult) const override {
-        std::vector<std::shared_ptr<IChunkedArray>> arrays;
+        std::vector<const IChunkedArray*> arrays;
         std::optional<arrow::Type::type> type;
         for (auto&& i : sources) {
             const auto& acc = i->GetAccessorVerified(ColumnInfo.GetColumnId());
             AFL_VERIFY(acc->GetRecordsCount() == 1)("count", acc->GetRecordsCount());
-            arrays.emplace_back(acc);
+            arrays.emplace_back(acc.get());
             if (!type) {
                 type = acc->GetDataType()->id();
             } else {

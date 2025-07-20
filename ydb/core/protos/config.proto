@@ -1777,8 +1777,7 @@ message TAuditConfig {
     optional TStderrBackend StderrBackend = 1;
     optional TFileBackend FileBackend = 2;
     optional TUnifiedAgentBackend UnifiedAgentBackend = 3;
-    optional EAuditLevel AuditMonitoringLevel = 4 [default = EAuditLevel::None];
-    optional EAuditLevel AuditGRPCLevel = 5 [default = EAuditLevel::None];
+    optional bool MonitoringAudit = 4 [default = false];
 };
 
 message THiveTabletLimit {

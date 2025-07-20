@@ -10,13 +10,15 @@ namespace NActors {
 
 using TAuditParts = TVector<std::pair<TString, TString>>;
 
-bool IsAuditEnabled(const NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr& ev);
+bool NeedAudit(const TString& method, const TString& url, const TCgiParameters& params,
+               TStringBuf TStringBuf = {});
 
-void AddUserTokenAuditParts(const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, TAuditParts& parts);
+void AddAuditParts(const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, TAuditParts& parts);
 
 void AddErrorStatusAuditParts(const TString& status, TAuditParts& parts);
 
 void AuditRequest(const NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr& ev,
+                  const NHttp::THttpOutgoingResponsePtr response,
                   const TAuditParts& parts = {});
 
 }

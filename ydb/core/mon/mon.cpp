@@ -1,13 +1,21 @@
 #include "mon.h"
-#include "mon_audit.h"
-#include <ydb/library/actors/core/actor_bootstrapped.h>
-#include <ydb/library/actors/core/interconnect.h>
-#include <ydb/library/actors/http/http_proxy.h>
+#include "mon_impl.h"
+#include "counters_adapter_impl.h"
+
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/auth.h>
-#include <ydb/core/grpc_services/base/base.h>
+#include <ydb/core/base/counters.h>
+#include <ydb/core/base/monitoring_provider.h>
 #include <ydb/core/base/ticket_parser.h>
+#include <ydb/core/grpc_services/base/base.h>
+#include <ydb/core/mon/audit/audit.h>
+#include <ydb/core/protos/mon.pb.h>
+#include <ydb/core/util/wildcard.h>
 
+#include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/interconnect.h>
+#include <ydb/library/actors/core/probes.h>
+#include <ydb/library/actors/http/http_proxy.h>
 #include <ydb/public/sdk/cpp/adapters/issue/issue.h>
 
 #include <library/cpp/json/json_reader.h>
@@ -15,22 +23,12 @@
 #include <library/cpp/protobuf/json/proto2json.h>
 #include <library/cpp/lwtrace/all.h>
 #include <library/cpp/lwtrace/mon/mon_lwtrace.h>
-#include <ydb/library/actors/core/probes.h>
-#include <ydb/core/base/monitoring_provider.h>
-#include <ydb/core/util/wildcard.h>
-
 #include <library/cpp/monlib/service/pages/version_mon_page.h>
 #include <library/cpp/monlib/service/pages/mon_page.h>
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 #include <library/cpp/monlib/dynamic_counters/page.h>
 
 #include <util/system/hostname.h>
-
-#include <ydb/core/base/counters.h>
-#include <ydb/core/protos/mon.pb.h>
-
-#include "mon_impl.h"
-#include "counters_adapter_impl.h"
 
 namespace NActors {
 
@@ -395,8 +393,7 @@ public:
     }
 
     void ReplyWith(NHttp::THttpOutgoingResponsePtr response) {
-        Cerr << "iiiii ReplyWith audit " << Event->Get()->Request->URL << Endl;
-        AuditRequest(Event, AuditParts);
+        AuditRequest(Event, response, AuditParts);
         Send(Event->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(response));
     }
 
@@ -504,8 +501,6 @@ public:
         response << "Content-Length: " << body.size() << "\r\n";
         response << "\r\n";
         response << body;
-
-        AddErrorStatusAuditParts(httpError);
         ReplyWith(request->CreateResponseString(response));
         PassAway();
     }
@@ -528,7 +523,7 @@ public:
         }
         TString serializedToken;
         if (result && result->UserToken) {
-            AddUserTokenAuditParts(result->UserToken, AuditParts);
+            AddAuditParts(result->UserToken, AuditParts);
             serializedToken = result->UserToken->GetSerializedToken();
         }
         Send(ActorMonPage->TargetActorId, new NMon::TEvHttpInfo(
@@ -1056,8 +1051,6 @@ public:
                 return;
             }
         }
-
-        AuditRequest(Event);
         Forward(Event, Fields.Handler);
         PassAway();
     }
@@ -1144,7 +1137,6 @@ public:
         response << "Content-Length: " << body.size() << "\r\n";
         response << "\r\n";
         response << body;
-        AuditRequest(Event);
         Send(Event->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(request->CreateResponseString(response)));
         PassAway();
     }
@@ -1167,14 +1159,11 @@ public:
         if (result.UserToken) {
             Event->Get()->UserToken = result.UserToken->GetSerializedToken();
         }
-        AddUserTokenAuditParts(result.UserToken, AuditParts);
-        AuditRequest(Event, AuditParts);
         Forward(Event, Fields.Handler);
         PassAway();
     }
 
     void HandleUndelivered(TEvents::TEvUndelivered::TPtr&) {
-        AuditRequest(Event);
         NHttp::THttpIncomingRequestPtr request = Event->Get()->Request;
         Send(Event->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(
             request->CreateResponseServiceUnavailable(TStringBuilder() << "Auth actor is not available")));
@@ -1292,7 +1281,6 @@ public:
                     Register(new THttpMonAuthorizedActorRequest(std::move(ev), it->second, Authorizer));
                     return;
                 }
-                AuditRequest(ev);
                 Forward(ev, it->second.Handler);
                 return;
             } else {
@@ -1309,7 +1297,6 @@ public:
             }
         }
 
-        AuditRequest(ev);
         Register(new THttpMonLegacyIndexRequest(std::move(ev), IndexMonPage.Get()));
     }
 

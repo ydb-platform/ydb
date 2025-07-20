@@ -1909,6 +1909,22 @@ message TImmediateControlsConfig {
         }];
     }
 
+    message TGroupMapperControls {
+        optional uint64 GroupSizeInUnitsLargerThanPDiskPenalty = 1 [(ControlOptions) = {
+            Description: "Group size in units larger than pdisk penalty",
+            MinValue: 0,
+            MaxValue: 1000,
+            DefaultValue: 10
+        }];
+
+        optional uint64 GroupSizeInUnitsSmallerThanPDiskPenalty = 2 [(ControlOptions) = {
+            Description: "Group size in units smaller than penalty in pdisk",
+            MinValue: 0,
+            MaxValue: 1000,
+            DefaultValue: 20
+        }];
+    }
+
     optional TDataShardControls DataShardControls = 1;
     optional TTxLimitControls TxLimitControls = 2;
     optional TCoordinatorControls CoordinatorControls = 3;
@@ -1925,6 +1941,7 @@ message TImmediateControlsConfig {
     optional TGRpcControls GRpcControls = 14;
     optional TKQPSessionControls KQPSessionControls = 15;
     optional TColumnShardControls ColumnShardControls = 16;
+    optional TGroupMapperControls GroupMapperControls = 17;
 };
 
 message TMeteringConfig {

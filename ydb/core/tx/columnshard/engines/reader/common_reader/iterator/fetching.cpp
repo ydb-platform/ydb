@@ -41,10 +41,10 @@ TConclusion<bool> TStepAction::DoExecuteImpl() {
     return FinishedFlag;
 }
 
-TStepAction::TStepAction(const std::shared_ptr<IDataSource>& source, TFetchingScriptCursor&& cursor, const NActors::TActorId& ownerActorId,
+TStepAction::TStepAction(std::shared_ptr<IDataSource>&& source, TFetchingScriptCursor&& cursor, const NActors::TActorId& ownerActorId,
     const bool changeSyncSection)
     : TBase(ownerActorId, source->GetContext()->GetCommonContext()->GetCounters().GetAssembleTasksGuard())
-    , Source(source)
+    , Source(std::move(source))
     , Cursor(std::move(cursor)) {
     if (changeSyncSection) {
         Source->StartAsyncSection();

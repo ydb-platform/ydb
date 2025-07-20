@@ -8,7 +8,7 @@ namespace {
 class TPortionAccessorFetchingSubscriber: public IDataAccessorRequestsSubscriber {
 private:
     NReader::NCommon::TFetchingScriptCursor Step;
-    std::shared_ptr<NReader::NSimple::IDataSource> Source;
+    std::shared_ptr<NCommon::IDataSource> Source;
     const NColumnShard::TCounterGuard Guard;
     virtual const std::shared_ptr<const TAtomicCounter>& DoGetAbortionFlag() const override {
         return Source->GetContext()->GetCommonContext()->GetAbortionFlag();
@@ -22,16 +22,14 @@ private:
         }
         AFL_VERIFY(result.GetPortions().size() == 1)("count", result.GetPortions().size());
         Source->MutableStageData().SetPortionAccessor(std::move(result.ExtractPortionsVector().front()));
-        Source->InitUsedRawBytes();
         AFL_VERIFY(Step.Next());
         const auto& commonContext = *Source->GetContext()->GetCommonContext();
-        auto task = std::make_shared<NReader::NCommon::TStepAction>(Source, std::move(Step), commonContext.GetScanActorId(), false);
+        auto task = std::make_shared<NReader::NCommon::TStepAction>(std::move(Source), std::move(Step), commonContext.GetScanActorId(), false);
         NConveyorComposite::TScanServiceOperator::SendTaskToExecute(task, commonContext.GetConveyorProcessId());
     }
 
 public:
-    TPortionAccessorFetchingSubscriber(
-        const NReader::NCommon::TFetchingScriptCursor& step, const std::shared_ptr<NReader::NSimple::IDataSource>& source)
+    TPortionAccessorFetchingSubscriber(const NReader::NCommon::TFetchingScriptCursor& step, const std::shared_ptr<NCommon::IDataSource>& source)
         : Step(step)
         , Source(source)
         , Guard(Source->GetContext()->GetCommonContext()->GetCounters().GetFetcherAcessorsGuard()) {
@@ -40,7 +38,8 @@ public:
 
 }   // namespace
 
-bool TSourceData::DoStartFetchingAccessor(const std::shared_ptr<IDataSource>& sourcePtr, const NReader::NCommon::TFetchingScriptCursor& step) {
+bool TSourceData::DoStartFetchingAccessor(
+    const std::shared_ptr<NCommon::IDataSource>& sourcePtr, const NReader::NCommon::TFetchingScriptCursor& step) {
     AFL_VERIFY(!GetStageData().HasPortionAccessor());
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", step.GetName())("fetching_info", step.DebugString());
 

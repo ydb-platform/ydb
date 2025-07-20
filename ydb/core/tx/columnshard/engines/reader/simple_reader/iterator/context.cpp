@@ -20,7 +20,8 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::DoGetColumnsFetchingPlan(c
             NCommon::TFetchingScriptBuilder acc(*this);
             acc.AddStep(std::make_shared<NCommon::TAllocateMemoryStep>(
                 source->PredictAccessorsSize(GetFFColumns()->GetColumnIds()), NArrow::NSSA::IMemoryCalculationPolicy::EStage::Accessors));
-            acc.AddStep(std::make_shared<TPortionAccessorFetchingStep>());
+            acc.AddStep(std::make_shared<TStartPortionAccessorFetchingStep>());
+            acc.AddStep(std::make_shared<TPortionAccessorFetchedStep>());
             acc.AddStep(std::make_shared<TDetectInMem>(*GetFFColumns()));
             AskAccumulatorsScript = std::move(acc).Build();
         }

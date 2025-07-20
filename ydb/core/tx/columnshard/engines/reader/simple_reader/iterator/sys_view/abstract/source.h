@@ -22,7 +22,7 @@ private:
     }
 
     virtual bool DoStartFetchingAccessor(
-        const std::shared_ptr<IDataSource>& /*sourcePtr*/, const NReader::NCommon::TFetchingScriptCursor& /*step*/) override {
+        const std::shared_ptr<NCommon::IDataSource>& /*sourcePtr*/, const NReader::NCommon::TFetchingScriptCursor& /*step*/) override {
         return false;
     }
 

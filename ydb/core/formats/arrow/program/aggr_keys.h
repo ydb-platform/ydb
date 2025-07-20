@@ -49,10 +49,7 @@ private:
         return result;
     }
 
-    virtual std::shared_ptr<IStepFunction> BuildResultsAggregator() const override {
-        AFL_VERIFY(!GetFunctionOptions());
-        return std::make_shared<TAggregateFunction>(TAggregationsHelper::GetSecondaryAggregationId(AggregationType), GetFunctionOptions());
-    }
+    virtual std::shared_ptr<IResourcesAggregator> BuildResultsAggregator(const TColumnChainInfo& output) const override;
 
 public:
     virtual bool IsAggregation() const override {
@@ -167,7 +164,7 @@ private:
     std::vector<TColumnChainInfo> AggregationKeys;
     std::vector<TWithKeysAggregationOption> Aggregations;
 
-/*
+    /*
     virtual std::shared_ptr<IResourceProcessor> BuildResultsAggregator() const override {
         std::vector<TColumnChainInfo> input = AggregationKeys;
         std::vector<TWithKeysAggregationOption> aggrOptions;

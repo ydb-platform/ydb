@@ -119,7 +119,7 @@ public:
 class TBlobsFetcherTask: public NBlobOperations::NRead::ITask, public NColumnShard::TMonitoringObjectsCounter<TBlobsFetcherTask> {
 private:
     using TBase = NBlobOperations::NRead::ITask;
-    const std::shared_ptr<IDataSource> Source;
+    std::shared_ptr<IDataSource> Source;
     TFetchingScriptCursor Step;
     const std::shared_ptr<TSpecialReadContext> Context;
     NColumnShard::TCounterGuard Guard;

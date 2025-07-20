@@ -29,11 +29,11 @@ protected:
     }
 
 public:
-    virtual std::shared_ptr<IStepFunction> BuildResultsAggregator() const {
+    virtual bool IsAggregation() const = 0;
+
+    virtual std::shared_ptr<IResourcesAggregator> BuildResultsAggregator(const TColumnChainInfo& /*output*/) const {
         return nullptr;
     }
-
-    virtual bool IsAggregation() const = 0;
 
     arrow::compute::ExecContext* GetContext() const {
         return GetCustomExecContext();

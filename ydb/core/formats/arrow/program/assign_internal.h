@@ -36,15 +36,11 @@ private:
 
     virtual ui64 DoGetWeight() const override;
 
-/*
+
     virtual std::shared_ptr<IResourcesAggregator> BuildResultsAggregator() const override {
-        auto function = Function->BuildResultsAggregator();
-        if (!function) {
-            return nullptr;
-        }
-        return Build({GetOutput()}, GetOutput(), function, nullptr);
+        return Function->BuildResultsAggregator(GetOutputColumnIdOnce());
     }
-*/
+
 
 public:
     static TConclusion<std::shared_ptr<TCalculationProcessor>> Build(std::vector<TColumnChainInfo>&& input, const TColumnChainInfo& output, 

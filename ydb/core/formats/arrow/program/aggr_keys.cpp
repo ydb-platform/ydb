@@ -2,6 +2,10 @@
 #include "collection.h"
 #include "execution.h"
 
+#include <ydb/core/formats/arrow/accessor/plain/accessor.h>
+
+#include <ydb/library/formats/arrow/switch/switch_type.h>
+
 #include <util/string/join.h>
 
 #ifndef WIN32
@@ -200,6 +204,145 @@ TConclusion<arrow::Datum> TAggregateFunction::Call(
     } else {
         return TBase::Call(context, resources);
     }
+}
+
+namespace {
+class TResultsAggregator: public IResourcesAggregator {
+private:
+    const TColumnChainInfo ColumnInfo;
+    const EAggregate AggregationType;
+    virtual TConclusionStatus DoExecute(const std::vector<std::shared_ptr<TAccessorsCollection>>& sources,
+        const std::shared_ptr<TAccessorsCollection>& collectionResult) const override {
+        std::vector<std::shared_ptr<IChunkedArray>> arrays;
+        std::optional<arrow::Type::type> type;
+        for (auto&& i : sources) {
+            const auto& acc = i->GetAccessorVerified(ColumnInfo.GetColumnId());
+            AFL_VERIFY(acc->GetRecordsCount() == 1)("count", acc->GetRecordsCount());
+            arrays.emplace_back(acc);
+            if (!type) {
+                type = acc->GetDataType()->id();
+            } else {
+                AFL_VERIFY(*type == acc->GetDataType()->id());
+            }
+        }
+        if (!NArrow::SwitchType(*type, [&](const auto& type) {
+                using TWrap = std::decay_t<decltype(type)>;
+                using TArrayType = typename TWrap::TArray;
+                using TScalarType = typename TWrap::TScalar;
+                if constexpr (std::is_base_of<arrow::FixedSizeBinaryType, typename TWrap::T>()) {
+                    return false;
+                }
+                if constexpr (TWrap::IsStringView) {
+                    std::optional<arrow::util::string_view> result;
+                    std::shared_ptr<IChunkedArray> arrResult;
+                    for (auto&& i : arrays) {
+                        auto addr = i->GetChunkSlow(0);
+                        const arrow::util::string_view sv(static_cast<const TArrayType*>(addr.GetArray().get())->GetView(0));
+                        if (!result) {
+                            arrResult = i;
+                            result = sv;
+                        } else {
+                            switch (AggregationType) {
+                                case EAggregate::Some:
+                                    break;
+                                case EAggregate::Unspecified:
+                                case EAggregate::Sum:
+                                case EAggregate::Count:
+                                case EAggregate::NumRows:
+                                    AFL_VERIFY(false);
+                                case EAggregate::Max:
+                                    if (*result < sv) {
+                                        arrResult = i;
+                                        result = sv;
+                                    }
+                                    break;
+                                case EAggregate::Min:
+                                    if (sv < *result) {
+                                        arrResult = i;
+                                        result = sv;
+                                    }
+                                    break;
+                            }
+                        }
+                    }
+                    AFL_VERIFY(arrResult);
+                    collectionResult->AddVerified(ColumnInfo.GetColumnId(), arrResult, false);
+                    return true;
+                }
+                if constexpr (TWrap::IsCType && arrow::is_parameter_free_type<typename TWrap::T>::value) {
+                    std::optional<typename TWrap::ValueType> result;
+                    std::shared_ptr<IChunkedArray> arrResult;
+                    for (auto&& i : arrays) {
+                        auto addr = i->GetChunkSlow(0);
+                        const typename TWrap::ValueType value = static_cast<const TArrayType*>(addr.GetArray().get())->Value(0);
+                        if (!result) {
+                            switch (AggregationType) {
+                                case EAggregate::Some:
+                                case EAggregate::Max:
+                                case EAggregate::Min:
+                                    arrResult = i;
+                                    break;
+                                case EAggregate::Unspecified:
+                                case EAggregate::Count:
+                                case EAggregate::NumRows:
+                                    AFL_VERIFY(false);
+                                case EAggregate::Sum:
+                                    break;
+                            }
+                            result = value;
+                        } else {
+                            switch (AggregationType) {
+                                case EAggregate::Some:
+                                    break;
+                                case EAggregate::Unspecified:
+                                case EAggregate::Count:
+                                case EAggregate::NumRows:
+                                    AFL_VERIFY(false);
+                                case EAggregate::Sum:
+                                    *result += value;
+                                case EAggregate::Max:
+                                    if (*result < value) {
+                                        arrResult = i;
+                                        result = value;
+                                    }
+                                    break;
+                                case EAggregate::Min:
+                                    if (value < *result) {
+                                        arrResult = i;
+                                        result = value;
+                                    }
+                                    break;
+                            }
+                        }
+                    }
+                    AFL_VERIFY(result);
+                    if (arrResult) {
+                        collectionResult->AddVerified(ColumnInfo.GetColumnId(), arrResult, false);
+                    } else {
+                        collectionResult->AddVerified(ColumnInfo.GetColumnId(),
+                            NAccessor::TTrivialArray::BuildArrayFromScalar(std::make_shared<TScalarType>(*result)), false);
+                    }
+                    return true;
+                }
+                return false;
+            })) {
+            return TConclusionStatus::Fail("incorrect scalars type for aggregation");
+        }
+        return TConclusionStatus::Success();
+    }
+
+public:
+    TResultsAggregator(const TColumnChainInfo& column, const EAggregate aggrType)
+        : ColumnInfo(column)
+        , AggregationType(aggrType) {
+    }
+};
+
+}   // namespace
+
+std::shared_ptr<IResourcesAggregator> TAggregateFunction::BuildResultsAggregator(const TColumnChainInfo& output) const {
+    AFL_VERIFY(!GetFunctionOptions());
+    return std::make_shared<TResultsAggregator>(output, TAggregationsHelper::GetSecondaryAggregationId(AggregationType));
 }
 
 }   // namespace NKikimr::NArrow::NSSA::NAggregation

@@ -10,15 +10,19 @@ private:
     using TBase = ISyncPoint;
 
     std::vector<std::shared_ptr<IDataSource>> SourcesToAggregate;
+    const std::shared_ptr<ISourcesCollection> Collection;
     const std::shared_ptr<TFetchingScript> AggregationScript;
-    ui32 SourcesCount = 0;
+    ui32 InFlightControl = 0;
 
     std::shared_ptr<IDataSource> Flush() {
         if (SourcesToAggregate.empty()) {
             return nullptr;
         }
+        AFL_WARN(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "aggregation_batching")("count", SourcesToAggregate.size());
+        ++InFlightControl;
         auto result = std::make_shared<TAggregationDataSource>(std::move(SourcesToAggregate), Context);
-        ++SourcesCount;
+        result->SetPurposeSyncPointIndex(0);
+        result->SetPurposeSyncPointIndex(GetPointIndex());
         SourcesToAggregate.clear();
         SourcesSequentially.emplace_back(result);
         result->InitFetchingPlan(AggregationScript);
@@ -26,11 +30,7 @@ private:
     }
 
     virtual bool IsSourcePrepared(const std::shared_ptr<IDataSource>& source) const override {
-        return source->IsSyncSection() && source->HasStageData();
-    }
-
-    virtual std::shared_ptr<IDataSource> DoOnSourceFinished() override {
-        return Flush();
+        return source->IsSyncSection() && source->HasStageResult();
     }
 
     virtual bool IsFinished() const override {
@@ -39,22 +39,29 @@ private:
 
     virtual std::shared_ptr<IDataSource> OnAddSource(const std::shared_ptr<IDataSource>& source) override {
         SourcesToAggregate.emplace_back(source);
-        if (SourcesToAggregate.size() > 100) {
+        if (SourcesToAggregate.size() >= 100 || Collection->IsFinished()) {
             return Flush();
         }
+
         return nullptr;
     }
 
     virtual void DoAbort() override {
+        SourcesToAggregate.clear();
     }
 
     virtual ESourceAction OnSourceReady(const std::shared_ptr<IDataSource>& source, TPlainReadData& reader) override {
+        AFL_VERIFY(InFlightControl);
+        --InFlightControl;
         AFL_VERIFY(!Next);
+        AFL_VERIFY(source->GetType() == IDataSource::EType::Aggregation)("type", source->GetType());
+        const TAggregationDataSource* aggrSource = static_cast<const TAggregationDataSource*>(source.get());
+        for (auto&& i : aggrSource->GetSources()) {
+            Collection->OnSourceFinished(i);
+        }
         if (source->GetStageResult().IsEmpty()) {
             return ESourceAction::Finish;
         }
-        AFL_VERIFY(source->GetType() == IDataSource::EType::Aggregation)("type", source->GetType());
-        const TAggregationDataSource* aggrSource = static_cast<const TAggregationDataSource*>(source.get());
         auto resultChunk = source->MutableStageResult().ExtractResultChunk();
         AFL_VERIFY(source->GetStageResult().IsFinished());
         if (resultChunk && resultChunk->HasData()) {
@@ -69,9 +76,10 @@ private:
     }
 
 public:
-    TSyncPointResultsAggregationControl(
+    TSyncPointResultsAggregationControl(const std::shared_ptr<ISourcesCollection>& collection,
         const std::shared_ptr<TFetchingScript>& aggregationScript, const ui32 pointIndex, const std::shared_ptr<TSpecialReadContext>& context)
         : TBase(pointIndex, "SYNC_AGGR", context, nullptr)
+        , Collection(collection)
         , AggregationScript(aggregationScript) {
         AFL_VERIFY(AggregationScript);
         AFL_VERIFY(pointIndex);

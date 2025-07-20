@@ -137,7 +137,7 @@ public:
     }
 };
 
-class TPortionAccessorFetchingStep: public IFetchingStep {
+class TStartPortionAccessorFetchingStep: public IFetchingStep {
 private:
     using TBase = IFetchingStep;
 
@@ -148,8 +148,24 @@ protected:
     }
 
 public:
-    TPortionAccessorFetchingStep()
-        : TBase("FETCHING_ACCESSOR") {
+    TStartPortionAccessorFetchingStep()
+        : TBase("START_FETCHING_ACCESSOR") {
+    }
+};
+
+class TPortionAccessorFetchedStep: public IFetchingStep {
+private:
+    using TBase = IFetchingStep;
+
+protected:
+    virtual TConclusion<bool> DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& /*step*/) const override;
+    virtual TString DoDebugString() const override {
+        return TStringBuilder();
+    }
+
+public:
+    TPortionAccessorFetchedStep()
+        : TBase("PORTION_ACCESSOR_FETCHED") {
     }
 };
 

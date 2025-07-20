@@ -70,6 +70,8 @@ public:
     void Start(const std::shared_ptr<IDataSource>& source, const std::shared_ptr<NArrow::NSSA::NGraph::NExecution::TCompiledGraph>& program,
         const TFetchingScriptCursor& step);
 
+    void Stop();
+
     const TFetchingStepSignals& GetCurrentStepSignalsVerified() const {
         AFL_VERIFY(!!CurrentStepSignals);
         return *CurrentStepSignals;
@@ -171,6 +173,17 @@ protected:
     }
 
 public:
+
+    template <class T>
+    const T* GetAs() const {
+        return static_cast<const T*>(this);
+    }
+
+    template <class T>
+    T* MutableAs() {
+        return static_cast<T*>(this);
+    }
+
     virtual bool NeedPortionData() const {
         return true;
     }

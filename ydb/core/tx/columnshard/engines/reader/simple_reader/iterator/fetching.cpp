@@ -82,7 +82,7 @@ NKikimr::TConclusion<bool> TFilterCutLimit::DoExecuteInplace(
     return true;
 }
 
-TConclusion<bool> TPortionAccessorFetchingStep::DoExecuteInplace(
+TConclusion<bool> TStartPortionAccessorFetchingStep::DoExecuteInplace(
     const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const {
     FOR_DEBUG_LOG(NKikimrServices::COLUMNSHARD_SCAN_EVLOG, source->AddEvent("sacc"));
     return !source->StartFetchingAccessor(source, step);
@@ -132,15 +132,21 @@ public:
 
 }   // namespace
 
+TConclusion<bool> TPortionAccessorFetchedStep::DoExecuteInplace(
+    const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& /*step*/) const {
+    source->InitUsedRawBytes();
+    return true;
+}
+
 TConclusion<bool> TStepAggregationSources::DoExecuteInplace(
     const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& /*step*/) const {
     AFL_VERIFY(source->GetType() == IDataSource::EType::Aggregation);
     auto* aggrSource = static_cast<const TAggregationDataSource*>(source.get());
-    std::vector<std::shared_ptr<NArrow::NSSA::IDataSource>> sources;
+    std::vector<std::shared_ptr<NArrow::NSSA::TAccessorsCollection>> collections;
     for (auto&& i : aggrSource->GetSources()) {
-        sources.emplace_back(i);
+        collections.emplace_back(i->GetStageData().GetTable());
     }
-    auto conclusion = Aggregator->Execute(sources, source->GetStageData().GetTable());
+    auto conclusion = Aggregator->Execute(collections, source->GetStageData().GetTable());
     if (conclusion.IsFail()) {
         return conclusion;
     }

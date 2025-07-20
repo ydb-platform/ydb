@@ -22,7 +22,7 @@ private:
     YDB_READONLY(ui32, PointIndex, 0);
     YDB_READONLY_DEF(TString, PointName);
     std::optional<ui32> LastSourceIdx;
-    virtual std::shared_ptr<IDataSource> DoOnSourceFinished() {
+    virtual std::shared_ptr<IDataSource> DoOnSourceFinished(const bool /*force*/) {
         return nullptr;
     }
     virtual bool IsSourcePrepared(const std::shared_ptr<IDataSource>& source) const = 0;
@@ -84,7 +84,7 @@ public:
     }
 
     void AddSource(std::shared_ptr<IDataSource>&& source);
-    void OnSourceFinished();
+    void OnSourceFinished(const bool force);
 
     void OnSourcePrepared(const std::shared_ptr<IDataSource>& sourceInput, TPlainReadData& reader);
 };

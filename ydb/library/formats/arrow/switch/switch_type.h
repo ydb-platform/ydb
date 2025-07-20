@@ -37,10 +37,16 @@ public:
     using ValueType = ValueTypeSelector<T, IsCType>::type;
     using TArray = typename arrow::TypeTraits<T>::ArrayType;
     using TBuilder = typename arrow::TypeTraits<T>::BuilderType;
+    using TScalar = typename arrow::TypeTraits<T>::ScalarType;
 
     template <class TExt>
     static TBuilder* CastBuilder(TExt* builder) {
         return static_cast<TBuilder*>(builder);
+    }
+
+    template <class TExt>
+    static TScalar* CastScalar(TExt* scalar) {
+        return static_cast<TScalar*>(scalar);
     }
 
     template <class TExt>

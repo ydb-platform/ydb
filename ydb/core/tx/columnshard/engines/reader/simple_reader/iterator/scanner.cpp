@@ -38,7 +38,7 @@ TScanHead::TScanHead(std::unique_ptr<NCommon::ISourcesConstructor>&& sourcesCons
         SyncPoints.emplace_back(std::make_shared<TSyncPointResult>(SyncPoints.size(), context, SourcesCollection));
         if (Context->GetSourcesAggregationScript()) {
             SyncPoints.emplace_back(
-                std::make_shared<TSyncPointResultsAggregationControl>(Context->GetSourcesAggregationScript(), SyncPoints.size(), context));
+                std::make_shared<TSyncPointResultsAggregationControl>(SourcesCollection, Context->GetSourcesAggregationScript(), SyncPoints.size(), context));
         }
     }
     for (ui32 i = 0; i + 1 < SyncPoints.size(); ++i) {

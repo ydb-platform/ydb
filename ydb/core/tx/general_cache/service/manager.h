@@ -410,6 +410,7 @@ public:
             Y_UNUSED(request->AddResult(i.first, std::move(i.second)));
         }
         if (request->GetWaitBySource().empty()) {
+            Counters->OnRequestFinished(TMonotonic::Now() - request->GetCreated());
             Counters->RequestCacheHit->Inc();
             return;
         } else {

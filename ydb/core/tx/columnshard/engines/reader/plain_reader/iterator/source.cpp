@@ -163,7 +163,7 @@ namespace {
 class TPortionAccessorFetchingSubscriber: public IDataAccessorRequestsSubscriber {
 private:
     TFetchingScriptCursor Step;
-    std::shared_ptr<IDataSource> Source;
+    std::shared_ptr<NCommon::IDataSource> Source;
     const NColumnShard::TCounterGuard Guard;
     virtual const std::shared_ptr<const TAtomicCounter>& DoGetAbortionFlag() const override {
         return Source->GetContext()->GetCommonContext()->GetAbortionFlag();
@@ -177,12 +177,12 @@ private:
         Source->MutableStageData().SetPortionAccessor(std::move(result.ExtractPortionsVector().front()));
         AFL_VERIFY(Step.Next());
         const auto& commonContext = *Source->GetContext()->GetCommonContext();
-        auto task = std::make_shared<TStepAction>(Source, std::move(Step), commonContext.GetScanActorId(), false);
+        auto task = std::make_shared<TStepAction>(std::move(Source), std::move(Step), commonContext.GetScanActorId(), false);
         NConveyorComposite::TScanServiceOperator::SendTaskToExecute(task, commonContext.GetConveyorProcessId());
     }
 
 public:
-    TPortionAccessorFetchingSubscriber(const TFetchingScriptCursor& step, const std::shared_ptr<IDataSource>& source)
+    TPortionAccessorFetchingSubscriber(const TFetchingScriptCursor& step, const std::shared_ptr<NCommon::IDataSource>& source)
         : Step(step)
         , Source(source)
         , Guard(Source->GetContext()->GetCommonContext()->GetCounters().GetFetcherAcessorsGuard()) {
@@ -190,7 +190,7 @@ public:
 };
 }   // namespace
 
-bool TPortionDataSource::DoStartFetchingAccessor(const std::shared_ptr<IDataSource>& sourcePtr, const TFetchingScriptCursor& step) {
+bool TPortionDataSource::DoStartFetchingAccessor(const std::shared_ptr<NCommon::IDataSource>& sourcePtr, const TFetchingScriptCursor& step) {
     AFL_VERIFY(!GetStageData().HasPortionAccessor());
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", step.GetName())("fetching_info", step.DebugString());
 

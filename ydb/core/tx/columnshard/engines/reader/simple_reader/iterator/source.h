@@ -88,7 +88,7 @@ protected:
     virtual NJson::TJsonValue DoDebugJsonForMemory() const {
         return NJson::JSON_MAP;
     }
-    virtual bool DoStartFetchingAccessor(const std::shared_ptr<IDataSource>& sourcePtr, const TFetchingScriptCursor& step) = 0;
+    virtual bool DoStartFetchingAccessor(const std::shared_ptr<NCommon::IDataSource>& sourcePtr, const TFetchingScriptCursor& step) = 0;
 
 public:
     bool NeedFullAnswer() const {
@@ -160,6 +160,7 @@ public:
 
     virtual void ClearResult() {
         ClearStageData();
+        MutableExecutionContext().Stop();
         StageResult.reset();
         ResourceGuards.clear();
         SourceGroupGuard = nullptr;
@@ -194,7 +195,7 @@ public:
     void StartProcessing(const std::shared_ptr<IDataSource>& sourcePtr);
     virtual ui64 PredictAccessorsSize(const std::set<ui32>& entityIds) const = 0;
 
-    bool StartFetchingAccessor(const std::shared_ptr<IDataSource>& sourcePtr, const TFetchingScriptCursor& step) {
+    bool StartFetchingAccessor(const std::shared_ptr<NCommon::IDataSource>& sourcePtr, const TFetchingScriptCursor& step) {
         return DoStartFetchingAccessor(sourcePtr, step);
     }
 
@@ -327,7 +328,7 @@ private:
         return Portion->GetPathId();
     }
 
-    virtual bool DoStartFetchingAccessor(const std::shared_ptr<IDataSource>& sourcePtr, const TFetchingScriptCursor& step) override;
+    virtual bool DoStartFetchingAccessor(const std::shared_ptr<NCommon::IDataSource>& sourcePtr, const TFetchingScriptCursor& step) override;
 
 public:
     virtual TString GetEntityStorageId(const ui32 entityId) const override {
@@ -417,12 +418,17 @@ class TAggregationDataSource: public IDataSource {
 private:
     using TBase = IDataSource;
     YDB_READONLY_DEF(std::vector<std::shared_ptr<IDataSource>>, Sources);
+    const ui64 LastSourceId;
+    const ui64 LastSourceRecordsCount;
 
     void DoBuildStageResult(const std::shared_ptr<NCommon::IDataSource>& /*sourcePtr*/) override {
         const ui32 recordsCount = GetStageData().GetTable()->GetRecordsCountActualVerified();
         StageResult = std::make_unique<TFetchedResult>(ExtractStageData(), *GetContext()->GetCommonContext()->GetResolver());
         StageResult->SetPages({ TPortionDataAccessor::TReadPage(0, recordsCount, 0) });
         StageResult->SetResultChunk(StageResult->GetBatch()->BuildTableVerified(), 0, recordsCount);
+        for (auto&& i : Sources) {
+            i->ClearResult();
+        }
     }
 
     virtual void InitUsedRawBytes() override {
@@ -487,18 +493,18 @@ private:
         return Sources.front()->GetPathId();
     }
 
-    virtual bool DoStartFetchingAccessor(const std::shared_ptr<IDataSource>& /*sourcePtr*/, const TFetchingScriptCursor& /*step*/) override {
+    virtual bool DoStartFetchingAccessor(const std::shared_ptr<NCommon::IDataSource>& /*sourcePtr*/, const TFetchingScriptCursor& /*step*/) override {
         AFL_VERIFY(false);
         return false;
     }
 
 public:
     ui64 GetLastSourceId() const {
-        return Sources.back()->GetSourceId();
+        return LastSourceId;
     }
 
     ui64 GetLastSourceRecordsCount() const {
-        return Sources.back()->GetRecordsCount();
+        return LastSourceRecordsCount;
     }
 
     virtual TString GetEntityStorageId(const ui32 /*entityId*/) const override {
@@ -580,7 +586,10 @@ public:
     TAggregationDataSource(std::vector<std::shared_ptr<IDataSource>>&& sources, const std::shared_ptr<NCommon::TSpecialReadContext>& context)
         : TBase(EType::Aggregation, sources.back()->GetSourceId(), sources.back()->GetSourceIdx(), context, sources.front()->GetStart().CopyValue(),
               sources.back()->GetFinish().CopyValue(), TSnapshot::Zero(), TSnapshot::Zero(), std::nullopt, std::nullopt, false)
-        , Sources(std::move(sources)) {
+        , Sources(std::move(sources))
+        , LastSourceId(Sources.back()->GetSourceId())
+        , LastSourceRecordsCount(Sources.back()->GetRecordsCount())
+    {
         AFL_VERIFY(Sources.size());
     }
 };

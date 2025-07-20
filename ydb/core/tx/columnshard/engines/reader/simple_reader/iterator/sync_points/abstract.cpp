@@ -47,9 +47,6 @@ void ISyncPoint::OnSourcePrepared(const std::shared_ptr<IDataSource>& sourceInpu
             }
         }
     }
-    if (SourcesSequentially.empty() && Next) {
-        Next->OnSourceFinished();
-    }
 }
 
 TString ISyncPoint::DebugString() const {
@@ -72,8 +69,8 @@ void ISyncPoint::Continue(const TPartialSourceAddress& continueAddress, TPlainRe
     SourcesSequentially.front()->ContinueCursor(SourcesSequentially.front());
 }
 
-void ISyncPoint::OnSourceFinished() {
-    if (auto genSource = DoOnSourceFinished()) {
+void ISyncPoint::OnSourceFinished(const bool force) {
+    if (auto genSource = DoOnSourceFinished(force)) {
         genSource->StartProcessing(genSource);
     }
 }

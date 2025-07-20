@@ -146,12 +146,22 @@ public:
         if (ResultRoot->GetProcessor()->GetProcessorType() != EProcessorType::Projection) {
             return nullptr;
         }
+        std::vector<std::shared_ptr<IResourcesAggregator>> aggregators;
         for (auto&& i : ResultRoot->GetInputEdges()) {
             if (i->GetProcessor()->IsAggregation()) {
-                return i->GetProcessor()->BuildResultsAggregator();
+                aggregators.emplace_back(i->GetProcessor()->BuildResultsAggregator());
+                if (!aggregators.back()) {
+                    return nullptr;
+                }
+            } else {
+                return nullptr;
             }
         }
-        return nullptr;
+        if (aggregators.size()) {
+            return std::make_shared<TCompositeResourcesAggregator>(std::move(aggregators));
+        } else {
+            return nullptr;
+        }
     }
 
     const THashMap<ui64, std::shared_ptr<TNode>>& GetNodes() const {

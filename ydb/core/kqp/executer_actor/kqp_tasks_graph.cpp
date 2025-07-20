@@ -1087,7 +1087,7 @@ void FillOutputDesc(
                     hashPartitionDesc.MutableHashV1();
                     break;
                 }
-                case HashV2: { // TODO!!!
+                case HashV2: {
                     hashPartitionDesc.MutableHashV2();
                     break;
                 }

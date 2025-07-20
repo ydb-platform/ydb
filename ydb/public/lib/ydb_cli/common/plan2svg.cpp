@@ -1847,7 +1847,7 @@ void TPlan::PrintSvg(ui64 maxTime, ui32 timelineDelta, ui32& offsetY, TStringBui
             if (s->OutputRows) {
                 FormatTooltip(tooltip, ", Rows", s->OutputRows.get(), FormatInteger);
             }
-            PrintStageSummary(builder, Config.SummaryLeft, Config.SummaryWidth, y0, INTERNAL_HEIGHT, s->OutputBytes, Config.Palette.OutputMedium, Config.Palette.OutputLight, textSum, tooltip, s->Tasks, "#icon_output", Config.Palette.OutputLight, "0.0325 0.0325", s->OutputPlanNodeId, ToString(s->OutputPhysicalStageId));
+            PrintStageSummary(builder, Config.SummaryLeft, Config.SummaryWidth, y0, INTERNAL_HEIGHT, s->OutputBytes, Config.Palette.OutputMedium, Config.Palette.OutputLight, textSum, tooltip, s->Tasks, "#icon_output", Config.Palette.OutputLight, "0.0325 0.0325", s->OutputPlanNodeId, s->OutputPhysicalStageId ? ToString(s->OutputPhysicalStageId) : "");
 
             if (s->SpillingChannelBytes && s->SpillingChannelBytes->Details.Sum) {
                 builder

@@ -1231,7 +1231,7 @@ message TQueryServiceConfig {
 // field options.
 message TImmediateControlOptions {
     optional string Description = 1;
-    optional uint64 MinValue = 2;
+    optional int64 MinValue = 2;
     optional uint64 MaxValue = 3;
     optional uint64 DefaultValue = 4;
 }
@@ -1969,6 +1969,22 @@ message TImmediateControlsConfig {
         }];
     }
 
+    message TGroupMapperControls {
+        optional uint64 GroupSizeInUnitsLargerThanPDiskPenalty = 1 [(ControlOptions) = {
+            Description: "Group size in units larger than pdisk penalty",
+            MinValue: -1000,
+            MaxValue: 1000,
+            DefaultValue: 10
+        }];
+
+        optional uint64 GroupSizeInUnitsSmallerThanPDiskPenalty = 2 [(ControlOptions) = {
+            Description: "Group size in units smaller than penalty in pdisk",
+            MinValue: -1000,
+            MaxValue: 1000,
+            DefaultValue: 20
+        }];
+    }
+
     optional TDataShardControls DataShardControls = 1;
     optional TTxLimitControls TxLimitControls = 2;
     optional TCoordinatorControls CoordinatorControls = 3;
@@ -1986,6 +2002,7 @@ message TImmediateControlsConfig {
     optional TKeyValueVolumeControls KeyValueVolumeControls = 15;
     optional TKQPSessionControls KQPSessionControls = 16;
     optional TColumnShardControls ColumnShardControls = 17;
+    optional TGroupMapperControls GroupMapperControls = 18;
 };
 
 message TMeteringConfig {

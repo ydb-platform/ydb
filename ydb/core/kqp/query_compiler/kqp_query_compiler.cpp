@@ -1476,6 +1476,10 @@ private:
                     shuffleProto.MutableHashV1();
                     break;
                 }
+                case HashV2: {
+                    shuffleProto.MutableHashV2();
+                    break;
+                }
                 case ColumnShardHashV1: {
                     auto& columnHashV1 = *shuffleProto.MutableColumnShardHashV1();
 

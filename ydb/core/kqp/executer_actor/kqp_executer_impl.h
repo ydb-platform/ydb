@@ -1844,7 +1844,6 @@ protected:
                             Y_ENSURE(hashByShardId.contains(readInfo.ShardId));
                             (*columnShardHashV1Params.TaskIndexByHash)[hashByShardId[readInfo.ShardId]] = stageInternalTaskId;
                         }
-
                     }
                 }
 

@@ -102,6 +102,7 @@ void BuildUnionAllChannels(TGraph& graph, const NNodes::TDqPhyStage& stage, ui32
     BuildUnionAllChannels(graph, stageInfo, inputIndex, inputStageInfo, outputIndex, false, logFunc);
 }
 
+// TODO: take hashKind from config?
 template <typename TGraph, typename TKeyColumns>
 void BuildHashShuffleChannels(TGraph& graph, const typename TGraph::TStageInfoType& stageInfo, ui32 inputIndex,
     const typename TGraph::TStageInfoType& inputStageInfo, ui32 outputIndex, const TKeyColumns& keyColumns,

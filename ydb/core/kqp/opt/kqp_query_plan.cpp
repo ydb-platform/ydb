@@ -510,6 +510,7 @@ private:
 
             auto& hashFunc = planNode.NodeInfo["HashFunc"];
             if (hashShuffle.HashFunc().IsValid()) {
+                // TODO: check for HashV2!
                 hashFunc = hashShuffle.HashFunc().Cast().StringValue();
             } else {
                 hashFunc = "HashV1";

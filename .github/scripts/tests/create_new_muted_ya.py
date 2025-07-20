@@ -134,7 +134,7 @@ def create_test_string(test, use_wildcards=False):
         test_string = re.sub(r'\d+/(\d+)\]', r'*/*]', test_string)
     return test_string
 
-def create_debug_string(test, resolution, success_rate=None):
+def create_debug_string(test, resolution, success_rate=None, period_days=None):
     """Создает debug строку для теста"""
     if success_rate is None:
         success_rate = calculate_success_rate(test)
@@ -145,30 +145,97 @@ def create_debug_string(test, resolution, success_rate=None):
     
     debug_string = f"{testsuite} {testcase} # owner {test.get('owner', 'N/A')} success_rate {success_rate}%"
     
-    debug_string += f", p-{test.get('pass_count')}, f-{test.get('fail_count')},m-{test.get('mute_count')}, s-{test.get('skip_count')}, total {runs}, resolution {resolution}"
+    if period_days:
+        debug_string += f" (last {period_days} days)"
+    
+    debug_string += f", p-{test.get('pass_count')}, f-{test.get('fail_count')},m-{test.get('mute_count')}, s-{test.get('skip_count')}, runs-{runs}, resolution {resolution}"
     
     return debug_string + "\n"
 
-def is_flaky_test(test):
-    """Проверяет, является ли тест flaky"""
-    fails = test.get('fail_count', 0)
-    runs = test.get('pass_count', 0) + fails
-    return (fails >= 2) or (fails >= 1 and runs <= 10)
-
-def is_unmute_candidate(unmute_stats):
-    """Проверяет, является ли тест кандидатом на размьют"""
-    if not unmute_stats:
+def is_flaky_test(test, all_data, period_days=3):
+    """Проверяет, является ли тест flaky за указанный период"""
+    # Фильтруем данные за период
+    today = datetime.date.today()
+    base_date = datetime.date(1970, 1, 1)
+    start_date = today - datetime.timedelta(days=period_days-1)
+    start_days = (start_date - base_date).days
+    
+    # Агрегируем данные за период
+    period_data = [t for t in all_data if t.get('full_name') == test.get('full_name') and t.get('date_window', 0) >= start_days]
+    
+    if not period_data:
         return False
-    unmute_runs = unmute_stats.get('pass_count', 0) + unmute_stats.get('fail_count', 0) + unmute_stats.get('mute_count', 0)
-    unmute_fails = unmute_stats.get('fail_count', 0) + unmute_stats.get('mute_count', 0)
-    return unmute_runs > 4 and unmute_fails == 0
+    
+    # Суммируем статистику
+    total_pass = sum(t.get('pass_count', 0) for t in period_data)
+    total_fail = sum(t.get('fail_count', 0) for t in period_data)
+    total_runs = total_pass + total_fail
+    
+    # Обновляем данные теста для debug
+    test['pass_count'] = total_pass
+    test['fail_count'] = total_fail
+    test['period_days'] = period_days
+    
+    return (total_fail >= 2) or (total_fail >= 1 and total_runs <= 10)
 
-def is_delete_candidate(delete_stats):
-    """Проверяет, является ли тест кандидатом на удаление из mute"""
-    if not delete_stats:
+def is_unmute_candidate(test, all_data, period_days=2):
+    """Проверяет, является ли тест кандидатом на размьют за указанный период"""
+    # Фильтруем данные за период
+    today = datetime.date.today()
+    base_date = datetime.date(1970, 1, 1)
+    start_date = today - datetime.timedelta(days=period_days-1)
+    start_days = (start_date - base_date).days
+    
+    # Агрегируем данные за период
+    period_data = [t for t in all_data if t.get('full_name') == test.get('full_name') and t.get('date_window', 0) >= start_days]
+    
+    if not period_data:
         return False
-    delete_runs = delete_stats.get('pass_count', 0) + delete_stats.get('fail_count', 0) + delete_stats.get('mute_count', 0) + delete_stats.get('skip_count', 0)
-    return delete_runs == 0
+    
+    # Суммируем статистику
+    total_pass = sum(t.get('pass_count', 0) for t in period_data)
+    total_fail = sum(t.get('fail_count', 0) for t in period_data)
+    total_mute = sum(t.get('mute_count', 0) for t in period_data)
+    total_runs = total_pass + total_fail + total_mute
+    total_fails = total_fail + total_mute
+    
+    # Обновляем данные теста для debug
+    test['pass_count'] = total_pass
+    test['fail_count'] = total_fail
+    test['mute_count'] = total_mute
+    test['period_days'] = period_days
+    
+    return total_runs > 4 and total_fails == 0
+
+def is_delete_candidate(test, all_data, period_days=7):
+    """Проверяет, является ли тест кандидатом на удаление из mute за указанный период"""
+    # Фильтруем данные за период
+    today = datetime.date.today()
+    base_date = datetime.date(1970, 1, 1)
+    start_date = today - datetime.timedelta(days=period_days-1)
+    start_days = (start_date - base_date).days
+    
+    # Агрегируем данные за период
+    period_data = [t for t in all_data if t.get('full_name') == test.get('full_name') and t.get('date_window', 0) >= start_days]
+    
+    if not period_data:
+        return False
+    
+    # Суммируем статистику
+    total_pass = sum(t.get('pass_count', 0) for t in period_data)
+    total_fail = sum(t.get('fail_count', 0) for t in period_data)
+    total_mute = sum(t.get('mute_count', 0) for t in period_data)
+    total_skip = sum(t.get('skip_count', 0) for t in period_data)
+    total_runs = total_pass + total_fail + total_mute + total_skip
+    
+    # Обновляем данные теста для debug
+    test['pass_count'] = total_pass
+    test['fail_count'] = total_fail
+    test['mute_count'] = total_mute
+    test['skip_count'] = total_skip
+    test['period_days'] = period_days
+    
+    return total_runs == 0
 
 def create_file_set(aggregated_for_mute, filter_func, mute_check=None, use_wildcards=False, resolution=None):
     """Создает набор тестов для файла на основе фильтра"""
@@ -192,7 +259,8 @@ def create_file_set(aggregated_for_mute, filter_func, mute_check=None, use_wildc
             result_set.add(test_string)
             
             if resolution:
-                debug_string = create_debug_string(test, resolution)
+                period_days = test.get('period_days')
+                debug_string = create_debug_string(test, resolution, period_days=period_days)
                 debug_list.append(debug_string)
     
     return sorted(result_set), sorted(debug_list)
@@ -205,20 +273,26 @@ def write_file_set(file_path, test_set, debug_list=None):
         add_lines_to_file(debug_path, debug_list)
     logging.info(f"Created {os.path.basename(file_path)} with {len(test_set)} tests")
 
-def apply_and_add_mutes(aggregated_for_mute, aggregated_for_unmute, aggregated_for_delete, output_path, mute_check):
+def apply_and_add_mutes(all_data, output_path, mute_check):
     output_path = os.path.join(output_path, 'mute_update')
     logging.info(f"Creating mute files in directory: {output_path}")
     
-    aggregated_for_mute = sorted(aggregated_for_mute, key=lambda d: d['full_name'])
-    aggregated_for_unmute = {t['full_name']: t for t in aggregated_for_unmute}
-    aggregated_for_delete = {t['full_name']: t for t in aggregated_for_delete}
+    # Получаем уникальные тесты для обработки
+    unique_tests = {}
+    for test in all_data:
+        full_name = test.get('full_name')
+        if full_name not in unique_tests:
+            unique_tests[full_name] = test
     
-    logging.info(f"Processing {len(aggregated_for_mute)} tests for mute analysis")
+    aggregated_for_mute = list(unique_tests.values())
+    aggregated_for_mute = sorted(aggregated_for_mute, key=lambda d: d['full_name'])
+    
+    logging.info(f"Processing {len(aggregated_for_mute)} unique tests for mute analysis")
 
     try:
         # 1. Кандидаты на mute
         def is_mute_candidate(test):
-            return is_flaky_test(test)
+            return is_flaky_test(test, all_data, period_days=3)
         
         to_mute, to_mute_debug = create_file_set(
             aggregated_for_mute, is_mute_candidate, use_wildcards=True, resolution='to_mute'
@@ -227,7 +301,7 @@ def apply_and_add_mutes(aggregated_for_mute, aggregated_for_unmute, aggregated_f
         
         # 2. Кандидаты на размьют
         def is_unmute_candidate_wrapper(test):
-            return is_unmute_candidate(aggregated_for_unmute.get(test.get('full_name')))
+            return is_unmute_candidate(test, all_data, period_days=2)
         
         to_unmute, to_unmute_debug = create_file_set(
             aggregated_for_mute, is_unmute_candidate_wrapper, mute_check, resolution='to_unmute'
@@ -250,7 +324,7 @@ def apply_and_add_mutes(aggregated_for_mute, aggregated_for_unmute, aggregated_f
         for wildcard_pattern, chunks in wildcard_groups.items():
             # Если ВСЕ chunk'и подходят под условия размьюта
             all_chunks_unmutable = all(
-                is_unmute_candidate(chunk)
+                is_unmute_candidate(chunk, all_data, period_days=2)
                 for chunk in chunks
             )
             
@@ -258,7 +332,7 @@ def apply_and_add_mutes(aggregated_for_mute, aggregated_for_unmute, aggregated_f
                 wildcard_unmute_candidates.append(wildcard_pattern)
                 # Берем debug-строку первого chunk'а
                 if chunks:
-                    debug_string = create_debug_string(chunks[0], 'to_unmute')
+                    debug_string = create_debug_string(chunks[0], 'to_unmute', period_days=2)
                     wildcard_unmute_debug.append(debug_string)
         
         # Объединяем обычные и wildcard кандидаты
@@ -269,7 +343,7 @@ def apply_and_add_mutes(aggregated_for_mute, aggregated_for_unmute, aggregated_f
         
         # 3. Кандидаты на удаление из mute (to_delete)
         def is_delete_candidate_wrapper(test):
-            return is_delete_candidate(aggregated_for_delete.get(test.get('full_name')))
+            return is_delete_candidate(test, all_data, period_days=7)
         
         to_delete, to_delete_debug = create_file_set(
             aggregated_for_mute, is_delete_candidate_wrapper, mute_check, resolution='to_delete'
@@ -637,7 +711,7 @@ def mute_worker(args):
         output_path = args.output_folder
         os.makedirs(output_path, exist_ok=True)
         logging.info(f"Creating mute files in: {output_path}")
-        apply_and_add_mutes(aggregated_for_mute, aggregated_for_unmute, aggregated_for_delete, output_path, mute_check)
+        apply_and_add_mutes(all_data, output_path, mute_check)
 
     elif args.mode == 'create_issues':
         file_path = args.file_path

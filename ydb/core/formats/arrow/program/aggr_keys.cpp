@@ -216,6 +216,7 @@ private:
         std::vector<const IChunkedArray*> arrays;
         std::optional<arrow::Type::type> type;
         for (auto&& i : sources) {
+            AFL_VERIFY(i);
             const auto& acc = i->GetAccessorVerified(ColumnInfo.GetColumnId());
             AFL_VERIFY(acc->GetRecordsCount() == 1)("count", acc->GetRecordsCount());
             arrays.emplace_back(acc.get());
@@ -280,7 +281,7 @@ private:
                     collectionResult->AddVerified(ColumnInfo.GetColumnId(),
                         NAccessor::TTrivialArray::BuildArrayFromScalar(type.BuildScalar(*result, arrays.front()->GetDataType())), false);
                 }
-                collectionResult->TakeSequenceFrom(sources.front());
+                collectionResult->TakeSequenceFrom(*sources.front());
                 return true;
             })) {
             return TConclusionStatus::Fail(errorMessage);

@@ -29,12 +29,13 @@ arrow::compute::OutputType ConvertToOutputType(TType* output);
 
 NUdf::TUnboxedValuePod MakeBlockCount(const THolderFactory& holderFactory, const uint64_t count);
 
-class TBlockFuncNode: public TMutableComputationNode<TBlockFuncNode> {
+class TBlockFuncNode : public TMutableComputationNode<TBlockFuncNode> {
+
 public:
-    TBlockFuncNode(TComputationMutables& mutables, NYql::NUdf::EValidateDatumMode validateDatumMode, TStringBuf name, TComputationNodePtrVector&& argsNodes,
-                   const TVector<TType*>& argsTypes, TType* outputType, const arrow::compute::ScalarKernel& kernel,
-                   std::shared_ptr<arrow::compute::ScalarKernel> kernelHolder = {},
-                   const arrow::compute::FunctionOptions* functionOptions = nullptr);
+    TBlockFuncNode(TComputationMutables& mutables, TStringBuf name, TComputationNodePtrVector&& argsNodes,
+        const TVector<TType*>& argsTypes, const arrow::compute::ScalarKernel& kernel,
+        std::shared_ptr<arrow::compute::ScalarKernel> kernelHolder = {},
+        const arrow::compute::FunctionOptions* functionOptions = nullptr);
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const;
 private:
@@ -78,11 +79,9 @@ private:
     std::unique_ptr<IArrowKernelComputationNode> PrepareArrowKernelComputationNode(TComputationContext& ctx) const final;
 
 private:
-    NYql::NUdf::EValidateDatumMode ValidateDatumMode_ = NYql::NUdf::EValidateDatumMode::None;
     const ui32 StateIndex_;
     const TComputationNodePtrVector ArgsNodes_;
     const std::vector<arrow::ValueDescr> ArgsValuesDescr_;
-    arrow::ValueDescr OutValueDescr_;
     const arrow::compute::ScalarKernel& Kernel_;
     const std::shared_ptr<arrow::compute::ScalarKernel> KernelHolder_;
     const arrow::compute::FunctionOptions* const Options_;

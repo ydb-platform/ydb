@@ -529,7 +529,7 @@ IComputationNode* WrapBlockLogical(std::string_view name, TCallable& callable, c
         kernel = MakeKernel<TXorBlockExec>(argsTypes, callable.GetType()->GetReturnType());
     }
 
-    return new TBlockFuncNode(ctx.Mutables, ToDatumValidateMode(ctx.ValidateMode), name, std::move(argsNodes), argsTypes, callable.GetType()->GetReturnType(), *kernel, kernel);
+    return new TBlockFuncNode(ctx.Mutables, name, std::move(argsNodes), argsTypes, *kernel, kernel);
 }
 
 } // namespace
@@ -559,7 +559,7 @@ IComputationNode* WrapBlockNot(TCallable& callable, const TComputationNodeFactor
     TVector<TType*> argsTypes = { callable.GetInput(0).GetStaticType() };
 
     auto kernel = MakeKernel<TNotBlockExec>(argsTypes, argsTypes[0]);
-    return new TBlockFuncNode(ctx.Mutables, ToDatumValidateMode(ctx.ValidateMode), "Not", std::move(argsNodes), argsTypes, callable.GetType()->GetReturnType(), *kernel, kernel);
+    return new TBlockFuncNode(ctx.Mutables, "Not", std::move(argsNodes), argsTypes, *kernel, kernel);
 }
 
 

@@ -271,7 +271,7 @@ IComputationNode* WrapBlockCoalesce(TCallable& callable, const TComputationNodeF
     TVector<TType*> argsTypes = {firstType, secondType};
 
     auto kernel = MakeBlockCoalesceKernel(argsTypes, secondType, needUnwrapFirst);
-    return new TBlockFuncNode(ctx.Mutables, ToDatumValidateMode(ctx.ValidateMode), "Coalesce", std::move(argsNodes), argsTypes, callable.GetType()->GetReturnType(), *kernel, kernel);
+    return new TBlockFuncNode(ctx.Mutables, "Coalesce", std::move(argsNodes), argsTypes, *kernel, kernel);
 }
 
 } // namespace NKikimr::NMiniKQL

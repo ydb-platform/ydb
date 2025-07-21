@@ -250,7 +250,6 @@ private:
                             case EAggregate::Sum:
                                 if constexpr (TWrap::IsCType) {
                                     *result += value;
-                                    arrResultIndex.reset();
                                 }
                                 if constexpr (TWrap::IsStringView) {
                                     errorMessage = "cannot sum string views";
@@ -273,7 +272,6 @@ private:
                     }
                     ++idx;
                 }
-                AFL_VERIFY(arrResultIndex);
                 if (arrResultIndex) {
                     collectionResult->AddVerified(
                         ColumnInfo.GetColumnId(), sources[*arrResultIndex]->GetAccessorVerified(ColumnInfo.GetColumnId()), false);

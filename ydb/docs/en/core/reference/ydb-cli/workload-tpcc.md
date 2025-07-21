@@ -15,7 +15,7 @@ Here is a quick start snippet:
 
 ## Common command options
 
-All commands support the common `--path` option, which specifies the path to the directory containing tables in the database:
+All commands support the common `--path` option, which specifies the path to the directory containing the benchmark tables in the database:
 
 ```bash
 {{ ydb-cli }} workload tpcc --path tpcc/10wh ...

@@ -3,7 +3,6 @@
 #include "common.h"
 #include "context.h"
 #include "events.h"
-#include "interval_tree.h"
 #include "private_events.h"
 
 #include <ydb/core/tx/columnshard/blobs_reader/actor.h>
@@ -12,6 +11,7 @@
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/iterator/default_fetching.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/range_treap/range_treap.h>
 
 namespace NKikimr::NOlap::NReader::NSimple {
 class TSpecialReadContext;
@@ -25,12 +25,13 @@ namespace NKikimr::NOlap::NReader::NSimple::NDuplicateFiltering {
 class TDuplicateManager: public NActors::TActor<TDuplicateManager> {
 private:
     inline static TAtomicCounter NextRequestId = 0;
+    using TIntervalTree = NRangeTreap::TRangeTreap<NArrow::TSimpleRow, ui64>;
 
     const TActorId ColumnShardActorId;
     const std::shared_ptr<NCommon::TColumnsSet> PKColumns;
     NColumnShard::TDuplicateFilteringCounters Counters;
     const THashMap<ui64, std::shared_ptr<TPortionInfo>> Portions;
-    const TIntervalTree<NArrow::TSimpleRow, ui64> Intervals;
+    const TIntervalTree Intervals;
     TLRUCache<TDuplicateMapInfo, NArrow::TColumnFilter> FiltersCache;
     THashMap<TDuplicateMapInfo, std::vector<std::shared_ptr<TInternalFilterConstructor>>> BuildingFilters;
 

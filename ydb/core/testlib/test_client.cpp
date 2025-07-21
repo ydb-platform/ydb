@@ -557,10 +557,6 @@ namespace Tests {
             appData.TransferWriterFactory = Settings->TransferWriterFactory;
             appData.WorkloadManagerConfig.MergeFrom(Settings->AppConfig->GetWorkloadManagerConfig());
             appData.QueryServiceConfig.MergeFrom(Settings->AppConfig->GetQueryServiceConfig());
-            appData.BridgeConfig.MergeFrom(Settings->BridgeConfig);
-            if (appData.BridgeConfig.PilesSize() > 0) {
-                appData.BridgeModeEnabled = true;
-            }
 
             appData.DynamicNameserviceConfig = new TDynamicNameserviceConfig;
             auto dnConfig = appData.DynamicNameserviceConfig;

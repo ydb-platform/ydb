@@ -1058,6 +1058,7 @@ public:
     }
 
     void ReplyWith(NHttp::THttpOutgoingResponsePtr response) {
+        AuditRequest(Event, response, AuditParts);
         Send(Event->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(response));
     }
 
@@ -1163,6 +1164,7 @@ public:
                 << " " << request->URL);
         }
         if (result.UserToken) {
+            AddAuditParts(result.UserToken, AuditParts);
             Event->Get()->UserToken = result.UserToken->GetSerializedToken();
         }
         Send(new IEventHandle(Fields.Handler, SelfId(), Event->ReleaseBase().Release(), IEventHandle::FlagTrackDelivery, Event->Cookie));

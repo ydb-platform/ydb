@@ -23,6 +23,10 @@ namespace NKafka {
     bool InSequence(ui64 maxSeqNo, ui64 seqNo);
 
     ECheckDeduplicationResult CheckDeduplication(i16 lastEpoch, ui64 lastSeqNo, i16 messageEpoch, ui64 messageSeqNo);
+
+    std::pair<TString, NPersQueue::NErrorCode> MakeDeduplicationError(
+        ECheckDeduplicationResult res, const TString& topicName, ui32 partitionId, const TString& sourceId, ui64 poffset,
+        i16 lastEpoch, ui64 lastSeqNo, i16 messageEpoch, ui64 messageSeqNo);
 }
 
 namespace NKikimr::NPQ {

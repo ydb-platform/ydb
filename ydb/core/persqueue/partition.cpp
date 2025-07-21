@@ -70,6 +70,34 @@ namespace NKafka {
 
         return ECheckDeduplicationResult::OUT_OF_ORDER_SEQUENCE_NUMBER;
     }
+
+    std::pair<NPersQueue::NErrorCode::EErrorCode, TString> MakeDeduplicationError(
+        ECheckDeduplicationResult res, const TString& topicName, ui32 partitionId, const TString& sourceId, ui64 poffset,
+        i16 lastEpoch, ui64 lastSeqNo, i16 messageEpoch, ui64 messageSeqNo
+    ) {
+        switch (res) {
+        case NKafka::ECheckDeduplicationResult::INVALID_PRODUCER_EPOCH: {
+            return {
+                NPersQueue::NErrorCode::KAFKA_INVALID_PRODUCER_EPOCH,
+                TStringBuilder() << "Epoch of producer " << EscapeC(sourceId) << " at offset " << poffset
+                                    << " in " << topicName << "-" << partitionId << " is " << messageEpoch
+                                    << ", which is smaller than the last seen epoch " << lastEpoch
+            };
+        }
+        case NKafka::ECheckDeduplicationResult::OUT_OF_ORDER_SEQUENCE_NUMBER: {
+            auto message = TStringBuilder() << "Out of order sequence number for producer " << EscapeC(sourceId) << " at offset " << poffset
+                                    << " in " << topicName << "-" << partitionId << ": ";
+            if (lastEpoch < messageEpoch) {
+                message << "for new producer epoch expected seqNo 0, got " << messageSeqNo;
+            } else {
+                message << messageSeqNo << " (incoming seq. number), " << lastSeqNo << " (current end sequence number)";
+            }
+            return {NPersQueue::NErrorCode::KAFKA_OUT_OF_ORDER_SEQUENCE_NUMBER, message};
+        }
+        default:
+            return {};
+        }
+    }
 }
 
 namespace {
@@ -1418,7 +1446,7 @@ TPartition::EProcessResult TPartition::ApplyWriteInfoResponse(TTransaction& tx) 
         }
 
         if (auto inFlightIter = TxInflightMaxSeqNoPerSourceId.find(s.first); !inFlightIter.IsEnd()) {
-            if (SeqnoViolation(inFlightIter->second.ProducerEpoch, inFlightIter->second.SeqNo, s.second.ProducerEpoch, s.second.MinSeqNo)) {
+            if (SeqnoViolation(inFlightIter->second.KafkaProducerEpoch, inFlightIter->second.SeqNo, s.second.ProducerEpoch, s.second.MinSeqNo)) {
                 tx.Predicate = false;
                 tx.Message = TStringBuilder() << "MinSeqNo violation failure on " << s.first;
                 tx.WriteInfoApplied = true;
@@ -2567,7 +2595,7 @@ void TPartition::CommitWriteOperations(TTransaction& t)
         auto pair = TSeqNoProducerEpoch{s.second.SeqNo, s.second.ProducerEpoch};
         auto [iter, ins] = TxInflightMaxSeqNoPerSourceId.emplace(s.first, pair);
         if (!ins) {
-            bool ok = !SeqnoViolation(iter->second.ProducerEpoch, iter->second.SeqNo, s.second.ProducerEpoch, s.second.SeqNo);
+            bool ok = !SeqnoViolation(iter->second.KafkaProducerEpoch, iter->second.SeqNo, s.second.ProducerEpoch, s.second.SeqNo);
             Y_ABORT_UNLESS(ok);
             iter->second = pair;
         }
@@ -2681,7 +2709,7 @@ void TPartition::CommitWriteOperations(TTransaction& t)
         auto& persistInfo = TxSourceIdForPostPersist[srcId];
         persistInfo.SeqNo = info.SeqNo;
         persistInfo.Offset = info.Offset + oldHeadOffset;
-        persistInfo.ProducerEpoch = info.ProducerEpoch;
+        persistInfo.KafkaProducerEpoch = info.ProducerEpoch;
     }
 
     Parameters->FirstCommitWriteOperations = false;

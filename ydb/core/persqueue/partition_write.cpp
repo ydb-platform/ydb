@@ -512,10 +512,10 @@ void TPartition::HandleWriteResponse(const TActorContext& ctx) {
     for (auto& [sourceId, info] : TxSourceIdForPostPersist) {
         auto it = SourceIdStorage.GetInMemorySourceIds().find(sourceId);
         if (it.IsEnd()) {
-            SourceIdStorage.RegisterSourceId(sourceId, info.SeqNo, info.Offset, now, info.ProducerEpoch);
+            SourceIdStorage.RegisterSourceId(sourceId, info.SeqNo, info.Offset, now, info.KafkaProducerEpoch);
         } else {
             ui64 seqNo = std::max(info.SeqNo, it->second.SeqNo);
-            SourceIdStorage.RegisterSourceId(sourceId, it->second.Updated(seqNo, info.Offset, now, info.ProducerEpoch));
+            SourceIdStorage.RegisterSourceId(sourceId, it->second.Updated(seqNo, info.Offset, now, info.KafkaProducerEpoch));
         }
         SourceIdCounter.Use(sourceId, now);
     }
@@ -1034,7 +1034,7 @@ TPartition::EProcessResult TPartition::PreProcessRequest(TWriteMsg& p) {
     auto inflightMaxSeqNo = TxInflightMaxSeqNoPerSourceId.find(p.Msg.SourceId);
 
     if (!inflightMaxSeqNo.IsEnd()) {
-        if (SeqnoViolation(inflightMaxSeqNo->second.ProducerEpoch, inflightMaxSeqNo->second.SeqNo, p.Msg.ProducerEpoch, p.Msg.SeqNo)) {
+        if (SeqnoViolation(inflightMaxSeqNo->second.KafkaProducerEpoch, inflightMaxSeqNo->second.SeqNo, p.Msg.ProducerEpoch, p.Msg.SeqNo)) {
             return EProcessResult::Blocked;
         }
     }
@@ -1180,41 +1180,30 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
         sourceId.ProducerEpoch().has_value() && sourceId.ProducerEpoch().value().Defined() &&
         p.Msg.ProducerEpoch.Defined()
     ) {
-        auto WriteError = [this, &ctx, &p](NPersQueue::NErrorCode::EErrorCode errorCode, TStringBuilder message) {
-            CancelOneWriteOnWrite(ctx, message, p, errorCode);
-        };
-
         auto lastEpoch = *sourceId.ProducerEpoch().value();
-        auto messageEpoch = *p.Msg.ProducerEpoch;
         auto lastSeqNo = *sourceId.SeqNo();
+        auto messageEpoch = *p.Msg.ProducerEpoch;
         auto messageSeqNo = p.Msg.SeqNo;
 
         if (auto res = NKafka::CheckDeduplication(lastEpoch, lastSeqNo, messageEpoch, messageSeqNo); res != NKafka::ECheckDeduplicationResult::OK) {
+            auto [error, message] = NKafka::MakeDeduplicationError(
+                res, TopicName(), Partition.OriginalPartitionId, p.Msg.SourceId, poffset,
+                lastEpoch, lastSeqNo, messageEpoch, messageSeqNo
+            );
+
             switch (res) {
-            case NKafka::ECheckDeduplicationResult::INVALID_PRODUCER_EPOCH: {
-                WriteError(
-                    NPersQueue::NErrorCode::KAFKA_INVALID_PRODUCER_EPOCH,
-                    TStringBuilder() << "Epoch of producer " << EscapeC(p.Msg.SourceId) << " at offset " << poffset
-                                        << " in " << TopicName() << "-" << Partition.OriginalPartitionId << " is " << messageEpoch
-                                        << ", which is smaller than the last seen epoch " << lastEpoch);
-                return false;
-            }
-            case NKafka::ECheckDeduplicationResult::OUT_OF_ORDER_SEQUENCE_NUMBER: {
-                auto message = TStringBuilder() << "Out of order sequence number for producer " << EscapeC(p.Msg.SourceId) << " at offset " << poffset
-                                     << " in " << TopicName() << "-" << Partition.OriginalPartitionId << ": ";
-                if (lastEpoch < messageEpoch) {
-                    message << "for new producer epoch expected seqNo 0, got " << messageSeqNo;
-                } else {
-                    message << messageSeqNo << " (incoming seq. number), " << lastSeqNo << " (current end sequence number)";
-                }
-                WriteError(NPersQueue::NErrorCode::KAFKA_OUT_OF_ORDER_SEQUENCE_NUMBER, std::move(message));
-                return false;
-            }
-            case NKafka::ECheckDeduplicationResult::DUPLICATE_SEQUENCE_NUMBER:
-                return true;
             case NKafka::ECheckDeduplicationResult::OK:
                 // Continue processing the message.
                 break;
+            case NKafka::ECheckDeduplicationResult::DUPLICATE_SEQUENCE_NUMBER:
+                return true;
+
+            case NKafka::ECheckDeduplicationResult::INVALID_PRODUCER_EPOCH:
+                [[fallthrough]];
+            case NKafka::ECheckDeduplicationResult::OUT_OF_ORDER_SEQUENCE_NUMBER: {
+                CancelOneWriteOnWrite(ctx, message, p, error);
+                return false;
+            }
             }
         }
     }

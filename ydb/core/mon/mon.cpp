@@ -1031,6 +1031,7 @@ public:
     TMon::TRegisterHandlerFields& Fields;
     TMon::TRequestAuthorizer Authorizer;
     TAuditParts AuditParts;
+    NHttp::TEvHttpProxy::TEvSubscribeForCancel::TPtr CancelSubscriber;
 
     THttpMonAuthorizedActorRequest(NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr event, TMon::TRegisterHandlerFields& fields, TMon::TRequestAuthorizer authorizer)
         : Event(std::move(event))
@@ -1043,7 +1044,8 @@ public:
     }
 
     void Bootstrap() {
-        if (Authorizer) {
+        Send(Event->Sender, new NHttp::TEvHttpProxy::TEvSubscribeForCancel(), IEventHandle::FlagTrackDelivery);
+        if (Fields.UseAuth && Authorizer) {
             NActors::IEventHandle* handle = Authorizer(SelfId(), Event->Get()->Request.Get());
             if (handle) {
                 Send(handle);
@@ -1051,8 +1053,12 @@ public:
                 return;
             }
         }
-        Forward(Event, Fields.Handler);
-        PassAway();
+        Send(new IEventHandle(Fields.Handler, SelfId(), Event->ReleaseBase().Release(), IEventHandle::FlagTrackDelivery, Event->Cookie));
+        Become(&THttpMonAuthorizedActorRequest::StateWork);
+    }
+
+    void ReplyWith(NHttp::THttpOutgoingResponsePtr response) {
+        Send(Event->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(response));
     }
 
     bool CredentialsProvided() {
@@ -1137,7 +1143,7 @@ public:
         response << "Content-Length: " << body.size() << "\r\n";
         response << "\r\n";
         response << body;
-        Send(Event->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(request->CreateResponseString(response)));
+        ReplyWith(request->CreateResponseString(response));
         PassAway();
     }
 
@@ -1159,14 +1165,25 @@ public:
         if (result.UserToken) {
             Event->Get()->UserToken = result.UserToken->GetSerializedToken();
         }
-        Forward(Event, Fields.Handler);
+        Send(new IEventHandle(Fields.Handler, SelfId(), Event->ReleaseBase().Release(), IEventHandle::FlagTrackDelivery, Event->Cookie));
+
         PassAway();
     }
 
-    void HandleUndelivered(TEvents::TEvUndelivered::TPtr&) {
+    void Cancelled() {
+        if (CancelSubscriber) {
+            Send(CancelSubscriber->Sender, new NHttp::TEvHttpProxy::TEvRequestCancelled(), 0, CancelSubscriber->Cookie);
+        }
+        PassAway();
+    }
+
+    void HandleUndelivered(TEvents::TEvUndelivered::TPtr& ev) {
+        if (ev->Get()->SourceType == NHttp::TEvHttpProxy::EvSubscribeForCancel) {
+            return Cancelled();
+        }
         NHttp::THttpIncomingRequestPtr request = Event->Get()->Request;
-        Send(Event->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(
-            request->CreateResponseServiceUnavailable(TStringBuilder() << "Auth actor is not available")));
+        ReplyWith(request->CreateResponseServiceUnavailable(
+            TStringBuilder() << "Auth actor is not available"));
         PassAway();
     }
 
@@ -1182,10 +1199,48 @@ public:
         }
     }
 
+    void Handle(NHttp::TEvHttpProxy::TEvHttpOutgoingResponse::TPtr& ev) {
+        ReplyWith(ev->Get()->Response);
+        if (ev->Get()->Response->IsDone()) {
+            return PassAway();
+        }
+    }
+
+    void Handle(NHttp::TEvHttpProxy::TEvHttpOutgoingDataChunk::TPtr& ev) {
+        auto response = std::make_unique<TEvMon::TEvMonitoringResponse>();
+        bool endOfData = false;
+        if (ev->Get()->Error) {
+            response->Record.SetError(ev->Get()->Error);
+            endOfData = true;
+        } else if (ev->Get()->DataChunk) {
+            response->Record.SetDataChunk(ev->Get()->DataChunk->AsString());
+            if (ev->Get()->DataChunk->IsEndOfData()) {
+                response->Record.SetEndOfData(true);
+                endOfData = true;
+            }
+        }
+        Send(Event->Sender, response.release(), 0, Event->Cookie);
+        if (endOfData) {
+            return PassAway();
+        }
+    }
+
+    void Handle(NHttp::TEvHttpProxy::TEvSubscribeForCancel::TPtr& ev) {
+        CancelSubscriber = std::move(ev);
+    }
+
+    void Handle(NHttp::TEvHttpProxy::TEvRequestCancelled::TPtr& /* ev */) {
+        Cancelled();
+    }
+
     STATEFN(StateWork) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvents::TEvUndelivered, HandleUndelivered);
             hFunc(NKikimr::NGRpcService::TEvRequestAuthAndCheckResult, Handle);
+            hFunc(NHttp::TEvHttpProxy::TEvHttpOutgoingResponse, Handle);
+            hFunc(NHttp::TEvHttpProxy::TEvHttpOutgoingDataChunk, Handle);
+            hFunc(NHttp::TEvHttpProxy::TEvSubscribeForCancel, Handle);
+            hFunc(NHttp::TEvHttpProxy::TEvRequestCancelled, Handle)
         }
     }
 };
@@ -1277,11 +1332,7 @@ public:
         while (!url.empty()) {
             auto it = Handlers.find(TString(url));
             if (it != Handlers.end()) {
-                if (it->second.UseAuth) {
-                    Register(new THttpMonAuthorizedActorRequest(std::move(ev), it->second, Authorizer));
-                    return;
-                }
-                Forward(ev, it->second.Handler);
+                Register(new THttpMonAuthorizedActorRequest(std::move(ev), it->second, Authorizer));
                 return;
             } else {
                 if (url.EndsWith('/')) {

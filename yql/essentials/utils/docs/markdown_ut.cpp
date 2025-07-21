@@ -64,12 +64,13 @@ FROM my_table;
         UNIT_ASSERT_VALUES_EQUAL(sections[0].Header.Anchor, "#coalesce");
         UNIT_ASSERT_STRING_CONTAINS(sections[0].Body, "Iterates");
         UNIT_ASSERT_STRING_CONTAINS(sections[0].Body, "COALESCE");
+        UNIT_ASSERT_GE(Count(sections[0].Body, '\n'), 5);
 
         UNIT_ASSERT_STRING_CONTAINS(sections[1].Header.Content, "Random");
         UNIT_ASSERT_VALUES_EQUAL(sections[1].Header.Anchor, "#random");
         UNIT_ASSERT_STRING_CONTAINS(sections[1].Body, "Generates");
         UNIT_ASSERT_STRING_CONTAINS(sections[1].Body, "Random");
-        UNIT_ASSERT_STRING_CONTAINS(sections[1].Body, "Random");
+        UNIT_ASSERT_GE(Count(sections[1].Body, '\n'), 5);
     }
 
 } // Y_UNIT_TEST_SUITE(MarkdownParserTests)

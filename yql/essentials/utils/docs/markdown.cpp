@@ -24,6 +24,7 @@ namespace NSQLComplete {
                         onSection(std::move(Section_));
                         ResetSection(std::move(line));
                     } else {
+                        line.append('\n');
                         Section_.Body.append(std::move(line));
                     }
                 }

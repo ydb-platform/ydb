@@ -710,8 +710,10 @@ protected:
     void Handle(TEvWhiteboard::TEvBridgeInfoUpdate::TPtr &ev, const TActorContext &ctx) {
         BridgeInfo.Swap(&ev->Get()->Record);
         BridgeInfoChangeTime = ctx.Now();
+        if (!IsBridgeCluster) {
+            ctx.Send(SelfId(), new TEvPrivate::TEvSendListNodes);
+        }
         IsBridgeCluster = true;
-        ctx.Send(SelfId(), new TEvPrivate::TEvSendListNodes);
     }
 
     void Handle(TEvInterconnect::TEvNodesInfo::TPtr &ev, const TActorContext &ctx) {

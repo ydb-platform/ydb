@@ -160,17 +160,7 @@ void TNodeWarden::Handle(TEvNodeWardenStorageConfig::TPtr ev) {
 
         using TEvBridgeInfoUpdate = NNodeWhiteboard::TEvWhiteboard::TEvBridgeInfoUpdate;
         std::unique_ptr<TEvBridgeInfoUpdate> update(new TEvBridgeInfoUpdate);
-
-        auto* clusterState = update->Record.MutableClusterState();
-        for (auto& pile : BridgeInfo->Piles) {
-            clusterState->MutablePerPileState()->Add(pile.State);
-            if (pile.IsPrimary) {
-                clusterState->SetPrimaryPile(pile.BridgePileId.GetRawId());
-            }
-            if (pile.IsBeingPromoted) {
-                clusterState->SetPromotedPile(pile.BridgePileId.GetRawId());
-            }
-        }
+        update->Record.MutableClusterState()->CopyFrom(StorageConfig->GetClusterState());
 
         Send(WhiteboardId, update.release());
     }

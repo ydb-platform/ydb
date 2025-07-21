@@ -619,14 +619,10 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
             TIntrusivePtr<TInterconnectProxyCommon> icCommon;
             icCommon.Reset(new TInterconnectProxyCommon);
             if (Config.GetInterconnectConfig().GetUseRdma()) {
+                // Interconnect uses rdma mem pool directly
                 icCommon->RdmaMemPool = CreateIncrementalMemPool();
-                auto pool = icCommon->RdmaMemPool;
-                setup->RcBufAllocator = [pool](size_t size, size_t headRoom, size_t tailRoom) mutable {
-                    auto buf = pool->AllocRcBuf(size + headRoom + tailRoom);
-                    buf.TrimFront(size + tailRoom);
-                    buf.TrimBack(size);
-                    return buf;
-                };
+                // Clients via wrapper to handle allocation fail
+                setup->RcBufAllocator = std::make_shared<TRdmaAllocatorWithFallback>(icCommon->RdmaMemPool);
             }
             icCommon->NameserviceId = nameserviceId;
             icCommon->MonCounters = GetServiceCounters(counters, "interconnect");

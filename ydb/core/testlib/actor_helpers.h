@@ -14,7 +14,7 @@ struct TActorSystemStub {
     THolder<NActors::TActorContext> Ctx;
     NActors::TActivationContext* PrevCtx;
 
-    TActorSystemStub(TRcBufAllocator alloc = {}); 
+    TActorSystemStub(std::shared_ptr<IRcBufAllocator> alloc = {}); 
     ~TActorSystemStub();
 };
 

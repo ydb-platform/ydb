@@ -24,7 +24,7 @@ namespace NKikimr {
 
 namespace {
 
-TRcBuf GenDataAsRcBuf(size_t size, NActors::TRdmaAllocatorWithFallback* alloc) {
+TRcBuf GenDataAsRcBuf(size_t size, IRcBufAllocator* alloc) {
     struct TRcBufWrap : public TRcBuf {
         using TRcBuf::TRcBuf;
 
@@ -39,13 +39,9 @@ TRcBuf GenDataAsRcBuf(size_t size, NActors::TRdmaAllocatorWithFallback* alloc) {
         char* mutable_data() {
             return this->GetDataMut();
         }
-
-        static TRcBufWrap Uninitialized(size_t size) {
-            return TRcBuf::Uninitialized(size);
-        }
     };
 
-    TRcBufWrap data = alloc ? alloc->AllocRcBuf(size, 0, 0) : TRcBufWrap::Uninitialized(size);
+    TRcBufWrap data = alloc ? alloc->AllocRcBuf(size, 0, 0) : GetDefaultRcBufAllocator()->AllocRcBuf(size, 0, 0);
 
     FastGenDataForLZ4<TRcBufWrap>(size, 0, data);
 

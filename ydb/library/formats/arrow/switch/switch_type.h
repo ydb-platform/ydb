@@ -64,6 +64,38 @@ public:
         return std::static_pointer_cast<TArray>(arr);
     }
 
+    template <class TValue>
+    std::shared_ptr<arrow::Scalar> BuildScalar(const TValue val, const std::shared_ptr<arrow::DataType>& dType) const {
+        if constexpr (IsCType) {
+            if constexpr (arrow::is_parameter_free_type<TType>::value) {
+                return std::make_shared<TScalar>(val);
+            }
+            if constexpr (!arrow::is_parameter_free_type<TType>::value) {
+                return std::make_shared<TScalar>(val, dType);
+            }
+        }
+        if constexpr (IsStringView) {
+            if constexpr (std::is_same<TValue, arrow::util::string_view>::value) {
+                if constexpr (arrow::is_parameter_free_type<TType>::value) {
+                    return std::make_shared<TScalar>(arrow::Buffer::FromString(std::string(val.data(), val.size())));
+                }
+                if constexpr (!arrow::is_parameter_free_type<TType>::value) {
+                    return std::make_shared<TScalar>(arrow::Buffer::FromString(std::string(val.data(), val.size())), dType);
+                }
+            }
+            if constexpr (!std::is_same<TValue, arrow::util::string_view>::value) {
+                if constexpr (arrow::is_parameter_free_type<TType>::value) {
+                    return std::make_shared<TScalar>(arrow::Buffer::FromString(val));
+                }
+                if constexpr (!arrow::is_parameter_free_type<TType>::value) {
+                    return std::make_shared<TScalar>(arrow::Buffer::FromString(val), dType);
+                }
+            }
+        }
+        Y_FAIL();
+        return nullptr;
+    }
+
     ValueType GetValue(const TArray& arr, const ui32 index) const {
         if constexpr (IsCType) {
             return arr.Value(index);

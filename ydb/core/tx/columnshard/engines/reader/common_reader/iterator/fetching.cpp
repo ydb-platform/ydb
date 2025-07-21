@@ -13,7 +13,7 @@
 
 namespace NKikimr::NOlap::NReader::NCommon {
 
-bool TStepAction::DoApply(IDataReader& owner) const {
+bool TStepAction::DoApply(IDataReader& owner) {
     AFL_VERIFY(FinishedFlag);
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "apply");
     Source->StartSyncSection();

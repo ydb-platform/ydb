@@ -112,7 +112,7 @@ class TApplySourceResult: public IApplyAction {
 private:
     using TBase = IDataTasksProcessor::ITask;
     YDB_READONLY_DEF(std::shared_ptr<IDataSource>, Source);
-    mutable TFetchingScriptCursor Step;
+    TFetchingScriptCursor Step;
 
 public:
     TApplySourceResult(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step)
@@ -120,7 +120,7 @@ public:
         , Step(step) {
     }
 
-    virtual bool DoApply(IDataReader& indexedDataRead) const override {
+    virtual bool DoApply(IDataReader& indexedDataRead) override {
         auto* plainReader = static_cast<TPlainReadData*>(&indexedDataRead);
         Source->SetCursor(std::move(Step));
         Source->StartSyncSection();
@@ -151,6 +151,16 @@ TConclusion<bool> TStepAggregationSources::DoExecuteInplace(
         return conclusion;
     }
     source->BuildStageResult(source);
+    return true;
+}
+
+TConclusion<bool> TCleanAggregationSources::DoExecuteInplace(
+    const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& /*step*/) const {
+    AFL_VERIFY(source->GetType() == IDataSource::EType::Aggregation);
+    auto* aggrSource = static_cast<const TAggregationDataSource*>(source.get());
+    for (auto&& i : aggrSource->GetSources()) {
+        i->ClearResult();
+    }
     return true;
 }
 

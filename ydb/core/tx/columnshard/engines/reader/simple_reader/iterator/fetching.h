@@ -55,6 +55,20 @@ public:
     virtual TConclusion<bool> DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const override;
 };
 
+class TCleanAggregationSources: public IFetchingStep {
+private:
+    using TBase = IFetchingStep;
+    const std::shared_ptr<NArrow::NSSA::IResourcesAggregator> Aggregator;
+
+public:
+    TCleanAggregationSources(const std::shared_ptr<NArrow::NSSA::IResourcesAggregator>& proc)
+        : TBase("CLEAN_AGGREGATION")
+        , Aggregator(proc) {
+    }
+
+    virtual TConclusion<bool> DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const override;
+};
+
 class TDetectInMemStep: public IFetchingStep {
 private:
     using TBase = IFetchingStep;

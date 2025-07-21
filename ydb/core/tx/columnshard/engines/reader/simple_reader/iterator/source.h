@@ -426,9 +426,6 @@ private:
         StageResult = std::make_unique<TFetchedResult>(ExtractStageData(), *GetContext()->GetCommonContext()->GetResolver());
         StageResult->SetPages({ TPortionDataAccessor::TReadPage(0, recordsCount, 0) });
         StageResult->SetResultChunk(StageResult->GetBatch()->BuildTableVerified(), 0, recordsCount);
-        for (auto&& i : Sources) {
-            i->ClearResult();
-        }
     }
 
     virtual void InitUsedRawBytes() override {

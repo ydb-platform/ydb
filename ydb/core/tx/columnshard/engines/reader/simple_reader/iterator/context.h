@@ -41,6 +41,7 @@ public:
             } else {
                 NCommon::TFetchingScriptBuilder builder(*this);
                 builder.AddStep(std::make_shared<TStepAggregationSources>(aggrProc));
+                builder.AddStep(std::make_shared<TCleanAggregationSources>(aggrProc));
                 SourcesAggregationScript = std::move(builder).Build();
             }
         }

@@ -12,7 +12,7 @@ class TestTpcdsS1(tpcds.TestTpcds1, FunctionalTestBase):
     @classmethod
     def setup_class(cls) -> None:
         cls.setup_cluster(memory_controller_config=cls.memory_controller_config)
-        cls.run_cli(['workload', 'tpcds', '-p', f'olap_yatests/{cls._get_path()}', 'init', '--store=column', '--datetime-mode=dt64'])
+        cls.run_cli(['workload', 'tpcds', '-p', f'olap_yatests/{cls._get_path()}', 'init', '--store=column', '--datetime-types=dt64'])
         cls.run_cli(['workload', 'tpcds', '-p', f'olap_yatests/{cls._get_path()}', 'import', 'generator', f'--scale={cls.scale}'])
         super().setup_class()
 

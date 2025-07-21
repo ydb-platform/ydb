@@ -2,6 +2,7 @@
 #include <contrib/libs/fmt/include/fmt/format.h>
 #include <ydb/public/api/protos/ydb_formats.pb.h>
 #include <ydb/library/yaml_json/yaml_to_json.h>
+#include <library/cpp/colorizer/colors.h>
 #include <contrib/libs/yaml-cpp/include/yaml-cpp/node/parse.h>
 #include <util/string/cast.h>
 #include <util/system/spinlock.h>
@@ -54,13 +55,13 @@ ui32 TWorkloadGeneratorBase::GetDefaultPartitionsCount(const TString& /*tableNam
 void TWorkloadGeneratorBase::GenerateDDLForTable(IOutputStream& result, const NJson::TJsonValue& table, const NJson::TJsonValue& common, bool single) const {
     auto specialTypes = GetSpecialDataTypes();
     specialTypes["string_type"] = Params.GetStringType();
-    switch (Params.GetDatetimeMode()) {
-    case TWorkloadBaseParams::EDatetimeMode::DateTime32:
+    switch (Params.GetDatetimeTypes()) {
+    case TWorkloadBaseParams::EDatetimeTypes::DateTime32:
         specialTypes["date_type"] = "Date";
         specialTypes["datetime_type"] = "Datetime";
         specialTypes["timestamp_type"] = "Timestamp";
         break;
-    case TWorkloadBaseParams::EDatetimeMode::DateTime64:
+    case TWorkloadBaseParams::EDatetimeTypes::DateTime64:
         specialTypes["date_type"] = "Date32";
         specialTypes["datetime_type"] = "Datetime64";
         specialTypes["timestamp_type"] = "Timestamp64";
@@ -192,6 +193,7 @@ TBulkDataGeneratorList TWorkloadDataInitializerBase::GetBulkInitialData() {
 }
 
 void TWorkloadBaseParams::ConfigureOpts(NLastGetopt::TOpts& opts, const ECommandType commandType, int /*workloadType*/) {
+    NColorizer::TColors colors = NColorizer::AutoColors(Cout);
     switch (commandType) {
     default:
         break;
@@ -215,8 +217,10 @@ void TWorkloadBaseParams::ConfigureOpts(NLastGetopt::TOpts& opts, const ECommand
             .Optional()
             .StoreResult(&S3Endpoint);
         opts.AddLongOption("string", "Use String type in tables instead Utf8 one.").NoArgument().StoreValue(&StringType, "String");
-        opts.AddLongOption("datetime-mode", "Witch set of date types have to use. Can be '" + ToString(EDatetimeMode::DateTime32) + "' (Date, Timestamp, Datetime) or '" + ToString(EDatetimeMode::DateTime64) +"' (Date32, Timestamp64, Datetime64).")
-            .DefaultValue(DatetimeMode).StoreResult(&DatetimeMode);
+        opts.AddLongOption("datetime-types", TStringBuilder() << "Datetime types to use. Available options:"
+            "\n  " << colors.BoldColor() << EDatetimeTypes::DateTime32 << colors.OldColor() << "\n    Date, Datetime and Timestamp"
+            "\n  " << colors.BoldColor() << EDatetimeTypes::DateTime64 << colors.OldColor() << "\n    Date32, Datetime64 and Timestamp64"
+            "\nDefault: " << colors.CyanColor() << "\"" << DatetimeTypes << "\"" << colors.OldColor() << ".").StoreResult(&DatetimeTypes);
         opts.AddLongOption("partition-size", "Maximum partition size in megabytes (AUTO_PARTITIONING_PARTITION_SIZE_MB) for row tables.")
             .DefaultValue(PartitionSizeMb).StoreResult(&PartitionSizeMb);
         break;

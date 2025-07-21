@@ -22,7 +22,7 @@ public:
         YQL /* "yql" */,
         PG /* "pg"*/
     };
-    enum class EDatetimeMode {
+    enum class EDatetimeTypes {
         DateTime32 /* "dt32" */,
         DateTime64 /* "dt64" */
     };
@@ -35,7 +35,7 @@ public:
     YDB_READONLY_DEF(TString, S3Endpoint);
     YDB_READONLY_DEF(TString, S3Prefix);
     YDB_READONLY(TString, StringType, "Utf8");
-    YDB_READONLY(EDatetimeMode, DatetimeMode, EDatetimeMode::DateTime32);
+    YDB_READONLY(EDatetimeTypes, DatetimeTypes, EDatetimeTypes::DateTime32);
     YDB_READONLY(ui64, PartitionSizeMb, 2000);
     YDB_READONLY_PROTECT(bool, CheckCanonical, false);
 };

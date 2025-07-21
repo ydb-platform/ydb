@@ -250,6 +250,7 @@ private:
                             case EAggregate::Sum:
                                 if constexpr (TWrap::IsCType) {
                                     *result += value;
+                                    arrResultIndex.reset();
                                 }
                                 if constexpr (TWrap::IsStringView) {
                                     errorMessage = "cannot sum string views";

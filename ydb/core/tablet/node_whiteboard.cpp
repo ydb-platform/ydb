@@ -1276,8 +1276,8 @@ protected:
         const auto& bridgeInfo = ev->Get()->BridgeInfo;
         if (bridgeInfo) {
             size_t bridgePileId = bridgeInfo->SelfNodePile->BridgePileId.GetRawId();
-            Y_ABORT_UNLESS(bridgePileId < AppData(ctx)->BridgeConfig->PilesSize());
-            SystemStateInfo.SetBridgePileName(AppData(ctx)->BridgeConfig->GetPiles(bridgePileId).GetName());
+            Y_ABORT_UNLESS(bridgePileId < AppData(ctx)->BridgeConfig.PilesSize());
+            SystemStateInfo.SetBridgePileName(AppData(ctx)->BridgeConfig.GetPiles(bridgePileId).GetName());
         }
     }
 };

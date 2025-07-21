@@ -2096,10 +2096,10 @@ public:
         } else {
             std::vector<TString> activePiles = {""};
             if (IsBridgeMode(TActivationContext::AsActorContext())) {
-                for (size_t i = 0; i < AppData()->BridgeConfig->PilesSize(); ++i) {
+                for (size_t i = 0; i < AppData()->BridgeConfig.PilesSize(); ++i) {
                     const auto& pile = NodeWardenStorageConfig->Get()->BridgeInfo->Piles[i];
                     if (pile.IsPrimary || pile.IsBeingPromoted) {
-                        activePiles.push_back(AppData()->BridgeConfig->GetPiles(i).GetName());
+                        activePiles.push_back(AppData()->BridgeConfig.GetPiles(i).GetName());
                     }
                 }
             }

@@ -110,9 +110,10 @@ public:
         return SumSize.Val();
     }
 
-    void AddExecutionDuration(const TDuration d) {
-        SumDuration.Add(d.MicroSeconds());
-        Signals->AddExecutionDuration(d);
+    void AddExecutionDuration(const TDuration dLocal, const TDuration dGlobal) {
+        SumDuration.Add(dLocal.MicroSeconds());
+        Signals->AddExecutionDuration(dLocal);
+        Signals->AddTotalDuration(dGlobal);
     }
 
     virtual ~IFetchingStep() = default;
@@ -147,9 +148,9 @@ public:
         , Steps(std::move(steps)) {
     }
 
-    void AddStepDuration(const ui32 index, const TDuration d) {
+    void AddStepDuration(const ui32 index, const TDuration dLocal, const TDuration dGlobal) {
         AtomicSet(FinishInstant, TMonotonic::Now().MicroSeconds());
-        GetStep(index)->AddExecutionDuration(d);
+        GetStep(index)->AddExecutionDuration(dLocal, dGlobal);
     }
 
     void OnExecute() {

@@ -22,6 +22,20 @@ static constexpr size_t HPageSz = (1 << 21);
 
 namespace NInterconnect::NRdma {
 
+    class TMemPoolImpl {
+    public:
+        static TMemRegion* DoAlloc(IMemPool* pool, int size, ui32 flags) {
+            TMemRegion* region = pool->AllocImpl(size, flags);
+            if (flags & IMemPool::BLOCK_MODE) {
+                while (!region) {
+                    std::this_thread::yield();
+                    region = pool->AllocImpl(size, flags);
+                }
+            }
+            return region;
+        }
+    };
+
     class TChunk: public NNonCopyable::TMoveOnly, public TAtomicRefCount<TChunk> {
     public:
 
@@ -203,18 +217,8 @@ namespace NInterconnect::NRdma {
         return res;
     }
 
-    void IMemPool::RetryAlloc(TMemRegion** region, int size, ui32 flags) noexcept {
-        while (!*region) {
-            std::this_thread::yield();
-            *region = AllocImpl(size, flags); 
-        }
-    }
-
     TMemRegionPtr IMemPool::Alloc(int size, ui32 flags) noexcept {
-        TMemRegion* region = AllocImpl(size, flags);
-        if (flags & IMemPool::BLOCK_MODE) {
-            RetryAlloc(&region, size, flags);
-        }
+        TMemRegion* region = TMemPoolImpl::DoAlloc(this, size, flags);
         if (!region) {
             return nullptr;
         }
@@ -222,10 +226,7 @@ namespace NInterconnect::NRdma {
     }
 
     std::optional<TRcBuf> IMemPool::AllocRcBuf(int size, ui32 flags) noexcept {
-        TMemRegion* region = AllocImpl(size, flags);
-        if (flags & IMemPool::BLOCK_MODE) {
-            RetryAlloc(&region, size, flags);
-        }
+        TMemRegion* region = TMemPoolImpl::DoAlloc(this, size, flags);
         if (!region) {
             return {};
         }

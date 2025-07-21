@@ -84,7 +84,6 @@ namespace NInterconnect::NRdma {
         virtual TMemRegion* AllocImpl(int size, ui32 flags) noexcept = 0;
         virtual void Free(TMemRegion&& mr, TChunk& chunk) noexcept = 0;
         virtual void NotifyDealocated() noexcept = 0;
-        void RetryAlloc(TMemRegion** region, int size, ui32 flags) noexcept;
     };
 
     std::shared_ptr<IMemPool> CreateDummyMemPool() noexcept;

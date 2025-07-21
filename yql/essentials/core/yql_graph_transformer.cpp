@@ -42,8 +42,9 @@ public:
     TCompositeGraphTransformer(const TVector<TTransformStage>& stages, bool useIssueScopes, bool doCheckArguments)
         : Stages_(stages)
         , UseIssueScopes_(useIssueScopes)
-        , DoCheckArguments_(doCheckArguments)
+        , DoCheckArguments_(true)
     {
+        Y_UNUSED(doCheckArguments);
         if (UseIssueScopes_) {
             for (const auto& stage : Stages_) {
                 YQL_ENSURE(!stage.Name.empty());
@@ -77,7 +78,7 @@ public:
         auto status = WithScope(ctx, [&]() {
             return Stages_[Index_].GetTransformer().Transform(input, output, ctx);
         });
-#ifndef NDEBUG
+
         if (DoCheckArguments_ && output && output != input) {
             try {
                 CheckArguments(*output);
@@ -88,10 +89,9 @@ public:
                 throw;
             }
         }
-#else
         Y_UNUSED(DoCheckArguments_);
         Y_UNUSED(CheckArgumentsCount_);
-#endif
+
         status = HandleStatus(status);
         return status;
     }

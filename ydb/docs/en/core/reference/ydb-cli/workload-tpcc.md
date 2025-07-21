@@ -106,6 +106,7 @@ Benchmark results include tpmC, efficiency, and per-transaction type latencies. 
 The TPC-C specification limits the number of transactions that can be processed per warehouse. The theoretical maximum is 12.86 tpmC per warehouse. To increase the overall load—and thereby the tpmC—you must scale the number of warehouses.
 
 Efficiency is calculated using the following formula:
+
 ```
 efficiency = (result_tpmc / (12.86 × warehouse_count)) × 100
 ```

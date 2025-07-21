@@ -19,6 +19,7 @@ WITH (option = value [, ...])
 
 
     * `CONNECTION_STRING` — a [connection string](../../../concepts/connect.md#connection_string) for the source database (mandatory).
+    * `CA_CERT` — a [root certificate for TLS](../../../concepts/connect.md#tls-cert). Optional parameter. Can be specified if the source database supports an encrypted data interchange protocol (`CONNECTION_STRING` starts with `grpcs://`).
     * Authentication details for the source database (mandatory) depending on the authentication method:
 
         * [Access token](../../../recipes/ydb-sdk/auth-access-token.md):

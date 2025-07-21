@@ -46,7 +46,6 @@ public:
 
     TGRpcSessionActor(THolder<NGRpcService::TEvCoordinationSessionRequest> requestEvent)
         : RequestEvent(std::move(requestEvent))
-        , Context(RequestEvent->GetStreamCtx())
     { }
 
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
@@ -55,7 +54,7 @@ public:
 
     void Bootstrap(const TActorContext& ctx) {
         Y_UNUSED(ctx);
-        Context->Attach(SelfId());
+        RequestEvent->Attach(SelfId());
         BeginAuth();
     }
 
@@ -67,6 +66,11 @@ private:
     void PassAway() override {
         if (ProxyActor && AttachSessionSent) {
             AbandonSession();
+        }
+
+        if (RequestEvent) {
+            // Write to audit log if it is needed and we have not written yet.
+            RequestEvent->AuditLogRequestEnd(Ydb::StatusIds::SUCCESS);
         }
 
         TActorBootstrapped::PassAway();
@@ -84,11 +88,11 @@ private:
     };
 
     void Reply(TResponse&& response) {
-        Context->Write(std::move(response));
+        RequestEvent->Write(std::move(response));
     }
 
-    void ReplyLast(TResponse&& response, const grpc::Status& status = grpc::Status::OK) {
-        Context->WriteAndFinish(std::move(response), status);
+    void ReplyLast(TResponse&& response, Ydb::StatusIds::StatusCode status, const grpc::Status& grpcStatus = grpc::Status::OK) {
+        RequestEvent->WriteAndFinish(std::move(response), status, grpcStatus);
         PassAway();
     }
 
@@ -96,14 +100,14 @@ private:
         TResponse response;
         response.mutable_failure()->set_status(error.GetStatus());
         response.mutable_failure()->mutable_issues()->CopyFrom(error.GetIssues());
-        ReplyLast(std::move(response));
+        ReplyLast(std::move(response), error.GetStatus());
     }
 
     void ReplyError(Ydb::StatusIds::StatusCode status, const TString& reason) {
         TResponse response;
         response.mutable_failure()->set_status(status);
         response.mutable_failure()->add_issues()->set_message(reason);
-        ReplyLast(std::move(response));
+        ReplyLast(std::move(response), status);
     }
 
     void Handle(const TEvKesusProxy::TEvProxyError::TPtr& ev) {
@@ -120,7 +124,7 @@ private:
 
 private:
     void ReadyToStart() {
-        Context->Read();
+        RequestEvent->Read();
         Become(&TThis::StateWaitStart);
     }
 
@@ -134,7 +138,7 @@ private:
         Y_ABORT_UNLESS(!StartRequest);
         StartRequest.Reset(ev->Release());
         if (StartRequest->Record.request_case() != TRequest::kSessionStart) {
-            Context->Finish(grpc::Status(grpc::StatusCode::INVALID_ARGUMENT,
+            RequestEvent->Finish(Ydb::StatusIds::BAD_REQUEST, grpc::Status(grpc::StatusCode::INVALID_ARGUMENT,
                 "First message must be a SessionStart"));
             return PassAway();
         }
@@ -150,7 +154,7 @@ private:
 
         auto resolve = MakeHolder<TEvKesusProxy::TEvResolveKesusProxy>(KesusPath);
         if (!Send(MakeKesusProxyServiceId(), resolve.Release())) {
-            Context->Finish(grpc::Status(grpc::StatusCode::UNIMPLEMENTED,
+            RequestEvent->Finish(Ydb::StatusIds::UNSUPPORTED, grpc::Status(grpc::StatusCode::UNIMPLEMENTED,
                 "Coordination service not implemented on this server"));
             return PassAway();
         }
@@ -251,7 +255,7 @@ private:
 
         SendPing();
 
-        Context->Read();
+        RequestEvent->Read();
         Become(&TThis::StateWork);
     }
 
@@ -278,7 +282,7 @@ private:
 
         // Start reading the next message
         // It will be ignored if Finish was called
-        Context->Read();
+        RequestEvent->Read();
     }
 
     void Handle(IContext::TEvWriteFinished::TPtr& ev) {
@@ -448,7 +452,7 @@ private:
         TResponse response;
         auto stopped = response.mutable_session_stopped();
         stopped->set_session_id(SessionId);
-        ReplyLast(std::move(response));
+        ReplyLast(std::move(response), Ydb::StatusIds::BAD_SESSION);
     }
 
     void Handle(const TEvKesus::TEvAcquireSemaphorePending::TPtr& ev) {
@@ -596,7 +600,6 @@ private:
 
 private:
     THolder<NGRpcService::TEvCoordinationSessionRequest> RequestEvent;
-    TIntrusivePtr<IContext> Context;
     TIntrusivePtr<TUserToken> UserToken;
     TIntrusivePtr<TSecurityObject> SecurityObject;
 

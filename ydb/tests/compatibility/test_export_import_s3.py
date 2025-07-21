@@ -61,7 +61,7 @@ class TestExportImportS3(MixedClusterFixture):
             self.output_f.write(content + "\n")
             result = json.loads(content)
             return result
-    
+
     def _create_items(self):
         with ydb.SessionPool(self.driver, size=1) as pool:
             with pool.checkout() as session:
@@ -91,7 +91,7 @@ class TestExportImportS3(MixedClusterFixture):
                         f"CONSUMER consumerB_{num}"
                         f");"
                     )
-    
+
     def _export_check(self):
         s3_endpoint, s3_access_key, s3_secret_key, s3_bucket = self.s3_config
         self.client = ExportClient(self.driver)
@@ -125,11 +125,11 @@ class TestExportImportS3(MixedClusterFixture):
             keys.add(x.key)
 
         assert keys_expected <= keys
-    
+
     def _import_check(self):
         s3_endpoint, s3_access_key, s3_secret_key, s3_bucket = self.s3_config
         imported_prefix = "imported"
-        
+
         import_settings = (
             ImportFromS3Settings()
             .with_endpoint(s3_endpoint)
@@ -158,10 +158,8 @@ class TestExportImportS3(MixedClusterFixture):
                     imported_table_name = f"/Root/{imported_prefix}/sample_table_{num}"
                     desc = session.describe_table(imported_table_name)
                     assert desc is not None, f"Table {imported_table_name} not found after import"
-        
+
     def test_full_pipeline(self):
         self._create_items()
         self._export_check()
         self._import_check()
-
-        

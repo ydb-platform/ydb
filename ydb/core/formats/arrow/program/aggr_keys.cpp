@@ -273,7 +273,6 @@ private:
                     ++idx;
                 }
                 AFL_VERIFY(arrResultIndex);
-                Cerr << "RESULT: " << type.ToString(*result) << "/" << ColumnInfo.GetColumnId() << Endl;
                 if (arrResultIndex) {
                     collectionResult->AddVerified(
                         ColumnInfo.GetColumnId(), sources[*arrResultIndex]->GetAccessorVerified(ColumnInfo.GetColumnId()), false);

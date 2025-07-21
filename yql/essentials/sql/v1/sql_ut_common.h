@@ -3668,7 +3668,8 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
             WITH (
                 CONNECTION_STRING = "grpc://localhost:2135/?database=/MyDatabase",
                 ENDPOINT = "localhost:2135",
-                DATABASE = "/MyDatabase"
+                DATABASE = "/MyDatabase",
+                CA_CERT = "-----BEGIN CERTIFICATE-----"
             );
         )";
         auto res = SqlToYql(req);
@@ -3688,6 +3689,8 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("localhost:2135"));
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("database"));
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("/MyDatabase"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("ca_cert"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("-----BEGIN CERTIFICATE-----"));
             }
         };
 
@@ -3782,6 +3785,7 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
             {"user", "user"},
             {"password", "bar"},
             {"password_secret_name", "bar_secret_name"},
+            {"ca_cert", "-----BEGIN CERTIFICATE-----"},
         };
 
         for (const auto& [k, v] : settings) {

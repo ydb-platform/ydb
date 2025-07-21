@@ -64,6 +64,7 @@ static bool AsyncReplicationSettingsEntry(std::map<TString, TNodePtr>& out,
         "user",
         "password",
         "password_secret_name",
+        "ca_cert",
     };
 
     TSet<TString> modeSettings = {
@@ -163,6 +164,7 @@ static bool TransferSettingsEntry(std::map<TString, TNodePtr>& out,
         "user",
         "password",
         "password_secret_name",
+        "ca_cert",
         "flush_interval",
         "batch_size_bytes",
     };

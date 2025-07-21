@@ -33,6 +33,11 @@ config.read(config_file_path)
 DATABASE_ENDPOINT = config["QA_DB"]["DATABASE_ENDPOINT"]
 DATABASE_PATH = config["QA_DB"]["DATABASE_PATH"]
 
+# Константы для временных окон mute-логики
+MUTE_DAYS = 4
+UNMUTE_DAYS = 4
+DELETE_DAYS = 7
+
 
 def execute_query(branch='main', build_type='relwithdebinfo', days_window=1):
     # Получаем today
@@ -567,7 +572,6 @@ def read_tests_from_file(file_path):
 
 
 def create_mute_issues(all_tests, file_path, close_issues=True):
-    base_date = datetime.datetime(1970, 1, 1)
     tests_from_file = read_tests_from_file(file_path)
     muted_tests_in_issues = get_muted_tests_from_issues()
     prepared_tests_by_suite = {}
@@ -745,9 +749,9 @@ def mute_worker(args):
     logging.info(f"Query returned {len(all_data)} test records")
     
     # Используем универсальную агрегацию для разных периодов
-    aggregated_for_mute = aggregate_test_data(all_data, 3)  # 3 дня для mute
-    aggregated_for_unmute = aggregate_test_data(all_data, 4)  # 4 дня для unmute
-    aggregated_for_delete = aggregate_test_data(all_data, 7)  # 7 дней для delete
+    aggregated_for_mute = aggregate_test_data(all_data, MUTE_DAYS)  # MUTE_DAYS дней для mute
+    aggregated_for_unmute = aggregate_test_data(all_data, UNMUTE_DAYS)  # UNMUTE_DAYS дней для unmute
+    aggregated_for_delete = aggregate_test_data(all_data, DELETE_DAYS)  # DELETE_DAYS дней для delete
     
     logging.info(f"Aggregated data: mute={len(aggregated_for_mute)}, unmute={len(aggregated_for_unmute)}, delete={len(aggregated_for_delete)}")
     

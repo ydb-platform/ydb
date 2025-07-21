@@ -165,8 +165,7 @@ void AuditRequest(const NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr& ev,
         for (const auto& [name, value] : parts) {
             AUDIT_PART(name, (!value.empty() ? value : EmptyValue))
         }
-        AUDIT_PART("method", method)
-        AUDIT_PART("url", url);
+        AUDIT_PART("operation", (TStringBuilder() << method << " " << url));
         AUDIT_PART("params", (!filteredParams.empty() ? filteredParams : EmptyValue))
         AUDIT_PART("status", status)
         AUDIT_PART("reason", response.Get()->Message)

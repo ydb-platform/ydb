@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/core/base/auth.h>
+#include <ydb/library/aclib/aclib.h>
 #include <ydb/library/actors/http/http.h>
 #include <ydb/library/actors/http/http_proxy.h>
 

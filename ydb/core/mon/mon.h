@@ -41,7 +41,6 @@ public:
         ui32 MaxRequestsPerSecond = 0;
         TDuration InactivityTimeout = TDuration::Minutes(2);
         TString AllowOrigin;
-        bool AuditRequests;
     };
 
     TMon(TConfig config);

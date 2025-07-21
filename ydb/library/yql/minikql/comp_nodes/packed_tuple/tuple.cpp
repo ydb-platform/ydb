@@ -1,3 +1,4 @@
+
 #include "tuple.h"
 
 #include <algorithm>
@@ -10,6 +11,8 @@
 
 #include <util/generic/bitops.h>
 #include <util/generic/buffer.h>
+
+#include <arrow/util/bit_util.h>
 
 #include "hashes_calc.h"
 #include "packing.h"
@@ -301,28 +304,13 @@ TTupleLayoutFallback::TTupleLayoutFallback(
 
     KeyColumnsSize = KeyColumnsEnd - KeyColumnsOffset;
 
-    switch (KeyColumnsSize) {
-    case 1:
-        KeySizeTag_ = 0;
-        break;
-    case 2:
-        KeySizeTag_ = 1;
-        break;
-    case 4:
-        KeySizeTag_ = 2;
-        break;
-    case 8:
-        KeySizeTag_ = 3;
-        break;
-    case 16:
-        KeySizeTag_ = 4;
-        break;
-    default:
-        KeySizeTag_ = 5;
-    }
     /// if layout contains varsize keys or null byte of 8 cols is not enough
-    if (KeyColumnsFixedNum != KeyColumnsNum || KeyColumnsNum > 8) {
+    if (KeyColumnsFixedNum != KeyColumnsNum || KeyColumnsNum > 8 ||
+        !arrow::BitUtil::IsPowerOf2(uint64_t(KeyColumnsSize)) ||
+        KeyColumnsSize > (1 << 4)) {
         KeySizeTag_ = 5;
+    } else {
+        KeySizeTag_ = arrow::BitUtil::CountTrailingZeros(KeyColumnsSize);
     }
 
     BitmaskOffset = currOffset;
@@ -1351,16 +1339,16 @@ void TTupleLayoutSIMD<TTraits>::BucketPack(
     TPaddedPtr<std::vector<ui8, TMKQLAllocator<ui8>>> reses,
     TPaddedPtr<std::vector<ui8, TMKQLAllocator<ui8>>> overflows, ui32 start,
     ui32 count, ui32 bucketsLogNum) const {
-    // if (bucketsLogNum == 0) {
-    //     auto& bres = reses[0];
-    //     const auto size = bres.size();
+    if (bucketsLogNum == 0) {
+        auto& bres = reses[0];
+        const auto size = bres.size();
 
-    //     bres.resize(size + count * TotalRowSize);
-    //     auto* const res = bres.data() + size;
+        bres.resize(size + count * TotalRowSize);
+        auto* const res = bres.data() + size;
 
-    //     Pack(columns, isValidBitmask, res, overflows[0], start, count);
-    //     return;
-    // }
+        Pack(columns, isValidBitmask, res, overflows[0], start, count);
+        return;
+    }
 
     std::vector<ui8> resbuf(BlockRows_ * TotalRowSize);
     ui8 *const res = resbuf.data();
@@ -1512,7 +1500,7 @@ void TTupleLayoutSIMD<TTraits>::BucketPack(
             WriteUnaligned<ui32>(res, hash);
 
             /// most-significant bits of hash
-            const auto bucket = bucketsLogNum ? hash >> (sizeof(hash) * 8 - bucketsLogNum) : 0;
+            const auto bucket = hash >> (sizeof(hash) * 8 - bucketsLogNum);
 
             auto& overflow = overflows[bucket];
 
@@ -1694,3 +1682,4 @@ ui32 TTupleLayout::GetTupleVarSize(const ui8* inTuple) const {
 } // namespace NPackedTuple
 } // namespace NMiniKQL
 } // namespace NKikimr
+

@@ -167,7 +167,7 @@ public:
         const TVector<TType*>&  rightItemTypesArg,
         const TVector<ui32>&    rightKeyColumns,
         NUdf::TUnboxedValue     rightStream,
-        IBlockGraceJoinPolicy*  policy,
+        TDefaultBlockGraceJoinPolicy  policy,
         arrow::MemoryPool*      pool
     )
         : TBase(memInfo)
@@ -208,7 +208,7 @@ public:
     }
 
     NUdf::EFetchStatus FetchStreams() {
-        auto maxFetchedSize = Policy_->GetMaximumInitiallyFetchedData();
+        auto maxFetchedSize = Policy_.GetMaximumInitiallyFetchedData();
 
         /// TODO: include overflow in estimated size calculation
 
@@ -249,7 +249,7 @@ public:
     }
 
     bool IsReady() {
-        const auto maxFetchedSize = Policy_->GetMaximumInitiallyFetchedData();
+        const auto maxFetchedSize = Policy_.GetMaximumInitiallyFetchedData();
         
         const bool leftReady = LeftIsFinished_ || LeftEstimatedSize_ > maxFetchedSize;
         const bool rightReady = RightIsFinished_ || RightEstimatedSize_ > maxFetchedSize;
@@ -351,7 +351,7 @@ private:
     TVector<THasherPtr> RightHashers_;
     TVector<TReaderPtr> RightReaders_;
 
-    IBlockGraceJoinPolicy*  Policy_;
+    TDefaultBlockGraceJoinPolicy  Policy_;
 };
 
 // -------------------------------------------------------------------
@@ -711,7 +711,7 @@ public:
         const TVector<TType*>*  rightItemTypesArg,
         const TVector<ui32>*    rightKeyColumns,
         const TVector<ui32>&    rightIOMap,
-        IBlockGraceJoinPolicy*  policy,
+        TDefaultBlockGraceJoinPolicy  policy,
         NUdf::TUnboxedValue     tempStorageValue
     )
         : TBase(memInfo)
@@ -746,7 +746,7 @@ public:
         BuildKeyColumns_ = leftKeyColumns;
         BuildKeyColumnsSet_ = THashSet<ui32>(BuildKeyColumns_->begin(), BuildKeyColumns_->end());
         // Use or not external payload depends on the policy
-        IsBuildIndirected_ = policy->UseExternalPayload(
+        IsBuildIndirected_ = policy.UseExternalPayload(
             EJoinAlgo::HashJoin, leftPSz, leftFetchedTuples / cardinality);
 
         ProbeStream_ = *rightStream;
@@ -755,7 +755,7 @@ public:
         ProbeInputs_.resize(rightItemTypesArg->size());
         ProbeKeyColumnsSet_ = THashSet<ui32>(ProbeKeyColumns_->begin(), ProbeKeyColumns_->end());
         // Use or not external payload depends on the policy
-        IsProbeIndirected_ = policy->UseExternalPayload(
+        IsProbeIndirected_ = policy.UseExternalPayload(
             EJoinAlgo::HashJoin, rightPSz, rightFetchedTuples / cardinality);
 
         // Create converters
@@ -1431,7 +1431,7 @@ public:
         const TVector<TType*>*  rightItemTypesArg,
         const TVector<ui32>*    rightKeyColumns,
         const TVector<ui32>&    rightIOMap,
-        IBlockGraceJoinPolicy*  policy,
+        TDefaultBlockGraceJoinPolicy  policy,
         NUdf::TUnboxedValue     tempStorageValue
     )
         : TBase(memInfo)
@@ -1460,12 +1460,12 @@ public:
 
         THashSet<ui32> leftKeyColumnsSet(leftKeyColumns->begin(), leftKeyColumns->end());
         // Use or not external payload depends on the policy
-        bool isLeftIndirected = policy->UseExternalPayload(
+        bool isLeftIndirected = policy.UseExternalPayload(
             EJoinAlgo::InMemoryGraceJoin, leftPSz, maxFetchedTuples / cardinality);
 
         THashSet<ui32> rightKeyColumnsSet(rightKeyColumns->begin(), rightKeyColumns->end());
         // Use or not external payload depends on the policy
-        bool isRightIndirected = policy->UseExternalPayload(
+        bool isRightIndirected = policy.UseExternalPayload(
             EJoinAlgo::InMemoryGraceJoin, rightPSz, maxFetchedTuples / cardinality);
 
         // Create converters
@@ -1880,7 +1880,7 @@ public:
         const TVector<TType*>*  rightItemTypesArg,
         const TVector<ui32>*    rightKeyColumns,
         const TVector<ui32>&    rightIOMap,
-        IBlockGraceJoinPolicy*  policy,
+        TDefaultBlockGraceJoinPolicy  policy,
         NUdf::TUnboxedValue     tempStorageValue
     )
         : TBase(memInfo)
@@ -1890,7 +1890,7 @@ public:
     {
         using EJoinAlgo = IBlockGraceJoinPolicy::EJoinAlgo;
 
-        MaxSize_ = policy->GetMaximumData();
+        MaxSize_ = policy.GetMaximumData();
 
         auto& tempStorage = *static_cast<TTempJoinStorage*>(tempStorageValue.AsBoxed().Get());
         auto [leftFetchedTuples, rightFetchedTuples] = tempStorage.GetFetchedTuples();
@@ -1906,7 +1906,7 @@ public:
         auto leftKeyColumnsSet = THashSet<ui32>(leftKeyColumns->begin(), leftKeyColumns->end());
         // Use or not external payload depends on the policy
         /// TODO: support indexed payload, currently it is ignored
-        leftSide.IsIndirected = policy->UseExternalPayload(
+        leftSide.IsIndirected = policy.UseExternalPayload(
             EJoinAlgo::HashJoin, leftPSz, leftFetchedTuples / cardinality);
 
         auto& rightSide = JoinSides_[kRightSide];
@@ -1914,7 +1914,7 @@ public:
         rightSide.Inputs.resize(rightItemTypesArg->size());
         auto rightKeyColumnsSet = THashSet<ui32>(rightKeyColumns->begin(), rightKeyColumns->end());
         // Use or not external payload depends on the policy
-        rightSide.IsIndirected = policy->UseExternalPayload(
+        rightSide.IsIndirected = policy.UseExternalPayload(
             EJoinAlgo::HashJoin, rightPSz, rightFetchedTuples / cardinality);
 
         // Create converters
@@ -2445,7 +2445,7 @@ public:
         const TVector<TType*>&  rightItemTypes,
         const TVector<ui32>&    rightKeyColumns,
         const TVector<ui32>&    rightIOMap,
-        IBlockGraceJoinPolicy*  policy
+        TDefaultBlockGraceJoinPolicy  policy
     )
         : TBase(memInfo)
         , Ctx_(ctx)
@@ -2504,7 +2504,7 @@ private:
                 rTuples = IBlockGraceJoinPolicy::STREAM_NOT_FETCHED;
             }
 
-            switch (Policy_->PickAlgorithm(lTuples, rTuples)) {
+            switch (Policy_.PickAlgorithm(lTuples, rTuples)) {
             case EJoinAlgo::HashJoin:
                 try {
                     Cerr << "DEBUGGING: Creating HashJoin..." << Endl;
@@ -2645,7 +2645,7 @@ private:
     const TVector<ui32>&    RightKeyColumns_;
     const TVector<ui32>&    RightIOMap_;
 
-    IBlockGraceJoinPolicy*  Policy_;
+    TDefaultBlockGraceJoinPolicy  Policy_;
 
     NUdf::TUnboxedValue     TempStorage_;
     NUdf::TUnboxedValue     Join_;
@@ -2668,8 +2668,7 @@ public:
         const TVector<ui32>&&   rightKeyColumns,
         const TVector<ui32>&&   rightIOMap,
         IComputationNode*       leftStream,
-        IComputationNode*       rightStream,
-        IBlockGraceJoinPolicy*  policy
+        IComputationNode*       rightStream
     )
         : TBaseComputation(mutables, EValueRepresentation::Boxed)
         , ResultItemTypes_(std::move(resultItemTypes))
@@ -2681,7 +2680,7 @@ public:
         , RightIOMap_(std::move(rightIOMap))
         , LeftStream_(std::move(leftStream))
         , RightStream_(std::move(rightStream))
-        , Policy_(policy)
+        , Policy_(TDefaultBlockGraceJoinPolicy{})
         , KeyTupleCache_(mutables)
     {}
 
@@ -2721,7 +2720,7 @@ private:
     IComputationNode*       LeftStream_;
     IComputationNode*       RightStream_;
 
-    IBlockGraceJoinPolicy*  Policy_;
+    TDefaultBlockGraceJoinPolicy  Policy_;
 
     const TContainerCacheOnContext KeyTupleCache_;
 };
@@ -2834,8 +2833,7 @@ IComputationNode* WrapDqBlockHashJoin(TCallable& callable, const TComputationNod
         std::move(rightKeyColumns),
         std::move(rightIOMap),
         leftStream,
-        rightStream,
-        &globalDefaultPolicy
+        rightStream
     );
 }
 

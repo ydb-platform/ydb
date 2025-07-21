@@ -1,3 +1,4 @@
+
 #pragma once
 
 #include <yql/essentials/minikql/mkql_node.h>
@@ -288,50 +289,48 @@ bool TupleKeysEqual(const TTupleLayout *layout,
 Y_FORCE_INLINE
 bool TTupleLayout::KeysEqual(const ui8 *lhsRow, const ui8 *lhsOverflow,
                              const ui8 *rhsRow, const ui8 *rhsOverflow) const {
-    static const void* keySizeDispatch[] = {&&keySize1, &&keySize2, &&keySize4, &&keySize8, &&keySize16, &&bigKeySize};
-    
     const ui8 keyNullMask = (1u << KeyColumnsNum) - 1;
-    
-    goto *keySizeDispatch[KeySizeTag_];
-    // compare keys
-keySize1:
-    return ReadUnaligned<ui8>(lhsRow + KeyColumnsOffset) ==
-               ReadUnaligned<ui8>(rhsRow + KeyColumnsOffset) &&
-           (ReadUnaligned<ui8>(lhsRow + BitmaskOffset) &
-            ReadUnaligned<ui8>(rhsRow + BitmaskOffset) & keyNullMask) ==
-               keyNullMask;
-keySize2:
-    return ReadUnaligned<ui16>(lhsRow + KeyColumnsOffset) ==
-               ReadUnaligned<ui16>(rhsRow + KeyColumnsOffset) &&
-           (ReadUnaligned<ui8>(lhsRow + BitmaskOffset) &
-            ReadUnaligned<ui8>(rhsRow + BitmaskOffset) & keyNullMask) ==
-               keyNullMask;
 
-keySize4:
-    return ReadUnaligned<ui32>(lhsRow + KeyColumnsOffset) ==
-               ReadUnaligned<ui32>(rhsRow + KeyColumnsOffset) &&
-           (ReadUnaligned<ui8>(lhsRow + BitmaskOffset) &
-            ReadUnaligned<ui8>(rhsRow + BitmaskOffset) & keyNullMask) ==
-               keyNullMask;
+    switch (KeySizeTag_) {
+    case 0:
+        return ReadUnaligned<ui8>(lhsRow + KeyColumnsOffset) ==
+                   ReadUnaligned<ui8>(rhsRow + KeyColumnsOffset) &&
+               (ReadUnaligned<ui8>(lhsRow + BitmaskOffset) &
+                ReadUnaligned<ui8>(rhsRow + BitmaskOffset) & keyNullMask) ==
+                   keyNullMask;
+    case 1:
+        return ReadUnaligned<ui16>(lhsRow + KeyColumnsOffset) ==
+                   ReadUnaligned<ui16>(rhsRow + KeyColumnsOffset) &&
+               (ReadUnaligned<ui8>(lhsRow + BitmaskOffset) &
+                ReadUnaligned<ui8>(rhsRow + BitmaskOffset) & keyNullMask) ==
+                   keyNullMask;
 
-keySize8:
-    return ReadUnaligned<ui64>(lhsRow + KeyColumnsOffset) ==
-               ReadUnaligned<ui64>(rhsRow + KeyColumnsOffset) &&
-           (ReadUnaligned<ui8>(lhsRow + BitmaskOffset) &
-            ReadUnaligned<ui8>(rhsRow + BitmaskOffset) & keyNullMask) ==
-               keyNullMask;
+    case 2:
+        return ReadUnaligned<ui32>(lhsRow + KeyColumnsOffset) ==
+                   ReadUnaligned<ui32>(rhsRow + KeyColumnsOffset) &&
+               (ReadUnaligned<ui8>(lhsRow + BitmaskOffset) &
+                ReadUnaligned<ui8>(rhsRow + BitmaskOffset) & keyNullMask) ==
+                   keyNullMask;
 
-keySize16:
-    return ReadUnaligned<ui64>(lhsRow + KeyColumnsOffset) ==
-            ReadUnaligned<ui64>(rhsRow + KeyColumnsOffset) &&
-            ReadUnaligned<ui64>(lhsRow + KeyColumnsOffset + 8) ==
-            ReadUnaligned<ui64>(rhsRow + KeyColumnsOffset + 8) &&
-           (ReadUnaligned<ui8>(lhsRow + BitmaskOffset) &
-            ReadUnaligned<ui8>(rhsRow + BitmaskOffset) & keyNullMask) ==
-               keyNullMask;
+    case 3:
+        return ReadUnaligned<ui64>(lhsRow + KeyColumnsOffset) ==
+                   ReadUnaligned<ui64>(rhsRow + KeyColumnsOffset) &&
+               (ReadUnaligned<ui8>(lhsRow + BitmaskOffset) &
+                ReadUnaligned<ui8>(rhsRow + BitmaskOffset) & keyNullMask) ==
+                   keyNullMask;
 
-bigKeySize:
-    return TupleKeysEqual(this, lhsRow, lhsOverflow, rhsRow, rhsOverflow);
+    case 4:
+        return ReadUnaligned<ui64>(lhsRow + KeyColumnsOffset) ==
+                   ReadUnaligned<ui64>(rhsRow + KeyColumnsOffset) &&
+               ReadUnaligned<ui64>(lhsRow + KeyColumnsOffset + 8) ==
+                   ReadUnaligned<ui64>(rhsRow + KeyColumnsOffset + 8) &&
+               (ReadUnaligned<ui8>(lhsRow + BitmaskOffset) &
+                ReadUnaligned<ui8>(rhsRow + BitmaskOffset) & keyNullMask) ==
+                   keyNullMask;
+
+    default:
+        return TupleKeysEqual(this, lhsRow, lhsOverflow, rhsRow, rhsOverflow);
+    }
 }
 
 template <size_t Size>
@@ -399,3 +398,4 @@ struct TIndexedTuple {
 } // namespace NPackedTuple
 } // namespace NMiniKQL
 } // namespace NKikimr
+

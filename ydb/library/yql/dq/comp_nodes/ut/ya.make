@@ -6,6 +6,8 @@ PEERDIR(
     ydb/library/yql/dq/comp_nodes
     yql/essentials/public/udf/service/exception_policy
     yql/essentials/sql/pg_dummy
+    yql/essentials/minikql/comp_nodes
+    yql/essentials/minikql/comp_nodes/llvm16
 
     ydb/core/kqp/runtime
 
@@ -21,6 +23,7 @@ SRCS(
 
     dq_hash_combine_ut.cpp
     dq_block_hash_join_ut.cpp
+    bench.cpp
 )
 
 END()

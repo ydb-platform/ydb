@@ -585,8 +585,8 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
             role='slot',
             node_broker_port=node_broker_port,
             tenant_affiliation=tenant_affiliation if tenant_affiliation is not None else 'dynamic',
-            encryption_key=encryption_key,
-            binary_path=self.__configurator.get_binary_path(slot_index),
+            encryption_key=encryption_key,            
+            binary_path=yatest.common.binary_path(os.getenv('YDB_DRIVER_BINARY')),
         )
         return self._slots[slot_index]
 

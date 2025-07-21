@@ -1162,6 +1162,7 @@ private:
         // We prepare a lot of partitions and distribute them between these tasks
         // Constraint of 1 task per partition is NOT valid anymore
         auto maxTasksPerStage = Config->MaxTasksPerStage.Get().GetOrElse(TDqSettings::TDefault::MaxTasksPerStage);
+        Cerr << "MISHA MaxTasksPerStage " << maxTasksPerStage << Endl;
         IDqIntegration::TPartitionSettings pSettings;
         pSettings.MaxPartitions = maxTasksPerStage;
         pSettings.CanFallback = false;

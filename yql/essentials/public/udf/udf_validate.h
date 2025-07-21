@@ -15,13 +15,7 @@ namespace NUdf {
 #define UDF_VALIDATE_POLICY(XX) \
     XX(Fail, 0)                       \
     XX(Exception, 1)                  \
-    XX(Max, 2)
-
-enum class EValidateDatumMode {
-    None,
-    Cheap,
-    Expensive,
-};
+    XX(Max, 2)                        \
 
 enum class EValidateMode : ui8 {
     UDF_VALIDATE_MODE(ENUM_VALUE_GEN)
@@ -37,6 +31,5 @@ EValidateMode ValidateModeByStr(const TString& verifyModeStr);
 TStringBuf ValidatePolicyAsStr(EValidatePolicy verifyPolicy);
 EValidatePolicy ValidatePolicyByStr(const TString& verifyPolicy);
 
-EValidateDatumMode ToDatumValidateMode(EValidateMode validateMode);
 } // namspace NUdf
 } // namspace NYql

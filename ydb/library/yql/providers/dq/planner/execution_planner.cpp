@@ -541,7 +541,9 @@ namespace NYql::NDqs {
         YQL_ENSURE(datasource);
         const auto stageSettings = TDqStageSettings::Parse(stage);
         auto tasksPerStage = Settings->MaxTasksPerStage.Get().GetOrElse(TDqSettings::TDefault::MaxTasksPerStage);
+        Cerr << "MISHA TASKS PER STAGE: " << tasksPerStage << Endl;
         const size_t maxPartitions = TDqStageSettings::EPartitionMode::Single == stageSettings.PartitionMode ? 1ULL : tasksPerStage;
+        Cerr << "MISHA PARTITIONS: " << tasksPerStage << Endl;
         TVector<TString> parts;
         if (auto dqIntegration = (*datasource)->GetDqIntegration()) {
             TString clusterName;

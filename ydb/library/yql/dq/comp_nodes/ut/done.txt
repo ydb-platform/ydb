@@ -1,0 +1,461 @@
+=== 63c2e1ffc13 ===
+Date: 2025-06-17
+Author: Filitov Mikhail
+Message: initial implementation of blockhashjoin (#19581)
+Branch: 
+ydb/library/yql/dq/comp_nodes/dq_block_hash_join.cpp
+ydb/library/yql/dq/comp_nodes/dq_block_hash_join.h
+ydb/library/yql/dq/comp_nodes/dq_program_builder.cpp
+ydb/library/yql/dq/comp_nodes/dq_program_builder.h
+ydb/library/yql/dq/comp_nodes/ut/dq_block_hash_join_ut.cpp
+ydb/library/yql/dq/comp_nodes/ut/dq_factories.cpp
+ydb/library/yql/dq/comp_nodes/ut/dq_factories.h
+ydb/library/yql/dq/comp_nodes/ut/dq_setup.h
+ydb/library/yql/dq/comp_nodes/ut/ya.make
+ydb/library/yql/dq/comp_nodes/ya.make
+
+=== 47742d8aaba ===
+Date: 2025-06-06
+Author: Filitov Mikhail
+Message: [test] Make sure digest udfs are strict (#19418)
+Branch: 
+ydb/core/kqp/ut/common/digest_udf.cpp
+ydb/core/kqp/ut/common/kqp_ut_common.cpp
+ydb/core/kqp/ut/common/ya.make
+ydb/core/kqp/ut/join/kqp_join_ut.cpp
+
+=== e0460de3ca3 ===
+Date: 2025-06-04
+Author: Filitov Mikhail
+Message: added more digest tests (#19231)
+Branch: 
+ydb/tests/compatibility/udf/test_digest_regression.py
+ydb/tests/compatibility/ya.make
+
+=== 55759352dd4 ===
+Date: 2025-06-02
+Author: Filitov Mikhail
+Message: Added re2 compatibility test (#19177)
+Branch: 
+ydb/core/kqp/ut/runtime/kqp_re2_ut.cpp
+ydb/core/kqp/ut/runtime/ya.make
+
+=== 84ec9093e10 ===
+Date: 2025-05-29
+Author: Filitov Mikhail
+Message: Add more SELECT iterations to udf compatibility test (#18998)
+Branch: 
+ydb/tests/compatibility/udf/test_datetime2.py
+ydb/tests/compatibility/udf/test_digest.py
+
+=== 4ab3a5e265c ===
+Date: 2025-05-29
+Author: Filitov Mikhail
+Message: Add udf compatibility test  digest (#18910)
+Branch: 
+ydb/tests/compatibility/udf/test_datetime2.py
+ydb/tests/compatibility/udf/test_digest.py
+ydb/tests/compatibility/ya.make
+
+=== 119ee75b992 ===
+Date: 2025-05-26
+Author: Filitov Mikhail
+Message: Add more UDF compatibility tests (#18756)
+Branch: 
+ydb/tests/compatibility/test_datetime2.py
+
+=== bd94a927404 ===
+Date: 2025-05-21
+Author: Filitov Mikhail
+Message: Test datetime2 format (#18556)
+Branch: 
+ydb/tests/compatibility/test_datetime2.py
+ydb/tests/compatibility/ya.make
+
+=== 290386cb0f1 ===
+Date: 2025-04-25
+Author: Filitov Mikhail
+Message: increased spilling io queue limit (#17749)
+Branch: 
+ydb/core/protos/table_service_config.proto
+
+=== e7c01edc736 ===
+Date: 2025-04-24
+Author: Filitov Mikhail
+Message: Made spilling queue test more stable (#17686)
+Branch: 
+ydb/library/yql/dq/actors/spilling/spilling_file_ut.cpp
+
+=== 62614f2f7fa ===
+Date: 2025-04-18
+Author: Filitov Mikhail
+Message: Added spilling queue counters (#17394)
+Branch: 
+ydb/library/yql/dq/actors/spilling/spilling_counters.cpp
+ydb/library/yql/dq/actors/spilling/spilling_counters.h
+ydb/library/yql/dq/actors/spilling/spilling_file.cpp
+
+=== 0f80a46a1d1 ===
+Date: 2025-04-17
+Author: Filitov Mikhail
+Message: Enable tests in comp nodes logging (#16695)
+Branch: 
+ydb/core/kqp/ut/runtime/kqp_scan_logging_ut.cpp
+
+=== fc2466491ab ===
+Date: 2025-04-15
+Author: mfilitov
+Message: Use udf_log instead of log in comp nodes
+Branch: 
+yql/essentials/minikql/comp_nodes/mkql_grace_join.cpp
+yql/essentials/minikql/comp_nodes/mkql_grace_join_imp.cpp
+yql/essentials/minikql/comp_nodes/mkql_grace_join_imp.h
+yql/essentials/minikql/comp_nodes/mkql_wide_combine.cpp
+yql/essentials/minikql/comp_nodes/mkql_wide_top_sort.cpp
+yql/essentials/minikql/comp_nodes/ut/mkql_grace_join_ut.cpp
+yql/essentials/public/udf/udf_log.h
+
+=== 751c197f1a8 ===
+Date: 2025-04-09
+Author: Filitov Mikhail
+Message: Change exception to error in spilling queue (#16922)
+Branch: 
+ydb/library/yql/dq/actors/spilling/spilling_file.cpp
+ydb/library/yql/dq/actors/spilling/spilling_file_ut.cpp
+
+=== d56beea89e6 ===
+Date: 2025-04-07
+Author: Filitov Mikhail
+Message: Fix comp nodes logging in case when it's disabled (#16837)
+Branch: 
+ydb/core/kqp/ut/runtime/kqp_scan_logging_ut.cpp
+ydb/library/yql/dq/runtime/dq_tasks_runner.cpp
+
+=== 34115482501 ===
+Date: 2025-04-02
+Author: mfilitov
+Message: Use udf_log instead of log in comp nodes
+Branch: 
+yql/essentials/minikql/comp_nodes/mkql_grace_join.cpp
+yql/essentials/minikql/comp_nodes/mkql_grace_join_imp.cpp
+yql/essentials/minikql/comp_nodes/mkql_grace_join_imp.h
+yql/essentials/minikql/comp_nodes/mkql_wide_combine.cpp
+yql/essentials/minikql/comp_nodes/mkql_wide_top_sort.cpp
+yql/essentials/minikql/comp_nodes/ut/mkql_grace_join_ut.cpp
+yql/essentials/public/udf/udf_log.h
+
+=== 5d4d0f5bdea ===
+Date: 2025-04-01
+Author: Filitov Mikhail
+Message: temporary disable spilling functional tests with msan and tsan (#16204)
+Branch: 
+ydb/tests/functional/tpc/large/ya.make
+
+=== c47a3afd152 ===
+Date: 2025-03-31
+Author: Filitov Mikhail
+Message: Change logger in comp nodes (#16368)
+Branch: 
+ydb/core/kqp/ut/runtime/kqp_scan_logging_ut.cpp
+ydb/core/kqp/ut/runtime/kqp_scan_spilling_ut.cpp
+ydb/core/kqp/ut/runtime/ya.make
+ydb/core/kqp/ut/ya.make
+ydb/library/yql/dq/runtime/dq_tasks_runner.cpp
+
+=== 77e33e55d0e ===
+Date: 2025-03-20
+Author: mfilitov
+Message: Added YellowZone check after preallocation in gracejoin
+Branch: 
+yql/essentials/minikql/comp_nodes/mkql_grace_join_imp.cpp
+
+=== b8e841f0c56 ===
+Date: 2025-03-13
+Author: Filitov Mikhail
+Message: Return option to disable spilling (in channels in particular) (#15650)
+Branch: 
+ydb/core/kqp/compile_service/kqp_compile_actor.cpp
+ydb/core/kqp/compile_service/kqp_compile_service.cpp
+ydb/core/kqp/ut/spilling/kqp_scan_spilling_ut.cpp
+
+=== 1e231e20361 ===
+Date: 2025-03-10
+Author: Filitov Mikhail
+Message: Add functional tests for spilling (#15358)
+Branch: 
+ydb/tests/functional/tpc/large/test_tpcds.py
+ydb/tests/functional/tpc/large/test_tpch_spilling.py
+ydb/tests/functional/tpc/large/ya.make
+ydb/tests/functional/tpc/lib/conftest.py
+ydb/tests/olap/load/lib/tpch.py
+
+=== 82ccb48898e ===
+Date: 2025-03-05
+Author: mfilitov
+Message: Added DeserializeAndUpdateState methods. This method is intended to  merge states from spilling
+Branch: 
+yql/essentials/minikql/comp_nodes/mkql_block_agg_count.cpp
+yql/essentials/minikql/comp_nodes/mkql_block_agg_factory.h
+yql/essentials/minikql/comp_nodes/mkql_block_agg_minmax.cpp
+yql/essentials/minikql/comp_nodes/mkql_block_agg_some.cpp
+yql/essentials/minikql/comp_nodes/mkql_block_agg_sum.cpp
+yql/essentials/parser/pg_wrapper/arrow.h
+
+=== 55a54de1a92 ===
+Date: 2025-02-21
+Author: mfilitov
+Message: Fix early object deletion in wide combiner
+Branch: 
+yql/essentials/minikql/comp_nodes/mkql_wide_combine.cpp
+
+=== c66255be5f2 ===
+Date: 2025-02-20
+Author: mfilitov
+Message: Added bloom filter preallocation in GJ
+Branch: 
+yql/essentials/minikql/comp_nodes/mkql_grace_join_imp.cpp
+yql/essentials/minikql/comp_nodes/mkql_grace_join_imp.h
+
+=== 27828e0b571 ===
+Date: 2025-02-19
+Author: mfilitov
+Message: Added serialization and deserialization functions to block state
+Branch: 
+yql/essentials/minikql/comp_nodes/mkql_block_agg_count.cpp
+yql/essentials/minikql/comp_nodes/mkql_block_agg_factory.h
+yql/essentials/minikql/comp_nodes/mkql_block_agg_minmax.cpp
+yql/essentials/minikql/comp_nodes/mkql_block_agg_some.cpp
+yql/essentials/minikql/comp_nodes/mkql_block_agg_sum.cpp
+yql/essentials/parser/pg_wrapper/arrow.h
+yql/essentials/public/udf/arrow/block_io_buffer.h
+
+=== 92ee8c57eca ===
+Date: 2025-02-18
+Author: mfilitov
+Message: Increase number of buckets in grace join& 32x2 -> 64x2
+Branch: 
+yql/essentials/minikql/comp_nodes/mkql_grace_join_imp.h
+
+=== 3b64cf85720 ===
+Date: 2025-02-18
+Author: Filitov Mikhail
+Message: added order by to canonical test GJ (#14714)
+Branch: 
+ydb/tests/functional/canonical/sql/join/join_to_idx_lookup.sql
+
+=== a0c76f5d223 ===
+Date: 2025-02-07
+Author: mfilitov
+Message: Fix possible segfault in gracejoin during memory preallocation commit_hash:17e8d9ea9ee4e9ae0722424efaf1cc4d03a802a5
+Branch: 
+yql/essentials/minikql/comp_nodes/mkql_grace_join_imp.cpp
+yql/essentials/minikql/comp_nodes/ut/mkql_grace_join_ut.cpp
+
+=== 84ee27dd08d ===
+Date: 2025-01-30
+Author: mfilitov
+Message: flush widecombiner earlier in case of low memory
+Branch: 
+yql/essentials/minikql/comp_nodes/mkql_wide_combine.cpp
+
+=== fe3fe1ab039 ===
+Date: 2025-01-14
+Author: mfilitov
+Message: Revert "added more cases to switch to spilling and to flush data"
+Branch: 
+yql/essentials/minikql/comp_nodes/mkql_wide_combine.cpp
+
+=== 87eab2a44bc ===
+Date: 2025-01-13
+Author: Filitov Mikhail
+Message: Added test that checks if simple aggregations are handled by block engine (#13224)
+Branch: 
+ydb/core/kqp/ut/olap/aggregations_ut.cpp
+
+=== b830866dd04 ===
+Date: 2025-01-10
+Author: mfilitov
+Message: added more cases to switch to spilling and to flush data
+Branch: 
+yql/essentials/minikql/comp_nodes/mkql_wide_combine.cpp
+
+=== dfda963d7c7 ===
+Date: 2024-12-25
+Author: Filitov Mikhail
+Message: Log last failed memory allocation instead of max (#12981)
+Branch: 
+ydb/core/kqp/rm_service/kqp_rm_service.h
+
+=== a0ab79ee3d9 ===
+Date: 2024-12-12
+Author: mfilitov
+Message: initial implementation of memory preallocation in gracejoin
+Branch: 
+yql/essentials/minikql/comp_nodes/mkql_grace_join.cpp
+yql/essentials/minikql/comp_nodes/mkql_grace_join_imp.cpp
+yql/essentials/minikql/comp_nodes/mkql_grace_join_imp.h
+
+=== 9b3ece24ced ===
+Date: 2024-12-11
+Author: Filitov Mikhail
+Message: Don't run spilling (unused) with asan (#12514)
+Branch: 
+ydb/library/yql/core/spilling/ut/ya.make
+
+=== 1b8df998edb ===
+Date: 2024-12-09
+Author: mfilitov
+Message: After spilling join inmemory buckets first
+Branch: 
+yql/essentials/minikql/comp_nodes/mkql_grace_join.cpp
+yql/essentials/minikql/comp_nodes/mkql_grace_join_imp.cpp
+yql/essentials/minikql/comp_nodes/mkql_grace_join_imp.h
+
+=== 62c911c4023 ===
+Date: 2024-11-27
+Author: vladluk
+Message: Distribute value in spilling buckets more evenly
+Branch: 
+yql/essentials/minikql/comp_nodes/mkql_wide_combine.cpp
+yql/essentials/minikql/comp_nodes/ut/mkql_wide_combine_ut.cpp
+yql/essentials/minikql/comp_nodes/ya.make.inc
+yql/essentials/minikql/computation/mkql_spiller_adapter.h
+yql/essentials/minikql/computation/mock_spiller_factory_ut.h
+yql/essentials/minikql/computation/mock_spiller_ut.h
+
+=== 2d4ccf80e7e ===
+Date: 2024-11-27
+Author: mfilitov
+Message: Fix memlimit with skip yields
+Branch: 
+yql/essentials/minikql/comp_nodes/mkql_wide_combine.cpp
+yql/essentials/minikql/comp_nodes/ut/mkql_wide_combine_ut.cpp
+
+=== 9499bd5690d ===
+Date: 2024-11-21
+Author: Filitov Mikhail
+Message: Fix udfs path in tests runner (#11821)
+Branch: 
+ydb/library/benchmarks/runner/run-tests.sh
+ydb/library/benchmarks/runner/run_tests/run_tests.py
+
+=== d1841102346 ===
+Date: 2024-11-06
+Author: Whompe
+Message: Fix kqp test on spilling in selfjoin (#11254)
+Branch: 
+ydb/core/kqp/ut/spilling/kqp_scan_spilling_ut.cpp
+
+=== a4d0e68728e ===
+Date: 2024-11-05
+Author: Filitov Mikhail
+Message: Try remaking Builders for every output (#11164)
+Branch: 
+ydb/library/yql/dq/runtime/dq_output_consumer.cpp
+
+=== 5dad85d4dc6 ===
+Date: 2024-11-01
+Author: Whompe
+Message: Stop wide combiner state from growing unlimited (#10997)
+Branch: 
+ydb/library/yql/minikql/comp_nodes/mkql_wide_combine.cpp
+
+=== 930e3121d71 ===
+Date: 2024-10-23
+Author: Whompe
+Message: Fixed: Make block combine use stream instead of flow (#10707)
+Branch: 
+ydb/library/yql/core/type_ann/type_ann_blocks.cpp
+ydb/library/yql/core/yql_aggregate_expander.cpp
+ydb/library/yql/dq/opt/dq_opt_peephole.cpp
+ydb/library/yql/minikql/comp_nodes/mkql_block_agg.cpp
+ydb/library/yql/minikql/mkql_program_builder.cpp
+ydb/library/yql/minikql/mkql_program_builder.h
+ydb/library/yql/tests/sql/yt_native_file/part0/canondata/result.json
+ydb/library/yql/tests/sql/yt_native_file/part1/canondata/result.json
+ydb/library/yql/tests/sql/yt_native_file/part10/canondata/result.json
+ydb/library/yql/tests/sql/yt_native_file/part11/canondata/result.json
+ydb/library/yql/tests/sql/yt_native_file/part12/canondata/result.json
+ydb/library/yql/tests/sql/yt_native_file/part13/canondata/result.json
+ydb/library/yql/tests/sql/yt_native_file/part14/canondata/result.json
+ydb/library/yql/tests/sql/yt_native_file/part16/canondata/result.json
+ydb/library/yql/tests/sql/yt_native_file/part17/canondata/result.json
+ydb/library/yql/tests/sql/yt_native_file/part18/canondata/result.json
+ydb/library/yql/tests/sql/yt_native_file/part19/canondata/result.json
+ydb/library/yql/tests/sql/yt_native_file/part2/canondata/result.json
+ydb/library/yql/tests/sql/yt_native_file/part3/canondata/result.json
+ydb/library/yql/tests/sql/yt_native_file/part4/canondata/result.json
+ydb/library/yql/tests/sql/yt_native_file/part5/canondata/result.json
+ydb/library/yql/tests/sql/yt_native_file/part6/canondata/result.json
+ydb/library/yql/tests/sql/yt_native_file/part7/canondata/result.json
+ydb/library/yql/tests/sql/yt_native_file/part8/canondata/result.json
+ydb/library/yql/tests/sql/yt_native_file/part9/canondata/result.json
+
+=== fca1f1871cb ===
+Date: 2024-10-22
+Author: Filitov Mikhail
+Message: Wide combiner spill during state split (#9785)
+Branch: 
+ydb/library/yql/minikql/comp_nodes/mkql_wide_combine.cpp
+
+=== 07c567d0879 ===
+Date: 2024-10-17
+Author: Whompe
+Message: Revert "Make block combine hashed use stream instead of flow (#9979)" (#10575)
+Branch: 
+ydb/library/yql/core/type_ann/type_ann_blocks.cpp
+ydb/library/yql/core/yql_aggregate_expander.cpp
+ydb/library/yql/minikql/comp_nodes/mkql_block_agg.cpp
+ydb/library/yql/minikql/mkql_program_builder.cpp
+ydb/library/yql/minikql/mkql_program_builder.h
+ydb/library/yql/minikql/mkql_runtime_version.h
+ydb/library/yql/tests/sql/yt_native_file/part0/canondata/result.json
+ydb/library/yql/tests/sql/yt_native_file/part1/canondata/result.json
+ydb/library/yql/tests/sql/yt_native_file/part10/canondata/result.json
+ydb/library/yql/tests/sql/yt_native_file/part11/canondata/result.json
+ydb/library/yql/tests/sql/yt_native_file/part12/canondata/result.json
+ydb/library/yql/tests/sql/yt_native_file/part13/canondata/result.json
+ydb/library/yql/tests/sql/yt_native_file/part14/canondata/result.json
+ydb/library/yql/tests/sql/yt_native_file/part16/canondata/result.json
+ydb/library/yql/tests/sql/yt_native_file/part17/canondata/result.json
+ydb/library/yql/tests/sql/yt_native_file/part18/canondata/result.json
+ydb/library/yql/tests/sql/yt_native_file/part19/canondata/result.json
+ydb/library/yql/tests/sql/yt_native_file/part2/canondata/result.json
+ydb/library/yql/tests/sql/yt_native_file/part3/canondata/result.json
+ydb/library/yql/tests/sql/yt_native_file/part4/canondata/result.json
+ydb/library/yql/tests/sql/yt_native_file/part5/canondata/result.json
+ydb/library/yql/tests/sql/yt_native_file/part6/canondata/result.json
+ydb/library/yql/tests/sql/yt_native_file/part7/canondata/result.json
+ydb/library/yql/tests/sql/yt_native_file/part8/canondata/result.json
+ydb/library/yql/tests/sql/yt_native_file/part9/canondata/result.json
+
+=== 4fc77b199a2 ===
+Date: 2024-10-16
+Author: Whompe
+Message: Make block combine hashed use stream instead of flow (#9979)
+Branch: 
+ydb/library/yql/core/type_ann/type_ann_blocks.cpp
+ydb/library/yql/core/yql_aggregate_expander.cpp
+ydb/library/yql/minikql/comp_nodes/mkql_block_agg.cpp
+ydb/library/yql/minikql/mkql_program_builder.cpp
+ydb/library/yql/minikql/mkql_program_builder.h
+ydb/library/yql/minikql/mkql_runtime_version.h
+ydb/library/yql/tests/sql/yt_native_file/part0/canondata/result.json
+ydb/library/yql/tests/sql/yt_native_file/part1/canondata/result.json
+ydb/library/yql/tests/sql/yt_native_file/part10/canondata/result.json
+ydb/library/yql/tests/sql/yt_native_file/part11/canondata/result.json
+ydb/library/yql/tests/sql/yt_native_file/part12/canondata/result.json
+ydb/library/yql/tests/sql/yt_native_file/part13/canondata/result.json
+ydb/library/yql/tests/sql/yt_native_file/part14/canondata/result.json
+ydb/library/yql/tests/sql/yt_native_file/part16/canondata/result.json
+ydb/library/yql/tests/sql/yt_native_file/part17/canondata/result.json
+ydb/library/yql/tests/sql/yt_native_file/part18/canondata/result.json
+ydb/library/yql/tests/sql/yt_native_file/part19/canondata/result.json
+ydb/library/yql/tests/sql/yt_native_file/part2/canondata/result.json
+ydb/library/yql/tests/sql/yt_native_file/part3/canondata/result.json
+ydb/library/yql/tests/sql/yt_native_file/part4/canondata/result.json
+ydb/library/yql/tests/sql/yt_native_file/part5/canondata/result.json
+ydb/library/yql/tests/sql/yt_native_file/part6/canondata/result.json
+ydb/library/yql/tests/sql/yt_native_file/part7/canondata/result.json
+ydb/library/yql/tests/sql/yt_native_file/part8/canondata/result.json
+ydb/library/yql/tests/sql/yt_native_file/part9/canondata/result.json

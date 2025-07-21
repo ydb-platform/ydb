@@ -1,3 +1,5 @@
+
+
 #include "dq_type_ann.h"
 #include <yql/essentials/core/yql_expr_type_annotation.h>
 #include <yql/essentials/core/yql_join.h>
@@ -1222,25 +1224,54 @@ TStatus AnnotateDqBlockHashJoinCore(const TExprNode::TPtr& node, TExprContext& c
         return IGraphTransformer::TStatus(TStatus::Error);
     }
     const auto joinType = joinTypeNode.Content();
-    if (joinType != "Inner") {
+    
+    // BlockHashJoin supports more join types than just Inner
+    const static THashSet<TStringBuf> supportedJoinTypes = {"Inner", "Left", "LeftOnly", "LeftSemi"};
+    if (!supportedJoinTypes.contains(joinType)) {
         ctx.AddError(TIssue(ctx.GetPosition(joinTypeNode.Pos()), TStringBuilder() << "Unknown join kind: " << joinType
-                    << ", supported: Inner"));
+                    << ", supported: " << JoinSeq(", ", supportedJoinTypes)));
         return IGraphTransformer::TStatus(TStatus::Error);
     }
 
     TTypeAnnotationNode::TListType leftItemTypes;
-    if (!EnsureWideStreamBlockType(leftInputNode, leftItemTypes, ctx)) {
-        return IGraphTransformer::TStatus(TStatus::Error);
+    // BlockHashJoinCore can accept either WideStreamBlock or WideFlow (non-block)
+    if (leftInputNode.GetTypeAnn()->GetKind() == ETypeAnnotationKind::Stream) {
+        // WideStreamBlock case
+        if (!EnsureWideStreamBlockType(leftInputNode, leftItemTypes, ctx)) {
+            return IGraphTransformer::TStatus(TStatus::Error);
+        }
+        // Remove length column for block types
+        leftItemTypes.pop_back();
+    } else {
+        // WideFlow case - extract types directly from Flow<Multi<...>>
+        const auto* flowType = leftInputNode.GetTypeAnn()->Cast<TFlowExprType>();
+        if (flowType->GetItemType()->GetKind() != ETypeAnnotationKind::Multi) {
+            ctx.AddError(TIssue(ctx.GetPosition(leftInputNode.Pos()), "Expected wide flow with Multi item type"));
+            return IGraphTransformer::TStatus(TStatus::Error);
+        }
+        const auto& multiType = *flowType->GetItemType()->Cast<TMultiExprType>();
+        leftItemTypes.assign(multiType.GetItems().begin(), multiType.GetItems().end());
     }
-    // Remove length column
-    leftItemTypes.pop_back();
 
     TTypeAnnotationNode::TListType rightItemTypes;
-    if (!EnsureWideStreamBlockType(rightInputNode, rightItemTypes, ctx)) {
-        return IGraphTransformer::TStatus(TStatus::Error);
-    }
-    // Remove length column
-    rightItemTypes.pop_back(); 
+    // BlockHashJoinCore can accept either WideStreamBlock or WideFlow (non-block)
+    if (rightInputNode.GetTypeAnn()->GetKind() == ETypeAnnotationKind::Stream) {
+        // WideStreamBlock case
+        if (!EnsureWideStreamBlockType(rightInputNode, rightItemTypes, ctx)) {
+            return IGraphTransformer::TStatus(TStatus::Error);
+        }
+        // Remove length column for block types
+        rightItemTypes.pop_back();
+    } else {
+        // WideFlow case - extract types directly from Flow<Multi<...>>
+        const auto* flowType = rightInputNode.GetTypeAnn()->Cast<TFlowExprType>();
+        if (flowType->GetItemType()->GetKind() != ETypeAnnotationKind::Multi) {
+            ctx.AddError(TIssue(ctx.GetPosition(rightInputNode.Pos()), "Expected wide flow with Multi item type"));
+            return IGraphTransformer::TStatus(TStatus::Error);
+        }
+        const auto& multiType = *flowType->GetItemType()->Cast<TMultiExprType>();
+        rightItemTypes.assign(multiType.GetItems().begin(), multiType.GetItems().end());
+    } 
 
     if (!EnsureTupleOfAtoms(leftKeysNode, ctx)) {
         return IGraphTransformer::TStatus(TStatus::Error);
@@ -1256,19 +1287,35 @@ TStatus AnnotateDqBlockHashJoinCore(const TExprNode::TPtr& node, TExprContext& c
 
     std::vector<const TTypeAnnotationNode*> resultItems;
 
-    // Add left side columns
-    for (auto itemType : leftItemTypes) {
-        resultItems.push_back(ctx.MakeType<TBlockExprType>(itemType));
+    // Determine if we're working with blocks (inputs are WideStreamBlock)
+    bool isBlockMode = (leftInputNode.GetTypeAnn()->GetKind() == ETypeAnnotationKind::Stream);
+
+    // Add left side columns (always included unless RightOnly/RightSemi)
+    if (joinType != "RightOnly" && joinType != "RightSemi") {
+        for (auto itemType : leftItemTypes) {
+            if (isBlockMode) {
+                resultItems.push_back(ctx.MakeType<TBlockExprType>(itemType));
+            } else {
+                resultItems.push_back(itemType);
+            }
+        }
     }
 
-    // Add right side columns
-    for (auto itemType : rightItemTypes) {
-        resultItems.push_back(ctx.MakeType<TBlockExprType>(itemType));
+    // Add right side columns (only for certain join types)
+    if (joinType != "LeftOnly" && joinType != "LeftSemi") {
+        for (auto itemType : rightItemTypes) {
+            if (isBlockMode) {
+                resultItems.push_back(ctx.MakeType<TBlockExprType>(itemType));
+            } else {
+                resultItems.push_back(itemType);
+            }
+        }
     }
 
-    // Add scalar length column at the end
+    // BlockHashJoinCore always requires length column at the end (runtime component expects it)
     resultItems.push_back(ctx.MakeType<TScalarExprType>(ctx.MakeType<TDataExprType>(EDataSlot::Uint64)));
-
+    
+    // BlockHashJoinCore always returns WideStream (required by runtime component)
     node->SetTypeAnn(ctx.MakeType<TStreamExprType>(ctx.MakeType<TMultiExprType>(resultItems)));
     return IGraphTransformer::TStatus(TStatus::Ok);
 }
@@ -1625,3 +1672,5 @@ TString PrintDqStageOnly(const TDqStageBase& stage, TExprContext& ctx) {
 }
 
 } // namespace NYql::NDq
+
+

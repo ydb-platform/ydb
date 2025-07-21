@@ -112,7 +112,7 @@ Below is an example when all transactions on accounts with even IDs are transfer
 
 For some tasks, the message processing order is not critical. For example, it's sometimes important to simply deliver data that will then be ordered by the storage system.
 
-For such tasks, the 'no-deduplication' mode can be used. In this scenario [`producer_id`](#producer-id) doen't specified in write session setup and [`sequence numbers`](#seqno) are also not used for messages. The no-deduplication mode offers better performance and requires fewer server resources, but there is no message ordering or deduplication on the server side, which means that a message sent to the server multiple times (for example, due to network instability or writer process crash) may also be written to the topic multiple times.
+For such tasks, the "no-deduplication" mode can be used. In this scenario, [`producer_id`](#producer-id) isn't specified in the write session setup, and [`sequence numbers`](#seqno) aren't used for messages. The no-deduplication mode offers better performance and requires fewer server resources; however, there is no message ordering or deduplication on the server side. This means that a message sent to the server multiple times (for example, due to network instability or a writer process crash) may be written to the topic multiple times.
 
 {% endcut %}
 

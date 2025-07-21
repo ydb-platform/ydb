@@ -89,6 +89,8 @@ public:
         appConfig.MutableKafkaProxyConfig()->SetListeningPort(Port);
         appConfig.MutableKafkaProxyConfig()->SetMaxMessageSize(1024);
         appConfig.MutableKafkaProxyConfig()->SetMaxInflightSize(2048);
+        appConfig.MutableKafkaProxyConfig()->SetAutoCreateTopicsEnable(true);
+
         if (serverless) {
             appConfig.MutableKafkaProxyConfig()->MutableProxy()->SetHostname("localhost");
             appConfig.MutableKafkaProxyConfig()->MutableProxy()->SetPort(FAKE_SERVERLESS_KAFKA_PROXY_PORT);
@@ -191,7 +193,22 @@ public:
             UNIT_ASSERT_VALUES_EQUAL(status, NMsgBusProxy::MSTATUS_OK);
 
             NYdb::NScheme::TSchemeClient schemeClient(*Driver);
-            NYdb::NScheme::TPermissions permissions("ouruser", {"ydb.generic.read", "ydb.generic.write", "ydb.generic.full"});
+            NYdb::NScheme::TPermissions permissions("user123", {"ydb.generic.read", "ydb.generic.write", "ydb.generic.full"});
+
+            auto result = schemeClient
+                              .ModifyPermissions(
+                                  "/Root", NYdb::NScheme::TModifyPermissionsSettings().AddGrantPermissions(permissions))
+                              .ExtractValueSync();
+            Cerr << result.GetIssues().ToString() << "\n";
+            UNIT_ASSERT(result.IsSuccess());
+        }
+
+        {
+            auto status = client.CreateUser("/Root", "usernorights", "dummyPass");
+            UNIT_ASSERT_VALUES_EQUAL(status, NMsgBusProxy::MSTATUS_OK);
+
+            NYdb::NScheme::TSchemeClient schemeClient(*Driver);
+            NYdb::NScheme::TPermissions permissions("user-no-rights", {"ydb.generic.read"});
 
             auto result = schemeClient
                               .ModifyPermissions(
@@ -2510,21 +2527,66 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
 
     Y_UNIT_TEST(ConsumerTopicAutocreationScenario) {
         TInsecureTestServer testServer;
-        // TInsecureTestServer testServer("1", false, true);
-        // TKafkaTestClient client(testServer.Port, "ClientA");
-        TClient client(*(testServer.KikimrServer->ServerSettings));
 
-        // NYdb::NScheme::TSchemeClient schemeClient(*testServer->Driver);
-        // NYdb::NScheme::TPermissions permissions("ouruser", {"ydb.generic.read", "ydb.generic.write", "ydb.generic.full"});
+        TString nonExistedTopicName1 = "non-existent-topic-1";
+        TString nonExistedTopicName2 = "non-existent-topic-2";
+        TString newConsumer = "new-consumer";
 
-        // auto result = schemeClient
-        //                     .ModifyPermissions(
-        //                         "/Root", NYdb::NScheme::TModifyPermissionsSettings().AddGrantPermissions(permissions))
-        //                     .ExtractValueSync();
-        // Cerr << result.GetIssues().ToString() << "\n";
-        // UNIT_ASSERT(result.IsSuccess());
-        // client.DeleteUser("/Root", const TModifyUserOption &options)
+        if (testServer.KikimrServer.get()->ServerSettings->AppConfig->GetKafkaProxyConfig().GetAutoCreateTopicsEnable()) {
+            Cout << "AutoCreateTopicsEnable is set true\n";
+            {
+                TKafkaTestClient client(testServer.Port);
+                // аутентифицируемся как пользователь с правами на чтение и запись
+                TString userName = "user123@/Root";
+                TString userPassword = "UsErPassword";
+                client.AuthenticateToKafka(userName, userPassword);
 
+                std::map<TString, std::vector<i32>> topicsToPartions;
+                topicsToPartions[nonExistedTopicName1] = std::vector<i32>{0};
+                auto msg = client.OffsetFetch(newConsumer, topicsToPartions);
+                UNIT_ASSERT_VALUES_EQUAL(msg->Groups.size(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].ErrorCode, 0);
+                UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics.size(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[0].Name, nonExistedTopicName1);
+                UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[0].Partitions.size(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[0].Partitions[0].PartitionIndex, 0);
+                UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[0].Partitions[0].ErrorCode, EKafkaErrors::NONE_ERROR);
+            }
+
+            {
+                TKafkaTestClient client(testServer.Port);
+                // аутентифицируемся как пользователь без прав на запись
+                TString userName = "usernorights@/Root";
+                TString userPassword = "dummyPass";
+                client.AuthenticateToKafka(userName, userPassword);
+                std::map<TString, std::vector<i32>> topicsToPartions;
+                topicsToPartions[nonExistedTopicName2] = std::vector<i32>{0};
+                auto msg = client.OffsetFetch(newConsumer, topicsToPartions);
+                UNIT_ASSERT_VALUES_EQUAL(msg->Groups.size(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics.size(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[0].Partitions[0].ErrorCode, EKafkaErrors::UNKNOWN_TOPIC_OR_PARTITION);
+            }
+        } else {
+            Cout << "AutoCreateTopicsEnable is set false\n";
+            {
+                TKafkaTestClient client(testServer.Port);
+                // аутентифицируемся как пользователь с правами на чтение и запись
+                TString userName = "user123@/Root";
+                TString userPassword = "UsErPassword";
+                client.AuthenticateToKafka(userName, userPassword);
+
+                std::map<TString, std::vector<i32>> topicsToPartions;
+                topicsToPartions[nonExistedTopicName1] = std::vector<i32>{0};
+                auto msg = client.OffsetFetch(newConsumer, topicsToPartions);
+                UNIT_ASSERT_VALUES_EQUAL(msg->Groups.size(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].ErrorCode, 0);
+                UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics.size(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[0].Name, nonExistedTopicName1);
+                UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[0].Partitions.size(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[0].Partitions[0].PartitionIndex, 0);
+                UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[0].Partitions[0].ErrorCode, EKafkaErrors::UNKNOWN_TOPIC_OR_PARTITION);
+            }
+        }
     }
 
     Y_UNIT_TEST(DescribeGroupsScenario) {

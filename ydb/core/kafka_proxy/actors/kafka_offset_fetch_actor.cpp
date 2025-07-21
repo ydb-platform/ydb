@@ -1,14 +1,12 @@
 #include "kafka_offset_fetch_actor.h"
-#include <ydb/core/kafka_proxy/kafka_events.h>
 
+#include <ydb/core/kafka_proxy/actors/kafka_create_topics_actor.h>
+#include <ydb/core/kafka_proxy/kafka_consumer_groups_metadata_initializers.h>
+#include "ydb/core/kafka_proxy/kafka_consumer_members_metadata_initializers.h"
+#include <ydb/core/kafka_proxy/kafka_events.h>
 #include <ydb/services/lib/actors/pq_schema_actor.h>
-
-#include <ydb/core/kafka_proxy/kafka_events.h>
-
 #include "ydb/services/persqueue_v1/actors/schema_actors.h"
 
-#include <ydb/core/kafka_proxy/kafka_consumer_groups_metadata_initializers.h>
-#include "../kafka_consumer_members_metadata_initializers.h"
 
 namespace NKafka {
 NKikimr::NGRpcProxy::V1::TDescribeTopicActorSettings ConsumerOffsetSettings(std::shared_ptr<TSet<TString>> consumers, std::shared_ptr<TSet<ui32>>& partitions) {
@@ -179,6 +177,11 @@ NActors::IActor* CreateKafkaOffsetFetchActor(const TContext::TPtr context, const
 void TKafkaOffsetFetchActor::Bootstrap(const NActors::TActorContext& ctx) {
     // If API level <= 7, Groups would be empty. In this case we convert message to level 8 and process it uniformely later
     KAFKA_LOG_D("New request for user " << GetUsernameOrAnonymous(Context));
+    ContextForTopicCreation = std::make_shared<TContext>(TContext(Context->Config));
+    ContextForTopicCreation->ConnectionId = ctx.SelfID;
+    ContextForTopicCreation->UserToken = Context->UserToken;
+    ContextForTopicCreation->DatabasePath = Context->DatabasePath;
+
     if (Message->Groups.empty()) {
         TOffsetFetchRequestData::TOffsetFetchRequestGroup group;
         group.GroupId = Message->GroupId.value();
@@ -239,79 +242,128 @@ void TKafkaOffsetFetchActor::Handle(TEvKafka::TEvCommitedOffsetsResponse::TPtr& 
     if (InflyTopics == 0) {
         auto response = GetOffsetFetchResponse();
         KAFKA_LOG_D("Sending response to user " << GetUsernameOrAnonymous(Context));
-        bool illigalRequestError = false;
-        for (const auto& consumerGroup : response->Groups) {
-            for (const auto& groupTopic : consumerGroup.Topics) {
-                for (const auto& topicPartition : groupTopic.Partitions) {
-                    // NKikimrConfig::TClientCertificateAuthorization::HasDefaultGroup
-                    if (topicPartition.ErrorCode == 91) {
-                        InflyTopics++;
-                        illigalRequestError = true;
-
-                        std::pair<TString, TString> consumerTopicRequestsCount = {*consumerGroup.GroupId, *groupTopic.Name};
-                        if (ConsumerTopicRequestsLimit.find(consumerTopicRequestsCount) != ConsumerTopicRequestsLimit.end()) {
-                            ConsumerTopicRequestsLimit[consumerTopicRequestsCount] = 2;
-                        } else {
-                            ui32& requestCounter = ConsumerTopicRequestsLimit[consumerTopicRequestsCount];
-                            if (requestCounter > 0) {
-                                requestCounter--;
+        if (Context->Config.GetAutoCreateTopicsEnable()) {
+            for (const auto& consumerGroup : response->Groups) {
+                for (const auto& groupTopic : consumerGroup.Topics) {
+                    for (const auto& topicPartition : groupTopic.Partitions) {
+                        if (topicPartition.ErrorCode == EKafkaErrors::RESOURCE_NOT_FOUND) {
+                            // consumer is not added to the topic case
+                            InflyTopics++;
+                            std::pair<TString, TString> consumerTopicRequest = {*consumerGroup.GroupId, *groupTopic.Name};
+                            if (ConsumerTopicRequestAttempts.find(consumerTopicRequest) == ConsumerTopicRequestAttempts.end()) {
+                                ConsumerTopicRequestAttempts.insert(consumerTopicRequest);
                             } else {
                                 break;
                             }
+
+                            auto topicSettings = NYdb::NTopic::TAlterTopicSettings();
+                            topicSettings.BeginAddConsumer(*consumerGroup.GroupId).EndAddConsumer();
+
+                            auto request = std::make_unique<Ydb::Topic::AlterTopicRequest>();
+                            TString p = TStringBuilder() << "/" << DatabasePath << groupTopic.Name;
+                            request.get()->set_path(TStringBuilder() << DatabasePath << "/" << groupTopic.Name);
+                            for (auto& c : topicSettings.AddConsumers_) {
+                                auto* consumer = request.get()->add_add_consumers();
+                                consumer->set_name(c.ConsumerName_);
+                            }
+
+                            AlterTopicCookie++;
+                            ModifiedTopicInfo alteredTopicInfo;
+                            alteredTopicInfo.TopicName = *groupTopic.Name;
+                            alteredTopicInfo.Entities.Consumers->insert(*consumerGroup.GroupId);
+                            alteredTopicInfo.Entities.Partitions->insert(topicPartition.PartitionIndex);
+                            AlterTopicInf[AlterTopicCookie] = alteredTopicInfo;
+                            auto callback = [replyTo = SelfId(), cookie = AlterTopicCookie, path = groupTopic.Name, this](Ydb::StatusIds::StatusCode statusCode, const google::protobuf::Message*) {
+                                NYdb::NIssue::TIssues issues;
+                                NYdb::TStatus status(static_cast<NYdb::EStatus>(statusCode), std::move(issues));
+                                Send(replyTo, new NKikimr::NReplication::TEvYdbProxy::TEvAlterTopicResponse(std::move(status)), 0, cookie);
+                            };
+                            NKikimr::NReplication::TLocalProxyActor* actor = new NKikimr::NReplication::TLocalProxyActor(DatabasePath);
+                            NKikimr::NGRpcService::DoAlterTopicRequest(std::make_unique<NKikimr::NReplication::TLocalProxyRequest>(*groupTopic.Name, DatabasePath, std::move(request), callback), *actor);
+                            break;
+                        } else if (topicPartition.ErrorCode == EKafkaErrors::UNKNOWN_TOPIC_OR_PARTITION) {
+                            // topic does not exist case
+                            InflyTopics++;
+                            auto message = std::make_shared<NKafka::TCreateTopicsRequestData>();
+                            TCreateTopicsRequestData::TCreatableTopic topicToCreate;
+                            topicToCreate.Name = *groupTopic.Name;
+                            message->Topics.push_back(topicToCreate);
+                            TActorId actorId = ctx.Register(new TKafkaCreateTopicsActor(ContextForTopicCreation,
+                                1,
+                                TMessagePtr<NKafka::TCreateTopicsRequestData>({}, message)));
+
+                            ModifiedTopicInfo createdTopicInfo;
+                            createdTopicInfo.TopicName = *groupTopic.Name;
+                            createdTopicInfo.Entities.Consumers->insert(*consumerGroup.GroupId);
+                            createdTopicInfo.Entities.Partitions->insert(0); // default number of partitions is 1
+                            CreateTopicInf[actorId] = createdTopicInfo;
                         }
-
-                        auto topicSettings = NYdb::NTopic::TAlterTopicSettings();
-                        topicSettings.BeginAddConsumer(*consumerGroup.GroupId).EndAddConsumer();
-
-                        auto request = std::make_unique<Ydb::Topic::AlterTopicRequest>();
-                        TString p = TStringBuilder() << "/" << DatabasePath << groupTopic.Name;
-                        request.get()->set_path(TStringBuilder() << DatabasePath << "/" << groupTopic.Name);
-                        for (auto& c : topicSettings.AddConsumers_) {
-                            auto* consumer = request.get()->add_add_consumers();
-                            consumer->set_name(c.ConsumerName_);
-                        }
-
-                        KqpCookie++;
-                        AlterTopicInf[KqpCookie].TopicName = *groupTopic.Name;
-                        AlterTopicInf[KqpCookie].Entities.Consumers->insert(*consumerGroup.GroupId);
-                        AlterTopicInf[KqpCookie].Entities.Partitions->insert(topicPartition.PartitionIndex);
-                        auto callback = [replyTo = SelfId(), cookie = KqpCookie, path = groupTopic.Name, this](Ydb::StatusIds::StatusCode statusCode, const google::protobuf::Message*) {
-                            NYdb::NIssue::TIssues issues;
-                            NYdb::TStatus status(static_cast<NYdb::EStatus>(statusCode), std::move(issues));
-                            Send(replyTo, new NKikimr::NReplication::TEvYdbProxy::TEvAlterTopicResponse(std::move(status)), 0, cookie);
-                        };
-                        NKikimr::NReplication::TLocalProxyActor * actor = new NKikimr::NReplication::TLocalProxyActor(DatabasePath);
-                        NKikimr::NGRpcService::DoAlterTopicRequest(std::make_unique<NKikimr::NReplication::TLocalProxyRequest>(*groupTopic.Name, DatabasePath, std::move(request), callback), *actor);
-                        break;
                     }
                 }
             }
         }
-        if (!illigalRequestError) {
+        if (InflyTopics == 0) {
             Send(Context->ConnectionId, new TEvKafka::TEvResponse(CorrelationId, response, static_cast<EKafkaErrors>(response->ErrorCode)));
             Die(ctx);
         }
     }
 }
 
-void TKafkaOffsetFetchActor::Handle(NKikimr::NReplication::TEvYdbProxy::TEvAlterTopicResponse::TPtr& ev, const TActorContext& ctx) {
-    KAFKA_LOG_D("Handling TEvAlterTopicResponse");
-    // auto& response = ev->Get()->Result;
+void TKafkaOffsetFetchActor::Handle(const TEvKafka::TEvResponse::TPtr& ev, const TActorContext& ctx) {
+    KAFKA_LOG_D("Entered TEvResponse from CreateTopicsActor");
+    auto& errorCode = ev->Release()->ErrorCode;
+    if (errorCode != EKafkaErrors::NONE_ERROR) {
+        InflyTopics--;
+        if (InflyTopics == 0) {
+            auto response = GetOffsetFetchResponse();
+            Send(Context->ConnectionId, new TEvKafka::TEvResponse(CorrelationId, response, static_cast<EKafkaErrors>(response->ErrorCode)));
+            Die(ctx);
+        }
+        return;
+    }
+    TActorId& creatorActorId = ev->Sender;
+    const ModifiedTopicInfo& createdTopicInformation = CreateTopicInf[creatorActorId];
 
-    // ! check Error in response here
-
-    const AlterTopicInfo& aTI = AlterTopicInf[ev->Cookie];
     NKikimr::NGRpcProxy::V1::TLocalRequestBase locationRequest{
-        NormalizePath(Context->DatabasePath, aTI.TopicName),
+        NormalizePath(Context->DatabasePath, createdTopicInformation.TopicName),
         Context->DatabasePath,
         GetUserSerializedToken(Context),
     };
     ctx.Register(new TTopicOffsetActor(
-        aTI.Entities.Consumers,
+        createdTopicInformation.Entities.Consumers,
         locationRequest,
         SelfId(),
-        aTI.Entities.Partitions,
-        aTI.TopicName,
+        createdTopicInformation.Entities.Partitions,
+        createdTopicInformation.TopicName,
+        GetUsernameOrAnonymous(Context)
+    ));
+}
+
+void TKafkaOffsetFetchActor::Handle(NKikimr::NReplication::TEvYdbProxy::TEvAlterTopicResponse::TPtr& ev, const TActorContext& ctx) {
+    KAFKA_LOG_D("Handling TEvAlterTopicResponse");
+    NYdb::TStatus& result = ev->Get()->Result;
+    if (result.GetStatus() != NYdb::EStatus::SUCCESS) {
+        InflyTopics--;
+        if (InflyTopics == 0) {
+            auto response = GetOffsetFetchResponse();
+            Send(Context->ConnectionId, new TEvKafka::TEvResponse(CorrelationId, response, static_cast<EKafkaErrors>(response->ErrorCode)));
+            Die(ctx);
+        }
+        return;
+    }
+
+    const ModifiedTopicInfo& alteredTopicInfo = AlterTopicInf[ev->Cookie];
+    NKikimr::NGRpcProxy::V1::TLocalRequestBase locationRequest{
+        NormalizePath(Context->DatabasePath, alteredTopicInfo.TopicName),
+        Context->DatabasePath,
+        GetUserSerializedToken(Context),
+    };
+    ctx.Register(new TTopicOffsetActor(
+        alteredTopicInfo.Entities.Consumers,
+        locationRequest,
+        SelfId(),
+        alteredTopicInfo.Entities.Partitions,
+        alteredTopicInfo.TopicName,
         GetUsernameOrAnonymous(Context)
     ));
 

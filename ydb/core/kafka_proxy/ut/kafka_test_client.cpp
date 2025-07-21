@@ -711,7 +711,7 @@ void TKafkaTestClient::UnknownApiKey() {
 }
 
 void TKafkaTestClient::AuthenticateToKafka() {
-{
+    {
         auto msg = ApiVersions();
 
         UNIT_ASSERT_VALUES_EQUAL(msg->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
@@ -732,6 +732,28 @@ void TKafkaTestClient::AuthenticateToKafka() {
     }
 }
 
+void TKafkaTestClient::AuthenticateToKafka(const TString& userName, const TString& userPassword) {
+    {
+        auto msg = ApiVersions();
+
+        UNIT_ASSERT_VALUES_EQUAL(msg->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
+        UNIT_ASSERT_VALUES_EQUAL(msg->ApiKeys.size(), EXPECTED_API_KEYS_COUNT);
+    }
+
+    {
+        auto msg = SaslHandshake();
+
+        UNIT_ASSERT_VALUES_EQUAL(msg->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
+        UNIT_ASSERT_VALUES_EQUAL(msg->Mechanisms.size(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(*msg->Mechanisms[0], "PLAIN");
+    }
+
+    {
+        auto msg = SaslAuthenticate(userName, userPassword);
+        UNIT_ASSERT_VALUES_EQUAL(msg->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
+    }
+
+}
 
 TRequestHeaderData TKafkaTestClient::Header(NKafka::EApiKey apiKey, TKafkaVersion version) {
     TRequestHeaderData header;

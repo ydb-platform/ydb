@@ -509,7 +509,7 @@ int TWorkloadCommandInit::DoRun(NYdbWorkload::IWorkloadQueryGenerator& workloadG
                 }
             }
             if (existPaths) {
-                throw yexception() << "Paths " << JoinSeq(", ", existPaths) << " already exists. Use 'ydb wokload " << Params.GetWorkloadName() << " clean' command or '--clear' option of 'init' command for cleanup tables.";
+                throw yexception() << "Paths " << JoinSeq(", ", existPaths) << " already exist. Use 'ydb wokload " << Params.GetWorkloadName() << " clean' command or '--clear' option of 'init' command to cleanup tables.";
             }
             auto result = TableClient->RetryOperationSync([ddlQueries](NTable::TSession session) {
                 return session.ExecuteSchemeQuery(ddlQueries.c_str()).GetValueSync();

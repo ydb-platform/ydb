@@ -326,19 +326,24 @@ def create_file_set(aggregated_for_mute, filter_func, mute_check=None, use_wildc
     """Создает набор тестов для файла на основе фильтра"""
     result_set = set()
     debug_list = []
-    
-    for test in aggregated_for_mute:
+    total = len(aggregated_for_mute)
+    last_percent = -1
+    for idx, test in enumerate(aggregated_for_mute, 1):
         testsuite = test.get('suite_folder')
         testcase = test.get('test_name')
-        
+        if test.get('full_name') == 'ydb/core/kqp/ut/cost/KqpCost.VectorIndexLookup+useSink':
+            print(1)
         if not testsuite or not testcase:
             continue
-            
+        
         # Проверяем mute_check если передан
         if mute_check and not mute_check(testsuite, testcase):
             continue
-        if test.get('full_name') == 'ydb/core/kqp/ut/cost/KqpCost.VectorIndexLookup+useSink':
-            print(1)
+        # Прогресс-бар
+        percent = int(idx / total * 100)
+        if percent != last_percent and (percent % 5 == 0 or percent == 100):
+            print(f"\r[create_file_set] Progress: {percent}% ({idx}/{total})", end="")
+            last_percent = percent
         # Применяем фильтр
         if filter_func(test):
             test_string = create_test_string(test, use_wildcards)
@@ -348,7 +353,7 @@ def create_file_set(aggregated_for_mute, filter_func, mute_check=None, use_wildc
                 period_days = test.get('period_days')
                 debug_string = create_debug_string(test, resolution, period_days=period_days)
                 debug_list.append(debug_string)
-    
+    print()  # Перевод строки после прогресса
     return sorted(result_set), sorted(debug_list)
 
 def write_file_set(file_path, test_set, debug_list=None):
@@ -364,16 +369,7 @@ def apply_and_add_mutes(all_data, output_path, mute_check, aggregated_for_mute, 
     logging.info(f"Creating mute files in directory: {output_path}")
     
     # Получаем уникальные тесты для обработки (используем максимальный период для получения всех тестов)
-    unique_tests = {}
-    for test in all_data:
-        full_name = test.get('full_name')
-        if full_name not in unique_tests:
-            unique_tests[full_name] = test
     
-    tests_for_processing = list(unique_tests.values())
-    tests_for_processing = sorted(tests_for_processing, key=lambda d: d['full_name'])
-    
-    logging.info(f"Processing {len(tests_for_processing)} unique tests for mute analysis")
 
     try:
         # 1. Кандидаты на mute
@@ -381,7 +377,7 @@ def apply_and_add_mutes(all_data, output_path, mute_check, aggregated_for_mute, 
             return is_flaky_test(test, aggregated_for_mute)
         
         to_mute, to_mute_debug = create_file_set(
-            tests_for_processing, is_mute_candidate, use_wildcards=True, resolution='to_mute'
+            aggregated_for_mute, is_mute_candidate, use_wildcards=True, resolution='to_mute'
         )
         write_file_set(os.path.join(output_path, 'to_mute.txt'), to_mute, to_mute_debug)
         
@@ -390,7 +386,7 @@ def apply_and_add_mutes(all_data, output_path, mute_check, aggregated_for_mute, 
             return is_unmute_candidate(test, aggregated_for_unmute)
         
         to_unmute, to_unmute_debug = create_file_set(
-            tests_for_processing, is_unmute_candidate_wrapper, mute_check, resolution='to_unmute'
+            aggregated_for_unmute, is_unmute_candidate_wrapper, mute_check, resolution='to_unmute'
         )
         
         # Для wildcard-паттернов: проверяем, что ВСЕ chunk'и подходят под условия размьюта
@@ -399,7 +395,7 @@ def apply_and_add_mutes(all_data, output_path, mute_check, aggregated_for_mute, 
         
         # Группируем тесты по wildcard-паттернам
         wildcard_groups = {}
-        for test in tests_for_processing:
+        for test in aggregated_for_unmute:
             if mute_check and mute_check(test.get('suite_folder'), test.get('test_name')):
                 wildcard_pattern = create_test_string(test, use_wildcards=True)
                 if wildcard_pattern not in wildcard_groups:
@@ -432,7 +428,7 @@ def apply_and_add_mutes(all_data, output_path, mute_check, aggregated_for_mute, 
             return is_delete_candidate(test, aggregated_for_delete)
         
         to_delete, to_delete_debug = create_file_set(
-            tests_for_processing, is_delete_candidate_wrapper, mute_check, resolution='to_delete'
+            aggregated_for_delete, is_delete_candidate_wrapper, mute_check, resolution='to_delete'
         )
         write_file_set(os.path.join(output_path, 'to_delete.txt'), to_delete, to_delete_debug)
         

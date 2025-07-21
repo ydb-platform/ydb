@@ -460,6 +460,16 @@ int TWorkloadCommandInit::DoRun(NYdbWorkload::IWorkloadQueryGenerator& workloadG
         if (DryRun) {
             Cout << ddlQueries << Endl;
         } else {
+            TVector<TString> existPaths;
+            for (const auto& path: workloadGen.GetCleanPaths()) {
+                const auto fullPath = config.Database + "/" + path.c_str();
+                if (SchemeClient->DescribePath(fullPath).GetValueSync().IsSuccess()) {
+                    existPaths.emplace_back(path);
+                }
+            }
+            if (existPaths) {
+                throw yexception() << "Paths " << JoinSeq(", ", existPaths) << " already exist. Use 'ydb wokload " << Params.GetWorkloadName() << " clean' command or '--clear' option of 'init' command to cleanup tables.";
+            }
             auto result = TableClient->RetryOperationSync([ddlQueries](NTable::TSession session) {
                 return session.ExecuteSchemeQuery(ddlQueries.c_str()).GetValueSync();
             });

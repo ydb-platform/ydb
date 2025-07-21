@@ -359,8 +359,6 @@ void TPartitionFamily::AttachePartitions(const std::vector<ui32>& partitions, co
 
         Partitions.insert(Partitions.end(), newPartitions.begin(), newPartitions.end());
         UpdatePartitionMapping(newPartitions);
-
-//        LockedPartitions.insert(newPartitions.begin(), newPartitions.end());
     }
 
     // Removing sessions wich can't read the family now

@@ -9,6 +9,7 @@ private:
     YDB_READONLY(bool, Enabled, true);
     YDB_READONLY(ui64, MemoryLimit, ui64(3) << 30);
     YDB_READONLY(ui64, HardMemoryLimit, ui64(10) << 30);
+    YDB_READONLY(ui64, CountBuckets, 1);
 
 public:
 

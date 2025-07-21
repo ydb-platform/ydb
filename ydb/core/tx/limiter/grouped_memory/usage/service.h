@@ -42,7 +42,7 @@ public:
         } else {
             AFL_VERIFY(Singleton<TSelf>()->DefaultStageFeatures);
             return std::make_shared<TStageFeatures>(
-                name, limit, std::nullopt, Singleton<TSelf>()->DefaultStageFeatures, Singleton<TSelf>()->Counters->BuildStageCounters(name));
+                name, limit / (GetCountBuckets() ? GetCountBuckets() : 1), std::nullopt, Singleton<TSelf>()->DefaultStageFeatures, Singleton<TSelf>()->Counters->BuildStageCounters(name));
         }
     }
 
@@ -87,6 +87,10 @@ public:
     }
     static bool IsEnabled() {
         return Singleton<TSelf>()->ServiceConfig.IsEnabled();
+    }
+
+    static ui64 GetCountBuckets() {
+        return Singleton<TSelf>()->ServiceConfig.GetCountBuckets();
     }
     static NActors::TActorId MakeServiceId(const ui32 nodeId) {
         return NActors::TActorId(nodeId, "SrvcMlmt" + GetMemoryLimiterName());

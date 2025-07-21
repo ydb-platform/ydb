@@ -95,9 +95,9 @@ public:
 
     TRequest(
         THashSet<TAddress>&& addresses, std::shared_ptr<ICallback>&& callback, const EConsumer consumer, const TMonotonic startRequestInstant)
-        : Callback(std::move(callback))
-        , Consumer(consumer)
-        , StartRequest(startRequestInstant) {
+        : StartRequest(startRequestInstant)
+        , Callback(std::move(callback))
+        , Consumer(consumer) {
         for (auto&& i : addresses) {
             Wait[TPolicy::GetSourceId(i)].emplace(i);
             WaitObjectsCount.Inc();

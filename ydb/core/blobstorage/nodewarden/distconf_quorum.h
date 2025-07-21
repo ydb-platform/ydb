@@ -157,7 +157,7 @@ namespace NKikimr::NStorage {
             // strict datacenter majority
             if (ok <= err) {
                 if (out) {
-                    *out << " no-quorum:";
+                    *out << " no-quorum";
                     for (const auto& [_, value] : pileStatus) {
                         const auto [dcOk, dcErr] = value;
                         *out << ':' << dcOk << '/' << dcOk + dcErr;

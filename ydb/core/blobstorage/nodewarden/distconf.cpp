@@ -14,7 +14,15 @@ namespace NKikimr::NStorage {
         , Cfg(std::move(cfg))
         , BaseConfig(baseConfig)
         , InitialConfig(std::move(baseConfig))
-    {}
+    {
+        if (Cfg && Cfg->BridgeConfig) {
+            const auto& piles = Cfg->BridgeConfig->GetPiles();
+            for (int i = 0; i < piles.size(); ++i) {
+                const auto [it, inserted] = BridgePileNameMap.emplace(piles[i].GetName(), TBridgePileId::FromValue(i));
+                Y_ABORT_UNLESS(inserted);
+            }
+        }
+    }
 
     void TDistributedConfigKeeper::Bootstrap() {
         STLOG(PRI_DEBUG, BS_NODE, NWDC00, "Bootstrap");
@@ -138,6 +146,14 @@ namespace NKikimr::NStorage {
                 SendConfigProposeRequest();
             }
 
+            const auto& allNodes = StorageConfig->GetAllNodes();
+            if (std::vector<TNodeIdentifier> newNodeList(allNodes.begin(), allNodes.end()); !newNodeList.empty()) {
+                ApplyNewNodeList(newNodeList);
+            }
+
+            UnbindNodesFromNonPrimaryPile();
+            UpdateQuorums();
+
             return true;
         } else if (StorageConfig->GetGeneration() && StorageConfig->GetGeneration() == config.GetGeneration() &&
                 StorageConfig->GetFingerprint() != config.GetFingerprint()) {
@@ -181,11 +197,13 @@ namespace NKikimr::NStorage {
 
 #ifndef NDEBUG
     void TDistributedConfigKeeper::ConsistencyCheck() {
-        for (const auto& [nodeId, info] : DirectBoundNodes) {
-            Y_ABORT_UNLESS(std::binary_search(NodeIds.begin(), NodeIds.end(), nodeId));
+        for (const auto& [nodeId, info] : DirectBoundNodes) { // validate incoming binding
+            Y_ABORT_UNLESS(std::ranges::binary_search(NodeIdsForIncomingBinding, nodeId) ||
+                (BridgeInfo && BridgeInfo->SelfNodePile->IsPrimary && AllNodeIds.contains(nodeId)));
         }
-        if (Binding) {
-            Y_ABORT_UNLESS(std::binary_search(NodeIds.begin(), NodeIds.end(), Binding->NodeId));
+        if (Binding) { // validate outgoing binding
+            Y_ABORT_UNLESS(std::ranges::binary_search(NodeIdsForOutgoingBinding, Binding->NodeId) ||
+                std::ranges::binary_search(NodeIdsForPrimaryPileOutgoingBinding, Binding->NodeId));
         }
 
         for (const auto& [cookie, task] : ScatterTasks) {
@@ -258,8 +276,14 @@ namespace NKikimr::NStorage {
         Y_ABORT_UNLESS(CheckFingerprint(*BaseConfig));
         Y_ABORT_UNLESS(!InitialConfig->GetFingerprint() || CheckFingerprint(*InitialConfig));
 
+        if (StorageConfig) {
+            Y_ABORT_UNLESS(HasConnectedNodeQuorum(*StorageConfig) == GlobalQuorum);
+            Y_ABORT_UNLESS((BridgeInfo && HasConnectedNodeQuorum(*StorageConfig, {BridgeInfo->SelfNodePile->BridgePileId})) ==
+                LocalPileQuorum);
+        }
+
         if (Scepter) {
-            Y_ABORT_UNLESS(StorageConfig && HasConnectedNodeQuorum(*StorageConfig));
+            Y_ABORT_UNLESS(StorageConfig && GlobalQuorum);
             Y_ABORT_UNLESS(RootState != ERootState::INITIAL && RootState != ERootState::ERROR_TIMEOUT);
             Y_ABORT_UNLESS(!Binding);
         } else {
@@ -290,17 +314,17 @@ namespace NKikimr::NStorage {
         const bool wasStorageConfigLoaded = StorageConfigLoaded;
 
         switch (ev->GetTypeRewrite()) {
-            case TEvInterconnect::TEvNodesInfo::EventType:
-                Handle(reinterpret_cast<TEvInterconnect::TEvNodesInfo::TPtr&>(ev));
-                if (!NodeIds.empty() || !IsSelfStatic) {
+            hFunc(TEvInterconnect::TEvNodesInfo, [&](auto& ev) {
+                if (!ev->Get()->NodesPtr->empty()) {
+                    Handle(ev);
                     change = !std::exchange(NodeListObtained, true);
                 }
-                break;
+            })
 
-            case TEvPrivate::EvStorageConfigLoaded:
-                Handle(reinterpret_cast<TEvPrivate::TEvStorageConfigLoaded::TPtr&>(ev));
+            hFunc(TEvPrivate::TEvStorageConfigLoaded, [&](auto& ev) {
+                Handle(ev);
                 change = wasStorageConfigLoaded < StorageConfigLoaded;
-                break;
+            });
 
             case TEvPrivate::EvProcessPendingEvent:
                 Y_ABORT_UNLESS(!PendingEvents.empty());

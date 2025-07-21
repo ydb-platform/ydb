@@ -45,27 +45,29 @@ namespace NSentinel {
 
 /// TNodeStatusComputer
 
-bool TNodeStatusComputer::GetCurrentState() const {
-    return ActualState == ENodeStatus::GOOD;
+ui32 TNodeStatusComputer::GetCurrentNodeState() const {
+    return (ui32)ActualState;
 }
 
 bool TNodeStatusComputer::Compute() {
     if (ActualState != CurrentState
-        && ((CurrentState == ENodeStatus::BAD && StateCounter >= BadStateLimit)
-        || (CurrentState == ENodeStatus::GOOD && StateCounter >= GoodStateLimit))) {
+        && ((CurrentState == ENodeState::BAD && StateCounter >= BadStateLimit)
+        || (CurrentState == ENodeState::GOOD && StateCounter >= GoodStateLimit))) {
         ActualState = CurrentState;
         return true;
     }
-    if (ActualState != ENodeStatus::INACTIVE
-        && ((CurrentState == ENodeStatus::BAD && StateCounter < BadStateLimit)
-        || (CurrentState == ENodeStatus::GOOD && StateCounter < GoodStateLimit))) {
-        ActualState = ENodeStatus::INACTIVE;
-        return true;
+    if (ActualState != ENodeState::MAY_BE_BAD && (CurrentState == ENodeState::BAD && StateCounter < BadStateLimit)) {
+        ActualState = ENodeState::MAY_BE_BAD;
+        return false;
+    }
+    if (ActualState != ENodeState::MAY_BE_GOOD && (CurrentState == ENodeState::GOOD && StateCounter < GoodStateLimit)) {
+        ActualState = ENodeState::MAY_BE_GOOD;
+        return false;
     }
     return false;
 }
 
-void TNodeStatusComputer::AddState(ENodeStatus newState) {
+void TNodeStatusComputer::AddState(ENodeState newState) {
     if (newState == CurrentState) {
         if (StateCounter != Max<ui64>()) {
             StateCounter++;
@@ -720,7 +722,7 @@ class TStateUpdater: public TUpdaterBase<TEvSentinel::TEvStateUpdated, TStateUpd
         return false;
     }
 
-    void MarkNode(ui32 nodeId, TNodeInfo::ENodeStatus status) {
+    void MarkNode(ui32 nodeId, TNodeInfo::ENodeState status) {
         auto node = SentinelState->Nodes.find(nodeId);
         if (node != SentinelState->Nodes.end()) {
             node->second.AddState(status);
@@ -766,7 +768,7 @@ class TStateUpdater: public TUpdaterBase<TEvSentinel::TEvStateUpdated, TStateUpd
             return;
         }
 
-        MarkNode(nodeId, TNodeInfo::ENodeStatus::GOOD);
+        MarkNode(nodeId, TNodeInfo::ENodeState::GOOD);
 
         if (!record.PDiskStateInfoSize()) {
             LOG_E("There is no pdisk info"
@@ -812,7 +814,7 @@ class TStateUpdater: public TUpdaterBase<TEvSentinel::TEvStateUpdated, TStateUpd
             return;
         }
 
-        MarkNode(nodeId, TNodeInfo::ENodeStatus::BAD);
+        MarkNode(nodeId, TNodeInfo::ENodeState::BAD);
 
         LOG_E("Cannot get pdisks state"
             << ": nodeId# " << nodeId
@@ -840,7 +842,7 @@ class TStateUpdater: public TUpdaterBase<TEvSentinel::TEvStateUpdated, TStateUpd
 
             MarkNodePDisks(nodeId, NKikimrBlobStorage::TPDiskState::Timeout);
             AcceptNodeReply(nodeId);
-            MarkNode(nodeId, TNodeInfo::ENodeStatus::BAD);
+            MarkNode(nodeId, TNodeInfo::ENodeState::BAD);
         }
 
         MaybeReply();
@@ -1139,14 +1141,14 @@ class TSentinel: public TActorBootstrapped<TSentinel> {
 
     void SendDistconfRequest() {
         auto request = std::make_unique<NKikimr::NStorage::TEvNodeConfigInvokeOnRoot>();
-        auto *updateRequest = request->Record.MutableSelfHealBadNodesListUpdate();
+        auto *updateRequest = request->Record.MutableSelfHealNodesStateUpdate();
         updateRequest->SetWaitForConfigStep(Config.StateStorageSelfHealWaitForConfigStep.GetValue() / 1000000); // milliseconds -> seconds
         updateRequest->SetEnableSelfHealStateStorage(Config.EnableSelfHealStateStorage);
         for (auto &[nodeId, node] : SentinelState->Nodes) {
             SentinelState->NeedSelfHealStateStorage |= node.Compute();
-            if (!node.GetCurrentState()) {
-                updateRequest->AddBadNodes(nodeId);
-            }
+            auto *nodeState = updateRequest->AddNodesState();
+            nodeState->SetNodeId(nodeId);
+            nodeState->SetState(node.GetCurrentNodeState());
         }
         if (SentinelState->LastStateStorageSelfHeal == TInstant::Zero()) {
             SentinelState->LastStateStorageSelfHeal = Now();

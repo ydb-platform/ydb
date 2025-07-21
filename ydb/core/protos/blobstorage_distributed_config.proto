@@ -238,12 +238,17 @@ message TEvNodeConfigInvokeOnRoot {
 
     message TSelfHealStateStorage {
         optional uint32 WaitForConfigStep = 1;
+        optional bool ForceHeal = 2;
     }
 
-    message TSelfHealBadNodesListUpdate {
+    message TSelfHealNodesStateUpdate {
+        message TNodeState {
+            optional uint32 NodeId = 1;
+            optional uint32 State = 2;
+        }
         optional bool EnableSelfHealStateStorage = 1;
         optional uint32 WaitForConfigStep = 2;
-        repeated uint32 BadNodes = 3;
+        repeated TNodeState NodesState = 3;
     }
 
     message TAdvanceGeneration
@@ -325,7 +330,7 @@ message TEvNodeConfigInvokeOnRoot {
         TMergeUnsyncedPileConfig MergeUnsyncedPileConfig = 16;
         TNegotiateUnsyncedConnection NegotiateUnsyncedConnection = 17;
         TAdvanceClusterStateGeneration AdvanceClusterStateGeneration = 18;
-        TSelfHealBadNodesListUpdate SelfHealBadNodesListUpdate = 19;
+        TSelfHealNodesStateUpdate SelfHealNodesStateUpdate = 19;
     }
 }
 

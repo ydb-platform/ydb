@@ -6,11 +6,13 @@ namespace NKikimr::NStorage {
 
     using TInvokeRequestHandlerActor = TDistributedConfigKeeper::TInvokeRequestHandlerActor;
 
-    void TInvokeRequestHandlerActor::GetRecommendedStateStorageConfig(NKikimrBlobStorage::TStateStorageConfig* currentConfig) {
+    bool TInvokeRequestHandlerActor::GetRecommendedStateStorageConfig(NKikimrBlobStorage::TStateStorageConfig* currentConfig) {
         const NKikimrBlobStorage::TStorageConfig &config = *Self->StorageConfig;
-        Self->GenerateStateStorageConfig(currentConfig->MutableStateStorageConfig(), config);
-        Self->GenerateStateStorageConfig(currentConfig->MutableStateStorageBoardConfig(), config);
-        Self->GenerateStateStorageConfig(currentConfig->MutableSchemeBoardConfig(), config);
+        bool result = true;
+        result &= Self->GenerateStateStorageConfig(currentConfig->MutableStateStorageConfig(), config);
+        result &= Self->GenerateStateStorageConfig(currentConfig->MutableStateStorageBoardConfig(), config);
+        result &= Self->GenerateStateStorageConfig(currentConfig->MutableSchemeBoardConfig(), config);
+        return result;
     }
 
     void TInvokeRequestHandlerActor::AdjustRingGroupActorIdOffsetInRecommendedStateStorageConfig(NKikimrBlobStorage::TStateStorageConfig* currentConfig) {
@@ -81,29 +83,35 @@ namespace NKikimr::NStorage {
         });
     }
 
-    void TInvokeRequestHandlerActor::SelfHealBadNodesListUpdate(const TQuery::TSelfHealBadNodesListUpdate& cmd) {
+    void TInvokeRequestHandlerActor::SelfHealNodesStateUpdate(const TQuery::TSelfHealNodesStateUpdate& cmd) {
         RunCommonChecks();
-        Self->SelfHealBadNodes.clear();
-        for(auto nodeId : cmd.GetBadNodes()) {
-            Self->SelfHealBadNodes.insert(nodeId);
+        Self->SelfHealNodesState.clear();
+        for(auto node : cmd.GetNodesState()) {
+            Self->SelfHealNodesState[node.GetNodeId()] = node.GetState();
         }
-        STLOG(PRI_DEBUG, BS_NODE, NW52, "SelfHealBadNodes: " << (Self->SelfHealBadNodes));
         if (cmd.GetEnableSelfHealStateStorage()) {
-            SelfHealStateStorage(cmd.GetWaitForConfigStep());
+            SelfHealStateStorage(cmd.GetWaitForConfigStep(), true);
         }
     }
 
-    void TInvokeRequestHandlerActor::SelfHealStateStorage(ui32 waitForConfigStep) {
+    void TInvokeRequestHandlerActor::SelfHealStateStorage(const TQuery::TSelfHealStateStorage& cmd) {
+        SelfHealStateStorage(cmd.GetWaitForConfigStep(), cmd.GetForceHeal());
+    }
+
+    void TInvokeRequestHandlerActor::SelfHealStateStorage(ui32 waitForConfigStep, bool forceHeal) {
         RunCommonChecks();
+        NKikimrBlobStorage::TStateStorageConfig targetConfig;
+        if (!GetRecommendedStateStorageConfig(&targetConfig) && !forceHeal) {
+            throw TExError() << " Recommended configuration has faulty nodes and can not be applyed";
+        }
+
+        NKikimrBlobStorage::TStateStorageConfig currentConfig;
+        GetCurrentStateStorageConfig(&currentConfig);
+
         if (Self->StateStorageSelfHealActor) {
             Self->Send(new IEventHandle(TEvents::TSystem::Poison, 0, Self->StateStorageSelfHealActor.value(), Self->SelfId(), nullptr, 0));
             Self->StateStorageSelfHealActor.reset();
         }
-        NKikimrBlobStorage::TStateStorageConfig currentConfig;
-        GetCurrentStateStorageConfig(&currentConfig);
-
-        NKikimrBlobStorage::TStateStorageConfig targetConfig;
-        GetRecommendedStateStorageConfig(&targetConfig);
 
         auto needReconfig = [&](auto name, auto clearFunc, auto ssMutableFunc, auto buildFunc) {
             auto copyCurrentConfig = currentConfig;
@@ -124,6 +132,7 @@ namespace NKikimr::NStorage {
                 (targetConfig.*clearFunc)();
                 return false;
             }
+
             return true;
         };
         #define NEED_RECONFIG(NAME) needReconfig(#NAME, &NKikimrBlobStorage::TStateStorageConfig::Clear##NAME##Config, &NKikimrBlobStorage::TStateStorageConfig::Mutable##NAME##Config, &NKikimr::Build##NAME##Info)
@@ -340,14 +349,3 @@ namespace NKikimr::NStorage {
     }
 
 } // NKikimr::NStorage
-
-Y_DECLARE_OUT_SPEC(inline, std::unordered_set<ui32>, o, x) {
-    o << '[';
-    for (auto it = x.begin(); it != x.end(); ++it) {
-        if (it != x.begin()) {
-            o << ',';
-        }
-        o << *it;
-    }
-    o << ']';
-}

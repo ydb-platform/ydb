@@ -118,12 +118,13 @@ namespace NKikimr::NStorage {
 
         void ReassignStateStorageNode(const TQuery::TReassignStateStorageNode& cmd);
         void ReconfigStateStorage(const NKikimrBlobStorage::TStateStorageConfig& cmd);
-        void SelfHealStateStorage(ui32 waitForConfigStep);
-        void SelfHealBadNodesListUpdate(const TQuery::TSelfHealBadNodesListUpdate& cmd);
+        void SelfHealStateStorage(const TQuery::TSelfHealStateStorage& cmd);
+        void SelfHealStateStorage(ui32 waitForConfigStep, bool forceHeal);
+        void SelfHealNodesStateUpdate(const TQuery::TSelfHealNodesStateUpdate& cmd);
         void GetStateStorageConfig(const TQuery::TGetStateStorageConfig& cmd);
 
         void GetCurrentStateStorageConfig(NKikimrBlobStorage::TStateStorageConfig* currentConfig);
-        void GetRecommendedStateStorageConfig(NKikimrBlobStorage::TStateStorageConfig* currentConfig);
+        bool GetRecommendedStateStorageConfig(NKikimrBlobStorage::TStateStorageConfig* currentConfig);
         void AdjustRingGroupActorIdOffsetInRecommendedStateStorageConfig(NKikimrBlobStorage::TStateStorageConfig* currentConfig);
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Storage configuration YAML manipulation

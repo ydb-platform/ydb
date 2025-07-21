@@ -109,21 +109,22 @@ private:
 }; // TPDiskInfo
 
 struct TNodeStatusComputer {
-    enum ENodeStatus {
+    enum ENodeState {
         GOOD = 0,
-        INACTIVE,
+        MAY_BE_GOOD,
+        MAY_BE_BAD,
         BAD
     };
 
-    ENodeStatus CurrentState = ENodeStatus::BAD;
-    ENodeStatus ActualState = ENodeStatus::BAD;
+    ENodeState CurrentState = ENodeState::GOOD;
+    ENodeState ActualState = ENodeState::GOOD;
     ui64 StateCounter = 0;
     ui32 BadStateLimit;
     ui32 GoodStateLimit;
 
-    bool GetCurrentState() const;
+    ui32 GetCurrentNodeState() const;
     bool Compute();
-    void AddState(ENodeStatus newState);
+    void AddState(ENodeState newState);
 };
 
 struct TNodeInfo : public TNodeStatusComputer {

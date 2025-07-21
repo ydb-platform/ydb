@@ -8029,10 +8029,7 @@ void TSchemeShard::Handle(TEvSchemeShard::TEvWakeupToRunDataErasureBSC::TPtr&, c
 
 void TSchemeShard::Handle(TEvPersQueue::TEvOffloadStatus::TPtr& ev, const TActorContext&) {
     auto tabletId = TTabletId(ev->Get()->Record.GetTabletId());
-    auto shardIdx = GetShardIdx(tabletId);
-    if (shardIdx == InvalidShardIdx) {
-        return;
-    }
+    auto shardIdx = MustGetShardIdx(tabletId);
 
     Y_ABORT_UNLESS(ShardInfos.contains(shardIdx));
     const auto& shardInfo = ShardInfos.at(shardIdx);

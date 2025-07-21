@@ -646,10 +646,11 @@ void TExecutor::PlanTransactionActivation() {
 
 void TExecutor::TryActivateWaitingTransaction(TIntrusivePtr<NPageCollection::TPagesWaitPad>&& waitPad) {
     Y_ENSURE(waitPad);
-    if (waitPad->RefCount() <= 2) { // one ref is here and one in TransactionWaitPads
-        ActivateWaitingTransaction(std::move(waitPad));
-    } else {
+    Y_ASSERT(waitPad->PendingRequests);
+    if (--waitPad->PendingRequests) {
         LogWaitingTransaction(std::move(waitPad));
+    } else {
+        ActivateWaitingTransaction(std::move(waitPad));
     }
 }
 
@@ -685,7 +686,7 @@ void TExecutor::LogWaitingTransaction(TIntrusivePtr<NPageCollection::TPagesWaitP
     if (auto it = TransactionWaitPads.find(waitPad.Get()); it != TransactionWaitPads.end()) {
         TSeat* seat = it->second->Seat;
         if (auto logl = Logger->Log(ELnLev::Debug)) {
-            logl << NFmt::Do(*this) << " " << NFmt::Do(*seat) << " still waiting " << waitPad->RefCount() - 2 << " requests";
+            logl << NFmt::Do(*this) << " " << NFmt::Do(*seat) << " still waiting " << waitPad->PendingRequests << " requests";
         }
     }
 }
@@ -2226,6 +2227,7 @@ void TExecutor::PostponeTransaction(TSeat* seat, TPageCollectionTxEnv &env,
         auto *req = new NPageCollection::TFetch(0, pageCollectionInfo->PageCollection, std::move(pages));
         req->TraceId = waitPad->GetWaitingTraceId();
         req->WaitPad = waitPad;
+        ++waitPad->PendingRequests;
 
         RequestFromSharedCache(req, NBlockIO::EPriority::Fast, ESharedCacheRequestType::Transaction);
     }

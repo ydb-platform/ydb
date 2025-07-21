@@ -9,7 +9,7 @@ namespace NKikimr {
 namespace NPageCollection {
 
     struct TPagesWaitPad : public TThrRefBase {
-        // no internal state
+        ui64 PendingRequests = 0;
     };
 
     struct TFetch {

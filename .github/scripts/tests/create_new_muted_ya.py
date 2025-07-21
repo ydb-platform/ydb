@@ -238,7 +238,7 @@ def sort_key_without_prefix(line):
     return line  # Для строк без префикса возвращаем как есть
 
 
-def create_debug_string(test, success_rate=None, period_days=None):
+def create_debug_string(test, success_rate=None, period_days=None, date_window=None):
     """Создает debug строку для теста"""
     if success_rate is None:
         success_rate = calculate_success_rate(test)
@@ -248,8 +248,15 @@ def create_debug_string(test, success_rate=None, period_days=None):
     runs = test.get('pass_count', 0) + test.get('fail_count', 0) + test.get('mute_count', 0) 
     
     debug_string = f"{testsuite} {testcase} # owner {test.get('owner', 'N/A')} success_rate {success_rate}%"
+    # Показываем оба периода: days и диапазон дат, если есть
+    if period_days is None:
+        period_days = test.get('period_days')
+    if date_window is None:
+        date_window = test.get('date_window')
     if period_days:
         debug_string += f" (last {period_days} days)"
+    if date_window:
+        debug_string += f" [{date_window}]"
     state = test.get('state', 'N/A')
     if test.get('is_test_chunk', 0):
         state = f"(chunk)"
@@ -331,8 +338,7 @@ def create_file_set(aggregated_for_mute, filter_func, mute_check=None, use_wildc
     for idx, test in enumerate(aggregated_for_mute, 1):
         testsuite = test.get('suite_folder')
         testcase = test.get('test_name')
-        if test.get('full_name') == 'ydb/core/kqp/ut/cost/KqpCost.VectorIndexLookup+useSink':
-            print(1)
+        
         if not testsuite or not testcase:
             continue
         
@@ -350,8 +356,11 @@ def create_file_set(aggregated_for_mute, filter_func, mute_check=None, use_wildc
             result_set.add(test_string)
             
             if resolution:
-                period_days = test.get('period_days')
-                debug_string = create_debug_string(test, resolution, period_days=period_days)
+                debug_string = create_debug_string(
+                    test,
+                    period_days=test.get('period_days'),
+                    date_window=test.get('date_window')
+                )
                 debug_list.append(debug_string)
     print()  # Перевод строки после прогресса
     return sorted(result_set), sorted(debug_list)
@@ -414,7 +423,11 @@ def apply_and_add_mutes(all_data, output_path, mute_check, aggregated_for_mute, 
                 wildcard_unmute_candidates.append(wildcard_pattern)
                 # Берем debug-строку первого chunk'а
                 if chunks:
-                    debug_string = create_debug_string(chunks[0], 'to_unmute', period_days=chunks[0].get('period_days'))
+                    debug_string = create_debug_string(
+                        chunks[0],
+                        period_days=chunks[0].get('period_days'),
+                        date_window=chunks[0].get('date_window')
+                    )
                     wildcard_unmute_debug.append(debug_string)
         
         # Объединяем обычные и wildcard кандидаты

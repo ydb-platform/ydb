@@ -186,7 +186,7 @@ NBoot::TSpawned TExecutorBootLogic::LoadPages(NBoot::IStep *step, TAutoPtr<NPage
         new NSharedCache::TEvRequest(
             NBlockIO::EPriority::Fast,
             req),
-        0, (ui64)EPageCollectionRequest::BootLogic);
+        0, (ui64)ESharedCacheRequestType::BootLogic);
 
     return NBoot::TSpawned(true);
 }
@@ -268,7 +268,7 @@ TExecutorBootLogic::EOpResult TExecutorBootLogic::Receive(::NActors::IEventHandl
             return OpResultBroken;
 
     } else if (auto *msg = ev.CastAsLocal<NSharedCache::TEvResult>()) {
-        if (EPageCollectionRequest(ev.Cookie) != EPageCollectionRequest::BootLogic)
+        if (ESharedCacheRequestType(ev.Cookie) != ESharedCacheRequestType::BootLogic)
             return OpResultUnhandled;
 
         auto it = Loads.find(msg->PageCollection.Get());

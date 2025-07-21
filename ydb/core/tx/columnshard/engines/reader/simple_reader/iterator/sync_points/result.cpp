@@ -6,7 +6,9 @@ namespace NKikimr::NOlap::NReader::NSimple {
 
 ISyncPoint::ESourceAction TSyncPointResult::OnSourceReady(const std::shared_ptr<NCommon::IDataSource>& source, TPlainReadData& reader) {
     if (Next) {
-        AFL_VERIFY(source->GetStageData().GetTable()->HasData() && !source->GetStageData().GetTable()->HasDataAndResultIsEmpty());
+        if (!source->GetStageData().GetTable()->HasData() || source->GetStageData().GetTable()->HasDataAndResultIsEmpty()) {
+            return ESourceAction::Finish;
+        }
         return ESourceAction::ProvideNext;
     } else {
         if (source->GetStageResult().IsEmpty()) {

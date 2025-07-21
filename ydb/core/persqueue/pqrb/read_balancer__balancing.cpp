@@ -352,13 +352,14 @@ void TPartitionFamily::AttachePartitions(const std::vector<ui32>& partitions, co
             return;
         }
 
+        Partitions.insert(Partitions.end(), newPartitions.begin(), newPartitions.end());
+        UpdatePartitionMapping(newPartitions);
+
         for (auto partitionId : newPartitions) {
             LockPartition(partitionId, ctx);
             WantedPartitions.erase(partitionId);
         }
-
-        Partitions.insert(Partitions.end(), newPartitions.begin(), newPartitions.end());
-        UpdatePartitionMapping(newPartitions);
+        LockedPartitions.insert(newPartitions.begin(), newPartitions.end());
     }
 
     // Removing sessions wich can't read the family now

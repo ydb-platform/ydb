@@ -1162,7 +1162,7 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
         ExecSQL(server, edgeActor, R"(BACKUP `MultiShardCollection` INCREMENTAL;)", false);
 
         // Wait for incremental backup to complete
-        SimulateSleep(server, TDuration::Seconds(1));
+        SimulateSleep(server, TDuration::Seconds(5));
 
         // Capture expected state
         auto expected = KqpSimpleExec(runtime, R"(

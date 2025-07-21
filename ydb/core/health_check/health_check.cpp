@@ -842,7 +842,20 @@ public:
         return UnknownStaticGroups.contains(groupId) || (!HaveAllBSControllerInfo() && IsStaticGroup(groupId));
     }
 
+    bool HaveStorageConfig() {
+        if (!NodeWardenStorageConfig->IsOk()) {
+            return false;
+        }
+        if (IsBridgeMode(TActivationContext::AsActorContext())) {
+            return (bool)(NodeWardenStorageConfig->Get()->BridgeInfo);
+        }
+        return true;
+    }
+
     void Handle(TEvNodeWardenStorageConfig::TPtr ev) {
+        if (HaveStorageConfig()) {
+            return;
+        }
         NodeWardenStorageConfig->Set(std::move(ev));
         const NKikimrBlobStorage::TStorageConfig& config = *NodeWardenStorageConfig->Get()->Config;
         if (config.GetSelfManagementConfig().GetEnabled() && config.GetGeneration() == 0) {
@@ -903,8 +916,9 @@ public:
                 }
             }
         }
-
-        RequestDone("TEvNodeWardenStorageConfig");
+        if (HaveStorageConfig()) {
+            RequestDone("TEvNodeWardenStorageConfig");
+        }
     }
 
     STATEFN(StateWait) {
@@ -1150,7 +1164,7 @@ public:
 
     [[nodiscard]] TRequestResponse<TEvNodeWardenStorageConfig> RequestStorageConfig() {
         TRequestResponse<TEvNodeWardenStorageConfig> response(Span.CreateChild(TComponentTracingLevels::TTablet::Detailed, TypeName<TEvNodeWardenQueryStorageConfig>()));
-        Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), new TEvNodeWardenQueryStorageConfig(false), 0/*flags*/, 0/*cookie*/, response.Span.GetTraceId());
+        Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), new TEvNodeWardenQueryStorageConfig(true), 0/*flags*/, 0/*cookie*/, response.Span.GetTraceId());
         ++Requests;
         return response;
     }
@@ -2080,11 +2094,20 @@ public:
         if (computeNodeIds->empty()) {
             context.ReportStatus(Ydb::Monitoring::StatusFlag::RED, "There are no compute nodes", ETags::ComputeState);
         } else {
+            std::vector<TString> activePiles = {""};
+            if (IsBridgeMode(TActivationContext::AsActorContext())) {
+                for (size_t i = 0; i < AppData()->BridgeConfig->PilesSize(); ++i) {
+                    const auto& pile = NodeWardenStorageConfig->Get()->BridgeInfo->Piles[i];
+                    if (pile.IsPrimary || pile.IsBeingPromoted) {
+                        activePiles.push_back(AppData()->BridgeConfig->GetPiles(i).GetName());
+                    }
+                }
+            }
             long maxTimeDifferenceUs = 0;
             for (TNodeId nodeId : *computeNodeIds) {
                 auto itNodeSystemState = MergedNodeSystemState.find(nodeId);
                 if (itNodeSystemState != MergedNodeSystemState.end()) {
-                    if (std::count(computeNodeIds->begin(), computeNodeIds->end(), itNodeSystemState->second->GetMaxClockSkewPeerId()) > 0
+                    if (std::count(activePiles.begin(), activePiles.end(), itNodeSystemState->second->GetBridgePileName()) > 0
                             && abs(itNodeSystemState->second->GetMaxClockSkewWithPeerUs()) > maxTimeDifferenceUs) {
                         maxTimeDifferenceUs = abs(itNodeSystemState->second->GetMaxClockSkewWithPeerUs());
                         databaseState.MaxTimeDifferenceNodeId = nodeId;

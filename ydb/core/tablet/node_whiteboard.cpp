@@ -3,6 +3,9 @@
 #include <util/system/info.h>
 #include <util/system/hostname.h>
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/base/bridge.h>
+#include <ydb/core/blobstorage/base/blobstorage_events.h>
+#include <ydb/core/protos/config.pb.h>
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
@@ -103,7 +106,6 @@ protected:
     ui64 SumNetworkWriteThroughput = 0;
     NKikimrWhiteboard::TSystemStateInfo SystemStateInfo;
     THolder<NTracing::ITraceCollection> TabletIntrospectionData;
-    TString BridgePileName;
 
     NMonitoring::TDynamicCounters::TCounterPtr MaxClockSkewWithPeerUsCounter;
     NMonitoring::TDynamicCounters::TCounterPtr MaxClockSkewPeerIdCounter;
@@ -599,7 +601,7 @@ protected:
         if (!IsBridgeMode(ctx)) {
             return true;
         }
-        return BridgePileName == info.GetPeerBridgePileName();
+        return SystemStateInfo.GetBridgePileName() == info.GetPeerBridgePileName();
     }
 
     void Handle(TEvWhiteboard::TEvNodeStateUpdate::TPtr &ev, const TActorContext &ctx) {
@@ -613,7 +615,7 @@ protected:
         } else {
             nodeStateInfo.ClearWriteThroughput();
         }
-        if (ShouldReportClockSkew(info, ctx)) {
+        if (ShouldReportClockSkew(ev->Get()->Record, ctx)) {
             i64 skew = ev->Get()->Record.GetClockSkewUs();
             if (abs(skew) > abs(MaxClockSkewWithPeerUs)) {
                 MaxClockSkewWithPeerUs = skew;
@@ -1271,11 +1273,11 @@ protected:
     }
 
     void Handle(TEvNodeWardenStorageConfig::TPtr &ev, const TActorContext &ctx) {
-        const auto& bridgeInfo = ev->Get()->BridgeInfo();
+        const auto& bridgeInfo = ev->Get()->BridgeInfo;
         if (bridgeInfo) {
             size_t bridgePileId = bridgeInfo->SelfNodePile->BridgePileId.GetRawId();
-            Y_ABORT_UNLESS(bridgePileId < ApData(ctx)->BridgeConfig->PilesSize());
-            BridgePileName = ApData(ctx)->BridgeConfig->GetPiles(bridgePileId);
+            Y_ABORT_UNLESS(bridgePileId < AppData(ctx)->BridgeConfig->PilesSize());
+            SystemStateInfo.SetBridgePileName(AppData(ctx)->BridgeConfig->GetPiles(bridgePileId).GetName());
         }
     }
 };

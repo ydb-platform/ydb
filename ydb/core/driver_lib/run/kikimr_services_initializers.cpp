@@ -679,6 +679,9 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
                         record.SetSessionState(NKikimrWhiteboard::TNodeStateInfo::CONNECTED);
                     }
                     record.SetSameScope(data.SameScope);
+                    if (data.PeerBridgePileName) {
+                        record.SetPeerBridgePileName(data.PeerBridgePileName);
+                    }
                     data.ActorSystem->Send(whiteboardId, update.release());
                 };
             }

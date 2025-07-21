@@ -1543,6 +1543,50 @@ TStatus AnnotateSequencer(const TExprNode::TPtr& node, TExprContext& ctx, const 
     return TStatus::Ok;
 }
 
+TStatus AnnotateKqpOlapPredicateClosure(const TExprNode::TPtr& node, TExprContext& ctx) {
+    if (!EnsureArgsCount(*node, 2, ctx)) {
+        return TStatus::Error;
+    }
+
+    auto* argsType = node->Child(TKqpOlapPredicateClosure::idx_ArgsType);
+
+    if (!EnsureType(*argsType, ctx)) {
+        return TStatus::Error;
+    }
+    auto argTypesTupleRaw = argsType->GetTypeAnn()->Cast<TTypeExprType>()->GetType();
+
+    if (!EnsureTupleType(node->Pos(), *argTypesTupleRaw, ctx)) {
+        return TStatus::Error;
+    }
+    auto argTypesTuple = argTypesTupleRaw->Cast<TTupleExprType>();
+
+    std::vector<const TTypeAnnotationNode*> argTypes;
+    argTypes.reserve(argTypesTuple->GetSize());
+
+    for (const auto& argTypeRaw : argTypesTuple->GetItems()) {
+        if (!EnsureStructType(node->Pos(), *argTypeRaw, ctx)) {
+            return TStatus::Error;
+        }
+        argTypes.push_back(argTypeRaw);
+    }
+
+    auto& lambda = node->ChildRef(TKqpOlapPredicateClosure::idx_Lambda);
+    if (!EnsureLambda(*lambda, ctx)) {
+        return TStatus::Error;
+    }
+
+    if (!UpdateLambdaAllArgumentsTypes(lambda, argTypes, ctx)) {
+        return TStatus::Error;
+    }
+
+    if (!lambda->GetTypeAnn()) {
+        return TStatus::Repeat;
+    }
+
+    node->SetTypeAnn(ctx.MakeType<TVoidExprType>());
+    return TStatus::Ok;
+}
+
 TStatus AnnotateKqpProgram(const TExprNode::TPtr& node, TExprContext& ctx) {
     if (!EnsureArgsCount(*node, 2, ctx)) {
         return TStatus::Error;
@@ -1986,6 +2030,10 @@ TAutoPtr<IGraphTransformer> CreateKqpTypeAnnotationTransformer(const TString& cl
 
             if (TKqpOlapNot::Match(input.Get())) {
                 return AnnotateOlapUnaryLogicOperator(input, ctx);
+            }
+
+            if (TKqpOlapPredicateClosure::Match(input.Get())) {
+                return AnnotateKqpOlapPredicateClosure(input, ctx);
             }
 
             if (TKqpOlapFilter::Match(input.Get())) {

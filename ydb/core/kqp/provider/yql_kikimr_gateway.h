@@ -850,6 +850,7 @@ struct TReplicationSettingsBase {
     TMaybe<TString> Database;
     TMaybe<TOAuthToken> OAuthToken;
     TMaybe<TStaticCredentials> StaticCredentials;
+    TMaybe<TString> CaCert;
     TMaybe<TStateDone> StateDone;
     bool StatePaused = false;
     bool StateStandBy = false;

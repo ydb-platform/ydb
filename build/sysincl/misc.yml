@@ -87,11 +87,6 @@
     - inet_ntop.h:   contrib/libs/curl/lib/inet_ntop.h
     - share.h:       contrib/libs/curl/lib/share.h
 
-- source_filter: "^contrib/libs/zeromq"
-  includes:
-    - atomic.h:      contrib/libs/zeromq/missing_includes/atomic.h
-    - Mstcpip.h:     contrib/libs/zeromq/missing_includes/Mstcpip.h
-
 - source_filter: "^contrib/restricted/openal-soft"
   includes:
     - atomic.h: contrib/restricted/openal-soft/common/atomic.h

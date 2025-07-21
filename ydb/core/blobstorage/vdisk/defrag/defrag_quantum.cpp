@@ -59,6 +59,7 @@ namespace NKikimr {
 
         void RunImpl() {
             TEvDefragQuantumResult::TStat stat{.Eof = true};
+            ui32 maxChunksToDefrag = DCtx->VCfg->MaxChunksToDefragInflight;
 
             if (!ChunksToDefrag) {
                 STLOG(PRI_DEBUG, BS_VDISK_DEFRAG, BSVDD07, DCtx->VCtx->VDiskLogPrefix << "going to find chunks to defrag",
@@ -75,7 +76,7 @@ namespace NKikimr {
                     }
                     Yield();
                 }
-                ChunksToDefrag.emplace(findChunks.GetChunksToDefrag(DCtx->MaxChunksToDefrag));
+                ChunksToDefrag.emplace(findChunks.GetChunksToDefrag(maxChunksToDefrag));
             }
             if (*ChunksToDefrag || ChunksToDefrag->IsShred) {
                 const bool isShred = ChunksToDefrag->IsShred;
@@ -87,7 +88,7 @@ namespace NKikimr {
                         << "commencing defragmentation", (ActorId, SelfActorId), (ChunksToDefrag, *ChunksToDefrag));
 
                     stat.FoundChunksToDefrag = ChunksToDefrag->FoundChunksToDefrag;
-                    stat.Eof = stat.FoundChunksToDefrag < DCtx->MaxChunksToDefrag;
+                    stat.Eof = stat.FoundChunksToDefrag < maxChunksToDefrag;
                     stat.FreedChunks = ChunksToDefrag->Chunks;
 
                     lockedChunks = LockChunks(*ChunksToDefrag);
@@ -134,8 +135,8 @@ namespace NKikimr {
 
                     const size_t numRecordsTotal = records.size();
 
-                    if (isShred && chunks.size() > DCtx->MaxChunksToDefrag) {
-                        chunks.resize(DCtx->MaxChunksToDefrag);
+                    if (isShred && chunks.size() > maxChunksToDefrag) {
+                        chunks.resize(maxChunksToDefrag);
                         THashSet<TChunkIdx> set;
                         for (const auto& [chunkIdx, usage] : chunks) {
                             set.insert(chunkIdx);

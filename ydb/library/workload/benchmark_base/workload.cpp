@@ -166,7 +166,7 @@ TVector<std::string> TWorkloadGeneratorBase::GetCleanPaths() const {
     const auto json = GetTablesJson();
     TVector<std::string> result;
     for (const auto& table: json["tables"].GetArray()) {
-        result.emplace_back(Params.GetPath() + "/" + table["name"].GetString());
+        result.emplace_back((Params.GetPath() ?  Params.GetPath() + "/" : "") + table["name"].GetString());
     }
     if (json.Has("table")) {
         result.emplace_back(Params.GetPath() ? Params.GetPath() : json["table"]["name"].GetString());

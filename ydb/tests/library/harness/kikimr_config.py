@@ -437,10 +437,10 @@ class KikimrConfigGenerator(object):
         if memory_controller_config:
             self.yaml_config["memory_controller_config"] = memory_controller_config
 
-        if os.getenv("YDB_HARD_MEMORY_LIMIT_BYTES"):
-            if "memory_controller_config" not in self.yaml_config:
-                self.yaml_config["memory_controller_config"] = {}
-            self.yaml_config["memory_controller_config"]["hard_limit_bytes"] = int(os.getenv("YDB_HARD_MEMORY_LIMIT_BYTES"))
+        # if os.getenv("YDB_HARD_MEMORY_LIMIT_BYTES"):
+        #     if "memory_controller_config" not in self.yaml_config:
+        #         self.yaml_config["memory_controller_config"] = {}
+        #     self.yaml_config["memory_controller_config"]["hard_limit_bytes"] = int(os.getenv("YDB_HARD_MEMORY_LIMIT_BYTES"))
 
         if os.getenv("YDB_CHANNEL_BUFFER_SIZE"):
             self.yaml_config["table_service_config"]["resource_manager"]["channel_buffer_size"] = int(os.getenv("YDB_CHANNEL_BUFFER_SIZE"))

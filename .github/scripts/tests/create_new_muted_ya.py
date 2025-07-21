@@ -604,7 +604,7 @@ def create_mute_issues(all_tests, file_path, close_issues=True):
                             'full_name': test.get('full_name'),
                             'success_rate': test.get('success_rate'),
                             'days_in_state': test.get('days_in_state'),
-                            'date_window': (base_date + datetime.timedelta(days=test.get('date_window'))).date(),
+                            'date_window': test.get('date_window', 'N/A'),
                             'owner': test.get('owner'),
                             'state': test.get('state'),
                             'summary': test.get('summary'),
@@ -670,9 +670,6 @@ def create_mute_issues(all_tests, file_path, close_issues=True):
             formatted_results.append(f"⚠️ **Partially unmuted** {issue['url']}")
             formatted_results.append("   📝 **Unmuted tests:**")
             for test in issue['unmuted_tests']:
-                formatted_results.append(f"   • `{test}`")
-            formatted_results.append("   🔒 **Still muted tests:**")
-            for test in issue['still_muted_tests']:
                 formatted_results.append(f"   • `{test}`")
             formatted_results.append("")
     
@@ -786,7 +783,7 @@ if __name__ == "__main__":
         help='create issues by muted_ya like files',
     )
     create_issues_parser.add_argument(
-        '--file_path', default=f'{repo_path}/mute_update/to_delete.txt', required=False, help='file path'
+        '--file_path', default=f'{repo_path}/mute_update/to_mute.txt', required=False, help='file path'
     )
     create_issues_parser.add_argument('--branch', default='main', help='Branch to get history')
     create_issues_parser.add_argument('--close_issues', action='store_true', default=True, help='Close issues when all tests are unmuted (default: True)')

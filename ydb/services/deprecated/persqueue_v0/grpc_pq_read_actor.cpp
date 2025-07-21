@@ -1125,14 +1125,22 @@ void TReadSessionActor::Handle(TEvPersQueue::TEvLockPartition::TPtr& ev, const T
     ctx.Send(actorId, new TEvPQProxy::TEvLockPartition(0, 0, false, !ClientsideLocksAllowed));
 }
 
-void TReadSessionActor::Handle(TEvPQProxy::TEvPartitionStatus::TPtr& ev, const TActorContext&) {
+void TReadSessionActor::Handle(TEvPQProxy::TEvPartitionStatus::TPtr& ev, const TActorContext& ctx) {
     if (!ActualPartitionActor(ev->Sender))
         return;
 
     auto& evTopic = ev->Get()->Topic;
     auto it = Partitions.find(std::make_pair(evTopic->GetClientsideName(), ev->Get()->Partition));
     Y_ABORT_UNLESS(it != Partitions.end());
-    Y_ABORT_UNLESS(it->second.LockGeneration);
+    if (!it->second.LockGeneration) {
+        LOG_ALERT_S(ctx, NKikimrServices::PQ_READ_PROXY,
+            PQ_LOG_PREFIX << " the unlocked partition " << ev->Get()->Partition << " status has been requested");
+        CloseSession(
+                TStringBuilder() << "Internal server error, the unlocked partition " << ev->Get()->Partition << " status has been requested",
+                NPersQueue::NErrorCode::ERROR, ctx
+        );
+        return;
+    }
 
     if (it->second.Releasing) //lock request for already released partition - ignore
         return;

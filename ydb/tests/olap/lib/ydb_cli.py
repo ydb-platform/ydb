@@ -98,7 +98,6 @@ class YdbCliHelper:
             result = self._stats.get(test, {})
             result.update({
                 'with_warnings': bool(self.warnings) or bool(self.warning_message),
-                'with_warrnings': bool(self.warnings) or bool(self.warning_message),
                 'with_errors': bool(self.errors) or bool(self.error_message),
                 'errors': self.get_error_stats()
             })

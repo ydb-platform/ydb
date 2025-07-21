@@ -98,7 +98,7 @@ public:
 
     TString ToString(const ValueType& value) const {
         if constexpr (IsCType) {
-            return ToString(value);
+            return ::ToString(value);
         }
         if constexpr (IsStringView) {
             return TString(value.data(), value.size());

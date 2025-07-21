@@ -118,7 +118,7 @@ namespace NKikimr::NStorage {
 
         void ReassignStateStorageNode(const TQuery::TReassignStateStorageNode& cmd);
         void ReconfigStateStorage(const NKikimrBlobStorage::TStateStorageConfig& cmd);
-        void SelfHealStateStorage(bool waitForConfigStep);
+        void SelfHealStateStorage(ui32 waitForConfigStep);
         void SelfHealBadNodesListUpdate(const TQuery::TSelfHealBadNodesListUpdate& cmd);
         void GetStateStorageConfig(const TQuery::TGetStateStorageConfig& cmd);
 

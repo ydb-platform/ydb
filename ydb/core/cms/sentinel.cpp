@@ -785,7 +785,7 @@ class TStateUpdater: public TUpdaterBase<TEvSentinel::TEvStateUpdated, TStateUpd
 
             MarkNodePDisks(nodeId, NKikimrBlobStorage::TPDiskState::Missing, true);
         }
-        
+
         MaybeReply();
     }
 
@@ -1134,7 +1134,7 @@ class TSentinel: public TActorBootstrapped<TSentinel> {
     void SendDistconfRequest() {
         auto request = std::make_unique<NKikimr::NStorage::TEvNodeConfigInvokeOnRoot>();
         auto *updateRequest = request->Record.MutableSelfHealBadNodesListUpdate();
-        updateRequest->SetWaitForConfigStep(Config.StateStorageSelfHealWaitForConfigStep);
+        updateRequest->SetWaitForConfigStep(Config.StateStorageSelfHealWaitForConfigStep.GetValue() / 1000000); // milliseconds -> seconds
         updateRequest->SetEnableSelfHealStateStorage(Config.EnableSelfHealStateStorage);
         bool needSelfHeal = false;
         for (auto &[nodeId, node] : SentinelState->Nodes) {
@@ -1143,10 +1143,14 @@ class TSentinel: public TActorBootstrapped<TSentinel> {
                 updateRequest->AddBadNodes(nodeId);
             }
         }
-        if (needSelfHeal) {
+        if (!needSelfHeal && SentinelState->NeedSelfHealStateStorage
+            && (Now() - SentinelState->LastStateStorageSelfHeal > Config.StateStorageSelfHealRelaxTime)) {
+            SentinelState->NeedSelfHealStateStorage = false;
             LOG_D("Sending self heal request");
+            SentinelState->LastStateStorageSelfHeal = Now();
             Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), request.release());
         }
+        SentinelState->NeedSelfHealStateStorage = needSelfHeal;
     }
 
     void SendBSCRequests() {

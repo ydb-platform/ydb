@@ -158,6 +158,8 @@ struct TSentinelState: public TSimpleRefCount<TSentinelState> {
     TMap<TPDiskID, TPDiskInfo::TPtr> ChangeRequests;
     ui32 StatusChangeAttempt = 0;
     ui32 ChangeRequestId = 0;
+    bool NeedSelfHealStateStorage = false;
+    TInstant LastStateStorageSelfHeal = TInstant::Zero();
 };
 
 class TClusterMap {

@@ -93,7 +93,7 @@ namespace NKikimr::NStorage {
         }
     }
 
-    void TInvokeRequestHandlerActor::SelfHealStateStorage(bool waitForConfigStep) {
+    void TInvokeRequestHandlerActor::SelfHealStateStorage(ui32 waitForConfigStep) {
         RunCommonChecks();
         if (Self->StateStorageSelfHealActor) {
             Self->Send(new IEventHandle(TEvents::TSystem::Poison, 0, Self->StateStorageSelfHealActor.value(), Self->SelfId(), nullptr, 0));
@@ -105,7 +105,7 @@ namespace NKikimr::NStorage {
         NKikimrBlobStorage::TStateStorageConfig targetConfig;
         GetRecommendedStateStorageConfig(&targetConfig);
 
-        auto needReconfig = [&](auto clearFunc, auto ssMutableFunc, auto buildFunc) {
+        auto needReconfig = [&](auto name, auto clearFunc, auto ssMutableFunc, auto buildFunc) {
             auto copyCurrentConfig = currentConfig;
             auto ss = *(copyCurrentConfig.*ssMutableFunc)();
             if (ss.RingGroupsSize() == 0) {
@@ -119,14 +119,14 @@ namespace NKikimr::NStorage {
             TIntrusivePtr<TStateStorageInfo> oldSSInfo;
             oldSSInfo = (*buildFunc)(ss);
             newSSInfo = (*buildFunc)(*(targetConfig.*ssMutableFunc)());
-            STLOG(PRI_DEBUG, BS_NODE, NW52, "needReconfig " << (oldSSInfo->RingGroups != newSSInfo->RingGroups));
+            STLOG(PRI_DEBUG, BS_NODE, NW52, "Need to reconfig " << name << " " << (oldSSInfo->RingGroups != newSSInfo->RingGroups));
             if (oldSSInfo->RingGroups == newSSInfo->RingGroups) {
                 (targetConfig.*clearFunc)();
                 return false;
             }
             return true;
         };
-        #define NEED_RECONFIG(NAME) needReconfig(&NKikimrBlobStorage::TStateStorageConfig::Clear##NAME##Config, &NKikimrBlobStorage::TStateStorageConfig::Mutable##NAME##Config, &NKikimr::Build##NAME##Info)
+        #define NEED_RECONFIG(NAME) needReconfig(#NAME, &NKikimrBlobStorage::TStateStorageConfig::Clear##NAME##Config, &NKikimrBlobStorage::TStateStorageConfig::Mutable##NAME##Config, &NKikimr::Build##NAME##Info)
         auto needReconfigSS = NEED_RECONFIG(StateStorage);
         auto needReconfigSSB = NEED_RECONFIG(StateStorageBoard);
         auto needReconfigSB = NEED_RECONFIG(SchemeBoard);

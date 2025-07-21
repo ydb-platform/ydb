@@ -77,7 +77,7 @@ Run the load:
 {{ ydb-cli }} workload tpcc --path tpcc/10wh run
 ```
 
-During the test, the benchmark displays a preview of the results and various load statistics.
+During the benchmark, the CLI displays a preview of the results and various load statistics.
 
 See the command description:
 

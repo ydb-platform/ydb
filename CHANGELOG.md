@@ -35,7 +35,6 @@ and timeout (by default, the maximum response time from healthcheck). Documentat
 * 20238:Fixed an [issue](https://github.com/ydb-platform/ydb/issues/20199) caused by column shards can return different amount of data for the same queries, fixind race in CPU limiter. [#20238](https://github.com/ydb-platform/ydb/pull/20238) ([Pisarenko Grigoriy](https://github.com/GrigoriyPA))
 * 20217:Fixed an [issue](https://github.com/ydb-platform/ydb/issues/18604). Now the force availability mode ignores the limits of offline nodes. ([Ilia Shakhov](https://github.com/pixcc))
 * 20157:Fixed use after free in CPU scheduler, fixed verify fail in CS CPU limiter: https://github.com/ydb-platform/ydb/issues/20116 [#20157](https://github.com/ydb-platform/ydb/pull/20157) ([Pisarenko Grigoriy](https://github.com/GrigoriyPA))
-* 20138:Issue: https://github.com/ydb-platform/ydb/issues/20139 [#20138](https://github.com/ydb-platform/ydb/pull/20138) ([Semyon Danilov](https://github.com/SammyVimes))
 * 20084:Fixed an issue where committing message offsets when reading a topic might result in the following error: "Unable to navigate:path: 'Root/logbroker-federation/--cut--/stable/guidance' status: PathErrorUnknown". [#20084](https://github.com/ydb-platform/ydb/pull/20084) ([Nikolay Shestakov](https://github.com/nshestakov))
 
 ### Performance

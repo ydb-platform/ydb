@@ -275,13 +275,16 @@ void TKafkaOffsetFetchActor::Handle(TEvKafka::TEvCommitedOffsetsResponse::TPtr& 
                             alteredTopicInfo.Entities.Consumers->insert(*consumerGroup.GroupId);
                             alteredTopicInfo.Entities.Partitions->insert(topicPartition.PartitionIndex);
                             AlterTopicInf[AlterTopicCookie] = alteredTopicInfo;
-                            auto callback = [replyTo = SelfId(), cookie = AlterTopicCookie, path = groupTopic.Name, this](Ydb::StatusIds::StatusCode statusCode, const google::protobuf::Message*) {
+                            auto callback = [replyTo = SelfId(), cookie = AlterTopicCookie, path = groupTopic.Name, this]
+                                (Ydb::StatusIds::StatusCode statusCode, const google::protobuf::Message*) {
                                 NYdb::NIssue::TIssues issues;
                                 NYdb::TStatus status(static_cast<NYdb::EStatus>(statusCode), std::move(issues));
                                 Send(replyTo, new NKikimr::NReplication::TEvYdbProxy::TEvAlterTopicResponse(std::move(status)), 0, cookie);
                             };
                             NKikimr::NReplication::TLocalProxyActor* actor = new NKikimr::NReplication::TLocalProxyActor(DatabasePath);
-                            NKikimr::NGRpcService::DoAlterTopicRequest(std::make_unique<NKikimr::NReplication::TLocalProxyRequest>(*groupTopic.Name, DatabasePath, std::move(request), callback), *actor);
+                            NKikimr::NGRpcService::DoAlterTopicRequest(std::make_unique<NKikimr::NReplication::TLocalProxyRequest>(
+                                *groupTopic.Name, DatabasePath, std::move(request), callback),
+                                *actor);
                             break;
                         } else if (topicPartition.ErrorCode == EKafkaErrors::UNKNOWN_TOPIC_OR_PARTITION) {
                             // topic does not exist case

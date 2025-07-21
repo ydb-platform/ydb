@@ -123,7 +123,7 @@ class TestCompatibility(RestartToAnotherVersionFixture):
             "tpch",
             "import",
             "generator",
-            "--scale=1",
+            "--scale=0.1",
         ]
         run_command = [
             yatest.common.binary_path(os.getenv("YDB_CLI_BINARY")),
@@ -136,9 +136,7 @@ class TestCompatibility(RestartToAnotherVersionFixture):
             "-p",
             "tpch",
             "run",
-            "--scale=1",
-            "--exclude",
-            "17",  # not working for row tables
+            "--scale=0.1",
             "--check-canonical",
             "--retries",
             "5",  # in row tables we have to retry query by design

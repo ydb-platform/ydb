@@ -1202,3 +1202,56 @@ class TestPqRowDispatcher(TestYdsBase):
         assert "Failed to parse json message for offset" not in issues, "Incorrect Issues: " + issues
 
         assert received == expected
+
+    @yq_v1
+    def test_huge_splitted(self, kikimr, client):
+        client.create_yds_connection(
+            YDS_CONNECTION, os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"), shared_reading=True
+        )
+        self.init_topics("test_huge_splitted")
+
+        sql = Rf'''
+            $data = SELECT * FROM {YDS_CONNECTION}.`{self.input_topic}`
+                WITH (format=json_each_row, SCHEMA (time UInt64 NOT NULL, sql String NOT NULL, event String NOT NULL))
+                WHERE event = "event1" or event = "event2";
+
+            $data = SELECT time, LENGTH(sql) AS len FROM $data;
+
+            INSERT INTO {YDS_CONNECTION}.`{self.output_topic}`
+            SELECT ToBytes(Unwrap(Json::SerializeJson(Yson::From(TableRow())))) FROM $data;
+                '''
+
+        query_id = start_yds_query(kikimr, client, sql)
+        wait_actor_count(kikimr, "FQ_ROW_DISPATCHER_SESSION", 1)
+
+        large_string = "abcdefghjkl1234567890" * 10
+        huge_string = large_string*(1000*1000//len(large_string) + 2)
+        assert len(huge_string) > 1000*1000
+
+        split_point = 500*1000
+        data = [
+            f'{{"time": 101, "sql":"{large_string}", "event": "event1"}}{{"time": 102, "event": "event2", "sql":"{huge_string[:split_point]}',
+            f'{huge_string[split_point:]}"}}',
+            f'{{"time": 103, "sql":"{large_string}", "event": "event3"}}',
+            f'{{"time": 105, "sql":"{large_string}", "event": "event1"}}'
+        ]
+
+        self.write_stream(data)
+        expected = [
+            f'{{"len":{len(large_string)},"time":101}}',
+            f'{{"len":{len(huge_string)},"time":102}}',
+            f'{{"len":{len(large_string)},"time":105}}',
+        ]
+        # TODO: normalize json and tolerate order mismatch
+
+        received = self.read_stream(len(expected), topic_path=self.output_topic)
+
+        # wait_actor_count(kikimr, "DQ_PQ_READ_ACTOR", 1)
+        stop_yds_query(client, query_id)
+
+        issues = str(client.describe_query(query_id).result.query.transient_issue)
+        assert "Row dispatcher will use the predicate:" in issues, "Incorrect Issues: " + issues
+        issues = str(client.describe_query(query_id).result.query.issue)
+        assert "Failed to parse json message for offset" not in issues, "Incorrect Issues: " + issues
+
+        assert received == expected

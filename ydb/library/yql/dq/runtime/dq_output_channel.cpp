@@ -226,7 +226,7 @@ public:
     }
 
     void Push(NDqProto::TWatermark&& watermark) override {
-        YQL_ENSURE(!Watermark);
+        YQL_ENSURE(!Watermark || Watermark->GetTimestampUs() <= watermark.GetTimestampUs());
         Watermark.ConstructInPlace(std::move(watermark));
     }
 

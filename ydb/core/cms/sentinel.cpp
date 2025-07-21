@@ -56,6 +56,12 @@ bool TNodeStatusComputer::Compute() {
         ActualState = CurrentState;
         return true;
     }
+    if (ActualState != ENodeStatus::INACTIVE
+        && ((CurrentState == ENodeStatus::BAD && StateCounter < BadStateLimit)
+        || (CurrentState == ENodeStatus::GOOD && StateCounter < GoodStateLimit))) {
+        ActualState = ENodeStatus::INACTIVE;
+        return true;
+    }
     return false;
 }
 
@@ -1136,21 +1142,22 @@ class TSentinel: public TActorBootstrapped<TSentinel> {
         auto *updateRequest = request->Record.MutableSelfHealBadNodesListUpdate();
         updateRequest->SetWaitForConfigStep(Config.StateStorageSelfHealWaitForConfigStep.GetValue() / 1000000); // milliseconds -> seconds
         updateRequest->SetEnableSelfHealStateStorage(Config.EnableSelfHealStateStorage);
-        bool needSelfHeal = false;
         for (auto &[nodeId, node] : SentinelState->Nodes) {
-            needSelfHeal |= node.Compute();
+            SentinelState->NeedSelfHealStateStorage |= node.Compute();
             if (!node.GetCurrentState()) {
                 updateRequest->AddBadNodes(nodeId);
             }
         }
-        if (!needSelfHeal && SentinelState->NeedSelfHealStateStorage
+        if (SentinelState->LastStateStorageSelfHeal == TInstant::Zero()) {
+            SentinelState->LastStateStorageSelfHeal = Now();
+        }
+        if (SentinelState->NeedSelfHealStateStorage
             && (Now() - SentinelState->LastStateStorageSelfHeal > Config.StateStorageSelfHealRelaxTime)) {
             SentinelState->NeedSelfHealStateStorage = false;
             LOG_D("Sending self heal request");
             SentinelState->LastStateStorageSelfHeal = Now();
             Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), request.release());
         }
-        SentinelState->NeedSelfHealStateStorage = needSelfHeal;
     }
 
     void SendBSCRequests() {

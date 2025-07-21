@@ -473,7 +473,7 @@ message TCmsConfig {
         optional uint32 NodeGoodStateLimit = 20 [default = 10];
         optional uint32 NodeBadStateLimit = 21 [default = 10];
         optional uint32 StateStorageSelfHealWaitForConfigStep = 22 [default = 60000000];
-        optional uint32 StateStorageSelfHealRelaxTime = 23 [default = 3600000000];
+        optional uint32 StateStorageSelfHealRelaxTime = 23 [default = 600000000];
     }
 
     message TLogConfig {

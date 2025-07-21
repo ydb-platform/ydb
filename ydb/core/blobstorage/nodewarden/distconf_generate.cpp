@@ -573,9 +573,7 @@ namespace NKikimr::NStorage {
         std::map<std::optional<TBridgePileId>, THashMap<TString, std::vector<std::tuple<ui32, TNodeLocation>>>> nodes;
 
         for (const auto& node : baseConfig.GetAllNodes()) {
-            if (SelfHealBadNodes.contains(node.GetNodeId())) {
-                continue;
-            }
+
             std::optional<TBridgePileId> pileId = node.HasBridgePileId()
                 ? std::make_optional(TBridgePileId::FromProto(&node, &NKikimrBlobStorage::TNodeIdentifier::GetBridgePileId))
                 : std::nullopt;
@@ -584,13 +582,27 @@ namespace NKikimr::NStorage {
             nodes[pileId][location.GetDataCenterId()].emplace_back(node.GetNodeId(), location);
         }
 
-        auto pickNodes = [](std::vector<std::tuple<ui32, TNodeLocation>>& nodes, size_t ringsCount, size_t nodesInRing) {
+        auto pickNodes = [&](std::vector<std::tuple<ui32, TNodeLocation>>& nodes, size_t ringsCount, size_t nodesInRing) {
             Y_ABORT_UNLESS(ringsCount * nodesInRing <= nodes.size());
             auto comp = [](const auto& x, const auto& y) { return std::get<1>(x).GetRackId() < std::get<1>(y).GetRackId(); };
             std::ranges::sort(nodes, comp);
             std::vector<std::vector<ui32>> result;
             result.resize(ringsCount);
             THashSet<ui32> disabled;
+            ui32 badNodesCnt = 0;
+            for (auto &[nodeId, _] : nodes) {
+                if(SelfHealBadNodes.contains(nodeId)) {
+                    badNodesCnt++;
+                }
+            }
+            STLOG(PRI_DEBUG, BS_NODE, NWDC33, "GenerateStateStorageConfig", (SelfHealBadNodes, SelfHealBadNodes), (nodes, nodes.size()), (ringsCount, ringsCount), (nodesInRing, nodesInRing));
+
+            if (badNodesCnt < nodes.size() / 2 && nodes.size() - badNodesCnt >= ringsCount * nodesInRing) {
+                for (ui32 badNode : SelfHealBadNodes) {
+                    disabled.insert(badNode);
+                }
+            }
+
             auto iter = nodes.begin();
             TNodeLocation location;
             for(ui32 i : xrange(ringsCount)) {

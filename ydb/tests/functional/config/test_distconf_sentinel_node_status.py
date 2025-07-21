@@ -6,7 +6,6 @@ import time
 import yaml
 
 from ydb.tests.library.common.types import Erasure
-import ydb.tests.library.common.cms as cms
 from ydb.tests.library.clients.kikimr_config_client import ConfigClient
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
@@ -50,10 +49,11 @@ class KiKiMRDistConfNodeStatusTest(object):
     }
     cms_config = {"sentinel_config": {
         "enable_self_heal_state_storage": True,
-        "node_good_state_limit": 2,
-        "node_bad_state_limit": 2,
+        "node_good_state_limit": 3,
+        "node_bad_state_limit": 3,
         "state_storage_self_heal_wait_for_config_step": 1000000,
         "default_state_limit": 2,
+        "state_storage_self_heal_relax_time": 10000000,
         "update_config_interval": 2000000,
         "update_state_interval": 2000000,
         "update_state_timeout": 1000000,
@@ -94,7 +94,7 @@ class KiKiMRDistConfNodeStatusTest(object):
         config_section = dumped_fetched_config["config"]
 
         config_section["cms_config"] = self.cms_config
-
+        logger.debug(f"Nodes list: {config_section["hosts"]}")
         replace_config_response = self.config_client.replace_config(yaml.dump(dumped_fetched_config))
         logger.debug(f"replace_config_response: {replace_config_response}")
         assert_that(replace_config_response.operation.status == StatusIds.SUCCESS)
@@ -129,14 +129,27 @@ class KiKiMRDistConfNodeStatusTest(object):
     def test_state_storage(self):
         self.do_test("StateStorage")
 
-    # def test_state_storage_board(self):
-    #     self.do_test("StateStorageBoard")
-
-    # def test_scheme_board(self):
-    #     self.do_test("SchemeBoard")
-
 
 class TestKiKiMRDistConfSelfHealNodeDisconnected(KiKiMRDistConfNodeStatusTest):
+    erasure = Erasure.MIRROR_3_DC
+    nodes_count = 12
+
+    def do_test(self, configName):
+        self.replace_config()
+        self.cluster.nodes[3].stop()
+        rg = get_ring_group(self.do_request_config(), configName)
+        assert_eq(rg["NToSelect"], 9)
+        assert_eq(len(rg["Ring"]), 9)
+        self.validateContainsNodes(rg, [3])
+        time.sleep(25)
+        rg2 = get_ring_group(self.do_request_config(), configName)
+        assert_eq(rg["NToSelect"], 9)
+        assert_eq(len(rg["Ring"]), 9)
+        self.validateNotContainsNodes(rg2, [3])
+        assert_that(rg != rg2)
+
+
+class TestKiKiMRDistConfSelfHeal2NodesDisconnected(KiKiMRDistConfNodeStatusTest):
     erasure = Erasure.MIRROR_3_DC
     nodes_count = 12
 

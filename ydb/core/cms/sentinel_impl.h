@@ -111,11 +111,12 @@ private:
 struct TNodeStatusComputer {
     enum ENodeStatus {
         GOOD = 0,
+        INACTIVE,
         BAD
     };
 
-    ENodeStatus CurrentState = ENodeStatus::GOOD;
-    ENodeStatus ActualState = ENodeStatus::GOOD;
+    ENodeStatus CurrentState = ENodeStatus::BAD;
+    ENodeStatus ActualState = ENodeStatus::BAD;
     ui64 StateCounter = 0;
     ui32 BadStateLimit;
     ui32 GoodStateLimit;

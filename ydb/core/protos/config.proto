@@ -1564,7 +1564,7 @@ message TImmediateControlsConfig {
             MinValue: 1,
             MaxValue: 1000,
             DefaultValue: 10 }];
-        
+
         optional uint64 HullCompMaxInFlightWrites = 31 [(ControlOptions) = {
             Description: "Max writes inflight for level compaction",
             MinValue: 1,
@@ -1576,7 +1576,7 @@ message TImmediateControlsConfig {
             MinValue: 1,
             MaxValue: 1000,
             DefaultValue: 20 }];
-            
+
         optional uint64 EnableDeepScrubbing = 33 [(ControlOptions) = {
             Description: "Run CheckIntegrity requests during Scrub process instead of usual scrubbing",
             MinValue: 0,
@@ -1779,9 +1779,25 @@ message TAuditConfig {
         optional string LogJsonEnvelope = 3; // Json template with text field containing %message% placeholder. For example {"my_enveloped_message": "%message%"}. %message% will be replaced with real audit log message
     }
 
+    message TApiAuditSettings {
+        enum EApiType {
+            UNSPECIFIED = 0;
+            HTTP = 1; // HTTP API
+            GRPC = 2; // gRPC API
+        }
+
+        optional EApiType ApiType = 1;
+
+        optional bool EnableModifyingMethodsAudit = 2; // Write modifying API calls to audit logs:
+                                                       // - from cluster API that modifies cluster state;
+                                                       // - from database API that modifies database state and is performed by a user account or
+                                                       //     a service account that contains a user account in its impersonation chain.
+    }
+
     optional TStderrBackend StderrBackend = 1;
     optional TFileBackend FileBackend = 2;
     optional TUnifiedAgentBackend UnifiedAgentBackend = 3;
+    repeated TApiAuditSettings ApiAuditSettings = 4;
 };
 
 message THiveTabletLimit {

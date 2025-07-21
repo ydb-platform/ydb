@@ -186,7 +186,7 @@ namespace NKikimr::NStorage {
             , MaxSyncLogChunksInFlightSSD(10, 1, 1024)
             , DefaultHugeGarbagePerMille(300, 1, 1000)
             , HugeDefragFreeSpaceBorderPerMille(260, 1, 1000)
-            , MaxChunksToDefragInflight(10, 1, 50)
+            , MaxChunksToDefragInflight(10, 1, 1000)
             , EnableExplicitCompactionAfterDefrag(1, 0, 1)
             , FreshCompMaxInFlightWrites(10, 1, 1000)
             , HullCompMaxInFlightWrites(10, 1, 1000)

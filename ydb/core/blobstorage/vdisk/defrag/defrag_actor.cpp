@@ -30,7 +30,6 @@ namespace NKikimr {
         , HugeKeeperId(hugeKeeperId)
         , DefragMonGroup(VCtx->VDiskCounters, "subsystem", "defrag")
         , RunDefragBySchedule(runDefrageBySchedule)
-        , MaxChunksToDefrag(vconfig->MaxChunksToDefragInflight)
     {}
 
     TDefragCtx::~TDefragCtx() = default;
@@ -138,8 +137,8 @@ namespace NKikimr {
                     double hugeDefragFreeSpaceBorder = DCtx->VCfg->HugeDefragFreeSpaceBorderPerMille / 1000.0;
                     DCtx->DefragMonGroup.DefragThreshold() = DefragThreshold(oos, defaultPercent, hugeDefragFreeSpaceBorder);
                     if (HugeHeapDefragmentationRequired(oos, canBeFreedChunks, totalChunks, defaultPercent, hugeDefragFreeSpaceBorder)) {
-                        TChunksToDefrag chunksToDefrag = calcStat.GetChunksToDefrag(MaxInflyghtDefragChunks(DCtx->MaxChunksToDefrag, canBeFreedChunks));
-                        Y_ABORT_UNLESS(chunksToDefrag);
+                        TChunksToDefrag chunksToDefrag = calcStat.GetChunksToDefrag(MaxInflyghtDefragChunks(DCtx->VCfg->MaxChunksToDefragInflight, canBeFreedChunks));
+                        Y_VERIFY_S(chunksToDefrag, DCtx->VCtx->VDiskLogPrefix);
                         STLOG(PRI_INFO, BS_VDISK_DEFRAG, BSVDD03, VDISKP(DCtx->VCtx->VDiskLogPrefix, "scan finished"),
                             (TotalChunks, totalChunks), (UsefulChunks, usefulChunks),
                             (LocalColor, NKikimrBlobStorage::TPDiskSpaceColor_E_Name(oos.GetLocalColor())),
@@ -264,12 +263,21 @@ namespace NKikimr {
                 Sublog.Log() << "=== Starting Defrag ===\n";
             }
 
-            Sublog.Log() << "Defrag quantum started\n";
+            auto chunksToDefrag = std::visit([](auto& r) { return GetChunksToDefrag(r); }, task.Request);
+            if (!chunksToDefrag) {
+                Sublog.Log() << "Defrag quantum started {nothing} \n";
+            } else {
+                Sublog.Log() << "Defrag quantum started"
+                            << " {chunksSize# " << chunksToDefrag->Chunks.size()
+                            << " foundChunks# " << chunksToDefrag->FoundChunksToDefrag
+                            << " estimatedSlots# " << chunksToDefrag->EstimatedSlotsCount
+                            << " }\n";
+            }
             ++TotalDefragRuns;
             InProgress = true;
             ActiveActors.Insert(ctx.Register(CreateDefragQuantumActor(DCtx,
                 GInfo->GetVDiskId(DCtx->VCtx->ShortSelfVDisk),
-                std::visit([](auto& r) { return GetChunksToDefrag(r); }, task.Request), DCtx->VCfg->EnableExplicitCompactionAfterDefrag)), __FILE__, __LINE__,
+                chunksToDefrag, DCtx->VCfg->EnableExplicitCompactionAfterDefrag)), __FILE__, __LINE__,
                 ctx, NKikimrServices::BLOBSTORAGE);
         }
 

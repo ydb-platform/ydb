@@ -390,6 +390,6 @@ message TTableServiceConfig {
 
     optional bool EnableSpillingInHashJoinShuffleConnections = 85 [default = false];
 
-    optional bool EnableOlapScalarApply = 86 [default = true];
-    optional bool EnableOlapSubstringPushdown = 87 [default = true];
+    optional bool EnableOlapScalarApply = 86 [default = false];
+    optional bool EnableOlapSubstringPushdown = 87 [default = false];
 };

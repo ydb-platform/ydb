@@ -330,7 +330,7 @@ void InitSync(const NConsoleClient::TClientCommand::TConfig& connectionConfig, c
 
     } catch (const std::exception& e) {
         Cout << "Failed to create TPC-C tables. " << e.what() << Endl;
-        Cout << "After fixing the reason, you might need to run `tpcc clean first`" << Endl;
+        Cout << "After fixing the reason, you might need to run `tpcc clean`." << Endl;
 
         // we want to stop it before calling exit to avoid crash
         driver.Stop(true);

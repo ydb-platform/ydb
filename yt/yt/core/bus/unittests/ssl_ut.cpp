@@ -1,4 +1,5 @@
 #include <yt/yt/core/test_framework/framework.h>
+#include <yt/yt/core/test_framework/test_key.h>
 
 #include <yt/yt/core/bus/bus.h>
 #include <yt/yt/core/bus/client.h>
@@ -10,8 +11,6 @@
 
 #include <library/cpp/testing/common/env.h>
 #include <library/cpp/testing/common/network.h>
-
-#include <library/cpp/resource/resource.h>
 
 namespace NYT::NBus {
 namespace {
@@ -30,16 +29,6 @@ TSharedRefArray CreateMessage(int numParts, int partSize = 1)
     }
 
     return TSharedRefArray(std::move(parts), TSharedRefArray::TMoveParts{});
-}
-
-TString CreatePemFile(TStringBuf name)
-{
-    auto fileName = TString("testdata_") + name;
-    auto output = TFileOutput(fileName);
-    output.Write(NResource::Find(TString("/testdata/") + name));
-    output.Finish();
-
-    return fileName;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -85,16 +74,16 @@ public:
         AddressWithIpV4 = Format("127.0.0.1:%v", Port);
         AddressWithIpV6 = Format("[::1]:%v", Port);
 
-        CACert = TPemBlobConfig::CreateFileReference(CreatePemFile("ca.pem"));
-        PrivateKey = TPemBlobConfig::CreateFileReference(CreatePemFile("key.pem"));
-        CertificateChain = TPemBlobConfig::CreateFileReference(CreatePemFile("cert.pem"));
-        CACertWithIPInSAN = TPemBlobConfig::CreateFileReference(CreatePemFile("ca_with_ip_in_san.pem"));
-        PrivateKeyWithIpInSAN = TPemBlobConfig::CreateFileReference(CreatePemFile("key_with_ip_in_san.pem"));
-        CertificateChainWithIpInSAN = TPemBlobConfig::CreateFileReference(CreatePemFile("cert_with_ip_in_san.pem"));
+        CACert = CreateTestKeyFile("ca.pem");
+        PrivateKey = CreateTestKeyFile("key.pem");
+        CertificateChain = CreateTestKeyFile("cert.pem");
+        CACertWithIPInSAN = CreateTestKeyFile("ca_with_ip_in_san.pem");
+        PrivateKeyWithIpInSAN = CreateTestKeyFile("key_with_ip_in_san.pem");
+        CertificateChainWithIpInSAN = CreateTestKeyFile("cert_with_ip_in_san.pem");
 
-        CACertEC = TPemBlobConfig::CreateFileReference(CreatePemFile("ca_ec.pem"));
-        PrivateKeyEC = TPemBlobConfig::CreateFileReference(CreatePemFile("key_ec.pem"));
-        CertificateChainEC = TPemBlobConfig::CreateFileReference(CreatePemFile("cert_ec.pem"));
+        CACertEC = CreateTestKeyFile("ca_ec.pem");
+        PrivateKeyEC = CreateTestKeyFile("key_ec.pem");
+        CertificateChainEC = CreateTestKeyFile("cert_ec.pem");
     }
 };
 

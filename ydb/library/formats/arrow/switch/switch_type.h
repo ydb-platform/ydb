@@ -167,8 +167,16 @@ bool SwitchArrayType(const arrow::Datum& column, TFunc&& f) {
 template <typename T>
 bool Append(arrow::ArrayBuilder& builder, const typename T::c_type& value) {
     using TBuilder = typename arrow::TypeTraits<T>::BuilderType;
-
     TStatusValidator::Validate(static_cast<TBuilder&>(builder).Append(value));
+    return true;
+}
+
+template <typename T>
+bool AppendValues(arrow::ArrayBuilder& builder, const typename T::c_type& value, const ui32 count) {
+    using TBuilder = typename arrow::TypeTraits<T>::BuilderType;
+    for (ui32 i = 0; i < count; ++i) {
+        TStatusValidator::Validate(static_cast<TBuilder&>(builder).Append(value));
+    }
     return true;
 }
 

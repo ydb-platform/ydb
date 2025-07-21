@@ -47,6 +47,8 @@ struct IClientRequest
 
     virtual bool IsAttachmentCompressionEnabled() const = 0;
 
+    virtual bool HasAttachments() const = 0;
+
     virtual bool IsStreamingEnabled() const = 0;
 
     virtual const TStreamingParameters& ClientAttachmentsStreamingParameters() const = 0;
@@ -159,6 +161,8 @@ public:
     const NProto::TRequestHeader& Header() const override;
 
     bool IsAttachmentCompressionEnabled() const override;
+
+    bool HasAttachments() const override;
 
     bool IsStreamingEnabled() const override;
 

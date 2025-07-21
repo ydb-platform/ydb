@@ -203,7 +203,9 @@ public:
     void Abort() {
         const TMonotonic now = TMonotonic::Now();
         for (auto&& i : RequestsQueue) {
-            for (auto&& objAddr : i->GetWaitBySource(SourceId)) {
+            auto addresses = i->GetWaitBySource(SourceId);
+            Counters->GetQueueObjectsCount()->Sub(addresses.size());
+            for (auto&& objAddr : addresses) {
                 Y_UNUSED(i->AddError(objAddr, "source broken: " + ::ToString(SourceId)));
             }
         }
@@ -466,6 +468,7 @@ public:
         if (Cache.GetMaxSize() == maxCacheSize) {
             return;
         }
+        return;
         AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD)("event", "update_max_cache_size")("id", TPolicy::GetCacheName())("new_value", maxCacheSize)(
             "old_value", Cache.GetMaxSize());
         Cache.SetMaxSize(maxCacheSize);

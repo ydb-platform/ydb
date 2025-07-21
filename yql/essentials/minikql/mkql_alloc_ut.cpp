@@ -123,7 +123,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLAllocTest) {
         UNIT_ASSERT_VALUES_UNEQUAL(TAllocState::GetPageStart(ptrZero1), TAllocState::GetPageStart(ptrOne));
 
         // Untrack zero-sized piece
-        MKQLArrowUntrack(ptrZero1, 0);
+        MKQLArrowUntrack(ptrZero1);
 
         // Deallocate all the stuff
         for (auto i = 0ul; i < pieceCount; ++i) {

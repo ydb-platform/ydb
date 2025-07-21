@@ -2,6 +2,7 @@
 #include "wilson_uploader.h"
 #include <util/system/backtrace.h>
 #include <google/protobuf/text_format.h>
+#include <ydb/library/actors/core/actorsystem.h>
 
 namespace NWilson {
 
@@ -52,6 +53,50 @@ namespace NWilson {
         SerializeValue(std::move(value), pb->mutable_value());
     }
 
+    TSpan::TSpan(ui8 verbosity, TTraceId parentId, std::variant<std::optional<TString>, const char*> name,
+            TFlags flags, NActors::TActorSystem* actorSystem)
+        : Data(parentId
+                ? std::make_unique<TData>(TInstant::Now(), GetCycleCount(), parentId.Span(verbosity), flags, actorSystem)
+                : nullptr)
+    {
+        if (Y_UNLIKELY(*this)) {
+            if (verbosity <= parentId.GetVerbosity()) {
+                if (!parentId.IsRoot()) {
+                    Data->Span.set_parent_span_id(parentId.GetSpanIdPtr(), parentId.GetSpanIdSize());
+                }
+                Data->Span.set_start_time_unix_nano(Data->StartTime.NanoSeconds());
+                Data->Span.set_kind(opentelemetry::proto::trace::v1::Span::SPAN_KIND_INTERNAL);
+
+                std::visit(TOverloaded{
+                    [&](const char *name) {
+                        Name(TString(name));
+                    },
+                    [&](std::optional<TString>& name) {
+                        if (name) {
+                            Name(std::move(*name));
+                        }
+                    }
+                }, name);
+
+                Attribute("node_id", Data->ActorSystem->NodeId);
+            } else {
+                Data->Ignored = true; // ignore this span due to verbosity mismatch, still allowing child spans to be created
+            }
+        }
+    }
+
+    TSpan::~TSpan() {
+        if (Y_UNLIKELY(*this)) {
+            if (std::uncaught_exceptions() != Data->UncaughtExceptions) {
+                EndError("span terminated due to stack unwinding");
+            } else if (Data->Flags & EFlags::AUTO_END) {
+                End();
+            } else {
+                EndError("unterminated span");
+            }
+        }
+    }
+
     TSpan& TSpan::Link(const TTraceId& traceId) {
         return Link(traceId, {});
     }
@@ -76,6 +121,27 @@ namespace NWilson {
         return *this;
     }
 
+    void TSpan::End() {
+        if (Y_UNLIKELY(*this)) {
+            Data->Span.set_trace_id(Data->TraceId.GetTraceIdPtr(), Data->TraceId.GetTraceIdSize());
+            Data->Span.set_span_id(Data->TraceId.GetSpanIdPtr(), Data->TraceId.GetSpanIdSize());
+            Data->Span.set_end_time_unix_nano(TimeUnixNano());
+            Send();
+        } else {
+            VerifyNotSent();
+        }
+    }
+
     const TSpan TSpan::Empty;
+
+    TSpan::TData::TData(TInstant startTime, ui64 startCycles, TTraceId traceId, TFlags flags, NActors::TActorSystem* actorSystem)
+        : StartTime(startTime)
+        , StartCycles(startCycles)
+        , TraceId(std::move(traceId))
+        , Flags(flags)
+        , ActorSystem(actorSystem ? actorSystem : (NActors::TlsActivationContext ? NActors::TActivationContext::ActorSystem() : nullptr))
+    {
+        Y_DEBUG_ABORT_UNLESS(ActorSystem, "Attempting to create NWilson::TSpan outside of actor system without providing actorSystem pointer");
+    }
 
 } // NWilson

@@ -733,7 +733,7 @@ struct TEvBlobStorage {
         EvGetLogoBlobIndexStatRequest,
         EvReadMetadata,
         EvWriteMetadata,
-        EvPermitGarbageCollection,
+        EvPermitGarbageCollection,                              // 268 636 310
         EvReplInvoke,
         EvStartBalancing,
         EvReplCheckProgress,
@@ -743,7 +743,7 @@ struct TEvBlobStorage {
         EvPDiskMetadataLoaded,
         EvBalancingSendPartsOnMain,
         EvHugeAllocateSlots,
-        EvHugeAllocateSlotsResult,
+        EvHugeAllocateSlotsResult,                              // 268 636 320
         EvHugeDropAllocatedSlots,
         EvShredPDisk,
         EvPreShredCompactVDisk,
@@ -753,7 +753,7 @@ struct TEvBlobStorage {
         EvHullShredDefragResult,
         EvHugeShredNotify,
         EvHugeShredNotifyResult,
-        EvNotifyChunksDeleted,
+        EvNotifyChunksDeleted,                                  // 268 636 330
         EvListChunks,
         EvListChunksResult,
         EvHugeQueryForbiddenChunks,
@@ -763,7 +763,7 @@ struct TEvBlobStorage {
         EvSyncToken,
         EvReleaseSyncToken,
         EvBSQueueResetConnection, // for test purposes
-        EvYardResize,
+        EvYardResize,                                           // 268 636 340
 
         EvYardInitResult = EvPut + 9 * 512,                     /// 268 636 672
         EvLogResult,

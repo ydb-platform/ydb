@@ -172,8 +172,8 @@ private:
             return Reads.find(readId);
         }
 
-        void insert(TReadState&& read) {
-            const auto [readIt, succeeded] = Reads.insert({read.Id, std::move(read)});
+        void insert(ui64 readId, TReadState&& read) {
+            const auto [readIt, succeeded] = Reads.insert({readId, std::move(read)});
             YQL_ENSURE(succeeded);
             ReadsPerShard[readIt->second.ShardId].Reads.emplace(readIt->second.Id);
         }
@@ -209,8 +209,11 @@ private:
 
         std::vector<TReadState*> GetShardReads(ui64 shardId) {
             auto it = ReadsPerShard.find(shardId);
-            YQL_ENSURE(it != ReadsPerShard.end());
             std::vector<TReadState*> result;
+            if (it == ReadsPerShard.end()) {
+                return result;
+            }
+
             for(ui64 readId: it->second.Reads) {
                 auto it = Reads.find(readId);
                 YQL_ENSURE(it != Reads.end());
@@ -634,7 +637,7 @@ private:
 
         auto readId = read.Id;
         auto lastSeqNo = read.LastSeqNo;
-        Reads.insert(std::move(read));
+        Reads.insert(readId, std::move(read));
 
         if (auto delay = ShardTimeout()) {
             TlsActivationContext->Schedule(

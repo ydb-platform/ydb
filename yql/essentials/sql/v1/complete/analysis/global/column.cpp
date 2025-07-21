@@ -134,7 +134,7 @@ namespace NSQLComplete {
             }
 
             std::any visitSelect_stmt(SQLv1::Select_stmtContext* ctx) override {
-                return AccumulatingVisit(ctx->select_kind_parenthesis());
+                return AccumulatingVisit(ctx->select_stmt_intersect());
             }
 
             std::any visitSelect_core(SQLv1::Select_coreContext* ctx) override {

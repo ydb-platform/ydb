@@ -586,7 +586,7 @@ class TestS3(object):
         query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
         client.wait_query_status(query_id, fq.QueryMeta.FAILED)
         issues = str(client.describe_query(query_id).result.query.issue)
-        assert "Expected data or optional of data" in issues, "Incorrect Issues: " + issues
+        assert "Only a column with a primitive type is allowed for the raw format" in issues, "Incorrect Issues: " + issues
 
     def get_insert_test_query(self, insert_path: str):
         sql = f"INSERT INTO {insert_path} WITH (FORMAT = \"parquet\") SELECT\n"

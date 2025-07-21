@@ -219,6 +219,7 @@ class TDataShard
     class TTxCdcStreamEmitHeartbeats;
     class TTxUpdateFollowerReadEdge;
     class TTxRemoveSchemaSnapshots;
+    class TTxIncrementalRestore;
     class TTxCleanupUncommitted;
     class TTxVacuum;
     class TTxCompleteVacuum;
@@ -1941,6 +1942,12 @@ public:
         const TActorContext& ctx, TTransactionContext& txc,
         const TPathId& pathId, ui64 tableSchemaVersion,
         const TPathId& streamPathId);
+
+    TUserTable::TPtr AlterTableRotateCdcStream(
+        const TActorContext& ctx, TTransactionContext& txc,
+        const TPathId& pathId, ui64 tableSchemaVersion,
+        const TPathId& oldStreamPathId,
+        const NKikimrSchemeOp::TCdcStreamDescription& newStreamDesc);
 
     TUserTable::TPtr CreateUserTable(TTransactionContext& txc, const NKikimrSchemeOp::TTableDescription& tableScheme);
     TUserTable::TPtr AlterUserTable(const TActorContext& ctx, TTransactionContext& txc,

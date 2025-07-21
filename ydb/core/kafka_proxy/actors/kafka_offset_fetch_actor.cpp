@@ -5,8 +5,10 @@
 #include "ydb/core/kafka_proxy/kafka_consumer_members_metadata_initializers.h"
 #include <ydb/core/kafka_proxy/kafka_events.h>
 #include <ydb/services/lib/actors/pq_schema_actor.h>
-#include "ydb/services/persqueue_v1/actors/schema_actors.h"
 
+#include <ydb/core/kafka_proxy/kafka_events.h>
+
+#include "ydb/services/persqueue_v1/actors/schema_actors.h"
 
 namespace NKafka {
 NKikimr::NGRpcProxy::V1::TDescribeTopicActorSettings ConsumerOffsetSettings(std::shared_ptr<TSet<TString>> consumers, std::shared_ptr<TSet<ui32>>& partitions) {
@@ -492,9 +494,11 @@ TOffsetFetchResponseData::TPtr TKafkaOffsetFetchActor::GetOffsetFetchResponse() 
                             partition.ErrorCode = NONE_ERROR;
                         } else {
                             partition.ErrorCode = RESOURCE_NOT_FOUND;
+                            KAFKA_LOG_ERROR("Group " << requestGroup.GroupId.value() << " not found for topic " << topicName);
                         }
                     } else {
                         partition.ErrorCode = RESOURCE_NOT_FOUND;
+                        KAFKA_LOG_ERROR("Partition " << requestPartition << " not found for topic " << topicName);
                     }
                     topic.Partitions.push_back(partition);
                 }

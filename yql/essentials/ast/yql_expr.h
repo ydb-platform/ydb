@@ -354,6 +354,8 @@ public:
 
     typedef std::vector<const TTypeAnnotationNode*> TListType;
     typedef std::span<const TTypeAnnotationNode*> TSpanType;
+    typedef std::span<const TTypeAnnotationNode* const> TConstSpanType;
+
 protected:
     template <typename T>
     static ui32 CombineFlags(const T& items) {
@@ -1608,6 +1610,7 @@ public:
     typedef TIntrusivePtr<TExprNode> TPtr;
     typedef std::vector<TPtr> TListType;
     typedef TArrayRef<const TPtr> TChildrenType;
+    typedef std::span<const TPtr> TExprNodeSpan;
 
     struct TPtrHash : private std::hash<const TExprNode*> {
         size_t operator()(const TPtr& p) const {

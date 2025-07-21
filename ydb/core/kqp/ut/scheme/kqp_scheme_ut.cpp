@@ -1,8 +1,12 @@
+#include <ydb/core/base/tablet_resolver.h>
+#include <ydb/core/kqp/gateway/actors/scheme.h>
 #include <ydb/core/kqp/gateway/behaviour/resource_pool_classifier/fetcher.h>
+#include <ydb/core/kqp/gateway/kqp_gateway.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/kqp/ut/common/columnshard.h>
 #include <ydb/core/kqp/workload_service/actors/actors.h>
 #include <ydb/core/kqp/workload_service/ut/common/kqp_workload_service_ut_common.h>
+#include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
 #include <ydb/core/tx/columnshard/test_helper/controllers.h>
 #include <ydb/core/formats/arrow/arrow_helpers.h>
@@ -29,6 +33,7 @@ namespace NKqp {
 
 using namespace NYdb;
 using namespace NYdb::NTable;
+using namespace NYdb::NTopic;
 using namespace NYdb::NReplication;
 
 Y_UNIT_TEST_SUITE(KqpScheme) {
@@ -1160,7 +1165,9 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
     }
 
     Y_UNIT_TEST_TWIN(RenameTable, СolumnTable) {
-        TKikimrRunner kikimr;
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableMoveColumnTable(true);
+        TKikimrRunner kikimr(featureFlags);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -3652,7 +3659,10 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
     }
 
     Y_UNIT_TEST(CreateTableWithVectorIndexNoFeatureFlag) {
-        TKikimrRunner kikimr;
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableVectorIndex(false);
+        auto settings = TKikimrSettings().SetFeatureFlags(featureFlags);
+        TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
         {
@@ -8179,7 +8189,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
             const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToOneLineString(), "PASSWORD or PASSWORD_SECRET_NAME are not provided", result.GetIssues().ToOneLineString());
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToOneLineString(), "Neither PASSWORD nor PASSWORD_SECRET_NAME are provided", result.GetIssues().ToOneLineString());
         }
         {
             auto query = R"(
@@ -8258,7 +8268,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         }
     }
 
-    Y_UNIT_TEST(CreateAsyncReplicationWithSecret) {
+    Y_UNIT_TEST(CreateAsyncReplicationWithTokenSecret) {
         using namespace NReplication;
 
         TKikimrRunner kikimr("root@builtin");
@@ -8333,6 +8343,30 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
             // TODO: check lag too
             break;
+        }
+    }
+
+    Y_UNIT_TEST(CreateAsyncReplicationWithPasswordSecret) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        // ok
+        {
+            auto query = Sprintf(R"(
+                --!syntax_v1
+                CREATE ASYNC REPLICATION `/Root/replication` FOR
+                    `/Root/table` AS `/Root/replica`
+                WITH (
+                    ENDPOINT = "%s",
+                    DATABASE = "/Root",
+                    USER = "user",
+                    PASSWORD_SECRET_NAME = "password_secret_name"
+                );
+            )", kikimr.GetEndpoint().c_str());
+
+            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
     }
 
@@ -9041,7 +9075,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
             const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), "PASSWORD or PASSWORD_SECRET_NAME are not provided");
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), "Neither PASSWORD nor PASSWORD_SECRET_NAME are provided");
         }
 
         {
@@ -9315,7 +9349,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
             const auto result = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), "PASSWORD or PASSWORD_SECRET_NAME are not provided");
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), "Neither PASSWORD nor PASSWORD_SECRET_NAME are provided");
         }
 
         {
@@ -11254,6 +11288,139 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
+    }
+
+    class TTestTempTablesAgentActor : public TActorBootstrapped<TTestTempTablesAgentActor> {
+    public:
+        explicit TTestTempTablesAgentActor(NThreading::TPromise<void> finishPromise)
+            : FinishPromise(std::move(finishPromise))
+        {}
+
+        void Bootstrap() {
+            Become(&TTestTempTablesAgentActor::StateWork);
+        }
+
+        STRICT_STFUNC(StateWork,
+            IgnoreFunc(NSchemeShard::TEvSchemeShard::TEvOwnerActorAck);
+            sFunc(TEvents::TEvPoison, Finish);
+        )
+
+    private:
+        void Finish() {
+            FinishPromise.SetValue();
+            PassAway();
+        }
+
+    private:
+        NThreading::TPromise<void> FinishPromise;
+    };
+
+    Y_UNIT_TEST(CleanupTemporaryTables) {
+        TKikimrRunner kikimr;
+
+        auto& runtime = *kikimr.GetTestServer().GetRuntime();
+
+        const auto createTempDir = [&](const TString& name, TActorId tempDirOwnerActorId) {
+            auto ev = std::make_unique<TEvTxUserProxy::TEvProposeTransaction>();
+            auto& record = ev->Record;
+
+            record.SetDatabaseName("/Root");
+            record.SetUserToken(NACLib::TSystemUsers::Tmp().SerializeAsString());
+
+            auto* modifyScheme = record.MutableTransaction()->MutableModifyScheme();
+            modifyScheme->SetWorkingDir("/Root");
+            modifyScheme->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpMkDir);
+            modifyScheme->SetAllowCreateInTempDir(false);
+
+            auto* makeDir = modifyScheme->MutableMkDir();
+            makeDir->SetName(name);
+            ActorIdToProto(tempDirOwnerActorId, modifyScheme->MutableTempDirOwnerActorId());
+
+            auto promise = NThreading::NewPromise<IKqpGateway::TGenericResult>();
+            runtime.Register(new TSchemeOpRequestHandler(ev.release(), promise, false));
+
+            const auto result = promise.GetFuture().ExtractValueSync();
+            UNIT_ASSERT_C(result.Success(), TStringBuilder() << "Temp dir '" << name << "' creation failed: " << result.Issues().ToString());
+        };
+
+        const auto finishPromise = NThreading::NewPromise<void>();
+        const auto firstOwner = runtime.Register(new TTestTempTablesAgentActor(finishPromise), 0, 1);
+        const auto firstDir = "first_dir";
+        createTempDir(firstDir, firstOwner);
+
+        const auto secondDir = "second_dir";
+        createTempDir(secondDir, runtime.Register(new TTestTempTablesAgentActor(NThreading::NewPromise<void>()), 0, 1));
+
+        // Directories succesfully created
+
+        Sleep(TDuration::Seconds(5));
+
+        const auto checkDirectory = [&](const TString& name, bool expectedExists) -> TString {
+            const auto result = Navigate(runtime, runtime.AllocateEdgeActor(), JoinPath({"/Root", name}), NSchemeCache::TSchemeCacheNavigate::EOp::OpUnknown);
+            UNIT_ASSERT_C(result, TStringBuilder() << "Empty Navigate " << name << " result");
+            UNIT_ASSERT_C(!result->ResultSet.empty(), TStringBuilder() << "Empty result sets for Navigate " << name);
+
+            const auto& tempDir = result->ResultSet.at(0);
+            if (expectedExists) {
+                if (tempDir.Status != NSchemeCache::TSchemeCacheNavigate::EStatus::Ok) {
+                    return TStringBuilder() << "Navigate temp dir '" << name << "' failed: " << tempDir.Status;
+                }
+                if (tempDir.Kind != NSchemeCache::TSchemeCacheNavigate::EKind::KindPath) {
+                    return TStringBuilder() << "Temp dir '" << name << "' has unexpected kind: " << tempDir.Kind << ", expected KindPath";
+                }
+            } else {
+                if (tempDir.Status != NSchemeCache::TSchemeCacheNavigate::EStatus::PathErrorUnknown) {
+                    return TStringBuilder() << "Navigate temp dir '" << name << "' finished with unexpected status: " << tempDir.Status << ", expected PathErrorUnknown";
+                }
+                if (tempDir.Kind != NSchemeCache::TSchemeCacheNavigate::EKind::KindUnknown) {
+                    return TStringBuilder() << "Temp dir '" << name << "' has unexpected kind: " << tempDir.Kind << ", expected KindUnknown";
+                }
+            }
+
+            return "";
+        };
+
+        {
+            const auto& result = checkDirectory(firstDir, true);
+            UNIT_ASSERT_C(result.empty(), result);
+        }
+
+        {
+            const auto& result = checkDirectory(secondDir, true);
+            UNIT_ASSERT_C(result.empty(), result);
+        }
+
+        // Delete first directory
+
+        const auto edgeActor = runtime.AllocateEdgeActor();
+        runtime.Send(firstOwner, edgeActor, new TEvents::TEvPoison());
+        finishPromise.GetFuture().GetValueSync();
+
+        runtime.Send(MakeTabletResolverID(), edgeActor, new TEvTabletResolver::TEvForward(
+            Tests::SchemeRoot,
+            new IEventHandle(TActorId(), edgeActor, new TEvents::TEvPoisonPill()),
+            {},
+            TEvTabletResolver::TEvForward::EActor::Tablet
+        ));
+        runtime.Send(MakeTabletResolverID(), TActorId(), new TEvTabletResolver::TEvTabletProblem(Tests::SchemeRoot, TActorId()));
+
+        // Check delete first directory
+
+        const auto timeout = TInstant::Now() + TDuration::Seconds(5);
+        TString deleteResult;
+        while (TInstant::Now() < timeout) {
+            deleteResult = checkDirectory(firstDir, false);
+            if (!deleteResult) {
+                Sleep(TDuration::Seconds(5));
+                const auto& result = checkDirectory(secondDir, true);
+                UNIT_ASSERT_C(result.empty(), result);
+                return;
+            }
+
+            Sleep(TDuration::MilliSeconds(100));
+        }
+
+        UNIT_FAIL("Temp dir '" << firstDir << "' still exists, last result: " << deleteResult);
     }
 }
 

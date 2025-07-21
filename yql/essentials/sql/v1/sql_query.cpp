@@ -1855,7 +1855,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
 
             std::map<TString, TNodePtr> settings;
             TSqlExpression expr(Ctx_, Mode_);
-            if (!TransferSettings(settings, node.GetRule_transfer_settings11(), expr, true)) {
+            if (node.GetBlock10().HasRule_transfer_settings3() && !TransferSettings(settings, node.GetBlock10().GetRule_transfer_settings3(), expr, true)) {
                 return false;
             }
 
@@ -1863,10 +1863,8 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             const TString source = Id(node.GetRule_object_ref5().GetRule_id_or_at2(), *this).second;
             const TString target = Id(node.GetRule_object_ref7().GetRule_id_or_at2(), *this).second;
             TString transformLambda;
-            if (node.GetBlock8().HasRule_lambda_or_parameter2()) {
-                if (!ParseTransferLambda(transformLambda, node.GetBlock8().GetRule_lambda_or_parameter2())) {
-                    return false;
-                }
+            if (!ParseTransferLambda(transformLambda, node.GetRule_lambda_or_parameter9())) {
+                return false;
             }
 
             AddStatementToBlocks(blocks, BuildCreateTransfer(Ctx_.Pos(), BuildTablePath(prefixPath, id),

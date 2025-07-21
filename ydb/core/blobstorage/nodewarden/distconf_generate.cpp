@@ -120,24 +120,6 @@ namespace NKikimr::NStorage {
 
         config->SetSelfAssemblyUUID(selfAssemblyUUID);
 
-        // generate initial cluster state, if needed
-        if (Cfg->BridgeConfig) {
-            auto *state = config->MutableClusterState();
-            state->SetGeneration(1);
-            auto *piles = state->MutablePerPileState();
-            for (size_t i = 0; i < Cfg->BridgeConfig->PilesSize(); ++i) {
-                piles->Add(NKikimrBridge::TClusterState::SYNCHRONIZED);
-            }
-
-            auto *history = config->MutableClusterStateHistory();
-            auto *entry = history->AddUnsyncedEntries();
-            entry->MutableClusterState()->CopyFrom(*state);
-            entry->SetOperationGuid(RandomNumber<ui64>());
-            for (size_t i = 0; i < Cfg->BridgeConfig->PilesSize(); ++i) {
-                entry->AddUnsyncedPiles(i);
-            }
-        }
-
         if (auto error = UpdateClusterState(config)) {
             return error;
         }
@@ -223,14 +205,14 @@ namespace NKikimr::NStorage {
 
             if (baseConfig->HasSettings()) {
                 const auto& settings = baseConfig->GetSettings();
-                if (settings.HasDefaultMaxSlots()) {
-                    defaultMaxSlots = settings.GetDefaultMaxSlots();
+                if (settings.DefaultMaxSlotsSize()) {
+                    defaultMaxSlots = settings.GetDefaultMaxSlots(0);
                 }
-                if (settings.HasPDiskSpaceColorBorder()) {
-                    pdiskSpaceColorBorder.emplace(settings.GetPDiskSpaceColorBorder());
+                if (settings.PDiskSpaceColorBorderSize()) {
+                    pdiskSpaceColorBorder.emplace(settings.GetPDiskSpaceColorBorder(0));
                 }
-                if (settings.HasPDiskSpaceMarginPromille()) {
-                    pdiskSpaceMarginPromille = settings.GetPDiskSpaceMarginPromille();
+                if (settings.PDiskSpaceMarginPromilleSize()) {
+                    pdiskSpaceMarginPromille = settings.GetPDiskSpaceMarginPromille(0);
                 }
             }
 
@@ -677,7 +659,9 @@ namespace NKikimr::NStorage {
     }
 
     bool TDistributedConfigKeeper::UpdateConfig(NKikimrBlobStorage::TStorageConfig *config) {
-        (void)config;
+        if (UpdateBridgeConfig(config)) {
+            return true;
+        }
         return false;
     }
 

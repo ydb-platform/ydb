@@ -14,7 +14,13 @@
 #include <yql/essentials/sql/v1/proto_parser/antlr4/proto_parser.h>
 #include <yql/essentials/sql/v1/proto_parser/antlr4_ansi/proto_parser.h>
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
+#include <yql/essentials/providers/common/proto/gateways_config.pb.h>
 #include <yql/essentials/parser/pg_wrapper/interface/parser.h>
+#include <yql/essentials/core/pg_ext/yql_pg_ext.h>
+#include <yql/essentials/utils/mem_limit.h>
+#include <yql/essentials/parser/pg_wrapper/interface/context.h>
+#include <yql/essentials/providers/common/gateways_utils/gateways_utils.h>
+
 
 #include <library/cpp/getopt/last_getopt.h>
 #include <library/cpp/testing/unittest/registar.h>
@@ -197,6 +203,24 @@ private:
     char Delim_;
 };
 
+
+void ParseProtoConfig(const TString& cfgFile, google::protobuf::Message* config) {
+    TString configData = TFileInput(cfgFile).ReadAll();
+
+    using ::google::protobuf::TextFormat;
+    if (!TextFormat::ParseFromString(configData, config)) {
+        throw yexception() << "Bad format of config file " << cfgFile;
+    }
+}
+
+template <typename TMessage>
+static THolder<TMessage> ParseProtoConfig(const TString& cfgFile) {
+    auto config = MakeHolder<TMessage>();
+    ParseProtoConfig(cfgFile, config.Get());
+    return config;
+}
+
+
 int BuildAST(int argc, char* argv[]) {
     NLastGetopt::TOpts opts = NLastGetopt::TOpts::Default();
 
@@ -204,7 +228,7 @@ int BuildAST(int argc, char* argv[]) {
     TString queryString;
     ui16 syntaxVersion;
     TString outFileNameFormat;
-    NYql::TLangVersion langVer;
+    NYql::TLangVersion langVer = NYql::MinLangVersion;
     THashMap<TString, TString> clusterMapping;
     clusterMapping["plato"] = NYql::YtProviderName;
     clusterMapping["pg_catalog"] = NYql::PgProviderName;
@@ -219,9 +243,12 @@ int BuildAST(int argc, char* argv[]) {
     };
 
     THashSet<TString> flags;
+    bool noDebug = false;
+    THolder<NYql::TGatewaysConfig> gatewaysConfig;
 
     opts.AddLongOption('o', "output", "save output to file").RequiredArgument("file").StoreResult(&outFileName);
     opts.AddLongOption('q', "query", "query string").RequiredArgument("query").StoreResult(&queryString);
+    opts.AddLongOption("ndebug", "do not print anything when no errors present").Optional().StoreTrue(&noDebug);
     opts.AddLongOption('t', "tree", "print AST proto text").NoArgument();
     opts.AddLongOption('d', "diff", "print inlined diff for original query and query build from AST if they differ").NoArgument();
     opts.AddLongOption('D', "dump", "dump inlined diff for original query and query build from AST").NoArgument();
@@ -244,6 +271,24 @@ int BuildAST(int argc, char* argv[]) {
     opts.AddLongOption("test-complete", "check completion engine").NoArgument();
     opts.AddLongOption("format-output", "Saves formatted query to it").RequiredArgument("format-output").StoreResult(&outFileNameFormat);
     opts.AddLongOption("langver", "Set current language version").Optional().RequiredArgument("VER").Handler1T<TString>(langVerHandler);
+    opts.AddLongOption("mem-limit", "Set memory limit in megabytes").Handler1T<ui32>(0, NYql::SetAddressSpaceLimit);
+    opts.AddLongOption("gateways-cfg", "Gateways configuration file").Optional().RequiredArgument("FILE")
+        .Handler1T<TString>([&gatewaysConfig, &clusterMapping](const TString& file) {
+            gatewaysConfig = ParseProtoConfig<NYql::TGatewaysConfig>(file);
+            GetClusterMappingFromGateways(*gatewaysConfig, clusterMapping);
+        });
+    opts.AddLongOption("pg-ext", "Pg extensions config file").Optional().RequiredArgument("FILE")
+        .Handler1T<TString>([](const TString& file) {
+            auto pgExtConfig = ParseProtoConfig<NYql::NProto::TPgExtensions>(file);
+            if (!pgExtConfig) {
+                throw yexception() << "Bad format of config file " << file;
+            }
+            TVector<NYql::NPg::TExtensionDesc> extensions;
+            NYql::PgExtensionsFromProto(*pgExtConfig, extensions);
+            NYql::NPg::RegisterExtensions(extensions, true,
+                *NSQLTranslationPG::CreateExtensionSqlParser(),
+                NKikimr::NMiniKQL::CreateExtensionLoader().get());
+        });
     opts.SetFreeArgDefaultTitle("query file");
     opts.AddHelpOption();
 
@@ -254,7 +299,12 @@ int BuildAST(int argc, char* argv[]) {
     if (!outFileName.empty()) {
         outFile.Reset(new TFixedBufferFileOutput(outFileName));
     }
+
     IOutputStream& out = outFile ? *outFile.Get() : Cout;
+
+    if (gatewaysConfig && gatewaysConfig->HasSqlCore()) {
+        flags.insert(gatewaysConfig->GetSqlCore().GetTranslationFlags().begin(), gatewaysConfig->GetSqlCore().GetTranslationFlags().end());
+    }
 
     if (!res.Has("query") && queryFiles.empty()) {
         Cerr << "No --query nor query file was specified" << Endl << Endl;
@@ -382,7 +432,9 @@ int BuildAST(int argc, char* argv[]) {
                     parseRes = NSQLTranslation::SqlToYql(translators, query, settings);
                 }
             }
-
+            if (noDebug && parseRes.IsOk()) {
+                continue;
+            }
             if (parseRes.Root) {
                 TStringStream yqlProgram;
                 parseRes.Root->PrettyPrintTo(yqlProgram, NYql::TAstPrintFlags::PerLine | NYql::TAstPrintFlags::ShortQuote);
@@ -397,8 +449,11 @@ int BuildAST(int argc, char* argv[]) {
 
             bool hasError = false;
             if (!parseRes.Issues.Empty()) {
-                parseRes.Issues.PrintWithProgramTo(Cerr, queryFile, query);
                 hasError = AnyOf(parseRes.Issues, [](const auto& issue) { return issue.GetSeverity() == NYql::TSeverityIds::S_ERROR;});
+
+                if (hasError || !noDebug) {
+                    parseRes.Issues.PrintWithProgramTo(Cerr, queryFile, query);
+                }
             }
 
             if (!parseRes.IsOk() && !hasError) {

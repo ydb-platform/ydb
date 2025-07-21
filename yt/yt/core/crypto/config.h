@@ -29,6 +29,9 @@ DEFINE_REFCOUNTED_TYPE(TPemBlobConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+//! FIXME: Enabled during migration, because this code has always been broken.
+constexpr bool DefaultInsecureSkipVerify = true;
+
 struct TSslContextCommand
     : public NYTree::TYsonStruct
 {
@@ -55,6 +58,9 @@ struct TSslContextConfig
 
     //! Commands for SSL context configuration handled by SSL_CONF_cmd.
     std::vector<TSslContextCommandPtr> SslConfigurationCommands;
+
+    //! Trust everybody, never verify certificate, issue warning - for testing purpose.
+    bool InsecureSkipVerify;
 
     REGISTER_YSON_STRUCT(TSslContextConfig);
 

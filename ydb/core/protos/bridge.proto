@@ -28,6 +28,7 @@ message TClusterStateHistory {
         repeated string PermanentErrorReasons = 2; // a set of detected permanent errors for this pile
         repeated uint32 UnsyncedGroupIds = 3; // a set of unsynced groups for this pile
         bool UnsyncedBSC = 4; // true if BSC is not synced with this configuration yet
+        bool UnsyncedStorageConfig = 5; // TStorageConfig is not synced after being DISCONNECTED, needs special procedure for nodes to establish connectivity
     }
     repeated TPileSyncState PileSyncState = 2; // per-pile sync state for current generation
 }

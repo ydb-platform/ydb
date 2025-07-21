@@ -132,15 +132,12 @@
                                                                                         "Name": "TableFullScan",
                                                                                         "Path": "/local/clickbench/plans/row/hits",
                                                                                         "ReadColumns": [
-                                                                                            "MobilePhoneModel",
-                                                                                            "UserID"
-                                                                                        ],
-                                                                                        "ReadRanges": [
                                                                                             "CounterID (-\u221e, +\u221e)",
                                                                                             "EventDate (-\u221e, +\u221e)",
                                                                                             "UserID (-\u221e, +\u221e)",
                                                                                             "EventTime (-\u221e, +\u221e)",
-                                                                                            "WatchID (-\u221e, +\u221e)"
+                                                                                            "WatchID (-\u221e, +\u221e)",
+                                                                                            "MobilePhoneModel"
                                                                                         ],
                                                                                         "Scan": "Parallel",
                                                                                         "Table": "clickbench/plans/row/hits"

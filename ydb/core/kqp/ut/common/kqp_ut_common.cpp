@@ -1698,7 +1698,6 @@ void WaitForCompaction(Tests::TServer* server, const TString& path, bool compact
 }
 
 NJson::TJsonValue SimplifyPlan(NJson::TJsonValue& opt, const TGetPlanParams& params) {
-    Cout << opt.GetStringRobust() << Endl;
     if (!opt.IsMap()) {
         return {};
     }

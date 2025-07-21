@@ -87,18 +87,15 @@
                                                                         "Name": "TableFullScan",
                                                                         "Path": "/local/clickbench/plans/column/hits",
                                                                         "ReadColumns": [
-                                                                            "ClientIP",
-                                                                            "IsRefresh",
-                                                                            "ResolutionWidth",
-                                                                            "SearchPhrase",
-                                                                            "WatchID"
-                                                                        ],
-                                                                        "ReadRanges": [
                                                                             "CounterID (-\u221e, +\u221e)",
                                                                             "EventDate (-\u221e, +\u221e)",
                                                                             "UserID (-\u221e, +\u221e)",
                                                                             "EventTime (-\u221e, +\u221e)",
-                                                                            "WatchID (-\u221e, +\u221e)"
+                                                                            "WatchID (-\u221e, +\u221e)",
+                                                                            "ClientIP",
+                                                                            "IsRefresh",
+                                                                            "ResolutionWidth",
+                                                                            "SearchPhrase"
                                                                         ],
                                                                         "Scan": "Parallel",
                                                                         "SsaProgram": {

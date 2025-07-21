@@ -1307,6 +1307,16 @@
                     },
                     "target": {
                         "arch": "x86_64",
+                        "os": "FREEBSD"
+                    }
+                },
+                {
+                    "default": true,
+                    "host": {
+                        "os": "LINUX"
+                    },
+                    "target": {
+                        "arch": "x86_64",
                         "os": "LINUX"
                     }
                 },

@@ -277,6 +277,9 @@ bool CheckComparisonParametersForPushdown(const TCoCompare& compare, const TExpr
         case ETypeAnnotationKind::Stream:
             inputType = inputType->Cast<TStreamExprType>()->GetItemType();
             break;
+        case ETypeAnnotationKind::Optional:
+            inputType = inputType->Cast<TOptionalExprType>()->GetItemType();
+            break;
         case ETypeAnnotationKind::Struct:
             break;
         default:

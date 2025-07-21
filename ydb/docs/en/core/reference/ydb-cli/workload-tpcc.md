@@ -25,7 +25,7 @@ All commands support the common `--path` option, which specifies the path to the
 
 | Name             | Description                                       | Default value |
 |------------------|---------------------------------------------------|---------------|
-| `--path` or `-p` | Database path where benchmark tables are located. | `/`           |
+| `--path` or `-p` | Database path where the benchmark tables are located. | `/`           |
 
 ## Initializing a load test { #init }
 

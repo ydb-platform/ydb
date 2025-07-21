@@ -94,6 +94,7 @@ class PrAutomerger:
 
         try:
             self.git_run("push")
+            return True
         except subprocess.CalledProcessError:
             self.add_failed_comment(pr, "Unable to push merged revision.")
             self.add_pr_failed_label(pr)

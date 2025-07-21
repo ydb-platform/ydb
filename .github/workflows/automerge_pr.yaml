@@ -26,8 +26,8 @@ jobs:
       - name: configure
         shell: bash
         run: |
-            git config user.name YDBot
-            git config user.email ydbot@ydb.tech
+            git config --global user.name YDBot
+            git config --global user.email ydbot@ydb.tech
             git config --local github.token ${{ env.GH_TOKEN }}
 
       - name: run-command

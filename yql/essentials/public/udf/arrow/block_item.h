@@ -5,6 +5,9 @@
 #include <yql/essentials/public/udf/udf_string_ref.h>
 #include <yql/essentials/public/udf/udf_type_size_check.h>
 
+#include <util/system/backtrace.h>
+#include <util/string/hex.h>
+
 namespace NYql::NUdf {
 
 class TBlockItem {
@@ -28,6 +31,12 @@ public:
         Raw.Simple.Meta = static_cast<ui8>(EMarkers::Embedded);
     }
     
+    inline explicit TBlockItem(const NYql::NUuid::TUuid& value) {
+        Raw.StringRef.Value = value.Data;
+        Raw.StringRef.Size = sizeof(value);
+        Raw.StringValue.Meta = static_cast<ui8>(EMarkers::String);
+    }
+
     inline explicit TBlockItem(IBoxedValuePtr&& value) {
         Raw.Resource.Meta = static_cast<ui8>(EMarkers::Boxed);
         Raw.Resource.Value = value.Release();
@@ -86,10 +95,10 @@ public:
     }
 
     // TODO: deprecate As<T>() in favor of Get<T>()
-    template <typename T, typename = std::enable_if_t<TPrimitiveDataType<T>::Result>>
+    template <typename T, typename = std::enable_if_t<TPrimitiveDataType<T>::Result || std::is_same_v<T, NYql::NUuid::TUuid>>>
     inline T As() const;
 
-    template <typename T, typename = std::enable_if_t<TPrimitiveDataType<T>::Result>>
+    template <typename T, typename = std::enable_if_t<TPrimitiveDataType<T>::Result || std::is_same_v<T, NYql::NUuid::TUuid>>>
     inline T Get() const;
 
     inline NYql::NDecimal::TInt128 GetInt128() const {
@@ -98,6 +107,12 @@ public:
         const auto p = reinterpret_cast<ui8*>(&v);
         p[0xF] = (p[0xE] & 0x80) ? 0xFF : 0x00;
         return v;
+    }
+
+    inline NYql::NUuid::TUuid GetUuid() const {
+        TStringRef asStr = AsStringRef();
+        Y_DEBUG_ABORT_UNLESS(asStr.size() == sizeof(NYql::NUuid::TUuid));
+        return *reinterpret_cast<const NYql::NUuid::TUuid*>(asStr.data());
     }
 
     // TODO: deprecate AsTuple() in favor of GetElements()
@@ -251,6 +266,16 @@ private:
 };
 
 UDF_ASSERT_TYPE_SIZE(TBlockItem, 16);
+
+template <>
+inline NYql::NUuid::TUuid TBlockItem::As<NYql::NUuid::TUuid>() const {
+    return GetUuid();
+}
+
+template <>
+inline NYql::NUuid::TUuid TBlockItem::Get<NYql::NUuid::TUuid>() const {
+    return GetUuid();
+}
 
 #define VALUE_AS(xType) \
     template <> \

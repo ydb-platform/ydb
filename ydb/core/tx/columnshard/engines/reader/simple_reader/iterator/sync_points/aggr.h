@@ -39,7 +39,8 @@ private:
 
     virtual std::shared_ptr<NCommon::IDataSource> OnAddSource(const std::shared_ptr<NCommon::IDataSource>& source) override {
         SourcesToAggregate.emplace_back(source);
-        if (SourcesToAggregate.size() >= 100 || Collection->IsFinished()) {
+        source->MutableAs<IDataSource>()->ClearMemoryGuards();
+        if (SourcesToAggregate.size() >= 100 || Collection->IsFinished() || !Collection->CheckInFlightLimits()) {
             return Flush();
         }
 

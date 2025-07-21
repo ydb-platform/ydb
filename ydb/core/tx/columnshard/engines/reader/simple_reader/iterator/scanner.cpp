@@ -28,7 +28,6 @@ TScanHead::TScanHead(std::unique_ptr<NCommon::ISourcesConstructor>&& sourcesCons
         SyncPoints.emplace_back(std::make_shared<TSyncPointResultsAggregationControl>(
             SourcesCollection, Context->GetSourcesAggregationScript(), SyncPoints.size(), context));
     } else if (Context->GetReadMetadata()->IsSorted()) {
-        AFL_VERIFY(!Context->GetSourcesAggregationScript());
         if (Context->GetReadMetadata()->HasLimit()) {
             auto collection = std::make_shared<TScanWithLimitCollection>(Context, std::move(sourcesConstructor));
             SourcesCollection = collection;

@@ -91,6 +91,10 @@ protected:
     virtual bool DoStartFetchingAccessor(const std::shared_ptr<NCommon::IDataSource>& sourcePtr, const TFetchingScriptCursor& step) = 0;
 
 public:
+    void ClearMemoryGuards() {
+        ResourceGuards.clear();
+    }
+
     bool NeedFullAnswer() const {
         return NeedFullAnswerFlag;
     }

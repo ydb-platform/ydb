@@ -214,7 +214,6 @@ private:
     virtual TConclusionStatus DoExecute(const std::vector<std::shared_ptr<TAccessorsCollection>>& sources,
         const std::shared_ptr<TAccessorsCollection>& collectionResult) const override {
         std::vector<const IChunkedArray*> arrays;
-
         std::optional<arrow::Type::type> type;
         for (auto&& i : sources) {
             const auto& acc = i->GetAccessorVerified(ColumnInfo.GetColumnId());
@@ -273,6 +272,7 @@ private:
                     ++idx;
                 }
                 AFL_VERIFY(arrResultIndex);
+                Cerr << "RESULT: " << type.ToString(*result) << "/" << ColumnInfo.GetColumnId() << Endl;
                 if (arrResultIndex) {
                     collectionResult->AddVerified(
                         ColumnInfo.GetColumnId(), sources[*arrResultIndex]->GetAccessorVerified(ColumnInfo.GetColumnId()), false);

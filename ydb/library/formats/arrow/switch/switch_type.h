@@ -96,6 +96,17 @@ public:
         return nullptr;
     }
 
+    TString ToString(const ValueType& value) const {
+        if constexpr (IsCType) {
+            return ToString(value);
+        }
+        if constexpr (IsStringView) {
+            return TString(value.data(), value.size());
+        }
+        Y_FAIL();
+        return "";
+    }
+
     ValueType GetValue(const TArray& arr, const ui32 index) const {
         if constexpr (IsCType) {
             return arr.Value(index);

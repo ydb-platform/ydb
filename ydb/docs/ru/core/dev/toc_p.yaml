@@ -39,3 +39,5 @@ items:
 - name: Управление потреблением ресурсов
   href: resource-consumption-management.md
   when: feature_resource_pool == true and feature_resource_pool_classifier == true
+- name: Статистика выполнения запросов и её анализ
+  href: runtime-stats/toc_p.md

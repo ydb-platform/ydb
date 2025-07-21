@@ -646,7 +646,7 @@ void TExecutor::PlanTransactionActivation() {
 
 void TExecutor::TryActivateWaitingTransaction(TIntrusivePtr<NPageCollection::TPagesWaitPad>&& waitPad) {
     Y_ENSURE(waitPad);
-    Y_ASSERT(waitPad->PendingRequests);
+    Y_ENSURE(waitPad->PendingRequests);
     if (--waitPad->PendingRequests) {
         LogWaitingTransaction(std::move(waitPad));
     } else {

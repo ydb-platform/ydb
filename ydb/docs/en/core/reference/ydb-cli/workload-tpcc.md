@@ -92,7 +92,7 @@ See the command description:
 | `--warehouses` or `-w`       | A number of TPC-C warehouses.                                  | 10            |
 | `--warmup`                   | Warmup time. Example: 10s, 5m, 1h.                             | 30m           |
 | `--time` or `-t`             | Execution time. Example: 10s, 5m, 1h.                          | 2h            |
-| `--max-sessions` or `-m`     | A soft limit on number of DB sessions.                         | 100           |
+| `--max-sessions` or `-m`     | A soft limit on the number of DB sessions.                         | 100           |
 | `--threads`                  | A number of threads executing queries                          | auto          |
 | `--format` or `-f`           | Output format: 'Pretty', 'Json'                                | Pretty        |
 | `--no-tui`                   | Disable TUI, which is enabled by default in interactive mode.  |               |

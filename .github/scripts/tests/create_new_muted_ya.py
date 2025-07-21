@@ -139,8 +139,6 @@ def aggregate_test_data(all_data, period_days):
     
     for test in all_data:
         processed_count += 1
-        if test.get('full_name') == 'ydb/core/blobstorage/ut_blobstorage/GroupReconfiguration.BsControllerDoesNotDisableGroup':
-            print(1)
         # Показываем прогресс каждые 1000 записей или каждые 10%
         if processed_count % 1000 == 0 or processed_count % max(1, total_count // 10) == 0:
             progress_percent = (processed_count / total_count) * 100

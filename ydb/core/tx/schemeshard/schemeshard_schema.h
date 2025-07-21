@@ -36,14 +36,14 @@ struct Schema : NIceDb::Schema {
         struct ACLVersion :            Column<15, NScheme::NTypeIds::Uint64> {};
         struct ParentOwnerId :         Column<16, NScheme::NTypeIds::Uint64> { using Type = TOwnerId; static constexpr Type Default = InvalidOwnerId; };
         struct TempDirOwnerActorId_Deprecated : Column<17, NScheme::NTypeIds::String> {};
-        struct TempDirOwnerActorId :   Column<18, NScheme::NTypeIds::ActorId> {}; // Only for EPathType::EPathTypeDir.
-                                                                                  // Not empty if dir must be deleted after loosing connection with TempDirOwnerActorId actor.
-                                                                                  // See schemeshard__background_cleaning.cpp.
+        struct TempDirOwnerActorIdRaw : Column<18, NScheme::NTypeIds::ActorId> {}; // Only for EPathType::EPathTypeDir.
+                                                                                   // Not empty if dir must be deleted after loosing connection with TempDirOwnerActorId actor.
+                                                                                   // See schemeshard__background_cleaning.cpp.
 
         using TKey = TableKey<Id>;
         using TColumns = TableColumns<Id, ParentId, Name, CreateFinished, PathType, StepCreated, CreateTxId,
             StepDropped, DropTxId, Owner, ACL, LastTxId, DirAlterVersion, UserAttrsAlterVersion, ACLVersion,
-            ParentOwnerId, TempDirOwnerActorId_Deprecated, TempDirOwnerActorId>;
+            ParentOwnerId, TempDirOwnerActorId_Deprecated, TempDirOwnerActorIdRaw>;
     };
 
     struct MigratedPaths : Table<50> {
@@ -64,14 +64,14 @@ struct Schema : NIceDb::Schema {
         struct UserAttrsAlterVersion : Column<15, NScheme::NTypeIds::Uint64> {};
         struct ACLVersion :            Column<16, NScheme::NTypeIds::Uint64> {};
         struct TempDirOwnerActorId_Deprecated : Column<17, NScheme::NTypeIds::String> {};
-        struct TempDirOwnerActorId :   Column<18, NScheme::NTypeIds::ActorId> {}; // Only for EPathType::EPathTypeDir.
-                                                                                  // Not empty if dir must be deleted after loosing connection with TempDirOwnerActorId actor.
-                                                                                  // See schemeshard__background_cleaning.cpp.
+        struct TempDirOwnerActorIdRaw : Column<18, NScheme::NTypeIds::ActorId> {}; // Only for EPathType::EPathTypeDir.
+                                                                                   // Not empty if dir must be deleted after loosing connection with TempDirOwnerActorId actor.
+                                                                                   // See schemeshard__background_cleaning.cpp.
 
         using TKey = TableKey<OwnerPathId, LocalPathId>;
         using TColumns = TableColumns<OwnerPathId, LocalPathId, ParentOwnerId, ParentLocalId, Name, PathType, StepCreated, CreateTxId,
             StepDropped, DropTxId, Owner, ACL, LastTxId, DirAlterVersion, UserAttrsAlterVersion, ACLVersion, TempDirOwnerActorId_Deprecated,
-            TempDirOwnerActorId>;
+            TempDirOwnerActorIdRaw>;
     };
 
     struct TxInFlight : Table<2> { // not in use

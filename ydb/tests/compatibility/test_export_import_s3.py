@@ -151,7 +151,7 @@ class TestExportImportS3(MixedClusterFixture):
             progress_import = import_client.get_import_from_s3_operation(import_id).progress.name
         assert progress_import == "DONE"
 
-        # Проверяем, что импортированные таблицы действительно созданы
+        # Checking that the imported tables are actually created
         with ydb.SessionPool(self.driver, size=1) as pool:
             with pool.checkout() as session:
                 for num in range(1, 6):

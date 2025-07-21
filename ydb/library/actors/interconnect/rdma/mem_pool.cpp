@@ -22,6 +22,20 @@ static constexpr size_t HPageSz = (1 << 21);
 
 namespace NInterconnect::NRdma {
 
+    class TMemPoolImpl {
+    public:
+        static TMemRegion* DoAlloc(IMemPool* pool, int size, ui32 flags) {
+            TMemRegion* region = pool->AllocImpl(size, flags);
+            if (flags & IMemPool::BLOCK_MODE) {
+                while (!region) {
+                    std::this_thread::yield();
+                    region = pool->AllocImpl(size, flags);
+                }
+            }
+            return region;
+        }
+    };
+
     class TChunk: public NNonCopyable::TMoveOnly, public TAtomicRefCount<TChunk> {
     public:
 
@@ -193,7 +207,9 @@ namespace NInterconnect::NRdma {
                 IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_READ | IBV_ACCESS_REMOTE_WRITE
             );
             if (!mr) {
-                std::free(addr);
+                for (ibv_mr* tmp : res) {
+                    ibv_dereg_mr(tmp);
+                }
                 return {};
             }
             res.push_back(mr);
@@ -201,24 +217,18 @@ namespace NInterconnect::NRdma {
         return res;
     }
 
-    TMemRegionPtr IMemPool::Alloc(int size) noexcept {
-        TMemRegion* region = nullptr;
-        while (!region) {
-            region = AllocImpl(size);
-            if (!region) {
-                std::this_thread::yield();
-            } 
+    TMemRegionPtr IMemPool::Alloc(int size, ui32 flags) noexcept {
+        TMemRegion* region = TMemPoolImpl::DoAlloc(this, size, flags);
+        if (!region) {
+            return nullptr;
         }
         return TMemRegionPtr(region);
     }
 
-    TRcBuf IMemPool::AllocRcBuf(int size) noexcept {
-        TMemRegion* region = nullptr;
-        while (!region) {
-            region = AllocImpl(size);
-            if (!region) {
-                std::this_thread::yield();
-            } 
+    std::optional<TRcBuf> IMemPool::AllocRcBuf(int size, ui32 flags) noexcept {
+        TMemRegion* region = TMemPoolImpl::DoAlloc(this, size, flags);
+        if (!region) {
+            return {};
         }
         return TRcBuf(IContiguousChunk::TPtr(region));
     }
@@ -252,7 +262,7 @@ namespace NInterconnect::NRdma {
 
             auto mrs = registerMemory(ptr, size, Ctxs);
             if (mrs.empty()) {
-                Y_ABORT_UNLESS(false, "UNABLE TO REGISTER MEMORY");
+                std::free(ptr);
                 return nullptr;
             }
 
@@ -282,7 +292,7 @@ namespace NInterconnect::NRdma {
             : TMemPoolBase(-1)
         {}
 
-        TMemRegion* AllocImpl(int size) noexcept override {
+        TMemRegion* AllocImpl(int size, ui32) noexcept override {
             struct TDummy {};
             auto chunk = AllocNewChunk<TDummy>(size, false);
             if (!chunk) {
@@ -345,7 +355,7 @@ namespace NInterconnect::NRdma {
             //}
         };
 
-        TMemRegion* AllocImpl(int size) noexcept override {
+        TMemRegion* AllocImpl(int size, ui32 flags) noexcept override {
             if (size > (int)ChunkSize)
                 return nullptr;
 
@@ -353,6 +363,9 @@ namespace NInterconnect::NRdma {
             constexpr size_t maxAttempts = 7;
             size_t attempt = maxAttempts;
             TChunkPtr chunk;
+
+            // we need to consider up to one page gap during allocation;
+            const size_t alignAwareChunkSize = ChunkSize - Alignment;
             do {
                 TChunk* cur = PopChunk(startPos, ActiveAndFree);
                 if (!cur) {
@@ -369,7 +382,7 @@ namespace NInterconnect::NRdma {
                 TAuxChunkData* aux = CastToAuxChunkData(cur);
 
                 // We have chunk, check can we use it to allock region
-                if (aux->Allocated.load() + (size_t)size > ChunkSize) {
+                if (aux->Allocated.load() + (size_t)size > alignAwareChunkSize) {
                     Y_ABORT_UNLESS(!aux->IsInactive());
                     // No more space - put chunk in to inactive to wait deallocation regions
                     int pos = -1;
@@ -396,13 +409,21 @@ namespace NInterconnect::NRdma {
                 chunk->Ref();
             }
 
-            size_t offset = CastToAuxChunkData(chunk.Get())->Allocated.fetch_add(size);
+            auto aux = CastToAuxChunkData(chunk.Get());
+            size_t offset = aux->Allocated.load();
+            size_t allignmentOffset = 0;
+            if (flags & Flags::PAGE_ALIGNED) {
+                allignmentOffset = Alignment - (offset % Alignment); 
+            }
+            aux->Allocated.store(offset + size + allignmentOffset);
+
+            //size_t offset = CastToAuxChunkData(chunk.Get())->Allocated.fetch_add(size);
             Y_ABORT_UNLESS(!CastToAuxChunkData(chunk.Get())->IsInactive());
 
             while (PushChunk(startPos, ActiveAndFree, chunk.Get()) == -1) {
                 std::this_thread::yield();
             }
-            return new TMemRegion(chunk, offset, size);
+            return new TMemRegion(chunk, offset + allignmentOffset, size);
         }
 
         void Free(TMemRegion&&, TChunk& chunk) noexcept override {
@@ -422,7 +443,7 @@ namespace NInterconnect::NRdma {
         }
 
         int GetMaxAllocSz() const noexcept override {
-            return ChunkSize;
+            return ChunkSize - Alignment;
         }
 
     private:

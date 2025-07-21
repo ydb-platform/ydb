@@ -22,7 +22,7 @@ Y_UNIT_TEST_SUITE(RdmaXdc) {
         if (!memPool) {
             ev->AddPayload(TRope(TString(5000, 'X')));
         } else {
-            auto buf = memPool->AllocRcBuf(5000);
+            auto buf = memPool->AllocRcBuf(5000, 0).value();
             std::fill(buf.GetDataMut(), buf.GetDataMut() + 5000, 'X');
             ev->AddPayload(TRope(std::move(buf)));
             UNIT_ASSERT_VALUES_EQUAL(ev->GetPayload().back().size(), 5000);
@@ -191,7 +191,7 @@ Y_UNIT_TEST_SUITE(RdmaXdc) {
 
         TVector<TMemRegionPtr> memRegions;
         for (const auto& cred: creds.GetCreds()) {
-            auto regToRead = memPool->Alloc(cred.GetSize());
+            auto regToRead = memPool->Alloc(cred.GetSize(), IMemPool::BLOCK_MODE);
             ReadOneMemRegion(
                 rdma, rdma->Qp2,
                 reinterpret_cast<void*>(cred.GetAddress()), cred.GetRkey(), cred.GetSize(),
@@ -346,7 +346,7 @@ Y_UNIT_TEST_SUITE(RdmaXdc) {
                     } else if (isXdc) {
                         ev->AddPayload(TRope(TString(5000 + j, j + i)));
                     } else if (isRdma) {
-                        auto buf = memPool->AllocRcBuf(5000 + j);
+                        auto buf = memPool->AllocRcBuf(5000 + j, 0).value();
                         std::fill(buf.GetDataMut(), buf.GetDataMut() + 5000 + j, j + i);
                         ev->AddPayload(TRope(std::move(buf)));
                         UNIT_ASSERT_VALUES_EQUAL(ev->GetPayload().back().size(), 5000 + j);

@@ -19,6 +19,8 @@
 #include <util/generic/hash.h>
 #include <util/system/rwlock.h>
 #include <util/random/random.h>
+#include <ydb/library/actors/interconnect/rdma/mem_pool.h>
+#include <ydb/library/actors/util/rc_buf.h>
 
 namespace NActors {
 
@@ -70,22 +72,36 @@ namespace NActors {
         }
     };
 
-    TRcBuf DefaultRcBufAllocator(size_t size, size_t headRoom, size_t tailRoom) {
-        auto buf = TRcBuf::UninitializedPageAligned(size + headRoom + tailRoom);
-        buf.TrimFront(size + tailRoom);
-        buf.TrimBack(size);
-        return buf;
-    };
-
-    TRdmaAllocatorWithFallback::TRdmaAllocatorWithFallback(TRcBufAllocator cb) noexcept
-        : Allocator(cb)
+    TRdmaAllocatorWithFallback::TRdmaAllocatorWithFallback(std::shared_ptr<NInterconnect::NRdma::IMemPool>  memPool) noexcept
+        : RdmaMemPool(memPool)
     {}
 
     TRcBuf TRdmaAllocatorWithFallback::AllocRcBuf(size_t size, size_t headRoom, size_t tailRoom) noexcept {
-        auto buf = Allocator(size, headRoom, tailRoom);
+        std::optional<TRcBuf> buf = TryAllocRdmaRcBuf<false>(size, headRoom, tailRoom);
         if (!buf) {
-            return DefaultRcBufAllocator(size, headRoom, tailRoom);
+            return GetDefaultRcBufAllocator()->AllocRcBuf(size, headRoom, tailRoom);
         }
+        return buf.value();
+    }
+
+    TRcBuf TRdmaAllocatorWithFallback::AllocPageAlignedRcBuf(size_t size, size_t tailRoom) noexcept {
+        TryAllocRdmaRcBuf<false>(1, 0, 0);
+        std::optional<TRcBuf> buf = TryAllocRdmaRcBuf<true>(size, 0, tailRoom);
+        if (!buf) {
+            return GetDefaultRcBufAllocator()->AllocPageAlignedRcBuf(size, tailRoom);
+        }
+        return buf.value();
+    }
+
+    template<bool pageAligned>
+    std::optional<TRcBuf> TRdmaAllocatorWithFallback::TryAllocRdmaRcBuf(size_t size, size_t headRoom, size_t tailRoom) noexcept {
+        std::optional<TRcBuf> buf = RdmaMemPool->AllocRcBuf(size + headRoom + tailRoom,
+            pageAligned ? NInterconnect::NRdma::IMemPool::PAGE_ALIGNED : NInterconnect::NRdma::IMemPool::EMPTY);
+        if (!buf) {
+            return {};
+        }
+        buf->TrimFront(size + tailRoom);
+        buf->TrimBack(size);
         return buf;
     }
 
@@ -99,7 +115,7 @@ namespace NActors {
         , CurrentTimestamp(0)
         , CurrentMonotonic(0)
         , CurrentIDCounter(RandomNumber<ui64>())
-        , RcBufAllocator(setup->RcBufAllocator ?: DefaultRcBufAllocator)
+        , RcBufAllocator(setup->RcBufAllocator ? setup->RcBufAllocator.get() : GetDefaultRcBufAllocator())
         , SystemSetup(setup.Release())
         , DefSelfID(NodeId, "actorsystem")
         , AppData0(appData)

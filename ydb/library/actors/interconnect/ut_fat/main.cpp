@@ -49,9 +49,12 @@ namespace {
 
             if (UseRope) {
                 if (MemPool) {
-                    auto buf = MemPool->AllocRcBuf(payload.size());
-                    std::memcpy(buf.GetDataMut(), payload.data(), payload.size());
-                    ev->Record.SetPayloadId(ev->AddPayload(TRope(std::move(buf))));
+                    auto buf = MemPool->AllocRcBuf(payload.size(), 0);
+                    if (!buf) {
+                        buf.emplace(GetDefaultRcBufAllocator()->AllocRcBuf(payload.size(), 0, 0));
+                    }
+                    std::memcpy(buf->GetDataMut(), payload.data(), payload.size());
+                    ev->Record.SetPayloadId(ev->AddPayload(TRope(std::move(buf.value()))));
                 } else {
                     ev->Record.SetPayloadId(ev->AddPayload(TRope(payload)));
                 }

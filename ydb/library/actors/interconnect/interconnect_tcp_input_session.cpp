@@ -599,10 +599,11 @@ namespace NActors {
     TRcBuf TInputSessionTCP::AllocateRcBuf(ui64 size, ui64 headroom, ui64 tailroom, bool isRdma) {
         if (isRdma) {
             Y_ABORT_UNLESS(Common->RdmaMemPool, "RdmaMemPool is not initialized");
-            auto buffer = Common->RdmaMemPool->AllocRcBuf(size + headroom + tailroom);
-            buffer.TrimFront(size + tailroom);
-            buffer.TrimBack(size);
-            return buffer;
+            auto buffer = Common->RdmaMemPool->AllocRcBuf(size + headroom + tailroom, NInterconnect::NRdma::IMemPool::EMPTY);
+            Y_ABORT_UNLESS(buffer);
+            buffer->TrimFront(size + tailroom);
+            buffer->TrimBack(size);
+            return buffer.value();
         } else {
             return TRcBuf::Uninitialized(size, headroom, tailroom);
         }

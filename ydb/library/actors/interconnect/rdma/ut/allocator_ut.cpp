@@ -69,7 +69,7 @@ Y_UNIT_TEST_SUITE(Allocator) {
         auto memPool = CreateMemPool<IncrementalPool>();
 
         {
-            auto memRegion = memPool->Alloc(BUF_SIZE);
+            auto memRegion = memPool->Alloc(BUF_SIZE, 0);
             UNIT_ASSERT_C(memRegion->GetAddr(), "invalid address");
             UNIT_ASSERT_VALUES_EQUAL_C(memRegion->GetSize(), BUF_SIZE, "invalid address");
             for (ui32 i = 0; i < NInterconnect::NRdma::NLinkMgr::GetAllCtxs().size(); ++i) {
@@ -80,11 +80,11 @@ Y_UNIT_TEST_SUITE(Allocator) {
             }
         }
         for (ui32 i = 0; i < 10; ++i) {
-            auto m1 = memPool->Alloc(BUF_SIZE);
+            auto m1 = memPool->Alloc(BUF_SIZE, 0);
             UNIT_ASSERT_C(m1->GetAddr() != nullptr, "invalid address");
-            auto m2 = memPool->Alloc(BUF_SIZE);
+            auto m2 = memPool->Alloc(BUF_SIZE, 0);
             UNIT_ASSERT_C(m2->GetAddr() != nullptr, "invalid address");
-            auto m3 = memPool->Alloc(BUF_SIZE);
+            auto m3 = memPool->Alloc(BUF_SIZE, 0);
             UNIT_ASSERT_C(m2->GetAddr() != nullptr, "invalid address");
         }
     }
@@ -103,7 +103,7 @@ Y_UNIT_TEST_SUITE(Allocator) {
             threads.emplace_back([memPool, &t=times[i]]() {
                 auto now = TInstant::Now();
                 for (ui32 j = 0; j < NUM_ALLOC; ++j) {
-                    auto memRegion = memPool->Alloc(BUF_SIZE);
+                    auto memRegion = memPool->Alloc(BUF_SIZE, NInterconnect::NRdma::IMemPool::BLOCK_MODE);
                     UNIT_ASSERT_C(memRegion->GetAddr(), "invalid address");
                 }
                 t = (TInstant::Now() - now).MicroSeconds();
@@ -137,7 +137,7 @@ Y_UNIT_TEST_SUITE(Allocator) {
             threads.emplace_back([memPool, &t=times[i], &mtx, &regions]() {
                 auto now = TInstant::Now();
                 for (ui32 j = 0; j < NUM_ALLOC; ++j) {
-                    auto memRegion = memPool->Alloc(BUF_SIZE);
+                    auto memRegion = memPool->Alloc(BUF_SIZE, 0);
                     UNIT_ASSERT_C(memRegion->GetAddr(), "invalid address");
                     size_t pos = (size_t)rand() % NUM_THREADS;
                     mtx.lock();
@@ -161,7 +161,7 @@ Y_UNIT_TEST_SUITE(Allocator) {
 
     Y_UNIT_TEST_TWIN(MemRegRcBuf, IncrementalPool) {
         auto memPool = CreateMemPool<IncrementalPool>();
-        TRcBuf data = memPool->AllocRcBuf(BUF_SIZE);
+        TRcBuf data = memPool->AllocRcBuf(BUF_SIZE, 0).value();
         UNIT_ASSERT_C(data.GetData(), "invalid data");
         UNIT_ASSERT_VALUES_EQUAL_C(data.GetSize(), BUF_SIZE, "invalid size");
         data.GetDataMut()[0] = 'a';
@@ -184,7 +184,7 @@ Y_UNIT_TEST_SUITE(Allocator) {
 
     Y_UNIT_TEST_TWIN(MemRegRcBufSubstr, IncrementalPool) {
         auto memPool = CreateMemPool<IncrementalPool>();
-        TRcBuf data = memPool->AllocRcBuf(BUF_SIZE);
+        TRcBuf data = memPool->AllocRcBuf(BUF_SIZE, 0).value();
         data.GetDataMut()[0] = 'a';
         data.GetDataMut()[1] = 'b';
         data.GetDataMut()[2] = 'c';
@@ -223,9 +223,9 @@ Y_UNIT_TEST_SUITE(Allocator) {
     Y_UNIT_TEST_TWIN(MemRegRope, IncrementalPool) {
         auto memPool = CreateMemPool<IncrementalPool>();
         TRope rope;
-        rope.Insert(rope.End(), TRope(TRcBuf(memPool->AllocRcBuf(BUF_SIZE))));
+        rope.Insert(rope.End(), TRope(TRcBuf(memPool->AllocRcBuf(BUF_SIZE, 0).value())));
         rope.Insert(rope.End(), TRope("AAAAAAABBBBBBBCCCCCC"));
-        rope.Insert(rope.End(), TRope(TRcBuf(memPool->AllocRcBuf(2 * BUF_SIZE))));
+        rope.Insert(rope.End(), TRope(TRcBuf(memPool->AllocRcBuf(2 * BUF_SIZE, 0).value())));
         auto regions = ExtractMemRegions(rope);
         UNIT_ASSERT_VALUES_EQUAL_C(regions.size(), 3, "invalid number of regions");
         UNIT_ASSERT_C(!regions[0].Empty(), "invalid region");
@@ -274,12 +274,7 @@ Y_UNIT_TEST_SUITE(Allocator) {
             threads.emplace_back([memPool, &t=times[i], sz]() {
                 auto now = TInstant::Now();
                 for (ui32 j = 0; j < NUM_ALLOC; ++j) {
-                    NInterconnect::NRdma::TMemRegionPtr memRegion = nullptr;
-                    while (!memRegion) {
-                        memRegion = memPool->Alloc(sz);
-                        if (!memRegion)
-                            std::this_thread::yield();
-                    }
+                    NInterconnect::NRdma::TMemRegionPtr memRegion = memPool->Alloc(sz, NInterconnect::NRdma::IMemPool::BLOCK_MODE);
                     UNIT_ASSERT_C(memRegion->GetAddr(), "invalid address");
                 }
                 t = (TInstant::Now() - now).MicroSeconds();
@@ -311,7 +306,7 @@ Y_UNIT_TEST_SUITE(Allocator) {
             threads.emplace_back([memPool, &t=times[i], sz]() {
                 auto now = TInstant::Now();
                 for (ui32 j = 0; j < NUM_ALLOC; ++j) {
-                    auto memRegion = memPool->Alloc(sz);
+                    auto memRegion = memPool->Alloc(sz, NInterconnect::NRdma::IMemPool::BLOCK_MODE);
                     UNIT_ASSERT_C(memRegion->GetAddr(), "invalid address");
                 }
                 t = (TInstant::Now() - now).MicroSeconds();

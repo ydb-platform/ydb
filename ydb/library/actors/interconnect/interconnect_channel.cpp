@@ -311,7 +311,8 @@ namespace NActors {
     bool TEventOutputChannel::SerializeEventRdma(TEventHolder& event, NActorsInterconnect::TRdmaCreds& rdmaCreds, ssize_t rdmaDeviceIndex) {
         if (!event.Buffer && event.Event) {
             std::optional<TRope> rope = event.Event->SerializeToRope(
-                [&](ui32 size) -> TRcBuf { return RdmaMemPool->AllocRcBuf(size); }
+                //TODO: !!! handle allocation error
+                [&](ui32 size) -> TRcBuf { return RdmaMemPool->AllocRcBuf(size, NInterconnect::NRdma::IMemPool::EMPTY).value(); }
             );
             if (!rope) {
                 return false; // serialization failed

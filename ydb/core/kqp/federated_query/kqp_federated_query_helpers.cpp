@@ -314,7 +314,7 @@ namespace NKikimr::NKqp {
             .CredentialsProviderFactory(credentialsProviderFactory);
         auto schemeClient = std::make_shared<NYdb::NScheme::TSchemeClient>(*driver, opts);
         return schemeClient->DescribePath(path)
-            .Apply([actorSystem = NActors::TActivationContext::ActorSystem(), p=path, sc = schemeClient](const NThreading::TFuture<NYdb::NScheme::TDescribePathResult>& result) {
+            .Apply([actorSystem = NActors::TActivationContext::ActorSystem(), p = path, sc = schemeClient, database, endpoint](const NThreading::TFuture<NYdb::NScheme::TDescribePathResult>& result) {
                 auto describePathResult = result.GetValue();
                 if (!describePathResult.IsSuccess()) {
                     LOG_WARN_S(*actorSystem, NKikimrServices::KQP_GATEWAY, "DescribePath failed, path " << p << ", " << describePathResult.GetIssues().ToString());

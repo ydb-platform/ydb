@@ -25,8 +25,8 @@ private:
     virtual std::shared_ptr<IDataSource> DoOnSourceFinished(const bool /*force*/) {
         return nullptr;
     }
-    virtual bool IsSourcePrepared(const std::shared_ptr<IDataSource>& source) const = 0;
-    virtual ESourceAction OnSourceReady(const std::shared_ptr<IDataSource>& source, TPlainReadData& reader) = 0;
+    virtual bool IsSourcePrepared(const std::shared_ptr<NCommon::IDataSource>& source) const = 0;
+    virtual ESourceAction OnSourceReady(const std::shared_ptr<NCommon::IDataSource>& source, TPlainReadData& reader) = 0;
     virtual void DoAbort() = 0;
     bool AbortFlag = false;
 
@@ -34,15 +34,15 @@ protected:
     const std::shared_ptr<TSpecialReadContext> Context;
     const std::shared_ptr<ISourcesCollection> Collection;
     std::shared_ptr<ISyncPoint> Next;
-    std::deque<std::shared_ptr<IDataSource>> SourcesSequentially;
+    std::deque<std::shared_ptr<NCommon::IDataSource>> SourcesSequentially;
 
 public:
     virtual ~ISyncPoint() = default;
 
-    virtual std::shared_ptr<IDataSource> OnAddSource(const std::shared_ptr<IDataSource>& source) {
+    virtual std::shared_ptr<NCommon::IDataSource> OnAddSource(const std::shared_ptr<NCommon::IDataSource>& source) {
         SourcesSequentially.emplace_back(source);
-        if (!source->HasFetchingPlan()) {
-            source->InitFetchingPlan(Context->GetColumnsFetchingPlan(source));
+        if (!source->GetAs<IDataSource>()->HasFetchingPlan()) {
+            source->MutableAs<IDataSource>()->InitFetchingPlan(Context->GetColumnsFetchingPlan(source));
         }
         return source;
     }
@@ -83,10 +83,10 @@ public:
         , Collection(collection) {
     }
 
-    void AddSource(std::shared_ptr<IDataSource>&& source);
+    void AddSource(std::shared_ptr<NCommon::IDataSource>&& source);
     void OnSourceFinished(const bool force);
 
-    void OnSourcePrepared(const std::shared_ptr<IDataSource>& sourceInput, TPlainReadData& reader);
+    void OnSourcePrepared(std::shared_ptr<NCommon::IDataSource>&& sourceInput, TPlainReadData& reader);
 };
 
 }   // namespace NKikimr::NOlap::NReader::NSimple

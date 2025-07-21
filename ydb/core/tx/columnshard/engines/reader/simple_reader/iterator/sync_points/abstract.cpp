@@ -6,7 +6,7 @@
 
 namespace NKikimr::NOlap::NReader::NSimple {
 
-void ISyncPoint::OnSourcePrepared(const std::shared_ptr<IDataSource>& sourceInput, TPlainReadData& reader) {
+void ISyncPoint::OnSourcePrepared(std::shared_ptr<NCommon::IDataSource>&& sourceInput, TPlainReadData& reader) {
     const NActors::TLogContextGuard gLogging = NActors::TLogContextBuilder::Build()("sync_point", GetPointName())("aborted", AbortFlag);
     if (AbortFlag) {
         FOR_DEBUG_LOG(NKikimrServices::COLUMNSHARD_SCAN_EVLOG, sourceInput->AddEvent("a" + GetShortPointName()));
@@ -66,22 +66,22 @@ void ISyncPoint::Continue(const TPartialSourceAddress& continueAddress, TPlainRe
                                                                                            "continue_source_id", continueAddress.GetSourceId());
     const NActors::TLogContextGuard gLogging = NActors::TLogContextBuilder::Build()("sync_point", GetPointName())("event", "continue_source");
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("source_id", SourcesSequentially.front()->GetSourceId());
-    SourcesSequentially.front()->ContinueCursor(SourcesSequentially.front());
+    SourcesSequentially.front()->MutableAs<IDataSource>()->ContinueCursor(SourcesSequentially.front());
 }
 
 void ISyncPoint::OnSourceFinished(const bool force) {
     if (auto genSource = DoOnSourceFinished(force)) {
-        genSource->StartProcessing(genSource);
+        genSource->MutableAs<IDataSource>()->StartProcessing(genSource);
     }
 }
 
-void ISyncPoint::AddSource(std::shared_ptr<IDataSource>&& source) {
+void ISyncPoint::AddSource(std::shared_ptr<NCommon::IDataSource>&& source) {
     const NActors::TLogContextGuard gLogging = NActors::TLogContextBuilder::Build()("sync_point", GetPointName())("event", "add_source");
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("source_id", source->GetSourceId());
     AFL_VERIFY(!AbortFlag);
-    source->SetPurposeSyncPointIndex(GetPointIndex());
+    source->MutableAs<IDataSource>()->SetPurposeSyncPointIndex(GetPointIndex());
     if (Next) {
-        source->SetNeedFullAnswer(false);
+        source->MutableAs<IDataSource>()->SetNeedFullAnswer(false);
     }
     AFL_VERIFY(!!source);
     if (!LastSourceIdx) {
@@ -91,7 +91,7 @@ void ISyncPoint::AddSource(std::shared_ptr<IDataSource>&& source) {
     }
     LastSourceIdx = source->GetSourceIdx();
     if (auto genSource = OnAddSource(source)) {
-        genSource->StartProcessing(genSource);
+        genSource->MutableAs<IDataSource>()->StartProcessing(genSource);
     }
 }
 

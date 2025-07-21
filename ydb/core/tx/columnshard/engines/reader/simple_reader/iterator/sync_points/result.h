@@ -9,8 +9,8 @@ private:
     virtual void DoAbort() override {
     }
 
-    virtual ESourceAction OnSourceReady(const std::shared_ptr<IDataSource>& source, TPlainReadData& reader) override;
-    virtual bool IsSourcePrepared(const std::shared_ptr<IDataSource>& source) const override {
+    virtual ESourceAction OnSourceReady(const std::shared_ptr<NCommon::IDataSource>& source, TPlainReadData& reader) override;
+    virtual bool IsSourcePrepared(const std::shared_ptr<NCommon::IDataSource>& source) const override {
         if (!Next) {
             return source->IsSyncSection() && source->HasStageResult() &&
                    (source->GetStageResult().HasResultChunk() || source->GetStageResult().IsEmpty());

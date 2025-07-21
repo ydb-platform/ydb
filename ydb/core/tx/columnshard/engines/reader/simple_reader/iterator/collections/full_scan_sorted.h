@@ -24,19 +24,19 @@ private:
     virtual bool DoIsFinished() const override {
         return SourcesConstructor->IsFinished();
     }
-    virtual std::shared_ptr<IScanCursor> DoBuildCursor(const std::shared_ptr<IDataSource>& source, const ui32 readyRecords) const override {
+    virtual std::shared_ptr<IScanCursor> DoBuildCursor(const std::shared_ptr<NCommon::IDataSource>& source, const ui32 readyRecords) const override {
         return std::make_shared<TSimpleScanCursor>(
-            std::make_shared<NArrow::TSimpleRow>(source->GetStartPKRecordBatch()), source->GetSourceId(), readyRecords);
+            std::make_shared<NArrow::TSimpleRow>(source->GetAs<IDataSource>()->GetStartPKRecordBatch()), source->GetSourceId(), readyRecords);
     }
-    virtual std::shared_ptr<IDataSource> DoExtractNext() override {
-        auto result = static_pointer_cast<IDataSource>(SourcesConstructor->ExtractNext(Context));
+    virtual std::shared_ptr<NCommon::IDataSource> DoExtractNext() override {
+        auto result = SourcesConstructor->ExtractNext(Context);
         InFlightCount.Inc();
-        return result;
+        return std::move(result);
     }
     virtual bool DoCheckInFlightLimits() const override {
         return InFlightCount < GetMaxInFlight();
     }
-    virtual void DoOnSourceFinished(const std::shared_ptr<IDataSource>& /*source*/) override {
+    virtual void DoOnSourceFinished(const std::shared_ptr<NCommon::IDataSource>& /*source*/) override {
         InFlightCount.Dec();
     }
 

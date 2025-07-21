@@ -21,7 +21,13 @@ TConclusionStatus TScanHead::Start() {
 
 TScanHead::TScanHead(std::unique_ptr<NCommon::ISourcesConstructor>&& sourcesConstructor, const std::shared_ptr<TSpecialReadContext>& context)
     : Context(context) {
-    if (Context->GetReadMetadata()->IsSorted()) {
+    if (auto script = Context->GetSourcesAggregationScript()) {
+        SourcesCollection =
+            std::make_shared<TNotSortedCollection>(Context, std::move(sourcesConstructor), Context->GetReadMetadata()->GetLimitRobustOptional());
+        SyncPoints.emplace_back(std::make_shared<TSyncPointResult>(SyncPoints.size(), context, SourcesCollection));
+        SyncPoints.emplace_back(std::make_shared<TSyncPointResultsAggregationControl>(
+            SourcesCollection, Context->GetSourcesAggregationScript(), SyncPoints.size(), context));
+    } else if (Context->GetReadMetadata()->IsSorted()) {
         AFL_VERIFY(!Context->GetSourcesAggregationScript());
         if (Context->GetReadMetadata()->HasLimit()) {
             auto collection = std::make_shared<TScanWithLimitCollection>(Context, std::move(sourcesConstructor));
@@ -36,10 +42,6 @@ TScanHead::TScanHead(std::unique_ptr<NCommon::ISourcesConstructor>&& sourcesCons
         SourcesCollection =
             std::make_shared<TNotSortedCollection>(Context, std::move(sourcesConstructor), Context->GetReadMetadata()->GetLimitRobustOptional());
         SyncPoints.emplace_back(std::make_shared<TSyncPointResult>(SyncPoints.size(), context, SourcesCollection));
-        if (Context->GetSourcesAggregationScript()) {
-            SyncPoints.emplace_back(
-                std::make_shared<TSyncPointResultsAggregationControl>(SourcesCollection, Context->GetSourcesAggregationScript(), SyncPoints.size(), context));
-        }
     }
     for (ui32 i = 0; i + 1 < SyncPoints.size(); ++i) {
         SyncPoints[i]->SetNext(SyncPoints[i + 1]);

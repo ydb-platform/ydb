@@ -45,7 +45,7 @@ public:
         return GetColumnsFetchingPlan(std::static_pointer_cast<IDataSource>(source));
     }
 
-    std::shared_ptr<TFetchingScript> GetColumnsFetchingPlan(const std::shared_ptr<IDataSource>& source) {
+    std::shared_ptr<TFetchingScript> GetColumnsFetchingPlan(const std::shared_ptr<NCommon::IDataSource>& source) {
         return DoGetColumnsFetchingPlan(source);
     }
 

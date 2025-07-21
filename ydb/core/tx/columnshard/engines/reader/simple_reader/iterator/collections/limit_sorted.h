@@ -44,7 +44,7 @@ private:
 
     void DrainToLimit();
 
-    virtual std::shared_ptr<IScanCursor> DoBuildCursor(const std::shared_ptr<IDataSource>& source, const ui32 readyRecords) const override {
+    virtual std::shared_ptr<IScanCursor> DoBuildCursor(const std::shared_ptr<NCommon::IDataSource>& source, const ui32 readyRecords) const override {
         return std::make_shared<TSimpleScanCursor>(nullptr, source->GetSourceId(), readyRecords);
     }
     virtual void DoClear() override {
@@ -62,12 +62,12 @@ private:
     virtual bool DoIsFinished() const override {
         return !NextSource && SourcesConstructor->IsFinished() && FetchingInFlightSources.empty();
     }
-    virtual std::shared_ptr<IDataSource> DoExtractNext() override;
+    virtual std::shared_ptr<NCommon::IDataSource> DoExtractNext() override;
     virtual bool DoCheckInFlightLimits() const override {
         return FetchingInFlightSources.size() < InFlightLimit;
     }
 
-    virtual void DoOnSourceFinished(const std::shared_ptr<IDataSource>& source) override;
+    virtual void DoOnSourceFinished(const std::shared_ptr<NCommon::IDataSource>& source) override;
     ui32 GetInFlightIntervalsCount(const TCompareKeyForScanSequence& from, const TCompareKeyForScanSequence& to) const;
 
 public:

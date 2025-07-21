@@ -9,12 +9,12 @@ class TSyncPointResultsAggregationControl: public ISyncPoint {
 private:
     using TBase = ISyncPoint;
 
-    std::vector<std::shared_ptr<IDataSource>> SourcesToAggregate;
+    std::vector<std::shared_ptr<NCommon::IDataSource>> SourcesToAggregate;
     const std::shared_ptr<ISourcesCollection> Collection;
     const std::shared_ptr<TFetchingScript> AggregationScript;
     ui32 InFlightControl = 0;
 
-    std::shared_ptr<IDataSource> Flush() {
+    std::shared_ptr<NCommon::IDataSource> Flush() {
         if (SourcesToAggregate.empty()) {
             return nullptr;
         }
@@ -29,7 +29,7 @@ private:
         return result;
     }
 
-    virtual bool IsSourcePrepared(const std::shared_ptr<IDataSource>& source) const override {
+    virtual bool IsSourcePrepared(const std::shared_ptr<NCommon::IDataSource>& source) const override {
         return source->IsSyncSection() && source->HasStageResult();
     }
 
@@ -37,7 +37,7 @@ private:
         return ISyncPoint::IsFinished() && SourcesToAggregate.empty();
     }
 
-    virtual std::shared_ptr<IDataSource> OnAddSource(const std::shared_ptr<IDataSource>& source) override {
+    virtual std::shared_ptr<NCommon::IDataSource> OnAddSource(const std::shared_ptr<NCommon::IDataSource>& source) override {
         SourcesToAggregate.emplace_back(source);
         if (SourcesToAggregate.size() >= 100 || Collection->IsFinished()) {
             return Flush();
@@ -50,11 +50,12 @@ private:
         SourcesToAggregate.clear();
     }
 
-    virtual ESourceAction OnSourceReady(const std::shared_ptr<IDataSource>& source, TPlainReadData& reader) override {
+    virtual ESourceAction OnSourceReady(const std::shared_ptr<NCommon::IDataSource>& source, TPlainReadData& reader) override {
         AFL_VERIFY(InFlightControl);
         --InFlightControl;
         AFL_VERIFY(!Next);
-        AFL_VERIFY(source->GetType() == IDataSource::EType::Aggregation)("type", source->GetType());
+        AFL_VERIFY(source->GetAs<IDataSource>()->GetType() == IDataSource::EType::Aggregation)(
+            "type", source->GetAs<IDataSource>()->GetType());
         const TAggregationDataSource* aggrSource = static_cast<const TAggregationDataSource*>(source.get());
         for (auto&& i : aggrSource->GetSources()) {
             Collection->OnSourceFinished(i);
@@ -68,10 +69,11 @@ private:
             AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "has_result")("source_id", aggrSource->GetLastSourceId())(
                 "source_idx", source->GetSourceIdx())("table", resultChunk->GetTable()->num_rows());
             auto cursor = std::make_shared<TNotSortedSimpleScanCursor>(aggrSource->GetLastSourceId(), aggrSource->GetLastSourceRecordsCount());
-            reader.OnIntervalResult(std::make_unique<TPartialReadResult>(source->ExtractResourceGuards(), source->ExtractGroupGuard(),
+            reader.OnIntervalResult(
+                std::make_unique<TPartialReadResult>(source->ExtractResourceGuards(), source->MutableAs<IDataSource>()->ExtractGroupGuard(),
                 resultChunk->ExtractTable(), std::move(cursor), Context->GetCommonContext(), std::nullopt));
         }
-        source->ClearResult();
+        source->MutableAs<IDataSource>()->ClearResult();
         return ESourceAction::Finish;
     }
 

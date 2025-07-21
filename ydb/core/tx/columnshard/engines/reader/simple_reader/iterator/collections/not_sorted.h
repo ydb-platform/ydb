@@ -23,23 +23,23 @@ private:
         SourcesConstructor->Abort();
     }
 
-    virtual std::shared_ptr<IScanCursor> DoBuildCursor(const std::shared_ptr<IDataSource>& source, const ui32 readyRecords) const override;
+    virtual std::shared_ptr<IScanCursor> DoBuildCursor(const std::shared_ptr<NCommon::IDataSource>& source, const ui32 readyRecords) const override;
     virtual bool DoIsFinished() const override {
         return SourcesConstructor->IsFinished();
     }
-    virtual std::shared_ptr<IDataSource> DoExtractNext() override {
-        auto result = static_pointer_cast<IDataSource>(SourcesConstructor->ExtractNext(Context));
+    virtual std::shared_ptr<NCommon::IDataSource> DoExtractNext() override {
+        auto result = SourcesConstructor->ExtractNext(Context);
         InFlightCount.Inc();
-        return result;
+        return std::move(result);
     }
     virtual bool DoCheckInFlightLimits() const override {
         return InFlightCount < InFlightLimit;
     }
-    virtual void DoOnSourceFinished(const std::shared_ptr<IDataSource>& source) override {
-        if (!source->GetResultRecordsCount() && InFlightLimit * 2 < GetMaxInFlight()) {
+    virtual void DoOnSourceFinished(const std::shared_ptr<NCommon::IDataSource>& source) override {
+        if (!source->GetAs<IDataSource>()->GetResultRecordsCount() && InFlightLimit * 2 < GetMaxInFlight()) {
             InFlightLimit *= 2;
         }
-        FetchedCount += source->GetResultRecordsCount();
+        FetchedCount += source->GetAs<IDataSource>()->GetResultRecordsCount();
         if (Limit && *Limit <= FetchedCount) {
             AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD)("event", "limit_exhausted")("limit", Limit)("fetched", FetchedCount);
             SourcesConstructor->Clear();

@@ -175,7 +175,7 @@ public:
         ScriptCursor = std::move(scriptCursor);
     }
 
-    void ContinueCursor(const std::shared_ptr<IDataSource>& sourcePtr);
+    void ContinueCursor(const std::shared_ptr<NCommon::IDataSource>& sourcePtr);
 
     template <bool Reverse>
     class TCompareStartForScanSequence {
@@ -192,7 +192,7 @@ public:
 
     virtual NArrow::TSimpleRow GetStartPKRecordBatch() const = 0;
 
-    void StartProcessing(const std::shared_ptr<IDataSource>& sourcePtr);
+    void StartProcessing(const std::shared_ptr<NCommon::IDataSource>& sourcePtr);
     virtual ui64 PredictAccessorsSize(const std::set<ui32>& entityIds) const = 0;
 
     bool StartFetchingAccessor(const std::shared_ptr<NCommon::IDataSource>& sourcePtr, const TFetchingScriptCursor& step) {
@@ -417,7 +417,7 @@ public:
 class TAggregationDataSource: public IDataSource {
 private:
     using TBase = IDataSource;
-    YDB_READONLY_DEF(std::vector<std::shared_ptr<IDataSource>>, Sources);
+    YDB_READONLY_DEF(std::vector<std::shared_ptr<NCommon::IDataSource>>, Sources);
     const ui64 LastSourceId;
     const ui64 LastSourceRecordsCount;
 
@@ -487,10 +487,11 @@ private:
     }
 
     virtual TInternalPathId GetPathId() const override {
-        return Sources.front()->GetPathId();
+        return Sources.front()->GetAs<IDataSource>()->GetPathId();
     }
 
-    virtual bool DoStartFetchingAccessor(const std::shared_ptr<NCommon::IDataSource>& /*sourcePtr*/, const TFetchingScriptCursor& /*step*/) override {
+    virtual bool DoStartFetchingAccessor(
+        const std::shared_ptr<NCommon::IDataSource>& /*sourcePtr*/, const TFetchingScriptCursor& /*step*/) override {
         AFL_VERIFY(false);
         return false;
     }
@@ -580,13 +581,14 @@ public:
         return NArrow::TSimpleRow(nullptr, 0);
     }
 
-    TAggregationDataSource(std::vector<std::shared_ptr<IDataSource>>&& sources, const std::shared_ptr<NCommon::TSpecialReadContext>& context)
-        : TBase(EType::Aggregation, sources.back()->GetSourceId(), sources.back()->GetSourceIdx(), context, sources.front()->GetStart().CopyValue(),
-              sources.back()->GetFinish().CopyValue(), TSnapshot::Zero(), TSnapshot::Zero(), std::nullopt, std::nullopt, false)
+    TAggregationDataSource(
+        std::vector<std::shared_ptr<NCommon::IDataSource>>&& sources, const std::shared_ptr<NCommon::TSpecialReadContext>& context)
+        : TBase(EType::Aggregation, sources.back()->GetSourceId(), sources.back()->GetSourceIdx(), context,
+              sources.front()->GetAs<IDataSource>()->GetStart().CopyValue(), sources.back()->GetAs<IDataSource>()->GetFinish().CopyValue(),
+              TSnapshot::Zero(), TSnapshot::Zero(), std::nullopt, std::nullopt, false)
         , Sources(std::move(sources))
         , LastSourceId(Sources.back()->GetSourceId())
-        , LastSourceRecordsCount(Sources.back()->GetRecordsCount())
-    {
+        , LastSourceRecordsCount(Sources.back()->GetRecordsCount()) {
         AFL_VERIFY(Sources.size());
     }
 };

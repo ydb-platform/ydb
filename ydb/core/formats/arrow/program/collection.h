@@ -47,6 +47,11 @@ private:
     THashSet<i64> Markers;
 
 public:
+    void TakeSequenceFrom(const TAccessorsCollection& collection) {
+        AFL_VERIFY(ColumnIdsSequence.empty());
+        ColumnIdsSequence = collection.ColumnIdsSequence;
+    }
+
     bool HasMarker(const i64 marker) const {
         return Markers.contains(marker);
     }

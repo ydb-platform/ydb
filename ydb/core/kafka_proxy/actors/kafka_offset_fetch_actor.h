@@ -35,7 +35,7 @@ struct TopicEntities {
     std::shared_ptr<TSet<ui32>> Partitions = std::make_shared<TSet<ui32>>();
 };
 
-struct AlterTopicInfo {
+struct ModifiedTopicInfo {
     TString TopicName;
     TopicEntities Entities;
 };
@@ -67,6 +67,7 @@ public:
             HFunc(NKqp::TEvKqp::TEvQueryResponse, Handle);
             HFunc(NKqp::TEvKqp::TEvCreateSessionResponse, Handle);
             HFunc(NKikimr::NReplication::TEvYdbProxy::TEvAlterTopicResponse, Handle);
+            HFunc(TEvKafka::TEvResponse, Handle);
         }
     }
 
@@ -74,6 +75,7 @@ public:
     void Handle(NKqp::TEvKqp::TEvCreateSessionResponse::TPtr& ev, const TActorContext& ctx);
     void Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr ev, const TActorContext& ctx);
     void Handle(NKikimr::NReplication::TEvYdbProxy::TEvAlterTopicResponse::TPtr& ev, const TActorContext& ctx);
+    void Handle(const TEvKafka::TEvResponse::TPtr& ev, const TActorContext& ctx);
     void ExtractPartitions(const TString& group, const NKafka::TOffsetFetchRequestData::TOffsetFetchRequestGroup::TOffsetFetchRequestTopics& topic);
     void ParseGroupsAssignments(NKqp::TEvKqp::TEvQueryResponse::TPtr ev, std::vector<std::pair<std::optional<TString>, TConsumerProtocolAssignment>>& assignments);
     TOffsetFetchResponseData::TPtr GetOffsetFetchResponse();
@@ -83,19 +85,22 @@ public:
 
 private:
     const TContext::TPtr Context;
+    TContext::TPtr ContextForTopicCreation;
     const ui64 CorrelationId;
     const TMessagePtr<TOffsetFetchRequestData> Message;
     std::unordered_map<TString, TopicEntities> TopicToEntities;
     std::unordered_map<TString, TAutoPtr<TEvKafka::TEvCommitedOffsetsResponse>> TopicsToResponses;
     std::unordered_map<TString, ui32> GroupIdToIndex;
     std::unordered_map<ui32, TString> CookieToGroupId;
-    std::unordered_map<ui32, AlterTopicInfo> AlterTopicInf;
-    std::unordered_map<std::pair<TString, TString>, ui32, TPairHash> ConsumerTopicRequestsLimit;
+    std::unordered_map<ui32, ModifiedTopicInfo> AlterTopicInf;
+    std::unordered_map<TActorId, ModifiedTopicInfo> CreateTopicInf;
+    std::unordered_set<std::pair<TString, TString>, TPairHash> ConsumerTopicRequestAttempts;
     std::unique_ptr<NKafka::TKqpTxHelper> Kqp;
 
     ui32 InflyTopics = 0;
     ui32 WaitingGroupTopicsInfo = 0;
     ui32 KqpCookie = 0;
+    ui32 AlterTopicCookie = 0;
     std::vector<std::optional<TString>> GroupsToFetch;
     const TString DatabasePath;
     bool KqpSessionCreated = false;

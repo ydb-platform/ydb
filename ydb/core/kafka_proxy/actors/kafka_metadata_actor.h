@@ -65,7 +65,7 @@ private:
             hFunc(NKikimr::TEvDiscovery::TEvDiscoveryData, HandleDiscoveryData);
             hFunc(NKikimr::TEvDiscovery::TEvError, HandleDiscoveryError);
             hFunc(NKikimr::TEvPQ::TEvListAllTopicsResponse, HandleListTopics);
-            HFunc(TEvKafka::TEvTopicModificationResponse, Handle);
+            HFunc(TEvKafka::TEvResponse, Handle);
         }
     }
 
@@ -73,11 +73,13 @@ private:
 
 private:
     const TContext::TPtr Context;
+    TContext::TPtr ContextForTopicCreation;
     const ui64 CorrelationId;
     const TMessagePtr<TMetadataRequestData> Message;
     const bool WithProxy;
 
     ui64 PendingResponses = 0;
+    ui64 InflyCreateTopics = 0;
 
     TMetadataResponseData::TPtr Response;
     THashMap<TActorId, TVector<ui64>> TopicIndexes;
@@ -89,8 +91,10 @@ private:
     bool HaveError = false;
     bool FallbackToIcDiscovery = false;
     TMap<ui64, TSimpleSharedPtr<TEvLocationResponse>> PendingTopicResponses;
+    TSet<TString> TopicСreationAttempts;
+    TMap<TActorId, std::pair<TString, ui32>> CreateTopicRequests;
 
-    void Handle(const TEvKafka::TEvTopicModificationResponse::TPtr& ev, const TActorContext& ctx);
+    void Handle(const TEvKafka::TEvResponse::TPtr& ev, const TActorContext& ctx);
 
     THashMap<ui64, TNodeInfo> Nodes;
     THashMap<TString, TActorId> PartitionActors;

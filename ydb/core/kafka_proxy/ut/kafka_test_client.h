@@ -137,6 +137,8 @@ class TKafkaTestClient {
 
         void AuthenticateToKafka();
 
+        void AuthenticateToKafka(const TString& userName, const TString& userPassword);
+
         TRequestHeaderData Header(NKafka::EApiKey apiKey, TKafkaVersion version);
 
     protected:

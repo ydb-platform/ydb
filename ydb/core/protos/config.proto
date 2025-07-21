@@ -1563,7 +1563,7 @@ message TImmediateControlsConfig {
             MinValue: 1,
             MaxValue: 1000,
             DefaultValue: 10 }];
-        
+
         optional uint64 HullCompMaxInFlightWrites = 31 [(ControlOptions) = {
             Description: "Max writes inflight for level compaction",
             MinValue: 1,
@@ -2339,6 +2339,7 @@ message TKafkaProxyConfig {
     optional bool MeteringV2Enabled = 10 [default = true];
     optional bool AuthViaApiKey = 11 [default = true];
     optional uint32 TransactionTimeoutMs = 12 [default = 300000]; // 5 minutes (same as in kafka)
+    optional bool AutoCreateTopicsEnable = 13 [default = false];
 }
 
 message TAwsCompatibilityConfig {

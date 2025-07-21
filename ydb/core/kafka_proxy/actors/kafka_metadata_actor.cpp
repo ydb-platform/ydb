@@ -260,7 +260,8 @@ void TKafkaMetadataActor::HandleLocationResponse(TEvLocationResponse::TPtr ev, c
             PendingTopicResponses.emplace(index, locationResponse);
         } else {
             if (!Context->Config.GetAutoCreateTopicsEnable() || TopicСreationAttempts.find(*topic.Name) != TopicСreationAttempts.end()) {
-                KAFKA_LOG_ERROR("Describe topic '" << topic.Name << "' location finishied with error: Code=" << locationResponse->Status << ", Issues=" << locationResponse->Issues.ToOneLineString());
+                KAFKA_LOG_ERROR("Describe topic '" << topic.Name << "' location finishied with error: Code="
+                    << locationResponse->Status << ", Issues=" << locationResponse->Issues.ToOneLineString());
                 AddTopicError(topic, ConvertErrorCode(locationResponse->Status));
             } else {
                 if (TopicСreationAttempts.find(*topic.Name) == TopicСreationAttempts.end()) {

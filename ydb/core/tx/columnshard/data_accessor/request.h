@@ -27,6 +27,10 @@ public:
         }
     }
 
+    THashMap<ui64, TPortionDataAccessor> ExtractPortions() {
+        return std::move(PortionsById);
+    }
+
     const THashMap<ui64, TPortionDataAccessor>& GetPortions() const {
         return PortionsById;
     }

@@ -78,6 +78,9 @@ NKikimr::TConclusion<bool> TFilterCutLimit::DoExecuteInplace(
 
 TConclusion<bool> TPortionAccessorFetchingStep::DoExecuteInplace(
     const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step) const {
+    if (source->GetStageData().HasPortionAccessor()) {
+        return true;
+    }
     return !source->MutableAs<IDataSource>()->StartFetchingAccessor(source, step);
 }
 

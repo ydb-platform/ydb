@@ -78,6 +78,9 @@ NKikimr::TConclusion<bool> TFilterCutLimit::DoExecuteInplace(
 TConclusion<bool> TStartPortionAccessorFetchingStep::DoExecuteInplace(
     const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step) const {
     FOR_DEBUG_LOG(NKikimrServices::COLUMNSHARD_SCAN_EVLOG, source->AddEvent("sacc"));
+    if (source->GetStageData().HasPortionAccessor()) {
+        return true;
+    }
     return !source->MutableAs<IDataSource>()->StartFetchingAccessor(source, step);
 }
 

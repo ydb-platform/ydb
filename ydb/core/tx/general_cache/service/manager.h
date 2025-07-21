@@ -233,6 +233,8 @@ public:
 
     void DrainQueue() {
         THashMap<EConsumer, THashSet<TAddress>> requestedAddresses;
+        THashSet<TAddress>* consumerAddresses = nullptr;
+        std::optional<EConsumer> currentConsumer;
         while (RequestsQueue.size() && RequestedObjects.size() < Counters->GetConfig().GetDirectInflightSourceLimit() &&
                Counters->CheckTotalLimit()) {
             auto request = std::move(RequestsQueue.front());
@@ -244,14 +246,16 @@ public:
                 continue;
             }
             AFL_VERIFY(RequestsInProgress.emplace(request->GetRequestId()).second);
-            auto& addresses = requestedAddresses[request->GetConsumer()];
+            if (!currentConsumer || *currentConsumer != request->GetConsumer()) {
+                consumerAddresses = &requestedAddresses[request->GetConsumer()];
+            }
             Counters->DirectRequests->Inc();
             for (auto&& i : sourceWaitObjects) {
                 auto it = RequestedObjects.find(i);
                 if (it == RequestedObjects.end()) {
                     it = RequestedObjects.emplace(i, std::vector<std::shared_ptr<TRequest>>()).first;
                     Counters->GetTotalInFlight()->Inc();
-                    AFL_VERIFY(addresses.emplace(i).second);
+                    AFL_VERIFY(consumerAddresses->emplace(i).second);
                     Counters->DirectObjects->Inc();
                 }
                 it->second.emplace_back(request);

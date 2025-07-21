@@ -10,7 +10,8 @@ class TManagerCounters: public NColumnShard::TCommonCountersOwner {
 private:
     using TBase = NColumnShard::TCommonCountersOwner;
     const NPublic::TConfig Config;
-    const NMonitoring::THistogramPtr RequestDuration;
+    const NMonitoring::THistogramPtr RequestProcessingDuration;
+    const NMonitoring::THistogramPtr RequestReceivingDuration;
     const std::shared_ptr<TPositiveControlInteger> TotalInFlight = std::make_shared<TPositiveControlInteger>();
     const std::shared_ptr<TPositiveControlInteger> QueueObjectsCount = std::make_shared<TPositiveControlInteger>();
 
@@ -31,8 +32,9 @@ public:
         return Config;
     }
 
-    void OnRequestFinished(const TDuration d) const {
-        RequestDuration->Collect(d.MicroSeconds());
+    void OnRequestFinished(const TMonotonic send, const TMonotonic received, const TMonotonic now) const {
+        RequestProcessingDuration->Collect(now - received);
+        RequestProcessingDuration->Collect(received - send);
     }
 
     const NMonitoring::TDynamicCounters::TCounterPtr RequestCacheMiss;
@@ -63,7 +65,8 @@ public:
     TManagerCounters(NColumnShard::TCommonCountersOwner& base, const NPublic::TConfig& config)
         : TBase(base, "signals_owner", "manager")
         , Config(config)
-        , RequestDuration(TBase::GetHistogram("Requests/Duration/Us", NMonitoring::ExponentialHistogram(15, 2, 16)))
+        , RequestProcessingDuration(TBase::GetHistogram("Requests/Duration/Processing/Us", NMonitoring::ExponentialHistogram(15, 2, 18)))
+        , RequestReceivingDuration(TBase::GetHistogram("Requests/Duration/Receiving/Us", NMonitoring::ExponentialHistogram(15, 2, 18)))
         , RequestCacheMiss(TBase::GetDeriviative("Cache/Request/Miss/Count"))
         , RequestCacheHit(TBase::GetDeriviative("Cache/Request/Hit/Count"))
         , ObjectCacheMiss(TBase::GetDeriviative("Cache/Object/Miss/Count"))

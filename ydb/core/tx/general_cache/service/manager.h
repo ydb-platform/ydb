@@ -24,6 +24,7 @@ private:
     static inline TAtomicCounter Counter = 0;
     YDB_READONLY(ui64, RequestId, Counter.Inc());
     YDB_READONLY(TMonotonic, Created, TMonotonic::Now());
+    YDB_READONLY(TMonotonic, StartRequest, TMonotonic::Zero());
     THashSet<ui64> Cookies;
     THashMap<TSourceId, THashSet<TAddress>> Wait;
     THashMap<TAddress, TObject> Result;
@@ -92,9 +93,11 @@ public:
         return RemoveAddrOnFinished(addr);
     }
 
-    TRequest(THashSet<TAddress>&& addresses, std::shared_ptr<ICallback>&& callback, const EConsumer consumer)
+    TRequest(
+        THashSet<TAddress>&& addresses, std::shared_ptr<ICallback>&& callback, const EConsumer consumer, const TMonotonic startRequestInstant)
         : Callback(std::move(callback))
-        , Consumer(consumer) {
+        , Consumer(consumer)
+        , StartRequest(startRequestInstant) {
         for (auto&& i : addresses) {
             Wait[TPolicy::GetSourceId(i)].emplace(i);
             WaitObjectsCount.Inc();
@@ -149,7 +152,7 @@ public:
                     continue;
                 }
                 RequestsInProgress.erase(r->GetRequestId());
-                Counters->OnRequestFinished(now - r->GetCreated());
+                Counters->OnRequestFinished(r->GetStartRequest(), r->GetCreated(), now);
                 if (isAdditional) {
                     Counters->AdditionalObjectInfo->Inc();
                 } else {
@@ -169,7 +172,7 @@ public:
                 Counters->FailedObject->Inc();
                 if (r->AddError(i.first, i.second)) {
                     RequestsInProgress.erase(r->GetRequestId());
-                    Counters->OnRequestFinished(now - r->GetCreated());
+                    Counters->OnRequestFinished(r->GetStartRequest(), r->GetCreated(), now);
                 }
             }
             RequestedObjects.erase(it);
@@ -188,7 +191,7 @@ public:
                     continue;
                 }
                 RequestsInProgress.erase(r->GetRequestId());
-                Counters->OnRequestFinished(now - r->GetCreated());
+                Counters->OnRequestFinished(r->GetStartRequest(), r->GetCreated(), now);
                 if (isAdditional) {
                     Counters->RemovedObjectInfo->Inc();
                 } else {
@@ -215,7 +218,7 @@ public:
                 Counters->FailedObject->Inc();
                 if (r->AddError(objAddr, "source broken: " + ::ToString(SourceId))) {
                     RequestsInProgress.erase(r->GetRequestId());
-                    Counters->OnRequestFinished(now - r->GetCreated());
+                    Counters->OnRequestFinished(r->GetStartRequest(), r->GetCreated(), now);
                 }
             }
         }
@@ -354,7 +357,7 @@ public:
         Counters->CacheConfigSizeLimitBytes->Set(Counters->GetConfig().GetMemoryLimit());
     }
 
-    void CleanUseless(const ui32 countLimit){
+    void CleanUseless(const ui32 countLimit) {
         for (ui32 idx = 0; idx < countLimit; ++idx) {
             auto it = Cache.FindOldest();
             if (it == Cache.End()) {
@@ -410,7 +413,7 @@ public:
             Y_UNUSED(request->AddResult(i.first, std::move(i.second)));
         }
         if (request->GetWaitBySource().empty()) {
-            Counters->OnRequestFinished(TMonotonic::Now() - request->GetCreated());
+            Counters->OnRequestFinished(request->GetStartRequest(), request->GetCreated(), TMonotonic::Now());
             Counters->RequestCacheHit->Inc();
             return;
         } else {

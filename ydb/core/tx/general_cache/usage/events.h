@@ -28,6 +28,7 @@ struct TEvents {
     class TEvAskData: public NActors::TEventLocal<TEvAskData, EvAskData> {
     private:
         YDB_READONLY(EConsumer, Consumer, EConsumer::Undefined);
+        YDB_READONLY(TMonotonic, StartRequestInstant, TMonotonic::Now());
 
         bool AddressesExtracted = false;
         THashSet<TAddress> Addresses;

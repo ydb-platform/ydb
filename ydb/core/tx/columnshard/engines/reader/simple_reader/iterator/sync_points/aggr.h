@@ -13,6 +13,7 @@ private:
     const std::shared_ptr<ISourcesCollection> Collection;
     const std::shared_ptr<TFetchingScript> AggregationScript;
     ui32 InFlightControl = 0;
+    ui32 SourcesCount = 0;
 
     std::shared_ptr<NCommon::IDataSource> Flush() {
         if (SourcesToAggregate.empty()) {
@@ -38,9 +39,11 @@ private:
     }
 
     virtual std::shared_ptr<NCommon::IDataSource> OnAddSource(const std::shared_ptr<NCommon::IDataSource>& source) override {
+        ++SourcesCount;
         SourcesToAggregate.emplace_back(source);
         source->MutableAs<IDataSource>()->ClearMemoryGuards();
-        if (SourcesToAggregate.size() >= 100 || Collection->IsFinished() || !Collection->CheckInFlightLimits()) {
+        if (SourcesToAggregate.size() >= 100 || (Collection->IsFinished() && Collection->GetSourcesInFlightCount() == SourcesCount) ||
+            Collection->GetMaxInFlight() == SourcesCount) {
             return Flush();
         }
 
@@ -60,6 +63,8 @@ private:
         const TAggregationDataSource* aggrSource = static_cast<const TAggregationDataSource*>(source.get());
         for (auto&& i : aggrSource->GetSources()) {
             Collection->OnSourceFinished(i);
+            AFL_VERIFY(SourcesCount);
+            --SourcesCount;
         }
         if (source->GetStageResult().IsEmpty()) {
             return ESourceAction::Finish;

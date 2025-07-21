@@ -31,6 +31,10 @@ protected:
     const std::shared_ptr<TSpecialReadContext> Context;
 
 public:
+    ui64 GetSourcesInFlightCount() const {
+        return SourcesInFlightCount.Val();
+    }
+
     bool HasData() const {
         return DoHasData();
     }

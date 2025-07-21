@@ -10,6 +10,7 @@ TEST_SRCS(
     test_diff_processing.py
     test_upload.py
     test_import_csv.py
+    test_default_path.py
 )
 
 SIZE(MEDIUM)

@@ -23,23 +23,19 @@ Dev Container allows you to quickly set up a reproducible and isolated environme
 
 ### Java SDK
 - The [`.devcontainer`](https://github.com/ydb-platform/ydb-java-sdk/tree/master/.devcontainer) contains a `Dockerfile`, `devcontainer.json`, and scripts for automatic environment setup.
-- The environment includes JDK, Gradle, and development tools.
-- You can extend the Dockerfile to install additional tools.
+- All necessary dependencies are pre-installed.
 
 ### Go SDK
 - The [`.devcontainer`](https://github.com/ydb-platform/ydb-go-sdk/tree/master/.devcontainer) contains a `Dockerfile`, `devcontainer.json`, `compose.yml`, and scripts for automatic environment setup.
-- All dependencies and the required Go version are pre-installed.
-- [ydb-cli](https://ydb.tech/docs/en/reference/ydb-cli/) is installed.
+- All necessary dependencies are pre-installed.
 - When the environment starts, a local {{ ydb-short-name }} cluster is automatically started and access from the container is pre-configured.
 
 ### JavaScript/TypeScript SDK
 - The [`.devcontainer`](https://github.com/ydb-platform/ydb-js-sdk/tree/main/.devcontainer) contains a `Dockerfile`, `devcontainer.json`, `compose.yml`, and scripts for automatic environment setup.
-- The environment includes Node.js, npm, TypeScript, and development tools.
-- [ydb-cli](https://ydb.tech/docs/en/reference/ydb-cli/) is installed.
+- All necessary dependencies are pre-installed.
 - When the environment starts, a local {{ ydb-short-name }} cluster is automatically started and access from the container is pre-configured.
 
 ### Python SDK (PR #590)
 - The [`.devcontainer`](https://github.com/ydb-platform/ydb-python-sdk/pull/590/files) contains a `Dockerfile`, `devcontainer.json`, `compose.yml`, and scripts for automatic environment setup.
-- All dependencies, flake8, tox are pre-installed.
-- [ydb-cli](https://ydb.tech/docs/en/reference/ydb-cli/) is installed.
+- All necessary dependencies are pre-installed.
 - When the environment starts, a local {{ ydb-short-name }} cluster is automatically started and access from the container is pre-configured.

@@ -140,7 +140,7 @@ public:
                 .ActorSystem = ctx.ActorSystem(),
                 .ActorId = ctx.SelfID,
                 .UseAuth = true,
-                .AllowedSIDs = monitoringAllowedSIDs,
+                .AllowedSIDs = databaseAllowedSIDs,
             });
             mon->RegisterActorPage({
                 .RelPath = "pdisk",
@@ -154,14 +154,14 @@ public:
                 .ActorSystem = ctx.ActorSystem(),
                 .ActorId = ctx.SelfID,
                 .UseAuth = true,
-                .AllowedSIDs = monitoringAllowedSIDs,
+                .AllowedSIDs = databaseAllowedSIDs,
             });
             mon->RegisterActorPage({
                 .RelPath = "query",
                 .ActorSystem = ctx.ActorSystem(),
                 .ActorId = ctx.SelfID,
                 .UseAuth = true,
-                .AllowedSIDs = monitoringAllowedSIDs,
+                .AllowedSIDs = databaseAllowedSIDs,
             });
             mon->RegisterActorPage({
                 .RelPath = "scheme",
@@ -216,7 +216,7 @@ public:
                         .Path = name,
                         .Handler = ctx.SelfID,
                         .UseAuth = true,
-                        .AllowedSIDs = viewerAllowedSIDs,
+                        .AllowedSIDs = databaseAllowedSIDs,
                     });
                 }
             }

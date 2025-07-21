@@ -54,7 +54,7 @@ For more details, see the description of the commands for each benchmark:
 * [tpcds init](../../reference/ydb-cli/workload-tpcds.md#init)
 * [clickbench init](../../reference/ydb-cli/workload-click-bench.md#init)
 
-### Data filling
+### Loading data into the tables
 
 Filling with data is performed using the `import` command. This command is specific to each benchmark, and its behavior depends on the subcommands. However, there are also parameters common to all benchmarks.
 

@@ -268,7 +268,7 @@ class KikimrConfigGenerator(object):
 
         if self.cms_config:
             self.yaml_config["cms_config"] = self.cms_config
-            
+
         if overrided_actor_system_config:
             self.yaml_config["actor_system_config"] = overrided_actor_system_config
 

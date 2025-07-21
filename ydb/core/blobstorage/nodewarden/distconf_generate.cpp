@@ -595,7 +595,6 @@ namespace NKikimr::NStorage {
                     badNodesCnt++;
                 }
             }
-            STLOG(PRI_DEBUG, BS_NODE, NWDC33, "GenerateStateStorageConfig", (SelfHealBadNodes, SelfHealBadNodes), (nodes, nodes.size()), (ringsCount, ringsCount), (nodesInRing, nodesInRing));
 
             if (badNodesCnt < nodes.size() / 2 && nodes.size() - badNodesCnt >= ringsCount * nodesInRing) {
                 for (ui32 badNode : SelfHealBadNodes) {

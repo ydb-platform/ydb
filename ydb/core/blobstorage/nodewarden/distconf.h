@@ -262,7 +262,6 @@ namespace NKikimr::NStorage {
         TScatterTasks ScatterTasks;
 
         std::optional<TActorId> StateStorageSelfHealActor;
-        std::unordered_map<ui32, ui32> SelfHealNodesState;
 
         // root node operation
         enum class ERootState {
@@ -435,8 +434,6 @@ namespace NKikimr::NStorage {
             bool convertToDonor, bool ignoreVSlotQuotaCheck, bool isSelfHealReasonDecommit,
             std::optional<TBridgePileId> bridgePileId);
 
-        bool GenerateStateStorageConfig(NKikimrConfig::TDomainsConfig::TStateStorage *ss,
-            const NKikimrBlobStorage::TStorageConfig& baseConfig);
         bool UpdateConfig(NKikimrBlobStorage::TStorageConfig *config);
 
         void PrepareScatterTask(ui64 cookie, TScatterTask& task);
@@ -452,6 +449,15 @@ namespace NKikimr::NStorage {
             TActorId actorId, bool checkSyncersAfterCommit, bool forceGeneration);
 
         void CheckForConfigUpdate();
+
+
+        ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+        // Generate state storage config
+
+        std::unordered_map<ui32, ui32> SelfHealNodesState;
+        
+        bool GenerateStateStorageConfig(NKikimrConfig::TDomainsConfig::TStateStorage *ss,
+            const NKikimrBlobStorage::TStorageConfig& baseConfig);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Bridge ops

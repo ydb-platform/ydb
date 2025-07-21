@@ -86,7 +86,7 @@ namespace NKikimr::NStorage {
     void TInvokeRequestHandlerActor::SelfHealNodesStateUpdate(const TQuery::TSelfHealNodesStateUpdate& cmd) {
         RunCommonChecks();
         Self->SelfHealNodesState.clear();
-        for(auto node : cmd.GetNodesState()) {
+        for (auto node : cmd.GetNodesState()) {
             Self->SelfHealNodesState[node.GetNodeId()] = node.GetState();
         }
         if (cmd.GetEnableSelfHealStateStorage()) {
@@ -193,7 +193,7 @@ namespace NKikimr::NStorage {
                     if (ring.RingSize() > 0) {
                         throw TExError() << name << " too deep nested ring declaration";
                     }
-                    if(ring.HasRingGroupActorIdOffset()) {
+                    if (ring.HasRingGroupActorIdOffset()) {
                         throw TExError() << name << " RingGroupActorIdOffset should be used in ring group level, not ring";
                     }
                     if (ring.NodeSize() < 1) {
@@ -208,8 +208,8 @@ namespace NKikimr::NStorage {
                 oldSSInfo = (*buildInfo)(*(config.*configMutableFunc)());
                 THashSet<TActorId> replicas;
                 for (auto& ringGroup : newSSInfo->RingGroups) {
-                    for(auto& ring : ringGroup.Rings) {
-                        for(auto& node : ring.Replicas) {
+                    for (auto& ring : ringGroup.Rings) {
+                        for (auto& node : ring.Replicas) {
                             if (!replicas.insert(node).second) {
                                 throw TExError() << name << " replicas ActorId intersection, specify"
                                     " RingGroupActorIdOffset if you run multiple replicas on one node";

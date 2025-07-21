@@ -77,7 +77,6 @@ class KiKiMRDistConfNodeStatusTest(object):
             simple_config=True,
             use_self_management=True,
             extra_grpc_services=['config'],
-            cms_config=cls.cms_config,
             additional_log_configs=log_configs)
 
         cls.cluster = KiKiMR(configurator=cls.configurator)
@@ -135,12 +134,12 @@ class TestKiKiMRDistConfSelfHealNodeDisconnected(KiKiMRDistConfNodeStatusTest):
     nodes_count = 12
 
     def do_test(self, configName):
-        self.replace_config()
         self.cluster.nodes[3].stop()
         rg = get_ring_group(self.do_request_config(), configName)
         assert_eq(rg["NToSelect"], 9)
         assert_eq(len(rg["Ring"]), 9)
         self.validateContainsNodes(rg, [3])
+        self.replace_config()
         time.sleep(25)
         rg2 = get_ring_group(self.do_request_config(), configName)
         assert_eq(rg["NToSelect"], 9)
@@ -154,13 +153,13 @@ class TestKiKiMRDistConfSelfHeal2NodesDisconnected(KiKiMRDistConfNodeStatusTest)
     nodes_count = 12
 
     def do_test(self, configName):
-        self.replace_config()
         self.cluster.nodes[2].stop()
         self.cluster.nodes[3].stop()
         rg = get_ring_group(self.do_request_config(), configName)
         assert_eq(rg["NToSelect"], 9)
         assert_eq(len(rg["Ring"]), 9)
         self.validateContainsNodes(rg, [2, 3])
+        self.replace_config()
         time.sleep(25)
         rg2 = get_ring_group(self.do_request_config(), configName)
         assert_eq(rg["NToSelect"], 9)
@@ -174,7 +173,6 @@ class TestKiKiMRDistConfSelfHealDCDisconnected(KiKiMRDistConfNodeStatusTest):
     nodes_count = 12
 
     def do_test(self, configName):
-        self.replace_config()
         cnt = 0
         hosts = self.configurator.yaml_config["hosts"]
         for i in range(len(hosts)):
@@ -186,6 +184,7 @@ class TestKiKiMRDistConfSelfHealDCDisconnected(KiKiMRDistConfNodeStatusTest):
         rg = get_ring_group(self.do_request_config(), configName)
         assert_eq(rg["NToSelect"], 9)
         assert_eq(len(rg["Ring"]), 9)
+        self.replace_config()
         time.sleep(25)
         rg2 = get_ring_group(self.do_request_config(), configName)
         assert_eq(rg["NToSelect"], 9)

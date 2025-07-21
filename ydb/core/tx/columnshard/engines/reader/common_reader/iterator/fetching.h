@@ -283,10 +283,8 @@ public:
 class TFetchingScriptCursor {
 private:
     ui32 CurrentStepIdx = 0;
+    YDB_READONLY(TMonotonic, StepStartInstant, TMonotonic::Zero());
     std::shared_ptr<TFetchingScript> Script;
-    void FlushDuration(const TDuration d) {
-        Script->AddStepDuration(CurrentStepIdx, d);
-    }
 
 public:
     TFetchingScriptCursor(const std::shared_ptr<TFetchingScript>& script, const ui32 index)
@@ -304,6 +302,10 @@ public:
     }
 
     bool Next() {
+        AFL_VERIFY(StepStartInstant != TMonotonic::Zero());
+        const auto now = TMonotonic::Now();
+        Script->AddStepDuration(CurrentStepIdx, TDuration::Zero(), now - StepStartInstant);
+        StepStartInstant = TMonotonic::Now();
         return !Script->IsFinished(++CurrentStepIdx);
     }
 

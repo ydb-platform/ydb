@@ -56,6 +56,9 @@ TStepAction::TStepAction(std::shared_ptr<IDataSource>&& source, TFetchingScriptC
 TConclusion<bool> TFetchingScriptCursor::Execute(const std::shared_ptr<IDataSource>& source) {
     AFL_VERIFY(source);
     NMiniKQL::TThrowingBindTerminator bind;
+    if (StepStartInstant == TMonotonic::Zero()) {
+        StepStartInstant = TMonotonic::Now();
+    }
     Script->OnExecute();
     AFL_VERIFY(!Script->IsFinished(CurrentStepIdx));
     while (!Script->IsFinished(CurrentStepIdx)) {
@@ -87,13 +90,14 @@ TConclusion<bool> TFetchingScriptCursor::Execute(const std::shared_ptr<IDataSour
             schedulableTask->DecreaseExtraUsage(executionTime);
         }
 
-        FlushDuration(executionTime);
+        Script->AddStepDuration(CurrentStepIdx, executionTime, TMonotonic::Now() - StepStartInstant);
         if (!resultStep) {
             return resultStep;
         }
         if (!*resultStep) {
             return false;
         }
+        StepStartInstant = TMonotonic::Now();
         ++CurrentStepIdx;
     }
     FOR_DEBUG_LOG(NKikimrServices::COLUMNSHARD_SCAN_EVLOG, source->AddEvent("fcursor"));

@@ -33,8 +33,8 @@ public:
     }
 
     void OnRequestFinished(const TMonotonic send, const TMonotonic received, const TMonotonic now) const {
-        RequestProcessingDuration->Collect(now - received);
-        RequestProcessingDuration->Collect(received - send);
+        RequestProcessingDuration->Collect((now - received).MicroSeconds());
+        RequestProcessingDuration->Collect((received - send).MicroSeconds());
     }
 
     const NMonitoring::TDynamicCounters::TCounterPtr RequestCacheMiss;

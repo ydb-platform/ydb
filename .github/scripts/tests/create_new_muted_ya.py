@@ -494,6 +494,8 @@ def apply_and_add_mutes(all_data, output_path, mute_check, aggregated_for_mute, 
             elif test in to_mute_debug_dict:
                 muted_ya_minus_to_delete_to_unmute_plus_to_mute_debug.append(to_mute_debug_dict[test])
         write_file_set(os.path.join(output_path, 'muted_ya-to-delete-to-unmute+to_mute.txt'), muted_ya_minus_to_delete_to_unmute_plus_to_mute, muted_ya_minus_to_delete_to_unmute_plus_to_mute_debug)
+        # Сохраняем этот же файл как new_muted_ya.txt для совместимости с workflow
+        write_file_set(os.path.join(output_path, 'new_muted_ya.txt'), muted_ya_minus_to_delete_to_unmute_plus_to_mute, muted_ya_minus_to_delete_to_unmute_plus_to_mute_debug)
         
         # 10. muted_ya_changes - файл с изменениями
         muted_ya_changes = []
@@ -784,7 +786,7 @@ if __name__ == "__main__":
         help='create issues by muted_ya like files',
     )
     create_issues_parser.add_argument(
-        '--file_path', default=f'{repo_path}/mute_update/flaky.txt', required=False, help='file path'
+        '--file_path', default=f'{repo_path}/mute_update/to_delete.txt', required=False, help='file path'
     )
     create_issues_parser.add_argument('--branch', default='main', help='Branch to get history')
     create_issues_parser.add_argument('--close_issues', action='store_true', default=True, help='Close issues when all tests are unmuted (default: True)')

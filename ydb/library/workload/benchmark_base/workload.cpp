@@ -54,9 +54,18 @@ ui32 TWorkloadGeneratorBase::GetDefaultPartitionsCount(const TString& /*tableNam
 void TWorkloadGeneratorBase::GenerateDDLForTable(IOutputStream& result, const NJson::TJsonValue& table, const NJson::TJsonValue& common, bool single) const {
     auto specialTypes = GetSpecialDataTypes();
     specialTypes["string_type"] = Params.GetStringType();
-    specialTypes["date_type"] = Params.GetDateType();
-    specialTypes["datetime_type"] = Params.GetDatetimeType();
-    specialTypes["timestamp_type"] = Params.GetTimestampType();
+    switch (Params.GetDatetimeMode()) {
+    case TWorkloadBaseParams::EDatetimeMode::DateTime32:
+        specialTypes["date_type"] = "Date";
+        specialTypes["datetime_type"] = "Datetime";
+        specialTypes["timestamp_type"] = "Timestamp";
+        break;
+    case TWorkloadBaseParams::EDatetimeMode::DateTime64:
+        specialTypes["date_type"] = "Date32";
+        specialTypes["datetime_type"] = "Datetime64";
+        specialTypes["timestamp_type"] = "Timestamp64";
+        break;
+    }
 
     const auto& tableName = table["name"].GetString();
     const auto path = Params.GetFullTableName((single && Params.GetPath())? nullptr : tableName.c_str());
@@ -206,8 +215,8 @@ void TWorkloadBaseParams::ConfigureOpts(NLastGetopt::TOpts& opts, const ECommand
             .Optional()
             .StoreResult(&S3Endpoint);
         opts.AddLongOption("string", "Use String type in tables instead Utf8 one.").NoArgument().StoreValue(&StringType, "String");
-        opts.AddLongOption("datetime", "Use Date and Timestamp types in tables instead Date32 and Timestamp64 ones.").NoArgument()
-            .StoreValue(&DateType, "Date").StoreValue(&TimestampType, "Timestamp").StoreValue(&DatetimeType, "Datetime");
+        opts.AddLongOption("datetime-mode", "Witch set of date types have to use. Can be '" + ToString(EDatetimeMode::DateTime32) + "' (Date, Timestamp, Datetime) or '" + ToString(EDatetimeMode::DateTime64) +"' (Date32, Timestamp64, Datetime64).")
+            .DefaultValue(DatetimeMode).StoreResult(&DatetimeMode);
         opts.AddLongOption("partition-size", "Maximum partition size in megabytes (AUTO_PARTITIONING_PARTITION_SIZE_MB) for row tables.")
             .DefaultValue(PartitionSizeMb).StoreResult(&PartitionSizeMb);
         break;

@@ -31,7 +31,7 @@ class TestTpchSpillingS10(tpch.TestTpch10, FunctionalTestBase):
     @classmethod
     def setup_class(cls) -> None:
         cls.setup_cluster(table_service_config=cls.table_service_config, memory_controller_config=cls.memory_controller_config)
-        cls.run_cli(['workload', 'tpch', '-p', 'olap_yatests/tpch/s10', 'init', '--store=column'])
+        cls.run_cli(['workload', 'tpch', '-p', 'olap_yatests/tpch/s10', 'init', '--store=column', '--datetime-mode=dt64'])
         cls.run_cli(['workload', 'tpch', '-p', 'olap_yatests/tpch/s10', 'import', 'generator', '--scale=10'])
 
         tpch.TestTpch10.setup_class()

@@ -10,7 +10,7 @@ class TestClickbench(clickbench.TestClickbench, FunctionalTestBase):
     @classmethod
     def setup_class(cls) -> None:
         cls.setup_cluster()
-        cls.run_cli(['workload', 'clickbench', '-p', 'olap_yatests/clickbench/hits', 'init', '--store=column'])
+        cls.run_cli(['workload', 'clickbench', '-p', 'olap_yatests/clickbench/hits', 'init', '--store=column', '--datetime-mode=dt64'])
         cls.run_cli(['workload', 'clickbench', '-p', 'olap_yatests/clickbench/hits', 'import', 'files', '--input', yatest.common.source_path("ydb/tests/functional/clickbench/data/hits.csv")])
         super().setup_class()
 
@@ -22,7 +22,7 @@ class TestClickbenchParallel(clickbench.TestClickbenchParallel8, FunctionalTestB
     @classmethod
     def setup_class(cls) -> None:
         cls.setup_cluster()
-        cls.run_cli(['workload', 'clickbench', '-p', 'olap_yatests/clickbench/hits', 'init', '--store=column'])
+        cls.run_cli(['workload', 'clickbench', '-p', 'olap_yatests/clickbench/hits', 'init', '--store=column', '--datetime-mode=dt64'])
         cls.run_cli(['workload', 'clickbench', '-p', 'olap_yatests/clickbench/hits', 'import', 'files', '--input', yatest.common.source_path("ydb/tests/functional/clickbench/data/hits.csv")])
         super().setup_class()
 
@@ -34,6 +34,6 @@ class TestClickbenchPg(clickbench.TestClickbenchPg, FunctionalTestBase):
     @classmethod
     def setup_class(cls) -> None:
         cls.setup_cluster()
-        cls.run_cli(['workload', 'clickbench', '-p', 'olap_yatests/clickbench/hits', 'init', '--store=column'])
+        cls.run_cli(['workload', 'clickbench', '-p', 'olap_yatests/clickbench/hits', 'init', '--store=column', '--datetime-mode=dt64'])
         cls.run_cli(['workload', 'clickbench', '-p', 'olap_yatests/clickbench/hits', 'import', 'files', '--input', yatest.common.source_path("ydb/tests/functional/clickbench/data/hits.csv")])
         super().setup_class()

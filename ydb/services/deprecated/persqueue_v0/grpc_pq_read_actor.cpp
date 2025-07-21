@@ -1219,7 +1219,14 @@ void TReadSessionActor::Handle(TEvPersQueue::TEvReleasePartition::TPtr& ev, cons
         return;
     }
 
-    Y_ABORT_UNLESS(!Partitions.empty());
+    if (Partitions.empty()) {
+        LOG_ALERT_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " Releasing unknown partition: " << record.ShortDebugString() << ", partitions empty");
+        CloseSession(
+                TStringBuilder() << "Internal server error, releasing unknown partition: " << record.ShortDebugString() << ", partitions empty",
+                NPersQueue::NErrorCode::ERROR, ctx
+        );
+        return;
+    }
 
     TActorId actorId = TActorId{};
     auto jt = Partitions.begin();

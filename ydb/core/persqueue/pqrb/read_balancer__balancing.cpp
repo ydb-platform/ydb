@@ -110,7 +110,7 @@ bool TPartitionFamily::IsFree() const {
     return Status == EStatus::Free;
 }
 
-bool TPartitionFamily::IsRelesing() const {
+bool TPartitionFamily::IsReleasing() const {
     return Status == EStatus::Releasing;
 }
 
@@ -360,7 +360,7 @@ void TPartitionFamily::AttachePartitions(const std::vector<ui32>& partitions, co
         Partitions.insert(Partitions.end(), newPartitions.begin(), newPartitions.end());
         UpdatePartitionMapping(newPartitions);
 
-        LockedPartitions.insert(newPartitions.begin(), newPartitions.end());
+//        LockedPartitions.insert(newPartitions.begin(), newPartitions.end());
     }
 
     // Removing sessions wich can't read the family now
@@ -727,10 +727,10 @@ bool TConsumer::BreakUpFamily(TPartitionFamily* family, ui32 partitionId, bool d
                 GetPartitionGraph().Travers(id, [&](auto childId) {
                     if (partitions.contains(childId)) {
                         auto [_, i] = processedPartitions.insert(childId);
-                        if (!i) {
-                            familiesIntersect = true;
-                        } else {
+                        if (i) {
                             members.push_back(childId);
+                        } else {
+                            familiesIntersect = true;
                         }
 
                         return true;
@@ -755,7 +755,7 @@ bool TConsumer::BreakUpFamily(TPartitionFamily* family, ui32 partitionId, bool d
                     f->Session->InactivePartitionCount += f->InactivePartitionCount;
                     if (f->IsActive()) {
                         ++f->Session->ActiveFamilyCount;
-                    } else if (f->IsRelesing()) {
+                    } else if (f->IsReleasing()) {
                         ++f->Session->ReleasingFamilyCount;
                     }
                 }
@@ -802,7 +802,7 @@ std::pair<TPartitionFamily*, bool> TConsumer::MergeFamilies(TPartitionFamily* lh
 
     if (lhs->IsFree() && rhs->IsFree() ||
         lhs->IsActive() && rhs->IsActive() && lhs->Session == rhs->Session ||
-        lhs->IsRelesing() && rhs->IsRelesing() && lhs->Session == rhs->Session && lhs->TargetStatus == rhs->TargetStatus) {
+        lhs->IsReleasing() && rhs->IsReleasing() && lhs->Session == rhs->Session && lhs->TargetStatus == rhs->TargetStatus) {
 
         lhs->Merge(rhs);
         rhs->Destroy(ctx);
@@ -810,10 +810,10 @@ std::pair<TPartitionFamily*, bool> TConsumer::MergeFamilies(TPartitionFamily* lh
         return {lhs, true};
     }
 
-    if (lhs->IsFree() && (rhs->IsActive() || rhs->IsRelesing())) {
+    if (lhs->IsFree() && (rhs->IsActive() || rhs->IsReleasing())) {
         std::swap(lhs, rhs);
     }
-    if ((lhs->IsActive() || lhs->IsRelesing()) && rhs->IsFree()) {
+    if ((lhs->IsActive() || lhs->IsReleasing()) && rhs->IsFree()) {
         lhs->AttachePartitions(rhs->Partitions, ctx);
         lhs->RootPartitions.insert(lhs->RootPartitions.end(), rhs->Partitions.begin(), rhs->Partitions.end());
 
@@ -826,10 +826,10 @@ std::pair<TPartitionFamily*, bool> TConsumer::MergeFamilies(TPartitionFamily* lh
     if (lhs->IsActive() && rhs->IsActive()) { // lhs->Session != rhs->Session
         rhs->Release(ctx);
     }
-    if (lhs->IsRelesing() && rhs->IsActive()) {
+    if (lhs->IsReleasing() && rhs->IsActive()) {
         std::swap(rhs, lhs);
     }
-    if (lhs->IsActive() && rhs->IsRelesing() && rhs->TargetStatus == TPartitionFamily::ETargetStatus::Free) {
+    if (lhs->IsActive() && rhs->IsReleasing() && rhs->TargetStatus == TPartitionFamily::ETargetStatus::Free) {
         rhs->TargetStatus = TPartitionFamily::ETargetStatus::Merge;
         rhs->MergeTo = lhs->Id;
 
@@ -1121,7 +1121,6 @@ void TConsumer::StartReading(ui32 partitionId, const TActorContext& ctx) {
 
             return true;
         });
-    } else {
     }
 }
 

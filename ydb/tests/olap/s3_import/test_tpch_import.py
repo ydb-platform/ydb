@@ -90,7 +90,7 @@ class TestS3TpchImport(S3ImportTestBase):
         """)
 
         logger.info("Creating tpc-h tables...")
-        self.ydb_client.run_cli_comand(["workload", "tpch", "init", "--datetime", "--store", "column"])
+        self.ydb_client.run_cli_comand(["workload", "tpch", "init", "--datetime-types=dt32", "--store", "column"])
         self.ydb_client.run_cli_comand(["workload", "tpch", "import", "generator", "--scale", "1"])
 
         logger.info("Exporting into s3...")

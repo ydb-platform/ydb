@@ -57,10 +57,6 @@ public:
 
     void Bootstrap(const NActors::TActorContext& ctx);
 
-    TStringBuilder LogPrefix() const {
-        return TStringBuilder() << "KafkaOffsetFetchActor{DatabasePath=" << DatabasePath << "}: ";
-    }
-
     STATEFN(StateWork) {
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvKafka::TEvCommitedOffsetsResponse, Handle);

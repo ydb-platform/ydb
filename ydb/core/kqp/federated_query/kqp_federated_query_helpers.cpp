@@ -317,7 +317,7 @@ namespace NKikimr::NKqp {
             .Apply([actorSystem = NActors::TActivationContext::ActorSystem(), p = path, sc = schemeClient, database, endpoint](const NThreading::TFuture<NYdb::NScheme::TDescribePathResult>& result) {
                 auto describePathResult = result.GetValue();
                 if (!describePathResult.IsSuccess()) {
-                    LOG_WARN_S(*actorSystem, NKikimrServices::KQP_GATEWAY, "DescribePath failed, path " << p << ", " << describePathResult.GetIssues().ToString());
+                    LOG_WARN_S(*actorSystem, NKikimrServices::KQP_GATEWAY, "Describe path '" << p << "' in external YDB database '" << database << "' with endpoint '" << endpoint << "' failed: " << describePathResult.GetIssues().ToString());
                     return NThreading::MakeFuture<TGetSchemeEntryResult>(Nothing());
                 }
                 NYdb::NScheme::TSchemeEntry entry = describePathResult.GetEntry();

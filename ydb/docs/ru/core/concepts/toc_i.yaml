@@ -32,8 +32,6 @@ items:
   when: feature_async_replication
 - name: Оптимизатор запросов
   href: optimizer.md
-- name: OLAP
-  href: olap.md
 - name: Федеративные запросы
   include:
     path: federated_query/toc_p.yaml

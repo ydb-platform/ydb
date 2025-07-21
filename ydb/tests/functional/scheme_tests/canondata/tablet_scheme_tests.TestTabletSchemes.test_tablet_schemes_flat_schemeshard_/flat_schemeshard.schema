@@ -93,7 +93,7 @@
             },
             {
                 "ColumnId": 18,
-                "ColumnName": "TempDirOwnerActorId",
+                "ColumnName": "TempDirOwnerActorIdRaw",
                 "ColumnType": "ActorID"
             }
         ],
@@ -3630,7 +3630,7 @@
             },
             {
                 "ColumnId": 18,
-                "ColumnName": "TempDirOwnerActorId",
+                "ColumnName": "TempDirOwnerActorIdRaw",
                 "ColumnType": "ActorID"
             }
         ],

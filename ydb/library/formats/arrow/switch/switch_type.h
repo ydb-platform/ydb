@@ -3,7 +3,7 @@
 #include <ydb/library/yverify_stream/yverify_stream.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/api.h>
-#include <util/generic/cast.h>
+#include <util/string/cast.h>
 #include <util/system/yassert.h>
 #include <yql/essentials/parser/pg_wrapper/interface/type_desc.h>
 

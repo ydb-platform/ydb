@@ -1840,6 +1840,63 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         }
     }
 
+    // This test triggers "heap-use-after-free" error if we call `PeepholeOptimizeNode()`
+    // on expression with `free args`.
+    Y_UNIT_TEST(OlapFilterPeephole) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+        appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
+        auto settings = TKikimrSettings()
+            .SetAppConfig(appConfig)
+            .SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+
+        TStreamExecScanQuerySettings scanSettings;
+        scanSettings.Explain(true);
+
+        auto tableClient = kikimr.GetTableClient();
+        auto session = tableClient.CreateSession().GetValueSync().GetSession();
+
+        auto res = session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/test` (
+            D Utf8 not null,
+            S Utf8 not null,
+            V Utf8,
+            PRIMARY KEY (D, S)
+        ) WITH (STORE = COLUMN);
+        )").GetValueSync();
+        UNIT_ASSERT(res.IsSuccess());
+
+        auto queryClient = kikimr.GetQueryClient();
+        auto result = queryClient.GetSession().GetValueSync();
+        NStatusHelpers::ThrowOnError(result);
+        auto session2 = result.GetSession();
+        std::string query =
+        R"(SELECT DISTINCT `t1`.`S` AS `result` FROM
+           (SELECT D, S, V FROM `/Root/test`) AS `t1` WHERE
+            Unicode::ReplaceAll(CAST(`t1`.`V` AS UTF8),
+                                coalesce(CAST(Unicode::Substring(CAST(`t1`.`V` AS UTF8),
+                                Unicode::GetLength(CAST(`t1`.`V` AS UTF8)) - 8) AS UTF8), ''),
+            coalesce(CAST('' AS UTF8), '')) IN ('m') AND
+            CASE WHEN String::Contains(`t1`.`D`, 'l') THEN 'c'
+                 WHEN String::Contains(`t1`.`D`, 's') THEN 's'
+                 WHEN String::Contains(`t1`.`D`, 'r') THEN 'r'
+                 ELSE 'o'
+            END IN ('c');
+        )";
+
+         auto resultQuery =
+              session2
+                  .ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(),
+                                NYdb::NQuery::TExecuteQuerySettings().ExecMode(
+                                    NQuery::EExecMode::Explain))
+                  .ExtractValueSync();
+          UNIT_ASSERT_VALUES_EQUAL(resultQuery.GetStatus(), EStatus::SUCCESS);
+          auto ast = *resultQuery.GetStats()->GetAst();
+          UNIT_ASSERT_C(ast.find("KqpOlapFilter") != std::string::npos,
+                      TStringBuilder() << "Predicate not pushed down. Query: " << query);
+   }
+
     // Unit tests for datetime pushdowns in scan query
     Y_UNIT_TEST(PredicatePushdown_Datetime_SQ) {
         auto settings = TKikimrSettings()

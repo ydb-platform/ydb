@@ -22,4 +22,13 @@ message TClusterStateHistory {
         repeated uint32 UnsyncedPiles = 3; // a list of pile ids that did not refer to this entry; trimmed when empty
     }
     repeated TUnsyncedEntry UnsyncedEntries = 1; // entries stored in order of ascending Generation
+
+    message TPileSyncState {
+        uint32 BridgePileId = 1;
+        repeated string PermanentErrorReasons = 2; // a set of detected permanent errors for this pile
+        repeated uint32 UnsyncedGroupIds = 3; // a set of unsynced groups for this pile
+        bool UnsyncedBSC = 4; // true if BSC is not synced with this configuration yet
+        bool UnsyncedStorageConfig = 5; // TStorageConfig is not synced after being DISCONNECTED, needs special procedure for nodes to establish connectivity
+    }
+    repeated TPileSyncState PileSyncState = 2; // per-pile sync state for current generation
 }

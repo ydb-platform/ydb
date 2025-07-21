@@ -1,13 +1,10 @@
 #pragma once
 
 #include "global.h"
-#include "parse_tree.h"
+#include "input.h"
 
 namespace NSQLComplete {
 
-    TMaybe<TColumnContext> InferColumnContext(
-        SQLv1::Sql_queryContext* ctx,
-        antlr4::TokenStream* tokens,
-        size_t cursorPosition);
+    TMaybe<TColumnContext> InferColumnContext(TParsedInput input);
 
 } // namespace NSQLComplete

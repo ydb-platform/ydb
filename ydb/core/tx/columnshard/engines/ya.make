@@ -5,6 +5,7 @@ RECURSE_FOR_TESTS(
 LIBRARY()
 
 SRCS(
+    metadata_accessor.cpp
     column_engine_logs.cpp
     column_engine.cpp
     db_wrapper.cpp

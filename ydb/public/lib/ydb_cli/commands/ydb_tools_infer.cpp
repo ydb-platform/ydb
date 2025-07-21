@@ -30,7 +30,9 @@ TCommandToolsInferCsv::TCommandToolsInferCsv()
         "the command uses the first row of the file as column names if possible"
         " (i.e., if the values meet the requirements for column names and do not match data types in the other rows)."
         " Otherwise, column names will be generated automatically.")
-{}
+{
+    Args[0] = "<input files...>";
+}
 
 void TCommandToolsInferCsv::Config(TConfig& config) {
     TYdbCommand::Config(config);

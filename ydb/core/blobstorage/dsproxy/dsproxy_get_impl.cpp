@@ -41,7 +41,7 @@ void TGetImpl::PrepareReply(NKikimrProto::EReplyStatus status, TString errorReas
             const TEvBlobStorage::TEvGet::TQuery &query = Queries[i];
             TEvBlobStorage::TEvGetResult::TResponse &outResponse = outGetResult->Responses[i];
 
-            const TBlobState &blobState = Blackboard.GetState(query.Id);
+            const TBlobState &blobState = Blackboard.GetState(query.Id, 0xff, "PrepareReply");
             outResponse.Id = query.Id;
             outResponse.PartMap = blobState.PartMap;
             outResponse.LooksLikePhantom = PhantomCheck

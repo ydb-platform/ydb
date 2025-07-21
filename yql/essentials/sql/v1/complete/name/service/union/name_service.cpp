@@ -16,14 +16,14 @@ namespace NSQLComplete {
             {
             }
 
-            NThreading::TFuture<TNameResponse> Lookup(TNameRequest request) const override {
+            NThreading::TFuture<TNameResponse> Lookup(const TNameRequest& request) const override {
                 TVector<NThreading::TFuture<TNameResponse>> fs;
                 for (const auto& c : Children_) {
                     fs.emplace_back(c->Lookup(request));
                 }
 
                 return NThreading::WaitAll(fs)
-                    .Apply([fs, ranking = Ranking_, request = std::move(request)](auto) {
+                    .Apply([fs, ranking = Ranking_, request](auto) {
                         return Union(fs, ranking, request.Constraints, request.Limit);
                     });
             }

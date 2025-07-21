@@ -165,8 +165,6 @@ message TStaticNameserviceConfig {
         repeated TEndpoint Endpoint = 7;
 
         optional NActorsInterconnect.TNodeLocation WalleLocation = 8 [deprecated=true];
-
-        optional string BridgePileName = 9; // realm name for bridged installations (starting from 0)
     }
 
     repeated TNode Node = 1;
@@ -273,6 +271,7 @@ message TDomainsConfig {
         repeated string ViewerAllowedSIDs = 6;
         repeated string RegisterDynamicNodeAllowedSIDs = 8;
         repeated string BootstrapAllowedSIDs = 9;
+        repeated string DatabaseAllowedSIDs = 10;
 
         message TUser {
             optional string Name = 1;
@@ -353,7 +352,7 @@ message TBlobStorageConfig {
     repeated NKikimrBlobStorage.TDefineHostConfig DefineHostConfig = 10;
     optional NKikimrBlobStorage.TDefineBox DefineBox = 11;
 
-    optional NKikimrBlobStorage.TUpdateSettings BscSettings = 12;
+    optional NKikimrBlobStorage.TBscConfig BscSettings = 12;
  }
 
 message TSelfManagementConfig {
@@ -712,6 +711,7 @@ message TGroupedMemoryLimiterConfig {
     optional bool Enabled = 1 [default = true];
     optional uint64 MemoryLimit = 2;
     optional uint64 HardMemoryLimit = 3;
+    optional uint64 CountBuckets = 4;
 }
 
 message TExternalIndexConfig {
@@ -1058,6 +1058,7 @@ message TSqsConfig {
         optional bool EnableCloudEvents = 1 [default = false];
         optional bool TenantMode = 2 [default = false];
         optional uint64 RetryTimeoutSeconds = 3;
+        optional string UnifiedAgentUri = 4;
     }
 
     optional TYcSearchEventsConfig YcSearchEventsConfig = 66;
@@ -1549,6 +1550,38 @@ message TImmediateControlsConfig {
             MinValue: 0,
             MaxValue: 1000,
             DefaultValue: 0 }];
+
+        reserved 28;
+
+        optional uint64 FreshCompMaxInFlightWrites = 29 [(ControlOptions) = {
+            Description: "Max writes inflight for fresh level compaction",
+            MinValue: 1,
+            MaxValue: 1000,
+            DefaultValue: 10 }];
+
+        optional uint64 FreshCompMaxInFlightReads = 30 [(ControlOptions) = {
+            Description: "Max reads inflight for fresh level compaction",
+            MinValue: 1,
+            MaxValue: 1000,
+            DefaultValue: 10 }];
+        
+        optional uint64 HullCompMaxInFlightWrites = 31 [(ControlOptions) = {
+            Description: "Max writes inflight for level compaction",
+            MinValue: 1,
+            MaxValue: 1000,
+            DefaultValue: 10 }];
+
+        optional uint64 HullCompMaxInFlightReads = 32 [(ControlOptions) = {
+            Description: "Max reads inflight for level compaction",
+            MinValue: 1,
+            MaxValue: 1000,
+            DefaultValue: 20 }];
+            
+        optional uint64 EnableDeepScrubbing = 33 [(ControlOptions) = {
+            Description: "Run CheckIntegrity requests during Scrub process instead of usual scrubbing",
+            MinValue: 0,
+            MaxValue: 1,
+            DefaultValue: 0 }];
     }
 
     message TTabletControls {
@@ -1727,7 +1760,6 @@ message TAuditConfig {
         TXT = 2;                        // Outputs audit log in format: "<time>: k1=v1, k2=v2, ..." where <time> is ISO 8601 format time string, k1, k2, ..., kn - fields of audit log message and v1, v2, ..., vn are their values
         JSON_LOG_COMPATIBLE = 3;        // Outputs audit log in format: "{"@timestamp": "<ISO 8601 time>", "@log_type": "audit", "k1": "v1", "k2": "v2", ...}" where @timestamp is ISO 8601 format time string, k1, k2, ..., kn - fields of audit log message and v1, v2, ..., vn are their values // Suitable for output both debug log and audit log to the same destination (stderr)
         FORMAT_4 = 4;                   // Reserved
-        YANDEX_CLOUD_EVENTS = 5;        // Reserved for Yandex.Cloud environment. Defaults to JSON elsewhere
     }
 
     message TStderrBackend {
@@ -1900,6 +1932,7 @@ message THiveConfig {
     optional uint64 NodeRestartsForPenalty = 85 [default = 3];
     optional bool UseTabletUsageEstimate = 86 [default = true];
     repeated TBootPriority TabletTypeToBootPriority = 87;
+    optional uint64 BalanceCountersRefreshFrequency = 88 [default = 15000]; // milliseconds
 }
 
 message THealthCheckConfig {
@@ -1990,6 +2023,7 @@ message TColumnShardConfig {
     optional uint32 PeriodicWakeupActivationPeriodMs = 42 [default = 60000];
     optional bool GenerateInternalPathId = 43 [default = false]; //Be aware! IRREVERSIBLE(if set, can not be unset for a dababase)
     optional bool ProxyWritingEnabled = 44 [default = true];
+    optional bool AllowExtraSymbolsForColumnTableColumns = 45 [default = false];
 }
 
 message TSchemeShardConfig {

@@ -5244,4 +5244,17 @@ TMaybeNode<TExprBase> ExportYtEquiJoin(TYtEquiJoin equiJoin, const TYtJoinNodeOp
     return TExprBase(ctx.ChangeChildren(join.Ref(), std::move(children)));
 }
 
+bool AreJoinInputsReady(const TYtEquiJoin& equiJoin) {
+    for (auto section: equiJoin.Input()) {
+        for (auto path: section.Paths()) {
+            TYtPathInfo pathInfo(path);
+            if (!pathInfo.Table->Stat) {
+                return false;
+            }
+        }
+    }
+
+    return true;
+}
+
 }

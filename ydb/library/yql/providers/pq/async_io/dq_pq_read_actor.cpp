@@ -122,7 +122,12 @@ struct TEvPrivate {
 class TDqPqReadActor : public NActors::TActor<TDqPqReadActor>, public NYql::NDq::NInternal::TDqPqReadActorBase  {
     static constexpr bool StaticDiscovery = true;
     struct TMetrics {
-        TMetrics(const TTxId& txId, ui64 taskId, const ::NMonitoring::TDynamicCounterPtr& counters, const ::NMonitoring::TDynamicCounterPtr& taskCounters)
+        TMetrics(
+            const TTxId& txId,
+            ui64 taskId,
+            const ::NMonitoring::TDynamicCounterPtr& counters,
+            const ::NMonitoring::TDynamicCounterPtr& taskCounters,
+            const NPq::NProto::TDqPqTopicSource& sourceParams)
             : TxId(std::visit([](auto arg) { return ToString(arg); }, txId))
             , Counters(counters)
             , TaskCounters(taskCounters) {
@@ -132,6 +137,10 @@ class TDqPqReadActor : public NActors::TActor<TDqPqReadActor>, public NYql::NDq:
                 SubGroup = TaskCounters->GetSubgroup("source", "PqRead");
             } else {
                 SubGroup = MakeIntrusive<::NMonitoring::TDynamicCounters>();
+            }
+
+            for (const auto& sensor : sourceParams.GetTaskSensorLabel()) {
+                SubGroup = SubGroup->GetSubgroup(sensor.GetLabel(), sensor.GetValue());
             }
             auto source = SubGroup->GetSubgroup("tx_id", TxId);
             auto task = source->GetSubgroup("task_id", ToString(taskId));
@@ -199,7 +208,7 @@ public:
         ui32 topicPartitionsCount)
         : TActor<TDqPqReadActor>(&TDqPqReadActor::StateFunc)
         , TDqPqReadActorBase(inputIndex, taskId, this->SelfId(), txId, std::move(sourceParams), std::move(readParams), computeActorId)
-        , Metrics(txId, taskId, counters, taskCounters)
+        , Metrics(txId, taskId, counters, taskCounters, SourceParams)
         , BufferSize(bufferSize)
         , HolderFactory(holderFactory)
         , Driver(std::move(driver))
@@ -343,7 +352,7 @@ private:
                 clusterState.ReadSession.reset();
             }
         }
-        ReadyBuffer = std::queue<TReadyBatch>{}; // clear read buffer
+        Reconnected = true;
         Metrics.ReconnectRate->Inc();
 
         Schedule(ReconnectPeriod, new TEvPrivate::TEvReconnectSession());
@@ -504,6 +513,7 @@ private:
     }
 
     i64 GetAsyncInputData(NKikimr::NMiniKQL::TUnboxedValueBatch& buffer, TMaybe<TInstant>& watermark, bool&, i64 freeSpace) override {
+        // called with bound allocator
         Metrics.InFlyAsyncInputData->Set(0);
         SRC_LOG_T("SessionId: " << GetSessionId() << " GetAsyncInputData freeSpace = " << freeSpace);
 
@@ -514,6 +524,11 @@ private:
             Metrics.ReconnectRate->Inc();
             Schedule(ReconnectPeriod, new TEvPrivate::TEvReconnectSession());
             InflightReconnect = true;
+        }
+
+        if (Reconnected) {
+            Reconnected = false;
+            ReadyBuffer = std::queue<TReadyBatch>{}; // clear read buffer
         }
 
         i64 usedSpace = 0;
@@ -664,6 +679,7 @@ private:
         THashMap<NYdb::NTopic::TPartitionSession::TPtr, std::pair<std::string, TList<std::pair<ui64, ui64>>>> OffsetRanges; // [start, end)
     };
 
+    // must be called with bound allocator
     bool MaybeReturnReadyBatch(NKikimr::NMiniKQL::TUnboxedValueBatch& buffer, TMaybe<TInstant>& watermark, i64& usedSpace) {
         if (ReadyBuffer.empty()) {
             SubscribeOnNextEvent();
@@ -700,6 +716,7 @@ private:
         return true;
     }
 
+    // must be called with bound allocator
     void PushWatermarkToReady(TInstant watermark) {
         SRC_LOG_D("SessionId: " << GetSessionId() << " New watermark " << watermark << " was generated");
 
@@ -711,6 +728,7 @@ private:
         ReadyBuffer.back().Watermark = watermark;
     }
 
+    // must be called (visited) with bound allocator
     struct TTopicEventProcessor {
         void operator()(NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent& event) {
             const auto partitionKey = MakePartitionKey(Cluster, event.GetPartitionSession());
@@ -844,6 +862,7 @@ private:
 private:
     bool InflightReconnect = false;
     TDuration ReconnectPeriod;
+    bool Reconnected = false;
     TMetrics Metrics;
     const i64 BufferSize;
     const THolderFactory& HolderFactory;

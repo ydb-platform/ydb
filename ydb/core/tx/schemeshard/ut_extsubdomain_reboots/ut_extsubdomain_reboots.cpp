@@ -15,7 +15,10 @@ Y_UNIT_TEST_SUITE(TSchemeShardTestExtSubdomainReboots) {
 
     Y_UNIT_TEST_FLAG(CreateExternalSubdomain, AlterDatabaseCreateHiveFirst) {
         TTestWithReboots t;
-        t.GetTestEnvOptions().EnableAlterDatabaseCreateHiveFirst(AlterDatabaseCreateHiveFirst);
+        t.GetTestEnvOptions()
+            .EnableAlterDatabaseCreateHiveFirst(AlterDatabaseCreateHiveFirst)
+            .EnableRealSystemViewPaths(false);
+
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
 
             TestCreateExtSubDomain(runtime, ++t.TxId,  "/MyRoot",
@@ -100,7 +103,10 @@ Y_UNIT_TEST_SUITE(TSchemeShardTestExtSubdomainReboots) {
 
     Y_UNIT_TEST_FLAG(CreateExternalSubdomainWithoutHive, AlterDatabaseCreateHiveFirst) {
         TTestWithReboots t;
-        t.GetTestEnvOptions().EnableAlterDatabaseCreateHiveFirst(AlterDatabaseCreateHiveFirst);
+        t.GetTestEnvOptions()
+            .EnableAlterDatabaseCreateHiveFirst(AlterDatabaseCreateHiveFirst)
+            .EnableRealSystemViewPaths(false);
+
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
 
             TestCreateExtSubDomain(runtime, ++t.TxId,  "/MyRoot",
@@ -176,7 +182,10 @@ Y_UNIT_TEST_SUITE(TSchemeShardTestExtSubdomainReboots) {
 
     Y_UNIT_TEST_FLAG(CreateForceDrop, AlterDatabaseCreateHiveFirst) {
         TTestWithReboots t;
-        t.GetTestEnvOptions().EnableAlterDatabaseCreateHiveFirst(AlterDatabaseCreateHiveFirst);
+        t.GetTestEnvOptions()
+            .EnableAlterDatabaseCreateHiveFirst(AlterDatabaseCreateHiveFirst)
+            .EnableRealSystemViewPaths(false);
+
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
 
             AsyncCreateExtSubDomain(runtime, ++t.TxId,  "/MyRoot",
@@ -200,7 +209,10 @@ Y_UNIT_TEST_SUITE(TSchemeShardTestExtSubdomainReboots) {
 
     Y_UNIT_TEST_FLAG(AlterForceDrop, AlterDatabaseCreateHiveFirst) {
         TTestWithReboots t;
-        t.GetTestEnvOptions().EnableAlterDatabaseCreateHiveFirst(AlterDatabaseCreateHiveFirst);
+        t.GetTestEnvOptions()
+            .EnableAlterDatabaseCreateHiveFirst(AlterDatabaseCreateHiveFirst)
+            .EnableRealSystemViewPaths(false);
+
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);
@@ -246,7 +258,10 @@ Y_UNIT_TEST_SUITE(TSchemeShardTestExtSubdomainReboots) {
 
     Y_UNIT_TEST_FLAG(SchemeLimits, AlterDatabaseCreateHiveFirst) {
         TTestWithReboots t;
-        t.GetTestEnvOptions().EnableAlterDatabaseCreateHiveFirst(AlterDatabaseCreateHiveFirst);
+        t.GetTestEnvOptions()
+            .EnableAlterDatabaseCreateHiveFirst(AlterDatabaseCreateHiveFirst)
+            .EnableRealSystemViewPaths(false);
+
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             TSchemeLimits limits;
             limits.MaxDepth = 2;
@@ -321,6 +336,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTestExtSubdomainReboots) {
 
     Y_UNIT_TEST(AlterSchemeLimits) {
         TTestWithReboots t;
+        t.GetTestEnvOptions().EnableRealSystemViewPaths(false);
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             TSchemeLimits limits;
             limits.MaxShards = 7;

@@ -19,14 +19,14 @@ TEST_SRCS(
     test_vector_index.py
     test_batch_operations.py
     test_transfer.py
+    test_node_broker_delta_protocol.py
     udf/test_datetime2.py
     udf/test_digest.py
     udf/test_digest_regression.py
 )
 
 SIZE(LARGE)
-REQUIREMENTS(cpu:all)
-REQUIREMENTS(ram:all)
+REQUIREMENTS(cpu:16)
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/tools/s3_recipe/recipe.inc)
 

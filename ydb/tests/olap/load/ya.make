@@ -7,6 +7,7 @@ PY3TEST()
     ENV(YDB_CLI_BINARY="ydb/apps/ydb/ydb")
     ENV(SIMPLE_QUEUE_BINARY="ydb/tests/stress/simple_queue/simple_queue")
     ENV(OLTP_WORKLOAD_BINARY="ydb/tests/stress/oltp_workload/oltp_workload")
+    ENV(NEMESIS_BINARY="ydb/tests/tools/nemesis/driver/nemesis")
 
     TEST_SRCS (
         test_clickbench.py
@@ -28,6 +29,7 @@ PY3TEST()
             ydb/apps/ydb
             ydb/tests/stress/simple_queue
             ydb/tests/stress/oltp_workload
+            ydb/tests/tools/nemesis/driver
         )
     ENDIF()
 

@@ -18,22 +18,20 @@ TConclusionStatus TScanHead::Start() {
     return TConclusionStatus::Success();
 }
 
-TScanHead::TScanHead(std::deque<TSourceConstructor>&& sources, const std::shared_ptr<TSpecialReadContext>& context)
+TScanHead::TScanHead(std::unique_ptr<NCommon::ISourcesConstructor>&& sourcesConstructor, const std::shared_ptr<TSpecialReadContext>& context)
     : Context(context) {
     if (Context->GetReadMetadata()->IsSorted()) {
         if (Context->GetReadMetadata()->HasLimit()) {
-            auto collection =
-                std::make_shared<TScanWithLimitCollection>(Context, std::move(sources), context->GetCommonContext()->GetScanCursor());
+            auto collection = std::make_shared<TScanWithLimitCollection>(Context, std::move(sourcesConstructor));
             SourcesCollection = collection;
             SyncPoints.emplace_back(std::make_shared<TSyncPointLimitControl>(
                 (ui64)Context->GetCommonContext()->GetReadMetadata()->GetLimitRobust(), SyncPoints.size(), context, collection));
         } else {
-            SourcesCollection =
-                std::make_shared<TSortedFullScanCollection>(Context, std::move(sources), context->GetCommonContext()->GetScanCursor());
+            SourcesCollection = std::make_shared<TSortedFullScanCollection>(Context, std::move(sourcesConstructor));
         }
     } else {
-        SourcesCollection = std::make_shared<TNotSortedCollection>(
-            Context, std::move(sources), context->GetCommonContext()->GetScanCursor(), Context->GetReadMetadata()->GetLimitRobustOptional());
+        SourcesCollection =
+            std::make_shared<TNotSortedCollection>(Context, std::move(sourcesConstructor), Context->GetReadMetadata()->GetLimitRobustOptional());
     }
     SyncPoints.emplace_back(std::make_shared<TSyncPointResult>(SyncPoints.size(), context, SourcesCollection));
     for (ui32 i = 0; i + 1 < SyncPoints.size(); ++i) {

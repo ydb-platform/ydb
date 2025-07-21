@@ -37,8 +37,8 @@ TPortionDataAccessor::TPreparedBatchData PrepareForAssembleImpl(const TPortionDa
         if ((it == portionData.GetRecordsVerified().end() || i < it->GetColumnId())) {
             if (restoreAbsent || IIndexInfo::IsSpecialColumn(i)) {
                 columns.emplace_back(rowsCount, dataSchema.GetColumnLoaderOptional(i), resultSchema.GetColumnLoaderVerified(i));
+                portionInfo.FillDefaultColumn(columns.back(), defaultSnapshot);
             }
-            portionInfo.FillDefaultColumn(columns.back(), defaultSnapshot);
         }
         if (it == portionData.GetRecordsVerified().end()) {
             continue;
@@ -192,7 +192,7 @@ THashMap<TString, THashMap<TChunkAddress, std::shared_ptr<IPortionDataChunk>>> T
     for (auto&& c : GetRecordsVerified()) {
         const TString& storageId = PortionInfo->GetColumnStorageId(c.GetColumnId(), indexInfo);
         auto chunk = std::make_shared<NChunks::TChunkPreparation>(
-            blobs.Extract(storageId, RestoreBlobRange(c.GetBlobRange())), c, indexInfo.GetColumnFeaturesVerified(c.GetColumnId()));
+            blobs.ExtractVerified(storageId, RestoreBlobRange(c.GetBlobRange())), c, indexInfo.GetColumnFeaturesVerified(c.GetColumnId()));
         chunk->SetChunkIdx(c.GetChunkIdx());
         AFL_VERIFY(result[storageId].emplace(c.GetAddress(), chunk).second);
     }
@@ -200,7 +200,7 @@ THashMap<TString, THashMap<TChunkAddress, std::shared_ptr<IPortionDataChunk>>> T
         const TString& storageId = indexInfo.GetIndexStorageId(c.GetIndexId());
         const TString blobData = [&]() -> TString {
             if (auto bRange = c.GetBlobRangeOptional()) {
-                return blobs.Extract(storageId, RestoreBlobRange(*bRange));
+                return blobs.ExtractVerified(storageId, RestoreBlobRange(*bRange));
             } else if (auto data = c.GetBlobDataOptional()) {
                 return *data;
             } else {
@@ -216,49 +216,55 @@ THashMap<TString, THashMap<TChunkAddress, std::shared_ptr<IPortionDataChunk>>> T
     return result;
 }
 
-THashMap<TChunkAddress, TString> TPortionDataAccessor::DecodeBlobAddresses(
-    NBlobOperations::NRead::TCompositeReadBlobs&& blobs, const TIndexInfo& indexInfo) const {
+THashMap<TChunkAddress, TString> TPortionDataAccessor::DecodeBlobAddressesImpl(
+    NBlobOperations::NRead::TCompositeReadBlobs& blobs, const TIndexInfo& indexInfo) const {
     THashMap<TChunkAddress, TString> result;
-    for (auto&& i : blobs) {
-        for (auto&& b : i.second) {
-            bool found = false;
-            TString columnStorageId;
-            ui32 columnId = 0;
-            for (auto&& record : GetRecordsVerified()) {
-                if (RestoreBlobRange(record.GetBlobRange()) == b.first) {
-                    if (columnId != record.GetColumnId()) {
-                        columnStorageId = PortionInfo->GetColumnStorageId(record.GetColumnId(), indexInfo);
-                    }
-                    if (columnStorageId != i.first) {
-                        continue;
-                    }
-                    result.emplace(record.GetAddress(), std::move(b.second));
-                    found = true;
-                    break;
-                }
+
+    {
+        TString storageId;
+        ui64 columnId = 0;
+        for (auto&& record : GetRecordsVerified()) {
+            if (record.GetColumnId() != columnId) {
+                AFL_VERIFY(record.GetColumnId() > columnId);
+                columnId = record.GetColumnId();
+                storageId = PortionInfo->GetColumnStorageId(columnId, indexInfo);
             }
-            if (found) {
-                continue;
+            std::optional<TString> blob = blobs.ExtractOptional(storageId, RestoreBlobRange(record.GetBlobRange()));
+            if (blob) {
+                result.emplace(record.GetAddress(), std::move(*blob));
             }
-            for (auto&& record : GetIndexesVerified()) {
-                if (!record.HasBlobRange()) {
-                    continue;
-                }
-                if (RestoreBlobRange(record.GetBlobRangeVerified()) == b.first) {
-                    if (columnId != record.GetIndexId()) {
-                        columnStorageId = indexInfo.GetIndexStorageId(record.GetIndexId());
-                    }
-                    if (columnStorageId != i.first) {
-                        continue;
-                    }
-                    result.emplace(record.GetAddress(), std::move(b.second));
-                    found = true;
-                    break;
-                }
-            }
-            AFL_VERIFY(found)("blobs", blobs.DebugString())("records", DebugString())("problem", b.first);
         }
     }
+
+    for (auto&& record : GetIndexesVerified()) {
+        if (!record.HasBlobRange()) {
+            continue;
+        }
+        std::optional<TString> blob =
+            blobs.ExtractOptional(indexInfo.GetIndexStorageId(record.GetIndexId()), RestoreBlobRange(record.GetBlobRangeVerified()));
+        if (blob) {
+            result.emplace(record.GetAddress(), std::move(*blob));
+        }
+    }
+
+    return result;
+}
+
+THashMap<TChunkAddress, TString> TPortionDataAccessor::DecodeBlobAddresses(
+    NBlobOperations::NRead::TCompositeReadBlobs&& blobs, const TIndexInfo& indexInfo) const {
+    THashMap<TChunkAddress, TString> result = DecodeBlobAddressesImpl(blobs, indexInfo);
+    AFL_VERIFY(blobs.IsEmpty())("blobs", blobs.DebugString());
+    return result;
+}
+
+std::vector<THashMap<TChunkAddress, TString>> TPortionDataAccessor::DecodeBlobAddresses(const std::vector<TPortionDataAccessor>& accessors,
+    const std::vector<ISnapshotSchema::TPtr>& schemas, NBlobOperations::NRead::TCompositeReadBlobs&& blobs) {
+    std::vector<THashMap<TChunkAddress, TString>> result;
+    AFL_VERIFY(accessors.size() == schemas.size())("accessors", accessors.size())("info", schemas.size());
+    for (ui64 i = 0; i < accessors.size(); ++i) {
+        result.emplace_back(accessors[i].DecodeBlobAddressesImpl(blobs, schemas[i]->GetIndexInfo()));
+    }
+    AFL_VERIFY(blobs.IsEmpty())("blobs", blobs.DebugString());
     return result;
 }
 

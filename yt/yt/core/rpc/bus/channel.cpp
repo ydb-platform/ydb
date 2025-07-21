@@ -726,7 +726,7 @@ private:
                 header.clear_timeout();
             }
 
-            if (options.RequestHeavy || request->IsAttachmentCompressionEnabled()) {
+            if (options.RequestHeavy || (request->IsAttachmentCompressionEnabled() && request->HasAttachments())) {
                 BIND(&IClientRequest::Serialize, request)
                     .AsyncVia(TDispatcher::Get()->GetHeavyInvoker())
                     .Run()

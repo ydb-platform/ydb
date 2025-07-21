@@ -16,15 +16,19 @@ static void Parenthesize(TStringBuilderBase* builder, const std::string& str)
     builder->AppendChar(')');
 }
 
-void TQueryBuilder::SetSource(std::string source)
+void TQueryBuilder::SetSource(std::string source, int syntax, bool subquerySource)
 {
     Source_ = std::move(source);
+    SyntaxVersion_ = syntax;
+    SourceIsQuery_ = subquerySource;
 }
 
-void TQueryBuilder::SetSource(std::string source, std::string alias)
+void TQueryBuilder::SetSource(std::string source, std::string alias, int syntax, bool subquerySource)
 {
     Source_ = std::move(source);
     SourceAlias_ = std::move(alias);
+    SyntaxVersion_ = syntax;
+    SourceIsQuery_ = subquerySource;
 }
 
 int TQueryBuilder::AddSelectExpression(std::string expression)
@@ -112,6 +116,16 @@ void TQueryBuilder::SetLimit(i64 limit)
     Limit_ = limit;
 }
 
+void TQueryBuilder::AddArrayJoinExpression(const std::vector<std::string>& expressions,  const std::vector<std::string>& aliases, ETableJoinType type) {
+    TJoinEntry entry;
+    entry.Type = type;
+    entry.ArrayJoinFields.reserve(expressions.size());
+    for (size_t ind = 0; ind < expressions.size(); ++ind) {
+        entry.ArrayJoinFields.push_back({expressions[ind], aliases[ind]});
+    }
+    JoinEntries_.push_back(std::move(entry));
+}
+
 void TQueryBuilder::AddJoinExpression(
     std::string table,
     std::string alias,
@@ -123,7 +137,18 @@ void TQueryBuilder::AddJoinExpression(
         std::move(alias),
         std::move(onExpression),
         type,
+        std::vector<TEntryWithAlias>(),
     });
+}
+
+std::string TQueryBuilder::WrapTableName(const std::string& table) {
+    if (SyntaxVersion_ == 1) {
+        return "[" + table + "]";
+    } else if (SyntaxVersion_ == 2) {
+        return "`" + table + "`";
+    } else {
+        THROW_ERROR_EXCEPTION("Only syntax versions 1 and 2 are supported");
+    }
 }
 
 std::string TQueryBuilder::Build()
@@ -139,16 +164,31 @@ std::string TQueryBuilder::Build()
     if (!Source_) {
         THROW_ERROR_EXCEPTION("Source must be specified in query");
     }
-    if (!SourceAlias_) {
-        wrapper->AppendFormat("FROM [%v]", *Source_);
+    if(!SourceIsQuery_) {
+        if (!SourceAlias_) {
+            wrapper->AppendFormat("FROM %v", WrapTableName(*Source_));
+        } else {
+            wrapper->AppendFormat("FROM %v AS %v", WrapTableName(*Source_), *SourceAlias_);
+        }
     } else {
-        wrapper->AppendFormat("FROM [%v] AS %v", *Source_, *SourceAlias_);
+        if (!SourceAlias_) {
+            wrapper->AppendFormat("FROM (%v)", *Source_);
+        } else {
+            wrapper->AppendFormat("FROM (%v) AS %v", *Source_, *SourceAlias_);
+        }
     }
 
     for (const auto& join : JoinEntries_) {
-        TStringBuf joinType = join.Type == ETableJoinType::Inner ? "JOIN" : "LEFT JOIN";
-        wrapper->AppendFormat("%v [%v] AS [%v] ON %v", joinType, join.Table, join.Alias, join.OnExpression);
+        if (join.Type == ETableJoinType::Inner || join.Type == ETableJoinType::Left) {
+            TStringBuf joinType = join.Type == ETableJoinType::Inner ? "JOIN" : "LEFT JOIN";
+            wrapper->AppendFormat("%v %v AS %v ON %v", joinType, WrapTableName(join.Table), WrapTableName(join.Alias), join.OnExpression);
+        } else {
+            TStringBuf joinType = join.Type == ETableJoinType::ArrayInner ? "ARRAY JOIN" : "LEFT ARRAY JOIN";
+            wrapper->AppendFormat(" %v ", joinType);
+            JoinToString(&wrapper, join.ArrayJoinFields.begin(), join.ArrayJoinFields.end(), &FormatEntryWithAlias);
+        }
     }
+
 
     if (!WhereConjuncts_.empty()) {
         wrapper->AppendFormat("WHERE");

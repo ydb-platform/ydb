@@ -23,6 +23,7 @@ private:
     const TMonotonic Created = TMonotonic::Now();
     const std::optional<TDuration> Timeout;
     const ui64 TxId;
+    const bool IsBulk;
 
 public:
     bool operator<(const TWriteTask& item) const {
@@ -35,7 +36,7 @@ public:
 
     TWriteTask(const std::shared_ptr<TArrowData>& arrowData, const NOlap::ISnapshotSchema::TPtr& schema, const NActors::TActorId sourceId,
         const std::optional<ui32>& granuleShardingVersionId, const TUnifiedPathId pathId, const ui64 cookie, const ui64 lockId,
-        const NEvWrite::EModificationType modificationType, const EOperationBehaviour behaviour, const std::optional<TDuration> timeout, const ui64 txId)
+        const NEvWrite::EModificationType modificationType, const EOperationBehaviour behaviour, const std::optional<TDuration> timeout, const ui64 txId, const bool isBulk)
         : ArrowData(arrowData)
         , Schema(schema)
         , SourceId(sourceId)
@@ -47,6 +48,7 @@ public:
         , Behaviour(behaviour)
         , Timeout(timeout)
         , TxId(txId)
+        , IsBulk(isBulk)
     {
     }
 

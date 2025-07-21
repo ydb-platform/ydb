@@ -1,8 +1,12 @@
 #include "fixture.h"
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/discovery/discovery.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/scheme/scheme.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 
-#include <util/system/execpath.h>
+
+using namespace NYdb::NScheme;
+using namespace NYdb::NTable;
 
 namespace NYdb::inline Dev::NTopic::NTests {
 
@@ -17,8 +21,7 @@ void TTopicTestFixture::SetUp() {
 
     TTopicClient client(MakeDriver());
 
-    const testing::TestInfo* const testInfo = testing::UnitTest::GetInstance()->current_test_info();
-    std::filesystem::path execPath(std::string{GetExecPath()});
+    const auto& testInfo = testing::UnitTest::GetInstance()->current_test_info();
 
     std::stringstream topicBuilder;
     topicBuilder << std::getenv("YDB_TEST_ROOT") << "/" << testInfo->test_suite_name() << "-" << testInfo->name() << "/";
@@ -28,8 +31,38 @@ void TTopicTestFixture::SetUp() {
     consumerBuilder << testInfo->test_suite_name() << "-" << testInfo->name() << "-";
     ConsumerPrefix_ = consumerBuilder.str();
 
-    client.DropTopic(GetTopicPath()).GetValueSync();
+    RemoveDirectoryRecurive(GetDatabase() + "/" + TopicPrefix_);
+
     CreateTopic();
+}
+
+void TTopicTestFixture::RemoveDirectoryRecurive(const std::string& path) const {
+    TSchemeClient schemeClient(MakeDriver());
+
+    auto describeResult = schemeClient.DescribePath(path).GetValueSync();
+    if (describeResult.GetStatus() == EStatus::SCHEME_ERROR) {
+        return;
+    }
+    NStatusHelpers::ThrowOnError(describeResult);
+    auto entry = describeResult.GetEntry();
+
+    if (entry.Type == ESchemeEntryType::Table || entry.Type == ESchemeEntryType::ColumnTable) {
+        TTableClient client(MakeDriver());
+        NStatusHelpers::ThrowOnError(client.RetryOperationSync([&path](TSession session) {
+            return session.DropTable(path).GetValueSync();
+        }));
+    } else if (entry.Type == ESchemeEntryType::Topic) {
+        TTopicClient client(MakeDriver());
+        NStatusHelpers::ThrowOnError(client.DropTopic(path).GetValueSync());
+    } else if (entry.Type == ESchemeEntryType::Directory) {
+        auto listResult = schemeClient.ListDirectory(path).GetValueSync();
+        NStatusHelpers::ThrowOnError(listResult);
+        for (const auto& entry : listResult.GetChildren()) {
+            RemoveDirectoryRecurive(path + "/" + entry.Name);
+        }
+    } else {
+        ythrow TYdbException() << "Entry type " << entry.Type << " is not supported" << Endl;
+    }
 }
 
 std::string TTopicTestFixture::GetEndpoint() const {

@@ -285,7 +285,7 @@ bool CheckComparisonParametersForPushdown(const TCoCompare& compare, const TExpr
         }
     }
 
-    if (options.PushdownSubstring) { //EnableSimpleIlikePushdown FF
+    if (options.PushdownSubstring) {
         if (IgnoreCaseSubstringMatchFunctions.contains(compare.CallableName())) {
             const auto& right = compare.Right().Ref();
             YQL_ENSURE(right.IsCallable("String") || right.IsCallable("Utf8"));

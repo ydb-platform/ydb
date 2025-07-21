@@ -63,7 +63,7 @@ namespace NYT::NYTree {
  *    Filter = {.Keys = {}; .Paths = {}, .Universal = true}
  *    Result depends on implementation.
  */
-struct TAttributeFilter
+class TAttributeFilter
 {
     //! Whitelist of top-level keys to be returned.
     DEFINE_BYREF_RO_PROPERTY(std::vector<IAttributeDictionary::TKey>, Keys);
@@ -71,8 +71,9 @@ struct TAttributeFilter
 
     //! If true, filter is universal, i.e. behavior depends on service's own policy;
     //! in such case #Keys and #Paths are always empty.
-    bool Universal = true;
+    DEFINE_BYVAL_RO_BOOLEAN_PROPERTY(Universal, true);
 
+public:
     //! Creates a universal filter.
     TAttributeFilter() = default;
 
@@ -99,12 +100,6 @@ struct TAttributeFilter
     //! that are not ready for by-path attribute filtering. Context argument allows customizing
     //! error message.
     void ValidateKeysOnly(TStringBuf context = "this context") const;
-
-    //! Adds key. Makes attribute filter not universal if it was universal.
-    void AddKey(IAttributeDictionary::TKey key);
-
-    //! Reserve keys.
-    void ReserveKeys(size_t capacity);
 
     //! Returns true if #key appears in Keys or "/#key" appears in Paths using linear search.
     bool AdmitsKeySlow(IAttributeDictionary::TKeyView key) const;

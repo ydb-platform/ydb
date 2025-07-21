@@ -186,7 +186,10 @@ def transform(fp, mute_check: YaMuteCheck, ya_out_dir, save_inplace, log_url_pre
 
         for case in suite.findall("testcase"):
             test_name = case.get("name")
+            test_classname = case.get("classname") + '.' + test_name
+            case.set("name", test_classname)
             case.set("classname", suite_name)
+            test_name = test_classname
 
             is_fail = is_faulty_testcase(case)
             has_fail_tests |= is_fail
@@ -268,7 +271,6 @@ def main():
         test_stuff_out,
         test_stuff_prefix,
     )
-
 
 if __name__ == "__main__":
     main()

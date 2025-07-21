@@ -473,6 +473,7 @@ Y_UNIT_TEST_SUITE(TConsistentOpsWithReboots) {
 
     Y_UNIT_TEST(CreateIndexedTableAndForceDrop) {
         TTestWithReboots t;
+        t.GetTestEnvOptions().EnableRealSystemViewPaths(false);
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             TPathVersion dirAVersion;
 
@@ -525,6 +526,7 @@ Y_UNIT_TEST_SUITE(TConsistentOpsWithReboots) {
 
     Y_UNIT_TEST(CreateIndexedTableAndForceDropSimultaneously) {
         TTestWithReboots t;
+        t.GetTestEnvOptions().EnableRealSystemViewPaths(false);
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             TPathVersion dirAVersion;
             {
@@ -566,6 +568,7 @@ Y_UNIT_TEST_SUITE(TConsistentOpsWithReboots) {
 
     Y_UNIT_TEST(DropIndexedTableAndForceDropSimultaneously) {
         TTestWithReboots t;
+        t.GetTestEnvOptions().EnableRealSystemViewPaths(false);
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             TPathVersion dirAVersion;
 

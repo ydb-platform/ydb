@@ -181,7 +181,6 @@ public:
     }
 
     std::vector<THolder<TEvDataShard::TEvRead>> RebuildRequest(const ui64& prevReadId, ui64& newReadId) final {
-
         auto it = ReadStateByReadId.find(prevReadId);
         if (it == ReadStateByReadId.end()) {
             return {};
@@ -223,22 +222,22 @@ public:
             THolder<TEvDataShard::TEvRead> request(new TEvDataShard::TEvRead());
             FillReadRequest(++newReadId, request, unprocessedPoints);
             requests.emplace_back(std::move(request));
-            ReadStateByReadId.emplace(
+            YQL_ENSURE(ReadStateByReadId.emplace(
                 newReadId,
                 TReadState{
                     .PendingKeys = std::move(unprocessedPoints),
-                });
+                }).second);
         }
 
         if (!unprocessedRanges.empty()) {
             THolder<TEvDataShard::TEvRead> request(new TEvDataShard::TEvRead());
             FillReadRequest(++newReadId, request, unprocessedRanges);
             requests.emplace_back(std::move(request));
-            ReadStateByReadId.emplace(
+            YQL_ENSURE(ReadStateByReadId.emplace(
                 newReadId,
                 TReadState{
                     .PendingKeys = std::move(unprocessedRanges),
-                });
+                }).second);
         }
 
         return requests;
@@ -271,22 +270,22 @@ public:
             THolder<TEvDataShard::TEvRead> request(new TEvDataShard::TEvRead());
             FillReadRequest(++readId, request, points);
             readRequests.emplace_back(shardId, std::move(request));
-            ReadStateByReadId.emplace(
+            YQL_ENSURE(ReadStateByReadId.emplace(
                 readId,
                 TReadState{
                     .PendingKeys = std::move(points),
-                });
+                }).second);
         }
 
         for (auto& [shardId, ranges] : rangesPerShard) {
             THolder<TEvDataShard::TEvRead> request(new TEvDataShard::TEvRead());
             FillReadRequest(++readId, request, ranges);
             readRequests.emplace_back(shardId, std::move(request));
-            ReadStateByReadId.emplace(
+            YQL_ENSURE(ReadStateByReadId.emplace(
                 readId,
                 TReadState{
                     .PendingKeys = std::move(ranges),
-                });
+                }).second);
         }
 
         return readRequests;
@@ -525,7 +524,6 @@ public:
     }
 
     std::vector<THolder<TEvDataShard::TEvRead>> RebuildRequest(const ui64& prevReadId, ui64& newReadId) final {
-
         auto readIt = ReadStateByReadId.find(prevReadId);
         if (readIt == ReadStateByReadId.end()) {
             return {};
@@ -542,17 +540,31 @@ public:
         ui32 firstUnprocessedQuery = state.FirstUnprocessedQuery;
         const auto& lastProcessedKey = state.LastProcessedKey;
 
+        for (ui32 i = 0; i < firstUnprocessedQuery; ++i) {
+            auto leftRowIt = PendingLeftRowsByKey.find(ExtractKeyPrefix(ranges[i]));
+            YQL_ENSURE(leftRowIt != PendingLeftRowsByKey.end());
+            leftRowIt->second.PendingReads.erase(prevReadId);
+
+            const bool leftRowProcessed = leftRowIt->second.PendingReads.empty()
+                && leftRowIt->second.RightRowExist;
+            if (leftRowProcessed) {
+                YQL_ENSURE(IsRowSeqNoValid(leftRowIt->second.SeqNo));
+                ResultRowsBySeqNo[leftRowIt->second.SeqNo].Completed = true;
+                PendingLeftRowsByKey.erase(leftRowIt);
+            }
+        }
+
         if (lastProcessedKey) {
             YQL_ENSURE(firstUnprocessedQuery < ranges.size());
             auto unprocessedRange = ranges[firstUnprocessedQuery];
             YQL_ENSURE(!unprocessedRange.Point);
 
-            TOwnedTableRange range(*lastProcessedKey, false,
-                unprocessedRange.GetOwnedTo(), unprocessedRange.InclusiveTo);
-
-            auto leftRowIt = PendingLeftRowsByKey.find(ExtractKeyPrefix(range));
+            auto leftRowIt = PendingLeftRowsByKey.find(ExtractKeyPrefix(unprocessedRange));
             YQL_ENSURE(leftRowIt != PendingLeftRowsByKey.end());
             leftRowIt->second.PendingReads.erase(prevReadId);
+
+            TOwnedTableRange range(*lastProcessedKey, false,
+                unprocessedRange.GetOwnedTo(), unprocessedRange.InclusiveTo);
 
             unprocessedRanges.emplace_back(std::move(range));
             ++firstUnprocessedQuery;
@@ -583,11 +595,11 @@ public:
                 rowIt->second.PendingReads.insert(newReadId);
             }
 
-            ReadStateByReadId.emplace(
+            YQL_ENSURE(ReadStateByReadId.emplace(
                 newReadId,
                 TReadState{
                     .PendingKeys = std::move(unprocessedPoints),
-                });
+                }).second);
         }
 
         if (!unprocessedRanges.empty()) {
@@ -601,11 +613,11 @@ public:
                 rowIt->second.PendingReads.insert(newReadId);
             }
 
-            ReadStateByReadId.emplace(
+            YQL_ENSURE(ReadStateByReadId.emplace(
                 newReadId,
                 TReadState{
                     .PendingKeys = std::move(unprocessedRanges),
-                });
+                }).second);
         }
 
         return readRequests;
@@ -702,11 +714,11 @@ public:
                 rowIt->second.PendingReads.insert(readId);
             }
 
-            ReadStateByReadId.emplace(
+            YQL_ENSURE(ReadStateByReadId.emplace(
                 readId,
                 TReadState{
                     .PendingKeys = std::move(points),
-                });
+                }).second);
         }
 
         for (auto& [shardId, ranges] : rangesPerShard) {
@@ -720,11 +732,11 @@ public:
                 rowIt->second.PendingReads.insert(readId);
             }
 
-            ReadStateByReadId.emplace(
+            YQL_ENSURE(ReadStateByReadId.emplace(
                 readId,
                 TReadState{
                     .PendingKeys = std::move(ranges),
-                });
+                }).second);
         }
 
         return requests;
@@ -766,18 +778,17 @@ public:
         if (record.GetFinished()) {
             for (const auto& key : pendingKeysIt->second.PendingKeys) {
                 auto leftRowIt = PendingLeftRowsByKey.find(ExtractKeyPrefix(key));
-                if (leftRowIt != PendingLeftRowsByKey.end()) {
-                    leftRowIt->second.PendingReads.erase(record.GetReadId());
+                YQL_ENSURE(leftRowIt != PendingLeftRowsByKey.end());
+                leftRowIt->second.PendingReads.erase(record.GetReadId());
 
-                    // row is considered processed when all reads are finished
-                    // and at least one right row is found
-                    const bool leftRowProcessed = leftRowIt->second.PendingReads.empty()
-                        && leftRowIt->second.RightRowExist;
-                    if (leftRowProcessed) {
-                        YQL_ENSURE(IsRowSeqNoValid(leftRowIt->second.SeqNo));
-                        ResultRowsBySeqNo[leftRowIt->second.SeqNo].Completed = true;
-                        PendingLeftRowsByKey.erase(leftRowIt);
-                    }
+                // row is considered processed when all reads are finished
+                // and at least one right row is found
+                const bool leftRowProcessed = leftRowIt->second.PendingReads.empty()
+                    && leftRowIt->second.RightRowExist;
+                if (leftRowProcessed) {
+                    YQL_ENSURE(IsRowSeqNoValid(leftRowIt->second.SeqNo));
+                    ResultRowsBySeqNo[leftRowIt->second.SeqNo].Completed = true;
+                    PendingLeftRowsByKey.erase(leftRowIt);
                 }
             }
 
@@ -839,10 +850,8 @@ public:
 
         // we should process left rows that haven't matches on the right
         for (auto leftRowIt = PendingLeftRowsByKey.begin(); leftRowIt != PendingLeftRowsByKey.end();) {
-            const bool leftRowShouldBeProcessed = leftRowIt->second.PendingReads.empty()
-                && !leftRowIt->second.RightRowExist;
-
-            if (leftRowShouldBeProcessed) {
+            if (leftRowIt->second.PendingReads.empty()) {
+                YQL_ENSURE(!leftRowIt->second.RightRowExist);
                 TReadResultStats rowStats;
                 auto resultRow = TryBuildResultRow(leftRowIt->second, {}, rowStats);
                 YQL_ENSURE(IsRowSeqNoValid(leftRowIt->second.SeqNo));

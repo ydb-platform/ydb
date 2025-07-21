@@ -2516,6 +2516,298 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         UNIT_ASSERT_VALUES_EQUAL(metadataResponse->Brokers[0].Port, FAKE_SERVERLESS_KAFKA_PROXY_PORT);
     }
 
+
+    Y_UNIT_TEST(DescribeGroupsScenario) {
+        TInsecureTestServer testServer("1", false, true);
+
+        TString topicName = "/Root/topic-0";
+        ui64 totalPartitions = 24;
+        TString groupId1 = "consumer-0";
+        TString groupId2 = "consumer-1";
+        TString groupId3 = "consumer-2";
+
+        TString protocolType = "consumer";
+        TString protocolName = "range";
+
+        TKafkaTestClient clientA(testServer.Port, "ClientA");
+        TKafkaTestClient clientB(testServer.Port, "ClientB");
+        TKafkaTestClient clientC(testServer.Port, "ClientC");
+
+        // Checking that DescribeGroups method works correctly if tables have not been inited yet
+
+        std::vector<std::optional<TString>> requestedGroups;
+        requestedGroups.push_back(groupId1);
+        auto response0 = clientA.DescribeGroups(requestedGroups);
+
+        UNIT_ASSERT_VALUES_EQUAL(response0->Groups.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(response0->Groups[0].GroupId, groupId1);
+        UNIT_ASSERT_VALUES_EQUAL(response0->Groups[0].Members.size(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(response0->Groups[0].ErrorCode, (TKafkaInt16)EKafkaErrors::GROUP_ID_NOT_FOUND);
+
+        // Creating 3 group members. One member of group "consumer-0" and two members of group "consumer-1"
+
+        {
+            NYdb::NTopic::TTopicClient pqClient(*testServer.Driver);
+            auto result = pqClient
+                .CreateTopic(
+                    topicName,
+                    NYdb::NTopic::TCreateTopicSettings()
+                        .PartitioningSettings(totalPartitions, 100)
+                        .BeginAddConsumer(groupId1).EndAddConsumer()
+                        .BeginAddConsumer(groupId2).EndAddConsumer()
+                )
+                .ExtractValueSync();
+            UNIT_ASSERT_C(
+                result.IsSuccess(),
+                "CreateTopic failed, issues: " << result.GetIssues().ToString()
+            );
+        }
+
+
+
+        std::vector<TString> topics = {topicName};
+        i32 heartbeatTimeout = 15000;
+        i32 rebalanceTimeout = 5000;
+
+        TRequestHeaderData headerAJoin = clientA.Header(NKafka::EApiKey::JOIN_GROUP, 9);
+        TRequestHeaderData headerBJoin = clientB.Header(NKafka::EApiKey::JOIN_GROUP, 9);
+        TRequestHeaderData headerCJoin = clientC.Header(NKafka::EApiKey::JOIN_GROUP, 9);
+
+        TJoinGroupRequestData joinReq1;
+        joinReq1.GroupId = groupId1;
+        joinReq1.ProtocolType = protocolType;
+        joinReq1.SessionTimeoutMs = heartbeatTimeout;
+        joinReq1.RebalanceTimeoutMs = rebalanceTimeout;
+
+        NKafka::TJoinGroupRequestData::TJoinGroupRequestProtocol protocol;
+        protocol.Name = protocolName;
+
+        TConsumerProtocolSubscription subscribtion;
+        for (auto& topic : topics) {
+            subscribtion.Topics.push_back(topic);
+        }
+        TKafkaVersion version = 3;
+        TWritableBuf buf(nullptr, subscribtion.Size(version) + sizeof(version));
+        TKafkaWritable writable(buf);
+        writable << version;
+        subscribtion.Write(writable, version);
+        protocol.Metadata = TKafkaRawBytes(buf.GetFrontBuffer().data(), buf.GetFrontBuffer().size());
+
+        joinReq1.Protocols.push_back(protocol);
+
+        TJoinGroupRequestData joinReqA = joinReq1;
+        joinReqA.GroupInstanceId = "instanceA";
+
+        TJoinGroupRequestData joinReq2 = joinReq1;
+        joinReq2.GroupId = groupId2;
+
+        TJoinGroupRequestData joinReqB = joinReq2;
+        joinReqB.GroupInstanceId = "instanceB";
+
+        TJoinGroupRequestData joinReqC = joinReq2;
+        joinReqC.GroupInstanceId = "instanceC";
+
+        clientA.WriteToSocket(headerAJoin, joinReqA);
+        clientB.WriteToSocket(headerBJoin, joinReqB);
+        clientC.WriteToSocket(headerCJoin, joinReqC);
+
+        auto joinRespA = clientA.ReadResponse<TJoinGroupResponseData>(headerAJoin);
+        auto joinRespB = clientB.ReadResponse<TJoinGroupResponseData>(headerBJoin);
+        auto joinRespC = clientC.ReadResponse<TJoinGroupResponseData>(headerCJoin);
+
+        UNIT_ASSERT_VALUES_EQUAL(joinRespA->ErrorCode, (TKafkaInt16)EKafkaErrors::NONE_ERROR);
+        UNIT_ASSERT_VALUES_EQUAL(joinRespB->ErrorCode, (TKafkaInt16)EKafkaErrors::NONE_ERROR);
+        UNIT_ASSERT_VALUES_EQUAL(joinRespC->ErrorCode, (TKafkaInt16)EKafkaErrors::NONE_ERROR);
+
+        // check that DescribeGroups information is returned correctly when one group is requested
+
+        auto response1 = clientA.DescribeGroups(requestedGroups);
+        UNIT_ASSERT_VALUES_EQUAL(response1->Groups.size(), 1);
+        auto& groupResponse = response1->Groups[0];
+        UNIT_ASSERT(groupResponse.GroupId.has_value());
+        UNIT_ASSERT_VALUES_EQUAL(*groupResponse.GroupId, groupId1);
+        UNIT_ASSERT_VALUES_EQUAL(groupResponse.Members.size(), 1);
+
+        // check that for two existing requested groups DescribeGroups returns correct member information
+        // and for one unexisting requested group the returned response constains error
+
+        requestedGroups.push_back(groupId2);
+        requestedGroups.push_back(groupId3);
+        auto response2 = clientA.DescribeGroups(requestedGroups);
+        UNIT_ASSERT_VALUES_EQUAL(response2->Groups.size(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(response2->Groups[0].GroupId, groupId1);
+        UNIT_ASSERT_VALUES_EQUAL(response2->Groups[0].Members.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(response2->Groups[0].Members[0].MemberId, joinRespA->MemberId);
+        UNIT_ASSERT_VALUES_EQUAL(response2->Groups[0].ErrorCode, (TKafkaInt16)EKafkaErrors::NONE_ERROR);
+        UNIT_ASSERT_VALUES_EQUAL(response2->Groups[1].Members.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(response2->Groups[1].GroupId, groupId2);
+        UNIT_ASSERT_VALUES_EQUAL(response2->Groups[1].ErrorCode, (TKafkaInt16)EKafkaErrors::NONE_ERROR);
+        UNIT_ASSERT_VALUES_EQUAL(response2->Groups[2].GroupId, groupId3);
+        UNIT_ASSERT_VALUES_EQUAL(response2->Groups[2].Members.size(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(response2->Groups[2].ErrorCode, (TKafkaInt16)EKafkaErrors::GROUP_ID_NOT_FOUND);
+
+        ui32 memberIdBCount = 0;
+        ui32 memberIdCCount = 0;
+        ui32 wrongMemberIdCount = 0;
+        for (auto& member : response2->Groups[1].Members) {
+            if (member.MemberId == joinRespB->MemberId) {
+                memberIdBCount += 1;
+            } else if (member.MemberId == joinRespC->MemberId) {
+                memberIdCCount += 1;
+            } else {
+                wrongMemberIdCount += 1;
+            }
+        }
+        UNIT_ASSERT_VALUES_EQUAL(memberIdBCount, 1);
+        UNIT_ASSERT_VALUES_EQUAL(memberIdCCount, 1);
+        UNIT_ASSERT_VALUES_EQUAL(wrongMemberIdCount, 0);
+    }
+
+    Y_UNIT_TEST(ListGroupsScenario) {
+        TInsecureTestServer testServer("1", false, true);
+        TString groupId1 = "consumer-0";
+        TString groupId2 = "consumer-1";
+        TString topicName = "/Root/topic-0";
+        ui64 totalPartitions = 24;
+        TString protocolType = "consumer";
+        TString protocolName = "range";
+
+        TKafkaTestClient clientA(testServer.Port, "ClientA");
+        TKafkaTestClient clientB(testServer.Port, "ClientB");
+
+        // check that ListGroups doesn't fail if tables have not been inited yet
+
+        std::vector<std::optional<TString>> statesFilter = {"PreparingRebalance"};
+        auto responseBeforeTablesInit = clientA.ListGroups(statesFilter);
+        UNIT_ASSERT_VALUES_EQUAL(responseBeforeTablesInit->Groups.size(), 0);
+
+        {
+            NYdb::NTopic::TTopicClient pqClient(*testServer.Driver);
+            auto result = pqClient
+                .CreateTopic(
+                    topicName,
+                    NYdb::NTopic::TCreateTopicSettings()
+                        .PartitioningSettings(totalPartitions, 100)
+                        .BeginAddConsumer(groupId1).EndAddConsumer()
+                        .BeginAddConsumer(groupId2).EndAddConsumer()
+                )
+                .ExtractValueSync();
+            UNIT_ASSERT_C(
+                result.IsSuccess(),
+                "CreateTopic failed, issues: " << result.GetIssues().ToString()
+            );
+        }
+
+
+        // check that before adding any consumers response will contain no groups
+
+        TListGroupsRequestData requestGroups;
+        auto responseEmpty = clientA.ListGroups(requestGroups);
+        Cout << "Recieved TListGroupsRequestData with " << responseEmpty->Groups.size() << Endl;
+        UNIT_ASSERT_VALUES_EQUAL(responseEmpty->Groups.size(), 0);
+
+        std::vector<TString> topics = {topicName};
+        i32 heartbeatTimeout = 15000;
+
+        auto joinRespA = clientA.JoinAndSyncGroupAndWaitPartitions(topics, groupId1, totalPartitions, protocolName, totalPartitions, heartbeatTimeout);
+        auto joinRespB = clientB.JoinAndSyncGroupAndWaitPartitions(topics, groupId2, totalPartitions, protocolName, totalPartitions, heartbeatTimeout);
+
+        // check that after two consumers have joined to two groups, they will be returned with correct status
+
+        auto response = clientA.ListGroups(requestGroups);
+
+        Cout << "Recieved TListGroupsRequestData with " << response->Groups.size() << Endl;
+        UNIT_ASSERT_VALUES_EQUAL(response->Groups.size(), 2);
+        ui32 first_group_count = 0;
+        ui32 second_group_count = 0;
+
+        // check that all metadata is correct and groups are in "preparing rebalance" state
+        for (auto group : response->Groups) {
+            UNIT_ASSERT_C(group.GroupId.has_value(),"Error, no groupId recieved");
+            UNIT_ASSERT_C(group.GroupState.has_value(),"Error, no GroupState recieved");
+            UNIT_ASSERT_C(group.ProtocolType.has_value(),"Error, no ProtocolType recieved");
+            UNIT_ASSERT_C(*group.GroupId == groupId1 || *group.GroupId == groupId2,"Error, wrong GroupId name" << group.GroupId);
+
+            if (*group.GroupId == groupId1) {
+                first_group_count += 1;
+            } else if (*group.GroupId == groupId2) {
+                second_group_count += 1;
+            }
+
+            UNIT_ASSERT_VALUES_EQUAL(*group.GroupState, "CompletingRebalance");
+            UNIT_ASSERT_VALUES_EQUAL(*group.ProtocolType, protocolType);
+
+            Cout << "********" << Endl;
+            Cout << "GroupId: " << *group.GroupId << Endl;
+            Cout << "GroupState: " << *group.GroupState << Endl;
+            Cout << "ProtocolType: " << *group.ProtocolType  << Endl;
+
+        }
+        UNIT_ASSERT_VALUES_EQUAL(first_group_count, 1);
+        UNIT_ASSERT_VALUES_EQUAL(second_group_count, 1);
+
+
+        // now we want to check that after calling JoinGroup() Group2 will be in state of "Preparing Rebalance"
+        // because another consumer has joined Group2 recently
+
+        clientA.JoinGroup(topics, groupId2, protocolName, heartbeatTimeout);
+
+        TListGroupsRequestData requestGroups1;
+        auto response1 = clientB.ListGroups(requestGroups1);
+        Cout << "Recieved TListGroupsRequestData with " << response1->Groups.size() << Endl;
+
+        first_group_count = 0;
+        second_group_count = 0;
+        for (auto group : response1->Groups) {
+            UNIT_ASSERT_C(group.GroupId.has_value(),"Error, no groupId recieved");
+            UNIT_ASSERT_C(group.GroupState.has_value(),"Error, no GroupState recieved");
+            UNIT_ASSERT_C(group.ProtocolType.has_value(),"Error, no ProtocolType recieved");
+            UNIT_ASSERT_C(*group.GroupId == groupId1 || *group.GroupId == groupId2, "Error, wrong GroupId name" << group.GroupId);
+
+            if (*group.GroupId == groupId1) {
+                first_group_count += 1;
+                UNIT_ASSERT_VALUES_EQUAL(*group.GroupState, "CompletingRebalance");
+            } else if (*group.GroupId == groupId2) {
+                second_group_count += 1;
+                UNIT_ASSERT_VALUES_EQUAL(*group.GroupState, "PreparingRebalance");
+            }
+            UNIT_ASSERT_VALUES_EQUAL(*group.ProtocolType, protocolType);
+
+            Cout << "********" << Endl;
+            Cout << "GroupId: " <<  *group.GroupId  << Endl;
+            Cout << "GroupState: " <<  *group.GroupState  << Endl;
+            Cout << "ProtocolType: " <<  *group.ProtocolType  << Endl;
+        }
+        UNIT_ASSERT_VALUES_EQUAL(first_group_count, 1);
+        UNIT_ASSERT_VALUES_EQUAL(second_group_count, 1);
+
+
+        // now we want to check that if StatesFilter is filled in TListGroupsRequestData
+        // than only consumers of certain states from StatesFilter are returned
+
+        TListGroupsRequestData requestGroupsStateFilter;
+        requestGroupsStateFilter.StatesFilter.push_back("PreparingRebalance");
+        auto responseStateFilter = clientA.ListGroups(requestGroupsStateFilter);
+
+        first_group_count = 0;
+        second_group_count = 0;
+        UNIT_ASSERT_VALUES_EQUAL(responseStateFilter->Groups.size(), 1);
+        for (auto group : responseStateFilter->Groups) {
+            UNIT_ASSERT_C(group.GroupId.has_value(),"Error, no groupId recieved");
+            UNIT_ASSERT_C(group.GroupState.has_value(),"Error, no GroupState recieved");
+            UNIT_ASSERT_C(group.ProtocolType.has_value(),"Error, no ProtocolType recieved");
+            UNIT_ASSERT_C(*group.GroupId == groupId1 || *group.GroupId == groupId2,"Error, wrong GroupId name" << group.GroupId);
+            UNIT_ASSERT_VALUES_EQUAL(*group.GroupId, groupId2);
+            UNIT_ASSERT_VALUES_EQUAL(*group.GroupState, "PreparingRebalance");
+            UNIT_ASSERT_VALUES_EQUAL(*group.ProtocolType, protocolType);
+
+            Cout << "********" << Endl;
+            Cout << "GroupId: " << *group.GroupId << Endl;
+            Cout << "GroupState: " << *group.GroupState << Endl;
+            Cout << "ProtocolType: " << *group.ProtocolType  << Endl;
+        }
+    }
+
     Y_UNIT_TEST(NativeKafkaBalanceScenario) {
         TInsecureTestServer testServer("1", false, true);
 
@@ -2601,7 +2893,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         TKafkaWritable writable(buf);
         writable << version;
         subscribtion.Write(writable, version);
-        protocol.Metadata = TKafkaRawBytes(buf.GetBuffer().data(), buf.GetBuffer().size());
+        protocol.Metadata = TKafkaRawBytes(buf.GetFrontBuffer().data(), buf.GetFrontBuffer().size());
 
         joinReq.Protocols.push_back(protocol);
 
@@ -2842,7 +3134,6 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             auto noMasterSyncResponse = clientA.ReadResponse<TSyncGroupResponseData>(syncHeaderNotMaster);
             UNIT_ASSERT_VALUES_EQUAL(noMasterSyncResponse->ErrorCode, (TKafkaInt16)EKafkaErrors::REBALANCE_IN_PROGRESS);
         }
-
     }
 
     Y_UNIT_TEST(InitProducerId_withoutTransactionalIdShouldReturnRandomInt) {
@@ -2965,7 +3256,6 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         auto transactionalId = TStringBuilder() << "my-tx-producer-" << TGUID::Create().AsUuidString();
 
         auto resp = kafkaClient.InitProducerId(transactionalId, testServer.KikimrServer->GetRuntime()->GetAppData().KafkaProxyConfig.GetTransactionTimeoutMs() + 1);
-        
         UNIT_ASSERT_VALUES_EQUAL(resp->ErrorCode, EKafkaErrors::INVALID_TRANSACTION_TIMEOUT);
     }
 
@@ -3084,7 +3374,6 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         auto consumerInfo = kafkaClient.JoinAndSyncGroupAndWaitPartitions(topicsToSubscribe, consumerName, 3, protocolName, 3, 15000);
 
         kafkaClient.ValidateNoDataInTopics({{outputTopicName, {0}}});
-        
         // move time forward after transaction timeout
         Sleep(TDuration::MilliSeconds(txnTimeoutMs));
 

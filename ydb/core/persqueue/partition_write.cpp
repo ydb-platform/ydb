@@ -599,7 +599,7 @@ void TPartition::HandleWriteResponse(const TActorContext& ctx) {
     AnswerCurrentWrites(ctx);
     SyncMemoryStateWithKVState(ctx);
 
-    if (SplitMergeEnabled(Config) && !IsSupportive()) {
+    if (SplitMergeEnabled(Config) && !IsSupportive() && !MirroringEnabled(Config)) {
         SplitMergeAvgWriteBytes->Update(writeNewSizeFull, now);
         auto needScaling = CheckScaleStatus(ctx);
         ChangeScaleStatusIfNeeded(needScaling);
@@ -683,7 +683,7 @@ void TPartition::HandleOnWrite(TEvPQ::TEvWrite::TPtr& ev, const TActorContext& c
         return sum + msg.Data.size();
     });
 
-    bool mirroredPartition = Config.GetPartitionConfig().HasMirrorFrom();
+    bool mirroredPartition = MirroringEnabled(Config);
 
     if (mirroredPartition && !ev->Get()->OwnerCookie.empty()) {
         ReplyError(ctx, ev->Get()->Cookie, NPersQueue::NErrorCode::BAD_REQUEST,

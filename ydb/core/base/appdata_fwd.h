@@ -26,6 +26,9 @@ namespace NKikimr {
     namespace NJaegerTracing {
         class TSamplingThrottlingConfigurator;
     }
+    namespace NKqp::NScheduler {
+        class TComputeScheduler;
+    }
 }
 
 namespace NKikimrCms {
@@ -257,7 +260,7 @@ struct TAppData {
     NKikimrConfig::THealthCheckConfig& HealthCheckConfig;
     NKikimrConfig::TWorkloadManagerConfig& WorkloadManagerConfig;
     NKikimrConfig::TQueryServiceConfig& QueryServiceConfig;
-    NKikimrConfig::TBridgeConfig *BridgeConfig = nullptr;
+    NKikimrConfig::TBridgeConfig& BridgeConfig;
     bool EnforceUserTokenRequirement = false;
     bool EnforceUserTokenCheckRequirement = false; // check token if it was specified
     bool AllowHugeKeyValueDeletes = true; // delete when all clients limit deletes per request
@@ -266,6 +269,7 @@ struct TAppData {
     bool EnableMvccSnapshotWithLegacyDomainRoot = false;
     bool UsePartitionStatsCollectorForTests = false;
     bool DisableCdcAutoSwitchingToReadyStateForTests = false;
+    bool BridgeModeEnabled = false;
 
     TVector<TString> AdministrationAllowedSIDs; // use IsAdministrator method to check whether a user or a group is allowed to perform administrative tasks
     TVector<TString> RegisterDynamicNodeAllowedSIDs;
@@ -309,6 +313,8 @@ struct TAppData {
     // Tracing configurator (look for tracing config in ydb/core/jaeger_tracing/actors_tracing_control)
     TIntrusivePtr<NKikimr::NJaegerTracing::TSamplingThrottlingConfigurator> TracingConfigurator;
 
+    std::shared_ptr<NKqp::NScheduler::TComputeScheduler> ComputeScheduler;
+
     TAppData(
             ui32 sysPoolId, ui32 userPoolId, ui32 ioPoolId, ui32 batchPoolId,
             TMap<TString, ui32> servicePools,
@@ -340,29 +346,15 @@ struct TAppData {
     }
 };
 
+inline bool CheckAppData(const TAppData* appData) {
+    return appData && appData->Magic == TAppData::MagicTag;
+}
+
 inline TAppData* AppData(NActors::TActorSystem* actorSystem) {
     Y_DEBUG_ABORT_UNLESS(actorSystem);
     TAppData* const x = actorSystem->AppData<TAppData>();
-    Y_DEBUG_ABORT_UNLESS(x && x->Magic == TAppData::MagicTag);
+    Y_DEBUG_ABORT_UNLESS(CheckAppData(x));
     return x;
-}
-
-inline bool HasAppData(NActors::TActorSystem* actorSystem) {
-    return actorSystem && AppData(actorSystem);
-}
-
-inline bool HasAppData() {
-    return !!NActors::TlsActivationContext
-        && NActors::TActivationContext::ActorSystem()
-        && NActors::TActivationContext::ActorSystem()->AppData<TAppData>();
-}
-
-inline TAppData& AppDataVerified() {
-    Y_ABORT_UNLESS(HasAppData());
-    NActors::TActorSystem* actorSystem = NActors::TActivationContext::ActorSystem();
-    TAppData* const x = actorSystem->AppData<TAppData>();
-    Y_ABORT_UNLESS(x->Magic == TAppData::MagicTag);
-    return *x;
 }
 
 inline TAppData* AppData() {
@@ -371,6 +363,19 @@ inline TAppData* AppData() {
 
 inline TAppData* AppData(const NActors::TActorContext &ctx) {
     return AppData(ctx.ActorSystem());
+}
+
+inline bool HasAppData(NActors::TActorSystem* actorSystem) {
+    return actorSystem && CheckAppData(actorSystem->AppData<TAppData>());
+}
+
+inline bool HasAppData() {
+    return !!NActors::TlsActivationContext && HasAppData(NActors::TActivationContext::ActorSystem());
+}
+
+inline TAppData& AppDataVerified() {
+    Y_ABORT_UNLESS(HasAppData());
+    return *AppData();
 }
 
 } // NKikimr

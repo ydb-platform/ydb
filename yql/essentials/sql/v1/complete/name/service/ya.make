@@ -15,6 +15,7 @@ RECURSE(
     binding
     cluster
     column
+    docs
     impatient
     ranking
     schema

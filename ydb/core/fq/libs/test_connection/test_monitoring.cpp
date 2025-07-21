@@ -55,7 +55,7 @@ public:
         , Counters(counters)
         , CredentialsFactory(credentialsFactory)
         , Signer(signer)
-        , ClusterConfig(NFq::CreateSolomonClusterConfig({}, token, endpoint, "", signer ? signer->SignAccountId(monitoring.auth().service_account().id()) : "", monitoring))
+        , ClusterConfig(NFq::CreateSolomonClusterConfig({}, token, endpoint, signer ? signer->SignAccountId(monitoring.auth().service_account().id()) : "", monitoring))
     {
         Counters->InFly->Inc();
     }

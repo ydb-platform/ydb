@@ -45,6 +45,9 @@ void TExtensionWhoami::PatchResponse(NJson::TJsonValue& json, NJson::TJsonValue&
     TString messageOverride;
     NJson::TJsonValue* outJson = nullptr;
 
+    SetCORS(Context->Params->Request, Context->Params->HeadersOverride.Get());
+    Context->Params->HeadersOverride->Set("Content-Type", "application/json; charset=utf-8");
+
     if (json.Has(USER_SID) && json.Has(ORIGINAL_USER_TOKEN)) {
         statusOverride = "200";
         messageOverride = "OK";
@@ -63,9 +66,6 @@ void TExtensionWhoami::PatchResponse(NJson::TJsonValue& json, NJson::TJsonValue&
         outJson = &errorJson;
     }
 
-    if (Context->Params->HeadersOverride) {
-        Context->Params->HeadersOverride->Set("Content-Type", "application/json; charset=utf-8");
-    }
     TStringStream content;
     NJson::WriteJson(&content, outJson, {
         .FloatToStringMode = EFloatToStringMode::PREC_NDIGITS,
@@ -81,9 +81,6 @@ void TExtensionWhoami::PatchResponse(NJson::TJsonValue& json, NJson::TJsonValue&
 
 void TExtensionWhoami::Handle(TEvPrivate::TEvExtensionRequest::TPtr ev) {
     Context = std::move(ev->Get()->Context);
-    if (!Context->Params->HeadersOverride) {
-        Context->Params->HeadersOverride = MakeHolder<NHttp::THeadersBuilder>();
-    }
     if (Context->Params->StatusOverride.StartsWith("3") || Context->Params->StatusOverride == "404") {
         ContinueAndPassAway();
     }

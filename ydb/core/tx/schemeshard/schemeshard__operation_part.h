@@ -448,6 +448,12 @@ ISubOperation::TPtr CreateDropCdcStreamImpl(TOperationId id, const TTxTransactio
 ISubOperation::TPtr CreateDropCdcStreamImpl(TOperationId id, TTxState::ETxState state);
 ISubOperation::TPtr CreateDropCdcStreamAtTable(TOperationId id, const TTxTransaction& tx, bool dropSnapshot);
 ISubOperation::TPtr CreateDropCdcStreamAtTable(TOperationId id, TTxState::ETxState state, bool dropSnapshot);
+// Rotate
+TVector<ISubOperation::TPtr> CreateRotateCdcStream(TOperationId id, const TTxTransaction& tx, TOperationContext& context);
+ISubOperation::TPtr CreateRotateCdcStreamImpl(TOperationId id, const TTxTransaction& tx);
+ISubOperation::TPtr CreateRotateCdcStreamImpl(TOperationId id, TTxState::ETxState state);
+ISubOperation::TPtr CreateRotateCdcStreamAtTable(TOperationId id, const TTxTransaction& tx);
+ISubOperation::TPtr CreateRotateCdcStreamAtTable(TOperationId id, TTxState::ETxState state);
 
 /// Continuous Backup
 // Create

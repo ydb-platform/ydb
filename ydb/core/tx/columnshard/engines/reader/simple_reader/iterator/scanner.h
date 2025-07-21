@@ -43,12 +43,15 @@ public:
     void Abort();
 
     bool IsFinished() const {
+        if (!SourcesCollection->IsFinished()) {
+            return false;
+        }
         for (auto&& i : SyncPoints) {
             if (!i->IsFinished()) {
                 return false;
             }
         }
-        return SourcesCollection->IsFinished();
+        return true;
     }
 
     const TReadContext& GetContext() const;
@@ -66,7 +69,7 @@ public:
 
     TConclusionStatus Start();
 
-    TScanHead(std::deque<TSourceConstructor>&& sources, const std::shared_ptr<TSpecialReadContext>& context);
+    TScanHead(std::unique_ptr<NCommon::ISourcesConstructor>&& sourcesConstructor, const std::shared_ptr<TSpecialReadContext>& context);
 
     [[nodiscard]] TConclusion<bool> BuildNextInterval();
 };

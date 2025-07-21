@@ -13,7 +13,7 @@ namespace NSQLComplete {
             {
             }
 
-            NThreading::TFuture<TNameResponse> Lookup(TNameRequest request) const override {
+            NThreading::TFuture<TNameResponse> Lookup(const TNameRequest& request) const override {
                 if (request.Constraints.IsEmpty()) {
                     return NThreading::MakeFuture<TNameResponse>({});
                 }
@@ -39,7 +39,7 @@ namespace NSQLComplete {
 
             static TGenericName Transform(TStringBuf name) {
                 TBindingName unknown;
-                unknown.Indentifier = name;
+                unknown.Identifier = name;
                 return unknown;
             }
 

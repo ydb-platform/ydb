@@ -984,13 +984,21 @@ inline TAsyncStatus TImportFileClient::TImpl::UpsertTValueBufferOnArena(
         auto buildTValueAndSendRequest = [this, &buildFunc, &dbPath, &tableClient, &prebuiltValue, arena]() {
             // For every retry attempt after first request build value from strings again
             // to prevent copying data in retryFunc in a happy way when there is only one request
-            TValue builtValue = prebuiltValue.has_value() ? std::move(prebuiltValue.value()) : buildFunc(arena.get());
-            prebuiltValue = std::nullopt;
+            std::unique_ptr<TValue> builtValue;
+            if (prebuiltValue.has_value()) {
+                // Sending first request with prebuilt value
+                builtValue = std::make_unique<TValue>(std::move(prebuiltValue.value()));
+                prebuiltValue = std::nullopt;
+            } else {
+                // Building value from strings again for retry
+                arena->Reset();
+                builtValue = std::make_unique<TValue>(buildFunc(arena.get()));
+            }
 
             auto settings = UpsertSettings;
             settings.Arena(arena.get());
             return tableClient.BulkUpsert(
-                dbPath, std::move(builtValue), settings)
+                dbPath, std::move(*builtValue), settings)
                 .Apply([](const NYdb::NTable::TAsyncBulkUpsertResult& bulkUpsertResult) {
                     NYdb::TStatus status = bulkUpsertResult.GetValueSync();
                     return NThreading::MakeFuture(status);

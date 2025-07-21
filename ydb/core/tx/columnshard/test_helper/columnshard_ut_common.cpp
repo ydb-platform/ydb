@@ -5,13 +5,14 @@
 #include <ydb/core/base/tablet_resolver.h>
 #include <ydb/core/protos/data_events.pb.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
-#include <ydb/core/tx/columnshard/engines/reader/sys_view/portions/portions.h>
+#include <ydb/core/tx/columnshard/engines/reader/simple_reader/iterator/sys_view/portions/schema.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/max/meta.h>
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
 #include <ydb/core/tx/data_events/common/modification_type.h>
 #include <ydb/core/tx/data_events/payload_helper.h>
 #include <ydb/core/tx/tiering/manager.h>
 #include <ydb/core/tx/tiering/tier/object.h>
+#include <ydb/core/tx/tx_processing.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -178,7 +179,7 @@ void ScanIndexStats(TTestBasicRuntime& runtime, TActorId& sender, const std::vec
 
     // Schema: pathId, kind, rows, bytes, rawBytes. PK: {pathId, kind}
     //record.SetSchemaVersion(0);
-    auto ydbSchema = NOlap::NReader::NSysView::NPortions::TStatsIterator::StatsSchema;
+    auto ydbSchema = NOlap::NReader::NSimple::NSysView::NPortions::TSchemaAdapter::GetStatsSchema();
     for (const auto& col : ydbSchema.Columns) {
         record.AddColumnTags(col.second.Id);
         auto columnType = NScheme::ProtoColumnTypeFromTypeInfoMod(col.second.PType, col.second.PTypeMod);
@@ -465,7 +466,7 @@ NOlap::TIndexInfo BuildTableInfo(const std::vector<NArrow::NTest::TTestColumn>& 
         columns[*it].KeyOrder = idx++;
         pkIds.push_back(*it);
     }
-    return NOlap::TIndexInfo::BuildDefault(NOlap::TTestStoragesManager::GetInstance(), columns, pkIds);
+    return NOlap::TIndexInfo::BuildDefault(1, NOlap::TTestStoragesManager::GetInstance(), columns, pkIds);
 }
 
 NTxUT::TPlanStep SetupSchema(TTestBasicRuntime& runtime, TActorId& sender, const TString& txBody, const ui64 txId) {

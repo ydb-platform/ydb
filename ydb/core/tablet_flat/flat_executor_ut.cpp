@@ -447,8 +447,8 @@ class TTestFlatTablet : public TActor<TTestFlatTablet>, public TTabletExecutedFl
         Send(Sender, new NFake::TEvCompacted(table));
     }
 
-    void DataCleanupComplete(ui64 dataCleanupComplete, const TActorContext&) override {
-        Send(Sender, new NFake::TEvDataCleaned(dataCleanupComplete));
+    void VacuumComplete(ui64 vacuumComplete, const TActorContext&) override {
+        Send(Sender, new NFake::TEvDataCleaned(vacuumComplete));
     }
 
     void ScanComplete(NTable::EStatus, TAutoPtr<IDestructable>, ui64 cookie, const TActorContext&) override

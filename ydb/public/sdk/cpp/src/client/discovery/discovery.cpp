@@ -63,11 +63,12 @@ TNodeLocation::TNodeLocation(const Ydb::Discovery::NodeLocation& location)
     , RackNum(location.has_rack_num() ? std::make_optional(location.rack_num()) : std::nullopt)
     , BodyNum(location.has_body_num() ? std::make_optional(location.body_num()) : std::nullopt)
     , Body(location.has_body() ? std::make_optional(location.body()) : std::nullopt)
+    , BridgePileName(location.has_bridge_pile_name() ? std::make_optional(location.bridge_pile_name()) : std::nullopt)
     , DataCenter(location.has_data_center() ? std::make_optional(location.data_center()) : std::nullopt)
     , Module(location.has_module() ? std::make_optional(location.module()) : std::nullopt)
     , Rack(location.has_rack() ? std::make_optional(location.rack()) : std::nullopt)
     , Unit(location.has_unit() ? std::make_optional(location.unit()) : std::nullopt)
-    {}
+{}
 
 TNodeInfo::TNodeInfo(const Ydb::Discovery::NodeInfo& info)
     : NodeId(info.node_id())
@@ -77,7 +78,6 @@ TNodeInfo::TNodeInfo(const Ydb::Discovery::NodeInfo& info)
     , Address(info.address())
     , Location(info.location())
     , Expire(info.expire())
-    , BridgePileId(info.has_bridge_pile_id() ? std::make_optional(info.bridge_pile_id()) : std::nullopt)
 {}
 
 TNodeRegistrationResult::TNodeRegistrationResult(TStatus&& status, const Ydb::Discovery::NodeRegistrationResult& proto)
@@ -209,13 +209,13 @@ public:
         if (!settings.Path_.empty()) {
             request.set_path(TStringType{settings.Path_});
         }
-        if (!settings.BridgePileName_.empty()) {
-            request.set_bridge_pile_name(TStringType{settings.BridgePileName_});
-        }
 
         auto requestLocation = request.mutable_location();
         const auto& location = settings.Location_;
 
+        if (location.BridgePileName) {
+            requestLocation->set_bridge_pile_name(TStringType{location.BridgePileName.value()});
+        }
         if (location.DataCenter) {
             requestLocation->set_data_center(TStringType{location.DataCenter.value()});
         }

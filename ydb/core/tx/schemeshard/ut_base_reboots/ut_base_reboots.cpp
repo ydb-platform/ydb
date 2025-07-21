@@ -39,6 +39,7 @@ Y_UNIT_TEST_SUITE(TTablesWithReboots) {
 
     Y_UNIT_TEST(CopyWithRebootsAtCommit) { //+
         TTestWithReboots t(true);
+        t.GetTestEnvOptions().EnableRealSystemViewPaths(false);
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);
@@ -644,6 +645,7 @@ Y_UNIT_TEST_SUITE(TTablesWithReboots) {
 
     Y_UNIT_TEST(AlterAndForceDrop) { //+
         TTestWithReboots t;
+        t.GetTestEnvOptions().EnableRealSystemViewPaths(false);
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             TPathVersion pathVersion;
             {
@@ -685,6 +687,7 @@ Y_UNIT_TEST_SUITE(TTablesWithReboots) {
 
     Y_UNIT_TEST(CopyTableWithReboots) { //+
         TTestWithReboots t;
+        t.GetTestEnvOptions().EnableRealSystemViewPaths(false);
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);
@@ -722,6 +725,7 @@ Y_UNIT_TEST_SUITE(TTablesWithReboots) {
 
     Y_UNIT_TEST(CopyIndexedTableWithReboots) { //+
         TTestWithReboots t;
+        t.GetTestEnvOptions().EnableRealSystemViewPaths(false);
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);
@@ -973,6 +977,7 @@ Y_UNIT_TEST_SUITE(TTablesWithReboots) {
 
     Y_UNIT_TEST(SimultaneousDropForceDrop) { //+
         TTestWithReboots t;
+        t.GetTestEnvOptions().EnableRealSystemViewPaths(false);
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             TestCreateTable(runtime, ++t.TxId, "/MyRoot", R"(
                 Name: "Table1"

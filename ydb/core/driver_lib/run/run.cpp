@@ -151,7 +151,9 @@
 #include <ydb/library/actors/util/memory_track.h>
 #include <ydb/library/actors/prof/tag.h>
 #include <ydb/library/security/ydb_credentials_provider_factory.h>
+#if !defined(_win_)
 #include <ydb/library/signal_backtrace/signal_backtrace.h>
+#endif
 #include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
 
 #include <util/charset/wide.h>
@@ -477,6 +479,9 @@ void TKikimrRunner::InitializeMonitoring(const TKikimrRunConfig& runConfig, bool
         const auto& securityConfig(runConfig.AppConfig.GetDomainsConfig().GetSecurityConfig());
         if (securityConfig.MonitoringAllowedSIDsSize() > 0) {
             monConfig.AllowedSIDs.assign(securityConfig.GetMonitoringAllowedSIDs().begin(), securityConfig.GetMonitoringAllowedSIDs().end());
+        }
+        if (securityConfig.AdministrationAllowedSIDsSize() > 0) {
+            monConfig.AllowedSIDs.insert(monConfig.AllowedSIDs.end(), securityConfig.GetAdministrationAllowedSIDs().begin(), securityConfig.GetAdministrationAllowedSIDs().end());
         }
         monConfig.AllowOrigin = appConfig.GetMonitoringConfig().GetAllowOrigin();
 
@@ -1111,11 +1116,14 @@ void TKikimrRunner::InitializeAllocator(const TKikimrRunConfig& runConfig) {
     for (const auto& a : allocConfig.GetParam()) {
         NMalloc::MallocInfo().SetParam(a.first.c_str(), a.second.c_str());
     }
-#if defined(ALLOW_DEFAULT_ALLOCATOR)
+
     if (allocConfig.GetEnableDefaultAllocator()) {
+#if defined(ALLOW_DEFAULT_ALLOCATOR)
         NKikimr::UseDefaultAllocator();
-    }
 #endif
+        NKikimr::UseDefaultArrowAllocator();
+    }
+
 }
 
 void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
@@ -1286,9 +1294,8 @@ void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
     }
 
     if (runConfig.AppConfig.HasBridgeConfig()) {
-        AppData->BridgeConfig->CopyFrom(runConfig.AppConfig.GetBridgeConfig());
-    } else {
-        AppData->BridgeConfig = nullptr;
+        AppData->BridgeConfig = runConfig.AppConfig.GetBridgeConfig();
+        AppData->BridgeModeEnabled = true;
     }
 
     // setup resource profiles
@@ -2044,11 +2051,11 @@ void TKikimrRunner::SetSignalHandlers() {
     signal(SIGINT, &TKikimrRunner::OnTerminate);
     signal(SIGTERM, &TKikimrRunner::OnTerminate);
 
+#if !defined(_win_)
     if (IsTrue(GetEnv("YDB_ENABLE_SIGNAL_BACKTRACE"))) {
         Singleton<TTraceCollector>(TTraceCollector::DEFAULT_SIGNALS);
     }
 
-#if !defined(_win_)
     SetAsyncSignalHandler(SIGHUP, [](int) {
         TLogBackend::ReopenAllBackends();
     });

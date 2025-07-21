@@ -281,11 +281,11 @@ private:
                     collectionResult->AddVerified(ColumnInfo.GetColumnId(),
                         NAccessor::TTrivialArray::BuildArrayFromScalar(type.BuildScalar(*result, arrays.front()->GetDataType())), false);
                 }
-                collectionResult->TakeSequenceFrom(*sources.front());
                 return true;
             })) {
             return TConclusionStatus::Fail(errorMessage);
         }
+        collectionResult->TakeSequenceFrom(*sources.front());
         return TConclusionStatus::Success();
     }
 

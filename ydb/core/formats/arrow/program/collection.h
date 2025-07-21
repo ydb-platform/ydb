@@ -48,7 +48,7 @@ private:
 
 public:
     void TakeSequenceFrom(const TAccessorsCollection& collection) {
-        AFL_VERIFY(ColumnIdsSequence.empty());
+        AFL_VERIFY(ColumnIdsSequence.empty() || ColumnIdsSequence == collection.ColumnIdsSequence);
         ColumnIdsSequence = collection.ColumnIdsSequence;
     }
 

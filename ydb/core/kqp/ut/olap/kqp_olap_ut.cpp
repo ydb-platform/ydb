@@ -1461,7 +1461,10 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     }
 
     Y_UNIT_TEST(PredicatePushdown_SimpleAsciiILike) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
         auto settings = TKikimrSettings()
+            .SetAppConfig(appConfig)
             .SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
 

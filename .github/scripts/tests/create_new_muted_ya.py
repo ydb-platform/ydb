@@ -38,6 +38,13 @@ MUTE_DAYS = 4
 UNMUTE_DAYS = 4
 DELETE_DAYS = 7
 
+def is_chunk_test(test):
+    # Сначала смотрим на поле is_test_chunk, если оно есть
+    if 'is_test_chunk' in test:
+        return bool(test['is_test_chunk'])
+    # Фоллбек на старую логику по имени
+    return "chunk" in test.get('test_name', '').lower()
+
 def get_wildcard_unmute_candidates(aggregated_for_unmute, mute_check, is_unmute_candidate):
     """
     Возвращает список (pattern, debug_string) для wildcard-паттернов, где все chunk'и проходят фильтр на размьют.
@@ -120,7 +127,8 @@ def execute_query(branch='main', build_type='relwithdebinfo', days_window=1):
         owner, 
         is_muted, 
         state, 
-        days_in_state
+        days_in_state,
+        is_test_chunk
     FROM `test_results/analytics/tests_monitor`
     WHERE date_window >= CurrentUtcDate() - 7*Interval("P1D")
         AND branch = '{branch}' 
@@ -225,6 +233,7 @@ def aggregate_test_data(all_data, period_days):
                     'days_in_state': test.get('days_in_state'),
                     'date_window': test.get('date_window'),
                     'period_days': period_days,  # <--- добавляем сюда
+                    'is_test_chunk': test.get('is_test_chunk', 0),
                 }
             else:
                 # Добавляем состояние в историю, если оно отличается от последнего
@@ -283,7 +292,7 @@ def create_test_string(test, use_wildcards=False):
     """Создает строку теста с опциональными wildcards"""
     testsuite = test.get('suite_folder')
     testcase = test.get('test_name')
-    test_string = f"{testsuite} {testcase}\n"
+    test_string = f"{testsuite} {testcase}"
     if use_wildcards:
         test_string = re.sub(r'\d+/(\d+)\]', r'*/*]', test_string)
     return test_string
@@ -316,7 +325,7 @@ def create_debug_string(test, success_rate=None, period_days=None, date_window=N
     if date_window:
         debug_string += f" [{date_window}]"
     state = test.get('state', 'N/A')
-    if test.get('is_test_chunk', 0):
+    if is_chunk_test(test):
         state = f"(chunk)"
     debug_string += f", p-{test.get('pass_count')}, f-{test.get('fail_count')},m-{test.get('mute_count')}, s-{test.get('skip_count')}, runs-{runs}, state {state}"
     return debug_string + "\n"
@@ -509,7 +518,9 @@ def apply_and_add_mutes(all_data, output_path, mute_check, aggregated_for_mute, 
          # Создаем словари для быстрого поиска debug-строк
         all_muted_ya_debug_dict = dict(zip(all_muted_ya, all_muted_ya_debug))
         to_mute_debug_dict = dict(zip(to_mute, to_mute_debug))
-        
+        to_unmute_debug_dict = dict(zip(to_unmute, to_unmute_debug))
+        to_delete_debug_dict = dict(zip(to_delete, to_delete_debug))
+
         # 5. muted_ya+to_mute
         muted_ya_plus_to_mute = sorted(list(all_muted_ya_set | to_mute_set))
         muted_ya_plus_to_mute_debug = []
@@ -519,22 +530,22 @@ def apply_and_add_mutes(all_data, output_path, mute_check, aggregated_for_mute, 
             elif test in to_mute_debug_dict:
                 muted_ya_plus_to_mute_debug.append(to_mute_debug_dict[test])
         write_file_set(os.path.join(output_path, 'muted_ya+to_mute.txt'), muted_ya_plus_to_mute, muted_ya_plus_to_mute_debug)
-        
+
         # 6. muted_ya-to_unmute
         muted_ya_minus_to_unmute = [t for t in all_muted_ya if t not in to_unmute_set]
         muted_ya_minus_to_unmute_debug = [all_muted_ya_debug_dict[t] for t in muted_ya_minus_to_unmute if t in all_muted_ya_debug_dict]
         write_file_set(os.path.join(output_path, 'muted_ya-to_unmute.txt'), muted_ya_minus_to_unmute, muted_ya_minus_to_unmute_debug)
-        
+
         # 7. muted_ya-to_delete
         muted_ya_minus_to_delete = [t for t in all_muted_ya if t not in to_delete_set]
         muted_ya_minus_to_delete_debug = [all_muted_ya_debug_dict[t] for t in muted_ya_minus_to_delete if t in all_muted_ya_debug_dict]
         write_file_set(os.path.join(output_path, 'muted_ya-to_delete.txt'), muted_ya_minus_to_delete, muted_ya_minus_to_delete_debug)
-        
+
         # 8. muted_ya-to-delete-to-unmute
         muted_ya_minus_to_delete_to_unmute = [t for t in all_muted_ya if t not in to_delete_set and t not in to_unmute_set]
         muted_ya_minus_to_delete_to_unmute_debug = [all_muted_ya_debug_dict[t] for t in muted_ya_minus_to_delete_to_unmute if t in all_muted_ya_debug_dict]
         write_file_set(os.path.join(output_path, 'muted_ya-to-delete-to-unmute.txt'), muted_ya_minus_to_delete_to_unmute, muted_ya_minus_to_delete_to_unmute_debug)
-        
+
         # 9. muted_ya-to-delete-to-unmute+to_mute
         muted_ya_minus_to_delete_to_unmute_set = set(muted_ya_minus_to_delete_to_unmute)
         muted_ya_minus_to_delete_to_unmute_plus_to_mute = sorted(list(muted_ya_minus_to_delete_to_unmute_set | to_mute_set))
@@ -548,42 +559,40 @@ def apply_and_add_mutes(all_data, output_path, mute_check, aggregated_for_mute, 
         # Сохраняем этот же файл как new_muted_ya.txt для совместимости с workflow
         write_file_set(os.path.join(output_path, 'new_muted_ya.txt'), muted_ya_minus_to_delete_to_unmute_plus_to_mute, muted_ya_minus_to_delete_to_unmute_plus_to_mute_debug)
         
-        # 10. muted_ya_changes - файл с изменениями
+        # 10. muted_ya_changes - файл с изменениями (новая логика)
+        all_test_strings = sorted(all_muted_ya_set | to_mute_set | to_unmute_set | to_delete_set, key=sort_key_without_prefix)
         muted_ya_changes = []
         muted_ya_changes_debug = []
-        
-        # Тесты для добавления (+++)
-        for test in to_mute:
-            muted_ya_changes.append(f"+++ {test}")
-            # Находим соответствующую debug-строку
-            if test in to_mute_debug_dict:
-                muted_ya_changes_debug.append(f"+++ {to_mute_debug_dict[test]}")
-        
-        # Тесты для размьюта (---)
-        for test in to_unmute:
-            muted_ya_changes.append(f"--- {test}")
-            # Находим соответствующую debug-строку из all_muted_ya_debug_dict
-            if test in all_muted_ya_debug_dict:
-                muted_ya_changes_debug.append(f"--- {all_muted_ya_debug_dict[test]}")
-        
-        # Тесты для удаления (xxx)
-        for test in to_delete:
-            muted_ya_changes.append(f"xxx {test}")
-            # Находим соответствующую debug-строку из all_muted_ya_debug_dict
-            if test in all_muted_ya_debug_dict:
-                muted_ya_changes_debug.append(f"xxx {all_muted_ya_debug_dict[test]}")
-        
-        # Тесты без изменений (без префикса)
-        unchanged_tests = [t for t in all_muted_ya if t not in to_unmute_set and t not in to_delete_set]
-        for test in unchanged_tests:
-            muted_ya_changes.append(test)
-            if test in all_muted_ya_debug_dict:
-                muted_ya_changes_debug.append(all_muted_ya_debug_dict[test])
-        
-        # Сортируем по алфавиту, игнорируя префиксы
-        muted_ya_changes = sorted(muted_ya_changes, key=sort_key_without_prefix)
-        muted_ya_changes_debug = sorted(muted_ya_changes_debug, key=sort_key_without_prefix)
-        
+
+        # Объединяем все debug-словари
+        debug_dict = {}
+        debug_dict.update(all_muted_ya_debug_dict)
+        debug_dict.update(to_mute_debug_dict)
+        debug_dict.update(to_unmute_debug_dict)
+        debug_dict.update(to_delete_debug_dict)
+
+        # Используем самый широкий список тестов для поиска chunk-ов по wildcard
+        all_tests_by_string = {create_test_string(test, use_wildcards=True).strip(): test for test in all_data}
+
+
+
+        for test_str in all_test_strings:
+            if test_str in to_mute_set and test_str not in all_muted_ya_set:
+                prefix = "+++"
+            elif test_str in to_unmute_set:
+                prefix = "---"
+            elif test_str in to_delete_set:
+                prefix = "xxx"
+            else:
+                prefix = ""
+            line = f"{prefix} {test_str}" if prefix else f"{test_str}"
+            muted_ya_changes.append(line)
+
+            
+            debug_val = create_debug_string(all_tests_by_string[test_str.strip()])
+            if debug_val:
+                muted_ya_changes_debug.append(f"{prefix} {debug_val}" if prefix else debug_val)
+
         write_file_set(os.path.join(output_path, 'muted_ya_changes.txt'), muted_ya_changes, muted_ya_changes_debug)
         
         # Логирование итоговых результатов

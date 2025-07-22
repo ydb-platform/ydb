@@ -131,7 +131,7 @@ std::pair<TTracingControls, TIntrusivePtr<TSamplingThrottlingConfigurator>>
     TIntrusivePtr<TSamplingThrottlingConfigurator> configurator = MakeIntrusive<TSamplingThrottlingConfigurator>(timeProvider, randomProvider);
     TVector<TIntrusivePtr<TSamplingThrottlingControl>> controls;
     for (size_t i = 0; i < n; ++i) {
-        controls.emplace_back(configurator.GetControl());
+        controls.emplace_back(configurator->GetControl());
     }
 
     return {TTracingControls(std::move(controls)), std::move(configurator)};

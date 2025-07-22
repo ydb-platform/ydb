@@ -380,12 +380,12 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         std::vector<std::string> received;
         while (true) {
             auto event = readSession->GetEvent(/*block = */true);
-             if (auto dataEvent = std::get_if<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent>(&*event)) {
-                    for (const auto& message : dataEvent->GetMessages()) {
-                        received.push_back(message.GetData());
-                    }
-                    break;
-             }
+            if (auto dataEvent = std::get_if<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent>(&*event)) {
+                for (const auto& message : dataEvent->GetMessages()) {
+                    received.push_back(message.GetData());
+                }
+                break;
+            }
         }
         UNIT_ASSERT_EQUAL(received.size(), 1);
         UNIT_ASSERT_EQUAL(received[0], "key1value1");

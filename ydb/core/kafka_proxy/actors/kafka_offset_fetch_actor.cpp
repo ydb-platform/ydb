@@ -262,7 +262,7 @@ void TKafkaOffsetFetchActor::Handle(TEvKafka::TEvCommitedOffsetsResponse::TPtr& 
                                 break;
                             }
                             InflyTopics++;
-                            
+
                             auto topicSettings = NYdb::NTopic::TAlterTopicSettings();
                             topicSettings.BeginAddConsumer(*consumerGroup.GroupId).EndAddConsumer();
                             auto request = std::make_unique<Ydb::Topic::AlterTopicRequest>();
@@ -281,10 +281,15 @@ void TKafkaOffsetFetchActor::Handle(TEvKafka::TEvCommitedOffsetsResponse::TPtr& 
                                 (Ydb::StatusIds::StatusCode statusCode, const google::protobuf::Message*) {
                                 NYdb::NIssue::TIssues issues;
                                 NYdb::TStatus status(static_cast<NYdb::EStatus>(statusCode), std::move(issues));
-                                Send(replyTo, new NKikimr::NReplication::TEvYdbProxy::TEvAlterTopicResponse(std::move(status)), 0, cookie);
+                                Send(replyTo,
+                                    new NKikimr::NReplication::TEvYdbProxy::TEvAlterTopicResponse(std::move(status)),
+                                    0,
+                                    cookie);
                             };
-                            std::shared_ptr<NKikimr::NReplication::TLocalProxyActor> actor(new NKikimr::NReplication::TLocalProxyActor(DatabasePath));
-                            NKikimr::NGRpcService::DoAlterTopicRequest(std::make_unique<NKikimr::NReplication::TLocalProxyRequest>(
+                            std::shared_ptr<NKikimr::NReplication::TLocalProxyActor> actor(
+                                new NKikimr::NReplication::TLocalProxyActor(DatabasePath));
+                            NKikimr::NGRpcService::DoAlterTopicRequest(
+                                std::make_unique<NKikimr::NReplication::TLocalProxyRequest>(
                                 topicName, DatabasePath, std::move(request), callback),
                                 *actor);
                             break;

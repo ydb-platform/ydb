@@ -108,7 +108,6 @@ public:
                 workingDir,
                 proposal.Record.GetDatabaseName()
         );
-        KAFKA_LOG_D("Topic creation finished. Name: " << name << ". ErrorCode: " << codes.YdbCode << "\n");
         if (codes.YdbCode != Ydb::StatusIds::SUCCESS) {
             return ReplyWithError(codes.YdbCode, codes.PQCode, error);
         }
@@ -263,7 +262,6 @@ void TKafkaCreateTopicsActor::Handle(const TEvKafka::TEvTopicModificationRespons
 };
 
 void TKafkaCreateTopicsActor::Reply(const TActorContext& ctx) {
-    KAFKA_LOG_D("Replying for topics to " << Context->ConnectionId << "\n");
     TCreateTopicsResponseData::TPtr response = std::make_shared<TCreateTopicsResponseData>();
     EKafkaErrors responseStatus = NONE_ERROR;
 

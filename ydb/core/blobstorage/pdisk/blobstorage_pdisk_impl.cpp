@@ -2075,6 +2075,7 @@ void TPDisk::YardResize(TYardResize &ev) {
     TStringStream errorReason;
     NKikimrProto::EReplyStatus errStatus = CheckOwnerAndRound(&ev, errorReason);
     if (errStatus != NKikimrProto::OK) {
+        Mon.YardResize.CountResponse();
         PCtx->ActorSystem->Send(ev.Sender, new NPDisk::TEvYardResizeResult(errStatus, {}, errorReason.Str()));
         return;
     }
@@ -2087,9 +2088,10 @@ void TPDisk::YardResize(TYardResize &ev) {
 
     auto result = std::make_unique<NPDisk::TEvYardResizeResult>(NKikimrProto::OK, GetStatusFlags(ev.Owner, ev.OwnerGroupType), TString());
     if (Cfg->ReadOnly) {
+        Mon.YardResize.CountResponse();
         PCtx->ActorSystem->Send(ev.Sender, result.release());
     } else {
-        WriteSysLogRestorePoint(new TCompletionEventSender(this, ev.Sender, result.release()),
+        WriteSysLogRestorePoint(new TCompletionEventSender(this, ev.Sender, result.release(), Mon.YardResize.Results),
             TReqId(TReqId::YardResize, 0), {});
     }
 }

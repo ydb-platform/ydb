@@ -2,6 +2,7 @@
 
 #include "defs.h"
 #include "blobstorage_hullcompactworker.h"
+#include <ydb/core/blobstorage/vdisk/common/vdisk_messages_quoter.h>
 #include <ydb/core/blobstorage/vdisk/hullop/blobstorage_hullload.h>
 #include <ydb/core/blobstorage/vdisk/huge/blobstorage_hullhuge.h>
 #include <library/cpp/random_provider/random_provider.h>
@@ -92,61 +93,8 @@ namespace NKikimr {
         ui32 PendingResponses = 0;
 
         //  Compaction throttler
-
-        class TCompQuoter {
-        public:
-            using TPtr = std::shared_ptr<TCompQuoter>;
-
-        private:
-            using TAtomicInstant = std::atomic<TInstant>;
-            static_assert(TAtomicInstant::is_always_lock_free);
-
-            TIntrusivePtr<TVDiskConfig> Config;
-            TAtomicInstant NextQueueItemTimestamp;
-
-        public:
-            TCompQuoter(TIntrusivePtr<TVDiskConfig> config)
-                : Config(config)
-            {
-                NextQueueItemTimestamp = TInstant::Zero();
-            }
-
-            TDuration Take(TInstant now, ui64 bytes) {
-                auto bytesPerSecond = Config->HullCompThrottlerBytesRate;
-                if (!bytesPerSecond) {
-                    return TDuration::Zero();
-                }
-                TDuration duration = TDuration::MicroSeconds(bytes * 1000000 / bytesPerSecond);
-                for (;;) {
-                    TInstant current = NextQueueItemTimestamp;
-                    const TInstant notBefore = now - GetCapacity();
-                    const TInstant base = Max(current, notBefore);
-                    const TDuration res = base - now;
-                    const TInstant next = base + duration;
-                    if (NextQueueItemTimestamp.compare_exchange_weak(current, next)) {
-                        return res;
-                    }
-                }
-            }
-
-            static void QuoteMessage(const TPtr& quoter, std::unique_ptr<IEventHandle> ev, ui64 bytes) {
-                const TDuration timeout = quoter
-                    ? quoter->Take(TActivationContext::Now(), bytes)
-                    : TDuration::Zero();
-                if (timeout != TDuration::Zero()) {
-                    TActivationContext::Schedule(timeout, ev.release());
-                } else {
-                    TActivationContext::Send(ev.release());
-                }
-            }
-
-            static constexpr TDuration GetCapacity() {
-                return TDuration::MilliSeconds(100);
-            }
-        };
-
         bool IsFullCompaction;
-        TCompQuoter::TPtr Throttler;
+        TMessagesQuoter::TPtr Throttler;
 
         ///////////////////////// BOOTSTRAP ////////////////////////////////////////////////
         void Bootstrap(const TActorContext &ctx) {
@@ -187,7 +135,7 @@ namespace NKikimr {
             LevelSnap.Destroy();
 
             if (!(bool)FreshSegment && IsFullCompaction) {
-                Throttler = std::make_shared<TCompQuoter>(HullCtx->VCfg);
+                Throttler = std::make_shared<TMessagesQuoter>();
             }
 
             // enter work state, prepare, and kick worker class
@@ -206,8 +154,8 @@ namespace NKikimr {
             // check if there are messages we have for yard
             for (std::unique_ptr<IEventBase>& msg : MsgsForYard) {
                 ui64 bytes = GetMsgSize(msg);
-                TCompQuoter::QuoteMessage(Throttler, std::make_unique<IEventHandle>(
-                            PDiskCtx->PDiskId, ctx.SelfID, msg.release()), bytes);
+                TMessagesQuoter::QuoteMessage(Throttler, std::make_unique<IEventHandle>(
+                            PDiskCtx->PDiskId, ctx.SelfID, msg.release()), bytes, HullCtx->VCfg->HullCompThrottlerBytesRate);
                 ++PendingResponses;
             }
 

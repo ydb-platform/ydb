@@ -22,7 +22,7 @@ namespace {
     private:
         const TActorId NotifyId;
         TVector<TLogoBlobID> Parts;
-        TReplQuoter::TPtr Quoter;
+        TMessagesQuoter::TPtr Quoter;
         TIntrusivePtr<TBlobStorageGroupInfo> GInfo;
         TQueueActorMapPtr QueueActorMapPtr;
         NMonGroup::TBalancingGroup& MonGroup;
@@ -32,7 +32,7 @@ namespace {
         ui32 Responses = 0;
     public:
 
-        TPartsRequester(TActorId notifyId, TVector<TLogoBlobID>&& parts, TReplQuoter::TPtr quoter, TIntrusivePtr<TBlobStorageGroupInfo> gInfo, TQueueActorMapPtr queueActorMapPtr, NMonGroup::TBalancingGroup& monGroup)
+        TPartsRequester(TActorId notifyId, TVector<TLogoBlobID>&& parts, TMessagesQuoter::TPtr quoter, TIntrusivePtr<TBlobStorageGroupInfo> gInfo, TQueueActorMapPtr queueActorMapPtr, NMonGroup::TBalancingGroup& monGroup)
             : NotifyId(notifyId)
             , Parts(std::move(parts))
             , Quoter(quoter)
@@ -69,7 +69,7 @@ namespace {
 
             for (auto& [vDiskId, ev]: vDiskToQueries) {
                 ui32 msgSize = ev->CalculateSerializedSize();
-                TReplQuoter::QuoteMessage(
+                TMessagesQuoter::QuoteMessage(
                     Quoter,
                     std::make_unique<IEventHandle>(QueueActorMapPtr->at(TVDiskIdShort(vDiskId)), selfId, ev.release()),
                     msgSize

@@ -2,9 +2,9 @@
 #include "defs.h"
 
 #include "vdisk_performance_params.h"
+#include "vdisk_messages_quoter.h"
 
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo.h>
-#include <ydb/core/blobstorage/vdisk/repl/repl_quoter.h>
 #include <ydb/core/base/blobstorage.h>
 #include <ydb/core/protos/blobstorage.pb.h>
 #include <ydb/core/protos/blobstorage_vdisk_config.pb.h>
@@ -36,10 +36,10 @@ namespace NKikimr {
             // a set of donor disks for this one
             std::vector<std::pair<TVDiskID, TActorId>> DonorDiskIds;
             // replication quoters
-            TReplQuoter::TPtr ReplPDiskReadQuoter;
-            TReplQuoter::TPtr ReplPDiskWriteQuoter;
-            TReplQuoter::TPtr ReplNodeRequestQuoter;
-            TReplQuoter::TPtr ReplNodeResponseQuoter;
+            TMessagesQuoter::TPtr ReplPDiskReadQuoter;
+            TMessagesQuoter::TPtr ReplPDiskWriteQuoter;
+            TMessagesQuoter::TPtr ReplNodeRequestQuoter;
+            TMessagesQuoter::TPtr ReplNodeResponseQuoter;
             TDuration YardInitDelay = TDuration::Zero();
             const ui64 ScrubCookie = 0;
             const ui64 WhiteboardInstanceGuid = 0;

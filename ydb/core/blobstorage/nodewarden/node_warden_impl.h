@@ -61,8 +61,8 @@ namespace NKikimr::NStorage {
 
         std::optional<NKikimrBlobStorage::TPDiskMetrics> PDiskMetrics;
 
-        TReplQuoter::TPtr ReplPDiskReadQuoter;
-        TReplQuoter::TPtr ReplPDiskWriteQuoter;
+        TMessagesQuoter::TPtr ReplPDiskReadQuoter;
+        TMessagesQuoter::TPtr ReplPDiskWriteQuoter;
 
         TPDiskRecord(NKikimrBlobStorage::TNodeWardenServiceSet::TPDisk record)
             : Record(std::move(record))
@@ -149,8 +149,8 @@ namespace NKikimr::NStorage {
         TControlWrapper HullCompFullCompRateSec;
         TControlWrapper HullCompThrottlerBytesRate;
 
-        TReplQuoter::TPtr ReplNodeRequestQuoter;
-        TReplQuoter::TPtr ReplNodeResponseQuoter;
+        TMessagesQuoter::TPtr ReplNodeRequestQuoter;
+        TMessagesQuoter::TPtr ReplNodeResponseQuoter;
 
         TCostMetricsParametersByMedia CostMetricsParametersByMedia;
 

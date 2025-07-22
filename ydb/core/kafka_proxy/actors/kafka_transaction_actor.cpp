@@ -213,7 +213,7 @@ namespace NKafka {
     }
 
     TString TTransactionActor::GetYqlWithTablesNames() {
-        TString templateStr = OffsetsToCommit.empty() ?  NKafkaTransactionSql::SELECT_FOR_VALIDATION_WITHOUT_CONSUMERS : NKafkaTransactionSql::SELECT_FOR_VALIDATION_WITH_CONSUMERS;
+        const TString& templateStr = OffsetsToCommit.empty() ?  NKafkaTransactionSql::SELECT_FOR_VALIDATION_WITHOUT_CONSUMERS : NKafkaTransactionSql::SELECT_FOR_VALIDATION_WITH_CONSUMERS;
 
         TString templateWithProducerStateTable = std::regex_replace(
             templateStr.c_str(),

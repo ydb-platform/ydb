@@ -1063,11 +1063,11 @@ void TPCCChecker::ConsistencyCheck3329(TQueryClient& client) {
 
         -- Join with district and compare D_YTD to summed H_AMOUNT
         SELECT *
-        SELECT h.W_ID, h.D_ID, h.SUM_H_AMOUNT, ABS(d.W_YTD - h.SUM_H_AMOUNT) as delta
+        SELECT h.W_ID, h.D_ID, h.SUM_H_AMOUNT, ABS(d.D_YTD - h.SUM_H_AMOUNT) as delta
         FROM `{}` as d
         JOIN $history_sums AS h
         ON D_W_ID = h.W_ID AND D_ID = h.D_ID
-        WHERE delta > 1e-3
+        WHERE ABS(d.D_YTD - h.SUM_H_AMOUNT) > 1e-3
         LIMIT 1;
     )", Config.Path.c_str(), TABLE_HISTORY, TABLE_DISTRICT);
 

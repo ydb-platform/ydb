@@ -111,6 +111,8 @@ struct TTransaction {
     NWilson::TSpan CalcPredicateSpan;
     NWilson::TSpan GetWriteInfoSpan;
     NWilson::TSpan CommitSpan;
+
+    TInstant WriteInfoResponseTimestamp;
 };
 
 class TPartition : public TActorBootstrapped<TPartition> {

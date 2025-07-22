@@ -234,7 +234,6 @@ void TKafkaOffsetFetchActor::Bootstrap(const NActors::TActorContext& ctx) {
 }
 
 void TKafkaOffsetFetchActor::Handle(TEvKafka::TEvCommitedOffsetsResponse::TPtr& ev, const TActorContext& ctx) {
-    KAFKA_LOG_D("Entered Handle:TEvCommitedOffsetsResponse. InflyTopics=" << InflyTopics << "\n");
     InflyTopics--;
 
     auto eventPtr = ev->Release();
@@ -242,46 +241,41 @@ void TKafkaOffsetFetchActor::Handle(TEvKafka::TEvCommitedOffsetsResponse::TPtr& 
 
     if (InflyTopics == 0) {
         auto response = GetOffsetFetchResponse();
-        KAFKA_LOG_D("Checking correctness of response for user " << GetUsernameOrAnonymous(Context));
         if (Context->Config.GetAutoCreateTopicsEnable()) {
             for (const auto& consumerGroup : response->Groups) {
                 for (const auto& groupTopic : consumerGroup.Topics) {
                     for (const auto& topicPartition : groupTopic.Partitions) {
+                        TString topicName = GetTopicNameWithoutDb(DatabasePath, *groupTopic.Name);
+                        TString topicPath = NormalizePath(DatabasePath, *groupTopic.Name);
                         if (topicPartition.ErrorCode == EKafkaErrors::RESOURCE_NOT_FOUND) {
                             // consumer is not added to the topic case
-                            if (topicPartition.PartitionIndex != 0 && TopicCreateRequestAttempts.find(*groupTopic.Name) != TopicCreateRequestAttempts.end()) {
+                            if (topicPartition.PartitionIndex != 0 &&
+                                TopicCreateRequestAttempts.find(topicName) != TopicCreateRequestAttempts.end()) {
                                 break;
                             }
-                            InflyTopics++;
-                            std::pair<TString, TString> consumerTopicRequest = {*consumerGroup.GroupId, *groupTopic.Name};
+                            std::pair<TString, TString> consumerTopicRequest = {*consumerGroup.GroupId, topicPath};
                             if (ConsumerTopicAlterRequestAttempts.find(consumerTopicRequest) == ConsumerTopicAlterRequestAttempts.end()) {
                                 ConsumerTopicAlterRequestAttempts.insert(consumerTopicRequest);
                             } else {
                                 break;
                             }
-                            KAFKA_LOG_D("Entered ConsumerNotExist case for topic " << *groupTopic.Name << " and consumer " <<  *consumerGroup.GroupId << ". InflyTopics: " << InflyTopics << ". Sending request from: " << ContextForTopicCreation->ConnectionId << "\n");
-
+                            InflyTopics++;
+                            
                             auto topicSettings = NYdb::NTopic::TAlterTopicSettings();
                             topicSettings.BeginAddConsumer(*consumerGroup.GroupId).EndAddConsumer();
-
                             auto request = std::make_unique<Ydb::Topic::AlterTopicRequest>();
-                            // TString p = TStringBuilder() << "/" << DatabasePath << groupTopic.Name;
-                            // TString p1 = TStringBuilder() << DatabasePath << "/" << groupTopic.Name;
-                            // TString p2 = DatabasePath + "/" + *groupTopic.Name;
-                            // TString p3 = *groupTopic.Name;
-                            request.get()->set_path(DatabasePath + "/" + *groupTopic.Name);
+                            request.get()->set_path(topicPath);
                             for (auto& c : topicSettings.AddConsumers_) {
                                 auto* consumer = request.get()->add_add_consumers();
                                 consumer->set_name(c.ConsumerName_);
                             }
-
                             AlterTopicCookie++;
                             ModifiedTopicInfo alteredTopicInfo;
                             alteredTopicInfo.TopicName = *groupTopic.Name;
                             alteredTopicInfo.Entities.Consumers->insert(*consumerGroup.GroupId);
                             alteredTopicInfo.Entities.Partitions->insert(topicPartition.PartitionIndex);
                             AlterTopicInf[AlterTopicCookie] = alteredTopicInfo;
-                            auto callback = [replyTo = SelfId(), cookie = AlterTopicCookie, path = groupTopic.Name, this]
+                            auto callback = [replyTo = SelfId(), cookie = AlterTopicCookie, path = topicName, this]
                                 (Ydb::StatusIds::StatusCode statusCode, const google::protobuf::Message*) {
                                 NYdb::NIssue::TIssues issues;
                                 NYdb::TStatus status(static_cast<NYdb::EStatus>(statusCode), std::move(issues));
@@ -289,25 +283,26 @@ void TKafkaOffsetFetchActor::Handle(TEvKafka::TEvCommitedOffsetsResponse::TPtr& 
                             };
                             std::shared_ptr<NKikimr::NReplication::TLocalProxyActor> actor(new NKikimr::NReplication::TLocalProxyActor(DatabasePath));
                             NKikimr::NGRpcService::DoAlterTopicRequest(std::make_unique<NKikimr::NReplication::TLocalProxyRequest>(
-                                *groupTopic.Name, DatabasePath, std::move(request), callback),
+                                topicName, DatabasePath, std::move(request), callback),
                                 *actor);
                             break;
                         } else if (topicPartition.ErrorCode == EKafkaErrors::UNKNOWN_TOPIC_OR_PARTITION) {
                             // topic does not exist case
-                            if (TopicCreateRequestAttempts.find(*groupTopic.Name) != TopicCreateRequestAttempts.end()) {
+                            if (TopicCreateRequestAttempts.find(topicName) != TopicCreateRequestAttempts.end()) {
                                 break;
                             }
-                            TopicCreateRequestAttempts.insert(*groupTopic.Name);
+                            TopicCreateRequestAttempts.insert(topicName);
                             InflyTopics++;
+
                             auto message = std::make_shared<NKafka::TCreateTopicsRequestData>();
                             TCreateTopicsRequestData::TCreatableTopic topicToCreate;
-                            topicToCreate.Name = *groupTopic.Name;
+                            topicToCreate.Name = topicName;
                             topicToCreate.NumPartitions = 1;
                             message->Topics.push_back(topicToCreate);
                             TActorId actorId = ctx.Register(new TKafkaCreateTopicsActor(ContextForTopicCreation,
                                 1,
                                 TMessagePtr<NKafka::TCreateTopicsRequestData>({}, message)));
-                            KAFKA_LOG_D("Entered TopicNotExist case for topic " << *groupTopic.Name << ". InflyTopics: " << InflyTopics << ". Sending request from: " << ContextForTopicCreation->ConnectionId << ". CreatorActorId: " << actorId << "\n");
+
                             ModifiedTopicInfo createdTopicInfo;
                             createdTopicInfo.TopicName = *groupTopic.Name;
                             createdTopicInfo.Entities.Consumers->insert(*consumerGroup.GroupId);
@@ -319,7 +314,6 @@ void TKafkaOffsetFetchActor::Handle(TEvKafka::TEvCommitedOffsetsResponse::TPtr& 
             }
         }
         if (InflyTopics == 0) {
-            KAFKA_LOG_D("Sending OffsetFetchResponse\n");
             Send(Context->ConnectionId, new TEvKafka::TEvResponse(CorrelationId, response, static_cast<EKafkaErrors>(response->ErrorCode)));
             Die(ctx);
         }
@@ -330,11 +324,7 @@ void TKafkaOffsetFetchActor::Handle(const TEvKafka::TEvResponse::TPtr& ev, const
     TActorId& creatorActorId = ev->Sender;
     KAFKA_LOG_D("Entered TEvResponse from CreateTopicsActor1. CreatorActorId: " << creatorActorId << "\n");
     const ModifiedTopicInfo& createdTopicInformation = CreateTopicInf[creatorActorId];
-    KAFKA_LOG_D("Entered TEvResponse from CreateTopicsActor2.\n");
-    // auto eventPtr = ev->Release();
-    KAFKA_LOG_D("Entered TEvResponse from CreateTopicsActor3 for topic " << createdTopicInformation.TopicName << "\n");
     auto errorCode = ev->Release()->ErrorCode;
-    KAFKA_LOG_D("Entered TEvResponse from CreateTopicsActor3 for topic " << createdTopicInformation.TopicName << ". ErrorCode: " << errorCode << "\n");
     if (errorCode != EKafkaErrors::NONE_ERROR) {
         InflyTopics--;
         if (InflyTopics == 0) {
@@ -379,10 +369,11 @@ void TKafkaOffsetFetchActor::Handle(NKikimr::NReplication::TEvYdbProxy::TEvAlter
         Context->DatabasePath,
         GetUserSerializedToken(Context),
     };
+    TActorId actorId = SelfId();
     ctx.Register(new TTopicOffsetActor(
         alteredTopicInfo.Entities.Consumers,
         locationRequest,
-        SelfId(),
+        actorId,
         alteredTopicInfo.Entities.Partitions,
         alteredTopicInfo.TopicName,
         GetUsernameOrAnonymous(Context)

@@ -1756,16 +1756,20 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         }
 
         {
+            // Check fetch offsets nonexistent consumer
+            std::map<TString, std::vector<i32>> topicsToPartions;
+            topicsToPartions[firstTopicName] = std::vector<i32>{0, 1};
+            auto msg = client.OffsetFetch(notExistsConsumerName, topicsToPartions);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Groups.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[0].Partitions.size(), 2);
             if (!testServer.KikimrServer.get()->ServerSettings->AppConfig->GetKafkaProxyConfig().GetAutoCreateTopicsEnable()) {
-                // Check fetch offsets nonexistent consumer
-                std::map<TString, std::vector<i32>> topicsToPartions;
-                topicsToPartions[firstTopicName] = std::vector<i32>{0, 1};
-                auto msg = client.OffsetFetch(notExistsConsumerName, topicsToPartions);
-                UNIT_ASSERT_VALUES_EQUAL(msg->Groups.size(), 1);
-                UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics.size(), 1);
-                UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[0].Partitions.size(), 2);
                 for (const auto& partition : msg->Groups[0].Topics[0].Partitions) {
                     UNIT_ASSERT_VALUES_EQUAL(partition.ErrorCode, RESOURCE_NOT_FOUND);
+                }
+            } else {
+                for (const auto& partition : msg->Groups[0].Topics[0].Partitions) {
+                    UNIT_ASSERT_VALUES_EQUAL(partition.ErrorCode, NONE_ERROR);
                 }
             }
         }

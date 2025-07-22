@@ -290,10 +290,9 @@ def calculate_success_rate(test):
     return round((test.get('pass_count', 0) / runs * 100) if runs > 0 else 0, 1)
 
 def create_test_string(test, use_wildcards=False):
-    """Создает строку теста с опциональными wildcards"""
     testsuite = test.get('suite_folder')
     testcase = test.get('test_name')
-    test_string = f"{testsuite} {testcase}\n"
+    test_string = f"{testsuite} {testcase}"
     if use_wildcards:
         test_string = re.sub(r'\d+/(\d+)\]', r'*/*]', test_string)
     return test_string
@@ -434,11 +433,10 @@ def create_file_set(aggregated_for_mute, filter_func, mute_check=None, use_wildc
     return sorted(result_set), sorted(debug_list)
 
 def write_file_set(file_path, test_set, debug_list=None):
-    """Записывает набор тестов в файл"""
-    add_lines_to_file(file_path, test_set)
+    add_lines_to_file(file_path, [line + '\n' for line in test_set])
     if debug_list:
         debug_path = file_path.replace('.txt', '_debug.txt')
-        add_lines_to_file(debug_path, debug_list)
+        add_lines_to_file(debug_path, [line + '\n' for line in debug_list])
     logging.info(f"Created {os.path.basename(file_path)} with {len(test_set)} tests")
 
 def apply_and_add_mutes(all_data, output_path, mute_check, aggregated_for_mute, aggregated_for_unmute, aggregated_for_delete):
@@ -517,12 +515,6 @@ def apply_and_add_mutes(all_data, output_path, mute_check, aggregated_for_mute, 
         all_muted_ya_set = set(all_muted_ya)
         
          # Создаем словари для быстрого поиска debug-строк
-        # Удаляем неиспользуемые словари debug_dict
-        # all_muted_ya_debug_dict = dict(zip(all_muted_ya, all_muted_ya_debug))
-        # to_mute_debug_dict = dict(zip(to_mute, to_mute_debug))
-        # to_unmute_debug_dict = dict(zip(to_unmute, to_unmute_debug))
-        # to_delete_debug_dict = dict(zip(to_delete, to_delete_debug))
-        # Весь дальнейший код использует только test_debug_dict
 
         # Универсальный словарь: ключ — строка теста (с wildcard или без), значение — debug-строка
         test_debug_dict = {}
@@ -548,8 +540,6 @@ def apply_and_add_mutes(all_data, output_path, mute_check, aggregated_for_mute, 
         for test in muted_ya_plus_to_mute:
             if test in test_debug_dict:
                 muted_ya_plus_to_mute_debug.append(test_debug_dict[test])
-            elif test in to_mute_debug_dict:
-                muted_ya_plus_to_mute_debug.append(to_mute_debug_dict[test])
         write_file_set(os.path.join(output_path, 'muted_ya+to_mute.txt'), muted_ya_plus_to_mute, muted_ya_plus_to_mute_debug)
 
         # 6. muted_ya-to_unmute
@@ -574,8 +564,6 @@ def apply_and_add_mutes(all_data, output_path, mute_check, aggregated_for_mute, 
         for test in muted_ya_minus_to_delete_to_unmute_plus_to_mute:
             if test in muted_ya_minus_to_delete_to_unmute_set and test in test_debug_dict:
                 muted_ya_minus_to_delete_to_unmute_plus_to_mute_debug.append(test_debug_dict[test])
-            elif test in to_mute_debug_dict:
-                muted_ya_minus_to_delete_to_unmute_plus_to_mute_debug.append(to_mute_debug_dict[test])
         write_file_set(os.path.join(output_path, 'muted_ya-to-delete-to-unmute+to_mute.txt'), muted_ya_minus_to_delete_to_unmute_plus_to_mute, muted_ya_minus_to_delete_to_unmute_plus_to_mute_debug)
         
         # Сохраняем этот же файл как new_muted_ya.txt для совместимости с workflow
@@ -585,14 +573,6 @@ def apply_and_add_mutes(all_data, output_path, mute_check, aggregated_for_mute, 
         all_test_strings = sorted(all_muted_ya_set | to_mute_set | to_unmute_set | to_delete_set, key=sort_key_without_prefix)
         muted_ya_changes = []
         muted_ya_changes_debug = []
-
-        # Объединяем все debug-словари
-        # debug_dict = {}
-        # debug_dict.update(all_muted_ya_debug_dict)
-        # debug_dict.update(to_mute_debug_dict)
-        # debug_dict.update(to_unmute_debug_dict)
-        # debug_dict.update(to_delete_debug_dict)
-
 
 
         for test_str in all_test_strings:

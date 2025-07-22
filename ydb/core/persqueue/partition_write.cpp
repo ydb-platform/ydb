@@ -218,7 +218,7 @@ void TPartition::UpdateWriteBufferIsFullState(const TInstant& now) {
 
 void TPartition::Handle(TEvPQ::TEvReserveBytes::TPtr& ev, const TActorContext& ctx) {
     PQ_LOG_T("TPartition::HandleOnWrite TEvReserveBytes.");
-    
+
     const TString& ownerCookie = ev->Get()->OwnerCookie;
     TStringBuf owner = TOwnerInfo::GetOwnerFromOwnerCookie(ownerCookie);
     const ui64& messageNo = ev->Get()->MessageNo;

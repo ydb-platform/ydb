@@ -620,7 +620,7 @@ void TKafkaProduceActor::RecreatePartitionWriterAndRetry(ui64 cookie, const TAct
             TransactionalWriters.erase(txnIt);
         }
         TProduceRequestData::TProduceRequestData::TTopicProduceData::TPartitionProduceData partitionData;
-        for(const auto& topicData : cookieInfo.Request->Request->Get()->Request->TopicData) {
+        for (const auto& topicData : cookieInfo.Request->Request->Get()->Request->TopicData) {
             TString topicPath = NormalizePath(Context->DatabasePath, *topicData.Name);
             if (topicPath == cookieInfo.TopicPath) {
                 for(const auto& partitionData : topicData.PartitionData) {

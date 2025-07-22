@@ -30,8 +30,25 @@ private:
         return result;
     }
 
+    std::shared_ptr<NCommon::IDataSource> TryToFlush() {
+        if (SourcesToAggregate.size() >= 100 || (Collection->IsFinished() && Collection->GetSourcesInFlightCount() == SourcesCount) ||
+            Collection->GetMaxInFlight() == SourcesCount) {
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "flush")("to_aggr", SourcesToAggregate.size())(
+                "fin", Collection->IsFinished())("fly", Collection->GetSourcesInFlightCount())("count", SourcesCount)(
+                "max", Collection->GetMaxInFlight());
+            return Flush();
+        }
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("to_aggr", SourcesToAggregate.size())("fin", Collection->IsFinished())(
+            "fly", Collection->GetSourcesInFlightCount())("count", SourcesCount)("max", Collection->GetMaxInFlight());
+        return nullptr;
+    }
+
     virtual bool IsSourcePrepared(const std::shared_ptr<NCommon::IDataSource>& source) const override {
         return source->IsSyncSection() && source->HasStageResult();
+    }
+
+    virtual std::shared_ptr<NCommon::IDataSource> DoOnSourceFinishedOnPreviouse() override {
+        return TryToFlush();
     }
 
     virtual bool IsFinished() const override {
@@ -42,12 +59,7 @@ private:
         ++SourcesCount;
         SourcesToAggregate.emplace_back(source);
         source->MutableAs<IDataSource>()->ClearMemoryGuards();
-        if (SourcesToAggregate.size() >= 100 || (Collection->IsFinished() && Collection->GetSourcesInFlightCount() == SourcesCount) ||
-            Collection->GetMaxInFlight() == SourcesCount) {
-            return Flush();
-        }
-
-        return nullptr;
+        return TryToFlush();
     }
 
     virtual void DoAbort() override {

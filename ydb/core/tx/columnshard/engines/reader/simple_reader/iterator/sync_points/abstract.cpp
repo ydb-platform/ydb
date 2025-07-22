@@ -7,7 +7,7 @@
 namespace NKikimr::NOlap::NReader::NSimple {
 
 void ISyncPoint::OnSourcePrepared(std::shared_ptr<NCommon::IDataSource>&& sourceInput, TPlainReadData& reader) {
-    const NActors::TLogContextGuard gLogging = NActors::TLogContextBuilder::Build()("sync_point", GetPointName())("aborted", AbortFlag);
+    const NActors::TLogContextGuard gLogging = NActors::TLogContextBuilder::Build()("sync_point", GetPointName())("aborted", AbortFlag)("id", CounterInternalId);
     if (AbortFlag) {
         FOR_DEBUG_LOG(NKikimrServices::COLUMNSHARD_SCAN_EVLOG, sourceInput->AddEvent("a" + GetShortPointName()));
         AFL_WARN(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "sync_point_aborted")("source_id", sourceInput->GetSourceId());
@@ -27,6 +27,10 @@ void ISyncPoint::OnSourcePrepared(std::shared_ptr<NCommon::IDataSource>&& source
                 if (Collection) {
                     Collection->OnSourceFinished(source);
                 }
+                if (Next) {
+                    Next->OnSourceFinished();
+                }
+
                 SourcesSequentially.pop_front();
                 break;
             }
@@ -69,12 +73,6 @@ void ISyncPoint::Continue(const TPartialSourceAddress& continueAddress, TPlainRe
     SourcesSequentially.front()->MutableAs<IDataSource>()->ContinueCursor(SourcesSequentially.front());
 }
 
-void ISyncPoint::OnSourceFinished(const bool force) {
-    if (auto genSource = DoOnSourceFinished(force)) {
-        genSource->MutableAs<IDataSource>()->StartProcessing(genSource);
-    }
-}
-
 void ISyncPoint::AddSource(std::shared_ptr<NCommon::IDataSource>&& source) {
     const NActors::TLogContextGuard gLogging = NActors::TLogContextBuilder::Build()("sync_point", GetPointName())("event", "add_source");
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("source_id", source->GetSourceId());
@@ -91,6 +89,15 @@ void ISyncPoint::AddSource(std::shared_ptr<NCommon::IDataSource>&& source) {
     }
     LastSourceIdx = source->GetSourceIdx();
     if (auto genSource = OnAddSource(source)) {
+        genSource->MutableAs<IDataSource>()->StartProcessing(genSource);
+    }
+}
+
+void ISyncPoint::OnSourceFinished() {
+    if (Next) {
+        Next->OnSourceFinished();
+    }
+    if (auto genSource = DoOnSourceFinishedOnPreviouse()) {
         genSource->MutableAs<IDataSource>()->StartProcessing(genSource);
     }
 }

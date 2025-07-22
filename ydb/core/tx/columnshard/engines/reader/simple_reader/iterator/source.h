@@ -141,6 +141,13 @@ public:
         return Finish;
     }
 
+    TReplaceKeyAdapter CopyStart() const {
+        return Start;
+    }
+    TReplaceKeyAdapter CopyFinish() const {
+        return Finish;
+    }
+
     bool GetIsStartedByCursor() const {
         return IsStartedByCursor;
     }
@@ -246,12 +253,12 @@ public:
     bool OnIntervalFinished(const ui32 intervalIdx);
 
     IDataSource(const EType type, const ui64 sourceId, const ui32 sourceIdx, const std::shared_ptr<NCommon::TSpecialReadContext>& context,
-        NArrow::TSimpleRow&& start, NArrow::TSimpleRow&& finish, const TSnapshot& recordSnapshotMin, const TSnapshot& recordSnapshotMax,
+        TReplaceKeyAdapter&& start, TReplaceKeyAdapter&& finish, const TSnapshot& recordSnapshotMin, const TSnapshot& recordSnapshotMax,
         const std::optional<ui32> recordsCount, const std::optional<ui64> shardingVersion, const bool hasDeletions)
         : TBase(sourceId, sourceIdx, context, recordSnapshotMin, recordSnapshotMax, recordsCount, shardingVersion, hasDeletions)
         , Type(type)
-        , Start(context->GetReadMetadata()->IsDescSorted() ? std::move(finish) : std::move(start), context->GetReadMetadata()->IsDescSorted())
-        , Finish(context->GetReadMetadata()->IsDescSorted() ? std::move(start) : std::move(finish), context->GetReadMetadata()->IsDescSorted()) {
+        , Start(std::move(start))
+        , Finish(std::move(finish)) {
         if (context->GetReadMetadata()->IsDescSorted()) {
             UsageClass = GetContext()->GetReadMetadata()->GetPKRangesFilter().GetUsageClass(Finish.GetValue(), Start.GetValue());
         } else {
@@ -588,7 +595,7 @@ public:
     TAggregationDataSource(
         std::vector<std::shared_ptr<NCommon::IDataSource>>&& sources, const std::shared_ptr<NCommon::TSpecialReadContext>& context)
         : TBase(EType::Aggregation, sources.back()->GetSourceId(), sources.back()->GetSourceIdx(), context,
-              sources.front()->GetAs<IDataSource>()->GetStart().CopyValue(), sources.back()->GetAs<IDataSource>()->GetFinish().CopyValue(),
+              sources.front()->GetAs<IDataSource>()->CopyStart(), sources.back()->GetAs<IDataSource>()->CopyFinish(),
               TSnapshot::Zero(), TSnapshot::Zero(), std::nullopt, std::nullopt, false)
         , Sources(std::move(sources))
         , LastSourceId(Sources.back()->GetSourceId())

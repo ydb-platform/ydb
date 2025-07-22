@@ -389,9 +389,10 @@ bool TPortionDataSource::DoStartFetchingAccessor(const std::shared_ptr<NCommon::
 
 TPortionDataSource::TPortionDataSource(
     const ui32 sourceIdx, const std::shared_ptr<TPortionInfo>& portion, const std::shared_ptr<NCommon::TSpecialReadContext>& context)
-    : TBase(EType::Portion, portion->GetPortionId(), sourceIdx, context, portion->IndexKeyStart(), portion->IndexKeyEnd(),
-          portion->RecordSnapshotMin(TSnapshot::Zero()), portion->RecordSnapshotMax(TSnapshot::Zero()), portion->GetRecordsCount(),
-          portion->GetShardingVersionOptional(), portion->GetMeta().GetDeletionsCount())
+    : TBase(EType::Portion, portion->GetPortionId(), sourceIdx, context, TReplaceKeyAdapter::BuildStart(*portion, *context->GetReadMetadata()),
+          TReplaceKeyAdapter::BuildFinish(*portion, *context->GetReadMetadata()), portion->RecordSnapshotMin(TSnapshot::Zero()),
+          portion->RecordSnapshotMax(TSnapshot::Zero()), portion->GetRecordsCount(), portion->GetShardingVersionOptional(),
+          portion->GetMeta().GetDeletionsCount())
     , Portion(portion)
     , Schema(GetContext()->GetReadMetadata()->GetLoadSchemaVerified(*portion)) {
 }

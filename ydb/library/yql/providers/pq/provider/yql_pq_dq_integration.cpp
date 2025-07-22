@@ -119,7 +119,7 @@ public:
         return TPqWriteTopic::Match(&write);
     }
 
-     TExprNode::TPtr WrapWrite(const TExprNode::TPtr& writeNode, TExprContext& ctx) override {
+    TExprNode::TPtr WrapWrite(const TExprNode::TPtr& writeNode, TExprContext& ctx) override {
         TExprBase writeExpr(writeNode);
         const auto write = writeExpr.Cast<TPqWriteTopic>();
 

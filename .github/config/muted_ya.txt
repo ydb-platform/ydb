@@ -93,6 +93,7 @@ ydb/services/persqueue_v1/ut/new_schemecache_ut TPersQueueNewSchemeCacheTest.Tes
 ydb/services/ydb/backup_ut BackupRestore.RestoreReplicationThatDoesNotUseSecret
 ydb/services/ydb/backup_ut CommonEncryptionRequirementsTest.CommonEncryptionRequirements
 ydb/services/ydb/table_split_ut unittest.[*/*] chunk
+ydb/services/ydb/ut TGRpcAuthentication.NoConnectRights
 ydb/services/ydb/ut TGRpcAuthentication.NoDescribeRights
 ydb/services/ydb/ut YdbLogStore.AlterLogTable
 ydb/tests/compatibility [test_compatibility.py */*] chunk chunk

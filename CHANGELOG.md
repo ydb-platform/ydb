@@ -42,7 +42,6 @@ and timeout (by default, the maximum response time from healthcheck). Documentat
 * 19134:Added the `running` status to script execution statuses (improved output for the get script execution operation). [#19134](https://github.com/ydb-platform/ydb/pull/19134) ([Pisarenko Grigoriy](https://github.com/GrigoriyPA))
 * 18444:Added support for a new external data source [OpenSearch](https://opensearch.org/) in federated queries. [#18444](https://github.com/ydb-platform/ydb/pull/18444) ([Arslan Giniyatullin](https://github.com/Arslanka))
 * 19893:Implemented a new robust algorithm for HDRF scheduler that does not allow executing more tasks than the demand allows. [#19893](https://github.com/ydb-platform/ydb/pull/19893) ([Ivan](https://github.com/abyss7))
-* 19817:Added CS compaction ResourceBroker queues configuration to MemoryController. [#19817](https://github.com/ydb-platform/ydb/pull/19817) ([Vladilen](https://github.com/Vladilen))
 * 19735:Added the Accept header to the oidc white list. [#19735](https://github.com/ydb-platform/ydb/pull/19735) ([Andrei Rykov](https://github.com/StekPerepolnen))
 * 19653:OIDC needs pass tracing headers [#19653](https://github.com/ydb-platform/ydb/pull/19653) ([Andrei Rykov](https://github.com/StekPerepolnen))
 * 19642:Added ColumnShard statistics for the update/delete operations, in rows and bytes. [#19642](https://github.com/ydb-platform/ydb/pull/19642) ([Vladilen](https://github.com/Vladilen))

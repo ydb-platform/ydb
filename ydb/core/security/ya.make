@@ -8,6 +8,7 @@ SRCS(
     ticket_parser_impl.h
     ticket_parser.cpp
     ticket_parser.h
+    xds_bootstrap_config_builder.cpp
 )
 
 PEERDIR(
@@ -32,6 +33,7 @@ END()
 
 RECURSE_FOR_TESTS(
     ut
+    ut_xds_bootstrap_config_builder
 )
 
 RECURSE(

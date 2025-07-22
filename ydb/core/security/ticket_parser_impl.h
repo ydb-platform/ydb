@@ -1,6 +1,7 @@
 #pragma once
 #include "ticket_parser_log.h"
 #include "ticket_parser_settings.h"
+#include "xds_bootstrap_config_builder.h"
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/counters.h>
@@ -12,6 +13,7 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
+#include <ydb/library/actors/interconnect/interconnect.h>
 #include <ydb/library/grpc/actor_client/grpc_service_cache.h>
 #include <ydb/library/ncloud/impl/access_service.h>
 #include <ydb/library/security/util.h>
@@ -27,6 +29,7 @@
 #include <util/generic/queue.h>
 #include <util/stream/file.h>
 #include <util/string/vector.h>
+#include <util/system/env.h>
 
 #include <util/string/join.h>
 
@@ -1549,6 +1552,13 @@ private:
         Schedule(RefreshPeriod, new NActors::TEvents::TEvWakeup());
     }
 
+    void Handle(TEvInterconnect::TEvNodeInfo::TPtr &ev) {
+        static const TString XDS_BOOTSTRAP_CONFIG_ENV = "GRPC_XDS_BOOTSTRAP_CONFIG";
+        TXdsBootstrapConfigBuilder xdsConfigBuilder(Config.GetXdsBootstrap(), ev->Get()->Node->Location.GetDataCenterId(), ToString(this->SelfId().NodeId()));
+        TString conf = xdsConfigBuilder.Build();
+        SetEnv(XDS_BOOTSTRAP_CONFIG_ENV, conf);
+    }
+
     void Handle(NMon::TEvHttpInfo::TPtr& ev) {
         const auto& params = ev->Get()->Request.GetParams();
         TStringBuilder html;
@@ -2090,6 +2100,11 @@ protected:
         }
         settings.GrpcKeepAliveTimeMs = Config.GetAccessServiceGrpcKeepAliveTimeMs();
         settings.GrpcKeepAliveTimeoutMs = Config.GetAccessServiceGrpcKeepAliveTimeoutMs();
+
+        if (settings.Endpoint.StartsWith("xds://")) {
+            const TActorId nameserviceId = GetNameserviceActorId();
+            Send(nameserviceId, new TEvInterconnect::TEvGetNode(this->SelfId().NodeId()));
+        }
     }
 
     void InitAuthProvider() {
@@ -2234,6 +2249,7 @@ public:
             hFunc(NCloud::TEvServiceAccountService::TEvGetServiceAccountResponse, Handle);
             hFunc(NNebiusCloud::TEvAccessService::TEvAuthenticateResponse, Handle);
             hFunc(NNebiusCloud::TEvAccessService::TEvAuthorizeResponse, Handle);
+            hFunc(TEvInterconnect::TEvNodeInfo, Handle);
             hFunc(NMon::TEvHttpInfo, Handle);
             cFunc(TEvents::TSystem::Wakeup, HandleRefresh);
             cFunc(TEvents::TSystem::PoisonPill, PassAway);

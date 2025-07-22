@@ -901,48 +901,28 @@ void TSslContext::AddPrivateKey(const TString& privateKey)
 void TSslContext::AddCertificateAuthority(const TPemBlobConfigPtr& pem, TCertificatePathResolver resolver)
 {
     if (pem) {
-        if (pem->FileName) {
-            auto filePath = resolver ? resolver(*pem->FileName) : *pem->FileName;
-            AddCertificateAuthorityFromFile(filePath);
-        } else {
-            AddCertificateAuthority(pem->LoadBlob());
-        }
+        AddCertificateAuthority(pem->LoadBlob(resolver));
     }
 }
 
 void TSslContext::AddCertificate(const TPemBlobConfigPtr& pem, TCertificatePathResolver resolver)
 {
     if (pem) {
-        if (pem->FileName) {
-            auto filePath = resolver ? resolver(*pem->FileName) : *pem->FileName;
-            AddCertificateFromFile(filePath);
-        } else {
-            AddCertificate(pem->LoadBlob());
-        }
+        AddCertificate(pem->LoadBlob(resolver));
     }
 }
 
 void TSslContext::AddCertificateChain(const TPemBlobConfigPtr& pem, TCertificatePathResolver resolver)
 {
     if (pem) {
-        if (pem->FileName) {
-            auto filePath = resolver ? resolver(*pem->FileName) : *pem->FileName;
-            AddCertificateChainFromFile(filePath);
-        } else {
-            AddCertificateChain(pem->LoadBlob());
-        }
+        AddCertificateChain(pem->LoadBlob(resolver));
     }
 }
 
 void TSslContext::AddPrivateKey(const TPemBlobConfigPtr& pem, TCertificatePathResolver resolver)
 {
     if (pem) {
-        if (pem->FileName) {
-            auto filePath = resolver ? resolver(*pem->FileName) : *pem->FileName;
-            AddPrivateKeyFromFile(filePath);
-        } else {
-            AddPrivateKey(pem->LoadBlob());
-        }
+        AddPrivateKey(pem->LoadBlob(resolver));
     }
 }
 

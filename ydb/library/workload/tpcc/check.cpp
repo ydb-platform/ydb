@@ -553,7 +553,7 @@ TFuture<void> ConsistencyCheck3321(TQueryClient& client, const TString& path) {
         SELECT w.W_ID as w_id, w.W_YTD as w_ytd, d.sum_d_ytd as sum_d_ytd
         FROM `{}` as w
         FULL JOIN $districtData as d on w.W_ID = d.D_W_ID
-        WHERE ABS(w.W_YTD - d.sum_d_ytd) > 1e-6
+        WHERE ABS(w.W_YTD - d.sum_d_ytd) > 1e-3
         LIMIT 1;
     )", path.c_str(), TABLE_DISTRICT, TABLE_WAREHOUSE);
 

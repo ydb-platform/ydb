@@ -630,6 +630,13 @@ private:
     void ConsistencyCheckPart2(TQueryClient& client);
     void ConsistencyCheck3324(TQueryClient& client);
     void ConsistencyCheck3325(TQueryClient& client);
+    void ConsistencyCheck3326(TQueryClient& client);
+    void ConsistencyCheck3327(TQueryClient& client);
+    void ConsistencyCheck3328(TQueryClient& client);
+    void ConsistencyCheck3329(TQueryClient& client);
+    void ConsistencyCheck33210(TQueryClient& client);
+    void ConsistencyCheck33211(TQueryClient& client);
+    void ConsistencyCheck33212(TQueryClient& client);
 
 private:
     NConsoleClient::TClientCommand::TConfig ConnectionConfig;
@@ -656,7 +663,18 @@ void TPCCChecker::CheckSync() {
         &TPCCChecker::ConsistencyCheckPart2,
         &TPCCChecker::ConsistencyCheck3324,
         &TPCCChecker::ConsistencyCheck3325,
+        &TPCCChecker::ConsistencyCheck3326,
+        //&TPCCChecker::ConsistencyCheck3327, //mem
+        //&TPCCChecker::ConsistencyCheck3328, // possibly fails
+        //&TPCCChecker::ConsistencyCheck3329, // possibly fails (similar to 3328)
+        //&TPCCChecker::ConsistencyCheck33210, // mem
     };
+
+    if (Config.JustImported) {
+        checkFunctions.insert(checkFunctions.end(), &TPCCChecker::ConsistencyCheck33211);
+    }
+
+    // checkFunctions.insert(checkFunctions.end(), &TPCCChecker::ConsistencyCheck33212); // mem
 
     for (auto& checkFunction : checkFunctions) {
         (this->*checkFunction)(queryClient);
@@ -804,9 +822,9 @@ void TPCCChecker::ConsistencyCheck3325(TQueryClient& client) {
 
             $missing_in_order =
             SELECT no.NO_W_ID AS W_ID, no.NO_D_ID AS D_ID, no.NO_O_ID AS O_ID
-            FROM `new_order` AS no
+            FROM `{}` AS no
             LEFT JOIN (
-                SELECT * FROM `oorder`
+                SELECT * FROM `{}`
                 WHERE O_W_ID >= $warehouse_from AND O_W_ID <= $warehouse_to
             ) AS o
             ON no.NO_W_ID = o.O_W_ID AND no.NO_D_ID = o.O_D_ID AND no.NO_O_ID = o.O_ID
@@ -816,11 +834,11 @@ void TPCCChecker::ConsistencyCheck3325(TQueryClient& client) {
             $missing_in_new_order =
             SELECT o.O_W_ID AS W_ID, o.O_D_ID AS D_ID, o.O_ID AS O_ID
             FROM (
-                SELECT * FROM `oorder`
+                SELECT * FROM `{}`
                 WHERE O_W_ID >= $warehouse_from AND O_W_ID <= $warehouse_to
             ) AS o
             LEFT JOIN (
-                SELECT * FROM `new_order`
+                SELECT * FROM `{}`
                 WHERE NO_W_ID >= $warehouse_from AND NO_W_ID <= $warehouse_to
             ) AS no
             ON o.O_W_ID = no.NO_W_ID AND o.O_D_ID = no.NO_D_ID AND o.O_ID = no.NO_O_ID
@@ -858,6 +876,388 @@ void TPCCChecker::ConsistencyCheck3325(TQueryClient& client) {
     });
 
     WaitAll(rangeFutures).GetValueSync();
+}
+
+void TPCCChecker::ConsistencyCheck3326(TQueryClient& client) {
+    const int WAREHOUSE_RANGE_SIZE = 250;
+    std::vector<TFuture<void>> rangeFutures;
+
+    for (int startWh = 1; startWh <= Config.WarehouseCount; startWh += WAREHOUSE_RANGE_SIZE) {
+        int endWh = std::min(startWh + WAREHOUSE_RANGE_SIZE - 1, Config.WarehouseCount);
+
+        TString query = std::format(R"(
+            PRAGMA TablePathPrefix("{}");
+
+            $warehouse_from = {};
+            $warehouse_to = {};
+
+            -- Aggregate order_line
+            $line_counts = SELECT
+                OL_W_ID AS W_ID,
+                OL_D_ID AS D_ID,
+                OL_O_ID AS O_ID,
+                COUNT(*) AS CNT
+            FROM `{}`
+            WHERE OL_W_ID >= $warehouse_from AND OL_W_ID <= $warehouse_to
+            GROUP BY OL_W_ID, OL_D_ID, OL_O_ID;
+
+            -- Orders with mismatched line count
+            $mismatch_cnt = SELECT
+                o.O_W_ID AS W_ID,
+                o.O_D_ID AS D_ID,
+                o.O_ID AS O_ID,
+                o.O_OL_CNT AS DeclaredCnt,
+                l.CNT AS ActualCnt
+            FROM (
+                SELECT * FROM `{}`
+                WHERE O_W_ID >= $warehouse_from AND O_W_ID <= $warehouse_to
+            ) AS o
+            LEFT JOIN $line_counts AS l
+            ON o.O_W_ID = l.W_ID AND o.O_D_ID = l.D_ID AND o.O_ID = l.O_ID
+            WHERE o.O_OL_CNT != l.CNT;
+
+            -- Order_lines without a matching oorder row
+            $missing_order = SELECT
+                l.W_ID AS W_ID,
+                l.D_ID AS D_ID,
+                l.O_ID AS O_ID
+            FROM $line_counts AS l
+            LEFT JOIN (
+                SELECT * FROM `{}`
+                WHERE O_W_ID >= $warehouse_from AND O_W_ID <= $warehouse_to
+            ) AS o
+            ON l.W_ID = o.O_W_ID AND l.D_ID = o.O_D_ID AND l.O_ID = o.O_ID
+            WHERE o.O_W_ID IS NULL;
+
+            -- Combined check
+            SELECT * FROM $mismatch_cnt
+            UNION ALL
+            SELECT W_ID, D_ID, O_ID, CAST(NULL AS Int32), CAST(NULL AS Int32) FROM $missing_order
+            LIMIT 1;
+        )", Config.Path.c_str(), startWh, endWh, TABLE_ORDER_LINE, TABLE_OORDER, TABLE_OORDER
+        );
+
+        auto future = CheckNoRows(client, query);
+        future.Wait();
+        rangeFutures.push_back(future);
+    }
+
+    auto result = WaitAll(rangeFutures).Apply([allFutures = std::move(rangeFutures)](const auto&) {
+        // return any with error
+        for (const auto& future: allFutures) {
+            if (future.HasException()) {
+                return future;
+            }
+        }
+
+        return MakeFuture();
+    });
+
+    RunningChecks.insert(RunningChecks.end(), {
+        { result, "3.3.2.6" },
+    });
+
+    WaitAll(rangeFutures).GetValueSync();
+}
+
+// TODO: rewrite (to much mem and materialization size)
+void TPCCChecker::ConsistencyCheck3327(TQueryClient& client) {
+    const int WAREHOUSE_RANGE_SIZE = 100;
+    std::vector<TFuture<void>> rangeFutures;
+
+    for (int startWh = 1; startWh <= Config.WarehouseCount; startWh += WAREHOUSE_RANGE_SIZE) {
+        int endWh = std::min(startWh + WAREHOUSE_RANGE_SIZE - 1, Config.WarehouseCount);
+
+        TString query = std::format(R"(
+            PRAGMA TablePathPrefix("{}");
+
+            $warehouse_from = {};
+            $warehouse_to = {};
+
+            -- Aggregate delivery nullness for each order
+            $line_flags = SELECT
+                OL_W_ID AS W_ID,
+                OL_D_ID AS D_ID,
+                OL_O_ID AS O_ID,
+                MIN(OL_DELIVERY_D IS NULL) AS ALL_NULL,
+                MAX(OL_DELIVERY_D IS NULL) AS SOME_NULL
+            FROM `{}`
+            WHERE OL_W_ID >= $warehouse_from AND OL_W_ID <= $warehouse_to
+            GROUP BY OL_W_ID, OL_D_ID, OL_O_ID;
+
+            -- Check for mismatch between delivery status and carrier presence
+            SELECT *
+            FROM $line_flags AS l
+            JOIN (
+                SELECT * FROM `{}`
+                WHERE O_W_ID >= $warehouse_from AND O_W_ID <= $warehouse_to
+            ) AS o
+            ON l.W_ID = o.O_W_ID AND l.D_ID = o.O_D_ID AND l.O_ID = o.O_ID
+            WHERE
+                (o.O_CARRIER_ID IS NULL AND ALL_NULL = false)
+                OR
+                (o.O_CARRIER_ID IS NOT NULL AND SOME_NULL = true)
+            LIMIT 1;
+        )", Config.Path.c_str(), startWh, endWh,
+           TABLE_ORDER_LINE, TABLE_OORDER);
+
+        auto future = CheckNoRows(client, query);
+        future.Wait();
+        rangeFutures.push_back(future);
+    }
+
+    auto result = WaitAll(rangeFutures).Apply([allFutures = std::move(rangeFutures)](const auto&) {
+        // return any with error
+        for (const auto& future: allFutures) {
+            if (future.HasException()) {
+                return future;
+            }
+        }
+
+        return MakeFuture();
+    });
+
+    RunningChecks.insert(RunningChecks.end(), {
+        { result, "3.3.2.7" },
+    });
+
+    WaitAll(rangeFutures).GetValueSync();
+}
+
+void TPCCChecker::ConsistencyCheck3328(TQueryClient& client) {
+    TString query = std::format(R"(
+        PRAGMA TablePathPrefix("{}");
+
+        -- Aggregate history by warehouse
+        $history_sums = SELECT
+            H_W_ID AS W_ID,
+            SUM(H_AMOUNT) AS SUM_H_AMOUNT
+        FROM `{}`
+        GROUP BY H_W_ID;
+
+        -- Join with warehouse and check mismatch
+        SELECT w.W_ID, w.W_YTD, h.SUM_H_AMOUNT, ABS(w.W_YTD - h.SUM_H_AMOUNT) as delta
+        FROM `{}` as w
+        JOIN $history_sums AS h
+        ON w.W_ID = h.W_ID
+        WHERE ABS(w.W_YTD - h.SUM_H_AMOUNT) > 1e-3
+        LIMIT 1;
+    )", Config.Path.c_str(), TABLE_HISTORY, TABLE_WAREHOUSE);
+
+    RunningChecks.insert(RunningChecks.end(), {
+        { CheckNoRows(client, query), "3.3.2.8" },
+    });
+}
+
+void TPCCChecker::ConsistencyCheck3329(TQueryClient& client) {
+    TString query = std::format(R"(
+        PRAGMA TablePathPrefix("{}");
+
+        -- Aggregate history amounts per district
+        $history_sums = SELECT
+            H_W_ID AS W_ID,
+            H_D_ID AS D_ID,
+            SUM(H_AMOUNT) AS SUM_H_AMOUNT
+        FROM `{}`
+        GROUP BY H_W_ID, H_D_ID;
+
+        -- Join with district and compare D_YTD to summed H_AMOUNT
+        SELECT *
+        SELECT h.W_ID, h.D_ID, h.SUM_H_AMOUNT, ABS(d.W_YTD - h.SUM_H_AMOUNT) as delta
+        FROM `{}` as d
+        JOIN $history_sums AS h
+        ON D_W_ID = h.W_ID AND D_ID = h.D_ID
+        WHERE delta > 1e-3
+        LIMIT 1;
+    )", Config.Path.c_str(), TABLE_HISTORY, TABLE_DISTRICT);
+
+    RunningChecks.insert(RunningChecks.end(), {
+        { CheckNoRows(client, query), "3.3.2.9" },
+    });
+}
+
+// TODO: rewrite (to much mem and materialization size)
+void TPCCChecker::ConsistencyCheck33210(TQueryClient& client) {
+    // 3.3.2.10: For each customer, C_BALANCE = sum(delivered OL_AMOUNTs) - sum(H_AMOUNT)
+    const int WAREHOUSE_RANGE_SIZE = 250;
+    std::vector<TFuture<void>> rangeFutures;
+
+    for (int startWh = 1; startWh <= Config.WarehouseCount; startWh += WAREHOUSE_RANGE_SIZE) {
+        int endWh = std::min(startWh + WAREHOUSE_RANGE_SIZE - 1, Config.WarehouseCount);
+
+        TString query = std::format(R"(
+            PRAGMA TablePathPrefix("{}");
+
+            $warehouse_from = {};
+            $warehouse_to = {};
+
+            $history = SELECT
+                H_C_W_ID AS W_ID,
+                H_C_D_ID AS D_ID,
+                H_C_ID AS C_ID,
+                SUM(H_AMOUNT) AS H_SUM
+            FROM `{}`
+            WHERE H_C_W_ID >= $warehouse_from AND H_C_W_ID <= $warehouse_to
+            GROUP BY H_C_W_ID, H_C_D_ID, H_C_ID;
+
+            $ol_sum = SELECT
+                o.O_W_ID AS W_ID,
+                o.O_D_ID AS D_ID,
+                o.O_C_ID AS C_ID,
+                SUM(ol.OL_AMOUNT) AS OL_SUM
+            FROM (
+                SELECT * FROM `{}`
+                WHERE O_W_ID >= $warehouse_from AND O_W_ID <= $warehouse_to
+            ) AS o
+            JOIN `{}` AS ol
+            ON ol.OL_W_ID = o.O_W_ID AND ol.OL_D_ID = o.O_D_ID AND ol.OL_O_ID = o.O_ID
+            WHERE ol.OL_DELIVERY_D IS NOT NULL
+            GROUP BY o.O_W_ID, o.O_D_ID, o.O_C_ID;
+
+            SELECT
+                c.C_W_ID AS W_ID,
+                c.C_D_ID AS D_ID,
+                c.C_ID,
+                c.C_BALANCE,
+                c.C_YTD_PAYMENT,
+                COALESCE(o.OL_SUM, 0.0) AS OL_SUM,
+                COALESCE(h.H_SUM, 0.0) AS H_SUM
+            FROM (
+                SELECT * FROM `{}`
+                WHERE C_W_ID >= $warehouse_from AND C_W_ID <= $warehouse_to
+            ) AS c
+            LEFT JOIN $history AS h
+            ON c.C_W_ID = h.W_ID AND c.C_D_ID = h.D_ID AND c.C_ID = h.C_ID
+            LEFT JOIN $ol_sum AS o
+            ON c.C_W_ID = o.W_ID AND c.C_D_ID = o.D_ID AND c.C_ID = o.C_ID
+            WHERE ABS(c.C_BALANCE - (OL_SUM - H_SUM)) > 1e-3
+            LIMIT 1;
+        )", Config.Path.c_str(), startWh, endWh,
+           TABLE_HISTORY, TABLE_OORDER, TABLE_ORDER_LINE, TABLE_CUSTOMER);
+
+        auto future = CheckNoRows(client, query);
+        future.Wait();
+        rangeFutures.push_back(future);
+    }
+
+    auto result = WaitAll(rangeFutures).Apply([allFutures = std::move(rangeFutures)](const auto&) {
+        for (const auto& future : allFutures) {
+            if (future.HasException()) {
+                return future;
+            }
+        }
+        return MakeFuture();
+    });
+
+    RunningChecks.push_back({ result, "3.3.2.10" });
+}
+
+void TPCCChecker::ConsistencyCheck33211(TQueryClient& client) {
+    // 3.3.2.11: For each district, ORDER count - NEW_ORDER count = 2100
+    const int WAREHOUSE_RANGE_SIZE = 250;
+    std::vector<TFuture<void>> rangeFutures;
+
+    for (int startWh = 1; startWh <= Config.WarehouseCount; startWh += WAREHOUSE_RANGE_SIZE) {
+        int endWh = std::min(startWh + WAREHOUSE_RANGE_SIZE - 1, Config.WarehouseCount);
+
+        TString query = std::format(R"(
+            PRAGMA TablePathPrefix("{}");
+
+            $warehouse_from = {};
+            $warehouse_to = {};
+
+            $order_counts = SELECT O_W_ID AS W_ID, O_D_ID AS D_ID, COUNT(*) AS ORDER_CNT
+            FROM `{}`
+            WHERE O_W_ID >= $warehouse_from AND O_W_ID <= $warehouse_to
+            GROUP BY O_W_ID, O_D_ID;
+
+            $new_order_counts = SELECT NO_W_ID AS W_ID, NO_D_ID AS D_ID, COUNT(*) AS NEW_ORDER_CNT
+            FROM `{}`
+            WHERE NO_W_ID >= $warehouse_from AND NO_W_ID <= $warehouse_to
+            GROUP BY NO_W_ID, NO_D_ID;
+
+            SELECT o.W_ID, o.D_ID, (o.ORDER_CNT - n.NEW_ORDER_CNT) as delta
+            FROM $order_counts AS o
+            JOIN $new_order_counts AS n
+              ON o.W_ID = n.W_ID AND o.D_ID = n.D_ID
+            WHERE (ORDER_CNT - NEW_ORDER_CNT) != 2100
+            LIMIT 1;
+        )", Config.Path.c_str(), startWh, endWh,
+           TABLE_OORDER, TABLE_NEW_ORDER);
+
+        auto future = CheckNoRows(client, query);
+        future.Wait();
+        rangeFutures.push_back(future);
+    }
+
+    auto result = WaitAll(rangeFutures).Apply([allFutures = std::move(rangeFutures)](const auto&) {
+        for (const auto& future : allFutures) {
+            if (future.HasException()) {
+                return future;
+            }
+        }
+        return MakeFuture();
+    });
+
+    RunningChecks.push_back({ result, "3.3.2.11" });
+}
+
+// TODO: rewrite (to much mem and materialization size)
+void TPCCChecker::ConsistencyCheck33212(TQueryClient& client) {
+    // 3.3.2.12: For each customer, C_BALANCE + C_YTD_PAYMENT = sum(delivered OL_AMOUNTs)
+    const int WAREHOUSE_RANGE_SIZE = 100;
+    std::vector<TFuture<void>> rangeFutures;
+
+    for (int startWh = 1; startWh <= Config.WarehouseCount; startWh += WAREHOUSE_RANGE_SIZE) {
+        int endWh = std::min(startWh + WAREHOUSE_RANGE_SIZE - 1, Config.WarehouseCount);
+
+        TString query = std::format(R"(
+            PRAGMA TablePathPrefix("{}");
+
+            $warehouse_from = {};
+            $warehouse_to = {};
+
+            $ol_sum = SELECT
+                o.O_W_ID AS W_ID,
+                o.O_D_ID AS D_ID,
+                o.O_C_ID AS C_ID,
+                SUM(ol.OL_AMOUNT) AS OL_SUM
+            FROM (
+                SELECT * FROM `{}`
+                WHERE O_W_ID >= $warehouse_from AND O_W_ID <= $warehouse_to
+            ) AS o
+            JOIN `{}` AS ol
+            ON ol.OL_W_ID = o.O_W_ID AND ol.OL_D_ID = o.O_D_ID AND ol.OL_O_ID = o.O_ID
+            WHERE ol.OL_DELIVERY_D IS NOT NULL
+            GROUP BY o.O_W_ID, o.O_D_ID, o.O_C_ID;
+
+            SELECT *
+            FROM (
+                SELECT * FROM `{}`
+                WHERE C_W_ID >= $warehouse_from AND C_W_ID <= $warehouse_to
+            ) AS c
+            JOIN $ol_sum AS l
+              ON c.C_W_ID = l.W_ID AND c.C_D_ID = l.D_ID AND c.C_ID = l.C_ID
+            WHERE ABS(C_BALANCE + C_YTD_PAYMENT - l.OL_SUM) > 1e-3
+            LIMIT 1;
+        )", Config.Path.c_str(), startWh, endWh,
+           TABLE_OORDER, TABLE_ORDER_LINE, TABLE_CUSTOMER);
+
+        auto future = CheckNoRows(client, query);
+        future.Wait();
+        rangeFutures.push_back(future);
+    }
+
+    auto result = WaitAll(rangeFutures).Apply([allFutures = std::move(rangeFutures)](const auto&) {
+        for (const auto& future : allFutures) {
+            if (future.HasException()) {
+                return future;
+            }
+        }
+        return MakeFuture();
+    });
+
+    RunningChecks.push_back({ result, "3.3.2.12" });
 }
 
 } // anonymous

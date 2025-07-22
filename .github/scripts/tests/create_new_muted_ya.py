@@ -428,7 +428,7 @@ def create_file_set(aggregated_for_mute, filter_func, mute_check=None, use_wildc
                 )
                 debug_list.append(debug_string)
     print()  # Перевод строки после прогресса
-    return sorted(result_set), sorted(debug_list)
+    return sorted(list(result_set)), sorted(debug_list)
 
 def write_file_set(file_path, test_set, debug_list=None):
     add_lines_to_file(file_path, [line + '\n' for line in test_set])
@@ -532,37 +532,45 @@ def apply_and_add_mutes(all_data, output_path, mute_check, aggregated_for_mute, 
             test_debug_dict[wildcard] = debug_str
 
         # 5. muted_ya+to_mute
-        muted_ya_plus_to_mute = sorted(list(all_muted_ya_set | to_mute_set))
+        muted_ya_plus_to_mute = list(all_muted_ya) + [t for t in to_mute if t not in all_muted_ya]
         muted_ya_plus_to_mute_debug = []
         for test in muted_ya_plus_to_mute:
-            if test in test_debug_dict:
-                muted_ya_plus_to_mute_debug.append(test_debug_dict[test])
+            debug_val = test_debug_dict.get(test, "NO DEBUG INFO")
+            muted_ya_plus_to_mute_debug.append(debug_val)
         write_file_set(os.path.join(output_path, 'muted_ya+to_mute.txt'), muted_ya_plus_to_mute, muted_ya_plus_to_mute_debug)
 
         # 6. muted_ya-to_unmute
-        muted_ya_minus_to_unmute = [t for t in all_muted_ya if t not in to_unmute_set]
-        muted_ya_minus_to_unmute_debug = [test_debug_dict[t] for t in muted_ya_minus_to_unmute if t in test_debug_dict]
+        muted_ya_minus_to_unmute = [t for t in all_muted_ya if t not in to_unmute]
+        muted_ya_minus_to_unmute_debug = []
+        for test in muted_ya_minus_to_unmute:
+            debug_val = test_debug_dict.get(test, "NO DEBUG INFO")
+            muted_ya_minus_to_unmute_debug.append(debug_val)
         write_file_set(os.path.join(output_path, 'muted_ya-to_unmute.txt'), muted_ya_minus_to_unmute, muted_ya_minus_to_unmute_debug)
 
         # 7. muted_ya-to_delete
-        muted_ya_minus_to_delete = [t for t in all_muted_ya if t not in to_delete_set]
-        muted_ya_minus_to_delete_debug = [test_debug_dict[t] for t in muted_ya_minus_to_delete if t in test_debug_dict]
+        muted_ya_minus_to_delete = [t for t in all_muted_ya if t not in to_delete]
+        muted_ya_minus_to_delete_debug = []
+        for test in muted_ya_minus_to_delete:
+            debug_val = test_debug_dict.get(test, "NO DEBUG INFO")
+            muted_ya_minus_to_delete_debug.append(debug_val)
         write_file_set(os.path.join(output_path, 'muted_ya-to_delete.txt'), muted_ya_minus_to_delete, muted_ya_minus_to_delete_debug)
 
         # 8. muted_ya-to-delete-to-unmute
-        muted_ya_minus_to_delete_to_unmute = [t for t in all_muted_ya if t not in to_delete_set and t not in to_unmute_set]
-        muted_ya_minus_to_delete_to_unmute_debug = [test_debug_dict[t] for t in muted_ya_minus_to_delete_to_unmute if t in test_debug_dict]
+        muted_ya_minus_to_delete_to_unmute = [t for t in all_muted_ya if t not in to_delete and t not in to_unmute]
+        muted_ya_minus_to_delete_to_unmute_debug = []
+        for test in muted_ya_minus_to_delete_to_unmute:
+            debug_val = test_debug_dict.get(test, "NO DEBUG INFO")
+            muted_ya_minus_to_delete_to_unmute_debug.append(debug_val)
         write_file_set(os.path.join(output_path, 'muted_ya-to-delete-to-unmute.txt'), muted_ya_minus_to_delete_to_unmute, muted_ya_minus_to_delete_to_unmute_debug)
 
         # 9. muted_ya-to-delete-to-unmute+to_mute
-        muted_ya_minus_to_delete_to_unmute_set = set(muted_ya_minus_to_delete_to_unmute)
-        muted_ya_minus_to_delete_to_unmute_plus_to_mute = sorted(list(muted_ya_minus_to_delete_to_unmute_set | to_mute_set))
+        # Вместо set используем list для полного соответствия
+        muted_ya_minus_to_delete_to_unmute_plus_to_mute = list(muted_ya_minus_to_delete_to_unmute) + [t for t in to_mute if t not in muted_ya_minus_to_delete_to_unmute]
         muted_ya_minus_to_delete_to_unmute_plus_to_mute_debug = []
         for test in muted_ya_minus_to_delete_to_unmute_plus_to_mute:
-            if test in muted_ya_minus_to_delete_to_unmute_set and test in test_debug_dict:
-                muted_ya_minus_to_delete_to_unmute_plus_to_mute_debug.append(test_debug_dict[test])
+            debug_val = test_debug_dict.get(test, "NO DEBUG INFO")
+            muted_ya_minus_to_delete_to_unmute_plus_to_mute_debug.append(debug_val)
         write_file_set(os.path.join(output_path, 'muted_ya-to-delete-to-unmute+to_mute.txt'), muted_ya_minus_to_delete_to_unmute_plus_to_mute, muted_ya_minus_to_delete_to_unmute_plus_to_mute_debug)
-        
         # Сохраняем этот же файл как new_muted_ya.txt для совместимости с workflow
         write_file_set(os.path.join(output_path, 'new_muted_ya.txt'), muted_ya_minus_to_delete_to_unmute_plus_to_mute, muted_ya_minus_to_delete_to_unmute_plus_to_mute_debug)
         

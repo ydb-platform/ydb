@@ -24,7 +24,7 @@ namespace NKafka {
 
     ECheckDeduplicationResult CheckDeduplication(i16 lastEpoch, ui64 lastSeqNo, i16 messageEpoch, ui64 messageSeqNo);
 
-    std::pair<TString, NPersQueue::NErrorCode> MakeDeduplicationError(
+    std::pair<NPersQueue::NErrorCode::EErrorCode, TString> MakeDeduplicationError(
         ECheckDeduplicationResult res, const TString& topicName, ui32 partitionId, const TString& sourceId, ui64 poffset,
         i16 lastEpoch, ui64 lastSeqNo, i16 messageEpoch, ui64 messageSeqNo);
 }

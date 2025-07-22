@@ -133,13 +133,16 @@ auto GetStepAndTxId(const E& event)
     return GetStepAndTxId(event.Step, event.TxId);
 }
 
+// SeqnoViolation checks that the message seqno is correct and is used in transaction processing.
+// The user may run conflicting transactions and we should block a transaction that tries to write a wrong seqno.
 bool SeqnoViolation(TMaybe<i16> lastEpoch, ui64 lastSeqNo, TMaybe<i16> messageEpoch, ui64 messageSeqNo) {
     bool isKafkaRequest = lastEpoch.Defined() && messageEpoch.Defined();
     if (isKafkaRequest) {
-        return NKafka::ECheckDeduplicationResult::OK != NKafka::CheckDeduplication(*lastEpoch, lastSeqNo, *messageEpoch, messageSeqNo);
-    } else {
-        return messageSeqNo <= lastSeqNo;
+        // In Kafka conflicting transactions are not possible if the user follows the protocol.
+        return false;
     }
+
+    return messageSeqNo <= lastSeqNo;
 }
 
 bool TPartition::LastOffsetHasBeenCommited(const TUserInfoBase& userInfo) const {

@@ -410,6 +410,9 @@ void TPartitionFamily::Merge(TPartitionFamily* other) {
     RootPartitions.insert(RootPartitions.end(), other->RootPartitions.begin(), other->RootPartitions.end());
     other->RootPartitions.clear();
 
+    for (auto partitionId : Partitions) {
+        other->WantedPartitions.erase(partitionId);
+    }
     WantedPartitions.insert(other->WantedPartitions.begin(), other->WantedPartitions.end());
     other->WantedPartitions.clear();
 
@@ -1045,7 +1048,7 @@ bool TConsumer::ProccessReadingFinished(ui32 partitionId, bool wasInactive, cons
 
                         if (other != family) {
                             auto [f, v] = MergeFamilies(family, other, ctx);
-                            allParentsMerged = v;
+                            allParentsMerged = allParentsMerged && v;
                             family = f;
                         }
                     }

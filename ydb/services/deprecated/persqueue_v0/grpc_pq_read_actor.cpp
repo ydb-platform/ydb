@@ -1227,13 +1227,16 @@ void TReadSessionActor::Handle(TEvPersQueue::TEvReleasePartition::TPtr& ev, cons
         return;
     }
 
-    if (Partitions.empty()) {
-        LOG_ALERT_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " Releasing unknown partition: " << record.ShortDebugString() << ", partitions empty");
+    auto onUnknownPartition = [&](auto& marker) {
+        LOG_ALERT_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " Releasing unknown partition: " << record.ShortDebugString() << " " << marker);
         CloseSession(
-                TStringBuilder() << "Internal server error, releasing unknown partition: " << record.ShortDebugString() << ", partitions empty",
+                TStringBuilder() << "Internal server error, releasing unknown partition: " << record.ShortDebugString() << " " << marker,
                 NPersQueue::NErrorCode::ERROR, ctx
         );
-        return;
+    };
+
+    if (Partitions.empty()) {
+        return onUnknownPartition("#PQv0.01");
     }
 
     TActorId actorId = TActorId{};
@@ -1248,7 +1251,9 @@ void TReadSessionActor::Handle(TEvPersQueue::TEvReleasePartition::TPtr& ev, cons
             }
         }
     }
-    Y_ABORT_UNLESS(actorId);
+    if (!actorId) {
+        return onUnknownPartition("#PQv0.02");
+    }
 
     {
         auto it = TopicCounters.find(name);

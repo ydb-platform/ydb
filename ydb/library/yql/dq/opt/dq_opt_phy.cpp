@@ -2295,6 +2295,69 @@ TExprBase DqBuildPureExprStage(TExprBase node, TExprContext& ctx) {
         .Done();
 }
 
+TVector<TCoAtom> GetHashShuffleKeys(TExprBase node, TExprContext& ctx) {
+    TVector<TCoAtom> keyColumns;
+
+    const auto* nodeType = node.Ptr()->GetTypeAnn();
+    if (nodeType && nodeType->GetKind() == ETypeAnnotationKind::List) {
+        const auto* listItemType = nodeType->Cast<TListExprType>()->GetItemType();
+        if (listItemType->GetKind() == ETypeAnnotationKind::Struct) {
+            const auto* structType = listItemType->Cast<TStructExprType>();
+            for (const auto* item : structType->GetItems()) {
+                auto* columnType = item->GetItemType();
+                if (columnType->GetKind() == ETypeAnnotationKind::Optional) {
+                    columnType = columnType->Cast<TOptionalExprType>()->GetItemType();
+                }
+                if (columnType->GetKind() == ETypeAnnotationKind::Data && columnType->IsHashable()) {
+                    auto columnName = Build<TCoAtom>(ctx, node.Pos())
+                        .Value(item->GetName())
+                        .Done();
+                    keyColumns.push_back(columnName);
+                }
+            }
+        }
+    }
+
+    return keyColumns;
+}
+
+TExprBase DqBuildStageForDqPureExpr(TExprBase node, TExprContext& ctx) {
+    TVector<TCoAtom> keyColumns = GetHashShuffleKeys(node, ctx);
+
+    auto newArg = Build<TCoToFlow>(ctx, node.Pos())
+        .Input(node)
+        .Done();
+
+    auto stage = Build<TDqStage>(ctx, node.Pos())
+        .Inputs()
+            .Build()
+        .Program()
+            .Args({})
+            .Body(newArg)
+            .Build()
+        .Settings(TDqStageSettings().BuildNode(ctx, node.Pos()))
+        .Done();
+
+    if (keyColumns.size()) {
+        return Build<TDqCnHashShuffle>(ctx, node.Pos())
+                .Output()
+                    .Stage(stage)
+                    .Index().Build("0")
+                .Build()
+                .KeyColumns()
+                    .Add(keyColumns)
+                .Build()
+                .Done();
+    } else {
+        return Build<TDqCnUnionAll>(ctx, node.Pos())
+            .Output()
+                .Stage(stage)
+                .Index().Build("0")
+            .Build()
+            .Done();
+    }
+}
+
 /*
  * Move (Extend ...) into a separate stage.
  *
@@ -2304,7 +2367,7 @@ TExprBase DqBuildPureExprStage(TExprBase node, TExprContext& ctx) {
  * is needed for handling UNION ALL case, which generates top-level Extend where some arguments
  * can be pure expressions not wrapped in DqStage (e.g. ... UNION ALL SELECT 1).
  */
-TExprBase DqBuildExtendStage(TExprBase node, TExprContext& ctx) {
+TExprBase DqBuildExtendStage(TExprBase node, TExprContext& ctx, bool enableHashShuffleConnections) {
     if (!node.Maybe<TCoExtendBase>()) {
         return node;
     }
@@ -2313,21 +2376,49 @@ TExprBase DqBuildExtendStage(TExprBase node, TExprContext& ctx) {
     TVector<TCoArgument> inputArgs;
     TVector<TExprBase> inputConns;
     TVector<TExprBase> extendArgs;
+    TVector<TExprBase> pureExprArgs;
+    TVector<TExprBase> pureExprConnections;
+
+    TNodeOnNodeOwnedMap replaces;
+    ui32 connectionCount = 0;
 
     for (const auto& arg: extend) {
         if (arg.Maybe<TDqConnection>()) {
-            auto conn = arg.Cast<TDqConnection>();
-            TCoArgument programArg = Build<TCoArgument>(ctx, conn.Pos())
+            auto connection = arg.Cast<TDqConnection>();
+            auto keyColumns = GetHashShuffleKeys(node, ctx);
+
+            // Create a hash shuffle connection if we have at least one key to shuffle by hash.
+            if (keyColumns.size()) {
+                auto shuffleConnection = Build<TDqCnHashShuffle>(ctx, node.Pos())
+                                             .Output()
+                                                .Stage(connection.Output().Stage())
+                                                .Index(connection.Output().Index())
+                                             .Build()
+                                                .KeyColumns()
+                                                .Add(keyColumns)
+                                             .Build()
+                                             .Done();
+
+                replaces[connection.Raw()] = shuffleConnection.Ptr();
+            }
+
+            TCoArgument programArg = Build<TCoArgument>(ctx, connection.Pos())
                 .Name("arg")
                 .Done();
-            inputConns.push_back(conn);
+
+            inputConns.push_back(connection);
             inputArgs.push_back(programArg);
             extendArgs.push_back(programArg);
+
+            ++connectionCount;
         } else if (IsDqCompletePureExpr(arg)) {
-            // arg is deemed to be a pure expression so leave it inside (Extend ...)
-            extendArgs.push_back(Build<TCoToFlow>(ctx, arg.Pos())
+            auto newArg = Build<TCoToFlow>(ctx, arg.Pos())
                 .Input(arg)
-                .Done());
+                .Done();
+            pureExprArgs.push_back(newArg);
+
+            auto newConnection = DqBuildStageForDqPureExpr(arg, ctx);
+            pureExprConnections.push_back(newConnection);
         } else {
             return node;
         }
@@ -2335,6 +2426,20 @@ TExprBase DqBuildExtendStage(TExprBase node, TExprContext& ctx) {
 
     if (inputConns.empty()) {
         return node;
+    }
+
+    const bool replaceWithShuffle = (enableHashShuffleConnections && replaces.size() == connectionCount);
+    if (replaceWithShuffle) {
+        for (auto &connection : pureExprConnections) {
+            TCoArgument arg = Build<TCoArgument>(ctx, node.Pos())
+                .Name("arg")
+                .Done();
+            inputConns.push_back(connection);
+            inputArgs.push_back(arg);
+            extendArgs.push_back(arg);
+        }
+    } else {
+        extendArgs.insert(extendArgs.end(), pureExprArgs.begin(), pureExprArgs.end());
     }
 
     auto stage = Build<TDqStage>(ctx, node.Pos())
@@ -2350,9 +2455,11 @@ TExprBase DqBuildExtendStage(TExprBase node, TExprContext& ctx) {
         .Settings(TDqStageSettings().BuildNode(ctx, node.Pos()))
         .Done();
 
+    auto newStage = replaceWithShuffle ? ctx.ReplaceNodes(stage.Ptr(), replaces) : stage.Ptr();
+
     return Build<TDqCnUnionAll>(ctx, node.Pos())
         .Output()
-            .Stage(stage)
+            .Stage(newStage)
             .Index().Build("0")
             .Build()
         .Done();

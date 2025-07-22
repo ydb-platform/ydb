@@ -1,7 +1,5 @@
 #include "generate_vim.h"
 
-#include "generate.h"
-
 #include <yql/essentials/utils/yql_panic.h>
 
 #include <contrib/libs/re2/re2/re2.h>
@@ -29,13 +27,13 @@ namespace NSQLHighlight {
             return regex;
         }
 
-        TString ToVim(EUnitKind kind, const NSQLTranslationV1::TRegexPattern& pattern) {
+        TString ToVim(const TUnit& unit, const NSQLTranslationV1::TRegexPattern& pattern) {
             TStringBuilder vim;
 
             vim << R"(")";
             vim << R"(\v)";
 
-            if (IsPlain(kind)) {
+            if (unit.IsPlain) {
                 vim << R"(<)";
             }
 
@@ -49,7 +47,7 @@ namespace NSQLHighlight {
                 vim << "(" << ToVim(pattern.After) << ")@=";
             }
 
-            if (IsPlain(kind)) {
+            if (unit.IsPlain) {
                 vim << R"(>)";
             }
 
@@ -89,9 +87,15 @@ namespace NSQLHighlight {
 
         void PrintRules(IOutputStream& out, const TUnit& unit) {
             TString name = ToVimName(unit.Kind);
-            for (const NSQLTranslationV1::TRegexPattern& pattern : unit.Patterns) {
+            for (const auto& pattern : std::ranges::reverse_view(unit.Patterns)) {
                 out << "syn match " << ToVimName(unit.Kind) << " "
-                    << ToVim(unit.Kind, pattern) << '\n';
+                    << ToVim(unit, pattern) << '\n';
+            }
+            if (auto range = unit.RangePattern) {
+                out << "syntax region " << name << "Multiline" << " "
+                    << "start=\"" << range->Begin << "\" "
+                    << "end=\"" << range->End << "\""
+                    << '\n';
             }
         }
 
@@ -127,15 +131,13 @@ namespace NSQLHighlight {
     } // namespace
 
     void GenerateVim(IOutputStream& out, const THighlighting& highlighting) {
-        const auto units = std::ranges::reverse_view(highlighting.Units);
-
         out << "if exists(\"b:current_syntax\")" << '\n';
         out << "  finish" << '\n';
         out << "endif" << '\n';
         out << '\n';
 
-        for (const TUnit& unit : units) {
-            if (IsIgnored(unit.Kind)) {
+        for (const TUnit& unit : std::ranges::reverse_view(highlighting.Units)) {
+            if (unit.IsCodeGenExcluded) {
                 continue;
             }
 
@@ -144,9 +146,11 @@ namespace NSQLHighlight {
 
         out << '\n';
 
-        for (const TUnit& unit : units) {
+        for (const TUnit& unit : std::ranges::reverse_view(highlighting.Units)) {
+            TString name = ToVimName(unit.Kind);
             for (TStringBuf group : ToVimGroups(unit.Kind)) {
-                out << "highlight default link " << ToVimName(unit.Kind) << " " << group << '\n';
+                out << "highlight default link " << name << "Multiline" << " " << group << '\n';
+                out << "highlight default link " << name << " " << group << '\n';
             }
         }
 

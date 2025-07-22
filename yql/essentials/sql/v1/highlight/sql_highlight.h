@@ -27,10 +27,18 @@ namespace NSQLHighlight {
         Error,
     };
 
+    struct TRangePattern {
+        TString Begin;
+        TString End;
+    };
+
     struct TUnit {
         EUnitKind Kind;
         TVector<NSQLTranslationV1::TRegexPattern> Patterns;
         TMaybe<TVector<NSQLTranslationV1::TRegexPattern>> PatternsANSI;
+        TMaybe<TRangePattern> RangePattern;
+        bool IsPlain = true;
+        bool IsCodeGenExcluded = false;
     };
 
     struct THighlighting {

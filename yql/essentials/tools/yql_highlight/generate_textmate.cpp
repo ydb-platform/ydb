@@ -1,6 +1,5 @@
 #include "generate_textmate.h"
 
-#include "generate.h"
 #include "json.h"
 
 #include <library/cpp/json/json_value.h>
@@ -12,14 +11,14 @@ namespace NSQLHighlight {
 
     namespace {
 
-        TString ToTextMateRegex(EUnitKind kind, const NSQLTranslationV1::TRegexPattern& pattern) {
+        TString ToTextMateRegex(const TUnit& unit, const NSQLTranslationV1::TRegexPattern& pattern) {
             TStringBuilder regex;
 
             if (pattern.IsCaseInsensitive) {
                 regex << "(?i)";
             }
 
-            if (IsPlain(kind)) {
+            if (unit.IsPlain) {
                 regex << R"re(\b)re";
             }
 
@@ -29,7 +28,7 @@ namespace NSQLHighlight {
                 regex << "(?=" << pattern.After << ")";
             }
 
-            if (IsPlain(kind)) {
+            if (unit.IsPlain) {
                 regex << R"re(\b)re";
             }
 
@@ -41,23 +40,23 @@ namespace NSQLHighlight {
                 case EUnitKind::Keyword:
                     return "keyword.control";
                 case EUnitKind::Punctuation:
-                    return "keyword.operator.custom";
+                    return "keyword.operator";
                 case EUnitKind::QuotedIdentifier:
-                    return "string.quoted.double.custom";
+                    return "string.interpolated";
                 case EUnitKind::BindParameterIdentifier:
-                    return "variable.other.dollar.custom";
+                    return "variable.parameter";
                 case EUnitKind::TypeIdentifier:
                     return "entity.name.type";
                 case EUnitKind::FunctionIdentifier:
                     return "entity.name.function";
                 case EUnitKind::Identifier:
-                    return "variable.other.custom";
+                    return "variable.other";
                 case EUnitKind::Literal:
-                    return "constant.numeric.custom";
+                    return "constant.numeric";
                 case EUnitKind::StringLiteral:
-                    return "string.quoted.double.custom";
+                    return "string.quoted.double";
                 case EUnitKind::Comment:
-                    return "comment.block.custom";
+                    return "comment.block";
                 case EUnitKind::Whitespace:
                     return "";
                 case EUnitKind::Error:
@@ -65,37 +64,23 @@ namespace NSQLHighlight {
             }
         }
 
-        TMaybe<std::tuple<TStringBuf, TStringBuf>> TextMateRange(EUnitKind kind) {
-            switch (kind) {
-                case EUnitKind::Comment: {
-                    return std::make_tuple(R"re(/\*)re", R"re(\*/)re");
-                } break;
-                case EUnitKind::StringLiteral: {
-                    return std::make_tuple("@@", "@@");
-                } break;
-                default: {
-                    return Nothing();
-                } break;
-            }
-        }
-
-        TMaybe<NJson::TJsonMap> TextMateMultilinePattern(EUnitKind kind) {
-            auto range = TextMateRange(kind);
+        TMaybe<NJson::TJsonMap> TextMateMultilinePattern(const TUnit& unit) {
+            auto range = unit.RangePattern;
             if (!range) {
                 return Nothing();
             }
 
             return NJson::TJsonMap({
-                {"begin", std::get<0>(*range)},
-                {"end", std::get<1>(*range)},
-                {"name", ToTextMateGroup(kind)},
+                {"begin", range->Begin},
+                {"end", range->End},
+                {"name", ToTextMateGroup(unit.Kind)},
             });
         }
 
-        NJson::TJsonMap ToTextMatePattern(EUnitKind kind, const NSQLTranslationV1::TRegexPattern& pattern) {
+        NJson::TJsonMap ToTextMatePattern(const TUnit& unit, const NSQLTranslationV1::TRegexPattern& pattern) {
             return NJson::TJsonMap({
-                {"match", ToTextMateRegex(kind, pattern)},
-                {"name", ToTextMateGroup(kind)},
+                {"match", ToTextMateRegex(unit, pattern)},
+                {"name", ToTextMateGroup(unit.Kind)},
             });
         }
 
@@ -110,10 +95,10 @@ namespace NSQLHighlight {
         root["$schema"] = "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json";
         root["name"] = "yql";
         root["scopeName"] = "source.yql";
-        root["fileTypes"] = NJson::TJsonArray({"sql", "yql"});
+        root["fileTypes"] = NJson::TJsonArray({"yql"});
 
         for (const TUnit& unit : highlighting.Units) {
-            if (IsIgnored(unit.Kind)) {
+            if (unit.IsCodeGenExcluded) {
                 continue;
             }
 
@@ -124,11 +109,11 @@ namespace NSQLHighlight {
             }));
 
             for (const NSQLTranslationV1::TRegexPattern& pattern : unit.Patterns) {
-                auto textmate = ToTextMatePattern(unit.Kind, pattern);
+                auto textmate = ToTextMatePattern(unit, pattern);
                 root["repository"][name]["patterns"].AppendValue(std::move(textmate));
             }
 
-            if (auto textmate = TextMateMultilinePattern(unit.Kind)) {
+            if (auto textmate = TextMateMultilinePattern(unit)) {
                 root["repository"][name]["patterns"].AppendValue(*textmate);
             }
         }

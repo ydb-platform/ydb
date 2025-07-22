@@ -12,7 +12,6 @@ PEERDIR(
 SRCS(
     generate_textmate.cpp
     generate_vim.cpp
-    generate.cpp
     json.cpp
     yql_highlight.cpp
 )

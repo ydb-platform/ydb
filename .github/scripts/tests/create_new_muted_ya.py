@@ -518,17 +518,16 @@ def apply_and_add_mutes(all_data, output_path, mute_check, aggregated_for_mute, 
         test_debug_dict = {}
         wildcard_to_chunks = defaultdict(list)
         for test in aggregated_for_mute + aggregated_for_unmute + aggregated_for_delete:
-            test_str = create_test_string(test, use_wildcards=False).strip()
+            test_str = create_test_string(test, use_wildcards=False)  # без .strip()
             debug_str = create_debug_string(test)
             test_debug_dict[test_str] = debug_str
             if is_chunk_test(test):
-                wildcard_key = create_test_string(test, use_wildcards=True).strip()
+                wildcard_key = create_test_string(test, use_wildcards=True)
                 wildcard_to_chunks[wildcard_key].append(test)
         # Формируем debug-строку для wildcard
         for wildcard, chunks in wildcard_to_chunks.items():
             N = len(chunks)
             m = sum(1 for t in chunks if t.get('is_muted'))
-            # Можно добавить свою статистику, например:
             debug_str = f"{wildcard}: {N} chunks, {m} muted"
             test_debug_dict[wildcard] = debug_str
 
@@ -569,11 +568,10 @@ def apply_and_add_mutes(all_data, output_path, mute_check, aggregated_for_mute, 
         
         # 10. muted_ya_changes - файл с изменениями (новая логика)
         all_test_strings = sorted(all_muted_ya_set | to_mute_set | to_unmute_set | to_delete_set, key=sort_key_without_prefix)
+        # Гарантируем 1:1 соответствие между .txt и debug.txt
         muted_ya_changes = []
         muted_ya_changes_debug = []
-
-
-        for test_str in all_test_strings:
+        for test_str in all_test_strings:  # all_test_strings должен быть list, не set
             if test_str in to_mute_set and test_str not in all_muted_ya_set:
                 prefix = "+++"
             elif test_str in to_unmute_set:
@@ -584,12 +582,8 @@ def apply_and_add_mutes(all_data, output_path, mute_check, aggregated_for_mute, 
                 prefix = ""
             line = f"{prefix} {test_str}" if prefix else f"{test_str}"
             muted_ya_changes.append(line)
-
-            
-            debug_val = test_debug_dict.get(test_str)
-            if debug_val:
-                muted_ya_changes_debug.append(f"{prefix} {debug_val}" if prefix else debug_val)
-
+            debug_val = test_debug_dict.get(test_str, "NO DEBUG INFO")
+            muted_ya_changes_debug.append(f"{prefix} {debug_val}" if prefix else debug_val)
         write_file_set(os.path.join(output_path, 'muted_ya_changes.txt'), muted_ya_changes, muted_ya_changes_debug)
         
         # Логирование итоговых результатов

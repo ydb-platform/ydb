@@ -124,8 +124,8 @@ public:
 
 private:
     const ui64 Mask = 0;
-};
 
+};
 } // namespace NYql::NDq
 
 IOutputStream& operator<<(IOutputStream& stream, const NYql::NDq::TTxId& txId);

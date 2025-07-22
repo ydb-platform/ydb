@@ -2897,16 +2897,10 @@ public:
         return Gateway->GetCollectedSchemeData();
     }
 
-    TFuture<TExecuteLiteralResult> ExecuteLiteral(const TString& program,
+    TExecuteLiteralResult ExecuteLiteralInstant(const TString& program, ui32 langVer,
         const NKikimrMiniKQL::TType& resultType, NKikimr::NKqp::TTxAllocatorState::TPtr txAlloc) override
     {
-        return Gateway->ExecuteLiteral(program, resultType, txAlloc);
-    }
-
-    TExecuteLiteralResult ExecuteLiteralInstant(const TString& program,
-        const NKikimrMiniKQL::TType& resultType, NKikimr::NKqp::TTxAllocatorState::TPtr txAlloc) override
-    {
-        return Gateway->ExecuteLiteralInstant(program, resultType, txAlloc);
+        return Gateway->ExecuteLiteralInstant(program, langVer, resultType, txAlloc);
     }
 
 private:

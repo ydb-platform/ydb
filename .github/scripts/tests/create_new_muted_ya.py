@@ -8,6 +8,7 @@ import ydb
 import logging
 import sys
 from pathlib import Path
+from collections import defaultdict
 
 # Add the parent directory to the path to import update_mute_issues
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
@@ -516,34 +517,54 @@ def apply_and_add_mutes(all_data, output_path, mute_check, aggregated_for_mute, 
         all_muted_ya_set = set(all_muted_ya)
         
          # Создаем словари для быстрого поиска debug-строк
-        all_muted_ya_debug_dict = dict(zip(all_muted_ya, all_muted_ya_debug))
-        to_mute_debug_dict = dict(zip(to_mute, to_mute_debug))
-        to_unmute_debug_dict = dict(zip(to_unmute, to_unmute_debug))
-        to_delete_debug_dict = dict(zip(to_delete, to_delete_debug))
+        # Удаляем неиспользуемые словари debug_dict
+        # all_muted_ya_debug_dict = dict(zip(all_muted_ya, all_muted_ya_debug))
+        # to_mute_debug_dict = dict(zip(to_mute, to_mute_debug))
+        # to_unmute_debug_dict = dict(zip(to_unmute, to_unmute_debug))
+        # to_delete_debug_dict = dict(zip(to_delete, to_delete_debug))
+        # Весь дальнейший код использует только test_debug_dict
+
+        # Универсальный словарь: ключ — строка теста (с wildcard или без), значение — debug-строка
+        test_debug_dict = {}
+        wildcard_to_chunks = defaultdict(list)
+        for test in aggregated_for_mute + aggregated_for_unmute + aggregated_for_delete:
+            test_str = create_test_string(test, use_wildcards=False).strip()
+            debug_str = create_debug_string(test)
+            test_debug_dict[test_str] = debug_str
+            if is_chunk_test(test):
+                wildcard_key = create_test_string(test, use_wildcards=True).strip()
+                wildcard_to_chunks[wildcard_key].append(test)
+        # Формируем debug-строку для wildcard
+        for wildcard, chunks in wildcard_to_chunks.items():
+            N = len(chunks)
+            m = sum(1 for t in chunks if t.get('is_muted'))
+            # Можно добавить свою статистику, например:
+            debug_str = f"{wildcard}: {N} chunks, {m} muted"
+            test_debug_dict[wildcard] = debug_str
 
         # 5. muted_ya+to_mute
         muted_ya_plus_to_mute = sorted(list(all_muted_ya_set | to_mute_set))
         muted_ya_plus_to_mute_debug = []
         for test in muted_ya_plus_to_mute:
-            if test in all_muted_ya_debug_dict:
-                muted_ya_plus_to_mute_debug.append(all_muted_ya_debug_dict[test])
+            if test in test_debug_dict:
+                muted_ya_plus_to_mute_debug.append(test_debug_dict[test])
             elif test in to_mute_debug_dict:
                 muted_ya_plus_to_mute_debug.append(to_mute_debug_dict[test])
         write_file_set(os.path.join(output_path, 'muted_ya+to_mute.txt'), muted_ya_plus_to_mute, muted_ya_plus_to_mute_debug)
 
         # 6. muted_ya-to_unmute
         muted_ya_minus_to_unmute = [t for t in all_muted_ya if t not in to_unmute_set]
-        muted_ya_minus_to_unmute_debug = [all_muted_ya_debug_dict[t] for t in muted_ya_minus_to_unmute if t in all_muted_ya_debug_dict]
+        muted_ya_minus_to_unmute_debug = [test_debug_dict[t] for t in muted_ya_minus_to_unmute if t in test_debug_dict]
         write_file_set(os.path.join(output_path, 'muted_ya-to_unmute.txt'), muted_ya_minus_to_unmute, muted_ya_minus_to_unmute_debug)
 
         # 7. muted_ya-to_delete
         muted_ya_minus_to_delete = [t for t in all_muted_ya if t not in to_delete_set]
-        muted_ya_minus_to_delete_debug = [all_muted_ya_debug_dict[t] for t in muted_ya_minus_to_delete if t in all_muted_ya_debug_dict]
+        muted_ya_minus_to_delete_debug = [test_debug_dict[t] for t in muted_ya_minus_to_delete if t in test_debug_dict]
         write_file_set(os.path.join(output_path, 'muted_ya-to_delete.txt'), muted_ya_minus_to_delete, muted_ya_minus_to_delete_debug)
 
         # 8. muted_ya-to-delete-to-unmute
         muted_ya_minus_to_delete_to_unmute = [t for t in all_muted_ya if t not in to_delete_set and t not in to_unmute_set]
-        muted_ya_minus_to_delete_to_unmute_debug = [all_muted_ya_debug_dict[t] for t in muted_ya_minus_to_delete_to_unmute if t in all_muted_ya_debug_dict]
+        muted_ya_minus_to_delete_to_unmute_debug = [test_debug_dict[t] for t in muted_ya_minus_to_delete_to_unmute if t in test_debug_dict]
         write_file_set(os.path.join(output_path, 'muted_ya-to-delete-to-unmute.txt'), muted_ya_minus_to_delete_to_unmute, muted_ya_minus_to_delete_to_unmute_debug)
 
         # 9. muted_ya-to-delete-to-unmute+to_mute
@@ -551,8 +572,8 @@ def apply_and_add_mutes(all_data, output_path, mute_check, aggregated_for_mute, 
         muted_ya_minus_to_delete_to_unmute_plus_to_mute = sorted(list(muted_ya_minus_to_delete_to_unmute_set | to_mute_set))
         muted_ya_minus_to_delete_to_unmute_plus_to_mute_debug = []
         for test in muted_ya_minus_to_delete_to_unmute_plus_to_mute:
-            if test in muted_ya_minus_to_delete_to_unmute_set and test in all_muted_ya_debug_dict:
-                muted_ya_minus_to_delete_to_unmute_plus_to_mute_debug.append(all_muted_ya_debug_dict[test])
+            if test in muted_ya_minus_to_delete_to_unmute_set and test in test_debug_dict:
+                muted_ya_minus_to_delete_to_unmute_plus_to_mute_debug.append(test_debug_dict[test])
             elif test in to_mute_debug_dict:
                 muted_ya_minus_to_delete_to_unmute_plus_to_mute_debug.append(to_mute_debug_dict[test])
         write_file_set(os.path.join(output_path, 'muted_ya-to-delete-to-unmute+to_mute.txt'), muted_ya_minus_to_delete_to_unmute_plus_to_mute, muted_ya_minus_to_delete_to_unmute_plus_to_mute_debug)
@@ -566,11 +587,11 @@ def apply_and_add_mutes(all_data, output_path, mute_check, aggregated_for_mute, 
         muted_ya_changes_debug = []
 
         # Объединяем все debug-словари
-        debug_dict = {}
-        debug_dict.update(all_muted_ya_debug_dict)
-        debug_dict.update(to_mute_debug_dict)
-        debug_dict.update(to_unmute_debug_dict)
-        debug_dict.update(to_delete_debug_dict)
+        # debug_dict = {}
+        # debug_dict.update(all_muted_ya_debug_dict)
+        # debug_dict.update(to_mute_debug_dict)
+        # debug_dict.update(to_unmute_debug_dict)
+        # debug_dict.update(to_delete_debug_dict)
 
 
 
@@ -587,7 +608,7 @@ def apply_and_add_mutes(all_data, output_path, mute_check, aggregated_for_mute, 
             muted_ya_changes.append(line)
 
             
-            debug_val = debug_dict[test_str]
+            debug_val = test_debug_dict.get(test_str)
             if debug_val:
                 muted_ya_changes_debug.append(f"{prefix} {debug_val}" if prefix else debug_val)
 

@@ -1,7 +1,6 @@
 #pragma once
 
 #include "flat_sausage_gut.h"
-#include "flat_part_iface.h"
 
 #include <util/generic/xrange.h>
 #include <ydb/library/actors/util/shared_data.h>
@@ -9,14 +8,16 @@
 namespace NKikimr {
 namespace NPageCollection {
 
+    struct TPagesWaitPad : public TThrRefBase {
+        ui64 PendingRequests = 0;
+    };
+
     struct TFetch {
-        TFetch(ui64 cookie, TIntrusiveConstPtr<IPageCollection> pageCollection, TVector<TPageId> pages, NWilson::TTraceId traceId = {})
+        TFetch(ui64 cookie, TIntrusiveConstPtr<IPageCollection> pageCollection, TVector<TPageId> pages)
             : Cookie(cookie)
             , PageCollection(std::move(pageCollection))
             , Pages(std::move(pages))
-            , TraceId(std::move(traceId))
         {
-
         }
 
         TString DebugString(bool detailed = false) const
@@ -39,6 +40,7 @@ namespace NPageCollection {
         ui64 Cookie = Max<ui64>();
         TIntrusiveConstPtr<IPageCollection> PageCollection;
         TVector<TPageId> Pages;
+        TIntrusivePtr<TPagesWaitPad> WaitPad;
         NWilson::TTraceId TraceId;
     };
 

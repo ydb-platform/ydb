@@ -157,6 +157,12 @@ void TNodeWarden::Handle(TEvNodeWardenStorageConfig::TPtr ev) {
             TAutoPtr<IEventHandle> temp(ev.Release());
             Receive(temp);
         }
+
+        using TEvBridgeInfoUpdate = NNodeWhiteboard::TEvWhiteboard::TEvBridgeInfoUpdate;
+        std::unique_ptr<TEvBridgeInfoUpdate> update(new TEvBridgeInfoUpdate);
+        update->Record.MutableClusterState()->CopyFrom(StorageConfig->GetClusterState());
+
+        Send(WhiteboardId, update.release());
     }
 }
 

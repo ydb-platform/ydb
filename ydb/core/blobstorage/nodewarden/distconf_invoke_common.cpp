@@ -38,6 +38,10 @@ namespace NKikimr::NStorage {
         if (LifetimeToken.expired()) {
             return FinishWithError(TResult::RACE, "Distributed config keeper terminated");
         }
+        if (InvokeActorQueueGeneration != Self->InvokeActorQueueGeneration) {
+            // actual request has been cancelled since it was signed up for bootstrap
+            return PassAway();
+        }
 
         STLOG(PRI_DEBUG, BS_NODE, NWDC42, "TInvokeRequestHandlerActor::Bootstrap", (Sender, Sender), (Cookie, Cookie),
             (SelfId, SelfId()), (Binding, Self->Binding), (RootState, Self->RootState));
@@ -45,37 +49,39 @@ namespace NKikimr::NStorage {
         ParentId = parentId;
         Become(&TThis::StateFunc);
 
-        if (Self->Binding) { // we aren't the root node
-            Y_ABORT_UNLESS(Event);
-            if (RequestSessionId) {
-                const auto it = Self->DirectBoundNodes.find(Sender.NodeId());
-                if (it == Self->DirectBoundNodes.end() || RequestSessionId != it->second.SessionId) {
-                    throw TExRace() << "Distconf tree reconfigured during query delivery";
+        Wrap([&] {
+            if (Self->Binding) { // we aren't the root node
+                Y_ABORT_UNLESS(Event);
+                if (RequestSessionId) {
+                    const auto it = Self->DirectBoundNodes.find(Sender.NodeId());
+                    if (it == Self->DirectBoundNodes.end() || RequestSessionId != it->second.SessionId) {
+                        throw TExRace() << "Distconf tree reconfigured during query delivery";
+                    }
                 }
-            }
-            const ui32 node = Self->Binding->RootNodeId; //Self->Binding->NodeId;
-            Send(MakeBlobStorageNodeWardenID(node), Event->Release(), IEventHandle::FlagSubscribeOnSession);
-            const auto [it, inserted] = Subscriptions.try_emplace(node);
-            Y_ABORT_UNLESS(inserted);
-            WaitingReplyFromNode = node;
-        } else if (Self->RootState == ERootState::ERROR_TIMEOUT) {
-            throw TExError() << Self->ErrorReason;
-        } else {
-            if (Event) {
-                if (const auto& record = Event->Get()->Record; record.HasSwitchBridgeClusterState()) {
-                    PrepareSwitchBridgeClusterState(record.GetSwitchBridgeClusterState());
-                } else if (record.HasAdvanceClusterStateGeneration()) {
-                    PrepareAdvanceClusterStateGeneration(record.GetAdvanceClusterStateGeneration());
-                } else if (record.HasMergeUnsyncedPileConfig()) {
-                    PrepareMergeUnsyncedPileConfig(record.GetMergeUnsyncedPileConfig());
+                const ui32 node = Self->Binding->RootNodeId; //Self->Binding->NodeId;
+                Send(MakeBlobStorageNodeWardenID(node), Event->Release(), IEventHandle::FlagSubscribeOnSession);
+                const auto [it, inserted] = Subscriptions.try_emplace(node);
+                Y_ABORT_UNLESS(inserted);
+                WaitingReplyFromNode = node;
+            } else if (Self->RootState == ERootState::ERROR_TIMEOUT) {
+                throw TExError() << Self->ErrorReason;
+            } else {
+                if (Event) {
+                    if (const auto& record = Event->Get()->Record; record.HasSwitchBridgeClusterState()) {
+                        PrepareSwitchBridgeClusterState(record.GetSwitchBridgeClusterState());
+                    } else if (record.HasAdvanceClusterStateGeneration()) {
+                        PrepareAdvanceClusterStateGeneration(record.GetAdvanceClusterStateGeneration());
+                    } else if (record.HasMergeUnsyncedPileConfig()) {
+                        PrepareMergeUnsyncedPileConfig(record.GetMergeUnsyncedPileConfig());
+                    }
                 }
-            }
 
-            const bool scepterless = SwitchBridgeNewConfig &&
-                Self->HasConnectedNodeQuorum(*SwitchBridgeNewConfig, SpecificBridgePileIds);
-            Y_ABORT_UNLESS(InvokeActorQueueGeneration == Self->InvokeActorQueueGeneration);
-            InvokeOtherActor(*Self, &TDistributedConfigKeeper::OpQueueBegin, SelfId(), scepterless);
-        }
+                const bool scepterless = SwitchBridgeNewConfig &&
+                    Self->HasConnectedNodeQuorum(*SwitchBridgeNewConfig, SpecificBridgePileIds);
+                Y_ABORT_UNLESS(InvokeActorQueueGeneration == Self->InvokeActorQueueGeneration);
+                InvokeOtherActor(*Self, &TDistributedConfigKeeper::OpQueueBegin, SelfId(), scepterless);
+            }
+        });
     }
 
     void TInvokeRequestHandlerActor::OnError(const TString& errorReason) {
@@ -398,8 +404,10 @@ namespace NKikimr::NStorage {
         } else if (ReplaceConfig) {
             // this is just temporary failure
             // TODO(alexvru): backoff?
+            PassAway();
         } else {
             Y_ABORT_UNLESS(InvokeActorQueueGeneration == Self->InvokeActorQueueGeneration);
+            PassAway(); // pass away first, as SwitchToError would invoke OnError for this actor too
             InvokeOtherActor(*Self, &TDistributedConfigKeeper::SwitchToError, errorReason);
         }
     }

@@ -201,6 +201,7 @@ namespace NKikimr::NStorage {
         TIntrusivePtr<TNodeWardenConfig> Cfg;
         bool SelfManagementEnabled = false;
         TBridgeInfo::TPtr BridgeInfo;
+        THashMap<TString, TBridgePileId> BridgePileNameMap;
 
         // currently active storage config
         std::shared_ptr<const NKikimrBlobStorage::TStorageConfig> StorageConfig;
@@ -240,6 +241,7 @@ namespace NKikimr::NStorage {
         std::optional<TBinding> Binding;
         ui64 BindingCookie = RandomNumber<ui64>();
         TBindQueue BindQueue;
+        TBindQueue PrimaryPileBindQueue;
         bool Scheduled = false;
 
         // incoming bindings
@@ -252,8 +254,11 @@ namespace NKikimr::NStorage {
 
         // pending event queue
         std::deque<TAutoPtr<IEventHandle>> PendingEvents;
-        std::vector<ui32> NodeIds;
-        THashSet<ui32> NodeIdsSet;
+        std::vector<ui32> NodeIdsForOutgoingBinding;
+        std::vector<ui32> NodeIdsForIncomingBinding;
+        std::vector<ui32> NodeIdsForPrimaryPileOutgoingBinding;
+        THashSet<ui32> AllNodeIds;
+        THashSet<ui32> NodesFromSamePile;
         TNodeIdentifier SelfNode;
 
         // scatter tasks
@@ -286,6 +291,8 @@ namespace NKikimr::NStorage {
         ui64 ScepterCounter = 0; // increased every time Scepter gets changed
         TString ErrorReason;
         std::optional<TString> CurrentSelfAssemblyUUID;
+        bool LocalPileQuorum = false;
+        bool GlobalQuorum = false;
 
         // bridge-related logic
         std::set<std::tuple<ui32, TGroupId, TBridgePileId>> WorkingSyncersByNode;
@@ -370,10 +377,13 @@ namespace NKikimr::NStorage {
 
         void Handle(TEvInterconnect::TEvNodesInfo::TPtr ev);
 
+        void ApplyNewNodeList(const std::vector<TNodeIdentifier>& newNodeList);
+
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Binding to peer nodes
 
         void IssueNextBindRequest();
+        void StartBinding(ui32 nodeId);
         void BindToSession(TActorId sessionId);
         void Handle(TEvInterconnect::TEvNodeConnected::TPtr ev);
         void Handle(TEvInterconnect::TEvNodeDisconnected::TPtr ev);
@@ -384,6 +394,8 @@ namespace NKikimr::NStorage {
         void HandleWakeup();
         void Handle(TEvNodeConfigReversePush::TPtr ev);
         void FanOutReversePush(const NKikimrBlobStorage::TStorageConfig *config, bool recurseConfigUpdate = false);
+        void UnbindNodesFromNonPrimaryPile();
+        void UpdateQuorums();
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Binding requests from peer nodes

@@ -268,7 +268,7 @@ std::shared_ptr<TCompiledGraph::TIterator> TCompiledGraph::BuildIterator(const s
     auto result = std::make_shared<TIterator>(visitor);
     auto rootNodes = FilterRoot;
     rootNodes.emplace_back(ResultRoot);
-    result->Reset(rootNodes).DetachResult();
+    result->Reset(std::move(rootNodes)).DetachResult();
     return result;
 }
 
@@ -362,8 +362,8 @@ TConclusion<bool> TCompiledGraph::TIterator::GlobalInitialize() {
     return IsValid();
 }
 
-TConclusion<bool> TCompiledGraph::TIterator::Reset(const std::vector<std::shared_ptr<TCompiledGraph::TNode>>& graphNodes) {
-    GraphNodes = graphNodes;
+TConclusion<bool> TCompiledGraph::TIterator::Reset(std::vector<std::shared_ptr<TCompiledGraph::TNode>>&& graphNodes) {
+    GraphNodes = std::move(graphNodes);
     GraphNodes.erase(std::remove_if(GraphNodes.begin(), GraphNodes.end(),
                          [](const std::shared_ptr<TCompiledGraph::TNode>& item) {
                              return !item;

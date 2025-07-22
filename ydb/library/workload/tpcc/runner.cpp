@@ -560,7 +560,7 @@ void TPCCRunner::CalculateStatusData(Clock::time_point now, TRunDisplayData& dat
 
         // there are two errors: rounding + approximation, we might overshoot
         // 100% efficiency very slightly because of errors and it's OK to "round down"
-        maxPossibleTpmc = Config.WarehouseCount * MAX_TPMC_PER_WAREHOUSE * 60 / currentPhaseElapsed.count();
+        maxPossibleTpmc = Config.WarehouseCount * MAX_TPMC_PER_WAREHOUSE;
         data.StatusData.Tpmc = std::min(maxPossibleTpmc, tpmc);
     }
 

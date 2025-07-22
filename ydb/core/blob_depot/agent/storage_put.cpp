@@ -87,6 +87,9 @@ namespace NKikimr::NBlobDepot {
                     Y_ABORT_UNLESS(CommitBlobSeq.ItemsSize() == 0);
                     auto *commitItem = CommitBlobSeq.AddItems();
                     commitItem->SetKey(Request.Id.AsBinaryString());
+                    if (Request.IssueKeepFlag) {
+                        commitItem->SetIssueKeepFlag(true);
+                    }
                     for (const auto& [tabletId, generation] : Request.ExtraBlockChecks) {
                         auto *p = commitItem->AddExtraBlockChecks();
                         p->SetTabletId(tabletId);

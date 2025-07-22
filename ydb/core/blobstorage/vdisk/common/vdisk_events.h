@@ -888,7 +888,7 @@ namespace NKikimr {
 
         TRope GetItemBuffer(ui64 itemIdx) const;
 
-        void AddVPut(const TLogoBlobID &logoBlobId, const TRcBuf &buffer, ui64 *cookie,
+        void AddVPut(const TLogoBlobID &logoBlobId, const TRcBuf &buffer, ui64 *cookie, bool issueKeepFlag,
                 std::vector<std::pair<ui64, ui32>> *extraBlockChecks, NWilson::TTraceId traceId) {
             NKikimrBlobStorage::TVMultiPutItem *item = Record.AddItems();
             LogoBlobIDFromLogoBlobID(logoBlobId, item->MutableBlobID());
@@ -897,6 +897,9 @@ namespace NKikimr {
             item->SetFullDataSize(logoBlobId.BlobSize());
             if (cookie) {
                 item->SetCookie(*cookie);
+            }
+            if (issueKeepFlag) {
+                item->SetIssueKeepFlag(true);
             }
             if (extraBlockChecks) {
                 for (const auto& [tabletId, generation] : *extraBlockChecks) {
@@ -1477,6 +1480,9 @@ namespace NKikimr {
                 }
                 if (const auto& v = result.GetParts(); !v.empty()) {
                     str << " Parts# " << FormatList(v);
+                }
+                if (result.HasKeep() || result.HasDoNotKeep()) {
+                    str << " Keep# " << result.GetKeep() << " DoNotKeep# " << result.GetDoNotKeep();
                 }
                 str << "}";
             }

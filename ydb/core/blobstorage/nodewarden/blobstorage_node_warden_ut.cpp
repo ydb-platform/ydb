@@ -1040,14 +1040,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
         }
     }
 
-    CUSTOM_UNIT_TEST(TestInferPDiskSlotCountWithRealNodeWarden) {
-        TTestBasicRuntime runtime(1, false);
-
-        const ui32 nodeId = runtime.GetNodeId(0);
-        const ui32 pdiskId = 1001;
-        const TString pdiskPath = "SectorMap:TestInferPDiskSlotCountWithRealNodeWarden:2400";
-        const ui64 inferPDiskSlotCountFromUnitSize = 100_GB; // 12 * 2u slots
-
+    TActorId SetupNodeWardenOnly(TTestBasicRuntime& runtime) {
         // Setup logging
         SetupLogging(runtime);
         runtime.SetLogPriority(NKikimrServices::BS_PDISK, NLog::PRI_DEBUG);
@@ -1063,13 +1056,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
         TIntrusivePtr<TNodeWardenConfig> nodeWardenConfig(new TNodeWardenConfig(static_cast<IPDiskServiceFactory*>(new TRealPDiskServiceFactory())));
         IActor* nodeWardenActor = CreateBSNodeWarden(nodeWardenConfig.Release());
         TActorId realNodeWarden = runtime.Register(nodeWardenActor, 0);
-        TActorId fakeNodeWarden = runtime.AllocateEdgeActor();
         runtime.EnableScheduleForActor(realNodeWarden, true);
-        runtime.RegisterService(MakeBlobStorageNodeWardenID(nodeId), fakeNodeWarden);
-
-        // Setup Whiteboard
-        TActorId fakeWhiteboard = runtime.AllocateEdgeActor();
-        runtime.RegisterService(NNodeWhiteboard::MakeNodeWhiteboardServiceId(nodeId), fakeWhiteboard);
 
         // Communication scheme:
         //                                      .-> fakeNodeWarden -.
@@ -1077,29 +1064,50 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
         //                                      `-> fakeWhiteboard -`
         // Now give it some time to bootstrap
         runtime.SimulateSleep(TDuration::Seconds(10));
+        return realNodeWarden;
+    }
 
-        { // Provide explicit config
-            NKikimrBlobStorage::TPDiskConfig pdiskConfig;
-            pdiskConfig.SetExpectedSlotCount(13);
-            CreatePDisk(runtime, 0, pdiskPath, 0, pdiskId, 0,
-                &pdiskConfig, inferPDiskSlotCountFromUnitSize, realNodeWarden);
-            CheckInferredPDiskSettings(runtime, fakeWhiteboard, fakeNodeWarden,
-                pdiskId, 13, 0u);
-        }
+    CUSTOM_UNIT_TEST(TestInferPDiskSlotCountExplicitConfig) {
+        TTestBasicRuntime runtime(1, false);
+        TActorId realNodeWarden = SetupNodeWardenOnly(runtime);
 
-        DestroyAllPDisks(runtime, 0, realNodeWarden);
-        const auto ev = runtime.GrabEdgeEventRethrow<NNodeWhiteboard::TEvWhiteboard::TEvPDiskStateDelete>(fakeWhiteboard, TDuration::Seconds(10));
-        VERBOSE_COUT(" Got TEvPDiskStateDelete# " << ev->ToString());
-        NKikimrWhiteboard::TPDiskStateInfo record = ev->Get()->Record;
-        UNIT_ASSERT_VALUES_EQUAL(record.GetPDiskId(), pdiskId);
+        const ui32 nodeId = runtime.GetNodeId(0);
+        const ui32 pdiskId = 1001;
+        const TString pdiskPath = "SectorMap:TestInferPDiskSlotCountExplicitConfig:2400";
+        const ui64 inferPDiskSlotCountFromUnitSize = 100_GB; // 12 * 2u slots
 
-        { // Infer values
-            NKikimrBlobStorage::TPDiskConfig pdiskConfig;
-            CreatePDisk(runtime, 0, pdiskPath, 0, pdiskId, 0,
-                &pdiskConfig, inferPDiskSlotCountFromUnitSize, realNodeWarden);
-            CheckInferredPDiskSettings(runtime, fakeWhiteboard, fakeNodeWarden,
-                pdiskId, 12, 2u);
-        }
+        TActorId fakeNodeWarden = runtime.AllocateEdgeActor();
+        runtime.RegisterService(MakeBlobStorageNodeWardenID(nodeId), fakeNodeWarden);
+        TActorId fakeWhiteboard = runtime.AllocateEdgeActor();
+        runtime.RegisterService(NNodeWhiteboard::MakeNodeWhiteboardServiceId(nodeId), fakeWhiteboard);
+
+        NKikimrBlobStorage::TPDiskConfig pdiskConfig;
+        pdiskConfig.SetExpectedSlotCount(13);
+        CreatePDisk(runtime, 0, pdiskPath, 0, pdiskId, 0,
+            &pdiskConfig, inferPDiskSlotCountFromUnitSize, realNodeWarden);
+        CheckInferredPDiskSettings(runtime, fakeWhiteboard, fakeNodeWarden,
+            pdiskId, 13, 0u);
+    }
+
+    CUSTOM_UNIT_TEST(TestInferPDiskSlotCountWithRealNodeWarden) {
+        TTestBasicRuntime runtime(1, false);
+        TActorId realNodeWarden = SetupNodeWardenOnly(runtime);
+
+        const ui32 nodeId = runtime.GetNodeId(0);
+        const ui32 pdiskId = 1002;
+        const TString pdiskPath = "SectorMap:TestInferPDiskSlotCount:2400";
+        const ui64 inferPDiskSlotCountFromUnitSize = 100_GB; // 12 * 2u slots
+
+        TActorId fakeNodeWarden = runtime.AllocateEdgeActor();
+        runtime.RegisterService(MakeBlobStorageNodeWardenID(nodeId), fakeNodeWarden);
+        TActorId fakeWhiteboard = runtime.AllocateEdgeActor();
+        runtime.RegisterService(NNodeWhiteboard::MakeNodeWhiteboardServiceId(nodeId), fakeWhiteboard);
+
+        NKikimrBlobStorage::TPDiskConfig pdiskConfig;
+        CreatePDisk(runtime, 0, pdiskPath, 0, pdiskId, 0,
+            &pdiskConfig, inferPDiskSlotCountFromUnitSize, realNodeWarden);
+        CheckInferredPDiskSettings(runtime, fakeWhiteboard, fakeNodeWarden,
+            pdiskId, 12, 2u);
     }
 }
 

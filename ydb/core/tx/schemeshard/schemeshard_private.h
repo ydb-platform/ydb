@@ -45,11 +45,12 @@ namespace TEvPrivate {
         EvSendBaseStatsToSA,
         EvRunBackgroundCleaning,
         EvRetryNodeSubscribe,
-        EvRunDataErasure,
-        EvRunTenantDataErasure,
-        EvAddNewShardToDataErasure,
+        EvRunShred,
+        EvRunTenantShred,
+        EvAddNewShardToShred,
         EvVerifyPassword,
         EvLoginFinalize,
+        EvContinuousBackupCleanerResult,
         EvEnd
     };
 
@@ -300,10 +301,10 @@ namespace TEvPrivate {
         { }
     };
 
-    struct TEvAddNewShardToDataErasure : public TEventLocal<TEvAddNewShardToDataErasure, EvAddNewShardToDataErasure> {
+    struct TEvAddNewShardToShred : public TEventLocal<TEvAddNewShardToShred, EvAddNewShardToShred> {
         const std::vector<TShardIdx> Shards;
 
-        TEvAddNewShardToDataErasure(std::vector<TShardIdx>&& shards)
+        TEvAddNewShardToShred(std::vector<TShardIdx>&& shards)
             : Shards(std::move(shards))
         {}
     };
@@ -352,6 +353,18 @@ namespace TEvPrivate {
         const TString PasswordHash;
         const bool NeedUpdateCache;
     };
+
+    struct TEvContinuousBackupCleanerResult : public NActors::TEventLocal<TEvContinuousBackupCleanerResult, EvContinuousBackupCleanerResult> {
+    public:
+        TEvContinuousBackupCleanerResult(bool success, const TString& error = "")
+            : Success(success)
+            , Error(error)
+        {}
+
+        const bool Success = false;
+        const TString Error;
+    };
+
 }; // TEvPrivate
 
 } // NSchemeShard

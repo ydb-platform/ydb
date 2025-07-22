@@ -134,7 +134,7 @@ public:
         return (lob == ELargeObj::Extern ? Pseudo : PageCollections.at(GroupsCount)).Get();
     }
 
-    TAutoPtr<NPageCollection::TFetch> GetPages(ui32 room) const
+    TVector<TPageId> GetPages(ui32 room) const
     {
         Y_ENSURE(room < PageCollections.size());
 
@@ -145,7 +145,7 @@ public:
             pages[i] = i;
         }
 
-        return new NPageCollection::TFetch{ 0, PageCollections[room]->PageCollection, std::move(pages) };
+        return pages;
     }
 
     static TVector<TIntrusivePtr<TCache>> Construct(TVector<TPageCollectionComponents> components)

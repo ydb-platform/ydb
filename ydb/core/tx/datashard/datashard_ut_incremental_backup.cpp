@@ -657,7 +657,7 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
 
         ExecSQL(server, edgeActor, R"(BACKUP `MyCollection` INCREMENTAL;)", false);
 
-        SimulateSleep(server, TDuration::Seconds(1));
+        SimulateSleep(server, TDuration::Seconds(5));
 
         UNIT_ASSERT_VALUES_EQUAL(
             KqpSimpleExec(runtime, R"(
@@ -677,12 +677,12 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
 
         ExecSQL(server, edgeActor, R"(BACKUP `MyCollection` INCREMENTAL;)", false);
 
-        SimulateSleep(server, TDuration::Seconds(1));
+        SimulateSleep(server, TDuration::Seconds(5));
 
         UNIT_ASSERT_VALUES_EQUAL(
             KqpSimpleExec(runtime, R"(
                 -- TODO: fix with navigate after proper scheme cache handling
-                SELECT key, value FROM `/Root/.backups/collections/MyCollection/19700101000003Z_incremental/Table`
+                SELECT key, value FROM `/Root/.backups/collections/MyCollection/19700101000007Z_incremental/Table`
                 ORDER BY key
                 )"),
             "{ items { uint32_value: 2 } items { null_flag_value: NULL_VALUE } }, "
@@ -1072,7 +1072,7 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
 
         ExecSQL(server, edgeActor, R"(BACKUP `MyCollection` INCREMENTAL;)", false);
 
-        SimulateSleep(server, TDuration::Seconds(1));
+        SimulateSleep(server, TDuration::Seconds(5));
 
         auto expected = KqpSimpleExec(runtime, R"(SELECT key, value FROM `/Root/Table` ORDER BY key)");
 
@@ -1162,7 +1162,7 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
         ExecSQL(server, edgeActor, R"(BACKUP `MultiShardCollection` INCREMENTAL;)", false);
 
         // Wait for incremental backup to complete
-        SimulateSleep(server, TDuration::Seconds(1));
+        SimulateSleep(server, TDuration::Seconds(5));
 
         // Capture expected state
         auto expected = KqpSimpleExec(runtime, R"(

@@ -15,11 +15,8 @@ struct TSimpleQueueChunk {
     };
     TSimpleQueueChunk* Next = nullptr;
 
-    TSimpleQueueChunk() requires (std::is_trivially_default_constructible_v<T>) = default;
-    TSimpleQueueChunk() requires (!std::is_trivially_default_constructible_v<T>) {}
-
-    ~TSimpleQueueChunk() requires (std::is_trivially_destructible_v<T>) = default;
-    ~TSimpleQueueChunk() requires (!std::is_trivially_destructible_v<T>) {}
+    TSimpleQueueChunk() {}
+    ~TSimpleQueueChunk() {}
 };
 
 template<typename T, ui32 TSize, typename TChunk = TSimpleQueueChunk<T, TSize>>
@@ -179,14 +176,14 @@ private:
     void Grow() {
         if (WriteTo) [[likely]] {
             if (WritePosition == TChunk::EntriesCount) [[unlikely]] {
-                TChunk* next = new TChunk();
+                TChunk* next = new TChunk;
                 WriteTo->Next = next;
                 WriteTo = next;
                 WritePosition = 0;
             }
         } else {
             // Note: ReadPosition == WritePosition == 0
-            ReadFrom = WriteTo = new TChunk();
+            ReadFrom = WriteTo = new TChunk;
         }
     }
 };

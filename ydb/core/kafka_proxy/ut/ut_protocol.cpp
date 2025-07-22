@@ -613,13 +613,13 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
                 UNIT_ASSERT_VALUES_EQUAL(res->Responses[0].PartitionResponses[0].ErrorCode, static_cast<TError>(*expected.ErrorCode));
             }
         };
-        auto listOffsets = [&](auto topic) {
-            std::vector<std::pair<i32, i64>> partitions{{{0, -1}}};
+        auto listOffsets = [&](auto topic, i64 partition = 0) {
+            std::vector<std::pair<i32, i64>> partitions{{{partition, -1}}};
             auto res = client.ListOffsets(partitions, topic);
             return res;
         };
-        auto assertOffset = [&](TString topicName, i64 expectedOffset) {
-            auto offsets = listOffsets(topicName);
+        auto assertOffset = [&](TString topicName, i64 expectedOffset, i64 partition = 0) {
+            auto offsets = listOffsets(topicName, partition);
             UNIT_ASSERT_VALUES_EQUAL(offsets->Topics[0].Partitions[0].Offset, expectedOffset);
         };
 
@@ -3215,7 +3215,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         CreateTopic(pqClient, outputTopicName, 3, {consumerName});
 
         // produce data to input topic (to commit offsets in further steps)
-        auto inputProduceResponse = kafkaClient.Produce({inputTopicName, 0}, {{"key1", "val1"}, {"key2", "val2"}});
+        auto inputProduceResponse = kafkaClient.Produce({inputTopicName, 0}, {{"key1", "val1"}, {"key2", "val2"}, {"key3", "val3"}});
         UNIT_ASSERT_VALUES_EQUAL(inputProduceResponse->Responses[0].PartitionResponses[0].ErrorCode, EKafkaErrors::NONE_ERROR);
 
         // init producer id
@@ -3278,6 +3278,34 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         auto offsetFetchResponse = kafkaClient.OffsetFetch(consumerName, topicsToPartitionsToFetch);
         UNIT_ASSERT_VALUES_EQUAL(offsetFetchResponse->ErrorCode, EKafkaErrors::NONE_ERROR);
         UNIT_ASSERT_VALUES_EQUAL(offsetFetchResponse->Groups[0].Topics[0].Partitions[0].CommittedOffset, 2);
+
+        {
+            // Commit the second transaction to ensure we properly handle producer epoch in transactions.
+
+            auto initProducerIdResp = kafkaClient.InitProducerId(transactionalId, 30000);
+            UNIT_ASSERT_VALUES_EQUAL(initProducerIdResp->ErrorCode, EKafkaErrors::NONE_ERROR);
+            TProducerInstanceId producerInstanceId = {initProducerIdResp->ProducerId, initProducerIdResp->ProducerEpoch};
+
+            std::unordered_map<TString, std::vector<ui32>> topicPartitionsToAddToTxn;
+            topicPartitionsToAddToTxn[outputTopicName] = std::vector<ui32>{0};
+            auto addPartsResponse = kafkaClient.AddPartitionsToTxn(transactionalId, producerInstanceId, topicPartitionsToAddToTxn);
+            UNIT_ASSERT_VALUES_EQUAL(addPartsResponse->Results[0].Results[0].ErrorCode, EKafkaErrors::NONE_ERROR);
+
+            auto out0ProduceResponse = kafkaClient.Produce({outputTopicName, 0}, {{"1", "123"}, {"2", "234"}}, 0, producerInstanceId, transactionalId);
+            UNIT_ASSERT_VALUES_EQUAL(out0ProduceResponse->Responses[0].PartitionResponses[0].ErrorCode, EKafkaErrors::NONE_ERROR);
+
+            auto consumerInfo = kafkaClient.JoinAndSyncGroupAndWaitPartitions(topicsToSubscribe, consumerName, 3, protocolName, 3, 15000);
+
+            auto addOffsetsResponse = kafkaClient.AddOffsetsToTxn(transactionalId, producerInstanceId, consumerName);
+            UNIT_ASSERT_VALUES_EQUAL(addOffsetsResponse->ErrorCode, EKafkaErrors::NONE_ERROR);
+
+            std::unordered_map<TString, std::vector<std::pair<ui32, ui64>>> offsetsToCommit{{inputTopicName, {{0, 3}}}};
+            auto txnOffsetCommitResponse = kafkaClient.TxnOffsetCommit(transactionalId, producerInstanceId, consumerName, consumerInfo.GenerationId, offsetsToCommit);
+            UNIT_ASSERT_VALUES_EQUAL(txnOffsetCommitResponse->Topics[0].Partitions[0].ErrorCode, EKafkaErrors::NONE_ERROR);
+
+            auto endTxnResponse = kafkaClient.EndTxn(transactionalId, producerInstanceId, true);
+            UNIT_ASSERT_VALUES_EQUAL(endTxnResponse->ErrorCode, EKafkaErrors::NONE_ERROR);
+        }
     }
 
     Y_UNIT_TEST(Several_Subsequent_Transactions_Scenario) {

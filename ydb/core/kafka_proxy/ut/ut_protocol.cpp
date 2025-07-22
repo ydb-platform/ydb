@@ -3350,7 +3350,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             auto addPartsResponse = kafkaClient.AddPartitionsToTxn(transactionalId, producerInstanceId, topicPartitionsToAddToTxn);
             UNIT_ASSERT_VALUES_EQUAL(addPartsResponse->Results[0].Results[0].ErrorCode, EKafkaErrors::NONE_ERROR);
 
-            auto out0ProduceResponse = kafkaClient.Produce({outputTopicName, 0}, {{"1", "123"}}, 0, producerInstanceId, transactionalId);
+            auto out0ProduceResponse = kafkaClient.Produce({outputTopicName, 0}, {{"1", "123"}, {"2", "234"}}, 0, producerInstanceId, transactionalId);
             UNIT_ASSERT_VALUES_EQUAL(out0ProduceResponse->Responses[0].PartitionResponses[0].ErrorCode, EKafkaErrors::NONE_ERROR);
 
             auto consumerInfo = kafkaClient.JoinAndSyncGroupAndWaitPartitions(topicsToSubscribe, consumerName, 3, protocolName, 3, 15000);

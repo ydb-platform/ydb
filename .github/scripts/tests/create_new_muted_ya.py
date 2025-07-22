@@ -292,7 +292,7 @@ def create_test_string(test, use_wildcards=False):
     """Создает строку теста с опциональными wildcards"""
     testsuite = test.get('suite_folder')
     testcase = test.get('test_name')
-    test_string = f"{testsuite} {testcase}"
+    test_string = f"{testsuite} {testcase}\n"
     if use_wildcards:
         test_string = re.sub(r'\d+/(\d+)\]', r'*/*]', test_string)
     return test_string
@@ -348,7 +348,7 @@ def is_flaky_test(test, aggregated_data):
     test['period_days'] = test_data.get('period_days')
     
     total_runs = test_data['pass_count'] + test_data['fail_count']
-    return (test_data['fail_count'] >= 2) or (test_data['fail_count'] >= 1 and total_runs <= 10)
+    return (test_data['fail_count'] >= 2) or (test_data['fail_count'] >= 1 and total_runs <= 10) and total_runs > 0
 
 def is_unmute_candidate(test, aggregated_data):
     """Проверяет, является ли тест кандидатом на размьют за указанный период"""
@@ -556,6 +556,7 @@ def apply_and_add_mutes(all_data, output_path, mute_check, aggregated_for_mute, 
             elif test in to_mute_debug_dict:
                 muted_ya_minus_to_delete_to_unmute_plus_to_mute_debug.append(to_mute_debug_dict[test])
         write_file_set(os.path.join(output_path, 'muted_ya-to-delete-to-unmute+to_mute.txt'), muted_ya_minus_to_delete_to_unmute_plus_to_mute, muted_ya_minus_to_delete_to_unmute_plus_to_mute_debug)
+        
         # Сохраняем этот же файл как new_muted_ya.txt для совместимости с workflow
         write_file_set(os.path.join(output_path, 'new_muted_ya.txt'), muted_ya_minus_to_delete_to_unmute_plus_to_mute, muted_ya_minus_to_delete_to_unmute_plus_to_mute_debug)
         
@@ -570,9 +571,6 @@ def apply_and_add_mutes(all_data, output_path, mute_check, aggregated_for_mute, 
         debug_dict.update(to_mute_debug_dict)
         debug_dict.update(to_unmute_debug_dict)
         debug_dict.update(to_delete_debug_dict)
-
-        # Используем самый широкий список тестов для поиска chunk-ов по wildcard
-        all_tests_by_string = {create_test_string(test, use_wildcards=True).strip(): test for test in all_data}
 
 
 
@@ -589,7 +587,7 @@ def apply_and_add_mutes(all_data, output_path, mute_check, aggregated_for_mute, 
             muted_ya_changes.append(line)
 
             
-            debug_val = create_debug_string(all_tests_by_string[test_str.strip()])
+            debug_val = debug_dict[test_str]
             if debug_val:
                 muted_ya_changes_debug.append(f"{prefix} {debug_val}" if prefix else debug_val)
 

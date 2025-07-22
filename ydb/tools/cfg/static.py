@@ -1202,9 +1202,9 @@ class StaticConfigGenerator(object):
                 for request_type in request_types:
                     selectors_pb.RequestTypes.append(request_type)
 
-            #database = selectors["database"]
-            #if database is not None:
-            #    selectors_pb.Database = database
+            # database = selectors["database"]
+            # if database is not None:
+            #     selectors_pb.Database = database
 
             return selectors_pb
 

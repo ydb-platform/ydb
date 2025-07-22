@@ -24,8 +24,6 @@ namespace NSQLComplete {
         TStringBuf text = Content;
         if (IsQuoted(text)) {
             text = Unquoted(text);
-        } else if (IsBinding(text)) {
-            text = Unbinded(text);
         }
         return ToLowerUTF8(text);
     }

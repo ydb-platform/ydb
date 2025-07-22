@@ -790,7 +790,7 @@ void TPCCChecker::ConsistencyCheck3324(TQueryClient& client) {
 }
 
 void TPCCChecker::ConsistencyCheck3325(TQueryClient& client) {
-    const int WAREHOUSE_RANGE_SIZE = 1000;
+    const int WAREHOUSE_RANGE_SIZE = 250;
     std::vector<TFuture<void>> rangeFutures;
 
     for (int startWh = 1; startWh <= Config.WarehouseCount; startWh += WAREHOUSE_RANGE_SIZE) {
@@ -799,21 +799,32 @@ void TPCCChecker::ConsistencyCheck3325(TQueryClient& client) {
         TString query = std::format(R"(
             PRAGMA TablePathPrefix("{}");
 
+            $warehouse_from = {};
+            $warehouse_to = {};
+
             $missing_in_order =
             SELECT no.NO_W_ID AS W_ID, no.NO_D_ID AS D_ID, no.NO_O_ID AS O_ID
-            FROM `{}` AS no
-            LEFT JOIN `{}` AS o
+            FROM `new_order` AS no
+            LEFT JOIN (
+                SELECT * FROM `oorder`
+                WHERE O_W_ID >= $warehouse_from AND O_W_ID <= $warehouse_to
+            ) AS o
             ON no.NO_W_ID = o.O_W_ID AND no.NO_D_ID = o.O_D_ID AND no.NO_O_ID = o.O_ID
-            WHERE no.NO_W_ID >= {} AND no.NO_W_ID <= {}
+            WHERE no.NO_W_ID >= $warehouse_from AND no.NO_W_ID <= $warehouse_to
             AND (o.O_W_ID IS NULL OR o.O_CARRIER_ID IS NOT NULL);
 
             $missing_in_new_order =
             SELECT o.O_W_ID AS W_ID, o.O_D_ID AS D_ID, o.O_ID AS O_ID
-            FROM `{}` AS o
-            LEFT JOIN `{}` AS no
+            FROM (
+                SELECT * FROM `oorder`
+                WHERE O_W_ID >= $warehouse_from AND O_W_ID <= $warehouse_to
+            ) AS o
+            LEFT JOIN (
+                SELECT * FROM `new_order`
+                WHERE NO_W_ID >= $warehouse_from AND NO_W_ID <= $warehouse_to
+            ) AS no
             ON o.O_W_ID = no.NO_W_ID AND o.O_D_ID = no.NO_D_ID AND o.O_ID = no.NO_O_ID
-            WHERE o.O_W_ID >= {} AND o.O_W_ID <= {}
-            AND o.O_CARRIER_ID IS NULL AND no.NO_W_ID IS NULL;
+            WHERE o.O_CARRIER_ID IS NULL AND no.NO_W_ID IS NULL;
 
             SELECT *
             FROM $missing_in_order
@@ -821,8 +832,8 @@ void TPCCChecker::ConsistencyCheck3325(TQueryClient& client) {
             SELECT *
             FROM $missing_in_new_order
             LIMIT 1;
-        )", Config.Path.c_str(), TABLE_NEW_ORDER, TABLE_OORDER, startWh, endWh,
-           TABLE_OORDER, TABLE_NEW_ORDER, startWh, endWh);
+        )", Config.Path.c_str(), startWh, endWh, TABLE_NEW_ORDER, TABLE_OORDER,
+           TABLE_OORDER, TABLE_NEW_ORDER);
 
         // because of #21490 we run queries 1 by one
         // also these queries consume a lot of memory, so probably 1 by one is better.

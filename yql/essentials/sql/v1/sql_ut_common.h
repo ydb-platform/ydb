@@ -3357,7 +3357,7 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
     }
 
     Y_UNIT_TEST(AlterTableAlterColumnDropNotNullAstCorrect) {
-        auto reqSetNull = SqlToYql(R"(
+        auto reqDropNotNull = SqlToYql(R"sql(
             USE plato;
             CREATE TABLE tableName (
                 id Uint32,
@@ -3367,21 +3367,48 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
 
             COMMIT;
             ALTER TABLE tableName ALTER COLUMN val DROP NOT NULL;
-        )");
+        )sql");
 
-        UNIT_ASSERT(reqSetNull.IsOk());
-        UNIT_ASSERT(reqSetNull.Root);
+        UNIT_ASSERT(reqDropNotNull.IsOk());
 
         TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
             Y_UNUSED(word);
 
             UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find(
-                R"(let world (Write! world sink (Key '('tablescheme (String '"tableName"))) (Void) '('('mode 'alter) '('actions '('('alterColumns '('('"val" '('changeColumnConstraints '('('drop_not_null)))))))))))"
+                "'('changeColumnConstraints '('('drop_not_null)))"
             ));
         };
 
         TWordCountHive elementStat({TString("\'mode \'alter")});
-        VerifyProgram(reqSetNull, elementStat, verifyLine);
+        VerifyProgram(reqDropNotNull, elementStat, verifyLine);
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["\'mode \'alter"]);
+    }
+
+    Y_UNIT_TEST(AlterTableAlterColumnSetNotNullAstCorrect) {
+        auto reqSetNotNull = SqlToYql(R"sql(
+            USE plato;
+            CREATE TABLE tableName (
+                id Uint32,
+                val Uint32,
+                PRIMARY KEY (id)
+            );
+
+            COMMIT;
+            ALTER TABLE tableName ALTER COLUMN val SET NOT NULL;
+        )sql");
+
+        UNIT_ASSERT(reqSetNotNull.IsOk());
+
+        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+            Y_UNUSED(word);
+
+            UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find(
+                "'('changeColumnConstraints '('('set_not_null)))"
+            ));
+        };
+
+        TWordCountHive elementStat({TString("\'mode \'alter")});
+        VerifyProgram(reqSetNotNull, elementStat, verifyLine);
         UNIT_ASSERT_VALUES_EQUAL(1, elementStat["\'mode \'alter"]);
     }
 
@@ -3641,7 +3668,8 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
             WITH (
                 CONNECTION_STRING = "grpc://localhost:2135/?database=/MyDatabase",
                 ENDPOINT = "localhost:2135",
-                DATABASE = "/MyDatabase"
+                DATABASE = "/MyDatabase",
+                CA_CERT = "-----BEGIN CERTIFICATE-----"
             );
         )";
         auto res = SqlToYql(req);
@@ -3661,6 +3689,8 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("localhost:2135"));
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("database"));
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("/MyDatabase"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("ca_cert"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("-----BEGIN CERTIFICATE-----"));
             }
         };
 
@@ -3755,6 +3785,7 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
             {"user", "user"},
             {"password", "bar"},
             {"password_secret_name", "bar_secret_name"},
+            {"ca_cert", "-----BEGIN CERTIFICATE-----"},
         };
 
         for (const auto& [k, v] : settings) {

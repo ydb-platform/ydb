@@ -704,7 +704,7 @@ namespace NSQLTranslationV1 {
         enum class ETypeOfChange {
             Nothing,
             DropNotNullConstraint,
-            SetNotNullConstraint, // todo flown4qqqq
+            SetNotNullConstraint,
             SetFamily
         };
 

@@ -9343,6 +9343,7 @@ struct TPeepHoleRules {
         {"AssumeDistinct", &DropAssume},
         {"AssumeChopped", &DropAssume},
         {"AssumeConstraints", &DropAssume},
+        {"Unessential", &DropAssume},
         {"EmptyFrom", &DropEmptyFrom},
         {"Top", &OptimizeTopOrSort<false, true>},
         {"TopSort", &OptimizeTopOrSort<true, true>},

@@ -1660,6 +1660,43 @@ ICalcualtor::TPtr BuildProgram(const TExprNode::TPtr& node, const TNodeMap<ESubg
     return result;
 }
 
+bool CanPushdownOverAggregate(
+    const TExprNode::TPtr& p,
+    const TExprNode::TPtr& arg,
+    const TOptimizeContext& optCtx,
+    const THashSet<TStringBuf>& keyColumns
+) {
+    if (IsNoPush(*p)) {
+        return false;
+    }
+
+    if (HasDependsOn(p, arg)) {
+        return false;
+    }
+
+    if (!p->IsComplete() && !IsStrict(p)) {
+        return false;
+    }
+
+    // Check used fields to ensure that predicate use only key columns from aggregation.
+    TSet<TStringBuf> usedFields;
+    // Predicate with HaveFieldsSubset()==true and any usedFields (including empty) can be used for pushdown (for example constant predicates can have empty usedFields).
+    if (!HaveFieldsSubset(p, *arg, usedFields, *optCtx.ParentsMap)) {
+        static const char optName[] = "FilterOverAggregateAllFields";
+        const bool canPushdownAll = IsOptimizerEnabled<optName>(*optCtx.Types) && !IsOptimizerDisabled<optName>(*optCtx.Types);
+        if (!canPushdownAll) {
+            return false;
+        }
+
+        // Predicate with HaveFieldsSubset()==false and non-empty usedFields also can be used for pushdown (all fields are used).
+        if (usedFields.empty()) {
+            return false;
+        }
+    }
+
+    return AllOf(usedFields, [&keyColumns] (TStringBuf field) { return keyColumns.contains(field); });
+}
+
 TExprBase FilterOverAggregate(const TCoFlatMapBase& node, TExprContext& ctx, TOptimizeContext& optCtx) {
     YQL_ENSURE(optCtx.ParentsMap);
     if (!TCoConditionalValueBase::Match(node.Lambda().Body().Raw())) {
@@ -1682,18 +1719,12 @@ TExprBase FilterOverAggregate(const TCoFlatMapBase& node, TExprContext& ctx, TOp
     TExprNodeList pushComponents;
     TExprNodeList restComponents;
     size_t separableComponents = 0;
-    for (auto& p : andComponents) {
-        TSet<TStringBuf> usedFields;
-        if (IsNoPush(*p) ||
-            HasDependsOn(p, arg.Ptr()) ||
-            !HaveFieldsSubset(p, arg.Ref(), usedFields, *optCtx.ParentsMap) ||
-            !AllOf(usedFields, [&](TStringBuf field) { return keyColumns.contains(field); }) ||
-            !p->IsComplete() && !IsStrict(p))
-        {
-            restComponents.push_back(p);
-        } else {
+    for (const auto& p : andComponents) {
+        if (CanPushdownOverAggregate(p, arg.Ptr(), optCtx, keyColumns)) {
             pushComponents.push_back(p);
             ++separableComponents;
+        } else {
+            restComponents.push_back(p);
         }
     }
 

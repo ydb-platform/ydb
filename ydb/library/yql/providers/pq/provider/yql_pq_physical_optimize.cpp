@@ -125,7 +125,7 @@ public:
         return dqQueryBuilder.Done();
     }
 
-    TMaybeNode<TExprBase> PqInsert(TExprBase node, TExprContext& ctx,  IOptimizationContext& /*optCtx*/, const TGetParents& getParents) const {
+    TMaybeNode<TExprBase> PqInsert(TExprBase node, TExprContext& ctx, IOptimizationContext& /*optCtx*/, const TGetParents& getParents) const {
         auto insert = node.Cast<TPqInsert>();
         if (!TDqCnUnionAll::Match(insert.Input().Raw())) {
             return node;

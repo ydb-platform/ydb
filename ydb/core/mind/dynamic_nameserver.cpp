@@ -401,17 +401,18 @@ void TDynamicNameserver::SendNodesList(TActorId recipient, const TActorContext &
     if (ListNodesCache->NeedUpdate(now)) {
         auto newNodes = MakeIntrusive<TIntrusiveVector<TEvInterconnect::TNodeInfo>>();
         auto newExpire = TInstant::Max();
-        const bool bridgeModeEnabled = AppData()->BridgeConfig && AppData()->BridgeConfig->PilesSize();
+        const bool bridgeModeEnabled = AppData()->BridgeModeEnabled;
+        const auto& bridge = AppData()->BridgeConfig;
         auto newPileMap = bridgeModeEnabled
             ?  std::make_shared<TEvInterconnect::TEvNodesInfo::TPileMap>()
             : nullptr;
         if (newPileMap) {
-            newPileMap->resize(AppData()->BridgeConfig->PilesSize());
+            newPileMap->resize(bridge.PilesSize());
         }
         THashMap<TString, size_t> pileNameMap;
         if (bridgeModeEnabled) {
-            for (size_t i = 0; i < AppData()->BridgeConfig->PilesSize(); ++i) {
-                pileNameMap.emplace(AppData()->BridgeConfig->GetPiles(i).GetName(), i);
+            for (size_t i = 0; i < bridge.PilesSize(); ++i) {
+                pileNameMap.emplace(bridge.GetPiles(i).GetName(), i);
             }
         }
 

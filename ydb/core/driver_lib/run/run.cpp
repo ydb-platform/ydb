@@ -1294,9 +1294,8 @@ void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
     }
 
     if (runConfig.AppConfig.HasBridgeConfig()) {
-        AppData->BridgeConfig->CopyFrom(runConfig.AppConfig.GetBridgeConfig());
-    } else {
-        AppData->BridgeConfig = nullptr;
+        AppData->BridgeConfig = runConfig.AppConfig.GetBridgeConfig();
+        AppData->BridgeModeEnabled = true;
     }
 
     // setup resource profiles

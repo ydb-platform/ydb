@@ -229,4 +229,27 @@ namespace NKikimr::NStorage {
         return changes;
     }
 
+    void TDistributedConfigKeeper::GenerateBridgeInitialState(const TNodeWardenConfig& cfg,
+            NKikimrBlobStorage::TStorageConfig *config) {
+        if (!cfg.BridgeConfig) {
+            return; // no bridge mode enabled at all
+        } else if (config->HasClusterState()) {
+            return; // some cluster state has been already defined
+        }
+
+        auto *state = config->MutableClusterState();
+        state->SetGeneration(1);
+        auto *piles = state->MutablePerPileState();
+        for (size_t i = 0; i < cfg.BridgeConfig->PilesSize(); ++i) {
+            piles->Add(NKikimrBridge::TClusterState::SYNCHRONIZED);
+        }
+
+        auto *history = config->MutableClusterStateHistory();
+        auto *entry = history->AddUnsyncedEntries();
+        entry->MutableClusterState()->CopyFrom(*state);
+        for (int i = 0; i < piles->size(); ++i) {
+            entry->AddUnsyncedPiles(i);
+        }
+    }
+
 } // NKikimr::NStorage

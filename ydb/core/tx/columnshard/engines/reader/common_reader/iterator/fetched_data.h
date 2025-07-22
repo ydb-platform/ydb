@@ -198,6 +198,11 @@ public:
         return Table;
     }
 
+    std::shared_ptr<arrow::Table>&& ExtractTable() {
+        AFL_VERIFY(Table);
+        return std::move(Table);
+    }
+
     bool HasData() const {
         return !!Table && Table->num_rows();
     }

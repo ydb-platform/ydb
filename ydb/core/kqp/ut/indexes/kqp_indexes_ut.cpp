@@ -1612,8 +1612,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
                                      query,
                                      TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
                               .ExtractValueSync();
-            // KIKIMR-7997
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::SCHEME_ERROR);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::SUCCESS);
         }
 
         {

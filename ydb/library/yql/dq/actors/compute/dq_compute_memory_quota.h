@@ -73,6 +73,14 @@ namespace NYql::NDq {
             });
         }
 
+        bool AllocateQuota(ui64 bytes) {
+            return MemoryLimits.MemoryQuotaManager->AllocateQuota(bytes);
+        }
+
+        void FreeQuota(ui64 bytes) {
+            MemoryLimits.MemoryQuotaManager->FreeQuota(bytes);
+        }
+
         void TryShrinkMemory(NKikimr::NMiniKQL::TScopedAlloc* alloc) {
             if (alloc->GetAllocated() - alloc->GetUsed() > MemoryLimits.MinMemFreeSize) {
                 alloc->ReleaseFreePages();

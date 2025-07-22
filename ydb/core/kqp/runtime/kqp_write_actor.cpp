@@ -1065,7 +1065,7 @@ public:
     }
 
     void Handle(TEvPrivate::TEvShardRequestTimeout::TPtr& ev) {
-        CA_LOG_W("Timeout shardID=" << ev->Get()->ShardId);
+        CA_LOG_I("Timeout shardID=" << ev->Get()->ShardId);
         YQL_ENSURE(InconsistentTx);
         RetryShard(ev->Get()->ShardId, ev->Cookie);
     }

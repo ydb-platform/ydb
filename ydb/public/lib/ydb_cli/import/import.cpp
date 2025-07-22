@@ -1008,7 +1008,7 @@ inline TAsyncStatus TImportFileClient::TImpl::UpsertTValueBufferOnArena(
                 });
         };
         // Running heavy building task on processing pool:
-        return NThreading::Async(std::move(buildTValueAndSendRequest), *ProcessingPool);
+        return NThreading::Async(std::move(buildTValueAndSendRequest), *RetryPool);
     };
 
     if (!RequestsInflight->try_acquire()) {

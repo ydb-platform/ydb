@@ -1248,7 +1248,7 @@ void TPartition::WriteInfoResponseHandler(
 
     auto& tx = (*txIter->second);
 
-    PQ_LOG_D("Received TEvGetWriteInfoResponse for TxId " << tx.Tx->TxId);
+    PQ_LOG_TX_D("Received TEvGetWriteInfoResponse for TxId " << tx.GetTxId());
 
     tx.GetWriteInfoSpan.End();
     tx.GetWriteInfoSpan = {};
@@ -1292,6 +1292,7 @@ TPartition::EProcessResult TPartition::ApplyWriteInfoResponse(TTransaction& tx) 
     THashSet<TString> txSourceIds;
     for (auto& s : srcIdInfo) {
         if (TxAffectedSourcesIds.contains(s.first)) {
+            PQ_LOG_TX_D("TxAffectedSourcesIds contains SourceId " << s.first << ". TxId " << tx.GetTxId());
             ret = EProcessResult::Blocked;
             break;
         }
@@ -1299,15 +1300,18 @@ TPartition::EProcessResult TPartition::ApplyWriteInfoResponse(TTransaction& tx) 
             WriteAffectedSourcesIds.insert(s.first);
         } else {
             if (WriteAffectedSourcesIds.contains(s.first)) {
+                PQ_LOG_TX_D("WriteAffectedSourcesIds contains SourceId " << s.first << ". TxId " << tx.GetTxId());
                 ret = EProcessResult::Blocked;
                 break;
             }
             txSourceIds.insert(s.first);
+            PQ_LOG_D("Tx " << tx.GetTxId() << " affect SourceId " << s.first);
         }
 
         auto existing = knownSourceIds.find(s.first);
-        if (existing.IsEnd())
+        if (existing.IsEnd()) {
             continue;
+        }
         if (s.second.MinSeqNo <= existing->second.SeqNo) {
             tx.Predicate = false;
             tx.Message = TStringBuilder() << "MinSeqNo violation failure on " << s.first;
@@ -1375,7 +1379,7 @@ void TPartition::ReplyToProposeOrPredicate(TSimpleSharedPtr<TTransaction>& tx, b
         Y_ABORT_UNLESS(insRes.second);
 
         if ((Now() - tx->WriteInfoResponseTimestamp) >= TDuration::Seconds(1)) {
-            PQ_LOG_D("The long answer to TEvTxCalcPredicate. TxId: " << tx->Tx->TxId);
+            PQ_LOG_TX_D("The long answer to TEvTxCalcPredicate. TxId: " << tx->GetTxId());
         }
 
         Send(Tablet,
@@ -1884,7 +1888,7 @@ void TPartition::RequestWriteInfoIfRequired()
     auto tx = std::get<1>(UserActionAndTransactionEvents.back().Event);
     auto supportId = tx->SupportivePartitionActor;
     if (supportId) {
-        PQ_LOG_D("Send TEvGetWriteInfoRequest for TxId " << tx->Tx->TxId);
+        PQ_LOG_TX_D("Send TEvGetWriteInfoRequest for TxId " << tx->GetTxId());
         Send(supportId, new TEvPQ::TEvGetWriteInfoRequest(),
              0, 0,
              tx->CalcPredicateSpan.GetTraceId());
@@ -2215,11 +2219,13 @@ TPartition::EProcessResult TPartition::PreProcessUserActionOrTransaction(TSimple
 
     auto result = EProcessResult::Continue;
     if (t->SupportivePartitionActor && !t->WriteInfo && !t->WriteInfoApplied) { // Pending for write info
+        PQ_LOG_TX_D("The Tx " << t->GetTxId() << " is waiting for TEvGetWriteInfoResponse");
         return EProcessResult::NotReady;
     }
     if (t->WriteInfo && !t->WriteInfoApplied) { //Recieved write info but not applied
         result = ApplyWriteInfoResponse(*t);
         if (!t->WriteInfoApplied) { // Tried to apply write info but couldn't - TX must be blocked.
+            PQ_LOG_TX_D("The Tx " << t->GetTxId() << " must be blocked");
             Y_ABORT_UNLESS(result != EProcessResult::Continue);
             return result;
         }
@@ -2307,30 +2313,29 @@ bool TPartition::ExecUserActionOrTransaction(TSimpleSharedPtr<TTransaction>& t, 
 
 TPartition::EProcessResult TPartition::BeginTransaction(const TEvPQ::TEvTxCalcPredicate& tx, TMaybe<bool>& predicate)
 {
-    const auto& ctx = ActorContext();
     THashSet<TString> consumers;
     bool ok = true;
     for (auto& operation : tx.Operations) {
         const TString& consumer = operation.GetConsumer();
         if (TxAffectedConsumers.contains(consumer)) {
+            PQ_LOG_TX_D("TxAffectedConsumers contains consumer " << consumer << ". TxId " << tx.TxId);
             return EProcessResult::Blocked;
         }
         if (SetOffsetAffectedConsumers.contains(consumer)) {
+            PQ_LOG_TX_D("SetOffsetAffectedConsumers contains consumer " << consumer << ". TxId " << tx.TxId);
             return EProcessResult::Blocked;
         }
 
         if (AffectedUsers.contains(consumer) && !GetPendingUserIfExists(consumer)) {
-            LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE,
-                        "Partition " << Partition <<
-                        " Consumer '" << consumer << "' has been removed");
+            PQ_LOG_D("Partition " << Partition <<
+                     " Consumer '" << consumer << "' has been removed");
             ok = false;
             break;
         }
 
         if (!UsersInfoStorage->GetIfExists(consumer)) {
-            LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE,
-                        "Partition " << Partition <<
-                        " Unknown consumer '" << consumer << "'");
+            PQ_LOG_D("Partition " << Partition <<
+                     " Unknown consumer '" << consumer << "'");
             ok = false;
             break;
         }
@@ -2339,28 +2344,25 @@ TPartition::EProcessResult TPartition::BeginTransaction(const TEvPQ::TEvTxCalcPr
         TUserInfoBase& userInfo = GetOrCreatePendingUser(consumer);
 
         if (operation.GetBegin() > operation.GetEnd()) {
-            LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE,
-                        "Partition " << Partition <<
-                        " Consumer '" << consumer << "'" <<
-                        " Bad request (invalid range) " <<
-                        " Begin " << operation.GetBegin() <<
-                        " End " << operation.GetEnd());
+            PQ_LOG_D("Partition " << Partition <<
+                     " Consumer '" << consumer << "'" <<
+                     " Bad request (invalid range) " <<
+                     " Begin " << operation.GetBegin() <<
+                     " End " << operation.GetEnd());
             ok = false;
         } else if (userInfo.Offset != (i64)operation.GetBegin()) {
-            LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE,
-                        "Partition " << Partition <<
-                        " Consumer '" << consumer << "'" <<
-                        " Bad request (gap) " <<
-                        " Offset " << userInfo.Offset <<
-                        " Begin " << operation.GetBegin());
+            PQ_LOG_D("Partition " << Partition <<
+                     " Consumer '" << consumer << "'" <<
+                     " Bad request (gap) " <<
+                     " Offset " << userInfo.Offset <<
+                     " Begin " << operation.GetBegin());
             ok = false;
         } else if (operation.GetEnd() > EndOffset) {
-            LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE,
-                        "Partition " << Partition <<
-                        " Consumer '" << consumer << "'" <<
-                        " Bad request (behind the last offset) " <<
-                        " EndOffset " << EndOffset <<
-                        " End " << operation.GetEnd());
+            PQ_LOG_D("Partition " << Partition <<
+                     " Consumer '" << consumer << "'" <<
+                     " Bad request (behind the last offset) " <<
+                     " EndOffset " << EndOffset <<
+                     " End " << operation.GetEnd());
             ok = false;
         }
 
@@ -2371,6 +2373,7 @@ TPartition::EProcessResult TPartition::BeginTransaction(const TEvPQ::TEvTxCalcPr
             break;
         }
         consumers.insert(consumer);
+        PQ_LOG_TX_D("Tx " << tx.TxId << " affect consumer " << consumer);
     }
     if (ok) {
         TxAffectedConsumers.insert(consumers.begin(), consumers.end());

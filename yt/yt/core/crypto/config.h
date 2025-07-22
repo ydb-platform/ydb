@@ -8,7 +8,8 @@ namespace NYT::NCrypto {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-//! Either an inlined value, environment variable, or a file reference.
+//! Environment variable and/or a file reference or inlined value.
+//! Environment variable have priority if specified and defined.
 struct TPemBlobConfig
     : public NYTree::TYsonStruct
 {
@@ -16,7 +17,7 @@ struct TPemBlobConfig
     std::optional<TString> FileName;
     std::optional<TString> Value;
 
-    TString LoadBlob() const;
+    TString LoadBlob(TCertificatePathResolver pathResolver = nullptr) const;
 
     static TPemBlobConfigPtr CreateFileReference(const TString& fileName);
 

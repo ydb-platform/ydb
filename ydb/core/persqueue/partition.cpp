@@ -1248,8 +1248,12 @@ void TPartition::WriteInfoResponseHandler(
 
     auto& tx = (*txIter->second);
 
+    PQ_LOG_D("Received TEvGetWriteInfoResponse for TxId " << tx.Tx->TxId);
+
     tx.GetWriteInfoSpan.End();
     tx.GetWriteInfoSpan = {};
+
+    tx.WriteInfoResponseTimestamp = Now();
 
     std::visit(TOverloaded{
         [&tx](TAutoPtr<TEvPQ::TEvGetWriteInfoResponse>& msg) {
@@ -1369,6 +1373,10 @@ void TPartition::ReplyToProposeOrPredicate(TSimpleSharedPtr<TTransaction>& tx, b
 
         auto insRes = TransactionsInflight.emplace(tx->Tx->TxId, tx);
         Y_ABORT_UNLESS(insRes.second);
+
+        if ((Now() - tx->WriteInfoResponseTimestamp) >= TDuration::Seconds(1)) {
+            PQ_LOG_D("The long answer to TEvTxCalcPredicate. TxId: " << tx->Tx->TxId);
+        }
 
         Send(Tablet,
              MakeHolder<TEvPQ::TEvTxCalcPredicateResult>(tx->Tx->Step,
@@ -1876,6 +1884,7 @@ void TPartition::RequestWriteInfoIfRequired()
     auto tx = std::get<1>(UserActionAndTransactionEvents.back().Event);
     auto supportId = tx->SupportivePartitionActor;
     if (supportId) {
+        PQ_LOG_D("Send TEvGetWriteInfoRequest for TxId " << tx->Tx->TxId);
         Send(supportId, new TEvPQ::TEvGetWriteInfoRequest(),
              0, 0,
              tx->CalcPredicateSpan.GetTraceId());
@@ -1936,6 +1945,7 @@ size_t TPartition::GetUserActCount(const TString& consumer) const
 void TPartition::ProcessTxsAndUserActs(const TActorContext& ctx)
 {
     if (KVWriteInProgress) {
+        PQ_LOG_D("Can't process txs");
         return;
     }
     if (DeletePartitionState == DELETION_INITED) {
@@ -1958,13 +1968,16 @@ void TPartition::ProcessTxsAndUserActs(const TActorContext& ctx)
 
         return;
     }
+    PQ_LOG_D("Batching state before ContinueProcessTxsAndUserActs: " << (int)BatchingState);
     while (true) {
         if (BatchingState == ETxBatchingState::PreProcessing) {
             ContinueProcessTxsAndUserActs(ctx);
         }
         if (BatchingState == ETxBatchingState::PreProcessing) {
+            PQ_LOG_D("Still preprocessing - waiting for something");
             return; // Still preprocessing - waiting for something;
         }
+        PQ_LOG_D("Batching state after ContinueProcessTxsAndUserActs: " << (int)BatchingState);
 
         // Preprocessing complete;
         if (CurrentBatchSize > 0) {
@@ -1981,6 +1994,7 @@ void TPartition::ProcessTxsAndUserActs(const TActorContext& ctx)
         }
         if (!UserActionAndTxPendingCommit.empty()) {
             // Still pending for come commits
+            PQ_LOG_D("Still pending for come commits");
             return;
         }
         // Commit queue processing complete. Now can either swith to persist or continue preprocessing;

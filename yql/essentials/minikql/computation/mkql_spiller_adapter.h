@@ -43,6 +43,10 @@ public:
     std::optional<NThreading::TFuture<ISpiller::TKey>> FinishWriting() {
         if (Packer.IsEmpty())
             return std::nullopt;
+
+        auto newPackerEstimatedSize = Packer.PackedSizeEstimate();
+        MemoryUsageReporter->ReportAllocate(newPackerEstimatedSize - PackerEstimatedSize);
+        PackerEstimatedSize = newPackerEstimatedSize;
         return Spiller->Put(std::move(Packer.Finish()));
     }
 

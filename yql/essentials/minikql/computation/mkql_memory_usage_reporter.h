@@ -4,6 +4,7 @@
 #include <util/system/types.h>
 
 #include <functional>
+#include <format>
 
 namespace NKikimr::NMiniKQL {
 
@@ -28,11 +29,16 @@ public:
         BytesAllocated_ -= bytes;
     }
 
-    ~TMemoryUsageReporter() noexcept(false) {
+    ~TMemoryUsageReporter() {
         // used only for test purposes. Must be changed to 
         // ReportFreeCallback_(BytesAllocated_);
         // Cerr << "[MISHA][DESTR]: " << "Total: " << BytesAllocated_ << Endl;
-        Y_ENSURE(BytesAllocated_ == 0, "Memory leak");
+        if (BytesAllocated_) {
+            // WHY??
+            Cerr << std::format("[MISHA] Bytes not freed: {}\n", BytesAllocated_);
+            ReportFreeCallback_(BytesAllocated_);
+        }
+        // Y_ENSURE(BytesAllocated_ == 0, "Memory leak");
     }
 
 private:

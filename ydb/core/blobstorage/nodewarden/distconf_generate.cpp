@@ -585,12 +585,16 @@ namespace NKikimr::NStorage {
         auto pickNodes = [&](std::vector<std::tuple<ui32, TNodeLocation>>& nodes, size_t ringsCount, size_t nodesInRing) {
             Y_ABORT_UNLESS(ringsCount * nodesInRing <= nodes.size());
             THashSet<ui32> disabled;
-            auto compNodesState = [&](const auto& x, const auto& y) {
+            auto compByRack = [](const auto& x, const auto& y) {
+                return std::get<1>(x).GetRackId() < std::get<1>(y).GetRackId()
+                    || (std::get<1>(x).GetRackId() == std::get<1>(y).GetRackId() && std::get<0>(x) < std::get<0>(y));
+            };
+            auto compByState = [&](const auto& x, const auto& y) {
                 ui32 state1 = SelfHealNodesState.contains(std::get<0>(x)) ? SelfHealNodesState.at(std::get<0>(x)) : Max<ui32>();
                 ui32 state2 = SelfHealNodesState.contains(std::get<0>(y)) ? SelfHealNodesState.at(std::get<0>(y)) : Max<ui32>();
-                return state1 < state2;
+                return state1 < state2 || (state1 == state2 && compByRack(x, y));
             };
-            std::ranges::sort(nodes, compNodesState);
+            std::ranges::sort(nodes, compByState);
             ui32 cnt = 0;
             for (auto &[nodeId, _] : nodes) {
                 if (SelfHealNodesState[nodeId] == 0) {
@@ -604,8 +608,8 @@ namespace NKikimr::NStorage {
                     goodConfig = false;
                 }
             }
-            auto comp = [](const auto& x, const auto& y) { return std::get<1>(x).GetRackId() < std::get<1>(y).GetRackId(); };
-            std::ranges::sort(nodes, comp);
+            std::ranges::sort(nodes, compByRack);
+
             std::vector<std::vector<ui32>> result;
             result.resize(ringsCount);
             auto iter = nodes.begin();

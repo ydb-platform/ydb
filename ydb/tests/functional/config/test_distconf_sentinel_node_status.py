@@ -77,33 +77,35 @@ class KiKiMRDistConfNodeStatusTest(object):
             simple_config=True,
             use_self_management=True,
             extra_grpc_services=['config'],
+            cms_config=cls.cms_config,
             additional_log_configs=log_configs)
 
         cls.cluster = KiKiMR(configurator=cls.configurator)
         cls.cluster.start()
         cls.config_client = ConfigClient(cls.cluster.nodes[1].host, cls.cluster.nodes[1].port)
+        fetched_config = fetch_config(cls.config_client)
+        dumped_fetched_config = yaml.safe_load(fetched_config)
+        config_section = dumped_fetched_config["config"]
+        logger.debug(f"replace_config_request dumped_fetched_config: {dumped_fetched_config}")
+
+        config_section["cms_config"] = cls.cms_config
+        logger.debug(f"Nodes list: {config_section["hosts"]}")
+        time.sleep(1)
+        dumped_fetched_config["metadata"]["version"] = dumped_fetched_config["metadata"]["version"] + 1
+        replace_config_response = cls.config_client.replace_config(yaml.dump(dumped_fetched_config))
+        logger.debug(f"replace_config_response: {replace_config_response}")
+        assert_that(replace_config_response.operation.status == StatusIds.SUCCESS)
 
     @classmethod
     def teardown_class(cls):
         cls.cluster.stop()
 
-    def replace_config(self):
-        fetched_config = fetch_config(self.config_client)
-        dumped_fetched_config = yaml.safe_load(fetched_config)
-        config_section = dumped_fetched_config["config"]
-
-        config_section["cms_config"] = self.cms_config
-        logger.debug(f"Nodes list: {config_section["hosts"]}")
-        replace_config_response = self.config_client.replace_config(yaml.dump(dumped_fetched_config))
-        logger.debug(f"replace_config_response: {replace_config_response}")
-        assert_that(replace_config_response.operation.status == StatusIds.SUCCESS)
-
-    def validateNotContainsNodes(self, rg, badNodes):
+    def validate_not_contains_nodes(self, rg, badNodes):
         for i in rg["Ring"]:
             for j in i["Node"]:
                 assert_that(j not in badNodes)
 
-    def validateContainsNodes(self, rg, goodNodes):
+    def validate_contains_nodes(self, rg, goodNodes):
         cnt = 0
         for i in rg["Ring"]:
             for j in i["Node"]:
@@ -134,17 +136,16 @@ class TestKiKiMRDistConfSelfHealNodeDisconnected(KiKiMRDistConfNodeStatusTest):
     nodes_count = 12
 
     def do_test(self, configName):
-        self.cluster.nodes[3].stop()
         rg = get_ring_group(self.do_request_config(), configName)
         assert_eq(rg["NToSelect"], 9)
         assert_eq(len(rg["Ring"]), 9)
-        self.validateContainsNodes(rg, [3])
-        self.replace_config()
+        self.validate_contains_nodes(rg, [3])
+        self.cluster.nodes[3].stop()
         time.sleep(25)
         rg2 = get_ring_group(self.do_request_config(), configName)
         assert_eq(rg["NToSelect"], 9)
         assert_eq(len(rg["Ring"]), 9)
-        self.validateNotContainsNodes(rg2, [3])
+        self.validate_not_contains_nodes(rg2, [3])
         assert_that(rg != rg2)
 
 
@@ -153,18 +154,17 @@ class TestKiKiMRDistConfSelfHeal2NodesDisconnected(KiKiMRDistConfNodeStatusTest)
     nodes_count = 12
 
     def do_test(self, configName):
-        self.cluster.nodes[2].stop()
-        self.cluster.nodes[3].stop()
         rg = get_ring_group(self.do_request_config(), configName)
         assert_eq(rg["NToSelect"], 9)
         assert_eq(len(rg["Ring"]), 9)
-        self.validateContainsNodes(rg, [2, 3])
-        self.replace_config()
+        self.validate_contains_nodes(rg, [2, 3])
+        self.cluster.nodes[2].stop()
+        self.cluster.nodes[3].stop()
         time.sleep(25)
         rg2 = get_ring_group(self.do_request_config(), configName)
         assert_eq(rg["NToSelect"], 9)
         assert_eq(len(rg["Ring"]), 9)
-        self.validateNotContainsNodes(rg2, [2, 3])
+        self.validate_not_contains_nodes(rg2, [2, 3])
         assert_that(rg != rg2)
 
 
@@ -173,6 +173,9 @@ class TestKiKiMRDistConfSelfHealDCDisconnected(KiKiMRDistConfNodeStatusTest):
     nodes_count = 12
 
     def do_test(self, configName):
+        rg = get_ring_group(self.do_request_config(), configName)
+        assert_eq(rg["NToSelect"], 9)
+        assert_eq(len(rg["Ring"]), 9)
         cnt = 0
         hosts = self.configurator.yaml_config["hosts"]
         for i in range(len(hosts)):
@@ -181,10 +184,6 @@ class TestKiKiMRDistConfSelfHealDCDisconnected(KiKiMRDistConfNodeStatusTest):
                 cnt += 1
         assert_eq(cnt, 4)
 
-        rg = get_ring_group(self.do_request_config(), configName)
-        assert_eq(rg["NToSelect"], 9)
-        assert_eq(len(rg["Ring"]), 9)
-        self.replace_config()
         time.sleep(25)
         rg2 = get_ring_group(self.do_request_config(), configName)
         assert_eq(rg["NToSelect"], 9)

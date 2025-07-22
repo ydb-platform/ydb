@@ -67,6 +67,10 @@
 		return find_selectable(parent);
 	}
 
+    window.onload = function() {
+        selectedNode = document.querySelector(".selected");
+    }
+
     window.addEventListener("click", function(e) {
 		var target = find_selectable(e.target);
         if (target) {
@@ -195,7 +199,7 @@
   <text x='390' y='133' class='texte'>48</text>
 </g>
 </g>
-<g class='selectable'><title>Stage 0</title>
+<g class='selectable'><title>Stage E</title>
 <rect x='0' y='165' width='298' height='50' class='clone'/>
 <rect x='301' y='165' width='64' height='50' class='clone'/>
 <rect x='395' y='165' width='200' height='50' class='clone'/>

@@ -94,7 +94,8 @@ private:
     std::unordered_map<ui32, TString> CookieToGroupId;
     std::unordered_map<ui32, ModifiedTopicInfo> AlterTopicInf;
     std::unordered_map<TActorId, ModifiedTopicInfo> CreateTopicInf;
-    std::unordered_set<std::pair<TString, TString>, TPairHash> ConsumerTopicRequestAttempts;
+    std::unordered_set<std::pair<TString, TString>, TPairHash> ConsumerTopicAlterRequestAttempts;
+    std::unordered_set<TString> TopicCreateRequestAttempts;
     std::unique_ptr<NKafka::TKqpTxHelper> Kqp;
 
     ui32 InflyTopics = 0;

@@ -1538,7 +1538,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         TString firstTopicName = "/Root/topic-0-test";
         TString secondTopicName = "/Root/topic-1-test";
         TString shortTopicName = "topic-1-test";
-        TString notExistsTopicName = "/Root/not-exists";
+        TString notExistsTopicName = "not-exists";
         ui64 minActivePartitions = 10;
 
         TString firstConsumerName = "consumer-0";
@@ -1682,16 +1682,19 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
     }
         {
             // Check fetch offsets with nonexistent topic
+            std::map<TString, std::vector<i32>> topicsToPartions;
+            topicsToPartions[notExistsTopicName] = std::vector<i32>{0, 1};
+            auto msg = client.OffsetFetch(firstConsumerName, topicsToPartions);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Groups.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[0].Partitions.size(), 2);
             if (!testServer.KikimrServer.get()->ServerSettings->AppConfig->GetKafkaProxyConfig().GetAutoCreateTopicsEnable()) {
-                std::map<TString, std::vector<i32>> topicsToPartions;
-                topicsToPartions[notExistsTopicName] = std::vector<i32>{0, 1};
-                auto msg = client.OffsetFetch(firstConsumerName, topicsToPartions);
-                UNIT_ASSERT_VALUES_EQUAL(msg->Groups.size(), 1);
-                UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics.size(), 1);
-                UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[0].Partitions.size(), 2);
                 for (const auto& partition : msg->Groups[0].Topics[0].Partitions) {
                     UNIT_ASSERT_VALUES_EQUAL(partition.ErrorCode, UNKNOWN_TOPIC_OR_PARTITION);
                 }
+            } else {
+                UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[0].Partitions[0].ErrorCode, NONE_ERROR);
+                UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[0].Partitions[1].ErrorCode, RESOURCE_NOT_FOUND);
             }
         }
 

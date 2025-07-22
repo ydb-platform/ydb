@@ -34,7 +34,7 @@ and timeout (by default, the maximum response time from healthcheck). Documentat
 * 17157:Viewer API: Fixed the retrieval of tablet list for tables implementing secondary indexes. #17103 [#17157](https://github.com/ydb-platform/ydb/pull/17157) ([Alexey Efimov](https://github.com/adameat))
 * 20238:Fixed an [issue](https://github.com/ydb-platform/ydb/issues/20199) caused by column shards can return different amount of data for the same queries, fixind race in CPU limiter. [#20238](https://github.com/ydb-platform/ydb/pull/20238) ([Pisarenko Grigoriy](https://github.com/GrigoriyPA))
 * 20217:Fixed an [issue](https://github.com/ydb-platform/ydb/issues/18604). Now the force availability mode ignores the limits of offline nodes. ([Ilia Shakhov](https://github.com/pixcc))
-* 20157:Fixed use after free in CPU scheduler, fixed verify fail in CS CPU limiter: https://github.com/ydb-platform/ydb/issues/20116 [#20157](https://github.com/ydb-platform/ydb/pull/20157) ([Pisarenko Grigoriy](https://github.com/GrigoriyPA))
+* 20157:Fixed an [issue](https://github.com/ydb-platform/ydb/issues/20116) that caused YDB node segfaults when users ran queries in [Workload Manager](./dev/resource-consumption-management) pools with the `TOTAL_CPU_LIMIT_PERCENT_PER_NODE` restriction enabled.  [#20157](https://github.com/ydb-platform/ydb/pull/20157) ([Pisarenko Grigoriy](https://github.com/GrigoriyPA))
 * 20084:Fixed an issue where committing message offsets when reading a topic might result in the following error: "Unable to navigate:path: 'Root/logbroker-federation/--cut--/stable/guidance' status: PathErrorUnknown". [#20084](https://github.com/ydb-platform/ydb/pull/20084) ([Nikolay Shestakov](https://github.com/nshestakov))
 
 ### Performance

@@ -40,13 +40,14 @@ namespace TEvPrivate {
         EvConsoleConfigsTimeout,
         EvRunCdcStreamScan,
         EvRunIncrementalRestore,
+        EvProgressIncrementalRestore,
         EvPersistTopicStats,
         EvSendBaseStatsToSA,
         EvRunBackgroundCleaning,
         EvRetryNodeSubscribe,
-        EvRunDataErasure,
-        EvRunTenantDataErasure,
-        EvAddNewShardToDataErasure,
+        EvRunShred,
+        EvRunTenantShred,
+        EvAddNewShardToShred,
         EvVerifyPassword,
         EvLoginFinalize,
         EvEnd
@@ -263,9 +264,28 @@ namespace TEvPrivate {
 
     struct TEvRunIncrementalRestore: public TEventLocal<TEvRunIncrementalRestore, EvRunIncrementalRestore> {
         const TPathId BackupCollectionPathId;
+        const TOperationId OperationId;
+        const TVector<TString> IncrementalBackupNames;
 
+        TEvRunIncrementalRestore(const TPathId& backupCollectionPathId, const TOperationId& operationId, const TVector<TString>& incrementalBackupNames)
+            : BackupCollectionPathId(backupCollectionPathId)
+            , OperationId(operationId)
+            , IncrementalBackupNames(incrementalBackupNames)
+        {}
+
+        // Backward compatibility constructor
         TEvRunIncrementalRestore(const TPathId& backupCollectionPathId)
             : BackupCollectionPathId(backupCollectionPathId)
+            , OperationId(0, 0)
+            , IncrementalBackupNames()
+        {}
+    };
+
+    struct TEvProgressIncrementalRestore : public TEventLocal<TEvProgressIncrementalRestore, EvProgressIncrementalRestore> {
+        ui64 OperationId;
+        
+        explicit TEvProgressIncrementalRestore(ui64 operationId)
+            : OperationId(operationId)
         {}
     };
 
@@ -280,10 +300,10 @@ namespace TEvPrivate {
         { }
     };
 
-    struct TEvAddNewShardToDataErasure : public TEventLocal<TEvAddNewShardToDataErasure, EvAddNewShardToDataErasure> {
+    struct TEvAddNewShardToShred : public TEventLocal<TEvAddNewShardToShred, EvAddNewShardToShred> {
         const std::vector<TShardIdx> Shards;
 
-        TEvAddNewShardToDataErasure(std::vector<TShardIdx>&& shards)
+        TEvAddNewShardToShred(std::vector<TShardIdx>&& shards)
             : Shards(std::move(shards))
         {}
     };

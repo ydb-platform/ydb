@@ -3,11 +3,13 @@
 #include "constants.h"
 #include "log.h"
 #include "log_backend.h"
+#include "path_checker.h"
 #include "runner_display_data.h"
 #include "runner_tui.h"
 #include "task_queue.h"
 #include "terminal.h"
 #include "transactions.h"
+#include "util.h"
 
 #include <ydb/public/lib/ydb_cli/commands/ydb_command.h>
 #include <ydb/public/lib/ydb_cli/common/interactive.h>
@@ -135,12 +137,14 @@ TPCCRunner::TPCCRunner(const NConsoleClient::TClientCommand::TConfig& connection
         std::exit(1);
     }
 
+    CheckPathForRun(connectionConfig, Config.Path, Config.WarehouseCount);
+
     const size_t terminalsCount = Config.WarehouseCount * TERMINALS_PER_WAREHOUSE;
 
     size_t threadCount = 0;
     if (Config.ThreadCount == 0) {
         // here we calculate max possible efficient thread number
-        const size_t networkThreadCount = NConsoleClient::TYdbCommand::GetNetworkThreadNum(ConnectionConfig);
+        const size_t networkThreadCount = ConnectionConfig.GetNetworkThreadNum();
         const size_t maxTerminalThreadCount = cpuCount > networkThreadCount ? cpuCount - networkThreadCount : 1;
         threadCount = std::min(maxTerminalThreadCount, terminalsCount);
 
@@ -153,7 +157,7 @@ TPCCRunner::TPCCRunner(const NConsoleClient::TClientCommand::TConfig& connection
     }
 
     // The number of terminals might be hundreds of thousands.
-    // For now, we don't have more than 32 network threads (check TYdbCommand::GetNetworkThreadNum()),
+    // For now, we don't have more than 32 network threads (check TClientCommand::TConfig::GetNetworkThreadNum()),
     // so that maxTerminalThreads will be around more or less around 100.
     const size_t driverCount = Config.DriverCount == 0 ? threadCount : Config.DriverCount;
 
@@ -556,7 +560,7 @@ void TPCCRunner::CalculateStatusData(Clock::time_point now, TRunDisplayData& dat
 
         // there are two errors: rounding + approximation, we might overshoot
         // 100% efficiency very slightly because of errors and it's OK to "round down"
-        maxPossibleTpmc = Config.WarehouseCount * MAX_TPMC_PER_WAREHOUSE * 60 / currentPhaseElapsed.count();
+        maxPossibleTpmc = Config.WarehouseCount * MAX_TPMC_PER_WAREHOUSE;
         data.StatusData.Tpmc = std::min(maxPossibleTpmc, tpmc);
     }
 
@@ -572,14 +576,8 @@ void TPCCRunner::CalculateStatusData(Clock::time_point now, TRunDisplayData& dat
 }
 
 void TPCCRunner::ExitTuiMode() {
-    LogBackend->StopCapture();
-
     Tui.reset();
-
-    // TODO: remove?
-    // Switch back to main screen buffer (restore original content)
-    std::cout << "\033[?1049l";
-    std::cout.flush();
+    LogBackend->StopCaptureAndFlush(Cerr);
 }
 
 void TPCCRunner::PrintTransactionStatisticsPretty(IOutputStream& os) {
@@ -759,11 +757,6 @@ void TRunConfig::SetDisplay() {
 void RunSync(const NConsoleClient::TClientCommand::TConfig& connectionConfig, const TRunConfig& runConfig) {
     TPCCRunner runner(connectionConfig, runConfig);
     runner.RunSync();
-}
-
-std::stop_source GetGlobalInterruptSource() {
-    static std::stop_source StopByInterrupt;
-    return StopByInterrupt;
 }
 
 } // namespace NYdb::NTPCC

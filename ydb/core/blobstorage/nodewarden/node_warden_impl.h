@@ -656,6 +656,7 @@ namespace NKikimr::NStorage {
         bool SelfManagementEnabled = false;
         TBridgeInfo::TPtr BridgeInfo;
         THashSet<TActorId> StorageConfigSubscribers;
+        std::deque<TEvNodeWardenQueryStorageConfig::TPtr> PendingQueryStorageConfigQ;
 
         void Handle(TEvNodeWardenQueryStorageConfig::TPtr ev);
         void Handle(TEvNodeWardenStorageConfig::TPtr ev);

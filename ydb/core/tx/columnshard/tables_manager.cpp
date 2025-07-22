@@ -493,7 +493,8 @@ std::vector<TTablesManager::TSchemasChain> TTablesManager::ExtractSchemasToClean
     std::optional<ui64> ignoreToVersion;
     std::vector<ui64> versions;
     ui32 predVersion = 0;
-    for (auto&& i : PrimaryIndex->GetVersionedIndex().GetSnapshotByVersions()) {
+    auto& index = MutablePrimaryIndexAsVerified<NOlap::TColumnEngineForLogs>();
+    for (auto&& i : index.GetVersionedIndex().GetSchemaByVersion()) {
         versions.emplace_back(i.first);
         TSchemaAddress addr(i.second->GetIndexInfo().GetPresetId(), i.second->GetSnapshot());
         if (addrPred) {
@@ -501,17 +502,17 @@ std::vector<TTablesManager::TSchemasChain> TTablesManager::ExtractSchemasToClean
         }
         addrPred = addr;
         if (ignoreToVersion) {
-            AFL_VERIFY(*ignoreToVersion == i.second->GetIndexInfo().GetVersion());
+            AFL_VERIFY(*ignoreToVersion == i.second->GetIndexInfo().GetVersion())("ignore_to", *ignoreToVersion)(
+                                             "next_version", i.second->GetIndexInfo().GetVersion());
         }
-        if (i.second->GetIndexInfo().GetIgnoreToVersion() && *i.second->GetIndexInfo().GetIgnoreToVersion() <= lastSchemaVersion) {
-            ignoreToVersion = i.second->GetIndexInfo().GetIgnoreToVersion();
+        if (auto ignoreToVersion = index.MutableVersionedIndex().ExtractIgnoreSchemaVersionFor(i.second->GetIndexInfo().GetVersion())) {
             AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "schema_to_remove")("reason", "equal_to_use")("from", i.first)(
                 "to", ignoreToVersion);
             AFL_VERIFY(versionsToRemove.emplace(i.first).second);
             AFL_VERIFY(toRemove.emplace(addr).second);
         } else {
             ignoreToVersion.reset();
-            if (!GetPrimaryIndexAsVerified<NOlap::TColumnEngineForLogs>().HasDataWithSchemaVersion(predVersion, i.first) &&
+            if (!index.HasDataWithSchemaVersion(predVersion, i.first) &&
                 lastSchemaVersion != i.first) {
                 AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "schema_to_remove")("reason", "empty")("from", i.first);
                 AFL_VERIFY(versionsToRemove.emplace(i.first).second);

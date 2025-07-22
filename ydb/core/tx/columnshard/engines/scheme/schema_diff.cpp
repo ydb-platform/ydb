@@ -104,8 +104,9 @@ void TSchemaDiffView::ApplyForColumns(const std::vector<ui32>& originalColumnIds
             ++it;
             ++i;
         } else if (it->first < originalColId) {
-            AFL_VERIFY(it->second);
-            addFromDiff(*it->second, std::nullopt);
+            if (it->second) {
+                addFromDiff(*it->second, std::nullopt);
+            }
             ++it;
         }
     }

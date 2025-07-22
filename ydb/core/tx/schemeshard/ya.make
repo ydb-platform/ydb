@@ -13,8 +13,8 @@ RECURSE_FOR_TESTS(
     ut_column_build
     ut_compaction
     ut_continuous_backup
-    ut_data_erasure
-    ut_data_erasure_reboots
+    ut_shred
+    ut_shred_reboots
     ut_export
     ut_export_reboots_s3
     ut_external_data_source
@@ -77,7 +77,7 @@ SRCS(
     schemeshard__borrowed_compaction.cpp
     schemeshard__clean_pathes.cpp
     schemeshard__conditional_erase.cpp
-    schemeshard__data_erasure_manager.cpp
+    schemeshard__shred_manager.cpp
     schemeshard__delete_tablet_reply.cpp
     schemeshard__describe_scheme.cpp
     schemeshard__find_subdomain_path_id.cpp
@@ -199,19 +199,20 @@ SRCS(
     schemeshard__operation_part.h
     schemeshard__operation_restore_backup_collection.cpp
     schemeshard__operation_rmdir.cpp
+    schemeshard__operation_rotate_cdc_stream.cpp
     schemeshard__operation_side_effects.cpp
     schemeshard__operation_side_effects.h
     schemeshard__operation_split_merge.cpp
     schemeshard__operation_upgrade_subdomain.cpp
     schemeshard__pq_stats.cpp
     schemeshard__publish_to_scheme_board.cpp
-    schemeshard__root_data_erasure_manager.cpp
+    schemeshard__root_shred_manager.cpp
     schemeshard__serverless_storage_billing.cpp
     schemeshard__state_changed_reply.cpp
     schemeshard__sync_update_tenants.cpp
     schemeshard__table_stats.cpp
     schemeshard__table_stats_histogram.cpp
-    schemeshard__tenant_data_erasure_manager.cpp
+    schemeshard__tenant_shred_manager.cpp
     schemeshard__unmark_restore_tables.cpp
     schemeshard__upgrade_access_database.cpp
     schemeshard__upgrade_schema.cpp
@@ -323,7 +324,6 @@ PEERDIR(
     ydb/core/tablet_flat
     ydb/core/tx
     ydb/core/tx/datashard
-    ydb/core/tx/schemeshard/backup
     ydb/core/tx/schemeshard/common
     ydb/core/tx/schemeshard/generated
     ydb/core/tx/schemeshard/olap

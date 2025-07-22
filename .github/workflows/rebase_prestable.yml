@@ -19,6 +19,8 @@ jobs:
         include:
           - prestable_branch: prestable-25-2
             stable_branch: stable-25-1
+          - prestable_branch: prestable-25-3
+            stable_branch: main
 
     steps:
       - name: Verify prestable branch
@@ -41,5 +43,5 @@ jobs:
       - name: Sync ${{ matrix.stable_branch }} to ${{ matrix.prestable_branch }}
         run: |
           git checkout ${{ matrix.prestable_branch }}
-          git rebase origin/${{ matrix.stable_branch }}
-          git push origin ${{ matrix.prestable_branch }} --force
+          git merge --no-ff origin/${{ matrix.stable_branch }}
+          git push origin ${{ matrix.prestable_branch }}

@@ -9,6 +9,10 @@ namespace NKikimr::NBsController {
     struct TAllocator;
 
     class TGroupMapper::TImpl : TNonCopyable {
+        // Note: absolute scores do not matter, only their relations greater / less.
+        static inline TControlWrapper GroupSizeInUnitsLargerThanPDiskPenalty{10, -1000, 1000};
+        static inline TControlWrapper GroupSizeInUnitsSmallerThanPDiskPenalty{20, -1000, 1000};
+
         struct TPDiskInfo : TPDiskRecord {
             TPDiskLayoutPosition Position;
             bool Matching;
@@ -50,12 +54,16 @@ namespace NKikimr::NBsController {
                 ui32 pu = SlotSizeInUnits ?: 1;
                 if (vu > pu) {
                     // double-unit vdisk occupies two single pdisk slots
-                    penalty += 10;
+                    penalty += TImpl::GroupSizeInUnitsLargerThanPDiskPenalty;
                 } else if (vu < pu) {
                     // single-unit vdisk occupies double-unit pdisk slot (storage waste)
-                    penalty += 20;
+                    penalty += TImpl::GroupSizeInUnitsSmallerThanPDiskPenalty;
                 }
-                return double(NumSlots) / MaxSlots + penalty;
+                if (!MaxSlots) {
+                    return NumSlots + penalty;
+                } else {
+                    return double(NumSlots) / MaxSlots + penalty;
+                }
             }
         };
 
@@ -865,7 +873,23 @@ namespace NKikimr::NBsController {
         TImpl(TGroupGeometryInfo geom, bool randomize)
             : Geom(std::move(geom))
             , Randomize(randomize)
-        {}
+        {
+            static bool controlsRegistered = false;
+            if (controlsRegistered) {
+                return;
+            }
+
+            TActorSystem *actorSystem = TlsActivationContext ? TActivationContext::ActorSystem() : nullptr;
+            if (actorSystem && actorSystem->AppData<TAppData>() && actorSystem->AppData<TAppData>()->Icb) {
+                const TIntrusivePtr<NKikimr::TControlBoard>& icb = actorSystem->AppData<TAppData>()->Icb;
+
+                icb->RegisterSharedControl(GroupSizeInUnitsLargerThanPDiskPenalty,
+                    "GroupMapperControls.GroupSizeInUnitsLargerThanPDiskPenalty");
+                icb->RegisterSharedControl(GroupSizeInUnitsSmallerThanPDiskPenalty,
+                    "GroupMapperControls.GroupSizeInUnitsSmallerThanPDiskPenalty");
+                controlsRegistered = true;
+            }
+        }
 
         bool RegisterPDisk(const TPDiskRecord& pdisk) {
             // calculate disk position

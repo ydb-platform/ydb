@@ -260,7 +260,7 @@ public:
 
         appData->CompactionConfig = Config.GetCompactionConfig();
         appData->BackgroundCleaningConfig = Config.GetBackgroundCleaningConfig();
-        appData->DataErasureConfig = Config.GetDataErasureConfig();
+        appData->ShredConfig = Config.GetDataErasureConfig();
     }
 };
 
@@ -479,6 +479,9 @@ void TKikimrRunner::InitializeMonitoring(const TKikimrRunConfig& runConfig, bool
         const auto& securityConfig(runConfig.AppConfig.GetDomainsConfig().GetSecurityConfig());
         if (securityConfig.MonitoringAllowedSIDsSize() > 0) {
             monConfig.AllowedSIDs.assign(securityConfig.GetMonitoringAllowedSIDs().begin(), securityConfig.GetMonitoringAllowedSIDs().end());
+        }
+        if (securityConfig.AdministrationAllowedSIDsSize() > 0) {
+            monConfig.AllowedSIDs.insert(monConfig.AllowedSIDs.end(), securityConfig.GetAdministrationAllowedSIDs().begin(), securityConfig.GetAdministrationAllowedSIDs().end());
         }
         monConfig.AllowOrigin = appConfig.GetMonitoringConfig().GetAllowOrigin();
 
@@ -1291,9 +1294,8 @@ void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
     }
 
     if (runConfig.AppConfig.HasBridgeConfig()) {
-        AppData->BridgeConfig->CopyFrom(runConfig.AppConfig.GetBridgeConfig());
-    } else {
-        AppData->BridgeConfig = nullptr;
+        AppData->BridgeConfig = runConfig.AppConfig.GetBridgeConfig();
+        AppData->BridgeModeEnabled = true;
     }
 
     // setup resource profiles

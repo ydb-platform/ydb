@@ -137,7 +137,9 @@ namespace NKikimr::NStorage {
             pdiskConfig->EnableSectorEncryption = !pdiskConfig->SectorMap;
         }
 
-        if (ui64 unitSizeInBytes = pdisk.GetInferPDiskSlotCountFromUnitSize()) {
+        if (pdisk.GetPDiskConfig().GetExpectedSlotCount() != 0) {
+            // Skip inferring PDisk SlotCount
+        } else if (ui64 unitSizeInBytes = pdisk.GetInferPDiskSlotCountFromUnitSize()) {
             ui64 driveSize = 0;
             TStringStream outDetails;
             if (pdiskConfig->SectorMap) {

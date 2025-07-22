@@ -1,0 +1,21 @@
+syntax = "proto3";
+
+package NYql.NConnector.NApi;
+
+import "ydb/public/api/protos/ydb_status_codes.proto";
+import "ydb/public/api/protos/ydb_issue_message.proto";
+
+option go_package = "a.yandex-team.ru/contrib/ydb/library/yql/providers/generic/connector/libgo/service/protos";
+
+// Special type to describe the result of any operation
+message TError {
+    // High-level code
+    Ydb.StatusIds.StatusCode status = 1;
+
+    // Error message
+    string message = 2;
+
+    // Detailed explanation of a problem;
+    // must be empty if status == SUCCESS
+    repeated Ydb.Issue.IssueMessage issues = 3;
+}

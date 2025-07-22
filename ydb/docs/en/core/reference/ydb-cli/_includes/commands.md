@@ -72,6 +72,7 @@ Any command can be run from the command line with the `--help` option to get hel
 | [table ttl reset](../table-ttl-reset.md) | Resetting TTL parameters |
 | [tools copy](../tools-copy.md) | Copying tables |
 | [tools dump](../export-import/tools-dump.md#schema-objects) | Dumping invidiual schema objects to the file system |
+| [tools infer csv](../tools-infer.md) | Generate a `CREATE TABLE` SQL query from a CSV file |
 | [tools rename](../commands/tools/rename.md) | Renaming tables |
 | [tools restore](../export-import/tools-restore.md#schema-objects) | Restoring invidiual schema objects from the file system |
 | [topic create](../topic-create.md) | Creating a topic |

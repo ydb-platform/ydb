@@ -709,13 +709,15 @@ ui64 AsyncAlterDropReplicationConfig(
 ui64 AsyncCreateContinuousBackup(
         Tests::TServer::TPtr server,
         const TString& workingDir,
-        const TString& tableName);
+        const TString& tableName,
+        const TString& streamName = "0_continuousBackupImpl");
 
 ui64 AsyncAlterTakeIncrementalBackup(
         Tests::TServer::TPtr server,
         const TString& workingDir,
         const TString& srcTableName,
-        const TString& dstTableName);
+        const TString& dstTableName,
+        const TString& dstStreamName);
 
 ui64 AsyncAlterRestoreIncrementalBackup(
         Tests::TServer::TPtr server,

@@ -147,7 +147,7 @@ public:
             return nullptr;
         }
 
-        YQL_CLOG(INFO, ProviderPq) << "Optimize PqWriteTopic `" << topicNode.Cluster().StringValue() << "`.`" << topicNode.Path().StringValue() << "`";
+        YQL_CLOG(INFO, ProviderPq) << "Optimize PqInsert `" << topicNode.Cluster().StringValue() << "`.`" << topicNode.Path().StringValue() << "`";
 
         auto dqPqTopicSinkSettingsBuilder = Build<TDqPqTopicSink>(ctx, insert.Pos());
         dqPqTopicSinkSettingsBuilder.Topic(topicNode);

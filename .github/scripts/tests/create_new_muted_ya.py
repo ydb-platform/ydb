@@ -450,6 +450,8 @@ def apply_and_add_mutes(all_data, output_path, mute_check, aggregated_for_mute, 
         
         # 2. Кандидаты на размьют
         def is_unmute_candidate_wrapper(test):
+            if is_chunk_test(test):
+                return False  # Не размьючивать chunk поштучно
             return is_unmute_candidate(test, aggregated_for_unmute)
         
         # Обычные тесты на размьют (по chunk'ам)
@@ -472,6 +474,8 @@ def apply_and_add_mutes(all_data, output_path, mute_check, aggregated_for_mute, 
         
         # 3. Кандидаты на удаление из mute (to_delete)
         def is_delete_candidate_wrapper(test):
+            if is_chunk_test(test):
+                return False  # Не удалять chunk поштучно
             return is_delete_candidate(test, aggregated_for_delete)
         
         # Обычные тесты на delete (по chunk'ам)

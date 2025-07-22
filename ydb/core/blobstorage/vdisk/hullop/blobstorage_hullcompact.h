@@ -35,6 +35,7 @@ namespace NKikimr {
 
         THullChange() = default;
     };
+    
 
     ////////////////////////////////////////////////////////////////////////////
     // THullCompaction
@@ -90,6 +91,63 @@ namespace NKikimr {
         bool IsAborting = false;
         ui32 PendingResponses = 0;
 
+        //  Compaction throttler
+
+        class TCompQuoter {
+        public:
+            using TPtr = std::shared_ptr<TCompQuoter>;
+
+        private:
+            using TAtomicInstant = std::atomic<TInstant>;
+            static_assert(TAtomicInstant::is_always_lock_free);
+
+            TIntrusivePtr<TVDiskConfig> Config;
+            TAtomicInstant NextQueueItemTimestamp;
+
+        public:
+            TCompQuoter(TIntrusivePtr<TVDiskConfig> config)
+                : Config(config)
+            {
+                NextQueueItemTimestamp = TInstant::Zero();
+            }
+
+            TDuration Take(TInstant now, ui64 bytes) {
+                auto bytesPerSecond = Config->HullCompThrottlerBytesRate;
+                if (!bytesPerSecond) {
+                    return TDuration::Zero();
+                }
+                TDuration duration = TDuration::MicroSeconds(bytes * 1000000 / bytesPerSecond);
+                for (;;) {
+                    TInstant current = NextQueueItemTimestamp;
+                    const TInstant notBefore = now - GetCapacity();
+                    const TInstant base = Max(current, notBefore);
+                    const TDuration res = base - now;
+                    const TInstant next = base + duration;
+                    if (NextQueueItemTimestamp.compare_exchange_weak(current, next)) {
+                        return res;
+                    }
+                }
+            }
+
+            static void QuoteMessage(const TPtr& quoter, std::unique_ptr<IEventHandle> ev, ui64 bytes) {
+                const TDuration timeout = quoter
+                    ? quoter->Take(TActivationContext::Now(), bytes)
+                    : TDuration::Zero();
+                if (timeout != TDuration::Zero()) {
+                    TActivationContext::Schedule(timeout, ev.release());
+                } else {
+                    TActivationContext::Send(ev.release());
+                }
+            }
+
+            static constexpr TDuration GetCapacity() {
+                return TDuration::MilliSeconds(100);
+            }
+        };
+
+        bool IsFullCompaction;
+        TCompQuoter::TPtr Throttler;
+
         ///////////////////////// BOOTSTRAP ////////////////////////////////////////////////
         void Bootstrap(const TActorContext &ctx) {
             Worker.Statistics.StartTime = TAppData::TimeProvider->Now();
@@ -128,6 +186,10 @@ namespace NKikimr {
             // free level snapshot
             LevelSnap.Destroy();
 
+            if (!(bool)FreshSegment && IsFullCompaction) {
+                Throttler = std::make_shared<TCompQuoter>(HullCtx->VCfg);
+            }
+
             // enter work state, prepare, and kick worker class
             TThis::Become(&TThis::WorkFunc);
             Worker.Prepare(Hmp, gcmpIt);
@@ -143,19 +205,29 @@ namespace NKikimr {
             const bool done = Worker.MainCycle(MsgsForYard);
             // check if there are messages we have for yard
             for (std::unique_ptr<IEventBase>& msg : MsgsForYard) {
-                ctx.Send(PDiskCtx->PDiskId, msg.release());
+                ui64 bytes = GetMsgSize(msg);
+                TCompQuoter::QuoteMessage(Throttler, std::make_unique<IEventHandle>(
+                            PDiskCtx->PDiskId, ctx.SelfID, msg.release()), bytes);
                 ++PendingResponses;
             }
+
             MsgsForYard.clear();
             // when done, continue with other state
             if (done) {
                 Finalize(ctx);
-                return;
             }
-            if (!PendingResponses) {
-                ui32 secondsBeforeNextAvailableRequest = Worker.GetSecondsBeforeNextRequest();
-                ctx.Schedule(TDuration::Seconds(secondsBeforeNextAvailableRequest), new TEvents::TEvWakeup);
+            return;
+        }
+
+        ui32 GetMsgSize(std::unique_ptr<IEventBase>& msg) {
+            if (msg->Type() == TEvBlobStorage::EvChunkWrite) {
+                auto *write = static_cast<NPDisk::TEvChunkWrite*>(msg.get());
+                return write->PartsPtr ? write->PartsPtr->ByteSize() : 0;
+            } else {
+                auto *read = static_cast<NPDisk::TEvChunkRead*>(msg.get());
+                return read->Size;
             }
+            return 0;
         }
 
         bool FinalizeIfAborting(const TActorContext& ctx) {
@@ -167,10 +239,6 @@ namespace NKikimr {
             } else {
                 return false;
             }
-        }
-
-        void HandleWakeup(const TActorContext& ctx) {
-            MainCycle(ctx);
         }
 
         // the same logic for every yard response: apply response and restart main cycle
@@ -243,7 +311,6 @@ namespace NKikimr {
             HFunc(NPDisk::TEvChunkReadResult, HandleYardResponse)
             HFunc(TEvRestoreCorruptedBlobResult, Handle)
             HFunc(TEvents::TEvPoisonPill, HandlePoison)
-            CFunc(TEvents::TSystem::Wakeup, HandleWakeup)
         )
         ///////////////////////// WORK: END /////////////////////////////////////////////////
 
@@ -338,9 +405,10 @@ namespace NKikimr {
             , Gcmp(CreateGcMap<TKey, TMemRec>(HullCtx, mergeElementsApproximation, allowGarbageCollection))
             , It(it)
             , Worker(HullCtx, PDiskCtx, rtCtx->LevelIndex, it, (bool)FreshSegment, firstLsn, lastLsn, restoreDeadline,
-                    partitionKey, isFullCompaction)
+                    partitionKey)
             , CompactionID(TAppData::RandomProvider->GenRand64())
             , SkeletonId(rtCtx->SkeletonId)
+            , IsFullCompaction(isFullCompaction)
         {}
     };
 

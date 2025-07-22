@@ -35,7 +35,6 @@ namespace NKikimr::NStorage {
             case TVDiskRecord::EScrubState::QUANTUM_FINISHED: // quantum finished, no work is in progress
             case TVDiskRecord::EScrubState::QUANTUM_FINISHED_AND_WAITING_FOR_NEXT_ONE: // like QUERY_START_QUANTUM
                 break;
-
             case TVDiskRecord::EScrubState::IN_PROGRESS: { // scrub is in progress, report scrub stop to BS_CONTROLLER
                 const TVSlotId vslotId = vdisk.GetVSlotId();
                 SendToController(std::make_unique<TEvBlobStorage::TEvControllerScrubQuantumFinished>(vslotId.NodeId,
@@ -186,7 +185,6 @@ namespace NKikimr::NStorage {
         vdiskConfig->FreshCompMaxInFlightWrites = FreshCompMaxInFlightWrites;
         vdiskConfig->HullCompMaxInFlightWrites = HullCompMaxInFlightWrites;
         vdiskConfig->HullCompMaxInFlightReads = HullCompMaxInFlightReads;
-        vdiskConfig->HullCompFullCompRateSec = HullCompFullCompRateSec;
         vdiskConfig->HullCompFullCompRateSec = HullCompFullCompRateSec;
         vdiskConfig->HullCompThrottlerBytesRate = HullCompThrottlerBytesRate;
 

@@ -9,31 +9,6 @@ namespace NKikimr::NOlap::NReader::NSimple::NDuplicateFiltering {
 
 class TInternalFilterConstructor: TMoveOnly {
 private:
-    class TRowRange {
-    private:
-        YDB_READONLY_DEF(ui64, Begin);
-        YDB_READONLY_DEF(ui64, End);
-
-    public:
-        TRowRange(const ui64 begin, const ui64 end)
-            : Begin(begin)
-            , End(end) {
-            AFL_VERIFY(end >= begin);
-        }
-
-        std::partial_ordering operator<=>(const TRowRange& other) const {
-            return std::tie(Begin, End) <=> std::tie(other.Begin, other.End);
-        }
-        bool operator==(const TRowRange& other) const {
-            return (*this <=> other) == std::partial_ordering::equivalent;
-        }
-
-        ui64 NumRows() const {
-            return End - Begin;
-        }
-    };
-
-private:
     TEvRequestFilter::TPtr OriginalRequest;
     const TColumnDataSplitter Intervals;
 
@@ -56,9 +31,9 @@ private:
 public:
     void AddFilter(const TDuplicateMapInfo& info, const NArrow::TColumnFilter& filterExt) {
         AFL_VERIFY(!IsDone());
-        AFL_VERIFY(filterExt.GetRecordsCountVerified() == info.GetRowsCount())("filter", filterExt.GetRecordsCountVerified())(
-                                                            "info", info.GetRowsCount());
-        FiltersByRange.emplace(TRowRange(info.GetOffset(), info.GetOffset() + info.GetRowsCount()), filterExt);
+        AFL_VERIFY(filterExt.GetRecordsCountVerified() == info.GetRows().NumRows())("filter", filterExt.GetRecordsCountVerified())(
+                                                            "info", info.GetRows().NumRows());
+        FiltersByRange.emplace(info.GetRows(), filterExt);
 
         while (FiltersByRange.size() > 1 && FiltersByRange.begin()->first.GetEnd() >= std::next(FiltersByRange.begin())->first.GetBegin()) {
             auto l = FiltersByRange.begin();

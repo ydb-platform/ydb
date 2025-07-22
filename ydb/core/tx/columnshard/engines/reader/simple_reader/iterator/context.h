@@ -31,6 +31,10 @@ private:
     virtual std::shared_ptr<TFetchingScript> DoGetColumnsFetchingPlan(const std::shared_ptr<NCommon::IDataSource>& source) override;
     mutable std::optional<std::shared_ptr<TFetchingScript>> SourcesAggregationScript;
 
+    bool NeedDuplicateFiltering() const {
+        return GetReadMetadata()->GetDeduplicationPolicy() == EDeduplicationPolicy::PREVENT_DUPLICATES;
+    }
+
 public:
     std::shared_ptr<TFetchingScript> GetSourcesAggregationScript() const {
         if (!SourcesAggregationScript) {
@@ -50,7 +54,7 @@ public:
 
     virtual TString ProfileDebugString() const override;
 
-    void RegisterActors();
+    void RegisterActors(NCommon::TPortionIntervalTree&& portions);
     void UnregisterActors();
 
     const TActorId& GetDuplicatesManagerVerified() const {

@@ -24,16 +24,17 @@ namespace NKikimr::NOlap::NReader::NSimple::NDuplicateFiltering {
 
 class TDuplicateManager: public NActors::TActor<TDuplicateManager> {
 private:
+    using TPortionIntervalTree = NCommon::TPortionIntervalTree;
     inline static TAtomicCounter NextRequestId = 0;
-    using TIntervalTree = NRangeTreap::TRangeTreap<NArrow::TSimpleRow, ui64>;
 
     const TActorId ColumnShardActorId;
     const std::shared_ptr<NCommon::TColumnsSet> PKColumns;
     NColumnShard::TDuplicateFilteringCounters Counters;
+    const TPortionIntervalTree Intervals;
     const THashMap<ui64, std::shared_ptr<TPortionInfo>> Portions;
-    const TIntervalTree Intervals;
     TLRUCache<TDuplicateMapInfo, NArrow::TColumnFilter> FiltersCache;
     THashMap<TDuplicateMapInfo, std::vector<std::shared_ptr<TInternalFilterConstructor>>> BuildingFilters;
+    std::shared_ptr<NDataAccessorControl::IDataAccessorsManager> DataAccessorsManager;
 
 private:
     STATEFN(StateMain) {
@@ -76,7 +77,7 @@ private:
     }
 
 public:
-    TDuplicateManager(const TSpecialReadContext& context);
+    TDuplicateManager(const TSpecialReadContext& context, TPortionIntervalTree&& portions);
 };
 
 }   // namespace NKikimr::NOlap::NReader::NSimple::NDuplicateFiltering

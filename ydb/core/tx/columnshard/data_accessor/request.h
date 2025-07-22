@@ -14,7 +14,7 @@ class TDataAccessorsRequest;
 
 class TDataAccessorsResult: private NNonCopyable::TMoveOnly {
 private:
-    THashMap<TInternalPathId, TString> ErrorsByPathId;
+    YDB_READONLY_DEF(TErrorByPathId, ErrorsByPathId);
     THashMap<ui64, std::shared_ptr<TPortionDataAccessor>> PortionsById;
 
 public:

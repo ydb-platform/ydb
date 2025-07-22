@@ -40,8 +40,7 @@ public:
     }
 
     explicit operator size_t() const {
-        ui64 h = 0;
-        h = CombineHashes(h, TabletActorId.Hash());
+        ui64 h = TabletActorId.Hash();
         h = CombineHashes(h, THash<NKikimr::NOlap::TPortionAddress>()(InternalPortionAddress));
         h = CombineHashes(h, (ui64)ColumnId);
         return h;

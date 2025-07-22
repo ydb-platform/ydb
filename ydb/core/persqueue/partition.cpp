@@ -1974,7 +1974,7 @@ void TPartition::ProcessTxsAndUserActs(const TActorContext& ctx)
     }
     PQ_LOG_D("Batching state before ContinueProcessTxsAndUserActs: " << (int)BatchingState);
     while (true) {
-        if (BatchingState == ETxBatchingState::PreProcessing) {
+        if ((BatchingState == ETxBatchingState::PreProcessing) || (BatchingState == ETxBatchingState::Executing)) {
             ContinueProcessTxsAndUserActs(ctx);
         }
         if (BatchingState == ETxBatchingState::PreProcessing) {

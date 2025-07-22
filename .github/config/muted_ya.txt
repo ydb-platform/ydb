@@ -27,6 +27,7 @@ ydb/core/kqp/ut/query KqpStats.SysViewClientLost
 ydb/core/kqp/ut/scheme KqpOlapScheme.TenThousandColumns
 ydb/core/kqp/ut/scheme KqpScheme.AlterAsyncReplication
 ydb/core/kqp/ut/scheme KqpScheme.AlterDatabaseChangeOwner+EnableAlterDatabase
+ydb/core/kqp/ut/scheme KqpScheme.AlterDatabaseChangeOwner-EnableAlterDatabase
 ydb/core/kqp/ut/scheme [*/*] chunk chunk
 ydb/core/kqp/ut/scheme [*/*]+chunk+chunk
 ydb/core/kqp/ut/service [*/*] chunk chunk

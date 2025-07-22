@@ -759,8 +759,38 @@ public:
     }
 
     void HandleTimeout(TEvents::TEvWakeup::TPtr&) {
-        ReplyWithError(Ydb::StatusIds::TIMEOUT, TStringBuilder() << "ReadRows from table " << GetTable()
-            << " timed out, duration: " << (TAppData::TimeProvider->Now() - StartTime).Seconds() << " sec");
+        TString errorMessage = TStringBuilder() << "ReadRows from table " << GetTable()
+            << " timed out, duration: " << (TAppData::TimeProvider->Now() - StartTime).Seconds() << " sec\n";
+
+        auto errorLog = TStringBuilder() << "ShardIdToReadState: {";
+        ui64 rowsRequested = 0;
+        bool first = true;
+        for (const auto& [shardId, readState] : ShardIdToReadState) {
+            if (!first) {
+                errorLog << ", ";
+            }
+            first = false;
+            errorLog << "{"
+                << " ShardId: " << shardId
+                << " Status: " << readState.Status
+                << " ContinuationToken: " << readState.FirstUnprocessedQuery
+            << " }";
+
+            rowsRequested += readState.Keys.size();
+        }
+        errorLog << "}\n";
+
+        ui64 rowsRead = 0;
+        for (auto& result : EvReadResults) {
+            rowsRead += result->GetRowsCount();
+        }
+
+        errorLog << "ReadsInFlight: " << ReadsInFlight << '\n';
+        errorLog << "Retries: " << Retries << '\n';
+        errorLog << "Rows requested: " << rowsRequested << '\n';
+        errorLog << "Rows read: " << rowsRead << '\n';
+        errorLog << "Estimated RuCost: " << RuCost << '\n';
+        ReplyWithError(Ydb::StatusIds::TIMEOUT, errorMessage, nullptr, &errorLog);
     }
 
     void HandleForget(TRpcServices::TEvForgetOperation::TPtr& ev) {
@@ -771,10 +801,14 @@ public:
     }
 
     void ReplyWithError(const Ydb::StatusIds::StatusCode& status, const TString& errorMsg,
-        const ::google::protobuf::RepeatedPtrField<Ydb::Issue::IssueMessage>* issues = nullptr)
+        const ::google::protobuf::RepeatedPtrField<Ydb::Issue::IssueMessage>* issues = nullptr, const TString* logAppendix = nullptr)
     {
         CancelReads();
-        LOG_ERROR_S(TlsActivationContext->AsActorContext(), NKikimrServices::RPC_REQUEST, "TReadRowsRPC ReplyWithError: " << errorMsg);
+        auto message = TStringBuilder() << "TReadRowsRPC ReplyWithError: " << errorMsg;
+        if (logAppendix) {
+            message << *logAppendix;
+        }
+        LOG_ERROR_S(TlsActivationContext->AsActorContext(), NKikimrServices::RPC_REQUEST, message);
         SendResult(status, errorMsg, issues);
     }
 

@@ -31,6 +31,7 @@ public:
     std::optional<NThreading::TFuture<ISpiller::TKey>> WriteWideItem(const TArrayRef<NUdf::TUnboxedValuePod>& wideItem) {
         Packer.AddWideItem(wideItem.data(), wideItem.size());
         auto newPackerEstimatedSize = Packer.PackedSizeEstimate();
+        Y_ENSURE(newPackerEstimatedSize >= PackerEstimatedSize, "MISHA size should be grater");
         MemoryUsageReporter->ReportAllocate(newPackerEstimatedSize - PackerEstimatedSize);
         PackerEstimatedSize = newPackerEstimatedSize;
         if (newPackerEstimatedSize > SizeLimit) {
@@ -44,9 +45,6 @@ public:
         if (Packer.IsEmpty())
             return std::nullopt;
 
-        auto newPackerEstimatedSize = Packer.PackedSizeEstimate();
-        MemoryUsageReporter->ReportAllocate(newPackerEstimatedSize - PackerEstimatedSize);
-        PackerEstimatedSize = newPackerEstimatedSize;
         return Spiller->Put(std::move(Packer.Finish()));
     }
 

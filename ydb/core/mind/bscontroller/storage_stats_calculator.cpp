@@ -142,8 +142,8 @@ public:
                                 .Location = location,
                                 .Usable = usable,
                                 .NumSlots = pdisk.GetNumActiveSlots(),
-                                .MaxSlots = pdisk.GetExpectedSlotCount(),
-                                .SlotSizeInUnits = 0, // TODO(ydynnikov): sys_view.proto TPDiskInfo
+                                .MaxSlots = pdisk.GetExpectedSlotCount(), // either inferred or user-defined
+                                .SlotSizeInUnits = pdisk.GetSlotSizeInUnits(), // either inferred or user-defined
                                 .Groups = {},
                                 .SpaceAvailable = 0,
                                 .Operational = true,

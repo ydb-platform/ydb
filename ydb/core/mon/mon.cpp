@@ -1050,7 +1050,7 @@ public:
                 return;
             }
         }
-        Send(new IEventHandle(Fields.Handler, SelfId(), Event->ReleaseBase().Release(), IEventHandle::FlagTrackDelivery, Event->Cookie));
+        SendRequest();
         Become(&THttpMonAuthorizedActorRequest::StateWork);
     }
 
@@ -1150,17 +1150,17 @@ public:
         ReplyErrorAndPassAway(Ydb::StatusIds::UNAUTHORIZED, issues, true);
     }
 
-    void SendRequest(const NKikimr::NGRpcService::TEvRequestAuthAndCheckResult& result) {
+    void SendRequest(const NKikimr::NGRpcService::TEvRequestAuthAndCheckResult* result = nullptr) {
         NHttp::THttpIncomingRequestPtr request = Event->Get()->Request;
         if (Authorizer) {
-            TString user = result.UserToken ? result.UserToken->GetUserSID() : "anonymous";
+            TString user = result->UserToken ? result->UserToken->GetUserSID() : "anonymous";
             ALOG_NOTICE(NActorsServices::HTTP, (request->Address ? request->Address->ToString() : "")
                 << " " << user
                 << " " << request->Method
                 << " " << request->URL);
         }
-        if (result.UserToken) {
-            Event->Get()->UserToken = result.UserToken->GetSerializedToken();
+        if (result && result->UserToken) {
+            Event->Get()->UserToken = result->UserToken->GetSerializedToken();
         }
         Send(new IEventHandle(Fields.Handler, SelfId(), Event->ReleaseBase().Release(), IEventHandle::FlagTrackDelivery, Event->Cookie));
 
@@ -1190,7 +1190,7 @@ public:
             return ReplyErrorAndPassAway(result);
         }
         if (IsTokenAllowed(result.UserToken.Get(), Fields.AllowedSIDs)) {
-            SendRequest(result);
+            SendRequest(&result);
         } else {
             return ReplyForbiddenAndPassAway("SID is not allowed");
         }
@@ -1204,8 +1204,17 @@ public:
     }
 
     void Handle(NHttp::TEvHttpProxy::TEvHttpOutgoingDataChunk::TPtr& ev) {
-        Send(Event->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingDataChunk(ev->Get()->DataChunk), 0, Event->Cookie);
-        if (ev->Get()->DataChunk && ev->Get()->DataChunk->IsEndOfData()) {
+        bool endOfData = false;
+        if (ev->Get()->DataChunk) {
+            Send(Event->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingDataChunk(ev->Get()->DataChunk), 0, Event->Cookie);
+            if (ev->Get()->DataChunk->IsEndOfData()) {
+                endOfData = true;
+            }
+        } else if (ev->Get()->Error) {
+            Send(Event->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingDataChunk(ev->Get()->Error), 0, Event->Cookie);
+            endOfData = true;
+        }
+        if (endOfData) {
             PassAway();
         }
     }
@@ -1225,7 +1234,7 @@ public:
             hFunc(NHttp::TEvHttpProxy::TEvHttpOutgoingResponse, Handle);
             hFunc(NHttp::TEvHttpProxy::TEvHttpOutgoingDataChunk, Handle);
             hFunc(NHttp::TEvHttpProxy::TEvSubscribeForCancel, Handle);
-            hFunc(NHttp::TEvHttpProxy::TEvRequestCancelled, Handle)
+            hFunc(NHttp::TEvHttpProxy::TEvRequestCancelled, Handle);
         }
     }
 };

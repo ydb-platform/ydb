@@ -182,7 +182,7 @@ message TFeatureFlags {
     optional bool EnableScaleRecommender = 157 [default = false];
     optional bool EnableVDiskThrottling = 158 [default = false];
     optional bool EnableDataShardInMemoryStateMigration = 159 [default = true];
-    optional bool EnableDataShardInMemoryStateMigrationAcrossGenerations = 160 [default = false];
+    optional bool EnableDataShardInMemoryStateMigrationAcrossGenerations = 160 [default = true];
     optional bool DisableLocalDBEraseCache = 161 [default = false];
     optional bool EnableChecksumsExport = 162 [default = false];
     optional bool EnableTopicTransfer = 163 [default = false];

@@ -90,12 +90,13 @@ Technically, tablets are [actors](#actor) with a persistent state reliably saved
 
 [Tablet implementation details](#tablet-implementation) and related terms, as well as [main tablet types](#tablet-types), are covered below in the advanced section.
 
-### Distributed transactions {#distributed-transaction}
+### Transactions {#transactions}
 
 {{ ydb-short-name }} implements **transactions** on two main levels:
 
 * [Local database](#local-database) and the rest of [tablet infrastructure](#tablet-implementation) allow [tablets](#tablet) to manipulate their state using **local transactions** with [serializable isolation level](https://en.wikipedia.org/wiki/Isolation_%28database_systems%29#Serializable). Technically, they aren't really local to a single node as such a state persists remotely in [Distributed Storage](#distributed-storage).
 * In the context of {{ ydb-short-name }}, the term **distributed transactions** usually refers to transactions involving multiple tablets. For example, cross-table or even cross-row transactions are often distributed.
+* **Single-shard** transactions span a single tablet and are faster to complete. For example, transactions between rows in the same table partition are often single-shard.
 
 Together, these mechanisms allow {{ ydb-short-name }} to provide [strict consistency](https://en.wikipedia.org/wiki/Consistency_model#Strict_consistency).
 
@@ -607,7 +608,7 @@ A **channel** is a logical connection between a [tablet](#tablet) and [Distribut
 
 ### Distributed transactions implementation {#distributed-transaction-implementation}
 
-Terms related to the implementation of [distributed transactions](#distributed-transaction) are explained below. The implementation itself is described in a separate article [{#T}](../contributor/datashard-distributed-txs.md).
+Terms related to the implementation of [distributed transactions](#transactions) are explained below. The implementation itself is described in a separate article [{#T}](../contributor/datashard-distributed-txs.md).
 
 #### Deterministic transactions {#deterministic-transactions}
 
@@ -633,7 +634,7 @@ In the case of read-only transactions, similar to "read uncommitted" in other da
 
 #### Read-write set {#rw-set}
 
-The **read-write set** or **RW set** is a set of data that will participate in executing a [distributed transaction](#distributed-transaction). It combines the read set, the data that will be read, and the write set, the data modifications to be carried out.
+The **read-write set** or **RW set** is a set of data that will participate in executing a [distributed transaction](#transactions). It combines the read set, the data that will be read, and the write set, the data modifications to be carried out.
 
 #### Read set {#read-set}
 
@@ -641,7 +642,7 @@ The **read set** or **ReadSet data** is what participating shards forward during
 
 #### Transaction proxy {#transaction-proxy}
 
-The **transaction proxy** or `TX_PROXY` is a service that orchestrates the execution of many [distributed transactions](#distributed-transaction): sequential phases, phase execution, planning, and aggregation of results. In the case of direct orchestration by other actors (for example, KQP data transactions), it is used for caching and allocation of unique [TxIDs](#txid).
+The **transaction proxy** or `TX_PROXY` is a service that orchestrates the execution of many [distributed transactions](#transactions): sequential phases, phase execution, planning, and aggregation of results. In the case of direct orchestration by other actors (for example, KQP data transactions), it is used for caching and allocation of unique [TxIDs](#txid).
 
 #### Transaction flags {#txflags}
 

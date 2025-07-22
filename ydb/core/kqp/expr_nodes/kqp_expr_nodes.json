@@ -566,7 +566,8 @@
                 {"Index": 3, "Name": "Priority", "Type": "TCoAtom"},
                 {"Index": 4, "Name": "StreamWrite", "Type": "TCoAtom"},
                 {"Index": 5, "Name": "IsBatch", "Type": "TCoAtom"},
-                {"Index": 6, "Name": "Settings", "Type": "TCoNameValueTupleList", "Optional": true}
+                {"Index": 6, "Name": "IsIndexImplTable", "Type": "TCoAtom"},
+                {"Index": 7, "Name": "Settings", "Type": "TCoNameValueTupleList", "Optional": true}
             ]
         },
         {

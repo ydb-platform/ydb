@@ -57,6 +57,7 @@ ydb/core/tx/tiering/ut ColumnShardTiers.TTLUsage
 ydb/core/viewer/tests test.py.test_topic_data
 ydb/core/viewer/tests test.py.test_transfer_describe
 ydb/core/viewer/ut Viewer.TabletMerging
+ydb/core/viewer/ut Viewer.TabletMergingPacked
 ydb/library/actors/interconnect/ut_fat InterconnectZcLocalOp.ZcDisabledAfterHiddenCopy
 ydb/library/actors/interconnect/ut_fat InterconnectZcLocalOp.ZcIsDisabledByDefault
 ydb/library/actors/interconnect/ut_huge_cluster HugeCluster.AllToAll
@@ -65,6 +66,8 @@ ydb/library/yql/dq/opt/ut unittest.sole chunk
 ydb/library/yql/tests/sql/dq_file/part11 py2_flake8.sole chunk
 ydb/library/yql/tests/sql/dq_file/part11 pytest.[*/*] chunk
 ydb/library/yql/tests/sql/dq_file/part11 test.py.test[pg-tpch-q02-default.txt-ForceBlocks]
+ydb/library/yql/tests/sql/dq_file/part14 pytest.[*/*] chunk
+ydb/library/yql/tests/sql/dq_file/part14 test.py.test[pg-tpch-q18-default.txt-ForceBlocks]
 ydb/mvp/oidc_proxy/ut unittest.sole chunk
 ydb/public/sdk/cpp/src/client/federated_topic/ut BasicUsage.PropagateSessionClosed
 ydb/public/sdk/cpp/src/client/federated_topic/ut unittest.[*/*] chunk
@@ -246,6 +249,20 @@ ydb/tests/functional/tpc/large [test_tpcds.py] chunk chunk
 ydb/tests/functional/tpc/large flake8.sole chunk
 ydb/tests/functional/tpc/large import_test.sole chunk
 ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS0_1.test_tpcds[90]
+ydb/tests/functional/tpc/large test_tpch_spilling.py.TestTpchSpillingS10.test_tpch[10]
+ydb/tests/functional/tpc/large test_tpch_spilling.py.TestTpchSpillingS10.test_tpch[13]
+ydb/tests/functional/tpc/large test_tpch_spilling.py.TestTpchSpillingS10.test_tpch[16]
+ydb/tests/functional/tpc/large test_tpch_spilling.py.TestTpchSpillingS10.test_tpch[18]
+ydb/tests/functional/tpc/large test_tpch_spilling.py.TestTpchSpillingS10.test_tpch[19]
+ydb/tests/functional/tpc/large test_tpch_spilling.py.TestTpchSpillingS10.test_tpch[1]
+ydb/tests/functional/tpc/large test_tpch_spilling.py.TestTpchSpillingS10.test_tpch[20]
+ydb/tests/functional/tpc/large test_tpch_spilling.py.TestTpchSpillingS10.test_tpch[21]
+ydb/tests/functional/tpc/large test_tpch_spilling.py.TestTpchSpillingS10.test_tpch[22]
+ydb/tests/functional/tpc/large test_tpch_spilling.py.TestTpchSpillingS10.test_tpch[2]
+ydb/tests/functional/tpc/large test_tpch_spilling.py.TestTpchSpillingS10.test_tpch[3]
+ydb/tests/functional/tpc/large test_tpch_spilling.py.TestTpchSpillingS10.test_tpch[7]
+ydb/tests/functional/tpc/large test_tpch_spilling.py.TestTpchSpillingS10.test_tpch[8]
+ydb/tests/functional/tpc/large test_tpch_spilling.py.TestTpchSpillingS10.test_tpch[9]
 ydb/tests/functional/tpc/medium/tpch py3test.[test_tpch.py] chunk
 ydb/tests/functional/ydb_cli test_ydb_backup.py.TestDatabaseBackup.test_database_backup
 ydb/tests/functional/ydb_cli test_ydb_backup.py.TestDatabaseBackupRestore.test_database_backup_restore

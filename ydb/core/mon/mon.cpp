@@ -1026,11 +1026,11 @@ protected:
 class THttpMonAuthorizedActorRequest : public TActorBootstrapped<THttpMonAuthorizedActorRequest> {
 public:
     NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr Event;
-    TMon::TRegisterHandlerFields& Fields;
+    TMon::TRegisterHandlerFields Fields;
     TMon::TRequestAuthorizer Authorizer;
     NHttp::TEvHttpProxy::TEvSubscribeForCancel::TPtr CancelSubscriber;
 
-    THttpMonAuthorizedActorRequest(NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr event, TMon::TRegisterHandlerFields& fields, TMon::TRequestAuthorizer authorizer)
+    THttpMonAuthorizedActorRequest(NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr event, const TMon::TRegisterHandlerFields& fields, TMon::TRequestAuthorizer authorizer)
         : Event(std::move(event))
         , Fields(fields)
         , Authorizer(std::move(authorizer))
@@ -1153,7 +1153,7 @@ public:
     void SendRequest(const NKikimr::NGRpcService::TEvRequestAuthAndCheckResult* result = nullptr) {
         NHttp::THttpIncomingRequestPtr request = Event->Get()->Request;
         if (Authorizer) {
-            TString user = result->UserToken ? result->UserToken->GetUserSID() : "anonymous";
+            TString user = (result && result->UserToken) ? result->UserToken->GetUserSID() : "anonymous";
             ALOG_NOTICE(NActorsServices::HTTP, (request->Address ? request->Address->ToString() : "")
                 << " " << user
                 << " " << request->Method
@@ -1163,8 +1163,6 @@ public:
             Event->Get()->UserToken = result->UserToken->GetSerializedToken();
         }
         Send(new IEventHandle(Fields.Handler, SelfId(), Event->ReleaseBase().Release(), IEventHandle::FlagTrackDelivery, Event->Cookie));
-
-        PassAway();
     }
 
     void Cancelled() {
@@ -1180,7 +1178,7 @@ public:
         }
         NHttp::THttpIncomingRequestPtr request = Event->Get()->Request;
         ReplyWith(request->CreateResponseServiceUnavailable(
-            TStringBuilder() << "Auth actor is not available"));
+            TStringBuilder() << "Actor is not available"));
         PassAway();
     }
 
@@ -1223,10 +1221,6 @@ public:
         CancelSubscriber = std::move(ev);
     }
 
-    void Handle(NHttp::TEvHttpProxy::TEvRequestCancelled::TPtr& /* ev */) {
-        Cancelled();
-    }
-
     STATEFN(StateWork) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvents::TEvUndelivered, HandleUndelivered);
@@ -1234,7 +1228,7 @@ public:
             hFunc(NHttp::TEvHttpProxy::TEvHttpOutgoingResponse, Handle);
             hFunc(NHttp::TEvHttpProxy::TEvHttpOutgoingDataChunk, Handle);
             hFunc(NHttp::TEvHttpProxy::TEvSubscribeForCancel, Handle);
-            hFunc(NHttp::TEvHttpProxy::TEvRequestCancelled, Handle);
+            cFunc(NHttp::TEvHttpProxy::EvRequestCancelled, Cancelled);
         }
     }
 };

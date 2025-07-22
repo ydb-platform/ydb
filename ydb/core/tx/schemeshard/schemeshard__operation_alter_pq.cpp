@@ -792,9 +792,10 @@ public:
             return result;
         }
 
+        const auto& stats = topic->Stats;
         const PQGroupReserve reserve(newTabletConfig, alterData->ActivePartitionCount);
         const PQGroupReserve reserveForCheckLimit(newTabletConfig, alterData->ActivePartitionCount + involvedPartitions.size());
-        const PQGroupReserve oldReserve(tabletConfig, topic->ActivePartitionCount);
+        const PQGroupReserve oldReserve(tabletConfig, topic->ActivePartitionCount, stats.DataSize);
 
         const ui64 storageToReserve = reserveForCheckLimit.Storage > oldReserve.Storage ? reserveForCheckLimit.Storage - oldReserve.Storage : 0;
 

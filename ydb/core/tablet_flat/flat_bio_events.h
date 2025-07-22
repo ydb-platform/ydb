@@ -58,14 +58,6 @@ namespace NBlockIO {
                 << " " << NKikimrProto::EReplyStatus_Name(Status) << "}";
         }
 
-        ui64 Bytes() const
-        {
-            return
-                std::accumulate(Pages.begin(), Pages.end(), ui64(0),
-                    [](ui64 bytes, const NPageCollection::TLoadedPage& block)
-                        { return bytes + block.Data.size(); });
-        }
-
         const EStatus Status;
         TIntrusiveConstPtr<NPageCollection::IPageCollection> PageCollection;
         TVector<NPageCollection::TLoadedPage> Pages;

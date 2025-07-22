@@ -1,5 +1,13 @@
 items:
-- name: Строковые
-  href: row-oriented.md
-- name: Колоночные
-  href: column-oriented.md
+- name: Как получить графическое представление плана
+  href: how-to-get.md
+- name: Структура плана запроса
+  href: structure.md
+- name: Агрегирование данных
+  href: basics.md
+- name: Типовые проблемы и способы их решения
+  href: troubleshooting.md
+- name: Федеративные аналитические запросы
+  href: federative.md
+- name: Особенности анализа строчных таблиц
+  href: datashards.md

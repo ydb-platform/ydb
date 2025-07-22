@@ -209,7 +209,7 @@ def aggregate_test_data(all_data, period_days):
     for test in all_data:
         processed_count += 1
         # Показываем прогресс каждые 1000 записей или каждые 10%
-        if processed_count % 1000 == 0 or processed_count % max(1, total_count // 10) == 0:
+        if processed_count % 10000 == 0 or processed_count % max(1, total_count // 10) == 0:
             progress_percent = (processed_count / total_count) * 100
             logging.info(f"Aggregation progress: {processed_count}/{total_count} ({progress_percent:.1f}%)")
         
@@ -369,6 +369,11 @@ def is_unmute_candidate(test, aggregated_data):
     total_runs = test_data['pass_count'] + test_data['fail_count'] + test_data['mute_count']
     total_fails = test_data['fail_count'] + test_data['mute_count']
     
+    # Проверяем, что не было состояний no_runs в истории
+    state_history = test_data.get('state', [])
+    if 'no_runs' in state_history:
+        return False
+    
     return total_runs > 4 and total_fails == 0
 
 def is_delete_candidate(test, aggregated_data):
@@ -427,23 +432,27 @@ def create_file_set(aggregated_for_mute, filter_func, mute_check=None, use_wildc
                     date_window=test.get('date_window')
                 )
                 debug_list.append(debug_string)
+    
+    # Принудительно показываем 100% если не показали
+    if last_percent != 100:
+        print(f"\r[create_file_set] Progress: 100% ({total}/{total})", end="")
     print()  # Перевод строки после прогресса
     return sorted(list(result_set)), sorted(debug_list)
 
-def write_file_set(file_path, test_set, debug_list=None, ignore_prefixes=False):
-    # Сортируем test_set с учетом флага ignore_prefixes
-    if ignore_prefixes:
-        sorted_test_set = sorted(test_set, key=sort_key_without_prefix)
-    else:
+def write_file_set(file_path, test_set, debug_list=None, sort_without_prefixes=False):
+    # По умолчанию игнорируем префиксы для правильной сортировки
+    if not sort_without_prefixes:
         sorted_test_set = sorted(test_set)
+    else:
+        sorted_test_set = sorted(test_set, key=sort_key_without_prefix)
     
     # Сортируем debug_list если он есть
     sorted_debug_list = None
     if debug_list:
-        if ignore_prefixes:
-            sorted_debug_list = sorted(debug_list, key=sort_key_without_prefix)
-        else:
+        if not sort_without_prefixes:
             sorted_debug_list = sorted(debug_list)
+        else:
+            sorted_debug_list = sorted(debug_list, key=sort_key_without_prefix)
     
     add_lines_to_file(file_path, [line + '\n' for line in sorted_test_set])
     if sorted_debug_list:
@@ -466,7 +475,7 @@ def apply_and_add_mutes(all_data, output_path, mute_check, aggregated_for_mute, 
         to_mute, to_mute_debug = create_file_set(
             aggregated_for_mute, is_mute_candidate, use_wildcards=True, resolution='to_mute'
         )
-        write_file_set(os.path.join(output_path, 'to_mute.txt'), to_mute, to_mute_debug, ignore_prefixes=False)
+        write_file_set(os.path.join(output_path, 'to_mute.txt'), to_mute, to_mute_debug)
         
         # 2. Кандидаты на размьют
         def is_unmute_candidate_wrapper(test):
@@ -490,7 +499,7 @@ def apply_and_add_mutes(all_data, output_path, mute_check, aggregated_for_mute, 
         to_unmute = sorted(list(set(to_unmute) | set(wildcard_unmute_patterns)))
         to_unmute_debug = sorted(list(set(to_unmute_debug) | set(wildcard_unmute_debugs)))
         
-        write_file_set(os.path.join(output_path, 'to_unmute.txt'), to_unmute, to_unmute_debug, ignore_prefixes=False)
+        write_file_set(os.path.join(output_path, 'to_unmute.txt'), to_unmute, to_unmute_debug)
         
         # 3. Кандидаты на удаление из mute (to_delete)
         def is_delete_candidate_wrapper(test):
@@ -514,13 +523,13 @@ def apply_and_add_mutes(all_data, output_path, mute_check, aggregated_for_mute, 
         to_delete = sorted(list(set(to_delete) | set(wildcard_delete_patterns)))
         to_delete_debug = sorted(list(set(to_delete_debug) | set(wildcard_delete_debugs)))
         
-        write_file_set(os.path.join(output_path, 'to_delete.txt'), to_delete, to_delete_debug, ignore_prefixes=False)
+        write_file_set(os.path.join(output_path, 'to_delete.txt'), to_delete, to_delete_debug)
         
         # 4. muted_ya (все замьюченные сейчас)
         all_muted_ya, all_muted_ya_debug = create_file_set(
             aggregated_for_mute, lambda test: mute_check(test.get('suite_folder'), test.get('test_name')) if mute_check else True, use_wildcards=True, resolution='muted_ya'
         )
-        write_file_set(os.path.join(output_path, 'muted_ya.txt'), all_muted_ya, all_muted_ya_debug, ignore_prefixes=False)
+        write_file_set(os.path.join(output_path, 'muted_ya.txt'), all_muted_ya, all_muted_ya_debug)
         to_mute_set = set(to_mute)
         to_unmute_set = set(to_unmute)
         to_delete_set = set(to_delete)
@@ -542,7 +551,24 @@ def apply_and_add_mutes(all_data, output_path, mute_check, aggregated_for_mute, 
         for wildcard, chunks in wildcard_to_chunks.items():
             N = len(chunks)
             m = sum(1 for t in chunks if t.get('is_muted'))
-            debug_str = f"{wildcard}: {N} chunks, {m} muted"
+            
+            # Собираем статистику по всем chunks для объяснения решения
+            total_pass = sum(t.get('pass_count', 0) for t in chunks)
+            total_fail = sum(t.get('fail_count', 0) for t in chunks)
+            total_mute = sum(t.get('mute_count', 0) for t in chunks)
+            total_skip = sum(t.get('skip_count', 0) for t in chunks)
+            total_runs = total_pass + total_fail + total_mute + total_skip
+            
+            # Определяем причину попадания в список
+            reason = ""
+            if wildcard in to_mute_set:
+                reason = f"TO_MUTE: {total_fail} fails in {total_runs} runs"
+            elif wildcard in to_unmute_set:
+                reason = f"TO_UNMUTE: {total_fail + total_mute} fails in {total_runs} runs"
+            elif wildcard in to_delete_set:
+                reason = f"TO_DELETE: {total_runs} total runs"
+            
+            debug_str = f"{wildcard}: {N} chunks, {m} muted ({reason})"
             test_debug_dict[wildcard] = debug_str
 
         # 5. muted_ya+to_mute
@@ -551,7 +577,7 @@ def apply_and_add_mutes(all_data, output_path, mute_check, aggregated_for_mute, 
         for test in muted_ya_plus_to_mute:
             debug_val = test_debug_dict.get(test, "NO DEBUG INFO")
             muted_ya_plus_to_mute_debug.append(debug_val)
-        write_file_set(os.path.join(output_path, 'muted_ya+to_mute.txt'), muted_ya_plus_to_mute, muted_ya_plus_to_mute_debug, ignore_prefixes=False)
+        write_file_set(os.path.join(output_path, 'muted_ya+to_mute.txt'), muted_ya_plus_to_mute, muted_ya_plus_to_mute_debug)
 
         # 6. muted_ya-to_unmute
         muted_ya_minus_to_unmute = [t for t in all_muted_ya if t not in to_unmute]
@@ -559,7 +585,7 @@ def apply_and_add_mutes(all_data, output_path, mute_check, aggregated_for_mute, 
         for test in muted_ya_minus_to_unmute:
             debug_val = test_debug_dict.get(test, "NO DEBUG INFO")
             muted_ya_minus_to_unmute_debug.append(debug_val)
-        write_file_set(os.path.join(output_path, 'muted_ya-to_unmute.txt'), muted_ya_minus_to_unmute, muted_ya_minus_to_unmute_debug, ignore_prefixes=False)
+        write_file_set(os.path.join(output_path, 'muted_ya-to_unmute.txt'), muted_ya_minus_to_unmute, muted_ya_minus_to_unmute_debug)
 
         # 7. muted_ya-to_delete
         muted_ya_minus_to_delete = [t for t in all_muted_ya if t not in to_delete]
@@ -567,7 +593,7 @@ def apply_and_add_mutes(all_data, output_path, mute_check, aggregated_for_mute, 
         for test in muted_ya_minus_to_delete:
             debug_val = test_debug_dict.get(test, "NO DEBUG INFO")
             muted_ya_minus_to_delete_debug.append(debug_val)
-        write_file_set(os.path.join(output_path, 'muted_ya-to_delete.txt'), muted_ya_minus_to_delete, muted_ya_minus_to_delete_debug, ignore_prefixes=False)
+        write_file_set(os.path.join(output_path, 'muted_ya-to_delete.txt'), muted_ya_minus_to_delete, muted_ya_minus_to_delete_debug)
 
         # 8. muted_ya-to-delete-to-unmute
         muted_ya_minus_to_delete_to_unmute = [t for t in all_muted_ya if t not in to_delete and t not in to_unmute]
@@ -575,7 +601,7 @@ def apply_and_add_mutes(all_data, output_path, mute_check, aggregated_for_mute, 
         for test in muted_ya_minus_to_delete_to_unmute:
             debug_val = test_debug_dict.get(test, "NO DEBUG INFO")
             muted_ya_minus_to_delete_to_unmute_debug.append(debug_val)
-        write_file_set(os.path.join(output_path, 'muted_ya-to-delete-to-unmute.txt'), muted_ya_minus_to_delete_to_unmute, muted_ya_minus_to_delete_to_unmute_debug, ignore_prefixes=False)
+        write_file_set(os.path.join(output_path, 'muted_ya-to-delete-to-unmute.txt'), muted_ya_minus_to_delete_to_unmute, muted_ya_minus_to_delete_to_unmute_debug)
 
         # 9. muted_ya-to-delete-to-unmute+to_mute
         # Вместо set используем list для полного соответствия
@@ -584,9 +610,9 @@ def apply_and_add_mutes(all_data, output_path, mute_check, aggregated_for_mute, 
         for test in muted_ya_minus_to_delete_to_unmute_plus_to_mute:
             debug_val = test_debug_dict.get(test, "NO DEBUG INFO")
             muted_ya_minus_to_delete_to_unmute_plus_to_mute_debug.append(debug_val)
-        write_file_set(os.path.join(output_path, 'muted_ya-to-delete-to-unmute+to_mute.txt'), muted_ya_minus_to_delete_to_unmute_plus_to_mute, muted_ya_minus_to_delete_to_unmute_plus_to_mute_debug, ignore_prefixes=False)
+        write_file_set(os.path.join(output_path, 'muted_ya-to-delete-to-unmute+to_mute.txt'), muted_ya_minus_to_delete_to_unmute_plus_to_mute, muted_ya_minus_to_delete_to_unmute_plus_to_mute_debug)
         # Сохраняем этот же файл как new_muted_ya.txt для совместимости с workflow
-        write_file_set(os.path.join(output_path, 'new_muted_ya.txt'), muted_ya_minus_to_delete_to_unmute_plus_to_mute, muted_ya_minus_to_delete_to_unmute_plus_to_mute_debug, ignore_prefixes=False)
+        write_file_set(os.path.join(output_path, 'new_muted_ya.txt'), muted_ya_minus_to_delete_to_unmute_plus_to_mute, muted_ya_minus_to_delete_to_unmute_plus_to_mute_debug)
         
         # 10. muted_ya_changes - файл с изменениями (новая логика)
         all_test_strings = sorted(all_muted_ya_set | to_mute_set | to_unmute_set | to_delete_set, key=sort_key_without_prefix)
@@ -606,7 +632,7 @@ def apply_and_add_mutes(all_data, output_path, mute_check, aggregated_for_mute, 
             muted_ya_changes.append(line)
             debug_val = test_debug_dict.get(test_str, "NO DEBUG INFO")
             muted_ya_changes_debug.append(f"{prefix} {debug_val}" if prefix else debug_val)
-        write_file_set(os.path.join(output_path, 'muted_ya_changes.txt'), muted_ya_changes, muted_ya_changes_debug, ignore_prefixes=True)
+        write_file_set(os.path.join(output_path, 'muted_ya_changes.txt'), muted_ya_changes, muted_ya_changes_debug, sort_without_prefixes=True)
         
         # Логирование итоговых результатов
         logging.info(f"To mute: {len(to_mute)}")

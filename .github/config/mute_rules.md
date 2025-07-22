@@ -1,171 +1,189 @@
-## 📖 Правила Мьюта и размьюта
+## 📖 Mute and Unmute Rules
 
 ---
 
-### Мьютим тест, если за последние 4 дня:
-- **2 и более падений**
-- **ИЛИ** 1 падение и запусков (pass + fail) не более 10
+### Mute a test if in the last 4 days:
+- **2 or more failures**
+- **OR** 1 failure and runs (pass + fail) not more than 10
 
-### Размьючиваем тест, если за последние 4 дня:
-- **Запусков (pass + fail + mute) > 4**
-- **И нет ни одного падения (fail + mute = 0)**
+### Unmute a test if in the last 4 days:
+- **Runs (pass + fail + mute) > 4**
+- **AND no failures (fail + mute = 0)**
+- **AND no `no_runs` states in history** (test ran consistently)
 
-### Удаляем из mute, если за последние 7 дней:
-- **Не было ни одного запуска** (pass + fail + mute + skip = 0)
-
----
-
-### Примечания
-- Для всех правил учитываются только последние N дней (N=3 для mute, N=4 для unmute, N=7 для delete), включая текущий день.
-- Под "запуском" понимается любое выполнение теста с результатом pass, fail ил mute .
-- Под "падением" понимается выполнение теста с результатом fail или mute.
-- Агрегация статистики ведётся по ключу (test_name, suite_folder, full_name, build_type, branch).
+### Remove from mute if in the last 7 days:
+- **No runs at all** (pass + fail + mute + skip = 0)
 
 ---
 
-**Пример:**
-- Если за 3 дня тест запускался 5 раз, из них 2 раза упал — тест будет замьючен.
-- Если за 4 дня тест запускался 5 раз и все прошли успешно — тест будет размьючен.
-- Если за 7 дней тест не запускался ни разу — он будет удалён из mute. 
+### Notes
+- For all rules, only the last N days are considered (N=3 for mute, N=4 for unmute, N=7 for delete), including the current day.
+- A "run" is any test execution with result pass, fail, or mute.
+- A "failure" is a test execution with result fail or mute.
+- Statistics aggregation is done by key (test_name, suite_folder, full_name, build_type, branch).
 
-## 📝 Ручное управление mute/unmute
+---
 
-### Как замьютить тест вручную
+**Example:**
+- If a test ran 5 times in 3 days with 2 failures — the test will be muted.
+- If a test ran 5 times in 4 days and all passed successfully, and there were no days without runs — the test will be unmuted.
+- If a test ran 5 times in 4 days and all passed successfully, but there was a day without runs (`no_runs`) — the test will NOT be unmuted.
+- If a test didn't run at all in 7 days — it will be removed from mute.
 
-- Откройте [muted_ya.txt](https://github.com/ydb-platform/ydb/blob/main/.github/config/muted_ya.txt) и добавьте строку теста.
-- Создайте PR, скопируйте название и описание из issue.
-- Получите подтверждение от владельца теста.
-- После мержа свяжите PR и issue, уведомите команду.
+## 🔄 Automated Workflow
 
-**Можно также:**
-- Использовать контекстное меню в отчёте PR (см. скриншот).
-- Использовать [Test history dashboard](https://datalens.yandex/4un3zdm0zcnyr?tab=A4) для поиска и мьюта теста.
+### Automatic muted_ya.txt Updates
+The `.github/workflows/update_muted_ya.yml` workflow automatically:
+- Runs every 2 hours from 6:00 to 20:00 UTC
+- Analyzes test data for the last 4-7 days
+- Creates a PR with updated `muted_ya.txt` based on the rules above
+- The PR should be approved to merge by CI Team @ydb-platform/ci
 
-### Как размьютить тест вручную
+### Automatic Issue Creation
+The `.github/workflows/create_issues_for_muted_tests.yml` workflow:
+- Triggers after approval of PRs with `mute-unmute` label
+- Creates GitHub issues for newly muted tests and close unmute
+- Assigns issues to appropriate teams based on test ownership
+- Links issues to the PR that introduced the mutes
 
-- Откройте [muted_ya.txt](https://github.com/ydb-platform/ydb/blob/main/.github/config/muted_ya.txt) и удалите строку теста.
-- Создайте PR с названием "UnMute {testname}".
-- Получите подтверждение от владельца теста.
-- После мержа переведите issue в статус Unmuted, свяжите PR и issue. 
+## 📝 Manual mute/unmute management
 
-## 📊 Дашборд для анализа замьюченных и флейки тестов
+### How to mute a test manually
 
-Для анализа состояния тестов, поиска кандидатов на mute/unmute и отслеживания стабильности используйте интерактивный дашборд:
+- Open [muted_ya.txt](https://github.com/ydb-platform/ydb/blob/main/.github/config/muted_ya.txt) and add a test line.
+- Create a PR, copy the title and description from the issue.
+- Get confirmation from the test owner.
+- After merging, link the PR and issue, notify the team.
+
+**You can also:**
+- Use the context menu in the PR report (see screenshot).
+- Use [Test history dashboard](https://datalens.yandex/4un3zdm0zcnyr?tab=A4) to search and mute a test.
+
+### How to unmute a test manually
+
+- Open [muted_ya.txt](https://github.com/ydb-platform/ydb/blob/main/.github/config/muted_ya.txt) and remove the test line.
+- Create a PR with title "UnMute {testname}".
+- Get confirmation from the test owner.
+- After merging, move the issue to Unmuted status, link the PR and issue.
+
+## 📊 Dashboard for analyzing muted and flaky tests
+
+For analyzing test status, finding mute/unmute candidates, and tracking stability, use the interactive dashboard:
 
 - [YDB Test Analytics Dashboard](https://datalens.yandex/4un3zdm0zcnyr)
 
-**Возможности дашборда:**
-- Просмотр всех замьюченных тестов по owner, full_name, статусу
-- Быстрый поиск по имени теста или команде (owner)
-- Фильтрация по статусу (flaky, muted, stable и др.)
-- История запусков и падений по дням
-- Таблицы кандидатов на mute/unmute (см. соответствующие вкладки)
-- Быстрый переход к созданию mute-issue через ссылку в таблице
+**Dashboard capabilities:**
+- View all muted tests by owner, full_name, status
+- Quick search by test name or team (owner)
+- Filter by status (flaky, muted, stable, etc.)
+- History of runs and failures by day
+- Tables of mute/unmute candidates (see corresponding tabs)
+- Quick transition to creating mute-issues via link in the table
 
-**Примеры использования:**
-- Найти все замьюченные тесты своей команды: выберите owner в фильтре
-- Найти флейки-кандидаты на mute: вкладка Flaky, фильтр по fail_count/run_count
-- Найти стабильные mute для размьюта: вкладка Stable, фильтр по success_rate
+**Usage examples:**
+- Find all muted tests for your team: select owner in the filter
+- Find flaky candidates for mute: Flaky tab, filter by fail_count/run_count
+- Find stable mutes for unmute: Stable tab, filter by success_rate
 
-## 📋 Файлы которые генерирует create_new_muted_ya.py
+## 📋 Files generated by create_new_muted_ya.py
 
 ### 🔇 [to_mute.txt](mute_update/to_mute.txt)
-**Содержимое:** Кандидаты на мьют по новым правилам  
-**Правила:** За 4 дня ≥2 падения **ИЛИ** (≥1 падение и запусков ≤10)  
-**Использование:** Основной файл для принятия решений о мьюте
+**Content:** Mute candidates by new rules  
+**Rules:** In 4 days ≥2 failures **OR** (≥1 failure and runs ≤10)  
+**Usage:** Main file for mute decisions
 
 ### 🔊 [to_unmute.txt](mute_update/to_unmute.txt)
-**Содержимое:** Кандидаты на размьют по новым правилам  
-**Правила:** За 4 дня >4 запусков (pass+fail+mute) и нет падений (fail+mute=0)  
-**Использование:** Основной файл для принятия решений о размьюте
+**Content:** Unmute candidates by new rules  
+**Rules:** In 4 days >4 runs (pass+fail+mute), no failures (fail+mute=0), and no `no_runs` states  
+**Usage:** Main file for unmute decisions
 
 ### 🗑️ [to_remove_from_mute.txt](mute_update/to_remove_from_mute.txt)
-**Содержимое:** Тесты, которые нужно удалить из mute  
-**Правила:** За 7 дней нет запусков  
-**Использование:** Основной файл для удаления из mute
+**Content:** Tests to remove from mute  
+**Rules:** No runs in 7 days  
+**Usage:** Main file for removal from mute
 
-## 📊 Дополнительные файлы для анализа
+## 📊 Additional analysis files
 
 ### 🔍 [muted_ya-deleted.txt](mute_update/muted_ya-deleted.txt)
-**Содержимое:** Тесты из muted_ya минус удалённые тесты  
-**Формула:** `muted_ya` - `deleted`  
-**Использование:** Анализ активных тестов в mute
+**Content:** Tests from muted_ya minus deleted tests  
+**Formula:** `muted_ya` - `deleted`  
+**Usage:** Analysis of active tests in mute
 
 ### 🔍 [muted_ya-stable.txt](mute_update/muted_ya-stable.txt)
-**Содержимое:** Тесты из muted_ya минус стабильные тесты  
-**Формула:** `muted_ya` - `stable`  
-**Использование:** Анализ нестабильных тестов в mute
+**Content:** Tests from muted_ya minus stable tests  
+**Formula:** `muted_ya` - `stable`  
+**Usage:** Analysis of unstable tests in mute
 
 ### 🔍 [muted_ya-stable-deleted.txt](mute_update/muted_ya-stable-deleted.txt)
-**Содержимое:** Тесты из muted_ya минус стабильные и удалённые  
-**Формула:** `muted_ya` - `stable` - `deleted`  
-**Использование:** Анализ активных нестабильных тестов
+**Content:** Tests from muted_ya minus stable and deleted  
+**Formula:** `muted_ya` - `stable` - `deleted`  
+**Usage:** Analysis of active unstable tests
 
 ### 🔍 [muted_ya-stable-deleted+flaky.txt](mute_update/muted_ya-stable-deleted+flaky.txt)
-**Содержимое:** Тесты из muted_ya минус стабильные и удалённые, плюс flaky  
-**Формула:** `muted_ya` - `stable` - `deleted` + `flaky`  
-**Использование:** Создание GitHub issues
+**Content:** Tests from muted_ya minus stable and deleted, plus flaky  
+**Formula:** `muted_ya` - `stable` - `deleted` + `flaky`  
+**Usage:** Creating GitHub issues
 
-## 📋 Debug-файлы (с подробностями)
+## 📋 Debug files (with details)
 
 ### 🔍 [muted_ya-deleted_debug.txt](mute_update/muted_ya-deleted_debug.txt)
-**Содержимое:** Подробности по тестам muted_ya - deleted  
-**Дополнительно:** owner, success_rate, state, days_in_state
+**Content:** Details for tests muted_ya - deleted  
+**Additional:** owner, success_rate, state, days_in_state
 
 ### 🔍 [muted_ya-stable_debug.txt](mute_update/muted_ya-stable_debug.txt)
-**Содержимое:** Подробности по тестам muted_ya - stable  
-**Дополнительно:** owner, success_rate, state, days_in_state
+**Content:** Details for tests muted_ya - stable  
+**Additional:** owner, success_rate, state, days_in_state
 
 ### 🔍 [muted_ya-stable-deleted_debug.txt](mute_update/muted_ya-stable-deleted_debug.txt)
-**Содержимое:** Подробности по тестам muted_ya - stable - deleted  
-**Дополнительно:** owner, success_rate, state, days_in_state
+**Content:** Details for tests muted_ya - stable - deleted  
+**Additional:** owner, success_rate, state, days_in_state
 
 ### 🔍 [muted_ya-stable-deleted+flaky_debug.txt](mute_update/muted_ya-stable-deleted+flaky_debug.txt)
-**Содержимое:** Подробности по тестам muted_ya - stable - deleted + flaky  
-**Дополнительно:** owner, success_rate, state, days_in_state, pass_count, fail_count
-
-
+**Content:** Details for tests muted_ya - stable - deleted + flaky  
+**Additional:** owner, success_rate, state, days_in_state, pass_count, fail_count
 
 ---
 
-## 🔄 Жизненный цикл файлов
+## 🔄 File lifecycle
 
-1. **Анализ данных** → Создание основных файлов действий
-2. **Применение правил** → Формирование трёх основных файлов
-3. **Дополнительный анализ** → Создание файлов для анализа различных комбинаций
-4. **Создание issues** → Использование `new_muted_ya.txt`
+1. **Data analysis** → Creation of main action files
+2. **Rule application** → Formation of three main files
+3. **Additional analysis** → Creation of files for analyzing various combinations
+4. **Issue creation** → Using `new_muted_ya.txt`
 
-**Все файлы создаются в директории `mute_update/` при запуске скрипта. Итоговый mute-файл для workflow — это `new_muted_ya.txt`.** # Таблица выходных файлов mute-логики
+**All files are created in the `mute_update/` directory when running the script. The final mute file for workflow is `new_muted_ya.txt`.**
 
-Эта таблица показывает все файлы, создаваемые скриптом mute-логики, с описанием их содержимого и назначения.
+# Mute logic output files table
 
-## 📋 Основные файлы
+This table shows all files created by the mute logic script, with descriptions of their content and purpose.
 
-| Файл | Описание | Правила | Использование |
+## 📋 Main files
+
+| File | Description | Rules | Usage |
 |------|----------|---------|---------------|
-| `to_mute.txt` | Кандидаты на мьют | За 4 дня ≥2 падения **ИЛИ** (≥1 падение и запусков ≤10) | Основной файл для принятия решений о мьюте |
-| `to_unmute.txt` | Кандидаты на размьют | За 4 дня >4 запусков (pass+fail+mute) и нет падений (fail+mute=0) | Основной файл для принятия решений о размьюте |
-| `to_remove_from_mute.txt` | Тесты для удаления из mute | За 7 дней нет запусков | Основной файл для удаления из mute |
+| `to_mute.txt` | Mute candidates | In 4 days ≥2 failures **OR** (≥1 failure and runs ≤10) | Main file for mute decisions |
+| `to_unmute.txt` | Unmute candidates | In 4 days >4 runs (pass+fail+mute), no failures (fail+mute=0), and no `no_runs` states | Main file for unmute decisions |
+| `to_remove_from_mute.txt` | Tests to remove from mute | No runs in 7 days | Main file for removal from mute |
 
-## 📊 Дополнительные файлы для анализа
+## 📊 Additional analysis files
 
-| Файл | Описание | Формула | Использование |
+| File | Description | Formula | Usage |
 |------|----------|---------|---------------|
-| `muted_ya.txt` | Все замьюченные тесты на текущий момент | агрегировано за 4 дня | База для анализа mute |
-| `muted_ya+to_mute.txt` | muted_ya + to_mute | | Анализ потенциальных mute |
-| `muted_ya-to_unmute.txt` | muted_ya - to_unmute | | Анализ потенциальных размьютов |
-| `muted_ya-to_delete.txt` | muted_ya - to_delete | | Анализ потенциальных удалений |
-| `muted_ya-to-delete-to-unmute.txt` | muted_ya - to_delete - to_unmute | | Анализ активных mute |
-| `muted_ya-to-delete-to-unmute+to_mute.txt` | (muted_ya - to_delete - to_unmute) + to_mute | | Для итогового mute-файла |
-| `new_muted_ya.txt` | Итоговый mute-файл для workflow (дублирует muted_ya-to-delete-to-unmute+to_mute.txt) | копия предыдущего | Используется для автоматического обновления .github/config/muted_ya.txt |
+| `muted_ya.txt` | All currently muted tests | aggregated over 4 days | Base for mute analysis |
+| `muted_ya+to_mute.txt` | muted_ya + to_mute | | Analysis of potential mutes |
+| `muted_ya-to_unmute.txt` | muted_ya - to_unmute | | Analysis of potential unmutes |
+| `muted_ya-to_delete.txt` | muted_ya - to_delete | | Analysis of potential deletions |
+| `muted_ya-to-delete-to-unmute.txt` | muted_ya - to_delete - to_unmute | | Analysis of active mutes |
+| `muted_ya-to-delete-to-unmute+to_mute.txt` | (muted_ya - to_delete - to_unmute) + to_mute | | For final mute file |
+| `new_muted_ya.txt` | Final mute file for workflow (duplicates muted_ya-to-delete-to-unmute+to_mute.txt) | copy of previous | Used for automatic update of .github/config/muted_ya.txt |
 
-## 📋 Debug-файлы (с подробностями)
+## 📋 Debug files (with details)
 
-| Файл | Описание | Дополнительная информация |
+| File | Description | Additional information |
 |------|----------|---------------------------|
-| `muted_ya-deleted_debug.txt` | Подробности по тестам muted_ya - deleted | owner, success_rate, state, days_in_state |
-| `muted_ya-stable_debug.txt` | Подробности по тестам muted_ya - stable | owner, success_rate, state, days_in_state |
-| `muted_ya-stable-deleted_debug.txt` | Подробности по тестам muted_ya - stable - deleted | owner, success_rate, state, days_in_state |
-| `muted_ya-stable-deleted+flaky_debug.txt` | Подробности по тестам muted_ya - stable - deleted + flaky | owner, success_rate, state, days_in_state, pass_count, fail_count |
+| `muted_ya-deleted_debug.txt` | Details for tests muted_ya - deleted | owner, success_rate, state, days_in_state |
+| `muted_ya-stable_debug.txt` | Details for tests muted_ya - stable | owner, success_rate, state, days_in_state |
+| `muted_ya-stable-deleted_debug.txt` | Details for tests muted_ya - stable - deleted | owner, success_rate, state, days_in_state |
+| `muted_ya-stable-deleted+flaky_debug.txt` | Details for tests muted_ya - stable - deleted + flaky | owner, success_rate, state, days_in_state, pass_count, fail_count |
 
 ---

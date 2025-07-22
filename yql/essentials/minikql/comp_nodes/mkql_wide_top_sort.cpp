@@ -777,7 +777,7 @@ private:
             case EOperatingMode::Spilling:
             {
                 const size_t PACK_SIZE = 5_MB;
-                SpilledStates.emplace_back(std::make_unique<TWideUnboxedValuesSpillerAdapter>(Spiller, TupleMultiType, PACK_SIZE));
+                SpilledStates.emplace_back(std::make_unique<TWideUnboxedValuesSpillerAdapter>(Spiller, nullptr, TupleMultiType, PACK_SIZE));
                 break;
             }
             case EOperatingMode::ProcessSpilled:

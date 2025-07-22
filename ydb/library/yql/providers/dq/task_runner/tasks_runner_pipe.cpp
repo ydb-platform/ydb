@@ -1690,6 +1690,9 @@ public:
     void SetSpillerFactory(std::shared_ptr<ISpillerFactory>) override {
     }
 
+    void SetMemoryUsageReporter(TMemoryUsageReporter::TPtr) override {
+    }
+
     TString GetOutputDebugString() override {
         return "";
     }

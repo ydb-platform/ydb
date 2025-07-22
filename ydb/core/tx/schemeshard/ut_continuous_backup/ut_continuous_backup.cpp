@@ -137,6 +137,11 @@ Y_UNIT_TEST_SUITE(TContinuousBackupTests) {
             NLs::HasNotOffloadConfig,
         });
 
+        // Check that stream is deleted after offloading
+        env.SimulateSleep(runtime, TDuration::Seconds(5));
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/0_continuousBackupImpl"), {NLs::PathNotExist});
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/0_continuousBackupImpl/streamImpl"), {NLs::PathNotExist});
+
         TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/IncrBackupImpl"), {
             NLs::PathExist,
             NLs::IsTable,

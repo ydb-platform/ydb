@@ -1228,6 +1228,8 @@ public:
     void Handle(TEvSchemeShard::TEvShredManualStartupRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvSchemeShard::TEvWakeupToRunShredBSC::TPtr& ev, const TActorContext& ctx);
 
+    void Handle(TEvPersQueue::TEvOffloadStatus::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPrivate::TEvContinuousBackupCleanerResult::TPtr& ev, const TActorContext& ctx);
 
     void Handle(TEvSchemeShard::TEvProcessingRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvSchemeShard::TEvSyncTenantSchemeShard::TPtr& ev, const TActorContext& ctx);
@@ -1617,6 +1619,8 @@ public:
     TActorId LoginHelper;
 
     THolder<TShredManager> ShredManager = nullptr;
+
+    THashSet<TActorId> RunningContinuousBackupCleaners;
 
 private:
     void OnDetach(const TActorContext &ctx) override;

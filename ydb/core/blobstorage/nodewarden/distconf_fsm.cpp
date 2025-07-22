@@ -1,45 +1,36 @@
 #include "distconf.h"
 #include "distconf_quorum.h"
+#include "distconf_invoke.h"
 
 namespace NKikimr::NStorage {
 
     void TDistributedConfigKeeper::CheckRootNodeStatus() {
         Y_VERIFY_S(Binding ? (RootState == ERootState::INITIAL || RootState == ERootState::ERROR_TIMEOUT) && !Scepter :
             RootState == ERootState::INITIAL || RootState == ERootState::ERROR_TIMEOUT ? !Scepter :
-            static_cast<bool>(Scepter) || ScepterlessOperationInProgress, "Binding# " << (Binding ? Binding->ToString() : "<null>")
-            << " RootState# " << RootState << " Scepter# " << (Scepter ? ToString(Scepter->Id) : "<null>")
-            << " ScepterlessOperationInProgress# " << ScepterlessOperationInProgress);
+            static_cast<bool>(Scepter) || RootState == ERootState::SCEPTERLESS_OPERATION,
+            "Binding# " << (Binding ? Binding->ToString() : "<null>")
+            << " RootState# " << RootState
+            << " Scepter# " << (Scepter ? ToString(Scepter->Id) : "<null>"));
 
         if (Binding) { // can't become root node
             return;
         }
 
-        const bool hasQuorum = StorageConfig && HasConnectedNodeQuorum(*StorageConfig);
-
-        if (RootState == ERootState::INITIAL && hasQuorum) { // becoming root node
+        if (RootState == ERootState::INITIAL && GlobalQuorum) { // becoming root node
             Y_ABORT_UNLESS(!Scepter);
             Scepter = std::make_shared<TScepter>();
             BecomeRoot();
-        } else if (Scepter && !hasQuorum) { // unbecoming root node -- lost quorum
+            UpdateRootStateToConnectionChecker();
+        } else if (Scepter && !GlobalQuorum) { // unbecoming root node -- lost quorum
             SwitchToError("quorum lost");
         }
     }
 
     void TDistributedConfigKeeper::BecomeRoot() {
-        RootState = ERootState::IN_PROGRESS; // collecting configs at least
-
         WorkingSyncersByNode.clear();
         WorkingSyncers.clear();
         SyncerArrangeInFlight = false;
         SyncerArrangePending = false;
-
-        // start collecting configs from all bound nodes
-        STLOG(PRI_DEBUG, BS_NODE, NWDC19, "Starting config collection", (Scepter, Scepter->Id));
-        ConfigsCollected = false;
-        TEvScatter task;
-        task.SetTaskId(RandomNumber<ui64>());
-        task.MutableCollectConfigs();
-        IssueScatterTask(TActorId(), std::move(task));
 
         // start collecting syncers state if needed
         IssueQuerySyncers();
@@ -47,6 +38,10 @@ namespace NKikimr::NStorage {
         // establish connection to console tablet (if we have means to do it)
         Y_ABORT_UNLESS(!ConsolePipeId);
         ConnectToConsole();
+
+        // trigger first operation
+        RootState = ERootState::RELAX;
+        ChildActors.insert(RegisterWithSameMailbox(new TInvokeRequestHandlerActor(this)));
     }
 
     void TDistributedConfigKeeper::UnbecomeRoot() {
@@ -55,11 +50,17 @@ namespace NKikimr::NStorage {
             StateStorageSelfHealActor.reset();
         }
         DisconnectFromConsole();
+        OpQueueOnUnbecomeRoot();
     }
 
-    void TDistributedConfigKeeper::CheckIfDone() {
-        if (RootState == ERootState::IN_PROGRESS && ConfigsCollected) {
-            RootState = ERootState::RELAX;
+    void TDistributedConfigKeeper::UpdateRootStateToConnectionChecker() {
+        if (AppData()->BridgeModeEnabled) {
+            std::optional<ui32> rootNodeId;
+            if (Binding && Binding->RootNodeId) {
+                rootNodeId.emplace(Binding->RootNodeId);
+            }
+            Send(MakeDistconfBridgeConnectionCheckerActorId(), new TEvPrivate::TEvUpdateRootState(static_cast<bool>(Scepter),
+                rootNodeId, LocalPileQuorum));
         }
     }
 
@@ -69,15 +70,12 @@ namespace NKikimr::NStorage {
             UnbecomeRoot();
             Scepter.reset();
             ++ScepterCounter;
-            ScepterlessOperationInProgress = false;
+            UpdateRootStateToConnectionChecker();
         }
+        Y_ABORT_UNLESS(RootState != ERootState::ERROR_TIMEOUT);
         RootState = ERootState::ERROR_TIMEOUT;
         ErrorReason = reason;
-        if (CurrentProposition) {
-            for (TActorId actorId : CurrentProposition->ActorIds) {
-                Send(actorId, new TEvPrivate::TEvConfigProposed(reason));
-            }
-        }
+        OpQueueOnError(reason);
         CurrentProposition.reset();
         CurrentSelfAssemblyUUID.reset();
         ApplyConfigUpdateToDynamicNodes(true);
@@ -88,7 +86,9 @@ namespace NKikimr::NStorage {
 
     void TDistributedConfigKeeper::HandleErrorTimeout() {
         STLOG(PRI_DEBUG, BS_NODE, NWDC20, "Error timeout hit");
+        Y_ABORT_UNLESS(RootState == ERootState::ERROR_TIMEOUT);
         Y_ABORT_UNLESS(!Scepter);
+        Y_ABORT_UNLESS(InvokeQ.empty());
         RootState = ERootState::INITIAL;
         ErrorReason = {};
         CheckRootNodeStatus();
@@ -103,7 +103,8 @@ namespace NKikimr::NStorage {
 
         switch (res->GetResponseCase()) {
             case TEvGather::kCollectConfigs:
-                return ProcessCollectConfigs(res->MutableCollectConfigs());
+                Y_DEBUG_ABORT();
+                break;
 
             case TEvGather::kProposeStorageConfig:
                 return ProcessProposeStorageConfig(res->MutableProposeStorageConfig());
@@ -125,23 +126,13 @@ namespace NKikimr::NStorage {
                 callback(nodeId);
             }
         };
-        return HasNodeQuorum(config, generateConnected, GetMandatoryPileIds(config, specificBridgePileIds));
-    }
-
-    void TDistributedConfigKeeper::ProcessCollectConfigs(TEvGather::TCollectConfigs *res) {
-        if (auto r = ProcessCollectConfigs(res, std::nullopt, {}, true); r.ErrorReason) {
-            STLOG(PRI_DEBUG, BS_NODE, NWDC63, "ProcessCollectConfigs: error", (Error, *r.ErrorReason));
-            SwitchToError(*r.ErrorReason);
-        } else if (!CurrentProposition) {
-            STLOG(PRI_DEBUG, BS_NODE, NWDC61, "ProcessCollectConfigs: no changes being made");
-            ConfigsCollected = true;
-            CheckIfDone();
-        }
+        return HasNodeQuorum(config, generateConnected, GetMandatoryPileIds(config, specificBridgePileIds), nullptr);
     }
 
     TDistributedConfigKeeper::TProcessCollectConfigsResult TDistributedConfigKeeper::ProcessCollectConfigs(
-            TEvGather::TCollectConfigs *res, std::optional<TStringBuf> selfAssemblyUUID, TActorId actorId,
-            bool allowProposition) {
+            TEvGather::TCollectConfigs *res, std::optional<TStringBuf> selfAssemblyUUID) {
+        TStringStream err;
+
         auto generateSuccessful = [&](auto&& callback) {
             for (const auto& item : res->GetNodes()) {
                 for (const auto& node : item.GetNodeIds()) {
@@ -149,7 +140,7 @@ namespace NKikimr::NStorage {
                 }
             }
         };
-        const bool nodeQuorum = HasNodeQuorum(*StorageConfig, generateSuccessful);
+        const bool nodeQuorum = HasNodeQuorum(*StorageConfig, generateSuccessful, &err);
 
         auto generateSuccessfulDisks = [&](auto&& callback) {
             auto invoke = [&](const auto& disk) {
@@ -170,10 +161,10 @@ namespace NKikimr::NStorage {
                 invoke(disk);
             }
         };
-        const bool configQuorum = HasConfigQuorum(*StorageConfig, generateSuccessfulDisks, *Cfg, false);
+        const bool configQuorum = HasConfigQuorum(*StorageConfig, generateSuccessfulDisks, *Cfg, false, {}, &err);
 
         STLOG(PRI_DEBUG, BS_NODE, NWDC31, "ProcessCollectConfigs", (RootState, RootState), (NodeQuorum, nodeQuorum),
-            (ConfigQuorum, configQuorum), (Res, *res));
+            (ConfigQuorum, configQuorum), (Res, *res), (Error, err.Str()));
 
         if (nodeQuorum && !configQuorum) {
             // check if there is quorum of no-distconf config along the cluster
@@ -187,14 +178,14 @@ namespace NKikimr::NStorage {
                     }
                 }
             };
-            if (HasNodeQuorum(*StorageConfig, generateNodesWithoutDistconf)) {
+            if (HasNodeQuorum(*StorageConfig, generateNodesWithoutDistconf, nullptr)) {
                 // yes, distconf is disabled on the majority of the nodes, so we can't do anything about it
                 return {.IsDistconfDisabledQuorum = true};
             }
         }
 
         if (!nodeQuorum || !configQuorum) {
-            return {"no quorum for CollectConfigs"};
+            return {.ErrorReason = TStringBuilder() << "no quorum for CollectConfigs:" << err.Str()};
         }
 
         // TODO: validate self-assembly UUID
@@ -232,7 +223,7 @@ namespace NKikimr::NStorage {
                     callback(nodeId);
                 }
             };
-            if (HasNodeQuorum(r.Config, generateNodeIds)) {
+            if (HasNodeQuorum(r.Config, generateNodeIds, nullptr)) {
                 ++it;
             } else {
                 baseConfigs.erase(it++);
@@ -243,7 +234,7 @@ namespace NKikimr::NStorage {
                 (BaseConfigs.size, baseConfigs.size()));
             Y_DEBUG_ABORT("Multiple nonintersecting node sets have quorum of BaseConfig");
             Halt();
-            return {"Multiple nonintersecting node sets have quorum of BaseConfig"};
+            return {.ErrorReason = "Multiple nonintersecting node sets have quorum of BaseConfig"};
         }
         NKikimrBlobStorage::TStorageConfig *baseConfig = nullptr;
         for (auto& [meta, info] : baseConfigs) {
@@ -309,13 +300,13 @@ namespace NKikimr::NStorage {
                     (Generation, generation), (Configs, configs));
                 Y_DEBUG_ABORT("Multiple nonintersecting node sets have quorum of persistent config");
                 Halt();
-                return {"Multiple nonintersecting node sets have quorum of persistent config"};
+                return {.ErrorReason = "Multiple nonintersecting node sets have quorum of persistent config"};
             }
             Y_ABORT_UNLESS(configs.size() == 1);
             persistedConfig = configs.front();
         }
         if (maxSeenGeneration && (!persistedConfig || persistedConfig->GetGeneration() < maxSeenGeneration)) {
-            return {"couldn't obtain quorum for configuration that was seen in effect"};
+            return {.ErrorReason = "Couldn't obtain quorum for configuration that was seen in effect"};
         }
 
         // let's try to find possibly proposed config, but without a quorum, and try to reconstruct it
@@ -331,7 +322,7 @@ namespace NKikimr::NStorage {
                             (PersistentConfig, *persistedConfig), (ProposedConfig, config));
                         Y_DEBUG_ABORT("persistently proposed config has too big generation");
                         Halt();
-                        return {"persistently proposed config has too big generation"};
+                        return {.ErrorReason = "Persistently proposed config has too big generation"};
                     }
                 }
                 if (proposedConfig && (proposedConfig->GetGeneration() != config.GetGeneration() ||
@@ -385,17 +376,17 @@ namespace NKikimr::NStorage {
                 }
                 propositionBase.emplace(*baseConfig);
                 if (auto error = GenerateFirstConfig(baseConfig, TString(*selfAssemblyUUID))) {
-                    return {*error};
+                    return {.ErrorReason = *error};
                 }
                 configToPropose = baseConfig;
             }
         }
 
         if (configToPropose) {
-            if (!allowProposition) {
-                return {"unexpected config proposition"};
-            }
-            StartProposition(configToPropose, propositionBase ? &propositionBase.value() : nullptr, {}, actorId, false);
+            return {
+                .PropositionBase = std::move(propositionBase),
+                .ConfigToPropose = *configToPropose,
+            };
         }
 
         return {};
@@ -411,52 +402,74 @@ namespace NKikimr::NStorage {
             }
         };
 
+        if (!CurrentProposition) {
+            Y_DEBUG_ABORT("no currently proposed StorageConfig");
+            return SwitchToError("no currently proposed StorageConfig");
+        }
+
+        // reset current proposition in advance
+        auto proposition = *std::exchange(CurrentProposition, std::nullopt);
+
         auto finishWithError = [&](TString error) {
-            if (CurrentProposition && CurrentProposition->FromActor) {
-                for (TActorId actorId : CurrentProposition->ActorIds) {
-                    Send(actorId, new TEvPrivate::TEvConfigProposed(error));
+            if (proposition.ActorId) {
+                if (auto *actor = GetInvokeRequestHandlerActor(proposition.ActorId)) {
+                    actor->OnConfigProposed(error);
+                } else {
+                    Y_ABORT_UNLESS(DeadActorWaitingForProposition);
                 }
             } else {
                 SwitchToError(error);
             }
         };
 
-        if (!CurrentProposition) {
-            Y_DEBUG_ABORT("no currently proposed StorageConfig");
-            finishWithError("no currently proposed StorageConfig");
-        } else if (HasConfigQuorum(CurrentProposition->StorageConfig, generateSuccessful, *Cfg, true,
-                CurrentProposition->SpecificBridgePileIds)) {
+        if (TStringStream err; HasConfigQuorum(proposition.StorageConfig, generateSuccessful, *Cfg, true,
+                proposition.SpecificBridgePileIds, &err)) {
             // apply configuration and spread it
-            ApplyStorageConfig(CurrentProposition->StorageConfig);
+            ApplyStorageConfig(proposition.StorageConfig);
             FanOutReversePush(StorageConfig.get(), true /*recurseConfigUpdate*/);
 
-            // notify proposing actor, if any
-            auto proposition = *std::exchange(CurrentProposition, std::nullopt);
-            for (TActorId actorId : proposition.ActorIds) {
-                Send(actorId, new TEvPrivate::TEvConfigProposed);
+            // this proposition came from actor -- we notify that actor and finish operation
+            if (auto *actor = GetInvokeRequestHandlerActor(proposition.ActorId)) {
+                actor->OnConfigProposed(std::nullopt);
+            } else {
+                Y_ABORT_UNLESS(DeadActorWaitingForProposition);
             }
+
+            // in case of successful proposition we trigger syncers (if needed)
             if (proposition.CheckSyncersAfterCommit) {
                 IssueQuerySyncers();
             }
-
-            // check if we need to update this config
-            NKikimrBlobStorage::TStorageConfig proposedConfig = *StorageConfig;
-            if (UpdateConfig(&proposedConfig)) {
-                if (auto error = StartProposition(&proposedConfig, &*StorageConfig, {}, {}, false)) {
-                    SwitchToError(*error);
-                }
-            } else if (proposition.FromActor) {
-                const auto prev = std::exchange(RootState, ERootState::RELAX);
-                Y_ABORT_UNLESS(prev == ERootState::IN_PROGRESS);
-            } else {
-                ConfigsCollected = true;
-                CheckIfDone();
-            }
         } else {
             STLOG(PRI_DEBUG, BS_NODE, NWDC47, "no quorum for ProposedStorageConfig", (Record, *res),
-                (ProposedStorageConfig, CurrentProposition->StorageConfig));
-            finishWithError("no quorum for ProposedStorageConfig");
-            CurrentProposition.reset();
+                (ProposedStorageConfig, proposition.StorageConfig),
+                (SpecificBridgePileIds, proposition.SpecificBridgePileIds),
+                (ActorId, proposition.ActorId),
+                (CheckSyncersAfterCommit, proposition.CheckSyncersAfterCommit),
+                (Error, err.Str()));
+            finishWithError(TStringBuilder() << "no quorum for ProposedStorageConfig:" << err.Str());
+        }
+
+        // if this proposition was made by an actor, but it has died, then we have to return state to correct one
+        if (DeadActorWaitingForProposition) {
+            Y_ABORT_UNLESS(proposition.ActorId);
+            Y_ABORT_UNLESS(!InvokeQ.empty());
+            const auto& front = InvokeQ.front();
+            Y_ABORT_UNLESS(proposition.ActorId == front.ActorId);
+            Y_ABORT_UNLESS(!GetInvokeRequestHandlerActor(front.ActorId));
+
+            if (RootState == ERootState::SCEPTERLESS_OPERATION) {
+                Y_ABORT_UNLESS(front.Scepterless);
+                RootState = ERootState::INITIAL;
+            } else if (RootState == ERootState::IN_PROGRESS) {
+                RootState = ERootState::RELAX;
+            } else {
+                return;
+            }
+
+            InvokeQ.pop_front();
+            DeadActorWaitingForProposition = false;
+
+            OpQueueProcessFront();
         }
     }
 
@@ -672,12 +685,14 @@ namespace NKikimr::NStorage {
 
     std::optional<TString> TDistributedConfigKeeper::StartProposition(NKikimrBlobStorage::TStorageConfig *configToPropose,
             const NKikimrBlobStorage::TStorageConfig *propositionBase, THashSet<TBridgePileId>&& specificBridgePileIds,
-            TActorId actorId, bool checkSyncersAfterCommit) {
+            TActorId actorId, bool checkSyncersAfterCommit, bool forceGeneration) {
         // ensure we are not proposing any other config right now
         Y_ABORT_UNLESS(!CurrentProposition);
 
         if (propositionBase) {
-            configToPropose->SetGeneration(propositionBase->GetGeneration() + 1);
+            if (!forceGeneration) {
+                configToPropose->SetGeneration(propositionBase->GetGeneration() + 1);
+            }
             configToPropose->MutablePrevConfig()->CopyFrom(*propositionBase);
             configToPropose->MutablePrevConfig()->ClearPrevConfig();
         }
@@ -695,7 +710,7 @@ namespace NKikimr::NStorage {
             if (auto error = ValidateConfig(*propositionBase)) {
                 return TStringBuilder() << "failed to propose configuration, base config contains errors: " << *error;
             }
-            if (auto error = ValidateConfigUpdate(*propositionBase, *configToPropose)) {
+            if (auto error = ValidateConfigUpdate(*propositionBase, *configToPropose, forceGeneration)) {
                 return TStringBuilder() << "incorrect config proposed: " << *error
                     << " Base# " << SingleLineProto(*propositionBase)
                     << " Proposed# " << SingleLineProto(*configToPropose);
@@ -708,8 +723,7 @@ namespace NKikimr::NStorage {
         CurrentProposition.emplace(TProposition{
             .StorageConfig = *configToPropose,
             .SpecificBridgePileIds = std::move(specificBridgePileIds),
-            .FromActor = static_cast<bool>(actorId),
-            .ActorIds{static_cast<bool>(actorId), actorId},
+            .ActorId = actorId,
             .CheckSyncersAfterCommit = checkSyncersAfterCommit,
         });
 
@@ -720,6 +734,12 @@ namespace NKikimr::NStorage {
         IssueScatterTask(TActorId(), std::move(task));
 
         return std::nullopt;
+    }
+
+    void TDistributedConfigKeeper::CheckForConfigUpdate() {
+        if (NKikimrBlobStorage::TStorageConfig config; UpdateConfig(&config)) {
+            ChildActors.insert(RegisterWithSameMailbox(new TInvokeRequestHandlerActor(this, std::move(config))));
+        }
     }
 
 } // NKikimr::NStorage

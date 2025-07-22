@@ -6,7 +6,7 @@ namespace NKikimr::NOlap::NReader::NSimple::NSysView::NChunks {
 std::shared_ptr<IDataSource> TPortionDataConstructor::Construct(const std::shared_ptr<NReader::NCommon::TSpecialReadContext>& context) {
     AFL_VERIFY(SourceId);
     return std::make_shared<TSourceData>(
-        SourceId, SourceIdx, PathId, TabletId, Portion, std::move(Start), std::move(Finish), context, std::move(Schema));
+        SourceId, SourceIdx, PathId, TabletId, std::move(Portion), std::move(Start), std::move(Finish), context, std::move(Schema));
 }
 
 std::shared_ptr<NCommon::IDataSource> TConstructor::DoExtractNext(const std::shared_ptr<NReader::NCommon::TSpecialReadContext>& context) {

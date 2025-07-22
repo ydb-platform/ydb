@@ -1062,16 +1062,44 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
         }
         {
             TVector<TCandidate> expected = {
-                {BindingName, "a"},
-                {BindingName, "abac"},
+                {BindingName, "$a"},
+                {BindingName, "$abac"},
             };
             UNIT_ASSERT_VALUES_EQUAL(Complete(engine, query + "$"), expected);
         }
         {
             TVector<TCandidate> expected = {
-                {BindingName, "abac"},
+                {BindingName, "$abac"},
             };
             UNIT_ASSERT_VALUES_EQUAL(Complete(engine, query + "$ab"), expected);
+        }
+    }
+
+    Y_UNIT_TEST(BindingEditRange) {
+        auto engine = MakeSqlCompletionEngineUT();
+        {
+            TString query = R"sql(
+                $abacaba=0;
+                SELECT #
+            )sql";
+            TCompletion c = engine->Complete(SharpedInput(query)).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(c.CompletedToken.Content, "");
+        }
+        {
+            TString query = R"sql(
+                $abacaba=0;
+                SELECT $#
+            )sql";
+            TCompletion c = engine->Complete(SharpedInput(query)).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(c.CompletedToken.Content, "$");
+        }
+        {
+            TString query = R"sql(
+                $abacaba=0;
+                SELECT $aba#
+            )sql";
+            TCompletion c = engine->Complete(SharpedInput(query)).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(c.CompletedToken.Content, "$aba");
         }
     }
 

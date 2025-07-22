@@ -45,6 +45,22 @@ void ExitIfError(const TStatus& status, const TString& what) {
     std::exit(1);
 }
 
+void ThrowIfError(const TStatus& status, const TString& what) {
+    if (status.GetStatus() == EStatus::SUCCESS) {
+        return;
+    }
+
+    TStringStream ss;
+    ss << what << ": " << ToString(status.GetStatus());
+    const auto& issues = status.GetIssues();
+    if (issues) {
+        ss << ", issues: ";
+        issues.PrintTo(ss, true);
+    }
+
+    ythrow yexception() << ss.Str();
+}
+
 std::stop_source& GetGlobalInterruptSource() {
     static std::stop_source StopByInterrupt;
     return StopByInterrupt;

@@ -1,8 +1,32 @@
 # {{ ydb-short-name }} CLI changelog
 
+## Version 2.23.0 {#2-23-0}
+
+Released on July 16, 2025. To update to version **2.23.0**, select the [Downloads](downloads/ydb-cli.md) section.
+
+### Features
+
+* Added the `{{ ydb-cli }} workload tpcc` command to run a TPC-C benchmark.
+* Added the `{{ ydb-cli }} workload vector select` command to benchmark vector index performance and recall.
+* Added the `{{ ydb-cli }} tools infer csv` command to generate a `CREATE TABLE` SQL query from a CSV data file.
+
+### Improvements
+
+* Enhanced processing of special values (`null`, `/dev/null`, `stdout`, `cout`, `console`, `stderr`, and `cerr`) for the `--output` option in the `{{ ydb-cli }} workload * run` [commands](./reference/ydb-cli/commands/workload/index.md).
+* The `{{ ydb-cli }} workload` [commands](./reference/ydb-cli/commands/workload/index.md) now work with absolute paths for database scheme objects.
+* Improvements in the `{{ ydb-cli }}` [interactive mode](./reference/ydb-cli/interactive-cli.md):
+  * Added server connection check and hotkeys description.
+  * Improved inline hints.
+  * Added table column names completion.
+  * Added schema caching.
+
+### Bug fixes
+
+* Fixed an issue where the `{{ ydb-cli }} tools restore` [command](./reference/ydb-cli/export-import/tools-restore.md) was not working on Windows.
+
 ## Version 2.22.1 {#2-22-1}
 
-Released on June 17, 2025. To update to version **2.22.1**, select the [Downloads](downloads/index.md#ydb-cli) section.
+Released on June 17, 2025. To update to version **2.22.1**, select the [Downloads](downloads/ydb-cli.md) section.
 
 ### Bug fixes
 
@@ -11,7 +35,7 @@ Released on June 17, 2025. To update to version **2.22.1**, select the [Download
 
 ## Version 2.22.0 {#2-22-0}
 
-Released on June 4, 2025. To update to version **2.22.0**, select the [Downloads](downloads/index.md#ydb-cli) section.
+Released on June 4, 2025. To update to version **2.22.0**, select the [Downloads](downloads/ydb-cli.md) section.
 
 ### Features
 
@@ -22,15 +46,15 @@ Released on June 4, 2025. To update to version **2.22.0**, select the [Downloads
 
 ### Backward incompatible changes
 
-* Removed the `--executor` option from the `{{ ydb-cli }} workload * run` [commands](./reference/ydb-cli/commands/workload). The `generic` executor is now always used.
+* Removed the `--executor` option from the `{{ ydb-cli }} workload * run` [commands](./reference/ydb-cli/commands/workload/index.md). The `generic` executor is now always used.
 
 ### Bug fixes
 
-* Fixed an issue where the `{{ ydb-cli }} workload * clean` [commands](./reference/ydb-cli/commands/workload) were deleting all contents from the target directory, instead of just the tables created by the init command.
+* Fixed an issue where the `{{ ydb-cli }} workload * clean` [commands](./reference/ydb-cli/commands/workload/index.md) were deleting all contents from the target directory, instead of just the tables created by the init command.
 
 ## Version 2.21.0 {#2-21-0}
 
-Released on May 22, 2025. To update to version **2.21.0**, select the [Downloads](downloads/index.md#ydb-cli) section.
+Released on May 22, 2025. To update to version **2.21.0**, select the [Downloads](downloads/ydb-cli.md) section.
 
 ### Features
 
@@ -65,7 +89,7 @@ Released on May 22, 2025. To update to version **2.21.0**, select the [Downloads
 
 ## Version 2.20.0 {#2-20-0}
 
-Released on March 5, 2025. To update to version **2.20.0**, select the [Downloads](downloads/index.md#ydb-cli) section.
+Released on March 5, 2025. To update to version **2.20.0**, select the [Downloads](downloads/ydb-cli.md) section.
 
 ### Features
 
@@ -93,7 +117,7 @@ Released on March 5, 2025. To update to version **2.20.0**, select the [Download
 
 ## Version 2.19.0 {#2-19-0}
 
-Released on February 5, 2025. To update to version **2.19.0**, select the [Downloads](downloads/index.md#ydb-cli) section.
+Released on February 5, 2025. To update to version **2.19.0**, select the [Downloads](downloads/ydb-cli.md) section.
 
 ### Features
 
@@ -117,7 +141,7 @@ Released on February 5, 2025. To update to version **2.19.0**, select the [Downl
 
 ## Version 2.18.0 {#2-18-0}
 
-Released on December 24, 2024. To update to version **2.18.0**, select the [Downloads](downloads/index.md#ydb-cli) section.
+Released on December 24, 2024. To update to version **2.18.0**, select the [Downloads](downloads/ydb-cli.md) section.
 
 ### Features
 
@@ -141,7 +165,7 @@ Released on December 24, 2024. To update to version **2.18.0**, select the [Down
 
 ## Version 2.17.0 {#2-17-0}
 
-Released on December 4, 2024. To update to version **2.17.0**, select the [Downloads](downloads/index.md#ydb-cli) section.
+Released on December 4, 2024. To update to version **2.17.0**, select the [Downloads](downloads/ydb-cli.md) section.
 
 ### Features
 
@@ -158,7 +182,7 @@ Released on December 4, 2024. To update to version **2.17.0**, select the [Downl
 
 ## Version 2.16.0 {#2-16-0}
 
-Released on November 26, 2024. To update to version **2.16.0**, select the [Downloads](downloads/index.md#ydb-cli) section.
+Released on November 26, 2024. To update to version **2.16.0**, select the [Downloads](downloads/ydb-cli.md) section.
 
 ### Features
 
@@ -183,7 +207,7 @@ Released on November 26, 2024. To update to version **2.16.0**, select the [Down
 
 ## Version 2.10.0 {#2-10-0}
 
-Released on June 24, 2024. To update to version **2.10.0**, select the [Downloads](downloads/index.md#ydb-cli) section.
+Released on June 24, 2024. To update to version **2.10.0**, select the [Downloads](downloads/ydb-cli.md) section.
 
 ### Features
 
@@ -211,7 +235,7 @@ Released on June 24, 2024. To update to version **2.10.0**, select the [Download
 
 ## Version 2.9.0 {#2-9-0}
 
-Released on April 25, 2024. To update to version **2.9.0**, select the [Downloads](downloads/index.md#ydb-cli) section.
+Released on April 25, 2024. To update to version **2.9.0**, select the [Downloads](downloads/ydb-cli.md) section.
 
 ### Features
 
@@ -232,7 +256,7 @@ Released on April 25, 2024. To update to version **2.9.0**, select the [Download
 
 ## Version 2.8.0 {#2-8-0}
 
-Released on January 12, 2024. To update to version **2.8.0**, select the [Downloads](downloads/index.md#ydb-cli) section.
+Released on January 12, 2024. To update to version **2.8.0**, select the [Downloads](downloads/ydb-cli.md) section.
 
 ### Features
 
@@ -253,7 +277,7 @@ Released on January 12, 2024. To update to version **2.8.0**, select the [Downlo
 
 ## Version 2.7.0 {#2-7-0}
 
-Released on October 23, 2023. To update to version **2.7.0**, select the [Downloads](downloads/index.md#ydb-cli) section.
+Released on October 23, 2023. To update to version **2.7.0**, select the [Downloads](downloads/ydb-cli.md) section.
 
 ### Features
 
@@ -274,7 +298,7 @@ Released on October 23, 2023. To update to version **2.7.0**, select the [Downlo
 
 ## Version 2.6.0 {#2-6-0}
 
-Released on September 7, 2023. To update to version **2.6.0**, select the [Downloads](downloads/index.md#ydb-cli) section.
+Released on September 7, 2023. To update to version **2.6.0**, select the [Downloads](downloads/ydb-cli.md) section.
 
 ### Features
 
@@ -302,7 +326,7 @@ Released on September 7, 2023. To update to version **2.6.0**, select the [Downl
 
 ## Version 2.5.0 {#2-5-0}
 
-Released on June 20, 2023. To update to version **2.5.0**, select the [Downloads](downloads/index.md#ydb-cli) section.
+Released on June 20, 2023. To update to version **2.5.0**, select the [Downloads](downloads/ydb-cli.md) section.
 
 ### Features
 
@@ -320,7 +344,7 @@ Released on June 20, 2023. To update to version **2.5.0**, select the [Downloads
 
 ## Version 2.4.0 {#2-4-0}
 
-Released on May 24, 2023. To update to version **2.4.0**, select the [Downloads](downloads/index.md#ydb-cli) section.
+Released on May 24, 2023. To update to version **2.4.0**, select the [Downloads](downloads/ydb-cli.md) section.
 
 ### Features
 
@@ -330,7 +354,7 @@ Released on May 24, 2023. To update to version **2.4.0**, select the [Downloads]
 
 ## Version 2.3.0 {#2-3-0}
 
-Release date: May 1, 2023. To update to version **2.3.0**, select the [Downloads](downloads/index.md#ydb-cli) section.
+Release date: May 1, 2023. To update to version **2.3.0**, select the [Downloads](downloads/ydb-cli.md) section.
 
 ### Features
 
@@ -349,7 +373,7 @@ Release date: May 1, 2023. To update to version **2.3.0**, select the [Downloads
 
 ## Version 2.2.0 {#2-2-0}
 
-Release date: March 3, 2023. To update to version **2.2.0**, select the [Downloads](downloads/index.md#ydb-cli) section.
+Release date: March 3, 2023. To update to version **2.2.0**, select the [Downloads](downloads/ydb-cli.md) section.
 
 ### Features
 
@@ -363,7 +387,7 @@ Release date: March 3, 2023. To update to version **2.2.0**, select the [Downloa
 
 ## Version 2.1.1 {#2-1-1}
 
-Release date: December 30, 2022. To update to version **2.1.1**, select the [Downloads](downloads/index.md#ydb-cli) section.
+Release date: December 30, 2022. To update to version **2.1.1**, select the [Downloads](downloads/ydb-cli.md) section.
 
 ### Improvements
 
@@ -373,7 +397,7 @@ Release date: December 30, 2022. To update to version **2.1.1**, select the [Dow
 
 ## Version 2.1.0 {#2-1-0}
 
-Release date: November 18, 2022. To update to version **2.1.0**, select the [Downloads](downloads/index.md#ydb-cli) section.
+Release date: November 18, 2022. To update to version **2.1.0**, select the [Downloads](downloads/ydb-cli.md) section.
 
 ### Features
 
@@ -392,7 +416,7 @@ Release date: November 18, 2022. To update to version **2.1.0**, select the [Dow
 
 ## Version 2.0.0 {#2-0-0}
 
-Release date: September 20, 2022. To update to version **2.0.0**, select the [Downloads](downloads/index.md#ydb-cli) section.
+Release date: September 20, 2022. To update to version **2.0.0**, select the [Downloads](downloads/ydb-cli.md) section.
 
 ### Features
 
@@ -424,7 +448,7 @@ Release date: September 20, 2022. To update to version **2.0.0**, select the [Do
 
 ## Version 1.9.1 {#1-9-1}
 
-Release date: June 25, 2022. To update to version **1.9.1**, select the [Downloads](downloads/index.md#ydb-cli) section.
+Release date: June 25, 2022. To update to version **1.9.1**, select the [Downloads](downloads/ydb-cli.md) section.
 
 ### Features
 

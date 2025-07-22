@@ -187,6 +187,9 @@ public:
 
     NKikimrCms::TClusterState RequestState(const NKikimrCms::TClusterStateRequest &request = {},
         NKikimrCms::TStatus::ECode code = NKikimrCms::TStatus::OK);
+    
+    using TListNodes = ::google::protobuf::RepeatedPtrField< ::Ydb::Maintenance::Node>;
+    TListNodes RequestListNodes();
 
     std::pair<TString, TVector<TString>> ExtractPermissions(const NKikimrCms::TPermissionResponse &response);
 

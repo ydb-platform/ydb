@@ -14,7 +14,15 @@ namespace NKikimr::NStorage {
         , Cfg(std::move(cfg))
         , BaseConfig(baseConfig)
         , InitialConfig(std::move(baseConfig))
-    {}
+    {
+        if (Cfg && Cfg->BridgeConfig) {
+            const auto& piles = Cfg->BridgeConfig->GetPiles();
+            for (int i = 0; i < piles.size(); ++i) {
+                const auto [it, inserted] = BridgePileNameMap.emplace(piles[i].GetName(), TBridgePileId::FromValue(i));
+                Y_ABORT_UNLESS(inserted);
+            }
+        }
+    }
 
     void TDistributedConfigKeeper::Bootstrap() {
         STLOG(PRI_DEBUG, BS_NODE, NWDC00, "Bootstrap");
@@ -27,12 +35,13 @@ namespace NKikimr::NStorage {
         }
 
         std::shared_ptr<TEvInterconnect::TEvNodesInfo::TPileMap> pileMap;
-        if (AppData()->BridgeConfig && AppData()->BridgeConfig->PilesSize()) {
-            pileMap = std::make_shared<TEvInterconnect::TEvNodesInfo::TPileMap>(AppData()->BridgeConfig->PilesSize());
+        if (AppData()->BridgeModeEnabled) {
+            const auto& bridge = AppData()->BridgeConfig;
+            pileMap = std::make_shared<TEvInterconnect::TEvNodesInfo::TPileMap>(bridge.PilesSize());
 
             THashMap<TString, ui32> pileNames;
-            for (size_t i = 0; i < AppData()->BridgeConfig->PilesSize(); ++i) {
-                pileNames.emplace(AppData()->BridgeConfig->GetPiles(i).GetName(), i);
+            for (size_t i = 0; i < bridge.PilesSize(); ++i) {
+                pileNames.emplace(bridge.GetPiles(i).GetName(), i);
             }
 
             for (const auto& item : Cfg->NameserviceConfig.GetNode()) {
@@ -77,11 +86,6 @@ namespace NKikimr::NStorage {
         TActorBootstrapped::PassAway();
     }
 
-    void TDistributedConfigKeeper::HandleGone(STATEFN_SIG) {
-        const size_t numErased = ChildActors.erase(ev->Sender);
-        Y_DEBUG_ABORT_UNLESS(numErased == 1);
-    }
-
     void TDistributedConfigKeeper::Halt() {
         // TODO: implement
     }
@@ -122,7 +126,7 @@ namespace NKikimr::NStorage {
                 config.GetSelfManagementConfig().GetEnabled() &&
                 config.GetGeneration();
 
-            if (config.HasClusterState() && Cfg->BridgeConfig) {
+            if (Cfg->BridgeConfig) {
                 BridgeInfo = GenerateBridgeInfo(config, Cfg.Get(), SelfNode.NodeId());
             } else {
                 Y_ABORT_UNLESS(!BridgeInfo);
@@ -141,6 +145,14 @@ namespace NKikimr::NStorage {
                 ConnectToConsole();
                 SendConfigProposeRequest();
             }
+
+            const auto& allNodes = StorageConfig->GetAllNodes();
+            if (std::vector<TNodeIdentifier> newNodeList(allNodes.begin(), allNodes.end()); !newNodeList.empty()) {
+                ApplyNewNodeList(newNodeList);
+            }
+
+            UnbindNodesFromNonPrimaryPile();
+            UpdateQuorums();
 
             return true;
         } else if (StorageConfig->GetGeneration() && StorageConfig->GetGeneration() == config.GetGeneration() &&
@@ -185,11 +197,13 @@ namespace NKikimr::NStorage {
 
 #ifndef NDEBUG
     void TDistributedConfigKeeper::ConsistencyCheck() {
-        for (const auto& [nodeId, info] : DirectBoundNodes) {
-            Y_ABORT_UNLESS(std::binary_search(NodeIds.begin(), NodeIds.end(), nodeId));
+        for (const auto& [nodeId, info] : DirectBoundNodes) { // validate incoming binding
+            Y_ABORT_UNLESS(std::ranges::binary_search(NodeIdsForIncomingBinding, nodeId) ||
+                (BridgeInfo && BridgeInfo->SelfNodePile->IsPrimary && AllNodeIds.contains(nodeId)));
         }
-        if (Binding) {
-            Y_ABORT_UNLESS(std::binary_search(NodeIds.begin(), NodeIds.end(), Binding->NodeId));
+        if (Binding) { // validate outgoing binding
+            Y_ABORT_UNLESS(std::ranges::binary_search(NodeIdsForOutgoingBinding, Binding->NodeId) ||
+                std::ranges::binary_search(NodeIdsForPrimaryPileOutgoingBinding, Binding->NodeId));
         }
 
         for (const auto& [cookie, task] : ScatterTasks) {
@@ -262,13 +276,19 @@ namespace NKikimr::NStorage {
         Y_ABORT_UNLESS(CheckFingerprint(*BaseConfig));
         Y_ABORT_UNLESS(!InitialConfig->GetFingerprint() || CheckFingerprint(*InitialConfig));
 
+        if (StorageConfig) {
+            Y_ABORT_UNLESS(HasConnectedNodeQuorum(*StorageConfig) == GlobalQuorum);
+            Y_ABORT_UNLESS((BridgeInfo && HasConnectedNodeQuorum(*StorageConfig, {BridgeInfo->SelfNodePile->BridgePileId})) ==
+                LocalPileQuorum);
+        }
+
         if (Scepter) {
-            Y_ABORT_UNLESS(StorageConfig && HasConnectedNodeQuorum(*StorageConfig));
+            Y_ABORT_UNLESS(StorageConfig && GlobalQuorum);
             Y_ABORT_UNLESS(RootState != ERootState::INITIAL && RootState != ERootState::ERROR_TIMEOUT);
             Y_ABORT_UNLESS(!Binding);
         } else {
             Y_ABORT_UNLESS(RootState == ERootState::INITIAL || RootState == ERootState::ERROR_TIMEOUT ||
-                ScepterlessOperationInProgress);
+                RootState == ERootState::SCEPTERLESS_OPERATION);
 
             // we can't have connection to the Console without being the root node
             Y_ABORT_UNLESS(!ConsolePipeId);
@@ -294,17 +314,17 @@ namespace NKikimr::NStorage {
         const bool wasStorageConfigLoaded = StorageConfigLoaded;
 
         switch (ev->GetTypeRewrite()) {
-            case TEvInterconnect::TEvNodesInfo::EventType:
-                Handle(reinterpret_cast<TEvInterconnect::TEvNodesInfo::TPtr&>(ev));
-                if (!NodeIds.empty() || !IsSelfStatic) {
+            hFunc(TEvInterconnect::TEvNodesInfo, [&](auto& ev) {
+                if (!ev->Get()->NodesPtr->empty()) {
+                    Handle(ev);
                     change = !std::exchange(NodeListObtained, true);
                 }
-                break;
+            })
 
-            case TEvPrivate::EvStorageConfigLoaded:
-                Handle(reinterpret_cast<TEvPrivate::TEvStorageConfigLoaded::TPtr&>(ev));
+            hFunc(TEvPrivate::TEvStorageConfigLoaded, [&](auto& ev) {
+                Handle(ev);
                 change = wasStorageConfigLoaded < StorageConfigLoaded;
-                break;
+            });
 
             case TEvPrivate::EvProcessPendingEvent:
                 Y_ABORT_UNLESS(!PendingEvents.empty());
@@ -369,7 +389,7 @@ namespace NKikimr::NStorage {
             hFunc(TEvNodeWardenDynamicConfigPush, Handle);
             cFunc(TEvPrivate::EvReconnect, HandleReconnect);
             hFunc(NMon::TEvHttpInfo, Handle);
-            fFunc(TEvents::TSystem::Gone, HandleGone);
+            fFunc(TEvPrivate::EvOpQueueEnd, HandleOpQueueEnd);
             cFunc(TEvents::TSystem::Wakeup, HandleWakeup);
             cFunc(TEvents::TSystem::Poison, PassAway);
             hFunc(TEvTabletPipe::TEvClientConnected, Handle);
@@ -517,8 +537,6 @@ namespace NKikimr::NStorage {
 
     TBridgeInfo::TPtr GenerateBridgeInfo(const NKikimrBlobStorage::TStorageConfig& config, const TNodeWardenConfig *cfg,
             ui32 selfNodeId) {
-        const auto& state = config.GetClusterState();
-
         // prepare empty structure
         auto bridgeInfo = std::make_shared<TBridgeInfo>();
         bridgeInfo->Piles.resize(cfg->BridgeConfig->PilesSize());
@@ -546,8 +564,9 @@ namespace NKikimr::NStorage {
             if (!bridgePileName) {
                 Y_ABORT("missing BridgePileName in dynamic TNodeLocation");
             }
-            for (ui32 pileId = 0; pileId < AppData()->BridgeConfig->PilesSize(); ++pileId) {
-                if (AppData()->BridgeConfig->GetPiles(pileId).GetName() == bridgePileName) {
+            const auto& bridge = AppData()->BridgeConfig;
+            for (ui32 pileId = 0; pileId < bridge.PilesSize(); ++pileId) {
+                if (bridge.GetPiles(pileId).GetName() == bridgePileName) {
                     bridgeInfo->SelfNodePile = &bridgeInfo->Piles[pileId];
                     break;
                 }
@@ -559,20 +578,25 @@ namespace NKikimr::NStorage {
 
         Y_ABORT_UNLESS(bridgeInfo->SelfNodePile);
 
-        Y_ABORT_UNLESS(state.PerPileStateSize() == cfg->BridgeConfig->PilesSize());
-        for (size_t i = 0; i < state.PerPileStateSize(); ++i) {
+        const NKikimrBridge::TClusterState *state = config.HasClusterState()
+            ? &config.GetClusterState()
+            : nullptr;
+
+        const size_t numPiles = cfg->BridgeConfig->PilesSize();
+        Y_ABORT_UNLESS(!state || state->PerPileStateSize() == numPiles);
+        for (size_t i = 0; i < numPiles; ++i) {
             auto& pile = bridgeInfo->Piles[i];
             pile.BridgePileId = TBridgePileId::FromValue(i);
-            pile.State = state.GetPerPileState(i);
+            pile.State = state ? state->GetPerPileState(i) : NKikimrBridge::TClusterState::SYNCHRONIZED;
             std::ranges::sort(pile.StaticNodeIds);
         }
 
-        const ui32 primary = state.GetPrimaryPile();
+        const ui32 primary = state ? state->GetPrimaryPile() : 0;
         Y_ABORT_UNLESS(primary < cfg->BridgeConfig->PilesSize());
         bridgeInfo->Piles[primary].IsPrimary = true;
         bridgeInfo->PrimaryPile = &bridgeInfo->Piles[primary];
 
-        if (const ui32 promoted = state.GetPromotedPile(); promoted != primary) {
+        if (const ui32 promoted = state ? state->GetPromotedPile() : primary; promoted != primary) {
             Y_ABORT_UNLESS(promoted < cfg->BridgeConfig->PilesSize());
             auto& pile = bridgeInfo->Piles[promoted];
             Y_ABORT_UNLESS(pile.State == NKikimrBridge::TClusterState::SYNCHRONIZED);
@@ -589,10 +613,11 @@ template<>
 void Out<NKikimr::NStorage::TDistributedConfigKeeper::ERootState>(IOutputStream& s, NKikimr::NStorage::TDistributedConfigKeeper::ERootState state) {
     using E = decltype(state);
     switch (state) {
-        case E::INITIAL:       s << "INITIAL";       return;
-        case E::ERROR_TIMEOUT: s << "ERROR_TIMEOUT"; return;
-        case E::IN_PROGRESS:   s << "IN_PROGRESS";   return;
-        case E::RELAX:         s << "RELAX";         return;
+        case E::INITIAL:               s << "INITIAL";               return;
+        case E::ERROR_TIMEOUT:         s << "ERROR_TIMEOUT";         return;
+        case E::IN_PROGRESS:           s << "IN_PROGRESS";           return;
+        case E::RELAX:                 s << "RELAX";                 return;
+        case E::SCEPTERLESS_OPERATION: s << "SCEPTERLESS_OPERATION"; return;
     }
     Y_ABORT();
 }

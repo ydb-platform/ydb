@@ -1,11 +1,11 @@
 Metadata-Version: 2.4
 Name: multidict
-Version: 6.5.1
+Version: 6.6.3
 Summary: multidict implementation
 Home-page: https://github.com/aio-libs/multidict
 Author: Andrew Svetlov
 Author-email: andrew.svetlov@gmail.com
-License: Apache 2
+License: Apache License 2.0
 Project-URL: Chat: Matrix, https://matrix.to/#/#aio-libs:matrix.org
 Project-URL: Chat: Matrix Space, https://matrix.to/#/#aio-libs-space:matrix.org
 Project-URL: CI: GitHub, https://github.com/aio-libs/multidict/actions
@@ -17,7 +17,6 @@ Project-URL: GitHub: issues, https://github.com/aio-libs/multidict/issues
 Project-URL: GitHub: repo, https://github.com/aio-libs/multidict
 Classifier: Development Status :: 5 - Production/Stable
 Classifier: Intended Audience :: Developers
-Classifier: License :: OSI Approved :: Apache Software License
 Classifier: Programming Language :: Python
 Classifier: Programming Language :: Python :: 3
 Classifier: Programming Language :: Python :: 3.9

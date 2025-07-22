@@ -219,7 +219,7 @@ public:
         } catch (const std::exception& ex) {
             try {
                 // don't generate core if parent died before child
-                Cerr << ex.what() << Endl;
+                Cerr << FormatCurrentException() << Endl;
                 Cerr << "Command " << LastCommand << Endl;
                 Cerr << "Version " << LastVersion << Endl;
                 Cerr << "TaskId " << LastTaskId << Endl;

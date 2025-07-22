@@ -325,19 +325,28 @@ def _maven_coords_for_project(unit, project_dir):
 
     pom_path = unit.resolve(os.path.join('$S', project_dir, 'pom.xml'))
     if os.path.exists(pom_path):
-        import xml.etree.ElementTree as et
-
         try:
-            with open(pom_path, 'rb') as f:
-                root = et.fromstring(f.read())
-            for xpath in ('./{http://maven.apache.org/POM/4.0.0}artifactId', './artifactId'):
-                artifact = root.find(xpath)
-                if artifact is not None:
-                    artifact = artifact.text
-                    if a != artifact and a.startswith(artifact):
-                        c = a[len(artifact) :].lstrip('-_')
-                        a = artifact
-                    break
+            # TODO(YMAKE-1694): xml is not currenly ready for Python subinterpreters, so we temporarily switch to parser implemented in ymake module
+            if hasattr(ymake, 'ymake.get_artifact_id_from_pom_xml'):
+                with open(pom_path, 'rb') as f:
+                    artifact = ymake.get_artifact_id_from_pom_xml(f.read())
+                    if artifact is not None:
+                        if a != artifact and a.startswith(artifact):
+                            c = a[len(artifact) :].lstrip('-_')
+                            a = artifact
+            else:
+                import xml.etree.ElementTree as et
+
+                with open(pom_path, 'rb') as f:
+                    root = et.fromstring(f.read())
+                for xpath in ('./{http://maven.apache.org/POM/4.0.0}artifactId', './artifactId'):
+                    artifact = root.find(xpath)
+                    if artifact is not None:
+                        artifact = artifact.text
+                        if a != artifact and a.startswith(artifact):
+                            c = a[len(artifact) :].lstrip('-_')
+                            a = artifact
+                        break
         except Exception as e:
             raise Exception(f"Can't parse {pom_path}: {str(e)}") from None
 

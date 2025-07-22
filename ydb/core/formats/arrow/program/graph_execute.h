@@ -201,7 +201,7 @@ public:
             return *CurrentNode;
         }
 
-        [[nodiscard]] TConclusion<bool> Reset(const std::vector<std::shared_ptr<TCompiledGraph::TNode>>& graphNodes);
+        [[nodiscard]] TConclusion<bool> Reset(std::vector<std::shared_ptr<TCompiledGraph::TNode>>&& graphNodes);
 
         bool IsValid() const {
             return !!CurrentNode;

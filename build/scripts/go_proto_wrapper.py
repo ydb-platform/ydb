@@ -73,11 +73,14 @@ def main(args):
     # All Arcadia GO projects should have 'a.yandex-team.ru/' namespace prefix.
     # If the namespace doesn't start with 'a.yandex-team.ru/' prefix then this
     # project is from vendor directory under the root of Arcadia.
-    out_dir_src = os.path.normpath(os.path.join(out_dir_temp, arcadia_prefix, proto_namespace))
-    out_dir_dst = out_dir_orig
-    if not os.path.isdir(out_dir_src):
+    out_dir_src_arcadia_prefix = os.path.normpath(os.path.join(out_dir_temp, arcadia_prefix))
+    if not os.path.isdir(out_dir_src_arcadia_prefix):
         out_dir_src = out_dir_temp
         out_dir_dst = os.path.join(out_dir_orig, contrib_prefix)
+    else:
+        out_dir_src = os.path.normpath(os.path.join(out_dir_src_arcadia_prefix, proto_namespace))
+        assert os.path.isdir(out_dir_src), 'Make sure your proto namespace {} is correctly set in go_package, path not found {}'.format(proto_namespace, out_dir_src)
+        out_dir_dst = out_dir_orig
 
     move_tree(out_dir_src, out_dir_dst)
 

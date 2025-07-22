@@ -588,6 +588,15 @@
             ]
         },
         {
+            "Name": "TKqpOlapPredicateClosure",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "TKqpOlapPredicateClosure"},
+            "Children": [
+                {"Index": 0, "Name": "Lambda", "Type": "TCoLambda"},
+                {"Index": 1, "Name": "ArgsType", "Type": "TExprBase"}
+            ]
+        },
+        {
             "Name": "TKqpOlapOperationBase",
             "Base": "TCallable",
             "Match": {"Type": "CallableBase"},

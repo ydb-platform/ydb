@@ -1682,66 +1682,74 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
     }
         {
             // Check fetch offsets with nonexistent topic
-            std::map<TString, std::vector<i32>> topicsToPartions;
-            topicsToPartions[notExistsTopicName] = std::vector<i32>{0, 1};
-            auto msg = client.OffsetFetch(firstConsumerName, topicsToPartions);
-            UNIT_ASSERT_VALUES_EQUAL(msg->Groups.size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics.size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[0].Partitions.size(), 2);
-            for (const auto& partition : msg->Groups[0].Topics[0].Partitions) {
-                UNIT_ASSERT_VALUES_EQUAL(partition.ErrorCode, UNKNOWN_TOPIC_OR_PARTITION);
+            if (!testServer.KikimrServer.get()->ServerSettings->AppConfig->GetKafkaProxyConfig().GetAutoCreateTopicsEnable()) {
+                std::map<TString, std::vector<i32>> topicsToPartions;
+                topicsToPartions[notExistsTopicName] = std::vector<i32>{0, 1};
+                auto msg = client.OffsetFetch(firstConsumerName, topicsToPartions);
+                UNIT_ASSERT_VALUES_EQUAL(msg->Groups.size(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics.size(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[0].Partitions.size(), 2);
+                for (const auto& partition : msg->Groups[0].Topics[0].Partitions) {
+                    UNIT_ASSERT_VALUES_EQUAL(partition.ErrorCode, UNKNOWN_TOPIC_OR_PARTITION);
+                }
             }
         }
 
         {
             // Check commit with nonexistent topic
 
-            std::unordered_map<TString, std::vector<NKafka::TEvKafka::PartitionConsumerOffset>> offsets;
-            std::vector<NKafka::TEvKafka::PartitionConsumerOffset> partitionsAndOffsets;
-            for (ui64 i = 0; i < minActivePartitions; ++i) {
-                partitionsAndOffsets.emplace_back(i, static_cast<ui64>(recordsCount), commitedMetaData);
-            }
-            offsets[firstTopicName] = partitionsAndOffsets;
-            offsets[notExistsTopicName] = partitionsAndOffsets;
+            if (!testServer.KikimrServer.get()->ServerSettings->AppConfig->GetKafkaProxyConfig().GetAutoCreateTopicsEnable()) {
+                std::unordered_map<TString, std::vector<NKafka::TEvKafka::PartitionConsumerOffset>> offsets;
+                std::vector<NKafka::TEvKafka::PartitionConsumerOffset> partitionsAndOffsets;
+                for (ui64 i = 0; i < minActivePartitions; ++i) {
+                    partitionsAndOffsets.emplace_back(i, static_cast<ui64>(recordsCount), commitedMetaData);
+                }
+                offsets[firstTopicName] = partitionsAndOffsets;
+                offsets[notExistsTopicName] = partitionsAndOffsets;
 
-            auto msg = client.OffsetCommit(notExistsConsumerName, offsets);
-            UNIT_ASSERT_VALUES_EQUAL(msg->Topics.size(), 2);
-            UNIT_ASSERT_VALUES_EQUAL(msg->Topics.back().Partitions.size(), minActivePartitions);
-            for (const auto& topic : msg->Topics) {
-                for (const auto& partition : topic.Partitions) {
-                   UNIT_ASSERT_VALUES_EQUAL(partition.ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::GROUP_ID_NOT_FOUND));
+                auto msg = client.OffsetCommit(notExistsConsumerName, offsets);
+                UNIT_ASSERT_VALUES_EQUAL(msg->Topics.size(), 2);
+                UNIT_ASSERT_VALUES_EQUAL(msg->Topics.back().Partitions.size(), minActivePartitions);
+                for (const auto& topic : msg->Topics) {
+                    for (const auto& partition : topic.Partitions) {
+                    UNIT_ASSERT_VALUES_EQUAL(partition.ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::GROUP_ID_NOT_FOUND));
+                    }
                 }
             }
         }
 
         {
-            // Check fetch offsets nonexistent consumer
-            std::map<TString, std::vector<i32>> topicsToPartions;
-            topicsToPartions[firstTopicName] = std::vector<i32>{0, 1};
-            auto msg = client.OffsetFetch(notExistsConsumerName, topicsToPartions);
-            UNIT_ASSERT_VALUES_EQUAL(msg->Groups.size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics.size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[0].Partitions.size(), 2);
-            for (const auto& partition : msg->Groups[0].Topics[0].Partitions) {
-                UNIT_ASSERT_VALUES_EQUAL(partition.ErrorCode, RESOURCE_NOT_FOUND);
+            if (!testServer.KikimrServer.get()->ServerSettings->AppConfig->GetKafkaProxyConfig().GetAutoCreateTopicsEnable()) {
+                // Check fetch offsets nonexistent consumer
+                std::map<TString, std::vector<i32>> topicsToPartions;
+                topicsToPartions[firstTopicName] = std::vector<i32>{0, 1};
+                auto msg = client.OffsetFetch(notExistsConsumerName, topicsToPartions);
+                UNIT_ASSERT_VALUES_EQUAL(msg->Groups.size(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics.size(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[0].Partitions.size(), 2);
+                for (const auto& partition : msg->Groups[0].Topics[0].Partitions) {
+                    UNIT_ASSERT_VALUES_EQUAL(partition.ErrorCode, RESOURCE_NOT_FOUND);
+                }
             }
         }
 
         {
-            // Check commit with nonexistent consumer
-            std::unordered_map<TString, std::vector<NKafka::TEvKafka::PartitionConsumerOffset>> offsets;
-            std::vector<NKafka::TEvKafka::PartitionConsumerOffset> partitionsAndOffsets;
-            for (ui64 i = 0; i < minActivePartitions; ++i) {
-                partitionsAndOffsets.emplace_back(i, static_cast<ui64>(recordsCount), commitedMetaData);
-            }
-            offsets[firstTopicName] = partitionsAndOffsets;
+            if (!testServer.KikimrServer.get()->ServerSettings->AppConfig->GetKafkaProxyConfig().GetAutoCreateTopicsEnable()) {
+                // Check commit with nonexistent consumer
+                std::unordered_map<TString, std::vector<NKafka::TEvKafka::PartitionConsumerOffset>> offsets;
+                std::vector<NKafka::TEvKafka::PartitionConsumerOffset> partitionsAndOffsets;
+                for (ui64 i = 0; i < minActivePartitions; ++i) {
+                    partitionsAndOffsets.emplace_back(i, static_cast<ui64>(recordsCount), commitedMetaData);
+                }
+                offsets[firstTopicName] = partitionsAndOffsets;
 
-            auto msg = client.OffsetCommit(notExistsConsumerName, offsets);
-            UNIT_ASSERT_VALUES_EQUAL(msg->Topics.size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(msg->Topics.back().Partitions.size(), minActivePartitions);
-            for (const auto& topic : msg->Topics) {
-                for (const auto& partition : topic.Partitions) {
-                   UNIT_ASSERT_VALUES_EQUAL(partition.ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::GROUP_ID_NOT_FOUND));
+                auto msg = client.OffsetCommit(notExistsConsumerName, offsets);
+                UNIT_ASSERT_VALUES_EQUAL(msg->Topics.size(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(msg->Topics.back().Partitions.size(), minActivePartitions);
+                for (const auto& topic : msg->Topics) {
+                    for (const auto& partition : topic.Partitions) {
+                    UNIT_ASSERT_VALUES_EQUAL(partition.ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::GROUP_ID_NOT_FOUND));
+                    }
                 }
             }
         }

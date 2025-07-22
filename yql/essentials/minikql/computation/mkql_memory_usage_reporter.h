@@ -10,23 +10,27 @@ namespace NKikimr::NMiniKQL {
 
 class TMemoryUsageReporter {
 public:
-    using TReportCallback = std::function<void(ui64)>;
+    using TAllocateReportCallback = std::function<bool(ui64)>;
+    using TFreeReportCallback = std::function<void(ui64)>;
     using TPtr = std::shared_ptr<TMemoryUsageReporter>;
 public:
-    TMemoryUsageReporter(TReportCallback reportAllocateCallback, TReportCallback reportFreeCallback): ReportAllocateCallback_(reportAllocateCallback), ReportFreeCallback_(reportFreeCallback) {}
+    TMemoryUsageReporter(TAllocateReportCallback reportAllocateCallback, TFreeReportCallback reportFreeCallback): ReportAllocateCallback_(reportAllocateCallback), ReportFreeCallback_(reportFreeCallback) {}
     void ReportAllocate(ui64 bytes) {
         // Cerr << "[MISHA][ALLOC]: " << bytes << ", Total: " << BytesAllocated_ << Endl;
         Y_ENSURE(ReportAllocateCallback_ != nullptr);
-        ReportAllocateCallback_(bytes);
-        BytesAllocated_ += bytes;
+        if (ReportAllocateCallback_(bytes)) {
+            BytesAllocated_ += bytes;
+        }
     }
 
     void ReportFree(ui64 bytes) {
         // Cerr << "[MISHA][FREE]: " << bytes << ", Total: " << BytesAllocated_ << Endl;
         Y_ENSURE(ReportFreeCallback_ != nullptr);
-        ReportFreeCallback_(bytes);
-        Y_ENSURE(BytesAllocated_ >= bytes, "Trying to free more bytes than allocated");
-        BytesAllocated_ -= bytes;
+        ui64 toFree = std::min(BytesAllocated_, bytes);
+        if (toFree) {
+            ReportFreeCallback_(bytes);
+        }
+        BytesAllocated_ -= toFree;
     }
 
     ~TMemoryUsageReporter() {
@@ -43,8 +47,8 @@ public:
 
 private:
     ui64 BytesAllocated_{0};
-    TReportCallback ReportAllocateCallback_{nullptr};
-    TReportCallback ReportFreeCallback_{nullptr};
+    TAllocateReportCallback ReportAllocateCallback_{nullptr};
+    TFreeReportCallback ReportFreeCallback_{nullptr};
 };
 
 }//namespace NKikimr::NMiniKQL

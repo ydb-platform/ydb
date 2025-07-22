@@ -293,7 +293,7 @@ Y_UNIT_TEST_SUITE(TSentinelBaseTests) {
                         .Host = name,
                         .Location = NActors::TNodeLocation(location),
                         .PileId = Nothing(),
-                        .Markers = {}
+                        .Markers = {},
                     };
 
                     for (ui64 npdisk : xrange(pdisksPerNode)) {

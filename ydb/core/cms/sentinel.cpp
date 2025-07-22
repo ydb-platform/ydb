@@ -8,9 +8,9 @@
 #include <ydb/core/base/domain.h>
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
+#include <ydb/core/blobstorage/nodewarden/node_warden_events.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <ydb/library/services/services.pb.h>
-#include <ydb/core/blobstorage/nodewarden/node_warden_events.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
@@ -50,17 +50,15 @@ ui32 TNodeStatusComputer::GetCurrentNodeState() const {
 }
 
 bool TNodeStatusComputer::Compute() {
-    if (ActualState != CurrentState
-        && ((CurrentState == ENodeState::BAD && StateCounter >= BadStateLimit)
-        || (CurrentState == ENodeState::GOOD && StateCounter >= GoodStateLimit))) {
+    if (ActualState != CurrentState && (DefinitelyBad() || DefinitelyGood())) {
         ActualState = CurrentState;
         return true;
     }
-    if (ActualState != ENodeState::MAY_BE_BAD && (CurrentState == ENodeState::BAD && StateCounter < BadStateLimit)) {
+    if (ActualState != ENodeState::MAY_BE_BAD && MaybeBad()) {
         ActualState = ENodeState::MAY_BE_BAD;
         return false;
     }
-    if (ActualState != ENodeState::MAY_BE_GOOD && (CurrentState == ENodeState::GOOD && StateCounter < GoodStateLimit)) {
+    if (ActualState != ENodeState::MAY_BE_GOOD && MaybeGood()) {
         ActualState = ENodeState::MAY_BE_GOOD;
         return false;
     }
@@ -558,7 +556,7 @@ class TConfigUpdater: public TUpdaterBase<TEvSentinel::TEvConfigUpdated, TConfig
 
         if (record.HasState()) {
             std::unordered_set<ui32> nodesToDelete;
-            for (const auto &[nodeId, _] : SentinelState->Nodes) {
+            for (const auto& [nodeId, _] : SentinelState->Nodes) {
                 nodesToDelete.insert(nodeId);
             }
             for (const auto& host : record.GetState().GetHosts()) {
@@ -573,11 +571,11 @@ class TConfigUpdater: public TUpdaterBase<TEvSentinel::TEvConfigUpdated, TConfig
                     node.Location = NActors::TNodeLocation(host.GetLocation());
                     node.PileId = host.HasPileId() ? TMaybeFail<ui32>(host.GetPileId()) : Nothing();
                     node.Markers = std::move(markers);
-                    node.BadStateLimit = Config.NodeBadStateLimit;
-                    node.GoodStateLimit = Config.NodeGoodStateLimit;
+                    node.BadStateLimit = Config.StateStorageSelfHealConfig.NodeBadStateLimit;
+                    node.GoodStateLimit = Config.StateStorageSelfHealConfig.NodeGoodStateLimit;
                 }
             }
-            for (const auto& nodeId : nodesToDelete) {
+            for (const auto nodeId : nodesToDelete) {
                 SentinelState->Nodes.erase(nodeId);
             }
         }
@@ -841,8 +839,8 @@ class TStateUpdater: public TUpdaterBase<TEvSentinel::TEvStateUpdated, TStateUpd
             const ui32 nodeId = *SentinelState->StateUpdaterWaitNodes.begin();
 
             MarkNodePDisks(nodeId, NKikimrBlobStorage::TPDiskState::Timeout);
-            AcceptNodeReply(nodeId);
             MarkNode(nodeId, TNodeInfo::ENodeState::BAD);
+            AcceptNodeReply(nodeId);
         }
 
         MaybeReply();
@@ -1140,13 +1138,13 @@ class TSentinel: public TActorBootstrapped<TSentinel> {
     }
 
     void SendDistconfRequest() {
-        auto request = std::make_unique<NKikimr::NStorage::TEvNodeConfigInvokeOnRoot>();
-        auto *updateRequest = request->Record.MutableSelfHealNodesStateUpdate();
-        updateRequest->SetWaitForConfigStep(Config.StateStorageSelfHealWaitForConfigStep.GetValue() / 1000000); // milliseconds -> seconds
-        updateRequest->SetEnableSelfHealStateStorage(Config.EnableSelfHealStateStorage);
-        for (auto &[nodeId, node] : SentinelState->Nodes) {
+        auto request = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
+        auto* updateRequest = request->Record.MutableSelfHealNodesStateUpdate();
+        updateRequest->SetWaitForConfigStep(Config.StateStorageSelfHealConfig.WaitForConfigStep.GetValue() / 1000000); // milliseconds -> seconds
+        updateRequest->SetEnableSelfHealStateStorage(Config.StateStorageSelfHealConfig.Enable);
+        for (auto& [nodeId, node] : SentinelState->Nodes) {
             SentinelState->NeedSelfHealStateStorage |= node.Compute();
-            auto *nodeState = updateRequest->AddNodesState();
+            auto* nodeState = updateRequest->AddNodesState();
             nodeState->SetNodeId(nodeId);
             nodeState->SetState(node.GetCurrentNodeState());
         }
@@ -1154,7 +1152,7 @@ class TSentinel: public TActorBootstrapped<TSentinel> {
             SentinelState->LastStateStorageSelfHeal = Now();
         }
         if (SentinelState->NeedSelfHealStateStorage
-            && (Now() - SentinelState->LastStateStorageSelfHeal > Config.StateStorageSelfHealRelaxTime)) {
+            && (Now() - SentinelState->LastStateStorageSelfHeal > Config.StateStorageSelfHealConfig.RelaxTime)) {
             SentinelState->NeedSelfHealStateStorage = false;
             LOG_D("Sending self heal request");
             SentinelState->LastStateStorageSelfHeal = Now();

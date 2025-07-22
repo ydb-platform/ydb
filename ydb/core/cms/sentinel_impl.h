@@ -113,7 +113,7 @@ struct TNodeStatusComputer {
         GOOD = 0,
         MAY_BE_GOOD,
         MAY_BE_BAD,
-        BAD
+        BAD,
     };
 
     ENodeState CurrentState = ENodeState::GOOD;
@@ -125,6 +125,11 @@ struct TNodeStatusComputer {
     ui32 GetCurrentNodeState() const;
     bool Compute();
     void AddState(ENodeState newState);
+
+    bool MaybeBad() const { return CurrentState == ENodeState::BAD && StateCounter < BadStateLimit; }
+    bool DefinitelyBad() const { return CurrentState == ENodeState::BAD && StateCounter >= BadStateLimit; }
+    bool MaybeGood() const { return CurrentState == ENodeState::GOOD && StateCounter < GoodStateLimit; }
+    bool DefinitelyGood() const { return CurrentState == ENodeState::GOOD && StateCounter >= GoodStateLimit; }
 };
 
 struct TNodeInfo : public TNodeStatusComputer {

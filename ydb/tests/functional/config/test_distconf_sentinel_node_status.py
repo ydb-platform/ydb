@@ -48,16 +48,18 @@ class KiKiMRDistConfNodeStatusTest(object):
         "cluster": "",
     }
     cms_config = {"sentinel_config": {
-        "enable_self_heal_state_storage": True,
-        "node_good_state_limit": 3,
-        "node_bad_state_limit": 3,
-        "state_storage_self_heal_wait_for_config_step": 1000000,
+        "state_storage_self_heal_config": {
+            "enable": True,
+            "node_good_state_limit": 3,
+            "node_bad_state_limit": 3,
+            "wait_for_config_step": 1000000,
+            "relax_time": 10000000,
+        },
         "default_state_limit": 2,
-        "state_storage_self_heal_relax_time": 10000000,
         "update_config_interval": 2000000,
         "update_state_interval": 2000000,
         "update_state_timeout": 1000000,
-        "retry_update_config": 1000000
+        "retry_update_config": 1000000,
     }}
 
     @classmethod
@@ -65,7 +67,7 @@ class KiKiMRDistConfNodeStatusTest(object):
         log_configs = {
             'BOARD_LOOKUP': LogLevels.DEBUG,
             'BS_NODE': LogLevels.DEBUG,
-            "CMS": LogLevels.DEBUG
+            "CMS": LogLevels.DEBUG,
         }
         cls.configurator = KikimrConfigGenerator(
             cls.erasure,

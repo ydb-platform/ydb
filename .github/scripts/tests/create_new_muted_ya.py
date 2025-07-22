@@ -38,6 +38,61 @@ MUTE_DAYS = 4
 UNMUTE_DAYS = 4
 DELETE_DAYS = 7
 
+def get_wildcard_unmute_candidates(aggregated_for_unmute, mute_check, is_unmute_candidate):
+    """
+    Возвращает список (pattern, debug_string) для wildcard-паттернов, где все chunk'и проходят фильтр на размьют.
+    Если хотя бы один chunk не проходит фильтр, паттерн не попадает в размьют.
+    Debug-строка берётся от любого chunk'а, прошедшего фильтр (обычно первого).
+    Это гарантирует, что если размьючивается паттерн, то размьючиваются все chunk'и, и наоборот.
+    """
+    wildcard_groups = {}
+    for test in aggregated_for_unmute:
+        if mute_check and mute_check(test.get('suite_folder'), test.get('test_name')):
+            wildcard_pattern = create_test_string(test, use_wildcards=True)
+            if wildcard_pattern not in wildcard_groups:
+                wildcard_groups[wildcard_pattern] = []
+            wildcard_groups[wildcard_pattern].append(test)
+
+    result = []
+    for pattern, chunks in wildcard_groups.items():
+        passed_chunks = [chunk for chunk in chunks if is_unmute_candidate(chunk, aggregated_for_unmute)]
+        if len(passed_chunks) == len(chunks) and chunks:
+            debug = create_debug_string(
+                passed_chunks[0],
+                period_days=passed_chunks[0].get('period_days'),
+                date_window=passed_chunks[0].get('date_window')
+            )
+            result.append((pattern, debug))
+    return result
+
+
+def get_wildcard_delete_candidates(aggregated_for_delete, mute_check, is_delete_candidate):
+    """
+    Возвращает список (pattern, debug_string) для wildcard-паттернов, где все chunk'и проходят фильтр на delete (удаление mute).
+    Если хотя бы один chunk не проходит фильтр, паттерн не попадает в delete.
+    Debug-строка берётся от любого chunk'а, прошедшего фильтр (обычно первого).
+    Это гарантирует, что если удаляется mute по паттерну, то удаляются все chunk'и, и наоборот.
+    """
+    wildcard_groups = {}
+    for test in aggregated_for_delete:
+        if mute_check and mute_check(test.get('suite_folder'), test.get('test_name')):
+            wildcard_pattern = create_test_string(test, use_wildcards=True)
+            if wildcard_pattern not in wildcard_groups:
+                wildcard_groups[wildcard_pattern] = []
+            wildcard_groups[wildcard_pattern].append(test)
+
+    result = []
+    for pattern, chunks in wildcard_groups.items():
+        passed_chunks = [chunk for chunk in chunks if is_delete_candidate(chunk, aggregated_for_delete)]
+        if len(passed_chunks) == len(chunks) and chunks:
+            debug = create_debug_string(
+                passed_chunks[0],
+                period_days=passed_chunks[0].get('period_days'),
+                date_window=passed_chunks[0].get('date_window')
+            )
+            result.append((pattern, debug))
+    return result
+
 
 def execute_query(branch='main', build_type='relwithdebinfo', days_window=1):
     # Получаем today
@@ -397,45 +452,21 @@ def apply_and_add_mutes(all_data, output_path, mute_check, aggregated_for_mute, 
         def is_unmute_candidate_wrapper(test):
             return is_unmute_candidate(test, aggregated_for_unmute)
         
+        # Обычные тесты на размьют (по chunk'ам)
         to_unmute, to_unmute_debug = create_file_set(
             aggregated_for_unmute, is_unmute_candidate_wrapper, mute_check, resolution='to_unmute'
         )
         
-        # Для wildcard-паттернов: проверяем, что ВСЕ chunk'и подходят под условия размьюта
-        wildcard_unmute_candidates = []
-        wildcard_unmute_debug = []
+        # Wildcard-паттерны на размьют:
+        # Если все chunk'и паттерна проходят фильтр, то размьючивается весь паттерн (массовый размьют).
+        # Если хотя бы один chunk не проходит — паттерн не размьючивается.
+        wildcard_unmute = get_wildcard_unmute_candidates(aggregated_for_unmute, mute_check, is_unmute_candidate)
+        wildcard_unmute_patterns = [p for p, d in wildcard_unmute]
+        wildcard_unmute_debugs = [d for p, d in wildcard_unmute]
         
-        # Группируем тесты по wildcard-паттернам
-        wildcard_groups = {}
-        for test in aggregated_for_unmute:
-            if mute_check and mute_check(test.get('suite_folder'), test.get('test_name')):
-                wildcard_pattern = create_test_string(test, use_wildcards=True)
-                if wildcard_pattern not in wildcard_groups:
-                    wildcard_groups[wildcard_pattern] = []
-                wildcard_groups[wildcard_pattern].append(test)
-        
-        # Проверяем каждый wildcard-паттерн
-        for wildcard_pattern, chunks in wildcard_groups.items():
-            # Если ВСЕ chunk'и подходят под условия размьюта
-            all_chunks_unmutable = all(
-                is_unmute_candidate(chunk, aggregated_for_unmute)
-                for chunk in chunks
-            )
-            
-            if all_chunks_unmutable:
-                wildcard_unmute_candidates.append(wildcard_pattern)
-                # Берем debug-строку первого chunk'а
-                if chunks:
-                    debug_string = create_debug_string(
-                        chunks[0],
-                        period_days=chunks[0].get('period_days'),
-                        date_window=chunks[0].get('date_window')
-                    )
-                    wildcard_unmute_debug.append(debug_string)
-        
-        # Объединяем обычные и wildcard кандидаты
-        to_unmute = sorted(list(set(to_unmute) | set(wildcard_unmute_candidates)))
-        to_unmute_debug = sorted(list(set(to_unmute_debug) | set(wildcard_unmute_debug)))
+        # Объединяем поштучные и wildcard-результаты
+        to_unmute = sorted(list(set(to_unmute) | set(wildcard_unmute_patterns)))
+        to_unmute_debug = sorted(list(set(to_unmute_debug) | set(wildcard_unmute_debugs)))
         
         write_file_set(os.path.join(output_path, 'to_unmute.txt'), to_unmute, to_unmute_debug)
         
@@ -443,9 +474,22 @@ def apply_and_add_mutes(all_data, output_path, mute_check, aggregated_for_mute, 
         def is_delete_candidate_wrapper(test):
             return is_delete_candidate(test, aggregated_for_delete)
         
+        # Обычные тесты на delete (по chunk'ам)
         to_delete, to_delete_debug = create_file_set(
             aggregated_for_delete, is_delete_candidate_wrapper, mute_check, resolution='to_delete'
         )
+        
+        # Wildcard-паттерны на delete:
+        # Если все chunk'и паттерна проходят фильтр, то удаляется mute по всему паттерну (массовое удаление).
+        # Если хотя бы один chunk не проходит — паттерн не удаляется.
+        wildcard_delete = get_wildcard_delete_candidates(aggregated_for_delete, mute_check, is_delete_candidate)
+        wildcard_delete_patterns = [p for p, d in wildcard_delete]
+        wildcard_delete_debugs = [d for p, d in wildcard_delete]
+        
+        # Объединяем поштучные и wildcard-результаты
+        to_delete = sorted(list(set(to_delete) | set(wildcard_delete_patterns)))
+        to_delete_debug = sorted(list(set(to_delete_debug) | set(wildcard_delete_debugs)))
+        
         write_file_set(os.path.join(output_path, 'to_delete.txt'), to_delete, to_delete_debug)
         
         # 4. muted_ya (все замьюченные сейчас)

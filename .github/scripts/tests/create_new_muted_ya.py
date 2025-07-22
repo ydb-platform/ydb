@@ -254,8 +254,6 @@ def aggregate_test_data(all_data, period_days):
     date_window_range = f"{start_date.strftime('%Y-%m-%d')}:{today.strftime('%Y-%m-%d')}"
     for test_data in aggregated.values():
         test_data['date_window'] = date_window_range
-        if test_data.get('full_name') == 'ydb/core/kqp/ut/cost/KqpCost.VectorIndexLookup+useSink':
-            print(1)
         total_runs = test_data['pass_count'] + test_data['fail_count'] + test_data['mute_count'] + test_data['skip_count']
         if total_runs > 0:
             test_data['success_rate'] = round((test_data['pass_count'] / total_runs) * 100, 1)
@@ -328,7 +326,7 @@ def create_debug_string(test, success_rate=None, period_days=None, date_window=N
     if is_chunk_test(test):
         state = f"(chunk)"
     debug_string += f", p-{test.get('pass_count')}, f-{test.get('fail_count')},m-{test.get('mute_count')}, s-{test.get('skip_count')}, runs-{runs}, state {state}"
-    return debug_string + "\n"
+    return debug_string
 
 def is_flaky_test(test, aggregated_data):
     """Проверяет, является ли тест flaky за указанный период"""
@@ -348,7 +346,7 @@ def is_flaky_test(test, aggregated_data):
     test['period_days'] = test_data.get('period_days')
     
     total_runs = test_data['pass_count'] + test_data['fail_count']
-    return (test_data['fail_count'] >= 2) or (test_data['fail_count'] >= 1 and total_runs <= 10) and total_runs > 0
+    return (test_data['fail_count'] >= 2) or (test_data['fail_count'] >= 1 and total_runs <= 10)
 
 def is_unmute_candidate(test, aggregated_data):
     """Проверяет, является ли тест кандидатом на размьют за указанный период"""

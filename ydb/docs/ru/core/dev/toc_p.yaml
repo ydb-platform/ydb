@@ -44,4 +44,4 @@ items:
   href: resource-consumption-management.md
   when: feature_resource_pool == true and feature_resource_pool_classifier == true
 - name: Статистика выполнения запросов и её анализ
-  href: runtime-stats/toc_p.md
+  href: runtime-stats/toc_p.yaml

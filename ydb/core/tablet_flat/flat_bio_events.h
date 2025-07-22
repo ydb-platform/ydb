@@ -1,8 +1,8 @@
 #pragma once
 
 #include "flat_bio_eggs.h"
-#include "flat_sausage_packet.h"
 #include "flat_sausage_fetch.h"
+#include "flat_sausage_gut.h"
 #include <ydb/core/protos/base.pb.h>
 #include <ydb/core/base/events.h>
 #include <ydb/library/actors/core/event_local.h>
@@ -10,6 +10,8 @@
 namespace NKikimr {
 namespace NTabletFlatExecutor {
 namespace NBlockIO {
+
+    using TPageId = NPageCollection::TPageId;
 
     enum class EEv : ui32 {
         Base_ = EventSpaceBegin(TKikimrEvents::ES_FLAT_EXECUTOR) + 1088,
@@ -20,23 +22,29 @@ namespace NBlockIO {
     };
 
     struct TEvFetch : public TEventLocal<TEvFetch, ui32(EEv::Fetch)> {
-        TEvFetch(EPriority priority, TAutoPtr<NPageCollection::TFetch> fetch)
+        TEvFetch(EPriority priority, TIntrusiveConstPtr<NPageCollection::IPageCollection> pageCollection, TVector<TPageId> pages, ui64 cookie)
             : Priority(priority)
-            , Fetch(fetch)
+            , PageCollection(std::move(pageCollection))
+            , Pages(std::move(pages))
+            , Cookie(cookie)
         {
 
         }
 
-        const EPriority Priority = EPriority::None;
-        TAutoPtr<NPageCollection::TFetch> Fetch;
+        const EPriority Priority;
+        TIntrusiveConstPtr<NPageCollection::IPageCollection> PageCollection;
+        TVector<TPageId> Pages;
+        NWilson::TTraceId TraceId;
+        const ui64 Cookie;
     };
 
     struct TEvData: public TEventLocal<TEvData, ui32(EEv::Data)> {
         using EStatus = NKikimrProto::EReplyStatus;
 
-        TEvData(TAutoPtr<NPageCollection::TFetch> fetch, EStatus status)
+        TEvData(EStatus status, TIntrusiveConstPtr<NPageCollection::IPageCollection> pageCollection, ui64 cookie)
             : Status(status)
-            , Fetch(fetch)
+            , PageCollection(std::move(pageCollection))
+            , Cookie(cookie)
         {
 
         }
@@ -44,8 +52,8 @@ namespace NBlockIO {
         void Describe(IOutputStream &out) const
         {
             out
-                << "Blocks{" << Blocks.size() << " pages"
-                << " " << Fetch->PageCollection->Label()
+                << "Blocks{" << Pages.size() << " pages"
+                << " " << PageCollection->Label()
                 << " " << (Status == NKikimrProto::OK ? "ok" : "fail")
                 << " " << NKikimrProto::EReplyStatus_Name(Status) << "}";
         }
@@ -53,14 +61,15 @@ namespace NBlockIO {
         ui64 Bytes() const
         {
             return
-                std::accumulate(Blocks.begin(), Blocks.end(), ui64(0),
+                std::accumulate(Pages.begin(), Pages.end(), ui64(0),
                     [](ui64 bytes, const NPageCollection::TLoadedPage& block)
                         { return bytes + block.Data.size(); });
         }
 
         const EStatus Status;
-        TAutoPtr<NPageCollection::TFetch> Fetch;
-        TVector<NPageCollection::TLoadedPage> Blocks;
+        TIntrusiveConstPtr<NPageCollection::IPageCollection> PageCollection;
+        TVector<NPageCollection::TLoadedPage> Pages;
+        const ui64 Cookie;
     };
 
 }

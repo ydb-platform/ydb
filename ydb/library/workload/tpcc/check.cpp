@@ -635,6 +635,57 @@ TFuture<void> ConsistencyCheck3324(TQueryClient& client, const TString& path) {
     return CheckNoRows(client, query);
 }
 
+TFuture<void> ConsistencyCheck3325(TQueryClient& client, const TString& path, int expectedWhNumber) {
+    const int WAREHOUSE_RANGE_SIZE = 1000;
+    std::vector<TFuture<void>> rangeFutures;
+
+    for (int startWh = 1; startWh <= expectedWhNumber; startWh += WAREHOUSE_RANGE_SIZE) {
+        int endWh = std::min(startWh + WAREHOUSE_RANGE_SIZE - 1, expectedWhNumber);
+
+        TString query = std::format(R"(
+            PRAGMA TablePathPrefix("{}");
+
+            $missing_in_order =
+            SELECT no.NO_W_ID AS W_ID, no.NO_D_ID AS D_ID, no.NO_O_ID AS O_ID
+            FROM `{}` AS no
+            LEFT JOIN `{}` AS o
+            ON no.NO_W_ID = o.O_W_ID AND no.NO_D_ID = o.O_D_ID AND no.NO_O_ID = o.O_ID
+            WHERE no.NO_W_ID >= {} AND no.NO_W_ID <= {}
+            AND (o.O_W_ID IS NULL OR o.O_CARRIER_ID IS NOT NULL);
+
+            $missing_in_new_order =
+            SELECT o.O_W_ID AS W_ID, o.O_D_ID AS D_ID, o.O_ID AS O_ID
+            FROM `{}` AS o
+            LEFT JOIN `{}` AS no
+            ON o.O_W_ID = no.NO_W_ID AND o.O_D_ID = no.NO_D_ID AND o.O_ID = no.NO_O_ID
+            WHERE o.O_W_ID >= {} AND o.O_W_ID <= {}
+            AND o.O_CARRIER_ID IS NULL AND no.NO_W_ID IS NULL;
+
+            SELECT *
+            FROM $missing_in_order
+            UNION ALL
+            SELECT *
+            FROM $missing_in_new_order
+            LIMIT 1;
+        )", path.c_str(), TABLE_NEW_ORDER, TABLE_OORDER, startWh, endWh,
+           TABLE_OORDER, TABLE_NEW_ORDER, startWh, endWh);
+
+        rangeFutures.push_back(CheckNoRows(client, query));
+    }
+
+    auto waitAllFuture = WaitAll(rangeFutures);
+    waitAllFuture.GetValue();
+
+    // return any with error
+    for (const auto& future: rangeFutures) {
+        if (future.HasException()) {
+            return future;
+        }
+    }
+
+    return MakeFuture();
+}
+
 //-----------------------------------------------------------------------------
 
 class TPCCChecker {
@@ -655,6 +706,7 @@ private:
     void BaseCheck(TQueryClient& client);
     void ConsistencyCheckPart1(TQueryClient& client);
     void ConsistencyCheckPart2(TQueryClient& client);
+    void ConsistencyCheckPart3(TQueryClient& client);
 
 private:
     NConsoleClient::TClientCommand::TConfig ConnectionConfig;
@@ -678,7 +730,8 @@ void TPCCChecker::CheckSync() {
     std::vector<void (TPCCChecker::*)(TQueryClient&)> checkFunctions = {
         &TPCCChecker::BaseCheck,
         &TPCCChecker::ConsistencyCheckPart1,
-        &TPCCChecker::ConsistencyCheckPart2
+        &TPCCChecker::ConsistencyCheckPart2,
+        &TPCCChecker::ConsistencyCheckPart3,
     };
 
     for (auto& checkFunction : checkFunctions) {
@@ -758,6 +811,12 @@ void TPCCChecker::ConsistencyCheckPart2(TQueryClient& client) {
     RunningChecks.insert(RunningChecks.end(), {
         { ConsistencyCheck3323(client, Config.Path), "3.3.2.3" },
         { ConsistencyCheck3324(client, Config.Path), "3.3.2.4" },
+    });
+}
+
+void TPCCChecker::ConsistencyCheckPart3(TQueryClient& client) {
+    RunningChecks.insert(RunningChecks.end(), {
+        { ConsistencyCheck3325(client, Config.Path, Config.WarehouseCount), "3.3.2.5" },
     });
 }
 

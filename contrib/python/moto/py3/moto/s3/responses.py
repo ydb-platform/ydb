@@ -1,7 +1,6 @@
 import io
-import os
 import re
-from typing import List, Union
+from typing import Any, Dict, List, Iterator, Union, Tuple, Optional, Type
 
 import urllib.parse
 
@@ -14,13 +13,13 @@ from urllib.parse import parse_qs, urlparse, unquote, urlencode, urlunparse
 
 import xmltodict
 
+from moto.core.common_types import TYPE_RESPONSE
 from moto.core.responses import BaseResponse
 from moto.core.utils import path_url
 
 from moto.s3bucket_path.utils import (
     bucket_name_from_url as bucketpath_bucket_name_from_url,
     parse_key_name as bucketpath_parse_key_name,
-    is_delete_keys as bucketpath_is_delete_keys,
 )
 from moto.utilities.aws_headers import amzn_request_id
 
@@ -32,6 +31,7 @@ from .exceptions import (
     InvalidContentMD5,
     InvalidContinuationToken,
     S3ClientError,
+    HeadOnDeleteMarker,
     MissingBucket,
     MissingKey,
     MissingVersion,
@@ -51,10 +51,19 @@ from .exceptions import (
     PreconditionFailed,
     InvalidRange,
     LockNotEnabled,
+    AccessForbidden,
 )
-from .models import s3_backends
-from .models import get_canned_acl, FakeGrantee, FakeGrant, FakeAcl, FakeKey
-from .utils import bucket_name_from_url, metadata_from_headers, parse_region_from_url
+from .models import s3_backends, S3Backend
+from .models import get_canned_acl, FakeGrantee, FakeGrant, FakeAcl, FakeKey, FakeBucket
+from .select_object_content import serialize_select
+from .utils import (
+    bucket_name_from_url,
+    metadata_from_headers,
+    parse_region_from_url,
+    compute_checksum,
+    ARCHIVE_STORAGE_CLASSES,
+    cors_matches_origin,
+)
 from xml.dom import minidom
 
 
@@ -127,6 +136,7 @@ ACTION_MAP = {
             "uploads": "PutObject",
             "restore": "RestoreObject",
             "uploadId": "PutObject",
+            "select": "SelectObject",
         },
     },
     "CONTROL": {
@@ -137,35 +147,36 @@ ACTION_MAP = {
 }
 
 
-def parse_key_name(pth):
+def parse_key_name(pth: str) -> str:
     # strip the first '/' left by urlparse
     return pth[1:] if pth.startswith("/") else pth
 
 
-def is_delete_keys(request, path):
-    # GOlang sends a request as url/?delete= (treating it as a normal key=value, even if the value is empty)
-    # Python sends a request as url/?delete (treating it as a flag)
-    # https://github.com/spulec/moto/issues/2937
-    return (
-        path == "/?delete"
-        or path == "/?delete="
-        or (path == "/" and getattr(request, "query_string", "") == "delete")
-    )
-
-
 class S3Response(BaseResponse):
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__(service_name="s3")
+        # Whatever format requests come in, we should never touch them
+        # There are some nuances here - this decision should be method-specific, instead of service-specific
+        # E.G.: we don't want to touch put_object(), but we might have to decompress put_object_configuration()
+        # Taking the naive approach to never decompress anything from S3 for now
+        self.allow_request_decompression = False
+
+    def get_safe_path(self) -> str:
+        return unquote(self.raw_path)
 
     @property
-    def backend(self):
+    def is_access_point(self) -> bool:
+        return ".s3-accesspoint." in self.headers["host"]
+
+    @property
+    def backend(self) -> S3Backend:
         return s3_backends[self.current_account]["global"]
 
     @property
-    def should_autoescape(self):
+    def should_autoescape(self) -> bool:
         return True
 
-    def all_buckets(self):
+    def all_buckets(self) -> str:
         self.data["Action"] = "ListAllMyBuckets"
         self._authenticate_and_authorize_s3_action()
 
@@ -174,7 +185,7 @@ class S3Response(BaseResponse):
         template = self.response_template(S3_ALL_BUCKETS)
         return template.render(buckets=all_buckets)
 
-    def subdomain_based_buckets(self, request):
+    def subdomain_based_buckets(self, request: Any) -> bool:
         if settings.S3_IGNORE_SUBDOMAIN_BUCKETNAME:
             return False
         host = request.headers.get("host", request.headers.get("Host"))
@@ -226,25 +237,38 @@ class S3Response(BaseResponse):
         )
         return not path_based
 
-    def is_delete_keys(self, request, path, bucket_name):
-        if self.subdomain_based_buckets(request):
-            return is_delete_keys(request, path)
-        else:
-            return bucketpath_is_delete_keys(request, path, bucket_name)
+    def is_delete_keys(self) -> bool:
+        qs = parse_qs(urlparse(self.path).query, keep_blank_values=True)
+        return "delete" in qs
 
-    def parse_bucket_name_from_url(self, request, url):
+    def parse_bucket_name_from_url(self, request: Any, url: str) -> str:
+        bucket_name = ""
         if self.subdomain_based_buckets(request):
-            return bucket_name_from_url(url)
+            bucket_name = bucket_name_from_url(url)  # type: ignore
         else:
-            return bucketpath_bucket_name_from_url(url)
+            bucket_name = bucketpath_bucket_name_from_url(url)  # type: ignore
 
-    def parse_key_name(self, request, url):
+        if self.is_access_point:
+            # import here to avoid circular dependency error
+            from moto.s3control import s3control_backends
+
+            ap_name = bucket_name[: -(len(self.current_account) + 1)]
+            ap = s3control_backends[self.current_account]["global"].get_access_point(
+                self.current_account, ap_name
+            )
+            bucket_name = ap.bucket
+
+        return bucket_name
+
+    def parse_key_name(self, request: Any, url: str) -> str:
         if self.subdomain_based_buckets(request):
             return parse_key_name(url)
         else:
             return bucketpath_parse_key_name(url)
 
-    def ambiguous_response(self, request, full_url, headers):
+    def ambiguous_response(
+        self, request: Any, full_url: str, headers: Any
+    ) -> TYPE_RESPONSE:
         # Depending on which calling format the client is using, we don't know
         # if this is a bucket or key request so we have to check
         if self.subdomain_based_buckets(request):
@@ -254,8 +278,12 @@ class S3Response(BaseResponse):
             return self.bucket_response(request, full_url, headers)
 
     @amzn_request_id
-    def bucket_response(self, request, full_url, headers):
+    def bucket_response(
+        self, request: Any, full_url: str, headers: Any
+    ) -> TYPE_RESPONSE:
         self.setup_class(request, full_url, headers, use_raw_body=True)
+        bucket_name = self.parse_bucket_name_from_url(request, full_url)
+        self.backend.log_incoming_request(request, bucket_name)
         try:
             response = self._bucket_response(request, full_url)
         except S3ClientError as s3error:
@@ -264,7 +292,7 @@ class S3Response(BaseResponse):
         return self._send_response(response)
 
     @staticmethod
-    def _send_response(response):
+    def _send_response(response: Any) -> TYPE_RESPONSE:  # type: ignore
         if isinstance(response, str):
             return 200, {}, response.encode("utf-8")
         else:
@@ -274,8 +302,10 @@ class S3Response(BaseResponse):
 
             return status_code, headers, response_content
 
-    def _bucket_response(self, request, full_url):
-        querystring = self._get_querystring(full_url)
+    def _bucket_response(
+        self, request: Any, full_url: str
+    ) -> Union[str, TYPE_RESPONSE]:
+        querystring = self._get_querystring(request, full_url)
         method = request.method
         region_name = parse_region_from_url(full_url, use_default_region=False)
         if region_name is None:
@@ -306,16 +336,23 @@ class S3Response(BaseResponse):
         elif method == "POST":
             return self._bucket_response_post(request, bucket_name)
         elif method == "OPTIONS":
-            return self._response_options(bucket_name)
+            return self._response_options(request.headers, bucket_name)
         else:
             raise NotImplementedError(
-                "Method {0} has not been implemented in the S3 backend yet".format(
-                    method
-                )
+                f"Method {method} has not been implemented in the S3 backend yet"
             )
 
-    @staticmethod
-    def _get_querystring(full_url):
+    def _get_querystring(self, request: Any, full_url: str) -> Dict[str, Any]:  # type: ignore[misc]
+        # Flask's Request has the querystring already parsed
+        # In ServerMode, we can use this, instead of manually parsing this
+        if hasattr(request, "args"):
+            query_dict = dict()
+            for key, val in dict(request.args).items():
+                # The parse_qs-method returns List[str, List[Any]]
+                # Ensure that we confirm to the same response-type here
+                query_dict[key] = val if isinstance(val, list) else [val]
+            return query_dict
+
         parsed_url = urlparse(full_url)
         # full_url can be one of two formats, depending on the version of werkzeug used:
         # http://foobaz.localhost:5000/?prefix=bar%2Bbaz
@@ -329,24 +366,27 @@ class S3Response(BaseResponse):
         # YQ-1825: Replace was commented out as the version of `Werkzeug`
         # that we are using is 2.0.3 (lesser than 2.1.0) and workaround is not needed
         qs = (parsed_url.query or "") #.replace("+", "%2B")
-        querystring = parse_qs(qs, keep_blank_values=True)
-        return querystring
+        return parse_qs(qs, keep_blank_values=True)
 
-    def _bucket_response_head(self, bucket_name, querystring):
+    def _bucket_response_head(
+        self, bucket_name: str, querystring: Dict[str, Any]
+    ) -> TYPE_RESPONSE:
         self._set_action("BUCKET", "HEAD", querystring)
-        self._authenticate_and_authorize_s3_action()
+        self._authenticate_and_authorize_s3_action(bucket_name=bucket_name)
 
         try:
-            self.backend.head_bucket(bucket_name)
+            bucket = self.backend.head_bucket(bucket_name)
         except MissingBucket:
             # Unless we do this, boto3 does not raise ClientError on
             # HEAD (which the real API responds with), and instead
             # raises NoSuchBucket, leading to inconsistency in
             # error response between real and mocked responses.
             return 404, {}, ""
-        return 200, {}, ""
+        return 200, {"x-amz-bucket-region": bucket.region_name}, ""
 
-    def _set_cors_headers(self, bucket):
+    def _set_cors_headers_options(
+        self, headers: Dict[str, str], bucket: FakeBucket
+    ) -> None:
         """
         TODO: smarter way of matching the right CORS rule:
         See https://docs.aws.amazon.com/AmazonS3/latest/userguide/cors.html
@@ -370,9 +410,13 @@ class S3Response(BaseResponse):
                     cors_rule.allowed_methods
                 )
             if cors_rule.allowed_origins is not None:
-                self.response_headers["Access-Control-Allow-Origin"] = _to_string(
-                    cors_rule.allowed_origins
-                )
+                origin = headers.get("Origin")
+                if cors_matches_origin(origin, cors_rule.allowed_origins):  # type: ignore
+                    self.response_headers["Access-Control-Allow-Origin"] = origin  # type: ignore
+                else:
+                    raise AccessForbidden(
+                        "CORSResponse: This CORS request is not allowed. This is usually because the evalution of Origin, request method / Access-Control-Request-Method or Access-Control-Request-Headers are not whitelisted by the resource's CORS spec."
+                    )
             if cors_rule.allowed_headers is not None:
                 self.response_headers["Access-Control-Allow-Headers"] = _to_string(
                     cors_rule.allowed_headers
@@ -386,25 +430,73 @@ class S3Response(BaseResponse):
                     cors_rule.max_age_seconds
                 )
 
-    def _response_options(self, bucket_name):
+    def _response_options(
+        self, headers: Dict[str, str], bucket_name: str
+    ) -> TYPE_RESPONSE:
         # Return 200 with the headers from the bucket CORS configuration
-        self._authenticate_and_authorize_s3_action()
+        self._authenticate_and_authorize_s3_action(bucket_name=bucket_name)
         try:
             bucket = self.backend.head_bucket(bucket_name)
         except MissingBucket:
-            return (
-                403,
-                {},
-                "",
-            )  # AWS S3 seems to return 403 on OPTIONS and 404 on GET/HEAD
+            # AWS S3 seems to return 403 on OPTIONS and 404 on GET/HEAD
+            return 403, {}, ""
 
-        self._set_cors_headers(bucket)
+        self._set_cors_headers_options(headers, bucket)
 
         return 200, self.response_headers, ""
 
-    def _bucket_response_get(self, bucket_name, querystring):
+    def _get_cors_headers_other(
+        self, headers: Dict[str, str], bucket_name: str
+    ) -> Dict[str, Any]:
+        """
+        Returns a dictionary with the appropriate CORS headers
+        Should be used for non-OPTIONS requests only
+        Applicable if the 'Origin' header matches one of a CORS-rules - returns an empty dictionary otherwise
+        """
+        response_headers: Dict[str, Any] = dict()
+        try:
+            origin = headers.get("Origin")
+            if not origin:
+                return response_headers
+            bucket = self.backend.get_bucket(bucket_name)
+
+            def _to_string(header: Union[List[str], str]) -> str:
+                # We allow list and strs in header values. Transform lists in comma-separated strings
+                if isinstance(header, list):
+                    return ", ".join(header)
+                return header
+
+            for cors_rule in bucket.cors:
+                if cors_rule.allowed_origins is not None:
+                    if cors_matches_origin(origin, cors_rule.allowed_origins):
+                        response_headers["Access-Control-Allow-Origin"] = origin
+                        if cors_rule.allowed_methods is not None:
+                            response_headers[
+                                "Access-Control-Allow-Methods"
+                            ] = _to_string(cors_rule.allowed_methods)
+                        if cors_rule.allowed_headers is not None:
+                            response_headers[
+                                "Access-Control-Allow-Headers"
+                            ] = _to_string(cors_rule.allowed_headers)
+                        if cors_rule.exposed_headers is not None:
+                            response_headers[
+                                "Access-Control-Expose-Headers"
+                            ] = _to_string(cors_rule.exposed_headers)
+                        if cors_rule.max_age_seconds is not None:
+                            response_headers["Access-Control-Max-Age"] = _to_string(
+                                cors_rule.max_age_seconds
+                            )
+
+                        return response_headers
+        except S3ClientError:
+            pass
+        return response_headers
+
+    def _bucket_response_get(
+        self, bucket_name: str, querystring: Dict[str, Any]
+    ) -> Union[str, TYPE_RESPONSE]:
         self._set_action("BUCKET", "GET", querystring)
-        self._authenticate_and_authorize_s3_action()
+        self._authenticate_and_authorize_s3_action(bucket_name=bucket_name)
 
         if "object-lock" in querystring:
             (
@@ -423,9 +515,7 @@ class S3Response(BaseResponse):
             for unsup in ("delimiter", "max-uploads"):
                 if unsup in querystring:
                     raise NotImplementedError(
-                        "Listing multipart uploads with {} has not been implemented yet.".format(
-                            unsup
-                        )
+                        f"Listing multipart uploads with {unsup} has not been implemented yet."
                     )
             multiparts = list(self.backend.get_all_multiparts(bucket_name).values())
             if "prefix" in querystring:
@@ -442,7 +532,7 @@ class S3Response(BaseResponse):
                 account_id=self.current_account,
             )
         elif "location" in querystring:
-            location = self.backend.get_bucket_location(bucket_name)
+            location: Optional[str] = self.backend.get_bucket_location(bucket_name)
             template = self.response_template(S3_BUCKET_LOCATION)
 
             # us-east-1 is different - returns a None location
@@ -474,7 +564,7 @@ class S3Response(BaseResponse):
             if not website_configuration:
                 template = self.response_template(S3_NO_BUCKET_WEBSITE_CONFIG)
                 return 404, {}, template.render(bucket_name=bucket_name)
-            return 200, {}, website_configuration
+            return 200, {}, website_configuration  # type: ignore
         elif "acl" in querystring:
             acl = self.backend.get_bucket_acl(bucket_name)
             template = self.response_template(S3_OBJECT_ACL_RESPONSE)
@@ -612,7 +702,9 @@ class S3Response(BaseResponse):
             ),
         )
 
-    def _set_action(self, action_resource_type, method, querystring):
+    def _set_action(
+        self, action_resource_type: str, method: str, querystring: Dict[str, Any]
+    ) -> None:
         action_set = False
         for action_in_querystring, action in ACTION_MAP[action_resource_type][
             method
@@ -623,7 +715,9 @@ class S3Response(BaseResponse):
         if not action_set:
             self.data["Action"] = ACTION_MAP[action_resource_type][method]["DEFAULT"]
 
-    def _handle_list_objects_v2(self, bucket_name, querystring):
+    def _handle_list_objects_v2(
+        self, bucket_name: str, querystring: Dict[str, Any]
+    ) -> str:
         template = self.response_template(S3_BUCKET_GET_RESPONSE_V2)
         bucket = self.backend.get_bucket(bucket_name)
 
@@ -675,7 +769,7 @@ class S3Response(BaseResponse):
         )
 
     @staticmethod
-    def _split_truncated_keys(truncated_keys):
+    def _split_truncated_keys(truncated_keys: Any) -> Any:  # type: ignore[misc]
         result_keys = []
         result_folders = []
         for key in truncated_keys:
@@ -685,7 +779,7 @@ class S3Response(BaseResponse):
                 result_folders.append(key)
         return result_keys, result_folders
 
-    def _get_results_from_token(self, result_keys, token):
+    def _get_results_from_token(self, result_keys: Any, token: Any) -> Any:
         continuation_index = 0
         for key in result_keys:
             if (key.name if isinstance(key, FakeKey) else key) > token:
@@ -693,22 +787,22 @@ class S3Response(BaseResponse):
             continuation_index += 1
         return result_keys[continuation_index:]
 
-    def _truncate_result(self, result_keys, max_keys):
+    def _truncate_result(self, result_keys: Any, max_keys: int) -> Any:
         if max_keys == 0:
             result_keys = []
             is_truncated = True
             next_continuation_token = None
         elif len(result_keys) > max_keys:
-            is_truncated = "true"
+            is_truncated = "true"  # type: ignore
             result_keys = result_keys[:max_keys]
             item = result_keys[-1]
             next_continuation_token = item.name if isinstance(item, FakeKey) else item
         else:
-            is_truncated = "false"
+            is_truncated = "false"  # type: ignore
             next_continuation_token = None
         return result_keys, is_truncated, next_continuation_token
 
-    def _body_contains_location_constraint(self, body):
+    def _body_contains_location_constraint(self, body: bytes) -> bool:
         if body:
             try:
                 xmltodict.parse(body)["CreateBucketConfiguration"]["LocationConstraint"]
@@ -717,7 +811,7 @@ class S3Response(BaseResponse):
                 pass
         return False
 
-    def _create_bucket_configuration_is_empty(self, body):
+    def _create_bucket_configuration_is_empty(self, body: bytes) -> bool:
         if body:
             try:
                 create_bucket_configuration = xmltodict.parse(body)[
@@ -730,18 +824,24 @@ class S3Response(BaseResponse):
                 pass
         return False
 
-    def _parse_pab_config(self):
+    def _parse_pab_config(self) -> Dict[str, Any]:
         parsed_xml = xmltodict.parse(self.body)
         parsed_xml["PublicAccessBlockConfiguration"].pop("@xmlns", None)
 
         return parsed_xml
 
-    def _bucket_response_put(self, request, region_name, bucket_name, querystring):
-        if not request.headers.get("Content-Length"):
+    def _bucket_response_put(
+        self,
+        request: Any,
+        region_name: str,
+        bucket_name: str,
+        querystring: Dict[str, Any],
+    ) -> Union[str, TYPE_RESPONSE]:
+        if querystring and not request.headers.get("Content-Length"):
             return 411, {}, "Content-Length required"
 
         self._set_action("BUCKET", "PUT", querystring)
-        self._authenticate_and_authorize_s3_action()
+        self._authenticate_and_authorize_s3_action(bucket_name=bucket_name)
 
         if "object-lock" in querystring:
             config = self._lock_config_from_body()
@@ -751,7 +851,7 @@ class S3Response(BaseResponse):
 
             self.backend.put_object_lock_configuration(
                 bucket_name,
-                config.get("enabled"),
+                config.get("enabled"),  # type: ignore
                 config.get("mode"),
                 config.get("days"),
                 config.get("years"),
@@ -869,7 +969,6 @@ class S3Response(BaseResponse):
             if self.body:
                 if self._create_bucket_configuration_is_empty(self.body):
                     raise MalformedXML()
-
                 try:
                     forced_region = xmltodict.parse(self.body)[
                         "CreateBucketConfiguration"
@@ -889,15 +988,19 @@ class S3Response(BaseResponse):
                 new_bucket = self.backend.create_bucket(bucket_name, region_name)
             except BucketAlreadyExists:
                 new_bucket = self.backend.get_bucket(bucket_name)
-                if (
-                    new_bucket.region_name == DEFAULT_REGION_NAME
-                    and region_name == DEFAULT_REGION_NAME
-                ):
-                    # us-east-1 has different behavior - creating a bucket there is an idempotent operation
-                    pass
+                if new_bucket.account_id == self.get_current_account():
+                    # special cases when the bucket belongs to self
+                    if (
+                        new_bucket.region_name == DEFAULT_REGION_NAME
+                        and region_name == DEFAULT_REGION_NAME
+                    ):
+                        # us-east-1 has different behavior - creating a bucket there is an idempotent operation
+                        pass
+                    else:
+                        template = self.response_template(S3_DUPLICATE_BUCKET_ERROR)
+                        return 409, {}, template.render(bucket_name=bucket_name)
                 else:
-                    template = self.response_template(S3_DUPLICATE_BUCKET_ERROR)
-                    return 409, {}, template.render(bucket_name=bucket_name)
+                    raise
 
             if "x-amz-acl" in request.headers:
                 # TODO: Support the XML-based ACL format
@@ -919,9 +1022,11 @@ class S3Response(BaseResponse):
             template = self.response_template(S3_BUCKET_CREATE_RESPONSE)
             return 200, {}, template.render(bucket=new_bucket)
 
-    def _bucket_response_delete(self, bucket_name, querystring):
+    def _bucket_response_delete(
+        self, bucket_name: str, querystring: Dict[str, Any]
+    ) -> TYPE_RESPONSE:
         self._set_action("BUCKET", "DELETE", querystring)
-        self._authenticate_and_authorize_s3_action()
+        self._authenticate_and_authorize_s3_action(bucket_name=bucket_name)
 
         if "policy" in querystring:
             self.backend.delete_bucket_policy(bucket_name)
@@ -962,17 +1067,17 @@ class S3Response(BaseResponse):
             template = self.response_template(S3_DELETE_BUCKET_WITH_ITEMS_ERROR)
             return 409, {}, template.render(bucket=removed_bucket)
 
-    def _bucket_response_post(self, request, bucket_name):
+    def _bucket_response_post(self, request: Any, bucket_name: str) -> TYPE_RESPONSE:
         response_headers = {}
         if not request.headers.get("Content-Length"):
             return 411, {}, "Content-Length required"
 
         self.path = self._get_path(request)
 
-        if self.is_delete_keys(request, self.path, bucket_name):
+        if self.is_delete_keys():
             self.data["Action"] = "DeleteObject"
             try:
-                self._authenticate_and_authorize_s3_action()
+                self._authenticate_and_authorize_s3_action(bucket_name=bucket_name)
                 return self._bucket_response_delete_keys(bucket_name)
             except BucketAccessDeniedError:
                 return self._bucket_response_delete_keys(
@@ -980,23 +1085,15 @@ class S3Response(BaseResponse):
                 )
 
         self.data["Action"] = "PutObject"
-        self._authenticate_and_authorize_s3_action()
+        self._authenticate_and_authorize_s3_action(bucket_name=bucket_name)
 
-        # POST to bucket-url should create file from form
-        form = request.form
+        key = self.querystring["key"][0]
+        f = self.body
 
-        key = form["key"]
-        if "file" in form:
-            f = form["file"]
-        else:
-            fobj = request.files["file"]
-            f = fobj.stream.read()
-            key = key.replace("${filename}", os.path.basename(fobj.filename))
-
-        if "success_action_redirect" in form:
-            redirect = form["success_action_redirect"]
+        if "success_action_redirect" in self.querystring:
+            redirect = self.querystring["success_action_redirect"][0]
             parts = urlparse(redirect)
-            queryargs = parse_qs(parts.query)
+            queryargs: Dict[str, Any] = parse_qs(parts.query)
             queryargs["key"] = key
             queryargs["bucket"] = bucket_name
             redirect_queryargs = urlencode(queryargs, doseq=True)
@@ -1012,34 +1109,36 @@ class S3Response(BaseResponse):
 
             response_headers["Location"] = fixed_redirect
 
-        if "success_action_status" in form:
-            status_code = form["success_action_status"]
-        elif "success_action_redirect" in form:
+        if "success_action_status" in self.querystring:
+            status_code = self.querystring["success_action_status"][0]
+        elif "success_action_redirect" in self.querystring:
             status_code = 303
         else:
             status_code = 204
 
         new_key = self.backend.put_object(bucket_name, key, f)
 
-        if form.get("acl"):
-            acl = get_canned_acl(form.get("acl"))
+        if self.querystring.get("acl"):
+            acl = get_canned_acl(self.querystring["acl"][0])  # type: ignore
             new_key.set_acl(acl)
 
         # Metadata
-        metadata = metadata_from_headers(form)
+        metadata = metadata_from_headers(self.form_data)
         new_key.set_metadata(metadata)
 
         return status_code, response_headers, ""
 
     @staticmethod
-    def _get_path(request):
+    def _get_path(request: Any) -> str:  # type: ignore[misc]
         return (
             request.full_path
             if hasattr(request, "full_path")
             else path_url(request.url)
         )
 
-    def _bucket_response_delete_keys(self, bucket_name, authenticated=True):
+    def _bucket_response_delete_keys(
+        self, bucket_name: str, authenticated: bool = True
+    ) -> TYPE_RESPONSE:
         template = self.response_template(S3_DELETE_KEYS_RESPONSE)
         body_dict = xmltodict.parse(self.body, strip_whitespace=False)
 
@@ -1065,36 +1164,46 @@ class S3Response(BaseResponse):
             template.render(deleted=deleted_objects, delete_errors=errors),
         )
 
-    def _handle_range_header(self, request, response_headers, response_content):
+    def _handle_range_header(
+        self, request: Any, response_headers: Dict[str, Any], response_content: Any
+    ) -> TYPE_RESPONSE:
         length = len(response_content)
         last = length - 1
+
         _, rspec = request.headers.get("range").split("=")
         if "," in rspec:
-            raise NotImplementedError("Multiple range specifiers not supported")
+            return 200, response_headers, response_content
 
-        def toint(i):
-            return int(i) if i else None
+        try:
+            begin, end = [int(i) if i else None for i in rspec.split("-")]
+        except ValueError:
+            # if we can't parse the Range header, S3 just treat the request as a non-range request
+            return 200, response_headers, response_content
 
-        begin, end = map(toint, rspec.split("-"))
+        if (begin is None and end == 0) or (begin is not None and begin > last):
+            raise InvalidRange(
+                actual_size=str(length), range_requested=request.headers.get("range")
+            )
+
         if begin is not None:  # byte range
             end = last if end is None else min(end, last)
         elif end is not None:  # suffix byte range
             begin = length - min(end, length)
             end = last
         else:
-            return 400, response_headers, ""
-        if begin < 0 or end > last or begin > min(end, last):
-            raise InvalidRange(
-                actual_size=str(length), range_requested=request.headers.get("range")
-            )
-        response_headers["content-range"] = "bytes {0}-{1}/{2}".format(
-            begin, end, length
-        )
+            # Treat as non-range request
+            return 200, response_headers, response_content
+
+        if begin > min(end, last):
+            # Treat as non-range request if after the logic is applied, the start of the range is greater than the end
+            return 200, response_headers, response_content
+
+        response_headers["content-range"] = f"bytes {begin}-{end}/{length}"
         content = response_content[begin : end + 1]
-        response_headers["content-length"] = len(content)
+        response_headers["content-length"] = str(len(content))
         return 206, response_headers, content
 
-    def _handle_v4_chunk_signatures(self, body, content_length):
+    def _handle_v4_chunk_signatures(self, body: bytes, content_length: int) -> bytes:
         body_io = io.BytesIO(body)
         new_body = bytearray(content_length)
         pos = 0
@@ -1109,7 +1218,7 @@ class S3Response(BaseResponse):
             line = body_io.readline()
         return bytes(new_body)
 
-    def _handle_encoded_body(self, body, content_length):
+    def _handle_encoded_body(self, body: bytes, content_length: int) -> bytes:
         body_io = io.BytesIO(body)
         # first line should equal '{content_length}\r\n
         body_io.readline()
@@ -1119,10 +1228,14 @@ class S3Response(BaseResponse):
         # amz-checksum-sha256:<..>\r\n
 
     @amzn_request_id
-    def key_response(self, request, full_url, headers):
+    def key_response(
+        self, request: Any, full_url: str, headers: Dict[str, Any]
+    ) -> TYPE_RESPONSE:
         # Key and Control are lumped in because splitting out the regex is too much of a pain :/
         self.setup_class(request, full_url, headers, use_raw_body=True)
-        response_headers = {}
+        bucket_name = self.parse_bucket_name_from_url(request, full_url)
+        self.backend.log_incoming_request(request, bucket_name)
+        response_headers: Dict[str, Any] = {}
 
         try:
             response = self._key_response(request, full_url, self.headers)
@@ -1148,60 +1261,61 @@ class S3Response(BaseResponse):
                 return s3error.code, {}, s3error.description
         return status_code, response_headers, response_content
 
-    def _key_response(self, request, full_url, headers):
+    def _key_response(
+        self, request: Any, full_url: str, headers: Dict[str, Any]
+    ) -> TYPE_RESPONSE:
         parsed_url = urlparse(full_url)
+        url_path = self.get_safe_path()
         query = parse_qs(parsed_url.query, keep_blank_values=True)
         method = request.method
 
-        key_name = self.parse_key_name(request, parsed_url.path)
+        key_name = self.parse_key_name(request, url_path)
         bucket_name = self.parse_bucket_name_from_url(request, full_url)
 
-        # Because we patch the requests library the boto/boto3 API
-        # requests go through this method but so do
-        # `requests.get("https://bucket-name.s3.amazonaws.com/file-name")`
-        # Here we deny public access to private files by checking the
-        # ACL and checking for the mere presence of an Authorization
-        # header.
-        if "Authorization" not in request.headers:
-            if hasattr(request, "url"):
-                signed_url = "Signature=" in request.url
-            elif hasattr(request, "requestline"):
-                signed_url = "Signature=" in request.path
+        # SDK requests tend to have Authorization set automatically
+        # If users make an HTTP-request, such as `requests.get("https://bucket-name.s3.amazonaws.com/file-name")`,
+        # The authorization-header may not be set
+        authorized_request = "Authorization" in request.headers
+        if hasattr(request, "url"):
+            signed_url = "Signature=" in request.url
+        elif hasattr(request, "requestline"):
+            signed_url = "Signature=" in request.path
+        try:
             key = self.backend.get_object(bucket_name, key_name)
+            bucket = self.backend.get_bucket(bucket_name)
+        except S3ClientError:
+            key = bucket = None
+        if key:
+            resource = f"arn:aws:s3:::{bucket_name}/{key_name}"
 
-            if key and not signed_url:
-                bucket = self.backend.get_bucket(bucket_name)
-                resource = f"arn:aws:s3:::{bucket_name}/{key_name}"
-                bucket_policy_allows = bucket.allow_action("s3:GetObject", resource)
-                if not bucket_policy_allows and (key.acl and not key.acl.public_read):
+            # Authorization Workflow
+            # https://docs.aws.amazon.com/AmazonS3/latest/userguide/access-control-auth-workflow-object-operation.html
+
+            # A bucket can deny all actions, regardless of who makes the request
+            from moto.iam.access_control import PermissionResult
+
+            action = f"s3:{method.upper()[0]}{method.lower()[1:]}Object"
+            bucket_permissions = bucket.get_permission(action, resource)  # type: ignore
+            if bucket_permissions == PermissionResult.DENIED:
+                return 403, {}, ""
+
+            # If the request is not authorized, and not signed,
+            # that means that the action should be allowed for anonymous users
+            if not authorized_request and not signed_url:
+                # We already know that the bucket permissions do not explicitly deny this
+                # So bucket permissions are either not set, or do not explicitly allow
+                # Next check is to see if the ACL of the individual key allows this action
+                if bucket_permissions != PermissionResult.PERMITTED and (
+                    key.acl and not key.acl.public_read
+                ):
                     return 403, {}, ""
-            elif signed_url and not key:
-                # coming in from requests.get(s3.generate_presigned_url())
-                if self._invalid_headers(request.url, dict(request.headers)):
-                    return 403, {}, S3_INVALID_PRESIGNED_PARAMETERS
 
-        if hasattr(request, "body"):
-            # Boto
-            body = request.body
-            if hasattr(body, "read"):
-                body = body.read()
-        else:
-            # Flask server
-            body = request.data
-            if not body:
-                # when the data is being passed as a file
-                if request.files:
-                    for _, value in request.files.items():
-                        body = value.stream.read()
-                elif hasattr(request, "form"):
-                    # Body comes through as part of the form, if no content-type is set on the PUT-request
-                    # form = ImmutableMultiDict([('some data 123 321', '')])
-                    form = request.form
-                    for k, _ in form.items():
-                        body = k
+        elif signed_url and not authorized_request:
+            # coming in from requests.get(s3.generate_presigned_url())
+            if self._invalid_headers(request.url, dict(request.headers)):
+                return 403, {}, S3_INVALID_PRESIGNED_PARAMETERS
 
-        if body is None:
-            body = b""
+        body = self.body or b""
 
         if (
             request.headers.get("x-amz-content-sha256", None)
@@ -1227,19 +1341,25 @@ class S3Response(BaseResponse):
             return self._key_response_post(request, body, bucket_name, query, key_name)
         elif method == "OPTIONS":
             # OPTIONS response doesn't depend on the key_name: always return 200 with CORS headers
-            return self._response_options(bucket_name)
+            return self._response_options(request.headers, bucket_name)
         else:
             raise NotImplementedError(
-                "Method {0} has not been implemented in the S3 backend yet".format(
-                    method
-                )
+                f"Method {method} has not been implemented in the S3 backend yet"
             )
 
-    def _key_response_get(self, bucket_name, query, key_name, headers):
+    def _key_response_get(
+        self,
+        bucket_name: str,
+        query: Dict[str, Any],
+        key_name: str,
+        headers: Dict[str, Any],
+    ) -> TYPE_RESPONSE:
         self._set_action("KEY", "GET", query)
-        self._authenticate_and_authorize_s3_action()
+        self._authenticate_and_authorize_s3_action(
+            bucket_name=bucket_name, key_name=key_name
+        )
 
-        response_headers = {}
+        response_headers = self._get_cors_headers_other(headers, bucket_name)
         if query.get("uploadId"):
             upload_id = query["uploadId"][0]
 
@@ -1267,7 +1387,7 @@ class S3Response(BaseResponse):
             )
             next_part_number_marker = parts[-1].name if parts else 0
             is_truncated = len(parts) != 0 and self.backend.is_truncated(
-                bucket_name, upload_id, next_part_number_marker
+                bucket_name, upload_id, next_part_number_marker  # type: ignore
             )
 
             template = self.response_template(S3_MULTIPART_LIST_RESPONSE)
@@ -1297,23 +1417,26 @@ class S3Response(BaseResponse):
         elif key is None:
             raise MissingVersion()
 
-        if key.version_id:
+        if key.version_id != "null":
             response_headers["x-amz-version-id"] = key.version_id
 
-        if key.storage_class == "GLACIER":
-            raise InvalidObjectState(storage_class="GLACIER")
+        if key.storage_class in ARCHIVE_STORAGE_CLASSES:
+            if 'ongoing-request="false"' not in key.response_dict.get(
+                "x-amz-restore", ""
+            ):
+                raise InvalidObjectState(storage_class=key.storage_class)
         if if_unmodified_since:
             if_unmodified_since = str_to_rfc_1123_datetime(if_unmodified_since)
-            if key.last_modified > if_unmodified_since:
+            if key.last_modified.replace(microsecond=0) > if_unmodified_since:
                 raise PreconditionFailed("If-Unmodified-Since")
-        if if_match and key.etag not in [if_match, '"{0}"'.format(if_match)]:
+        if if_match and key.etag not in [if_match, f'"{if_match}"']:
             raise PreconditionFailed("If-Match")
 
         if if_modified_since:
             if_modified_since = str_to_rfc_1123_datetime(if_modified_since)
-            if key.last_modified < if_modified_since:
+            if key.last_modified.replace(microsecond=0) <= if_modified_since:
                 return 304, response_headers, "Not Modified"
-        if if_none_match and key.etag == if_none_match:
+        if if_none_match and key.etag in [if_none_match, f'"{if_none_match}"']:
             return 304, response_headers, "Not Modified"
 
         if "acl" in query:
@@ -1328,16 +1451,34 @@ class S3Response(BaseResponse):
             legal_hold = self.backend.get_object_legal_hold(key)
             template = self.response_template(S3_OBJECT_LEGAL_HOLD)
             return 200, response_headers, template.render(legal_hold=legal_hold)
+        if "attributes" in query:
+            attributes_to_get = headers.get("x-amz-object-attributes", "").split(",")
+            response_keys = self.backend.get_object_attributes(key, attributes_to_get)
+
+            response_headers["Last-Modified"] = key.last_modified_ISO8601
+
+            template = self.response_template(S3_OBJECT_ATTRIBUTES_RESPONSE)
+            return 200, response_headers, template.render(**response_keys)
 
         response_headers.update(key.metadata)
         response_headers.update(key.response_dict)
+        response_headers.update({"Accept-Ranges": "bytes"})
         return 200, response_headers, key.value
 
-    def _key_response_put(self, request, body, bucket_name, query, key_name):
+    def _key_response_put(
+        self,
+        request: Any,
+        body: bytes,
+        bucket_name: str,
+        query: Dict[str, Any],
+        key_name: str,
+    ) -> TYPE_RESPONSE:
         self._set_action("KEY", "PUT", query)
-        self._authenticate_and_authorize_s3_action()
+        self._authenticate_and_authorize_s3_action(
+            bucket_name=bucket_name, key_name=key_name
+        )
 
-        response_headers = {}
+        response_headers = self._get_cors_headers_other(request.headers, bucket_name)
         if query.get("uploadId") and query.get("partNumber"):
             upload_id = query["uploadId"][0]
             part_number = int(query["partNumber"][0])
@@ -1346,9 +1487,11 @@ class S3Response(BaseResponse):
                 if isinstance(copy_source, bytes):
                     copy_source = copy_source.decode("utf-8")
                 copy_source_parsed = urlparse(copy_source)
-                src_bucket, src_key = copy_source_parsed.path.lstrip("/").split("/", 1)
+                src_bucket, src_key = (
+                    unquote(copy_source_parsed.path).lstrip("/").split("/", 1)
+                )
                 src_version_id = parse_qs(copy_source_parsed.query).get(
-                    "versionId", [None]
+                    "versionId", [None]  # type: ignore
                 )[0]
                 src_range = request.headers.get("x-amz-copy-source-range", "").split(
                     "bytes="
@@ -1367,11 +1510,11 @@ class S3Response(BaseResponse):
                         bucket_name,
                         upload_id,
                         part_number,
-                        src_bucket,
-                        src_key,
-                        src_version_id,
-                        start_byte,
-                        end_byte,
+                        src_bucket_name=src_bucket,
+                        src_key_name=src_key,
+                        src_version_id=src_version_id,
+                        start_byte=start_byte,
+                        end_byte=end_byte,
                     )
                 else:
                     return 404, response_headers, ""
@@ -1386,6 +1529,7 @@ class S3Response(BaseResponse):
                 )
                 response = ""
             response_headers.update(key.response_dict)
+            response_headers["content-length"] = str(len(response))
             return 200, response_headers, response
 
         storage_class = request.headers.get("x-amz-storage-class", "STANDARD")
@@ -1399,10 +1543,18 @@ class S3Response(BaseResponse):
         checksum_value = request.headers.get(checksum_header)
         if not checksum_value and checksum_algorithm:
             # Extract the checksum-value from the body first
-            search = re.search(rb"x-amz-checksum-\w+:(\w+={1,2})", body)
+            search = re.search(rb"x-amz-checksum-\w+:(.+={1,2})", body)
             checksum_value = search.group(1) if search else None
 
         if checksum_value:
+            # TODO: AWS computes the provided value and verifies it's the same
+            # Afterwards, it should be returned in every subsequent call
+            if isinstance(checksum_value, bytes):
+                checksum_value = checksum_value.decode("utf-8")
+            response_headers.update({checksum_header: checksum_value})
+        elif checksum_algorithm:
+            # If the value is not provided, we compute it and only return it as part of this request
+            checksum_value = compute_checksum(body, algorithm=checksum_algorithm)
             response_headers.update({checksum_header: checksum_value})
 
         # Extract the actual data from the body second
@@ -1441,13 +1593,17 @@ class S3Response(BaseResponse):
 
         acl = self._acl_from_headers(request.headers)
         if acl is None:
-            acl = self.backend.get_bucket(bucket_name).acl
+            acl = bucket.acl
         tagging = self._tagging_from_headers(request.headers)
+
+        if "versionId" in query:
+            version_id = query["versionId"][0]
+        else:
+            version_id = None
 
         if "retention" in query:
             if not lock_enabled:
                 raise LockNotEnabled
-            version_id = query.get("VersionId")
             retention = self._mode_until_from_body()
             self.backend.put_object_retention(
                 bucket_name, key_name, version_id=version_id, retention=retention
@@ -1457,7 +1613,6 @@ class S3Response(BaseResponse):
         if "legal-hold" in query:
             if not lock_enabled:
                 raise LockNotEnabled
-            version_id = query.get("VersionId")
             legal_hold_status = self._legal_hold_status_from_xml(body)
             self.backend.put_object_legal_hold(
                 bucket_name, key_name, version_id, legal_hold_status
@@ -1469,13 +1624,11 @@ class S3Response(BaseResponse):
             return 200, response_headers, ""
 
         if "tagging" in query:
-            if "versionId" in query:
-                version_id = query["versionId"][0]
-            else:
-                version_id = None
-            key = self.backend.get_object(bucket_name, key_name, version_id=version_id)
+            key_to_tag = self.backend.get_object(
+                bucket_name, key_name, version_id=version_id
+            )
             tagging = self._tagging_from_xml(body)
-            self.backend.set_key_tags(key, tagging, key_name)
+            self.backend.set_key_tags(key_to_tag, tagging, key_name)
             return 200, response_headers, ""
 
         if "x-amz-copy-source" in request.headers:
@@ -1490,56 +1643,77 @@ class S3Response(BaseResponse):
                 unquote(copy_source_parsed.path).lstrip("/").split("/", 1)
             )
             src_version_id = parse_qs(copy_source_parsed.query).get(
-                "versionId", [None]
+                "versionId", [None]  # type: ignore
             )[0]
 
-            key = self.backend.get_object(
-                src_bucket, src_key, version_id=src_version_id, key_is_clean=True
+            key_to_copy = self.backend.get_object(
+                src_bucket, src_key, version_id=src_version_id
             )
 
-            if key is not None:
-                if key.storage_class in ["GLACIER", "DEEP_ARCHIVE"]:
-                    if key.response_dict.get(
+            if key_to_copy is not None:
+                if key_to_copy.storage_class in ARCHIVE_STORAGE_CLASSES:
+                    if key_to_copy.response_dict.get(
                         "x-amz-restore"
-                    ) is None or 'ongoing-request="true"' in key.response_dict.get(
+                    ) is None or 'ongoing-request="true"' in key_to_copy.response_dict.get(  # type: ignore
                         "x-amz-restore"
                     ):
-                        raise ObjectNotInActiveTierError(key)
+                        raise ObjectNotInActiveTierError(key_to_copy)
 
-                bucket_key_enabled = (
-                    request.headers.get(
-                        "x-amz-server-side-encryption-bucket-key-enabled", ""
-                    ).lower()
-                    == "true"
+                website_redirect_location = request.headers.get(
+                    "x-amz-website-redirect-location"
                 )
 
                 mdirective = request.headers.get("x-amz-metadata-directive")
-
+                metadata = metadata_from_headers(request.headers)
                 self.backend.copy_object(
-                    key,
+                    key_to_copy,
                     bucket_name,
                     key_name,
-                    storage=storage_class,
-                    acl=acl,
+                    storage=request.headers.get("x-amz-storage-class"),
                     kms_key_id=kms_key_id,
                     encryption=encryption,
                     bucket_key_enabled=bucket_key_enabled,
                     mdirective=mdirective,
+                    metadata=metadata,
+                    website_redirect_location=website_redirect_location,
+                    lock_mode=lock_mode,
+                    lock_legal_status=legal_hold,
+                    lock_until=lock_until,
                 )
             else:
                 raise MissingKey(key=src_key)
 
-            new_key = self.backend.get_object(bucket_name, key_name)
-            if mdirective is not None and mdirective == "REPLACE":
-                metadata = metadata_from_headers(request.headers)
-                new_key.set_metadata(metadata, replace=True)
+            new_key: FakeKey = self.backend.get_object(bucket_name, key_name)  # type: ignore
+
+            if acl is not None:
+                new_key.set_acl(acl)
+
             tdirective = request.headers.get("x-amz-tagging-directive")
             if tdirective == "REPLACE":
                 tagging = self._tagging_from_headers(request.headers)
                 self.backend.set_key_tags(new_key, tagging)
+            if key_to_copy.version_id != "null":
+                response_headers[
+                    "x-amz-copy-source-version-id"
+                ] = key_to_copy.version_id
+
+            # checksum stuff, do we need to compute hash of the copied object
+            checksum_algorithm = request.headers.get("x-amz-checksum-algorithm")
+            if checksum_algorithm:
+                checksum_value = compute_checksum(
+                    new_key.value, algorithm=checksum_algorithm
+                ).decode("utf-8")
+                response_headers.update(
+                    {"Checksum": {f"Checksum{checksum_algorithm}": checksum_value}}
+                )
+                new_key.checksum_algorithm = checksum_algorithm
+                new_key.checksum_value = checksum_value
+
             template = self.response_template(S3_OBJECT_COPY_RESPONSE)
             response_headers.update(new_key.response_dict)
-            return 200, response_headers, template.render(key=new_key)
+            response = template.render(key=new_key)
+            response_headers["content-length"] = str(len(response))
+            return 200, response_headers, response
 
         # Initial data
         new_key = self.backend.put_object(
@@ -1553,6 +1727,7 @@ class S3Response(BaseResponse):
             lock_mode=lock_mode,
             lock_legal_status=legal_hold,
             lock_until=lock_until,
+            checksum_value=checksum_value,
         )
 
         metadata = metadata_from_headers(request.headers)
@@ -1562,16 +1737,28 @@ class S3Response(BaseResponse):
         new_key.website_redirect_location = request.headers.get(
             "x-amz-website-redirect-location"
         )
+        if checksum_algorithm:
+            new_key.checksum_algorithm = checksum_algorithm
         self.backend.set_key_tags(new_key, tagging)
 
         response_headers.update(new_key.response_dict)
+        # Remove content-length - the response body is empty for this request
+        response_headers.pop("content-length", None)
         return 200, response_headers, ""
 
-    def _key_response_head(self, bucket_name, query, key_name, headers):
+    def _key_response_head(
+        self,
+        bucket_name: str,
+        query: Dict[str, Any],
+        key_name: str,
+        headers: Dict[str, Any],
+    ) -> TYPE_RESPONSE:
         self._set_action("KEY", "HEAD", query)
-        self._authenticate_and_authorize_s3_action()
+        self._authenticate_and_authorize_s3_action(
+            bucket_name=bucket_name, key_name=key_name
+        )
 
-        response_headers = {}
+        response_headers: Dict[str, Any] = {}
         version_id = query.get("versionId", [None])[0]
         if version_id and not self.backend.get_bucket(bucket_name).is_versioned:
             return 400, response_headers, ""
@@ -1585,39 +1772,58 @@ class S3Response(BaseResponse):
         if_none_match = headers.get("If-None-Match", None)
         if_unmodified_since = headers.get("If-Unmodified-Since", None)
 
-        key = self.backend.head_object(
-            bucket_name, key_name, version_id=version_id, part_number=part_number
-        )
+        try:
+            key = self.backend.head_object(
+                bucket_name, key_name, version_id=version_id, part_number=part_number
+            )
+        except HeadOnDeleteMarker as exc:
+            headers = {
+                "x-amz-delete-marker": "true",
+                "x-amz-version-id": version_id,
+                "content-type": "application/xml",
+            }
+            if version_id:
+                headers["allow"] = "DELETE"
+                return 405, headers, "Method Not Allowed"
+            else:
+                headers["x-amz-version-id"] = exc.marker.version_id
+                return 404, headers, "Not Found"
         if key:
             response_headers.update(key.metadata)
             response_headers.update(key.response_dict)
+            response_headers.update({"Accept-Ranges": "bytes"})
 
             if if_unmodified_since:
                 if_unmodified_since = str_to_rfc_1123_datetime(if_unmodified_since)
-                if key.last_modified > if_unmodified_since:
+                if key.last_modified.replace(microsecond=0) > if_unmodified_since:
                     return 412, response_headers, ""
             if if_match and key.etag != if_match:
                 return 412, response_headers, ""
 
             if if_modified_since:
                 if_modified_since = str_to_rfc_1123_datetime(if_modified_since)
-                if key.last_modified < if_modified_since:
+                if key.last_modified.replace(microsecond=0) <= if_modified_since:
                     return 304, response_headers, "Not Modified"
             if if_none_match and key.etag == if_none_match:
                 return 304, response_headers, "Not Modified"
 
             if part_number:
                 full_key = self.backend.head_object(bucket_name, key_name, version_id)
-                if full_key.multipart:
-                    mp_part_count = str(len(full_key.multipart.partlist))
+                if full_key.multipart:  # type: ignore
+                    mp_part_count = str(len(full_key.multipart.partlist))  # type: ignore
                     response_headers["x-amz-mp-parts-count"] = mp_part_count
 
             return 200, response_headers, ""
         else:
             return 404, response_headers, ""
 
-    def _lock_config_from_body(self):
-        response_dict = {"enabled": False, "mode": None, "days": None, "years": None}
+    def _lock_config_from_body(self) -> Dict[str, Any]:
+        response_dict: Dict[str, Any] = {
+            "enabled": False,
+            "mode": None,
+            "days": None,
+            "years": None,
+        }
         parsed_xml = xmltodict.parse(self.body)
         enabled = (
             parsed_xml["ObjectLockConfiguration"]["ObjectLockEnabled"] == "Enabled"
@@ -1639,7 +1845,7 @@ class S3Response(BaseResponse):
 
         return response_dict
 
-    def _acl_from_body(self):
+    def _acl_from_body(self) -> Optional[FakeAcl]:
         parsed_xml = xmltodict.parse(self.body)
         if not parsed_xml.get("AccessControlPolicy"):
             raise MalformedACLError()
@@ -1651,7 +1857,7 @@ class S3Response(BaseResponse):
 
         # If empty, then no ACLs:
         if parsed_xml["AccessControlPolicy"].get("AccessControlList") is None:
-            return []
+            return None
 
         if not parsed_xml["AccessControlPolicy"]["AccessControlList"].get("Grant"):
             raise MalformedACLError()
@@ -1672,7 +1878,12 @@ class S3Response(BaseResponse):
         )
         return FakeAcl(grants)
 
-    def _get_grants_from_xml(self, grant_list, exception_type, permissions):
+    def _get_grants_from_xml(
+        self,
+        grant_list: List[Dict[str, Any]],
+        exception_type: Type[S3ClientError],
+        permissions: List[str],
+    ) -> List[FakeGrant]:
         grants = []
         for grant in grant_list:
             if grant.get("Permission", "") not in permissions:
@@ -1702,7 +1913,7 @@ class S3Response(BaseResponse):
 
         return grants
 
-    def _acl_from_headers(self, headers):
+    def _acl_from_headers(self, headers: Dict[str, str]) -> Optional[FakeAcl]:
         canned_acl = headers.get("x-amz-acl", "")
 
         grants = []
@@ -1721,7 +1932,7 @@ class S3Response(BaseResponse):
 
             grantees = []
             for key_and_value in value.split(","):
-                key, value = re.match(
+                key, value = re.match(  # type: ignore
                     '([^=]+)="?([^"]+)"?', key_and_value.strip()
                 ).groups()
                 if key.lower() == "id":
@@ -1739,7 +1950,7 @@ class S3Response(BaseResponse):
         else:
             return None
 
-    def _tagging_from_headers(self, headers):
+    def _tagging_from_headers(self, headers: Dict[str, Any]) -> Dict[str, str]:
         tags = {}
         if headers.get("x-amz-tagging"):
             parsed_header = parse_qs(headers["x-amz-tagging"], keep_blank_values=True)
@@ -1747,16 +1958,16 @@ class S3Response(BaseResponse):
                 tags[tag[0]] = tag[1][0]
         return tags
 
-    def _tagging_from_xml(self, xml):
+    def _tagging_from_xml(self, xml: bytes) -> Dict[str, str]:
         parsed_xml = xmltodict.parse(xml, force_list={"Tag": True})
 
         tags = {}
         for tag in parsed_xml["Tagging"]["TagSet"]["Tag"]:
-            tags[tag["Key"]] = tag["Value"]
+            tags[tag["Key"]] = tag["Value"] or ""
 
         return tags
 
-    def _bucket_tagging_from_body(self):
+    def _bucket_tagging_from_body(self) -> Dict[str, str]:
         parsed_xml = xmltodict.parse(self.body)
 
         tags = {}
@@ -1780,7 +1991,7 @@ class S3Response(BaseResponse):
 
         return tags
 
-    def _cors_from_body(self):
+    def _cors_from_body(self) -> List[Dict[str, Any]]:
         parsed_xml = xmltodict.parse(self.body)
 
         if isinstance(parsed_xml["CORSConfiguration"]["CORSRule"], list):
@@ -1788,18 +1999,18 @@ class S3Response(BaseResponse):
 
         return [parsed_xml["CORSConfiguration"]["CORSRule"]]
 
-    def _mode_until_from_body(self):
+    def _mode_until_from_body(self) -> Tuple[Optional[str], Optional[str]]:
         parsed_xml = xmltodict.parse(self.body)
         return (
             parsed_xml.get("Retention", None).get("Mode", None),
             parsed_xml.get("Retention", None).get("RetainUntilDate", None),
         )
 
-    def _legal_hold_status_from_xml(self, xml):
+    def _legal_hold_status_from_xml(self, xml: bytes) -> Dict[str, Any]:
         parsed_xml = xmltodict.parse(xml)
         return parsed_xml["LegalHold"]["Status"]
 
-    def _encryption_config_from_body(self):
+    def _encryption_config_from_body(self) -> Dict[str, Any]:
         parsed_xml = xmltodict.parse(self.body)
 
         if (
@@ -1815,7 +2026,7 @@ class S3Response(BaseResponse):
 
         return parsed_xml["ServerSideEncryptionConfiguration"]
 
-    def _ownership_rule_from_body(self):
+    def _ownership_rule_from_body(self) -> Dict[str, Any]:
         parsed_xml = xmltodict.parse(self.body)
 
         if not parsed_xml["OwnershipControls"]["Rule"].get("ObjectOwnership"):
@@ -1823,7 +2034,7 @@ class S3Response(BaseResponse):
 
         return parsed_xml["OwnershipControls"]["Rule"]["ObjectOwnership"]
 
-    def _logging_from_body(self):
+    def _logging_from_body(self) -> Dict[str, Any]:
         parsed_xml = xmltodict.parse(self.body)
 
         if not parsed_xml["BucketLoggingStatus"].get("LoggingEnabled"):
@@ -1868,7 +2079,7 @@ class S3Response(BaseResponse):
 
         return parsed_xml["BucketLoggingStatus"]["LoggingEnabled"]
 
-    def _notification_config_from_body(self):
+    def _notification_config_from_body(self) -> Dict[str, Any]:
         parsed_xml = xmltodict.parse(self.body)
 
         if not len(parsed_xml["NotificationConfiguration"]):
@@ -1901,17 +2112,17 @@ class S3Response(BaseResponse):
             # 1st verify that the proper notification configuration has been passed in (with an ARN that is close
             # to being correct -- nothing too complex in the ARN logic):
             the_notification = parsed_xml["NotificationConfiguration"].get(
-                "{}Configuration".format(name)
+                f"{name}Configuration"
             )
             if the_notification:
                 found_notifications += 1
                 if not isinstance(the_notification, list):
                     the_notification = parsed_xml["NotificationConfiguration"][
-                        "{}Configuration".format(name)
+                        f"{name}Configuration"
                     ] = [the_notification]
 
                 for n in the_notification:
-                    if not n[name].startswith("arn:aws:{}:".format(arn_string)):
+                    if not n[name].startswith(f"arn:aws:{arn_string}:"):
                         raise InvalidNotificationARN()
 
                     # 2nd, verify that the Events list is correct:
@@ -1943,19 +2154,23 @@ class S3Response(BaseResponse):
 
         return parsed_xml["NotificationConfiguration"]
 
-    def _accelerate_config_from_body(self):
+    def _accelerate_config_from_body(self) -> str:
         parsed_xml = xmltodict.parse(self.body)
         config = parsed_xml["AccelerateConfiguration"]
         return config["Status"]
 
-    def _replication_config_from_xml(self, xml):
+    def _replication_config_from_xml(self, xml: str) -> Dict[str, Any]:
         parsed_xml = xmltodict.parse(xml, dict_constructor=dict)
         config = parsed_xml["ReplicationConfiguration"]
         return config
 
-    def _key_response_delete(self, headers, bucket_name, query, key_name):
+    def _key_response_delete(
+        self, headers: Any, bucket_name: str, query: Dict[str, Any], key_name: str
+    ) -> TYPE_RESPONSE:
         self._set_action("KEY", "DELETE", query)
-        self._authenticate_and_authorize_s3_action()
+        self._authenticate_and_authorize_s3_action(
+            bucket_name=bucket_name, key_name=key_name
+        )
 
         if query.get("uploadId"):
             upload_id = query["uploadId"][0]
@@ -1975,21 +2190,30 @@ class S3Response(BaseResponse):
         response_headers = {}
         if response_meta is not None:
             for k in response_meta:
-                response_headers["x-amz-{}".format(k)] = response_meta[k]
+                response_headers[f"x-amz-{k}"] = response_meta[k]
         return 204, response_headers, ""
 
-    def _complete_multipart_body(self, body):
+    def _complete_multipart_body(self, body: bytes) -> Iterator[Tuple[int, str]]:
         ps = minidom.parseString(body).getElementsByTagName("Part")
         prev = 0
         for p in ps:
-            pn = int(p.getElementsByTagName("PartNumber")[0].firstChild.wholeText)
+            pn = int(p.getElementsByTagName("PartNumber")[0].firstChild.wholeText)  # type: ignore[union-attr]
             if pn <= prev:
                 raise InvalidPartOrder()
-            yield (pn, p.getElementsByTagName("ETag")[0].firstChild.wholeText)
+            yield (pn, p.getElementsByTagName("ETag")[0].firstChild.wholeText)  # type: ignore[union-attr]
 
-    def _key_response_post(self, request, body, bucket_name, query, key_name):
+    def _key_response_post(
+        self,
+        request: Any,
+        body: bytes,
+        bucket_name: str,
+        query: Dict[str, Any],
+        key_name: str,
+    ) -> TYPE_RESPONSE:
         self._set_action("KEY", "POST", query)
-        self._authenticate_and_authorize_s3_action()
+        self._authenticate_and_authorize_s3_action(
+            bucket_name=bucket_name, key_name=key_name
+        )
 
         encryption = request.headers.get("x-amz-server-side-encryption")
         kms_key_id = request.headers.get("x-amz-server-side-encryption-aws-kms-key-id")
@@ -2026,11 +2250,10 @@ class S3Response(BaseResponse):
             return 200, response_headers, response
 
         if query.get("uploadId"):
-            body = self._complete_multipart_body(body)
             multipart_id = query["uploadId"][0]
 
             multipart, value, etag = self.backend.complete_multipart_upload(
-                bucket_name, multipart_id, body
+                bucket_name, multipart_id, self._complete_multipart_body(body)
             )
             if value is None:
                 return 400, {}, ""
@@ -2047,10 +2270,14 @@ class S3Response(BaseResponse):
             )
             key.set_metadata(multipart.metadata)
             self.backend.set_key_tags(key, multipart.tags)
-            self.backend.put_object_acl(bucket_name, key.name, multipart.acl)
+            self.backend.put_object_acl(
+                bucket_name=bucket_name,
+                key_name=key.name,
+                acl=multipart.acl,
+            )
 
             template = self.response_template(S3_MULTIPART_COMPLETE_RESPONSE)
-            headers = {}
+            headers: Dict[str, Any] = {}
             if key.version_id:
                 headers["x-amz-version-id"] = key.version_id
 
@@ -2071,21 +2298,30 @@ class S3Response(BaseResponse):
         elif "restore" in query:
             es = minidom.parseString(body).getElementsByTagName("Days")
             days = es[0].childNodes[0].wholeText
-            key = self.backend.get_object(bucket_name, key_name)
-            if key.storage_class not in ["GLACIER", "DEEP_ARCHIVE"]:
+            key = self.backend.get_object(bucket_name, key_name)  # type: ignore
+            if key.storage_class not in ARCHIVE_STORAGE_CLASSES:
                 raise InvalidObjectState(storage_class=key.storage_class)
             r = 202
             if key.expiry_date is not None:
                 r = 200
             key.restore(int(days))
             return r, {}, ""
+        elif "select" in query:
+            request = xmltodict.parse(body)["SelectObjectContentRequest"]
+            select_query = request["Expression"]
+            input_details = request["InputSerialization"]
+            output_details = request["OutputSerialization"]
+            results = self.backend.select_object_content(
+                bucket_name, key_name, select_query, input_details
+            )
+            return 200, {}, serialize_select(results, output_details)
 
         else:
             raise NotImplementedError(
                 "Method POST had only been implemented for multipart uploads and restore operations, so far"
             )
 
-    def _invalid_headers(self, url, headers):
+    def _invalid_headers(self, url: str, headers: Dict[str, str]) -> bool:
         """
         Verify whether the provided metadata in the URL is also present in the headers
         :param url: .../file.txt&content-type=app%2Fjson&Signature=..
@@ -2199,6 +2435,9 @@ S3_BUCKET_GET_RESPONSE_V2 = """<?xml version="1.0" encoding="UTF-8"?>
         <DisplayName>webfile</DisplayName>
       </Owner>
       {% endif %}
+      {% if key.checksum_algorithm %}
+      <ChecksumAlgorithm>{{ key.checksum_algorithm }}</ChecksumAlgorithm>
+      {% endif %}
     </Contents>
   {% endfor %}
   {% if delimiter %}
@@ -2270,17 +2509,19 @@ S3_BUCKET_LIFECYCLE_CONFIGURATION = """<?xml version="1.0" encoding="UTF-8"?>
             {% endif %}
         {% endif %}
         <Status>{{ rule.status }}</Status>
-        {% if rule.storage_class %}
-        <Transition>
-            {% if rule.transition_days %}
-               <Days>{{ rule.transition_days }}</Days>
-            {% endif %}
-            {% if rule.transition_date %}
-               <Date>{{ rule.transition_date }}</Date>
-            {% endif %}
-           <StorageClass>{{ rule.storage_class }}</StorageClass>
-        </Transition>
-        {% endif %}
+        {% for transition in rule.transitions %}
+            <Transition>
+                {% if transition.days %}
+                <Days>{{ transition.days }}</Days>
+                {% endif %}
+                {% if transition.date %}
+                <Date>{{ transition.date }}</Date>
+                {% endif %}
+                {% if transition.storage_class %}
+                <StorageClass>{{ transition.storage_class }}</StorageClass>
+                {% endif %}
+            </Transition>
+        {% endfor %}
         {% if rule.expiration_days or rule.expiration_date or rule.expired_object_delete_marker %}
         <Expiration>
             {% if rule.expiration_days %}
@@ -2294,12 +2535,19 @@ S3_BUCKET_LIFECYCLE_CONFIGURATION = """<?xml version="1.0" encoding="UTF-8"?>
             {% endif %}
         </Expiration>
         {% endif %}
-        {% if rule.nvt_noncurrent_days and rule.nvt_storage_class %}
-        <NoncurrentVersionTransition>
-           <NoncurrentDays>{{ rule.nvt_noncurrent_days }}</NoncurrentDays>
-           <StorageClass>{{ rule.nvt_storage_class }}</StorageClass>
-        </NoncurrentVersionTransition>
-        {% endif %}
+        {% for nvt in rule.noncurrent_version_transitions %}
+            <NoncurrentVersionTransition>
+                {% if nvt.newer_versions %}
+                <NewerNoncurrentVersions>{{ nvt.newer_versions }}</NewerNoncurrentVersions>
+                {% endif %}
+                {% if nvt.days %}
+                <NoncurrentDays>{{ nvt.days }}</NoncurrentDays>
+                {% endif %}
+                {% if nvt.storage_class %}
+                <StorageClass>{{ nvt.storage_class }}</StorageClass>
+                {% endif %}
+            </NoncurrentVersionTransition>
+        {% endfor %}
         {% if rule.nve_noncurrent_days %}
         <NoncurrentVersionExpiration>
            <NoncurrentDays>{{ rule.nve_noncurrent_days }}</NoncurrentDays>
@@ -2479,10 +2727,17 @@ S3_BUCKET_CORS_RESPONSE = """<?xml version="1.0" encoding="UTF-8"?>
   </CORSConfiguration>
 """
 
+# https://docs.aws.amazon.com/AmazonS3/latest/API/API_CopyObject.html
 S3_OBJECT_COPY_RESPONSE = """\
 <CopyObjectResult xmlns="http://doc.s3.amazonaws.com/2006-03-01">
     <ETag>{{ key.etag }}</ETag>
     <LastModified>{{ key.last_modified_ISO8601 }}</LastModified>
+    {% if key.checksum_value  %}
+      {% if "CRC32" in key.checksum_algorithm %}<ChecksumCRC32>{{ key.checksum_value }}</ChecksumCRC32>{% endif %}
+      {% if "CRC32C" in key.checksum_algorithm %}<ChecksumCRC32C>{{ key.checksum_value }}</ChecksumCRC32C>{% endif %}
+      {% if "SHA1" in key.checksum_algorithm %}<ChecksumSHA1>{{ key.checksum_value }}</ChecksumSHA1>{% endif %}
+      {% if "SHA256" in key.checksum_algorithm %}<ChecksumSHA256>{{ key.checksum_value }}</ChecksumSHA256>{% endif %}
+    {% endif %}
 </CopyObjectResult>"""
 
 S3_MULTIPART_INITIATE_RESPONSE = """<?xml version="1.0" encoding="UTF-8"?>
@@ -2864,4 +3119,21 @@ S3_ERROR_BUCKET_ONWERSHIP_NOT_FOUND = """
     <RequestId>294PFVCB9GFVXY2S</RequestId>
     <HostId>l/tqqyk7HZbfvFFpdq3+CAzA9JXUiV4ZajKYhwolOIpnmlvZrsI88AKsDLsgQI6EvZ9MuGHhk7M=</HostId>
 </Error>
+"""
+
+
+S3_OBJECT_ATTRIBUTES_RESPONSE = """<?xml version="1.0" encoding="UTF-8"?>
+<GetObjectAttributesOutput xmlns="http://s3.amazonaws.com/doc/2006-03-01/">
+    {% if etag is not none %}<ETag>{{ etag }}</ETag>{% endif %}
+    {% if checksum is not none %}
+      <Checksum>
+      {% if "CRC32" in checksum %}<ChecksumCRC32>{{ checksum["CRC32"] }}</ChecksumCRC32>{% endif %}
+      {% if "CRC32C" in checksum %}<ChecksumCRC32C>{{ checksum["CRC32C"] }}</ChecksumCRC32C>{% endif %}
+      {% if "SHA1" in checksum %}<ChecksumSHA1>{{ checksum["SHA1"] }}</ChecksumSHA1>{% endif %}
+      {% if "SHA256" in checksum %}<ChecksumSHA256>{{ checksum["SHA256"] }}</ChecksumSHA256>{% endif %}
+      </Checksum>
+    {% endif %}
+    {% if size is not none %}<ObjectSize>{{ size }}</ObjectSize>{% endif %}
+    {% if storage_class is not none %}<StorageClass>{{ storage_class }}</StorageClass>{% endif %}
+</GetObjectAttributesOutput>
 """

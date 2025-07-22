@@ -20,7 +20,7 @@ public:
     {
         if (Result.IsSuccess()) {
             for (const auto& [info, filter] : *Result) {
-                AFL_VERIFY(!!filter.GetRecordsCount() && filter.GetRecordsCountVerified() == info.GetRowsCount())(
+                AFL_VERIFY(!!filter.GetRecordsCount() && filter.GetRecordsCountVerified() == info.GetRows().NumRows())(
                                                                                              "filter", filter.GetRecordsCount().value_or(0))(
                                                                                              "info", info.DebugString());
             }
@@ -54,8 +54,8 @@ public:
         AFL_VERIFY(!!AllocationGuard);
     }
 
-    TEvDuplicateSourceCacheResult(const std::shared_ptr<TInternalFilterConstructor>& context, TString errorMessage)
-        : Result(std::move(errorMessage))
+    TEvDuplicateSourceCacheResult(const std::shared_ptr<TInternalFilterConstructor>& context, const TString& errorMessage)
+        : Result(TConclusionStatus::Fail(errorMessage))
         , Context(context)
     {
     }

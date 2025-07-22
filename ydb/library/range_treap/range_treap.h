@@ -63,10 +63,10 @@ private:
         ui64 Prio = -1;
         TKey LeftKey;
         TKey RightKey;
-        TKey MaxRightKey;
         TValue Value;
         EBorderMode LeftMode;
         EBorderMode RightMode;
+        TKey MaxRightKey;
         EBorderMode MaxRightMode;
         bool MaxRightTrivial;
 

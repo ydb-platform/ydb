@@ -101,10 +101,10 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::BuildColumnsFetchingPlan(c
     return std::move(acc).Build();
 }
 
-void TSpecialReadContext::RegisterActors() {
+void TSpecialReadContext::RegisterActors(NCommon::TPortionIntervalTree&& portions) {
     AFL_VERIFY(!DuplicatesManager);
-    if (GetReadMetadata()->GetDeduplicationPolicy() == EDeduplicationPolicy::PREVENT_DUPLICATES) {
-        DuplicatesManager = NActors::TActivationContext::Register(new NDuplicateFiltering::TDuplicateManager(*this));
+    if (NeedDuplicateFiltering()) {
+        DuplicatesManager = NActors::TActivationContext::Register(new NDuplicateFiltering::TDuplicateManager(*this, std::move(portions)));
     }
 }
 

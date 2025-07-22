@@ -41,17 +41,4 @@ public:
     }
 };
 
-class TEvDuplicateFilterDataFetched
-    : public NActors::TEventLocal<TEvDuplicateFilterDataFetched, NColumnShard::TEvPrivate::EvDuplicateFilterDataFetched> {
-private:
-    YDB_READONLY_DEF(ui64, SourceId);
-    YDB_READONLY(TConclusion<TColumnsData>, Result, TConclusionStatus::Success());
-
-public:
-    TEvDuplicateFilterDataFetched(const ui64 sourceId, TConclusion<TColumnsData>&& result)
-        : SourceId(sourceId)
-        , Result(std::move(result)) {
-    }
-};
-
 }   // namespace NKikimr::NOlap::NReader::NSimple::NDuplicateFiltering

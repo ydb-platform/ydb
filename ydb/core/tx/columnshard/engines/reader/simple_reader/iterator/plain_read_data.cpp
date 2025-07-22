@@ -9,6 +9,7 @@ TPlainReadData::TPlainReadData(const std::shared_ptr<TReadContext>& context)
     , SpecialReadContext(std::make_shared<TSpecialReadContext>(context)) {
     auto constructor = SpecialReadContext->GetReadMetadata()->ExtractSelectInfo();
     constructor->FillReadStats(GetReadMetadata()->ReadStats);
+    SpecialReadContext->RegisterActors(constructor->GetPortionIntervals());
     Scanner =
         std::make_shared<TScanHead>(std::move(constructor), SpecialReadContext);
     auto& stats = GetReadMetadata()->ReadStats;

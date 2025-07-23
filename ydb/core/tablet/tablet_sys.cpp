@@ -49,6 +49,19 @@ void TTablet::NextFollowerAttempt() {
     FollowerInfo.NextAttempt();
 }
 
+void TTablet::SendFollowerAttach(const TActorId& leader) {
+    FollowerInfo.KnownLeaderID = leader;
+    FollowerInfo.LastCookie = ++LastInterconnectSubscribeCookie;
+    Send(FollowerInfo.KnownLeaderID,
+        new TEvTablet::TEvFollowerAttach(TabletID(), FollowerInfo.FollowerAttempt),
+        IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession,
+        FollowerInfo.LastCookie);
+
+    if (ui32 nodeId = FollowerInfo.KnownLeaderID.NodeId(); nodeId != SelfId().NodeId()) {
+        InterconnectPending[nodeId].LastCookie = FollowerInfo.LastCookie;
+    }
+}
+
 void TTablet::ReportTabletStateChange(ETabletState state) {
     const TActorId tabletStateServiceId = NNodeWhiteboard::MakeNodeWhiteboardServiceId(SelfId().NodeId());
     if (state == TTabletStateInfo::Created || state == TTabletStateInfo::ResolveLeader) {
@@ -309,16 +322,7 @@ void TTablet::HandleStateStorageLeaderResolve(TEvStateStorage::TEvInfo::TPtr &ev
     StateStorageInfo.KnownStep = msg->CurrentStep;
 
     if (msg->Status == NKikimrProto::OK && msg->CurrentLeader) {
-        FollowerInfo.KnownLeaderID = msg->CurrentLeader;
-        FollowerInfo.LastCookie = ++LastInterconnectSubscribeCookie;
-        Send(FollowerInfo.KnownLeaderID,
-                new TEvTablet::TEvFollowerAttach(TabletID(), FollowerInfo.FollowerAttempt),
-                IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession,
-                FollowerInfo.LastCookie);
-
-        if (ui32 nodeId = FollowerInfo.KnownLeaderID.NodeId(); nodeId != SelfId().NodeId()) {
-            InterconnectPending[nodeId].LastCookie = FollowerInfo.LastCookie;
-        }
+        SendFollowerAttach(msg->CurrentLeader);
 
         Become(&TThis::StateFollowerSubscribe);
     } else { // something goes weird, try again a bit later
@@ -458,16 +462,7 @@ void TTablet::HandleByFollower(TEvTablet::TEvFollowerRefresh::TPtr &ev) {
 
     NextFollowerAttempt();
 
-    FollowerInfo.KnownLeaderID = ev->Sender;
-    FollowerInfo.LastCookie = ++LastInterconnectSubscribeCookie;
-    Send(FollowerInfo.KnownLeaderID,
-        new TEvTablet::TEvFollowerAttach(TabletID(), FollowerInfo.FollowerAttempt),
-        IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession,
-        FollowerInfo.LastCookie);
-
-    if (ui32 nodeId = FollowerInfo.KnownLeaderID.NodeId(); nodeId != SelfId().NodeId()) {
-        InterconnectPending[nodeId].LastCookie = FollowerInfo.LastCookie;
-    }
+    SendFollowerAttach(ev->Sender);
 
     Become(&TThis::StateFollowerSubscribe);
 }

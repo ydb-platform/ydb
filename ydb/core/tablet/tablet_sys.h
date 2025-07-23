@@ -169,6 +169,7 @@ class TTablet : public TActor<TTablet> {
     } FollowerInfo;
 
     void NextFollowerAttempt();
+    void SendFollowerAttach(const TActorId& leader);
 
     enum class EFollowerSyncState {
         NeedSync, // follower known but not connected, blocks gc

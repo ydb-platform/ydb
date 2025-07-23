@@ -1779,25 +1779,17 @@ message TAuditConfig {
         optional string LogJsonEnvelope = 3; // Json template with text field containing %message% placeholder. For example {"my_enveloped_message": "%message%"}. %message% will be replaced with real audit log message
     }
 
-    message TApiAuditSettings {
-        enum EApiType {
-            UNSPECIFIED = 0;
-            HTTP = 1; // HTTP API
-            GRPC = 2; // gRPC API
-        }
-
-        optional EApiType ApiType = 1;
-
-        optional bool EnableModifyingMethodsAudit = 2; // Write modifying API calls to audit logs:
-                                                       // - from cluster API that modifies cluster state;
-                                                       // - from database API that modifies database state and is performed by a user account or
-                                                       //     a service account that contains a user account in its impersonation chain.
-    }
-
     optional TStderrBackend StderrBackend = 1;
     optional TFileBackend FileBackend = 2;
     optional TUnifiedAgentBackend UnifiedAgentBackend = 3;
-    repeated TApiAuditSettings ApiAuditSettings = 4;
+
+    optional bool WriteApiCalls = 4; // Write modifying API calls to audit logs:
+                                     // * In the same way as DML audit, but for all databases and out of database admin APIs.
+                                     // * For both GRPC and HTTP calls.
+                                     //
+                                     // - from cluster admin API that modifies cluster state (public and private API);
+                                     // - from database API that modifies database state and is performed by a user account or
+                                     //     a service account that contains a user account in its impersonation chain.
 };
 
 message THiveTabletLimit {

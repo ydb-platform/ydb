@@ -43,7 +43,6 @@ and timeout (by default, the maximum response time from healthcheck). Documentat
 * 18444:Added support for a new external data source [OpenSearch](https://opensearch.org/) in federated queries. [#18444](https://github.com/ydb-platform/ydb/pull/18444) ([Arslan Giniyatullin](https://github.com/Arslanka))
 * 19893:Implemented a new robust algorithm for HDRF scheduler that does not allow executing more tasks than the demand allows. [#19893](https://github.com/ydb-platform/ydb/pull/19893) ([Ivan](https://github.com/abyss7))
 * 19735:Added the Accept header to the oidc white list. [#19735](https://github.com/ydb-platform/ydb/pull/19735) ([Andrei Rykov](https://github.com/StekPerepolnen))
-* 19653:OIDC needs pass tracing headers [#19653](https://github.com/ydb-platform/ydb/pull/19653) ([Andrei Rykov](https://github.com/StekPerepolnen))
 * 19642:Added ColumnShard statistics for the update/delete operations, in rows and bytes. [#19642](https://github.com/ydb-platform/ydb/pull/19642) ([Vladilen](https://github.com/Vladilen))
 * 19618:Re-implemented the KQP scheduler for CPU using the HDRF model. [#19618](https://github.com/ydb-platform/ydb/pull/19618) ([Ivan](https://github.com/abyss7))
 * 19600:Implemented cluster bootstrapping state detection in Healthcheck API for configuration v2 environments. [#19600](https://github.com/ydb-platform/ydb/pull/19600) ([vporyadke](https://github.com/vporyadke))

@@ -521,6 +521,56 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         );
     }
 
+    Y_UNIT_TEST(ManualRequestApproval)
+    {
+        auto opts = TTestEnvOpts(8, 8).WithSentinel().WithDynamicGroups();
+        TCmsTestEnv env(opts);
+
+        auto pdiskId = env.PDiskId(0, 0);
+        TString pdiskPath = "/" + std::to_string(pdiskId.NodeId) + "/pdisk-" + std::to_string(pdiskId.DiskId) + ".data";
+
+        for (ui32 i = 0; i < 3; i++) {
+            auto& node = TFakeNodeWhiteboardService::Info[env.GetNodeId(i)];
+            node.Connected = false;
+        }
+        env.RegenerateBSConfig(TFakeNodeWhiteboardService::Config.MutableResponse()->MutableStatus(0)->MutableBaseConfig(), opts);
+
+        auto req = MakePermissionRequest(
+            TRequestOptions("user", false, false, true),
+            MakeAction(TAction::SHUTDOWN_HOST, env.GetNodeId(0), 60000000)
+        );
+        req->Record.SetAvailabilityMode(NKikimrCms::EAvailabilityMode::MODE_MAX_AVAILABILITY);
+
+        // Request that cannot be fulfilled
+        auto rec1 = env.CheckPermissionRequest(req, TStatus::DISALLOW_TEMP);
+
+        auto rid1 = rec1.GetRequestId();
+
+        // Manual approval
+        auto approveResp = env.CheckApproveRequest("user", rid1, false, TStatus::OK);
+        UNIT_ASSERT_VALUES_EQUAL(approveResp.ManuallyApprovedPermissionsSize(), 1);
+        TString permissionId = approveResp.GetManuallyApprovedPermissions(0);
+        auto rec2 = env.CheckGetPermission("user", permissionId);
+        UNIT_ASSERT_VALUES_EQUAL(rec2.PermissionsSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(rec2.GetPermissions(0).GetId(), permissionId);
+        
+        for (ui32 i = 0; i < 3; i++) {
+            auto& node = TFakeNodeWhiteboardService::Info[env.GetNodeId(i)];
+            node.Connected = true;
+        }
+
+        {
+            // Request cannot be fulfilled, since node 0 is locked by previously approved request
+            auto req = MakePermissionRequest(
+                TRequestOptions("user", false, false, true),
+                MakeAction(TAction::SHUTDOWN_HOST, env.GetNodeId(0), 60000000)
+            );
+            req->Record.SetAvailabilityMode(NKikimrCms::EAvailabilityMode::MODE_MAX_AVAILABILITY);
+
+            env.CheckPermissionRequest(req, TStatus::DISALLOW_TEMP);
+        }
+    }
+
     Y_UNIT_TEST(RequestReplacePDiskDoesntBreakGroup)
     {
         auto opts = TTestEnvOpts(8, 2).WithSentinel().WithDynamicGroups();

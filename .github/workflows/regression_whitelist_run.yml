@@ -23,6 +23,5 @@ jobs:
     with:
       test_targets: ydb/tests/sql/ ydb/tests/stress ydb/tests/functional/tpc ydb/tests/functional/benchmarks_init
       branches: ''
-      branches_config_path: '.github/config/stable_branches.json'
-      branches_config_set: '.stables_for_tests'
+      branches_config_path: '.github/config/stable_tests_branches.json'
       build_preset: ${{ matrix.build_preset }}

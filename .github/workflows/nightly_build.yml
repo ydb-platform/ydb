@@ -27,7 +27,7 @@ jobs:
       id: set-branches
       run: |
           if [[ "${{ github.event_name }}" == "schedule" || ("${{ inputs.use_default_branches }}" == "true"  && "${{ github.ref_type }}" != "tag") ]]; then
-            echo "branches=$(jq -c '.stables_for_nightly' .github/config/stable_branches.json)" >> $GITHUB_OUTPUT
+            echo "branches=$(jq -c '.' .github/config/stable_nightly_branches.json)" >> $GITHUB_OUTPUT
           else
             echo "branches=['${{ github.ref_name }}']" >> $GITHUB_OUTPUT
           fi

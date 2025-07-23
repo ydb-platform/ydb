@@ -107,9 +107,9 @@ The TPC-C specification limits the number of transactions that can be processed 
 
 Efficiency is calculated using the following formula:
 
-```
-efficiency = (result_tpmc / (12.86 × warehouse_count)) × 100
-```
+$$
+\text{efficiency} = \frac{\text{tpmC}}{12.86 \times \text{warehouses}} \times 100
+$$
 
 ## Test data cleaning { #cleanup }
 

@@ -1195,7 +1195,11 @@ public:
     }
 
     void Handle(NHttp::TEvHttpProxy::TEvHttpOutgoingResponse::TPtr& ev) {
-        ReplyWith(ev->Get()->Response);
+        bool endOfData = ev->Get()->Response->IsDone();
+        Forward(ev, Event->Sender);
+        if (endOfData) {
+            return PassAway();
+        }
         if (ev->Get()->Response->IsDone()) {
             return PassAway();
         }

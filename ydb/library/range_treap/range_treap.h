@@ -250,7 +250,7 @@ private:
                  /*Parent=*/parent, /*Left=*/std::move(l), /*Right=*/std::move(r), /*Prio=*/prio, /*LeftKey=*/std::move(leftOwnedKey),
                  /*RightKey=*/rightOwnedKey, /*Value=*/std::move(value), /*LeftMode=*/leftKey.GetMode(), /*RightMode=*/rightKey.GetMode(),
                  /*MaxRightKey=*/rightOwnedKey, /*MaxRightMode=*/rightKey.GetMode(), /*MaxRightTrivial=*/true)));
-        Values[value].PushBack(t);
+        Values[t->Value].PushBack(t);
         ++Stats_.Inserts;
         ++Size_;
         RecomputeMaxRight(t);

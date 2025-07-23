@@ -257,12 +257,12 @@ THashMap<TChunkAddress, TString> TPortionDataAccessor::DecodeBlobAddresses(
     return result;
 }
 
-std::vector<THashMap<TChunkAddress, TString>> TPortionDataAccessor::DecodeBlobAddresses(const std::vector<TPortionDataAccessor>& accessors,
+std::vector<THashMap<TChunkAddress, TString>> TPortionDataAccessor::DecodeBlobAddresses(const std::vector<std::shared_ptr<TPortionDataAccessor>>& accessors,
     const std::vector<ISnapshotSchema::TPtr>& schemas, NBlobOperations::NRead::TCompositeReadBlobs&& blobs) {
     std::vector<THashMap<TChunkAddress, TString>> result;
     AFL_VERIFY(accessors.size() == schemas.size())("accessors", accessors.size())("info", schemas.size());
     for (ui64 i = 0; i < accessors.size(); ++i) {
-        result.emplace_back(accessors[i].DecodeBlobAddressesImpl(blobs, schemas[i]->GetIndexInfo()));
+        result.emplace_back(accessors[i]->DecodeBlobAddressesImpl(blobs, schemas[i]->GetIndexInfo()));
     }
     AFL_VERIFY(blobs.IsEmpty())("blobs", blobs.DebugString());
     return result;

@@ -63,7 +63,7 @@ public:
     };
 
     std::shared_ptr<NReader::NSimple::IDataSource> Construct(
-        const std::shared_ptr<NCommon::TSpecialReadContext>& context, TPortionDataAccessor&& accessor);
+        const std::shared_ptr<NCommon::TSpecialReadContext>& context, std::shared_ptr<TPortionDataAccessor>&& accessor);
     std::shared_ptr<NReader::NSimple::IDataSource> Construct(
         const std::shared_ptr<NCommon::TSpecialReadContext>& context);
 };

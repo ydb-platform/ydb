@@ -12,7 +12,7 @@ std::shared_ptr<IDataSource> TPortionDataConstructor::Construct(const std::share
 }
 
 std::shared_ptr<IDataSource> TPortionDataConstructor::Construct(
-    const std::shared_ptr<NReader::NCommon::TSpecialReadContext>& context, TPortionDataAccessor&& accessor) {
+    const std::shared_ptr<NReader::NCommon::TSpecialReadContext>& context, std::shared_ptr<TPortionDataAccessor>&& accessor) {
     auto result = Construct(context);
     result->SetPortionAccessor(std::move(accessor));
     return result;
@@ -64,7 +64,7 @@ public:
 void TConstructor::AddAccessors(TDataAccessorsResult&& accessors) {
     AFL_VERIFY(InFlightRequests);
     if (Accessors.empty()) {
-        Accessors = std::move(accessors);
+        Accessors = std::move(accessors.ExtractPortions());
     } else {
         for (auto&& i : accessors.ExtractPortions()) {
             AFL_VERIFY(Accessors.emplace(i.first, std::move(i.second)).second);

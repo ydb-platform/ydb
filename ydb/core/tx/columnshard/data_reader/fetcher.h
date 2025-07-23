@@ -69,7 +69,7 @@ public:
     }
 
     ui64 GetNecessaryDataMemory(
-        const std::shared_ptr<NReader::NCommon::TColumnsSetIds>& columnIds, const std::vector<TPortionDataAccessor>& acc) const {
+        const std::shared_ptr<NReader::NCommon::TColumnsSetIds>& columnIds, const std::vector<std::shared_ptr<TPortionDataAccessor>>& acc) const {
         return Callback->GetNecessaryDataMemory(columnIds, acc);
     }
 

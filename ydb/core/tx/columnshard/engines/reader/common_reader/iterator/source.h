@@ -163,7 +163,7 @@ private:
 
     std::optional<NEvLog::TLogsThread> Events;
     std::unique_ptr<TFetchedData> StageData;
-    std::optional<TPortionDataAccessor> Accessor;
+    std:shared_ptr<TPortionDataAccessor> Accessor;
 
 protected:
     std::vector<std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>> ResourceGuards;
@@ -180,9 +180,9 @@ public:
         return *Accessor;
     }
 
-    TPortionDataAccessor ExtractPortionAccessor() {
+    std::shared_ptr<TPortionDataAccessor> ExtractPortionAccessor() {
         AFL_VERIFY(!!Accessor);
-        auto result = std::move(*Accessor);
+        auto result = std::move(Accessor);
         Accessor.reset();
         return result;
     }
@@ -191,7 +191,8 @@ public:
         return !!Accessor;
     }
 
-    void SetPortionAccessor(TPortionDataAccessor&& acc) {
+    void SetPortionAccessor(std::shared_ptr<TPortionDataAccessor>&& acc) {
+        AFL_VERIFY(!!acc);
         AFL_VERIFY(!Accessor);
         Accessor = std::move(acc);
     }

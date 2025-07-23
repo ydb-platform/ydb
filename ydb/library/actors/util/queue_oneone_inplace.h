@@ -62,17 +62,17 @@ public:
         }
     }
 
-    struct TCleanDestructor {
-        static inline void Destroy(TOneOneQueueInplace<T, TSize>* x) noexcept {
+    struct TPtrCleanDestructor {
+        static inline void Destroy(TOneOneQueueInplace* x) noexcept {
+            while (T head = x->Pop()) {
+                ::CheckedDelete(head);
+            }
             delete x;
         }
     };
 
-    struct TPtrCleanDestructor {
-        static inline void Destroy(TOneOneQueueInplace<T, TSize>* x) noexcept {
-            while (T head = x->Pop()) {
-                ::CheckedDelete(head);
-            }
+    struct TCleanDestructor {
+        static inline void Destroy(TOneOneQueueInplace* x) noexcept {
             delete x;
         }
     };

@@ -58,8 +58,8 @@ You can analyze a transaction's execution time using a histogram counter. The in
 
 | Metric name<br/>Type, units of measurement | Description<br/>Labels |
 | ----- | ----- |
-| `table.datashard.row_count`<br/>`GAUGE`, pieces | The number of rows in row-oriented tables in the database. |
-| `table.datashard.size_bytes`<br/>`GAUGE`, bytes | The size of data in row-oriented tables in the database. |
+| `table.datashard.row_count`<br/>`GAUGE`, pieces | The number of rows in all row-oriented tables in the database. |
+| `table.datashard.size_bytes`<br/>`GAUGE`, bytes | The size of data in all row-oriented tables in the database. |
 | `table.datashard.used_core_percents`<br/>`HIST_GAUGE`, % | Histogram counter. The intervals are set as a percentage. Shows the number of row-oriented table partitions using computing resources in the ratio that falls within a certain interval. |
 | `table.datashard.read.rows`<br/>`RATE`, pieces | The number of rows that are read by all partitions of all row-oriented tables in the database in a certain period of time. |
 | `table.datashard.read.bytes`<br/>`RATE`, bytes | The size of data that is read by all partitions of all row-oriented tables in the database in a certain period of time. |

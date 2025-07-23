@@ -3,7 +3,7 @@
 #include "defs.h"
 #include "queue_chunk.h"
 
-template <typename T, ui32 TSize, class D = TNoAction, typename TChunk = TQueueChunk<T, TSize>>
+template <typename T, ui32 TSize, typename D = TNoAction, typename TChunk = TQueueChunk<T, TSize>>
 class TOneOneQueueInplace : TNonCopyable {
     static_assert(std::is_integral<T>::value || std::is_pointer<T>::value, "expect std::is_integral<T>::value || std::is_pointer<T>::value");
 

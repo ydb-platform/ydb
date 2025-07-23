@@ -16,14 +16,12 @@ namespace NKikimr::NStorage {
             return;
         }
 
-        const bool hasQuorum = StorageConfig && HasConnectedNodeQuorum(*StorageConfig);
-
-        if (RootState == ERootState::INITIAL && hasQuorum) { // becoming root node
+        if (RootState == ERootState::INITIAL && GlobalQuorum) { // becoming root node
             Y_ABORT_UNLESS(!Scepter);
             Scepter = std::make_shared<TScepter>();
             BecomeRoot();
             UpdateRootStateToConnectionChecker();
-        } else if (Scepter && !hasQuorum) { // unbecoming root node -- lost quorum
+        } else if (Scepter && !GlobalQuorum) { // unbecoming root node -- lost quorum
             SwitchToError("quorum lost");
         }
     }
@@ -61,10 +59,8 @@ namespace NKikimr::NStorage {
             if (Binding && Binding->RootNodeId) {
                 rootNodeId.emplace(Binding->RootNodeId);
             }
-            const bool hasQuorumInPile = StorageConfig && BridgeInfo && HasConnectedNodeQuorum(*StorageConfig,
-                {{BridgeInfo->SelfNodePile->BridgePileId}});
             Send(MakeDistconfBridgeConnectionCheckerActorId(), new TEvPrivate::TEvUpdateRootState(static_cast<bool>(Scepter),
-                rootNodeId, hasQuorumInPile));
+                rootNodeId, LocalPileQuorum));
         }
     }
 

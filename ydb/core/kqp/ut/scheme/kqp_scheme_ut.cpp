@@ -8370,6 +8370,60 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         }
     }
 
+    Y_UNIT_TEST_TWIN(CreateAsyncReplicationWithCaCert, UseQueryService) {
+        TKikimrRunner kikimr;
+        auto queryClient = kikimr.GetQueryClient();
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        auto executeQuery = [&queryClient, &session](const TString& query) {
+            if constexpr (UseQueryService) {
+                Y_UNUSED(session);
+                return queryClient.ExecuteQuery(query, NQuery::TTxControl::NoTx()).ExtractValueSync();
+            } else {
+                Y_UNUSED(queryClient);
+                return session.ExecuteSchemeQuery(query).ExtractValueSync();
+            }
+        };
+
+        // invalid, non-secure mode
+        {
+            auto query = Sprintf(R"(
+                --!syntax_v1
+                CREATE ASYNC REPLICATION `/Root/replication` FOR
+                    `/Root/table` AS `/Root/replica`
+                WITH (
+                    CONNECTION_STRING = "grpc://localhost:2135/?database=/Root",
+                    USER = "user",
+                    PASSWORD = "password",
+                    CA_CERT = "-----BEGIN CERTIFICATE-----"
+                );
+            )", kikimr.GetEndpoint().c_str());
+
+            const auto result = executeQuery(query);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToOneLineString(), "CA_CERT has no effect in non-secure mode", result.GetIssues().ToOneLineString());
+        }
+
+        // ok
+        {
+            auto query = Sprintf(R"(
+                --!syntax_v1
+                CREATE ASYNC REPLICATION `/Root/replication` FOR
+                    `/Root/table` AS `/Root/replica`
+                WITH (
+                    CONNECTION_STRING = "grpcs://localhost:2135/?database=/Root",
+                    USER = "user",
+                    PASSWORD = "password",
+                    CA_CERT = "-----BEGIN CERTIFICATE-----"
+                );
+            )", kikimr.GetEndpoint().c_str());
+
+            const auto result = executeQuery(query);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+    }
+
     Y_UNIT_TEST(AlterAsyncReplication) {
         using namespace NReplication;
 

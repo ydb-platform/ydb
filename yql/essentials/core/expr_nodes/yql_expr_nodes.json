@@ -2697,6 +2697,15 @@
             "Name" : "TCoLikely",
             "Base" : "TCoNoPushBase",
             "Match": {"Type": "Callable", "Name": "Likely"}
+        },
+        {
+            "Name" : "TCoUnessential",
+            "Base" : "TCallable",
+            "Match": {"Type": "Callable", "Name": "Unessential"},
+            "Children": [
+                {"Index": 0, "Name": "Predicate", "Type": "TExprBase"},
+                {"Index": 1, "Name": "AssumeAs", "Type": "TExprBase"}
+            ]
         }
     ]
 }

@@ -39,7 +39,7 @@ private:
     mutable EPDiskState PrevState = State;
     ui64 StateCounter;
     TMaybe<EPDiskStatus> ForcedStatus;
-    
+
     mutable bool HadBadStateRecently = false;
 
 }; // TPDiskStatusComputer
@@ -108,7 +108,31 @@ private:
 
 }; // TPDiskInfo
 
-struct TNodeInfo {
+struct TNodeStatusComputer {
+    enum ENodeState {
+        GOOD = 0,
+        MAY_BE_GOOD,
+        MAY_BE_BAD,
+        BAD,
+    };
+
+    ENodeState CurrentState = ENodeState::GOOD;
+    ENodeState ActualState = ENodeState::GOOD;
+    ui64 StateCounter = 0;
+    ui32 BadStateLimit;
+    ui32 GoodStateLimit;
+
+    ui32 GetCurrentNodeState() const;
+    bool Compute();
+    void AddState(ENodeState newState);
+
+    bool MaybeBad() const { return CurrentState == ENodeState::BAD && StateCounter < BadStateLimit; }
+    bool DefinitelyBad() const { return CurrentState == ENodeState::BAD && StateCounter >= BadStateLimit; }
+    bool MaybeGood() const { return CurrentState == ENodeState::GOOD && StateCounter < GoodStateLimit; }
+    bool DefinitelyGood() const { return CurrentState == ENodeState::GOOD && StateCounter >= GoodStateLimit; }
+};
+
+struct TNodeInfo : public TNodeStatusComputer {
     TString Host;
     NActors::TNodeLocation Location;
     TMaybeFail<ui32> PileId;
@@ -141,6 +165,8 @@ struct TSentinelState: public TSimpleRefCount<TSentinelState> {
     TMap<TPDiskID, TPDiskInfo::TPtr> ChangeRequests;
     ui32 StatusChangeAttempt = 0;
     ui32 ChangeRequestId = 0;
+    bool NeedSelfHealStateStorage = false;
+    TInstant LastStateStorageSelfHeal = TInstant::Zero();
 };
 
 class TClusterMap {

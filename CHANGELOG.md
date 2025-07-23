@@ -41,6 +41,23 @@ and timeout (by default, the maximum response time from healthcheck). Documentat
 * 18859:Added support for Board reconfiguration in StateStorage via DistConf. [#18859](https://github.com/ydb-platform/ydb/pull/18859) ([Evgenik2](https://github.com/Evgenik2))
 * 19134:Added the `running` status to script execution statuses (improved output for the get script execution operation). [#19134](https://github.com/ydb-platform/ydb/pull/19134) ([Pisarenko Grigoriy](https://github.com/GrigoriyPA))
 * 18444:Added support for a new external data source [OpenSearch](https://opensearch.org/) in federated queries. [#18444](https://github.com/ydb-platform/ydb/pull/18444) ([Arslan Giniyatullin](https://github.com/Arslanka))
+* 19893:Implemented a new robust algorithm for HDRF scheduler that does not allow executing more tasks than the demand allows. [#19893](https://github.com/ydb-platform/ydb/pull/19893) ([Ivan](https://github.com/abyss7))
+* 19735:Added the Accept header to the oidc white list. [#19735](https://github.com/ydb-platform/ydb/pull/19735) ([Andrei Rykov](https://github.com/StekPerepolnen))
+* 19642:Added ColumnShard statistics for the update/delete operations, in rows and bytes. [#19642](https://github.com/ydb-platform/ydb/pull/19642) ([Vladilen](https://github.com/Vladilen))
+* 19618:Re-implemented the KQP scheduler for CPU using the HDRF model. [#19618](https://github.com/ydb-platform/ydb/pull/19618) ([Ivan](https://github.com/abyss7))
+* 19600:Implemented cluster bootstrapping state detection in Healthcheck API for configuration v2 environments. [#19600](https://github.com/ydb-platform/ydb/pull/19600) ([vporyadke](https://github.com/vporyadke))
+* 19580:Added support fo changing [schema object limits](./concepts/limits-ydb#schema-object) (MAX_SHARDS, MAX_PATHS, ...) with YQL. ([Daniil Demin](https://github.com/jepett0))
+* 19567:Added support for a new `Increment` operation, only Integer types are supported. [#19567](https://github.com/ydb-platform/ydb/pull/19567) ([r314-git](https://github.com/r314-git))
+* 18333:Added audit logs for YMQ events in common ydb format. [#18333](https://github.com/ydb-platform/ydb/pull/18333) ([flown4qqqq](https://github.com/flown4qqqq))
+* 20176:Added automatic creation and deletion of a service consumer for topic compaction. [#20176](https://github.com/ydb-platform/ydb/pull/20176) ([FloatingCrowbar](https://github.com/FloatingCrowbar))
+* 19994:Added memory limits for column-oriented tables to the [Memory Controller](https://ydb.tech/docs/en/reference/configuration/#memory-controller) configuration. [#19994](https://github.com/ydb-platform/ydb/pull/19994) ([Vladilen](https://github.com/Vladilen))
+* 19678:Added support for [idempotent producers](https://cwiki.apache.org/confluence/display/KAFKA/Idempotent+Producer) to the YDB implementation of the Apache Kafka protocol. [#19678](https://github.com/ydb-platform/ydb/pull/19678) ([qyryq](https://github.com/qyryq))
+* 19444:Introduced a new UnorderedData protocol for full synchronization, which allows taking a full index snapshot only once per full sync session. The new protocol will be used to send DoNotKeep flags from Phantom Flag Storage, which will be sent without relying on the linear order. For now the new protocol is disabled by default. [#19444](https://github.com/ydb-platform/ydb/pull/19444) ([Sergey Belyakov](https://github.com/serbel324))
+* 19337:* Introduced two new Distributed Storage parameters — `GroupSizeInUnits` property of storage groups and `SlotSizeInUnits` of PDisks. Docs: #19364 [#19337](https://github.com/ydb-platform/ydb/pull/19337) ([Yaroslav Dynnikov](https://github.com/rosik))
+* 18955:Added a new external data source to YDB topics. [#18955](https://github.com/ydb-platform/ydb/pull/18955) ([Dmitry Kardymon](https://github.com/kardymonds))
+* 18544:Added shared metadata cache. Now all column shards on the same node share the same metadata cache by default. To disable the shared metadata cache, use the `EnableSharedMetadataAccessorCache` flag. The default cache size is 1 GB, this value can be changed in the `SharedMetadataAccessorCacheSize` parameter. [#18544](https://github.com/ydb-platform/ydb/pull/18544) ([Iurii Kravchenko](https://github.com/XJIE6))
+* 19680:Implemented the select load type for the vector workload test. [#19680](https://github.com/ydb-platform/ydb/pull/19680) ([azevaykin](https://github.com/azevaykin))
+* 20040:Enabled verbose memory limit by default in recipe [#20040](https://github.com/ydb-platform/ydb/pull/20040). ([Ivan](https://github.com/abyss7))
 
 ### Bug fixes
 
@@ -90,6 +107,12 @@ and timeout (by default, the maximum response time from healthcheck). Documentat
 * 18924:Fixed a race condition between YardInit and Slay when a group (and therefore a VDisk) is created and then immediately deleted, removing "phantom vdisks" from pdisks. [#18924](https://github.com/ydb-platform/ydb/pull/18924) ([Semyon Danilov](https://github.com/SammyVimes))
 * 18764:Fixed an [issue](https://github.com/ydb-platform/ydb/issues/18747) with a timestamp push down in OLAP. [#18764](https://github.com/ydb-platform/ydb/pull/18764) ([Oleg Doronin](https://github.com/dorooleg))
 * 19466:Fixed float sum aggregation in arrow::Kernel. [#19466](https://github.com/ydb-platform/ydb/pull/19466) ([Oleg Doronin](https://github.com/dorooleg))
+* 19781:Fixed an [issue](https://github.com/ydb-platform/ydb/issues/19799) where CMS would try to lock pdisk without vdisks twice. [#19781](https://github.com/ydb-platform/ydb/pull/19781) ([Semyon Danilov](https://github.com/SammyVimes))
+* 19762:Fixed a [bug](https://github.com/ydb-platform/ydb/issues/19619) with absolute paths in workloads. [#19762](https://github.com/ydb-platform/ydb/pull/19762) ([Олег](https://github.com/iddqdex))
+* 20238:Fixed an [issue](https://github.com/ydb-platform/ydb/issues/20199) where column shards could return different amounts of data for the same queries. Fixed a race in the CPU limiter. [#20238](https://github.com/ydb-platform/ydb/pull/20238) ([Pisarenko Grigoriy](https://github.com/GrigoriyPA))
+* 20217:Fixed an [issue](https://github.com/ydb-platform/ydb/issues/18604). Now the force availability mode ignores the limits of offline nodes. ([Ilia Shakhov](https://github.com/pixcc))
+* 20157:Fixed an [issue](https://github.com/ydb-platform/ydb/issues/20116) that caused YDB node to segfault when users ran queries in [Workload Manager](./dev/resource-consumption-management) pools with the `TOTAL_CPU_LIMIT_PERCENT_PER_NODE` restriction enabled.  [#20157](https://github.com/ydb-platform/ydb/pull/20157) ([Pisarenko Grigoriy](https://github.com/GrigoriyPA))
+* 20084:Fixed an issue where committing message offsets when reading a topic might result in the following error: "Unable to navigate:path: 'Root/logbroker-federation/--cut--/stable/guidance' status: PathErrorUnknown". [#20084](https://github.com/ydb-platform/ydb/pull/20084) ([Nikolay Shestakov](https://github.com/nshestakov))
 
 ### YDB UI
 
@@ -105,3 +128,8 @@ and timeout (by default, the maximum response time from healthcheck). Documentat
 * 17884:Increased the number of filter types pushed into column shards, resulting in improved performance.[#17884](https://github.com/ydb-platform/ydb/pull/17884) ([Pavel Velikhov](https://github.com/pavelvelikhov))
 * 18461:Corrected the task placement logic for read operations from external sources. [#18461](https://github.com/ydb-platform/ydb/pull/18461) ([Pisarenko Grigoriy](https://github.com/GrigoriyPA))
 * 18765:Optimized the process of copying TStorageConfig when sending a changed configuration to subscribers. [#18765](https://github.com/ydb-platform/ydb/pull/18765) ([Alexander Rutkovsky](https://github.com/alexvru))
+* 20195:Improved the algorithm of the new scheduler. [#20195](https://github.com/ydb-platform/ydb/pull/20195) ([Ivan](https://github.com/abyss7))
+* 20128:Added a cache for SchemeNavigate responses. Users will receive quicker confirmations when the server successfully writes messages. [#20128](https://github.com/ydb-platform/ydb/pull/20128) ([Alek5andr-Kotov](https://github.com/Alek5andr-Kotov))
+* 20048:Improved performance of upsert operations for tables with defaults. Upsert operations now ignore the last DefaulFilledColumnsCnt columns if a row exist. This logic allows QP to avoid reading rows to check if it exists (the whole operation with default columns is processed at a shard). [#20048](https://github.com/ydb-platform/ydb/pull/20048) ([r314-git](https://github.com/r314-git))
+* 19724:Added the `buffer_page_alloc_size` configuration parameter with the default value of 4Kb. [#19724](https://github.com/ydb-platform/ydb/pull/19724) ([Ivan](https://github.com/abyss7))
+* 19687:Extracted the password verification logic into a dedicated actor, separating it from `TSchemeShard` local transactions for improved performance. [#19687](https://github.com/ydb-platform/ydb/pull/19687) ([Yury Kiselev](https://github.com/yurikiselev))

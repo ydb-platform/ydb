@@ -14977,7 +14977,7 @@ intern_static(PyInterpreterState *interp, PyObject *s /* stolen */)
      * per-interpreter interned_dict, which might contain duplicates.
      */
     PyObject *interned = get_interned_dict(interp);
-    // assert(interned == NULL);
+    assert(interned == NULL);
 #endif
 
     /* Look in the global cache first. */

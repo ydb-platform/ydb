@@ -25,6 +25,8 @@ public:
     {
     }
 
+    virtual ~TReadonlyBitVector() = default;
+
     bool Test(ui64 pos) const {
         return TTraits::Test(Data_, pos, Size_);
     }

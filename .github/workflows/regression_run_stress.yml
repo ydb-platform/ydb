@@ -22,5 +22,7 @@ jobs:
         build_preset: ["relwithdebinfo", "release-asan", "release-tsan", "release-msan"]
     with:
       test_targets: ydb/tests/stress/
-      branches: ${{ (inputs.use_default_branches == true || github.event_name == 'schedule') && '["main", "stable-25-1", "stable-25-1-analytics", "prestable-25-2", "prestable-25-3"]' || github.ref_name }}
+      branches: ''
+      branches_config_path: '.github/config/stable_branches.json'
+      branches_config_set: '.stables_for_tests'
       build_preset: ${{ matrix.build_preset }}

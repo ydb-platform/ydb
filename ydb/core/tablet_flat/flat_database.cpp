@@ -409,6 +409,26 @@ size_t TDatabase::GetOpenTxCount(ui32 table) const
     return Require(table)->GetOpenTxCount();
 }
 
+size_t TDatabase::GetTxsWithDataCount(ui32 table) const
+{
+    return Require(table)->GetTxsWithDataCount();
+}
+
+size_t TDatabase::GetTxsWithStatusCount(ui32 table) const
+{
+    return Require(table)->GetTxsWithStatusCount();
+}
+
+size_t TDatabase::GetCommittedTxCount(ui32 table) const
+{
+    return Require(table)->GetCommittedTxCount();
+}
+
+size_t TDatabase::GetRemovedTxCount(ui32 table) const
+{
+    return Require(table)->GetRemovedTxCount();
+}
+
 void TDatabase::RemoveRowVersions(ui32 table, const TRowVersion& lower, const TRowVersion& upper)
 {
     if (Y_LIKELY(lower < upper)) {
@@ -567,6 +587,13 @@ TEpoch TDatabase::TxSnapTable(ui32 table)
     Y_ENSURE(Redo, "Cannot TxSnapTable outside a transaction");
     ++Change->Snapshots;
     return DatabaseImpl->FlushTable(table);
+}
+
+void TDatabase::Truncate(ui32 table)
+{
+    Y_ENSURE(Redo, "Cannot Truncate outside a transaction");
+    ++Change->Snapshots;
+    DatabaseImpl->TruncateTable(table);
 }
 
 TAutoPtr<TSubset> TDatabase::CompactionSubset(ui32 table, TEpoch before, TArrayRef<const TLogoBlobID> bundle) const
@@ -778,6 +805,7 @@ TDatabase::TProd TDatabase::Commit(TTxStamp stamp, bool commit, TCookieAllocator
 
         Change->Garbage = std::move(DatabaseImpl->Garbage);
         Change->Deleted = std::move(DatabaseImpl->Deleted);
+        Change->Truncated = std::move(DatabaseImpl->Truncated);
         Change->Affects = DatabaseImpl->GrabAffects();
         Change->Annex = std::move(annex);
 

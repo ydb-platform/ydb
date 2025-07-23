@@ -70,6 +70,13 @@ bool TNodeProgressBase::MergeWith(const TOperationProgress& p) {
         Progress_.RemoteData = p.RemoteData;
         dirty = true;
     }
+
+    // (7) alerts
+    if (p.Alerts != Progress_.Alerts) {
+        Progress_.Alerts = p.Alerts;
+        dirty = true;
+    }
+
     return Dirty_ = dirty;
 }
 

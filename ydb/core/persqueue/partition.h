@@ -1004,6 +1004,8 @@ private:
     NWilson::TSpan KVWriteSpan;
     TDeque<NWilson::TTraceId> TxForPersistTraceIds;
     TDeque<NWilson::TSpan> TxForPersistSpans;
+
+    bool CanProcessUserActionAndTransactionEvents() const;
 };
 
 } // namespace NKikimr::NPQ

@@ -1382,6 +1382,8 @@ void TPartition::ReplyToProposeOrPredicate(TSimpleSharedPtr<TTransaction>& tx, b
             PQ_LOG_TX_D("The long answer to TEvTxCalcPredicate. TxId: " << tx->GetTxId());
         }
 
+        PQ_LOG_TX_D("Send TEvTxCalcPredicateResult. TxId: " << tx->GetTxId());
+
         Send(Tablet,
              MakeHolder<TEvPQ::TEvTxCalcPredicateResult>(tx->Tx->Step,
                                                          tx->Tx->TxId,
@@ -1974,7 +1976,7 @@ void TPartition::ProcessTxsAndUserActs(const TActorContext& ctx)
     }
     PQ_LOG_D("Batching state before ContinueProcessTxsAndUserActs: " << (int)BatchingState);
     while (true) {
-        if ((BatchingState == ETxBatchingState::PreProcessing) || (BatchingState == ETxBatchingState::Executing)) {
+        if (CanProcessUserActionAndTransactionEvents()) {
             ContinueProcessTxsAndUserActs(ctx);
         }
         if (BatchingState == ETxBatchingState::PreProcessing) {
@@ -2010,6 +2012,13 @@ void TPartition::ProcessTxsAndUserActs(const TActorContext& ctx)
     }
 }
 
+bool TPartition::CanProcessUserActionAndTransactionEvents() const
+{
+    return
+        (BatchingState == ETxBatchingState::PreProcessing) ||
+        (BatchingState == ETxBatchingState::Executing);
+}
+
 void TPartition::ContinueProcessTxsAndUserActs(const TActorContext&)
 {
     Y_ABORT_UNLESS(!KVWriteInProgress);
@@ -2021,7 +2030,7 @@ void TPartition::ContinueProcessTxsAndUserActs(const TActorContext&)
     auto visitor = [this](auto& event) {
         return this->PreProcessUserActionOrTransaction(event);
     };
-    while (BatchingState == ETxBatchingState::PreProcessing && !UserActionAndTransactionEvents.empty()) {
+    while (CanProcessUserActionAndTransactionEvents() && !UserActionAndTransactionEvents.empty()) {
         if (ChangingConfig) {
             BatchingState = ETxBatchingState::Finishing;
             break;

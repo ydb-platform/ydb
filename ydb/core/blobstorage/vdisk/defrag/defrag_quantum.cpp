@@ -56,6 +56,7 @@ namespace NKikimr {
 
         void RunImpl() {
             TEvDefragQuantumResult::TStat stat{.Eof = true};
+            ui32 maxChunksToDefrag = DCtx->VCfg->MaxChunksToDefragInflight;
 
             if (ChunksToDefrag) {
                 Y_ABORT_UNLESS(*ChunksToDefrag);
@@ -68,12 +69,12 @@ namespace NKikimr {
                     }
                     Yield();
                 }
-                ChunksToDefrag.emplace(findChunks.GetChunksToDefrag(DCtx->MaxChunksToDefrag));
+                ChunksToDefrag.emplace(findChunks.GetChunksToDefrag(maxChunksToDefrag));
             }
             if (*ChunksToDefrag) {
                 stat.FoundChunksToDefrag = ChunksToDefrag->FoundChunksToDefrag;
                 stat.FreedChunks = ChunksToDefrag->Chunks;
-                stat.Eof = stat.FoundChunksToDefrag < DCtx->MaxChunksToDefrag;
+                stat.Eof = stat.FoundChunksToDefrag < maxChunksToDefrag;
 
                 auto lockedChunks = LockChunks(*ChunksToDefrag);
 

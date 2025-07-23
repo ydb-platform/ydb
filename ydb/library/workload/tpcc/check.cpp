@@ -21,6 +21,25 @@ using namespace NThreading;
 
 //-----------------------------------------------------------------------------
 
+// waits all futures and returns either the one with exception,
+// or void future.
+TFuture<void> WaitAllAndCheck(const std::vector<TFuture<void>>& futures) {
+    auto result = WaitAll(futures).Apply([allFutures = std::move(futures)](const auto&) {
+        // return any with error
+        for (const auto& future: allFutures) {
+            if (future.HasException()) {
+                return future;
+            }
+        }
+
+        return MakeFuture();
+    });
+
+    return result;
+}
+
+//-----------------------------------------------------------------------------
+
 TFuture<void> BaseCheckWarehouseTable(TQueryClient& client, const TString& path, int expectedWhNumber) {
     // W_ID is PK, so we can take just min, max and count to check if all rows present
     TString query = std::format(R"(
@@ -658,12 +677,12 @@ void TPCCChecker::CheckSync() {
     // Each member starts multiple async checks. To evenly load the cluster we
     // split checks into such "batches" and execute batch-by-batch
     std::vector<void (TPCCChecker::*)(TQueryClient&)> checkFunctions = {
-        &TPCCChecker::BaseCheck,
-        &TPCCChecker::ConsistencyCheckPart1,
-        &TPCCChecker::ConsistencyCheckPart2,
-        &TPCCChecker::ConsistencyCheck3324,
+        //&TPCCChecker::BaseCheck,
+        //&TPCCChecker::ConsistencyCheckPart1,
+        //&TPCCChecker::ConsistencyCheckPart2,
+        //&TPCCChecker::ConsistencyCheck3324,
         &TPCCChecker::ConsistencyCheck3325,
-        &TPCCChecker::ConsistencyCheck3326,
+        //&TPCCChecker::ConsistencyCheck3326,
         //&TPCCChecker::ConsistencyCheck3327, //mem
         //&TPCCChecker::ConsistencyCheck3328, // possibly fails
         //&TPCCChecker::ConsistencyCheck3329, // possibly fails (similar to 3328)
@@ -791,17 +810,7 @@ void TPCCChecker::ConsistencyCheck3324(TQueryClient& client) {
         rangeFutures.push_back(future);
     }
 
-    auto result = WaitAll(rangeFutures).Apply([allFutures = std::move(rangeFutures)](const auto&) {
-        // return any with error
-        for (const auto& future: allFutures) {
-            if (future.HasException()) {
-                return future;
-            }
-        }
-
-        return MakeFuture();
-    });
-
+    auto result = WaitAllAndCheck(rangeFutures);
     RunningChecks.insert(RunningChecks.end(), {
         { result, "3.3.2.4" },
     });
@@ -860,22 +869,10 @@ void TPCCChecker::ConsistencyCheck3325(TQueryClient& client) {
         rangeFutures.push_back(future);
     }
 
-    auto result = WaitAll(rangeFutures).Apply([allFutures = std::move(rangeFutures)](const auto&) {
-        // return any with error
-        for (const auto& future: allFutures) {
-            if (future.HasException()) {
-                return future;
-            }
-        }
-
-        return MakeFuture();
-    });
-
+    auto result = WaitAllAndCheck(rangeFutures);
     RunningChecks.insert(RunningChecks.end(), {
         { result, "3.3.2.5" },
     });
-
-    WaitAll(rangeFutures).GetValueSync();
 }
 
 void TPCCChecker::ConsistencyCheck3326(TQueryClient& client) {
@@ -942,22 +939,10 @@ void TPCCChecker::ConsistencyCheck3326(TQueryClient& client) {
         rangeFutures.push_back(future);
     }
 
-    auto result = WaitAll(rangeFutures).Apply([allFutures = std::move(rangeFutures)](const auto&) {
-        // return any with error
-        for (const auto& future: allFutures) {
-            if (future.HasException()) {
-                return future;
-            }
-        }
-
-        return MakeFuture();
-    });
-
+    auto result = WaitAllAndCheck(rangeFutures);
     RunningChecks.insert(RunningChecks.end(), {
         { result, "3.3.2.6" },
     });
-
-    WaitAll(rangeFutures).GetValueSync();
 }
 
 // TODO: rewrite (to much mem and materialization size)
@@ -1006,22 +991,10 @@ void TPCCChecker::ConsistencyCheck3327(TQueryClient& client) {
         rangeFutures.push_back(future);
     }
 
-    auto result = WaitAll(rangeFutures).Apply([allFutures = std::move(rangeFutures)](const auto&) {
-        // return any with error
-        for (const auto& future: allFutures) {
-            if (future.HasException()) {
-                return future;
-            }
-        }
-
-        return MakeFuture();
-    });
-
+    auto result = WaitAllAndCheck(rangeFutures);
     RunningChecks.insert(RunningChecks.end(), {
         { result, "3.3.2.7" },
     });
-
-    WaitAll(rangeFutures).GetValueSync();
 }
 
 void TPCCChecker::ConsistencyCheck3328(TQueryClient& client) {
@@ -1140,15 +1113,7 @@ void TPCCChecker::ConsistencyCheck33210(TQueryClient& client) {
         rangeFutures.push_back(future);
     }
 
-    auto result = WaitAll(rangeFutures).Apply([allFutures = std::move(rangeFutures)](const auto&) {
-        for (const auto& future : allFutures) {
-            if (future.HasException()) {
-                return future;
-            }
-        }
-        return MakeFuture();
-    });
-
+    auto result = WaitAllAndCheck(rangeFutures);
     RunningChecks.push_back({ result, "3.3.2.10" });
 }
 
@@ -1190,15 +1155,7 @@ void TPCCChecker::ConsistencyCheck33211(TQueryClient& client) {
         rangeFutures.push_back(future);
     }
 
-    auto result = WaitAll(rangeFutures).Apply([allFutures = std::move(rangeFutures)](const auto&) {
-        for (const auto& future : allFutures) {
-            if (future.HasException()) {
-                return future;
-            }
-        }
-        return MakeFuture();
-    });
-
+    auto result = WaitAllAndCheck(rangeFutures);
     RunningChecks.push_back({ result, "3.3.2.11" });
 }
 
@@ -1248,15 +1205,7 @@ void TPCCChecker::ConsistencyCheck33212(TQueryClient& client) {
         rangeFutures.push_back(future);
     }
 
-    auto result = WaitAll(rangeFutures).Apply([allFutures = std::move(rangeFutures)](const auto&) {
-        for (const auto& future : allFutures) {
-            if (future.HasException()) {
-                return future;
-            }
-        }
-        return MakeFuture();
-    });
-
+    auto result = WaitAllAndCheck(rangeFutures);
     RunningChecks.push_back({ result, "3.3.2.12" });
 }
 

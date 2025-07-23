@@ -1499,6 +1499,12 @@ message TImmediateControlsConfig {
             MinValue: 0,
             MaxValue: 1000,
             DefaultValue: 0 }];
+
+        optional uint64 EnableDeepScrubbing = 33 [(ControlOptions) = {
+            Description: "Run CheckIntegrity requests during Scrub process instead of usual scrubbing",
+            MinValue: 0,
+            MaxValue: 1,
+            DefaultValue: 0 }];
     }
 
     message TTabletControls {
@@ -1749,6 +1755,11 @@ message THiveConfig {
         HIVE_BOOT_STRATEGY_FAST = 1;
     }
 
+    message TBootPriority {
+        optional NKikimrTabletBase.TTabletTypes.EType TabletType = 1;
+        optional double Priority = 2;
+    }
+
     optional uint64 MaxTabletsScheduled = 2 [default = 100];
     optional uint64 MaxResourceCounter = 3 [default = 100000000];
     optional uint64 MaxResourceCPU = 4 [default = 10000000];
@@ -1832,6 +1843,7 @@ message THiveConfig {
     optional double TargetTrackingCPUMargin = 83 [default = 0.1]; // percent
     optional double DryRunTargetTrackingCPU = 84; // percent
     optional uint64 NodeRestartsForPenalty = 85 [default = 3];
+    repeated TBootPriority TabletTypeToBootPriority = 87;
 }
 
 message THealthCheckConfig {

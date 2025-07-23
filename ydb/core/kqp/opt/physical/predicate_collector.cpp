@@ -277,6 +277,9 @@ bool CheckComparisonParametersForPushdown(const TCoCompare& compare, const TExpr
         case ETypeAnnotationKind::Stream:
             inputType = inputType->Cast<TStreamExprType>()->GetItemType();
             break;
+        case ETypeAnnotationKind::Optional:
+            inputType = inputType->Cast<TOptionalExprType>()->GetItemType();
+            break;
         case ETypeAnnotationKind::Struct:
             break;
         default:
@@ -305,7 +308,7 @@ bool CheckComparisonParametersForPushdown(const TCoCompare& compare, const TExpr
         }
     }
 
-    if (options.PushdownSubstring) { //EnableSimpleIlikePushdown FF
+    if (options.PushdownSubstring) {
         if (IgnoreCaseSubstringMatchFunctions.contains(compare.CallableName())) {
             const auto& right = compare.Right().Ref();
             YQL_ENSURE(right.IsCallable("String") || right.IsCallable("Utf8"));

@@ -18,8 +18,8 @@
 - [Структура плана запроса](structure.md)
     - [Стадии](structure.md#stages)
     - [Каналы связи](structure.md#connections)
-    - [Объединение стадий](structure.md#join)
-    - Множественные выходы
+    - [Объединение](structure.md#join)
+    - [Множественные выходы](structure.md#multiout)
     - Прекомпьюты
 - [Агрегирование данных](basics.md)
     - Параллельность

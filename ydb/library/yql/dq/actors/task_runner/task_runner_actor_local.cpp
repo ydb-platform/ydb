@@ -157,7 +157,7 @@ private:
 
     void OnContinueRun(TEvContinueRun::TPtr& ev) {
         auto guard = TaskRunner->BindAllocator(MemoryQuota ? MemoryQuota->GetMkqlMemoryLimit() : ev->Get()->MemLimit);
-        auto inputMap = ev->Get()->AskFreeSpace
+        const auto& inputMap = ev->Get()->AskFreeSpace
             ? Inputs
             : ev->Get()->InputChannels;
 

@@ -213,4 +213,6 @@ TExprNode::TPtr MakeAtomList(TPositionHandle pos, const C& container, TExprConte
     return ctx.NewList(pos, std::move(atoms));
 }
 
+TExprNode::TPtr ReplaceUnessentials(TExprNode::TPtr predicate, TExprNode::TPtr row, const TNodeSet& banned, TExprContext& ctx);
+
 }

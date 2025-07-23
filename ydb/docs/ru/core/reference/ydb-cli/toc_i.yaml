@@ -37,6 +37,8 @@ items:
       href: table-ttl-reset.md
     - name: Удаление таблицы
       href: table-drop.md
+    - name: Генерация скрипта создания таблицы
+      href: tools-infer.md
   - name: Работа с данными
     items:
     - name: Получение плана исполнения запроса и AST

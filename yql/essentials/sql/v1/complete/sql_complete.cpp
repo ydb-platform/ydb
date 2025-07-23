@@ -24,8 +24,6 @@ namespace NSQLComplete {
         TStringBuf text = Content;
         if (IsQuoted(text)) {
             text = Unquoted(text);
-        } else if (IsBinding(text)) {
-            text = Unbinded(text);
         }
         return ToLowerUTF8(text);
     }
@@ -70,7 +68,7 @@ namespace NSQLComplete {
             TNameRequest request = NameRequestFrom(input, local, global);
             if (request.IsEmpty()) {
                 return NThreading::MakeFuture<TCompletion>({
-                    .CompletedToken = GetCompletedToken(input, local.EditRange),
+                    .CompletedToken = GetCompletedToken(input, local.ReplaceRange),
                     .Candidates = {},
                 });
             }
@@ -109,7 +107,7 @@ namespace NSQLComplete {
             const TLocalSyntaxContext& local,
             const TGlobalContext& global) const {
             TNameRequest request = {
-                .Prefix = TString(GetCompletedToken(input, local.EditRange).Content),
+                .Prefix = TString(GetCompletedToken(input, local.FilterRange).Content),
                 .Limit = Configuration_.Limit,
             };
 
@@ -177,7 +175,7 @@ namespace NSQLComplete {
 
         TCompletion ToCompletion(TCompletionInput input, TLocalSyntaxContext local, TNameResponse response) const {
             TCompletion completion = {
-                .CompletedToken = GetCompletedToken(input, local.EditRange),
+                .CompletedToken = GetCompletedToken(input, local.ReplaceRange),
                 .Candidates = ToCandidate(std::move(response.RankedNames), std::move(local)),
             };
 

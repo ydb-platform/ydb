@@ -75,6 +75,7 @@ inline bool ShouldExit(const TStatus& status) {
 }
 
 void ExitIfError(const TStatus& status, const TString& what);
+void ThrowIfError(const TStatus& status, const TString& what);
 
 //-----------------------------------------------------------------------------
 

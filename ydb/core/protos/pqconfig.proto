@@ -1171,3 +1171,14 @@ message TTabletTxInfo {
     optional uint64 ExecStep = 6;
     optional uint64 ExecTxId = 7;
 }
+
+message TEvOffloadStatus {
+    enum EStatus {
+        UNSPECIFIED = 0;
+        DONE = 1;
+    }
+
+    optional EStatus Status = 1;
+    optional uint64 TabletId = 2;
+    optional uint32 PartitionId = 3;
+}

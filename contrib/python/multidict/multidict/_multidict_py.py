@@ -445,11 +445,11 @@ class _CIMixin:
         if isinstance(key, istr):
             ret = key.__istr_identity__
             if ret is None:
-                ret = key.title()
+                ret = key.lower()
                 key.__istr_identity__ = ret
             return ret
         if isinstance(key, str):
-            return key.title()
+            return key.lower()
         else:
             raise TypeError("MultiDict keys should be either str or subclasses of str")
 
@@ -632,13 +632,13 @@ class MultiDict(_CSMixin, MutableMultiMapping[_V]):
                 self._from_md(md)
                 return
 
-        items = self._parse_args(arg, kwargs)
-        log2_size = estimate_log2_keysize(len(items))
+        it = self._parse_args(arg, kwargs)
+        log2_size = estimate_log2_keysize(cast(int, next(it)))
         if log2_size > 17:  # pragma: no cover
             # Don't overallocate really huge keys space in init
             log2_size = 17
         self._keys: _HtKeys[_V] = _HtKeys.new(log2_size, [])
-        self._extend_items(items)
+        self._extend_items(cast(Iterator[_Entry[_V]], it))
 
     def _from_md(self, md: "MultiDict[_V]") -> None:
         # Copy everything as-is without compacting the new multidict,
@@ -657,14 +657,17 @@ class MultiDict(_CSMixin, MutableMultiMapping[_V]):
         identity = self._identity(key)
         hash_ = hash(identity)
         res = []
-
+        restore = []
         for slot, idx, e in self._keys.iter_hash(hash_):
             if e.identity == identity:  # pragma: no branch
                 res.append(e.value)
                 e.hash = -1
-        self._keys.restore_hash(hash_)
+                restore.append(idx)
 
         if res:
+            entries = self._keys.entries
+            for idx in restore:
+                entries[idx].hash = hash_  # type: ignore[union-attr]
             return res
         if not res and default is not sentinel:
             return default
@@ -787,35 +790,33 @@ class MultiDict(_CSMixin, MutableMultiMapping[_V]):
 
         This method must be used instead of update.
         """
-        items = self._parse_args(arg, kwargs)
-        newsize = self._used + len(items)
+        it = self._parse_args(arg, kwargs)
+        newsize = self._used + cast(int, next(it))
         self._resize(estimate_log2_keysize(newsize), False)
-        self._extend_items(items)
+        self._extend_items(cast(Iterator[_Entry[_V]], it))
 
     def _parse_args(
         self,
         arg: MDArg[_V],
         kwargs: Mapping[str, _V],
-    ) -> list[_Entry[_V]]:
+    ) -> Iterator[Union[int, _Entry[_V]]]:
         identity_func = self._identity
         if arg:
             if isinstance(arg, MultiDictProxy):
                 arg = arg._md
             if isinstance(arg, MultiDict):
+                yield len(arg) + len(kwargs)
                 if self._ci is not arg._ci:
-                    items = []
                     for e in arg._keys.iter_entries():
                         identity = identity_func(e.key)
-                        items.append(_Entry(hash(identity), identity, e.key, e.value))
+                        yield _Entry(hash(identity), identity, e.key, e.value)
                 else:
-                    items = [
-                        _Entry(e.hash, e.identity, e.key, e.value)
-                        for e in arg._keys.iter_entries()
-                    ]
+                    for e in arg._keys.iter_entries():
+                        yield _Entry(e.hash, e.identity, e.key, e.value)
                 if kwargs:
                     for key, value in kwargs.items():
                         identity = identity_func(key)
-                        items.append(_Entry(hash(identity), identity, key, value))
+                        yield _Entry(hash(identity), identity, key, value)
             else:
                 if hasattr(arg, "keys"):
                     arg = cast(SupportsKeys[_V], arg)
@@ -823,7 +824,10 @@ class MultiDict(_CSMixin, MutableMultiMapping[_V]):
                 if kwargs:
                     arg = list(arg)
                     arg.extend(list(kwargs.items()))
-                items = []
+                try:
+                    yield len(arg) + len(kwargs)  # type: ignore[arg-type]
+                except TypeError:
+                    yield 0
                 for pos, item in enumerate(arg):
                     if not len(item) == 2:
                         raise ValueError(
@@ -831,14 +835,12 @@ class MultiDict(_CSMixin, MutableMultiMapping[_V]):
                             f"has length {len(item)}; 2 is required"
                         )
                     identity = identity_func(item[0])
-                    items.append(_Entry(hash(identity), identity, item[0], item[1]))
+                    yield _Entry(hash(identity), identity, item[0], item[1])
         else:
-            items = []
+            yield len(kwargs)
             for key, value in kwargs.items():
                 identity = identity_func(key)
-                items.append(_Entry(hash(identity), identity, key, value))
-
-        return items
+                yield _Entry(hash(identity), identity, key, value)
 
     def _extend_items(self, items: Iterable[_Entry[_V]]) -> None:
         for e in items:
@@ -985,9 +987,9 @@ class MultiDict(_CSMixin, MutableMultiMapping[_V]):
         return ret
 
     def update(self, arg: MDArg[_V] = None, /, **kwargs: _V) -> None:
-        """Update the dictionary from *other*, overwriting existing keys."""
-        items = self._parse_args(arg, kwargs)
-        newsize = self._used + len(items)
+        """Update the dictionary, overwriting existing keys."""
+        it = self._parse_args(arg, kwargs)
+        newsize = self._used + cast(int, next(it))
         log2_size = estimate_log2_keysize(newsize)
         if log2_size > 17:  # pragma: no cover
             # Don't overallocate really huge keys space in update,
@@ -995,11 +997,12 @@ class MultiDict(_CSMixin, MutableMultiMapping[_V]):
             log2_size = 17
         if log2_size > self._keys.log2_size:
             self._resize(log2_size, False)
-        self._update_items(items)
+        try:
+            self._update_items(cast(Iterator[_Entry[_V]], it))
+        finally:
+            self._post_update()
 
-    def _update_items(self, items: list[_Entry[_V]]) -> None:
-        if not items:
-            return
+    def _update_items(self, items: Iterator[_Entry[_V]]) -> None:
         for entry in items:
             found = False
             hash_ = entry.hash
@@ -1016,6 +1019,7 @@ class MultiDict(_CSMixin, MutableMultiMapping[_V]):
             if not found:
                 self._add_with_hash_for_upd(entry)
 
+    def _post_update(self) -> None:
         keys = self._keys
         indices = keys.indices
         entries = keys.entries
@@ -1025,13 +1029,39 @@ class MultiDict(_CSMixin, MutableMultiMapping[_V]):
                 e2 = entries[idx]
                 assert e2 is not None
                 if e2.key is None:
-                    entries[idx] = None  # type: ignore[unreachable]
+                    entries[idx] = None
                     indices[slot] = -2
                     self._used -= 1
                 if e2.hash == -1:
                     e2.hash = hash(e2.identity)
 
         self._incr_version()
+
+    def merge(self, arg: MDArg[_V] = None, /, **kwargs: _V) -> None:
+        """Merge into the dictionary, adding non-existing keys."""
+        it = self._parse_args(arg, kwargs)
+        newsize = self._used + cast(int, next(it))
+        log2_size = estimate_log2_keysize(newsize)
+        if log2_size > 17:  # pragma: no cover
+            # Don't overallocate really huge keys space in update,
+            # duplicate keys could reduce the resulting anount of entries
+            log2_size = 17
+        if log2_size > self._keys.log2_size:
+            self._resize(log2_size, False)
+        try:
+            self._merge_items(cast(Iterator[_Entry[_V]], it))
+        finally:
+            self._post_update()
+
+    def _merge_items(self, items: Iterator[_Entry[_V]]) -> None:
+        for entry in items:
+            hash_ = entry.hash
+            identity = entry.identity
+            for slot, idx, e in self._keys.iter_hash(hash_):
+                if e.identity == identity:  # pragma: no branch
+                    break
+            else:
+                self._add_with_hash_for_upd(entry)
 
     def _incr_version(self) -> None:
         v = _version

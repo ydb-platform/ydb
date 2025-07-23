@@ -483,6 +483,8 @@ Y_UNIT_TEST(AlterTable) {
             "ALTER TABLE user\n\tALTER COLUMN user SET FAMILY user\n;\n"},
         {"alter table t alter column c drop not null",
             "ALTER TABLE t\n\tALTER COLUMN c DROP NOT NULL\n;\n"},
+        {"alter table t alter column c set not null",
+            "ALTER TABLE t\n\tALTER COLUMN c SET NOT NULL\n;\n"},
         {"alter table user add family user(user='foo')",
             "ALTER TABLE user\n\tADD FAMILY user (user = 'foo')\n;\n"},
         {"alter table user alter family user set user 'foo'",

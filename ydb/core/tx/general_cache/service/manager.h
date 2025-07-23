@@ -468,6 +468,7 @@ public:
         if (Cache.GetMaxSize() == maxCacheSize) {
             return;
         }
+        return;
         AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD)("event", "update_max_cache_size")("id", TPolicy::GetCacheName())("new_value", maxCacheSize)(
             "old_value", Cache.GetMaxSize());
         Cache.SetMaxSize(maxCacheSize);

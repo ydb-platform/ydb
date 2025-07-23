@@ -102,7 +102,7 @@ class RestartToAnotherVersionFixture:
                 endpoint=self.endpoint
             )
         )
-        self.driver.wait()
+        self.driver.wait(timeout=60)
         yield
         self.cluster.stop()
 
@@ -117,7 +117,7 @@ class RestartToAnotherVersionFixture:
                 endpoint=self.endpoint
             )
         )
-        self.driver.wait()
+        self.driver.wait(timeout=60)
         # TODO: remove sleep
         # without sleep there are errors like
         # ydb.issues.Unavailable: message: "Failed to resolve tablet: 72075186224037909 after several retries." severity: 1 (server_code: 400050)
@@ -161,7 +161,7 @@ class MixedClusterFixture:
                 endpoint=self.endpoint
             )
         )
-        self.driver.wait()
+        self.driver.wait(timeout=60)
         yield
         self.cluster.stop()
 
@@ -192,7 +192,7 @@ class RollingUpgradeAndDowngradeFixture:
                     endpoint=self.endpoints[0]
                 )
             )
-            self.driver.wait()
+            self.driver.wait(timeout=60)
 
         query = """
             CREATE TABLE `test_readiness` (
@@ -247,7 +247,7 @@ class RollingUpgradeAndDowngradeFixture:
                 database='/Root'
             )
         )
-        self.driver.wait()
+        self.driver.wait(timeout=60)
         yield
         self.cluster.stop()
 

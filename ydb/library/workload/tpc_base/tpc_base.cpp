@@ -71,9 +71,10 @@ void TTpcBaseWorkloadGenerator::PatchQuery(TString& query) const {
     const auto tableJson = GetTablesJson();
     for (const auto& table: tableJson["tables"].GetArray()) {
         const auto& tableName = table["name"].GetString();
+        const auto tableFullName = (Params.GetPath() ? Params.GetPath() + "/" : "") + tableName;
         SubstGlobal(query, 
             TStringBuilder() << "{{" << tableName << "}}", 
-            TStringBuilder() << Params.GetTablePathQuote(Params.GetSyntax()) << Params.GetPath() << "/" << tableName << Params.GetTablePathQuote(Params.GetSyntax())
+            TStringBuilder() << Params.GetTablePathQuote(Params.GetSyntax()) << tableFullName << Params.GetTablePathQuote(Params.GetSyntax())
         );
     }
 }

@@ -1471,7 +1471,7 @@ partitioning_settings {
                 const auto* msg = ev->Get<NSharedCache::TEvResult>();
                 UNIT_ASSERT_VALUES_EQUAL(msg->Status, NKikimrProto::OK);
 
-                auto result = MakeHolder<NSharedCache::TEvResult>(msg->PageCollection, msg->Cookie, NKikimrProto::ERROR);
+                auto result = MakeHolder<NSharedCache::TEvResult>(msg->PageCollection, NKikimrProto::ERROR, msg->Cookie);
                 std::move(msg->Pages.begin(), msg->Pages.end(), std::back_inserter(result->Pages));
 
                 injectResult = MakeHolder<IEventHandle>(ev->Recipient, ev->Sender, result.Release(), ev->Flags, ev->Cookie);

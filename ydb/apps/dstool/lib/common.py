@@ -248,6 +248,15 @@ def get_vslot_extended_id(vslot):
     return *get_vslot_id(vslot.VSlotId), *get_vdisk_id(vslot)
 
 
+def get_pdisk_inferred_settings(pdisk):
+    if (pdisk.PDiskMetrics.HasField('SlotCount')):
+        return pdisk.PDiskMetrics.SlotCount, pdisk.PDiskMetrics.SlotSizeInUnits
+    elif (pdisk.InferPDiskSlotCountFromUnitSize != 0):
+        return 0, 0
+    else:
+        return pdisk.ExpectedSlotCount, pdisk.PDiskConfig.SlotSizeInUnits
+
+
 class Location(typing.NamedTuple):
     dc: int
     room: int
@@ -364,6 +373,7 @@ def query_random_host_with_retry(retries=5, request_type=None):
             explicit_host = binded.arguments.pop('explicit_host', None)
             host = binded.arguments.pop('host', None)
             endpoint = binded.arguments.pop('endpoint', None)
+            endpoints = binded.arguments.pop('endpoints', None)
 
             if endpoint is not None or host is not None:
                 return func(*args, **kwargs)
@@ -383,6 +393,10 @@ def query_random_host_with_retry(retries=5, request_type=None):
             result = None
             if explicit_endpoint:
                 try_index, result = retry_query_with_endpoints(send_query, [explicit_endpoint] * retries, request_type, func.__name__, retries)
+                return result
+
+            if endpoints:
+                try_index, result = retry_query_with_endpoints(send_query, endpoints, request_type, func.__name__, retries)
                 return result
 
             if result is not None:
@@ -439,7 +453,7 @@ def query_random_host_with_retry(retries=5, request_type=None):
 
 @inmemcache('fetch', ['path', 'params', 'explicit_host', 'fmt'], 'cache')
 @query_random_host_with_retry(request_type='http')
-def fetch(path, params={}, explicit_host=None, fmt='json', host=None, cache=True, method=None, data=None, content_type=None, accept=None, endpoint=None):
+def fetch(path, params={}, explicit_host=None, fmt='json', host=None, cache=True, method=None, data=None, content_type=None, accept=None, endpoint=None, endpoints=None):
     if endpoint is None and host is not None:
         endpoint = connection_params.make_endpoint_info(f'{connection_params.mon_protocol}://{host}')
     if endpoint.protocol not in ('http', 'https'):
@@ -468,7 +482,7 @@ def fetch(path, params={}, explicit_host=None, fmt='json', host=None, cache=True
 
 
 @query_random_host_with_retry(request_type='grpc')
-def invoke_grpc(func, *params, explicit_host=None, endpoint=None, stub_factory=kikimr_grpc.TGRpcServerStub):
+def invoke_grpc(func, *params, explicit_host=None, endpoint=None, stub_factory=kikimr_grpc.TGRpcServerStub, endpoints=None):
     options = [
         ('grpc.max_receive_message_length', 256 << 20),  # 256 MiB
     ]
@@ -582,6 +596,32 @@ def set_primary_pile(primary_pile_id, synchronized_piles):
             state=ydb_bridge.PileState.SYNCHRONIZED
         ))
     invoke_grpc('UpdateClusterState', request, stub_factory=bridge_grpc_server.BridgeServiceStub)
+
+
+def disconnect_pile(pile_id):
+    request = ydb_bridge.UpdateClusterStateRequest()
+    request.updates.add().CopyFrom(ydb_bridge.PileStateUpdate(
+        pile_id=pile_id,
+        state=ydb_bridge.PileState.DISCONNECTED
+    ))
+    invoke_grpc('UpdateClusterState', request, stub_factory=bridge_grpc_server.BridgeServiceStub)
+
+
+def connect_pile(pile_id, pile_to_endpoints):
+    request = ydb_bridge.UpdateClusterStateRequest()
+    request.updates.add().CopyFrom(ydb_bridge.PileStateUpdate(
+        pile_id=pile_id,
+        state=ydb_bridge.PileState.NOT_SYNCHRONIZED,
+    ))
+    request.specific_pile_ids.append(pile_id)
+    invoke_grpc('UpdateClusterState', request, stub_factory=bridge_grpc_server.BridgeServiceStub, endpoints=pile_to_endpoints[pile_id])
+    other_pile_ids = [x for x in pile_to_endpoints.keys() if x != pile_id]
+    request.specific_pile_ids.extend(other_pile_ids)
+    request.updates.add().CopyFrom(ydb_bridge.PileStateUpdate(
+        pile_id=pile_id,
+        state=ydb_bridge.PileState.NOT_SYNCHRONIZED,
+    ))
+    invoke_grpc('UpdateClusterState', request, stub_factory=bridge_grpc_server.BridgeServiceStub, endpoints=pile_to_endpoints[pile_id])
 
 
 def create_bsc_request(args):
@@ -862,6 +902,13 @@ def build_node_fqdn_maps(base_config):
     return node_id_to_host, host_to_node_id
 
 
+def build_pile_to_node_id_map(base_config):
+    pile_to_node_id_map = defaultdict(list)
+    for node in base_config.Node:
+        pile_to_node_id_map[node.Location.BridgePileName].append(node.NodeId)
+    return pile_to_node_id_map
+
+
 def build_pdisk_map(base_config):
     pdisk_map = {
         get_pdisk_id(pdisk): pdisk
@@ -1069,6 +1116,20 @@ def fetch_node_mon_map(nodes=None):
         for ep in sysinfo.get('Endpoints', [])
         if ep['Name'] == 'http-mon'
     }
+
+
+def fetch_node_to_endpoint_map(nodes=None):
+    res = {}
+    for node_id, sysinfo in fetch_json_info('sysinfo', nodes).items():
+        grpc_port = None
+        mon_port = None
+        for ep in sysinfo.get('Endpoints', []):
+            if ep['Name'] == 'grpc':
+                grpc_port = int(ep['Address'][1:])
+            elif ep['Name'] == 'http-mon':
+                mon_port = int(ep['Address'][1:])
+        res[node_id] = EndpointInfo('grpc', sysinfo['Host'], grpc_port, mon_port)
+    return res
 
 
 def get_vslots_by_vdisk_ids(base_config, vdisk_ids):

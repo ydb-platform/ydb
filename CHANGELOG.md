@@ -98,7 +98,7 @@ and timeout (by default, the maximum response time from healthcheck). Documentat
 * 18924:Fixed a race condition between YardInit and Slay when a group (and therefore a VDisk) is created and then immediately deleted, removing "phantom vdisks" from pdisks. [#18924](https://github.com/ydb-platform/ydb/pull/18924) ([Semyon Danilov](https://github.com/SammyVimes))
 * 18764:Fixed an [issue](https://github.com/ydb-platform/ydb/issues/18747) with a timestamp push down in OLAP. [#18764](https://github.com/ydb-platform/ydb/pull/18764) ([Oleg Doronin](https://github.com/dorooleg))
 * 19466:Fixed float sum aggregation in arrow::Kernel. [#19466](https://github.com/ydb-platform/ydb/pull/19466) ([Oleg Doronin](https://github.com/dorooleg))
-* 19781:Fixed an [issue](https://github.com/ydb-platform/ydb/issues/19799) - VERIFY in CMS when trying to lock pdisk without vdisks twice. [#19781](https://github.com/ydb-platform/ydb/pull/19781) ([Semyon Danilov](https://github.com/SammyVimes))
+* 19781:Fixed an [issue](https://github.com/ydb-platform/ydb/issues/19799) where CMS would try to lock pdisk without vdisks twice. [#19781](https://github.com/ydb-platform/ydb/pull/19781) ([Semyon Danilov](https://github.com/SammyVimes))
 * 19762:Fixed a [bug](https://github.com/ydb-platform/ydb/issues/19619) with absolute paths in workloads. [#19762](https://github.com/ydb-platform/ydb/pull/19762) ([Олег](https://github.com/iddqdex))
 
 ### YDB UI

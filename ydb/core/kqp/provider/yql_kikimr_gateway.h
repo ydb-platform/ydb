@@ -1265,9 +1265,7 @@ public:
 
     virtual TVector<NKikimrKqp::TKqpTableMetadataProto> GetCollectedSchemeData() = 0;
 
-    virtual NThreading::TFuture<TExecuteLiteralResult> ExecuteLiteral(const TString& program, const NKikimrMiniKQL::TType& resultType, NKikimr::NKqp::TTxAllocatorState::TPtr txAlloc) = 0;
-
-    virtual TExecuteLiteralResult ExecuteLiteralInstant(const TString& program, const NKikimrMiniKQL::TType& resultType, NKikimr::NKqp::TTxAllocatorState::TPtr txAlloc) = 0;
+    virtual TExecuteLiteralResult ExecuteLiteralInstant(const TString& program, ui32 langVer, const NKikimrMiniKQL::TType& resultType, NKikimr::NKqp::TTxAllocatorState::TPtr txAlloc) = 0;
 
 public:
     using TCreateDirFunc = std::function<void(const TString&, const TString&, NThreading::TPromise<TGenericResult>)>;

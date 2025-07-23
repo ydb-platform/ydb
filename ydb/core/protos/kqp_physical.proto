@@ -587,4 +587,5 @@ message TKqpPhyQuery {
     optional bool EnableOlapSink = 13;
     optional bool EnableHtapTx = 14;
     optional bool ForceImmediateEffectsExecution = 15;
+    uint32 LangVer = 16;
 }

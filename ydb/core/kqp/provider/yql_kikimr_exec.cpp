@@ -1137,7 +1137,7 @@ public:
                 return SyncStatus(status);
             }
 
-            auto literalResult = Gateway->ExecuteLiteralInstant(program, resultType, SessionCtx->Query().QueryData->GetAllocState());
+            auto literalResult = Gateway->ExecuteLiteralInstant(program, SessionCtx->Config().LangVer, resultType, SessionCtx->Query().QueryData->GetAllocState());
 
             if (!literalResult.Success()) {
                 for (const auto& issue : literalResult.Issues()) {

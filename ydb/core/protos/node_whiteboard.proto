@@ -38,7 +38,7 @@ message TTabletStateInfo {
         ResolveLeader = 11;
         Deleted = 12;
         Stopped = 13;
-        Stopping = 14;
+        Terminating = 14;
         Reserved15 = 15;
         Reserved16 = 16;
         Reserved17 = 17;

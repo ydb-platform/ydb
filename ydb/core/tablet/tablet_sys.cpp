@@ -1858,8 +1858,8 @@ bool TTablet::StopTablet(
                 FollowerStStGuardian = { };
             }
 
-            ReportTabletStateChange(TTabletStateInfo::Stopping);
-            SendTabletStateUpdates(NKikimrTabletBase::TEvTabletStateUpdate::StateStopping);
+            ReportTabletStateChange(TTabletStateInfo::Terminating);
+            SendTabletStateUpdates(NKikimrTabletBase::TEvTabletStateUpdate::StateTerminating);
         }
 
         if (!DelayedCancelTablet) {
@@ -2006,7 +2006,7 @@ void TTablet::Handle(TEvTablet::TEvTabletStateSubscribe::TPtr& ev) {
 
     NKikimrTabletBase::TEvTabletStateUpdate::EState state;
     if (PipeConnectAcceptor->IsStopped()) {
-        state = NKikimrTabletBase::TEvTabletStateUpdate::StateStopping;
+        state = NKikimrTabletBase::TEvTabletStateUpdate::StateTerminating;
     } else if (PipeConnectAcceptor->IsActive()) {
         state = NKikimrTabletBase::TEvTabletStateUpdate::StateActive;
     } else {

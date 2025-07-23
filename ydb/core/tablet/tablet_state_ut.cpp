@@ -96,13 +96,13 @@ Y_UNIT_TEST_SUITE(TabletState) {
             });
         Y_UNUSED(tablet2);
 
-        // We should receive a stopping notification (which implies new pipes will not connect)
+        // We should receive a terminating notification (which implies new pipes will not connect)
         {
             auto ev = runtime.GrabEdgeEvent<TEvTablet::TEvTabletStateUpdate>(sender);
             auto* msg = ev->Get();
             UNIT_ASSERT_VALUES_EQUAL(msg->Record.GetTabletId(), tabletId);
             UNIT_ASSERT_VALUES_EQUAL(msg->Record.GetSeqNo(), 1u);
-            UNIT_ASSERT_VALUES_EQUAL(msg->Record.GetState(), NKikimrTabletBase::TEvTabletStateUpdate::StateStopping);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Record.GetState(), NKikimrTabletBase::TEvTabletStateUpdate::StateTerminating);
             UNIT_ASSERT_VALUES_UNEQUAL(msg->GetUserActorId(), TActorId());
             UNIT_ASSERT_VALUES_EQUAL(ev->Cookie, 123u);
         }

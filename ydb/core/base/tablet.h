@@ -91,11 +91,6 @@ struct TEvTablet {
         EvReserved_00,
         EvFollowerGcAck, // from follower to leader
 
-        // between tablet resolver and sys tablet
-        EvTabletStateSubscribe = EvBoot + 2064,
-        EvTabletStateUnsubscribe,
-        EvTabletStateUpdate,
-
         // from leader to follower
         EvFollowerUpdate = EvBoot + 2560,
         EvFollowerAuxUpdate,
@@ -108,6 +103,11 @@ struct TEvTablet {
         EvResetTabletResult,
         EvGcForStepAckRequest, // from executer to sys tablet
         EvGcForStepAckResponse, // from sys tablet to executer
+
+        // between tablet resolver and sys tablet
+        EvTabletStateSubscribe = EvBoot + 3328,
+        EvTabletStateUnsubscribe,
+        EvTabletStateUpdate,
 
         EvEnd
     };

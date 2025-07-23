@@ -273,7 +273,7 @@ message TEvTabletStateUpdate {
         StateUnknown = 0;
         StateBooting = 1;
         StateActive = 2;
-        StateStopping = 3;
+        StateTerminating = 3;
         StateDead = 4;
     }
 

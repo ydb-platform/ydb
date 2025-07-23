@@ -1,4 +1,4 @@
-#include "yql_yt_qb2.h"
+#include "qb2.h"
 
 #include <yql/essentials/utils/yql_panic.h>
 
@@ -8,8 +8,6 @@
 #include <util/generic/vector.h>
 
 namespace NYql {
-
-namespace NNative {
 
 void ProcessTableQB2Premapper(const NYT::TNode& remapper,
     const TString& tableName,
@@ -146,7 +144,5 @@ void UpdateQB2PremapperUseSkiff(const TRemapperMap& remapperMap, bool& useSkiff)
         useSkiff = false;
     }
 }
-
-} // NNative
 
 } // NYql

@@ -28,4 +28,11 @@ ITableDataService::TPtr MakeTableDataServiceClient(ui16 port) {
     return MakeTableDataServiceClient(tableDataServiceDiscovery);
 }
 
+void SetupTableDataServiceDiscovery(TTempFileHandle& hostsFile, ui16 port) {
+    std::vector<TTableDataServiceServerConnection> connections{{.Host = "localhost", .Port = port}};
+    ui64 workersNum = 1;
+    WriteHostsToFile(hostsFile, workersNum, connections);
+}
+
+
 } // namespace NYql::NFmr

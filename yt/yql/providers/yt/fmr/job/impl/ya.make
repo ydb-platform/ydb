@@ -15,7 +15,7 @@ PEERDIR(
     yt/cpp/mapreduce/interface
     yt/yql/providers/yt/fmr/job/interface
     yt/yql/providers/yt/fmr/utils
-    yt/yql/providers/yt/fmr/process
+    yt/yql/providers/yt/fmr/job_launcher
     yt/yql/providers/yt/fmr/table_data_service/interface
     yql/essentials/utils
     yql/essentials/utils/log

@@ -2523,7 +2523,7 @@ private:
 
     TTxProgressIdempotentScalarQueue<TEvPrivate::TEvProgressTransaction> PlanQueue;
     TTxProgressIdempotentScalarScheduleQueue<TEvPrivate::TEvCleanupTransaction> CleanupQueue;
-    TTxProgressQueue<ui64, TNoOpDestroy, TEvPrivate::TEvProgressResendReadSet> ResendReadSetQueue;
+    TTxProgressQueue<ui64, TEvPrivate::TEvProgressResendReadSet> ResendReadSetQueue;
 
     struct TPipeServerInfoOverloadSubscribersTag {};
 

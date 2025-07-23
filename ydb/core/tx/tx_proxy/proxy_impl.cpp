@@ -12,6 +12,7 @@
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
 #include <ydb/core/tablet/tablet_pipe_client_cache.h>
 #include <ydb/core/protos/counters_tx_proxy.pb.h>
+#include <ydb/core/util/queue_inplace.h>
 
 namespace NKikimr {
 using namespace NTabletFlatExecutor;
@@ -34,12 +35,10 @@ struct TDelayedQueue {
         }
     };
     typedef TAutoPtr<TRequest> TRequestPtr;
-    typedef TOneOneQueueInplace<TRequest*, 64> TQueueType;
-    typedef TAutoPtr<TQueueType, typename TQueueType::TPtrCleanDestructor> TSafeQueue;
-    TSafeQueue Queue;
+    typedef TQueueInplace<TRequestPtr, 64> TQueueType;
+    TQueueType Queue;
 
     TDelayedQueue()
-        : Queue(new TQueueType())
     {}
 };
 
@@ -129,30 +128,30 @@ class TTxProxy : public TActorBootstrapped<TTxProxy> {
 
     void DelayRequest(TEvTxUserProxy::TEvProposeTransaction::TPtr &ev, const TActorContext &ctx) {
         auto request = new TDelayedProposal::TRequest(ev, ctx.Now() + TimeoutDelayedRequest);
-        DelayedProposal.Queue->Push(request);
+        DelayedProposal.Queue.Emplace(request);
 
     }
 
     void DelayRequest(TEvTxUserProxy::TEvProposeKqpTransaction::TPtr &ev, const TActorContext &ctx) {
         auto request = new TDelayedKqpProposal::TRequest(ev, ctx.Now() + TimeoutDelayedRequest);
-        DelayedKqpProposal.Queue->Push(request);
+        DelayedKqpProposal.Queue.Emplace(request);
     }
 
     void DelayRequest(TEvTxUserProxy::TEvAllocateTxId::TPtr &ev, const TActorContext &ctx) {
         auto request = new TDelayedAllocateTxId::TRequest(ev, ctx.Now() + TimeoutDelayedRequest);
-        DelayedAllocateTxId.Queue->Push(request);
+        DelayedAllocateTxId.Queue.Emplace(request);
     }
 
     template<class EventType>
     void PlayQueue(TDelayedQueue<EventType> &delayed, const TActorContext &ctx) {
         typedef typename TDelayedQueue<EventType>::TRequestPtr TRequestPtr;
 
-        while (delayed.Queue->Head()) {
+        while (delayed.Queue.Head()) {
             TVector<ui64> txIds = TxAllocatorClient.AllocateTxIds(1, ctx);
             if (!txIds) {
                 return;
             }
-            TRequestPtr extracted = delayed.Queue->Pop();
+            TRequestPtr extracted = delayed.Queue.PopDefault();
             ProcessRequest(extracted->GetRequest(), ctx, txIds.front());
         }
     }
@@ -167,12 +166,12 @@ class TTxProxy : public TActorBootstrapped<TTxProxy> {
     void CheckTimeout(TDelayedQueue<EventType> &delayed, const TActorContext &ctx) {
         typedef typename TDelayedQueue<EventType>::TRequestPtr TRequestPtr;
 
-        while (const auto head = delayed.Queue->Head()) {
-            const TInstant &expireAt = head->GetExpireMoment();
+        while (const auto head = delayed.Queue.Head()) {
+            const TInstant &expireAt = (*head)->GetExpireMoment();
             if (expireAt > ctx.Now()) {
                 break;
             }
-            TRequestPtr extracted = delayed.Queue->Pop();
+            TRequestPtr extracted = delayed.Queue.PopDefault();
             Decline(extracted->GetRequest(), ctx);
         }
     }

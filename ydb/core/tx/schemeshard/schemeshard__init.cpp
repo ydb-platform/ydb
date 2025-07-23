@@ -113,7 +113,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             rowSet.template GetValueOrDefault<typename SchemaTable::UserAttrsAlterVersion>(1),
             rowSet.template GetValueOrDefault<typename SchemaTable::ACLVersion>(0),
             rowSet.template GetValueOrDefault<typename SchemaTable::TempDirOwnerActorId_Deprecated>(),
-            rowSet.template GetValueOrDefault<typename SchemaTable::TempDirOwnerActorId>()
+            rowSet.template GetValueOrDefault<typename SchemaTable::TempDirOwnerActorIdRaw>()
         );
     }
 

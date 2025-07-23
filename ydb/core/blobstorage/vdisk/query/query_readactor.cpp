@@ -28,7 +28,7 @@ namespace NKikimr {
             Become(&TThis::StateFunc);
             Y_DEBUG_ABORT_UNLESS(!Result->GlueReads.empty());
 
-            TMessagesQuoter::TPtr quoter;
+            TReplQuoter::TPtr quoter;
             if (IsRepl) {
                 quoter = Ctx->VCtx->ReplPDiskReadQuoter;
             }
@@ -47,7 +47,7 @@ namespace NKikimr {
                     VDISKP(Ctx->VCtx->VDiskLogPrefix, "GLUEREAD(%p): %s", this, msg->ToString().data()));
 
                 // send request
-                TMessagesQuoter::QuoteMessage(quoter, std::make_unique<IEventHandle>(Ctx->PDiskCtx->PDiskId, SelfId(),
+                TReplQuoter::QuoteMessage(quoter, std::make_unique<IEventHandle>(Ctx->PDiskCtx->PDiskId, SelfId(),
                     msg.release(), 0, 0, nullptr, Span.GetTraceId()), it->Part.Size);
 
                 Counter++;

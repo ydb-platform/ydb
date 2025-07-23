@@ -238,13 +238,13 @@ void TNodeWarden::Bootstrap() {
     } else if (replBrokerConfig.HasRateBytesPerSecond()) { // compatibility option
         requestBytesPerSecond = replBrokerConfig.GetRateBytesPerSecond();
     }
-    ReplNodeRequestQuoter = std::make_shared<TMessagesQuoter>(requestBytesPerSecond);
+    ReplNodeRequestQuoter = std::make_shared<TReplQuoter>(requestBytesPerSecond);
 
     ui64 responseBytesPerSecond = 500000000; // the same as for request
     if (replBrokerConfig.HasTotalResponseBytesPerSecond()) {
         responseBytesPerSecond = replBrokerConfig.GetTotalResponseBytesPerSecond();
     }
-    ReplNodeResponseQuoter = std::make_shared<TMessagesQuoter>(responseBytesPerSecond);
+    ReplNodeResponseQuoter = std::make_shared<TReplQuoter>(responseBytesPerSecond);
 
     const ui64 maxBytes = replBrokerConfig.GetMaxInFlightReadBytes();
     actorSystem->RegisterLocalService(MakeBlobStorageReplBrokerID(), Register(CreateReplBrokerActor(maxBytes)));

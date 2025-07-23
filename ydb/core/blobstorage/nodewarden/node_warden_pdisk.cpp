@@ -157,10 +157,10 @@ namespace NKikimr::NStorage {
         readBytesPerSecond = readBytesPerSecond ? readBytesPerSecond : def;
         writeBytesPerSecond = writeBytesPerSecond ? writeBytesPerSecond : def;
         if (readBytesPerSecond) {
-            record.ReplPDiskReadQuoter = std::make_shared<TMessagesQuoter>(*readBytesPerSecond);
+            record.ReplPDiskReadQuoter = std::make_shared<TReplQuoter>(*readBytesPerSecond);
         }
         if (writeBytesPerSecond) {
-            record.ReplPDiskWriteQuoter = std::make_shared<TMessagesQuoter>(*writeBytesPerSecond);
+            record.ReplPDiskWriteQuoter = std::make_shared<TReplQuoter>(*writeBytesPerSecond);
         }
 
         STLOG(PRI_DEBUG, BS_NODE, NW04, "StartLocalPDisk", (NodeId, key.NodeId), (PDiskId, key.PDiskId),

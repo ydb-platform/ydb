@@ -60,10 +60,10 @@ namespace NKikimr {
         TMemoryConsumer Replication;
         TMemoryConsumer SyncLogCache;
         TActorSystem *ActorSystem;
-        TMessagesQuoter::TPtr ReplPDiskReadQuoter;
-        TMessagesQuoter::TPtr ReplPDiskWriteQuoter;
-        TMessagesQuoter::TPtr ReplNodeRequestQuoter;
-        TMessagesQuoter::TPtr ReplNodeResponseQuoter;
+        TReplQuoter::TPtr ReplPDiskReadQuoter;
+        TReplQuoter::TPtr ReplPDiskWriteQuoter;
+        TReplQuoter::TPtr ReplNodeRequestQuoter;
+        TReplQuoter::TPtr ReplNodeResponseQuoter;
 
         // diagnostics
         TString LocalRecoveryErrorStr;
@@ -105,10 +105,10 @@ namespace NKikimr {
                 TActorSystem *as,   // can be nullptr for tests
                 NPDisk::EDeviceType type,
                 bool donorMode = false,
-                TMessagesQuoter::TPtr replPDiskReadQuoter = nullptr,
-                TMessagesQuoter::TPtr replPDiskWriteQuoter = nullptr,
-                TMessagesQuoter::TPtr replNodeRequestQuoter = nullptr,
-                TMessagesQuoter::TPtr replNodeResponseQuoter = nullptr);
+                TReplQuoter::TPtr replPDiskReadQuoter = nullptr,
+                TReplQuoter::TPtr replPDiskWriteQuoter = nullptr,
+                TReplQuoter::TPtr replNodeRequestQuoter = nullptr,
+                TReplQuoter::TPtr replNodeResponseQuoter = nullptr);
 
         // The function checks response from PDisk. Normally, it's OK.
         // Other alternatives are: 1) shutdown; 2) FAIL

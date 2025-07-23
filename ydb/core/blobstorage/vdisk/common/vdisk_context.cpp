@@ -27,10 +27,10 @@ namespace NKikimr {
                 TActorSystem *as, // as can be nullptr for tests
                 NPDisk::EDeviceType type,
                 bool donorMode,
-                TMessagesQuoter::TPtr replPDiskReadQuoter,
-                TMessagesQuoter::TPtr replPDiskWriteQuoter,
-                TMessagesQuoter::TPtr replNodeRequestQuoter,
-                TMessagesQuoter::TPtr replNodeResponseQuoter)
+                TReplQuoter::TPtr replPDiskReadQuoter,
+                TReplQuoter::TPtr replPDiskWriteQuoter,
+                TReplQuoter::TPtr replNodeRequestQuoter,
+                TReplQuoter::TPtr replNodeResponseQuoter)
         : TBSProxyContext(vdiskCounters->GetSubgroup("subsystem", "memhull"))
         , VDiskActorId(vdiskActorId)
         , Top(std::move(top))

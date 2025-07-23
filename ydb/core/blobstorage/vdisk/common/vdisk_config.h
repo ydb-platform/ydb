@@ -36,10 +36,10 @@ namespace NKikimr {
             // a set of donor disks for this one
             std::vector<std::pair<TVDiskID, TActorId>> DonorDiskIds;
             // replication quoters
-            TMessagesQuoter::TPtr ReplPDiskReadQuoter;
-            TMessagesQuoter::TPtr ReplPDiskWriteQuoter;
-            TMessagesQuoter::TPtr ReplNodeRequestQuoter;
-            TMessagesQuoter::TPtr ReplNodeResponseQuoter;
+            TReplQuoter::TPtr ReplPDiskReadQuoter;
+            TReplQuoter::TPtr ReplPDiskWriteQuoter;
+            TReplQuoter::TPtr ReplNodeRequestQuoter;
+            TReplQuoter::TPtr ReplNodeResponseQuoter;
             TDuration YardInitDelay = TDuration::Zero();
             const ui64 ScrubCookie = 0;
             const ui64 WhiteboardInstanceGuid = 0;

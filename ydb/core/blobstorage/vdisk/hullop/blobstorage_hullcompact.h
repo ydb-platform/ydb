@@ -93,8 +93,7 @@ namespace NKikimr {
         ui32 PendingResponses = 0;
 
         //  Compaction throttler
-        bool IsFullCompaction;
-        TMessagesQuoter::TPtr Throttler;
+        TEventsQuoter::TPtr Throttler;
 
         ///////////////////////// BOOTSTRAP ////////////////////////////////////////////////
         void Bootstrap(const TActorContext &ctx) {
@@ -134,10 +133,6 @@ namespace NKikimr {
             // free level snapshot
             LevelSnap.Destroy();
 
-            if (!(bool)FreshSegment && IsFullCompaction) {
-                Throttler = std::make_shared<TMessagesQuoter>();
-            }
-
             // enter work state, prepare, and kick worker class
             TThis::Become(&TThis::WorkFunc);
             Worker.Prepare(Hmp, gcmpIt);
@@ -154,7 +149,7 @@ namespace NKikimr {
             // check if there are messages we have for yard
             for (std::unique_ptr<IEventBase>& msg : MsgsForYard) {
                 ui64 bytes = GetMsgSize(msg);
-                TMessagesQuoter::QuoteMessage(Throttler, std::make_unique<IEventHandle>(
+                TEventsQuoter::QuoteMessage(Throttler, std::make_unique<IEventHandle>(
                             PDiskCtx->PDiskId, ctx.SelfID, msg.release()), bytes, HullCtx->VCfg->HullCompThrottlerBytesRate);
                 ++PendingResponses;
             }
@@ -340,7 +335,7 @@ namespace NKikimr {
                         TDuration restoreDeadline,
                         std::optional<TKey> partitionKey,
                         bool allowGarbageCollection,
-                        bool isFullCompaction)
+                        bool useThrottle)
             : TActorBootstrapped<TThis>()
             , HullCtx(std::move(hullCtx))
             , PDiskCtx(rtCtx->PDiskCtx)
@@ -356,8 +351,11 @@ namespace NKikimr {
                     partitionKey)
             , CompactionID(TAppData::RandomProvider->GenRand64())
             , SkeletonId(rtCtx->SkeletonId)
-            , IsFullCompaction(isFullCompaction)
-        {}
+        {
+            if (!(bool)FreshSegment && useThrottle) {
+                Throttler = std::make_shared<TEventsQuoter>();
+            }
+        }
     };
 
 } // NKikimr

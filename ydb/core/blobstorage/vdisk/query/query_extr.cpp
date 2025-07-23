@@ -309,7 +309,7 @@ namespace NKikimr {
         }
 
         void Finish2(const TActorContext& ctx) {
-            TMessagesQuoter::TPtr quoter;
+            TReplQuoter::TPtr quoter;
             if (IsRepl()) {
                 quoter = QueryCtx->HullCtx->VCtx->ReplNodeResponseQuoter;
             }

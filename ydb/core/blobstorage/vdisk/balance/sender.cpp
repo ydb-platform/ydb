@@ -20,7 +20,7 @@ namespace {
     private:
         TPDiskCtxPtr PDiskCtx;
         TVector<TPartInfo> Parts;
-        TMessagesQuoter::TPtr Quoter;
+        TReplQuoter::TPtr Quoter;
         const TBlobStorageGroupType GType;
         NMonGroup::TBalancingGroup& MonGroup;
 
@@ -28,7 +28,7 @@ namespace {
         ui32 Responses = 0;
     public:
 
-        TReader(TPDiskCtxPtr pDiskCtx, TVector<TPartInfo>&& parts, TMessagesQuoter::TPtr replPDiskReadQuoter, TBlobStorageGroupType gType, NMonGroup::TBalancingGroup& monGroup)
+        TReader(TPDiskCtxPtr pDiskCtx, TVector<TPartInfo>&& parts, TReplQuoter::TPtr replPDiskReadQuoter, TBlobStorageGroupType gType, NMonGroup::TBalancingGroup& monGroup)
             : PDiskCtx(pDiskCtx)
             , Parts(std::move(parts))
             , Quoter(replPDiskReadQuoter)
@@ -60,7 +60,7 @@ namespace {
                             reinterpret_cast<void*>(i)
                         );
 
-                        TMessagesQuoter::QuoteMessage(
+                        TReplQuoter::QuoteMessage(
                             Quoter,
                             std::make_unique<IEventHandle>(PDiskCtx->PDiskId, selfId, ev.release()),
                             diskPart.Size
@@ -135,7 +135,7 @@ namespace {
 
         void SendRequest(const TVDiskIdShort& vDiskId, const TActorId& selfId, IEventBase* ev, ui32 dataSize) {
             auto& queue = (*QueueActorMapPtr)[vDiskId];
-            TMessagesQuoter::QuoteMessage(
+            TReplQuoter::QuoteMessage(
                 Ctx->VCtx->ReplNodeRequestQuoter,
                 std::make_unique<IEventHandle>(queue, selfId, ev),
                 dataSize

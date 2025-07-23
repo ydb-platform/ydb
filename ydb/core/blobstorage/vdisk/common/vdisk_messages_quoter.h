@@ -2,9 +2,9 @@
 
 namespace NKikimr {
 
-    class TMessagesQuoter {
+    class TEventsQuoter {
     public:
-        using TPtr = std::shared_ptr<TMessagesQuoter>;
+        using TPtr = std::shared_ptr<TEventsQuoter>;
 
     private:
         using TAtomicInstant = std::atomic<TInstant>;
@@ -14,21 +14,21 @@ namespace NKikimr {
         const ui64 DefaultBytesPerSecond = 0;
 
     public:
-        TMessagesQuoter() {
+        TEventsQuoter() {
             NextQueueItemTimestamp = TInstant::Zero();
         }
 
-        TMessagesQuoter(ui64 bytesPerSecond)
+        TEventsQuoter(ui64 bytesPerSecond)
             : DefaultBytesPerSecond(bytesPerSecond) {
             NextQueueItemTimestamp = TInstant::Zero();
         }
 
-        TDuration Take(TInstant now, ui64 bytes, ui64 bytesRate = 0) {
-            auto bytesPerSecond = GetBytesRate(bytesRate);
-            if (!bytesPerSecond) {
+        TDuration Take(TInstant now, ui64 bytes, ui64 bytesPerSecond = 0) {
+            auto bytesRate = GetBytesRate(bytesPerSecond);
+            if (!bytesRate) {
                 return TDuration::Zero();
             }
-            TDuration duration = TDuration::MicroSeconds(bytes * 1000000 / bytesPerSecond);
+            TDuration duration = TDuration::MicroSeconds(bytes * 1000000 / bytesRate);
             for (;;) {
                 TInstant current = NextQueueItemTimestamp;
                 const TInstant notBefore = now - GetCapacity();
@@ -41,9 +41,9 @@ namespace NKikimr {
             }
         }
 
-        static void QuoteMessage(const TPtr& quoter, std::unique_ptr<IEventHandle> ev, ui64 bytes, ui64 bytesRate = 0) {
+        static void QuoteMessage(const TPtr& quoter, std::unique_ptr<IEventHandle> ev, ui64 bytes, ui64 bytesPerSecond = 0) {
             const TDuration timeout = quoter
-                ? quoter->Take(TActivationContext::Now(), bytes, bytesRate)
+                ? quoter->Take(TActivationContext::Now(), bytes, bytesPerSecond)
                 : TDuration::Zero();
             if (timeout != TDuration::Zero()) {
                 TActivationContext::Schedule(timeout, ev.release());
@@ -52,12 +52,12 @@ namespace NKikimr {
             }
         }
 
-        ui64 GetMaxPacketSize(ui64 bytesRate = 0) const {
-            auto bytesPerSecond = GetBytesRate(bytesRate);
-            if (!bytesPerSecond) {
+        ui64 GetMaxPacketSize(ui64 bytesPerSecond = 0) const {
+            auto bytesRate = GetBytesRate(bytesPerSecond);
+            if (!bytesRate) {
                 std::numeric_limits<ui64>::max();
             }
-            return bytesPerSecond * GetCapacity().MicroSeconds() / 1000000;
+            return bytesRate * GetCapacity().MicroSeconds() / 1000000;
         }
 
         static constexpr TDuration GetCapacity() {
@@ -65,9 +65,11 @@ namespace NKikimr {
         }
 
     private:
-        ui64 GetBytesRate(ui64 bytesRate = 0) const {
-            return bytesRate ? bytesRate : DefaultBytesPerSecond;
+        ui64 GetBytesRate(ui64 bytesPerSecond = 0) const {
+            return bytesPerSecond ? bytesPerSecond : DefaultBytesPerSecond;
         }
     };
+    
+    using TReplQuoter = TEventsQuoter;
 
 } // NKikimr

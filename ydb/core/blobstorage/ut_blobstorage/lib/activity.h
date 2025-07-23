@@ -19,7 +19,7 @@ class TActivityActor : public TActorBootstrapped<TActivityActor> {
     ui32 ReadsInFlight = 0;
     ui32 NumWritesRemaining = 0;
     ui32 MaxWritesInFlight;
-    TMessagesQuoter Quoter;
+    TReplQuoter Quoter;
 
 public:
     TActivityActor(ui64 tabletId, ui32 groupId, const TActorId& edge)

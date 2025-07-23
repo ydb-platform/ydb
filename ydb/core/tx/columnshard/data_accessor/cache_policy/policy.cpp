@@ -15,10 +15,10 @@ TPortionsMetadataCachePolicy::BuildObjectsProcessor(const NActors::TActorId& ser
         const std::shared_ptr<NKikimr::NGeneralCache::NSource::IObjectsProcessor<TPortionsMetadataCachePolicy>> Callback;
         THashSet<TAddress> RequestedAddresses;
 
-        virtual void OnAccessorsFetched(std::vector<TPortionDataAccessor>&& accessors) override {
+        virtual void OnAccessorsFetched(std::vector<std::shared_ptr<TPortionDataAccessor>>&& accessors) override {
             THashMap<TAddress, TObject> objects;
             for (auto&& i : accessors) {
-                const TAddress address(OwnerActorId, i.GetPortionInfo().GetAddress());
+                const TAddress address(OwnerActorId, i->GetPortionInfo().GetAddress());
                 AFL_VERIFY(RequestedAddresses.erase(address));
                 objects.emplace(address, std::move(i));
             }

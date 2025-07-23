@@ -1195,7 +1195,7 @@ public:
         Indexes = std::move(indexes);
     }
 
-    NOlap::TPortionDataAccessor BuildAccessor() {
+    std::shared_ptr<NOlap::TPortionDataAccessor> BuildAccessor() {
         AFL_VERIFY(PortionInfo);
         AFL_VERIFY(Records)("portion_id", PortionInfo->GetPortionId())("path_id", PortionInfo->GetPathId());
         AFL_VERIFY(Indexes)("portion_id", PortionInfo->GetPortionId())("path_id", PortionInfo->GetPathId());
@@ -1209,7 +1209,7 @@ private:
     std::vector<TPortionConstructorV2> Portions;
 
     virtual void DoExecute(const std::shared_ptr<ITask>& /*taskPtr*/) override {
-        std::vector<NOlap::TPortionDataAccessor> accessors;
+        std::vector<std::shared_ptr<NOlap::TPortionDataAccessor>> accessors;
         accessors.reserve(Portions.size());
         for (auto&& i : Portions) {
             accessors.emplace_back(i.BuildAccessor());

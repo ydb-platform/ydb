@@ -15,11 +15,11 @@ private:
 public:
     const NOlap::TPortionDataAccessor& GetPortionInfo() const {
         AFL_VERIFY(PortionInfo);
-        return *PortionInfo;
+        return **PortionInfo;
     }
-    const NOlap::TPortionDataAccessor& GetPortionInfoPtr() const {
+    const std::shared_ptr<NOlap::TPortionDataAccessor>& GetPortionInfoPtr() const {
         AFL_VERIFY(PortionInfo);
-        return PortionInfo;
+        return *PortionInfo;
     }
     TInsertedPortion(NOlap::TWritePortionInfoWithBlobsResult&& portion)
         : PortionInfoConstructor(portion.DetachPortionConstructor()) {

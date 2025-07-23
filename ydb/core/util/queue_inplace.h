@@ -107,7 +107,7 @@ public:
         ++Size;
     }
 
-    void Push(T&& x) noexcept {
+    void Push(T&& x) {
         ::new (NewEntry()) T(std::move(x));
         ++WritePosition;
         ++Size;

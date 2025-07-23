@@ -203,7 +203,7 @@ Y_UNIT_TEST_SUITE(TargetDiscoverer) {
         staticCreds.SetUser("user");
         staticCreds.SetPassword("password");
         const auto ydbProxy = env.GetRuntime().Register(CreateYdbProxy(
-            env.GetEndpoint(), env.GetDatabase(), false /* ssl */, staticCreds));
+            env.GetEndpoint(), env.GetDatabase(), false /* ssl */, "" /* cert */, staticCreds));
 
         env.GetRuntime().Register(CreateTargetDiscoverer(env.GetSender(), 1, ydbProxy,
             CreateConfig(TVector<std::pair<TString, TString>>{

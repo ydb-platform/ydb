@@ -99,7 +99,7 @@ See the command description:
 
 ### Results
 
-Benchmark results include tpmC, efficiency, and per-transaction type latencies. As stated by the official specification:
+Benchmark results include tpmC, efficiency, and per-transaction-type latencies. As stated by the official specification:
 
 > “The performance metric reported by TPC-C is a “business throughput” measuring the number of orders processed per minute. Multiple transactions are used to simulate the business activity of processing an order, and each transaction is subject to a response time constraint. The performance metric for this benchmark is expressed in transactions-per-minute-C (tpmC).”
 

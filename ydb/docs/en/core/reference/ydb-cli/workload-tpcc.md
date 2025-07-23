@@ -13,6 +13,8 @@ Here is a quick start snippet:
 {{ ydb-cli }} workload tpcc --path tpcc/10wh run -w 10
 ```
 
+By default, when executed in an interactive terminal, both the `import` and `run` commands display their execution progress using a [Terminal User Interface (TUI)](https://en.wikipedia.org/wiki/Text-based_user_interface).
+
 ## Common Command Options
 
 All commands support the common `--path` option, which specifies the path to the directory containing the benchmark tables in the database:
@@ -55,6 +57,10 @@ The data will be generated and loaded into the tables directly by {{ ydb-cli }}:
 {{ ydb-cli }} workload tpcc --path tpcc/10wh import --warehouses 10
 ```
 
+Example usage:
+
+![Import](_assets/tpcc-import.gif)
+
 See the command description:
 
 ```bash
@@ -77,7 +83,8 @@ Run the load:
 {{ ydb-cli }} workload tpcc --path tpcc/10wh run
 ```
 
-During the benchmark, the CLI displays a preview of the results and various load statistics.
+During the benchmark, the CLI displays a preview of the results and various client side load statistics:
+![Run](_assets/tpcc-run.gif)
 
 See the command description:
 

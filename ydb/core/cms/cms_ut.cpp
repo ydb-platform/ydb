@@ -2361,6 +2361,12 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         for (const auto& node : *nodes) {
             pileMap->at(node.NodeId % pileMap->size()).push_back(node.NodeId);
         }
+        for (auto& node : *nodes) {
+            NActorsInterconnect::TNodeLocation pb;
+            node.Location.Serialize(&pb, true);
+            pb.SetBridgePileName("r" + ToString(node.NodeId % pileMap->size()));
+            node.Location = TNodeLocation(pb);
+        }
 
         auto newEv = IEventHandle::Downcast<TEvInterconnect::TEvNodesInfo>(
             new IEventHandle((*ev)->Recipient, (*ev)->Sender, new TEvInterconnect::TEvNodesInfo(nodes, pileMap))
@@ -2395,6 +2401,29 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         for (const auto [nodeId, pileId] : info.NodeIdToPileId) {
             // In ChangePileMap, nodes are distributed among piles based on the parity.
             UNIT_ASSERT(nodeId % opts.PileCount == pileId);
+        }
+        for (const auto& [nodeId, node] : info.AllNodes()) {
+            UNIT_ASSERT(node->PileId);
+            UNIT_ASSERT_EQUAL(nodeId % opts.PileCount, node->PileId);
+        }
+
+        auto state = env.RequestState();
+        for (const auto& host : state.GetHosts()) {
+            const ui32 correctPileId = host.GetNodeId() % opts.PileCount;
+            if (correctPileId != 0) {
+                UNIT_ASSERT(host.GetPileId());
+                UNIT_ASSERT_EQUAL(correctPileId, host.GetPileId());
+            }
+            const auto bridgePileName = host.GetLocation().GetBridgePileName();
+            UNIT_ASSERT(bridgePileName);
+            UNIT_ASSERT_EQUAL(correctPileId, static_cast<ui32>(bridgePileName[1] - '0'));
+        }
+
+        auto listNodes = env.RequestListNodes();
+        for (const auto& node : listNodes) {
+            const auto bridgePileName = node.location().bridge_pile_name();
+            UNIT_ASSERT(bridgePileName);
+            UNIT_ASSERT_EQUAL(node.node_id() % opts.PileCount, static_cast<ui32>(bridgePileName[1] - '0'));
         }
     }
 

@@ -247,7 +247,9 @@ int TInteractiveCLI::Run(TClientCommand::TConfig& config) {
         }
     }
 
-    std::cout << std::endl << "Bye" << std::endl;
+    // Clear line (hints can be still present)
+    lineReader->ClearHints();
+    std::cout << "Bye" << std::endl;
     return EXIT_SUCCESS;
 }
 

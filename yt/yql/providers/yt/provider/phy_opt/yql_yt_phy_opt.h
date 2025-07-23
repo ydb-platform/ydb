@@ -156,6 +156,8 @@ private:
     template <typename TLMapType>
     NNodes::TMaybeNode<NNodes::TExprBase> LMap(NNodes::TExprBase node, TExprContext& ctx) const;
 
+    NNodes::TMaybeNode<NNodes::TExprBase> UnessentialFilter(NNodes::TExprBase node, TExprContext& ctx) const;
+
     template<bool WithList>
     NNodes::TCoLambda MakeJobLambda(NNodes::TCoLambda lambda, bool useFlow, TExprContext& ctx) const;
 

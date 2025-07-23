@@ -238,6 +238,17 @@ message TEvNodeConfigInvokeOnRoot {
 
     message TSelfHealStateStorage {
         optional uint32 WaitForConfigStep = 1;
+        optional bool ForceHeal = 2;
+    }
+
+    message TSelfHealNodesStateUpdate {
+        message TNodeState {
+            optional uint32 NodeId = 1;
+            optional uint32 State = 2;
+        }
+        optional bool EnableSelfHealStateStorage = 1;
+        optional uint32 WaitForConfigStep = 2;
+        repeated TNodeState NodesState = 3;
     }
 
     message TAdvanceGeneration
@@ -287,6 +298,19 @@ message TEvNodeConfigInvokeOnRoot {
         repeated uint32 UnsyncedGroupIdsToAdd = 7;
     }
 
+    message TMergeUnsyncedPileConfig {
+        // the config of the pile that we are merging in right now
+        TStorageConfig PileConfig = 1;
+    }
+
+    message TNegotiateUnsyncedConnection {
+        uint32 NodeId = 1;
+    }
+
+    message TAdvanceClusterStateGeneration {
+        uint64 Generation = 1;
+    }
+
     oneof Request {
         TUpdateConfig UpdateConfig = 1;
         TQueryConfig QueryConfig = 2;
@@ -303,6 +327,10 @@ message TEvNodeConfigInvokeOnRoot {
         TGetStateStorageConfig GetStateStorageConfig = 13;
         TNotifyBridgeSyncFinished NotifyBridgeSyncFinished = 14;
         TSelfHealStateStorage SelfHealStateStorage = 15;
+        TMergeUnsyncedPileConfig MergeUnsyncedPileConfig = 16;
+        TNegotiateUnsyncedConnection NegotiateUnsyncedConnection = 17;
+        TAdvanceClusterStateGeneration AdvanceClusterStateGeneration = 18;
+        TSelfHealNodesStateUpdate SelfHealNodesStateUpdate = 19;
     }
 }
 
@@ -335,6 +363,10 @@ message TEvNodeConfigInvokeOnRootResult {
         optional bool AllowEnablingDistconf = 1;
     }
 
+    message TMergeUnsyncedPileConfig {
+        TStorageConfig MergedConfig = 1;
+    }
+
     EStatus Status = 1;
     optional string ErrorReason = 2;
     TScepter Scepter = 3;
@@ -346,6 +378,7 @@ message TEvNodeConfigInvokeOnRootResult {
         TFetchStorageConfig FetchStorageConfig = 10;
         TReplaceStorageConfig ReplaceStorageConfig = 11;
         TStateStorageConfig StateStorageConfig = 12;
+        TMergeUnsyncedPileConfig MergeUnsyncedPileConfig = 13;
     }
 }
 
@@ -353,4 +386,12 @@ message TEvNodeWardenDynamicConfigPush {
     TStorageConfig Config = 1;
     bool NoQuorum = 2;
     TCacheUpdate CacheUpdate = 3;
+}
+
+message TConnectivityPayload {
+    TStorageConfig StorageConfig = 1; // storage config of a sender
+    optional uint32 BridgePileId = 2; // bridge pile id of a sender
+    optional uint32 RootNodeId = 3; // root node id of a sender (if set and zero, then this is the root)
+    optional bool HasQuorumInPile = 4; // does the sender have quorum inside his pile? (when root)
+    TEvNodeConfigInvokeOnRoot InvokeOnRoot = 5; // instruct the recipient to execute this command
 }

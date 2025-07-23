@@ -9,33 +9,25 @@ using namespace NProfiling;
 ////////////////////////////////////////////////////////////////////////////////
 
 TPeriodicYielder::TPeriodicYielder(TDuration period)
-    : Period_(DurationToCpuDuration(period))
-    , Disabled_(false)
+    : TContextSwitchGuard(
+        [this] () noexcept { Stop(); },
+        [this] () noexcept { Restart(); })
+    , CpuPeriod_(DurationToCpuDuration(period))
 { }
 
-bool TPeriodicYielder::TryYield()
+bool TPeriodicYielder::NeedYield() const
 {
-    if (Disabled_) {
-        return false;
-    }
+    return GetElapsedCpuTime() > CpuPeriod_;
+}
 
-    if (GetCpuInstant() - LastYieldTime_ > Period_) {
+bool TPeriodicYielder::TryYield() const
+{
+    if (NeedYield()) {
         Yield();
-        LastYieldTime_ = GetCpuInstant();
         return true;
     }
 
     return false;
-}
-
-void TPeriodicYielder::SetDisabled(bool value)
-{
-    Disabled_ = value;
-}
-
-void TPeriodicYielder::SetPeriod(TDuration value)
-{
-    Period_ = DurationToCpuDuration(value);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -76,7 +76,8 @@ namespace NSQLComplete {
         bool Binding = false;
 
         TQuotation IsQuoted;
-        TEditRange EditRange;
+        TEditRange ReplaceRange;
+        TEditRange FilterRange;
     };
 
     // TODO(YQL-19747): Make it thread-safe to make ISqlCompletionEngine thread-safe.

@@ -1517,8 +1517,8 @@ void TNodeBroker::Handle(TEvNodeBroker::TEvRegistrationRequest::TPtr &ev,
             auto& record = Ev->Get()->Record;
 
             if (const auto& bridgePileName = TNodeLocation(record.GetLocation()).GetBridgePileName()) {
-                if (AppData()->BridgeConfig && AppData()->BridgeConfig->PilesSize()) {
-                    const auto& bridge = *AppData()->BridgeConfig;
+                if (AppData()->BridgeModeEnabled) {
+                    const auto& bridge = AppData()->BridgeConfig;
                     const auto& piles = bridge.GetPiles();
                     bool found = false;
                     for (int i = 0; i < piles.size(); ++i) {
@@ -1533,7 +1533,7 @@ void TNodeBroker::Handle(TEvNodeBroker::TEvRegistrationRequest::TPtr &ev,
                 } else {
                     Error = "Bridge pile specified while bridge mode is disabled";
                 }
-            } else if (AppData()->BridgeConfig && AppData()->BridgeConfig->PilesSize()) {
+            } else if (AppData()->BridgeModeEnabled) {
                 Error = "Bridge pile not specified while bridge mode is enabled";
             }
 

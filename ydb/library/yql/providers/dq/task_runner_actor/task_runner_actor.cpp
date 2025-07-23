@@ -589,10 +589,10 @@ private:
         for (auto inputId = 0; inputId < inputs.size(); inputId++) {
             auto& input = inputs[inputId];
             if (input.HasSource()) {
-                Sources.emplace(inputId);
+                Sources.emplace_back(inputId);
             } else {
                 for (auto& channel : input.GetChannels()) {
-                    Inputs.emplace(channel.GetId());
+                    Inputs.emplace_back(channel.GetId());
                 }
             }
         }
@@ -756,8 +756,8 @@ private:
     NTaskRunnerProxy::ITaskRunner::TPtr TaskRunner;
     ITaskRunnerInvoker::TPtr Invoker;
     bool Local;
-    THashSet<ui32> Inputs;
-    THashSet<ui32> Sources;
+    TVector<ui32> Inputs;
+    TVector<ui32> Sources;
     TIntrusivePtr<TDqConfiguration> Settings;
     NDqProto::EDataTransportVersion DataTransportVersion;
     ui64 StageId;
@@ -784,7 +784,6 @@ public:
         std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc,
         const TTxId& txId,
         ui64 taskId,
-        THashSet<ui32>&&,
         THolder<NYql::NDq::TDqMemoryQuota>&&) override
     {
         auto* actor = new TTaskRunnerActor(parent, alloc, ProxyFactory, InvokerFactory->Create(), txId, taskId, RuntimeData);

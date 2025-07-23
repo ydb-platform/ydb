@@ -3,6 +3,8 @@ import pytest
 import time
 import uuid
 
+from pprint import pprint
+
 from ydb.tests.library.compatibility.fixtures import RestartToAnotherVersionFixture, RollingUpgradeAndDowngradeFixture, MixedClusterFixture
 from ydb.tests.oss.ydb_sdk_import import ydb
 
@@ -31,21 +33,39 @@ class Workload:
                 self.message_count += 1
 
     def read_from_topic(self):
-        with self.driver.topic_client.reader(self.topic_name, consumer='test-consumer') as reader:
-            while True:
-                try:
-                    message = reader.receive_message(timeout=1)
-                except TimeoutError:
-                    break
+        iteration = 0
+        while iteration < 5:
+            iteration = iteration + 1
 
-                if not message:
-                    break
+            end_offset = 0
+            try:
+                describe = self.driver.topic_client.describe_topic(self.topic_name, include_stats = True)
+                pprint(vars(describe))
+                end_offset = describe.partitions[0].partition_stats.partition_end
+            except Exception:
+                time.sleep(1)
+                continue
 
-                reader.commit_with_ack(message)
-                self.processed_message_count += 1
+            with self.driver.topic_client.reader(self.topic_name, consumer='test-consumer') as reader:
+                while True:
+                    try:
+                        message = reader.receive_message(timeout=5)
+                    except TimeoutError:
+                        break
+
+                    reader.commit(message)
+                    self.processed_message_count = message.offset + 1
+
+                    if self.processed_message_count == end_offset:
+                        break
+
+            if self.processed_message_count == end_offset:
+                break
+            
+            time.sleep(1)
         
-        if self.processed_message_count != self.message_count:
-            raise Exception(f"Transfer still work after {iterations} seconds. Last offset is {last_offset}")
+        if self.processed_message_count != end_offset:
+            raise Exception(f"Received {self.processed_message_count} messages but written {self.message_count}")
 
 
 class TestTopicMixedClusterFixture(MixedClusterFixture):

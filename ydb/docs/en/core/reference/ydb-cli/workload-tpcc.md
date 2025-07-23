@@ -13,7 +13,7 @@ Here is a quick start snippet:
 {{ ydb-cli }} workload tpcc --path tpcc/10wh run -w 10
 ```
 
-## Common command options
+## Common Command Options
 
 All commands support the common `--path` option, which specifies the path to the directory containing the benchmark tables in the database:
 

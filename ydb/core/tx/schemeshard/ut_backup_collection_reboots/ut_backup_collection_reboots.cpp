@@ -622,4 +622,139 @@ Y_UNIT_TEST_SUITE(TBackupCollectionWithRebootsTests) {
             }
         });
     }
+
+    Y_UNIT_TEST(BackupCycleWithDataBackupCollectionWithReboots) {
+        TTestWithReboots t;
+        t.EnvOpts = TTestEnvOptions().EnableBackupService(true);
+        t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+            {
+                TInactiveZone inactive(activeZone);
+
+                TestMkDir(runtime, ++t.TxId, "/MyRoot", ".backups/collections");
+                t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+                TestCreateBackupCollection(runtime, ++t.TxId, "/MyRoot/.backups/collections", DefaultIncrementalCollectionSettings());
+                t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+                TestCreateTable(runtime, ++t.TxId, "/MyRoot", R"(
+                    Name: "Table1"
+                    Columns { Name: "key" Type: "Uint32" }
+                    Columns { Name: "value" Type: "Uint32" }
+                    KeyColumnNames: ["key"]
+                )");
+                t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+                UploadRow(runtime, "/MyRoot/Table1", 0, {1}, {2}, {TCell::Make(1u)}, {TCell::Make(1u)});
+                UploadRow(runtime, "/MyRoot/Table1", 0, {1}, {2}, {TCell::Make(2u)}, {TCell::Make(2u)});
+            }
+
+            TestBackupBackupCollection(runtime, ++t.TxId, "/MyRoot",
+                R"(Name: ".backups/collections/)" DEFAULT_NAME_1 R"(")");
+            t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+            runtime.AdvanceCurrentTime(TDuration::Seconds(1));
+
+            {
+                TInactiveZone inactive(activeZone);
+                UploadRow(runtime, "/MyRoot/Table1", 0, {1}, {2}, {TCell::Make(1u)}, {TCell::Make(2u)});
+            }
+
+            TestBackupIncrementalBackupCollection(runtime, ++t.TxId, "/MyRoot",
+                R"(Name: ".backups/collections/)" DEFAULT_NAME_1 R"(")");
+            t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+            runtime.AdvanceCurrentTime(TDuration::Seconds(1));
+
+            {
+                TInactiveZone inactive(activeZone);
+                UploadRow(runtime, "/MyRoot/Table1", 0, {1}, {2}, {TCell::Make(1u)}, {TCell::Make(3u)});
+            }
+
+            TestBackupIncrementalBackupCollection(runtime, ++t.TxId, "/MyRoot",
+                R"(Name: ".backups/collections/)" DEFAULT_NAME_1 R"(")");
+            t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+            runtime.AdvanceCurrentTime(TDuration::Seconds(1));
+
+            {
+                TInactiveZone inactive(activeZone);
+                UploadRow(runtime, "/MyRoot/Table1", 0, {1}, {2}, {TCell::Make(1u)}, {TCell::Make(4u)});
+            }
+
+            TestBackupBackupCollection(runtime, ++t.TxId, "/MyRoot",
+                R"(Name: ".backups/collections/)" DEFAULT_NAME_1 R"(")");
+            t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+            runtime.AdvanceCurrentTime(TDuration::Seconds(1));
+
+            {
+                TInactiveZone inactive(activeZone);
+                UploadRow(runtime, "/MyRoot/Table1", 0, {1}, {2}, {TCell::Make(1u)}, {TCell::Make(5u)});
+            }
+
+            TestBackupIncrementalBackupCollection(runtime, ++t.TxId, "/MyRoot",
+                R"(Name: ".backups/collections/)" DEFAULT_NAME_1 R"(")");
+            t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+            runtime.AdvanceCurrentTime(TDuration::Seconds(1));
+
+            {
+                TInactiveZone inactive(activeZone);
+                UploadRow(runtime, "/MyRoot/Table1", 0, {1}, {2}, {TCell::Make(1u)}, {TCell::Make(6u)});
+            }
+
+            TestBackupIncrementalBackupCollection(runtime, ++t.TxId, "/MyRoot",
+                R"(Name: ".backups/collections/)" DEFAULT_NAME_1 R"(")");
+            t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+            t.TestEnv->SimulateSleep(runtime, TDuration::Seconds(5));
+
+            {
+                TInactiveZone inactive(activeZone);
+
+                TVector<TString> backups;
+                TestDescribeResult(DescribePath(runtime, "/MyRoot/.backups/collections/" DEFAULT_NAME_1), {
+                    NLs::PathExist,
+                    NLs::IsBackupCollection,
+                    NLs::ChildrenCount(6),
+                    NLs::ExtractChildren(&backups),
+                    NLs::Finished,
+                });
+
+                for (const auto& b : backups) {
+                    TString backupPath = TStringBuilder() << "/MyRoot/.backups/collections/" << DEFAULT_NAME_1 << '/' << b;
+                    TVector<TString> tables;
+                    TestDescribeResult(DescribePath(runtime,  backupPath), {
+                        NLs::PathExist,
+                        NLs::ChildrenCount(1),
+                        NLs::ExtractChildren(&tables),
+                        NLs::Finished,
+                    });
+
+                    for (const auto& t : tables) {
+                        TString tablePath = TStringBuilder() << backupPath << '/' << t;
+                        TestDescribeResult(DescribePath(runtime,  tablePath), {
+                            NLs::PathExist,
+                            NLs::IsTable,
+                            NLs::CheckPathState(NKikimrSchemeOp::EPathStateNoChanges),
+                            NLs::Finished,
+                        });
+
+                        ui32 expectedRows = b.Contains("full") ? 2 : 1;
+                        ui32 foundRows = CountRows(runtime, tablePath);
+                        UNIT_ASSERT_EQUAL_C(foundRows, expectedRows, TStringBuilder()
+                            << "Backup table " << tablePath << " has " << foundRows << " rows, "
+                            << "but expected " << expectedRows << " rows");
+                    }
+                }
+
+                TestDescribeResult(DescribePath(runtime, "/MyRoot/Table1"), {
+                    NLs::PathExist,
+                    NLs::IsTable,
+                    NLs::CheckPathState(NKikimrSchemeOp::EPathStateNoChanges),
+                    NLs::Finished,
+                });
+            }
+        });
+    }
 } // TBackupCollectionWithRebootsTests

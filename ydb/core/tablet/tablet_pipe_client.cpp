@@ -9,7 +9,7 @@
 #include <ydb/core/base/hive.h>
 #include <ydb/core/base/domain.h>
 #include <ydb/core/base/appdata.h>
-#include <ydb/library/actors/util/queue_oneone_inplace.h>
+#include <ydb/core/util/queue_inplace.h>
 #include <library/cpp/random_provider/random_provider.h>
 
 
@@ -40,7 +40,6 @@ namespace NTabletPipe {
             , TabletId(tabletId)
             , Config(config)
             , IsShutdown(false)
-            , PayloadQueue(new TPayloadQueue())
             , Leader(true)
         {
             Y_ABORT_UNLESS(tabletId != 0);
@@ -148,7 +147,7 @@ namespace NTabletPipe {
         void HandleSendQueued(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx) {
             BLOG_D("queue send");
             Y_ABORT_UNLESS(!IsShutdown);
-            PayloadQueue->Push(ev.Release());
+            PayloadQueue.Push(std::move(ev));
         }
 
         void HandleSend(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx) {
@@ -322,10 +321,11 @@ namespace NTabletPipe {
                                                                   Leader, false, Generation, std::move(versionInfo)));
 
             BLOG_D("send queued");
-            while (TAutoPtr<IEventHandle> x = PayloadQueue->Pop())
+            while (TAutoPtr<IEventHandle> x = PayloadQueue.PopDefault())
                 Push(ctx, x);
 
-            PayloadQueue.Destroy();
+            // Free buffer memory
+            PayloadQueue.Clear();
 
             if (IsShutdown) {
                 BLOG_D("shutdown pipe due to pending shutdown request");
@@ -719,8 +719,7 @@ namespace NTabletPipe {
         TActorId InterconnectProxyId;
         TActorId InterconnectSessionId;
         TActorId ServerId;
-        typedef TOneOneQueueInplace<IEventHandle*, 32> TPayloadQueue;
-        TAutoPtr<TPayloadQueue, TPayloadQueue::TPtrCleanDestructor> PayloadQueue;
+        TQueueInplace<TAutoPtr<IEventHandle>, 32> PayloadQueue;
         TClientRetryState RetryState;
         bool Leader;
         ui64 Generation = 0;

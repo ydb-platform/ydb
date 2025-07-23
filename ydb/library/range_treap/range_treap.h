@@ -74,8 +74,6 @@ private:
             const EBorderMode leftMode, const EBorderMode rightMode, TKey maxRightKey, const EBorderMode maxRightMode,
             const bool maxRightTrivial)
             : Parent(parent)
-            , Left(std::move(left))
-            , Right(std::move(right))
             , Prio(prio)
             , LeftKey(std::move(leftKey))
             , RightKey(std::move(rightKey))
@@ -86,6 +84,8 @@ private:
             , MaxRightMode(maxRightMode)
             , MaxRightTrivial(maxRightTrivial)
         {
+            SetLeft(std::move(left));
+            SetRight(std::move(right));
         }
 
         void SetLeft(THolder<TNode> child) noexcept {

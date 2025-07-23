@@ -1311,8 +1311,9 @@ protected:
         THashMap<ui64, TVector<ui64>> nodeIdToTasks;
         THashMap<ui64, TVector<TShardRangesWithShardId>> nodeIdToShardKeyRanges;
         Y_DEFER {
+            intros.push_back("Built scan tasks from source and shards to read for node");
             for (const auto& [nodeId, tasks] : nodeIdToTasks) {
-                intros.push_back("Built scan tasks from source for node " + ToString(nodeId) + " - " + ToString(tasks.size()));
+                intros.push_back(ToString(nodeId) + " - " + ToString(tasks.size()) + ", " + ToString(nodeIdToShardKeyRanges.at(nodeId).size()));
             }
             intros.push_back("Total built scan tasks from source - " + ToString(createdTasksIds.size()));
         };
@@ -1344,8 +1345,6 @@ protected:
                 if (nodeTasks.size() < maxScanTasksPerNode) {
                     const auto& task = createNewTask(nodeId, taskLocation, {}, maxInFlightShards);
                     nodeTasks.push_back(task.Id);
-                } else {
-                    intros.push_back("Not building scan task from source because limit exceeded for node " + ToString(*nodeId) + " - " + ToString(maxScanTasksPerNode));
                 }
 
                 nodeIdToShardKeyRanges[*nodeId].push_back(TShardRangesWithShardId{shardId, &*shardInfo.KeyReadRanges});

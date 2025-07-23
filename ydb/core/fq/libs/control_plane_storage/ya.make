@@ -33,17 +33,16 @@ PEERDIR(
     ydb/core/fq/libs/quota_manager/events
     ydb/core/fq/libs/shared_resources
     ydb/core/fq/libs/ydb
+    ydb/core/kqp/proxy_service
     ydb/core/mon
     ydb/library/db_pool
     ydb/library/security
     ydb/library/yql/providers/s3/path_generator
-    yql/essentials/public/issue
     ydb/public/api/protos
     ydb/public/sdk/cpp/adapters/issue
     ydb/public/sdk/cpp/src/client/scheme
     ydb/public/sdk/cpp/src/client/table
-    ydb/library/db_pool
-    ydb/library/yql/providers/s3/path_generator
+    yql/essentials/public/issue
 )
 
 YQL_LAST_ABI_VERSION()

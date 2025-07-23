@@ -46,7 +46,7 @@ void BackTraceSignalHandler(int signal) {
     abort();
 }
 
-}  // nonymous namespace
+}  // anonymous namespace
 
 
 TRequestResult::TRequestResult()

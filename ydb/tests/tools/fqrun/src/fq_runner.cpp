@@ -174,12 +174,14 @@ private:
             PrintStatistics(queryId, meta.Statistics);
         };
 
+        TString previousIssues;
         while (true) {
             TExecutionMeta meta;
             const TRequestResult status = FqSetup.DescribeQuery(QueryId, CurrentOptions, meta);
 
-            if (meta.TransientIssues.Size() != ExecutionMeta.TransientIssues.Size() && VerboseLevel >= EVerbose::Info) {
-                Cerr << CerrColors.Red() << "Query transient issues updated:" << CerrColors.Default() << Endl << meta.TransientIssues.ToString() << Endl;
+            if (const auto newIssues = meta.TransientIssues.ToString(); newIssues && previousIssues != newIssues && VerboseLevel >= EVerbose::Info) {
+                previousIssues = newIssues;
+                Cerr << CerrColors.Red() << "Query transient issues updated:" << CerrColors.Default() << Endl << newIssues << Endl;
             }
             ExecutionMeta = meta;
             printStats(ExecutionMeta);

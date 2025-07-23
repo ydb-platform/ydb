@@ -3,6 +3,7 @@
 
 #include <ydb/core/testlib/test_client.h>
 #include <ydb/core/testlib/basics/appdata.h>
+#include <ydb/core/util/proto_duration.h>
 #include <ydb/library/table_creator/table_creator.h>
 #include <ydb/services/ydb/ydb_common_ut.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
@@ -18,6 +19,7 @@ using namespace NSchemeShard;
 namespace  {
 
 constexpr TDuration TestLeaseDuration = TDuration::Seconds(1);
+constexpr TDuration TestTimeout = TDuration::Seconds(10);
 constexpr TDuration TestOperationTtl = TDuration::Minutes(1);
 constexpr TDuration TestResultsTtl = TDuration::Minutes(1);
 const TString TestDatabase = "test_db";
@@ -62,7 +64,6 @@ const TVector<TString> TEST_TABLE_PATH = { "test", "test_table" };
 
 const TVector<TString> TEST_KEY_COLUMNS = {"col1"};
 
-
 struct TScriptExecutionsYdbSetup {
     TScriptExecutionsYdbSetup() {
         Init();
@@ -77,8 +78,8 @@ struct TScriptExecutionsYdbSetup {
         Server = MakeHolder<Tests::TServer>(*ServerSettings);
         Client = MakeHolder<Tests::TClient>(*ServerSettings);
 
-        // Logging
         GetRuntime()->SetLogPriority(NKikimrServices::KQP_PROXY, NActors::NLog::PRI_DEBUG);
+        GetRuntime()->SetDispatchTimeout(TestTimeout);
         Server->EnableGRpc(GrpcPort);
         Client->InitRootScheme();
 
@@ -101,7 +102,11 @@ struct TScriptExecutionsYdbSetup {
     }
 
     void WaitInitScriptExecutionsTables() {
+        const auto timeout = TInstant::Now() + TestTimeout;
         while (!RunSelect42Script()) {
+            if (TInstant::Now() > timeout) {
+                UNIT_FAIL("Failed to init script executions tables");
+            }
             Sleep(TDuration::MilliSeconds(10));
         }
     }
@@ -120,7 +125,7 @@ struct TScriptExecutionsYdbSetup {
 
         GetRuntime()->Send(new IEventHandle(kqpProxy, edgeActor, ev.Release()), node);
 
-        auto reply = GetRuntime()->GrabEdgeEvent<TEvKqp::TEvScriptResponse>(edgeActor);
+        auto reply = GetRuntime()->GrabEdgeEvent<TEvKqp::TEvScriptResponse>(edgeActor, TestTimeout);
         Ydb::StatusIds::StatusCode status = reply->Get()->Status;
         return status == Ydb::StatusIds::SUCCESS;
     }
@@ -128,15 +133,21 @@ struct TScriptExecutionsYdbSetup {
     // Creates query in db. Returns execution id
     TString CreateQueryInDb(const TString& query = "SELECT 42", TDuration leaseDuration = TestLeaseDuration, TDuration operationTtl = TestOperationTtl, TDuration resultsTtl = TestResultsTtl) {
         TString executionId = CreateGuidAsString();
+
         NKikimrKqp::TEvQueryRequest req;
         req.MutableRequest()->SetDatabase(TestDatabase);
         req.MutableRequest()->SetQuery(query);
         req.MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
-        const ui32 node = 0;
-        TActorId edgeActor = GetRuntime()->AllocateEdgeActor(node);
-        GetRuntime()->Register(NPrivate::CreateCreateScriptOperationQueryActor(executionId, NActors::TActorId(), req, operationTtl, resultsTtl, leaseDuration), 0, 0, TMailboxType::Simple, 0, edgeActor);
 
-        auto reply = GetRuntime()->GrabEdgeEvent<NPrivate::TEvPrivate::TEvCreateScriptOperationResponse>(edgeActor);
+        NKikimrKqp::TScriptExecutionOperationMeta meta;
+        SetDuration(leaseDuration, *meta.MutableLeaseDuration());
+        SetDuration(operationTtl, *meta.MutableOperationTtl());
+        SetDuration(resultsTtl, *meta.MutableResultsTtl());
+
+        TActorId edgeActor = GetRuntime()->AllocateEdgeActor(0);
+        GetRuntime()->Register(NPrivate::CreateCreateScriptOperationQueryActor(executionId, NActors::TActorId(), req, meta), 0, 0, TMailboxType::Simple, 0, edgeActor);
+
+        auto reply = GetRuntime()->GrabEdgeEvent<NPrivate::TEvPrivate::TEvCreateScriptOperationResponse>(edgeActor, TestTimeout);
         UNIT_ASSERT(reply->Get()->Status == Ydb::StatusIds::SUCCESS);
         UNIT_ASSERT_VALUES_EQUAL(executionId, reply->Get()->ExecutionId);
         return reply->Get()->ExecutionId;
@@ -163,7 +174,7 @@ struct TScriptExecutionsYdbSetup {
 
     void WaitTableCreation(TVector<TActorId> edgeActors) {
         for (const auto& actor: edgeActors) {
-            GetRuntime()->GrabEdgeEvent<TEvTableCreator::TEvCreateTableResponse>(actor);
+            GetRuntime()->GrabEdgeEvent<TEvTableCreator::TEvCreateTableResponse>(actor, TestTimeout);
         }
     }
 
@@ -195,56 +206,56 @@ struct TScriptExecutionsYdbSetup {
         TActorId edgeActor = GetRuntime()->AllocateEdgeActor(node);
         GetRuntime()->Register(NPrivate::CreateCheckLeaseStatusActor(edgeActor, TestDatabase, executionId));
 
-        auto reply = GetRuntime()->GrabEdgeEvent<NPrivate::TEvPrivate::TEvLeaseCheckResult>(edgeActor);
+        auto reply = GetRuntime()->GrabEdgeEvent<NPrivate::TEvPrivate::TEvLeaseCheckResult>(edgeActor, TestTimeout);
         UNIT_ASSERT(reply->Get()->Status == Ydb::StatusIds::SUCCESS);
         return reply;
     }
 
-    void CheckLeaseExistance(const TString& executionId, bool expectedExistance, std::optional<i32> expectedStatus) {
-        TStringBuilder sql;
-            sql <<
-                R"(
-                    DECLARE $database As Utf8;
-                    DECLARE $execution_id As Utf8;
+    void CheckLeaseExistence(const TString& executionId, bool expectedExistence, std::optional<i32> expectedStatus) {
+        TString sql = R"(
+            DECLARE $database As Utf8;
+            DECLARE $execution_id As Utf8;
 
-                    SELECT COUNT(*)
-                    FROM `.metadata/script_execution_leases`
-                    WHERE database = $database AND execution_id = $execution_id;
+            SELECT COUNT(*)
+            FROM `.metadata/script_execution_leases`
+            WHERE database = $database AND execution_id = $execution_id;
 
-                    SELECT operation_status
-                    FROM `.metadata/script_executions`
-                    WHERE database = $database AND execution_id = $execution_id;
-                )";
+            SELECT operation_status
+            FROM `.metadata/script_executions`
+            WHERE database = $database AND execution_id = $execution_id;
+        )";
 
-            NYdb::TParamsBuilder params;
-            params
-                .AddParam("$database")
-                    .Utf8(TestDatabase)
-                    .Build()
-                .AddParam("$execution_id")
-                    .Utf8(executionId)
-                    .Build();
+        NYdb::TParamsBuilder params;
+        params
+            .AddParam("$database")
+                .Utf8(TestDatabase)
+                .Build()
+            .AddParam("$execution_id")
+                .Utf8(executionId)
+                .Build();
 
-            auto result = TableClientSession->ExecuteDataQuery(sql, NYdb::NTable::TTxControl::BeginTx().CommitTx(), params.Build()).ExtractValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        auto result = TableClientSession->ExecuteDataQuery(sql, NYdb::NTable::TTxControl::BeginTx().CommitTx(), params.Build()).ExtractValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 
-            NYdb::TResultSetParser rs1 = result.GetResultSetParser(0);
-            UNIT_ASSERT(rs1.TryNextRow());
+        NYdb::TResultSetParser rs1 = result.GetResultSetParser(0);
+        UNIT_ASSERT(rs1.TryNextRow());
 
-            auto count = rs1.ColumnParser(0).GetUint64();
-            UNIT_ASSERT_VALUES_EQUAL(count, expectedExistance ? 1 : 0);
+        auto count = rs1.ColumnParser(0).GetUint64();
+        UNIT_ASSERT_VALUES_EQUAL(count, expectedExistence ? 1 : 0);
 
-            NYdb::TResultSetParser rs2 = result.GetResultSetParser(1);
-            UNIT_ASSERT(rs2.TryNextRow());
+        NYdb::TResultSetParser rs2 = result.GetResultSetParser(1);
+        UNIT_ASSERT(rs2.TryNextRow());
 
-            UNIT_ASSERT(rs2.ColumnParser("operation_status").GetOptionalInt32() == expectedStatus);
+        UNIT_ASSERT(rs2.ColumnParser("operation_status").GetOptionalInt32() == expectedStatus);
     }
 
-    THolder<TEvScriptLeaseUpdateResponse> UpdateLease(const TString& executionId, TDuration leaseDuration) {
-        GetRuntime()->Register(CreateScriptLeaseUpdateActor(GetRuntime()->AllocateEdgeActor(), TestDatabase, executionId, leaseDuration, nullptr));
-        auto reply = GetRuntime()->GrabEdgeEvent<TEvScriptLeaseUpdateResponse>();
+    TEvScriptLeaseUpdateResponse::TPtr UpdateLease(const TString& executionId, TDuration leaseDuration, i64 leaseGeneration = 1) {
+        const auto edgeActor = GetRuntime()->AllocateEdgeActor();
+        GetRuntime()->Register(CreateScriptLeaseUpdateActor(edgeActor, TestDatabase, executionId, leaseDuration, leaseGeneration, nullptr));
 
-        UNIT_ASSERT(reply != nullptr);
+        auto reply = GetRuntime()->GrabEdgeEvent<TEvScriptLeaseUpdateResponse>(edgeActor, TestTimeout);
+        UNIT_ASSERT(reply);
+
         return reply;
     }
 
@@ -268,19 +279,19 @@ Y_UNIT_TEST_SUITE(ScriptExecutionsTest) {
 
         const TString executionId = ydb.CreateQueryInDb();
         UNIT_ASSERT(executionId);
+
         const TInstant startLeaseTime = TInstant::Now();
-        ydb.CheckLeaseExistance(executionId, true, std::nullopt);
-        auto checkResult1 = ydb.CheckLeaseStatus(executionId);
-        const TDuration checkTime = TInstant::Now() - startLeaseTime;
-        if (checkTime < TestLeaseDuration) {
-            UNIT_ASSERT_VALUES_EQUAL(checkResult1->Get()->OperationStatus, Nothing());
-            ydb.CheckLeaseExistance(executionId, true, std::nullopt);
+        ydb.CheckLeaseExistence(executionId, true, std::nullopt);
+
+        if (const auto checkResult = ydb.CheckLeaseStatus(executionId); TInstant::Now() - startLeaseTime < TestLeaseDuration) {
+            UNIT_ASSERT_VALUES_EQUAL(checkResult->Get()->OperationStatus, Nothing());
+            ydb.CheckLeaseExistence(executionId, true, std::nullopt);
             SleepUntil(startLeaseTime + TestLeaseDuration);
         }
 
         auto checkResult2 = ydb.CheckLeaseStatus(executionId);
         UNIT_ASSERT_VALUES_EQUAL(checkResult2->Get()->OperationStatus, Ydb::StatusIds::UNAVAILABLE);
-        ydb.CheckLeaseExistance(executionId, false, Ydb::StatusIds::UNAVAILABLE);
+        ydb.CheckLeaseExistence(executionId, false, Ydb::StatusIds::UNAVAILABLE);
     }
 
     Y_UNIT_TEST(UpdatesLeaseAfterExpiring) {
@@ -291,16 +302,16 @@ Y_UNIT_TEST_SUITE(ScriptExecutionsTest) {
 
         TInstant startLeaseTime = TInstant::Now();
 
-        ydb.CheckLeaseExistance(executionId, true, std::nullopt);
+        ydb.CheckLeaseExistence(executionId, true, std::nullopt);
         SleepUntil(startLeaseTime + TestLeaseDuration);
 
         startLeaseTime = TInstant::Now();
         TDuration leaseDuration = TDuration::Seconds(10);
-        auto updateResponse = ydb.UpdateLease(executionId, leaseDuration);
-        UNIT_ASSERT_C(updateResponse->Status == Ydb::StatusIds::SUCCESS, updateResponse->Issues.ToString());
-        UNIT_ASSERT(updateResponse->ExecutionEntryExists);
+        const auto updateResponse = ydb.UpdateLease(executionId, leaseDuration);
+        UNIT_ASSERT_VALUES_EQUAL_C(updateResponse->Get()->Status, Ydb::StatusIds::SUCCESS, updateResponse->Get()->Issues.ToString());
+        UNIT_ASSERT(updateResponse->Get()->ExecutionEntryExists);
 
-        ydb.CheckLeaseExistance(executionId, true, std::nullopt);
+        ydb.CheckLeaseExistence(executionId, true, std::nullopt);
         auto checkResult = ydb.CheckLeaseStatus(executionId);
 
         if (TInstant::Now() - startLeaseTime < leaseDuration) {
@@ -313,16 +324,16 @@ Y_UNIT_TEST_SUITE(ScriptExecutionsTest) {
 
         const TString executionId = ydb.CreateQueryInDb();
         UNIT_ASSERT(executionId);
-        ydb.CheckLeaseExistance(executionId, true, std::nullopt);
+        ydb.CheckLeaseExistence(executionId, true, std::nullopt);
 
         Sleep(TestLeaseDuration);
 
         auto checkResult = ydb.CheckLeaseStatus(executionId);
         UNIT_ASSERT_VALUES_EQUAL(checkResult->Get()->OperationStatus, Ydb::StatusIds::UNAVAILABLE);
-        ydb.CheckLeaseExistance(executionId, false, Ydb::StatusIds::UNAVAILABLE);
+        ydb.CheckLeaseExistence(executionId, false, Ydb::StatusIds::UNAVAILABLE);
 
-        auto updateResponse = ydb.UpdateLease(executionId, TestLeaseDuration);
-        UNIT_ASSERT(!updateResponse->ExecutionEntryExists);
+        const auto updateResponse = ydb.UpdateLease(executionId, TestLeaseDuration);
+        UNIT_ASSERT(!updateResponse->Get()->ExecutionEntryExists);
     }
 }
 

@@ -65,7 +65,7 @@ public:
     }
 };
 
-class TConstructor: public NAbstract::ISourcesConstructor {
+class TConstructor: public NCommon::ISourcesConstructor {
 private:
     const ui64 TabletId;
     std::deque<TDataConstructor> Constructors;

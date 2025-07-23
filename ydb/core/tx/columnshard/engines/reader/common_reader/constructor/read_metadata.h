@@ -23,7 +23,9 @@ private:
     virtual void DoInitCursor(const std::shared_ptr<IScanCursor>& cursor) = 0;
     virtual TString DoDebugString() const = 0;
     bool InitCursorFlag = false;
-    virtual void DoFillReadStats(TReadStats& /*stats*/) const = 0;
+    virtual void DoFillReadStats(TReadStats& /*stats*/) const {
+    
+    }
 
 public:
     virtual ~ISourcesConstructor() = default;

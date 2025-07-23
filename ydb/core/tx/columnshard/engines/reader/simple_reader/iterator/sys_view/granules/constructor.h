@@ -71,7 +71,7 @@ public:
     }
 };
 
-class TConstructor: public NAbstract::ISourcesConstructor {
+class TConstructor: public NCommon::ISourcesConstructor {
 private:
     std::deque<TGranuleDataConstructor> Constructors;
     const ui64 TabletId;

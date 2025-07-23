@@ -5,6 +5,7 @@ SRCS(
     script.cpp
     script_cursor.cpp
     script_counters.cpp
+    accessors_ordering.cpp
     columns_set.cpp
 )
 

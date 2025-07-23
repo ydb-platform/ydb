@@ -5,27 +5,25 @@
 
 namespace NKikimr::NOlap::NReader::NSimple {
 
-void TSortedPortionsSources::DoInitCursor(const std::shared_ptr<IScanCursor>& cursor) {
-    while (HeapSources.size()) {
+void TPortionsSources::DoInitCursor(const std::shared_ptr<IScanCursor>& cursor) {
+    while (TBase::GetConstructorsCount()) {
         bool usage = false;
-        if (!cursor->CheckEntityIsBorder(HeapSources.front(), usage)) {
-            std::pop_heap(HeapSources.begin(), HeapSources.end());
-            HeapSources.pop_back();
+        if (!cursor->CheckEntityIsBorder(TBase::MutableNextConstructor(), usage)) {
+            TBase::DropNextConstructor();
             continue;
         }
         if (usage) {
-            HeapSources.front().SetIsStartedByCursor();
+            TBase::MutableNextConstructor().SetIsStartedByCursor();
         } else {
-            std::pop_heap(HeapSources.begin(), HeapSources.end());
-            HeapSources.pop_back();
+            TBase::DropNextConstructor();
         }
         break;
     }
 }
 
-std::vector<TInsertWriteId> TSortedPortionsSources::GetUncommittedWriteIds() const {
+std::vector<TInsertWriteId> TPortionsSources::GetUncommittedWriteIds() const {
     std::vector<TInsertWriteId> result;
-    for (auto&& i : HeapSources) {
+    for (auto&& i : TBase::GetConstructors()) {
         if (!i.GetPortion()->IsCommitted()) {
             AFL_VERIFY(i.GetPortion()->GetPortionType() == EPortionType::Written);
             auto* written = static_cast<const TWrittenPortionInfo*>(i.GetPortion().get());
@@ -36,24 +34,14 @@ std::vector<TInsertWriteId> TSortedPortionsSources::GetUncommittedWriteIds() con
 }
 
 std::shared_ptr<TPortionDataSource> TSourceConstructor::Construct(
-    const ui32 sourceIdx, const std::shared_ptr<TSpecialReadContext>& context) const {
-    auto result = std::make_shared<TPortionDataSource>(sourceIdx, Portion, context);
+    const std::shared_ptr<NCommon::TSpecialReadContext>& context, std::shared_ptr<TPortionDataAccessor>&& accessor) const {
+    AFL_VERIFY(SourceIdx);
+    auto result = std::make_shared<TPortionDataSource>(*SourceIdx, Portion, context);
+    result->SetPortionAccessor(std::move(accessor));
     if (IsStartedByCursorFlag) {
         result->SetIsStartedByCursor();
     }
     FOR_DEBUG_LOG(NKikimrServices::COLUMNSHARD_SCAN_EVLOG, result->AddEvent("s"));
-    return result;
-}
-
-std::vector<TInsertWriteId> TNotSortedPortionsSources::GetUncommittedWriteIds() const {
-    std::vector<TInsertWriteId> result;
-    for (auto&& i : Sources) {
-        if (!i.GetPortion()->IsCommitted()) {
-            AFL_VERIFY(i.GetPortion()->GetPortionType() == EPortionType::Written);
-            auto* written = static_cast<const TWrittenPortionInfo*>(i.GetPortion().get());
-            result.emplace_back(written->GetInsertWriteId());
-        }
-    }
     return result;
 }
 

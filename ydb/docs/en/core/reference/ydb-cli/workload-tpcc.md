@@ -127,3 +127,25 @@ Run cleaning:
 ```
 
 The command has no parameters.
+
+## Data consistency check { #consistency_check }
+
+`check` command verifies the consistency of TPC-C data. It can be executed after either the `import` or `run` commands. The `check` command is intended primarily for development and is of limited interest to end users.
+
+Example:
+```bash
+{{ ydb-cli }} workload tpcc --path tpcc/10wh check
+```
+
+See the command description:
+
+```bash
+{{ ydb-cli }} workload tpcc check --help
+```
+
+### Available options { #check_options }
+
+| Name                         | Description                                                                                                         | Default value |
+|------------------------------|---------------------------------------------------------------------------------------------------------------------|---------------|
+| `--warehouses` or `-w`       | A number of TPC-C warehouses.                                                                                       | 10            |
+| `--just-imported`            | Turns on additional checks. Should be used only when data has been just imported and no runs have been done yet.    |               |

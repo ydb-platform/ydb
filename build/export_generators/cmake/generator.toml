@@ -229,6 +229,16 @@ add_values=[{attr="includes", values=["cmake/bison.cmake"]}]
 
 [[rules]]
 attrs=[
+    "conan-requires",
+    "conan-tool_requires",
+    "conan-imports",
+    "conan-options",
+    "conan-generators",
+]
+copy=["cmake/conan_provider.cmake"]
+
+[[rules]]
+attrs=[
     "target_options-privates-option=target_ev_messages",
     "target_options-privates-option=target_proto_messages",
     "target_macroses-macro=target_proto_plugin",

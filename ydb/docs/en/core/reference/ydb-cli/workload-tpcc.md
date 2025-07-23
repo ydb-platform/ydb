@@ -21,13 +21,13 @@ All commands support the common `--path` option, which specifies the path to the
 {{ ydb-cli }} workload tpcc --path tpcc/10wh ...
 ```
 
-### Available options {#common_options}
+### Available Options {#common_options}
 
-| Name             | Description                                       | Default value |
-|------------------|---------------------------------------------------|---------------|
-| `--path` or `-p` | Database path where the benchmark tables are located. | `/`           |
+| Name             | Description                                           | Default value |
+|------------------|-------------------------------------------------------|----------------|
+| `--path` or `-p` | Database path where the benchmark tables are located. | `/`            |
 
-## Initializing a load test { #init }
+## Initializing a Load Test {#init}
 
 Before running the benchmark, create the tables:
 

@@ -147,8 +147,18 @@ jobs:
                   TEST_COUNT=0
                   FULL_URL="${BASE_URL}"
                   while read -r test_name && [ ${TEST_COUNT} -lt ${MAX_TESTS} ]; do
-                    formatted_name=$(echo "${test_name}" | sed 's/ \//')
-                    encoded_name=$(echo "${formatted_name}" | sed 's/ /%20/g' | sed 's/[+]/%2B/g' | sed 's/[\/]/%2F/g' | sed 's/\[/%5B/g' | sed 's/\]/%5D/g')
+                    # Заменяем только первый пробел на слэш для формата suite/test
+                    formatted_name=$(echo "${test_name}" | sed 's/ /\//')
+
+                    # URL-кодируем спецсимволы: пробел, слэш, [, ], плюс, минус
+                    encoded_name=$(echo "${formatted_name}" \
+                      | sed 's/ /%20/g' \
+                      | sed 's/\//%2F/g' \
+                      | sed 's/\[/%5B/g' \
+                      | sed 's/\]/%5D/g' \
+                      | sed 's/+/%2B/g' \
+                      | sed 's/-/%2D/g')
+
                     FULL_URL="${FULL_URL}&full_name=${encoded_name}"
                     TEST_COUNT=$((TEST_COUNT+1))
                   done < mute_update/to_mute.txt

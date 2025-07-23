@@ -396,4 +396,6 @@ message TTableServiceConfig {
     optional bool EnableOlapPushdownProjections = 91  [ default = true ];
 
     optional uint32 DefaultLangVer = 92 [default = 202501];
+
+    optional bool EnableParallelUnionAllConnectionsForExtend = 93  [ default = true ];
 };

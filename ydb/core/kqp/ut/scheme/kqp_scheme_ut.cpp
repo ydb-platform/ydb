@@ -8370,10 +8370,21 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         }
     }
 
-    Y_UNIT_TEST(CreateAsyncReplicationWithCaCert) {
+    Y_UNIT_TEST_TWIN(CreateAsyncReplicationWithCaCert, UseQueryService) {
         TKikimrRunner kikimr;
+        auto queryClient = kikimr.GetQueryClient();
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
+
+        auto executeQuery = [&queryClient, &session](const TString& query) {
+            if constexpr (UseQueryService) {
+                Y_UNUSED(session);
+                return queryClient.ExecuteQuery(query, NQuery::TTxControl::NoTx()).ExtractValueSync();
+            } else {
+                Y_UNUSED(queryClient);
+                return session.ExecuteSchemeQuery(query).ExtractValueSync();
+            }
+        };
 
         // invalid, non-secure mode
         {
@@ -8389,7 +8400,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 );
             )", kikimr.GetEndpoint().c_str());
 
-            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            const auto result = executeQuery(query);
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
             UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToOneLineString(), "CA_CERT has no effect in non-secure mode", result.GetIssues().ToOneLineString());
         }
@@ -8408,7 +8419,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 );
             )", kikimr.GetEndpoint().c_str());
 
-            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            const auto result = executeQuery(query);
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
     }

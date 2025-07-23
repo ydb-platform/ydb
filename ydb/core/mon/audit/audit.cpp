@@ -1,4 +1,9 @@
 #include "audit.h"
+<<<<<<< HEAD
+=======
+#include "audit_force.h"
+#include "url_tree.h"
+>>>>>>> ea31ec8811c (audit log http)
 
 #include <ydb/core/audit/audit_log.h>
 #include <ydb/core/base/appdata.h>
@@ -42,12 +47,31 @@ namespace {
     }
 }
 
+<<<<<<< HEAD
+=======
+bool TAuditCtx::NeedAudit() const {
+    return Need;
+}
+
+>>>>>>> ea31ec8811c (audit log http)
 void TAuditCtx::AddAuditLogPart(TStringBuf name, const TString& value) {
     Parts.emplace_back(name, value);
 }
 
+<<<<<<< HEAD
 bool TAuditCtx::CheckAuditConditions(const TString& method) {
     return false; // change when audit config is ready
+=======
+bool TAuditCtx::CheckAuditConditions(const TString& method, const TString& url, const TCgiParameters& params) {
+    // if (!NKikimr::AppData()->AuditConfig.GetMonitoringAudit()) {
+    //     return false;
+    // }
+
+    // OPTIONS are not audited
+    if (method == "OPTIONS") {
+        return false;
+    }
+>>>>>>> ea31ec8811c (audit log http)
 
     // only modifying methods are audited
     static const THashSet<TString> MODIFYING_METHODS = {"POST", "PUT", "DELETE"};
@@ -55,9 +79,16 @@ bool TAuditCtx::CheckAuditConditions(const TString& method) {
         return true;
     }
 
+<<<<<<< HEAD
     // OPTIONS are not audited
     if (method == "OPTIONS") {
         return false;
+=======
+    // force audit for specific URLs
+    static const auto FORCE_AUDIT_URL_PATTERN = CreateAuditUrlPattern();
+    if (FORCE_AUDIT_URL_PATTERN.Match(url, params)) {
+        return true;
+>>>>>>> ea31ec8811c (audit log http)
     }
 
     return false;
@@ -69,7 +100,11 @@ void TAuditCtx::InitAudit(const NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPt
     const TString url(request->URL.Before('?'));
     const auto params = request->URL.After('?');
     const auto cgiParams = TCgiParameters(params);
+<<<<<<< HEAD
     if (!(Need = CheckAuditConditions(method))) {
+=======
+    if (!(Need = CheckAuditConditions(method, url, cgiParams))) {
+>>>>>>> ea31ec8811c (audit log http)
         return;
     }
 
@@ -90,7 +125,11 @@ void TAuditCtx::InitAudit(const NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPt
 }
 
 void TAuditCtx::AddAuditLogParts(const TIntrusiveConstPtr<NACLib::TUserToken>& userToken) {
+<<<<<<< HEAD
     if (!Need) {
+=======
+    if (!NeedAudit()) {
+>>>>>>> ea31ec8811c (audit log http)
         return;
     }
     AddAuditLogPart("subject", userToken->GetUserSID());
@@ -98,7 +137,11 @@ void TAuditCtx::AddAuditLogParts(const TIntrusiveConstPtr<NACLib::TUserToken>& u
 }
 
 void TAuditCtx::FinishAudit(const NHttp::THttpOutgoingResponsePtr& response) {
+<<<<<<< HEAD
     if (!Need) {
+=======
+    if (!NeedAudit()) {
+>>>>>>> ea31ec8811c (audit log http)
         return;
     }
     auto status = GetStatus(response);

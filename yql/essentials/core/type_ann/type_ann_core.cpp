@@ -7076,6 +7076,45 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         return IGraphTransformer::TStatus::Ok;
     }
 
+    IGraphTransformer::TStatus RaiseErrorWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+        Y_UNUSED(output);
+        if (!EnsureArgsCount(*input, 1, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (!EnsureAtom(input->Head(), ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), input->Head().Content()));
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    IGraphTransformer::TStatus EnsureTypeKindWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+        if (!EnsureArgsCount(*input, 2, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (!EnsureComputable(input->Head(), ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (!EnsureAtom(input->Tail(), ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (ToString(input->Head().GetTypeAnn()->GetKind()) != input->Tail().Content()) {
+            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
+                TStringBuilder() << "Expected type kind: " <<
+                    input->Tail().Content() << ", but got: " <<
+                    input->Head().GetTypeAnn()->GetKind()));
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        output = input->HeadPtr();
+        return IGraphTransformer::TStatus::Repeat;
+    }
+
     IGraphTransformer::TStatus ToIndexDictWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
         if (!EnsureArgsCount(*input, 1, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
@@ -12824,6 +12863,8 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["EnsureConvertibleTo"] = &TypeAssertWrapper<false>;
         Functions["EnsureTupleSize"] = &TupleSizeAssertWrapper;
         Functions["Ensure"] = &EnsureWrapper;
+        Functions["RaiseError"] = &RaiseErrorWrapper;
+        Functions["EnsureTypeKind"] = &EnsureTypeKindWrapper;
         Functions["TryMember"] = &TryMemberWrapper;
         Functions["ToIndexDict"] = &ToIndexDictWrapper;
         Functions["ToDict"] = &ToDictWrapper;

@@ -62,7 +62,7 @@ namespace NSQLComplete {
             return pos != TStringBuf::npos ? pos : 0;
         }
 
-        RE2 SectionHeaderRegex_{R"re(## ([^#]+)(\s+{(#[a-z\-_]+)})?)re"};
+        RE2 SectionHeaderRegex_{R"re(## ([^#]+)(\s+{(#[a-z0-9\-_]+)})?)re"};
         bool IsSkipping_ = true;
         TMarkdownSection Section_;
     };

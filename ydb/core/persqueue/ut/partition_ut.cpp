@@ -1747,7 +1747,7 @@ ui64 TPartitionTxTestHelper::AddAndSendNormalWrite(
 
 auto TPartitionTxTestHelper::AddWriteTxImpl(const TSrcIdMap& srcIdsAffected, ui64 txId, ui64 step) {
     auto id = NextActId++;
-    TTestUserAct act{.IsImmediateTx = (step != 0), .TxId = txId, .SupportivePartitionId = CreateFakePartition()};
+    TTestUserAct act{.IsImmediateTx = (step == 0), .TxId = txId, .SupportivePartitionId = CreateFakePartition()};
     NPQ::TSourceIdMap srcIdMap;
 
     for (const auto& [key, val] : srcIdsAffected) {

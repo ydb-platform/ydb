@@ -680,15 +680,15 @@ void TPCCChecker::CheckSync() {
     // Each member starts multiple async checks. To evenly load the cluster we
     // split checks into such "batches" and execute batch-by-batch
     std::vector<void (TPCCChecker::*)(TQueryClient&)> checkFunctions = {
-        //&TPCCChecker::BaseCheck,
-        //&TPCCChecker::ConsistencyCheckPart1,
-        //&TPCCChecker::ConsistencyCheckPart2,
-        //&TPCCChecker::ConsistencyCheck3324,
+        &TPCCChecker::BaseCheck,
+        &TPCCChecker::ConsistencyCheckPart1,
+        &TPCCChecker::ConsistencyCheckPart2,
+        &TPCCChecker::ConsistencyCheck3324,
         &TPCCChecker::ConsistencyCheck3325,
-        //&TPCCChecker::ConsistencyCheck3326,
+        &TPCCChecker::ConsistencyCheck3326,
         //&TPCCChecker::ConsistencyCheck3327, //mem
-        //&TPCCChecker::ConsistencyCheck3328, // possibly fails
-        //&TPCCChecker::ConsistencyCheck3329, // possibly fails (similar to 3328)
+        &TPCCChecker::ConsistencyCheck3328,
+        &TPCCChecker::ConsistencyCheck3329,
         //&TPCCChecker::ConsistencyCheck33210, // mem
     };
 
@@ -835,15 +835,16 @@ void TPCCChecker::ConsistencyCheck3325(TQueryClient& client) {
             $warehouse_to = {};
 
             $missing_in_order =
-            SELECT no.NO_W_ID AS W_ID, no.NO_D_ID AS D_ID, no.NO_O_ID AS O_ID
+            SELECT no.NO_W_ID AS W_ID, no.NO_D_ID AS D_ID, no.NO_O_ID AS O_ID, o.O_W_ID as O_W_ID, o.O_CARRIER_ID as CID
             FROM `{}` AS no
             LEFT JOIN (
-                SELECT * FROM `{}`
+                SELECT O_W_ID as O_W_ID, O_D_ID as O_D_ID, O_ID as O_ID, O_CARRIER_ID as O_CARRIER_ID FROM `{}`
                 WHERE O_W_ID >= $warehouse_from AND O_W_ID <= $warehouse_to
             ) AS o
             ON no.NO_W_ID = o.O_W_ID AND no.NO_D_ID = o.O_D_ID AND no.NO_O_ID = o.O_ID
             WHERE no.NO_W_ID >= $warehouse_from AND no.NO_W_ID <= $warehouse_to
-            AND (o.O_W_ID IS NULL OR o.O_CARRIER_ID IS NOT NULL);
+            AND (o.O_W_ID IS NULL OR (o.O_CARRIER_ID IS NOT NULL AND o.O_CARRIER_ID != 0))
+            LIMIT 1;
 
             $missing_in_new_order =
             SELECT o.O_W_ID AS W_ID, o.O_D_ID AS D_ID, o.O_ID AS O_ID
@@ -856,7 +857,8 @@ void TPCCChecker::ConsistencyCheck3325(TQueryClient& client) {
                 WHERE NO_W_ID >= $warehouse_from AND NO_W_ID <= $warehouse_to
             ) AS no
             ON o.O_W_ID = no.NO_W_ID AND o.O_D_ID = no.NO_D_ID AND o.O_ID = no.NO_O_ID
-            WHERE o.O_CARRIER_ID IS NULL AND no.NO_W_ID IS NULL;
+            WHERE (o.O_CARRIER_ID IS NULL OR o.O_CARRIER_ID == 0) AND no.NO_W_ID IS NULL
+            LIMIT 1;
 
             SELECT *
             FROM $missing_in_order
@@ -1048,11 +1050,10 @@ void TPCCChecker::ConsistencyCheck3329(TQueryClient& client) {
         GROUP BY H_W_ID, H_D_ID;
 
         -- Join with district and compare D_YTD to summed H_AMOUNT
-        SELECT *
         SELECT h.W_ID, h.D_ID, h.SUM_H_AMOUNT, ABS(d.D_YTD - h.SUM_H_AMOUNT) as delta
         FROM `{}` as d
         JOIN $history_sums AS h
-        ON D_W_ID = h.W_ID AND D_ID = h.D_ID
+        ON d.D_W_ID = h.W_ID AND d.D_ID = h.D_ID
         WHERE ABS(d.D_YTD - h.SUM_H_AMOUNT) > 1e-3
         LIMIT 1;
     )", Config.Path.c_str(), TABLE_HISTORY, TABLE_DISTRICT);

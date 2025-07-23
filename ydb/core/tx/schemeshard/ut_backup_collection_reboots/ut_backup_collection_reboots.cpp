@@ -511,7 +511,7 @@ Y_UNIT_TEST_SUITE(TBackupCollectionWithRebootsTests) {
         });
     }
 
-     Y_UNIT_TEST(BackupCycleMultiTableBackupCollectionWithReboots) {
+    Y_UNIT_TEST(BackupCycleMultiTableBackupCollectionWithReboots) {
         TTestWithReboots t;
         t.EnvOpts = TTestEnvOptions().EnableBackupService(true);
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {

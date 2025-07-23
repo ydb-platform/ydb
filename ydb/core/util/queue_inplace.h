@@ -102,29 +102,26 @@ public:
     }
 
     void Push(const T& x) {
-        Grow();
-        ::new (&WriteTo->Entries[WritePosition]) T(x);
+        ::new (NewEntry()) T(x);
         ++WritePosition;
         ++Size;
     }
 
     void Push(T&& x) noexcept {
-        Grow();
-        ::new (&WriteTo->Entries[WritePosition]) T(std::move(x));
+        ::new (NewEntry()) T(std::move(x));
         ++WritePosition;
         ++Size;
     }
 
     template<class... TArgs>
     T& Emplace(TArgs&&... args) {
-        Grow();
-        T& result = *::new (&WriteTo->Entries[WritePosition]) T(std::forward<TArgs>(args)...);
+        T& result = *::new (NewEntry()) T(std::forward<TArgs>(args)...);
         ++WritePosition;
         ++Size;
         return result;
     }
 
-    T* Head() {
+    T* Head() noexcept {
         TChunk* head = ReadFrom;
         if (head == WriteTo && ReadPosition == WritePosition) {
             // Note: this also handles ReadFrom == WriteTo == nullptr
@@ -144,16 +141,15 @@ public:
     }
 
     void Pop() {
-        T* x = Head();
-        Y_DEBUG_ABORT_UNLESS(x);
-        std::destroy_at(x);
-        ++ReadPosition;
-        --Size;
+        if (T* x = Head()) [[likely]] {
+            std::destroy_at(x);
+            ++ReadPosition;
+            --Size;
+        }
     }
 
     T PopDefault() {
-        T* x = Head();
-        if (x) {
+        if (T* x = Head()) [[likely]] {
             T result(std::move(*x));
             std::destroy_at(x);
             ++ReadPosition;
@@ -173,7 +169,7 @@ public:
     }
 
 private:
-    void Grow() {
+    void* NewEntry() {
         if (WriteTo) [[likely]] {
             if (WritePosition == TChunk::EntriesCount) [[unlikely]] {
                 TChunk* next = new TChunk;
@@ -185,5 +181,6 @@ private:
             // Note: ReadPosition == WritePosition == 0
             ReadFrom = WriteTo = new TChunk;
         }
+        return &WriteTo->Entries[WritePosition];
     }
 };

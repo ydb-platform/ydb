@@ -99,7 +99,7 @@ Y_UNIT_TEST_SUITE(TQueueInplaceTests) {
         UNIT_ASSERT(!e);
     }
 
-    Y_UNIT_TEST(PopNTimes) {
+    Y_UNIT_TEST(PopTooManyTimes) {
         using TQueueType = TQueueInplace<std::unique_ptr<int>, 32>;
 
         TQueueType queue;
@@ -109,6 +109,7 @@ Y_UNIT_TEST_SUITE(TQueueInplaceTests) {
         queue.Push(std::make_unique<int>(13));
         UNIT_ASSERT(queue.GetSize() == 4);
 
+        queue.Pop();
         queue.Pop();
         queue.Pop();
         queue.Pop();

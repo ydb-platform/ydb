@@ -544,15 +544,18 @@ TFuture<void> BaseCheckHistoryTable(TQueryClient& client, const TString& path, i
 
 // based on checks in TPC-C for CockroachDB
 
-TFuture<void> CheckNoRows(TQueryClient& client, const TString& query) {
+TFuture<void> CheckNoRows(TQueryClient& client, const TString& query, const TString& description = {}) {
     return client.RetryQuery([query](TSession session) {
         return session.ExecuteQuery(query, TTxControl::NoTx());
-    }).Apply([](const TFuture<TExecuteQueryResult>& future) {
+    }).Apply([description](const TFuture<TExecuteQueryResult>& future) {
         auto result = future.GetValueSync();
         ThrowIfError(result, TStringBuilder() << "query failed");
 
         TResultSetParser parser(result.GetResultSet(0));
         if (parser.TryNextRow()) {
+            if (!description.empty()) {
+                ythrow yexception() << description;
+            }
             ythrow yexception();
         }
     });
@@ -805,7 +808,9 @@ void TPCCChecker::ConsistencyCheck3324(TQueryClient& client) {
         )", Config.Path.c_str(), TABLE_OORDER, startWh, endWh, TABLE_ORDER_LINE, startWh, endWh);
 
         // because of #21490 we run queries 1 by one
-        auto future = CheckNoRows(client, query);
+        TStringStream ss;
+        ss << "w_id_from=" << startWh << ", w_id_to=" << endWh;
+        auto future = CheckNoRows(client, query, ss.Str());
         future.Wait();
         rangeFutures.push_back(future);
     }
@@ -864,7 +869,9 @@ void TPCCChecker::ConsistencyCheck3325(TQueryClient& client) {
 
         // because of #21490 we run queries 1 by one
         // also these queries consume a lot of memory, so probably 1 by one is better.
-        auto future = CheckNoRows(client, query);
+        TStringStream ss;
+        ss << "w_id_from=" << startWh << ", w_id_to=" << endWh;
+        auto future = CheckNoRows(client, query, ss.Str());
         future.Wait();
         rangeFutures.push_back(future);
     }
@@ -934,7 +941,10 @@ void TPCCChecker::ConsistencyCheck3326(TQueryClient& client) {
         )", Config.Path.c_str(), startWh, endWh, TABLE_ORDER_LINE, TABLE_OORDER, TABLE_OORDER
         );
 
-        auto future = CheckNoRows(client, query);
+        // because of #21490 we run queries 1 by one
+        TStringStream ss;
+        ss << "w_id_from=" << startWh << ", w_id_to=" << endWh;
+        auto future = CheckNoRows(client, query, ss.Str());
         future.Wait();
         rangeFutures.push_back(future);
     }
@@ -986,7 +996,10 @@ void TPCCChecker::ConsistencyCheck3327(TQueryClient& client) {
         )", Config.Path.c_str(), startWh, endWh,
            TABLE_ORDER_LINE, TABLE_OORDER);
 
-        auto future = CheckNoRows(client, query);
+        // because of #21490 we run queries 1 by one
+        TStringStream ss;
+        ss << "w_id_from=" << startWh << ", w_id_to=" << endWh;
+        auto future = CheckNoRows(client, query, ss.Str());
         future.Wait();
         rangeFutures.push_back(future);
     }
@@ -1108,7 +1121,10 @@ void TPCCChecker::ConsistencyCheck33210(TQueryClient& client) {
         )", Config.Path.c_str(), startWh, endWh,
            TABLE_HISTORY, TABLE_OORDER, TABLE_ORDER_LINE, TABLE_CUSTOMER);
 
-        auto future = CheckNoRows(client, query);
+        // because of #21490 we run queries 1 by one
+        TStringStream ss;
+        ss << "w_id_from=" << startWh << ", w_id_to=" << endWh;
+        auto future = CheckNoRows(client, query, ss.Str());
         future.Wait();
         rangeFutures.push_back(future);
     }
@@ -1150,7 +1166,10 @@ void TPCCChecker::ConsistencyCheck33211(TQueryClient& client) {
         )", Config.Path.c_str(), startWh, endWh,
            TABLE_OORDER, TABLE_NEW_ORDER);
 
-        auto future = CheckNoRows(client, query);
+        // because of #21490 we run queries 1 by one
+        TStringStream ss;
+        ss << "w_id_from=" << startWh << ", w_id_to=" << endWh;
+        auto future = CheckNoRows(client, query, ss.Str());
         future.Wait();
         rangeFutures.push_back(future);
     }
@@ -1200,7 +1219,10 @@ void TPCCChecker::ConsistencyCheck33212(TQueryClient& client) {
         )", Config.Path.c_str(), startWh, endWh,
            TABLE_OORDER, TABLE_ORDER_LINE, TABLE_CUSTOMER);
 
-        auto future = CheckNoRows(client, query);
+        // because of #21490 we run queries 1 by one
+        TStringStream ss;
+        ss << "w_id_from=" << startWh << ", w_id_to=" << endWh;
+        auto future = CheckNoRows(client, query, ss.Str());
         future.Wait();
         rangeFutures.push_back(future);
     }

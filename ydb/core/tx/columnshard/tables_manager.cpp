@@ -109,6 +109,7 @@ bool TTablesManager::InitFromDB(NIceDb::TNiceDb& db, const TTabletStorageInfo* i
             tabletInternalPathIdValue = tabletSchemeShardLocalPathIdValue;
         }
         if (tabletSchemeShardLocalPathIdValue.has_value()) {
+            AFL_VERIFY(tabletInternalPathIdValue.has_value());
             TabletPathId.emplace(TUnifiedPathId::BuildValid(TInternalPathId::FromRawValue(*tabletInternalPathIdValue),
                 TSchemeShardLocalPathId::FromRawValue(*tabletSchemeShardLocalPathIdValue)));
             if (info) {

@@ -135,7 +135,7 @@ Y_UNIT_TEST_SUITE(TabletState) {
         runtime.Send(new IEventHandle(tablet1, sender, new TEvTablet::TEvTabletStateSubscribe(tabletId, /* seqNo */ 1), /* flags */ 0, /* cookie */ 123), 0, true);
         runtime.Send(new IEventHandle(tablet1, sender, new TEvTablet::TEvTabletStateSubscribe(tabletId, /* seqNo */ 2), /* flags */ 0, /* cookie */ 234), 0, true);
 
-        // We should receive a booting state immediately after subscription
+        // We should receive a booting state with SeqNo=1 immediately after subscription
         {
             auto ev = runtime.GrabEdgeEvent<TEvTablet::TEvTabletStateUpdate>(sender);
             auto* msg = ev->Get();
@@ -146,7 +146,7 @@ Y_UNIT_TEST_SUITE(TabletState) {
             UNIT_ASSERT_VALUES_EQUAL(ev->Cookie, 123u);
         }
 
-        // Same for the second SeqNo (which replaces subscription)
+        // Same for SeqNo=2 (which replaces subscription)
         {
             auto ev = runtime.GrabEdgeEvent<TEvTablet::TEvTabletStateUpdate>(sender);
             auto* msg = ev->Get();
@@ -157,7 +157,7 @@ Y_UNIT_TEST_SUITE(TabletState) {
             UNIT_ASSERT_VALUES_EQUAL(ev->Cookie, 234u);
         }
 
-        // Next we should receive an active state with the user tablet for the second SeqNo
+        // Next we should receive an active state with the user tablet for SeqNo=2
         {
             auto ev = runtime.GrabEdgeEvent<TEvTablet::TEvTabletStateUpdate>(sender);
             auto* msg = ev->Get();
@@ -185,7 +185,7 @@ Y_UNIT_TEST_SUITE(TabletState) {
         runtime.Send(new IEventHandle(tablet1, sender, new TEvTablet::TEvTabletStateSubscribe(tabletId, /* seqNo */ 2), /* flags */ 0, /* cookie */ 234), 0, true);
         runtime.Send(new IEventHandle(tablet1, sender, new TEvTablet::TEvTabletStateSubscribe(tabletId, /* seqNo */ 1), /* flags */ 0, /* cookie */ 123), 0, true);
 
-        // We should receive reply for the second SeqNo, the first out-of-order one should be ignored
+        // We should receive a reply for SeqNo=2, an out-of-order SeqNo=1 should be ignored
         {
             auto ev = runtime.GrabEdgeEvent<TEvTablet::TEvTabletStateUpdate>(sender);
             auto* msg = ev->Get();
@@ -196,7 +196,7 @@ Y_UNIT_TEST_SUITE(TabletState) {
             UNIT_ASSERT_VALUES_EQUAL(ev->Cookie, 234u);
         }
 
-        // Next we should receive an active state with the user tablet for the second SeqNo
+        // Next we should receive an active state with the user tablet for SeqNo=2
         {
             auto ev = runtime.GrabEdgeEvent<TEvTablet::TEvTabletStateUpdate>(sender);
             auto* msg = ev->Get();
@@ -208,29 +208,37 @@ Y_UNIT_TEST_SUITE(TabletState) {
         }
     }
 
-    Y_UNIT_TEST(ImplicitUnsubscribeOnDisconnect) {
-        TTestBasicRuntime runtime(2);
+    Y_UNIT_TEST(ExplicitUnsubscribe) {
+        TTestBasicRuntime runtime(1);
         SetupTabletServices(runtime);
 
-        auto sender = runtime.AllocateEdgeActor();
+        auto sender1 = runtime.AllocateEdgeActor();
+        auto sender2 = runtime.AllocateEdgeActor();
         ui64 tabletId = TTestTxConfig::TxTablet0;
 
         auto tablet1 = StartTestTablet(runtime,
             CreateTestTabletInfo(tabletId, TTabletTypes::Dummy),
             [](const TActorId& tablet, TTabletStorageInfo* info) {
                 return new TSimpleTablet(tablet, info);
-            }, /* nodeIdx */ 1);
+            });
 
-        runtime.Send(new IEventHandle(tablet1, sender, new TEvTablet::TEvTabletStateSubscribe(tabletId, /* seqNo */ 2), /* flags */ IEventHandle::FlagSubscribeOnSession, /* cookie */ 234), 0, true);
+        runtime.Send(new IEventHandle(tablet1, sender1, new TEvTablet::TEvTabletStateSubscribe(tabletId, /* seqNo */ 1), /* flags */ 0, /* cookie */ 123), 0, true);
+        runtime.Send(new IEventHandle(tablet1, sender2, new TEvTablet::TEvTabletStateSubscribe(tabletId, /* seqNo */ 2), /* flags */ 0, /* cookie */ 234), 0, true);
 
-        // Connect notification for FlagSubscribeOnSession
+        // We should receive a reply for SeqNo=1
         {
-            auto ev = runtime.GrabEdgeEvent<TEvInterconnect::TEvNodeConnected>(sender);
+            auto ev = runtime.GrabEdgeEvent<TEvTablet::TEvTabletStateUpdate>(sender1);
+            auto* msg = ev->Get();
+            UNIT_ASSERT_VALUES_EQUAL(msg->Record.GetTabletId(), tabletId);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Record.GetSeqNo(), 1u);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Record.GetState(), NKikimrTabletBase::TEvTabletStateUpdate::StateBooting);
+            UNIT_ASSERT_VALUES_EQUAL(msg->GetUserActorId(), TActorId());
+            UNIT_ASSERT_VALUES_EQUAL(ev->Cookie, 123u);
         }
 
-        // We should receive reply for the second SeqNo, the first out-of-order one should be ignored
+        // We should receive a reply for SeqNo=2
         {
-            auto ev = runtime.GrabEdgeEvent<TEvTablet::TEvTabletStateUpdate>(sender);
+            auto ev = runtime.GrabEdgeEvent<TEvTablet::TEvTabletStateUpdate>(sender2);
             auto* msg = ev->Get();
             UNIT_ASSERT_VALUES_EQUAL(msg->Record.GetTabletId(), tabletId);
             UNIT_ASSERT_VALUES_EQUAL(msg->Record.GetSeqNo(), 2u);
@@ -239,9 +247,115 @@ Y_UNIT_TEST_SUITE(TabletState) {
             UNIT_ASSERT_VALUES_EQUAL(ev->Cookie, 234u);
         }
 
-        // Next we should receive an active state with the user tablet for the second SeqNo
+        // Same for the active state for SeqNo=1
         {
-            auto ev = runtime.GrabEdgeEvent<TEvTablet::TEvTabletStateUpdate>(sender);
+            auto ev = runtime.GrabEdgeEvent<TEvTablet::TEvTabletStateUpdate>(sender1);
+            auto* msg = ev->Get();
+            UNIT_ASSERT_VALUES_EQUAL(msg->Record.GetTabletId(), tabletId);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Record.GetSeqNo(), 1u);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Record.GetState(), NKikimrTabletBase::TEvTabletStateUpdate::StateActive);
+            UNIT_ASSERT_VALUES_UNEQUAL(msg->GetUserActorId(), TActorId());
+            UNIT_ASSERT_VALUES_EQUAL(ev->Cookie, 123u);
+        }
+
+        // Same for the active state for SeqNo=2
+        {
+            auto ev = runtime.GrabEdgeEvent<TEvTablet::TEvTabletStateUpdate>(sender2);
+            auto* msg = ev->Get();
+            UNIT_ASSERT_VALUES_EQUAL(msg->Record.GetTabletId(), tabletId);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Record.GetSeqNo(), 2u);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Record.GetState(), NKikimrTabletBase::TEvTabletStateUpdate::StateActive);
+            UNIT_ASSERT_VALUES_UNEQUAL(msg->GetUserActorId(), TActorId());
+            UNIT_ASSERT_VALUES_EQUAL(ev->Cookie, 234u);
+        }
+
+        // Unsubscribe for the first actor
+        runtime.Send(new IEventHandle(tablet1, sender1, new TEvTablet::TEvTabletStateUnsubscribe(tabletId, /* seqNo */ 1), /* flags */ 0, /* cookie */ 123), 0, true);
+
+        // Start a new tablet instance, which will cause the first instance to shutdown
+        auto tablet2 = StartTestTablet(runtime,
+            CreateTestTabletInfo(tabletId, TTabletTypes::Dummy),
+            [](const TActorId& tablet, TTabletStorageInfo* info) {
+                return new TSimpleTablet(tablet, info);
+            });
+        Y_UNUSED(tablet2);
+
+        // We should receive a terminating notification for SeqNo=2
+        {
+            auto ev = runtime.GrabEdgeEvent<TEvTablet::TEvTabletStateUpdate>(sender2);
+            auto* msg = ev->Get();
+            UNIT_ASSERT_VALUES_EQUAL(msg->Record.GetTabletId(), tabletId);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Record.GetSeqNo(), 2u);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Record.GetState(), NKikimrTabletBase::TEvTabletStateUpdate::StateTerminating);
+            UNIT_ASSERT_VALUES_UNEQUAL(msg->GetUserActorId(), TActorId());
+            UNIT_ASSERT_VALUES_EQUAL(ev->Cookie, 234u);
+        }
+
+        // There should be no events for SeqNo=1
+        {
+            auto ev = runtime.GrabEdgeEvent<IEventHandle>(sender1, TDuration::Seconds(1));
+            UNIT_ASSERT_C(!ev, "Unexpected event received by sender1");
+        }
+    }
+
+    Y_UNIT_TEST(ImplicitUnsubscribeOnDisconnect) {
+        TTestBasicRuntime runtime(2);
+        SetupTabletServices(runtime);
+
+        auto sender1 = runtime.AllocateEdgeActor(0);
+        auto sender2 = runtime.AllocateEdgeActor(1);
+        ui64 tabletId = TTestTxConfig::TxTablet0;
+
+        auto tablet1 = StartTestTablet(runtime,
+            CreateTestTabletInfo(tabletId, TTabletTypes::Dummy),
+            [](const TActorId& tablet, TTabletStorageInfo* info) {
+                return new TSimpleTablet(tablet, info);
+            }, /* nodeIdx */ 1);
+
+        runtime.Send(new IEventHandle(tablet1, sender1, new TEvTablet::TEvTabletStateSubscribe(tabletId, /* seqNo */ 1), /* flags */ IEventHandle::FlagSubscribeOnSession, /* cookie */ 123), 0, true);
+        runtime.Send(new IEventHandle(tablet1, sender2, new TEvTablet::TEvTabletStateSubscribe(tabletId, /* seqNo */ 2), /* flags */ IEventHandle::FlagSubscribeOnSession, /* cookie */ 234), 1, true);
+
+        // Connect notification for FlagSubscribeOnSession
+        {
+            auto ev = runtime.GrabEdgeEvent<TEvInterconnect::TEvNodeConnected>(sender1);
+        }
+
+        // We should receive a reply for SeqNo=1
+        {
+            auto ev = runtime.GrabEdgeEvent<TEvTablet::TEvTabletStateUpdate>(sender1);
+            auto* msg = ev->Get();
+            UNIT_ASSERT_VALUES_EQUAL(msg->Record.GetTabletId(), tabletId);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Record.GetSeqNo(), 1u);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Record.GetState(), NKikimrTabletBase::TEvTabletStateUpdate::StateBooting);
+            UNIT_ASSERT_VALUES_EQUAL(msg->GetUserActorId(), TActorId());
+            UNIT_ASSERT_VALUES_EQUAL(ev->Cookie, 123u);
+        }
+
+        // We should receive a reply for SeqNo=2
+        {
+            auto ev = runtime.GrabEdgeEvent<TEvTablet::TEvTabletStateUpdate>(sender2);
+            auto* msg = ev->Get();
+            UNIT_ASSERT_VALUES_EQUAL(msg->Record.GetTabletId(), tabletId);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Record.GetSeqNo(), 2u);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Record.GetState(), NKikimrTabletBase::TEvTabletStateUpdate::StateBooting);
+            UNIT_ASSERT_VALUES_EQUAL(msg->GetUserActorId(), TActorId());
+            UNIT_ASSERT_VALUES_EQUAL(ev->Cookie, 234u);
+        }
+
+        // Same for the active state for SeqNo=1
+        {
+            auto ev = runtime.GrabEdgeEvent<TEvTablet::TEvTabletStateUpdate>(sender1);
+            auto* msg = ev->Get();
+            UNIT_ASSERT_VALUES_EQUAL(msg->Record.GetTabletId(), tabletId);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Record.GetSeqNo(), 1u);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Record.GetState(), NKikimrTabletBase::TEvTabletStateUpdate::StateActive);
+            UNIT_ASSERT_VALUES_UNEQUAL(msg->GetUserActorId(), TActorId());
+            UNIT_ASSERT_VALUES_EQUAL(ev->Cookie, 123u);
+        }
+
+        // Same for the active state for SeqNo=2
+        {
+            auto ev = runtime.GrabEdgeEvent<TEvTablet::TEvTabletStateUpdate>(sender2);
             auto* msg = ev->Get();
             UNIT_ASSERT_VALUES_EQUAL(msg->Record.GetTabletId(), tabletId);
             UNIT_ASSERT_VALUES_EQUAL(msg->Record.GetSeqNo(), 2u);
@@ -255,12 +369,18 @@ Y_UNIT_TEST_SUITE(TabletState) {
 
         // Disconnect notification for FlagSubscribeOnSession
         {
-            auto ev = runtime.GrabEdgeEvent<TEvInterconnect::TEvNodeDisconnected>(sender);
+            auto ev = runtime.GrabEdgeEvent<TEvInterconnect::TEvNodeDisconnected>(sender1);
         }
 
         // There should be no more events in the queue
         {
-            auto ev = runtime.GrabEdgeEvent<IEventHandle>(sender, TDuration::MilliSeconds(1));
+            auto ev = runtime.GrabEdgeEvent<IEventHandle>(sender1, TDuration::MilliSeconds(1));
+            UNIT_ASSERT_C(!ev, "Unexpected event received");
+        }
+
+        // There should be no more events in the queue
+        {
+            auto ev = runtime.GrabEdgeEvent<IEventHandle>(sender2, TDuration::MilliSeconds(1));
             UNIT_ASSERT_C(!ev, "Unexpected event received");
         }
 
@@ -272,10 +392,21 @@ Y_UNIT_TEST_SUITE(TabletState) {
             }, /* nodeIdx */ 1);
         Y_UNUSED(tablet2);
 
-        // There should be no events for the subscription
+        // We should receive a terminating notification for SeqNo=2
         {
-            auto ev = runtime.GrabEdgeEvent<IEventHandle>(sender, TDuration::Seconds(1));
-            UNIT_ASSERT_C(!ev, "Unexpected envet received");
+            auto ev = runtime.GrabEdgeEvent<TEvTablet::TEvTabletStateUpdate>(sender2);
+            auto* msg = ev->Get();
+            UNIT_ASSERT_VALUES_EQUAL(msg->Record.GetTabletId(), tabletId);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Record.GetSeqNo(), 2u);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Record.GetState(), NKikimrTabletBase::TEvTabletStateUpdate::StateTerminating);
+            UNIT_ASSERT_VALUES_UNEQUAL(msg->GetUserActorId(), TActorId());
+            UNIT_ASSERT_VALUES_EQUAL(ev->Cookie, 234u);
+        }
+
+        // There should be no events for SeqNo=1
+        {
+            auto ev = runtime.GrabEdgeEvent<IEventHandle>(sender1, TDuration::Seconds(1));
+            UNIT_ASSERT_C(!ev, "Unexpected event received by sender1");
         }
     }
 

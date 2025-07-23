@@ -39,7 +39,7 @@ Initialization is performed by the `init` command:
 {{ ydb-cli }} workload clickbench --path clickbench/hits init --store=column
 ```
 
-At this stage, in case of `tpch`, `tpcds` and `clickbench` you can configure the tables to be created:
+At this stage, for `tpch`, `tpcds`, and `clickbench`, you can configure the tables to be created:
 
 * Select the type of tables to be used: row, column, external, etc. (parameter `--store`);
 * Select the types of columns to be used: some data types from the original benchmarks can be represented by multiple {{ ydb-short-name }} data types. In such cases, it is possible to select a specific one with `--string`, `--datetime`, and `--float-mode` parameters.

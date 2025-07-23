@@ -262,7 +262,7 @@ namespace NKikimr::NStorage {
     void TInvokeRequestHandlerActor::ReconfigStateStorage(const NKikimrBlobStorage::TStateStorageConfig& cmd) {
         RunCommonChecks();
 
-        STLOG(PRI_DEBUG, BS_NODE, NW52, "TInvokeRequestHandlerActor::ReconfigStateStorage",
+        STLOG(PRI_DEBUG, BS_NODE, NW67, "TInvokeRequestHandlerActor::ReconfigStateStorage",
                 (StateStorageConfig, cmd));
 
         NKikimrBlobStorage::TStorageConfig config = *Self->StorageConfig;

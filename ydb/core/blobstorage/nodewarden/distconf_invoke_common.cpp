@@ -44,7 +44,8 @@ namespace NKikimr::NStorage {
         }
 
         STLOG(PRI_DEBUG, BS_NODE, NWDC42, "TInvokeRequestHandlerActor::Bootstrap", (Sender, Sender), (Cookie, Cookie),
-            (SelfId, SelfId()), (Binding, Self->Binding), (RootState, Self->RootState));
+            (SelfId, SelfId()), (Binding, Self->Binding), (RootState, Self->RootState), (ErrorReason, Self->ErrorReason),
+            (Record, Event ? &Event->Get()->Record : nullptr));
 
         ParentId = parentId;
         Become(&TThis::StateFunc);
@@ -58,7 +59,7 @@ namespace NKikimr::NStorage {
                         throw TExRace() << "Distconf tree reconfigured during query delivery";
                     }
                 }
-                const ui32 node = Self->Binding->RootNodeId; //Self->Binding->NodeId;
+                const ui32 node = Self->Binding->NodeId;
                 Send(MakeBlobStorageNodeWardenID(node), Event->Release(), IEventHandle::FlagSubscribeOnSession);
                 const auto [it, inserted] = Subscriptions.try_emplace(node);
                 Y_ABORT_UNLESS(inserted);
@@ -69,10 +70,6 @@ namespace NKikimr::NStorage {
                 if (Event) {
                     if (const auto& record = Event->Get()->Record; record.HasSwitchBridgeClusterState()) {
                         PrepareSwitchBridgeClusterState(record.GetSwitchBridgeClusterState());
-                    } else if (record.HasAdvanceClusterStateGeneration()) {
-                        PrepareAdvanceClusterStateGeneration(record.GetAdvanceClusterStateGeneration());
-                    } else if (record.HasMergeUnsyncedPileConfig()) {
-                        PrepareMergeUnsyncedPileConfig(record.GetMergeUnsyncedPileConfig());
                     }
                 }
 
@@ -211,15 +208,6 @@ namespace NKikimr::NStorage {
             case TQuery::kNotifyBridgeSyncFinished:
                 return NotifyBridgeSyncFinished(record.GetNotifyBridgeSyncFinished());
 
-            case TQuery::kMergeUnsyncedPileConfig:
-                return MergeUnsyncedPileConfig();
-
-            case TQuery::kNegotiateUnsyncedConnection:
-                return NegotiateUnsyncedConnection(record.GetNegotiateUnsyncedConnection());
-
-            case TQuery::kAdvanceClusterStateGeneration:
-                return AdvanceClusterStateGeneration();
-
             case TQuery::REQUEST_NOT_SET:
                 throw TExError() << "Request field not set";
         }
@@ -241,7 +229,7 @@ namespace NKikimr::NStorage {
             } else if (auto r = Self->ProcessCollectConfigs(res->MutableCollectConfigs(), std::nullopt); r.ErrorReason) {
                 throw TExError() << *r.ErrorReason;
             } else if (r.ConfigToPropose) {
-                StartProposition(&r.ConfigToPropose.value(), false, r.PropositionBase ? &r.PropositionBase.value() : nullptr);
+                StartProposition(&r.ConfigToPropose.value(), r.PropositionBase ? &r.PropositionBase.value() : nullptr);
             } else {
                 FinishWithSuccess();
             }
@@ -285,7 +273,7 @@ namespace NKikimr::NStorage {
         StartProposition(&config);
     }
 
-    void TInvokeRequestHandlerActor::StartProposition(NKikimrBlobStorage::TStorageConfig *config, bool forceGeneration,
+    void TInvokeRequestHandlerActor::StartProposition(NKikimrBlobStorage::TStorageConfig *config,
             const NKikimrBlobStorage::TStorageConfig *propositionBase) {
         if (Self->CurrentProposition) {
             throw TExCriticalError() << "Config proposition request is already in flight";
@@ -341,7 +329,7 @@ namespace NKikimr::NStorage {
 
         Y_ABORT_UNLESS(InvokeActorQueueGeneration == Self->InvokeActorQueueGeneration);
         auto error = InvokeOtherActor(*Self, &TDistributedConfigKeeper::StartProposition, config, propositionBase,
-            std::move(SpecificBridgePileIds), SelfId(), CheckSyncersAfterCommit, forceGeneration);
+            std::move(SpecificBridgePileIds), SelfId(), CheckSyncersAfterCommit);
         if (error) {
             STLOG(PRI_DEBUG, BS_NODE, NWDC78, "Config update validation failed", (SelfId, SelfId()),
                 (Error, *error), (ProposedConfig, *config));
@@ -356,12 +344,7 @@ namespace NKikimr::NStorage {
         if (errorReason) {
             throw TExError() << "Config proposition failed: " << *errorReason;
         } else {
-            FinishWithSuccess([&](auto *record) {
-                if (MergedConfig) { // copy merged config in case of success, if we have any
-                    MergedConfig->Swap(record->MutableMergeUnsyncedPileConfig()->MutableMergedConfig());
-                }
-            });
-
+            FinishWithSuccess();
             Y_ABORT_UNLESS(InvokeActorQueueGeneration == Self->InvokeActorQueueGeneration);
             InvokeOtherActor(*Self, &TDistributedConfigKeeper::CheckForConfigUpdate);
         }
@@ -402,6 +385,9 @@ namespace NKikimr::NStorage {
     }
 
     void TInvokeRequestHandlerActor::FinishWithError(TResult::EStatus status, const TString& errorReason) {
+        STLOG(PRI_DEBUG, BS_NODE, NWDC61, "FinishWithError", (SelfId, SelfId()), (Status, status),
+            (ErrorReason, errorReason));
+
         if (Event) {
             Finish(Sender, SelfId(), PrepareResult(status, errorReason).release(), 0, Cookie);
         } else if (ReplaceConfig) {
@@ -416,6 +402,11 @@ namespace NKikimr::NStorage {
     }
 
     void TInvokeRequestHandlerActor::PassAway() {
+        if (!LifetimeToken.expired() && Self->CurrentProposition) {
+            Y_ABORT_UNLESS(Self->CurrentProposition->ActorId == SelfId());
+            Y_ABORT_UNLESS(!Self->DeadActorWaitingForProposition);
+            Self->DeadActorWaitingForProposition = true;
+        }
         TActivationContext::Send(new IEventHandle(TEvPrivate::EvOpQueueEnd, 0, ParentId, SelfId(), nullptr,
             BeginRegistered ? InvokeActorQueueGeneration : 0));
         if (ControllerPipeId) {
@@ -524,7 +515,7 @@ namespace NKikimr::NStorage {
         Y_ABORT_UNLESS(ev->Sender == front.ActorId);
 
         if (CurrentProposition && CurrentProposition->ActorId == front.ActorId) {
-            DeadActorWaitingForProposition = true;
+            Y_ABORT_UNLESS(DeadActorWaitingForProposition);
             return; // transaction is still being proposed, although issuer actor is dead
         }
 

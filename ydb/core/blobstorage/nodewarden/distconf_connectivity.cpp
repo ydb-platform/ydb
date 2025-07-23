@@ -15,10 +15,6 @@ namespace NKikimr::NStorage {
 
         std::deque<std::unique_ptr<IEventHandle>> PendingEvents;
 
-        bool HasScepter = false;
-        std::optional<ui32> RootNodeId;
-        bool HasQuorumInPile = false;
-
         static constexpr TStringBuf DistconfKey = "distconf";
 
         using TClusterState = NKikimrBridge::TClusterState;
@@ -223,7 +219,7 @@ namespace NKikimr::NStorage {
                 );
             } else if (!incoming.HasStorageConfig()) {
                 error = "missing mandatory peer storage configuration section in handshake";
-            } else if (auto res = ProcessPeerConfig(*peerBridgePileId, std::move(*incoming.MutableStorageConfig()), outgoing)) {
+            } else if (auto res = CheckPeerConfig(*peerBridgePileId, std::move(*incoming.MutableStorageConfig()))) {
                 error = std::move(res);
             }
 
@@ -238,17 +234,6 @@ namespace NKikimr::NStorage {
             auto& params = ev->Get()->Params;
             NKikimrBlobStorage::TConnectivityPayload incoming;
             if (const auto it = params.find(DistconfKey); it != params.end() && incoming.ParseFromString(it->second)) {
-                if (incoming.HasStorageConfig() && !IsSelfStatic && incoming.HasBridgePileId() &&
-                        TBridgePileId::FromProto(&incoming, &decltype(incoming)::GetBridgePileId) == SelfBridgePileId) {
-                    // TODO(alexvru): apply storage config for trustworthy peers
-                    Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), new TEvNodeWardenUpdateConfigFromPeer(
-                        std::move(*incoming.MutableStorageConfig())));
-                }
-                if (incoming.HasInvokeOnRoot()) {
-                    auto cmdEv = std::make_unique<TEvNodeConfigInvokeOnRoot>();
-                    cmdEv->Record.Swap(incoming.MutableInvokeOnRoot());
-                    Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), cmdEv.release());
-                }
             }
         }
 
@@ -279,20 +264,15 @@ namespace NKikimr::NStorage {
             return std::nullopt;
         }
 
-        std::optional<TString> ProcessPeerConfig(TBridgePileId peerBridgePileId,
-                NKikimrBlobStorage::TStorageConfig&& config, NKikimrBlobStorage::TConnectivityPayload& outgoing) {
-            auto updateConfigAndReturn = [&] {
-                Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), new TEvNodeWardenUpdateConfigFromPeer(std::move(config)));
-                return std::nullopt;
-            };
-
+        std::optional<TString> CheckPeerConfig(TBridgePileId peerBridgePileId,
+                NKikimrBlobStorage::TStorageConfig&& config) {
             Y_ABORT_UNLESS(StorageConfig);
             Y_ABORT_UNLESS(BridgeInfo);
 
             const auto *peerPile = BridgeInfo->GetPile(peerBridgePileId);
             if (peerPile == BridgeInfo->SelfNodePile) {
                 // no extra checks when connecting nodes from the same pile
-                return updateConfigAndReturn();
+                return std::nullopt;
             } else if (peerPile->State == TClusterState::DISCONNECTED) {
                 // peer pile is considered disconnected according to our config; this is incoming connection and we
                 // should definitely drop it
@@ -308,30 +288,8 @@ namespace NKikimr::NStorage {
                 return TStringBuilder() << "peer storage config invalid: " << *error;
             } else if (auto error = ValidateClusterState(*StorageConfig)) {
                 return TStringBuilder() << "local storage config invalid: " << *error;
-            } else if (auto error = CheckStateCompatibility(StorageConfig->GetClusterState(),
-                    config.GetClusterState(), outgoing)) {
+            } else if (auto error = CheckStateCompatibility(StorageConfig->GetClusterState(), config.GetClusterState())) {
                 return error;
-            }
-
-            // we don't have to do anything else if we are both synchronized
-            if (BridgeInfo->SelfNodePile->State == TClusterState::SYNCHRONIZED && peerPile->State == TClusterState::SYNCHRONIZED) {
-                return updateConfigAndReturn();
-            }
-
-            // see if we have unsynced configs for us or for peer; if we don't, then there is no reason to continue checking
-            auto hasUnsyncedStorageConfig = [&](const auto& config, TBridgePileId bridgePileId) {
-                if (BridgeInfo->GetPile(bridgePileId)->State == TClusterState::SYNCHRONIZED) {
-                    return false; // this pile is synchronized, no reason to doubt configs
-                }
-                const auto *pss = GetPileSyncState(config, bridgePileId);
-                return pss && pss->GetUnsyncedStorageConfig();
-            };
-            // we evaluate the worst case, when unsynced states are a bit different on this side and on peer's
-            if (!hasUnsyncedStorageConfig(*StorageConfig, SelfBridgePileId) &&
-                    !hasUnsyncedStorageConfig(*StorageConfig, peerBridgePileId) &&
-                    !hasUnsyncedStorageConfig(config, SelfBridgePileId) &&
-                    !hasUnsyncedStorageConfig(config, peerBridgePileId)) {
-                return updateConfigAndReturn();
             }
 
             // local/peer side is returning from DISCONNECTED state, validate cluster histories to ensure there were no
@@ -345,27 +303,7 @@ namespace NKikimr::NStorage {
                 return error;
             }
 
-            // check if peer config is the same as ours; in this case we can continue transition, otherwise we start
-            // merging machinery
-            if (StorageConfig->GetGeneration() == config.GetGeneration() && StorageConfig->GetFingerprint() == config.GetFingerprint()) {
-                return updateConfigAndReturn();
-            }
-
-            if (BridgeInfo->SelfNodePile->State == TClusterState::SYNCHRONIZED && peerPile->State == TClusterState::NOT_SYNCHRONIZED) {
-                // we are the one active party
-                auto cmdEv = std::make_unique<TEvNodeConfigInvokeOnRoot>();
-                cmdEv->Record.MutableMergeUnsyncedPileConfig()->MutablePileConfig()->CopyFrom(config);
-                Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), cmdEv.release());
-            } else if (BridgeInfo->SelfNodePile->State == TClusterState::NOT_SYNCHRONIZED && peerPile->State == TClusterState::SYNCHRONIZED) {
-                // we are the party trying to join synchronized domain and we have incoming connection from the active
-                // domain -- send 'em our configuration to trigger merging mechanism
-                outgoing.MutableInvokeOnRoot()->MutableMergeUnsyncedPileConfig()->MutablePileConfig()->CopyFrom(*StorageConfig);
-
-                // TODO(alexvru): check if we just need to merge this configuration in?
-                Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), new TEvNodeWardenUpdateConfigFromPeer(std::move(config)));
-            }
-
-            return "configs are different";
+            return std::nullopt;
         }
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -390,23 +328,8 @@ namespace NKikimr::NStorage {
         }
 
         std::optional<TString> CheckStateCompatibility(const NKikimrBridge::TClusterState& my,
-                const NKikimrBridge::TClusterState& peer, NKikimrBlobStorage::TConnectivityPayload& outgoing) {
+                const NKikimrBridge::TClusterState& peer) {
             Y_ABORT_UNLESS(my.PerPileStateSize() == peer.PerPileStateSize());
-            if (!std::ranges::equal(my.GetPerPileState(), peer.GetPerPileState()) ||
-                    my.GetPrimaryPile() != peer.GetPrimaryPile() ||
-                    my.GetPromotedPile() != peer.GetPromotedPile()) {
-                return "ClusterState is different";
-            }
-            if (my.GetGeneration() < peer.GetGeneration()) {
-                // start advancing our generation to the desired one
-                auto cmdEv = std::make_unique<TEvNodeConfigInvokeOnRoot>();
-                cmdEv->Record.MutableAdvanceClusterStateGeneration()->SetGeneration(peer.GetGeneration());
-                Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), cmdEv.release());
-                return "ClusterState generation mismatch: updating local";
-            } else if (peer.GetGeneration() < my.GetGeneration()) {
-                outgoing.MutableInvokeOnRoot()->MutableAdvanceClusterStateGeneration()->SetGeneration(my.GetGeneration());
-                return "ClusterState generation mismatch: updating peer";
-            }
             return std::nullopt;
         }
 
@@ -448,12 +371,9 @@ namespace NKikimr::NStorage {
             return std::nullopt;
         }
 
-        void Handle(TEvPrivate::TEvUpdateRootState::TPtr ev) {
-            auto& msg = *ev->Get();
-            HasScepter = msg.HasScepter;
-            RootNodeId = msg.RootNodeId;
-            HasQuorumInPile = msg.HasQuorumInPile;
-        }
+        ////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+        ////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
         const NKikimrBridge::TClusterStateHistory::TPileSyncState *GetPileSyncState(
                 const NKikimrBlobStorage::TStorageConfig& config, TBridgePileId bridgePileId) {
@@ -479,7 +399,6 @@ namespace NKikimr::NStorage {
             hFunc(TEvInterconnect::TEvPrepareOutgoingConnection, Handle)
             hFunc(TEvInterconnect::TEvCheckIncomingConnection, Handle)
             hFunc(TEvInterconnect::TEvNotifyOutgoingConnectionEstablished, Handle)
-            hFunc(TEvPrivate::TEvUpdateRootState, Handle)
             hFunc(TEvNodeConfigInvokeOnRootResult, Handle)
         )
     };

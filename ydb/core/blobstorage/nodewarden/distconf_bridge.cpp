@@ -157,8 +157,7 @@ namespace NKikimr::NStorage {
 
         if (manage) {
             IssueScatterTask(TActorId(), std::move(task));
-        } else {
-            Y_ABORT_UNLESS(SyncerArrangeInFlight);
+        } else if (SyncerArrangeInFlight) {
             SyncerArrangeInFlight = false;
             if (std::exchange(SyncerArrangePending, false)) {
                 IssueQuerySyncers();
@@ -199,13 +198,17 @@ namespace NKikimr::NStorage {
         }
     }
 
-    bool TDistributedConfigKeeper::UpdateBridgeConfig(NKikimrBlobStorage::TStorageConfig *config) {
+    bool TDistributedConfigKeeper::UpdateBridgeConfig(NKikimrBlobStorage::TStorageConfig *config,
+            const THashMap<TBridgePileId, NKikimrBlobStorage::TStorageConfig*>& persistedConfigForUnsyncedPile) {
         bool changes = false;
+        const ui64 configGeneration = config->GetGeneration();
+
         if (config->HasClusterStateHistory()) {
             Y_DEBUG_ABORT_UNLESS(config->HasClusterState());
             const auto& clusterState = config->GetClusterState();
 
-            auto *entries = config->MutableClusterStateHistory()->MutableUnsyncedEntries();
+            auto *history = config->MutableClusterStateHistory();
+            auto *entries = history->MutableUnsyncedEntries();
             for (int i = 0; i < entries->size(); ++i) {
                 auto *piles = entries->Mutable(i)->MutableUnsyncedPiles();
                 for (int j = 0; j < piles->size(); ++j) {
@@ -225,7 +228,20 @@ namespace NKikimr::NStorage {
                     changes = true;
                 }
             }
+
+            for (size_t i = 0; i < history->PileSyncStateSize(); ++i) {
+                if (auto *pss = history->MutablePileSyncState(i); pss->GetUnsyncedStorageConfig()) {
+                    const auto bridgePileId = TBridgePileId::FromProto(pss, &std::decay_t<decltype(*pss)>::GetBridgePileId);
+                    if (const auto it = persistedConfigForUnsyncedPile.find(bridgePileId); it != persistedConfigForUnsyncedPile.end()) {
+                        NKikimrBlobStorage::TStorageConfig& peerConfig = *it->second;
+                        pss->ClearUnsyncedStorageConfig();
+                        config->SetGeneration(Max(configGeneration, peerConfig.GetGeneration()) + 1);
+                        changes = true;
+                    }
+                }
+            }
         }
+
         return changes;
     }
 
@@ -250,6 +266,50 @@ namespace NKikimr::NStorage {
         for (int i = 0; i < piles->size(); ++i) {
             entry->AddUnsyncedPiles(i);
         }
+    }
+
+    bool TDistributedConfigKeeper::CheckBridgePeerRevPush(const NKikimrBlobStorage::TStorageConfig& peerConfig,
+            ui32 senderNodeId) {
+        if (!BridgeInfo) { // we aren't in bridge mode
+            return true;
+        }
+
+        Y_ABORT_UNLESS(StorageConfig);
+
+        const auto *peerPile = BridgeInfo->GetPileForNode(senderNodeId);
+        if (!peerPile) {
+            AbortBinding(TString(TStringBuilder() << "can't determine peer pile NodeId# " << senderNodeId).data());
+            return false;
+        }
+
+        if (peerPile == BridgeInfo->SelfNodePile) { // accept all configs from the same pile
+            return true;
+        }
+
+        // TODO(alexvru): consider peerConfig's picture of cluster
+
+        if (peerPile->State != NKikimrBridge::TClusterState::SYNCHRONIZED) { // unexpected peer state
+            AbortBinding("bound peer is not in SYNCHRONIZED state");
+            return false;
+        }
+
+        if (BridgeInfo->SelfNodePile->State != NKikimrBridge::TClusterState::NOT_SYNCHRONIZED) { // we are not waiting for sync, accept configs
+            return true;
+        }
+
+        if (!peerConfig.HasClusterStateHistory()) {
+            AbortBinding("peer's config doesn't have ClusterStateHistory");
+            return false;
+        }
+        for (const auto& item : peerConfig.GetClusterStateHistory().GetPileSyncState()) {
+            if (TBridgePileId::FromProto(&item, &std::decay_t<decltype(item)>::GetBridgePileId) != BridgeInfo->SelfNodePile->BridgePileId) {
+                continue; // some other pile
+            } else if (item.GetUnsyncedStorageConfig()) {
+                return false; // we can't let this config in as it is not merged with the primary pile yet
+            }
+        }
+
+        return true; // validation successful
     }
 
 } // NKikimr::NStorage

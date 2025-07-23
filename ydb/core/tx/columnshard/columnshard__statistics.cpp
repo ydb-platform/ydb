@@ -195,7 +195,7 @@ public:
             THashMap<ui32, ui32> indexIdToColumnId;
 
             for (const auto& [id, portionInfo] : result.GetPortions()) {
-                std::shared_ptr<NOlap::ISnapshotSchema> portionSchema = portionInfo.GetPortionInfo().GetSchema(*VersionedIndex);
+                std::shared_ptr<NOlap::ISnapshotSchema> portionSchema = portionInfo->GetPortionInfo().GetSchema(*VersionedIndex);
                 for (const ui32 columnId : ColumnTagsRequested) {
                     auto indexMeta = portionSchema->GetIndexInfo().GetIndexMetaCountMinSketch({ columnId });
 
@@ -206,9 +206,9 @@ public:
                     AFL_VERIFY(indexMeta->GetColumnIds().size() == 1);
                     indexIdToColumnId.emplace(indexMeta->GetIndexId(), columnId);
                     if (!indexMeta->IsInplaceData()) {
-                        portionInfo.FillBlobRangesByStorage(rangesByColumn, portionSchema->GetIndexInfo(), { indexMeta->GetIndexId() });
+                        portionInfo->FillBlobRangesByStorage(rangesByColumn, portionSchema->GetIndexInfo(), { indexMeta->GetIndexId() });
                     } else {
-                        const std::vector<TString> data = portionInfo.GetIndexInplaceDataOptional(indexMeta->GetIndexId());
+                        const std::vector<TString> data = portionInfo->GetIndexInplaceDataOptional(indexMeta->GetIndexId());
 
                         for (const auto& sketchAsString : data) {
                             auto sketch =

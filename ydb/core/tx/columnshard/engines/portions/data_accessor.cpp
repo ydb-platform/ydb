@@ -727,7 +727,7 @@ TConclusion<std::shared_ptr<TPortionDataAccessor>> TPortionDataAccessor::BuildFr
         }
     }
     {
-        std::shared_ptr<TPortionDataAccessor> result = std::make_shared<TPortionDataAccessor>();
+        std::shared_ptr<TPortionDataAccessor> result(new TPortionDataAccessor);
         result->PortionInfo = resultPortion;
         auto parse = result->DeserializeFromProto(proto);
         if (!parse) {

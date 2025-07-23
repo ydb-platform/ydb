@@ -622,6 +622,9 @@ void FillUserJobSpecImpl(NYT::TUserJobSpec& spec,
         spec.AddEnvironment("LD_LIBRARY_PATH", ".");
     }
 
+    if (settings->UseDefaultArrowAllocatorInJobs.Get().GetOrElse(false)) {
+        spec.AddEnvironment("YQL_USE_DEFAULT_ARROW_ALLOCATOR", "1");
+    }
 
     if (!localRun) {
         for (size_t i = 0; i < mrJobSystemLibs.size(); i++) {

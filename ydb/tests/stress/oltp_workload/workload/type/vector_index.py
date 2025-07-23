@@ -207,6 +207,18 @@ class WorkloadVectorIndex(WorkloadBase):
             distance=distance,
             similarity=similarity,
         )
+        if random.randint(0, 1) == 0:
+            self._create_index(
+                index_name=index_name+'Rename',
+                table_path=table_path,
+                vector_type=vector_type,
+                vector_dimension=vector_dimension,
+                levels=levels,
+                clusters=clusters,
+                distance=distance,
+                similarity=similarity,
+            )
+            self.client.replace_index(table_path, index_name+'Rename', index_name)
         self._drop_index(index_name, table_path)
         logger.info('check was completed successfully')
 

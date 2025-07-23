@@ -15,7 +15,12 @@ Y_UNIT_TEST_SUITE(TSchemeShardServerLess) {
 
     Y_UNIT_TEST_FLAG(BaseCase, AlterDatabaseCreateHiveFirst) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableAlterDatabaseCreateHiveFirst(AlterDatabaseCreateHiveFirst));
+        TTestEnv env(runtime,
+            TTestEnvOptions()
+                .EnableAlterDatabaseCreateHiveFirst(AlterDatabaseCreateHiveFirst)
+                .EnableRealSystemViewPaths(false)
+        );
+
         ui64 txId = 100;
 
         TestCreateExtSubDomain(runtime, ++txId,  "/MyRoot",
@@ -48,6 +53,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardServerLess) {
                            {NLs::PathExist,
                             NLs::IsExternalSubDomain("SharedDB"),
                             NLs::ExtractDomainHive(&sharedHive)});
+
         UNIT_ASSERT(sharedHive != 0
                     && sharedHive != (ui64)-1
                     && sharedHive != TTestTxConfig::Hive);

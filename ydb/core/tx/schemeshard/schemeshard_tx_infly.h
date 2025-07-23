@@ -151,6 +151,8 @@ struct TTxState {
         item(TxDropSysView, 104) \
         item(TxCreateLongIncrementalRestoreOp, 105) \
         item(TxChangePathState, 106) \
+        item(TxRotateCdcStream, 107) \
+        item(TxRotateCdcStreamAtTable, 108) \
 
     // TX_STATE_TYPE_ENUM
 
@@ -282,7 +284,8 @@ struct TTxState {
     TStepId MinStep = InvalidStepId;
     TStepId PlanStep = InvalidStepId;
 
-    // TxCopy: Stores path for cdc stream to create in case of ContinuousBackup; uses ExtraData through proto
+    // TxCopy or TxRotateCdcStreamAtTable: Stores path for cdc stream to create in case of ContinuousBackup;
+    // uses ExtraData through proto
     TPathId CdcPathId = InvalidPathId;
     TMaybe<NKikimrSchemeOp::EPathState> TargetPathTargetState;
 
@@ -459,6 +462,10 @@ struct TTxState {
         case TxMoveTableIndex:
         case TxMoveSequence:
             return true;
+        case TxRotateCdcStream:
+            return true;
+        case TxRotateCdcStreamAtTable:
+            return false;
         case TxInvalid:
         case TxAllocatePQ:
             Y_DEBUG_ABORT_UNLESS("UNREACHABLE");
@@ -572,6 +579,8 @@ struct TTxState {
         case TxAlterResourcePool:
         case TxAlterBackupCollection:
         case TxChangePathState:
+        case TxRotateCdcStream:
+        case TxRotateCdcStreamAtTable:
             return false;
         case TxMoveTable:
         case TxMoveTableIndex:
@@ -694,6 +703,8 @@ struct TTxState {
         case TxAlterResourcePool:
         case TxAlterBackupCollection:
         case TxChangePathState:
+        case TxRotateCdcStream:
+        case TxRotateCdcStreamAtTable:
             return false;
         case TxInvalid:
         case TxAllocatePQ:
@@ -774,6 +785,9 @@ struct TTxState {
             case NKikimrSchemeOp::ESchemeOpDropCdcStream: return TxInvalid;
             case NKikimrSchemeOp::ESchemeOpDropCdcStreamImpl: return TxDropCdcStream;
             case NKikimrSchemeOp::ESchemeOpDropCdcStreamAtTable: return TxDropCdcStreamAtTable;
+            case NKikimrSchemeOp::ESchemeOpRotateCdcStream: return TxInvalid;
+            case NKikimrSchemeOp::ESchemeOpRotateCdcStreamImpl: return TxRotateCdcStream;
+            case NKikimrSchemeOp::ESchemeOpRotateCdcStreamAtTable: return TxRotateCdcStreamAtTable;
             case NKikimrSchemeOp::ESchemeOpMoveTable: return TxMoveTable;
             case NKikimrSchemeOp::ESchemeOpMoveTableIndex: return TxMoveTableIndex;
             case NKikimrSchemeOp::ESchemeOpCreateSequence: return TxCreateSequence;
@@ -813,6 +827,7 @@ struct TTxState {
             case NKikimrSchemeOp::ESchemeOpDropBackupCollection: return TxDropBackupCollection;
             case NKikimrSchemeOp::ESchemeOpCreateSysView: return TxCreateSysView;
             case NKikimrSchemeOp::ESchemeOpDropSysView: return TxDropSysView;
+            case NKikimrSchemeOp::ESchemeOpCreateLongIncrementalRestoreOp: return TxCreateLongIncrementalRestoreOp;
             case NKikimrSchemeOp::ESchemeOpChangePathState: return TxChangePathState;
             default: return TxInvalid;
         }

@@ -1924,11 +1924,11 @@ namespace NSchemeShardUT_Private {
     }
 
     void TestBuildVectorIndex(TTestActorRuntime& runtime, ui64 id, ui64 schemeShard, const TString &dbName,
-                              const TString &src, const TString &name, TString column,
+                              const TString &src, const TString &name, TVector<TString> columns,
                               Ydb::StatusIds::StatusCode expectedStatus)
     {
         TestBuildIndex(runtime, id, schemeShard, dbName, src, TBuildIndexConfig{
-            name, NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree, {column}, {}
+            name, NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree, columns, {}
         }, expectedStatus);
     }
 
@@ -2552,16 +2552,6 @@ namespace NSchemeShardUT_Private {
         auto ev = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvCompactTableResult>(sender);
         return ev->Get()->Record;
     }
-
-    NKikimrPQ::TDescribeResponse GetDescribeFromPQBalancer(TTestActorRuntime& runtime, ui64 balancerId) {
-        TActorId edge = runtime.AllocateEdgeActor();
-       TAutoPtr<IEventHandle> handle;
-       runtime.SendToPipe(balancerId, edge, new TEvPersQueue::TEvDescribe(), 0, GetPipeConfigWithRetries());
-       TEvPersQueue::TEvDescribeResponse* result = runtime.GrabEdgeEvent<TEvPersQueue::TEvDescribeResponse>(handle);
-       UNIT_ASSERT(result);
-       auto& rec = result->Record;
-       return rec;
-   }
 
     void SendTEvPeriodicTopicStats(TTestActorRuntime& runtime, ui64 topicId, ui64 generation, ui64 round, ui64 dataSize, ui64 usedReserveSize) {
         TActorId sender = runtime.AllocateEdgeActor();

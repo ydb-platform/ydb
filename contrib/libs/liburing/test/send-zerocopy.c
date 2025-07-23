@@ -843,8 +843,8 @@ int main(int argc, char *argv[])
 
 	if (try_hugepages) {
 		len = LARGE_BUF_SIZE;
-		tx_buffer = aligned_alloc(page_sz, len);
-		rx_buffer = aligned_alloc(page_sz, len);
+		tx_buffer = t_aligned_alloc(page_sz, len);
+		rx_buffer = t_aligned_alloc(page_sz, len);
 
 		if (tx_buffer && rx_buffer) {
 			buffers_iov[BUF_T_LARGE].iov_base = tx_buffer;
@@ -857,8 +857,8 @@ int main(int argc, char *argv[])
 
 	if (!tx_buffer) {
 		len = 2 * page_sz;
-		tx_buffer = aligned_alloc(page_sz, len);
-		rx_buffer = aligned_alloc(page_sz, len);
+		tx_buffer = t_aligned_alloc(page_sz, len);
+		rx_buffer = t_aligned_alloc(page_sz, len);
 
 		if (!tx_buffer || !rx_buffer) {
 			fprintf(stderr, "can't allocate buffers\n");

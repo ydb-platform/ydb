@@ -229,13 +229,15 @@ class TListClusterNodes: public TAdapterActor<
         location.set_rack(in.Location.GetRackId());
         location.set_unit(in.Location.GetUnitId());
 
+        if (const auto bridgePileName = in.Location.GetBridgePileName(); bridgePileName) {
+            location.set_bridge_pile_name(*bridgePileName);
+        }
+
         if (in.Services & EService::DynamicNode) {
             out.mutable_dynamic()->set_tenant(in.Tenant);
         } else {
             out.mutable_storage();
         }
-
-        out.set_pile_id(in.PileId);
     }
 
 public:

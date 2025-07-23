@@ -81,9 +81,6 @@
                                                         "Name": "TableFullScan",
                                                         "Path": "/Root/postgres_jointest/join0.test_plan/int8_tbl",
                                                         "ReadColumns": [
-                                                            "q1"
-                                                        ],
-                                                        "ReadRanges": [
                                                             "q1 (-\u221e, +\u221e)",
                                                             "q2 (-\u221e, +\u221e)"
                                                         ],
@@ -114,13 +111,10 @@
                                                                         "Name": "TableFullScan",
                                                                         "Path": "/Root/postgres_jointest/join0.test_plan/tenk1",
                                                                         "ReadColumns": [
-                                                                            "hundred",
-                                                                            "thousand",
-                                                                            "unique2"
-                                                                        ],
-                                                                        "ReadRanges": [
                                                                             "unique1 (-\u221e, +\u221e)",
-                                                                            "unique2 (-\u221e, +\u221e)"
+                                                                            "unique2 (-\u221e, +\u221e)",
+                                                                            "hundred",
+                                                                            "thousand"
                                                                         ],
                                                                         "ReadRangesPointPrefixLen": "0",
                                                                         "Scan": "Parallel",

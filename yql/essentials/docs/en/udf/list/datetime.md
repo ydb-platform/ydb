@@ -172,7 +172,8 @@ Conversions between `Interval` and various time units.
 * `DateTime::ToHours(Interval64{Flags:AutoMap}) -> Int64`
 * `DateTime::ToMinutes(Interval{Flags:AutoMap}) -> Int32`
 * `DateTime::ToMinutes(Interval64{Flags:AutoMap}) -> Int64`
-* `DateTime::ToSeconds(Interval{Flags:AutoMap}) -> Int32`
+* `DateTime::ToSeconds(Interval{Flags:AutoMap}) -> Int32` Until [2025.03](../../changelog/2025.03.md)
+* `DateTime::ToSeconds(Interval{Flags:AutoMap}) -> Int64` Since [2025.03](../../changelog/2025.03.md)
 * `DateTime::ToSeconds(Interval64{Flags:AutoMap}) -> Int64`
 * `DateTime::ToMilliseconds(Interval{Flags:AutoMap}) -> Int64`
 * `DateTime::ToMilliseconds(Interval64{Flags:AutoMap}) -> Int64`
@@ -184,7 +185,8 @@ Conversions between `Interval` and various time units.
 * `DateTime::Interval64FromHours(Int64{Flags:AutoMap}) -> Interval64`
 * `DateTime::IntervalFromMinutes(Int32{Flags:AutoMap}) -> Interval`
 * `DateTime::Interval64FromMinutes(Int64{Flags:AutoMap}) -> Interval64`
-* `DateTime::IntervalFromSeconds(Int32{Flags:AutoMap}) -> Interval`
+* `DateTime::IntervalFromSeconds(Int32{Flags:AutoMap}) -> Interval` Until [2025.03](../../changelog/2025.03.md)
+* `DateTime::IntervalFromSeconds(Int64{Flags:AutoMap}) -> Interval` Since [2025.03](../../changelog/2025.03.md)
 * `DateTime::Interval64FromSeconds(Int64{Flags:AutoMap}) -> Interval64`
 * `DateTime::IntervalFromMilliseconds(Int64{Flags:AutoMap}) -> Interval`
 * `DateTime::Interval64FromMilliseconds(Int64{Flags:AutoMap}) -> Interval64`

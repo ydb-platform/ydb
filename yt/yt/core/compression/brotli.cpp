@@ -1,7 +1,6 @@
 #include "brotli.h"
 #include "private.h"
 
-#include <yt/yt/core/misc/blob.h>
 #include <yt/yt/core/misc/finally.h>
 
 #include <library/cpp/streams/brotli/brotli.h>

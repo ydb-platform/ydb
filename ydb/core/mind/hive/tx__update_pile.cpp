@@ -16,6 +16,8 @@ public:
     bool Execute(TTransactionContext &txc, const TActorContext&) override {
         BLOG_D("THive::TTxUpdatePiles()::Execute");
         NIceDb::TNiceDb db(txc.DB);
+        bool promotion = false;
+        Y_ENSURE(Self->BridgeInfo);
         for (const auto& wardenPileInfo : Self->BridgeInfo->Piles) {
             auto pileId = wardenPileInfo.BridgePileId;
             auto [it, inserted] = Self->BridgePiles.try_emplace(pileId, wardenPileInfo);
@@ -37,6 +39,9 @@ public:
                     }
                 }
             }
+            if (!pileInfo.IsPromoted && wardenPileInfo.IsBeingPromoted) {
+                promotion = true;
+            }
             pileInfo.State = wardenPileInfo.State;
             pileInfo.IsPrimary = wardenPileInfo.IsPrimary;
             pileInfo.IsPromoted = wardenPileInfo.IsBeingPromoted;
@@ -45,6 +50,16 @@ public:
                 NIceDb::TUpdate<Schema::BridgePile::IsPrimary>(pileInfo.IsPrimary),
                 NIceDb::TUpdate<Schema::BridgePile::IsPromoted>(pileInfo.IsPromoted)
             );
+        }
+
+        for (auto& [pileId, pileInfo] : Self->BridgePiles) {
+            if (promotion && pileInfo.IsPrimary) {
+                pileInfo.Drain = true;
+                db.Table<Schema::BridgePile>().Key(pileInfo.GetId()).Update<Schema::BridgePile::Drain>(true);
+            }
+            if (pileInfo.Drain) {
+                Self->StartHiveDrain(pileId, TDrainSettings{.DownPolicy = NKikimrHive::EDrainDownPolicy::DRAIN_POLICY_NO_DOWN, .Forward = false});
+            }
         }
 
         for (auto* tablet : TabletsToRestart) {

@@ -256,6 +256,7 @@ Y_UNIT_TEST_SUITE(TFileStoreWithReboots) {
 
     Y_UNIT_TEST(SimultaneousCreateDropNfs) { //+
         TTestWithReboots t;
+        t.GetTestEnvOptions().EnableRealSystemViewPaths(false);
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);

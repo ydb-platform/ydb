@@ -35,12 +35,12 @@ public:
 
 private:
     TSettings<double, TIntrusivePtr<TThrottler>> GenerateThrottlers(
-        TSettings<double, TWithTag<TThrottlingSettings>> settings);
+        TSettings<double, TWithTag<TThrottlingSettings>> settings) const;
 
     std::unique_ptr<TSamplingThrottlingControl::TSamplingThrottlingImpl> GenerateSetup();
 
     TVector<TIntrusivePtr<TSamplingThrottlingControl>> IssuedControls;
-    TIntrusivePtr<ITimeProvider> TimeProvider;
+    const TIntrusivePtr<ITimeProvider> TimeProvider;
     TFastRng64 Rng;
     TSettings<double, TIntrusivePtr<TThrottler>> CurrentSettings;
     TMutex ControlMutex;

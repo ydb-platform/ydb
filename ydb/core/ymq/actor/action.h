@@ -1,8 +1,8 @@
 #pragma once
-#include "defs.h"
+#include <ydb/core/ymq/actor/cfg/defs.h>
 
 #include "actor.h"
-#include "cfg.h"
+#include <ydb/core/ymq/actor/cfg/cfg.h>
 #include "error.h"
 #include "events.h"
 #include "limits.h"
@@ -575,7 +575,7 @@ private:
         UserName_ = request.GetAuth().GetUserName();
         FolderId_ = request.GetAuth().GetFolderId();
         UserSID_ = request.GetAuth().GetUserSID();
-        MaskedToken_ = NKikimr::MaskTicket(SecurityToken_);
+        MaskedToken_ = NKikimr::MaskIAMTicket(SecurityToken_);
         AuthType_ = request.GetAuth().GetAuthType();
 
         if (IsCloud() && !FolderId_) {

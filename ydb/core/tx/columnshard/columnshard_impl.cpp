@@ -18,13 +18,11 @@
 #include "blobs_action/storages_manager/manager.h"
 #include "blobs_action/transaction/tx_gc_indexed.h"
 #include "blobs_action/transaction/tx_remove_blobs.h"
-#include "blobs_action/transaction/tx_gc_indexed.h"
 #include "blobs_reader/actor.h"
-#include "bg_tasks/events/events.h"
-
-#include "data_reader/fetcher.h"
-#include "data_reader/contexts.h"
+#include "column_fetching/cache_policy.h"
 #include "data_accessor/manager.h"
+#include "data_reader/contexts.h"
+#include "data_reader/fetcher.h"
 #include "data_sharing/destination/session/destination.h"
 #include "data_sharing/source/session/source.h"
 #include "engines/changes/cleanup_portions.h"
@@ -291,13 +289,13 @@ void TColumnShard::RunEnsureTable(const NKikimrTxColumnShard::TCreateTable& tabl
 
     const auto& schemeShardLocalPathId = TSchemeShardLocalPathId::FromProto(tableProto);
     if (const auto& internalPathId = TablesManager.ResolveInternalPathId(schemeShardLocalPathId)) {
-        LOG_S_DEBUG("EnsureTable for existed pathId: " << TUnifiedPathId(*internalPathId, schemeShardLocalPathId)
+        LOG_S_DEBUG("EnsureTable for existed pathId: " << TUnifiedPathId::BuildValid(*internalPathId, schemeShardLocalPathId)
              << " at tablet " << TabletID());
         return;
     }
     const auto internalPathId = TablesManager.CreateInternalPathId(schemeShardLocalPathId);
 
-    LOG_S_INFO("EnsureTable for pathId: " << TUnifiedPathId(internalPathId, schemeShardLocalPathId)
+    LOG_S_INFO("EnsureTable for pathId: " << TUnifiedPathId::BuildValid(internalPathId, schemeShardLocalPathId)
                                            << " ttl settings: " << tableProto.GetTtlSettings()
                                            << " at tablet " << TabletID());
 
@@ -325,7 +323,7 @@ void TColumnShard::RunEnsureTable(const NKikimrTxColumnShard::TCreateTable& tabl
 
     {
         THashSet<NTiers::TExternalStorageId> usedTiers;
-        TTableInfo table({internalPathId, schemeShardLocalPathId});
+        TTableInfo table(TUnifiedPathId::BuildValid(internalPathId, schemeShardLocalPathId));
         if (tableProto.HasTtlSettings()) {
             const auto& ttlSettings = tableProto.GetTtlSettings();
             *tableVerProto.MutableTtlSettings() = ttlSettings;
@@ -353,10 +351,9 @@ void TColumnShard::RunAlterTable(const NKikimrTxColumnShard::TAlterTable& alterP
     NIceDb::TNiceDb db(txc.DB);
 
     const auto& schemeShardLocalPathId = TSchemeShardLocalPathId::FromProto(alterProto);
-    const auto& internalPathId = TablesManager.ResolveInternalPathId(schemeShardLocalPathId);
-    AFL_VERIFY(internalPathId);
-    Y_ABORT_UNLESS(TablesManager.HasTable(*internalPathId), "AlterTable on a dropped or non-existent table");
-    const auto& pathId = TUnifiedPathId(*internalPathId, schemeShardLocalPathId);
+    const auto& internalPathId = TablesManager.ResolveInternalPathIdVerified(schemeShardLocalPathId);
+    Y_ABORT_UNLESS(TablesManager.HasTable(internalPathId), "AlterTable on a dropped or non-existent table");
+    const auto& pathId = TUnifiedPathId::BuildValid(internalPathId, schemeShardLocalPathId);
     LOG_S_DEBUG("AlterTable for pathId: " << pathId
                                           << " schema: " << alterProto.GetSchema()
                                           << " ttl settings: " << alterProto.GetTtlSettings()
@@ -379,11 +376,11 @@ void TColumnShard::RunAlterTable(const NKikimrTxColumnShard::TAlterTable& alterP
         if (ttlSettings.HasEnabled()) {
             usedTiers = NOlap::TTiering::GetUsedTiers(ttlSettings.GetEnabled());
         }
-        ActivateTiering(*internalPathId, usedTiers);
+        ActivateTiering(internalPathId, usedTiers);
     }
 
     tableVerProto.SetSchemaPresetVersionAdj(alterProto.GetSchemaPresetVersionAdj());
-    TablesManager.AddTableVersion(*internalPathId, version, tableVerProto, schema, db);
+    TablesManager.AddTableVersion(internalPathId, version, tableVerProto, schema, db);
 }
 
 void TColumnShard::RunDropTable(const NKikimrTxColumnShard::TDropTable& dropProto, const NOlap::TSnapshot& version,
@@ -391,16 +388,15 @@ void TColumnShard::RunDropTable(const NKikimrTxColumnShard::TDropTable& dropProt
     NIceDb::TNiceDb db(txc.DB);
 
     const auto& schemeShardLocalPathId = TSchemeShardLocalPathId::FromProto(dropProto);
-    const auto& internalPathId = TablesManager.ResolveInternalPathId(schemeShardLocalPathId);
-    AFL_VERIFY(internalPathId);
-    const auto& pathId = TUnifiedPathId(*internalPathId, schemeShardLocalPathId);
-    if (!TablesManager.HasTable(*internalPathId)) {
+    const auto& internalPathId = TablesManager.ResolveInternalPathIdVerified(schemeShardLocalPathId);
+    const auto& pathId = TUnifiedPathId::BuildValid(internalPathId, schemeShardLocalPathId);
+    if (!TablesManager.HasTable(internalPathId)) {
         LOG_S_DEBUG("DropTable for unknown or deleted pathId: " << pathId << " at tablet " << TabletID());
         return;
     }
 
     LOG_S_DEBUG("DropTable for pathId: " << pathId << " at tablet " << TabletID());
-    TablesManager.DropTable(*internalPathId, version, db);
+    TablesManager.DropTable(internalPathId, version, db);
 }
 
 void TColumnShard::RunMoveTable(const NKikimrTxColumnShard::TMoveTable& proto, const NOlap::TSnapshot& /*version*/,
@@ -452,6 +448,7 @@ void TColumnShard::EnqueueBackgroundActivities(const bool periodic) {
     SharingSessionsManager->Start(*this);
 
     SetupCompaction({});
+    SetupCleanupSchemas();
     SetupCleanupPortions();
     SetupCleanupTables();
     SetupMetadata();
@@ -502,16 +499,12 @@ private:
     const ui64 TabletId;
     const NActors::TActorId ParentActorId;
     std::shared_ptr<NOlap::TColumnEngineChanges> Changes;
-    std::shared_ptr<NOlap::TVersionedIndex> VersionedIndex;
+    std::shared_ptr<const NOlap::TVersionedIndex> VersionedIndex;
     std::shared_ptr<NOlap::NResourceBroker::NSubscribe::TResourcesGuard> ResourcesGuard;
     const TIndexationCounters Counters;
     const NOlap::TSnapshot SnapshotModification;
     const bool NeedBlobs = true;
     const std::shared_ptr<TAtomicCounter> TabletActivity;
-
-    virtual std::optional<ui64> GetMemoryForUsage() const override {
-        return Changes->CalcMemoryForUsage();
-    }
 
     virtual bool IsAborted() const override {
         return !TabletActivity->Val();
@@ -548,9 +541,9 @@ private:
         NActors::TLogContextGuard g(
             NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", TabletId)("parent_id", ParentActorId));
         if (NeedBlobs) {
-            AFL_VERIFY(context.GetResourceGuards().size() == 2);
+            AFL_VERIFY(context.GetResourceGuards().size() == 3);
         } else {
-            AFL_VERIFY(context.GetResourceGuards().size() == 1);
+            AFL_VERIFY(context.GetResourceGuards().size() == 2);
         }
         if (NeedBlobs) {
             Changes->Blobs = context.ExtractBlobs();
@@ -602,7 +595,7 @@ private:
 
 public:
     TCompactionExecutor(const ui64 tabletId, const NActors::TActorId parentActorId, const std::shared_ptr<NOlap::TColumnEngineChanges>& changes,
-        const std::shared_ptr<NOlap::TVersionedIndex>& versionedIndex, const TIndexationCounters& counters,
+        const std::shared_ptr<const NOlap::TVersionedIndex>& versionedIndex, const TIndexationCounters& counters,
         const NOlap::TSnapshot snapshotModification, const std::shared_ptr<TAtomicCounter>& tabletActivity, const bool needBlobs = true)
         : TabletId(tabletId)
         , ParentActorId(parentActorId)
@@ -611,8 +604,7 @@ public:
         , Counters(counters)
         , SnapshotModification(snapshotModification)
         , NeedBlobs(needBlobs)
-        , TabletActivity(tabletActivity)
-    {
+        , TabletActivity(tabletActivity) {
     }
 };
 
@@ -632,8 +624,11 @@ void TColumnShard::StartCompaction(const std::shared_ptr<NPrioritiesQueue::TAllo
     compaction.Start(*this);
 
     auto actualIndexInfo = TablesManager.GetPrimaryIndex()->GetVersionedIndexReadonlyCopy();
+    static std::shared_ptr<NOlap::NGroupedMemoryManager::TStageFeatures> stageFeatures =
+        NOlap::NGroupedMemoryManager::TCompMemoryLimiterOperator::BuildStageFeatures("DEFAULT", 1000000000);
+    auto processGuard = NOlap::NGroupedMemoryManager::TCompMemoryLimiterOperator::BuildProcessGuard({ stageFeatures });
     NOlap::NDataFetcher::TRequestInput rInput(compaction.GetSwitchedPortions(), actualIndexInfo,
-        NOlap::NBlobOperations::EConsumer::GENERAL_COMPACTION, compaction.GetTaskIdentifier());
+        NOlap::NBlobOperations::EConsumer::GENERAL_COMPACTION, compaction.GetTaskIdentifier(), processGuard);
     auto env = std::make_shared<NOlap::NDataFetcher::TEnvironment>(DataAccessorsManager.GetObjectPtrVerified(), StoragesManager);
     NOlap::NDataFetcher::TPortionsDataFetcher::StartFullPortionsFetching(std::move(rInput),
         std::make_shared<TCompactionExecutor>(
@@ -753,8 +748,11 @@ bool TColumnShard::SetupTtl() {
     auto actualIndexInfo = TablesManager.GetPrimaryIndex()->GetVersionedIndexReadonlyCopy();
     for (auto&& i : indexChanges) {
         i->Start(*this);
+        static std::shared_ptr<NOlap::NGroupedMemoryManager::TStageFeatures> stageFeatures =
+            NOlap::NGroupedMemoryManager::TCompMemoryLimiterOperator::BuildStageFeatures("DEFAULT", 1000000000);
+        auto processGuard = NOlap::NGroupedMemoryManager::TCompMemoryLimiterOperator::BuildProcessGuard({ stageFeatures });
         NOlap::NDataFetcher::TRequestInput rInput(
-            i->GetPortionsInfo(), actualIndexInfo, NOlap::NBlobOperations::EConsumer::TTL, i->GetTaskIdentifier());
+            i->GetPortionsInfo(), actualIndexInfo, NOlap::NBlobOperations::EConsumer::TTL, i->GetTaskIdentifier(), processGuard);
         auto env = std::make_shared<NOlap::NDataFetcher::TEnvironment>(DataAccessorsManager.GetObjectPtrVerified(), StoragesManager);
         if (i->NeedConstruction()) {
             NOlap::NDataFetcher::TPortionsDataFetcher::StartFullPortionsFetching(std::move(rInput),
@@ -779,7 +777,7 @@ void TColumnShard::SetupCleanupPortions() {
         return;
     }
     if (BackgroundController.IsCleanupPortionsActive()) {
-        ACFL_DEBUG("background", "cleanup")("skip_reason", "in_progress");
+        ACFL_DEBUG("background", "cleanup_portions")("skip_reason", "in_progress");
         return;
     }
 
@@ -794,8 +792,11 @@ void TColumnShard::SetupCleanupPortions() {
     changes->Start(*this);
 
     auto actualIndexInfo = TablesManager.GetPrimaryIndex()->GetVersionedIndexReadonlyCopy();
-    NOlap::NDataFetcher::TRequestInput rInput(
-        changes->GetPortionsToAccess(), actualIndexInfo, NOlap::NBlobOperations::EConsumer::CLEANUP_PORTIONS, changes->GetTaskIdentifier());
+    static std::shared_ptr<NOlap::NGroupedMemoryManager::TStageFeatures> stageFeatures =
+        NOlap::NGroupedMemoryManager::TCompMemoryLimiterOperator::BuildStageFeatures("DEFAULT", 1000000000);
+    auto processGuard = NOlap::NGroupedMemoryManager::TCompMemoryLimiterOperator::BuildProcessGuard({ stageFeatures });
+    NOlap::NDataFetcher::TRequestInput rInput(changes->GetPortionsToAccess(), actualIndexInfo,
+        NOlap::NBlobOperations::EConsumer::CLEANUP_PORTIONS, changes->GetTaskIdentifier(), processGuard);
     auto env = std::make_shared<NOlap::NDataFetcher::TEnvironment>(DataAccessorsManager.GetObjectPtrVerified(), StoragesManager);
     NOlap::NDataFetcher::TPortionsDataFetcher::StartAccessorPortionsFetching(std::move(rInput),
         std::make_shared<TCompactionExecutor>(
@@ -806,7 +807,7 @@ void TColumnShard::SetupCleanupPortions() {
 void TColumnShard::SetupCleanupTables() {
     Counters.GetCSCounters().OnSetupCleanup();
     if (BackgroundController.IsCleanupTablesActive()) {
-        ACFL_DEBUG("background", "cleanup")("skip_reason", "in_progress");
+        ACFL_DEBUG("background", "cleanup_tables")("skip_reason", "in_progress");
         return;
     }
 
@@ -829,6 +830,111 @@ void TColumnShard::SetupCleanupTables() {
     changes->Start(*this);
 
     Send(SelfId(), ev.release());
+}
+
+class TTxCleanupSchemasWithnoData: public TTransactionBase<TColumnShard> {
+private:
+    std::vector<TTablesManager::TSchemasChain> ChainsToClean;
+    std::set<TTablesManager::TSchemaAddress> AddressesToFetch;
+    THashMap<TTablesManager::TSchemaAddress, TSchemaPreset::TSchemaPresetVersionInfo> Fetched;
+
+    TSchemaPreset::TSchemaPresetVersionInfo ExtractFetched(const TTablesManager::TSchemaAddress addr) {
+        auto it = Fetched.find(addr);
+        AFL_VERIFY(it != Fetched.end());
+        auto result = std::move(it->second);
+        Fetched.erase(it);
+        return result;
+    }
+
+public:
+    TTxCleanupSchemasWithnoData(TColumnShard* self, std::vector<TTablesManager::TSchemasChain>&& chainsToClean)
+        : TBase(self)
+        , ChainsToClean(std::move(chainsToClean)) {
+        for (auto&& i : ChainsToClean) {
+            i.FillAddressesTo(AddressesToFetch);
+        }
+    }
+
+    virtual bool Execute(TTransactionContext& txc, const TActorContext& /*ctx*/) override {
+        NIceDb::TNiceDb db(txc.DB);
+        using SchemaPresetVersionInfo = NColumnShard::Schema::SchemaPresetVersionInfo;
+        std::vector<TTablesManager::TSchemaAddress> toRemove;
+        for (auto&& i : AddressesToFetch) {
+            auto rowset =
+                db.Table<SchemaPresetVersionInfo>().Key(i.GetPresetId(), i.GetSnapshot().GetPlanStep(), i.GetSnapshot().GetTxId()).Select();
+            if (rowset.IsReady()) {
+                toRemove.emplace_back(i);
+                AFL_VERIFY(!rowset.EndOfSet())("address", i.DebugString());
+                TSchemaPreset::TSchemaPresetVersionInfo info;
+                Y_ABORT_UNLESS(info.ParseFromString(rowset.GetValue<Schema::SchemaPresetVersionInfo::InfoProto>()));
+                Fetched.emplace(i, std::move(info));
+            }
+        }
+        for (auto&& i : toRemove) {
+            AddressesToFetch.erase(i);
+        }
+        if (AddressesToFetch.size()) {
+            return false;
+        }
+        for (auto&& i : ChainsToClean) {
+            std::vector<TSchemaPreset::TSchemaPresetVersionInfo> schemasProto;
+            for (auto&& del : i.GetToRemove()) {
+                schemasProto.emplace_back(ExtractFetched(del));
+            }
+            schemasProto.emplace_back(ExtractFetched(i.GetFinish()));
+            auto finalProto = NOlap::TSchemaDiffView::Merge(schemasProto);
+            AFL_VERIFY(schemasProto.back().HasSchema());
+            *finalProto.MutableSchema() = schemasProto.back().GetSchema();
+
+            ui32 idx = 0;
+            for (auto&& del : i.GetToRemove()) {
+                AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "useless_schema_removed")("address", del.DebugString())(
+                    "is_diff", schemasProto[idx].HasDiff())("version",
+                    schemasProto[idx].HasDiff() ? schemasProto[idx].GetDiff().GetVersion() : schemasProto[idx].GetSchema().GetVersion());
+                ++idx;
+                db.Table<SchemaPresetVersionInfo>()
+                    .Key(del.GetPresetId(), del.GetSnapshot().GetPlanStep(), del.GetSnapshot().GetTxId())
+                    .Delete();
+            }
+            AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "schema_updated")("address", i.GetFinish().DebugString())(
+                "new_schema", finalProto.DebugString());
+            db.Table<SchemaPresetVersionInfo>()
+                .Key(i.GetFinish().GetPresetId(), i.GetFinish().GetSnapshot().GetPlanStep(), i.GetFinish().GetSnapshot().GetTxId())
+                .Update(NIceDb::TUpdate<SchemaPresetVersionInfo::InfoProto>(finalProto.SerializeAsString()));
+        }
+        return true;
+    }
+    virtual void Complete(const TActorContext& /*ctx*/) override {
+        NYDBTest::TControllers::GetColumnShardController()->OnCleanupSchemasFinished();
+        Self->BackgroundController.OnCleanupSchemasFinished();
+    }
+    TTxType GetTxType() const override {
+        return TXTYPE_CLEANUP_SCHEMAS;
+    }
+};
+
+void TColumnShard::SetupCleanupSchemas() {
+    if (!NYDBTest::TControllers::GetColumnShardController()->IsBackgroundEnabled(NYDBTest::ICSController::EBackground::CleanupSchemas)) {
+        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "skip_schemas_cleanup")("reason", "disabled");
+        return;
+    }
+    if (!AppDataVerified().FeatureFlags.GetEnableCSSchemasCollapsing()) {
+        return;
+    }
+    Counters.GetCSCounters().OnSetupCleanup();
+    if (BackgroundController.IsCleanupSchemasActive()) {
+        ACFL_DEBUG("background", "cleanup_schemas")("skip_reason", "in_progress");
+        return;
+    }
+
+    std::vector<TTablesManager::TSchemasChain> chainsToClean = TablesManager.ExtractSchemasToClean();
+    if (chainsToClean.empty()) {
+        ACFL_DEBUG("background", "cleanup_schemas")("skip_reason", "no_changes");
+        return;
+    }
+
+    BackgroundController.OnCleanupSchemasStarted();
+    Execute(new TTxCleanupSchemasWithnoData(this, std::move(chainsToClean)), NActors::TActivationContext::AsActorContext());
 }
 
 void TColumnShard::SetupGC() {
@@ -1225,6 +1331,69 @@ public:
 
 void TColumnShard::Handle(NColumnShard::TEvPrivate::TEvAskTabletDataAccessors::TPtr& ev, const TActorContext& /*ctx*/) {
     Execute(new TTxAskPortionChunks(this, ev->Get()->GetCallback(), std::move(ev->Get()->DetachPortions())));
+}
+
+void TColumnShard::Handle(NColumnShard::TEvPrivate::TEvAskColumnData::TPtr& ev, const TActorContext& /*ctx*/) {
+    class TExecutor: public NOlap::NDataFetcher::IFetchCallback {
+    private:
+        std::shared_ptr<NKikimr::NGeneralCache::NSource::IObjectsProcessor<NOlap::NGeneralCache::TColumnDataCachePolicy>> CacheCallback;
+        NOlap::TPortionAddress Portion;
+        TActorId Owner;
+        std::vector<ui32> ColumnIds;
+
+        virtual bool IsAborted() const override {
+            return false;
+        }
+
+        virtual TString GetClassName() const override {
+            return "ColumnData";
+        }
+
+        virtual void DoOnFinished(NOlap::NDataFetcher::TCurrentContext&& context) override {
+            THashMap<NOlap::NGeneralCache::TGlobalColumnAddress, NOlap::NGeneralCache::TColumnDataCachePolicy::TObject> result;
+
+            auto portionsData = context.ExtractAssembledData();
+            AFL_VERIFY(portionsData.size() == 1);
+            std::shared_ptr<NArrow::TGeneralContainer> container = std::make_shared<NArrow::TGeneralContainer>(std::move(portionsData.front()));
+            for (ui64 i = 0; i < ColumnIds.size(); ++i) {
+                result.emplace(NOlap::NGeneralCache::TGlobalColumnAddress(Owner, Portion, ColumnIds[i]), container->GetColumnVerified(i));
+            }
+
+            CacheCallback->OnReceiveData(Owner, std::move(result), {}, {});
+        }
+
+        virtual void DoOnError(const TString& errorMessage) override {
+            THashMap<NOlap::NGeneralCache::TGlobalColumnAddress, TString> errorAddresses;
+            for (const ui32 columnId : ColumnIds) {
+                errorAddresses.emplace(NOlap::NGeneralCache::TGlobalColumnAddress(Owner, Portion, columnId), errorMessage);
+            }
+            CacheCallback->OnReceiveData(Owner, {}, {}, std::move(errorAddresses));
+        }
+
+    public:
+        TExecutor(const std::shared_ptr<NKikimr::NGeneralCache::NSource::IObjectsProcessor<NOlap::NGeneralCache::TColumnDataCachePolicy>>&
+                      cacheCallback, const NOlap::TPortionAddress& portion, const TActorId& owner, const std::vector<ui32>& columnIds)
+            : CacheCallback(cacheCallback)
+            , Portion(std::move(portion))
+            , Owner(owner)
+            , ColumnIds(columnIds)
+        {
+        }
+    };
+
+    for (const auto& [portion, columns] : ev->Get()->GetRequests()) {
+        auto actualIndexInfo = TablesManager.GetPrimaryIndex()->GetVersionedIndexReadonlyCopy();
+        auto portionInfo = TablesManager.MutablePrimaryIndexAsVerified<NOlap::TColumnEngineForLogs>()
+                               .GetGranuleVerified(portion.GetPortionAddress().GetPathId())
+                               .GetPortionVerifiedPtr(portion.GetPortionAddress().GetPortionId());
+        NOlap::NDataFetcher::TRequestInput rInput({ portionInfo }, actualIndexInfo, portion.GetConsumer(), "", nullptr);
+        auto env = std::make_shared<NOlap::NDataFetcher::TEnvironment>(DataAccessorsManager.GetObjectPtrVerified(), StoragesManager);
+
+        NOlap::NDataFetcher::TPortionsDataFetcher::StartAssembledColumnsFetchingNoAllocation(std::move(rInput),
+            std::make_shared<NOlap::NReader::NCommon::TColumnsSetIds>(columns),
+            std::make_shared<TExecutor>(ev->Get()->GetCallback(), portion.GetPortionAddress(), SelfId(), columns), env,
+            NConveyorComposite::ESpecialTaskCategory::Scan);
+    }
 }
 
 void TColumnShard::Handle(NOlap::NDataSharing::NEvents::TEvAckFinishFromInitiator::TPtr& ev, const TActorContext& ctx) {

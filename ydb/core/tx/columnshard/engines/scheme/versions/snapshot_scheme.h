@@ -16,12 +16,19 @@ private:
 protected:
     virtual TString DoDebugString() const override {
         return TStringBuilder() << "("
-            "schema=" << Schema->ToString() << ";" <<
-            "snapshot=" << Snapshot.DebugString() << ";" <<
-            "index_info=" << IndexInfo->DebugString() << ";" <<
-            ")"
-            ;
+                                   "schema="
+                                << Schema->ToString() << ";" << "snapshot=" << Snapshot.DebugString() << ";"
+                                << "index_info=" << IndexInfo->DebugString() << ";" << ")";
     }
+
+    virtual NJson::TJsonValue DoDebugJson() const override {
+        NJson::TJsonValue result = NJson::JSON_MAP;
+        result.InsertValue("schema", Schema->ToString());
+        result.InsertValue("snapshot", Snapshot.DebugString());
+        result.InsertValue("index_info", IndexInfo->DebugString());
+        return result;
+    }
+
 public:
     TSnapshotSchema(TObjectCache<TSchemaVersionId, TIndexInfo>::TEntryGuard&& indexInfo, const TSnapshot& snapshot);
 

@@ -4,6 +4,7 @@ SRCS(
     activity.h
     common.h
     defs.h
+    debug_log.cpp
     env.h
     node_warden_mock_bsc.cpp
     node_warden_mock.h
@@ -11,6 +12,7 @@ SRCS(
     node_warden_mock_state.cpp
     node_warden_mock_state.h
     node_warden_mock_vdisk.h
+    ut_helpers.cpp
 )
 
 PEERDIR(

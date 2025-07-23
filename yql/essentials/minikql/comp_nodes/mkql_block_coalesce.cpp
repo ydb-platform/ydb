@@ -253,7 +253,7 @@ IComputationNode* WrapBlockCoalesce(TCallable& callable, const TComputationNodeF
 
     auto firstItemType = firstType->GetItemType();
     auto secondItemType = secondType->GetItemType();
-    MKQL_ENSURE(firstItemType->IsOptional() || firstItemType->IsPg(), "Expecting Optional or Pg type as first argument");
+    MKQL_ENSURE(firstItemType->IsOptional() || firstItemType->IsPg(), TStringBuilder() << "Expecting Optional or Pg type as first argument, but got: " << *firstItemType);
 
     bool needUnwrapFirst = false;
     if (!firstItemType->IsSameType(*secondItemType)) {
@@ -271,7 +271,7 @@ IComputationNode* WrapBlockCoalesce(TCallable& callable, const TComputationNodeF
     TVector<TType*> argsTypes = {firstType, secondType};
 
     auto kernel = MakeBlockCoalesceKernel(argsTypes, secondType, needUnwrapFirst);
-    return new TBlockFuncNode(ctx.Mutables, "Coalesce", std::move(argsNodes), argsTypes, *kernel, kernel);
+    return new TBlockFuncNode(ctx.Mutables, ToDatumValidateMode(ctx.ValidateMode), "Coalesce", std::move(argsNodes), argsTypes, callable.GetType()->GetReturnType(), *kernel, kernel);
 }
 
 } // namespace NKikimr::NMiniKQL

@@ -104,11 +104,6 @@ void TConsumerOperations::Merge(const TConsumerOperations& rhs)
         return;
     }
 
-    if (rhs.IsKafkaApiOperation()) {
-        KafkaCommitOffset_ = rhs.KafkaCommitOffset_;
-        return;
-    }
-
     if (!rhs.Offsets_.Empty()) {
         for (auto& range : rhs.Offsets_) {
             AddOperationImpl(*rhs.Consumer_, range.first, range.second, rhs.GetForceCommit(), rhs.GetKillReadSession(), rhs.GetOnlyCheckCommitedToFinish(), rhs.GetReadSessionId());
@@ -298,6 +293,11 @@ ui64 TTopicPartitionOperations::GetTabletId() const
     Y_ENSURE(TabletId_.Defined());
 
     return *TabletId_;
+}
+
+bool TTopicPartitionOperations::HasTabletId() const
+{
+    return TabletId_.Defined();
 }
 
 void TTopicPartitionOperations::SetTabletId(ui64 value)
@@ -532,6 +532,17 @@ bool TTopicOperations::ProcessSchemeCacheNavigate(const NSchemeCache::TSchemeCac
             }
         } else {
             builder << "Topic '" << JoinPath(result.Path) << "' is missing";
+
+            status = Ydb::StatusIds::SCHEME_ERROR;
+            message = std::move(builder);
+
+            return false;
+        }
+    }
+
+    for (const auto& [key, operations] : Operations_) {
+        if (!operations.HasTabletId()) {
+            builder << "Topic '" << key.Topic_ << "'. Unknown partition " << key.Partition_;
 
             status = Ydb::StatusIds::SCHEME_ERROR;
             message = std::move(builder);

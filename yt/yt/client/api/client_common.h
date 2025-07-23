@@ -182,6 +182,12 @@ struct TSelectRowsOptions
     std::optional<NCodegen::EExecutionBackend> ExecutionBackend;
     //! Explicitly allow or forbid the usage of row cache.
     std::optional<bool> UseLookupCache;
+    //! Tune batch sizes for row processing.
+    std::optional<i64> RowsetProcessingBatchSize;
+    //! Tune write row batch size.
+    std::optional<i64> WriteRowsetSize;
+    //! Tune join row batch size.
+    std::optional<i64> MaxJoinBatchSize;
     //! Allow queries without any condition on key columns.
     bool AllowFullScan = true;
     //! Allow queries with join condition which implies foreign query with IN operator.

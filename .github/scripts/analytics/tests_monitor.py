@@ -586,7 +586,7 @@ def main():
         df['success_rate'] = df.apply(calculate_success_rate, axis=1).astype(int)
         df['summary'] = df.apply(calculate_summary, axis=1)
         df['owner'] = df['owners'].apply(compute_owner)
-        df['is_test_chunk'] = df['full_name'].str.contains('chunk chunk|chunk\+chunk', regex=True).astype(int)
+        df['is_test_chunk'] = df['full_name'].str.contains(']? chunk|sole chunk|chunk chunk|chunk\+chunk', regex=True).astype(int)
         df['is_muted'] = df['is_muted'].fillna(0).astype(int)
         df['success_rate'].astype(int)
         df['state'] = df.apply(determine_state, axis=1)

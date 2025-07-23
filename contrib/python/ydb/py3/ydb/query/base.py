@@ -137,40 +137,43 @@ def create_execute_query_request(
     parameters: Optional[dict],
     concurrent_result_sets: Optional[bool],
 ) -> ydb_query.ExecuteQueryRequest:
-    syntax = QuerySyntax.YQL_V1 if not syntax else syntax
-    exec_mode = QueryExecMode.EXECUTE if not exec_mode else exec_mode
-    stats_mode = QueryStatsMode.NONE if stats_mode is None else stats_mode
+    try:
+        syntax = QuerySyntax.YQL_V1 if not syntax else syntax
+        exec_mode = QueryExecMode.EXECUTE if not exec_mode else exec_mode
+        stats_mode = QueryStatsMode.NONE if stats_mode is None else stats_mode
 
-    tx_control = None
-    if not tx_id and not tx_mode:
         tx_control = None
-    elif tx_id:
-        tx_control = ydb_query.TransactionControl(
-            tx_id=tx_id,
-            commit_tx=commit_tx,
-            begin_tx=None,
-        )
-    else:
-        tx_control = ydb_query.TransactionControl(
-            begin_tx=ydb_query.TransactionSettings(
-                tx_mode=tx_mode,
-            ),
-            commit_tx=commit_tx,
-            tx_id=None,
-        )
+        if not tx_id and not tx_mode:
+            tx_control = None
+        elif tx_id:
+            tx_control = ydb_query.TransactionControl(
+                tx_id=tx_id,
+                commit_tx=commit_tx,
+                begin_tx=None,
+            )
+        else:
+            tx_control = ydb_query.TransactionControl(
+                begin_tx=ydb_query.TransactionSettings(
+                    tx_mode=tx_mode,
+                ),
+                commit_tx=commit_tx,
+                tx_id=None,
+            )
 
-    return ydb_query.ExecuteQueryRequest(
-        session_id=session_id,
-        query_content=ydb_query.QueryContent.from_public(
-            query=query,
-            syntax=syntax,
-        ),
-        tx_control=tx_control,
-        exec_mode=exec_mode,
-        parameters=parameters,
-        concurrent_result_sets=concurrent_result_sets,
-        stats_mode=stats_mode,
-    )
+        return ydb_query.ExecuteQueryRequest(
+            session_id=session_id,
+            query_content=ydb_query.QueryContent.from_public(
+                query=query,
+                syntax=syntax,
+            ),
+            tx_control=tx_control,
+            exec_mode=exec_mode,
+            parameters=parameters,
+            concurrent_result_sets=concurrent_result_sets,
+            stats_mode=stats_mode,
+        )
+    except BaseException as e:
+        raise issues.ClientInternalError("Unable to prepare execute request") from e
 
 
 def bad_session_handler(func):

@@ -13,20 +13,20 @@ namespace NMiniKQL {
 namespace {
 
 
-class TDqHashAggregate: public TStatefulWideFlowComputationNode<TDqHashAggregate>
+class TDqHashAggregate: public TMutableComputationNode<TDqHashAggregate>
 {
-using TBaseComputation = TStatefulWideFlowComputationNode<TDqHashAggregate>;
+using TBaseComputation = TMutableComputationNode<TDqHashAggregate>;
 public:
     TDqHashAggregate(
         TComputationMutables& mutables,
-        IComputationWideFlowNode* flow,
+        IComputationNode* streamSource,
         NDqHashOperatorCommon::TCombinerNodes&& nodes,
         const TMultiType* usedInputItemType,
         TKeyTypes&& keyTypes,
         const TMultiType* keyAndStateType,
         bool allowSpilling)
-        : TBaseComputation(mutables, flow, EValueRepresentation::Boxed)
-        , Flow(flow)
+        : TBaseComputation(mutables, EValueRepresentation::Boxed)
+        , StreamSource(streamSource)
         , Nodes(std::move(nodes))
         , KeyTypes(std::move(keyTypes))
         , UsedInputItemType(usedInputItemType)
@@ -37,22 +37,20 @@ public:
         Y_UNUSED(AllowSpilling, UsedInputItemType, KeyAndStateType);
     }
 
-    EFetchResult DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx, NUdf::TUnboxedValue*const* output) const {
-        Y_UNUSED(state, ctx, output);
+    NUdf::TUnboxedValue DoCalculate([[maybe_unused]] TComputationContext& ctx) const {
         THROW yexception() << "Not implemented yet";
     }
 
 private:
     void RegisterDependencies() const final {
-        if (const auto flow = this->FlowDependsOn(Flow)) {
-            Nodes.RegisterDependencies(
-                [this, flow](IComputationNode* node){ this->DependsOn(flow, node); },
-                [this, flow](IComputationExternalNode* node){ this->Own(flow, node); }
-            );
-        }
+        DependsOn(StreamSource);
+        Nodes.RegisterDependencies(
+            [this](IComputationNode* node){ this->DependsOn(node); },
+            [this](IComputationExternalNode* node){ this->Own(node); }
+        );
     }
 
-    IComputationWideFlowNode *const Flow;
+    IComputationNode *const StreamSource;
     const NDqHashOperatorCommon::TCombinerNodes Nodes;
     const TKeyTypes KeyTypes;
 
@@ -69,23 +67,19 @@ private:
 IComputationNode* WrapDqHashAggregate(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     TDqHashOperatorParams params = ParseCommonDqHashOperatorParams(callable, ctx);
 
-    const auto flow = LocateNode(ctx.NodeLocator, callable, NDqHashOperatorParams::Flow);
-    auto* wideFlow = dynamic_cast<IComputationWideFlowNode*>(flow);
-    if (!wideFlow) {
-        THROW yexception() << "Expected wide flow.";
-    };
+    const auto inputNode = LocateNode(ctx.NodeLocator, callable, NDqHashOperatorParams::Input);
 
     const TTupleLiteral* operatorParams = AS_VALUE(TTupleLiteral, callable.GetInput(NDqHashOperatorParams::OperatorParams));
     const bool allowSpilling = AS_VALUE(TDataLiteral, operatorParams->GetValue(NDqHashOperatorParams::AggregateParamEnableSpilling))->AsValue().Get<bool>();
 
-    const auto inputType = AS_TYPE(TFlowType, callable.GetInput(NDqHashOperatorParams::Flow).GetStaticType());
+    const auto inputType = AS_TYPE(TStreamType, callable.GetInput(NDqHashOperatorParams::Input).GetStaticType());
     const auto inputItemTypes = GetWideComponents(inputType);
 
     std::vector<TType*> keyAndStateTypes;
     keyAndStateTypes.insert(keyAndStateTypes.end(), params.KeyItemTypes.begin(), params.KeyItemTypes.end());
     keyAndStateTypes.insert(keyAndStateTypes.end(), params.StateItemTypes.begin(), params.StateItemTypes.end());
 
-    return new TDqHashAggregate(ctx.Mutables, wideFlow, std::move(params.Nodes),
+    return new TDqHashAggregate(ctx.Mutables, inputNode, std::move(params.Nodes),
         TMultiType::Create(inputItemTypes.size(), inputItemTypes.data(), ctx.Env),
         std::move(params.KeyTypes),
         TMultiType::Create(keyAndStateTypes.size(),keyAndStateTypes.data(), ctx.Env),

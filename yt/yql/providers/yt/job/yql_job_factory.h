@@ -12,6 +12,6 @@
 namespace NYql {
 
 NKikimr::NMiniKQL::TComputationNodeFactory GetJobFactory(NYql::NCommon::TCodecContext& codecCtx,
-    const TString& optLLVM, const TMkqlIOSpecs* specs, NYT::IReaderImplBase* reader, TJobMkqlWriterImpl* writer);
+    const TString& optLLVM, const TMkqlIOSpecs* specs, NYT::IReaderImplBase* reader, TMkqlWriterImpl* writer, const TString& prefix = "Yt");
 
 } // NYql

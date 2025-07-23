@@ -1200,7 +1200,7 @@ Y_UNIT_TEST_SUITE(TWebLoginService) {
     void AuditLogLoginTest(TTestBasicRuntime& runtime, bool isUserAdmin) {
         std::vector<std::string> lines;
         runtime.AuditLogBackends = CreateTestAuditLogBackends(lines);
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
 
         UNIT_ASSERT_VALUES_EQUAL(lines.size(), 1);   // alter root subdomain
 
@@ -1270,7 +1270,7 @@ Y_UNIT_TEST_SUITE(TWebLoginService) {
         TTestBasicRuntime runtime;
         std::vector<std::string> lines;
         runtime.AuditLogBackends = CreateTestAuditLogBackends(lines);
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
 
         UNIT_ASSERT_VALUES_EQUAL(lines.size(), 1);   // alter root subdomain
 
@@ -1314,7 +1314,7 @@ Y_UNIT_TEST_SUITE(TWebLoginService) {
         runtime.AuditLogBackends = CreateTestAuditLogBackends(lines);
         // Enable and configure ldap auth
         runtime.SetLogPriority(NKikimrServices::LDAP_AUTH_PROVIDER, NActors::NLog::PRI_DEBUG);
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
 
         // configure ldap auth
         auto ldapPort = runtime.GetPortManager().GetPort();  // randomized port
@@ -1410,7 +1410,7 @@ Y_UNIT_TEST_SUITE(TWebLoginService) {
         runtime.AuditLogBackends =CreateTestAuditLogBackends(lines);
         // Enable and configure ldap auth
         runtime.SetLogPriority(NKikimrServices::LDAP_AUTH_PROVIDER, NActors::NLog::PRI_DEBUG);
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
 
         // configure ldap auth
         auto ldapPort = runtime.GetPortManager().GetPort();  // randomized port
@@ -1505,7 +1505,7 @@ Y_UNIT_TEST_SUITE(TWebLoginService) {
         runtime.AuditLogBackends =CreateTestAuditLogBackends(lines);
         // Enable and configure ldap auth
         runtime.SetLogPriority(NKikimrServices::LDAP_AUTH_PROVIDER, NActors::NLog::PRI_DEBUG);
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
 
         // configure ldap auth
         auto ldapPort = runtime.GetPortManager().GetPort();  // randomized port
@@ -1598,10 +1598,10 @@ Y_UNIT_TEST_SUITE(TWebLoginService) {
     Y_UNIT_TEST(AuditLogLdapLoginBadBind) {
         TTestBasicRuntime runtime;
         std::vector<std::string> lines;
-        runtime.AuditLogBackends =CreateTestAuditLogBackends(lines);
+        runtime.AuditLogBackends = CreateTestAuditLogBackends(lines);
         // Enable and configure ldap auth
         runtime.SetLogPriority(NKikimrServices::LDAP_AUTH_PROVIDER, NActors::NLog::PRI_DEBUG);
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
 
         // configure ldap auth
         auto ldapPort = runtime.GetPortManager().GetPort();  // randomized port
@@ -1693,8 +1693,8 @@ Y_UNIT_TEST_SUITE(TWebLoginService) {
     Y_UNIT_TEST(AuditLogLogout) {
         TTestBasicRuntime runtime;
         std::vector<std::string> lines;
-        runtime.AuditLogBackends =CreateTestAuditLogBackends(lines);
-        TTestEnv env(runtime);
+        runtime.AuditLogBackends = CreateTestAuditLogBackends(lines);
+        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
 
         // Add ticket parser to the mix
         {
@@ -1799,7 +1799,7 @@ Y_UNIT_TEST_SUITE(TWebLoginService) {
         TTestBasicRuntime runtime;
         std::vector<std::string> lines;
         runtime.AuditLogBackends = CreateTestAuditLogBackends(lines);
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
         UNIT_ASSERT_VALUES_EQUAL(lines.size(), 1);
         ui64 txId = 100;
 

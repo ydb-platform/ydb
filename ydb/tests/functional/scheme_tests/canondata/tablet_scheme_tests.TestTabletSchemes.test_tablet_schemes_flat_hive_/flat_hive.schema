@@ -789,6 +789,11 @@
                 "ColumnId": 4,
                 "ColumnName": "IsPromoted",
                 "ColumnType": "Bool"
+            },
+            {
+                "ColumnId": 5,
+                "ColumnName": "Drain",
+                "ColumnType": "Bool"
             }
         ],
         "ColumnsDropped": [],
@@ -798,7 +803,8 @@
                     1,
                     2,
                     3,
-                    4
+                    4,
+                    5
                 ],
                 "RoomID": 0,
                 "Codec": 0,

@@ -64,6 +64,7 @@ static bool AsyncReplicationSettingsEntry(std::map<TString, TNodePtr>& out,
         "user",
         "password",
         "password_secret_name",
+        "ca_cert",
     };
 
     TSet<TString> modeSettings = {
@@ -163,6 +164,7 @@ static bool TransferSettingsEntry(std::map<TString, TNodePtr>& out,
         "user",
         "password",
         "password_secret_name",
+        "ca_cert",
         "flush_interval",
         "batch_size_bytes",
     };
@@ -1855,7 +1857,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
 
             std::map<TString, TNodePtr> settings;
             TSqlExpression expr(Ctx_, Mode_);
-            if (!TransferSettings(settings, node.GetRule_transfer_settings11(), expr, true)) {
+            if (node.GetBlock10().HasRule_transfer_settings3() && !TransferSettings(settings, node.GetBlock10().GetRule_transfer_settings3(), expr, true)) {
                 return false;
             }
 
@@ -1863,10 +1865,8 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             const TString source = Id(node.GetRule_object_ref5().GetRule_id_or_at2(), *this).second;
             const TString target = Id(node.GetRule_object_ref7().GetRule_id_or_at2(), *this).second;
             TString transformLambda;
-            if (node.GetBlock8().HasRule_lambda_or_parameter2()) {
-                if (!ParseTransferLambda(transformLambda, node.GetBlock8().GetRule_lambda_or_parameter2())) {
-                    return false;
-                }
+            if (!ParseTransferLambda(transformLambda, node.GetRule_lambda_or_parameter9())) {
+                return false;
             }
 
             AddStatementToBlocks(blocks, BuildCreateTransfer(Ctx_.Pos(), BuildTablePath(prefixPath, id),
@@ -2226,6 +2226,16 @@ bool TSqlQuery::AlterTableAction(const TRule_alter_table_action& node, TAlterTab
 
         break;
     }
+    case TRule_alter_table_action::kAltAlterTableAction18: {
+        // ALTER COLUMN id SET NOT NULL
+        const auto& alterRule = node.GetAlt_alter_table_action18().GetRule_alter_table_alter_column_set_not_null1();
+
+        if (!AlterTableAlterColumnSetNotNull(alterRule, params)) {
+            return false;
+        }
+
+        break;
+    }
 
     case TRule_alter_table_action::ALT_NOT_SET: {
         AltNotImplemented("alter_table_action", node);
@@ -2564,6 +2574,13 @@ bool TSqlQuery::AlterTableAlterColumnDropNotNull(const TRule_alter_table_alter_c
     TString name = Id(node.GetRule_an_id3(), *this);
     const TPosition pos(Context().Pos());
     params.AlterColumns.emplace_back(pos, name, nullptr, false, TVector<TIdentifier>(), false, nullptr, TColumnSchema::ETypeOfChange::DropNotNullConstraint);
+    return true;
+}
+
+bool TSqlQuery::AlterTableAlterColumnSetNotNull(const TRule_alter_table_alter_column_set_not_null& node, TAlterTableParameters& params) {
+    TString name = Id(node.GetRule_an_id3(), *this);
+    const TPosition pos(Context().Pos());
+    params.AlterColumns.emplace_back(pos, name, nullptr, false, TVector<TIdentifier>(), false, nullptr, TColumnSchema::ETypeOfChange::SetNotNullConstraint);
     return true;
 }
 

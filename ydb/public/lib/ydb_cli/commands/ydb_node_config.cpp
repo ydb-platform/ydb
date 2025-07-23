@@ -1,12 +1,7 @@
 #include "ydb_node_config.h"
 #include <util/system/fs.h>
 #include <util/folder/dirut.h>
-
-#include <ydb/library/yaml_config/public/yaml_config.h>
-#include <ydb/library/yaml_config/yaml_config.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/config/config.h>
-
-using namespace NKikimr;
 
 namespace NYdb::NConsoleClient::NNodeConfig {
 
@@ -119,28 +114,6 @@ int TCommandNodeConfigInit::Run(TConfig& config) {
     }
 
     configYaml = TFileInput(ConfigYamlPath).ReadAll();
-
-    try {
-        auto doc = NFyaml::TDocument::Parse(configYaml);
-        auto proto = NKikimr::NYamlConfig::YamlToProto(doc.Root());
-
-        auto swissKnife = NKikimr::NYamlConfig::CreateDefaultConfigSwissKnife();
-        std::vector<TString> issues;
-        auto validationResult = swissKnife->ValidateConfig(proto, issues);
-
-        if (validationResult == NKikimr::NYamlConfig::EValidationResult::Error) {
-             Cerr << "Config validation failed:" << Endl;
-             for (const auto& error : issues) {
-                 Cerr << "ERROR: " << error << Endl;
-             }
-             return EXIT_FAILURE;
-        }
-
-    } catch (const std::exception& e) {
-        Cerr << "Failed to parse and validate config: \n" << e.what() << Endl;
-        return EXIT_FAILURE;
-    }
-
     if (SaveConfig(configYaml, CONFIG_FILE_NAME, ConfigDirPath)){
         Cout << "Initialized cluster config in " << ConfigDirPath << "/" << CONFIG_FILE_NAME << Endl;
         return EXIT_SUCCESS;

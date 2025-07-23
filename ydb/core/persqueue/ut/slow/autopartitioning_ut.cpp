@@ -4,7 +4,7 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <ydb/core/persqueue/partition_key_range/partition_key_range.h>
-#include <ydb/core/persqueue/partition_scale_manager.h>
+#include <ydb/core/persqueue/pqrb/partition_scale_manager.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/test_env.h>
 

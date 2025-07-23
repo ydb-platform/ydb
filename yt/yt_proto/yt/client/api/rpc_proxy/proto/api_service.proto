@@ -321,6 +321,12 @@ enum EQueryState
     QS_FAILED = 8;
 }
 
+enum EJobStderrType
+{
+    JST_USER_JOB_STDERR = 0;
+    JST_GPU_CHECK_STDERR = 1;
+}
+
 // COMPAT(max42).
 // A legacy analog of NYT.NYTree.NProto.TAttributeFilter.
 // It is different in that universal filter is encoded via all = true
@@ -661,6 +667,9 @@ message TReqSelectRows
     optional bool use_lookup_cache = 26;
     optional int64 min_row_count_per_subquery = 27;
     optional int32 expression_builder_version = 28 [default = 1];
+    optional int64 rowset_processing_batch_size = 29;
+    optional int64 write_rowset_size = 30;
+    optional int64 max_join_batch_size = 31;
 
     optional TSuppressableAccessTrackingOptions suppressable_access_tracking_options = 104;
 
@@ -2598,6 +2607,7 @@ message TReqGetJobStderr
     required NYT.NProto.TGuid job_id = 2;
     optional int64 limit = 4;
     optional int64 offset = 5;
+    optional EJobStderrType type = 6;
 }
 
 message TRspGetJobStderr

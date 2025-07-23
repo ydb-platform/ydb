@@ -1,4 +1,6 @@
 #pragma once
+
+#include <ydb/core/base/memory_controller_iface.h>
 #include <ydb/core/tx/columnshard/engines/portions/data_accessor.h>
 #include <ydb/core/tx/columnshard/engines/portions/meta.h>
 #include <ydb/core/tx/general_cache/source/abstract.h>
@@ -44,7 +46,12 @@ class TPortionsMetadataCachePolicy {
 public:
     using TAddress = TGlobalPortionAddress;
     using TObject = TPortionDataAccessor;
+    using TSourceId = NActors::TActorId;
     using EConsumer = NOlap::NBlobOperations::EConsumer;
+
+    static TSourceId GetSourceId(const TAddress& address) {
+        return address.GetTabletActorId();
+    }
 
     static EConsumer DefaultConsumer() {
         return EConsumer::UNDEFINED;
@@ -67,6 +74,10 @@ public:
 
     static std::shared_ptr<NKikimr::NGeneralCache::NSource::IObjectsProcessor<TPortionsMetadataCachePolicy>> BuildObjectsProcessor(
         const NActors::TActorId& serviceActorId);
+
+    static NMemory::EMemoryConsumerKind GetConsumerKind() {
+        return NMemory::EMemoryConsumerKind::DataAccessorCache;
+    }
 };
 
 }   // namespace NKikimr::NOlap::NGeneralCache

@@ -172,6 +172,7 @@ public:
         auto& record = Response->Record;
         record.MutableMeteringStats()->SetReadRows(ReadRows);
         record.MutableMeteringStats()->SetReadBytes(ReadBytes);
+        record.MutableMeteringStats()->SetCpuTimeUs(Driver->GetTotalCpuTimeUs());
 
         Uploader.Finish(record, status);
 
@@ -277,7 +278,7 @@ protected:
             HFunc(TEvTxUserProxy::TEvUploadRowsResponse, Handle);
             CFunc(TEvents::TSystem::Wakeup, HandleWakeup);
             default:
-                LOG_E("StateWork unexpected event type: " << ev->GetTypeRewrite() 
+                LOG_E("StateWork unexpected event type: " << ev->GetTypeRewrite()
                     << " event: " << ev->ToString() << " " << Debug());
         }
     }
@@ -534,12 +535,9 @@ void TDataShard::HandleSafe(TEvDataShard::TEvLocalKMeansRequest::TPtr& ev, const
 
     try {
         auto response = MakeHolder<TEvDataShard::TEvLocalKMeansResponse>();
-        response->Record.SetId(id);
-        response->Record.SetTabletId(TabletID());
-        response->Record.SetRequestSeqNoGeneration(seqNo.Generation);
-        response->Record.SetRequestSeqNoRound(seqNo.Round);
+        FillScanResponseCommonFields(*response, id, TabletID(), seqNo);
 
-        LOG_N("Starting TLocalKMeansScan TabletId: " << TabletID() 
+        LOG_N("Starting TLocalKMeansScan TabletId: " << TabletID()
             << " " << request.ShortDebugString()
             << " row version " << rowVersion);
 
@@ -609,7 +607,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvLocalKMeansRequest::TPtr& ev, const
         const auto parentTo = request.GetParentTo();
         NTable::TLead lead;
         if (parentFrom == 0) {
-            if (request.GetUpload() == NKikimrTxDataShard::UPLOAD_BUILD_TO_BUILD 
+            if (request.GetUpload() == NKikimrTxDataShard::UPLOAD_BUILD_TO_BUILD
                 || request.GetUpload() == NKikimrTxDataShard::UPLOAD_BUILD_TO_POSTING)
             {
                 badRequest("Wrong upload for zero parent");
@@ -617,7 +615,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvLocalKMeansRequest::TPtr& ev, const
             lead.To({}, NTable::ESeek::Lower);
         } else if (parentFrom > parentTo) {
             badRequest(TStringBuilder() << "Parent from " << parentFrom << " should be less or equal to parent to " << parentTo);
-        } else if (request.GetUpload() == NKikimrTxDataShard::UPLOAD_MAIN_TO_BUILD 
+        } else if (request.GetUpload() == NKikimrTxDataShard::UPLOAD_MAIN_TO_BUILD
             || request.GetUpload() == NKikimrTxDataShard::UPLOAD_MAIN_TO_POSTING)
         {
             badRequest("Wrong upload for non-zero parent");
@@ -636,10 +634,10 @@ void TDataShard::HandleSafe(TEvDataShard::TEvLocalKMeansRequest::TPtr& ev, const
             lead.Until(range.To, true);
         }
 
-        if (!request.HasLevelName()) {
+        if (!request.GetLevelName()) {
             badRequest(TStringBuilder() << "Empty level table name");
         }
-        if (!request.HasOutputName()) {
+        if (!request.GetOutputName()) {
             badRequest(TStringBuilder() << "Empty output table name");
         }
 

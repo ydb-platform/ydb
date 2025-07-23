@@ -155,7 +155,6 @@ void TCms::GenerateNodeState(IOutputStream& out)
         totalVDisksRestart += nodeVDisksStatusMap[node.first].Restart;
     }
 
-    const auto& nodeState = ClusterInfo->ClusterNodes->GetNodeToState();
     HTML(out) {
         TAG(TH3) {
             out << "Nodes with state";
@@ -193,11 +192,17 @@ void TCms::GenerateNodeState(IOutputStream& out)
                     TABLED() {
                         out << "VDisksRestart";
                     }
+                    if (ClusterInfo->IsBridgeMode) {
+                        TABLED() {
+                            out << "PileId";
+                        }
+                    }
                 }
             }
             TABLEBODY() {
                 for (const auto& node : ClusterInfo->AllNodes()) {
                     auto currentInMemoryState = INodesChecker::NODE_STATE_UNSPECIFIED;
+                    const auto& nodeState = ClusterInfo->ClusterNodes[node.second->PileId.GetOrElse(0)]->GetNodeToState();
                     if (nodeState.contains(node.first)) {
                         currentInMemoryState = nodeState.at(node.first);
                     }
@@ -226,6 +231,15 @@ void TCms::GenerateNodeState(IOutputStream& out)
                             }
                             TABLED() {
                                 out << nodeVDisksStatusMap[node.first].Restart;
+                            }
+                        }
+                        if (ClusterInfo->IsBridgeMode) {
+                            TABLED() {
+                                if (node.second->PileId) {
+                                    out << *node.second->PileId;
+                                } else {
+                                    out << "-";
+                                }
                             }
                         }
                     }
@@ -714,8 +728,15 @@ bool TCms::TryToLockStateStorageReplica(const TAction& action,
         return true;
     }
 
-    Y_ABORT_UNLESS(ClusterInfo->StateStorageInfo->RingGroups.size() > 0);
-    const ui32 ringGroupId = ClusterInfo->IsBridgeMode ? node.PileId : 0;
+    if (ClusterInfo->IsBridgeMode && node.PileId.Empty()) {
+        error.Code = TStatus::ERROR;
+        error.Reason = "Node doesn't belong to any pile in bridge mode";
+        error.Deadline = defaultDeadline;
+        return false;
+    }
+
+    const ui32 ringGroupId = node.PileId.GetOrElse(0);
+    Y_ABORT_UNLESS(ringGroupId < ClusterInfo->StateStorageInfo->RingGroups.size());
     const ui32 nToSelect = ClusterInfo->StateStorageInfo->RingGroups[ringGroupId].NToSelect;
     const ui32 currentRing = ClusterInfo->GetRingId(node.NodeId);
     ui8 currentRingState = TStateStorageRingInfo::Unknown;
@@ -814,7 +835,7 @@ bool TCms::CheckSysTabletsNode(const TActionOptions &opts,
     }
 
     for (auto &tabletType : ClusterInfo->NodeToTabletTypes[node.NodeId]) {
-        if (!ClusterInfo->SysNodesCheckers[tabletType]->TryToLockNode(node.NodeId, opts.AvailabilityMode, error.Reason)) {
+        if (!ClusterInfo->SysNodesCheckers[node.PileId.GetOrElse(0)][tabletType]->TryToLockNode(node.NodeId, opts.AvailabilityMode, error.Reason)) {
             error.Code = TStatus::DISALLOW_TEMP;
             error.Deadline = TActivationContext::Now() + State->Config.DefaultRetryTime;
             return false;
@@ -832,7 +853,7 @@ bool TCms::TryToLockNode(const TAction& action,
     TDuration duration = TDuration::MicroSeconds(action.GetDuration());
     duration += opts.PermissionDuration;
 
-    if (!ClusterInfo->ClusterNodes->TryToLockNode(node.NodeId, opts.AvailabilityMode, error.Reason)) {
+    if (!ClusterInfo->ClusterNodes[node.PileId.GetOrElse(0)]->TryToLockNode(node.NodeId, opts.AvailabilityMode, error.Reason)) {
         error.Code = TStatus::DISALLOW_TEMP;
         error.Deadline = TActivationContext::Now() + State->Config.DefaultRetryTime;
         return false;
@@ -840,7 +861,7 @@ bool TCms::TryToLockNode(const TAction& action,
 
     if (node.Tenant
         && opts.TenantPolicy != NONE
-        && !ClusterInfo->TenantNodesChecker[node.Tenant]->TryToLockNode(node.NodeId, opts.AvailabilityMode, error.Reason))
+        && !ClusterInfo->TenantNodesChecker[node.PileId.GetOrElse(0)][node.Tenant]->TryToLockNode(node.NodeId, opts.AvailabilityMode, error.Reason))
     {
         error.Code = TStatus::DISALLOW_TEMP;
         error.Deadline = TActivationContext::Now() + State->Config.DefaultRetryTime;
@@ -1228,8 +1249,13 @@ void TCms::AddHostState(const TClusterInfoPtr &clusterInfo, const TNodeInfo &nod
     host->SetInterconnectPort(node.IcPort);
     host->SetTimestamp(timestamp.GetValue());
     host->SetStartTimeSeconds(node.StartTime.Seconds());
-    host->SetPileId(node.PileId);
+    if (node.PileId.Defined()) {
+        host->SetPileId(*node.PileId);
+    }
     node.Location.Serialize(host->MutableLocation(), false);
+    if (const auto bridgePileName = node.Location.GetBridgePileName(); bridgePileName) {
+        host->MutableLocation()->SetBridgePileName(*bridgePileName);
+    }
     for (auto marker : node.Markers) {
         host->AddMarkers(marker);
     }
@@ -1767,6 +1793,8 @@ void TCms::Handle(TEvPrivate::TEvClusterInfo::TPtr &ev, const TActorContext &ctx
 
     if (!AppData(ctx)->DisableCheckingSysNodesCms)
         info->GenerateSysTabletsNodesCheckers();
+
+    info->GenerateClusterNodesCheckers();
 
     AdjustInfo(info, ctx);
 

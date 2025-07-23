@@ -105,6 +105,8 @@ void AssertMapsEqual(std::unordered_map<K, std::vector<Item>>& left, std::unorde
     }
 }
 
+
+// String -> (ui64, ...) wide row generator
 class TWideStream : public NUdf::TBoxedValue
 {
 public:
@@ -123,7 +125,6 @@ public:
         , Types(types)
         , Reference(reference)
     {
-
     }
 
     NUdf::EFetchStatus WideFetch(NUdf::TUnboxedValue* result, ui32 width) override = 0;
@@ -280,9 +281,9 @@ THolder<IComputationGraph> BuildBlockGraph(TDqSetup<LLVM>& setup, const size_t m
 
     columnTypes = {keyBaseType, valueBaseType};
 
-    auto rootNode = pb.Collect(pb.NarrowMap(
+    auto rootNode = pb.Collect(pb.NarrowMap(pb.ToFlow(
         pb.DqHashCombine(
-            pb.ToFlow(TRuntimeNode(streamCallable, false)),
+            TRuntimeNode(streamCallable, false),
             memLimit,
             [&](TRuntimeNode::TList items) -> TRuntimeNode::TList { return { items.front() }; },
             [&](TRuntimeNode::TList, TRuntimeNode::TList items) -> TRuntimeNode::TList { return { items.back() } ; },
@@ -292,7 +293,7 @@ THolder<IComputationGraph> BuildBlockGraph(TDqSetup<LLVM>& setup, const size_t m
             [&](TRuntimeNode::TList keys, TRuntimeNode::TList state) -> TRuntimeNode::TList {
                 return {keys.front(), state.front()};
             }
-        ),
+        )),
         [&](TRuntimeNode::TList items) -> TRuntimeNode { return pb.NewTuple(items); } // NarrowMap handler
     ));
 
@@ -313,9 +314,9 @@ THolder<IComputationGraph> BuildWideGraph(TDqSetup<LLVM>& setup, const size_t me
 
     columnTypes = {keyBaseType, valueBaseType};
 
-    const auto rootNode = pb.Collect(pb.NarrowMap(
+    const auto rootNode = pb.Collect(pb.NarrowMap(pb.ToFlow(
         pb.DqHashCombine(
-            pb.ToFlow(TRuntimeNode(streamCallable, false)),
+            TRuntimeNode(streamCallable, false),
             memLimit,
             [&](TRuntimeNode::TList items) -> TRuntimeNode::TList { return { items.front() }; },
             [&](TRuntimeNode::TList, TRuntimeNode::TList items) -> TRuntimeNode::TList { return { items.back() } ; },
@@ -325,7 +326,7 @@ THolder<IComputationGraph> BuildWideGraph(TDqSetup<LLVM>& setup, const size_t me
             [&](TRuntimeNode::TList keys, TRuntimeNode::TList state) -> TRuntimeNode::TList {
                 return {keys.front(), state.front()};
             }
-        ),
+        )),
         [&](TRuntimeNode::TList items) -> TRuntimeNode { return pb.NewTuple(items); } // NarrowMap handler
     ));
 

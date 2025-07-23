@@ -232,6 +232,10 @@ private:
     void FullValidation() const;
     TPortionDataAccessor() = default;
 
+private:
+    THashMap<TChunkAddress, TString> DecodeBlobAddressesImpl(
+        NBlobOperations::NRead::TCompositeReadBlobs& blobs, const TIndexInfo& indexInfo) const;
+
 public:
     using TColumnAssemblingInfo = NAssembling::TColumnAssemblingInfo;
     using TAssembleBlobInfo = NAssembling::TAssembleBlobInfo;
@@ -410,12 +414,38 @@ public:
     void RemoveFromDatabase(IDbWrapper& db) const;
     void SaveToDatabase(IDbWrapper& db, const ui32 firstPKColumnId, const bool saveOnlyMeta) const;
 
-    NArrow::NSplitter::TSerializationStats GetSerializationStat(const ISnapshotSchema& schema) const {
+    NArrow::NSplitter::TSerializationStats GetSerializationStat(const ISnapshotSchema& schema, const bool zeroIfAbsent = false) const {
         NArrow::NSplitter::TSerializationStats result;
-        for (auto&& i : GetRecordsVerified()) {
-            if (auto col = schema.GetFieldByColumnIdOptional(i.ColumnId)) {
-                result.AddStat(i.GetSerializationStat(col->name()));
+        if (!zeroIfAbsent) {
+            for (auto&& i : GetRecordsVerified()) {
+                if (auto col = schema.GetFieldByColumnIdOptional(i.ColumnId)) {
+                    result.AddStat(i.GetSerializationStat(col->name()));
+                }
             }
+        } else {
+            auto itSchema = schema.GetColumnIds().begin();
+            auto itRecords = GetRecordsVerified().begin();
+            ui32 schemaIdx = 0;
+            while (itSchema != schema.GetColumnIds().end() && itRecords != GetRecordsVerified().end()) {
+                if (*itSchema < itRecords->ColumnId) {
+                    NArrow::NSplitter::TColumnSerializationStat stat(*itSchema, schema.GetFieldByIndexVerified(schemaIdx)->name());
+                    NArrow::NSplitter::TSimpleSerializationStat simpleStat(0, GetPortionInfo().GetRecordsCount(), 0);
+                    stat.Merge(simpleStat);
+                    result.AddStat(stat);
+                    ++itSchema;
+                    ++schemaIdx;
+                } else if (itRecords->ColumnId < *itSchema) {
+                    ++itRecords;
+                } else {
+                    while (itRecords != GetRecordsVerified().end() && itRecords->ColumnId == *itSchema) {
+                        result.AddStat(itRecords->GetSerializationStat(schema.GetFieldByIndexVerified(schemaIdx)->name()));
+                        ++itRecords;
+                    }
+                    ++itSchema;
+                    ++schemaIdx;
+                }
+            }
+        
         }
         return result;
     }
@@ -446,6 +476,8 @@ public:
     std::vector<const TIndexChunk*> GetIndexChunksPointers(const ui32 indexId) const;
 
     THashMap<TChunkAddress, TString> DecodeBlobAddresses(NBlobOperations::NRead::TCompositeReadBlobs&& blobs, const TIndexInfo& indexInfo) const;
+    static std::vector<THashMap<TChunkAddress, TString>> DecodeBlobAddresses(const std::vector<TPortionDataAccessor>& accessors,
+        const std::vector<ISnapshotSchema::TPtr>& schemas, NBlobOperations::NRead::TCompositeReadBlobs&& blobs);
 
     THashMap<TString, THashSet<TUnifiedBlobId>> GetBlobIdsByStorage(const TIndexInfo& indexInfo) const {
         THashMap<TString, THashSet<TUnifiedBlobId>> result;

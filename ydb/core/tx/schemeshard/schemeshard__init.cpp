@@ -1,4 +1,4 @@
-#include "schemeshard__data_erasure_manager.h"
+#include "schemeshard__shred_manager.h"
 #include "schemeshard_impl.h"
 #include "schemeshard_utils.h"  // for PQGroupReserve
 
@@ -94,7 +94,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                        TStepId, TTxId, TStepId, TTxId,
                        TString, TTxId,
                        ui64, ui64, ui64,
-                       TString> TPathRec;
+                       TString, TActorId> TPathRec;
     typedef TDeque<TPathRec> TPathRows;
 
     template <typename SchemaTable, typename TRowSet>
@@ -112,7 +112,8 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             rowSet.template GetValueOrDefault<typename SchemaTable::DirAlterVersion>(1),
             rowSet.template GetValueOrDefault<typename SchemaTable::UserAttrsAlterVersion>(1),
             rowSet.template GetValueOrDefault<typename SchemaTable::ACLVersion>(0),
-            rowSet.template GetValueOrDefault<typename SchemaTable::TempDirOwnerActorId>()
+            rowSet.template GetValueOrDefault<typename SchemaTable::TempDirOwnerActorId_Deprecated>(),
+            rowSet.template GetValueOrDefault<typename SchemaTable::TempDirOwnerActorIdRaw>()
         );
     }
 
@@ -138,7 +139,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
         TPathElement::TPtr path = new TPathElement(pathId, parentPathId, domainId, name, owner);
 
-        TString tempDirOwnerActorId;
+        TString tempDirOwnerActorId_Deprecated;
         std::tie(
             std::ignore, //pathId
             std::ignore, //parentPathId
@@ -154,14 +155,17 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             path->DirAlterVersion,
             path->UserAttrs->AlterVersion,
             path->ACLVersion,
-            tempDirOwnerActorId) = rec;
+            tempDirOwnerActorId_Deprecated,
+            path->TempDirOwnerActorId) = rec;
 
         path->PathState = TPathElement::EPathState::EPathStateNoChanges;
         if (path->StepDropped) {
             path->PathState = TPathElement::EPathState::EPathStateNotExist;
         }
 
-        path->TempDirOwnerActorId.Parse(tempDirOwnerActorId.c_str(), tempDirOwnerActorId.size());
+        if (!path->TempDirOwnerActorId) {
+            path->TempDirOwnerActorId.Parse(tempDirOwnerActorId_Deprecated.c_str(), tempDirOwnerActorId_Deprecated.size());
+        }
 
         return path;
     }
@@ -1880,9 +1884,9 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
         }
 
-        // Read Running data erasure for tenants
+        // Read Running shred for tenants
         {
-            if (!Self->DataErasureManager->Restore(db)) {
+            if (!Self->ShredManager->Restore(db)) {
                 return false;
             }
         }
@@ -3616,6 +3620,13 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                             txState.TargetPathTargetState = proto.GetTxCopyTableExtraData().GetTargetPathTargetState();
                         }
                     }
+                } else if (txState.TxType == TTxState::TxRotateCdcStreamAtTable) {
+                    if (!extraData.empty()) {
+                        NKikimrSchemeOp::TGenericTxInFlyExtraData proto;
+                        bool deserializeRes = ParseFromStringNoSizeLimit(proto, extraData);
+                        Y_ABORT_UNLESS(deserializeRes);
+                        txState.CdcPathId = TPathId::FromProto(proto.GetTxCopyTableExtraData().GetCdcPathId());
+                    }
                 }
 
                 Y_ABORT_UNLESS(txState.TxType != TTxState::TxInvalid);
@@ -5303,6 +5314,35 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
                 if (!rowset.Next()) {
                     return false;
+                }
+            }
+
+            // Check for orphaned incremental restore operations during restart
+            for (const auto& [opId, op] : Self->LongIncrementalRestoreOps) {
+                TTxId txId = opId.GetTxId();
+                bool controlOperationExists = false;
+                
+                for (const auto& [txOpId, txState] : Self->TxInFlight) {
+                    if (txOpId.GetTxId() == txId) {
+                        controlOperationExists = true;
+                        break;
+                    }
+                }
+                
+                if (!controlOperationExists) {
+                    TPathId backupCollectionPathId;
+                    backupCollectionPathId.OwnerId = op.GetBackupCollectionPathId().GetOwnerId();
+                    backupCollectionPathId.LocalPathId = op.GetBackupCollectionPathId().GetLocalId();
+                    
+                    LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                        "TTxInit detected orphaned incremental restore operation during recovery"
+                            << ", operationId: " << opId
+                            << ", txId: " << txId
+                            << ", backupCollectionPathId: " << backupCollectionPathId
+                            << ", scheduling TTxProgress to continue operation"
+                            << ", at schemeshard: " << Self->TabletID());
+                    
+                    OnComplete.Send(Self->SelfId(), new TEvPrivate::TEvRunIncrementalRestore(backupCollectionPathId));
                 }
             }
         }

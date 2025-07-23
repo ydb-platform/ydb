@@ -89,9 +89,9 @@ class TestCompatibility(RestartToAnotherVersionFixture):
         assert self.execute_scan_query('select count(*) as row_count from `sample_table`')[0]['row_count'] == 500, 'Expected 500 rows: update 100-200 rows and added 300 rows'
 
     @pytest.mark.parametrize("store_type, date_args", [
-        pytest.param("row",    ["--datetime"], id="row"),
-        pytest.param("column", ["--datetime"], id="column"),
-        pytest.param("column", []            , id="column-date64")
+        pytest.param("row",    ["--datetime-types=dt32"], id="row"),
+        pytest.param("column", ["--datetime-types=dt32"], id="column"),
+        pytest.param("column", ["--datetime-types=dt64"], id="column-date64")
     ])
     def test_tpch1(self, store_type, date_args):
         result_json_path = os.path.join(yatest.common.test_output_path(), "result.json")
@@ -123,7 +123,7 @@ class TestCompatibility(RestartToAnotherVersionFixture):
             "tpch",
             "import",
             "generator",
-            "--scale=1",
+            "--scale=0.1",
         ]
         run_command = [
             yatest.common.binary_path(os.getenv("YDB_CLI_BINARY")),
@@ -136,9 +136,7 @@ class TestCompatibility(RestartToAnotherVersionFixture):
             "-p",
             "tpch",
             "run",
-            "--scale=1",
-            "--exclude",
-            "17",  # not working for row tables
+            "--scale=0.1",
             "--check-canonical",
             "--retries",
             "5",  # in row tables we have to retry query by design

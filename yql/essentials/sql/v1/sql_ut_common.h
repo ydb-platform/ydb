@@ -911,7 +911,7 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
 
     Y_UNIT_TEST(SelectOrderByExpressionAsc) {
         NYql::TAstParseResult res = SqlToYql("select i.key, i.subkey from plato.Input as i order by cast(key as uint32) % cast(i.subkey as uint32) asc");
-        UNIT_ASSERT(res.Root);
+        UNIT_ASSERT_C(res.Root, res.Issues.ToString());
         TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
             if (word == "Sort") {
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("\"%MayWarn\""));
@@ -1805,7 +1805,7 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
     Y_UNIT_TEST(IntersectAllTest) {
         NSQLTranslation::TTranslationSettings settings;
         settings.LangVer = 202503;
-        NYql::TAstParseResult res = SqlToYqlWithSettings("SELECT key FROM plato.Input INTERSECT ALL select subkey FROM plato.Input;", settings);
+        NYql::TAstParseResult res = SqlToYqlWithSettings("SELECT key FROM plato.Input INTERSECT ALL SELECT subkey FROM plato.Input;", settings);
         UNIT_ASSERT(res.Root);
 
         TWordCountHive elementStat = {{TString("IntersectAll"), 0}};
@@ -1816,7 +1816,7 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
     Y_UNIT_TEST(IntersectTest) {
         NSQLTranslation::TTranslationSettings settings;
         settings.LangVer = 202503;
-        NYql::TAstParseResult res = SqlToYqlWithSettings("SELECT key FROM plato.Input INTERSECT select subkey FROM plato.Input;", settings);
+        NYql::TAstParseResult res = SqlToYqlWithSettings("SELECT key FROM plato.Input INTERSECT SELECT subkey FROM plato.Input;", settings);
         UNIT_ASSERT(res.Root);
 
         TWordCountHive elementStat = {{TString("Intersect"), 0}};
@@ -1827,7 +1827,7 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
     Y_UNIT_TEST(IntersectDistinctTest) {
         NSQLTranslation::TTranslationSettings settings;
         settings.LangVer = 202503;
-        NYql::TAstParseResult res = SqlToYqlWithSettings("SELECT key FROM plato.Input INTERSECT DISTINCT select subkey FROM plato.Input;", settings);
+        NYql::TAstParseResult res = SqlToYqlWithSettings("SELECT key FROM plato.Input INTERSECT DISTINCT SELECT subkey FROM plato.Input;", settings);
         UNIT_ASSERT(res.Root);
 
         TWordCountHive elementStat = {{TString("Intersect"), 0}};
@@ -1838,7 +1838,7 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
     Y_UNIT_TEST(IntersectAllPositionalTest) {
         NSQLTranslation::TTranslationSettings settings;
         settings.LangVer = 202503;
-        NYql::TAstParseResult res = SqlToYqlWithSettings("PRAGMA PositionalUnionAll; SELECT key FROM plato.Input INTERSECT ALL select subkey FROM plato.Input;", settings);
+        NYql::TAstParseResult res = SqlToYqlWithSettings("PRAGMA PositionalUnionAll; SELECT key FROM plato.Input INTERSECT ALL SELECT subkey FROM plato.Input;", settings);
         UNIT_ASSERT(res.Root);
 
         TWordCountHive elementStat = {{TString("IntersectAllPositional"), 0}};
@@ -1849,7 +1849,7 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
     Y_UNIT_TEST(IntersectDistinctPositionalTest) {
         NSQLTranslation::TTranslationSettings settings;
         settings.LangVer = 202503;
-        NYql::TAstParseResult res = SqlToYqlWithSettings("PRAGMA PositionalUnionAll; SELECT key FROM plato.Input INTERSECT DISTINCT select subkey FROM plato.Input;", settings);
+        NYql::TAstParseResult res = SqlToYqlWithSettings("PRAGMA PositionalUnionAll; SELECT key FROM plato.Input INTERSECT DISTINCT SELECT subkey FROM plato.Input;", settings);
         UNIT_ASSERT(res.Root);
 
         TWordCountHive elementStat = {{TString("IntersectPositional"), 0}};
@@ -1857,12 +1857,39 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         UNIT_ASSERT_VALUES_EQUAL(1, elementStat["IntersectPositional"]);
     }
 
+    Y_UNIT_TEST(MultipleIntersectTest) {
+        NSQLTranslation::TTranslationSettings settings;
+        settings.LangVer = 202503;
+
+        NYql::TAstParseResult res = SqlToYqlWithSettings("SELECT key FROM plato.Input INTERSECT SELECT subkey FROM plato.Input INTERSECT SELECT subkey FROM plato.Input;", settings);
+        UNIT_ASSERT(res.Root);
+
+        TWordCountHive elementStat = {{TString("Intersect"), 0}};
+        VerifyProgram(res, elementStat, {});
+        UNIT_ASSERT_VALUES_EQUAL(2, elementStat["Intersect"]);
+
+        res = SqlToYqlWithSettings("SELECT key FROM plato.Input INTERSECT SELECT subkey FROM plato.Input INTERSECT ALL SELECT subkey FROM plato.Input;", settings);
+        UNIT_ASSERT(res.Root);
+
+        elementStat = {{TString("Intersect"), 0}};
+        VerifyProgram(res, elementStat, {});
+        UNIT_ASSERT_VALUES_EQUAL(2, elementStat["Intersect"]);
+
+        res = SqlToYqlWithSettings("SELECT key FROM plato.Input INTERSECT SELECT subkey FROM plato.Input UNION SELECT subkey FROM plato.Input;", settings);
+        UNIT_ASSERT(res.Root);
+
+        elementStat = {{TString("Intersect"), 0}, {TString("Union"), 0}};
+        VerifyProgram(res, elementStat, {});
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Intersect"]);
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Union"]);
+    }
+
     // EXCEPT
 
     Y_UNIT_TEST(ExceptAllTest) {
         NSQLTranslation::TTranslationSettings settings;
         settings.LangVer = 202503;
-        NYql::TAstParseResult res = SqlToYqlWithSettings("SELECT key FROM plato.Input EXCEPT ALL select subkey FROM plato.Input;", settings);
+        NYql::TAstParseResult res = SqlToYqlWithSettings("SELECT key FROM plato.Input EXCEPT ALL SELECT subkey FROM plato.Input;", settings);
         UNIT_ASSERT(res.Root);
 
         TWordCountHive elementStat = {{TString("ExceptAll"), 0}};
@@ -1873,7 +1900,7 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
     Y_UNIT_TEST(ExceptTest) {
         NSQLTranslation::TTranslationSettings settings;
         settings.LangVer = 202503;
-        NYql::TAstParseResult res = SqlToYqlWithSettings("SELECT key FROM plato.Input EXCEPT select subkey FROM plato.Input;", settings);
+        NYql::TAstParseResult res = SqlToYqlWithSettings("SELECT key FROM plato.Input EXCEPT SELECT subkey FROM plato.Input;", settings);
         UNIT_ASSERT(res.Root);
 
         TWordCountHive elementStat = {{TString("Except"), 0}};
@@ -1884,7 +1911,7 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
     Y_UNIT_TEST(ExceptDistinctTest) {
         NSQLTranslation::TTranslationSettings settings;
         settings.LangVer = 202503;
-        NYql::TAstParseResult res = SqlToYqlWithSettings("SELECT key FROM plato.Input EXCEPT DISTINCT select subkey FROM plato.Input;", settings);
+        NYql::TAstParseResult res = SqlToYqlWithSettings("SELECT key FROM plato.Input EXCEPT DISTINCT SELECT subkey FROM plato.Input;", settings);
         UNIT_ASSERT(res.Root);
 
         TWordCountHive elementStat = {{TString("Except"), 0}};
@@ -1892,10 +1919,10 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Except"]);
     }
 
-        Y_UNIT_TEST(ExceptAllPositionalTest) {
+    Y_UNIT_TEST(ExceptAllPositionalTest) {
         NSQLTranslation::TTranslationSettings settings;
         settings.LangVer = 202503;
-        NYql::TAstParseResult res = SqlToYqlWithSettings("PRAGMA PositionalUnionAll; SELECT key FROM plato.Input EXCEPT ALL select subkey FROM plato.Input;", settings);
+        NYql::TAstParseResult res = SqlToYqlWithSettings("PRAGMA PositionalUnionAll; SELECT key FROM plato.Input EXCEPT ALL SELECT subkey FROM plato.Input;", settings);
         UNIT_ASSERT(res.Root);
 
         TWordCountHive elementStat = {{TString("ExceptAllPositional"), 0}};
@@ -1906,12 +1933,39 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
     Y_UNIT_TEST(ExceptDistinctPositionalTest) {
         NSQLTranslation::TTranslationSettings settings;
         settings.LangVer = 202503;
-        NYql::TAstParseResult res = SqlToYqlWithSettings("PRAGMA PositionalUnionAll; SELECT key FROM plato.Input EXCEPT DISTINCT select subkey FROM plato.Input;", settings);
+        NYql::TAstParseResult res = SqlToYqlWithSettings("PRAGMA PositionalUnionAll; SELECT key FROM plato.Input EXCEPT DISTINCT SELECT subkey FROM plato.Input;", settings);
         UNIT_ASSERT(res.Root);
 
         TWordCountHive elementStat = {{TString("ExceptPositional"), 0}};
         VerifyProgram(res, elementStat, {});
         UNIT_ASSERT_VALUES_EQUAL(1, elementStat["ExceptPositional"]);
+    }
+
+    Y_UNIT_TEST(MultipleExceptTest) {
+        NSQLTranslation::TTranslationSettings settings;
+        settings.LangVer = 202503;
+
+        NYql::TAstParseResult res = SqlToYqlWithSettings("SELECT key FROM plato.Input EXCEPT SELECT subkey FROM plato.Input EXCEPT SELECT subkey FROM plato.Input;", settings);
+        UNIT_ASSERT(res.Root);
+
+        TWordCountHive elementStat = {{TString("Except"), 0}};
+        VerifyProgram(res, elementStat, {});
+        UNIT_ASSERT_VALUES_EQUAL(2, elementStat["Except"]);
+
+        res = SqlToYqlWithSettings("SELECT key FROM plato.Input EXCEPT SELECT subkey FROM plato.Input EXCEPT ALL SELECT subkey FROM plato.Input;", settings);
+        UNIT_ASSERT(res.Root);
+
+        elementStat = {{TString("Except"), 0}};
+        VerifyProgram(res, elementStat, {});
+        UNIT_ASSERT_VALUES_EQUAL(2, elementStat["Except"]);
+
+        res = SqlToYqlWithSettings("SELECT key FROM plato.Input EXCEPT SELECT subkey FROM plato.Input UNION SELECT subkey FROM plato.Input;", settings);
+        UNIT_ASSERT(res.Root);
+
+        elementStat = {{TString("Except"), 0}, {TString("Union"), 0}};
+        VerifyProgram(res, elementStat, {});
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Except"]);
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Union"]);
     }
 
 
@@ -3303,7 +3357,7 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
     }
 
     Y_UNIT_TEST(AlterTableAlterColumnDropNotNullAstCorrect) {
-        auto reqSetNull = SqlToYql(R"(
+        auto reqDropNotNull = SqlToYql(R"sql(
             USE plato;
             CREATE TABLE tableName (
                 id Uint32,
@@ -3313,21 +3367,48 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
 
             COMMIT;
             ALTER TABLE tableName ALTER COLUMN val DROP NOT NULL;
-        )");
+        )sql");
 
-        UNIT_ASSERT(reqSetNull.IsOk());
-        UNIT_ASSERT(reqSetNull.Root);
+        UNIT_ASSERT(reqDropNotNull.IsOk());
 
         TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
             Y_UNUSED(word);
 
             UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find(
-                R"(let world (Write! world sink (Key '('tablescheme (String '"tableName"))) (Void) '('('mode 'alter) '('actions '('('alterColumns '('('"val" '('changeColumnConstraints '('('drop_not_null)))))))))))"
+                "'('changeColumnConstraints '('('drop_not_null)))"
             ));
         };
 
         TWordCountHive elementStat({TString("\'mode \'alter")});
-        VerifyProgram(reqSetNull, elementStat, verifyLine);
+        VerifyProgram(reqDropNotNull, elementStat, verifyLine);
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["\'mode \'alter"]);
+    }
+
+    Y_UNIT_TEST(AlterTableAlterColumnSetNotNullAstCorrect) {
+        auto reqSetNotNull = SqlToYql(R"sql(
+            USE plato;
+            CREATE TABLE tableName (
+                id Uint32,
+                val Uint32,
+                PRIMARY KEY (id)
+            );
+
+            COMMIT;
+            ALTER TABLE tableName ALTER COLUMN val SET NOT NULL;
+        )sql");
+
+        UNIT_ASSERT(reqSetNotNull.IsOk());
+
+        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+            Y_UNUSED(word);
+
+            UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find(
+                "'('changeColumnConstraints '('('set_not_null)))"
+            ));
+        };
+
+        TWordCountHive elementStat({TString("\'mode \'alter")});
+        VerifyProgram(reqSetNotNull, elementStat, verifyLine);
         UNIT_ASSERT_VALUES_EQUAL(1, elementStat["\'mode \'alter"]);
     }
 
@@ -3587,7 +3668,8 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
             WITH (
                 CONNECTION_STRING = "grpc://localhost:2135/?database=/MyDatabase",
                 ENDPOINT = "localhost:2135",
-                DATABASE = "/MyDatabase"
+                DATABASE = "/MyDatabase",
+                CA_CERT = "-----BEGIN CERTIFICATE-----"
             );
         )";
         auto res = SqlToYql(req);
@@ -3607,6 +3689,8 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("localhost:2135"));
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("database"));
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("/MyDatabase"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("ca_cert"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("-----BEGIN CERTIFICATE-----"));
             }
         };
 
@@ -3701,6 +3785,7 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
             {"user", "user"},
             {"password", "bar"},
             {"password_secret_name", "bar_secret_name"},
+            {"ca_cert", "-----BEGIN CERTIFICATE-----"},
         };
 
         for (const auto& [k, v] : settings) {
@@ -8829,4 +8914,38 @@ Y_UNIT_TEST_SUITE(Crashes) {
 
         UNIT_ASSERT_C(res.IsOk(), res.Issues.ToString());
     }
+}
+
+Y_UNIT_TEST_SUITE(Aggregation) {
+
+    Y_UNIT_TEST(DeduplicationDistinctSources) {
+        NYql::TAstParseResult res = SqlToYql(R"sql(
+            SELECT Percentile(a.x, 0.50), Percentile(b.x, 0.75)
+            FROM plato.Input1 AS a
+            JOIN plato.Input1 AS b ON a.x == b.x;
+        )sql");
+
+        UNIT_ASSERT_C(res.IsOk(), res.Issues.ToString());
+
+        TWordCountHive count = {{TString("percentile_traits_factory"), 0}};
+        VerifyProgram(res, count);
+
+        UNIT_ASSERT_VALUES_EQUAL(2, count["percentile_traits_factory"]);
+    }
+
+    Y_UNIT_TEST(DeduplicationSameSource) {
+        NYql::TAstParseResult res = SqlToYql(R"sql(
+            SELECT Percentile(a.x, 0.50), Percentile(a.x, 0.75)
+            FROM plato.Input1 AS a
+            JOIN plato.Input1 AS b ON a.x == b.x;
+        )sql");
+
+        UNIT_ASSERT_C(res.IsOk(), res.Issues.ToString());
+
+        TWordCountHive count = {{TString("percentile_traits_factory"), 0}};
+        VerifyProgram(res, count);
+
+        UNIT_ASSERT_VALUES_EQUAL(1, count["percentile_traits_factory"]);
+    }
+
 }

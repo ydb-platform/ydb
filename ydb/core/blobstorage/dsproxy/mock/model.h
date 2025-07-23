@@ -80,7 +80,7 @@ namespace NFake {
             }
 
             // check if this blob is not being collected -- writing such blob is a violation of BS contract
-            Y_ABORT_UNLESS(!IsCollectedByBarrier(id), "Id# %s", id.ToString().data());
+            Y_ABORT_UNLESS(!IsCollectedByBarrier(id, msg->IssueKeepFlag), "Id# %s", id.ToString().data());
 
             // validate that there are no blobs with the same gen/step, channel, cookie, but with different size
             const TLogoBlobID base(id.TabletID(), id.Generation(), id.Step(), id.Channel(), 0, id.Cookie());
@@ -101,7 +101,10 @@ namespace NFake {
             }
 
             // put an entry into logo blobs database and reply with success
-            Blobs.emplace(id, std::move(msg->Buffer));
+            auto [it, inserted] = Blobs.emplace(id, std::move(msg->Buffer));
+            if (msg->IssueKeepFlag) {
+                it->second.Keep = true;
+            }
             return new TEvBlobStorage::TEvPutResult(NKikimrProto::OK, id, GetStorageStatusFlags(), GroupId, 0.f);
         }
 
@@ -450,11 +453,15 @@ namespace NFake {
         }
 
         // check if provided blob is under garbage collection by barriers
-        bool IsCollectedByBarrier(const TLogoBlobID& id) const noexcept {
+        bool IsCollectedByBarrier(const TLogoBlobID& id, bool issueKeepFlag = false) const noexcept {
             auto hardIt = HardBarriers.find(std::make_pair(id.TabletID(), id.Channel()));
             if (hardIt != HardBarriers.end() &&
                     std::make_pair(id.Generation(), id.Step()) <= hardIt->second.MakeCollectPair()) {
                 return true;
+            }
+
+            if (issueKeepFlag) {
+                return false;
             }
 
             auto it = Barriers.find(std::make_pair(id.TabletID(), id.Channel()));

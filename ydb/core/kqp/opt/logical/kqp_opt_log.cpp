@@ -173,7 +173,8 @@ protected:
             },
             KqpCtx.EquiJoinsCount,
             KqpCtx.GetOptimizerHints(),
-            enableShuffleElimination
+            enableShuffleElimination,
+            &KqpCtx.ShufflingOrderingsByJoinLabels
         );
         DumpAppliedRule("OptimizeEquiJoinWithCosts", node.Ptr(), output.Ptr(), ctx);
         return output;

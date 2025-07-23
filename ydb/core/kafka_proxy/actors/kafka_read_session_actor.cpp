@@ -261,7 +261,7 @@ void TKafkaReadSessionActor::SendSyncGroupResponseOk(const TActorContext& ctx, u
     TKafkaWritable writable(buf);
     writable << ASSIGNMENT_VERSION;
     assignment.Write(writable, ASSIGNMENT_VERSION);
-    response->AssignmentStr = TString(buf.GetBuffer().data(), buf.GetBuffer().size());
+    response->AssignmentStr = TString(buf.GetFrontBuffer().data(), buf.GetFrontBuffer().size());
     response->Assignment = response->AssignmentStr;
 
     Send(Context->ConnectionId, new TEvKafka::TEvResponse(corellationId, response, EKafkaErrors::NONE_ERROR));
@@ -476,7 +476,7 @@ void TKafkaReadSessionActor::HandleAuthOk(NGRpcProxy::V1::TEvPQProxy::TEvAuthRes
 
     for (const auto& [name, t] : ev->Get()->TopicAndTablets) {
         auto internalName = t.TopicNameConverter->GetInternalName();
-        TopicsInfo[internalName] = NGRpcProxy::TTopicHolder::FromTopicInfo(t);
+        TopicsInfo[internalName] = NKikimr::NGRpcProxy::TTopicHolder(t);
         FullPathToConverter[t.TopicNameConverter->GetPrimaryPath()] = t.TopicNameConverter;
         FullPathToConverter[t.TopicNameConverter->GetSecondaryPath()] = t.TopicNameConverter;
     }

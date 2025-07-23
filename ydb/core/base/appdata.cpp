@@ -71,7 +71,7 @@ struct TAppData::TImpl {
     NKikimrConfig::TMemoryControllerConfig MemoryControllerConfig;
     NKikimrReplication::TReplicationDefaults ReplicationConfig;
     NKikimrProto::TDataIntegrityTrailsConfig DataIntegrityTrailsConfig;
-    NKikimrConfig::TDataErasureConfig DataErasureConfig;
+    NKikimrConfig::TDataErasureConfig ShredConfig;
     NKikimrConfig::THealthCheckConfig HealthCheckConfig;
     NKikimrConfig::TWorkloadManagerConfig WorkloadManagerConfig;
     NKikimrConfig::TQueryServiceConfig QueryServiceConfig;
@@ -133,11 +133,11 @@ TAppData::TAppData(
     , MemoryControllerConfig(Impl->MemoryControllerConfig)
     , ReplicationConfig(Impl->ReplicationConfig)
     , DataIntegrityTrailsConfig(Impl->DataIntegrityTrailsConfig)
-    , DataErasureConfig(Impl->DataErasureConfig)
+    , ShredConfig(Impl->ShredConfig)
     , HealthCheckConfig(Impl->HealthCheckConfig)
     , WorkloadManagerConfig(Impl->WorkloadManagerConfig)
     , QueryServiceConfig(Impl->QueryServiceConfig)
-    , BridgeConfig(&Impl->BridgeConfig)
+    , BridgeConfig(Impl->BridgeConfig)
     , KikimrShouldContinue(kikimrShouldContinue)
     , TracingConfigurator(MakeIntrusive<NJaegerTracing::TSamplingThrottlingConfigurator>(TimeProvider, RandomProvider))
 {}

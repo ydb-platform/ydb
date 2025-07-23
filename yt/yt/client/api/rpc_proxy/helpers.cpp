@@ -442,7 +442,6 @@ void ToProto(
     }
 }
 
-
 void FromProto(
     NApi::TOperationEvent* result,
     const NProto::TOperationEvent& proto)
@@ -1822,6 +1821,28 @@ NQueryTrackerClient::EQueryState ConvertQueryStateFromProto(
     YT_ABORT();
 }
 
+NApi::EJobStderrType ConvertJobStderrTypeFromProto(
+    NProto::EJobStderrType proto)
+{
+    switch (proto) {
+        case NProto::EJobStderrType::JST_USER_JOB_STDERR:
+            return NApi::EJobStderrType::UserJobStderr;
+        case NProto::EJobStderrType::JST_GPU_CHECK_STDERR:
+            return NApi::EJobStderrType::GpuCheckStderr;
+    }
+}
+
+NProto::EJobStderrType ConvertJobStderrTypeToProto(
+    NApi::EJobStderrType jobStderrType)
+{
+    switch (jobStderrType) {
+        case NApi::EJobStderrType::UserJobStderr:
+            return NProto::EJobStderrType::JST_USER_JOB_STDERR;
+        case NApi::EJobStderrType::GpuCheckStderr:
+            return NProto::EJobStderrType::JST_GPU_CHECK_STDERR;
+    }
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 void FillRequest(
@@ -1924,7 +1945,8 @@ bool IsDynamicTableRetriableError(const TError& error)
         error.FindMatching(NTabletClient::EErrorCode::NoInSyncReplicas) ||
         error.FindMatching(NTabletClient::EErrorCode::TabletNotMounted) ||
         error.FindMatching(NTabletClient::EErrorCode::NoSuchTablet) ||
-        error.FindMatching(NTabletClient::EErrorCode::TabletReplicationEraMismatch);
+        error.FindMatching(NTabletClient::EErrorCode::TabletReplicationEraMismatch) ||
+        error.FindMatching(NTableClient::EErrorCode::UnableToSynchronizeReplicationCard);
 }
 
 bool IsRetriableError(const TError& error, bool retryProxyBanned)

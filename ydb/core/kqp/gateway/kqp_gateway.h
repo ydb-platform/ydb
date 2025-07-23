@@ -183,6 +183,8 @@ public:
         NKikimrKqp::TExecuterTxResult ExecuterResult;
         NLongTxService::TLockHandle LockHandle;
         TVector<NKikimrMiniKQL::TResult> Results;
+        TVector<TString> BinaryResults;
+        bool ExpectBinaryResults = false;
     };
 
     struct TAstQuerySettings {
@@ -198,12 +200,9 @@ public:
     virtual NThreading::TFuture<TGenericResult> ModifyScheme(NKikimrSchemeOp::TModifyScheme&& modifyScheme) = 0;
 
     /* Compute */
-    using NYql::IKikimrGateway::ExecuteLiteral;
     virtual NThreading::TFuture<TExecPhysicalResult> ExecuteLiteral(TExecPhysicalRequest&& request,
         TQueryData::TPtr params, ui32 txIndex) = 0;
     using NYql::IKikimrGateway::ExecuteLiteralInstant;
-    virtual TExecPhysicalResult ExecuteLiteralInstant(TExecPhysicalRequest&& request,
-        TQueryData::TPtr params, ui32 txIndex) = 0;
 
     /* Scripting */
     virtual NThreading::TFuture<TQueryResult> ExplainDataQueryAst(const TString& cluster, const TString& query) = 0;

@@ -204,6 +204,7 @@ public:
     virtual NArrow::TSimpleRow GetStartPKRecordBatch() const = 0;
 
     void StartProcessing(const std::shared_ptr<NCommon::IDataSource>& sourcePtr);
+    void InitializeProcessing(const std::shared_ptr<NCommon::IDataSource>& sourcePtr);
     virtual ui64 PredictAccessorsSize(const std::set<ui32>& entityIds) const = 0;
 
     bool StartFetchingAccessor(const std::shared_ptr<NCommon::IDataSource>& sourcePtr, const TFetchingScriptCursor& step) {
@@ -284,7 +285,7 @@ private:
 
     virtual void InitUsedRawBytes() override {
         AFL_VERIFY(!UsedRawBytes);
-        UsedRawBytes = GetStageData().GetPortionAccessor().GetColumnRawBytes(GetContext()->GetAllUsageColumns()->GetColumnIds(), false);
+        UsedRawBytes = GetPortionAccessor().GetColumnRawBytes(GetContext()->GetAllUsageColumns()->GetColumnIds(), false);
     }
 
     virtual bool DoStartFetchingColumns(
@@ -322,16 +323,16 @@ private:
 
     virtual NJson::TJsonValue DoDebugJsonForMemory() const override {
         NJson::TJsonValue result = TBase::DoDebugJsonForMemory();
-        if (GetStageData().HasPortionAccessor()) {
-            auto columns = GetStageData().GetPortionAccessor().GetColumnIds();
+        if (HasPortionAccessor()) {
+            auto columns = GetPortionAccessor().GetColumnIds();
             //        result.InsertValue("sequential_columns", JoinSeq(",", SequentialEntityIds));
-            result.InsertValue("in_mem", GetStageData().GetPortionAccessor().GetColumnRawBytes(columns, false));
+            result.InsertValue("in_mem", GetPortionAccessor().GetColumnRawBytes(columns, false));
             result.InsertValue("columns_in_mem", JoinSeq(",", columns));
         }
         result.InsertValue("portion_id", Portion->GetPortionId());
         result.InsertValue("raw", Portion->GetTotalRawBytes());
         result.InsertValue("blob", Portion->GetTotalBlobBytes());
-        result.InsertValue("read_memory", GetColumnRawBytes(GetStageData().GetPortionAccessor().GetColumnIds()));
+        result.InsertValue("read_memory", GetColumnRawBytes(GetPortionAccessor().GetColumnIds()));
         return result;
     }
     virtual void DoAbort() override;
@@ -351,7 +352,7 @@ public:
     }
 
     virtual TBlobRange RestoreBlobRange(const TBlobRangeLink16& rangeLink) const override {
-        return GetStageData().GetPortionAccessor().RestoreBlobRange(rangeLink);
+        return GetPortionAccessor().RestoreBlobRange(rangeLink);
     }
 
     virtual const std::shared_ptr<ISnapshotSchema>& GetSourceSchema() const override {
@@ -377,32 +378,32 @@ public:
     }
 
     virtual THashMap<TChunkAddress, TString> DecodeBlobAddresses(NBlobOperations::NRead::TCompositeReadBlobs&& blobsOriginal) const override {
-        return GetStageData().GetPortionAccessor().DecodeBlobAddresses(std::move(blobsOriginal), Schema->GetIndexInfo());
+        return GetPortionAccessor().DecodeBlobAddresses(std::move(blobsOriginal), Schema->GetIndexInfo());
     }
 
     virtual ui64 GetColumnsVolume(const std::set<ui32>& columnIds, const EMemType type) const override {
         AFL_VERIFY(columnIds.size());
         switch (type) {
             case EMemType::Raw:
-                return GetStageData().GetPortionAccessor().GetColumnRawBytes(columnIds, false);
+                return GetPortionAccessor().GetColumnRawBytes(columnIds, false);
             case EMemType::Blob:
-                return GetStageData().GetPortionAccessor().GetColumnBlobBytes(columnIds, false);
+                return GetPortionAccessor().GetColumnBlobBytes(columnIds, false);
             case EMemType::RawSequential:
-                return GetStageData().GetPortionAccessor().GetMinMemoryForReadColumns(columnIds);
+                return GetPortionAccessor().GetMinMemoryForReadColumns(columnIds);
         }
     }
 
     virtual ui64 GetColumnRawBytes(const std::set<ui32>& columnsIds) const override {
         AFL_VERIFY(columnsIds.size());
-        return GetStageData().GetPortionAccessor().GetColumnRawBytes(columnsIds, false);
+        return GetPortionAccessor().GetColumnRawBytes(columnsIds, false);
     }
 
     virtual ui64 GetColumnBlobBytes(const std::set<ui32>& columnsIds) const override {
-        return GetStageData().GetPortionAccessor().GetColumnBlobBytes(columnsIds, false);
+        return GetPortionAccessor().GetColumnBlobBytes(columnsIds, false);
     }
 
     virtual ui64 GetIndexRawBytes(const std::set<ui32>& indexIds) const override {
-        return GetStageData().GetPortionAccessor().GetIndexRawBytes(indexIds, false);
+        return GetPortionAccessor().GetIndexRawBytes(indexIds, false);
     }
 
     virtual NArrow::TSimpleRow GetMinPK() const override {

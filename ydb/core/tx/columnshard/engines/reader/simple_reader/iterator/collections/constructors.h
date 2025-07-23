@@ -107,7 +107,8 @@ private:
     virtual bool DoIsFinished() const override {
         return Sources.empty();
     }
-    virtual std::shared_ptr<NCommon::IDataSource> DoExtractNext(const std::shared_ptr<NCommon::TSpecialReadContext>& context) override {
+    virtual std::shared_ptr<NCommon::IDataSource> DoExtractNext(
+        const std::shared_ptr<NCommon::TSpecialReadContext>& context, const ui32 /*inFlightCurrentLimit*/) override {
         auto result = Sources.front().Construct(SourceIdx++, static_pointer_cast<TSpecialReadContext>(context));
         Sources.pop_front();
         return result;
@@ -164,7 +165,8 @@ private:
     virtual bool DoIsFinished() const override {
         return HeapSources.empty();
     }
-    virtual std::shared_ptr<NCommon::IDataSource> DoExtractNext(const std::shared_ptr<NCommon::TSpecialReadContext>& context) override {
+    virtual std::shared_ptr<NCommon::IDataSource> DoExtractNext(
+        const std::shared_ptr<NCommon::TSpecialReadContext>& context, const ui32 /*inFlightCurrentLimit*/) override {
         AFL_VERIFY(HeapSources.size());
         std::pop_heap(HeapSources.begin(), HeapSources.end());
         auto result = HeapSources.back().Construct(SourceIdx++, static_pointer_cast<TSpecialReadContext>(context));

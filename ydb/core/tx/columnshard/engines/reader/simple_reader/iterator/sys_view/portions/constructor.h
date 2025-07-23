@@ -83,7 +83,7 @@ private:
         return Constructors.empty();
     }
     virtual std::shared_ptr<NReader::NCommon::IDataSource> DoExtractNext(
-        const std::shared_ptr<NReader::NCommon::TSpecialReadContext>& context) override;
+        const std::shared_ptr<NReader::NCommon::TSpecialReadContext>& context, const ui32 /*inFlightCurrentLimit*/) override;
     virtual void DoInitCursor(const std::shared_ptr<IScanCursor>& /*cursor*/) override {
     }
     virtual TString DoDebugString() const override {

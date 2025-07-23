@@ -62,14 +62,19 @@ public:
         }
     };
 
-    std::shared_ptr<NReader::NSimple::IDataSource> Construct(const std::shared_ptr<NCommon::TSpecialReadContext>& context);
+    std::shared_ptr<NReader::NSimple::IDataSource> Construct(
+        const std::shared_ptr<NCommon::TSpecialReadContext>& context, TPortionDataAccessor&& accessor);
+    std::shared_ptr<NReader::NSimple::IDataSource> Construct(
+        const std::shared_ptr<NCommon::TSpecialReadContext>& context);
 };
 
 class TConstructor: public NAbstract::ISourcesConstructor {
 private:
     const ERequestSorting Sorting;
     ui32 CurrentSourceIdx = 0;
+    int InFlightRequests = 0;
     std::deque<TPortionDataConstructor> Constructors;
+    THashMap<ui32, TPortionDataAccessor> Accessors;
 
     virtual void DoClear() override {
         Constructors.clear();
@@ -81,7 +86,7 @@ private:
         return Constructors.empty();
     }
     virtual std::shared_ptr<NReader::NCommon::IDataSource> DoExtractNext(
-        const std::shared_ptr<NReader::NCommon::TSpecialReadContext>& context) override;
+        const std::shared_ptr<NReader::NCommon::TSpecialReadContext>& context, const ui32 inFlightCurrentLimit) override;
     virtual void DoInitCursor(const std::shared_ptr<IScanCursor>& /*cursor*/) override {
     }
     virtual TString DoDebugString() const override {
@@ -89,6 +94,8 @@ private:
     }
 
 public:
+    void AddAccessors(TDataAccessorsResult&& accessors);
+
     TConstructor(const NOlap::IPathIdTranslator& pathIdTranslator, const IColumnEngine& engine, const ui64 tabletId,
         const std::optional<NOlap::TInternalPathId> internalPathId, const TSnapshot reqSnapshot,
         const std::shared_ptr<NOlap::TPKRangesFilter>& pkFilter, const ERequestSorting sorting);

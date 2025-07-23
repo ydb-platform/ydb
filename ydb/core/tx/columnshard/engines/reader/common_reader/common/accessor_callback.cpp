@@ -12,7 +12,7 @@ void TPortionAccessorFetchingSubscriber::DoOnRequestsFinished(TDataAccessorsResu
         return;
     }
     AFL_VERIFY(result.GetPortions().size() == 1)("count", result.GetPortions().size());
-    Source->MutableStageData().SetPortionAccessor(std::move(result.ExtractPortions().begin()->second));
+    Source->SetPortionAccessor(std::move(result.ExtractPortions().begin()->second));
     auto task = std::make_shared<NReader::NCommon::TStepAction>(std::move(Source), std::move(Step), ScanActorId, false);
     NConveyorComposite::TScanServiceOperator::SendTaskToExecute(task, ConveyorProcessId);
 }

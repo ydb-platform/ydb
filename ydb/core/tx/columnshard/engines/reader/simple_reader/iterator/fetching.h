@@ -221,7 +221,19 @@ public:
     }
 };
 
-class TDetectInMem: public IFetchingStep {
+class TInitializeSourceStep: public IFetchingStep {
+private:
+    using TBase = IFetchingStep;
+
+public:
+    virtual TConclusion<bool> DoExecuteInplace(
+        const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& /*step*/) const override;
+    TInitializeSourceStep()
+        : TBase("INITIALIZE_SOURCE") {
+    }
+};
+
+class TDetectInMemFlag: public IFetchingStep {
 private:
     using TBase = IFetchingStep;
     TColumnsSetIds Columns;
@@ -229,8 +241,22 @@ private:
 public:
     virtual TConclusion<bool> DoExecuteInplace(
         const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step) const override;
-    TDetectInMem(const TColumnsSetIds& columns)
-        : TBase("DETECT_IN_MEM")
+    TDetectInMemFlag(const TColumnsSetIds& columns)
+        : TBase("DETECT_IN_MEM_FLAG")
+        , Columns(columns) {
+    }
+};
+
+class TDetectScript: public IFetchingStep {
+private:
+    using TBase = IFetchingStep;
+    TColumnsSetIds Columns;
+
+public:
+    virtual TConclusion<bool> DoExecuteInplace(
+        const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step) const override;
+    TDetectScript(const TColumnsSetIds& columns)
+        : TBase("DETECT_SCRIPT")
         , Columns(columns) {
     }
 };

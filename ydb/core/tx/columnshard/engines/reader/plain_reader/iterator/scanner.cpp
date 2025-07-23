@@ -118,7 +118,7 @@ TScanHead::TScanHead(std::unique_ptr<NCommon::ISourcesConstructor>&& sources, co
         InFlightLimit = MaxInFlight;
     }
     while (!sources->IsFinished()) {
-        auto source = std::static_pointer_cast<IDataSource>(sources->ExtractNext(context));
+        auto source = std::static_pointer_cast<IDataSource>(sources->ExtractNext(context, InFlightLimit));
         BorderPoints[source->GetStart()].AddStart(source);
         BorderPoints[source->GetFinish()].AddFinish(source);
     }

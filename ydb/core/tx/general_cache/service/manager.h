@@ -53,6 +53,27 @@ private:
     }
 
 public:
+    bool TakeFromCache(const TManagerCounters& counters, TLRUCache<TAddress, TObject, TNoopDelete, typename TPolicy::TSizeCalcer>& cache) {
+        std::vector<TAddress> toRemove;
+        for (auto&& [sourceId, addresses] : Wait) {
+            for (auto&& addr : addresses) {
+                auto it = cache.Find(addr);
+                if (it == cache.End()) {
+                    counters.ObjectCacheMiss->Inc();
+                } else {
+                    counters.ObjectCacheHit->Inc();
+                    AFL_VERIFY(Result.emplace(addr, it.Value()).second);
+                    WaitObjectsCount.Dec();
+                    toRemove.emplace_back(addr);
+                }
+            }
+        }
+        for (auto&& i : toRemove) {
+            Y_UNUSED(RemoveAddrOnFinished(i));
+        }
+        return Wait.empty();
+    }
+
     ui64 GetWaitObjectsCount() {
         return WaitObjectsCount.Val();
     }
@@ -152,7 +173,7 @@ public:
                     continue;
                 }
                 RequestsInProgress.erase(r->GetRequestId());
-                Counters->OnRequestFinished(r->GetStartRequest(), r->GetCreated(), now);
+                Counters->OnMissCacheRequestFinished(r->GetStartRequest(), r->GetCreated(), now);
                 if (isAdditional) {
                     Counters->AdditionalObjectInfo->Inc();
                 } else {
@@ -172,7 +193,7 @@ public:
                 Counters->FailedObject->Inc();
                 if (r->AddError(i.first, i.second)) {
                     RequestsInProgress.erase(r->GetRequestId());
-                    Counters->OnRequestFinished(r->GetStartRequest(), r->GetCreated(), now);
+                    Counters->OnMissCacheRequestFinished(r->GetStartRequest(), r->GetCreated(), now);
                 }
             }
             RequestedObjects.erase(it);
@@ -191,7 +212,7 @@ public:
                     continue;
                 }
                 RequestsInProgress.erase(r->GetRequestId());
-                Counters->OnRequestFinished(r->GetStartRequest(), r->GetCreated(), now);
+                Counters->OnMissCacheRequestFinished(r->GetStartRequest(), r->GetCreated(), now);
                 if (isAdditional) {
                     Counters->RemovedObjectInfo->Inc();
                 } else {
@@ -218,7 +239,7 @@ public:
                 Counters->FailedObject->Inc();
                 if (r->AddError(objAddr, "source broken: " + ::ToString(SourceId))) {
                     RequestsInProgress.erase(r->GetRequestId());
-                    Counters->OnRequestFinished(r->GetStartRequest(), r->GetCreated(), now);
+                    Counters->OnMissCacheRequestFinished(r->GetStartRequest(), r->GetCreated(), now);
                 }
             }
         }
@@ -395,29 +416,14 @@ public:
 
     void AddRequest(const std::shared_ptr<TRequest>& request) {
         AFL_DEBUG(NKikimrServices::GENERAL_CACHE)("event", "add_request");
-        THashMap<TAddress, TObject> objectsResult;
         if (request->IsAborted()) {
             Counters->IncomingAbortedRequestsCount->Inc();
             return;
         } else {
             Counters->IncomingRequestsCount->Inc();
         }
-        for (auto&& [sourceId, addresses] : request->GetWaitBySource()) {
-            for (auto&& addr : addresses) {
-                auto it = Cache.Find(addr);
-                if (it == Cache.End()) {
-                    Counters->ObjectCacheMiss->Inc();
-                } else {
-                    Counters->ObjectCacheHit->Inc();
-                    AFL_VERIFY(objectsResult.emplace(addr, it.Value()).second);
-                }
-            }
-        }
-        for (auto&& i : objectsResult) {
-            Y_UNUSED(request->AddResult(i.first, std::move(i.second)));
-        }
-        if (request->GetWaitBySource().empty()) {
-            Counters->OnRequestFinished(request->GetStartRequest(), request->GetCreated(), TMonotonic::Now());
+        if (request->TakeFromCache(*Counters, Cache)) {
+            Counters->OnHitCacheRequestFinished(request->GetStartRequest(), request->GetCreated(), TMonotonic::Now());
             Counters->RequestCacheHit->Inc();
             return;
         } else {

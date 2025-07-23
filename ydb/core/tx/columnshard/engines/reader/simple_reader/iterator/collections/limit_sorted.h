@@ -34,9 +34,9 @@ private:
     virtual bool DoHasData() const override {
         return !SourcesConstructor->IsFinished();
     }
-    std::shared_ptr<IDataSource> NextSource;
+    std::shared_ptr<NCommon::IDataSource> NextSource;
     ui64 Limit = 0;
-    std::unique_ptr<NCommon::ISourcesConstructor> SourcesConstructor;
+
     ui64 InFlightLimit = 1;
     std::set<ui32> FetchingInFlightSources;
     bool Aborted = false;
@@ -71,7 +71,7 @@ private:
     ui32 GetInFlightIntervalsCount(const TCompareKeyForScanSequence& from, const TCompareKeyForScanSequence& to) const;
 
 public:
-    const std::shared_ptr<IDataSource>& GetNextSource() const {
+    const std::shared_ptr<NCommon::IDataSource>& GetNextSource() const {
         return NextSource;
     }
 

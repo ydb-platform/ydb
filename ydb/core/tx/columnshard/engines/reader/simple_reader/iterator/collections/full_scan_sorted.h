@@ -10,7 +10,7 @@ namespace NKikimr::NOlap::NReader::NSimple {
 class TSortedFullScanCollection: public ISourcesCollection {
 private:
     using TBase = ISourcesCollection;
-    std::unique_ptr<NCommon::ISourcesConstructor> SourcesConstructor;
+
     TPositiveControlInteger InFlightCount;
     virtual void DoClear() override {
         SourcesConstructor->Clear();
@@ -29,7 +29,10 @@ private:
             std::make_shared<NArrow::TSimpleRow>(source->GetAs<IDataSource>()->GetStartPKRecordBatch()), source->GetSourceId(), readyRecords);
     }
     virtual std::shared_ptr<NCommon::IDataSource> DoExtractNext() override {
-        auto result = SourcesConstructor->ExtractNext(Context);
+        auto result = SourcesConstructor->ExtractNext(Context, GetMaxInFlight());
+        if (!result) {
+            return std::move(result);
+        }
         InFlightCount.Inc();
         return std::move(result);
     }
@@ -43,8 +46,7 @@ private:
 public:
     TSortedFullScanCollection(
         const std::shared_ptr<TSpecialReadContext>& context, std::unique_ptr<NCommon::ISourcesConstructor>&& sourcesConstructor)
-        : TBase(context)
-        , SourcesConstructor(std::move(sourcesConstructor)) {
+        : TBase(context, std::move(sourcesConstructor)) {
     }
 };
 

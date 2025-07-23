@@ -78,14 +78,26 @@ NKikimr::TConclusion<bool> TFilterCutLimit::DoExecuteInplace(
 TConclusion<bool> TStartPortionAccessorFetchingStep::DoExecuteInplace(
     const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step) const {
     FOR_DEBUG_LOG(NKikimrServices::COLUMNSHARD_SCAN_EVLOG, source->AddEvent("sacc"));
-    if (source->GetStageData().HasPortionAccessor()) {
+    if (source->HasPortionAccessor()) {
         return true;
     }
     return !source->MutableAs<IDataSource>()->StartFetchingAccessor(source, step);
 }
 
-TConclusion<bool> TDetectInMem::DoExecuteInplace(
+TConclusion<bool> TDetectScript::DoExecuteInplace(
     const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& /*step*/) const {
+    auto plan = source->GetContext()->GetColumnsFetchingPlan(source);
+    source->MutableAs<IDataSource>()->InitFetchingPlan(plan);
+    TFetchingScriptCursor cursor(plan, 0);
+    FOR_DEBUG_LOG(NKikimrServices::COLUMNSHARD_SCAN_EVLOG, source->AddEvent("sdmem"));
+    return cursor.Execute(source);
+}
+
+TConclusion<bool> TDetectInMemFlag::DoExecuteInplace(
+    const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& /*step*/) const {
+    if (source->HasSourceInMemoryFlag()) {
+        return true;
+    }
     const auto& chainProgram = source->GetContext()->GetReadMetadata()->GetProgram().GetChainVerified();
     if (Columns.GetColumnsCount() && !chainProgram->HasAggregations()) {
         source->SetSourceInMemory(
@@ -93,16 +105,7 @@ TConclusion<bool> TDetectInMem::DoExecuteInplace(
     } else {
         source->SetSourceInMemory(true);
     }
-    AFL_VERIFY(source->GetStageData().HasPortionAccessor());
-    auto plan = source->GetContext()->GetColumnsFetchingPlan(source);
-    source->MutableAs<IDataSource>()->InitFetchingPlan(plan);
-    TFetchingScriptCursor cursor(plan, 0);
-    FOR_DEBUG_LOG(NKikimrServices::COLUMNSHARD_SCAN_EVLOG, source->AddEvent("sdmem"));
-    const auto& commonContext = *source->GetContext()->GetCommonContext();
-    auto sCopy = source;
-    auto task = std::make_shared<TStepAction>(std::move(sCopy), std::move(cursor), commonContext.GetScanActorId(), false);
-    NConveyorComposite::TScanServiceOperator::SendTaskToExecute(task, commonContext.GetConveyorProcessId());
-    return false;
+    return true;
 }
 
 namespace {
@@ -129,6 +132,12 @@ public:
 
 
 }   // namespace
+
+NKikimr::TConclusion<bool> TInitializeSourceStep::DoExecuteInplace(
+    const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& /*step*/) const {
+    source->MutableAs<IDataSource>()->InitializeProcessing(source);
+    return true;
+}
 
 TConclusion<bool> TPortionAccessorFetchedStep::DoExecuteInplace(
     const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& /*step*/) const {

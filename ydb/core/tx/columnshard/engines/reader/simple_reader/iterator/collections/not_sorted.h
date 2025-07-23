@@ -10,7 +10,7 @@ private:
     using TBase = ISourcesCollection;
     std::optional<ui32> Limit;
     ui32 InFlightLimit = 1;
-    std::unique_ptr<NCommon::ISourcesConstructor> SourcesConstructor;
+
     TPositiveControlInteger InFlightCount;
     ui32 FetchedCount = 0;
     virtual bool DoHasData() const override {
@@ -28,7 +28,10 @@ private:
         return SourcesConstructor->IsFinished();
     }
     virtual std::shared_ptr<NCommon::IDataSource> DoExtractNext() override {
-        auto result = SourcesConstructor->ExtractNext(Context);
+        auto result = SourcesConstructor->ExtractNext(Context, InFlightLimit);
+        if (!result) {
+            return result;
+        }
         InFlightCount.Inc();
         return std::move(result);
     }
@@ -50,9 +53,8 @@ private:
 public:
     TNotSortedCollection(const std::shared_ptr<TSpecialReadContext>& context, std::unique_ptr<NCommon::ISourcesConstructor>&& sourcesConstructor,
         const std::optional<ui32> limit)
-        : TBase(context)
-        , Limit(limit)
-        , SourcesConstructor(std::move(sourcesConstructor)) {
+        : TBase(context, std::move(sourcesConstructor))
+        , Limit(limit) {
         if (Limit) {
             InFlightLimit = 1;
         } else {

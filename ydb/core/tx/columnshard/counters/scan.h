@@ -364,6 +364,7 @@ private:
     std::shared_ptr<TAtomicCounter> AbortsGuard = std::make_shared<TAtomicCounter>();
     std::shared_ptr<TAtomicCounter> TotalExecutionDurationUs = std::make_shared<TAtomicCounter>();
     std::shared_ptr<TAtomicCounter> TotalRawBytes = std::make_shared<TAtomicCounter>();
+    std::shared_ptr<TAtomicCounter> AccessorsForConstructionGuard = std::make_shared<TAtomicCounter>();
     THashMap<ui32, std::shared_ptr<TAtomicCounter>> SkipNodesCount;
     THashMap<ui32, std::shared_ptr<TAtomicCounter>> ExecuteNodesCount;
 
@@ -414,6 +415,11 @@ public:
                                 << "FilterFetchingGuard:" << FilterFetchingGuard->Val() << ";"
                                 << "AbortsGuard:" << AbortsGuard->Val() << ";";
     }
+
+    TCounterGuard GetAccessorsForConstructionGuard() const {
+        return TCounterGuard(AccessorsForConstructionGuard);
+    }
+
 
     TCounterGuard GetResultsForReplyGuard() const {
         return TCounterGuard(ResultsForReplyGuard);

@@ -62,11 +62,11 @@ private:
                 return AccessorsCallback->GetAbortionFlag() && AccessorsCallback->GetAbortionFlag()->Val();
             }
 
-            virtual void DoOnResultReady(THashMap<NGeneralCache::TGlobalPortionAddress, TPortionDataAccessor>&& objectAddresses,
+            virtual void DoOnResultReady(THashMap<NGeneralCache::TGlobalPortionAddress, std::shared_ptr<TPortionDataAccessor>>&& objectAddresses,
                 THashSet<NGeneralCache::TGlobalPortionAddress>&& removedAddresses,
                 THashMap<NGeneralCache::TGlobalPortionAddress, TString>&& errorAddresses) const override {
                 AFL_VERIFY(removedAddresses.empty());
-                THashMap<ui64, TPortionDataAccessor> objects;
+                THashMap<ui64, std::shared_ptr<TPortionDataAccessor>> objects;
                 for (auto&& i : objectAddresses) {
                     objects.emplace(i.first.GetPortionId(), std::move(i.second));
                 }

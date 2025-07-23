@@ -5,8 +5,10 @@
 
 namespace NKikimr::NOlap::NReader::NSimple {
 
-ISourcesCollection::ISourcesCollection(const std::shared_ptr<TSpecialReadContext>& context)
-    : Context(context) {
+ISourcesCollection::ISourcesCollection(
+    const std::shared_ptr<TSpecialReadContext>& context, std::unique_ptr<NCommon::ISourcesConstructor>&& sourcesConstructor)
+    : Context(context)
+    , SourcesConstructor(std::move(sourcesConstructor)) {
     if (HasAppData() && AppDataVerified().ColumnShardConfig.HasMaxInFlightIntervalsOnRequest()) {
         MaxInFlight = AppDataVerified().ColumnShardConfig.GetMaxInFlightIntervalsOnRequest();
     }

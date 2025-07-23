@@ -31,7 +31,7 @@ public:
         return Source;
     }
     ui32 GetRecordsCount() const {
-        return Source->GetStageData().GetPortionAccessor().GetPortionInfo().GetRecordsCount();
+        return Source->GetPortionAccessor().GetPortionInfo().GetRecordsCount();
     }
 
     const std::shared_ptr<NArrow::TColumnFilter>& GetAppliedFilter() const {

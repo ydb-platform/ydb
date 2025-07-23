@@ -49,7 +49,7 @@ bool TAllocateMemoryStep::TFetchingStepAllocation::DoOnAllocated(std::shared_ptr
         return false;
     }
     if (StageIndex == NArrow::NSSA::IMemoryCalculationPolicy::EStage::Accessors) {
-        data->MutableStageData().SetAccessorsGuard(std::move(guard));
+//        data->SetAccessorsGuard(std::move(guard));
     } else {
         data->RegisterAllocationGuard(std::move(guard));
     }

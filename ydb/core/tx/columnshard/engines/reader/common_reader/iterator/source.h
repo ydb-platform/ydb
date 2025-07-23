@@ -163,6 +163,7 @@ private:
 
     std::optional<NEvLog::TLogsThread> Events;
     std::unique_ptr<TFetchedData> StageData;
+    std::optional<TPortionDataAccessor> Accessor;
 
 protected:
     std::vector<std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>> ResourceGuards;
@@ -173,6 +174,27 @@ protected:
     }
 
 public:
+
+    const TPortionDataAccessor& GetPortionAccessor() const {
+        AFL_VERIFY(!!Accessor);
+        return *Accessor;
+    }
+
+    TPortionDataAccessor ExtractPortionAccessor() {
+        AFL_VERIFY(!!Accessor);
+        auto result = std::move(*Accessor);
+        Accessor.reset();
+        return result;
+    }
+
+    bool HasPortionAccessor() const {
+        return !!Accessor;
+    }
+
+    void SetPortionAccessor(TPortionDataAccessor&& acc) {
+        AFL_VERIFY(!Accessor);
+        Accessor = std::move(acc);
+    }
 
     template <class T>
     const T* GetAs() const {
@@ -297,6 +319,11 @@ public:
         AFL_VERIFY(IsSourceInMemoryFlag);
         return *IsSourceInMemoryFlag;
     }
+
+    bool HasSourceInMemoryFlag() const {
+        return !!IsSourceInMemoryFlag;
+    }
+
     void SetSourceInMemory(const bool value) {
         AFL_VERIFY(!IsSourceInMemoryFlag);
         IsSourceInMemoryFlag = value;

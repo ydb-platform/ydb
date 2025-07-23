@@ -51,6 +51,9 @@ TConclusion<bool> TScanHead::BuildNextInterval() {
     bool changed = false;
     while (SourcesCollection->HasData() && SourcesCollection->CheckInFlightLimits()) {
         auto source = SourcesCollection->ExtractNext();
+        if (!source) {
+            return changed;
+        }
         SyncPoints.front()->AddSource(std::move(source));
         changed = true;
     }

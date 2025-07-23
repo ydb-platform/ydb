@@ -29,8 +29,17 @@ private:
 
 protected:
     const std::shared_ptr<TSpecialReadContext> Context;
+    std::unique_ptr<NCommon::ISourcesConstructor> SourcesConstructor;
 
 public:
+
+    template <class T>
+    T& MutableConstructorsAs() {
+        auto result = static_cast<T*>(SourcesConstructor.get());
+        AFL_VERIFY(result);
+        return *result;
+    }
+
     ui64 GetSourcesInFlightCount() const {
         return SourcesInFlightCount.Val();
     }
@@ -56,8 +65,12 @@ public:
     virtual ~ISourcesCollection() = default;
 
     std::shared_ptr<NCommon::IDataSource> ExtractNext() {
-        SourcesInFlightCount.Inc();
-        return DoExtractNext();
+        if (auto result = DoExtractNext()) {
+            SourcesInFlightCount.Inc();
+            return result;
+        } else {
+            return nullptr;
+        }
     }
 
     bool IsFinished() const {
@@ -82,7 +95,7 @@ public:
         DoAbort();
     }
 
-    ISourcesCollection(const std::shared_ptr<TSpecialReadContext>& context);
+    ISourcesCollection(const std::shared_ptr<TSpecialReadContext>& context, std::unique_ptr<NCommon::ISourcesConstructor>&& sourcesConstructor);
 };
 
 }   // namespace NKikimr::NOlap::NReader::NSimple

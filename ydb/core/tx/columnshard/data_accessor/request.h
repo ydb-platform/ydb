@@ -15,14 +15,15 @@ class TDataAccessorsRequest;
 class TDataAccessorsResult: private NNonCopyable::TMoveOnly {
 private:
     THashMap<TInternalPathId, TString> ErrorsByPathId;
-    THashMap<ui64, TPortionDataAccessor> PortionsById;
+    THashMap<ui64, std::shared_ptr<TPortionDataAccessor>> PortionsById;
 
 public:
     TDataAccessorsResult() = default;
 
-    TDataAccessorsResult(std::vector<TPortionDataAccessor>&& portions) {
+    TDataAccessorsResult(std::vector<std::shared_ptr<TPortionDataAccessor>>&& portions) {
         for (auto&& i : portions) {
-            const ui64 portionId = i.GetPortionInfo().GetPortionId();
+            AFL_VERIFY(i);
+            const ui64 portionId = i->GetPortionInfo().GetPortionId();
             PortionsById.emplace(portionId, std::move(i));
         }
     }
@@ -35,8 +36,8 @@ public:
         return PortionsById;
     }
 
-    std::vector<TPortionDataAccessor> ExtractPortionsVector() {
-        std::vector<TPortionDataAccessor> portions;
+    std::vector<std::shared_ptr<TPortionDataAccessor>> ExtractPortionsVector() {
+        std::vector<std::shared_ptr<TPortionDataAccessor>> portions;
         portions.reserve(PortionsById.size());
         for (auto&& [_, portionInfo] : PortionsById) {
             portions.emplace_back(std::move(portionInfo));
@@ -59,7 +60,7 @@ public:
         return it->second;
     }
 
-    TPortionDataAccessor ExtractPortionAccessorVerified(const ui64 portionId) {
+    std::shared_ptr<TPortionDataAccessor> ExtractPortionAccessorVerified(const ui64 portionId) {
         auto it = PortionsById.find(portionId);
         AFL_VERIFY(it != PortionsById.end());
         auto result = std::move(it->second);
@@ -67,10 +68,14 @@ public:
         return result;
     }
 
-    void AddData(THashMap<ui64, TPortionDataAccessor>&& accessors) {
-        std::deque<TPortionDataAccessor> v;
-        for (auto&& [portionId, i] : accessors) {
-            AFL_VERIFY(PortionsById.emplace(portionId, i).second);
+    void AddData(THashMap<ui64, std::shared_ptr<TPortionDataAccessor>>&& accessors) {
+        if (PortionsById.empty()) {
+            PortionsById = std::move(accessors);
+        } else {
+            for (auto&& [portionId, i] : accessors) {
+                AFL_VERIFY(i);
+                AFL_VERIFY(PortionsById.emplace(portionId, std::move(i)).second);
+            }
         }
     }
 

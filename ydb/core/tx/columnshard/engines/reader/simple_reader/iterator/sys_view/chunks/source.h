@@ -17,7 +17,7 @@ private:
     std::shared_ptr<NArrow::NAccessor::TAccessorsCollection> OriginalData;
 
     virtual TString GetColumnStorageId(const ui32 columnId) const override {
-        return GetStageData().GetPortionAccessor().GetPortionInfo().GetColumnStorageId(columnId, Schema->GetIndexInfo());
+        return GetPortionAccessor().GetPortionInfo().GetColumnStorageId(columnId, Schema->GetIndexInfo());
     }
 
     virtual ui64 GetColumnRawBytes(const std::set<ui32>& /*columnsIds*/) const override {
@@ -29,7 +29,7 @@ private:
     }
 
     virtual TBlobRange RestoreBlobRange(const TBlobRangeLink16& rangeLink) const override {
-        return GetStageData().GetPortionAccessor().RestoreBlobRange(rangeLink);
+        return GetPortionAccessor().RestoreBlobRange(rangeLink);
     }
 
     virtual bool DoStartFetchingAccessor(
@@ -39,7 +39,7 @@ private:
 
     virtual void InitUsedRawBytes() override {
         AFL_VERIFY(!UsedRawBytes);
-        UsedRawBytes = GetStageData().GetPortionAccessor().GetColumnRawBytes(GetContext()->GetAllUsageColumns()->GetColumnIds(), false);
+        UsedRawBytes = GetPortionAccessor().GetColumnRawBytes(GetContext()->GetAllUsageColumns()->GetColumnIds(), false);
         InitRecordsCount(GetRecordsCount());
     }
 
@@ -49,7 +49,7 @@ private:
 
     virtual ui32 GetRecordsCountVirtual() const override {
         AFL_VERIFY(HasStageData())("tablet_id", GetTabletId())("source_id", GetSourceId());
-        return GetStageData().GetPortionAccessor().GetRecordsVerified().size() + GetStageData().GetPortionAccessor().GetIndexesVerified().size();
+        return GetPortionAccessor().GetRecordsVerified().size() + GetPortionAccessor().GetIndexesVerified().size();
     }
 
     virtual void DoAssembleAccessor(const NArrow::NSSA::TProcessorContext& context, const ui32 columnId, const TString& subColumnName) override;

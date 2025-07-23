@@ -3,15 +3,30 @@
 namespace NKikimr::NOlap::NReader::NSimple {
 
 std::shared_ptr<NCommon::IDataSource> TScanWithLimitCollection::DoExtractNext() {
-    auto result = NextSource ? NextSource : static_pointer_cast<IDataSource>(SourcesConstructor->ExtractNext(Context));
-    AFL_VERIFY(FetchingInFlightSources.emplace(result->GetSourceId()).second);
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "DoExtractNext")("source_id", result->GetSourceId());
-    if (!SourcesConstructor->IsFinished()) {
-        NextSource = static_pointer_cast<IDataSource>(SourcesConstructor->ExtractNext(Context));
-    } else {
-        NextSource = nullptr;
+    if (!NextSource) {
+        if (!SourcesConstructor->IsFinished()) {
+            NextSource = SourcesConstructor->ExtractNext(Context, InFlightLimit);
+            if (!NextSource) {
+                return nullptr;
+            }
+        }
     }
-    return result;
+    std::shared_ptr<NCommon::IDataSource> localNext;
+    {
+        if (!SourcesConstructor->IsFinished()) {
+            localNext = SourcesConstructor->ExtractNext(Context, InFlightLimit);
+            if (!localNext) {
+                return nullptr;
+            }
+        } else {
+            localNext = nullptr;
+        }
+        auto result = std::move(NextSource);
+        NextSource = std::move(localNext);
+        AFL_VERIFY(FetchingInFlightSources.emplace(result->GetSourceId()).second);
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "DoExtractNext")("source_id", result->GetSourceId());
+        return result;
+    }
 }
 
 void TScanWithLimitCollection::DoOnSourceFinished(const std::shared_ptr<NCommon::IDataSource>& source) {
@@ -25,9 +40,8 @@ void TScanWithLimitCollection::DoOnSourceFinished(const std::shared_ptr<NCommon:
 
 TScanWithLimitCollection::TScanWithLimitCollection(
     const std::shared_ptr<TSpecialReadContext>& context, std::unique_ptr<NCommon::ISourcesConstructor>&& sourcesConstructor)
-    : TBase(context)
-    , Limit((ui64)Context->GetCommonContext()->GetReadMetadata()->GetLimitRobust())
-    , SourcesConstructor(std::move(sourcesConstructor)) {
+    : TBase(context, std::move(sourcesConstructor))
+    , Limit((ui64)Context->GetCommonContext()->GetReadMetadata()->GetLimitRobust()) {
 }
 
 }   // namespace NKikimr::NOlap::NReader::NSimple

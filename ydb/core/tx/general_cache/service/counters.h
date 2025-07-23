@@ -10,7 +10,8 @@ class TManagerCounters: public NColumnShard::TCommonCountersOwner {
 private:
     using TBase = NColumnShard::TCommonCountersOwner;
     const NPublic::TConfig Config;
-    const NMonitoring::THistogramPtr RequestProcessingDuration;
+    const NMonitoring::THistogramPtr CacheRequestProcessingDuration;
+    const NMonitoring::THistogramPtr MissRequestProcessingDuration;
     const NMonitoring::THistogramPtr RequestDeliveringDuration;
     const std::shared_ptr<TPositiveControlInteger> TotalInFlight = std::make_shared<TPositiveControlInteger>();
     const std::shared_ptr<TPositiveControlInteger> QueueObjectsCount = std::make_shared<TPositiveControlInteger>();
@@ -32,8 +33,13 @@ public:
         return Config;
     }
 
-    void OnRequestFinished(const TMonotonic send, const TMonotonic received, const TMonotonic now) const {
-        RequestProcessingDuration->Collect((now - received).MicroSeconds());
+    void OnMissCacheRequestFinished(const TMonotonic send, const TMonotonic received, const TMonotonic now) const {
+        MissRequestProcessingDuration->Collect((now - received).MicroSeconds());
+        RequestDeliveringDuration->Collect((received - send).MicroSeconds());
+    }
+
+    void OnHitCacheRequestFinished(const TMonotonic send, const TMonotonic received, const TMonotonic now) const {
+        CacheRequestProcessingDuration->Collect((now - received).MicroSeconds());
         RequestDeliveringDuration->Collect((received - send).MicroSeconds());
     }
 
@@ -65,7 +71,9 @@ public:
     TManagerCounters(NColumnShard::TCommonCountersOwner& base, const NPublic::TConfig& config)
         : TBase(base, "signals_owner", "manager")
         , Config(config)
-        , RequestProcessingDuration(TBase::GetHistogram("Requests/Duration/Processing/Us", NMonitoring::ExponentialHistogram(18, 2, 16)))
+        , CacheRequestProcessingDuration(TBase::GetHistogram("Requests/Duration/Processing/Cache/Us", NMonitoring::ExponentialHistogram(18, 2, 16)))
+        , MissRequestProcessingDuration(
+              TBase::GetHistogram("Requests/Duration/Processing/Miss/Us", NMonitoring::ExponentialHistogram(18, 2, 16)))
         , RequestDeliveringDuration(TBase::GetHistogram("Requests/Duration/Delivering/Us", NMonitoring::ExponentialHistogram(18, 2, 16)))
         , RequestCacheMiss(TBase::GetDeriviative("Cache/Request/Miss/Count"))
         , RequestCacheHit(TBase::GetDeriviative("Cache/Request/Hit/Count"))

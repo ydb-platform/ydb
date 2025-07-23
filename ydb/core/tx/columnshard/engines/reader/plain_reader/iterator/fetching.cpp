@@ -78,7 +78,7 @@ NKikimr::TConclusion<bool> TFilterCutLimit::DoExecuteInplace(
 
 TConclusion<bool> TPortionAccessorFetchingStep::DoExecuteInplace(
     const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step) const {
-    if (source->GetStageData().HasPortionAccessor()) {
+    if (source->HasPortionAccessor()) {
         return true;
     }
     return !source->MutableAs<IDataSource>()->StartFetchingAccessor(source, step);
@@ -86,6 +86,9 @@ TConclusion<bool> TPortionAccessorFetchingStep::DoExecuteInplace(
 
 TConclusion<bool> TDetectInMem::DoExecuteInplace(
     const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& /*step*/) const {
+    if (source->HasSourceInMemoryFlag()) {
+        return true;
+    }
     if (Columns.GetColumnsCount()) {
         source->SetSourceInMemory(
             source->GetColumnRawBytes(Columns.GetColumnIds()) < NYDBTest::TControllers::GetColumnShardController()->GetMemoryLimitScanPortion());
@@ -96,11 +99,7 @@ TConclusion<bool> TDetectInMem::DoExecuteInplace(
     auto plan = source->GetContext()->GetColumnsFetchingPlan(source);
     source->MutableAs<IDataSource>()->InitFetchingPlan(plan);
     TFetchingScriptCursor cursor(plan, 0);
-    const auto& commonContext = *source->GetContext()->GetCommonContext();
-    auto sourceCopy = source;
-    auto task = std::make_shared<TStepAction>(std::move(sourceCopy), std::move(cursor), commonContext.GetScanActorId(), false);
-    NConveyorComposite::TScanServiceOperator::SendTaskToExecute(task, commonContext.GetConveyorProcessId());
-    return false;
+    return cursor.Execute(source);
 }
 
 TConclusion<bool> TBuildFakeSpec::DoExecuteInplace(

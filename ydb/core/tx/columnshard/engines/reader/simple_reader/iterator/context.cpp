@@ -15,14 +15,17 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::DoGetColumnsFetchingPlan(c
     if (!sourceExt->NeedPortionData()) {
         sourceExt->SetSourceInMemory(true);
         source->InitUsedRawBytes();
-    } else if (!dontNeedColumns && !source->HasStageData()) {
+    } else if (!dontNeedColumns && !source->HasStageData() && !source->HasPortionAccessor()) {
         if (!AskAccumulatorsScript) {
             NCommon::TFetchingScriptBuilder acc(*this);
+            acc.AddStep(std::make_shared<TInitializeSourceStep>());
             acc.AddStep(std::make_shared<NCommon::TAllocateMemoryStep>(
                 source->PredictAccessorsSize(GetFFColumns()->GetColumnIds()), NArrow::NSSA::IMemoryCalculationPolicy::EStage::Accessors));
             acc.AddStep(std::make_shared<TStartPortionAccessorFetchingStep>());
             acc.AddStep(std::make_shared<TPortionAccessorFetchedStep>());
-            acc.AddStep(std::make_shared<TDetectInMem>(*GetFFColumns()));
+            acc.AddStep(std::make_shared<TDetectInMemFlag>(*GetFFColumns()));
+            acc.AddStep(std::make_shared<TDetectScript>(*GetFFColumns()));
+
             AskAccumulatorsScript = std::move(acc).Build();
         }
         return AskAccumulatorsScript;
@@ -68,6 +71,8 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::BuildColumnsFetchingPlan(c
     const bool partialUsageByPredicate = partialUsageByPredicateExt && GetPredicateColumns()->GetColumnsCount();
 
     NCommon::TFetchingScriptBuilder acc(*this);
+    acc.AddStep(std::make_shared<TInitializeSourceStep>());
+    acc.AddStep(std::make_shared<TDetectInMemFlag>(*GetFFColumns()));
     if (needFilterSharding && !GetShardingColumns()->IsEmpty()) {
         const TColumnsSetIds columnsFetch = *GetShardingColumns();
         acc.AddFetchingStep(columnsFetch, NArrow::NSSA::IMemoryCalculationPolicy::EStage::Filter);

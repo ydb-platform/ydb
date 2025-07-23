@@ -39,7 +39,7 @@ class Workload:
 
             end_offset = 0
             try:
-                describe = self.driver.topic_client.describe_topic(self.topic_name, include_stats = True)
+                describe = self.driver.topic_client.describe_topic(self.topic_name, include_stats=True)
                 pprint(vars(describe))
                 end_offset = describe.partitions[0].partition_stats.partition_end
             except Exception:
@@ -49,7 +49,7 @@ class Workload:
             with self.driver.topic_client.reader(self.topic_name, consumer='test-consumer') as reader:
                 while True:
                     try:
-                        message = reader.receive_message(timeout=5)
+                        message = reader.receive_message(timeout=1)
                     except TimeoutError:
                         break
 
@@ -61,9 +61,9 @@ class Workload:
 
             if self.processed_message_count == end_offset:
                 break
-            
+
             time.sleep(1)
-        
+
         if self.processed_message_count != end_offset:
             raise Exception(f"Received {self.processed_message_count} messages but written {self.message_count}")
 

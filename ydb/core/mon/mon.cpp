@@ -1203,15 +1203,7 @@ public:
 
     void Handle(NHttp::TEvHttpProxy::TEvHttpOutgoingDataChunk::TPtr& ev) {
         bool endOfData = false;
-        if (ev->Get()->DataChunk) {
-            Send(Event->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingDataChunk(ev->Get()->DataChunk), 0, Event->Cookie);
-            if (ev->Get()->DataChunk->IsEndOfData()) {
-                endOfData = true;
-            }
-        } else if (ev->Get()->Error) {
-            Send(Event->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingDataChunk(ev->Get()->Error), 0, Event->Cookie);
-            endOfData = true;
-        }
+        Forward(ev, Event->Sender);
         if (endOfData) {
             PassAway();
         }

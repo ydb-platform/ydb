@@ -41,7 +41,7 @@ private:
     }
 
 public:
-    TPathIdData(const TInternalPathId pathId, const std::vector<TPortionDataAccessor>& portions)
+    TPathIdData(const TInternalPathId pathId, const std::vector<std::shared_ptr<TPortionDataAccessor>>& portions)
         : PathId(pathId)
         , Portions(portions) {
     }
@@ -52,9 +52,9 @@ public:
     void InitPortionIds(ui64* lastPortionId, const std::optional<TInternalPathId> pathId = {}) {
         AFL_VERIFY(lastPortionId);
         for (auto&& i : Portions) {
-            i.MutablePortionInfo().SetPortionId(++*lastPortionId);
+            i->MutablePortionInfo().SetPortionId(++*lastPortionId);
             if (pathId) {
-                i.MutablePortionInfo().SetPathId(*pathId);
+                i->MutablePortionInfo().SetPathId(*pathId);
             }
         }
     }
@@ -62,7 +62,7 @@ public:
     void SerializeToProto(NKikimrColumnShardDataSharingProto::TPathIdData& proto) const {
         proto.SetPathId(PathId.GetRawValue());
         for (auto&& i : Portions) {
-            i.SerializeToProto(*proto.AddPortions());
+            i->SerializeToProto(*proto.AddPortions());
         }
     };
 

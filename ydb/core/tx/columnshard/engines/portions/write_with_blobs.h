@@ -218,6 +218,13 @@ public:
         return **PortionResult;
     }
 
+    const std::shared_ptr<TPortionDataAccessor>& GetPortionResultPtr() const {
+        AFL_VERIFY(!PortionConstructor);
+        AFL_VERIFY(!!PortionResult);
+        AFL_VERIFY(!!*PortionResult);
+        return *PortionResult;
+    }
+
     TPortionAccessorConstructor& GetPortionConstructor() {
         AFL_VERIFY(!!PortionConstructor);
         AFL_VERIFY(!PortionResult);

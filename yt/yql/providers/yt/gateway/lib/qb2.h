@@ -11,8 +11,6 @@
 
 namespace NYql {
 
-namespace NNative {
-
 using TRemapperKey = std::tuple<TString, TString, TString>; // binary path (must be first), log name, all fields
 using TRemapperPayload = std::vector<ui32>; // table indicies
 using TRemapperMap = std::map<TRemapperKey, TRemapperPayload>;
@@ -28,7 +26,5 @@ void ProcessTableQB2Premapper(const NYT::TNode& remapper,
 TString GetQB2PremapperPrefix(const TRemapperMap& remapperMap, bool useSkiff);
 
 void UpdateQB2PremapperUseSkiff(const TRemapperMap& remapperMap, bool& useSkiff);
-
-} // NNative
 
 } // NYql

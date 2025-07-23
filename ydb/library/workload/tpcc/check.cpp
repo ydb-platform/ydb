@@ -857,7 +857,7 @@ void TPCCChecker::ConsistencyCheck3325(TQueryClient& client) {
                 WHERE NO_W_ID >= $warehouse_from AND NO_W_ID <= $warehouse_to
             ) AS no
             ON o.O_W_ID = no.NO_W_ID AND o.O_D_ID = no.NO_D_ID AND o.O_ID = no.NO_O_ID
-            WHERE (o.O_CARRIER_ID IS NULL OR o.O_CARRIER_ID == 0) AND no.NO_W_ID IS NULL
+            WHERE (o.O_CARRIER_ID IS NULL OR o.O_CARRIER_ID = 0) AND no.NO_W_ID IS NULL
             LIMIT 1;
 
             SELECT *

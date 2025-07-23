@@ -4,7 +4,6 @@
 #include <util/system/hostname.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/bridge.h>
-#include <ydb/core/blobstorage/base/blobstorage_events.h>
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
@@ -67,11 +66,6 @@ public:
 
         SystemStateInfo.SetStartTime(ctx.Now().MilliSeconds());
         ctx.Send(ctx.SelfID, new TEvPrivate::TEvUpdateRuntimeStats());
-
-        if (IsBridgeMode(ctx)) {
-            const TActorId wardenId = MakeBlobStorageNodeWardenID(SelfId().NodeId());
-            ctx.Send(wardenId, new TEvNodeWardenQueryStorageConfig(true));
-        }
 
         auto utils = NKikimr::GetServiceCounters(NKikimr::AppData()->Counters, "utils");
         UserTime = utils->GetCounter("Process/UserTime", true);
@@ -580,7 +574,6 @@ protected:
         HFunc(TEvPrivate::TEvSendListNodes, Handle);
         HFunc(TEvPrivate::TEvUpdateRuntimeStats, Handle);
         HFunc(TEvPrivate::TEvCleanupDeadTablets, Handle);
-        HFunc(TEvNodeWardenStorageConfig, Handle);
     )
 
     void Handle(TEvWhiteboard::TEvTabletStateUpdate::TPtr &ev, const TActorContext &ctx) {
@@ -741,10 +734,15 @@ protected:
         if (!pileMap) {
             return;
         }
-        for (const auto& pile : *pileMap) {
+        for (size_t pileId = 0; pileId < pileMap->size(); ++pileId) {
+            const auto& pile = (*pileMap)[pileId];
             auto* pileInfo = newInfo.MutablePiles()->Add();
             for (const auto nodeId : pile) {
                 pileInfo->MutableNodeIds()->Add(nodeId);
+                if (nodeId == SelfId().NodeId()) {
+                    Y_ABORT_UNLESS(pileId < AppData(ctx)->BridgeConfig.PilesSize());
+                    SystemStateInfo.SetBridgePileName(AppData(ctx)->BridgeConfig.GetPiles(pileId).GetName());
+                }
             }
         }
         if (!google::protobuf::util::MessageDifferencer::Equals(newInfo, BridgeNodesInfo)) {
@@ -1270,15 +1268,6 @@ protected:
             }
         }
         ctx.Schedule(TDuration::Seconds(60), new TEvPrivate::TEvCleanupDeadTablets());
-    }
-
-    void Handle(TEvNodeWardenStorageConfig::TPtr &ev, const TActorContext &ctx) {
-        const auto& bridgeInfo = ev->Get()->BridgeInfo;
-        if (bridgeInfo) {
-            size_t bridgePileId = bridgeInfo->SelfNodePile->BridgePileId.GetRawId();
-            Y_ABORT_UNLESS(bridgePileId < AppData(ctx)->BridgeConfig.PilesSize());
-            SystemStateInfo.SetBridgePileName(AppData(ctx)->BridgeConfig.GetPiles(bridgePileId).GetName());
-        }
     }
 };
 

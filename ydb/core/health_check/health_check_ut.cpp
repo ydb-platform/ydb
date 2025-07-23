@@ -2701,6 +2701,7 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         auto settings = TServerSettings(port, {}, {}, bridgeConfig)
                 .SetNodeCount(4)
                 .SetUseRealThreads(false)
+                .SetEnableStorage(false)
                 .SetDomainName("Root");
         TServer server(settings);
         server.EnableGRpc(grpcPort);

@@ -266,6 +266,7 @@ domains_config:
          node: [1, 2, 3, 4, 5, 6, 7, 8]
          nto_select: 5
        ssid: 1
+   ```
 
 
 - `block-4-2` + Auth
@@ -291,6 +292,7 @@ domains_config:
        ssid: 1
      security_config:
        enforce_user_token_requirement: true
+   ```
 
 
 - `mirror-3-dc`
@@ -641,7 +643,7 @@ auth_config:
   #...
 ```
 
-| Parameter | Description | Default value
+| Parameter | Description | Default value |
 |:---|:---|:---:|
 | `min_length` | Minimal length of the password | 0 |
 | `min_lower_case_count` | Minimal count of letters in lower case | 0 |
@@ -662,6 +664,7 @@ Any changes to the password policy do not affect existing user passwords, so it 
 {{ ydb-short-name }} allows for the blocking of user authentication after unsuccessful password entry attempts. Lockout rules are configured in the `account_lockout` section.
 
 Syntax of the `account_lockout` section:
+
 ```yaml
 auth_config:
   #...

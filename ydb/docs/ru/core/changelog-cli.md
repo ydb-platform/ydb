@@ -11,7 +11,7 @@
 
 ### Улучшения
 
-* Изменён тип хранения по умолчанию в командах `{{ ydb-cli }} workload * init` [на](./reference/ydb-cli/commands/workload/index.md) `column` (было `row`), а режим работы с датой и временем по умолчанию — на `datetime32` (было `datetime64`).
+* Тип хранения по умолчанию [в командах](./reference/ydb-cli/commands/workload/index.md) `{{ ydb-cli }} workload * init` изменен на `column` (было `row`), а режим работы с датой и временем по умолчанию — на `datetime32` (было `datetime64`).
 
 ### Исправления ошибок
 

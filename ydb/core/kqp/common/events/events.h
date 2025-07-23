@@ -121,6 +121,7 @@ struct TEvKqp {
         TDuration ForgetAfter;
         TDuration ResultsTtl;
         TDuration ProgressStatsPeriod;
+        std::vector<NKikimrKqp::TScriptExecutionRetryState::TMapping> RetryMapping;
     };
 
     struct TEvScriptResponse : public TEventLocal<TEvScriptResponse, TKqpEvents::EvScriptResponse> {

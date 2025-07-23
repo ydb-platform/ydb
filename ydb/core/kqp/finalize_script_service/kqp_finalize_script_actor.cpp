@@ -30,6 +30,7 @@ public:
         , ExecutionId(request->Get()->Description.ExecutionId)
         , Database(request->Get()->Description.Database)
         , FinalizationStatus(request->Get()->Description.FinalizationStatus)
+        , LeaseGeneration(request->Get()->Description.LeaseGeneration)
         , Request(std::move(request))
         , FinalizationTimeout(TDuration::Seconds(queryServiceConfig.GetFinalizeScriptServiceConfig().GetScriptFinalizationTimeoutSeconds()))
         , FederatedQuerySetup(federatedQuerySetup)
@@ -79,7 +80,7 @@ public:
 
     void Handle(TEvSaveScriptFinalStatusResponse::TPtr& ev) {
         if (!ev->Get()->ApplicateScriptExternalEffectRequired || ev->Get()->Status != Ydb::StatusIds::SUCCESS) {
-            Reply(ev->Get()->OperationAlreadyFinalized, ev->Get()->Status, std::move(ev->Get()->Issues));
+            Reply(ev->Get()->OperationAlreadyFinalized, ev->Get()->WaitRetry, ev->Get()->Status, std::move(ev->Get()->Issues));
             return;
         }
 
@@ -213,7 +214,7 @@ private:
     )
 
     void FinishScriptFinalization(std::optional<Ydb::StatusIds::StatusCode> status, NYql::TIssues issues) {
-        Register(CreateScriptFinalizationFinisherActor(SelfId(), ExecutionId, Database, status, std::move(issues)));
+        Register(CreateScriptFinalizationFinisherActor(SelfId(), ExecutionId, Database, status, std::move(issues), LeaseGeneration));
         Become(&TScriptFinalizerActor::FinishState);
     }
 
@@ -226,11 +227,11 @@ private:
     }
 
     void Handle(TEvScriptExecutionFinished::TPtr& ev) {
-        Reply(ev->Get()->OperationAlreadyFinalized, ev->Get()->Status, std::move(ev->Get()->Issues));
+        Reply(ev->Get()->OperationAlreadyFinalized, ev->Get()->WaitingRetry, ev->Get()->Status, std::move(ev->Get()->Issues));
     }
 
-    void Reply(bool operationAlreadyFinalized, Ydb::StatusIds::StatusCode status, NYql::TIssues&& issues) {
-        Send(ReplyActor, new TEvScriptExecutionFinished(operationAlreadyFinalized, status, std::move(issues)));
+    void Reply(bool operationAlreadyFinalized, bool waitRetry, Ydb::StatusIds::StatusCode status, NYql::TIssues&& issues) {
+        Send(ReplyActor, new TEvScriptExecutionFinished(operationAlreadyFinalized, waitRetry, status, std::move(issues)));
         Send(MakeKqpFinalizeScriptServiceId(SelfId().NodeId()), new TEvScriptFinalizeResponse(ExecutionId));
 
         PassAway();
@@ -246,6 +247,7 @@ private:
     const TString ExecutionId;
     const TString Database;
     const EFinalizationStatus FinalizationStatus;
+    const i64 LeaseGeneration = 0;
     TEvScriptFinalizeRequest::TPtr Request;
 
     const TDuration FinalizationTimeout;

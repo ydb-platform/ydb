@@ -417,10 +417,11 @@ public:
         return RunKqpProxyRequest<NKikimr::NKqp::TEvKqp::TEvQueryRequest, NKikimr::NKqp::TEvKqp::TEvQueryResponse>(std::move(event), nodeIndex);
     }
 
-    NKikimr::NKqp::TEvKqp::TEvScriptResponse::TPtr ScriptRequest(const TRequestOptions& script) {
-        ui32 nodeIndex = GetNodeIndexForDatabase(script.Database);
+    NKikimr::NKqp::TEvKqp::TEvScriptResponse::TPtr ScriptRequest(const TScriptRequest& script) {
+        ui32 nodeIndex = GetNodeIndexForDatabase(script.Options.Database);
         auto event = MakeHolder<NKikimr::NKqp::TEvKqp::TEvScriptRequest>();
-        FillQueryRequest(script, NKikimrKqp::QUERY_TYPE_SQL_GENERIC_SCRIPT, nodeIndex, event->Record);
+        event->RetryMapping = script.RetryMapping;
+        FillQueryRequest(script.Options, NKikimrKqp::QUERY_TYPE_SQL_GENERIC_SCRIPT, nodeIndex, event->Record);
 
         return RunKqpProxyRequest<NKikimr::NKqp::TEvKqp::TEvScriptRequest, NKikimr::NKqp::TEvKqp::TEvScriptResponse>(std::move(event), nodeIndex);
     }
@@ -667,7 +668,7 @@ TRequestResult TYdbSetup::SchemeQueryRequest(const TRequestOptions& query, TSche
     return TRequestResult(schemeQueryOperationResponse.GetYdbStatus(), responseRecord.GetQueryIssues());
 }
 
-TRequestResult TYdbSetup::ScriptRequest(const TRequestOptions& script, TString& operation) const {
+TRequestResult TYdbSetup::ScriptRequest(const TScriptRequest& script, TString& operation) const {
     auto scriptExecutionOperation = Impl_->ScriptRequest(script);
 
     operation = scriptExecutionOperation->Get()->OperationId;

@@ -222,7 +222,7 @@ private:
     }
 
     void RunLeaseUpdater() {
-        Register(CreateScriptLeaseUpdateActor(SelfId(), Database, ExecutionId, LeaseDuration, Counters));
+        Register(CreateScriptLeaseUpdateActor(SelfId(), Database, ExecutionId, LeaseDuration, LeaseGeneration, Counters));
         LeaseUpdateQueryRunning = true;
         Counters->ReportRunActorLeaseUpdateBacklog(TInstant::Now() - LeaseUpdateScheduleTime);
     }
@@ -310,10 +310,13 @@ private:
     }
 
     // Event in case of error in registering script in database
-    // Just pass away, because we have not started execution.
+    // or expired / failed script finalization
     void Handle(NActors::TEvents::TEvPoison::TPtr&) {
-        Y_ABORT_UNLESS(RunState == ERunState::Created);
-        PassAway();
+        if (RunState == ERunState::Created) {
+            PassAway();
+        } else {
+            CancelRunningQuery();
+        }
     }
 
     bool ShouldSaveResult(size_t resultSetId) const {
@@ -724,7 +727,7 @@ private:
     const TString ExecutionId;
     NKikimrKqp::TEvQueryRequest Request;
     const TString Database;
-    const ui64 LeaseGeneration;
+    const i64 LeaseGeneration;
     const TDuration LeaseDuration;
     const TDuration ResultsTtl;
     const TDuration ProgressStatsPeriod;

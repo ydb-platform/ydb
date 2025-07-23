@@ -12,11 +12,9 @@ SRCS(
 
 PEERDIR(
     contrib/libs/fmt
-    ydb/library/actors/core
     library/cpp/lwtrace/mon
     library/cpp/monlib/service/pages
     ydb/core/base
-    ydb/core/metering
     ydb/core/fq/libs/common
     ydb/core/fq/libs/compute/common
     ydb/core/fq/libs/config
@@ -26,14 +24,17 @@ PEERDIR(
     ydb/core/fq/libs/quota_manager/events
     ydb/core/fq/libs/rate_limiter/events
     ydb/core/fq/libs/ydb
+    ydb/core/kqp/proxy_service
+    ydb/core/metering
     ydb/core/mon
+    ydb/library/actors/core
     ydb/library/protobuf_printer
     ydb/library/security
-    yql/essentials/public/issue
-    yql/essentials/utils
     ydb/public/lib/fq
     ydb/public/sdk/cpp/src/client/scheme
     ydb/public/sdk/cpp/src/client/value
+    yql/essentials/public/issue
+    yql/essentials/utils
 )
 
 YQL_LAST_ABI_VERSION()

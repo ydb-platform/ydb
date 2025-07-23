@@ -33,7 +33,7 @@
 namespace NKikimr::NKqp {
 
 TString ScriptExecutionRunnerActorIdString(const NActors::TActorId& actorId);
-bool ScriptExecutionRunnerActorIdFromString(const TString& executionId, TActorId& actorId);
+bool ScriptExecutionRunnerActorIdFromString(const std::string& executionId, TActorId& actorId);
 
 
 class TKqpRequestInfo {

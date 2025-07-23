@@ -18,7 +18,7 @@ namespace {
 
 struct TTaskInternal {
     TTask Task;
-    TRetryLimiter RetryLimiter;
+    NKikimr::NKqp::TRetryLimiter RetryLimiter;
     bool ShouldAbortTask = false; // force ABORTED_BY_SYSTEM
     bool ShouldSkipTask = false;  // tenant fetch denied or tenant must be changed
     TString TablePathPrefix;

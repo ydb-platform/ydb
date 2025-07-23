@@ -41,8 +41,8 @@ PEERDIR(
     ydb/tests/library/compatibility
 )
 
-RECURSE_FOR_TESTS (
-    test_export_import_s3
+RECURSE (
+    s3_backups
 )
 
 END()

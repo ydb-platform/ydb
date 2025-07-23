@@ -91,6 +91,18 @@ WITH (
 );
 ```
 
+Создание экземпляра асинхронной репликации с указанием корневого сертификата для TLS:
+
+```yql
+CREATE ASYNC REPLICATION my_consistent_replication
+FOR original_table AS replica_table
+WITH (
+    CONNECTION_STRING = 'grpcs://example.com:2135/?database=/Root/another_database',
+    TOKEN_SECRET_NAME = 'my_secret',
+    CA_CERT = '-----BEGIN CERTIFICATE-----...'
+);
+```
+
 Создание экземпляра асинхронной репликации в режиме глобальной согласованности данных (периодичность фиксации изменений по умолчанию — 10 секунд):
 
 ```yql

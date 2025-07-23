@@ -90,6 +90,18 @@ WITH (
 );
 ```
 
+The following statement creates an asynchronous replication instance with a TLS root certificate specified:
+
+```yql
+CREATE ASYNC REPLICATION my_consistent_replication
+FOR original_table AS replica_table
+WITH (
+    CONNECTION_STRING = 'grpcs://example.com:2135/?database=/Root/another_database',
+    TOKEN_SECRET_NAME = 'my_secret',
+    CA_CERT = '-----BEGIN CERTIFICATE-----...'
+);
+```
+
 The following statement creates an asynchronous replication instance in global data consistency mode (default change commit interval is 10 seconds):
 
 ```yql

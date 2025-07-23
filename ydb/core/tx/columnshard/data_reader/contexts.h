@@ -23,7 +23,7 @@ enum class EFetchingStage : ui32 {
 
 class TCurrentContext: TMoveOnly {
 private:
-    std::optional<std::vector<TPortionDataAccessor>> Accessors;
+    std::optional<std::vector<std::shared_ptr<TPortionDataAccessor>>> Accessors;
     YDB_READONLY_DEF(std::vector<std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>>, ResourceGuards);
     std::shared_ptr<NGroupedMemoryManager::TProcessGuard> MemoryProcessGuard;
     std::shared_ptr<NGroupedMemoryManager::TScopeGuard> MemoryScopeGuard;
@@ -97,17 +97,17 @@ public:
         }
     }
 
-    void SetPortionAccessors(std::vector<TPortionDataAccessor>&& acc) {
+    void SetPortionAccessors(std::vector<std::shared_ptr<TPortionDataAccessor>>&& acc) {
         AFL_VERIFY(!Accessors);
         Accessors = std::move(acc);
     }
 
-    const std::vector<TPortionDataAccessor>& GetPortionAccessors() const {
+    const std::vector<std::shared_ptr<TPortionDataAccessor>>& GetPortionAccessors() const {
         AFL_VERIFY(Accessors);
         return *Accessors;
     }
 
-    std::vector<TPortionDataAccessor> ExtractPortionAccessors() {
+    std::vector<std::shared_ptr<TPortionDataAccessor>> ExtractPortionAccessors() {
         AFL_VERIFY(Accessors);
         auto result = std::move(*Accessors);
         Accessors.reset();

@@ -74,7 +74,7 @@ private:
     ui32 CurrentSourceIdx = 0;
     int InFlightRequests = 0;
     std::deque<TPortionDataConstructor> Constructors;
-    THashMap<ui32, TPortionDataAccessor> Accessors;
+    THashMap<ui32, std::shared_ptr<TPortionDataAccessor>> Accessors;
 
     virtual void DoClear() override {
         Constructors.clear();

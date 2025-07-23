@@ -28,11 +28,11 @@ public:
         }
     }
 
-    THashMap<ui64, TPortionDataAccessor> ExtractPortions() {
+    THashMap<ui64, std::shared_ptr<TPortionDataAccessor>> ExtractPortions() {
         return std::move(PortionsById);
     }
 
-    const THashMap<ui64, TPortionDataAccessor>& GetPortions() const {
+    const THashMap<ui64, std::shared_ptr<TPortionDataAccessor>>& GetPortions() const {
         return PortionsById;
     }
 
@@ -57,7 +57,7 @@ public:
     const TPortionDataAccessor& GetPortionAccessorVerified(const ui64 portionId) const {
         auto it = PortionsById.find(portionId);
         AFL_VERIFY(it != PortionsById.end());
-        return it->second;
+        return *it->second;
     }
 
     std::shared_ptr<TPortionDataAccessor> ExtractPortionAccessorVerified(const ui64 portionId) {

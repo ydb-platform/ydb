@@ -63,8 +63,12 @@ public:
 
 void TConstructor::AddAccessors(TDataAccessorsResult&& accessors) {
     AFL_VERIFY(InFlightRequests);
-    for (auto&& i : accessors.ExtractPortions()) {
-        AFL_VERIFY(Accessors.emplace(i.first, std::move(i.second)).second);
+    if (Accessors.empty()) {
+        Accessors = std::move(accessors);
+    } else {
+        for (auto&& i : accessors.ExtractPortions()) {
+            AFL_VERIFY(Accessors.emplace(i.first, std::move(i.second)).second);
+        }
     }
     AFL_VERIFY(InFlightRequests);
     --InFlightRequests;
@@ -89,7 +93,7 @@ std::shared_ptr<NCommon::IDataSource> TConstructor::DoExtractNext(
             request->SetColumnIds(context->GetAllUsageColumns()->GetColumnIds());
             request->RegisterSubscriber(std::make_shared<TLocalPortionAccessorFetchingSubscriber>(context));
             context->GetCommonContext()->GetDataAccessorsManager()->AskData(std::move(request));
-            ++InFlightRequests;
+            AFL_VERIFY(++InFlightRequests == 1);
         }
         if (!Accessors.size()) {
             return nullptr;

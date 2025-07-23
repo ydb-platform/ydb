@@ -319,6 +319,7 @@ namespace NKikimr {
             void ExecuteStep(const NKikimrBlobStorage::TSetPDiskReadOnly& cmd, TStatus& status);
             void ExecuteStep(const NKikimrBlobStorage::TStopPDisk& cmd, TStatus& status);
             void ExecuteStep(const NKikimrBlobStorage::TGetInterfaceVersion& cmd, TStatus& status);
+            void ExecuteStep(const NKikimrBlobStorage::TMovePDisk& cmd, TStatus& status);
         };
 
     } // NBsController

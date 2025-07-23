@@ -1,8 +1,8 @@
-# TPC-C workload
+# TPC-C Workload
 
-The workload is based on the TPC-C [specification](https://www.tpc.org/tpc_documents_current_versions/pdf/tpc-c_v5.11.0.pdf) with the queries and table schemas adapted for {{ ydb-short-name }}.
+The workload is based on the TPC-C [specification](https://www.tpc.org/tpc_documents_current_versions/pdf/tpc-c_v5.11.0.pdf), with the queries and table schemas adapted for {{ ydb-short-name }}.
 
-TPC-C is an industry-standard On-Line Transaction Processing (OLTP) benchmark. It simulates a retail company with a configurable number of warehouses, each containing 10 districts and 3,000 per-district customers. A corresponding inventory exists for the warehouses. Customers place orders composed of several items. The company tracks payments, deliveries, and order history, and periodically performs inventory checks.
+TPC-C is an industry-standard [On-Line Transaction Processing (OLTP)](https://en.wikipedia.org/wiki/Online_transaction_processing) benchmark. It simulates a retail company with a configurable number of warehouses, each containing 10 districts and 3,000 customers per district. A corresponding inventory exists for the warehouses. Customers place orders composed of several items. The company tracks payments, deliveries, and order history, and periodically performs inventory checks.
 
 As a result, the benchmark generates a workload of concurrent distributed transactions with varying types and complexities.
 

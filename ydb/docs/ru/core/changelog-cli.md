@@ -6,7 +6,7 @@
 
 ### Функциональность
 
-* Добавлена возможность для [команд](./reference/ydb-cli/commands/workload/index.md) `{{ ydb-cli }} workload tpch` и `{{ ydb-cli }} workload tpcds` использовать опцию `--scale` c дробным значением, что позволяет задавать масштаб как процент от полного объёма данных и нагрузки бенчмарка.
+* Добавлена возможность для [команд](./reference/ydb-cli/commands/workload/index.md) `{{ ydb-cli }} workload tpch` и `{{ ydb-cli }} workload tpcds` использовать опцию `--scale` c дробным значением, что позволяет задавать долю от полного объёма данных и нагрузки бенчмарка.
 * Добавлена команда `{{ ydb-cli }} workload tpcc check` для проверки целостности данных TPC-C.
 
 ### Улучшения

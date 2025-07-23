@@ -163,7 +163,7 @@ private:
 
     std::optional<NEvLog::TLogsThread> Events;
     std::unique_ptr<TFetchedData> StageData;
-    std:shared_ptr<TPortionDataAccessor> Accessor;
+    std::shared_ptr<TPortionDataAccessor> Accessor;
 
 protected:
     std::vector<std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>> ResourceGuards;

@@ -118,7 +118,7 @@ void TSourceSession::StartCursor(const NColumnShard::TColumnShard& shard,
 }
 
 TConclusionStatus TSourceSession::DoStart(
-    NColumnShard::TColumnShard& shard, THashMap<TInternalPathId, std::vector<TPortionDataAccessor>>&& portions) {
+    NColumnShard::TColumnShard& shard, THashMap<TInternalPathId, std::vector<std::shared_ptr<TPortionDataAccessor>>>&& portions) {
     shard.Execute(new TTxStartSourceCursor(this, &shard, std::move(portions), "start_source_cursor"));
     return TConclusionStatus::Success();
 }

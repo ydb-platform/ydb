@@ -1200,9 +1200,6 @@ public:
         if (endOfData) {
             return PassAway();
         }
-        if (ev->Get()->Response->IsDone()) {
-            return PassAway();
-        }
     }
 
     void Handle(NHttp::TEvHttpProxy::TEvHttpOutgoingDataChunk::TPtr& ev) {

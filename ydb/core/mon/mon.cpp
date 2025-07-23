@@ -1206,7 +1206,7 @@ public:
     }
 
     void Handle(NHttp::TEvHttpProxy::TEvHttpOutgoingDataChunk::TPtr& ev) {
-        bool endOfData = false;
+        bool endOfData = ev->Get()->DataChunk && ev->Get()->DataChunk->IsEndOfData() || ev->Get()->Error;
         Forward(ev, Event->Sender);
         if (endOfData) {
             PassAway();

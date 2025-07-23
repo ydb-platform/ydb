@@ -39,11 +39,11 @@ The guarantees provided by implicit transactions are generally weaker than those
 
 **Summary Table**
 
-| Statement Type | Implicit Transaction Handling                 | Multistatement Support | Rollback on Error     |
-|----------------|-----------------------------------------------|------------------------|-----------------------|
-| DDL            | Outside transaction context                   | Yes (DDL-only)         | No                    |
-| DML            | Auto transaction (Serializable/Snapshot)      | Yes (DML-only)         | Yes                   |
-| BATCH UPDATE / BATCH DELETE FROM | Outside transaction context | No                     | No                    |
+| Statement Type | Implicit Transaction Handling                     | Multistatement Support | Rollback on Error     |
+|----------------|---------------------------------------------------|------------------------|-----------------------|
+| DDL            | Outside transaction context                       | Yes (DDL-only)         | No                    |
+| DML            | Auto transaction (Serializable/Snapshot)          | Yes (DML-only)         | Yes                   |
+| `BATCH UPDATE` / `BATCH DELETE FROM` | Outside transaction context | No                     | No                    |
 
 When using implicit transactions, be aware of these limitations and reduced guarantees compared to explicit transactions. For advanced transaction control, error handling, or atomicity across diverse statements, it is strongly recommended to use explicit transactions.
 

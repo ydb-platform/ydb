@@ -540,6 +540,8 @@ message StorageSettings {
     // * This feature cannot be disabled once enabled for a table
     Ydb.FeatureFlag.Status store_external_blobs = 5;
 
+    // This works when store_external_blobs is enabled
+    // and specifies the number of data channels to store "external blobs"
     optional uint32 external_data_channels_count = 6;
 }
 

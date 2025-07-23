@@ -336,6 +336,12 @@ public:
         bool dry = false,
         NKikimrCms::TStatus::ECode code = NKikimrCms::TStatus::OK);
     NKikimrCms::TManageRequestResponse CheckListRequests(const TString &user, ui64 count);
+    NKikimrCms::TManageRequestResponse CheckApproveRequest(
+        const TString &user,
+        const TString &id,
+        bool dry = false,
+        NKikimrCms::TStatus::ECode code = NKikimrCms::TStatus::OK
+    );
 
     NKikimrCms::TPermissionResponse CheckRequest(
         const TString &user,

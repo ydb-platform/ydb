@@ -79,9 +79,6 @@ class TestTopicMixedClusterFixture(MixedClusterFixture):
     def test_write_and_read(self):
         utils = Workload(self.driver, self.endpoint)
 
-        #
-        # 1. Fill table with data
-        #
         utils.create_topic()
 
         utils.write_to_topic()
@@ -99,9 +96,6 @@ class TestTopicRestartToAnotherVersion(RestartToAnotherVersionFixture):
     def test_write_and_read(self):
         utils = Workload(self.driver, self.endpoint)
 
-        #
-        # 1. Fill table with data
-        #
         utils.create_topic()
 
         utils.read_from_topic()
@@ -126,9 +120,6 @@ class TestTopicRollingUpdate(RollingUpgradeAndDowngradeFixture):
     def test_write_and_read(self):
         utils = Workload(self.driver, self.endpoint)
 
-        #
-        # 1. Fill table with data
-        #
         utils.create_topic()
 
         utils.write_to_topic()

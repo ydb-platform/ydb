@@ -32,7 +32,7 @@ The guarantees provided by implicit transactions are generally weaker than those
   DDL queries (such as `CREATE TABLE`, `DROP TABLE`, etc.) are always executed outside of any transaction context. Multistatement queries are supported only if all statements are DDL. If an error occurs, changes made by previous statements within the batch are not rolled back.
 
 - **Data Manipulation Language (DML) Statements**
-  DML queries (such as `INSERT`, `UPDATE`, `DELETE`, etc.) are automatically executed inside a transaction with Snapshot (for read-only queries) or Serializable (for read-write queries) isolation, created and managed by the server. Multistatement queries are supported if all statements are DML. On successful execution, changes are committed; if an error occurs, all changes are rolled back.
+  DML queries (such as `INSERT`, `UPDATE`, `DELETE`, etc.) are automatically executed inside a transaction with Snapshot (for read-only queries) or Serializable (for read-write queries) isolation, created and managed by the server. Multistatement queries are supported if all statements are DML. On successful execution, changes are committed. If an error occurs, all changes are rolled back.
 
 - **BATCH UPDATE / BATCH DELETE FROM Statements**
   Batch modification statements are executed outside of a transactional context. Multistatement queries are not supported. As with DDL, changes are not rolled back if an error occurs during execution.

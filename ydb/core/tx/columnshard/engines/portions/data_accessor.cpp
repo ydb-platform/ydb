@@ -712,7 +712,7 @@ TConclusionStatus TPortionDataAccessor::DeserializeFromProto(const NKikimrColumn
     return TConclusionStatus::Success();
 }
 
-TConclusion<TPortionDataAccessor> TPortionDataAccessor::BuildFromProto(
+TConclusion<std::shared_ptr<TPortionDataAccessor>> TPortionDataAccessor::BuildFromProto(
     const NKikimrColumnShardDataSharingProto::TPortionInfo& proto, const TIndexInfo& indexInfo, const IBlobGroupSelector& groupSelector) {
     TPortionMetaConstructor constructor;
     if (!constructor.LoadMetadata(proto.GetMeta(), indexInfo, groupSelector)) {
@@ -727,9 +727,9 @@ TConclusion<TPortionDataAccessor> TPortionDataAccessor::BuildFromProto(
         }
     }
     {
-        TPortionDataAccessor result;
-        result.PortionInfo = resultPortion;
-        auto parse = result.DeserializeFromProto(proto);
+        std::shared_ptr<TPortionDataAccessor> result = std::make_shared<TPortionDataAccessor>();
+        result->PortionInfo = resultPortion;
+        auto parse = result->DeserializeFromProto(proto);
         if (!parse) {
             return parse;
         }

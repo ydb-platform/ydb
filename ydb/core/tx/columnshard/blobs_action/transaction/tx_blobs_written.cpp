@@ -117,7 +117,7 @@ void TTxBlobsWritingFinished::DoComplete(const TActorContext& ctx) {
     auto& index = Self->MutableIndexAs<NOlap::TColumnEngineForLogs>();
     auto& granule = index.MutableGranuleVerified(Pack.GetPathId());
     for (auto&& portion : Pack.GetPortions()) {
-        granule.InsertPortionOnComplete(portion.GetPortionInfo(), index);
+        granule.InsertPortionOnComplete(portion.GetPortionInfoPtr(), index);
     }
     if (PackBehaviour == EOperationBehaviour::NoTxWrite) {
         for (auto&& i : InsertWriteIds) {

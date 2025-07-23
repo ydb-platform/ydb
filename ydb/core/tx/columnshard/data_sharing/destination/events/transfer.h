@@ -19,7 +19,7 @@ namespace NKikimr::NOlap::NDataSharing::NEvents {
 class TPathIdData {
 private:
     YDB_READONLY_DEF(TInternalPathId, PathId);
-    YDB_ACCESSOR_DEF(std::vector<TPortionDataAccessor>, Portions);
+    YDB_ACCESSOR_DEF(std::vector<std::shared_ptr<TPortionDataAccessor>>, Portions);
 
     TPathIdData() = default;
 
@@ -31,7 +31,7 @@ private:
         PathId = TInternalPathId::FromProto(proto);
         for (auto&& portionProto : proto.GetPortions()) {
             const auto schema = versionedIndex.GetSchemaVerified(portionProto.GetSchemaVersion());
-            TConclusion<TPortionDataAccessor> portion = TPortionDataAccessor::BuildFromProto(portionProto, schema->GetIndexInfo(), groupSelector);
+            TConclusion<std::shared_ptr<TPortionDataAccessor>> portion = TPortionDataAccessor::BuildFromProto(portionProto, schema->GetIndexInfo(), groupSelector);
             if (!portion) {
                 return portion.GetError();
             }

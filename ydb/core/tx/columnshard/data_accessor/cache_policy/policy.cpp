@@ -73,9 +73,10 @@ TPortionsMetadataCachePolicy::BuildObjectsProcessor(const NActors::TActorId& ser
                 }
             }
             for (auto&& i : requests) {
-                NActors::TActivationContext::Send(
-                    i.first, std::make_unique<NColumnShard::TEvPrivate::TEvAskTabletDataAccessors>(i.second.ExtractRequest(),
-                                 std::make_shared<TAccessorsCallback>(i.first, selfPtr, i.second.ExtractRequestedAddresses())), 0, cookie);
+                NActors::TActivationContext::Send(i.first,
+                    std::make_unique<NColumnShard::TEvPrivate::TEvAskTabletDataAccessors>(
+                        i.second.ExtractRequest(), std::make_shared<TAccessorsCallback>(i.first, selfPtr, i.second.ExtractRequestedAddresses())),
+                    0, cookie);
             }
         }
         virtual void DoOnReceiveData(const TSourceId sourceId, THashMap<TAddress, TObject>&& objectAddresses, THashSet<TAddress>&& removedAddresses,

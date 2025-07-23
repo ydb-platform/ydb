@@ -63,10 +63,10 @@ private:
         ui64 Prio = -1;
         TKey LeftKey;
         TKey RightKey;
+        TKey MaxRightKey;
         TValue Value;
         EBorderMode LeftMode;
         EBorderMode RightMode;
-        TKey MaxRightKey;
         EBorderMode MaxRightMode;
         bool MaxRightTrivial;
 
@@ -79,10 +79,10 @@ private:
             , Prio(prio)
             , LeftKey(std::move(leftKey))
             , RightKey(std::move(rightKey))
+            , MaxRightKey(std::move(maxRightKey))
             , Value(std::move(value))
             , LeftMode(leftMode)
             , RightMode(rightMode)
-            , MaxRightKey(std::move(maxRightKey))
             , MaxRightMode(maxRightMode)
             , MaxRightTrivial(maxRightTrivial)
         {
@@ -247,9 +247,9 @@ private:
         // Make a new subtree root with l and r as children
         tptr->Reset(
             (t = new TNode(
-                 /*Parent=*/parent, /*Left=*/(std::move(l)), /*Right=*/(std::move(r)), /*Prio=*/prio, /*LeftKey=*/std::move(leftOwnedKey),
-                 /*RightKey=*/rightOwnedKey, /*Value=*/std::move(value), /*LeftMode=*/leftKey.GetMode(),
-                 /*RightMode=*/rightKey.GetMode(), /*MaxRightKey=*/rightOwnedKey, /*MaxRightMode=*/rightKey.GetMode(), /*MaxRightTrivial=*/true)));
+                 /*Parent=*/parent, /*Left=*/std::move(l), /*Right=*/std::move(r), /*Prio=*/prio, /*LeftKey=*/std::move(leftOwnedKey),
+                 /*RightKey=*/rightOwnedKey, /*Value=*/std::move(value), /*LeftMode=*/leftKey.GetMode(), /*RightMode=*/rightKey.GetMode(),
+                 /*MaxRightKey=*/rightOwnedKey, /*MaxRightMode=*/rightKey.GetMode(), /*MaxRightTrivial=*/true)));
         Values[value].PushBack(t);
         ++Stats_.Inserts;
         ++Size_;

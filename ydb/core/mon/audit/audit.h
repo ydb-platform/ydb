@@ -1,0 +1,29 @@
+#pragma once
+
+#include <ydb/library/aclib/aclib.h>
+#include <ydb/library/actors/http/http.h>
+#include <ydb/library/actors/http/http_proxy.h>
+
+#include <util/generic/string.h>
+
+namespace NActors {
+
+using TAuditParts = TVector<std::pair<TString, TString>>;
+
+class TAuditCtx {
+public:
+    void InitAudit(const NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr& ev);
+    void AddAuditLogParts(const TIntrusiveConstPtr<NACLib::TUserToken>& userToken);
+    void AddAuditLogParts(const NHttp::THttpOutgoingResponsePtr& response);
+    void FinishAudit();
+    bool NeedAudit() const;
+
+private:
+    void AddAuditLogPart(TStringBuf name, const TString& value);
+    bool CheckAuditConditions(const TString& method, const TString& url, const TCgiParameters& params);
+
+    TAuditParts Parts;
+    bool Need = false;
+};
+
+}

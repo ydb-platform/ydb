@@ -1564,7 +1564,7 @@ message TImmediateControlsConfig {
             MinValue: 1,
             MaxValue: 1000,
             DefaultValue: 10 }];
-        
+
         optional uint64 HullCompMaxInFlightWrites = 31 [(ControlOptions) = {
             Description: "Max writes inflight for level compaction",
             MinValue: 1,
@@ -1782,6 +1782,7 @@ message TAuditConfig {
     optional TStderrBackend StderrBackend = 1;
     optional TFileBackend FileBackend = 2;
     optional TUnifiedAgentBackend UnifiedAgentBackend = 3;
+    optional bool MonitoringAudit = 4 [default = false];
 };
 
 message THiveTabletLimit {

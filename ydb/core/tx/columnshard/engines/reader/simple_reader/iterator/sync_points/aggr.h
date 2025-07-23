@@ -19,7 +19,7 @@ private:
         if (SourcesToAggregate.empty()) {
             return nullptr;
         }
-        AFL_WARN(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "aggregation_batching")("count", SourcesToAggregate.size());
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "aggregation_batching")("count", SourcesToAggregate.size());
         ++InFlightControl;
         auto result = std::make_shared<TAggregationDataSource>(std::move(SourcesToAggregate), Context);
         result->SetPurposeSyncPointIndex(0);

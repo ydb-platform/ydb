@@ -433,8 +433,8 @@ private:
                 }
             }
         }
+        std::sort(Inputs.begin(), Inputs.end());
         Y_ENSURE(std::unique(Inputs.begin(), Inputs.end()) == Inputs.end());
-        Y_ENSURE(std::unique(Sources.begin(), Sources.end()) == Sources.end());
 
         auto& outputs = settings.GetOutputs();
         for (auto outputId = 0; outputId < outputs.size(); outputId++) {
@@ -447,8 +447,8 @@ private:
                 }
             }
         }
+        std::sort(Outputs.begin(), Outputs.end());
         Y_ENSURE(std::unique(Outputs.begin(), Outputs.end()) == Outputs.end());
-        Y_ENSURE(std::unique(Sinks.begin(), Sinks.end()) == Sinks.end());
 
         auto guard = TaskRunner->BindAllocator(MemoryQuota ? TMaybe<ui64>(MemoryQuota->GetMkqlMemoryLimit()) : Nothing());
         if (MemoryQuota) {

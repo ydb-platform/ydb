@@ -4,6 +4,7 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/grpc_services/base/base.h>
 #include <ydb/core/base/ticket_parser.h>
+#include <ydb/core/mon/audit/audit.h>
 
 #include <library/cpp/json/json_writer.h>
 #include <library/cpp/lwtrace/all.h>
@@ -191,6 +192,7 @@ public:
     NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr Event;
     THttpMonRequestContainer Container;
     TIntrusivePtr<TActorMonPage> ActorMonPage;
+    TAuditCtx AuditCtx;
 
     THttpMonLegacyActorRequest(NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr event, TIntrusivePtr<TActorMonPage> actorMonPage)
         : Event(std::move(event))
@@ -206,6 +208,8 @@ public:
         if (Event->Get()->Request->Method == "OPTIONS") {
             return ReplyOptionsAndPassAway();
         }
+
+        AuditCtx.InitAudit(Event);
         Become(&THttpMonLegacyActorRequest::StateFunc);
         if (ActorMonPage->Authorizer) {
             NActors::IEventHandle* handle = ActorMonPage->Authorizer(SelfId(), Container);
@@ -217,6 +221,8 @@ public:
         SendRequest();
     }
     void ReplyWith(NHttp::THttpOutgoingResponsePtr response) {
+        AuditCtx.FinishAudit(response);
+
         TString url(Event->Get()->Request->URL.Before('?'));
         TString status(response->Status);
         NMonitoring::THistogramPtr ResponseTimeHgram = NKikimr::GetServiceCounters(NKikimr::AppData()->Counters,
@@ -344,6 +350,7 @@ public:
         }
         TString serializedToken;
         if (result && result->UserToken) {
+            AuditCtx.AddAuditLogParts(result->UserToken);
             serializedToken = result->UserToken->GetSerializedToken();
         }
         Send(ActorMonPage->TargetActorId, new NMon::TEvHttpInfo(

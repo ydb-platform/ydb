@@ -20,6 +20,40 @@ Y_UNIT_TEST_SUITE(TBackupCollectionWithRebootsTests) {
         )";
     }
 
+    TString DefaultIncrementalCollectionSettings() {
+        return R"(
+            Name: ")" DEFAULT_NAME_1 R"("
+
+            ExplicitEntryList {
+                Entries {
+                    Type: ETypeTable
+                    Path: "/MyRoot/Table1"
+                }
+            }
+            Cluster {}
+            IncrementalBackupConfig {}
+        )";
+    }
+
+    TString DefaultIncrementalMultiTableCollectionSettings() {
+        return R"(
+            Name: ")" DEFAULT_NAME_1 R"("
+
+            ExplicitEntryList {
+                Entries {
+                    Type: ETypeTable
+                    Path: "/MyRoot/Table1"
+                }
+                Entries {
+                    Type: ETypeTable
+                    Path: "/MyRoot/Table2"
+                }
+            }
+            Cluster {}
+            IncrementalBackupConfig {}
+        )";
+    }
+
     TString CollectionSettings(const TString& name) {
         return Sprintf(R"(
             Name: "%s"
@@ -227,6 +261,364 @@ Y_UNIT_TEST_SUITE(TBackupCollectionWithRebootsTests) {
                 TInactiveZone inactive(activeZone);
                 TestDescribeResult(DescribePath(runtime, "/MyRoot/.backups/collections/" DEFAULT_NAME_1),
                                    {NLs::PathNotExist});
+            }
+        });
+    }
+
+    Y_UNIT_TEST(BackupBackupCollectionWithReboots) {
+        TTestWithReboots t;
+        t.EnvOpts = TTestEnvOptions().EnableBackupService(true);
+        t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+            {
+                TInactiveZone inactive(activeZone);
+
+                TestMkDir(runtime, ++t.TxId, "/MyRoot", ".backups/collections");
+                t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+                TestCreateBackupCollection(runtime, ++t.TxId, "/MyRoot/.backups/collections", DefaultCollectionSettings());
+                t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+                TestCreateTable(runtime, ++t.TxId, "/MyRoot", R"(
+                    Name: "Table1"
+                    Columns { Name: "key" Type: "Utf8" }
+                    KeyColumnNames: ["key"]
+                )");
+                t.TestEnv->TestWaitNotification(runtime, t.TxId);
+            }
+
+            TestBackupBackupCollection(runtime, ++t.TxId, "/MyRoot",
+                R"(Name: ".backups/collections/)" DEFAULT_NAME_1 R"(")");
+            t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+            {
+                TInactiveZone inactive(activeZone);
+
+                TVector<TString> backups;
+                TestDescribeResult(DescribePath(runtime, "/MyRoot/.backups/collections/" DEFAULT_NAME_1), {
+                    NLs::PathExist,
+                    NLs::IsBackupCollection,
+                    NLs::ChildrenCount(1),
+                    NLs::ExtractChildren(&backups),
+                    NLs::Finished,
+                });
+
+                for (const auto& b : backups) {
+                    TString backupPath = TStringBuilder() << "/MyRoot/.backups/collections/" << DEFAULT_NAME_1 << '/' << b;
+                    TVector<TString> tables;
+                    TestDescribeResult(DescribePath(runtime,  backupPath), {
+                        NLs::PathExist,
+                        NLs::ChildrenCount(1),
+                        NLs::ExtractChildren(&tables),
+                        NLs::Finished,
+                    });
+
+                    for (const auto& t : tables) {
+                        TString tablePath = TStringBuilder() << backupPath << '/' << t;
+                        TestDescribeResult(DescribePath(runtime,  tablePath), {
+                            NLs::PathExist,
+                            NLs::IsTable,
+                            NLs::CheckPathState(NKikimrSchemeOp::EPathStateNoChanges),
+                            NLs::Finished,
+                        });
+                    }
+                }
+
+                TestDescribeResult(DescribePath(runtime, "/MyRoot/Table1"), {
+                    NLs::PathExist,
+                    NLs::IsTable,
+                    NLs::CheckPathState(NKikimrSchemeOp::EPathStateNoChanges),
+                    NLs::Finished,
+                });
+            }
+        });
+    }
+
+    Y_UNIT_TEST(BackupIncrementalBackupCollectionWithReboots) {
+        TTestWithReboots t;
+        t.EnvOpts = TTestEnvOptions().EnableBackupService(true);
+        t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+            {
+                TInactiveZone inactive(activeZone);
+
+                TestMkDir(runtime, ++t.TxId, "/MyRoot", ".backups/collections");
+                t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+                TestCreateBackupCollection(runtime, ++t.TxId, "/MyRoot/.backups/collections", DefaultIncrementalCollectionSettings());
+                t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+                TestCreateTable(runtime, ++t.TxId, "/MyRoot", R"(
+                    Name: "Table1"
+                    Columns { Name: "key" Type: "Utf8" }
+                    KeyColumnNames: ["key"]
+                )");
+                t.TestEnv->TestWaitNotification(runtime, t.TxId);
+            }
+
+            TestBackupBackupCollection(runtime, ++t.TxId, "/MyRoot",
+                R"(Name: ".backups/collections/)" DEFAULT_NAME_1 R"(")");
+            t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+            runtime.AdvanceCurrentTime(TDuration::Seconds(1));
+
+            TestBackupIncrementalBackupCollection(runtime, ++t.TxId, "/MyRoot",
+                R"(Name: ".backups/collections/)" DEFAULT_NAME_1 R"(")");
+            t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+            runtime.AdvanceCurrentTime(TDuration::Seconds(1));
+
+            TestBackupIncrementalBackupCollection(runtime, ++t.TxId, "/MyRoot",
+                R"(Name: ".backups/collections/)" DEFAULT_NAME_1 R"(")");
+            t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+            {
+                TInactiveZone inactive(activeZone);
+
+                TVector<TString> backups;
+                TestDescribeResult(DescribePath(runtime, "/MyRoot/.backups/collections/" DEFAULT_NAME_1), {
+                    NLs::PathExist,
+                    NLs::IsBackupCollection,
+                    NLs::ChildrenCount(3),
+                    NLs::ExtractChildren(&backups),
+                    NLs::Finished,
+                });
+
+                for (const auto& b : backups) {
+                    TString backupPath = TStringBuilder() << "/MyRoot/.backups/collections/" << DEFAULT_NAME_1 << '/' << b;
+                    TVector<TString> tables;
+                    TestDescribeResult(DescribePath(runtime,  backupPath), {
+                        NLs::PathExist,
+                        NLs::ChildrenCount(1),
+                        NLs::ExtractChildren(&tables),
+                        NLs::Finished,
+                    });
+
+                    for (const auto& t : tables) {
+                        TString tablePath = TStringBuilder() << backupPath << '/' << t;
+                        TestDescribeResult(DescribePath(runtime,  tablePath), {
+                            NLs::PathExist,
+                            NLs::IsTable,
+                            NLs::CheckPathState(NKikimrSchemeOp::EPathStateNoChanges),
+                            NLs::Finished,
+                        });
+                    }
+                }
+
+                TestDescribeResult(DescribePath(runtime, "/MyRoot/Table1"), {
+                    NLs::PathExist,
+                    NLs::IsTable,
+                    NLs::CheckPathState(NKikimrSchemeOp::EPathStateNoChanges),
+                    NLs::Finished,
+                });
+            }
+        });
+    }
+
+    Y_UNIT_TEST(BackupCycleBackupCollectionWithReboots) {
+        TTestWithReboots t;
+        t.EnvOpts = TTestEnvOptions().EnableBackupService(true);
+        t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+            {
+                TInactiveZone inactive(activeZone);
+                TestMkDir(runtime, ++t.TxId, "/MyRoot", ".backups/collections");
+                t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+                TestCreateBackupCollection(runtime, ++t.TxId, "/MyRoot/.backups/collections", DefaultIncrementalCollectionSettings());
+                t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+                TestCreateTable(runtime, ++t.TxId, "/MyRoot", R"(
+                    Name: "Table1"
+                    Columns { Name: "key" Type: "Uint32" }
+                    Columns { Name: "value" Type: "Utf8" }
+                    KeyColumnNames: ["key"]
+                )");
+                t.TestEnv->TestWaitNotification(runtime, t.TxId);
+            }
+
+            TestBackupBackupCollection(runtime, ++t.TxId, "/MyRoot",
+                R"(Name: ".backups/collections/)" DEFAULT_NAME_1 R"(")");
+            t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+            runtime.AdvanceCurrentTime(TDuration::Seconds(1));
+
+            TestBackupIncrementalBackupCollection(runtime, ++t.TxId, "/MyRoot",
+                R"(Name: ".backups/collections/)" DEFAULT_NAME_1 R"(")");
+            t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+            runtime.AdvanceCurrentTime(TDuration::Seconds(1));
+
+            TestBackupIncrementalBackupCollection(runtime, ++t.TxId, "/MyRoot",
+                R"(Name: ".backups/collections/)" DEFAULT_NAME_1 R"(")");
+            t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+            runtime.AdvanceCurrentTime(TDuration::Seconds(1));
+
+            TestBackupBackupCollection(runtime, ++t.TxId, "/MyRoot",
+                R"(Name: ".backups/collections/)" DEFAULT_NAME_1 R"(")");
+            t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+            runtime.AdvanceCurrentTime(TDuration::Seconds(1));
+
+            TestBackupIncrementalBackupCollection(runtime, ++t.TxId, "/MyRoot",
+                R"(Name: ".backups/collections/)" DEFAULT_NAME_1 R"(")");
+            t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+            runtime.AdvanceCurrentTime(TDuration::Seconds(1));
+
+            TestBackupIncrementalBackupCollection(runtime, ++t.TxId, "/MyRoot",
+                R"(Name: ".backups/collections/)" DEFAULT_NAME_1 R"(")");
+            t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+            {
+                TInactiveZone inactive(activeZone);
+
+                TVector<TString> backups;
+                TestDescribeResult(DescribePath(runtime, "/MyRoot/.backups/collections/" DEFAULT_NAME_1), {
+                    NLs::PathExist,
+                    NLs::IsBackupCollection,
+                    NLs::ChildrenCount(6),
+                    NLs::ExtractChildren(&backups),
+                    NLs::Finished,
+                });
+
+                for (const auto& b : backups) {
+                    TString backupPath = TStringBuilder() << "/MyRoot/.backups/collections/" << DEFAULT_NAME_1 << '/' << b;
+                    TVector<TString> tables;
+                    TestDescribeResult(DescribePath(runtime,  backupPath), {
+                        NLs::PathExist,
+                        NLs::ChildrenCount(1),
+                        NLs::ExtractChildren(&tables),
+                        NLs::Finished,
+                    });
+
+                    for (const auto& t : tables) {
+                        TString tablePath = TStringBuilder() << backupPath << '/' << t;
+                        TestDescribeResult(DescribePath(runtime,  tablePath), {
+                            NLs::PathExist,
+                            NLs::IsTable,
+                            NLs::CheckPathState(NKikimrSchemeOp::EPathStateNoChanges),
+                            NLs::Finished,
+                        });
+                    }
+                }
+
+                TestDescribeResult(DescribePath(runtime, "/MyRoot/Table1"), {
+                    NLs::PathExist,
+                    NLs::IsTable,
+                    NLs::CheckPathState(NKikimrSchemeOp::EPathStateNoChanges),
+                    NLs::Finished,
+                });
+            }
+        });
+    }
+
+     Y_UNIT_TEST(BackupCycleMultiTableBackupCollectionWithReboots) {
+        TTestWithReboots t;
+        t.EnvOpts = TTestEnvOptions().EnableBackupService(true);
+        t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+            {
+                TInactiveZone inactive(activeZone);
+
+                TestMkDir(runtime, ++t.TxId, "/MyRoot", ".backups/collections");
+                t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+                TestCreateBackupCollection(runtime, ++t.TxId, "/MyRoot/.backups/collections", DefaultIncrementalMultiTableCollectionSettings());
+                t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+                TestCreateTable(runtime, ++t.TxId, "/MyRoot", R"(
+                    Name: "Table1"
+                    Columns { Name: "key" Type: "Utf8" }
+                    KeyColumnNames: ["key"]
+                )");
+                t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+                TestCreateTable(runtime, ++t.TxId, "/MyRoot", R"(
+                    Name: "Table2"
+                    Columns { Name: "key" Type: "Utf8" }
+                    KeyColumnNames: ["key"]
+                )");
+                t.TestEnv->TestWaitNotification(runtime, t.TxId);
+            }
+
+            TestBackupBackupCollection(runtime, ++t.TxId, "/MyRoot",
+                R"(Name: ".backups/collections/)" DEFAULT_NAME_1 R"(")");
+            t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+            runtime.AdvanceCurrentTime(TDuration::Seconds(1));
+
+            TestBackupIncrementalBackupCollection(runtime, ++t.TxId, "/MyRoot",
+                R"(Name: ".backups/collections/)" DEFAULT_NAME_1 R"(")");
+            t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+            runtime.AdvanceCurrentTime(TDuration::Seconds(1));
+
+            TestBackupIncrementalBackupCollection(runtime, ++t.TxId, "/MyRoot",
+                R"(Name: ".backups/collections/)" DEFAULT_NAME_1 R"(")");
+            t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+            runtime.AdvanceCurrentTime(TDuration::Seconds(1));
+
+            TestBackupBackupCollection(runtime, ++t.TxId, "/MyRoot",
+                R"(Name: ".backups/collections/)" DEFAULT_NAME_1 R"(")");
+            t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+            runtime.AdvanceCurrentTime(TDuration::Seconds(1));
+
+            TestBackupIncrementalBackupCollection(runtime, ++t.TxId, "/MyRoot",
+                R"(Name: ".backups/collections/)" DEFAULT_NAME_1 R"(")");
+            t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+            runtime.AdvanceCurrentTime(TDuration::Seconds(1));
+
+            TestBackupIncrementalBackupCollection(runtime, ++t.TxId, "/MyRoot",
+                R"(Name: ".backups/collections/)" DEFAULT_NAME_1 R"(")");
+            t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+            {
+                TInactiveZone inactive(activeZone);
+
+                TVector<TString> backups;
+                TestDescribeResult(DescribePath(runtime, "/MyRoot/.backups/collections/" DEFAULT_NAME_1), {
+                    NLs::PathExist,
+                    NLs::IsBackupCollection,
+                    NLs::ChildrenCount(6),
+                    NLs::ExtractChildren(&backups),
+                    NLs::Finished,
+                });
+
+                for (const auto& b : backups) {
+                    TString backupPath = TStringBuilder() << "/MyRoot/.backups/collections/" << DEFAULT_NAME_1 << '/' << b;
+                    TVector<TString> tables;
+                    TestDescribeResult(DescribePath(runtime,  backupPath), {
+                        NLs::PathExist,
+                        NLs::ChildrenCount(2),
+                        NLs::ExtractChildren(&tables),
+                        NLs::Finished,
+                    });
+
+                    for (const auto& t : tables) {
+                        TString tablePath = TStringBuilder() << backupPath << '/' << t;
+                        TestDescribeResult(DescribePath(runtime,  tablePath), {
+                            NLs::PathExist,
+                            NLs::IsTable,
+                            NLs::CheckPathState(NKikimrSchemeOp::EPathStateNoChanges),
+                            NLs::Finished,
+                        });
+                    }
+                }
+
+                TestDescribeResult(DescribePath(runtime, "/MyRoot/Table1"), {
+                    NLs::PathExist,
+                    NLs::IsTable,
+                    NLs::CheckPathState(NKikimrSchemeOp::EPathStateNoChanges),
+                    NLs::Finished,
+                });
+
+                TestDescribeResult(DescribePath(runtime, "/MyRoot/Table2"), {
+                    NLs::PathExist,
+                    NLs::IsTable,
+                    NLs::CheckPathState(NKikimrSchemeOp::EPathStateNoChanges),
+                    NLs::Finished,
+                });
             }
         });
     }

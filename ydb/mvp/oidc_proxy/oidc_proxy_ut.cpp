@@ -1747,4 +1747,13 @@ Y_UNIT_TEST_SUITE(Mvp) {
         UNIT_ASSERT(!json.Has(EXTENDED_INFO));
         UNIT_ASSERT(!json.Has(EXTENDED_ERRORS));
     }
+
+    Y_UNIT_TEST(GetAddressWithoutPort) {
+        UNIT_ASSERT_VALUES_EQUAL(GetAddressWithoutPort("[2001:db8::1]:8080"), "2001:db8::1");
+        UNIT_ASSERT_VALUES_EQUAL(GetAddressWithoutPort("2001:db8::1:8080"), "2001:db8::1:8080"); // raw IPv6
+        UNIT_ASSERT_VALUES_EQUAL(GetAddressWithoutPort("192.168.1.1:8080"), "192.168.1.1");
+        UNIT_ASSERT_VALUES_EQUAL(GetAddressWithoutPort("192.168.1.1"), "192.168.1.1");
+        UNIT_ASSERT_VALUES_EQUAL(GetAddressWithoutPort("localhost:9090"), "localhost");
+        UNIT_ASSERT_VALUES_EQUAL(GetAddressWithoutPort("localhost"), "localhost");
+    }
 }

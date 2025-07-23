@@ -331,7 +331,7 @@ struct TEvContinueRun
         , CheckpointOnly(checkpointOnly)
     { }
 
-    TEvContinueRun(TVector<ui32> inputChannels, ui64 memLimit)
+    TEvContinueRun(TVector<ui32>&& inputChannels, ui64 memLimit)
         : AskFreeSpace(false)
         , InputChannels(std::move(inputChannels))
         , MemLimit(memLimit)

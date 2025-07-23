@@ -1,3 +1,6 @@
+
+## 2.24.0 ##
+
 * Fixed a bug where executing the `ydb import file csv` command could hang.
 * Set default storage type as `column` (was `row`) and default datetime mode as `datetime32` (was `datetime64`) in `ydb workload * init` commands.
 * Added ability of `ydb workload tpch` and `ydb workload tpcds` commands to use fraction `--scale` option.

@@ -2496,6 +2496,9 @@ public:
             if (const auto& staticCreds = settings.Settings.StaticCredentials) {
                 staticCreds->Serialize(*params.MutableStaticCredentials());
             }
+            if (const auto& caCert = settings.Settings.CaCert) {
+                params.SetCaCert(*caCert);
+            }
             if (settings.Settings.RowConsistency) {
                 config.MutableConsistencySettings()->MutableRow();
             }
@@ -2563,14 +2566,20 @@ public:
                 state.MutableStandBy();
             }
 
-            if (settings.Settings.ConnectionString || settings.Settings.Endpoint || settings.Settings.Database ||
-                    settings.Settings.OAuthToken || settings.Settings.StaticCredentials) {
+            if (settings.Settings.ConnectionString
+                || settings.Settings.Endpoint
+                || settings.Settings.Database
+                || settings.Settings.OAuthToken
+                || settings.Settings.StaticCredentials
+                || settings.Settings.CaCert
+            ) {
                 auto& config = *op.MutableConfig();
                 auto& params = *config.MutableSrcConnectionParams();
                 if (const auto& connectionString = settings.Settings.ConnectionString) {
                     const auto parseResult = NYdb::ParseConnectionString(*connectionString);
                     params.SetEndpoint(TString{parseResult.Endpoint});
                     params.SetDatabase(TString{parseResult.Database});
+                    params.SetEnableSsl(parseResult.EnableSsl);
                 }
                 if (const auto& endpoint = settings.Settings.Endpoint) {
                     params.SetEndpoint(*endpoint);
@@ -2583,6 +2592,9 @@ public:
                 }
                 if (const auto& staticCreds = settings.Settings.StaticCredentials) {
                     staticCreds->Serialize(*params.MutableStaticCredentials());
+                }
+                if (const auto& caCert = settings.Settings.CaCert) {
+                    params.SetCaCert(*caCert);
                 }
             }
 
@@ -2671,8 +2683,6 @@ public:
             op.SetName(pathPair.second);
 
             auto& config = *op.MutableConfig();
-
-
             auto& params = *config.MutableSrcConnectionParams();
             if (const auto& connectionString = settings.Settings.ConnectionString) {
                 const auto parseResult = NYdb::ParseConnectionString(*connectionString);
@@ -2691,6 +2701,9 @@ public:
             }
             if (const auto& staticCreds = settings.Settings.StaticCredentials) {
                 staticCreds->Serialize(*params.MutableStaticCredentials());
+            }
+            if (const auto& caCert = settings.Settings.CaCert) {
+                params.SetCaCert(*caCert);
             }
 
             {
@@ -2774,14 +2787,20 @@ public:
                 state.MutableStandBy();
             }
 
-            if (settings.Settings.ConnectionString || settings.Settings.Endpoint || settings.Settings.Database ||
-                    settings.Settings.OAuthToken || settings.Settings.StaticCredentials) {
+            if (settings.Settings.ConnectionString
+                || settings.Settings.Endpoint
+                || settings.Settings.Database
+                || settings.Settings.OAuthToken
+                || settings.Settings.StaticCredentials
+                || settings.Settings.CaCert
+            ) {
                 auto& config = *op.MutableConfig();
                 auto& params = *config.MutableSrcConnectionParams();
                 if (const auto& connectionString = settings.Settings.ConnectionString) {
                     const auto parseResult = NYdb::ParseConnectionString(*connectionString);
                     params.SetEndpoint(TString{parseResult.Endpoint});
                     params.SetDatabase(TString{parseResult.Database});
+                    params.SetEnableSsl(parseResult.EnableSsl);
                 }
                 if (const auto& endpoint = settings.Settings.Endpoint) {
                     params.SetEndpoint(*endpoint);
@@ -2794,6 +2813,9 @@ public:
                 }
                 if (const auto& staticCreds = settings.Settings.StaticCredentials) {
                     staticCreds->Serialize(*params.MutableStaticCredentials());
+                }
+                if (const auto& caCert = settings.Settings.CaCert) {
+                    params.SetCaCert(*caCert);
                 }
             }
 

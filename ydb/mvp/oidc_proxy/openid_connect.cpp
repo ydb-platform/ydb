@@ -262,6 +262,49 @@ TStringBuf GetCookie(const NHttp::TCookies& cookies, const TString& cookieName) 
     return cookieValue;
 }
 
+TString GetAddressWithoutPort(const TString& address) {
+    // IPV6 addresses may be enclosed in square brackets
+    if (address.StartsWith('[')) {
+        auto end = address.find(']');
+        if (end != TString::npos) {
+            return address.substr(1, end - 1);
+        }
+    }
+
+    // Count colons to determine if it's an IPv6 address
+    size_t cnt = std::count(address.begin(), address.end(), ':');
+    if (cnt > 1 && !address.StartsWith('[')) {
+        // It's likely an IPv6 address without brackets
+        return address;
+    }
+
+    // Regular IPv4 or hostname:port
+    auto pos = address.rfind(':');
+    if (pos != TString::npos) {
+        return address.substr(0, pos);
+    }
+
+    return address;
+}
+
+// Append request address to X-Forwarded-For header
+// Useful for logging and audit
+TStringBuilder MergeXForwardedFor(const TProxiedRequestParams& params) {
+    NHttp::THeadersBuilder headers(params.Request->Headers);
+    auto forwarded = headers.Get(X_FORWARDED_FOR_HEADER);
+    auto address = GetAddressWithoutPort(params.Request->Address->ToString());
+
+    TStringBuilder outForwarded;
+    outForwarded << forwarded;
+    if (!address.empty()) {
+        if (!outForwarded.empty()) {
+            outForwarded << ", ";
+        }
+        outForwarded << address;
+    }
+    return outForwarded;
+}
+
 NHttp::THttpOutgoingRequestPtr CreateProxiedRequest(const TProxiedRequestParams& params) {
     auto outRequest = NHttp::THttpOutgoingRequest::CreateRequest(params.Request->Method, params.ProtectedPage.Url);
     NHttp::THeadersBuilder headers(params.Request->Headers);
@@ -275,6 +318,9 @@ NHttp::THttpOutgoingRequestPtr CreateProxiedRequest(const TProxiedRequestParams&
     if (!params.AuthHeader.empty()) {
         outRequest->Set(AUTHORIZATION_HEADER, params.AuthHeader);
     }
+
+    outRequest->Set(X_FORWARDED_FOR_HEADER, MergeXForwardedFor(params));
+
     if (params.Request->HaveBody()) {
         outRequest->SetBody(params.Request->Body);
     }

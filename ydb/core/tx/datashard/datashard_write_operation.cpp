@@ -146,10 +146,20 @@ std::tuple<NKikimrTxDataShard::TError::EKind, TString> TValidatedWriteTxOperatio
             return {NKikimrTxDataShard::TError::SCHEME_ERROR, TStringBuilder() << "Key column schema at position " << i};
     }
 
-    for (ui32 columnTag : ColumnIds) {
+    for (ui16 colIdx = 0; colIdx < ColumnIds.size(); ++colIdx) {
+        ui32 columnTag = ColumnIds[colIdx];
         auto* col = tableInfo.Columns.FindPtr(columnTag);
         if (!col)
             return {NKikimrTxDataShard::TError::SCHEME_ERROR, TStringBuilder() << "Missing column with id " << columnTag};
+
+        if (col->NotNull) {
+            for (ui32 rowIdx = 0; rowIdx < Matrix.GetRowCount(); ++rowIdx) {
+                const TCell& cell = Matrix.GetCell(rowIdx, colIdx);
+                if (cell.IsNull()) {
+                    return {NKikimrTxDataShard::TError::BAD_ARGUMENT, TStringBuilder() << "NULL value for NON NULL column " << columnTag};
+                }
+            }
+        }
     }
 
     for (ui32 rowIdx = 0; rowIdx < Matrix.GetRowCount(); ++rowIdx)

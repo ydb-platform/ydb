@@ -1499,7 +1499,7 @@ void TCms::ManuallyApproveRequest(TEvCms::TEvManageRequestRequest::TPtr &ev, con
     };
 
     auto actor = new TRequestApproveActor(ev->Sender);
-    TActorId rrr = ctx.RegisterWithSameMailbox(actor);
+    TActorId approveActorId = ctx.RegisterWithSameMailbox(actor);
 
     auto &rec = ev->Get()->Record;
     // Manual approval: forcefully grant permission for the request
@@ -1526,7 +1526,7 @@ void TCms::ManuallyApproveRequest(TEvCms::TEvManageRequestRequest::TPtr &ev, con
 
     AcceptPermissions(resp->Record, rec.GetRequestId(), rec.GetUser(), ctx, true);
 
-    auto handle = new IEventHandle(rrr, SelfId(), resp.Release(), 0, ev->Cookie);
+    auto handle = new IEventHandle(approveActorId, SelfId(), resp.Release(), 0, ev->Cookie);
     Execute(CreateTxStorePermissions(std::move(ev->Release()), handle, rec.GetUser(), std::move(copy)), ctx);
 }
 

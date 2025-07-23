@@ -3461,6 +3461,50 @@ Y_UNIT_TEST_F(After_TEvGetWriteInfoError_Comes_TEvTxCalcPredicateResult, TPartit
     WaitForCalcPredicateResult(txId, false);
 }
 
+Y_UNIT_TEST_F(TEvTxCalcPredicate_Without_Conflicts, TPartitionTxTestHelper)
+{
+    Init();
+
+    auto tx1 = MakeAndSendWriteTx({{"sourceid", {1, 3}}});
+
+    WaitWriteInfoRequest(tx1);
+    SendWriteInfoResponse(tx1);
+
+    WaitTxPredicateReply(tx1);
+
+    auto tx2 = MakeAndSendWriteTx({{"another-sourceid", {1, 3}}});
+
+    WaitWriteInfoRequest(tx2);
+    SendWriteInfoResponse(tx2);
+
+    WaitTxPredicateReply(tx2);
+}
+
+Y_UNIT_TEST_F(TEvTxCalcPredicate_With_Conflicts, TPartitionTxTestHelper)
+{
+    Init();
+
+    auto tx1 = MakeAndSendWriteTx({{"sourceid", {1, 3}}});
+
+    WaitWriteInfoRequest(tx1);
+    SendWriteInfoResponse(tx1);
+
+    WaitTxPredicateReply(tx1);
+
+    auto tx2 = MakeAndSendWriteTx({{"sourceid", {1, 3}}});
+
+    WaitWriteInfoRequest(tx2);
+    SendWriteInfoResponse(tx2);
+
+    ExpectNoTxPredicateReply();
+
+    SendTxCommit(tx1);
+
+    EmulateKVTablet();
+
+    WaitTxPredicateReply(tx2);
+}
+
 } // End of suite
 
 } // namespace

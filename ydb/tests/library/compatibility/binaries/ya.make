@@ -2,15 +2,7 @@ RECURSE(downloader)
 
 UNION()
 
-IF(NOT ${YDB_COMPAT_INIT_REF})
-    SET(YDB_COMPAT_INIT_REF stable-24-4-4-hotfix)
-ENDIF()
-IF(NOT ${YDB_COMPAT_INTER_REF})
-    SET(YDB_COMPAT_INTER_REF stable-25-1-3)
-ENDIF()
-IF(NOT ${YDB_COMPAT_TARGET_REF})
-    SET(YDB_COMPAT_TARGET_REF current)
-ENDIF()
+INCLUDE(${ARCADIA_ROOT}/ydb/tests/library/compatibility/versions.inc)
 
 RUN_PROGRAM(
     ydb/tests/library/compatibility/binaries/downloader download $YDB_COMPAT_INTER_REF/release/ydbd ydbd-inter $YDB_COMPAT_INTER_REF

@@ -1464,7 +1464,8 @@ public:
         }
 
         Response->Get()->OperationStatus = Nothing();
-        Response->Get()->ExecutionStatus = Ydb::Query::ExecStatus::EXEC_STATUS_STARTING;
+        Response->Get()->ExecutionStatus = Nothing();
+        Response->Get()->OperationIssues = Nothing();
         Reply();
     }
 
@@ -1947,7 +1948,7 @@ public:
 
     void OnFinish(Ydb::StatusIds::StatusCode status, NYql::TIssues&& issues) override {
         bool ready = !!OperationStatus;
-        if (LeaseStatus && *LeaseStatus == ELeaseState::WaitRetry) {
+        if (FinalizationStatus || LeaseStatus && *LeaseStatus == ELeaseState::WaitRetry) {
             ready = false;
             OperationStatus = std::nullopt;
         }
@@ -2018,13 +2019,8 @@ public:
             return;
         }
 
-        if (alreadyFinalized || waitRetry) {
-            // Final status and issues are unknown, the operation must be repeated
-            Response->Get()->Ready = false;
-            Response->Get()->Status = Ydb::StatusIds::SUCCESS;
-            Response->Get()->Issues.Clear();
-            Response->Get()->Metadata.set_exec_status(Ydb::Query::ExecStatus::EXEC_STATUS_UNSPECIFIED);
-        } else {
+        // Otherwise final status and issues are unknown, the operation must be repeated
+        if (!alreadyFinalized && !waitRetry) {
             Response->Get()->Ready = true;
             Response->Get()->Status = GetOperationStatus();
             Response->Get()->Issues = GetIssues();

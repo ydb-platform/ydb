@@ -385,6 +385,7 @@ ISubOperation::TPtr CreateSplitMerge(TOperationId id, TTxState::ETxState state);
 
 ISubOperation::TPtr CreateDropTable(TOperationId id, const TTxTransaction& tx);
 ISubOperation::TPtr CreateDropTable(TOperationId id, TTxState::ETxState state);
+bool CreateDropTable(TOperationId id, const TTxTransaction& tx, TOperationContext& context, TVector<ISubOperation::TPtr>& result);
 
 TVector<ISubOperation::TPtr> CreateBuildColumn(TOperationId id, const TTxTransaction& tx, TOperationContext& context);
 
@@ -444,6 +445,7 @@ ISubOperation::TPtr CreateAlterCdcStreamAtTable(TOperationId id, const TTxTransa
 ISubOperation::TPtr CreateAlterCdcStreamAtTable(TOperationId id, TTxState::ETxState state, bool dropSnapshot);
 // Drop
 TVector<ISubOperation::TPtr> CreateDropCdcStream(TOperationId id, const TTxTransaction& tx, TOperationContext& context);
+bool CreateDropCdcStream(TOperationId id, const TTxTransaction& tx, TOperationContext& context, TVector<ISubOperation::TPtr>& result);
 ISubOperation::TPtr CreateDropCdcStreamImpl(TOperationId id, const TTxTransaction& tx);
 ISubOperation::TPtr CreateDropCdcStreamImpl(TOperationId id, TTxState::ETxState state);
 ISubOperation::TPtr CreateDropCdcStreamAtTable(TOperationId id, const TTxTransaction& tx, bool dropSnapshot);
@@ -521,6 +523,7 @@ ISubOperation::TPtr CreateAlterPQ(TOperationId id, TTxState::ETxState state);
 
 ISubOperation::TPtr CreateDropPQ(TOperationId id, const TTxTransaction& tx);
 ISubOperation::TPtr CreateDropPQ(TOperationId id, TTxState::ETxState state);
+bool CreateDropPQ(TOperationId id, const TTxTransaction& tx, TOperationContext& context, TVector<ISubOperation::TPtr>& result);
 
 ISubOperation::TPtr CreateAllocatePQ(TOperationId id, const TTxTransaction& tx);
 ISubOperation::TPtr CreateAllocatePQ(TOperationId id, TTxState::ETxState state);

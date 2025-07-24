@@ -7,7 +7,7 @@ namespace NKikimr {
 namespace NDataShard {
 
 class TDropCdcStreamUnit : public TExecutionUnit {
-    THolder<TEvChangeExchange::TEvRemoveSender> RemoveSender;
+    TVector<THolder<TEvChangeExchange::TEvRemoveSender>> RemoveSenders;
 
 public:
     TDropCdcStreamUnit(TDataShard& self, TPipeline& pipeline)
@@ -35,12 +35,33 @@ public:
         const auto pathId = TPathId::FromProto(params.GetPathId());
         Y_ENSURE(pathId.OwnerId == DataShard.GetPathOwnerId());
 
-        const auto streamPathId = TPathId::FromProto(params.GetStreamPathId());
+        // Collect stream IDs to drop - works for both single and multiple
+        TVector<TPathId> streamPathIds;
+        for (const auto& streamId : params.GetStreamPathId()) {
+            streamPathIds.push_back(TPathId::FromProto(streamId));
+        }
 
         const auto version = params.GetTableSchemaVersion();
         Y_ENSURE(version);
 
-        auto tableInfo = DataShard.AlterTableDropCdcStream(ctx, txc, pathId, version, streamPathId);
+        // Process all streams atomically
+        TUserTable::TPtr tableInfo;
+        for (const auto& streamPathId : streamPathIds) {
+            tableInfo = DataShard.AlterTableDropCdcStream(ctx, txc, pathId, version, streamPathId);
+            
+            auto& scanManager = DataShard.GetCdcStreamScanManager();
+            scanManager.Forget(txc.DB, pathId, streamPathId);
+            if (const auto* info = scanManager.Get(streamPathId)) {
+                DataShard.CancelScan(tableInfo->LocalTid, info->ScanId);
+                scanManager.Complete(streamPathId);
+            }
+
+            DataShard.GetCdcStreamHeartbeatManager().DropCdcStream(txc.DB, pathId, streamPathId);
+
+            RemoveSenders.emplace_back(new TEvChangeExchange::TEvRemoveSender(streamPathId));
+        }
+
+        // Update table info once after processing all streams
         TDataShardLocksDb locksDb(DataShard, txc);
         DataShard.AddUserTable(pathId, tableInfo, &locksDb);
 
@@ -56,17 +77,6 @@ public:
             DataShard.GetSnapshotManager().RemoveSnapshot(txc.DB, key);
         }
 
-        auto& scanManager = DataShard.GetCdcStreamScanManager();
-        scanManager.Forget(txc.DB, pathId, streamPathId);
-        if (const auto* info = scanManager.Get(streamPathId)) {
-            DataShard.CancelScan(tableInfo->LocalTid, info->ScanId);
-            scanManager.Complete(streamPathId);
-        }
-
-        DataShard.GetCdcStreamHeartbeatManager().DropCdcStream(txc.DB, pathId, streamPathId);
-
-        RemoveSender.Reset(new TEvChangeExchange::TEvRemoveSender(streamPathId));
-
         BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::COMPLETE);
         op->Result()->SetStepOrderId(op->GetStepOrder().ToPair());
 
@@ -74,10 +84,11 @@ public:
     }
 
     void Complete(TOperation::TPtr, const TActorContext& ctx) override {
-        if (RemoveSender) {
-            ctx.Send(DataShard.GetChangeSender(), RemoveSender.Release());
+        for (auto& removeSender : RemoveSenders) {
+            ctx.Send(DataShard.GetChangeSender(), removeSender.Release());
         }
     }
+
 };
 
 THolder<TExecutionUnit> CreateDropCdcStreamUnit(TDataShard& self, TPipeline& pipeline) {

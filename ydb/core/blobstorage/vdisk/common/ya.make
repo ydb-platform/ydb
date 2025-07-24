@@ -45,6 +45,7 @@ SRCS(
     vdisk_log.cpp
     vdisk_log.h
     vdisk_lsnmngr.h
+    vdisk_messages_quoter.h
     vdisk_mon.h
     vdisk_mongroups.h
     vdisk_outofspace.cpp

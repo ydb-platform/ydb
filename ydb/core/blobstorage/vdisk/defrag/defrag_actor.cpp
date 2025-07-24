@@ -361,7 +361,6 @@ namespace NKikimr {
 
         void Handle(TEvBlobStorage::TEvVDefrag::TPtr &ev, const TActorContext &ctx) {
             Sublog.Log() << "Defrag request\n";
-            STLOG(PRI_DEBUG, BS_VDISK_DEFRAG, BSVDD02, VDISKP(DCtx->VCtx->VDiskLogPrefix, "quantum Defrag request"));
             WaitQueue.emplace_back(ev);
             RunDefragIfAny(ctx);
         }

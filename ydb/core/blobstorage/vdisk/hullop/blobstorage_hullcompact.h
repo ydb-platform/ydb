@@ -37,7 +37,6 @@ namespace NKikimr {
         THullChange() = default;
     };
     
-
     ////////////////////////////////////////////////////////////////////////////
     // THullCompaction
     ////////////////////////////////////////////////////////////////////////////
@@ -159,7 +158,6 @@ namespace NKikimr {
             if (done) {
                 Finalize(ctx);
             }
-            return;
         }
 
         ui32 GetMsgSize(std::unique_ptr<IEventBase>& msg) {

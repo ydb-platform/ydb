@@ -15,11 +15,13 @@ public:
         std::shared_ptr<TVector<std::pair<TSerializedCellVec, TString>>> rows,
         EUploadRowsMode mode,
         bool writeToPrivateTable,
-        bool writeToIndexImplTable)
+        bool writeToIndexImplTable,
+        ui64 cookie)
         : Sender(sender)
         , Table(table)
         , ColumnTypes(types)
         , Rows(rows)
+        , Cookie(cookie)
     {
         AllowWriteToPrivateTable = writeToPrivateTable;
         AllowWriteToIndexImplTable = writeToIndexImplTable;
@@ -56,7 +58,7 @@ private:
 
     void SendResult(const NActors::TActorContext& ctx, const Ydb::StatusIds::StatusCode& status) override {
         auto ev = new TEvTxUserProxy::TEvUploadRowsResponse(status, Issues);
-        ctx.Send(Sender, ev);
+        ctx.Send(Sender, ev, 0, Cookie);
     }
 
     void RaiseIssue(const NYql::TIssue& issue) override {
@@ -81,6 +83,7 @@ private:
     const TString Table;
     const std::shared_ptr<TVector<std::pair<TString, Ydb::Type>>> ColumnTypes;
     const std::shared_ptr<TVector<std::pair<TSerializedCellVec, TString>>> Rows;
+    const ui64 Cookie;
 
     NYql::TIssues Issues;
 };
@@ -91,7 +94,8 @@ IActor* CreateUploadRowsInternal(const TActorId& sender,
     std::shared_ptr<TVector<std::pair<TSerializedCellVec, TString>>> rows,
     EUploadRowsMode mode,
     bool writeToPrivateTable,
-    bool writeToIndexImplTable)
+    bool writeToIndexImplTable,
+    ui64 cookie)
 {
     return new TUploadRowsInternal(sender,
         table,
@@ -99,7 +103,8 @@ IActor* CreateUploadRowsInternal(const TActorId& sender,
         rows,
         mode,
         writeToPrivateTable,
-        writeToIndexImplTable);
+        writeToIndexImplTable,
+        cookie);
 }
 
 } // namespace NTxProxy

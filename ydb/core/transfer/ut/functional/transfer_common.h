@@ -32,3 +32,5 @@ void MessageField_SeqNo(const std::string& tableType);
 
 void ProcessingJsonMessage(const std::string& tableType);
 void ProcessingCDCMessage(const std::string& tableType);
+
+void ProcessingTargetTable(const std::string& tableType);

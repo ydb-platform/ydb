@@ -644,6 +644,10 @@ struct MainTestCase {
     }
 
     std::pair<i64, Ydb::ResultSet> DoRead(const TExpectations& expectations) {
+        return DoRead(TableName, expectations);
+    }
+
+    std::pair<i64, Ydb::ResultSet> DoRead(const std::string& tableName, const TExpectations& expectations) {
         auto& e = expectations.front();
 
         TStringBuilder columns;
@@ -655,7 +659,7 @@ struct MainTestCase {
         }
 
 
-        auto res = ExecuteQuery(Sprintf("SELECT %s FROM `%s` ORDER BY %s", columns.data(), TableName.data(), columns.data()), false);
+        auto res = ExecuteQuery(Sprintf("SELECT %s FROM `%s` ORDER BY %s", columns.data(), tableName.data(), columns.data()), false);
         if (!res.IsSuccess()) {
             TResultSet r{Ydb::ResultSet()};
             return {-1, NYdb::TProtoAccessor::GetProto(r)};
@@ -665,9 +669,9 @@ struct MainTestCase {
         return {proto.rowsSize(), proto};
     }
 
-    void CheckResult(const TExpectations& expectations) {
+    void CheckResult(const std::string& tableName, const TExpectations& expectations) {
         for (size_t attempt = 20; attempt--; ) {
-            auto res = DoRead(expectations);
+            auto res = DoRead(tableName, expectations);
             Cerr << "Attempt=" << attempt << " count=" << res.first << Endl << Flush;
             if (res.first == (ssize_t)expectations.size()) {
                 const Ydb::ResultSet& proto = res.second;
@@ -689,6 +693,10 @@ struct MainTestCase {
 
         CheckTransferState(TTransferDescription::EState::Running);
         UNIT_ASSERT_C(false, "Unable to wait transfer result");
+    }
+
+    void CheckResult(const TExpectations& expectations) {
+        CheckResult(TableName, expectations);
     }
 
     TTransferDescription CheckTransferState(TTransferDescription::EState expected) {

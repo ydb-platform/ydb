@@ -29,6 +29,7 @@ namespace NKikimr::NReplication::NTransfer {
 namespace {
 
 constexpr const char* RESULT_COLUMN_NAME = "__ydb_r";
+constexpr const char* OUTPUT_TABLE_COLUMN = "__ydb_table";
 
 using namespace NYql::NPureCalc;
 using namespace NKikimr::NMiniKQL;
@@ -52,12 +53,16 @@ struct TSchemaColumn {
 struct TScheme {
     TVector<TSchemaColumn> TopicColumns;
     TVector<TSchemaColumn> TableColumns;
+
+    TVector<NKikimrKqp::TKqpColumnMetadataProto> StructMetadata;
     TVector<NKikimrKqp::TKqpColumnMetadataProto> ColumnsMetadata;
+    
     std::vector<ui32> WriteIndex;
     std::shared_ptr<TVector<std::pair<TString, Ydb::Type>>> Types = std::make_shared<TVector<std::pair<TString, Ydb::Type>>>();
 };
 
 struct TOutputType {
+    std::optional<TString> Table;
     NUdf::TUnboxedValue Value;
     NMiniKQL::TUnboxedValueBatch Data;
 };
@@ -76,6 +81,10 @@ public:
 
     const TVector<NKikimrKqp::TKqpColumnMetadataProto>& GetTableColumns() const {
         return TableScheme.ColumnsMetadata;
+    }
+
+    const TVector<NKikimrKqp::TKqpColumnMetadataProto>& GetStructColumns() const {
+        return TableScheme.StructMetadata;
     }
 
 private:
@@ -111,9 +120,21 @@ public:
 
             Out.Value = value.GetElement(0);
 
-            const auto& columns = OutputSpec.GetTableColumns();
+            const auto& columns = OutputSpec.GetStructColumns();
             for (size_t i = 0; i < columns.size(); ++i) {
                 const auto& column = columns[i];
+                Cerr << ">>>>> column.name()=" << column.name() << Endl;
+                if (column.name() == OUTPUT_TABLE_COLUMN) {
+                    auto e = Out.Value.GetElement(i);
+                    if (e) {
+                        auto opt = e.GetOptionalValue();
+                        if (opt) {
+                            Out.Table = opt.AsStringRef();
+                        }
+                    }
+                    continue;
+                }
+
                 if (column.GetNotNull() && !Out.Value.GetElement(i)) {
                     throw yexception() << "The value of the '" << column.GetName() << "' column must be non-NULL";
                 }
@@ -181,6 +202,7 @@ void AddField(NYT::TNode& node, const TString& fieldName, const TString& fieldTy
 NYT::TNode MakeOutputSchema(const TVector<TSchemaColumn>& columns) {
     auto structMembers = NYT::TNode::CreateList();
 
+    AddField(structMembers, OUTPUT_TABLE_COLUMN, "String");
     for (const auto& column : columns) {
         AddField(structMembers, column.Name, column.TypeName());
     }
@@ -244,6 +266,7 @@ TScheme BuildScheme(const TAutoPtr<NSchemeCache::TSchemeCacheNavigate>& nav) {
 
     result.TableColumns.reserve(entry.Columns.size());
     result.ColumnsMetadata.reserve(entry.Columns.size());
+    result.StructMetadata.reserve(entry.Columns.size() + 1);
     result.WriteIndex.reserve(entry.Columns.size());
 
     size_t keyColumns = CountIf(entry.Columns, [](auto& c) {
@@ -265,12 +288,12 @@ TScheme BuildScheme(const TAutoPtr<NSchemeCache::TSchemeCacheNavigate>& nav) {
     for (const auto& [_, column] : entry.Columns) {
         columns[column.Name] = column;
     }
+    columns[OUTPUT_TABLE_COLUMN] = TSysTables::TTableColumnInfo{OUTPUT_TABLE_COLUMN, 0, NScheme::TTypeInfo(NScheme::NTypeIds::String)};
 
     size_t i = keyColumns;
-    for (const auto& [_, column] : columns) {
-        result.ColumnsMetadata.emplace_back();
-        auto& c = result.ColumnsMetadata.back();
-        result.WriteIndex.push_back(column.KeyOrder >= 0 ? column.KeyOrder : i++);
+    for (const auto& [name, column] : columns) {
+        result.StructMetadata.emplace_back();
+        auto& c = result.StructMetadata.back();
 
         c.SetName(column.Name);
         c.SetId(column.Id);
@@ -279,6 +302,13 @@ TScheme BuildScheme(const TAutoPtr<NSchemeCache::TSchemeCacheNavigate>& nav) {
 
         if (NScheme::NTypeIds::IsParametrizedType(column.PType.GetTypeId())) {
             NScheme::ProtoFromTypeInfo(column.PType, "", *c.MutableTypeInfo());
+        }
+
+        if (name != OUTPUT_TABLE_COLUMN) {
+            result.ColumnsMetadata.push_back(c);
+            result.WriteIndex.push_back(column.KeyOrder >= 0 ? column.KeyOrder : i++);
+        } else {
+            ++i;
         }
 
         Ydb::Type type;
@@ -300,18 +330,23 @@ public:
 
     virtual ~ITableKindState() = default;
 
-    void EnshureDataBatch() {
-        if (!Batcher) {
-            Batcher = CreateDataBatcher();
+    void AddData(TString&& table, const NMiniKQL::TUnboxedValueBatch &data) {
+        auto it = Batchers.find(table);
+        if (it != Batchers.end()) {
+            it->second->AddData(data);
+            return;
         }
-    }
 
-    void AddData(const NMiniKQL::TUnboxedValueBatch &data) {
-        Batcher->AddData(data);
+        auto& batcher = Batchers[std::move(table)] = CreateDataBatcher();
+        batcher->AddData(data);
     }
 
     i64 BatchSize() const {
-        return Batcher->GetMemory();
+        i64 size = 0;
+        for (auto& [_, batcher] : Batchers) {
+            size += batcher->GetMemory();
+        }
+        return size;
     }
 
     virtual NKqp::IDataBatcherPtr CreateDataBatcher() = 0;
@@ -328,7 +363,7 @@ protected:
     const TActorId SelfId;
     const TScheme Scheme;
 
-    NKqp::IDataBatcherPtr Batcher;
+    std::map<TString, NKqp::IDataBatcherPtr> Batchers;
 };
 
 class TColumnTableState : public ITableKindState {
@@ -360,17 +395,17 @@ public:
             return true;
         }
 
-        if (!Batcher || !Batcher->GetMemory()) {
+        if (Batchers.empty() || !BatchSize()) {
             return false;
         }
-
+/*
         NKqp::IDataBatchPtr batch = Batcher->Build();
         auto data = batch->ExtractBatch();
 
         Data = reinterpret_pointer_cast<arrow::RecordBatch>(data);
         Y_VERIFY(Data);
 
-        doWrite();
+        doWrite();*/
         return true;
     }
 
@@ -397,6 +432,95 @@ private:
     std::shared_ptr<NYql::TIssues> Issues;
 };
 
+class TRowTableUploader : public TActorBootstrapped<TRowTableUploader> {
+public:
+    TRowTableUploader(const TActorId& parentActor, const TScheme& scheme, std::unordered_map<TString, std::shared_ptr<TVector<std::pair<TSerializedCellVec, TString>>>>&& data)
+        : ParentActor(parentActor)
+        , Scheme(scheme)
+        , Data(std::move(data))
+    {
+    }
+
+    void Bootstrap() {
+        Become(&TRowTableUploader::StateWork);
+        DoRequests();
+    }
+
+private:
+    void DoRequests() {
+        for (const auto& [tablePath, data] : Data) {
+            DoUpload(tablePath, data);
+        }
+    }
+
+    void DoUpload(const TString& tablePath, const std::shared_ptr<TVector<std::pair<TSerializedCellVec, TString>>>& data) {
+        auto cookie = ++Cookie;
+
+        TActivationContext::AsActorContext().RegisterWithSameMailbox(
+            NTxProxy::CreateUploadRowsInternal(SelfId(), tablePath, Scheme.Types, data, NTxProxy::EUploadRowsMode::Normal, false, false, cookie)
+        );
+        CookieMapping[cookie] = tablePath;
+    }
+
+    std::string GetLogPrefix() const {
+        return "RowTableUploader: ";
+    }
+
+    void Handle(TEvTxUserProxy::TEvUploadRowsResponse::TPtr& ev) {
+        auto it = CookieMapping.find(ev->Cookie);
+        if (it == CookieMapping.end()) {
+            LOG_W("Processed unknown cookie " << ev->Cookie);
+            return;
+        }
+
+        auto& tablePath = it->second;
+
+        if (ev->Get()->Status == Ydb::StatusIds::SUCCESS) {
+            Data.erase(tablePath);
+            CookieMapping.erase(ev->Cookie);
+
+            if (Data.empty()) {
+                Forward(ev, ParentActor);
+                PassAway();
+            }
+
+            return;
+        }
+
+        auto retry = ev->Get()->Status != Ydb::StatusIds::SCHEME_ERROR;
+        if (retry && false /* TODO */) {
+            // TODO schedule event
+            DoUpload(tablePath, Data[tablePath]);
+            CookieMapping.erase(ev->Cookie);
+            return;
+        }
+
+
+        Forward(ev, ParentActor);
+        PassAway();
+    }
+
+    STFUNC(StateWork) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(TEvTxUserProxy::TEvUploadRowsResponse, Handle);
+
+            sFunc(TEvents::TEvPoison, PassAway);
+            //hFunc(TEvents::TEvWakeup, WriteWakeup);
+        }
+    }
+
+
+private:
+    const TActorId ParentActor;
+    const TScheme Scheme;
+    // Table path -> Data
+    std::unordered_map<TString, std::shared_ptr<TVector<std::pair<TSerializedCellVec, TString>>>> Data;
+
+    ui64 Cookie = 0;
+    // Cookie -> Table path
+    std::unordered_map<ui64, TString> CookieMapping;
+};
+
 class TRowTableState : public ITableKindState {
 public:
     TRowTableState(
@@ -406,6 +530,7 @@ public:
         : ITableKindState(selfId, result)
     {
         Path = JoinPath(result->ResultSet.front().Path);
+        Database = result->DatabaseName;
     }
 
     NKqp::IDataBatcherPtr CreateDataBatcher() override {
@@ -413,47 +538,45 @@ public:
     }
 
     bool Flush() override {
-        auto doWrite = [&]() {
-            TActivationContext::AsActorContext().RegisterWithSameMailbox(
-                NTxProxy::CreateUploadRowsInternal(SelfId, Path, GetScheme().Types, Data, NTxProxy::EUploadRowsMode::Normal)
-            );
-        };
-
-        if (Data) {
-            doWrite();
-            return true;
-        }
-
-        if (!Batcher || !Batcher->GetMemory()) {
+        if (Batchers.empty() || !BatchSize()) {
             return false;
         }
 
-        NKqp::IDataBatchPtr batch = Batcher->Build();
+        std::unordered_map<TString, std::shared_ptr<TVector<std::pair<TSerializedCellVec, TString>>>> tableData;
 
-        auto data = reinterpret_pointer_cast<TOwnedCellVecBatch>(batch->ExtractBatch());
-        Y_VERIFY(data);
+        for (auto& [tablePath, batcher] : Batchers)  {
+            NKqp::IDataBatchPtr batch = batcher->Build();
 
-        Data = std::make_shared<TVector<std::pair<TSerializedCellVec, TString>>>();
-        for (auto r : *data) {
-            TVector<TCell> key;
-            TVector<TCell> value;
+            auto data = reinterpret_pointer_cast<TOwnedCellVecBatch>(batch->ExtractBatch());
+            Y_VERIFY(data);
 
-            for (size_t i = 0; i < r.size(); ++i) {
-                auto& column = GetScheme().TableColumns[i];
-                if (column.KeyColumn) {
-                    key.push_back(r[i]);
-                } else {
-                    value.push_back(r[i]);
+            auto d = std::make_shared<TVector<std::pair<TSerializedCellVec, TString>>>();
+            for (auto r : *data) {
+                TVector<TCell> key;
+                TVector<TCell> value;
+
+                for (size_t i = 0; i < r.size(); ++i) {
+                    auto& column = GetScheme().TableColumns[i];
+                    if (column.KeyColumn) {
+                        key.push_back(r[i]);
+                    } else {
+                        value.push_back(r[i]);
+                    }
                 }
+
+                TSerializedCellVec serializedKey(key);
+                TString serializedValue = TSerializedCellVec::Serialize(value);
+
+                d->emplace_back(serializedKey, serializedValue);
             }
 
-            TSerializedCellVec serializedKey(key);
-            TString serializedValue = TSerializedCellVec::Serialize(value);
-
-            Data->emplace_back(serializedKey, serializedValue);
+            tableData[tablePath] = d;
         }
 
-        doWrite();
+        TActivationContext::AsActorContext().RegisterWithSameMailbox(
+            new TRowTableUploader(SelfId, GetScheme(), std::move(tableData))
+        );
+
         return true;
     }
 
@@ -463,8 +586,6 @@ public:
 
     std::pair<TString, bool> Handle(TEvTxUserProxy::TEvUploadRowsResponse::TPtr& ev) override {
         if (ev->Get()->Status == Ydb::StatusIds::SUCCESS) {
-            Data.reset();
-
             return {"", false};
         }
 
@@ -475,9 +596,7 @@ public:
 
 private:
     TString Path;
-
-    // { KeyVec , data }
-    std::shared_ptr<TVector<std::pair<TSerializedCellVec, TString>>> Data;
+    TString Database;
 };
 
 enum class ETag {
@@ -588,6 +707,12 @@ private:
         if (!CheckEntrySucceeded(entry)) {
             return;
         }
+
+        auto path = entry.Path;
+        path.pop_back();
+        Database = JoinPath(path);
+
+        DefaultTablePath = JoinPath(entry.Path);
 
         if (entry.Kind == TNavigate::KindColumnTable) {
             TableState = std::make_unique<TColumnTableState>(SelfId(), result);
@@ -713,7 +838,7 @@ private:
 
         PollSent = false;
 
-        TableState->EnshureDataBatch();
+        //TableState->EnshureDataBatch();
         if (!LastWriteTime) {
             LastWriteTime = TInstant::Now();
         }
@@ -730,7 +855,15 @@ private:
             try {
                 auto result = ProgramHolder->GetProgram()->Apply(NYql::NPureCalc::StreamFromVector(TVector{input}));
                 while (auto* m = result->Fetch()) {
-                    TableState->AddData(m->Data);
+                    TString tablePath;
+                    if (m->Table) {
+                        tablePath = JoinPath({ Database, m->Table.value()});
+                    } else {
+                        tablePath = DefaultTablePath;
+                    }
+                    
+                    Cerr << ">>>>> TABLE = " << tablePath << Endl;
+                    TableState->AddData(std::move(tablePath), m->Data);
                 }
 
                 LastProcessedOffset = message.GetOffset();
@@ -799,11 +932,7 @@ private:
         HandleWriteResult(ev->Get()->Status, error, retry);
     }
 
-    void HandleWriteResult(ui32 status, const TString& error, bool retry) {
-        if (ui32(NYdb::EStatus::SUCCESS) != status && retry && Delay < MaxRetryDelay && !PendingLeave()) {
-            return LogWarnAndRetry(error);
-        }
-
+    void HandleWriteResult(ui32 /*status*/, const TString& error, bool /*retry*/) {
         if (error && !ProcessingError) {
             ProcessingError = error;
         }
@@ -912,6 +1041,9 @@ private:
     const TDuration FlushInterval;
     const i64 BatchSizeBytes;
     TActorId Worker;
+
+    TString Database;
+    TString DefaultTablePath;
 
     ITableKindState::TPtr TableState;
 

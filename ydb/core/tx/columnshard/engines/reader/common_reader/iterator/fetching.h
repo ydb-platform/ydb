@@ -137,9 +137,8 @@ class TFetchingScript {
 private:
     YDB_READONLY_DEF(TString, BranchName);
     std::vector<std::shared_ptr<IFetchingStep>> Steps;
-    TAtomic StartInstant;
+    TAtomic StartInstant = 0;
     TAtomic FinishInstant;
-    TAtomic Started = 0;
 
 public:
     TFetchingScript(const TString& branchName, std::vector<std::shared_ptr<IFetchingStep>>&& steps)
@@ -153,10 +152,7 @@ public:
     }
 
     void OnExecute() {
-        if (!AtomicGet(Started)) {
-            AtomicSet(StartInstant, TMonotonic::Now().MicroSeconds());
-            AtomicSet(Started, 1);
-        }
+        AtomicCas(&StartInstant, 0, TMonotonic::Now().MicroSeconds());
     }
 
     TString DebugString() const;

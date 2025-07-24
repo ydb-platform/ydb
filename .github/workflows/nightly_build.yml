@@ -34,7 +34,7 @@ jobs:
       uses: ./.github/actions/build_and_test_ya
       with:
         build_preset: ${{ matrix.build_preset }}
-        build_target: "ydb/apps/ydbd"
+        build_target: "ydb/apps/ydbd ydb/tests/library/compatibility/configs/dump"
         increment: false
         run_tests: false
         put_build_results_to_cache: false
@@ -56,3 +56,6 @@ jobs:
       run: |
         set -x
         s3cmd sync --follow-symlinks --acl-public --no-progress --stats --no-check-md5 "ydb/apps/ydbd/ydbd" "s3://ydb-builds/${{ github.ref_name }}/${{ matrix.build_preset }}/ydbd" -d
+        if [ -e ydb/tests/library/compatibility/configs/dump/config-meta.json ]; then
+          s3cmd sync --follow-symlinks --acl-public --no-progress --stats --no-check-md5 "ydb/tests/library/compatibility/configs/dump/config-meta.json" "s3://ydb-builds/${{ github.ref_name }}/${{ matrix.build_preset }}/config-meta.json" -d
+        fi

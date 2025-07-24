@@ -7,4 +7,5 @@ RUN_PROGRAM(
 
 END()
 
+RECURSE(configs)
 RECURSE(downloader)

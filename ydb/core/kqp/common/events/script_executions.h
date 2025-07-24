@@ -255,7 +255,7 @@ struct TEvFetchScriptResultsResponse : public TEventLocal<TEvFetchScriptResultsR
 
     Ydb::StatusIds::StatusCode Status;
     std::optional<Ydb::ResultSet> ResultSet;
-    bool HasMoreResults;
+    bool HasMoreResults = false;
     NYql::TIssues Issues;
 };
 

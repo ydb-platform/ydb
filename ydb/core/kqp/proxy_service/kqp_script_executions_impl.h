@@ -1,8 +1,11 @@
 #pragma once
 
-#include "kqp_script_executions.h"
+#include <ydb/core/kqp/common/events/script_executions.h>
+#include <ydb/library/actors/core/events.h>
+#include <ydb/public/api/protos/ydb_query.pb.h>
+#include <ydb/public/api/protos/ydb_status_codes.pb.h>
 
-#include <ydb/library/actors/core/event_local.h>
+#include <yql/essentials/public/issue/yql_issue.h>
 
 namespace NKikimr::NKqp::NPrivate {
 
@@ -69,6 +72,13 @@ struct TEvPrivate {
         const bool RetryRequired = false;
         const i64 LeaseGeneration = 0;
     };
+};
+
+// stored in column "lease_state" of .metadata/script_execution_leases table
+enum class ELeaseState {
+    ScriptRunning = 0,
+    ScriptFinalizing = 1,
+    WaitRetry = 2
 };
 
 // Writes new script into db.

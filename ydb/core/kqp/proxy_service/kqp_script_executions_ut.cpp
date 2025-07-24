@@ -1,15 +1,16 @@
 #include "kqp_script_executions.h"
 #include "kqp_script_executions_impl.h"
 
+#include <ydb/core/base/backtrace.h>
+#include <ydb/core/kqp/common/kqp_script_executions.h>
 #include <ydb/core/testlib/test_client.h>
 #include <ydb/core/testlib/basics/appdata.h>
 #include <ydb/core/util/proto_duration.h>
+#include <ydb/library/actors/interconnect/interconnect_impl.h>
 #include <ydb/library/table_creator/table_creator.h>
-#include <ydb/services/ydb/ydb_common_ut.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
-
-#include <ydb/library/actors/interconnect/interconnect_impl.h>
+#include <ydb/services/ydb/ydb_common_ut.h>
 
 namespace NKikimr::NKqp {
 
@@ -22,7 +23,7 @@ constexpr TDuration TestLeaseDuration = TDuration::Seconds(1);
 constexpr TDuration TestTimeout = TDuration::Seconds(10);
 constexpr TDuration TestOperationTtl = TDuration::Minutes(1);
 constexpr TDuration TestResultsTtl = TDuration::Minutes(1);
-const TString TestDatabase = "test_db";
+const TString TestDatabase = CanonizePath(TestDomainName);
 
 NKikimrSchemeOp::TColumnDescription Col(const TString& columnName, const char* columnType) {
     NKikimrSchemeOp::TColumnDescription desc;
@@ -69,7 +70,22 @@ struct TScriptExecutionsYdbSetup {
         Init();
     }
 
+    static void BackTraceSignalHandler(int signal) {
+        NColorizer::TColors colors = NColorizer::AutoColors(Cerr);
+
+        Cerr << colors.Red() << "======= " << signal << " call stack ========" << colors.Default() << Endl;
+        FormatBackTrace(&Cerr);
+        Cerr << colors.Red() << "===============================================" << colors.Default() << Endl;
+
+        abort();
+    }
+
     void Init() {
+        EnableYDBBacktraceFormat();
+        for (auto sig : {SIGILL, SIGSEGV}) {
+            signal(sig, &TScriptExecutionsYdbSetup::BackTraceSignalHandler);
+        }
+
         MsgBusPort = PortManager.GetPort(2134);
         GrpcPort = PortManager.GetPort(2135);
         ServerSettings = MakeHolder<Tests::TServerSettings>(MsgBusPort);
@@ -95,6 +111,8 @@ struct TScriptExecutionsYdbSetup {
         auto createSessionResult = TableClient->CreateSession().ExtractValueSync();
         UNIT_ASSERT_C(createSessionResult.IsSuccess(), createSessionResult.GetIssues().ToString());
         TableClientSession = MakeHolder<NYdb::NTable::TSession>(createSessionResult.GetSession());
+
+        Cerr << "\n\n\n--------------------------- INIT FINISHED ---------------------------\n\n\n";
     }
 
     TTestActorRuntime* GetRuntime() {
@@ -111,44 +129,53 @@ struct TScriptExecutionsYdbSetup {
         }
     }
 
-    bool RunSelect42Script(ui32 node = 0) {
-        TActorId edgeActor = GetRuntime()->AllocateEdgeActor(node);
+    bool RunSelect42Script() {
+        const auto reply = RunQueryInDb("SELECT 42");
+        if (reply->Get()->Status != Ydb::StatusIds::SUCCESS) {
+            return false;
+        }
 
-        TActorId kqpProxy = MakeKqpProxyID(GetRuntime()->GetNodeId(node));
+        WaitQueryFinish(reply->Get()->ExecutionId);
+        return true;
+    }
 
+    TEvKqp::TEvScriptResponse::TPtr RunQueryInDb(const TString& query = "SELECT 42", TDuration resultsTtl = TestResultsTtl, const std::vector<NKikimrKqp::TScriptExecutionRetryState::TMapping> retryMapping = {}) {
         auto ev = MakeHolder<TEvKqp::TEvScriptRequest>();
-        auto& req = *ev->Record.MutableRequest();
-        req.SetQuery("SELECT 42");
-        req.SetType(NKikimrKqp::QUERY_TYPE_SQL_GENERIC_SCRIPT);
-        req.SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
-        req.SetDatabase(ServerSettings->DomainName);
+        ev->Record = GetQueryRequest(query);
+        ev->ResultsTtl = resultsTtl;
+        ev->RetryMapping = retryMapping;
 
-        GetRuntime()->Send(new IEventHandle(kqpProxy, edgeActor, ev.Release()), node);
+        const auto edgeActor = GetRuntime()->AllocateEdgeActor();
+        GetRuntime()->Send(new IEventHandle(MakeKqpProxyID(GetRuntime()->GetNodeId()), edgeActor, ev.Release()));
 
-        auto reply = GetRuntime()->GrabEdgeEvent<TEvKqp::TEvScriptResponse>(edgeActor, TestTimeout);
-        Ydb::StatusIds::StatusCode status = reply->Get()->Status;
-        return status == Ydb::StatusIds::SUCCESS;
+        const auto reply = GetRuntime()->GrabEdgeEvent<TEvKqp::TEvScriptResponse>(edgeActor, TestTimeout);
+        UNIT_ASSERT_C(reply, "CreateScript response is empty");
+
+        return reply;
+    }
+
+    TString CheckRunQueryInDb(const TString& query = "SELECT 42", TDuration resultsTtl = TestResultsTtl, const std::vector<NKikimrKqp::TScriptExecutionRetryState::TMapping> retryMapping = {}) {
+        const auto result = RunQueryInDb(query, resultsTtl, retryMapping);
+        UNIT_ASSERT_VALUES_EQUAL_C(result->Get()->Status, Ydb::StatusIds::SUCCESS, result->Get()->Issues.ToString());
+        UNIT_ASSERT(result->Get()->ExecutionId);
+
+        return result->Get()->ExecutionId;
     }
 
     // Creates query in db. Returns execution id
     TString CreateQueryInDb(const TString& query = "SELECT 42", TDuration leaseDuration = TestLeaseDuration, TDuration operationTtl = TestOperationTtl, TDuration resultsTtl = TestResultsTtl) {
-        TString executionId = CreateGuidAsString();
-
-        NKikimrKqp::TEvQueryRequest req;
-        req.MutableRequest()->SetDatabase(TestDatabase);
-        req.MutableRequest()->SetQuery(query);
-        req.MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
+        const TString executionId = CreateGuidAsString();
 
         NKikimrKqp::TScriptExecutionOperationMeta meta;
         SetDuration(leaseDuration, *meta.MutableLeaseDuration());
         SetDuration(operationTtl, *meta.MutableOperationTtl());
         SetDuration(resultsTtl, *meta.MutableResultsTtl());
 
-        TActorId edgeActor = GetRuntime()->AllocateEdgeActor(0);
-        GetRuntime()->Register(NPrivate::CreateCreateScriptOperationQueryActor(executionId, NActors::TActorId(), req, meta), 0, 0, TMailboxType::Simple, 0, edgeActor);
+        const auto edgeActor = GetRuntime()->AllocateEdgeActor();
+        GetRuntime()->Register(NPrivate::CreateCreateScriptOperationQueryActor(executionId, NActors::TActorId(), GetQueryRequest(query), meta), 0, 0, TMailboxType::Simple, 0, edgeActor);
 
-        auto reply = GetRuntime()->GrabEdgeEvent<NPrivate::TEvPrivate::TEvCreateScriptOperationResponse>(edgeActor, TestTimeout);
-        UNIT_ASSERT(reply->Get()->Status == Ydb::StatusIds::SUCCESS);
+        const auto reply = GetRuntime()->GrabEdgeEvent<NPrivate::TEvPrivate::TEvCreateScriptOperationResponse>(edgeActor, TestTimeout);
+        UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Status, Ydb::StatusIds::SUCCESS);
         UNIT_ASSERT_VALUES_EQUAL(executionId, reply->Get()->ExecutionId);
         return reply->Get()->ExecutionId;
     }
@@ -211,16 +238,20 @@ struct TScriptExecutionsYdbSetup {
         return reply;
     }
 
-    void CheckLeaseExistence(const TString& executionId, bool expectedExistence, std::optional<i32> expectedStatus) {
+    void CheckLeaseExistence(const TString& executionId, bool expectedExistence, std::optional<i32> expectedOperationStatus, i64 leaseGeneration = 1, NPrivate::ELeaseState leaseStatus = NPrivate::ELeaseState::ScriptRunning) {
         TString sql = R"(
             DECLARE $database As Utf8;
             DECLARE $execution_id As Utf8;
 
-            SELECT COUNT(*)
+            SELECT
+                COUNT(*) AS number_leases,
+                SOME(lease_generation) AS lease_generation,
+                SOME(lease_state) AS lease_state
             FROM `.metadata/script_execution_leases`
             WHERE database = $database AND execution_id = $execution_id;
 
-            SELECT operation_status
+            SELECT
+                operation_status
             FROM `.metadata/script_executions`
             WHERE database = $database AND execution_id = $execution_id;
         )";
@@ -237,16 +268,30 @@ struct TScriptExecutionsYdbSetup {
         auto result = TableClientSession->ExecuteDataQuery(sql, NYdb::NTable::TTxControl::BeginTx().CommitTx(), params.Build()).ExtractValueSync();
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 
-        NYdb::TResultSetParser rs1 = result.GetResultSetParser(0);
-        UNIT_ASSERT(rs1.TryNextRow());
+        {   // Lease info
+            NYdb::TResultSetParser rs = result.GetResultSetParser(0);
+            UNIT_ASSERT(rs.TryNextRow());
 
-        auto count = rs1.ColumnParser(0).GetUint64();
-        UNIT_ASSERT_VALUES_EQUAL(count, expectedExistence ? 1 : 0);
+            const auto count = rs.ColumnParser("number_leases").GetUint64();
+            UNIT_ASSERT_VALUES_EQUAL(count, expectedExistence ? 1 : 0);
 
-        NYdb::TResultSetParser rs2 = result.GetResultSetParser(1);
-        UNIT_ASSERT(rs2.TryNextRow());
+            if (expectedExistence) {
+                const auto leaseGenerationInDatabase = rs.ColumnParser("lease_generation").GetOptionalInt64();
+                UNIT_ASSERT(leaseGenerationInDatabase);
+                UNIT_ASSERT_VALUES_EQUAL(*leaseGenerationInDatabase, leaseGeneration);
 
-        UNIT_ASSERT(rs2.ColumnParser("operation_status").GetOptionalInt32() == expectedStatus);
+                const auto leaseStatusInDatabase = rs.ColumnParser("lease_state").GetOptionalInt32();
+                UNIT_ASSERT(leaseStatusInDatabase);
+                UNIT_ASSERT_VALUES_EQUAL(*leaseStatusInDatabase, static_cast<i32>(leaseStatus));
+            }
+        }
+
+        {   // Execution info
+            NYdb::TResultSetParser rs = result.GetResultSetParser(1);
+            UNIT_ASSERT(rs.TryNextRow());
+
+            UNIT_ASSERT(rs.ColumnParser("operation_status").GetOptionalInt32() == expectedOperationStatus);
+        }
     }
 
     TEvScriptLeaseUpdateResponse::TPtr UpdateLease(const TString& executionId, TDuration leaseDuration, i64 leaseGeneration = 1) {
@@ -254,9 +299,80 @@ struct TScriptExecutionsYdbSetup {
         GetRuntime()->Register(CreateScriptLeaseUpdateActor(edgeActor, TestDatabase, executionId, leaseDuration, leaseGeneration, nullptr));
 
         auto reply = GetRuntime()->GrabEdgeEvent<TEvScriptLeaseUpdateResponse>(edgeActor, TestTimeout);
-        UNIT_ASSERT(reply);
+        UNIT_ASSERT_C(reply, "ScriptLeaseUpdate response is empty");
 
         return reply;
+    }
+
+    TEvGetScriptExecutionOperationResponse::TPtr GetScriptExecutionOperation(const TString& executionId) {
+        const auto edgeActor = GetRuntime()->AllocateEdgeActor();
+        GetRuntime()->Send(
+            MakeKqpProxyID(GetRuntime()->GetFirstNodeId()),
+            edgeActor,
+            new TEvGetScriptExecutionOperation(
+                TestDatabase,
+                NOperationId::TOperationId(ScriptExecutionOperationFromExecutionId(executionId))
+            )
+        );
+
+        auto reply = GetRuntime()->GrabEdgeEvent<TEvGetScriptExecutionOperationResponse>(edgeActor, TestTimeout);
+        UNIT_ASSERT_C(reply, "GetScriptExecutionOperation response is empty");
+
+        return reply;
+    }
+
+    TEvFetchScriptResultsResponse::TPtr FetchScriptResults(const TString& executionId, i32 resultSetId) {
+        const auto edgeActor = GetRuntime()->AllocateEdgeActor();
+        GetRuntime()->Register(NKikimr::NKqp::CreateGetScriptExecutionResultActor(edgeActor, TestDatabase, executionId, resultSetId, 0, 0, 0, TInstant::Max()));
+
+        auto reply = GetRuntime()->GrabEdgeEvent<TEvFetchScriptResultsResponse>(edgeActor, TestTimeout);
+        UNIT_ASSERT_C(reply, "FetchScriptResults response is empty");
+
+        return reply;
+    }
+
+    void WaitQueryFinish(const TString& executionId, TDuration timeoutDuration = TestTimeout) {
+        const auto timeout = TInstant::Now() + timeoutDuration;
+        while (true) {
+            const auto getOperation = GetScriptExecutionOperation(executionId);
+            const auto& ev = *getOperation->Get();
+
+            UNIT_ASSERT_VALUES_EQUAL_C(ev.Status, Ydb::StatusIds::SUCCESS, ev.Issues.ToString());
+            UNIT_ASSERT_C(ev.Metadata, "Expected not empty metadata for success get operation");
+
+            Ydb::Query::ExecuteScriptMetadata deserializedMeta;
+            ev.Metadata->UnpackTo(&deserializedMeta);
+            UNIT_ASSERT_VALUES_EQUAL(deserializedMeta.execution_id(), executionId);
+            UNIT_ASSERT_C(deserializedMeta.exec_mode() == Ydb::Query::EXEC_MODE_EXECUTE, Ydb::Query::ExecMode_Name(deserializedMeta.exec_mode()));
+
+            const auto execStatus = deserializedMeta.exec_status();
+            if (ev.Ready) {
+                UNIT_ASSERT_C(execStatus == Ydb::Query::EXEC_STATUS_COMPLETED, Ydb::Query::ExecStatus_Name(execStatus));
+                break;
+            }
+
+            UNIT_ASSERT_C(IsIn({Ydb::Query::EXEC_STATUS_STARTING, Ydb::Query::EXEC_STATUS_RUNNING}, execStatus), Ydb::Query::ExecStatus_Name(execStatus));
+
+            if (TInstant::Now() > timeout) {
+                UNIT_FAIL("Failed to wait for query to finish: " << executionId);
+            }
+
+            Sleep(TDuration::MilliSeconds(100));
+        }
+    }
+
+private:
+    NKikimrKqp::TEvQueryRequest GetQueryRequest(const TString& query) {
+        NKikimrKqp::TEvQueryRequest queryProto;
+        queryProto.SetUserToken(NACLib::TUserToken(BUILTIN_ACL_ROOT, TVector<NACLib::TSID>{GetRuntime()->GetAppData().AllAuthenticatedUsers}).SerializeAsString());
+
+        auto& req = *queryProto.MutableRequest();
+        req.SetDatabase(TestDatabase);
+        req.SetQuery(query);
+        req.SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
+        req.SetType(NKikimrKqp::QUERY_TYPE_SQL_GENERIC_SCRIPT);
+
+        return queryProto;
     }
 
 public:
@@ -334,6 +450,81 @@ Y_UNIT_TEST_SUITE(ScriptExecutionsTest) {
 
         const auto updateResponse = ydb.UpdateLease(executionId, TestLeaseDuration);
         UNIT_ASSERT(!updateResponse->Get()->ExecutionEntryExists);
+    }
+
+    Y_UNIT_TEST(RestartQueryWithGetOperation) {
+        constexpr TDuration BACKOFF_DURATION = TDuration::Seconds(5);
+
+        TScriptExecutionsYdbSetup ydb;
+
+        NKikimrKqp::TScriptExecutionRetryState::TMapping retryMapping;
+        retryMapping.AddStatusCode(Ydb::StatusIds::SCHEME_ERROR);
+        auto& policy = *retryMapping.MutableBackoffPolicy();
+        policy.SetRetryPeriodMs(BACKOFF_DURATION.MilliSeconds());
+        policy.SetBackoffPeriodMs(BACKOFF_DURATION.MilliSeconds());
+        policy.SetRetryRateLimit(1);
+
+        constexpr char TABLE_NAME[] = "test_table";
+        const auto executionId = ydb.CheckRunQueryInDb(
+            TStringBuilder() << "SELECT * FROM " << TABLE_NAME,
+            TestResultsTtl,
+            {retryMapping}
+        );
+
+        const auto timeout = TInstant::Now() + TestTimeout;
+        while (true) {
+            const auto getOperation = ydb.GetScriptExecutionOperation(executionId);
+            const auto& ev = *getOperation->Get();
+
+            UNIT_ASSERT_VALUES_EQUAL_C(ev.Status, Ydb::StatusIds::SUCCESS, ev.Issues.ToString());
+            UNIT_ASSERT_C(!ev.Ready, "Operation unexpectedly finished");
+            UNIT_ASSERT_C(ev.Metadata, "Expected not empty metadata for success get operation");
+
+            Ydb::Query::ExecuteScriptMetadata deserializedMeta;
+            ev.Metadata->UnpackTo(&deserializedMeta);
+            UNIT_ASSERT_VALUES_EQUAL(deserializedMeta.execution_id(), executionId);
+            UNIT_ASSERT_C(deserializedMeta.exec_mode() == Ydb::Query::EXEC_MODE_EXECUTE, Ydb::Query::ExecMode_Name(deserializedMeta.exec_mode()));
+
+            const auto execStatus = deserializedMeta.exec_status();
+            if (execStatus == Ydb::Query::EXEC_STATUS_FAILED) {
+                UNIT_ASSERT_STRING_CONTAINS(ev.Issues.ToString(), "Script execution operation failed with code SCHEME_ERROR and will be restarted");
+                ydb.CheckLeaseExistence(executionId, true, Ydb::StatusIds::SCHEME_ERROR, 1, NPrivate::ELeaseState::WaitRetry);
+                break;
+            }
+
+            UNIT_ASSERT_C(IsIn({Ydb::Query::EXEC_STATUS_STARTING, Ydb::Query::EXEC_STATUS_RUNNING}, execStatus), Ydb::Query::ExecStatus_Name(execStatus));
+
+            if (TInstant::Now() > timeout) {
+                UNIT_FAIL("Failed to wait for query to finish (before retry)");
+            }
+
+            Sleep(TDuration::MilliSeconds(100));
+        }
+
+        ydb.WaitQueryFinish(ydb.CheckRunQueryInDb(TStringBuilder() << R"(
+            CREATE TABLE )" << TABLE_NAME << R"( (
+                PRIMARY KEY (Key)
+            ) AS
+                SELECT 42 AS Key, "Some-Val" AS Value
+        )"));
+
+        Sleep(BACKOFF_DURATION);
+        ydb.WaitQueryFinish(executionId);
+
+        const auto scriptResults = ydb.FetchScriptResults(executionId, 0);
+        const auto& ev = *scriptResults->Get();
+        UNIT_ASSERT_VALUES_EQUAL_C(ev.Status, Ydb::StatusIds::SUCCESS, ev.Issues.ToString());
+        UNIT_ASSERT(!ev.HasMoreResults);
+        UNIT_ASSERT(ev.ResultSet);
+
+        const auto& resultSet = *ev.ResultSet;
+        UNIT_ASSERT_VALUES_EQUAL(resultSet.rows_size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(resultSet.columns_size(), 2);
+
+        NYdb::TResultSetParser parser(resultSet);
+        UNIT_ASSERT(parser.TryNextRow());
+        UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("Key").GetInt32(), 42);
+        UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("Value").GetString(), "Some-Val");
     }
 }
 

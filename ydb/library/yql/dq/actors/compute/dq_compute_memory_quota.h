@@ -83,6 +83,10 @@ namespace NYql::NDq {
             } else {
                 alloc->SetMaximumLimitValueReached(false);
             }
+
+            if (MkqlMemoryQuota) {
+                MkqlMemoryQuota->add(bytes);
+            }
             return allocated;
         }
 
@@ -95,6 +99,9 @@ namespace NYql::NDq {
                 alloc->SetMaximumLimitValueReached(true);
             } else {
                 alloc->SetMaximumLimitValueReached(false);
+            }
+            if (MkqlMemoryQuota) {
+                MkqlMemoryQuota->Sub(bytes);
             }
         }
 

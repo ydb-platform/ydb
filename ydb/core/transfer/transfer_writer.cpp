@@ -9,7 +9,7 @@
 #include <ydb/core/tx/replication/ydb_proxy/topic_message.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/tx/tx_proxy/upload_rows.h>
-#include <ydb/core/persqueue/purecalc/purecalc.h> // should be after topic_message
+#include "purecalc.h" // should be after topic_message
 #include <ydb/core/protos/replication.pb.h>
 #include <ydb/core/tx/scheme_cache/helpers.h>
 #include <ydb/core/tx/tx_proxy/upload_rows_common_impl.h>

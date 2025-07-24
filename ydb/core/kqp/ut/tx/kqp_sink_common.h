@@ -14,7 +14,6 @@ using namespace NYdb::NQuery;
 
 class TTableDataModificationTester {
 protected:
-    NKikimrConfig::TAppConfig AppConfig;
     std::unique_ptr<TKikimrRunner> Kikimr;
     YDB_ACCESSOR(bool, IsOlap, false);
     YDB_ACCESSOR(bool, FastSnapshotExpiration, false);
@@ -23,10 +22,10 @@ protected:
     virtual void DoExecute() = 0;
 public:
     void Execute() {
-        AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(!DisableSinks);
-        AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(!DisableSinks);
-        AppConfig.MutableTableServiceConfig()->SetEnableSnapshotIsolationRW(true);
-        auto settings = TKikimrSettings().SetAppConfig(AppConfig).SetWithSampleTables(false).SetColumnShardReaderClassName("PLAIN");
+        auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardReaderClassName("PLAIN");
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(!DisableSinks);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(!DisableSinks);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableSnapshotIsolationRW(true);
         if (FastSnapshotExpiration) {
             settings.SetKeepSnapshotTimeout(TDuration::Seconds(1));
         }

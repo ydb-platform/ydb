@@ -176,7 +176,7 @@ message TFeatureFlags {
     optional bool EnableTopicAutopartitioningForReplication = 151 [default = true];
     optional bool EnableDriveSerialsDiscovery = 152 [default = false];
     optional bool EnableSeparateDiskSpaceQuotas = 153 [default = false];
-    optional bool EnableAntlr4Parser = 154 [default = false];
+    optional bool EnableAntlr4Parser = 154 [default = true];
     optional bool EnableReleaseNodeNameOnGracefulShutdown = 155 [default = false];
     optional bool ForceDistconfDisable = 156 [default = false];
     optional bool EnableScaleRecommender = 157 [default = false];

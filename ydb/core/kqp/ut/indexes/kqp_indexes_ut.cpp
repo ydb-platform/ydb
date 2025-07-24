@@ -4046,8 +4046,8 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
                                  query,
                                  TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
                           .ExtractValueSync();
-            UNIT_ASSERT(result.GetIssues().ToString().contains("Unexpected token"));
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::GENERIC_ERROR);
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "mismatched input", result.GetIssues().ToString());
         }
 
         {
@@ -4059,8 +4059,8 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
                                  query,
                                  TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
                           .ExtractValueSync();
-            UNIT_ASSERT(result.GetIssues().ToString().contains("Unexpected token"));
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::GENERIC_ERROR);
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "mismatched input", result.GetIssues().ToString());
         }
 
         {
@@ -4072,8 +4072,8 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
                                      query,
                                      TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
                               .ExtractValueSync();
-            UNIT_ASSERT(result.GetIssues().ToString().contains("Unexpected token"));
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::GENERIC_ERROR);
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "mismatched input", result.GetIssues().ToString());
         }
 
         {
@@ -4085,8 +4085,8 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
                                      query,
                                      TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
                               .ExtractValueSync();
-            UNIT_ASSERT(result.GetIssues().ToString().contains("Unexpected token"));
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::GENERIC_ERROR);
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "mismatched input", result.GetIssues().ToString());
         }
 
     }

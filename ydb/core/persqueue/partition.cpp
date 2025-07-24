@@ -178,7 +178,7 @@ TPartition::TPartition(ui64 tabletId, const TPartitionId& partition, const TActo
                        const NKikimrPQ::TPQTabletConfig& tabletConfig, const TTabletCountersBase& counters, bool subDomainOutOfSpace, ui32 numChannels,
                        const TActorId& writeQuoterActorId,
                        TIntrusivePtr<NJaegerTracing::TSamplingThrottlingControl> samplingControl,
-                       bool newPartition, TVector<TTransaction> distrTxs)
+                       bool newPartition)
     : Initializer(this)
     , TabletID(tabletId)
     , TabletGeneration(tabletGeneration)
@@ -223,22 +223,6 @@ TPartition::TPartition(ui64 tabletId, const TPartitionId& partition, const TActo
     , SamplingControl(samplingControl)
 {
     TabletCounters.Populate(Counters);
-
-    if (!distrTxs.empty()) {
-        for (auto& tx : distrTxs) {
-            if (!tx.Predicate.Defined()) {
-                UserActionAndTransactionEvents.emplace_back(MakeSimpleShared<TTransaction>(std::move(tx)));
-            } else if (*tx.Predicate) {
-                auto txId = tx.GetTxId();
-                auto txPtr = MakeSimpleShared<TTransaction>(std::move(tx));
-                BatchingState = ETxBatchingState::Executing;
-                if (txId.Defined()) {
-                    TransactionsInflight.insert(std::make_pair(*txId, txPtr));
-                }
-                UserActionAndTxPendingCommit.emplace_back(std::move(txPtr));
-            }
-        }
-    }
 }
 
 void TPartition::EmplaceResponse(TMessage&& message, const TActorContext& ctx) {

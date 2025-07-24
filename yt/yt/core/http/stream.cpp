@@ -59,7 +59,8 @@ http_parser_settings THttpParser::GetParserSettings()
 const http_parser_settings ParserSettings = THttpParser::GetParserSettings();
 
 THttpParser::THttpParser(http_parser_type parserType)
-    : Headers_(New<THeaders>())
+    : ParserType_(parserType)
+    , Headers_(New<THeaders>())
 {
     http_parser_init(&Parser_, parserType);
     Parser_.data = reinterpret_cast<void*>(this);
@@ -86,6 +87,8 @@ void THttpParser::Reset()
     YT_VERIFY(FirstLine_.GetLength() == 0);
     YT_VERIFY(NextField_.GetLength() == 0);
     YT_VERIFY(NextValue_.GetLength() == 0);
+
+    http_parser_init(&Parser_, ParserType_);
 }
 
 TSharedRef THttpParser::Feed(const TSharedRef& input)

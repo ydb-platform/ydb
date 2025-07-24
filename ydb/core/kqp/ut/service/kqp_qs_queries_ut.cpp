@@ -3966,7 +3966,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         appConfig.MutableTableServiceConfig()->SetEnableHtapTx(true);
         auto settings = TKikimrSettings()
             .SetAppConfig(appConfig)
-            .SetWithSampleTables(false);
+            .SetWithSampleTables(false).SetColumnShardReaderClassName("PLAIN");
         TKikimrRunner kikimr(settings);
         Tests::NCommon::TLoggerInit(kikimr).Initialize();
 
@@ -4155,7 +4155,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         appConfig.MutableTableServiceConfig()->SetEnableHtapTx(true);
         auto settings = TKikimrSettings()
             .SetAppConfig(appConfig)
-            .SetWithSampleTables(false);
+            .SetWithSampleTables(false).SetColumnShardReaderClassName("PLAIN");
         TKikimrRunner kikimr(settings);
         Tests::NCommon::TLoggerInit(kikimr).Initialize();
 
@@ -5056,7 +5056,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
         auto settings = TKikimrSettings()
             .SetAppConfig(appConfig)
-            .SetWithSampleTables(false);
+            .SetWithSampleTables(false).SetColumnShardReaderClassName("PLAIN");
 
         TKikimrRunner kikimr(settings);
         Tests::NCommon::TLoggerInit(kikimr).Initialize();

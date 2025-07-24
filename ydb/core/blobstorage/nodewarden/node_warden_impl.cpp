@@ -197,7 +197,7 @@ void TNodeWarden::Bootstrap() {
         icb->RegisterSharedControl(FreshCompMaxInFlightWrites, "VDiskControls.FreshCompMaxInFlightWrites");
         icb->RegisterSharedControl(HullCompMaxInFlightWrites, "VDiskControls.HullCompMaxInFlightWrites");
         icb->RegisterSharedControl(HullCompMaxInFlightReads, "VDiskControls.HullCompMaxInFlightReads");
-        icb->RegisterSharedControl(HullCompFullCompRateSec, "VDiskControls.HullCompFullCompRateSec");
+        icb->RegisterSharedControl(HullCompFullCompPeriodSec, "VDiskControls.HullCompFullCompPeriodSec");
         icb->RegisterSharedControl(HullCompThrottlerBytesRate, "VDiskControls.HullCompThrottlerBytesRate");
 
         icb->RegisterSharedControl(CostMetricsParametersByMedia[NPDisk::DEVICE_TYPE_ROT].BurstThresholdNs,

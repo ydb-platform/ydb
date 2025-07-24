@@ -129,7 +129,7 @@ namespace NKikimr {
         TControlWrapper FreshCompMaxInFlightWrites;
         TControlWrapper HullCompMaxInFlightWrites;
         TControlWrapper HullCompMaxInFlightReads;
-        TControlWrapper HullCompFullCompRateSec;
+        TControlWrapper HullCompFullCompPeriodSec;
         TControlWrapper HullCompThrottlerBytesRate;
         double HullCompReadBatchEfficiencyThreshold;
         ui64 AnubisOsirisMaxInFly;

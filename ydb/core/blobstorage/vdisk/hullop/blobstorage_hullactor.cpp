@@ -15,13 +15,18 @@ namespace NKikimr {
     struct TFullCompactionState {
         class TRateLimitter {
         public:
-            TRateLimitter(TIntrusivePtr<TVDiskConfig> config) : Config(config) {}
+            TRateLimitter(TIntrusivePtr<TVDiskConfig> config)
+                : Config(config)
+            {}
+
             bool IsEnable() const {
-                return (TInstant::Now() - LastUpdateTime).Seconds() > (ui32) Config->HullCompFullCompRateSec; 
+                return (TInstant::Now() - LastUpdateTime).Seconds() > (ui32) Config->HullCompFullCompPeriodSec; 
             }
+
             void Update() {
                 LastUpdateTime = TInstant::Now();
             }
+
         private:
             TInstant LastUpdateTime = TInstant::Now();
             TIntrusivePtr<TVDiskConfig> Config;

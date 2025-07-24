@@ -19,7 +19,8 @@ namespace NKikimr {
         }
 
         TEventsQuoter(ui64 bytesPerSecond)
-            : DefaultBytesPerSecond(bytesPerSecond) {
+            : DefaultBytesPerSecond(bytesPerSecond) 
+        {
             NextQueueItemTimestamp = TInstant::Zero();
         }
 

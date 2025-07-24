@@ -1383,16 +1383,18 @@ message TImmediateControlsConfig {
             MaxValue: 1000,
             DefaultValue: 20 }];
 
-        optional uint64 HullCompFullCompRateSec = 33 [(ControlOptions) = {
+        reserved 33;
+
+        optional uint64 HullCompFullCompPeriodSec = 34 [(ControlOptions) = {
             Description: "Full compaction will start no more than once during this interval",
             MinValue: 1,
-            MaxValue: 4000000,
+            MaxValue: 604800,
             DefaultValue: 1 }];
 
-        optional uint64 HullCompThrottlerBytesRate = 34 [(ControlOptions) = {
-            Description: "Rate bytes in 1 second for requests (separately for write and read) in compaction throttler",
+        optional uint64 HullCompThrottlerBytesRate = 35 [(ControlOptions) = {
+            Description: "Rate bytes in 1 second for requests (sum of write and read) in compaction throttler",
             MinValue: 0,
-            MaxValue: 4000000,
+            MaxValue: 1073741824,
             DefaultValue: 0 }];
     }
 

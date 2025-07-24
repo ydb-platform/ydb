@@ -185,7 +185,7 @@ namespace NKikimr::NStorage {
         vdiskConfig->FreshCompMaxInFlightWrites = FreshCompMaxInFlightWrites;
         vdiskConfig->HullCompMaxInFlightWrites = HullCompMaxInFlightWrites;
         vdiskConfig->HullCompMaxInFlightReads = HullCompMaxInFlightReads;
-        vdiskConfig->HullCompFullCompRateSec = HullCompFullCompRateSec;
+        vdiskConfig->HullCompFullCompPeriodSec = HullCompFullCompPeriodSec;
         vdiskConfig->HullCompThrottlerBytesRate = HullCompThrottlerBytesRate;
 
         vdiskConfig->EnableLocalSyncLogDataCutting = EnableLocalSyncLogDataCutting;

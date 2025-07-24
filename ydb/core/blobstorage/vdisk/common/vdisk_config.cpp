@@ -41,7 +41,7 @@ namespace NKikimr {
         FreshCompMaxInFlightWrites = 10;
         HullCompMaxInFlightWrites = 10;
         HullCompMaxInFlightReads = 20;
-        HullCompFullCompRateSec = 1;
+        HullCompFullCompPeriodSec = 1;
         HullCompThrottlerBytesRate = 0;
         HullCompReadBatchEfficiencyThreshold = 0.5;  // don't issue reads if there are more gaps than the useful data
         AnubisOsirisMaxInFly = 1000;

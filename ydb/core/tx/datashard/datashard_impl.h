@@ -219,9 +219,10 @@ class TDataShard
     class TTxCdcStreamEmitHeartbeats;
     class TTxUpdateFollowerReadEdge;
     class TTxRemoveSchemaSnapshots;
+    class TTxIncrementalRestore;
     class TTxCleanupUncommitted;
-    class TTxDataCleanup;
-    class TTxCompleteDataCleanup;
+    class TTxVacuum;
+    class TTxCompleteVacuum;
 
     template <typename T> friend class TTxDirectBase;
     class TTxUploadRows;
@@ -1159,7 +1160,7 @@ class TDataShard
             Sys_InMemoryStateActorId = 45,
             Sys_InMemoryStateGeneration = 46,
 
-            Sys_DataCleanupCompletedGeneration = 47,
+            Sys_VacuumCompletedGeneration = 47,
 
             // reserved
             SysPipeline_Flags = 1000,
@@ -1399,7 +1400,7 @@ class TDataShard
 
     void Handle(TEvIncrementalRestoreScan::TEvFinished::TPtr& ev, const TActorContext& ctx);
 
-    void Handle(TEvDataShard::TEvForceDataCleanup::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvDataShard::TEvVacuum::TPtr& ev, const TActorContext& ctx);
 
     void HandleByReplicationSourceOffsetsServer(STATEFN_SIG);
 
@@ -1941,6 +1942,12 @@ public:
         const TActorContext& ctx, TTransactionContext& txc,
         const TPathId& pathId, ui64 tableSchemaVersion,
         const TPathId& streamPathId);
+
+    TUserTable::TPtr AlterTableRotateCdcStream(
+        const TActorContext& ctx, TTransactionContext& txc,
+        const TPathId& pathId, ui64 tableSchemaVersion,
+        const TPathId& oldStreamPathId,
+        const NKikimrSchemeOp::TCdcStreamDescription& newStreamDesc);
 
     TUserTable::TPtr CreateUserTable(TTransactionContext& txc, const NKikimrSchemeOp::TTableDescription& tableScheme);
     TUserTable::TPtr AlterUserTable(const TActorContext& ctx, TTransactionContext& txc,
@@ -2516,7 +2523,7 @@ private:
 
     TTxProgressIdempotentScalarQueue<TEvPrivate::TEvProgressTransaction> PlanQueue;
     TTxProgressIdempotentScalarScheduleQueue<TEvPrivate::TEvCleanupTransaction> CleanupQueue;
-    TTxProgressQueue<ui64, TNoOpDestroy, TEvPrivate::TEvProgressResendReadSet> ResendReadSetQueue;
+    TTxProgressQueue<ui64, TEvPrivate::TEvProgressResendReadSet> ResendReadSetQueue;
 
     struct TPipeServerInfoOverloadSubscribersTag {};
 
@@ -2989,7 +2996,7 @@ private:
     // from the front
     THashMap<ui32, TCompactionWaiterList> CompactionWaiters;
 
-    TMap<ui64, TActorId> DataCleanupWaiters;
+    TMap<ui64, TActorId> VacuumWaiters;
 
     struct TCompactBorrowedWaiter : public TThrRefBase {
         TCompactBorrowedWaiter(TActorId actorId, TLocalPathId requestedTable)
@@ -3041,7 +3048,7 @@ private:
     ui32 StatisticsScanTableId = 0;
     ui64 StatisticsScanId = 0;
 
-    ui64 CurrentDataCleanupGeneration = 0;
+    ui64 CurrentVacuumGeneration = 0;
 
 public:
     auto& GetLockChangeRecords() {
@@ -3244,7 +3251,7 @@ protected:
             HFunc(TEvPrivate::TEvStatisticsScanFinished, Handle);
             HFuncTraced(TEvPrivate::TEvRemoveSchemaSnapshots, Handle);
             HFunc(TEvIncrementalRestoreScan::TEvFinished, Handle);
-            HFunc(TEvDataShard::TEvForceDataCleanup, Handle);
+            HFunc(TEvDataShard::TEvVacuum, Handle);
             default:
                 if (!HandleDefaultEvents(ev, SelfId())) {
                     ALOG_WARN(NKikimrServices::TX_DATASHARD, "TDataShard::StateWork unhandled event type: " << ev->GetTypeRewrite() << " event: " << ev->ToString());

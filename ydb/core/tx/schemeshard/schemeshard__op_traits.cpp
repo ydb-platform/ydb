@@ -132,6 +132,9 @@ EOperationClass GetOperationClass(NKikimrSchemeOp::EOperationType op) {
         case NKikimrSchemeOp::EOperationType::ESchemeOpAlterCdcStreamAtTable:
         case NKikimrSchemeOp::EOperationType::ESchemeOpDropCdcStreamImpl:
         case NKikimrSchemeOp::EOperationType::ESchemeOpDropCdcStreamAtTable:
+        case NKikimrSchemeOp::EOperationType::ESchemeOpRotateCdcStream:
+        case NKikimrSchemeOp::EOperationType::ESchemeOpRotateCdcStreamImpl:
+        case NKikimrSchemeOp::EOperationType::ESchemeOpRotateCdcStreamAtTable:
         case NKikimrSchemeOp::EOperationType::ESchemeOpDropReplicationCascade:
         case NKikimrSchemeOp::EOperationType::ESchemeOpAlterExtSubDomainCreateHive:
         case NKikimrSchemeOp::EOperationType::ESchemeOpCreateColumnBuild:

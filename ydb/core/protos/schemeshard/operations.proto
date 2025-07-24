@@ -94,6 +94,10 @@ enum EOperationType {
     ESchemeOpDropCdcStream = 68;
     ESchemeOpDropCdcStreamImpl = 69;
     ESchemeOpDropCdcStreamAtTable = 70;
+    // Rotate
+    ESchemeOpRotateCdcStream = 120;
+    ESchemeOpRotateCdcStreamImpl = 121;
+    ESchemeOpRotateCdcStreamAtTable = 122;
 
     ESchemeOpMoveTable = 71;
     ESchemeOpMoveTableIndex = 72;

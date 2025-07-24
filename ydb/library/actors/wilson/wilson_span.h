@@ -1,8 +1,9 @@
 #pragma once
 
 #include <ydb/library/actors/core/actor.h>
-#include <ydb/library/actors/core/actorsystem.h>
+#include <ydb/library/actors/core/actorsystem_fwd.h>
 #include <contrib/libs/opentelemetry-proto/opentelemetry/proto/trace/v1/trace.pb.h>
+#include <util/generic/flags.h>
 #include <util/generic/hash.h>
 #include <util/generic/overloaded.h>
 #include <util/datetime/cputimer.h>
@@ -59,15 +60,7 @@ namespace NWilson {
             bool Ignored = false;
             NActors::TActorSystem* ActorSystem;
 
-            TData(TInstant startTime, ui64 startCycles, TTraceId traceId, TFlags flags, NActors::TActorSystem* actorSystem)
-                : StartTime(startTime)
-                , StartCycles(startCycles)
-                , TraceId(std::move(traceId))
-                , Flags(flags)
-                , ActorSystem(actorSystem ? actorSystem : (NActors::TlsActivationContext ? NActors::TActivationContext::ActorSystem() : nullptr))
-            {
-                Y_DEBUG_ABORT_UNLESS(ActorSystem, "Attempting to create NWilson::TSpan outside of actor system without providing actorSystem pointer");
-            }
+            TData(TInstant startTime, ui64 startCycles, TTraceId traceId, TFlags flags, NActors::TActorSystem* actorSystem);
 
             ~TData() {
                 Y_DEBUG_ABORT_UNLESS(Sent || Ignored);
@@ -82,48 +75,8 @@ namespace NWilson {
         TSpan(TSpan&&) = default;
 
         TSpan(ui8 verbosity, TTraceId parentId, std::variant<std::optional<TString>, const char*> name,
-                TFlags flags = EFlags::NONE, NActors::TActorSystem* actorSystem = nullptr)
-            : Data(parentId
-                    ? std::make_unique<TData>(TInstant::Now(), GetCycleCount(), parentId.Span(verbosity), flags, actorSystem)
-                    : nullptr)
-        {
-            if (Y_UNLIKELY(*this)) {
-                if (verbosity <= parentId.GetVerbosity()) {
-                    if (!parentId.IsRoot()) {
-                        Data->Span.set_parent_span_id(parentId.GetSpanIdPtr(), parentId.GetSpanIdSize());
-                    }
-                    Data->Span.set_start_time_unix_nano(Data->StartTime.NanoSeconds());
-                    Data->Span.set_kind(opentelemetry::proto::trace::v1::Span::SPAN_KIND_INTERNAL);
-
-                    std::visit(TOverloaded{
-                        [&](const char *name) {
-                            Name(TString(name));
-                        },
-                        [&](std::optional<TString>& name) {
-                            if (name) {
-                                Name(std::move(*name));
-                            }
-                        }
-                    }, name);
-
-                    Attribute("node_id", Data->ActorSystem->NodeId);
-                } else {
-                    Data->Ignored = true; // ignore this span due to verbosity mismatch, still allowing child spans to be created
-                }
-            }
-        }
-
-        ~TSpan() {
-            if (Y_UNLIKELY(*this)) {
-                if (std::uncaught_exceptions() != Data->UncaughtExceptions) {
-                    EndError("span terminated due to stack unwinding");
-                } else if (Data->Flags & EFlags::AUTO_END) {
-                    End();
-                } else {
-                    EndError("unterminated span");
-                }
-            }
-        }
+            TFlags flags = EFlags::NONE, NActors::TActorSystem* actorSystem = nullptr);
+        ~TSpan();
 
         TSpan& operator =(const TSpan&) = delete;
         TSpan& operator=(TSpan&& other);
@@ -229,16 +182,7 @@ namespace NWilson {
             }
         }
 
-        void End() {
-            if (Y_UNLIKELY(*this)) {
-                Data->Span.set_trace_id(Data->TraceId.GetTraceIdPtr(), Data->TraceId.GetTraceIdSize());
-                Data->Span.set_span_id(Data->TraceId.GetSpanIdPtr(), Data->TraceId.GetSpanIdSize());
-                Data->Span.set_end_time_unix_nano(TimeUnixNano());
-                Send();
-            } else {
-                VerifyNotSent();
-            }
-        }
+        void End();
 
         TTraceId GetTraceId() const {
             return Data ? TTraceId(Data->TraceId) : TTraceId();

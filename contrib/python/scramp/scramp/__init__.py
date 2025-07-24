@@ -7,6 +7,6 @@ from scramp.core import (
     make_channel_binding,
 )
 
-__all__ = [ScramClient, ScramMechanism, ScramException, make_channel_binding]
+__all__ = ["ScramClient", "ScramException", "ScramMechanism", "make_channel_binding"]
 
 __version__ = version("scramp")

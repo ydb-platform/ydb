@@ -763,7 +763,13 @@ class TPopulator: public TMonitorableActor<TPopulator> {
                 << ", cookie# " << ev->Cookie);
             return;
         }
-
+        TActorId* ackedReplica = ReplicaToReplicaPopulatorBackMap.FindPtr(ev->Sender);
+        if (ackedReplica == nullptr) {
+            SBP_LOG_D("Ack from unknown replica (config changed?)"
+                << ": sender# " << ev->Sender
+                << ", cookie# " << ev->Cookie);
+            return;
+        }
         const TPathId pathId = ev->Get()->GetPathId();
         const ui64 version = record.GetVersion();
 
@@ -771,8 +777,6 @@ class TPopulator: public TMonitorableActor<TPopulator> {
         while (pathIt != it->second.PathAcks.end()
                && pathIt->first.first == pathId
                && pathIt->first.second <= version) {
-            TActorId* ackedReplica = ReplicaToReplicaPopulatorBackMap.FindPtr(ev->Sender);
-            Y_ABORT_UNLESS(ackedReplica != nullptr);
             if (CheckQuorum(pathIt->second, *ackedReplica)) {
                 SBP_LOG_N("Ack update"
                     << ": ack to# " << it->second.AckTo

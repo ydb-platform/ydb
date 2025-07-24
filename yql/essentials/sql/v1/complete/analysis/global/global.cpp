@@ -2,18 +2,34 @@
 
 #include "column.h"
 #include "function.h"
+#include "input.h"
 #include "named_node.h"
 #include "parse_tree.h"
 #include "use.h"
 
 #include <yql/essentials/sql/v1/complete/antlr4/pipeline.h>
 #include <yql/essentials/sql/v1/complete/syntax/ansi.h>
+#include <yql/essentials/sql/v1/complete/text/word.h>
 
 #include <library/cpp/iterator/functools.h>
 
 #include <util/string/join.h>
 
 namespace NSQLComplete {
+
+    namespace {
+
+        template <class C>
+        void Move(TColumnContext& lhs, TColumnContext& rhs, C TColumnContext::*member) {
+            C& lhsM = lhs.*member;
+            C& rhsM = rhs.*member;
+
+            lhsM.reserve(lhsM.size() + rhsM.size());
+            std::move(rhsM.begin(), rhsM.end(), std::back_inserter(lhsM));
+            SortUnique(lhsM);
+        }
+
+    } // namespace
 
     bool operator<(const TColumnId& lhs, const TColumnId& rhs) {
         return std::tie(lhs.TableAlias, lhs.Name) < std::tie(rhs.TableAlias, rhs.Name);
@@ -38,9 +54,16 @@ namespace NSQLComplete {
         Tables.erase(aliasedTables.begin(), aliasedTables.end());
         Columns.erase(aliasedColumns.begin(), aliasedColumns.end());
 
+        THashMap<TString, THashSet<TString>> without;
+        if (auto it = WithoutByTableAlias.find(*alias); it != WithoutByTableAlias.end()) {
+            without[*alias] = std::move(it->second);
+            WithoutByTableAlias.erase(it);
+        }
+
         return {
             .Tables = std::move(tables),
             .Columns = std::move(columns),
+            .WithoutByTableAlias = std::move(without),
         };
     }
 
@@ -54,21 +77,38 @@ namespace NSQLComplete {
         for (TAliased<TTableId>& table : Tables) {
             table.Alias = alias;
         }
+
         for (TColumnId& column : Columns) {
             column.TableAlias = alias;
         }
+
+        THashSet<TString>& without = WithoutByTableAlias[alias];
+        for (auto& [tableAlias, excluded] : WithoutByTableAlias) {
+            if (tableAlias == alias) {
+                continue;
+            }
+
+            without.insert(excluded.begin(), excluded.end());
+        }
+
+        if (without.empty()) {
+            WithoutByTableAlias = {};
+        } else {
+            WithoutByTableAlias = {{TString(alias), std::move(without)}};
+        }
+
         return *this;
     }
 
     TColumnContext operator|(TColumnContext lhs, TColumnContext rhs) {
-        lhs.Tables.reserve(lhs.Tables.size() + rhs.Tables.size());
-        lhs.Columns.reserve(lhs.Columns.size() + rhs.Columns.size());
+        Move(lhs, rhs, &TColumnContext::Tables);
 
-        std::move(rhs.Tables.begin(), rhs.Tables.end(), std::back_inserter(lhs.Tables));
-        std::move(rhs.Columns.begin(), rhs.Columns.end(), std::back_inserter(lhs.Columns));
+        Move(lhs, rhs, &TColumnContext::Columns);
 
-        SortUnique(lhs.Tables);
-        SortUnique(lhs.Columns);
+        for (auto& [tableAlias, excluded] : rhs.WithoutByTableAlias) {
+            auto& without = lhs.WithoutByTableAlias[tableAlias];
+            without.insert(excluded.begin(), excluded.end());
+        }
 
         return lhs;
     }
@@ -87,18 +127,10 @@ namespace NSQLComplete {
     template <bool IsAnsiLexer>
     class TSpecializedGlobalAnalysis: public IGlobalAnalysis {
     public:
-        using TDefaultYQLGrammar = TAntlrGrammar<
-            NALADefaultAntlr4::SQLv1Antlr4Lexer,
-            NALADefaultAntlr4::SQLv1Antlr4Parser>;
-
-        using TAnsiYQLGrammar = TAntlrGrammar<
-            NALAAnsiAntlr4::SQLv1Antlr4Lexer,
-            NALAAnsiAntlr4::SQLv1Antlr4Parser>;
-
-        using G = std::conditional_t<
+        using TLexer = std::conditional_t<
             IsAnsiLexer,
-            TAnsiYQLGrammar,
-            TDefaultYQLGrammar>;
+            NALAAnsiAntlr4::SQLv1Antlr4Lexer,
+            NALADefaultAntlr4::SQLv1Antlr4Lexer>;
 
         TSpecializedGlobalAnalysis()
             : Chars_()
@@ -128,11 +160,17 @@ namespace NSQLComplete {
 
             TGlobalContext ctx;
 
-            // TODO(YQL-19747): Add ~ParseContext(Tokens, ParseTree, CursorPosition)
-            ctx.Use = FindUseStatement(sqlQuery, &Tokens_, input.CursorPosition, env);
-            ctx.Names = CollectNamedNodes(sqlQuery, &Tokens_, input.CursorPosition);
-            ctx.EnclosingFunction = EnclosingFunction(sqlQuery, &Tokens_, input.CursorPosition);
-            ctx.Column = InferColumnContext(sqlQuery, &Tokens_, input.CursorPosition);
+            TParsedInput parsed = {
+                .Original = input,
+                .Tokens = &Tokens_,
+                .Parser = &Parser_,
+                .SqlQuery = sqlQuery,
+            };
+
+            ctx.Use = FindUseStatement(parsed, env);
+            ctx.Names = CollectNamedNodes(parsed);
+            ctx.EnclosingFunction = EnclosingFunction(parsed);
+            ctx.Column = InferColumnContext(parsed);
 
             if (ctx.Use && ctx.Column) {
                 EnrichTableClusters(*ctx.Column, *ctx.Use);
@@ -143,14 +181,11 @@ namespace NSQLComplete {
 
     private:
         bool IsRecoverable(TCompletionInput input) const {
-            static const TStringBuf prev = " ";
-            static const TStringBuf next = " .(";
-
             TStringBuf s = input.Text;
             size_t i = input.CursorPosition;
 
-            return (i < s.size() && prev.Contains(s[i]) || i == s.size()) &&
-                   (i > 0 /*  */ && next.Contains(s[i - 1]));
+            return (i < s.size() && IsWordBoundary(s[i]) || i == s.size()) &&
+                   (i > 0 /*  */ && IsWordBoundary(s[i - 1]));
         }
 
         SQLv1::Sql_queryContext* Parse(TStringBuf input) {
@@ -176,9 +211,9 @@ namespace NSQLComplete {
         }
 
         antlr4::ANTLRInputStream Chars_;
-        G::TLexer Lexer_;
+        TLexer Lexer_;
         antlr4::CommonTokenStream Tokens_;
-        TDefaultYQLGrammar::TParser Parser_;
+        SQLv1 Parser_;
     };
 
     class TGlobalAnalysis: public IGlobalAnalysis {
@@ -207,14 +242,11 @@ namespace NSQLComplete {
 } // namespace NSQLComplete
 
 template <>
-void Out<NSQLComplete::TAliased<NSQLComplete::TTableId>>(IOutputStream& out, const NSQLComplete::TAliased<NSQLComplete::TTableId>& value) {
-    Out<NSQLComplete::TTableId>(out, value);
-    out << " AS " << value.Alias;
-}
-
-template <>
-void Out<NSQLComplete::TColumnId>(IOutputStream& out, const NSQLComplete::TColumnId& value) {
-    out << value.TableAlias << "." << value.Name;
+void Out<NSQLComplete::TFunctionContext>(IOutputStream& out, const NSQLComplete::TFunctionContext& value) {
+    out << "TFunctionContext { ";
+    out << "Name: " << value.Name;
+    out << ", Args: " << value.ArgumentNumber;
+    out << " }";
 }
 
 template <>
@@ -222,5 +254,13 @@ void Out<NSQLComplete::TColumnContext>(IOutputStream& out, const NSQLComplete::T
     out << "TColumnContext { ";
     out << "Tables: " << JoinSeq(", ", value.Tables);
     out << ", Columns: " << JoinSeq(", ", value.Columns);
+
+    if (!value.WithoutByTableAlias.empty()) {
+        out << ", WithoutByTableAlias: ";
+        for (const auto& [tableAlias, columns] : value.WithoutByTableAlias) {
+            out << tableAlias << ".[" << JoinSeq(", ", columns) << "], ";
+        }
+    }
+
     out << " }";
 }

@@ -1073,7 +1073,14 @@ message TDropCdcStream {
     optional string StreamName = 2;
 }
 
+message TRotateCdcStream {
+    optional string TableName = 1;
+    optional string OldStreamName = 2;
+    optional TCreateCdcStream NewStream = 3;
+}
+
 message TContinuousBackupDescription {
+    optional string StreamName = 1;
 }
 
 message TCreateContinuousBackup {
@@ -1089,6 +1096,7 @@ message TAlterContinuousBackup {
 
     message TTakeIncrementalBackup {
         optional string DstPath = 1;
+        optional string DstStreamPath = 2;
     }
 
     oneof Action {
@@ -1748,6 +1756,7 @@ message TModifyScheme {
     optional TCreateCdcStream CreateCdcStream = 45;
     optional TAlterCdcStream AlterCdcStream = 46;
     optional TDropCdcStream DropCdcStream = 47;
+    optional TRotateCdcStream RotateCdcStream = 83;
     optional TMove MoveTable = 48;
     optional TMove MoveTableIndex = 49;
     optional TSequenceDescription Sequence = 51;

@@ -2,6 +2,7 @@
 #include "counters.h"
 #include "manager.h"
 
+#include <ydb/core/base/memory_controller_iface.h>
 #include <ydb/core/tx/limiter/grouped_memory/usage/config.h>
 #include <ydb/core/tx/limiter/grouped_memory/usage/events.h>
 
@@ -9,22 +10,70 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 
 namespace NKikimr::NOlap::NGroupedMemoryManager {
+
+namespace {
+
+template<class T>
+class TLoadQueue {
+    using TLoad = i64;
+    std::map<TLoad, std::set<T>> Load;
+    std::map<T, TLoad> Items;
+
+public:
+    void Add(const T& item) {
+        Load[0].emplace(item);
+        Items[item] = 0;
+    }
+
+    const T& Top() {
+        auto loadLevelIt = Load.begin();
+        AFL_VERIFY(loadLevelIt != Load.end())("error", "Load queue is empty. Please add at least one element to load queue");
+        return *loadLevelIt->second.begin();
+    }
+
+    void ChangeLoad(const T& item, i64 delta) {
+        if (delta == 0) {
+            return;
+        }
+        auto it = Items.find(item);
+        AFL_VERIFY(it != Items.end())("error", "Load item is not found");
+        TLoad& load = it->second;
+        auto loadLevelIt = Load.find(load);
+        loadLevelIt->second.erase(item);
+        if (loadLevelIt->second.empty()) {
+            Load.erase(loadLevelIt);
+        }
+        load += delta;
+        Load[load].emplace(item);
+    }
+};
+
+}
 class TManager;
 class TMemoryLimiterActor: public NActors::TActorBootstrapped<TMemoryLimiterActor> {
 private:
-    std::shared_ptr<TManager> Manager;
+    TVector<std::shared_ptr<TManager>> Managers;
+    TLoadQueue<size_t> LoadQueue;
+    struct TProcessStats {
+        size_t ManagerIndex = 0;
+        int Counter = 0;
+    };
+    TMap<ui64, TProcessStats> ProcessMapping;
+
     const TConfig Config;
     const TString Name;
     const std::shared_ptr<TCounters> Signals;
     const std::shared_ptr<TStageFeatures> DefaultStage;
+    const NMemory::EMemoryConsumerKind ConsumerKind;
 
 public:
     TMemoryLimiterActor(const TConfig& config, const TString& name, const std::shared_ptr<TCounters>& signals,
-        const std::shared_ptr<TStageFeatures>& defaultStage)
+        const std::shared_ptr<TStageFeatures>& defaultStage, const NMemory::EMemoryConsumerKind consumerKind)
         : Config(config)
         , Name(name)
         , Signals(signals)
-        , DefaultStage(defaultStage) {
+        , DefaultStage(defaultStage)
+        , ConsumerKind(consumerKind) {
     }
 
     void Handle(NEvents::TEvExternal::TEvStartTask::TPtr& ev);
@@ -36,7 +85,8 @@ public:
     void Handle(NEvents::TEvExternal::TEvFinishProcess::TPtr& ev);
     void Handle(NEvents::TEvExternal::TEvStartProcessScope::TPtr& ev);
     void Handle(NEvents::TEvExternal::TEvFinishProcessScope::TPtr& ev);
-    void Handle(NEvents::TEvExternal::TEvUpdateMemoryLimits::TPtr& ev);
+    void Handle(NMemory::TEvConsumerRegistered::TPtr& ev);
+    void Handle(NMemory::TEvConsumerLimit::TPtr& ev);
 
     void Bootstrap();
 
@@ -51,11 +101,16 @@ public:
             hFunc(NEvents::TEvExternal::TEvFinishProcess, Handle);
             hFunc(NEvents::TEvExternal::TEvStartProcessScope, Handle);
             hFunc(NEvents::TEvExternal::TEvFinishProcessScope, Handle);
-            hFunc(NEvents::TEvExternal::TEvUpdateMemoryLimits, Handle);
+            hFunc(NMemory::TEvConsumerRegistered, Handle);
+            hFunc(NMemory::TEvConsumerLimit, Handle);
             default:
                 AFL_VERIFY(false)("ev_type", ev->GetTypeName());
         }
     }
+private:
+    size_t AcquireManager(ui64 externalProcessId);
+    size_t ReleaseManager(ui64 externalProcessId);
+    size_t GetManager(ui64 externalProcessId);
 };
 
 }   // namespace NKikimr::NOlap::NGroupedMemoryManager

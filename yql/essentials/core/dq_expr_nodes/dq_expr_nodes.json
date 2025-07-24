@@ -169,7 +169,8 @@
         "Match": {"Type": "Callable", "Name": "DqCnHashShuffle"},
         "Children": [
             {"Index": 1, "Name": "KeyColumns", "Type": "TCoAtomList"},
-            {"Index": 2, "Name": "UseSpilling", "Type": "TCoAtom", "Optional": true}
+            {"Index": 2, "Name": "UseSpilling", "Type": "TCoAtom", "Optional": true},
+            {"Index": 3, "Name": "HashFunc", "Type": "TCoAtom", "Optional": true}
         ]
     },
     {

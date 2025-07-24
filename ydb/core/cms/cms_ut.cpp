@@ -2361,6 +2361,12 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         for (const auto& node : *nodes) {
             pileMap->at(node.NodeId % pileMap->size()).push_back(node.NodeId);
         }
+        for (auto& node : *nodes) {
+            NActorsInterconnect::TNodeLocation pb;
+            node.Location.Serialize(&pb, true);
+            pb.SetBridgePileName("r" + ToString(node.NodeId % pileMap->size()));
+            node.Location = TNodeLocation(pb);
+        }
 
         auto newEv = IEventHandle::Downcast<TEvInterconnect::TEvNodesInfo>(
             new IEventHandle((*ev)->Recipient, (*ev)->Sender, new TEvInterconnect::TEvNodesInfo(nodes, pileMap))
@@ -2370,18 +2376,15 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
 
     Y_UNIT_TEST(BridgeModeCollectInfo)
     {
-        TTestEnvOpts opts(8);
+        TTestEnvOpts opts(16);
         TCmsTestEnv env(opts.WithBridgeMode());
-
-        auto observerFunc = [&](TAutoPtr<IEventHandle>& ev) {
+        TTestActorRuntime::TEventObserver prev = env.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() == TEvInterconnect::EvNodesInfo) {
                 auto *x = reinterpret_cast<TEvInterconnect::TEvNodesInfo::TPtr*>(&ev);
                 ChangePileMap(x);
             }
-            return TTestActorRuntime::EEventAction::PROCESS;
-        };
-        env.SetObserverFunc(observerFunc);
-
+            return prev(ev);
+        });
         env.Register(CreateInfoCollector(env.GetSender(), TDuration::Minutes(1)));
 
         TAutoPtr<IEventHandle> handle;
@@ -2389,12 +2392,208 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         UNIT_ASSERT(reply);
         const auto &info = *reply->Info;
         UNIT_ASSERT(info.IsBridgeMode);
-        UNIT_ASSERT(info.NodeIdToPileId.size() == 8);
-
+        UNIT_ASSERT_EQUAL(info.NodeIdToPileId.size(), 16);
+        UNIT_ASSERT_EQUAL(info.BSGroupsCount(), 8);
+        for (const auto& [_, group] : info.AllBSGroups()) {
+            // Checking (group.VDisks.size() > 0) means there are no proxy groups.
+            UNIT_ASSERT(group.VDisks.size() > 0);
+        }
         for (const auto [nodeId, pileId] : info.NodeIdToPileId) {
+            // In ChangePileMap, nodes are distributed among piles based on the parity.
             UNIT_ASSERT(nodeId % opts.PileCount == pileId);
         }
+        for (const auto& [nodeId, node] : info.AllNodes()) {
+            UNIT_ASSERT(node->PileId);
+            UNIT_ASSERT_EQUAL(nodeId % opts.PileCount, node->PileId);
+        }
 
+        auto state = env.RequestState();
+        for (const auto& host : state.GetHosts()) {
+            const ui32 correctPileId = host.GetNodeId() % opts.PileCount;
+            if (correctPileId != 0) {
+                UNIT_ASSERT(host.GetPileId());
+                UNIT_ASSERT_EQUAL(correctPileId, host.GetPileId());
+            }
+            const auto bridgePileName = host.GetLocation().GetBridgePileName();
+            UNIT_ASSERT(bridgePileName);
+            UNIT_ASSERT_EQUAL(correctPileId, static_cast<ui32>(bridgePileName[1] - '0'));
+        }
+
+        auto listNodes = env.RequestListNodes();
+        for (const auto& node : listNodes) {
+            const auto bridgePileName = node.location().bridge_pile_name();
+            UNIT_ASSERT(bridgePileName);
+            UNIT_ASSERT_EQUAL(node.node_id() % opts.PileCount, static_cast<ui32>(bridgePileName[1] - '0'));
+        }
+    }
+
+    Y_UNIT_TEST(BridgeModeGroups)
+    {
+        TTestEnvOpts opts(16, 4);
+        opts.NToSelect = 8;
+        TCmsTestEnv env(opts.WithBridgeMode());
+        TTestActorRuntime::TEventObserver prev = env.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvInterconnect::EvNodesInfo) {
+                auto *x = reinterpret_cast<TEvInterconnect::TEvNodesInfo::TPtr*>(&ev);
+                ChangePileMap(x);
+            }
+            return prev(ev);
+        });
+
+        // Pile #1.
+        env.CheckPermissionRequest("user", true, false, true, true, MODE_MAX_AVAILABILITY, TStatus::ALLOW,
+                                    MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(0), 60000000, "storage"));
+        // Pile #0: there are no vdisks that are the same as on the node with index 0.
+        env.CheckPermissionRequest("user", true, false, true, true, MODE_MAX_AVAILABILITY, TStatus::ALLOW,
+                                    MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(9), 60000000, "storage"));
+        // Pile #1: the vdisk from this pile is already locked.
+        env.CheckPermissionRequest("user", true, false, true, true, MODE_MAX_AVAILABILITY, TStatus::DISALLOW_TEMP,
+                                    MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(2), 60000000, "storage"));
+        // Pile #0: the vdisk from this pile is already locked.
+        env.CheckPermissionRequest("user", true, false, true, true, MODE_MAX_AVAILABILITY, TStatus::DISALLOW_TEMP,
+                                    MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(11), 60000000, "storage"));
+        // Pile #1: in MODE_KEEP_AVAILABLE mode, two vdisks can be locked in a pile.
+        env.CheckPermissionRequest("user", true, false, true, true, MODE_KEEP_AVAILABLE, TStatus::ALLOW,
+                                    MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(2), 60000000, "storage"));
+        // Pile #2: in MODE_KEEP_AVAILABLE mode, two vdisks can be locked in a pile.
+        env.CheckPermissionRequest("user", true, false, true, true, MODE_KEEP_AVAILABLE, TStatus::ALLOW,
+                                    MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(11), 60000000, "storage"));
+        // Pile #1: in MODE_KEEP_AVAILABLE mode, no more than two vdisks can be locked in a pile.
+        env.CheckPermissionRequest("user", true, false, true, true, MODE_KEEP_AVAILABLE, TStatus::DISALLOW_TEMP,
+                                    MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(4), 60000000, "storage"));
+        // Pile #2: in MODE_KEEP_AVAILABLE mode, no more than two vdisks can be locked in a pile.
+        env.CheckPermissionRequest("user", true, false, true, true, MODE_KEEP_AVAILABLE, TStatus::DISALLOW_TEMP,
+                                    MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(13), 60000000, "storage"));
+    }
+
+    Y_UNIT_TEST(BridgeModeStateStorage)
+    {
+        TTestEnvOpts opts(16);
+        opts.VDisks = 0;
+        opts.NToSelect = 5;
+        TCmsTestEnv env(opts.WithBridgeMode());
+
+        TTestActorRuntime::TEventObserver prev = env.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvInterconnect::EvNodesInfo) {
+                auto *x = reinterpret_cast<TEvInterconnect::TEvNodesInfo::TPtr*>(&ev);
+                ChangePileMap(x);
+            }
+            return prev(ev);
+        });
+
+        // Pile #1: There are 0 rings locked on this pile => it is possible to lock.
+        env.CheckPermissionRequest("user", true, false, true, true, MODE_MAX_AVAILABILITY, TStatus::ALLOW,
+                                    MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(0), 60000000, "storage"));
+        // Pile #0: There are 0 rings locked on this pile => it is possible to lock.                            
+        env.CheckPermissionRequest("user", true, false, true, true, MODE_MAX_AVAILABILITY, TStatus::ALLOW,
+                                    MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(1), 60000000, "storage"));
+        // Pile #1: There is already one ring locked on this pile => it is not possible to lock.
+        env.CheckPermissionRequest("user", true, false, true, true, MODE_MAX_AVAILABILITY, TStatus::DISALLOW_TEMP,
+                                    MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(2), 60000000, "storage"));
+        // Pile #0: There is already one ring locked on this pile => it is not possible to lock.
+        env.CheckPermissionRequest("user", true, false, true, true, MODE_MAX_AVAILABILITY, TStatus::DISALLOW_TEMP,
+                                    MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(3), 60000000, "storage"));
+        // Pile #1: On a pile in MODE_KEEP_AVAILABLE mode, it is possible to lock <= 2 rings => it is possible to lock
+        env.CheckPermissionRequest("user", true, false, true, true, MODE_KEEP_AVAILABLE, TStatus::ALLOW,
+                                    MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(2), 60000000, "storage"));
+        // Pile #0: On a pile in MODE_KEEP_AVAILABLE mode, it is possible to lock <= 2 rings => it is possible to lock
+        env.CheckPermissionRequest("user", true, false, true, true, MODE_KEEP_AVAILABLE, TStatus::ALLOW,
+                                    MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(3), 60000000, "storage"));
+        // Pile #1: On a pile in MODE_KEEP_AVAILABLE mode, it is possible to lock <= 2 rings — the limit has been exhausted => it is not possible to lock.
+        env.CheckPermissionRequest("user", true, false, true, true, MODE_KEEP_AVAILABLE, TStatus::DISALLOW_TEMP,
+                                    MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(4), 60000000, "storage"));
+        // Pile #0: On a pile in MODE_KEEP_AVAILABLE mode, it is possible to lock <= 2 rings — the limit has been exhausted => it is not possible to lock.
+        env.CheckPermissionRequest("user", true, false, true, true, MODE_KEEP_AVAILABLE, TStatus::DISALLOW_TEMP,
+                                    MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(5), 60000000, "storage"));
+    }
+
+    Y_UNIT_TEST(BridgeModeNodeLimit)
+    {
+        TTestEnvOpts opts(16);
+        opts.VDisks = 0;
+        opts.NToSelect = 8;
+        TCmsTestEnv env(opts.WithBridgeMode());
+
+        TTestActorRuntime::TEventObserver prev = env.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvInterconnect::EvNodesInfo) {
+                auto *x = reinterpret_cast<TEvInterconnect::TEvNodesInfo::TPtr*>(&ev);
+                ChangePileMap(x);
+            }
+            return prev(ev);
+        });
+
+        // set limit
+        NKikimrCms::TCmsConfig config;
+        config.MutableClusterLimits()->SetDisabledNodesLimit(1);
+        env.SetCmsConfig(config);
+
+        // Pile #1: We can lock one node.
+        env.CheckPermissionRequest("user", true, false, true, true, MODE_KEEP_AVAILABLE, TStatus::ALLOW,
+                                    MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(0), 60000000, "storage"));
+        // Pile #0: We can lock one node.
+        env.CheckPermissionRequest("user", true, false, true, true, MODE_KEEP_AVAILABLE, TStatus::ALLOW,
+                                    MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(9), 60000000, "storage"));
+        // Pile #1: We cannot lock more than one node.
+        env.CheckPermissionRequest("user", true, false, true, true, MODE_KEEP_AVAILABLE, TStatus::DISALLOW_TEMP,
+                                    MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(2), 60000000, "storage"));
+        // Pile #0: We cannot lock more than one node.
+        env.CheckPermissionRequest("user", true, false, true, true, MODE_KEEP_AVAILABLE, TStatus::DISALLOW_TEMP,
+                                    MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(11), 60000000, "storage"));
+    }
+
+    Y_UNIT_TEST(BridgeModeSysTablets) {
+        TTestEnvOpts opts(12, 0);
+        TCmsTestEnv env(opts.WithBridgeMode(2, true));
+        env.EnableSysNodeChecking();
+
+        TTestActorRuntime::TEventObserver prev = env.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvInterconnect::EvNodesInfo) {
+                auto *x = reinterpret_cast<TEvInterconnect::TEvNodesInfo::TPtr*>(&ev);
+                ChangePileMap(x);
+            }
+            return prev(ev);
+        });
+
+        // Locking 3 nodes in each pile
+        env.CheckPermissionRequest("user", false, false, false, true, MODE_MAX_AVAILABILITY, TStatus::ALLOW,
+                                   MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(0), 60000000, "storage"));
+        env.CheckPermissionRequest("user", false, false, false, true, MODE_MAX_AVAILABILITY, TStatus::ALLOW,
+                                   MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(2), 60000000, "storage"));
+        env.CheckPermissionRequest("user", false, false, false, true, MODE_MAX_AVAILABILITY, TStatus::ALLOW,
+                                   MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(4), 60000000, "storage"));
+
+        env.CheckPermissionRequest("user", false, false, false, true, MODE_MAX_AVAILABILITY, TStatus::ALLOW,
+                                   MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(1), 60000000, "storage"));
+        env.CheckPermissionRequest("user", false, false, false, true, MODE_MAX_AVAILABILITY, TStatus::ALLOW,
+                                   MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(3), 60000000, "storage"));
+        env.CheckPermissionRequest("user", false, false, false, true, MODE_MAX_AVAILABILITY, TStatus::ALLOW,
+                                   MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(5), 60000000, "storage"));
+        
+        // Pile #1: tablet 'FLAT_BS_CONTROLLER' has too many unavailable nodes. Locked: 3, down: 0, limit: 3
+        env.CheckPermissionRequest("user", false, false, false, true, MODE_MAX_AVAILABILITY, TStatus::DISALLOW_TEMP,
+                                   MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(6), 60000000, "storage"));
+        // Pile #2: tablet 'FLAT_BS_CONTROLLER' has too many unavailable nodes. Locked: 3, down: 0, limit: 3
+        env.CheckPermissionRequest("user", false, false, false, true, MODE_MAX_AVAILABILITY, TStatus::DISALLOW_TEMP,
+                                   MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(7), 60000000, "storage"));
+        
+        // Locking 5 nodes in each pile (MODE_KEEP_AVAILABLE)
+        env.CheckPermissionRequest("user", false, false, false, true, MODE_KEEP_AVAILABLE, TStatus::ALLOW,
+                                   MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(6), 60000000, "storage"));
+        env.CheckPermissionRequest("user", false, false, false, true, MODE_KEEP_AVAILABLE, TStatus::ALLOW,
+                                   MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(7), 60000000, "storage"));
+
+        env.CheckPermissionRequest("user", false, false, false, true, MODE_KEEP_AVAILABLE, TStatus::ALLOW,
+                                   MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(8), 60000000, "storage"));
+        env.CheckPermissionRequest("user", false, false, false, true, MODE_KEEP_AVAILABLE, TStatus::ALLOW,
+                                   MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(9), 60000000, "storage"));
+        
+        // Pile #1: tablet 'FLAT_BS_CONTROLLER' has too many unavailable nodes. Locked: 5, down: 0, limit: 5 (MODE_KEEP_AVAILABLE)
+        env.CheckPermissionRequest("user", false, false, false, true, MODE_KEEP_AVAILABLE, TStatus::DISALLOW_TEMP,
+                                   MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(10), 60000000, "storage"));
+        // Pile #0: tablet 'FLAT_BS_CONTROLLER' has too many unavailable nodes. Locked: 5, down: 0, limit: 5 (MODE_KEEP_AVAILABLE)
+        env.CheckPermissionRequest("user", false, false, false, true, MODE_KEEP_AVAILABLE, TStatus::DISALLOW_TEMP,
+                                   MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(11), 60000000, "storage"));
+        
     }
 }
 

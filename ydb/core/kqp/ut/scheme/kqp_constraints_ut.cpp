@@ -1287,6 +1287,39 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
             ]
         )");
 
+        {
+            auto query = R"(
+                --!syntax_v1
+                ALTER TABLE `/Root/AlterTableAddNotNullColumn` ADD COLUMN Value10 Int16 NOT NULL DEFAULT Int16("-213");
+            )";
+
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS,
+                                       result.GetIssues().ToString());
+        }
+
+        fCompareTable(R"(
+            [
+                [[1u];["Old"];-213;1;7;-24;-25;1.;1.;"[123]";"{\"age\" : 22}";"1.11";"155555555555555.11"];[[2u];["New"];-213;1;7;-24;-25;1.;1.;"[123]";"{\"age\" : 22}";"1.11";"155555555555555.11"]
+            ]
+        )");
+
+        {
+            auto query = R"(
+                --!syntax_v1
+                ALTER TABLE `/Root/AlterTableAddNotNullColumn` ADD COLUMN Value11 Uint16 NOT NULL DEFAULT 213;
+            )";
+
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS,
+                                       result.GetIssues().ToString());
+        }
+
+        fCompareTable(R"(
+            [
+                [[1u];["Old"];-213;213u;1;7;-24;-25;1.;1.;"[123]";"{\"age\" : 22}";"1.11";"155555555555555.11"];[[2u];["New"];-213;213u;1;7;-24;-25;1.;1.;"[123]";"{\"age\" : 22}";"1.11";"155555555555555.11"]
+            ]
+        )");
     }
 
     Y_UNIT_TEST(DefaultAndIndexesTestDefaultColumnNotIncludedInIndex) {

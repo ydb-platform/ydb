@@ -11,8 +11,8 @@ namespace NSQLComplete {
             {
             }
 
-            NThreading::TFuture<TNameResponse> Lookup(TNameRequest request) const override {
-                auto future = Origin_->Lookup(std::move(request));
+            NThreading::TFuture<TNameResponse> Lookup(const TNameRequest& request) const override {
+                auto future = Origin_->Lookup(request);
                 if (future.IsReady()) {
                     return future;
                 }

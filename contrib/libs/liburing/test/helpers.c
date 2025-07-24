@@ -365,6 +365,16 @@ unsigned long long utime_since_now(struct timeval *tv)
 	return utime_since(tv, &end);
 }
 
+void *t_aligned_alloc(size_t alignment, size_t size)
+{
+	void *ret;
+
+	if (posix_memalign(&ret, alignment, size))
+		return NULL;
+
+	return ret;
+}
+
 int t_create_socketpair_ip(struct sockaddr_storage *addr,
 				int *sock_client, int *sock_server,
 				bool ipv6, bool client_connect,

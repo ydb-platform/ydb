@@ -574,6 +574,35 @@ T FromUnversionedValue(TUnversionedValue unversionedValue)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+template <class T>
+TUnversionedValue ToUnversionedCompositeValue(
+    T&& value,
+    const TRowBufferPtr& rowBuffer,
+    int id,
+    EValueFlags flags)
+{
+    TUnversionedValue unversionedValue;
+    ToUnversionedCompositeValue(&unversionedValue, std::forward<T>(value), rowBuffer, id, flags);
+    return unversionedValue;
+}
+
+template <class T>
+void ToUnversionedCompositeValue(
+    TUnversionedValue* unversionedValue,
+    const std::optional<T>& value,
+    const TRowBufferPtr& rowBuffer,
+    int id,
+    EValueFlags flags)
+{
+    if (value) {
+        ToUnversionedCompositeValue(unversionedValue, *value, rowBuffer, id, flags);
+    } else {
+        *unversionedValue = MakeUnversionedSentinelValue(EValueType::Null, id, flags);
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 template <class... Ts>
 TUnversionedOwningRow MakeUnversionedOwningRow(Ts&&... values)
 {

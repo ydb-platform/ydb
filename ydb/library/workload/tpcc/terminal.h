@@ -60,14 +60,14 @@ public:
 
         // Transaction latency observed by the terminal, i.e., includes both session acquisition,
         // inflight waiting and retries performed by the SDK
-        THistogram LatencyHistogramMs{256, 32768};
+        THistogram LatencyHistogramMs{4096, 32768};
 
         // As LatencyHistogramMs plus inflight wait time in the terminal
-        THistogram LatencyHistogramFullMs{256, 32768};
+        THistogram LatencyHistogramFullMs{4096, 32768};
 
         // Latency of a successful transaction measured directly in the transaction code,
         // when there is nothing to wait for except the queries
-        THistogram LatencyHistogramPure{256, 32768};
+        THistogram LatencyHistogramPure{4096, 32768};
     };
 
 public:

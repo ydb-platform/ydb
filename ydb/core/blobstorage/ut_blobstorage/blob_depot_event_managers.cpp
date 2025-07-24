@@ -671,8 +671,8 @@ void VerifyTEvCheckIntegrityResult(TAutoPtr<TEventHandle<TEvBlobStorage::TEvChec
     UNIT_ASSERT(event->Status == NKikimrProto::OK);
     Cerr << "ErrorReason" << Endl << event->ErrorReason << Endl;
 
-    UNIT_ASSERT(res->Get()->PlacementStatus == TEvBlobStorage::TEvCheckIntegrityResult::PS_OK);
-    UNIT_ASSERT(res->Get()->DataStatus == TEvBlobStorage::TEvCheckIntegrityResult::DS_OK);
+    UNIT_ASSERT(event->PlacementStatus == TEvBlobStorage::TEvCheckIntegrityResult::PS_OK);
+    UNIT_ASSERT(event->DataStatus == TEvBlobStorage::TEvCheckIntegrityResult::DS_OK);
     Cerr << "DataInfo" << Endl <<  event->DataInfo << Endl;
 }
 

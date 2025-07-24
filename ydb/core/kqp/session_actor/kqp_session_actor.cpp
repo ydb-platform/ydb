@@ -1041,6 +1041,9 @@ public:
         }
 
         QueryState->TxCtx->SetTempTables(QueryState->TempTablesState);
+        if (phyQuery.GetForceImmediateEffectsExecution()) {
+            Counters->ForcedImmediateEffectsExecution->Inc();
+        }
         QueryState->TxCtx->ApplyPhysicalQuery(phyQuery, QueryState->Commit);
         auto [success, issues] = QueryState->TxCtx->ApplyTableOperations(phyQuery.GetTableOps(), phyQuery.GetTableInfos(),
             EKikimrQueryType::Dml);
@@ -2033,12 +2036,14 @@ public:
             auto stats = QueryState->QueryStats.ToProto();
             if (QueryState->GetStatsMode() >= Ydb::Table::QueryStatsCollection::STATS_COLLECTION_FULL) {
                 response->SetQueryPlan(SerializeAnalyzePlan(stats, QueryState->UserRequestContext->PoolId));
-                if (QueryState->CompileResult) {
-                    auto preparedQuery = QueryState->CompileResult->PreparedQuery;
-                    if (preparedQuery) {
-                        response->SetQueryAst(preparedQuery->GetPhysicalQuery().GetQueryAst());
+                if (const auto compileResult = QueryState->CompileResult) {
+                    if (const auto preparedQuery = compileResult->PreparedQuery) {
+                        if (const auto& queryAst = preparedQuery->GetPhysicalQuery().GetQueryAst()) {
+                            QueryState->QueryAst = queryAst;
+                        }
                     }
                 }
+                response->SetQueryAst(QueryState->QueryAst);
             }
             response->MutableQueryStats()->Swap(&stats);
         }

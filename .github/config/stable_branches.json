@@ -1,0 +1,20 @@
+{
+    "stables_for_nightly": [
+        "main",
+        "stable-25-1",
+        "stable-24-4-hotfix",
+        "stable-25-1-1",
+        "stable-25-1-analytics",
+        "stable-25-1-2",
+        "stable-25-1-3",
+        "prestable-25-2",
+        "prestable-25-3"
+    ],
+    "stables_for_tests": [
+        "main",
+        "stable-25-1",
+        "stable-25-1-analytics",
+        "prestable-25-2",
+        "prestable-25-3"
+    ]
+}

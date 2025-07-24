@@ -89,7 +89,15 @@ public:
             return true;
         }
 
-        context.OnComplete.Send(context.SS->SelfId(), new TEvPrivate::TEvRunIncrementalRestore(backupCollectionPathId));
+        // Extract incremental backup names from the operation
+        TVector<TString> incrementalBackupNames;
+        for (const auto& name : op.GetIncrementalBackupTrimmedNames()) {
+            incrementalBackupNames.push_back(name);
+        }
+
+        LOG_I(DebugHint() << " Found " << incrementalBackupNames.size() << " incremental backups to restore");
+
+        context.OnComplete.Send(context.SS->SelfId(), new TEvPrivate::TEvRunIncrementalRestore(backupCollectionPathId, OperationId, incrementalBackupNames));
 
         return true;
     }

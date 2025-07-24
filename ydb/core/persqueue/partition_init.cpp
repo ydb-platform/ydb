@@ -933,7 +933,7 @@ void TPartition::Bootstrap(const TActorContext& ctx) {
 }
 
 void TPartition::Initialize(const TActorContext& ctx) {
-    if (Config.GetPartitionConfig().HasMirrorFrom()) {
+    if (MirroringEnabled(Config)) {
         ManageWriteTimestampEstimate = !Config.GetPartitionConfig().GetMirrorFrom().GetSyncWriteTime();
     } else {
         ManageWriteTimestampEstimate = IsLocalDC;
@@ -1011,7 +1011,7 @@ void TPartition::Initialize(const TActorContext& ctx) {
     }
 
     if (Config.HasOffloadConfig() && !OffloadActor && !IsSupportive()) {
-        OffloadActor = Register(CreateOffloadActor(Tablet, Partition, Config.GetOffloadConfig()));
+        OffloadActor = Register(CreateOffloadActor(Tablet, TabletID, Partition, Config.GetOffloadConfig()));
     }
 
     PQ_LOG_I("bootstrapping " << Partition << " " << ctx.SelfID);

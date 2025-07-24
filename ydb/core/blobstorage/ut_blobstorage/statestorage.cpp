@@ -264,4 +264,78 @@ Y_UNIT_TEST_SUITE(TStateStorageRingGroupState) {
         test.Runtime.FilterFunction = nullptr;
     }
 
+    Y_UNIT_TEST(TestStateStorageDoubleReply) {
+        StateStorageTest test;
+        auto res = test.ResolveReplicas();
+        const auto &replicas = res->Get()->GetPlainReplicas();
+        const TActorId proxy = MakeStateStorageProxyID();
+        const auto edge1 = test.Runtime.AllocateEdgeActor(1);
+        std::unordered_set<ui32> processed;
+        test.Runtime.FilterFunction = [&](ui32 node, std::unique_ptr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvStateStorage::TEvReplicaInfo::EventType) {
+                ui32 cookie = ev->Get<TEvStateStorage::TEvReplicaInfo>()->Record.GetCookie();
+                if(processed.insert(cookie).second) {
+                    auto *duplicate = new TEvStateStorage::TEvReplicaInfo();
+                    duplicate->Record = ev->Get<TEvStateStorage::TEvReplicaInfo>()->Record;
+                    test.Runtime.Send(new IEventHandle(ev->Recipient, ev->Sender, duplicate, 0, cookie), node);
+                    test.Runtime.Send(ev->Forward(ev->Recipient), node);
+                    return false;
+                }
+                return true;
+            }
+            return true;
+        };
+
+        test.Runtime.WrapInActorContext(edge1, [&] {
+            test.Runtime.Send(new IEventHandle(proxy, edge1, new TEvStateStorage::TEvLookup(test.TabletId, 0, TEvStateStorage::TProxyOptions(TEvStateStorage::TProxyOptions::SigAsync)), IEventHandle::FlagTrackDelivery));
+        });
+        auto ev = test.Runtime.WaitForEdgeActorEvent<TEvStateStorage::TEvInfo>(edge1);
+        for (auto replica : replicas) {
+            UNIT_ASSERT(ev->Get()->Signature.GetReplicaSignature(replica) != Max<ui64>());
+        }
+        test.Runtime.FilterFunction = nullptr;
+    }
+
+    Y_UNIT_TEST(TestStateStorageUpdateSigConfigVersionChanged) {
+        StateStorageTest test;
+        auto res = test.ResolveReplicas();
+        const auto &replicas = res->Get()->GetPlainReplicas();
+        ui32 rejectCnt = 0;
+        const TActorId proxy = MakeStateStorageProxyID();
+        const auto edge1 = test.Runtime.AllocateEdgeActor(1);
+        std::unordered_set<ui32> processed;
+        ui32 nodewardenNotifyCnt = 0;
+        ui32 updateSignatureCnt = 0;
+        test.Runtime.FilterFunction = [&](ui32 node, std::unique_ptr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == NStorage::TEvNodeWardenNotifyConfigMismatch::EventType) {
+                nodewardenNotifyCnt++;
+                return true;
+            }
+            if (ev->GetTypeRewrite() == TEvStateStorage::TEvUpdateSignature::EventType) {
+                updateSignatureCnt++;
+            }
+            if (ev->GetTypeRewrite() == TEvStateStorage::TEvReplicaInfo::EventType) {
+                ui32 cookie = ev->Get<TEvStateStorage::TEvReplicaInfo>()->Record.GetCookie();
+                rejectCnt++;
+                if (rejectCnt >= replicas.size() || rejectCnt < (replicas.size() / 2 + 2)) {
+                    return true;
+                }
+                if(processed.insert(cookie).second) {
+                    ev->Get<TEvStateStorage::TEvReplicaInfo>()->Record.SetClusterStateGeneration(10);
+                    test.Runtime.Send(ev->Forward(ev->Recipient), node);
+                }
+                return false;
+            }
+            return true;
+        };
+
+        test.Runtime.WrapInActorContext(edge1, [&] {
+            test.Runtime.Send(new IEventHandle(proxy, edge1, new TEvStateStorage::TEvLookup(test.TabletId, 0, TEvStateStorage::TProxyOptions(TEvStateStorage::TProxyOptions::SigAsync)), IEventHandle::FlagTrackDelivery));
+        });
+        test.Runtime.WaitForEdgeActorEvent<TEvStateStorage::TEvInfo>(edge1);
+        test.Env.Sim(TDuration::Minutes(1));
+        UNIT_ASSERT(nodewardenNotifyCnt == 1);
+        UNIT_ASSERT(updateSignatureCnt == 0);
+        test.Runtime.FilterFunction = nullptr;
+    }
 }

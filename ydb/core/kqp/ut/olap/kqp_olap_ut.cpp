@@ -1459,6 +1459,107 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         UNIT_ASSERT_C(ast.find("KqpOlapFilter") != std::string::npos,
                         TStringBuilder() << "Predicate wasn't pushed down. Query: " << query);
     }
+
+    Y_UNIT_TEST(PredicatePushdown_SimpleAsciiILike) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+        auto settings = TKikimrSettings()
+            .SetAppConfig(appConfig)
+            .SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+
+        {
+            auto tableClient = kikimr.GetTableClient();
+            auto session = tableClient.CreateSession().GetValueSync().GetSession();
+            const auto res = session.ExecuteSchemeQuery(R"(
+                CREATE TABLE `/Root/foo` (
+                    id Int64 NOT NULL,
+                    str String,
+                    u_str Utf8,
+                    json JsonDocument,
+                    PRIMARY KEY(id)
+                )
+                WITH (STORE = COLUMN);
+            )").GetValueSync();
+            UNIT_ASSERT(res.IsSuccess());
+        }
+
+        auto queryClient = kikimr.GetQueryClient();
+        auto session = queryClient.GetSession().GetValueSync().GetSession();
+        {
+            const auto res = session.ExecuteQuery(R"(
+                INSERT INTO `/Root/foo` (id, str, u_str) VALUES 
+                    (1, "hello", "hello")
+            )", NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues());
+        }
+
+        std::vector<TString> predicates = {
+            "str ILIKE 'hell%'",
+            "str ILIKE 'Hell%'",
+            "str ILIKE 'Hello%'",
+            "str ILIKE '%lo'",
+            "str ILIKE '%Lo'",
+            "str ILIKE '%Lo%'",
+            "str ILIKE '%eLLo%'",
+            "str ILIKE '%HeLLo%'",
+            "str ILIKE '%LLL%'",
+            "u_str ILIKE 'hell%'",
+            "u_str ILIKE 'Hell%'",
+            "u_str ILIKE 'Hello%'",
+            "u_str ILIKE '%lo'",
+            "u_str ILIKE '%Lo'",
+            "u_str ILIKE '%Lo%'",
+            "u_str ILIKE '%eLLo%'",
+            "u_str ILIKE '%HeLLo%'",
+            "u_str ILIKE '%LLL%'",
+        };
+
+        std::vector<TString> expectedResults = {
+            "[[1]]",
+            "[[1]]",
+            "[[1]]",
+            "[[1]]",
+            "[[1]]",
+            "[[1]]",
+            "[[1]]",
+            "[[1]]",
+            "[]",
+            "[[1]]",
+            "[[1]]",
+            "[[1]]",
+            "[[1]]",
+            "[[1]]",
+            "[[1]]",
+            "[[1]]",
+            "[[1]]",
+            "[]",
+        };
+
+        UNIT_ASSERT_EQUAL(expectedResults.size(), predicates.size());
+
+        for (ui32 i = 0; i < predicates.size(); ++i) {
+            const auto& query = TString(R"(
+                PRAGMA OptimizeSimpleILike;
+                PRAGMA AnsiLike;
+                SELECT id FROM `/Root/foo` WHERE 
+                )") + predicates[i];
+            Cerr
+                << "QUERY " << i << Endl
+                << query << Endl;
+
+            const auto res = session
+                                 .ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(),
+                                     NYdb::NQuery::TExecuteQuerySettings().StatsMode(NQuery::EStatsMode::Full))
+                                 .ExtractValueSync();
+            UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues());
+
+            const auto ast = res.GetStats()->GetAst();
+            UNIT_ASSERT_C(ast->find("KqpOlapFilter") != std::string::npos, TStringBuilder() << "ILIKE not pushed down. Query: " << query);
+            CompareYson(FormatResultSetYson(res.GetResultSet(0)), expectedResults[i]);
+        }
+    }
+
     Y_UNIT_TEST(PredicatePushdown_MixStrictAndNotStrict) {
         auto settings = TKikimrSettings()
             .SetWithSampleTables(false);
@@ -1494,6 +1595,63 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
         UNIT_ASSERT_C(ast.find("NarrowMap") != std::string::npos,
                           TStringBuilder() << "NarrowMap was removed. Query: " << query);
+    }
+
+    Y_UNIT_TEST(DisablePushdownAggregate) {
+        auto settings = TKikimrSettings()
+            .SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+
+        auto tableClient = kikimr.GetTableClient();
+        auto session = tableClient.CreateSession().GetValueSync().GetSession();
+
+        auto queryClient = kikimr.GetQueryClient();
+        auto result = queryClient.GetSession().GetValueSync();
+        NStatusHelpers::ThrowOnError(result);
+        auto session2 = result.GetSession();
+
+        auto res = session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/foo` (
+                a Int64	NOT NULL,
+                b Int32,
+                primary key(a)
+            )
+            PARTITION BY HASH(a)
+            WITH (STORE = COLUMN);
+        )").GetValueSync();
+        UNIT_ASSERT(res.IsSuccess());
+
+
+        auto insertRes = session2.ExecuteQuery(R"(
+            INSERT INTO `/Root/foo` (a, b)  VALUES (1, 1);
+            INSERT INTO `/Root/foo` (a, b)  VALUES (2, 11);
+            INSERT INTO `/Root/foo` (a, b)  VALUES (3, 11);
+        )", NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+        UNIT_ASSERT(insertRes.IsSuccess());
+
+        std::vector<TString> queries = {
+            R"(
+                PRAGMA Kikimr.OptEnableOlapPushdownAggregate = "false";
+
+                SELECT count(*) FROM `/Root/foo`
+                where b > a
+                GROUP BY a;
+            )",
+        };
+
+        for (ui32 i = 0; i < queries.size(); ++i) {
+            const auto query = queries[i];
+
+            auto result =
+                session2
+                    .ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain))
+                    .ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+            auto ast = *result.GetStats()->GetAst();
+            Cerr << "AST " << ast << Endl;
+            UNIT_ASSERT_C(ast.find("TKqpOlapAgg") == std::string::npos, TStringBuilder() << "Aggregatee pushed down. Query: " << query);
+            UNIT_ASSERT_C(ast.find("KqpOlapFilter") != std::string::npos, TStringBuilder() << "Olap filter not pushed down. Query: " << query);
+        }
     }
 
     Y_UNIT_TEST(ProjectionPushDown) {
@@ -1782,6 +1940,63 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
         }
     }
+
+    // This test triggers "heap-use-after-free" error if we call `PeepholeOptimizeNode()`
+    // on expression with `free args`.
+    Y_UNIT_TEST(OlapFilterPeephole) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+        appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
+        auto settings = TKikimrSettings()
+            .SetAppConfig(appConfig)
+            .SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+
+        TStreamExecScanQuerySettings scanSettings;
+        scanSettings.Explain(true);
+
+        auto tableClient = kikimr.GetTableClient();
+        auto session = tableClient.CreateSession().GetValueSync().GetSession();
+
+        auto res = session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/test` (
+            D Utf8 not null,
+            S Utf8 not null,
+            V Utf8,
+            PRIMARY KEY (D, S)
+        ) WITH (STORE = COLUMN);
+        )").GetValueSync();
+        UNIT_ASSERT(res.IsSuccess());
+
+        auto queryClient = kikimr.GetQueryClient();
+        auto result = queryClient.GetSession().GetValueSync();
+        NStatusHelpers::ThrowOnError(result);
+        auto session2 = result.GetSession();
+        std::string query =
+        R"(SELECT DISTINCT `t1`.`S` AS `result` FROM
+           (SELECT D, S, V FROM `/Root/test`) AS `t1` WHERE
+            Unicode::ReplaceAll(CAST(`t1`.`V` AS UTF8),
+                                coalesce(CAST(Unicode::Substring(CAST(`t1`.`V` AS UTF8),
+                                Unicode::GetLength(CAST(`t1`.`V` AS UTF8)) - 8) AS UTF8), ''),
+            coalesce(CAST('' AS UTF8), '')) IN ('m') AND
+            CASE WHEN String::Contains(`t1`.`D`, 'l') THEN 'c'
+                 WHEN String::Contains(`t1`.`D`, 's') THEN 's'
+                 WHEN String::Contains(`t1`.`D`, 'r') THEN 'r'
+                 ELSE 'o'
+            END IN ('c');
+        )";
+
+         auto resultQuery =
+              session2
+                  .ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(),
+                                NYdb::NQuery::TExecuteQuerySettings().ExecMode(
+                                    NQuery::EExecMode::Explain))
+                  .ExtractValueSync();
+          UNIT_ASSERT_VALUES_EQUAL(resultQuery.GetStatus(), EStatus::SUCCESS);
+          auto ast = *resultQuery.GetStats()->GetAst();
+          UNIT_ASSERT_C(ast.find("KqpOlapFilter") != std::string::npos,
+                      TStringBuilder() << "Predicate not pushed down. Query: " << query);
+   }
 
     // Unit tests for datetime pushdowns in scan query
     Y_UNIT_TEST(PredicatePushdown_Datetime_SQ) {

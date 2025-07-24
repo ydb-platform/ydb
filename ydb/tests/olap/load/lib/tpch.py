@@ -29,7 +29,7 @@ class TpchSuiteBase(LoadSuiteBase):
 
     @classmethod
     def _get_path(cls) -> str:
-        return get_external_param(f'table-path-{cls.suite()}', f'tpch/s{cls.scale}')
+        return get_external_param(f'table-path-{cls.suite()}', f'tpch/s{cls.scale}'.replace('.', '_'))
 
     @classmethod
     def do_setup_class(cls):
@@ -80,17 +80,5 @@ class TestTpch10000(TpchSuiteBase):
     }
 
     scale: int = 10000
-    iterations: int = 1
-    timeout = max(TpchSuiteBase.timeout, 14400.)
-
-
-class TestTpch30000(TpchSuiteBase):
-    scale: int = 30000
-    iterations: int = 1
-    timeout = max(TpchSuiteBase.timeout, 14400.)
-
-
-class TestTpch100000(TpchSuiteBase):
-    scale: int = 100000
     iterations: int = 1
     timeout = max(TpchSuiteBase.timeout, 14400.)

@@ -5,6 +5,7 @@
 #include "events_internal.h"
 #include "subscriber.h"
 
+#include <ydb/core/base/statestorage_impl.h>
 #include <ydb/core/base/tablet_types.h>
 #include <ydb/core/protos/flat_tx_scheme.pb.h>
 #include <ydb/core/testlib/basics/appdata.h>
@@ -27,6 +28,7 @@ namespace NSchemeBoard {
 void SetupMinimalRuntime(TTestActorRuntime& runtime, const TStateStorageSetupper& setupStateStorage = CreateDefaultStateStorageSetupper());
 
 TIntrusiveConstPtr<TStateStorageInfo> GetStateStorageInfo(TTestActorRuntime& runtime);
+TEvStateStorage::TEvResolveReplicasList::TPtr ResolveReplicas(TTestActorRuntime& runtime, const TString& path);
 
 class TTestContext: public TTestBasicRuntime {
 public:

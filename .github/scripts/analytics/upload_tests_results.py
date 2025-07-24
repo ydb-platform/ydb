@@ -215,59 +215,66 @@ def main():
     test_table_name = f"{path_in_database}/test_runs_column"
     full_path = posixpath.join(DATABASE_PATH, test_table_name)
 
-    with ydb.Driver(
-        endpoint=DATABASE_ENDPOINT,
-        database=DATABASE_PATH,
-        credentials=ydb.credentials_from_env_variables(),
-    ) as driver:
-        driver.wait(timeout=10, fail_fast=True)
-        session = ydb.retry_operation_sync(
-            lambda: driver.table_client.session().create()
-        )
+    try:
+        with ydb.Driver(
+            endpoint=DATABASE_ENDPOINT,
+            database=DATABASE_PATH,
+            credentials=ydb.credentials_from_env_variables(),
+        ) as driver:
+            driver.wait(timeout=10, fail_fast=True)
+            session = ydb.retry_operation_sync(
+                lambda: driver.table_client.session().create()
+            )
 
-        # Parse and upload
-        results = parse_junit_xml(
-            test_results_file, build_type, job_name, job_id, commit, branch, pull, run_timestamp
-        )
-        result_with_owners = get_codeowners_for_tests(codeowners, results)
-        prepared_for_upload_rows = []
-        for index, row in enumerate(result_with_owners):
-            prepared_for_upload_rows.append({
-                'branch': row['branch'],
-                'build_type': row['build_type'],
-                'commit': row['commit'],
-                'duration': row['duration'],
-                'job_id': row['job_id'],
-                'job_name': row['job_name'],
-                'log': row['log'],
-                'logsdir': row['logsdir'],
-                'owners': row['owners'],
-                'pull': row['pull'],
-                'run_timestamp': row['run_timestamp'],
-                'status_description': row['status_description'],
-                'status': row['status'],
-                'stderr': row['stderr'],
-                'stdout': row['stdout'],
-                'suite_folder': row['suite_folder'],
-                'test_id': f"{row['pull']}_{row['run_timestamp']}_{index}",
-                'test_name': row['test_name'],
-            })
-        print(f'upserting runs: {len(prepared_for_upload_rows)} rows')
-        if prepared_for_upload_rows:
-            batch_rows_for_upload_size = 1000
-            with ydb.SessionPool(driver) as pool:
-                create_tables(pool, test_table_name)
-                for start in range(0, len(prepared_for_upload_rows), batch_rows_for_upload_size):
-                    batch_rows_for_upload = prepared_for_upload_rows[start:start + batch_rows_for_upload_size]     
-                    bulk_upsert(driver.table_client, full_path,
-                            batch_rows_for_upload)
-                
-            print('tests uploaded')
-        else:
-            print('nothing to upload')
+            # Parse and upload
+            results = parse_junit_xml(
+                test_results_file, build_type, job_name, job_id, commit, branch, pull, run_timestamp
+            )
+            result_with_owners = get_codeowners_for_tests(codeowners, results)
+            prepared_for_upload_rows = []
+            for index, row in enumerate(result_with_owners):
+                prepared_for_upload_rows.append({
+                    'branch': row['branch'],
+                    'build_type': row['build_type'],
+                    'commit': row['commit'],
+                    'duration': row['duration'],
+                    'job_id': row['job_id'],
+                    'job_name': row['job_name'],
+                    'log': row['log'],
+                    'logsdir': row['logsdir'],
+                    'owners': row['owners'],
+                    'pull': row['pull'],
+                    'run_timestamp': row['run_timestamp'],
+                    'status_description': row['status_description'],
+                    'status': row['status'],
+                    'stderr': row['stderr'],
+                    'stdout': row['stdout'],
+                    'suite_folder': row['suite_folder'],
+                    'test_id': f"{row['pull']}_{row['run_timestamp']}_{index}",
+                    'test_name': row['test_name'],
+                })
+            print(f'upserting runs: {len(prepared_for_upload_rows)} rows')
+            if prepared_for_upload_rows:
+                batch_rows_for_upload_size = 1000
+                with ydb.SessionPool(driver) as pool:
+                    create_tables(pool, test_table_name)
+                    for start in range(0, len(prepared_for_upload_rows), batch_rows_for_upload_size):
+                        batch_rows_for_upload = prepared_for_upload_rows[start:start + batch_rows_for_upload_size]     
+                        bulk_upsert(driver.table_client, full_path,
+                                batch_rows_for_upload)
+                    
+                print('tests uploaded')
+            else:
+                print('nothing to upload')
+    except Exception as e:
+        print(f"Warning: Failed to upload test results to YDB: {e}")
+        print("This is not a critical error, continuing with CI process...")
+        return 0
+    
+    return 0
 
        
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

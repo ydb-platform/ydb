@@ -12,6 +12,8 @@
 
 #include <yt/yt/library/numeric/util.h>
 
+#include <yt/yt/library/tz_types/tz_types.h>
+
 #include <library/cpp/yt/memory/chunked_output_stream.h>
 
 #include <util/generic/buffer.h>
@@ -20,6 +22,8 @@
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/api.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/type_fwd.h>
+
+#include <contrib/libs/apache/arrow/cpp/src/arrow/compute/cast.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/io/api.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/io/memory.h>
@@ -33,6 +37,7 @@ namespace NYT::NFormats {
 using namespace NTableClient;
 using TUnversionedRowValues = std::vector<NTableClient::TUnversionedValue>;
 using namespace NDecimal;
+using namespace NTzTypes;
 
 namespace {
 
@@ -52,6 +57,8 @@ void ThrowOnError(const arrow::Status& status)
     }
 }
 
+////////////////////////////////////////////////////////////////////////////////
+
 void CheckArrowType(
     auto ytTypeOrMetatype,
     const std::initializer_list<arrow::Type::type>& allowedArrowTypes,
@@ -65,18 +72,107 @@ void CheckArrowType(
     }
 }
 
+void CheckTzArrowType(
+    ESimpleLogicalValueType columnType,
+    const std::string& arrowTypeName,
+    const std::shared_ptr<arrow::DataType>& arrowDataType)
+{
+    CheckArrowType(
+        columnType,
+        {
+            arrow::Type::BINARY,
+            arrow::Type::STRUCT,
+            arrow::Type::DICTIONARY
+        },
+        arrowTypeName,
+        arrowDataType->id());
+
+    if (arrowDataType->id() != arrow::Type::STRUCT) {
+        return;
+    }
+
+    if (arrowDataType->num_fields() != 2) {
+        THROW_ERROR_EXCEPTION("Struct is expected to have two fields for the TzType representation");
+    }
+
+    auto timestampType = arrowDataType->field(0)->type();
+    auto tzIndexType = arrowDataType->field(1)->type();
+    if (tzIndexType->id() != arrow::Type::UINT16 && tzIndexType->id() != arrow::Type::BINARY) {
+        THROW_ERROR_EXCEPTION("The second field in the struct is expected to be a uint16 or binary");
+    }
+
+    switch (columnType) {
+        case ESimpleLogicalValueType::TzDate:
+            CheckArrowType(
+                columnType,
+                {
+                    arrow::Type::UINT16
+                },
+                arrowTypeName,
+                timestampType->id());
+            break;
+        case ESimpleLogicalValueType::TzDatetime:
+            CheckArrowType(
+                columnType,
+                {
+                    arrow::Type::UINT32
+                },
+                arrowTypeName,
+                timestampType->id());
+            break;
+        case ESimpleLogicalValueType::TzTimestamp:
+            CheckArrowType(
+                columnType,
+                {
+                    arrow::Type::UINT64
+                },
+                arrowTypeName,
+                timestampType->id());
+            break;
+        case ESimpleLogicalValueType::TzDate32:
+            CheckArrowType(
+                columnType,
+                {
+                    arrow::Type::INT32
+                },
+                arrowTypeName,
+                timestampType->id());
+            break;
+        case ESimpleLogicalValueType::TzDatetime64:
+            CheckArrowType(
+                columnType,
+                {
+                    arrow::Type::INT64
+                },
+                arrowTypeName,
+                timestampType->id());
+            break;
+        case ESimpleLogicalValueType::TzTimestamp64:
+            CheckArrowType(
+                columnType,
+                {
+                    arrow::Type::INT64
+                },
+                arrowTypeName,
+                timestampType->id());
+            break;
+        default:
+            YT_ABORT();
+    }
+}
+
 void CheckArrowTypeMatch(
     const ESimpleLogicalValueType& columnType,
     const std::string& arrowTypeName,
-    arrow::Type::type arrowTypeId)
+    const std::shared_ptr<arrow::DataType>& arrowDataType)
 {
+    auto arrowTypeId = arrowDataType->id();
     switch (columnType) {
         case ESimpleLogicalValueType::Int8:
             CheckArrowType(
                 columnType,
                 {
                     arrow::Type::INT8,
-                    arrow::Type::DICTIONARY
                 },
                 arrowTypeName,
                 arrowTypeId);
@@ -88,7 +184,6 @@ void CheckArrowTypeMatch(
                 {
                     arrow::Type::INT8,
                     arrow::Type::INT16,
-                    arrow::Type::DICTIONARY
                 },
                 arrowTypeName,
                 arrowTypeId);
@@ -102,7 +197,6 @@ void CheckArrowTypeMatch(
                     arrow::Type::INT32,
                     arrow::Type::DATE32,
                     arrow::Type::TIME32,
-                    arrow::Type::DICTIONARY
                 },
                 arrowTypeName,
                 arrowTypeId);
@@ -121,7 +215,6 @@ void CheckArrowTypeMatch(
                     arrow::Type::TIMESTAMP,
                     arrow::Type::TIME32,
                     arrow::Type::TIME64,
-                    arrow::Type::DICTIONARY
                 },
                 arrowTypeName,
                 arrowTypeId);
@@ -135,7 +228,6 @@ void CheckArrowTypeMatch(
                     arrow::Type::INT16,
                     arrow::Type::INT32,
                     arrow::Type::INT64,
-                    arrow::Type::DICTIONARY
                 },
                 arrowTypeName,
                 arrowTypeId);
@@ -146,7 +238,6 @@ void CheckArrowTypeMatch(
                 columnType,
                 {
                     arrow::Type::UINT8,
-                    arrow::Type::DICTIONARY
                 },
                 arrowTypeName,
                 arrowTypeId);
@@ -158,7 +249,6 @@ void CheckArrowTypeMatch(
                 {
                     arrow::Type::UINT8,
                     arrow::Type::UINT16,
-                    arrow::Type::DICTIONARY
                 },
                 arrowTypeName,
                 arrowTypeId);
@@ -171,7 +261,6 @@ void CheckArrowTypeMatch(
                     arrow::Type::UINT8,
                     arrow::Type::UINT16,
                     arrow::Type::UINT32,
-                    arrow::Type::DICTIONARY
                 },
                 arrowTypeName,
                 arrowTypeId);
@@ -185,7 +274,6 @@ void CheckArrowTypeMatch(
                     arrow::Type::UINT16,
                     arrow::Type::UINT32,
                     arrow::Type::UINT64,
-                    arrow::Type::DICTIONARY
                 },
                 arrowTypeName,
                 arrowTypeId);
@@ -196,7 +284,6 @@ void CheckArrowTypeMatch(
                 columnType,
                 {
                     arrow::Type::UINT32,
-                    arrow::Type::DICTIONARY,
                     arrow::Type::DATE32,
                 },
                 arrowTypeName,
@@ -209,7 +296,6 @@ void CheckArrowTypeMatch(
                 {
                     arrow::Type::UINT32,
                     arrow::Type::UINT64,
-                    arrow::Type::DICTIONARY,
                     arrow::Type::DATE64,
                 },
                 arrowTypeName,
@@ -221,11 +307,22 @@ void CheckArrowTypeMatch(
                 columnType,
                 {
                     arrow::Type::UINT64,
-                    arrow::Type::DICTIONARY,
                     arrow::Type::TIMESTAMP,
                 },
                 arrowTypeName,
                 arrowTypeId);
+            break;
+
+        case ESimpleLogicalValueType::TzDate:
+        case ESimpleLogicalValueType::TzDatetime:
+        case ESimpleLogicalValueType::TzTimestamp:
+        case ESimpleLogicalValueType::TzDate32:
+        case ESimpleLogicalValueType::TzDatetime64:
+        case ESimpleLogicalValueType::TzTimestamp64:
+            CheckTzArrowType(
+                columnType,
+                arrowTypeName,
+                arrowDataType);
             break;
 
         case ESimpleLogicalValueType::Date32:
@@ -233,7 +330,6 @@ void CheckArrowTypeMatch(
                 columnType,
                 {
                     arrow::Type::INT32,
-                    arrow::Type::DICTIONARY,
                     arrow::Type::DATE32,
                 },
                 arrowTypeName,
@@ -246,7 +342,6 @@ void CheckArrowTypeMatch(
                 {
                     arrow::Type::INT32,
                     arrow::Type::INT64,
-                    arrow::Type::DICTIONARY,
                     arrow::Type::DATE64,
                 },
                 arrowTypeName,
@@ -259,7 +354,6 @@ void CheckArrowTypeMatch(
                 {
                     arrow::Type::INT32,
                     arrow::Type::INT64,
-                    arrow::Type::DICTIONARY,
                     arrow::Type::TIMESTAMP,
                 },
                 arrowTypeName,
@@ -275,7 +369,6 @@ void CheckArrowTypeMatch(
                     arrow::Type::LARGE_STRING,
                     arrow::Type::LARGE_BINARY,
                     arrow::Type::FIXED_SIZE_BINARY,
-                    arrow::Type::DICTIONARY,
                     arrow::Type::DECIMAL128,
                     arrow::Type::DECIMAL256,
                 },
@@ -292,7 +385,6 @@ void CheckArrowTypeMatch(
                     arrow::Type::LARGE_STRING,
                     arrow::Type::BINARY,
                     arrow::Type::LARGE_BINARY,
-                    arrow::Type::DICTIONARY,
                 },
                 arrowTypeName,
                 arrowTypeId);
@@ -306,7 +398,6 @@ void CheckArrowTypeMatch(
                     arrow::Type::HALF_FLOAT,
                     arrow::Type::FLOAT,
                     arrow::Type::DOUBLE,
-                    arrow::Type::DICTIONARY
                 },
                 arrowTypeName,
                 arrowTypeId);
@@ -315,7 +406,7 @@ void CheckArrowTypeMatch(
         case ESimpleLogicalValueType::Boolean:
             CheckArrowType(
                 columnType,
-                {arrow::Type::BOOL, arrow::Type::DICTIONARY},
+                {arrow::Type::BOOL},
                 arrowTypeName,
                 arrowTypeId);
             break;
@@ -352,7 +443,6 @@ void CheckArrowTypeMatch(
                     arrow::Type::BOOL,
 
                     arrow::Type::NA,
-                    arrow::Type::DICTIONARY
                 },
                 arrowTypeName,
                 arrowTypeId);
@@ -364,7 +454,6 @@ void CheckArrowTypeMatch(
                 columnType,
                 {
                     arrow::Type::NA,
-                    arrow::Type::DICTIONARY
                 },
                 arrowTypeName,
                 arrowTypeId);
@@ -379,20 +468,12 @@ void CheckArrowTypeMatch(
                     arrow::Type::LARGE_STRING,
                     arrow::Type::LARGE_BINARY,
                     arrow::Type::FIXED_SIZE_BINARY,
-                    arrow::Type::DICTIONARY
                 },
                 arrowTypeName,
                 arrowTypeId);
             break;
 
         case ESimpleLogicalValueType::Interval64:
-        case ESimpleLogicalValueType::TzDate:
-        case ESimpleLogicalValueType::TzDatetime:
-        case ESimpleLogicalValueType::TzTimestamp:
-        case ESimpleLogicalValueType::TzDate32:
-        case ESimpleLogicalValueType::TzDatetime64:
-        case ESimpleLogicalValueType::TzTimestamp64:
-            // TODO(nadya02): YT-15805: Support tz types.
             THROW_ERROR_EXCEPTION("Unexpected column type %Qv",
                 columnType);
     }
@@ -402,8 +483,10 @@ void CheckArrowTypeMatch(
     const ESimpleLogicalValueType& columnType,
     const std::shared_ptr<arrow::Array>& column)
 {
-    CheckArrowTypeMatch(columnType, column->type()->name(), column->type_id());
+    CheckArrowTypeMatch(columnType, column->type()->name(), column->type());
 }
+
+////////////////////////////////////////////////////////////////////////////////
 
 template <class TUnderlyingValueType>
 TStringBuf SerializeDecimalBinary(TStringBuf value, int precision, char* buffer, size_t bufferLength)
@@ -466,7 +549,7 @@ i64 CheckAndTransformTimestamp(i64 arrowValue, arrow::TimeUnit::type timeUnit, i
         case arrow::TimeUnit::type::NANO:
             resultValue = arrowValue / MicroToNanoCoefficient;
             minArrowAllowedTimestamp = SignedSaturationArithmeticMultiply(minAllowedTimestamp, MicroToNanoCoefficient);
-            maxArrowAllowedTimestamp = SignedSaturationArithmeticMultiply(minAllowedTimestamp, MicroToNanoCoefficient);
+            maxArrowAllowedTimestamp = SignedSaturationArithmeticMultiply(maxAllowedTimestamp, MicroToNanoCoefficient);
             break;
 
         case arrow::TimeUnit::type::SECOND:
@@ -659,6 +742,29 @@ public:
         });
     }
 
+    arrow::Status Visit(const arrow::StructType& /*type*/) override
+    {
+        if (ColumnType_) {
+            switch (*ColumnType_) {
+                case ESimpleLogicalValueType::TzDate:
+                    return ParseTzDate<arrow::UInt16Array>();
+                case ESimpleLogicalValueType::TzDatetime:
+                    return ParseTzDate<arrow::UInt32Array>();
+                case ESimpleLogicalValueType::TzTimestamp:
+                    return ParseTzDate<arrow::UInt64Array>();
+                case ESimpleLogicalValueType::TzDate32:
+                    return ParseTzDate<arrow::Int32Array>();
+                case ESimpleLogicalValueType::TzDatetime64:
+                    return ParseTzDate<arrow::Int64Array>();
+                case ESimpleLogicalValueType::TzTimestamp64:
+                    return ParseTzDate<arrow::Int64Array>();
+                default:
+                    YT_ABORT();
+            }
+        }
+        YT_ABORT();
+    }
+
 private:
     const std::optional<ESimpleLogicalValueType> ColumnType_;
     const i64 ColumnId_;
@@ -768,7 +874,7 @@ private:
     {
         auto array = std::static_pointer_cast<ArrayType>(Array_);
         YT_VERIFY(array->length() <= std::ssize(*RowValues_));
-        for (int rowIndex = 0; rowIndex < array->length(); ++rowIndex) {
+        for (i64 rowIndex = 0; rowIndex < array->length(); ++rowIndex) {
             if (array->IsNull(rowIndex)) {
                 (*RowValues_)[rowIndex] = MakeUnversionedNullValue(ColumnId_);
             } else {
@@ -782,7 +888,7 @@ private:
     {
         auto array = std::static_pointer_cast<ArrayType>(Array_);
         YT_VERIFY(array->length() <= std::ssize(*RowValues_));
-        for (int rowIndex = 0; rowIndex < array->length(); ++rowIndex) {
+        for (i64 rowIndex = 0; rowIndex < array->length(); ++rowIndex) {
             if (array->IsNull(rowIndex)) {
                 (*RowValues_)[rowIndex] = MakeUnversionedNullValue(ColumnId_);
             } else {
@@ -820,7 +926,7 @@ private:
     {
         auto array = std::static_pointer_cast<arrow::BooleanArray>(Array_);
         YT_VERIFY(array->length() <= std::ssize(*RowValues_));
-        for (int rowIndex = 0; rowIndex < array->length(); rowIndex++) {
+        for (i64 rowIndex = 0; rowIndex < array->length(); ++rowIndex) {
             if (array->IsNull(rowIndex)) {
                 (*RowValues_)[rowIndex] = MakeUnversionedNullValue(ColumnId_);
             } else {
@@ -834,8 +940,42 @@ private:
     {
         auto array = std::static_pointer_cast<arrow::NullArray>(Array_);
         YT_VERIFY(array->length() <= std::ssize(*RowValues_));
-        for (int rowIndex = 0; rowIndex < array->length(); rowIndex++) {
+        for (i64 rowIndex = 0; rowIndex < array->length(); ++rowIndex) {
             (*RowValues_)[rowIndex] = MakeUnversionedNullValue(ColumnId_);
+        }
+        return arrow::Status::OK();
+    }
+
+    template <typename TInnerArray>
+    arrow::Status ParseTzDate()
+    {
+        auto array = std::static_pointer_cast<arrow::StructArray>(Array_);
+        YT_VERIFY(array->length() <= std::ssize(*RowValues_));
+        auto timestampArray = std::static_pointer_cast<TInnerArray>(array->field(0));
+        for (i64 rowIndex = 0; rowIndex < array->length(); ++rowIndex) {
+            if (array->IsNull(rowIndex)) {
+                (*RowValues_)[rowIndex] = MakeUnversionedNullValue(ColumnId_);
+            } else {
+                auto timestamp = timestampArray->Value(rowIndex);
+
+                std::string_view tzName;
+                if (array->field(1)->type_id() == arrow::Type::BINARY) {
+                    auto tzNameArray = std::static_pointer_cast<arrow::BinaryArray>(array->field(1));
+                    auto tzValue = tzNameArray->Value(rowIndex);
+                    tzName = std::string_view(tzValue.data(), tzValue.size());
+                } else {
+                    auto tzIndexArray = std::static_pointer_cast<arrow::UInt16Array>(array->field(1));
+                    tzName = GetTzName(tzIndexArray->Value(rowIndex));
+                }
+                int tzStringSize = tzName.size() + sizeof(timestamp);
+
+                char* buffer = BufferForStringLikeValues_->Preallocate(tzStringSize);
+
+                (*RowValues_)[rowIndex] = MakeUnversionedStringValue(
+                    MakeTzString(timestamp, tzName, buffer, tzStringSize),
+                    ColumnId_);
+                BufferForStringLikeValues_->Advance(tzStringSize);
+            }
         }
         return arrow::Status::OK();
     }
@@ -870,47 +1010,66 @@ public:
         YT_VERIFY(writer != nullptr);
     }
 
+    // Dictionary types.
+    arrow::Status Visit(const arrow::DictionaryType& /*type*/) override
+    {
+        auto dictionaryArrayColumn = std::static_pointer_cast<arrow::DictionaryArray>(Array_);
+        auto dictionary = dictionaryArrayColumn->dictionary();
+
+        if (dictionaryArrayColumn->IsNull(RowIndex_)) {
+            Writer_->WriteEntity();
+        } else {
+            TArrayCompositeVisitor visitor(
+                YTType_,
+                dictionary,
+                Writer_,
+                dictionaryArrayColumn->GetValueIndex(RowIndex_));
+            ThrowOnError(dictionary->type()->Accept(&visitor));
+        }
+        return arrow::Status::OK();
+    }
+
     // Signed integer types.
     arrow::Status Visit(const arrow::Int8Type& type) override
     {
-        CheckArrowTypeMatch(YTType_->AsSimpleTypeRef().GetElement(), type.type_name(), type.id());
+        CheckArrowTypeMatch(YTType_->AsSimpleTypeRef().GetElement(), type.type_name(), Array_->type());
         return ParseInt64<arrow::Int8Array>();
     }
 
     arrow::Status Visit(const arrow::Int16Type& type) override
     {
-        CheckArrowTypeMatch(YTType_->AsSimpleTypeRef().GetElement(), type.type_name(), type.id());
+        CheckArrowTypeMatch(YTType_->AsSimpleTypeRef().GetElement(), type.type_name(), Array_->type());
         return ParseInt64<arrow::Int16Array>();
     }
 
     arrow::Status Visit(const arrow::Int32Type& type) override
     {
-        CheckArrowTypeMatch(YTType_->AsSimpleTypeRef().GetElement(), type.type_name(), type.id());
+        CheckArrowTypeMatch(YTType_->AsSimpleTypeRef().GetElement(), type.type_name(), Array_->type());
         return ParseInt64<arrow::Int32Array>();
     }
 
     arrow::Status Visit(const arrow::Int64Type& type) override
     {
-        CheckArrowTypeMatch(YTType_->AsSimpleTypeRef().GetElement(), type.type_name(), type.id());
+        CheckArrowTypeMatch(YTType_->AsSimpleTypeRef().GetElement(), type.type_name(), Array_->type());
         return ParseInt64<arrow::Int64Array>();
     }
 
     // Date types.
     arrow::Status Visit(const arrow::Time32Type& type) override
     {
-        CheckArrowTypeMatch(YTType_->AsSimpleTypeRef().GetElement(), type.type_name(), type.id());
+        CheckArrowTypeMatch(YTType_->AsSimpleTypeRef().GetElement(), type.type_name(), Array_->type());
         return ParseInt64<arrow::Time32Array>();
     }
 
     arrow::Status Visit(const arrow::Time64Type& type) override
     {
-        CheckArrowTypeMatch(YTType_->AsSimpleTypeRef().GetElement(), type.type_name(), type.id());
+        CheckArrowTypeMatch(YTType_->AsSimpleTypeRef().GetElement(), type.type_name(), Array_->type());
         return ParseInt64<arrow::Time64Array>();
     }
 
     arrow::Status Visit(const arrow::Date32Type& type) override
     {
-        CheckArrowTypeMatch(YTType_->AsSimpleTypeRef().GetElement(), type.type_name(), type.id());
+        CheckArrowTypeMatch(YTType_->AsSimpleTypeRef().GetElement(), type.type_name(), Array_->type());
         if (YTType_->AsSimpleTypeRef().GetElement() == ESimpleLogicalValueType::Date32) {
             return ParseDate32<arrow::Date32Array>();
         } else if (YTType_->AsSimpleTypeRef().GetElement() == ESimpleLogicalValueType::Date) {
@@ -922,7 +1081,7 @@ public:
 
     arrow::Status Visit(const arrow::Date64Type& type) override
     {
-        CheckArrowTypeMatch(YTType_->AsSimpleTypeRef().GetElement(), type.type_name(), type.id());
+        CheckArrowTypeMatch(YTType_->AsSimpleTypeRef().GetElement(), type.type_name(), Array_->type());
         if (YTType_->AsSimpleTypeRef().GetElement()== ESimpleLogicalValueType::Datetime64) {
             return ParseDate64<arrow::Date64Array>();
         } else if (YTType_->AsSimpleTypeRef().GetElement() == ESimpleLogicalValueType::Datetime) {
@@ -934,7 +1093,7 @@ public:
 
     arrow::Status Visit(const arrow::TimestampType& type) override
     {
-        CheckArrowTypeMatch(YTType_->AsSimpleTypeRef().GetElement(), type.type_name(), type.id());
+        CheckArrowTypeMatch(YTType_->AsSimpleTypeRef().GetElement(), type.type_name(), Array_->type());
         if (YTType_->AsSimpleTypeRef().GetElement() == ESimpleLogicalValueType::Timestamp64) {
             return ParseTimestamp64<arrow::TimestampArray>(type.unit());
         } else if (YTType_->AsSimpleTypeRef().GetElement() == ESimpleLogicalValueType::Timestamp) {
@@ -947,71 +1106,71 @@ public:
     // Unsigned integer types.
     arrow::Status Visit(const arrow::UInt8Type& type) override
     {
-        CheckArrowTypeMatch(YTType_->AsSimpleTypeRef().GetElement(), type.type_name(), type.id());
+        CheckArrowTypeMatch(YTType_->AsSimpleTypeRef().GetElement(), type.type_name(), Array_->type());
         return ParseUInt64<arrow::UInt8Array>();
     }
 
     arrow::Status Visit(const arrow::UInt16Type& type) override
     {
-        CheckArrowTypeMatch(YTType_->AsSimpleTypeRef().GetElement(), type.type_name(), type.id());
+        CheckArrowTypeMatch(YTType_->AsSimpleTypeRef().GetElement(), type.type_name(), Array_->type());
         return ParseUInt64<arrow::UInt16Array>();
     }
 
     arrow::Status Visit(const arrow::UInt32Type& type) override
     {
-        CheckArrowTypeMatch(YTType_->AsSimpleTypeRef().GetElement(), type.type_name(), type.id());
+        CheckArrowTypeMatch(YTType_->AsSimpleTypeRef().GetElement(), type.type_name(), Array_->type());
         return ParseUInt64<arrow::UInt32Array>();
     }
 
     arrow::Status Visit(const arrow::UInt64Type& type) override
     {
-        CheckArrowTypeMatch(YTType_->AsSimpleTypeRef().GetElement(), type.type_name(), type.id());
+        CheckArrowTypeMatch(YTType_->AsSimpleTypeRef().GetElement(), type.type_name(), Array_->type());
         return ParseUInt64<arrow::UInt64Array>();
     }
 
     // Float types.
     arrow::Status Visit(const arrow::HalfFloatType& type) override
     {
-        CheckArrowTypeMatch(YTType_->AsSimpleTypeRef().GetElement(), type.type_name(), type.id());
+        CheckArrowTypeMatch(YTType_->AsSimpleTypeRef().GetElement(), type.type_name(), Array_->type());
         return ParseDouble<arrow::HalfFloatArray>();
     }
 
     arrow::Status Visit(const arrow::FloatType& type) override
     {
-        CheckArrowTypeMatch(YTType_->AsSimpleTypeRef().GetElement(), type.type_name(), type.id());
+        CheckArrowTypeMatch(YTType_->AsSimpleTypeRef().GetElement(), type.type_name(), Array_->type());
         return ParseDouble<arrow::FloatArray>();
     }
 
     arrow::Status Visit(const arrow::DoubleType& type) override
     {
-        CheckArrowTypeMatch(YTType_->AsSimpleTypeRef().GetElement(), type.type_name(), type.id());
+        CheckArrowTypeMatch(YTType_->AsSimpleTypeRef().GetElement(), type.type_name(), Array_->type());
         return ParseDouble<arrow::DoubleArray>();
     }
 
     // Binary types.
     arrow::Status Visit(const arrow::StringType& type) override
     {
-        CheckArrowTypeMatch(YTType_->AsSimpleTypeRef().GetElement(), type.type_name(), type.id());
+        CheckArrowTypeMatch(YTType_->AsSimpleTypeRef().GetElement(), type.type_name(), Array_->type());
         return ParseStringLikeArray<arrow::StringArray>();
     }
 
     arrow::Status Visit(const arrow::BinaryType& type) override
     {
-        CheckArrowTypeMatch(YTType_->AsSimpleTypeRef().GetElement(), type.type_name(), type.id());
+        CheckArrowTypeMatch(YTType_->AsSimpleTypeRef().GetElement(), type.type_name(), Array_->type());
         return ParseStringLikeArray<arrow::BinaryArray>();
     }
 
     // Boolean types.
     arrow::Status Visit(const arrow::BooleanType& type) override
     {
-        CheckArrowTypeMatch(YTType_->AsSimpleTypeRef().GetElement(), type.type_name(), type.id());
+        CheckArrowTypeMatch(YTType_->AsSimpleTypeRef().GetElement(), type.type_name(), Array_->type());
         return ParseBoolean();
     }
 
     // Null types.
     arrow::Status Visit(const arrow::NullType& type) override
     {
-        CheckArrowTypeMatch(YTType_->AsSimpleTypeRef().GetElement(), type.type_name(), type.id());
+        CheckArrowTypeMatch(YTType_->AsSimpleTypeRef().GetElement(), type.type_name(), Array_->type());
         return ParseNull();
     }
 
@@ -1028,7 +1187,11 @@ public:
 
     arrow::Status Visit(const arrow::StructType& /*type*/) override
     {
-        return ParseStruct();
+        if (IsTzType(YTType_)) {
+            return ParseTzType();
+        } else {
+            return ParseStruct();
+        }
     }
 
     arrow::Status Visit(const arrow::Decimal128Type& type) override
@@ -1191,6 +1354,51 @@ private:
         return arrow::Status::OK();
     }
 
+    arrow::Status ParseTzType()
+    {
+        CheckArrowTypeMatch(YTType_->AsSimpleTypeRef().GetElement(), Array_->type()->name(), Array_->type());
+        switch (YTType_->AsSimpleTypeRef().GetElement()) {
+            case ESimpleLogicalValueType::TzDate:
+                return ParseTzTypeImpl<arrow::UInt16Array>();
+            case ESimpleLogicalValueType::TzDatetime:
+                return ParseTzTypeImpl<arrow::UInt32Array>();
+            case ESimpleLogicalValueType::TzTimestamp:
+                return ParseTzTypeImpl<arrow::UInt64Array>();
+            case ESimpleLogicalValueType::TzDate32:
+                return ParseTzTypeImpl<arrow::Int32Array>();
+            case ESimpleLogicalValueType::TzDatetime64:
+                return ParseTzTypeImpl<arrow::Int64Array>();
+            case ESimpleLogicalValueType::TzTimestamp64:
+                return ParseTzTypeImpl<arrow::Int64Array>();
+            default:
+                YT_ABORT();
+        }
+    }
+
+    template <typename TInnerArray>
+    arrow::Status ParseTzTypeImpl()
+    {
+        auto array = std::static_pointer_cast<arrow::StructArray>(Array_);
+        auto timestampArray = std::static_pointer_cast<TInnerArray>(array->field(0));
+        if (array->IsNull(RowIndex_)) {
+            Writer_->WriteEntity();
+        } else {
+            auto timestamp = timestampArray->Value(RowIndex_);
+            std::string_view tzName;
+            if (array->field(1)->type_id() == arrow::Type::BINARY) {
+                auto tzNameArray = std::static_pointer_cast<arrow::BinaryArray>(array->field(1));
+                auto tzValue = tzNameArray->Value(RowIndex_);
+                tzName = std::string_view(tzValue.data(), tzValue.size());
+            } else {
+                auto tzIndexArray = std::static_pointer_cast<arrow::UInt16Array>(array->field(1));
+                tzName = GetTzName(tzIndexArray->Value(RowIndex_));
+            }
+
+            Writer_->WriteBinaryString(MakeTzString(timestamp, tzName));
+        }
+        return arrow::Status::OK();
+    }
+
     arrow::Status ParseList()
     {
         if (YTType_->GetMetatype() != ELogicalMetatype::List) {
@@ -1330,41 +1538,19 @@ void PrepareArrayForSimpleLogicalType(
     ESimpleLogicalValueType columnType,
     const std::shared_ptr<TChunkedOutputStream>&  bufferForStringLikeValues,
     const std::shared_ptr<arrow::Array>& column,
-    std::vector<TUnversionedRowValues>& rowsValues,
-    int columnIndex,
+    TUnversionedRowValues& rowValues,
     int columnId)
 {
     CheckArrowTypeMatch(columnType, column);
-    if (column->type()->id() == arrow::Type::DICTIONARY) {
-        auto dictionaryArrayColumn = std::static_pointer_cast<arrow::DictionaryArray>(column);
-        auto dictionary = dictionaryArrayColumn->dictionary();
-        TUnversionedRowValues dictionaryValues(dictionary->length());
-        CheckArrowTypeMatch(columnType, dictionary);
-
-        TArraySimpleVisitor visitor(columnType, columnId, dictionary, bufferForStringLikeValues, &dictionaryValues);
-        ThrowOnError(dictionaryArrayColumn->dictionary()->type()->Accept(&visitor));
-
-        for (int offset = 0; offset < std::ssize(rowsValues[columnIndex]); offset++) {
-            if (dictionaryArrayColumn->IsNull(offset)) {
-                rowsValues[columnIndex][offset] = MakeUnversionedNullValue(columnId);
-            } else {
-                auto dictionaryValueIndex = dictionaryArrayColumn->GetValueIndex(offset);
-                YT_VERIFY(dictionaryValueIndex < std::ssize(dictionaryValues));
-                rowsValues[columnIndex][offset] = dictionaryValues[dictionaryValueIndex];
-            }
-        }
-    } else {
-        TArraySimpleVisitor visitor(columnType, columnId, column, bufferForStringLikeValues, &rowsValues[columnIndex]);
-        ThrowOnError(column->type()->Accept(&visitor));
-    }
+    TArraySimpleVisitor visitor(columnType, columnId, column, bufferForStringLikeValues, &rowValues);
+    ThrowOnError(column->type()->Accept(&visitor));
 }
 
 void PrepareArrayForComplexType(
     const TLogicalTypePtr& denullifiedLogicalType,
     const std::shared_ptr<TChunkedOutputStream>& bufferForStringLikeValues,
     const std::shared_ptr<arrow::Array>& column,
-    std::vector<TUnversionedRowValues>& rowsValues,
-    int columnIndex,
+    TUnversionedRowValues& rowValues,
     int columnId)
 {
     switch (auto metatype = denullifiedLogicalType->GetMetatype()) {
@@ -1427,23 +1613,23 @@ void PrepareArrayForComplexType(
         column->type()->id() == arrow::Type::DECIMAL128 ||
         column->type()->id() == arrow::Type::DECIMAL256)
     {
-        TUnversionedRowValues stringValues(rowsValues[columnIndex].size());
+        TUnversionedRowValues stringValues(rowValues.size());
         TArraySimpleVisitor visitor(/*columnType*/ std::nullopt, columnId, column, bufferForStringLikeValues, &stringValues);
         ThrowOnError(column->type()->Accept(&visitor));
-        for (int offset = 0; offset < std::ssize(rowsValues[columnIndex]); offset++) {
+        for (int offset = 0; offset < std::ssize(rowValues); ++offset) {
             if (column->IsNull(offset)) {
-                rowsValues[columnIndex][offset] = MakeUnversionedNullValue(columnId);
+                rowValues[offset] = MakeUnversionedNullValue(columnId);
             } else if (column->type()->id() == arrow::Type::DECIMAL128 || column->type()->id() == arrow::Type::DECIMAL256) {
-                rowsValues[columnIndex][offset] = MakeUnversionedStringValue(stringValues[offset].AsStringBuf(), columnId);
+                rowValues[offset] = MakeUnversionedStringValue(stringValues[offset].AsStringBuf(), columnId);
             } else {
                 // TODO(max): is it even correct? Binary is not necessarily a correct YSON...
-                rowsValues[columnIndex][offset] = MakeUnversionedCompositeValue(stringValues[offset].AsStringBuf(), columnId);
+                rowValues[offset] = MakeUnversionedCompositeValue(stringValues[offset].AsStringBuf(), columnId);
             }
         }
     } else {
-        for (int rowIndex = 0; rowIndex < std::ssize(rowsValues[columnIndex]); rowIndex++) {
+        for (int rowIndex = 0; rowIndex < std::ssize(rowValues); ++rowIndex) {
             if (column->IsNull(rowIndex)) {
-                rowsValues[columnIndex][rowIndex] = MakeUnversionedNullValue(columnId);
+                rowValues[rowIndex] = MakeUnversionedNullValue(columnId);
             } else {
                 TBuffer valueBuffer;
                 TBufferOutput out(valueBuffer);
@@ -1464,7 +1650,7 @@ void PrepareArrayForComplexType(
 
                 auto value = TStringBuf(buffer, valueBuffer.Size());
 
-                rowsValues[columnIndex][rowIndex] = MakeUnversionedCompositeValue(value, columnId);
+                rowValues[rowIndex] = MakeUnversionedCompositeValue(value, columnId);
             }
         }
     }
@@ -1474,42 +1660,56 @@ void PrepareArray(
     const TLogicalTypePtr& denullifiedLogicalType,
     const std::shared_ptr<TChunkedOutputStream>& bufferForStringLikeValues,
     const std::shared_ptr<arrow::Array>& column,
-    std::vector<TUnversionedRowValues>& rowsValues,
-    int columnIndex,
+    TUnversionedRowValues& rowValues,
     int columnId)
 {
-    switch (denullifiedLogicalType->GetMetatype()) {
-        case ELogicalMetatype::Simple:
-            return PrepareArrayForSimpleLogicalType(
-                denullifiedLogicalType->AsSimpleTypeRef().GetElement(),
-                bufferForStringLikeValues,
-                column,
-                rowsValues,
-                columnIndex,
-                columnId);
+    if (column->type()->id() == arrow::Type::DICTIONARY) {
+        auto dictionaryArrayColumn = std::static_pointer_cast<arrow::DictionaryArray>(column);
+        auto dictionary = dictionaryArrayColumn->dictionary();
+        TUnversionedRowValues dictionaryValues(dictionary->length());
+        PrepareArray(denullifiedLogicalType, bufferForStringLikeValues, dictionary, dictionaryValues, columnId);
 
-        case ELogicalMetatype::List:
-        case ELogicalMetatype::Dict:
-        case ELogicalMetatype::Struct:
+        for (int offset = 0; offset < std::ssize(rowValues); ++offset) {
+            if (dictionaryArrayColumn->IsNull(offset)) {
+                rowValues[offset] = MakeUnversionedNullValue(columnId);
+            } else {
+                auto dictionaryValueIndex = dictionaryArrayColumn->GetValueIndex(offset);
+                YT_VERIFY(dictionaryValueIndex < std::ssize(dictionaryValues));
+                rowValues[offset] = dictionaryValues[dictionaryValueIndex];
+            }
+        }
+    } else {
+        switch (denullifiedLogicalType->GetMetatype()) {
+            case ELogicalMetatype::Simple:
+                return PrepareArrayForSimpleLogicalType(
+                    denullifiedLogicalType->AsSimpleTypeRef().GetElement(),
+                    bufferForStringLikeValues,
+                    column,
+                    rowValues,
+                    columnId);
 
-        case ELogicalMetatype::Decimal:
+            case ELogicalMetatype::List:
+            case ELogicalMetatype::Dict:
+            case ELogicalMetatype::Struct:
 
-        case ELogicalMetatype::Optional:
-        case ELogicalMetatype::Tuple:
-        case ELogicalMetatype::VariantTuple:
-        case ELogicalMetatype::VariantStruct:
-            return PrepareArrayForComplexType(
-                denullifiedLogicalType,
-                bufferForStringLikeValues,
-                column,
-                rowsValues,
-                columnIndex,
-                columnId);
+            case ELogicalMetatype::Decimal:
 
-        case ELogicalMetatype::Tagged:
-            // Denullified type should not contain tagged type.
-            YT_ABORT();
-            break;
+            case ELogicalMetatype::Optional:
+            case ELogicalMetatype::Tuple:
+            case ELogicalMetatype::VariantTuple:
+            case ELogicalMetatype::VariantStruct:
+                return PrepareArrayForComplexType(
+                    denullifiedLogicalType,
+                    bufferForStringLikeValues,
+                    column,
+                    rowValues,
+                    columnId);
+
+            case ELogicalMetatype::Tagged:
+                // Denullified type should not contain tagged type.
+                YT_ABORT();
+                break;
+        }
     }
 }
 
@@ -1569,8 +1769,7 @@ public:
                     denullifiedColumnType,
                     bufferForStringLikeValues,
                     batch->column(columnIndex),
-                    rowsValues,
-                    columnIndex,
+                    rowsValues[columnIndex],
                     columnId);
             } catch (const std::exception& ex) {
                 THROW_ERROR_EXCEPTION("Failed to parse column %Qv", columnName)

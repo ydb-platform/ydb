@@ -69,8 +69,10 @@ public:
 };
 
 struct TIndexInfo: public IIndexInfo {
-private:
+public:
     using TColumns = THashMap<ui32, NTable::TColumn>;
+
+private:
     friend class TPortionInfo;
     friend class TCompactedPortionInfo;
     friend class TPortionDataAccessor;
@@ -89,7 +91,6 @@ private:
     std::optional<TString> ScanReaderPolicyName;
 
     TPresetId PresetId;
-    std::shared_ptr<TAtomic> IgnoreToVersion = std::make_shared<TAtomic>(0);
     ui64 Version = 0;
     std::vector<ui32> SchemaColumnIdsWithSpecials;
     std::shared_ptr<NArrow::TSchemaLite> SchemaWithSpecials;
@@ -101,9 +102,17 @@ private:
     }
 
     static std::shared_ptr<arrow::Field> BuildArrowField(const NTable::TColumn& column, const std::shared_ptr<TSchemaObjectsCache>& cache) {
-        auto arrowType = NArrow::GetArrowType(column.PType);
-        AFL_VERIFY(arrowType.ok());
-        auto f = std::make_shared<arrow::Field>(column.Name, arrowType.ValueUnsafe(), !column.NotNull);
+        std::shared_ptr<arrow::DataType> arrowType;
+
+        if (column.PType.GetTypeId() == NScheme::NTypeIds::Decimal) {
+            arrowType = arrow::fixed_size_binary(16);
+        } else {
+            auto result = NArrow::GetArrowType(column.PType);
+            AFL_VERIFY(result.ok());
+            arrowType = result.ValueUnsafe();
+        }
+
+        auto f = std::make_shared<arrow::Field>(column.Name, arrowType, !column.NotNull);
         if (cache) {
             return cache->GetOrInsertField(f);
         } else {
@@ -156,14 +165,6 @@ private:
         }
     }
 
-    const TString& GetEntityStorageId(const ui32 entityId, const TString& specialTier) const {
-        auto it = Indexes.find(entityId);
-        if (it != Indexes.end()) {
-            return it->second->GetStorageId();
-        }
-        return GetColumnStorageId(entityId, specialTier);
-    }
-
     void SetAllKeys(const std::shared_ptr<IStoragesManager>& operators, const THashMap<ui32, NTable::TColumn>& columns);
 
     bool CompareColumnIdxByName(const ui32 lhs, const ui32 rhs) const {
@@ -173,23 +174,18 @@ private:
     }
 
 public:
+    const TString& GetEntityStorageId(const ui32 entityId, const TString& specialTier) const {
+        auto it = Indexes.find(entityId);
+        if (it != Indexes.end()) {
+            return it->second->GetStorageId();
+        }
+        return GetColumnStorageId(entityId, specialTier);
+    }
+
     NSplitter::TEntityGroups GetEntityGroupsByStorageId(const TString& specialTier, const IStoragesManager& storages) const;
     std::optional<ui32> GetPKColumnIndexByIndexVerified(const ui32 columnIndex) const {
         AFL_VERIFY(columnIndex < ColumnFeatures.size());
         return ColumnFeatures[columnIndex]->GetPKColumnIndex();
-    }
-
-    void SetIgnoreToVersion(const ui64 version) const {
-        AFL_VERIFY(AtomicCas(&*IgnoreToVersion, version, 0) || (ui64)AtomicGet(*IgnoreToVersion) == version)("already", AtomicGet(*IgnoreToVersion))(
-                                                               "version", version);
-    }
-
-    std::optional<ui64> GetIgnoreToVersion() const {
-        if (const ui64 val = AtomicGet(*IgnoreToVersion)) {
-            return val;
-        } else {
-            return std::nullopt;
-        }
     }
 
     ui64 GetPresetId() const {
@@ -401,6 +397,7 @@ public:
 
     /// Returns names of columns defined by the specific ids.
     std::vector<TString> GetColumnNames(const std::vector<ui32>& ids) const;
+    std::vector<TString> GetColumnNames() const;
     std::vector<std::string> GetColumnSTLNames(const bool withSpecial = true) const;
     TColumnIdsView GetColumnIds(const bool withSpecial = true) const;
     ui32 GetColumnIdByIndexVerified(const ui32 index) const {

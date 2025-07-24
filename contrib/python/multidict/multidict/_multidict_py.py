@@ -1,9 +1,9 @@
 import enum
+import functools
 import reprlib
 import sys
 from array import array
 from collections.abc import (
-    Callable,
     ItemsView,
     Iterable,
     Iterator,
@@ -11,9 +11,11 @@ from collections.abc import (
     Mapping,
     ValuesView,
 )
+from dataclasses import dataclass
 from typing import (
     TYPE_CHECKING,
     Any,
+    ClassVar,
     Generic,
     NoReturn,
     Optional,
@@ -81,11 +83,12 @@ class _ItemsView(_ViewBase[_V], ItemsView[str, _V]):
             return False
         key, value = item
         try:
-            ident = self._md._identity(key)
+            identity = self._md._identity(key)
         except TypeError:
             return False
-        for i, k, v in self._md._items:
-            if ident == i and value == v:
+        hash_ = hash(identity)
+        for slot, idx, e in self._md._keys.iter_hash(hash_):
+            if e.identity == identity and value == e.value:
                 return True
         return False
 
@@ -93,28 +96,29 @@ class _ItemsView(_ViewBase[_V], ItemsView[str, _V]):
         return _Iter(len(self), self._iter(self._md._version))
 
     def _iter(self, version: int) -> Iterator[tuple[str, _V]]:
-        for i, k, v in self._md._items:
+        for e in self._md._keys.iter_entries():
             if version != self._md._version:
                 raise RuntimeError("Dictionary changed during iteration")
-            yield self._md._key(k), v
+            yield self._md._key(e.key), e.value
 
     @reprlib.recursive_repr()
     def __repr__(self) -> str:
         lst = []
-        for i, k, v in self._md._items:
-            lst.append(f"'{k}': {v!r}")
+        for e in self._md._keys.iter_entries():
+            lst.append(f"'{e.key}': {e.value!r}")
         body = ", ".join(lst)
         return f"<{self.__class__.__name__}({body})>"
 
     def _parse_item(
         self, arg: Union[tuple[str, _V], _T]
-    ) -> Optional[tuple[str, str, _V]]:
+    ) -> Optional[tuple[int, str, str, _V]]:
         if not isinstance(arg, tuple):
             return None
         if len(arg) != 2:
             return None
         try:
-            return (self._md._identity(arg[0]), arg[0], arg[1])
+            identity = self._md._identity(arg[0])
+            return (hash(identity), identity, arg[0], arg[1])
         except TypeError:
             return None
 
@@ -125,7 +129,7 @@ class _ItemsView(_ViewBase[_V], ItemsView[str, _V]):
             if item is None:
                 continue
             else:
-                tmp.add((item[0], item[2]))
+                tmp.add((item[1], item[3]))
         return tmp
 
     def __and__(self, other: Iterable[Any]) -> set[tuple[str, _V]]:
@@ -138,10 +142,12 @@ class _ItemsView(_ViewBase[_V], ItemsView[str, _V]):
             item = self._parse_item(arg)
             if item is None:
                 continue
-            identity, key, value = item
-            for i, k, v in self._md._items:
-                if i == identity and v == value:
-                    ret.add((k, v))
+            hash_, identity, key, value = item
+            for slot, idx, e in self._md._keys.iter_hash(hash_):
+                e.hash = -1
+                if e.identity == identity and e.value == value:
+                    ret.add((e.key, e.value))
+            self._md._keys.restore_hash(hash_)
         return ret
 
     def __rand__(self, other: Iterable[_T]) -> set[_T]:
@@ -154,9 +160,9 @@ class _ItemsView(_ViewBase[_V], ItemsView[str, _V]):
             item = self._parse_item(arg)
             if item is None:
                 continue
-            identity, key, value = item
-            for i, k, v in self._md._items:
-                if i == identity and v == value:
+            hash_, identity, key, value = item
+            for slot, idx, e in self._md._keys.iter_hash(hash_):
+                if e.identity == identity and e.value == value:
                     ret.add(arg)
                     break
         return ret
@@ -168,13 +174,13 @@ class _ItemsView(_ViewBase[_V], ItemsView[str, _V]):
         except TypeError:
             return NotImplemented
         for arg in it:
-            item: Optional[tuple[str, str, _V]] = self._parse_item(arg)
+            item: Optional[tuple[int, str, str, _V]] = self._parse_item(arg)
             if item is None:
                 ret.add(arg)
                 continue
-            identity, key, value = item
-            for i, k, v in self._md._items:
-                if i == identity and v == value:
+            hash_, identity, key, value = item
+            for slot, idx, e in self._md._keys.iter_hash(hash_):
+                if e.identity == identity and e.value == value:  # pragma: no branch
                     break
             else:
                 ret.add(arg)
@@ -187,9 +193,9 @@ class _ItemsView(_ViewBase[_V], ItemsView[str, _V]):
             return NotImplemented
         tmp = self._tmp_set(ret)
 
-        for i, k, v in self._md._items:
-            if (i, v) not in tmp:
-                ret.add((k, v))
+        for e in self._md._keys.iter_entries():
+            if (e.identity, e.value) not in tmp:
+                ret.add((e.key, e.value))
         return ret
 
     def __sub__(self, other: Iterable[_T]) -> set[Union[tuple[str, _V], _T]]:
@@ -200,9 +206,9 @@ class _ItemsView(_ViewBase[_V], ItemsView[str, _V]):
             return NotImplemented
         tmp = self._tmp_set(it)
 
-        for i, k, v in self._md._items:
-            if (i, v) not in tmp:
-                ret.add((k, v))
+        for e in self._md._keys.iter_entries():
+            if (e.identity, e.value) not in tmp:
+                ret.add((e.key, e.value))
 
         return ret
 
@@ -218,9 +224,9 @@ class _ItemsView(_ViewBase[_V], ItemsView[str, _V]):
                 ret.add(arg)
                 continue
 
-            identity, key, value = item
-            for i, k, v in self._md._items:
-                if i == identity and v == value:
+            hash_, identity, key, value = item
+            for slot, idx, e in self._md._keys.iter_hash(hash_):
+                if e.identity == identity and e.value == value:  # pragma: no branch
                     break
             else:
                 ret.add(arg)
@@ -243,17 +249,17 @@ class _ItemsView(_ViewBase[_V], ItemsView[str, _V]):
             if item is None:
                 continue
 
-            identity, key, value = item
-            for i, k, v in self._md._items:
-                if i == identity and v == value:
+            hash_, identity, key, value = item
+            for slot, idx, e in self._md._keys.iter_hash(hash_):
+                if e.identity == identity and e.value == value:  # pragma: no branch
                     return False
         return True
 
 
 class _ValuesView(_ViewBase[_V], ValuesView[_V]):
     def __contains__(self, value: object) -> bool:
-        for i, k, v in self._md._items:
-            if v == value:
+        for e in self._md._keys.iter_entries():
+            if e.value == value:
                 return True
         return False
 
@@ -261,16 +267,16 @@ class _ValuesView(_ViewBase[_V], ValuesView[_V]):
         return _Iter(len(self), self._iter(self._md._version))
 
     def _iter(self, version: int) -> Iterator[_V]:
-        for i, k, v in self._md._items:
+        for e in self._md._keys.iter_entries():
             if version != self._md._version:
                 raise RuntimeError("Dictionary changed during iteration")
-            yield v
+            yield e.value
 
     @reprlib.recursive_repr()
     def __repr__(self) -> str:
         lst = []
-        for i, k, v in self._md._items:
-            lst.append(repr(v))
+        for e in self._md._keys.iter_entries():
+            lst.append(repr(e.value))
         body = ", ".join(lst)
         return f"<{self.__class__.__name__}({body})>"
 
@@ -280,8 +286,9 @@ class _KeysView(_ViewBase[_V], KeysView[str]):
         if not isinstance(key, str):
             return False
         identity = self._md._identity(key)
-        for i, k, v in self._md._items:
-            if i == identity:
+        hash_ = hash(identity)
+        for slot, idx, e in self._md._keys.iter_hash(hash_):
+            if e.identity == identity:  # pragma: no branch
                 return True
         return False
 
@@ -289,15 +296,15 @@ class _KeysView(_ViewBase[_V], KeysView[str]):
         return _Iter(len(self), self._iter(self._md._version))
 
     def _iter(self, version: int) -> Iterator[str]:
-        for i, k, v in self._md._items:
+        for e in self._md._keys.iter_entries():
             if version != self._md._version:
                 raise RuntimeError("Dictionary changed during iteration")
-            yield self._md._key(k)
+            yield self._md._key(e.key)
 
     def __repr__(self) -> str:
         lst = []
-        for i, k, v in self._md._items:
-            lst.append(f"'{k}'")
+        for e in self._md._keys.iter_entries():
+            lst.append(f"'{e.key}'")
         body = ", ".join(lst)
         return f"<{self.__class__.__name__}({body})>"
 
@@ -311,9 +318,11 @@ class _KeysView(_ViewBase[_V], KeysView[str]):
             if not isinstance(key, str):
                 continue
             identity = self._md._identity(key)
-            for i, k, v in self._md._items:
-                if i == identity:
-                    ret.add(k)
+            hash_ = hash(identity)
+            for slot, idx, e in self._md._keys.iter_hash(hash_):
+                if e.identity == identity:  # pragma: no branch
+                    ret.add(e.key)
+                    break
         return ret
 
     def __rand__(self, other: Iterable[_T]) -> set[_T]:
@@ -325,10 +334,8 @@ class _KeysView(_ViewBase[_V], KeysView[str]):
         for key in it:
             if not isinstance(key, str):
                 continue
-            identity = self._md._identity(key)
-            for i, k, v in self._md._items:
-                if i == identity:
-                    ret.add(key)
+            if key in self._md:
+                ret.add(key)
         return cast(set[_T], ret)
 
     def __or__(self, other: Iterable[_T]) -> set[Union[str, _T]]:
@@ -341,11 +348,7 @@ class _KeysView(_ViewBase[_V], KeysView[str]):
             if not isinstance(key, str):
                 ret.add(key)
                 continue
-            identity = self._md._identity(key)
-            for i, k, v in self._md._items:
-                if i == identity:
-                    break
-            else:
+            if key not in self._md:
                 ret.add(key)
         return ret
 
@@ -362,9 +365,9 @@ class _KeysView(_ViewBase[_V], KeysView[str]):
             identity = self._md._identity(key)
             tmp.add(identity)
 
-        for i, k, v in self._md._items:
-            if i not in tmp:
-                ret.add(k)
+        for e in self._md._keys.iter_entries():
+            if e.identity not in tmp:
+                ret.add(e.key)
         return ret
 
     def __sub__(self, other: Iterable[object]) -> set[str]:
@@ -377,9 +380,10 @@ class _KeysView(_ViewBase[_V], KeysView[str]):
             if not isinstance(key, str):
                 continue
             identity = self._md._identity(key)
-            for i, k, v in self._md._items:
-                if i == identity:
-                    ret.discard(k)
+            hash_ = hash(identity)
+            for slot, idx, e in self._md._keys.iter_hash(hash_):
+                if e.identity == identity:  # pragma: no branch
+                    ret.discard(e.key)
                     break
         return ret
 
@@ -391,11 +395,8 @@ class _KeysView(_ViewBase[_V], KeysView[str]):
         for key in other:
             if not isinstance(key, str):
                 continue
-            identity = self._md._identity(key)
-            for i, k, v in self._md._items:
-                if i == identity:
-                    ret.discard(key)  # type: ignore[arg-type]
-                    break
+            if key in self._md:
+                ret.discard(key)  # type: ignore[arg-type]
         return ret
 
     def __xor__(self, other: Iterable[_T]) -> set[Union[str, _T]]:
@@ -413,15 +414,13 @@ class _KeysView(_ViewBase[_V], KeysView[str]):
         for key in other:
             if not isinstance(key, str):
                 continue
-            identity = self._md._identity(key)
-            for i, k, v in self._md._items:
-                if i == identity:
-                    return False
+            if key in self._md:
+                return False
         return True
 
 
 class _CSMixin:
-    _ci: bool = False
+    _ci: ClassVar[bool] = False
 
     def _key(self, key: str) -> str:
         return key
@@ -434,7 +433,7 @@ class _CSMixin:
 
 
 class _CIMixin:
-    _ci: bool = True
+    _ci: ClassVar[bool] = True
 
     def _key(self, key: str) -> str:
         if type(key) is istr:
@@ -446,24 +445,206 @@ class _CIMixin:
         if isinstance(key, istr):
             ret = key.__istr_identity__
             if ret is None:
-                ret = key.title()
+                ret = key.lower()
                 key.__istr_identity__ = ret
             return ret
         if isinstance(key, str):
-            return key.title()
+            return key.lower()
         else:
             raise TypeError("MultiDict keys should be either str or subclasses of str")
+
+
+def estimate_log2_keysize(n: int) -> int:
+    # 7 == HT_MINSIZE - 1
+    return (((n * 3 + 1) // 2) | 7).bit_length()
+
+
+@dataclass
+class _Entry(Generic[_V]):
+    hash: int
+    identity: str
+    key: str
+    value: _V
+
+
+@dataclass
+class _HtKeys(Generic[_V]):  # type: ignore[misc]
+    LOG_MINSIZE: ClassVar[int] = 3
+    MINSIZE: ClassVar[int] = 8
+    PREALLOCATED_INDICES: ClassVar[dict[int, array]] = {  # type: ignore[type-arg]
+        log2_size: array(
+            "b" if log2_size < 8 else "h", (-1 for i in range(1 << log2_size))
+        )
+        for log2_size in range(3, 10)
+    }
+
+    log2_size: int
+    usable: int
+
+    indices: array  # type: ignore[type-arg] # in py3.9 array is not generic
+    entries: list[Optional[_Entry[_V]]]
+
+    @functools.cached_property
+    def nslots(self) -> int:
+        return 1 << self.log2_size
+
+    @functools.cached_property
+    def mask(self) -> int:
+        return self.nslots - 1
+
+    if sys.implementation.name != "pypy":
+
+        def __sizeof__(self) -> int:
+            return (
+                object.__sizeof__(self)
+                + sys.getsizeof(self.indices)
+                + sys.getsizeof(self.entries)
+            )
+
+    @classmethod
+    def new(cls, log2_size: int, entries: list[Optional[_Entry[_V]]]) -> Self:
+        size = 1 << log2_size
+        usable = (size << 1) // 3
+        if log2_size < 10:
+            indices = cls.PREALLOCATED_INDICES[log2_size].__copy__()
+        elif log2_size < 16:
+            indices = array("h", (-1 for i in range(size)))
+        elif log2_size < 32:
+            indices = array("l", (-1 for i in range(size)))
+        else:  # pragma: no cover  # don't test huge multidicts
+            indices = array("q", (-1 for i in range(size)))
+        ret = cls(
+            log2_size=log2_size,
+            usable=usable,
+            indices=indices,
+            entries=entries,
+        )
+        return ret
+
+    def clone(self) -> "_HtKeys[_V]":
+        entries = [
+            _Entry(e.hash, e.identity, e.key, e.value) if e is not None else None
+            for e in self.entries
+        ]
+
+        return _HtKeys(
+            log2_size=self.log2_size,
+            usable=self.usable,
+            indices=self.indices.__copy__(),
+            entries=entries,
+        )
+
+    def build_indices(self, update: bool) -> None:
+        mask = self.mask
+        indices = self.indices
+        for idx, e in enumerate(self.entries):
+            assert e is not None
+            hash_ = e.hash
+            if update:
+                if hash_ == -1:
+                    hash_ = hash(e.identity)
+            else:
+                assert hash_ != -1
+            i = hash_ & mask
+            perturb = hash_ & sys.maxsize
+            while indices[i] != -1:
+                perturb >>= 5
+                i = mask & (i * 5 + perturb + 1)
+            indices[i] = idx
+
+    def find_empty_slot(self, hash_: int) -> int:
+        mask = self.mask
+        indices = self.indices
+        i = hash_ & mask
+        perturb = hash_ & sys.maxsize
+        ix = indices[i]
+        while ix != -1:
+            perturb >>= 5
+            i = (i * 5 + perturb + 1) & mask
+            ix = indices[i]
+        return i
+
+    def iter_hash(self, hash_: int) -> Iterator[tuple[int, int, _Entry[_V]]]:
+        mask = self.mask
+        indices = self.indices
+        entries = self.entries
+        i = hash_ & mask
+        perturb = hash_ & sys.maxsize
+        ix = indices[i]
+        while ix != -1:
+            if ix != -2:
+                e = entries[ix]
+                if e.hash == hash_:
+                    yield i, ix, e
+            perturb >>= 5
+            i = (i * 5 + perturb + 1) & mask
+            ix = indices[i]
+
+    def del_idx(self, hash_: int, idx: int) -> None:
+        mask = self.mask
+        indices = self.indices
+        i = hash_ & mask
+        perturb = hash_ & sys.maxsize
+        ix = indices[i]
+        while ix != idx:
+            perturb >>= 5
+            i = (i * 5 + perturb + 1) & mask
+            ix = indices[i]
+        indices[i] = -2
+
+    def iter_entries(self) -> Iterator[_Entry[_V]]:
+        return filter(None, self.entries)
+
+    def restore_hash(self, hash_: int) -> None:
+        mask = self.mask
+        indices = self.indices
+        entries = self.entries
+        i = hash_ & mask
+        perturb = hash_ & sys.maxsize
+        ix = indices[i]
+        while ix != -1:
+            if ix != -2:
+                entry = entries[ix]
+                if entry.hash == -1:
+                    entry.hash = hash_
+            perturb >>= 5
+            i = (i * 5 + perturb + 1) & mask
+            ix = indices[i]
 
 
 class MultiDict(_CSMixin, MutableMultiMapping[_V]):
     """Dictionary with the support for duplicate keys."""
 
+    __slots__ = ("_keys", "_used", "_version")
+
     def __init__(self, arg: MDArg[_V] = None, /, **kwargs: _V):
-        self._items: list[tuple[str, str, _V]] = []
+        self._used = 0
         v = _version
         v[0] += 1
         self._version = v[0]
-        self._extend(arg, kwargs, self.__class__.__name__, self._extend_items)
+        if not kwargs:
+            md = None
+            if isinstance(arg, MultiDictProxy):
+                md = arg._md
+            elif isinstance(arg, MultiDict):
+                md = arg
+            if md is not None and md._ci is self._ci:
+                self._from_md(md)
+                return
+
+        it = self._parse_args(arg, kwargs)
+        log2_size = estimate_log2_keysize(cast(int, next(it)))
+        if log2_size > 17:  # pragma: no cover
+            # Don't overallocate really huge keys space in init
+            log2_size = 17
+        self._keys: _HtKeys[_V] = _HtKeys.new(log2_size, [])
+        self._extend_items(cast(Iterator[_Entry[_V]], it))
+
+    def _from_md(self, md: "MultiDict[_V]") -> None:
+        # Copy everything as-is without compacting the new multidict,
+        # otherwise it requires reindexing
+        self._keys = md._keys.clone()
+        self._used = md._used
 
     @overload
     def getall(self, key: str) -> list[_V]: ...
@@ -474,8 +655,19 @@ class MultiDict(_CSMixin, MutableMultiMapping[_V]):
     ) -> Union[list[_V], _T]:
         """Return a list of all values matching the key."""
         identity = self._identity(key)
-        res = [v for i, k, v in self._items if i == identity]
+        hash_ = hash(identity)
+        res = []
+        restore = []
+        for slot, idx, e in self._keys.iter_hash(hash_):
+            if e.identity == identity:  # pragma: no branch
+                res.append(e.value)
+                e.hash = -1
+                restore.append(idx)
+
         if res:
+            entries = self._keys.entries
+            for idx in restore:
+                entries[idx].hash = hash_  # type: ignore[union-attr]
             return res
         if not res and default is not sentinel:
             return default
@@ -493,9 +685,10 @@ class MultiDict(_CSMixin, MutableMultiMapping[_V]):
         Raises KeyError if the key is not found and no default is provided.
         """
         identity = self._identity(key)
-        for i, k, v in self._items:
-            if i == identity:
-                return v
+        hash_ = hash(identity)
+        for slot, idx, e in self._keys.iter_hash(hash_):
+            if e.identity == identity:  # pragma: no branch
+                return e.value
         if default is not sentinel:
             return default
         raise KeyError("Key not found: %r" % key)
@@ -520,7 +713,7 @@ class MultiDict(_CSMixin, MutableMultiMapping[_V]):
         return iter(self.keys())
 
     def __len__(self) -> int:
-        return len(self._items)
+        return self._used
 
     def keys(self) -> KeysView[str]:
         """Return a new view of the dictionary's keys."""
@@ -540,15 +733,15 @@ class MultiDict(_CSMixin, MutableMultiMapping[_V]):
         if isinstance(other, MultiDictProxy):
             return self == other._md
         if isinstance(other, MultiDict):
-            lft = self._items
-            rht = other._items
-            if len(lft) != len(rht):
+            lft = self._keys
+            rht = other._keys
+            if self._used != other._used:
                 return False
-            for (i1, k2, v1), (i2, k2, v2) in zip(lft, rht):
-                if i1 != i2 or v1 != v2:
+            for e1, e2 in zip(lft.iter_entries(), rht.iter_entries()):
+                if e1.identity != e2.identity or e1.value != e2.value:
                     return False
             return True
-        if len(self._items) != len(other):
+        if self._used != len(other):
             return False
         for k, v in self.items():
             nv = other.get(k, sentinel)
@@ -560,33 +753,35 @@ class MultiDict(_CSMixin, MutableMultiMapping[_V]):
         if not isinstance(key, str):
             return False
         identity = self._identity(key)
-        for i, k, v in self._items:
-            if i == identity:
+        hash_ = hash(identity)
+        for slot, idx, e in self._keys.iter_hash(hash_):
+            if e.identity == identity:  # pragma: no branch
                 return True
         return False
 
     @reprlib.recursive_repr()
     def __repr__(self) -> str:
-        body = ", ".join(f"'{k}': {v!r}" for i, k, v in self._items)
+        body = ", ".join(f"'{e.key}': {e.value!r}" for e in self._keys.iter_entries())
         return f"<{self.__class__.__name__}({body})>"
 
     if sys.implementation.name != "pypy":
 
         def __sizeof__(self) -> int:
-            return object.__sizeof__(self) + sys.getsizeof(self._items)
+            return object.__sizeof__(self) + sys.getsizeof(self._keys)
 
     def __reduce__(self) -> tuple[type[Self], tuple[list[tuple[str, _V]]]]:
         return (self.__class__, (list(self.items()),))
 
     def add(self, key: str, value: _V) -> None:
         identity = self._identity(key)
-        self._items.append((identity, key, value))
+        hash_ = hash(identity)
+        self._add_with_hash(_Entry(hash_, identity, key, value))
         self._incr_version()
 
     def copy(self) -> Self:
         """Return a copy of itself."""
         cls = self.__class__
-        return cls(self.items())
+        return cls(self)
 
     __copy__ = copy
 
@@ -595,28 +790,33 @@ class MultiDict(_CSMixin, MutableMultiMapping[_V]):
 
         This method must be used instead of update.
         """
-        self._extend(arg, kwargs, "extend", self._extend_items)
+        it = self._parse_args(arg, kwargs)
+        newsize = self._used + cast(int, next(it))
+        self._resize(estimate_log2_keysize(newsize), False)
+        self._extend_items(cast(Iterator[_Entry[_V]], it))
 
-    def _extend(
+    def _parse_args(
         self,
         arg: MDArg[_V],
         kwargs: Mapping[str, _V],
-        name: str,
-        method: Callable[[list[tuple[str, str, _V]]], None],
-    ) -> None:
+    ) -> Iterator[Union[int, _Entry[_V]]]:
+        identity_func = self._identity
         if arg:
             if isinstance(arg, MultiDictProxy):
                 arg = arg._md
             if isinstance(arg, MultiDict):
+                yield len(arg) + len(kwargs)
                 if self._ci is not arg._ci:
-                    items = [(self._identity(k), k, v) for _, k, v in arg._items]
+                    for e in arg._keys.iter_entries():
+                        identity = identity_func(e.key)
+                        yield _Entry(hash(identity), identity, e.key, e.value)
                 else:
-                    items = arg._items
-                    if kwargs:
-                        items = items.copy()
+                    for e in arg._keys.iter_entries():
+                        yield _Entry(e.hash, e.identity, e.key, e.value)
                 if kwargs:
                     for key, value in kwargs.items():
-                        items.append((self._identity(key), key, value))
+                        identity = identity_func(key)
+                        yield _Entry(hash(identity), identity, key, value)
             else:
                 if hasattr(arg, "keys"):
                     arg = cast(SupportsKeys[_V], arg)
@@ -624,41 +824,65 @@ class MultiDict(_CSMixin, MutableMultiMapping[_V]):
                 if kwargs:
                     arg = list(arg)
                     arg.extend(list(kwargs.items()))
-                items = []
+                try:
+                    yield len(arg) + len(kwargs)  # type: ignore[arg-type]
+                except TypeError:
+                    yield 0
                 for pos, item in enumerate(arg):
                     if not len(item) == 2:
                         raise ValueError(
                             f"multidict update sequence element #{pos}"
                             f"has length {len(item)}; 2 is required"
                         )
-                    items.append((self._identity(item[0]), item[0], item[1]))
-
-            method(items)
+                    identity = identity_func(item[0])
+                    yield _Entry(hash(identity), identity, item[0], item[1])
         else:
-            method([(self._identity(key), key, value) for key, value in kwargs.items()])
+            yield len(kwargs)
+            for key, value in kwargs.items():
+                identity = identity_func(key)
+                yield _Entry(hash(identity), identity, key, value)
 
-    def _extend_items(self, items: Iterable[tuple[str, str, _V]]) -> None:
-        for identity, key, value in items:
-            self._items.append((identity, key, value))
+    def _extend_items(self, items: Iterable[_Entry[_V]]) -> None:
+        for e in items:
+            self._add_with_hash(e)
         self._incr_version()
 
     def clear(self) -> None:
         """Remove all items from MultiDict."""
-        self._items.clear()
+        self._used = 0
+        self._keys = _HtKeys.new(_HtKeys.LOG_MINSIZE, [])
         self._incr_version()
 
     # Mapping interface #
 
     def __setitem__(self, key: str, value: _V) -> None:
-        self._replace(key, value)
+        identity = self._identity(key)
+        hash_ = hash(identity)
+        found = False
+
+        for slot, idx, e in self._keys.iter_hash(hash_):
+            if e.identity == identity:  # pragma: no branch
+                if not found:
+                    e.key = key
+                    e.value = value
+                    e.hash = -1
+                    found = True
+                    self._incr_version()
+                elif e.hash != -1:  # pragma: no branch
+                    self._del_at(slot, idx)
+
+        if not found:
+            self._add_with_hash(_Entry(hash_, identity, key, value))
+        else:
+            self._keys.restore_hash(hash_)
 
     def __delitem__(self, key: str) -> None:
-        identity = self._identity(key)
-        items = self._items
         found = False
-        for i in range(len(items) - 1, -1, -1):
-            if items[i][0] == identity:
-                del items[i]
+        identity = self._identity(key)
+        hash_ = hash(identity)
+        for slot, idx, e in self._keys.iter_hash(hash_):
+            if e.identity == identity:  # pragma: no branch
+                self._del_at(slot, idx)
                 found = True
         if not found:
             raise KeyError(key)
@@ -674,9 +898,10 @@ class MultiDict(_CSMixin, MutableMultiMapping[_V]):
     def setdefault(self, key: str, default: Union[_V, None] = None) -> Union[_V, None]:  # type: ignore[misc]
         """Return value for key, set value to default if key is not present."""
         identity = self._identity(key)
-        for i, k, v in self._items:
-            if i == identity:
-                return v
+        hash_ = hash(identity)
+        for slot, idx, e in self._keys.iter_hash(hash_):
+            if e.identity == identity:  # pragma: no branch
+                return e.value
         self.add(key, default)  # type: ignore[arg-type]
         return default
 
@@ -694,10 +919,11 @@ class MultiDict(_CSMixin, MutableMultiMapping[_V]):
 
         """
         identity = self._identity(key)
-        for i in range(len(self._items)):
-            if self._items[i][0] == identity:
-                value = self._items[i][2]
-                del self._items[i]
+        hash_ = hash(identity)
+        for slot, idx, e in self._keys.iter_hash(hash_):
+            if e.identity == identity:  # pragma: no branch
+                value = e.value
+                self._del_at(slot, idx)
                 self._incr_version()
                 return value
         if default is sentinel:
@@ -725,99 +951,167 @@ class MultiDict(_CSMixin, MutableMultiMapping[_V]):
         """
         found = False
         identity = self._identity(key)
+        hash_ = hash(identity)
         ret = []
-        for i in range(len(self._items) - 1, -1, -1):
-            item = self._items[i]
-            if item[0] == identity:
-                ret.append(item[2])
-                del self._items[i]
-                self._incr_version()
+        for slot, idx, e in self._keys.iter_hash(hash_):
+            if e.identity == identity:  # pragma: no branch
                 found = True
+                ret.append(e.value)
+                self._del_at(slot, idx)
+                self._incr_version()
+
         if not found:
             if default is sentinel:
                 raise KeyError(key)
             else:
                 return default
         else:
-            ret.reverse()
             return ret
 
     def popitem(self) -> tuple[str, _V]:
         """Remove and return an arbitrary (key, value) pair."""
-        if self._items:
-            i, k, v = self._items.pop()
-            self._incr_version()
-            return self._key(k), v
-        else:
+        if self._used <= 0:
             raise KeyError("empty multidict")
 
+        pos = len(self._keys.entries) - 1
+        entry = self._keys.entries.pop()
+
+        while entry is None:
+            pos -= 1
+            entry = self._keys.entries.pop()
+
+        ret = self._key(entry.key), entry.value
+        self._keys.del_idx(entry.hash, pos)
+        self._used -= 1
+        self._incr_version()
+        return ret
+
     def update(self, arg: MDArg[_V] = None, /, **kwargs: _V) -> None:
-        """Update the dictionary from *other*, overwriting existing keys."""
-        self._extend(arg, kwargs, "update", self._update_items)
+        """Update the dictionary, overwriting existing keys."""
+        it = self._parse_args(arg, kwargs)
+        newsize = self._used + cast(int, next(it))
+        log2_size = estimate_log2_keysize(newsize)
+        if log2_size > 17:  # pragma: no cover
+            # Don't overallocate really huge keys space in update,
+            # duplicate keys could reduce the resulting anount of entries
+            log2_size = 17
+        if log2_size > self._keys.log2_size:
+            self._resize(log2_size, False)
+        try:
+            self._update_items(cast(Iterator[_Entry[_V]], it))
+        finally:
+            self._post_update()
 
-    def _update_items(self, items: list[tuple[str, str, _V]]) -> None:
-        if not items:
-            return
-        used_keys: dict[str, int] = {}
-        for identity, key, value in items:
-            start = used_keys.get(identity, 0)
-            for i in range(start, len(self._items)):
-                item = self._items[i]
-                if item[0] == identity:
-                    used_keys[identity] = i + 1
-                    self._items[i] = (identity, key, value)
-                    break
-            else:
-                self._items.append((identity, key, value))
-                used_keys[identity] = len(self._items)
+    def _update_items(self, items: Iterator[_Entry[_V]]) -> None:
+        for entry in items:
+            found = False
+            hash_ = entry.hash
+            identity = entry.identity
+            for slot, idx, e in self._keys.iter_hash(hash_):
+                if e.identity == identity:  # pragma: no branch
+                    if not found:
+                        found = True
+                        e.key = entry.key
+                        e.value = entry.value
+                        e.hash = -1
+                    else:
+                        self._del_at_for_upd(e)
+            if not found:
+                self._add_with_hash_for_upd(entry)
 
-        # drop tails
-        i = 0
-        while i < len(self._items):
-            item = self._items[i]
-            identity = item[0]
-            pos = used_keys.get(identity)
-            if pos is None:
-                i += 1
-                continue
-            if i >= pos:
-                del self._items[i]
-            else:
-                i += 1
+    def _post_update(self) -> None:
+        keys = self._keys
+        indices = keys.indices
+        entries = keys.entries
+        for slot in range(keys.nslots):
+            idx = indices[slot]
+            if idx >= 0:
+                e2 = entries[idx]
+                assert e2 is not None
+                if e2.key is None:
+                    entries[idx] = None
+                    indices[slot] = -2
+                    self._used -= 1
+                if e2.hash == -1:
+                    e2.hash = hash(e2.identity)
 
         self._incr_version()
 
-    def _replace(self, key: str, value: _V) -> None:
-        identity = self._identity(key)
-        items = self._items
+    def merge(self, arg: MDArg[_V] = None, /, **kwargs: _V) -> None:
+        """Merge into the dictionary, adding non-existing keys."""
+        it = self._parse_args(arg, kwargs)
+        newsize = self._used + cast(int, next(it))
+        log2_size = estimate_log2_keysize(newsize)
+        if log2_size > 17:  # pragma: no cover
+            # Don't overallocate really huge keys space in update,
+            # duplicate keys could reduce the resulting anount of entries
+            log2_size = 17
+        if log2_size > self._keys.log2_size:
+            self._resize(log2_size, False)
+        try:
+            self._merge_items(cast(Iterator[_Entry[_V]], it))
+        finally:
+            self._post_update()
 
-        for i in range(len(items)):
-            item = items[i]
-            if item[0] == identity:
-                items[i] = (identity, key, value)
-                # i points to last found item
-                rgt = i
-                self._incr_version()
-                break
-        else:
-            self._items.append((identity, key, value))
-            self._incr_version()
-            return
-
-        # remove all tail items
-        # Mypy bug: https://github.com/python/mypy/issues/14209
-        i = rgt + 1  # type: ignore[possibly-undefined]
-        while i < len(items):
-            item = items[i]
-            if item[0] == identity:
-                del items[i]
+    def _merge_items(self, items: Iterator[_Entry[_V]]) -> None:
+        for entry in items:
+            hash_ = entry.hash
+            identity = entry.identity
+            for slot, idx, e in self._keys.iter_hash(hash_):
+                if e.identity == identity:  # pragma: no branch
+                    break
             else:
-                i += 1
+                self._add_with_hash_for_upd(entry)
 
     def _incr_version(self) -> None:
         v = _version
         v[0] += 1
         self._version = v[0]
+
+    def _resize(self, log2_newsize: int, update: bool) -> None:
+        oldkeys = self._keys
+        newentries = self._used
+
+        if len(oldkeys.entries) == newentries:
+            entries = oldkeys.entries
+        else:
+            entries = [e for e in oldkeys.entries if e is not None]
+        newkeys: _HtKeys[_V] = _HtKeys.new(log2_newsize, entries)
+        newkeys.usable -= newentries
+        newkeys.build_indices(update)
+        self._keys = newkeys
+
+    def _add_with_hash(self, entry: _Entry[_V]) -> None:
+        if self._keys.usable <= 0:
+            self._resize((self._used * 3 | _HtKeys.MINSIZE - 1).bit_length(), False)
+        keys = self._keys
+        slot = keys.find_empty_slot(entry.hash)
+        keys.indices[slot] = len(keys.entries)
+        keys.entries.append(entry)
+        self._incr_version()
+        self._used += 1
+        keys.usable -= 1
+
+    def _add_with_hash_for_upd(self, entry: _Entry[_V]) -> None:
+        if self._keys.usable <= 0:
+            self._resize((self._used * 3 | _HtKeys.MINSIZE - 1).bit_length(), True)
+        keys = self._keys
+        slot = keys.find_empty_slot(entry.hash)
+        keys.indices[slot] = len(keys.entries)
+        entry.hash = -1
+        keys.entries.append(entry)
+        self._incr_version()
+        self._used += 1
+        keys.usable -= 1
+
+    def _del_at(self, slot: int, idx: int) -> None:
+        self._keys.entries[idx] = None
+        self._keys.indices[slot] = -2
+        self._used -= 1
+
+    def _del_at_for_upd(self, entry: _Entry[_V]) -> None:
+        entry.key = None  # type: ignore[assignment]
+        entry.value = None  # type: ignore[assignment]
 
 
 class CIMultiDict(_CIMixin, MultiDict[_V]):
@@ -827,13 +1121,14 @@ class CIMultiDict(_CIMixin, MultiDict[_V]):
 class MultiDictProxy(_CSMixin, MultiMapping[_V]):
     """Read-only proxy for MultiDict instance."""
 
+    __slots__ = ("_md",)
+
     _md: MultiDict[_V]
 
     def __init__(self, arg: Union[MultiDict[_V], "MultiDictProxy[_V]"]):
         if not isinstance(arg, (MultiDict, MultiDictProxy)):
             raise TypeError(
-                "ctor requires MultiDict or MultiDictProxy instance"
-                f", not {type(arg)}"
+                f"ctor requires MultiDict or MultiDictProxy instance, not {type(arg)}"
             )
         if isinstance(arg, MultiDictProxy):
             self._md = arg._md
@@ -919,7 +1214,7 @@ class MultiDictProxy(_CSMixin, MultiMapping[_V]):
 
     def copy(self) -> MultiDict[_V]:
         """Return a copy of itself."""
-        return MultiDict(self.items())
+        return MultiDict(self._md)
 
 
 class CIMultiDictProxy(_CIMixin, MultiDictProxy[_V]):
@@ -936,7 +1231,7 @@ class CIMultiDictProxy(_CIMixin, MultiDictProxy[_V]):
 
     def copy(self) -> CIMultiDict[_V]:
         """Return a copy of itself."""
-        return CIMultiDict(self.items())
+        return CIMultiDict(self._md)
 
 
 def getversion(md: Union[MultiDict[object], MultiDictProxy[object]]) -> int:

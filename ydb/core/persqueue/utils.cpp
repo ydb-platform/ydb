@@ -33,6 +33,10 @@ ui64 TopicPartitionReserveThroughput(const NKikimrPQ::TPQTabletConfig& config) {
     return config.GetPartitionConfig().GetWriteSpeedInBytesPerSecond();
 }
 
+bool MirroringEnabled(const NKikimrPQ::TPQTabletConfig& config) {
+    return config.GetPartitionConfig().HasMirrorFrom();
+}
+
 bool SplitMergeEnabled(const NKikimrPQ::TPQTabletConfig& config) {
     return config.has_partitionstrategy() && config.partitionstrategy().has_partitionstrategytype() && config.partitionstrategy().partitionstrategytype() != ::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_DISABLED;
 }

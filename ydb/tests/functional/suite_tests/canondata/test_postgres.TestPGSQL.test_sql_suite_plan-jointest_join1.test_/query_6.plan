@@ -63,11 +63,6 @@
                                                         "Name": "TableFullScan",
                                                         "Path": "/Root/postgres_jointest/join1.test_plan/J1_TBL",
                                                         "ReadColumns": [
-                                                            "i",
-                                                            "j",
-                                                            "t"
-                                                        ],
-                                                        "ReadRanges": [
                                                             "i (-\u221e, +\u221e)",
                                                             "j (-\u221e, +\u221e)",
                                                             "t (-\u221e, +\u221e)"
@@ -99,9 +94,6 @@
                                                                         "Name": "TableFullScan",
                                                                         "Path": "/Root/postgres_jointest/join1.test_plan/J2_TBL",
                                                                         "ReadColumns": [
-                                                                            "k"
-                                                                        ],
-                                                                        "ReadRanges": [
                                                                             "i (-\u221e, +\u221e)",
                                                                             "k (-\u221e, +\u221e)"
                                                                         ],

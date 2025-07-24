@@ -535,6 +535,7 @@ struct TStateStorageInfo : public TThrRefBase {
     TStateStorageInfo()
         : ClusterStateGeneration(0)
         , ClusterStateGuid(0)
+        , StateStorageVersion(0)
         , Hash(Max<ui64>())
     {}
 

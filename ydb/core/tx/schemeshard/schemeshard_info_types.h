@@ -1184,6 +1184,7 @@ struct TTopicInfo : TSimpleRefCount<TTopicInfo> {
     TShardIdx BalancerShardIdx = InvalidShardIdx;
     THashMap<ui32, TTopicTabletInfo::TTopicPartitionInfo*> Partitions;
     size_t ActivePartitionCount = 0;
+    THashSet<ui32> OffloadDonePartitions;
 
     TString PreSerializedPathDescription; // Cached path description
     TString PreSerializedPartitionsDescription; // Cached partition description
@@ -3758,6 +3759,116 @@ struct TSysViewInfo : TSimpleRefCount<TSysViewInfo> {
 
     ui64 AlterVersion = 0;
     NKikimrSysView::ESysViewType Type;
+};
+
+struct TIncrementalRestoreState {
+    TPathId BackupCollectionPathId;
+    ui64 OriginalOperationId;
+
+    // Sequential incremental backup processing
+    struct TIncrementalBackup {
+        TPathId BackupPathId;
+        TString BackupPath;
+        ui64 Timestamp;
+        bool Completed = false;
+
+        TIncrementalBackup(const TPathId& pathId, const TString& path, ui64 timestamp)
+            : BackupPathId(pathId), BackupPath(path), Timestamp(timestamp)
+        {}
+    };
+
+    // Table operation state for tracking DataShard completion
+    struct TTableOperationState {
+        TOperationId OperationId;
+        THashSet<TShardIdx> ExpectedShards;
+        THashSet<TShardIdx> CompletedShards;
+        THashSet<TShardIdx> FailedShards;
+
+        TTableOperationState() = default;
+        explicit TTableOperationState(const TOperationId& opId) : OperationId(opId) {}
+
+        bool AllShardsComplete() const {
+            return CompletedShards.size() + FailedShards.size() == ExpectedShards.size() && 
+                    !ExpectedShards.empty();
+        }
+
+        bool HasFailures() const {
+            return !FailedShards.empty();
+        }
+    };
+
+    TVector<TIncrementalBackup> IncrementalBackups; // Sorted by timestamp
+    ui32 CurrentIncrementalIdx = 0;
+    bool CurrentIncrementalStarted = false;
+
+    // Operation completion tracking for current incremental backup
+    THashSet<TOperationId> InProgressOperations;
+    THashSet<TOperationId> CompletedOperations;
+
+    // Table operation state tracking for DataShard completion
+    THashMap<TOperationId, TTableOperationState> TableOperations;
+
+    bool AllIncrementsProcessed() const {
+        return CurrentIncrementalIdx >= IncrementalBackups.size();
+    }
+
+    bool IsCurrentIncrementalComplete() const {
+        return CurrentIncrementalIdx < IncrementalBackups.size() && 
+                IncrementalBackups[CurrentIncrementalIdx].Completed;
+    }
+
+    bool AreAllCurrentOperationsComplete() const {
+        return InProgressOperations.empty() && !CompletedOperations.empty();
+    }
+
+    void MarkCurrentIncrementalComplete() {
+        if (CurrentIncrementalIdx < IncrementalBackups.size()) {
+            IncrementalBackups[CurrentIncrementalIdx].Completed = true;
+        }
+    }
+
+    void MoveToNextIncremental() {
+        if (CurrentIncrementalIdx < IncrementalBackups.size()) {
+            CurrentIncrementalIdx++;
+            CurrentIncrementalStarted = false;
+
+            // Reset operation tracking for next incremental
+            InProgressOperations.clear();
+            CompletedOperations.clear();
+            TableOperations.clear();
+        }
+    }
+
+    const TIncrementalBackup* GetCurrentIncremental() const {
+        if (CurrentIncrementalIdx < IncrementalBackups.size()) {
+            return &IncrementalBackups[CurrentIncrementalIdx];
+        }
+
+        return nullptr;
+    }
+
+    void AddIncrementalBackup(const TPathId& pathId, const TString& path, ui64 timestamp) {
+        IncrementalBackups.emplace_back(pathId, path, timestamp);
+
+        // Sort by timestamp to ensure chronological order
+        std::sort(IncrementalBackups.begin(), IncrementalBackups.end(), 
+                    [](const TIncrementalBackup& a, const TIncrementalBackup& b) {
+                        return a.Timestamp < b.Timestamp;
+                    });
+    }
+
+    void AddCurrentIncrementalOperation(const TOperationId& opId) {
+        InProgressOperations.insert(opId);
+    }
+
+    void MarkOperationComplete(const TOperationId& opId) {
+        InProgressOperations.erase(opId);
+        CompletedOperations.insert(opId);
+    }
+
+    bool AllCurrentIncrementalOperationsComplete() const {
+        return InProgressOperations.empty() && !CompletedOperations.empty();
+    }
 };
 
 bool ValidateTtlSettings(const NKikimrSchemeOp::TTTLSettings& ttl,

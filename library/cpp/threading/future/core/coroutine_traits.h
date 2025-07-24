@@ -3,6 +3,7 @@
 #include <library/cpp/threading/future/future.h>
 
 #include <coroutine>
+#include <utility>
 
 template <typename... Args>
 struct std::coroutine_traits<NThreading::TFuture<void>, Args...> {
@@ -45,6 +46,12 @@ struct std::coroutine_traits<NThreading::TFuture<void>, Args...> {
 template <typename T, typename... Args>
 struct std::coroutine_traits<NThreading::TFuture<T>, Args...> {
     struct promise_type {
+
+        static_assert(
+            !std::derived_from<T, std::exception>,
+            "TFuture<std::exception can not be used in coroutines"
+        );
+
         NThreading::TFuture<T> get_return_object() noexcept {
             return NThreading::TFuture<T>(State_);
         }
@@ -66,6 +73,17 @@ struct std::coroutine_traits<NThreading::TFuture<T>, Args...> {
 
         void unhandled_exception() {
             bool success = State_->TrySetException(std::current_exception(), /* deferCallbacks */ true);
+            Y_ASSERT(success && "value already set");
+        }
+
+        template <typename E>
+        requires std::derived_from<std::remove_cvref_t<E>, std::exception>
+        void return_value(E&& err) {
+            // Allow co_return std::exception instances in order to avoid stack unwinding
+            bool success = State_->TrySetException(
+                std::make_exception_ptr(std::forward<E>(err)),
+                /* deferCallbacks */ true
+            );
             Y_ASSERT(success && "value already set");
         }
 
@@ -126,23 +144,19 @@ namespace NThreading {
     template <typename T>
     using TExtractingFutureAwaitable = TFutureAwaitable<T, true>;
 
-} // namespace NThreading
+    template <typename T>
+    auto operator co_await(const NThreading::TFuture<T>& future) noexcept {
+        return NThreading::TFutureAwaitable{future};
+    }
 
-template <typename T>
-auto operator co_await(const NThreading::TFuture<T>& future) noexcept {
-    return NThreading::TFutureAwaitable{future};
-}
-
-template <typename T>
-auto operator co_await(NThreading::TFuture<T>&& future) noexcept {
-    // Not TExtractongFutureAwaitable, because TFuture works like std::shared_future.
-    // auto value = co_await GetCachedFuture();
-    // If GetCachedFuture stores a future in some cache and returns its copies,
-    // then subsequent uses of co_await will return a moved-from value.
-    return NThreading::TFutureAwaitable{std::move(future)};
-}
-
-namespace NThreading {
+    template <typename T>
+    auto operator co_await(NThreading::TFuture<T>&& future) noexcept {
+        // Not TExtractongFutureAwaitable, because TFuture works like std::shared_future.
+        // auto value = co_await GetCachedFuture();
+        // If GetCachedFuture stores a future in some cache and returns its copies,
+        // then subsequent uses of co_await will return a moved-from value.
+        return NThreading::TFutureAwaitable{std::move(future)};
+    }
 
     template <typename T>
     auto AsAwaitable(const NThreading::TFuture<T>& fut) noexcept {

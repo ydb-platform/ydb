@@ -2,6 +2,7 @@ syntax = "proto3";
 
 package NYql.NConnector.NApi;
 
+import "ydb/library/yql/providers/generic/connector/api/service/protos/error.proto";
 import "ydb/public/api/protos/ydb_value.proto";
 import "ydb/public/api/protos/ydb_status_codes.proto";
 import "ydb/public/api/protos/ydb_issue_message.proto";
@@ -43,7 +44,7 @@ message TListTablesResponse {
 message TDescribeTableRequest {
     // Data source instance to connect
     NYql.TGenericDataSourceInstance data_source_instance = 1;
-    // Table name to describe. 
+    // Table name to describe.
     // Should be equivalent to the name in TFrom filled in TListSplitsRequest and TReadSplitsRequest.
     string table = 2;
     // Rules for type mapping
@@ -247,7 +248,7 @@ message TReadSplitsRequest {
         // If Connector cannot push down the predicate to the data source completely
         // (due to the lack of data type support, for example), it doesn't apply filter at all
         // and returns the full result of `SELECT columns FROM table` (no WHERE clause).
-        // It's YDB's duty to filter the output on its own side. 
+        // It's YDB's duty to filter the output on its own side.
         FILTERING_OPTIONAL = 1;
         // If Connector cannot push down the predicate to the data source completely,
         // it terminates the request and returns an error.
@@ -255,7 +256,7 @@ message TReadSplitsRequest {
     }
 
     // Determines various modes of server behavior in the context of predicate pushdown.
-    // If not set, the default value is `FILTERING_OPTIONAL`. 
+    // If not set, the default value is `FILTERING_OPTIONAL`.
     EFiltering filtering = 7;
 
     reserved 5;
@@ -460,8 +461,8 @@ message TPredicate {
             G = 6;  // "$column > value"
             IND = 7;// "$column IS NOT DISTINCT value"
             ID = 8; // "$column IS DISTINCT value"
-            STARTS_WITH = 9; 
-            ENDS_WITH = 10; 
+            STARTS_WITH = 9;
+            ENDS_WITH = 10;
             CONTAINS = 11;
         }
 
@@ -490,19 +491,4 @@ message TPredicate {
         TIf if = 11;
         TRegexp regexp = 12;
     }
-}
-
-// ---------- Utils ----------
-
-// Special type to describe the result of any operation
-message TError {
-    // High-level code
-    Ydb.StatusIds.StatusCode status = 1;
-
-    // Error message
-    string message = 2;
-
-    // Detailed explanation of a problem;
-    // must be empty if status == SUCCESS
-    repeated Ydb.Issue.IssueMessage issues = 3;
 }

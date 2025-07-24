@@ -2,6 +2,7 @@
 
 #include <format>
 #include <ydb/core/kqp/counters/kqp_counters.h>
+#include <ydb/core/tx/schemeshard/schemeshard_impl.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 
 #include <library/cpp/json/json_reader.h>
@@ -312,6 +313,8 @@ Y_UNIT_TEST_SUITE(KqpCost) {
 
         kikimr.GetTestServer().GetRuntime()->GetAppData().FeatureFlags.SetEnableVectorIndex(true);
         kikimr.GetTestServer().GetRuntime()->GetAppData().FeatureFlags.SetEnableAccessToIndexImplTables(true);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_INFO);
+        NSchemeShard::gVectorIndexSeed = 1337;
 
         { // 1. CREATE TABLE
             auto result = session.ExecuteSchemeQuery(R"(
@@ -382,6 +385,19 @@ Y_UNIT_TEST_SUITE(KqpCost) {
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
         }
 
+        auto debugPringTable = [&](const TString& name) {
+            auto query = Q_(Sprintf(R"(
+                SELECT * FROM `%s`
+            )", name.c_str()));
+
+            auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx(), GetDataQuerySettings()).ExtractValueSync();
+        
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
+
+            Cerr << name << ":" << Endl;
+            Cerr << NYdb::FormatResultSetYson(result.GetResultSet(0)) << Endl;
+        };
+
         auto checkSelect = [&](auto query, TMap<TString, ui64> expectedReadsByTable) {
             auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx(), GetDataQuerySettings()).ExtractValueSync();
         
@@ -390,10 +406,14 @@ Y_UNIT_TEST_SUITE(KqpCost) {
             auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
 
             TMap<TString, ui64> readsByTable;
-            for(const auto& queryPhase : stats.query_phases()) {
+            for (const auto& queryPhase : stats.query_phases()) {
                 for(const auto& tableAccess: queryPhase.table_access()) {
                     readsByTable[tableAccess.name()] += tableAccess.reads().rows();
                 }
+            }
+
+            for (const auto& kvp : readsByTable) {
+                debugPringTable(kvp.first);
             }
 
             UNIT_ASSERT_VALUES_EQUAL_C(expectedReadsByTable, readsByTable, query);
@@ -450,8 +470,8 @@ Y_UNIT_TEST_SUITE(KqpCost) {
                     LIMIT 10;
             )"), {
                 {"/Root/Vectors/vector_idx/indexImplLevelTable", 10},
-                {"/Root/Vectors/vector_idx/indexImplPostingTable", 32},
-                {"/Root/Vectors", 32}
+                {"/Root/Vectors/vector_idx/indexImplPostingTable", 24},
+                {"/Root/Vectors", 24}
             });
         }
 
@@ -485,7 +505,7 @@ Y_UNIT_TEST_SUITE(KqpCost) {
                     LIMIT 10;
             )"), {
                 {"/Root/Vectors/vector_idx_covered/indexImplLevelTable", 10},
-                {"/Root/Vectors/vector_idx_covered/indexImplPostingTable", 32},
+                {"/Root/Vectors/vector_idx_covered/indexImplPostingTable", 24},
             });
         }
 
@@ -499,8 +519,8 @@ Y_UNIT_TEST_SUITE(KqpCost) {
             )"), {
                 {"/Root/Vectors/vector_idx_prefixed/indexImplPrefixTable", 1},
                 {"/Root/Vectors/vector_idx_prefixed/indexImplLevelTable", 4},
-                {"/Root/Vectors/vector_idx_prefixed/indexImplPostingTable", 2}, // about rows / 10 / clusters^levels = 100 / 10 / 2^3 = 1.25
-                {"/Root/Vectors", 2} // same as posting
+                {"/Root/Vectors/vector_idx_prefixed/indexImplPostingTable", 4}, // about rows / 10 / clusters^levels = 100 / 10 / 2^2 = 2.5
+                {"/Root/Vectors", 4} // same as posting
             });
         }
     }

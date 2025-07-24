@@ -114,7 +114,6 @@ protected:
 template <typename TClient, typename TOperation, typename TAsyncStatusType = TFunctionResult<TOperation>>
 class TRetryWithSession : public TRetryContext<TClient, TAsyncStatusType> {
     using TRetryContextAsync = TRetryContext<TClient, TAsyncStatusType>;
-    using TPtr = typename TRetryContextAsync::TPtr;
     using TStatusType = typename TRetryContextAsync::TStatusType;
     using TSession = typename TClient::TSession;
     using TCreateSessionSettings = typename TClient::TCreateSessionSettings;
@@ -132,7 +131,7 @@ public:
     {}
 
     void Retry() override {
-        TPtr self(this);
+        TIntrusivePtr<TRetryWithSession> self(this);
         if (!Session_) {
             auto settings = TCreateSessionSettings().ClientTimeout(this->Settings_.GetSessionClientTimeout_);
             this->Client_.GetSession(settings).Subscribe(
@@ -143,9 +142,8 @@ public:
                             return TRetryContextAsync::HandleStatusAsync(self, TStatusType(TStatus(result)));
                         }
 
-                        auto* myself = dynamic_cast<TRetryWithSession*>(self.Get());
-                        myself->Session_ = result.GetSession();
-                        myself->DoRunOperation(self);
+                        self->Session_ = result.GetSession();
+                        self->DoRunOperation(self);
                     } catch (...) {
                         return TRetryContextAsync::HandleExceptionAsync(self, std::current_exception());
                     }

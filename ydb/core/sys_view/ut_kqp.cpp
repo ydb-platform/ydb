@@ -3607,27 +3607,37 @@ ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = UPSERT_OPTIONS,
         TTestEnv env({ .EnableRealSystemViewPaths = EnableRealSystemViewPaths });
         env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_DEBUG);
 
-        // Make AdministrationAllowedSIDs non-empty to deny anonymous user cluster admin privilege.
-        // All requests here are made anonymously, effectively making all requests run with admin rights.
+        // Make AdministrationAllowedSIDs non-empty to deny any user cluster admin privilege.
         // That can cause side effects, especially when dealing with system reserved names.
         // Using an authorized non-admin user helps avoid these side effects.
-        env.GetServer().GetRuntime()->GetAppData().AdministrationAllowedSIDs.push_back("thou-shalt-not-pass");
+        env.GetServer().GetRuntime()->GetAppData().AdministrationAllowedSIDs.push_back("root@builtin");
 
-        TTableClient client(env.GetDriver());
-        auto session = client.CreateSession().GetValueSync().GetSession();
+        TTableClient adminClient(env.GetDriver(), TClientSettings().AuthToken("root@builtin"));
+        auto adminSession = adminClient.CreateSession().GetValueSync().GetSession();
 
+        TTableClient userClient(env.GetDriver(), TClientSettings().AuthToken("user@builtin"));
+        auto userSession = userClient.CreateSession().GetValueSync().GetSession();
+
+        {
+            auto query = TStringBuilder() << R"(
+                --!syntax_v1
+                GRANT 'ydb.generic.full' ON `/Root` TO `user@builtin`;
+                )";
+            auto result = adminSession.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
         {
             auto desc = TTableBuilder()
                 .AddNullableColumn("Column1", EPrimitiveType::Uint64)
                 .SetPrimaryKeyColumn("Column1")
                 .Build();
 
-            auto result = session.CreateTable("/Root/.sys/partition_stats", std::move(desc)).GetValueSync();
+            auto result = userSession.CreateTable("/Root/.sys/partition_stats", std::move(desc)).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SCHEME_ERROR);
             result.GetIssues().PrintTo(Cerr);
         }
         {
-            auto result = session.CopyTable("/Root/.sys/partition_stats", "/Root/Table0").GetValueSync();
+            auto result = userSession.CopyTable("/Root/.sys/partition_stats", "/Root/Table0").GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SCHEME_ERROR);
             result.GetIssues().PrintTo(Cerr);
         }
@@ -3635,24 +3645,24 @@ ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = UPSERT_OPTIONS,
             auto settings = TAlterTableSettings()
                 .AppendDropColumns("OwnerId");
 
-            auto result = session.AlterTable("/Root/.sys/partition_stats", settings).GetValueSync();
+            auto result = userSession.AlterTable("/Root/.sys/partition_stats", settings).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SCHEME_ERROR);
             result.GetIssues().PrintTo(Cerr);
         }
         {
-            auto result = session.DropTable("/Root/.sys/partition_stats").GetValueSync();
+            auto result = userSession.DropTable("/Root/.sys/partition_stats").GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SCHEME_ERROR);
             result.GetIssues().PrintTo(Cerr);
         }
         {
-            auto result = session.ExecuteSchemeQuery(R"(
+            auto result = userSession.ExecuteSchemeQuery(R"(
                 DROP TABLE `/Root/.sys/partition_stats`;
             )").GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SCHEME_ERROR);
             result.GetIssues().PrintTo(Cerr);
         }
         {
-            auto result = session.ReadTable("/Root/.sys/partition_stats").GetValueSync();
+            auto result = userSession.ReadTable("/Root/.sys/partition_stats").GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
 
             TReadTableResultPart streamPart = result.ReadNext().GetValueSync();
@@ -3662,33 +3672,38 @@ ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = UPSERT_OPTIONS,
         {
             TValueBuilder rows;
             rows.BeginList().EndList();
-            auto result = client.BulkUpsert("/Root/.sys/partition_stats", rows.Build()).GetValueSync();
+            auto result = userClient.BulkUpsert("/Root/.sys/partition_stats", rows.Build()).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SCHEME_ERROR);
             result.GetIssues().PrintTo(Cerr);
         }
 
-        TSchemeClient schemeClient(env.GetDriver());
+        auto driverConfig = env.GetDriver().GetConfig();
+        driverConfig.SetAuthToken("user@builtin");
+        const auto driver = TDriver(driverConfig);
+        auto userSchemeClient = TSchemeClient(driver);
         {
-            auto result = schemeClient.MakeDirectory("/Root/.sys").GetValueSync();
+            auto result = userSchemeClient.MakeDirectory("/Root/.sys").GetValueSync();
             if (EnableRealSystemViewPaths) {
                 UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+                UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(),
+                    "path exist", result.GetIssues().ToString());
             } else {
                 UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SCHEME_ERROR);
             }
             result.GetIssues().PrintTo(Cerr);
         }
         {
-            auto result = schemeClient.MakeDirectory("/Root/.sys/partition_stats").GetValueSync();
+            auto result = userSchemeClient.MakeDirectory("/Root/.sys/partition_stats").GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SCHEME_ERROR);
             result.GetIssues().PrintTo(Cerr);
         }
         {
-            auto result = schemeClient.RemoveDirectory("/Root/.sys").GetValueSync();
+            auto result = userSchemeClient.RemoveDirectory("/Root/.sys").GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SCHEME_ERROR);
             result.GetIssues().PrintTo(Cerr);
         }
         {
-            auto result = schemeClient.RemoveDirectory("/Root/.sys/partition_stats").GetValueSync();
+            auto result = userSchemeClient.RemoveDirectory("/Root/.sys/partition_stats").GetValueSync();
             if (EnableRealSystemViewPaths) {
                 UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
             } else {
@@ -3698,7 +3713,7 @@ ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = UPSERT_OPTIONS,
         }
         {
             TModifyPermissionsSettings settings;
-            auto result = schemeClient.ModifyPermissions("/Root/.sys/partition_stats", settings).GetValueSync();
+            auto result = userSchemeClient.ModifyPermissions("/Root/.sys/partition_stats", settings).GetValueSync();
             if (EnableRealSystemViewPaths) {
                 UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
             } else {

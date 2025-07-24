@@ -8,6 +8,8 @@
 #include <yt/yt/client/api/journal_writer.h>
 #include <yt/yt/client/api/transaction.h>
 
+#include <yt/yt/client/bundle_controller_client/bundle_controller_settings.h>
+
 #include <yt/yt/client/chaos_client/replication_card_cache.h>
 
 #include <yt/yt/client/scheduler/spec_patch.h>

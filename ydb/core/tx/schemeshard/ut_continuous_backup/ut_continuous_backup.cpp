@@ -30,18 +30,19 @@ Y_UNIT_TEST_SUITE(TContinuousBackupTests) {
         TestCreateContinuousBackup(runtime, ++txId, "/MyRoot", R"(
             TableName: "Table"
             ContinuousBackupDescription {
+                StreamName: "0_continuousBackupImpl"
             }
         )");
         env.TestWaitNotification(runtime, txId);
 
-        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/continuousBackupImpl"), {
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/0_continuousBackupImpl"), {
             NLs::PathExist,
             NLs::StreamMode(NKikimrSchemeOp::ECdcStreamModeUpdate),
             NLs::StreamFormat(NKikimrSchemeOp::ECdcStreamFormatProto),
             NLs::StreamState(NKikimrSchemeOp::ECdcStreamStateReady),
             NLs::StreamVirtualTimestamps(false),
         });
-        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/continuousBackupImpl/streamImpl"), {NLs::PathExist});
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/0_continuousBackupImpl/streamImpl"), {NLs::PathExist});
 
         TestAlterContinuousBackup(runtime, ++txId, "/MyRoot", R"(
             TableName: "Table"
@@ -49,7 +50,7 @@ Y_UNIT_TEST_SUITE(TContinuousBackupTests) {
         )");
         env.TestWaitNotification(runtime, txId);
 
-        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/continuousBackupImpl"), {
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/0_continuousBackupImpl"), {
             NLs::PathExist,
             NLs::StreamMode(NKikimrSchemeOp::ECdcStreamModeUpdate),
             NLs::StreamFormat(NKikimrSchemeOp::ECdcStreamFormatProto),
@@ -61,8 +62,8 @@ Y_UNIT_TEST_SUITE(TContinuousBackupTests) {
         )");
         env.TestWaitNotification(runtime, txId);
 
-        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/continuousBackupImpl"), {NLs::PathNotExist});
-        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/continuousBackupImpl/streamImpl"), {NLs::PathNotExist});
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/0_continuousBackupImpl"), {NLs::PathNotExist});
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/0_continuousBackupImpl/streamImpl"), {NLs::PathNotExist});
     }
 
     Y_UNIT_TEST(TakeIncrementalBackup) {
@@ -81,18 +82,19 @@ Y_UNIT_TEST_SUITE(TContinuousBackupTests) {
         TestCreateContinuousBackup(runtime, ++txId, "/MyRoot", R"(
             TableName: "Table"
             ContinuousBackupDescription {
+                StreamName: "0_continuousBackupImpl"
             }
         )");
         env.TestWaitNotification(runtime, txId);
 
-        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/continuousBackupImpl"), {
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/0_continuousBackupImpl"), {
             NLs::PathExist,
             NLs::StreamMode(NKikimrSchemeOp::ECdcStreamModeUpdate),
             NLs::StreamFormat(NKikimrSchemeOp::ECdcStreamFormatProto),
             NLs::StreamState(NKikimrSchemeOp::ECdcStreamStateReady),
             NLs::StreamVirtualTimestamps(false),
         });
-        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/continuousBackupImpl/streamImpl"), {
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/0_continuousBackupImpl/streamImpl"), {
             NLs::PathExist,
             NLs::HasNotOffloadConfig,
         });
@@ -101,6 +103,7 @@ Y_UNIT_TEST_SUITE(TContinuousBackupTests) {
             TableName: "Table"
             TakeIncrementalBackup {
                 DstPath: "IncrBackupImpl"
+                DstStreamPath: "1_continuousBackupImpl"
             }
         )");
         env.TestWaitNotification(runtime, txId);
@@ -109,7 +112,7 @@ Y_UNIT_TEST_SUITE(TContinuousBackupTests) {
         auto ownerId = pathInfo.GetPathOwnerId();
         auto localId = pathInfo.GetPathId();
 
-        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/continuousBackupImpl/streamImpl"), {
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/0_continuousBackupImpl/streamImpl"), {
             NLs::PathExist,
             NLs::HasOffloadConfig(Sprintf(R"(
                     IncrementalBackup: {
@@ -121,6 +124,23 @@ Y_UNIT_TEST_SUITE(TContinuousBackupTests) {
                     }
                 )", ownerId, localId)),
         });
+
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/1_continuousBackupImpl"), {
+            NLs::PathExist,
+            NLs::StreamMode(NKikimrSchemeOp::ECdcStreamModeUpdate),
+            NLs::StreamFormat(NKikimrSchemeOp::ECdcStreamFormatProto),
+            NLs::StreamState(NKikimrSchemeOp::ECdcStreamStateReady),
+            NLs::StreamVirtualTimestamps(false),
+        });
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/1_continuousBackupImpl/streamImpl"), {
+            NLs::PathExist,
+            NLs::HasNotOffloadConfig,
+        });
+
+        // Check that stream is deleted after offloading
+        env.SimulateSleep(runtime, TDuration::Seconds(5));
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/0_continuousBackupImpl"), {NLs::PathNotExist});
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/0_continuousBackupImpl/streamImpl"), {NLs::PathNotExist});
 
         TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/IncrBackupImpl"), {
             NLs::PathExist,

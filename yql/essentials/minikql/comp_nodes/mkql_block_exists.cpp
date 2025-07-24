@@ -55,7 +55,7 @@ IComputationNode* WrapBlockExists(TCallable& callable, const TComputationNodeFac
     TComputationNodePtrVector argsNodes = { compute };
     TVector<TType*> argsTypes = { callable.GetInput(0).GetStaticType() };
     auto kernel = MakeBlockExistsKernel(argsTypes, callable.GetType()->GetReturnType());
-    return new TBlockFuncNode(ctx.Mutables, "Exists", std::move(argsNodes), argsTypes, *kernel, kernel);
+    return new TBlockFuncNode(ctx.Mutables, ToDatumValidateMode(ctx.ValidateMode), "Exists", std::move(argsNodes), argsTypes, callable.GetType()->GetReturnType(), *kernel, kernel);
 }
 
 } // namespace NMiniKQL

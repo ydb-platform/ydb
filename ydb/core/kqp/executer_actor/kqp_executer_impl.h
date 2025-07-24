@@ -526,11 +526,6 @@ protected:
         auto& state = ev->Get()->Record;
         ui64 taskId = state.GetTaskId();
 
-        ParticipantNodes.emplace(computeActor.NodeId());
-        if (TxManager) {
-            TxManager->AddParticipantNode(computeActor.NodeId());
-        }
-
         bool populateChannels = HandleComputeStats(ev);
 
         switch (state.GetState()) {
@@ -1849,7 +1844,6 @@ protected:
                             Y_ENSURE(hashByShardId.contains(readInfo.ShardId));
                             (*columnShardHashV1Params.TaskIndexByHash)[hashByShardId[readInfo.ShardId]] = stageInternalTaskId;
                         }
-
                     }
                 }
 
@@ -2311,7 +2305,7 @@ protected:
 
     ui32 StatementResultIndex;
 
-    // Track which nodes has been involved during execution
+    // Track which nodes (by shards) have been involved during execution
     THashSet<ui32> ParticipantNodes;
 
     bool AlreadyReplied = false;

@@ -6,7 +6,7 @@ Released on July 23, 2025. To update to version **2.24.0**, select the [Download
 
 ### Features
 
-* Added the ability for the `{{ ydb-cli }} workload tpch` and `{{ ydb-cli }} workload tpcds` [commands](./reference/ydb-cli/commands/workload/index.md) to use a fractional value for the `--scale` option, specifying a percentage of full benchmark's data size and workload.
+* Added the ability for the `{{ ydb-cli }} workload tpch` and `{{ ydb-cli }} workload tpcds` [commands](./reference/ydb-cli/commands/workload/index.md) to use a fractional value for the `--scale` option, specifying a percentage of the full benchmark's data size and workload.
 * Added the `{{ ydb-cli }} workload tpcc check` command to check TPC-C data consistency.
 
 ### Improvements

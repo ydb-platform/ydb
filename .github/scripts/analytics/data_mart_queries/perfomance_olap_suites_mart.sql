@@ -78,6 +78,7 @@ SELECT
     s.Version AS Version,
     s.Report AS Report,
     s.YdbSumMeans AS YdbSumMeans,
+    s.SumImportTime AS SumImportTime,
     s.SumImportWithCompactionTime AS SumImportWithCompactionTime,
     s.SumCompactedBytes AS SumCompactedBytes,
     s.SumWrittenBytes AS SumWrittenBytes,

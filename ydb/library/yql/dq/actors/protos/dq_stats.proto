@@ -407,6 +407,7 @@ message TDqStageStats {
     uint32 TotalTasksCount = 5;
     uint32 FailedTasksCount = 6;
     uint32 FinishedTasksCount = 50;
+    repeated string Introspections = 52; // the human-readable reasons for choosing this exact number of tasks
 
     TDqStatsAggr CpuTimeUs = 8;
     TDqStatsAggr SourceCpuTimeUs = 25;

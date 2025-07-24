@@ -150,7 +150,7 @@ private:
     TOrderedObjects<TConstructor> Constructors;
 
     virtual TString DoDebugString() const override {
-        return "{" + ::ToString(Constructors.GetSize()) + "}";
+        return "{CC:" + ::ToString(Constructors.GetSize()) + "}";
     }
 
     virtual TString GetClassName() const override {
@@ -169,12 +169,13 @@ private:
         return Constructors.IsEmpty();
     }
 
-    virtual std::shared_ptr<NReader::NCommon::IDataSource> DoExtractNextImpl(
-        const std::shared_ptr<NReader::NCommon::TSpecialReadContext>& context) = 0;
+    virtual std::shared_ptr<IDataSource> DoExtractNextImpl(const std::shared_ptr<TSpecialReadContext>& context) = 0;
 
-    virtual std::shared_ptr<NReader::NCommon::IDataSource> DoExtractNext(
-        const std::shared_ptr<NReader::NCommon::TSpecialReadContext>& context, const ui32 inFlightCurrentLimit) override final {
+    virtual std::shared_ptr<IDataSource> DoExtractNext(
+        const std::shared_ptr<TSpecialReadContext>& context, const ui32 inFlightCurrentLimit) override final {
         if (!Accessors.GetSize() && Accessors.HasRequest()) {
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "SKIP_NO_ACCESSORS")("has_request", Accessors.HasRequest())(
+                "in_flight", inFlightCurrentLimit);
             return nullptr;
         }
         if (!Accessors.HasRequest() && (Accessors.GetSize() < Constructors.GetSize() && Accessors.GetSize() < inFlightCurrentLimit)) {
@@ -187,11 +188,15 @@ private:
                     break;
                 }
             }
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "START_FETCH_ACCESSORS")("acc_count", Accessors.GetSize())(
+                "add", request->GetSize())("in_flight", inFlightCurrentLimit);
             request->SetColumnIds(context->GetAllUsageColumns()->GetColumnIds());
             Accessors.StartRequest(std::move(request), context);
         }
         if (!Accessors.GetSize()) {
             AFL_VERIFY(Accessors.HasRequest());
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "SKIP_NO_ACCESSORS")("has_request", Accessors.HasRequest())(
+                "in_flight", inFlightCurrentLimit);
             return nullptr;
         }
         return DoExtractNextImpl(context);

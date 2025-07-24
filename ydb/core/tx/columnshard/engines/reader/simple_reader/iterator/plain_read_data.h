@@ -25,8 +25,10 @@ protected:
 
     virtual TString DoDebugString(const bool verbose) const override {
         TStringBuilder sb;
-        sb << SpecialReadContext->DebugString() << ";";
-        sb << Scanner->DebugString() << ";";
+        sb << "CTX:{" << SpecialReadContext->DebugString() << "};";
+        sb << "SCANNER:{" << Scanner->DebugString() << "};";
+        sb << "SF:" << Scanner->IsFinished() << ";";
+        sb << "PR:" << PartialResults.size() << ";";
         if (verbose) {
             sb << "intervals_schema=" << Scanner->DebugString();
         }

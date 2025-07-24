@@ -12,8 +12,8 @@ std::shared_ptr<NCommon::IDataSource> TScanWithLimitCollection::DoExtractNext() 
             }
         }
     }
-    std::shared_ptr<NCommon::IDataSource> localNext;
     {
+        std::shared_ptr<NCommon::IDataSource> localNext;
         if (!SourcesConstructor->IsFinished()) {
             localNext = SourcesConstructor->ExtractNext(Context, InFlightLimit);
             if (!localNext) {
@@ -25,8 +25,8 @@ std::shared_ptr<NCommon::IDataSource> TScanWithLimitCollection::DoExtractNext() 
         }
         auto result = std::move(NextSource);
         NextSource = std::move(localNext);
-        AFL_VERIFY(GetSourcesInFlightCount() == FetchingInFlightSources.size())("in_flight", GetSourcesInFlightCount())(
-                                                  "fetching", FetchingInFlightSources.size())("aborted", Aborted)("cleared", Cleared);
+        AFL_VERIFY(Cleared || Aborted || GetSourcesInFlightCount() == FetchingInFlightSources.size())("in_flight", GetSourcesInFlightCount())(
+                                                  "fetching", FetchingInFlightSources.size());
         AFL_VERIFY(FetchingInFlightSources.emplace(result->GetSourceId()).second);
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "DoExtractNext")("source_id", result->GetSourceId());
         return result;
@@ -39,9 +39,9 @@ void TScanWithLimitCollection::DoOnSourceFinished(const std::shared_ptr<NCommon:
     if (!source->GetAs<IDataSource>()->GetResultRecordsCount() && InFlightLimit < GetMaxInFlight()) {
         InFlightLimit = 2 * InFlightLimit;
     }
-    AFL_VERIFY(GetSourcesInFlightCount() == FetchingInFlightSources.size())("in_flight", GetSourcesInFlightCount())(
-                                              "fetching", FetchingInFlightSources.size())("aborted", Aborted)("cleared", Cleared);
-    AFL_VERIFY(Cleared || Aborted || FetchingInFlightSources.erase(source->GetSourceId()))("source_id", source->GetSourceId());
+    AFL_VERIFY(Cleared || Aborted || GetSourcesInFlightCount() == FetchingInFlightSources.size())("in_flight", GetSourcesInFlightCount())(
+                                              "fetching", FetchingInFlightSources.size());
+    AFL_VERIFY(FetchingInFlightSources.erase(source->GetSourceId()) || Cleared || Aborted)("source_id", source->GetSourceId());
 }
 
 TScanWithLimitCollection::TScanWithLimitCollection(

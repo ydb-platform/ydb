@@ -57,9 +57,13 @@ void ISyncPoint::OnSourcePrepared(std::shared_ptr<NCommon::IDataSource>&& source
 
 TString ISyncPoint::DebugString() const {
     TStringBuilder sb;
-    sb << "{" << PointName << ";" << PointIndex << ";";
+    sb << "{" << PointName << ";" << PointIndex << ";" << IsFinished() << ";";
+    if (SourcesSequentially.size()) {
+        sb << "SRCS:[";
     for (auto&& i : SourcesSequentially) {
         sb << i->GetSourceId() << ",";
+    }
+        sb << "];";
     }
     sb << "}";
     return sb;

@@ -86,7 +86,6 @@ public:
     }
 
     void AddSource(std::shared_ptr<NCommon::IDataSource>&& source);
-    void OnSourceFinished(const bool force);
 
     void OnSourcePrepared(std::shared_ptr<NCommon::IDataSource>&& sourceInput, TPlainReadData& reader);
 };

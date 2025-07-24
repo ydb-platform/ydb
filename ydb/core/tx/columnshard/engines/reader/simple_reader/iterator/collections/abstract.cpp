@@ -19,6 +19,7 @@ ISourcesCollection::ISourcesCollection(
 TString ISourcesCollection::DebugString() const {
     TStringBuilder sb;
     sb << "{";
+    sb << "finished:{" << IsFinished() << "};";
     sb << "internal:{" << DoDebugString() << "};";
     sb << "constructor:{" << SourcesConstructor->DebugString() << "};";
     sb << "in_fly=" << SourcesInFlightCount.Val() << ";";

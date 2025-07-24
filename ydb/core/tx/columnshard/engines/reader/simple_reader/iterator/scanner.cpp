@@ -48,6 +48,8 @@ TScanHead::TScanHead(std::unique_ptr<NCommon::ISourcesConstructor>&& sourcesCons
 }
 
 TConclusion<bool> TScanHead::BuildNextInterval() {
+    const NActors::TLogContextGuard gLogging = NActors::TLogContextBuilder::Build()("tablet_id", SourcesCollection->GetTabletId());
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "build_next_interval");
     bool changed = false;
     while (SourcesCollection->HasData() && SourcesCollection->CheckInFlightLimits()) {
         auto source = SourcesCollection->ExtractNext();

@@ -41,6 +41,8 @@ struct TEvents {
             : Consumer(consumer)
             , Addresses(std::move(addresses))
             , Callback(std::move(callback)) {
+            AFL_VERIFY(Addresses.size());
+            AFL_VERIFY(Callback);
         }
 
         THashSet<TAddress> ExtractAddresses() {

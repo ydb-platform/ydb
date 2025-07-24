@@ -32,7 +32,7 @@ private:
     };
 
     virtual bool DoHasData() const override {
-        return !SourcesConstructor->IsFinished();
+        return !SourcesConstructor->IsFinished() || !!NextSource;
     }
     std::shared_ptr<NCommon::IDataSource> NextSource;
     ui64 Limit = 0;
@@ -44,7 +44,8 @@ private:
 
     void DrainToLimit();
 
-    virtual std::shared_ptr<IScanCursor> DoBuildCursor(const std::shared_ptr<NCommon::IDataSource>& source, const ui32 readyRecords) const override {
+    virtual std::shared_ptr<IScanCursor> DoBuildCursor(
+        const std::shared_ptr<NCommon::IDataSource>& source, const ui32 readyRecords) const override {
         return std::make_shared<TSimpleScanCursor>(nullptr, source->GetSourceId(), readyRecords);
     }
     virtual void DoClear() override {
@@ -58,6 +59,23 @@ private:
         SourcesConstructor->Abort();
         FetchingInFlightSources.clear();
         NextSource.reset();
+    }
+    virtual TString DoDebugString() const override {
+        TStringBuilder sb;
+        sb << "{";
+        sb << "N:" << (NextSource ? true : false) << ";";
+        if (Cleared) {
+            sb << "C:" << Cleared << ";";
+        }
+        if (Aborted) {
+            sb << "A:" << Aborted << ";";
+        }
+        sb << "SCF:" << SourcesConstructor->IsFinished() << ";";
+        sb << "FFS:" << FetchingInFlightSources.size() << ";";
+        sb << "IN_FLY:" << GetSourcesInFlightCount() << ";";
+        sb << "HAS_DATA:" << HasData() << ";";
+        sb << "}";
+        return sb;
     }
     virtual bool DoIsFinished() const override {
         return !NextSource && SourcesConstructor->IsFinished() && FetchingInFlightSources.empty();

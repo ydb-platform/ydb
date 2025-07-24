@@ -75,6 +75,10 @@ See the command description:
 | `--threads`                  | A number of threads loading the TPC-C data to the database.    | 10            |
 | `--no-tui`                   | Disable TUI, which is enabled by default in interactive mode.  |               |
 
+The optimal number of loading threads depends on your YDB cluster’s size and configuration. As a rule of thumb, for clusters with several hundred CPU cores, starting with around 50 loading threads is reasonable. For larger clusters, you can scale this number further.
+
+However, on the client side, it is recommended to keep the number of loading threads to no more than 50–75% of the available CPU cores.
+
 ## Run the load test { #run }
 
 Run the load:
@@ -99,10 +103,14 @@ See the command description:
 | `--warehouses` or `-w`       | A number of TPC-C warehouses.                                  | 10            |
 | `--warmup`                   | Warmup time. Example: 10s, 5m, 1h.                             | 30m           |
 | `--time` or `-t`             | Execution time. Example: 10s, 5m, 1h.                          | 2h            |
-| `--max-sessions` or `-m`     | A soft limit on the number of DB sessions.                         | 100           |
+| `--max-sessions` or `-m`     | A soft limit on the number of DB sessions.                     | 100           |
 | `--threads`                  | A number of threads executing queries                          | auto          |
 | `--format` or `-f`           | Output format: 'Pretty', 'Json'                                | Pretty        |
 | `--no-tui`                   | Disable TUI, which is enabled by default in interactive mode.  |               |
+
+The optimal number of sessions depends on your YDB cluster’s size and configuration. As a rule of thumb, a good starting point is to multiply the total number of CPU cores allocated to YDB compute (dynnodes) by 5–10.
+
+We recommend starting with a multiplier of 5. If YDB is underutilized during the benchmark run, consider increasing the number of sessions.
 
 ### Results
 

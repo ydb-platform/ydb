@@ -17,7 +17,7 @@ $filter_lambda = ($search, $doc_ids) -> {
 };
 
 $udaf = AggregationFactory("UDAF",
-    ($item, $parent) -> (Roaring::FromUint32List(AsList(UNWRAP(CAST($item AS Uint32))), $parent)),
+    ($item, $parent) -> (Roaring::FromUint32List(AsList(UNWRAP(CAST($item AS Uint32))))),
     ($state, $item, $_) -> (Roaring::Add($state, UNWRAP(CAST($item AS Uint32)))),
     ($state1, $state2) -> (Roaring::Or($state1, $state2)),
     ($state) -> (Roaring::Uint32List($state)),

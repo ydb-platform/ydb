@@ -13,7 +13,6 @@ and timeout (by default, the maximum response time from healthcheck). Documentat
 * 16076:Added automatic cleanup of temporary tables and directories created during S3 export operations. Previously, users had to manually remove temporary directories and tables that were created as part of the export pipeline. [#16076](https://github.com/ydb-platform/ydb/pull/16076) ([stanislav_shchetinin](https://github.com/stanislav-shchetinin))
 * 20272:Enabled the following feature flags by default: EnableTopicAutopartitioningForCDC, EnableTopicAutopartitioningForReplication, EnableTopicTransfer. [#20272](https://github.com/ydb-platform/ydb/pull/20272) ([Nikolay Shestakov](https://github.com/nshestakov))
 * 20253:Separated bulk statistics operations from non-bulk. [#20253](https://github.com/ydb-platform/ydb/pull/20253) ([Vladilen](https://github.com/Vladilen))
-* 20245:Account as extra usage which doesn't affect scheduling for now [#20245](https://github.com/ydb-platform/ydb/pull/20245) ([Ivan](https://github.com/abyss7))
 
 ### UI
 

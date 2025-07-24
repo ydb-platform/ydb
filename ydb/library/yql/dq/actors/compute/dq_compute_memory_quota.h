@@ -85,7 +85,7 @@ namespace NYql::NDq {
             }
 
             if (MkqlMemoryQuota) {
-                MkqlMemoryQuota->add(bytes);
+                MkqlMemoryQuota->Add(bytes);
             }
             return allocated;
         }

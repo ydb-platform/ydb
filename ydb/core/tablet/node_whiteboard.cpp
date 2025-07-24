@@ -3,6 +3,8 @@
 #include <util/system/info.h>
 #include <util/system/hostname.h>
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/base/bridge.h>
+#include <ydb/core/protos/config.pb.h>
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
@@ -585,6 +587,16 @@ protected:
         }
     }
 
+    bool ShouldReportClockSkew(const NKikimrWhiteboard::TNodeStateInfo &info, const TActorContext &ctx) {
+        if (!info.GetSameScope()) {
+            return false;
+        }
+        if (!IsBridgeMode(ctx)) {
+            return true;
+        }
+        return SystemStateInfo.GetBridgePileName() == info.GetPeerBridgePileName();
+    }
+
     void Handle(TEvWhiteboard::TEvNodeStateUpdate::TPtr &ev, const TActorContext &ctx) {
         auto& nodeStateInfo = NodeStateInfo[ev->Get()->Record.GetPeerName()];
         ui64 previousChangeTime = nodeStateInfo.GetChangeTime();
@@ -596,7 +608,7 @@ protected:
         } else {
             nodeStateInfo.ClearWriteThroughput();
         }
-        if (ev->Get()->Record.GetSameScope()) {
+        if (ShouldReportClockSkew(ev->Get()->Record, ctx)) {
             i64 skew = ev->Get()->Record.GetClockSkewUs();
             if (abs(skew) > abs(MaxClockSkewWithPeerUs)) {
                 MaxClockSkewWithPeerUs = skew;
@@ -722,10 +734,15 @@ protected:
         if (!pileMap) {
             return;
         }
-        for (const auto& pile : *pileMap) {
+        for (size_t pileId = 0; pileId < pileMap->size(); ++pileId) {
+            const auto& pile = (*pileMap)[pileId];
             auto* pileInfo = newInfo.MutablePiles()->Add();
             for (const auto nodeId : pile) {
                 pileInfo->MutableNodeIds()->Add(nodeId);
+                if (nodeId == SelfId().NodeId()) {
+                    Y_ABORT_UNLESS(pileId < AppData(ctx)->BridgeConfig.PilesSize());
+                    SystemStateInfo.SetBridgePileName(AppData(ctx)->BridgeConfig.GetPiles(pileId).GetName());
+                }
             }
         }
         if (!google::protobuf::util::MessageDifferencer::Equals(newInfo, BridgeNodesInfo)) {

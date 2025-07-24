@@ -50,13 +50,6 @@ constexpr TDuration DEADLINE_OFFSET = TDuration::Minutes(20);
 constexpr TDuration BRO_RUN_INTERVAL = TDuration::Minutes(60);
 constexpr ui64 MAX_TRANSIENT_ISSUES_COUNT = 10;
 
-// stored in column "lease_state" of .metadata/script_execution_leases table
-enum class ELeaseState {
-    ScriptRunning = 0,
-    ScriptFinalizing = 1,
-    WaitRetry = 2
-};
-
 TString SerializeIssues(const NYql::TIssues& issues) {
     NYql::TIssue root;
     for (const NYql::TIssue& issue : issues) {
@@ -281,9 +274,7 @@ public:
         , Meta(meta)
         , MaxRunTime(Max(maxRunTime, TDuration::Days(1)))
         , RetryState(retryState)
-    {
-        Y_ENSURE(MaxRunTime);
-    }
+    {}
 
     void OnRunQuery() override {
         TString sql = R"(
@@ -2994,12 +2985,15 @@ public:
         , RowsLimit(rowsLimit)
         , SizeLimit(sizeLimit)
         , OperationDeadline(operationDeadline)
-    {
-        Y_ENSURE(RowsLimit >= 0);
-        Y_ENSURE(SizeLimit >= 0);
-    }
+    {}
 
     void Bootstrap() {
+        if (RowsLimit < 0 || SizeLimit < 0) {
+            Send(ReplyActorId, new TEvFetchScriptResultsResponse(Ydb::StatusIds::BAD_REQUEST, std::nullopt, true, {NYql::TIssue("Result rows limit and size limit should not be negative")}));
+            PassAway();
+            return;
+        }
+
         Register(new TGetScriptExecutionResultQueryActor(Database, ExecutionId, ResultSetIndex, Offset, RowsLimit, SizeLimit, OperationDeadline));
         Become(&TGetScriptExecutionResultActor::StateFunc);
     }
@@ -3151,12 +3145,14 @@ LeaseFinalizationInfo GetLeaseFinalizationSql(TInstant now, Ydb::StatusIds::Stat
             .NewLeaseState = ELeaseState::WaitRetry
         };
     } else {
-        TStringBuilder finalIssue;
-        finalIssue << "Script execution operation failed with code " << Ydb::StatusIds::StatusCode_Name(status);
-        if (policy.RetryCount) {
-            finalIssue << " (" << retryLimiter.LastError << ")";
+        if (retryState.RetryPolicyMappingSize()) {
+            TStringBuilder finalIssue;
+            finalIssue << "Script execution operation failed with code " << Ydb::StatusIds::StatusCode_Name(status);
+            if (policy.RetryCount) {
+                finalIssue << " (" << retryLimiter.LastError << ")";
+            }
+            issues = AddRootIssue(finalIssue << " at " << now, issues);
         }
-        issues = AddRootIssue(finalIssue << " at " << now, issues);
 
         return {
             .Sql = R"(
@@ -3719,7 +3715,9 @@ public:
     }
 
     void OnFinish(Ydb::StatusIds::StatusCode status, NYql::TIssues&& issues) override {
-        Y_ENSURE(OperationStatus);
+        if (!OperationStatus) {
+            OperationStatus = status;
+        }
 
         if (issues) {
             OperationIssues.AddIssues(AddRootIssue(TStringBuilder() << "Update final status failed " << status, issues));

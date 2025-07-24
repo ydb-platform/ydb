@@ -144,6 +144,8 @@ items:
       href: workload-tpch.md
     - name: TPC-DS нагрузка
       href: workload-tpcds.md
+    - name: Нагрузка Vector
+      href: workload-vector.md
   - name: Работа с конфигурацией
     href: configs.md
     include:

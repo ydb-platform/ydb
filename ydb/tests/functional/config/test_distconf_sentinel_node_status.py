@@ -143,12 +143,20 @@ class TestKiKiMRDistConfSelfHealNodeDisconnected(KiKiMRDistConfNodeStatusTest):
         assert_eq(len(rg["Ring"]), 9)
         self.validate_contains_nodes(rg, [3])
         self.cluster.nodes[3].stop()
-        time.sleep(25)
+        for i in range(15):
+            time.sleep(2)
+            cfg = self.do_request_config()[f"{configName}Config"]
+            assert_eq(len(cfg["RingGroups"]), 1)
+
         rg2 = get_ring_group(self.do_request_config(), configName)
         assert_eq(rg["NToSelect"], 9)
         assert_eq(len(rg["Ring"]), 9)
         self.validate_not_contains_nodes(rg2, [3])
         assert_that(rg != rg2)
+        self.cluster.nodes[3].start()
+        time.sleep(25)
+        rg3 = get_ring_group(self.do_request_config(), configName)
+        assert_that(rg3 == rg2)  # Current config has no bad nodes and should not run self-heal
 
 
 class TestKiKiMRDistConfSelfHeal2NodesDisconnected(KiKiMRDistConfNodeStatusTest):

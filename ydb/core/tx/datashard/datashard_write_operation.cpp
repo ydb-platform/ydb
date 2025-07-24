@@ -162,6 +162,18 @@ std::tuple<NKikimrTxDataShard::TError::EKind, TString> TValidatedWriteTxOperatio
         }
     }
 
+    if (OperationType == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INSERT) {
+        // If we are inserting new rows, check that all NON NULL columns are present in data.
+        // Note that UPSERT can also insert new rows, but we don't know if this actually happens
+        // at this stage, so we skip the check for UPSERT.
+        auto columnIdsSet = THashSet<ui32>(ColumnIds.begin(), ColumnIds.end());
+        for (const auto& [id, column] : tableInfo.Columns) {
+            if (column.NotNull && !columnIdsSet.contains(id)) {
+                return {NKikimrTxDataShard::TError::BAD_ARGUMENT, TStringBuilder() << "Missing inserted values for NON NULL column " << id};
+            }
+        }
+    }
+
     for (ui32 rowIdx = 0; rowIdx < Matrix.GetRowCount(); ++rowIdx)
     {
         ui64 keyBytes = 0;

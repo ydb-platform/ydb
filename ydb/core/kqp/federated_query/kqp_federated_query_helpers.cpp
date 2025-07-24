@@ -300,7 +300,6 @@ namespace NKikimr::NKqp {
         const TString& structuredTokenJson,
         const TString& path) {
 
-        static TMutex mutex;       
         if (!federatedQuerySetup || !federatedQuerySetup->Driver) {
             return NThreading::MakeFuture<TGetSchemeEntryResult>(Nothing()); 
         }
@@ -312,12 +311,9 @@ namespace NKikimr::NKqp {
             .DiscoveryEndpoint(endpoint)
             .Database(database)
             .SslCredentials(NYdb::TSslCredentials(useTls))
+            .DiscoveryMode(NYdb::EDiscoveryMode::Async)
             .CredentialsProviderFactory(credentialsProviderFactory);
-
-        std::shared_ptr<NYdb::NScheme::TSchemeClient> schemeClient;
-        with_lock(mutex) {
-            schemeClient = std::make_shared<NYdb::NScheme::TSchemeClient>(*driver, opts);
-        }
+        auto schemeClient = std::make_shared<NYdb::NScheme::TSchemeClient>(*driver, opts);
 
         return schemeClient->DescribePath(path)
             .Apply([actorSystem = NActors::TActivationContext::ActorSystem(), p = path, sc = schemeClient, database, endpoint](const NThreading::TFuture<NYdb::NScheme::TDescribePathResult>& result) {

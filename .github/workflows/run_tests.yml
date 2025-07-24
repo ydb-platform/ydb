@@ -37,11 +37,6 @@ on:
         required: false
         type: string
         default: ''
-      branches_config_set:
-        description: 'Property in file with branches to use'
-        required: false
-        type: string
-        default: ''
 
   workflow_dispatch:
     inputs:
@@ -96,7 +91,6 @@ jobs:
         env:
           CALLED_BRANCHES: '${{ inputs.branches }}'
           BRANCHES_CONFIG_PATH: '${{ inputs.branches_config_path }}'
-          BRANCHES_CONFIG_SET: '${{ inputs.branches_config_set }}'
         run: |
           # Проверяем, был ли передан параметр branches из вызывающего workflow
           if [[ -n "$CALLED_BRANCHES" ]]; then
@@ -110,7 +104,7 @@ jobs:
               echo "branch_array=[\"$CALLED_BRANCHES\"]" >> $GITHUB_OUTPUT
             fi
           elif [[ -n "$BRANCHES_CONFIG_PATH" ]]; then
-            echo "branch_array=$(jq -c "$BRANCHES_CONFIG_SET" "$BRANCHES_CONFIG_PATH")" >> $GITHUB_OUTPUT
+            echo "branch_array=$(jq -c "." "$BRANCHES_CONFIG_PATH")" >> $GITHUB_OUTPUT
           else
             # Если ветки не переданы, значит это прямой запуск workflow_dispatch
             echo "No branches specified, using current branch: ${{ github.ref_name }}"

@@ -40,7 +40,7 @@ SELECT
     optStr ILIKE 'te%',
     optStr ILIKE '%st',
     optStr ILIKE '%es%',
-    
+
     nullStr ILIKE 'test',
     nullStr ILIKE 'te%',
     nullStr ILIKE '%st',

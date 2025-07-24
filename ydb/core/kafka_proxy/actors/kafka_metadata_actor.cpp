@@ -4,7 +4,7 @@
 #include <ydb/core/grpc_services/grpc_endpoint.h>
 #include <ydb/core/kafka_proxy/actors/kafka_create_topics_actor.h>
 #include <ydb/core/kafka_proxy/kafka_events.h>
-#include <ydb/core/kafka_proxy/kafka_messages.cpp>
+#include <ydb/core/kafka_proxy/kafka_messages.h>
 #include <ydb/core/persqueue/list_all_topics_actor.h>
 #include <ydb/services/persqueue_v1/actors/schema_actors.h>
 
@@ -28,11 +28,6 @@ void TKafkaMetadataActor::Bootstrap(const TActorContext& ctx) {
     Response->Topics.resize(Message->Topics.size());
     Response->ClusterId = "ydb-cluster";
     Response->ControllerId = Context->Config.HasProxy() ? ProxyNodeId : ctx.SelfID.NodeId();
-
-    ContextForTopicCreation = std::make_shared<TContext>(TContext(Context->Config));
-    ContextForTopicCreation->ConnectionId = ctx.SelfID;
-    ContextForTopicCreation->UserToken = Context->UserToken;
-    ContextForTopicCreation->DatabasePath = Context->DatabasePath;
 
     if (WithProxy) {
         AddProxyNodeToBrokers();
@@ -271,6 +266,11 @@ void TKafkaMetadataActor::HandleLocationResponse(TEvLocationResponse::TPtr ev, c
                     topicToCreate.Name = topic.Name;
                     message->Topics.push_back(topicToCreate);
                     TopicСreationAttempts.insert(*topic.Name);
+                    TContext::TPtr ContextForTopicCreation;
+                    ContextForTopicCreation = std::make_shared<TContext>(TContext(Context->Config));
+                    ContextForTopicCreation->ConnectionId = ctx.SelfID;
+                    ContextForTopicCreation->UserToken = Context->UserToken;
+                    ContextForTopicCreation->DatabasePath = Context->DatabasePath;
                     TActorId actorId = ctx.Register(new TKafkaCreateTopicsActor(ContextForTopicCreation,
                         1,
                         TMessagePtr<NKafka::TCreateTopicsRequestData>({}, message)

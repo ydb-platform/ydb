@@ -46,6 +46,7 @@ struct TPairHash { size_t operator()(const std::pair<TString, TString>& p) const
 class TKafkaOffsetFetchActor: public NActors::TActorBootstrapped<TKafkaOffsetFetchActor> {
 
     using TBase = NActors::TActor<TKafkaOffsetFetchActor>;
+    using TOffsetFetchResponsePartitions = NKafka::TOffsetFetchResponseData::TOffsetFetchResponseGroup::TOffsetFetchResponseTopics::TOffsetFetchResponsePartitions;
 
 public:
     TKafkaOffsetFetchActor(const TContext::TPtr context, const ui64 correlationId, const TMessagePtr<TOffsetFetchRequestData>& message)
@@ -74,6 +75,15 @@ public:
     void Handle(const TEvKafka::TEvResponse::TPtr& ev, const TActorContext& ctx);
     void ExtractPartitions(const TString& group, const NKafka::TOffsetFetchRequestData::TOffsetFetchRequestGroup::TOffsetFetchRequestTopics& topic);
     void ParseGroupsAssignments(NKqp::TEvKqp::TEvQueryResponse::TPtr ev, std::vector<std::pair<std::optional<TString>, TConsumerProtocolAssignment>>& assignments);
+    void CreateConsumerGroupIfNecessary(const TString& topicName,
+                                    const TString& topicPath,
+                                    const TString& groupId,
+                                    const TString& originalTopicName,
+                                    const TOffsetFetchResponsePartitions& topicPartition);
+    bool CreateTopicIfNecessary(const TString& topicName,
+                                const TString& originalTopicName,
+                                const TString& groupId,
+                                const TActorContext& ctx);
     TOffsetFetchResponseData::TPtr GetOffsetFetchResponse();
     NYdb::TParamsBuilder BuildFetchAssignmentsParams(const std::vector<std::optional<TString>>& groupIds);
     void ReplyError(const TActorContext& ctx);
@@ -85,7 +95,6 @@ public:
 
 private:
     const TContext::TPtr Context;
-    TContext::TPtr ContextForTopicCreation;
     const ui64 CorrelationId;
     const TMessagePtr<TOffsetFetchRequestData> Message;
     std::unordered_map<TString, TopicEntities> TopicToEntities;

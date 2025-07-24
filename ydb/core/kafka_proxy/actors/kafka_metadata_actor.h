@@ -73,7 +73,6 @@ private:
 
 private:
     const TContext::TPtr Context;
-    TContext::TPtr ContextForTopicCreation;
     const ui64 CorrelationId;
     const TMessagePtr<TMetadataRequestData> Message;
     const bool WithProxy;

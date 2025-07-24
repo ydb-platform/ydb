@@ -151,6 +151,8 @@ public:
         SyncState,
         Uptime,
         QuotaUsage,
+        BridgeGroupState,
+        PileComputeState,
     };
 
     enum ETimeoutTag {
@@ -264,9 +266,11 @@ public:
         TMaybeServerlessComputeResourcesMode ServerlessComputeResourcesMode;
         TNodeId MaxTimeDifferenceNodeId = 0;
         TString Path;
+        THashMap<TString, TVector<TNodeId>> PileNodeIds;
     };
 
     struct TGroupState {
+        TGroupId Id;
         TString ErasureSpecies;
         std::vector<const NKikimrSysView::TVSlotEntry*> VSlots;
         ui32 Generation;
@@ -1758,6 +1762,7 @@ public:
             auto groupId = group.GetKey().GetGroupId();
             auto poolId = group.GetInfo().GetStoragePoolId();
             auto& groupState = GroupState[groupId];
+            groupState.Id = groupId;
             groupState.ErasureSpecies = group.GetInfo().GetErasureSpeciesV2();
             groupState.Generation = group.GetInfo().GetGeneration();
             groupState.LayoutCorrect = group.GetInfo().GetLayoutCorrect();
@@ -2079,6 +2084,11 @@ public:
 
     void FillCompute(TDatabaseState& databaseState, Ydb::Monitoring::ComputeStatus& computeStatus, TSelfCheckContext context) {
         TVector<TNodeId>* computeNodeIds = &databaseState.ComputeNodeIds;
+        auto report = [](TSelfCheckContext& context, ETags tag) {
+            context.ReportWithMaxChildStatus("Some nodes are restarting too often", tag, {ETags::Uptime});
+            context.ReportWithMaxChildStatus("Compute is overloaded", tag, {ETags::OverloadState});
+            context.ReportWithMaxChildStatus("Compute quota usage", tag, {ETags::QuotaUsage});
+        };
         if (databaseState.ResourcePathId
             && databaseState.ServerlessComputeResourcesMode != NKikimrSubDomains::EServerlessComputeResourcesModeExclusive)
         {
@@ -2095,28 +2105,42 @@ public:
             context.ReportStatus(Ydb::Monitoring::StatusFlag::RED, "There are no compute nodes", ETags::ComputeState);
         } else {
             std::vector<TString> activePiles = {""};
+            std::unordered_map<TString, TSelfCheckContext> pileContext;
             if (IsBridgeMode(TActivationContext::AsActorContext())) {
                 for (size_t i = 0; i < AppData()->BridgeConfig.PilesSize(); ++i) {
                     const auto& pile = NodeWardenStorageConfig->Get()->BridgeInfo->Piles[i];
+                    const auto& pileName = AppData()->BridgeConfig.GetPiles(i).GetName();
+                    auto [it, _] = pileContext.try_emplace(pileName, &context, "BRIDGE_PILE");
+                    it->second.Location.mutable_compute()->mutable_pile()->set_name(pileName);
                     if (pile.IsPrimary || pile.IsBeingPromoted) {
-                        activePiles.push_back(AppData()->BridgeConfig.GetPiles(i).GetName());
+                        activePiles.push_back(pileName);
                     }
                 }
             }
+            auto getContext = [&](const TString& pileName) -> TSelfCheckContext* {
+                auto it = pileContext.find(pileName);
+                if (it == pileContext.end()) {
+                    return &context;
+                } else {
+                    return &it->second;
+                }
+            };
             long maxTimeDifferenceUs = 0;
             for (TNodeId nodeId : *computeNodeIds) {
                 auto itNodeSystemState = MergedNodeSystemState.find(nodeId);
                 if (itNodeSystemState != MergedNodeSystemState.end()) {
-                    if (std::count(activePiles.begin(), activePiles.end(), itNodeSystemState->second->GetBridgePileName()) > 0
+                    const TString& pileName = itNodeSystemState->second->GetBridgePileName();
+                    if (std::count(activePiles.begin(), activePiles.end(), pileName) > 0
                             && abs(itNodeSystemState->second->GetMaxClockSkewWithPeerUs()) > maxTimeDifferenceUs) {
                         maxTimeDifferenceUs = abs(itNodeSystemState->second->GetMaxClockSkewWithPeerUs());
                         databaseState.MaxTimeDifferenceNodeId = nodeId;
                     }
+                    auto& computeNode = *computeStatus.add_nodes();
+                    FillComputeNodeStatus(databaseState, nodeId, computeNode, {getContext(pileName), "COMPUTE_NODE"});
                 }
             }
-            for (TNodeId nodeId : *computeNodeIds) {
-                auto& computeNode = *computeStatus.add_nodes();
-                FillComputeNodeStatus(databaseState, nodeId, computeNode, {&context, "COMPUTE_NODE"});
+            for (auto& [_, ctx] : pileContext) {
+                report(ctx, ETags::PileComputeState);
             }
         }
         Ydb::Monitoring::StatusFlag::Status systemStatus = FillSystemTablets(databaseState, {&context, "SYSTEM_TABLET"});
@@ -2124,9 +2148,11 @@ public:
             context.ReportStatus(systemStatus, "Compute has issues with system tablets", ETags::ComputeState, {ETags::SystemTabletState});
         }
         FillComputeDatabaseStatus(databaseState, computeStatus, {&context, "COMPUTE_QUOTA"});
-        context.ReportWithMaxChildStatus("Some nodes are restarting too often", ETags::ComputeState, {ETags::Uptime});
-        context.ReportWithMaxChildStatus("Compute is overloaded", ETags::ComputeState, {ETags::OverloadState});
-        context.ReportWithMaxChildStatus("Compute quota usage", ETags::ComputeState, {ETags::QuotaUsage});
+        if (IsBridgeMode(TActivationContext::AsActorContext())) {
+            context.ReportWithMaxChildStatus("There are compute issues", ETags::ComputeState, {ETags::PileComputeState});
+        } else {
+            report(context, ETags::ComputeState);
+        }
         context.ReportWithMaxChildStatus("Database has time difference between nodes", ETags::ComputeState, {ETags::SyncState});
         Ydb::Monitoring::StatusFlag::Status tabletsStatus = Ydb::Monitoring::StatusFlag::GREEN;
         computeNodeIds->push_back(0); // for tablets without node
@@ -2607,6 +2633,7 @@ public:
         int FailedDisks = 0;
         std::array<int, Ydb::Monitoring::StatusFlag::Status_ARRAYSIZE> DisksColors = {};
         TStackVec<std::pair<ui32, int>> FailedRealms;
+        ETags Tag;
 
         void IncrementFor(ui32 realm) {
             auto itRealm = FindIf(FailedRealms, [realm](const std::pair<ui32, int>& p) -> bool {
@@ -2620,9 +2647,10 @@ public:
         }
 
     public:
-        TGroupChecker(const TString& erasure, const bool layoutCorrect = true)
+        TGroupChecker(const TString& erasure, const bool layoutCorrect = true, ETags tag = ETags::GroupState)
             : ErasureSpecies(erasure)
             , LayoutCorrect(layoutCorrect)
+            , Tag(tag)
         {}
 
         void AddVDiskStatus(Ydb::Monitoring::StatusFlag::Status status, ui32 realm) {
@@ -2643,34 +2671,34 @@ public:
         void ReportStatus(TSelfCheckContext& context) const {
             context.OverallStatus = Ydb::Monitoring::StatusFlag::GREEN;
             if (!LayoutCorrect) {
-                context.ReportStatus(Ydb::Monitoring::StatusFlag::ORANGE, "Group layout is incorrect", ETags::GroupState);
+                context.ReportStatus(Ydb::Monitoring::StatusFlag::ORANGE, "Group layout is incorrect", Tag);
             }
             if (ErasureSpecies == NONE) {
                 if (FailedDisks > 0) {
-                    context.ReportStatus(Ydb::Monitoring::StatusFlag::RED, "Group failed", ETags::GroupState, {ETags::VDiskState});
+                    context.ReportStatus(Ydb::Monitoring::StatusFlag::RED, "Group failed", Tag, {ETags::VDiskState});
                 }
             } else if (ErasureSpecies == BLOCK_4_2) {
                 if (FailedDisks > 2) {
-                    context.ReportStatus(Ydb::Monitoring::StatusFlag::RED, "Group failed", ETags::GroupState, {ETags::VDiskState});
+                    context.ReportStatus(Ydb::Monitoring::StatusFlag::RED, "Group failed", Tag, {ETags::VDiskState});
                 } else if (FailedDisks > 1) {
-                    context.ReportStatus(Ydb::Monitoring::StatusFlag::ORANGE, "Group has no redundancy", ETags::GroupState, {ETags::VDiskState});
+                    context.ReportStatus(Ydb::Monitoring::StatusFlag::ORANGE, "Group has no redundancy", Tag, {ETags::VDiskState});
                 } else if (FailedDisks > 0) {
                     if (DisksColors[Ydb::Monitoring::StatusFlag::BLUE] == FailedDisks) {
-                        context.ReportStatus(Ydb::Monitoring::StatusFlag::BLUE, "Group degraded", ETags::GroupState, {ETags::VDiskState});
+                        context.ReportStatus(Ydb::Monitoring::StatusFlag::BLUE, "Group degraded", Tag, {ETags::VDiskState});
                     } else {
-                        context.ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW, "Group degraded", ETags::GroupState, {ETags::VDiskState});
+                        context.ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW, "Group degraded", Tag, {ETags::VDiskState});
                     }
                 }
             } else if (ErasureSpecies == MIRROR_3_DC) {
                 if (FailedRealms.size() > 2 || (FailedRealms.size() == 2 && FailedRealms[0].second > 1 && FailedRealms[1].second > 1)) {
-                    context.ReportStatus(Ydb::Monitoring::StatusFlag::RED, "Group failed", ETags::GroupState, {ETags::VDiskState});
+                    context.ReportStatus(Ydb::Monitoring::StatusFlag::RED, "Group failed", Tag, {ETags::VDiskState});
                 } else if (FailedRealms.size() == 2) {
-                    context.ReportStatus(Ydb::Monitoring::StatusFlag::ORANGE, "Group has no redundancy", ETags::GroupState, {ETags::VDiskState});
+                    context.ReportStatus(Ydb::Monitoring::StatusFlag::ORANGE, "Group has no redundancy", Tag, {ETags::VDiskState});
                 } else if (FailedDisks > 0) {
                     if (DisksColors[Ydb::Monitoring::StatusFlag::BLUE] == FailedDisks) {
-                        context.ReportStatus(Ydb::Monitoring::StatusFlag::BLUE, "Group degraded", ETags::GroupState, {ETags::VDiskState});
+                        context.ReportStatus(Ydb::Monitoring::StatusFlag::BLUE, "Group degraded", Tag, {ETags::VDiskState});
                     } else {
-                        context.ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW, "Group degraded", ETags::GroupState, {ETags::VDiskState});
+                        context.ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW, "Group degraded", Tag, {ETags::VDiskState});
                     }
                 }
             }
@@ -2830,9 +2858,13 @@ public:
             for (auto it = records.begin(); it != records.end(); ) {
                 bool isSimilar = it->IssueLog.status() == similar.begin()->IssueLog.status()
                     && it->IssueLog.message() == similar.begin()->IssueLog.message()
-                    && it->IssueLog.level() == similar.begin()->IssueLog.level() ;
+                    && it->IssueLog.level() == similar.begin()->IssueLog.level();
                 if (isSimilar && similar.begin()->Tag == ETags::VDiskState) {
                     isSimilar = it->IssueLog.location().storage().node().id() == similar.begin()->IssueLog.location().storage().node().id();
+                }
+                if (isSimilar && similar.begin()->IssueLog.location().storage().pool().group().has_pile()) {
+                    isSimilar = it->IssueLog.location().storage().pool().group().pile().name()
+                        == similar.begin()->IssueLog.location().storage().pool().group().pile().name();
                 }
                 if (isSimilar) {
                     auto move = it++;
@@ -2886,6 +2918,7 @@ public:
             ids.insert(it->IssueLog.id());
 
             switch (similar.begin()->Tag) {
+                case ETags::BridgeGroupState:
                 case ETags::GroupState: {
                     auto mainGroupIds = similar.begin()->IssueLog.mutable_location()->mutable_storage()->mutable_pool()->mutable_group()->mutable_id();
                     auto donorGroupIds = it->IssueLog.mutable_location()->mutable_storage()->mutable_pool()->mutable_group()->mutable_id();
@@ -3010,11 +3043,16 @@ public:
             checker.ReportStatus(context);
         } else {
             auto getStatus = [&](const TGroupState* group) {
-                TGroupChecker checker(group->ErasureSpecies, group->LayoutCorrect);
-                CheckGroupVSlots(checker, group->VSlots, storageGroupStatus, context);
-                TSelfCheckContext dummyContext(nullptr);
-                checker.ReportStatus(dummyContext);
-                return dummyContext.GetOverallStatus();
+                TGroupChecker checker(group->ErasureSpecies, group->LayoutCorrect, ETags::BridgeGroupState);
+                TSelfCheckContext pileContext(&context, "BRIDGE_GROUP");
+                if (group->BridgePileId->GetRawId() < AppData()->BridgeConfig.PilesSize()) {
+                    const auto& pileName = AppData()->BridgeConfig.GetPiles(group->BridgePileId->GetRawId()).GetName();
+                    pileContext.Location.mutable_storage()->mutable_pool()->mutable_group()->mutable_pile()->set_name(pileName);
+                }
+                pileContext.Location.mutable_storage()->mutable_pool()->mutable_group()->set_id(0, ToString(group->Id));
+                CheckGroupVSlots(checker, group->VSlots, storageGroupStatus, pileContext);
+                checker.ReportStatus(pileContext);
+                return pileContext.GetOverallStatus();
             };
             auto isSyncPile = [&](const TGroupState* group) {
                 if (!group->BridgePileId) {
@@ -3050,7 +3088,7 @@ public:
                 } else {
                     issue << " in some piles";
                 }
-                context.ReportStatus(status, issue, ETags::GroupState, {ETags::VDiskState});
+                context.ReportStatus(status, issue, ETags::GroupState, {ETags::BridgeGroupState});
             }
         }
 
@@ -3063,6 +3101,8 @@ public:
         TMergeIssuesContext mergeContext(records);
         if (Request->Request.merge_records()) {
             MergeLevelRecords(mergeContext, ETags::GroupState);
+            MergeLevelRecords(mergeContext, ETags::BridgeGroupState, ETags::GroupState);
+            MergeLevelRecords(mergeContext, ETags::VDiskState, ETags::BridgeGroupState);
             MergeLevelRecords(mergeContext, ETags::VDiskState, ETags::GroupState);
             MergeLevelRecords(mergeContext, ETags::PDiskState, ETags::VDiskState);
         }

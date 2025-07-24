@@ -123,7 +123,7 @@ items:
     - name: Вывод версии YDB CLI
       href: version.md
     - name: Проверка состояния базы данных
-      href: commands/monitoring-healthcheck.md 
+      href: commands/monitoring-healthcheck.md
   - name: Нагрузочное тестирование
     items:
     - name: Обзор
@@ -138,6 +138,8 @@ items:
       href: workload-topic.md
     - name: Transfer нагрузка
       href: workload-transfer.md
+    - name: TPC-C нагрузка
+      href: workload-tpcc.md
     - name: TPC-H нагрузка
       href: workload-tpch.md
     - name: TPC-DS нагрузка

@@ -171,7 +171,7 @@ message TFeatureFlags {
     optional bool EnableImmediateWritingOnBulkUpsert = 146 [default = true];
     optional bool EnableInsertWriteIdSpecialColumnCompatibility = 147 [default = false];
     optional bool EnableTopicAutopartitioningForCDC = 148 [default = true];
-    optional bool EnableWritePortionsOnInsert = 149 [default = false];
+    optional bool EnableWritePortionsOnInsert = 149 [default = true];
     optional bool EnableFollowerStats = 150 [default = true];
     optional bool EnableTopicAutopartitioningForReplication = 151 [default = true];
     optional bool EnableDriveSerialsDiscovery = 152 [default = false];

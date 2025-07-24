@@ -1876,7 +1876,7 @@ message TColumnShardConfig {
         }
     }
     optional TTablesStorageLayoutPolicy TablesStorageLayoutPolicy = 1;
-    optional bool DisabledOnSchemeShard = 2 [default = true];
+    optional bool DisabledOnSchemeShard = 2 [default = false];
     optional bool IndexationEnabled = 4 [default = true];
     optional bool CompactionEnabled = 5 [default = true];
     optional bool TTLEnabled = 6 [default = true];
@@ -1914,8 +1914,8 @@ message TColumnShardConfig {
     optional uint32 LagForCompactionBeforeTieringsMs = 22 [default = 3600000];
     optional uint32 OptimizerFreshnessCheckDurationMs = 23 [default = 300000];
     optional uint32 SmallPortionDetectSizeLimit = 24 [default = 1048576];  // 1 << 20
-    optional bool ColumnChunksV0Usage = 25 [default = true];
-    optional bool ColumnChunksV1Usage = 26 [default = true];
+    optional bool ColumnChunksV0Usage = 25 [default = false];
+    optional bool ColumnChunksV1Usage = 26 [default = false];
     optional uint64 MemoryLimitScanPortion = 27 [default = 100000000];
     optional string ReaderClassName = 28;
     optional bool AllowNullableColumnsInPK = 29 [default = false];

@@ -51,6 +51,7 @@ class KiKiMRDistConfNodeStatusTest(object):
         "state_storage_self_heal_config": {
             "enable": True,
             "node_good_state_limit": 3,
+            "node_pretty_good_state_limit": 2,
             "node_bad_state_limit": 3,
             "wait_for_config_step": 1000000,
             "relax_time": 10000000,

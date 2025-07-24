@@ -10,25 +10,11 @@ namespace NKikimr::NOlap::NReader::NSimple {
 std::shared_ptr<TFetchingScript> TSpecialReadContext::DoGetColumnsFetchingPlan(const std::shared_ptr<NCommon::IDataSource>& sourceExt) {
     const auto source = std::static_pointer_cast<IDataSource>(sourceExt);
     const bool needSnapshots = GetReadMetadata()->GetRequestSnapshot() < source->GetRecordSnapshotMax();
-    const bool dontNeedColumns = !needSnapshots && GetFFColumns()->GetColumnIds().size() == 1 &&
-                                 GetFFColumns()->GetColumnIds().contains(NOlap::NPortion::TSpecialColumns::SPEC_COL_PLAN_STEP_INDEX);
     if (!sourceExt->NeedPortionData()) {
         sourceExt->SetSourceInMemory(true);
         source->InitUsedRawBytes();
-    } else if (!dontNeedColumns && !source->HasStageData() && !source->HasPortionAccessor()) {
-        if (!AskAccumulatorsScript) {
-            NCommon::TFetchingScriptBuilder acc(*this);
-            acc.AddStep(std::make_shared<TInitializeSourceStep>());
-            acc.AddStep(std::make_shared<NCommon::TAllocateMemoryStep>(
-                source->PredictAccessorsSize(GetFFColumns()->GetColumnIds()), NArrow::NSSA::IMemoryCalculationPolicy::EStage::Accessors));
-            acc.AddStep(std::make_shared<TStartPortionAccessorFetchingStep>());
-            acc.AddStep(std::make_shared<TPortionAccessorFetchedStep>());
-            acc.AddStep(std::make_shared<TDetectInMemFlag>(*GetFFColumns()));
-            acc.AddStep(std::make_shared<TDetectScript>(*GetFFColumns()));
-
-            AskAccumulatorsScript = std::move(acc).Build();
-        }
-        return AskAccumulatorsScript;
+    } else {
+        AFL_VERIFY(source->HasPortionAccessor());
     }
     const bool partialUsageByPK = [&]() {
         switch (source->GetUsageClass()) {

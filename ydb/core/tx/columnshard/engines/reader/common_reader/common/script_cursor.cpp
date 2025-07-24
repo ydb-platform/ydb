@@ -27,7 +27,7 @@ TConclusion<bool> TFetchingScriptCursor::Execute(const std::shared_ptr<IDataSour
             mGuard.emplace("SCAN_PROFILE::FETCHING::" + step->GetName() + "::" + Script->GetBranchName());
         }
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("scan_step", step->DebugString())("scan_step_idx", CurrentStepIdx)(
-            "source_id", source->GetSourceId());
+            "source_id", source->GetSourceId())("tablet_id", source->GetContext()->GetReadMetadata()->GetTabletId());
 
         auto& schedulableTask = source->GetContext()->GetCommonContext()->GetSchedulableTask();
         if (schedulableTask) {

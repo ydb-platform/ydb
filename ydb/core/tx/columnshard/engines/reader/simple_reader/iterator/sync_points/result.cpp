@@ -4,9 +4,24 @@
 
 namespace NKikimr::NOlap::NReader::NSimple {
 
+bool TSyncPointResult::IsSourcePrepared(const std::shared_ptr<NCommon::IDataSource>& source) const {
+    if (!Next) {
+        return source->IsSyncSection() && source->HasStageResult() &&
+               (source->GetStageResult().HasResultChunk() || source->GetStageResult().IsEmpty());
+    } else if (source->IsSyncSection()) {
+        AFL_VERIFY(source->HasStageData() || (source->HasStageResult() && source->GetStageResult().IsEmpty()));
+        return true;
+    } else {
+        return false;
+    }
+}
+
 ISyncPoint::ESourceAction TSyncPointResult::OnSourceReady(const std::shared_ptr<NCommon::IDataSource>& source, TPlainReadData& reader) {
     if (Next) {
-        if (!source->GetStageData().GetTable()->HasData() || source->GetStageData().GetTable()->HasDataAndResultIsEmpty()) {
+        if (source->HasStageResult() && source->GetStageResult().IsEmpty()) {
+            return ESourceAction::Finish;
+        }
+        if (source->HasStageData() && (!source->GetStageData().GetTable()->HasData() || source->GetStageData().GetTable()->HasDataAndResultIsEmpty())) {
             return ESourceAction::Finish;
         }
         return ESourceAction::ProvideNext;

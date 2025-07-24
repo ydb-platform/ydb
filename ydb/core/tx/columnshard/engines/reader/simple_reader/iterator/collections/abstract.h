@@ -32,6 +32,10 @@ protected:
     std::unique_ptr<NCommon::ISourcesConstructor> SourcesConstructor;
 
 public:
+    ui64 GetTabletId() const {
+        return Context->GetCommonContext()->GetReadMetadata()->GetTabletId();
+    }
+    virtual TString GetClassName() const = 0;
 
     template <class T>
     T& MutableConstructorsAs() {
@@ -48,19 +52,10 @@ public:
         return DoHasData();
     }
 
-    std::shared_ptr<IScanCursor> BuildCursor(const std::shared_ptr<NCommon::IDataSource>& source, const ui32 readyRecords, const ui64 tabletId) const {
-        AFL_VERIFY(source);
-        AFL_VERIFY(readyRecords <= source->GetRecordsCount())("count", source->GetRecordsCount())("ready", readyRecords);
-        auto result = DoBuildCursor(source, readyRecords);
-        AFL_VERIFY(result);
-        result->SetTabletId(tabletId);
-        AFL_VERIFY(tabletId);
-        return result;
-    }
+    std::shared_ptr<IScanCursor> BuildCursor(
+        const std::shared_ptr<NCommon::IDataSource>& source, const ui32 readyRecords, const ui64 tabletId) const;
 
-    TString DebugString() const {
-        return DoDebugString();
-    }
+    TString DebugString() const;
 
     virtual ~ISourcesCollection() = default;
 
@@ -79,8 +74,8 @@ public:
 
     void OnSourceFinished(const std::shared_ptr<NCommon::IDataSource>& source) {
         AFL_VERIFY(source);
-        SourcesInFlightCount.Dec();
         DoOnSourceFinished(source);
+        SourcesInFlightCount.Dec();
     }
 
     bool CheckInFlightLimits() const {

@@ -10,14 +10,7 @@ private:
     }
 
     virtual ESourceAction OnSourceReady(const std::shared_ptr<NCommon::IDataSource>& source, TPlainReadData& reader) override;
-    virtual bool IsSourcePrepared(const std::shared_ptr<NCommon::IDataSource>& source) const override {
-        if (!Next) {
-            return source->IsSyncSection() && source->HasStageResult() &&
-                   (source->GetStageResult().HasResultChunk() || source->GetStageResult().IsEmpty());
-        } else {
-            return source->IsSyncSection() && source->HasStageData();
-        }
-    }
+    virtual bool IsSourcePrepared(const std::shared_ptr<NCommon::IDataSource>& source) const override;
 
 public:
     TSyncPointResult(

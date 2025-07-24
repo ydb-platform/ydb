@@ -28,6 +28,10 @@ private:
     }
 
 public:
+    virtual TString GetClassName() const {
+        return "UNDEFINED";
+    }
+
     virtual ~ISourcesConstructor() = default;
 
     void FillReadStats(const std::shared_ptr<TReadStats>& stats) const {
@@ -40,7 +44,12 @@ public:
     }
 
     TString DebugString() const {
-        return DoDebugString();
+        TStringBuilder sb;
+        sb << "{";
+        sb << "class_name=" << GetClassName() << ";";
+        sb << "internal={" << DoDebugString() << "};";
+        sb << "}";
+        return sb;
     }
     void Clear() {
         return DoClear();

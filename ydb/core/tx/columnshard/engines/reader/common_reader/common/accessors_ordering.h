@@ -18,6 +18,10 @@ public:
         : Sorting(sorting) {
     }
 
+    ERequestSorting GetSorting() const {
+        return Sorting;
+    }
+
     const std::deque<TObject>& GetObjects() const {
         if (AlreadySorted.size()) {
             AFL_VERIFY(!HeapObjects.size());
@@ -147,6 +151,10 @@ private:
 
     virtual TString DoDebugString() const override {
         return "{" + ::ToString(Constructors.GetSize()) + "}";
+    }
+
+    virtual TString GetClassName() const override {
+        return "GENERAL_ORDERING::" + ::ToString(Constructors.GetSorting());
     }
 
     virtual void DoClear() override {

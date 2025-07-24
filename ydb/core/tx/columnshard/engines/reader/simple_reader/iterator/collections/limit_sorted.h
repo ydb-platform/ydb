@@ -64,13 +64,17 @@ private:
     }
     virtual std::shared_ptr<NCommon::IDataSource> DoExtractNext() override;
     virtual bool DoCheckInFlightLimits() const override {
-        return FetchingInFlightSources.size() < InFlightLimit;
+        return GetSourcesInFlightCount() < InFlightLimit;
     }
 
     virtual void DoOnSourceFinished(const std::shared_ptr<NCommon::IDataSource>& source) override;
     ui32 GetInFlightIntervalsCount(const TCompareKeyForScanSequence& from, const TCompareKeyForScanSequence& to) const;
 
 public:
+    virtual TString GetClassName() const override {
+        return "SORT_LIMIT";
+    }
+
     const std::shared_ptr<NCommon::IDataSource>& GetNextSource() const {
         return NextSource;
     }

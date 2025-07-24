@@ -28,8 +28,6 @@ private:
     bool AbortFlag = false;
 
 protected:
-    static inline TAtomicCounter GlobalCounterInternalId = 0;
-    const ui64 CounterInternalId = GlobalCounterInternalId.Inc();
     const std::shared_ptr<TSpecialReadContext> Context;
     const std::shared_ptr<ISourcesCollection> Collection;
     std::shared_ptr<ISyncPoint> Next;

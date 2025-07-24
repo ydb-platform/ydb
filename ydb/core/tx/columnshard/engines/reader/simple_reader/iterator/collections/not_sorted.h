@@ -11,7 +11,6 @@ private:
     std::optional<ui32> Limit;
     ui32 InFlightLimit = 1;
 
-    TPositiveControlInteger InFlightCount;
     ui32 FetchedCount = 0;
     virtual bool DoHasData() const override {
         return !SourcesConstructor->IsFinished();
@@ -28,15 +27,10 @@ private:
         return SourcesConstructor->IsFinished();
     }
     virtual std::shared_ptr<NCommon::IDataSource> DoExtractNext() override {
-        auto result = SourcesConstructor->ExtractNext(Context, InFlightLimit);
-        if (!result) {
-            return result;
-        }
-        InFlightCount.Inc();
-        return std::move(result);
+        return SourcesConstructor->ExtractNext(Context, InFlightLimit);
     }
     virtual bool DoCheckInFlightLimits() const override {
-        return InFlightCount < InFlightLimit;
+        return GetSourcesInFlightCount() < InFlightLimit;
     }
     virtual void DoOnSourceFinished(const std::shared_ptr<NCommon::IDataSource>& source) override {
         if (!source->GetAs<IDataSource>()->GetResultRecordsCount() && InFlightLimit * 2 < GetMaxInFlight()) {
@@ -47,10 +41,13 @@ private:
             AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD)("event", "limit_exhausted")("limit", Limit)("fetched", FetchedCount);
             SourcesConstructor->Clear();
         }
-        InFlightCount.Dec();
     }
 
 public:
+    virtual TString GetClassName() const override {
+        return "NOT_SORTED";
+    }
+
     TNotSortedCollection(const std::shared_ptr<TSpecialReadContext>& context, std::unique_ptr<NCommon::ISourcesConstructor>&& sourcesConstructor,
         const std::optional<ui32> limit)
         : TBase(context, std::move(sourcesConstructor))

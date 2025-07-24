@@ -11,7 +11,6 @@ class TSortedFullScanCollection: public ISourcesCollection {
 private:
     using TBase = ISourcesCollection;
 
-    TPositiveControlInteger InFlightCount;
     virtual void DoClear() override {
         SourcesConstructor->Clear();
     }
@@ -29,21 +28,19 @@ private:
             std::make_shared<NArrow::TSimpleRow>(source->GetAs<IDataSource>()->GetStartPKRecordBatch()), source->GetSourceId(), readyRecords);
     }
     virtual std::shared_ptr<NCommon::IDataSource> DoExtractNext() override {
-        auto result = SourcesConstructor->ExtractNext(Context, GetMaxInFlight());
-        if (!result) {
-            return std::move(result);
-        }
-        InFlightCount.Inc();
-        return std::move(result);
+        return SourcesConstructor->ExtractNext(Context, GetMaxInFlight());
     }
     virtual bool DoCheckInFlightLimits() const override {
-        return InFlightCount < GetMaxInFlight();
+        return GetSourcesInFlightCount() < GetMaxInFlight();
     }
     virtual void DoOnSourceFinished(const std::shared_ptr<NCommon::IDataSource>& /*source*/) override {
-        InFlightCount.Dec();
     }
 
 public:
+    virtual TString GetClassName() const override {
+        return "FULL_SORTED";
+    }
+
     TSortedFullScanCollection(
         const std::shared_ptr<TSpecialReadContext>& context, std::unique_ptr<NCommon::ISourcesConstructor>&& sourcesConstructor)
         : TBase(context, std::move(sourcesConstructor)) {

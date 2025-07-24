@@ -7,7 +7,8 @@
 namespace NKikimr::NOlap::NReader::NSimple {
 
 void ISyncPoint::OnSourcePrepared(std::shared_ptr<NCommon::IDataSource>&& sourceInput, TPlainReadData& reader) {
-    const NActors::TLogContextGuard gLogging = NActors::TLogContextBuilder::Build()("sync_point", GetPointName())("aborted", AbortFlag)("id", CounterInternalId);
+    const NActors::TLogContextGuard gLogging = NActors::TLogContextBuilder::Build()("sync_point", GetPointName())("aborted", AbortFlag)(
+        "tablet_id", Context->GetCommonContext()->GetReadMetadata()->GetTabletId());
     if (AbortFlag) {
         FOR_DEBUG_LOG(NKikimrServices::COLUMNSHARD_SCAN_EVLOG, sourceInput->AddEvent("a" + GetShortPointName()));
         AFL_WARN(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "sync_point_aborted")("source_id", sourceInput->GetSourceId());
@@ -18,7 +19,8 @@ void ISyncPoint::OnSourcePrepared(std::shared_ptr<NCommon::IDataSource>&& source
     AFL_DEBUG(NKikimrServices::COLUMNSHARD_SCAN_EVLOG)("event_log", sourceInput->GetEventsReport())("count", SourcesSequentially.size())(
         "source_id", sourceInput->GetSourceId());
     AFL_VERIFY(sourceInput->IsSyncSection())("source_id", sourceInput->GetSourceId());
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "OnSourcePrepared")("source_id", sourceInput->GetSourceId());
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "OnSourcePrepared")("source_id", sourceInput->GetSourceId())(
+        "prepared", IsSourcePrepared(sourceInput));
     while (SourcesSequentially.size() && IsSourcePrepared(SourcesSequentially.front())) {
         auto source = SourcesSequentially.front();
         switch (OnSourceReady(source, reader)) {
@@ -55,7 +57,7 @@ void ISyncPoint::OnSourcePrepared(std::shared_ptr<NCommon::IDataSource>&& source
 
 TString ISyncPoint::DebugString() const {
     TStringBuilder sb;
-    sb << "{";
+    sb << "{" << PointName << ";" << PointIndex << ";";
     for (auto&& i : SourcesSequentially) {
         sb << i->GetSourceId() << ",";
     }
@@ -74,7 +76,8 @@ void ISyncPoint::Continue(const TPartialSourceAddress& continueAddress, TPlainRe
 }
 
 void ISyncPoint::AddSource(std::shared_ptr<NCommon::IDataSource>&& source) {
-    const NActors::TLogContextGuard gLogging = NActors::TLogContextBuilder::Build()("sync_point", GetPointName())("event", "add_source");
+    const NActors::TLogContextGuard gLogging = NActors::TLogContextBuilder::Build()("sync_point", GetPointName())("event", "add_source")(
+        "tablet_id", Context->GetCommonContext()->GetReadMetadata()->GetTabletId());
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("source_id", source->GetSourceId());
     AFL_VERIFY(!AbortFlag);
     source->MutableAs<IDataSource>()->SetPurposeSyncPointIndex(GetPointIndex());

@@ -11,11 +11,11 @@
 
 ### Улучшения
 
-* Тип хранения по умолчанию [в командах](./reference/ydb-cli/commands/workload/index.md) `{{ ydb-cli }} workload * init` изменен на `column` (было `row`), а режим работы с датой и временем по умолчанию — на `datetime32` (было `datetime64`).
+* Тип хранения по умолчанию [в командах](./reference/ydb-cli/commands/workload/index.md) `{{ ydb-cli }} workload * init` изменён на `column` (было `row`), а режим работы с датой и временем по умолчанию — на `datetime32` (было `datetime64`).
 
 ### Исправления ошибок
 
-* Исправлена проблема, из-за которой [команда](./reference/ydb-cli/export-import/import-file.md) `{{ ydb-cli }} import file csv` могла зависнуть.
+* Исправлена проблема, из-за которой [команда](./reference/ydb-cli/export-import/import-file.md) `{{ ydb-cli }} import file csv` могла зависать.
 
 ## Версия 2.23.0 {#2-23-0}
 

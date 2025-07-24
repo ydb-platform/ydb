@@ -3,7 +3,7 @@ import pytest
 import time
 import uuid
 
-from ydb.tests.library.compatibility.fixtures import RestartToAnotherVersionFixture, RollingUpgradeAndDowngradeFixture, MixedClusterFixture
+from ydb.tests.library.compatibility.fixtures import RollingUpgradeAndDowngradeFixture
 from ydb.tests.oss.ydb_sdk_import import ydb
 
 

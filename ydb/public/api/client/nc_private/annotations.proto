@@ -128,7 +128,7 @@ extend google.protobuf.MessageOptions {
   // It is PUBLIC if a public item depends on it, for example is returned by a public method.
   // Use `option (message_visibility) = PUBLIC;` if you want to override the result of tree shaking.
   // NOTE: tree shaking takes into account only .proto files inside the current directory.
-  Visibility message_visibility = 50001;
+  // Visibility message_visibility = 50001; // Conflicts with other options by its number
 
   // Marker extension for resource specifications. Resource type is equal to according NID type, e.g. "serviceaccount" or "project"
   string resource = 50002;
@@ -463,7 +463,7 @@ message MethodCLISettings {
 
     // must be a single character
     string shortcut = 1;
-    
+
     string flag = 2;
   }
 

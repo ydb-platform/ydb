@@ -152,7 +152,7 @@ public:
     }
 
     void OnExecute() {
-        AtomicCas(&StartInstant, 0, TMonotonic::Now().MicroSeconds());
+        AtomicCas(&StartInstant, TMonotonic::Now().MicroSeconds(), 0);
     }
 
     TString DebugString() const;

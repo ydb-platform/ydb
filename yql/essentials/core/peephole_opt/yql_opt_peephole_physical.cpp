@@ -7047,22 +7047,13 @@ TExprNode::TPtr OptimizeBlockCombine(const TExprNode::TPtr& node, TExprContext& 
         return UpdateBlockCombineColumns(node, filterIndex, argIndices, ctx);
     }
 
-    if (input.IsCallable("ToFlow") && input.Head().IsCallable("ReplicateScalars")) {
-        const auto& replicateScalars = input.Head();
+    if (input.IsCallable("ReplicateScalars")) {
         // Technically, the code below rewrites the following sequence
-        // (BlockCombine{All,Hashed} (ToFlow (ReplicateScalars (<input>))))
-        // into (BlockCombine{All,Hashed} (<input>)), but ToFlow/FromFlow
-        // wrappers will be removed when all other nodes in block pipeline
-        // start using WideStream instead of the WideFlow. Hence, the
-        // logging is left intact.
-        YQL_CLOG(DEBUG, CorePeepHole) << "Drop " << replicateScalars.Content() << " as input of " << node->Content();
-        // If tail is FromFlow, its input is WideFlow and can be
-        // used intact; Otherwise the input is WideStream, so the
-        // new input should be converted to WideFlow.
-        const auto tail = replicateScalars.HeadPtr();
-        auto flowInput = tail->IsCallable("FromFlow") ? tail->HeadPtr()
-                       : ctx.NewCallable(tail->Pos(), "ToFlow", { tail });
-        return ctx.ChangeChild(*node, 0, std::move(flowInput));
+        // (BlockCombine{All,Hashed} (ReplicateScalars (<input>)))
+        // into (BlockCombine{All,Hashed} (<input>).
+        YQL_CLOG(DEBUG, CorePeepHole) << "Drop " << input.Head().Content() << " as input of " << node->Content();
+        auto tail = input.HeadPtr();
+        return ctx.ChangeChild(*node, 0, std::move(tail));
     }
 
     return node;
@@ -7071,22 +7062,14 @@ TExprNode::TPtr OptimizeBlockCombine(const TExprNode::TPtr& node, TExprContext& 
 TExprNode::TPtr OptimizeBlockMerge(const TExprNode::TPtr& node, TExprContext& ctx, TTypeAnnotationContext& types) {
     Y_UNUSED(types);
     const auto& input = node->Head();
-    if (input.IsCallable("ToFlow") && input.Head().IsCallable("ReplicateScalars")) {
-        const auto& replicateScalars = input.Head();
+    if (input.IsCallable("ReplicateScalars")) {
+        const auto& replicateScalars = input;
         // Technically, the code below rewrites the following sequence
-        // (BlockMerge{,Many}FinalizeHashed (ToFlow (ReplicateScalars (<input>))))
-        // into (BlockMerge{,Many}FinalizeHashed (<input>)), but
-        // ToFlow/FromFlow wrappers will be removed when all other nodes
-        // in block pipeline start using WideStream instead of the WideFlow.
-        // Hence, the logging is left intact.
+        // (BlockMerge{,Many}FinalizeHashed (ReplicateScalars (<input>)))
+        // into (BlockMerge{,Many}FinalizeHashed (<input>)).
         YQL_CLOG(DEBUG, CorePeepHole) << "Drop " << replicateScalars.Content() << " as input of " << node->Content();
-        // If tail is FromFlow, its input is WideFlow and can be
-        // used intact; Otherwise the input is WideStream, so the
-        // new input should be converted to WideFlow.
-        const auto tail = replicateScalars.HeadPtr();
-        auto flowInput = tail->IsCallable("FromFlow") ? tail->HeadPtr()
-                       : ctx.NewCallable(tail->Pos(), "ToFlow", { tail });
-        return ctx.ChangeChild(*node, 0, std::move(flowInput));
+        auto tail = replicateScalars.HeadPtr();
+        return ctx.ChangeChild(*node, 0, std::move(tail));
     }
 
     return node;

@@ -26,10 +26,17 @@ message CsvSettings {
     Quoting quoting = 5;
 }
 
-message ValueOutput {
-}
+/**
+ * Ydb.Value output format for Query.ExecuteQueryRequest
+*/
+message ValueOutputFormat {}
 
-message ArrowOutput {
+message ValueOutputFormatMeta {}
+
+/**
+ * Arrow output format for Query.ExecuteQueryRequest
+*/
+message ArrowOutputFormat {
     message Compression {
         enum Type {
             COMPRESSION_UNSPECIFIED = 0;
@@ -43,4 +50,9 @@ message ArrowOutput {
     }
 
     Compression compression = 1;
+}
+
+message ArrowOutputFormatMeta {
+    // It's filled only for SCHEMA_INCLUSION_MODE_ALWAYS, SCHEMA_INCLUSION_MODE_FIRST_ONLY.
+    bytes schema = 1;
 }

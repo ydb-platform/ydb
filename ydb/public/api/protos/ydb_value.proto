@@ -177,30 +177,19 @@ message Column {
     Type type = 2;
 }
 
-message ValueOutputMeta {
-}
-
-message ArrowOutputMeta {
-    // To detect compression type and level
-    Ydb.Formats.ArrowOutput format = 1;
-
-    // It's filled only for SCHEMA_INCLUSION_MODE_ALWAYS, SCHEMA_INCLUSION_MODE_FIRST_ONLY.
-    bytes schema = 2;
-}
-
 // Represents table-like structure with ordered set of rows and columns
 message ResultSet {
     // Metadata of columns, it is filled only for SCHEMA_INCLUSION_MODE_ALWAYS, SCHEMA_INCLUSION_MODE_FIRST_ONLY.
     repeated Column columns = 1;
-    // Rows of table, only for ValueOutput format
+    // Rows of table, only for ValueOutputFormat
     repeated Value rows = 2;
     // Flag indicates the result was truncated
     bool truncated = 3;
 
     // Metadata of the output format
     oneof output_format_meta {
-        ValueOutputMeta value_output_meta = 100;
-        ArrowOutputMeta arrow_output_meta = 101;
+        ValueOutputFormatMeta value_output_format_meta = 100;
+        ArrowOutputFormatMeta arrow_output_format_meta = 101;
     }
 
     // Binary data for compressed rows or/and other formats

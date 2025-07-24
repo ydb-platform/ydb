@@ -83,7 +83,7 @@ TColumnShard::TColumnShard(TTabletStorageInfo* info, const TActorId& tablet)
     , PeriodicWakeupActivationPeriod(NYDBTest::TControllers::GetColumnShardController()->GetPeriodicWakeupActivationPeriod())
     , StatsReportInterval(NYDBTest::TControllers::GetColumnShardController()->GetStatsReportInterval())
     , InFlightReadsTracker(StoragesManager, Counters.GetRequestsTracingCounters())
-    , TablesManager(StoragesManager, nullptr, nullptr, Counters.GetPortionIndexCounters(), info->TabletID)
+    , TablesManager(StoragesManager, nullptr, Counters.GetPortionIndexCounters(), info->TabletID)
     , Subscribers(std::make_shared<NSubscriber::TManager>(*this))
     , PipeClientCache(NTabletPipe::CreateBoundedClientCache(new NTabletPipe::TBoundedClientCacheConfig(), GetPipeClientConfig()))
     , CompactTaskSubscription(NOlap::TCompactColumnEngineChanges::StaticTypeName(), Counters.GetSubscribeCounters())
@@ -106,11 +106,11 @@ void TColumnShard::OnTabletDead(TEvTablet::TEvTabletDead::TPtr& ev, const TActor
 
 void TColumnShard::TryRegisterMediatorTimeCast() {
     if (MediatorTimeCastRegistered) {
-        return; // already registered
+        return;   // already registered
     }
 
     if (!ProcessingParams) {
-        return; // cannot register without processing params
+        return;   // cannot register without processing params
     }
 
     Send(MakeMediatorTimecastProxyID(), new TEvMediatorTimecast::TEvRegisterTablet(TabletID(), *ProcessingParams));
@@ -263,16 +263,10 @@ void TColumnShard::RunSchemaTx(const NKikimrTxColumnShard::TSchemaTxBody& body, 
 
 void TColumnShard::RunInit(const NKikimrTxColumnShard::TInitShard& proto, const NOlap::TSnapshot& version,
     NTabletFlatExecutor::TTransactionContext& txc) {
-    Y_UNUSED(version);
-
     NIceDb::TNiceDb db(txc.DB);
-
-    if (proto.HasOwnerPathId()) {
-        OwnerPathId = proto.GetOwnerPathId();
-        Schema::SaveSpecialValue(db, Schema::EValueIds::OwnerPathId, OwnerPathId);
-        TablesManager.SetSchemaObjectsCache(NOlap::TSchemaCachesManager::GetCache(OwnerPathId, Info()->TenantPathId));
-    }
-
+    AFL_VERIFY(proto.HasOwnerPathId());
+    const auto& tabletSchemeShardLocalPathId = NColumnShard::TSchemeShardLocalPathId::FromProto(proto);
+    TablesManager.Init(db, tabletSchemeShardLocalPathId, Info());
     if (proto.HasOwnerPath()) {
         OwnerPath = proto.GetOwnerPath();
         Schema::SaveSpecialValue(db, Schema::EValueIds::OwnerPath, OwnerPath);
@@ -288,12 +282,14 @@ void TColumnShard::RunEnsureTable(const NKikimrTxColumnShard::TCreateTable& tabl
     NIceDb::TNiceDb db(txc.DB);
 
     const auto& schemeShardLocalPathId = TSchemeShardLocalPathId::FromProto(tableProto);
-    if (const auto& internalPathId = TablesManager.ResolveInternalPathId(schemeShardLocalPathId)) {
-        LOG_S_DEBUG("EnsureTable for existed pathId: " << TUnifiedPathId::BuildValid(*internalPathId, schemeShardLocalPathId)
-             << " at tablet " << TabletID());
+
+    if (const auto& internalPathId = TablesManager.ResolveInternalPathId(schemeShardLocalPathId);
+        internalPathId && TablesManager.HasTable(*internalPathId, true)) {
+        LOG_S_DEBUG("EnsureTable for existed pathId: " << TUnifiedPathId::BuildNoCheck(internalPathId, schemeShardLocalPathId) << " at tablet "
+                                                       << TabletID());
         return;
     }
-    const auto internalPathId = TablesManager.CreateInternalPathId(schemeShardLocalPathId);
+    const auto internalPathId = TablesManager.GetOrCreateInternalPathId(schemeShardLocalPathId);
 
     LOG_S_INFO("EnsureTable for pathId: " << TUnifiedPathId::BuildValid(internalPathId, schemeShardLocalPathId)
                                            << " ttl settings: " << tableProto.GetTtlSettings()
@@ -413,10 +409,11 @@ void TColumnShard::RunAlterStore(const NKikimrTxColumnShard::TAlterStore& proto,
     NTabletFlatExecutor::TTransactionContext& txc) {
     NIceDb::TNiceDb db(txc.DB);
 
-    if (proto.HasStorePathId()) {
-        OwnerPathId = proto.GetStorePathId();
-        Schema::SaveSpecialValue(db, Schema::EValueIds::OwnerPathId, OwnerPathId);
-    }
+    AFL_VERIFY(proto.HasStorePathId());
+    const auto& storeSchemeShardLocalPathId = NColumnShard::TSchemeShardLocalPathId::FromProto(proto);
+    const auto& tabletSchemeShardLocalPathId = TablesManager.GetTabletPathIdVerified().SchemeShardLocalPathId;
+    AFL_VERIFY(tabletSchemeShardLocalPathId == storeSchemeShardLocalPathId)("tablet_path_id", tabletSchemeShardLocalPathId)(
+        "store_path_id", storeSchemeShardLocalPathId);
 
     for (ui32 id : proto.GetDroppedSchemaPresets()) {
         if (!TablesManager.HasPreset(id)) {

@@ -9,12 +9,14 @@
 #include <ydb/core/tx/columnshard/engines/changes/with_appended.h>
 #include <ydb/core/tx/columnshard/engines/changes/compaction.h>
 #include <ydb/core/tx/columnshard/engines/changes/cleanup_portions.h>
+#include <ydb/core/tx/columnshard/engines/scheme/objects_cache.h>
 #include <ydb/core/tx/columnshard/operations/write_data.h>
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
 #include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
 #include <ydb/core/tx/columnshard/test_helper/controllers.h>
 #include <ydb/core/tx/columnshard/test_helper/shard_reader.h>
+#include <ydb/core/tx/columnshard/test_helper/test_combinator.h>
 #include <ydb/library/actors/protos/unittests.pb.h>
 #include <util/string/join.h>
 
@@ -66,7 +68,7 @@ Y_UNIT_TEST_SUITE(MoveTable) {
         PlanSchemaTx(runtime, sender, {planStep, txId});
     }
 
-    Y_UNIT_TEST(WithData) {
+    Y_UNIT_TEST_DUO(WithData, Reboot) {
         TTestBasicRuntime runtime;
         TTester::Setup(runtime);
         auto csDefaultControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
@@ -79,14 +81,21 @@ Y_UNIT_TEST_SUITE(MoveTable) {
         ui64 txId = 10;
         int writeId = 10;
         std::vector<ui64> writeIds;
-        const bool ok = WriteData(runtime, sender, writeId++, srcPathId, MakeTestBlob({0, 100}, testTabe.Schema), testTabe.Schema, true, &writeIds);
+        const bool ok =
+            WriteData(runtime, sender, writeId++, srcPathId, MakeTestBlob({ 0, 100 }, testTabe.Schema), testTabe.Schema, true, &writeIds);
         UNIT_ASSERT(ok);
         planStep = ProposeCommit(runtime, sender, ++txId, writeIds);
         PlanCommit(runtime, sender, planStep, txId);
 
         const ui64 dstPathId = 2;
         planStep = ProposeSchemaTx(runtime, sender, TTestSchema::MoveTableTxBody(srcPathId, dstPathId, 1), ++txId);
-        PlanSchemaTx(runtime, sender, {planStep, txId});
+        PlanSchemaTx(runtime, sender, { planStep, txId });
+
+        if (Reboot) {
+            RebootTablet(runtime, TTestTxConfig::TxTablet0, sender);
+        }
+
+        UNIT_ASSERT_EQUAL(1, NOlap::TSchemaCachesManager::GetCachedOwnersCount());
 
         {
             TShardReader reader(runtime, TTestTxConfig::TxTablet0, dstPathId, NOlap::TSnapshot(planStep, txId));

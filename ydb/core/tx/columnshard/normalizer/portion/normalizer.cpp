@@ -25,9 +25,9 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TPortionsNormalizerBase::DoInit(
         return TConclusionStatus::Fail("Not ready");
     }
 
-    NColumnShard::TTablesManager tablesManager(controller.GetStoragesManager(), controller.GetDataAccessorsManager(),
-        std::make_shared<TSchemaObjectsCache>(), std::make_shared<TPortionIndexStats>(), 0);
-    if (!tablesManager.InitFromDB(db)) {
+    NColumnShard::TTablesManager tablesManager(
+        controller.GetStoragesManager(), controller.GetDataAccessorsManager(), std::make_shared<TPortionIndexStats>(), 0);
+    if (!tablesManager.InitFromDB(db, nullptr)) {
         ACFL_TRACE("normalizer", "TPortionsNormalizer")("error", "can't initialize tables manager");
         return TConclusionStatus::Fail("Can't load index");
     }

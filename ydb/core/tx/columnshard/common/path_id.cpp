@@ -106,6 +106,15 @@ void TSchemeShardLocalPathId::ToProto(NKikimrTxColumnShard::TEvReadResult& proto
 }
 
 template <>
+TSchemeShardLocalPathId TSchemeShardLocalPathId::FromProto(const NKikimrTxColumnShard::TInitShard& proto) {
+    return TSchemeShardLocalPathId(proto.GetOwnerPathId());
+}
+template <>
+void TSchemeShardLocalPathId::ToProto(NKikimrTxColumnShard::TInitShard& proto) const {
+    proto.SetOwnerPathId(PathId);
+}
+
+template <>
 TSchemeShardLocalPathId TSchemeShardLocalPathId::FromProto(const NKikimrTxColumnShard::TCreateTable& proto) {
     return TSchemeShardLocalPathId(proto.GetPathId());
 }
@@ -113,6 +122,15 @@ TSchemeShardLocalPathId TSchemeShardLocalPathId::FromProto(const NKikimrTxColumn
 template <>
 void TSchemeShardLocalPathId::ToProto(NKikimrTxColumnShard::TCreateTable& proto) const {
     proto.SetPathId(PathId);
+}
+
+template <>
+TSchemeShardLocalPathId TSchemeShardLocalPathId::FromProto(const NKikimrTxColumnShard::TAlterStore& proto) {
+    return TSchemeShardLocalPathId(proto.GetStorePathId());
+}
+template <>
+void TSchemeShardLocalPathId::ToProto(NKikimrTxColumnShard::TAlterStore& proto) const {
+    proto.SetStorePathId(PathId);
 }
 
 template <>

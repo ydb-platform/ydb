@@ -11,7 +11,7 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/interconnect/interconnect.h>
 #include <ydb/core/util/cache.h>
-#include <ydb/core/util/queue_oneone_inplace.h>
+#include <ydb/core/util/queue_inplace.h>
 #include <util/generic/map.h>
 #include <util/generic/deque.h>
 #include <library/cpp/random_provider/random_provider.h>
@@ -94,17 +94,15 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
             TInstant AddInstant;
             TEvTabletResolver::TEvForward::TPtr Ev;
 
-            TQueueEntry(TInstant instant, TEvTabletResolver::TEvForward::TPtr &ev)
+            TQueueEntry(TInstant instant, TEvTabletResolver::TEvForward::TPtr&& ev)
                 : AddInstant(instant)
-                , Ev(ev)
+                , Ev(std::move(ev))
             {}
         };
 
-        typedef TOneOneQueueInplace<TQueueEntry *, 64> TQueueType;
-
         EState State = StInit;
 
-        TAutoPtr<TQueueType, TQueueType::TPtrCleanDestructor> Queue;
+        TQueueInplace<TQueueEntry, 128> Queue;
         TActorId KnownLeader;
         TActorId KnownLeaderTablet;
 
@@ -200,9 +198,7 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
     }
 
     bool PushQueue(TEvTabletResolver::TEvForward::TPtr &ev, TEntry &entry, const TActorContext &ctx) {
-        if (!entry.Queue)
-            entry.Queue.Reset(new TEntry::TQueueType());
-        entry.Queue->Push(new TEntry::TQueueEntry(ctx.Now(), ev));
+        entry.Queue.Emplace(ctx.Now(), std::move(ev));
         return true;
     }
 
@@ -324,14 +320,15 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
     }
 
     void SendQueued(ui64 tabletId, TEntry &entry, const TActorContext &ctx) {
-        if (TEntry::TQueueType *queue = entry.Queue.Get()) {
-            for (TAutoPtr<TEntry::TQueueEntry> x = queue->Pop(); !!x; x.Reset(queue->Pop())) {
-                TEvTabletResolver::TEvForward *msg = x->Ev->Get();
-                if (!SendForward(x->Ev->Sender, entry, msg, ctx))
-                    ctx.Send(x->Ev->Sender, new TEvTabletResolver::TEvForwardResult(NKikimrProto::ERROR, tabletId));
+        while (TEntry::TQueueEntry* x = entry.Queue.Head()) {
+            TEvTabletResolver::TEvForward *msg = x->Ev->Get();
+            if (!SendForward(x->Ev->Sender, entry, msg, ctx)) {
+                ctx.Send(x->Ev->Sender, new TEvTabletResolver::TEvForwardResult(NKikimrProto::ERROR, tabletId));
             }
-            entry.Queue.Destroy();
+            entry.Queue.Pop();
         }
+        // Free buffer memory
+        entry.Queue.Clear();
     }
 
     void SendPing(ui64 tabletId, TEntry &entry, const TActorContext &ctx) {
@@ -359,10 +356,9 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
         LOG_DEBUG(ctx, NKikimrServices::TABLET_RESOLVER,
                   "DropEntry tabletId: %" PRIu64 " followers: %" PRIu64,
                   tabletId, entry.KnownFollowers.size());
-        if (TEntry::TQueueType *queue = entry.Queue.Get()) {
-            for (TAutoPtr<TEntry::TQueueEntry> x = queue->Pop(); !!x; x.Reset(queue->Pop())) {
-                ctx.Send(x->Ev->Sender, new TEvTabletResolver::TEvForwardResult(NKikimrProto::ERROR, tabletId));
-            }
+        while (TEntry::TQueueEntry* x = entry.Queue.Head()) {
+            ctx.Send(x->Ev->Sender, new TEvTabletResolver::TEvForwardResult(NKikimrProto::ERROR, tabletId));
+            entry.Queue.Pop();
         }
         ResolvedTablets.Erase(tabletId);
         UnresolvedTablets.Erase(tabletId);
@@ -840,10 +836,10 @@ public:
             if (!value)
                 return;
 
-            if (TEntry::TQueueType *queue = value->Queue.Get()) {
-                for (TAutoPtr<TEntry::TQueueEntry> x = queue->Pop(); !!x; x.Reset(queue->Pop())) {
-                    ActorSystem->Send(x->Ev->Sender, new TEvTabletResolver::TEvForwardResult(NKikimrProto::RACE, key));
-                }
+            auto& queue = value->Queue;
+            while (TEntry::TQueueEntry* x = queue.Head()) {
+                ActorSystem->Send(x->Ev->Sender, new TEvTabletResolver::TEvForwardResult(NKikimrProto::RACE, key));
+                queue.Pop();
             }
         });
     }

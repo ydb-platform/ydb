@@ -21,7 +21,7 @@ namespace NKikimr::NSharedCache {
             RegularTier = &CacheTiers.back();
 
             CacheTiers.emplace_back(0, createCache(), cacheCounters.ReplacementPolicySize(policy));
-            TryInMemoryTier = &CacheTiers.back();
+            TryKeepInMemoryTier = &CacheTiers.back();
         }
 
         template <typename TCacheBuilder>
@@ -39,7 +39,7 @@ namespace NKikimr::NSharedCache {
             if (auto evicted = RegularTier->EvictNext(); evicted) {
                 return std::move(evicted);
             } else {
-                return TryInMemoryTier->EvictNext();
+                return TryKeepInMemoryTier->EvictNext();
             }
         }
 
@@ -56,7 +56,7 @@ namespace NKikimr::NSharedCache {
         void UpdateLimit(ui64 limit, ui64 tryKeepInMemoryBytes) {
             ui64 tryKeepInMemoryLimit = Min(limit, tryKeepInMemoryBytes);
             RegularTier->UpdateLimit(limit - tryKeepInMemoryLimit);
-            TryInMemoryTier->UpdateLimit(tryKeepInMemoryLimit);
+            TryKeepInMemoryTier->UpdateLimit(tryKeepInMemoryLimit);
         }
 
         ui64 GetSize() const {
@@ -86,7 +86,7 @@ namespace NKikimr::NSharedCache {
     private:
         TVector<TCache> CacheTiers;
         TCache* RegularTier;
-        TCache* TryInMemoryTier;
+        TCache* TryKeepInMemoryTier;
     };
 
 } // namespace NKikimr::NSharedCache

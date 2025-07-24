@@ -386,7 +386,8 @@ namespace NKikimr {
             const bool fromVPutCommand = true;
             const TLogoBlobID id = LogoBlobIDFromLogoBlobID(PutMsg.GetBlobID());
             const TString &buf = PutMsg.GetBuffer();
-            TMaybe<TIngress> ingress = TIngress::CreateIngressWithLocal(LocRecCtx->VCtx->Top.get(), LocRecCtx->VCtx->ShortSelfVDisk, id);
+            TMaybe<TIngress> ingress = TIngress::CreateIngressWithLocal(LocRecCtx->VCtx->Top.get(), LocRecCtx->VCtx->ShortSelfVDisk, id,
+                PutMsg.GetIssueKeepFlag());
             Y_VERIFY_S(ingress, "Failed to create ingress, VDiskId# " << LocRecCtx->VCtx->ShortSelfVDisk << ", BlobId# " << id);
 
             PutLogoBlobToHullAndSyncLog(ctx, record.Lsn, id, *ingress, buf, fromVPutCommand);
@@ -400,7 +401,7 @@ namespace NKikimr {
 
             const bool fromVPutCommand = true;
             TMaybe<TIngress> ingress = TIngress::CreateIngressWithLocal(LocRecCtx->VCtx->Top.get(), LocRecCtx->VCtx->ShortSelfVDisk,
-                PutMsgOpt.Id);
+                PutMsgOpt.Id, PutMsgOpt.IssueKeepFlag);
             Y_VERIFY_S(ingress, "Failed to create ingress, VDiskId# " << LocRecCtx->VCtx->ShortSelfVDisk << 
                     ", BlobId# " << PutMsgOpt.Id);
 

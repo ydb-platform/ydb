@@ -172,7 +172,7 @@ namespace {
                             ev = std::make_unique<TEvBlobStorage::TEvVMultiPut>(vDiskId, TInstant::Max(), NKikimrBlobStorage::EPutHandleClass::AsyncBlob, true, nullptr);
                         }
 
-                        ev->AddVPut(key, TRcBuf(std::move(data)), nullptr, {}, NWilson::TTraceId());
+                        ev->AddVPut(key, TRcBuf(std::move(data)), nullptr, false, {}, NWilson::TTraceId());
                     }
                 }
             }

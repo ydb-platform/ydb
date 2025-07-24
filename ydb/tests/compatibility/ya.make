@@ -9,7 +9,6 @@ SPLIT_FACTOR(10)
 
 TEST_SRCS(
     test_example.py
-    test_export_s3.py
     test_followers.py
     test_compatibility.py
     test_stress.py
@@ -28,7 +27,6 @@ TEST_SRCS(
 SIZE(LARGE)
 REQUIREMENTS(cpu:16)
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
-INCLUDE(${ARCADIA_ROOT}/ydb/tests/tools/s3_recipe/recipe.inc)
 
 
 DEPENDS(
@@ -37,7 +35,6 @@ DEPENDS(
 )
 
 PEERDIR(
-    contrib/python/boto3
     ydb/tests/library
     ydb/tests/datashard/lib
     ydb/tests/stress/simple_queue/workload
@@ -45,3 +42,7 @@ PEERDIR(
 )
 
 END()
+
+RECURSE(
+    s3_backups
+)

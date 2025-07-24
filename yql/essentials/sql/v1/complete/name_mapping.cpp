@@ -127,10 +127,8 @@ namespace NSQLComplete {
         return {ECandidateKind::ColumnName, std::move(name.Identifier)};
     }
 
-    TCandidate ToCandidate(TBindingName name, TLocalSyntaxContext& local) {
-        if (!local.Binding) {
-            name.Identifier.prepend('$');
-        }
+    TCandidate ToCandidate(TBindingName name) {
+        name.Identifier.prepend('$');
         return {ECandidateKind::BindingName, std::move(name.Identifier)};
     }
 
@@ -149,7 +147,6 @@ namespace NSQLComplete {
                 std::is_same_v<T, TFolderName> ||
                 std::is_same_v<T, TTableName> ||
                 std::is_same_v<T, TColumnName> ||
-                std::is_same_v<T, TBindingName> ||
                 std::is_same_v<T, TUnknownName>;
 
             constexpr bool IsDocumented =

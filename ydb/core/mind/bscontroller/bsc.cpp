@@ -6,6 +6,7 @@
 #include "console_interaction.h"
 #include "group_geometry_info.h"
 #include "group_layout_checker.h"
+#include "util.h"
 
 #include <library/cpp/streams/zstd/zstd.h>
 
@@ -412,9 +413,7 @@ void TBlobStorageController::ApplyBscSettings(const NKikimrConfig::TBlobStorageC
     auto *request = r.MutableRequest();
     auto* command = request->AddCommand();
 
-    auto updateSettings = command->MutableUpdateSettings();
-
-    updateSettings->CopyFrom(bsConfig.GetBscSettings());
+    command->MutableUpdateSettings()->CopyFrom(FromBscConfig(bsConfig.GetBscSettings()));
 
     STLOG(PRI_DEBUG, BS_CONTROLLER, BSC39, "ApplyBSCSettings", (Request, r));
     Send(SelfId(), ev.release());
@@ -1000,6 +999,7 @@ ui32 TBlobStorageController::GetEventPriority(IEventHandle *ev) {
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kSetPDiskReadOnly:
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kStopPDisk:
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kGetInterfaceVersion:
+                    case NKikimrBlobStorage::TConfigRequest::TCommand::kMovePDisk:
                         return 2; // read-write commands go with higher priority as they are needed to keep cluster intact
 
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kReadHostConfig:

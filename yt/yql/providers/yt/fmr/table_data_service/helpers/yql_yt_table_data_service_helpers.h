@@ -14,4 +14,6 @@ IFmrServer::TPtr MakeTableDataServiceServer(ui16 port);
 
 ITableDataService::TPtr MakeTableDataServiceClient(ui16 port);
 
+void SetupTableDataServiceDiscovery(TTempFileHandle& hostsFile, ui16 port);
+
 } // namespace NYql::NFmr

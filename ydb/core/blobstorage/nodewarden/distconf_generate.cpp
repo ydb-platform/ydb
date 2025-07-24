@@ -120,24 +120,6 @@ namespace NKikimr::NStorage {
 
         config->SetSelfAssemblyUUID(selfAssemblyUUID);
 
-        // generate initial cluster state, if needed
-        if (Cfg->BridgeConfig) {
-            auto *state = config->MutableClusterState();
-            state->SetGeneration(1);
-            auto *piles = state->MutablePerPileState();
-            for (size_t i = 0; i < Cfg->BridgeConfig->PilesSize(); ++i) {
-                piles->Add(NKikimrBridge::TClusterState::SYNCHRONIZED);
-            }
-
-            auto *history = config->MutableClusterStateHistory();
-            auto *entry = history->AddUnsyncedEntries();
-            entry->MutableClusterState()->CopyFrom(*state);
-            entry->SetOperationGuid(RandomNumber<ui64>());
-            for (size_t i = 0; i < Cfg->BridgeConfig->PilesSize(); ++i) {
-                entry->AddUnsyncedPiles(i);
-            }
-        }
-
         if (auto error = UpdateClusterState(config)) {
             return error;
         }
@@ -223,14 +205,14 @@ namespace NKikimr::NStorage {
 
             if (baseConfig->HasSettings()) {
                 const auto& settings = baseConfig->GetSettings();
-                if (settings.HasDefaultMaxSlots()) {
-                    defaultMaxSlots = settings.GetDefaultMaxSlots();
+                if (settings.DefaultMaxSlotsSize()) {
+                    defaultMaxSlots = settings.GetDefaultMaxSlots(0);
                 }
-                if (settings.HasPDiskSpaceColorBorder()) {
-                    pdiskSpaceColorBorder.emplace(settings.GetPDiskSpaceColorBorder());
+                if (settings.PDiskSpaceColorBorderSize()) {
+                    pdiskSpaceColorBorder.emplace(settings.GetPDiskSpaceColorBorder(0));
                 }
-                if (settings.HasPDiskSpaceMarginPromille()) {
-                    pdiskSpaceMarginPromille = settings.GetPDiskSpaceMarginPromille();
+                if (settings.PDiskSpaceMarginPromilleSize()) {
+                    pdiskSpaceMarginPromille = settings.GetPDiskSpaceMarginPromille(0);
                 }
             }
 
@@ -586,11 +568,12 @@ namespace NKikimr::NStorage {
         });
     }
 
-    void TDistributedConfigKeeper::GenerateStateStorageConfig(NKikimrConfig::TDomainsConfig::TStateStorage *ss,
+    bool TDistributedConfigKeeper::GenerateStateStorageConfig(NKikimrConfig::TDomainsConfig::TStateStorage *ss,
             const NKikimrBlobStorage::TStorageConfig& baseConfig) {
         std::map<std::optional<TBridgePileId>, THashMap<TString, std::vector<std::tuple<ui32, TNodeLocation>>>> nodes;
-
+        bool goodConfig = true;
         for (const auto& node : baseConfig.GetAllNodes()) {
+
             std::optional<TBridgePileId> pileId = node.HasBridgePileId()
                 ? std::make_optional(TBridgePileId::FromProto(&node, &NKikimrBlobStorage::TNodeIdentifier::GetBridgePileId))
                 : std::nullopt;
@@ -599,13 +582,36 @@ namespace NKikimr::NStorage {
             nodes[pileId][location.GetDataCenterId()].emplace_back(node.GetNodeId(), location);
         }
 
-        auto pickNodes = [](std::vector<std::tuple<ui32, TNodeLocation>>& nodes, size_t ringsCount, size_t nodesInRing) {
+        auto pickNodes = [&](std::vector<std::tuple<ui32, TNodeLocation>>& nodes, size_t ringsCount, size_t nodesInRing) {
             Y_ABORT_UNLESS(ringsCount * nodesInRing <= nodes.size());
-            auto comp = [](const auto& x, const auto& y) { return std::get<1>(x).GetRackId() < std::get<1>(y).GetRackId(); };
-            std::ranges::sort(nodes, comp);
+            THashSet<ui32> disabled;
+            auto compByRack = [](const auto& x, const auto& y) {
+                return std::get<1>(x).GetRackId() < std::get<1>(y).GetRackId()
+                    || (std::get<1>(x).GetRackId() == std::get<1>(y).GetRackId() && std::get<0>(x) < std::get<0>(y));
+            };
+            auto compByState = [&](const auto& x, const auto& y) {
+                ui32 state1 = SelfHealNodesState.contains(std::get<0>(x)) ? SelfHealNodesState.at(std::get<0>(x)) : Max<ui32>();
+                ui32 state2 = SelfHealNodesState.contains(std::get<0>(y)) ? SelfHealNodesState.at(std::get<0>(y)) : Max<ui32>();
+                return state1 < state2 || (state1 == state2 && compByRack(x, y));
+            };
+            std::ranges::sort(nodes, compByState);
+            ui32 cnt = 0;
+            for (auto &[nodeId, _] : nodes) {
+                if (SelfHealNodesState[nodeId] == 0) {
+                    cnt++;
+                    continue;
+                }
+                if (cnt >= ringsCount * nodesInRing) {
+                    disabled.insert(nodeId);
+                } else {
+                    cnt++;
+                    goodConfig = false;
+                }
+            }
+            std::ranges::sort(nodes, compByRack);
+
             std::vector<std::vector<ui32>> result;
             result.resize(ringsCount);
-            THashSet<ui32> disabled;
             auto iter = nodes.begin();
             TNodeLocation location;
             for(ui32 i : xrange(ringsCount)) {
@@ -674,6 +680,7 @@ namespace NKikimr::NStorage {
                 }
             }
         }
+        return goodConfig;
     }
 
     bool TDistributedConfigKeeper::UpdateConfig(NKikimrBlobStorage::TStorageConfig *config) {

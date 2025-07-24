@@ -16,4 +16,7 @@ namespace NSQLComplete {
 
     IDocumentation::TPtr MakeStaticDocumentation(TDocByNormalizedNameMap docs);
 
+    IDocumentation::TPtr MakeReservedDocumentation(
+        IDocumentation::TPtr primary, IDocumentation::TPtr fallback);
+
 } // namespace NSQLComplete

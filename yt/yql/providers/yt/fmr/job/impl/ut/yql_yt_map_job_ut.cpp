@@ -35,7 +35,7 @@ Y_UNIT_TEST_SUITE(MapTests) {
             .Input = TTaskTableInputRef{.Inputs ={taskTableRef}},
             .Output = {fmrOutputRef}
         };
-        FillMapFmrJob(mapJob, mapTaskParams, {}, tableDataServiceHostsFile.Name(), true);
+        FillMapFmrJob(mapJob, mapTaskParams, {}, tableDataServiceHostsFile.Name(), MakeFileYtJobSerivce());
 
         {
             auto functionRegistry = CreateFunctionRegistry(CreateBuiltinRegistry());

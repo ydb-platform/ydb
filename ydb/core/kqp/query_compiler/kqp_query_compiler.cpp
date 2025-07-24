@@ -613,6 +613,8 @@ public:
         queryProto.SetEnableOltpSink(Config->EnableOltpSink);
         queryProto.SetEnableOlapSink(Config->EnableOlapSink);
         queryProto.SetEnableHtapTx(Config->EnableHtapTx);
+        queryProto.SetLangVer(Config->LangVer);
+
         queryProto.SetForceImmediateEffectsExecution(
             Config->KqpForceImmediateEffectsExecution.Get().GetOrElse(false));
 
@@ -931,6 +933,7 @@ private:
         auto& programProto = *stageProto.MutableProgram();
         programProto.SetRuntimeVersion(NYql::NDqProto::ERuntimeVersion::RUNTIME_VERSION_YQL_1_0);
         programProto.SetRaw(programBytecode);
+        programProto.SetLangVer(Config->LangVer);
 
         stagePredictor.SerializeToKqpSettings(*programProto.MutableSettings());
 
@@ -1471,6 +1474,10 @@ private:
                 using enum NDq::EHashShuffleFuncType;
                 case HashV1: {
                     shuffleProto.MutableHashV1();
+                    break;
+                }
+                case HashV2: {
+                    shuffleProto.MutableHashV2();
                     break;
                 }
                 case ColumnShardHashV1: {

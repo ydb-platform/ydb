@@ -413,10 +413,11 @@ void TColumnShard::FillColumnTableStats(const TActorContext& ctx, std::unique_pt
 void TColumnShard::SendPeriodicStats() {
     LOG_S_DEBUG("Send periodic stats.");
 
-    if (!CurrentSchemeShardId || !OwnerPathId) {
+    if (!CurrentSchemeShardId || !TablesManager.GetTabletPathIdOptional()) {
         LOG_S_DEBUG("Disabled periodic stats at tablet " << TabletID());
         return;
     }
+    const auto& tabletSchemeShardLocalPathId = TablesManager.GetTabletPathIdVerified().SchemeShardLocalPathId;
 
     const TActorContext& ctx = ActorContext();
     const TInstant now = TAppData::TimeProvider->Now();
@@ -433,7 +434,7 @@ void TColumnShard::SendPeriodicStats() {
         StatsReportPipe = ctx.Register(NTabletPipe::CreateClient(ctx.SelfID, CurrentSchemeShardId, clientConfig));
     }
 
-    auto ev = std::make_unique<TEvDataShard::TEvPeriodicTableStats>(TabletID(), OwnerPathId);
+    auto ev = std::make_unique<TEvDataShard::TEvPeriodicTableStats>(TabletID(), tabletSchemeShardLocalPathId.GetRawValue());
 
     FillOlapStats(ctx, ev);
     FillColumnTableStats(ctx, ev);

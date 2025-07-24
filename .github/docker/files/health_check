@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+
+set -e
+if [ "${DEBUG}" = "true" ]; then
+    set -x
+fi
+
+/ydb -e grpcs://localhost:${GRPC_TLS_PORT:-2135} --ca-file /ydb_certs/ca.pem -d /local --no-discovery monitoring healthcheck | grep -q GOOD || exit 1
+

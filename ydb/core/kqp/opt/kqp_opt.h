@@ -1,5 +1,6 @@
 #pragma once
 
+#include <yql/essentials/core/yql_statistics.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/provider/yql_kikimr_expr_nodes.h>
 #include <ydb/core/kqp/provider/yql_kikimr_provider.h>
@@ -32,6 +33,7 @@ struct TKqpOptimizeContext : public TSimpleRefCount<TKqpOptimizeContext> {
     int EquiJoinsCount{};
     std::shared_ptr<NJson::TJsonValue> OverrideStatistics{};
     std::shared_ptr<NYql::TOptimizerHints> Hints{};
+    NYql::TShufflingOrderingsByJoinLabels ShufflingOrderingsByJoinLabels;
 
     std::shared_ptr<NJson::TJsonValue> GetOverrideStatistics() {
         if (Config->OptOverrideStatistics.Get()) {

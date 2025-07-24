@@ -363,6 +363,7 @@ private:
     std::shared_ptr<TAtomicCounter> FilterFetchingGuard = std::make_shared<TAtomicCounter>();
     std::shared_ptr<TAtomicCounter> AbortsGuard = std::make_shared<TAtomicCounter>();
     std::shared_ptr<TAtomicCounter> TotalExecutionDurationUs = std::make_shared<TAtomicCounter>();
+    std::shared_ptr<TAtomicCounter> TotalRawBytes = std::make_shared<TAtomicCounter>();
     THashMap<ui32, std::shared_ptr<TAtomicCounter>> SkipNodesCount;
     THashMap<ui32, std::shared_ptr<TAtomicCounter>> ExecuteNodesCount;
 
@@ -391,6 +392,14 @@ public:
 
     TDuration GetExecutionDuration() const {
         return TDuration::MicroSeconds(TotalExecutionDurationUs->Val());
+    }
+
+    void AddRawBytes(const ui64 bytes) const {
+        TotalRawBytes->Add(bytes);
+    }
+
+    ui64 GetRawBytes() const {
+        return TotalRawBytes->Val();
     }
 
     TString DebugString() const {

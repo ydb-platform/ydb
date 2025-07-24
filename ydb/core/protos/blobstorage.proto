@@ -311,6 +311,7 @@ message TEvVPut {
 
     optional NKikimrProto.TLogoBlobID BlobID = 1;
     optional bytes Buffer = 2;
+    optional bool IssueKeepFlag = 12; // when set, blob is written along with keep flag
 
     optional NKikimrBlobStorage.TVDiskID VDiskID = 3;
 
@@ -346,6 +347,7 @@ message TEvVPutResult {
 message TVMultiPutItem {
     optional NKikimrProto.TLogoBlobID BlobID = 1;
     optional bytes Buffer = 2;
+    optional bool IssueKeepFlag = 7;
 
     optional uint64 FullDataSize = 3;
     optional uint64 Cookie = 4;

@@ -252,6 +252,9 @@ message TKqpPhyCnMap {
 message THashV1 {
 }
 
+message THashV2 {
+}
+
 message TColumnShardHashV1 {
     repeated uint32 KeyColumnTypes = 3;
 }
@@ -261,6 +264,7 @@ message TKqpPhyCnHashShuffle {
 
     oneof HashKind {
         THashV1 HashV1 = 2;
+        THashV2 HashV2 = 5;
         TColumnShardHashV1 ColumnShardHashV1 = 3;
     }
 
@@ -587,4 +591,5 @@ message TKqpPhyQuery {
     optional bool EnableOlapSink = 13;
     optional bool EnableHtapTx = 14;
     optional bool ForceImmediateEffectsExecution = 15;
+    uint32 LangVer = 16;
 }

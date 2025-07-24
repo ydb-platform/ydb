@@ -5,6 +5,7 @@
 #include "import_tui.h"
 #include "log.h"
 #include "log_backend.h"
+#include "path_checker.h"
 #include "util.h"
 
 #include <ydb/public/lib/ydb_cli/commands/ydb_command.h>
@@ -188,7 +189,7 @@ NTable::TBulkUpsertResult LoadWarehouses(
         valueBuilder.AddListItem()
             .BeginStruct()
             .AddMember("W_ID").Int32(warehouseId)
-            .AddMember("W_YTD").Double(300000.00)
+            .AddMember("W_YTD").Double(DISTRICT_INITIAL_YTD * DISTRICT_COUNT)
             .AddMember("W_TAX").Double(RandomNumber(fastRng, 0, 2000) / 10000.0)
             .AddMember("W_NAME").Utf8(RandomAlphaString(fastRng, 6, 10))
             .AddMember("W_STREET_1").Utf8(RandomAlphaString(fastRng, 10, 20))
@@ -295,7 +296,7 @@ NTable::TBulkUpsertResult LoadDistricts(
             .BeginStruct()
             .AddMember("D_W_ID").Int32(warehouseId)
             .AddMember("D_ID").Int32(districtId)
-            .AddMember("D_YTD").Double(30000.00)
+            .AddMember("D_YTD").Double(DISTRICT_INITIAL_YTD)
             .AddMember("D_TAX").Double(RandomNumber(fastRng, 0, 2000) / 10000.0)
             .AddMember("D_NEXT_O_ID").Int32(CUSTOMERS_PER_DISTRICT + 1)
             .AddMember("D_NAME").Utf8(RandomAlphaString(fastRng, 6, 10))
@@ -837,6 +838,8 @@ public:
             std::cerr << "Specified zero warehouses" << std::endl;
             std::exit(1);
         }
+
+        CheckPathForImport(ConnectionConfig, Config.Path);
 
         Config.SetDisplay();
         CalculateApproximateDataSize();

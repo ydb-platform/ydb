@@ -426,6 +426,14 @@ message TCmsConfig {
     }
 
     message TSentinelConfig {
+        message TStateStorageSelfHealConfig {
+            optional bool Enable = 19 [default = true];
+            optional uint32 NodeGoodStateLimit = 20 [default = 10];
+            optional uint32 NodeBadStateLimit = 21 [default = 10];
+            optional uint32 WaitForConfigStep = 22 [default = 60000000];
+            optional uint32 RelaxTime = 23 [default = 600000000];
+        }
+
         message TStateLimit {
             optional uint32 State = 1; // EPDiskState
             optional uint32 Limit = 2;
@@ -466,8 +474,10 @@ message TCmsConfig {
         optional bool DryRun = 13;
         repeated TStateLimit StateLimits = 14;
         optional EEvictVDisksStatus EvictVDisksStatus = 15;
-        
+
         optional uint32 GoodStateLimit = 16 [default = 5];
+
+        optional TStateStorageSelfHealConfig StateStorageSelfHealConfig = 19;
     }
 
     message TLogConfig {

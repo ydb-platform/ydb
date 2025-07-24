@@ -877,6 +877,20 @@
             "uri": "https://{canondata_backend}/1784117/dbcd3ba4a0d5f6082e54161256fb75ae88cbff44/resource.tar.gz#test.test_join-join_comp_inmem-default.txt-Results_/results.txt"
         }
     ],
+    "test.test[join-pushdown_all_sides-default.txt-Debug]": [
+        {
+            "checksum": "c6ad5b6c8904b81eda5617d3f90e0f03",
+            "size": 1927,
+            "uri": "https://{canondata_backend}/1599023/db1fc424c33f1e3d7379b8d279c7b3ecfd28ced1/resource.tar.gz#test.test_join-pushdown_all_sides-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[join-pushdown_all_sides-default.txt-Results]": [
+        {
+            "checksum": "71f164814672fba7d6bb48c998ecbd0d",
+            "size": 6703,
+            "uri": "https://{canondata_backend}/1597364/a08acb9a39de513be38f4870d1fa364d442a056c/resource.tar.gz#test.test_join-pushdown_all_sides-default.txt-Results_/results.txt"
+        }
+    ],
     "test.test[json-json_query/on_error-default.txt-Debug]": [
         {
             "checksum": "e88d18b7b03f5445093c7ffb4f15d241",
@@ -1613,16 +1627,16 @@
     ],
     "test.test[select_op-select_op_precedence-default.txt-Debug]": [
         {
-            "checksum": "d988a916cc8cf62b2b0a209dac05e6ad",
-            "size": 2449,
-            "uri": "https://{canondata_backend}/1937424/ee95b3be0f5d76ab6152d1ca5aedc6f278ad320b/resource.tar.gz#test.test_select_op-select_op_precedence-default.txt-Debug_/opt.yql"
+            "checksum": "3cc5644e63d6d4d4601132f97c177a71",
+            "size": 2350,
+            "uri": "https://{canondata_backend}/1871182/4957464f17f4b05ffc05eeebd894c6e979082da5/resource.tar.gz#test.test_select_op-select_op_precedence-default.txt-Debug_/opt.yql"
         }
     ],
     "test.test[select_op-select_op_precedence-default.txt-Results]": [
         {
-            "checksum": "355b6ce9dc8117b59c91a73b5a309c1e",
-            "size": 2428,
-            "uri": "https://{canondata_backend}/1937424/ee95b3be0f5d76ab6152d1ca5aedc6f278ad320b/resource.tar.gz#test.test_select_op-select_op_precedence-default.txt-Results_/results.txt"
+            "checksum": "c0efe7c81a642f898ef8a9edaa9744eb",
+            "size": 2355,
+            "uri": "https://{canondata_backend}/1871182/4957464f17f4b05ffc05eeebd894c6e979082da5/resource.tar.gz#test.test_select_op-select_op_precedence-default.txt-Results_/results.txt"
         }
     ],
     "test.test[udf-same_udf_modules--Debug]": [

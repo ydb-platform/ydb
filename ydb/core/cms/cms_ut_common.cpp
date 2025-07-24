@@ -587,8 +587,9 @@ static void SetupServices(TTestBasicRuntime &runtime, const TTestEnvOpts &option
     
     if (options.IsBridgeMode) {
         for (ui32 pileId = 0; pileId < options.PileCount; ++pileId) {
-            runtime.GetAppData().BridgeConfig->AddPiles()->SetName("r" + ToString(pileId));
+            runtime.GetAppData().BridgeConfig.AddPiles()->SetName("r" + ToString(pileId));
         }
+        runtime.GetAppData().BridgeModeEnabled = true;
     }
 
     NKikimrCms::TCmsConfig cmsConfig;
@@ -658,7 +659,9 @@ TCmsTestEnv::TCmsTestEnv(const TTestEnvOpts &options)
         for (ui32 i = 1; i <= GetNodeCount(); ++i) {
             ringGroupIdToNodeIds[i % options.PileCount].push_back(i - 1);
         }
-        auto setuper = CreateCustomStateStorageSetupper(ringGroups, ringGroupIdToNodeIds);
+        auto setuper = options.EnableSimpleStateStorageConfig 
+                                              ? CreateCustomStateStorageSetupper(ringGroups, 3) 
+                                              : CreateCustomStateStorageSetupper(ringGroups, ringGroupIdToNodeIds);
 
         for (ui32 nodeIndex = 0; nodeIndex < GetNodeCount(); ++nodeIndex) {
             setuper(*this, nodeIndex);
@@ -821,6 +824,22 @@ TCmsTestEnv::RequestState(const NKikimrCms::TClusterStateRequest &request,
     UNIT_ASSERT_VALUES_EQUAL(rec.GetStatus().GetCode(), code);
 
     return rec.GetState();
+}
+
+TCmsTestEnv::TListNodes
+TCmsTestEnv::RequestListNodes()
+{
+    TAutoPtr<TEvCms::TEvListClusterNodesRequest> event = new TEvCms::TEvListClusterNodesRequest;
+    SendToPipe(CmsId, GetSender(), event.Release(), 0, GetPipeConfigWithRetries());
+
+    TAutoPtr<IEventHandle> handle;
+    auto reply = GrabEdgeEventRethrow<TEvCms::TEvListClusterNodesResponse>(handle);
+    UNIT_ASSERT(reply);
+
+    const auto &rec = reply->Record;
+    UNIT_ASSERT_VALUES_EQUAL(rec.GetStatus(), Ydb::StatusIds::SUCCESS);
+
+    return rec.GetResult().nodes();
 }
 
 std::pair<TString, TVector<TString>>

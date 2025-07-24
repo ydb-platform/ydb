@@ -54,6 +54,7 @@ Y_UNIT_TEST_SUITE(LocalPartitionReader) {
 
     TEvPersQueue::TEvResponse* GenerateData(ui32 dataPatternCookie) {
         auto* readResponse = new TEvPersQueue::TEvResponse;
+        readResponse->Record.SetStatus(NMsgBusProxy::MSTATUS_OK);
         readResponse->Record.SetErrorCode(NPersQueue::NErrorCode::OK);
         auto& cmdReadResult = *readResponse->Record.MutablePartitionResponse()->MutableCmdReadResult();
         auto& readResult1 = *cmdReadResult.AddResult();
@@ -74,9 +75,10 @@ Y_UNIT_TEST_SUITE(LocalPartitionReader) {
         return readResponse;
     }
 
-    TEvPersQueue::TEvResponse* GenerateEmptyData() {
+    TEvPersQueue::TEvResponse* GenerateUnavailableData() {
         auto* readResponse = new TEvPersQueue::TEvResponse;
-        readResponse->Record.SetErrorCode(NPersQueue::NErrorCode::OK);
+        readResponse->Record.SetStatus(NMsgBusProxy::MSTATUS_NOTREADY);
+        readResponse->Record.SetErrorCode(NPersQueue::NErrorCode::OVERLOAD);
         readResponse->Record.MutablePartitionResponse()->MutableCmdReadResult();
 
         return readResponse;
@@ -148,7 +150,7 @@ Y_UNIT_TEST_SUITE(LocalPartitionReader) {
         Y_UNUSED(handshake);
     }
 
-    Y_UNIT_TEST(FeedSlowly) {
+    Y_UNIT_TEST(Retries) {
         TTestActorRuntime runtime;
         runtime.Initialize(NKikimr::TAppPrepare().Unwrap());
 
@@ -177,7 +179,7 @@ Y_UNIT_TEST_SUITE(LocalPartitionReader) {
 
             runtime.SimulateSleep(TDuration::Seconds(1));
 
-            runtime.Send(new IEventHandle(reader, pqtablet, GenerateEmptyData()));
+            runtime.Send(new IEventHandle(reader, pqtablet, GenerateUnavailableData()));
         }
 
         for (auto i = 0; i < 3; ++i) {
@@ -201,7 +203,7 @@ Y_UNIT_TEST_SUITE(LocalPartitionReader) {
 
             runtime.SimulateSleep(TDuration::Seconds(1));
 
-            runtime.Send(new IEventHandle(reader, pqtablet, GenerateEmptyData()));
+            runtime.Send(new IEventHandle(reader, pqtablet, GenerateUnavailableData()));
         }
 
         for (auto i = 3; i < 5; ++i) {

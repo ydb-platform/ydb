@@ -3,11 +3,13 @@
 #include "constants.h"
 #include "log.h"
 #include "log_backend.h"
+#include "path_checker.h"
 #include "runner_display_data.h"
 #include "runner_tui.h"
 #include "task_queue.h"
 #include "terminal.h"
 #include "transactions.h"
+#include "util.h"
 
 #include <ydb/public/lib/ydb_cli/commands/ydb_command.h>
 #include <ydb/public/lib/ydb_cli/common/interactive.h>
@@ -134,6 +136,8 @@ TPCCRunner::TPCCRunner(const NConsoleClient::TClientCommand::TConfig& connection
         std::cerr << "Specified zero warehouses" << std::endl;
         std::exit(1);
     }
+
+    CheckPathForRun(connectionConfig, Config.Path, Config.WarehouseCount);
 
     const size_t terminalsCount = Config.WarehouseCount * TERMINALS_PER_WAREHOUSE;
 
@@ -556,7 +560,7 @@ void TPCCRunner::CalculateStatusData(Clock::time_point now, TRunDisplayData& dat
 
         // there are two errors: rounding + approximation, we might overshoot
         // 100% efficiency very slightly because of errors and it's OK to "round down"
-        maxPossibleTpmc = Config.WarehouseCount * MAX_TPMC_PER_WAREHOUSE * 60 / currentPhaseElapsed.count();
+        maxPossibleTpmc = Config.WarehouseCount * MAX_TPMC_PER_WAREHOUSE;
         data.StatusData.Tpmc = std::min(maxPossibleTpmc, tpmc);
     }
 
@@ -753,11 +757,6 @@ void TRunConfig::SetDisplay() {
 void RunSync(const NConsoleClient::TClientCommand::TConfig& connectionConfig, const TRunConfig& runConfig) {
     TPCCRunner runner(connectionConfig, runConfig);
     runner.RunSync();
-}
-
-std::stop_source GetGlobalInterruptSource() {
-    static std::stop_source StopByInterrupt;
-    return StopByInterrupt;
 }
 
 } // namespace NYdb::NTPCC

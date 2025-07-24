@@ -307,13 +307,13 @@ TScheme BuildScheme(const TAutoPtr<NSchemeCache::TSchemeCacheNavigate>& nav) {
         if (name != OUTPUT_TABLE_COLUMN) {
             result.ColumnsMetadata.push_back(c);
             result.WriteIndex.push_back(column.KeyOrder >= 0 ? column.KeyOrder : i++);
+
+            Ydb::Type type;
+            type.set_type_id(static_cast<Ydb::Type::PrimitiveTypeId>(column.PType.GetTypeId()));
+            result.Types->emplace_back(column.Name, type);
         } else {
             ++i;
         }
-
-        Ydb::Type type;
-        type.set_type_id(static_cast<Ydb::Type::PrimitiveTypeId>(column.PType.GetTypeId()));
-        result.Types->emplace_back(column.Name, type);
     }
 
     return result;
@@ -467,8 +467,10 @@ private:
     }
 
     void Handle(TEvTxUserProxy::TEvUploadRowsResponse::TPtr& ev) {
+        Cerr << ">>>>> TEvUploadRowsResponse" << Endl;
         auto it = CookieMapping.find(ev->Cookie);
         if (it == CookieMapping.end()) {
+        Cerr << ">>>>> TEvUploadRowsResponse COOKIE" << Endl;
             LOG_W("Processed unknown cookie " << ev->Cookie);
             return;
         }
@@ -476,10 +478,12 @@ private:
         auto& tablePath = it->second;
 
         if (ev->Get()->Status == Ydb::StatusIds::SUCCESS) {
+            Cerr << ">>>>> TEvUploadRowsResponse SUCCESS" << Endl;
             Data.erase(tablePath);
             CookieMapping.erase(ev->Cookie);
 
             if (Data.empty()) {
+                Cerr << ">>>>> TEvUploadRowsResponse DATA EMPTY" << Endl;
                 Forward(ev, ParentActor);
                 PassAway();
             }
@@ -495,6 +499,7 @@ private:
             return;
         }
 
+        Cerr << ">>>>> TEvUploadRowsResponse ERROR " << ev->Get()->Issues.ToOneLineString() << Endl;
 
         Forward(ev, ParentActor);
         PassAway();

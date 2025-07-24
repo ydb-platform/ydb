@@ -8,6 +8,8 @@ import yatest.common
 import allure
 import logging
 import ydb.tests.olap.lib.remote_execution as re
+import pytest
+from .tpch import TpchSuiteBase
 
 
 class UploadSuiteBase(LoadSuiteBase):
@@ -148,6 +150,10 @@ class UploadClusterBase(UploadSuiteBase):
 
 class UploadTpchBase(UploadClusterBase):
     __static_nodes: list[YdbCluster.Node] = []
+    workload_type = TpchSuiteBase.workload_type
+    iterations = TpchSuiteBase.iterations
+    tables_size = TpchSuiteBase.tables_size
+    check_canonical = TpchSuiteBase.check_canonical
 
     @classmethod
     def __execute_on_nodes(cls, cmd):
@@ -203,6 +209,10 @@ class UploadTpchBase(UploadClusterBase):
     def do_teardown_class(cls) -> None:
         yatest.common.execute(YdbCliHelper.get_cli_command() + ['workload', 'tpch', '-p', YdbCluster.get_tables_path(cls.get_path()), 'clean'])
         cls.__execute_on_nodes(f'rm -rf {cls.get_remote_tmpdir()}')
+
+    @pytest.mark.parametrize('query_num', [i for i in range(1, 23)])
+    def test_tpch(self, query_num: int):
+        self.run_workload_test(self.get_path(), query_num)
 
 
 class TestUploadTpch1(UploadTpchBase):

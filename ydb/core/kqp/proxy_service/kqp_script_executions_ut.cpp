@@ -1,4 +1,5 @@
 #include "kqp_script_executions.h"
+#include "kqp_script_execution_retries.h"
 #include "kqp_script_executions_impl.h"
 
 #include <ydb/core/base/backtrace.h>
@@ -387,7 +388,7 @@ public:
     THolder<NYdb::NTable::TSession> TableClientSession;
 };
 
-}
+} // anonymous namespace
 
 Y_UNIT_TEST_SUITE(ScriptExecutionsTest) {
     Y_UNIT_TEST(RunCheckLeaseStatus) {
@@ -528,6 +529,77 @@ Y_UNIT_TEST_SUITE(ScriptExecutionsTest) {
     }
 }
 
+Y_UNIT_TEST_SUITE(TestScriptExecutionsUtils) {
+    Y_UNIT_TEST(TestRetryPolicyItem) {
+        NKikimrKqp::TScriptExecutionRetryState retryState;
+
+        {
+            auto& mapping = *retryState.AddRetryPolicyMapping();
+            mapping.AddStatusCode(Ydb::StatusIds::SCHEME_ERROR);
+            mapping.MutableBackoffPolicy()->SetRetryRateLimit(42);
+        }
+
+        {
+            auto& mapping = *retryState.AddRetryPolicyMapping();
+            mapping.AddStatusCode(Ydb::StatusIds::UNAVAILABLE);
+            mapping.AddStatusCode(Ydb::StatusIds::INTERNAL_ERROR);
+            mapping.MutableBackoffPolicy()->SetRetryRateLimit(84);
+        }
+
+        const auto checkStatus = [&](Ydb::StatusIds::StatusCode status, ui64 expectedRateLimit) {
+            const auto policy = TRetryPolicyItem::FromProto(status, retryState);
+            UNIT_ASSERT_VALUES_EQUAL(policy.RetryCount, expectedRateLimit);
+        };
+
+        checkStatus(Ydb::StatusIds::SCHEME_ERROR, 42);
+        checkStatus(Ydb::StatusIds::UNAVAILABLE, 84);
+        checkStatus(Ydb::StatusIds::INTERNAL_ERROR, 84);
+        checkStatus(Ydb::StatusIds::BAD_REQUEST, 0);
+    }
+
+    Y_UNIT_TEST(TestRetryLimiter) {
+        constexpr ui64 RETRY_COUNT = 10;
+        const TInstant now = TInstant::Now();
+
+        TRetryLimiter limiter;
+        limiter.Assign(RETRY_COUNT, now, 0.0);
+        UNIT_ASSERT_VALUES_EQUAL(limiter.RetryCount, RETRY_COUNT);
+        UNIT_ASSERT_VALUES_EQUAL(limiter.RetryCounterUpdatedAt, now);
+        UNIT_ASSERT_VALUES_EQUAL(limiter.RetryRate, 0.0);
+
+        constexpr TDuration RETRY_PERIOD = TDuration::Seconds(1);
+        constexpr TDuration BACKOFF_DURATION = TDuration::Seconds(1);
+
+        {   // Retry rate limit
+            TRetryPolicyItem policy(RETRY_COUNT, 0, RETRY_PERIOD, BACKOFF_DURATION);
+
+            for (ui64 i = 0; i <= 2 * RETRY_COUNT; ++i) {
+                Sleep(RETRY_PERIOD / (2 * RETRY_COUNT));
+                if (i < 2 * RETRY_COUNT) {
+                    UNIT_ASSERT_C(limiter.UpdateOnRetry(TInstant::Now(), policy), i << ": " << limiter.RetryRate << ", error=" << limiter.LastError);
+                    UNIT_ASSERT_DOUBLES_EQUAL(limiter.Backoff.SecondsFloat(), (1.0 + 0.5 * static_cast<double>(i + 1)) * BACKOFF_DURATION.SecondsFloat(), 0.1);
+                } else {
+                    UNIT_ASSERT_C(!limiter.UpdateOnRetry(TInstant::Now(), policy), limiter.RetryRate);
+                    UNIT_ASSERT_STRING_CONTAINS(limiter.LastError, TStringBuilder() << "failure rate " << limiter.RetryRate << " exceeds limit of "  << RETRY_COUNT);
+                }
+            }
+        }
+
+        {   // Retry count limit
+            TRetryPolicyItem policy(8 * RETRY_COUNT, 4 * RETRY_COUNT, RETRY_PERIOD, BACKOFF_DURATION);
+
+            for (ui64 i = 0; i <= RETRY_COUNT; ++i) {
+                if (i < RETRY_COUNT) {
+                    UNIT_ASSERT_C(limiter.UpdateOnRetry(TInstant::Now(), policy), i << ": rate=" << limiter.RetryRate << ", count=" << limiter.RetryCount << ", error=" << limiter.LastError);
+                } else {
+                    UNIT_ASSERT_C(!limiter.UpdateOnRetry(TInstant::Now(), policy), limiter.RetryCount);
+                    UNIT_ASSERT_STRING_CONTAINS(limiter.LastError, TStringBuilder() << "retry count reached limit of " << 4 * RETRY_COUNT);
+                }
+            }
+        }
+    }
+}
+
 Y_UNIT_TEST_SUITE(TableCreation) {
 
     Y_UNIT_TEST(SimpleTableCreation) {
@@ -632,4 +704,5 @@ Y_UNIT_TEST_SUITE(TableCreation) {
     }
 
 }
+
 } // namespace NKikimr::NKqp

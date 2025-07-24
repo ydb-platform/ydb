@@ -506,6 +506,10 @@ void BuildKqpStageChannels(TKqpTasksGraph& tasksGraph, TStageInfo& stageInfo,
                         hashKind = EHashShuffleFuncType::HashV1;
                         break;
                     }
+                    case NKqpProto::TKqpPhyCnHashShuffle::kHashV2: {
+                        hashKind = EHashShuffleFuncType::HashV2;
+                        break;
+                    }
                     case NKqpProto::TKqpPhyCnHashShuffle::kColumnShardHashV1: {
                         Y_ENSURE(enableShuffleElimination, "OptShuffleElimination wasn't turned on, but ColumnShardHashV1 detected!");
 
@@ -1081,6 +1085,10 @@ void FillOutputDesc(
                 using enum EHashShuffleFuncType;
                 case HashV1: {
                     hashPartitionDesc.MutableHashV1();
+                    break;
+                }
+                case HashV2: {
+                    hashPartitionDesc.MutableHashV2();
                     break;
                 }
                 case ColumnShardHashV1: {

@@ -88,7 +88,7 @@
                                                         "PlanNodeId": 14,
                                                         "Plans": [
                                                             {
-                                                                "HashFunc": "HashV1",
+                                                                "HashFunc": "HashV2",
                                                                 "KeyColumns": [
                                                                     "qq"
                                                                 ],
@@ -139,7 +139,7 @@
                                                                 ]
                                                             },
                                                             {
-                                                                "HashFunc": "HashV1",
+                                                                "HashFunc": "HashV2",
                                                                 "KeyColumns": [
                                                                     "qq"
                                                                 ],

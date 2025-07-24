@@ -915,7 +915,7 @@ TStatus AnnotateDqCnHashShuffle(const TExprNode::TPtr& input, TExprContext& ctx)
     if (TDqCnHashShuffle::idx_HashFunc < input->ChildrenSize()) {
         TString hashFuncName = TString(input->Child(TDqCnHashShuffle::idx_HashFunc)->Content()); hashFuncName.to_lower();
 
-        static const auto allowableHashFuncs = { "columnshardhashv1", "hashv1" };
+        static const auto allowableHashFuncs = { "columnshardhashv1", "hashv1", "hashv2" };
         Y_ENSURE(
             std::find(allowableHashFuncs.begin(), allowableHashFuncs.end(), hashFuncName) != allowableHashFuncs.end(),
             TStringBuilder{} << "No such hash function: "  << hashFuncName << ", allowable: "  << "{" << JoinSeq(",", allowableHashFuncs) << "}"
@@ -1240,7 +1240,7 @@ TStatus AnnotateDqBlockHashJoinCore(const TExprNode::TPtr& node, TExprContext& c
         return IGraphTransformer::TStatus(TStatus::Error);
     }
     // Remove length column
-    rightItemTypes.pop_back(); 
+    rightItemTypes.pop_back();
 
     if (!EnsureTupleOfAtoms(leftKeysNode, ctx)) {
         return IGraphTransformer::TStatus(TStatus::Error);

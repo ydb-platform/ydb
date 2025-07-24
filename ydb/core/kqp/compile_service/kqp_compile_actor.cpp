@@ -670,6 +670,15 @@ void ApplyServiceConfig(TKikimrConfiguration& kqpConfig, const TTableServiceConf
         kqpConfig.YqlCoreOptimizerFlags.insert("fuseequijoinsinputmultilabels");
         kqpConfig.YqlCoreOptimizerFlags.insert("pullupflatmapoverjoinmultiplelabels");
     }
+
+    switch(serviceConfig.GetDefaultHashShuffleFuncType()) {
+        case NKikimrConfig::TTableServiceConfig_EHashKind_HASH_V1:
+            kqpConfig.DefaultHashShuffleFuncType = NYql::NDq::EHashShuffleFuncType::HashV1;
+            break;
+        case NKikimrConfig::TTableServiceConfig_EHashKind_HASH_V2:
+            kqpConfig.DefaultHashShuffleFuncType = NYql::NDq::EHashShuffleFuncType::HashV2;
+            break;
+    }
 }
 
 IActor* CreateKqpCompileActor(const TActorId& owner, const TKqpSettings::TConstPtr& kqpSettings,

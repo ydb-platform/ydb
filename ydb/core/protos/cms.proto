@@ -429,9 +429,10 @@ message TCmsConfig {
         message TStateStorageSelfHealConfig {
             optional bool Enable = 19 [default = true];
             optional uint32 NodeGoodStateLimit = 20 [default = 10];
-            optional uint32 NodeBadStateLimit = 21 [default = 10];
-            optional uint32 WaitForConfigStep = 22 [default = 60000000];
-            optional uint32 RelaxTime = 23 [default = 600000000];
+            optional uint32 NodePrettyGoodStateLimit = 21 [default = 7];
+            optional uint32 NodeBadStateLimit = 22 [default = 10];
+            optional uint32 WaitForConfigStep = 23 [default = 60000000];
+            optional uint32 RelaxTime = 24 [default = 600000000];
         }
 
         message TStateLimit {

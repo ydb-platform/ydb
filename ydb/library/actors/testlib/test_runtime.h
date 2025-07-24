@@ -564,7 +564,7 @@ namespace NActors {
             try {
                 return GrabEdgeEvent<TEvent>(handle, simTimeout);
             } catch (...) {
-                ythrow TWithBackTrace<yexception>() << "Exception occured while waiting for " << TypeName<TEvent>() << ": " << CurrentExceptionMessage();
+                ythrow TWithBackTrace<yexception>() << "Exception occured while waiting for " << TypeName<TEvent>() << ": " << FormatCurrentException();
             }
         }
 
@@ -573,7 +573,7 @@ namespace NActors {
             try {
                 return GrabEdgeEvent<TEvent>(edgeFilter, simTimeout);
             } catch (...) {
-                ythrow TWithBackTrace<yexception>() << "Exception occured while waiting for " << TypeName<TEvent>() << ": " << CurrentExceptionMessage();
+                ythrow TWithBackTrace<yexception>() << "Exception occured while waiting for " << TypeName<TEvent>() << ": " << FormatCurrentException();
             }
         }
 
@@ -582,7 +582,7 @@ namespace NActors {
             try {
                 return GrabEdgeEvent<TEvent>(edgeActor, simTimeout);
             } catch (...) {
-                ythrow TWithBackTrace<yexception>() << "Exception occured while waiting for " << TypeName<TEvent>() << ": " << CurrentExceptionMessage();
+                ythrow TWithBackTrace<yexception>() << "Exception occured while waiting for " << TypeName<TEvent>() << ": " << FormatCurrentException();
             }
         }
 
@@ -609,7 +609,7 @@ namespace NActors {
             try {
                 return GrabEdgeEvents<TEvents...>(handle, simTimeout);
             } catch (...) {
-                ythrow TWithBackTrace<yexception>() << "Exception occured while waiting for " << TypeNames<TEvents...>() << ": " << CurrentExceptionMessage();
+                ythrow TWithBackTrace<yexception>() << "Exception occured while waiting for " << TypeNames<TEvents...>() << ": " << FormatCurrentException();
             }
         }
 

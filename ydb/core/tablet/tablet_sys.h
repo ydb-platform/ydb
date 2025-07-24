@@ -369,7 +369,7 @@ class TTablet : public TActor<TTablet> {
 
     // next funcs return next correct iterator
     TMap<TActorId, TLeaderInfo>::iterator EraseFollowerInfo(TMap<TActorId, TLeaderInfo>::iterator followerIt);
-    TMap<TActorId, TLeaderInfo>::iterator HandleFollowerConnectionProblem(TMap<TActorId, TLeaderInfo>::iterator followerIt);
+    TMap<TActorId, TLeaderInfo>::iterator HandleFollowerConnectionProblem(TMap<TActorId, TLeaderInfo>::iterator followerIt, bool permanent = false);
     void HandleFollowerDisconnect(TLeaderInfo* follower);
 
     void TrySyncToFollower(TMap<TActorId, TLeaderInfo>::iterator followerIt);
@@ -418,6 +418,7 @@ class TTablet : public TActor<TTablet> {
     TInterconnectSession& SubscribeInterconnectSession(const TActorId& sessionId);
     void InterconnectSessionConnected(const TActorId& sessionId, ui32 nodeId, ui64 cookie);
     void InterconnectSessionDisconnected(const TActorId& sessionId);
+    void InterconnectSessionDisconnected(const TActorId& sessionId, ui32 nodeId, ui64 cookie);
     void TabletStateUndelivered(const TActorId& actorId, ui64 cookie);
     void SendViaSession(const TActorId& sessionId, const TActorId& target, IEventBase* event, ui32 flags = 0, ui64 cookie = 0);
 

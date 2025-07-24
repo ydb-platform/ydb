@@ -439,7 +439,7 @@ void TTablet::HandleByFollower(TEvInterconnect::TEvNodeDisconnected::TPtr &ev) {
         RetryFollowerBootstrapOrWait();
     }
 
-    InterconnectSessionDisconnected(ev->Sender);
+    InterconnectSessionDisconnected(ev->Sender, ev->Get()->NodeId, ev->Cookie);
 }
 
 void TTablet::HandleByFollower(TEvTablet::TEvFollowerDisconnect::TPtr &ev) {
@@ -592,7 +592,7 @@ TTablet::EraseFollowerInfo(TMap<TActorId, TLeaderInfo>::iterator followerIt) {
     return retIt;
 }
 
-TMap<TActorId, TTablet::TLeaderInfo>::iterator TTablet::HandleFollowerConnectionProblem(TMap<TActorId, TLeaderInfo>::iterator followerIt) {
+TMap<TActorId, TTablet::TLeaderInfo>::iterator TTablet::HandleFollowerConnectionProblem(TMap<TActorId, TLeaderInfo>::iterator followerIt, bool permanent) {
     TLeaderInfo &followerInfo = followerIt->second;
     bool shouldEraseEntry = false;
 
@@ -600,18 +600,26 @@ TMap<TActorId, TTablet::TLeaderInfo>::iterator TTablet::HandleFollowerConnection
     followerInfo.LastCookie = -1;
     followerInfo.Unlink();
 
+    auto moveToIgnore = [&]() {
+        shouldEraseEntry = !followerInfo.PresentInList;
+        followerInfo.SyncState = EFollowerSyncState::Ignore;
+        BLOG_D("HandleFollowerConnectionProblem " << followerIt->first << " moved to Ignore state, shouldEraseEntry# " << shouldEraseEntry, "TSYS13");
+    };
+
     switch (followerInfo.SyncState) {
     case EFollowerSyncState::Pending:
     case EFollowerSyncState::Active:
-        followerInfo.SyncState = EFollowerSyncState::NeedSync;
-        followerInfo.SyncAttempt = 0;
-        BLOG_D("HandleFollowerConnectionProblem " << followerIt->first << " moved to NeedSync state", "TSYS12");
+        if (permanent) {
+            moveToIgnore();
+        } else {
+            followerInfo.SyncState = EFollowerSyncState::NeedSync;
+            followerInfo.SyncAttempt = 0;
+            BLOG_D("HandleFollowerConnectionProblem " << followerIt->first << " moved to NeedSync state", "TSYS12");
+        }
         break;
     case EFollowerSyncState::NeedSync:
         if (!followerInfo.SyncCookieHolder && followerInfo.SyncAttempt > 3) {
-            shouldEraseEntry = !followerInfo.PresentInList;
-            followerInfo.SyncState = EFollowerSyncState::Ignore;
-            BLOG_D("HandleFollowerConnectionProblem " << followerIt->first << " moved to Ignore state, shouldEraseEntry# " << shouldEraseEntry, "TSYS13");
+            moveToIgnore();
         } else {
             BLOG_D("HandleFollowerConnectionProblem " << followerIt->first << " kept in NeedSync state", "TSYS14");
         }
@@ -692,7 +700,13 @@ void TTablet::HandleByLeader(TEvents::TEvUndelivered::TPtr &ev) {
 
     auto followerIt = LeaderInfo.find(ev->Sender);
     if (followerIt != LeaderInfo.end() && followerIt->second.LastCookie == ev->Cookie) {
-        HandleFollowerConnectionProblem(followerIt);
+        // When TEvUndelivered has ReasonActorUnknown and it's either a local
+        // follower or event was received via interconnect (otherwise it was a
+        // forward to a disconnected session) we know it's permanent and actor
+        // no longer exists.
+        bool permanent = (ev->Get()->Reason == TEvents::TEvUndelivered::ReasonActorUnknown &&
+            (ev->Sender.NodeId() == SelfId().NodeId() || ev->InterconnectSession));
+        HandleFollowerConnectionProblem(followerIt, permanent);
         return;
     }
 }
@@ -703,7 +717,7 @@ void TTablet::HandleByLeader(TEvInterconnect::TEvNodeConnected::TPtr &ev) {
 
 void TTablet::HandleByLeader(TEvInterconnect::TEvNodeDisconnected::TPtr &ev) {
     // This will also call HandleFollowerConnectionProblem for all attached followers
-    InterconnectSessionDisconnected(ev->Sender);
+    InterconnectSessionDisconnected(ev->Sender, ev->Get()->NodeId, ev->Cookie);
 }
 
 void TTablet::HandleByLeader(TEvTablet::TEvFollowerListRefresh::TPtr &ev) {
@@ -2070,17 +2084,43 @@ void TTablet::InterconnectSessionConnected(const TActorId& sessionId, ui32 nodeI
 }
 
 void TTablet::InterconnectSessionDisconnected(const TActorId& sessionId) {
-    if (auto it = InterconnectSessions.find(sessionId); it != InterconnectSessions.end()) {
+    auto it = InterconnectSessions.find(sessionId);
+    if (it != InterconnectSessions.end()) {
         while (!it->second.Followers.Empty()) {
             TLeaderInfo* follower = it->second.Followers.PopFront();
             HandleFollowerDisconnect(follower);
         }
+
         while (!it->second.TabletStateSubscribers.Empty()) {
             TTabletStateSubscriber* subscriber = it->second.TabletStateSubscribers.PopFront();
             TActorId actorId = subscriber->ActorId;
             TabletStateSubscribers.erase(actorId);
         }
+
         InterconnectSessions.erase(it);
+    }
+}
+
+void TTablet::InterconnectSessionDisconnected(const TActorId& sessionId, ui32 nodeId, ui64 cookie) {
+    InterconnectSessionDisconnected(sessionId);
+
+    // It is possible to receive TEvNodeDisconnected without TEvNodeConnected
+    auto it = InterconnectPending.find(nodeId);
+    if (it != InterconnectPending.end()) {
+        while (!it->second.Followers.Empty()) {
+            TLeaderInfo* follower = it->second.Followers.Front();
+            if (cookie < follower->LastCookie) {
+                break;
+            }
+            // We have matched FlagSubscribeOnSession to the specific session
+            follower->Unlink();
+            HandleFollowerDisconnect(follower);
+        }
+
+        if (it->second.LastCookie == cookie) {
+            // This was the last known FlagSubscribeOnSession request
+            InterconnectPending.erase(it);
+        }
     }
 }
 

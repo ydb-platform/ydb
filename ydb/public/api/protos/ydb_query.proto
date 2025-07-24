@@ -9,6 +9,7 @@ import "google/protobuf/duration.proto";
 
 import "ydb/public/api/protos/annotations/validation.proto";
 import "ydb/public/api/protos/ydb_common.proto";
+import "ydb/public/api/protos/ydb_formats.proto";
 import "ydb/public/api/protos/ydb_issue_message.proto";
 import "ydb/public/api/protos/ydb_operation.proto";
 import "ydb/public/api/protos/ydb_query_stats.proto";
@@ -192,8 +193,8 @@ message ExecuteQueryRequest {
     // Format of data in the result sets.
     // It's for get Ydb.ResultSet with Ydb.Value rows or some (compressed) binary data.
     oneof output_format {
-        Ydb.Formats.ValueOutput value_output = 100;
-        Ydb.Formats.ArrowOutput arrow_output = 101;
+        Ydb.Formats.ValueOutputFormat value_output_format = 100;
+        Ydb.Formats.ArrowOutputFormat arrow_output_format = 101;
     }
 
     // If Ydb.ResultSet schema is not needed, it can be omitted in the response stream.

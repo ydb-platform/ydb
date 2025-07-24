@@ -234,7 +234,7 @@ public:
                     vdiskInfo.MutableVDiskId()->SetDomain(bscInfo.GetFailDomain());
                     vdiskInfo.MutableVDiskId()->SetVDisk(bscInfo.GetVDisk());
                     vdiskInfo.SetAllocatedSize(bscInfo.GetAllocatedSize());
-                    vdiskInfo.SetAvailableSize(bscInfo.GetAvailableSize());
+                    // vdiskInfo.SetAvailableSize(bscInfo.GetAvailableSize());
                 }
             }
         }

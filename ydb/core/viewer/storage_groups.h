@@ -1267,7 +1267,7 @@ public:
                                 static_cast<ui8>(info.GetVDisk()));
         vDisk.VSlotId = vSlotId;
         vDisk.AllocatedSize = info.GetAllocatedSize();
-        vDisk.AvailableSize = info.GetAvailableSize();
+        // vDisk.AvailableSize = info.GetAvailableSize();
         //vDisk.Kind = info.GetKind();
         vDisk.Status = info.GetStatusV2();
         NKikimrBlobStorage::EVDiskStatus vDiskStatus;
@@ -1696,7 +1696,7 @@ public:
         vDisk.VDiskId = VDiskIDFromVDiskID(info.GetVDiskId());
         vDisk.VSlotId = vSlotId;
         vDisk.AllocatedSize = info.GetAllocatedSize();
-        vDisk.AvailableSize = info.GetAvailableSize();
+        // vDisk.AvailableSize = info.GetAvailableSize();
         vDisk.Read = info.GetReadThroughput();
         vDisk.Write = info.GetWriteThroughput();
         switch (info.GetVDiskState()) {

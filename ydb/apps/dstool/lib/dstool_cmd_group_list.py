@@ -43,8 +43,8 @@ def do(args):
         'VDisks_INIT_PENDING',
         'Usage',
         'UsedSize',
-        'AvailableSize',
-        'TotalSize',
+        # 'AvailableSize',
+        # 'TotalSize',
         'VirtualGroupState',
         'VirtualGroupName',
         'BlobDepotId',
@@ -64,15 +64,15 @@ def do(args):
     col_units = {
         'Usage': '%',
         'UsedSize': 'bytes',
-        'AvailableSize': 'bytes',
-        'TotalSize': 'bytes',
+        # 'AvailableSize': 'bytes',
+        # 'TotalSize': 'bytes',
     }
 
     if args.show_vdisk_status or args.all_columns:
         visible_columns.extend(['VDisks_READY', 'VDisks_ERROR', 'VDisks_REPLICATING', 'VDisks_INIT_PENDING'])
 
     if args.show_vdisk_usage or args.all_columns:
-        visible_columns.extend(['Usage', 'UsedSize', 'AvailableSize', 'TotalSize'])
+        visible_columns.extend(['Usage', 'UsedSize'])
 
     if args.virtual_groups_only:
         visible_columns.extend(['VirtualGroupState', 'VirtualGroupName', 'BlobDepotId', 'ErrorReason', 'DecommitStatus'])
@@ -101,8 +101,8 @@ def do(args):
             group_stat['DecommitStatus'] = common.TGroupDecommitStatus.E.Name(group.VirtualGroupInfo.DecommitStatus)
 
         group_stat['UsedSize'] = 0
-        group_stat['TotalSize'] = 0
-        group_stat['AvailableSize'] = 0
+        # group_stat['TotalSize'] = 0
+        # group_stat['AvailableSize'] = 0
 
     for vslot_id, vslot in vslot_map.items():
         group_id = vslot.GroupId
@@ -118,9 +118,9 @@ def do(args):
         group_stat = group_stat_map[group_id]
 
         group_stat['UsedSize'] += vslot.VDiskMetrics.AllocatedSize
-        group_stat['TotalSize'] += vslot.VDiskMetrics.AllocatedSize
-        group_stat['AvailableSize'] += vslot.VDiskMetrics.AvailableSize
-        group_stat['TotalSize'] += vslot.VDiskMetrics.AvailableSize
+        # group_stat['TotalSize'] += vslot.VDiskMetrics.AllocatedSize
+        # group_stat['AvailableSize'] += vslot.VDiskMetrics.AvailableSize
+        # group_stat['TotalSize'] += vslot.VDiskMetrics.AvailableSize
 
         for key in ['VDisks_TOTAL', 'VDisks_' + vslot.Status]:
             group_stat[key] += 1

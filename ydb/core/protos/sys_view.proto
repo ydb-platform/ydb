@@ -222,7 +222,7 @@ message TVSlotInfo {
     optional uint32 FailDomain = 5;
     optional uint32 VDisk = 6;
     optional uint64 AllocatedSize = 7;
-    optional uint64 AvailableSize = 8;
+    // optional uint64 AvailableSize = 8;
     reserved 9;
     reserved 10;
     optional string StatusV2 = 12;
@@ -264,7 +264,7 @@ message TGroupInfo {
     optional uint32 EncryptionMode = 5;
     optional uint32 LifeCyclePhase = 6;
     optional uint64 AllocatedSize = 7;
-    optional uint64 AvailableSize = 8;
+    optional uint64 AvailableSize = 8; // See sys_view.cpp:49
     reserved 9;
     reserved 10;
     optional bool SeenOperational = 11;

@@ -4332,11 +4332,11 @@ public:
         out << "<table class='table table-sortable'>";
         out << "<thead>";
         if (Kinds) {
-            out << "<tr><th>Storage Pool</th><th>Group ID</th><th>Binding Kind</th><th>AUs</th><th>Acq. IOPS</th><th>Max. IOPS</th><th>Acq. Size</th><th>Max. Size</th>"
+            out << "<tr><th>Storage Pool</th><th>Group ID</th><th>Binding Kind</th><th>AUs</th><th>Acq. IOPS</th><th>Max. IOPS</th><th>Acq. Size</th>"
                    "<th>Acq. Thr.</th><th>Max. Thr.</th><th>Overcommit</th><th>Group Usage</th></tr>";
         } else {
-            out << "<tr><th>Storage Pool</th><th>Group ID</th><th>AUs</th><th>Acq. IOPS</th><th>Max. IOPS</th><th>Acq. Size</th><th>Max. Size</th>"
-                   "<th>Acq. Thr.</th><th>Max. Thr.</th><th>Allocated Size</th><th>Available Size</th><th>Overcommit</th><th>Group Usage</th></tr>";
+            out << "<tr><th>Storage Pool</th><th>Group ID</th><th>AUs</th><th>Acq. IOPS</th><th>Max. IOPS</th><th>Acq. Size</th>"
+                   "<th>Acq. Thr.</th><th>Max. Thr.</th><th>Allocated Size</th><th>Overcommit</th><th>Group Usage</th></tr>";
         }
         out << "</thead>";
         out << "<tbody>";
@@ -4354,7 +4354,7 @@ public:
                         out << "<td style='text-align:right'>" << Sprintf("%.2f", kind.IOPS * units) << "</td>";
                         out << "<td style='text-align:right'>" << Sprintf("%.2f", prStorageGroup.second.MaximumResources.IOPS) << "</td>";
                         out << "<td style='text-align:right'>" << kind.Size * units << "</td>";
-                        out << "<td style='text-align:right'>" << prStorageGroup.second.MaximumResources.Size << "</td>";
+                        // out << "<td style='text-align:right'>" << prStorageGroup.second.MaximumResources.Size << "</td>";
                         out << "<td style='text-align:right'>" << kind.Throughput * units << "</td>";
                         out << "<td style='text-align:right'>" << prStorageGroup.second.MaximumResources.Throughput << "</td>";
                         out << "<td style='text-align:right'>" << Sprintf("%.2f", prStorageGroup.second.StoragePool.GetOvercommit()) << "</td>";
@@ -4370,11 +4370,11 @@ public:
                     out << "<td style='text-align:right'>" << Sprintf("%.2f", group.AcquiredResources.IOPS) << "</td>";
                     out << "<td style='text-align:right'>" << Sprintf("%.2f", group.MaximumResources.IOPS) << "</td>";
                     out << "<td style='text-align:right'>" << group.AcquiredResources.Size << "</td>";
-                    out << "<td style='text-align:right'>" << group.MaximumResources.Size << "</td>";
+                    // out << "<td style='text-align:right'>" << group.MaximumResources.Size << "</td>";
                     out << "<td style='text-align:right'>" << group.AcquiredResources.Throughput << "</td>";
                     out << "<td style='text-align:right'>" << group.MaximumResources.Throughput << "</td>";
                     out << "<td style='text-align:right'>" << group.GroupParameters.GetAllocatedSize() << "</td>";
-                    out << "<td style='text-align:right'>" << group.GroupParameters.GetAvailableSize() << "</td>";
+                    // out << "<td style='text-align:right'>" << group.GroupParameters.GetAvailableSize() << "</td>";
                     out << "<td style='text-align:right'>" << Sprintf("%.2f", group.StoragePool.GetOvercommit()) << "</td>";
                     out << "<td style='text-align:right'>" << Sprintf("%.2f", group.GetUsage()) << "</td>";
                     out << "</tr>";

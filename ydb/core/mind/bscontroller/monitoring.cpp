@@ -1337,7 +1337,7 @@ void TBlobStorageController::RenderVSlotTable(IOutputStream& out, std::function<
                     TABLEH() { out << "Kind"; }
                     TABLEH() { out << "VSlot id"; }
                     TABLEH() { out << "Allocated"; }
-                    TABLEH() { out << "Available"; }
+                    // TABLEH() { out << "Available"; }
                     TABLEH() { out << "Status"; }
                     TABLEH() { out << "IsReady"; }
                     TABLEH() { out << "LastSeenReady"; }
@@ -1372,7 +1372,7 @@ void TBlobStorageController::RenderVSlotRow(IOutputStream& out, const TVSlotInfo
                 out << vslot.VSlotId;
             }
             RenderBytesCell(out, vslot.Metrics.GetAllocatedSize());
-            RenderBytesCell(out, vslot.Metrics.GetAvailableSize());
+            RenderBytesCell(out, 0 /* vslot.Metrics.GetAvailableSize() */);
             TABLED() { out << vslot.GetStatusString(); }
             TABLED() { out << (vslot.IsReady ? "YES" : ""); }
             TABLED() {
@@ -1402,7 +1402,7 @@ void TBlobStorageController::RenderVSlotRow(IOutputStream& out, const TVSlotInfo
                 }
             }
             RenderResourceValues(out, vslot.GetResourceCurrentValues());
-            RenderResourceValues(out, vslot.GetResourceMaximumValues());
+            RenderResourceValues(out, 0 /* vslot.GetResourceMaximumValues() */);
         }
     }
 }
@@ -1440,12 +1440,12 @@ void TBlobStorageController::RenderGroupTable(IOutputStream& out, std::function<
 void TBlobStorageController::RenderGroupRow(IOutputStream& out, const TGroupInfo& group) {
     HTML(out) {
         ui64 allocatedSize = 0;
-        ui64 availableSize = 0;
+        // ui64 availableSize = 0;
         ui32 satisfactionRank = 0;
         for (const TVSlotInfo *vslot : group.VDisksInGroup) {
             const auto& m = vslot->Metrics;
             allocatedSize += m.GetAllocatedSize();
-            availableSize += m.GetAvailableSize();
+            // availableSize += m.GetAvailableSize();
             satisfactionRank = std::max(satisfactionRank, m.GetSatisfactionRank());
         }
 
@@ -1481,7 +1481,7 @@ void TBlobStorageController::RenderGroupRow(IOutputStream& out, const TGroupInfo
             TABLED() { out << group.EncryptionMode; }
             TABLED() { out << group.LifeCyclePhase; }
             RenderBytesCell(out, allocatedSize);
-            RenderBytesCell(out, availableSize);
+            RenderBytesCell(out, 0 /* availableSize */);
             RenderResourceValues(out, group.GetResourceCurrentValues());
             renderLatency(group.LatencyStats.PutTabletLog);
             renderLatency(group.LatencyStats.PutUserData);

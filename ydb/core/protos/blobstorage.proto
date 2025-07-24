@@ -1314,7 +1314,7 @@ message TEvControllerSelectGroupsResult {
         optional TResources CurrentResources = 8;
 
         // VDisk metrics for this group
-        optional uint64 AvailableSize = 9; // bytes as reported by VDisk metrics (pessimistic case)
+        // optional uint64 AvailableSize = 9; // bytes as reported by VDisk metrics (pessimistic case)
         optional uint64 AllocatedSize = 10; // the same basis
         optional NKikimrBlobStorage.TPDiskSpaceColor.E SpaceColor = 11;
     }

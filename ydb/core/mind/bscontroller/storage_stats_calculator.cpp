@@ -108,7 +108,7 @@ public:
                 auto& e = storageStats[it->second];
                 e.SetCurrentGroupsCreated(e.GetCurrentGroupsCreated() + 1);
                 e.SetCurrentAllocatedSize(e.GetCurrentAllocatedSize() + group.GetAllocatedSize());
-                e.SetCurrentAvailableSize(e.GetCurrentAvailableSize() + group.GetAvailableSize());
+                // e.SetCurrentAvailableSize(e.GetCurrentAvailableSize() + group.GetAvailableSize());
             }
         }
 

@@ -117,9 +117,9 @@ public:
         mutable NKikimrBlobStorage::TVDiskMetrics Metrics;
         mutable bool MetricsDirty = false;
         mutable TResourceRawValues DiskResourceValues;
-        mutable TResourceRawValues MaximumResourceValues{
-            1ULL << 40, // 1 TB
-        };
+        // mutable TResourceRawValues MaximumResourceValues{
+        //     1ULL << 40, // 1 TB
+        // };
 
         // not persistent field; set only when VSlot is scheduled for deletion
         std::optional<TBoxStoragePoolId> DeletedFromStoragePoolId;
@@ -288,7 +288,7 @@ public:
 
         void UpdateVDiskMetrics() const {
             DiskResourceValues.DataSize = Metrics.GetAllocatedSize();
-            MaximumResourceValues.DataSize = Metrics.GetAvailableSize() + DiskResourceValues.DataSize;
+            // MaximumResourceValues.DataSize = Metrics.GetAvailableSize() + DiskResourceValues.DataSize;
         }
 
         bool UpdateVDiskMetrics(const NKikimrBlobStorage::TVDiskMetrics& vDiskMetrics, i64 *allocatedSizeIncrementPtr) const {
@@ -306,9 +306,9 @@ public:
             return DiskResourceValues;
         }
 
-        TResourceRawValues GetResourceMaximumValues() const {
-            return MaximumResourceValues;
-        }
+        // TResourceRawValues GetResourceMaximumValues() const {
+        //     return MaximumResourceValues;
+        // }
 
         TString GetStatusString() const {
             TStringStream s;

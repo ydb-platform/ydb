@@ -2194,7 +2194,7 @@ void THive::Handle(TEvHive::TEvRequestHiveStorageStats::TPtr& ev) {
             pbGroup.SetMaximumThroughput(group.MaximumResources.Throughput);
             pbGroup.SetMaximumSize(group.MaximumResources.Size);
             pbGroup.SetAllocatedSize(group.GroupParameters.GetAllocatedSize());
-            pbGroup.SetAvailableSize(group.GroupParameters.GetAvailableSize());
+            // pbGroup.SetAvailableSize(group.GroupParameters.GetAvailableSize());
         }
     }
     Send(ev->Sender, response.Release(), 0, ev->Cookie);

@@ -214,7 +214,7 @@ message TVDiskStateInfo {
     // How much this VDisk have allocated on corresponding PDisk
     optional uint64 AllocatedSize = 16 [(InsignificantChangeAmount) = 536870912, (DefaultField) = true]; // 512MiB
     // How much space is available for VDisk corresponding to PDisk's hard space limits
-    optional uint64 AvailableSize = 28 [(InsignificantChangeAmount) = 536870912,  (DefaultField) = true]; // 512MiB
+    // optional uint64 AvailableSize = 28 [(InsignificantChangeAmount) = 536870912,  (DefaultField) = true]; // 512MiB
     // Does this disk has some unreadable but not yet restored blobs?
     optional bool HasUnreadableBlobs = 24 [(DefaultField) = true];
     optional fixed64 IncarnationGuid = 25 [(DefaultField) = true];
@@ -259,7 +259,7 @@ message TBSGroupStateInfo {
     optional uint32 Count = 13; // filled during group count
     optional string StoragePoolName = 14 [(DefaultField) = true]; // from BS_CONTROLLER
     optional uint64 AllocatedSize = 15 [(InsignificantChangeAmount) = 100000000, (DefaultField) = true];
-    optional uint64 AvailableSize = 16 [(InsignificantChangeAmount) = 100000000,  (DefaultField) = true];
+    // optional uint64 AvailableSize = 16 [(InsignificantChangeAmount) = 100000000,  (DefaultField) = true];
     optional uint64 ReadThroughput = 17 [(DefaultField) = true];
     optional uint64 WriteThroughput = 18 [(DefaultField) = true];
     optional bool Encryption = 19 [(DefaultField) = true];

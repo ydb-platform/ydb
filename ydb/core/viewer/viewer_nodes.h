@@ -392,7 +392,7 @@ class TJsonNodes : public TViewerPipeClient {
                     vDiskState.SetNodeId(entry.GetKey().GetNodeId());
                     vDiskState.SetPDiskId(entry.GetKey().GetPDiskId());
                     vDiskState.SetAllocatedSize(vdisk.GetAllocatedSize());
-                    vDiskState.SetAvailableSize(vdisk.GetAvailableSize());
+                    // vDiskState.SetAvailableSize(vdisk.GetAvailableSize());
                     vDiskState.SetVDiskSlotId(entry.GetKey().GetVSlotId());
                     NKikimrBlobStorage::EVDiskStatus vDiskStatus;
                     if (NKikimrBlobStorage::EVDiskStatus_Parse(vdisk.GetStatusV2(), &vDiskStatus)) {

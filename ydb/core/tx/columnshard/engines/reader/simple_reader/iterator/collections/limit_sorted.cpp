@@ -2,12 +2,12 @@
 
 namespace NKikimr::NOlap::NReader::NSimple {
 
-std::shared_ptr<NCommon::IDataSource> TScanWithLimitCollection::DoExtractNext() {
+std::shared_ptr<NCommon::IDataSource> TScanWithLimitCollection::DoTryExtractNext() {
     if (!NextSource) {
         if (!SourcesConstructor->IsFinished()) {
-            NextSource = SourcesConstructor->ExtractNext(Context, InFlightLimit);
+            NextSource = SourcesConstructor->TryExtractNext(Context, InFlightLimit);
             if (!NextSource) {
-                AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "DoExtractNextSkip");
+                AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "DoTryExtractNextSkip");
                 return nullptr;
             }
         }
@@ -15,9 +15,9 @@ std::shared_ptr<NCommon::IDataSource> TScanWithLimitCollection::DoExtractNext() 
     {
         std::shared_ptr<NCommon::IDataSource> localNext;
         if (!SourcesConstructor->IsFinished()) {
-            localNext = SourcesConstructor->ExtractNext(Context, InFlightLimit);
+            localNext = SourcesConstructor->TryExtractNext(Context, InFlightLimit);
             if (!localNext) {
-                AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "DoExtractNextSkip");
+                AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "DoTryExtractNextSkip");
                 return nullptr;
             }
         } else {
@@ -28,7 +28,7 @@ std::shared_ptr<NCommon::IDataSource> TScanWithLimitCollection::DoExtractNext() 
         AFL_VERIFY(Cleared || Aborted || GetSourcesInFlightCount() == FetchingInFlightSources.size())("in_flight", GetSourcesInFlightCount())(
                                                   "fetching", FetchingInFlightSources.size());
         AFL_VERIFY(FetchingInFlightSources.emplace(result->GetSourceId()).second);
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "DoExtractNext")("source_id", result->GetSourceId());
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "DoTryExtractNext")("source_id", result->GetSourceId());
         return result;
     }
 }

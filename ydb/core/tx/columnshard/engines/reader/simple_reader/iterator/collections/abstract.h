@@ -12,7 +12,7 @@ namespace NKikimr::NOlap::NReader::NSimple {
 class ISourcesCollection {
 private:
     virtual bool DoIsFinished() const = 0;
-    virtual std::shared_ptr<NCommon::IDataSource> DoExtractNext() = 0;
+    virtual std::shared_ptr<NCommon::IDataSource> DoTryExtractNext() = 0;
     virtual bool DoCheckInFlightLimits() const = 0;
     virtual void DoOnSourceFinished(const std::shared_ptr<NCommon::IDataSource>& source) = 0;
     virtual void DoClear() = 0;
@@ -59,8 +59,8 @@ public:
 
     virtual ~ISourcesCollection() = default;
 
-    std::shared_ptr<NCommon::IDataSource> ExtractNext() {
-        if (auto result = DoExtractNext()) {
+    std::shared_ptr<NCommon::IDataSource> TryExtractNext() {
+        if (auto result = DoTryExtractNext()) {
             SourcesInFlightCount.Inc();
             return result;
         } else {

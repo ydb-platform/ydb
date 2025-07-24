@@ -27,8 +27,8 @@ private:
         return std::make_shared<TSimpleScanCursor>(
             std::make_shared<NArrow::TSimpleRow>(source->GetAs<IDataSource>()->GetStartPKRecordBatch()), source->GetSourceId(), readyRecords);
     }
-    virtual std::shared_ptr<NCommon::IDataSource> DoExtractNext() override {
-        return SourcesConstructor->ExtractNext(Context, GetMaxInFlight());
+    virtual std::shared_ptr<NCommon::IDataSource> DoTryExtractNext() override {
+        return SourcesConstructor->TryExtractNext(Context, GetMaxInFlight());
     }
     virtual bool DoCheckInFlightLimits() const override {
         return GetSourcesInFlightCount() < GetMaxInFlight();

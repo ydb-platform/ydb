@@ -5,7 +5,7 @@
 
 namespace NKikimr::NOlap::NReader::NPlain {
 
-std::shared_ptr<NKikimr::NOlap::NReader::NCommon::IDataSource> NKikimr::NOlap::NReader::NPlain::TPortionSources::DoExtractNext(
+std::shared_ptr<NCommon::IDataSource> TPortionSources::DoTryExtractNext(
     const std::shared_ptr<NCommon::TSpecialReadContext>& context, const ui32 /*inFlightCurrentLimit*/) {
     auto result = std::make_shared<TPortionDataSource>(SourceIdx++, Sources.front(), std::static_pointer_cast<TSpecialReadContext>(context));
     Sources.pop_front();

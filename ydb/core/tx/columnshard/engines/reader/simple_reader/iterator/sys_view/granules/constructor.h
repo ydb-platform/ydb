@@ -85,7 +85,7 @@ private:
     virtual bool DoIsFinished() const override {
         return Constructors.empty();
     }
-    virtual std::shared_ptr<NReader::NCommon::IDataSource> DoExtractNext(
+    virtual std::shared_ptr<NReader::NCommon::IDataSource> DoTryExtractNext(
         const std::shared_ptr<NReader::NCommon::TSpecialReadContext>& context, const ui32 /*inFlightCurrentLimit*/) override {
         AFL_VERIFY(Constructors.size());
         std::shared_ptr<NReader::NCommon::IDataSource> result = Constructors.front().Construct(context);

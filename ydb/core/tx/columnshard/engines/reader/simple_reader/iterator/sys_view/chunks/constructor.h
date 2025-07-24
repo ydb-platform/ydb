@@ -74,7 +74,7 @@ private:
     using TBase = NCommon::TSourcesConstructorWithAccessors<TPortionDataConstructor>;
     ui32 CurrentSourceIdx = 0;
 
-    virtual std::shared_ptr<NReader::NCommon::IDataSource> DoExtractNextImpl(
+    virtual std::shared_ptr<NReader::NCommon::IDataSource> DoTryExtractNextImpl(
         const std::shared_ptr<NReader::NCommon::TSpecialReadContext>& context) override;
     virtual void DoInitCursor(const std::shared_ptr<IScanCursor>& /*cursor*/) override {
     }

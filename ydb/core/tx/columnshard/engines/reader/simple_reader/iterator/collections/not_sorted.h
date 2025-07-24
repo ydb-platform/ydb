@@ -26,8 +26,8 @@ private:
     virtual bool DoIsFinished() const override {
         return SourcesConstructor->IsFinished();
     }
-    virtual std::shared_ptr<NCommon::IDataSource> DoExtractNext() override {
-        return SourcesConstructor->ExtractNext(Context, InFlightLimit);
+    virtual std::shared_ptr<NCommon::IDataSource> DoTryExtractNext() override {
+        return SourcesConstructor->TryExtractNext(Context, InFlightLimit);
     }
     virtual bool DoCheckInFlightLimits() const override {
         return GetSourcesInFlightCount() < InFlightLimit;

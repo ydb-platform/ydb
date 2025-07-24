@@ -52,7 +52,7 @@ TConclusion<bool> TScanHead::BuildNextInterval() {
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "build_next_interval");
     bool changed = false;
     while (SourcesCollection->HasData() && SourcesCollection->CheckInFlightLimits()) {
-        auto source = SourcesCollection->ExtractNext();
+        auto source = SourcesCollection->TryExtractNext();
         if (!source) {
             return changed;
         }

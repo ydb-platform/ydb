@@ -169,9 +169,9 @@ private:
         return Constructors.IsEmpty();
     }
 
-    virtual std::shared_ptr<IDataSource> DoExtractNextImpl(const std::shared_ptr<TSpecialReadContext>& context) = 0;
+    virtual std::shared_ptr<IDataSource> DoTryExtractNextImpl(const std::shared_ptr<TSpecialReadContext>& context) = 0;
 
-    virtual std::shared_ptr<IDataSource> DoExtractNext(
+    virtual std::shared_ptr<IDataSource> DoTryExtractNext(
         const std::shared_ptr<TSpecialReadContext>& context, const ui32 inFlightCurrentLimit) override final {
         if (!Accessors.GetSize() && Accessors.HasRequest()) {
             AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "SKIP_NO_ACCESSORS")("has_request", Accessors.HasRequest())(
@@ -199,7 +199,7 @@ private:
                 "in_flight", inFlightCurrentLimit);
             return nullptr;
         }
-        return DoExtractNextImpl(context);
+        return DoTryExtractNextImpl(context);
     }
 
 public:

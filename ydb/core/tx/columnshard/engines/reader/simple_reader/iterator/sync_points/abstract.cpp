@@ -60,9 +60,9 @@ TString ISyncPoint::DebugString() const {
     sb << "{" << PointName << ";" << PointIndex << ";" << IsFinished() << ";";
     if (SourcesSequentially.size()) {
         sb << "SRCS:[";
-    for (auto&& i : SourcesSequentially) {
-        sb << i->GetSourceId() << ",";
-    }
+        for (auto&& i : SourcesSequentially) {
+            sb << i->GetSourceId() << ",";
+        }
         sb << "];";
     }
     sb << "}";

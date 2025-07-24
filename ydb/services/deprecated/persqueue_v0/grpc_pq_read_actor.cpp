@@ -1132,7 +1132,15 @@ void TReadSessionActor::Handle(TEvPQProxy::TEvPartitionStatus::TPtr& ev, const T
     auto& evTopic = ev->Get()->Topic;
     auto it = Partitions.find(std::make_pair(evTopic->GetClientsideName(), ev->Get()->Partition));
     Y_ABORT_UNLESS(it != Partitions.end());
-    Y_ABORT_UNLESS(it->second.LockGeneration);
+    if (!it->second.LockGeneration) {
+        LOG_ALERT_S(ctx, NKikimrServices::PQ_READ_PROXY,
+            PQ_LOG_PREFIX << " the unlocked partition " << ev->Get()->Partition << " status has been requested");
+        CloseSession(
+                TStringBuilder() << "Internal server error, the unlocked partition " << ev->Get()->Partition << " status has been requested",
+                NPersQueue::NErrorCode::ERROR, ctx
+        );
+        return;
+    }
 
     if (it->second.Releasing) //lock request for already released partition - ignore
         return;
@@ -1219,7 +1227,17 @@ void TReadSessionActor::Handle(TEvPersQueue::TEvReleasePartition::TPtr& ev, cons
         return;
     }
 
-    Y_ABORT_UNLESS(!Partitions.empty());
+    auto onUnknownPartition = [&](auto& marker) {
+        LOG_ALERT_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " Releasing unknown partition: " << record.ShortDebugString() << " " << marker);
+        CloseSession(
+                TStringBuilder() << "Internal server error, releasing unknown partition: " << record.ShortDebugString() << " " << marker,
+                NPersQueue::NErrorCode::ERROR, ctx
+        );
+    };
+
+    if (Partitions.empty()) {
+        return onUnknownPartition("#PQv0.01");
+    }
 
     TActorId actorId = TActorId{};
     auto jt = Partitions.begin();
@@ -1233,7 +1251,9 @@ void TReadSessionActor::Handle(TEvPersQueue::TEvReleasePartition::TPtr& ev, cons
             }
         }
     }
-    Y_ABORT_UNLESS(actorId);
+    if (!actorId) {
+        return onUnknownPartition("#PQv0.02");
+    }
 
     {
         auto it = TopicCounters.find(name);

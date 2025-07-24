@@ -5,16 +5,7 @@ package Ydb.Formats;
 option java_package = "com.yandex.ydb.formats";
 
 message ArrowBatchSettings {
-    enum Compression {
-        UNSPECIFIED = 0;
-        UNCOMPRESSED = 1;
-        LZ4_FRAME = 2;
-        ZSTD = 3;
-    }
-
     bytes schema = 1;
-
-    Compression compression = 2;
 }
 
 message CsvSettings {
@@ -33,4 +24,23 @@ message CsvSettings {
     // First not skipped line is a CSV header (list of column names).
     bool header = 4;
     Quoting quoting = 5;
+}
+
+message ValueOutput {
+}
+
+message ArrowOutput {
+    message Compression {
+        enum Type {
+            COMPRESSION_UNSPECIFIED = 0;
+            COMPRESSION_NONE = 1;
+            COMPRESSION_ZSTD = 2;
+            COMPRESSION_LZ4_FRAME = 3;
+        }
+
+        Type type = 1;
+        int32 level = 2;
+    }
+
+    Compression compression = 1;
 }

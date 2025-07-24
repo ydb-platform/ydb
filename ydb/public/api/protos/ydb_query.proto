@@ -155,6 +155,12 @@ enum StatsMode {
     STATS_MODE_PROFILE = 40;    // Detailed execution stats including stats for individual tasks and channels
 }
 
+enum SchemaInclusionMode {
+    SCHEMA_INCLUSION_MODE_UNSPECIFIED = 0;
+    SCHEMA_INCLUSION_MODE_ALWAYS = 10;        // Always include schema in the response stream.
+    SCHEMA_INCLUSION_MODE_FIRST_ONLY = 20;    // Include schema only in the first part of the response stream.
+}
+
 message ExecuteQueryRequest {
     // Session identifier (required)
     string session_id = 1 [(Ydb.length).le = 1024];
@@ -183,9 +189,15 @@ message ExecuteQueryRequest {
     // In case when stats_period_ms is specified and is non-zero, query statistics will be additionally sent every stats_period_ms milliseconds beginning from the start of query execution.
     int64 stats_period_ms = 11 [(Ydb.value) = ">= 0"];
 
-    // Format of result set parts.
-    // It's for get ResultSet with Ydb.Value rows or some binary data with schema in the response stream.
-    Ydb.ResultSet.DataFormat output_format = 12;
+    // Format of data in the result sets.
+    // It's for get Ydb.ResultSet with Ydb.Value rows or some (compressed) binary data.
+    oneof output_format {
+        Ydb.Formats.ValueOutput value_output = 100;
+        Ydb.Formats.ArrowOutput arrow_output = 101;
+    }
+
+    // If Ydb.ResultSet schema is not needed, it can be omitted in the response stream.
+    SchemaInclusionMode schema_inclusion_mode = 12;
 }
 
 message ResultSetMeta {

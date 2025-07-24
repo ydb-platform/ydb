@@ -18,7 +18,7 @@ namespace NYql::NDq {
         ui64 DataInflight = 200_MB;
         ui64 FileSizeLimit = 2_GB;
         ui64 BlockFileSizeLimit = 50_GB;
-        std::unordered_map<TString, ui64> FormatSizeLimits;
+        std::unordered_map<std::string, ui64> FormatSizeLimits;
     };
 
     class IS3ActorsFactory {

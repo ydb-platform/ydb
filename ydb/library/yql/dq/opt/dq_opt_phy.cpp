@@ -11,7 +11,9 @@
 #include <ydb/library/yql/dq/type_ann/dq_type_ann.h>
 #include <yql/essentials/core/dq_integration/yql_dq_optimization.h>
 #include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
+#include <ydb/library/yql/dq/opt/dq_opt_stat.h>
 #include <yql/essentials/core/yql_cost_function.h>
+
 
 namespace NYql::NDq {
 
@@ -194,7 +196,14 @@ bool PrepareKeySelectorToStage(TCoLambda& keySelector, TCoLambda& stageLambda, T
     return true;
 }
 
-TDqConnection BuildShuffleConnection(TPositionHandle pos, TCoLambda keySelector, TDqCnUnionAll dqUnion, TExprContext& ctx) {
+TDqConnection BuildConnection(
+    TPositionHandle pos,
+    const TCoLambda& keySelector,
+    const TDqCnUnionAll& dqUnion,
+    TExprContext& ctx,
+    TTypeAnnotationContext* typeCtx,
+    bool enableShuffleElimination
+) {
     const bool isConstKey = keySelector.Body().Ref().IsComplete();
     if (isConstKey) {
         return Build<TDqCnUnionAll>(ctx, pos)
@@ -223,20 +232,54 @@ TDqConnection BuildShuffleConnection(TPositionHandle pos, TCoLambda keySelector,
         keyColumns.push_back(element.Cast<TCoMember>().Name());
     }
 
-    return Build<TDqCnHashShuffle>(ctx, pos)
-        .Output()
-            .Stage(dqUnion.Output().Stage())
-            .Index(dqUnion.Output().Index())
-        .Build()
-        .KeyColumns()
-            .Add(keyColumns)
-        .Build()
-        .Done();
+    auto buildShuffle = [&]() {
+        return Build<TDqCnHashShuffle>(ctx, pos)
+            .Output()
+                .Stage(dqUnion.Output().Stage())
+                .Index(dqUnion.Output().Index())
+            .Build()
+            .KeyColumns()
+                .Add(keyColumns)
+            .Build()
+            .Done();
+    };
+
+    if (!enableShuffleElimination || !typeCtx || !typeCtx->OrderingsFSM) {
+        return buildShuffle();
+    }
+    auto inputStats = typeCtx->GetStats(dqUnion.Output().Raw());
+    if (!inputStats) {
+        return buildShuffle();
+    }
+
+    auto shuffling = TShuffling(GetKeySelectorOrdering(keySelector));
+    auto shufflingIdx = typeCtx->OrderingsFSM->FDStorage.FindShuffling(shuffling, inputStats->TableAliases.Get());
+
+    YQL_CLOG(TRACE, CoreDq) << "Shufflings Idx: " << shufflingIdx << ", statistics of the unionall output: " << inputStats->ToString();
+
+    if (inputStats->LogicalOrderings.ContainsShuffle(shufflingIdx)) {
+        return
+            Build<TDqCnMap>(ctx, pos)
+                .Output()
+                    .Stage(dqUnion.Output().Stage())
+                    .Index(dqUnion.Output().Index())
+                .Build()
+            .Done();
+    }
+
+    return buildShuffle();
 }
 
 template <typename TPartition>
-TExprBase DqBuildPartitionsStageStub(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx,
-    const TParentsMap& parentsMap, bool allowStageMultiUsage)
+TExprBase DqBuildPartitionsStageStub(
+    TExprBase node,
+    TExprContext& ctx,
+    IOptimizationContext& optCtx,
+    const TParentsMap& parentsMap,
+    bool allowStageMultiUsage,
+    TTypeAnnotationContext* typeCtx,
+    bool enableShuffleElimination
+)
 {
     auto partitionsInput = node.Maybe<TPartition>().Input();
     const bool isMuxInput = partitionsInput.template Maybe<TCoMux>().IsValid();
@@ -335,7 +378,7 @@ TExprBase DqBuildPartitionsStageStub(TExprBase node, TExprContext& ctx, IOptimiz
                 .Done();
         }
 
-        TDqConnection newConnection = BuildShuffleConnection(node.Pos(), keyLambda, dqUnion, ctx);
+        TDqConnection newConnection = BuildConnection(node.Pos(), keyLambda, dqUnion, ctx, typeCtx, enableShuffleElimination);
         TCoArgument programArg = Build<TCoArgument>(ctx, node.Pos())
             .Name("arg")
             .Done();
@@ -1180,24 +1223,22 @@ TExprBase DqPushCombineToStageDependsOnOtherStage(TExprBase node, TExprContext& 
         !IsDqDependsOnOtherStage(combine.FinishHandlerLambda(), dqUnion.Output().Stage())) {
 
         // Collect all connections for `UpdateHnadler` and `InitHandler` lambda, we want to replace them.
-        TExprNode::TListType connections{dqUnion.Ptr()};
+        THashSet<TExprNode::TPtr> uniqueConnections;
         auto connectionPredicate = [](const TExprNode::TPtr& node) { return !!TMaybeNode<TDqConnection>(node); };
         const auto connectionsInitHandler = FindNodes(combine.InitHandlerLambda().Ptr(), connectionPredicate);
         const auto connectionsUpdateHandler = FindNodes(combine.UpdateHandlerLambda().Ptr(), connectionPredicate);
 
-        if (connectionsInitHandler.empty() || (connectionsInitHandler.size() != connectionsUpdateHandler.size())) {
+        if (connectionsInitHandler.empty()) {
             return node;
         }
 
-        // Check that all collected connections are the same.
-        for (ui32 i = 0; i < connectionsInitHandler.size(); ++i) {
-            if ((connectionsInitHandler[i].Get() != connectionsUpdateHandler[i].Get()) || (connectionsInitHandler[i].Get() == dqUnion.Raw()) ||
-                (connectionsUpdateHandler[i].Get() == dqUnion.Raw())) {
-                return node;
-            }
-        }
+        uniqueConnections.insert(connectionsInitHandler.begin(), connectionsInitHandler.end());
+        uniqueConnections.insert(connectionsUpdateHandler.begin(), connectionsUpdateHandler.end());
 
-        connections.insert(connections.end(), connectionsInitHandler.begin(), connectionsInitHandler.end());
+        TExprNode::TListType connections{dqUnion.Ptr()};
+        for (const auto &connection : uniqueConnections) {
+            connections.push_back(connection);
+        }
 
         // Arguments for DqStage.
         TVector<TCoArgument> inputArgs;
@@ -1315,20 +1356,41 @@ NNodes::TExprBase DqPushAggregateCombineToStage(NNodes::TExprBase node, TExprCon
     return result.Cast();
 }
 
-TExprBase DqBuildPartitionsStage(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx,
-    const TParentsMap& parentsMap, bool allowStageMultiUsage)
+TExprBase DqBuildPartitionsStage(
+    TExprBase node,
+    TExprContext& ctx,
+    IOptimizationContext& optCtx,
+    const TParentsMap& parentsMap,
+    bool allowStageMultiUsage,
+    TTypeAnnotationContext* typeCtx,
+    bool enableShuffleElimination
+)
 {
-    return DqBuildPartitionsStageStub<TCoPartitionsByKeys>(std::move(node), ctx, optCtx, parentsMap, allowStageMultiUsage);
+    return DqBuildPartitionsStageStub<TCoPartitionsByKeys>(std::move(node), ctx, optCtx, parentsMap, allowStageMultiUsage, typeCtx, enableShuffleElimination);
 }
 
-TExprBase DqBuildPartitionStage(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx,
-    const TParentsMap& parentsMap, bool allowStageMultiUsage)
+TExprBase DqBuildPartitionStage(
+    TExprBase node,
+    TExprContext& ctx,
+    IOptimizationContext& optCtx,
+    const TParentsMap& parentsMap,
+    bool allowStageMultiUsage,
+    TTypeAnnotationContext* typeCtx,
+    bool enableShuffleElimination
+)
 {
-    return DqBuildPartitionsStageStub<TCoPartitionByKey>(std::move(node), ctx, optCtx, parentsMap, allowStageMultiUsage);
+    return DqBuildPartitionsStageStub<TCoPartitionByKey>(std::move(node), ctx, optCtx, parentsMap, allowStageMultiUsage, typeCtx, enableShuffleElimination);
 }
 
-TExprBase DqBuildShuffleStage(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx,
-    const TParentsMap& parentsMap, bool allowStageMultiUsage)
+TExprBase DqBuildShuffleStage(
+    TExprBase node,
+    TExprContext& ctx,
+    IOptimizationContext& optCtx,
+    const TParentsMap& parentsMap,
+    bool allowStageMultiUsage,
+    TTypeAnnotationContext* typeCtx,
+    bool enableShuffleElimination
+)
 {
     auto shuffleInput = node.Maybe<TCoShuffleByKeys>().Input();
     if (!shuffleInput.Maybe<TDqCnUnionAll>()) {
@@ -1364,7 +1426,7 @@ TExprBase DqBuildShuffleStage(TExprBase node, TExprContext& ctx, IOptimizationCo
             .Done();
     }
 
-    auto connection = BuildShuffleConnection(node.Pos(), keyLambda, dqUnion, ctx);
+    auto connection = BuildConnection(node.Pos(), keyLambda, dqUnion, ctx, typeCtx, enableShuffleElimination);
     TCoArgument programArg = Build<TCoArgument>(ctx, node.Pos())
         .Name("arg")
         .Done();

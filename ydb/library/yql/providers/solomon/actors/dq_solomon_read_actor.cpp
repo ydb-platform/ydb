@@ -386,7 +386,7 @@ public:
 private:
     // IActor & IDqComputeActorAsyncInput
     void PassAway() override { // Is called from Compute Actor
-        SOURCE_LOG_I("PassAway, processed " << CompletedMetricsCount << " metrics.");
+        SOURCE_LOG_I("PassAway, processed " << CompletedMetricsCount << " metrics, " << CompletedTimeRanges << " time ranges.");
         if (UseMetricsQueue) {
             MetricsQueueEvents.Unsubscribe();
         }

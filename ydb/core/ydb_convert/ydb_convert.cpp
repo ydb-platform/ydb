@@ -813,20 +813,6 @@ void ConvertYdbValueToMiniKQLValue(const Ydb::Type& inputType,
     }
 }
 
-void ConvertYdbParamsToMiniKQLParams(const ::google::protobuf::Map<TString, Ydb::TypedValue>& input,
-                                     NKikimrMiniKQL::TParams& output) {
-    output.MutableType()->SetKind(NKikimrMiniKQL::ETypeKind::Struct);
-    auto type = output.MutableType()->MutableStruct();
-    auto value = output.MutableValue();
-    for (const auto& p : input) {
-        auto typeMember = type->AddMember();
-        auto valueItem = value->AddStruct();
-        typeMember->SetName(p.first);
-        ConvertYdbTypeToMiniKQLType(p.second.type(), *typeMember->MutableType());
-        ConvertYdbValueToMiniKQLValue(p.second.type(), p.second.value(), *valueItem);
-    }
-}
-
 void ConvertAclToYdb(const TString& owner, const TString& acl, bool isContainer,
     google::protobuf::RepeatedPtrField<Ydb::Scheme::Permissions>* permissions) {
     const auto& securityObject = TSecurityObject(owner, acl, isContainer);

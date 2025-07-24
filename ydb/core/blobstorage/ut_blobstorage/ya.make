@@ -48,7 +48,6 @@ SRCS(
     snapshots.cpp
     space_check.cpp
     sync.cpp
-    ut_helpers.cpp
     validation.cpp
     vdisk_malfunction.cpp
     group_size_in_units.cpp
@@ -83,4 +82,5 @@ RECURSE_FOR_TESTS(
     ut_read_only_pdisk
     ut_stop_pdisk
     ut_cluster_balancing
+    ut_move_pdisk
 )

@@ -1886,14 +1886,21 @@ namespace NActors {
         return actorId.ToString();
     }
 
+    void TTestActorRuntimeBase::SimulateSleep(TDuration duration) {
+        if (!SleepEdgeActor) {
+            SleepEdgeActor = AllocateEdgeActor();
+        }
+        Schedule(new IEventHandle(SleepEdgeActor, SleepEdgeActor, new TEvents::TEvWakeup()), duration);
+        GrabEdgeEventRethrow<TEvents::TEvWakeup>(SleepEdgeActor);
+    }
+
     struct TStrandingActorDecoratorContext : public TThrRefBase {
         TStrandingActorDecoratorContext()
-            : Queue(new TQueueType)
         {
         }
 
-        typedef TOneOneQueueInplace<IEventHandle*, 32> TQueueType;
-        TAutoPtr<TQueueType, TQueueType::TPtrCleanDestructor> Queue;
+        typedef TOneOneQueueInplace<IEventHandle*, 32, TDelete> TQueueType;
+        TQueueType Queue;
     };
 
     class TStrandingActorDecorator : public TActorBootstrapped<TStrandingActorDecorator> {
@@ -1950,8 +1957,8 @@ namespace NActors {
         }
 
         STFUNC(StateFunc) {
-            bool wasEmpty = !Context->Queue->Head();
-            Context->Queue->Push(ev.Release());
+            bool wasEmpty = !Context->Queue.Head();
+            Context->Queue.Push(ev.Release());
             if (wasEmpty) {
                 SendHead(ActorContext());
             }
@@ -1959,15 +1966,15 @@ namespace NActors {
 
         STFUNC(Reply) {
             Y_ABORT_UNLESS(!HasReply);
-            IEventHandle *requestEv = Context->Queue->Head();
+            IEventHandle *requestEv = Context->Queue.Head();
             TActorId originalSender = requestEv->Sender;
             HasReply = !ReplyChecker->IsWaitingForMoreResponses(ev.Get());
             if (HasReply) {
-                delete Context->Queue->Pop();
+                delete Context->Queue.Pop();
             }
             auto ctx(ActorContext());
             ctx.Send(IEventHandle::Forward(ev, originalSender));
-            if (!IsSync && Context->Queue->Head()) {
+            if (!IsSync && Context->Queue.Head()) {
                 SendHead(ctx);
             }
         }
@@ -1977,7 +1984,7 @@ namespace NActors {
             if (!IsSync) {
                 ctx.Send(GetForwardedEvent().Release());
             } else {
-                while (Context->Queue->Head()) {
+                while (Context->Queue.Head()) {
                     ctx.Send(GetForwardedEvent().Release());
                     int count = 100;
                     while (!HasReply && count > 0) {
@@ -1995,7 +2002,7 @@ namespace NActors {
         }
 
         TAutoPtr<IEventHandle> GetForwardedEvent() {
-            IEventHandle* ev = Context->Queue->Head();
+            IEventHandle* ev = Context->Queue.Head();
             RequestType = ev->GetTypeRewrite();
             HasReply = !ReplyChecker->OnRequest(ev);
             TAutoPtr<IEventHandle> forwardedEv = ev->HasEvent()
@@ -2003,7 +2010,7 @@ namespace NActors {
                     : new IEventHandle(ev->GetTypeRewrite(), ev->Flags, Delegatee, ReplyId, ev->ReleaseChainBuffer(), ev->Cookie);
 
             if (HasReply) {
-                delete Context->Queue->Pop();
+                delete Context->Queue.Pop();
             }
             return forwardedEv;
         }

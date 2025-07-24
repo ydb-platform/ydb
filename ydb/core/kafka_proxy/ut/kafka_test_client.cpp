@@ -213,7 +213,7 @@ TMessagePtr<TJoinGroupResponseData> TKafkaTestClient::JoinGroup(std::vector<TStr
     writable << version;
     subscribtion.Write(writable, version);
 
-    protocol.Metadata = TKafkaRawBytes(buf.GetBuffer().data(), buf.GetBuffer().size());
+    protocol.Metadata = TKafkaRawBytes(buf.GetFrontBuffer().data(), buf.GetFrontBuffer().size());
 
     request.Protocols.push_back(protocol);
     return WriteAndRead<TJoinGroupResponseData>(header, request);
@@ -393,7 +393,7 @@ std::vector<NKafka::TSyncGroupRequestData::TSyncGroupRequestAssignment> TKafkaTe
             consumerAssignment.Write(writable, ASSIGNMENT_VERSION);
             NKafka::TSyncGroupRequestData::TSyncGroupRequestAssignment syncAssignment;
             syncAssignment.MemberId = member.MemberId;
-            syncAssignment.AssignmentStr = TString(buf.GetBuffer().data(), buf.GetBuffer().size());
+            syncAssignment.AssignmentStr = TString(buf.GetFrontBuffer().data(), buf.GetFrontBuffer().size());
             syncAssignment.Assignment = syncAssignment.AssignmentStr;
 
             assignments.push_back(std::move(syncAssignment));
@@ -756,10 +756,10 @@ void TKafkaTestClient::Write(TSocketOutput& so, TApiMessage* request, TKafkaVers
     TWritableBuf sb(nullptr, request->Size(version) + 1000);
     TKafkaWritable writable(sb);
     request->Write(writable, version);
-    so.Write(sb.Data(), sb.Size());
+    so.Write(sb.GetFrontBuffer().data(), sb.GetFrontBuffer().size());
 
     if (!silent) {
-        Print(sb.GetBuffer());
+        Print(sb.GetFrontBuffer());
     }
 }
 

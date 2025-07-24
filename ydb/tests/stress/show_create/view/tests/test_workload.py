@@ -25,8 +25,8 @@ class TestYdbWorkload(StressFixture):
     def test_show_create_view_workload(self, duration, path_prefix):
         cmd = [
             yatest.common.binary_path(os.getenv("STRESS_TEST_UTILITY")),
-            "--endpoint", f"grpc://localhost:{self.cluster.nodes[1].grpc_port}",
-            "--database", "/Root",
+            "--endpoint", self.endpoint,
+            "--database", self.database,
             "--duration", str(duration),
         ]
 

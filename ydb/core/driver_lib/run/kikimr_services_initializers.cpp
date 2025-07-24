@@ -730,9 +730,38 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
 
             if (Config.HasBridgeConfig()) {
                 // when we work in Bridge mode, we need special actor to ensure connectivity check between nodes
-                const TActorId actorId = MakeDistconfConnectionCheckerActorId();
-                setup->LocalServices.emplace_back(actorId, TActorSetupCmd(CreateDistconfConnectionCheckerActor(),
-                    TMailboxType::ReadAsFilled, interconnectPoolId));
+                const auto& bridge = Config.GetBridgeConfig();
+                TString name;
+
+                if (Config.GetDynamicNodeConfig().HasNodeInfo()) {
+                    const auto& nodeInfo = Config.GetDynamicNodeConfig().GetNodeInfo();
+                    Y_ABORT_UNLESS(nodeInfo.HasLocation());
+                    const auto& bridgePileName = TNodeLocation(nodeInfo.GetLocation()).GetBridgePileName();
+                    Y_ABORT_UNLESS(bridgePileName);
+                    name = *bridgePileName;
+                } else {
+                    const auto it = table->StaticNodeTable.find(NodeId);
+                    Y_ABORT_UNLESS(it != table->StaticNodeTable.end());
+                    const auto& entry = it->second;
+                    const auto& bridgePileName = entry.Location.GetBridgePileName();
+                    Y_ABORT_UNLESS(bridgePileName);
+                    name = *bridgePileName;
+                }
+
+                size_t i;
+                for (i = 0; i < bridge.PilesSize(); ++i) {
+                    if (bridge.GetPiles(i).GetName() == name) {
+                        break;
+                    }
+                }
+                Y_ABORT_UNLESS(i != bridge.PilesSize());
+                const auto selfBridgePileId = TBridgePileId::FromValue(i);
+
+                const TActorId actorId = MakeDistconfBridgeConnectionCheckerActorId();
+                setup->LocalServices.emplace_back(actorId, TActorSetupCmd(
+                    CreateDistconfBridgeConnectionCheckerActor(selfBridgePileId),
+                    TMailboxType::ReadAsFilled,
+                    interconnectPoolId));
                 icCommon->ConnectionCheckerActorIds.push_back(actorId);
             }
 
@@ -2193,6 +2222,9 @@ TScanGroupedMemoryLimiterInitializer::TScanGroupedMemoryLimiterInitializer(const
 
 void TScanGroupedMemoryLimiterInitializer::InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) {
     NOlap::NGroupedMemoryManager::TConfig serviceConfig;
+    if (Config.GetScanGroupedMemoryLimiterConfig().GetCountBuckets() == 0) {
+        Config.MutableScanGroupedMemoryLimiterConfig()->SetCountBuckets(10);
+    }
     Y_ABORT_UNLESS(serviceConfig.DeserializeFromProto(Config.GetScanGroupedMemoryLimiterConfig()));
 
     if (serviceConfig.IsEnabled()) {
@@ -2213,6 +2245,9 @@ TCompGroupedMemoryLimiterInitializer::TCompGroupedMemoryLimiterInitializer(const
 
 void TCompGroupedMemoryLimiterInitializer::InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) {
     NOlap::NGroupedMemoryManager::TConfig serviceConfig;
+    if (Config.GetCompGroupedMemoryLimiterConfig().GetCountBuckets() == 0) {
+        Config.MutableCompGroupedMemoryLimiterConfig()->SetCountBuckets(1);
+    }
     Y_ABORT_UNLESS(serviceConfig.DeserializeFromProto(Config.GetCompGroupedMemoryLimiterConfig()));
 
     if (serviceConfig.IsEnabled()) {

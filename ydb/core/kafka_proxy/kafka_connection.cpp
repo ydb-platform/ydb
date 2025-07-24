@@ -55,7 +55,7 @@ public:
     TIntrusivePtr<TSocketDescriptor> Socket;
     TSocketAddressType Address;
     TPollerToken::TPtr PollerToken;
-    TBufferedWriter Buffer;
+    TBufferedWriter<> BufferedWriter;
 
     THPTimer InactivityTimer;
 
@@ -65,6 +65,8 @@ public:
 
     bool ConnectionEstablished = false;
     bool CloseConnection = false;
+
+    bool RetryingWriteToSocket = false;
 
     NAddressClassifier::TLabeledAddressClassifier::TConstPtr DatacenterClassifier;
 
@@ -91,7 +93,7 @@ public:
         : ListenerActorId(listenerActorId)
         , Socket(std::move(socket))
         , Address(address)
-        , Buffer(Socket.Get(), config.GetPacketSize())
+        , BufferedWriter(Socket.Get(), config.GetPacketSize())
         , Step(SIZE_READ)
         , Demand(NoDemand)
         , InflightSize(0)
@@ -606,6 +608,12 @@ protected:
         RequestPoller();
     }
 
+    void OnRequestProcessed(const Msg::TPtr& request) {
+        InflightSize -= request->ExpectedSize;
+        PendingRequests.erase(request->Header.CorrelationId);
+        PendingRequestsQueue.pop_front();
+    }
+
     bool ProcessReplyQueue(const TActorContext& ctx) {
         while(!PendingRequestsQueue.empty()) {
             auto& request = PendingRequestsQueue.front();
@@ -613,14 +621,11 @@ protected:
                 break;
             }
 
-            if (!Reply(&request->Header, request->Response.get(), request->Method, request->StartTime, request->ResponseErrorCode, ctx)) {
+            if (RetryingWriteToSocket || !Reply(&request->Header, request->Response.get(), request->Method, request->StartTime, request->ResponseErrorCode, ctx)) {
                 return false;
             }
 
-            InflightSize -= request->ExpectedSize;
-
-            PendingRequests.erase(request->Header.CorrelationId);
-            PendingRequestsQueue.pop_front();
+            OnRequestProcessed(request);
         }
 
         return true;
@@ -629,25 +634,31 @@ protected:
     bool Reply(const TRequestHeaderData* header, const TApiMessage* reply, const TString method, const TInstant requestStartTime, EKafkaErrors errorCode, const TActorContext& ctx) {
         TKafkaVersion headerVersion = ResponseHeaderVersion(header->RequestApiKey, header->RequestApiVersion);
         TKafkaVersion version = header->RequestApiVersion;
-
+        
         TResponseHeaderData responseHeader;
         responseHeader.CorrelationId = header->CorrelationId;
-
+        
         TKafkaInt32 size = responseHeader.Size(headerVersion) + reply->Size(version);
-
-        TKafkaWritable writable(Buffer);
+        TKafkaWritable writable(BufferedWriter);
         SendResponseMetrics(method, requestStartTime, size, errorCode, ctx);
         try {
             writable << size;
             responseHeader.Write(writable, headerVersion);
             reply->Write(writable, version);
 
-            ssize_t res = Buffer.flush();
-            if (res < 0) {
+            ssize_t res = BufferedWriter.flush();
+            // if we got EAGAIN or EWOULDBLOCK it means that socket is busy and we need to wait for PollerReady event to proceed
+            // PollerReady means that poller polled socket ready status
+            if (res == -EAGAIN || res == -EWOULDBLOCK) {
+                RetryingWriteToSocket = true;
+                KAFKA_LOG_D("Socket is busy. Buffer queue size: " << BufferedWriter.GetBuffersDeque().size() <<  ". Waiting for PollerReady event");
+                RequestPoller();
+                return false;
+            } else if (res < 0) {
                 ythrow yexception() << "Error during flush of the written to socket data. Error code: " << strerror(-res) << " (" << res << ")";
+            } else {
+                KAFKA_LOG_D("Sent reply: ApiKey=" << header->RequestApiKey << ", Version=" << version << ", Correlation=" << responseHeader.CorrelationId <<  ", Size=" << size);
             }
-
-            KAFKA_LOG_D("Sent reply: ApiKey=" << header->RequestApiKey << ", Version=" << version << ", Correlation=" << responseHeader.CorrelationId <<  ", Size=" << size);
         } catch(const yexception& e) {
             KAFKA_LOG_ERROR("error on processing response: ApiKey=" << reply->ApiKey()
                                                      << ", Version=" << version
@@ -844,16 +855,28 @@ protected:
                 }
             }
         }
-        if (event->Get()->Write) {
-            ssize_t res = Buffer.flush();
-            if (res < 0) {
-                KAFKA_LOG_ERROR("connection closed - error in FlushOutput: " << strerror(-res));
+        if (event->Get()->Write && !BufferedWriter.Empty()) {
+            KAFKA_LOG_D("Retrying flush. Buffer queue size: " << BufferedWriter.GetBuffersDeque().size());
+            ssize_t res = BufferedWriter.flush();
+            if (res == -EAGAIN || res == -EWOULDBLOCK) {
+                KAFKA_LOG_D("Socket is busy during retry. Buffer queue size: " << BufferedWriter.GetBuffersDeque().size() <<  ". Waiting for PollerReady event");
+                RequestPoller();
+                return;
+            } else if (res < 0) {
+                KAFKA_LOG_ERROR("connection closed - error in FlushOutput: " << strerror(-res) << ". Buffer queue size: " << BufferedWriter.GetBuffersDeque().size());
                 PassAway();
                 return;
+            } else if (res > 0 && BufferedWriter.Empty()) { // we successfuly retryed sending the reqsponse
+                RetryingWriteToSocket = false;
+                auto& request = PendingRequestsQueue.front();
+                auto& header = request->Header;
+                OnRequestProcessed(request);
+                KAFKA_LOG_D("Sent reply (after retry): ApiKey=" << header.RequestApiKey << ", Version=" << header.RequestApiVersion << ", Correlation=" << header.CorrelationId);
+                ProcessReplyQueue(ctx);
             }
         }
 
-        if (CloseConnection && Buffer.Empty()) {
+        if (CloseConnection && BufferedWriter.Empty()) {
             KAFKA_LOG_D("connection closed");
             return PassAway();
         }

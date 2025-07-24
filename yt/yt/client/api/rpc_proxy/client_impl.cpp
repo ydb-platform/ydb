@@ -248,12 +248,11 @@ TFuture<IPrerequisitePtr> TClient::AttachChaosLease(
     auto client = GetRpcProxyClient();
     auto channel = GetRetryingChannel();
 
-    auto chaosLeasePath = Format("#%v/@", chaosLeaseId);
+    auto chaosLeasePath = Format("%v/@", FromObjectId(chaosLeaseId));
 
-    return client->GetNode(chaosLeasePath, {}).Apply(BIND([=](const TYsonString& value) {
+    return client->GetNode(chaosLeasePath, {}).Apply(BIND([=] (const TYsonString& value) {
         auto attributes = ConvertToAttributes(value);
-        auto timeoutValue = attributes->Get<i64>("timeout");
-        auto timeout = TDuration::MilliSeconds(timeoutValue);
+        auto timeout = attributes->Get<TDuration>("timeout");
 
         auto chaosLease = CreateChaosLease(
             std::move(client),
@@ -287,7 +286,7 @@ TFuture<IPrerequisitePtr> TClient::StartChaosLease(const TChaosLeaseStartOptions
             .OptionalItem("parent_id", options.ParentId)
         .EndMap());
 
-    return client->CreateObject(EObjectType::ChaosLease, {}).Apply(BIND([=](const TChaosLeaseId& chaosLeaseId) {
+    return client->CreateObject(EObjectType::ChaosLease, {}).Apply(BIND([=] (const TChaosLeaseId& chaosLeaseId) {
         return CreateChaosLease(
             std::move(client),
             std::move(channel),
@@ -1417,7 +1416,7 @@ TFuture<TGetJobStderrResponse> TClient::GetJobStderr(
         req->set_type(NProto::ConvertJobStderrTypeToProto(*options.Type));
     }
 
-    return req->Invoke().Apply(BIND([req = req](const TApiServiceProxy::TRspGetJobStderrPtr& rsp) {
+    return req->Invoke().Apply(BIND([req = req] (const TApiServiceProxy::TRspGetJobStderrPtr& rsp) {
         YT_VERIFY(rsp->Attachments().size() == 1);
         TGetJobStderrOptions options{.Limit = req->limit(), .Offset = req->offset()};
         return TGetJobStderrResponse::MakeJobStderr(rsp->Attachments().front(), options);
@@ -2863,7 +2862,7 @@ TFuture<TFlowExecuteResult> TClient::FlowExecute(
         req->set_argument(ToProto(argument));
     }
 
-    return req->Invoke().Apply(BIND([](const TApiServiceProxy::TRspFlowExecutePtr& rsp) {
+    return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspFlowExecutePtr& rsp) {
         return TFlowExecuteResult{
             .Result = rsp->has_result() ? TYsonString(rsp->result()) : TYsonString{},
         };

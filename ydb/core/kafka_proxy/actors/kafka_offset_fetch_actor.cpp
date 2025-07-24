@@ -358,9 +358,11 @@ TOffsetFetchResponseData::TPtr TKafkaOffsetFetchActor::GetOffsetFetchResponse() 
                             partition.ErrorCode = NONE_ERROR;
                         } else {
                             partition.ErrorCode = RESOURCE_NOT_FOUND;
+                            KAFKA_LOG_ERROR("Group " << requestGroup.GroupId.value() << " not found for topic " << topicName);
                         }
                     } else {
                         partition.ErrorCode = RESOURCE_NOT_FOUND;
+                        KAFKA_LOG_ERROR("Partition " << requestPartition << " not found for topic " << topicName);
                     }
                     topic.Partitions.push_back(partition);
                 }

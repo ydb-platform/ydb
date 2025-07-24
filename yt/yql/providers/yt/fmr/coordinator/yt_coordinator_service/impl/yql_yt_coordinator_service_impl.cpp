@@ -49,7 +49,7 @@ public:
                 return {{}, false};
             }
         }
-        YQL_CLOG(INFO, FastMapReduce) << "partitioned input yt tables into " << ytPartitions.size() << " tasks";
+        YQL_CLOG(INFO, FastMapReduce) << "partitioned " << ytTables.size() << " input yt tables into " << ytPartitions.size() << " tasks";
         for (auto& task: ytPartitions) {
             YQL_CLOG(DEBUG, FastMapReduce) << task;
         }

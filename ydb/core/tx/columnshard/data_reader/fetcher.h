@@ -80,7 +80,7 @@ public:
         , ClassCounters(Singleton<TCounters>()->GetClassCounters(Callback->GetClassName()))
         , Guard(ClassCounters->GetGuard(EFetchingStage::Created))
         , Script(script)
-        , CurrentContext(Input.GetMemoryProcessGuard())
+        , CurrentContext(Input.GetMemoryProcessGuardOptional())
         , Environment(environment)
         , ConveyorCategory(conveyorCategory)
     {
@@ -89,6 +89,9 @@ public:
     }
 
     ~TPortionsDataFetcher() {
+        if (NActors::TActorSystem::IsStopped() || Callback->IsAborted()) {
+            CurrentContext.Abort();
+        }
         AFL_VERIFY(NActors::TActorSystem::IsStopped() || IsFinishedFlag || Guard.GetStage() == EFetchingStage::Created
             || Callback->IsAborted())("stage", Guard.GetStage())("class_name", Callback->GetClassName());
     }
@@ -106,6 +109,10 @@ public:
     static void StartAssembledColumnsFetching(TRequestInput&& input, const std::shared_ptr<NReader::NCommon::TColumnsSetIds>& entityIds,
         std::shared_ptr<IFetchCallback>&& callback, const std::shared_ptr<TEnvironment>& environment,
         const NConveyorComposite::ESpecialTaskCategory conveyorCategory);
+
+    static void StartAssembledColumnsFetchingNoAllocation(TRequestInput&& input,
+        const std::shared_ptr<NReader::NCommon::TColumnsSetIds>& entityIds, std::shared_ptr<IFetchCallback>&& callback,
+        const std::shared_ptr<TEnvironment>& environment, const NConveyorComposite::ESpecialTaskCategory conveyorCategory);
 
     TScriptExecution& MutableScript() {
         return Script;

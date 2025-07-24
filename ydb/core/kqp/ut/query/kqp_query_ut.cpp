@@ -1490,8 +1490,11 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
         appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
         appConfig.MutableTableServiceConfig()->SetEnableCreateTableAs(true);
         appConfig.MutableTableServiceConfig()->SetEnablePerStatementQueryExecution(true);
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableMoveColumnTable(true);
         auto settings = TKikimrSettings()
             .SetAppConfig(appConfig)
+            .SetFeatureFlags(featureFlags)
             .SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
 
@@ -1770,8 +1773,11 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
         appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
         appConfig.MutableTableServiceConfig()->SetEnableCreateTableAs(true);
         appConfig.MutableTableServiceConfig()->SetEnablePerStatementQueryExecution(true);
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableMoveColumnTable(true);
         auto settings = TKikimrSettings()
             .SetAppConfig(appConfig)
+            .SetFeatureFlags(featureFlags)
             .SetWithSampleTables(false)
             .SetEnableTempTables(true);
         TKikimrRunner kikimr(settings);
@@ -1945,8 +1951,11 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
         appConfig.MutableTableServiceConfig()->SetEnableOltpSink(false);
         appConfig.MutableTableServiceConfig()->SetEnableHtapTx(false);
         appConfig.MutableTableServiceConfig()->SetEnableCreateTableAs(true);
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableMoveColumnTable(true);
         auto settings = TKikimrSettings()
             .SetAppConfig(appConfig)
+            .SetFeatureFlags(featureFlags)
             .SetWithSampleTables(false)
             .SetEnableTempTables(true);
         TKikimrRunner kikimr(settings);
@@ -2328,8 +2337,11 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
         appConfig.MutableTableServiceConfig()->SetEnableOltpSink(true);
         appConfig.MutableTableServiceConfig()->SetEnableCreateTableAs(true);
         appConfig.MutableTableServiceConfig()->SetEnablePerStatementQueryExecution(true);
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableMoveColumnTable(true);
         auto settings = TKikimrSettings()
             .SetAppConfig(appConfig)
+            .SetFeatureFlags(featureFlags)
             .SetWithSampleTables(false)
             .SetEnableTempTables(true);
         TKikimrRunner kikimr(settings);

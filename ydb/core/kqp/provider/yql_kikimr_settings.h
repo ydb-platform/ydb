@@ -77,6 +77,7 @@ public:
     NCommon::TConfSetting<bool, Static> OptUseFinalizeByKey;
     NCommon::TConfSetting<bool, Static> OptShuffleElimination;
     NCommon::TConfSetting<bool, Static> OptShuffleEliminationWithMap;
+    NCommon::TConfSetting<bool, Static> OptShuffleEliminationForAggregation;
     NCommon::TConfSetting<ui32, Static> CostBasedOptimizationLevel;
     NCommon::TConfSetting<bool, Static> UseBlockReader;
 
@@ -194,6 +195,7 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
     bool EnableSnapshotIsolationRW = false;
     bool AllowMultiBroadcasts = false;
     bool DefaultEnableShuffleElimination = false;
+    bool DefaultEnableShuffleEliminationForAggregation = false;
     bool FilterPushdownOverJoinOptionalSide = false;
     THashSet<TString> YqlCoreOptimizerFlags;
     bool EnableNewRBO = false;
@@ -202,6 +204,9 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
     bool EnableOlapSubstringPushdown = false;
     bool EnableIndexStreamWrite = false;
     bool EnableOlapPushdownProjections = false;
+
+    ui32 LangVer = NYql::MinLangVersion;
+    NYql::EBackportCompatibleFeaturesMode BackportMode = NYql::EBackportCompatibleFeaturesMode::Released;
 
     NDq::EHashShuffleFuncType DefaultHashShuffleFuncType = NDq::EHashShuffleFuncType::HashV1;
     NDq::EHashShuffleFuncType DefaultColumnShardHashShuffleFuncType = NDq::EHashShuffleFuncType::ColumnShardHashV1;

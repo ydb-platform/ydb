@@ -1,148 +1,189 @@
-## How to Mute a test <a id="how-to-mute"></a>
+## 📖 Mute and Unmute Rules
 
-- Through a PR Report
-  - Open report in PR ![screen](https://storage.yandexcloud.net/ydb-public-images/report_mute.png)
-  - In context menu of test select `Crete mute issue`
+---
 
- - Through the [Test history](https://datalens.yandex/4un3zdm0zcnyr?tab=A4) dashboard
-  
-    - Enter the test name or path in the `full_name contain` field, click **Apply** - the search is done by the occurrence.  ![image.png](https://storage.yandexcloud.net/ydb-public-images/mute_candidate.png)
+### Mute a test if in the last 4 days:
+- **2 or more failures**
+- **OR** 1 failure and runs (pass + fail) not more than 10
 
-   - Click the `Mute` link, which will create a draft issue in GitHub.
+### Unmute a test if in the last 4 days:
+- **Runs (pass + fail + mute) > 4**
+- **AND no failures (fail + mute = 0)**
+- **AND no `no_runs` states in history** (test ran consistently)
 
+### Remove from mute if in the last 7 days:
+- **No runs at all** (pass + fail + mute + skip = 0)
 
-* Add the issue to the [Mute and Un-mute](https://github.com/orgs/ydb-platform/projects/45/views/6?visibleFields=%5B%22Title%22%2C%22Assignees%22%2C%22Status%22%2C126637100%5D) project.
-* Set the `status` to `Mute`
-* Set the `owner` field to the team name (see the issue for the owner's name). ![image.png](https://storage.yandexcloud.net/ydb-public-images/create_issue.png)
-* Open [muted_ya.txt](https://github.com/ydb-platform/ydb/blob/main/.github/config/muted_ya.txt) in a new tab and edit it.
-* Copy the line under `Add line to muted_ya.txt` (for example, like in the screenshot, `ydb/core/kqp/ut/query KqpStats.SysViewClientLost`) and add it to [muted_ya.txt](https://github.com/ydb-platform/ydb/blob/main/.github/config/muted_ya.txt).
-* Edit the branch for merging, for example, replace `{username}-patch-1` with `mute/{username}`.
-* Create a PR - copy the PR name from the issue name.
-* Copy the issue description to the PR, keep the line `Not for changelog (changelog entry is not required)`.
-* Take "OK" from member of test owner team in PR
-* Merge.
-* Link Issue and Pr (field "Development" in issue and PR)
-* Inform test owner team about new mutes - dm or in public chat (with mention of maintainer of team)
-* You are awesome!
+---
 
-## How to UnMute a test <a id="how-to-unmute"></a>
---IN PROGRESS--
-* Open [muted_ya.txt](https://github.com/ydb-platform/ydb/blob/main/.github/config/muted_ya.txt)
-* Press "Edit file" and delete line of test
-* Commit changes (Edit the branch for merging, for example, replace `{username}-patch-1` with `mute/{username}`)
-* Edit PR name like "UnMute {testname}"
-* Take "OK" from member of test owner team in PR
-* Merge
-* If test have an issue in [Mute and Un-mute](https://github.com/orgs/ydb-platform/projects/45/views/6?visibleFields=%5B%22Title%22%2C%22Assignees%22%2C%22Status%22%2C126637100%5D) in status `Muted` - Move it to `Unmuted`
-* Link Issue and Pr (field "Development" in issue and PR)
-* Move issue to status `Unmuted`
-* You are awesome!
+### Notes
+- For all rules, only the last N days are considered (N=3 for mute, N=4 for unmute, N=7 for delete), including the current day.
+- A "run" is any test execution with result pass, fail, or mute.
+- A "failure" is a test execution with result fail or mute.
+- Statistics aggregation is done by key (test_name, suite_folder, full_name, build_type, branch).
 
-## How to manage muted tests by team <a id="how-to-manage"></a>
---IN PROGRESS--
-### Explore your tests stability
- >If you want to get more info about stability of your test visit [dashboard](https://datalens.yandex/4un3zdm0zcnyr?tab=wED) (fill field `owner`=`{your_team_name}`)
-![image.png](https://storage.yandexcloud.net/ydb-public-images/test_analitycs_1.png)
-![image.png](https://storage.yandexcloud.net/ydb-public-images/test_analitycs_2.png)
-### Find your muted tests
- >Not all muted tests have issue in github project about this , we working on it
-* Open project [Mute and Un-mute](https://github.com/orgs/ydb-platform/projects/45/views/6?visibleFields=%5B%22Title%22%2C%22Assignees%22%2C%22Status%22%2C126637100%5D)
-* click in label with name of your team, example [link to qp](https://github.com/orgs/ydb-platform/projects/45/views/6?filterQuery=owner%3Aqp) muted tests (cgi `?filterQuery=owner%3Aqp`)
-* Open `Mute {testname}` issue
-* Perform [How to unmute](#how-to-unmute)
+---
 
-## Flaky Tests
+**Example:**
+- If a test ran 5 times in 3 days with 2 failures — the test will be muted.
+- If a test ran 5 times in 4 days and all passed successfully, and there were no days without runs — the test will be unmuted.
+- If a test ran 5 times in 4 days and all passed successfully, but there was a day without runs (`no_runs`) — the test will NOT be unmuted.
+- If a test didn't run at all in 7 days — it will be removed from mute.
 
-### Who and When Monitors Flaky Tests
+## 🔄 Automated Workflow
 
-The CI duty engineer (in progress) checks flaky tests once a day (only working days). 
+### Automatic muted_ya.txt Updates
+The `.github/workflows/update_muted_ya.yml` workflow automatically:
+- Runs every 2 hours from 6:00 to 20:00 UTC
+- Analyzes test data for the last 4-7 days
+- Creates a PR with updated `muted_ya.txt` based on the rules above
+- The PR should be approved to merge by CI Team @ydb-platform/ci
 
-- Open the [Flaky](https://datalens.yandex/4un3zdm0zcnyr) dashboard.
-- Perform the sections **[Mute Flaky Test](#mute-flaky)** and **[Test Flaps More - Need to Unmute](#unmute-flaky)** once a day or ondemand
+### Automatic Issue Creation
+The `.github/workflows/create_issues_for_muted_tests.yml` workflow:
+- Triggers after approval of PRs with `mute-unmute` label
+- Creates GitHub issues for newly muted tests and close unmute
+- Assigns issues to appropriate teams based on test ownership
+- Links issues to the PR that introduced the mutes
 
-### Mute Flaky Tests <a id="mute-flaky"></a>
+## 📝 Manual mute/unmute management
 
-Open the [Flaky](https://datalens.yandex/4un3zdm0zcnyr) dashboard.
+### How to mute a test manually
 
-- Select today's date.
-- Look at the tests in the Mute candidate table.
+- Open [muted_ya.txt](https://github.com/ydb-platform/ydb/blob/main/.github/config/muted_ya.txt) and add a test line.
+- Create a PR, copy the title and description from the issue.
+- Get confirmation from the test owner.
+- After merging, link the PR and issue, notify the team.
 
-![image.png](https://storage.yandexcloud.net/ydb-public-images/mute_candidate.png)
+**You can also:**
+- Use the context menu in the PR report (see screenshot).
+- Use [Test history dashboard](https://datalens.yandex/4un3zdm0zcnyr?tab=A4) to search and mute a test.
 
-- Select today's date in the `date_window`.
-- Select `days_ago_window = 5` (how many days back from the selected day to calculate statistics). Currently, there are calculations for 1 day and 5 days ago.
-  * If you want to understand how long ago and how often the test started failing, you can click the `history` link in the table (loading may take time) or select `days_ago_window = 1`.
-- For `days_ago_window = 5`, set the values to filter out isolated failures and low run counts:
-  * `fail_count >= 3`
-  * `run_count >= 10`
-- Click the `Mute` link, which will create a draft issue in GitHub.
-- Perform steps from [How to mute](#how-to-mute)
-- You are awesome!
+### How to unmute a test manually
 
-### Test is no longer flaky - Time to Unmute <a id="unmute-flaky"></a>
+- Open [muted_ya.txt](https://github.com/ydb-platform/ydb/blob/main/.github/config/muted_ya.txt) and remove the test line.
+- Create a PR with title "UnMute {testname}".
+- Get confirmation from the test owner.
+- After merging, move the issue to Unmuted status, link the PR and issue.
 
-- Open the [Flaky](https://datalens.yandex/4un3zdm0zcnyr) dashboard.
-- Look at the tests in the UNMute candidate table.
+## 📊 Dashboard for analyzing muted and flaky tests
 
-![image.png](https://storage.yandexcloud.net/ydb-public-images/unmute.png)
+For analyzing test status, finding mute/unmute candidates, and tracking stability, use the interactive dashboard:
 
-- If the `summary:` column shows `mute <= 3` and `success rate >= 98%` - **it's time to enable the test**.
-- Perform steps from [How to Unmute](#how-to-unmute)
-- You are awesome!
+- [YDB Test Analytics Dashboard](https://datalens.yandex/4un3zdm0zcnyr)
 
-### Unmute stable and flaky tests automaticaly
+**Dashboard capabilities:**
+- View all muted tests by owner, full_name, status
+- Quick search by test name or team (owner)
+- Filter by status (flaky, muted, stable, etc.)
+- History of runs and failures by day
+- Tables of mute/unmute candidates (see corresponding tabs)
+- Quick transition to creating mute-issues via link in the table
 
+**Usage examples:**
+- Find all muted tests for your team: select owner in the filter
+- Find flaky candidates for mute: Flaky tab, filter by fail_count/run_count
+- Find stable mutes for unmute: Stable tab, filter by success_rate
 
-**setup**
-1) ```pip install PyGithub```
-2) request git token
-```
-# Github api (personal access token (classic)) token shoud have permitions to
-# repo
-# - repo:status
-# - repo_deployment
-# - public_repo
-# admin:org
-# project
-```
-3) save it to env `export GITHUB_TOKEN=<token>
-4) save to env `export CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS=<iam_cloud_file> 
+## 📋 Files generated by create_new_muted_ya.py
 
-**How to use**
+### 🔇 [to_mute.txt](mute_update/to_mute.txt)
+**Content:** Mute candidates by new rules  
+**Rules:** In 4 days ≥2 failures **OR** (≥1 failure and runs ≤10)  
+**Usage:** Main file for mute decisions
 
-0) *update your branch* - you shoud have last version of muted_ya localy
-1) Run instance https://github.com/ydb-platform/ydb/actions/workflows/collect_analytics.yml
-2) wait till end of step `Collect all test monitor (how long tests in state)` (about 7 min)
-3) run `create_new_muted_ya.py update_muted_ya` - it creates bunch of files in `%repo_path%/mute_update/`
-     
-| File Name                              | Description                                                                                     |
-|----------------------------------------|-------------------------------------------------------------------------------------------------|
-| deleted.txt                            | Tests what look like deleted (no runs 28 days in a row)                                         |
-| deleted_debug.txt                      | With detailed info                                                                              |
-| flaky.txt                              | Tests which are flaky today AND total runs > 3 AND fail_count > 2                               |
-| flaky_debug.txt                        | With detailed info                                                                              |
-| muted_stable.txt                       | Muted tests which are stable for the last 14 days                                               |
-| muted_stable_debug.txt                 | With detailed info                                                                              |
-| new_muted_ya.txt                       | Muted_ya.txt version with excluded **muted_stable** and **deleted** tests                       |
-| new_muted_ya_debug.txt                 | With detailed info                                                                              |
-| new_muted_ya_with_flaky.txt            | Muted_ya.txt version with excluded **muted_stable** and **deleted** tests and included **flaky**|
-| new_muted_ya_with_flaky_debug.txt      | With detailed info                                                                              |
-|muted_ya_sorted.txt| original muted_ya with resolved wildcards for real tests (not chunks)|
-|muted_ya_sorted_debug.txt| With detailed info|
+### 🔊 [to_unmute.txt](mute_update/to_unmute.txt)
+**Content:** Unmute candidates by new rules  
+**Rules:** In 4 days >4 runs (pass+fail+mute), no failures (fail+mute=0), and no `no_runs` states  
+**Usage:** Main file for unmute decisions
 
+### 🗑️ [to_remove_from_mute.txt](mute_update/to_remove_from_mute.txt)
+**Content:** Tests to remove from mute  
+**Rules:** No runs in 7 days  
+**Usage:** Main file for removal from mute
 
-**1. Unmute Stable**
-1) replace content of [muted_ya](https://github.com/ydb-platform/ydb/blob/main/.github/config/muted_ya.txt) with content of **new_muted_ya.txt** 
-2) create new PR and paste in PR Description 
-- `<Unmuted tests : stable 9 and deleted 0>`  from concole output
--  content from **muted_stable_debug** and **deleted_debug**
-3) Merge
- example https://github.com/ydb-platform/ydb/pull/11099
+## 📊 Additional analysis files
 
-**2. Mute Flaky** (AFTER UNMUTE STABLE ONLY)
-1) replace content of [muted_ya](https://github.com/ydb-platform/ydb/blob/main/.github/config/muted_ya.txt) with content of **new_muted_ya_with_flaky.txt** 
-2) create new PR 
-2) run `create_new_muted_ya.py create_issues` - it creates issue for each flaky test in **flaky.txt** 
-3) copy from console output text like ' Created issue ...' and paste in PR
-4) merge
- example https://github.com/ydb-platform/ydb/pull/11101
+### 🔍 [muted_ya-deleted.txt](mute_update/muted_ya-deleted.txt)
+**Content:** Tests from muted_ya minus deleted tests  
+**Formula:** `muted_ya` - `deleted`  
+**Usage:** Analysis of active tests in mute
+
+### 🔍 [muted_ya-stable.txt](mute_update/muted_ya-stable.txt)
+**Content:** Tests from muted_ya minus stable tests  
+**Formula:** `muted_ya` - `stable`  
+**Usage:** Analysis of unstable tests in mute
+
+### 🔍 [muted_ya-stable-deleted.txt](mute_update/muted_ya-stable-deleted.txt)
+**Content:** Tests from muted_ya minus stable and deleted  
+**Formula:** `muted_ya` - `stable` - `deleted`  
+**Usage:** Analysis of active unstable tests
+
+### 🔍 [muted_ya-stable-deleted+flaky.txt](mute_update/muted_ya-stable-deleted+flaky.txt)
+**Content:** Tests from muted_ya minus stable and deleted, plus flaky  
+**Formula:** `muted_ya` - `stable` - `deleted` + `flaky`  
+**Usage:** Creating GitHub issues
+
+## 📋 Debug files (with details)
+
+### 🔍 [muted_ya-deleted_debug.txt](mute_update/muted_ya-deleted_debug.txt)
+**Content:** Details for tests muted_ya - deleted  
+**Additional:** owner, success_rate, state, days_in_state
+
+### 🔍 [muted_ya-stable_debug.txt](mute_update/muted_ya-stable_debug.txt)
+**Content:** Details for tests muted_ya - stable  
+**Additional:** owner, success_rate, state, days_in_state
+
+### 🔍 [muted_ya-stable-deleted_debug.txt](mute_update/muted_ya-stable-deleted_debug.txt)
+**Content:** Details for tests muted_ya - stable - deleted  
+**Additional:** owner, success_rate, state, days_in_state
+
+### 🔍 [muted_ya-stable-deleted+flaky_debug.txt](mute_update/muted_ya-stable-deleted+flaky_debug.txt)
+**Content:** Details for tests muted_ya - stable - deleted + flaky  
+**Additional:** owner, success_rate, state, days_in_state, pass_count, fail_count
+
+---
+
+## 🔄 File lifecycle
+
+1. **Data analysis** → Creation of main action files
+2. **Rule application** → Formation of three main files
+3. **Additional analysis** → Creation of files for analyzing various combinations
+4. **Issue creation** → Using `new_muted_ya.txt`
+
+**All files are created in the `mute_update/` directory when running the script. The final mute file for workflow is `new_muted_ya.txt`.**
+
+# Mute logic output files table
+
+This table shows all files created by the mute logic script, with descriptions of their content and purpose.
+
+## 📋 Main files
+
+| File | Description | Rules | Usage |
+|------|----------|---------|---------------|
+| `to_mute.txt` | Mute candidates | In 4 days ≥2 failures **OR** (≥1 failure and runs ≤10) | Main file for mute decisions |
+| `to_unmute.txt` | Unmute candidates | In 4 days >4 runs (pass+fail+mute), no failures (fail+mute=0), and no `no_runs` states | Main file for unmute decisions |
+| `to_remove_from_mute.txt` | Tests to remove from mute | No runs in 7 days | Main file for removal from mute |
+
+## 📊 Additional analysis files
+
+| File | Description | Formula | Usage |
+|------|----------|---------|---------------|
+| `muted_ya.txt` | All currently muted tests | aggregated over 4 days | Base for mute analysis |
+| `muted_ya+to_mute.txt` | muted_ya + to_mute | | Analysis of potential mutes |
+| `muted_ya-to_unmute.txt` | muted_ya - to_unmute | | Analysis of potential unmutes |
+| `muted_ya-to_delete.txt` | muted_ya - to_delete | | Analysis of potential deletions |
+| `muted_ya-to-delete-to-unmute.txt` | muted_ya - to_delete - to_unmute | | Analysis of active mutes |
+| `muted_ya-to-delete-to-unmute+to_mute.txt` | (muted_ya - to_delete - to_unmute) + to_mute | | For final mute file |
+| `new_muted_ya.txt` | Final mute file for workflow (duplicates muted_ya-to-delete-to-unmute+to_mute.txt) | copy of previous | Used for automatic update of .github/config/muted_ya.txt |
+
+## 📋 Debug files (with details)
+
+| File | Description | Additional information |
+|------|----------|---------------------------|
+| `muted_ya-deleted_debug.txt` | Details for tests muted_ya - deleted | owner, success_rate, state, days_in_state |
+| `muted_ya-stable_debug.txt` | Details for tests muted_ya - stable | owner, success_rate, state, days_in_state |
+| `muted_ya-stable-deleted_debug.txt` | Details for tests muted_ya - stable - deleted | owner, success_rate, state, days_in_state |
+| `muted_ya-stable-deleted+flaky_debug.txt` | Details for tests muted_ya - stable - deleted + flaky | owner, success_rate, state, days_in_state, pass_count, fail_count |
+
+---

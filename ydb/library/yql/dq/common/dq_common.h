@@ -101,6 +101,7 @@ enum class EEnabledSpillingNodes : ui64 {
 
 enum class EHashShuffleFuncType {
     HashV1            = 0     /* "HashV1" */,
+    HashV2            = 2     /* "HashV2" */,
     ColumnShardHashV1 = 1     /* "ColumnShardHashV1" */,
 };
 

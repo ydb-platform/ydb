@@ -1,6 +1,6 @@
 LIBRARY()
 
-IF(OS_LINUX)
+IF(NOT OS_WINDOWS)
 
     PEERDIR(
         library/cpp/dwarf_backtrace

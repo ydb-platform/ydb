@@ -57,6 +57,7 @@ YTEST_FIELDS_BASE = (
 
 YTEST_FIELDS_EXTRA = (
     df.Blob.value,
+    df.ParallelTestsInSingleNode.value,
     df.ForkMode.from_macro_and_unit,
     df.Size.from_macro_args_and_unit,
     df.Tag.from_macro_args_and_unit,

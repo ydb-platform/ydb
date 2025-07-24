@@ -582,14 +582,14 @@ std::pair<TNodePtr, bool> ISource::BuildAggregation(const TString& label, TConte
 
     std::map<std::pair<bool, TString>, std::vector<IAggregation*>> genericAggrs;
     for (const auto& aggr: Aggregations_) {
-        if (const auto key = aggr->GetGenericKey()) {
+        if (auto key = aggr->GetGenericKey()) {
             genericAggrs[{aggr->IsDistinct(), *key}].emplace_back(aggr.Get());
         }
     }
 
-    for (const auto& aggr : genericAggrs) {
-        for (size_t i = 1U; i < aggr.second.size(); ++i) {
-            aggr.second.front()->Join(aggr.second[i]);
+    for (const auto& [_, aggrs] : genericAggrs) {
+        for (size_t i = 1; i < aggrs.size(); ++i) {
+            aggrs.front()->Join(aggrs[i]);
         }
     }
 

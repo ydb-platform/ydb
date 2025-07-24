@@ -315,43 +315,112 @@ i64 TFDStorage::FindInterestingOrderingIdx(
     TOrdering::EType type,
     TTableAliasMap* tableAliases
 ) {
-    const auto& [_, orderingIdx] = ConvertColumnsAndFindExistingOrdering(interestingOrdering, {}, type, false, tableAliases);
+    const auto& [_, orderingIdx] = ConvertColumnsAndFindExistingOrdering(interestingOrdering, {}, type, false, false, tableAliases);
     return orderingIdx;
+}
+
+// returns was ordering reordered or not
+bool ReorderByNatural(
+    std::vector<std::size_t>& ordering,
+    const std::vector<std::size_t> natural
+) {
+    std::unordered_set<std::size_t> itemsLeft{ordering.begin(), ordering.end()};
+    std::vector<std::size_t> reordered;
+    reordered.reserve(ordering.size());
+    for (std::size_t item: natural) {
+        if (itemsLeft.contains(item)) {
+            reordered.push_back(item);
+            itemsLeft.erase(item);
+        }
+    }
+
+    if (reordered.empty()) {
+        return false;
+    }
+
+    reordered.insert(reordered.end(), itemsLeft.begin(), itemsLeft.end());
+    ordering = std::move(reordered);
+    return true;
+}
+
+void TFDStorage::ApplyNaturalOrderings() {
+    std::vector<TOrdering> naturalOrderings;
+    naturalOrderings.reserve(InterestingOrderings.size());
+
+    for (const auto& ordering: InterestingOrderings) {
+        if (ordering.IsNatural) {
+            naturalOrderings.push_back(ordering);
+        }
+    }
+
+    for (TOrdering& ordering: InterestingOrderings) {
+        if (!ordering.IsNatural) {
+            for (const auto& natural: naturalOrderings) {
+                if (/* wasReordered = */ ReorderByNatural(ordering.Items, natural.Items)) {
+                    break;
+                }
+            }
+        }
+    }
+
+    std::sort(
+        InterestingOrderings.begin(),
+        InterestingOrderings.end(),
+        [](const TOrdering& lhs, const TOrdering& rhs){ return lhs.Items < rhs.Items; }
+    );
+
+    InterestingOrderings.erase(
+        std::unique(
+            InterestingOrderings.begin(),
+            InterestingOrderings.end()
+        ),
+        InterestingOrderings.end()
+    );
 }
 
 std::size_t TFDStorage::FindSorting(
     const TSorting& sorting,
     TTableAliasMap* tableAliases
 ) {
-    const auto& [_, orderingIdx] = ConvertColumnsAndFindExistingOrdering(sorting.Ordering, sorting.Directions, TOrdering::ESorting, false, tableAliases);
+    const auto& [_, orderingIdx] = ConvertColumnsAndFindExistingOrdering(sorting.Ordering, sorting.Directions, TOrdering::ESorting, false, false, tableAliases);
     return orderingIdx;
 }
+
+std::size_t TFDStorage::FindShuffling(
+    const TShuffling& shuffling,
+    TTableAliasMap* tableAliases
+) {
+    const auto& [_, orderingIdx] = ConvertColumnsAndFindExistingOrdering(shuffling.Ordering, {}, TOrdering::EShuffle, false, shuffling.IsNatural, tableAliases);
+    return orderingIdx;
+}
+
 
 std::size_t TFDStorage::AddSorting(
     const TSorting& sorting,
     TTableAliasMap* tableAliases
 ) {
-    return AddInterestingOrdering(sorting.Ordering, TOrdering::ESorting, sorting.Directions, tableAliases);
+    return AddInterestingOrdering(sorting.Ordering, TOrdering::ESorting, sorting.Directions, true, tableAliases);
 }
 
 std::size_t TFDStorage::AddShuffling(
-    const std::vector<TJoinColumn>& interestingOrdering,
+    const TShuffling& shuffling,
     TTableAliasMap* tableAliases
 ) {
-    return AddInterestingOrdering(interestingOrdering, TOrdering::EShuffle, std::vector<TOrdering::TItem::EDirection>{}, tableAliases);
+    return AddInterestingOrdering(shuffling.Ordering, TOrdering::EShuffle, std::vector<TOrdering::TItem::EDirection>{}, shuffling.IsNatural, tableAliases);
 }
 
 std::size_t TFDStorage::AddInterestingOrdering(
     const std::vector<TJoinColumn>& interestingOrdering,
     TOrdering::EType type,
     const std::vector<TOrdering::TItem::EDirection>& directions,
+    bool isNatural,
     TTableAliasMap* tableAliases
 ) {
     if (interestingOrdering.empty()) {
         return std::numeric_limits<std::size_t>::max();
     }
 
-    auto [items, foundIdx] = ConvertColumnsAndFindExistingOrdering(interestingOrdering, directions, type, true, tableAliases);
+    auto [items, foundIdx] = ConvertColumnsAndFindExistingOrdering(interestingOrdering, directions, type, true, isNatural, tableAliases);
     if (items.Items.empty()) {
         return std::numeric_limits<std::size_t>::max();
     }
@@ -373,7 +442,7 @@ std::size_t TFDStorage::AddInterestingOrdering(
         return std::numeric_limits<std::size_t>::max();
     }
 
-    auto [items, foundIdx] = ConvertColumnsAndFindExistingOrdering(interestingOrdering, {}, type, true, tableAliases);
+    auto [items, foundIdx] = ConvertColumnsAndFindExistingOrdering(interestingOrdering, {}, type, true, false, tableAliases);
 
     if (foundIdx >= 0) {
         return static_cast<std::size_t>(foundIdx);
@@ -433,11 +502,31 @@ TString TFDStorage::ToString() const {
     return ss;
 }
 
+std::function<bool(const std::vector<std::size_t>&)> GetItemsComparator(std::vector<std::size_t> items, bool isNatural) {
+    if (isNatural) {
+        return
+            [items](const std::vector<std::size_t>& interestingOrdering) -> bool
+            {
+                return items == interestingOrdering;
+            };
+    }
+
+    std::sort(items.begin(), items.end());
+
+    return
+        [items](std::vector<std::size_t> interestingOrdering) -> bool
+        {
+            std::sort(interestingOrdering.begin(), interestingOrdering.end());
+            return items == interestingOrdering;
+        };
+}
+
 std::pair<TOrdering, i64> TFDStorage::ConvertColumnsAndFindExistingOrdering(
     const std::vector<TJoinColumn>& interestingOrdering,
     const std::vector<TOrdering::TItem::EDirection>& directions,
     TOrdering::EType type,
     bool createIfNotExists,
+    bool isNatural,
     TTableAliasMap* tableAliases
 ) {
     if(!(
@@ -454,9 +543,11 @@ std::pair<TOrdering, i64> TFDStorage::ConvertColumnsAndFindExistingOrdering(
         return {TOrdering(), -1};
     }
 
+    auto comp = GetItemsComparator(items, isNatural);
+
     for (std::size_t i = 0; i < InterestingOrderings.size(); ++i) {
         if (
-            items == InterestingOrderings[i].Items &&
+            comp(InterestingOrderings[i].Items) &&
             type == InterestingOrderings[i].Type &&
             directions == InterestingOrderings[i].Directions
         ) {
@@ -464,7 +555,7 @@ std::pair<TOrdering, i64> TFDStorage::ConvertColumnsAndFindExistingOrdering(
         }
     }
 
-    return {TOrdering(std::move(items), directions, type), -1};
+    return {TOrdering(std::move(items), directions, type, isNatural), -1};
 }
 
 std::vector<std::size_t> TFDStorage::ConvertColumnIntoIndexes(
@@ -608,11 +699,11 @@ bool TOrderingsStateMachine::TLogicalOrderings::IsSubset(const std::bitset<EMaxN
     return (lhs & rhs) == lhs;
 }
 
-TOrderingsStateMachine::TLogicalOrderings TOrderingsStateMachine::CreateState() {
+TOrderingsStateMachine::TLogicalOrderings TOrderingsStateMachine::CreateState() const {
     return TLogicalOrderings(Dfsm_.Get());
 }
 
-TOrderingsStateMachine::TLogicalOrderings TOrderingsStateMachine::CreateState(i64 orderingIdx) {
+TOrderingsStateMachine::TLogicalOrderings TOrderingsStateMachine::CreateState(i64 orderingIdx) const {
     auto state = TLogicalOrderings(Dfsm_.Get());
     state.SetOrdering(orderingIdx);
     return state;

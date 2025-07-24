@@ -141,6 +141,7 @@ public:
             const auto& endpoint = params.GetEndpoint();
             const auto& database = params.GetDatabase();
             const bool ssl = params.GetEnableSsl();
+            const auto& caCert = params.GetCaCert();
 
             if (endpoint.empty()) {
                 ydbProxy.Reset(CreateLocalYdbProxy(Database));
@@ -150,13 +151,13 @@ public:
                     if (!params.GetStaticCredentials().HasPassword()) {
                         return ResolveSecret(params.GetStaticCredentials().GetPasswordSecretName(), ctx);
                     }
-                    ydbProxy.Reset(CreateYdbProxy(endpoint, database, ssl, params.GetStaticCredentials()));
+                    ydbProxy.Reset(CreateYdbProxy(endpoint, database, ssl, caCert, params.GetStaticCredentials()));
                     break;
                 case NKikimrReplication::TConnectionParams::kOAuthToken:
                     if (!params.GetOAuthToken().HasToken()) {
                         return ResolveSecret(params.GetOAuthToken().GetTokenSecretName(), ctx);
                     }
-                    ydbProxy.Reset(CreateYdbProxy(endpoint, database, ssl, params.GetOAuthToken().GetToken()));
+                    ydbProxy.Reset(CreateYdbProxy(endpoint, database, ssl, caCert, params.GetOAuthToken().GetToken()));
                     break;
                 default:
                     ErrorState(TStringBuilder() << "Unexpected credentials: " << params.GetCredentialsCase());

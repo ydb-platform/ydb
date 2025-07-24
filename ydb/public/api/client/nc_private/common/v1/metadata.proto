@@ -12,7 +12,7 @@ option java_package = "ai.nebius.common.v1";
 
 // Common resource metadata.
 message ResourceMetadata {
-  option (message_visibility) = PUBLIC;
+  // option (message_visibility) = PUBLIC; // This option conflicts with other options by its number
 
   // Identifier for the resource, unique for its resource type.
   // @exclude Using NID is STRONGLY recommended because NID is URL- and DNS-safe and reasonably human-readable.
@@ -69,7 +69,7 @@ message ResourceMetadata {
 // if service supports uniqueness of ResourceMetadata.name within tuple (scope) <resource_type, parent_id>
 // it also must have grpc method GetByName
 message GetByNameRequest {
-  option (message_visibility) = PUBLIC;
+  // option (message_visibility) = PUBLIC; // This option conflicts with other options by its number
 
   string parent_id = 1;
   string name = 2;

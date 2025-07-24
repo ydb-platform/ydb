@@ -830,7 +830,7 @@ bool TCms::CheckSysTabletsNode(const TActionOptions &opts,
                                const TNodeInfo &node,
                                TErrorInfo &error) const
 {
-    if (node.Services & EService::DynamicNode || node.PDisks.size()) {
+    if (node.Services & EService::DynamicNode) {
         return true;
     }
 

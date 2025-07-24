@@ -1,5 +1,22 @@
 # {{ ydb-short-name }} CLI changelog
 
+## Version 2.24.0 {#2-24-0}
+
+Released on July 23, 2025. To update to version **2.24.0**, select the [Downloads](downloads/ydb-cli.md) section.
+
+### Features
+
+* Added the ability for the `{{ ydb-cli }} workload tpch` and `{{ ydb-cli }} workload tpcds` [commands](./reference/ydb-cli/commands/workload/index.md) to use a fractional value for the `--scale` option, specifying a percentage of the full benchmark's data size and workload.
+* Added the `{{ ydb-cli }} workload tpcc check` command to check TPC-C data consistency.
+
+### Improvements
+
+* Changed the default storage type in `{{ ydb-cli }} workload * init` [commands](./reference/ydb-cli/commands/workload/index.md) to `column` (from `row`), and the default datetime mode to `datetime32` (from `datetime64`).
+
+### Bug fixes
+
+* Fixed an issue where the `{{ ydb-cli }} import file csv` [command](./reference/ydb-cli/export-import/import-file.md) could get stuck during execution.
+
 ## Version 2.23.0 {#2-23-0}
 
 Released on July 16, 2025. To update to version **2.23.0**, select the [Downloads](downloads/ydb-cli.md) section.

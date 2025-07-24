@@ -236,8 +236,8 @@ protected:
         if (this->Task.GetEnableSpilling()) {
             TaskRunner->SetSpillerFactory(std::make_shared<TDqSpillerFactory>(execCtx.GetTxId(), NActors::TActivationContext::ActorSystem(), execCtx.GetWakeupCallback(), execCtx.GetErrorCallback()));
             TaskRunner->SetMemoryUsageReporter(std::make_shared<NKikimr::NMiniKQL::TMemoryUsageReporter>(
-                [this](ui64 bytes){ return  this->MemoryQuota->AllocateQuota(bytes); },
-                [this](ui64 bytes){ this->MemoryQuota->FreeQuota(bytes); }
+                [this, alloc](ui64 bytes){ return  this->MemoryQuota->AllocateQuota(bytes, alloc); },
+                [this, alloc](ui64 bytes){ this->MemoryQuota->FreeQuota(bytes, alloc); }
             ));
         }
 

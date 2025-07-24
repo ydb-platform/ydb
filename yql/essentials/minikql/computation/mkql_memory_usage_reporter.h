@@ -39,9 +39,9 @@ public:
         // Cerr << "[MISHA][DESTR]: " << "Total: " << BytesAllocated_ << Endl;
         if (BytesAllocated_) {
             // WHY??
-            Cerr << std::format("[MISHA] Bytes not freed: {}\n", BytesAllocated_);
             ReportFreeCallback_(BytesAllocated_);
         }
+        Cerr << std::format("[MISHA] Bytes not freed: {}\n", BytesAllocated_);
         // Y_ENSURE(BytesAllocated_ == 0, "Memory leak");
     }
 

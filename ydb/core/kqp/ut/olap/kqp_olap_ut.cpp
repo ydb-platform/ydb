@@ -3348,7 +3348,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     Y_UNIT_TEST(BulkUpsertUpdate) {
         TKikimrSettings runnerSettings;
         runnerSettings.WithSampleTables = false;
-        runnerSettings.SetColumnShardAlterObjectEnabled(true);
+        runnerSettings.SetColumnShardAlterObjectEnabled(true).SetColumnShardReaderClassName("PLAIN");
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
         TTestHelper testHelper(runnerSettings);
 

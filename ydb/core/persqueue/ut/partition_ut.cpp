@@ -38,7 +38,6 @@ struct TCreatePartitionParams {
     ui64 End = 0;
     TMaybe<ui64> PlanStep;
     TMaybe<ui64> TxId;
-    TVector<TTransaction> Transactions;
     TConfigParams Config;
     TInstant EndWriteTimestamp;
     bool FillHead = false;
@@ -202,11 +201,10 @@ protected:
     void TearDown(NUnitTest::TTestContext&) override;
 
     TPartition* CreatePartitionActor(const TPartitionId& partition,
-                              const TConfigParams& config,
-                              bool newPartition,
-                              TVector<TTransaction> txs);
+                                     const TConfigParams& config,
+                                     bool newPartition);
     TPartition* CreatePartition(const TCreatePartitionParams& params = {},
-                         const TConfigParams& config = {});
+                                const TConfigParams& config = {});
 
     void CreateSession(const TString& clientId,
                        const TString& sessionId,
@@ -333,6 +331,8 @@ void TPartitionFixture::SetUp(NUnitTest::TTestContext&)
     Ctx.ConstructInPlace();
     Finalizer.ConstructInPlace(*Ctx);
 
+    Ctx->EnableDetailedPQLog = true;
+
     Ctx->Prepare();
     Ctx->Runtime->SetScheduledLimit(5'000);
 }
@@ -346,9 +346,8 @@ void TPartitionFixture::TearDown(NUnitTest::TTestContext&)
 }
 
 TPartition* TPartitionFixture::CreatePartitionActor(const TPartitionId& id,
-                                             const TConfigParams& config,
-                                             bool newPartition,
-                                             TVector<TTransaction> txs)
+                                                    const TConfigParams& config,
+                                                    bool newPartition)
 {
     using TKeyValueCounters = TProtobufTabletCounters<
         NKeyValue::ESimpleCounters_descriptor,
@@ -404,30 +403,22 @@ TPartition* TPartitionFixture::CreatePartitionActor(const TPartitionId& id,
                                      1,
                                      quoterId,
                                      std::move(samplingControl),
-                                     newPartition,
-                                     std::move(txs));
+                                     newPartition);
     ActorId = Ctx->Runtime->Register(actor);
     return actor;
 }
 
 TPartition* TPartitionFixture::CreatePartition(const TCreatePartitionParams& params,
-                                        const TConfigParams& config)
+                                               const TConfigParams& config)
 {
     TPartition* ret;
     if ((params.Begin == 0) && (params.End == 0)) {
-        ret = CreatePartitionActor(params.Partition, config, true, {});
+        ret = CreatePartitionActor(params.Partition, config, true);
 
         WaitConfigRequest();
         SendConfigResponse(params.Config);
     } else {
-        TVector<TTransaction> copyTx;
-        for (const auto& origTx : params.Transactions) {
-            copyTx.emplace_back(origTx.Tx, origTx.Predicate);
-            copyTx.back().ChangeConfig = origTx.ChangeConfig;
-            copyTx.back().SendReply = origTx.SendReply;
-            copyTx.back().ProposeConfig = origTx.ProposeConfig;
-        }
-        ret = CreatePartitionActor(params.Partition, config, false, std::move(copyTx));
+        ret = CreatePartitionActor(params.Partition, config, false);
 
         WaitConfigRequest();
         SendConfigResponse(params.Config);
@@ -2161,63 +2152,6 @@ Y_UNIT_TEST_F(OldPlanStep, TPartitionFixture)
 
     SendCommitTx(step, txId);
     WaitCommitTxDone({.TxId=txId, .Partition=TPartitionId(partition)});
-}
-
-Y_UNIT_TEST_F(AfterRestart_1, TPartitionFixture)
-{
-    const TPartitionId partition{3};
-    const ui64 begin = 0;
-    const ui64 end = 10;
-    const TString consumer = "client";
-    const TString session = "session";
-
-    const ui64 step = 12345;
-
-    TVector<TTransaction> txs;
-    txs.push_back(MakeTransaction(step, 11111, consumer, 0, 2, true));
-    txs.push_back(MakeTransaction(step, 22222, consumer, 2, 4));
-
-    CreatePartition({
-                    .Partition=partition,
-                    .Begin=begin,
-                    .End=end,
-                    .PlanStep=step, .TxId=10000,
-                    .Transactions=std::move(txs),
-                    .Config={.Consumers={{.Consumer=consumer, .Offset=0, .Session=session}}}
-                    });
-
-    SendCommitTx(step, 11111);
-
-    WaitCalcPredicateResult({.Step=step, .TxId=22222, .Partition=TPartitionId(partition), .Predicate=true});
-    SendCommitTx(step, 22222);
-
-    WaitCmdWrite({.Count=3, .PlanStep=step, .TxId=22222, .UserInfos={{1, {.Session=session, .Offset=4}}}});
-}
-
-Y_UNIT_TEST_F(AfterRestart_2, TPartitionFixture)
-{
-    const TPartitionId partition{3};
-    const ui64 begin = 0;
-    const ui64 end = 10;
-    const TString consumer = "client";
-    const TString session = "session";
-
-    const ui64 step = 12345;
-
-    TVector<TTransaction> txs;
-    txs.push_back(MakeTransaction(step, 11111, consumer, 0, 2));
-    txs.push_back(MakeTransaction(step, 22222, consumer, 2, 4));
-
-    CreatePartition({
-                    .Partition=partition,
-                    .Begin=begin,
-                    .End=end,
-                    .PlanStep=step, .TxId=10000,
-                    .Transactions=std::move(txs),
-                    .Config={.Consumers={{.Consumer=consumer, .Offset=0, .Session=session}}}
-                    });
-
-    WaitCalcPredicateResult({.Step=step, .TxId=11111, .Partition=TPartitionId(partition), .Predicate=true});
 }
 
 Y_UNIT_TEST_F(IncorrectRange, TPartitionFixture)

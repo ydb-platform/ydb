@@ -264,9 +264,9 @@ protected:
 void TPQTabletFixture::SetUp(NUnitTest::TTestContext&)
 {
     Ctx.ConstructInPlace();
-    Ctx->EnableDetailedPQLog = true;
-
     Finalizer.ConstructInPlace(*Ctx);
+
+    Ctx->EnableDetailedPQLog = true;
 
     Ctx->Prepare();
     Ctx->Runtime->SetScheduledLimit(5'000);
@@ -426,6 +426,61 @@ void TPQTabletFixture::WaitPlanStepAccepted(const TPlanStepAcceptedMatcher& matc
 
 void TPQTabletFixture::WaitReadSet(NHelpers::TPQTabletMock& tablet, const TReadSetMatcher& matcher)
 {
+    auto tryMatch = [](const TReadSetMatcher& matcher, const NKikimrTx::TEvReadSet& readSet) {
+        if (matcher.Step.Defined()) {
+            UNIT_ASSERT(readSet.HasStep());
+            UNIT_ASSERT_VALUES_EQUAL(*matcher.Step, readSet.GetStep());
+        }
+        if (matcher.TxId.Defined()) {
+            UNIT_ASSERT(readSet.HasTxId());
+            UNIT_ASSERT_VALUES_EQUAL(*matcher.TxId, readSet.GetTxId());
+        }
+        if (matcher.Source.Defined()) {
+            UNIT_ASSERT(readSet.HasTabletSource());
+            UNIT_ASSERT_VALUES_EQUAL(*matcher.Source, readSet.GetTabletSource());
+        }
+        if (matcher.Target.Defined()) {
+            UNIT_ASSERT(readSet.HasTabletDest());
+            UNIT_ASSERT_VALUES_EQUAL(*matcher.Target, readSet.GetTabletDest());
+        }
+        if (matcher.Decision.Defined()) {
+            UNIT_ASSERT(readSet.HasReadSet());
+
+            NKikimrTx::TReadSetData data;
+            Y_ABORT_UNLESS(data.ParseFromString(readSet.GetReadSet()));
+
+            UNIT_ASSERT_EQUAL(*matcher.Decision, data.GetDecision());
+        }
+        if (matcher.Producer.Defined()) {
+            UNIT_ASSERT(readSet.HasTabletProducer());
+            UNIT_ASSERT_VALUES_EQUAL(*matcher.Producer, readSet.GetTabletProducer());
+        }
+    };
+
+    if (matcher.Step.Defined() && matcher.TxId.Defined()) {
+        const ui64 step = *matcher.Step;
+        const ui64 txId = *matcher.TxId;
+        const auto key = std::make_pair(step, txId);
+
+        auto p = tablet.ReadSets.find(std::make_pair(step, txId));
+        if (p == tablet.ReadSets.end()) {
+            TDispatchOptions options;
+            options.CustomFinalCondition = [&]() {
+                return tablet.ReadSets.contains(key);
+            };
+            UNIT_ASSERT(Ctx->Runtime->DispatchEvents(options));
+
+            p = tablet.ReadSets.find(key);
+        }
+
+        const auto& records = p->second;
+        UNIT_ASSERT_VALUES_EQUAL(records.size(), 1);
+
+        tryMatch(matcher, records.front());
+
+        return;
+    }
+
     if (!tablet.ReadSet.Defined()) {
         TDispatchOptions options;
         options.CustomFinalCondition = [&]() {
@@ -437,34 +492,7 @@ void TPQTabletFixture::WaitReadSet(NHelpers::TPQTabletMock& tablet, const TReadS
     auto readSet = std::move(*tablet.ReadSet);
     tablet.ReadSet = Nothing();
 
-    if (matcher.Step.Defined()) {
-        UNIT_ASSERT(readSet.HasStep());
-        UNIT_ASSERT_VALUES_EQUAL(*matcher.Step, readSet.GetStep());
-    }
-    if (matcher.TxId.Defined()) {
-        UNIT_ASSERT(readSet.HasTxId());
-        UNIT_ASSERT_VALUES_EQUAL(*matcher.TxId, readSet.GetTxId());
-    }
-    if (matcher.Source.Defined()) {
-        UNIT_ASSERT(readSet.HasTabletSource());
-        UNIT_ASSERT_VALUES_EQUAL(*matcher.Source, readSet.GetTabletSource());
-    }
-    if (matcher.Target.Defined()) {
-        UNIT_ASSERT(readSet.HasTabletDest());
-        UNIT_ASSERT_VALUES_EQUAL(*matcher.Target, readSet.GetTabletDest());
-    }
-    if (matcher.Decision.Defined()) {
-        UNIT_ASSERT(readSet.HasReadSet());
-
-        NKikimrTx::TReadSetData data;
-        Y_ABORT_UNLESS(data.ParseFromString(readSet.GetReadSet()));
-
-        UNIT_ASSERT_EQUAL(*matcher.Decision, data.GetDecision());
-    }
-    if (matcher.Producer.Defined()) {
-        UNIT_ASSERT(readSet.HasTabletProducer());
-        UNIT_ASSERT_VALUES_EQUAL(*matcher.Producer, readSet.GetTabletProducer());
-    }
+    tryMatch(matcher, readSet);
 }
 
 void TPQTabletFixture::WaitReadSetEx(NHelpers::TPQTabletMock& tablet, const TReadSetMatcher& matcher)

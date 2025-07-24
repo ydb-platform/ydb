@@ -56,18 +56,17 @@ public:
     }
 
     TObject PopFront() {
-        if (Sorting == ERequestSorting::NONE) {
+        if (AlreadySorted.size()) {
             AFL_VERIFY(AlreadySorted.size());
             auto result = std::move(AlreadySorted.front());
             AlreadySorted.pop_front();
             return result;
-        } else {
-            AFL_VERIFY(HeapObjects.size());
-            std::pop_heap(HeapObjects.begin(), HeapObjects.end(), typename TObject::TComparator(Sorting));
-            auto result = std::move(HeapObjects.back());
-            HeapObjects.pop_back();
-            return result;
         }
+        AFL_VERIFY(HeapObjects.size());
+        std::pop_heap(HeapObjects.begin(), HeapObjects.end(), typename TObject::TComparator(Sorting));
+        auto result = std::move(HeapObjects.back());
+        HeapObjects.pop_back();
+        return result;
     }
 
     bool IsEmpty() const {

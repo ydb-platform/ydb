@@ -11,7 +11,9 @@
 #include <library/cpp/time_provider/time_provider.h>
 
 #include <util/generic/maybe.h>
+#include <util/generic/ptr.h>
 #include <util/generic/vector.h>
+#include <util/system/mutex.h>
 
 namespace NKikimr::NJaegerTracing {
 
@@ -22,7 +24,7 @@ struct TWithTag {
     size_t Tag;
 };
 
-class TSamplingThrottlingConfigurator: private TMoveOnly {
+class TSamplingThrottlingConfigurator: public TRefCounted<TSamplingThrottlingConfigurator, TAtomicCounter> {
 public:
     TSamplingThrottlingConfigurator(TIntrusivePtr<ITimeProvider> timeProvider,
                                     TIntrusivePtr<IRandomProvider>& randomProvider);
@@ -41,6 +43,7 @@ private:
     TIntrusivePtr<ITimeProvider> TimeProvider;
     TFastRng64 Rng;
     TSettings<double, TIntrusivePtr<TThrottler>> CurrentSettings;  
+    TMutex ControlMutex;
 };
 
 } // namespace NKikimr::NJaegerTracing

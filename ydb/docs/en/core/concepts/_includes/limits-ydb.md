@@ -45,12 +45,12 @@ The table below lists the limits that apply to query execution.
 
 | Parameter | Default | Explanation | Effect<br/>in case of<br/>a violation<br/>of the limit |
 | :--- | :--- | :--- | :---: |
-| Query duration | 1800 seconds (30 minutes) | The maximum amount of time allowed for a single query to execute. | Return status code TIMEOUT |
-| Maximum number of sessions per cluster node | 1,000 | The limit on the number of sessions that clients can create with each {{ ydb-short-name }} node. | Return status code OVERLOADED |
-| Maximum query text length | 10 KB | The maximum allowable length of YQL query text. | Return status code BAD_REQUEST |
-| Maximum size of parameter values | 50 MB | The maximum total size of parameters passed when executing a previously prepared query. | Return status code BAD_REQUEST |
-| Maximum size of a row | 50 MB | The maximum total size of all fields of a single row returned or produced by the query. | Return status code PRECONDITION_FAILED |
-| Maximum number of locks per DataShard | 10000 | The number of lock ranges per DataShard | Convert some locks to WholeShardLock |
+| Query duration | 1800 seconds (30 minutes) | The maximum amount of time allowed for a single query to execute. | Returns status code `TIMEOUT` |
+| Maximum number of sessions per cluster node | 1,000 | The limit on the number of sessions that clients can create with each {{ ydb-short-name }} node. | Returns status code `OVERLOADED` |
+| Maximum query text length | 10 KB | The maximum allowable length of YQL query text. | Returns status code `BAD_REQUEST` |
+| Maximum size of parameter values | 50 MB | The maximum total size of parameters passed when executing a previously prepared query. | Returns status code `BAD_REQUEST` |
+| Maximum size of a row | 50 MB | The maximum total size of all fields of a single row returned or produced by the query. | Returns status code `PRECONDITION_FAILED` |
+| Maximum number of [locks](../contributor/datashard-locks-and-change-visibility) per DataShard | 10000 | The number of lock ranges per DataShard | Convert some locks to whole-shard locks (uses less memory, but locks the entire shard instead of just a part). |
 
 {% cut "Legacy Limits" %}
 

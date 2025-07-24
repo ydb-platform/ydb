@@ -68,9 +68,11 @@ void TEventHolder::SendToVDisk(const TActorContext& ctx, const TActorId& remoteV
         NKikimrBlobStorage::TEvVPut record;
         processMsgQoS(record);
 
+        auto sz = record.ByteSizeLong();
+        auto buf = ctx.ActorSystem()->GetRcBufAllocator()->AllocRcBuf(sz, 0, 0);
+
         // serialize that extra buffer
-        TString buf;
-        const bool status = record.SerializeToString(&buf);
+        const bool status = record.SerializeToArray(buf.GetContiguousSpanMut().data(), buf.GetContiguousSpanMut().size());
         Y_ABORT_UNLESS(status);
 
         // send it to disk

@@ -6,6 +6,8 @@
 #include <ydb/library/actors/util/rope.h>
 #include <ydb/library/actors/wilson/wilson_trace.h>
 
+#include <ydb/library/actors/interconnect/rdma/mem_pool.h>
+
 namespace NActors {
     class IEventHandle;
 
@@ -48,12 +50,13 @@ namespace NActors {
             , SerializationInfo(std::move(serializationInfo))
         {}
 
-        TEventSerializedData(const TEventSerializedData& original, TString extraBuffer)
+        TEventSerializedData(const TEventSerializedData& original, TRcBuf&& extraBuffer)
             : Rope(original.Rope)
             , SerializationInfo(original.SerializationInfo)
         {
             if (!SerializationInfo.Sections.empty()) {
-                SerializationInfo.Sections.push_back(TEventSectionInfo{0, extraBuffer.size(), 0, 0, true});
+                bool rdma = !NInterconnect::NRdma::TryExtractFromRcBuf(extraBuffer).Empty();
+                SerializationInfo.Sections.push_back(TEventSectionInfo{0, extraBuffer.size(), 0, 0, true, rdma});
             }
             Append(std::move(extraBuffer));
         }

@@ -38,12 +38,12 @@
 
 </defs>
 <style type='text/css'>
-  .stage { stroke-width:0; fill:var(--stage-main, #F2F2F2); }
-  .clone { stroke-width:0; fill:var(--stage-clone, #D9D9D9); }
+  rect.stage { stroke-width:0; fill:var(--stage-main, #F2F2F2); }
+  rect.clone { stroke-width:0; fill:var(--stage-clone, #D9D9D9); }
   .texts { text-anchor:start; font-family:Verdana; font-size:8px; fill:var(--stage-text, #262626); }
   .textm { text-anchor:middle; font-family:Verdana; font-size:8px; fill:var(--stage-text, #262626); }
   .texte { text-anchor:end; font-family:Verdana; font-size:8px; fill:var(--stage-text, #262626); }
-  circle.stage { r:7; stroke:var(--stage-main, #F2F2F2); stroke-width:1; fill:var(--stage-clone, #D9D9D9); }
+  circle.stage { stroke:var(--stage-main, #F2F2F2); stroke-width:1; fill:var(--stage-clone, #D9D9D9); }
   line.opdiv { stroke-width:1; stroke:var(--stage-grid, #B2B2B2); stroke-dasharray:1,2; }
   text.clipped { clip-path:url(#clipTextPath); }
   polygon.conn { stroke-width:0; fill:var(--conn-fill, #BFBFBF); }
@@ -93,7 +93,7 @@
 <rect x='395' y='27' width='200' height='66' class='stage'/>
 <rect x='368' y='27' width='24' height='66' class='stage'/>
 <rect x='598' y='27' width='270' height='66' class='stage'/>
-<circle cx='8' cy='60' class='stage' />
+<circle cx='8' cy='60' r='7' class='stage' />
 <text x='8' y='64' class='textm'>5</text>
 <g><title>Aggregate: </title><text x='18' y='38' class='texts clipped'>Aggregate</text>
 <text x='22' y='48' class='texts clipped'></text>
@@ -110,14 +110,6 @@
 <line x1='18' y1='70' x2='298' y2='70' class='opdiv' />
 <g><title>Aggregate: </title><text x='18' y='78' class='texts clipped'>Aggregate</text>
 <text x='22' y='88' class='texts clipped'></text>
-</g>
-<g><title>Output 0%, 14B, Rows 0%, 1</title>
-<use href='#icon_output' transform='translate(395 29) scale(0.0325 0.0325)' fill='var(--output-light, #6F93C3)'/>
-  <rect x='413' y='29' width='1' height='14' stroke-width='0' fill='var(--output-light, #6F93C3)'/>  <polygon points='413,29 413,29 414,29 414,43 413,43' stroke='none' fill='var(--output-medium, #5781B9)'/>
-<rect x='413' y='32' width='16' height='9' stroke-width='0' opacity='0.5' fill='var(--stage-main, #F2F2F2)'/>
-<text font-family='Verdana' font-size='8px' fill='var(--text-summary, #262626)' x='413' y='40'>14B</text>
-</g>
-<g><title>Output, Duration: 0.00 (1:33 | 1:33 | 1:33 - 1:33 | 1:33 | 1:33)</title><rect x='868' y='29' width='0' height='14' stroke-width='0' fill='var(--output-medium, #5781B9)'/>
 </g>
 <g><title>Memory 0%, 1.00MB</title>
 <use href='#icon_memory' transform='translate(395 45) scale(0.6 0.6)' fill='var(--mem-medium, #7E4E5B)'/>
@@ -152,7 +144,7 @@
 <rect x='368' y='96' width='24' height='82' class='stage'/>
 <rect x='598' y='96' width='270' height='82' class='stage'/>
 <rect x='0' y='178' width='8' height='419' class='stage'/>
-<circle cx='8' cy='137' class='stage' />
+<circle cx='8' cy='137' r='7' class='stage' />
 <text x='8' y='141' class='textm'>4</text>
 <g><title>Aggregate: </title><text x='18' y='107' class='texts clipped'>Aggregate</text>
 <text x='22' y='117' class='texts clipped'></text>
@@ -211,7 +203,7 @@
 <rect x='395' y='181' width='200' height='66' class='stage'/>
 <rect x='368' y='181' width='24' height='66' class='stage'/>
 <rect x='598' y='181' width='270' height='66' class='stage'/>
-<circle cx='19' cy='214' class='stage' />
+<circle cx='19' cy='214' r='7' class='stage' />
 <text x='19' y='218' class='textm'>1</text>
 <g><title>Filter: Exist(l_partkey)</title><text x='29' y='192' class='texts clipped'>Filter</text>
 <text x='33' y='202' class='texts clipped'>Exist(l_partkey)</text>
@@ -266,7 +258,7 @@
 <rect x='395' y='250' width='200' height='66' class='stage'/>
 <rect x='368' y='250' width='24' height='66' class='stage'/>
 <rect x='598' y='250' width='270' height='66' class='stage'/>
-<circle cx='19' cy='283' class='stage' />
+<circle cx='19' cy='283' r='7' class='stage' />
 <text x='19' y='287' class='textm'>0</text>
 <g><title>TableFullScan: </title><text x='29' y='261' class='texts clipped'>TableFullScan</text>
 <text x='33' y='271' class='texts clipped'></text>
@@ -310,7 +302,7 @@
 <rect x='395' y='457' width='200' height='18' class='clone'/>
 <rect x='301' y='457' width='64' height='18' class='clone'/>
 <rect x='598' y='457' width='270' height='18' class='clone'/>
-<circle cx='46' cy='466' class='stage' />
+<circle cx='46' cy='466' r='7' class='stage' />
 <text x='46' y='470' class='textm'>0</text>
 <text x='56' y='468' class='texts clipped'>TableFullScan: </text>
 </g>
@@ -340,7 +332,7 @@
 <rect x='368' y='372' width='24' height='82' class='stage'/>
 <rect x='598' y='372' width='270' height='82' class='stage'/>
 <rect x='11' y='454' width='8' height='143' class='stage'/>
-<circle cx='19' cy='413' class='stage' />
+<circle cx='19' cy='413' r='7' class='stage' />
 <text x='19' y='417' class='textm'>3</text>
 <g><title>InnerJoin (Grace): lineitem.l_partkey = part.p_partkey</title><text x='29' y='383' class='texts clipped'>InnerJoin (Grace)</text>
 <text x='33' y='393' class='texts clipped'>lineitem.l_partkey = part.p_partkey</text>
@@ -390,7 +382,7 @@
 <rect x='395' y='478' width='200' height='66' class='stage'/>
 <rect x='368' y='478' width='24' height='66' class='stage'/>
 <rect x='598' y='478' width='270' height='66' class='stage'/>
-<circle cx='30' cy='511' class='stage' />
+<circle cx='30' cy='511' r='7' class='stage' />
 <text x='30' y='515' class='textm'>2</text>
 <g><title>Filter-TableFullScan: </title><text x='40' y='489' class='texts clipped'>Filter-TableFullScan</text>
 <text x='44' y='499' class='texts clipped'></text>
@@ -457,9 +449,22 @@
   <text x='390' y='576' class='texte'>64</text>
 </g>
 </g>
+<g class='selectable'><title>Result: ResultSet</title>
+<rect x='0' y='3' width='298' height='24' class='background'/>
+<text x='0' y='11' class='texts'>ResultSet</text>
+<g><title>Output 0%, 14B, Rows 0%, 1</title>
+<rect x='395' y='29' width='200' height='14' class='background'/>
+<use href='#icon_output' transform='translate(395 29) scale(0.0325 0.0325)' fill='var(--output-light, #6F93C3)'/>
+  <rect x='413' y='29' width='1' height='14' stroke-width='0' fill='var(--output-light, #6F93C3)'/>  <polygon points='413,29 413,29 414,29 414,43 413,43' stroke='none' fill='var(--output-medium, #5781B9)'/>
+<rect x='413' y='32' width='16' height='9' stroke-width='0' opacity='0.5' fill='var(--stage-main, #F2F2F2)'/>
+<text font-family='Verdana' font-size='8px' fill='var(--text-summary, #262626)' x='413' y='40'>14B</text>
+</g>
+<g><title>Output, Duration: 0.00 (1:33 | 1:33 | 1:33 - 1:33 | 1:33 | 1:33)</title><rect x='868' y='29' width='0' height='14' stroke-width='0' fill='var(--output-medium, #5781B9)'/>
+</g>
+</g>
 <g class='selectable'><title>Connection: HashShuffle KeyColumns: p_partkey</title>
 <g><title>Input from Stage 2</title>
-<circle cx='290' cy='385' class='stage' />
+<circle cx='290' cy='385' r='7' class='stage' />
 <text x='290' y='389' class='textm'>2</text>
 </g>
   <polygon points='38,492 22,492 18,485 22,478 38,478' class='conn' />
@@ -501,7 +506,7 @@
 </g>
 <g class='selectable'><title>Connection: HashShuffle KeyColumns: _yql_dq_key_left_0</title>
 <g><title>Input from Stage 0</title>
-<circle cx='274' cy='385' class='stage' />
+<circle cx='274' cy='385' r='7' class='stage' />
 <text x='274' y='389' class='textm'>0</text>
 </g>
 <g><title>Output 64%, ∑14.41GB, 604.60MB | 614.91MB | 623.51MB, Rows 49%, ∑600.03M, 24.58M | 25.00M | 25.35M, Width 1B</title>
@@ -537,7 +542,7 @@
 </g>
 <g class='selectable'><title>Connection: HashShuffle KeyColumns: part.p_partkey</title>
 <g><title>Input from Stage 3</title>
-<circle cx='290' cy='149' class='stage' />
+<circle cx='290' cy='149' r='7' class='stage' />
 <text x='290' y='153' class='textm'>3</text>
 </g>
   <polygon points='27,386 11,386 7,379 11,372 27,372' class='conn' />
@@ -575,7 +580,7 @@
 </g>
 <g class='selectable'><title>Connection: HashShuffle KeyColumns: l_partkey</title>
 <g><title>Input from Stage 0</title>
-<circle cx='290' cy='214' class='stage' />
+<circle cx='290' cy='214' r='7' class='stage' />
 <text x='290' y='218' class='textm'>0</text>
 </g>
   <polygon points='27,264 11,264 11,250 19,246 27,250' class='conn' />
@@ -615,7 +620,7 @@
 </g>
 <g class='selectable'><title>Connection: HashShuffle KeyColumns: _yql_dq_key_left_0</title>
 <g><title>Input from Stage 1</title>
-<circle cx='274' cy='149' class='stage' />
+<circle cx='274' cy='149' r='7' class='stage' />
 <text x='274' y='153' class='textm'>1</text>
 </g>
   <polygon points='27,195 11,195 7,188 11,181 27,181' class='conn' />
@@ -653,7 +658,7 @@
 </g>
 <g class='selectable'><title>Connection: UnionAll</title>
 <g><title>Input from Stage 4</title>
-<circle cx='290' cy='80' class='stage' />
+<circle cx='290' cy='80' r='7' class='stage' />
 <text x='290' y='84' class='textm'>4</text>
 </g>
   <polygon points='16,110 0,110 0,96 8,92 16,96' class='conn' />
@@ -774,7 +779,6 @@
 <text x='830' y='11' class='texts'>1:20</text>
 <line x1='857' y1='0' x2='857' y2='597' stroke-width='1' stroke='var(--stage-grid, #B2B2B2)' stroke-dasharray='1,2'/>
 <text x='859' y='11' class='texts'>1:30</text>
-<text x='0' y='11' class='texts'>ResultSet</text>
 <text x='303' y='11' class='texts'>Operators</text>
 <text x='397' y='11' class='texts'>Stages</text>
 <text x='390' y='11' class='texte'>Tasks</text>

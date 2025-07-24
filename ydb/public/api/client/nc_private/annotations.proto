@@ -131,7 +131,7 @@ extend google.protobuf.MessageOptions {
   // Visibility message_visibility = 50001; // Conflicts with other options by its number
 
   // Marker extension for resource specifications. Resource type is equal to according NID type, e.g. "serviceaccount" or "project"
-  string resource = 50002;
+  // string resource = 50002; // Conflicts with other options by its number
 
   // @exclude 50003 is used for audit in `nebius/audit/annotations.proto`
 }

@@ -76,7 +76,23 @@ public:
             LocalEvent.reset(ev->ReleaseBase().Release());
         } else {
             const bool hasEvent = ev->HasEvent();
-            Buffer = ev->ReleaseChainBuffer();
+            if (hasEvent) {
+                auto eventBase = ev->ReleaseBase();
+
+                auto rcBufAlloc = TlsActivationContext ?
+                    TlsActivationContext->AsActorContext().ActorSystem()->GetRcBufAllocator() : GetDefaultRcBufAllocator();
+
+                auto rope = eventBase->SerializeToRope(
+                    [rcBufAlloc](ui32 size) -> TRcBuf {
+                        return rcBufAlloc->AllocRcBuf(size, 0, 0);
+                    });
+
+                Buffer = MakeIntrusive<TEventSerializedData>(
+                    std::move(*rope), eventBase->CreateSerializationInfo()
+                );
+            } else {
+                Buffer = ev->ReleaseChainBuffer();
+            }
             ByteSize = Buffer->GetSize();
             if (hasEvent) {
                 ++*serItems;

@@ -186,7 +186,12 @@ runs:
           git checkout $ORIGINAL_HEAD
           YA_MAKE_TARGET=.
         else
-          YA_MAKE_TARGET="${{ inputs.build_target }}"
+          YA_MAKE_TARGET=""
+          for TARGET in ${{ inputs.build_target }}; do
+             if [ -e $TARGET ]; then
+                YA_MAKE_TARGET="$YA_MAKE_TARGET $TARGET"
+             fi
+          done
         fi
 
         readarray -d ',' -t test_size < <(printf "%s" "${{ inputs.test_size }}")

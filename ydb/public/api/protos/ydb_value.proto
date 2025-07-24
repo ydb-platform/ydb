@@ -177,33 +177,32 @@ message Column {
     Type type = 2;
 }
 
+message ValueOutputMeta {
+}
+
+message ArrowOutputMeta {
+    // To detect compression type and level
+    Ydb.Formats.ArrowOutput format = 1;
+
+    // It's filled only for SCHEMA_INCLUSION_MODE_ALWAYS, SCHEMA_INCLUSION_MODE_FIRST_ONLY.
+    bytes schema = 2;
+}
+
 // Represents table-like structure with ordered set of rows and columns
 message ResultSet {
-    enum DataFormat {
-        // Default value for empty Query.ExecuteQueryRequest.data_format, cannot be returned as result
-        UNSPECIFIED = 0;
-
-        // Default Ydb.Value, it also returns with ResultSet.DataFormat.UNSPECIFIED specified
-        YDB_VALUE = 1;
-
-        // Returns a record batch in ResultSet.data with the schema in ResultSet.arrow_batch_settings
-        ARROW = 2;
-    }
-
-    // Metadata of columns for any format
+    // Metadata of columns, it is filled only for SCHEMA_INCLUSION_MODE_ALWAYS, SCHEMA_INCLUSION_MODE_FIRST_ONLY.
     repeated Column columns = 1;
-    // Rows of table, only for YDB_VALUE format
+    // Rows of table, only for ValueOutput format
     repeated Value rows = 2;
     // Flag indicates the result was truncated
     bool truncated = 3;
-    // Format of rows data
-    DataFormat data_format = 4;
 
-    oneof data_format_settings {
-        // Settings for the arrow data format
-        Ydb.Formats.ArrowBatchSettings arrow_batch_settings = 5;
+    // Metadata of the output format
+    oneof output_format_meta {
+        ValueOutputMeta value_output_meta = 100;
+        ArrowOutputMeta arrow_output_meta = 101;
     }
 
-    // Rows of table, only for any binary data format (ARROW)
+    // Binary data for compressed rows or/and other formats
     bytes data = 1000;
 }

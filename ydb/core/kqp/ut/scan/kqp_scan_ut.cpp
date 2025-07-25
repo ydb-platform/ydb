@@ -3,6 +3,7 @@
 #include <ydb/core/tx/datashard/datashard_failpoints.h>
 #include <ydb/core/tx/datashard/datashard_impl.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
+#include <ydb/core/base/tablet.h>
 
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
 

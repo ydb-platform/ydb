@@ -5,6 +5,48 @@ ydb/core/client/ut TClientTest.ReadFromFollower
 ydb/core/client/ut TFlatTest.AutoSplitMergeQueue
 ydb/core/cms/ut_sentinel_unstable *
 ydb/core/external_sources *
+ydb/core/blobstorage/pdisk/ut TPDiskTest.FailedToFormatDiskInfoUpdate
+ydb/core/blobstorage/pdisk/ut TPDiskTest.PDiskSlotSizeInUnits
+ydb/core/blobstorage/ut_blobstorage GroupReconfiguration.BsControllerDoesNotDisableGroupNoRequestsToNodesWVDisks
+ydb/core/blobstorage/ut_blobstorage NodeDisconnected.BsQueueRetries
+ydb/core/blobstorage/ut_blobstorage/ut_group_reconfiguration GroupReconfigurationRace.Test_block42
+ydb/core/blobstorage/ut_blobstorage/ut_huge HugeBlobOnlineSizeChange.Compaction
+ydb/core/blobstorage/ut_blobstorage/ut_huge unittest.[*/*] chunk
+ydb/core/blobstorage/ut_blobstorage/ut_scrub BlobScrubbing.block42
+ydb/core/blobstorage/ut_blobstorage/ut_scrub BlobScrubbing.mirror3dc
+ydb/core/blobstorage/ut_blobstorage/ut_scrub BlobScrubbing.mirror3of4
+ydb/core/blobstorage/ut_blobstorage/ut_statestorage TStateStorageRingGroupState.TestProxyConfigMismatch
+ydb/core/blobstorage/ut_vdisk TBsLocalRecovery.WriteRestartReadHugeDecreased
+ydb/core/blobstorage/ut_vdisk TBsVDiskGC.GCPutKeepBarrierSync
+ydb/core/blobstorage/ut_vdisk TBsVDiskManyPutGet.ManyPutRangeGetCompactionIndexOnly
+ydb/core/blobstorage/ut_vdisk unittest.[*/*] chunk
+ydb/core/cms/ut_sentinel_unstable TSentinelUnstableTests.BSControllerCantChangeStatus
+ydb/core/external_sources/s3/ut unittest.sole chunk
+ydb/core/fq/libs/row_dispatcher/ut unittest.sole chunk
+ydb/core/keyvalue/ut_trace TKeyValueTracingTest.ReadHuge
+ydb/core/keyvalue/ut_trace TKeyValueTracingTest.ReadSmall
+ydb/core/keyvalue/ut_trace TKeyValueTracingTest.WriteHuge
+ydb/core/keyvalue/ut_trace TKeyValueTracingTest.WriteSmall
+ydb/core/kqp/ut/batch_operations unittest.[*/*] chunk
+ydb/core/kqp/ut/cost KqpCost.VectorIndexLookup+useSink
+ydb/core/kqp/ut/cost KqpCost.VectorIndexLookup-useSink
+ydb/core/kqp/ut/data_integrity KqpDataIntegrityTrails.UpsertEvWriteQueryService-isOlap+useOltpSink
+ydb/core/kqp/ut/federated_query/large_results KqpScriptExecResults.ExecuteScriptWithLargeFile
+ydb/core/kqp/ut/federated_query/s3 unittest.sole chunk
+ydb/core/kqp/ut/indexes KqpMultishardIndex.WriteIntoRenamingAsyncIndex
+ydb/core/kqp/ut/indexes KqpMultishardIndex.WriteIntoRenamingSyncIndex
+ydb/core/kqp/ut/opt KqpKv.ReadRows_TimeoutCancelsReads
+ydb/core/kqp/ut/query KqpAnalyze.AnalyzeTable+ColumnStore
+ydb/core/kqp/ut/query KqpAnalyze.AnalyzeTable-ColumnStore
+ydb/core/kqp/ut/query KqpLimits.StreamWrite+Allowed
+ydb/core/kqp/ut/query KqpStats.DeferredEffects+UseSink
+ydb/core/kqp/ut/query KqpStats.SysViewClientLost
+ydb/core/kqp/ut/scheme KqpOlapScheme.AddPgColumnWithStore
+ydb/core/kqp/ut/scheme KqpOlapScheme.TenThousandColumns
+ydb/core/kqp/ut/scheme unittest.[*/*] chunk
+ydb/core/kqp/ut/service unittest.[*/*] chunk
+ydb/core/kqp/ut/yql KqpScripting.StreamExecuteYqlScriptScanOperationTmeoutBruteForce
+ydb/core/mind/hive/ut unittest.[*/*] chunk
 ydb/core/quoter/ut QuoterWithKesusTest.PrefetchCoefficient
 ydb/core/keyvalue/ut_trace TKeyValueTracingTest.*
 ydb/core/kqp/provider/ut KikimrIcGateway.TestLoadBasicSecretValueFromExternalDataSourceMetadata

@@ -358,7 +358,7 @@ private:
             const auto& channelStats = *Channels->GetOutputChannelStats(id);
             DUMP(channelStats, ResentMessages);
             const auto& peerState = Channels->GetOutputChannelInFlightState(id);
-            html << "OutputChannelInFightState: " << peerState.DebugString() << "<br />";
+            html << "OutputChannelInFlightState: " << peerState.DebugString() << "<br />";
             DUMP((*Channels), ShouldSkipData, (id));
             DUMP((*Channels), HasFreeMemoryInChannel, (id));
             DUMP((*Channels), CanSendChannelData, (id));

@@ -118,7 +118,6 @@ namespace NKikimr {
                         return;
                     }
                 }
-
                 TDefragQuantumFindRecords findRecords(DCtx->VCtx->VDiskLogPrefix,
                         std::move(*ChunksToDefrag), lockedChunks);
                 while (findRecords.Scan(NDefrag::WorkQuantum, GetSnapshot())) {
@@ -178,22 +177,24 @@ namespace NKikimr {
                     }
                 }
 
-                // scan index again to find tables we have to compact
-                for (findRecords.StartFindingTablesToCompact(); findRecords.Scan(NDefrag::WorkQuantum, GetSnapshot()); Yield()) {}
-                if (auto records = findRecords.GetRecordsToRewrite(); !records.empty()) {
-                    for (const auto& item : records) {
-                        STLOG(PRI_WARN, BS_VDISK_DEFRAG, BSVDD16, DCtx->VCtx->VDiskLogPrefix
-                            << "blob found again after rewriting", (ActorId, SelfActorId), (Id, item.LogoBlobId),
-                            (Location, item.OldDiskPart));
+                if (!DCtx->VCfg->FeatureFlags.GetEnableCompDefragIndependacy()) {
+                    // scan index again to find tables we have to compact
+                    for (findRecords.StartFindingTablesToCompact(); findRecords.Scan(NDefrag::WorkQuantum, GetSnapshot()); Yield()) {}
+                    if (auto records = findRecords.GetRecordsToRewrite(); !records.empty()) {
+                        for (const auto& item : records) {
+                            STLOG(PRI_WARN, BS_VDISK_DEFRAG, BSVDD16, DCtx->VCtx->VDiskLogPrefix
+                                << "blob found again after rewriting", (ActorId, SelfActorId), (Id, item.LogoBlobId),
+                                (Location, item.OldDiskPart));
+                        }
                     }
-                }
 
-                auto tablesToCompact = findRecords.GetTablesToCompact();
-                const bool needsFreshCompaction = findRecords.GetNeedsFreshCompaction();
-                STLOG(PRI_DEBUG, BS_VDISK_DEFRAG, BSVDD13, DCtx->VCtx->VDiskLogPrefix << "compacting",
-                    (ActorId, SelfActorId), (TablesToCompact, tablesToCompact),
-                    (NeedsFreshCompaction, needsFreshCompaction));
-                Compact(std::move(tablesToCompact), needsFreshCompaction);
+                    auto tablesToCompact = findRecords.GetTablesToCompact();
+                    const bool needsFreshCompaction = findRecords.GetNeedsFreshCompaction();
+                    STLOG(PRI_DEBUG, BS_VDISK_DEFRAG, BSVDD13, DCtx->VCtx->VDiskLogPrefix << "compacting",
+                        (ActorId, SelfActorId), (TablesToCompact, tablesToCompact),
+                        (NeedsFreshCompaction, needsFreshCompaction));
+                    Compact(std::move(tablesToCompact), needsFreshCompaction);
+                }
             }
 
             STLOG(PRI_DEBUG, BS_VDISK_DEFRAG, BSVDD15, DCtx->VCtx->VDiskLogPrefix << "quantum finished",

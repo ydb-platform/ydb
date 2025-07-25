@@ -68,12 +68,13 @@ namespace NKikimr {
                                                            const ui32 maxBlobInBytes,
                                                            const ui32 overhead,
                                                            const ui32 freeChunksReservation,
+                                                           const bool chunksSoftLocking,
                                                            std::function<void(const TString&)> logFunc)
             : VCtx(std::move(vctx))
             , LogPos(THullHugeRecoveryLogPos::Default())
             , Heap(new NHuge::THeap(VCtx->VDiskLogPrefix, chunkSize, appendBlockSize,
                                     minHugeBlobInBytes, milestoneHugeBlobInBytes,
-                                    maxBlobInBytes, overhead, freeChunksReservation))
+                                    maxBlobInBytes, overhead, freeChunksReservation, chunksSoftLocking))
             , Guid(TAppData::RandomProvider->GenRand64())
         {
             Heap->FinishRecovery();
@@ -92,12 +93,13 @@ namespace NKikimr {
                                                            const ui32 freeChunksReservation,
                                                            const ui64 entryPointLsn,
                                                            const TString &entryPointData,
+                                                           const bool chunksSoftLocking,
                                                            std::function<void(const TString&)> logFunc)
             : VCtx(std::move(vctx))
             , LogPos(THullHugeRecoveryLogPos::Default())
             , Heap(new NHuge::THeap(VCtx->VDiskLogPrefix, chunkSize, appendBlockSize,
                                     minHugeBlobInBytes, milestoneHugeBlobInBytes,
-                                    maxBlobInBytes, overhead, freeChunksReservation))
+                                    maxBlobInBytes, overhead, freeChunksReservation, chunksSoftLocking))
             , Guid(TAppData::RandomProvider->GenRand64())
             , PersistentLsn(entryPointLsn)
         {
@@ -119,12 +121,13 @@ namespace NKikimr {
                                                            const ui32 freeChunksReservation,
                                                            const ui64 entryPointLsn,
                                                            const TContiguousSpan &entryPointData,
+                                                           const bool chunksSoftLocking,
                                                            std::function<void(const TString&)> logFunc)
             : VCtx(std::move(vctx))
             , LogPos(THullHugeRecoveryLogPos::Default())
             , Heap(new NHuge::THeap(VCtx->VDiskLogPrefix, chunkSize, appendBlockSize,
                                     minHugeBlobInBytes, milestoneHugeBlobInBytes,
-                                    maxBlobInBytes, overhead, freeChunksReservation))
+                                    maxBlobInBytes, overhead, freeChunksReservation, chunksSoftLocking))
             , Guid(TAppData::RandomProvider->GenRand64())
             , PersistentLsn(entryPointLsn)
         {

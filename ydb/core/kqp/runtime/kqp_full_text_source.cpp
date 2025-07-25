@@ -1827,7 +1827,7 @@ public:
         return CalcDelay(shardInfo.Retries, allowInstantRetry);
     }
 
-    bool CheckShardRetriesExeeded(ui64 shardId, ui64 maxRetries) {
+    bool CheckShardRetriesExceeded(ui64 shardId, ui64 maxRetries) {
         auto it = ReadsByShardId.find(shardId);
         if (it == ReadsByShardId.end()) {
             return false;
@@ -2810,7 +2810,7 @@ public:
         }
 
         auto maxRetries = MaxShardRetries();
-        if (ReadsState.CheckShardRetriesExeeded(shardId, maxRetries)) {
+        if (ReadsState.CheckShardRetriesExceeded(shardId, maxRetries)) {
             RuntimeError(TStringBuilder() << "Max shard retries ("<< maxRetries << ") exceeded for shard " << shardId, errorStatus);
             return false;
         }
@@ -3212,7 +3212,7 @@ public:
         auto maxRetries = MaxShardRetries();
         TDuration delay;
         if (!throttleDelay) {
-            if (ReadsState.CheckShardRetriesExeeded(shardId, maxRetries)) {
+            if (ReadsState.CheckShardRetriesExceeded(shardId, maxRetries)) {
                 RuntimeError(TStringBuilder() << "Max retries (" << maxRetries << ") exceeded for read " << readId
                     << " on shard " << shardId, errorStatus);
                 return;

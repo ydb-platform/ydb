@@ -1465,6 +1465,7 @@ protected:
         ui32 inputTasks = 0;
         bool isShuffle = false;
         bool forceMapTasks = false;
+        bool isParallelUnionAll = false;
         ui32 mapCnt = 0;
 
 
@@ -1482,6 +1483,7 @@ protected:
                     case NKqpProto::TKqpPhyConnection::kMerge:
                     case NKqpProto::TKqpPhyConnection::kStreamLookup:
                     case NKqpProto::TKqpPhyConnection::kMap:
+                    case NKqpProto::TKqpPhyConnection::kParallelUnionAll:
                         break;
                     default:
                         YQL_ENSURE(false, "Unexpected connection type: " << (ui32)input.GetTypeCase() << Endl
@@ -1497,18 +1499,24 @@ protected:
                     isShuffle = true;
                     break;
                 }
-
-                case NKqpProto::TKqpPhyConnection::kStreamLookup:
+                case NKqpProto::TKqpPhyConnection::kStreamLookup: {
                     partitionsCount = originStageInfo.Tasks.size();
                     UnknownAffectedShardCount = true;
                     intros.push_back("Resetting compute tasks count because input " + ToString(inputIndex) + " is StreamLookup - " + ToString(partitionsCount));
                     break;
-                case NKqpProto::TKqpPhyConnection::kMap:
+                }
+                case NKqpProto::TKqpPhyConnection::kMap: {
                     partitionsCount = originStageInfo.Tasks.size();
                     forceMapTasks = true;
                     ++mapCnt;
                     intros.push_back("Resetting compute tasks count because input " + ToString(inputIndex) + " is Map - " + ToString(partitionsCount));
                     break;
+                }
+                case NKqpProto::TKqpPhyConnection::kParallelUnionAll: {
+                    inputTasks += originStageInfo.Tasks.size();
+                    isParallelUnionAll = true;
+                    break;
+                }
                 default:
                     break;
             }
@@ -1517,7 +1525,7 @@ protected:
 
         Y_ENSURE(mapCnt < 2, "There can be only < 2 'Map' connections");
 
-        if (isShuffle && !forceMapTasks) {
+        if ((isShuffle || isParallelUnionAll) && !forceMapTasks) {
             if (stage.GetTaskCount()) {
                 partitionsCount = stage.GetTaskCount();
                 intros.push_back("Manually overridden - " + ToString(partitionsCount));

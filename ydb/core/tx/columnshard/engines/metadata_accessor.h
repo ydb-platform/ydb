@@ -31,13 +31,12 @@ public:
     virtual TString GetOverridenScanType(const TString& defScanType) const {
         return defScanType;
     }
-    virtual std::optional<NColumnShard::TUnifiedPathId> GetPathId() const {
+    virtual std::optional<NColumnShard::TUnifiedOptionalPathId> GetPathId() const {
         return std::nullopt;
     }
     NColumnShard::TUnifiedPathId GetPathIdVerified() const {
-        std::optional<NColumnShard::TUnifiedPathId> result = GetPathId();
+        std::optional<NColumnShard::TUnifiedOptionalPathId> result = GetPathId();
         AFL_VERIFY(result);
-        AFL_VERIFY(result->IsValid());
         return *result;
     }
     std::vector<TNameTypeInfo> GetPrimaryKeyScheme(const TVersionedPresetSchemas& vSchemas) const {
@@ -92,8 +91,8 @@ private:
         return vSchemas.GetDefaultVersionedIndex().GetSchemaVerified(snapshot);
     }
 
-    virtual std::optional<NColumnShard::TUnifiedPathId> GetPathId() const override {
-        return PathId;
+    virtual std::optional<NColumnShard::TUnifiedOptionalPathId> GetPathId() const override {
+        return NColumnShard::TUnifiedOptionalPathId(PathId.GetInternalPathId(), PathId.GetSchemeShardLocalPathId());
     }
 
 public:
@@ -131,8 +130,8 @@ public:
         , PathId(pathId) {
     }
 
-    virtual std::optional<NColumnShard::TUnifiedPathId> GetPathId() const override {
-        return PathId;
+    virtual std::optional<NColumnShard::TUnifiedOptionalPathId> GetPathId() const override {
+        return NColumnShard::TUnifiedOptionalPathId(PathId.GetInternalPathId(), PathId.GetSchemeShardLocalPathId());
     }
 
     virtual std::optional<TGranuleShardingInfo> GetShardingInfo(

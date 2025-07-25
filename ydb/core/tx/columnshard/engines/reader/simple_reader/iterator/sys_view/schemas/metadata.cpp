@@ -6,11 +6,8 @@
 
 namespace NKikimr::NOlap::NReader::NSimple::NSysView::NSchemas {
 
-TAccessor::TAccessor(const TString& tablePath, const NColumnShard::TSchemeShardLocalPathId externalPathId,
-    const std::optional<NColumnShard::TInternalPathId> internalPathId)
-    : TBase(tablePath, NColumnShard::TUnifiedPathId::BuildNoCheck(internalPathId, externalPathId), "/.sys/primary_index_schema_stats",
-          "/.sys/store_primary_index_schema_stats")
-{
+TAccessor::TAccessor(const TString& tablePath, const NColumnShard::TUnifiedOptionalPathId pathId)
+    : TBase(tablePath, pathId) {
 }
 
 std::unique_ptr<NReader::NCommon::ISourcesConstructor> TAccessor::SelectMetadata(const TSelectMetadataContext& context,

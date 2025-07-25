@@ -678,7 +678,9 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
                 },
                 dqInputChannel))
         {}
-        DumpMonPage(asyncCA, [this](auto str) {
+        DumpMonPage(asyncCA, [this](auto&& str) {
+            UNIT_ASSERT_STRING_CONTAINS(str, "<h3>Sources</h3>");
+            UNIT_ASSERT_STRING_CONTAINS(str, LogPrefix);
             // todo add validation
             LOG_D(str);
         });
@@ -833,7 +835,9 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
                 },
                 dqInputChannel))
         {}
-        DumpMonPage(asyncCA, [this](auto str) {
+        DumpMonPage(asyncCA, [this](auto&& str) {
+            UNIT_ASSERT_STRING_CONTAINS(str, "<h3>Sources</h3>");
+            UNIT_ASSERT_STRING_CONTAINS(str, LogPrefix);
             // todo add validation
             LOG_D(str);
         });

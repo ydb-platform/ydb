@@ -71,7 +71,8 @@ struct TMockHttpRequest : NMonitoring::IMonHttpRequest {
         return Headers;
     }
     TStringBuf GetHeader(TStringBuf name) const override {
-        return Headers.FindHeader(name)->Value();
+        const auto* header = Headers.FindHeader(name);
+        return header ? header->Value() : TStringBuf();
     }
     TStringBuf GetCookie(TStringBuf) const override {
         return "";

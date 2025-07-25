@@ -95,7 +95,8 @@ private:
                         request->GateId = GateComp;
                         break;
                     case NPriWrite::HullHugeAsyncBlob:
-                        request->GateId = GateHugeAsync;
+                        
+                        request->GateId = PCtx->Cfg->SeparateHugePriorities ? GateHugeAsync : GateHugeUser;
                         break;
                     case NPriWrite::HullHugeUserData:
                         request->GateId = GateHugeUser;

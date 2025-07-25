@@ -25,3 +25,34 @@ message CsvSettings {
     bool header = 4;
     Quoting quoting = 5;
 }
+
+/**
+ * Ydb.Value output format for Query.ExecuteQueryRequest
+*/
+message ValueOutputFormat {}
+
+message ValueOutputFormatMeta {}
+
+/**
+ * Arrow output format for Query.ExecuteQueryRequest
+*/
+message ArrowOutputFormat {
+    message Compression {
+        enum Type {
+            COMPRESSION_UNSPECIFIED = 0;
+            COMPRESSION_NONE = 1;
+            COMPRESSION_ZSTD = 2;
+            COMPRESSION_LZ4_FRAME = 3;
+        }
+
+        Type type = 1;
+        int32 level = 2;
+    }
+
+    Compression compression = 1;
+}
+
+message ArrowOutputFormatMeta {
+    // It's filled only for SCHEMA_INCLUSION_MODE_ALWAYS, SCHEMA_INCLUSION_MODE_FIRST_ONLY.
+    bytes schema = 1;
+}

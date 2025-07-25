@@ -1,4 +1,5 @@
 #include "transfer_writer.h"
+#include "events.h"
 
 #include <ydb/core/tx/replication/service/logging.h>
 #include <ydb/core/tx/replication/service/worker.h>
@@ -433,6 +434,8 @@ private:
 };
 
 class TRowTableUploader : public TActorBootstrapped<TRowTableUploader> {
+    static constexpr size_t MaxRetries = 7;
+
 public:
     TRowTableUploader(const TActorId& parentActor, const TScheme& scheme, std::unordered_map<TString, std::shared_ptr<TVector<std::pair<TSerializedCellVec, TString>>>>&& data)
         : ParentActor(parentActor)
@@ -467,10 +470,8 @@ private:
     }
 
     void Handle(TEvTxUserProxy::TEvUploadRowsResponse::TPtr& ev) {
-        Cerr << ">>>>> TEvUploadRowsResponse" << Endl;
         auto it = CookieMapping.find(ev->Cookie);
         if (it == CookieMapping.end()) {
-        Cerr << ">>>>> TEvUploadRowsResponse COOKIE" << Endl;
             LOG_W("Processed unknown cookie " << ev->Cookie);
             return;
         }
@@ -478,31 +479,36 @@ private:
         auto& tablePath = it->second;
 
         if (ev->Get()->Status == Ydb::StatusIds::SUCCESS) {
-            Cerr << ">>>>> TEvUploadRowsResponse SUCCESS" << Endl;
             Data.erase(tablePath);
             CookieMapping.erase(ev->Cookie);
 
             if (Data.empty()) {
-                Cerr << ">>>>> TEvUploadRowsResponse DATA EMPTY" << Endl;
-                Forward(ev, ParentActor);
-                PassAway();
+                ReplyOkAndDie();
             }
 
             return;
         }
 
         auto retry = ev->Get()->Status != Ydb::StatusIds::SCHEME_ERROR;
-        if (retry && false /* TODO */) {
-            // TODO schedule event
-            DoUpload(tablePath, Data[tablePath]);
+        if (retry && Retry < MaxRetries) {
+            Schedule(TDuration::Seconds(1 << Retry), new NTransferPrivate::TEvRetryTable(tablePath));
+            ++Retry;
             CookieMapping.erase(ev->Cookie);
             return;
         }
 
-        Cerr << ">>>>> TEvUploadRowsResponse ERROR " << ev->Get()->Issues.ToOneLineString() << Endl;
+        ReplyErrorAndDie(std::move(ev->Get()->Issues));
+    }
 
-        Forward(ev, ParentActor);
-        PassAway();
+    void Handle(NTransferPrivate::TEvRetryTable::TPtr& ev) {
+        auto& tablePath = ev->Get()->TablePath;
+        
+        auto it = Data.find(tablePath);
+        if (it == Data.end()) {
+            return ReplyErrorAndDie(TStringBuilder() << "Unexpected retry for table '" << tablePath << "'");
+        }
+
+        DoUpload(tablePath, it->second);
     }
 
     STFUNC(StateWork) {
@@ -510,8 +516,25 @@ private:
             hFunc(TEvTxUserProxy::TEvUploadRowsResponse, Handle);
 
             sFunc(TEvents::TEvPoison, PassAway);
-            //hFunc(TEvents::TEvWakeup, WriteWakeup);
+            hFunc(NTransferPrivate::TEvRetryTable, Handle);
         }
+    }
+
+    void ReplyOkAndDie() {
+        NYql::TIssues issues;
+        Send(ParentActor, new NTransferPrivate::TEvWriteCompleeted(Ydb::StatusIds::SUCCESS, std::move(issues)));
+        PassAway();
+    }
+
+    void ReplyErrorAndDie(const TString& error) {
+        NYql::TIssues issues;
+        issues.AddIssue(error);
+        ReplyErrorAndDie(std::move(issues));
+    }
+
+    void ReplyErrorAndDie(NYql::TIssues&& issues) {
+        Send(ParentActor, new NTransferPrivate::TEvWriteCompleeted(Ydb::StatusIds::INTERNAL_ERROR, std::move(issues)));
+        PassAway();
     }
 
 
@@ -524,6 +547,8 @@ private:
     ui64 Cookie = 0;
     // Cookie -> Table path
     std::unordered_map<ui64, TString> CookieMapping;
+
+    size_t Retry = 0;
 };
 
 class TRowTableState : public ITableKindState {
@@ -908,7 +933,7 @@ private:
     STFUNC(StateWrite) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvents::TEvCompleted, Handle);
-            hFunc(TEvTxUserProxy::TEvUploadRowsResponse, Handle);
+            hFunc(NTransferPrivate::TEvWriteCompleeted, Handle);
 
             hFunc(TEvWorker::TEvHandshake, Handle);
             hFunc(TEvWorker::TEvData, HoldHandle);
@@ -918,14 +943,13 @@ private:
         }
     }
 
-    void Handle(TEvTxUserProxy::TEvUploadRowsResponse::TPtr& ev) {
-        LOG_D("Handle TEvTxUserProxy::TEvUploadRowsResponse"
+    void Handle(NTransferPrivate::TEvWriteCompleeted::TPtr& ev) {
+        LOG_D("Handle NTransferPrivate::TEvWriteCompleeted"
             << ": worker# " << Worker
             << " status# " << ev->Get()->Status
             << " issues# " << ev->Get()->Issues.ToOneLineString());
 
-        auto [error, retry] = TableState->Handle(ev);
-        HandleWriteResult(ev->Get()->Status, error, retry);
+        HandleWriteResult(ev->Get()->Status, ev->Get()->Issues.ToOneLineString());
     }
 
     void Handle(TEvents::TEvCompleted::TPtr& ev) {
@@ -933,12 +957,12 @@ private:
             << ": worker# " << Worker
             << " status# " << ev->Get()->Status);
 
-        auto [error, retry] = TableState->Handle(ev);
-        HandleWriteResult(ev->Get()->Status, error, retry);
+        auto [error, _] = TableState->Handle(ev);
+        HandleWriteResult(ev->Get()->Status, error);
     }
 
-    void HandleWriteResult(ui32 /*status*/, const TString& error, bool /*retry*/) {
-        if (error && !ProcessingError) {
+    void HandleWriteResult(ui32 status, const TString& error) {
+        if (status != Ydb::StatusIds::SUCCESS && error && !ProcessingError) {
             ProcessingError = error;
         }
 

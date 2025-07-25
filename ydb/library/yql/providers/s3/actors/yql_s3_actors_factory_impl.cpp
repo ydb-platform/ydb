@@ -2,14 +2,15 @@
 #include "yql_s3_write_actor.h"
 #include "yql_s3_applicator_actor.h"
 
+#include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io.h>
+
 #include <util/system/platform.h>
 #if defined(_linux_) || defined(_darwin_)
 #include "yql_s3_read_actor.h"
+
+// Clickhouse includes MUST be after all other includes due to sanitizer defines like THREAD_SANITIZER, it may affect other libs like protobufs
 #include <ydb/library/yql/udfs/common/clickhouse/client/src/Formats/registerFormats.h>
 #endif
-
-#include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io.h>
-
 
 namespace NYql::NDq {
 

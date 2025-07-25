@@ -20,6 +20,8 @@
 
 #if defined(_linux_) || defined(_darwin_)
 #include <ydb/library/yql/providers/s3/compressors/factory.h>
+
+// Clickhouse includes MUST be after all other includes due to sanitizer defines like THREAD_SANITIZER, it may affect other libs like protobufs
 #include <ydb/library/yql/udfs/common/clickhouse/client/src/IO/ReadBufferFromString.h>
 #endif
 

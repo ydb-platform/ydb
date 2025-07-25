@@ -1,9 +1,11 @@
 #include <ydb/library/yql/providers/s3/compressors/lz4io.h>
-#include <ydb/library/yql/udfs/common/clickhouse/client/src/IO/ReadBufferFromFile.h>
 
 #include <library/cpp/scheme/scheme.h>
 #include <library/cpp/testing/common/env.h>
 #include <library/cpp/testing/unittest/registar.h>
+
+// Clickhouse includes MUST be after all other includes due to sanitizer defines like THREAD_SANITIZER, it may affect other libs like protobufs
+#include <ydb/library/yql/udfs/common/clickhouse/client/src/IO/ReadBufferFromFile.h>
 
 namespace NYql::NCompressors {
 

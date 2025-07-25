@@ -23,6 +23,7 @@
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wunused-parameter"
 
+// Clickhouse includes MUST be after all other includes due to sanitizer defines like THREAD_SANITIZER, it may affect other libs like protobufs
 #include <ydb/library/yql/udfs/common/clickhouse/client/src/Functions/FunctionsConversion.h>
 
 #pragma clang diagnostic pop

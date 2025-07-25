@@ -10,6 +10,7 @@
 #include <util/generic/size_literals.h>
 
 #if defined(_linux_) || defined(_darwin_)
+// Clickhouse includes MUST be after all other includes due to sanitizer defines like THREAD_SANITIZER, it may affect other libs like protobufs
 #include <ydb/library/yql/udfs/common/clickhouse/client/src/IO/ReadBuffer.h>
 #endif
 

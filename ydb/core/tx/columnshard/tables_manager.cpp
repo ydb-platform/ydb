@@ -596,7 +596,7 @@ TConclusion<std::shared_ptr<NOlap::ITableMetadataAccessor>> TTablesManager::Buil
     const std::optional<TInternalPathId> internalPathId = ResolveInternalPathIdOptional(externalPathId);
     auto schemaAdapter = NOlap::NReader::NSimple::NSysView::NAbstract::ISchemaAdapter::TFactory::MakeHolder(TFsPath(tablePath).Fix().GetName());
     if (schemaAdapter) {
-        return schemaAdapter->BuildMetadataAccessor(tablePath, externalPathId, internalPathId);
+        return schemaAdapter->BuildMetadataAccessor(tablePath, TUnifiedOptionalPathId::BuildExternal(externalPathId, internalPathId));
     } else if (!internalPathId) {
         return TConclusionStatus::Fail(
             "incorrect table name and table id for scan start: " + tablePath + "::" + externalPathId.DebugString());

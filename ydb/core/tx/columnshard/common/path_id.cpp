@@ -205,9 +205,14 @@ TUnifiedPathId TUnifiedPathId::BuildValid(const TInternalPathId internalPathId, 
     return TUnifiedPathId(internalPathId, externalPathId);
 }
 
-TUnifiedPathId TUnifiedPathId::BuildNoCheck(
-    const std::optional<TInternalPathId> internalPathId, const std::optional<TSchemeShardLocalPathId> externalPathId) {
-    return TUnifiedPathId(internalPathId.value_or(TInternalPathId::FromRawValue(0)), externalPathId.value_or(TSchemeShardLocalPathId::FromRawValue(0)));
+TInternalPathId TUnifiedOptionalPathId::GetInternalPathIdVerified() const {
+    AFL_VERIFY(!!InternalPathId);
+    return *InternalPathId;
+}
+
+TSchemeShardLocalPathId TUnifiedOptionalPathId::GetSchemeShardLocalPathIdVerified() const {
+    AFL_VERIFY(!!SchemeShardLocalPathId);
+    return *SchemeShardLocalPathId;
 }
 
 }   //namespace NKikimr::NColumnShard

@@ -206,6 +206,7 @@ private:
 
     void OnTablesCreated(bool success, NYql::TIssues issues) override  {
         Send(Owner, new TEvScriptExecutionsTablesCreationFinished(success, std::move(issues)));
+        Send(MakeKqpFinalizeScriptServiceId(SelfId().NodeId()), new TEvStartScriptExecutionBackgroundChecks());
     }
 };
 
@@ -249,8 +250,8 @@ NKikimrKqp::EQueryAction GetActionFromExecMode(Ydb::Query::ExecMode execMode) {
     }
 }
 
-NYql::TIssues AddRootIssue(const TString& message, const NYql::TIssues& issues) {
-    if (!issues) {
+NYql::TIssues AddRootIssue(const TString& message, const NYql::TIssues& issues, bool force = false) {
+    if (!issues && !force) {
         return {};
     }
 
@@ -3789,6 +3790,175 @@ private:
     const TString QueryPlan;
 };
 
+class TListExpiredLeasesQueryActor : public TQueryBase {
+public:
+    TListExpiredLeasesQueryActor()
+        : TQueryBase(__func__, "")
+        , LeaseDeadline(TInstant::Now())
+    {}
+
+    void OnRunQuery() override {
+        SetOperationInfo(OperationName, Owner.ToString());
+
+        TString sql = R"(
+            -- TListExpiredLeasesQueryActor::OnRunQuery
+            DECLARE $max_lease_deadline AS Timestamp;
+
+            SELECT
+                database,
+                execution_id
+            FROM `.metadata/script_execution_leases`
+            WHERE lease_deadline < $max_lease_deadline
+              AND (expire_at > CurrentUtcTimestamp() OR expire_at IS NULL)
+        )";
+
+        NYdb::TParamsBuilder params;
+        params
+            .AddParam("$max_lease_deadline")
+                .Timestamp(LeaseDeadline)
+                .Build();
+
+        RunStreamQuery(sql, &params);
+    }
+
+    void OnStreamResult(NYdb::TResultSet&& resultSet) override {
+        std::vector<TEvListExpiredLeasesResponse::TLeaseInfo> leases;
+        leases.reserve(resultSet.RowsCount());
+
+        NYdb::TResultSetParser result(resultSet);
+        while (result.TryNextRow()) {
+            const std::optional<TString> database = result.ColumnParser("database").GetOptionalUtf8();
+            if (!database) {
+                KQP_PROXY_LOG_E("Database field is null for script execution lease");
+                continue;
+            }
+
+            const std::optional<TString> executionId = result.ColumnParser("execution_id").GetOptionalUtf8();
+            if (!executionId) {
+                KQP_PROXY_LOG_E("Execution id field is null for script execution lease in database " << *database);
+                continue;
+            }
+
+            leases.push_back({*database, *executionId});
+        }
+
+        if (!leases.empty()) {
+            KQP_PROXY_LOG_D(LogPrefix() << "Found " << leases.size() << " expired leases");
+            Send(Owner, new TEvListExpiredLeasesResponse(std::move(leases)));
+        }
+    }
+
+    void OnQueryResult() override {
+        Finish();
+    }
+
+    void OnFinish(Ydb::StatusIds::StatusCode status, NYql::TIssues&& issues) override {
+        Send(Owner, new TEvListExpiredLeasesResponse(status, std::move(issues)));
+    }
+
+private:
+    TString LogPrefix() const {
+        return TStringBuilder() << "[TListExpiredLeasesQueryActor] OwnerId: " << Owner << " LeaseDeadline: " << LeaseDeadline << ". ";
+    }
+
+private:
+    const TInstant LeaseDeadline;
+};
+
+class TRefreshScriptExecutionLeasesActor : public TActorBootstrapped<TRefreshScriptExecutionLeasesActor> {
+public:
+    TRefreshScriptExecutionLeasesActor(const TActorId& replyActorId, const NKikimrConfig::TQueryServiceConfig& queryServiceConfig, TIntrusivePtr<TKqpCounters> counters)
+        : ReplyActorId(replyActorId)
+        , QueryServiceConfig(queryServiceConfig)
+        , Counters(counters)
+    {}
+
+    void Bootstrap() {
+        KQP_PROXY_LOG_D("Bootstrap. Start TListExpiredLeasesQueryActor");
+        Register(new TListExpiredLeasesQueryActor());
+
+        Become(&TRefreshScriptExecutionLeasesActor::StateFunc);
+    }
+
+    STRICT_STFUNC(StateFunc,
+        hFunc(TEvListExpiredLeasesResponse, Handle);
+        hFunc(TEvPrivate::TEvLeaseCheckResult, Handle);
+    )
+
+    void Handle(TEvListExpiredLeasesResponse::TPtr& ev) {
+        const auto& leases = ev->Get()->Leases;
+        KQP_PROXY_LOG_D("Got list expired leases response, found " << leases.size() << " expired leases");
+
+        for (const auto& lease : leases) {
+            KQP_PROXY_LOG_D("ExecutionId: " << lease.ExecutionId << ", start TCheckLeaseStatusActor #" << CookieId);
+            Register(new TCheckLeaseStatusActor(SelfId(), lease.Database, lease.ExecutionId, QueryServiceConfig, Counters, CookieId++));
+            ++OperationsToCheck;
+        }
+
+        if (const auto status = ev->Get()->Status) {
+            if (status != Ydb::StatusIds::SUCCESS) {
+                KQP_PROXY_LOG_W("List expired leases failed with status " << *status << ", issues: " << ev->Get()->Issues.ToOneLineString());
+
+                Success = false;
+                Issues.AddIssues(AddRootIssue(
+                    TStringBuilder() << "Failed to list expired leases (" << *status << ")",
+                    ev->Get()->Issues,
+                    true
+                ));
+            } else {
+                KQP_PROXY_LOG_D("List expired leases successfully completed");
+            }
+
+            MaybeFinish();
+        }
+    }
+
+    void Handle(TEvPrivate::TEvLeaseCheckResult::TPtr& ev) {
+        Y_ABORT_UNLESS(ev->Cookie < CookieId);
+
+        if (const auto status = ev->Get()->Status; status != Ydb::StatusIds::SUCCESS) {
+            const auto& issues = ev->Get()->Issues;
+            KQP_PROXY_LOG_W("Lease check failed #" << ev->Cookie << ", status: " << status << ", issues: " << issues.ToOneLineString());
+
+            Success = false;
+            Issues.AddIssues(AddRootIssue(
+                TStringBuilder() <<"Lease check failed #" << ev->Cookie << " (" << status << ")",
+                ev->Get()->Issues,
+                true
+            ));
+        } else {
+            KQP_PROXY_LOG_D("Lease check success #" << ev->Cookie);
+        }
+
+        --OperationsToCheck;
+        MaybeFinish();
+    }
+
+private:
+    void MaybeFinish() {
+        if (OperationsToCheck) {
+            return;
+        }
+
+        Send(ReplyActorId, new TEvRefreshScriptExecutionLeasesResponse(Success, std::move(Issues)));
+        PassAway();
+    }
+
+    TString LogPrefix() const {
+        return TStringBuilder() << "[TRefreshScriptExecutionLeasesActor] ActorId: " << SelfId() << ". ";
+    }
+
+private:
+    const TActorId ReplyActorId;
+    const NKikimrConfig::TQueryServiceConfig QueryServiceConfig;
+    const TIntrusivePtr<TKqpCounters> Counters;
+
+    ui64 CookieId = 0;
+    ui64 OperationsToCheck = 0;
+    bool Success = true;
+    NYql::TIssues Issues;
+};
+
 } // anonymous namespace
 
 IActor* CreateScriptExecutionCreatorActor(TEvKqp::TEvScriptRequest::TPtr&& ev, const NKikimrConfig::TQueryServiceConfig& queryServiceConfig, TIntrusivePtr<TKqpCounters> counters, TDuration maxRunTime) {
@@ -3845,6 +4015,10 @@ IActor* CreateScriptFinalizationFinisherActor(const TActorId& finalizationActorI
 
 IActor* CreateScriptProgressActor(const TString& executionId, const TString& database, const TString& queryPlan) {
     return new TScriptProgressActor(database, executionId, queryPlan);
+}
+
+IActor* CreateRefreshScriptExecutionLeasesActor(const TActorId& replyActorId, const NKikimrConfig::TQueryServiceConfig& queryServiceConfig, TIntrusivePtr<TKqpCounters> counters) {
+    return new TRefreshScriptExecutionLeasesActor(replyActorId, queryServiceConfig, counters);
 }
 
 namespace NPrivate {

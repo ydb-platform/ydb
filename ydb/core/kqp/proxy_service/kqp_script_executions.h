@@ -37,4 +37,7 @@ NActors::IActor* CreateSaveScriptFinalStatusActor(const NActors::TActorId& final
 NActors::IActor* CreateScriptFinalizationFinisherActor(const NActors::TActorId& finalizationActorId, const TString& executionId, const TString& database, std::optional<Ydb::StatusIds::StatusCode> operationStatus, NYql::TIssues operationIssues, i64 leaseGeneration);
 NActors::IActor* CreateScriptProgressActor(const TString& executionId, const TString& database, const TString& queryPlan);
 
+// Check lease expiration for running script execution operations
+IActor* CreateRefreshScriptExecutionLeasesActor(const TActorId& replyActorId, const NKikimrConfig::TQueryServiceConfig& queryServiceConfig, TIntrusivePtr<TKqpCounters> counters);
+
 } // namespace NKikimr::NKqp

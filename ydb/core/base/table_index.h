@@ -49,6 +49,8 @@ using TClusterId = ui64;
 inline constexpr auto ClusterIdType = Ydb::Type::UINT64;
 inline constexpr const char* ClusterIdTypeName = "Uint64";
 
+inline constexpr TClusterId PostingParentFlag = (1ull << 63ull);
+
 void EnsureNoPostingParentFlag(TClusterId parent);
 
 TClusterId SetPostingParentFlag(TClusterId parent);

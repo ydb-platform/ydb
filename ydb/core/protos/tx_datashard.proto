@@ -275,6 +275,36 @@ message TKqpReadRangesSourceSettings {
     optional bool IsTableImmutable = 23 [default = false];
 }
 
+// Takes input rows with a vector column, resolves the leaf cluster ID using the given
+// vector index level and prefix tables for each of them and returns rows for the posting table.
+// Primary key and data columns are copied to the posting table row and a cluster ID column is added.
+message TKqpVectorResolveSettings {
+    // Index settings
+    optional Ydb.Table.VectorIndexSettings IndexSettings = 1;
+    optional uint32 IndexLevels = 2;
+
+    // Level table and its column IDs
+    optional TKqpTransaction.TTableMeta LevelTable = 3;
+    optional uint32 LevelTableParentColumnId = 4;
+    optional uint32 LevelTableClusterColumnId = 5;
+    optional uint32 LevelTableCentroidColumnId = 6;
+
+    //optional TKqpTransaction.TTableMeta PrefixTable = ?;
+
+    // Input columns (columns of the source table)
+    repeated uint32 InputColumnTypes = 7;
+    repeated NKikimrProto.TTypeInfo InputColumnTypeInfos = 8;
+    //repeated uint32 PrefixColumnIds = ?;
+    repeated uint32 CopyColumnIndexes = 9;
+    optional uint32 VectorColumnIndex = 10;
+
+    // Transaction parameters
+    optional NKikimrProto.TRowVersion Snapshot = 11;
+    optional uint64 LockTxId = 12;
+    optional uint32 LockNodeId = 13;
+    optional NKikimrDataEvents.ELockMode LockMode = 14;
+}
+
 message TKqpTaskInfo {
     optional uint64 TaskId = 1;
     optional NActorsProto.TActorId ComputeActor = 2;

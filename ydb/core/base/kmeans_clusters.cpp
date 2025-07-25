@@ -266,13 +266,10 @@ public:
         return false;
     }
 
-    std::optional<ui32> FindCluster(TArrayRef<const TCell> row, ui32 embeddingPos) override {
-        Y_ENSURE(embeddingPos < row.size());
-        const auto embedding = row.at(embeddingPos).AsRef();
+    std::optional<ui32> FindCluster(TArrayRef<const char> embedding) override {
         if (!IsExpectedSize(embedding)) {
             return {};
         }
-
         auto min = TMetric::Init();
         std::optional<ui32> closest = {};
         for (size_t i = 0; const auto& cluster : Clusters) {
@@ -284,6 +281,11 @@ public:
             ++i;
         }
         return closest;
+    }
+
+    std::optional<ui32> FindCluster(TArrayRef<const TCell> row, ui32 embeddingPos) override {
+        Y_ENSURE(embeddingPos < row.size());
+        return FindCluster(row.at(embeddingPos).AsRef());
     }
 
     void AggregateToCluster(ui32 pos, const TArrayRef<const char>& embedding, ui64 weight) override {

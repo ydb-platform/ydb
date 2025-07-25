@@ -27,6 +27,7 @@ NJson::TJsonValue IResourceProcessor::DebugJson() const {
 }
 
 TConclusion<IResourceProcessor::EExecutionResult> IResourceProcessor::Execute(const TProcessorContext& context, const TExecutionNodeContext& nodeContext) const {
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("execute", GetProcessorType());
     return DoExecute(context, nodeContext);
 }
 

@@ -440,7 +440,7 @@ private:
 
             Flags |= (FlagWriteActive | (status ? FlagWriteAndFinish : 0));
         }
-        
+
         if (status) {
             Stream.WriteAndFinish(message, options, *status, OnWriteDoneTag.Prepare());
         } else {

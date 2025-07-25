@@ -70,14 +70,14 @@ struct TMockHttpRequest : NMonitoring::IMonHttpRequest {
     const THttpHeaders& GetHeaders() const override {
         return Headers;
     }
-    TStringBuf GetHeader(TStringBuf) const override {
-        return "";
+    TStringBuf GetHeader(TStringBuf name) const override {
+        return Headers.FindHeader(name)->Value();
     }
     TStringBuf GetCookie(TStringBuf) const override {
         return "";
     }
     TString GetRemoteAddr() const override {
-        return "";
+        return "::";
     }
     TString GetServiceTitle() const override {
         return "";
@@ -582,6 +582,21 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
         }
     }
 
+    void DumpMonPage(auto asyncCA, auto hook) {
+        {
+            TMockHttpRequest request;
+            auto evHttpInfo = MakeHolder<NActors::NMon::TEvHttpInfo>(request);
+            ActorSystem.Send(asyncCA, EdgeActor, evHttpInfo.Release());
+        }
+        {
+            auto ev = ActorSystem.GrabEdgeEvent<NActors::NMon::TEvHttpInfoRes>({EdgeActor});
+            UNIT_ASSERT_EQUAL(ev->Get()->GetContentType(), NActors::NMon::IEvHttpInfoRes::EContentType::Html);
+            TStringStream out;
+            ev->Get()->Output(out);
+            hook(out.Str());
+        }
+    }
+
     void BasicTests(ui32 packets, bool doWatermark, bool waitIntermediateAcks) {
         LogPrefix = TStringBuilder() << "Square Test for:"
            << " packets=" << packets
@@ -663,19 +678,10 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
                 },
                 dqInputChannel))
         {}
-        {
-            TMockHttpRequest request;
-            auto evHttpInfo = MakeHolder<NActors::NMon::TEvHttpInfo>(request);
-            ActorSystem.Send(asyncCA, EdgeActor, evHttpInfo.Release());
-        }
-        {
-            auto ev = ActorSystem.GrabEdgeEvent<NActors::NMon::TEvHttpInfoRes>({EdgeActor});
-            UNIT_ASSERT_EQUAL(ev->Get()->GetContentType(), NActors::NMon::IEvHttpInfoRes::EContentType::Html);
-            TStringStream out;
-            ev->Get()->Output(out);
-            // TODO: add validation
-            LOG_D(out.Str());
-        }
+        DumpMonPage(asyncCA, [this](auto str) {
+            // todo add validation
+            LOG_D(str);
+        });
         UNIT_ASSERT_EQUAL(receivedData.size(), val);
         for (; val > 0; --val) {
             UNIT_ASSERT_EQUAL_C(receivedData[val * val], 1, "expected count for " << (val * val));
@@ -827,6 +833,10 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
                 },
                 dqInputChannel))
         {}
+        DumpMonPage(asyncCA, [this](auto str) {
+            // todo add validation
+            LOG_D(str);
+        });
         UNIT_ASSERT_EQUAL(receivedData.size(), expectedData.size());
         for (auto [receivedVal, receivedCnt] : receivedData) {
             UNIT_ASSERT_EQUAL_C(receivedCnt, expectedData[receivedVal], "expected count for " << receivedVal << ": " << receivedCnt << " != " << expectedData[receivedVal]);

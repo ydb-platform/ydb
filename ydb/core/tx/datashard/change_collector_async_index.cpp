@@ -157,13 +157,16 @@ bool TAsyncIndexChangeCollector::Collect(const TTableId& tableId, ERowOp rop,
                 }
             }
 
+            ui64 sizeOfKey = 0;
             for (TPos pos = 0; pos < userTable->KeyColumnIds.size(); ++pos) {
                 const auto& tag = userTable->KeyColumnIds.at(pos);
                 if (!KeyTagsSeen.contains(tag)) {
+                    sizeOfKey += KeyVals.ysize();
                     AddRawValue(KeyVals, tag, key.at(pos));
                 }
             }
-
+            if (sizeOfKey > NLimits::MaxWriteKeySize)
+                return false;
             for (const auto tag : index.DataColumnIds) {
                 if (updatedTagToPos.contains(tag)) {
                     needUpdate = true;

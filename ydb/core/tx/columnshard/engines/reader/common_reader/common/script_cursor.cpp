@@ -8,6 +8,8 @@ namespace NKikimr::NOlap::NReader::NCommon {
 
 TConclusion<bool> TFetchingScriptCursor::Execute(const std::shared_ptr<IDataSource>& source) {
     AFL_VERIFY(source);
+    const NActors::TLogContextGuard lGuard = NActors::TLogContextBuilder::Build()("source_id", source->GetSourceId())(
+        "tablet_id", source->GetContext()->GetCommonContext()->GetReadMetadata()->GetTabletId());
     NMiniKQL::TThrowingBindTerminator bind;
     if (StepStartInstant == TMonotonic::Zero()) {
         StepStartInstant = TMonotonic::Now();

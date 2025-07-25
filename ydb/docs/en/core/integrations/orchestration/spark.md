@@ -7,29 +7,37 @@
 To work with {{ ydb-short-name }} in {{ spark-name }} you need to add the {{ ydb-short-name }} Spark Connector to your Apache Spark™ [driver](https://spark.apache.org/docs/latest/cluster-overview.html). That can be done in several ways:
 
 * Download the connector dependency directly from Maven Central using the `--packages` option. It's recommended to use the latest published [version](https://mvnrepository.com/artifact/tech.ydb.spark/ydb-spark-connector)
+
   ```shell
   # Run spark-shell
   ~ $ spark-shell --master <master-url> --packages tech.ydb.spark:ydb-spark-connector:2.0.1
   # Or spark-sql
   ~ $ spark-sql --master <master-url> --packages tech.ydb.spark:ydb-spark-connector:2.0.1
   ```
-* Download the latest version of the shaded connector (a connector build that includes all dependencies) from [Github](https://github.com/ydb-platform/ydb-spark-connector/releases) or [Maven Central](https://mvnrepository.com/artifact/tech.ydb.spark/ydb-spark-connector-shaded) and specify the downloaded artifact in the `--jars` option
+
+* Download the latest version of the shaded connector (a connector build that includes all dependencies) from [GitHub](https://github.com/ydb-platform/ydb-spark-connector/releases) or [Maven Central](https://mvnrepository.com/artifact/tech.ydb.spark/ydb-spark-connector-shaded) and specify the downloaded artifact in the `--jars` option
+
   ```shell
   # Run spark-shell
   ~ $ spark-shell --master <master-url> --jars ~/Download/ydb-spark-connector-shaded-2.0.1.jar
   # Or spark-sql
   ~ $ spark-sql --master <master-url> --jars ~/Download/ydb-spark-connector-shaded-2.0.1.jar
   ```
+
 * You can also copy the downloaded shaded artifact to the `jars`  folder of your {{ spark-name }} distribution. In this case, no additional options need to be specified
 
 ### Use DataFrame API {#dataframe-api}
+
 The DataFrame API allows to work with {{ ydb-short-name }} in interactive `spark-shell` or `pyspark`, as well as when writing code with `Java`, `Scala`, or `Python` for `spark-submit`.
 
 Create a `DataFrame` referencing a {{ ydb-short-name }} table
+
 ```scala
 val ydb_df = spark.read.format("ydb").options(<options>).load(<table-path>)
 ```
+
 Write a `DataFrame` to a {{ ydb-short-name }} table
+
 ```scala
 any_dataframe.write.format("ydb").options(<options>).mode("append").load(<table-path>)
 ```
@@ -43,8 +51,10 @@ For writing data to {{ ydb-short-name }} it's recommended to use the `append` mo
 A more detailed example is provided in [Spark-shell example](#example-spark-shell)
 
 ### Use Catalog API {#catalog-api}
+
 Catalogs allow you to work with {{ ydb-short-name }} in interactive `spark-sql` or execute SQL queries via the `spark.sql` method.
 In this case, to access {{ ydb-short-name }}, you need to create an {{ spark-name }} catalog by specifying the following properties (it's allowed to define multiple catalogs with different names for access to different {{ ydb-short-name }} databases):
+
 ```properties
 # Mandatory catalog's driver name
 spark.sql.catalog.<catalog_name>=tech.ydb.spark.connector.YdbCatalog
@@ -53,14 +63,18 @@ spark.sql.catalog.<catalog_name>.url=grpc://my-ydb-host:2135/cluster/database
 # Other options are not mandatory and may be specified by upon request
 spark.sql.catalog.<catalog_name>.auth.token.file=/home/username/.token
 ```
+
 After that, you can work with  {{ ydb-short-name }} tables through standard {{ spark-name }} SQL queries.
 Note that you should use a dot `.` as a separator in the table path.
+
 ```sql
 SELECT * FROM my_ydb.stackoverflow.posts LIMIT;
 ```
+
 A more detailed example is provided in [Spark-sql example](#example-spark-sql)
 
 ## {{ ydb-short-name }} Spark Connector options {#options}
+
 The behavior of the {{ ydb-short-name }} Spark Connector is configured using options that can be passed as a `Map` using the `options` method, or specified one by one using the `option` method. Each `DataFrame` and even each individual operation on a `DataFrame` can have its own configuration of options.
 
 ### Опции подключения {#auth-options}
@@ -71,7 +85,7 @@ The behavior of the {{ ydb-short-name }} Spark Connector is configured using opt
    - Remote self-hosted cluster:<br/>`grpcs://my-private-cluster:2135/Root/my-database?secureConnectionCertificate=~/myCertificate.cer`
    - Cloud database instance with a token:<br/>`grpcs://ydb.my-cloud.com:2135/my_folder/test_database?tokenFile=~/my_token`
    - Cloud database instance with a service account key:<br/>`grpcs://ydb.my-cloud.com:2135/my_folder/test_database?saKeyFile=~/sa_key.json`
-      
+
 * `auth.use_env` —  if set to `true`, authentication based on environment variables will be used
 * `auth.use_metadata` —  if set to `true`, metadata based authentication mode will be used. Can be specified directly in the url as the `useMetadata` option
 * `auth.login` и `auth.password` — login and password for static authentication
@@ -109,6 +123,7 @@ Type :help for more information.
 ```
 
 Let's display the schema of the parquet file and count the number of rows it contains
+
 ```shell
 scala> val so_posts2020 = spark.read.format("parquet").load("/home/username/2020.parquet")
 so_posts2020: org.apache.spark.sql.DataFrame = [Id: bigint, PostTypeId: bigint ... 20 more fields]
@@ -143,6 +158,7 @@ res1: Long = 4304021
 ```
 
 Then add a new column with the year to this DataSet and store it all to a columnar {{ ydb-short-name }} table
+
 ```shell
 scala> val my_ydb = Map("url" -> "grpcs://ydb.my-host.net:2135/preprod/spark-test?tokenFile=~/.token")
 my_ydb: scala.collection.immutable.Map[String,String] = Map(url -> grpcs://ydb.my-host.net:2135/preprod/spark-test?tokenFile=~/.token)
@@ -151,6 +167,7 @@ scala> so_posts2020.withColumn("Year", lit(2020)).write.format("ydb").options(my
 ```
 
 As a result, we can read the stored data from {{ ydb-short-name }} table and, for example, count the number of posts that have an accepted answer
+
 ```shell
 scala> val ydb_posts2020 = spark.read.format("ydb").options(my_ydb).load("stackoverflow/posts")
 ydb_posts2020: org.apache.spark.sql.DataFrame = [Id: bigint, PostTypeId: bigint ... 21 more fields]
@@ -193,15 +210,17 @@ res4: Long = 843780
 As an example, we'll show how to load a list of all StackOverflow posts from 2020 year into {{ ydb-short-name }}. This data can be downloaded by link [https://datasets-documentation.s3.eu-west-3.amazonaws.com/stackoverflow/parquet/posts/2020.parquet](https://datasets-documentation.s3.eu-west-3.amazonaws.com/stackoverflow/parquet/posts/2020.parquet)
 
 First, let's run `spark-sql` with the configured `my_ydb` catalog
+
 ```shell
 ~ $ spark-sql --master <master-url> --packages tech.ydb.spark:ydb-spark-connector:2.0.1 \
      --conf spark.sql.catalog.my_ydb=tech.ydb.spark.connector.YdbCatalog
      --conf spark.sql.catalog.my_ydb.url=grpcs://ydb.my-host.net:2135/preprod/spark-test?tokenFile=~/.token
-spark-sql (default)> 
+spark-sql (default)>
 ```
 
 Let's validate the current state of the connected database and confirm the absence of the `stackoverflow/posts` table
-```
+
+```shell
 spark-sql (default)> SHOW NAMESPACES FROM my_ydb;
 stackoverflow
 Time taken: 0.11 seconds, Fetched 1 row(s)
@@ -210,50 +229,54 @@ Time taken: 0.041 seconds
 ```
 
 Let's count the number of rows in the original parquet file
+
 ```shell
 spark-sql (default)> SELECT COUNT(*) FROM parquet.`/home/username/2020.parquet`;
 4304021
 ```
 
 Let's add a new column with the year and copy it all to a new {{ ydb-short-name }} table
+
 ```shell
 spark-sql (default)> CREATE TABLE my_ydb.stackoverflow.posts AS SELECT *, 2020 as Year FROM parquet.`/home/username/2020.parquet`;
 Time taken: 85.225 seconds
 ```
 
 Let's verify that the new table has appeared in the {{ ydb-short-name }}  database
+
 ```shell
 spark-sql (default)> SHOW TABLES FROM my_ydb.stackoverflow;
 posts
 Time taken: 0.07 seconds, Fetched 1 row(s)
 spark-sql (default)> DESCRIBE TABLE my_ydb.stackoverflow.posts;
-Id                  	bigint              	
-PostTypeId          	bigint              	
-AcceptedAnswerId    	bigint              	
-CreationDate        	timestamp           	
-Score               	bigint              	
-ViewCount           	bigint              	
-Body                	binary              	
-OwnerUserId         	bigint              	
-OwnerDisplayName    	binary              	
-LastEditorUserId    	bigint              	
-LastEditorDisplayName	binary              	
-LastEditDate        	timestamp           	
-LastActivityDate    	timestamp           	
-Title               	binary              	
-Tags                	binary              	
-AnswerCount         	bigint              	
-CommentCount        	bigint              	
-FavoriteCount       	bigint              	
-ContentLicense      	binary              	
-ParentId            	binary              	
-CommunityOwnedDate  	timestamp           	
-ClosedDate          	timestamp           	
-Year                	int                 	
-_spark_key          	string              	
+Id                    bigint
+PostTypeId            bigint
+AcceptedAnswerId      bigint
+CreationDate          timestamp
+Score                 bigint
+ViewCount             bigint
+Body                  binary
+OwnerUserId           bigint
+OwnerDisplayName      binary
+LastEditorUserId      bigint
+LastEditorDisplayName binary
+LastEditDate          timestamp
+LastActivityDate      timestamp
+Title                 binary
+Tags                  binary
+AnswerCount           bigint
+CommentCount          bigint
+FavoriteCount         bigint
+ContentLicense        binary
+ParentId              binary
+CommunityOwnedDate    timestamp
+ClosedDate            timestamp
+Year                  int
+_spark_key            string
 ```
 
 As a result, we can read the stored data from {{ ydb-short-name }} table and, for example, count the number of posts that have an accepted answer
+
 ```shell
 spark-sql (default)> SELECT COUNT(*) FROM my_ydb.stackoverflow.posts;
 4304021

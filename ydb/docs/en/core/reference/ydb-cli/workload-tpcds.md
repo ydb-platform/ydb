@@ -1,6 +1,6 @@
 # TPC-DS workload
 
-The workload is based on the TPC-DS [documentation](https://www.tpc.org/TPC_Documents_Current_Versions/pdf/TPC-DS_v3.2.0.pdf), with the queries and table schemas adapted for {{ ydb-short-name }}.
+The workload is based on the TPC-DS [specification](https://www.tpc.org/TPC_Documents_Current_Versions/pdf/TPC-DS_v3.2.0.pdf), with the queries and table schemas adapted for {{ ydb-short-name }}.
 
 This benchmark generates a workload typical for decision support systems.
 

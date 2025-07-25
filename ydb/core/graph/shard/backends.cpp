@@ -192,7 +192,7 @@ void TMemoryBackend::GetMetrics(const NKikimrGraph::TEvGetMetrics& get, NKikimrG
     if (!get.GetSkipBorders()) {
         if (get.HasTimeTo()) {
             TInstant to(TInstant::Seconds(get.GetTimeTo()));
-            if (metricValues.Timestamps.empty() || (itLeft != itRight && std::prev(itRight)->Timestamp < to)) {
+            if (metricValues.Timestamps.empty() || (metricValues.Timestamps.back() < to)) {
                 metricValues.Timestamps.push_back(to);
                 for (size_t num = 0; num < indexes.size(); ++num) {
                     metricValues.Values[num].push_back(NAN);
@@ -205,8 +205,8 @@ void TMemoryBackend::GetMetrics(const NKikimrGraph::TEvGetMetrics& get, NKikimrG
 
 void TMemoryBackend::ClearData(TInstant now, const TAggregateSettings& settings) {
     TInstant cutline = now - settings.PeriodToStart;
-    BLOG_D("Clear data to " << cutline.Seconds());
-    auto itCutLine = std::lower_bound(MetricsValues.begin(), MetricsValues.end(), cutline);
+    BLOG_D("Clear data to " << cutline.ToStringUpToSeconds());
+    auto itCutLine = std::upper_bound(MetricsValues.begin(), MetricsValues.end(), cutline);
     size_t before = MetricsValues.size();
     MetricsValues.erase(MetricsValues.begin(), itCutLine);
     if (!MetricsValues.empty()) {
@@ -218,61 +218,87 @@ void TMemoryBackend::ClearData(TInstant now, const TAggregateSettings& settings)
 }
 
 void TMemoryBackend::DownsampleData(TInstant now, const TAggregateSettings& settings) {
-    TInstant endTimestamp = now - settings.PeriodToStart;
-    BLOG_D("Downsample data from " << settings.StartTimestamp.Seconds() << " to " << endTimestamp.Seconds());
+    const TInstant startTimestamp = TInstant::Seconds(settings.StartTimestamp.Seconds() / settings.SampleSize.Seconds() * settings.SampleSize.Seconds());
+    const TInstant endTimestamp = now - settings.PeriodToStart;
+    BLOG_D("Downsample data from " << settings.StartTimestamp.ToStringUpToSeconds() << " to " << endTimestamp.ToStringUpToSeconds());
 
-    auto itStart = std::upper_bound(MetricsValues.begin(), MetricsValues.end(), settings.StartTimestamp);
+    const auto itStart = std::lower_bound(MetricsValues.begin(), MetricsValues.end(), startTimestamp);
     if (itStart == MetricsValues.end()) {
         BLOG_TRACE("StartTimestamp beyond the range");
         return;
     }
 
-    auto itStop = std::lower_bound(MetricsValues.begin(), MetricsValues.end(), endTimestamp);
-    if (itStop == MetricsValues.end()) {
+    const auto itStop = std::upper_bound(MetricsValues.begin(), MetricsValues.end(), endTimestamp);
+    if (itStop == MetricsValues.begin()) {
         BLOG_TRACE("EndTimestamp beyond the range");
         return;
     }
 
-    size_t before = MetricsValues.size();
+    const size_t before = MetricsValues.size();
 
     TMetricsValues values;
-    TInstant prevTimestamp = {};
-    const TInstant itStopTs = itStop->Timestamp;
-
-    for (auto it = itStart; it->Timestamp < itStopTs; ++it) {
-        TDuration step = it->Timestamp - prevTimestamp;
-        if (prevTimestamp == TInstant() || step >= settings.SampleSize) {
-            prevTimestamp = it->Timestamp;
-            continue;
-        }
-        values.Clear();
-        values.Values.resize(MetricsIndex.size());
-        TInstant stop = std::min(TInstant::FromValue(prevTimestamp.GetValue() / settings.SampleSize.GetValue() * settings.SampleSize.GetValue()) + settings.SampleSize, itStopTs);
-        const auto point = std::prev(it);
-        auto jt = point;
-        for (; jt->Timestamp < stop; ++jt) {
-            values.Timestamps.emplace_back(jt->Timestamp);
-            for (size_t nVal = 0; nVal < jt->Values.size(); ++nVal) {
-                values.Values[nVal].push_back(jt->Values[nVal]);
-            }
+    auto itEraseStart = itStart;
+    auto itEraseStop = itEraseStart;
+    std::optional<TInstant> beginSampleTimestamp;
+    TInstant endSampleTimestamp;
+    values.Values.resize(MetricsIndex.size());
+    std::vector<TMetricsRecord> insertedValues;
+    for (auto it = itStart; it != itStop; ++it) {
+        const TInstant timestamp = it->Timestamp;
+        if (!beginSampleTimestamp) {
+            beginSampleTimestamp = TInstant::FromValue(timestamp.GetValue() / settings.SampleSize.GetValue() * settings.SampleSize.GetValue());
+            endSampleTimestamp = *beginSampleTimestamp + settings.SampleSize;
         }
 
-        if (values.Timestamps.size() > 1) {
-            BLOG_TRACE("Normalizing " << values.Timestamps.size() << " values from " << values.Timestamps.front().Seconds()
-                << " to " << values.Timestamps.back().Seconds() << " values " << values.Values[0].front() << " .. " << values.Values[0].back());
-            NormalizeAndDownsample(values, 1);
-            point->Timestamp = values.Timestamps.front();
-            point->Values = std::move(values.Values.front());
-            BLOG_TRACE("Result time is " << point->Timestamp.Seconds() << " value is " << point->Values[0]);
-            MetricsValues.erase(it, jt);
-            it = std::upper_bound(MetricsValues.begin(), MetricsValues.end(), point->Timestamp);
-            if (it == MetricsValues.end()) {
-                break;
+        if (std::prev(itStop)->Timestamp < endSampleTimestamp) {
+            break;
+        }
+
+        if (timestamp >= endSampleTimestamp) {
+            if (values.Timestamps.size() > 1) {
+                itEraseStop = it;
+
+                BLOG_TRACE("Normalizing " << values.Timestamps.size() << " values from " << values.Timestamps.front().Seconds()
+                    << " to " << values.Timestamps.back().Seconds());
+                NormalizeAndDownsample(values, 1);
+            } else {
+                if (itEraseStart + 1 == it) {
+                    itEraseStop = ++itEraseStart;
+                }
+            }
+
+            if (!values.Timestamps.empty()) {
+                BLOG_TRACE("Result time is " << values.Timestamps.front().Seconds());
+                if (it != itEraseStart) {
+                    insertedValues.emplace_back(TMetricsRecord{values.Timestamps.front(), std::move(values.Values.front())});
+                }
+            }
+
+            settings.StartTimestamp = endSampleTimestamp;
+            values.Clear();
+            beginSampleTimestamp = TInstant::FromValue(timestamp.GetValue() / settings.SampleSize.GetValue() * settings.SampleSize.GetValue());
+            endSampleTimestamp = *beginSampleTimestamp + settings.SampleSize;
+        }
+
+        values.Timestamps.emplace_back(timestamp);
+        for (size_t nVal = 0; nVal < MetricsIndex.size(); ++nVal) {
+            if (nVal < it->Values.size()) {
+                values.Values[nVal].push_back(it->Values[nVal]);
+            } else {
+                values.Values[nVal].push_back(NAN);
             }
         }
-        prevTimestamp = it->Timestamp;
     }
-    settings.StartTimestamp = itStopTs;
+
+    insertedValues.reserve(insertedValues.size() + MetricsValues.end() - itEraseStop);
+    for (auto it = itEraseStop; it != MetricsValues.end(); ++it) {
+        insertedValues.emplace_back(std::move(*it));
+    }
+    MetricsValues.erase(itEraseStart, MetricsValues.end());
+    for (auto& val : insertedValues) {
+        MetricsValues.emplace_back(std::move(val));
+    }
+
     BLOG_D("Downsampled " << before - MetricsValues.size() << " logical rows");
 }
 
@@ -328,7 +354,7 @@ bool TLocalBackend::GetMetrics(NTabletFlatExecutor::TTransactionContext& txc, co
     if (!rowset.IsReady()) {
         return false;
     }
-    ui64 lastTime = std::numeric_limits<ui64>::max();
+    std::optional<ui64> lastTime;
     metricValues.Values.resize(get.MetricsSize());
     if (get.HasTimeFrom() && !get.GetSkipBorders() && (rowset.EndOfSet() || rowset.GetValue<Schema::MetricsValues::Timestamp>() > minTime)) {
         metricValues.Timestamps.push_back(TInstant::Seconds(minTime));
@@ -338,7 +364,7 @@ bool TLocalBackend::GetMetrics(NTabletFlatExecutor::TTransactionContext& txc, co
     }
     while (!rowset.EndOfSet()) {
         ui64 time = rowset.GetValue<Schema::MetricsValues::Timestamp>();
-        if (time != lastTime) {
+        if (!lastTime || time != *lastTime) {
             lastTime = time;
             metricValues.Timestamps.push_back(TInstant::Seconds(time));
             for (auto& vals : metricValues.Values) {
@@ -354,7 +380,7 @@ bool TLocalBackend::GetMetrics(NTabletFlatExecutor::TTransactionContext& txc, co
             return false;
         }
     }
-    if (get.HasTimeTo() && !get.GetSkipBorders() && (lastTime < maxTime)) {
+    if (get.HasTimeTo() && !get.GetSkipBorders() && (!lastTime || *lastTime < maxTime)) {
         metricValues.Timestamps.push_back(TInstant::Seconds(maxTime));
         for (auto& vals : metricValues.Values) {
             vals.emplace_back(NAN);
@@ -373,14 +399,15 @@ bool TLocalBackend::ClearData(NTabletFlatExecutor::TTransactionContext& txc, TIn
     if (!rowset.IsReady()) {
         return false;
     }
-    ui64 prevTimestamp = 0;
+    std::optional<ui64> prevTimestamp;
     while (!rowset.EndOfSet()) {
         ui64 timestamp = rowset.GetValue<Schema::MetricsValues::Timestamp>();
         ui64 id = rowset.GetValue<Schema::MetricsValues::Id>();
         db.Table<Schema::MetricsValues>().Key(timestamp, id).Delete();
         settings.StartTimestamp = TInstant::Seconds(timestamp);
-        if (timestamp != prevTimestamp && ++rows >= MAX_ROWS_TO_DELETE) { // we count as a logical row every unique timestamp
-            break;                                                        // so for database it will be MAX_ROWS * NUM_OF_METRICS rows
+        if ((!prevTimestamp || timestamp != *prevTimestamp) // we count as a logical row every unique timestamp
+            && ++rows >= MAX_ROWS_TO_DELETE) {              // so for database it will be MAX_ROWS * NUM_OF_METRICS rows
+            break;
         }
         prevTimestamp = timestamp;
         if (!rowset.Next()) {
@@ -392,9 +419,9 @@ bool TLocalBackend::ClearData(NTabletFlatExecutor::TTransactionContext& txc, TIn
 }
 
 bool TLocalBackend::DownsampleData(NTabletFlatExecutor::TTransactionContext& txc, TInstant now, const TAggregateSettings& settings) {
-    TInstant startTimestamp = TInstant::Seconds(settings.StartTimestamp.Seconds() / settings.SampleSize.Seconds() * settings.SampleSize.Seconds());
-    TInstant endTimestamp = now - settings.PeriodToStart;
-    BLOG_D("Downsample data from " << startTimestamp.Seconds() << " to " << endTimestamp.Seconds());
+    const TInstant startTimestamp = TInstant::Seconds(settings.StartTimestamp.Seconds() / settings.SampleSize.Seconds() * settings.SampleSize.Seconds());
+    const TInstant endTimestamp = now - settings.PeriodToStart;
+    BLOG_D("Downsample data from " << startTimestamp.ToStringUpToSeconds() << " to " << endTimestamp.ToStringUpToSeconds());
     NIceDb::TNiceDb db(txc.DB);
     ui64 rows = 0;
     auto rowset = db.Table<Schema::MetricsValues>().GreaterOrEqual(startTimestamp.Seconds()).LessOrEqual(endTimestamp.Seconds()).Select();
@@ -403,17 +430,17 @@ bool TLocalBackend::DownsampleData(NTabletFlatExecutor::TTransactionContext& txc
     }
     TMetricsValues values;
     std::unordered_set<ui64> ids;
-    ui64 beginSampleTimestamp = 0;
-    ui64 endSampleTimestamp = 0;
-    ui64 prevTimestamp = 0;
+    std::optional<ui64> beginSampleTimestamp;
+    ui64 endSampleTimestamp;
+    std::optional<ui64> prevTimestamp;
     values.Values.resize(MetricsIndex.size());
     while (!rowset.EndOfSet()) {
-        ui64 timestamp = rowset.GetValue<Schema::MetricsValues::Timestamp>();
-        ui64 metricId = rowset.GetValue<Schema::MetricsValues::Id>();
-        double value = rowset.GetValue<Schema::MetricsValues::Value>();
-        if (beginSampleTimestamp == 0 || endSampleTimestamp == 0) {
+        const ui64 timestamp = rowset.GetValue<Schema::MetricsValues::Timestamp>();
+        const ui64 metricId = rowset.GetValue<Schema::MetricsValues::Id>();
+        const double value = rowset.GetValue<Schema::MetricsValues::Value>();
+        if (!beginSampleTimestamp) {
             beginSampleTimestamp = timestamp / settings.SampleSize.Seconds() * settings.SampleSize.Seconds();
-            endSampleTimestamp = beginSampleTimestamp + settings.SampleSize.Seconds();
+            endSampleTimestamp = *beginSampleTimestamp + settings.SampleSize.Seconds();
         }
         if (timestamp >= endSampleTimestamp) {
             if (values.Timestamps.size() > 1) {
@@ -421,13 +448,9 @@ bool TLocalBackend::DownsampleData(NTabletFlatExecutor::TTransactionContext& txc
                     for (ui64 id : ids) {
                         db.Table<Schema::MetricsValues>().Key(ts.Seconds(), id).Delete();
                     }
+                    ++rows;
                 }
-                for (auto& val : values.Values) {
-                    if (val.size() < values.Timestamps.size()) {
-                        val.resize(values.Timestamps.size(), NAN);
-                    }
-                    Y_VERIFY(val.size() <= values.Timestamps.size());
-                }
+
                 BLOG_TRACE("Normalizing " << values.Timestamps.size() << " values from " << values.Timestamps.front().Seconds()
                     << " to " << values.Timestamps.back().Seconds());
                 NormalizeAndDownsample(values, 1);
@@ -445,10 +468,15 @@ bool TLocalBackend::DownsampleData(NTabletFlatExecutor::TTransactionContext& txc
             ids.clear();
             values.Clear();
             beginSampleTimestamp = timestamp / settings.SampleSize.Seconds() * settings.SampleSize.Seconds();
-            endSampleTimestamp = beginSampleTimestamp + settings.SampleSize.Seconds();
-            prevTimestamp = 0;
+            endSampleTimestamp = *beginSampleTimestamp + settings.SampleSize.Seconds();
+            prevTimestamp = std::nullopt;
         }
-        if (timestamp != prevTimestamp) {
+        if (!prevTimestamp || timestamp != *prevTimestamp) {
+            for (auto& val : values.Values) {
+                if (val.size() < values.Timestamps.size()) {
+                    val.push_back(NAN);
+                }
+            }
             values.Timestamps.emplace_back(TInstant::Seconds(timestamp));
         }
         values.Values[metricId].push_back(value);

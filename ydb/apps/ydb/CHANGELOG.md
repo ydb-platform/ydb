@@ -1,3 +1,6 @@
+
+## 2.24.1 ##
+
 * Fixed a bug where the `ydb tools dump` command was skipping scheme objects of unsupported types without notification and leaving an empty directory for them.
 
 ## 2.24.0 ##

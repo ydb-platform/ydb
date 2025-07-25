@@ -1,5 +1,7 @@
 #include "actor.h"
 
+#include <ydb/core/tx/columnshard/common/limits.h>
+
 namespace NKikimr::NOlap::NGroupedMemoryManager {
 
 void TMemoryLimiterActor::Bootstrap() {
@@ -68,8 +70,9 @@ void TMemoryLimiterActor::Handle(NMemory::TEvConsumerRegistered::TPtr& ev) {
 }
 
 void TMemoryLimiterActor::Handle(NMemory::TEvConsumerLimit::TPtr& ev) {
-    ui64 limitBytes = ev->Get()->LimitBytes / (Config.GetCountBuckets() ? Config.GetCountBuckets() : 1);
-    std::optional<ui64> hardLimitBytes = ev->Get()->HardLimitBytes ? *ev->Get()->HardLimitBytes / (Config.GetCountBuckets() ? Config.GetCountBuckets() : 1) : ev->Get()->HardLimitBytes;
+    const ui64 countBuckets = Config.GetCountBuckets() ? Config.GetCountBuckets() : 1;
+    const ui64 limitBytes = ev->Get()->LimitBytes * NKikimr::NOlap::TGlobalLimits::GroupedMemoryLimiterSoftLimitCoefficient / countBuckets;
+    const ui64 hardLimitBytes = ev->Get()->LimitBytes / countBuckets;
     for (auto& manager: Managers) {
         manager->UpdateMemoryLimits(limitBytes, hardLimitBytes);
     }

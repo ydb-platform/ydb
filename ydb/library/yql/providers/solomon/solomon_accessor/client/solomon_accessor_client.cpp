@@ -262,8 +262,8 @@ public:
     }
 
 public:
-    NThreading::TFuture<TGetLabelsResponse> GetLabelNames(const std::map<TString, TString>& selectors) const override final {
-        auto requestUrl = BuildGetLabelsUrl(selectors);
+    NThreading::TFuture<TGetLabelsResponse> GetLabelNames(const std::map<TString, TString>& selectors, TInstant from, TInstant to) const override final {
+        auto requestUrl = BuildGetLabelsUrl(selectors, from, to);
 
         auto resultPromise = NThreading::NewPromise<TGetLabelsResponse>();
         
@@ -279,8 +279,8 @@ public:
         return resultPromise.GetFuture();
     }
 
-    NThreading::TFuture<TListMetricsResponse> ListMetrics(const std::map<TString, TString>& selectors, int pageSize, int page) const override final {
-        auto requestUrl = BuildListMetricsUrl(selectors, pageSize, page);
+    NThreading::TFuture<TListMetricsResponse> ListMetrics(const std::map<TString, TString>& selectors, TInstant from, TInstant to, int pageSize, int page) const override final {
+        auto requestUrl = BuildListMetricsUrl(selectors, from, to, pageSize, page);
 
         auto resultPromise = NThreading::NewPromise<TListMetricsResponse>();
         
@@ -296,11 +296,9 @@ public:
         return resultPromise.GetFuture();
     }
 
-    NThreading::TFuture<TGetPointsCountResponse> GetPointsCount(const std::map<TString, TString>& selectors) const override final {        
+    NThreading::TFuture<TGetPointsCountResponse> GetPointsCount(const std::map<TString, TString>& selectors, TInstant from, TInstant to) const override final {        
         auto resultPromise = NThreading::NewPromise<TGetPointsCountResponse>();
 
-        TInstant from = TInstant::Seconds(Settings.GetFrom());
-        TInstant to = TInstant::Seconds(Settings.GetTo());
         TInstant sevenDaysAgo = TInstant::Now() - TDuration::Days(7); // points older then a week ago are automatically downsampled by solomon backend
 
         TInstant downsamplingFrom = from;
@@ -453,7 +451,7 @@ private:
         }
     }
 
-    TString BuildGetLabelsUrl(const std::map<TString, TString>& selectors) const {
+    TString BuildGetLabelsUrl(const std::map<TString, TString>& selectors, TInstant from, TInstant to) const {
         TUrlBuilder builder(GetHttpSolomonEndpoint());
 
         builder.AddPathComponent("api");
@@ -465,13 +463,13 @@ private:
 
         builder.AddUrlParam("selectors", BuildSelectorsProgram(selectors));
         builder.AddUrlParam("forceCluster", DefaultReplica);
-        builder.AddUrlParam("from", TInstant::Seconds(Settings.GetFrom()).ToString());
-        builder.AddUrlParam("to", TInstant::Seconds(Settings.GetTo()).ToString());
+        builder.AddUrlParam("from", from.ToString());
+        builder.AddUrlParam("to", to.ToString());
 
         return builder.Build();
     }
 
-    TString BuildListMetricsUrl(const std::map<TString, TString>& selectors, int pageSize, int page) const {
+    TString BuildListMetricsUrl(const std::map<TString, TString>& selectors, TInstant from, TInstant to, int pageSize, int page) const {
         TUrlBuilder builder(GetHttpSolomonEndpoint());
 
         builder.AddPathComponent("api");
@@ -482,8 +480,8 @@ private:
 
         builder.AddUrlParam("selectors", BuildSelectorsProgram(selectors));
         builder.AddUrlParam("forceCluster", DefaultReplica);
-        builder.AddUrlParam("from", TInstant::Seconds(Settings.GetFrom()).ToString());
-        builder.AddUrlParam("to", TInstant::Seconds(Settings.GetTo()).ToString());
+        builder.AddUrlParam("from", from.ToString());
+        builder.AddUrlParam("to", to.ToString());
         builder.AddUrlParam("pageSize", std::to_string(pageSize));
         builder.AddUrlParam("page", std::to_string(page));
 

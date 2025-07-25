@@ -58,7 +58,7 @@ class DataService(DataServiceServicer):
             timeseries.labels[key] = str(value)
         timeseries.type = MetricType.RATE
 
-        timeseries.timestamp_values.values.extend([1, 2, 3])
+        timeseries.timestamp_values.values.extend([10000, 20000, 30000])
         timeseries.double_values.values.extend([100, 200, 300])
 
         return response

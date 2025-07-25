@@ -577,7 +577,7 @@ message TCompactionSelectorConstructorContainer {
 message TCompactionPlannerConstructorContainer {
     optional string ClassName = 1;
     optional uint64 NodePortionsCountLimit = 2;
-	optional double WeightKff = 3 [default = 1.0];
+    optional double WeightKff = 3 [default = 1.0];
 
     message TLOptimizer {
 

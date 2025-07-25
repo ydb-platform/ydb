@@ -339,7 +339,7 @@ private:
 
             ui64 value = 0;
             for (const auto& consumer : consumers) {
-                value += Max(consumer.Consumption, consumer.GetLimit(middle));
+                value += GetResultingConsumption(consumer, middle);
             }
 
             if (value > availableMemory) {

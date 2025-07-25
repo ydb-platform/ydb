@@ -60,7 +60,7 @@ namespace NJson2Udf {
 
                 return TUnboxedValuePod(new TJsonPathResource(jsonPath));
             } catch (const std::exception& e) {
-                UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data());
+                UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).c_str());
             }
         }
 

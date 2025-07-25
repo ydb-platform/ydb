@@ -5,6 +5,8 @@
 
 #define LOG_STREAMS_IMPL(level, component, logRecordStream) \
     LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog:: Y_CAT(PRI_, level), ::NKikimrServices::component, logRecordStream);
+#define IS_STREAMS_LOG_ENABLED_IMPL(level, component) \
+    IS_CTX_LOG_PRIORITY_ENABLED(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog:: Y_CAT(PRI_, level), ::NKikimrServices::component, 0ull)
 
 #define LOG_STREAMS_IMPL_AS(actorSystem, level, component, logRecordStream) \
     LOG_LOG_S(actorSystem, ::NActors::NLog:: Y_CAT(PRI_, level), ::NKikimrServices::component, logRecordStream);
@@ -53,6 +55,7 @@
 #define LOG_ROW_DISPATCHER_INFO(logRecordStream) LOG_STREAMS_IMPL(INFO, FQ_ROW_DISPATCHER, LogPrefix << logRecordStream)
 #define LOG_ROW_DISPATCHER_WARN(logRecordStream) LOG_STREAMS_IMPL(WARN, FQ_ROW_DISPATCHER, LogPrefix << logRecordStream)
 #define LOG_ROW_DISPATCHER_ERROR(logRecordStream) LOG_STREAMS_IMPL(ERROR, FQ_ROW_DISPATCHER, LogPrefix << logRecordStream)
+#define IS_ROW_DISPATCHER_LOG_ENABLED(level) IS_STREAMS_LOG_ENABLED_IMPL(level, FQ_ROW_DISPATCHER)
 
 // Component: STREAMS_SCHEDULER_SERVICE.
 #define LOG_STREAMS_SCHEDULER_SERVICE_EMERG(logRecordStream) LOG_STREAMS_IMPL(EMERG, STREAMS_SCHEDULER_SERVICE, logRecordStream)

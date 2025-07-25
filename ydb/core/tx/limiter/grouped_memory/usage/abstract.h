@@ -53,9 +53,13 @@ private:
 public:
     TScopeGuard(const NActors::TActorId& actorId, const ui64 processId, const ui64 scopeId);
 
-    std::shared_ptr<TGroupGuard> BuildGroupGuard() const {
-        static TAtomicCounter counter = 0;
-        return std::make_shared<TGroupGuard>(ActorId, ProcessId, ScopeId, counter.Inc());
+    std::shared_ptr<TGroupGuard> BuildGroupGuard(const std::optional<ui64> extGroupId = std::nullopt) const {
+        if (extGroupId) {
+            return std::make_shared<TGroupGuard>(ActorId, ProcessId, ScopeId, *extGroupId);
+        } else {
+            static TAtomicCounter counter = 0;
+            return std::make_shared<TGroupGuard>(ActorId, ProcessId, ScopeId, counter.Inc());
+        }
     }
 
     ~TScopeGuard();

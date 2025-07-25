@@ -103,8 +103,7 @@ private:
         auto constructor = TBase::PopObjectWithAccessor();
         constructor.MutableObject().SetIndex(CurrentSourceIdx);
         ++CurrentSourceIdx;
-        std::shared_ptr<NReader::NCommon::IDataSource> result = constructor.MutableObject().Construct(context, constructor.DetachAccessor());
-        return result;
+        return constructor.MutableObject().Construct(context, constructor.DetachAccessor());
     }
 
 public:

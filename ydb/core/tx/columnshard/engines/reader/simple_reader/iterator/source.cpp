@@ -30,6 +30,7 @@ void IDataSource::InitFetchingPlan(const std::shared_ptr<TFetchingScript>& fetch
 
 void IDataSource::StartProcessing(const std::shared_ptr<NCommon::IDataSource>& sourcePtr) {
     AFL_VERIFY(FetchingPlan);
+    AFL_VERIFY(ProcessingStarted);
     TFetchingScriptCursor cursor(FetchingPlan, 0);
     const auto& commonContext = *GetContext()->GetCommonContext();
     auto sourceCopy = sourcePtr;
@@ -46,9 +47,9 @@ void IDataSource::InitializeProcessing(const std::shared_ptr<NCommon::IDataSourc
             InitUsedRawBytes();
         }
         ProcessingStarted = true;
-        SourceGroupGuard = GetContext()->GetProcessScopeGuard()->BuildGroupGuard();
+        SourceGroupGuard = GetContext()->GetProcessScopeGuard()->BuildGroupGuard(GetSequentialMemoryGroupIdx());
         SetMemoryGroupId(SourceGroupGuard->GetGroupId());
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("InitFetchingPlan", FetchingPlan->DebugString())("source_idx", GetSourceIdx());
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("InitFetchingPlan", FetchingPlan->DebugString())("memory_source_idx", GetSequentialMemoryGroupIdx());
         //    NActors::TLogContextGuard logGuard(NActors::TLogContextBuilder::Build()("source", SourceIdx)("method", "InitFetchingPlan"));
     }
 }
@@ -202,6 +203,7 @@ TConclusion<bool> TPortionDataSource::DoStartFetchImpl(
 
 TConclusion<std::vector<std::shared_ptr<NArrow::NSSA::IFetchLogic>>> TPortionDataSource::DoStartFetchIndex(
     const NArrow::NSSA::TProcessorContext& /*context*/, const TFetchIndexContext& indexContext) {
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("source_id", GetSourceId());
     THashMap<TCheckIndexContext, std::shared_ptr<NIndexes::IIndexMeta>> indexInfo;
     for (auto&& i : indexContext.GetOperationsBySubColumn().GetData()) {
         NIndexes::NRequest::TOriginalDataAddress addr(indexContext.GetColumnId(), i.first);
@@ -283,6 +285,7 @@ void TPortionDataSource::DoAbort() {
 
 TConclusion<std::shared_ptr<NArrow::NSSA::IFetchLogic>> TPortionDataSource::DoStartFetchHeader(
     const NArrow::NSSA::TProcessorContext& context, const TFetchHeaderContext& fetchContext) {
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("source_id", GetSourceId());
     if (context.GetResources()->GetAccessorOptional(fetchContext.GetColumnId())) {
         return std::shared_ptr<NArrow::NSSA::IFetchLogic>();
     }
@@ -339,6 +342,7 @@ TConclusion<NArrow::TColumnFilter> TPortionDataSource::DoCheckHeader(
 
 TConclusion<std::shared_ptr<NArrow::NSSA::IFetchLogic>> TPortionDataSource::DoStartFetchData(
     const NArrow::NSSA::TProcessorContext& context, const TDataAddress& addr) {
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("source_id", GetSourceId());
     auto source = context.GetDataSourceVerifiedAs<NCommon::IDataSource>();
     if (addr.HasSubColumns() && GetPortionAccessor().GetColumnChunksPointers(addr.GetColumnId()).size() &&
         GetSourceSchema()->GetColumnLoaderVerified(addr.GetColumnId())->GetAccessorConstructor()->GetType() ==

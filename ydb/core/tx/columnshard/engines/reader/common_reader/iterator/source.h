@@ -121,6 +121,8 @@ private:
     TAtomic SyncSectionFlag = 1;
     YDB_READONLY(ui64, SourceId, 0);
     YDB_READONLY(ui32, SourceIdx, 0);
+    static inline TAtomicCounter MemoryGroupCounter = 0;
+    YDB_READONLY(ui32, SequentialMemoryGroupIdx, MemoryGroupCounter.Inc());
     YDB_READONLY(TSnapshot, RecordSnapshotMin, TSnapshot::Zero());
     YDB_READONLY(TSnapshot, RecordSnapshotMax, TSnapshot::Zero());
     YDB_READONLY_DEF(std::shared_ptr<TSpecialReadContext>, Context);

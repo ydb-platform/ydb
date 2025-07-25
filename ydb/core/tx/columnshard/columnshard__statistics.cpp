@@ -314,7 +314,7 @@ void TColumnShard::Handle(NStat::TEvStatistics::TEvStatisticsRequest::TPtr& ev, 
         StoragesManager, resultAccumulator, 1000, columnTagsRequested, versionedIndex, DataAccessorsManager.GetObjectPtrVerified());
 
     for (const auto& [_, portionInfo] : spg->GetPortions()) {
-        if (!portionInfo->IsVisible(GetMaxReadVersion())) {
+        if (!portionInfo->IsVisible(GetMaxReadVersion(), true)) {
             continue;
         }
         portionsPack.AddTask(portionInfo);

@@ -13,15 +13,7 @@ std::shared_ptr<NCommon::IDataSource> TPortionSources::DoTryExtractNext(
 }
 
 std::vector<TInsertWriteId> TPortionSources::GetUncommittedWriteIds() const {
-    std::vector<TInsertWriteId> result;
-    for (auto&& i : Sources) {
-        if (!i->IsCommitted()) {
-            AFL_VERIFY(i->GetPortionType() == EPortionType::Written);
-            auto* written = static_cast<const TWrittenPortionInfo*>(i.get());
-            result.emplace_back(written->GetInsertWriteId());
-        }
-    }
-    return result;
+    return Uncommitted;
 }
 
 }   // namespace NKikimr::NOlap::NReader::NPlain

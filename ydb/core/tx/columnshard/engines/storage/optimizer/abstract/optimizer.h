@@ -100,7 +100,7 @@ private:
         return false;
     }
     const ui32 NodePortionsCountLimit = 0;
-    const double WeightKff = 1;
+    double WeightKff = 1;
     static inline TAtomicCounter NodePortionsCounter = 0;
     TPositiveControlInteger LocalPortionsCount;
     std::shared_ptr<TCounters> Counters = std::make_shared<TCounters>();
@@ -131,8 +131,7 @@ public:
 
     IOptimizerPlanner(const TInternalPathId pathId, const ui32 nodePortionsCountLimit)
         : PathId(pathId)
-        , NodePortionsCountLimit(nodePortionsCountLimit)
-        , WeightKff(weightKff) {
+        , NodePortionsCountLimit(nodePortionsCountLimit) {
         Counters->NodePortionsCountLimit->Set(NodePortionsCountLimit);
     }
     bool IsOverloaded() const {
@@ -285,7 +284,10 @@ public:
 
     TConclusion<std::shared_ptr<IOptimizerPlanner>> BuildPlanner(const TBuildContext& context) const {
         auto result = DoBuildPlanner(context);
-        result->WeightKff = WeightKff;
+        if (result.IsFail()) {
+            return result;
+        }
+        (*result)->WeightKff = WeightKff;
         return result;
     }
 

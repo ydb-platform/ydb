@@ -49,8 +49,7 @@ private:
         Issues.AddIssue(issue);
     }
 
-    bool ExtractRows(TString& /*errorMessage*/) override {
-        //errorMessage = "Not supported";
+    bool ExtractRows(TString&) override {
         return true;
     }
 

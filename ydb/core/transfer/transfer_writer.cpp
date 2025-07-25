@@ -96,7 +96,6 @@ public:
             const auto& columns = OutputSpec.GetStructColumns();
             for (size_t i = 0; i < columns.size(); ++i) {
                 const auto& column = columns[i];
-                Cerr << ">>>>> column.name()=" << column.name() << Endl;
                 if (column.name() == SystemColumns::TargetTable) {
                     auto e = Out.Value.GetElement(i);
                     if (e) {

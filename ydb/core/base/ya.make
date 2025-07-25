@@ -102,6 +102,7 @@ PEERDIR(
     library/cpp/time_provider
     ydb/core/base/generated
     ydb/core/base/services
+    ydb/core/control/lib
     ydb/core/debug
     ydb/core/erasure
     ydb/core/graph/api

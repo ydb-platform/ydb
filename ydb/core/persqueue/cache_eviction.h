@@ -145,7 +145,7 @@ namespace NKikimr::NPQ {
         }
 
         void Verify(const TRequestedBlob& blob) const {
-            Y_ABORT_UNLESS(blob.Value.size() == blob.Size,
+            Y_ABORT_UNLESS(blob.Value.size() <= blob.Size,
                            "\nblob.Value.size=%" PRISZT ", blob.Size=%" PRIu64 "\nblob.Key=%s",
                            blob.Value.size(), blob.Size, blob.Key.ToString().data());
             TClientBlob::CheckBlob(blob.Key, blob.Value);

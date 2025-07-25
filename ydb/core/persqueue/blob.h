@@ -39,6 +39,7 @@ struct TClientBlob {
     TInstant WriteTimestamp;
     TInstant CreateTimestamp;
     ui32 UncompressedSize;
+    bool HadUncompressed = false;
     TString PartitionKey;
     TString ExplicitHashKey;
 
@@ -56,6 +57,7 @@ struct TClientBlob {
         , WriteTimestamp(writeTimestamp)
         , CreateTimestamp(createTimestamp)
         , UncompressedSize(uncompressedSize)
+        , HadUncompressed(uncompressedSize > 0)
         , PartitionKey(partitionKey)
         , ExplicitHashKey(explicitHashKey)
     {

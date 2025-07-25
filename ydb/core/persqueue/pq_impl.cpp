@@ -199,23 +199,33 @@ private:
 
         for (ui32 i = 0; i < readResult.ResultSize(); ++i) {
             bool isNewMsg = !readResult.GetResult(i).HasPartNo() || readResult.GetResult(i).GetPartNo() == 0;
+            bool isEmptyPart = readResult.GetResult(i).GetTotalParts() > 1 && readResult.GetResult(i).GetData().empty();
             if (!isStart) {
                 Y_ABORT_UNLESS(partResp->ResultSize() > 0);
                 auto& back = partResp->GetResult(partResp->ResultSize() - 1);
                 bool lastMsgIsNotFull = back.GetPartNo() + 1 < back.GetTotalParts();
-                bool trancate = lastMsgIsNotFull && isNewMsg;
+                bool trancate = lastMsgIsNotFull && (
+                        isNewMsg  // Multipart message with missing part, remove it.
+                        || isEmptyPart && back.GetOffset() == readResult.GetResult(i).GetOffset()); // Got empty part for multipart message
+                        // which was already stored in partResp; This message should've been cut out by compactification. Remove it from response;
+
                 if (trancate) {
                     partResp->MutableResult()->RemoveLast();
-                    if (partResp->GetResult().empty()) isStart = false;
+                    if (partResp->GetResult().empty()) isStart = true;
                 }
             }
-
+            if (isEmptyPart) { //Multipart message containing empty part. Ignore the part.
+                continue;
+            }
             if (isNewMsg) {
                 if (!isStart && readResult.GetResult(i).HasTotalParts()
                              && readResult.GetResult(i).GetTotalParts() + i > readResult.ResultSize()) //last blob is not full
                     break;
-                partResp->AddResult()->CopyFrom(readResult.GetResult(i));
-                isStart = false;
+                if (!readResult.GetResult(i).GetData().empty()) {
+                    partResp->AddResult()->CopyFrom(readResult.GetResult(i));
+                    isStart = false;
+                }
+
             } else { //glue to last res
                 auto rr = partResp->MutableResult(partResp->ResultSize() - 1);
                 if (rr->GetSeqNo() != readResult.GetResult(i).GetSeqNo() || rr->GetPartNo() + 1 != readResult.GetResult(i).GetPartNo()) {
@@ -2706,7 +2716,7 @@ void TPersQueue::HandleEventForSupportivePartition(const ui64 responseCookie,
         if (!req.GetNeedSupportivePartition()) {
             // missing supportivce partition in kafka transaction means that we already committed and deleted transaction for current producerId + producerEpoch
             NPersQueue::NErrorCode::EErrorCode errorCode = writeId.KafkaApiTransaction ?
-                NPersQueue::NErrorCode::KAFKA_TRANSACTION_MISSING_SUPPORTIVE_PARTITION : 
+                NPersQueue::NErrorCode::KAFKA_TRANSACTION_MISSING_SUPPORTIVE_PARTITION :
                 NPersQueue::NErrorCode::PRECONDITION_FAILED;
             TString error = writeId.KafkaApiTransaction ?
                 "Kafka transaction and there is no supportive partition for current producerId and producerEpoch. It means GetOwnership request was not called from TPartitionWriter" :

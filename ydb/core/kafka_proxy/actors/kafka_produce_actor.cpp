@@ -291,6 +291,7 @@ std::pair<EKafkaErrors, THolder<TEvPartitionWriter::TEvWriteRequest>> Convert(
         NKikimrPQClient::TDataChunk proto;
         proto.set_codec(NPersQueueCommon::RAW);
         for(auto& h : record.Headers) {
+            TMaybe<TString> key;
             auto res = proto.AddMessageMeta();
             if (h.Key) {
                 res->set_key(static_cast<const char*>(h.Key->data()), h.Key->size());
@@ -299,11 +300,13 @@ std::pair<EKafkaErrors, THolder<TEvPartitionWriter::TEvWriteRequest>> Convert(
                 res->set_value(static_cast<const char*>(h.Value->data()), h.Value->size());
             }
         }
+        auto w = partitionRequest->AddCmdWrite();
 
         if (record.Key) {
             auto res = proto.AddMessageMeta();
             res->set_key("__key");
             res->set_value(static_cast<const char*>(record.Key->data()), record.Key->size());
+            w->SetPartitionKey(res->value());
         }
 
         if (record.Value) {
@@ -314,7 +317,6 @@ std::pair<EKafkaErrors, THolder<TEvPartitionWriter::TEvWriteRequest>> Convert(
         bool res = proto.SerializeToString(&str);
         Y_ABORT_UNLESS(res);
 
-        auto w = partitionRequest->AddCmdWrite();
         w->SetSourceId(sourceId);
 
         bool enableKafkaDeduplication = batch->ProducerId >= 0;

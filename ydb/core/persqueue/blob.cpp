@@ -222,11 +222,10 @@ void TBatch::Pack() {
         return;
     Packed = true;
     PackedData.Clear();
-
     bool hasUncompressed = false;
     bool hasKinesis = false;
     for (ui32 i = 0; i < Blobs.size(); ++i) {
-        if (Blobs[i].UncompressedSize > 0)
+        if (Blobs[i].UncompressedSize > 0 || Blobs[i].HadUncompressed)
             hasUncompressed = true;
 
         if (!Blobs[i].PartitionKey.empty() || !Blobs[i].ExplicitHashKey.empty()) {

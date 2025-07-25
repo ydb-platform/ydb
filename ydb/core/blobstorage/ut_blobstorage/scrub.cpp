@@ -510,15 +510,15 @@ Y_UNIT_TEST_SUITE(DeepScrubbing) {
 
             ui64 blobsScrubbed =
                     Env->AggregateVDiskCounters(Env->StoragePoolName, NodeCount, Erasure.BlobSubgroupSize(),
-                            GroupId, pdiskLayout, "deepScrubbing", "SmallBlobsChecked", false) +
+                            GroupId, pdiskLayout, "deepScrubbing", "SmallBlobsChecked", {}, false) +
                     Env->AggregateVDiskCounters(Env->StoragePoolName, NodeCount, Erasure.BlobSubgroupSize(),
-                            GroupId, pdiskLayout, "deepScrubbing", "HugeBlobsChecked", false);
+                            GroupId, pdiskLayout, "deepScrubbing", "HugeBlobsChecked", {}, false);
 
             ui64 dataIssues =
                     Env->AggregateVDiskCounters(Env->StoragePoolName, NodeCount, Erasure.BlobSubgroupSize(),
-                            GroupId, pdiskLayout, "deepScrubbing", "DataIssuesSmallBlobs", false) +
+                            GroupId, pdiskLayout, "deepScrubbing", "DataIssuesSmallBlobs", {}, false) +
                     Env->AggregateVDiskCounters(Env->StoragePoolName, NodeCount, Erasure.BlobSubgroupSize(),
-                            GroupId, pdiskLayout, "deepScrubbing", "DataIssuesHugeBlobs", false);
+                            GroupId, pdiskLayout, "deepScrubbing", "DataIssuesHugeBlobs", {}, false);
 
             UNIT_ASSERT_VALUES_UNEQUAL_C(blobsScrubbed, 0, makePrefix());
             UNIT_ASSERT_VALUES_UNEQUAL_C(dataIssues, 0, makePrefix()

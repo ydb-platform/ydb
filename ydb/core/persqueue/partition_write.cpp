@@ -1123,13 +1123,6 @@ void TPartition::AddCmdWrite(const std::optional<TPartitionedBlob::TFormedBlobIn
         WriteCycleSize += newWrite->Value.size();
 }
 
-void TPartition::AddCmdWrite(const std::optional<TPartitionedBlob::TFormedBlobInfo>& newWrite,
-                             TEvKeyValue::TEvRequest* request,
-                             const TActorContext& ctx, bool includeToWriteCycle)
-{
-    AddCmdWrite(newWrite, request, 0, ctx, includeToWriteCycle);
-}
-
 void TPartition::RenameFormedBlobs(const std::deque<TPartitionedBlob::TRenameFormedBlobInfo>& formedBlobs,
                                    ProcessParameters& parameters,
                                    ui32 curWrites,

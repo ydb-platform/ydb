@@ -212,7 +212,7 @@ private:
 
         for (ui32 i = 0; i < readResult.ResultSize(); ++i) {
             auto currentReadResult = readResult.GetResult(i);
-            if (currentReadResult.GetData().empty() && currentReadResult.GetUncompressedSize() == 0) { // This is empty parted removed by compactification
+            if (currentReadResult.GetData().empty()) { // This is empty parted removed by compactification
                 LastSkipOffset = currentReadResult.GetOffset();
                 if (!InitialRequest) {
                     removeIncompleteMessageIfAny();

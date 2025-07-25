@@ -51,6 +51,13 @@ enum class ECommitState {
     Aborted
 };
 
+enum class ERequestCookie : ui64 {
+    ReadBlobsForCompaction = 0,
+    WriteBlobsForCompaction,
+    CompactificationWrite,
+    End
+};
+
 struct TTransaction {
 
     explicit TTransaction(TSimpleSharedPtr<TEvPQ::TEvTxCalcPredicate> tx,
@@ -1044,13 +1051,7 @@ private:
     void DumpKeyValueRequest(const NKikimrClient::TKeyValueRequest& request);
 
     TBlobKeyTokenPtr MakeBlobKeyToken(const TString& key);
-
-    enum ERequestCookie : ui64 {
-        ReadBlobsForCompaction = 0,
-        WriteBlobsForCompaction,
-        CompactificationWrite,
-        End
-    };
+    const std::deque<TDataKey>& GetDataKeysBody() const;
 
 };
 

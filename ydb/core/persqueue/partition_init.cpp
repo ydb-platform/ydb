@@ -449,6 +449,7 @@ void TInitInfoRangeStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActor
             Cerr << "ERROR " << range.GetStatus() << "\n";
             Y_ABORT("bad status");
     };
+    Partition()->CreateCompacter();
 }
 
 void TInitInfoRangeStep::PostProcessing(const TActorContext& ctx) {
@@ -891,10 +892,7 @@ void TPartition::Initialize(const TActorContext& ctx) {
             SetupTopicCounters(ctx);
         }
     }
-    if (Config.GetEnableCompactification()) {
-        Cerr << "=== Create compacter on init\n";
-        CreateCompacter();
-    }
+    CreateCompacter();
 }
 
 void TPartition::SetupTopicCounters(const TActorContext& ctx) {
@@ -1107,27 +1105,34 @@ void TPartition::InitSplitMergeSlidingWindow() {
 }
 
 void TPartition::CreateCompacter() {
-    if (!CompacterStartCookie.Defined()) {
-        Send(Tablet, new TEvPQ::TEvAllocateCookie(100));
+    if (!Config.GetEnableCompactification() || !AppData()->FeatureFlags.GetEnableTopicCompactificationByKey() || IsSupportive()) {
+        Compacter.Reset();
         return;
-    } else {
-        TUserInfo* userInfo = UsersInfoStorage->GetIfExists(CLIENTID_COMPACTION_CONSUMER);
-        ui64 compStartOffset = 0;
-        if (userInfo) {
-            compStartOffset = userInfo->Offset;
-        } else {
-            PQ_LOG_ALERT("Have compaction enabled but could not find compaction consumer; Will start from offset = 0");
-        }
-        Compacter = MakeHolder<TPartitionCompaction>(compStartOffset /* ToDo: !! */, *CompacterStartCookie, *CompacterStartCookie + 100, this);
-        Compacter->TryCompactionIfPossible();
     }
+    if (Compacter) {
+        Compacter->TryCompactionIfPossible();
+        return;
+    }
+    if (!CompacterStartCookie.Defined()) {
+        Send(Tablet, new TEvPQ::TEvAllocateCookie(1));
+        return;
+    }
+    ui64 compStartOffset = 0;
+
+    TUserInfo* userInfo = UsersInfoStorage->GetIfExists(CLIENTID_COMPACTION_CONSUMER);
+    if (userInfo) {
+        compStartOffset = userInfo->Offset;
+    } else {
+        PQ_LOG_ALERT("Have compaction enabled but could not find compaction consumer");
+        Y_ENSURE(false);
+    }
+    Compacter = MakeHolder<TPartitionCompaction>(compStartOffset, *CompacterStartCookie, *CompacterStartCookie + 100, this);
+    Compacter->TryCompactionIfPossible();
 }
 
 void TPartition::Handle(TEvPQ::TEvAllocateCookie::TPtr& ev) {
     CompacterStartCookie = ev->Get()->StartCookie;
-    if (Config.GetEnableCompactification()) {
-        CreateCompacter();
-    }
+    CreateCompacter();
 }
 //
 // Functions

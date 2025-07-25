@@ -143,7 +143,7 @@ namespace NKikimr::NPQ {
 
         void Verify(const TRequestedBlob& blob) const {
             TKey key(TKeyPrefix::TypeData, TPartitionId(0), blob.Offset, blob.PartNo, blob.Count, blob.InternalPartsCount, false);
-            Y_ABORT_UNLESS(blob.Value.size() == blob.Size);
+            Y_ABORT_UNLESS(blob.Value.size() <= blob.Size);
             TClientBlob::CheckBlob(key, blob.Value);
         }
     };

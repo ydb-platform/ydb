@@ -1015,21 +1015,22 @@ void BackupFolderImpl(TDriver driver, const TString& database, const TString& db
             }
             if (dbIt.IsView()) {
                 BackupView(driver, dbIt.GetTraverseRoot(), dbIt.GetRelPath(), childFolderPath, issues);
-            }
-            if (dbIt.IsTopic()) {
+            } else if (dbIt.IsTopic()) {
                 BackupTopic(driver, dbIt.GetFullPath(), childFolderPath);
-            }
-            if (dbIt.IsCoordinationNode()) {
+            } else if (dbIt.IsCoordinationNode()) {
                 BackupCoordinationNode(driver, dbIt.GetFullPath(), childFolderPath);
-            }
-            if (dbIt.IsReplication()) {
+            } else if (dbIt.IsReplication()) {
                 BackupReplication(driver, database, dbIt.GetTraverseRoot(), dbIt.GetRelPath(), childFolderPath);
-            }
-            if (dbIt.IsExternalDataSource()) {
+            } else if (dbIt.IsExternalDataSource()) {
                 BackupExternalDataSource(driver, dbIt.GetFullPath(), childFolderPath);
-            }
-            if (dbIt.IsExternalTable()) {
+            } else if (dbIt.IsExternalTable()) {
                 BackupExternalTable(driver, dbIt.GetFullPath(), childFolderPath);
+            } else if (!dbIt.IsTable() && !dbIt.IsDir()) {
+                LOG_E("Skipping " << dbIt.GetFullPath().Quote() << ": dumping objects of type " << dbIt.GetCurrentNode()->Type << " is not supported");
+                if (childFolderPath.Exists()) {
+                    childFolderPath.Child(NDump::NFiles::Incomplete().FileName).DeleteIfExists();
+                    childFolderPath.DeleteIfExists();
+                }
             }
             dbIt.Next();
         }

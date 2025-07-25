@@ -22,8 +22,8 @@
 #include <util/string/escape.h>
 #include <util/system/byteorder.h>
 
+
 #define VERIFY_RESULT_BLOB(blob, pos) \
-    Y_ABORT_UNLESS(!blob.Data.empty(), "Empty data. SourceId: %s, SeqNo: %" PRIu64, blob.SourceId.data(), blob.SeqNo); \
     Y_ABORT_UNLESS(blob.SeqNo <= (ui64)Max<i64>(), "SeqNo is too big: %" PRIu64, blob.SeqNo);
 
 namespace NKikimr::NPQ {
@@ -934,7 +934,9 @@ void TPartition::ProcessTimestampsForNewData(const ui64 prevEndOffset, const TAc
 
 void TPartition::Handle(TEvPQ::TEvProxyResponse::TPtr& ev, const TActorContext& ctx) {
     ReadingTimestamp = false;
+
     auto userInfo = UsersInfoStorage->GetIfExists(ReadingForUser);
+
     if (!userInfo || userInfo->ReadRuleGeneration != ReadingForUserReadRuleGeneration) {
         PQ_LOG_I("Topic '" << TopicConverter->GetClientsideName() << "'" <<
             " partition " << Partition <<
@@ -1013,7 +1015,6 @@ void TPartition::ProcessTimestampRead(const TActorContext& ctx) {
 void TPartition::ProcessRead(const TActorContext& ctx, TReadInfo&& info, const ui64 cookie, bool subscription) {
     ui32 count = 0;
     ui32 size = 0;
-
     Y_ABORT_UNLESS(!info.User.empty());
     auto& userInfo = UsersInfoStorage->GetOrCreate(info.User, ctx);
 

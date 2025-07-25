@@ -77,8 +77,8 @@ public:
         , PageSize(pageSize)
         , PrefetchSize(prefetchSize)
         , BatchCountLimit(batchCountLimit)
-        , TrueRangeFrom(TInstant::Seconds(std::max<i64>(ReadParams.Source.GetFrom() - (i64)truePointsFindRange, 0)))
-        , TrueRangeTo(TInstant::Seconds(ReadParams.Source.GetTo() + truePointsFindRange))
+        , TrueRangeFrom(TInstant::Seconds(ReadParams.Source.GetFrom()) - TDuration::Seconds(truePointsFindRange))
+        , TrueRangeTo(TInstant::Seconds(ReadParams.Source.GetTo()) + TDuration::Seconds(truePointsFindRange))
         , CredentialsProvider(credentialsProvider)
         , SolomonClient(NSo::ISolomonAccessorClient::Make(ReadParams.Source, CredentialsProvider))
     {}

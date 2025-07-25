@@ -49,7 +49,8 @@ private:
     virtual bool DoIsFinished() const override {
         return Sources.empty();
     }
-    virtual std::shared_ptr<NCommon::IDataSource> DoExtractNext(const std::shared_ptr<NCommon::TSpecialReadContext>& context) override;
+    virtual std::shared_ptr<NCommon::IDataSource> DoTryExtractNext(
+        const std::shared_ptr<NCommon::TSpecialReadContext>& context, const ui32 inFlightCurrentLimit) override;
 
 public:
     TPortionSources(std::vector<std::shared_ptr<TPortionInfo>>&& sources)

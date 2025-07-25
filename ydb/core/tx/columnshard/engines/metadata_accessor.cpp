@@ -40,11 +40,7 @@ std::unique_ptr<NReader::NCommon::ISourcesConstructor> TUserTableAccessor::Selec
         for (auto&& i : portions) {
             sources.emplace_back(NReader::NSimple::TSourceConstructor(std::move(i), readDescription.GetSorting()));
         }
-        if (readDescription.GetSorting() != NReader::ERequestSorting::NONE) {
-            return std::make_unique<NReader::NSimple::TSortedPortionsSources>(std::move(sources));
-        } else {
-            return std::make_unique<NReader::NSimple::TNotSortedPortionsSources>(std::move(sources));
-        }
+        return std::make_unique<NReader::NSimple::TPortionsSources>(std::move(sources), readDescription.GetSorting());
     } else {
         return std::make_unique<NReader::NPlain::TPortionSources>(std::move(portions));
     }
@@ -52,7 +48,7 @@ std::unique_ptr<NReader::NCommon::ISourcesConstructor> TUserTableAccessor::Selec
 
 std::unique_ptr<NReader::NCommon::ISourcesConstructor> TAbsentTableAccessor::SelectMetadata(const TSelectMetadataContext& /*context*/,
     const NReader::TReadDescription& /*readDescription*/, const bool /*withUncommitted*/, const bool /*isPlain*/) const {
-    return std::make_unique<NReader::NSimple::TNotSortedPortionsSources>();
+    return NReader::NSimple::TPortionsSources::BuildEmpty();
 }
 
 }   // namespace NKikimr::NOlap

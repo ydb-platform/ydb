@@ -1,7 +1,6 @@
 LIBRARY()
 
 SRCS(
-    columns_set.cpp
     GLOBAL sub_columns_fetching.cpp
     GLOBAL default_fetching.cpp
     constructor.cpp
@@ -19,7 +18,5 @@ PEERDIR(
     yql/essentials/minikql
     ydb/core/util/evlog
 )
-
-GENERATE_ENUM_SERIALIZATION(columns_set.h)
 
 END()

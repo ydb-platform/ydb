@@ -2,6 +2,10 @@
 #include "collection.h"
 #include "execution.h"
 
+#include <ydb/core/formats/arrow/accessor/plain/accessor.h>
+
+#include <ydb/library/formats/arrow/switch/switch_type.h>
+
 #include <util/string/join.h>
 
 #ifndef WIN32
@@ -65,6 +69,16 @@ CH::AggFunctionId TWithKeysAggregationOption::GetHouseFunction(const EAggregate 
             break;
     }
     return CH::AggFunctionId::AGG_UNSPECIFIED;
+}
+
+TString TWithKeysAggregationOption::DebugString() const {
+    TStringBuilder sb;
+    std::vector<ui32> ids;
+    for (auto&& i : Inputs) {
+        ids.emplace_back(i.GetColumnId());
+    }
+    sb << "{" << Output.GetColumnId() << "(" << AggregationId << ")" << ":[" << JoinSeq(",", ids) << "]}";
+    return sb;
 }
 
 TConclusion<IResourceProcessor::EExecutionResult> TWithKeysAggregationProcessor::DoExecute(
@@ -190,6 +204,102 @@ TConclusion<arrow::Datum> TAggregateFunction::Call(
     } else {
         return TBase::Call(context, resources);
     }
+}
+
+namespace {
+class TResultsAggregator: public IResourcesAggregator {
+private:
+    const TColumnChainInfo ColumnInfo;
+    const EAggregate AggregationType;
+    virtual TConclusionStatus DoExecute(const std::vector<std::shared_ptr<TAccessorsCollection>>& sources,
+        const std::shared_ptr<TAccessorsCollection>& collectionResult) const override {
+        std::vector<const IChunkedArray*> arrays;
+        std::optional<arrow::Type::type> type;
+        for (auto&& i : sources) {
+            AFL_VERIFY(i);
+            const auto& acc = i->GetAccessorVerified(ColumnInfo.GetColumnId());
+            AFL_VERIFY(acc->GetRecordsCount() == 1)("count", acc->GetRecordsCount());
+            arrays.emplace_back(acc.get());
+            if (!type) {
+                type = acc->GetDataType()->id();
+            } else {
+                AFL_VERIFY(*type == acc->GetDataType()->id());
+            }
+        }
+        TString errorMessage;
+        if (!NArrow::SwitchType(*type, [&](const auto& type) {
+                using TWrap = std::decay_t<decltype(type)>;
+                using TArrayType = typename TWrap::TArray;
+                std::optional<ui32> arrResultIndex;
+                std::optional<typename TWrap::ValueType> result;
+                ui32 idx = 0;
+                for (auto&& i : arrays) {
+                    auto addr = i->GetChunkSlow(0);
+                    const typename TWrap::ValueType value = type.GetValue(*static_cast<const TArrayType*>(addr.GetArray().get()), 0);
+                    if (!result) {
+                        arrResultIndex = idx;
+                        result = value;
+                    } else {
+                        switch (AggregationType) {
+                            case EAggregate::Some:
+                                break;
+                            case EAggregate::Unspecified:
+                            case EAggregate::Count:
+                            case EAggregate::NumRows:
+                                AFL_VERIFY(false);
+                            case EAggregate::Sum:
+                                if constexpr (TWrap::IsCType) {
+                                    *result += value;
+                                    arrResultIndex.reset();
+                                }
+                                if constexpr (TWrap::IsStringView) {
+                                    errorMessage = "cannot sum string views";
+                                    return false;
+                                }
+                                break;
+                            case EAggregate::Max:
+                                if (*result < value) {
+                                    arrResultIndex = idx;
+                                    result = value;
+                                }
+                                break;
+                            case EAggregate::Min:
+                                if (value < *result) {
+                                    arrResultIndex = idx;
+                                    result = value;
+                                }
+                                break;
+                        }
+                    }
+                    ++idx;
+                }
+                if (arrResultIndex) {
+                    collectionResult->AddVerified(
+                        ColumnInfo.GetColumnId(), sources[*arrResultIndex]->GetAccessorVerified(ColumnInfo.GetColumnId()), false);
+                } else {
+                    collectionResult->AddVerified(ColumnInfo.GetColumnId(),
+                        NAccessor::TTrivialArray::BuildArrayFromScalar(type.BuildScalar(*result, arrays.front()->GetDataType())), false);
+                }
+                return true;
+            })) {
+            return TConclusionStatus::Fail(errorMessage);
+        }
+        collectionResult->TakeSequenceFrom(*sources.front());
+        return TConclusionStatus::Success();
+    }
+
+public:
+    TResultsAggregator(const TColumnChainInfo& column, const EAggregate aggrType)
+        : ColumnInfo(column)
+        , AggregationType(aggrType) {
+    }
+};
+
+}   // namespace
+
+std::shared_ptr<IResourcesAggregator> TAggregateFunction::BuildResultsAggregator(const TColumnChainInfo& output) const {
+    AFL_VERIFY(!GetFunctionOptions());
+    return std::make_shared<TResultsAggregator>(output, TAggregationsHelper::GetSecondaryAggregationId(AggregationType));
 }
 
 }   // namespace NKikimr::NArrow::NSSA::NAggregation

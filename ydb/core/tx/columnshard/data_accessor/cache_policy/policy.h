@@ -45,7 +45,7 @@ public:
 class TPortionsMetadataCachePolicy {
 public:
     using TAddress = TGlobalPortionAddress;
-    using TObject = TPortionDataAccessor;
+    using TObject = std::shared_ptr<TPortionDataAccessor>;
     using TSourceId = NActors::TActorId;
     using EConsumer = NOlap::NBlobOperations::EConsumer;
 
@@ -60,7 +60,8 @@ public:
     class TSizeCalcer {
     public:
         size_t operator()(const TObject& data) {
-            return sizeof(TAddress) + data.GetMetadataSize();
+            AFL_VERIFY(data);
+            return sizeof(TAddress) + data->GetMetadataSize();
         }
     };
 

@@ -67,11 +67,11 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TPortionsNormalizerBase::DoInit(
     ui64 brokenPortioncCount = 0;
     for (auto&& portionConstructor : portions) {
         auto portionInfo = portionConstructor.second.Build(false);
-        if (CheckPortion(tablesManager, portionInfo)) {
+        if (CheckPortion(tablesManager, *portionInfo)) {
             continue;
         }
         ++brokenPortioncCount;
-        package.emplace_back(portionInfo);
+        package.emplace_back(*portionInfo);
         if (package.size() == 1000) {
             std::vector<TPortionDataAccessor> local;
             local.swap(package);

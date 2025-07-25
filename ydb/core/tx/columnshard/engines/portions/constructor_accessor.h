@@ -209,7 +209,7 @@ public:
         return TPortionAccessorConstructor(portion.BuildConstructor(true));
     }
 
-    static TPortionDataAccessor BuildForLoading(
+    static std::shared_ptr<TPortionDataAccessor> BuildForLoading(
         const TPortionInfo::TConstPtr& portion, TColumnChunkLoadContextV2::TBuildInfo&& records, std::vector<TIndexChunkLoadContext>&& indexes);
 
     const std::vector<TColumnRecord>& GetRecords() const {
@@ -258,7 +258,7 @@ public:
         return TBlobRange();
     }
 
-    TPortionDataAccessor Build(const bool needChunksNormalization);
+    std::shared_ptr<TPortionDataAccessor> Build(const bool needChunksNormalization);
 
     TPortionAccessorConstructor(TPortionAccessorConstructor&&) noexcept = default;
     TPortionAccessorConstructor& operator=(TPortionAccessorConstructor&&) noexcept = default;

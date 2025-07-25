@@ -71,7 +71,7 @@ TConclusionStatus TBaseMergeTask::PrepareResultBatch() {
     return TConclusionStatus::Success();
 }
 
-bool TBaseMergeTask::DoApply(IDataReader& indexedDataRead) const {
+bool TBaseMergeTask::DoApply(IDataReader& indexedDataRead) {
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "DoApply")("interval_idx", MergingContext->GetIntervalIdx());
     auto& reader = static_cast<TPlainReadData&>(indexedDataRead);
     auto copy = AllocationGuard;

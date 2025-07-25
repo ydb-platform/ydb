@@ -3,6 +3,11 @@
 
 namespace NKikimr::NOlap::NReader::NCommon {
 
+void TExecutionContext::Stop() {
+    ProgramIterator.reset();
+    ExecutionVisitor.reset();
+}
+
 void TExecutionContext::Start(const std::shared_ptr<IDataSource>& source,
     const std::shared_ptr<NArrow::NSSA::NGraph::NExecution::TCompiledGraph>& program, const TFetchingScriptCursor& step) {
     auto readMeta = source->GetContext()->GetCommonContext()->GetReadMetadata();

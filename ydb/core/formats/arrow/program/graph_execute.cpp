@@ -160,7 +160,7 @@ TCompiledGraph::TCompiledGraph(const NOptimization::TGraph& original, const ICol
         }
     }
     AFL_TRACE(NKikimrServices::SSA_GRAPH_EXECUTION)("graph_constructed", DebugDOT());
-    //    Cerr << DebugDOT() << Endl;
+//    Cerr << DebugDOT() << Endl;
 }
 
 TConclusionStatus TCompiledGraph::Apply(

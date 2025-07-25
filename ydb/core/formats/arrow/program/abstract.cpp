@@ -16,6 +16,9 @@ NJson::TJsonValue IResourceProcessor::DebugJson() const {
         result.InsertValue("o", JoinSeq(",", Output));
     }
     result.InsertValue("t", ::ToString(ProcessorType));
+    if (IsAggregation()) {
+        result.InsertValue("a", IsAggregation());
+    }
     auto internalJson = DoDebugJson();
     if (!internalJson.IsMap() || internalJson.GetMapSafe().size()) {
         result.InsertValue("p", std::move(internalJson));

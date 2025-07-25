@@ -408,13 +408,13 @@ void TColumnEngineForLogs::AppendPortion(const std::shared_ptr<TPortionInfo>& po
     }
 }
 
-void TColumnEngineForLogs::AppendPortion(const TPortionDataAccessor& portionInfo) {
-    auto granule = GetGranulePtrVerified(portionInfo.GetPortionInfo().GetPathId());
-    AFL_VERIFY(!granule->GetPortionOptional(portionInfo.GetPortionInfo().GetPortionId()));
-    Counters->AddPortion(portionInfo.GetPortionInfo());
+void TColumnEngineForLogs::AppendPortion(const std::shared_ptr<TPortionDataAccessor>& portionInfo) {
+    auto granule = GetGranulePtrVerified(portionInfo->GetPortionInfo().GetPathId());
+    AFL_VERIFY(!granule->GetPortionOptional(portionInfo->GetPortionInfo().GetPortionId()));
+    Counters->AddPortion(portionInfo->GetPortionInfo());
     granule->AppendPortion(portionInfo);
-    if (portionInfo.GetPortionInfo().HasRemoveSnapshot()) {
-        AddCleanupPortion(portionInfo.GetPortionInfoPtr());
+    if (portionInfo->GetPortionInfo().HasRemoveSnapshot()) {
+        AddCleanupPortion(portionInfo->GetPortionInfoPtr());
     }
 }
 

@@ -987,7 +987,7 @@ private:
 
             auto getKeyTypes = [&](TPathId pathId) {
                 TVector<NScheme::TTypeInfo> keyTypes;
-                
+
                 auto tableInfo = Self->Tables.FindPtr(pathId);
                 if (!tableInfo) {
                     return keyTypes;
@@ -1119,7 +1119,7 @@ private:
 
     void OutputTxInfoPage(TOperationId operationId, TStringStream& str) const {
         HTML(str) {
-            TAG(TH3) {str << "Transaction " << operationId;}
+            TAG(TH3) {str << "Operation " << operationId;}
 
             auto txInfo = Self->FindTx(operationId);
             if (!txInfo) {
@@ -1128,7 +1128,10 @@ private:
                 }
             } else {
                 const TTxState txState = *txInfo;
-                TAG(TH3) {str << "Shards in progress : " << txState.ShardsInProgress.size() << "\n";}
+
+                OutputOperationPartInfo(operationId, str);
+
+                TAG(TH3) {str << "Shards in progress : " << txState.ShardsInProgress.size();}
                 TABLE_SORTABLE_CLASS("table") {
                     TABLEHEAD() {
                         TABLER() {
@@ -1137,7 +1140,7 @@ private:
                             TABLEH() {str << "TabletId";}
                         }
                     }
-                    for (auto shardIdx :  txState.ShardsInProgress) {
+                    for (auto shardIdx : txState.ShardsInProgress) {
                         TABLER() {
                             TABLED() {
                                 str << "<a href='../tablets/app?" << TCgi::TabletID.AsCgiParam(Self->TabletID())
@@ -1248,7 +1251,7 @@ private:
             auto localACL = TSecurityObject(path->Owner, path->ACL, path->IsContainer());
             auto effectiveACL = TSecurityObject(path->Owner, path->CachedEffectiveACL.GetForSelf(), path->IsContainer());
 
-            TAG(TH4) {str << "Path info " << pathId;}
+            TAG(TH3) {str << "Path info " << pathId;}
             PRE () {
                 str << "Path: " << Self->PathToString(path) << Endl
                     << "PathId: " << pathId << Endl
@@ -1361,7 +1364,7 @@ private:
         HTML(str) {
             if (!Self->Operations.contains(opId.GetTxId())) {
                 TAG(TH4) {
-                    str << "No operations for tx id " << opId << "</a>";
+                    str << "No operations for tx id " << opId;
                 }
                 return;
             }
@@ -1370,148 +1373,177 @@ private:
 
             if (ui64(opId.GetSubTxId()) >= operation->Parts.size()) {
                 TAG(TH4) {
-                    str << "No part operations for operation id " << opId << "</a>";
+                    str << "No suboperations for operation " << opId;
                 }
                 return;
             }
 
             if (!Self->TxInFlight.contains(opId)) {
                 TAG(TH4) {
-                    str << "No txInfly record for operation id " << opId << "</a>";
+                    str << "No txState for operation " << opId;
                 }
                 return;
             }
 
             const TTxState& txState = Self->TxInFlight.at(opId);
 
-
-            TAG(TH4) {str << "TxState info " << opId << "</a>";}
+            TAG(TH4) {str << "Suboperation " << opId << " TxState info";}
             PRE () {
-                str << "TxType: " << TTxState::TypeName(txState.TxType) << Endl
+                str << "StartTime: " << txState.StartTime << " (" << (::Now() - txState.StartTime) << " ago)" << Endl
+                    << Endl
+                    << "TxType: " << TTxState::TypeName(txState.TxType) << Endl
                     << "TargetPathId: " << LinkToPathInfo(txState.TargetPathId) << Endl
                     << "SourcePathId: " << LinkToPathInfo(txState.SourcePathId) << Endl
                     << "State: " << TTxState::StateName(txState.State) << Endl
                     << "MinStep: " << txState.MinStep << Endl
-                    << "ReadyForNotifications: " << txState.ReadyForNotifications << Endl
-                    << "DataTotalSize: " << txState.DataTotalSize << Endl
-                    << "TxShardsListFinalized: " << txState.TxShardsListFinalized << Endl
-                    << "SchemeOpSeqNo: " << txState.SchemeOpSeqNo.Generation << ":" << txState.SchemeOpSeqNo.Round << Endl
-                    << "StartTime: " << txState.StartTime << Endl
-                    << "Shards count: " << txState.Shards.size() << Endl
-                    << "Shards in progress count: " << txState.ShardsInProgress.size() << Endl
-                    << "SchemeChangeNotificationReceived count: " << txState.SchemeChangeNotificationReceived.size() << Endl
-                    << "SplitDescription: " << (txState.SplitDescription ? txState.SplitDescription->ShortDebugString() : "") << Endl
-                    << "Dependent operations count: " << operation->DependentOperations.size() << Endl
-                    << "Wait operations count: " << operation->WaitOperations.size() << Endl;
+                    << "PlanStep: " << txState.PlanStep << Endl
+                    << "NeedUpdateObject: " << txState.NeedUpdateObject << Endl
+                    << "NeedSyncHive: " << txState.NeedSyncHive << Endl
+                    << Endl
+                    << "Progress:" << Endl
+                    << "- ReadyForNotifications: " << txState.ReadyForNotifications << Endl
+                    << "- TxShardsListFinalized: " << txState.TxShardsListFinalized << Endl
+                    << "- SchemeOpSeqNo: " << txState.SchemeOpSeqNo.Generation << ":" << txState.SchemeOpSeqNo.Round << Endl
+                    << "- Shards count: " << txState.Shards.size() << Endl
+                    << "- Shards in progress count: " << txState.ShardsInProgress.size() << Endl
+                    << "- SchemeChangeNotificationReceived count: " << txState.SchemeChangeNotificationReceived.size() << Endl
+                    << Endl
+                    << "Dependency:" << Endl
+                    << "- Transactions we-waiting-for count: " << operation->WaitOperations.size() << Endl
+                    << "- Transactions waiting-for-us count: " << operation->DependentOperations.size() << Endl
+                    << Endl
+                    << "Split/Merge:" << Endl
+                    << "- SplitDescription: " << (txState.SplitDescription ? txState.SplitDescription->ShortDebugString() : "") << Endl
+                    << Endl
+                    << "CDC:" << Endl
+                    << "- CdcPathId: " << LinkToPathInfo(txState.CdcPathId) << Endl
+                    << "- TargetPathTargetState: " << txState.TargetPathTargetState << Endl
+                    << Endl
+                    << "Backup/Restore:" << Endl
+                    << "- Cancel: " << txState.Cancel << Endl
+                    << "- DataTotalSize: " << txState.DataTotalSize << Endl
+                    << "- ShardStatuses count: " << txState.ShardStatuses.size() << Endl
+                ;
             }
 
-            TAG(TH4) {str << "Dependent operations for txId " << opId.GetTxId() << "</a>";}
-            TABLE_SORTABLE_CLASS("DependentTxId") {
-                TABLEHEAD() {
-                    TABLER() {
-                        TABLEH() {str << "TxId";}
+            if (!operation->WaitOperations.empty()) {
+                TAG(TH4) {str << "Transactions we waiting for : " << operation->WaitOperations.size();}
+                TABLE_SORTABLE_CLASS("WaitTxId") {
+                    TABLEHEAD() {
+                        TABLER() {
+                            TABLEH() {str << "TxId";}
+                        }
                     }
-                }
-                for (auto& txId: operation->DependentOperations) {
-                    TABLER() {
-                        TABLED() { str << txId; }
-                    }
-                }
-            }
-
-            TAG(TH4) {str << "Wait operations for txId " << opId.GetTxId() << "</a>";}
-            TABLE_SORTABLE_CLASS("WaitTxId") {
-                TABLEHEAD() {
-                    TABLER() {
-                        TABLEH() {str << "TxId";}
-                    }
-                }
-                for (auto& txId: operation->WaitOperations) {
-                    TABLER() {
-                        TABLED() { str << txId; }
-                    }
-                }
-            }
-
-
-            TAG(TH4) {str << "Shards for opId " << opId << "</a>";}
-            TABLE_SORTABLE_CLASS("Shards") {
-                TABLEHEAD() {
-                    TABLER() {
-                        TABLEH() {str << "ShardId";}
-                        TABLEH() {str << "TabletType";}
-                        TABLEH() {str << "Operation";}
-                        TABLEH() {str << "RangeEnd";}
-                    }
-                }
-                ui32 maxItems = 100;
-                for (auto& item: txState.Shards) {
-                    if (0 == maxItems) { break; }
-                    --maxItems;
-                    TABLER() {
-                        TABLED() { str << item.Idx; }
-                        TABLED() { str << TTabletTypes::TypeToStr(item.TabletType); }
-                        TABLED() { str << TTxState::StateName(item.Operation); }
-                        TABLED() { str << item.RangeEnd; }
+                    for (auto& txId: operation->WaitOperations) {
+                        TABLER() {
+                            TABLED() { str << txId; }
+                        }
                     }
                 }
             }
 
-            TAG(TH4) {str << "Shards in progress for opId " << opId << "</a>";}
-            TABLE_SORTABLE_CLASS("Shards") {
-                TABLEHEAD() {
-                    TABLER() {
-                        TABLEH() {str << "ShardId";}
+            if (!operation->DependentOperations.empty()) {
+                TAG(TH4) {str << "Transactions waiting for us : " << operation->DependentOperations.size();}
+                TABLE_SORTABLE_CLASS("DependentTxId") {
+                    TABLEHEAD() {
+                        TABLER() {
+                            TABLEH() {str << "TxId";}
+                        }
                     }
-                }
-                ui32 maxItems = 100;
-                for (auto& shardId: txState.ShardsInProgress) {
-                    if (0 == maxItems) { break; }
-                    --maxItems;
-                    TABLER() {
-                        TABLED() { str << shardId; }
-                    }
-                }
-            }
-
-            TAG(TH4) {str << "SchemeChangeNotificationReceived for opId " << opId << "</a>";}
-            TABLE_SORTABLE_CLASS("SchemeChangeNotificationReceived") {
-                TABLEHEAD() {
-                    TABLER() {
-                        TABLEH() {str << "ShardId";}
-                    }
-                }
-                ui32 maxItems = 100;
-                for (auto& item: txState.SchemeChangeNotificationReceived) {
-                    if (0 == maxItems) { break; }
-                    --maxItems;
-                    TABLER() {
-                        TABLED() { str << item.first; }
+                    for (auto& txId: operation->DependentOperations) {
+                        TABLER() {
+                            TABLED() { str << txId; }
+                        }
                     }
                 }
             }
 
-            TAG(TH4) {str << "ShardStatuses for opId " << opId << "</a>";}
-            TABLE_SORTABLE_CLASS("ShardStatuses") {
-                TABLEHEAD() {
-                    TABLER() {
-                        TABLEH() {str << "ShardId";}
-                        TABLEH() {str << "Success";}
-                        TABLEH() {str << "Error";}
-                        TABLEH() {str << "BytesProcessed";}
-                        TABLEH() {str << "RowsProcessed";}
+            if (!txState.Shards.empty()) {
+                TAG(TH4) {str << "Shards : " << txState.Shards.size();}
+                TABLE_SORTABLE_CLASS("Shards") {
+                    TABLEHEAD() {
+                        TABLER() {
+                            TABLEH() {str << "ShardId";}
+                            TABLEH() {str << "TabletType";}
+                            TABLEH() {str << "Operation";}
+                            TABLEH() {str << "RangeEnd";}
+                        }
+                    }
+                    ui32 maxItems = 100;
+                    for (auto& item: txState.Shards) {
+                        if (0 == maxItems) { break; }
+                        --maxItems;
+                        TABLER() {
+                            TABLED() { str << item.Idx; }
+                            TABLED() { str << TTabletTypes::TypeToStr(item.TabletType); }
+                            TABLED() { str << TTxState::StateName(item.Operation); }
+                            TABLED() { str << item.RangeEnd; }
+                        }
                     }
                 }
-                ui32 maxItems = 10;
-                for (auto& item: txState.ShardStatuses) {
-                    if (0 == maxItems) { break; }
-                    --maxItems;
-                    TABLER() {
-                        TABLED() { str << item.first; }
-                        TABLED() { str << item.second.Success; }
-                        TABLED() { str << item.second.Error; }
-                        TABLED() { str << item.second.BytesProcessed; }
-                        TABLED() { str << item.second.RowsProcessed; }
+            }
+
+            if (!txState.ShardsInProgress.empty()) {
+                TAG(TH4) {str << "Shards in progress : " << txState.ShardsInProgress.size();}
+                TABLE_SORTABLE_CLASS("Shards") {
+                    TABLEHEAD() {
+                        TABLER() {
+                            TABLEH() {str << "ShardId";}
+                        }
+                    }
+                    ui32 maxItems = 100;
+                    for (auto& shardId: txState.ShardsInProgress) {
+                        if (0 == maxItems) { break; }
+                        --maxItems;
+                        TABLER() {
+                            TABLED() { str << shardId; }
+                        }
+                    }
+                }
+            }
+
+            if (!txState.SchemeChangeNotificationReceived.empty()) {
+                TAG(TH4) {str << "SchemeChangeNotificationReceived : " << txState.SchemeChangeNotificationReceived.size();}
+                TABLE_SORTABLE_CLASS("SchemeChangeNotificationReceived") {
+                    TABLEHEAD() {
+                        TABLER() {
+                            TABLEH() {str << "ShardId";}
+                        }
+                    }
+                    ui32 maxItems = 100;
+                    for (auto& item: txState.SchemeChangeNotificationReceived) {
+                        if (0 == maxItems) { break; }
+                        --maxItems;
+                        TABLER() {
+                            TABLED() { str << item.first; }
+                        }
+                    }
+                }
+            }
+
+            if (!txState.ShardStatuses.empty()) {
+                TAG(TH4) {str << "ShardStatuses : " << txState.ShardStatuses.size();}
+                TABLE_SORTABLE_CLASS("ShardStatuses") {
+                    TABLEHEAD() {
+                        TABLER() {
+                            TABLEH() {str << "ShardId";}
+                            TABLEH() {str << "Success";}
+                            TABLEH() {str << "Error";}
+                            TABLEH() {str << "BytesProcessed";}
+                            TABLEH() {str << "RowsProcessed";}
+                        }
+                    }
+                    ui32 maxItems = 10;
+                    for (auto& item: txState.ShardStatuses) {
+                        if (0 == maxItems) { break; }
+                        --maxItems;
+                        TABLER() {
+                            TABLED() { str << item.first; }
+                            TABLED() { str << item.second.Success; }
+                            TABLED() { str << item.second.Error; }
+                            TABLED() { str << item.second.BytesProcessed; }
+                            TABLED() { str << item.second.RowsProcessed; }
+                        }
                     }
                 }
             }
@@ -1528,6 +1560,7 @@ private:
             }
 
             TOperation::TPtr operation = Self->Operations.at(txId);
+            TAG(TH4) {str << "Suboperations : " << operation->Parts.size();}
             for (ui32 partId = 0; partId < operation->Parts.size(); ++partId) {
                 OutputOperationPartInfo(TOperationId(txId, partId), str);
             }
@@ -1661,7 +1694,7 @@ bool TSchemeShard::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const T
     if (!ev)
         return true;
 
-    LOG_DEBUG(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Handle TEvRemoteHttpInfo: %s", ev->Get()->Query.data());
+    LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Handle TEvRemoteHttpInfo: " << ev->Get()->Cgi().Print());
     Execute(new TTxMonitoring(this, ev), ctx);
 
     return true;

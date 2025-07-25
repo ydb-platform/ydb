@@ -1,5 +1,6 @@
 #include "transfer_writer.h"
 #include "events.h"
+#include "scheme.h"
 
 #include <ydb/core/tx/replication/service/logging.h>
 #include <ydb/core/tx/replication/service/worker.h>
@@ -29,38 +30,8 @@ namespace NKikimr::NReplication::NTransfer {
 
 namespace {
 
-constexpr const char* RESULT_COLUMN_NAME = "__ydb_r";
-constexpr const char* OUTPUT_TABLE_COLUMN = "__ydb_table";
-
 using namespace NYql::NPureCalc;
 using namespace NKikimr::NMiniKQL;
-
-struct TSchemaColumn {
-    TString Name;
-    ui32 Id;
-    NScheme::TTypeInfo PType;
-    bool KeyColumn;
-    bool Nullable;
-
-    bool operator==(const TSchemaColumn& other) const = default;
-
-    TString ToString() const;
-
-    TString TypeName() const {
-        return NScheme::TypeName(PType);
-    }
-};
-
-struct TScheme {
-    TVector<TSchemaColumn> TopicColumns;
-    TVector<TSchemaColumn> TableColumns;
-
-    TVector<NKikimrKqp::TKqpColumnMetadataProto> StructMetadata;
-    TVector<NKikimrKqp::TKqpColumnMetadataProto> ColumnsMetadata;
-    
-    std::vector<ui32> WriteIndex;
-    std::shared_ptr<TVector<std::pair<TString, Ydb::Type>>> Types = std::make_shared<TVector<std::pair<TString, Ydb::Type>>>();
-};
 
 struct TOutputType {
     std::optional<TString> Table;
@@ -125,7 +96,7 @@ public:
             for (size_t i = 0; i < columns.size(); ++i) {
                 const auto& column = columns[i];
                 Cerr << ">>>>> column.name()=" << column.name() << Endl;
-                if (column.name() == OUTPUT_TABLE_COLUMN) {
+                if (column.name() == SystemColumns::TargetTable) {
                     auto e = Out.Value.GetElement(i);
                     if (e) {
                         auto opt = e.GetOptionalValue();
@@ -200,10 +171,10 @@ void AddField(NYT::TNode& node, const TString& fieldName, const TString& fieldTy
     );
 }
 
-NYT::TNode MakeOutputSchema(const TVector<TSchemaColumn>& columns) {
+NYT::TNode MakeOutputSchema(const TVector<TSchemeColumn>& columns) {
     auto structMembers = NYT::TNode::CreateList();
 
-    AddField(structMembers, OUTPUT_TABLE_COLUMN, "String");
+    AddField(structMembers, SystemColumns::TargetTable, "String");
     for (const auto& column : columns) {
         AddField(structMembers, column.Name, column.TypeName());
     }
@@ -211,7 +182,7 @@ NYT::TNode MakeOutputSchema(const TVector<TSchemaColumn>& columns) {
     auto rootMembers = NYT::TNode::CreateList();
     rootMembers.Add(
         NYT::TNode::CreateList()
-            .Add(RESULT_COLUMN_NAME)
+            .Add(SystemColumns::Root)
             .Add(NYT::TNode::CreateList()
                 .Add("StructType")
                 .Add(std::move(structMembers)))
@@ -253,72 +224,13 @@ public:
     }
 
 private:
-    const TVector<TSchemaColumn> TopicColumns;
+    const TVector<TSchemeColumn> TopicColumns;
     const TScheme TableScheme;
     const TString Sql;
 
     THolder<NYql::NPureCalc::TPullListProgram<NYdb::NTopic::NPurecalc::TMessageInputSpec, TMessageOutputSpec>> Program;
 };
 
-TScheme BuildScheme(const TAutoPtr<NSchemeCache::TSchemeCacheNavigate>& nav) {
-    const auto& entry = nav->ResultSet.at(0);
-
-    TScheme result;
-
-    result.TableColumns.reserve(entry.Columns.size());
-    result.ColumnsMetadata.reserve(entry.Columns.size());
-    result.StructMetadata.reserve(entry.Columns.size() + 1);
-    result.WriteIndex.reserve(entry.Columns.size());
-
-    size_t keyColumns = CountIf(entry.Columns, [](auto& c) {
-        return c.second.KeyOrder >= 0;
-    });
-
-    result.TableColumns.resize(keyColumns);
-
-    for (const auto& [_, column] : entry.Columns) {
-        auto notNull = entry.NotNullColumns.contains(column.Name);
-        if (column.KeyOrder >= 0) {
-            result.TableColumns[column.KeyOrder] = {column.Name, column.Id, column.PType, column.KeyOrder >= 0, !notNull};
-        } else {
-            result.TableColumns.emplace_back(column.Name, column.Id, column.PType, column.KeyOrder >= 0, !notNull);
-        }
-    }
-
-    std::map<TString, TSysTables::TTableColumnInfo> columns;
-    for (const auto& [_, column] : entry.Columns) {
-        columns[column.Name] = column;
-    }
-    columns[OUTPUT_TABLE_COLUMN] = TSysTables::TTableColumnInfo{OUTPUT_TABLE_COLUMN, 0, NScheme::TTypeInfo(NScheme::NTypeIds::String)};
-
-    size_t i = keyColumns;
-    for (const auto& [name, column] : columns) {
-        result.StructMetadata.emplace_back();
-        auto& c = result.StructMetadata.back();
-
-        c.SetName(column.Name);
-        c.SetId(column.Id);
-        c.SetTypeId(column.PType.GetTypeId());
-        c.SetNotNull(entry.NotNullColumns.contains(column.Name));
-
-        if (NScheme::NTypeIds::IsParametrizedType(column.PType.GetTypeId())) {
-            NScheme::ProtoFromTypeInfo(column.PType, "", *c.MutableTypeInfo());
-        }
-
-        if (name != OUTPUT_TABLE_COLUMN) {
-            result.ColumnsMetadata.push_back(c);
-            result.WriteIndex.push_back(column.KeyOrder >= 0 ? column.KeyOrder : i++);
-
-            Ydb::Type type;
-            type.set_type_id(static_cast<Ydb::Type::PrimitiveTypeId>(column.PType.GetTypeId()));
-            result.Types->emplace_back(column.Name, type);
-        } else {
-            ++i;
-        }
-    }
-
-    return result;
-}
 
 class ITableKindState {
 public:
@@ -779,8 +691,8 @@ private:
         TStringBuilder sb;
         sb << TransformLambda;
         sb << "SELECT * FROM (\n";
-        sb << "  SELECT $__ydb_transfer_lambda(TableRow()) AS " << RESULT_COLUMN_NAME << " FROM Input\n";
-        sb << ") FLATTEN BY " << RESULT_COLUMN_NAME << ";\n";
+        sb << "  SELECT $__ydb_transfer_lambda(TableRow()) AS " << SystemColumns::Root << " FROM Input\n";
+        sb << ") FLATTEN BY " << SystemColumns::Root << ";\n";
         LOG_T("SQL: " << sb);
         return sb;
     }

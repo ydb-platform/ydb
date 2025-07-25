@@ -682,7 +682,7 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
         DumpMonPage(asyncCA, [this](auto&& str) {
             UNIT_ASSERT_STRING_CONTAINS(str, "<h3>Sources</h3>");
             UNIT_ASSERT_STRING_CONTAINS(str, LogPrefix);
-            // todo add validation
+            // TODO add validation
             LOG_D(str);
         });
         UNIT_ASSERT_EQUAL(receivedData.size(), val);
@@ -839,7 +839,7 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
         DumpMonPage(asyncCA, [this](auto&& str) {
             UNIT_ASSERT_STRING_CONTAINS(str, "<h3>Sources</h3>");
             UNIT_ASSERT_STRING_CONTAINS(str, LogPrefix);
-            // todo add validation
+            // TODO add validation
             LOG_D(str);
         });
         UNIT_ASSERT_EQUAL(receivedData.size(), expectedData.size());

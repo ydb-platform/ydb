@@ -1798,6 +1798,13 @@
             "uri": "https://{canondata_backend}/1130705/7bfa4c7bef8ecf6ffba8b79d210708dc39bab04e/resource.tar.gz#test_sql2yql.test_blocks-projection_add_ints_filter_/sql.yql"
         }
     ],
+    "test_sql2yql.test[blocks-singular_type_scalar]": [
+        {
+            "checksum": "478a39ba8c01f6908473487befbb6e28",
+            "size": 4867,
+            "uri": "https://{canondata_backend}/1031349/77c2200e2fab29f17b8c794273f4805beb3d9e25/resource.tar.gz#test_sql2yql.test_blocks-singular_type_scalar_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[blocks-sort]": [
         {
             "checksum": "69badbf5aa282179d350e6d76c20e026",
@@ -9150,6 +9157,11 @@
     "test_sql_format.test[blocks-projection_add_ints_filter]": [
         {
             "uri": "file://test_sql_format.test_blocks-projection_add_ints_filter_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[blocks-singular_type_scalar]": [
+        {
+            "uri": "file://test_sql_format.test_blocks-singular_type_scalar_/formatted.sql"
         }
     ],
     "test_sql_format.test[blocks-sort]": [

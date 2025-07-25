@@ -46,19 +46,26 @@ namespace NSentinel {
 /// TNodeStatusComputer
 
 ui32 TNodeStatusComputer::GetCurrentNodeState() const {
-    return (ui32)ActualState;
+    return (ui32)(ActualState == ENodeState::PRETTY_GOOD ? ENodeState::GOOD : ActualState);
 }
 
 bool TNodeStatusComputer::Compute() {
-    if (ActualState != CurrentState && (DefinitelyBad() || DefinitelyGood())) {
-        ActualState = CurrentState;
-        return true;
+    if (DefinitelyBad() || DefinitelyGood()) {
+        if(ActualState != CurrentState) {
+            ActualState = CurrentState;
+            return true;
+        }
+        return false;
     }
-    if (ActualState != ENodeState::MAY_BE_BAD && MaybeBad()) {
+    if (MaybeBad()) {
         ActualState = ENodeState::MAY_BE_BAD;
         return false;
     }
-    if (ActualState != ENodeState::MAY_BE_GOOD && MaybeGood()) {
+    if (PrettyGood()) {
+        ActualState = ENodeState::PRETTY_GOOD;
+        return false;
+    }
+    if (MaybeGood()) {
         ActualState = ENodeState::MAY_BE_GOOD;
         return false;
     }
@@ -573,6 +580,7 @@ class TConfigUpdater: public TUpdaterBase<TEvSentinel::TEvConfigUpdated, TConfig
                     node.Markers = std::move(markers);
                     node.BadStateLimit = Config.StateStorageSelfHealConfig.NodeBadStateLimit;
                     node.GoodStateLimit = Config.StateStorageSelfHealConfig.NodeGoodStateLimit;
+                    node.PrettyGoodStateLimit = Config.StateStorageSelfHealConfig.NodePrettyGoodStateLimit;
                 }
             }
             for (const auto nodeId : nodesToDelete) {

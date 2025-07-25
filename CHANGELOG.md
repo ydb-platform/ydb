@@ -58,6 +58,8 @@ and timeout (by default, the maximum response time from healthcheck). Documentat
 * 18544:Added shared metadata cache. Now all column shards on the same node share the same metadata cache by default. To disable the shared metadata cache, use the `EnableSharedMetadataAccessorCache` flag. The default cache size is 1 GB, this value can be changed in the `SharedMetadataAccessorCacheSize` parameter. [#18544](https://github.com/ydb-platform/ydb/pull/18544) ([Iurii Kravchenko](https://github.com/XJIE6))
 * 19680:Implemented the select load type for the vector workload test. [#19680](https://github.com/ydb-platform/ydb/pull/19680) ([azevaykin](https://github.com/azevaykin))
 * 20040:Enabled verbose memory limit by default in recipe [#20040](https://github.com/ydb-platform/ydb/pull/20040). ([Ivan](https://github.com/abyss7))
+* 20272:Enabled the following feature flags by default: EnableTopicAutopartitioningForCDC, EnableTopicAutopartitioningForReplication, EnableTopicTransfer. [#20272](https://github.com/ydb-platform/ydb/pull/20272) ([Nikolay Shestakov](https://github.com/nshestakov))
+* 20253:Separated bulk statistics operations from non-bulk. [#20253](https://github.com/ydb-platform/ydb/pull/20253) ([Vladilen](https://github.com/Vladilen))
 
 ### Bug fixes
 
@@ -113,11 +115,16 @@ and timeout (by default, the maximum response time from healthcheck). Documentat
 * 20217:Fixed an [issue](https://github.com/ydb-platform/ydb/issues/18604). Now the force availability mode ignores the limits of offline nodes. ([Ilia Shakhov](https://github.com/pixcc))
 * 20157:Fixed an [issue](https://github.com/ydb-platform/ydb/issues/20116) that caused YDB node to segfault when users ran queries in [Workload Manager](./dev/resource-consumption-management) pools with the `TOTAL_CPU_LIMIT_PERCENT_PER_NODE` restriction enabled.  [#20157](https://github.com/ydb-platform/ydb/pull/20157) ([Pisarenko Grigoriy](https://github.com/GrigoriyPA))
 * 20084:Fixed an issue where committing message offsets when reading a topic might result in the following error: "Unable to navigate:path: 'Root/logbroker-federation/--cut--/stable/guidance' status: PathErrorUnknown". [#20084](https://github.com/ydb-platform/ydb/pull/20084) ([Nikolay Shestakov](https://github.com/nshestakov))
+* 17198:Fixed an issue with UUID data type handling in YDB CLI backup/restore operations. [#17198](https://github.com/ydb-platform/ydb/pull/17198) ([Semyon Danilov](https://github.com/SammyVimes))
+* 20560:Resolved an issue with memory travel when a consumer commits an offset to the topic with autopartitioning enabled. [#20560](https://github.com/ydb-platform/ydb/pull/20560) ([Nikolay Shestakov](https://github.com/nshestakov))
+* 20386:Resolved an issue with reporting of gRPC metrics for serverless databases. [#20386](https://github.com/ydb-platform/ydb/pull/20386) ([Ilnaz Nizametdinov](https://github.com/CyberROFL))
 
 ### YDB UI
 
 * 17942:Changed authentication mechanisms for `whoami` and `capabilities` handlers in the viewer. [#17942](https://github.com/ydb-platform/ydb/pull/17942) ([Andrei Rykov](https://github.com/StekPerepolnen))
 * 18056:Fixed an [issue](https://github.com/ydb-platform/ydb-embedded-ui/issues/2164) to keep precision of double values on serialization. [#18056](https://github.com/ydb-platform/ydb/pull/18056) ([Alexey Efimov](https://github.com/adameat))
+* 20432:Fixed an [issue](https://github.com/ydb-platform/ydb/issues/20431) with the pdisk info timeout when target node is disconnected or dead. [#20432](https://github.com/ydb-platform/ydb/pull/20432) ([Alexey Efimov](https://github.com/adameat))
+* 17157: Fixed the retrieval of tablet lists for tables with secondary indexes in the Viewer API. #17103 [#17157](https://github.com/ydb-platform/ydb/pull/17157) ([Alexey Efimov](https://github.com/adameat))
 
 ### Performance
 

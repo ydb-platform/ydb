@@ -260,6 +260,9 @@ namespace NKikimr {
 
                 for (const auto *kv : chunks) {
                     const auto& [chunkIdx, chunk] = *kv;
+                    if (chunk.UsefulSlots == 0) {
+                        continue;
+                    }
                     auto it = aggrSlots.find(chunk.SlotSize);
                     Y_ABORT_UNLESS(it != aggrSlots.end());
                     auto& a = it->second;
@@ -278,6 +281,14 @@ namespace NKikimr {
                 }
 
                 return result;
+            }
+
+            ui32 GetTotalChunksCouldBeFreedViaCompaction() const {
+                ui32 totalFreeChunks = 0;
+                for (const auto& [chunkIdx, chunk] : PerChunkMap) {
+                    totalFreeChunks += (chunk.UsefulSlots == 0);
+                }
+                return totalFreeChunks;
             }
 
             void Output(IOutputStream &str) const {
@@ -310,6 +321,10 @@ namespace NKikimr {
 
         TChunksToDefrag GetChunksToDefrag(size_t maxChunksToDefrag) {
             return ChunksMap.GetChunksToDefrag(maxChunksToDefrag);
+        }
+
+        ui32 GetTotalChunksCouldBeFreedViaCompaction() const {
+            return ChunksMap.GetTotalChunksCouldBeFreedViaCompaction();
         }
 
         void Add(TDiskPart part, const TLogoBlobID& id, bool useful, const void* /*sst*/) {

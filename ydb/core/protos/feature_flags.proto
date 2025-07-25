@@ -204,4 +204,5 @@ message TFeatureFlags {
     optional bool EnableExportAutoDropping = 183 [default = false];
     optional bool EnableThrottlingReport = 184 [default = false];
     optional bool EnableAccessToIndexImplTables = 186 [default = false];
+    optional bool EnableCompDefragIndependacy = 194 [default = false];
 }

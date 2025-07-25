@@ -26,7 +26,7 @@ namespace {
 TInternalPathId GetInitialMaxInternalPathId(const ui64 tabletId) {
     static constexpr ui64 InternalPathIdBase = 1'000'000'000;   //Use a value presumably greater than any really used
     static constexpr ui64 InternalPathIdTabletMod = 1'000'000;   //Use different start value for tablets
-    return TInternalPathId::FromRawValue(InternalPathIdBase + tabletId * InternalPathIdTabletMod);
+    return TInternalPathId::FromRawValue(InternalPathIdBase + tabletId % InternalPathIdTabletMod);
 }
 
 }   //namespace

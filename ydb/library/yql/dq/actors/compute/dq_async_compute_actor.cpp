@@ -365,6 +365,15 @@ private:
             DUMP((*Channels), HasFreeMemoryInChannel, (id));
             DUMP((*Channels), CanSendChannelData, (id));
 
+            if (const auto& stats = info.Stats) {
+                DUMP((*stats), BlockedByCapacity);
+                DUMP((*stats), NoDstActorId);
+                DUMP((*stats), BlockedTime);
+                if (stats->StartBlockedTime) {
+                    DUMP(*(*stats), StartBlockedTime);
+                }
+            }
+
             auto channel = info.Channel;
             if (!channel) {
                 auto stats = GetTaskRunnerStats();

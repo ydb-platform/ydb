@@ -34,7 +34,7 @@ TPDisk::TPDisk(std::shared_ptr<TPDiskCtx> pCtx, const TIntrusivePtr<TPDiskConfig
             cfg->DriveModelSpeedBpsMin,
             cfg->DriveModelSpeedBpsMax,
             cfg->DeviceInFlight)
-    , ReqCreator(PCtx, &Mon, &DriveModel, &EstimatedLogChunkIdx)
+    , ReqCreator(PCtx, &Mon, &DriveModel, &EstimatedLogChunkIdx, cfg->SeparateHugePriorities)
     , ReorderingMs(cfg->ReorderingMs)
     , LogSeekCostLoop(2)
     , ExpectedDiskGuid(cfg->PDiskGuid)

@@ -70,7 +70,7 @@ namespace NFake {
             Y_ABORT_UNLESS(id == id.FullID());
 
             // validate put against set blocks
-            if (IsBlocked(id.TabletID(), id.Generation())) {
+            if (!msg->IgnoreBlock && IsBlocked(id.TabletID(), id.Generation())) {
                 return new TEvBlobStorage::TEvPutResult(NKikimrProto::BLOCKED, id, GetStorageStatusFlags(), GroupId, 0.f);
             }
             for (const auto& [tabletId, generation] : msg->ExtraBlockChecks) {

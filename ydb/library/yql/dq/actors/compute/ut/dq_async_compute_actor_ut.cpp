@@ -39,6 +39,58 @@ namespace {
 static const bool TESTS_VERBOSE = getenv("TESTS_VERBOSE") != nullptr;
 #define LOG_D(stream) LOG_DEBUG_S(*ActorSystem.SingleSys(), NKikimrServices::KQP_COMPUTE, LogPrefix << stream);
 #define LOG_E(stream) LOG_ERROR_S(*ActorSystem.SingleSys(), NKikimrServices::KQP_COMPUTE, LogPrefix << stream);
+struct TMockHttpRequest : NMonitoring::IMonHttpRequest {
+    TStringStream Out;
+    TCgiParameters Params;
+    THttpHeaders Headers;
+    IOutputStream& Output() override {
+        return Out;
+    }
+    HTTP_METHOD GetMethod() const override {
+        return HTTP_METHOD_GET;
+    }
+    TStringBuf GetPath() const override {
+        return "";
+    }
+    TStringBuf GetPathInfo() const override {
+        return "";
+    }
+    TStringBuf GetUri() const override {
+        return "";
+    }
+    const TCgiParameters& GetParams() const override {
+        return Params;
+    }
+    const TCgiParameters& GetPostParams() const override {
+        return Params;
+    }
+    TStringBuf GetPostContent() const override {
+        return "";
+    }
+    const THttpHeaders& GetHeaders() const override {
+        return Headers;
+    }
+    TStringBuf GetHeader(TStringBuf) const override {
+        return "";
+    }
+    TStringBuf GetCookie(TStringBuf) const override {
+        return "";
+    }
+    TString GetRemoteAddr() const override {
+        return "";
+    }
+    TString GetServiceTitle() const override {
+        return "";
+    }
+
+    NMonitoring::IMonPage* GetPage() const override {
+        return nullptr;
+    }
+
+    IMonHttpRequest* MakeChild(NMonitoring::IMonPage*, const TString&) const override {
+        return nullptr;
+    }
+};
 
 struct TActorSystem: NActors::TTestActorRuntimeBase {
     TActorSystem()
@@ -611,6 +663,19 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
                 },
                 dqInputChannel))
         {}
+        {
+            TMockHttpRequest request;
+            auto evHttpInfo = MakeHolder<NActors::NMon::TEvHttpInfo>(request);
+            ActorSystem.Send(asyncCA, EdgeActor, evHttpInfo.Release());
+        }
+        {
+            auto ev = ActorSystem.GrabEdgeEvent<NActors::NMon::TEvHttpInfoRes>({EdgeActor});
+            UNIT_ASSERT_EQUAL(ev->Get()->GetContentType(), NActors::NMon::IEvHttpInfoRes::EContentType::Html);
+            TStringStream out;
+            ev->Get()->Output(out);
+            // TODO: add validation
+            LOG_D(out.Str());
+        }
         UNIT_ASSERT_EQUAL(receivedData.size(), val);
         for (; val > 0; --val) {
             UNIT_ASSERT_EQUAL_C(receivedData[val * val], 1, "expected count for " << (val * val));

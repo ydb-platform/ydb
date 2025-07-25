@@ -184,4 +184,5 @@ enum ETxTypes {
     TXTYPE_UPDATE_DC_FOLLOWERS = 66                       [(TxTypeOpts) = {Name: "TxUpdateDcFollowers"}];
     TXTYPE_CONFIGURE_SCALE_RECOMMENDER = 67               [(TxTypeOpts) = {Name: "TxConfigureScaleRecommender"}];
     TXTYPE_UPDATE_PILES = 68                              [(TxTypeOpts) = {Name: "TxUpdatePiles"}];
+    TXTYPE_MON_SET_DOMAIN = 69                            [(TxTypeOpts) = {Name: "TxMonSetDomain"}];
 }

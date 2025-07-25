@@ -1580,7 +1580,6 @@ Y_UNIT_TEST(TestComactifiedWithRetention) {
         activeZone = false;
         tc.Prepare(dispatchName, setup, activeZone);
         tc.Runtime->SetScheduledLimit(100);
-        tc.Runtime->GetAppData(0).PQConfig.MutableCompactionConfig()->SetBlobsCount(0);
 
         TVector<std::pair<ui64, TString>> data;
         activeZone = PlainOrSoSlow(true, false);

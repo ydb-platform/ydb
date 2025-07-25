@@ -199,7 +199,6 @@ struct TEvPQ {
         EvDeletePartitionDone,
         EvTransactionCompleted,
         EvListAllTopicsResponse,
-        EvAllocateCookie,
         EvEnd
     };
 
@@ -1231,15 +1230,6 @@ struct TEvPQ {
         TString Error;
     };
 
-    struct TEvAllocateCookie : TEventLocal<TEvAllocateCookie, EvAllocateCookie> {
-        explicit TEvAllocateCookie(ui64 count)
-            : Count(count)
-        {
-        }
-
-        ui64 Count;
-        ui64 StartCookie = 0;
-    };
 };
 
 } //NKikimr

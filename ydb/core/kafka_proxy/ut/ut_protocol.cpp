@@ -59,8 +59,8 @@ class TTestServer {
 public:
     TIpPort Port;
 
-    TTestServer(const TString& kafkaApiMode = "1", bool serverless = false, bool enableNativeKafkaBalancing = true, bool enableAutoTopicCreation = true,
-                                                                                                                    bool enableAutoConsumerCreation = true) {
+    TTestServer(const TString& kafkaApiMode = "1", bool serverless = false, bool enableNativeKafkaBalancing = true,
+                bool enableAutoTopicCreation = true, bool enableAutoConsumerCreation = true, bool enableQuoting = true) {
         TPortManager portManager;
         Port = portManager.GetTcpPort();
 
@@ -103,9 +103,9 @@ public:
             appConfig.MutableKafkaProxyConfig()->MutableProxy()->SetPort(FAKE_SERVERLESS_KAFKA_PROXY_PORT);
         }
 
-        appConfig.MutablePQConfig()->MutableQuotingConfig()->SetEnableQuoting(true);
+        appConfig.MutablePQConfig()->MutableQuotingConfig()->SetEnableQuoting(enableQuoting);
         appConfig.MutablePQConfig()->MutableQuotingConfig()->SetQuotaWaitDurationMs(300);
-        appConfig.MutablePQConfig()->MutableQuotingConfig()->SetPartitionReadQuotaIsTwiceWriteQuota(true);
+        appConfig.MutablePQConfig()->MutableQuotingConfig()->SetPartitionReadQuotaIsTwiceWriteQuota(enableQuoting);
         appConfig.MutablePQConfig()->MutableBillingMeteringConfig()->SetEnabled(true);
         appConfig.MutablePQConfig()->MutableBillingMeteringConfig()->SetFlushIntervalSec(1);
         appConfig.MutablePQConfig()->AddClientServiceType()->SetName("data-streams");
@@ -150,6 +150,7 @@ public:
             KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableKafkaNativeBalancing(true);
         }
         KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableKafkaTransactions(true);
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableTopicCompactificationByKey(true);
 
         TClient client(*(KikimrServer->ServerSettings));
         if (secure) {
@@ -2163,7 +2164,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         {
             // Creation of two topics
             auto msg = client.CreateTopics({
-                TTopicConfig(topic1, 12, std::nullopt, std::nullopt, {{"cleanup.policy", "compact"}}),
+                TTopicConfig(topic1, 1, std::nullopt, std::nullopt, {{"cleanup.policy", "compact"}}),
                 TTopicConfig(topic2, 13, std::nullopt, std::nullopt, {{"cleanup.policy", "delete"}}),
                 TTopicConfig("topic_bad", 1, std::nullopt, std::nullopt, {{"cleanup.policy", "bad"}})
             });
@@ -2172,7 +2173,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             UNIT_ASSERT_VALUES_EQUAL(msg->Topics[1].Name.value(), topic2);
 
             UNIT_ASSERT_VALUES_EQUAL(msg->Topics[0].ErrorCode, NONE_ERROR);
-            UNIT_ASSERT_VALUES_EQUAL(msg->Topics[1].ErrorCode(), NONE_ERROR);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Topics[1].ErrorCode, NONE_ERROR);
             UNIT_ASSERT_VALUES_EQUAL(msg->Topics[2].ErrorCode, INVALID_REQUEST);
         }
 
@@ -2247,60 +2248,58 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             UNIT_ASSERT_VALUES_EQUAL(msg->Responses[0].ErrorCode, NONE_ERROR);
             checkDescribeTopic({{topic1, "compact"}, {topic2, "delete"}});
         }
-        //ui64 offset = 1, seqNo = 1;
-        TString valueBase{700u, 'a'};
-        TString largeValueBase{1'000'000u, 'a'};
         NYdb::NTopic::TWriteSessionSettings wSSettings{topic1FullPath, "producer1", ""};
         wSSettings.Codec(NTopic::ECodec::RAW);
-        auto writeSession = pqClient.CreateSimpleBlockingWriteSession(wSSettings);
-        auto produce = [&](const TString& key) {
-            NYdb::NTopic::TWriteMessage message1{key + largeValueBase};
-            NYdb::NTopic::TWriteMessage message2{key + valueBase};
-            NYdb::NTopic::TWriteMessage::TMessageMeta meta1, meta2;
-            meta1.push_back(std::make_pair("__key", key));
-            meta2.push_back(std::make_pair("__key", key + "-big"));
-            message1.MessageMeta(meta1);
-            message2.MessageMeta(meta2);
-            writeSession->Write(std::move(message1));
-            writeSession->Write(std::move(message2));
-        };
 
-        checkDescribeTopic({{topic1, "compact"}, {topic2, "delete"}});
-        for (auto i = 0u; i < 20; i++) {
-            produce("key1");
-            produce("key2");
-            produce("key3");
-            produce("key4");
-        }
-        writeSession->Close(TDuration::Seconds(50));
+        auto writeSession = pqClient.CreateSimpleBlockingWriteSession(wSSettings);
+        ui64 totalWritten = 0;
 
         {
             auto msg = client.AlterConfigs({
-                TTopicConfig(topic1, 12, std::nullopt, std::nullopt, {{"cleanup.policy", "bad"}}),
-                TTopicConfig(topic2, 13, std::nullopt, std::nullopt, {{"cleanup.policy", "compact"}}),
+                TTopicConfig(topic1, 1, std::nullopt, std::nullopt, {{"cleanup.policy", "delete"}}),
+                TTopicConfig(topic2, 13, std::nullopt, std::nullopt, {{"cleanup.policy", "delete"}})
+            });
+            UNIT_ASSERT_VALUES_EQUAL(msg->Responses[1].ErrorCode, NONE_ERROR);
+            checkDescribeTopic({{topic1, "delete"}, {topic2, "delete"}});
+        }
+
+        {
+            auto msg = client.AlterConfigs({
+                TTopicConfig(topic1, 1, std::nullopt, std::nullopt, {{"cleanup.policy", "bad"}}),
             });
             UNIT_ASSERT_VALUES_EQUAL(msg->Responses[0].ErrorCode, INVALID_REQUEST);
-            checkDescribeTopic({{topic1, "compact"}, {topic2, "compact"}});
+            checkDescribeTopic({{topic1, "delete"}, {topic2, "delete"}});
 
         }
         {
             auto msg = client.AlterConfigs({
-                TTopicConfig(topic1, 12, std::nullopt, std::nullopt, {{"cleanup.policy", "delete"}}),
+                TTopicConfig(topic1, 1, std::nullopt, std::nullopt, {{"cleanup.policy", "compact"}}),
                 TTopicConfig(topic2, 13, std::nullopt, std::nullopt, {{"cleanup.policy", ""}})
             });
             UNIT_ASSERT_VALUES_EQUAL(msg->Responses[1].ErrorCode, INVALID_REQUEST);
-            checkDescribeTopic({{topic1, "delete"}, {topic2, "compact"}});
+            checkDescribeTopic({{topic1, "compact"}, {topic2, "delete"}});
 
         }
-        {
-            auto msg = client.AlterConfigs({
-                TTopicConfig(topic1, 12, std::nullopt, std::nullopt, {{"cleanup.policy", "delete"}}),
-                TTopicConfig(topic2, 13, std::nullopt, std::nullopt, {{"cleanup.policy", ""}})
-            });
-            UNIT_ASSERT_VALUES_EQUAL(msg->Responses[1].ErrorCode, INVALID_REQUEST);
-            checkDescribeTopic({{topic1, "delete"}, {topic2, "compact"}});
+        auto writeMessage = [&] (const TString& key, ui64 size) {
+            NYdb::NTopic::TWriteMessage message{key + TString{size, 'a'}};
+            NYdb::NTopic::TWriteMessage::TMessageMeta meta1;
+            meta1.push_back(std::make_pair("__key", key));
+            message.MessageMeta(meta1);
+            writeSession->Write(std::move(message));
+            totalWritten++;
+        };
+        ui32 totalWriteCycles = 20;
+        for (auto i = 0u; i < totalWriteCycles; i++) {
+            writeMessage("key1", 100_KB);
+            writeMessage("key2", 500_KB);
+            writeMessage("key3", 9_MB);
+            writeMessage("key4", 20_MB);
+            writeMessage(TStringBuilder() << "extra-key-" << i, 3_MB);
+            Cerr << "Wrote message " << i << Endl;
         }
-/*
+        writeSession->Close(TDuration::Seconds(50));
+        Sleep(TDuration::Seconds(10));
+
         NYdb::NTopic::TReadSessionSettings rSSettings{.ConsumerName_ = "consumer1"};
         rSSettings.AppendTopics({topic1FullPath});
         auto readSession = pqClient.CreateReadSession(rSSettings);
@@ -2311,20 +2310,24 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
                 if (!event)
                     return result;
                 if (auto dataEvent = std::get_if<NTopic::TReadSessionEvent::TDataReceivedEvent>(&*event)) {
+                    dataEvent->Commit();
                     result = *dataEvent;
+
                     break;
                 } else if (auto *lockEv = std::get_if<NTopic::TReadSessionEvent::TStartPartitionSessionEvent>(&*event)) {
                     lockEv->Confirm();
                 } else if (auto *releaseEv = std::get_if<NTopic::TReadSessionEvent::TStopPartitionSessionEvent>(&*event)) {
                     releaseEv->Confirm();
                 } else if (auto *closeSessionEvent = std::get_if<NTopic::TSessionClosedEvent>(&*event)) {
+                    Cerr << "Session closed event\n";
                     return result;
                 }
             }
             return result;
         };
-        ui64 totalTries = 20;
+        ui64 totalTries = 5;
         ui64 totalMessages = 0;
+        THashSet<TString> keysFound;
         while(totalTries) {
             auto result = getMessagesFromTopic(readSession);
             if (!result) {
@@ -2333,24 +2336,28 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
                 continue;
             }
             if (result) {
+                totalTries = 5;
                 for (const auto& message : result->GetMessages()) {
                     TStringBuilder msg;
-                    msg << "==== Got message from offset " << message.GetOffset();
+                    msg << "Got message from offset " << message.GetOffset() << " and size: " << message.GetData().size() << Endl;
+                    keysFound.emplace(message.GetMessageMeta()->Fields[0].second);
                     totalMessages++;
-                    if (!message.GetMessageMeta()->Fields.empty()) {
-                        msg << " with meta: " << message.GetMessageMeta()->Fields[0].first << ":" << message.GetMessageMeta()->Fields[0].second << Endl;
-                    }
+                    msg << " with meta: " << message.GetMessageMeta()->Fields[0].first << ":" << message.GetMessageMeta()->Fields[0].second << Endl;
                     Cerr << msg;
+                    UNIT_ASSERT(!message.GetMessageMeta()->Fields.empty());
+                    UNIT_ASSERT(message.GetData().size() > 0);
                 }
             }
         }
-        Cerr << "===Total messages: " << totalMessages << Endl;
-        */
+        Cerr << "Total messages: " << totalMessages << Endl;
+        UNIT_ASSERT(keysFound.contains("key1") && keysFound.contains("key2") && keysFound.contains("key3") && keysFound.contains("key4"));
+        UNIT_ASSERT_VALUES_EQUAL(keysFound.size(), 4 + totalWriteCycles); //4 + 15
+        UNIT_ASSERT(totalMessages < totalWritten);
     }
 
 
     Y_UNIT_TEST(TopicsWithCleaunpPolicyScenario) {
-        TInsecureTestServer testServer("2");
+        TInsecureTestServer testServer("2", false, true, true, true, false);
         TKafkaTestClient client(testServer.Port);
 
         RunCreateTopicsWithCleanupPolicy(testServer, client);

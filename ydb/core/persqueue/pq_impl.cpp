@@ -200,6 +200,7 @@ private:
                 return;
             auto& back = partResp->GetResult(partResp->ResultSize() - 1);
             if (back.GetPartNo() + 1 < back.GetTotalParts()) {
+                Cerr << "===ReadProxy: remove incomplete message on offset " << back.GetOffset() << Endl;
                 partResp->MutableResult()->RemoveLast();
             }
         };
@@ -214,11 +215,8 @@ private:
 
         for (ui32 i = 0; i < readResult.ResultSize(); ++i) {
             auto currentReadResult = readResult.GetResult(i);
-            if (currentReadResult.GetData().empty() && currentReadResult.GetUncompressedSize() == 0) { // This is empty parted removed by compactification
+            if (currentReadResult.GetData().empty()) { // This is empty parted removed by compactification
                 LastSkipOffset = currentReadResult.GetOffset();
-                if (!InitialRequest) {
-                    removeIncompleteMessageIfAny();
-                }
                 continue; // Skip the empty part;
             }
             if (LastSkipOffset.Defined() && currentReadResult.GetOffset() == *LastSkipOffset) {
@@ -236,14 +234,12 @@ private:
                 }
                 if (currentReadResult.GetPartNo() == 0) {
                     // This is new message. If we still have another incomplete message stored previously, its' last parts were probably deleted by retention of compactification.
-                    // This is fine, we can drop last message (if incomplete) and go on;
-                    removeIncompleteMessageIfAny();
-                } else {
-                    if (currentReadResult.GetOffset() != partResp->GetResult(partResp->ResultSize() - 1).GetOffset()) {
-                        // This is a middle of another message. Possibly some race on deletion. Skip new message, remove previous big message and stop here;
-                        removeIncompleteMessageIfAny();
-                        break;
-                    }
+                    // This is fine, we can drop last message;
+                    break;
+                }
+                auto rr = partResp->MutableResult(partResp->ResultSize() - 1);
+                if (rr->GetSeqNo() != readResult.GetResult(i).GetSeqNo() || rr->GetPartNo() + 1 != readResult.GetResult(i).GetPartNo()) {
+                    break;
                 }
             }
 
@@ -259,7 +255,7 @@ private:
             if (currentReadResult.GetPartNo() == 0) {
                 if (partResp->ResultSize()) {
                     const auto& back = partResp->GetResult(partResp->ResultSize() - 1);
-                    if (back.GetPartNo() + 1< back.GetTotalParts()) {
+                    if (back.GetPartNo() + 1 < back.GetTotalParts()) {
                         makeErrorResponse("Internal error - got message part from the middle when expecting first part");
                         PQ_LOG_CRIT("Handle TEvRead last read pos (seqno/parno): " << back.GetSeqNo() << "," << back.GetPartNo() << " readed now "
                                     << readResult.GetResult(i).GetSeqNo() << ", " << readResult.GetResult(i).GetPartNo()
@@ -268,7 +264,6 @@ private:
                     }
                 }
                 // Create new message for first part;
-
                 partResp->AddResult()->CopyFrom(readResult.GetResult(i));
             } else { // Glue next part to prevous otherwise
                 if(partResp->ResultSize() == 0) {
@@ -311,7 +306,7 @@ private:
             Request.MutablePartitionRequest()->MutableCmdRead()->SetOffset(*LastSkipOffset + 1);
             THolder<TEvPersQueue::TEvRequest> req(new TEvPersQueue::TEvRequest);
             req->Record = Request;
-            ctx.Send(Tablet, req.Release());
+            Send(Tablet, req.Release());
             return;
         }
         if (!partResp->GetResult().empty()) {
@@ -331,7 +326,7 @@ private:
 
                 THolder<TEvPersQueue::TEvRequest> req(new TEvPersQueue::TEvRequest);
                 req->Record = Request;
-                ctx.Send(Tablet, req.Release());
+                Send(Tablet, req.Release());
                 InitialRequest = false;
                 return;
             }
@@ -2409,6 +2404,10 @@ void TPersQueue::HandleReadRequest(
     } else if (cmd.HasMaxTimeLagMs() && cmd.GetMaxTimeLagMs() < 0) {
         ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::BAD_REQUEST,
             TStringBuilder() << "invalid maxTimeLagMs in read request: " << ToString(req).data());
+
+    } else if (cmd.GetClientId() == NPQ::CLIENTID_COMPACTION_CONSUMER) {
+        ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::BAD_REQUEST,
+            TStringBuilder() << "cannot read with internal clinetId: " << cmd.GetClientId());
     } else {
         InitResponseBuilder(responseCookie, 1, COUNTER_LATENCY_PQ_READ);
         ui32 count = cmd.HasCount() ? cmd.GetCount() : Max<ui32>();
@@ -5088,7 +5087,6 @@ TPartition* TPersQueue::CreatePartitionActor(const TPartitionId& partitionId,
                           (ui32)channels,
                           GetPartitionQuoter(partitionId),
                           SamplingControl,
-                          AppData()->FeatureFlags,
                           newPartition);
 }
 
@@ -5402,14 +5400,6 @@ void TPersQueue::Handle(TEvPQ::TEvPartitionScaleStatusChanged::TPtr& ev, const T
         ctx.Send(ReadBalancerActorId, ev->Release().Release());
     }
 }
-
-void TPersQueue::Handle(TEvPQ::TEvAllocateCookie::TPtr& ev)
-{
-    ev->Get()->StartCookie = NextResponseCookie + 1;
-    NextResponseCookie += ev->Get()->Count;
-    Send(ev->Sender, ev->Release());
-}
-
 void TPersQueue::DeletePartition(const TPartitionId& partitionId, const TActorContext& ctx)
 {
     auto p = Partitions.find(partitionId);
@@ -5581,7 +5571,6 @@ bool TPersQueue::HandleHook(STFUNC_SIG)
         HFuncTraced(TEvPQ::TEvReadingPartitionStatusRequest, Handle);
         HFuncTraced(TEvPQ::TEvDeletePartitionDone, Handle);
         HFuncTraced(TEvPQ::TEvTransactionCompleted, Handle);
-        hFuncTraced(TEvPQ::TEvAllocateCookie, Handle);
         default:
             return false;
     }

@@ -22,10 +22,11 @@
 #include <util/string/escape.h>
 #include <util/system/byteorder.h>
 
+
 #define VERIFY_RESULT_BLOB(blob, pos) \
     Y_ABORT_UNLESS(blob.SeqNo <= (ui64)Max<i64>(), "SeqNo is too big: %" PRIu64, blob.SeqNo);
 
-namespace NKikimr::NPQ {
+    namespace NKikimr::NPQ {
 
 TMaybe<TInstant> GetReadFrom(ui32 maxTimeLagMs, ui64 readTimestampMs, TInstant consumerReadFromTimestamp, const TActorContext& ctx) {
     if (!(maxTimeLagMs > 0 || readTimestampMs > 0 || consumerReadFromTimestamp > TInstant::MilliSeconds(1))) {
@@ -383,9 +384,6 @@ TReadAnswer TReadInfo::FormAnswer(
     Y_UNUSED(meteringMode);
     Y_UNUSED(partition);
     THolder<TEvPQ::TEvProxyResponse> answer = MakeHolder<TEvPQ::TEvProxyResponse>(destination, IsInternal);
-    if (IsInternal) {
-        Cerr << "===Form internal answer\n";
-    }
 
     NKikimrClient::TResponse& res = *answer->Response;
     const TEvPQ::TEvBlobResponse* response = &blobResponse;
@@ -471,7 +469,7 @@ TReadAnswer TReadInfo::FormAnswer(
             readResult->SetEndOffset(endOffset);
             return {answerSize, std::move(answer)};
         }
-        Y_ABORT_UNLESS(blobValue.size() == blobs[pos].Size, "value for offset %" PRIu64 " count %u size must be %u, but got %u",
+        Y_ABORT_UNLESS(blobValue.size() <= blobs[pos].Size, "value for offset %" PRIu64 " count %u size must be %u, but got %u",
                                                         offset, count, blobs[pos].Size, (ui32)blobValue.size());
 
         if (offset > Offset || (offset == Offset && partNo > PartNo)) { // got gap
@@ -586,7 +584,6 @@ TReadAnswer TReadInfo::FormAnswer(
 }
 
 void TPartition::Handle(TEvPQ::TEvReadTimeout::TPtr& ev, const TActorContext& ctx) {
-    Cerr << "====On TEvReadTimeout\n";
     auto res = Subscriber.OnTimeout(ev);
     if (!res)
         return;
@@ -732,6 +729,7 @@ TVector<TClientBlob> TPartition::GetReadRequestFromHead(
 
 void TPartition::Handle(TEvPQ::TEvRead::TPtr& ev, const TActorContext& ctx) {
     auto* read = ev->Get();
+    Cerr << "===Handle TEvRead, read->Offset: " << read->Offset << ", internal: " << read->IsInternal << Endl;
 
     if (read->Count == 0) {
         TabletCounters.Cumulative()[COUNTER_PQ_READ_ERROR].Increment(1);
@@ -774,7 +772,7 @@ void TPartition::Handle(TEvPQ::TEvRead::TPtr& ev, const TActorContext& ctx) {
 
     const TString& user = read->ClientId;
     auto& userInfo = UsersInfoStorage->GetOrCreate(user, ctx);
-    if (!read->SessionId.empty() && !userInfo.NoConsumer && user != CLIENTID_COMPACTION_CONSUMER) {
+    if (!read->SessionId.empty() && !userInfo.NoConsumer) {
         if (userInfo.Session != read->SessionId) {
             TabletCounters.Cumulative()[COUNTER_PQ_READ_ERROR_NO_SESSION].Increment(1);
             TabletCounters.Percentile()[COUNTER_LATENCY_PQ_READ_ERROR].IncrementFor(0);
@@ -926,9 +924,8 @@ void TPartition::ProcessTimestampsForNewData(const ui64 prevEndOffset, const TAc
 }
 
 void TPartition::Handle(TEvPQ::TEvProxyResponse::TPtr& ev, const TActorContext& ctx) {
-    Cerr << "=== Partiton - got proxy response with cookie: " << ev->Get()->Cookie << Endl;
+    Cerr << "=== Partiti: handle response with cooike: " << ev->Get()->Cookie << ", internal:" << ev->Get()->IsInternal << "\n";
     if (ev->Get()->IsInternal) {
-        Cerr << "=== Got internal proxy response\n";
         if (Compacter) {
             Compacter->ProcessResponse(ev);
         }
@@ -937,7 +934,6 @@ void TPartition::Handle(TEvPQ::TEvProxyResponse::TPtr& ev, const TActorContext& 
     ReadingTimestamp = false;
 
     auto userInfo = UsersInfoStorage->GetIfExists(ReadingForUser);
-    Cerr << "=== Got proxy response with client id = " << userInfo->User << Endl;
 
     if (!userInfo || userInfo->ReadRuleGeneration != ReadingForUserReadRuleGeneration) {
         PQ_LOG_I("Topic '" << TopicConverter->GetClientsideName() << "'" <<
@@ -1017,7 +1013,6 @@ void TPartition::ProcessTimestampRead(const TActorContext& ctx) {
 void TPartition::ProcessRead(const TActorContext& ctx, TReadInfo&& info, const ui64 cookie, bool subscription) {
     ui32 count = 0;
     ui32 size = 0;
-    Cerr << "=== Process read with cookie: " << cookie << Endl;
     Y_ABORT_UNLESS(!info.User.empty());
     auto& userInfo = UsersInfoStorage->GetOrCreate(info.User, ctx);
 

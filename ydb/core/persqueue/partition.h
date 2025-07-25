@@ -53,6 +53,13 @@ enum class ECommitState {
     Aborted
 };
 
+enum class ERequestCookie : ui64 {
+    ReadBlobsForCompaction = 0,
+    WriteBlobsForCompaction,
+    CompactificationWrite,
+    End
+};
+
 struct TTransaction {
 
     explicit TTransaction(TSimpleSharedPtr<TEvPQ::TEvTxCalcPredicate> tx,
@@ -233,7 +240,6 @@ private:
     void Handle(TEvPQ::TEvApproveWriteQuota::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvents::TEvPoisonPill::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQ::TEvSubDomainStatus::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvPQ::TEvAllocateCookie::TPtr& ev);
     void HandleMonitoring(TEvPQ::TEvMonRequest::TPtr& ev, const TActorContext& ctx);
     void HandleOnIdle(TEvPQ::TEvDeregisterMessageGroup::TPtr& ev, const TActorContext& ctx);
     void HandleOnIdle(TEvPQ::TEvRegisterMessageGroup::TPtr& ev, const TActorContext& ctx);
@@ -361,14 +367,14 @@ private:
                         const TActorContext& ctx);
 
 
-    void ScheduleReplyOk(const ui64 dst, bool internal = false);
+    void ScheduleReplyOk(const ui64 dst, bool internal);
     void ScheduleReplyGetClientOffsetOk(const ui64 dst,
                                         const i64 offset,
                                         const TInstant writeTimestamp,
                                         const TInstant createTimestamp,
                                         bool consumerHasAnyCommits,
                                         const std::optional<TString>& committedMetadata=std::nullopt);
-    void ScheduleReplyError(const ui64 dst,
+    void ScheduleReplyError(const ui64 dst, bool internal,
                             NPersQueue::NErrorCode::EErrorCode errorCode,
                             const TString& error);
     void ScheduleReplyPropose(const NKikimrPQ::TEvProposeTransaction& event,
@@ -395,7 +401,7 @@ private:
     TUserInfoBase& GetOrCreatePendingUser(const TString& user, TMaybe<ui64> readRuleGeneration = {});
     TUserInfoBase* GetPendingUserIfExists(const TString& user);
 
-    THolder<TEvPQ::TEvProxyResponse> MakeReplyOk(const ui64 dst);
+    THolder<TEvPQ::TEvProxyResponse> MakeReplyOk(const ui64 dst, bool internal);
     THolder<TEvPQ::TEvProxyResponse> MakeReplyGetClientOffsetOk(const ui64 dst,
                                                                 const i64 offset,
                                                                 const TInstant writeTimestamp,
@@ -490,7 +496,6 @@ public:
                const NKikimrPQ::TPQTabletConfig& config, const TTabletCountersBase& counters, bool SubDomainOutOfSpace, ui32 numChannels,
                const TActorId& writeQuoterActorId,
                TIntrusivePtr<NJaegerTracing::TSamplingThrottlingControl> samplingControl,
-               const NKikimrConfig::TFeatureFlags& featureFlags,
                bool newPartition = false);
 
     void Bootstrap(const TActorContext& ctx);
@@ -572,7 +577,6 @@ private:
             HFuncTraced(TEvPQ::TEvGetWriteInfoError, HandleOnInit);
             HFuncTraced(TEvPQ::TEvDeletePartition, HandleOnInit);
             IgnoreFunc(TEvPQ::TEvTxBatchComplete);
-            hFuncTraced(TEvPQ::TEvAllocateCookie, Handle);
         default:
             if (!Initializer.Handle(ev)) {
                 ALOG_ERROR(NKikimrServices::PERSQUEUE, "Unexpected " << EventStr("StateInit", ev));
@@ -637,7 +641,6 @@ private:
             HFuncTraced(TEvPQ::TEvProcessChangeOwnerRequests, Handle);
             HFuncTraced(TEvPQ::TEvDeletePartition, Handle);
             IgnoreFunc(TEvPQ::TEvTxBatchComplete);
-            hFuncTraced(TEvPQ::TEvAllocateCookie, Handle);
         default:
             ALOG_ERROR(NKikimrServices::PERSQUEUE, "Unexpected " << EventStr("StateIdle", ev));
             break;
@@ -989,8 +992,9 @@ private:
 
     TInstant LastUsedStorageMeterTimestamp;
 
-    TMaybe<ui64> CompacterStartCookie;
+    ui64 CompacterCookie = 0;
     THolder<TPartitionCompaction> Compacter;
+    bool HaveCompacterRequestInflight = false;
 
     using TPendingEvent = std::variant<
         std::unique_ptr<TEvPQ::TEvTxCalcPredicate>,
@@ -1042,11 +1046,26 @@ private:
     void AddCmdWrite(const std::optional<TPartitionedBlob::TFormedBlobInfo>& newWrite,
                      TEvKeyValue::TEvRequest* request,
                      const TActorContext& ctx, bool includeToWriteCycle = true);
+    void RenameFormedBlobs(const std::deque<TPartitionedBlob::TRenameFormedBlobInfo>& formedBlobs,
+                           ProcessParameters& parameters,
+                           ui32 curWrites,
+                           TEvKeyValue::TEvRequest* request,
+                           const TActorContext& ctx);
+    ui32 RenameTmpCmdWrites(TEvKeyValue::TEvRequest* request);
+
+    void UpdateAvgWriteBytes(ui64 size, const TInstant& now);
+
+    size_t WriteNewSizeFromSupportivePartitions = 0;
+
+    bool TryAddDeleteHeadKeysToPersistRequest();
+    void DumpKeyValueRequest(const NKikimrClient::TKeyValueRequest& request);
+
+    TBlobKeyTokenPtr MakeBlobKeyToken(const TString& key);
+
 
     TIntrusivePtr<NJaegerTracing::TSamplingThrottlingControl> SamplingControl;
     TDeque<NWilson::TTraceId> TxForPersistTraceIds;
     TDeque<NWilson::TSpan> TxForPersistSpans;
-
     bool CanProcessUserActionAndTransactionEvents() const;
 };
 

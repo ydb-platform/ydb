@@ -1,6 +1,7 @@
 #pragma once
 
 #include "key.h"
+#include "blob.h"
 
 namespace NKikimr::NPQ {
 
@@ -21,7 +22,7 @@ struct TBlobInfo {
 
 class TPartitionCompaction {
 public:
-    TPartitionCompaction(ui64 lastCompactedOffset, ui64 startCookie, ui64 endCookie, TPartition* partitionActor);
+    TPartitionCompaction(ui64 lastCompactedOffset, ui64 partReqestCookie, TPartition* partitionActor);
 
     enum class EStep {
         PENDING,
@@ -29,15 +30,16 @@ public:
         COMPACTING,
     };
 
-    class TReadState {
+    struct TReadState {
         friend TPartitionCompaction;
         constexpr static const ui64 MAX_DATA_KEYS = 5000;
 
         ui64 OffsetToRead;
         ui64 LastOffset = 0;
+
         ui64 NextPartNo = 0;
         THashMap<TString, ui64> TopicData; //Key -> Offset
-
+        TMaybe<ui64> SkipOffset;
 
         TPartition* PartitionActor;
         TMaybe<NKikimrClient::TCmdReadResult::TResult> LastMessage;
@@ -52,60 +54,72 @@ public:
         void UpdateConfig(ui64 maxBurst, ui64 readQuota); //ToDo;
     };
 
-    class TCompactState {
+    struct TCompactState {
         friend TPartitionCompaction;
         using TKeysIter = std::deque<TDataKey>::iterator;
 
-        THolder<TEvKeyValue::TEvRequest> Request;
+        constexpr static const ui64 MAX_REQUEST_DATA_SIZE = 24_MB;
+        constexpr static const ui64 MAX_BLOB_SIZE = 8_MB;
+
         ui64 RequestSize;
         ui64 MaxOffset;
         THashMap<TString, ui64> TopicData;
         TPartition* PartitionActor;
 
         ui64 LastProcessedOffset;
+        TMaybe<ui64> OffsetToCommit;
+        ui64 CommitCookie = 0;
         TKeysIter KeysIter;
         bool Failure = false;
-        ui64 RequestDataSize = 0;
-        std::deque<TDataKey> DataKeysBody;
-        std::deque<TDataKey> DroppedKeys;
+
+        THolder<TEvKeyValue::TEvRequest> Request;
+
+        TMaybe<NKikimrClient::TCmdReadResult::TResult> CurrentMessage;
+        TMaybe<TBatch> LastBatch;
+        TKey LastBatchKey;
+        TVector<TClientBlob> CurrMsgPartsFromLastBatch;
+        TVector<TKey> CurrMsgMiggleBlobKeys;
+        ui64 BlobsToWriteInRequest = 0;
+        ui64 SavedLastProcessedOffset = 0;
+
         ui64 FirstHeadOffset;
         ui64 FirstHeadPartNo;
+        ui64 CommittedOffset;
+
+        std::deque<TDataKey> DataKeysBody;
+        TMap<TKey, ui64> UpdatedKeys;
+        TSet<TKey> DeletedKeys;
+
+        TMaybe<ui64> SkipOffset;
+        TMap<ui64, TKey> EmptyBlobs;
 
         TCompactState(THashMap<TString, ui64>&& data, ui64 firstUncompactedOffset, ui64 maxOffset, TPartition* partitionActor);
 
-        EStep ProcessKVResponse(TEvKeyValue::TEvResponse::TPtr& ev);
+        bool ProcessKVResponse(TEvKeyValue::TEvResponse::TPtr& ev);
         bool ProcessResponse(TEvPQ::TEvProxyResponse::TPtr& ev);
 
         EStep ContinueIfPossible(ui64 nextCookie);
         void RunKvRequest();
+        void AddCmdWrite(const TKey& key, TBatch& batch);
         void AddDeleteRange(const TKey& key);
+        void SendCommit(ui64 cookie);
+        void SaveLastBatch();
+        void UpdateDataKeysBody();
     };
 
     EStep Step = EStep::PENDING;
     ui64 FirstUncompactedOffset = 0;
-    bool HaveRequestInflight = false;
-    ui64 StartCookie = 0;
-    ui64 EndCookie = 0;
-    ui64 CurrentCookie = 0;
+    ui64 PartRequestCookie = 0;
 
 
-    std::optional<TReadState> ReadState;
-    std::optional<TCompactState> CompactState;
+    TMaybe<TReadState> ReadState;
+    TMaybe<TCompactState> CompactState;
     TPartition* PartitionActor;
-
-    ui64 GetNextCookie() {
-        CurrentCookie++;
-        if (CurrentCookie > EndCookie) {
-            CurrentCookie = StartCookie;
-        }
-        return CurrentCookie;
-    }
 
     void TryCompactionIfPossible();
     void UpdatePartitionConifg();
     void ProcessResponse(TEvPQ::TEvProxyResponse::TPtr& ev);
     void ProcessResponse(TEvKeyValue::TEvResponse::TPtr& ev);
-
 };
 
 } // namespace NKikimr::NPQ

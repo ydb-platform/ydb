@@ -249,7 +249,7 @@ void TPartition::ReplyPropose(const TActorContext& ctx,
 }
 
 void TPartition::ReplyOk(const TActorContext& ctx, const ui64 dst) {
-    ctx.Send(Tablet, MakeReplyOk(dst).Release());
+    ctx.Send(Tablet, MakeReplyOk(dst, false).Release());
 }
 
 void TPartition::ReplyOk(const TActorContext& ctx, const ui64 dst, NWilson::TSpan& span) {
@@ -277,8 +277,7 @@ TPartition::TPartition(ui64 tabletId, const TPartitionId& partition, const TActo
                        const NPersQueue::TTopicConverterPtr& topicConverter, TString dcId, bool isServerless,
                        const NKikimrPQ::TPQTabletConfig& tabletConfig, const TTabletCountersBase& counters, bool subDomainOutOfSpace, ui32 numChannels,
                        const TActorId& writeQuoterActorId,
-                       TIntrusivePtr<NJaegerTracing::TSamplingThrottlingControl> samplingControl,
-                       const NKikimrConfig::TFeatureFlags& featureFlags, bool newPartition)
+                       TIntrusivePtr<NJaegerTracing::TSamplingThrottlingControl> samplingControl, bool newPartition)
     : Initializer(this)
     , TabletID(tabletId)
     , TabletGeneration(tabletGeneration)
@@ -321,6 +320,7 @@ TPartition::TPartition(ui64 tabletId, const TPartitionId& partition, const TActo
     , WriteLagMs(TDuration::Minutes(1), 100)
     , LastEmittedHeartbeat(TRowVersion::Min())
     , SamplingControl(samplingControl) {
+
     TabletCounters.Populate(Counters);
 }
 
@@ -457,7 +457,6 @@ void TPartition::AddMetaKey(TEvKeyValue::TEvRequest* request) {
     NKikimrPQ::TPartitionMeta meta;
     meta.SetStartOffset(StartOffset);
     meta.SetEndOffset(Max(NewHead.GetNextOffset(), EndOffset));
-
     meta.SetSubDomainOutOfSpace(SubDomainOutOfSpace);
     meta.SetEndWriteTimestamp(PendingWriteTimestamp.MilliSeconds());
 
@@ -629,9 +628,6 @@ void TPartition::DestroyActor(const TActorContext& ctx)
         Send(OffloadActor, new TEvents::TEvPoisonPill());
     }
 
-    if(!Partition.IsSupportivePartition()) {
-        //Send(BlobCache, ) //ToDo!
-    }
     Die(ctx);
 }
 
@@ -1580,8 +1576,8 @@ void TPartition::Handle(TEvPQ::TEvBlobResponse::TPtr& ev, const TActorContext& c
         TabletCounters.Percentile()[COUNTER_LATENCY_PQ_READ_OK].IncrementFor((ctx.Now() - info.Timestamp).MilliSeconds());
         TabletCounters.Cumulative()[COUNTER_PQ_READ_BYTES].Increment(resp->ByteSize());
     }
-    ctx.Send(info.Destination != 0 ? Tablet : ctx.SelfID, answer.Event.Release());
-    OnReadRequestFinished(info.Destination && !info.IsInternal, answer.Size, info.User, ctx);
+    ctx.Send(info.Destination != 0 && !info.IsInternal ? Tablet : ctx.SelfID, answer.Event.Release());
+    OnReadRequestFinished(info.Destination, answer.Size, info.User, ctx);
 }
 
 void TPartition::Handle(TEvPQ::TEvError::TPtr& ev, const TActorContext& ctx) {
@@ -1917,7 +1913,8 @@ void TPartition::Handle(NReadQuoterEvents::TEvQuotaUpdated::TPtr& ev, const TAct
 void TPartition::Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActorContext& ctx) {
     auto& response = ev->Get()->Record;
 
-    if (response.HasCookie() && (response.GetCookie() == ERequestCookie::CompactificationWrite)) {
+    if (response.HasCookie() && (response.GetCookie() == static_cast<ui64>(ERequestCookie::CompactificationWrite))) {
+        HaveCompacterRequestInflight = false;
         if (Compacter) {
             Compacter->ProcessResponse(ev);
         }
@@ -2073,16 +2070,16 @@ void TPartition::ProcessTxsAndUserActs(const TActorContext& ctx)
 
         return;
     }
-    PQ_LOG_D("Batching state before ContinueProcessTxsAndUserActs: " << (int)BatchingState);
+    // ToDo: !! restore PQ_LOG_D("Batching state before ContinueProcessTxsAndUserActs: " << (int)BatchingState);
     while (true) {
         if (CanProcessUserActionAndTransactionEvents()) {
             ContinueProcessTxsAndUserActs(ctx);
         }
         if (BatchingState == ETxBatchingState::PreProcessing) {
-            PQ_LOG_D("Still preprocessing - waiting for something");
+            // ToDo: !! restore  PQ_LOG_D("Still preprocessing - waiting for something");
             return; // Still preprocessing - waiting for something;
         }
-        PQ_LOG_D("Batching state after ContinueProcessTxsAndUserActs: " << (int)BatchingState);
+        // ToDo: !! restore  PQ_LOG_D("Batching state after ContinueProcessTxsAndUserActs: " << (int)BatchingState);
 
         // Preprocessing complete;
         if (CurrentBatchSize > 0) {
@@ -2999,11 +2996,7 @@ void TPartition::EndChangePartitionConfig(NKikimrPQ::TPQTabletConfig&& config,
     Send(WriteQuotaTrackerActor, new TEvPQ::TEvChangePartitionConfig(TopicConverter, Config));
     TotalPartitionWriteSpeed = config.GetPartitionConfig().GetWriteSpeedInBytesPerSecond();
 
-    if (Config.GetEnableCompactification()) {
-        CreateCompacter();
-    } else {
-        Compacter.Reset();
-    }
+    CreateCompacter();
 
     if (Config.GetPartitionConfig().HasMirrorFrom()) {
         if (Mirrorer) {
@@ -3258,6 +3251,9 @@ TPartition::EProcessResult TPartition::PreProcessUserAct(
 }
 
 void TPartition::CommitUserAct(TEvPQ::TEvSetClientInfo& act) {
+    if (act.IsInternal) {
+        Cerr << "===Partition: commit internal user act\n";
+    }
     const bool strictCommitOffset = (act.Type == TEvPQ::TEvSetClientInfo::ESCI_OFFSET && act.Strict);
     const TString& user = act.ClientId;
     RemoveUserAct(user);
@@ -3269,7 +3265,7 @@ void TPartition::CommitUserAct(TEvPQ::TEvSetClientInfo& act) {
         case TEvPQ::TEvSetClientInfo::ESCI_DROP_READ_RULE:
             return;
         default:
-            ScheduleReplyError(act.Cookie,
+            ScheduleReplyError(act.Cookie, act.IsInternal,
                                NPersQueue::NErrorCode::WRONG_COOKIE,
                                "request to deleted read rule");
             return;
@@ -3310,7 +3306,7 @@ void TPartition::CommitUserAct(TEvPQ::TEvSetClientInfo& act) {
                  && (act.Generation < userInfo.Generation || act.Generation == userInfo.Generation && act.Step <= userInfo.Step))) { //old generation request
         TabletCounters.Cumulative()[COUNTER_PQ_SET_CLIENT_OFFSET_ERROR].Increment(1);
 
-        ScheduleReplyError(act.Cookie,
+        ScheduleReplyError(act.Cookie, act.IsInternal,
                            NPersQueue::NErrorCode::WRONG_COOKIE,
                            TStringBuilder() << "set offset in already dead session " << act.SessionId << " actual is " << userInfo.Session);
 
@@ -3318,14 +3314,14 @@ void TPartition::CommitUserAct(TEvPQ::TEvSetClientInfo& act) {
     }
 
     if (!act.SessionId.empty() && act.Type == TEvPQ::TEvSetClientInfo::ESCI_OFFSET && (i64)act.Offset <= userInfo.Offset) { //this is stale request, answer ok for it
-        ScheduleReplyOk(act.Cookie);
+        ScheduleReplyOk(act.Cookie, act.IsInternal);
         return;
     }
 
     if (strictCommitOffset && act.Offset < StartOffset) {
         // strict commit to past, reply error
         TabletCounters.Cumulative()[COUNTER_PQ_SET_CLIENT_OFFSET_ERROR].Increment(1);
-        ScheduleReplyError(act.Cookie,
+        ScheduleReplyError(act.Cookie, act.IsInternal,
                            NPersQueue::NErrorCode::SET_OFFSET_ERROR_COMMIT_TO_PAST,
                            TStringBuilder() << "set offset " <<  act.Offset << " to past for consumer " << act.ClientId << " actual start offset is " << StartOffset);
 
@@ -3350,7 +3346,7 @@ void TPartition::CommitUserAct(TEvPQ::TEvSetClientInfo& act) {
     if (offset > EndOffset) {
         if (strictCommitOffset) {
             TabletCounters.Cumulative()[COUNTER_PQ_SET_CLIENT_OFFSET_ERROR].Increment(1);
-            ScheduleReplyError(act.Cookie,
+            ScheduleReplyError(act.Cookie, act.IsInternal,
                             NPersQueue::NErrorCode::SET_OFFSET_ERROR_COMMIT_TO_FUTURE,
                             TStringBuilder() << "strict commit can't set offset " <<  act.Offset << " to future, consumer " << act.ClientId << ", actual end offset is " << EndOffset);
 
@@ -3372,7 +3368,7 @@ void TPartition::CommitUserAct(TEvPQ::TEvSetClientInfo& act) {
 
     if (!IsActive() && act.Type == TEvPQ::TEvSetClientInfo::ESCI_OFFSET && static_cast<i64>(EndOffset) == userInfo.Offset && offset < EndOffset) {
         TabletCounters.Cumulative()[COUNTER_PQ_SET_CLIENT_OFFSET_ERROR].Increment(1);
-        ScheduleReplyError(act.Cookie,
+        ScheduleReplyError(act.Cookie, act.IsInternal,
                            NPersQueue::NErrorCode::SET_OFFSET_ERROR_COMMIT_TO_PAST,
                            TStringBuilder() << "set offset " <<  act.Offset << " to past for consumer " << act.ClientId << " for inactive partition");
 
@@ -3473,8 +3469,11 @@ void TPartition::EmulatePostProcessUserAct(const TEvPQ::TEvSetClientInfo& act,
 
 void TPartition::ScheduleReplyOk(const ui64 dst, bool internal)
 {
+    if (internal)
+        Cerr << "===Partition - schedule OK reply  for internal Req\n";
+
     Replies.emplace_back(internal ? SelfId() : Tablet,
-                         MakeReplyOk(dst).Release());
+                         MakeReplyOk(dst, internal).Release());
 }
 
 void TPartition::ScheduleReplyGetClientOffsetOk(const ui64 dst,
@@ -3493,12 +3492,13 @@ void TPartition::ScheduleReplyGetClientOffsetOk(const ui64 dst,
 
 }
 
-void TPartition::ScheduleReplyError(const ui64 dst,
+void TPartition::ScheduleReplyError(const ui64 dst, bool internal,
                                     NPersQueue::NErrorCode::EErrorCode errorCode,
                                     const TString& error)
 {
     PQ_LOG_ERROR("Got error: " << error);
-    Replies.emplace_back(Tablet,
+    Y_ABORT_UNLESS(!internal); //ToDo: !! remove, add TEvError processing to compacter (and handler in partition)!
+    Replies.emplace_back(internal ? SelfId() : Tablet,
                          MakeReplyError(dst,
                                         errorCode,
                                         error).Release());
@@ -3714,9 +3714,9 @@ TUserInfoBase* TPartition::GetPendingUserIfExists(const TString& user)
     return nullptr;
 }
 
-THolder<TEvPQ::TEvProxyResponse> TPartition::MakeReplyOk(const ui64 dst)
+THolder<TEvPQ::TEvProxyResponse> TPartition::MakeReplyOk(const ui64 dst, bool internal)
 {
-    auto response = MakeHolder<TEvPQ::TEvProxyResponse>(dst, false);
+    auto response = MakeHolder<TEvPQ::TEvProxyResponse>(dst, internal);
     NKikimrClient::TResponse& resp = *response->Response;
 
     resp.SetStatus(NMsgBusProxy::MSTATUS_OK);
@@ -4038,7 +4038,7 @@ void TPartition::ScheduleNegativeReply(const TTransaction&)
 
 void TPartition::ScheduleNegativeReply(const TMessage& msg)
 {
-    ScheduleReplyError(msg.GetCookie(), NPersQueue::NErrorCode::ERROR, "The transaction is completed");
+    ScheduleReplyError(msg.GetCookie(), false, NPersQueue::NErrorCode::ERROR, "The transaction is completed");
 }
 
 void TPartition::ScheduleTransactionCompleted(const NKikimrPQ::TEvProposeTransaction& tx)

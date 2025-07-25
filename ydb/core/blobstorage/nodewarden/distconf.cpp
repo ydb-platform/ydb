@@ -146,13 +146,16 @@ namespace NKikimr::NStorage {
                 SendConfigProposeRequest();
             }
 
-            const auto& allNodes = StorageConfig->GetAllNodes();
-            if (std::vector<TNodeIdentifier> newNodeList(allNodes.begin(), allNodes.end()); !newNodeList.empty()) {
+            std::vector<std::tuple<TNodeIdentifier, TNodeLocation>> newNodeList;
+            newNodeList.reserve(StorageConfig->AllNodesSize());
+            for (const auto& node : StorageConfig->GetAllNodes()) {
+                newNodeList.emplace_back(node, node.GetLocation());
+            }
+            if (!newNodeList.empty()) {
                 ApplyNewNodeList(newNodeList);
             }
 
-            UnbindNodesFromNonPrimaryPile();
-            UpdateQuorums();
+            QuorumValid = false;
 
             return true;
         } else if (StorageConfig->GetGeneration() && StorageConfig->GetGeneration() == config.GetGeneration() &&
@@ -198,11 +201,22 @@ namespace NKikimr::NStorage {
 #ifndef NDEBUG
     void TDistributedConfigKeeper::ConsistencyCheck() {
         for (const auto& [nodeId, info] : DirectBoundNodes) { // validate incoming binding
-            Y_ABORT_UNLESS(std::ranges::binary_search(NodeIdsForIncomingBinding, nodeId) ||
-                (BridgeInfo && BridgeInfo->SelfNodePile->IsPrimary && AllNodeIds.contains(nodeId)));
+            if (std::ranges::binary_search(NodeIdsForIncomingBinding, nodeId) ||
+                    std::ranges::binary_search(NodeIdsForOutgoingBinding, nodeId)) {
+                continue; // okay
+            } else if (BridgeInfo && BridgeInfo->SelfNodePile->IsPrimary && !NodesFromSamePile.contains(nodeId) &&
+                    AllNodeIds.contains(nodeId) && !Binding) {
+                continue; // okay too -- other pile connecting to primary
+            }
+            Y_ABORT_S("unexpected incoming bound node NodeId# " << nodeId
+                << " NodeIdsForIncomingBinding# " << FormatList(NodeIdsForIncomingBinding)
+                << " NodeIdsForOutgoingBinding# " << FormatList(NodeIdsForOutgoingBinding)
+                << " NodesFromSamePile# " << FormatList(NodesFromSamePile)
+                << " Binding# " << (Binding ? Binding->ToString() : "<null>"));
         }
         if (Binding) { // validate outgoing binding
             Y_ABORT_UNLESS(std::ranges::binary_search(NodeIdsForOutgoingBinding, Binding->NodeId) ||
+                std::ranges::binary_search(NodeIdsForIncomingBinding, Binding->NodeId) ||
                 std::ranges::binary_search(NodeIdsForPrimaryPileOutgoingBinding, Binding->NodeId));
         }
 
@@ -279,10 +293,11 @@ namespace NKikimr::NStorage {
         Y_ABORT_UNLESS(CheckFingerprint(*BaseConfig));
         Y_ABORT_UNLESS(!InitialConfig->GetFingerprint() || CheckFingerprint(*InitialConfig));
 
-        if (StorageConfig) {
-            Y_ABORT_UNLESS(HasConnectedNodeQuorum(*StorageConfig) == GlobalQuorum);
-            Y_ABORT_UNLESS((BridgeInfo && HasConnectedNodeQuorum(*StorageConfig, {BridgeInfo->SelfNodePile->BridgePileId})) ==
-                LocalPileQuorum);
+        if (IsSelfStatic && StorageConfig && NodeListObtained) {
+            Y_VERIFY_S(HasConnectedNodeQuorum(*StorageConfig, false) == GlobalQuorum,
+                "GlobalQuorum# " << GlobalQuorum);
+            Y_VERIFY_S((BridgeInfo && HasConnectedNodeQuorum(*StorageConfig, true)) == LocalPileQuorum,
+                "LocalPileQuorum# " << LocalPileQuorum);
         }
 
         if (Scepter) {
@@ -291,7 +306,7 @@ namespace NKikimr::NStorage {
             Y_ABORT_UNLESS(!Binding);
         } else {
             Y_ABORT_UNLESS(RootState == ERootState::INITIAL || RootState == ERootState::ERROR_TIMEOUT ||
-                RootState == ERootState::SCEPTERLESS_OPERATION);
+                RootState == ERootState::LOCAL_QUORUM_OP);
 
             // we can't have connection to the Console without being the root node
             Y_ABORT_UNLESS(!ConsolePipeId);
@@ -363,6 +378,13 @@ namespace NKikimr::NStorage {
     }
 
     STFUNC(TDistributedConfigKeeper::StateFunc) {
+        const ui32 type = ev->GetTypeRewrite();
+        THPTimer timer;
+        Y_DEFER {
+            if (auto duration = TDuration::Seconds(timer.Passed()); duration >= TDuration::MilliSeconds(5)) {
+                STLOG(PRI_WARN, BS_NODE, NWDC01, "StateFunc too long", (Type, type), (Duration, duration));
+            }
+        };
         STLOG(PRI_DEBUG, BS_NODE, NWDC15, "StateFunc", (Type, ev->GetTypeRewrite()), (Sender, ev->Sender),
             (SessionId, ev->InterconnectSession), (Cookie, ev->Cookie));
         const ui32 senderNodeId = ev->Sender.NodeId();
@@ -407,6 +429,7 @@ namespace NKikimr::NStorage {
         }
         if (IsSelfStatic && StorageConfig && NodeListObtained) {
             IssueNextBindRequest();
+            CheckRootNodeStatus();
         }
         ConsistencyCheck();
     }
@@ -462,10 +485,11 @@ namespace NKikimr::NStorage {
                 // copy cluster state generation
                 pb->SetClusterStateGeneration(clusterState.GetGeneration());
                 
-                auto &history = config->GetClusterStateHistory();
-                if (history.UnsyncedEntriesSize() > 0) {
-                    auto &entry = history.GetUnsyncedEntries(0);
-                    pb->SetClusterStateGuid(entry.GetOperationGuid());
+                auto& details = config->GetClusterStateDetails();
+                if (details.UnsyncedHistorySize() > 0) {
+                    // get the last entry about current cluster state
+                    auto& lastItem = details.GetUnsyncedHistory(details.UnsyncedHistorySize() - 1);
+                    pb->SetClusterStateGuid(lastItem.GetOperationGuid());
                 } else {
                     pb->SetClusterStateGuid(0);
                 }
@@ -494,7 +518,8 @@ namespace NKikimr::NStorage {
                                     state = T::DISCONNECTED;
                                     break;
 
-                                case NKikimrBridge::TClusterState::NOT_SYNCHRONIZED:
+                                case NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_1:
+                                case NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_2:
                                     state = T::NOT_SYNCHRONIZED;
                                     break;
 
@@ -540,17 +565,32 @@ namespace NKikimr::NStorage {
         auto bridgeInfo = std::make_shared<TBridgeInfo>();
         bridgeInfo->Piles.resize(cfg->BridgeConfig->PilesSize());
 
+        THashMap<TString, TBridgePileId> names;
+        if (cfg->BridgeConfig) {
+            for (size_t i = 0; i < cfg->BridgeConfig->PilesSize(); ++i) {
+                names.emplace(cfg->BridgeConfig->GetPiles(i).GetName(), TBridgePileId::FromValue(i));
+            }
+        }
+
         for (const auto& node : config.GetAllNodes()) {
-            if (node.HasBridgePileId()) {
-                const ui32 nodeId = node.GetNodeId();
-                const ui32 pileId = node.GetBridgePileId();
-                Y_ABORT_UNLESS(pileId < bridgeInfo->Piles.size());
-                auto& pile = bridgeInfo->Piles[pileId];
-                pile.StaticNodeIds.push_back(node.GetNodeId());
-                bridgeInfo->StaticNodeIdToPile[nodeId] = &pile;
-                if (nodeId == selfNodeId) {
-                    bridgeInfo->SelfNodePile = &pile;
+            std::optional<TBridgePileId> bridgePileId;
+            const TNodeLocation location(node.GetLocation());
+            if (const auto& bridgePileName = location.GetBridgePileName()) {
+                if (const auto it = names.find(*bridgePileName); it != names.end()) {
+                    bridgePileId.emplace(it->second);
+                } else {
+                    Y_ABORT("BridgePileName is incorrect");
                 }
+            } else if (names) {
+                Y_ABORT("missing BridgePileName for node");
+            }
+            Y_ABORT_UNLESS(bridgePileId);
+            const ui32 nodeId = node.GetNodeId();
+            auto& pile = bridgeInfo->Piles[bridgePileId->GetRawId()];
+            pile.StaticNodeIds.push_back(node.GetNodeId());
+            bridgeInfo->StaticNodeIdToPile[nodeId] = &pile;
+            if (nodeId == selfNodeId) {
+                bridgeInfo->SelfNodePile = &pile;
             }
         }
 
@@ -586,6 +626,7 @@ namespace NKikimr::NStorage {
         for (size_t i = 0; i < numPiles; ++i) {
             auto& pile = bridgeInfo->Piles[i];
             pile.BridgePileId = TBridgePileId::FromValue(i);
+            pile.Name = cfg->BridgeConfig->GetPiles(i).GetName();
             pile.State = state ? state->GetPerPileState(i) : NKikimrBridge::TClusterState::SYNCHRONIZED;
             std::ranges::sort(pile.StaticNodeIds);
         }
@@ -612,11 +653,11 @@ template<>
 void Out<NKikimr::NStorage::TDistributedConfigKeeper::ERootState>(IOutputStream& s, NKikimr::NStorage::TDistributedConfigKeeper::ERootState state) {
     using E = decltype(state);
     switch (state) {
-        case E::INITIAL:               s << "INITIAL";               return;
-        case E::ERROR_TIMEOUT:         s << "ERROR_TIMEOUT";         return;
-        case E::IN_PROGRESS:           s << "IN_PROGRESS";           return;
-        case E::RELAX:                 s << "RELAX";                 return;
-        case E::SCEPTERLESS_OPERATION: s << "SCEPTERLESS_OPERATION"; return;
+        case E::INITIAL:         s << "INITIAL";         return;
+        case E::ERROR_TIMEOUT:   s << "ERROR_TIMEOUT";   return;
+        case E::IN_PROGRESS:     s << "IN_PROGRESS";     return;
+        case E::RELAX:           s << "RELAX";           return;
+        case E::LOCAL_QUORUM_OP: s << "LOCAL_QUORUM_OP"; return;
     }
     Y_ABORT();
 }

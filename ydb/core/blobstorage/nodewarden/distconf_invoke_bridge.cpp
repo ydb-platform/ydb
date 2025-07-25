@@ -17,10 +17,6 @@ namespace NKikimr::NStorage {
 
         const auto& newClusterState = cmd.GetNewClusterState();
 
-        for (ui32 bridgePileId : cmd.GetSpecificBridgePileIds()) {
-            SpecificBridgePileIds.insert(TBridgePileId::FromValue(bridgePileId));
-        }
-
         // check new config alone
         const ui32 numPiles = Self->Cfg->BridgeConfig->PilesSize();
         if (newClusterState.PerPileStateSize() != numPiles) {
@@ -50,14 +46,16 @@ namespace NKikimr::NStorage {
                             break;
 
                         case NKikimrBridge::TClusterState::SYNCHRONIZED:
-                            // invalid transition from any state
                             throw TExError() << "Can't switch to SYNCHRONIZED directly";
 
-                        case NKikimrBridge::TClusterState::NOT_SYNCHRONIZED:
+                        case NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_1:
                             if (currentState == NKikimrBridge::TClusterState::SYNCHRONIZED) {
-                                throw TExError() << "Invalid transition from SYNCHRONIZED to NOT_SYNCHRONIZED";
+                                throw TExError() << "Invalid transition from SYNCHRONIZED to NOT_SYNCHRONIZED_1";
                             }
                             break;
+
+                        case NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_2:
+                            throw TExError() << "Can't switch to NOT_SYNCHRONIZED_2 directly";
 
                         case NKikimrBridge::TClusterState_EPileState_TClusterState_EPileState_INT_MIN_SENTINEL_DO_NOT_USE_:
                         case NKikimrBridge::TClusterState_EPileState_TClusterState_EPileState_INT_MAX_SENTINEL_DO_NOT_USE_:
@@ -77,7 +75,7 @@ namespace NKikimr::NStorage {
     }
 
     void TInvokeRequestHandlerActor::SwitchBridgeClusterState() {
-        RunCommonChecks();
+        RunCommonChecks(/*requireScepter=*/ false);
         Y_ABORT_UNLESS(SwitchBridgeNewConfig);
         StartProposition(&SwitchBridgeNewConfig.value());
     }
@@ -95,8 +93,8 @@ namespace NKikimr::NStorage {
         }
         clusterState->CopyFrom(newClusterState);
 
-        auto *history = config.MutableClusterStateHistory();
-        auto *entry = history->AddUnsyncedEntries();
+        auto *details = config.MutableClusterStateDetails();
+        auto *entry = details->AddUnsyncedHistory();
         entry->MutableClusterState()->CopyFrom(newClusterState);
         entry->SetOperationGuid(RandomNumber<ui64>());
         for (ui32 i = 0; i < Self->Cfg->BridgeConfig->PilesSize(); ++i) {
@@ -107,53 +105,31 @@ namespace NKikimr::NStorage {
             return config;
         }
 
+        for (size_t i = 0; i < details->PileSyncStateSize(); ++i) {
+            if (const auto& state = details->GetPileSyncState(i); state.GetBridgePileId() == changedPileIndex) {
+                details->MutablePileSyncState()->DeleteSubrange(i, 1);
+                break;
+            }
+        }
+
         switch (clusterState->GetPerPileState(changedPileIndex)) {
             case NKikimrBridge::TClusterState::DISCONNECTED:
                 // this pile is not disconnected, there is no reason to synchronize it anymore
-                for (size_t i = 0; i < history->PileSyncStateSize(); ++i) {
-                    const auto& item = history->GetPileSyncState(i);
+                for (size_t i = 0; i < details->PileSyncStateSize(); ++i) {
+                    const auto& item = details->GetPileSyncState(i);
                     if (item.GetBridgePileId() != changedPileIndex) {
                         break;
                     }
-                    history->MutablePileSyncState()->DeleteSubrange(i, 1);
+                    details->MutablePileSyncState()->DeleteSubrange(i, 1);
                     break;
                 }
                 break;
 
-            case NKikimrBridge::TClusterState::NOT_SYNCHRONIZED: {
-                // we are coming into NOT_SYNCHRONIZED state; we have to build a list of all of our entities
-                NKikimrBridge::TClusterStateHistory::TPileSyncState *state = nullptr;
-                for (size_t i = 0; i < history->PileSyncStateSize(); ++i) {
-                    state = history->MutablePileSyncState(i);
-                    if (state->GetBridgePileId() == changedPileIndex) {
-                        state->ClearUnsyncedGroupIds();
-                        state->ClearUnsyncedBSC();
-                        break;
-                    } else {
-                        state = nullptr;
-                    }
-                }
-                if (!state) {
-                    state = history->AddPileSyncState();
-                    state->SetBridgePileId(changedPileIndex);
-                }
-                state->SetUnsyncedBSC(true);
-                state->SetUnsyncedStorageConfig(true);
-                if (config.HasBlobStorageConfig()) {
-                    if (const auto& bsConfig = config.GetBlobStorageConfig(); bsConfig.HasServiceSet()) {
-                        const auto& ss = bsConfig.GetServiceSet();
-                        for (const auto& group : ss.GetGroups()) {
-                            if (group.BridgeGroupIdsSize()) {
-                                state->AddUnsyncedGroupIds(group.GetGroupID());
-                            }
-                        }
-                    }
-                }
-                CheckSyncersAfterCommit = true;
+            case NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_1:
                 break;
-            }
 
             case NKikimrBridge::TClusterState::SYNCHRONIZED:
+            case NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_2:
                 Y_ABORT("invalid transition");
 
             case NKikimrBridge::TClusterState_EPileState_TClusterState_EPileState_INT_MIN_SENTINEL_DO_NOT_USE_:
@@ -177,12 +153,12 @@ namespace NKikimr::NStorage {
         NKikimrBlobStorage::TStorageConfig config = *Self->StorageConfig;
 
         auto *clusterState = config.MutableClusterState();
-        auto *history = config.MutableClusterStateHistory();
+        auto *details = config.MutableClusterStateDetails();
 
         size_t stateIndex;
-        NKikimrBridge::TClusterStateHistory::TPileSyncState *state = nullptr;
-        for (stateIndex = 0; stateIndex < history->PileSyncStateSize(); ++stateIndex) {
-            state = history->MutablePileSyncState(stateIndex);
+        NKikimrBridge::TClusterStateDetails::TPileSyncState *state = nullptr;
+        for (stateIndex = 0; stateIndex < details->PileSyncStateSize(); ++stateIndex) {
+            state = details->MutablePileSyncState(stateIndex);
             if (state->GetBridgePileId() == cmd.GetBridgePileId()) {
                 break;
             } else {
@@ -224,12 +200,12 @@ namespace NKikimr::NStorage {
                     const auto [first, last] = std::ranges::unique(*groups);
                     groups->erase(first, last);
                 }
-                if (!state->GetUnsyncedBSC() && !state->UnsyncedGroupIdsSize() && !state->GetUnsyncedStorageConfig()) {
+                if (!state->GetUnsyncedBSC() && !state->UnsyncedGroupIdsSize()) {
                     // fully synced, can switch to SYNCHRONIZED
-                    history->MutablePileSyncState()->DeleteSubrange(stateIndex, 1);
+                    details->MutablePileSyncState()->DeleteSubrange(stateIndex, 1);
                     clusterState->SetPerPileState(cmd.GetBridgePileId(), NKikimrBridge::TClusterState::SYNCHRONIZED);
                     clusterState->SetGeneration(clusterState->GetGeneration() + 1);
-                    auto *entry = history->AddUnsyncedEntries();
+                    auto *entry = details->AddUnsyncedHistory();
                     entry->MutableClusterState()->CopyFrom(*clusterState);
                     entry->SetOperationGuid(RandomNumber<ui64>());
                     for (size_t i = 0; i < clusterState->PerPileStateSize(); ++i) {

@@ -102,7 +102,9 @@ namespace NKikimr::NStorage {
             throw TExError() << "Self-management is not enabled";
         }
 
-        const auto& record = Event->Get()->Record;
+        auto *op = std::get_if<TInvokeExternalOperation>(&Query);
+        Y_ABORT_UNLESS(op);
+        const auto& record = op->Command;
         const auto& cmd = record.GetReassignGroupDisk();
 
         STLOG(PRI_DEBUG, BS_NODE, NWDC75, "ReassignGroupDiskExecute", (SelfId, SelfId()));
@@ -314,7 +316,7 @@ namespace NKikimr::NStorage {
         }
 
         if (!changes) {
-            return FinishWithSuccess();
+            return Finish(TResult::OK, std::nullopt);
         }
 
         StartProposition(&config);

@@ -10,7 +10,7 @@
 
 #include <ydb/core/blobstorage/vdisk/common/vdisk_events.h> // for TEvConfigureProxy
 
-namespace NKikimr::NStorage::NBridge {
+namespace NKikimr::NBridge {
 
     class TSyncerActor : public TActorBootstrapped<TSyncerActor> {
         TIntrusivePtr<TBlobStorageGroupInfo> Info;
@@ -89,4 +89,4 @@ namespace NKikimr::NStorage::NBridge {
         void Handle(TEvBlobStorage::TEvAssimilateResult::TPtr ev);
     };
 
-} // NKikimr::NStorage::NBridge
+} // NKikimr::NBridge

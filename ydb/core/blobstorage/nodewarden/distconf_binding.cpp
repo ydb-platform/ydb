@@ -1,4 +1,5 @@
 #include "distconf.h"
+#include "distconf_quorum.h"
 #include <ydb/core/protos/node_broker.pb.h>
 
 namespace NKikimr::NStorage {
@@ -6,47 +7,30 @@ namespace NKikimr::NStorage {
     void TDistributedConfigKeeper::Handle(TEvInterconnect::TEvNodesInfo::TPtr ev) {
         STLOG(PRI_DEBUG, BS_NODE, NWDC11, "TEvNodesInfo");
 
-        std::vector<TNodeIdentifier> newNodeList;
+        std::vector<std::tuple<TNodeIdentifier, TNodeLocation>> newNodeList;
         for (const auto& item : ev->Get()->Nodes) {
             if (item.IsStatic) {
-                std::optional<TBridgePileId> bridgePileId;
-                if (const auto& bridgePileName = item.Location.GetBridgePileName()) {
-                    const auto it = BridgePileNameMap.find(*bridgePileName);
-                    Y_ABORT_UNLESS(it != BridgePileNameMap.end());
-                    bridgePileId.emplace(it->second);
-                }
-
-                newNodeList.emplace_back(
-                    item.ResolveHost,
-                    item.Port,
-                    item.NodeId,
-                    bridgePileId
-                );
+                newNodeList.emplace_back(TNodeIdentifier(item.ResolveHost, item.Port, item.NodeId), item.Location);
             }
         }
 
         ApplyNewNodeList(newNodeList);
     }
 
-    void TDistributedConfigKeeper::ApplyNewNodeList(const std::vector<TNodeIdentifier>& newNodeList) {
+    void TDistributedConfigKeeper::ApplyNewNodeList(std::span<std::tuple<TNodeIdentifier, TNodeLocation>> newNodeList) {
         // do not start configuration negotiation for dynamic nodes
         if (!IsSelfStatic) {
-            std::optional<TBridgePileId> expectedBridgePileId;
+            std::optional<TString> expectedBridgePileName;
             if (Cfg->BridgeConfig) {
                 Y_ABORT_UNLESS(Cfg->DynamicNodeConfig && Cfg->DynamicNodeConfig->HasNodeInfo());
                 const auto& nodeInfo = Cfg->DynamicNodeConfig->GetNodeInfo();
                 Y_ABORT_UNLESS(nodeInfo.HasLocation());
-                const TNodeLocation location(nodeInfo.GetLocation());
-                const auto& bridgePileName = location.GetBridgePileName();
-                Y_ABORT_UNLESS(bridgePileName);
-                const auto it = BridgePileNameMap.find(*bridgePileName);
-                Y_ABORT_UNLESS(it != BridgePileNameMap.end());
-                expectedBridgePileId.emplace(it->second);
+                expectedBridgePileName = TNodeLocation(nodeInfo.GetLocation()).GetBridgePileName();
             }
 
             std::vector<ui32> nodeIds;
-            for (const auto& item : newNodeList) {
-                if (item.BridgePileId == expectedBridgePileId) {
+            for (const auto& [item, location] : newNodeList) {
+                if (location.GetBridgePileName() == expectedBridgePileName) {
                     nodeIds.push_back(item.NodeId());
                 }
             }
@@ -57,9 +41,10 @@ namespace NKikimr::NStorage {
         // find this node in new node list
         const ui32 selfNodeId = SelfId().NodeId();
         bool found = false;
-        for (const auto& item : newNodeList) {
+        for (const auto& [item, location] : newNodeList) {
             if (item.NodeId() == selfNodeId) {
                 SelfNode = item;
+                SelfNodeBridgePileName = location.GetBridgePileName();
                 found = true;
                 break;
             }
@@ -74,39 +59,38 @@ namespace NKikimr::NStorage {
         std::vector<ui32> nodeIdsForIncomingBinding;
         std::vector<ui32> nodeIdsForPrimaryPileOutgoingBinding;
 
-        for (const auto& item : newNodeList) {
+        for (const auto& [item, location] : newNodeList) {
             const ui32 nodeId = item.NodeId();
             AllNodeIds.insert(item.NodeId());
 
             // check if node is from the same pile (as this one)
-            if (item.BridgePileId == SelfNode.BridgePileId) {
+            if (location.GetBridgePileName() == SelfNodeBridgePileName) {
                 NodesFromSamePile.insert(item.NodeId());
                 if (nodeId < selfNodeId) {
                     nodeIdsForOutgoingBinding.push_back(nodeId);
-                } else {
+                } else if (selfNodeId < nodeId) {
                     nodeIdsForIncomingBinding.push_back(nodeId);
                 }
             }
 
             // check if node is located in primary pile (and this one is not the primary) -- then it is suitable for
             // binding to primary pile
-            if (BridgeInfo && !BridgeInfo->SelfNodePile->IsPrimary && item.BridgePileId == BridgeInfo->PrimaryPile->BridgePileId) {
+            if (BridgeInfo && !BridgeInfo->SelfNodePile->IsPrimary && location.GetBridgePileName() == BridgeInfo->PrimaryPile->Name) {
                 nodeIdsForPrimaryPileOutgoingBinding.push_back(item.NodeId());
             }
         }
 
         // check if some nodes were deleted -- we have to unbind them
         bool bindingReset = false;
-        auto applyChanges = [&](auto& prev, auto& cur, bool isIncoming) {
+        auto applyChanges = [&](auto& prev, auto& cur) {
             std::ranges::sort(cur);
             for (auto prevIt = prev.begin(), curIt = cur.begin(); prevIt != prev.end() || curIt != cur.end(); ) {
                 if (prevIt == prev.end() || (curIt != cur.end() && *curIt < *prevIt)) { // node added
                     ++curIt;
                 } else if (curIt == cur.end() || *prevIt < *curIt) { // node deleted
                     const ui32 nodeId = *prevIt++;
-                    if (isIncoming) {
-                        UnbindNode(nodeId, "node vanished");
-                    } else if (Binding && Binding->NodeId == nodeId) {
+                    UnbindNode(nodeId, "node vanished");
+                    if (Binding && Binding->NodeId == nodeId) {
                         bindingReset = true;
                     }
                 } else {
@@ -117,21 +101,34 @@ namespace NKikimr::NStorage {
             }
             prev = std::move(cur);
         };
-        applyChanges(NodeIdsForOutgoingBinding, nodeIdsForOutgoingBinding, false);
-        applyChanges(NodeIdsForIncomingBinding, nodeIdsForIncomingBinding, true);
-        applyChanges(NodeIdsForPrimaryPileOutgoingBinding, nodeIdsForPrimaryPileOutgoingBinding, false);
+        applyChanges(NodeIdsForOutgoingBinding, nodeIdsForOutgoingBinding);
+        applyChanges(NodeIdsForIncomingBinding, nodeIdsForIncomingBinding);
+        applyChanges(NodeIdsForPrimaryPileOutgoingBinding, nodeIdsForPrimaryPileOutgoingBinding);
         if (bindingReset) {
             AbortBinding("node vanished");
         }
 
         // issue updates
         BindQueue.Update(NodeIdsForOutgoingBinding);
+        RevBindQueue.Update(NodeIdsForIncomingBinding);
         PrimaryPileBindQueue.Update(NodeIdsForPrimaryPileOutgoingBinding);
+    }
+
+    std::optional<TBridgePileId> TDistributedConfigKeeper::ResolveNodePileId(const TNodeLocation& location) {
+        if (const auto& bridgePileName = location.GetBridgePileName()) {
+            if (const auto it = BridgePileNameMap.find(*bridgePileName); it != BridgePileNameMap.end()) {
+                return it->second;
+            } else {
+                Y_DEBUG_ABORT_S("incorrect bridge pile name for node Location# " << location.ToString());
+            }
+        } else if (BridgePileNameMap) {
+            Y_DEBUG_ABORT_S("missing bridge pile name for node Location# " << location.ToString());
+        }
+        return std::nullopt;
     }
 
     void TDistributedConfigKeeper::IssueNextBindRequest() {
         Y_DEBUG_ABORT_UNLESS(IsSelfStatic);
-        CheckRootNodeStatus();
 
         if (RootState != ERootState::INITIAL || Binding) {
             return; // we are either doing something, or binding is already in progress
@@ -145,16 +142,22 @@ namespace NKikimr::NStorage {
             return StartBinding(*nodeId);
         }
 
+        // nothing to bind to from main bind queue, try reverse one
+        TMonotonic revClosest = TMonotonic::Max();
+        if (std::optional<ui32> nodeId = RevBindQueue.Pick(now, &revClosest)) {
+            return StartBinding(*nodeId);
+        }
+
         // no node from the same pile available, try to bind to primary pile (if we have quorum)
+        TMonotonic primaryClosest = TMonotonic::Max();
         if (LocalPileQuorum && !BridgeInfo->SelfNodePile->IsPrimary) {
-            TMonotonic primaryClosest;
             if (std::optional<ui32> nodeIdFromPrimaryPile = PrimaryPileBindQueue.Pick(now, &primaryClosest)) {
                 return StartBinding(*nodeIdFromPrimaryPile);
             }
-            closest = closest != TMonotonic::Max() ? Min(closest, primaryClosest) : primaryClosest;
         }
 
         // nothing to bind to
+        closest = Max(closest, revClosest, primaryClosest);
         if (closest != TMonotonic::Max() && !Scheduled) {
             STLOG(PRI_DEBUG, BS_NODE, NWDC30, "Delaying bind");
             TActivationContext::Schedule(closest, new IEventHandle(TEvents::TSystem::Wakeup, 0, SelfId(), {}, nullptr, 0));
@@ -178,6 +181,9 @@ namespace NKikimr::NStorage {
 
         // abort any pending queries
         OpQueueOnError(TStringBuilder() << "binding is in progress Binding# " << Binding->ToString());
+
+        // unbind any other piles
+        UnbindNodesFromOtherPiles();
     }
 
     void TDistributedConfigKeeper::BindToSession(TActorId sessionId) {
@@ -358,7 +364,7 @@ namespace NKikimr::NStorage {
         return subs.SessionId;
     }
 
-    void TDistributedConfigKeeper::AbortBinding(const char *reason, bool sendUnbindMessage) {
+    void TDistributedConfigKeeper::AbortBinding(const char *reason, bool sendUnbindMessage, bool sendUpdate) {
         if (Binding) {
             STLOG(PRI_DEBUG, BS_NODE, NWDC03, "AbortBinding", (Binding, Binding), (Reason, reason));
 
@@ -372,7 +378,9 @@ namespace NKikimr::NStorage {
 
             ApplyConfigUpdateToDynamicNodes(true);
 
-            FanOutReversePush(nullptr);
+            if (sendUpdate) {
+                FanOutReversePush(nullptr);
+            }
 
             UnsubscribeQueue.insert(binding.NodeId);
         }
@@ -407,11 +415,20 @@ namespace NKikimr::NStorage {
             const bool configUpdate = record.HasCommittedStorageConfig() &&
                 CheckBridgePeerRevPush(record.GetCommittedStorageConfig(), senderNodeId) &&
                 (ApplyStorageConfig(record.GetCommittedStorageConfig()) || record.GetRecurseConfigUpdate());
-            const ui32 prevRootNodeId = std::exchange(Binding->RootNodeId, record.GetRootNodeId());
-            if (Binding->RootNodeId == SelfId().NodeId()) {
-                AbortBinding("binding cycle");
-            } else if (prevRootNodeId != GetRootNodeId() || configUpdate) {
-                STLOG(PRI_DEBUG, BS_NODE, NWDC13, "Binding updated", (Binding, Binding), (PrevRootNodeId, prevRootNodeId),
+
+            const bool bindingUpdate = !Binding || Binding->RootNodeId != record.GetRootNodeId();
+            if (Binding) {
+                if (record.GetRootNodeId() == SelfId().NodeId()) {
+                    AbortBinding("binding cycle", /*sendUnbindMessage=*/ true, /*sendUpdate=*/ false);
+                } else {
+                    Binding->RootNodeId = record.GetRootNodeId();
+                }
+            }
+
+            Y_ABORT_UNLESS(!Binding || Binding->RootNodeId != SelfId().NodeId());
+
+            if (bindingUpdate || configUpdate) {
+                STLOG(PRI_DEBUG, BS_NODE, NWDC13, "Binding updated", (Binding, Binding), (BindingUpdate, bindingUpdate),
                     (ConfigUpdate, configUpdate));
                 FanOutReversePush(configUpdate ? StorageConfig.get() : nullptr, record.GetRecurseConfigUpdate());
             }
@@ -439,10 +456,15 @@ namespace NKikimr::NStorage {
 
         const auto [it, inserted] = AllBoundNodes.try_emplace(std::move(nodeId));
         TIndirectBoundNode& node = it->second;
+        QuorumValid &= !inserted;
 
-        if (inserted && std::ranges::binary_search(NodeIdsForOutgoingBinding, it->first.NodeId())) {
-            // disable this node from target binding set, this is the first mention of this node
-            BindQueue.Disable(it->first.NodeId());
+        if (inserted) {
+            const ui32 nodeId = it->first.NodeId();
+            if (std::ranges::binary_search(NodeIdsForOutgoingBinding, nodeId)) {
+                BindQueue.Disable(nodeId);
+            } else if (std::ranges::binary_search(NodeIdsForIncomingBinding, nodeId)) {
+                RevBindQueue.Disable(nodeId);
+            }
         }
 
         // remember previous config meta
@@ -463,10 +485,6 @@ namespace NKikimr::NStorage {
             it->first.Serialize(boundNode->MutableNodeId());
             boundNode->MutableMeta()->CopyFrom(node.Configs.back());
         }
-
-        if (inserted) {
-            UpdateQuorums();
-        }
     }
 
     void TDistributedConfigKeeper::DeleteBound(ui32 refererNodeId, const TNodeIdentifier& nodeId, TEvNodeConfigPush *msg) {
@@ -485,13 +503,15 @@ namespace NKikimr::NStorage {
 
         if (node.Refs.empty()) {
             AllBoundNodes.erase(it);
+            QuorumValid = false;
             if (std::ranges::binary_search(NodeIdsForOutgoingBinding, nodeId.NodeId())) {
                 BindQueue.Enable(nodeId.NodeId());
+            } else if (std::ranges::binary_search(NodeIdsForIncomingBinding, nodeId.NodeId())) {
+                RevBindQueue.Enable(nodeId.NodeId());
             }
             if (msg) {
                 nodeId.Serialize(msg->Record.AddDeletedBoundNodeIds());
             }
-            UpdateQuorums();
         } else if (msg && prev != node.Configs.back()) {
             auto *boundNode = msg->Record.AddBoundNodes();
             nodeId.Serialize(boundNode->MutableNodeId());
@@ -505,7 +525,8 @@ namespace NKikimr::NStorage {
         auto& record = ev->Get()->Record;
 
         STLOG(PRI_DEBUG, BS_NODE, NWDC02, "TEvNodeConfigPush", (NodeId, senderNodeId), (Cookie, ev->Cookie),
-            (SessionId, ev->InterconnectSession), (Binding, Binding), (Record, record));
+            (SessionId, ev->InterconnectSession), (Binding, Binding), (Record, record),
+            (RootNodeId, GetRootNodeId()));
 
         if (!AllNodeIds.contains(senderNodeId)) {
             // node has been already deleted from the config, but new subscription is coming through -- ignoring it
@@ -523,26 +544,19 @@ namespace NKikimr::NStorage {
         }
 
         // check if this is connection from another pile
-        if (record.GetInitial()) {
-            if (!NodesFromSamePile.contains(senderNodeId)) {
-                Y_DEBUG_ABORT_UNLESS(BridgeInfo);
-                if (!Binding && LocalPileQuorum && BridgeInfo->SelfNodePile->IsPrimary) {
-                    // we allow this node's connection as this is the primary pile AND we have majority of connected
-                    // nodes AND this is the root one
-                } else {
-                    // this is either not the root node, or no quorum for connection
-                    auto response = std::make_unique<TEvNodeConfigReversePush>();
-                    if (Binding && Binding->RootNodeId) {
-                        // command peer to join this specific node
-                        response->Record.SetRootNodeId(Binding->RootNodeId);
-                    }
-                    response->Record.SetRejected(true);
-                    SendEvent(*ev, std::move(response));
-                    return;
+        if (record.GetInitial() && !NodesFromSamePile.contains(senderNodeId)) {
+            Y_DEBUG_ABORT_UNLESS(BridgeInfo);
+            if (!Binding && LocalPileQuorum && BridgeInfo->SelfNodePile->IsPrimary) {
+                // we allow this node's connection as this is the primary pile AND we have majority of connected
+                // nodes AND this is the root one
+            } else {
+                // this is either not the root node, or no quorum for connection
+                auto response = TEvNodeConfigReversePush::MakeRejected();
+                if (Binding && Binding->RootNodeId) {
+                    // command peer to join this specific node
+                    response->Record.SetRootNodeId(Binding->RootNodeId);
                 }
-            } else if (!std::ranges::binary_search(NodeIdsForIncomingBinding, senderNodeId)) {
-                // reject node as we do not expected binding from it
-                SendEvent(*ev, TEvNodeConfigReversePush::MakeRejected());
+                SendEvent(*ev, std::move(response));
                 return;
             }
         }
@@ -643,8 +657,6 @@ namespace NKikimr::NStorage {
         if (pushEv && pushEv->IsUseful()) {
             SendEvent(*Binding, std::move(pushEv));
         }
-
-        CheckRootNodeStatus();
     }
 
     void TDistributedConfigKeeper::Handle(TEvNodeConfigUnbind::TPtr ev) {
@@ -691,8 +703,6 @@ namespace NKikimr::NStorage {
             UnsubscribeQueue.insert(nodeId);
 
             OnSyncerUnboundNode(nodeId);
-
-            CheckRootNodeStatus();
         }
     }
 
@@ -704,25 +714,19 @@ namespace NKikimr::NStorage {
         return Scepter || (Binding && GetRootNodeId() != SelfId().NodeId());
     }
 
-    void TDistributedConfigKeeper::UnbindNodesFromNonPrimaryPile() {
-        if (!BridgeInfo || BridgeInfo->SelfNodePile->IsPrimary) {
-            return; // we don't disconnect anything when this is primary pile
+    void TDistributedConfigKeeper::UnbindNodesFromOtherPiles() {
+        if (!BridgeInfo) {
+            return;
         }
         std::vector<ui32> goingToUnbind;
-        for (const auto& [node, item] : AllBoundNodes) {
-            if (DirectBoundNodes.contains(node.NodeId()) && node.BridgePileId != SelfNode.BridgePileId) {
-                goingToUnbind.push_back(node.NodeId());
+        for (const auto& [nodeId, info] : DirectBoundNodes) {
+            if (BridgeInfo->GetPileForNode(nodeId) != BridgeInfo->SelfNodePile) {
+                goingToUnbind.push_back(nodeId);
             }
         }
         for (ui32 nodeId : goingToUnbind) {
-            UnbindNode(nodeId, "pile lost its primary status");
+            UnbindNode(nodeId, "primary pile scepter lost");
         }
-    }
-
-    void TDistributedConfigKeeper::UpdateQuorums() {
-        Y_ABORT_UNLESS(StorageConfig);
-        LocalPileQuorum = BridgeInfo && HasConnectedNodeQuorum(*StorageConfig, {BridgeInfo->SelfNodePile->BridgePileId});
-        GlobalQuorum = HasConnectedNodeQuorum(*StorageConfig);
     }
 
 } // NKikimr::NStorage

@@ -10,16 +10,12 @@ namespace NKikimr::NStorage {
         TDistributedConfigKeeper* const Self;
         const std::weak_ptr<TLifetimeToken> LifetimeToken;
         const ui64 InvokeActorQueueGeneration;
-        std::unique_ptr<TEventHandle<TEvNodeConfigInvokeOnRoot>> Event;
-        const TActorId Sender;
-        const ui64 Cookie;
-        const TActorId RequestSessionId;
+        TInvokeQuery Query;
 
         bool BeginRegistered = false;
 
         bool CheckSyncersAfterCommit = false;
 
-        TActorId ParentId;
         ui32 WaitingReplyFromNode = 0;
 
         using TQuery = NKikimrBlobStorage::TEvNodeConfigInvokeOnRoot;
@@ -31,12 +27,9 @@ namespace NKikimr::NStorage {
 
         std::shared_ptr<TLifetimeToken> RequestHandlerToken = std::make_shared<TLifetimeToken>();
 
-        THashSet<TBridgePileId> SpecificBridgePileIds;
         std::optional<NKikimrBlobStorage::TStorageConfig> SwitchBridgeNewConfig;
 
-        std::optional<NKikimrBlobStorage::TStorageConfig> MergedConfig;
-
-        std::optional<NKikimrBlobStorage::TStorageConfig> ReplaceConfig;
+        std::optional<TString> PassedAwayBacktrace;
 
     public: // Error handling
         struct TExError : yexception {
@@ -57,11 +50,9 @@ namespace NKikimr::NStorage {
         };
 
     public:
-        TInvokeRequestHandlerActor(TDistributedConfigKeeper *self, std::unique_ptr<TEventHandle<TEvNodeConfigInvokeOnRoot>>&& ev);
-        TInvokeRequestHandlerActor(TDistributedConfigKeeper *self);
-        TInvokeRequestHandlerActor(TDistributedConfigKeeper *self, NKikimrBlobStorage::TStorageConfig&& config);
+        TInvokeRequestHandlerActor(TDistributedConfigKeeper *self, TInvokeQuery&& query);
 
-        void Bootstrap(TActorId parentId);
+        void Bootstrap();
 
         void Handle(TEvNodeConfigInvokeOnRootResult::TPtr ev);
 
@@ -78,7 +69,6 @@ namespace NKikimr::NStorage {
         // Query execution logic
 
         void ExecuteQuery();
-        void ExecuteInitialRootAction();
         void IssueScatterTask(TEvScatter&& task, TGatherCallback callback);
         void Handle(TEvNodeConfigGather::TPtr ev);
 
@@ -174,39 +164,16 @@ namespace NKikimr::NStorage {
         // Configuration proposition
 
         void AdvanceGeneration();
-        void StartProposition(NKikimrBlobStorage::TStorageConfig *config,
+        void StartProposition(NKikimrBlobStorage::TStorageConfig *config, bool acceptLocalQuorum = false,
             const NKikimrBlobStorage::TStorageConfig *propositionBase = nullptr);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Query termination and result delivery
 
-        void RunCommonChecks();
+        void RunCommonChecks(bool requireScepter = true);
 
-        std::unique_ptr<TEvNodeConfigInvokeOnRootResult> PrepareResult(TResult::EStatus status, std::optional<TStringBuf> errorReason);
-        void FinishWithError(TResult::EStatus status, const TString& errorReason);
-
-        template<typename T>
-        void FinishWithSuccess(T&& callback, TResult::EStatus status = TResult::OK,
-                std::optional<TStringBuf> errorReason = std::nullopt) {
-            auto ev = PrepareResult(status, errorReason);
-            callback(&ev->Record);
-            STLOG(PRI_DEBUG, BS_NODE, NWDC01, "FinishWithSuccess", (SelfId, SelfId()), (Record, ev->Record));
-            Finish(Sender, SelfId(), ev.release(), Cookie);
-        }
-
-        void FinishWithSuccess() {
-            FinishWithSuccess([&](auto* /*record*/) {});
-        }
-
-        template<typename... TArgs>
-        void Finish(TArgs&&... args) {
-            auto handle = std::make_unique<IEventHandle>(std::forward<TArgs>(args)...);
-            if (RequestSessionId) { // deliver response through interconnection session the request arrived from
-                handle->Rewrite(TEvInterconnect::EvForward, RequestSessionId);
-            }
-            TActivationContext::Send(handle.release());
-            PassAway();
-        }
+        void Finish(TResult::EStatus status, std::optional<TStringBuf> errorReason,
+            const std::function<void(TResult*)>& callback = {});
 
         void PassAway() override;
 
@@ -215,7 +182,6 @@ namespace NKikimr::NStorage {
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Notifications from distconf
 
-        void OnNoQuorum();
         void OnError(const TString& errorReason);
         void OnBeginOperation();
         void OnConfigProposed(const std::optional<TString>& errorReason);
@@ -225,7 +191,7 @@ namespace NKikimr::NStorage {
             try {
                 callback();
             } catch (const TExError& error) {
-                FinishWithError(error.Status, error.what());
+                Finish(error.Status, error.what());
                 if (error.IsCritical) {
                     Y_DEBUG_ABORT("critical error during query processing: %s", error.what());
                 }

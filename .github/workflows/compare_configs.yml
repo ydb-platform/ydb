@@ -1,4 +1,4 @@
-name: Collect-analytics-fast-run
+name: Compare ydb configs in branches
 on:
   schedule:
     - cron: "0 * * * *"  # Every hour
@@ -13,7 +13,7 @@ defaults:
     shell: bash
 jobs:
   main:
-    name: Checkout and setup
+    name: Compare configs
     runs-on: [ self-hosted, auto-provisioned, build-preset-analytic-node]
     steps:
     - name: Checkout
@@ -25,7 +25,7 @@ jobs:
       uses: ./.github/actions/setup_ci_ydb_service_account_key_file_credentials
       with:
         ci_ydb_service_account_key_file_credentials: ${{ secrets.CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS }}
-    - name: Build and test
+    - name: Build
       uses: ./.github/actions/build_and_test_ya
       with:
         build_preset: "release"
@@ -45,7 +45,7 @@ jobs:
         s3_key_id: ${{ secrets.AWS_KEY_ID }}
         s3_key_secret: ${{ secrets.AWS_KEY_VALUE }}
     
-    - name: comapare and publish result
+    - name: Comapare and publish result
       shell: bash
       run: |
         set -xe

@@ -2,10 +2,8 @@
 
 #include <ydb/core/fq/libs/common/compression.h>
 #include <ydb/core/fq/libs/events/events.h>
-
 #include <ydb/core/kqp/federated_query/kqp_federated_query_actors.h>
 #include <ydb/core/kqp/proxy_service/kqp_script_executions.h>
-
 #include <ydb/core/tx/datashard/const.h>
 
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
@@ -175,8 +173,8 @@ private:
     }
 
     void RunS3ApplicatorActor(const NYql::NDqProto::TExternalEffect& externalEffect) {
-        if (!FederatedQuerySetup) {
-            FinishScriptFinalization(Ydb::StatusIds::INTERNAL_ERROR, "unable to aplicate s3 external effect, invalid federated query setup");
+        if (!FederatedQuerySetup || !S3ActorsFactor) {
+            FinishScriptFinalization(Ydb::StatusIds::INTERNAL_ERROR, "unable to applicate s3 external effect, invalid federated query setup");
             return;
         }
 
@@ -251,7 +249,7 @@ private:
     TEvScriptFinalizeRequest::TPtr Request;
 
     const TDuration FinalizationTimeout;
-    const std::optional<TKqpFederatedQuerySetup>& FederatedQuerySetup;
+    const std::optional<TKqpFederatedQuerySetup> FederatedQuerySetup;
     const NFq::TCompressor Compressor;
     std::shared_ptr<NYql::NDq::IS3ActorsFactory> S3ActorsFactor;
 

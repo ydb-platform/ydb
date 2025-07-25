@@ -4,6 +4,7 @@
 
 #include <ydb/core/base/backtrace.h>
 #include <ydb/core/kqp/common/kqp_script_executions.h>
+#include <ydb/core/kqp/finalize_script_service/kqp_finalize_script_service.h>
 #include <ydb/core/testlib/test_client.h>
 #include <ydb/core/testlib/basics/appdata.h>
 #include <ydb/core/util/proto_duration.h>
@@ -67,8 +68,8 @@ const TVector<TString> TEST_TABLE_PATH = { "test", "test_table" };
 const TVector<TString> TEST_KEY_COLUMNS = {"col1"};
 
 struct TScriptExecutionsYdbSetup {
-    TScriptExecutionsYdbSetup() {
-        Init();
+    explicit TScriptExecutionsYdbSetup(bool enableScriptExecutionBackgroundChecks = false) {
+        Init(enableScriptExecutionBackgroundChecks);
     }
 
     static void BackTraceSignalHandler(int signal) {
@@ -81,7 +82,7 @@ struct TScriptExecutionsYdbSetup {
         abort();
     }
 
-    void Init() {
+    void Init(bool enableScriptExecutionBackgroundChecks) {
         EnableYDBBacktraceFormat();
         for (auto sig : {SIGILL, SIGSEGV}) {
             signal(sig, &TScriptExecutionsYdbSetup::BackTraceSignalHandler);
@@ -91,6 +92,7 @@ struct TScriptExecutionsYdbSetup {
         GrpcPort = PortManager.GetPort(2135);
         ServerSettings = MakeHolder<Tests::TServerSettings>(MsgBusPort);
         ServerSettings->SetEnableScriptExecutionOperations(true);
+        ServerSettings->SetEnableScriptExecutionBackgroundChecks(enableScriptExecutionBackgroundChecks);
         ServerSettings->SetGrpcPort(GrpcPort);
         Server = MakeHolder<Tests::TServer>(*ServerSettings);
         Client = MakeHolder<Tests::TClient>(*ServerSettings);
@@ -240,7 +242,7 @@ struct TScriptExecutionsYdbSetup {
     }
 
     void CheckLeaseExistence(const TString& executionId, bool expectedExistence, std::optional<i32> expectedOperationStatus, i64 leaseGeneration = 1, NPrivate::ELeaseState leaseStatus = NPrivate::ELeaseState::ScriptRunning) {
-        TString sql = R"(
+        const TString sql = R"(
             DECLARE $database As Utf8;
             DECLARE $execution_id As Utf8;
 
@@ -266,7 +268,7 @@ struct TScriptExecutionsYdbSetup {
                 .Utf8(executionId)
                 .Build();
 
-        auto result = TableClientSession->ExecuteDataQuery(sql, NYdb::NTable::TTxControl::BeginTx().CommitTx(), params.Build()).ExtractValueSync();
+        const auto result = TableClientSession->ExecuteDataQuery(sql, NYdb::NTable::TTxControl::BeginTx().CommitTx(), params.Build()).ExtractValueSync();
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 
         {   // Lease info
@@ -362,6 +364,50 @@ struct TScriptExecutionsYdbSetup {
         }
     }
 
+    void WaitOperationStatus(const TString& executionId, i32 expectedOperationStatus, TDuration timeoutDuration = TestTimeout) {
+        Ydb::StatusIds::StatusCode lastOperationStatus = Ydb::StatusIds::STATUS_CODE_UNSPECIFIED;
+        const auto timeout = TInstant::Now() + timeoutDuration;
+        while (true) {
+            const TString sql = R"(
+                DECLARE $database As Utf8;
+                DECLARE $execution_id As Utf8;
+
+                SELECT
+                    operation_status
+                FROM `.metadata/script_executions`
+                WHERE database = $database AND execution_id = $execution_id;
+            )";
+
+            NYdb::TParamsBuilder params;
+            params
+                .AddParam("$database")
+                    .Utf8(TestDatabase)
+                    .Build()
+                .AddParam("$execution_id")
+                    .Utf8(executionId)
+                    .Build();
+
+            const auto result = TableClientSession->ExecuteDataQuery(sql, NYdb::NTable::TTxControl::BeginTx().CommitTx(), params.Build()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            NYdb::TResultSetParser rs = result.GetResultSetParser(0);
+            UNIT_ASSERT(rs.TryNextRow());
+
+            if (const auto operationStatus = rs.ColumnParser("operation_status").GetOptionalInt32()) {
+                if (operationStatus == expectedOperationStatus) {
+                    return;
+                }
+                lastOperationStatus = static_cast<Ydb::StatusIds::StatusCode>(*operationStatus);
+            }
+
+            if (TInstant::Now() > timeout) {
+                UNIT_FAIL("Failed to wait for operation status, last status: " << lastOperationStatus << ", execution id: " << executionId);
+            }
+
+            Sleep(TDuration::MilliSeconds(100));
+        }
+    }
+
 private:
     NKikimrKqp::TEvQueryRequest GetQueryRequest(const TString& query) {
         NKikimrKqp::TEvQueryRequest queryProto;
@@ -406,8 +452,8 @@ Y_UNIT_TEST_SUITE(ScriptExecutionsTest) {
             SleepUntil(startLeaseTime + TestLeaseDuration);
         }
 
-        auto checkResult2 = ydb.CheckLeaseStatus(executionId);
-        UNIT_ASSERT_VALUES_EQUAL(checkResult2->Get()->OperationStatus, Ydb::StatusIds::UNAVAILABLE);
+        const auto checkResult = ydb.CheckLeaseStatus(executionId);
+        UNIT_ASSERT_VALUES_EQUAL(checkResult->Get()->OperationStatus, Ydb::StatusIds::UNAVAILABLE);
         ydb.CheckLeaseExistence(executionId, false, Ydb::StatusIds::UNAVAILABLE);
     }
 
@@ -453,16 +499,12 @@ Y_UNIT_TEST_SUITE(ScriptExecutionsTest) {
         UNIT_ASSERT(!updateResponse->Get()->ExecutionEntryExists);
     }
 
-    Y_UNIT_TEST(RestartQueryWithGetOperation) {
-        constexpr TDuration BACKOFF_DURATION = TDuration::Seconds(5);
-
-        TScriptExecutionsYdbSetup ydb;
-
+    TString ExecuteQueryToRetry(TScriptExecutionsYdbSetup& ydb, TDuration backoffDuration) {
         NKikimrKqp::TScriptExecutionRetryState::TMapping retryMapping;
         retryMapping.AddStatusCode(Ydb::StatusIds::SCHEME_ERROR);
         auto& policy = *retryMapping.MutableBackoffPolicy();
-        policy.SetRetryPeriodMs(BACKOFF_DURATION.MilliSeconds());
-        policy.SetBackoffPeriodMs(BACKOFF_DURATION.MilliSeconds());
+        policy.SetRetryPeriodMs(backoffDuration.MilliSeconds());
+        policy.SetBackoffPeriodMs(backoffDuration.MilliSeconds());
         policy.SetRetryRateLimit(1);
 
         constexpr char TABLE_NAME[] = "test_table";
@@ -509,9 +551,10 @@ Y_UNIT_TEST_SUITE(ScriptExecutionsTest) {
                 SELECT 42 AS Key, "Some-Val" AS Value
         )"));
 
-        Sleep(BACKOFF_DURATION);
-        ydb.WaitQueryFinish(executionId);
+        return executionId;
+    }
 
+    void CheckQueryResults(TScriptExecutionsYdbSetup& ydb, const TString& executionId) {
         const auto scriptResults = ydb.FetchScriptResults(executionId, 0);
         const auto& ev = *scriptResults->Get();
         UNIT_ASSERT_VALUES_EQUAL_C(ev.Status, Ydb::StatusIds::SUCCESS, ev.Issues.ToString());
@@ -526,6 +569,65 @@ Y_UNIT_TEST_SUITE(ScriptExecutionsTest) {
         UNIT_ASSERT(parser.TryNextRow());
         UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("Key").GetInt32(), 42);
         UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("Value").GetString(), "Some-Val");
+    }
+
+    Y_UNIT_TEST(RestartQueryWithGetOperation) {
+        constexpr TDuration BACKOFF_DURATION = TDuration::Seconds(5);
+
+        TScriptExecutionsYdbSetup ydb;
+
+        const auto executionId = ExecuteQueryToRetry(ydb, BACKOFF_DURATION);
+
+        Sleep(BACKOFF_DURATION);
+        ydb.WaitQueryFinish(executionId);
+
+        CheckQueryResults(ydb, executionId);
+    }
+
+    Y_UNIT_TEST(BackgroundOperationRestart) {
+        constexpr TDuration BACKOFF_DURATION = TDuration::Seconds(5);
+
+        TScriptExecutionsYdbSetup ydb(/* enableScriptExecutionBackgroundChecks */ true);
+
+        const auto executionId = ExecuteQueryToRetry(ydb, BACKOFF_DURATION);
+
+        // Wait background retry
+        Sleep(BACKOFF_DURATION);
+        ydb.WaitOperationStatus(executionId, Ydb::StatusIds::SUCCESS);
+
+        ydb.CheckLeaseExistence(executionId, false, Ydb::StatusIds::SUCCESS);
+        CheckQueryResults(ydb, executionId);
+    }
+
+    Y_UNIT_TEST(BackgroundOperationFinalization) {
+        TScriptExecutionsYdbSetup ydb(/* enableScriptExecutionBackgroundChecks */ true);
+
+        const TString executionId = ydb.CreateQueryInDb();
+        UNIT_ASSERT(executionId);
+
+        ydb.CheckLeaseExistence(executionId, true, std::nullopt);
+
+        // Wait background finalization
+        Sleep(TestLeaseDuration);
+        ydb.WaitOperationStatus(executionId, Ydb::StatusIds::UNAVAILABLE);
+
+        ydb.CheckLeaseExistence(executionId, false, Ydb::StatusIds::UNAVAILABLE);
+    }
+
+    Y_UNIT_TEST(BackgroundChecksStartAfterRestart) {
+        TScriptExecutionsYdbSetup ydb(/* enableScriptExecutionBackgroundChecks */ false);
+
+        const TString executionId = ydb.CreateQueryInDb();
+        UNIT_ASSERT(executionId);
+
+        ydb.CheckLeaseExistence(executionId, true, std::nullopt);
+
+        // Wait background finalization
+        Sleep(TestLeaseDuration);
+        ydb.GetRuntime()->Register(CreateKqpFinalizeScriptService({}, nullptr, nullptr, true));
+        ydb.WaitOperationStatus(executionId, Ydb::StatusIds::UNAVAILABLE);
+
+        ydb.CheckLeaseExistence(executionId, false, Ydb::StatusIds::UNAVAILABLE);
     }
 }
 

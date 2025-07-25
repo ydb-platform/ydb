@@ -12,6 +12,7 @@ namespace NKikimr::NKqp {
 
 IActor* CreateKqpFinalizeScriptService(const NKikimrConfig::TQueryServiceConfig& queryServiceConfig,
     IKqpFederatedQuerySetupFactory::TPtr federatedQuerySetupFactory,
-    std::shared_ptr<NYql::NDq::IS3ActorsFactory> s3ActorsFactory);
+    std::shared_ptr<NYql::NDq::IS3ActorsFactory> s3ActorsFactory,
+    bool enableBackgroundLeaseChecks = true);
 
 }  // namespace NKikimr::NKqp

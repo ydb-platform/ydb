@@ -166,6 +166,9 @@ struct TKqpScriptExecutionEvents {
         EvSaveScriptResultPartFinished,
         EvScriptExecutionsTableCreationFinished,
         EvScriptExecutionRestarted,
+        EvListExpiredLeasesResponse,
+        EvRefreshScriptExecutionLeasesResponse,
+        EvStartScriptExecutionBackgroundChecks,
     };
 };
 

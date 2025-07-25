@@ -259,6 +259,9 @@ struct TEvFetchScriptResultsResponse : public TEventLocal<TEvFetchScriptResultsR
     NYql::TIssues Issues;
 };
 
+struct TEvStartScriptExecutionBackgroundChecks : public TEventLocal<TEvStartScriptExecutionBackgroundChecks, TKqpScriptExecutionEvents::EvStartScriptExecutionBackgroundChecks> {
+};
+
 struct TEvSaveScriptExternalEffectRequest : public TEventLocal<TEvSaveScriptExternalEffectRequest, TKqpScriptExecutionEvents::EvSaveScriptExternalEffectRequest> {
     struct TDescription {
         TDescription(const TString& executionId, const TString& database, const TString& customerSuppliedId)
@@ -394,6 +397,36 @@ struct TEvScriptExecutionRestarted : public TEventLocal<TEvScriptExecutionRestar
 
     const Ydb::StatusIds::StatusCode Status;
     const NYql::TIssues Issues;
+};
+
+struct TEvListExpiredLeasesResponse : public TEventLocal<TEvListExpiredLeasesResponse, TKqpScriptExecutionEvents::EvListExpiredLeasesResponse> {
+    struct TLeaseInfo {
+        TString Database;
+        TString ExecutionId;
+    };
+
+    explicit TEvListExpiredLeasesResponse(std::vector<TLeaseInfo>&& leases)
+        : Leases(std::move(leases))
+    {}
+
+    TEvListExpiredLeasesResponse(Ydb::StatusIds::StatusCode status, NYql::TIssues issues)
+        : Status(status)
+        , Issues(std::move(issues))
+    {}
+
+    std::vector<TLeaseInfo> Leases;
+    std::optional<Ydb::StatusIds::StatusCode> Status;
+    NYql::TIssues Issues;
+};
+
+struct TEvRefreshScriptExecutionLeasesResponse : public TEventLocal<TEvRefreshScriptExecutionLeasesResponse, TKqpScriptExecutionEvents::EvRefreshScriptExecutionLeasesResponse> {
+    TEvRefreshScriptExecutionLeasesResponse(bool success, NYql::TIssues issues)
+        : Success(success)
+        , Issues(std::move(issues))
+    {}
+
+    bool Success;
+    NYql::TIssues Issues;
 };
 
 } // namespace NKikimr::NKqp

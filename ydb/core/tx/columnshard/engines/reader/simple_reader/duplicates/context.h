@@ -11,6 +11,9 @@ class TInternalFilterConstructor: TMoveOnly {
 private:
     TEvRequestFilter::TPtr OriginalRequest;
     const TColumnDataSplitter Intervals;
+    const std::shared_ptr<NGroupedMemoryManager::TProcessGuard> ProcessGuard;
+    const std::shared_ptr<NGroupedMemoryManager::TScopeGuard> ScopeGuard;
+    const std::shared_ptr<NGroupedMemoryManager::TGroupGuard> GroupGuard;
 
     std::map<TRowRange, NArrow::TColumnFilter> FiltersByRange;
 
@@ -74,7 +77,30 @@ public:
     TInternalFilterConstructor(const TEvRequestFilter::TPtr& request, TColumnDataSplitter&& splitter);
 
     ~TInternalFilterConstructor() {
-        AFL_VERIFY(IsDone());
+        AFL_VERIFY(IsDone())("state", DebugString());
+    }
+
+    TString DebugString() const {
+        TStringBuilder sb;
+        sb << "{";
+        sb << "Portion=" << OriginalRequest->Get()->GetSourceId() << ";";
+        sb << "ReadyFilters=[";
+        for (const auto& [range, _] : FiltersByRange) {
+            sb << range.DebugString() << ";";
+        }
+        sb << "];";
+        sb << "}";
+        return sb;
+    }
+
+    ui64 GetMemoryProcessId() const {
+        return ProcessGuard->GetProcessId();
+    }
+    ui64 GetMemoryScopeId() const {
+        return ScopeGuard->GetProcessId();
+    }
+    ui64 GetMemoryGroupId() const {
+        return GroupGuard->GetProcessId();
     }
 };
 

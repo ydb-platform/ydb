@@ -93,24 +93,6 @@ public:
     ~TAllocationGuard();
 };
 
-class TCompositeAllocationGuard {
-private:
-    std::set<std::shared_ptr<TAllocationGuard>> Guards;
-
-public:
-    void Add(const std::shared_ptr<TAllocationGuard>& guard) {
-        Guards.insert(std::move(guard));
-    }
-
-    ui64 GetMemory() const {
-        ui64 memory = 0;
-        for (const auto& guard : Guards) {
-            memory += guard->GetMemory();
-        }
-        return memory;
-    }
-};
-
 class IAllocation {
 private:
     static inline TAtomicCounter Counter = 0;

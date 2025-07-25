@@ -102,6 +102,7 @@ public:
             segments.emplace_back(TRowRange(borderOffsets[i - 1], borderOffsets[i]));
         }
 
+        AFL_VERIFY(segments.size() == NumIntervals())("splitted", segments.size())("expected", NumIntervals())("splitter", DebugString());
         return segments;
     }
 

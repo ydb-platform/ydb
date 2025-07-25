@@ -99,15 +99,6 @@ private:
 
     virtual void DoInitCursor(const std::shared_ptr<IScanCursor>& cursor) override;
 
-    virtual NCommon::TPortionIntervalTree GetPortionIntervals() const override {
-        NCommon::TPortionIntervalTree result;
-        for (const auto& portion : Sources) {
-            result.AddRange(NCommon::TPortionIntervalTree::TOwnedRange(portion.GetPortion()->IndexKeyStart(), true, portion.GetPortion()->IndexKeyEnd(), true),
-                portion.GetPortion());
-        }
-        return result;
-    }
-
     virtual std::vector<TInsertWriteId> GetUncommittedWriteIds() const override;
 
     virtual std::shared_ptr<NCommon::IDataSource> DoTryExtractNextImpl(const std::shared_ptr<NCommon::TSpecialReadContext>& context) override {
@@ -116,15 +107,6 @@ private:
         ++CurrentSourceIdx;
         return constructor.MutableObject().Construct(context, constructor.DetachAccessor());
     }
-    virtual NCommon::TPortionIntervalTree  GetPortionIntervals() const override {
-        NCommon::TPortionIntervalTree  result;
-        for (const auto& portion : HeapSources) {
-            result.AddRange(NCommon::TPortionIntervalTree ::TOwnedRange(portion.GetPortion()->IndexKeyStart(), true, portion.GetPortion()->IndexKeyEnd(), true),
-                portion.GetPortion());
-        }
-        return result;
-    }
-
 public:
     TPortionsSources(std::deque<TSourceConstructor>&& sources, const ERequestSorting sorting, std::vector<TInsertWriteId>&& uncommitted)
         : TBase(sorting)

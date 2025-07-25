@@ -68,7 +68,7 @@ private:
 
     const std::shared_ptr<TPortionInfo>& GetPortionVerified(const ui64 portionId) const {
         const auto* portion = Portions.FindPtr(portionId);
-        AFL_VERIFY(portion);
+        AFL_VERIFY(portion)("portion", portionId);
         return *portion;
     }
 

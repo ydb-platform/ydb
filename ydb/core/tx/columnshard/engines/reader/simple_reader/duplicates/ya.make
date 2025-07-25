@@ -12,6 +12,7 @@ SRCS(
     private_events.cpp
     splitter.cpp
     context.cpp
+    filter_cache.cpp
 )
 
 PEERDIR(

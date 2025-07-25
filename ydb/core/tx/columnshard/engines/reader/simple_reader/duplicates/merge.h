@@ -54,6 +54,19 @@ public:
         AFL_VERIFY(SourcesById.emplace(interval, batch).second);
         AllocationGuards.push_back(guard);
     }
+
+    TString DebugString() const {
+        TStringBuilder sb;
+        sb << '{';
+        sb << "sources=";
+        sb << '[';
+        for (const auto& [range, _] : SourcesById) {
+            sb << range.DebugString() << ';';
+        }
+        sb << ']';
+        sb << '}';
+        return sb;
+    }
 };
 
 }   // namespace NKikimr::NOlap::NReader::NSimple

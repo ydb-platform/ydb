@@ -18,16 +18,26 @@ private:
 
     TActorId Owner;
     TActorId ColumnShardActorId;
-    std::shared_ptr<TInternalFilterConstructor> Context;
+    YDB_READONLY_DEF(std::shared_ptr<TInternalFilterConstructor>, Context);
     std::map<ui32, std::shared_ptr<arrow::Field>> Columns;
     std::vector<TPortionInfo::TConstPtr> Portions;
     std::shared_ptr<NGroupedMemoryManager::TAllocationGuard> AllocationGuard;
 
 private:
+    void OnDone() {
+        AFL_VERIFY(Owner);
+        Owner = TActorId();
+    }
+
+    bool IsDone() const {
+        return !Owner;
+    }
+
     virtual void DoOnResultReady(THashMap<TAddress, TObject>&& objectAddresses, THashSet<TAddress>&& /*removedAddresses*/,
         THashMap<TAddress, TString>&& errorAddresses) override {
         if (!errorAddresses.empty()) {
             TActorContext::AsActorContext().Send(Owner, new NPrivate::TEvDuplicateSourceCacheResult(Context, errorAddresses.begin()->second));
+            OnDone();
             return;
         }
 
@@ -53,7 +63,7 @@ private:
         AFL_VERIFY(AllocationGuard);
         TActorContext::AsActorContext().Send(
             Owner, new NPrivate::TEvDuplicateSourceCacheResult(Context, std::move(result), std::move(AllocationGuard)));
-        Owner = TActorId();
+        OnDone();
     }
 
     virtual bool DoIsAborted() const override {
@@ -62,7 +72,7 @@ private:
 
 public:
     TColumnFetchingCallback(const TActorId& owner, const TActorId& columnShardActorId, std::shared_ptr<TInternalFilterConstructor>&& context,
-        std::map<ui32, std::shared_ptr<arrow::Field>>&& columns, std::vector<TPortionInfo::TConstPtr>&& portions)
+        std::map<ui32, std::shared_ptr<arrow::Field>>&& columns, const std::vector<TPortionInfo::TConstPtr>& portions)
         : Owner(owner)
         , ColumnShardActorId(columnShardActorId)
         , Context(std::move(context))
@@ -74,13 +84,17 @@ public:
     void OnError(const TString& errorMessage) {
         AFL_VERIFY(Owner);
         TActorContext::AsActorContext().Send(Owner, new NPrivate::TEvDuplicateSourceCacheResult(Context, errorMessage));
-        Owner = TActorId();
+        OnDone();
     }
 
     void SetAllocationGuard(std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>&& allocationGuard) {
         AFL_VERIFY(!AllocationGuard);
         AllocationGuard = allocationGuard;
         AFL_VERIFY(AllocationGuard);
+    }
+
+    ~TColumnFetchingCallback() {
+        AFL_VERIFY(IsDone());
     }
 };
 
@@ -119,15 +133,15 @@ private:
 
 private:
     virtual void DoOnRequestsFinished(TDataAccessorsResult&& result) override {
+        AFL_VERIFY(Callback);
         if (result.HasErrors()) {
             Callback->OnError(result.GetErrorsByPathId().begin()->second);
             return;
         }
 
-        static TAtomicCounter processId;
         ui64 mem = 0;
         for (const auto& accessor : result.ExtractPortionsVector()) {
-            mem += accessor.GetColumnRawBytes(Columns);
+            mem += accessor->GetColumnRawBytes(Columns);
         }
 
         THashSet<NGeneralCache::TColumnDataCachePolicy::TAddress> columnsToFetch;
@@ -136,12 +150,13 @@ private:
                 columnsToFetch.emplace(ColumnShardActorId, portion, column);
             }
         }
-        NGroupedMemoryManager::TDeduplicationMemoryLimiterOperator::SendToAllocation(
-            processId.Inc(), 1, 1, { std::make_shared<TColumnDataAllocation>(Callback, std::move(columnsToFetch), mem) }, std::nullopt);
+        AFL_VERIFY(!columnsToFetch.empty());
+        NGroupedMemoryManager::TDeduplicationMemoryLimiterOperator::SendToAllocation(Callback->GetContext()->GetMemoryProcessId(),
+            Callback->GetContext()->GetMemoryScopeId(), Callback->GetContext()->GetMemoryGroupId(),
+            { std::make_shared<TColumnDataAllocation>(Callback, std::move(columnsToFetch), mem) }, std::nullopt);
     }
     virtual const std::shared_ptr<const TAtomicCounter>& DoGetAbortionFlag() const override {
-        static std::shared_ptr<const TAtomicCounter> counter = std::make_shared<const TAtomicCounter>();
-        return counter;
+        return Default<std::shared_ptr<const TAtomicCounter>>();
     }
 
 public:
@@ -168,7 +183,7 @@ TDuplicateManager::TDuplicateManager(const TSpecialReadContext& context, TPortio
     , Portions([this]() {
         THashMap<ui64, std::shared_ptr<TPortionInfo>> portions;
         Intervals.EachRange(
-            [portions](const TPortionIntervalTree::TOwnedRange& /*range*/, const std::shared_ptr<TPortionInfo>& portion) mutable {
+            [&portions](const TPortionIntervalTree::TOwnedRange& /*range*/, const std::shared_ptr<TPortionInfo>& portion) mutable {
                 AFL_VERIFY(portions.emplace(portion->GetPortionId(), portion).second);
             });
         return portions;
@@ -176,6 +191,7 @@ TDuplicateManager::TDuplicateManager(const TSpecialReadContext& context, TPortio
     , FiltersCache(100)   // FIXME configure
     , DataAccessorsManager(context.GetCommonContext()->GetDataAccessorsManager())
 {
+    AFL_VERIFY(Intervals.Size());
 }
 
 void TDuplicateManager::Handle(const TEvRequestFilter::TPtr& ev) {
@@ -216,14 +232,6 @@ void TDuplicateManager::Handle(const TEvRequestFilter::TPtr& ev) {
         }
     }
 
-    auto sortingSchema = sourcesToFetch.front()->IndexKeyStart().GetSchema();
-    THashSet<NGeneralCache::TColumnDataCachePolicy::TAddress> columnsToFetch;
-    for (const auto& portion : sourcesToFetch) {
-        for (const auto& [columnId, _] : fieldsByColumn) {
-            columnsToFetch.emplace(ColumnShardActorId, portion->GetAddress(), columnId);
-        }
-    }
-
     {
         std::vector<TPortionAddress> portionAddresses;
         for (const auto& portion : sourcesToFetch) {
@@ -238,7 +246,7 @@ void TDuplicateManager::Handle(const TEvRequestFilter::TPtr& ev) {
             std::make_shared<TDataAccessorsRequest>(NBlobOperations::EConsumer::DUPLICATE_FILTERING);
         request->RegisterSubscriber(std::make_shared<TColumnDataAccessorFetching>(
             std::make_shared<TColumnFetchingCallback>(SelfId(), ColumnShardActorId, std::move(constructor), std::move(fieldsByColumn),
-                std::move(sourcesToFetch)), ColumnShardActorId, portionAddresses, columns));
+                sourcesToFetch), ColumnShardActorId, portionAddresses, columns));
         for (auto&& source : sourcesToFetch) {
             request->AddPortion(source);
         }
@@ -248,7 +256,9 @@ void TDuplicateManager::Handle(const TEvRequestFilter::TPtr& ev) {
 
 void TDuplicateManager::Handle(const NPrivate::TEvDuplicateSourceCacheResult::TPtr& ev) {
     if (ev->Get()->GetConclusion().IsFail()) {
-        AbortAndPassAway(ev->Get()->GetConclusion().GetErrorMessage());
+        const TString& error = ev->Get()->GetConclusion().GetErrorMessage();
+        ev->Get()->GetContext()->Abort(error);
+        AbortAndPassAway(error);
         return;
     }
 
@@ -283,7 +293,8 @@ void TDuplicateManager::Handle(const NPrivate::TEvDuplicateSourceCacheResult::TP
         }
     }
     LOCAL_LOG_TRACE("event", "construct_filters")
-    ("source", filterRequest->GetSourceId())("built_intervals", builtIntervals.size())("intervals", splitter.NumIntervals());
+    ("source", filterRequest->GetSourceId())("built_intervals", builtIntervals.size())("intervals", splitter.NumIntervals())(
+        "done", context->IsDone())("splitter", splitter.DebugString());
     if (context->IsDone()) {
         return;
     }
@@ -333,9 +344,12 @@ void TDuplicateManager::Handle(const NPrivate::TEvDuplicateSourceCacheResult::TP
 
 void TDuplicateManager::Handle(const NPrivate::TEvFilterConstructionResult::TPtr& ev) {
     if (ev->Get()->GetConclusion().IsFail()) {
+        LOCAL_LOG_TRACE("event", "filter_construction_error")("error", ev->Get()->GetConclusion().GetErrorMessage());
         return AbortAndPassAway(ev->Get()->GetConclusion().GetErrorMessage());
     }
+    LOCAL_LOG_TRACE("event", "filters_constructed")("sources", ev->Get()->GetConclusion().GetResult().size());
     for (auto&& [key, filter] : ev->Get()->ExtractResult()) {
+        LOCAL_LOG_TRACE("event", "extract_constructed_filter")("range", key.DebugString());
         auto findWaiting = BuildingFilters.find(key);
         AFL_VERIFY(findWaiting != BuildingFilters.end());
         for (const auto& callback : findWaiting->second) {

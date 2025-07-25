@@ -127,5 +127,5 @@ LIMIT 10;
 
 Для начала работы с векторным индексом можно воспользоваться следующими рецептами:
 
-*  [YDB CLI & YQL](../recipes/vector-search)
-*  [YDB SDK: Python, C++](../recipes/ydb-sdk/vector-search.md)
+* [YDB CLI & YQL](../recipes/vector-search)
+* [YDB SDK: Python, C++](../recipes/ydb-sdk/vector-search.md)

@@ -325,8 +325,6 @@ void TInitMetaStep::LoadMeta(const NKikimrClient::TResponse& kvResponse, const T
 
         Partition()->BlobEncoder.StartOffset = meta.GetStartOffset();
         Partition()->BlobEncoder.EndOffset = meta.GetEndOffset();
-        Partition()->BlobEncoder.FirstUncompactedOffset = meta.GetFirstUncompactedOffset();
-
         if (Partition()->BlobEncoder.StartOffset == Partition()->BlobEncoder.EndOffset) {
            Partition()->BlobEncoder.NewHead.Offset = Partition()->BlobEncoder.Head.Offset = Partition()->BlobEncoder.EndOffset;
         }
@@ -451,6 +449,9 @@ void TInitInfoRangeStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActor
             Cerr << "ERROR " << range.GetStatus() << "\n";
             Y_ABORT("bad status");
     };
+    if (Partition()->Config.GetEnableCompactification()) {
+        Partition()->CreateCompacter();
+    }
 }
 
 void TInitInfoRangeStep::PostProcessing(const TActorContext& ctx) {
@@ -1023,6 +1024,9 @@ void TPartition::Initialize(const TActorContext& ctx) {
             SetupTopicCounters(ctx);
         }
     }
+    if (Config.GetEnableCompactification()) {
+        CreateCompacter();
+    }
 }
 
 void TPartition::SetupTopicCounters(const TActorContext& ctx) {
@@ -1262,6 +1266,32 @@ void TPartition::InitSplitMergeSlidingWindow() {
     SplitMergeAvgWriteBytes = std::make_unique<Tui64SumSlidingWindow>(TDuration::Seconds(Config.GetPartitionStrategy().GetScaleThresholdSeconds()), 1000);
 }
 
+void TPartition::CreateCompacter() {
+    if (!CompacterStartCookie.Defined()) {
+        Send(Tablet, new TEvPQ::TEvAllocateCookie(100));
+        return;
+    }
+    if (Compacter) {
+        return;
+    }
+
+    TUserInfo* userInfo = UsersInfoStorage->GetIfExists(CLIENTID_COMPACTION_CONSUMER);
+    ui64 compStartOffset = 0;
+    if (userInfo) {
+        compStartOffset = userInfo->Offset;
+    } else {
+        return;
+    }
+    Compacter = MakeHolder<TPartitionCompaction>(compStartOffset, *CompacterStartCookie, *CompacterStartCookie + 100, this);
+    Compacter->TryCompactionIfPossible();
+}
+
+void TPartition::Handle(TEvPQ::TEvAllocateCookie::TPtr& ev) {
+    CompacterStartCookie = ev->Get()->StartCookie;
+    if (Config.GetEnableCompactification()) {
+        CreateCompacter();
+    }
+}
 //
 // Functions
 //

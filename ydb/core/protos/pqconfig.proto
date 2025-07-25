@@ -33,7 +33,6 @@ message TPartitionMeta {
     optional bool SubDomainOutOfSpace = 3 [default = false];
     optional TPartitionCounterData CounterData = 4;
     optional uint64 EndWriteTimestamp = 5;
-    optional uint64 FirstUncompactedOffset = 6;
 }
 
 message TPartitionTxMeta {

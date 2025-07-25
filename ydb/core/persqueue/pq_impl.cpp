@@ -199,21 +199,29 @@ private:
 
         for (ui32 i = 0; i < readResult.ResultSize(); ++i) {
             bool isNewMsg = !readResult.GetResult(i).HasPartNo() || readResult.GetResult(i).GetPartNo() == 0;
+            bool isEmptyPart = readResult.GetResult(i).GetTotalParts() > 1 && readResult.GetResult(i).GetData().empty();
             if (!isStart) {
                 Y_ABORT_UNLESS(partResp->ResultSize() > 0);
                 auto& back = partResp->GetResult(partResp->ResultSize() - 1);
                 bool lastMsgIsNotFull = back.GetPartNo() + 1 < back.GetTotalParts();
-                bool trancate = lastMsgIsNotFull && isNewMsg;
+                bool trancate = isNewMsg && (lastMsgIsNotFull  // Multipart message with missing part, remove it.
+                    // Got empty part for multipart message which was already stored in partResp;
+                    // This message should've been cut out by compactification. Remove it from response;
+                    || isEmptyPart && back.GetOffset() == readResult.GetResult(i).GetOffset());
+
                 if (trancate) {
                     partResp->MutableResult()->RemoveLast();
-                    if (partResp->GetResult().empty()) isStart = false;
+                    if (partResp->GetResult().empty()) isStart = true;
                 }
             }
-
+            if (isEmptyPart) { //Multipart message containing empty part. Ignore the part.
+                continue;
+            }
             if (isNewMsg) {
                 if (!isStart && readResult.GetResult(i).HasTotalParts()
                              && readResult.GetResult(i).GetTotalParts() + i > readResult.ResultSize()) //last blob is not full
                     break;
+
                 partResp->AddResult()->CopyFrom(readResult.GetResult(i));
                 isStart = false;
             } else { //glue to last res
@@ -1954,7 +1962,7 @@ void TPersQueue::HandleCreateSessionRequest(const ui64 responseCookie, NWilson::
         }
         if (cmd.GetRestoreSession()) {
             Y_ABORT_UNLESS(isDirectRead);
-            auto fakeResponse = MakeHolder<TEvPQ::TEvProxyResponse>(responseCookie);
+            auto fakeResponse = MakeHolder<TEvPQ::TEvProxyResponse>(responseCookie, false);
             auto& record = *fakeResponse->Response;
             record.SetStatus(NMsgBusProxy::MSTATUS_OK);
             auto& partResponse = *record.MutablePartitionResponse();
@@ -2403,7 +2411,7 @@ void TPersQueue::HandlePublishReadRequest(
         return ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::BAD_REQUEST, error);
     }
     InitResponseBuilder(responseCookie, 1, COUNTER_LATENCY_PQ_PUBLISH_READ);
-    THolder<TEvPQ::TEvProxyResponse> publishDoneEvent = MakeHolder<TEvPQ::TEvProxyResponse>(responseCookie);
+    THolder<TEvPQ::TEvProxyResponse> publishDoneEvent = MakeHolder<TEvPQ::TEvProxyResponse>(responseCookie, false);
     publishDoneEvent->Response->SetStatus(NMsgBusProxy::MSTATUS_OK);
     publishDoneEvent->Response->SetErrorCode(NPersQueue::NErrorCode::OK);
 
@@ -2433,7 +2441,7 @@ void TPersQueue::HandleForgetReadRequest(
         return ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::BAD_REQUEST, error);
     }
     InitResponseBuilder(responseCookie, 1, COUNTER_LATENCY_PQ_FORGET_READ);
-    THolder<TEvPQ::TEvProxyResponse> forgetDoneEvent = MakeHolder<TEvPQ::TEvProxyResponse>(responseCookie);
+    THolder<TEvPQ::TEvProxyResponse> forgetDoneEvent = MakeHolder<TEvPQ::TEvProxyResponse>(responseCookie, false);
     forgetDoneEvent->Response->SetStatus(NMsgBusProxy::MSTATUS_OK);
     forgetDoneEvent->Response->SetErrorCode(NPersQueue::NErrorCode::OK);
     forgetDoneEvent->Response->MutablePartitionResponse()->MutableCmdForgetReadResult()->SetDirectReadId(key.ReadId);
@@ -5186,6 +5194,13 @@ void TPersQueue::Handle(TEvPQ::TEvPartitionScaleStatusChanged::TPtr& ev, const T
     }
 }
 
+void TPersQueue::Handle(TEvPQ::TEvAllocateCookie::TPtr& ev)
+{
+    ev->Get()->StartCookie = NextResponseCookie + 1;
+    NextResponseCookie += ev->Get()->Count;
+    Send(ev->Sender, ev->Release());
+}
+
 void TPersQueue::DeletePartition(const TPartitionId& partitionId, const TActorContext& ctx)
 {
     auto p = Partitions.find(partitionId);
@@ -5356,6 +5371,7 @@ bool TPersQueue::HandleHook(STFUNC_SIG)
         HFuncTraced(TEvPQ::TEvReadingPartitionStatusRequest, Handle);
         HFuncTraced(TEvPQ::TEvDeletePartitionDone, Handle);
         HFuncTraced(TEvPQ::TEvTransactionCompleted, Handle);
+        hFuncTraced(TEvPQ::TEvAllocateCookie, Handle);
         default:
             return false;
     }

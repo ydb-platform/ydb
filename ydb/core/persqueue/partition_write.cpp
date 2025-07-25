@@ -32,7 +32,7 @@ static constexpr NPersQueue::NErrorCode::EErrorCode InactivePartitionErrorCode =
 void TPartition::ReplyOwnerOk(const TActorContext& ctx, const ui64 dst, const TString& cookie, ui64 seqNo, NWilson::TSpan& span) {
     PQ_LOG_D("TPartition::ReplyOwnerOk. Partition: " << Partition);
 
-    THolder<TEvPQ::TEvProxyResponse> response = MakeHolder<TEvPQ::TEvProxyResponse>(dst);
+    THolder<TEvPQ::TEvProxyResponse> response = MakeHolder<TEvPQ::TEvProxyResponse>(dst, false);
     NKikimrClient::TResponse& resp = *response->Response;
     resp.SetStatus(NMsgBusProxy::MSTATUS_OK);
     resp.SetErrorCode(NPersQueue::NErrorCode::OK);
@@ -58,7 +58,7 @@ void TPartition::ReplyWrite(
     Y_ABORT_UNLESS(offset <= (ui64)Max<i64>(), "Offset is too big: %" PRIu64, offset);
     Y_ABORT_UNLESS(seqNo <= (ui64)Max<i64>(), "SeqNo is too big: %" PRIu64, seqNo);
 
-    THolder<TEvPQ::TEvProxyResponse> response = MakeHolder<TEvPQ::TEvProxyResponse>(dst);
+    THolder<TEvPQ::TEvProxyResponse> response = MakeHolder<TEvPQ::TEvProxyResponse>(dst, false);
     NKikimrClient::TResponse& resp = *response->Response;
     resp.SetStatus(NMsgBusProxy::MSTATUS_OK);
     resp.SetErrorCode(NPersQueue::NErrorCode::OK);
@@ -1045,7 +1045,8 @@ TPartition::EProcessResult TPartition::PreProcessRequest(TWriteMsg& p) {
 void TPartition::AddCmdWrite(const std::optional<TPartitionedBlob::TFormedBlobInfo>& newWrite,
                              TEvKeyValue::TEvRequest* request,
                              ui64 creationUnixTime,
-                             const TActorContext& ctx)
+                             const TActorContext& ctx,
+                             bool includeToWriteCycle)
 {
     auto write = request->Record.AddCmdWrite();
     write->SetKey(newWrite->Key.Data(), newWrite->Key.Size());
@@ -1060,14 +1061,15 @@ void TPartition::AddCmdWrite(const std::optional<TPartitionedBlob::TFormedBlobIn
 
     TKey resKey = newWrite->Key;
     resKey.SetType(TKeyPrefix::TypeData);
-    WriteCycleSize += newWrite->Value.size();
+    if (includeToWriteCycle)
+        WriteCycleSize += newWrite->Value.size();
 }
 
 void TPartition::AddCmdWrite(const std::optional<TPartitionedBlob::TFormedBlobInfo>& newWrite,
                              TEvKeyValue::TEvRequest* request,
-                             const TActorContext& ctx)
+                             const TActorContext& ctx, bool includeToWriteCycle)
 {
-    AddCmdWrite(newWrite, request, 0, ctx);
+    AddCmdWrite(newWrite, request, 0, ctx, includeToWriteCycle);
 }
 
 void TPartition::RenameFormedBlobs(const std::deque<TPartitionedBlob::TRenameFormedBlobInfo>& formedBlobs,

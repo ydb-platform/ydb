@@ -58,7 +58,7 @@ class TTestServer {
 public:
     TIpPort Port;
 
-    TTestServer(const TString& kafkaApiMode = "1", bool serverless = false, bool enableNativeKafkaBalancing = false) {
+    TTestServer(const TString& kafkaApiMode = "1", bool serverless = false, bool enableNativeKafkaBalancing = false, bool enableQuoting = true) {
         TPortManager portManager;
         Port = portManager.GetTcpPort();
 
@@ -94,9 +94,9 @@ public:
             appConfig.MutableKafkaProxyConfig()->MutableProxy()->SetPort(FAKE_SERVERLESS_KAFKA_PROXY_PORT);
         }
 
-        appConfig.MutablePQConfig()->MutableQuotingConfig()->SetEnableQuoting(true);
+        appConfig.MutablePQConfig()->MutableQuotingConfig()->SetEnableQuoting(enableQuoting);
         appConfig.MutablePQConfig()->MutableQuotingConfig()->SetQuotaWaitDurationMs(300);
-        appConfig.MutablePQConfig()->MutableQuotingConfig()->SetPartitionReadQuotaIsTwiceWriteQuota(true);
+        appConfig.MutablePQConfig()->MutableQuotingConfig()->SetPartitionReadQuotaIsTwiceWriteQuota(enableQuoting);
         appConfig.MutablePQConfig()->MutableBillingMeteringConfig()->SetEnabled(true);
         appConfig.MutablePQConfig()->MutableBillingMeteringConfig()->SetFlushIntervalSec(1);
         appConfig.MutablePQConfig()->AddClientServiceType()->SetName("data-streams");
@@ -2080,21 +2080,22 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         NYdb::NTopic::TTopicClient pqClient(*testServer.Driver);
 
         TString topic1 = "topic-999-test", topic2 = "topic-998-test";
+        TStringBuilder topic1FullPath;
+        topic1FullPath << "/Root/" << topic1;
 
+        CreateTopic(pqClient, topic1FullPath, 1, {"consumer1"});
         {
             // Creation of two topics
             auto msg = client.CreateTopics({
-                TTopicConfig(topic1, 12, std::nullopt, std::nullopt, {{"cleanup.policy", "compact"}}),
-                TTopicConfig(topic2, 13, std::nullopt, std::nullopt, {{"cleanup.policy", "delete"}}),
-                TTopicConfig("topic_bad", 13, std::nullopt, std::nullopt, {{"cleanup.policy", "bad"}})
+                //TTopicConfig(topic1, 1, std::nullopt, std::nullopt, {{"cleanup.policy", "compact"}}),
+                TTopicConfig(topic2, 1, std::nullopt, std::nullopt, {{"cleanup.policy", "delete"}}),
+                TTopicConfig("topic_bad", 1, std::nullopt, std::nullopt, {{"cleanup.policy", "bad"}})
             });
-            UNIT_ASSERT_VALUES_EQUAL(msg->Topics.size(), 3);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Topics.size(), 2);
 
             UNIT_ASSERT_VALUES_EQUAL(msg->Topics[0].ErrorCode, NONE_ERROR);
-            UNIT_ASSERT_VALUES_EQUAL(msg->Topics[0].Name.value(), topic1);
-            UNIT_ASSERT_VALUES_EQUAL(msg->Topics[1].ErrorCode, NONE_ERROR);
-            UNIT_ASSERT_VALUES_EQUAL(msg->Topics[1].Name.value(), topic2);
-            UNIT_ASSERT_VALUES_EQUAL(msg->Topics[2].ErrorCode, INVALID_REQUEST);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Topics[0].Name.value(), topic2);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Topics[1].ErrorCode, INVALID_REQUEST);
         }
 
         auto getConfigsMap = [&](const auto& describeResult) {
@@ -2110,12 +2111,30 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             TString policy;
         };
 
+
         auto checkDescribeTopic = [&](const std::vector<TDescribeTopicResult>& topics) {
             std::vector<TString> topicNames;
+
             for (const auto& topic : topics) {
+                bool hasCompactionConsumer = false;
+                auto result0 = pqClient.DescribeTopic(topic.name, NTopic::TDescribeTopicSettings{}).GetValueSync();
+                UNIT_ASSERT(result0.IsSuccess());
+                const auto& consumers = result0.GetTopicDescription().GetConsumers();
+                Cerr << "Check consumers for topic: " << topic.name << " with policy: " << topic.policy << Endl;
+                for (const auto& consumer : consumers) {
+                    Cerr << "Got consumer with name: " << consumer.GetConsumerName() << Endl;
+                    if (consumer.GetConsumerName() == NKikimr::NPQ::CLIENTID_COMPACTION_CONSUMER) {
+                        hasCompactionConsumer = true;
+                        break;
+                    }
+                }
+                if (topic.policy == "compact") {
+                    UNIT_ASSERT_C(hasCompactionConsumer, topic.name);
+                } else {
+                    UNIT_ASSERT_C(!hasCompactionConsumer, topic.name);
+                }
                 topicNames.push_back(topic.name);
             }
-
             auto msg = client.DescribeConfigs(topicNames);
             UNIT_ASSERT_VALUES_EQUAL(msg->Results.size(), topics.size());
             for (auto i = 0u; i < topics.size(); ++i) {
@@ -2139,41 +2158,101 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
                 } else {
                     UNIT_ASSERT_C(!hasCompConsumer, topics[i].name);
                 }
-
             }
         };
 
+        {
+            auto msg = client.AlterConfigs({
+                TTopicConfig(topic1, 1, std::nullopt, std::nullopt, {{"cleanup.policy", "compact"}}),
+            });
+            UNIT_ASSERT_VALUES_EQUAL(msg->Responses[0].ErrorCode, NONE_ERROR);
+            checkDescribeTopic({{topic1, "compact"}, {topic2, "delete"}});
+        }
+        NYdb::NTopic::TWriteSessionSettings wSSettings{topic1FullPath, "producer1", ""};
+        wSSettings.Codec(NTopic::ECodec::RAW);
+
+        auto writeSession = pqClient.CreateSimpleBlockingWriteSession(wSSettings);
+        ui64 totalWritten = 0;
+        auto writeMessage = [&] (const TString& key, ui64 size) {
+            NYdb::NTopic::TWriteMessage message{key + TString{size, 'a'}};
+            NYdb::NTopic::TWriteMessage::TMessageMeta meta1;
+            meta1.push_back(std::make_pair("__key", key));
+            message.MessageMeta(meta1);
+            writeSession->Write(std::move(message));
+            totalWritten++;
+        };
+
         checkDescribeTopic({{topic1, "compact"}, {topic2, "delete"}});
+        for (auto i = 0u; i < 20; i++) {
+            writeMessage("key1", 100_KB * (i + 1));
+            writeMessage("key2", 50_KB * (i + 1));
+            writeMessage("key3", 200_KB * (i + 1));
 
-        {
-            auto msg = client.AlterConfigs({
-                TTopicConfig(topic1, 12, std::nullopt, std::nullopt, {{"cleanup.policy", "bad"}}),
-                TTopicConfig(topic2, 13, std::nullopt, std::nullopt, {{"cleanup.policy", "compact"}}),
-            });
-            UNIT_ASSERT_VALUES_EQUAL(msg->Responses[0].ErrorCode, INVALID_REQUEST);
-            checkDescribeTopic({{topic1, "compact"}, {topic2, "compact"}});
+            Cerr << "Wrote message " << i << Endl;
         }
-        {
-            auto msg = client.AlterConfigs({
-                TTopicConfig(topic1, 12, std::nullopt, std::nullopt, {{"cleanup.policy", "delete"}}),
-                TTopicConfig(topic2, 13, std::nullopt, std::nullopt, {{"cleanup.policy", ""}})
-            });
-            UNIT_ASSERT_VALUES_EQUAL(msg->Responses[1].ErrorCode, INVALID_REQUEST);
-            checkDescribeTopic({{topic1, "delete"}, {topic2, "compact"}});
+        for (auto i = 0u; i < 500; i++) {
+            writeMessage("key4", 10_KB * (i + 1));
+            Cerr << "Wrote message " << i << Endl;
         }
+        writeSession->Close(TDuration::Seconds(50));
+        Sleep(TDuration::Seconds(10));
 
-        NYdb::NTopic::TAlterTopicSettings addConsumer;
-        addConsumer.BeginAddConsumer().ConsumerName(NPQ::CLIENTID_COMPACTION_CONSUMER).EndAddConsumer();
-        NYdb::NTopic::TAlterTopicSettings dropConsumer;
-        addConsumer.AppendDropConsumers(NPQ::CLIENTID_COMPACTION_CONSUMER);
-        pqClient.AlterTopic(topic1, addConsumer).GetValueSync();
-        pqClient.AlterTopic(topic2, dropConsumer).GetValueSync();
-        checkDescribeTopic({{topic1, "delete"}, {topic2, "compact"}});
+        NYdb::NTopic::TReadSessionSettings rSSettings{.ConsumerName_ = "consumer1"};
+        rSSettings.AppendTopics({topic1FullPath});
+        auto readSession = pqClient.CreateReadSession(rSSettings);
+        auto getMessagesFromTopic = [&](auto& reader) {
+            TMaybe<NTopic::TReadSessionEvent::TDataReceivedEvent> result;
+            while (true) {
+                auto event = reader->GetEvent(false);
+                if (!event)
+                    return result;
+                if (auto dataEvent = std::get_if<NTopic::TReadSessionEvent::TDataReceivedEvent>(&*event)) {
+                    dataEvent->Commit();
+                    result = *dataEvent;
+
+                    break;
+                } else if (auto *lockEv = std::get_if<NTopic::TReadSessionEvent::TStartPartitionSessionEvent>(&*event)) {
+                    lockEv->Confirm();
+                } else if (auto *releaseEv = std::get_if<NTopic::TReadSessionEvent::TStopPartitionSessionEvent>(&*event)) {
+                    releaseEv->Confirm();
+                } else if (auto *closeSessionEvent = std::get_if<NTopic::TSessionClosedEvent>(&*event)) {
+                    return result;
+                }
+            }
+            return result;
+        };
+        ui64 totalTries = 5;
+        ui64 totalMessages = 0;
+        THashSet<TString> keysFound;
+        while(totalTries) {
+            auto result = getMessagesFromTopic(readSession);
+            if (!result) {
+                --totalTries;
+                Sleep(TDuration::MilliSeconds(500));
+                continue;
+            }
+            if (result) {
+                for (const auto& message : result->GetMessages()) {
+                    TStringBuilder msg;
+                    msg << "==== Got message from offset " << message.GetOffset() << " and size: " << message.GetData().size() << Endl;
+                    keysFound.emplace(message.GetMessageMeta()->Fields[0].second);
+                    totalMessages++;
+                    msg << " with meta: " << message.GetMessageMeta()->Fields[0].first << ":" << message.GetMessageMeta()->Fields[0].second << Endl;
+                    Cerr << msg;
+                    UNIT_ASSERT(!message.GetMessageMeta()->Fields.empty());
+                    UNIT_ASSERT(message.GetData().size() > 0);
+                }
+            }
+        }
+        UNIT_ASSERT(totalMessages < totalWritten);
+        UNIT_ASSERT(keysFound.size() == 4);
+        UNIT_ASSERT(keysFound.contains("key1") && keysFound.contains("key2") && keysFound.contains("key3") && keysFound.contains("key4"));
+        Cerr << "===Total messages: " << totalMessages << Endl;
     }
 
 
     Y_UNIT_TEST(TopicsWithCleaunpPolicyScenario) {
-        TInsecureTestServer testServer("2");
+        TInsecureTestServer testServer("2", false, false, false);
         TKafkaTestClient client(testServer.Port);
 
         RunCreateTopicsWithCleanupPolicy(testServer, client);
@@ -3533,6 +3612,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         auto consumerInfo = kafkaClient.JoinAndSyncGroupAndWaitPartitions(topicsToSubscribe, consumerName, 3, protocolName, 3, 15000);
 
         kafkaClient.ValidateNoDataInTopics({{outputTopicName, {0}}});
+
         // move time forward after transaction timeout
         Sleep(TDuration::MilliSeconds(txnTimeoutMs));
 

@@ -13,6 +13,7 @@
 #include "utils.h"
 #include "read_quoter.h"
 #include "partition_blob_encoder.h"
+#include "partition_compactification.h"
 
 #include <ydb/core/keyvalue/keyvalue_events.h>
 #include <ydb/library/persqueue/counter_time_keeper/counter_time_keeper.h>
@@ -114,6 +115,7 @@ struct TTransaction {
     TString Message;
     ECommitState State = ECommitState::Pending;
 };
+class TPartitionCompaction;
 
 class TPartition : public TActorBootstrapped<TPartition> {
     friend TInitializer;
@@ -130,6 +132,7 @@ class TPartition : public TActorBootstrapped<TPartition> {
     friend TPartitionSourceManager;
 
     friend class TPartitionTestWrapper;
+    friend class TPartitionCompaction;
 
 public:
     const TString& TopicName() const;
@@ -227,6 +230,7 @@ private:
     void Handle(TEvents::TEvPoisonPill::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQ::TEvSubDomainStatus::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQ::TEvRunCompaction::TPtr& ev);
+    void Handle(TEvPQ::TEvAllocateCookie::TPtr& ev);
     void HandleMonitoring(TEvPQ::TEvMonRequest::TPtr& ev, const TActorContext& ctx);
     void HandleOnIdle(TEvPQ::TEvDeregisterMessageGroup::TPtr& ev, const TActorContext& ctx);
     void HandleOnIdle(TEvPQ::TEvRegisterMessageGroup::TPtr& ev, const TActorContext& ctx);
@@ -360,7 +364,7 @@ private:
                         const TActorContext& ctx);
 
 
-    void ScheduleReplyOk(const ui64 dst);
+    void ScheduleReplyOk(const ui64 dst, bool internal = false);
     void ScheduleReplyGetClientOffsetOk(const ui64 dst,
                                         const i64 offset,
                                         const TInstant writeTimestamp,
@@ -478,6 +482,8 @@ private:
 
     TConsumerSnapshot CreateSnapshot(TUserInfo& userInfo) const;
 
+    void CreateCompacter();
+
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::PERSQUEUE_PARTITION_ACTOR;
@@ -567,6 +573,7 @@ private:
             HFuncTraced(TEvPQ::TEvDeletePartition, HandleOnInit);
             IgnoreFunc(TEvPQ::TEvTxBatchComplete);
             hFuncTraced(TEvPQ::TEvRunCompaction, Handle);
+            hFuncTraced(TEvPQ::TEvAllocateCookie, Handle);
         default:
             if (!Initializer.Handle(ev)) {
                 ALOG_ERROR(NKikimrServices::PERSQUEUE, "Unexpected " << EventStr("StateInit", ev));
@@ -632,6 +639,7 @@ private:
             HFuncTraced(TEvPQ::TEvDeletePartition, Handle);
             IgnoreFunc(TEvPQ::TEvTxBatchComplete);
             hFuncTraced(TEvPQ::TEvRunCompaction, Handle);
+            hFuncTraced(TEvPQ::TEvAllocateCookie, Handle);
         default:
             ALOG_ERROR(NKikimrServices::PERSQUEUE, "Unexpected " << EventStr("StateIdle", ev));
             break;
@@ -976,6 +984,9 @@ private:
 
     TInstant LastUsedStorageMeterTimestamp;
 
+    TMaybe<ui64> CompacterStartCookie;
+    THolder<TPartitionCompaction> Compacter;
+
     using TPendingEvent = std::variant<
         std::unique_ptr<TEvPQ::TEvTxCalcPredicate>,
         std::unique_ptr<TEvPQ::TEvTxCommit>,
@@ -1026,10 +1037,11 @@ private:
     void AddCmdWrite(const std::optional<TPartitionedBlob::TFormedBlobInfo>& newWrite,
                      TEvKeyValue::TEvRequest* request,
                      ui64 creationUnixTime,
-                     const TActorContext& ctx);
+                     const TActorContext& ctx, bool includeToWriteCycle = true);
     void AddCmdWrite(const std::optional<TPartitionedBlob::TFormedBlobInfo>& newWrite,
                      TEvKeyValue::TEvRequest* request,
-                     const TActorContext& ctx);
+                     const TActorContext& ctx, bool includeToWriteCycle = true);
+
     void RenameFormedBlobs(const std::deque<TPartitionedBlob::TRenameFormedBlobInfo>& formedBlobs,
                            TProcessParametersBase& parameters,
                            ui32 curWrites,
@@ -1052,12 +1064,14 @@ private:
                         const TEvPQ::TEvBlobResponse* blobResponse,
                         const TActorContext& ctx);
 
+public:
     enum ERequestCookie : ui64 {
         ReadBlobsForCompaction = 0,
         WriteBlobsForCompaction,
+        CompactificationWrite,
         End
     };
-
+private:
     void TryRunCompaction();
     void BlobsForCompactionWereRead(const TVector<NPQ::TRequestedBlob>& blobs);
     void BlobsForCompactionWereWrite();

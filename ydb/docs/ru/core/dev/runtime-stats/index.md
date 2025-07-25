@@ -21,7 +21,7 @@
     - [Объединение](structure.md#join)
     - [Множественные выходы](structure.md#multiout)
     - [Составные графы](structure.md#complex)
-- [Агрегирование данных](basics.md)
+- [Визуализация метрик](metrics.md)
     - Параллельность
     - Агрегаты
     - Data Skew

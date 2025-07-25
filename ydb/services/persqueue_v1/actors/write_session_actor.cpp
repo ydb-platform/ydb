@@ -1219,6 +1219,9 @@ void TWriteSessionActor<UseMigrationProtocol>::PrepareRequest(THolder<TEvWrite>&
         ui64 currMetadataSize = 0;
         for (const auto& metaItem : msg.metadata_items()) {
             currMetadataSize += metaItem.key().size() + metaItem.value().size();
+            if (metaItem.key() == "__key") {
+                w->SetPartitionKey(metaItem.value());
+            }
         }
         maxMessageMetadataSize = std::max(maxMessageMetadataSize, currMetadataSize);
     };

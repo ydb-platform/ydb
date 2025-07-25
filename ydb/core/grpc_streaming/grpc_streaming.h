@@ -205,6 +205,7 @@ private:
             (this->Service->*AcceptRequest)(&this->Context, &this->Stream, this->CQ, this->CQ, OnAcceptedTag.Prepare());
             return true;
         }
+
         return false;
     }
 
@@ -439,6 +440,7 @@ private:
 
             Flags |= (FlagWriteActive | (status ? FlagWriteAndFinish : 0));
         }
+        
         if (status) {
             Stream.WriteAndFinish(message, options, *status, OnWriteDoneTag.Prepare());
         } else {

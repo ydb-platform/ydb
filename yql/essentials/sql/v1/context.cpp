@@ -112,6 +112,10 @@ TContext::TContext(const TLexers& lexers, const TParsers& parsers,
         GroupByExprAfterWhere = true;
     }
 
+    if (settings.LangVer >= MakeLangVersion(2025, 3)) {
+        PersistableFlattenAndAggrExprs = true;
+    }
+
     for (auto lib : settings.Libraries) {
         Libraries.emplace(lib, TLibraryStuff());
     }

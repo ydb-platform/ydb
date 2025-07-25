@@ -1,5 +1,6 @@
 #pragma once
 
+#include <library/cpp/yson/node/node.h>
 #include <util/generic/vector.h>
 #include <ydb/core/protos/kqp.pb.h>
 #include <ydb/core/scheme_types/scheme_type_info.h>
@@ -42,5 +43,6 @@ struct TScheme {
 };
 
 TScheme BuildScheme(const TAutoPtr<NSchemeCache::TSchemeCacheNavigate>& nav);
+NYT::TNode MakeOutputSchema(const TVector<TSchemeColumn>& columns);
 
 }

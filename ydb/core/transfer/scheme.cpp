@@ -70,4 +70,50 @@ TScheme BuildScheme(const TAutoPtr<NSchemeCache::TSchemeCacheNavigate>& nav) {
     return result;
 }
 
+namespace {
+
+    NYT::TNode CreateTypeNode(const TString& fieldType) {
+    return NYT::TNode::CreateList()
+        .Add("DataType")
+        .Add(fieldType);
+}
+
+NYT::TNode CreateOptionalTypeNode(const TString& fieldType) {
+    return NYT::TNode::CreateList()
+        .Add("OptionalType")
+        .Add(CreateTypeNode(fieldType));
+}
+
+void AddField(NYT::TNode& node, const TString& fieldName, const TString& fieldType) {
+    node.Add(
+        NYT::TNode::CreateList()
+            .Add(fieldName)
+            .Add(CreateOptionalTypeNode(fieldType))
+    );
+}
+
+}
+
+NYT::TNode MakeOutputSchema(const TVector<TSchemeColumn>& columns) {
+    auto structMembers = NYT::TNode::CreateList();
+
+    AddField(structMembers, SystemColumns::TargetTable, "String");
+    for (const auto& column : columns) {
+        AddField(structMembers, column.Name, column.TypeName());
+    }
+
+    auto rootMembers = NYT::TNode::CreateList();
+    rootMembers.Add(
+        NYT::TNode::CreateList()
+            .Add(SystemColumns::Root)
+            .Add(NYT::TNode::CreateList()
+                .Add("StructType")
+                .Add(std::move(structMembers)))
+    );
+
+    return NYT::TNode::CreateList()
+        .Add("StructType")
+        .Add(std::move(rootMembers));
+}
+
 }

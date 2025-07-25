@@ -1,8 +1,9 @@
-#include "transfer_writer.h"
 #include "events.h"
+#include "logging.h"
 #include "scheme.h"
+#include "table_kind_state.h"
+#include "transfer_writer.h"
 
-#include <ydb/core/tx/replication/service/logging.h>
 #include <ydb/core/tx/replication/service/worker.h>
 
 #include <ydb/core/fq/libs/row_dispatcher/events/data_plane.h>
@@ -151,47 +152,6 @@ namespace NKikimr::NReplication::NTransfer {
 
 namespace {
 
-NYT::TNode CreateTypeNode(const TString& fieldType) {
-    return NYT::TNode::CreateList()
-        .Add("DataType")
-        .Add(fieldType);
-}
-
-NYT::TNode CreateOptionalTypeNode(const TString& fieldType) {
-    return NYT::TNode::CreateList()
-        .Add("OptionalType")
-        .Add(CreateTypeNode(fieldType));
-}
-
-void AddField(NYT::TNode& node, const TString& fieldName, const TString& fieldType) {
-    node.Add(
-        NYT::TNode::CreateList()
-            .Add(fieldName)
-            .Add(CreateOptionalTypeNode(fieldType))
-    );
-}
-
-NYT::TNode MakeOutputSchema(const TVector<TSchemeColumn>& columns) {
-    auto structMembers = NYT::TNode::CreateList();
-
-    AddField(structMembers, SystemColumns::TargetTable, "String");
-    for (const auto& column : columns) {
-        AddField(structMembers, column.Name, column.TypeName());
-    }
-
-    auto rootMembers = NYT::TNode::CreateList();
-    rootMembers.Add(
-        NYT::TNode::CreateList()
-            .Add(SystemColumns::Root)
-            .Add(NYT::TNode::CreateList()
-                .Add("StructType")
-                .Add(std::move(structMembers)))
-    );
-
-    return NYT::TNode::CreateList()
-        .Add("StructType")
-        .Add(std::move(rootMembers));
-}
 
 class TProgramHolder : public NFq::IProgramHolder {
 public:
@@ -232,52 +192,6 @@ private:
 };
 
 
-class ITableKindState {
-public:
-    using TPtr = std::unique_ptr<ITableKindState>;
-
-    ITableKindState(const TActorId& selfId, const TAutoPtr<NSchemeCache::TSchemeCacheNavigate>& result)
-        : SelfId(selfId)
-        , Scheme(BuildScheme(result))
-    {}
-
-    virtual ~ITableKindState() = default;
-
-    void AddData(TString&& table, const NMiniKQL::TUnboxedValueBatch &data) {
-        auto it = Batchers.find(table);
-        if (it != Batchers.end()) {
-            it->second->AddData(data);
-            return;
-        }
-
-        auto& batcher = Batchers[std::move(table)] = CreateDataBatcher();
-        batcher->AddData(data);
-    }
-
-    i64 BatchSize() const {
-        i64 size = 0;
-        for (auto& [_, batcher] : Batchers) {
-            size += batcher->GetMemory();
-        }
-        return size;
-    }
-
-    virtual NKqp::IDataBatcherPtr CreateDataBatcher() = 0;
-    virtual bool Flush() = 0;
-
-    virtual std::pair<TString, bool> Handle(TEvents::TEvCompleted::TPtr& ev) = 0;
-    virtual std::pair<TString, bool> Handle(TEvTxUserProxy::TEvUploadRowsResponse::TPtr& ev) = 0;
-
-    const TScheme& GetScheme() const {
-        return Scheme;
-    }
-
-protected:
-    const TActorId SelfId;
-    const TScheme Scheme;
-
-    std::map<TString, NKqp::IDataBatcherPtr> Batchers;
-};
 
 class TColumnTableState : public ITableKindState {
 public:
@@ -322,6 +236,7 @@ public:
         return true;
     }
 
+    /*
     std::pair<TString, bool> Handle(TEvents::TEvCompleted::TPtr& ev) override {
         if (ev->Get()->Status == Ydb::StatusIds::SUCCESS) {
             Data.reset();
@@ -335,7 +250,7 @@ public:
 
     std::pair<TString, bool> Handle(TEvTxUserProxy::TEvUploadRowsResponse::TPtr&) override {
         Y_UNREACHABLE();
-    }
+    }*/
 
 private:
     std::shared_ptr<const NSchemeCache::TSchemeCacheNavigate> NavigateResult;
@@ -345,201 +260,6 @@ private:
     std::shared_ptr<NYql::TIssues> Issues;
 };
 
-class TRowTableUploader : public TActorBootstrapped<TRowTableUploader> {
-    static constexpr size_t MaxRetries = 7;
-
-public:
-    TRowTableUploader(const TActorId& parentActor, const TScheme& scheme, std::unordered_map<TString, std::shared_ptr<TVector<std::pair<TSerializedCellVec, TString>>>>&& data)
-        : ParentActor(parentActor)
-        , Scheme(scheme)
-        , Data(std::move(data))
-    {
-    }
-
-    void Bootstrap() {
-        Become(&TRowTableUploader::StateWork);
-        DoRequests();
-    }
-
-private:
-    void DoRequests() {
-        for (const auto& [tablePath, data] : Data) {
-            DoUpload(tablePath, data);
-        }
-    }
-
-    void DoUpload(const TString& tablePath, const std::shared_ptr<TVector<std::pair<TSerializedCellVec, TString>>>& data) {
-        auto cookie = ++Cookie;
-
-        TActivationContext::AsActorContext().RegisterWithSameMailbox(
-            NTxProxy::CreateUploadRowsInternal(SelfId(), tablePath, Scheme.Types, data, NTxProxy::EUploadRowsMode::Normal, false, false, cookie)
-        );
-        CookieMapping[cookie] = tablePath;
-    }
-
-    std::string GetLogPrefix() const {
-        return "RowTableUploader: ";
-    }
-
-    void Handle(TEvTxUserProxy::TEvUploadRowsResponse::TPtr& ev) {
-        auto it = CookieMapping.find(ev->Cookie);
-        if (it == CookieMapping.end()) {
-            LOG_W("Processed unknown cookie " << ev->Cookie);
-            return;
-        }
-
-        auto& tablePath = it->second;
-
-        if (ev->Get()->Status == Ydb::StatusIds::SUCCESS) {
-            Data.erase(tablePath);
-            CookieMapping.erase(ev->Cookie);
-
-            if (Data.empty()) {
-                ReplyOkAndDie();
-            }
-
-            return;
-        }
-
-        auto retry = ev->Get()->Status != Ydb::StatusIds::SCHEME_ERROR;
-        if (retry && Retry < MaxRetries) {
-            Schedule(TDuration::Seconds(1 << Retry), new NTransferPrivate::TEvRetryTable(tablePath));
-            ++Retry;
-            CookieMapping.erase(ev->Cookie);
-            return;
-        }
-
-        ReplyErrorAndDie(std::move(ev->Get()->Issues));
-    }
-
-    void Handle(NTransferPrivate::TEvRetryTable::TPtr& ev) {
-        auto& tablePath = ev->Get()->TablePath;
-        
-        auto it = Data.find(tablePath);
-        if (it == Data.end()) {
-            return ReplyErrorAndDie(TStringBuilder() << "Unexpected retry for table '" << tablePath << "'");
-        }
-
-        DoUpload(tablePath, it->second);
-    }
-
-    STFUNC(StateWork) {
-        switch (ev->GetTypeRewrite()) {
-            hFunc(TEvTxUserProxy::TEvUploadRowsResponse, Handle);
-
-            sFunc(TEvents::TEvPoison, PassAway);
-            hFunc(NTransferPrivate::TEvRetryTable, Handle);
-        }
-    }
-
-    void ReplyOkAndDie() {
-        NYql::TIssues issues;
-        Send(ParentActor, new NTransferPrivate::TEvWriteCompleeted(Ydb::StatusIds::SUCCESS, std::move(issues)));
-        PassAway();
-    }
-
-    void ReplyErrorAndDie(const TString& error) {
-        NYql::TIssues issues;
-        issues.AddIssue(error);
-        ReplyErrorAndDie(std::move(issues));
-    }
-
-    void ReplyErrorAndDie(NYql::TIssues&& issues) {
-        Send(ParentActor, new NTransferPrivate::TEvWriteCompleeted(Ydb::StatusIds::INTERNAL_ERROR, std::move(issues)));
-        PassAway();
-    }
-
-
-private:
-    const TActorId ParentActor;
-    const TScheme Scheme;
-    // Table path -> Data
-    std::unordered_map<TString, std::shared_ptr<TVector<std::pair<TSerializedCellVec, TString>>>> Data;
-
-    ui64 Cookie = 0;
-    // Cookie -> Table path
-    std::unordered_map<ui64, TString> CookieMapping;
-
-    size_t Retry = 0;
-};
-
-class TRowTableState : public ITableKindState {
-public:
-    TRowTableState(
-        const TActorId& selfId,
-        TAutoPtr<NSchemeCache::TSchemeCacheNavigate>& result
-    )
-        : ITableKindState(selfId, result)
-    {
-        Path = JoinPath(result->ResultSet.front().Path);
-        Database = result->DatabaseName;
-    }
-
-    NKqp::IDataBatcherPtr CreateDataBatcher() override {
-        return NKqp::CreateRowDataBatcher(GetScheme().ColumnsMetadata, GetScheme().WriteIndex);
-    }
-
-    bool Flush() override {
-        if (Batchers.empty() || !BatchSize()) {
-            return false;
-        }
-
-        std::unordered_map<TString, std::shared_ptr<TVector<std::pair<TSerializedCellVec, TString>>>> tableData;
-
-        for (auto& [tablePath, batcher] : Batchers)  {
-            NKqp::IDataBatchPtr batch = batcher->Build();
-
-            auto data = reinterpret_pointer_cast<TOwnedCellVecBatch>(batch->ExtractBatch());
-            Y_VERIFY(data);
-
-            auto d = std::make_shared<TVector<std::pair<TSerializedCellVec, TString>>>();
-            for (auto r : *data) {
-                TVector<TCell> key;
-                TVector<TCell> value;
-
-                for (size_t i = 0; i < r.size(); ++i) {
-                    auto& column = GetScheme().TableColumns[i];
-                    if (column.KeyColumn) {
-                        key.push_back(r[i]);
-                    } else {
-                        value.push_back(r[i]);
-                    }
-                }
-
-                TSerializedCellVec serializedKey(key);
-                TString serializedValue = TSerializedCellVec::Serialize(value);
-
-                d->emplace_back(serializedKey, serializedValue);
-            }
-
-            tableData[tablePath] = d;
-        }
-
-        TActivationContext::AsActorContext().RegisterWithSameMailbox(
-            new TRowTableUploader(SelfId, GetScheme(), std::move(tableData))
-        );
-
-        return true;
-    }
-
-    std::pair<TString, bool> Handle(TEvents::TEvCompleted::TPtr&) override {
-        Y_UNREACHABLE();
-    }
-
-    std::pair<TString, bool> Handle(TEvTxUserProxy::TEvUploadRowsResponse::TPtr& ev) override {
-        if (ev->Get()->Status == Ydb::StatusIds::SUCCESS) {
-            return {"", false};
-        }
-
-        auto retry = ev->Get()->Status != Ydb::StatusIds::SCHEME_ERROR;
-        return {ev->Get()->Issues.ToOneLineString(), retry};
-    }
-
-
-private:
-    TString Path;
-    TString Database;
-};
 
 enum class ETag {
     FlushTimeout,
@@ -659,7 +379,7 @@ private:
         if (entry.Kind == TNavigate::KindColumnTable) {
             TableState = std::make_unique<TColumnTableState>(SelfId(), result);
         } else {
-            TableState = std::make_unique<TRowTableState>(SelfId(), result);
+            TableState = CreateRowTableState(SelfId(), result);
         }
 
         CompileTransferLambda();
@@ -869,8 +589,8 @@ private:
             << ": worker# " << Worker
             << " status# " << ev->Get()->Status);
 
-        auto [error, _] = TableState->Handle(ev);
-        HandleWriteResult(ev->Get()->Status, error);
+        //auto [error, _] = TableState->Handle(ev);
+        //HandleWriteResult(ev->Get()->Status, error);
     }
 
     void HandleWriteResult(ui32 status, const TString& error) {

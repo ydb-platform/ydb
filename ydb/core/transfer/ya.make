@@ -7,6 +7,7 @@ PEERDIR(
 
 SRCS(
     purecalc.cpp
+    row_table.cpp
     scheme.cpp
     transfer_writer.cpp
 )

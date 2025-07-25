@@ -1332,6 +1332,8 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
         
         UNIT_ASSERT_C(cdcStreamsAfterReboot.empty(), 
             "Incremental backup CDC streams with '_continuousBackupImpl' suffix should remain cleaned up after restart");
+
+        // The implementation properly handles CDC stream cleanup during backup collection drop
     }
 
     Y_UNIT_TEST(DropErrorRecoveryTest) {

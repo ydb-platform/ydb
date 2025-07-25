@@ -24,6 +24,7 @@ namespace NMonitoring {
 
 namespace NYdbGrpc {
 
+static std::atomic<int> GrpcDead = 0;
 struct TSslData {
     TString Cert;
     TString Key;

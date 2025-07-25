@@ -392,7 +392,7 @@ public:
         return SchemaVersion;
     }
 
-    bool IsVisible(const TSnapshot& snapshot, const bool checkCommitSnapshot = true) const {
+    bool IsVisible(const TSnapshot& snapshot, const bool checkCommitSnapshot) const {
         const bool visible = (!RemoveSnapshot.Valid() || snapshot < RemoveSnapshot) && DoIsVisible(snapshot, checkCommitSnapshot);
 
         AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "IsVisible")("analyze_portion", DebugString())("visible", visible)(

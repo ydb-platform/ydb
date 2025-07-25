@@ -22,15 +22,7 @@ void TPortionsSources::DoInitCursor(const std::shared_ptr<IScanCursor>& cursor) 
 }
 
 std::vector<TInsertWriteId> TPortionsSources::GetUncommittedWriteIds() const {
-    std::vector<TInsertWriteId> result;
-    for (auto&& i : TBase::GetConstructors()) {
-        if (!i.GetPortion()->IsCommitted()) {
-            AFL_VERIFY(i.GetPortion()->GetPortionType() == EPortionType::Written);
-            auto* written = static_cast<const TWrittenPortionInfo*>(i.GetPortion().get());
-            result.emplace_back(written->GetInsertWriteId());
-        }
-    }
-    return result;
+    return Uncommitted;
 }
 
 std::shared_ptr<TPortionDataSource> TSourceConstructor::Construct(

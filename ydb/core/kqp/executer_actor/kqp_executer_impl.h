@@ -140,7 +140,8 @@ public:
         ui32 statementResultIndex,
         ui64 spanVerbosity = 0, TString spanName = "KqpExecuterBase",
         bool streamResult = false, const TActorId bufferActorId = {}, const IKqpTransactionManagerPtr& txManager = nullptr,
-        Ydb::ResultSet::Type resultSetType = Ydb::ResultSet::UNSPECIFIED,
+        const TOutputFormat& outputFormat,
+        Ydb::Query::SchemaInclusionMode schemaInclusionMode,
         TMaybe<TBatchOperationSettings> batchOperationSettings = Nothing())
         : NActors::TActor<TDerived>(&TDerived::ReadyState)
         , Request(std::move(request))
@@ -161,13 +162,10 @@ public:
         , StatementResultIndex(statementResultIndex)
         , BlockTrackingMode(tableServiceConfig.GetBlockTrackingMode())
         , VerboseMemoryLimitException(tableServiceConfig.GetResourceManager().GetVerboseMemoryLimitException())
-        , ResultSetType(resultSetType)
+        , OutputFormat(outputFormat)
+        , SchemaInclusionMode(schemaInclusionMode)
         , BatchOperationSettings(std::move(batchOperationSettings))
     {
-        if (ResultSetType == Ydb::ResultSet::UNSPECIFIED) {
-            ResultSetType = Ydb::ResultSet::MESSAGE;
-        }
-
         if (tableServiceConfig.HasArrayBufferMinFillPercentage()) {
             ArrayBufferMinFillPercentage = tableServiceConfig.GetArrayBufferMinFillPercentage();
         }
@@ -335,9 +333,10 @@ protected:
             batch.Payload = NYql::MakeChunkedBuffer(std::move(computeData.Payload));
 
             if (!trailingResults) {
+                auto resultIndex = *txResult.QueryResultIndex + StatementResultIndex;
                 auto streamEv = MakeHolder<TEvKqpExecuter::TEvStreamData>();
                 streamEv->Record.SetSeqNo(computeData.Proto.GetSeqNo());
-                streamEv->Record.SetQueryResultIndex(*txResult.QueryResultIndex + StatementResultIndex);
+                streamEv->Record.SetQueryResultIndex(resultIndex);
                 streamEv->Record.SetChannelId(channel.Id);
                 streamEv->Record.SetFinished(channelData.GetFinished());
                 const auto& snap = GetSnapshot();
@@ -347,16 +346,29 @@ protected:
                     vt->SetTxId(snap.TxId);
                 }
 
+                bool fillSchema = false;
+                switch (SchemaInclusionMode) {
+                    case Ydb::Query::SchemaInclusionMode::SCHEMA_INCLUSION_MODE_UNSPECIFIED:
+                    case Ydb::Query::SchemaInclusionMode::SCHEMA_INCLUSION_MODE_ALWAYS:
+                        fillSchema = true;
+                        break;
+                    case Ydb::Query::SchemaInclusionMode::SCHEMA_INCLUSION_MODE_FIRST_ONLY:
+                        fillSchema = (BuiltResultIndex.find(resultIndex) == BuiltResultIndex.end());
+                        break;
+                    default:
+                        break;
+                }
+
                 TKqpProtoBuilder protoBuilder{*AppData()->FunctionRegistry};
                 protoBuilder.BuildYdbResultSet(*streamEv->Record.MutableResultSet(), std::move(batches),
-                    txResult.MkqlItemType, ResultSetType, txResult.ColumnOrder, txResult.ColumnHints);
+                    txResult.MkqlItemType, OutputFormat, fillSchema, txResult.ColumnOrder, txResult.ColumnHints);
 
                 // TODO: rows size for arrow
                 LOG_D("Send TEvStreamData to " << Target << ", seqNo: " << streamEv->Record.GetSeqNo()
                     << ", nRows: " << streamEv->Record.GetResultSet().rows().size());
 
+                SentResultIndexes.insert(resultIndex);
                 this->Send(Target, streamEv.Release());
-
             } else {
                 auto ackEv = MakeHolder<NYql::NDq::TEvDqCompute::TEvChannelDataAck>();
                 ackEv->Record.SetSeqNo(computeData.Proto.GetSeqNo());
@@ -2292,7 +2304,7 @@ protected:
     ui64 StatCollectInflightBytes = 0;
     ui64 StatFinishInflightBytes = 0;
 
-    Ydb::ResultSet::Type ResultSetType;
+    THashSet<ui32> SentResultIndexes;
 
     TMaybe<TBatchOperationSettings> BatchOperationSettings;
 private:
@@ -2308,7 +2320,7 @@ IActor* CreateKqpDataExecuter(IKqpGateway::TExecPhysicalRequest&& request, const
     const TIntrusivePtr<TUserRequestContext>& userRequestContext, ui32 statementResultIndex,
     const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup, const TGUCSettings::TPtr& GUCSettings,
     const TShardIdToTableInfoPtr& shardIdToTableInfo, const IKqpTransactionManagerPtr& txManager, const TActorId bufferActorId,
-    Ydb::ResultSet::Type resultSetType, TMaybe<TBatchOperationSettings> batchOperationSettings);
+    const TOutputFormat& outputFormat, Ydb::Query::SchemaInclusionMode schemaInclusionMode, TMaybe<TBatchOperationSettings> batchOperationSettings);
 
 IActor* CreateKqpScanExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TString& database,
     const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, TKqpRequestCounters::TPtr counters,

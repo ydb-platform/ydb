@@ -188,8 +188,8 @@ message ResultSet {
 
     // Metadata of the output format
     oneof output_format_meta {
-        ValueOutputFormatMeta value_output_format_meta = 100;
-        ArrowOutputFormatMeta arrow_output_format_meta = 101;
+        Formats.ValueOutputFormatMeta value_output_format_meta = 100;
+        Formats.ArrowOutputFormatMeta arrow_output_format_meta = 101;
     }
 
     // Binary data for compressed rows or/and other formats

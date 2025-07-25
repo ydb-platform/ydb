@@ -83,7 +83,7 @@ IActor* CreateKqpExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TSt
     const TIntrusivePtr<TUserRequestContext>& userRequestContext, ui32 statementResultIndex,
     const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup, const TGUCSettings::TPtr& GUCSettings,
     const TShardIdToTableInfoPtr& shardIdToTableInfo, const IKqpTransactionManagerPtr& txManager, const TActorId bufferActorId,
-    Ydb::ResultSet::Type resultSetType, TMaybe<TBatchOperationSettings> batchOperationSettings)
+    const TOutputFormat& outputFormat, Ydb::Query::SchemaInclusionMode schemaInclusionMode, TMaybe<TBatchOperationSettings> batchOperationSettings)
 {
     if (request.Transactions.empty()) {
         // commit-only or rollback-only data transaction
@@ -93,7 +93,7 @@ IActor* CreateKqpExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TSt
             userRequestContext, statementResultIndex,
             federatedQuerySetup, /*GUCSettings*/nullptr,
             shardIdToTableInfo, txManager, bufferActorId,
-            resultSetType, std::move(batchOperationSettings)
+            outputFormat, schemaInclusionMode, std::move(batchOperationSettings)
         );
     }
 
@@ -118,7 +118,7 @@ IActor* CreateKqpExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TSt
                 userRequestContext, statementResultIndex,
                 federatedQuerySetup, /*GUCSettings*/nullptr,
                 shardIdToTableInfo, txManager, bufferActorId,
-                resultSetType, std::move(batchOperationSettings)
+                outputFormat, schemaInclusionMode, std::move(batchOperationSettings)
             );
 
         case NKqpProto::TKqpPhyTx::TYPE_SCAN:
@@ -135,7 +135,7 @@ IActor* CreateKqpExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TSt
                 userRequestContext, statementResultIndex,
                 federatedQuerySetup, GUCSettings,
                 shardIdToTableInfo, txManager, bufferActorId,
-                resultSetType, std::move(batchOperationSettings)
+                outputFormat, schemaInclusionMode, std::move(batchOperationSettings)
             );
 
         default:

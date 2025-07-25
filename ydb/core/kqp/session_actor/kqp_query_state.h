@@ -210,8 +210,12 @@ public:
         return RequestEv->GetSyntax();
     }
 
-    Ydb::ResultSet::Type GetResultSetType() const {
-        return RequestEv->GetResultSetType();
+    Ydb::Query::schemaInclusionMode GetSchemaInclusionMode() const {
+        return RequestEv->GetSchemaInclusionMode();
+    }
+
+    const TOutputFormat& GetOutputFormat() const {
+        return RequestEv->GetOutputFormat();
     }
 
     const TString& GetRequestType() const {

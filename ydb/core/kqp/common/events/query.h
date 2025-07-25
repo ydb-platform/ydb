@@ -2,6 +2,7 @@
 #include <ydb/core/resource_pools/resource_pool_settings.h>
 #include <ydb/core/protos/kqp.pb.h>
 #include <ydb/core/kqp/common/simple/kqp_event_ids.h>
+#include <ydb/core/kqp/common/simple/helpers.h>
 #include <ydb/core/kqp/common/kqp_user_request_context.h>
 #include <ydb/core/grpc_services/base/iface.h>
 #include <ydb/core/grpc_services/cancelation/cancelation_event.h>
@@ -35,8 +36,8 @@ struct TQueryRequestSettings {
         return *this;
     }
 
-    TQueryRequestSettings& SetResultSetType(const Ydb::ResultSet::Type& resultSetType) {
-        ResultSetType = resultSetType;
+    TQueryRequestSettings& SetSchemaInclusionMode(const Ydb::Query::SchemaInclusionMode& schemaInclusionMode) {
+        SchemaInclusionMode = schemaInclusionMode;
         return *this;
     }
 
@@ -54,7 +55,7 @@ struct TQueryRequestSettings {
     bool KeepSession = false;
     bool UseCancelAfter = true;
     ::Ydb::Query::Syntax Syntax = Ydb::Query::Syntax::SYNTAX_UNSPECIFIED;
-    Ydb::ResultSet::Type ResultSetType = Ydb::ResultSet::UNSPECIFIED;
+    Ydb::Query::SchemaInclusionMode SchemaInclusionMode = Ydb::Query::SchemaInclusionMode::SCHEMA_INCLUSION_MODE_UNSPECIFIED;
     bool SupportsStreamTrailingResult = false;
 };
 
@@ -63,6 +64,7 @@ public:
     TEvQueryRequest(
         NKikimrKqp::EQueryAction queryAction,
         NKikimrKqp::EQueryType queryType,
+        TOutputFormat outputFormat,
         TActorId requestActorId,
         const std::shared_ptr<NGRpcService::IRequestCtxMtSafe>& ctx,
         const TString& sessionId,
@@ -134,6 +136,23 @@ public:
         return RequestCtx ? SessionId : Record.GetRequest().GetSessionId();
     }
 
+    const TOutputFormat& GetOutputFormat() const {
+        if (RequestCtx) {
+            return OutputFormat;
+        }
+
+        auto req = Record.GetRequest();
+        if (req.HasValueOutputFormat()) {
+            return req.GetValueOutputFormat();
+        }
+
+        if (req.HasArrowOutputFormat()) {
+            return req.GetArrowOutputFormat();
+        }
+
+        return TOutputFormat{};
+    }
+
     NKikimrKqp::EQueryAction GetAction() const {
         return RequestCtx ? QueryAction : Record.GetRequest().GetAction();
     }
@@ -146,8 +165,8 @@ public:
         return RequestCtx ? QuerySettings.Syntax : Record.GetRequest().GetSyntax();
     }
 
-    Ydb::ResultSet::Type GetResultSetType() const {
-        return RequestCtx ? QuerySettings.ResultSetType : Record.GetRequest().GetResultSetType();
+    Ydb::Query::SchemaInclusionMode GetSchemaInclusionMode() const {
+        return RequestCtx ? QuerySettings.SchemaInclusionMode : Record.GetRequest().GetSchemaInclusionMode();
     }
 
     bool HasPreparedQuery() const {
@@ -385,6 +404,7 @@ private:
     mutable TString TraceId;
     mutable TString RequestType;
     mutable TIntrusiveConstPtr<NACLib::TUserToken> Token_;
+    TOutputFormat OutputFormat;
     TActorId RequestActorId;
     TString Database;
     TString DatabaseId;

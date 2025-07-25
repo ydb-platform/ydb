@@ -8,6 +8,7 @@ namespace NKikimr::NKqp {
 TEvKqp::TEvQueryRequest::TEvQueryRequest(
     NKikimrKqp::EQueryAction queryAction,
     NKikimrKqp::EQueryType queryType,
+    TOutputFormat outputFormat,
     TActorId requestActorId,
     const std::shared_ptr<NGRpcService::IRequestCtxMtSafe>& ctx,
     const TString& sessionId,
@@ -21,6 +22,7 @@ TEvKqp::TEvQueryRequest::TEvQueryRequest(
     const TQueryRequestSettings& querySettings,
     const TString& poolId)
     : RequestCtx(ctx)
+    , OutputFormat(std::move(outputFormat))
     , RequestActorId(requestActorId)
     , Database(CanonizePath(ctx->GetDatabaseName().GetOrElse("")))
     , SessionId(sessionId)
@@ -36,6 +38,7 @@ TEvKqp::TEvQueryRequest::TEvQueryRequest(
     , HasOperationParams(operationParams)
     , QuerySettings(querySettings)
 {
+
     if (HasOperationParams) {
         OperationTimeout = GetDuration(operationParams->operation_timeout());
         if (QuerySettings.UseCancelAfter) {
@@ -95,12 +98,21 @@ void TEvKqp::TEvQueryRequest::PrepareRemote() const {
             Record.MutableRequest()->SetDatabaseId(DatabaseId);
         }
 
+        std::visit([](auto&& format) {
+            using T = std::decay_t<decltype(format)>;
+            if constexpr (std::is_same_v<T, Ydb::Formats::ValueOutputFormat*>) {
+                Record.MutableRequest()->ValueOutputFormat(format);
+            } else if constexpr (std::is_same_v<T, Ydb::Formats::ArrowOutputFormat*>) {
+                Record.MutableRequest()->ArrowOutputFormat(format);
+            }
+        }, OutputFormat);
+
         Record.MutableRequest()->SetUsePublicResponseDataFormat(true);
         Record.MutableRequest()->SetSessionId(SessionId);
         Record.MutableRequest()->SetAction(QueryAction);
         Record.MutableRequest()->SetType(QueryType);
         Record.MutableRequest()->SetSyntax(QuerySettings.Syntax);
-        Record.MutableRequest()->SetResultSetType(QuerySettings.ResultSetType);
+        Record.MutableRequest()->SetSchemaInclusionMode(QuerySettings.SchemaInclusionMode);
         if (HasOperationParams) {
             Record.MutableRequest()->SetCancelAfterMs(CancelAfter.MilliSeconds());
             Record.MutableRequest()->SetTimeoutMs(OperationTimeout.MilliSeconds());

@@ -8,6 +8,7 @@ import "ydb/core/scheme/protos/type_info.proto";
 import "ydb/core/protos/kqp_physical.proto";
 import "ydb/core/protos/kqp_stats.proto";
 import "ydb/core/protos/data_events.proto";
+import "ydb/public/api/protos/ydb_formats.proto";
 import "ydb/public/api/protos/ydb_status_codes.proto";
 import "ydb/public/api/protos/ydb_table.proto";
 import "ydb/public/api/protos/ydb_value.proto";
@@ -168,7 +169,12 @@ message TQueryRequest {
     optional string PoolId = 35;
     optional string DatabaseId = 36;
     optional TKafkaApiOperationsRequest KafkaApiOperations = 37;
-    optional Ydb.ResultSet.Type ResultSetType = 38;
+    optional Ydb.Query.SchemaInclusionMode SchemaInclusionMode = 38;
+
+    oneof OutputFormat {
+        Ydb.Formats.ValueOutputFormat ValueOutputFormat = 1000;
+        Ydb.Formats.ArrowOutputFormat ArrowOutputFormat = 1001;
+    }
 }
 
 message TKqpPathIdProto {

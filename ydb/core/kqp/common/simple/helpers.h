@@ -11,4 +11,10 @@ enum class ETableReadType {
 
 bool IsSqlQuery(const NKikimrKqp::EQueryType& queryType);
 
+using TOutputFormat = std::variant<
+    std::monostate,
+    Ydb::Formats::ValueOutputFormat*,
+    Ydb::Formats::ArrowOutputFormat*
+>;
+
 } // namespace NKikimr::NKqp

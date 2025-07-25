@@ -1506,7 +1506,8 @@ public:
             QueryState ? QueryState->StatementResultIndex : 0, FederatedQuerySetup,
             (QueryState && QueryState->RequestEv->GetSyntax() == Ydb::Query::Syntax::SYNTAX_PG)
                 ? GUCSettings : nullptr, txCtx->ShardIdToTableInfo, txCtx->TxManager, txCtx->BufferActorId,
-            (QueryState) ? QueryState->GetResultSetType() : Ydb::ResultSet::UNSPECIFIED, Nothing());
+            (QueryState) ? QueryState->GetOutputFormat() : TOutputFormat{},
+            (QueryState) ? QueryState->GetSchemaInclusionMode() : Ydb::Query::SchemaInclusionMode::SCHEMA_INCLUSION_MODE_UNSPECIFIED, Nothing());
 
         auto exId = RegisterWithSameMailbox(executerActor);
         LOG_D("Created new KQP executer: " << exId << " isRollback: " << isRollback);
@@ -1800,6 +1801,9 @@ public:
     void HandleExecute(TEvKqpExecuter::TEvStreamData::TPtr& ev) {
         YQL_ENSURE(QueryState && QueryState->RequestActorId);
         LOG_D("Forwarded TEvStreamData to " << QueryState->RequestActorId);
+
+        QueryState->QueryData->AddBuiltResultIndex(ev->Record.GetQueryResultIndex());
+
         TlsActivationContext->Send(ev->Forward(QueryState->RequestActorId));
     }
 
@@ -2094,7 +2098,8 @@ public:
                 if (QueryState->IsStreamResult()) {
                     if (QueryState->QueryData->HasTrailingTxResult(phyQuery.GetResultBindings(i))) {
                         auto ydbResult = QueryState->QueryData->GetYdbTxResult(
-                            phyQuery.GetResultBindings(i), response->GetArena(), QueryState->GetResultSetType(), {});
+                            phyQuery.GetResultBindings(i), response->GetArena(),
+                            QueryState->GetOutputFormat(), QueryState->GetSchemaInclusionMode(), {});
 
                         YQL_ENSURE(ydbResult);
                         ++trailingResultsCount;
@@ -2110,8 +2115,9 @@ public:
                     effectiveRowsLimit = QueryState->PreparedQuery->GetResults(i).GetRowsLimit();
                 }
 
-                auto* ydbResult = QueryState->QueryData->GetYdbTxResult(phyQuery.GetResultBindings(i),
-                    response->GetArena(), QueryState->GetResultSetType(), effectiveRowsLimit);
+                auto* ydbResult = QueryState->QueryData->GetYdbTxResult(
+                    phyQuery.GetResultBindings(i), response->GetArena(),
+                    QueryState->GetOutputFormat(), QueryState->GetSchemaInclusionMode(), effectiveRowsLimit);
                 response->AddYdbResults()->Swap(ydbResult);
             }
         }

@@ -268,6 +268,24 @@ private:
             }
         }
 
+        NKqp::TOutputFormat outputFormat;
+
+        switch (req->output_format_case()) {
+            case Ydb::Query::ExecuteQueryRequest::kValueOutputFormat:
+                auto valueOutputFormat = google::protobuf::Arena::CreateMessage<Ydb::Formats::ValueOutputFormat>(Request_->GetArena());
+                valueOutputFormat->CopyFrom(req->value_output_format());
+                outputFormat = valueOutputFormat;
+                break;
+            case Ydb::Query::ExecuteQueryRequest::kArrowOutputFormat:
+                auto arrowOutputFormat = google::protobuf::Arena::CreateMessage<Ydb::Formats::ArrowOutputFormat>(Request_->GetArena());
+                arrowOutputFormat->CopyFrom(req->arrow_output_format());
+                outputFormat = arrowOutputFormat;
+                break;
+            default:
+                issues.AddIssue(MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR, "Unexpected output format"));
+                return ReplyFinishStream(Ydb::StatusIds::BAD_REQUEST, std::move(issues));
+        }
+
         AuditContextAppend(Request_.get(), *req);
         NDataIntegrity::LogIntegrityTrails(traceId, *req, ctx);
 
@@ -283,13 +301,14 @@ private:
             .SetKeepSession(false)
             .SetUseCancelAfter(false)
             .SetSyntax(syntax)
-            .SetResultSetType(req->result_set_type())
+            .SetSchemaInclusionMode(req->schema_inclusion_mode())
             .SetSupportStreamTrailingResult(true)
             .SetOutputChunkMaxSize(req->response_part_limit_bytes());
 
         auto ev = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>(
             QueryAction,
             queryType,
+            std::move(outputFormat),
             SelfId(),
             Request_,
             req->session_id(),

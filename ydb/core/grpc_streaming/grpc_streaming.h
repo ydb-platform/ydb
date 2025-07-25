@@ -200,13 +200,12 @@ private:
     }
 
     bool Start() {
-        if (!NYdbGrpc::GrpcDead) {
-            if (auto guard = Server->ProtectShutdown()) {
-                this->Context.AsyncNotifyWhenDone(OnDoneTag.Prepare());
-                (this->Service->*AcceptRequest)(&this->Context, &this->Stream, this->CQ, this->CQ, OnAcceptedTag.Prepare());
-                return true;
-            }
+        if (auto guard = Server->ProtectShutdown()) {
+            this->Context.AsyncNotifyWhenDone(OnDoneTag.Prepare());
+            (this->Service->*AcceptRequest)(&this->Context, &this->Stream, this->CQ, this->CQ, OnAcceptedTag.Prepare());
+            return true;
         }
+
         return false;
     }
 
@@ -338,9 +337,7 @@ private:
             // This is the first read, start reading from the stream
             Y_ABORT_UNLESS(!ReadInProgress);
             ReadInProgress = MakeHolder<typename IContext::TEvReadFinished>();
-            if (!NYdbGrpc::GrpcDead) {
-                Stream.Read(&ReadInProgress->Record, OnReadDoneTag.Prepare());
-            }
+            Stream.Read(&ReadInProgress->Record, OnReadDoneTag.Prepare());
         } else {
             Y_DEBUG_ABORT("Multiple outstanding reads are unsafe in grpc streaming");
         }
@@ -385,9 +382,7 @@ private:
             // We need to perform another read (likely unsafe)
             Y_DEBUG_ABORT("Multiple outstanding reads are unsafe in grpc streaming");
             ReadInProgress = MakeHolder<typename IContext::TEvReadFinished>();
-            if (!NYdbGrpc::GrpcDead) {
-                Stream.Read(&ReadInProgress->Record, OnReadDoneTag.Prepare());
-            }
+            Stream.Read(&ReadInProgress->Record, OnReadDoneTag.Prepare());
         }
     }
 
@@ -445,12 +440,11 @@ private:
 
             Flags |= (FlagWriteActive | (status ? FlagWriteAndFinish : 0));
         }
-        if (!NYdbGrpc::GrpcDead) {
-            if (status) {
-                Stream.WriteAndFinish(message, options, *status, OnWriteDoneTag.Prepare());
-            } else {
-                Stream.Write(message, options, OnWriteDoneTag.Prepare());
-            }
+
+        if (status) {
+            Stream.WriteAndFinish(message, options, *status, OnWriteDoneTag.Prepare());
+        } else {
+            Stream.Write(message, options, OnWriteDoneTag.Prepare());
         }
         return true;
     }
@@ -498,16 +492,14 @@ private:
             }
         }
 
-        if (!NYdbGrpc::GrpcDead) {
-            if (next && nextStatus) {
-                Stream.WriteAndFinish(next->Message, next->Options, *nextStatus, OnWriteDoneTag.Prepare());
-            } else if (next) {
-                Stream.Write(next->Message, next->Options, OnWriteDoneTag.Prepare());
-            } else if (nextStatus) {
-                Stream.Finish(*nextStatus, OnFinishDoneTag.Prepare());
-            } else if (wasWriteAndFinish) {
-                OnFinishDone(status);
-            }
+        if (next && nextStatus) {
+            Stream.WriteAndFinish(next->Message, next->Options, *nextStatus, OnWriteDoneTag.Prepare());
+        } else if (next) {
+            Stream.Write(next->Message, next->Options, OnWriteDoneTag.Prepare());
+        } else if (nextStatus) {
+            Stream.Finish(*nextStatus, OnFinishDoneTag.Prepare());
+        } else if (wasWriteAndFinish) {
+            OnFinishDone(status);
         }
     }
 

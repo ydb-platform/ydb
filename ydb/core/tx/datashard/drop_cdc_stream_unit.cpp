@@ -83,8 +83,12 @@ public:
     }
 
     void Complete(TOperation::TPtr, const TActorContext& ctx) override {
-        for (auto& removeSender : RemoveSenders) {
-            ctx.Send(DataShard.GetChangeSender(), removeSender.Release());
+        if (const auto& changeSender = DataShard.GetChangeSender()) {
+            for (auto& removeSender : RemoveSenders) {
+                if (auto* event = removeSender.Release()) {
+                    ctx.Send(changeSender, event);
+                }
+            }
         }
     }
 

@@ -460,7 +460,7 @@ NActors::IActor* CreateSolomonMetricsQueueActor(
         batchCountLimit = FromString<ui64>(it->second);
     }
 
-    ui32 truePointsFindRange = 300;
+    ui32 truePointsFindRange = 301;
     if (auto it = settings.find("truePointsFindRange"); it != settings.end()) {
         truePointsFindRange = FromString<ui32>(it->second);
     }

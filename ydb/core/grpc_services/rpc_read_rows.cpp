@@ -40,6 +40,7 @@ struct RequestedKeyColumn {
 struct TShardReadState {
     std::vector<TOwnedCellVec> Keys;
     ui32 FirstUnprocessedQuery = 0;
+    Ydb::StatusIds::StatusCode Status = Ydb::StatusIds::STATUS_CODE_UNSPECIFIED;
 };
 
 }
@@ -531,6 +532,7 @@ public:
                 if (Retries < MaxTotalRetries) {
                     TStringStream ss;
                     ss << "Reached MaxRetries count for DataShard# " << shardId << ", status# " << statusCode;
+                    it->second.Status = statusCode;
                     ReplyWithError(statusCode, ss.Str(), &issues);
                 } else {
                     SendRead(shardId, it->second);
@@ -545,6 +547,7 @@ public:
                 if (statusCode != Ydb::StatusIds::OVERLOADED) {
                     statusCode = Ydb::StatusIds::ABORTED;
                 }
+                it->second.Status = statusCode;
                 ReplyWithError(statusCode, ss.Str(), &issues);
                 return;
             }
@@ -562,6 +565,9 @@ public:
                 // we just wait for the next batch of results.
                 it->second.FirstUnprocessedQuery = token.GetFirstUnprocessedQuery();
                 ReadsInFlight++;
+            } else {
+                // Read for this shard has finished
+                it->second.Status = statusCode;
             }
         }
         LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::RPC_REQUEST, "TReadRowsRPC TEvReadResult RowsCount: " << msg->GetRowsCount());

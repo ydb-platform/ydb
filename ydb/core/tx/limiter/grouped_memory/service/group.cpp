@@ -27,8 +27,8 @@ bool TAllocationGroups::Allocate(const bool isPriorityProcess, TProcessMemorySco
     while (true) {
         std::vector<ui64> toRemove;
         for (auto it = Groups.begin(); it != Groups.end();) {
-            const ui64 internalGroupId = it->first;
-            const bool forced = isPriorityProcess && internalGroupId == scope.GroupIds.GetMinInternalIdVerified();
+            const ui64 externalGroupId = it->first;
+            const bool forced = isPriorityProcess && externalGroupId == scope.GroupIds.GetMinExternalIdVerified();
             std::vector<std::shared_ptr<TAllocationInfo>> allocated;
             if (forced) {
                 allocated = it->second.ExtractAllocationsToVector();

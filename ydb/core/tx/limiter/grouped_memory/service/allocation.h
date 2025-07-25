@@ -14,6 +14,7 @@ class TAllocationInfo: public NColumnShard::TMonitoringObjectsCounter<TAllocatio
 private:
     std::shared_ptr<IAllocation> Allocation;
     YDB_READONLY(ui64, AllocationInternalGroupId, 0);
+    YDB_READONLY(ui64, AllocationExternalGroupId, 0);
     ui64 AllocatedVolume = 0;
     YDB_READONLY(ui64, Identifier, 0);
     YDB_READONLY(ui64, ProcessId, 0);
@@ -44,7 +45,7 @@ public:
         }
     }
 
-    TAllocationInfo(const ui64 processId, const ui64 scopeId, const ui64 allocationInternalGroupId,
+    TAllocationInfo(const ui64 processId, const ui64 scopeId, const ui64 allocationInternalGroupId, const ui64 allocationExternalGroupId,
         const std::shared_ptr<IAllocation>& allocation, const std::shared_ptr<TStageFeatures>& stage);
 };
 

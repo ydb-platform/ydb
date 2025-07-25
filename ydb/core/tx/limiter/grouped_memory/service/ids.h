@@ -10,7 +10,7 @@ namespace NKikimr::NOlap::NGroupedMemoryManager {
 
 class TIdsControl {
 private:
-    THashMap<ui64, ui64> ExternalIdIntoInternalId;
+    std::map<ui64, ui64> ExternalIdIntoInternalId;
     std::map<ui64, ui64> InternalIdIntoExternalId;
     ui64 CurrentInternalId = 0;
 
@@ -24,6 +24,10 @@ public:
         return InternalIdIntoExternalId;
     }
 
+    const std::map<ui64, ui64>& GetExternalIdToInternalIds() const {
+        return ExternalIdIntoInternalId;
+    }
+
     ui64 GetSize() const {
         return InternalIdIntoExternalId.size();
     }
@@ -32,6 +36,7 @@ public:
     [[nodiscard]] std::optional<ui64> ExtractInternalIdOptional(const ui64 externalId);
 
     ui64 GetMinInternalIdVerified() const;
+    ui64 GetMinExternalIdVerified() const;
     ui64 GetExternalIdVerified(const ui64 internalId) const;
 
     std::optional<ui64> GetInternalIdOptional(const ui64 externalId) const;
@@ -62,6 +67,14 @@ public:
     ui64 GetMinInternalIdDef(const ui64 def) const {
         if (InternalIdIntoExternalId.size()) {
             return InternalIdIntoExternalId.begin()->first;
+        } else {
+            return def;
+        }
+    }
+
+    ui64 GetMinExternalIdDef(const ui64 def) const {
+        if (ExternalIdIntoInternalId.size()) {
+            return ExternalIdIntoInternalId.begin()->first;
         } else {
             return def;
         }

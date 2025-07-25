@@ -40,7 +40,21 @@ struct ModifiedTopicInfo {
     TopicEntities Entities;
 };
 
-struct TPairHash { size_t operator()(const std::pair<TString, TString>& p) const { return CombineHashes(std::hash<TString>()(p.first), std::hash<TString>()(p.second)); } };
+struct TopicGroupRequest {
+    TOffsetFetchRequestData::TOffsetFetchRequestGroup::TOffsetFetchRequestTopics TopicRequest;
+    TString GroupId;
+};
+
+struct TopicGroupIdAndPath {
+    TString GroupId;
+    TString TopicPath;
+
+    bool operator==(const TopicGroupIdAndPath& topicGroupIdAndPath) const {
+        return GroupId == topicGroupIdAndPath.GroupId && TopicPath == topicGroupIdAndPath.TopicPath;
+    }
+};
+
+struct TStructHash { size_t operator()(const TopicGroupIdAndPath& alterTopicRequest) const { return CombineHashes(std::hash<TString>()(alterTopicRequest.GroupId), std::hash<TString>()(alterTopicRequest.TopicPath)); } };
 
 
 class TKafkaOffsetFetchActor: public NActors::TActorBootstrapped<TKafkaOffsetFetchActor> {
@@ -74,8 +88,21 @@ public:
     void Handle(const TEvKafka::TEvResponse::TPtr& ev, const TActorContext& ctx);
     void ExtractPartitions(const TString& group, const NKafka::TOffsetFetchRequestData::TOffsetFetchRequestGroup::TOffsetFetchRequestTopics& topic);
     void ParseGroupsAssignments(NKqp::TEvKqp::TEvQueryResponse::TPtr ev, std::vector<std::pair<std::optional<TString>, TConsumerProtocolAssignment>>& assignments);
+    void CreateConsumerGroupIfNecessary(const TString& topicName,
+                                    const TString& topicPath,
+                                    const TString& originalTopicName,
+                                    const TString& groupId,
+                                    const std::vector<TOffsetFetchResponsePartitions>& topicPartitions);
+    bool CreateTopicIfNecessary(const TString& topicName,
+                                const TString& originalTopicName,
+                                const TString& groupId,
+                                const TActorContext& ctx);
     TOffsetFetchResponseData::TPtr GetOffsetFetchResponse();
+    TOffsetFetchResponseData::TOffsetFetchResponseGroup::TOffsetFetchResponseTopics GetOffsetResponseForTopic(
+                                    TOffsetFetchRequestData::TOffsetFetchRequestGroup::TOffsetFetchRequestTopics const &requestTopic,
+                                    TString groupId);
     NYdb::TParamsBuilder BuildFetchAssignmentsParams(const std::vector<std::optional<TString>>& groupIds);
+    void FillMapWithGroupRequests();
     void ReplyError(const TActorContext& ctx);
     void Die(const TActorContext &ctx);
 
@@ -92,10 +119,12 @@ private:
     std::unordered_map<TString, TAutoPtr<TEvKafka::TEvCommitedOffsetsResponse>> TopicsToResponses;
     std::unordered_map<TString, ui32> GroupIdToIndex;
     std::unordered_map<ui32, TString> CookieToGroupId;
-    std::unordered_map<ui32, ModifiedTopicInfo> AlterTopicInf;
-    std::unordered_map<TActorId, ModifiedTopicInfo> CreateTopicInf;
-    std::unordered_set<std::pair<TString, TString>, TPairHash> ConsumerTopicAlterRequestAttempts;
+    std::unordered_map<ui32, ModifiedTopicInfo> AlterTopicInfo;
+    std::unordered_map<TString, TopicGroupRequest> GroupRequests;
+    std::unordered_map<TActorId, ModifiedTopicInfo> CreateTopicInfo;
+    std::unordered_set<TopicGroupIdAndPath, TStructHash> ConsumerTopicAlterRequestAttempts;
     std::unordered_set<TString> TopicCreateRequestAttempts;
+    std::unordered_set<TActorId> DependantActors;
     std::unique_ptr<NKafka::TKqpTxHelper> Kqp;
 
     ui32 InflyTopics = 0;

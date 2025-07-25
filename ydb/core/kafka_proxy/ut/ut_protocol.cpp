@@ -89,7 +89,10 @@ public:
         appConfig.MutableKafkaProxyConfig()->SetListeningPort(Port);
         appConfig.MutableKafkaProxyConfig()->SetMaxMessageSize(1024);
         appConfig.MutableKafkaProxyConfig()->SetMaxInflightSize(2048);
-        appConfig.MutableKafkaProxyConfig()->SetAutoCreateTopicsEnable(true);
+        if (enableAutoTopicCreation) {
+            appConfig.MutableKafkaProxyConfig()->SetAutoCreateTopicsEnable(true);
+        }
+        appConfig.MutableKafkaProxyConfig()->SetDefaultNumOfPartitions(2);
 
         if (serverless) {
             appConfig.MutableKafkaProxyConfig()->MutableProxy()->SetHostname("localhost");
@@ -1834,6 +1837,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         }
     } // Y_UNIT_TEST(OffsetFetchScenario)
 
+
     void RunCreateTopicsScenario(TInsecureTestServer& testServer, TKafkaTestClient& client) {
         NYdb::NTopic::TTopicClient pqClient(*testServer.Driver);
 
@@ -2540,66 +2544,154 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         UNIT_ASSERT_VALUES_EQUAL(metadataResponse->Brokers[0].Port, FAKE_SERVERLESS_KAFKA_PROXY_PORT);
     }
 
-    Y_UNIT_TEST(ConsumerTopicAutocreationScenario) {
-        TInsecureTestServer testServer;
+    Y_UNIT_TEST(OffsetFetchConsumerTopicAutocreationScenario) {
+        TInsecureTestServer testServer("1", false, false, true);
 
         TString nonExistedTopicName1 = "non-existent-topic-1";
         TString nonExistedTopicName2 = "non-existent-topic-2";
+        TString nonExistedTopicName3 = "non-existent-topic-3";
+        TString existedTopicName = "existent-topic";
         TString newConsumer = "new-consumer";
+        TString consumerName = "my-consumer";
 
-        if (testServer.KikimrServer.get()->ServerSettings->AppConfig->GetKafkaProxyConfig().GetAutoCreateTopicsEnable()) {
-            Cout << "AutoCreateTopicsEnable is set true\n";
+        ui32 defaultPartitionsCount = testServer.KikimrServer.get()->ServerSettings->AppConfig->GetKafkaProxyConfig().GetDefaultNumOfPartitions();
+
+        {
+            NYdb::NTopic::TTopicClient pqClient(*testServer.Driver);
+            // create input and output topics
+            CreateTopic(pqClient, existedTopicName, 3, {consumerName});
+        }
+
+        { TKafkaTestClient client(testServer.Port);
+            // аутентифицируемся как пользователь с правами на чтение и запись
+            TString userName = "user123@/Root";
+            TString userPassword = "UsErPassword";
+            client.AuthenticateToKafka(userName, userPassword);
             {
-                TKafkaTestClient client(testServer.Port);
-                // аутентифицируемся как пользователь с правами на чтение и запись
-                TString userName = "user123@/Root";
-                TString userPassword = "UsErPassword";
-                client.AuthenticateToKafka(userName, userPassword);
-
+                // existent topic with existent consumer
                 std::map<TString, std::vector<i32>> topicsToPartions;
-                topicsToPartions[nonExistedTopicName1] = std::vector<i32>{0};
-                auto msg = client.OffsetFetch(newConsumer, topicsToPartions);
+                topicsToPartions[existedTopicName] = std::vector<i32>{0, 1, 2};
+                auto msg = client.OffsetFetch(consumerName, topicsToPartions);
                 UNIT_ASSERT_VALUES_EQUAL(msg->Groups.size(), 1);
                 UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].ErrorCode, 0);
                 UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics.size(), 1);
-                UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[0].Name, nonExistedTopicName1);
-                UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[0].Partitions.size(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[0].Name, existedTopicName);
+                UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[0].Partitions.size(), 3);
                 UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[0].Partitions[0].PartitionIndex, 0);
                 UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[0].Partitions[0].ErrorCode, EKafkaErrors::NONE_ERROR);
             }
 
             {
-                TKafkaTestClient client(testServer.Port);
-                // аутентифицируемся как пользователь без прав на запись
-                TString userName = "usernorights@/Root";
-                TString userPassword = "dummyPass";
-                client.AuthenticateToKafka(userName, userPassword);
+                // existent topic with non-existent consumer
                 std::map<TString, std::vector<i32>> topicsToPartions;
-                topicsToPartions[nonExistedTopicName2] = std::vector<i32>{0};
-                auto msg = client.OffsetFetch(newConsumer, topicsToPartions);
-                UNIT_ASSERT_VALUES_EQUAL(msg->Groups.size(), 1);
-                UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics.size(), 1);
-                UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[0].Partitions[0].ErrorCode, EKafkaErrors::UNKNOWN_TOPIC_OR_PARTITION);
-            }
-        } else {
-            Cout << "AutoCreateTopicsEnable is set false\n";
-            {
-                TKafkaTestClient client(testServer.Port);
-                // аутентифицируемся как пользователь с правами на чтение и запись
-                TString userName = "user123@/Root";
-                TString userPassword = "UsErPassword";
-                client.AuthenticateToKafka(userName, userPassword);
-
-                std::map<TString, std::vector<i32>> topicsToPartions;
-                topicsToPartions[nonExistedTopicName1] = std::vector<i32>{0};
+                topicsToPartions[existedTopicName] = std::vector<i32>{0, 1, 2};
                 auto msg = client.OffsetFetch(newConsumer, topicsToPartions);
                 UNIT_ASSERT_VALUES_EQUAL(msg->Groups.size(), 1);
                 UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].ErrorCode, 0);
                 UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics.size(), 1);
-                UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[0].Name, nonExistedTopicName1);
+                UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[0].Name, existedTopicName);
+                UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[0].Partitions.size(), 3);
+                UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[0].Partitions[0].PartitionIndex, 0);
+                UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[0].Partitions[0].ErrorCode, EKafkaErrors::NONE_ERROR);
+            }
+
+            {
+                // an offset fetch request for both existent topic and non-existent topic
+                std::map<TString, std::vector<i32>> topicsToPartions;
+                topicsToPartions[existedTopicName] = std::vector<i32>{0, 1, 2};
+                topicsToPartions[nonExistedTopicName1] = std::vector<i32>{0, 1};
+                auto msg = client.OffsetFetch(newConsumer, topicsToPartions);
+                UNIT_ASSERT_VALUES_EQUAL(msg->Groups.size(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].ErrorCode, 0);
+                UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics.size(), 2);
+                UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[0].Name, existedTopicName);
+                UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[0].Partitions.size(), 3);
+                for (const auto& partition : msg->Groups[0].Topics[0].Partitions) {
+                    UNIT_ASSERT_VALUES_EQUAL(partition.ErrorCode, EKafkaErrors::NONE_ERROR);
+                }
+                UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[1].Name, nonExistedTopicName1);
+                UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[1].Partitions.size(), defaultPartitionsCount);
+                for (const auto& partition : msg->Groups[0].Topics[1].Partitions) {
+                    UNIT_ASSERT_VALUES_EQUAL(partition.ErrorCode, EKafkaErrors::NONE_ERROR);
+                }
+            }
+
+            {
+                // non-existent topic with non-existent consumer
+                std::map<TString, std::vector<i32>> topicsToPartions;
+                topicsToPartions[nonExistedTopicName2] = std::vector<i32>{0};
+                auto msg = client.OffsetFetch(newConsumer, topicsToPartions);
+                UNIT_ASSERT_VALUES_EQUAL(msg->Groups.size(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].ErrorCode, 0);
+                UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics.size(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[0].Name, nonExistedTopicName2);
                 UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[0].Partitions.size(), 1);
                 UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[0].Partitions[0].PartitionIndex, 0);
-                UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[0].Partitions[0].ErrorCode, EKafkaErrors::UNKNOWN_TOPIC_OR_PARTITION);
+                UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[0].Partitions[0].ErrorCode, EKafkaErrors::NONE_ERROR);
+            }
+        }
+
+        {
+            TKafkaTestClient client(testServer.Port);
+            // аутентифицируемся как пользователь без прав на запись
+            TString userName = "usernorights@/Root";
+            TString userPassword = "dummyPass";
+            client.AuthenticateToKafka(userName, userPassword);
+
+            std::map<TString, std::vector<i32>> topicsToPartions;
+            topicsToPartions[nonExistedTopicName3] = std::vector<i32>{0};
+            auto msg = client.OffsetFetch(newConsumer, topicsToPartions);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Groups.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[0].Partitions[0].ErrorCode, EKafkaErrors::UNKNOWN_TOPIC_OR_PARTITION);
+        }
+    }
+
+    Y_UNIT_TEST(MetadataTopicAutocreationEnabledScenario) {
+        TInsecureTestServer testServer("1", false, false, true);
+
+        TString nonExistedTopicName1 = "non-existent-topic-1";
+        TString nonExistedTopicName2 = "non-existent-topic-2";
+        TString existedTopicName = "existent-topic";
+        TString consumerName = "my-consumer";
+        ui32 existedTopicPartitionsNum = 3;
+
+        ui32 defaultPartitionsCount = testServer.KikimrServer.get()->ServerSettings->AppConfig->GetKafkaProxyConfig().GetDefaultNumOfPartitions();
+
+        {
+            NYdb::NTopic::TTopicClient pqClient(*testServer.Driver);
+            // create input and output topics
+            CreateTopic(pqClient, existedTopicName, existedTopicPartitionsNum, {consumerName});
+        }
+
+        {
+            TKafkaTestClient client(testServer.Port);
+            TString userName = "user123@/Root";
+            TString userPassword = "UsErPassword";
+            client.AuthenticateToKafka(userName, userPassword);
+            TVector<TString> nonExistentTopics = {nonExistedTopicName1};
+            auto msg = client.Metadata(nonExistentTopics);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Topics.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Topics[0].Partitions.size(), defaultPartitionsCount);
+            for (const auto &partitionInfo : msg->Topics[0].Partitions) {
+                UNIT_ASSERT_VALUES_EQUAL(partitionInfo.ErrorCode, EKafkaErrors::NONE_ERROR);
+            }
+        }
+
+        {
+            TKafkaTestClient client(testServer.Port);
+            TString userName = "user123@/Root";
+            TString userPassword = "UsErPassword";
+            client.AuthenticateToKafka(userName, userPassword);
+            TVector<TString> nonExistentTopics = {nonExistedTopicName2, existedTopicName};
+            auto msg = client.Metadata(nonExistentTopics);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Topics.size(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Topics[0].Partitions.size(), defaultPartitionsCount);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Topics[1].Partitions.size(), existedTopicPartitionsNum);
+            for (int i = 0; i < 2; i++) {
+                for (const auto &partitionInfo : msg->Topics[0].Partitions) {
+                    UNIT_ASSERT_VALUES_EQUAL(partitionInfo.ErrorCode, EKafkaErrors::NONE_ERROR);
+                }
             }
         }
     }
@@ -3301,7 +3393,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         TKafkaTestClient kafkaClient(testServer.Port);
         // use random transactional id for each request to avoid parallel execution problems
         auto transactionalId = TStringBuilder() << "my-tx-producer-" << RandomNumber<ui64>();
-        
+
         // this first request will init table
         auto resp1 = kafkaClient.InitProducerId(transactionalId);
         // update epoch to be last available
@@ -3319,7 +3411,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         rows.EndList();
         auto upsertResult = tableClient.BulkUpsert("//Root/.metadata/kafka_transactional_producers", rows.Build()).GetValueSync();
         UNIT_ASSERT_EQUAL(upsertResult.GetStatus(), EStatus::SUCCESS);
-        
+
         auto resp2 = kafkaClient.InitProducerId(transactionalId);
 
         // validate first response

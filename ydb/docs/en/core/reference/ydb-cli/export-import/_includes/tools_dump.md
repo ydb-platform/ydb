@@ -1,6 +1,6 @@
 # Exporting data to the file system
 
-## Cluster
+## Cluster {#cluster}
 
 The `admin cluster dump` command dumps the cluster' metadata to the client file system in the format described in the [{#T}](../file-structure.md) article:
 
@@ -14,7 +14,7 @@ The `admin cluster dump` command dumps the cluster' metadata to the client file 
 
 A [cluster configuration](../../../../maintenance/manual/config-overview.md) is dumped separately using the `{{ ydb-cli }} admin cluster config fetch` command.
 
-## Database
+## Database {#db}
 
 The `admin database dump` command dumps the database' data and metadata to the client file system in the format described in [{#T}](../file-structure.md):
 
@@ -28,7 +28,7 @@ The `admin database dump` command dumps the database' data and metadata to the c
 
 A [database configuration](../../../../maintenance/manual/config-overview.md) is dumped separately using the `{{ ydb-cli }} admin database config fetch` command.
 
-## Schema objects
+## Schema objects {#schema-objects}
 
 The `tools dump` command dumps the schema objects to the client file system in the format described in [{#T}](../file-structure.md):
 

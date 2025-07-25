@@ -22,11 +22,14 @@
 #include <util/string/escape.h>
 #include <util/system/byteorder.h>
 
+// #define VERIFY_RESULT_BLOB(blob, pos) \
+//     Y_ABORT_UNLESS(!blob.Data.empty(), "Empty data. SourceId: %s, SeqNo: %" PRIu64, blob.SourceId.data(), blob.SeqNo); \
+//     Y_ABORT_UNLESS(blob.SeqNo <= (ui64)Max<i64>(), "SeqNo is too big: %" PRIu64, blob.SeqNo);
+
 #define VERIFY_RESULT_BLOB(blob, pos) \
-    Y_ABORT_UNLESS(!blob.Data.empty(), "Empty data. SourceId: %s, SeqNo: %" PRIu64, blob.SourceId.data(), blob.SeqNo); \
     Y_ABORT_UNLESS(blob.SeqNo <= (ui64)Max<i64>(), "SeqNo is too big: %" PRIu64, blob.SeqNo);
 
-namespace NKikimr::NPQ {
+    namespace NKikimr::NPQ {
 
 TMaybe<TInstant> GetReadFrom(ui32 maxTimeLagMs, ui64 readTimestampMs, TInstant consumerReadFromTimestamp, const TActorContext& ctx) {
     if (!(maxTimeLagMs > 0 || readTimestampMs > 0 || consumerReadFromTimestamp > TInstant::MilliSeconds(1))) {
@@ -442,7 +445,7 @@ TMaybe<TReadAnswer> TReadInfo::AddBlobsFromBody(const TVector<NPQ::TRequestedBlo
             readResult->SetEndOffset(endOffset);
             return TReadAnswer{answerSize, std::move(answer)};
         }
-        Y_ABORT_UNLESS(blobValue.size() == blobs[pos].Size, "value for offset %" PRIu64 " count %u size must be %u, but got %u",
+        Y_ABORT_UNLESS(blobValue.size() <= blobs[pos].Size, "value for offset %" PRIu64 " count %u size must be %u, but got %u",
                                                         offset, count, blobs[pos].Size, (ui32)blobValue.size());
 
         if (offset > Offset || (offset == Offset && partNo > PartNo)) { // got gap
@@ -488,8 +491,11 @@ TMaybe<TReadAnswer> TReadInfo::AddBlobsFromBody(const TVector<NPQ::TRequestedBlo
                                                   Destination != 0, ctx.Now()
                                               );
                 }
-
-                AddResultBlob(readResult, res, Offset);
+                if (res.Data.size() > 0 || res.UncompressedSize > 0) {
+                    AddResultBlob(readResult, res, Offset);
+                } else {
+                    Cerr << "=== Skip message :" << res.SeqNo << ":" << res.GetPartNo() << Endl;
+                }
 
                 if (res.IsLastPart()) {
                     PartNo = 0;
@@ -526,9 +532,6 @@ TReadAnswer TReadInfo::FormAnswer(
     Y_UNUSED(meteringMode);
     Y_UNUSED(partition);
     THolder<TEvPQ::TEvProxyResponse> answer = MakeHolder<TEvPQ::TEvProxyResponse>(destination, IsInternal);
-    if (IsInternal) {
-        Cerr << "===Form internal answer\n";
-    }
 
     NKikimrClient::TResponse& res = *answer->Response;
     const TEvPQ::TEvBlobResponse* response = &blobResponse;
@@ -670,7 +673,6 @@ TReadAnswer TReadInfo::FormAnswer(
 }
 
 void TPartition::Handle(TEvPQ::TEvReadTimeout::TPtr& ev, const TActorContext& ctx) {
-    Cerr << "====On TEvReadTimeout\n";
     auto res = Subscriber.OnTimeout(ev);
     if (!res)
         return;
@@ -945,9 +947,7 @@ void TPartition::ProcessTimestampsForNewData(const ui64 prevEndOffset, const TAc
 }
 
 void TPartition::Handle(TEvPQ::TEvProxyResponse::TPtr& ev, const TActorContext& ctx) {
-    Cerr << "=== Partiton - got proxy response with cookie: " << ev->Get()->Cookie << Endl;
     if (ev->Get()->IsInternal) {
-        Cerr << "=== Got internal proxy response\n";
         if (Compacter) {
             Compacter->ProcessResponse(ev);
         }
@@ -956,7 +956,6 @@ void TPartition::Handle(TEvPQ::TEvProxyResponse::TPtr& ev, const TActorContext& 
     ReadingTimestamp = false;
 
     auto userInfo = UsersInfoStorage->GetIfExists(ReadingForUser);
-    Cerr << "=== Got proxy response with client id = " << userInfo->User << Endl;
 
     if (!userInfo || userInfo->ReadRuleGeneration != ReadingForUserReadRuleGeneration) {
         PQ_LOG_I("Topic '" << TopicConverter->GetClientsideName() << "'" <<
@@ -1036,7 +1035,6 @@ void TPartition::ProcessTimestampRead(const TActorContext& ctx) {
 void TPartition::ProcessRead(const TActorContext& ctx, TReadInfo&& info, const ui64 cookie, bool subscription) {
     ui32 count = 0;
     ui32 size = 0;
-    Cerr << "=== Process read with cookie: " << cookie << Endl;
     Y_ABORT_UNLESS(!info.User.empty());
     auto& userInfo = UsersInfoStorage->GetOrCreate(info.User, ctx);
 

@@ -466,7 +466,6 @@ void TPartition::AddMetaKey(TEvKeyValue::TEvRequest* request) {
     NKikimrPQ::TPartitionMeta meta;
     //meta.SetStartOffset(CompactionBlobEncoder.StartOffset);
     //meta.SetEndOffset(Max(BlobEncoder.NewHead.GetNextOffset(), BlobEncoder.EndOffset));
-    meta.SetFirstUncompactedOffset(BlobEncoder.FirstUncompactedOffset);
     meta.SetSubDomainOutOfSpace(SubDomainOutOfSpace);
     meta.SetEndWriteTimestamp(PendingWriteTimestamp.MilliSeconds());
 

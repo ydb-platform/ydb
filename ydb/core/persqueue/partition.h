@@ -1064,13 +1064,14 @@ private:
                         const TEvPQ::TEvBlobResponse* blobResponse,
                         const TActorContext& ctx);
 
+public:
     enum ERequestCookie : ui64 {
         ReadBlobsForCompaction = 0,
         WriteBlobsForCompaction,
         CompactificationWrite,
         End
     };
-
+private:
     void TryRunCompaction();
     void BlobsForCompactionWereRead(const TVector<NPQ::TRequestedBlob>& blobs);
     void BlobsForCompactionWereWrite();

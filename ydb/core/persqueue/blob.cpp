@@ -20,6 +20,9 @@ TBlobIterator::TBlobIterator(const TKey& key, const TString& blob)
                    "Key=%s, blob.size=%" PRISZT,
                    Key.ToString().data(), blob.size());
     ParseBatch();
+    if (Header.GetPartNo() != Key.GetPartNo()) {
+        Cerr << "===Error around key: " << Key.ToString() << Endl;
+    }
     Y_ABORT_UNLESS(Header.GetPartNo() == Key.GetPartNo());
 }
 
@@ -30,6 +33,9 @@ void TBlobIterator::ParseBatch() {
     Count += Header.GetCount();
     Offset += Header.GetCount();
     InternalPartsCount += Header.GetInternalPartsCount();
+    if (Count > Key.GetCount() || InternalPartsCount > Key.GetInternalPartsCount()) {
+        Cerr << "===Error around key: " << Key.ToString() << Endl;
+    }
     Y_ABORT_UNLESS(Count <= Key.GetCount());
     Y_ABORT_UNLESS(InternalPartsCount <= Key.GetInternalPartsCount());
 }
@@ -222,11 +228,10 @@ void TBatch::Pack() {
         return;
     Packed = true;
     PackedData.Clear();
-
     bool hasUncompressed = false;
     bool hasKinesis = false;
     for (ui32 i = 0; i < Blobs.size(); ++i) {
-        if (Blobs[i].UncompressedSize > 0)
+        if (Blobs[i].UncompressedSize > 0 || Blobs[i].HadUncompressed)
             hasUncompressed = true;
 
         if (!Blobs[i].PartitionKey.empty() || !Blobs[i].ExplicitHashKey.empty()) {

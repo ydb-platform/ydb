@@ -325,7 +325,6 @@ void TInitMetaStep::LoadMeta(const NKikimrClient::TResponse& kvResponse, const T
 
         Partition()->BlobEncoder.StartOffset = meta.GetStartOffset();
         Partition()->BlobEncoder.EndOffset = meta.GetEndOffset();
-        Partition()->BlobEncoder.FirstUncompactedOffset = meta.GetFirstUncompactedOffset();
         if (Partition()->BlobEncoder.StartOffset == Partition()->BlobEncoder.EndOffset) {
            Partition()->BlobEncoder.NewHead.Offset = Partition()->BlobEncoder.Head.Offset = Partition()->BlobEncoder.EndOffset;
         }
@@ -450,6 +449,9 @@ void TInitInfoRangeStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActor
             Cerr << "ERROR " << range.GetStatus() << "\n";
             Y_ABORT("bad status");
     };
+    if (Partition()->Config.GetEnableCompactification()) {
+        Partition()->CreateCompacter();
+    }
 }
 
 void TInitInfoRangeStep::PostProcessing(const TActorContext& ctx) {
@@ -1023,7 +1025,6 @@ void TPartition::Initialize(const TActorContext& ctx) {
         }
     }
     if (Config.GetEnableCompactification()) {
-        Cerr << "=== Create compacter on init\n";
         CreateCompacter();
     }
 }
@@ -1269,17 +1270,20 @@ void TPartition::CreateCompacter() {
     if (!CompacterStartCookie.Defined()) {
         Send(Tablet, new TEvPQ::TEvAllocateCookie(100));
         return;
-    } else {
-        TUserInfo* userInfo = UsersInfoStorage->GetIfExists(CLIENTID_COMPACTION_CONSUMER);
-        ui64 compStartOffset = 0;
-        if (userInfo) {
-            compStartOffset = userInfo->Offset;
-        } else {
-            PQ_LOG_ALERT("Have compaction enabled but could not find compaction consumer; Will start from offset = 0");
-        }
-        Compacter = MakeHolder<TPartitionCompaction>(0 /* ToDo: !! */, *CompacterStartCookie, *CompacterStartCookie + 100, this);
-        Compacter->TryCompactionIfPossible();
     }
+    if (Compacter) {
+        return;
+    }
+
+    TUserInfo* userInfo = UsersInfoStorage->GetIfExists(CLIENTID_COMPACTION_CONSUMER);
+    ui64 compStartOffset = 0;
+    if (userInfo) {
+        compStartOffset = userInfo->Offset;
+    } else {
+        return;
+    }
+    Compacter = MakeHolder<TPartitionCompaction>(compStartOffset, *CompacterStartCookie, *CompacterStartCookie + 100, this);
+    Compacter->TryCompactionIfPossible();
 }
 
 void TPartition::Handle(TEvPQ::TEvAllocateCookie::TPtr& ev) {

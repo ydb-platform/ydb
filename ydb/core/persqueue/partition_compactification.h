@@ -1,6 +1,7 @@
 #pragma once
 
 #include "key.h"
+#include "blob.h"
 
 namespace NKikimr::NPQ {
 
@@ -35,6 +36,7 @@ public:
 
         ui64 OffsetToRead;
         ui64 LastOffset = 0;
+
         ui64 NextPartNo = 0;
         THashMap<TString, ui64> TopicData; //Key -> Offset
 
@@ -56,18 +58,33 @@ public:
         friend TPartitionCompaction;
         using TKeysIter = std::deque<TDataKey>::iterator;
 
-        THolder<TEvKeyValue::TEvRequest> Request;
+        constexpr static const ui64 MAX_REQUEST_DATA_SIZE = 24_MB;
+        constexpr static const ui64 MAX_BLOB_SIZE = 8_MB;
+
         ui64 RequestSize;
         ui64 MaxOffset;
         THashMap<TString, ui64> TopicData;
         TPartition* PartitionActor;
 
         ui64 LastProcessedOffset;
+        TMaybe<ui64> OffsetToCommit;
+        ui64 CommitCookie = 0;
         TKeysIter KeysIter;
         bool Failure = false;
+
+        THolder<TEvKeyValue::TEvRequest> Request;
         ui64 RequestDataSize = 0;
         std::deque<TDataKey> DataKeysBody;
         std::deque<TDataKey> DroppedKeys;
+        TVector<TDataKey> ChangedKeys;
+
+        TMaybe<NKikimrClient::TCmdReadResult::TResult> LastMessage;
+        TMaybe<TBatch> LastBatch;
+        TKey LastBatchKey;
+        TVector<TClientBlob> LastMessageBlobs;
+        THashMap<TString, TBatch> CurrentMessageBatches;
+        ui64 FirstUnprocessedOffset = 0;
+
         ui64 FirstHeadOffset;
         ui64 FirstHeadPartNo;
 
@@ -78,12 +95,15 @@ public:
 
         EStep ContinueIfPossible(ui64 nextCookie);
         void RunKvRequest();
+        void AddCmdWrite(const TKey& key, TBatch& batch);
         void AddDeleteRange(const TKey& key);
+        void SendCommit(ui64 offset, ui64 cookie);
+        void SaveLastBatch();
     };
 
     EStep Step = EStep::PENDING;
-    ui64 FirstUncompactedOffset = 0;
     bool HaveRequestInflight = false;
+    ui64 FirstUncompactedOffset = 0;
     ui64 StartCookie = 0;
     ui64 EndCookie = 0;
     ui64 CurrentCookie = 0;
@@ -100,7 +120,7 @@ public:
         }
         return CurrentCookie;
     }
-
+//    ui64
     void TryCompactionIfPossible();
     void UpdatePartitionConifg();
     void ProcessResponse(TEvPQ::TEvProxyResponse::TPtr& ev);

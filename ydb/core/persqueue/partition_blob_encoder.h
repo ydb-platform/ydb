@@ -81,6 +81,8 @@ struct TPartitionBlobEncoder {
     void ResetNewHead(ui64 endOffset);
 
     void PackLastBatch();
+    std::deque<TDataKey> GetDataKeysBody() const;
+    void RecalcBlobSizes(const TVector<TDataKey>& dataKeys);
 
     std::pair<TKey, ui32> Compact(const TKey& key, bool headCleared);
 
@@ -99,7 +101,6 @@ struct TPartitionBlobEncoder {
     std::deque<TDataKey> DataKeysBody;
     TVector<TKeyLevel> DataKeysHead;
     std::deque<TDataKey> HeadKeys;
-    ui64 FirstUncompactedOffset = 0;
 
     bool HaveData = false;
     bool HeadCleared = false;

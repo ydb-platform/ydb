@@ -58,7 +58,7 @@ class TTestServer {
 public:
     TIpPort Port;
 
-    TTestServer(const TString& kafkaApiMode = "1", bool serverless = false, bool enableNativeKafkaBalancing = false) {
+    TTestServer(const TString& kafkaApiMode = "1", bool serverless = false, bool enableNativeKafkaBalancing = false, bool enableQuoting = true) {
         TPortManager portManager;
         Port = portManager.GetTcpPort();
 
@@ -94,9 +94,9 @@ public:
             appConfig.MutableKafkaProxyConfig()->MutableProxy()->SetPort(FAKE_SERVERLESS_KAFKA_PROXY_PORT);
         }
 
-        appConfig.MutablePQConfig()->MutableQuotingConfig()->SetEnableQuoting(true);
+        appConfig.MutablePQConfig()->MutableQuotingConfig()->SetEnableQuoting(enableQuoting);
         appConfig.MutablePQConfig()->MutableQuotingConfig()->SetQuotaWaitDurationMs(300);
-        appConfig.MutablePQConfig()->MutableQuotingConfig()->SetPartitionReadQuotaIsTwiceWriteQuota(true);
+        appConfig.MutablePQConfig()->MutableQuotingConfig()->SetPartitionReadQuotaIsTwiceWriteQuota(enableQuoting);
         appConfig.MutablePQConfig()->MutableBillingMeteringConfig()->SetEnabled(true);
         appConfig.MutablePQConfig()->MutableBillingMeteringConfig()->SetFlushIntervalSec(1);
         appConfig.MutablePQConfig()->AddClientServiceType()->SetName("data-streams");
@@ -2168,32 +2168,34 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             UNIT_ASSERT_VALUES_EQUAL(msg->Responses[0].ErrorCode, NONE_ERROR);
             checkDescribeTopic({{topic1, "compact"}, {topic2, "delete"}});
         }
-        //ui64 offset = 1, seqNo = 1;
-        TString valueBase{700u, 'a'};
-        TString largeValueBase{1'000'000u, 'a'};
         NYdb::NTopic::TWriteSessionSettings wSSettings{topic1FullPath, "producer1", ""};
         wSSettings.Codec(NTopic::ECodec::RAW);
+
         auto writeSession = pqClient.CreateSimpleBlockingWriteSession(wSSettings);
-        auto produce = [&](const TString& key) {
-            NYdb::NTopic::TWriteMessage message1{key + largeValueBase};
-            NYdb::NTopic::TWriteMessage message2{key + valueBase};
-            NYdb::NTopic::TWriteMessage::TMessageMeta meta1, meta2;
+        ui64 totalWritten = 0;
+        auto writeMessage = [&] (const TString& key, ui64 size) {
+            NYdb::NTopic::TWriteMessage message{key + TString{size, 'a'}};
+            NYdb::NTopic::TWriteMessage::TMessageMeta meta1;
             meta1.push_back(std::make_pair("__key", key));
-            meta2.push_back(std::make_pair("__key", key + "-big"));
-            message1.MessageMeta(meta1);
-            message2.MessageMeta(meta2);
-            writeSession->Write(std::move(message1));
-            writeSession->Write(std::move(message2));
+            message.MessageMeta(meta1);
+            writeSession->Write(std::move(message));
+            totalWritten++;
         };
 
         checkDescribeTopic({{topic1, "compact"}, {topic2, "delete"}});
         for (auto i = 0u; i < 20; i++) {
-            produce("key1");
-            produce("key2");
-            produce("key3");
-            produce("key4");
+            writeMessage("key1", 100_KB * (i + 1));
+            writeMessage("key2", 50_KB * (i + 1));
+            writeMessage("key3", 200_KB * (i + 1));
+
+            Cerr << "Wrote message " << i << Endl;
+        }
+        for (auto i = 0u; i < 500; i++) {
+            writeMessage("key4", 10_KB * (i + 1));
+            Cerr << "Wrote message " << i << Endl;
         }
         writeSession->Close(TDuration::Seconds(50));
+        Sleep(TDuration::Seconds(10));
 
         NYdb::NTopic::TReadSessionSettings rSSettings{.ConsumerName_ = "consumer1"};
         rSSettings.AppendTopics({topic1FullPath});
@@ -2205,7 +2207,9 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
                 if (!event)
                     return result;
                 if (auto dataEvent = std::get_if<NTopic::TReadSessionEvent::TDataReceivedEvent>(&*event)) {
+                    dataEvent->Commit();
                     result = *dataEvent;
+
                     break;
                 } else if (auto *lockEv = std::get_if<NTopic::TReadSessionEvent::TStartPartitionSessionEvent>(&*event)) {
                     lockEv->Confirm();
@@ -2217,8 +2221,9 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             }
             return result;
         };
-        ui64 totalTries = 20;
+        ui64 totalTries = 5;
         ui64 totalMessages = 0;
+        THashSet<TString> keysFound;
         while(totalTries) {
             auto result = getMessagesFromTopic(readSession);
             if (!result) {
@@ -2229,21 +2234,25 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             if (result) {
                 for (const auto& message : result->GetMessages()) {
                     TStringBuilder msg;
-                    msg << "==== Got message from offset " << message.GetOffset();
+                    msg << "==== Got message from offset " << message.GetOffset() << " and size: " << message.GetData().size() << Endl;
+                    keysFound.emplace(message.GetMessageMeta()->Fields[0].second);
                     totalMessages++;
-                    if (!message.GetMessageMeta()->Fields.empty()) {
-                        msg << " with meta: " << message.GetMessageMeta()->Fields[0].first << ":" << message.GetMessageMeta()->Fields[0].second << Endl;
-                    }
+                    msg << " with meta: " << message.GetMessageMeta()->Fields[0].first << ":" << message.GetMessageMeta()->Fields[0].second << Endl;
                     Cerr << msg;
+                    UNIT_ASSERT(!message.GetMessageMeta()->Fields.empty());
+                    UNIT_ASSERT(message.GetData().size() > 0);
                 }
             }
         }
+        UNIT_ASSERT(totalMessages < totalWritten);
+        UNIT_ASSERT(keysFound.size() == 4);
+        UNIT_ASSERT(keysFound.contains("key1") && keysFound.contains("key2") && keysFound.contains("key3") && keysFound.contains("key4"));
         Cerr << "===Total messages: " << totalMessages << Endl;
     }
 
 
     Y_UNIT_TEST(TopicsWithCleaunpPolicyScenario) {
-        TInsecureTestServer testServer("2");
+        TInsecureTestServer testServer("2", false, false, false);
         TKafkaTestClient client(testServer.Port);
 
         RunCreateTopicsWithCleanupPolicy(testServer, client);

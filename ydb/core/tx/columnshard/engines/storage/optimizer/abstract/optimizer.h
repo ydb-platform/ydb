@@ -36,6 +36,10 @@ private:
     }
 
 public:
+    void Mul(const ui32 kff) {
+        InternalLevelWeight *= kff;
+    }
+
     ui64 GetGeneralPriority() const {
         return ((ui64)Level << 56) + InternalLevelWeight;
     }
@@ -88,6 +92,7 @@ using TPortionInfoForCompaction = NPortion::TPortionInfoForCompaction;
 
 class IOptimizerPlanner {
 private:
+    friend class IOptimizerPlannerConstructor;
     const TInternalPathId PathId;
     YDB_READONLY(TInstant, ActualizationInstant, TInstant::Zero());
 
@@ -95,6 +100,7 @@ private:
         return false;
     }
     const ui32 NodePortionsCountLimit = 0;
+    double WeightKff = 1;
     static inline TAtomicCounter NodePortionsCounter = 0;
     TPositiveControlInteger LocalPortionsCount;
     std::shared_ptr<TCounters> Counters = std::make_shared<TCounters>();
@@ -191,7 +197,9 @@ public:
     std::shared_ptr<TColumnEngineChanges> GetOptimizationTask(
         std::shared_ptr<TGranuleMeta> granule, const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) const;
     TOptimizationPriority GetUsefulMetric() const {
-        return DoGetUsefulMetric();
+        auto result = DoGetUsefulMetric();
+        result.Mul(WeightKff);
+        return result;
     }
     void Actualize(const TInstant currentInstant) {
         ActualizationInstant = currentInstant;
@@ -228,6 +236,7 @@ public:
 
 private:
     ui32 NodePortionsCountLimit = 1000000;
+    double WeightKff = 1.0;
 
     virtual TConclusion<std::shared_ptr<IOptimizerPlanner>> DoBuildPlanner(const TBuildContext& context) const = 0;
     virtual void DoSerializeToProto(TProto& proto) const = 0;
@@ -263,16 +272,29 @@ public:
             }
             NodePortionsCountLimit = jsonValue.GetUInteger();
         }
+        if (jsonInfo.Has("weight_kff")) {
+            const auto& jsonValue = jsonInfo["weight_kff"];
+            if (!jsonValue.IsDouble()) {
+                return TConclusionStatus::Fail("incorrect weight_kff value have to be double");
+            }
+            WeightKff = jsonValue.GetDouble();
+        }
         return DoDeserializeFromJson(jsonInfo);
     }
 
     TConclusion<std::shared_ptr<IOptimizerPlanner>> BuildPlanner(const TBuildContext& context) const {
-        return DoBuildPlanner(context);
+        auto result = DoBuildPlanner(context);
+        if (result.IsFail()) {
+            return result;
+        }
+        (*result)->WeightKff = WeightKff;
+        return result;
     }
 
     virtual TString GetClassName() const = 0;
     void SerializeToProto(TProto& proto) const {
         proto.SetNodePortionsCountLimit(NodePortionsCountLimit);
+        proto.SetWeightKff(WeightKff);
         DoSerializeToProto(proto);
     }
 
@@ -291,6 +313,9 @@ public:
     bool DeserializeFromProto(const TProto& proto) {
         if (proto.HasNodePortionsCountLimit()) {
             NodePortionsCountLimit = proto.GetNodePortionsCountLimit();
+        }
+        if (proto.HasWeightKff()) {
+            WeightKff = proto.GetWeightKff();
         }
         return DoDeserializeFromProto(proto);
     }

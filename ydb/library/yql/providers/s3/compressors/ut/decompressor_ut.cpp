@@ -18,7 +18,7 @@ namespace {
 Y_UNIT_TEST_SUITE(TCompressorTests) {
     Y_UNIT_TEST(SuccessLz4) {
         NDB::ReadBufferFromFile buffer(GetResourcePath("test.json.lz4"));
-        auto decompressorBuffer = std::make_unique<NLz4::TReadBuffer>(buffer);
+        auto decompressorBuffer = NLz4::MakeDecompressor(buffer);
 
         char str[256] = {};
         decompressorBuffer->read(str, 256);
@@ -33,12 +33,12 @@ Y_UNIT_TEST_SUITE(TCompressorTests) {
 
     Y_UNIT_TEST(WrongMagicLz4) {
         NDB::ReadBufferFromFile buffer(GetResourcePath("test.json"));
-        UNIT_ASSERT_EXCEPTION_CONTAINS(std::make_unique<NLz4::TReadBuffer>(buffer), yexception, "Wrong magic.");
+        UNIT_ASSERT_EXCEPTION_CONTAINS(NLz4::MakeDecompressor(buffer), yexception, "Wrong magic.");
     }
 
     Y_UNIT_TEST(ErrorLz4) {
         NDB::ReadBufferFromFile buffer(GetResourcePath("test.broken.lz4"));
-        auto decompressorBuffer = std::make_unique<NLz4::TReadBuffer>(buffer);
+        auto decompressorBuffer = NLz4::MakeDecompressor(buffer);
         char str[256] = {};
         UNIT_ASSERT_EXCEPTION_CONTAINS(decompressorBuffer->read(str, 256), yexception, "Decompression error: ERROR_reservedFlag_set");
     }

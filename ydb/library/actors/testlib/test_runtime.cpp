@@ -1591,7 +1591,7 @@ namespace NActors {
         if (!actor) {
             return {};
         }
-        return TLocalProcessKeyState<TActorActivityTag>::GetInstance().GetNameByIndex(actor->GetActivityType());
+        return actor->GetActivityType().GetName();
     }
 
     void TTestActorRuntimeBase::EnableScheduleForActor(const TActorId& actorId, bool allow) {

@@ -108,9 +108,10 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::BuildColumnsFetchingPlan(c
 void TSpecialReadContext::RegisterActors(const NCommon::ISourcesConstructor& sources) {
     AFL_VERIFY(!DuplicatesManager);
     if (NeedDuplicateFiltering()) {
-        const auto& portions = dynamic_cast<const NCommon::TSourcesConstructorWithAccessors<TSourceConstructor>&>(sources);
+        const auto* portions = dynamic_cast<const NCommon::TSourcesConstructorWithAccessors<TSourceConstructor>*>(&sources);
+        AFL_VERIFY(portions);
         NCommon::TPortionIntervalTree intervals;
-        for (const auto& portion : portions.GetConstructors()) {
+        for (const auto& portion : portions->GetConstructors()) {
             intervals.AddRange(NCommon::TPortionIntervalTree::TOwnedRange(portion.GetPortion()->IndexKeyStart(), true,
                                    portion.GetPortion()->IndexKeyEnd(), true), portion.GetPortion());
         }

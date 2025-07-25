@@ -191,7 +191,6 @@ TDuplicateManager::TDuplicateManager(const TSpecialReadContext& context, TPortio
     , FiltersCache(100)   // FIXME configure
     , DataAccessorsManager(context.GetCommonContext()->GetDataAccessorsManager())
 {
-    AFL_VERIFY(Intervals.Size());
 }
 
 void TDuplicateManager::Handle(const TEvRequestFilter::TPtr& ev) {

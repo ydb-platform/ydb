@@ -95,14 +95,16 @@ private:
                         request->GateId = GateComp;
                         break;
                     case NPriWrite::HullHugeAsyncBlob:
+                        request->GateId = GateHugeAsync;
+                        break;
                     case NPriWrite::HullHugeUserData:
-                        request->GateId = GateHuge;
+                        request->GateId = GateHugeUser;
                         break;
                     case NPriWrite::SyncLog:
                         request->GateId = GateSyncLog;
                         break;
                     default:
-                        request->GateId = GateHuge;
+                        request->GateId = GateHugeUser;
                         break;
                 }
                 request->IsSensitive = false;

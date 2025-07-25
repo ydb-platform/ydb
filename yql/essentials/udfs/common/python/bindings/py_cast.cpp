@@ -916,7 +916,19 @@ TPyObjectPtr ToPyArgs(
     TPyObjectPtr tuple(PyTuple_New(argsCount));
 
     for (ui32 i = 0; i < argsCount; i++) {
-        auto arg = ToPyObject(ctx, inspector.GetArgType(i), args[i]);
+        const auto argType = inspector.GetArgType(i);
+        auto arg = ToPyObject(ctx, argType, args[i]);
+        // PyTuple_SET_ITEM doesn't handle the case if nullptr is
+        // given as a payload to be set (unlike PyList_Append or
+        // PyDict_SetItem do), so we have to explicitly handle
+        // the failed export from UnboxedValue to PyObject here.
+        if (!arg) {
+            ::TStringBuilder sb;
+            sb << "Failed to export ";
+            NUdf::TTypePrinter(*ctx->PyCtx->TypeInfoHelper, argType).Out(sb.Out);
+            sb << " given as args[" << i << "]: ";
+            UdfTerminate((sb << ctx->PyCtx->Pos << GetLastErrorAsString()).data());
+        }
         PyTuple_SET_ITEM(tuple.Get(), i, arg.Release());
     }
 

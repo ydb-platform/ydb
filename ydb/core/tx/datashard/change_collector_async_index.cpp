@@ -165,8 +165,13 @@ bool TAsyncIndexChangeCollector::Collect(const TTableId& tableId, ERowOp rop,
                     AddRawValue(KeyVals, tag, key.at(pos));
                 }
             }
+         
+            //ALOG_EMERG(1, "r314"
+            //    << ": size sizeOfKey" << sizeOfKey);
+
             if (sizeOfKey > NLimits::MaxWriteKeySize)
                 return false;
+
             for (const auto tag : index.DataColumnIds) {
                 if (updatedTagToPos.contains(tag)) {
                     needUpdate = true;

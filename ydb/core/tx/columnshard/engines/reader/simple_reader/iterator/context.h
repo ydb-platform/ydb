@@ -54,7 +54,7 @@ public:
 
     virtual TString ProfileDebugString() const override;
 
-    void RegisterActors(NCommon::TPortionIntervalTree&& portions);
+    void RegisterActors(const NCommon::ISourcesConstructor& sources);
     void UnregisterActors();
 
     const TActorId& GetDuplicatesManagerVerified() const {

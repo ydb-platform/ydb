@@ -40,7 +40,7 @@ public:
     }
 
     TString DebugString() const {
-        return TStringBuilder() << "[" << Begin << ";" << End << "]";
+        return TStringBuilder() << "[" << Begin << ";" << End << ")";
     }
 };
 

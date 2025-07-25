@@ -45,6 +45,16 @@ public:
         h = CombineHashes(h, (ui64)ColumnId);
         return h;
     }
+
+    TString DebugString() const {
+        TStringBuilder sb;
+        sb << '{';
+        sb << "tablet=" << TabletActorId.ToString() << ";";
+        sb << "portion=" << InternalPortionAddress.DebugString() << ";";
+        sb << "column=" << ColumnId << ";";
+        sb << '}';
+        return sb;
+    }
 };
 
 class TColumnDataCachePolicy {
@@ -53,6 +63,10 @@ public:
     using TObject = std::shared_ptr<NArrow::NAccessor::IChunkedArray>;
     using EConsumer = NOlap::NBlobOperations::EConsumer;
     using TSourceId = TActorId;
+
+    static TSourceId GetSourceId(const TAddress& address) {
+        return address.GetTabletActorId();
+    }
 
     static EConsumer DefaultConsumer() {
         return EConsumer::UNDEFINED;

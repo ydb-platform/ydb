@@ -1336,7 +1336,7 @@ void TColumnShard::Handle(NColumnShard::TEvPrivate::TEvAskColumnData::TPtr& ev, 
         std::shared_ptr<NKikimr::NGeneralCache::NSource::IObjectsProcessor<NOlap::NGeneralCache::TColumnDataCachePolicy>> CacheCallback;
         NOlap::TPortionAddress Portion;
         TActorId Owner;
-        std::vector<ui32> ColumnIds;
+        NOlap::NReader::NCommon::TColumnsSetIds ColumnIds;
 
         virtual bool IsAborted() const override {
             return false;
@@ -1352,8 +1352,13 @@ void TColumnShard::Handle(NColumnShard::TEvPrivate::TEvAskColumnData::TPtr& ev, 
             auto portionsData = context.ExtractAssembledData();
             AFL_VERIFY(portionsData.size() == 1);
             std::shared_ptr<NArrow::TGeneralContainer> container = std::make_shared<NArrow::TGeneralContainer>(std::move(portionsData.front()));
-            for (ui64 i = 0; i < ColumnIds.size(); ++i) {
-                result.emplace(NOlap::NGeneralCache::TGlobalColumnAddress(Owner, Portion, ColumnIds[i]), container->GetColumnVerified(i));
+            {
+                ui32 columnIdx = 0;
+                for (const ui32 columnId : ColumnIds.GetColumnIds()) {
+                    auto address = NOlap::NGeneralCache::TGlobalColumnAddress(Owner, Portion, columnId);
+                    AFL_VERIFY(result.emplace(address, container->GetColumnVerified(columnIdx)).second);
+                    ++columnIdx;
+                }
             }
 
             CacheCallback->OnReceiveData(Owner, std::move(result), {}, {});
@@ -1361,7 +1366,7 @@ void TColumnShard::Handle(NColumnShard::TEvPrivate::TEvAskColumnData::TPtr& ev, 
 
         virtual void DoOnError(const TString& errorMessage) override {
             THashMap<NOlap::NGeneralCache::TGlobalColumnAddress, TString> errorAddresses;
-            for (const ui32 columnId : ColumnIds) {
+            for (const ui32 columnId : ColumnIds.GetColumnIds()) {
                 errorAddresses.emplace(NOlap::NGeneralCache::TGlobalColumnAddress(Owner, Portion, columnId), errorMessage);
             }
             CacheCallback->OnReceiveData(Owner, {}, {}, std::move(errorAddresses));
@@ -1369,7 +1374,8 @@ void TColumnShard::Handle(NColumnShard::TEvPrivate::TEvAskColumnData::TPtr& ev, 
 
     public:
         TExecutor(const std::shared_ptr<NKikimr::NGeneralCache::NSource::IObjectsProcessor<NOlap::NGeneralCache::TColumnDataCachePolicy>>&
-                      cacheCallback, const NOlap::TPortionAddress& portion, const TActorId& owner, const std::vector<ui32>& columnIds)
+                      cacheCallback, const NOlap::TPortionAddress& portion, const TActorId& owner,
+            const NOlap::NReader::NCommon::TColumnsSetIds& columnIds)
             : CacheCallback(cacheCallback)
             , Portion(std::move(portion))
             , Owner(owner)

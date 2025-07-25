@@ -86,7 +86,7 @@ public:
             if (allocationInfo->GetAllocationStatus() != EAllocationStatus::Waiting) {
             } else if (WaitAllocations.GetMinExternalGroupId().value_or(externalGroupId) < externalGroupId) {
                 WaitAllocations.AddAllocationExt(externalGroupId, allocationInfo);
-            } else if (allocationInfo->IsAllocatable(0) || (isPriorityProcess && externalGroupId == GroupIds.GetMinExternalIdVerified())) {
+            } else if (allocationInfo->IsAllocatable(0) || (isPriorityProcess && externalGroupId <= GroupIds.GetMinExternalIdVerified())) {
                 Y_UNUSED(WaitAllocations.RemoveAllocationExt(externalGroupId, allocationInfo));
                 if (!allocationInfo->Allocate(OwnerActorId)) {
                     UnregisterAllocation(allocationInfo->GetIdentifier());

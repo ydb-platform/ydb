@@ -391,8 +391,6 @@ private:
                 const auto& popStats = channel->GetPopStats();
                 html << "DqOutputChannel.PopStats.ChannelId: " << popStats.ChannelId << "<br />";
                 html << "DqOutputChannel.PopStats.DstStageId: " << popStats.DstStageId << "<br />";
-                html << "DqOutputChannel.PopStats.MaxMemoryUsage: " << popStats.MaxMemoryUsage << "<br />";
-                html << "DqOutputChannel.PopStats.MaxRowsInMemory: " << popStats.MaxRowsInMemory << "<br />";
                 html << "DqOutputChannel.PopStats.SerializationTime: " << popStats.SerializationTime.ToString() << "<br />";
                 html << "DqOutputChannel.PopStats.SpilledBytes: " << popStats.SpilledBytes << "<br />";
                 html << "DqOutputChannel.PopStats.SpilledRows: " << popStats.SpilledRows << "<br />";

@@ -13,6 +13,7 @@ class TPortionSources: public NCommon::ISourcesConstructor {
 private:
     std::deque<std::shared_ptr<TPortionInfo>> Sources;
     ui32 SourceIdx = 0;
+    std::vector<TInsertWriteId> Uncommitted;
 
     virtual void DoFillReadStats(TReadStats& stats) const override {
         ui64 compactedPortionsBytes = 0;
@@ -53,8 +54,10 @@ private:
         const std::shared_ptr<NCommon::TSpecialReadContext>& context, const ui32 inFlightCurrentLimit) override;
 
 public:
-    TPortionSources(std::vector<std::shared_ptr<TPortionInfo>>&& sources)
-        : Sources(sources.begin(), sources.end()) {
+    TPortionSources(std::vector<std::shared_ptr<TPortionInfo>>&& sources, std::vector<TInsertWriteId>&& uncommitted)
+        : Sources(sources.begin(), sources.end())
+        , Uncommitted(std::move(uncommitted))
+    {
     }
 
     virtual std::vector<TInsertWriteId> GetUncommittedWriteIds() const override;

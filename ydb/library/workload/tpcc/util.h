@@ -5,15 +5,24 @@
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/status/status.h>
 
+#include <util/random/fast.h>
 #include <util/random/random.h>
 
 #include <string>
+#include <stop_token>
 
 namespace NYdb::NTPCC {
+
+//-----------------------------------------------------------------------------
 
 // [from; to]
 inline size_t RandomNumber(size_t from, size_t to) {
     return ::RandomNumber(to - from + 1) + from;
+}
+
+// [from; to]
+inline size_t RandomNumber(TReallyFastRng32& rng, size_t from, size_t to) {
+    return rng.Uniform(from, to + 1);
 }
 
 // Non-uniform random number generation as per TPC-C spec
@@ -50,8 +59,12 @@ inline TString GetNonUniformRandomLastNameForLoad() {
     return GetLastName(NonUniformRandom(255, C_LAST_LOAD_C, 0, 999));
 }
 
+//-----------------------------------------------------------------------------
+
 // Format size in bytes to human-readable format
 std::string GetFormattedSize(size_t size);
+
+//-----------------------------------------------------------------------------
 
 // Check if a status should cause program termination
 inline bool ShouldExit(const TStatus& status) {
@@ -60,6 +73,13 @@ inline bool ShouldExit(const TStatus& status) {
            status.GetStatus() == EStatus::SCHEME_ERROR ||
            status.GetStatus() == EStatus::UNAUTHORIZED;
 }
+
+void ExitIfError(const TStatus& status, const TString& what);
+void ThrowIfError(const TStatus& status, const TString& what);
+
+//-----------------------------------------------------------------------------
+
+std::stop_source& GetGlobalInterruptSource();
 
 inline void RequestStop() {
     GetGlobalInterruptSource().request_stop();

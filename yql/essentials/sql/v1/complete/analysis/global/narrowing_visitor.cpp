@@ -2,9 +2,9 @@
 
 namespace NSQLComplete {
 
-    TSQLv1NarrowingVisitor::TSQLv1NarrowingVisitor(antlr4::TokenStream* tokens, size_t cursorPosition)
-        : Tokens_(tokens)
-        , CursorPosition_(cursorPosition)
+    TSQLv1NarrowingVisitor::TSQLv1NarrowingVisitor(const TParsedInput& input)
+        : Tokens_(input.Tokens)
+        , CursorPosition_(input.Original.CursorPosition)
     {
     }
 

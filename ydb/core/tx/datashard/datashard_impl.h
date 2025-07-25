@@ -137,21 +137,6 @@ public:
     virtual void OnFinished(TDataShard* self) = 0;
 };
 
-struct TReadWriteVersions {
-    TReadWriteVersions(const TRowVersion& readVersion, const TRowVersion& writeVersion)
-        : ReadVersion(readVersion)
-        , WriteVersion(writeVersion)
-    {}
-
-    TReadWriteVersions(const TRowVersion& version)
-        : ReadVersion(version)
-        , WriteVersion(version)
-    {}
-
-    const TRowVersion ReadVersion;
-    const TRowVersion WriteVersion;
-};
-
 class TDataShardEngineHost;
 struct TSetupSysLocks;
 
@@ -234,9 +219,10 @@ class TDataShard
     class TTxCdcStreamEmitHeartbeats;
     class TTxUpdateFollowerReadEdge;
     class TTxRemoveSchemaSnapshots;
+    class TTxIncrementalRestore;
     class TTxCleanupUncommitted;
-    class TTxDataCleanup;
-    class TTxCompleteDataCleanup;
+    class TTxVacuum;
+    class TTxCompleteVacuum;
 
     template <typename T> friend class TTxDirectBase;
     class TTxUploadRows;
@@ -248,6 +234,7 @@ class TDataShard
 
     class TTxHandleSafeKqpScan;
     class TTxHandleSafeBuildIndexScan;
+    class TTxHandleSafeValidateUniqueIndexScan;
     class TTxHandleSafeSampleKScan;
     class TTxHandleSafeLocalKMeansScan;
     class TTxHandleSafePrefixKMeansScan;
@@ -1173,7 +1160,7 @@ class TDataShard
             Sys_InMemoryStateActorId = 45,
             Sys_InMemoryStateGeneration = 46,
 
-            Sys_DataCleanupCompletedGeneration = 47,
+            Sys_VacuumCompletedGeneration = 47,
 
             // reserved
             SysPipeline_Flags = 1000,
@@ -1332,6 +1319,8 @@ class TDataShard
     void Handle(TEvDataShard::TEvObjectStorageListingRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvBuildIndexCreateRequest::TPtr& ev, const TActorContext& ctx);
     void HandleSafe(TEvDataShard::TEvBuildIndexCreateRequest::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvDataShard::TEvValidateUniqueIndexRequest::TPtr& ev, const TActorContext& ctx);
+    void HandleSafe(TEvDataShard::TEvValidateUniqueIndexRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvSampleKRequest::TPtr& ev, const TActorContext& ctx);
     void HandleSafe(TEvDataShard::TEvSampleKRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvReshuffleKMeansRequest::TPtr& ev, const TActorContext& ctx);
@@ -1411,7 +1400,7 @@ class TDataShard
 
     void Handle(TEvIncrementalRestoreScan::TEvFinished::TPtr& ev, const TActorContext& ctx);
 
-    void Handle(TEvDataShard::TEvForceDataCleanup::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvDataShard::TEvVacuum::TPtr& ev, const TActorContext& ctx);
 
     void HandleByReplicationSourceOffsetsServer(STATEFN_SIG);
 
@@ -1489,7 +1478,7 @@ class TDataShard
     NTabletFlatExecutor::ITransaction* CreateTxCheckInReadSets();
     NTabletFlatExecutor::ITransaction* CreateTxRemoveOldInReadSets();
 
-    TReadWriteVersions GetLocalReadWriteVersions() const;
+    TRowVersion GetLocalMvccVersion() const;
 
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
@@ -1803,7 +1792,7 @@ public:
     void SnapshotComplete(TIntrusivePtr<NTabletFlatExecutor::TTableSnapshotContext> snapContext, const TActorContext &ctx) override;
     void CompactionComplete(ui32 tableId, const TActorContext &ctx) override;
     void CompletedLoansChanged(const TActorContext &ctx) override;
-    void DataCleanupComplete(ui64 dataCleanupGeneration, const TActorContext &ctx) override;
+    void VacuumComplete(ui64 dataCleanupGeneration, const TActorContext &ctx) override;
 
     void ReplyCompactionWaiters(
         ui32 tableId,
@@ -1954,6 +1943,12 @@ public:
         const TPathId& pathId, ui64 tableSchemaVersion,
         const TPathId& streamPathId);
 
+    TUserTable::TPtr AlterTableRotateCdcStream(
+        const TActorContext& ctx, TTransactionContext& txc,
+        const TPathId& pathId, ui64 tableSchemaVersion,
+        const TPathId& oldStreamPathId,
+        const NKikimrSchemeOp::TCdcStreamDescription& newStreamDesc);
+
     TUserTable::TPtr CreateUserTable(TTransactionContext& txc, const NKikimrSchemeOp::TTableDescription& tableScheme);
     TUserTable::TPtr AlterUserTable(const TActorContext& ctx, TTransactionContext& txc,
                                     const NKikimrSchemeOp::TTableDescription& tableScheme);
@@ -2058,7 +2053,7 @@ public:
         bool WaitCompletion = false;
     };
 
-    TReadWriteVersions GetReadWriteVersions(TOperation* op = nullptr) const;
+    TRowVersion GetMvccVersion(TOperation* op = nullptr) const;
     TPromotePostExecuteEdges PromoteImmediatePostExecuteEdges(
             const TRowVersion& version, EPromotePostExecuteEdges mode, TTransactionContext& txc);
     ui64 GetMaxObservedStep() const;
@@ -2528,7 +2523,7 @@ private:
 
     TTxProgressIdempotentScalarQueue<TEvPrivate::TEvProgressTransaction> PlanQueue;
     TTxProgressIdempotentScalarScheduleQueue<TEvPrivate::TEvCleanupTransaction> CleanupQueue;
-    TTxProgressQueue<ui64, TNoOpDestroy, TEvPrivate::TEvProgressResendReadSet> ResendReadSetQueue;
+    TTxProgressQueue<ui64, TEvPrivate::TEvProgressResendReadSet> ResendReadSetQueue;
 
     struct TPipeServerInfoOverloadSubscribersTag {};
 
@@ -3001,7 +2996,7 @@ private:
     // from the front
     THashMap<ui32, TCompactionWaiterList> CompactionWaiters;
 
-    TMap<ui64, TActorId> DataCleanupWaiters;
+    TMap<ui64, TActorId> VacuumWaiters;
 
     struct TCompactBorrowedWaiter : public TThrRefBase {
         TCompactBorrowedWaiter(TActorId actorId, TLocalPathId requestedTable)
@@ -3053,7 +3048,7 @@ private:
     ui32 StatisticsScanTableId = 0;
     ui64 StatisticsScanId = 0;
 
-    ui64 CurrentDataCleanupGeneration = 0;
+    ui64 CurrentVacuumGeneration = 0;
 
 public:
     auto& GetLockChangeRecords() {
@@ -3210,6 +3205,7 @@ protected:
             HFunc(TEvDataShard::TEvRefreshVolatileSnapshotRequest, Handle);
             HFunc(TEvDataShard::TEvDiscardVolatileSnapshotRequest, Handle);
             HFuncTraced(TEvDataShard::TEvBuildIndexCreateRequest, Handle);
+            HFuncTraced(TEvDataShard::TEvValidateUniqueIndexRequest, Handle);
             HFunc(TEvDataShard::TEvSampleKRequest, Handle);
             HFunc(TEvDataShard::TEvReshuffleKMeansRequest, Handle);
             HFunc(TEvDataShard::TEvRecomputeKMeansRequest, Handle);
@@ -3255,7 +3251,7 @@ protected:
             HFunc(TEvPrivate::TEvStatisticsScanFinished, Handle);
             HFuncTraced(TEvPrivate::TEvRemoveSchemaSnapshots, Handle);
             HFunc(TEvIncrementalRestoreScan::TEvFinished, Handle);
-            HFunc(TEvDataShard::TEvForceDataCleanup, Handle);
+            HFunc(TEvDataShard::TEvVacuum, Handle);
             default:
                 if (!HandleDefaultEvents(ev, SelfId())) {
                     ALOG_WARN(NKikimrServices::TX_DATASHARD, "TDataShard::StateWork unhandled event type: " << ev->GetTypeRewrite() << " event: " << ev->ToString());

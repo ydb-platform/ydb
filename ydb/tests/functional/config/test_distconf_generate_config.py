@@ -59,10 +59,18 @@ class KiKiMRDistConfGenerateConfigTest(object):
         return requests.post(url, headers={'content-type': 'application/json'}, json=json_req).json()
 
     def do_request_config(self):
-        return self.do_request({"GetStateStorageConfig": {}})["StateStorageConfig"]
+        cfg = self.do_request({"GetStateStorageConfig": {}})["StateStorageConfig"]
+        recommended = self.do_request({"GetStateStorageConfig": {"Recommended": True}})["StateStorageConfig"]
+        assert_eq(recommended["StateStorageConfig"]["RingGroups"][0]["RingGroupActorIdOffset"], 1)
+        assert_eq(recommended["StateStorageBoardConfig"]["RingGroups"][0]["RingGroupActorIdOffset"], 1)
+        assert_eq(recommended["SchemeBoardConfig"]["RingGroups"][0]["RingGroupActorIdOffset"], 1)
+        recommended["StateStorageConfig"]["RingGroups"][0].pop("RingGroupActorIdOffset", None)
+        recommended["StateStorageBoardConfig"]["RingGroups"][0].pop("RingGroupActorIdOffset", None)
+        recommended["SchemeBoardConfig"]["RingGroups"][0].pop("RingGroupActorIdOffset", None)
+        assert_eq(cfg, recommended)
+        return cfg
 
     def test(self):
-        logger.debug(f"Config: {self.do_request_config()}")
         self.do_test("StateStorage")
         self.do_test("StateStorageBoard")
         self.do_test("SchemeBoard")
@@ -119,4 +127,4 @@ class TestKiKiMRDistConfGenerateConfig1Node(KiKiMRDistConfGenerateConfigTest):
     nodes_count = 1
 
     def do_test(self, configName):
-        assert_eq(self.do_request_config()[f"{configName}Config"], {'SSId': 1, 'Ring': {'NToSelect': 1, 'Node': [1]}})
+        assert_eq(self.do_request({"GetStateStorageConfig": {}})["StateStorageConfig"][f"{configName}Config"], {'SSId': 1, 'Ring': {'NToSelect': 1, 'Node': [1]}})

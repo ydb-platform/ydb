@@ -74,7 +74,10 @@ public:
             case NConfig::TYdbComputeControlPlane::TYPE_NOT_SET:
                 return {};
             case NConfig::TYdbComputeControlPlane::kSingle:
-                return {};
+            {
+                const auto& ids = controlPlane.GetSingle().GetAccessConfig().GetExternalSourcesAccessSID();
+                return TVector<TString>{ids.begin(), ids.end()};
+            }
             case NConfig::TYdbComputeControlPlane::kCms:
                 return GetExternalSourcesAccessSIDs(scope, controlPlane.GetCms().GetDatabaseMapping());
             case NConfig::TYdbComputeControlPlane::kYdbcp:
@@ -83,7 +86,7 @@ public:
     }
 
     TVector<TString> GetExternalSourcesAccessSIDs(const TString& scope, const ::NFq::NConfig::TDatabaseMapping& databaseMapping) const {
-        const auto protoExternalSourcesAccessSIDs = GetComputeDatabaseConfig(scope, databaseMapping).GetAccessConfig().GetExternalSourcesAccessSID();
+        const auto& protoExternalSourcesAccessSIDs = GetComputeDatabaseConfig(scope, databaseMapping).GetAccessConfig().GetExternalSourcesAccessSID();
         return TVector<TString>{protoExternalSourcesAccessSIDs.begin(), protoExternalSourcesAccessSIDs.end()};
     }
 

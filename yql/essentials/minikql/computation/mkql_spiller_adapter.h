@@ -17,7 +17,7 @@ public:
         : Spiller(spiller)
         , ItemType(type)
         , SizeLimit(sizeLimit)
-        , Packer(type)
+        , Packer(type, EValuePackerVersion::V1)
     {
     }
 

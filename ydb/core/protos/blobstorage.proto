@@ -311,6 +311,7 @@ message TEvVPut {
 
     optional NKikimrProto.TLogoBlobID BlobID = 1;
     optional bytes Buffer = 2;
+    optional bool IssueKeepFlag = 12; // when set, blob is written along with keep flag
 
     optional NKikimrBlobStorage.TVDiskID VDiskID = 3;
 
@@ -346,6 +347,8 @@ message TEvVPutResult {
 message TVMultiPutItem {
     optional NKikimrProto.TLogoBlobID BlobID = 1;
     optional bytes Buffer = 2;
+    optional bool IssueKeepFlag = 7;
+    optional bool IgnoreBlock = 8;
 
     optional uint64 FullDataSize = 3;
     optional uint64 Cookie = 4;
@@ -1038,6 +1041,10 @@ message TNodeWardenServiceSet {
         optional TPDiskSpaceColor.E SpaceColorBorder = 13;
         optional bool ReadOnly = 14;
         optional bool Stop = 15;
+
+        // If not zero, NodeWarded infers PDiskConfig ExpectedSlotCount and SlotSizeInUnits (if unset)
+        // from drive size and this value
+        optional uint64 InferPDiskSlotCountFromUnitSize = 16;
     }
 
     message TVDisk {

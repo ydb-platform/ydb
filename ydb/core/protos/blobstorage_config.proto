@@ -23,6 +23,7 @@ message THostConfigDrive {
 
     // optional PDisk config for these drives; if not set, default configuration is applied; overrides host-wide default
     NKikimrBlobStorage.TPDiskConfig PDiskConfig = 6;
+    uint64 InferPDiskSlotCountFromUnitSize = 7;
 }
 
 // Command used to define typical host configuration. It it used while defining new typical host configurations and as
@@ -451,6 +452,15 @@ message TStopPDisk {
     }
 }
 
+message TMovePDisk {
+    message TPDisk {
+        NKikimrBlobStorage.TPDiskId TargetPDiskId = 1;
+        TPDiskLocation TargetPDiskLocation = 2;
+    }
+    TPDisk SourcePDisk = 1;
+    TPDisk DestinationPDisk = 2;
+}
+
 message TSetScrubPeriodicity {
     uint32 ScrubPeriodicity = 1; // in seconds; 0 = disable
 }
@@ -481,16 +491,34 @@ message TSetPDiskSpaceMarginPromille {
     uint32 PDiskSpaceMarginPromille = 1;
 }
 
-message TUpdateSettings {
-    message TClusterBalancingSettings {
-        optional bool Enable = 1;
-        optional uint64 IterationIntervalMs = 2;
-        optional uint32 MaxReplicatingPDisks = 3;
-        optional uint32 MaxReplicatingVDisks = 4;
-    }
+message TClusterBalancingSettings {
+    optional bool Enable = 1;
+    optional uint64 IterationIntervalMs = 2;
+    optional uint32 MaxReplicatingPDisks = 3;
+    optional uint32 MaxReplicatingVDisks = 4;
+}
 
+message TUpdateSettings {
     // when value is specified, its value is written to State
     // and applied immediately; when no value specified, setting kept unchanged
+    repeated uint32 DefaultMaxSlots = 1;
+    repeated bool EnableSelfHeal = 2;
+    repeated bool EnableDonorMode = 3;
+    repeated uint64 ScrubPeriodicitySeconds = 4;
+    repeated uint32 PDiskSpaceMarginPromille = 5;
+    repeated uint32 GroupReserveMin = 6;
+    repeated uint32 GroupReservePartPPM = 7;
+    repeated uint32 MaxScrubbedDisksAtOnce = 8;
+    repeated NKikimrBlobStorage.TPDiskSpaceColor.E PDiskSpaceColorBorder = 9;
+    repeated bool EnableGroupLayoutSanitizer = 10;
+    // TODO
+    // repeated TSerialManagementStage.E SerialManagementStage = 11;
+    repeated bool AllowMultipleRealmsOccupation = 12;
+    repeated bool UseSelfHealLocalPolicy = 13;
+    repeated bool TryToRelocateBrokenDisksLocallyFirst = 14;
+}
+
+message TBscConfig {
     optional uint32 DefaultMaxSlots = 1;
     optional bool EnableSelfHeal = 2;
     optional bool EnableDonorMode = 3;
@@ -599,6 +627,7 @@ message TConfigRequest {
             TStopPDisk StopPDisk = 50;
             TGetInterfaceVersion GetInterfaceVersion = 51;
             TChangeGroupSizeInUnits ChangeGroupSizeInUnits = 52;
+            TMovePDisk MovePDisk = 53;
 
             // commands intended for internal use
             TReassignGroupDisk ReassignGroupDisk = 19;
@@ -681,6 +710,7 @@ message TBaseConfig {
         string LastSeenSerial = 18;
         bool ReadOnly = 19;
         TMaintenanceStatus.E MaintenanceStatus = 20;
+        uint64 InferPDiskSlotCountFromUnitSize = 21;
     }
     message TVSlot {
         message TDonorDisk {

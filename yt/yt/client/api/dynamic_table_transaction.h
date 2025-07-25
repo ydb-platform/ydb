@@ -71,6 +71,7 @@ struct TModifyRowsOptions
 ////////////////////////////////////////////////////////////////////////////////
 
 struct IDynamicTableTransaction
+    : public virtual TRefCounted
 {
     virtual ~IDynamicTableTransaction() = default;
 
@@ -115,6 +116,8 @@ struct IDynamicTableTransaction
         TSharedRange<TRowModification> modifications,
         const TModifyRowsOptions& options = {}) = 0;
 };
+
+DEFINE_REFCOUNTED_TYPE(IDynamicTableTransaction)
 
 ////////////////////////////////////////////////////////////////////////////////
 

@@ -57,6 +57,10 @@ TValidatedWriteTx::TValidatedWriteTx(TDataShard* self, ui64 globalTxId, TInstant
         LockNodeId = record.GetLockNodeId();
     }
 
+    if (record.HasMvccSnapshot()) {
+        MvccSnapshot.emplace(record.GetMvccSnapshot().GetStep(), record.GetMvccSnapshot().GetTxId());
+    }
+
     OverloadSubscribe = record.HasOverloadSubscribe() ? record.GetOverloadSubscribe() : std::optional<ui64>{};
 
     NKikimrTxDataShard::TKqpTransaction::TDataTaskMeta meta;
@@ -142,10 +146,32 @@ std::tuple<NKikimrTxDataShard::TError::EKind, TString> TValidatedWriteTxOperatio
             return {NKikimrTxDataShard::TError::SCHEME_ERROR, TStringBuilder() << "Key column schema at position " << i};
     }
 
-    for (ui32 columnTag : ColumnIds) {
+    for (ui16 colIdx = 0; colIdx < ColumnIds.size(); ++colIdx) {
+        ui32 columnTag = ColumnIds[colIdx];
         auto* col = tableInfo.Columns.FindPtr(columnTag);
         if (!col)
             return {NKikimrTxDataShard::TError::SCHEME_ERROR, TStringBuilder() << "Missing column with id " << columnTag};
+
+        if (col->NotNull) {
+            for (ui32 rowIdx = 0; rowIdx < Matrix.GetRowCount(); ++rowIdx) {
+                const TCell& cell = Matrix.GetCell(rowIdx, colIdx);
+                if (cell.IsNull()) {
+                    return {NKikimrTxDataShard::TError::BAD_ARGUMENT, TStringBuilder() << "NULL value for NON NULL column " << columnTag};
+                }
+            }
+        }
+    }
+
+    if (OperationType == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INSERT) {
+        // If we are inserting new rows, check that all NON NULL columns are present in data.
+        // Note that UPSERT can also insert new rows, but we don't know if this actually happens
+        // at this stage, so we skip the check for UPSERT.
+        auto columnIdsSet = THashSet<ui32>(ColumnIds.begin(), ColumnIds.end());
+        for (const auto& [id, column] : tableInfo.Columns) {
+            if (column.NotNull && !columnIdsSet.contains(id)) {
+                return {NKikimrTxDataShard::TError::BAD_ARGUMENT, TStringBuilder() << "Missing inserted values for NON NULL column " << id};
+            }
+        }
     }
 
     for (ui32 rowIdx = 0; rowIdx < Matrix.GetRowCount(); ++rowIdx)

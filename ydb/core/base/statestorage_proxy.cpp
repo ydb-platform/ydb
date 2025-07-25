@@ -214,7 +214,12 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
 
         Y_ABORT_UNLESS(cookie < Replicas);
         auto replicaId = ReplicaSelection->SelectedReplicas[cookie];
-        Y_ABORT_UNLESS(!Signature.HasReplicaSignature(replicaId));
+
+        if (Signature.HasReplicaSignature(replicaId)) {
+            BLOG_ERROR("TStateStorageProxyRequest::MergeReply duplicated TEvReplicaInfo cookie:" << cookie
+                << " replica:" << replicaId << " signature:" << Signature.GetReplicaSignature(replicaId) << " ev: " << ev->ToString());
+            return;
+        }
         UndeliveredReplicas.erase(replicaId);
         Signature.SetReplicaSignature(replicaId, ev->Record.GetSignature());
         ++RepliesMerged;
@@ -519,12 +524,18 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
 
         TEvStateStorage::TEvReplicaInfo *msg = ev->Get();
 
-        CheckConfigVersion(ev->Sender, msg);
+        if (!CheckConfigVersion(ev->Sender, msg)) {
+            return;
+        }
 
         const ui64 cookie = msg->Record.GetCookie();
         Y_ABORT_UNLESS(cookie < Replicas);
         const auto replicaId = ReplicaSelection->SelectedReplicas[cookie];
-        Y_ABORT_UNLESS(!Signature.HasReplicaSignature(replicaId));
+        if (Signature.HasReplicaSignature(replicaId)) {
+            BLOG_ERROR("TStateStorageProxyRequest::HandleUpdateSig duplicated TEvReplicaInfo cookie:" << cookie
+                << " replica:" << replicaId << " signature:" << Signature.GetReplicaSignature(replicaId) << " ev: " << ev->ToString());
+            return;
+        }
         UndeliveredReplicas.erase(replicaId);
         return UpdateSigFor(cookie, msg->Record.GetSignature());
     }

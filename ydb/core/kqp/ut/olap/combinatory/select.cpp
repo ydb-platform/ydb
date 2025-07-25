@@ -26,6 +26,8 @@ TConclusionStatus TSelectCommand::DoExecute(TKikimrRunner& kikimr) {
         Cerr << "COMPARE: " << Compare << Endl;
         Cerr << "OUTPUT: " << output << Endl;
         CompareYson(output, Compare);
+    } else {
+        Cerr << "OUTPUT: " << output << Endl;
     }
     const ui32 iSkip = controller->GetIndexesSkippingOnSelect().Val() - indexSkipStart;
     const ui32 iNoData = controller->GetIndexesSkippedNoData().Val() - indexNoDataStart;

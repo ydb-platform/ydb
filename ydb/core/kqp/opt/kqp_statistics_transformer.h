@@ -35,9 +35,13 @@ class TKqpStatisticsTransformer : public NYql::NDq::TDqStatisticsTransformerBase
     THashMap<std::shared_ptr<TOptimizerStatistics>, TString, std::hash<std::shared_ptr<TOptimizerStatistics>>> TablePathByStats;
 
     public:
-        TKqpStatisticsTransformer(const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx, TTypeAnnotationContext& typeCtx,
-            const TKikimrConfiguration::TPtr& config, const TKqpProviderContext& pctx) :
-            TDqStatisticsTransformerBase(&typeCtx, pctx, *kqpCtx->GetOptimizerHints().CardinalityHints),
+        TKqpStatisticsTransformer(
+            const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx,
+            TTypeAnnotationContext& typeCtx,
+            const TKikimrConfiguration::TPtr& config,
+            const TKqpProviderContext& pctx
+        ) :
+            TDqStatisticsTransformerBase(&typeCtx, pctx, kqpCtx->GetOptimizerHints(), &kqpCtx->ShufflingOrderingsByJoinLabels),
             Config(config),
             KqpCtx(*kqpCtx) {}
 

@@ -18,9 +18,10 @@
 #include <yql/essentials/public/issue/yql_issue_message.h>
 
 #include <ydb/core/ydb_convert/ydb_convert.h>
+#include <ydb/core/ydb_convert/table_description.h>
+
 #include <util/generic/algorithm.h>
 #include <util/string/builder.h>
-#include <ydb/core/ydb_convert/table_description.h>
 
 namespace NKikimr::NDataShard {
 
@@ -238,10 +239,7 @@ public:
         }
 
         TAutoPtr<TEvDataShard::TEvBuildIndexProgressResponse> progress = new TEvDataShard::TEvBuildIndexProgressResponse;
-        progress->Record.SetId(BuildIndexId);
-        progress->Record.SetTabletId(DataShardId);
-        progress->Record.SetRequestSeqNoGeneration(SeqNo.Generation);
-        progress->Record.SetRequestSeqNoRound(SeqNo.Round);
+        FillScanResponseCommonFields(*progress, BuildIndexId, DataShardId, SeqNo);
 
         if (status == EStatus::Exception) {
             progress->Record.SetStatus(NKikimrIndexBuilder::EBuildStatus::BUILD_ERROR);
@@ -349,10 +347,7 @@ private:
 
             //send progress
             TAutoPtr<TEvDataShard::TEvBuildIndexProgressResponse> progress = new TEvDataShard::TEvBuildIndexProgressResponse;
-            progress->Record.SetId(BuildIndexId);
-            progress->Record.SetTabletId(DataShardId);
-            progress->Record.SetRequestSeqNoGeneration(SeqNo.Generation);
-            progress->Record.SetRequestSeqNoRound(SeqNo.Round);
+            FillScanResponseCommonFields(*progress, BuildIndexId, DataShardId, SeqNo);
 
             // TODO(mbkkt) ReleaseBuffer isn't possible, we use LastUploadedKey for logging
             progress->Record.SetLastKeyAck(LastUploadedKey.GetBuffer());
@@ -534,12 +529,9 @@ void TDataShard::HandleSafe(TEvDataShard::TEvBuildIndexCreateRequest::TPtr& ev, 
 
     try {
         auto response = MakeHolder<TEvDataShard::TEvBuildIndexProgressResponse>();
-        response->Record.SetId(request.GetId());
-        response->Record.SetTabletId(TabletID());
-        response->Record.SetRequestSeqNoGeneration(seqNo.Generation);
-        response->Record.SetRequestSeqNoRound(seqNo.Round);
+        FillScanResponseCommonFields(*response, request.GetId(), TabletID(), seqNo);
 
-        LOG_N("Starting TBuildIndexScan TabletId: " << TabletID() 
+        LOG_N("Starting TBuildIndexScan TabletId: " << TabletID()
             << " " << request.ShortDebugString()
             << " row version " << rowVersion);
 
@@ -603,7 +595,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvBuildIndexCreateRequest::TPtr& ev, 
                 << " scanRange: " << DebugPrintRange(userTable.KeyColumnTypes, scanRange, *AppData()->TypeRegistry));
         }
 
-        if (!request.HasTargetName()) {
+        if (!request.GetTargetName()) {
             badRequest(TStringBuilder() << "Empty target table name");
         }
 

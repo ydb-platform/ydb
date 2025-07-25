@@ -3,16 +3,14 @@
 #include "defs.h"
 #include "queue_chunk.h"
 
-template <typename T, ui32 TSize, typename TChunk = TQueueChunk<T, TSize>>
+template <typename T, ui32 TSize, typename D = TNoAction, typename TChunk = TQueueChunk<T, TSize>>
 class TOneOneQueueInplace : TNonCopyable {
-    static_assert(std::is_integral<T>::value || std::is_pointer<T>::value, "expect std::is_integral<T>::value || std::is_pointer<T>::valuer");
+    static_assert(std::is_integral<T>::value || std::is_pointer<T>::value, "expect std::is_integral<T>::value || std::is_pointer<T>::value");
 
     TChunk* ReadFrom;
     ui32 ReadPosition;
     ui32 WritePosition;
     TChunk* WriteTo;
-
-    friend class TReadIterator;
 
 public:
     class TReadIterator {
@@ -28,14 +26,15 @@ public:
 
         inline T Next() {
             TChunk* head = ReadFrom;
-            if (ReadPosition != TChunk::EntriesCount) {
-                return AtomicLoad(&head->Entries[ReadPosition++]);
-            } else if (TChunk* next = AtomicLoad(&head->Next)) {
-                ReadFrom = next;
+            if (ReadPosition == TChunk::EntriesCount) [[unlikely]] {
+                head = AtomicLoad(&head->Next);
+                if (!head) {
+                    return T{};
+                }
+                ReadFrom = head;
                 ReadPosition = 0;
-                return Next();
             }
-            return T{};
+            return AtomicLoad(&head->Entries[ReadPosition++]);
         }
     };
 
@@ -48,67 +47,68 @@ public:
     }
 
     ~TOneOneQueueInplace() {
-        Y_DEBUG_ABORT_UNLESS(Head() == 0);
-        delete ReadFrom;
+        if constexpr (!std::is_same_v<D, TNoAction>) {
+            while (T x = Pop()) {
+                D::Destroy(x);
+            }
+            delete ReadFrom;
+        } else {
+            TChunk* next = ReadFrom;
+            do {
+                TChunk* head = next;
+                next = AtomicLoad(&head->Next);
+                delete head;
+            } while (next);
+        }
     }
 
     struct TPtrCleanDestructor {
-        static inline void Destroy(TOneOneQueueInplace<T, TSize>* x) noexcept {
-            while (T head = x->Pop())
-                delete head;
-            delete x;
-        }
-    };
-
-    struct TCleanDestructor {
-        static inline void Destroy(TOneOneQueueInplace<T, TSize>* x) noexcept {
-            while (x->Pop() != nullptr)
-                continue;
-            delete x;
-        }
-    };
-
-    struct TPtrCleanInplaceMallocDestructor {
-        template <typename TPtrVal>
-        static inline void Destroy(TOneOneQueueInplace<TPtrVal*, TSize>* x) noexcept {
-            while (TPtrVal* head = x->Pop()) {
-                head->~TPtrVal();
-                free(head);
+        static inline void Destroy(TOneOneQueueInplace* x) noexcept {
+            while (T head = x->Pop()) {
+                ::CheckedDelete(head);
             }
             delete x;
         }
     };
 
-    void Push(T x) noexcept {
-        if (WritePosition != TChunk::EntriesCount) {
-            AtomicStore(&WriteTo->Entries[WritePosition], x);
-            ++WritePosition;
-        } else {
+    struct TCleanDestructor {
+        static inline void Destroy(TOneOneQueueInplace* x) noexcept {
+            delete x;
+        }
+    };
+
+    void Push(T x) {
+        if (WritePosition == TChunk::EntriesCount) [[unlikely]] {
             TChunk* next = new TChunk();
-            next->Entries[0] = x;
+            AtomicStore(&next->Entries[0], x);
             AtomicStore(&WriteTo->Next, next);
             WriteTo = next;
             WritePosition = 1;
+        } else {
+            AtomicStore(&WriteTo->Entries[WritePosition++], x);
         }
     }
 
     T Head() {
         TChunk* head = ReadFrom;
-        if (ReadPosition != TChunk::EntriesCount) {
-            return AtomicLoad(&head->Entries[ReadPosition]);
-        } else if (TChunk* next = AtomicLoad(&head->Next)) {
-            ReadFrom = next;
+        if (ReadPosition == TChunk::EntriesCount) [[unlikely]] {
+            TChunk* next = AtomicLoad(&head->Next);
+            if (!next) {
+                return T{};
+            }
             delete head;
+            head = next;
+            ReadFrom = next;
             ReadPosition = 0;
-            return Head();
         }
-        return T{};
+        return AtomicLoad(&head->Entries[ReadPosition]);
     }
 
     T Pop() {
         T ret = Head();
-        if (ret)
+        if (ret) {
             ++ReadPosition;
+        }
         return ret;
     }
 

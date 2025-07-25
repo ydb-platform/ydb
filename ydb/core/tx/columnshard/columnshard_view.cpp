@@ -17,6 +17,8 @@ public:
 private:
     NMon::TEvRemoteHttpInfo::TPtr HttpInfoEvent;
     NJson::TJsonValue JsonReport = NJson::JSON_MAP;
+    TString RenderCompactionPage();
+    TString RenderMainPage();
 };
 
 inline TString TEscapeHtml(const TString& in) {
@@ -89,7 +91,7 @@ void TPrintErrorTable(TStringStream& html, THashMap<TString, std::queue<T>> erro
         html << "<b>" << errorType << " errors:</b><br />";
         html << "<table class='error-table'>"
                 "<tr><th>Tier</th><th>Time</th><th>Error</th></tr>";
-        
+
         for (auto [tier, queue] : errors) {
             while (!queue.empty()) {
                 const auto& element = queue.front();
@@ -106,7 +108,7 @@ void TPrintErrorTable(TStringStream& html, THashMap<TString, std::queue<T>> erro
     }
 }
 
-void TTxMonitoring::Complete(const TActorContext& ctx) {
+TString TTxMonitoring::RenderMainPage() {
     const auto& cgi = HttpInfoEvent->Get()->Cgi();
     std::map<std::pair<ui64, ui64>, NJson::TJsonValue> schemaVersions;
     for (const auto& item : JsonReport["tables_manager"]["schema_versions"].GetArray()) {
@@ -132,7 +134,13 @@ void TTxMonitoring::Complete(const TActorContext& ctx) {
     html << "<b>LastSchemaSeqNoGeneration :</b> " << Self->LastSchemaSeqNo.Generation << "<br />";
     html << "<b>LastSchemaSeqNoRound :</b> " << Self->LastSchemaSeqNo.Round << "<br />";
     html << "<b>LastExportNumber :</b> " << Self->LastExportNo << "<br />";
-    html << "<b>OwnerPathId :</b> " << Self->OwnerPathId << "<br />";
+    if (const auto& tabletPathId = Self->TablesManager.GetTabletPathIdOptional()) {
+        html << "<b>SchemeShardLocalPathId :</b> " << tabletPathId->SchemeShardLocalPathId << "<br />";
+        html << "<b>InternalPathId :</b> " << tabletPathId->InternalPathId << "<br />";
+    } else {
+        html << "<b>SchemeShardLocalPathId :</b> " << "None" << "<br />";
+        html << "<b>InternalPathId :</b> " << "None" << "<br />";
+    }
     html << "<b>Table/Store Path :</b> " << Self->OwnerPath << "<br />";
     html << "<b>LastCompletedStep :</b> " << Self->LastCompletedTx.GetPlanStep() << "<br />";
     html << "<b>LastCompletedTxId :</b> " << Self->LastCompletedTx.GetTxId() << "<br />";
@@ -152,6 +160,8 @@ void TTxMonitoring::Complete(const TActorContext& ctx) {
         }
     }
 
+    html << "<h3><a href=\"app?Compaction=true&TabletID=" << cgi.Get("TabletID") << "\"> Compaction </a></h3>";
+
     html << "<h3>Tiering Errors</h3>";
     auto readErrors = Self->Counters.GetEvictionCounters().TieringErrors->GetAllReadErrors();
     auto writeErrors = Self->Counters.GetEvictionCounters().TieringErrors->GetAllWriteErrors();
@@ -159,7 +169,36 @@ void TTxMonitoring::Complete(const TActorContext& ctx) {
     TPrintErrorTable(html, readErrors, "read");
     TPrintErrorTable(html, writeErrors, "write");
 
-    ctx.Send(HttpInfoEvent->Sender, new NMon::TEvRemoteHttpInfoRes(html.Str()));
+    return html.Str();
+}
+
+
+TString TTxMonitoring::RenderCompactionPage() {
+    TStringStream html;
+    const auto& cgi = HttpInfoEvent->Get()->Cgi();
+    auto engine = Self->TablesManager.GetPrimaryIndexAsVerified<NOlap::TColumnEngineForLogs>();
+    for (auto [tableId, _] : Self->TablesManager.GetTables()) {
+        html << "<h3>TableId : " << tableId << "</h3>";
+        auto& compaction = engine.GetGranuleVerified(tableId).GetOptimizerPlanner();
+        auto json = compaction.SerializeToJsonVisual();
+        html << "<pre>";
+        NJson::WriteJson(&html, &json, true, true, true);
+        html << "</pre>";
+    }
+    return html.Str();
+}
+
+void TTxMonitoring::Complete(const TActorContext& ctx) {
+    auto cgi = HttpInfoEvent->Get()->Cgi();
+    auto path = HttpInfoEvent->Get()->PathInfo();
+    TString htmlResult;
+
+    if (cgi.Has("Compaction") && cgi.Get("Compaction") == "true") {
+        htmlResult = RenderCompactionPage();
+    } else {
+        htmlResult = RenderMainPage();
+    }
+    ctx.Send(HttpInfoEvent->Sender, new NMon::TEvRemoteHttpInfoRes(htmlResult));
 }
 
 bool TColumnShard::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TActorContext& ctx) {

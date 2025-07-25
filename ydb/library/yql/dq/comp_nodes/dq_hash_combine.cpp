@@ -411,7 +411,10 @@ protected:
 public:
     using TBase = TComputationValue<TBaseAggregationState>;
 
-    TBaseAggregationState(TMemoryUsageInfo* memInfo, TComputationContext& ctx, const TMemoryEstimationHelper& memoryHelper, size_t inputWidth, const NDqHashOperatorCommon::TCombinerNodes& nodes, ui32 wideFieldsIndex, const TKeyTypes& keyTypes)
+    TBaseAggregationState(
+        TMemoryUsageInfo* memInfo, TComputationContext& ctx, const TMemoryEstimationHelper& memoryHelper, size_t inputWidth,
+        const NDqHashOperatorCommon::TCombinerNodes& nodes, ui32 wideFieldsIndex, const TKeyTypes& keyTypes
+    )
         : TBase(memInfo)
         , Ctx(ctx)
         , MemoryHelper(memoryHelper)
@@ -447,8 +450,8 @@ public:
     virtual ~TBaseAggregationState() {
     }
 
-    virtual bool TryDrain(NUdf::TUnboxedValue* const* output) = 0;
-    virtual EFillState TryFill(IComputationWideFlowNode& flow) = 0;
+    virtual bool TryDrain(TUnboxedValue* output) = 0;
+    virtual EFillState TryFill(TUnboxedValue& inputStream) = 0;
 
     virtual bool IsDraining() = 0;
     virtual bool IsSourceEmpty() = 0;
@@ -495,11 +498,13 @@ public:
         TComputationContext& ctx,
         const TMemoryEstimationHelper& memoryHelper,
         size_t inputWidth,
+        size_t outputWidth,
         const NDqHashOperatorCommon::TCombinerNodes& nodes,
         ui32 wideFieldsIndex,
         const TKeyTypes& keyTypes
     )
         : TBaseAggregationState(memInfo, ctx, memoryHelper, inputWidth, nodes, wideFieldsIndex, keyTypes)
+        , OutputWidth(outputWidth)
         , DrainMapIterator(nullptr)
     {
         InputBuffer.resize(inputWidth, TUnboxedValuePod());
@@ -518,13 +523,13 @@ public:
         return SourceEmpty;
     }
 
-    EFillState TryFill(IComputationWideFlowNode& flow) override {
+    EFillState TryFill(TUnboxedValue& inputStream) override {
         auto **fields = Ctx.WideFields.data() + WideFieldsIndex;
-        const auto result = flow.FetchValues(Ctx, fields);
+        const auto result = inputStream.WideFetch(InputBuffer.data(), InputBuffer.size());
 
-        if (result == EFetchResult::Yield) {
+        if (result == NUdf::EFetchStatus::Yield) {
             return EFillState::Yield;
-        } else if (result == EFetchResult::Finish) {
+        } else if (result == NUdf::EFetchStatus::Finish) {
             OpenDrain();
             SourceEmpty = true;
             return EFillState::SourceEmpty;
@@ -533,7 +538,13 @@ public:
         return ProcessFetchedRow(fields);
     }
 
-    bool TryDrain(NUdf::TUnboxedValue* const* output) override {
+    bool TryDrain(NUdf::TUnboxedValue* output) override {
+        std::vector<TUnboxedValue*> outputPtrs;
+        outputPtrs.resize(OutputWidth, nullptr);
+        std::transform(output, output + OutputWidth, outputPtrs.begin(), [&](TUnboxedValue& val) {
+            return &val;
+        });
+
         for (; DrainMapIterator != Map.End(); Map.Advance(DrainMapIterator)) {
             if (Map.IsValid(DrainMapIterator)) {
                 break;
@@ -561,7 +572,7 @@ public:
 
         char* statePtr = static_cast<char *>(static_cast<void *>(key)) + StatesOffset;
         for (auto& agg : Aggs) {
-            agg->ExtractState(statePtr, output);
+            agg->ExtractState(statePtr, outputPtrs.data());
             statePtr += agg->GetStateSize();
         }
 
@@ -606,6 +617,7 @@ public:
 
 private:
     TUnboxedValueVector InputBuffer;
+    size_t OutputWidth;
     const char* DrainMapIterator;
 };
 
@@ -687,18 +699,12 @@ public:
         return SourceEmpty;
     }
 
-    EFillState TryFill(IComputationWideFlowNode& flow) override {
+    EFillState TryFill(TUnboxedValue& inputStream) override {
         if (CurrentInputBatchPtr >= CurrentInputBatchSize) {
-            std::vector<TUnboxedValue*> ptrs;
-            ptrs.resize(InputBuffer.size(), nullptr);
-            std::transform(InputBuffer.begin(), InputBuffer.end(), ptrs.begin(), [&](TUnboxedValue& val) {
-                return &val;
-            });
-
-            auto fetchResult = flow.FetchValues(Ctx, ptrs.begin());
-            if (fetchResult == EFetchResult::Yield) {
+            auto fetchResult = inputStream.WideFetch(InputBuffer.data(), InputBuffer.size());
+            if (fetchResult == NUdf::EFetchStatus::Yield) {
                 return EFillState::Yield;
-            } else if (fetchResult == EFetchResult::Finish) {
+            } else if (fetchResult == NUdf::EFetchStatus::Finish) {
                 Draining = true;
                 SourceEmpty = true;
                 DrainMapIterator = Map.Begin();
@@ -733,7 +739,7 @@ public:
         return ProcessFetchedRow(RowBufferPointers.data());
     }
 
-    bool TryDrain(NUdf::TUnboxedValue* const* output) override {
+    bool TryDrain(NUdf::TUnboxedValue* output) override {
         MKQL_ENSURE(DrainMapIterator != nullptr, "Cannot call TryDrain when DrainMapIterator is null");
 
         TTypeInfoHelper helper;
@@ -792,10 +798,10 @@ public:
         if (currentBlockSize) {
             for (size_t i = 0; i < OutputColumns; ++i) {
                 auto datum = blockBuilders[i]->Build(true);
-                *output[i] = Ctx.HolderFactory.CreateArrowBlock(std::move(datum));
+                output[i] = Ctx.HolderFactory.CreateArrowBlock(std::move(datum));
             }
 
-            *output[OutputColumns] = Ctx.HolderFactory.CreateArrowBlock(arrow::Datum(static_cast<uint64_t>(currentBlockSize)));
+            output[OutputColumns] = Ctx.HolderFactory.CreateArrowBlock(arrow::Datum(static_cast<uint64_t>(currentBlockSize)));
         }
 
         if (DrainMapIterator == Map.End()) {
@@ -839,23 +845,70 @@ private:
     const char* DrainMapIterator;
 };
 
+class TDqHashCombine;
 
-class TDqHashCombine: public TStatefulWideFlowComputationNode<TDqHashCombine>
+class TCombinerOutputStreamValue : public TComputationValue<TCombinerOutputStreamValue> {
+public:
+    using TBase = TComputationValue<TCombinerOutputStreamValue>;
+
+    TCombinerOutputStreamValue(TMemoryUsageInfo* memInfo, TUnboxedValue boxedState, TUnboxedValue inputStream)
+        : TBase(memInfo)
+        , BoxedState(boxedState)
+        , InputStream(inputStream)
+        , UnboxedState(*static_cast<TBaseAggregationState*>(BoxedState.AsBoxed().Get()))
+    {
+    }
+
+    NUdf::EFetchStatus WideFetch(NUdf::TUnboxedValue* output, [[maybe_unused]] ui32 width) override {
+        auto& state = UnboxedState;
+
+        for (;;) {
+            if (!state.IsDraining()) {
+                if (state.IsSourceEmpty()) {
+                    break;
+                }
+                auto fillResult = state.TryFill(InputStream);
+                if (fillResult == EFillState::Yield) {
+                    return NUdf::EFetchStatus::Yield;
+                } else if (fillResult == EFillState::ContinueFilling) {
+                    continue;
+                } else {
+                    MKQL_ENSURE(state.IsDraining(), "Expected state to be switched to draining");
+                }
+            }
+
+            if (state.TryDrain(output)) {
+                return NUdf::EFetchStatus::Ok;
+            } else if (state.IsSourceEmpty()) {
+                break;
+            }
+        }
+
+        return NUdf::EFetchStatus::Finish;
+    }
+
+private:
+    TUnboxedValue BoxedState;
+    TUnboxedValue InputStream;
+    TBaseAggregationState& UnboxedState;
+};
+
+class TDqHashCombine: public TMutableComputationNode<TDqHashCombine>
 {
 private:
-    using TBaseComputation = TStatefulWideFlowComputationNode<TDqHashCombine>;
+    using TBaseComputation = TMutableComputationNode<TDqHashCombine>;
 
 public:
     TDqHashCombine(
-        TComputationMutables& mutables, IComputationWideFlowNode* flow,
+        TComputationMutables& mutables, IComputationNode* streamSource,
         const bool blockMode,
         const std::vector<TType*>& inputTypes, const std::vector<TType*>& outputTypes,
         size_t inputWidth, const std::vector<TType*>& keyItemTypes, const std::vector<TType*>& stateItemTypes,
         NDqHashOperatorCommon::TCombinerNodes&& nodes, TKeyTypes&& keyTypes, ui64 memLimit
     )
-        : TBaseComputation(mutables, flow, EValueRepresentation::Boxed)
+        : TBaseComputation(mutables, EValueRepresentation::Boxed)
         , BlockMode(blockMode)
-        , Flow(flow)
+        , StreamSource(streamSource)
         , InputTypes(inputTypes)
         , OutputTypes(outputTypes)
         , InputWidth(inputWidth)
@@ -867,37 +920,14 @@ public:
     {
     }
 
-    EFetchResult DoCalculate(NUdf::TUnboxedValue& boxedState, TComputationContext& ctx, NUdf::TUnboxedValue* const* output) const {
-        if (boxedState.IsInvalid()) {
-            MakeState(ctx, boxedState);
-        }
-
-        TBaseAggregationState* state = static_cast<TBaseAggregationState*>(boxedState.AsBoxed().Get());
-
-        for (;;) {
-            if (!state->IsDraining()) {
-                if (state->IsSourceEmpty()) {
-                    break;
-                }
-                auto fillResult = state->TryFill(*Flow);
-                if (fillResult == EFillState::Yield) {
-                    return EFetchResult::Yield;
-                } else if (fillResult == EFillState::ContinueFilling) {
-                    continue;
-                } else {
-                    MKQL_ENSURE(state->IsDraining(), "Expected state to be switched to draining");
-                }
-            }
-
-            if (state->TryDrain(output)) {
-                return EFetchResult::One;
-            } else if (state->IsSourceEmpty()) {
-                break;
-            }
-        }
-
-        boxedState = TUnboxedValue();
-        return EFetchResult::Finish;
+    // DoCalculate must return an object that encapsulates the node state;
+    // we'll use the stream wrapper value to carry the state and the input stream along
+    // TODO: separate UnboxedValue wrapper for the state is no longer necessary
+    NUdf::TUnboxedValue DoCalculate(TComputationContext& ctx) const {
+        TUnboxedValue boxedState;
+        MakeState(ctx, boxedState);
+        TUnboxedValue inputStream = StreamSource->GetValue(ctx);
+        return ctx.HolderFactory.Create<TCombinerOutputStreamValue>(boxedState, inputStream);
     }
 
 private:
@@ -907,23 +937,22 @@ private:
         UDF_LOG(logger, logComponent, NUdf::ELogLevel::Debug, TStringBuilder() << "State initialized");
 
         if (!BlockMode) {
-            state = ctx.HolderFactory.Create<TWideAggregationState>(ctx, MemoryHelper, InputWidth, Nodes, WideFieldsIndex, KeyTypes);
+            state = ctx.HolderFactory.Create<TWideAggregationState>(ctx, MemoryHelper, InputWidth, OutputTypes.size(), Nodes, WideFieldsIndex, KeyTypes);
         } else {
             state = ctx.HolderFactory.Create<TBlockAggregationState>(ctx, MemoryHelper, InputTypes, OutputTypes, InputWidth, Nodes, WideFieldsIndex, KeyTypes);
         }
     }
 
     void RegisterDependencies() const final {
-        if (const auto flow = this->FlowDependsOn(Flow)) {
-            Nodes.RegisterDependencies(
-                [this, flow](IComputationNode* node){ this->DependsOn(flow, node); },
-                [this, flow](IComputationExternalNode* node){ this->Own(flow, node); }
-            );
-        }
+        DependsOn(StreamSource);
+        Nodes.RegisterDependencies(
+            [this](IComputationNode* node){ this->DependsOn(node); },
+            [this](IComputationExternalNode* node){ this->Own(node); }
+        );
     }
 
     const bool BlockMode;
-    IComputationWideFlowNode *const Flow;
+    IComputationNode *const StreamSource;
     std::vector<TType*> InputTypes;
     std::vector<TType*> OutputTypes;
     size_t InputWidth;
@@ -937,29 +966,24 @@ private:
 IComputationNode* WrapDqHashCombine(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     TDqHashOperatorParams params = ParseCommonDqHashOperatorParams(callable, ctx);
 
-    auto inputComponents = GetWideComponents(AS_TYPE(TFlowType, callable.GetInput(NDqHashOperatorParams::Flow).GetStaticType()));
+    auto inputComponents = GetWideComponents(AS_TYPE(TStreamType, callable.GetInput(NDqHashOperatorParams::Input).GetStaticType()));
     std::vector<TType*> inputTypes;
     bool inputIsBlocks = UnwrapBlockTypes(inputComponents, inputTypes);
 
-    const auto outputComponents = GetWideComponents(AS_TYPE(TFlowType, callable.GetType()->GetReturnType()));
+    const auto outputComponents = GetWideComponents(AS_TYPE(TStreamType, callable.GetType()->GetReturnType()));
     std::vector<TType*> outputTypes;
     bool outputIsBlocks = UnwrapBlockTypes(outputComponents, outputTypes);
 
     MKQL_ENSURE(inputIsBlocks == outputIsBlocks, "Inconsistent input/output item types: mixing of blocks and non-blocks detected");
 
-    const auto flow = LocateNode(ctx.NodeLocator, callable, NDqHashOperatorParams::Flow);
-
-    auto* wideFlow = dynamic_cast<IComputationWideFlowNode*>(flow);
-    if (!wideFlow) {
-        THROW yexception() << "Expected wide flow";
-    };
+    const auto input = LocateNode(ctx.NodeLocator, callable, NDqHashOperatorParams::Input);
 
     const TTupleLiteral* operatorParams = AS_VALUE(TTupleLiteral, callable.GetInput(NDqHashOperatorParams::OperatorParams));
     const auto memLimit = AS_VALUE(TDataLiteral, operatorParams->GetValue(NDqHashOperatorParams::CombineParamMemLimit))->AsValue().Get<ui64>();
 
     return new TDqHashCombine(
         ctx.Mutables,
-        wideFlow,
+        input,
         inputIsBlocks,
         inputTypes,
         outputTypes,

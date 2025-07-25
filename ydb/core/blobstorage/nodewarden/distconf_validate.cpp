@@ -130,7 +130,7 @@ namespace NKikimr::NStorage {
 
     std::optional<TString> ValidateConfigUpdate(const NKikimrBlobStorage::TStorageConfig& current,
             const NKikimrBlobStorage::TStorageConfig& proposed) {
-        if (current.GetGeneration() + 1 != proposed.GetGeneration()) {
+        if (proposed.GetGeneration() <= current.GetGeneration()) {
             return TStringBuilder() << "invalid proposed config generation current# " << current.GetGeneration()
                 << " proposed# " << proposed.GetGeneration();
         }

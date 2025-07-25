@@ -228,6 +228,17 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
 
             UNIT_ASSERT_VALUES_EQUAL(rows.size(), 0);
         }
+        {
+            auto selectQuery = Sprintf(R"(
+                SELECT COUNT(*)
+                FROM `/Root/olapStore/olapTable_1/.sys/primary_index_stats`
+            )",
+                tablePathId1);
+
+            auto rows = ExecuteScanQuery(tableClient, selectQuery);
+            UNIT_ASSERT_VALUES_EQUAL(rows.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows.front().at("column0")), 150);
+        }
     }
 
     Y_UNIT_TEST(StatsSysViewEnumStringBytes) {
@@ -332,11 +343,11 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
         ui64 count3;
 
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
-        NKikimrConfig::TAppConfig appConfig;
-        auto* CSConfig = appConfig.MutableColumnShardConfig();
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        auto* CSConfig = settings.AppConfig.MutableColumnShardConfig();
         CSConfig->SetDefaultCompression(NKikimrSchemeOp::EColumnCodec::ColumnCodecLZ4);
         CSConfig->SetAlterObjectEnabled(true);
-        auto settings = TKikimrSettings().SetWithSampleTables(false).SetAppConfig(appConfig);
+
         TKikimrRunner kikimr(settings);
         Tests::NCommon::TLoggerInit(kikimr).Initialize();
         TTypedLocalHelper helper("", kikimr, "olapTable", "olapStore");
@@ -408,11 +419,10 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
         ui64 bytes1;
         ui64 count1;
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
-        NKikimrConfig::TAppConfig appConfig;
-        auto* CSConfig = appConfig.MutableColumnShardConfig();
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        auto* CSConfig = settings.AppConfig.MutableColumnShardConfig();
         CSConfig->SetDefaultCompression(NKikimrSchemeOp::EColumnCodec::ColumnCodecLZ4);
         CSConfig->SetAlterObjectEnabled(true);
-        auto settings = TKikimrSettings().SetWithSampleTables(false).SetAppConfig(appConfig);
         TKikimrRunner kikimr(settings);
         Tests::NCommon::TLoggerInit(kikimr).Initialize();
         TTypedLocalHelper helper("Utf8", kikimr);
@@ -452,11 +462,10 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
         ui64 bytes1;
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
         csController->SetSmallSizeDetector(Max<ui32>());
-        NKikimrConfig::TAppConfig appConfig;
-        auto* CSConfig = appConfig.MutableColumnShardConfig();
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        auto* CSConfig = settings.AppConfig.MutableColumnShardConfig();
         CSConfig->SetDefaultCompression(NKikimrSchemeOp::EColumnCodec::ColumnCodecLZ4);
         CSConfig->SetAlterObjectEnabled(true);
-        auto settings = TKikimrSettings().SetWithSampleTables(false).SetAppConfig(appConfig);
         TKikimrRunner kikimr(settings);
         Tests::NCommon::TLoggerInit(kikimr).Initialize();
         TTypedLocalHelper helper("Utf8", kikimr);

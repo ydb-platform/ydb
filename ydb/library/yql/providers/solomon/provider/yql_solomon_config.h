@@ -20,6 +20,7 @@ public:
     NCommon::TConfSetting<ui64, Static> MetricsQueueBatchCountLimit;
     NCommon::TConfSetting<TString, Static> SolomonClientDefaultReplica;
     NCommon::TConfSetting<ui64, Static> ComputeActorBatchSize;
+    NCommon::TConfSetting<ui64, Static> MaxApiInflight;
 };
 
 struct TSolomonConfiguration

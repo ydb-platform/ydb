@@ -13,10 +13,12 @@ PEERDIR(
     yql/essentials/parser/lexer_common
     yql/essentials/sql/settings
     yql/essentials/sql/v1/lexer
+    yql/essentials/sql/v1/lexer/regex
     yql/essentials/sql/v1/reflect
     yql/essentials/sql/v1/complete/antlr4
     yql/essentials/sql/v1/complete/core
     yql/essentials/sql/v1/complete/text
+    contrib/libs/re2
 )
 
 END()

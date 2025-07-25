@@ -834,6 +834,8 @@ public:
     }
 
     void AddPrecommitCallback(TPrecommitTransactionCallback cb) {
+        std::lock_guard lock(PrecommitCallbacksMutex);
+
         if (!ChangesAreAccepted) {
             ythrow TContractViolation("Changes are no longer accepted");
         }
@@ -842,6 +844,8 @@ public:
     }
 
     void AddOnFailureCallback(TOnFailureTransactionCallback cb) {
+        std::lock_guard lock(OnFailureCallbacksMutex);
+
         if (!ChangesAreAccepted) {
             ythrow TContractViolation("Changes are no longer accepted");
         }
@@ -854,8 +858,11 @@ public:
 
 private:
     bool ChangesAreAccepted = true; // haven't called Commit or Rollback yet
-    std::vector<TPrecommitTransactionCallback> PrecommitCallbacks;
-    std::vector<TOnFailureTransactionCallback> OnFailureCallbacks;
+    mutable std::vector<TPrecommitTransactionCallback> PrecommitCallbacks;
+    mutable std::vector<TOnFailureTransactionCallback> OnFailureCallbacks;
+
+    std::mutex PrecommitCallbacksMutex;
+    std::mutex OnFailureCallbacksMutex;
 };
 
 TTransaction::TTransaction(const TSession& session, const std::string& txId)

@@ -32,8 +32,6 @@ private:
     YDB_READONLY_DEF(std::shared_ptr<NIndexes::TIndexesCollection>, Indexes);
     YDB_READONLY(bool, Aborted, false);
 
-    std::shared_ptr<NGroupedMemoryManager::TAllocationGuard> AccessorsGuard;
-    std::optional<TPortionDataAccessor> PortionAccessor;
     THashMap<NArrow::NSSA::IDataSource::TCheckIndexContext, std::shared_ptr<NIndexes::IIndexMeta>> DataAddrToIndex;
 
 public:
@@ -79,34 +77,23 @@ public:
         return TStringBuilder() << "OK";
     }
 
-    TFetchedData(const bool useFilter, const ui32 recordsCount) {
-        Table = std::make_shared<NArrow::NAccessor::TAccessorsCollection>(recordsCount);
+    TFetchedData(const bool useFilter, const std::optional<ui32> recordsCount) {
+        if (recordsCount) {
+            Table = std::make_shared<NArrow::NAccessor::TAccessorsCollection>(*recordsCount);
+        } else {
+            Table = std::make_shared<NArrow::NAccessor::TAccessorsCollection>();
+        }
         Table->SetFilterUsage(useFilter);
         Indexes = std::make_shared<NIndexes::TIndexesCollection>();
     }
 
-    void SetAccessorsGuard(std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>&& guard) {
-        AFL_VERIFY(!AccessorsGuard);
-        AFL_VERIFY(!!guard);
-        AccessorsGuard = std::move(guard);
+    void InitRecordsCount(const ui32 recordsCount) {
+        AFL_VERIFY(!Table->HasData());
+        Table = std::make_shared<NArrow::NAccessor::TAccessorsCollection>(recordsCount);
     }
 
     void SetUseFilter(const bool value) {
         Table->SetFilterUsage(value);
-    }
-
-    bool HasPortionAccessor() const {
-        return !!PortionAccessor;
-    }
-
-    void SetPortionAccessor(TPortionDataAccessor&& accessor) {
-        AFL_VERIFY(!PortionAccessor);
-        PortionAccessor = std::move(accessor);
-    }
-
-    const TPortionDataAccessor& GetPortionAccessor() const {
-        AFL_VERIFY(!!PortionAccessor);
-        return *PortionAccessor;
     }
 
     ui32 GetFilteredCount(const ui32 recordsCount, const ui32 defLimit) const {
@@ -115,7 +102,7 @@ public:
 
     void SyncTableColumns(const std::vector<std::shared_ptr<arrow::Field>>& fields, const ISnapshotSchema& schema, const ui32 recordsCount);
 
-    std::shared_ptr<NArrow::TColumnFilter> GetAppliedFilter() const {
+    const std::shared_ptr<NArrow::TColumnFilter>& GetAppliedFilter() const {
         return Table->GetAppliedFilter();
     }
 
@@ -187,6 +174,11 @@ public:
     const std::shared_ptr<arrow::Table>& GetTable() const {
         AFL_VERIFY(Table);
         return Table;
+    }
+
+    std::shared_ptr<arrow::Table>&& ExtractTable() {
+        AFL_VERIFY(Table);
+        return std::move(Table);
     }
 
     bool HasData() const {

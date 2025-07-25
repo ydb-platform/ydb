@@ -37,7 +37,7 @@ namespace NSQLComplete {
 
                     for (auto& cluster : clusters) {
                         TClusterName name;
-                        name.Indentifier = std::move(cluster);
+                        name.Identifier = std::move(cluster);
                         response.RankedNames.emplace_back(std::move(name));
                     }
 
@@ -52,7 +52,7 @@ namespace NSQLComplete {
             {
             }
 
-            NThreading::TFuture<TNameResponse> Lookup(TNameRequest request) const override {
+            NThreading::TFuture<TNameResponse> Lookup(const TNameRequest& request) const override {
                 if (!request.Constraints.Cluster) {
                     return NThreading::MakeFuture<TNameResponse>({});
                 }
@@ -66,10 +66,10 @@ namespace NSQLComplete {
         private:
             static TString QualifiedClusterName(const TNameRequest& request) {
                 TClusterName cluster;
-                cluster.Indentifier = request.Prefix;
+                cluster.Identifier = request.Prefix;
 
                 TGenericName generic = request.Constraints.Qualified(cluster);
-                return std::get<TClusterName>(std::move(generic)).Indentifier;
+                return std::get<TClusterName>(std::move(generic)).Identifier;
             }
 
             IClusterDiscovery::TPtr Discovery_;

@@ -1,25 +1,25 @@
 #pragma once
-#include "kqp_compute_events.h"
 #include "kqp_compute_actor.h"
-#include "kqp_scan_events.h"
+#include "kqp_compute_events.h"
 #include "kqp_compute_state.h"
-#include "kqp_scan_compute_manager.h"
 #include "kqp_scan_common.h"
+#include "kqp_scan_compute_manager.h"
+#include "kqp_scan_events.h"
 
 #include <ydb/core/base/events.h>
-
-#include <ydb/core/kqp/runtime/kqp_scan_data_meta.h>
-#include <ydb/core/protos/tx_datashard.pb.h>
-#include <ydb/core/protos/kqp.pb.h>
-#include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/base/tablet_pipecache.h>
+#include <ydb/core/kqp/common/kqp_resolve.h>
+#include <ydb/core/kqp/runtime/kqp_scan_data_meta.h>
+#include <ydb/core/protos/kqp.pb.h>
+#include <ydb/core/protos/tx_datashard.pb.h>
 #include <ydb/core/tx/datashard/datashard.h>
-#include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
+#include <ydb/core/tx/scheme_cache/scheme_cache.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/events.h>
-#include <ydb/library/actors/wilson/wilson_trace.h>
 #include <ydb/library/actors/core/interconnect.h>
+#include <ydb/library/actors/wilson/wilson_trace.h>
+#include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
 
 namespace NKikimr::NKqp::NScanPrivate {
 
@@ -36,6 +36,7 @@ private:
             explicit TEvRetryShard(const ui64 tabletId)
                 : TabletId(tabletId) {
             }
+
         public:
             ui64 TabletId = 0;
             ui32 Generation = 0;
@@ -61,13 +62,13 @@ public:
     }
 
     TKqpScanFetcherActor(const NKikimrKqp::TKqpSnapshot& snapshot, const NYql::NDq::TComputeRuntimeSettings& settings,
-        std::vector<NActors::TActorId>&& computeActors,
-        const ui64 txId, const TMaybe<ui64> lockTxId, const ui32 lockNodeId, const TMaybe<NKikimrDataEvents::ELockMode> lockMode,
-        const NKikimrTxDataShard::TKqpTransaction_TScanTaskMeta& meta,
+        std::vector<NActors::TActorId>&& computeActors, const ui64 txId, const TMaybe<ui64> lockTxId, const ui32 lockNodeId,
+        const TMaybe<NKikimrDataEvents::ELockMode> lockMode, const NKikimrTxDataShard::TKqpTransaction_TScanTaskMeta& meta,
         const TShardsScanningPolicy& shardsScanningPolicy, TIntrusivePtr<TKqpCounters> counters, NWilson::TTraceId traceId,
         const TCPULimits& cpuLimits);
 
-    static TVector<TSerializedTableRange> BuildSerializedTableRanges(const NKikimrTxDataShard::TKqpTransaction::TScanTaskMeta::TReadOpMeta& readData);
+    static TVector<TSerializedTableRange> BuildSerializedTableRanges(
+        const NKikimrTxDataShard::TKqpTransaction::TScanTaskMeta::TReadOpMeta& readData);
 
     void Bootstrap();
 
@@ -105,16 +106,17 @@ public:
     void HandleExecute(NActors::TEvents::TEvWakeup::TPtr& ev);
 
 private:
-
     void CheckFinish();
     ui32 GetShardsInProgressCount() const;
 
     std::vector<NActors::TActorId> ComputeActorIds;
 
     void StopOnError(const TString& errorMessage) const;
-    bool SendGlobalFail(const NYql::NDqProto::StatusIds::StatusCode statusCode, const NYql::TIssuesIds::EIssueCode issueCode, const TString& message) const;
+    bool SendGlobalFail(
+        const NYql::NDqProto::StatusIds::StatusCode statusCode, const NYql::TIssuesIds::EIssueCode issueCode, const TString& message) const;
 
-    bool SendGlobalFail(const NYql::NDqProto::EComputeState state, NYql::NDqProto::StatusIds::StatusCode statusCode, const NYql::TIssues& issues) const;
+    bool SendGlobalFail(
+        const NYql::NDqProto::EComputeState state, NYql::NDqProto::StatusIds::StatusCode statusCode, const NYql::TIssues& issues) const;
 
     bool SendScanFinished();
 
@@ -123,7 +125,6 @@ private:
     virtual const TVector<NScheme::TTypeInfo>& GetKeyColumnTypes() const override {
         return KeyColumnTypes;
     }
-
 
     void HandleExecute(TEvKqpCompute::TEvScanInitActor::TPtr& ev);
 
@@ -146,7 +147,6 @@ private:
     void HandleExecute(TEvInterconnect::TEvNodeDisconnected::TPtr& ev);
 
 private:
-
     void StartTableScan();
 
     void RetryDeliveryProblem(TShardState::TPtr state);
@@ -186,8 +186,7 @@ private:
 
     TInFlightShards InFlightShards;
     TInFlightComputes InFlightComputes;
-    const bool IsOlapTable = false;
-    ui32 TotalRetries = 0;
+    const NKqp::ETableKind TableKind = NKqp::ETableKind::Unknown;
 
     std::set<ui32> TrackingNodes;
     ui32 MaxInFlight = 1024;
@@ -196,4 +195,4 @@ private:
     TInstant RegistrationStartTime;
 };
 
-}
+}   // namespace NKikimr::NKqp::NScanPrivate

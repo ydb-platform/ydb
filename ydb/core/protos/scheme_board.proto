@@ -119,6 +119,11 @@ message TEvUnsubscribe {
     optional uint64 LocalPathId = 3;
 }
 
+message TClusterState {
+    optional uint64 Generation = 1;
+    optional fixed64 Guid = 2;
+}
+
  // See comments for TEvUpdate.
 message TEvNotify {
     optional string Path = 1;
@@ -135,6 +140,8 @@ message TEvNotify {
 
     optional NKikimrProto.TPathID PathSubdomainPathId = 8;
     repeated uint64 PathAbandonedTenantsSchemeShards = 9;
+
+    optional TClusterState ClusterState = 10;
 }
 
 message TEvNotifyAck {
@@ -151,4 +158,5 @@ message TEvSyncVersionRequest {
 message TEvSyncVersionResponse {
     optional uint64 Version = 1;
     optional bool Partial = 2;
+    optional TClusterState ClusterState = 3;
 }

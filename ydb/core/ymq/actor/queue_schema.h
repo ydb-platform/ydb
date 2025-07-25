@@ -1,5 +1,5 @@
 #pragma once
-#include "defs.h"
+#include <ydb/core/ymq/actor/cfg/defs.h>
 
 #include "schema.h"
 #include <ydb/core/quoter/public/quoter.h>
@@ -34,7 +34,8 @@ public:
                                const TString& tagsJson,
                                const TString& userSid,
                                const TString& maskedToken,
-                               const TString& authType);
+                               const TString& authType,
+                               const TString& sourceAddress);
 
     ~TCreateQueueSchemaActorV2();
 
@@ -139,6 +140,7 @@ private:
     const TString UserSid_;
     const TString MaskedToken_;
     const TString AuthType_;
+    const TString SourceAddress_;
 
     ui64 RequiredShardsCount_ = 0;
     ui64 CreatedShardsCount_ = 0;
@@ -170,7 +172,8 @@ public:
                               const TString& tagsJson,
                               const TString& userSid,
                               const TString& maskedToken,
-                              const TString& authType);
+                              const TString& authType,
+                              const TString& sourceAddress);
 
     TDeleteQueueSchemaActorV2(const TQueuePath& path,
                               bool isFifo,
@@ -185,7 +188,8 @@ public:
                               const TString& tagsJson,
                               const TString& userSid,
                               const TString& maskedToken,
-                              const TString& authType);
+                              const TString& authType,
+                              const TString& sourceAddress);
 
     void Bootstrap();
 
@@ -245,6 +249,7 @@ private:
     const TString MaskedToken_;
     const TString AuthType_;
     const TString FolderId_;
+    const TString SourceAddress_;
 };
 
 } // namespace NKikimr::NSQS

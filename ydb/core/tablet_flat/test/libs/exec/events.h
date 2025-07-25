@@ -91,9 +91,9 @@ namespace NFake {
     };
 
     struct TEvDataCleaned : public TEventLocal<TEvDataCleaned, EvDataCleaned> {
-        TEvDataCleaned(ui64 dataCleanupGeneration) : DataCleanupGeneration(dataCleanupGeneration) { }
+        TEvDataCleaned(ui64 vacuumGeneration) : VacuumGeneration(vacuumGeneration) { }
 
-        ui64 DataCleanupGeneration;
+        ui64 VacuumGeneration;
     };
 
     struct TEvCompact : public TEventLocal<TEvCompact, EvCompact> {

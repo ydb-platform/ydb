@@ -24,10 +24,13 @@ public:
     void Init() override;
 
     TString TableName;
+    TString QueryTableName;
     TString IndexName;
     std::string KeyColumn;
     std::string EmbeddingColumn;
+    std::string QueryTableKeyColumn;
     std::optional<std::string> PrefixColumn;
+    std::optional<std::string> PrefixType;
     NYdb::NTable::TVectorIndexSettings::EMetric Metric;
     TString Distance;
     TString VectorType;
@@ -39,7 +42,10 @@ public:
     size_t KmeansTreeSearchClusters = 0;
     size_t Limit = 0;
     size_t RecallThreads = 0;
-    bool Recall;
+    ui64 TableRowCount = 0;
+    bool Recall = false;
+    bool NonIndexedSearch = false;
+    bool KeyIsInt = false;
 };
 
 

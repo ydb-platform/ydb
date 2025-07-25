@@ -311,6 +311,20 @@ Y_UNIT_TEST_F(UnknownTopic, TUpdateOffsetsInTransactionFixture) {
     UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), Ydb::StatusIds::SCHEME_ERROR);
 }
 
+Y_UNIT_TEST_F(UnknownPartition, TUpdateOffsetsInTransactionFixture) {
+    auto response = Call_UpdateOffsetsInTransaction({
+        TTopic{.Path=VALID_TOPIC_PATH, .Partitions={
+            TPartition{.Id=1000, .Offsets={
+                TOffsetRange{.Begin=0, .End=2}
+            }},
+            TPartition{.Id=2000, .Offsets={
+                TOffsetRange{.Begin=1, .End=2}
+            }}
+        }}
+    });
+    UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), Ydb::StatusIds::SCHEME_ERROR);
+}
+
 Y_UNIT_TEST_F(UseDoubleSlashInTopicPath, TUpdateOffsetsInTransactionFixture) {
     TestTopicPaths("//Root//PQ//rt3.dc1--topic1", "/Root/PQ/rt3.dc1--topic1");
 }

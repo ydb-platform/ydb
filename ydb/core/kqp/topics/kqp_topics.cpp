@@ -295,6 +295,11 @@ ui64 TTopicPartitionOperations::GetTabletId() const
     return *TabletId_;
 }
 
+bool TTopicPartitionOperations::HasTabletId() const
+{
+    return TabletId_.Defined();
+}
+
 void TTopicPartitionOperations::SetTabletId(ui64 value)
 {
     Y_ENSURE(TabletId_.Empty());
@@ -527,6 +532,17 @@ bool TTopicOperations::ProcessSchemeCacheNavigate(const NSchemeCache::TSchemeCac
             }
         } else {
             builder << "Topic '" << JoinPath(result.Path) << "' is missing";
+
+            status = Ydb::StatusIds::SCHEME_ERROR;
+            message = std::move(builder);
+
+            return false;
+        }
+    }
+
+    for (const auto& [key, operations] : Operations_) {
+        if (!operations.HasTabletId()) {
+            builder << "Topic '" << key.Topic_ << "'. Unknown partition " << key.Partition_;
 
             status = Ydb::StatusIds::SCHEME_ERROR;
             message = std::move(builder);

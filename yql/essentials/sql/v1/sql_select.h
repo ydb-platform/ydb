@@ -62,9 +62,36 @@ private:
     bool ValidateLimitOrderByWithSelectOp(TMaybe<TSelectKindPlacement> placement, TStringBuf what);
     bool NeedPassLimitOrderByToUnderlyingSelect(TMaybe<TSelectKindPlacement> placement);
 
-    template<typename TRule>
-    TSourcePtr Build(const TRule& node, TPosition pos, TSelectKindResult&& first);
+    struct TBuildExtra {
+        TSelectKindResult First;
+        TPosition FirstPos;
+        TSelectKindResult Last;
+    };
 
+    template <typename TRule>
+        requires std::same_as<TRule, TRule_union_op> ||
+                 std::same_as<TRule, TRule_intersect_op>
+    bool IsAllQualifiedOp(const TRule& node);
+
+    template <typename TRule>
+        requires std::same_as<TRule, TRule_select_stmt> ||
+                 std::same_as<TRule, TRule_select_unparenthesized_stmt>
+    TSourcePtr BuildStmt(const TRule& node, TPosition& pos);
+
+    template <typename TRule>
+        requires std::same_as<TRule, TRule_select_stmt> ||
+                 std::same_as<TRule, TRule_select_unparenthesized_stmt>
+    TSourcePtr BuildUnionException(const TRule& node, TPosition& pos, TBuildExtra& extra);
+
+    template <typename TRule>
+        requires std::same_as<TRule, TRule_select_stmt_intersect> ||
+                 std::same_as<TRule, TRule_select_unparenthesized_stmt_intersect>
+    TSourcePtr BuildIntersection(const TRule& node, TPosition& pos, TSelectKindPlacement placement, TBuildExtra& extra);
+
+    template <typename TRule>
+        requires std::same_as<TRule, TRule_select_kind_parenthesis> ||
+                 std::same_as<TRule, TRule_select_kind_partial>
+    TSelectKindResult BuildAtom(const TRule& node, TPosition& pos, TSelectKindPlacement placement, TBuildExtra& extra);
 
     TSelectKindResult SelectKind(const TRule_select_kind& node, TPosition& selectPos, TMaybe<TSelectKindPlacement> placement);
     TSelectKindResult SelectKind(const TRule_select_kind_partial& node, TPosition& selectPos, TMaybe<TSelectKindPlacement> placement);

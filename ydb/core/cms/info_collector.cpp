@@ -71,9 +71,6 @@ private:
             hFunc(TEvInterconnect::TEvNodeDisconnected, Handle);
             IgnoreFunc(TEvInterconnect::TEvNodeConnected);
 
-            // Bridge
-            hFunc(NKikimr::TEvNodeWardenStorageConfig, Handle);
-
         default:
             LOG_E("Unexpected event"
                 << ": type# " << ev->GetTypeRewrite()
@@ -115,10 +112,6 @@ private:
     void Handle(TEvTenantPool::TEvTenantPoolStatus::TPtr& ev);
     void Handle(TEvents::TEvUndelivered::TPtr& ev);
     void Handle(TEvInterconnect::TEvNodeDisconnected::TPtr& ev);
-
-    // Bridge
-    void RequestBridgeInfo();
-    void Handle(NKikimr::TEvNodeWardenStorageConfig::TPtr& ev);
 
 private:
     const TActorId Client;
@@ -224,7 +217,6 @@ void TInfoCollector::Handle(TEvInterconnect::TEvNodesInfo::TPtr& ev) {
     RequestBaseConfig();
     RequestBootstrapConfig();
     RequestStateStorageConfig();
-    RequestBridgeInfo();
 
     const auto& pileMap = ev->Get()->PileMap;
     Info->IsBridgeMode = static_cast<bool>(pileMap);
@@ -538,16 +530,6 @@ void TInfoCollector::Handle(TEvInterconnect::TEvNodeDisconnected::TPtr& ev) {
     Info->ClearNode(nodeId);
     NodeEvents[nodeId].clear();
     MaybeReplyAndDie();
-}
-
-void TInfoCollector::RequestBridgeInfo() {
-    Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), new NKikimr::TEvNodeWardenQueryStorageConfig(false));
-}
-
-void TInfoCollector::Handle(NKikimr::TEvNodeWardenStorageConfig::TPtr& ev) {
-    const auto& bridgeInfo = ev->Get()->BridgeInfo;
-    if (bridgeInfo)
-        Info->Piles = bridgeInfo->Piles;
 }
 
 IActor* CreateInfoCollector(const TActorId& client, const TDuration& timeout) {

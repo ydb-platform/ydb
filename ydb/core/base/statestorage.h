@@ -104,7 +104,7 @@ struct TEvStateStorage {
             , ProxyOptions(proxyOptions)
         {}
 
-        TEvLookup(const TEvLookup& ev)            
+        TEvLookup(const TEvLookup& ev)
             : TabletID(ev.TabletID)
             , Cookie(ev.Cookie)
             , ProxyOptions(ev.ProxyOptions)
@@ -154,7 +154,7 @@ struct TEvStateStorage {
         {
         }
 
-        TEvUpdate(const TEvUpdate& ev) 
+        TEvUpdate(const TEvUpdate& ev)
             : TabletID(ev.TabletID)
             , Cookie(ev.Cookie)
             , ProposedLeader(ev.ProposedLeader)
@@ -162,7 +162,7 @@ struct TEvStateStorage {
             , ProposedGeneration(ev.ProposedGeneration)
             , ProposedStep(ev.ProposedStep)
             , Signature(ev.Signature)
-            , ProxyOptions(ev.ProxyOptions) 
+            , ProxyOptions(ev.ProxyOptions)
         {
         }
 
@@ -251,7 +251,7 @@ struct TEvStateStorage {
             , ProposedLeader(ev.ProposedLeader)
             , ProposedGeneration(ev.ProposedGeneration)
             , Signature(ev.Signature)
-            , ProxyOptions(ev.ProxyOptions) 
+            , ProxyOptions(ev.ProxyOptions)
         {
         }
 
@@ -486,7 +486,7 @@ struct TStateStorageInfo : public TThrRefBase {
             StatusOutdated,
             StatusUnavailable,
         };
- 
+
         ui32 Sz;
         TArrayHolder<TActorId> SelectedReplicas;
         TArrayHolder<EStatus> Status;
@@ -522,8 +522,8 @@ struct TStateStorageInfo : public TThrRefBase {
 
     TVector<TRingGroup> RingGroups;
 
-    ui32 ClusterStateGeneration;
-    ui32 ClusterStateGuid;
+    ui64 ClusterStateGeneration;
+    ui64 ClusterStateGuid;
     ui32 StateStorageVersion;
     TVector<ui32> CompatibleVersions;
 
@@ -535,6 +535,7 @@ struct TStateStorageInfo : public TThrRefBase {
     TStateStorageInfo()
         : ClusterStateGeneration(0)
         , ClusterStateGuid(0)
+        , StateStorageVersion(0)
         , Hash(Max<ui64>())
     {}
 

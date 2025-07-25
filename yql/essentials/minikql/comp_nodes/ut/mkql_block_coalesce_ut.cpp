@@ -11,7 +11,7 @@
 #include <yql/essentials/minikql/computation/mkql_block_impl.h>
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/minikql/arrow/arrow_util.h>
-#include <yql/essentials/minikql/comp_nodes/ut/mkql_block_helper.h>
+#include <yql/essentials/minikql/comp_nodes/ut/mkql_block_test_helper.h>
 
 #include <arrow/compute/exec_internal.h>
 
@@ -107,12 +107,11 @@ arrow::Datum GenerateArray(TTypeInfoHelper& typeInfoHelper, TType* type, std::ve
 }
 
 template <typename T, typename U, typename V>
-void TestScalarCoalesceKernel(T left, U right, V expected) {
-    TSetup<false> setup;
-    TestScalarKernel(left, right, expected, setup,
-                     [&](TRuntimeNode left, TRuntimeNode right) {
-                         return setup.PgmBuilder->BlockCoalesce(left, right);
-                     });
+void TestCoalesceKernel(T left, U right, V expected) {
+    TBlockHelper().TestKernel(left, right, expected,
+                              [](TSetup<false>& setup, TRuntimeNode left, TRuntimeNode right) {
+                                  return setup.PgmBuilder->BlockCoalesce(left, right);
+                              });
 }
 
 enum class ERightOperandType {
@@ -273,7 +272,7 @@ void BlockCoalesceGraphTest(size_t length, size_t offset) {
 
     node = pb.ToFlow(pb.WideToBlocks(pb.FromFlow(node)));
     if (offset > 0) {
-        node = pb.WideSkipBlocks(node, pb.NewDataLiteral<ui64>(offset));
+        node = pb.ToFlow(pb.WideSkipBlocks(pb.FromFlow(node), pb.NewDataLiteral<ui64>(offset)));
     }
     node = pb.WideMap(node, [&](TRuntimeNode::TList items) -> TRuntimeNode::TList {
         Y_ENSURE(items.size() == 3);
@@ -360,28 +359,55 @@ UNIT_TEST_WITH_INTEGER(KernelRightIsOptionalValidScalar) {
 }
 
 Y_UNIT_TEST(OptionalScalar) {
-    TestScalarCoalesceKernel(TMaybe<i32>{16}, 5, 16);
-    TestScalarCoalesceKernel(TMaybe<i32>(), 4, 4);
-    TestScalarCoalesceKernel(TMaybe<i32>(18), TMaybe<i32>(3), TMaybe<i32>(18));
-    TestScalarCoalesceKernel(TMaybe<i32>(), TMaybe<i32>(2), TMaybe<i32>(2));
+    TestCoalesceKernel(TMaybe<i32>{16}, 5, 16);
+    TestCoalesceKernel(TMaybe<i32>(), 4, 4);
+    TestCoalesceKernel(TMaybe<i32>(18), TMaybe<i32>(3), TMaybe<i32>(18));
+    TestCoalesceKernel(TMaybe<i32>(), TMaybe<i32>(2), TMaybe<i32>(2));
 }
 
 Y_UNIT_TEST(Tuple) {
     using TTuple = std::tuple<ui32, ui64, bool>;
-    TestScalarCoalesceKernel(TMaybe<TTuple>({16, 13, false}), TMaybe<TTuple>({15, 11, true}), TMaybe<TTuple>({16, 13, false}));
-    TestScalarCoalesceKernel(TMaybe<TTuple>(), TMaybe<TTuple>({15, 11, true}), TMaybe<TTuple>({15, 11, true}));
-    TestScalarCoalesceKernel(TMaybe<TTuple>(), TTuple{15, 11, true}, TTuple{15, 11, true});
+    TestCoalesceKernel(TMaybe<TTuple>({16, 13, false}), TMaybe<TTuple>({15, 11, true}), TMaybe<TTuple>({16, 13, false}));
+    TestCoalesceKernel(TMaybe<TTuple>(), TMaybe<TTuple>({15, 11, true}), TMaybe<TTuple>({15, 11, true}));
+    TestCoalesceKernel(TMaybe<TTuple>(), TTuple{15, 11, true}, TTuple{15, 11, true});
+}
+
+Y_UNIT_TEST(TestVectorAndScalar) {
+    {
+        std::vector<TMaybe<ui32>> left = {1, 2, Nothing(), 4};
+        std::vector<ui32> right = {11, 22, 33, 44};
+        std::vector<ui32> expected = {1, 2, 33, 4};
+        TestCoalesceKernel(left, right, expected);
+    }
+    {
+        std::vector<TMaybe<ui32>> left = {1, 2, Nothing(), 4};
+        ui32 right = 333;
+        std::vector<ui32> expected = {1, 2, 333, 4};
+        TestCoalesceKernel(left, right, expected);
+    }
+    {
+        TMaybe<ui32> left = 1;
+        std::vector<ui32> right = {1111, 2222};
+        std::vector<ui32> expected = {1, 1};
+        TestCoalesceKernel(left, right, expected);
+    }
+    {
+        TMaybe<ui32> left = Nothing();
+        std::vector<ui32> right = {1111, 2222};
+        std::vector<ui32> expected = {1111, 2222};
+        TestCoalesceKernel(left, right, expected);
+    }
 }
 
 Y_UNIT_TEST(ExternalOptionalScalar) {
     using TDoubleMaybe = TMaybe<TMaybe<i32>>;
     using TSingleMaybe = TMaybe<i32>;
 
-    TestScalarCoalesceKernel(TDoubleMaybe{TSingleMaybe{25}}, TSingleMaybe{1}, TSingleMaybe{25});
-    TestScalarCoalesceKernel(TDoubleMaybe(TSingleMaybe()), TSingleMaybe(9), TSingleMaybe());
-    TestScalarCoalesceKernel(TDoubleMaybe(), TSingleMaybe(8), TSingleMaybe(8));
-    TestScalarCoalesceKernel(TDoubleMaybe(TSingleMaybe(33)), TDoubleMaybe(TSingleMaybe(7)), TDoubleMaybe(TSingleMaybe(33)));
-    TestScalarCoalesceKernel(TDoubleMaybe(), TDoubleMaybe(TSingleMaybe(6)), TDoubleMaybe(TSingleMaybe(6)));
+    TestCoalesceKernel(TDoubleMaybe{TSingleMaybe{25}}, TSingleMaybe{1}, TSingleMaybe{25});
+    TestCoalesceKernel(TDoubleMaybe(TSingleMaybe()), TSingleMaybe(9), TSingleMaybe());
+    TestCoalesceKernel(TDoubleMaybe(), TSingleMaybe(8), TSingleMaybe(8));
+    TestCoalesceKernel(TDoubleMaybe(TSingleMaybe(33)), TDoubleMaybe(TSingleMaybe(7)), TDoubleMaybe(TSingleMaybe(33)));
+    TestCoalesceKernel(TDoubleMaybe(), TDoubleMaybe(TSingleMaybe(6)), TDoubleMaybe(TSingleMaybe(6)));
 }
 
 } // Y_UNIT_TEST_SUITE(TMiniKQLBlockCoalesceTest)

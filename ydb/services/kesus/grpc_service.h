@@ -4,7 +4,7 @@
 
 #include <ydb/library/grpc/server/grpc_server.h>
 
-#include <ydb/library/actors/core/actorsystem.h>
+#include <ydb/library/actors/core/actorsystem_fwd.h>
 
 #include <util/generic/hash_set.h>
 

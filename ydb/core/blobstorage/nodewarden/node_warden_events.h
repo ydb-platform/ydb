@@ -166,13 +166,32 @@ namespace NKikimr::NStorage {
         {}
     };
 
-    struct TEvNodeWardenUpdateConfigFromPeer
-            : TEventLocal<TEvNodeWardenUpdateConfigFromPeer, TEvBlobStorage::EvNodeWardenUpdateConfigFromPeer>
+    struct TEvNodeWardenManageSyncers
+        : TEventLocal<TEvNodeWardenManageSyncers, TEvBlobStorage::EvNodeWardenManageSyncers>
     {
-        NKikimrBlobStorage::TStorageConfig StorageConfig;
+        struct TSyncer {
+            ui32 NodeId;
+            TGroupId GroupId;
+            TBridgePileId TargetBridgePileId;
+        };
+        std::vector<TSyncer> RunSyncers;
 
-        TEvNodeWardenUpdateConfigFromPeer(NKikimrBlobStorage::TStorageConfig&& storageConfig)
-            : StorageConfig(std::move(storageConfig))
+        TEvNodeWardenManageSyncers(std::vector<TSyncer>&& runSyncers)
+            : RunSyncers(std::move(runSyncers))
+        {}
+    };
+
+    struct TEvNodeWardenManageSyncersResult
+        : TEventLocal<TEvNodeWardenManageSyncersResult, TEvBlobStorage::EvNodeWardenManageSyncersResult>
+    {
+        struct TSyncer {
+            TGroupId GroupId;
+            TBridgePileId TargetBridgePileId;
+        };
+        std::vector<TSyncer> WorkingSyncers;
+
+        TEvNodeWardenManageSyncersResult(std::vector<TSyncer>&& workingSyncers)
+            : WorkingSyncers(std::move(workingSyncers))
         {}
     };
 

@@ -10,8 +10,16 @@ namespace NYql::NDq {
 
 using namespace NNodes;
 
-TDqStatisticsTransformerBase::TDqStatisticsTransformerBase(TTypeAnnotationContext* typeCtx, const IProviderContext& ctx, TCardinalityHints hints)
-    : TypeCtx(typeCtx), Pctx(ctx), CardinalityHints(hints)
+TDqStatisticsTransformerBase::TDqStatisticsTransformerBase(
+    TTypeAnnotationContext* typeCtx,
+    const IProviderContext& ctx,
+    const TOptimizerHints& hints,
+    TShufflingOrderingsByJoinLabels* shufflingOrderingsByJoinLabels
+)
+    : TypeCtx(typeCtx)
+    , Pctx(ctx)
+    , Hints(hints)
+    , ShufflingOrderingsByJoinLabels(shufflingOrderingsByJoinLabels)
 { }
 
 void PropogateTableAliasesFromChildren(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx) {
@@ -104,18 +112,14 @@ bool TDqStatisticsTransformerBase::BeforeLambdas(const TExprNode::TPtr& input, T
 
     // Join matchers
     else if(TCoMapJoinCore::Match(input.Get())) {
-        InferStatisticsForMapJoin(input, TypeCtx, Pctx, CardinalityHints);
+        InferStatisticsForMapJoin(input, TypeCtx, Pctx, Hints);
     }
     else if(TCoGraceJoinCore::Match(input.Get())) {
-        InferStatisticsForGraceJoin(input, TypeCtx, Pctx, CardinalityHints);
+        InferStatisticsForGraceJoin(input, TypeCtx, Pctx, Hints, ShufflingOrderingsByJoinLabels);
     }
-    else if (TDqJoin::Match(input.Get())) {
-        InferStatisticsForDqJoin(input, TypeCtx, Pctx, CardinalityHints);
+    else if (auto dqJoinBase = TMaybeNode<TDqJoinBase>(input.Get())) {
+        InferStatisticsForDqJoinBase(input, TypeCtx, Pctx, Hints);
     }
-    else if(TDqPhyCrossJoin::Match(input.Get())) {
-        InferStatisticsForDqPhyCrossJoin(input, TypeCtx);
-    }
-
     // Do nothing in case of EquiJoin, otherwise the EquiJoin rule won't fire
     else if(TCoEquiJoin::Match(input.Get())){
         InferStatisticsForEquiJoin(input, TypeCtx);
@@ -139,6 +143,12 @@ bool TDqStatisticsTransformerBase::BeforeLambdas(const TExprNode::TPtr& input, T
     else if (auto sortBase = TMaybeNode<TCoSortBase>(input)) {
         InferStatisticsForSortBase(input, TypeCtx);
     }
+    else if (TCoUnionAll::Match(input.Get())) {
+        InferStatisticsForUnionAll(input, TypeCtx);
+    }
+    else if (TCoShuffleByKeys::Match(input.Get())) {
+        InferStatisticsForAggregationCallable<TCoShuffleByKeys>(input, TypeCtx);
+    }
     else {
         matched = false;
     }
@@ -152,7 +162,7 @@ bool TDqStatisticsTransformerBase::BeforeLambdasUnmatched(const TExprNode::TPtr&
     if (input->ChildrenSize() >= 1) {
         auto stats = TypeCtx->GetStats(input->ChildRef(0).Get());
         if (stats) {
-            TypeCtx->SetStats(input.Get(), RemoveSorting(stats, input));
+            TypeCtx->SetStats(input.Get(), RemoveOrderings(stats, input));
         }
     }
     return true;

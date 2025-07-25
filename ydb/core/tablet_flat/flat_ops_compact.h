@@ -377,9 +377,9 @@ namespace NTabletFlatExecutor {
 
                 if (Y_UNLIKELY(fetch)) {
                     TStringBuilder error;
-                    error << "Just compacted part needs to load pages";
-                    for (auto collection : fetch) {
-                        error << " " << collection->DebugString(true);
+                    error << "Just compacted part needs to load page collection " << fetch.PageCollection->Label() << " pages";
+                    for (auto page : fetch.Pages) {
+                        error << " " << page;
                     }
                     Y_TABLET_ERROR(error);
                 }

@@ -8,7 +8,7 @@
 #include <ydb/public/sdk/cpp/src/library/issue/yql_issue_message.h>
 #include <ydb/public/api/grpc/draft/ydb_replication_v1.grpc.pb.h>
 #include <ydb/public/sdk/cpp/src/client/common_client/impl/client.h>
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/accessor.h>
 
 #include <google/protobuf/util/time_util.h>
 #include <google/protobuf/repeated_field.h>
@@ -224,6 +224,100 @@ const Ydb::Replication::DescribeReplicationResult& TDescribeReplicationResult::G
     return *Proto_;
 }
 
+
+TTransferDescription::TTransferDescription(const Ydb::Replication::DescribeTransferResult& desc)
+    : ConnectionParams_(desc.connection_params())
+{
+    switch (desc.state_case()) {
+    case Ydb::Replication::DescribeTransferResult::kRunning:
+        State_ = TRunningState();
+        break;
+
+    case Ydb::Replication::DescribeTransferResult::kError:
+        State_ = TErrorState(IssuesFromMessage(desc.error().issues()));
+        break;
+
+    case Ydb::Replication::DescribeTransferResult::kDone:
+        State_ = TDoneState();
+        break;
+
+    case Ydb::Replication::DescribeTransferResult::kPaused:
+        State_ = TPausedState();
+        break;
+
+    default:
+        break;
+    }
+
+   SrcPath_ = desc.source_path();
+   DstPath_ = desc.destination_path();
+   TransformationLambda_ = desc.transformation_lambda();
+   ConsumerName_ = desc.consumer_name();
+   BatchingSettings_.SizeBytes = desc.batch_settings().size_bytes();
+   BatchingSettings_.FlushInterval = TDuration::Seconds(desc.batch_settings().flush_interval().seconds());
+}
+
+const TTransferDescription& TDescribeTransferResult::GetTransferDescription() const {
+    return TransferDescription_;
+}
+
+const Ydb::Replication::DescribeTransferResult& TDescribeTransferResult::GetProto() const {
+    return *Proto_;
+}
+
+const TConnectionParams& TTransferDescription::GetConnectionParams() const {
+    return ConnectionParams_;
+}
+
+const std::string& TTransferDescription::GetSrcPath() const {
+    return SrcPath_;
+}
+
+const std::string& TTransferDescription::GetDstPath() const {
+    return DstPath_;
+}
+
+const std::string& TTransferDescription::GetTransformationLambda() const {
+    return TransformationLambda_;
+}
+
+const std::string& TTransferDescription::GetConsumerName() const {
+    return ConsumerName_;
+}
+
+const TBatchingSettings& TTransferDescription::GetBatchingSettings() const {
+    return BatchingSettings_;
+}
+
+TTransferDescription::EState TTransferDescription::GetState() const {
+    return static_cast<EState>(State_.index());
+}
+
+const TRunningState& TTransferDescription::GetRunningState() const {
+    return std::get<TRunningState>(State_);
+}
+
+const TErrorState& TTransferDescription::GetErrorState() const {
+    return std::get<TErrorState>(State_);
+}
+
+const TDoneState& TTransferDescription::GetDoneState() const {
+    return std::get<TDoneState>(State_);
+}
+
+const TPausedState& TTransferDescription::GetPausedState() const {
+    return std::get<TPausedState>(State_);
+}
+
+TDescribeTransferResult::TDescribeTransferResult(TStatus&& status, Ydb::Replication::DescribeTransferResult&& desc)
+    : NScheme::TDescribePathResult(std::move(status), desc.self())
+    , TransferDescription_(desc)
+    , Proto_(std::make_unique<Ydb::Replication::DescribeTransferResult>())
+{
+    *Proto_ = std::move(desc);
+}
+
+
 class TReplicationClient::TImpl: public TClientImplCommon<TReplicationClient::TImpl> {
 public:
     TImpl(std::shared_ptr<TGRpcConnectionsImpl>&& connections, const TCommonClientSettings& settings)
@@ -262,6 +356,37 @@ public:
         return promise.GetFuture();
     }
 
+    TAsyncDescribeTransferResult DescribeTransfer(const std::string& path) {
+        using namespace Ydb::Replication;
+
+        const TDescribeReplicationSettings settings;
+        auto request = MakeOperationRequest<DescribeTransferRequest>(settings);
+        request.set_path(TStringType{path});
+
+        auto promise = NThreading::NewPromise<TDescribeTransferResult>();
+
+        auto extractor = [promise]
+            (google::protobuf::Any* any, TPlainStatus status) mutable {
+                DescribeTransferResult result;
+                if (any) {
+                    any->UnpackTo(&result);
+                }
+
+                TDescribeTransferResult val(TStatus(std::move(status)), std::move(result));
+                promise.SetValue(std::move(val));
+            };
+
+        Connections_->RunDeferred<V1::ReplicationService, DescribeTransferRequest, DescribeTransferResponse>(
+            std::move(request),
+            extractor,
+            &V1::ReplicationService::Stub::AsyncDescribeTransfer,
+            DbDriverState_,
+            INITIAL_DEFERRED_CALL_DELAY,
+            TRpcRequestSettings::Make(settings));
+
+        return promise.GetFuture();
+    }
+
 };
 
 TReplicationClient::TReplicationClient(const TDriver& driver, const TCommonClientSettings& settings)
@@ -273,9 +398,17 @@ TAsyncDescribeReplicationResult TReplicationClient::DescribeReplication(const st
     return Impl_->DescribeReplication(path, settings);
 }
 
+TAsyncDescribeTransferResult TReplicationClient::DescribeTransfer(const std::string& path) {
+    return Impl_->DescribeTransfer(path);
+}
+
 } // NReplication
 
-const Ydb::Replication::DescribeReplicationResult& TProtoAccessor::GetProto(const NReplication::TDescribeReplicationResult& result) {
+const Ydb::Replication::DescribeReplicationResult& NDraft::TProtoAccessor::GetProto(const NReplication::TDescribeReplicationResult& result) {
+    return result.GetProto();
+}
+
+const Ydb::Replication::DescribeTransferResult& NDraft::TProtoAccessor::GetProto(const NReplication::TDescribeTransferResult& result) {
     return result.GetProto();
 }
 

@@ -37,4 +37,7 @@
 {#- JNI -#}
 {%- set jnis = all_targets|selectattr(consumer)|map(attribute='consumer')|sum|selectattr('type', 'eq', 'dll')|selectattr('jar')|map(attribute='jar')|unique -%}
 
+{#- Flags -#}
+{%- set hasResources = all_targets|selectattr('resource_sets')|map(attribute='resource_sets')|sum|length -%}
+
 {%- include "[generator]/jdk.jinja" -%}

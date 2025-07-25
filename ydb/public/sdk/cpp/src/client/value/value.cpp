@@ -2061,12 +2061,24 @@ class TValueBuilderImpl {
 public:
     TValueBuilderImpl()
         : TypeBuilder_()
+        , Arena(nullptr)
+        , ProtoValue_(ProtoValueHeap)
+    {
+        PushPath(ProtoValue_);
+    }
+
+    TValueBuilderImpl(google::protobuf::Arena* arena)
+        : TypeBuilder_()
+        , Arena(arena)
+        , ProtoValue_(*google::protobuf::Arena::CreateMessage<Ydb::Value>(Arena))
     {
         PushPath(ProtoValue_);
     }
 
     TValueBuilderImpl(const TType& type)
         : TypeBuilder_()
+        , Arena(nullptr)
+        , ProtoValue_(ProtoValueHeap)
     {
         PushPath(ProtoValue_);
         GetType().CopyFrom(type.GetProto());
@@ -2074,6 +2086,8 @@ public:
 
     TValueBuilderImpl(Ydb::Type& type, Ydb::Value& value)
         : TypeBuilder_(type)
+        , Arena(nullptr)
+        , ProtoValue_(ProtoValueHeap)
     {
         PushPath(value);
     }
@@ -2088,10 +2102,15 @@ public:
     TValue BuildValue() {
         CheckValue();
 
-        Ydb::Value value;
-        value.Swap(&ProtoValue_);
-
-        return TValue(TypeBuilder_.Build(), std::move(value));
+        if (Arena) {
+            auto* value = google::protobuf::Arena::CreateMessage<Ydb::Value>(Arena);
+            value->Swap(&ProtoValue_);
+            return TValue(TypeBuilder_.Build(), value);
+        } else {
+            Ydb::Value value;
+            value.Swap(&ProtoValue_);
+            return TValue(TypeBuilder_.Build(), std::move(value));
+        }
     }
 
     void Bool(bool value) {
@@ -2803,7 +2822,12 @@ private:
 private:
     //TTypeBuilder TypeBuilder_;
     TTypeBuilder::TImpl TypeBuilder_;
-    Ydb::Value ProtoValue_;
+    google::protobuf::Arena* Arena;
+    Ydb::Value ProtoValueHeap;
+
+    // either ProtoValueHeap or a reference to the arena allocated protobuf
+    Ydb::Value& ProtoValue_;
+
     std::map<const Ydb::StructType*, TMembersMap> StructsMap_;
 
     TStackVec<TProtoPosition, 8> Path_;
@@ -2821,6 +2845,10 @@ TValueBuilderBase<TDerived>::~TValueBuilderBase() = default;
 template<typename TDerived>
 TValueBuilderBase<TDerived>::TValueBuilderBase()
     : Impl_(new TValueBuilderImpl()) {}
+
+template<typename TDerived>
+TValueBuilderBase<TDerived>::TValueBuilderBase(google::protobuf::Arena* arena)
+    : Impl_(new TValueBuilderImpl(arena)) {}
 
 template<typename TDerived>
 TValueBuilderBase<TDerived>::TValueBuilderBase(const TType& type)
@@ -3384,6 +3412,9 @@ template class TValueBuilderBase<TParamValueBuilder>;
 
 TValueBuilder::TValueBuilder()
     : TValueBuilderBase() {}
+
+TValueBuilder::TValueBuilder(google::protobuf::Arena* arena)
+    : TValueBuilderBase(arena) {}
 
 TValueBuilder::TValueBuilder(const TType& type)
     : TValueBuilderBase(type) {}

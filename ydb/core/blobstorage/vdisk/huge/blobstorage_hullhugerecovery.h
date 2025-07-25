@@ -96,6 +96,7 @@ namespace NKikimr {
                                      const ui32 maxBlobInBytes,
                                      const ui32 overhead,
                                      const ui32 freeChunksReservation,
+                                     const bool chunksSoftLocking,
                                      std::function<void(const TString&)> logFunc);
             THullHugeKeeperPersState(TIntrusivePtr<TVDiskContext> vctx,
                                      const ui32 chunkSize,
@@ -107,6 +108,7 @@ namespace NKikimr {
                                      const ui32 freeChunksReservation,
                                      const ui64 entryPointLsn,
                                      const TString &entryPointData,
+                                     const bool chunksSoftLocking,
                                      std::function<void(const TString&)> logFunc);
             THullHugeKeeperPersState(TIntrusivePtr<TVDiskContext> vctx,
                                      const ui32 chunkSize,
@@ -118,6 +120,7 @@ namespace NKikimr {
                                      const ui32 freeChunksReservation,
                                      const ui64 entryPointLsn,
                                      const TContiguousSpan &entryPointData,
+                                     const bool chunksSoftLocking,
                                      std::function<void(const TString&)> logFunc);
             ~THullHugeKeeperPersState();
 

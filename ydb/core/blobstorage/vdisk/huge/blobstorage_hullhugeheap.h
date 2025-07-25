@@ -102,6 +102,7 @@ namespace NKikimr {
             static constexpr ui32 MaxNumberOfSlots = 32768; // it's not a good idea to have more slots than this
             TString VDiskLogPrefix;
             TMask ConstMask; // mask of 'all slots are free'
+            const bool ChunksSoftLocking;
             TFreeSpace FreeSpace;
             TFreeSpace LockedChunks;
             ui32 AllocatedSlots = 0;
@@ -115,9 +116,10 @@ namespace NKikimr {
             static TMask BuildConstMask(const TString &prefix, ui32 slotsInChunk);
 
         public:
-            TChain(TString vdiskLogPrefix, ui32 slotsInChunk, ui32 slotSize)
+            TChain(TString vdiskLogPrefix, ui32 slotsInChunk, ui32 slotSize, bool chunksSoftLocking)
                 : VDiskLogPrefix(std::move(vdiskLogPrefix))
                 , ConstMask(BuildConstMask(vdiskLogPrefix, slotsInChunk))
+                , ChunksSoftLocking(chunksSoftLocking)
                 , SlotsInChunk(slotsInChunk)
                 , SlotSize(slotSize)
             {}
@@ -152,7 +154,7 @@ namespace NKikimr {
             void ShredNotify(const std::vector<ui32>& chunksToShred);
             void ListChunks(const THashSet<TChunkIdx>& chunksOfInterest, THashSet<TChunkIdx>& chunks);
 
-            static TChain Load(IInputStream *s, TString vdiskLogPrefix, ui32 appendBlockSize, ui32 blocksInChunk);
+            static TChain Load(IInputStream *s, TString vdiskLogPrefix, ui32 appendBlockSize, ui32 blocksInChunk, bool chunksSoftLocking);
 
             template<typename T>
             void ForEachFreeSpaceChunk(T&& callback) const {
@@ -185,7 +187,9 @@ namespace NKikimr {
                 ui32 minHugeBlobInBytes,
                 ui32 milestoneBlobInBytes,
                 ui32 maxBlobInBytes,
-                ui32 overhead);
+                ui32 overhead,
+                bool chunksSoftLocking
+            );
             // return a pointer to corresponding chain delegator by object byte size
             TChain *GetChain(ui32 size);
             const TChain *GetChain(ui32 size) const;
@@ -218,6 +222,7 @@ namespace NKikimr {
             const ui32 Overhead;
             const ui32 MinHugeBlobInBlocks;
             const ui32 MaxHugeBlobInBlocks;
+            const bool ChunksSoftLocking;
             TDynBitMap DeserializedChains; // a bit mask of chains that were deserialized from the origin stream
             std::vector<TChain> Chains;
             std::vector<ui16> SearchTable; // (NumFullBlocks - 1) -> Chain index
@@ -252,7 +257,8 @@ namespace NKikimr {
                 ui32 maxBlobInBytes,
                 // difference between buckets is 1/overhead
                 ui32 overhead,
-                ui32 freeChunksReservation);
+                ui32 freeChunksReservation,
+                bool chunksSoftLocking = false);
 
 
             ui32 SlotNumberOfThisSize(ui32 size) const {

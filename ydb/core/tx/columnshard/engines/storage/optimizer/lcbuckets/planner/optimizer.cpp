@@ -13,8 +13,8 @@ namespace NKikimr::NOlap::NStorageOptimizer::NLCBuckets {
 
 TOptimizerPlanner::TOptimizerPlanner(const TInternalPathId pathId, const std::shared_ptr<IStoragesManager>& storagesManager,
     const std::shared_ptr<arrow::Schema>& primaryKeysSchema, std::shared_ptr<TCounters> counters, std::shared_ptr<TSimplePortionsGroupInfo> portionsGroupInfo, std::vector<std::shared_ptr<IPortionsLevel>>&& levels,
-    std::vector<std::shared_ptr<IPortionsSelector>>&& selectors, const ui32 nodePortionsCountLimit)
-    : TBase(pathId, nodePortionsCountLimit)
+    std::vector<std::shared_ptr<IPortionsSelector>>&& selectors, const ui32 nodePortionsCountLimit, const ui32 weightKff)
+    : TBase(pathId, nodePortionsCountLimit, weightKff)
     , Counters(counters)
     , PortionsInfo(portionsGroupInfo)
     , Selectors(std::move(selectors))

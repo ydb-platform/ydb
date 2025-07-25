@@ -34,8 +34,6 @@ is_extra_target = true
 [attrs.target]
 # DEPRECATED
 annotation_processors="list"
-jar_source_set="list"
-jar_resource_set="list"
 
 required_jdk="str"
 add_vcs_info_to_mf="bool"

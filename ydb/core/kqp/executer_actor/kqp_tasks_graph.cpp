@@ -319,6 +319,44 @@ void BuildSequencerChannels(TKqpTasksGraph& graph, const TStageInfo& stageInfo, 
     }
 }
 
+void BuildChannelBetweenTasks(TKqpTasksGraph& graph, const TStageInfo& stageInfo, const TStageInfo& inputStageInfo, ui64 originTaskId,
+                              ui64 targetTaskId, ui32 inputIndex, ui32 outputIndex, bool enableSpilling, const TChannelLogFunc& logFunc) {
+    auto& originTask = graph.GetTask(originTaskId);
+    auto& targetTask = graph.GetTask(targetTaskId);
+
+    auto& channel = graph.AddChannel();
+    channel.SrcStageId = inputStageInfo.Id;
+    channel.SrcTask = originTaskId;
+    channel.SrcOutputIndex = outputIndex;
+    channel.DstStageId = stageInfo.Id;
+    channel.DstTask = targetTask.Id;
+    channel.DstInputIndex = inputIndex;
+    channel.InMemory = !enableSpilling || inputStageInfo.OutputsCount == 1;
+
+    auto& taskInput = targetTask.Inputs[inputIndex];
+    taskInput.Channels.push_back(channel.Id);
+
+    auto& taskOutput = originTask.Outputs[outputIndex];
+    taskOutput.Type = TTaskOutputType::Map;
+    taskOutput.Channels.push_back(channel.Id);
+    logFunc(channel.Id, originTaskId, targetTask.Id, "ParallelUnionAll/Map", !channel.InMemory);
+}
+
+void BuildParallelUnionAllChannels(TKqpTasksGraph& graph, const TStageInfo& stageInfo, ui32 inputIndex, const TStageInfo& inputStageInfo,
+                                   ui32 outputIndex, bool enableSpilling, const TChannelLogFunc& logFunc, ui64 &nextOriginTaskId) {
+    const ui64 inputStageTasksSize = inputStageInfo.Tasks.size();
+    const ui64 originStageTasksSize = stageInfo.Tasks.size();
+    Y_ENSURE(originStageTasksSize);
+    Y_ENSURE(nextOriginTaskId < originStageTasksSize);
+
+    for (ui64 i = 0; i < inputStageTasksSize; ++i) {
+        const auto originTaskId = inputStageInfo.Tasks[i];
+        const auto targetTaskId = stageInfo.Tasks[nextOriginTaskId];
+        BuildChannelBetweenTasks(graph, stageInfo, inputStageInfo, originTaskId, targetTaskId, inputIndex, outputIndex, enableSpilling, logFunc);
+        nextOriginTaskId = (nextOriginTaskId + 1) % originStageTasksSize;
+    }
+}
+
 void BuildStreamLookupChannels(TKqpTasksGraph& graph, const TStageInfo& stageInfo, ui32 inputIndex,
     const TStageInfo& inputStageInfo, ui32 outputIndex,
     const NKqpProto::TKqpPhyCnStreamLookup& streamLookup, bool enableSpilling, const TChannelLogFunc& logFunc)
@@ -489,6 +527,7 @@ void BuildKqpStageChannels(TKqpTasksGraph& tasksGraph, TStageInfo& stageInfo,
         }
     }
 
+    ui64 nextOriginTaskId = 0;
     for (auto& input : stage.GetInputs()) {
         ui32 inputIdx = input.GetInputIndex();
         auto& inputStageInfo = tasksGraph.GetStageInfo(TStageId(stageInfo.Id.TxId, input.GetStageIndex()));
@@ -504,6 +543,10 @@ void BuildKqpStageChannels(TKqpTasksGraph& tasksGraph, TStageInfo& stageInfo,
                 switch (input.GetHashShuffle().GetHashKindCase()) {
                     case NKqpProto::TKqpPhyCnHashShuffle::kHashV1: {
                         hashKind = EHashShuffleFuncType::HashV1;
+                        break;
+                    }
+                    case NKqpProto::TKqpPhyCnHashShuffle::kHashV2: {
+                        hashKind = EHashShuffleFuncType::HashV2;
                         break;
                     }
                     case NKqpProto::TKqpPhyCnHashShuffle::kColumnShardHashV1: {
@@ -579,6 +622,11 @@ void BuildKqpStageChannels(TKqpTasksGraph& tasksGraph, TStageInfo& stageInfo,
             case NKqpProto::TKqpPhyConnection::kStreamLookup: {
                 BuildStreamLookupChannels(tasksGraph, stageInfo, inputIdx, inputStageInfo, outputIdx,
                     input.GetStreamLookup(), enableSpilling, log);
+                break;
+            }
+
+            case NKqpProto::TKqpPhyConnection::kParallelUnionAll: {
+                BuildParallelUnionAllChannels(tasksGraph, stageInfo, inputIdx, inputStageInfo, outputIdx, enableSpilling, log, nextOriginTaskId);
                 break;
             }
 
@@ -1081,6 +1129,10 @@ void FillOutputDesc(
                 using enum EHashShuffleFuncType;
                 case HashV1: {
                     hashPartitionDesc.MutableHashV1();
+                    break;
+                }
+                case HashV2: {
+                    hashPartitionDesc.MutableHashV2();
                     break;
                 }
                 case ColumnShardHashV1: {

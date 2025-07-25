@@ -802,6 +802,70 @@ Y_UNIT_TEST_SUITE(TSentinelTests) {
             env.SetPDiskState({id1, id2, id3}, NKikimrBlobStorage::TPDiskState::Normal, EPDiskStatus::ACTIVE);
         }
     }
+
+    Y_UNIT_TEST(NodeStatusComputer) {
+        TNodeStatusComputer computer{
+            .BadStateLimit = 5,
+            .GoodStateLimit = 5,
+            .PrettyGoodStateLimit = 3,
+        };
+        UNIT_ASSERT(computer.GetCurrentNodeState() == TNodeStatusComputer::ENodeState::GOOD);
+        for (ui32 _ : xrange(2)) {
+            computer.AddState(TNodeStatusComputer::ENodeState::GOOD);
+            UNIT_ASSERT(!computer.Compute());
+            UNIT_ASSERT(computer.GetCurrentNodeState() == TNodeStatusComputer::ENodeState::MAY_BE_GOOD);
+        }
+        for (ui32 _ : xrange(2)) {
+            computer.AddState(TNodeStatusComputer::ENodeState::GOOD);
+            UNIT_ASSERT(!computer.Compute());
+            UNIT_ASSERT(computer.ActualState == TNodeStatusComputer::ENodeState::PRETTY_GOOD);
+            UNIT_ASSERT(computer.GetCurrentNodeState() == TNodeStatusComputer::ENodeState::GOOD);
+        }
+        computer.AddState(TNodeStatusComputer::ENodeState::GOOD);
+
+        UNIT_ASSERT(computer.Compute());
+        for (ui32 _ : xrange(4)) {
+            UNIT_ASSERT(computer.GetCurrentNodeState() == TNodeStatusComputer::ENodeState::GOOD);
+            computer.AddState(TNodeStatusComputer::ENodeState::GOOD);
+            UNIT_ASSERT(!computer.Compute());
+        }
+        for (ui32 _ : xrange(4)) {
+            computer.AddState(TNodeStatusComputer::ENodeState::BAD);
+            UNIT_ASSERT(!computer.Compute());
+            UNIT_ASSERT(computer.GetCurrentNodeState() == TNodeStatusComputer::ENodeState::MAY_BE_BAD);
+        }
+        computer.AddState(TNodeStatusComputer::ENodeState::BAD);
+        UNIT_ASSERT(computer.Compute());
+        UNIT_ASSERT(computer.GetCurrentNodeState() == TNodeStatusComputer::ENodeState::BAD);
+        for (ui32 _ : xrange(6)) {
+            computer.AddState(TNodeStatusComputer::ENodeState::BAD);
+            UNIT_ASSERT(!computer.Compute());
+            UNIT_ASSERT(computer.GetCurrentNodeState() == TNodeStatusComputer::ENodeState::BAD);
+        }
+        for (ui32 _ : xrange(6)) {
+            computer.AddState(TNodeStatusComputer::ENodeState::GOOD);
+            UNIT_ASSERT(!computer.Compute());
+            UNIT_ASSERT(computer.GetCurrentNodeState() == TNodeStatusComputer::ENodeState::MAY_BE_GOOD);
+            computer.AddState(TNodeStatusComputer::ENodeState::BAD);
+            UNIT_ASSERT(!computer.Compute());
+            UNIT_ASSERT(computer.GetCurrentNodeState() == TNodeStatusComputer::ENodeState::MAY_BE_BAD);
+        }
+        for (ui32 _ : xrange(2)) {
+            computer.AddState(TNodeStatusComputer::ENodeState::GOOD);
+            UNIT_ASSERT(!computer.Compute());
+            UNIT_ASSERT(computer.GetCurrentNodeState() == TNodeStatusComputer::ENodeState::MAY_BE_GOOD);
+        }
+        for (ui32 _ : xrange(2)) {
+            computer.AddState(TNodeStatusComputer::ENodeState::GOOD);
+            UNIT_ASSERT(!computer.Compute());
+            UNIT_ASSERT(computer.ActualState == TNodeStatusComputer::ENodeState::PRETTY_GOOD);
+            UNIT_ASSERT(computer.GetCurrentNodeState() == TNodeStatusComputer::ENodeState::GOOD);
+        }
+        computer.AddState(TNodeStatusComputer::ENodeState::GOOD);
+        UNIT_ASSERT(computer.Compute());
+        UNIT_ASSERT(computer.GetCurrentNodeState() == TNodeStatusComputer::ENodeState::GOOD);
+    }
+
 } // TSentinelTests
 
 }

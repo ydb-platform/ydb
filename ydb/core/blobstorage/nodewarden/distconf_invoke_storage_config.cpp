@@ -305,7 +305,7 @@ namespace NKikimr::NStorage {
 
         if (auto error = ValidateConfig(*Self->StorageConfig)) {
             throw TExError() << "ReplaceStorageConfig current config validation failed: " << *error;
-        } else if (auto error = ValidateConfigUpdate(*Self->StorageConfig, ProposedStorageConfig, false)) {
+        } else if (auto error = ValidateConfigUpdate(*Self->StorageConfig, ProposedStorageConfig)) {
             throw TExError() << "ReplaceStorageConfig config validation failed: " << *error;
         }
 

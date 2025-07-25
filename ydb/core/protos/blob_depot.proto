@@ -185,6 +185,7 @@ message TEvCommitBlobSeq {
         optional TS3Locator S3Locator = 6; // if blob has been written to S3
         repeated TExtraBlockCheck ExtraBlockChecks = 7;
         optional bool IssueKeepFlag = 8;
+        optional bool IgnoreBlock = 9;
     }
 
     repeated TItem Items = 1;

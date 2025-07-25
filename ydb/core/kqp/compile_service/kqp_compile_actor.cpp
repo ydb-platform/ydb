@@ -660,6 +660,7 @@ void ApplyServiceConfig(TKikimrConfiguration& kqpConfig, const TTableServiceConf
     kqpConfig.EnableIndexStreamWrite = serviceConfig.GetEnableIndexStreamWrite();
     kqpConfig.EnableOlapPushdownProjections = serviceConfig.GetEnableOlapPushdownProjections();
     kqpConfig.LangVer = serviceConfig.GetDefaultLangVer();
+    kqpConfig.EnableParallelUnionAllConnectionsForExtend = serviceConfig.GetEnableParallelUnionAllConnectionsForExtend();
 
     if (const auto limit = serviceConfig.GetResourceManager().GetMkqlHeavyProgramMemoryLimit()) {
         kqpConfig._KqpYqlCombinerMemoryLimit = std::max(1_GB, limit - (limit >> 2U));
@@ -669,6 +670,15 @@ void ApplyServiceConfig(TKikimrConfiguration& kqpConfig, const TTableServiceConf
         kqpConfig.FilterPushdownOverJoinOptionalSide = true;
         kqpConfig.YqlCoreOptimizerFlags.insert("fuseequijoinsinputmultilabels");
         kqpConfig.YqlCoreOptimizerFlags.insert("pullupflatmapoverjoinmultiplelabels");
+    }
+
+    switch(serviceConfig.GetDefaultHashShuffleFuncType()) {
+        case NKikimrConfig::TTableServiceConfig_EHashKind_HASH_V1:
+            kqpConfig.DefaultHashShuffleFuncType = NYql::NDq::EHashShuffleFuncType::HashV1;
+            break;
+        case NKikimrConfig::TTableServiceConfig_EHashKind_HASH_V2:
+            kqpConfig.DefaultHashShuffleFuncType = NYql::NDq::EHashShuffleFuncType::HashV2;
+            break;
     }
 }
 

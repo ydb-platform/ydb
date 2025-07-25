@@ -45,7 +45,8 @@ TConstructor::TConstructor(const NOlap::IPathIdTranslator& pathIdTranslator, con
     }
 }
 
-std::shared_ptr<NCommon::IDataSource> TConstructor::DoExtractNext(const std::shared_ptr<NReader::NCommon::TSpecialReadContext>& context) {
+std::shared_ptr<NCommon::IDataSource> TConstructor::DoTryExtractNext(
+    const std::shared_ptr<NCommon::TSpecialReadContext>& context, const ui32 /*inFlightCurrentLimit*/) {
     AFL_VERIFY(Constructors.size());
 
     Constructors.front().SetIndex(CurrentSourceIdx);

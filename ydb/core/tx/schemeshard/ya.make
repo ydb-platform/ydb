@@ -13,6 +13,7 @@ RECURSE_FOR_TESTS(
     ut_column_build
     ut_compaction
     ut_continuous_backup
+    ut_continuous_backup_reboots
     ut_shred
     ut_shred_reboots
     ut_export

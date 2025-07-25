@@ -100,7 +100,7 @@ namespace NKikimr::NStorage {
         auto applyChanges = [&](auto& prev, auto& cur, bool isIncoming) {
             std::ranges::sort(cur);
             for (auto prevIt = prev.begin(), curIt = cur.begin(); prevIt != prev.end() || curIt != cur.end(); ) {
-                if (prevIt == prev.end() || *curIt < *prevIt) { // node added
+                if (prevIt == prev.end() || (curIt != cur.end() && *curIt < *prevIt)) { // node added
                     ++curIt;
                 } else if (curIt == cur.end() || *prevIt < *curIt) { // node deleted
                     const ui32 nodeId = *prevIt++;
@@ -163,6 +163,8 @@ namespace NKikimr::NStorage {
     }
 
     void TDistributedConfigKeeper::StartBinding(ui32 nodeId) {
+        Y_ABORT_UNLESS(!Binding);
+
         Y_ABORT_UNLESS(nodeId != SelfId().NodeId());
         Binding.emplace(nodeId, ++BindingCookie);
 
@@ -175,7 +177,7 @@ namespace NKikimr::NStorage {
             (SessionId, sessionId));
 
         // abort any pending queries
-        OpQueueOnError("binding is in progress");
+        OpQueueOnError(TStringBuilder() << "binding is in progress Binding# " << Binding->ToString());
     }
 
     void TDistributedConfigKeeper::BindToSession(TActorId sessionId) {
@@ -373,8 +375,6 @@ namespace NKikimr::NStorage {
             FanOutReversePush(nullptr);
 
             UnsubscribeQueue.insert(binding.NodeId);
-
-            UpdateRootStateToConnectionChecker();
         }
     }
 
@@ -404,8 +404,9 @@ namespace NKikimr::NStorage {
                 StartBinding(rootNodeId);
             }
         } else {
-            const bool configUpdate = record.HasCommittedStorageConfig() && (
-                ApplyStorageConfig(record.GetCommittedStorageConfig()) || record.GetRecurseConfigUpdate());
+            const bool configUpdate = record.HasCommittedStorageConfig() &&
+                CheckBridgePeerRevPush(record.GetCommittedStorageConfig(), senderNodeId) &&
+                (ApplyStorageConfig(record.GetCommittedStorageConfig()) || record.GetRecurseConfigUpdate());
             const ui32 prevRootNodeId = std::exchange(Binding->RootNodeId, record.GetRootNodeId());
             if (Binding->RootNodeId == SelfId().NodeId()) {
                 AbortBinding("binding cycle");
@@ -413,7 +414,6 @@ namespace NKikimr::NStorage {
                 STLOG(PRI_DEBUG, BS_NODE, NWDC13, "Binding updated", (Binding, Binding), (PrevRootNodeId, prevRootNodeId),
                     (ConfigUpdate, configUpdate));
                 FanOutReversePush(configUpdate ? StorageConfig.get() : nullptr, record.GetRecurseConfigUpdate());
-                UpdateRootStateToConnectionChecker();
             }
         }
 
@@ -526,8 +526,9 @@ namespace NKikimr::NStorage {
         if (record.GetInitial()) {
             if (!NodesFromSamePile.contains(senderNodeId)) {
                 Y_DEBUG_ABORT_UNLESS(BridgeInfo);
-                if (LocalPileQuorum && BridgeInfo->SelfNodePile->IsPrimary) {
-                    // we allow this node's connection as this is the primary pile AND we have majority of connected nodes
+                if (!Binding && LocalPileQuorum && BridgeInfo->SelfNodePile->IsPrimary) {
+                    // we allow this node's connection as this is the primary pile AND we have majority of connected
+                    // nodes AND this is the root one
                 } else {
                     // this is either not the root node, or no quorum for connection
                     auto response = std::make_unique<TEvNodeConfigReversePush>();

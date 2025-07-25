@@ -1458,6 +1458,11 @@ private:
             return;
         }
 
+        if (connection.Maybe<TDqCnParallelUnionAll>()) {
+            connectionProto.MutableParallelUnionAll();
+            return;
+        }
+
         if (auto maybeShuffle = connection.Maybe<TDqCnHashShuffle>()) {
             const auto& shuffle = maybeShuffle.Cast();
             auto& shuffleProto = *connectionProto.MutableHashShuffle();
@@ -1474,6 +1479,10 @@ private:
                 using enum NDq::EHashShuffleFuncType;
                 case HashV1: {
                     shuffleProto.MutableHashV1();
+                    break;
+                }
+                case HashV2: {
+                    shuffleProto.MutableHashV2();
                     break;
                 }
                 case ColumnShardHashV1: {

@@ -223,6 +223,8 @@ common:
     to: /yql/reference/syntax/select/window.md
   - from: /yql/reference/ddl/create-index.md
     to: /yql/reference/syntax/create_table/secondary_index.md
+  - from: /yql/reference/syntax/alter_table/secondary_index.md
+    to: /yql/reference/syntax/alter_table/indexes.md
 
 # Security-related redirects
   - from: /cluster/access.md

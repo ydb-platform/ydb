@@ -13,7 +13,7 @@ This query, like the standard `UPDATE`, executes synchronously and returns a sta
 The semantics are inherited from the standard `UPDATE` with the following restrictions:
 
 * Supported only for [row-oriented tables](../../../concepts/glossary.md#row-oriented-table).
-* Supported only for queries with implicit transaction control (`NoTx` mode or `EmptyTxControl` in SDK).
+* Supported only for queries with [implicit transaction control](../../../concepts/transactions.md#implicit).
 * Only idempotent updates are supported: expressions following `SET` should not depend on the current values of the columns being modified.
 * The use of subqueries and multiple statements in a single query is prohibited.
 * The `RETURNING` clause is unavailable.

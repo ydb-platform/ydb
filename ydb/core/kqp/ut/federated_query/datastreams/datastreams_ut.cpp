@@ -299,6 +299,101 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser(0).GetString(), "key1");
         UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser(1).GetString(), "value1");
     }
+
+    Y_UNIT_TEST(InsertTopicBasic) {
+        auto kikimr = NFederatedQueryTest::MakeKikimrRunner(true, nullptr, nullptr, std::nullopt, NYql::NDq::CreateS3ActorsFactory());
+
+        TString sourceName = "sourceName";
+        TString inputTopicName = "inputTopicName";
+        TString outputTopicName = "outputTopicName";
+        TString tableName = "tableName";
+
+        NYdb::NTopic::TTopicClientSettings opts;
+        opts.DiscoveryEndpoint(GetEnv("YDB_ENDPOINT"))
+            .Database(GetEnv("YDB_DATABASE"));
+        auto driver = TDriver(TDriverConfig());
+        NYdb::NTopic::TTopicClient topicClient(driver, opts);
+
+        auto topicSettings = NYdb::NTopic::TCreateTopicSettings().PartitioningSettings(1, 1);
+        auto status = topicClient.CreateTopic(outputTopicName, topicSettings).GetValueSync();
+        
+        UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
+        std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+
+        status = topicClient.CreateTopic(inputTopicName, topicSettings).GetValueSync();
+        UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
+
+        auto query = TStringBuilder() << R"(
+            CREATE OBJECT secret_local_password (TYPE SECRET) WITH (value = "1234");
+            CREATE EXTERNAL DATA SOURCE `)" << sourceName << R"(` WITH (
+                SOURCE_TYPE="Ydb",
+                LOCATION=")" << GetEnv("YDB_ENDPOINT") << R"(",
+                DATABASE_NAME=")" << GetEnv("YDB_DATABASE") << R"(",
+                AUTH_METHOD="BASIC",
+                LOGIN="root",
+                PASSWORD_SECRET_NAME="secret_local_password"
+            );)";
+
+        auto db = kikimr->GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        const TString sql = fmt::format(R"(
+                $input = SELECT key, value FROM `{source}`.`{input_topic}`
+                    WITH (
+                        FORMAT="json_each_row",
+                        SCHEMA=(
+                            key String NOT NULL,
+                            value String  NOT NULL
+                        ));
+                INSERT INTO `{source}`.`{output_topic}`
+                    SELECT key || value FROM $input;
+            )", "source"_a=sourceName, "input_topic"_a=inputTopicName, "output_topic"_a=outputTopicName);
+
+        auto queryClient = kikimr->GetQueryClient();
+        auto settings = TExecuteScriptSettings().StatsMode(EStatsMode::Basic);
+        auto scriptExecutionOperation = queryClient.ExecuteScript(sql, settings).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(scriptExecutionOperation.Status().GetStatus(), EStatus::SUCCESS, scriptExecutionOperation.Status().GetIssues().ToString());
+
+        std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+
+        auto writeSettings = NYdb::NTopic::TWriteSessionSettings().Path(inputTopicName);
+        auto topicSession = topicClient.CreateSimpleBlockingWriteSession(writeSettings);
+        topicSession->Write(NYdb::NTopic::TWriteMessage(R"({"key":"key1", "value":"value1"})"));
+        topicSession->Close();
+
+        NYdb::NTopic::TReadSessionSettings readSettings;
+        readSettings
+            .WithoutConsumer()
+            .AppendTopics(
+                NTopic::TTopicReadSettings(outputTopicName).ReadFromTimestamp(TInstant::Now() - TDuration::Seconds(146))
+                    .AppendPartitionIds(0));
+
+        readSettings.EventHandlers_.StartPartitionSessionHandler(
+            [](NYdb::NTopic::TReadSessionEvent::TStartPartitionSessionEvent& event) {
+                event.Confirm(0);
+            }
+        );
+
+        auto readSession = topicClient.CreateReadSession(readSettings);
+        std::vector<std::string> received;
+        while (true) {
+            auto event = readSession->GetEvent(/*block = */true);
+            if (auto dataEvent = std::get_if<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent>(&*event)) {
+                for (const auto& message : dataEvent->GetMessages()) {
+                    received.push_back(message.GetData());
+                }
+                break;
+            }
+        }
+        UNIT_ASSERT_EQUAL(received.size(), 1);
+        UNIT_ASSERT_EQUAL(received[0], "key1value1");
+
+        NYdb::NOperation::TOperationClient client(kikimr->GetDriver());
+        status = client.Cancel(scriptExecutionOperation.Id()).ExtractValueSync();
+        UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
+    }
 }
 
 } // namespace NKikimr::NKqp

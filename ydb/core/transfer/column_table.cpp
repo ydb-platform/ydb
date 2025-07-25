@@ -3,7 +3,8 @@
 #include "table_kind_state.h"
 
 #include <ydb/core/tx/tx_proxy/proxy.h>
-#include <ydb/core/tx/tx_proxy/upload_rows.h>
+#include <ydb/core/tx/tx_proxy/upload_columns.h>
+//#include <ydb/core/tx/tx_proxy/upload_rows_common_impl.h>
 
 namespace NKikimr::NReplication::NTransfer {
 
@@ -13,7 +14,7 @@ class TTableUploader : public TActorBootstrapped<TTableUploader> {
     static constexpr size_t MaxRetries = 7;
 
 public:
-    TTableUploader(const TActorId& parentActor, const TScheme& scheme, std::unordered_map<TString, std::shared_ptr<TVector<std::pair<TSerializedCellVec, TString>>>>&& data)
+    TTableUploader(const TActorId& parentActor, const TScheme& scheme, std::unordered_map<TString, std::shared_ptr<arrow::RecordBatch>>&& data)
         : ParentActor(parentActor)
         , Scheme(scheme)
         , Data(std::move(data))
@@ -32,11 +33,11 @@ private:
         }
     }
 
-    void DoUpload(const TString& tablePath, const std::shared_ptr<TVector<std::pair<TSerializedCellVec, TString>>>& data) {
+    void DoUpload(const TString& tablePath, const std::shared_ptr<arrow::RecordBatch>& data) {
         auto cookie = ++Cookie;
 
         TActivationContext::AsActorContext().RegisterWithSameMailbox(
-            NTxProxy::CreateUploadRowsInternal(SelfId(), tablePath, Scheme.Types, data, NTxProxy::EUploadRowsMode::Normal, false, false, cookie)
+            NTxProxy::CreateUploadColumnsInternal(SelfId(), tablePath, Scheme.Types, data, cookie)
         );
         CookieMapping[cookie] = tablePath;
     }
@@ -118,7 +119,7 @@ private:
     const TActorId ParentActor;
     const TScheme Scheme;
     // Table path -> Data
-    std::unordered_map<TString, std::shared_ptr<TVector<std::pair<TSerializedCellVec, TString>>>> Data;
+    std::unordered_map<TString, std::shared_ptr<arrow::RecordBatch>> Data;
 
     ui64 Cookie = 0;
     // Cookie -> Table path
@@ -129,19 +130,20 @@ private:
 
 }
 
-class TRowTableState : public ITableKindState {
+class TColumnTableState : public ITableKindState {
 public:
-    TRowTableState(
+    TColumnTableState(
         const TActorId& selfId,
         TAutoPtr<NSchemeCache::TSchemeCacheNavigate>& result
     )
         : ITableKindState(selfId, result)
     {
-        Path = JoinPath(result->ResultSet.front().Path);
+        NavigateResult.reset(result.Release());
+        Path = JoinPath(NavigateResult->ResultSet.front().Path);
     }
 
     NKqp::IDataBatcherPtr CreateDataBatcher() override {
-        return NKqp::CreateRowDataBatcher(GetScheme().ColumnsMetadata, GetScheme().WriteIndex);
+        return NKqp::CreateColumnDataBatcher(Scheme.ColumnsMetadata, Scheme.WriteIndex);
     }
 
     bool Flush() override {
@@ -149,35 +151,15 @@ public:
             return false;
         }
 
-        std::unordered_map<TString, std::shared_ptr<TVector<std::pair<TSerializedCellVec, TString>>>> tableData;
+        std::unordered_map<TString, std::shared_ptr<arrow::RecordBatch>> tableData;
 
         for (auto& [tablePath, batcher] : Batchers)  {
             NKqp::IDataBatchPtr batch = batcher->Build();
 
-            auto data = reinterpret_pointer_cast<TOwnedCellVecBatch>(batch->ExtractBatch());
+            auto data = reinterpret_pointer_cast<arrow::RecordBatch>(batch->ExtractBatch());
             Y_VERIFY(data);
 
-            auto d = std::make_shared<TVector<std::pair<TSerializedCellVec, TString>>>();
-            for (auto r : *data) {
-                TVector<TCell> key;
-                TVector<TCell> value;
-
-                for (size_t i = 0; i < r.size(); ++i) {
-                    auto& column = GetScheme().TableColumns[i];
-                    if (column.KeyColumn) {
-                        key.push_back(r[i]);
-                    } else {
-                        value.push_back(r[i]);
-                    }
-                }
-
-                TSerializedCellVec serializedKey(key);
-                TString serializedValue = TSerializedCellVec::Serialize(value);
-
-                d->emplace_back(serializedKey, serializedValue);
-            }
-
-            tableData[tablePath] = d;
+            tableData[tablePath] = data;
         }
 
         TActivationContext::AsActorContext().RegisterWithSameMailbox(
@@ -188,11 +170,14 @@ public:
     }
 
 private:
+    std::shared_ptr<const NSchemeCache::TSchemeCacheNavigate> NavigateResult;
     TString Path;
+
+    std::shared_ptr<arrow::RecordBatch> Data;
 };
 
-std::unique_ptr<ITableKindState> CreateRowTableState(const TActorId& selfId, TAutoPtr<NSchemeCache::TSchemeCacheNavigate>& result) {
-    return std::make_unique<TRowTableState>(selfId, result);
+std::unique_ptr<ITableKindState> CreateColumnTableState(const TActorId& selfId, TAutoPtr<NSchemeCache::TSchemeCacheNavigate>& result) {
+    return std::make_unique<TColumnTableState>(selfId, result);
 }
 
 }

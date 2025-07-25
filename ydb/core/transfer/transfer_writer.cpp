@@ -193,74 +193,6 @@ private:
 
 
 
-class TColumnTableState : public ITableKindState {
-public:
-    TColumnTableState(
-        const TActorId& selfId,
-        TAutoPtr<NSchemeCache::TSchemeCacheNavigate>& result
-    )
-        : ITableKindState(selfId, result)
-    {
-        NavigateResult.reset(result.Release());
-        Path = JoinPath(NavigateResult->ResultSet.front().Path);
-    }
-
-    NKqp::IDataBatcherPtr CreateDataBatcher() override {
-        return NKqp::CreateColumnDataBatcher(Scheme.ColumnsMetadata, Scheme.WriteIndex);
-    }
-
-    bool Flush() override {
-        auto doWrite = [&]() {
-            Issues = std::make_shared<NYql::TIssues>();
-
-            NTxProxy::DoLongTxWriteSameMailbox(TActivationContext::AsActorContext(), SelfId /* replyTo */, { /* longTxId */ }, { /* dedupId */ },
-                NavigateResult->DatabaseName, Path, NavigateResult, Data, Issues);
-        };
-
-        if (Data) {
-            doWrite();
-            return true;
-        }
-
-        if (Batchers.empty() || !BatchSize()) {
-            return false;
-        }
-/*
-        NKqp::IDataBatchPtr batch = Batcher->Build();
-        auto data = batch->ExtractBatch();
-
-        Data = reinterpret_pointer_cast<arrow::RecordBatch>(data);
-        Y_VERIFY(Data);
-
-        doWrite();*/
-        return true;
-    }
-
-    /*
-    std::pair<TString, bool> Handle(TEvents::TEvCompleted::TPtr& ev) override {
-        if (ev->Get()->Status == Ydb::StatusIds::SUCCESS) {
-            Data.reset();
-            Issues.reset();
-
-            return {"", false};
-        }
-
-        return {Issues->ToOneLineString(), true};
-    }
-
-    std::pair<TString, bool> Handle(TEvTxUserProxy::TEvUploadRowsResponse::TPtr&) override {
-        Y_UNREACHABLE();
-    }*/
-
-private:
-    std::shared_ptr<const NSchemeCache::TSchemeCacheNavigate> NavigateResult;
-    TString Path;
-
-    std::shared_ptr<arrow::RecordBatch> Data;
-    std::shared_ptr<NYql::TIssues> Issues;
-};
-
-
 enum class ETag {
     FlushTimeout,
     RetryFlush
@@ -377,7 +309,7 @@ private:
         DefaultTablePath = JoinPath(entry.Path);
 
         if (entry.Kind == TNavigate::KindColumnTable) {
-            TableState = std::make_unique<TColumnTableState>(SelfId(), result);
+            TableState = CreateColumnTableState(SelfId(), result);
         } else {
             TableState = CreateRowTableState(SelfId(), result);
         }

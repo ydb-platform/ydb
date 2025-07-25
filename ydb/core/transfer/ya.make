@@ -6,6 +6,7 @@ PEERDIR(
 )
 
 SRCS(
+    column_table.cpp
     purecalc.cpp
     row_table.cpp
     scheme.cpp

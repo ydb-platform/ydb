@@ -20,6 +20,7 @@ struct TOpenIdConnectSettings;
 constexpr TStringBuf IAM_TOKEN_SCHEME = "Bearer ";
 constexpr TStringBuf IAM_TOKEN_SCHEME_LOWER = "bearer ";
 constexpr TStringBuf AUTHORIZATION_HEADER = "Authorization";
+constexpr TStringBuf X_FORWARDED_FOR_HEADER = "X-Forwarded-For";
 constexpr TStringBuf LOCATION_HEADER = "Location";
 
 constexpr TStringBuf USER_SID = "UserSID";

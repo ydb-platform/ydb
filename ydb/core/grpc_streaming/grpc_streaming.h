@@ -497,7 +497,7 @@ private:
                 } while (!Flags.compare_exchange_weak(flags, flags & ~FlagWriteActive, std::memory_order_acq_rel));
             }
         }
-        
+
         if (!NYdbGrpc::GrpcDead) {
             if (next && nextStatus) {
                 Stream.WriteAndFinish(next->Message, next->Options, *nextStatus, OnWriteDoneTag.Prepare());

@@ -45,7 +45,6 @@ public:
         SourcesSequentially.emplace_back(source);
         if (!source->GetAs<IDataSource>()->HasFetchingPlan()) {
             source->MutableAs<IDataSource>()->InitFetchingPlan(Context->GetColumnsFetchingPlan(source));
-            source->MutableAs<IDataSource>()->InitializeProcessing(source);
         }
         return source;
     }

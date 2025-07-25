@@ -270,9 +270,10 @@ private:
             DUMP(info, FreeSpace);
             html << "IsPaused: " << info.IsPaused() << "<br />";
 
-            const auto& channelStats = *Channels->GetInputChannelStats(id);
-            DUMP(channelStats, PollRequests);
-            DUMP(channelStats, ResentMessages);
+            if (const auto* channelStats = Channels->GetInputChannelStats(id)) {
+                DUMP_PREFIXED("InputChannelStats.", (*channelStats), PollRequests);
+                DUMP_PREFIXED("InputChannelStats.", (*channelStats), ResentMessages);
+            }
 
             auto channel = info.Channel;
             if (!channel) {
@@ -355,8 +356,9 @@ private:
                 html << "AsyncData.Watermark: " << info.AsyncData->Watermark << "<br />";
             }
 
-            const auto& channelStats = *Channels->GetOutputChannelStats(id);
-            DUMP(channelStats, ResentMessages);
+            if (const auto* channelStats = Channels->GetOutputChannelStats(id)) {
+                DUMP_PREFIXED("OutputChannelStats.", (*channelStats), ResentMessages);
+            }
             const auto& peerState = Channels->GetOutputChannelInFlightState(id);
             html << "OutputChannelInFlightState: " << peerState.DebugString() << "<br />";
             DUMP((*Channels), ShouldSkipData, (id));

@@ -1027,10 +1027,8 @@ void BackupFolderImpl(TDriver driver, const TString& database, const TString& db
                 BackupExternalTable(driver, dbIt.GetFullPath(), childFolderPath);
             } else if (!dbIt.IsTable() && !dbIt.IsDir()) {
                 LOG_E("Skipping " << dbIt.GetFullPath().Quote() << ": dumping objects of type " << dbIt.GetCurrentNode()->Type << " is not supported");
-                if (childFolderPath.Exists()) {
-                    childFolderPath.Child(NDump::NFiles::Incomplete().FileName).DeleteIfExists();
-                    childFolderPath.DeleteIfExists();
-                }
+                childFolderPath.Child(NDump::NFiles::Incomplete().FileName).DeleteIfExists();
+                childFolderPath.DeleteIfExists();
             }
             dbIt.Next();
         }

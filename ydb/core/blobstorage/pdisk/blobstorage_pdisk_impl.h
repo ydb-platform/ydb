@@ -110,6 +110,7 @@ public:
     TControlWrapper ForsetiOpPieceSizeRot;
     TControlWrapper UseNoopSchedulerSSD;
     TControlWrapper UseNoopSchedulerHDD;
+    TControlWrapper ReportFairAvailableSizeToVDisk;
     bool UseNoopSchedulerCached = false;
 
     // SectorMap Controls

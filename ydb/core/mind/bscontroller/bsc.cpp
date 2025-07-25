@@ -146,6 +146,7 @@ void TBlobStorageController::TGroupInfo::FillInResources(
         const TPDiskInfo *pdisk = vslot->PDisk;
         const auto& metrics = pdisk->Metrics;
         const ui32 shareFactor = countMaxSlots ? pdisk->ExpectedSlotCount : pdisk->NumActiveSlots;
+        // TODO account GroupSizeInUnits
         ui64 vdiskSlotSize = 0;
         if (metrics.HasEnforcedDynamicSlotSize()) {
             vdiskSlotSize = metrics.GetEnforcedDynamicSlotSize();
@@ -195,9 +196,9 @@ void TBlobStorageController::TGroupInfo::FillInVDiskResources(
     const double f = (double)VDisksInGroup.size() * type.DataParts() / type.TotalPartCount();
     for (const TVSlotInfo *vslot : VDisksInGroup) {
         const auto& m = vslot->Metrics;
-        if (m.HasAvailableSize()) {
-            pb->SetAvailableSize(Min<ui64>(pb->HasAvailableSize() ? pb->GetAvailableSize() : Max<ui64>(), f * m.GetAvailableSize()));
-        }
+        // if (m.HasAvailableSize()) {
+        //     pb->SetAvailableSize(Min<ui64>(pb->HasAvailableSize() ? pb->GetAvailableSize() : Max<ui64>(), f * m.GetAvailableSize()));
+        // }
         if (m.HasAllocatedSize()) {
             pb->SetAllocatedSize(Max<ui64>(pb->HasAllocatedSize() ? pb->GetAllocatedSize() : 0, f * m.GetAllocatedSize()));
         }

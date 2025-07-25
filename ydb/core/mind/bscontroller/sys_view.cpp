@@ -341,9 +341,9 @@ void SerializeVSlotInfo(NKikimrSysView::TVSlotInfo *pb, const TVDiskID& vdiskId,
     if (m.HasAllocatedSize()) {
         pb->SetAllocatedSize(m.GetAllocatedSize());
     }
-    if (m.HasAvailableSize()) {
-        pb->SetAvailableSize(m.GetAvailableSize());
-    }
+    // if (m.HasAvailableSize()) {
+    //     pb->SetAvailableSize(m.GetAvailableSize());
+    // }
     if (status) {
         pb->SetStatusV2(NKikimrBlobStorage::EVDiskStatus_Name(*status));
     }

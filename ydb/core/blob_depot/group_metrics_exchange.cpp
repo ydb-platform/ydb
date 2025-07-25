@@ -64,7 +64,7 @@ namespace NKikimr::NBlobDepot {
                             case NKikimrBlobDepot::TChannelKind::Data:
                                 if (processedDataGroups.insert(entry->GroupID).second) { // count each data group exactly once
                                     dataColor = Min(dataColor, p.GetSpaceColor());
-                                    params->SetAvailableSize(params->GetAvailableSize() + p.GetAvailableSize());
+                                    // params->SetAvailableSize(params->GetAvailableSize() + p.GetAvailableSize());
                                     if (p.HasAssuredResources()) {
                                         addResources(params->MutableAssuredResources(), p.GetAssuredResources());
                                     }
@@ -84,7 +84,7 @@ namespace NKikimr::NBlobDepot {
             auto *wb = record.MutableWhiteboardUpdate();
             wb->SetGroupID(Config.GetVirtualGroupId());
             wb->SetAllocatedSize(Data->GetTotalStoredDataSize());
-            wb->SetAvailableSize(params->GetAvailableSize());
+            // wb->SetAvailableSize(params->GetAvailableSize());
             wb->SetReadThroughput(ReadThroughput);
             wb->SetWriteThroughput(WriteThroughput);
 
@@ -96,8 +96,9 @@ namespace NKikimr::NBlobDepot {
             Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), response.release());
 
             // TODO(alexvru): use a better approach
-            const double approximateFreeSpaceShare = (double)params->GetAvailableSize() / (params->GetAvailableSize() +
-                params->GetAllocatedSize());
+            // const double approximateFreeSpaceShare = (double)params->GetAvailableSize() / (params->GetAvailableSize() +
+            //     params->GetAllocatedSize());
+            const double approximateFreeSpaceShare = 0;
 
             SpaceMonitor->SetSpaceColor(dataColor, approximateFreeSpaceShare); // the best data channel space color works for the whole depot
         }

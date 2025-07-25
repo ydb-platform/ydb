@@ -34,7 +34,7 @@ public:
             {T::FailDomain::ColumnId, {E::kInfoFieldNumber, V::kFailDomainFieldNumber}},
             {T::VDisk::ColumnId, {E::kInfoFieldNumber, V::kVDiskFieldNumber}},
             {T::AllocatedSize::ColumnId, {E::kInfoFieldNumber, V::kAllocatedSizeFieldNumber}},
-            {T::AvailableSize::ColumnId, {E::kInfoFieldNumber, V::kAvailableSizeFieldNumber}},
+            // {T::AvailableSize::ColumnId, {E::kInfoFieldNumber, V::kAvailableSizeFieldNumber}},
             {T::Status::ColumnId, {E::kInfoFieldNumber, V::kStatusV2FieldNumber}},
             {T::State::ColumnId, {E::kInfoFieldNumber, V::kStateFieldNumber}},
             {T::Kind::ColumnId, {E::kInfoFieldNumber, V::kKindFieldNumber}},

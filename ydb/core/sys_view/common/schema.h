@@ -278,7 +278,7 @@ struct Schema : NIceDb::Schema {
         struct FailDomain : Column<8, NScheme::NTypeIds::Uint32> {};
         struct VDisk : Column<9, NScheme::NTypeIds::Uint32> {};
         struct AllocatedSize : Column<10, NScheme::NTypeIds::Uint64> {};
-        struct AvailableSize : Column<11, NScheme::NTypeIds::Uint64> {};
+        // struct AvailableSize : Column<11, NScheme::NTypeIds::Uint64> {};
         struct Status : Column<12, NScheme::NTypeIds::Utf8> {};
         //struct StopFactor : Column<13, NScheme::NTypeIds::Double> {};
         struct Kind : Column<14, NScheme::NTypeIds::Utf8> {};
@@ -297,7 +297,6 @@ struct Schema : NIceDb::Schema {
             FailDomain,
             VDisk,
             AllocatedSize,
-            AvailableSize,
             Status,
             State,
             Kind,

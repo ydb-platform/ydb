@@ -769,7 +769,7 @@ public:
                         const NKikimrHive::TEvResponseHiveStorageStats& record = itHiveStorageStats->second.Get()->Record;
                         if (entry.DomainDescription) {
                             uint64 storageAllocatedSize = 0;
-                            uint64 storageAvailableSize = 0;
+                            // uint64 storageAvailableSize = 0;
                             uint64 storageMinAvailableSize = std::numeric_limits<ui64>::max();
                             uint64 storageGroups = 0;
                             std::unordered_map<TString, NKikimrViewer::TStorageUsage::EType> storagePoolType;
@@ -781,17 +781,17 @@ public:
                                     NKikimrViewer::TStorageUsage::EType storageType = storagePoolType[poolStat.GetName()];
                                     for (const NKikimrHive::THiveStorageGroupStats& groupStat : poolStat.GetGroups()) {
                                         storageAllocatedSize += groupStat.GetAllocatedSize();
-                                        storageAvailableSize += groupStat.GetAvailableSize();
+                                        // storageAvailableSize += groupStat.GetAvailableSize();
                                         databaseStorageByType[storageType].first += groupStat.GetAllocatedSize();
-                                        databaseStorageByType[storageType].second += groupStat.GetAvailableSize();
-                                        storageMinAvailableSize = std::min(storageMinAvailableSize, groupStat.GetAvailableSize());
+                                        // databaseStorageByType[storageType].second += groupStat.GetAvailableSize();
+                                        // storageMinAvailableSize = std::min(storageMinAvailableSize, groupStat.GetAvailableSize());
                                         ++storageGroups;
                                     }
                                 }
                             }
-                            uint64 storageAllocatedLimit = storageAllocatedSize + storageAvailableSize;
+                            // uint64 storageAllocatedLimit = storageAllocatedSize + storageAvailableSize;
                             tenant.SetStorageAllocatedSize(storageAllocatedSize);
-                            tenant.SetStorageAllocatedLimit(storageAllocatedLimit);
+                            // tenant.SetStorageAllocatedLimit(storageAllocatedLimit);
                             tenant.SetStorageMinAvailableSize(storageMinAvailableSize);
                             tenant.SetStorageGroups(storageGroups);
                         }

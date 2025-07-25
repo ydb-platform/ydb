@@ -53,7 +53,7 @@ public:
                         auto ie = VDisksIndex.find(vDiskId);
                         if (ie != VDisksIndex.end()) {
                             used += ie->second.GetAllocatedSize();
-                            limit += ie->second.GetAllocatedSize() + ie->second.GetAvailableSize();
+                            // limit += ie->second.GetAllocatedSize() + ie->second.GetAvailableSize();
                         }
                     }
                     int bucketNumber = limit == 0 ? 100 : used * 100 / limit / Pace;

@@ -56,7 +56,7 @@ message TVSlotId {
 message TVDiskMetrics {
     optional TVDiskID VDiskId = 1;
     optional uint32 SatisfactionRank = 2;
-    optional uint64 AvailableSize = 3;
+    // optional uint64 AvailableSize = 3;
     optional uint64 AllocatedSize = 4;
     //optional uint64 ReadThroughput = 5; // bytes per second
     //optional uint64 WriteThroughput = 6; // bytes per second

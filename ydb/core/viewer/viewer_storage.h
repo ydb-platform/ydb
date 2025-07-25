@@ -331,16 +331,16 @@ public:
                             ui32 pDiskId = ie->second.GetPDiskId();
                             degraded |= !ie->second.GetReplicated() || ie->second.GetVDiskState() != NKikimrWhiteboard::EVDiskState::OK;
                             row.Used += ie->second.GetAllocatedSize();
-                            row.Limit += ie->second.GetAllocatedSize() + ie->second.GetAvailableSize();
+                            // row.Limit += ie->second.GetAllocatedSize() + ie->second.GetAvailableSize();
                             row.Read += ie->second.GetReadThroughput();
                             row.Write += ie->second.GetWriteThroughput();
 
                             auto ip = PDisksIndex.find(std::make_pair(nodeId, pDiskId));
                             if (ip != PDisksIndex.end()) {
                                 degraded |= ip->second.GetState() != NKikimrBlobStorage::TPDiskState::Normal;
-                                if (!ie->second.HasAvailableSize()) {
-                                    row.Limit += ip->second.GetAvailableSize();
-                                }
+                                // if (!ie->second.HasAvailableSize()) {
+                                //     row.Limit += ip->second.GetAvailableSize();
+                                // }
                             }
                         }
                         if (degraded) {

@@ -1,12 +1,11 @@
 #include "allocation.h"
+
 #include <ydb/library/accessor/validator.h>
 
 namespace NKikimr::NOlap::NGroupedMemoryManager {
 
-TAllocationInfo::TAllocationInfo(const ui64 processId, const ui64 scopeId,
-    const ui64 allocationExternalGroupId,
-    const std::shared_ptr<IAllocation>& allocation,
-    const std::shared_ptr<TStageFeatures>& stage)
+TAllocationInfo::TAllocationInfo(const ui64 processId, const ui64 scopeId, const ui64 allocationExternalGroupId,
+    const std::shared_ptr<IAllocation>& allocation, const std::shared_ptr<TStageFeatures>& stage)
     : Allocation(allocation)
     , AllocationExternalGroupId(allocationExternalGroupId)
     , Identifier(TValidator::CheckNotNull(Allocation)->GetIdentifier())

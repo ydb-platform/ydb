@@ -299,25 +299,19 @@ struct TEvOutputChannelData
 struct TWatermarkRequest {
     TWatermarkRequest() = default;
 
-    TWatermarkRequest(TVector<ui32>&& channelIds, TInstant watermark)
-        : ChannelIds(std::move(channelIds))
-        , Watermark(watermark) {
+    explicit TWatermarkRequest(TInstant watermark)
+        : Watermark(watermark) {
     }
 
-    TVector<ui32> ChannelIds;
     TInstant Watermark;
 };
 
 // Holds info required to inject barriers to outputs
 struct TCheckpointRequest {
-    TCheckpointRequest(TVector<ui32>&& channelIds, TVector<ui32>&& sinkIds, const NDqProto::TCheckpoint& checkpoint)
-        : ChannelIds(std::move(channelIds))
-        , SinkIds(std::move(sinkIds))
-        , Checkpoint(checkpoint) {
+    explicit TCheckpointRequest(const NDqProto::TCheckpoint& checkpoint)
+        : Checkpoint(checkpoint) {
     }
 
-    TVector<ui32> ChannelIds;
-    TVector<ui32> SinkIds;
     NDqProto::TCheckpoint Checkpoint;
 };
 
@@ -337,20 +331,18 @@ struct TEvContinueRun
         , CheckpointOnly(checkpointOnly)
     { }
 
-    TEvContinueRun(THashSet<ui32>&& inputChannels, ui64 memLimit)
+    TEvContinueRun(TVector<ui32>&& inputChannels, ui64 memLimit)
         : AskFreeSpace(false)
         , InputChannels(std::move(inputChannels))
         , MemLimit(memLimit)
     { }
 
     bool AskFreeSpace = true;
-    const THashSet<ui32> InputChannels;
+    const TVector<ui32> InputChannels;
     ui64 MemLimit;
     TMaybe<TWatermarkRequest> WatermarkRequest = Nothing();
     TMaybe<TCheckpointRequest> CheckpointRequest = Nothing();
     bool CheckpointOnly = false;
-    TVector<ui32> SinkIds;
-    TVector<ui32> InputTransformIds;
 };
 
 //Sent by TaskRunnerActor to ComputeActor as an acknowledgement in AsyncInputPush method call
@@ -427,14 +419,10 @@ struct TEvLoadTaskRunnerFromStateDone : NActors::TEventLocal<TEvLoadTaskRunnerFr
 
 struct TEvStatistics : NActors::TEventLocal<TEvStatistics, TTaskRunnerEvents::EvStatistics>
 {
-    explicit TEvStatistics(TVector<ui32>&& sinkIds, TVector<ui32>&& inputTransformIds)
-        : SinkIds(std::move(sinkIds))
-        , InputTransformIds(std::move(inputTransformIds))
-        , Stats() {
+    explicit TEvStatistics()
+        : Stats() {
     }
 
-    TVector<ui32> SinkIds;
-    TVector<ui32> InputTransformIds;
     NDq::TDqTaskRunnerStatsView Stats;
 };
 

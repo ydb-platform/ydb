@@ -88,14 +88,8 @@ public:
 
     void DoBootstrap() {
         NActors::IActor* actor;
-        THashSet<ui32> inputWithDisabledCheckpointing;
-        for (const auto&[idx, inputInfo]: InputChannelsMap) {
-            if (inputInfo.CheckpointingMode == NDqProto::CHECKPOINTING_MODE_DISABLED) {
-                inputWithDisabledCheckpointing.insert(idx);
-            }
-        }
         std::tie(TaskRunnerActor, actor) = TaskRunnerActorFactory->Create(
-            this, TBase::GetAllocatorPtr(), GetTxId(), Task.GetId(), std::move(inputWithDisabledCheckpointing), InitMemoryQuota());
+            this, TBase::GetAllocatorPtr(), GetTxId(), Task.GetId(), InitMemoryQuota());
         TaskRunnerActorId = RegisterWithSameMailbox(actor);
 
         TDqTaskRunnerMemoryLimits limits;
@@ -199,13 +193,6 @@ private:
             DUMP_PREFIXED("ContinueRunEvent.", (*ContinueRunEvent), CheckpointRequest, .Defined());
             DUMP_PREFIXED("ContinueRunEvent.", (*ContinueRunEvent), WatermarkRequest, .Defined());
             DUMP_PREFIXED("ContinueRunEvent.", (*ContinueRunEvent), MemLimit);
-            for (const auto& sinkId: ContinueRunEvent->SinkIds) {
-                html << "ContinueRunEvent.SinkIds: " << sinkId << "<br />";
-            }
-
-            for (const auto& inputTransformId: ContinueRunEvent->InputTransformIds) {
-                html << "ContinueRunEvent.InputTransformIds: " << inputTransformId << "<br />";
-            }
         }
 
         DUMP((*this), ContinueRunStartWaitTime, .ToString());
@@ -444,7 +431,7 @@ private:
     void OnStateRequest(TEvDqCompute::TEvStateRequest::TPtr& ev) {
         CA_LOG_T("Got TEvStateRequest from actor " << ev->Sender << " PingCookie: " << ev->Cookie);
         if (!SentStatsRequest) {
-            Send(TaskRunnerActorId, new NTaskRunnerActor::TEvStatistics(GetIds(SinksMap), GetIds(InputTransformsMap)));
+            Send(TaskRunnerActorId, new NTaskRunnerActor::TEvStatistics());
             SentStatsRequest = true;
         }
         WaitingForStateResponse.push_back({ev->Sender, ev->Cookie});
@@ -1066,15 +1053,6 @@ private:
         return nullptr;
     }
 
-    template<typename TSecond>
-    TVector<ui32> GetIds(const THashMap<ui64, TSecond>& collection) {
-        TVector<ui32> ids;
-        std::transform(collection.begin(), collection.end(), std::back_inserter(ids), [](const auto& p) {
-            return p.first;
-        });
-        return ids;
-    }
-
     void InjectBarrierToOutputs(const NDqProto::TCheckpoint&) override {
         Y_ABORT_UNLESS(CheckpointingMode != NDqProto::CHECKPOINTING_MODE_DISABLED);
         // already done in task_runner_actor
@@ -1139,28 +1117,19 @@ private:
         if (!ContinueRunEvent) {
             ContinueRunStartWaitTime = TInstant::Now();
             ContinueRunEvent = std::make_unique<NTaskRunnerActor::TEvContinueRun>();
-            ContinueRunEvent->SinkIds = GetIds(SinksMap);
-            ContinueRunEvent->InputTransformIds = GetIds(InputTransformsMap);
         }
         ContinueRunEvent->CheckpointOnly = checkpointOnly;
         if (TMaybe<TInstant> watermarkRequest = GetWatermarkRequest()) {
             if (!ContinueRunEvent->WatermarkRequest) {
                 ContinueRunEvent->WatermarkRequest.ConstructInPlace();
                 ContinueRunEvent->WatermarkRequest->Watermark = *watermarkRequest;
-
-                ContinueRunEvent->WatermarkRequest->ChannelIds.reserve(OutputChannelsMap.size());
-                for (const auto& [channelId, info] : OutputChannelsMap) {
-                    if (info.WatermarksMode != NDqProto::EWatermarksMode::WATERMARKS_MODE_DISABLED) {
-                        ContinueRunEvent->WatermarkRequest->ChannelIds.emplace_back(channelId);
-                    }
-                }
             } else {
                 ContinueRunEvent->WatermarkRequest->Watermark = Max(ContinueRunEvent->WatermarkRequest->Watermark, *watermarkRequest);
             }
         }
         if (checkpointRequest) {
             if (!ContinueRunEvent->CheckpointRequest) {
-                ContinueRunEvent->CheckpointRequest.ConstructInPlace(GetIds(OutputChannelsMap), GetIds(SinksMap), *checkpointRequest);
+                ContinueRunEvent->CheckpointRequest.ConstructInPlace(*checkpointRequest);
             } else {
                 Y_ABORT_UNLESS(ContinueRunEvent->CheckpointRequest->Checkpoint.GetGeneration() == checkpointRequest->GetGeneration());
                 Y_ABORT_UNLESS(ContinueRunEvent->CheckpointRequest->Checkpoint.GetId() == checkpointRequest->GetId());

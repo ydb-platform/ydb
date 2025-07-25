@@ -91,10 +91,9 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::BuildColumnsFetchingPlan(c
             acc.AddAssembleStep(*GetSpecColumns(), "SPEC", NArrow::NSSA::IMemoryCalculationPolicy::EStage::Filter, false);
             acc.AddStep(std::make_shared<TSnapshotFilter>());
         }
-        Y_UNUSED(preventDuplicates);
-        // if (preventDuplicates) {
-        //     acc.AddStep(std::make_shared<TDuplicateFilter>());
-        // }
+        if (preventDuplicates) {
+            acc.AddStep(std::make_shared<TDuplicateFilter>());
+        }
         const auto& chainProgram = GetReadMetadata()->GetProgram().GetChainVerified();
         acc.AddStep(std::make_shared<NCommon::TProgramStep>(chainProgram));
     }
@@ -109,13 +108,14 @@ void TSpecialReadContext::RegisterActors(const NCommon::ISourcesConstructor& sou
     AFL_VERIFY(!DuplicatesManager);
     if (NeedDuplicateFiltering()) {
         const auto* portions = dynamic_cast<const NCommon::TSourcesConstructorWithAccessors<TSourceConstructor>*>(&sources);
-        AFL_VERIFY(portions);
-        NCommon::TPortionIntervalTree intervals;
-        for (const auto& portion : portions->GetConstructors()) {
-            intervals.AddRange(NCommon::TPortionIntervalTree::TOwnedRange(portion.GetPortion()->IndexKeyStart(), true,
-                                   portion.GetPortion()->IndexKeyEnd(), true), portion.GetPortion());
+        if (portions) {
+            NCommon::TPortionIntervalTree intervals;
+            for (const auto& portion : portions->GetConstructors()) {
+                intervals.AddRange(NCommon::TPortionIntervalTree::TOwnedRange(portion.GetPortion()->IndexKeyStart(), true,
+                                       portion.GetPortion()->IndexKeyEnd(), true), portion.GetPortion());
+            }
+            DuplicatesManager = NActors::TActivationContext::Register(new NDuplicateFiltering::TDuplicateManager(*this, std::move(intervals)));
         }
-        DuplicatesManager = NActors::TActivationContext::Register(new NDuplicateFiltering::TDuplicateManager(*this, std::move(intervals)));
     }
 }
 

@@ -3,12 +3,11 @@
 
 namespace NKikimr::NOlap::NGroupedMemoryManager {
 
-TAllocationInfo::TAllocationInfo(const ui64 processId, const ui64 scopeId, const ui64 allocationInternalGroupId,
+TAllocationInfo::TAllocationInfo(const ui64 processId, const ui64 scopeId,
     const ui64 allocationExternalGroupId,
     const std::shared_ptr<IAllocation>& allocation,
     const std::shared_ptr<TStageFeatures>& stage)
     : Allocation(allocation)
-    , AllocationInternalGroupId(allocationInternalGroupId)
     , AllocationExternalGroupId(allocationExternalGroupId)
     , Identifier(TValidator::CheckNotNull(Allocation)->GetIdentifier())
     , ProcessId(processId)
@@ -27,8 +26,7 @@ TAllocationInfo::TAllocationInfo(const ui64 processId, const ui64 scopeId, const
 
 bool TAllocationInfo::Allocate(const NActors::TActorId& ownerId) {
     AFL_TRACE(NKikimrServices::GROUPED_MEMORY_LIMITER)("event", "allocated")("allocation_id", Identifier)("stage", Stage->GetName());
-    AFL_VERIFY(Allocation)("status", GetAllocationStatus())("volume", AllocatedVolume)("id", Identifier)("stage", Stage->GetName())(
-        "allocation_internal_group_id", AllocationInternalGroupId);
+    AFL_VERIFY(Allocation)("status", GetAllocationStatus())("volume", AllocatedVolume)("id", Identifier)("stage", Stage->GetName());
     auto allocationResult = Stage->Allocate(AllocatedVolume);
     if (allocationResult.IsFail()) {
         AllocationFailed = true;

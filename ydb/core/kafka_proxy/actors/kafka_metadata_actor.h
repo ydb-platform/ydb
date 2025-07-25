@@ -12,6 +12,11 @@
 
 namespace NKafka {
 
+    struct TopicNameToIndex {
+        TString TopicName;
+        ui32 TopicIndex;
+    };
+
 TActorId MakeKafkaDiscoveryCacheID();
 
 class TKafkaMetadataActor: public NActors::TActorBootstrapped<TKafkaMetadataActor> {
@@ -91,9 +96,10 @@ private:
     bool FallbackToIcDiscovery = false;
     TMap<ui64, TSimpleSharedPtr<TEvLocationResponse>> PendingTopicResponses;
     TSet<TString> TopicСreationAttempts;
-    TMap<TActorId, std::pair<TString, ui32>> CreateTopicRequests;
+    TMap<TActorId, TopicNameToIndex> CreateTopicRequests;
 
     void Handle(const TEvKafka::TEvResponse::TPtr& ev, const TActorContext& ctx);
+    void SendCreateTopicsRequest(const TString& topicName, ui32 index, const TActorContext& ctx);
 
     THashMap<ui64, TNodeInfo> Nodes;
     THashMap<TString, TActorId> PartitionActors;

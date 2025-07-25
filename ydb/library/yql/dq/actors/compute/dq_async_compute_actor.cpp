@@ -269,6 +269,11 @@ private:
             html << "CheckpointingMode: " << NDqProto::ECheckpointingMode_Name(info.CheckpointingMode) << "<br />";
             DUMP(info, FreeSpace);
             html << "IsPaused: " << info.IsPaused() << "<br />";
+
+            const auto& channelStats = *Channels->GetInputChannelStats(id);
+            DUMP(channelStats, PollRequests);
+            DUMP(channelStats, ResentMessages);
+
             auto channel = info.Channel;
             if (!channel) {
                 auto stats = GetTaskRunnerStats();
@@ -349,6 +354,14 @@ private:
                 html << "AsyncData.Finished: " << info.AsyncData->Finished << "<br />";
                 html << "AsyncData.Watermark: " << info.AsyncData->Watermark << "<br />";
             }
+
+            const auto& channelStats = *Channels->GetOutputChannelStats(id);
+            DUMP(channelStats, ResentMessages);
+            const auto& peerState = Channels->GetOutputChannelInFlightState(id);
+            html << "OutputChannelInFightState: " << peerState.DebugString() << "<br />";
+            DUMP((*Channels), ShouldSkipData, (id));
+            DUMP((*Channels), HasFreeMemoryInChannel, (id));
+            DUMP((*Channels), CanSendChannelData, (id));
 
             auto channel = info.Channel;
             if (!channel) {

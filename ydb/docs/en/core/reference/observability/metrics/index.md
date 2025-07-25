@@ -54,25 +54,36 @@ You can analyze a transaction's execution time using a histogram counter. The in
 | `table.query.compilation.cache_misses`<br/>`RATE`, pieces | The number of queries in a certain period of time that required query compilation. |
 | `table.query.execution.latency_milliseconds`<br/>`HIST_RATE`, pieces | Histogram counter. The intervals are set in milliseconds. Shows the number of queries whose execution time falls within a certain interval. |
 
-## Table partition metrics {#datashards}
+## Row-oriented table partition metrics {#datashards}
 
 | Metric name<br/>Type, units of measurement | Description<br/>Labels |
 | ----- | ----- |
-| `table.datashard.row_count`<br/>`GAUGE`, pieces | The number of rows in DB tables. |
-| `table.datashard.size_bytes`<br/>`GAUGE`, bytes | The size of data in DB tables. |
-| `table.datashard.used_core_percents`<br/>`HIST_GAUGE`, % | Histogram counter. The intervals are set as a percentage. Shows the number of table partitions using computing resources in the ratio that falls within a certain interval. |
-| `table.datashard.read.rows`<br/>`RATE`, pieces | The number of rows that are read by all partitions of all DB tables in a certain period of time. |
-| `table.datashard.read.bytes`<br/>`RATE`, bytes | The size of data that is read by all partitions of all DB tables in a certain period of time. |
-| `table.datashard.write.rows`<br/>`RATE`, pieces | The number of rows that are written by all partitions of all DB tables in a certain period of time. |
-| `table.datashard.write.bytes`<br/>`RATE`, bytes | The size of data that is written by all partitions of all DB tables in a certain period of time. |
-| `table.datashard.scan.rows`<br/>`RATE`, pieces | The number of rows that are read through `StreamExecuteScanQuery` or `StreamReadTable` gRPC API calls by all partitions of all DB tables in a certain period of time. |
-| `table.datashard.scan.bytes`<br/>`RATE`, bytes | The size of data that is read through `StreamExecuteScanQuery` or `StreamReadTable` gRPC API calls by all partitions of all DB tables in a certain period of time. |
-| `table.datashard.bulk_upsert.rows`<br/>`RATE`, pieces | The number of rows that are added through a `BulkUpsert` gRPC API call to all partitions of all DB tables in a certain period of time. |
-| `table.datashard.bulk_upsert.bytes`<br/>`RATE`, bytes | The size of data that is added through a `BulkUpsert` gRPC API call to all partitions of all DB tables in a certain period of time. |
-| `table.datashard.erase.rows`<br/>`RATE`, pieces | The number of rows deleted from the database in a certain period of time. |
-| `table.datashard.erase.bytes`<br/>`RATE`, bytes | The size of data deleted from the database in a certain period of time. |
+| `table.datashard.row_count`<br/>`GAUGE`, pieces | The number of rows in all row-oriented tables in the database. |
+| `table.datashard.size_bytes`<br/>`GAUGE`, bytes | The size of data in all row-oriented tables in the database. |
+| `table.datashard.used_core_percents`<br/>`HIST_GAUGE`, % | Histogram counter. The intervals are set as a percentage. Shows the number of row-oriented table partitions using computing resources in the ratio that falls within a certain interval. |
+| `table.datashard.read.rows`<br/>`RATE`, pieces | The number of rows that are read by all partitions of all row-oriented tables in the database in a certain period of time. |
+| `table.datashard.read.bytes`<br/>`RATE`, bytes | The size of data that is read by all partitions of all row-oriented tables in the database in a certain period of time. |
+| `table.datashard.write.rows`<br/>`RATE`, pieces | The number of rows that are written by all partitions of all row-oriented tables in the database in a certain period of time. |
+| `table.datashard.write.bytes`<br/>`RATE`, bytes | The size of data that is written by all partitions of all row-oriented tables in the database in a certain period of time. |
+| `table.datashard.scan.rows`<br/>`RATE`, pieces | The number of rows that are read through `StreamExecuteScanQuery` or `StreamReadTable` gRPC API calls by all partitions of all row-oriented tables in the database in a certain period of time. |
+| `table.datashard.scan.bytes`<br/>`RATE`, bytes | The size of data that is read through `StreamExecuteScanQuery` or `StreamReadTable` gRPC API calls by all partitions of all row-oriented tables in the database in a certain period of time. |
+| `table.datashard.bulk_upsert.rows`<br/>`RATE`, pieces | The number of rows that are added through a `BulkUpsert` gRPC API call to all partitions of all row-oriented tables in the database in a certain period of time. |
+| `table.datashard.bulk_upsert.bytes`<br/>`RATE`, bytes | The size of data that is added through a `BulkUpsert` gRPC API call to all partitions of all row-oriented tables in the database in a certain period of time. |
+| `table.datashard.erase.rows`<br/>`RATE`, pieces | The number of rows deleted from row-oriented tables in the database in a certain period of time. |
+| `table.datashard.erase.bytes`<br/>`RATE`, bytes | The size of data deleted from row-oriented tables in the database in a certain period of time. |
 | `table.datashard.cache_hit.bytes`<br/>`RATE`, bytes | The total amount of data successfully retrieved from memory (cache), indicating efficient cache utilization in serving frequently accessed data without accessing distributed storage. |
 | `table.datashard.cache_miss.bytes`<br/>`RATE`, bytes | The total amount of data that was requested but not found in memory (cache) and was read from distributed storage, highlighting potential areas for cache optimization. |
+
+## Column-oriented table partition metrics {#columnshards}
+
+| Metric name<br/>Type, units of measurement | Description<br/>Labels |
+| ----- | ----- |
+| `table.columnshard.write.rows`<br/>`RATE`, pieces | The number of rows that are written by all partitions of all column-oriented tables in the database in a certain period of time. |
+| `table.columnshard.write.bytes`<br/>`RATE`, bytes | The size of data that is written by all partitions of all column-oriented tables in the database in a certain period of time. |
+| `table.columnshard.scan.rows`<br/>`RATE`, pieces | The number of rows that are read through `StreamExecuteScanQuery` or `StreamReadTable` gRPC API calls by all partitions of all column-oriented tables in the database in a certain period of time. |
+| `table.columnshard.scan.bytes`<br/>`RATE`, bytes | The size of data that is read through `StreamExecuteScanQuery` or `StreamReadTable` gRPC API calls by all partitions of all column-oriented tables in the database in a certain period of time. |
+| `table.columnshard.bulk_upsert.rows`<br/>`RATE`, pieces | The number of rows that are added through a `BulkUpsert` gRPC API call to all partitions of all column-oriented tables in the database in a certain period of time. |
+| `table.columnshard.bulk_upsert.bytes`<br/>`RATE`, bytes | The size of data that is added through a `BulkUpsert` gRPC API call to all partitions of all column-oriented tables in the database in a certain period of time. |
 
 ## Resource usage metrics (for Dedicated mode only) {#ydb_dedicated_resources}
 

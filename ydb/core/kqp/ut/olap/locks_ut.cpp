@@ -16,9 +16,9 @@ namespace NKikimr::NKqp {
 
 Y_UNIT_TEST_SUITE(KqpOlapLocks) {
     Y_UNIT_TEST(TwoQueriesWithRestartTablet) {
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
-        auto settings = TKikimrSettings().SetAppConfig(appConfig).SetWithSampleTables(false);
+        auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardReaderClassName("PLAIN");
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+
         TKikimrRunner kikimr(settings);
         Tests::NCommon::TLoggerInit(kikimr).Initialize();
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
@@ -71,9 +71,9 @@ Y_UNIT_TEST_SUITE(KqpOlapLocks) {
         }
     }
     Y_UNIT_TEST(TableSinkWithOlapStore) {
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
-        auto settings = TKikimrSettings().SetAppConfig(appConfig).SetWithSampleTables(false);
+        auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardReaderClassName("PLAIN");
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+
         TKikimrRunner kikimr(settings);
         Tests::NCommon::TLoggerInit(kikimr)
             .SetComponents({ NKikimrServices::TX_COLUMNSHARD_WRITE, NKikimrServices::TX_COLUMNSHARD }, "CS")
@@ -104,9 +104,9 @@ Y_UNIT_TEST_SUITE(KqpOlapLocks) {
         //It corresponds to a SCAN, then NO write then COMMIT on that shard
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
 
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
-        auto settings = TKikimrSettings().SetAppConfig(appConfig).SetWithSampleTables(false);
+        auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardReaderClassName("PLAIN");
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+
         TTestHelper testHelper(settings);
 
         TVector<TTestHelper::TColumnSchema> schema = {

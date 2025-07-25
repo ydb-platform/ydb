@@ -19,7 +19,7 @@ TConclusionStatus TReadMetadata::Init(const NColumnShard::TColumnShard* owner, c
         LockSharingInfo = owner->GetOperationsManager().GetLockVerified(*LockId).GetSharingInfo();
     }
     if (!owner->GetIndexOptional()) {
-        SourcesConstructor = std::make_unique<NReader::NSimple::TNotSortedPortionsSources>();
+        SourcesConstructor = NReader::NSimple::TPortionsSources::BuildEmpty();
         SourcesConstructor->InitCursor(nullptr);
         return TConclusionStatus::Success();
     }

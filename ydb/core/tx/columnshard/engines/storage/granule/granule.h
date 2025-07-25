@@ -122,7 +122,7 @@ private:
     TAtomic LastInsertWriteId = 1;
     THashMap<TInsertWriteId, std::shared_ptr<TWrittenPortionInfo>> InsertedPortions;
     THashMap<ui64, std::shared_ptr<TWrittenPortionInfo>> InsertedPortionsById;
-    THashMap<TInsertWriteId, TPortionDataAccessor> InsertedAccessors;
+    THashMap<TInsertWriteId, std::shared_ptr<TPortionDataAccessor>> InsertedAccessors;
     mutable std::optional<TGranuleAdditiveSummary> AdditiveSummaryCache;
 
     void RebuildHardMetrics() const;
@@ -213,8 +213,8 @@ public:
     }
 
     void InsertPortionOnExecute(
-        NTabletFlatExecutor::TTransactionContext& txc, const TPortionDataAccessor& portion, const ui64 firstPKColumnId) const;
-    void InsertPortionOnComplete(const TPortionDataAccessor& portion, IColumnEngine& engine);
+        NTabletFlatExecutor::TTransactionContext& txc, const std::shared_ptr<TPortionDataAccessor>& portion, const ui64 firstPKColumnId) const;
+    void InsertPortionOnComplete(const std::shared_ptr<TPortionDataAccessor>& portion, IColumnEngine& engine);
 
     void CommitPortionOnExecute(
         NTabletFlatExecutor::TTransactionContext& txc, const TInsertWriteId insertWriteId, const TSnapshot& snapshot) const;
@@ -340,7 +340,7 @@ public:
     void OnCompactionFailed(const TString& reason);
     void OnCompactionFinished();
 
-    void AppendPortion(const TPortionDataAccessor& info);
+    void AppendPortion(const std::shared_ptr<TPortionDataAccessor>& info);
     void AppendPortion(const std::shared_ptr<TPortionInfo>& info);
 
     TString DebugString() const {

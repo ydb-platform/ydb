@@ -3962,6 +3962,68 @@ public:
     }
 };
 
+
+class TTxMonEvent_SetDomain : public TTransactionBase<THive>, TLoggedMonTransaction {
+public:
+    TAutoPtr<NMon::TEvRemoteHttpInfo> Event;
+    const TActorId Source;
+    TTabletId TabletId = 0;
+    TTabletId SchemeShard = 0;
+    TObjectId PathId = 0;
+    bool Success = false;
+
+    TTxMonEvent_SetDomain(const TActorId& source, NMon::TEvRemoteHttpInfo::TPtr& ev, TSelf* hive)
+        : TBase(hive)
+        , TLoggedMonTransaction(ev, hive)
+        , Event(ev->Release())
+        , Source(source)
+    {
+        TabletId = FromStringWithDefault<TTabletId>(Event->Cgi().Get("tablet"), TabletId);
+        SchemeShard = FromStringWithDefault<TTabletId>(Event->Cgi().Get("schemeshard"), TabletId);
+        PathId = FromStringWithDefault<TObjectId>(Event->Cgi().Get("pathid"), TabletId);
+    }
+
+    TTxType GetTxType() const override { return NHive::TXTYPE_MON_SET_DOMAIN; }
+
+    bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
+        TLeaderTabletInfo* tablet = Self->FindTablet(TabletId);
+        TSubDomainKey newDomain(SchemeShard, PathId);
+        if (tablet != nullptr) {
+            NIceDb::TNiceDb db(txc.DB);
+            auto rowset = db.Table<Schema::Tablet>().Key(TabletId).Select<Schema::Tablet::ObjectDomain>();
+            if (!rowset.IsReady()) {
+                return false;
+            }
+            TSubDomainKey oldDomain(rowset.GetValueOrDefault<Schema::Tablet::ObjectDomain>());
+            if (rowset.HaveValue<Schema::Tablet::ObjectDomain>() && (bool)oldDomain) {
+                if (oldDomain == newDomain) {
+                    ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes(TStringBuilder() << "{\"status\":\"ALREADY\"}"));
+                } else {
+                    ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes(TStringBuilder() << "{\"status\": \"ERROR\", \"error\":\"Domain already set to " << oldDomain << "\"}"));
+                }
+                return true;
+            }
+            tablet->AssignDomains(newDomain, tablet->NodeFilter.AllowedDomains);
+            tablet->TabletStorageInfo->TenantPathId = tablet->GetTenant();
+            db.Table<Schema::Tablet>().Key(TabletId).Update<Schema::Tablet::ObjectDomain>(tablet->ObjectDomain);
+            NJson::TJsonValue jsonOperation;
+            jsonOperation["Tablet"] = TabletId;
+            jsonOperation["ObjectDomain"] = TStringBuilder() << newDomain;
+            WriteOperation(db, jsonOperation);
+            Success = true;
+        } else {
+            ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes(TStringBuilder() << "{\"status\": \"ERROR\", \"error\":\"Tablet not found\"}"));
+        }
+        return true;
+    }
+
+    void Complete(const TActorContext& ctx) override {
+        if (Success) {
+            ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes(TStringBuilder() << "{\"status\":\"OK\"}"));
+        }
+    }
+};
+
 class TUpdateResourcesActor : public TActorBootstrapped<TUpdateResourcesActor> {
 public:
     TActorId Source;
@@ -4659,6 +4721,9 @@ void THive::CreateEvMonitoring(NMon::TEvRemoteHttpInfo::TPtr& ev, const TActorCo
     }
     if (page == "OperationsLog") {
         return Execute(new TTxMonEvent_OperationsLog(ev->Sender, ev, this), ctx);
+    }
+    if (page == "SetDomain") {
+        return Execute(new TTxMonEvent_SetDomain(ev->Sender, ev, this), ctx);
     }
     return Execute(new TTxMonEvent_Landing(ev->Sender, ev, this), ctx);
 }

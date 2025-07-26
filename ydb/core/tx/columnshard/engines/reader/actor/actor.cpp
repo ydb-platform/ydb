@@ -164,12 +164,14 @@ void TColumnShardScan::HandleScan(TEvents::TEvUndelivered::TPtr& ev) {
 void TColumnShardScan::CheckHanging(const bool logging) const {
     if (logging) {
         AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("HAS_ACK", AckReceivedInstant)("fi", FinishInstant)("si", !!ScanIterator)(
+            "finished", ScanIterator ? ScanIterator->Finished() : true)(
             "has_more", ChunksLimiter.HasMore())("in_waiting", ScanCountersPool.InWaiting())("counters_waiting", ScanCountersPool.DebugString())(
             "scan_actor_id", ScanActorId)("tx_id", TxId)("scan_id", ScanId)("gen", ScanGen)("tablet", TabletId)(
             "debug", ScanIterator ? ScanIterator->DebugString() : Default<TString>())("last", LastResultInstant);
     }
     const bool ok = !!FinishInstant || !ScanIterator || !ChunksLimiter.HasMore() || ScanCountersPool.InWaiting();
     AFL_VERIFY_DEBUG(ok)
+    ("finished", ScanIterator->Finished())
     ("scan_actor_id", ScanActorId)("tx_id", TxId)("scan_id", ScanId)("gen", ScanGen)("tablet", TabletId)("debug", ScanIterator->DebugString())(
         "counters", ScanCountersPool.DebugString());
     if (!ok) {

@@ -1070,7 +1070,7 @@ message TAlterCdcStream {
 
 message TDropCdcStream {
     optional string TableName = 1;
-    optional string StreamName = 2;
+    repeated string StreamName = 2;
 }
 
 message TRotateCdcStream {

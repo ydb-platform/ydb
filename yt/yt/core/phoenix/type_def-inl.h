@@ -89,6 +89,13 @@ namespace NYT::NPhoenix::NDetail {
 #define PHOENIX_REGISTER_FIELD(fieldTag, fieldName, ...) \
     registrar.template Field<fieldTag, &TThis::fieldName>(#fieldName) __VA_ARGS__ ()
 
+#define PHOENIX_REGISTER_DELETED_FIELD(fieldTag, fieldType, fieldName, version) \
+    registrar \
+        .template VirtualField<fieldTag>(#fieldName, [] (TThis* /*this_*/, auto& context) { \
+            Load<fieldType>(context); \
+        }) \
+        .BeforeVersion(version)()
+
 ////////////////////////////////////////////////////////////////////////////////
 
 template <class TThis, class TContext>

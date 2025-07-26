@@ -49,7 +49,7 @@ bool TAllocateMemoryStep::TFetchingStepAllocation::DoOnAllocated(std::shared_ptr
         return false;
     }
     if (StageIndex == NArrow::NSSA::IMemoryCalculationPolicy::EStage::Accessors) {
-        data->MutableStageData().SetAccessorsGuard(std::move(guard));
+//        data->SetAccessorsGuard(std::move(guard));
     } else {
         data->RegisterAllocationGuard(std::move(guard));
     }
@@ -57,8 +57,9 @@ bool TAllocateMemoryStep::TFetchingStepAllocation::DoOnAllocated(std::shared_ptr
         Step.Next();
     }
     FOR_DEBUG_LOG(NKikimrServices::COLUMNSHARD_SCAN_EVLOG, data->AddEvent("fmalloc"));
-    auto task = std::make_shared<TStepAction>(data, std::move(Step), data->GetContext()->GetCommonContext()->GetScanActorId(), false);
-    NConveyorComposite::TScanServiceOperator::SendTaskToExecute(task, data->GetContext()->GetCommonContext()->GetConveyorProcessId());
+    auto convProcId = data->GetContext()->GetCommonContext()->GetConveyorProcessId();
+    auto task = std::make_shared<TStepAction>(std::move(data), std::move(Step), data->GetContext()->GetCommonContext()->GetScanActorId(), false);
+    NConveyorComposite::TScanServiceOperator::SendTaskToExecute(task, convProcId);
     return true;
 }
 

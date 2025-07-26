@@ -1,7 +1,7 @@
 #pragma once
-#include "columns_set.h"
 
 #include <ydb/core/tx/columnshard/engines/reader/abstract/read_context.h>
+#include <ydb/core/tx/columnshard/engines/reader/common_reader/common/columns_set.h>
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/constructor/read_metadata.h>
 #include <ydb/core/tx/columnshard/engines/scheme/versions/abstract_scheme.h>
 #include <ydb/core/tx/limiter/grouped_memory/usage/abstract.h>
@@ -45,7 +45,7 @@ public:
         return GetColumnsFetchingPlan(std::static_pointer_cast<IDataSource>(source));
     }
 
-    std::shared_ptr<TFetchingScript> GetColumnsFetchingPlan(const std::shared_ptr<IDataSource>& source) {
+    std::shared_ptr<TFetchingScript> GetColumnsFetchingPlan(const std::shared_ptr<NCommon::IDataSource>& source) {
         return DoGetColumnsFetchingPlan(source);
     }
 

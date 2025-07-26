@@ -974,6 +974,7 @@ columns {
 primary_key: "key"
 storage_settings {
   store_external_blobs: DISABLED
+  external_data_channels_count: 1
 }
 column_families {
   name: "default"

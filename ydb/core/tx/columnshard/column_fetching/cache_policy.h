@@ -75,7 +75,7 @@ public:
     class TSizeCalcer {
     public:
         size_t operator()(const TObject& data) {
-            return sizeof(TAddress) + sizeof(TObject) + data->GetRawSizeVerified();
+            return sizeof(TAddress) + sizeof(TObject) + data->GetRawSize().value_or(0);
         }
     };
 

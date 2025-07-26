@@ -61,6 +61,7 @@ public:
     NCommon::TConfSetting<bool, Static> UseGraceJoinCoreForMap;
     NCommon::TConfSetting<bool, Static> UseBlockHashJoin;
     NCommon::TConfSetting<bool, Static> EnableOrderPreservingLookupJoin;
+    NCommon::TConfSetting<bool, Static> OptEnableParallelUnionAllConnectionsForExtend;
 
     NCommon::TConfSetting<TString, Static> OptOverrideStatistics;
     NCommon::TConfSetting<NYql::TOptimizerHints, Static> OptimizerHints;
@@ -204,6 +205,7 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
     bool EnableOlapSubstringPushdown = false;
     bool EnableIndexStreamWrite = false;
     bool EnableOlapPushdownProjections = false;
+    bool EnableParallelUnionAllConnectionsForExtend = false;
 
     ui32 LangVer = NYql::MinLangVersion;
     NYql::EBackportCompatibleFeaturesMode BackportMode = NYql::EBackportCompatibleFeaturesMode::Released;
@@ -214,6 +216,7 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
     void SetDefaultEnabledSpillingNodes(const TString& node);
     ui64 GetEnabledSpillingNodes() const;
     bool GetEnableOlapPushdownProjections() const;
+    bool GetEnableParallelUnionAllConnectionsForExtend() const;
 };
 
 }

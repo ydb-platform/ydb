@@ -11,11 +11,16 @@ namespace NKikimr::NOlap::NReader {
 class IDataReader;
 
 class IApplyAction {
+private:
+    bool AppliedFlag = false;
+
 protected:
-    virtual bool DoApply(IDataReader& indexedDataRead) const = 0;
+    virtual bool DoApply(IDataReader& indexedDataRead) = 0;
 
 public:
-    bool Apply(IDataReader& indexedDataRead) const {
+    bool Apply(IDataReader& indexedDataRead) {
+        AFL_VERIFY(!AppliedFlag);
+        AppliedFlag = true;
         return DoApply(indexedDataRead);
     }
     virtual ~IApplyAction() = default;

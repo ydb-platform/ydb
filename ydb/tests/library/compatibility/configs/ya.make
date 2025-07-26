@@ -1,34 +1,45 @@
 RECURSE(dump)
+RECURSE(comparator)
 
-INCLUDE(${ARCADIA_ROOT}/ydb/tests/library/compatibility/versions.inc)
+UNION()
 
-# UNION()
-#
-#
+RUN_PROGRAM(
+   ydb/tests/library/compatibility/binaries/downloader download stable-25-1/release/config-meta.json stable-25-1
+   OUT_NOAUTO stable-25-1
+)
+
+RUN_PROGRAM(
+   ydb/tests/library/compatibility/binaries/downloader download stable-25-1-1/release/config-meta.json stable-25-1-1
+   OUT_NOAUTO stable-25-1-1
+)
+
+RUN_PROGRAM(
+   ydb/tests/library/compatibility/binaries/downloader download stable-25-1-2/release/config-meta.json stable-25-1-2
+   OUT_NOAUTO stable-25-1-2
+)
+
+RUN_PROGRAM(
+   ydb/tests/library/compatibility/binaries/downloader download stable-25-1-3/release/config-meta.json stable-25-1-3
+   OUT_NOAUTO stable-25-1-3
+)
+
 # RUN_PROGRAM(
-#    ydb/tests/library/compatibility/binaries/downloader download $YDB_COMPAT_INTER_REF/release/config-meta.json inter $YDB_COMPAT_INTER_REF
-#    OUT_NOAUTO inter inter-name
+#   ydb/tests/library/compatibility/binaries/downloader download prestable-25-2/release/config-meta.json prestable-25-2
+#   OUT_NOAUTO prestable-25-2
 # )
-#
-# RUN_PROGRAM(
-#     ydb/tests/library/compatibility/binaries/downloader download $YDB_COMPAT_INIT_REF/release/config-meta.json init $YDB_COMPAT_INIT_REF
-#     OUT_NOAUTO init init-name
-# )
-# 
-# IF(${YDB_COMPAT_TARGET_REF} != "current")
-#     RUN_PROGRAM(
-#         ydb/tests/library/compatibility/binaries/downloader download $YDB_COMPAT_TARGET_REF/release/config-meta.json target $YDB_COMPAT_TARGET_REF
-#         OUT_NOAUTO target target-name
-#     )
-# ELSE()
-#     RUN_PROGRAM(
-#         ydb/tests/library/compatibility/configs/dump/dumper
-#         STDOUT_NOAUTO target
-#     )
-#     RUN(
-#         echo current
-#         STDOUT_NOAUTO target-name
-#     )
-# ENDIF()
-# 
-# END()
+
+RUN_PROGRAM(
+   ydb/tests/library/compatibility/binaries/downloader download prestable-25-3/release/config-meta.json prestable-25-3
+   OUT_NOAUTO prestable-25-3
+)
+
+RUN_PROGRAM(
+    ydb/tests/library/compatibility/configs/dump/dumper
+    STDOUT_NOAUTO current
+)
+RUN(
+    echo current
+    STDOUT_NOAUTO current-name
+)
+
+END()

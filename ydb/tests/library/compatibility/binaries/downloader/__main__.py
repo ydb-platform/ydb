@@ -21,15 +21,15 @@ def main():
         s3_bucket = AWS_BUCKET
         remote_src = sys.argv[2]
         local_dst = sys.argv[3]
-        binary_name = sys.argv[4]
+        binary_name = sys.argv[4] if len(sys.argv) > 4 else None
         s3_client.download_file(s3_bucket, remote_src, local_dst)
 
         # chmod +x
         st = os.stat(local_dst)
         os.chmod(local_dst, st.st_mode | stat.S_IEXEC)
-
-        with open(local_dst + "-name", "w") as f:
-            f.write(binary_name)
+        if binary_name:
+            with open(local_dst + "-name", "w") as f:
+                f.write(binary_name)
     elif mode == 'append-version':
         local_dst = sys.argv[2]
         binary_name = sys.argv[3]

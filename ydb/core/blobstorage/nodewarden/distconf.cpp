@@ -249,6 +249,9 @@ namespace NKikimr::NStorage {
             if (ConnectedDynamicNodes.contains(nodeId)) {
                 okay = true;
             }
+            if (UnsubscribeQueue.contains(nodeId)) {
+                okay = true;
+            }
             Y_ABORT_UNLESS(okay);
             if (subs.SubscriptionCookie) {
                 const auto it = SubscriptionCookieMap.find(subs.SubscriptionCookie);
@@ -359,10 +362,6 @@ namespace NKikimr::NStorage {
         Send(wardenId, ev.release(), 0, cookie);
     }
 
-    void TDistributedConfigKeeper::Handle(TEvNodeWardenUpdateConfigFromPeer::TPtr ev) {
-        ApplyStorageConfig(ev->Get()->StorageConfig);
-    }
-
     STFUNC(TDistributedConfigKeeper::StateFunc) {
         STLOG(PRI_DEBUG, BS_NODE, NWDC15, "StateFunc", (Type, ev->GetTypeRewrite()), (Sender, ev->Sender),
             (SessionId, ev->InterconnectSession), (Cookie, ev->Cookie));
@@ -378,6 +377,7 @@ namespace NKikimr::NStorage {
             hFunc(TEvNodeConfigScatter, Handle);
             hFunc(TEvNodeConfigGather, Handle);
             hFunc(TEvNodeConfigInvokeOnRoot, Handle);
+            IgnoreFunc(TEvNodeConfigInvokeOnRootResult);
             hFunc(TEvInterconnect::TEvNodesInfo, Handle);
             hFunc(TEvInterconnect::TEvNodeConnected, Handle);
             hFunc(TEvInterconnect::TEvNodeDisconnected, Handle);
@@ -400,7 +400,6 @@ namespace NKikimr::NStorage {
             hFunc(TEvNodeWardenUpdateCache, Handle);
             hFunc(TEvNodeWardenQueryCache, Handle);
             hFunc(TEvNodeWardenUnsubscribeFromCache, Handle);
-            hFunc(TEvNodeWardenUpdateConfigFromPeer, Handle);
             hFunc(TEvNodeWardenManageSyncersResult, Handle);
         )
         for (ui32 nodeId : std::exchange(UnsubscribeQueue, {})) {

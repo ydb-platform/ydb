@@ -385,6 +385,13 @@ void TGetQueryTrackerInfoCommand::Register(TRegistrar registrar)
             return command->Options.Attributes;
         })
         .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<INodePtr>(
+        "settings",
+        [] (TThis* command) -> auto& {
+            return command->Options.Settings;
+        })
+        .Optional(/*init*/ false);
 }
 
 void TGetQueryTrackerInfoCommand::DoExecute(ICommandContextPtr context)
@@ -399,6 +406,7 @@ void TGetQueryTrackerInfoCommand::DoExecute(ICommandContextPtr context)
             .Item("supported_features").Value(result.SupportedFeatures)
             .Item("access_control_objects").Value(result.AccessControlObjects)
             .Item("clusters").Value(result.Clusters)
+            .Item("engines_info").Value(result.EnginesInfo)
         .EndMap());
 }
 

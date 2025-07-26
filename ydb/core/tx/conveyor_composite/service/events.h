@@ -84,11 +84,11 @@ public:
         return TWorkerTask(std::move(*this), std::move(Task), std::move(signals));
     }
 
-    TWorkerTaskPrepare(const ITask::TPtr& task, const TDuration prediction, const ESpecialTaskCategory category,
+    TWorkerTaskPrepare(ITask::TPtr&& task, const TDuration prediction, const ESpecialTaskCategory category,
         const std::shared_ptr<TProcessScope>& scope, const ui64 processId)
         : TBase(prediction, category, scope, processId)
-        , Task(task) {
-        AFL_VERIFY(task);
+        , Task(std::move(task)) {
+        AFL_VERIFY(Task);
     }
 
     bool operator<(const TWorkerTaskPrepare& wTask) const {

@@ -1,6 +1,6 @@
 {% extends '//builtin/bag.ym' %}
 
-{% block current_version %}20.1.7{% endblock %}
+{% block current_version %}20.1.8{% endblock %}
 
 {% block current_url %}
 https://github.com/llvm/llvm-project/releases/download/llvmorg-{{self.version().strip()}}/compiler-rt-{{self.version().strip()}}.src.tar.xz

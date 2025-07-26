@@ -32,7 +32,7 @@ namespace NSQLComplete {
         struct TConstraints: TNamespaced {};
     };
 
-    struct TTypeName: TIdentifier {
+    struct TTypeName: TIdentifier, TDescribed {
         struct TConstraints {};
 
         enum class EKind {

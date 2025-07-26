@@ -87,7 +87,6 @@ namespace NKikimr::NStorage {
                EvStorageConfigLoaded,
                EvStorageConfigStored,
                EvReconnect,
-               EvUpdateRootState,
                EvOpQueueEnd,
             };
 
@@ -99,18 +98,6 @@ namespace NKikimr::NStorage {
 
             struct TEvStorageConfigStored : TEventLocal<TEvStorageConfigStored, EvStorageConfigStored> {
                 std::vector<std::tuple<TString, bool, std::optional<ui64>>> StatusPerPath;
-            };
-
-            struct TEvUpdateRootState : TEventLocal<TEvUpdateRootState, EvUpdateRootState> {
-                const bool HasScepter;
-                const std::optional<ui32> RootNodeId;
-                const bool HasQuorumInPile;
-
-                TEvUpdateRootState(bool hasScepter, std::optional<ui32> rootNodeId, bool hasQuorumInPile)
-                    : HasScepter(hasScepter)
-                    , RootNodeId(rootNodeId)
-                    , HasQuorumInPile(hasQuorumInPile)
-                {}
             };
         };
 
@@ -357,7 +344,6 @@ namespace NKikimr::NStorage {
         bool ApplyStorageConfig(const NKikimrBlobStorage::TStorageConfig& config);
         void HandleConfigConfirm(STATEFN_SIG);
         void ReportStorageConfigToNodeWarden(ui64 cookie);
-        void Handle(TEvNodeWardenUpdateConfigFromPeer::TPtr ev);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // PDisk configuration retrieval and storing
@@ -419,8 +405,6 @@ namespace NKikimr::NStorage {
         bool HasConnectedNodeQuorum(const NKikimrBlobStorage::TStorageConfig& config,
             const THashSet<TBridgePileId>& specificBridgePileIds = {}) const;
 
-        void UpdateRootStateToConnectionChecker();
-
         struct TProcessCollectConfigsResult {
             std::optional<TString> ErrorReason;
             bool IsDistconfDisabledQuorum = false;
@@ -446,7 +430,8 @@ namespace NKikimr::NStorage {
             bool convertToDonor, bool ignoreVSlotQuotaCheck, bool isSelfHealReasonDecommit,
             std::optional<TBridgePileId> bridgePileId);
 
-        bool UpdateConfig(NKikimrBlobStorage::TStorageConfig *config);
+        bool UpdateConfig(NKikimrBlobStorage::TStorageConfig *config,
+            const THashMap<TBridgePileId, NKikimrBlobStorage::TStorageConfig*>& persistedConfigForUnsyncedPile);
 
         void PrepareScatterTask(ui64 cookie, TScatterTask& task);
 
@@ -458,7 +443,7 @@ namespace NKikimr::NStorage {
 
         std::optional<TString> StartProposition(NKikimrBlobStorage::TStorageConfig *configToPropose,
             const NKikimrBlobStorage::TStorageConfig *propositionBase, THashSet<TBridgePileId>&& specificBridgePileIds,
-            TActorId actorId, bool checkSyncersAfterCommit, bool forceGeneration);
+            TActorId actorId, bool checkSyncersAfterCommit);
 
         void CheckForConfigUpdate();
 
@@ -488,9 +473,12 @@ namespace NKikimr::NStorage {
         void OnSyncerUnboundNode(ui32 nodeId);
         void IssueQuerySyncers();
 
-        bool UpdateBridgeConfig(NKikimrBlobStorage::TStorageConfig *config);
+        bool UpdateBridgeConfig(NKikimrBlobStorage::TStorageConfig *config,
+            const THashMap<TBridgePileId, NKikimrBlobStorage::TStorageConfig*>& persistedConfigForUnsyncedPile);
 
         static void GenerateBridgeInitialState(const TNodeWardenConfig& cfg, NKikimrBlobStorage::TStorageConfig *config);
+
+        bool CheckBridgePeerRevPush(const NKikimrBlobStorage::TStorageConfig& peerConfig, ui32 senderNodeId);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Scatter/gather logic
@@ -679,7 +667,7 @@ namespace NKikimr::NStorage {
     }
 
     std::optional<TString> ValidateConfigUpdate(const NKikimrBlobStorage::TStorageConfig& current,
-            const NKikimrBlobStorage::TStorageConfig& proposed, bool forceGeneration);
+            const NKikimrBlobStorage::TStorageConfig& proposed);
 
     std::optional<TString> ValidateConfig(const NKikimrBlobStorage::TStorageConfig& config);
 

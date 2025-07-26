@@ -1572,7 +1572,7 @@ TVector<ISubOperation::TPtr> TDefaultOperationFactory::MakeOperationParts(
     case NKikimrSchemeOp::EOperationType::ESchemeOpAlterBackupCollection:
         Y_ABORT("TODO: implement");
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropBackupCollection:
-        return {CreateDropBackupCollection(op.NextPartId(), tx)};
+        return CreateDropBackupCollectionCascade(op.NextPartId(), tx, context);
 
     case NKikimrSchemeOp::EOperationType::ESchemeOpBackupBackupCollection:
         return CreateBackupBackupCollection(op.NextPartId(), tx, context);

@@ -348,6 +348,7 @@ message TVMultiPutItem {
     optional NKikimrProto.TLogoBlobID BlobID = 1;
     optional bytes Buffer = 2;
     optional bool IssueKeepFlag = 7;
+    optional bool IgnoreBlock = 8;
 
     optional uint64 FullDataSize = 3;
     optional uint64 Cookie = 4;

@@ -2,7 +2,7 @@
 #include <ydb/core/tx/columnshard/blobs_reader/task.h>
 #include <ydb/core/tx/columnshard/data_accessor/manager.h>
 #include <ydb/core/tx/columnshard/engines/portions/data_accessor.h>
-#include <ydb/core/tx/columnshard/engines/reader/common_reader/iterator/columns_set.h>
+#include <ydb/core/tx/columnshard/engines/reader/common_reader/common/columns_set.h>
 #include <ydb/core/tx/limiter/grouped_memory/usage/abstract.h>
 #include <ydb/core/tx/limiter/grouped_memory/usage/service.h>
 
@@ -23,7 +23,7 @@ enum class EFetchingStage : ui32 {
 
 class TCurrentContext: TMoveOnly {
 private:
-    std::optional<std::vector<TPortionDataAccessor>> Accessors;
+    std::optional<std::vector<std::shared_ptr<TPortionDataAccessor>>> Accessors;
     YDB_READONLY_DEF(std::vector<std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>>, ResourceGuards);
     std::shared_ptr<NGroupedMemoryManager::TProcessGuard> MemoryProcessGuard;
     std::shared_ptr<NGroupedMemoryManager::TScopeGuard> MemoryScopeGuard;
@@ -97,17 +97,17 @@ public:
         }
     }
 
-    void SetPortionAccessors(std::vector<TPortionDataAccessor>&& acc) {
+    void SetPortionAccessors(std::vector<std::shared_ptr<TPortionDataAccessor>>&& acc) {
         AFL_VERIFY(!Accessors);
         Accessors = std::move(acc);
     }
 
-    const std::vector<TPortionDataAccessor>& GetPortionAccessors() const {
+    const std::vector<std::shared_ptr<TPortionDataAccessor>>& GetPortionAccessors() const {
         AFL_VERIFY(Accessors);
         return *Accessors;
     }
 
-    std::vector<TPortionDataAccessor> ExtractPortionAccessors() {
+    std::vector<std::shared_ptr<TPortionDataAccessor>> ExtractPortionAccessors() {
         AFL_VERIFY(Accessors);
         auto result = std::move(*Accessors);
         Accessors.reset();
@@ -129,7 +129,7 @@ public:
     virtual ~IFetchCallback() = default;
 
     virtual ui64 GetNecessaryDataMemory(
-        const std::shared_ptr<NReader::NCommon::TColumnsSetIds>& /*columnIds*/, const std::vector<TPortionDataAccessor>& /*acc*/) const {
+        const std::shared_ptr<NReader::NCommon::TColumnsSetIds>& /*columnIds*/, const std::vector<std::shared_ptr<TPortionDataAccessor>>& /*acc*/) const {
         return 0;
     }
 

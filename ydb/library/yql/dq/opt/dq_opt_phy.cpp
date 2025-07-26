@@ -2359,6 +2359,26 @@ TExprBase DqBuildPureExprStage(TExprBase node, TExprContext& ctx) {
         .Done();
 }
 
+// Creates a new stage with empty inputs and `ParallelUnionAllConnection` for pure expr.
+TExprBase DqBuildStageWithParallelConnectionForDqPureExpr(TExprBase node, TExprContext& ctx) {
+    auto stage = Build<TDqStage>(ctx, node.Pos())
+         .Inputs()
+         .Build()
+         .Program()
+             .Args({})
+             .Body(node)
+         .Build()
+         .Settings(TDqStageSettings().BuildNode(ctx, node.Pos()))
+    .Done();
+
+    return Build<TDqCnParallelUnionAll>(ctx, node.Pos())
+        .Output()
+            .Stage(stage)
+            .Index().Build("0")
+        .Build()
+    .Done();
+ }
+
 /*
  * Move (Extend ...) into a separate stage.
  *
@@ -2368,7 +2388,7 @@ TExprBase DqBuildPureExprStage(TExprBase node, TExprContext& ctx) {
  * is needed for handling UNION ALL case, which generates top-level Extend where some arguments
  * can be pure expressions not wrapped in DqStage (e.g. ... UNION ALL SELECT 1).
  */
-TExprBase DqBuildExtendStage(TExprBase node, TExprContext& ctx) {
+TExprBase DqBuildExtendStage(TExprBase node, TExprContext& ctx, bool enableParallelUnionAllConnections) {
     if (!node.Maybe<TCoExtendBase>()) {
         return node;
     }
@@ -2377,27 +2397,54 @@ TExprBase DqBuildExtendStage(TExprBase node, TExprContext& ctx) {
     TVector<TCoArgument> inputArgs;
     TVector<TExprBase> inputConns;
     TVector<TExprBase> extendArgs;
+    ui32 originalDqConnectionCount = 0;
 
     for (const auto& arg: extend) {
         if (arg.Maybe<TDqConnection>()) {
-            auto conn = arg.Cast<TDqConnection>();
-            TCoArgument programArg = Build<TCoArgument>(ctx, conn.Pos())
+            auto dqConnection = arg.Cast<TDqConnection>();
+            TCoArgument programArg = Build<TCoArgument>(ctx, node.Pos())
                 .Name("arg")
+            .Done();
+
+            if (enableParallelUnionAllConnections) {
+                // Create a new `ParallelUnionAll` connection to replace original one.
+                dqConnection = Build<TDqCnParallelUnionAll>(ctx, node.Pos())
+                    .Output()
+                        .Stage(dqConnection.Output().Stage())
+                        .Index(dqConnection.Output().Index())
+                    .Build()
                 .Done();
-            inputConns.push_back(conn);
+            }
+
+            inputConns.push_back(dqConnection);
             inputArgs.push_back(programArg);
             extendArgs.push_back(programArg);
+            ++originalDqConnectionCount;
         } else if (IsDqCompletePureExpr(arg)) {
-            // arg is deemed to be a pure expression so leave it inside (Extend ...)
-            extendArgs.push_back(Build<TCoToFlow>(ctx, arg.Pos())
+            auto newFlowArg = Build<TCoToFlow>(ctx, node.Pos())
                 .Input(arg)
-                .Done());
+            .Done();
+
+            if (enableParallelUnionAllConnections) {
+                TCoArgument newArg = Build<TCoArgument>(ctx, node.Pos())
+                    .Name("arg")
+                .Done();
+
+                inputArgs.push_back(newArg);
+                extendArgs.push_back(newArg);
+
+                // Create a `ParallelUnionAll` connection for pure expr.
+                inputConns.push_back(DqBuildStageWithParallelConnectionForDqPureExpr(newFlowArg, ctx));
+            } else {
+                extendArgs.push_back(newFlowArg);
+            }
         } else {
             return node;
         }
     }
 
-    if (inputConns.empty()) {
+    // Do not apply rule if no original connections, extend already inside stage.
+    if (!originalDqConnectionCount) {
         return node;
     }
 
@@ -2407,7 +2454,7 @@ TExprBase DqBuildExtendStage(TExprBase node, TExprContext& ctx) {
             .Build()
         .Program()
             .Args(inputArgs)
-            .Body<TCoExtend>() // TODO: check Extend effectiveness
+            .Body<TCoExtend>()
                 .Add(extendArgs)
                 .Build()
             .Build()

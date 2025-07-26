@@ -435,15 +435,17 @@ namespace NKikimr {
             NWilson::TTraceId TraceId;
             bool WrittenBeyondBarrier = false;
             bool IssueKeepFlag = false;
+            bool IgnoreBlock = false;
 
             TVPutInfo(TLogoBlobID blobId, TRope &&buffer,
                     NProtoBuf::RepeatedPtrField<NKikimrBlobStorage::TEvVPut::TExtraBlockCheck> *extraBlockChecks,
-                    NWilson::TTraceId traceId, bool issueKeepFlag)
+                    NWilson::TTraceId traceId, bool issueKeepFlag, bool ignoreBlock)
                 : Buffer(std::move(buffer))
                 , BlobId(blobId)
                 , HullStatus({NKikimrProto::UNKNOWN, "", false})
                 , TraceId(std::move(traceId))
                 , IssueKeepFlag(issueKeepFlag)
+                , IgnoreBlock(ignoreBlock)
             {
                 ExtraBlockChecks.Swap(extraBlockChecks);
             }
@@ -608,7 +610,6 @@ namespace NKikimr {
             }
 
             bool hasPostponed = false;
-            bool ignoreBlock = record.GetIgnoreBlock();
 
             TBatchedVec<TVPutInfo> putsInfo;
             ui64 lsnCount = 0;
@@ -616,8 +617,10 @@ namespace NKikimr {
                 auto &item = *record.MutableItems(itemIdx);
                 TLogoBlobID blobId = LogoBlobIDFromLogoBlobID(item.GetBlobID());
                 putsInfo.emplace_back(blobId, ev->Get()->GetItemBuffer(itemIdx), item.MutableExtraBlockChecks(),
-                    item.HasTraceId() ? item.GetTraceId() : NWilson::TTraceId(), item.GetIssueKeepFlag());
+                    item.HasTraceId() ? item.GetTraceId() : NWilson::TTraceId(), item.GetIssueKeepFlag(),
+                    item.GetIgnoreBlock());
                 TVPutInfo &info = putsInfo.back();
+                const bool ignoreBlock = record.GetIgnoreBlock() || info.IgnoreBlock;
 
                 try {
                     info.IsHugeBlob = HugeBlobCtx->IsHugeBlob(VCtx->Top->GType, blobId.FullID(), MinHugeBlobInBytes);
@@ -761,7 +764,7 @@ namespace NKikimr {
             LWTRACK(VDiskSkeletonVPutRecieved, ev->Get()->Orbit, VCtx->NodeId, VCtx->GroupId.GetRawId(),
                    VCtx->Top->GetFailDomainOrderNumber(VCtx->ShortSelfVDisk), id.TabletID(), id.BlobSize());
             TVPutInfo info(id, ev->Get()->GetBuffer(), record.MutableExtraBlockChecks(), std::move(ev->TraceId),
-                record.GetIssueKeepFlag());
+                record.GetIssueKeepFlag(), record.GetIgnoreBlock());
             const ui64 bufSize = info.Buffer.GetSize();
 
             try {
@@ -835,7 +838,7 @@ namespace NKikimr {
             NKikimrBlobStorage::EPutHandleClass handleClass = record.GetHandleClass();
             if (!info.IsHugeBlob) {
                 auto [logMsg, traceId] = CreatePutLogEvent(ctx, "TEvVPut", ev->Sender, ev->Cookie,
-                        std::move(ev->Get()->Orbit), handleClass, info, std::move(result));
+                    std::move(ev->Get()->Orbit), handleClass, info, std::move(result));
                 ctx.Send(Db->LoggerID, logMsg.release(), 0, 0, std::move(traceId));
             } else if (info.Buffer) {
                 auto traceId = std::move(info.TraceId);

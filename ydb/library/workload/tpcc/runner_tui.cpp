@@ -198,19 +198,27 @@ Element TRunnerTui::BuildUpperPart() {
         }
     }
 
-    // Pad the shorter column with empty lines
-    while (leftThreadElements.size() < rightThreadElements.size()) {
-        leftThreadElements.push_back(text(""));
-    }
-    while (rightThreadElements.size() < leftThreadElements.size()) {
-        rightThreadElements.push_back(text(""));
-    }
+    Element threadSection;
+    if (threadCount > 1) {
+        // Pad the shorter column with empty lines
+        while (leftThreadElements.size() < rightThreadElements.size()) {
+            leftThreadElements.push_back(text(""));
+        }
+        while (rightThreadElements.size() < leftThreadElements.size()) {
+            rightThreadElements.push_back(text(""));
+        }
 
-    auto threadSection = window(text("TPC-C client state"), hbox({
-        vbox(leftThreadElements) | flex,
-        separator(),
-        vbox(rightThreadElements) | flex
-    }));
+        threadSection = window(text("TPC-C client state"), hbox({
+            vbox(leftThreadElements) | flex,
+            separator(),
+            vbox(rightThreadElements) | flex
+        }));
+    } else {
+        // a very rare case when we have just 1 thread
+        threadSection = window(text("TPC-C client state"), hbox({
+            vbox(leftThreadElements) | flex
+        }));
+    }
 
     return vbox({
         topSection,

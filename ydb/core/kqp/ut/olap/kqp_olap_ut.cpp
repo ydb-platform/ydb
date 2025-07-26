@@ -1737,8 +1737,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
         for (ui32 i = 0; i < queries.size(); ++i) {
             const auto query = queries[i];
-            Cerr << "QUERY: " << Endl;
-            Cerr << query << Endl;
 
             auto result =
                 session2
@@ -1747,11 +1745,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
 
             auto ast = *result.GetStats()->GetAst();
-            // TString plan = *result.GetStats()->GetPlan();
-            // Cerr << "PLAN " << plan << Endl;
-            // TODO: Add pushed projection to explain.
-            // NYdb::NConsoleClient::TQueryPlanPrinter queryPlanPrinter(NYdb::NConsoleClient::EDataFormat::PrettyTable, true, Cout, 0);
-            // queryPlanPrinter.Print(plan);
 
             UNIT_ASSERT_C(ast.find("KqpOlapProjections") != std::string::npos, TStringBuilder() << "Projections not pushed down. Query: " << query);
             UNIT_ASSERT_C(ast.find("KqpOlapProjection") != std::string::npos, TStringBuilder() << "Projection not pushed down. Query: " << query);
@@ -1760,11 +1753,35 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
 
             TString output = FormatResultSetYson(result.GetResultSet(0));
-            Cerr << "QUERY: " << Endl;
-            Cerr << query << Endl;
-
-            Cerr << "RESULT: " << output << Endl;
             CompareYson(output, results[i]);
+        }
+
+        TVector<TString> notForPushdown = {
+        R"(
+            PRAGMA Kikimr.OptEnableOlapPushdownProjections = "true";
+
+            SELECT JSON_VALUE(jsonDoc, "$.a"), JSON_VALUE(jsonDoc, "$.b") FROM `/Root/foo`
+            where JSON_VALUE(jsonDoc, "$.c") = "b";
+        )"};
+
+       for (ui32 i = 0; i < notForPushdown.size(); ++i) {
+            const auto query = notForPushdown[i];
+            auto result =
+                session2
+                    .ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain))
+                    .ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+
+            auto ast = *result.GetStats()->GetAst();
+            UNIT_ASSERT_C(ast.find("KqpOlapProjections") == std::string::npos,
+                          TStringBuilder() << "Projections pushed down, but should not. Query: " << query);
+            UNIT_ASSERT_C(ast.find("KqpOlapFilter") != std::string::npos, TStringBuilder() << "Filter not pushed down. Query: " << query);
+
+            result =
+                session2.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), NYdb::NQuery::TExecuteQuerySettings()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+
+            TString output = FormatResultSetYson(result.GetResultSet(0));
         }
     }
 
@@ -1944,12 +1961,9 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     // This test triggers "heap-use-after-free" error if we call `PeepholeOptimizeNode()`
     // on expression with `free args`.
     Y_UNIT_TEST(OlapFilterPeephole) {
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
-        appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
-        auto settings = TKikimrSettings()
-            .SetAppConfig(appConfig)
-            .SetWithSampleTables(false);
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+        settings.AppConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
         TKikimrRunner kikimr(settings);
 
         TStreamExecScanQuerySettings scanSettings;
@@ -2735,12 +2749,9 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     }
 
     void TestOlapUpsert(ui32 numShards) {
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
-        appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
-        auto settings = TKikimrSettings()
-            .SetAppConfig(appConfig)
-            .SetWithSampleTables(false);
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+        settings.AppConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
         TKikimrRunner kikimr(settings);
 
         auto tableClient = kikimr.GetTableClient();
@@ -3348,7 +3359,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     Y_UNIT_TEST(BulkUpsertUpdate) {
         TKikimrSettings runnerSettings;
         runnerSettings.WithSampleTables = false;
-        runnerSettings.SetColumnShardAlterObjectEnabled(true);
+        runnerSettings.SetColumnShardAlterObjectEnabled(true).SetColumnShardReaderClassName("PLAIN");
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
         TTestHelper testHelper(runnerSettings);
 
@@ -3384,13 +3395,10 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     }
 
     void RunBlockChannelTest(auto blockChannelsMode) {
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
-        appConfig.MutableTableServiceConfig()->SetBlockChannelsMode(blockChannelsMode);
-        appConfig.MutableTableServiceConfig()->SetEnableSpillingNodes("None");
-        auto settings = TKikimrSettings()
-            .SetAppConfig(appConfig)
-            .SetWithSampleTables(true);
+        auto settings = TKikimrSettings().SetWithSampleTables(true);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+        settings.AppConfig.MutableTableServiceConfig()->SetBlockChannelsMode(blockChannelsMode);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableSpillingNodes("None");
 
         TKikimrRunner kikimr(settings);
         Tests::NCommon::TLoggerInit(kikimr).Initialize();
@@ -3830,11 +3838,9 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     }
 
     Y_UNIT_TEST(MultiInsertWithSinks) {
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
-        auto settings = TKikimrSettings()
-            .SetAppConfig(appConfig)
-            .SetWithSampleTables(false);
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+
         TKikimrRunner kikimr(settings);
 
         TLocalHelper(kikimr).CreateTestOlapTable();
@@ -3956,10 +3962,10 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     }
 
     Y_UNIT_TEST(ScanFailedSnapshotTooOld) {
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
-        appConfig.MutableColumnShardConfig()->SetMaxReadStaleness_ms(5000);
-        auto settings = TKikimrSettings().SetAppConfig(appConfig).SetWithSampleTables(false);
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+        settings.AppConfig.MutableColumnShardConfig()->SetMaxReadStaleness_ms(5000);
+
         TTestHelper testHelper(settings);
 
         TTestHelper::TColumnTable cnt;
@@ -3981,10 +3987,9 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     }
 
     Y_UNIT_TEST(InsertIntoNullablePK) {
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
-        appConfig.MutableColumnShardConfig()->SetAllowNullableColumnsInPK(true);
-        auto settings = TKikimrSettings().SetAppConfig(appConfig).SetWithSampleTables(false);
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+        settings.AppConfig.MutableColumnShardConfig()->SetAllowNullableColumnsInPK(true);
         TTestHelper testHelper(settings);
 
         TVector<TTestHelper::TColumnSchema> schema = {
@@ -4030,10 +4035,10 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     }
 
     Y_UNIT_TEST(InsertEmptyString) {
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
-        appConfig.MutableColumnShardConfig()->SetAllowNullableColumnsInPK(true);
-        auto settings = TKikimrSettings().SetAppConfig(appConfig).SetWithSampleTables(false);
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+        settings.AppConfig.MutableColumnShardConfig()->SetAllowNullableColumnsInPK(true);
+        
         TTestHelper testHelper(settings);
 
         TVector<TTestHelper::TColumnSchema> schema = {
@@ -4168,9 +4173,8 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     }
 
     Y_UNIT_TEST(CountWithPredicate) {
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
-        auto runnerSettings = TKikimrSettings().SetAppConfig(appConfig).SetWithSampleTables(true);
+        auto runnerSettings = TKikimrSettings().SetWithSampleTables(true);
+        runnerSettings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
 
         TTestHelper testHelper(runnerSettings);
         auto client = testHelper.GetKikimr().GetQueryClient();
@@ -4217,13 +4221,9 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     }
 
     Y_UNIT_TEST(PredicateWithLimit) {
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
-        auto runnerSettings = TKikimrSettings()
-                                  .SetAppConfig(appConfig)
-                                  .SetWithSampleTables(true)
-                                  .SetColumnShardAlterObjectEnabled(true)
-                                  .SetColumnShardReaderClassName("SIMPLE");
+        auto runnerSettings =
+            TKikimrSettings().SetWithSampleTables(true).SetColumnShardAlterObjectEnabled(true).SetColumnShardReaderClassName("SIMPLE");
+        runnerSettings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
 
         TTestHelper testHelper(runnerSettings);
         auto client = testHelper.GetKikimr().GetQueryClient();
@@ -4286,9 +4286,9 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     }
 
     Y_UNIT_TEST(ReverseMerge) {
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
-        auto runnerSettings = TKikimrSettings().SetAppConfig(appConfig).SetWithSampleTables(true).SetColumnShardAlterObjectEnabled(true);
+        auto runnerSettings =
+            TKikimrSettings().SetWithSampleTables(true).SetColumnShardAlterObjectEnabled(true).SetColumnShardReaderClassName("PLAIN");
+        runnerSettings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
 
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
         csController->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);

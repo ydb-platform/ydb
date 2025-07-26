@@ -14,7 +14,7 @@ TAccessor::TAccessor(const TString& tablePath, const NColumnShard::TSchemeShardL
 }
 
 std::unique_ptr<NReader::NCommon::ISourcesConstructor> TAccessor::SelectMetadata(const TSelectMetadataContext& context,
-    const NReader::TReadDescription& readDescription, const bool /*withUncommitted*/, const bool isPlain) const {
+    const NReader::TReadDescription& readDescription, const NColumnShard::IResolveWriteIdToLockId& /*resolver*/, const bool isPlain) const {
     AFL_VERIFY(!isPlain);
     return std::make_unique<TConstructor>(context.GetPathIdTranslator(), context.GetEngine(), readDescription.GetTabletId(),
         GetTableFilterPathId(), readDescription.GetSnapshot(), readDescription.PKRangesFilter, readDescription.GetSorting());

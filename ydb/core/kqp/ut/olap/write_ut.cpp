@@ -471,10 +471,9 @@ Y_UNIT_TEST_SUITE(KqpOlapWrite) {
         csController->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::GC);
         Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->ResetWriteCounters();
 
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+        auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
 
-        auto settings = TKikimrSettings().SetAppConfig(appConfig).SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true);
         TKikimrRunner kikimr(settings);
         auto helper = TLocalHelper(kikimr);
         helper.CreateTestOlapTable();

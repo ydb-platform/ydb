@@ -1,5 +1,6 @@
 #include "schemeshard__operation_common.h"
 #include "schemeshard__operation_part.h"
+#include "schemeshard__operation.h"
 #include "schemeshard_impl.h"
 
 #include <ydb/core/base/subdomain.h>
@@ -632,6 +633,14 @@ ISubOperation::TPtr CreateDropTable(TOperationId id, const TTxTransaction& tx) {
 ISubOperation::TPtr CreateDropTable(TOperationId id, TTxState::ETxState state) {
     Y_ABORT_UNLESS(state != TTxState::Invalid);
     return MakeSubOperation<TDropTable>(id, state);
+}
+
+bool CreateDropTable(TOperationId id, const TTxTransaction& tx, TOperationContext& context, TVector<ISubOperation::TPtr>& result) {
+    Y_UNUSED(context);
+    Y_ABORT_UNLESS(tx.GetOperationType() == NKikimrSchemeOp::EOperationType::ESchemeOpDropTable);
+
+    result.push_back(CreateDropTable(NextPartId(id, result), tx));
+    return true;
 }
 
 }

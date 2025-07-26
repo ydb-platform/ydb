@@ -239,7 +239,7 @@ public:
         Counters->RemovePortion(*exPortion);
     }
 
-    void AppendPortion(const TPortionDataAccessor& portionInfo);
+    void AppendPortion(const std::shared_ptr<TPortionDataAccessor>& portionInfo);
     void AppendPortion(const std::shared_ptr<TPortionInfo>& portionInfo);
 
 private:

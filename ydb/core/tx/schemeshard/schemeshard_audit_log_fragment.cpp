@@ -497,7 +497,13 @@ TVector<TString> ExtractChangingPaths(const NKikimrSchemeOp::TModifyScheme& tx) 
         result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetAlterCdcStream().GetTableName()}));
         break;
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropCdcStream:
-        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetDropCdcStream().GetTableName(), tx.GetDropCdcStream().GetStreamName()}));
+        {
+            const auto& tablePath = NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetDropCdcStream().GetTableName()});
+            // Add entry for each stream being dropped
+            for (const auto& streamName : tx.GetDropCdcStream().GetStreamName()) {
+                result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetDropCdcStream().GetTableName(), streamName}));
+            }
+        }
         break;
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropCdcStreamImpl:
         result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetDrop().GetName()}));

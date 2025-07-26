@@ -1377,11 +1377,8 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
     }
 
     Y_UNIT_TEST(FloatSum) {
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
-        auto settings = TKikimrSettings()
-            .SetAppConfig(appConfig)
-            .SetWithSampleTables(false);
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
         TKikimrRunner kikimr(settings);
 
         auto queryClient = kikimr.GetQueryClient();

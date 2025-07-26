@@ -242,7 +242,7 @@ bool BuildAlterTableModifyScheme(const TString& path, const Ydb::Table::AlterTab
     for (const auto& drop : req->drop_changefeeds()) {
         modifyScheme->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpDropCdcStream);
         auto op = modifyScheme->MutableDropCdcStream();
-        op->SetStreamName(drop);
+        op->AddStreamName(drop);
         op->SetTableName(name);
     }
 

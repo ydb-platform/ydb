@@ -10,8 +10,7 @@ namespace NKikimr::NOlap::NReader::NSimple {
 class TSortedFullScanCollection: public ISourcesCollection {
 private:
     using TBase = ISourcesCollection;
-    std::unique_ptr<NCommon::ISourcesConstructor> SourcesConstructor;
-    TPositiveControlInteger InFlightCount;
+
     virtual void DoClear() override {
         SourcesConstructor->Clear();
     }
@@ -24,27 +23,27 @@ private:
     virtual bool DoIsFinished() const override {
         return SourcesConstructor->IsFinished();
     }
-    virtual std::shared_ptr<IScanCursor> DoBuildCursor(const std::shared_ptr<IDataSource>& source, const ui32 readyRecords) const override {
+    virtual std::shared_ptr<IScanCursor> DoBuildCursor(const std::shared_ptr<NCommon::IDataSource>& source, const ui32 readyRecords) const override {
         return std::make_shared<TSimpleScanCursor>(
-            std::make_shared<NArrow::TSimpleRow>(source->GetStartPKRecordBatch()), source->GetSourceId(), readyRecords);
+            std::make_shared<NArrow::TSimpleRow>(source->GetAs<IDataSource>()->GetStartPKRecordBatch()), source->GetSourceId(), readyRecords);
     }
-    virtual std::shared_ptr<IDataSource> DoExtractNext() override {
-        auto result = static_pointer_cast<IDataSource>(SourcesConstructor->ExtractNext(Context));
-        InFlightCount.Inc();
-        return result;
+    virtual std::shared_ptr<NCommon::IDataSource> DoTryExtractNext() override {
+        return SourcesConstructor->TryExtractNext(Context, GetMaxInFlight());
     }
     virtual bool DoCheckInFlightLimits() const override {
-        return InFlightCount < GetMaxInFlight();
+        return GetSourcesInFlightCount() < GetMaxInFlight();
     }
-    virtual void DoOnSourceFinished(const std::shared_ptr<IDataSource>& /*source*/) override {
-        InFlightCount.Dec();
+    virtual void DoOnSourceFinished(const std::shared_ptr<NCommon::IDataSource>& /*source*/) override {
     }
 
 public:
+    virtual TString GetClassName() const override {
+        return "FULL_SORTED";
+    }
+
     TSortedFullScanCollection(
         const std::shared_ptr<TSpecialReadContext>& context, std::unique_ptr<NCommon::ISourcesConstructor>&& sourcesConstructor)
-        : TBase(context)
-        , SourcesConstructor(std::move(sourcesConstructor)) {
+        : TBase(context, std::move(sourcesConstructor)) {
     }
 };
 

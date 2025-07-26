@@ -33,7 +33,7 @@ bool TTxDataFromSource::DoExecute(NTabletFlatExecutor::TTransactionContext& txc,
     THashMap<TString, THashSet<NBlobCache::TUnifiedBlobId>> sharedBlobIds;
     for (auto&& i : PortionsByPathId) {
         for (auto&& p : i.second.GetPortions()) {
-            p.SaveToDatabase(dbWrapper, schemaPtr->GetIndexInfo().GetPKFirstColumnId(), false);
+            p->SaveToDatabase(dbWrapper, schemaPtr->GetIndexInfo().GetPKFirstColumnId(), false);
         }
     }
     db.Table<Schema::DestinationSessions>().Key(Session->GetSessionId())
@@ -54,11 +54,11 @@ TTxDataFromSource::TTxDataFromSource(NColumnShard::TColumnShard* self, const std
     , SourceTabletId(sourceTabletId) {
     for (auto&& i : PortionsByPathId) {
         for (ui32 p = 0; p < i.second.GetPortions().size();) {
-            if (Session->TryTakePortionBlobs(Self->GetIndexAs<TColumnEngineForLogs>().GetVersionedIndex(), i.second.GetPortions()[p])) {
+            if (Session->TryTakePortionBlobs(Self->GetIndexAs<TColumnEngineForLogs>().GetVersionedIndex(), *i.second.GetPortions()[p])) {
                 ++p;
             } else {
                 i.second.MutablePortions()[p] = std::move(i.second.MutablePortions().back());
-                i.second.MutablePortions()[p].MutablePortionInfo().ResetShardingVersion();
+                i.second.MutablePortions()[p]->MutablePortionInfo().ResetShardingVersion();
                 i.second.MutablePortions().pop_back();
             }
         }

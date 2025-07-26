@@ -103,7 +103,7 @@ namespace NKikimr::NStorage {
 
     void TStateStorageSelfhealActor::HandleWakeup() {
         if (!AllowNextStep) {
-            STLOG(PRI_ERROR, BS_NODE, NW52, "TStateStorageSelfhealActor::HandleWakeup aborted. Previous reconfiguration step not finished yet.", (StateStorageReconfigurationStep, (ui32)StateStorageReconfigurationStep));
+            STLOG(PRI_ERROR, BS_NODE, NW78, "TStateStorageSelfhealActor::HandleWakeup aborted. Previous reconfiguration step not finished yet.", (StateStorageReconfigurationStep, (ui32)StateStorageReconfigurationStep));
             Finish(TResult::ERROR, "Previous reconfiguration step not finished yet.");
             return;
         }
@@ -118,7 +118,7 @@ namespace NKikimr::NStorage {
 
     void TStateStorageSelfhealActor::HandleResult(NStorage::TEvNodeConfigInvokeOnRootResult::TPtr& ev) {
         if (ev->Get()->Record.GetStatus() != TResult::OK) {
-            STLOG(PRI_ERROR, BS_NODE, NW52, "TStateStorageSelfhealActor::HandleResult aborted. ", (Reason, ev->Get()->Record.GetErrorReason()));
+            STLOG(PRI_ERROR, BS_NODE, NW72, "TStateStorageSelfhealActor::HandleResult aborted. ", (Reason, ev->Get()->Record.GetErrorReason()));
             Finish(TResult::ERROR, ev->Get()->Record.GetErrorReason());
         } else {
             AllowNextStep = true;

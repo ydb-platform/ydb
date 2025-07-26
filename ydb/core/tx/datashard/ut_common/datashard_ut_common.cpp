@@ -1868,7 +1868,7 @@ ui64 AsyncAlterDropStream(
     auto request = SchemeTxTemplate(NKikimrSchemeOp::ESchemeOpDropCdcStream, workingDir);
     auto& desc = *request->Record.MutableTransaction()->MutableModifyScheme()->MutableDropCdcStream();
     desc.SetTableName(tableName);
-    desc.SetStreamName(streamName);
+    desc.AddStreamName(streamName);
 
     return RunSchemeTx(*server->GetRuntime(), std::move(request));
 }

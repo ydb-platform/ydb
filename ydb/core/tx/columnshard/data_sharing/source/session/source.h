@@ -1,10 +1,10 @@
 #pragma once
 #include "cursor.h"
 
+#include <ydb/core/tx/columnshard/common/path_id.h>
 #include <ydb/core/tx/columnshard/common/tablet_id.h>
 #include <ydb/core/tx/columnshard/data_sharing/common/session/common.h>
 #include <ydb/core/tx/columnshard/engines/scheme/schema_version.h>
-#include <ydb/core/tx/columnshard/common/path_id.h>
 
 namespace NKikimr::NIceDb {
 class TNiceDb;
@@ -23,7 +23,8 @@ private:
     TTabletId DestinationTabletId = TTabletId(0);
 
 protected:
-    virtual TConclusionStatus DoStart(NColumnShard::TColumnShard& shard, THashMap<TInternalPathId, std::vector<TPortionDataAccessor>>&& portions) override;
+    virtual TConclusionStatus DoStart(
+        NColumnShard::TColumnShard& shard, THashMap<TInternalPathId, std::vector<std::shared_ptr<TPortionDataAccessor>>>&& portions) override;
     virtual THashSet<TInternalPathId> GetPathIdsForStart() const override {
         THashSet<TInternalPathId> result;
         for (auto&& i : PathIds) {
@@ -38,7 +39,8 @@ public:
         , SelfTabletId(selfTabletId) {
     }
 
-    TSourceSession(const TString& sessionId, const TTransferContext& transfer, const TTabletId selfTabletId, const std::set<TInternalPathId>& pathIds, const TTabletId destTabletId)
+    TSourceSession(const TString& sessionId, const TTransferContext& transfer, const TTabletId selfTabletId,
+        const std::set<TInternalPathId>& pathIds, const TTabletId destTabletId)
         : TBase(sessionId, "source_base", transfer)
         , SelfTabletId(selfTabletId)
         , PathIds(pathIds)
@@ -54,9 +56,7 @@ public:
     }
 
     bool IsEqualTo(const TSourceSession& item) const {
-        return TBase::IsEqualTo(item) &&
-               DestinationTabletId == item.DestinationTabletId &&
-               PathIds == item.PathIds;
+        return TBase::IsEqualTo(item) && DestinationTabletId == item.DestinationTabletId && PathIds == item.PathIds;
     }
 
     std::shared_ptr<TSourceCursor> GetCursorVerified() const {
@@ -66,11 +66,16 @@ public:
 
     void SaveCursorToDatabase(NIceDb::TNiceDb& db);
 
-    void StartCursor(const NColumnShard::TColumnShard& shard, THashMap<TInternalPathId, std::vector<TPortionDataAccessor>>&& portions, std::vector<NOlap::TSchemaPresetVersionInfo>&& schemeHistory);
+    void StartCursor(const NColumnShard::TColumnShard& shard,
+        THashMap<TInternalPathId, std::vector<std::shared_ptr<TPortionDataAccessor>>>&& portions,
+        std::vector<NOlap::TSchemaPresetVersionInfo>&& schemeHistory);
 
-    [[nodiscard]] TConclusion<std::unique_ptr<NTabletFlatExecutor::ITransaction>> AckFinished(NColumnShard::TColumnShard* self, const std::shared_ptr<TSourceSession>& selfPtr);
-    [[nodiscard]] TConclusion<std::unique_ptr<NTabletFlatExecutor::ITransaction>> AckData(NColumnShard::TColumnShard* self, const ui32 receivedPackIdx, const std::shared_ptr<TSourceSession>& selfPtr);
-    [[nodiscard]] TConclusion<std::unique_ptr<NTabletFlatExecutor::ITransaction>> AckLinks(NColumnShard::TColumnShard* self, const TTabletId tabletId, const ui32 packIdx, const std::shared_ptr<TSourceSession>& selfPtr);
+    [[nodiscard]] TConclusion<std::unique_ptr<NTabletFlatExecutor::ITransaction>> AckFinished(
+        NColumnShard::TColumnShard* self, const std::shared_ptr<TSourceSession>& selfPtr);
+    [[nodiscard]] TConclusion<std::unique_ptr<NTabletFlatExecutor::ITransaction>> AckData(
+        NColumnShard::TColumnShard* self, const ui32 receivedPackIdx, const std::shared_ptr<TSourceSession>& selfPtr);
+    [[nodiscard]] TConclusion<std::unique_ptr<NTabletFlatExecutor::ITransaction>> AckLinks(
+        NColumnShard::TColumnShard* self, const TTabletId tabletId, const ui32 packIdx, const std::shared_ptr<TSourceSession>& selfPtr);
 
     void ActualizeDestination(const NColumnShard::TColumnShard& shard, const std::shared_ptr<NDataLocks::TManager>& dataLocksManager);
 
@@ -88,4 +93,4 @@ public:
         const std::optional<NKikimrColumnShardDataSharingProto::TSourceSession::TCursorDynamic>& protoCursor,
         const std::optional<NKikimrColumnShardDataSharingProto::TSourceSession::TCursorStatic>& protoCursorStatic);
 };
-} // namespace NKikimr::NOlap::NDataSharing
+}   // namespace NKikimr::NOlap::NDataSharing

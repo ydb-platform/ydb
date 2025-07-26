@@ -563,12 +563,12 @@ private:
     }
 
     virtual ui64 GetNecessaryDataMemory(const std::shared_ptr<NOlap::NReader::NCommon::TColumnsSetIds>& columnIds,
-        const std::vector<NOlap::TPortionDataAccessor>& acc) const override {
+        const std::vector<std::shared_ptr<NOlap::TPortionDataAccessor>>& acc) const override {
         AFL_VERIFY(!columnIds);
         THashMap<ui32, ui64> memoryByColumns;
         for (auto&& a : acc) {
             THashMap<ui32, ui64> memoryByPortionColumns;
-            for (auto&& c : a.GetRecordsVerified()) {
+            for (auto&& c : a->GetRecordsVerified()) {
                 const ui64 current = memoryByPortionColumns[c.GetEntityId()];
                 memoryByPortionColumns[c.GetEntityId()] = std::max<ui64>(current, c.GetMeta().GetRawBytes());
             }
@@ -622,7 +622,7 @@ void TColumnShard::StartCompaction(const std::shared_ptr<NPrioritiesQueue::TAllo
 
     auto actualIndexInfo = TablesManager.GetPrimaryIndex()->GetVersionedIndexReadonlyCopy();
     static std::shared_ptr<NOlap::NGroupedMemoryManager::TStageFeatures> stageFeatures =
-        NOlap::NGroupedMemoryManager::TCompMemoryLimiterOperator::BuildStageFeatures("DEFAULT", 1000000000);
+        NOlap::NGroupedMemoryManager::TCompMemoryLimiterOperator::BuildStageFeatures("COMPACTION", NOlap::TGlobalLimits::GeneralCompactionMemoryLimit);
     auto processGuard = NOlap::NGroupedMemoryManager::TCompMemoryLimiterOperator::BuildProcessGuard({ stageFeatures });
     NOlap::NDataFetcher::TRequestInput rInput(compaction.GetSwitchedPortions(), actualIndexInfo,
         NOlap::NBlobOperations::EConsumer::GENERAL_COMPACTION, compaction.GetTaskIdentifier(), processGuard);
@@ -746,7 +746,7 @@ bool TColumnShard::SetupTtl() {
     for (auto&& i : indexChanges) {
         i->Start(*this);
         static std::shared_ptr<NOlap::NGroupedMemoryManager::TStageFeatures> stageFeatures =
-            NOlap::NGroupedMemoryManager::TCompMemoryLimiterOperator::BuildStageFeatures("DEFAULT", 1000000000);
+            NOlap::NGroupedMemoryManager::TCompMemoryLimiterOperator::BuildStageFeatures("TTL", 1000000000);
         auto processGuard = NOlap::NGroupedMemoryManager::TCompMemoryLimiterOperator::BuildProcessGuard({ stageFeatures });
         NOlap::NDataFetcher::TRequestInput rInput(
             i->GetPortionsInfo(), actualIndexInfo, NOlap::NBlobOperations::EConsumer::TTL, i->GetTaskIdentifier(), processGuard);
@@ -790,7 +790,7 @@ void TColumnShard::SetupCleanupPortions() {
 
     auto actualIndexInfo = TablesManager.GetPrimaryIndex()->GetVersionedIndexReadonlyCopy();
     static std::shared_ptr<NOlap::NGroupedMemoryManager::TStageFeatures> stageFeatures =
-        NOlap::NGroupedMemoryManager::TCompMemoryLimiterOperator::BuildStageFeatures("DEFAULT", 1000000000);
+        NOlap::NGroupedMemoryManager::TCompMemoryLimiterOperator::BuildStageFeatures("CLEANUP_PORTIONS", 1000000000);
     auto processGuard = NOlap::NGroupedMemoryManager::TCompMemoryLimiterOperator::BuildProcessGuard({ stageFeatures });
     NOlap::NDataFetcher::TRequestInput rInput(changes->GetPortionsToAccess(), actualIndexInfo,
         NOlap::NBlobOperations::EConsumer::CLEANUP_PORTIONS, changes->GetTaskIdentifier(), processGuard);
@@ -1195,7 +1195,7 @@ public:
         Indexes = std::move(indexes);
     }
 
-    NOlap::TPortionDataAccessor BuildAccessor() {
+    std::shared_ptr<NOlap::TPortionDataAccessor> BuildAccessor() {
         AFL_VERIFY(PortionInfo);
         AFL_VERIFY(Records)("portion_id", PortionInfo->GetPortionId())("path_id", PortionInfo->GetPathId());
         AFL_VERIFY(Indexes)("portion_id", PortionInfo->GetPortionId())("path_id", PortionInfo->GetPathId());
@@ -1209,7 +1209,7 @@ private:
     std::vector<TPortionConstructorV2> Portions;
 
     virtual void DoExecute(const std::shared_ptr<ITask>& /*taskPtr*/) override {
-        std::vector<NOlap::TPortionDataAccessor> accessors;
+        std::vector<std::shared_ptr<NOlap::TPortionDataAccessor>> accessors;
         accessors.reserve(Portions.size());
         for (auto&& i : Portions) {
             accessors.emplace_back(i.BuildAccessor());

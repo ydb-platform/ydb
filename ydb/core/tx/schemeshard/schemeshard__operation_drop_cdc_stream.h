@@ -28,7 +28,7 @@ void DoDropStream(
     const TOperationId& opId,
     const TPath& workingDirPath,
     const TPath& tablePath,
-    const TPath& streamPath,
+    const TVector<TPath>& streamPaths,
     const TTxId lockTxId,
     TOperationContext& context);
 

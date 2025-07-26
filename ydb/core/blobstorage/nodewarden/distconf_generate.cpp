@@ -683,8 +683,9 @@ namespace NKikimr::NStorage {
         return goodConfig;
     }
 
-    bool TDistributedConfigKeeper::UpdateConfig(NKikimrBlobStorage::TStorageConfig *config) {
-        if (UpdateBridgeConfig(config)) {
+    bool TDistributedConfigKeeper::UpdateConfig(NKikimrBlobStorage::TStorageConfig *config,
+            const THashMap<TBridgePileId, NKikimrBlobStorage::TStorageConfig*>& persistedConfigForUnsyncedPile) {
+        if (UpdateBridgeConfig(config, persistedConfigForUnsyncedPile)) {
             return true;
         }
         return false;

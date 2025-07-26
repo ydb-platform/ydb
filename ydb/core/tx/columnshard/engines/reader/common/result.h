@@ -73,8 +73,8 @@ public:
         return ScanCursor;
     }
 
-    explicit TPartialReadResult(std::vector<std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>>&& resourceGuards,
-        std::shared_ptr<NGroupedMemoryManager::TGroupGuard>&& gGuard, NArrow::TShardedRecordBatch&& batch,
+    explicit TPartialReadResult(const std::vector<std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>>& resourceGuards,
+        const std::shared_ptr<NGroupedMemoryManager::TGroupGuard>& gGuard, NArrow::TShardedRecordBatch&& batch,
         std::shared_ptr<IScanCursor>&& scanCursor, const std::shared_ptr<TReadContext>& context,
         const std::optional<TPartialSourceAddress> notFinishedInterval);
 

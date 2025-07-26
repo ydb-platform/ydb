@@ -52,12 +52,12 @@ std::vector<std::shared_ptr<TPartialReadResult>> TPartialReadResult::SplitResult
     return result;
 }
 
-TPartialReadResult::TPartialReadResult(std::vector<std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>>&& resourceGuards,
-    std::shared_ptr<NGroupedMemoryManager::TGroupGuard>&& gGuard, NArrow::TShardedRecordBatch&& batch,
+TPartialReadResult::TPartialReadResult(const std::vector<std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>>& resourceGuards,
+    const std::shared_ptr<NGroupedMemoryManager::TGroupGuard>& gGuard, NArrow::TShardedRecordBatch&& batch,
     std::shared_ptr<IScanCursor>&& scanCursor, const std::shared_ptr<TReadContext>& context,
     const std::optional<TPartialSourceAddress> notFinishedInterval)
-    : ResourceGuards(std::move(resourceGuards))
-    , GroupGuard(std::move(gGuard))
+    : ResourceGuards(resourceGuards)
+    , GroupGuard(gGuard)
     , ResultBatch(std::move(batch))
     , ScanCursor(std::move(scanCursor))
     , NotFinishedInterval(notFinishedInterval)

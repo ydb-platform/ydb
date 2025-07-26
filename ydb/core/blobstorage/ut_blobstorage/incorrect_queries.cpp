@@ -80,8 +80,8 @@ Y_UNIT_TEST_SUITE(IncorrectQueries) {
                                 TInstant::Max(), NKikimrBlobStorage::EPutHandleClass::TabletLog, false, nullptr));
 
         for(auto [blob, data, status] : blobs) {
-            static_cast<TEvBlobStorage::TEvVMultiPut*>(ev.get())->AddVPut(blob, TRcBuf(data), nullptr, false, nullptr,
-                NWilson::TTraceId());
+            static_cast<TEvBlobStorage::TEvVMultiPut*>(ev.get())->AddVPut(blob, TRcBuf(data), nullptr, false, false,
+                nullptr, NWilson::TTraceId());
         }
 
         static_cast<TEvBlobStorage::TEvVMultiPut*>(ev.get())->Record = proto;
@@ -106,8 +106,8 @@ Y_UNIT_TEST_SUITE(IncorrectQueries) {
                                 TInstant::Max(), NKikimrBlobStorage::EPutHandleClass::TabletLog, false, nullptr));
 
         for(auto [blob, data, status] : blobs) {
-            static_cast<TEvBlobStorage::TEvVMultiPut*>(ev.get())->AddVPut(blob, TRcBuf(data), nullptr, false, nullptr,
-                NWilson::TTraceId());
+            static_cast<TEvBlobStorage::TEvVMultiPut*>(ev.get())->AddVPut(blob, TRcBuf(data), nullptr, false, false,
+                nullptr, NWilson::TTraceId());
         }
 
         env.WithQueueId(test.Info->GetVDiskInSubgroup(0, blobs[0].BlobId.Hash()), NKikimrBlobStorage::EVDiskQueueId::PutTabletLog, [&](TActorId queueId) {
@@ -519,7 +519,7 @@ Y_UNIT_TEST_SUITE(IncorrectQueries) {
                 ++goodCount;
                 TLogoBlobID blob(i, 1, 0, 0, blobSize, 0, 1);
                 static_cast<TEvBlobStorage::TEvVMultiPut*>(events[i].get())->AddVPut(blob, TRcBuf(data), nullptr, false,
-                    nullptr, NWilson::TTraceId());
+                    false, nullptr, NWilson::TTraceId());
             }
         }
 

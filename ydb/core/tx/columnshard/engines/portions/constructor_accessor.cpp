@@ -32,7 +32,7 @@ void TPortionAccessorConstructor::ChunksValidation() const {
     }
 }
 
-TPortionDataAccessor TPortionAccessorConstructor::Build(const bool needChunksNormalization) {
+std::shared_ptr<TPortionDataAccessor> TPortionAccessorConstructor::Build(const bool needChunksNormalization) {
     AFL_VERIFY(!Constructed);
     Constructed = true;
 
@@ -99,7 +99,7 @@ TPortionDataAccessor TPortionAccessorConstructor::Build(const bool needChunksNor
         }
     }
     ChunksValidation();
-    return TPortionDataAccessor(result, ExtractBlobIds(), std::move(Records), std::move(Indexes), false);
+    return std::make_shared<TPortionDataAccessor>(result, ExtractBlobIds(), std::move(Records), std::move(Indexes), false);
 }
 
 void TPortionAccessorConstructor::AddBuildInfo(TColumnChunkLoadContextV2::TBuildInfo&& buildInfo) {
@@ -122,7 +122,7 @@ void TPortionAccessorConstructor::LoadIndex(TIndexChunkLoadContext&& loadContext
     }
 }
 
-TPortionDataAccessor TPortionAccessorConstructor::BuildForLoading(const TPortionInfo::TConstPtr& portion,
+std::shared_ptr<TPortionDataAccessor> TPortionAccessorConstructor::BuildForLoading(const TPortionInfo::TConstPtr& portion,
     TColumnChunkLoadContextV2::TBuildInfo&& records, std::vector<TIndexChunkLoadContext>&& indexes) {
     AFL_VERIFY(portion);
     std::vector<TColumnRecord> recordChunks;
@@ -160,7 +160,7 @@ TPortionDataAccessor TPortionAccessorConstructor::BuildForLoading(const TPortion
             std::sort(indexChunks.begin(), indexChunks.end(), pred);
         }
     }
-    return TPortionDataAccessor(portion, records.DetachBlobIds(), std::move(recordChunks), std::move(indexChunks), true);
+    return std::make_shared<TPortionDataAccessor>(portion, records.DetachBlobIds(), std::move(recordChunks), std::move(indexChunks), true);
 }
 
 }   // namespace NKikimr::NOlap

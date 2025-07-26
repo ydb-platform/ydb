@@ -1366,6 +1366,11 @@ Y_UNIT_TEST_SUITE(TTabletPipeTest) {
         }
 
         auto sender2 = runtime.AllocateEdgeActor();
+        for (int i = 0; i < 30; ++i) {
+            // overload tablet resolver with unrelated queries
+            runtime.Send(new IEventHandle(MakeTabletResolverID(), TActorId(),
+                new TEvTabletResolver::TEvForward(TTestTxConfig::TxTablet0 + 1 + i, nullptr, {})));
+        }
         auto client2 = runtime.Register(NTabletPipe::CreateClient(sender2, TTestTxConfig::TxTablet0, NTabletPipe::TClientConfig{
             .ExpectShutdown = true,
             .RetryPolicy = NTabletPipe::TClientRetryPolicy::WithoutRetries(),
@@ -1442,6 +1447,11 @@ Y_UNIT_TEST_SUITE(TTabletPipeTest) {
         }
 
         auto sender2 = runtime.AllocateEdgeActor();
+        for (int i = 0; i < 30; ++i) {
+            // overload tablet resolver with unrelated queries
+            runtime.Send(new IEventHandle(MakeTabletResolverID(), TActorId(),
+                new TEvTabletResolver::TEvForward(TTestTxConfig::TxTablet0 + 1 + i, nullptr, {})));
+        }
         auto client2 = runtime.Register(NTabletPipe::CreateClient(sender2, TTestTxConfig::TxTablet0, NTabletPipe::TClientConfig{
             .RetryPolicy = NTabletPipe::TClientRetryPolicy::WithoutRetries(),
         }));

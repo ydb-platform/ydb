@@ -170,21 +170,11 @@ namespace NKikimr::NStorage {
 
         void NotifyBridgeSyncFinished(const TQuery::TNotifyBridgeSyncFinished& cmd);
 
-        void PrepareMergeUnsyncedPileConfig(const TQuery::TMergeUnsyncedPileConfig& cmd);
-        void MergeUnsyncedPileConfig();
-
-        void NegotiateUnsyncedConnection(const TQuery::TNegotiateUnsyncedConnection& cmd);
-
-        void PrepareAdvanceClusterStateGeneration(const TQuery::TAdvanceClusterStateGeneration& cmd);
-        void AdvanceClusterStateGeneration();
-
-        void GenerateSpecificBridgePileIds();
-
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Configuration proposition
 
         void AdvanceGeneration();
-        void StartProposition(NKikimrBlobStorage::TStorageConfig *config, bool forceGeneration = false,
+        void StartProposition(NKikimrBlobStorage::TStorageConfig *config,
             const NKikimrBlobStorage::TStorageConfig *propositionBase = nullptr);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -200,6 +190,7 @@ namespace NKikimr::NStorage {
                 std::optional<TStringBuf> errorReason = std::nullopt) {
             auto ev = PrepareResult(status, errorReason);
             callback(&ev->Record);
+            STLOG(PRI_DEBUG, BS_NODE, NWDC01, "FinishWithSuccess", (SelfId, SelfId()), (Record, ev->Record));
             Finish(Sender, SelfId(), ev.release(), Cookie);
         }
 

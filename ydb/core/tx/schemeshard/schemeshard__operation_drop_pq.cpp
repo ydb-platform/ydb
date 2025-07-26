@@ -1,5 +1,6 @@
 #include "schemeshard__operation_common.h"
 #include "schemeshard__operation_part.h"
+#include "schemeshard__operation.h"
 #include "schemeshard_impl.h"
 #include "schemeshard_utils.h"  // for PQGroupReserve
 
@@ -468,6 +469,14 @@ ISubOperation::TPtr CreateDropPQ(TOperationId id, const TTxTransaction& tx) {
 ISubOperation::TPtr CreateDropPQ(TOperationId id, TTxState::ETxState state) {
     Y_ABORT_UNLESS(state != TTxState::Invalid);
     return MakeSubOperation<TDropPQ>(id, state);
+}
+
+bool CreateDropPQ(TOperationId id, const TTxTransaction& tx, TOperationContext& context, TVector<ISubOperation::TPtr>& result) {
+    Y_UNUSED(context);
+    Y_ABORT_UNLESS(tx.GetOperationType() == NKikimrSchemeOp::EOperationType::ESchemeOpDropPersQueueGroup);
+
+    result.push_back(CreateDropPQ(NextPartId(id, result), tx));
+    return true;
 }
 
 }

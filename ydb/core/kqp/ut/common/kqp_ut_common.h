@@ -41,6 +41,19 @@ extern const TString EXPECTED_EIGHTSHARD_VALUE1;
 TVector<NKikimrKqp::TKqpSetting> SyntaxV1Settings();
 
 struct TKikimrSettings: public TTestFeatureFlagsHolder<TKikimrSettings> {
+private:
+    void InitDefaultConfig() {
+        if (!AppConfig.MutableColumnShardConfig()->HasReaderClassName()) {
+            SetColumnShardReaderClassName("SIMPLE");
+        }
+        if (!AppConfig.MutableColumnShardConfig()->HasDisabledOnSchemeShard()) {
+            AppConfig.MutableColumnShardConfig()->SetDisabledOnSchemeShard(false);
+        }
+        if (!AppConfig.MutableColumnShardConfig()->HasMaxInFlightIntervalsOnRequest()) {
+            AppConfig.MutableColumnShardConfig()->SetMaxInFlightIntervalsOnRequest(1);
+        }
+    }
+public:
     NKikimrConfig::TAppConfig AppConfig;
     NKikimrPQ::TPQConfig PQConfig;
     TVector<NKikimrKqp::TKqpSetting> KqpSettings;
@@ -59,24 +72,26 @@ struct TKikimrSettings: public TTestFeatureFlagsHolder<TKikimrSettings> {
     NKikimrConfig::TImmediateControlsConfig Controls;
     TMaybe<NYdbGrpc::TServerOptions> GrpcServerOptions;
 
-    TKikimrSettings()
-    {
+    TKikimrSettings() {
         auto* tableServiceConfig = AppConfig.MutableTableServiceConfig();
         auto* infoExchangerRetrySettings = tableServiceConfig->MutableResourceManager()->MutableInfoExchangerSettings();
         auto* exchangerSettings = infoExchangerRetrySettings->MutableExchangerSettings();
         exchangerSettings->SetStartDelayMs(10);
         exchangerSettings->SetMaxDelayMs(10);
-        AppConfig.MutableColumnShardConfig()->SetDisabledOnSchemeShard(false);
-        AppConfig.MutableColumnShardConfig()->SetMaxInFlightIntervalsOnRequest(1);
         FeatureFlags.SetEnableSparsedColumns(true);
         FeatureFlags.SetEnableWritePortionsOnInsert(true);
         FeatureFlags.SetEnableParameterizedDecimal(true);
         FeatureFlags.SetEnableTopicAutopartitioningForCDC(true);
         FeatureFlags.SetEnableFollowerStats(true);
         FeatureFlags.SetEnableColumnStore(true);
+        InitDefaultConfig();
     }
 
-    TKikimrSettings& SetAppConfig(const NKikimrConfig::TAppConfig& value) { AppConfig = value; return *this; }
+    TKikimrSettings& SetAppConfig(const NKikimrConfig::TAppConfig& value) {
+        AppConfig = value;
+        InitDefaultConfig();
+        return *this;
+    }
     TKikimrSettings& SetFeatureFlags(const NKikimrConfig::TFeatureFlags& value) { FeatureFlags = value; return *this; }
     TKikimrSettings& SetPQConfig(const NKikimrPQ::TPQConfig& value) { PQConfig = value; return *this; };
     TKikimrSettings& SetKqpSettings(const TVector<NKikimrKqp::TKqpSetting>& value) { KqpSettings = value; return *this; }

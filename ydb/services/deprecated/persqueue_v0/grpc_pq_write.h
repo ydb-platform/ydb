@@ -72,6 +72,11 @@ public:
         if (ClustersUpdaterStatus) {
             ClustersUpdaterStatus->Stop();
         }
+        auto g(Guard(Lock));
+        for (auto it = Sessions.begin(); it != Sessions.end();) {
+            auto jt = it++;
+            jt->second->DestroyStream("Grpc server is dead", NPersQueue::NErrorCode::BAD_REQUEST);
+        }
     }
 
     bool IsShuttingDown() const {

@@ -3,6 +3,7 @@
 #include <ydb/library/yverify_stream/yverify_stream.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/api.h>
+#include <util/string/cast.h>
 #include <util/system/yassert.h>
 #include <yql/essentials/parser/pg_wrapper/interface/type_desc.h>
 
@@ -37,10 +38,16 @@ public:
     using ValueType = ValueTypeSelector<T, IsCType>::type;
     using TArray = typename arrow::TypeTraits<T>::ArrayType;
     using TBuilder = typename arrow::TypeTraits<T>::BuilderType;
+    using TScalar = typename arrow::TypeTraits<T>::ScalarType;
 
     template <class TExt>
     static TBuilder* CastBuilder(TExt* builder) {
         return static_cast<TBuilder*>(builder);
+    }
+
+    template <class TExt>
+    static TScalar* CastScalar(TExt* scalar) {
+        return static_cast<TScalar*>(scalar);
     }
 
     template <class TExt>
@@ -56,6 +63,49 @@ public:
     template <class TExt>
     static std::shared_ptr<TArray> CastArray(const std::shared_ptr<TExt>& arr) {
         return std::static_pointer_cast<TArray>(arr);
+    }
+
+    template <class TValue>
+    std::shared_ptr<arrow::Scalar> BuildScalar(const TValue val, const std::shared_ptr<arrow::DataType>& dType) const {
+        if constexpr (IsCType) {
+            if constexpr (arrow::is_parameter_free_type<TType>::value) {
+                return std::make_shared<TScalar>(val);
+            }
+            if constexpr (!arrow::is_parameter_free_type<TType>::value) {
+                return std::make_shared<TScalar>(val, dType);
+            }
+        }
+        if constexpr (IsStringView) {
+            if constexpr (std::is_same<TValue, arrow::util::string_view>::value) {
+                if constexpr (arrow::is_parameter_free_type<TType>::value) {
+                    return std::make_shared<TScalar>(arrow::Buffer::FromString(std::string(val.data(), val.size())));
+                }
+                if constexpr (!arrow::is_parameter_free_type<TType>::value) {
+                    return std::make_shared<TScalar>(arrow::Buffer::FromString(std::string(val.data(), val.size())), dType);
+                }
+            }
+            if constexpr (!std::is_same<TValue, arrow::util::string_view>::value) {
+                if constexpr (arrow::is_parameter_free_type<TType>::value) {
+                    return std::make_shared<TScalar>(arrow::Buffer::FromString(val));
+                }
+                if constexpr (!arrow::is_parameter_free_type<TType>::value) {
+                    return std::make_shared<TScalar>(arrow::Buffer::FromString(val), dType);
+                }
+            }
+        }
+        Y_FAIL();
+        return nullptr;
+    }
+
+    TString ToString(const ValueType& value) const {
+        if constexpr (IsCType) {
+            return ::ToString(value);
+        }
+        if constexpr (IsStringView) {
+            return TString(value.data(), value.size());
+        }
+        Y_FAIL();
+        return "";
     }
 
     ValueType GetValue(const TArray& arr, const ui32 index) const {

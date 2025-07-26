@@ -352,7 +352,7 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
         SendQueued(msg.TabletID, entry, ctx);
     }
 
-    void DropEntry(ui64 tabletId, TEntry& entry, const TActorContext &ctx) {
+    void DropEntry(ui64 tabletId, TEntry& entry, bool cacheNegative, const TActorContext &ctx) {
         LOG_DEBUG(ctx, NKikimrServices::TABLET_RESOLVER,
                   "DropEntry tabletId: %" PRIu64 " followers: %" PRIu64,
                   tabletId, entry.KnownFollowers.size());
@@ -363,10 +363,14 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
         ResolvedTablets.Erase(tabletId);
         UnresolvedTablets.Erase(tabletId);
 
-        if (TabletResolverNegativeCacheTimeout) {
+        if (TabletResolverNegativeCacheTimeout && cacheNegative) {
             if (TabletsOnStopList.emplace(tabletId).second)
                 Schedule(TabletResolverNegativeCacheTimeout, new TEvPrivate::TEvStopListRemoval(tabletId));
         }
+    }
+
+    void DropEntry(ui64 tabletId, TEntry& entry, const TActorContext &ctx) {
+        DropEntry(tabletId, entry, true, ctx);
     }
 
     TAutoPtr<TEntry>& GetEntry(ui64 tabletId, const TActorContext &ctx) {
@@ -425,7 +429,7 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
                             " leader: %s by NodeId", tabletId, entry.KnownLeader.ToString().c_str());
                     if (entry.KnownFollowers.empty()) {
                         // Avoid resolving preemptively until the next request
-                        DropEntry(tabletId, entry, ctx);
+                        DropEntry(tabletId, entry, /* cacheNegative */ false, ctx);
                         return;
                     }
                     ResolveRequest(tabletId, ctx);
@@ -544,7 +548,7 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
             if (!msg->Actor || entry.KnownLeader == msg->Actor || entry.KnownLeaderTablet == msg->Actor) {
                 if (entry.KnownFollowers.empty()) {
                     // Avoid resolving preemptively until the next request
-                    DropEntry(tabletId, entry, ctx);
+                    DropEntry(tabletId, entry, /* cacheNegative */ false, ctx);
                     return;
                 }
                 ResolveRequest(tabletId, ctx);

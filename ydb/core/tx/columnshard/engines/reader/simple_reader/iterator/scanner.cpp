@@ -4,6 +4,7 @@
 #include "collections/full_scan_sorted.h"
 #include "collections/limit_sorted.h"
 #include "collections/not_sorted.h"
+#include "sync_points/aggr.h"
 #include "sync_points/limit.h"
 #include "sync_points/result.h"
 
@@ -20,7 +21,13 @@ TConclusionStatus TScanHead::Start() {
 
 TScanHead::TScanHead(std::unique_ptr<NCommon::ISourcesConstructor>&& sourcesConstructor, const std::shared_ptr<TSpecialReadContext>& context)
     : Context(context) {
-    if (Context->GetReadMetadata()->IsSorted()) {
+    if (auto script = Context->GetSourcesAggregationScript()) {
+        SourcesCollection =
+            std::make_shared<TNotSortedCollection>(Context, std::move(sourcesConstructor), Context->GetReadMetadata()->GetLimitRobustOptional());
+        SyncPoints.emplace_back(std::make_shared<TSyncPointResult>(SyncPoints.size(), context, SourcesCollection));
+        SyncPoints.emplace_back(std::make_shared<TSyncPointResultsAggregationControl>(
+            SourcesCollection, Context->GetSourcesAggregationScript(), SyncPoints.size(), context));
+    } else if (Context->GetReadMetadata()->IsSorted()) {
         if (Context->GetReadMetadata()->HasLimit()) {
             auto collection = std::make_shared<TScanWithLimitCollection>(Context, std::move(sourcesConstructor));
             SourcesCollection = collection;
@@ -29,21 +36,27 @@ TScanHead::TScanHead(std::unique_ptr<NCommon::ISourcesConstructor>&& sourcesCons
         } else {
             SourcesCollection = std::make_shared<TSortedFullScanCollection>(Context, std::move(sourcesConstructor));
         }
+        SyncPoints.emplace_back(std::make_shared<TSyncPointResult>(SyncPoints.size(), context, SourcesCollection));
     } else {
         SourcesCollection =
             std::make_shared<TNotSortedCollection>(Context, std::move(sourcesConstructor), Context->GetReadMetadata()->GetLimitRobustOptional());
+        SyncPoints.emplace_back(std::make_shared<TSyncPointResult>(SyncPoints.size(), context, SourcesCollection));
     }
-    SyncPoints.emplace_back(std::make_shared<TSyncPointResult>(SyncPoints.size(), context, SourcesCollection));
     for (ui32 i = 0; i + 1 < SyncPoints.size(); ++i) {
         SyncPoints[i]->SetNext(SyncPoints[i + 1]);
     }
 }
 
 TConclusion<bool> TScanHead::BuildNextInterval() {
+    const NActors::TLogContextGuard gLogging = NActors::TLogContextBuilder::Build()("tablet_id", SourcesCollection->GetTabletId());
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "build_next_interval");
     bool changed = false;
     while (SourcesCollection->HasData() && SourcesCollection->CheckInFlightLimits()) {
-        auto source = SourcesCollection->ExtractNext();
-        SyncPoints.front()->AddSource(source);
+        auto source = SourcesCollection->TryExtractNext();
+        if (!source) {
+            return changed;
+        }
+        SyncPoints.front()->AddSource(std::move(source));
         changed = true;
     }
     return changed;

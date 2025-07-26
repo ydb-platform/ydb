@@ -17,7 +17,8 @@ public:
     TAccessor(const TString& tableName, const NColumnShard::TSchemeShardLocalPathId externalPathId,
         const std::optional<NColumnShard::TInternalPathId> internalPathId);
     virtual std::unique_ptr<NReader::NCommon::ISourcesConstructor> SelectMetadata(const TSelectMetadataContext& context,
-        const NReader::TReadDescription& readDescription, const bool withUncommitted, const bool isPlain) const override;
+        const NReader::TReadDescription& readDescription, const NColumnShard::IResolveWriteIdToLockId& resolver,
+        const bool isPlain) const override;
     virtual std::optional<TGranuleShardingInfo> GetShardingInfo(
         const std::shared_ptr<const TVersionedIndex>& /*indexVersionsPointer*/, const NOlap::TSnapshot& /*ss*/) const override {
         return std::nullopt;

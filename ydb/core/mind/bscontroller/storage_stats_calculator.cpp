@@ -33,7 +33,7 @@ private:
 public:
     TStorageStatsCoroCalculatorImpl(
         const TControllerSystemViewsState& systemViewsState,
-        const TBlobStorageController::THostRecordMap& hostRecordMap,
+        const THostRecordMap& hostRecordMap,
         ui32 groupReserveMin,
         ui32 groupReservePart)
         : TActorCoroImpl(/* stackSize */ 640_KB, /* allowUnhandledDtor */ true) // 640 KiB should be enough for anything!
@@ -231,14 +231,14 @@ private:
 
 private:
     TControllerSystemViewsState SystemViewsState;
-    TBlobStorageController::THostRecordMap HostRecordMap;
+    THostRecordMap HostRecordMap;
     ui32 GroupReserveMin = 0;
     ui32 GroupReservePart = 0;
 };
 
 std::unique_ptr<IActor> CreateStorageStatsCoroCalculator(
     const TControllerSystemViewsState& systemViewsState,
-    const TBlobStorageController::THostRecordMap& hostRecordMap,
+    const THostRecordMap& hostRecordMap,
     ui32 groupReserveMin,
     ui32 groupReservePart)
 {

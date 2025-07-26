@@ -162,7 +162,7 @@ namespace NKikimr {
                     const auto& hostConfig = it->second;
 
                     const TBlobStorageController::THostId hostId(hostKey.Fqdn, hostKey.IcPort);
-                    const auto& nodeId = state.HostRecords->ResolveNodeId(hostKey, hostValue);
+                    const auto& nodeId = hostValue.EnforcedNodeId ? hostValue.EnforcedNodeId : state.HostRecords->ResolveNodeId(hostKey);
                     if (!nodeId) {
                         throw TExHostNotFound(hostKey) << TErrorParams::BoxId(boxId) << TErrorParams::NodeId(*nodeId);
                     } else if (!usedNodes.insert(*nodeId).second) {

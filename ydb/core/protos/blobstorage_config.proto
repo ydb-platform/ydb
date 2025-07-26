@@ -877,4 +877,5 @@ message TConfigResponse {
     repeated uint32 GroupsGetDegraded = 5;
     repeated uint32 GroupsGetDisintegrated = 6;
     repeated uint32 GroupsGetDisintegratedByExpectedStatus = 7;
+    bool RollbackSuccess = 8;
 }

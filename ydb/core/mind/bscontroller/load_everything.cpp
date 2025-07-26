@@ -283,7 +283,7 @@ public:
         std::map<std::tuple<TNodeId, TString>, TBoxId> driveToBox;
         for (const auto& [boxId, box] : Self->Boxes) {
             for (const auto& [host, value] : box.Hosts) {
-                const auto& nodeId = Self->HostRecords->ResolveNodeId(host, value);
+                const auto& nodeId = value.EnforcedNodeId ? value.EnforcedNodeId : Self->HostRecords->ResolveNodeId(host);
                 Y_VERIFY_S(nodeId, "HostKey# " << host.Fqdn << ":" << host.IcPort << " does not resolve to a node");
                 if (const auto it = Self->HostConfigs.find(value.HostConfigId); it != Self->HostConfigs.end()) {
                     for (const auto& [drive, info] : it->second.Drives) {

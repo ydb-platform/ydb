@@ -2,6 +2,7 @@
 
 #include "scheme.h"
 
+#include <ydb/core/fq/libs/row_dispatcher/events/data_plane.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 #include <yql/essentials/public/purecalc/common/interface.h>
 #include <yql/essentials/public/udf/udf_value.h>
@@ -52,6 +53,15 @@ private:
     const TScheme TableScheme;
     const NYT::TNode Schema;
 };
+
+class IProgramHolder : public NFq::IProgramHolder {
+public:
+    using TPtr = TIntrusivePtr<IProgramHolder>;
+
+    virtual NYql::NPureCalc::TPullListProgram<TMessageInputSpec, TMessageOutputSpec>* GetProgram() = 0;
+};
+
+IProgramHolder::TPtr CreateProgramHolder(const TScheme& tableScheme, const TString& sql);
 
 }
 

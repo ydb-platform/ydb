@@ -25,46 +25,6 @@ namespace NKikimr::NReplication::NTransfer {
 namespace {
 
 
-class TProgramHolder : public NFq::IProgramHolder {
-public:
-    using TPtr = TIntrusivePtr<TProgramHolder>;
-
-public:
-    TProgramHolder(
-        const TScheme& tableScheme,
-        const TString& sql
-    )
-        : TopicColumns()
-        , TableScheme(tableScheme)
-        , Sql(sql)
-    {}
-
-public:
-    void CreateProgram(NYql::NPureCalc::IProgramFactoryPtr programFactory) override {
-        // Program should be stateless because input values
-        // allocated on another allocator and should be released
-        Program = programFactory->MakePullListProgram(
-            TMessageInputSpec(),
-            TMessageOutputSpec(TableScheme, MakeOutputSchema(TableScheme.TableColumns)),
-            Sql,
-            NYql::NPureCalc::ETranslationMode::SQL
-        );
-    }
-
-    NYql::NPureCalc::TPullListProgram<TMessageInputSpec, TMessageOutputSpec>* GetProgram() {
-        return Program.Get();
-    }
-
-private:
-    const TVector<TSchemeColumn> TopicColumns;
-    const TScheme TableScheme;
-    const TString Sql;
-
-    THolder<NYql::NPureCalc::TPullListProgram<TMessageInputSpec, TMessageOutputSpec>> Program;
-};
-
-
-
 enum class ETag {
     FlushTimeout,
     RetryFlush
@@ -194,7 +154,7 @@ private:
         LOG_D("CompileTransferLambda: worker# " << Worker);
 
         NFq::TPurecalcCompileSettings settings = {};
-        auto programHolder = MakeIntrusive<TProgramHolder>(TableState->GetScheme(), GenerateSql());
+        auto programHolder = CreateProgramHolder(TableState->GetScheme(), GenerateSql());
         auto result = std::make_unique<NFq::TEvRowDispatcher::TEvPurecalcCompileRequest>(std::move(programHolder), settings);
 
         Send(CompileServiceId, result.release(), 0, ++InFlightCompilationId);
@@ -236,10 +196,10 @@ private:
             return LogCritAndLeave(TStringBuilder() << "Compilation failed: " << result->Issues.ToOneLineString());
         }
 
-        auto r = dynamic_cast<TProgramHolder*>(ev->Get()->ProgramHolder.Release());
+        auto r = dynamic_cast<IProgramHolder*>(ev->Get()->ProgramHolder.Release());
         Y_ENSURE(result, "Unexpected compile response");
 
-        ProgramHolder = TIntrusivePtr<TProgramHolder>(r);
+        ProgramHolder = TIntrusivePtr<IProgramHolder>(r);
 
         StartWork();
     }
@@ -487,7 +447,7 @@ private:
     ITableKindState::TPtr TableState;
 
     size_t InFlightCompilationId = 0;
-    TProgramHolder::TPtr ProgramHolder;
+    IProgramHolder::TPtr ProgramHolder;
 
     mutable bool WakeupScheduled = false;
     mutable bool PollSent = false;

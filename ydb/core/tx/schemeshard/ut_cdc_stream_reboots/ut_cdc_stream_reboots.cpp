@@ -415,6 +415,65 @@ Y_UNIT_TEST_SUITE(TCdcStreamWithRebootsTests) {
         DropStream<T>(NKikimrSchemeOp::ECdcStreamStateScan, true);
     }
 
+    Y_UNIT_TEST_WITH_REBOOTS(DropMultipleStreams) {
+        T t;
+        t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+            {
+                TInactiveZone inactive(activeZone);
+                TestCreateTable(runtime, ++t.TxId, "/MyRoot", R"(
+                    Name: "Table"
+                    Columns { Name: "key" Type: "Uint64" }
+                    Columns { Name: "value" Type: "Uint64" }
+                    KeyColumnNames: ["key"]
+                )");
+                t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+                TestCreateCdcStream(runtime, ++t.TxId, "/MyRoot", R"(
+                    TableName: "Table"
+                    StreamDescription {
+                      Name: "Stream1"
+                      Mode: ECdcStreamModeKeysOnly
+                      Format: ECdcStreamFormatProto
+                    }
+                )");
+                t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+                TestCreateCdcStream(runtime, ++t.TxId, "/MyRoot", R"(
+                    TableName: "Table"
+                    StreamDescription {
+                      Name: "Stream2"
+                      Mode: ECdcStreamModeKeysOnly
+                      Format: ECdcStreamFormatProto
+                    }
+                )");
+                t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+                // Verify both streams exist
+                TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/Stream1"), {NLs::PathExist});
+                TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/Stream2"), {NLs::PathExist});
+            }
+
+            // Drop both streams in one go
+            auto request = DropCdcStreamRequest(++t.TxId, "/MyRoot", R"(
+                TableName: "Table"
+                StreamName: "Stream1"
+                StreamName: "Stream2"
+            )");
+            t.TestEnv->ReliablePropose(runtime, request, {
+                NKikimrScheme::StatusAccepted,
+                NKikimrScheme::StatusMultipleModifications,
+            });
+            t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+            {
+                TInactiveZone inactive(activeZone);
+                // Verify both streams are deleted
+                TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/Stream1"), {NLs::PathNotExist});
+                TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/Stream2"), {NLs::PathNotExist});
+            }
+        });
+    }
+
     Y_UNIT_TEST_WITH_REBOOTS(CreateDropRecreate) {
         T t;
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {

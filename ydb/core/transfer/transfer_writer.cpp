@@ -8,20 +8,13 @@
 
 #include <ydb/core/fq/libs/row_dispatcher/events/data_plane.h>
 #include <ydb/core/fq/libs/row_dispatcher/purecalc_compilation/compile_service.h>
-#include <ydb/core/kqp/runtime/kqp_write_table.h>
 #include <ydb/core/tx/replication/ydb_proxy/topic_message.h>
-#include <ydb/core/tx/tx_proxy/proxy.h>
-#include <ydb/core/tx/tx_proxy/upload_rows.h>
 #include "purecalc.h" // should be after topic_message
 #include <ydb/core/protos/replication.pb.h>
 #include <ydb/core/tx/scheme_cache/helpers.h>
-#include <ydb/core/tx/tx_proxy/upload_rows_common_impl.h>
-#include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/services/services.pb.h>
-#include <ydb/public/lib/scheme_types/scheme_type_id.h>
 
-#include <yql/essentials/providers/common/schema/parser/yql_type_parser.h>
 #include <yql/essentials/public/purecalc/helpers/stream/stream_from_vector.h>
 
 using namespace NFq::NRowDispatcher;

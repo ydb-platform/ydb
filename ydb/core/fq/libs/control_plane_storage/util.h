@@ -12,30 +12,6 @@
 
 namespace NFq {
 
-class TRetryPolicyItem {
-public:
-    TRetryPolicyItem() = default;
-    TRetryPolicyItem(ui64 retryCount, ui64 retryLimit, const TDuration& retryPeriod, const TDuration& backoffPeriod)
-    : RetryCount(retryCount), RetryLimit(retryLimit), RetryPeriod(retryPeriod), BackoffPeriod(backoffPeriod)
-    { }
-    ui64 RetryCount = 0;
-    ui64 RetryLimit = 0;
-    TDuration RetryPeriod = TDuration::Zero();
-    TDuration BackoffPeriod = TDuration::Zero();
-};
-
-class TRetryLimiter {
-public:
-    TRetryLimiter() = default;
-    TRetryLimiter(ui64 retryCount, const TInstant& retryCounterUpdatedAt, double retryRate);
-    void Assign(ui64 retryCount, const TInstant& retryCounterUpdatedAt, double retryRate);
-    bool UpdateOnRetry(const TInstant& lastSeenAt, const TRetryPolicyItem& policy, const TInstant now = Now());
-    ui64 RetryCount = 0;
-    TInstant RetryCounterUpdatedAt = TInstant::Zero();
-    double RetryRate = 0.0;
-    TString LastError;
-};
-
 bool IsTerminalStatus(FederatedQuery::QueryMeta::ComputeStatus status);
 
 bool IsAbortedStatus(FederatedQuery::QueryMeta::ComputeStatus status);

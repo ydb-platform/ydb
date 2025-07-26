@@ -6,7 +6,7 @@
 
 namespace NKikimr::NKqp {
 
-TString ScriptExecutionOperationFromExecutionId(const TString& executionId) {
+TString ScriptExecutionOperationFromExecutionId(const std::string& executionId) {
     Ydb::TOperationId operationId;
     operationId.SetKind(Ydb::TOperationId::SCRIPT_EXECUTION);
     NOperationId::AddOptionalValue(operationId, "id", executionId);

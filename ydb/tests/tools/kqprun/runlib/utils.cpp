@@ -23,6 +23,10 @@ void TerminateHandler() {
 
     Cerr << colors.Red() << "======= terminate() call stack ========" << colors.Default() << Endl;
     FormatBackTrace(&Cerr);
+    if (const auto& backtrace = TBackTrace::FromCurrentException(); backtrace.size() > 0) {
+        Cerr << colors.Red() << "======== exception call stack =========" << colors.Default() << Endl;
+        backtrace.PrintTo(Cerr);
+    }
     Cerr << colors.Red() << "=======================================" << colors.Default() << Endl;
 
     abort();
@@ -46,7 +50,7 @@ void BackTraceSignalHandler(int signal) {
     abort();
 }
 
-}  // nonymous namespace
+}  // anonymous namespace
 
 
 TRequestResult::TRequestResult()

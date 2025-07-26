@@ -103,6 +103,7 @@ namespace NKikimr::NKqp::NFederatedQueryTest {
             .SetDomainRoot(options.DomainRoot)
             .SetNodeCount(options.NodeCount);
 
+        settings.EnableScriptExecutionBackgroundChecks = options.EnableScriptExecutionBackgroundChecks;
         settings = settings.SetAppConfig(appConfig.value());
 
         return std::make_shared<TKikimrRunner>(settings);

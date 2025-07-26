@@ -43,7 +43,7 @@ class TInMemoryControlPlaneStorageActor : public NActors::TActor<TInMemoryContro
         };
 
         struct TValue {
-            TRetryLimiter RetryLimiter;
+            NKikimr::NKqp::TRetryLimiter RetryLimiter;
             TString Owner;
             TInstant AssignedUntil;
             TInstant LastSeenAt;
@@ -439,7 +439,7 @@ private:
         if (ctx.Request.execute_mode() != FederatedQuery::SAVE) {
             AddEntity(Jobs, {ctx.Scope, queryId, jobId}, {job});
 
-            TRetryLimiter retryLimiter;
+            NKikimr::NKqp::TRetryLimiter retryLimiter;
             retryLimiter.Assign(0, ctx.StartTime, 0.0);
 
             AddEntity(PendingQueries, {
@@ -1081,7 +1081,7 @@ private:
     struct TTaskInternal {
         TTask Task;
         TString Owner;
-        TRetryLimiter RetryLimiter;
+        NKikimr::NKqp::TRetryLimiter RetryLimiter;
         TString TenantName;
         bool ShouldAbortTask;
     };

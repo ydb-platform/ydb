@@ -10,7 +10,7 @@ TString ScriptExecutionRunnerActorIdString(const NActors::TActorId& actorId) {
     return TStringBuilder() << "[" << actorId.NodeId() << ":" << actorId.LocalId() << ":" << actorId.Hint() << ":" << actorId.PoolID() << "]";
 }
 
-bool ScriptExecutionRunnerActorIdFromString(const TString& executionId, TActorId& actorId) {
+bool ScriptExecutionRunnerActorIdFromString(const std::string& executionId, TActorId& actorId) {
     if (executionId.size() < 5 || executionId[0] != '[' || executionId[executionId.size() - 1] != ']')
         return false;
 

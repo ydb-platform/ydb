@@ -41,6 +41,7 @@ struct TScheme {
     size_t TargetTableIndex;
 
     std::vector<ui32> WriteIndex;
+    std::vector<ui32> ReadIndex;
     std::shared_ptr<TVector<std::pair<TString, Ydb::Type>>> Types = std::make_shared<TVector<std::pair<TString, Ydb::Type>>>();
 };
 

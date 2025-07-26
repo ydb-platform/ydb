@@ -141,7 +141,7 @@ public:
     }
 
     NKqp::IDataBatcherPtr CreateDataBatcher() override {
-        return NKqp::CreateRowDataBatcher(GetScheme().ColumnsMetadata, GetScheme().WriteIndex);
+        return NKqp::CreateRowDataBatcher(GetScheme().ColumnsMetadata, GetScheme().WriteIndex, nullptr, GetScheme().ReadIndex);
     }
 
     bool Flush() override {

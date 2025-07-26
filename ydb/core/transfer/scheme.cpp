@@ -18,6 +18,7 @@ TScheme BuildScheme(const TAutoPtr<NSchemeCache::TSchemeCacheNavigate>& nav) {
     result.TableColumns.reserve(entry.Columns.size());
     result.ColumnsMetadata.reserve(entry.Columns.size());
     result.StructMetadata.reserve(entry.Columns.size() + 1);
+    result.ReadIndex.reserve(entry.Columns.size());
     result.WriteIndex.reserve(entry.Columns.size());
 
     size_t keyColumns = CountIf(entry.Columns, [](auto& c) {
@@ -61,6 +62,7 @@ TScheme BuildScheme(const TAutoPtr<NSchemeCache::TSchemeCacheNavigate>& nav) {
         } else {
             result.ColumnsMetadata.push_back(c);
             result.WriteIndex.push_back(column.KeyOrder >= 0 ? column.KeyOrder : i++);
+            result.ReadIndex.push_back(j);
 
             Ydb::Type type;
             type.set_type_id(static_cast<Ydb::Type::PrimitiveTypeId>(column.PType.GetTypeId()));

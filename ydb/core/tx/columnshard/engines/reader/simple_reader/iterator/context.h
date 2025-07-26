@@ -32,7 +32,8 @@ private:
     mutable std::optional<std::shared_ptr<TFetchingScript>> SourcesAggregationScript;
 
     bool NeedDuplicateFiltering() const {
-        return GetReadMetadata()->GetDeduplicationPolicy() == EDeduplicationPolicy::PREVENT_DUPLICATES;
+        return GetReadMetadata()->GetDeduplicationPolicy() == EDeduplicationPolicy::PREVENT_DUPLICATES &&
+               GetReadMetadata()->TableMetadataAccessor->NeedDuplicateFiltering();
     }
 
 public:

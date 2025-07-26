@@ -37,7 +37,9 @@ struct TScheme {
 
     TVector<NKikimrKqp::TKqpColumnMetadataProto> StructMetadata;
     TVector<NKikimrKqp::TKqpColumnMetadataProto> ColumnsMetadata;
-    
+
+    size_t TargetTableIndex;
+
     std::vector<ui32> WriteIndex;
     std::shared_ptr<TVector<std::pair<TString, Ydb::Type>>> Types = std::make_shared<TVector<std::pair<TString, Ydb::Type>>>();
 };

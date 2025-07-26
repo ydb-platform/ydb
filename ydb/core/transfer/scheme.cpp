@@ -42,6 +42,7 @@ TScheme BuildScheme(const TAutoPtr<NSchemeCache::TSchemeCacheNavigate>& nav) {
     columns[SystemColumns::TargetTable] = TSysTables::TTableColumnInfo{SystemColumns::TargetTable, 0, NScheme::TTypeInfo(NScheme::NTypeIds::String)};
 
     size_t i = keyColumns;
+    size_t j = 0;
     for (const auto& [name, column] : columns) {
         result.StructMetadata.emplace_back();
         auto& c = result.StructMetadata.back();
@@ -55,16 +56,18 @@ TScheme BuildScheme(const TAutoPtr<NSchemeCache::TSchemeCacheNavigate>& nav) {
             NScheme::ProtoFromTypeInfo(column.PType, "", *c.MutableTypeInfo());
         }
 
-        if (name != SystemColumns::TargetTable) {
+        if (name == SystemColumns::TargetTable) {
+            result.TargetTableIndex = j;
+        } else {
             result.ColumnsMetadata.push_back(c);
             result.WriteIndex.push_back(column.KeyOrder >= 0 ? column.KeyOrder : i++);
 
             Ydb::Type type;
             type.set_type_id(static_cast<Ydb::Type::PrimitiveTypeId>(column.PType.GetTypeId()));
             result.Types->emplace_back(column.Name, type);
-        } else {
-            ++i;
         }
+
+        ++j;
     }
 
     return result;

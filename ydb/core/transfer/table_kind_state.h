@@ -17,23 +17,24 @@ public:
 
     virtual ~ITableKindState() = default;
 
-    void AddData(TString&& table, const NMiniKQL::TUnboxedValueBatch &data) {
-        auto it = Batchers.find(table);
-        if (it != Batchers.end()) {
-            it->second->AddData(data);
-            return;
+    void AddData(TString&& table, const NMiniKQL::TUnboxedValueBatch& data) {
+        auto& batcher = Batchers[std::move(table)];
+        if (!batcher) {
+            batcher = CreateDataBatcher();
         }
-
-        auto& batcher = Batchers[std::move(table)] = CreateDataBatcher();
         batcher->AddData(data);
     }
 
-    i64 BatchSize() const {
-        i64 size = 0;
+    ui64 BatchSize() const {
+        ui64 size = 0;
         for (auto& [_, batcher] : Batchers) {
-            size += batcher->GetMemory();
+            size += std::max<i64>(0, batcher->GetMemory());
         }
         return size;
+    }
+
+    void Reset() {
+        Batchers.clear();
     }
 
     virtual NKqp::IDataBatcherPtr CreateDataBatcher() = 0;

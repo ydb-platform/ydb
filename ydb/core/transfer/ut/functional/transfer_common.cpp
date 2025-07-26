@@ -74,6 +74,7 @@ void ComplexKey(const std::string& tableType) {
                 Key2 Uint64 NOT NULL,
                 Value2 Utf8,
                 Key4 Uint64 NOT NULL,
+                ___Value3 Utf8,
                 PRIMARY KEY (Key3, Key2, Key1, Key4)
             )  WITH (
                 STORE = %s
@@ -90,6 +91,7 @@ void ComplexKey(const std::string& tableType) {
                         Key4:CAST(4 AS Uint64),
                         Key3:CAST(3 AS Uint64),
                         Value1:CAST("value-1" AS Utf8),
+                        ___Value3:CAST("value-3" AS Utf8)
                     |>
                 ];
             };
@@ -104,6 +106,7 @@ void ComplexKey(const std::string& tableType) {
             _C("Key4", ui64(4)),
             _C("Value1", TString("value-1")),
             _C("Value2", TString("value-2")),
+            _C("___Value3", TString("value-3")),
         }}
     });
 }

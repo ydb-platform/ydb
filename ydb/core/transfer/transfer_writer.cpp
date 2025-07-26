@@ -631,7 +631,7 @@ private:
     const TPathId TablePathId;
     const TActorId CompileServiceId;
     const TDuration FlushInterval;
-    const i64 BatchSizeBytes;
+    const ui64 BatchSizeBytes;
     TActorId Worker;
 
     TString Database;

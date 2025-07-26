@@ -7,6 +7,8 @@ items:
   href: dynamic-config-selectors.md
 - name: Параметры конфигурации
   href: config-settings.md
+- name: Конфигурация спиллинга
+  href: spilling-config.md
 - name: Расширение кластера
   href: cluster-expansion.md
 - name: Перемещение State Storage

@@ -41,7 +41,6 @@ ydb/core/kqp/ut/tx KqpSnapshotIsolation.TReadOnlyOltp
 ydb/core/kqp/ut/tx KqpSnapshotIsolation.TReadOnlyOltpNoSink
 ydb/core/kqp/ut/tx KqpSnapshotIsolation.TSimpleOltp
 ydb/core/kqp/ut/tx KqpSnapshotIsolation.TSimpleOltpNoSink
-ydb/core/kqp/ut/yql KqpScripting.StreamExecuteYqlScriptScanOperationTmeoutBruteForce
 ydb/core/persqueue/ut [*/*] chunk chunk
 ydb/core/quoter/ut QuoterWithKesusTest.PrefetchCoefficient
 ydb/core/statistics/aggregator/ut AnalyzeColumnshard.AnalyzeRebootColumnShard

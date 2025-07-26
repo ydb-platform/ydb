@@ -1,3 +1,4 @@
+#include "combinatory/variator.h"
 #include "helpers/get_value.h"
 #include "helpers/local.h"
 #include "helpers/query_executor.h"
@@ -135,7 +136,7 @@ Y_UNIT_TEST_SUITE(KqpOlapWrite) {
         {
             const auto startInstant = TMonotonic::Now();
             AFL_VERIFY(Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->GetDeletesCount() == 0)
-                ("count", Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->GetDeletesCount());
+            ("count", Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->GetDeletesCount());
             while (Singleton<NWrappers::NExternalStorage::TFakeExternalStorage>()->GetSize() &&
                    TMonotonic::Now() - startInstant < TDuration::Seconds(200)) {
                 for (auto&& i : csController->GetShardActualIds()) {

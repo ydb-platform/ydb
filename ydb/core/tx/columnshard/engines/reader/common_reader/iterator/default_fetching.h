@@ -72,7 +72,7 @@ private:
                 continue;
             }
             AFL_VERIFY(!!StorageId);
-            i.SetBlobData(blobs.Extract(*StorageId, *i.GetBlobRangeOptional()));
+            i.SetBlobData(blobs.ExtractVerified(*StorageId, *i.GetBlobRangeOptional()));
         }
     }
 

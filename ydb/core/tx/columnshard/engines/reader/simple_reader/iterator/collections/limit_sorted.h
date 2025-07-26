@@ -1,6 +1,8 @@
 #pragma once
 #include "abstract.h"
 
+#include <ydb/core/tx/columnshard/engines/reader/common_reader/constructor/read_metadata.h>
+
 #include <ydb/library/accessor/positive_integer.h>
 
 namespace NKikimr::NOlap::NReader::NSimple {
@@ -30,12 +32,11 @@ private:
     };
 
     virtual bool DoHasData() const override {
-        return HeapSources.size();
+        return !SourcesConstructor->IsFinished();
     }
-    ui32 SourceIdxCurrent = 0;
     std::shared_ptr<IDataSource> NextSource;
-    std::deque<TSourceConstructor> HeapSources;
     ui64 Limit = 0;
+    std::unique_ptr<NCommon::ISourcesConstructor> SourcesConstructor;
     ui64 InFlightLimit = 1;
     std::set<ui32> FetchingInFlightSources;
     bool Aborted = false;
@@ -48,16 +49,16 @@ private:
     }
     virtual void DoClear() override {
         Cleared = true;
-        HeapSources.clear();
+        SourcesConstructor->Clear();
         FetchingInFlightSources.clear();
     }
     virtual void DoAbort() override {
         Aborted = true;
-        HeapSources.clear();
+        SourcesConstructor->Abort();
         FetchingInFlightSources.clear();
     }
     virtual bool DoIsFinished() const override {
-        return HeapSources.empty() && FetchingInFlightSources.empty();
+        return !NextSource && SourcesConstructor->IsFinished() && FetchingInFlightSources.empty();
     }
     virtual std::shared_ptr<IDataSource> DoExtractNext() override;
     virtual bool DoCheckInFlightLimits() const override {
@@ -72,8 +73,8 @@ public:
         return NextSource;
     }
 
-    TScanWithLimitCollection(const std::shared_ptr<TSpecialReadContext>& context, std::deque<TSourceConstructor>&& sources,
-        const std::shared_ptr<IScanCursor>& cursor);
+    TScanWithLimitCollection(
+        const std::shared_ptr<TSpecialReadContext>& context, std::unique_ptr<NCommon::ISourcesConstructor>&& sourcesConstructor);
 };
 
 }   // namespace NKikimr::NOlap::NReader::NSimple

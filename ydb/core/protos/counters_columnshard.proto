@@ -209,4 +209,5 @@ enum ETxTypes {
     TXTYPE_WRITE_PORTIONS_FAILED = 40                       [(TxTypeOpts) = {Name: "TxWritePortionsFailed"}];
     TXTYPE_PERSIST_SUBDOMAIN_OUT_OF_SPACE = 41              [(TxTypeOpts) = {Name: "TxPersistSubDomainOutOfSpace"}];
     TXTYPE_PERSIST_SUBDOMAIN_PATH_ID = 42                   [(TxTypeOpts) = {Name: "TxPersistSubDomainPathId"}];
+    TXTYPE_CLEANUP_SCHEMAS = 43                             [(TxTypeOpts) = {Name: "TxCleanupSchemasWithnoData"}];
 }

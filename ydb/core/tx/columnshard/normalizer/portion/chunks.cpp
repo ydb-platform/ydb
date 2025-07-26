@@ -56,7 +56,7 @@ protected:
         for (auto&& chunkInfo : Chunks) {
             const auto& blobRange = chunkInfo.GetBlobRange();
 
-            auto blobData = Blobs.Extract(IStoragesManager::DefaultStorageId, blobRange);
+            auto blobData = Blobs.ExtractVerified(IStoragesManager::DefaultStorageId, blobRange);
 
             auto columnLoader = chunkInfo.GetLoader();
             Y_ABORT_UNLESS(!!columnLoader);

@@ -89,8 +89,8 @@ public:
             const auto& columns = OutputSpec.GetStructColumns();
             for (size_t i = 0; i < columns.size(); ++i) {
                 const auto& column = columns[i];
+                const auto e = Out.Value.GetElement(i);
                 if (column.name() == SystemColumns::TargetTable) {
-                    auto e = Out.Value.GetElement(i);
                     if (e) {
                         auto opt = e.GetOptionalValue();
                         if (opt) {
@@ -100,7 +100,7 @@ public:
                     continue;
                 }
 
-                if (column.GetNotNull() && !Out.Value.GetElement(i)) {
+                if (column.GetNotNull() && !e) {
                     throw yexception() << "The value of the '" << column.GetName() << "' column must be non-NULL";
                 }
             }

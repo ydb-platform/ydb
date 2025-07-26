@@ -61,10 +61,7 @@ and timeout (by default, the maximum response time from healthcheck). Documentat
 * 20272:Enabled the following feature flags by default: EnableTopicAutopartitioningForCDC, EnableTopicAutopartitioningForReplication, EnableTopicTransfer. [#20272](https://github.com/ydb-platform/ydb/pull/20272) ([Nikolay Shestakov](https://github.com/nshestakov))
 * 20253:Separated bulk statistics operations from non-bulk. [#20253](https://github.com/ydb-platform/ydb/pull/20253) ([Vladilen](https://github.com/Vladilen))
 * 21007:Added support for enable default allocator for Arrow in config. (https://github.com/ydb-platform/ydb/pull/21007) ([Ivan](https://github.com/abyss7))
-* 20753:https://github.com/ydb-platform/ydb/issues/20767 
-Return CORS headers on 403, mon. Pages show Network Error without CORS; we need CORS so the client can interpret the received response [#20753](https://github.com/ydb-platform/ydb/pull/20753) ([Andrei Rykov](https://github.com/StekPerepolnen))
-* 20738:Added stats for grouped limiter and caches. [#20738](https://github.com/ydb-platform/ydb/pull/20738) ([Vladilen](https://github.com/Vladilen))
-* 20525:YMQ: Do not send x-amz-crc32 HTTP header (AWS does not do it) [#20525](https://github.com/ydb-platform/ydb/pull/20525) ([qyryq](https://github.com/qyryq))
+* 20738:Added statistics for grouped limiter and caches. [#20738](https://github.com/ydb-platform/ydb/pull/20738) ([Vladilen](https://github.com/Vladilen))
 
 ### Bug fixes
 
@@ -123,16 +120,7 @@ Return CORS headers on 403, mon. Pages show Network Error without CORS; we need 
 * 17198:Fixed an issue with UUID data type handling in YDB CLI backup/restore operations. [#17198](https://github.com/ydb-platform/ydb/pull/17198) ([Semyon Danilov](https://github.com/SammyVimes))
 * 20560:Resolved an issue with memory travel when a consumer commits an offset to the topic with autopartitioning enabled. [#20560](https://github.com/ydb-platform/ydb/pull/20560) ([Nikolay Shestakov](https://github.com/nshestakov))
 * 20386:Resolved an issue with reporting of gRPC metrics for serverless databases. [#20386](https://github.com/ydb-platform/ydb/pull/20386) ([Ilnaz Nizametdinov](https://github.com/CyberROFL))
-* 20929:fixes data doubling on memory reallocation when processing incoming chunk
-closes #20890 [#20929](https://github.com/ydb-platform/ydb/pull/20929) ([Alexey Efimov](https://github.com/adameat))
-* 20916:[Ticket](https://github.com/ydb-platform/ydb/issues/20833)
-... [#20916](https://github.com/ydb-platform/ydb/pull/20916) ([Evgenik2](https://github.com/Evgenik2))
-* 20863:fixes crash when request was made with URL longer than 2048 bytes and DEBUG level for logging HTTP is active
-closes #20859 [#20863](https://github.com/ydb-platform/ydb/pull/20863) ([Alexey Efimov](https://github.com/adameat))
-* 20785:Fix data race which occured during reconfiguration of TSamplingThrottlingControl, https://github.com/ydb-platform/ydb/issues/20741 [#20785](https://github.com/ydb-platform/ydb/pull/20785) ([Sergey Belyakov](https://github.com/serbel324))
-* 20748:Fixed the [KesusQuoterService freeze](https://github.com/ydb-platform/ydb/issues/20747) in case of several unsuccessful attempts to connect to the Kesus tablet. [#20748](https://github.com/ydb-platform/ydb/pull/20748) ([Ilnaz Nizametdinov](https://github.com/CyberROFL))
-* 20720:return CORS to bad 403 response https://github.com/ydb-platform/ydb/issues/20682 [#20720](https://github.com/ydb-platform/ydb/pull/20720) ([Andrei Rykov](https://github.com/StekPerepolnen))
-* 20681:fix incorrect error reporting https://github.com/ydb-platform/ydb/issues/20682 [#20681](https://github.com/ydb-platform/ydb/pull/20681) ([Andrei Rykov](https://github.com/StekPerepolnen))
+* 20785:Fixed [data race](https://github.com/ydb-platform/ydb/issues/20741) in Jaeger settings configurator. [#20785](https://github.com/ydb-platform/ydb/pull/20785) ([Sergey Belyakov](https://github.com/serbel324))
 * 20670:Fixed external sources ddl errors, also fix for: https://github.com/ydb-platform/ydb/issues/20669 [#20670](https://github.com/ydb-platform/ydb/pull/20670) ([Pisarenko Grigoriy](https://github.com/GrigoriyPA))
 
 ### YDB UI
@@ -141,6 +129,7 @@ closes #20859 [#20863](https://github.com/ydb-platform/ydb/pull/20863) ([Alexey 
 * 18056:Fixed an [issue](https://github.com/ydb-platform/ydb-embedded-ui/issues/2164) to keep precision of double values on serialization. [#18056](https://github.com/ydb-platform/ydb/pull/18056) ([Alexey Efimov](https://github.com/adameat))
 * 20432:Fixed an [issue](https://github.com/ydb-platform/ydb/issues/20431) with the pdisk info timeout when target node is disconnected or dead. [#20432](https://github.com/ydb-platform/ydb/pull/20432) ([Alexey Efimov](https://github.com/adameat))
 * 17157: Fixed the retrieval of tablet lists for tables with secondary indexes in the Viewer API. #17103 [#17157](https://github.com/ydb-platform/ydb/pull/17157) ([Alexey Efimov](https://github.com/adameat))
+* 20929:Fixed [data doubling](https://github.com/ydb-platform/ydb/issues/20116) on memory reallocation when processing incoming chunk. [#20929](https://github.com/ydb-platform/ydb/pull/20929) ([Alexey Efimov](https://github.com/adameat))
 
 ### Performance
 

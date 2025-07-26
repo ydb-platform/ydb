@@ -53,6 +53,8 @@ private:
                 std::shared_ptr<NArrow::NAccessor::IChunkedArray>* findColumn =
                     objectAddresses.FindPtr(NGeneralCache::TGlobalColumnAddress(ColumnShardActorId, portion->GetAddress(), columnId));
                 AFL_VERIFY(findColumn)("portion", portion->DebugString())("column", columnId);
+                AFL_VERIFY(field->type()->Equals((*findColumn)->GetDataType()))("field", field->ToString())(
+                    "column", (*findColumn)->GetDataType()->ToString())("portion", portion->DebugString())("column_id", columnId);
                 columns.emplace_back(*findColumn);
             }
             std::shared_ptr<NArrow::TGeneralContainer> container = std::make_shared<NArrow::TGeneralContainer>(fields, std::move(columns));

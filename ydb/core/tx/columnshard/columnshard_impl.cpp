@@ -1336,7 +1336,7 @@ void TColumnShard::Handle(NColumnShard::TEvPrivate::TEvAskColumnData::TPtr& ev, 
         std::shared_ptr<NKikimr::NGeneralCache::NSource::IObjectsProcessor<NOlap::NGeneralCache::TColumnDataCachePolicy>> CacheCallback;
         NOlap::TPortionAddress Portion;
         TActorId Owner;
-        NOlap::NReader::NCommon::TColumnsSetIds ColumnIds;
+        NOlap::ISnapshotSchema::TPtr Schema;
 
         virtual bool IsAborted() const override {
             return false;
@@ -1353,11 +1353,12 @@ void TColumnShard::Handle(NColumnShard::TEvPrivate::TEvAskColumnData::TPtr& ev, 
             AFL_VERIFY(portionsData.size() == 1);
             std::shared_ptr<NArrow::TGeneralContainer> container = std::make_shared<NArrow::TGeneralContainer>(std::move(portionsData.front()));
             {
-                ui32 columnIdx = 0;
-                for (const ui32 columnId : ColumnIds.GetColumnIds()) {
+                for (const ui32 columnId : Schema->GetColumnIds()) {
                     auto address = NOlap::NGeneralCache::TGlobalColumnAddress(Owner, Portion, columnId);
-                    AFL_VERIFY(result.emplace(address, container->GetColumnVerified(columnIdx)).second);
-                    ++columnIdx;
+                    auto columnData = container->GetAccessorByNameVerified(Schema->GetFieldByColumnIdVerified(columnId)->name());
+                    AFL_VERIFY(Schema->GetFieldByColumnIdVerified(columnId)->type()->Equals(columnData->GetDataType()))(
+                        "schema", Schema->GetFieldByColumnIdVerified(columnId)->ToString())("data", columnData->GetDataType()->ToString());
+                    AFL_VERIFY(result.emplace(address, columnData).second);
                 }
             }
 
@@ -1366,7 +1367,7 @@ void TColumnShard::Handle(NColumnShard::TEvPrivate::TEvAskColumnData::TPtr& ev, 
 
         virtual void DoOnError(const TString& errorMessage) override {
             THashMap<NOlap::NGeneralCache::TGlobalColumnAddress, TString> errorAddresses;
-            for (const ui32 columnId : ColumnIds.GetColumnIds()) {
+            for (const ui32 columnId : Schema->GetColumnIds()) {
                 errorAddresses.emplace(NOlap::NGeneralCache::TGlobalColumnAddress(Owner, Portion, columnId), errorMessage);
             }
             CacheCallback->OnReceiveData(Owner, {}, {}, std::move(errorAddresses));
@@ -1374,12 +1375,11 @@ void TColumnShard::Handle(NColumnShard::TEvPrivate::TEvAskColumnData::TPtr& ev, 
 
     public:
         TExecutor(const std::shared_ptr<NKikimr::NGeneralCache::NSource::IObjectsProcessor<NOlap::NGeneralCache::TColumnDataCachePolicy>>&
-                      cacheCallback, const NOlap::TPortionAddress& portion, const TActorId& owner,
-            const NOlap::NReader::NCommon::TColumnsSetIds& columnIds)
+                      cacheCallback, const NOlap::TPortionAddress& portion, const TActorId& owner, const NOlap::ISnapshotSchema::TPtr& schema)
             : CacheCallback(cacheCallback)
             , Portion(std::move(portion))
             , Owner(owner)
-            , ColumnIds(columnIds)
+            , Schema(schema)
         {
         }
     };
@@ -1394,7 +1394,8 @@ void TColumnShard::Handle(NColumnShard::TEvPrivate::TEvAskColumnData::TPtr& ev, 
 
         NOlap::NDataFetcher::TPortionsDataFetcher::StartAssembledColumnsFetchingNoAllocation(std::move(rInput),
             std::make_shared<NOlap::NReader::NCommon::TColumnsSetIds>(columns),
-            std::make_shared<TExecutor>(ev->Get()->GetCallback(), portion.GetPortionAddress(), SelfId(), columns), env,
+            std::make_shared<TExecutor>(ev->Get()->GetCallback(), portion.GetPortionAddress(), SelfId(),
+                std::make_shared<NOlap::TFilteredSnapshotSchema>(portionInfo->GetSchema(*actualIndexInfo), columns)), env,
             NConveyorComposite::ESpecialTaskCategory::Scan);
     }
 }

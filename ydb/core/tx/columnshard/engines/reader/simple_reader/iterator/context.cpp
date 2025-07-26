@@ -39,7 +39,7 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::DoGetColumnsFetchingPlan(c
             needShardingFilter = true;
         }
     }
-    const bool preventDuplicates = GetReadMetadata()->GetDeduplicationPolicy() == EDeduplicationPolicy::PREVENT_DUPLICATES;
+    const bool preventDuplicates = NeedDuplicateFiltering();
     {
         auto& result = CacheFetchingScripts[needSnapshots ? 1 : 0][partialUsageByPK ? 1 : 0][useIndexes ? 1 : 0][needShardingFilter ? 1 : 0]
                                            [hasDeletions ? 1 : 0][preventDuplicates ? 1 : 0];
@@ -108,14 +108,13 @@ void TSpecialReadContext::RegisterActors(const NCommon::ISourcesConstructor& sou
     AFL_VERIFY(!DuplicatesManager);
     if (NeedDuplicateFiltering()) {
         const auto* portions = dynamic_cast<const NCommon::TSourcesConstructorWithAccessors<TSourceConstructor>*>(&sources);
-        if (portions) {
-            NCommon::TPortionIntervalTree intervals;
-            for (const auto& portion : portions->GetConstructors()) {
-                intervals.AddRange(NCommon::TPortionIntervalTree::TOwnedRange(portion.GetPortion()->IndexKeyStart(), true,
-                                       portion.GetPortion()->IndexKeyEnd(), true), portion.GetPortion());
-            }
-            DuplicatesManager = NActors::TActivationContext::Register(new NDuplicateFiltering::TDuplicateManager(*this, std::move(intervals)));
+        AFL_VERIFY(portions);
+        NCommon::TPortionIntervalTree intervals;
+        for (const auto& portion : portions->GetConstructors()) {
+            intervals.AddRange(NCommon::TPortionIntervalTree::TOwnedRange(portion.GetPortion()->IndexKeyStart(), true,
+                                   portion.GetPortion()->IndexKeyEnd(), true), portion.GetPortion());
         }
+        DuplicatesManager = NActors::TActivationContext::Register(new NDuplicateFiltering::TDuplicateManager(*this, std::move(intervals)));
     }
 }
 

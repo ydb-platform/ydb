@@ -18,6 +18,8 @@ struct TDefaultValueTraits {
     static bool Equal(const TValue& a, const TValue& b) {
         return a == b;
     }
+
+    using THashFnc = THash<TValue>;
 };
 
 template <class TKey, class TValue, class TKeyView = TKey, class TValueTraits = TDefaultValueTraits<TValue>,
@@ -67,6 +69,24 @@ private:
         EBorderMode RightMode;
         EBorderMode MaxRightMode;
         bool MaxRightTrivial;
+
+        TNode(TNode* parent, THolder<TNode> left, THolder<TNode> right, const ui64 prio, TKey leftKey, TKey rightKey, TValue value,
+            const EBorderMode leftMode, const EBorderMode rightMode, TKey maxRightKey, const EBorderMode maxRightMode,
+            const bool maxRightTrivial)
+            : Parent(parent)
+            , Prio(prio)
+            , LeftKey(std::move(leftKey))
+            , RightKey(std::move(rightKey))
+            , MaxRightKey(std::move(maxRightKey))
+            , Value(std::move(value))
+            , LeftMode(leftMode)
+            , RightMode(rightMode)
+            , MaxRightMode(maxRightMode)
+            , MaxRightTrivial(maxRightTrivial)
+        {
+            SetLeft(std::move(left));
+            SetRight(std::move(right));
+        }
 
         void SetLeft(THolder<TNode> child) noexcept {
             if (child) {
@@ -225,17 +245,12 @@ private:
         }
 
         // Make a new subtree root with l and r as children
-        tptr->Reset((t = new TNode));
-        Values[value].PushBack(t);
-        t->Parent = parent;
-        t->SetLeft(std::move(l));
-        t->SetRight(std::move(r));
-        t->Prio = prio;
-        t->Value = std::move(value);
-        t->LeftKey = std::move(leftOwnedKey);
-        t->RightKey = std::move(rightOwnedKey);
-        t->LeftMode = leftKey.GetMode();
-        t->RightMode = rightKey.GetMode();
+        tptr->Reset(
+            (t = new TNode(
+                 /*Parent=*/parent, /*Left=*/std::move(l), /*Right=*/std::move(r), /*Prio=*/prio, /*LeftKey=*/std::move(leftOwnedKey),
+                 /*RightKey=*/rightOwnedKey, /*Value=*/std::move(value), /*LeftMode=*/leftKey.GetMode(), /*RightMode=*/rightKey.GetMode(),
+                 /*MaxRightKey=*/rightOwnedKey, /*MaxRightMode=*/rightKey.GetMode(), /*MaxRightTrivial=*/true)));
+        Values[t->Value].PushBack(t);
         ++Stats_.Inserts;
         ++Size_;
         RecomputeMaxRight(t);
@@ -587,7 +602,7 @@ private:
 private:
     TBorderComparator Comparator;
     THolder<TNode> Root;
-    THashMap<TValue, TIntrusiveList<TNode>> Values;
+    THashMap<TValue, TIntrusiveList<TNode>, typename TValueTraits::THashFnc> Values;
 };
 }   // namespace NRangeTreap
 }   // namespace NKikimr

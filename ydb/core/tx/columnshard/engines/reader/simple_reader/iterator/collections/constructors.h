@@ -3,6 +3,7 @@
 
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/common/accessors_ordering.h>
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/constructor/read_metadata.h>
+#include <ydb/core/tx/columnshard/engines/reader/simple_reader/duplicates/common.h>
 
 #include <ydb/library/accessor/positive_integer.h>
 
@@ -107,7 +108,6 @@ private:
         std::shared_ptr<NReader::NCommon::IDataSource> result = constructor.MutableObject().Construct(context, constructor.DetachAccessor());
         return result;
     }
-
 public:
     TPortionsSources(std::deque<TSourceConstructor>&& sources, const ERequestSorting sorting, std::vector<TInsertWriteId>&& uncommitted)
         : TBase(sorting)

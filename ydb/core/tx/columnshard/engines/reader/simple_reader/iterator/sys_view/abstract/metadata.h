@@ -48,6 +48,10 @@ public:
         return "SIMPLE";
     }
 
+    virtual bool NeedDuplicateFiltering() const override {
+        return false;
+    }
+
     virtual bool NeedStalenessChecker() const override {
         return false;
     }

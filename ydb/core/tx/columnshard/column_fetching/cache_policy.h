@@ -40,11 +40,20 @@ public:
     }
 
     explicit operator size_t() const {
-        ui64 h = 0;
-        h = CombineHashes(h, TabletActorId.Hash());
+        ui64 h = TabletActorId.Hash();
         h = CombineHashes(h, THash<NKikimr::NOlap::TPortionAddress>()(InternalPortionAddress));
         h = CombineHashes(h, (ui64)ColumnId);
         return h;
+    }
+
+    TString DebugString() const {
+        TStringBuilder sb;
+        sb << '{';
+        sb << "tablet=" << TabletActorId.ToString() << ";";
+        sb << "portion=" << InternalPortionAddress.DebugString() << ";";
+        sb << "column=" << ColumnId << ";";
+        sb << '}';
+        return sb;
     }
 };
 
@@ -55,6 +64,10 @@ public:
     using EConsumer = NOlap::NBlobOperations::EConsumer;
     using TSourceId = TActorId;
 
+    static TSourceId GetSourceId(const TAddress& address) {
+        return address.GetTabletActorId();
+    }
+
     static EConsumer DefaultConsumer() {
         return EConsumer::UNDEFINED;
     }
@@ -62,7 +75,7 @@ public:
     class TSizeCalcer {
     public:
         size_t operator()(const TObject& data) {
-            return sizeof(TAddress) + sizeof(TObject) + data->GetRawSizeVerified();
+            return sizeof(TAddress) + sizeof(TObject) + data->GetRawSize().value_or(0);
         }
     };
 

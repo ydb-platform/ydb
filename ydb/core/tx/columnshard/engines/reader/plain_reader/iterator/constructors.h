@@ -61,6 +61,10 @@ public:
     }
 
     virtual std::vector<TInsertWriteId> GetUncommittedWriteIds() const override;
+
+    virtual NCommon::TPortionIntervalTree GetPortionIntervals() const override {
+        Y_ABORT("unimplemented");
+    }
 };
 
 }   // namespace NKikimr::NOlap::NReader::NPlain

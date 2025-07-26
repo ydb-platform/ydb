@@ -1,6 +1,5 @@
 #include "merge.h"
-
-#include <ydb/core/tx/columnshard/engines/reader/simple_reader/duplicates/events.h>
+#include "private_events.h"
 
 namespace NKikimr::NOlap::NReader::NSimple::NDuplicateFiltering  {
 
@@ -48,11 +47,12 @@ public:
 };
 
 void TBuildDuplicateFilters::DoExecute(const std::shared_ptr<ITask>& /*taskPtr*/) {
+    AFL_TRACE(NKikimrServices::TX_COLUMNSHARD_SCAN)("task", "build_duplicate_filters")("info", DebugString());
     NArrow::NMerger::TMergePartialStream merger(PKSchema, nullptr, false, VersionColumnNames, MaxVersion);
     merger.PutControlPoint(Finish.BuildSortablePosition(), false);
     TFiltersBuilder filtersBuilder;
     for (const auto& [interval, data] : SourcesById) {
-        merger.AddSource(data->GetData(), nullptr, NArrow::NMerger::TIterationOrder::Forward(interval.GetOffset()), interval.GetSourceId());
+        merger.AddSource(data, nullptr, NArrow::NMerger::TIterationOrder::Forward(interval.GetRows().GetBegin()), interval.GetSourceId());
         filtersBuilder.AddSource(interval.GetSourceId());
     }
     merger.DrainToControlPoint(filtersBuilder, IncludeFinish);
@@ -67,13 +67,13 @@ void TBuildDuplicateFilters::DoExecute(const std::shared_ptr<ITask>& /*taskPtr*/
     }
 
     AFL_VERIFY(Owner);
-    TActivationContext::AsActorContext().Send(Owner, new TEvFilterConstructionResult(std::move(filters)));
+    TActivationContext::AsActorContext().Send(Owner, new NPrivate::TEvFilterConstructionResult(std::move(filters)));
     Owner = TActorId();
 }
 
 void TBuildDuplicateFilters::DoOnCannotExecute(const TString& reason) {
     AFL_VERIFY(Owner);
-    TActivationContext::AsActorContext().Send(Owner, new TEvFilterConstructionResult(TConclusionStatus::Fail(reason)));
+    TActivationContext::AsActorContext().Send(Owner, new NPrivate::TEvFilterConstructionResult(TConclusionStatus::Fail(reason)));
     Owner = TActorId();
 }
 

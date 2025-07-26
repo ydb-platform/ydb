@@ -281,6 +281,9 @@ static INode::TPtr CreateTableSettings(const TTableSettings& tableSettings, ETab
     if (tableSettings.PartitionByHashFunction && parsingMode == ETableSettingsParsingMode::Create) {
         settings = L(settings, Q(Y(Q("partitionByHashFunction"), tableSettings.PartitionByHashFunction)));
     }
+    if (tableSettings.ExternalDataChannelsCount) {
+        settings = L(settings, Q(Y(Q("externalDataChannelsCount"), tableSettings.ExternalDataChannelsCount)));
+    }
 
     return settings;
 }

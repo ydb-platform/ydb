@@ -5,7 +5,7 @@
 #include <yql/essentials/minikql/mkql_string_util.h>
 #include <yql/essentials/utils/yql_panic.h>
 
-namespace NYdb::NTopic::NPurecalc {
+namespace NKikimr::NReplication::NTransfer {
 
 namespace {
 
@@ -241,11 +241,11 @@ const TVector<NYT::TNode>& TMessageInputSpec::GetSchemas() const {
     return InputSchema;
 }
 
-} // namespace NYdb::NTopic::NPurecalc
+} // namespace NKikimr::NReplication::NTransfer
 
 namespace NYql::NPureCalc {
 
-using namespace NYdb::NTopic::NPurecalc;
+using namespace NKikimr::NReplication::NTransfer;
 
 using ConsumerType = TInputSpecTraits<TMessageInputSpec>::TConsumerType;
 

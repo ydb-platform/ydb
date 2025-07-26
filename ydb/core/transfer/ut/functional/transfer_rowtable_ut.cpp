@@ -124,6 +124,11 @@ Y_UNIT_TEST_SUITE(Transfer_RowTable)
         ProcessingCDCMessage(TableType);
     }
 
+    Y_UNIT_TEST(ProcessingTargetTable)
+    {
+        ProcessingTargetTable(TableType);
+    }
+
     Y_UNIT_TEST(TableWithSyncIndex) {
         MainTestCase testCase(std::nullopt, TableType);
 

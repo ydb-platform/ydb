@@ -113,4 +113,9 @@ Y_UNIT_TEST_SUITE(Transfer_ColumnTable)
     {
         ProcessingCDCMessage(TableType);
     }
+
+    Y_UNIT_TEST(ProcessingTargetTable)
+    {
+        ProcessingTargetTable(TableType);
+    }
 }

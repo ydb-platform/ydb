@@ -116,9 +116,9 @@ public:
     void SendChannelData(TChannelDataOOB&& channelData, const bool needAck);
     void SendChannelDataAck(i64 channelId, i64 freeSpace);
     bool PollChannel(ui64 channelId, i64 freeSpace);
-    bool CheckInFlight(const TString& prefix);
+    bool CheckInFlight(const TString& prefix) const;
     bool FinishInputChannels();
-    bool ShouldSkipData(ui64 channelId);
+    bool ShouldSkipData(ui64 channelId) const;
     const TPeerState& GetOutputChannelInFlightState(ui64 channelId);
     const TInputChannelStats* GetInputChannelStats(ui64 channelId);
     const TOutputChannelStats* GetOutputChannelStats(ui64 channelId);

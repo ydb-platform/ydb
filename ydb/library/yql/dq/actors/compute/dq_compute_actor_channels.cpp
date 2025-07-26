@@ -540,8 +540,8 @@ bool TDqComputeActorChannels::CanSendChannelData(const ui64 channelId) const {
     return outputChannel.Peer && (!outputChannel.Finished || SupportCheckpoints) && !outputChannel.RetryState;
 }
 
-bool TDqComputeActorChannels::ShouldSkipData(ui64 channelId) {
-    TOutputChannelState& outputChannel = OutCh(channelId);
+bool TDqComputeActorChannels::ShouldSkipData(ui64 channelId) const {
+    const TOutputChannelState& outputChannel = OutCh(channelId);
     return outputChannel.Finished && !SupportCheckpoints;
 }
 
@@ -650,7 +650,7 @@ bool TDqComputeActorChannels::PollChannel(ui64 channelId, i64 freeSpace) {
     return true;
 }
 
-bool TDqComputeActorChannels::CheckInFlight(const TString& prefix) {
+bool TDqComputeActorChannels::CheckInFlight(const TString& prefix) const {
     for (auto& inputChannel: InputChannelsMap) {
         if (!inputChannel.second.InFlight.empty()) {
             if (inputChannel.second.Finished) {

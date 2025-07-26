@@ -36,7 +36,7 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
         {
             //check the store
             auto selectQuery = TString(R"(
-                SELECT PathId, TabletId, InternalPathId, 
+                SELECT PathId, TabletId, InternalPathId,
                 FROM `/Root/columnStore/.sys/store_primary_index_granule_stats`
             )");
 
@@ -63,7 +63,7 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
         {
             //check a table in the store
             auto selectQuery = TString(R"(
-                SELECT PathId, TabletId, InternalPathId, 
+                SELECT PathId, TabletId, InternalPathId,
                 FROM `/Root/columnStore/table2/.sys/primary_index_granule_stats`
             )");
 
@@ -99,7 +99,7 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
         UNIT_ASSERT_VALUES_EQUAL(tablets.size(), tableShardsCount);
         auto tableClient = kikimr.GetTableClient();
         auto selectQuery = TString(R"(
-            SELECT PathId, TabletId, InternalPathId, 
+            SELECT PathId, TabletId, InternalPathId,
             FROM `/Root/table/.sys/primary_index_granule_stats`
         )");
         auto rows = ExecuteScanQuery(tableClient, selectQuery, true);
@@ -223,8 +223,7 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
             auto selectQuery = Sprintf(R"(
                 SELECT COUNT(*)
                 FROM `/Root/olapStore/olapTable_1/.sys/primary_index_stats`
-            )",
-                tablePathId1);
+            )");
 
             auto rows = ExecuteScanQuery(tableClient, selectQuery);
             UNIT_ASSERT_VALUES_EQUAL(rows.size(), 1);

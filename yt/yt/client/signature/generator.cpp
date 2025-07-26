@@ -14,7 +14,7 @@ TSignaturePtr ISignatureGenerator::Sign(std::string payload) const
 {
     auto signature = New<TSignature>();
     signature->Payload_ = std::move(payload);
-    DoSign(signature);
+    Resign(signature);
     return signature;
 }
 
@@ -25,14 +25,14 @@ namespace {
 struct TDummySignatureGenerator
     : public ISignatureGenerator
 {
-    void DoSign(const TSignaturePtr& /*signature*/) const final
+    void Resign(const TSignaturePtr& /*signature*/) const final
     { }
 };
 
 struct TAlwaysThrowingSignatureGenerator
     : public ISignatureGenerator
 {
-    void DoSign(const TSignaturePtr& /*signature*/) const final
+    void Resign(const TSignaturePtr& /*signature*/) const final
     {
         THROW_ERROR_EXCEPTION("Signature generation is unsupported");
     }

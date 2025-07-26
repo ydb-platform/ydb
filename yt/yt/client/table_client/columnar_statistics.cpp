@@ -70,13 +70,13 @@ TUnversionedOwningValue ApproximateMaxValue(TUnversionedValue value)
     }
 }
 
-void UpdateLargeColumnarStatistics(TLargeColumnarStatistics& statistics, TUnversionedValue value)
+void UpdateLargeColumnarStatistics(TLargeColumnarStatistics* statistics, TUnversionedValue value)
 {
     if (value.Type != EValueType::Null) {
         auto valueNoFlags = value;
         valueNoFlags.Flags = EValueFlags::None;
         auto fingerprint = TBitwiseUnversionedValueHash()(valueNoFlags);
-        statistics.ColumnHyperLogLogDigests[value.Id].Add(fingerprint);
+        statistics->ColumnHyperLogLogDigests[value.Id].Add(fingerprint);
     }
 }
 
@@ -119,7 +119,7 @@ void UpdateColumnarStatistics(
         statistics->ColumnNonNullValueCounts[value.Id] += (value.Type != EValueType::Null);
 
         if (needsLargeStatistics) {
-            UpdateLargeColumnarStatistics(statistics->LargeStatistics, value);
+            UpdateLargeColumnarStatistics(&statistics->LargeStatistics, value);
         }
     }
 }
@@ -373,7 +373,6 @@ void TColumnarStatistics::Update(TRange<TVersionedRow> rows)
         UpdateMinAndMax(this, minValues, maxValues);
     }
 
-
     if (ChunkRowCount) {
         ChunkRowCount = *ChunkRowCount + rows.Size();
     }
@@ -398,6 +397,7 @@ TColumnarStatistics TColumnarStatistics::SelectByColumnNames(const TNameTablePtr
             }
         }
     }
+
     result.TimestampTotalWeight = TimestampTotalWeight;
     result.LegacyChunkDataWeight = LegacyChunkDataWeight;
 

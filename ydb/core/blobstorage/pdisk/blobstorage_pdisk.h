@@ -1778,6 +1778,7 @@ struct TPDiskCtx {
     const TActorId PDiskActor;
     const TString PDiskLogPrefix;
     // TPDiskMon * const Mon = nullptr; TODO implement it
+    const TPDiskConfig* Cfg;
 
     TPDiskCtx() = default;
 

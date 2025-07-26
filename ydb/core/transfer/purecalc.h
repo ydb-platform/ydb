@@ -76,7 +76,7 @@ struct TInputSpecTraits<NKikimr::NReplication::NTransfer::TMessageInputSpec> {
 };
 
 template <>
-struct NYql::NPureCalc::TOutputSpecTraits<NKikimr::NReplication::NTransfer::TMessageOutputSpec> {
+struct TOutputSpecTraits<NKikimr::NReplication::NTransfer::TMessageOutputSpec> {
     static const constexpr bool IsPartial = false;
 
     static const constexpr bool SupportPullListMode = true;

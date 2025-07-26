@@ -328,7 +328,6 @@ private:
                         tablePath = DefaultTablePath;
                     }
                     
-                    Cerr << ">>>>> TABLE = " << tablePath << Endl;
                     TableState->AddData(std::move(tablePath), m->Data);
                 }
 

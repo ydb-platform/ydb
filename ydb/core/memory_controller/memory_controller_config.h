@@ -1,5 +1,6 @@
 #include <ydb/core/mon_alloc/memory_info.h>
 #include <ydb/core/protos/memory_controller_config.pb.h>
+#include <ydb/core/tx/columnshard/common/limits.h>
 #include <util/generic/size_literals.h>
 
 #pragma once
@@ -83,4 +84,28 @@ GET_LIMIT(QueryExecutionLimit)
 GET_LIMIT(ColumnTablesReadExecutionLimit)
 GET_LIMIT(ColumnTablesCompactionLimit)
 GET_LIMIT(ColumnTablesCacheLimit)
+
+inline ui64 GetScanGroupedMemoryLimiterLimitBytes(const NKikimrConfig::TMemoryControllerConfig& config, const ui64 hardLimitBytes) {
+    return GetColumnTablesReadExecutionLimitBytes(config, hardLimitBytes) * (1.0 - NKikimr::NOlap::TGlobalLimits::DeduplicationInScanMemoryFraction);
+}
+
+inline ui64 GetDeduplicationGroupedMemoryLimiterLimitBytes(const NKikimrConfig::TMemoryControllerConfig& config, const ui64 hardLimitBytes) {
+    return GetColumnTablesReadExecutionLimitBytes(config, hardLimitBytes) * NKikimr::NOlap::TGlobalLimits::DeduplicationInScanMemoryFraction;
+}
+
+inline ui64 GetCompGroupedMemoryLimiterLimitBytes(const NKikimrConfig::TMemoryControllerConfig& config, const ui64 hardLimitBytes) {
+    return GetColumnTablesCompactionLimitBytes(config, hardLimitBytes) * NKikimr::NOlap::TGlobalLimits::GroupedMemoryLimiterCompactionLimitCoefficient;
+}
+
+inline ui64 GetBlobCacheLimitBytes(const NKikimrConfig::TMemoryControllerConfig& config, const ui64 hardLimitBytes) {
+    return GetColumnTablesCacheLimitBytes(config, hardLimitBytes) * NKikimr::NOlap::TGlobalLimits::BlobCacheCoefficient;
+}
+
+inline ui64 GetDataAccessorCacheBytes(const NKikimrConfig::TMemoryControllerConfig& config, const ui64 hardLimitBytes) {
+    return GetColumnTablesCacheLimitBytes(config, hardLimitBytes) * NKikimr::NOlap::TGlobalLimits::DataAccessorCoefficient;
+}
+
+inline ui64 GetColumnDataCacheBytes(const NKikimrConfig::TMemoryControllerConfig& config, const ui64 hardLimitBytes) {
+    return GetColumnTablesCacheLimitBytes(config, hardLimitBytes) * NKikimr::NOlap::TGlobalLimits::ColumnDataCacheCoefficient;
+}
 }

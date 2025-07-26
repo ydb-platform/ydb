@@ -22,7 +22,7 @@ from update_mute_issues import (
 )
 
 # Configure logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
 
 dir = os.path.dirname(__file__)
 config = configparser.ConfigParser()
@@ -228,6 +228,7 @@ def aggregate_test_data(all_data, period_days):
                     'skip_count': 0,
                     'owner': test.get('owner'),
                     'is_muted': test.get('is_muted'),
+                    'is_muted_date': test.get('date_window'),  # Сохраняем дату для is_muted
                     'state': test.get('state'),
                     'state_history': [test.get('state')],  # Начинаем историю состояний
                     'state_dates': [test.get('date_window')],  # История дат состояний
@@ -243,6 +244,11 @@ def aggregate_test_data(all_data, period_days):
                 if current_state and (not aggregated[full_name]['state_history'] or aggregated[full_name]['state_history'][-1] != current_state):
                     aggregated[full_name]['state_history'].append(current_state)
                     aggregated[full_name]['state_dates'].append(current_date)
+                
+                # Обновляем is_muted если текущая дата новее
+                if test.get('date_window', 0) > aggregated[full_name].get('is_muted_date', 0):
+                    aggregated[full_name]['is_muted'] = test.get('is_muted')
+                    aggregated[full_name]['is_muted_date'] = test.get('date_window')
             
             # Суммируем статистику
             aggregated[full_name]['pass_count'] += test.get('pass_count', 0)
@@ -325,7 +331,10 @@ def create_debug_string(test, success_rate=None, period_days=None, date_window=N
     state = test.get('state', 'N/A')
     if is_chunk_test(test):
         state = f"(chunk)"
-    debug_string += f", p-{test.get('pass_count')}, f-{test.get('fail_count')},m-{test.get('mute_count')}, s-{test.get('skip_count')}, runs-{runs}, state {state}"
+    
+    is_muted = test.get('is_muted', False)
+    mute_state = "muted" if is_muted else "not muted"
+    debug_string += f", p-{test.get('pass_count')}, f-{test.get('fail_count')},m-{test.get('mute_count')}, s-{test.get('skip_count')}, runs-{runs}, mute state: {mute_state}, test state {state}"
     return debug_string
 
 def is_flaky_test(test, aggregated_data):
@@ -344,6 +353,11 @@ def is_flaky_test(test, aggregated_data):
     test['pass_count'] = test_data['pass_count']
     test['fail_count'] = test_data['fail_count']
     test['period_days'] = test_data.get('period_days')
+    test['is_muted'] = test_data.get('is_muted', False)
+    
+    # Не считаем тест flaky, если он уже замьючен
+    if test_data.get('is_muted', False):
+        return False
     
     total_runs = test_data['pass_count'] + test_data['fail_count']
     return (test_data['fail_count'] >= 2) or (test_data['fail_count'] >= 1 and total_runs <= 10)
@@ -365,6 +379,7 @@ def is_unmute_candidate(test, aggregated_data):
     test['fail_count'] = test_data['fail_count']
     test['mute_count'] = test_data['mute_count']
     test['period_days'] = test_data.get('period_days')
+    test['is_muted'] = test_data.get('is_muted', False)
     
     total_runs = test_data['pass_count'] + test_data['fail_count'] + test_data['mute_count']
     total_fails = test_data['fail_count'] + test_data['mute_count']
@@ -374,7 +389,13 @@ def is_unmute_candidate(test, aggregated_data):
     if 'no_runs' in state_history:
         return False
     
-    return total_runs > 4 and total_fails == 0
+    result = total_runs > 4 and total_fails == 0
+    
+    # Добавляем детальное логирование для диагностики
+    if test_data.get('is_muted', False):  # Логируем только для замьюченных тестов
+        logging.debug(f"UNMUTE_CHECK: {test.get('full_name')} - runs:{total_runs}, fails:{total_fails}, muted:{test_data.get('is_muted')}, result:{result}")
+    
+    return result
 
 def is_delete_candidate(test, aggregated_data):
     """Проверяет, является ли тест кандидатом на удаление из mute за указанный период"""
@@ -394,10 +415,17 @@ def is_delete_candidate(test, aggregated_data):
     test['mute_count'] = test_data['mute_count']
     test['skip_count'] = test_data['skip_count']
     test['period_days'] = test_data.get('period_days')
+    test['is_muted'] = test_data.get('is_muted', False)
     
     total_runs = test_data['pass_count'] + test_data['fail_count'] + test_data['mute_count'] + test_data['skip_count']
     
-    return total_runs == 0
+    result = total_runs == 0
+    
+    # Добавляем детальное логирование для диагностики
+    if test_data.get('is_muted', False):  # Логируем только для замьюченных тестов
+        logging.debug(f"DELETE_CHECK: {test.get('full_name')} - runs:{total_runs}, muted:{test_data.get('is_muted')}, result:{result}")
+    
+    return result
 
 def create_file_set(aggregated_for_mute, filter_func, mute_check=None, use_wildcards=False, resolution=None):
     """Создает набор тестов для файла на основе фильтра"""
@@ -466,6 +494,10 @@ def apply_and_add_mutes(all_data, output_path, mute_check, aggregated_for_mute, 
     
     # Получаем уникальные тесты для обработки (используем максимальный период для получения всех тестов)
     
+    # Добавляем статистику по замьюченным тестам
+    muted_tests = [test for test in aggregated_for_mute if test.get('is_muted', False)]
+    logging.info(f"Total muted tests found: {len(muted_tests)}")
+
 
     try:
         # 1. Кандидаты на mute

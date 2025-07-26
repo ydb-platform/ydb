@@ -488,7 +488,6 @@ private:
 private:
     STFUNC(StateWrite) {
         switch (ev->GetTypeRewrite()) {
-            hFunc(TEvents::TEvCompleted, Handle);
             hFunc(NTransferPrivate::TEvWriteCompleeted, Handle);
 
             hFunc(TEvWorker::TEvHandshake, Handle);
@@ -505,19 +504,9 @@ private:
             << " status# " << ev->Get()->Status
             << " issues# " << ev->Get()->Issues.ToOneLineString());
 
-        HandleWriteResult(ev->Get()->Status, ev->Get()->Issues.ToOneLineString());
-    }
+        const auto status = ev->Get()->Status;
+        const auto& error = ev->Get()->Issues.ToOneLineString();
 
-    void Handle(TEvents::TEvCompleted::TPtr& ev) {
-        LOG_D("Handle TEvents::TEvCompleted"
-            << ": worker# " << Worker
-            << " status# " << ev->Get()->Status);
-
-        //auto [error, _] = TableState->Handle(ev);
-        //HandleWriteResult(ev->Get()->Status, error);
-    }
-
-    void HandleWriteResult(ui32 status, const TString& error) {
         if (status != Ydb::StatusIds::SUCCESS && error && !ProcessingError) {
             ProcessingError = error;
         }
@@ -551,7 +540,6 @@ private:
     }
 
 private:
-
     bool PendingLeave() {
         return PendingRecords && PendingRecords->empty();
     }
@@ -564,19 +552,6 @@ private:
         }
 
         return LogPrefix.GetRef();
-    }
-
-    template <typename TResult>
-    bool CheckResult(const TResult& result, const TStringBuf marker) {
-        if (result.IsSuccess()) {
-            return true;
-        }
-
-        LOG_E("Error at '" << marker << "'"
-            << ", error# " << result);
-        RetryOrLeave(result.GetError());
-
-        return false;
     }
 
     void Retry() {

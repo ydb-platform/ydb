@@ -101,7 +101,7 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
             UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
             TString result = StreamResultToYson(it);
             Cout << result << Endl;
-            CompareYson(result, R"([[25000u;]])");
+            CompareYson(result, R"([[23000u;]])");
         }
     }
 

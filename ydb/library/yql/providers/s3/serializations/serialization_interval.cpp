@@ -1,13 +1,14 @@
 #include "serialization_interval.h"
 
+#include <util/generic/serialized_enum.h>
+
+// Clickhouse includes MUST be after all other includes due to sanitizer defines like THREAD_SANITIZER, it may affect other libs like protobufs
 #include <ydb/library/yql/udfs/common/clickhouse/client/src/DataTypes/DataTypeFactory.h>
 #include <ydb/library/yql/udfs/common/clickhouse/client/src/DataTypes/DataTypeInterval.h>
 #include <ydb/library/yql/udfs/common/clickhouse/client/src/DataTypes/Serializations/SerializationNumber.h>
 
 #include <ydb/library/yql/udfs/common/clickhouse/client/src/IO/ReadHelpers.h>
 #include <ydb/library/yql/udfs/common/clickhouse/client/src/IO/WriteHelpers.h>
-
-#include <util/generic/serialized_enum.h>
 
 namespace NYql::NSerialization {
 

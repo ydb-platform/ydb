@@ -1,12 +1,12 @@
 PY3TEST()
-TAG(ya:manual) #skip reason https://github.com/ydb-platform/ydb/issues/16128
+# TAG(ya:manual) #skip reason https://github.com/ydb-platform/ydb/issues/16128
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/ydbd_dep.inc)
 ENV(MOTO_SERVER_PATH="contrib/python/moto/bin/moto_server")
 ENV(YDB_ADDITIONAL_LOG_CONFIGS="TX_TIERING:DEBUG")
 
 # INCLUDE(${ARCADIA_ROOT}/ydb/tests/tools/fq_runner/ydb_runner_with_datastreams.inc)
 
-REQUIREMENTS(ram:48 cpu:all)
+# REQUIREMENTS(ram:48 cpu:all)
 
 TEST_SRCS(
     test_bulkupserts_tpch.py
@@ -16,8 +16,8 @@ TEST_SRCS(
     test_workload_manager.py
 )
 
-SIZE(LARGE)
-INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
+SIZE(MEDIUM)
+# INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 
 DEPENDS(
     ydb/apps/ydb

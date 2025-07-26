@@ -1,14 +1,37 @@
 #include "zstd.h"
-
-#include <util/generic/size_literals.h>
-#include <yql/essentials/utils/yql_panic.h>
-#include <yql/essentials/utils/exceptions.h>
-#include <ydb/library/yql/dq/actors/protos/dq_status_codes.pb.h>
 #include "output_queue_impl.h"
 
-namespace NYql {
+#include <util/generic/size_literals.h>
 
-namespace NZstd {
+#include <ydb/library/yql/dq/actors/protos/dq_status_codes.pb.h>
+
+#include <yql/essentials/utils/exceptions.h>
+#include <yql/essentials/utils/yql_panic.h>
+
+#define ZSTD_STATIC_LINKING_ONLY
+#include <contrib/libs/zstd/include/zstd.h>
+
+// Clickhouse includes MUST be after all other includes due to sanitizer defines like THREAD_SANITIZER, it may affect other libs like protobufs
+#include <ydb/library/yql/udfs/common/clickhouse/client/src/IO/ReadBuffer.h>
+
+namespace NYql::NZstd {
+
+namespace {
+
+class TReadBuffer : public NDB::ReadBuffer {
+public:
+    TReadBuffer(NDB::ReadBuffer& source);
+    ~TReadBuffer();
+private:
+    bool nextImpl() final;
+
+    NDB::ReadBuffer& Source_;
+    std::vector<char> InBuffer, OutBuffer;
+    ::ZSTD_DStream *const ZCtx_;
+    size_t Offset_;
+    size_t Size_;
+    bool Finished_ = false;
+};
 
 TReadBuffer::TReadBuffer(NDB::ReadBuffer& source)
     : NDB::ReadBuffer(nullptr, 0ULL), Source_(source), ZCtx_(::ZSTD_createDStream())
@@ -58,8 +81,6 @@ bool TReadBuffer::nextImpl() {
         return false;
     }
 }
-
-namespace {
 
 class TCompressor : public TOutputQueue<> {
 public:
@@ -136,12 +157,14 @@ private:
     bool IsFirstBlock = true;
 };
 
+} // anonymous namespace
+
+std::unique_ptr<NDB::ReadBuffer> MakeDecompressor(NDB::ReadBuffer& source) {
+    return std::make_unique<TReadBuffer>(source);
 }
 
 IOutputQueue::TPtr MakeCompressor(std::optional<int> cLevel) {
     return std::make_unique<TCompressor>(cLevel.value_or(ZSTD_defaultCLevel()));
 }
 
-}
-
-}
+} // namespace NYql::NZstd

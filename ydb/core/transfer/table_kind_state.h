@@ -40,13 +40,13 @@ public:
     virtual NKqp::IDataBatcherPtr CreateDataBatcher() = 0;
     virtual bool Flush() = 0;
 
-    const TScheme& GetScheme() const {
+    const TScheme::TPtr GetScheme() const {
         return Scheme;
     }
 
 protected:
     const TActorId SelfId;
-    const TScheme Scheme;
+    const TScheme::TPtr Scheme;
 
     std::map<TString, NKqp::IDataBatcherPtr> Batchers;
 };

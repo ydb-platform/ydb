@@ -3,7 +3,7 @@
 
 namespace NKikimr::NReplication::NTransfer {
 
-TMessageOutputSpec::TMessageOutputSpec(const TScheme& tableScheme, const NYT::TNode& schema)
+TMessageOutputSpec::TMessageOutputSpec(const TScheme::TPtr& tableScheme, const NYT::TNode& schema)
     : TableScheme(tableScheme)
     , Schema(schema)
 {}
@@ -13,11 +13,11 @@ const NYT::TNode& TMessageOutputSpec::GetSchema() const {
 }
 
 const TVector<NKikimrKqp::TKqpColumnMetadataProto>& TMessageOutputSpec::GetTableColumns() const {
-    return TableScheme.ColumnsMetadata;
+    return TableScheme->ColumnsMetadata;
 }
 
 const TVector<NKikimrKqp::TKqpColumnMetadataProto>& TMessageOutputSpec::GetStructColumns() const {
-    return TableScheme.StructMetadata;
+    return TableScheme->StructMetadata;
 }
 
 namespace {

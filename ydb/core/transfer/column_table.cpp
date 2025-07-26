@@ -14,7 +14,7 @@ class TTableUploader : public TActorBootstrapped<TTableUploader> {
     static constexpr size_t MaxRetries = 7;
 
 public:
-    TTableUploader(const TActorId& parentActor, const TScheme& scheme, std::unordered_map<TString, std::shared_ptr<arrow::RecordBatch>>&& data)
+    TTableUploader(const TActorId& parentActor, const TScheme::TPtr& scheme, std::unordered_map<TString, std::shared_ptr<arrow::RecordBatch>>&& data)
         : ParentActor(parentActor)
         , Scheme(scheme)
         , Data(std::move(data))
@@ -37,7 +37,7 @@ private:
         auto cookie = ++Cookie;
 
         TActivationContext::AsActorContext().RegisterWithSameMailbox(
-            NTxProxy::CreateUploadColumnsInternal(SelfId(), tablePath, Scheme.Types, data, cookie)
+            NTxProxy::CreateUploadColumnsInternal(SelfId(), tablePath, Scheme->Types, data, cookie)
         );
         CookieMapping[cookie] = tablePath;
     }
@@ -117,7 +117,7 @@ private:
 
 private:
     const TActorId ParentActor;
-    const TScheme Scheme;
+    const TScheme::TPtr Scheme;
     // Table path -> Data
     std::unordered_map<TString, std::shared_ptr<arrow::RecordBatch>> Data;
 
@@ -143,7 +143,7 @@ public:
     }
 
     NKqp::IDataBatcherPtr CreateDataBatcher() override {
-        return NKqp::CreateColumnDataBatcher(Scheme.ColumnsMetadata, Scheme.WriteIndex, nullptr, GetScheme().ReadIndex);
+        return NKqp::CreateColumnDataBatcher(Scheme->ColumnsMetadata, Scheme->WriteIndex, nullptr, GetScheme()->ReadIndex);
     }
 
     bool Flush() override {

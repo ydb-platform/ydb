@@ -10,29 +10,29 @@ TString TSchemeColumn::TypeName() const {
 }
 
 
-TScheme BuildScheme(const TAutoPtr<NSchemeCache::TSchemeCacheNavigate>& nav) {
+TScheme::TPtr BuildScheme(const TAutoPtr<NSchemeCache::TSchemeCacheNavigate>& nav) {
     const auto& entry = nav->ResultSet.at(0);
 
-    TScheme result;
+    TScheme::TPtr result = std::make_shared<TScheme>();
 
-    result.TableColumns.reserve(entry.Columns.size());
-    result.ColumnsMetadata.reserve(entry.Columns.size());
-    result.StructMetadata.reserve(entry.Columns.size() + 1);
-    result.ReadIndex.reserve(entry.Columns.size());
-    result.WriteIndex.reserve(entry.Columns.size());
+    result->TableColumns.reserve(entry.Columns.size());
+    result->ColumnsMetadata.reserve(entry.Columns.size());
+    result->StructMetadata.reserve(entry.Columns.size() + 1);
+    result->ReadIndex.reserve(entry.Columns.size());
+    result->WriteIndex.reserve(entry.Columns.size());
 
     size_t keyColumns = CountIf(entry.Columns, [](auto& c) {
         return c.second.KeyOrder >= 0;
     });
 
-    result.TableColumns.resize(keyColumns);
+    result->TableColumns.resize(keyColumns);
 
     for (const auto& [_, column] : entry.Columns) {
         auto notNull = entry.NotNullColumns.contains(column.Name);
         if (column.KeyOrder >= 0) {
-            result.TableColumns[column.KeyOrder] = {column.Name, column.Id, column.PType, column.KeyOrder >= 0, !notNull};
+            result->TableColumns[column.KeyOrder] = {column.Name, column.Id, column.PType, column.KeyOrder >= 0, !notNull};
         } else {
-            result.TableColumns.emplace_back(column.Name, column.Id, column.PType, column.KeyOrder >= 0, !notNull);
+            result->TableColumns.emplace_back(column.Name, column.Id, column.PType, column.KeyOrder >= 0, !notNull);
         }
     }
 
@@ -45,8 +45,8 @@ TScheme BuildScheme(const TAutoPtr<NSchemeCache::TSchemeCacheNavigate>& nav) {
     size_t i = keyColumns;
     size_t j = 0;
     for (const auto& [name, column] : columns) {
-        result.StructMetadata.emplace_back();
-        auto& c = result.StructMetadata.back();
+        result->StructMetadata.emplace_back();
+        auto& c = result->StructMetadata.back();
 
         c.SetName(column.Name);
         c.SetId(column.Id);
@@ -58,15 +58,15 @@ TScheme BuildScheme(const TAutoPtr<NSchemeCache::TSchemeCacheNavigate>& nav) {
         }
 
         if (name == SystemColumns::TargetTable) {
-            result.TargetTableIndex = j;
+            result->TargetTableIndex = j;
         } else {
-            result.ColumnsMetadata.push_back(c);
-            result.WriteIndex.push_back(column.KeyOrder >= 0 ? column.KeyOrder : i++);
-            result.ReadIndex.push_back(j);
+            result->ColumnsMetadata.push_back(c);
+            result->WriteIndex.push_back(column.KeyOrder >= 0 ? column.KeyOrder : i++);
+            result->ReadIndex.push_back(j);
 
             Ydb::Type type;
             type.set_type_id(static_cast<Ydb::Type::PrimitiveTypeId>(column.PType.GetTypeId()));
-            result.Types->emplace_back(column.Name, type);
+            result->Types->emplace_back(column.Name, type);
         }
 
         ++j;

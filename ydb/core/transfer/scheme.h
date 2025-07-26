@@ -45,7 +45,7 @@ struct TScheme {
     std::shared_ptr<TVector<std::pair<TString, Ydb::Type>>> Types = std::make_shared<TVector<std::pair<TString, Ydb::Type>>>();
 };
 
-TScheme BuildScheme(const TAutoPtr<NSchemeCache::TSchemeCacheNavigate>& nav);
+TScheme::TPtr BuildScheme(const TAutoPtr<NSchemeCache::TSchemeCacheNavigate>& nav);
 NYT::TNode MakeOutputSchema(const TVector<TSchemeColumn>& columns);
 
 }

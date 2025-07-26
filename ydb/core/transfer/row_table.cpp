@@ -13,7 +13,7 @@ class TTableUploader : public TActorBootstrapped<TTableUploader> {
     static constexpr size_t MaxRetries = 7;
 
 public:
-    TTableUploader(const TActorId& parentActor, const TScheme& scheme, std::unordered_map<TString, std::shared_ptr<TVector<std::pair<TSerializedCellVec, TString>>>>&& data)
+    TTableUploader(const TActorId& parentActor, const TScheme::TPtr& scheme, std::unordered_map<TString, std::shared_ptr<TVector<std::pair<TSerializedCellVec, TString>>>>&& data)
         : ParentActor(parentActor)
         , Scheme(scheme)
         , Data(std::move(data))
@@ -36,7 +36,7 @@ private:
         auto cookie = ++Cookie;
 
         TActivationContext::AsActorContext().RegisterWithSameMailbox(
-            NTxProxy::CreateUploadRowsInternal(SelfId(), tablePath, Scheme.Types, data, NTxProxy::EUploadRowsMode::Normal, false, false, cookie)
+            NTxProxy::CreateUploadRowsInternal(SelfId(), tablePath, Scheme->Types, data, NTxProxy::EUploadRowsMode::Normal, false, false, cookie)
         );
         CookieMapping[cookie] = tablePath;
     }
@@ -116,7 +116,7 @@ private:
 
 private:
     const TActorId ParentActor;
-    const TScheme Scheme;
+    const TScheme::TPtr Scheme;
     // Table path -> Data
     std::unordered_map<TString, std::shared_ptr<TVector<std::pair<TSerializedCellVec, TString>>>> Data;
 
@@ -141,7 +141,7 @@ public:
     }
 
     NKqp::IDataBatcherPtr CreateDataBatcher() override {
-        return NKqp::CreateRowDataBatcher(GetScheme().ColumnsMetadata, GetScheme().WriteIndex, nullptr, GetScheme().ReadIndex);
+        return NKqp::CreateRowDataBatcher(GetScheme()->ColumnsMetadata, GetScheme()->WriteIndex, nullptr, GetScheme()->ReadIndex);
     }
 
     bool Flush() override {
@@ -163,7 +163,7 @@ public:
                 TVector<TCell> value;
 
                 for (size_t i = 0; i < r.size(); ++i) {
-                    auto& column = GetScheme().TableColumns[i];
+                    auto& column = GetScheme()->TableColumns[i];
                     if (column.KeyColumn) {
                         key.push_back(r[i]);
                     } else {

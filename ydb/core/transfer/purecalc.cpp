@@ -10,7 +10,7 @@ public:
 
 public:
     TProgramHolder(
-        const TScheme& tableScheme,
+        const TScheme::TPtr& tableScheme,
         const TString& sql
     )
         : TopicColumns()
@@ -24,7 +24,7 @@ public:
         // allocated on another allocator and should be released
         Program = programFactory->MakePullListProgram(
             TMessageInputSpec(),
-            TMessageOutputSpec(TableScheme, MakeOutputSchema(TableScheme.TableColumns)),
+            TMessageOutputSpec(TableScheme, MakeOutputSchema(TableScheme->TableColumns)),
             Sql,
             NYql::NPureCalc::ETranslationMode::SQL
         );
@@ -36,7 +36,7 @@ public:
 
 private:
     const TVector<TSchemeColumn> TopicColumns;
-    const TScheme TableScheme;
+    const TScheme::TPtr TableScheme;
     const TString Sql;
 
     THolder<NYql::NPureCalc::TPullListProgram<TMessageInputSpec, TMessageOutputSpec>> Program;
@@ -44,7 +44,7 @@ private:
 
 }
 
-IProgramHolder::TPtr CreateProgramHolder(const TScheme& tableScheme, const TString& sql) {
+IProgramHolder::TPtr CreateProgramHolder(const TScheme::TPtr& tableScheme, const TString& sql) {
     return MakeIntrusive<TProgramHolder>(tableScheme, sql);
 }
 

@@ -41,7 +41,7 @@ struct TOutputMessage {
 
 class TMessageOutputSpec : public NYql::NPureCalc::TOutputSpecBase {
 public:
-    explicit TMessageOutputSpec(const TScheme& tableScheme, const NYT::TNode& schema);
+    explicit TMessageOutputSpec(const TScheme::TPtr& tableScheme, const NYT::TNode& schema);
 
 public:
     const NYT::TNode& GetSchema() const override;
@@ -50,7 +50,7 @@ public:
     const TVector<NKikimrKqp::TKqpColumnMetadataProto>& GetStructColumns() const;
 
 private:
-    const TScheme TableScheme;
+    const TScheme::TPtr TableScheme;
     const NYT::TNode Schema;
 };
 
@@ -61,7 +61,7 @@ public:
     virtual NYql::NPureCalc::TPullListProgram<TMessageInputSpec, TMessageOutputSpec>* GetProgram() = 0;
 };
 
-IProgramHolder::TPtr CreateProgramHolder(const TScheme& tableScheme, const TString& sql);
+IProgramHolder::TPtr CreateProgramHolder(const TScheme::TPtr& tableScheme, const TString& sql);
 
 }
 

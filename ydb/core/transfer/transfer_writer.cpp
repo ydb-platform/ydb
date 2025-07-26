@@ -24,126 +24,6 @@ namespace NKikimr::NReplication::NTransfer {
 
 namespace {
 
-using namespace NYql::NPureCalc;
-using namespace NKikimr::NMiniKQL;
-
-struct TOutputType {
-    std::optional<TString> Table;
-    NUdf::TUnboxedValue Value;
-    NMiniKQL::TUnboxedValueBatch Data;
-};
-
-class TMessageOutputSpec : public NYql::NPureCalc::TOutputSpecBase {
-public:
-    explicit TMessageOutputSpec(const TScheme& tableScheme, const NYT::TNode& schema)
-        : TableScheme(tableScheme)
-        , Schema(schema)
-    {}
-
-public:
-    const NYT::TNode& GetSchema() const override {
-        return Schema;
-    }
-
-    const TVector<NKikimrKqp::TKqpColumnMetadataProto>& GetTableColumns() const {
-        return TableScheme.ColumnsMetadata;
-    }
-
-    const TVector<NKikimrKqp::TKqpColumnMetadataProto>& GetStructColumns() const {
-        return TableScheme.StructMetadata;
-    }
-
-private:
-    const TScheme TableScheme;
-    const NYT::TNode Schema;
-};
-
-class TOutputListImpl final: public IStream<TOutputType*> {
-protected:
-    TWorkerHolder<IPullListWorker> WorkerHolder_;
-    const TMessageOutputSpec& OutputSpec;
-
-public:
-    explicit TOutputListImpl(const TMessageOutputSpec& outputSpec, TWorkerHolder<IPullListWorker> worker)
-        : WorkerHolder_(std::move(worker))
-        , OutputSpec(outputSpec)
-    {
-        Row.resize(1);
-    }
-
-public:
-    TOutputType* Fetch() override {
-        TBindTerminator bind(WorkerHolder_->GetGraph().GetTerminator());
-
-        with_lock(WorkerHolder_->GetScopedAlloc()) {
-            Out.Data.clear();
-
-            NYql::NUdf::TUnboxedValue value;
-
-            if (!WorkerHolder_->GetOutputIterator().Next(value)) {
-                return nullptr;
-            }
-
-            Out.Value = value.GetElement(0);
-
-            const auto& columns = OutputSpec.GetStructColumns();
-            for (size_t i = 0; i < columns.size(); ++i) {
-                const auto& column = columns[i];
-                const auto e = Out.Value.GetElement(i);
-                if (column.name() == SystemColumns::TargetTable) {
-                    if (e) {
-                        auto opt = e.GetOptionalValue();
-                        if (opt) {
-                            Out.Table = opt.AsStringRef();
-                        }
-                    }
-                    continue;
-                }
-
-                if (column.GetNotNull() && !e) {
-                    throw yexception() << "The value of the '" << column.GetName() << "' column must be non-NULL";
-                }
-            }
-
-            Out.Data.PushRow(&Out.Value, 1);
-
-            return &Out;
-        }
-    }
-
-private:
-    std::vector<NUdf::TUnboxedValue> Row;
-    TOutputType Out;
-};
-
-} // namespace
-
-} // namespace NKikimr::NReplication::NTransfer
-
-
-template <>
-struct NYql::NPureCalc::TOutputSpecTraits<NKikimr::NReplication::NTransfer::TMessageOutputSpec> {
-    static const constexpr bool IsPartial = false;
-
-    static const constexpr bool SupportPullListMode = true;
-
-    using TOutputItemType = NKikimr::NReplication::NTransfer::TOutputType*;
-    using TPullStreamReturnType = THolder<IStream<TOutputItemType>>;
-    using TPullListReturnType = THolder<IStream<TOutputItemType>>;
-
-    static TPullListReturnType ConvertPullListWorkerToOutputType(
-        const NKikimr::NReplication::NTransfer::TMessageOutputSpec& outputSpec,
-        TWorkerHolder<IPullListWorker> worker
-    ) {
-        return MakeHolder<NKikimr::NReplication::NTransfer::TOutputListImpl>(outputSpec, std::move(worker));
-    }
-};
-
-
-namespace NKikimr::NReplication::NTransfer {
-
-namespace {
-
 
 class TProgramHolder : public NFq::IProgramHolder {
 public:
@@ -164,14 +44,14 @@ public:
         // Program should be stateless because input values
         // allocated on another allocator and should be released
         Program = programFactory->MakePullListProgram(
-            NYdb::NTopic::NPurecalc::TMessageInputSpec(),
+            TMessageInputSpec(),
             TMessageOutputSpec(TableScheme, MakeOutputSchema(TableScheme.TableColumns)),
             Sql,
             NYql::NPureCalc::ETranslationMode::SQL
         );
     }
 
-    NYql::NPureCalc::TPullListProgram<NYdb::NTopic::NPurecalc::TMessageInputSpec, TMessageOutputSpec>* GetProgram() {
+    NYql::NPureCalc::TPullListProgram<TMessageInputSpec, TMessageOutputSpec>* GetProgram() {
         return Program.Get();
     }
 
@@ -180,7 +60,7 @@ private:
     const TScheme TableScheme;
     const TString Sql;
 
-    THolder<NYql::NPureCalc::TPullListProgram<NYdb::NTopic::NPurecalc::TMessageInputSpec, TMessageOutputSpec>> Program;
+    THolder<NYql::NPureCalc::TPullListProgram<TMessageInputSpec, TMessageOutputSpec>> Program;
 };
 
 
@@ -430,7 +310,7 @@ private:
         }
 
         for (auto& message : records) {
-            NYdb::NTopic::NPurecalc::TMessage input;
+            TMessage input;
             input.Data = std::move(message.GetData());
             input.MessageGroupId = std::move(message.GetMessageGroupId());
             input.Partition = partitionId;

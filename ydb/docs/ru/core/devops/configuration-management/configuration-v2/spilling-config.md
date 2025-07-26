@@ -2,7 +2,7 @@
 
 ## Обзор
 
-[Спиллинг](../../../concepts/spilling.md) — это механизм управления памятью в YDB, который позволяет временно сохранять данные на диск при нехватке оперативной памяти. Данный раздел описывает параметры конфигурации для настройки спиллинга в продакшн-среде.
+[Спиллинг](../../../concepts/spilling.md) — это механизм управления памятью в {{ ydb-short-name }}, который позволяет временно сохранять данные на диск при нехватке оперативной памяти. Данный раздел описывает параметры конфигурации для настройки спиллинга в продакшн-среде.
 
 Все настройки спиллинга находятся в секции `table_service_config`, которая располагается на том же уровне, что и `host_configs`.
 
@@ -13,7 +13,7 @@ table_service_config:
   spilling_service_config:
     local_file_config:
       enable: true
-      root: "/var/ydb/spill"
+      root: ""
       max_total_size: 21474836480    # 20 GiB
       max_file_size: 5368709120      # 5 GiB
       max_file_part_size: 104857600  # 100 MB
@@ -64,7 +64,7 @@ table_service_config:
   spilling_service_config:
     local_file_config:
       enable: true
-      root: "/var/ydb/spill"
+      root: ""
       max_total_size: 21474836480    # 20 GiB
       max_file_size: 5368709120      # 5 GiB
       max_file_part_size: 104857600  # 100 MB
@@ -179,7 +179,7 @@ table_service_config:
   spilling_service_config:
     local_file_config:
       enable: true
-      root: "/ssd/ydb/spill"
+      root: ""
       max_total_size: 107374182400   # 100 GiB
       max_file_size: 10737418240     # 10 GiB
       max_file_part_size: 1073741824 # 1 GiB
@@ -197,7 +197,7 @@ table_service_config:
   spilling_service_config:
     local_file_config:
       enable: true
-      root: "/var/ydb/spill"
+      root: ""
       max_total_size: 5368709120     # 5 GiB
       max_file_size: 1073741824      # 1 GiB
       max_file_part_size: 52428800   # 50 MB
@@ -213,7 +213,7 @@ table_service_config:
 1. **Service not started...**
     Попытка включить спиллинг при выключенном Spilling Service.
     - Выставите `table_service_config.enable_query_service_spilling: true`
-    Подробнее про архитектуру спиллинга читайте в разделе [Архитектура спиллинга в YDB](../../../concepts/spilling.md#архитектура-спиллинга-в-ydb)
+    Подробнее про архитектуру спиллинга читайте в разделе [Архитектура спиллинга в {{ ydb-short-name }}](../../../concepts/spilling.md#архитектура-спиллинга-в-ydb)
 
 2. **Total size limit exceeded...**
    - Увеличьте `MaxTotalSize`
@@ -222,5 +222,5 @@ table_service_config:
 
 - [Концепция спиллинга](../../../concepts/spilling.md)
 - [Конфигурация контроллера памяти](../../../reference/configuration/index.md#memory-controller-config)
-- [Мониторинг YDB](../../observability/monitoring.md)
+- [Мониторинг {{ ydb-short-name }}](../../observability/monitoring.md)
 - [Диагностика производительности](../../../troubleshooting/performance/index.md)

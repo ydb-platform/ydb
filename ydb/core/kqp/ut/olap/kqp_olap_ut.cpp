@@ -1737,8 +1737,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
         for (ui32 i = 0; i < queries.size(); ++i) {
             const auto query = queries[i];
-            Cerr << "QUERY: " << Endl;
-            Cerr << query << Endl;
 
             auto result =
                 session2
@@ -1747,11 +1745,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
 
             auto ast = *result.GetStats()->GetAst();
-            // TString plan = *result.GetStats()->GetPlan();
-            // Cerr << "PLAN " << plan << Endl;
-            // TODO: Add pushed projection to explain.
-            // NYdb::NConsoleClient::TQueryPlanPrinter queryPlanPrinter(NYdb::NConsoleClient::EDataFormat::PrettyTable, true, Cout, 0);
-            // queryPlanPrinter.Print(plan);
 
             UNIT_ASSERT_C(ast.find("KqpOlapProjections") != std::string::npos, TStringBuilder() << "Projections not pushed down. Query: " << query);
             UNIT_ASSERT_C(ast.find("KqpOlapProjection") != std::string::npos, TStringBuilder() << "Projection not pushed down. Query: " << query);
@@ -1760,11 +1753,35 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
 
             TString output = FormatResultSetYson(result.GetResultSet(0));
-            Cerr << "QUERY: " << Endl;
-            Cerr << query << Endl;
-
-            Cerr << "RESULT: " << output << Endl;
             CompareYson(output, results[i]);
+        }
+
+        TVector<TString> notForPushdown = {
+        R"(
+            PRAGMA Kikimr.OptEnableOlapPushdownProjections = "true";
+
+            SELECT JSON_VALUE(jsonDoc, "$.a"), JSON_VALUE(jsonDoc, "$.b") FROM `/Root/foo`
+            where JSON_VALUE(jsonDoc, "$.c") = "b";
+        )"};
+
+       for (ui32 i = 0; i < notForPushdown.size(); ++i) {
+            const auto query = notForPushdown[i];
+            auto result =
+                session2
+                    .ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain))
+                    .ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+
+            auto ast = *result.GetStats()->GetAst();
+            UNIT_ASSERT_C(ast.find("KqpOlapProjections") == std::string::npos,
+                          TStringBuilder() << "Projections pushed down, but should not. Query: " << query);
+            UNIT_ASSERT_C(ast.find("KqpOlapFilter") != std::string::npos, TStringBuilder() << "Filter not pushed down. Query: " << query);
+
+            result =
+                session2.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), NYdb::NQuery::TExecuteQuerySettings()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+
+            TString output = FormatResultSetYson(result.GetResultSet(0));
         }
     }
 

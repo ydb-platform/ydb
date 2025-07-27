@@ -2902,7 +2902,7 @@ TFuture<TSignedShuffleHandlePtr> TClient::StartShuffle(
 TFuture<IRowBatchReaderPtr> TClient::CreateShuffleReader(
     const TSignedShuffleHandlePtr& signedShuffleHandle,
     int partitionIndex,
-    std::optional<std::pair<int, int>> writerIndexRange,
+    std::optional<TIndexRange> writerIndexRange,
     const TShuffleReaderOptions& options)
 {
     auto proxy = CreateApiServiceProxy();

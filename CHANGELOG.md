@@ -14,6 +14,7 @@
 * 19310:Added ability to enable followers (read replicas) for covered secondary indexes. [#19310](https://github.com/ydb-platform/ydb/pull/19310) ([azevaykin](https://github.com/azevaykin))
 * 19504:Implemented a [vector index](./dev/vector-indexes.md) for approximate vector search. [#19504](https://github.com/ydb-platform/ydb/pull/19504) ([kungurtsev](https://github.com/kunga))
 * 20691:YMQ: Do not send x-amz-crc32 HTTP header (AWS does not do it) [#20691](https://github.com/ydb-platform/ydb/pull/20691) ([qyryq](https://github.com/qyryq))
+* 21474:Add the ability to configure tablet boot priorities via `HiveConfig` [#21474](https://github.com/ydb-platform/ydb/pull/21474) ([Constantine Gamora](https://github.com/ya-ksgamora))
 
 ### Bug fixes
 
@@ -37,34 +38,14 @@ Original commit: 7b5e0194f5ddeab1c864112b1716b70b969ac7b2 [#20633](https://githu
 * 20242:If the CDC stream was recorded in an auto-partitioned topic, then it could stop after several splits of the topic. In this case, modification of rows in the table would result in the error that the table is overloaded. [#20242](https://github.com/ydb-platform/ydb/pull/20242) ([Nikolay Shestakov](https://github.com/nshestakov))
 * 20155:Fixed use after free in CPU scheduler, fixed verify fail in CS CPU limiter: https://github.com/ydb-platform/ydb/issues/20116 [#20155](https://github.com/ydb-platform/ydb/pull/20155) ([Pisarenko Grigoriy](https://github.com/GrigoriyPA))
 * 20083:Поправил коммит оффсетов сообщений топика при чтении. До фикса пользователь получал ошибку "Unable to navigate:path: 'Root/logbroker-federation/--cut--/stable/guidance' status: PathErrorUnknown\n". Сломали начиная с 25-1-2 [#20083](https://github.com/ydb-platform/ydb/pull/20083) ([Nikolay Shestakov](https://github.com/nshestakov))
+* 21472:Fixed temp dir owner id column name due to compatibility fail with 25-1-3 [#21472](https://github.com/ydb-platform/ydb/pull/21472) ([Pisarenko Grigoriy](https://github.com/GrigoriyPA))
+* 21447:Cherry-pick from main https://github.com/ydb-platform/ydb/issues/21156 [#21447](https://github.com/ydb-platform/ydb/pull/21447) ([Denis Khalikov](https://github.com/denis0x0D))
+* 21272:https://github.com/ydb-platform/ydb/issues/21239 [#21272](https://github.com/ydb-platform/ydb/pull/21272) ([kruall](https://github.com/kruall))
 
 ### YDB UI
 
-* None:Fixed an [issue](https://github.com/ydb-platform/ydb-embedded-ui/issues/17226) with Optional<Struct> columns are always shown as NULLs.
+* None:Fixed an [issue](https://github.com/ydb-platform/ydb/issues/19676) – make nodes less critical (to make cluster less critical). [#20053](https://github.com/ydb-platform/ydb/pull/20053) ([Alexey Efimov](https://github.com/adameat))
 * 17839:[Fixed](https://github.com/ydb-platform/ydb/pull/17839) an [issue](https://github.com/ydb-platform/ydb-embedded-ui/issues/18615) where not all tablets are shown for pers queue group on the tablets tab in diagnostics. #15230 ([Alexey Efimov](https://github.com/adameat))
-* Fixed an [issue](https://github.com/ydb-platform/ydb-embedded-ui/issues/14992) with empty nodes groups for disconnected nodes.
-* Fixed an [issue](https://github.com/ydb-platform/ydb-embedded-ui/issues/14180) when tables storage is 0.
-* Fixed an [issue](https://github.com/ydb-platform/ydb-embedded-ui/issues/15256) with nested databases are childless when navigating from domain.
-* Fixed an [issue](https://github.com/ydb-platform/ydb-embedded-ui/issues/14827) with unstable version numbers in /viewer/nodes handler.
-* Fixed an [issue](https://github.com/ydb-platform/ydb-embedded-ui/issues/15866) with long running queries are terminated because of inactivity on tcp socket.
-* Fixed [issue](https://github.com/ydb-platform/ydb-embedded-ui/issues/15988) with not all follower tablets are shown on tablets tab.
-* Fixed [issue](https://github.com/ydb-platform/ydb-embedded-ui/issues/15863) with long timings on BSC requests in a large cluster.
-* Fixed [issue](https://github.com/ydb-platform/ydb-embedded-ui/issues/15522) with calculating load average on K8S nodes.
-* Fixed an [issue](https://github.com/ydb-platform/ydb-embedded-ui/issues/16895) with long time loading databases page on certain databases due to timeout on graph rendering.
-* Fixed an [issue](https://github.com/ydb-platform/ydb-embedded-ui/issues/17103) with no tablets shown for table index on tablets tab.
-* Fixed an [issue](https://github.com/ydb-platform/ydb-embedded-ui/issues/17226) with Optional<Struct> columns are always shown as NULLs.
-* Fixed an [issue](https://github.com/ydb-platform/ydb/issues/17813) crash in /viewer/storage handler.
-* Fixed an [issue](https://github.com/ydb-platform/ydb-embedded-ui/issues/2164) keep precision of double values on serialization.
-* Fixed long errors on vdisk evict when no pdisks are available.
-* Improved vdisk evict swagger and parameters handling.
-* Fixed handling of metadata cache requests.
-* Improved annotations.
-* Fixes list of nodes and databases in broken environment, closes https://github.com/ydb-platform/ydb/issues/16477
-* Support form-urlencoded in base class.
-* Fixed an [issue](https://github.com/ydb-platform/ydb/issues/18735) storage nodes, some other minor fixes.
-* Fixed an [issue](https://github.com/ydb-platform/ydb/issues/19810) - minimized returned data to avoid large responses.
-* Don't report fake limit as total node memory.
-* Fixed an [issue](https://github.com/ydb-platform/ydb/issues/19676) – make nodes less critical (to make cluster less critical). [#20053](https://github.com/ydb-platform/ydb/pull/20053) ([Alexey Efimov](https://github.com/adameat))
 
 ### Performance
 
@@ -75,3 +56,4 @@ Original commit: 7b5e0194f5ddeab1c864112b1716b70b969ac7b2 [#20633](https://githu
 * 19910:Enhanced pool scaling when using shared threads and available CPU resources. [#19910](https://github.com/ydb-platform/ydb/pull/19910) ([kruall](https://github.com/kruall))
 * 20197:Added early termination optimization for `GraceJoin`: if one side is empty and the join kind guarantees an empty result, the other side is no longer read. [#20197](https://github.com/ydb-platform/ydb/pull/20197) ([Filitov Mikhail](https://github.com/lll-phill-lll))
 * 19926:Significantly improved performance for single-core, dual-core, and triple-core configurations [#19926](https://github.com/ydb-platform/ydb/pull/19926) ([kruall](https://github.com/kruall))
+

@@ -166,14 +166,14 @@ public:
             new TTableUploader(SelfId, GetScheme(), std::move(tableData))
         );
 
+        Batchers.clear();
+
         return true;
     }
 
 private:
     std::shared_ptr<const NSchemeCache::TSchemeCacheNavigate> NavigateResult;
     TString Path;
-
-    std::shared_ptr<arrow::RecordBatch> Data;
 };
 
 std::unique_ptr<ITableKindState> CreateColumnTableState(const TActorId& selfId, TAutoPtr<NSchemeCache::TSchemeCacheNavigate>& result) {

@@ -33,10 +33,6 @@ public:
         return size;
     }
 
-    void Reset() {
-        Batchers.clear();
-    }
-
     virtual NKqp::IDataBatcherPtr CreateDataBatcher() = 0;
     virtual bool Flush() = 0;
 

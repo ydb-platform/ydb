@@ -77,7 +77,7 @@ TScheme::TPtr BuildScheme(const TAutoPtr<NSchemeCache::TSchemeCacheNavigate>& na
 
 namespace {
 
-    NYT::TNode CreateTypeNode(const TString& fieldType) {
+NYT::TNode CreateTypeNode(const TString& fieldType) {
     return NYT::TNode::CreateList()
         .Add("DataType")
         .Add(fieldType);

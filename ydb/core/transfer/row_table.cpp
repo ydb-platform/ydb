@@ -184,6 +184,8 @@ public:
             new TTableUploader(SelfId, GetScheme(), std::move(tableData))
         );
 
+        Batchers.clear();
+
         return true;
     }
 

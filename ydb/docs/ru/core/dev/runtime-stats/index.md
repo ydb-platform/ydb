@@ -22,10 +22,11 @@
     - [Множественные выходы](structure.md#multiout)
     - [Составные графы](structure.md#complex)
 - [Визуализация метрик](metrics.md)
-    - Параллельность
-    - Агрегаты
-    - Data Skew
-    - Time Skew
+    - [Параллельность](metrics.md#parallelism)
+    - [Агрегаты](metrics.md#aggregates)
+    - [Масштаб метрик](metrics.md#scale)
+    - [Перекос данных](metrics.md#dataskew)
+    - [Перекос времени](metrics.md#timeskew)
 - [Типовые проблемы и способы их решения](troubleshooting.md)
     - Локализация проблемной стадии
     - Недостаточная производительность колоночных таблиц

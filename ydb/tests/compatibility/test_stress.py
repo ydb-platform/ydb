@@ -243,13 +243,13 @@ class TestStress(MixedClusterFixture):
         yatest.common.execute(run_command, wait=True, stdout=self.output_f, stderr=self.output_f)
 
     @pytest.mark.skip(reason="Not stabilized yet")
-    @pytest.mark.parametrize("store_type, is_date64", [
+    @pytest.mark.parametrize("store_type, date64", [
         pytest.param("row",    False, id="row"),
         pytest.param("column", False, id="column"),
         pytest.param("column", True,  id="column-date64")
     ])
-    def test_tpcds1(self, store_type, is_date64):
-        if is_date64 and min(self.versions) < (25, 1):
+    def test_tpcds1(self, store_type, date64):
+        if date64 and min(self.versions) < (25, 1):
             pytest.skip("date64 is not supported in 24-4")
 
         if date64:

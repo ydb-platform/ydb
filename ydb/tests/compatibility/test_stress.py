@@ -182,7 +182,7 @@ class TestStress(MixedClusterFixture):
     @pytest.mark.parametrize("store_type, date64", [
         pytest.param("row",    False, id="row"),
         pytest.param("column", False, id="column"),
-        pytest.param("column", True, id="column-date64")
+        pytest.param("column", True,  id="column-date64")
     ])
     def test_tpch1(self, store_type, date64):
         if date64 and min(self.versions) < (25, 1):

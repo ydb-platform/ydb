@@ -3,6 +3,8 @@
 #include "pdisk_restart.h"
 #include "pdisk_status.h"
 
+#include <ydb/library/actors/http/audit/auditable_actions.h>
+
 namespace NKikimr::NViewer {
 
 void InitPDiskInfoJsonHandler(TJsonHandlers& handlers) {
@@ -10,11 +12,13 @@ void InitPDiskInfoJsonHandler(TJsonHandlers& handlers) {
 }
 
 void InitPDiskRestartJsonHandler(TJsonHandlers& handlers) {
-    handlers.AddHandler("/pdisk/restart", new TJsonHandler<TJsonPDiskRestart>(TJsonPDiskRestart::GetSwagger()));
+    handlers.AddHandler("/pdisk/restart", new TJsonHandler<TJsonPDiskRestart>(TJsonPDiskRestart::GetSwagger()), 1,
+                        NHttp::NAudit::EAuditableAction::PDiskRestart);
 }
 
 void InitPDiskStatusJsonHandler(TJsonHandlers& handlers) {
-    handlers.AddHandler("/pdisk/status", new TJsonHandler<TPDiskStatus>(TPDiskStatus::GetSwagger()));
+    handlers.AddHandler("/pdisk/status", new TJsonHandler<TPDiskStatus>(TPDiskStatus::GetSwagger()), 1,
+                        NHttp::NAudit::EAuditableAction::ChangePDiskStatus);
 }
 
 void InitPDiskJsonHandlers(TJsonHandlers& jsonHandlers) {

@@ -66,6 +66,7 @@ SRCS(
 PEERDIR(
     ydb/library/actors/core
     ydb/library/actors/interconnect/mock
+    ydb/library/actors/http/audit
     ydb/library/actors/util
     ydb/library/actors/wilson
     library/cpp/containers/stack_vector

@@ -245,7 +245,8 @@ void InitViewerWhoAmIJsonHandler(TJsonHandlers& handlers) {
 }
 
 void InitViewerQueryJsonHandler(TJsonHandlers& handlers) {
-    handlers.AddHandler("/viewer/query", new THttpHandler<TJsonQuery>(TJsonQuery::GetSwagger()), 9);
+    handlers.AddHandler("/viewer/query", new THttpHandler<TJsonQuery>(TJsonQuery::GetSwagger()), 9,
+                        NHttp::NAudit::EAuditableAction::ExecuteQuery);
 }
 
 void InitViewerNetInfoJsonHandler(TJsonHandlers& handlers) {
@@ -265,7 +266,8 @@ void InitViewerNodesJsonHandler(TJsonHandlers& handlers) {
 }
 
 void InitViewerACLJsonHandler(TJsonHandlers &jsonHandlers) {
-    jsonHandlers.AddHandler("/viewer/acl", new TJsonHandler<TJsonACL>(TJsonACL::GetSwagger()), 2);
+    jsonHandlers.AddHandler("/viewer/acl", new TJsonHandler<TJsonACL>(TJsonACL::GetSwagger()), 2,
+                            NHttp::NAudit::EAuditableAction::UpdateAcl);
 }
 
 void InitViewerGraphJsonHandler(TJsonHandlers &handlers) {

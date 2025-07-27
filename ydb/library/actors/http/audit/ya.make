@@ -1,13 +1,8 @@
-RECURSE_FOR_TESTS(
-    ut
-)
-
 LIBRARY()
 
 SRCS(
-    auditable_actions.cpp
     audit.cpp
-    url_matcher.cpp
+    auditable_actions.cpp
 )
 
 PEERDIR(

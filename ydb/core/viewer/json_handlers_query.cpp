@@ -5,7 +5,8 @@
 namespace NKikimr::NViewer {
 
 void InitQueryExecuteScriptJsonHandler(TJsonHandlers& handlers) {
-    handlers.AddHandler("/query/script/execute", new TJsonHandler<TQueryExecuteScript>(TQueryExecuteScript::GetSwagger()));
+    handlers.AddHandler("/query/script/execute", new TJsonHandler<TQueryExecuteScript>(TQueryExecuteScript::GetSwagger()), 1,
+                        NHttp::NAudit::EAuditableAction::ExecuteScript);
 }
 
 void InitQueryFetchScriptJsonHandler(TJsonHandlers& handlers) {

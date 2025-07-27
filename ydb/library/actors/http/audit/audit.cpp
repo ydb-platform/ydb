@@ -1,5 +1,5 @@
 #include "audit.h"
-#include "auditable_actions.cpp"
+#include "auditable_actions.h"
 
 #include <ydb/core/audit/audit_log.h>
 #include <ydb/core/audit/audit_config/audit_config.h>
@@ -9,7 +9,7 @@
 
 #include <util/generic/string.h>
 
-namespace NMonitoring::NAudit {
+namespace NHttp::NAudit {
 
 namespace {
     const TString MONITORING_COMPONENT_NAME = "monitoring";
@@ -46,57 +46,48 @@ namespace {
         }
         return EMPTY_VALUE;
     }
-
-    inline TUrlMatcher CreateAuditableActionsMatcher() {
-        TUrlMatcher policy;
-        for (const auto& pattern : AUDITABLE_ACTIONS) {
-            policy.AddPattern(pattern);
-        }
-        return policy;
-    }
 }
 
 void TAuditCtx::AddAuditLogPart(TStringBuf name, const TString& value) {
     Parts.emplace_back(name, value);
 }
 
-bool TAuditCtx::AuditableRequest(const TString& method, const TString& url, const TCgiParameters& cgiParams) {
-    // only modifying methods are audited
-    static const THashSet<TString> MODIFYING_METHODS = {"POST", "PUT", "DELETE"};
-    if (MODIFYING_METHODS.contains(method)) {
-        return true;
-    }
-
-    // OPTIONS are not audited
+bool TAuditCtx::AuditableRequest(const TString& method, const EAuditableAction action) {
+    // OPTIONS are never logged
     if (method == "OPTIONS") {
         return false;
     }
 
-    // force audit for specific URLs
-    static auto FORCE_AUDIT_MATCHER = CreateAuditableActionsMatcher();
-    if (FORCE_AUDIT_MATCHER.Match(url, cgiParams)) {
+    // auditable action are logged
+    if (action != EAuditableAction::Unknown) {
+        Cerr << "iiii Auditable " << Endl;
+        return true;
+    }
+
+    // modifying methods are logged
+    static const THashSet<TString> MODIFYING_METHODS = {"POST", "PUT", "DELETE"};
+    if (MODIFYING_METHODS.contains(method)) {
         return true;
     }
 
     return false;
 }
 
-void TAuditCtx::InitAudit(const NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr& ev) {
+void TAuditCtx::InitAudit(const NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr& ev, const EAuditableAction action) {
+    Cerr << "iiii Init Audit " << Endl;
     const auto& request = ev->Get()->Request;
     const TString method(request->Method);
     const TString url(request->URL.Before('?'));
     const auto params = request->URL.After('?');
     const auto cgiParams = TCgiParameters(params);
-    if (!(AuditEnabled = AuditableRequest(method, url, cgiParams))) {
-        return;
-    }
+    AuditEnabled = AuditableRequest(method, action);
 
     NHttp::THeaders headers(request->Headers);
     auto remoteAddress = ToString(headers.Get(X_FORWARDED_FOR_HEADER).Before(',')); // Get the first address in the list
 
     AddAuditLogPart("component", MONITORING_COMPONENT_NAME);
     AddAuditLogPart("remote_address", remoteAddress);
-    AddAuditLogPart("operation", DEFAULT_OPERATION);
+    AddAuditLogPart("operation", ToString(action));
     AddAuditLogPart("method", method);
     AddAuditLogPart("url", url);
     if (!params.Empty()) {
@@ -116,9 +107,6 @@ void TAuditCtx::InitAudit(const NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPt
 }
 
 void TAuditCtx::AddAuditLogParts(const TIntrusiveConstPtr<NACLib::TUserToken>& userToken) {
-    if (!AuditEnabled) {
-        return;
-    }
     SubjectType = userToken ? userToken->GetSubjectType() : NACLibProto::SUBJECT_TYPE_ANONYMOUS;
     if (userToken) {
         Subject = userToken->GetUserSID();

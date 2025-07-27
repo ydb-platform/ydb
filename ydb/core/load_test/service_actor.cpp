@@ -1332,4 +1332,19 @@ IActor *CreateLoadTestActor(const TIntrusivePtr<::NMonitoring::TDynamicCounters>
     return new TLoadActor(counters);
 }
 
+NHttp::NAudit::EAuditableAction LoadServiceAuditResolver(const NMonitoring::IMonHttpRequest& request) {
+    if (request.GetMethod() == HTTP_METHOD_POST) {
+        const auto& params = request.GetPostParams();
+        TString content(request.GetPostContent());
+
+        TString mode = params.Has("mode") ? params.Get("mode") : "start";
+        if (mode == "start") {
+            return NHttp::NAudit::EAuditableAction::StartLoadTest;
+        } else if (mode == "stop") {
+            return NHttp::NAudit::EAuditableAction::StopLoadTest;
+        }
+    }
+    return NHttp::NAudit::EAuditableAction::Unknown;
+}
+
 } // NKikimr

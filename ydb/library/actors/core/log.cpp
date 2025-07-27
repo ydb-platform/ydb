@@ -296,6 +296,15 @@ namespace NActors {
         }
     }
 
+    NHttp::NAudit::EAuditableAction LoggerAuditResolver(const NMonitoring::IMonHttpRequest& request) {
+        const auto& params = request.GetParams();
+        if (params.Has("c") || params.Has("p") || params.Has("sp") || params.Has("sr") || params.Has("allowdrop")) {
+            return NHttp::NAudit::EAuditableAction::UpdateLoggerSettings;
+        }
+
+        return NHttp::NAudit::EAuditableAction::Unknown;
+    }
+
     /*
      * Logger INFO:
      * 1. Current priority settings from components

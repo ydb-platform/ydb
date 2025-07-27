@@ -370,4 +370,20 @@ namespace NKikimr {
         return new TFailureInjectionActor(config, appData);
     }
 
+    NHttp::NAudit::EAuditableAction FailureInjectionAuditResolver(const NMonitoring::IMonHttpRequest& request) {
+        if (request.GetMethod() == HTTP_METHOD_POST) {
+            if (request.GetPostParams().Has("terminate")) {
+                return NHttp::NAudit::EAuditableAction::FailureInjectionTerminate;
+            }
+            return NHttp::NAudit::EAuditableAction::Unknown;
+        }
+
+        const auto& params = request.GetParams();
+        if (params.Has("queue") || params.Has("probe") || params.Has("enable")) {
+            return NHttp::NAudit::EAuditableAction::FailureInjectionModify;
+        }
+
+        return NHttp::NAudit::EAuditableAction::Unknown;
+    }
+
 } // NKikimr

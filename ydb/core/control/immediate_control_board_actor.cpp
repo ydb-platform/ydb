@@ -53,13 +53,12 @@ public:
         ChangedCount = IcbGroup->GetCounter("Icb/ChangedControlsCount");
     }
 
-
     void Bootstrap(const TActorContext &ctx) {
         auto mon = AppData(ctx)->Mon;
         if (mon) {
             NMonitoring::TIndexMonPage *actorsMonPage = mon->RegisterIndexPage("actors", "Actors");
             mon->RegisterActorPage(actorsMonPage, "icb", "Immediate Control Board", false,
-                    ctx.ActorSystem(), ctx.SelfID);
+                    ctx.ActorSystem(), ctx.SelfID, true, true, IcbAuditResolver);
         }
         Become(&TThis::StateFunc);
     }
@@ -132,4 +131,12 @@ NActors::IActor* CreateImmediateControlActor(TIntrusivePtr<TControlBoard> board,
             const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters) {
     return new NKikimr::TImmediateControlActor(board, counters);
 }
+
+NHttp::NAudit::EAuditableAction IcbAuditResolver(const NMonitoring::IMonHttpRequest& request) {
+    HTTP_METHOD method = request.GetMethod();
+    return method == HTTP_METHOD_POST
+        ? NHttp::NAudit::EAuditableAction::UpdateImmediateControlBoard
+        : NHttp::NAudit::EAuditableAction::Unknown;
+}
+
 };

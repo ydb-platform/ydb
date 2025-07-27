@@ -371,4 +371,15 @@ namespace NActors {
             std::move(dir),
             profiler ? std::move(profiler) : CreateProfiler());
     }
+
+    NHttp::NAudit::EAuditableAction ProfilerAuditResolver(const NMonitoring::IMonHttpRequest& request) {
+        TString action = request.GetParams().Get("action");
+
+        if (action == "start") {
+            return NHttp::NAudit::EAuditableAction::ProfilerStart;
+        } else if (action == "stop-display" || action == "stop-save" || action == "stop-log") {
+            return NHttp::NAudit::EAuditableAction::ProfilerStop;
+        }
+        return NHttp::NAudit::EAuditableAction::Unknown;
+    }
 }

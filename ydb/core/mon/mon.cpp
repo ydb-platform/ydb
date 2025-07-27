@@ -8,13 +8,13 @@
 #include <ydb/core/base/monitoring_provider.h>
 #include <ydb/core/base/ticket_parser.h>
 #include <ydb/core/grpc_services/base/base.h>
-#include <ydb/core/mon/audit/audit.h>
 #include <ydb/core/protos/mon.pb.h>
 #include <ydb/core/util/wildcard.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/interconnect.h>
 #include <ydb/library/actors/core/probes.h>
+#include <ydb/library/actors/http/audit/audit.h>
 #include <ydb/library/actors/http/http_proxy.h>
 #include <ydb/public/sdk/cpp/adapters/issue/issue.h>
 
@@ -197,7 +197,7 @@ void MakeJsonErrorReply(NJson::TJsonValue& jsonResponse, TString& message, const
 }
 
 IMonPage* TMon::RegisterActorPage(TIndexMonPage* index, const TString& relPath,
-    const TString& title, bool preTag, TActorSystem* actorSystem, const TActorId& actorId, bool useAuth, bool sortPages) {
+    const TString& title, bool preTag, TActorSystem* actorSystem, const TActorId& actorId, bool useAuth, bool sortPages, TMon::TActorPageAuditableResolver auditableResolver) {
     return RegisterActorPage({
         .Title = title,
         .RelPath = relPath,
@@ -207,6 +207,7 @@ IMonPage* TMon::RegisterActorPage(TIndexMonPage* index, const TString& relPath,
         .ActorId = actorId,
         .UseAuth = useAuth,
         .SortPages = sortPages,
+        .AuditableResolver = auditableResolver
     });
 }
 
@@ -365,7 +366,7 @@ public:
     NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr Event;
     THttpMonRequestContainer Container;
     TIntrusivePtr<TActorMonPage> ActorMonPage;
-    NMonitoring::NAudit::TAuditCtx AuditCtx;
+    NHttp::NAudit::TAuditCtx AuditCtx;
 
     THttpMonLegacyActorRequest(NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr event, TIntrusivePtr<TActorMonPage> actorMonPage)
         : Event(std::move(event))
@@ -576,7 +577,7 @@ class THttpMonLegacyIndexRequest : public TActorBootstrapped<THttpMonLegacyIndex
 public:
     NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr Event;
     THttpMonRequestContainer Container;
-    NMonitoring::NAudit::TAuditCtx AuditCtx;
+    NHttp::NAudit::TAuditCtx AuditCtx;
 
     THttpMonLegacyIndexRequest(NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr event, NMonitoring::IMonPage* index)
         : Event(std::move(event))
@@ -1034,7 +1035,7 @@ public:
     NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr Event;
     TMon::TRegisterHandlerFields Fields;
     TMon::TRequestAuthorizer Authorizer;
-    NMonitoring::NAudit::TAuditCtx AuditCtx;
+    NHttp::NAudit::TAuditCtx AuditCtx;
     NHttp::TEvHttpProxy::TEvSubscribeForCancel::TPtr CancelSubscriber;
 
     THttpMonAuthorizedActorRequest(NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr event, const TMon::TRegisterHandlerFields& fields, TMon::TRequestAuthorizer authorizer)
@@ -1496,6 +1497,7 @@ NMonitoring::IMonPage* TMon::RegisterActorPage(TRegisterActorPageFields fields) 
         fields.ActorId,
         fields.AllowedSIDs ? fields.AllowedSIDs : Config.AllowedSIDs,
         fields.UseAuth ? Config.Authorizer : TRequestAuthorizer(),
+        fields.AuditableResolver ? fields.AuditableResolver : DefaultActorPageAuditableResolver,
         fields.MonServiceName);
     if (fields.Index) {
         fields.Index->Register(page);

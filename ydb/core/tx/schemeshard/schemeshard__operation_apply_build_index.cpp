@@ -15,9 +15,10 @@ namespace NKikimr {
 namespace NSchemeShard {
 namespace {
 
-ISubOperation::TPtr FinalizeIndexImplTable(TOperationContext& context, const TPath& index, const TOperationId& partId, const TString& name, const TPathId& pathId) {
-    Y_ABORT_UNLESS(index.Child(name)->PathId == pathId);
-    Y_ABORT_UNLESS(index.Child(name).LeafName() == name);
+ISubOperation::TPtr FinalizeIndexImplTable(TOperationContext& context, const TPath& index, const TOperationId& partId, const TString& name, const TPathId& pathId, const NKikimrSchemeOp::TLockGuard& lockGuard) {
+    TPath implTable = index.Child(name);
+    Y_ABORT_UNLESS(implTable->PathId == pathId);
+    Y_ABORT_UNLESS(implTable.LeafName() == name);
     TTableInfo::TPtr table = context.SS->Tables.at(pathId);
     auto transaction = TransactionTemplate(index.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpFinalizeBuildIndexImplTable);
     auto operation = transaction.MutableAlterTable();
@@ -25,6 +26,9 @@ ISubOperation::TPtr FinalizeIndexImplTable(TOperationContext& context, const TPa
     operation->MutablePartitionConfig()->MutableCompactionPolicy()->CopyFrom(table->PartitionConfig().GetCompactionPolicy());
     operation->MutablePartitionConfig()->MutableCompactionPolicy()->SetKeepEraseMarkers(false);
     operation->MutablePartitionConfig()->SetShadowData(false);
+    if (implTable.IsLocked()) { // implTables for some type of indexes may be locked during build
+        *transaction.MutableLockGuard() = lockGuard;
+    }
     return CreateFinalizeBuildIndexImplTable(partId, transaction);
 }
 
@@ -107,7 +111,7 @@ TVector<ISubOperation::TPtr> ApplyBuildIndex(TOperationId nextId, const TTxTrans
                 }
                 result.push_back(std::move(op));
             } else {
-                result.push_back(FinalizeIndexImplTable(context, index, partId, indexImplTableName, indexChildItems.second));
+                result.push_back(FinalizeIndexImplTable(context, index, partId, indexImplTableName, indexChildItems.second, tx.GetLockGuard()));
             }
         }
     }

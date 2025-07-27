@@ -9,6 +9,16 @@ IActor* CreateNodePersQueueL2Cache(const TCacheL2Parameters& params, TIntrusiveP
     return new TPersQueueCacheL2(params, counters);
 }
 
+static NActors::NAudit::EAuditableAction PqlAuditResolver(const NMonitoring::IMonHttpRequest& request)
+{
+    const auto& params = request.GetParams();
+    if (params.Has("submit")) {
+        return NActors::NAudit::EAuditableAction::PqUpdateNodeCacheLimit;
+    }
+
+    return NActors::NAudit::EAuditableAction::Unknown;
+}
+
 void TPersQueueCacheL2::Bootstrap(const TActorContext& ctx)
 {
     TAppData * appData = AppData(ctx);
@@ -17,7 +27,7 @@ void TPersQueueCacheL2::Bootstrap(const TActorContext& ctx)
     auto mon = appData->Mon;
     if (mon) {
         NMonitoring::TIndexMonPage * page = mon->RegisterIndexPage("actors", "Actors");
-        mon->RegisterActorPage(page, "pql2", "PersQueue Node Cache", false, ctx.ExecutorThread.ActorSystem, ctx.SelfID);
+        mon->RegisterActorPage(page, "pql2", "PersQueue Node Cache", false, ctx.ExecutorThread.ActorSystem, ctx.SelfID, true, true, PqlAuditResolver);
     }
 
     Become(&TThis::StateFunc);

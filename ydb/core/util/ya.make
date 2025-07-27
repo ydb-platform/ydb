@@ -76,6 +76,7 @@ PEERDIR(
     library/cpp/monlib/dynamic_counters
     library/cpp/random_provider
     ydb/core/base
+    ydb/core/mon/audit
     ydb/core/protos
     library/cpp/deprecated/atomic
     ydb/library/yverify_stream

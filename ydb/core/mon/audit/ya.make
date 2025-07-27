@@ -6,6 +6,7 @@ LIBRARY()
 
 SRCS(
     audit.cpp
+    audit_action.cpp
 )
 
 PEERDIR(

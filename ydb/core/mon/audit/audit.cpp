@@ -1,9 +1,4 @@
 #include "audit.h"
-<<<<<<< HEAD
-=======
-#include "audit_force.h"
-#include "url_tree.h"
->>>>>>> ea31ec8811c (audit log http)
 
 #include <ydb/core/audit/audit_log.h>
 #include <ydb/core/base/appdata.h>
@@ -12,7 +7,7 @@
 
 #include <util/generic/string.h>
 
-namespace NActors {
+namespace NActors::NAudit {
 
 namespace {
     const TString MONITORING_COMPONENT_NAME = "monitoring";
@@ -47,73 +42,54 @@ namespace {
     }
 }
 
-<<<<<<< HEAD
-=======
-bool TAuditCtx::NeedAudit() const {
-    return Need;
-}
-
->>>>>>> ea31ec8811c (audit log http)
 void TAuditCtx::AddAuditLogPart(TStringBuf name, const TString& value) {
     Parts.emplace_back(name, value);
 }
 
-<<<<<<< HEAD
-bool TAuditCtx::CheckAuditConditions(const TString& method) {
-    return false; // change when audit config is ready
-=======
-bool TAuditCtx::CheckAuditConditions(const TString& method, const TString& url, const TCgiParameters& params) {
-    // if (!NKikimr::AppData()->AuditConfig.GetMonitoringAudit()) {
-    //     return false;
-    // }
+bool TAuditCtx::AuditEnabled() const {
+    return true; // TODO: Implement audit enabled check
+}
 
-    // OPTIONS are not audited
-    if (method == "OPTIONS") {
-        return false;
-    }
->>>>>>> ea31ec8811c (audit log http)
-
-    // only modifying methods are audited
+bool TAuditCtx::CheckAuditable(const TString& method, const EAuditableAction action) const {
+    // specific methods are always audited
     static const THashSet<TString> MODIFYING_METHODS = {"POST", "PUT", "DELETE"};
     if (MODIFYING_METHODS.contains(method)) {
         return true;
     }
 
-<<<<<<< HEAD
-    // OPTIONS are not audited
+    // OPTIONS are never audited
     if (method == "OPTIONS") {
         return false;
-=======
-    // force audit for specific URLs
-    static const auto FORCE_AUDIT_URL_PATTERN = CreateAuditUrlPattern();
-    if (FORCE_AUDIT_URL_PATTERN.Match(url, params)) {
+    }
+
+    // specific auditable action are audited
+    if (action != EAuditableAction::Unknown) {
+        Cerr << "iiii Auditable " << Endl;
         return true;
->>>>>>> ea31ec8811c (audit log http)
     }
 
     return false;
 }
 
-void TAuditCtx::InitAudit(const NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr& ev) {
+void TAuditCtx::InitAudit(const NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr& ev, const EAuditableAction action) {
+    Cerr << "iiii Init Audit " << Endl;
+    if (!AuditEnabled()) {
+        return;
+    }
+    Cerr << "iiii AuditEnabled " << Endl;
     const auto& request = ev->Get()->Request;
     const TString method(request->Method);
     const TString url(request->URL.Before('?'));
     const auto params = request->URL.After('?');
     const auto cgiParams = TCgiParameters(params);
-<<<<<<< HEAD
-    if (!(Need = CheckAuditConditions(method))) {
-=======
-    if (!(Need = CheckAuditConditions(method, url, cgiParams))) {
->>>>>>> ea31ec8811c (audit log http)
-        return;
-    }
+    Auditable |= CheckAuditable(method, action);
 
     NHttp::THeaders headers(request->Headers);
     auto remote_address = ToString(headers.Get(X_FORWARDED_FOR_HEADER).Before(',')); // Get the first address in the list
 
     AddAuditLogPart("component", MONITORING_COMPONENT_NAME);
     AddAuditLogPart("remote_address", remote_address);
-    AddAuditLogPart("operation", DEFAULT_OPERATION);
+    AddAuditLogPart("operation", ToString(action));
     AddAuditLogPart("method", method);
     AddAuditLogPart("url", url);
     if (!params.Empty()) {
@@ -125,11 +101,7 @@ void TAuditCtx::InitAudit(const NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPt
 }
 
 void TAuditCtx::AddAuditLogParts(const TIntrusiveConstPtr<NACLib::TUserToken>& userToken) {
-<<<<<<< HEAD
-    if (!Need) {
-=======
-    if (!NeedAudit()) {
->>>>>>> ea31ec8811c (audit log http)
+    if (!AuditEnabled()) {
         return;
     }
     AddAuditLogPart("subject", userToken->GetUserSID());
@@ -137,11 +109,7 @@ void TAuditCtx::AddAuditLogParts(const TIntrusiveConstPtr<NACLib::TUserToken>& u
 }
 
 void TAuditCtx::FinishAudit(const NHttp::THttpOutgoingResponsePtr& response) {
-<<<<<<< HEAD
-    if (!Need) {
-=======
-    if (!NeedAudit()) {
->>>>>>> ea31ec8811c (audit log http)
+    if (!AuditEnabled() || !Auditable) {
         return;
     }
     auto status = GetStatus(response);

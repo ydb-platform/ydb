@@ -15,6 +15,7 @@
 #include <ydb/core/base/statestorage.h>
 #include <ydb/core/base/tablet_types.h>
 #include <ydb/core/mon/mon.h>
+#include <ydb/core/mon/audit/audit_action.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <ydb/core/util/wildcard.h>
 #include <ydb/library/aclib/aclib.h>
@@ -50,10 +51,50 @@ public:
         CurrentWorkerName = TStringBuilder() << FQDNHostName() << ":" << CurrentMonitoringPort;
     }
 
+    static NActors::TMon::TActorPageAuditableResolver MakeAuditableResolver(const THashMap<TString, NActors::NAudit::EAuditableAction>& metaMap) {
+        return [metaMap](const NMonitoring::IMonHttpRequest& req) -> NActors::NAudit::EAuditableAction {
+            TString path("/" + req.GetPage()->Path + req.GetPathInfo());
+            Cerr << "iiii AuditableResolver path: " << path << Endl;
+            if (auto it = metaMap.find(path); it != metaMap.end()) {
+                Cerr << "iiii resolved " << Endl;
+                return it->second;
+            }
+            return NActors::NAudit::EAuditableAction::Unknown;
+        };
+    }
+
     void Bootstrap(const TActorContext& ctx) {
         Become(&TThis::StateWork);
         NActors::TMon* mon = AppData(ctx)->Mon;
         if (mon) {
+            InitViewerJsonHandlers(JsonHandlers);
+            InitPDiskJsonHandlers(JsonHandlers);
+            InitVDiskJsonHandlers(JsonHandlers);
+            InitStorageJsonHandlers(JsonHandlers);
+            InitOperationJsonHandlers(JsonHandlers);
+            InitQueryJsonHandlers(JsonHandlers);
+            InitSchemeJsonHandlers(JsonHandlers);
+            InitViewerBrowseJsonHandlers(JsonHandlers);
+
+            for (const auto& handler : JsonHandlers.JsonHandlersList) {
+                // temporary handling of old paths
+                TStringBuf newPath(handler);
+                TString oldPath = "/" + TString(newPath.After('/').Before('/')) + "/json/" + TString(newPath.After('/').After('/'));
+                JsonHandlers.Redirect(oldPath, ToString(newPath));
+            }
+
+            // TODO: redirect of very old paths
+            JsonHandlers.Redirect("/viewer/v2/json/config", "/viewer/config");
+            JsonHandlers.Redirect("/viewer/v2/json/sysinfo", "/viewer/sysinfo");
+            JsonHandlers.Redirect("/viewer/v2/json/pdiskinfo", "/viewer/pdiskinfo");
+            JsonHandlers.Redirect("/viewer/v2/json/vdiskinfo", "/viewer/vdiskinfo");
+            JsonHandlers.Redirect("/viewer/v2/json/storage", "/viewer/storage");
+            JsonHandlers.Redirect("/viewer/v2/json/nodelist", "/viewer/nodelist");
+            JsonHandlers.Redirect("/viewer/v2/json/tabletinfo", "/viewer/tabletinfo");
+            JsonHandlers.Redirect("/viewer/v2/json/nodeinfo", "/viewer/nodeinfo");
+
+            auto AuditableResolver = MakeAuditableResolver(JsonHandlers.RequestsMetaInfo);
+
             TVector<TString> viewerAllowedSIDs;
             TVector<TString> monitoringAllowedSIDs;
             {
@@ -74,12 +115,14 @@ public:
                 .ActorId = ctx.SelfID,
                 .UseAuth = true,
                 .AllowedSIDs = viewerAllowedSIDs,
+                .AuditableResolver = AuditableResolver,
             });
             mon->RegisterActorPage({
                 .Title = "Viewer",
                 .RelPath = "viewer/v2",
                 .ActorSystem = ctx.ExecutorThread.ActorSystem,
                 .ActorId = ctx.SelfID,
+                .AuditableResolver = AuditableResolver,
             });
             mon->RegisterActorPage({
                 .Title = "Monitoring",
@@ -87,18 +130,21 @@ public:
                 .ActorSystem = ctx.ExecutorThread.ActorSystem,
                 .ActorId = ctx.SelfID,
                 .UseAuth = false,
+                .AuditableResolver = AuditableResolver,
             });
             mon->RegisterActorPage({
                 .RelPath = "counters/hosts",
                 .ActorSystem = ctx.ExecutorThread.ActorSystem,
                 .ActorId = ctx.SelfID,
                 .UseAuth = false,
+                .AuditableResolver = AuditableResolver,
             });
             mon->RegisterActorPage({
                 .RelPath = "healthcheck",
                 .ActorSystem = ctx.ExecutorThread.ActorSystem,
                 .ActorId = ctx.SelfID,
                 .UseAuth = false,
+                .AuditableResolver = AuditableResolver,
             });
             mon->RegisterActorPage({
                 .RelPath = "vdisk",
@@ -106,6 +152,7 @@ public:
                 .ActorId = ctx.SelfID,
                 .UseAuth = true,
                 .AllowedSIDs = monitoringAllowedSIDs,
+                .AuditableResolver = AuditableResolver,
             });
             mon->RegisterActorPage({
                 .RelPath = "pdisk",
@@ -113,6 +160,7 @@ public:
                 .ActorId = ctx.SelfID,
                 .UseAuth = true,
                 .AllowedSIDs = monitoringAllowedSIDs,
+                .AuditableResolver = AuditableResolver,
             });
             mon->RegisterActorPage({
                 .RelPath = "operation",
@@ -120,6 +168,7 @@ public:
                 .ActorId = ctx.SelfID,
                 .UseAuth = true,
                 .AllowedSIDs = monitoringAllowedSIDs,
+                .AuditableResolver = AuditableResolver,
             });
             mon->RegisterActorPage({
                 .RelPath = "query",
@@ -127,6 +176,7 @@ public:
                 .ActorId = ctx.SelfID,
                 .UseAuth = true,
                 .AllowedSIDs = monitoringAllowedSIDs,
+                .AuditableResolver = AuditableResolver,
             });
             mon->RegisterActorPage({
                 .RelPath = "scheme",
@@ -134,6 +184,7 @@ public:
                 .ActorId = ctx.SelfID,
                 .UseAuth = true,
                 .AllowedSIDs = viewerAllowedSIDs,
+                .AuditableResolver = AuditableResolver,
             });
             mon->RegisterActorPage({
                 .RelPath = "storage",
@@ -141,38 +192,13 @@ public:
                 .ActorId = ctx.SelfID,
                 .UseAuth = true,
                 .AllowedSIDs = viewerAllowedSIDs,
+                .AuditableResolver = AuditableResolver,
             });
             auto whiteboardServiceId = NNodeWhiteboard::MakeNodeWhiteboardServiceId(ctx.SelfID.NodeId());
             ctx.Send(whiteboardServiceId, new NNodeWhiteboard::TEvWhiteboard::TEvSystemStateAddEndpoint(
                 "http-mon", Sprintf(":%d", KikimrRunConfig.AppConfig.GetMonitoringConfig().GetMonitoringPort())));
 
             AllowOrigin = KikimrRunConfig.AppConfig.GetMonitoringConfig().GetAllowOrigin();
-
-            InitViewerJsonHandlers(JsonHandlers);
-            InitPDiskJsonHandlers(JsonHandlers);
-            InitVDiskJsonHandlers(JsonHandlers);
-            InitStorageJsonHandlers(JsonHandlers);
-            InitOperationJsonHandlers(JsonHandlers);
-            InitQueryJsonHandlers(JsonHandlers);
-            InitSchemeJsonHandlers(JsonHandlers);
-            InitViewerBrowseJsonHandlers(JsonHandlers);
-
-            for (const auto& handler : JsonHandlers.JsonHandlersList) {
-                // temporary handling of old paths
-                TStringBuf newPath(handler);
-                TString oldPath = "/" + TString(newPath.After('/').Before('/')) + "/json/" + TString(newPath.After('/').After('/'));
-                JsonHandlers.JsonHandlersIndex[oldPath] = JsonHandlers.JsonHandlersIndex[newPath];
-            }
-
-            // TODO: redirect of very old paths
-            JsonHandlers.JsonHandlersIndex["/viewer/v2/json/config"] = JsonHandlers.JsonHandlersIndex["/viewer/config"];
-            JsonHandlers.JsonHandlersIndex["/viewer/v2/json/sysinfo"] = JsonHandlers.JsonHandlersIndex["/viewer/sysinfo"];
-            JsonHandlers.JsonHandlersIndex["/viewer/v2/json/pdiskinfo"] = JsonHandlers.JsonHandlersIndex["/viewer/pdiskinfo"];
-            JsonHandlers.JsonHandlersIndex["/viewer/v2/json/vdiskinfo"] = JsonHandlers.JsonHandlersIndex["/viewer/vdiskinfo"];
-            JsonHandlers.JsonHandlersIndex["/viewer/v2/json/storage"] = JsonHandlers.JsonHandlersIndex["/viewer/storage"];
-            JsonHandlers.JsonHandlersIndex["/viewer/v2/json/nodelist"] = JsonHandlers.JsonHandlersIndex["/viewer/nodelist"];
-            JsonHandlers.JsonHandlersIndex["/viewer/v2/json/tabletinfo"] = JsonHandlers.JsonHandlersIndex["/viewer/tabletinfo"];
-            JsonHandlers.JsonHandlersIndex["/viewer/v2/json/nodeinfo"] = JsonHandlers.JsonHandlersIndex["/viewer/nodeinfo"];
         }
     }
 

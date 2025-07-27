@@ -1,5 +1,6 @@
 #pragma once
 #include "viewer.h"
+#include <ydb/core/mon/mon.h>
 #include <ydb/core/viewer/json/json.h>
 #include <ydb/core/viewer/yaml/yaml.h>
 
@@ -33,12 +34,16 @@ public:
 struct TJsonHandlers {
     std::vector<TString> JsonHandlersList;
     THashMap<TString, std::shared_ptr<TJsonHandlerBase>> JsonHandlersIndex;
+    THashMap<TString, NActors::NAudit::EAuditableAction> RequestsMetaInfo;
     std::map<TString, int> Capabilities;
 
-    void AddHandler(const TString& name, TJsonHandlerBase* handler, int version = 1) {
+    void AddHandler(const TString& name, TJsonHandlerBase* handler, int version = 1, std::optional<NActors::NAudit::EAuditableAction> action = std::nullopt) {
         JsonHandlersList.push_back(name);
         JsonHandlersIndex[name] = std::shared_ptr<TJsonHandlerBase>(handler);
         Capabilities[name] = version;
+        if (action.has_value()) {
+            RequestsMetaInfo[name] = action.value();
+        }
     }
 
     TJsonHandlerBase* FindHandler(const TString& name) const {
@@ -55,6 +60,11 @@ struct TJsonHandlers {
             return 0;
         }
         return it->second;
+    }
+
+    void Redirect(const TString& from, const TString& to) {
+        JsonHandlersIndex[from] = JsonHandlersIndex[to];
+        RequestsMetaInfo[from] = RequestsMetaInfo[to];
     }
 };
 

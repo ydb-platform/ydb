@@ -1,6 +1,8 @@
 #include "profiler.h"
 #include "tcmalloc.h"
 
+#include <ydb/core/audit/audit_action.h>
+
 #include <ydb/library/services/services.pb.h>
 
 #include <ydb/library/actors/core/actorsystem.h>
@@ -371,5 +373,17 @@ namespace NActors {
             std::move(counters),
             std::move(dir),
             profiler ? std::move(profiler) : CreateProfiler());
+    }
+
+    NActors::NAudit::EAuditableAction ProfilerAuditResolver(const NMonitoring::IMonHttpRequest& request)
+    {
+        TString action = request.GetParams().Get("action");
+
+        if (action == "start") {
+            return NActors::NAudit::EAuditableAction::ProfilerStart;
+        } else if (action == "stop-display" || action == "stop-save" || action == "stop-log") {
+            return NActors::NAudit::EAuditableAction::ProfilerStop;
+        }
+        return NActors::NAudit::EAuditableAction::Unknown;
     }
 }

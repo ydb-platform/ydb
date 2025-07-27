@@ -192,7 +192,7 @@ public:
     NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr Event;
     THttpMonRequestContainer Container;
     TIntrusivePtr<TActorMonPage> ActorMonPage;
-    TAuditCtx AuditCtx;
+    NAudit::TAuditCtx AuditCtx;
 
     THttpMonLegacyActorRequest(NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr event, TIntrusivePtr<TActorMonPage> actorMonPage)
         : Event(std::move(event))
@@ -209,7 +209,9 @@ public:
             return ReplyOptionsAndPassAway();
         }
 
-        AuditCtx.InitAudit(Event);
+        auto action = ActorMonPage->AuditableResolver(Container);
+        AuditCtx.InitAudit(Event, action);
+
         Become(&THttpMonLegacyActorRequest::StateFunc);
         if (ActorMonPage->Authorizer) {
             NActors::IEventHandle* handle = ActorMonPage->Authorizer(SelfId(), Container);
@@ -896,6 +898,7 @@ NMonitoring::IMonPage* TAsyncHttpMon::RegisterActorPage(TRegisterActorPageFields
         fields.ActorId,
         fields.AllowedSIDs ? fields.AllowedSIDs : Config.AllowedSIDs,
         fields.UseAuth ? Config.Authorizer : TRequestAuthorizer(),
+        fields.AuditableResolver ? fields.AuditableResolver : DefaultActorPageAuditableResolver,
         fields.MonServiceName);
     if (fields.Index) {
         fields.Index->Register(page);

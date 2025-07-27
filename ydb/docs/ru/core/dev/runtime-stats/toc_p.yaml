@@ -3,8 +3,8 @@ items:
   href: how-to-get.md
 - name: Структура плана запроса
   href: structure.md
-- name: Агрегирование данных
-  href: basics.md
+- name: Визуализация метрик
+  href: metrics.md
 - name: Типовые проблемы и способы их решения
   href: troubleshooting.md
 - name: Федеративные аналитические запросы

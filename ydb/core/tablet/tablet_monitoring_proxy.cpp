@@ -218,6 +218,21 @@ TTabletMonitoringProxyActor::TTabletMonitoringProxyActor(TTabletMonitoringProxyC
 TTabletMonitoringProxyActor::~TTabletMonitoringProxyActor()
 {}
 
+static NActors::NAudit::EAuditableAction TabletAuditResolver(const NMonitoring::IMonHttpRequest& request) {
+    const TCgiParameters* cgi;
+    if (request.GetMethod() == HTTP_METHOD_POST && IsFormUrlencoded(request)) {
+        cgi = &request.GetPostParams();
+    } else {
+        cgi = &request.GetParams();
+    }
+    if (cgi->Has("KillTabletID")) {
+        return NActors::NAudit::EAuditableAction::KillTablet;
+    } else if (cgi->Has("RestartTabletID")) {
+        return NActors::NAudit::EAuditableAction::RestartTablet;
+    }
+    return NActors::NAudit::EAuditableAction::Unknown;
+}
+
 ////////////////////////////////////////////
 void
 TTabletMonitoringProxyActor::Bootstrap(const TActorContext &ctx) {
@@ -226,7 +241,7 @@ TTabletMonitoringProxyActor::Bootstrap(const TActorContext &ctx) {
     NActors::TMon* mon = AppData(ctx)->Mon;
 
     if (mon) {
-        mon->RegisterActorPage(nullptr, "tablets", "Tablets", false, ctx.ExecutorThread.ActorSystem, ctx.SelfID);
+        mon->RegisterActorPage(nullptr, "tablets", "Tablets", false, ctx.ExecutorThread.ActorSystem, ctx.SelfID, true, true, TabletAuditResolver);
     }
 }
 

@@ -131,6 +131,7 @@
 #include <library/cpp/svnversion/svnversion.h>
 #include <library/cpp/malloc/api/malloc.h>
 
+#include <ydb/core/util/failure_injection.h>
 #include <ydb/core/util/sig.h>
 
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
@@ -1344,7 +1345,10 @@ void TKikimrRunner::InitializeActorSystem(
                 "Failure Injection",
                 false,
                 ActorSystem.Get(),
-                MakeBlobStorageFailureInjectionID(runConfig.NodeId));
+                MakeBlobStorageFailureInjectionID(runConfig.NodeId),
+                true,
+                true,
+                FailureInjectionAuditResolver);
         }
 
         Monitoring->RegisterActorPage(

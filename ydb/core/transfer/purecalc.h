@@ -48,6 +48,7 @@ public:
 
     const TVector<NKikimrKqp::TKqpColumnMetadataProto>& GetTableColumns() const;
     const TVector<NKikimrKqp::TKqpColumnMetadataProto>& GetStructColumns() const;
+    size_t GetTargetTableIndex() const;
 
 private:
     const TScheme::TPtr TableScheme;

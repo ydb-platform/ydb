@@ -20,6 +20,10 @@ const TVector<NKikimrKqp::TKqpColumnMetadataProto>& TMessageOutputSpec::GetStruc
     return TableScheme->StructMetadata;
 }
 
+size_t TMessageOutputSpec::GetTargetTableIndex() const {
+    return TableScheme->TargetTableIndex;
+}
+
 namespace {
 
 using namespace NYql::NPureCalc;
@@ -45,8 +49,9 @@ public:
         with_lock(WorkerHolder_->GetScopedAlloc()) {
             Out.Data.clear();
 
-            NYql::NUdf::TUnboxedValue value;
+            const auto targetTableIndex = OutputSpec.GetTargetTableIndex();
 
+            NYql::NUdf::TUnboxedValue value;
             if (!WorkerHolder_->GetOutputIterator().Next(value)) {
                 return nullptr;
             }
@@ -57,7 +62,7 @@ public:
             for (size_t i = 0; i < columns.size(); ++i) {
                 const auto& column = columns[i];
                 const auto e = Out.Value.GetElement(i);
-                if (column.name() == SystemColumns::TargetTable) {
+                if (i == targetTableIndex) {
                     if (e) {
                         auto opt = e.GetOptionalValue();
                         if (opt) {

@@ -963,10 +963,9 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
     }
 
     ui64 GetBalancerTabletId(TTopicSdkTestSetup& setup, const TString& topicPath) {
-        auto pathDescr = setup.GetServer().AnnoyingClient->Describe(&setup.GetRuntime(), topicPath).GetPathDescription().GetPersQueueGroup();
-;
-        auto balancerTabletId = pathDescr.GetBalancerTabletID();
-        Cerr << ">>>>> BalancerTabletID=" << balancerTabletId << Endl << Flush;
+        auto pathDescr = setup.GetServer().AnnoyingClient->Describe(&setup.GetRuntime(), topicPath, Tests::SchemeRoot, true);
+        auto balancerTabletId = pathDescr.GetPathDescription().GetPersQueueGroup().GetBalancerTabletID();
+        Cerr << ">>>>> TopicPath=" << topicPath << " BalancerTabletID=" << balancerTabletId << " describe=" << pathDescr.DebugString() << Endl;
         UNIT_ASSERT(balancerTabletId);
         return balancerTabletId;
     }

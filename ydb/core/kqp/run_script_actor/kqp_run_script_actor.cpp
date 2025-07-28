@@ -310,13 +310,10 @@ private:
     }
 
     // Event in case of error in registering script in database
-    // or expired / failed script finalization
+    // Just pass away, because we have not started execution.
     void Handle(NActors::TEvents::TEvPoison::TPtr&) {
-        if (RunState == ERunState::Created) {
-            PassAway();
-        } else {
-            CancelRunningQuery();
-        }
+        Y_ABORT_UNLESS(RunState == ERunState::Created);
+        PassAway();
     }
 
     bool ShouldSaveResult(size_t resultSetId) const {

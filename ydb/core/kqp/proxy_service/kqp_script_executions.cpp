@@ -1054,6 +1054,7 @@ class TCheckLeaseStatusActorBase : public TActorBootstrapped<TCheckLeaseStatusAc
     using TBase = TActorBootstrapped<TCheckLeaseStatusActorBase>;
 
     inline static const TDuration CHECK_ALIVE_REQUEST_TIMEOUT = TDuration::Seconds(60);
+    inline static const ui64 MAX_CHECK_ALIVE_RETRIES = 100;
 
 public:
     TCheckLeaseStatusActorBase(const TString& operationName, const TString& database, const TString& executionId,
@@ -1101,12 +1102,12 @@ public:
         SetupFinalizeRequest(EFinalizationStatus::FS_ROLLBACK, Ydb::StatusIds::UNAVAILABLE, Ydb::Query::EXEC_STATUS_ABORTED, NYql::TIssues{ NYql::TIssue("Lease expired") }, leaseGeneration);
         Schedule(CHECK_ALIVE_REQUEST_TIMEOUT, new TEvents::TEvWakeup());
 
-        ui64 flags = IEventHandle::FlagTrackDelivery;
+        CheckAliveFlags = IEventHandle::FlagTrackDelivery;
         if (runScriptActorId.NodeId() != SelfId().NodeId()) {
-            flags |= IEventHandle::FlagSubscribeOnSession;
+            CheckAliveFlags |= IEventHandle::FlagSubscribeOnSession;
             SubscribedOnSession = runScriptActorId.NodeId();
         }
-        Send(runScriptActorId, new TEvCheckAliveRequest(), flags);
+        Send(runScriptActorId, new TEvCheckAliveRequest(), CheckAliveFlags);
 
         Become(&TCheckLeaseStatusActorBase::StateFunc);
     }
@@ -1162,7 +1163,7 @@ private:
     }
 
     void RunScriptFinalizeRequest() {
-        if (WaitFinishQuery) {
+        if (WaitFinishQuery || LeaseVerified) {
             return;
         }
 
@@ -1171,26 +1172,56 @@ private:
         FinalExecStatus = ScriptFinalizeRequest->Description.ExecStatus;
         FinalIssues = ScriptFinalizeRequest->Description.Issues;
         Send(MakeKqpFinalizeScriptServiceId(SelfId().NodeId()), ScriptFinalizeRequest.release());
-        Send(RunScriptActorId, new TEvents::TEvPoison());  // Try to shutdown TRunScriptActor if it still running
+    }
+
+    bool RetryCheckAlive() {
+        CheckAliveRetries++;
+
+        if (WaitFinishQuery || LeaseVerified) {
+            // Already finished checks
+            return false;
+        }
+
+        if (CheckAliveRetries >= MAX_CHECK_ALIVE_RETRIES) {
+            KQP_PROXY_LOG_E("Retry limit exceeded for TRunScriptActor check alive, start finalization");
+            RunScriptFinalizeRequest();
+            return false;
+        }
+
+        Send(RunScriptActorId, new TEvCheckAliveRequest(), CheckAliveFlags);
+        return true;
     }
 
     void Handle(TEvCheckAliveResponse::TPtr&) {
-        OnLeaseVerified();
+        if (WaitFinishQuery) {
+            KQP_PROXY_LOG_E("Script execution lease was verified after started finalization");
+        } else if (!LeaseVerified) {
+            LeaseVerified = true;
+            OnLeaseVerified();
+        }
     }
 
     void Handle(TEvents::TEvWakeup::TPtr&) {
-        KQP_PROXY_LOG_W("TRunScriptActor is unavailable, start finalization");
-        RunScriptFinalizeRequest();
+        KQP_PROXY_LOG_W("Deliver TRunScriptActor check alive request timeout, retry check alive");
+        if (RetryCheckAlive()) {
+            Schedule(CHECK_ALIVE_REQUEST_TIMEOUT, new TEvents::TEvWakeup());
+        }
     }
 
-    void Handle(TEvents::TEvUndelivered::TPtr&) {
-        KQP_PROXY_LOG_W("Got delivery problem to node with TRunScriptActor, start finalization");
-        RunScriptFinalizeRequest();
+    void Handle(TEvents::TEvUndelivered::TPtr& ev) {
+        const auto reason = ev->Get()->Reason;
+        if (reason == TEvents::TEvUndelivered::ReasonActorUnknown) {
+            KQP_PROXY_LOG_W("TRunScriptActor not found, start finalization");
+            RunScriptFinalizeRequest();
+        } else {
+            KQP_PROXY_LOG_W("Got delivery problem to node with TRunScriptActor, reason: " << reason);
+            RetryCheckAlive();
+        }
     }
 
     void Handle(TEvInterconnect::TEvNodeDisconnected::TPtr&) {
-        KQP_PROXY_LOG_W("Node with TRunScriptActor was disconnected, start finalization");
-        RunScriptFinalizeRequest();
+        KQP_PROXY_LOG_W("Node with TRunScriptActor was disconnected, retry check alive");
+        RetryCheckAlive();
     }
 
     void Handle(TEvScriptExecutionFinished::TPtr& ev) {
@@ -1222,7 +1253,10 @@ private:
     NYql::TIssues FinalIssues;
 
     bool WaitFinishQuery = false;
+    bool LeaseVerified = false;
     std::optional<ui32> SubscribedOnSession;
+    ui64 CheckAliveFlags = 0;
+    ui64 CheckAliveRetries = 0;
     TActorId RunScriptActorId;
 
 protected:

@@ -257,32 +257,32 @@ public:
 class TTopic : public TSchemeObjectDescriber<NKikimrSchemeOp::TPersQueueGroupDescription,
                                              Ydb::Topic::CreateTopicRequest> {
 private:
-class TConsumer : public TObjectDescriber<NKikimrPQ::TPQTabletConfig::TConsumer,
-                                          Ydb::Topic::Consumer> {
-public:
-    TConsumer(ui64 number, bool important = false) {
-        google::protobuf::TextFormat::ParseFromString(Sprintf(ConsumerScheme, number), &Scheme);
-        google::protobuf::TextFormat::ParseFromString(Sprintf(ConsumerPublic, number), &Public);
-        Scheme.SetImportant(important);
-        if (important) 
-            Public.set_important(important);
-    }
-
-private:
-    const char* ConsumerScheme = R"(
-        Name: "Consumer_%d"
-    )";
-
-    const char* ConsumerPublic = R"(
-        name: "Consumer_%d"
-        read_from {
+    class TConsumer : public TObjectDescriber<NKikimrPQ::TPQTabletConfig::TConsumer,
+                                            Ydb::Topic::Consumer> {
+    public:
+        TConsumer(ui64 number, bool important = false) {
+            google::protobuf::TextFormat::ParseFromString(Sprintf(ConsumerScheme, number), &Scheme);
+            google::protobuf::TextFormat::ParseFromString(Sprintf(ConsumerPublic, number), &Public);
+            Scheme.SetImportant(important);
+            if (important) 
+                Public.set_important(important);
         }
-        attributes {
-            key: "_service_type"
-            value: "data-streams"
-        }
-    )";
-};
+
+    private:
+        const char* ConsumerScheme = R"(
+            Name: "Consumer_%d"
+        )";
+
+        const char* ConsumerPublic = R"(
+            name: "Consumer_%d"
+            read_from {
+            }
+            attributes {
+                key: "_service_type"
+                value: "data-streams"
+            }
+        )";
+    };
 
 public:
     TTopic(ui64 number, ui64 countConsumers = 0) 

@@ -262,7 +262,7 @@ public:
             return (*cacheVal);
         }
 
-        static std::array<TString, RTS_MAX> requestTypeName {
+        static std::array<TString, RTS_MAX> requestTypeNames {
             "CreateQuery",
             "ListQueries",
             "DescribeQuery",
@@ -289,7 +289,7 @@ public:
         auto scopeCounters = Counters
                                  ->GetSubgroup("cloud_id", cloudId)
                                  ->GetSubgroup("scope", scope);
-        auto scopeRequests = MakeIntrusive<TRequestScopeCounters>(requestTypeName[type]);
+        auto scopeRequests = MakeIntrusive<TRequestScopeCounters>(requestTypeNames[type]);
         scopeRequests->Register(scopeCounters);
         cacheVal = scopeRequests;
 

@@ -1129,7 +1129,7 @@ TStatus AnnotateOlapProjections(const TExprNode::TPtr& node, TExprContext& ctx) 
 
     // For each `Projection` we want to replace a type annotation for column
     // which associated with a `Projection`.
-    // For example: JsonDocumnet -> JsonValue.
+    // For example: JsonDocument -> UTF8.
     THashMap<TString, const TTypeAnnotationNode*> projectionsTypes;
     const auto* projections = node->Child(TKqpOlapProjections::idx_Projections);
     for (const auto& expr : TExprBase(projections).Cast<TExprList>()) {
@@ -1142,14 +1142,22 @@ TStatus AnnotateOlapProjections(const TExprNode::TPtr& node, TExprContext& ctx) 
         projectionsTypes.emplace(TString(projection.ColumnName()), projectionTypeAnn);
     }
 
+    THashSet<TString> takenColumns;
     TVector<const TItemExprType*> newItemTypes;
     const auto* originalStructType = inputType->Cast<TStructExprType>();
     for (const auto* originalItemType : originalStructType->GetItems()) {
         const auto& itemName = originalItemType->GetName();
         if (projectionsTypes.contains(itemName)) {
             newItemTypes.push_back(ctx.MakeType<TItemExprType>(itemName, projectionsTypes[itemName]));
+            takenColumns.insert(TString(itemName));
         } else {
             newItemTypes.push_back(originalItemType);
+        }
+    }
+
+    for (const auto &projectionType : projectionsTypes) {
+        if (!takenColumns.contains(projectionType.first)) {
+            newItemTypes.push_back(ctx.MakeType<TItemExprType>(projectionType.first, projectionType.second));
         }
     }
 

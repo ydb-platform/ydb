@@ -2,13 +2,13 @@
 
 ## Spilling concept
 
-**Spilling** is a memory management mechanism that temporarily offloads data exceeding available RAM capacity to external storage. This allows operations to continue without crashes and efficiently utilizes resources under memory constraints.
+**Spilling** is a memory management mechanism that temporarily offloads data exceeding available cluster RAM capacity to external storage. Spilling enables execution of user queries that require processing large data volumes exceeding available RAM.
 
 In data processing systems, including {{ ydb-short-name }}, spilling is essential for:
 
-- processing data volumes that exceed available RAM;
-- preventing "Out of Memory" (OOM) errors;
-- stable operation under peak loads and unpredictable memory usage scenarios.
+- processing queries with large data volumes when intermediate results don't fit in RAM;
+- executing complex analytical operations (aggregations, sorting, table joins) over large datasets;
+- optimizing query performance through intermediate materialization of part of the data in external memory, which in certain scenarios can accelerate overall execution time.
 
 ## Spilling principles
 
@@ -31,7 +31,7 @@ When memory usage approaches the limit, the system:
 
 ### Spilling architecture in {{ ydb-short-name }}
 
-The spilling mechanism in {{ ydb-short-name }} includes two main levels: backend - a service for storing data in external storage, and frontend - components that interact with this service and manage memory.
+The spilling mechanism in {{ ydb-short-name }} includes two main levels: backend - a service for storing data in external storage, and frontend - components that interact with this service and manage memory. Currently disk is used as external storage.
 
 #### Spilling Service
 

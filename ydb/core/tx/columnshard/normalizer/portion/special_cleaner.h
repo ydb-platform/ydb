@@ -13,7 +13,7 @@ public:
     class IAction {
     public:
         virtual TConclusionStatus ApplyOnExecute(NIceDb::TNiceDb& db) const = 0;
-        ~IAction() = default;
+        virtual ~IAction() = default;
     };
 
 private:

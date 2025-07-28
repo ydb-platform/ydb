@@ -42,7 +42,7 @@ private:
     ui32 ChunkIdx;
 
 public:
-    TDeleteChunksV1(ui64 pathId, ui64 portionId, ui64 ssColumnId, ui64 chunkIdx)
+    TDeleteChunksV1(ui64 pathId, ui64 portionId, ui32 ssColumnId, ui32 chunkIdx)
         : PathId(pathId)
         , PortionId(portionId)
         , SSColumnId(ssColumnId)
@@ -71,7 +71,6 @@ public:
     }
 
     virtual TConclusionStatus ApplyOnExecute(NIceDb::TNiceDb& db) const override {
-        db.Table<NColumnShard::Schema::IndexColumnsV2>().Key(PathId, PortionId).Delete();
         auto rowset = db.Table<NColumnShard::Schema::IndexColumnsV2>().Key(PathId, PortionId).Select();
         if (!rowset.IsReady()) {
             return TConclusionStatus::Fail("Not ready");
@@ -195,7 +194,7 @@ std::optional<std::vector<std::shared_ptr<TDeleteTrashImpl::IAction>>> TDeleteTr
             return std::nullopt;
         }
         while (!rowset.EndOfSet()) {
-            if (columnIdsToDelete.contains(rowset.GetValue<Schema::IndexColumns::ColumnIdx>())) {
+            if (columnIdsToDelete.contains(rowset.GetValue<Schema::IndexColumnsV1::SSColumnId>())) {
                 actions.emplace_back(std::make_shared<TDeleteChunksV1>(rowset.GetValue<Schema::IndexColumnsV1::PathId>(),
                     rowset.GetValue<Schema::IndexColumnsV1::PortionId>(), rowset.GetValue<Schema::IndexColumnsV1::SSColumnId>(),
                     rowset.GetValue<Schema::IndexColumnsV1::ChunkIdx>()));

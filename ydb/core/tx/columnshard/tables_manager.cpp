@@ -292,7 +292,7 @@ bool TTablesManager::HasTable(
 }
 
 TInternalPathId TTablesManager::GetOrCreateInternalPathId(const TSchemeShardLocalPathId schemeShardLocalPathId) {
-    if (const auto& internalPathId = ResolveInternalPathId(schemeShardLocalPathId)) {
+    if (const auto& internalPathId = ResolveInternalPathId(schemeShardLocalPathId, true)) {
         return *internalPathId;
     }
     if (GenerateInternalPathId) {
@@ -498,7 +498,7 @@ bool TTablesManager::TryFinalizeDropPathOnComplete(const TInternalPathId pathId)
 void TTablesManager::MoveTablePropose(const TSchemeShardLocalPathId schemeShardLocalPathId) {
     NActors::TLogContextGuard gLogging =
         NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("scheme_shard_local_path_id", schemeShardLocalPathId);
-    const auto& internalPathId = ResolveInternalPathId(schemeShardLocalPathId);
+    const auto& internalPathId = ResolveInternalPathId(schemeShardLocalPathId, true);
     AFL_VERIFY(internalPathId);
     AFL_VERIFY(RenamingLocalToInternal.emplace(schemeShardLocalPathId, *internalPathId).second)("internal_path_id", internalPathId);
     AFL_VERIFY(SchemeShardLocalToInternal.erase(schemeShardLocalPathId));
@@ -508,7 +508,7 @@ void TTablesManager::MoveTableProgress(
     NIceDb::TNiceDb& db, const TSchemeShardLocalPathId oldSchemeShardLocalPathId, const TSchemeShardLocalPathId newSchemeShardLocalPathId) {
     NActors::TLogContextGuard gLogging = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD) ("event", "move_table_progress")(
         "old_path_id", oldSchemeShardLocalPathId)("new_path_id", newSchemeShardLocalPathId);
-    AFL_VERIFY(!ResolveInternalPathId(newSchemeShardLocalPathId));
+    AFL_VERIFY(!ResolveInternalPathId(newSchemeShardLocalPathId, true));
     const auto* pInternalPathId = RenamingLocalToInternal.FindPtr(oldSchemeShardLocalPathId);
     AFL_VERIFY(pInternalPathId);
     const auto internalPathId = *pInternalPathId;

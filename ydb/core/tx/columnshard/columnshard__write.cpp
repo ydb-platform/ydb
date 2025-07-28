@@ -437,7 +437,7 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
     }
 
     const auto schemeShardLocalPathId = TSchemeShardLocalPathId::FromProto(operation.GetTableId());
-    const auto& internalPathId = TablesManager.ResolveInternalPathId(schemeShardLocalPathId);
+    const auto& internalPathId = TablesManager.ResolveInternalPathId(schemeShardLocalPathId, false);
     AFL_VERIFY(internalPathId);
     const auto& pathId = TUnifiedPathId::BuildValid(*internalPathId, schemeShardLocalPathId);
     if (!TablesManager.IsReadyForStartWrite(*internalPathId, false)) {

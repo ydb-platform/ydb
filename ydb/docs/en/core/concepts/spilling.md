@@ -2,7 +2,7 @@
 
 ## Spilling concept
 
-**Spilling** is a memory management mechanism that temporarily offloads data exceeding available RAM capacity to disk. This allows operations to continue without crashes and efficiently utilizes resources under memory constraints.
+**Spilling** is a memory management mechanism that temporarily offloads data exceeding available RAM capacity to external storage. This allows operations to continue without crashes and efficiently utilizes resources under memory constraints.
 
 In data processing systems, including {{ ydb-short-name }}, spilling is essential for:
 
@@ -17,12 +17,12 @@ In data processing systems, including {{ ydb-short-name }}, spilling is essentia
 Spilling operates based on the memory hierarchy principle:
 
 1. **Random Access Memory (RAM)** — fast but limited resource.
-2. **Disk storage** — slower but capacious.
+2. **External storage** — slower but more capacious.
 
 When memory usage approaches the limit, the system:
 
 - serializes part of the data;
-- saves it to temporary disk files;
+- saves it to external storage;
 - frees the corresponding memory;
 - when necessary — loads data back into memory to continue computations.
 
@@ -31,7 +31,7 @@ When memory usage approaches the limit, the system:
 
 ### Spilling architecture in {{ ydb-short-name }}
 
-The spilling mechanism in {{ ydb-short-name }} includes two main levels: backend - a service for storing data on disk, and frontend - components that interact with this service and manage memory.
+The spilling mechanism in {{ ydb-short-name }} includes two main levels: backend - a service for storing data in external storage, and frontend - components that interact with this service and manage memory.
 
 #### Spilling Service
 

@@ -53,7 +53,13 @@ SELECT * FROM ydb_datasource.<table_name>
 1. {% include [!](_includes/supported_requests.md) %}
 1. {% include [!](_includes/predicate_pushdown_preamble.md) %}
 
-   {% include [!](_includes/predicate_pushdown_examples.md) %}
+    |Описание|Пример|Примечание|
+    |---|---|---|
+    |Фильтров вида `IS NULL`/`IS NOT NULL`|`WHERE column1 IS NULL` или `WHERE column1 IS NOT NULL`||
+    |Логических условий `OR`, `NOT`, `AND`. |`WHERE column1 IS NULL OR column2 is NOT NULL`.||
+    |Условий сравнения `=`, `<>`, `<`, `<=`, `>`, `>=` c другими колонками или константами. |`WHERE column1 > column2 OR column3 <= 10`.||
+    |Оператора сопоставления строк с образцом `LIKE`.|`WHERE column1 LIKE '_abc%'`|В настоящее время поддерживается пушдаун только простых паттернов, основанных на префиксах (`'abc_'`, `'abc%'`), суффиксах (`'_abc'`, `'%abc'`) или их комбинации (`'_abc_'`, `'%abc%'`, `'_abc%'`, `'%abc_'`). |
+    |Оператора сопоставления строк с образцом `REGEXP`.|`WHERE column1 REGEXP '.*abc.*'`||
 
     Поддерживаемые типы данных для пушдауна фильтров:
 

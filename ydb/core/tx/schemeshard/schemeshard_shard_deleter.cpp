@@ -12,9 +12,11 @@ void TShardDeleter::Shutdown(const NActors::TActorContext &ctx) {
 }
 
 void TShardDeleter::SendDeleteRequests(TTabletId hiveTabletId,
-                                       const THashSet<TShardIdx> &shardsToDelete,
-                                       const THashMap<NKikimr::NSchemeShard::TShardIdx, NKikimr::NSchemeShard::TShardInfo>& shardsInfos,
-                                       const NActors::TActorContext &ctx) {
+        const THashSet<TShardIdx> &shardsToDelete,
+        const THashMap<NKikimr::NSchemeShard::TShardIdx,
+        NKikimr::NSchemeShard::TShardInfo>& shardsInfos,
+        const NActors::TActorContext &ctx
+    ) {
     if (shardsToDelete.empty())
         return;
 
@@ -28,10 +30,7 @@ void TShardDeleter::SendDeleteRequests(TTabletId hiveTabletId,
 
     for (auto shardIdx : shardsToDelete) {
         ShardHive[shardIdx] = hiveTabletId;
-        // !HACK: use shardIdx as  TxId because Hive only replies with TxId
-        // TODO: change hive events to get rid of this hack
-        // svc@ in progress fixing it
-        TAutoPtr<TEvHive::TEvDeleteTablet> event = new TEvHive::TEvDeleteTablet(shardIdx.GetOwnerId(), ui64(shardIdx.GetLocalId()), ui64(shardIdx.GetLocalId()));
+        TAutoPtr<TEvHive::TEvDeleteTablet> event = new TEvHive::TEvDeleteTablet(shardIdx.GetOwnerId(), ui64(shardIdx.GetLocalId()), /* TxId_Deprecated */ 0);
         auto itShard = shardsInfos.find(shardIdx);
         if (itShard != shardsInfos.end()) {
             TTabletId shardTabletId = itShard->second.TabletID;

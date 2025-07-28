@@ -689,6 +689,7 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
 
         auto asyncCA = CreateTestAsyncCA(task);
         ActorSystem.EnableScheduleForActor(asyncCA, true);
+        ActorSystem.GrabEdgeEvent<TEvDqCompute::TEvState>(EdgeActor);
 
         ui32 val = 0;
         TMaybe<TInstant> expectedWatermark;

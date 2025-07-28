@@ -352,6 +352,7 @@ struct TEnvironmentSetup {
     void SetupLogging() {
         Runtime->SetLogPriority(NKikimrServices::BS_HULLCOMP, NLog::PRI_NOTICE);
         Runtime->SetLogPriority(NKikimrServices::BS_VDISK_SCRUB, NLog::PRI_NOTICE);
+        Runtime->SetLogPriority(NKikimrServices::BS_VDISK_DEFRAG, NLog::PRI_INFO);
 
         auto prio = NLog::PRI_ERROR;
         Runtime->SetLogPriority(NKikimrServices::TABLET_MAIN, prio);
@@ -1040,14 +1041,9 @@ struct TEnvironmentSetup {
         return SyncQueryFactory<TResult>(actorId, [&] { return std::make_unique<TQuery>(args...); });
     }
 
-<<<<<<< HEAD
     ui64 AggregateVDiskCounters(TString storagePool, ui32 nodesCount, ui32 groupSize, ui32 groupId,
-            const std::vector<ui32>& pdiskLayout, TString subsystem, TString counter, bool derivative = false) {
-=======
-    ui64 AggregateVDiskCountersBase(TString storagePool, ui32 nodesCount, ui32 groupSize, ui32 groupId,
-            const std::vector<ui32>& pdiskLayout, TString subsgroupName, TString subgroupValue,  TString counter,
+            const std::vector<ui32>& pdiskLayout, TString subsystem, TString counter,
             std::unordered_map<TString, TString> labels = {}, bool derivative = false) {
->>>>>>> 805a78e2012 (Independence between compaction and defragmentation)
         ui64 ctr = 0;
 
         for (ui32 nodeId = 1; nodeId <= nodesCount; ++nodeId) {
@@ -1065,15 +1061,7 @@ struct TEnvironmentSetup {
                         GetSubgroup("orderNumber", orderNumber)->
                         GetSubgroup("pdisk", pdisk)->
                         GetSubgroup("media", "rot")->
-<<<<<<< HEAD
-                        GetSubgroup("subsystem", subsystem)->
-                        GetCounter(counter, derivative)->Val();
-            }
-        }
-        return ctr;
-    };
-=======
-                        GetSubgroup(subsgroupName, subgroupValue);
+                        GetSubgroup("subsystem", subsystem);
                 for (const auto& [label, value] : labels) {
                     cntr = cntr->GetSubgroup(label, value);
                 }
@@ -1082,20 +1070,6 @@ struct TEnvironmentSetup {
         }
         return ctr;
     }
-
-    ui64 AggregateVDiskCounters(TString storagePool, ui32 nodesCount, ui32 groupSize, ui32 groupId,
-        const std::vector<ui32>& pdiskLayout, TString subsystem, TString counter,
-        std::unordered_map<TString, TString> labels = {}, bool derivative = false) {
-        return AggregateVDiskCountersBase(storagePool, nodesCount, groupSize, groupId, pdiskLayout,
-            "subsystem", subsystem, counter, labels, derivative);
-    }
-
-    ui64 AggregateVDiskCountersWithHandleClass(TString storagePool, ui32 nodesCount, ui32 groupSize, ui32 groupId,
-        const std::vector<ui32>& pdiskLayout, TString handleclass, TString counter) {
-        return AggregateVDiskCountersBase(storagePool, nodesCount, groupSize, groupId, pdiskLayout, 
-            "handleclass", handleclass, counter);
-    }
->>>>>>> 805a78e2012 (Independence between compaction and defragmentation)
 
     void SetIcbControl(ui32 nodeId, TString controlName, ui64 value) {
         if (nodeId == 0) {

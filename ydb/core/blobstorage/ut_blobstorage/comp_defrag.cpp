@@ -3,6 +3,7 @@
 #include <ydb/core/load_test/service_actor.h>
 #include <ydb/core/util/lz4_data_generator.h>
 #include <ydb/core/blobstorage/vdisk/defrag/defrag_search.h>
+#include <ydb/core/blobstorage/vdisk/defrag/defrag_quantum.h>
 
 #include <library/cpp/protobuf/util/pb_io.h>
 
@@ -148,6 +149,7 @@ Y_UNIT_TEST_SUITE(CompDefrag) {
 
         ui64 bytesWrittenSmall = 0, bytesWrittenLarge = 0;
         std::unordered_map<ui32, ui32> compactionsPerNode;
+        std::unordered_map<ui32, ui32> chunksFreedByDefragPerNode;
         std::unordered_set<std::pair<ui32, ui32>> seenParts;
         ui64 compactionBytesWritten = 0;
         env.Env.Runtime->FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
@@ -181,6 +183,18 @@ Y_UNIT_TEST_SUITE(CompDefrag) {
                 }
                 case TEvBlobStorage::EvCompactVDiskResult: {
                     Cerr << nodeId << " : " << "EvCompactVDiskResult" << Endl;
+                    break;
+                }
+                case NKikimr::TEvDefragQuantumResult::EventType: {
+                    auto res = ev->Get<NKikimr::TEvDefragQuantumResult>();
+                    chunksFreedByDefragPerNode[nodeId] += res->Stat.FreedChunks.size();
+                    Cerr << nodeId << " : " << "Defrag quantum result: "
+                        << "FoundChunksToDefrag: " << res->Stat.FoundChunksToDefrag
+                        << ", RewrittenRecs: " << res->Stat.RewrittenRecs
+                        << ", RewrittenBytes: " << res->Stat.RewrittenBytes
+                        << ", Eof: " << res->Stat.Eof
+                        << ", FreedChunks: " << res->Stat.FreedChunks.size()
+                        << Endl;
                     break;
                 }
             }
@@ -263,6 +277,9 @@ Y_UNIT_TEST_SUITE(CompDefrag) {
             for (const auto& [nodeId, count] : compactionsPerNode) {
                 UNIT_ASSERT_GE(count, 1);
                 Cerr << "Node " << nodeId << " had " << count << " compactions" << Endl;
+
+                ui32 chunksFreed = chunksFreedByDefragPerNode[nodeId];
+                UNIT_ASSERT_GE_C(count, chunksFreed / 10, "Node: " << nodeId << ", compactions: " << count << ", chunksFreed: " << chunksFreed);
             }
             Cerr << "Total compaction bytes written during deletion: " << metrics.CompactionBytesWritten - compactionBytesWritten << Endl
                 << "Amplification to lsm size: " << (metrics.CompactionBytesWritten - compactionBytesWritten) / float(metrics.DskSpaceCurInplacedData) << Endl;

@@ -92,7 +92,7 @@ table_service_config:
 
 Spilling activation is closely related to memory controller settings. Detailed `memory_controller_config` configuration is described in a [separate article](../../../reference/configuration/index.md#memory-controller-config).
 
-The key parameter for spilling is **`activities_limit_percent`**, which determines the amount of memory allocated for background activities. This parameter affects the available memory for user queries and, accordingly, the frequency of spilling activation.
+The key parameter for spilling is **`activities_limit_percent`**, which determines the amount of memory allocated for query processing activities. This parameter affects the available memory for user queries and, accordingly, the frequency of spilling activation.
 
 **Impact on spilling:**
 
@@ -225,13 +225,30 @@ table_service_config:
 
 ### Common Issues
 
-1. **Service not started...**
-    Attempt to enable spilling with disabled Spilling Service.
-    - Set `table_service_config.enable_query_service_spilling: true`
-    Read more about spilling architecture in the section [Spilling Architecture in {{ ydb-short-name }}](../../../concepts/spilling.md#spilling-architecture-in-ydb)
+1. **Spilling Service not started** / **Service not started**
 
-2. **Total size limit exceeded...**
-   - Increase `MaxTotalSize`
+   **Description:** Attempt to use spilling when Spilling Service is disabled.
+   
+   **Solution:**
+   - Enable spilling: `table_service_config.spilling_service_config.local_file_config.enable: true`
+   
+   Read more about spilling architecture in the section [Spilling Architecture in {{ ydb-short-name }}](../../../concepts/spilling.md#spilling-architecture-in-ydb)
+
+2. **Total size limit exceeded: X/YMb**
+
+   **Description:** Maximum total size of spilling files exceeded (parameter `max_total_size`).
+   
+   **Solution:**
+   - Increase `max_total_size` in configuration
+
+3. **Can not run operation**
+
+   **Description:** I/O thread pool operation queue overflow.
+   
+   **Solution:**
+   - Increase `queue_size` in `io_thread_pool`
+   - Increase `workers_count` for faster operation processing
+   - Check disk performance
 
 ## See Also
 

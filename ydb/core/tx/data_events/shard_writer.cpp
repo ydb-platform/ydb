@@ -4,6 +4,7 @@
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/tablet/tablet_pipe_client_cache.h>
+#include <util/system/mutex.h>
 
 
 namespace NKikimr::NEvWrite {
@@ -29,6 +30,7 @@ namespace NKikimr::NEvWrite {
         Counters->OnCSFailed(code);
         FailsCount.Inc();
         if (AtomicCas(&HasCodeFail, 1, 0)) {
+            TGuard<TMutex> guard(IssuesMutex);
             AFL_VERIFY(!Code);
             Issues.AddIssue(message);
             Code = code;

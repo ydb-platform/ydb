@@ -238,6 +238,8 @@ struct TRpcServices {
         EvStreamWriteRefreshToken,    // internal call, pair to EvRefreshToken
         EvRequestAuthAndCheck, // performs authorization and runs GrpcRequestCheckActor
         EvRequestAuthAndCheckResult,
+        EvTmpGetClusterAttributes,
+        EvTmpGetClusterAttributesResponse,
         // !!! DO NOT ADD NEW REQUEST !!!
     };
 
@@ -1814,6 +1816,16 @@ public:
     TInstant deadline = TInstant::Now() + TDuration::Seconds(10);
 
     inline static const TString EmptySerializedTokenMessage;
+};
+
+class TEvTmpGetClusterAttributes : public TEventLocal<TEvTmpGetClusterAttributes, TRpcServices::EvTmpGetClusterAttributes> {
+};
+
+class TEvTmpGetClusterAttributesResponse : public TEventLocal<TEvTmpGetClusterAttributesResponse, TRpcServices::EvTmpGetClusterAttributesResponse> {
+public:
+    bool Success = true;
+    TString ErrorMessage;
+    TVector<std::pair<TString, TString>> RootAttributes;
 };
 
 } // namespace NGRpcService

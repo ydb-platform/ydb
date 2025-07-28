@@ -4,6 +4,8 @@
 #include "msgbus_tabletreq.h"
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/security/secure_request.h>
+#include <ydb/core/grpc_services/grpc_request_check_actor.h>
+#include <ydb/core/grpc_services/base/base.h>
 
 namespace NKikimr {
 namespace NMsgBusProxy {
@@ -11,9 +13,63 @@ namespace NMsgBusProxy {
 template <typename TBase>
 class TMessageBusSecureRequest;
 
+template <class TBase, class TDerived>
+class TMessageBusDatabaseAttributesLoader : public TBase {
+public:
+    template <typename... Args>
+    TMessageBusDatabaseAttributesLoader(Args&&... args)
+        : TBase(std::forward<Args>(args)...)
+    {}
+
+    void Bootstrap(const TActorContext& ctx) {
+        if (AttributesAreLoaded) {
+            TBase::Bootstrap(ctx);
+        } else {
+            LoadClusterAttributes();
+            this->Become(&TMessageBusDatabaseAttributesLoader::LoadClusterAttributesStateFunc);
+        }
+    }
+
+    void LoadClusterAttributes() {
+        this->Send(NGRpcService::CreateGRpcRequestProxyId(), new NGRpcService::TEvTmpGetClusterAttributes());
+    }
+
+    void HandleClusterAttributes(NGRpcService::TEvTmpGetClusterAttributesResponse::TPtr& ev, const TActorContext& ctx) {
+        AttributesAreLoaded = true;
+        if (!ev->Get()->Success) {
+            TEvTicketParser::TError err;
+            err.Message = ev->Get()->ErrorMessage;
+            err.LogMessage = ev->Get()->ErrorMessage;
+            TDerived* self = static_cast<TDerived*>(this);
+            self->OnAccessDenied(err, ctx);
+            return;
+        }
+
+        const auto& rootAttributes = ev->Get()->RootAttributes;
+        TVector<TEvTicketParser::TEvAuthorizeTicket::TEntry> entries;
+        TVector<TEvTicketParser::TEvAuthorizeTicket::TEntry> clusterAccessCheckEntries = NGRpcService::GetEntriesForClusterAccessCheck(rootAttributes);
+        entries.insert(entries.end(), clusterAccessCheckEntries.begin(), clusterAccessCheckEntries.end());
+        if (!entries.empty()) {
+            TBase::SetEntries(entries);
+        }
+
+        Bootstrap(ctx);
+    }
+
+    STRICT_STFUNC(LoadClusterAttributesStateFunc,
+        HFunc(NGRpcService::TEvTmpGetClusterAttributesResponse, HandleClusterAttributes);
+    )
+
+private:
+    bool AttributesAreLoaded = false;
+    TString RootDatabase;
+};
+
 template <typename TDerived>
 class TMessageBusSecureRequest<TMessageBusServerRequestBase<TDerived>> : public
-        TSecureRequestActor<TMessageBusServerRequestBase<TMessageBusSecureRequest<TMessageBusServerRequestBase<TDerived>>>, TDerived> {
+        TMessageBusDatabaseAttributesLoader<TSecureRequestActor<TMessageBusServerRequestBase<TMessageBusSecureRequest<TMessageBusServerRequestBase<TDerived>>>, TDerived>, TDerived> {
+
+    using TSecureRequestBase = TMessageBusDatabaseAttributesLoader<TSecureRequestActor<TMessageBusServerRequestBase<TMessageBusSecureRequest<TMessageBusServerRequestBase<TDerived>>>, TDerived>, TDerived>;
 public:
     void OnAccessDenied(const TEvTicketParser::TError& error, const TActorContext& ctx) {
         TMessageBusServerRequestBase<TMessageBusSecureRequest<TMessageBusServerRequestBase<TDerived>>>::HandleError(
@@ -25,7 +81,7 @@ public:
 
     template <typename... Args>
     TMessageBusSecureRequest(Args&&... args)
-        : TSecureRequestActor<TMessageBusServerRequestBase<TMessageBusSecureRequest<TMessageBusServerRequestBase<TDerived>>>, TDerived>(std::forward<Args>(args)...)
+        : TSecureRequestBase(std::forward<Args>(args)...)
     {}
 
     template<typename T>
@@ -36,10 +92,14 @@ public:
 
 template <typename TDerived, typename TTabletReplyEvent, NKikimrServices::TActivity::EType Activity>
 class TMessageBusSecureRequest<TMessageBusSimpleTabletRequest<TDerived, TTabletReplyEvent, Activity>> :
-        public TSecureRequestActor<
+        public TMessageBusDatabaseAttributesLoader<TSecureRequestActor<
         TMessageBusSimpleTabletRequest<TDerived, TTabletReplyEvent, Activity>,
         TMessageBusSecureRequest<TMessageBusSimpleTabletRequest<TDerived, TTabletReplyEvent, Activity>>,
-        TMessageBusSimpleTabletRequest<TDerived, TTabletReplyEvent, Activity>> {
+        TMessageBusSimpleTabletRequest<TDerived, TTabletReplyEvent, Activity>>, TDerived> {
+    using TSecureRequestBase = TMessageBusDatabaseAttributesLoader<TSecureRequestActor<
+        TMessageBusSimpleTabletRequest<TDerived, TTabletReplyEvent, Activity>,
+        TMessageBusSecureRequest<TMessageBusSimpleTabletRequest<TDerived, TTabletReplyEvent, Activity>>,
+        TMessageBusSimpleTabletRequest<TDerived, TTabletReplyEvent, Activity>>, TDerived>;
 public:
     void HandleError(EResponseStatus status,  TEvTxUserProxy::TResultStatus::EStatus proxyStatus, const TActorContext &ctx) {
         HandleError(status, proxyStatus, TEvTxUserProxy::TResultStatus::Str(proxyStatus), ctx);
@@ -66,19 +126,21 @@ public:
 
     template <typename... Args>
     TMessageBusSecureRequest(Args&&... args)
-        : TSecureRequestActor<
-          TMessageBusSimpleTabletRequest<TDerived, TTabletReplyEvent, Activity>,
-          TMessageBusSecureRequest<TMessageBusSimpleTabletRequest<TDerived, TTabletReplyEvent, Activity>>,
-          TMessageBusSimpleTabletRequest<TDerived, TTabletReplyEvent, Activity>>(std::forward<Args>(args)...)
+        : TSecureRequestBase(std::forward<Args>(args)...)
     {}
 };
 
 template <typename TDerived, typename TTabletReplyEvent>
 class TMessageBusSecureRequest<TMessageBusTabletRequest<TDerived, TTabletReplyEvent>> :
-        public TSecureRequestActor<
-        TMessageBusTabletRequest<TDerived, TTabletReplyEvent>,
-        TMessageBusSecureRequest<TMessageBusTabletRequest<TDerived, TTabletReplyEvent>>,
-        TMessageBusTabletRequest<TDerived, TTabletReplyEvent>> {
+        public TMessageBusDatabaseAttributesLoader<TSecureRequestActor<
+            TMessageBusTabletRequest<TDerived, TTabletReplyEvent>,
+            TMessageBusSecureRequest<TMessageBusTabletRequest<TDerived, TTabletReplyEvent>>,
+        TMessageBusTabletRequest<TDerived, TTabletReplyEvent>>, TDerived> {
+
+    using TSecureRequestBase = TMessageBusDatabaseAttributesLoader<TSecureRequestActor<
+            TMessageBusTabletRequest<TDerived, TTabletReplyEvent>,
+            TMessageBusSecureRequest<TMessageBusTabletRequest<TDerived, TTabletReplyEvent>>,
+        TMessageBusTabletRequest<TDerived, TTabletReplyEvent>>, TDerived>;
 public:
     void HandleError(EResponseStatus status,  TEvTxUserProxy::TResultStatus::EStatus proxyStatus, const TActorContext &ctx) {
         HandleError(status, proxyStatus, TEvTxUserProxy::TResultStatus::Str(proxyStatus), ctx);
@@ -105,10 +167,7 @@ public:
 
     template <typename... Args>
     TMessageBusSecureRequest(Args&&... args)
-        : TSecureRequestActor<
-          TMessageBusTabletRequest<TDerived, TTabletReplyEvent>,
-          TMessageBusSecureRequest<TMessageBusTabletRequest<TDerived, TTabletReplyEvent>>,
-          TMessageBusTabletRequest<TDerived, TTabletReplyEvent>>(std::forward<Args>(args)...)
+        : TSecureRequestBase(std::forward<Args>(args)...)
     {}
 };
 

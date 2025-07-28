@@ -78,6 +78,25 @@ private:
     void HandleSchemeBoard(TSchemeBoardEvents::TEvNotifyDelete::TPtr& ev);
     void ReplayEvents(const TString& databaseName, const TActorContext& ctx);
 
+    void HandleGetAttributes(TEvTmpGetClusterAttributes::TPtr& ev) {
+        auto rootIt = Databases.find(RootDatabase);
+        if (rootIt == Databases.end() || !rootIt->second.IsDatabaseReady() || !rootIt->second.SchemeBoardResult) {
+            auto response = std::make_unique<TEvTmpGetClusterAttributesResponse>();
+            response->Success = false;
+            response->ErrorMessage = "Root database is not ready";
+            this->Send(ev->Sender, std::move(response), 0, ev->Cookie);
+            return;
+        }
+
+        auto response = std::make_unique<TEvTmpGetClusterAttributesResponse>();
+        const auto& schemeData = rootIt->second.SchemeBoardResult->DescribeSchemeResult;
+        response->RootAttributes.reserve(schemeData.GetPathDescription().UserAttributesSize());
+        for (const auto& attr : schemeData.GetPathDescription().GetUserAttributes()) {
+            response->RootAttributes.emplace_back(std::make_pair(attr.GetKey(), attr.GetValue()));
+        }
+        this->Send(ev->Sender, std::move(response), 0, ev->Cookie);
+    }
+
     void MaybeStartTracing(IRequestProxyCtx& ctx);
 
     static bool IsAuthStateOK(const IRequestProxyCtx& ctx);
@@ -595,6 +614,7 @@ void TGRpcRequestProxyImpl::StateFunc(TAutoPtr<IEventHandle>& ev) {
     bool handled = true;
     // handle internal events
     switch (ev->GetTypeRewrite()) {
+        hFunc(TEvTmpGetClusterAttributes, HandleGetAttributes);
         hFunc(TEvTxUserProxy::TEvGetProxyServicesResponse, HandleProxyService);
         hFunc(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse, HandleConfig);
         hFunc(NConsole::TEvConsole::TEvConfigNotificationRequest, HandleConfig);

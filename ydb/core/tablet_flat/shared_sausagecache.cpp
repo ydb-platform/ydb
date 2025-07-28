@@ -378,14 +378,14 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
 
         LOG_DEBUG_S(ctx, NKikimrServices::TABLET_SAUSAGECACHE, "Attach page collection " << pageCollectionId
             << " owner " << ev->Sender
-            << " cache mode " << msg->CacheMode);
+            << " cache tier " << msg->CacheTier);
 
         TCollection& collection = AttachCollection(pageCollectionId, pageCollection, ev->Sender);
-        switch (msg->CacheMode) {
-        case ECacheMode::Regular:
+        switch (msg->CacheTier) {
+        case ECacheTier::Regular:
             TryMoveToRegularCacheTier(collection, ev->Sender);
             break;
-        case ECacheMode::TryKeepInMemory:
+        case ECacheTier::TryKeepInMemory:
             TryMoveToTryKeepInMemoryCacheTier(collection, std::move(msg->PageCollection), ev->Sender);
             break;
         }

@@ -149,8 +149,8 @@ struct TSharedPageCacheMock {
         return *this;
     }
 
-    TSharedPageCacheMock& Attach(TActorId sender, TIntrusiveConstPtr<TPageCollectionMock> collection, ECacheMode cacheMode = ECacheMode::Regular) {
-        auto attach = new TEvAttach(collection, cacheMode);
+    TSharedPageCacheMock& Attach(TActorId sender, TIntrusiveConstPtr<TPageCollectionMock> collection, ECacheTier cacheTier = ECacheTier::Regular) {
+        auto attach = new TEvAttach(collection, cacheTier);
         Send(sender, attach);
 
         TWaitForFirstEvent<TEvAttach> waiter(Runtime);
@@ -1356,7 +1356,7 @@ Y_UNIT_TEST_SUITE(TSharedPageCache_Actor) {
         sharedCache.Collection1 = MakeIntrusiveConst<TPageCollectionMock>(1ul, 4u);
         ui64 collection1TotalSize = 4 * (104 + 10);
 
-        sharedCache.Attach(sharedCache.Sender1, sharedCache.Collection1, ECacheMode::TryKeepInMemory);
+        sharedCache.Attach(sharedCache.Sender1, sharedCache.Collection1, ECacheTier::TryKeepInMemory);
         sharedCache.CheckFetches({
             TFetch{40, sharedCache.Collection1, {0, 1, 2, 3}}
         });
@@ -1419,7 +1419,7 @@ Y_UNIT_TEST_SUITE(TSharedPageCache_Actor) {
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActiveLimitBytes->Val(), MemoryLimit);
 
         // load in-memory collection
-        sharedCache.Attach(sharedCache.Sender1, sharedCache.Collection1, ECacheMode::TryKeepInMemory);
+        sharedCache.Attach(sharedCache.Sender1, sharedCache.Collection1, ECacheTier::TryKeepInMemory);
         sharedCache.CheckFetches({
             TFetch{40, sharedCache.Collection1, {0, 1, 2, 3}}
         });
@@ -1462,7 +1462,7 @@ Y_UNIT_TEST_SUITE(TSharedPageCache_Actor) {
         ui64 collection1TotalSize = 6 * (104 + 10);
 
         // only 4 pages should be in memory cache
-        sharedCache.Attach(sharedCache.Sender1, sharedCache.Collection1, ECacheMode::TryKeepInMemory);
+        sharedCache.Attach(sharedCache.Sender1, sharedCache.Collection1, ECacheTier::TryKeepInMemory);
         sharedCache.CheckFetches({
             TFetch{60, sharedCache.Collection1, {0, 1, 2, 3, 4, 5}}
         });
@@ -1500,7 +1500,7 @@ Y_UNIT_TEST_SUITE(TSharedPageCache_Actor) {
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->TryKeepInMemoryBytes->Val(), 0);
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActiveLimitBytes->Val(), MemoryLimit);
 
-        sharedCache.Attach(sharedCache.Sender1, sharedCache.Collection1, ECacheMode::TryKeepInMemory);
+        sharedCache.Attach(sharedCache.Sender1, sharedCache.Collection1, ECacheTier::TryKeepInMemory);
         sharedCache.CheckFetches({
             TFetch{30, sharedCache.Collection1, {0, 1, 3}}
         });
@@ -1540,7 +1540,7 @@ Y_UNIT_TEST_SUITE(TSharedPageCache_Actor) {
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->TryKeepInMemoryBytes->Val(), 0);
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActiveLimitBytes->Val(), MemoryLimit);
 
-        sharedCache.Attach(sharedCache.Sender1, sharedCache.Collection1, ECacheMode::TryKeepInMemory);
+        sharedCache.Attach(sharedCache.Sender1, sharedCache.Collection1, ECacheTier::TryKeepInMemory);
         sharedCache.CheckFetches({});
 
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->CacheMissPages->Val(), 4);
@@ -1559,7 +1559,7 @@ Y_UNIT_TEST_SUITE(TSharedPageCache_Actor) {
         sharedCache.Collection1 = MakeIntrusiveConst<TPageCollectionMock>(1ul, 4u);
         ui64 collection1TotalSize = 4 * (104 + 10);
 
-        sharedCache.Attach(sharedCache.Sender1, sharedCache.Collection1, ECacheMode::TryKeepInMemory);
+        sharedCache.Attach(sharedCache.Sender1, sharedCache.Collection1, ECacheTier::TryKeepInMemory);
         sharedCache.CheckFetches({
             TFetch{40, sharedCache.Collection1, {0, 1, 2, 3}}
         });
@@ -1573,7 +1573,7 @@ Y_UNIT_TEST_SUITE(TSharedPageCache_Actor) {
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->TryKeepInMemoryBytes->Val(), collection1TotalSize);
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActiveLimitBytes->Val(), MemoryLimit);
 
-        sharedCache.Attach(sharedCache.Sender1, sharedCache.Collection1, ECacheMode::Regular);
+        sharedCache.Attach(sharedCache.Sender1, sharedCache.Collection1, ECacheTier::Regular);
 
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->CacheMissPages->Val(), 0);
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActivePages->Val(), 4);
@@ -1591,7 +1591,7 @@ Y_UNIT_TEST_SUITE(TSharedPageCache_Actor) {
         sharedCache.Collection1 = MakeIntrusiveConst<TPageCollectionMock>(1ul, 4u);
         ui64 collection1TotalSize = 4 * (104 + 10);
 
-        sharedCache.Attach(sharedCache.Sender1, sharedCache.Collection1, ECacheMode::TryKeepInMemory);
+        sharedCache.Attach(sharedCache.Sender1, sharedCache.Collection1, ECacheTier::TryKeepInMemory);
         sharedCache.CheckFetches({
             TFetch{40, sharedCache.Collection1, {0, 1, 2, 3}}
         });
@@ -1603,7 +1603,7 @@ Y_UNIT_TEST_SUITE(TSharedPageCache_Actor) {
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->TryKeepInMemoryBytes->Val(), collection1TotalSize);
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActiveLimitBytes->Val(), MemoryLimit);
 
-        sharedCache.Attach(sharedCache.Sender2, sharedCache.Collection1, ECacheMode::TryKeepInMemory);
+        sharedCache.Attach(sharedCache.Sender2, sharedCache.Collection1, ECacheTier::TryKeepInMemory);
         sharedCache.CheckFetches({});
 
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActivePages->Val(), 4);
@@ -1632,7 +1632,7 @@ Y_UNIT_TEST_SUITE(TSharedPageCache_Actor) {
         sharedCache.Collection1 = MakeIntrusiveConst<TPageCollectionMock>(1ul, 4u);
         ui64 collection1TotalSize = 4 * (104 + 10);
 
-        sharedCache.Attach(sharedCache.Sender1, sharedCache.Collection1, ECacheMode::TryKeepInMemory);
+        sharedCache.Attach(sharedCache.Sender1, sharedCache.Collection1, ECacheTier::TryKeepInMemory);
         sharedCache.CheckFetches({
             TFetch{40, sharedCache.Collection1, {0, 1, 2, 3}}
         });
@@ -1644,7 +1644,7 @@ Y_UNIT_TEST_SUITE(TSharedPageCache_Actor) {
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->TryKeepInMemoryBytes->Val(), collection1TotalSize);
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActiveLimitBytes->Val(), MemoryLimit);
 
-        sharedCache.Attach(sharedCache.Sender2, sharedCache.Collection1, ECacheMode::TryKeepInMemory);
+        sharedCache.Attach(sharedCache.Sender2, sharedCache.Collection1, ECacheTier::TryKeepInMemory);
         sharedCache.CheckFetches({});
 
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActivePages->Val(), 4);
@@ -1718,7 +1718,7 @@ Y_UNIT_TEST_SUITE(TSharedPageCache_Actor) {
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->CacheHitPages->Val(), cacheHits);
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->CacheMissPages->Val(), 6);
 
-        sharedCache.Attach(sharedCache.Sender1, sharedCache.Collection1, ECacheMode::TryKeepInMemory);
+        sharedCache.Attach(sharedCache.Sender1, sharedCache.Collection1, ECacheTier::TryKeepInMemory);
         sharedCache.CheckFetches({}); // all collection#1 pages already loaded
         collection1Pages.clear(); // release refs and allow collection#1 pages eviction
 
@@ -1744,7 +1744,7 @@ Y_UNIT_TEST_SUITE(TSharedPageCache_Actor) {
         ui64 fetchNo = 1;
         ui64 cacheHits = 0;
 
-        sharedCache.Attach(sharedCache.Sender1, sharedCache.Collection1, ECacheMode::TryKeepInMemory);
+        sharedCache.Attach(sharedCache.Sender1, sharedCache.Collection1, ECacheTier::TryKeepInMemory);
         sharedCache.CheckFetches({
             TFetch{20, sharedCache.Collection1, {0, 1}}
         });
@@ -1765,7 +1765,7 @@ Y_UNIT_TEST_SUITE(TSharedPageCache_Actor) {
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->TryKeepInMemoryBytes->Val(), collection1TotalSize);
 
         // after loading collection#2 to InMemory, all collection#1 pages should be evicted
-        sharedCache.Attach(sharedCache.Sender1, sharedCache.Collection2, ECacheMode::TryKeepInMemory);
+        sharedCache.Attach(sharedCache.Sender1, sharedCache.Collection2, ECacheTier::TryKeepInMemory);
         sharedCache.CheckFetches({
             TFetch{40, sharedCache.Collection2, {0, 1, 2, 3}}
         });
@@ -1778,7 +1778,7 @@ Y_UNIT_TEST_SUITE(TSharedPageCache_Actor) {
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->TryKeepInMemoryBytes->Val(), collection1TotalSize + collection2TotalSize);
 
         // all evicted collection#1 pages sould be moved to Regular
-        sharedCache.Attach(sharedCache.Sender1, sharedCache.Collection1, ECacheMode::Regular);
+        sharedCache.Attach(sharedCache.Sender1, sharedCache.Collection1, ECacheTier::Regular);
         sharedCache.CheckFetches({});
 
         collection1Pages.clear();

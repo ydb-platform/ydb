@@ -8,7 +8,7 @@ namespace NKikimr::NOlap::NReader::NSimple {
 
 void ISyncPoint::OnSourcePrepared(std::shared_ptr<NCommon::IDataSource>&& sourceInput, TPlainReadData& reader) {
     const NActors::TLogContextGuard gLogging = NActors::TLogContextBuilder::Build()("sync_point", GetPointName())("aborted", AbortFlag)(
-        "tablet_id", Context->GetCommonContext()->GetReadMetadata()->GetTabletId())("source_id", sourceInput->GetSourceId());
+        "tablet_id", Context->GetCommonContext()->GetReadMetadata()->GetTabletId())("prepared_source_id", sourceInput->GetSourceId());
     if (AbortFlag) {
         FOR_DEBUG_LOG(NKikimrServices::COLUMNSHARD_SCAN_EVLOG, sourceInput->AddEvent("a" + GetShortPointName()));
         AFL_WARN(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "sync_point_aborted");

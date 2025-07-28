@@ -93,6 +93,7 @@ protected:
 public:
     void ClearMemoryGuards() {
         ResourceGuards.clear();
+        SourceGroupGuard.reset();
     }
 
     bool NeedFullAnswer() const {

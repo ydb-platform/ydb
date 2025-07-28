@@ -50,6 +50,8 @@ SELECT * FROM postgresql_datasource.<table_name>
 1. {% include [!](_includes/datetime_limits.md) %}
 1. {% include [!](_includes/predicate_pushdown.md) %}
 
+    Поддерживаемые типы данных для пушдауна фильтров:
+
     |Тип данных {{ ydb-short-name }}|
     |----|
     |`Bool`|

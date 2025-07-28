@@ -53,6 +53,8 @@ SELECT * FROM ydb_datasource.<table_name>
 1. {% include [!](_includes/supported_requests.md) %}
 1. {% include [!](_includes/predicate_pushdown.md) %}
 
+    Поддерживаемые типы данных для пушдауна фильтров:
+
     |Тип данных {{ ydb-short-name }}|
     |----|
     |`Bool`|

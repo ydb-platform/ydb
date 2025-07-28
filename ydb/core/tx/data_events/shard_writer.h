@@ -109,6 +109,7 @@ private:
     TAtomic HasCodeFail = 0;
     NYql::TIssues Issues;
     std::optional<Ydb::StatusIds::StatusCode> Code;
+    TMutex IssuesMutex;
 
     NActors::TActorIdentity LongTxActorId;
     std::vector<TWriteIdForShard> WriteIds;
@@ -118,6 +119,7 @@ private:
     void SendReply() {
         if (FailsCount.Val()) {
             Counters->OnFailedFullReply(TMonotonic::Now() - StartInstant);
+            TGuard<TMutex> guard(IssuesMutex);
             AFL_VERIFY(Code);
             LongTxActorId.Send(LongTxActorId, new TEvPrivate::TEvShardsWriteResult(*Code, Issues));
         } else {

@@ -1755,5 +1755,7 @@ Y_UNIT_TEST_SUITE(Mvp) {
         UNIT_ASSERT_VALUES_EQUAL(GetAddressWithoutPort("192.168.1.1"), "192.168.1.1");
         UNIT_ASSERT_VALUES_EQUAL(GetAddressWithoutPort("localhost:9090"), "localhost");
         UNIT_ASSERT_VALUES_EQUAL(GetAddressWithoutPort("localhost"), "localhost");
+        UNIT_ASSERT_VALUES_EQUAL(GetAddressWithoutPort("some.domain.name:1234"), "some.domain.name");
+        UNIT_ASSERT_VALUES_EQUAL(GetAddressWithoutPort("some.domain.name"), "some.domain.name");
     }
 }

@@ -287,7 +287,7 @@ TString GetAddressWithoutPort(const TString& address) {
 
 // Append request address to X-Forwarded-For header
 // Useful for logging and audit
-TStringBuilder MakeXForwardedFor(const TProxiedRequestParams& params) {
+TString MakeXForwardedFor(const TProxiedRequestParams& params) {
     NHttp::THeaders headers(params.Request->Headers);
 
     TStringBuilder forwarded;
@@ -301,7 +301,7 @@ TStringBuilder MakeXForwardedFor(const TProxiedRequestParams& params) {
             forwarded << address;
         }
     }
-    return forwarded;
+    return std::move(forwarded);
 }
 
 NHttp::THttpOutgoingRequestPtr CreateProxiedRequest(const TProxiedRequestParams& params) {

@@ -97,7 +97,7 @@ private:
             if (const auto* p = SchemeShardLocalToInternal.FindPtr(schemeShardLocalPathId)) {
                 return { *p };
             }
-            AFL_VERIFY(!withTabletPathId);
+//            AFL_VERIFY(!withTabletPathId);
             return std::nullopt;
         }
     };

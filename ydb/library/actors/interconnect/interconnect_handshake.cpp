@@ -374,7 +374,7 @@ namespace NActors {
                             ExternalDataChannel.GetSocketRef() = std::move(ev->Get()->Socket);
                         } else {
                             EstablishExternalDataChannel();
-                            if (HandShakeMemRegion) {
+                            if (HandShakeMemRegion && RdmaQp) {
                                 if (WaitRdmaReadResult() == false) {
                                     LOG_LOG_IC_X(NActorsServices::INTERCONNECT, "ICRDMA", NLog::PRI_ERROR,
                                         "RDMA memory read failed, disable rdma on the initiator");
@@ -982,6 +982,10 @@ namespace NActors {
                         RdmaQp.reset();
                         HandShakeMemRegion.reset();
                     }
+                } else {
+                    LOG_LOG_IC_X(NActorsServices::INTERCONNECT, "ICRDMA", NLog::PRI_ERROR,
+                        "Non success qp response from remote side");
+                    RdmaQp.reset();
                 }
 
                 // recover peer process info from peer's reply
@@ -1255,6 +1259,8 @@ namespace NActors {
                 std::optional<NActorsInterconnect::TRdmaHandshake> rdmaIncommingHandshake;
                 if (RdmaQp && request.HasRdmaHandshake()) {
                     rdmaIncommingHandshake = request.GetRdmaHandshake();
+                } else {
+                    RdmaQp.reset();
                 }
 
                 // send to proxy

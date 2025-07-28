@@ -4,7 +4,6 @@
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/tablet/tablet_pipe_client_cache.h>
-#include <util/system/mutex.h>
 
 
 namespace NKikimr::NEvWrite {
@@ -26,11 +25,11 @@ namespace NKikimr::NEvWrite {
         }
     }
 
+    NO_SANITIZE_THREAD
     void TWritersController::OnFail(const Ydb::StatusIds::StatusCode code, const TString& message) {
         Counters->OnCSFailed(code);
         FailsCount.Inc();
         if (AtomicCas(&HasCodeFail, 1, 0)) {
-            TGuard<TMutex> guard(Lock);
             AFL_VERIFY(!Code);
             Issues.AddIssue(message);
             Code = code;

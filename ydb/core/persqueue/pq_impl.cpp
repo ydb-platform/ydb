@@ -2913,6 +2913,7 @@ void TPersQueue::Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev, const TActo
 void TPersQueue::AckReadSetsToTablet(ui64 tabletId, const TActorContext& ctx)
 {
     THashSet<TDistributedTransaction*> txs;
+    TVector<std::pair<ui64, ui64>> bindings;
 
     for (ui64 txId : GetBindedTxs(tabletId)) {
         PQ_LOG_TX_I("Assume tablet " << tabletId << " dead, sending read set acks for tx " << txId);
@@ -2925,11 +2926,17 @@ void TPersQueue::AckReadSetsToTablet(ui64 tabletId, const TActorContext& ctx)
         tx->OnReadSetAck(tabletId);
         tx->UnbindMsgsFromPipe(tabletId);
 
+        bindings.emplace_back(tabletId, tx->TxId);
+
         txs.insert(tx);
     }
 
     if (txs.empty()) {
         return;
+    }
+
+    for (const auto& [tabletId, txId] : bindings) {
+        UnbindTxFromPipe(tabletId, txId);
     }
 
     for (auto* tx : txs) {
@@ -3483,6 +3490,7 @@ void TPersQueue::Handle(TEvTxProcessing::TEvReadSetAck::TPtr& ev, const TActorCo
 
     tx->OnReadSetAck(event);
     tx->UnbindMsgsFromPipe(event.GetTabletConsumer());
+    UnbindTxFromPipe(event.GetTabletConsumer(), event.GetTxId());
 
     if (tx->State == NKikimrPQ::TTransaction::WAIT_RS_ACKS) {
         TryExecuteTxs(ctx, *tx);
@@ -4210,6 +4218,10 @@ void TPersQueue::UnbindTxFromPipe(ui64 tabletId, ui64 txId)
 {
     if (auto p = BindedTxs.find(tabletId); p != BindedTxs.end()) {
         p->second.erase(txId);
+
+        if (p->second.empty()) {
+            BindedTxs.erase(p);
+        }
     }
 }
 

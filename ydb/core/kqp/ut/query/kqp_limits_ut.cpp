@@ -254,8 +254,7 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
 
         app.MutableFeatureFlags()->SetEnableResourcePools(true);
 
-        auto settings = TKikimrSettings()
-            .SetAppConfig(app)
+        auto settings = TKikimrSettings(app)
             .SetWithSampleTables(false);
 
         TKikimrRunner kikimr(settings);

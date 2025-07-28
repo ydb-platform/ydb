@@ -174,7 +174,7 @@ private:
 
     void RunS3ApplicatorActor(const NYql::NDqProto::TExternalEffect& externalEffect) {
         if (!FederatedQuerySetup || !S3ActorsFactor) {
-            FinishScriptFinalization(Ydb::StatusIds::INTERNAL_ERROR, "unable to applicate s3 external effect, invalid federated query setup");
+            FinishScriptFinalization(Ydb::StatusIds::INTERNAL_ERROR, "unable to apply s3 external effect, invalid federated query setup");
             return;
         }
 

@@ -1,6 +1,6 @@
 PY3TEST()
 
-SIZE(SMALL)
+SIZE(LARGE)
 
 DEPENDS(ydb/tests/library/compatibility/configs)
 

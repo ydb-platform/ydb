@@ -82,11 +82,11 @@ See the command description:
 
 ### TPC-DS-specific options { #run_tpcds_options }
 
-| Name                   | Description                                                                                         | Default value |
-|------------------------|-----------------------------------------------------------------------------------------------------|---------------|
-| `--syntax <value>`     | Which query syntax option should be used, `yql` or `pg`.                                            | `yql`         |
-| `--float_mode <value>` | Float mode. Can be `float`, `decimal` or `decimal_ydb`. If set to `float` - float will be used, `decimal` means that decimal will be used with canonical size and `decimal_ydb` means that all floats will be converted to decimal(22,9) because YDB supports only this type. | `float`           |
-| `--scale <value>`      | Scale factor. See specification of TPC-DS.                                                           | 1             |
+| Name                   | Description                                                                                                                                                                                                                                                                               | Default value |
+|------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|---------------|
+| `--syntax <value>`     | Query syntax option to use: `yql` or `pg`.                                                                                                                                                                                                                                                | `yql`         |
+| `--float_mode <value>` | Float mode. Can be `float`, `decimal`, or `decimal_ydb`. If set to `float`, floats will be used. `decimal` means that decimals will be used with canonical size, and `decimal_ydb` means all floats will be converted to `decimal(22,9)` because YDB supports only this type. | `float`       |
+| `--scale <value>`      | Scale factor. See the TPC-DS specification.                                                                                                                                                                                                                                               | `1`           |
 
 ## Test data cleanup { #cleanup }
 

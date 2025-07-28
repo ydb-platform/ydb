@@ -5,4 +5,4 @@
 | `--upload-threads <value>` or `-t <value>` | The number of execution threads for data preparation.                                                                                 | The number of available cores on the client.  |
 | `--bulk-size <value>`                  | The size of the chunk for sending data, in rows.                                                                                       | 10000                               |
 | `--max-in-flight <value>`              | The maximum number of data chunks that can be processed simultaneously.                                                                | 128                                  |
-| `--file-output-path <value>` or `-f <path>` | If this option set, data will not be load to db, but saved into <path> directory.                                                                |                                   |
+| `--file-output-path <value>` or `-f <path>` | If this option is set, data will not be loaded into the database but will be saved to the `<path>` directory instead.                                                                |                                   |

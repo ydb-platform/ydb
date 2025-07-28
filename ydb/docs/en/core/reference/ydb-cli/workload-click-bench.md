@@ -91,7 +91,7 @@ See the command description to run the load:
 
 | Name               | Description                                              | Default value |
 |--------------------|----------------------------------------------------------|---------------|
-| `--syntax <value>` | Which query syntax option should be used, `yql` or `pg`. | `yql`         |
+| `--syntax <value>` | Query syntax option to use: `yql` or `pg`. | `yql` |
 
 ## Cleanup test data { #cleanup }
 

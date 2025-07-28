@@ -283,7 +283,7 @@ void TColumnShard::RunEnsureTable(const NKikimrTxColumnShard::TCreateTable& tabl
 
     const auto& schemeShardLocalPathId = TSchemeShardLocalPathId::FromProto(tableProto);
 
-    if (const auto& internalPathId = TablesManager.ResolveInternalPathId(schemeShardLocalPathId, true);
+    if (const auto& internalPathId = TablesManager.ResolveInternalPathId(schemeShardLocalPathId, false);
         internalPathId && TablesManager.HasTable(*internalPathId, true)) {
         LOG_S_DEBUG("EnsureTable for existed pathId: " << TUnifiedOptionalPathId(internalPathId, schemeShardLocalPathId)
                                                        << " at tablet "
@@ -348,7 +348,7 @@ void TColumnShard::RunAlterTable(const NKikimrTxColumnShard::TAlterTable& alterP
     NIceDb::TNiceDb db(txc.DB);
 
     const auto& schemeShardLocalPathId = TSchemeShardLocalPathId::FromProto(alterProto);
-    const auto& internalPathId = TablesManager.ResolveInternalPathIdVerified(schemeShardLocalPathId, true);
+    const auto& internalPathId = TablesManager.ResolveInternalPathIdVerified(schemeShardLocalPathId, false);
     Y_ABORT_UNLESS(TablesManager.HasTable(internalPathId), "AlterTable on a dropped or non-existent table");
     const auto& pathId = TUnifiedPathId::BuildValid(internalPathId, schemeShardLocalPathId);
     LOG_S_DEBUG("AlterTable for pathId: " << pathId
@@ -385,7 +385,7 @@ void TColumnShard::RunDropTable(const NKikimrTxColumnShard::TDropTable& dropProt
     NIceDb::TNiceDb db(txc.DB);
 
     const auto& schemeShardLocalPathId = TSchemeShardLocalPathId::FromProto(dropProto);
-    const auto& internalPathId = TablesManager.ResolveInternalPathIdVerified(schemeShardLocalPathId, true);
+    const auto& internalPathId = TablesManager.ResolveInternalPathIdVerified(schemeShardLocalPathId, false);
     const auto& pathId = TUnifiedPathId::BuildValid(internalPathId, schemeShardLocalPathId);
     if (!TablesManager.HasTable(internalPathId)) {
         LOG_S_DEBUG("DropTable for unknown or deleted pathId: " << pathId << " at tablet " << TabletID());

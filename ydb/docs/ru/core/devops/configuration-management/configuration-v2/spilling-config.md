@@ -6,51 +6,6 @@
 
 Все настройки спиллинга находятся в секции `table_service_config`, которая располагается на том же уровне, что и `host_configs`.
 
-```yaml
-table_service_config:
-  enable_query_service_spilling: true
-  enable_spilling_nodes: "All"
-  spilling_service_config:
-    local_file_config:
-      enable: true
-      root: ""
-      max_total_size: 21474836480    # 20 GiB
-      max_file_size: 5368709120      # 5 GiB
-      max_file_part_size: 104857600  # 100 MB
-      io_thread_pool:
-        workers_count: 2
-        queue_size: 1000
-```
-
-## Глобальные настройки спиллинга
-
-### enable_query_service_spilling
-
-**Расположение:** `table_service_config.enable_query_service_spilling`  
-**Тип:** `boolean`  
-**По умолчанию:** `true`  
-**Описание:** Глобальная опция, включающая спиллинг в каналах передачи данных между задачами.
-
-```yaml
-table_service_config:
-  enable_query_service_spilling: true
-```
-
-**Важно:** Эта настройка работает совместно с локальной конфигурацией сервиса спиллинга. При отключении (`false`) спиллинг в каналах не функционирует даже при включенном `spilling_service_config`.
-
-### enable_spilling_nodes
-
-**Расположение:** `table_service_config.enable_spilling_nodes`  
-**Тип:** `string`  
-**Возможные значения:** `"All"` | `"GraceJoin"` | `"Aggregate"` | `"None"`  
-**По умолчанию:** `"All"`  
-**Описание:** Управляет включением спиллинга в вычислительных узлах.
-
-```yaml
-table_service_config:
-  enable_spilling_nodes: "All"
-```
-
 ## Основные параметры конфигурации
 
 ### Сервис спиллинга (spilling_service_config)
@@ -63,7 +18,6 @@ table_service_config:
 table_service_config:
   spilling_service_config:
     local_file_config:
-      enable: true
       root: ""
       max_total_size: 21474836480    # 20 GiB
       max_file_size: 5368709120      # 5 GiB
@@ -72,12 +26,6 @@ table_service_config:
         workers_count: 2
         queue_size: 1000
 ```
-
-#### Enable
-
-**Тип:** `boolean`  
-**По умолчанию:** `true`  
-**Описание:** Включает или отключает сервис спиллинга. При отключении (`false`) [спиллинг](../../../concepts/spilling.md) не функционирует, что может привести к ошибкам Out of Memory при обработке больших объемов данных.
 
 #### Root
 
@@ -174,11 +122,8 @@ table_service_config:
 
 ```yaml
 table_service_config:
-  enable_query_service_spilling: true
-  enable_spilling_nodes: "All"
   spilling_service_config:
     local_file_config:
-      enable: true
       root: ""
       max_total_size: 107374182400   # 100 GiB
       max_file_size: 10737418240     # 10 GiB
@@ -192,11 +137,8 @@ table_service_config:
 
 ```yaml
 table_service_config:
-  enable_query_service_spilling: true
-  enable_spilling_nodes: "GraceJoin"  # Только для join операций
   spilling_service_config:
     local_file_config:
-      enable: true
       root: ""
       max_total_size: 5368709120     # 5 GiB
       max_file_size: 1073741824      # 1 GiB
@@ -204,6 +146,70 @@ table_service_config:
       io_thread_pool:
         workers_count: 1
         queue_size: 500
+```
+
+## Полная конфигурация
+
+### Включение и отключение спиллинга
+
+Следующие параметры управляют включением и отключением различных типов спиллинга. Обычно их следует изменять только при наличии специфических требований к системе.
+
+#### enable_query_service_spilling
+
+**Расположение:** `table_service_config.enable_query_service_spilling`  
+**Тип:** `boolean`  
+**По умолчанию:** `true`  
+**Описание:** Глобальная опция, включающая спиллинг в каналах передачи данных между задачами.
+
+```yaml
+table_service_config:
+  enable_query_service_spilling: true
+```
+
+**Важно:** Эта настройка работает совместно с локальной конфигурацией сервиса спиллинга. При отключении (`false`) спиллинг в каналах не функционирует даже при включенном `spilling_service_config`.
+
+#### enable_spilling_nodes
+
+**Расположение:** `table_service_config.enable_spilling_nodes`  
+**Тип:** `string`  
+**Возможные значения:** `"All"` | `"GraceJoin"` | `"Aggregate"` | `"None"`  
+**По умолчанию:** `"All"`  
+**Описание:** Управляет включением спиллинга в вычислительных узлах.
+
+```yaml
+table_service_config:
+  enable_spilling_nodes: "All"
+```
+
+#### Enable (в spilling_service_config)
+
+**Тип:** `boolean`  
+**По умолчанию:** `true`  
+**Описание:** Включает или отключает сервис спиллинга. При отключении (`false`) [спиллинг](../../../concepts/spilling.md) не функционирует, что может привести к ошибкам при нехватке памяти.
+
+```yaml
+table_service_config:
+  spilling_service_config:
+    local_file_config:
+      enable: true
+```
+
+### Полный пример конфигурации
+
+```yaml
+table_service_config:
+  enable_query_service_spilling: true
+  enable_spilling_nodes: "All"
+  spilling_service_config:
+    local_file_config:
+      enable: true
+      root: ""
+      max_total_size: 21474836480    # 20 GiB
+      max_file_size: 5368709120      # 5 GiB
+      max_file_part_size: 104857600  # 100 MB
+      io_thread_pool:
+        workers_count: 2
+        queue_size: 1000
 ```
 
 ## Устранение неполадок

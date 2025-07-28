@@ -80,7 +80,7 @@ public:
         NKikimr::NMiniKQL::TProgramBuilder& programBuilder,
         TDqSolomonReadParams&& readParams,
         ui64 computeActorBatchSize,
-        ui32 truePointsFindRange,
+        TDuration truePointsFindRange,
         ui64 metricsQueueConsumersCountDelta,
         NActors::TActorId metricsQueueActor,
         const ::NMonitoring::TDynamicCounterPtr& counters,
@@ -94,8 +94,8 @@ public:
         , LogPrefix(TStringBuilder() << "TxId: " << TxId << ", TDqSolomonReadActor: ")
         , ReadParams(std::move(readParams))
         , ComputeActorBatchSize(computeActorBatchSize)
-        , TrueRangeFrom(TInstant::Seconds(ReadParams.Source.GetFrom()) - TDuration::Seconds(truePointsFindRange))
-        , TrueRangeTo(TInstant::Seconds(ReadParams.Source.GetTo()) + TDuration::Seconds(truePointsFindRange))
+        , TrueRangeFrom(TInstant::Seconds(ReadParams.Source.GetFrom()) - truePointsFindRange)
+        , TrueRangeTo(TInstant::Seconds(ReadParams.Source.GetTo()) + truePointsFindRange)
         , MetricsQueueConsumersCountDelta(metricsQueueConsumersCountDelta)
         , MetricsQueueActor(metricsQueueActor)
         , CredentialsProvider(credentialsProvider)
@@ -631,9 +631,9 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqSolom
         computeActorBatchSize = FromString<ui64>(it->second);
     }
 
-    ui32 truePointsFindRange = 301;
+    ui64 truePointsFindRange = 301;
     if (auto it = settings.find("truePointsFindRange"); it != settings.end()) {
-        truePointsFindRange = FromString<ui32>(it->second);
+        truePointsFindRange = FromString<ui64>(it->second);
     }
 
     auto credentialsProviderFactory = CreateCredentialsProviderFactoryForStructuredToken(credentialsFactory, token);
@@ -648,7 +648,7 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqSolom
         programBuilder,
         std::move(params),
         computeActorBatchSize,
-        truePointsFindRange,
+        TDuration::Seconds(truePointsFindRange),
         metricsQueueConsumersCountDelta,
         metricsQueueActor,
         counters,

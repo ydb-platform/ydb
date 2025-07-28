@@ -69,7 +69,7 @@ public:
         ui64 pageSize,
         ui64 prefetchSize,
         ui64 batchCountLimit,
-        ui32 truePointsFindRange,
+        TDuration truePointsFindRange,
         std::shared_ptr<NYdb::ICredentialsProvider> credentialsProvider)
         : CurrentPage(0)
         , ConsumersCount(consumersCount)
@@ -77,8 +77,8 @@ public:
         , PageSize(pageSize)
         , PrefetchSize(prefetchSize)
         , BatchCountLimit(batchCountLimit)
-        , TrueRangeFrom(TInstant::Seconds(ReadParams.Source.GetFrom()) - TDuration::Seconds(truePointsFindRange))
-        , TrueRangeTo(TInstant::Seconds(ReadParams.Source.GetTo()) + TDuration::Seconds(truePointsFindRange))
+        , TrueRangeFrom(TInstant::Seconds(ReadParams.Source.GetFrom()) - truePointsFindRange)
+        , TrueRangeTo(TInstant::Seconds(ReadParams.Source.GetTo()) + truePointsFindRange)
         , CredentialsProvider(credentialsProvider)
         , SolomonClient(NSo::ISolomonAccessorClient::Make(ReadParams.Source, CredentialsProvider))
     {}
@@ -460,12 +460,12 @@ NActors::IActor* CreateSolomonMetricsQueueActor(
         batchCountLimit = FromString<ui64>(it->second);
     }
 
-    ui32 truePointsFindRange = 301;
+    ui64 truePointsFindRange = 301;
     if (auto it = settings.find("truePointsFindRange"); it != settings.end()) {
-        truePointsFindRange = FromString<ui32>(it->second);
+        truePointsFindRange = FromString<ui64>(it->second);
     }
 
-    return new TDqSolomonMetricsQueueActor(consumersCount, std::move(readParams), pageSize, prefetchSize, batchCountLimit, truePointsFindRange, credentialsProvider);
+    return new TDqSolomonMetricsQueueActor(consumersCount, std::move(readParams), pageSize, prefetchSize, batchCountLimit, TDuration::Seconds(truePointsFindRange), credentialsProvider);
 }
 
 } // namespace NYql::NDq

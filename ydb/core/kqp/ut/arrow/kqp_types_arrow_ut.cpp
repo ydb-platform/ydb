@@ -10,14 +10,10 @@ using namespace NYdb::NTable;
 namespace {
 
 TKikimrRunner RunnerWithArrowFormatEnabled(bool forceSources = false) {
-    auto settings = TKikimrSettings()
-        .SetEnableArrowFormatAtDatashard(true);
-    auto app = NKikimrConfig::TAppConfig();
-
+    auto settings = TKikimrSettings().SetEnableArrowFormatAtDatashard(true);
     if (forceSources) {
-        app.MutableTableServiceConfig()->SetEnableKqpScanQuerySourceRead(true);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableKqpScanQuerySourceRead(true);
     }
-    settings.SetAppConfig(app);
 
     return TKikimrRunner{settings};
 }

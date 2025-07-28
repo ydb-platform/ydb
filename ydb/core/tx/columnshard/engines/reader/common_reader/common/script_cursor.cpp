@@ -32,19 +32,10 @@ TConclusion<bool> TFetchingScriptCursor::Execute(const std::shared_ptr<IDataSour
         }
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("scan_step", step->DebugString())("scan_step_idx", CurrentStepIdx);
 
-        auto& schedulableTask = source->GetContext()->GetCommonContext()->GetSchedulableTask();
-        if (schedulableTask) {
-            schedulableTask->IncreaseExtraUsage();
-        }
-
         const TMonotonic startInstant = TMonotonic::Now();
         const TConclusion<bool> resultStep = step->ExecuteInplace(source, *this);
         const auto executionTime = TMonotonic::Now() - startInstant;
         source->GetContext()->GetCommonContext()->GetCounters().AddExecutionDuration(executionTime);
-
-        if (schedulableTask) {
-            schedulableTask->DecreaseExtraUsage(executionTime);
-        }
 
         Script->AddStepDuration(CurrentStepIdx, executionTime, TMonotonic::Now() - StepStartInstant);
         if (resultStep.IsFail()) {

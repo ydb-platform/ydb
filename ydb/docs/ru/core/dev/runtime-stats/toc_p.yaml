@@ -5,8 +5,10 @@ items:
   href: structure.md
 - name: Визуализация метрик
   href: metrics.md
-- name: Типовые проблемы и способы их решения
-  href: troubleshooting.md
+- name: Анализ плана
+  href: analysis.md
+- name: Примеры анализа
+  href: examples.md
 - name: Федеративные аналитические запросы
   href: federative.md
 - name: Особенности анализа строчных таблиц

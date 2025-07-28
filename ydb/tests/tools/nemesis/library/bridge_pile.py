@@ -36,11 +36,18 @@ class AbstractBridgePileNemesis(Nemesis, AbstractMonitoredNemesis):
 
     def _validate_bridge_piles(self, cluster):
         bridge_pile_to_nodes = collections.defaultdict(list)
-        for node in cluster.nodes.values():
+        self.logger.info("Validating bridge piles for %d nodes", len(cluster.nodes))
+        
+        for node_id, node in cluster.nodes.items():
+            self.logger.info("Node %d: host=%s, bridge_pile_name=%s, bridge_pile_id=%s", 
+                           node_id, node.host, node.bridge_pile_name, node.bridge_pile_id)
             if node.bridge_pile_id is not None:
                 bridge_pile_to_nodes[node.bridge_pile_id].append(node)
 
         bridge_piles = list(bridge_pile_to_nodes.keys())
+        self.logger.info("Found bridge piles: %s", bridge_piles)
+        self.logger.info("Bridge pile to nodes mapping: %s", 
+                        {pile_id: [node.host for node in nodes] for pile_id, nodes in bridge_pile_to_nodes.items()})
         return bridge_pile_to_nodes, bridge_piles
 
     def _create_bridge_pile_cycle(self):
@@ -62,6 +69,7 @@ class AbstractBridgePileNemesis(Nemesis, AbstractMonitoredNemesis):
     def prepare_state(self):
         self._bridge_pile_to_nodes, self._bridge_piles = self._validate_bridge_piles(self._cluster)
         if len(self._bridge_piles) < 2:
+            self.logger.error("Bridge piles: %s", self._bridge_piles)
             self.logger.error("No bridge piles found in cluster or only one bridge pile found")
             raise Exception("No bridge piles found in cluster or only one bridge pile found")
 

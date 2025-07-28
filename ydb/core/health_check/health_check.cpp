@@ -1079,14 +1079,12 @@ public:
 
     ui64 RequestSchemeCacheNavigate(const TString& path) {
         ui64 cookie = NavigateKeySet.size();
-        BLOG_CRIT("RequestSchemeCacheNavigate " << path << " -> " << cookie);
         NavigateKeySet.emplace(cookie, MakeRequestSchemeCacheNavigate(path, cookie));
         return cookie;
     }
 
     ui64 RequestSchemeCacheNavigate(const TPathId& pathId) {
         ui64 cookie = NavigateKeySet.size();
-        BLOG_CRIT("RequestSchemeCacheNavigate " << pathId << " -> " << cookie);
         NavigateKeySet.emplace(cookie, MakeRequestSchemeCacheNavigate(pathId, cookie));
         return cookie;
     }
@@ -1545,7 +1543,6 @@ public:
     }
 
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
-        BLOG_CRIT("TEvNavigateKeySetResult: " << ev->Get()->Request->ToString({}));
         TRequestResponse<TEvTxProxySchemeCache::TEvNavigateKeySetResult>& response = NavigateKeySet[ev->Get()->Request->Cookie];
         response.Set(std::move(ev));
         if (response.IsOk()) {
@@ -1570,7 +1567,6 @@ public:
             FilterDomainKey[subDomainKey] = path;
 
             TTabletId hiveId = domainInfo->Params.GetHive();
-            BLOG_CRIT("TEvNavigateKeySetResult: " << path << " with hive " << hiveId);
             if (hiveId) {
                 DatabaseState[path].HiveId = hiveId;
                 if (NeedToAskHive(hiveId)) {
@@ -1598,7 +1594,7 @@ public:
                 }
             }
         } else {
-            BLOG_CRIT("NavigateKeySet: " << response.GetError());
+            BLOG_D("TEvNavigateKeySetResult error: " << response.GetError());
         }
         RequestDone("TEvNavigateKeySetResult");
     }
@@ -1661,7 +1657,6 @@ public:
         Ydb::Cms::ListDatabasesResult listTenantsResult;
         ListTenants->Get()->Record.GetResponse().operation().result().UnpackTo(&listTenantsResult);
         for (const TString& path : listTenantsResult.paths()) {
-            BLOG_CRIT("ListTenants: " << path);
             DatabaseState[path];
             RequestSchemeCacheNavigate(path);
         }

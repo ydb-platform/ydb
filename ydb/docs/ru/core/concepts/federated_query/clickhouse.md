@@ -66,6 +66,7 @@ SELECT * FROM clickhouse_datasource.<table_name>
     |`Uint64`|
     |`Float`|
     |`Double`|
+    |`String`|
 
 ## Поддерживаемые типы данных
 

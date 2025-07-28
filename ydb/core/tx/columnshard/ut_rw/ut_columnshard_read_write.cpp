@@ -1707,6 +1707,53 @@ Y_UNIT_TEST_SUITE(EvWrite) {
 }
 
 Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
+    Y_UNIT_TEST(NullablePkDoesNotMatchRangePredicate) {
+        auto schema = TTestSchema::YdbSchema();  // Standard schema: timestamp, message, etc.
+        auto pk = TTestSchema::YdbPkSchema();
+
+        // Make the PK column nullable explicitly (if not already supported)
+        pk[0].SetType(TTypeInfo(NTypeIds::Int64)); // Assuming timestamp is being made nullable
+
+        TestTableDescription table{ .Schema = schema, .Pk = pk };
+        TTestBasicRuntime runtime;
+        TTester::Setup(runtime);
+
+        TActorId sender = runtime.AllocateEdgeActor();
+        CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::ColumnShard), &CreateColumnShard);
+
+        TDispatchOptions options;
+        options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot));
+        runtime.DispatchEvents(options);
+
+        ui64 tableId = 1;
+        auto planStep = SetupSchema(runtime, sender, tableId, table);
+
+        // Insert one row with NULL PK, and one with a value
+        {
+            std::vector<ui64> writeIds;
+            TTestBlobOptions optsNull;
+            optsNull.NullColumns.emplace("timestamp");
+
+            TString data = MakeTestBlob({ 0, 1 }, schema, optsNull); // row with NULL timestamp
+            UNIT_ASSERT(WriteData(runtime, sender, 1, tableId, data, schema, true, &writeIds));
+
+            TString data2 = MakeTestBlob({ 5, 6 }, schema); // row with timestamp = 5
+            UNIT_ASSERT(WriteData(runtime, sender, 2, tableId, data2, schema, true, &writeIds));
+
+            auto txId = 100;
+            planStep = ProposeCommit(runtime, sender, txId, writeIds);
+            PlanCommit(runtime, sender, planStep, txId);
+        }
+
+        // Run predicate: timestamp < 10 — only row with 5 should match
+        {
+            using TBorder = TTabletReadPredicateTest::TBorder;
+            TTabletReadPredicateTest tester(runtime, planStep, 100, pk);
+
+            tester.Test("PK is NULL — should not match").SetTo(TBorder({10}, false)).SetExpectedCount(1);
+        }
+    }
+
     Y_UNIT_TEST(Write) {
         TestTableDescription table;
         TestWrite(table);

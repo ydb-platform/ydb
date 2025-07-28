@@ -118,8 +118,8 @@ private:
     YDB_READONLY(std::shared_ptr<TCSUploadCounters>, Counters, std::make_shared<TCSUploadCounters>());
     void SendReply() {
         if (FailsCount.Val()) {
-            TGuard<TMutex> guard(IssuesMutex);
             Counters->OnFailedFullReply(TMonotonic::Now() - StartInstant);
+            TGuard<TMutex> guard(IssuesMutex);
             AFL_VERIFY(Code);
             LongTxActorId.Send(LongTxActorId, new TEvPrivate::TEvShardsWriteResult(*Code, Issues));
         } else {

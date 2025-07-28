@@ -386,7 +386,15 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
         // DstEndpoint
         // IsPersistent
         // EnableSpilling
-        return CreateDqInputChannel(channelId, ThisStageId, type, 10_MB, TCollectStatsLevel::None, TypeEnv, HolderFactory, TransportVersion);
+        return CreateDqInputChannel(channelId,
+                                    ThisStageId,
+                                    type,
+                                    10_MB,
+                                    TCollectStatsLevel::None,
+                                    TypeEnv,
+                                    HolderFactory,
+                                    TransportVersion,
+                                    NKikimr::NMiniKQL::EValuePackerVersion::V0);
     }
 
     auto CreateTestAsyncCA(NDqProto::TDqTask& task) {

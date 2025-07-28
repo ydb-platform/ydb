@@ -75,13 +75,13 @@ System components are integrated with Spilling Service and interact with it thro
 
 1. Serializes data into a blob
 2. Generates a unique identifier for the blob
-3. Creates a spilling event (`TEvWrite`) with the blob and generated identifier
-4. Sends the event to Spilling Service
-5. **Releases resources** and enters waiting mode, allowing other tasks to utilize computational resources
+3. Creates a spilling request with the blob and generated identifier
+4. Sends the request to Spilling Service
+5. Releases resources and enters waiting mode, allowing other tasks to utilize computational resources
 
-**Waiting for results**: After sending the event, the compute component releases resources for other tasks and enters waiting mode, allowing the system to optimally utilize cluster computing resources until external storage write completion.
+**Waiting for results**: After sending the request, the compute component releases resources for other tasks and enters waiting mode, allowing the system to optimally utilize cluster computing resources until external storage write completion.
 
-**Response handling**: Spilling Service processes the event and returns a new `TEvWriteResult` event with write confirmation for the specified identifier or `TEvError` in case of error. Compute component can only continue after receiving confirmation.
+**Response handling**: Spilling Service processes the request and returns write confirmation for the specified identifier or error message. Compute component can only continue after receiving confirmation.
 
 **Spilling interaction diagram:**
 
@@ -98,12 +98,12 @@ sequenceDiagram
     AL->>CN: Signal: memory running low (Yellow Zone)
     CN->>CN: Spilling decision
     CN->>CN: Data serialization to blob
-    CN->>SS: TEvWrite (blob + unique ID)
+    CN->>SS: Write request (blob + unique ID)
     Note over CN: Release resources<br/>for other tasks
     SS->>SS: Queue in task queue
     SS->>FS: Asynchronous data write to external storage
     FS->>SS: Successful write confirmation
-    SS->>CN: TEvWriteResult (success + ID)
+    SS->>CN: Write confirmation (success + ID)
     Note over CN: Continue execution
 ```
 
@@ -116,16 +116,16 @@ sequenceDiagram
     participant FS as File system
 
     Note over CN: Need to recover<br/>spilled data
-    CN->>SS: TEvRead (blob ID)
+    CN->>SS: Read request (blob ID)
     Note over CN: Wait for data loading<br/>from external storage
     SS->>FS: Read data from external storage by ID
     FS->>SS: Blob data
     SS->>SS: Data deserialization
-    SS->>CN: TEvReadResult (recovered data)
+    SS->>CN: Data response (recovered data)
     Note over CN: Continue processing<br/>with recovered data
 ```
 
-**Data reading**: When data recovery is needed, the component sends a `TEvRead` event with blob identifier. Spilling Service reads data from external storage and returns a `TEvReadResult` event with recovered data. During data loading, freed computational resources are utilized for processing other tasks.
+**Data reading**: When data recovery is needed, the component sends a read request with blob identifier. Spilling Service reads data from external storage and returns a data response with recovered data. During data loading, freed computational resources are utilized for processing other tasks.
 
 ### Types of spilling in {{ ydb-short-name }}
 

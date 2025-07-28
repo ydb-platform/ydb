@@ -28,9 +28,23 @@ public:
 
 using IDataBatchPtr = TIntrusivePtr<IDataBatch>;
 
+class IRowsBatcher : public TThrRefBase {
+public:
+    virtual bool IsEmpty() const = 0;
+    virtual i64 GetMemory() const = 0;
+
+    virtual void AddRow(const TConstArrayRef<TCell> row) = 0;
+    virtual IDataBatchPtr Flush(bool force) = 0;
+};
+
+using IRowsBatcherPtr = TIntrusivePtr<IRowsBatcher>;
+
+IRowsBatcherPtr CreateRowsBatcher(
+    size_t columnsCount,
+    std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc = nullptr);
+
 class IDataBatcher : public TThrRefBase {
 public:
-
     virtual void AddData(const NMiniKQL::TUnboxedValueBatch& data) = 0;
     virtual i64 GetMemory() const = 0;
     virtual IDataBatchPtr Build() = 0;
@@ -52,8 +66,9 @@ IDataBatcherPtr CreateColumnDataBatcher(
 
 class IDataBatchProjection : public TThrRefBase {
 public:
-    virtual IDataBatchPtr Project(const IDataBatchPtr& data) const = 0;
-    virtual IDataBatchPtr Project(const TRowsRef& data) const = 0;
+    virtual void Fill(const IDataBatchPtr& data) = 0;
+    virtual void Fill(const TRowsRef& data) = 0;
+    virtual IDataBatchPtr Flush() = 0;
 };
 
 using IDataBatchProjectionPtr = TIntrusivePtr<IDataBatchProjection>;
@@ -65,11 +80,15 @@ IDataBatchProjectionPtr CreateDataBatchProjection(
     const TConstArrayRef<ui32> outputWriteIndex,
     std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc);
 
+IDataBatchProjectionPtr CreateDataBatchKeyProjection(
+    std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc);
+
 std::vector<TConstArrayRef<TCell>> GetSortedUniqueRows(
     const std::vector<NKikimr::NKqp::IDataBatchPtr>& batches,
     const TConstArrayRef<NScheme::TTypeInfo> keyColumnTypes);
 
-std::vector<TConstArrayRef<TCell>> CutColumns(const std::vector<TConstArrayRef<TCell>>& rows, const ui32 columnsCount);
+std::vector<TConstArrayRef<TCell>> CutColumns(
+    const std::vector<TConstArrayRef<TCell>>& rows, const ui32 columnsCount);
 
 class IShardedWriteController : public TThrRefBase {
 public:

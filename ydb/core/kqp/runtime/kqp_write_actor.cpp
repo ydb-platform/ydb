@@ -1391,6 +1391,7 @@ private:
 
     struct TPathWriteInfo {
         IDataBatchProjectionPtr Projection = nullptr;
+        IDataBatchProjectionPtr KeyProjection = nullptr;
         TKqpTableWriteActor* WriteActor = nullptr;
     };
 
@@ -1418,7 +1419,6 @@ public:
 
         for (const auto& [writeActor, projection] : writes) {
             AFL_ENSURE(projection || writeActor->GetTableId().PathId == pathId);
-            AFL_ENSURE(!projection || writeActor->GetTableId().PathId != pathId);
             PathWriteInfo[writeActor->GetTableId().PathId] = TPathWriteInfo{
                 .Projection = projection,
                 .WriteActor = writeActor,
@@ -1495,10 +1495,16 @@ private:
             auto& lookupInfo = lookupInfoIt->second;
             AFL_ENSURE(lookupInfo.KeyIndexes.empty());
 
-            ProcessCells = GetSortedUniqueRows(ProcessBatches, lookupInfo.Lookup->GetKeyColumnTypes());
+            const auto& keyColumnTypes = lookupInfo.Lookup->GetKeyColumnTypes();
+
+            ProcessCells = GetSortedUniqueRows(ProcessBatches, keyColumnTypes);
+            for (size_t index = 0; index < ProcessCells.size(); ++index) {
+                const auto& row = ProcessCells[index];
+                KeyToIndex[row.first(keyColumnTypes.size())] = index;
+            }
 
             lookupInfo.Lookup->AddLookupTask(
-                Cookie, CutColumns(ProcessCells, lookupInfo.Lookup->GetKeyColumnTypes().size()));
+                Cookie, CutColumns(ProcessCells, keyColumnTypes.size()));
 
             State = EState::LOOKUP_MAIN_TABLE;
         } else if (!PathLookupInfo.empty()) {
@@ -1507,16 +1513,17 @@ private:
         } else {
             // Write without lookups .
             // We don't do uncessary copy here.
-            std::vector<TWrite> writes;
+            Writes.reserve(BufferedBatches.size());
             for (auto& batch : BufferedBatches) {
-                writes.push_back(TWrite {
+                Writes.push_back(TWrite {
                     .NewBatch = std::move(batch),
                     .OldBatch = nullptr,
                 });
             }
-            FlushWritesToActors(std::move(writes));
-
             BufferedBatches.clear();
+
+            FlushWritesToActors();
+
             State = EState::BUFFERING;
         }
         return true;
@@ -1527,11 +1534,35 @@ private:
         AFL_ENSURE(!ProcessCells.empty());
 
         auto& lookupInfo = PathLookupInfo.at(PathId);
-        if (!lookupInfo.Lookup->ExtractResult(Cookie, [](TConstArrayRef<TCell> cells){
-            Y_UNUSED(cells);
-        })) {
+        if (lookupInfo.Lookup->HasResult(Cookie)) {
             return false;
         }
+
+        auto newRowsBatcher = CreateRowsBatcher(LookupNewColumns.size(), /* alloc */);
+        auto oldRowsBatcher = CreateRowsBatcher(LookupOldColumns.size(), /* alloc */);
+
+        const auto& keyColumnTypes = lookupInfo.Lookup->GetKeyColumnTypes();
+        lookupInfo.Lookup->ExtractResult(Cookie, [&](TConstArrayRef<TCell> cells) {
+            AFL_ENSURE(cells.size() > keyColumnTypes.size());
+            const auto key = cells.first(keyColumnTypes.size());
+            const auto readCells = cells.last(cells.size() - keyColumnTypes.size());
+
+            const auto index = KeyToIndex.at(key);
+            Y_UNUSED(readCells);
+            Y_UNUSED(key);
+
+            const auto& inputCells = ProcessCells[index];
+            Y_UNUSED(inputCells);
+
+            // indexes for inputCells + readCells
+        });
+
+        KeyToIndex.clear();
+
+        Writes.push_back(TWrite {
+            .NewBatch = nullptr, // std::move(batch),
+            .OldBatch = nullptr,
+        });
 
         if (PathLookupInfo.size() > 1) {
             // Need to lookup unique indexes
@@ -1544,14 +1575,16 @@ private:
         return true;
     }
 
-    void FlushWritesToActors(std::vector<TWrite>&& writes) {
-        for (auto& write : writes) {
+    void FlushWritesToActors() {
+        for (auto& write : Writes) {
+            // TODO: Track memory usage
             Memory -= write.NewBatch->GetMemory();
             if (write.OldBatch) {
                 Memory -= write.OldBatch->GetMemory();
             }
             WriteBatchToActors(std::move(write.NewBatch), std::move(write.OldBatch));
         }
+        Writes.clear();
     }
 
     void WriteBatchToActors(IDataBatchPtr newBatch, IDataBatchPtr oldBatch) {
@@ -1559,13 +1592,16 @@ private:
             // At first, write to indexes
             if (PathId != actorPathId) {
                 if (oldBatch) {
+                    actorInfo.KeyProjection->Fill(oldBatch);
+                    auto preparedKeyBatch = actorInfo.KeyProjection->Flush();
                     actorInfo.WriteActor->Write(
                         Cookie,
                         NKikimrDataEvents::TEvWrite::TOperation::OPERATION_DELETE,
-                        std::move(oldBatch));
+                        std::move(preparedKeyBatch));
                     actorInfo.WriteActor->FlushBuffer(Cookie);
                 }
-                auto preparedBatch = actorInfo.Projection->Project(newBatch);
+                actorInfo.Projection->Fill(newBatch);
+                auto preparedBatch = actorInfo.Projection->Flush();
                 actorInfo.WriteActor->Write(
                     Cookie,
                     OperationType == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_DELETE
@@ -1574,6 +1610,12 @@ private:
                     preparedBatch);
                 actorInfo.WriteActor->FlushBuffer(Cookie);
             }
+        }
+
+        auto& actorInfo = PathWriteInfo.at(PathId);
+        if (actorInfo.Projection) {
+            actorInfo.Projection->Fill(newBatch);
+            newBatch = actorInfo.Projection->Flush();
         }
         PathWriteInfo.at(PathId).WriteActor->Write(Cookie, OperationType, std::move(newBatch));
     }
@@ -1595,12 +1637,17 @@ private:
     THashMap<TPathId, TPathWriteInfo> PathWriteInfo;
     THashMap<TPathId, TPathLookupInfo> PathLookupInfo;
 
+    TVector<ui32> LookupNewColumns;
+    TVector<ui32> LookupOldColumns;
+
     bool Closed = false;
     i64 Memory = 0;
 
     std::vector<IDataBatchPtr> BufferedBatches;
     std::vector<IDataBatchPtr> ProcessBatches;
+    std::vector<TWrite> Writes;
     std::vector<TConstArrayRef<TCell>> ProcessCells;
+    THashMap<TConstArrayRef<TCell>, ui32, NKikimr::TCellVectorsHash, NKikimr::TCellVectorsEquals> KeyToIndex;
 };
 
 class TKqpDirectWriteActor : public TActorBootstrapped<TKqpDirectWriteActor>, public NYql::NDq::IDqComputeActorAsyncOutput, public IKqpTableWriterCallbacks {

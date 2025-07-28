@@ -828,6 +828,32 @@ private:
     std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc;
 };
 
+class TRowsBatcherProxy : public IRowsBatcher {
+public:
+    TRowsBatcherProxy(const size_t columnsCount, std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc) 
+        : RowBatcher(columnsCount, std::nullopt, alloc) {
+    }
+
+    bool IsEmpty() const override {
+        return RowBatcher.IsEmpty();
+    }
+
+    i64 GetMemory() const override {
+        return RowBatcher.GetMemory();
+    }
+
+    void AddRow(TConstArrayRef<TCell> row) override {
+        RowBatcher.AddRow(row);
+    }
+
+    IDataBatchPtr Flush(bool force) override {
+        return RowBatcher.Flush(force);
+    }
+
+private:
+    TRowsBatcher RowBatcher;
+};
+
 class TRowDataBatcher : public IDataBatcher {
 public:
     TRowDataBatcher(
@@ -1034,71 +1060,58 @@ IPayloadSerializerPtr CreateDataShardPayloadSerializer(
 class TDataBatchProjection : public IDataBatchProjection {
 public:
     TDataBatchProjection(
-        const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> inputColumns,
-        const TConstArrayRef<ui32> inputWriteIndex,
-        const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> outputColumns,
-        const TConstArrayRef<ui32> outputWriteIndex,
+        std::vector<ui32>&& columnsMapping,
         std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc)
-            : Alloc(std::move(alloc)) {
-        AFL_ENSURE(inputColumns.size() == inputWriteIndex.size());
-        AFL_ENSURE(outputColumns.size() == outputWriteIndex.size());
-        AFL_ENSURE(outputColumns.size() <= inputColumns.size());
-
-        THashMap<TString, ui32> InputColumnNameToIndex;
-        for (size_t index = 0; index < inputColumns.size(); ++index) {
-            InputColumnNameToIndex[inputColumns[index].GetName()] = index;
-        }
-        std::vector<ui32> outputOrder(outputWriteIndex.size());
-        for (size_t index = 0; index < outputWriteIndex.size(); ++index) {
-            outputOrder[outputWriteIndex[index]] = index;
-        }
-
-        ColumnsMapping.resize(outputColumns.size());
-        for (size_t index = 0; index < outputColumns.size(); ++index) {
-            const auto& outputColumnIndex = outputOrder.at(index);
-            const auto& outputColumnName = outputColumns.at(outputColumnIndex).GetName();
-            const auto& inputColumnIndex = InputColumnNameToIndex.at(outputColumnName);
-            const auto& inputIndex = inputWriteIndex.at(inputColumnIndex);
-
-            ColumnsMapping[index] = inputIndex;
-        }
+            : ColumnsMapping(std::move(columnsMapping))
+            , Alloc(std::move(alloc))
+            , RowBatcher(ColumnsMapping.size(), std::nullopt, Alloc) {
     }
 
-    IDataBatchPtr Project(const IDataBatchPtr& data) const override {
+    void Fill(const IDataBatchPtr& data) override {
+        YQL_ENSURE(RowBatcher.IsEmpty());
         auto* batch = dynamic_cast<TRowBatch*>(data.Get());
         AFL_ENSURE(batch);
         const auto& rows = batch->GetRows();
-        return ProjectDataShard(rows.begin(), rows.end());
+        AddDataShard(rows.begin(), rows.end());
     }
 
-    IDataBatchPtr Project(const TRowsRef& data) const override {
-        return ProjectDataShard(data.begin(), data.end());
+    void Fill(const TRowsRef& data) override {
+        YQL_ENSURE(RowBatcher.IsEmpty());
+        AddDataShard(data.begin(), data.end());
     }
 
-    IDataBatchPtr ProjectDataShard(
+    void AddDataShard(
             TVector<TConstArrayRef<TCell>>::const_iterator begin,
-            TVector<TConstArrayRef<TCell>>::const_iterator end) const {
+            TVector<TConstArrayRef<TCell>>::const_iterator end) {
         const size_t columnsCount = ColumnsMapping.size();
-        TRowsBatcher rowBatcher(columnsCount, std::nullopt, Alloc);
         std::vector<TCell> cells(columnsCount);
         for (auto it = begin; it != end; ++it) {
             const auto& row = *it;
             for (size_t index = 0; index < columnsCount; ++index) {
                 cells[index] = row[ColumnsMapping[index]];
             }
-            rowBatcher.AddRow(cells);
+            RowBatcher.AddRow(cells);
         }
-        auto result = rowBatcher.Flush(true);
-        YQL_ENSURE(rowBatcher.IsEmpty());
+    }
+
+    IDataBatchPtr Flush() override {
+        auto result = RowBatcher.Flush(true);
+        YQL_ENSURE(RowBatcher.IsEmpty());
         return result;
     }
 
 private:
-    std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc;
-
     std::vector<ui32> ColumnsMapping;
+    std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc;
+    TRowsBatcher RowBatcher;
 };
 
+}
+
+IRowsBatcherPtr CreateRowsBatcher(
+        size_t columnsCount,
+        std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc) {
+    return MakeIntrusive<TRowsBatcherProxy>(columnsCount, std::move(alloc));
 }
 
 IDataBatchProjectionPtr CreateDataBatchProjection(
@@ -1107,8 +1120,31 @@ IDataBatchProjectionPtr CreateDataBatchProjection(
         const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> outputColumns,
         const TConstArrayRef<ui32> outputWriteIndex,
         std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc) {
+    AFL_ENSURE(inputColumns.size() == inputWriteIndex.size());
+    AFL_ENSURE(outputColumns.size() == outputWriteIndex.size());
+    AFL_ENSURE(outputColumns.size() <= inputColumns.size());
+
+    THashMap<TString, ui32> InputColumnNameToIndex;
+    for (size_t index = 0; index < inputColumns.size(); ++index) {
+        InputColumnNameToIndex[inputColumns[index].GetName()] = index;
+    }
+    std::vector<ui32> outputOrder(outputWriteIndex.size());
+    for (size_t index = 0; index < outputWriteIndex.size(); ++index) {
+        outputOrder[outputWriteIndex[index]] = index;
+    }
+
+    std::vector<ui32> columnsMapping(outputColumns.size());
+    for (size_t index = 0; index < outputColumns.size(); ++index) {
+        const auto& outputColumnIndex = outputOrder.at(index);
+        const auto& outputColumnName = outputColumns.at(outputColumnIndex).GetName();
+        const auto& inputColumnIndex = InputColumnNameToIndex.at(outputColumnName);
+        const auto& inputIndex = inputWriteIndex.at(inputColumnIndex);
+
+        columnsMapping[index] = inputIndex;
+    }
+
     return MakeIntrusive<TDataBatchProjection>(
-        inputColumns, inputWriteIndex, outputColumns, outputWriteIndex, std::move(alloc));
+        std::move(columnsMapping), std::move(alloc));
 }
 
 std::vector<TConstArrayRef<TCell>> GetSortedUniqueRows(

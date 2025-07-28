@@ -172,12 +172,9 @@ void TTxScan::Complete(const TActorContext& ctx) {
     TComputeShardingPolicy shardingPolicy;
     AFL_VERIFY(shardingPolicy.DeserializeFromProto(request.GetComputeShardingPolicy()));
 
-    const auto& scheduler = AppData(ctx)->ComputeScheduler;
-    auto schedulableTask = scheduler ? scheduler->CreateSchedulableTaskFactory()(txId) : nullptr;
-
     auto scanActorId = ctx.Register(new TColumnShardScan(Self->SelfId(), scanComputeActor, Self->GetStoragesManager(),
         Self->DataAccessorsManager.GetObjectPtrVerified(), shardingPolicy, scanId, txId, scanGen, requestCookie, Self->TabletID(), timeout,
-        readMetadataRange, dataFormat, Self->Counters.GetScanCounters(), cpuLimits, std::move(schedulableTask)));
+        readMetadataRange, dataFormat, Self->Counters.GetScanCounters(), cpuLimits));
     Self->InFlightReadsTracker.AddScanActorId(requestCookie, scanActorId);
 
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "TTxScan started")("actor_id", scanActorId)("trace_detailed", detailedInfo);

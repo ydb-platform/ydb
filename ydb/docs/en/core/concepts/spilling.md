@@ -150,7 +150,7 @@ This type of spilling operates at the level of data transfer between different q
 Data transfer channels continuously monitor their state:
 
 1. **Buffering**: Incoming data accumulates in channel internal buffers
-2. **Fill control**: System tracks buffer fill levels (NoLimit, SoftLimit, HardLimit)
+2. **Fill control**: System tracks buffer fill levels
 3. **Automatic spilling**: When limits are reached, data is automatically serialized and transferred to Spilling Service
 4. **Continued operation**: Channel continues accepting new data after freeing memory space
 5. **Recovery**: When the next stage is ready, data is read from external storage and passed further

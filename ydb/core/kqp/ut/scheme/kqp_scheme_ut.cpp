@@ -5109,8 +5109,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
     }
 
     Y_UNIT_TEST(ModifyPermissionsByRelativePathQueryClient) {
-        NKikimrConfig::TAppConfig appConfig;
-        auto runnerSettings = TKikimrSettings().SetAppConfig(appConfig);
+        TKikimrSettings runnerSettings;
         TTestHelper testHelper(runnerSettings);
         auto client = testHelper.GetKikimr().GetQueryClient();
         auto db = testHelper.GetKikimr().GetTableClient();
@@ -7433,7 +7432,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         NKikimrConfig::TAppConfig config;
         config.MutableQueryServiceConfig()->AddAvailableExternalDataSources("ObjectStorage");
         config.MutableQueryServiceConfig()->MutableS3()->SetGeneratorPathsLimit(50000);
-        TKikimrRunner kikimr(NKqp::TKikimrSettings().SetAppConfig(config));
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(config));
 
         kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableExternalDataSources(true);
         auto db = kikimr.GetTableClient();
@@ -7587,7 +7586,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         NKikimrConfig::TAppConfig config;
         config.MutableQueryServiceConfig()->AddAvailableExternalDataSources("ObjectStorage");
         config.MutableQueryServiceConfig()->MutableS3()->SetGeneratorPathsLimit(50000);
-        TKikimrRunner kikimr(NKqp::TKikimrSettings().SetAppConfig(config));
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(config));
 
         kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableExternalDataSources(true);
         auto db = kikimr.GetTableClient();
@@ -7631,7 +7630,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         NKikimrConfig::TAppConfig config;
         config.MutableQueryServiceConfig()->AddAvailableExternalDataSources("ObjectStorage");
         config.MutableQueryServiceConfig()->MutableS3()->SetGeneratorPathsLimit(50000);
-        TKikimrRunner kikimr(NKqp::TKikimrSettings().SetAppConfig(config));
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(config));
 
         kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableExternalDataSources(true);
         auto db = kikimr.GetTableClient();
@@ -7677,7 +7676,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         config.MutableQueryServiceConfig()->AddAvailableExternalDataSources("ObjectStorage");
         config.MutableQueryServiceConfig()->MutableS3()->SetGeneratorPathsLimit(50000);
         config.MutableFeatureFlags()->SetEnableReplaceIfExistsForExternalEntities(true);
-        TKikimrRunner kikimr(NKqp::TKikimrSettings().SetAppConfig(config));
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(config));
 
         kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableExternalDataSources(true);
         auto db = kikimr.GetTableClient();
@@ -7792,7 +7791,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         NKikimrConfig::TAppConfig config;
         config.MutableQueryServiceConfig()->AddAvailableExternalDataSources("ObjectStorage");
         config.MutableQueryServiceConfig()->MutableS3()->SetGeneratorPathsLimit(50000);
-        TKikimrRunner kikimr(NKqp::TKikimrSettings().SetAppConfig(config));
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(config));
 
         kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableExternalDataSources(true);
         auto db = kikimr.GetTableClient();
@@ -7853,7 +7852,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         NKikimrConfig::TAppConfig config;
         config.MutableQueryServiceConfig()->AddAvailableExternalDataSources("ObjectStorage");
         config.MutableQueryServiceConfig()->MutableS3()->SetGeneratorPathsLimit(50000);
-        TKikimrRunner kikimr(NKqp::TKikimrSettings().SetAppConfig(config));
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(config));
 
         kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableExternalDataSources(true);
         auto db = kikimr.GetTableClient();
@@ -7905,7 +7904,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         NKikimrConfig::TAppConfig config;
         config.MutableQueryServiceConfig()->AddAvailableExternalDataSources("ObjectStorage");
         config.MutableQueryServiceConfig()->MutableS3()->SetGeneratorPathsLimit(50000);
-        TKikimrRunner kikimr(NKqp::TKikimrSettings().SetAppConfig(config));
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(config));
 
         kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableExternalDataSources(true);
         auto db = kikimr.GetTableClient();
@@ -7957,7 +7956,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         NKikimrConfig::TAppConfig config;
         config.MutableQueryServiceConfig()->AddAvailableExternalDataSources("ObjectStorage");
         config.MutableQueryServiceConfig()->MutableS3()->SetGeneratorPathsLimit(50000);
-        TKikimrRunner kikimr(NKqp::TKikimrSettings().SetAppConfig(config));
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(config));
 
         kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableExternalDataSources(true);
         auto db = kikimr.GetTableClient();
@@ -8011,7 +8010,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         NKikimrConfig::TAppConfig config;
         config.MutableQueryServiceConfig()->AddAvailableExternalDataSources("ObjectStorage");
         config.MutableQueryServiceConfig()->MutableS3()->SetGeneratorPathsLimit(50000);
-        TKikimrRunner kikimr(NKqp::TKikimrSettings().SetAppConfig(config));
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(config));
 
         kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableExternalDataSources(true);
         auto db = kikimr.GetTableClient();
@@ -10437,9 +10436,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         NKikimrConfig::TAppConfig config;
         config.MutableFeatureFlags()->SetEnableResourcePools(false);
 
-        TKikimrRunner kikimr(NKqp::TKikimrSettings()
-            .SetAppConfig(config)
-            .SetEnableResourcePools(false));
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(config).SetEnableResourcePools(false));
 
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -10530,9 +10527,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         NKikimrConfig::TAppConfig config;
         config.MutableFeatureFlags()->SetEnableResourcePools(true);
 
-        TKikimrRunner kikimr(NKqp::TKikimrSettings()
-            .SetAppConfig(config)
-            .SetEnableResourcePools(true));
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(config).SetEnableResourcePools(true));
 
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -10588,8 +10583,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         NKikimrConfig::TAppConfig config;
         config.MutableFeatureFlags()->SetEnableResourcePools(true);
 
-        TKikimrRunner kikimr(NKqp::TKikimrSettings()
-            .SetAppConfig(config)
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(config)
             .SetEnableResourcePools(true));
 
         auto db = kikimr.GetTableClient();
@@ -10621,8 +10615,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         NKikimrConfig::TAppConfig config;
         config.MutableFeatureFlags()->SetEnableResourcePools(true);
 
-        TKikimrRunner kikimr(NKqp::TKikimrSettings()
-            .SetAppConfig(config)
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(config)
             .SetEnableResourcePools(true));
 
         auto db = kikimr.GetTableClient();
@@ -10656,8 +10649,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         NKikimrConfig::TAppConfig config;
         config.MutableFeatureFlags()->SetEnableResourcePools(true);
 
-        TKikimrRunner kikimr(NKqp::TKikimrSettings()
-            .SetAppConfig(config)
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(config)
             .SetEnableResourcePools(true));
 
         auto db = kikimr.GetTableClient();
@@ -10703,8 +10695,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         NKikimrConfig::TAppConfig config;
         config.MutableFeatureFlags()->SetEnableResourcePools(true);
 
-        TKikimrRunner kikimr(NKqp::TKikimrSettings()
-            .SetAppConfig(config)
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(config)
             .SetEnableResourcePools(true));
 
         auto db = kikimr.GetTableClient();
@@ -10723,8 +10714,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         NKikimrConfig::TAppConfig config;
         config.MutableFeatureFlags()->SetEnableResourcePools(true);
 
-        TKikimrRunner kikimr(NKqp::TKikimrSettings()
-            .SetAppConfig(config)
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(config)
             .SetEnableResourcePools(true));
 
         auto db = kikimr.GetTableClient();
@@ -10756,8 +10746,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         NKikimrConfig::TAppConfig config;
         config.MutableFeatureFlags()->SetEnableResourcePools(true);
 
-        TKikimrRunner kikimr(NKqp::TKikimrSettings()
-            .SetAppConfig(config)
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(config)
             .SetEnableResourcePools(true));
 
         auto db = kikimr.GetTableClient();
@@ -10772,8 +10761,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         NKikimrConfig::TAppConfig config;
         config.MutableFeatureFlags()->SetEnableResourcePools(false);
 
-        TKikimrRunner kikimr(NKqp::TKikimrSettings()
-            .SetAppConfig(config)
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(config)
             .SetEnableResourcePools(false));
 
         auto db = kikimr.GetTableClient();
@@ -10867,8 +10855,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         NKikimrConfig::TAppConfig config;
         config.MutableFeatureFlags()->SetEnableResourcePools(true);
 
-        TKikimrRunner kikimr(NKqp::TKikimrSettings()
-            .SetAppConfig(config)
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(config)
             .SetEnableResourcePools(true));
 
         auto db = kikimr.GetTableClient();
@@ -10935,8 +10922,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         NKikimrConfig::TAppConfig config;
         config.MutableFeatureFlags()->SetEnableResourcePools(true);
 
-        TKikimrRunner kikimr(NKqp::TKikimrSettings()
-            .SetAppConfig(config)
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(config)
             .SetEnableResourcePools(true));
 
         auto db = kikimr.GetTableClient();
@@ -11010,8 +10996,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         NKikimrConfig::TAppConfig config;
         config.MutableFeatureFlags()->SetEnableResourcePools(true);
 
-        TKikimrRunner kikimr(NKqp::TKikimrSettings()
-            .SetAppConfig(config)
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(config)
             .SetEnableResourcePools(true));
 
         auto db = kikimr.GetTableClient();
@@ -11069,8 +11054,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         config.MutableFeatureFlags()->SetEnableResourcePools(true);
         config.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
 
-        TKikimrRunner kikimr(NKqp::TKikimrSettings()
-            .SetAppConfig(config)
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(config)
             .SetEnableResourcePools(true));
 
         auto db = kikimr.GetTableClient();
@@ -11102,8 +11086,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         NKikimrConfig::TAppConfig config;
         config.MutableFeatureFlags()->SetEnableResourcePools(true);
 
-        TKikimrRunner kikimr(NKqp::TKikimrSettings()
-            .SetAppConfig(config)
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(config)
             .SetEnableResourcePools(true));
 
         auto db = kikimr.GetTableClient();
@@ -11160,8 +11143,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         NKikimrConfig::TAppConfig config;
         config.MutableFeatureFlags()->SetEnableResourcePools(true);
 
-        TKikimrRunner kikimr(NKqp::TKikimrSettings()
-            .SetAppConfig(config)
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(config)
             .SetEnableResourcePools(true));
 
         auto db = kikimr.GetTableClient();
@@ -11181,8 +11163,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         NKikimrConfig::TAppConfig config;
         config.MutableFeatureFlags()->SetEnableResourcePools(true);
 
-        TKikimrRunner kikimr(NKqp::TKikimrSettings()
-            .SetAppConfig(config)
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(config)
             .SetEnableResourcePools(true));
 
         auto db = kikimr.GetTableClient();
@@ -11211,8 +11192,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         NKikimrConfig::TAppConfig config;
         config.MutableFeatureFlags()->SetEnableResourcePools(true);
 
-        TKikimrRunner kikimr(NKqp::TKikimrSettings()
-            .SetAppConfig(config)
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(config)
             .SetEnableResourcePools(true));
 
         auto db = kikimr.GetTableClient();
@@ -11289,8 +11269,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         NKikimrConfig::TAppConfig config;
         config.MutableFeatureFlags()->SetEnableBackupService(true);
 
-        TKikimrRunner kikimr(NKqp::TKikimrSettings()
-            .SetAppConfig(config)
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(config)
             .SetEnableBackupService(true));
 
         auto db = kikimr.GetTableClient();

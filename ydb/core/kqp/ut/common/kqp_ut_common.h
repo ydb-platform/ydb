@@ -88,7 +88,7 @@ public:
         InitDefaultConfig();
     }
 
-    TKikimrSettings(const NKikimrConfig::TAppConfig& value)
+    explicit TKikimrSettings(const NKikimrConfig::TAppConfig& value)
         : AppConfig(value)
     {
         InitDefaultConfig();

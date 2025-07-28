@@ -15,9 +15,9 @@ val {{ varprefix }}{{ custom_run['_object_index'] }} = task<Exec>("{{ varprefix 
 
     commandLine("bash", "-c", listOf(
 {%-        for arg in custom_run.command -%}
-{%-            if custom_run.depends|select("eq", arg)|length %}
+{%-            if custom_run.depends|select("eq", arg)|length or custom_run.depends|select("in", arg)|length %}
         {{ PatchRoots(arg, true) }}
-{%-            elif custom_run.outputs|select("eq", arg)|length %}
+{%-            elif custom_run.outputs|select("eq", arg)|length or custom_run.outputs|select("in", arg)|length %}
 {%-                if proto_template -%}
         {#- generated proto put to prepared proto dir #}
         {{ PatchGeneratedProto(arg) }}

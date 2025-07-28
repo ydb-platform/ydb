@@ -417,6 +417,26 @@ class EslintConfigPath:
         return {cls.KEY: _resolve_config_path(unit, test_runner, rel_to=rel_to)}
 
 
+class ParallelTestsInSingleNode:
+    KEY = 'PARALLEL-TESTS-WITHIN-NODE-ON-YT'
+
+    @classmethod
+    def value(cls, unit, flat_args, spec_args):
+        value = unit.get('PARALLEL_TESTS_ON_YT_WITHIN_NODE_WORKERS')
+
+        if value:
+            value = value.lower()
+            if value != 'all' and not (value.isnumeric() and int(value) > 0):
+                ymake.report_configure_error(
+                    'Incorrect value of PARALLEL_TESTS_ON_YT_WITHIN_NODE. Expected either "all" or a positive integer value, got: {}'.format(
+                        value,
+                    ),
+                )
+                raise DartValueError()
+
+        return {cls.KEY: value}
+
+
 class ForkMode:
     KEY = 'FORK-MODE'
 

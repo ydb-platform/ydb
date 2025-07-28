@@ -27,7 +27,7 @@ class TpcdsSuiteBase(LoadSuiteBase):
 
     @classmethod
     def _get_path(cls) -> str:
-        return get_external_param(f'table-path-{cls.suite()}', f'tpcds/s{cls.scale}')
+        return get_external_param(f'table-path-{cls.suite()}', f'tpcds/s{cls.scale}'.replace('.', '_'))
 
     @classmethod
     def do_setup_class(cls):

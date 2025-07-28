@@ -66,6 +66,8 @@ struct TStageInfo : private TMoveOnly {
     ui32 InputsCount = 0;
     ui32 OutputsCount = 0;
 
+    // Describes step-by-step the decisions leading to this exact number of tasks - in human-readable way.
+    TVector<TString> Introspections; // TODO(#20120): maybe find a better place?
     TVector<ui64> Tasks;
     TStageInfoMeta Meta;
 

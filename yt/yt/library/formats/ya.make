@@ -39,7 +39,6 @@ SRCS(
 PEERDIR(
     yt/yt/client
     yt/yt/client/formats
-    yt/yt/client/arrow/fbs
     yt/yt/library/column_converters
 
     contrib/libs/apache/arrow

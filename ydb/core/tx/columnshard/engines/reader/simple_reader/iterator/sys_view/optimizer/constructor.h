@@ -61,7 +61,7 @@ public:
         }
     };
 
-    std::shared_ptr<NReader::NSimple::IDataSource> Construct(const std::shared_ptr<NReader::NSimple::TSpecialReadContext>& context) {
+    std::shared_ptr<NReader::NSimple::IDataSource> Construct(const std::shared_ptr<NReader::NCommon::TSpecialReadContext>& context) {
         AFL_VERIFY(SourceId);
         auto tasks = Granule->GetOptimizerPlanner().GetTasksDescription();
         return std::make_shared<TSourceData>(
@@ -69,7 +69,7 @@ public:
     }
 };
 
-class TConstructor: public NAbstract::ISourcesConstructor {
+class TConstructor: public NCommon::ISourcesConstructor {
 private:
     std::deque<TGranuleDataConstructor> Constructors;
     const ui64 TabletId;
@@ -83,11 +83,10 @@ private:
     virtual bool DoIsFinished() const override {
         return Constructors.empty();
     }
-    virtual std::shared_ptr<NReader::NCommon::IDataSource> DoExtractNext(
-        const std::shared_ptr<NReader::NCommon::TSpecialReadContext>& context) override {
+    virtual std::shared_ptr<NCommon::IDataSource> DoTryExtractNext(
+        const std::shared_ptr<NCommon::TSpecialReadContext>& context, const ui32 /*inFlightCurrentLimit*/) override {
         AFL_VERIFY(Constructors.size());
-        std::shared_ptr<NReader::NCommon::IDataSource> result =
-            Constructors.front().Construct(std::static_pointer_cast<NReader::NSimple::TSpecialReadContext>(context));
+        std::shared_ptr<NCommon::IDataSource> result = Constructors.front().Construct(context);
         Constructors.pop_front();
         return result;
     }

@@ -7789,7 +7789,8 @@ Y_UNIT_TEST_SUITE(THiveTest) {
             BridgeConfig.AddPiles()->SetName("pile0");
             BridgeConfig.AddPiles()->SetName("pile1");
             Runtime.AddAppDataInit([this](ui32, TAppData& appData) {
-                appData.BridgeConfig = &BridgeConfig;
+                appData.BridgeConfig = BridgeConfig;
+                appData.BridgeModeEnabled = true;
             });
             Observe();
         }

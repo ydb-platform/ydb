@@ -9,14 +9,17 @@ from ydb.tests.library.stress.fixtures import StressFixture
 class TestYdbLogWorkload(StressFixture):
     @pytest.fixture(autouse=True, scope="function")
     def setup(self):
-        yield from self.setup_cluster()
+        yield from self.setup_cluster(
+            column_shard_config={
+                'disabled_on_scheme_shard': False,
+            })
 
     def get_command_prefix(self, subcmds: list[str], path: str) -> list[str]:
         return [
             yatest.common.binary_path(os.getenv('YDB_CLI_BINARY')),
             '--verbose',
-            '--endpoint', 'grpc://localhost:%d' % self.cluster.nodes[1].grpc_port,
-            '--database=/Root',
+            '--endpoint', self.endpoint,
+            '--database={}'.format(self.database),
             'workload', 'log'
         ] + subcmds + [
             '--path', path

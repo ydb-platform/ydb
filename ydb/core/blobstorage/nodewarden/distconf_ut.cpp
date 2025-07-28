@@ -35,13 +35,15 @@ Y_UNIT_TEST_SUITE(TDistconfGenerateConfigTest) {
         return ss;
     }
 
-    NKikimrConfig::TDomainsConfig::TStateStorage GenerateDCStateStorage(ui32 dcCnt, ui32 racksCnt,  ui32 nodesInRack) {
+    NKikimrConfig::TDomainsConfig::TStateStorage GenerateDCStateStorage(ui32 dcCnt, ui32 racksCnt,  ui32 nodesInRack, std::unordered_map<ui32, ui32> nodesState = {}) {
         NKikimrBlobStorage::TStorageConfig config;
         ui32 nodeId = 1;
+        NKikimr::NStorage::TDistributedConfigKeeper keeper(nullptr, nullptr, true);
         for (ui32 dc : xrange(dcCnt)) {
             for (ui32 rack : xrange(racksCnt)) {
                 for (auto _ : xrange(nodesInRack)) {
                     auto *node = config.AddAllNodes();
+                    keeper.SelfHealNodesState[nodeId] = 0;
                     node->SetNodeId(nodeId++);
                     node->MutableLocation()->SetDataCenter("dc-" + std::to_string(dc));
                     node->MutableLocation()->SetRack(std::to_string(rack));
@@ -49,7 +51,9 @@ Y_UNIT_TEST_SUITE(TDistconfGenerateConfigTest) {
             }
         }
         NKikimrConfig::TDomainsConfig::TStateStorage ss;
-        NKikimr::NStorage::TDistributedConfigKeeper keeper(nullptr, nullptr, true);
+        for(auto [nodeId, state] : nodesState) {
+            keeper.SelfHealNodesState[nodeId] = state;
+        }
         keeper.GenerateStateStorageConfig(&ss, config);
         return ss;
     }
@@ -94,7 +98,7 @@ Y_UNIT_TEST_SUITE(TDistconfGenerateConfigTest) {
 
     Y_UNIT_TEST(GenerateConfig1DCBigCases) {
         CheckStateStorage2(GenerateDCStateStorage(1, 1, 1000), "{ RingGroups { NToSelect: 5 "
-            "Ring { Node: 501 Node: 2 } Ring { Node: 3 Node: 4 } Ring { Node: 5 Node: 6 } "
+            "Ring { Node: 1 Node: 2 } Ring { Node: 3 Node: 4 } Ring { Node: 5 Node: 6 } "
             "Ring { Node: 7 Node: 8 } Ring { Node: 9 Node: 10 } Ring { Node: 11 Node: 12 } "
             "Ring { Node: 13 Node: 14 } Ring { Node: 15 Node: 16 } } }");
         CheckStateStorage2(GenerateDCStateStorage(1, 2, 1000), "{ RingGroups { NToSelect: 5 "
@@ -110,14 +114,21 @@ Y_UNIT_TEST_SUITE(TDistconfGenerateConfigTest) {
 
     Y_UNIT_TEST(GenerateConfig3DCBigCases) {
         CheckStateStorage2(GenerateDCStateStorage(3, 1, 300), "{ RingGroups { NToSelect: 9 "
-            "Ring { Node: 451 } Ring { Node: 302 } Ring { Node: 303 } "
-            "Ring { Node: 751 } Ring { Node: 602 } Ring { Node: 603 } "
-            "Ring { Node: 151 } Ring { Node: 2 } Ring { Node: 3 } } }");
+            "Ring { Node: 301 } Ring { Node: 302 } Ring { Node: 303 } "
+            "Ring { Node: 601 } Ring { Node: 602 } Ring { Node: 603 } "
+            "Ring { Node: 1 } Ring { Node: 2 } Ring { Node: 3 } } }");
         CheckStateStorage2(GenerateDCStateStorage(3, 10, 100), "{ RingGroups { NToSelect: 9 "
             "Ring { Node: 1001 Node: 1002 Node: 1003 Node: 1004 } Ring { Node: 1101 Node: 1102 Node: 1103 Node: 1104 } Ring { Node: 1201 Node: 1202 Node: 1203 Node: 1204 } "
             "Ring { Node: 2001 Node: 2002 Node: 2003 Node: 2004 } Ring { Node: 2101 Node: 2102 Node: 2103 Node: 2104 } Ring { Node: 2201 Node: 2202 Node: 2203 Node: 2204 } "
             "Ring { Node: 1 Node: 2 Node: 3 Node: 4 } Ring { Node: 101 Node: 102 Node: 103 Node: 104 } Ring { Node: 201 Node: 202 Node: 203 Node: 204 } } }");
+    }
 
+    Y_UNIT_TEST(GenerateConfigIgnoreNodes) {
+        CheckStateStorage(GenerateDCStateStorage(1, 1, 20, { {3, 1} }), 5, {1, 2, 4, 5, 6, 7, 8, 9});
+        CheckStateStorage(GenerateDCStateStorage(1, 1, 20, { {3, 1}, {7, 3}, {10, 2} }), 5, {1, 2, 4, 5, 6, 8, 9, 11});
+        CheckStateStorage(GenerateDCStateStorage(1, 1, 10, { {3, 1}, {7, 3}, {10, 2} }), 5, {1, 2, 3, 4, 5, 6, 8, 9});
+        CheckStateStorage(GenerateDCStateStorage(1, 1, 10, { {3, 2}, {7, 3}, {10, 1} }), 5, {1, 2, 4, 5, 6, 8, 9, 10});
+        CheckStateStorage(GenerateDCStateStorage(3, 3, 3, { {13, 1} }), 9, {1, 4, 7, 10, 14, 16, 19, 22, 25});
     }
 }
 }

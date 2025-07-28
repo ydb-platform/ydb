@@ -26,6 +26,11 @@
 
 namespace NSQLComplete {
 
+    enum class ERangeKind {
+        Replace,
+        Filter,
+    };
+
     template <std::regular_invocable<TParserCallStack> StackPredicate>
     std::regular_invocable<TMatchedRule> auto RuleAdapted(StackPredicate predicate) {
         return [=](const TMatchedRule& rule) {
@@ -87,8 +92,12 @@ namespace NSQLComplete {
             TLocalSyntaxContext result;
 
             result.IsQuoted = Quotation(input, context);
-            result.EditRange = EditRange(context);
-            result.EditRange.Begin += statement_position;
+
+            result.ReplaceRange = EditRange(context, ERangeKind::Replace);
+            result.ReplaceRange.Begin += statement_position;
+
+            result.FilterRange = EditRange(context, ERangeKind::Filter);
+            result.FilterRange.Begin += statement_position;
 
             if (auto enclosing = context.Enclosing()) {
                 if (enclosing->IsLiteral()) {
@@ -356,7 +365,17 @@ namespace NSQLComplete {
             return isQuoted;
         }
 
-        TEditRange EditRange(const TCursorTokenContext& context) const {
+        TEditRange EditRange(const TCursorTokenContext& context, ERangeKind kind) const {
+            if (TMaybe<TRichParsedToken> begin;
+                kind == ERangeKind::Replace &&
+                ((begin = context.MatchCursorPrefix({"DOLLAR"})) ||
+                 (begin = context.MatchCursorPrefix({"DOLLAR", ""})))) {
+                return {
+                    .Begin = begin->Position,
+                    .Length = context.Cursor.Position - begin->Position,
+                };
+            }
+
             if (auto enclosing = context.Enclosing()) {
                 return EditRange(*enclosing, context.Cursor);
             }

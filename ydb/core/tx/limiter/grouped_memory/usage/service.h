@@ -42,7 +42,7 @@ public:
         } else {
             AFL_VERIFY(Singleton<TSelf>()->DefaultStageFeatures);
             return std::make_shared<TStageFeatures>(
-                name, limit, std::nullopt, Singleton<TSelf>()->DefaultStageFeatures, Singleton<TSelf>()->Counters->BuildStageCounters(name));
+                name, limit / (GetCountBuckets() ? GetCountBuckets() : 1), std::nullopt, Singleton<TSelf>()->DefaultStageFeatures, Singleton<TSelf>()->Counters->BuildStageCounters(name));
         }
     }
 
@@ -88,6 +88,10 @@ public:
     static bool IsEnabled() {
         return Singleton<TSelf>()->ServiceConfig.IsEnabled();
     }
+
+    static ui64 GetCountBuckets() {
+        return Singleton<TSelf>()->ServiceConfig.GetCountBuckets();
+    }
     static NActors::TActorId MakeServiceId(const ui32 nodeId) {
         return NActors::TActorId(nodeId, "SrvcMlmt" + GetMemoryLimiterName());
     }
@@ -114,5 +118,14 @@ public:
 };
 
 using TCompMemoryLimiterOperator = TServiceOperatorImpl<TCompMemoryLimiterPolicy>;
+
+class TDeduplicationMemoryLimiterPolicy {
+public:
+    static const inline TString Name = "Deduplication";
+    static const inline NMemory::EMemoryConsumerKind ConsumerKind = NMemory::EMemoryConsumerKind::DeduplicationGroupedMemoryLimiter;
+    static constexpr bool ExternalProcessIdAllocation = false;
+};
+
+using TDeduplicationMemoryLimiterOperator = TServiceOperatorImpl<TDeduplicationMemoryLimiterPolicy>;
 
 }   // namespace NKikimr::NOlap::NGroupedMemoryManager

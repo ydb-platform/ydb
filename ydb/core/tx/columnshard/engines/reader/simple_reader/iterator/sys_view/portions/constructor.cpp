@@ -45,21 +45,19 @@ TConstructor::TConstructor(const NOlap::IPathIdTranslator& pathIdTranslator, con
     }
 }
 
-std::shared_ptr<NCommon::IDataSource> TConstructor::DoExtractNext(
-    const std::shared_ptr<NReader::NCommon::TSpecialReadContext>& context) {
+std::shared_ptr<NCommon::IDataSource> TConstructor::DoTryExtractNext(
+    const std::shared_ptr<NCommon::TSpecialReadContext>& context, const ui32 /*inFlightCurrentLimit*/) {
     AFL_VERIFY(Constructors.size());
 
     Constructors.front().SetIndex(CurrentSourceIdx);
     ++CurrentSourceIdx;
     if (Sorting == ERequestSorting::NONE) {
-        std::shared_ptr<NReader::NCommon::IDataSource> result =
-            Constructors.front().Construct(std::static_pointer_cast<NReader::NSimple::TSpecialReadContext>(context));
+        std::shared_ptr<NReader::NCommon::IDataSource> result = Constructors.front().Construct(context);
         Constructors.pop_front();
         return result;
     } else {
         std::pop_heap(Constructors.begin(), Constructors.end(), TPortionDataConstructor::TComparator(Sorting == ERequestSorting::DESC));
-        std::shared_ptr<NReader::NCommon::IDataSource> result =
-            Constructors.back().Construct(std::static_pointer_cast<NReader::NSimple::TSpecialReadContext>(context));
+        std::shared_ptr<NReader::NCommon::IDataSource> result = Constructors.back().Construct(context);
         Constructors.pop_back();
         return result;
     }

@@ -36,7 +36,6 @@
 #include <yql/essentials/public/result_format/yql_result_format_data.h>
 #include <yql/essentials/utils/failure_injector/failure_injector.h>
 #include <yql/essentials/utils/backtrace/backtrace.h>
-#include <yql/essentials/utils/log/log.h>
 #include <yql/essentials/utils/mem_limit.h>
 #include <yql/essentials/protos/yql_mount.pb.h>
 #include <yql/essentials/protos/pg_ext.pb.h>
@@ -525,6 +524,7 @@ void TFacadeRunOptions::Parse(int argc, const char *argv[]) {
 
 TFacadeRunner::TFacadeRunner(TString name)
     : Name_(std::move(name))
+    , YqlLogger_(std::make_unique<NYql::NLog::YqlLoggerScope>(&Cerr))
 {
 }
 
@@ -540,7 +540,6 @@ int TFacadeRunner::Main(int argc, const char *argv[]) {
     NYql::NBacktrace::EnableKikimrSymbolize();
     EnableKikimrBacktraceFormat();
 
-    NYql::NLog::YqlLoggerScope logger(&Cerr);
     try {
         return DoMain(argc, argv);
     }

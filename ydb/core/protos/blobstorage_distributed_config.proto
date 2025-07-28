@@ -236,6 +236,21 @@ message TEvNodeConfigInvokeOnRoot {
         optional bool Recommended = 1;
     }
 
+    message TSelfHealStateStorage {
+        optional uint32 WaitForConfigStep = 1;
+        optional bool ForceHeal = 2;
+    }
+
+    message TSelfHealNodesStateUpdate {
+        message TNodeState {
+            optional uint32 NodeId = 1;
+            optional uint32 State = 2;
+        }
+        optional bool EnableSelfHealStateStorage = 1;
+        optional uint32 WaitForConfigStep = 2;
+        repeated TNodeState NodesState = 3;
+    }
+
     message TAdvanceGeneration
     {}
 
@@ -298,6 +313,8 @@ message TEvNodeConfigInvokeOnRoot {
         TStateStorageConfig ReconfigStateStorage = 12;
         TGetStateStorageConfig GetStateStorageConfig = 13;
         TNotifyBridgeSyncFinished NotifyBridgeSyncFinished = 14;
+        TSelfHealStateStorage SelfHealStateStorage = 15;
+        TSelfHealNodesStateUpdate SelfHealNodesStateUpdate = 19;
     }
 }
 
@@ -348,4 +365,9 @@ message TEvNodeWardenDynamicConfigPush {
     TStorageConfig Config = 1;
     bool NoQuorum = 2;
     TCacheUpdate CacheUpdate = 3;
+}
+
+message TConnectivityPayload {
+    TStorageConfig StorageConfig = 1; // storage config of a sender
+    optional uint32 BridgePileId = 2; // bridge pile id of a sender
 }

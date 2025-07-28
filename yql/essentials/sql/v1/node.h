@@ -704,7 +704,7 @@ namespace NSQLTranslationV1 {
         enum class ETypeOfChange {
             Nothing,
             DropNotNullConstraint,
-            SetNotNullConstraint, // todo flown4qqqq
+            SetNotNullConstraint,
             SetFamily
         };
 
@@ -974,7 +974,7 @@ namespace NSQLTranslationV1 {
 
         void DoUpdateState() const override;
 
-        virtual const TString* GetGenericKey() const;
+        virtual TMaybe<TString> GetGenericKey() const;
 
         virtual bool InitAggr(TContext& ctx, bool isFactory, ISource* src, TAstListNode& node, const TVector<TNodePtr>& exprs) = 0;
 

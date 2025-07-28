@@ -55,9 +55,6 @@ namespace NKikimr {
         {}
 
         ~TEmergencyQueue() {
-            while (Queue.Head()) {
-                Queue.Pop();
-            }
         }
 
         void Push(TEvBlobStorage::TEvVMovedPatch::TPtr ev) {

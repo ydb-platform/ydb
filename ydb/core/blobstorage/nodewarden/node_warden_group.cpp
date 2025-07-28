@@ -332,12 +332,13 @@ namespace NKikimr::NStorage {
                 if (TActorId& actorId = group.WorkingSyncers[item.TargetBridgePileId]; !actorId) {
                     STLOG(PRI_DEBUG, BS_NODE, NW64, "starting syncer actor", (GroupId, item.GroupId),
                         (TargetBridgePileId, item.TargetBridgePileId));
-                    actorId = Register(NBridge::CreateSyncerActor(NeedGroupInfo(groupId), item.TargetBridgePileId));
+                    actorId = Register(NBridge::CreateSyncerActor(NeedGroupInfo(groupId), item.TargetBridgePileId,
+                        item.GroupId));
                 }
             } else if (const auto it = Groups.find(groupId); it != Groups.end()) {
                 TGroupRecord& group = it->second;
                 if (const auto jt = group.WorkingSyncers.find(item.TargetBridgePileId); jt != group.WorkingSyncers.end()) {
-                    STLOG(PRI_DEBUG, BS_NODE, NW64, "stopping syncer actor", (GroupId, item.GroupId),
+                    STLOG(PRI_DEBUG, BS_NODE, NW65, "stopping syncer actor", (GroupId, item.GroupId),
                         (TargetBridgePileId, item.TargetBridgePileId));
                     TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, jt->second, SelfId(), nullptr, 0));
                     group.WorkingSyncers.erase(jt);

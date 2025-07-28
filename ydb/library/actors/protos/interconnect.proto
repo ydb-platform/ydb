@@ -27,6 +27,7 @@ message TNodeLocation {
     optional uint32 BodyNum = 4 [deprecated=true];
     optional uint32 Body = 100500 [deprecated=true]; // for compatibility with WalleLocation
 
+    optional string BridgePileName = 5 [(PrintName) = "P"];
     optional string DataCenter = 10 [(PrintName) = "DC"];
     optional string Module = 20 [(PrintName) = "M"];
     optional string Rack = 30 [(PrintName) = "R"];

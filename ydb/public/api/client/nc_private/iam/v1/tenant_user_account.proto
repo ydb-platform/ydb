@@ -18,7 +18,7 @@ option java_package = "ai.nebius.iam.identity.v1";
 
 message TenantUserAccount {
   option (resource_behavior) = UNNAMED;
-  option (resource) = "tenantuseraccount";
+  // option (resource) = "tenantuseraccount"; // This option conflicts with other options by its number
 
   common.v1.ResourceMetadata metadata = 1 [(buf.validate.field).required = true];
   TenantUserAccountSpec spec = 2 [(buf.validate.field).required = true];

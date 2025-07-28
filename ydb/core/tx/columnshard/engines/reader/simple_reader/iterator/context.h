@@ -34,6 +34,7 @@ private:
 public:
     std::shared_ptr<TFetchingScript> GetSourcesAggregationScript() const {
         if (!SourcesAggregationScript) {
+            return nullptr;
             auto aggrProc = GetReadMetadata()->GetProgram().GetChainVerified()->GetResultsAggregationProcessor();
             if (!aggrProc) {
                 SourcesAggregationScript = nullptr;

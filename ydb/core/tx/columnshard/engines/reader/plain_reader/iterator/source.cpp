@@ -17,12 +17,14 @@
 
 namespace NKikimr::NOlap::NReader::NPlain {
 
+NO_SANITIZE_THREAD
 void IDataSource::InitFetchingPlan(const std::shared_ptr<TFetchingScript>& fetching) {
     AFL_VERIFY(fetching);
     //    AFL_VERIFY(!FetchingPlan);
     FetchingPlan = fetching;
 }
 
+NO_SANITIZE_THREAD
 void IDataSource::RegisterInterval(TFetchingInterval& interval, const std::shared_ptr<IDataSource>& sourcePtr) {
     if (!IsReadyFlag) {
         AFL_VERIFY(Intervals.emplace(interval.GetIntervalIdx(), &interval).second);

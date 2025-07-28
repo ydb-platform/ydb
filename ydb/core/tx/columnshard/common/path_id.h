@@ -187,7 +187,7 @@ public:
     virtual std::optional<NColumnShard::TSchemeShardLocalPathId> ResolveSchemeShardLocalPathIdOptional(
         const TInternalPathId internalPathId) const = 0;
     virtual std::optional<TInternalPathId> ResolveInternalPathIdOptional(
-        const NColumnShard::TSchemeShardLocalPathId schemeShardLocalPathId) const = 0;
+        const NColumnShard::TSchemeShardLocalPathId schemeShardLocalPathId, const bool withTabletPathId = true) const = 0;
     std::optional<NColumnShard::TSchemeShardLocalPathId> ResolveSchemeShardLocalPathId(const TInternalPathId internalPathId) const {
         return ResolveSchemeShardLocalPathIdOptional(internalPathId);
     }

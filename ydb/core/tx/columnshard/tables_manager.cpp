@@ -43,9 +43,13 @@ std::optional<NColumnShard::TSchemeShardLocalPathId> TTablesManager::ResolveSche
 }
 
 std::optional<TInternalPathId> TTablesManager::ResolveInternalPathIdOptional(
-    const NColumnShard::TSchemeShardLocalPathId schemeShardLocalPathId) const {
+    const NColumnShard::TSchemeShardLocalPathId schemeShardLocalPathId, const bool withTabletPathId) const {
     if (TabletPathId.has_value() && schemeShardLocalPathId == TabletPathId->SchemeShardLocalPathId) {
-        return { TabletPathId->InternalPathId };
+        if (withTabletPathId) {
+            return { TabletPathId->InternalPathId };
+        } else {
+            return std::nullopt;
+        }
     }
     if (const auto* internalPathId = SchemeShardLocalToInternal.FindPtr(schemeShardLocalPathId)) {
         return { *internalPathId };

@@ -124,6 +124,9 @@ namespace NKikimr {
                     return false;
                 }
                 TFreeSpaceItem item = it->second;
+                Cerr << VDiskLogPrefix
+                    << "TChain::Allocate: no free slots in FreeSpace, stealing chunk# " << it->first
+                    << " with " << item.NumFreeSlots << " free slots" << Endl;
                 FreeSpace.emplace(it->first, std::move(item));
                 LockedChunks.erase(it);
             }

@@ -39,6 +39,59 @@ namespace {
 static const bool TESTS_VERBOSE = getenv("TESTS_VERBOSE") != nullptr;
 #define LOG_D(stream) LOG_DEBUG_S(*ActorSystem.SingleSys(), NKikimrServices::KQP_COMPUTE, LogPrefix << stream);
 #define LOG_E(stream) LOG_ERROR_S(*ActorSystem.SingleSys(), NKikimrServices::KQP_COMPUTE, LogPrefix << stream);
+struct TMockHttpRequest : NMonitoring::IMonHttpRequest {
+    TStringStream Out;
+    TCgiParameters Params;
+    THttpHeaders Headers;
+    IOutputStream& Output() override {
+        return Out;
+    }
+    HTTP_METHOD GetMethod() const override {
+        return HTTP_METHOD_GET;
+    }
+    TStringBuf GetPath() const override {
+        return "";
+    }
+    TStringBuf GetPathInfo() const override {
+        return "";
+    }
+    TStringBuf GetUri() const override {
+        return "";
+    }
+    const TCgiParameters& GetParams() const override {
+        return Params;
+    }
+    const TCgiParameters& GetPostParams() const override {
+        return Params;
+    }
+    TStringBuf GetPostContent() const override {
+        return "";
+    }
+    const THttpHeaders& GetHeaders() const override {
+        return Headers;
+    }
+    TStringBuf GetHeader(TStringBuf name) const override {
+        const auto* header = Headers.FindHeader(name);
+        return header ? header->Value() : TStringBuf();
+    }
+    TStringBuf GetCookie(TStringBuf) const override {
+        return "";
+    }
+    TString GetRemoteAddr() const override {
+        return "::";
+    }
+    TString GetServiceTitle() const override {
+        return "";
+    }
+
+    NMonitoring::IMonPage* GetPage() const override {
+        return nullptr;
+    }
+
+    IMonHttpRequest* MakeChild(NMonitoring::IMonPage*, const TString&) const override {
+        return nullptr;
+    }
+};
 
 struct TActorSystem: NActors::TTestActorRuntimeBase {
     TActorSystem()
@@ -530,6 +583,21 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
         }
     }
 
+    void DumpMonPage(auto asyncCA, auto hook) {
+        {
+            TMockHttpRequest request;
+            auto evHttpInfo = MakeHolder<NActors::NMon::TEvHttpInfo>(request);
+            ActorSystem.Send(asyncCA, EdgeActor, evHttpInfo.Release());
+        }
+        {
+            auto ev = ActorSystem.GrabEdgeEvent<NActors::NMon::TEvHttpInfoRes>({EdgeActor});
+            UNIT_ASSERT_EQUAL(ev->Get()->GetContentType(), NActors::NMon::IEvHttpInfoRes::EContentType::Html);
+            TStringStream out;
+            ev->Get()->Output(out);
+            hook(out.Str());
+        }
+    }
+
     void BasicTests(ui32 packets, bool doWatermark, bool waitIntermediateAcks) {
         LogPrefix = TStringBuilder() << "Square Test for:"
            << " packets=" << packets
@@ -611,6 +679,12 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
                 },
                 dqInputChannel))
         {}
+        DumpMonPage(asyncCA, [this](auto&& str) {
+            UNIT_ASSERT_STRING_CONTAINS(str, "<h3>Sources</h3>");
+            UNIT_ASSERT_STRING_CONTAINS(str, LogPrefix);
+            // TODO add validation
+            LOG_D(str);
+        });
         UNIT_ASSERT_EQUAL(receivedData.size(), val);
         for (; val > 0; --val) {
             UNIT_ASSERT_EQUAL_C(receivedData[val * val], 1, "expected count for " << (val * val));
@@ -762,6 +836,12 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
                 },
                 dqInputChannel))
         {}
+        DumpMonPage(asyncCA, [this](auto&& str) {
+            UNIT_ASSERT_STRING_CONTAINS(str, "<h3>Sources</h3>");
+            UNIT_ASSERT_STRING_CONTAINS(str, LogPrefix);
+            // TODO add validation
+            LOG_D(str);
+        });
         UNIT_ASSERT_EQUAL(receivedData.size(), expectedData.size());
         for (auto [receivedVal, receivedCnt] : receivedData) {
             UNIT_ASSERT_EQUAL_C(receivedCnt, expectedData[receivedVal], "expected count for " << receivedVal << ": " << receivedCnt << " != " << expectedData[receivedVal]);

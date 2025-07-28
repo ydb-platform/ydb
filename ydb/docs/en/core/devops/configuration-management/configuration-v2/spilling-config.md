@@ -113,6 +113,8 @@ For proper spilling operation in multi-node clusters, it is recommended to incre
 
 ### High-load System
 
+For maximum performance in high-load systems, it is recommended to increase the spilling size and number of worker threads:
+
 ```yaml
 table_service_config:
   spilling_service_config:
@@ -125,6 +127,8 @@ table_service_config:
 ```
 
 ### Limited Resources
+
+For systems with limited resources, it is recommended to use conservative settings:
 
 ```yaml
 table_service_config:

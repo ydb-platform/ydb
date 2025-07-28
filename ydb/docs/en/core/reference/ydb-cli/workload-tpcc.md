@@ -7,6 +7,7 @@ TPC-C is an industry-standard [On-Line Transaction Processing (OLTP)](https://en
 As a result, the benchmark generates a workload of concurrent distributed transactions with varying types and complexities.
 
 Here is a quick start snippet:
+
 ```bash
 {{ ydb-cli }} workload tpcc --path tpcc/10wh init -w 10
 {{ ydb-cli }} workload tpcc --path tpcc/10wh import -w 10
@@ -141,6 +142,7 @@ The command has no parameters.
 `check` command verifies the consistency of TPC-C data. It can be executed after either the `import` or `run` commands. The `check` command is intended primarily for development and is of limited interest to end users.
 
 Example:
+
 ```bash
 {{ ydb-cli }} workload tpcc --path tpcc/10wh check
 ```

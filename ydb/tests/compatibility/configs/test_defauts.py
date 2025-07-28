@@ -50,7 +50,7 @@ class Differ:
             if old != new:
                 if isinstance(old, bool) and len(path) > 0 and path[0] == 'FeatureFlags':
                     if old:
-                        self.errors.append(('.'.join(path), f'feature flag was swithed on in {self.old_version}, bat is switched off in {self.new_version}'))
+                        self.errors.append(('.'.join(path), f'feature flag was switched on in {self.old_version}, but is switched off in {self.new_version}'))
 
     def compare_versions(self) -> str:
         with open(yatest.common.binary_path(f'ydb/tests/library/compatibility/configs/{self.old_version}')) as f:

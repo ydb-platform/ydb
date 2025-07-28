@@ -382,7 +382,7 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
     }
 
     Y_UNIT_TEST(QueryTimeout) {
-        TKikimrRunner kikimr(TKikimrSettings());
+        TKikimrRunner kikimr{ TKikimrSettings() };
 
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();

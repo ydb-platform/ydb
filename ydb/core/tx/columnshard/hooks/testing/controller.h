@@ -93,11 +93,11 @@ private:
             return std::nullopt;
         }
         virtual std::optional<TInternalPathId> ResolveInternalPathIdOptional(
-            const TSchemeShardLocalPathId schemeShardLocalPathId, const bool /*withTabletPathId*/) const override {
+            const TSchemeShardLocalPathId schemeShardLocalPathId, const bool withTabletPathId) const override {
             if (const auto* p = SchemeShardLocalToInternal.FindPtr(schemeShardLocalPathId)) {
                 return { *p };
             }
-//            AFL_VERIFY(!withTabletPathId);
+            AFL_VERIFY(!withTabletPathId);
             return std::nullopt;
         }
     };

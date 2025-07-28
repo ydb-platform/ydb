@@ -52,7 +52,7 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
             for (const auto& [tabletId, pathIdTranslator]  : tablets) {
                 const auto& pathIds = pathIdTranslator->GetSchemeShardLocalPathIds();
                 for (const auto& pathId : pathIds) {
-                    const auto& internalPathId = pathIdTranslator->ResolveInternalPathId(pathId);
+                    const auto& internalPathId = pathIdTranslator->ResolveInternalPathId(pathId, false);
                     UNIT_ASSERT(internalPathId.has_value());
                     UNIT_ASSERT(result.contains(pathId) && result[pathId].contains(tabletId));
                     UNIT_ASSERT_VALUES_EQUAL(result[pathId][tabletId], *internalPathId);

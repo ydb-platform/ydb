@@ -258,11 +258,11 @@ template <>
 void Out<NKikimr::NColumnShard::TUnifiedOptionalPathId>(IOutputStream& s, const NKikimr::NColumnShard::TUnifiedOptionalPathId& v) {
     s << "{";
     if (v.HasSchemeShardLocalPathId() && v.HasInternalPathId()) {
-        s << v.GetInternalPathIdVerified() << "," << v.GetSchemeShardLocalPathIdVerified();
+        s << "internal: " << v.GetInternalPathIdVerified() << ", ss:" << v.GetSchemeShardLocalPathIdVerified();
     } else if (v.HasInternalPathId()) {
-        s << v.GetInternalPathIdVerified();
+        s << "internal:" << v.GetInternalPathIdVerified();
     } else if (v.HasSchemeShardLocalPathId()) {
-        s << v.GetSchemeShardLocalPathIdVerified();
+        s << "ss:" << v.GetSchemeShardLocalPathIdVerified();
     }
     s << "}";
 }

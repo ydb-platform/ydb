@@ -19,6 +19,7 @@ WITH (option = value [, ...])
 
 
     * `CONNECTION_STRING` — a [connection string](../../../concepts/connect.md#connection_string) for the source database (mandatory).
+    * `CA_CERT` — a [root certificate for TLS](../../../concepts/connect.md#tls-cert). Optional parameter. Can be specified if the source database supports an encrypted data interchange protocol (`CONNECTION_STRING` starts with `grpcs://`).
     * Authentication details for the source database (mandatory) depending on the authentication method:
 
         * [Access token](../../../recipes/ydb-sdk/auth-access-token.md):
@@ -86,6 +87,18 @@ FOR `/Root/another_database` AS `/Root/my_database`
 WITH (
     CONNECTION_STRING = 'grpcs://example.com:2135/?database=/Root/another_database',
     TOKEN_SECRET_NAME = 'my_secret'
+);
+```
+
+The following statement creates an asynchronous replication instance with a TLS root certificate specified:
+
+```yql
+CREATE ASYNC REPLICATION my_consistent_replication
+FOR original_table AS replica_table
+WITH (
+    CONNECTION_STRING = 'grpcs://example.com:2135/?database=/Root/another_database',
+    TOKEN_SECRET_NAME = 'my_secret',
+    CA_CERT = '-----BEGIN CERTIFICATE-----...'
 );
 ```
 

@@ -415,7 +415,7 @@ Y_UNIT_TEST_TWIN(StreamLookupStats, StreamLookupJoin) {
     NKikimrConfig::TAppConfig app;
     app.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamIdxLookupJoin(StreamLookupJoin);
 
-    TKikimrRunner kikimr(TKikimrSettings(app));
+    TKikimrRunner kikimr{ TKikimrSettings(app) };
     auto db = kikimr.GetTableClient();
     auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -459,7 +459,7 @@ Y_UNIT_TEST(SelfJoin) {
     NKikimrConfig::TAppConfig app;
     app.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamIdxLookupJoin(true);
 
-    TKikimrRunner kikimr(TKikimrSettings(app));
+    TKikimrRunner kikimr{ TKikimrSettings(app) };
     auto db = kikimr.GetTableClient();
     auto session = db.CreateSession().GetValueSync().GetSession();
 

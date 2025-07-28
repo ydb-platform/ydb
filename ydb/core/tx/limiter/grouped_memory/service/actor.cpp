@@ -64,10 +64,10 @@ void TMemoryLimiterActor::Handle(NEvents::TEvExternal::TEvStartProcessScope::TPt
 }
 
 void TMemoryLimiterActor::Handle(NMemory::TEvConsumerRegistered::TPtr& ev) {
-    MemoryConsumptionAggregator.SetConsumer(std::move(ev->Get()->Consumer));
+    MemoryConsumptionAggregator->SetConsumer(std::move(ev->Get()->Consumer));
     for (size_t i = 0; i < Managers.size(); ++i) {
-        Managers[i]->SetMemoryConsumptionUpdateFunction([&aggregator = this->MemoryConsumptionAggregator, i](ui64 consumption) {
-            aggregator.SetConsumption(i, consumption);
+        Managers[i]->SetMemoryConsumptionUpdateFunction([aggregator = this->MemoryConsumptionAggregator, i](ui64 consumption) {
+            aggregator->SetConsumption(i, consumption);
         });
     }
 }

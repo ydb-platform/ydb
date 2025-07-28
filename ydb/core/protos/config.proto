@@ -1798,9 +1798,9 @@ message TAuditConfig {
             ServiceImpersonatedFromUser = 4;
         }
 
-        optional EApiClass ApiClass = 1;
-        optional bool WriteApiCalls = 2;
-        repeated EAccountType ExcludeAccountType = 3;
+        optional EApiClass ApiClass = 1; // API class selector. Default is used for all API class that were not included in config
+        optional bool WriteApiCalls = 2; // Enables audit logging for specified API class
+        repeated EAccountType ExcludeAccountType = 3; // If audit logging for API class is enabled, excludes logging for these account types
     }
 
     optional TStderrBackend StderrBackend = 1;

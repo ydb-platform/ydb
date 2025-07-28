@@ -273,6 +273,7 @@ void TGRpcServer::Start() {
 }
 
 void TGRpcServer::Stop() {
+    NYdbGrpc::GrpcDead = 1;
     for (auto& service : Services_) {
         service->StopService();
     }
@@ -304,8 +305,8 @@ void TGRpcServer::Stop() {
         }
 
         if (!unsafe && spent > Options_.GRpcShutdownDeadline.SecondsFloat()) {
-            Cerr << "GRpc shutdown warning: failed to shutdown all connections, left infly: " << infly << ", spent: " << spent << " sec"
-                 << Endl;
+            Cerr << "GRpc shutdown warning: failed to shutdown all connections, left infly: " << infly << ", spent: " << spent
+                 << " sec. GRpcShutdownDeadline: " << Options_.GRpcShutdownDeadline.SecondsFloat() << Endl;
             break;
         }
         Sleep(TDuration::MilliSeconds(10));

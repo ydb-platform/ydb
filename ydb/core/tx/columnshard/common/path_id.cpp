@@ -223,16 +223,15 @@ NColumnShard::TUnifiedPathId IPathIdTranslator::GetUnifiedByInternalVerified(con
     return NColumnShard::TUnifiedPathId::BuildValid(internalPathId, ResolveSchemeShardLocalPathIdVerified(internalPathId));
 }
 
-NColumnShard::TSchemeShardLocalPathId IPathIdTranslator::ResolveSchemeShardLocalPathIdVerified(
-    const TInternalPathId internalPathId) const {
+NColumnShard::TSchemeShardLocalPathId IPathIdTranslator::ResolveSchemeShardLocalPathIdVerified(const TInternalPathId internalPathId) const {
     auto result = ResolveSchemeShardLocalPathId(internalPathId);
     AFL_VERIFY(result);
     return *result;
 }
 
 NOlap::TInternalPathId IPathIdTranslator::ResolveInternalPathIdVerified(
-    const NColumnShard::TSchemeShardLocalPathId schemeShardLocalPathId) const {
-    auto result = ResolveInternalPathId(schemeShardLocalPathId);
+    const NColumnShard::TSchemeShardLocalPathId schemeShardLocalPathId, const bool withTabletPathId) const {
+    auto result = ResolveInternalPathIdOptional(schemeShardLocalPathId, withTabletPathId);
     AFL_VERIFY(result);
     return *result;
 }
@@ -258,11 +257,11 @@ template <>
 void Out<NKikimr::NColumnShard::TUnifiedOptionalPathId>(IOutputStream& s, const NKikimr::NColumnShard::TUnifiedOptionalPathId& v) {
     s << "{";
     if (v.HasSchemeShardLocalPathId() && v.HasInternalPathId()) {
-        s << v.GetInternalPathIdVerified() << "," << v.GetSchemeShardLocalPathIdVerified();
+        s << "internal: " << v.GetInternalPathIdVerified() << ", ss:" << v.GetSchemeShardLocalPathIdVerified();
     } else if (v.HasInternalPathId()) {
-        s << v.GetInternalPathIdVerified();
+        s << "internal:" << v.GetInternalPathIdVerified();
     } else if (v.HasSchemeShardLocalPathId()) {
-        s << v.GetSchemeShardLocalPathIdVerified();
+        s << "ss:" << v.GetSchemeShardLocalPathIdVerified();
     }
     s << "}";
 }

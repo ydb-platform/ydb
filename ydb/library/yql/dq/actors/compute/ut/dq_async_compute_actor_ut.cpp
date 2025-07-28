@@ -413,6 +413,7 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
         TDqOutputChannelSettings settings;
         settings.TransportVersion = TransportVersion;
         settings.MutableSettings.IsLocalChannel = true;
+        settings.Level = TCollectStatsLevel::Profile;
         return CreateDqOutputChannel(channelId, ThisStageId,
                 (IsWide ? static_cast<TType*>(WideRowType) : RowType), HolderFactory,
                 settings,
@@ -444,14 +445,14 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
                                     ThisStageId,
                                     type,
                                     10_MB,
-                                    TCollectStatsLevel::None,
+                                    TCollectStatsLevel::Profile,
                                     TypeEnv,
                                     HolderFactory,
                                     TransportVersion,
                                     NKikimr::NMiniKQL::EValuePackerVersion::V0);
     }
 
-    auto CreateTestAsyncCA(NDqProto::TDqTask& task) {
+    auto CreateTestAsyncCA(NDqProto::TDqTask& task, NDqProto::EDqStatsMode statsMode = NDqProto::DQ_STATS_MODE_PROFILE) {
         TVector<NKikimr::NMiniKQL::TComputationNodeFactory> compNodeFactories = {
             NYql::GetCommonDqFactory(),
             NKikimr::NMiniKQL::GetYqlFactory()
@@ -479,13 +480,15 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
         memoryLimits.MkqlHeavyProgramMemoryLimit = 20_MB;
         memoryLimits.MkqlProgramHardMemoryLimit = 30_MB;
         memoryLimits.MemoryQuotaManager = std::make_shared<TGuaranteeQuotaManager>(64_MB, 32_MB);
+        TComputeRuntimeSettings runtimeSettings;
+        runtimeSettings.StatsMode = statsMode;
         auto actor = CreateDqAsyncComputeActor(
                 EdgeActor, // executerId,
                 LogPrefix,
                 &task, // NYql::NDqProto::TDqTask* task,
                 CreateAsyncIoFactory(),
                 FunctionRegistry.Get(),
-                {}, // TComputeRuntimeSettings& settings,
+                runtimeSettings,
                 memoryLimits,
                 taskRunnerActorFactory,
                 {}, // ::NMonitoring::TDynamicCounterPtr taskCounters,
@@ -674,7 +677,7 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
 #define WEAK_UNIT_ASSERT_EQUAL_C(A, B, C) do { if (!((A) == (B))) LOG_E("Assert " #A " == " #B " failed " << C); } while(0)
 #define WEAK_UNIT_ASSERT(A) do { if (!(A)) LOG_E("Assert " #A " failed "); } while(0)
 #endif
-    void BasicTests(ui32 packets, ui32 watermarkPeriod, bool waitIntermediateAcks) {
+    void BasicTests(ui32 packets, ui32 watermarkPeriod, bool waitIntermediateAcks, NDqProto::EDqStatsMode statsMode = NDqProto::DQ_STATS_MODE_PROFILE) {
         LogPrefix = TStringBuilder() << "Square Test for:"
            << " packets=" << packets
            << " watermarkPeriod=" << watermarkPeriod
@@ -687,7 +690,7 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
         auto dqOutputChannel = AddDummyInputChannel(task, InputChannelId);
         auto dqInputChannel = AddDummyOutputChannel(task, OutputChannelId, (IsWide ? static_cast<TType*>(WideRowType) : RowType));
 
-        auto asyncCA = CreateTestAsyncCA(task);
+        auto asyncCA = CreateTestAsyncCA(task, statsMode);
         ActorSystem.EnableScheduleForActor(asyncCA, true);
         ActorSystem.GrabEdgeEvent<TEvDqCompute::TEvState>(EdgeActor);
 
@@ -910,6 +913,17 @@ Y_UNIT_TEST_SUITE(TAsyncComputeActorTest) {
                     BasicTests(packets, watermarkPeriod, waitIntermediateAcks);
                 }
             }
+        }
+    }
+
+    Y_UNIT_TEST_F(StatsMode, TAsyncCATestFixture) {
+        for (auto statsMode : {
+                NDqProto::DQ_STATS_MODE_NONE,
+                NDqProto::DQ_STATS_MODE_BASIC,
+                NDqProto::DQ_STATS_MODE_FULL,
+                NDqProto::DQ_STATS_MODE_PROFILE,
+                }) {
+            BasicTests(5, 1, true, statsMode);
         }
     }
 

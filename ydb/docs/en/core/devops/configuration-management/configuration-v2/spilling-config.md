@@ -33,8 +33,6 @@ table_service_config:
     local_file_config:
       root: ""
       max_total_size: 21474836480    # 20 GiB
-      max_file_size: 5368709120      # 5 GiB
-      max_file_part_size: 104857600  # 100 MB
       io_thread_pool:
         workers_count: 2
         queue_size: 1000
@@ -67,29 +65,7 @@ table_service_config:
 
 - Set the value based on available disk space
 
-#### MaxFileSize
 
-{% note warning %}
-
-This option is deprecated and will be removed in future versions.
-
-{% endnote %}
-
-**Type:** `uint64`  
-**Default:** `5368709120` (5 GiB)  
-**Description:** Maximum size of a single spilling file.
-
-#### MaxFilePartSize
-
-{% note warning %}
-
-This option is deprecated and will be removed in future versions.
-
-{% endnote %}
-
-**Type:** `uint64`  
-**Default:** `104857600` (100 MB)  
-**Description:** Maximum size of one file part. Spilling files can consist of multiple parts, each up to `MaxFilePartSize` in size. The total size of all parts must not exceed `MaxFileSize`.
 
 ### Thread Pool Configuration (TIoThreadPoolConfig)
 
@@ -139,8 +115,6 @@ table_service_config:
     local_file_config:
       root: ""
       max_total_size: 107374182400   # 100 GiB
-      max_file_size: 10737418240     # 10 GiB
-      max_file_part_size: 1073741824 # 1 GiB
       io_thread_pool:
         workers_count: 8
         queue_size: 2000
@@ -154,8 +128,6 @@ table_service_config:
     local_file_config:
       root: ""
       max_total_size: 5368709120     # 5 GiB
-      max_file_size: 1073741824      # 1 GiB
-      max_file_part_size: 52428800   # 50 MB
       io_thread_pool:
         workers_count: 1
         queue_size: 500
@@ -207,6 +179,22 @@ table_service_config:
       enable: true
 ```
 
+#### Deprecated Parameters
+
+The following parameters are deprecated and will be removed in future versions. It is recommended not to use them in new configurations.
+
+##### MaxFileSize
+
+**Type:** `uint64`  
+**Default:** `5368709120` (5 GiB)  
+**Description:** Maximum size of a single spilling file.
+
+##### MaxFilePartSize
+
+**Type:** `uint64`  
+**Default:** `104857600` (100 MB)  
+**Description:** Maximum size of one file part. Spilling files can consist of multiple parts, each up to `MaxFilePartSize` in size. The total size of all parts must not exceed `MaxFileSize`.
+
 ### Complete Configuration Example
 
 ```yaml
@@ -218,8 +206,8 @@ table_service_config:
       enable: true
       root: ""
       max_total_size: 21474836480    # 20 GiB
-      max_file_size: 5368709120      # 5 GiB
-      max_file_part_size: 104857600  # 100 MB
+      max_file_size: 5368709120      # 5 GiB (deprecated)
+      max_file_part_size: 104857600  # 100 MB (deprecated)
       io_thread_pool:
         workers_count: 2
         queue_size: 1000

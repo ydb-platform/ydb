@@ -20,8 +20,6 @@ table_service_config:
     local_file_config:
       root: ""
       max_total_size: 21474836480    # 20 GiB
-      max_file_size: 5368709120      # 5 GiB
-      max_file_part_size: 104857600  # 100 MB
       io_thread_pool:
         workers_count: 2
         queue_size: 1000
@@ -54,29 +52,7 @@ table_service_config:
 
 - Устанавливайте значение исходя из доступного дискового пространства
 
-#### MaxFileSize
 
-{% note warning %}
-
-Данная опция является устаревшей (deprecated) и будет удалена в будущих версиях.
-
-{% endnote %}
-
-**Тип:** `uint64`  
-**По умолчанию:** `5368709120` (5 GiB)  
-**Описание:** Максимальный размер одного файла спиллинга.
-
-#### MaxFilePartSize
-
-{% note warning %}
-
-Данная опция является устаревшей (deprecated) и будет удалена в будущих версиях.
-
-{% endnote %}
-
-**Тип:** `uint64`  
-**По умолчанию:** `104857600` (100 MB)  
-**Описание:** Максимальный размер одной части файла. Файлы спиллинга могут состоять из нескольких частей, каждая размером до `MaxFilePartSize`. Суммарный размер всех частей не должен превышать `MaxFileSize`.
 
 ### Конфигурация пула потоков (TIoThreadPoolConfig)
 
@@ -126,8 +102,6 @@ table_service_config:
     local_file_config:
       root: ""
       max_total_size: 107374182400   # 100 GiB
-      max_file_size: 10737418240     # 10 GiB
-      max_file_part_size: 1073741824 # 1 GiB
       io_thread_pool:
         workers_count: 8
         queue_size: 2000
@@ -141,8 +115,6 @@ table_service_config:
     local_file_config:
       root: ""
       max_total_size: 5368709120     # 5 GiB
-      max_file_size: 1073741824      # 1 GiB
-      max_file_part_size: 52428800   # 50 MB
       io_thread_pool:
         workers_count: 1
         queue_size: 500
@@ -194,6 +166,22 @@ table_service_config:
       enable: true
 ```
 
+#### Устаревшие параметры (deprecated)
+
+Следующие параметры являются устаревшими и будут удалены в будущих версиях. Рекомендуется не использовать их в новых конфигурациях.
+
+##### MaxFileSize
+
+**Тип:** `uint64`  
+**По умолчанию:** `5368709120` (5 GiB)  
+**Описание:** Максимальный размер одного файла спиллинга.
+
+##### MaxFilePartSize
+
+**Тип:** `uint64`  
+**По умолчанию:** `104857600` (100 MB)  
+**Описание:** Максимальный размер одной части файла. Файлы спиллинга могут состоять из нескольких частей, каждая размером до `MaxFilePartSize`. Суммарный размер всех частей не должен превышать `MaxFileSize`.
+
 ### Полный пример конфигурации
 
 ```yaml
@@ -205,8 +193,8 @@ table_service_config:
       enable: true
       root: ""
       max_total_size: 21474836480    # 20 GiB
-      max_file_size: 5368709120      # 5 GiB
-      max_file_part_size: 104857600  # 100 MB
+      max_file_size: 5368709120      # 5 GiB (deprecated)
+      max_file_part_size: 104857600  # 100 MB (deprecated)
       io_thread_pool:
         workers_count: 2
         queue_size: 1000

@@ -118,7 +118,7 @@
 <text font-family='Verdana' font-size='8px' fill='var(--text-summary, #262626)' x='413' y='56'>10.00MB</text>
 </g>
 <g><title>Max MEM 8.00MB</title>
-<polygon points='603,58 603,58 603,58 610,56 617,49 629,45 637,45 637,58 ' stroke-width='1' stroke='var(--mem-medium, #7E4E5B)' fill='var(--mem-medium, #7E4E5B)' />
+<path d='M603,58c0,0,0,0,0,0c0,0,0,0,0,0c2,0,4,-2,7,-2c2,0,4,-7,7,-7c4,0,8,-4,12,-4c2,0,5,0,8,0c0,0,0,13,0,13z' stroke-width='1' stroke='var(--mem-medium, #7E4E5B)' fill='var(--mem-medium, #7E4E5B)' />
 </g>
 <g><title>CPU Usage 7%, 62ms</title>
 <use href='#icon_cpu' transform='translate(395 61) scale(0.6 0.6)' fill='var(--cpu-medium, #A36D7B)'/>
@@ -130,7 +130,7 @@
   <rect x='368' y='27' width='24' height='66' stroke-width='0' fill='var(--cpu-light, #B78C98)' opacity='0.08987155331'/>
 </g>
 <g><title>Max CPU 3.80</title>
-<polygon points='603,74 603,74 603,74 605,74 606,74 607,74 608,74 609,66 610,74 611,74 612,74 613,74 614,74 615,74 616,66 617,74 619,74 620,74 620,74 622,74 623,74 624,74 625,74 626,74 627,74 628,61 629,74 630,74 631,74 632,74 633,74 634,74 636,74 637,66 637,74 ' stroke-width='1' stroke='var(--cpu-medium, #A36D7B)' fill='var(--cpu-light, #B78C98)' />
+<path d='M603,74c0,0,0,0,0,0c0,0,0,0,0,0c0,0,1,0,2,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,-8,1,-8c0,0,0,8,1,8c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,-8,1,-8c0,0,0,8,1,8c0,0,1,0,2,0c0,0,0,0,1,0c0,0,0,0,0,0c0,0,1,0,2,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,-13,1,-13c0,0,0,13,1,13c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,1,0,2,0c0,0,0,-8,1,-8c0,0,0,8,0,8z' stroke-width='1' stroke='var(--cpu-medium, #A36D7B)' fill='var(--cpu-light, #B78C98)' />
 </g>
 <g><title>Stage 1, tasks: 1, finished: 1</title>
 <line x1='371' y1='27' x2='371' y2='93' stroke-width='6' stroke='var(--stage-text, #262626)' stroke-dasharray='1,1' />
@@ -164,7 +164,7 @@
 <text font-family='Verdana' font-size='8px' fill='var(--text-summary, #262626)' x='413' y='125'>48.00MB</text>
 </g>
 <g><title>Max MEM 48.00MB</title>
-<polygon points='603,127 603,114 623,114 623,127 ' stroke-width='1' stroke='var(--mem-medium, #7E4E5B)' fill='var(--mem-medium, #7E4E5B)' />
+<path d='M603,127c0,0,0,-13,0,-13c6,0,13,0,20,0c0,0,0,13,0,13z' stroke-width='1' stroke='var(--mem-medium, #7E4E5B)' fill='var(--mem-medium, #7E4E5B)' />
 </g>
 <g><title>CPU Usage 92%, ∑0.77s, 5ms | 16ms | 30ms</title>
 <use href='#icon_cpu' transform='translate(395 130) scale(0.6 0.6)' fill='var(--cpu-medium, #A36D7B)'/>
@@ -179,12 +179,12 @@
 <g><title>Wait Input Time 69%, ∑1.75s, 15ms | 36ms | 57ms</title>
   <rect x='368' y='117' width='24' height='45' stroke-width='0' fill='var(--input-light, #7CA3A5)'/>
 </g>
-<polygon points='603,143 603,143 603,143 604,143 604,143 605,143 606,143 606,143 607,143 607,143 608,143 609,138 609,130 610,139 611,139 611,141 612,141 613,141 613,141 614,141 614,136 615,136 616,138 616,140 617,142 617,142 618,142 619,143 619,142 620,141 621,140 621,142 622,142 623,143 623,143 ' stroke-width='1' stroke='var(--input-medium, #5A8183)' fill='var(--input-light, #7CA3A5)' />
+<path d='M603,143c0,0,0,0,0,0c0,0,0,0,0,0c0,0,0,0,1,0c0,0,0,0,0,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,0,0c0,0,0,0,1,0c0,0,0,0,0,0c0,0,0,0,1,0c0,0,0,-5,1,-5c0,0,0,-8,0,-8c0,0,0,9,1,9c0,0,0,0,1,0c0,0,0,2,0,2c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,0,0c0,0,0,0,1,0c0,0,0,-5,0,-5c0,0,0,0,1,0c0,0,0,2,1,2c0,0,0,2,0,2c0,0,0,2,1,2c0,0,0,0,0,0c0,0,0,0,1,0c0,0,0,1,1,1c0,0,0,-1,0,-1c0,0,0,-1,1,-1c0,0,0,-1,1,-1c0,0,0,2,0,2c0,0,0,0,1,0c0,0,0,1,1,1c0,0,0,0,0,0z' stroke-width='1' stroke='var(--input-medium, #5A8183)' fill='var(--input-light, #7CA3A5)' />
 <g><title>Input Throughput 4.82M/s</title>
   <rect x='368' y='96' width='24' height='21' stroke-width='0' fill='var(--cpu-light, #B78C98)' opacity='0.5'/>
 </g>
 <g><title>Max CPU 69.72</title>
-<polygon points='603,143 603,143 603,143 604,143 604,143 605,143 606,143 606,143 607,143 607,143 608,143 609,143 609,142 610,143 611,143 611,143 612,143 613,143 613,143 614,143 614,143 615,134 616,142 616,143 617,143 617,143 618,143 619,143 619,143 620,138 621,141 621,130 622,137 623,135 623,143 ' stroke-width='1' stroke='var(--cpu-medium, #A36D7B)' fill='var(--cpu-light, #B78C98)' />
+<path d='M603,143c0,0,0,0,0,0c0,0,0,0,0,0c0,0,0,0,1,0c0,0,0,0,0,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,0,0c0,0,0,0,1,0c0,0,0,0,0,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,-1,0,-1c0,0,0,1,1,1c0,0,0,0,1,0c0,0,0,0,0,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,0,0c0,0,0,0,1,0c0,0,0,0,0,0c0,0,0,-9,1,-9c0,0,0,8,1,8c0,0,0,1,0,1c0,0,0,0,1,0c0,0,0,0,0,0c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,0,0,0c0,0,0,-5,1,-5c0,0,0,3,1,3c0,0,0,-11,0,-11c0,0,0,7,1,7c0,0,0,-2,1,-2c0,0,0,8,0,8z' stroke-width='1' stroke='var(--cpu-medium, #A36D7B)' fill='var(--cpu-light, #B78C98)' />
 </g>
 <g><title>Stage 0, tasks: 48, finished: 48</title>
 <line x1='371' y1='96' x2='371' y2='162' stroke-width='6' stroke='var(--stage-text, #262626)' stroke-dasharray='1,1' />
@@ -321,7 +321,7 @@
   <text text-anchor='end' font-family='Verdana' font-size='8px' fill='var(--text-inv, #FFFFFF)' x='866' y='11'>1.00</text>
 </g>
 <g><title>Max CPU 51.18</title>
-<polygon points='603,26 603,26 603,26 605,26 606,26 607,26 608,26 609,26 610,23 611,26 612,26 613,26 614,24 615,21 616,26 617,26 619,26 620,23 620,22 622,13 623,25 624,26 625,26 626,26 627,26 628,26 629,26 630,26 631,26 632,26 633,26 634,26 636,26 637,26 637,26 ' stroke-width='1' stroke='var(--cpu-medium, #A36D7B)' fill='var(--cpu-light, #B78C98)' />
+<path d='M603,26c0,0,0,0,0,0c0,0,0,0,0,0c0,0,0,0,0,0c0,0,0,0,1,0c0,0,0,0,0,0c0,0,0,0,0,0c0,0,0,0,0,0c0,0,0,-3,0,-3c0,0,0,3,0,3c0,0,0,0,0,0c0,0,0,0,0,0c0,0,0,-2,1,-2c0,0,0,-3,0,-3c0,0,0,5,0,5c0,0,0,0,0,0c0,0,0,0,0,0c0,0,0,-3,0,-3c0,0,0,-1,0,-1c0,0,0,-9,1,-9c0,0,0,12,0,12c0,0,0,1,0,1c0,0,0,0,0,0c0,0,0,0,0,0c0,0,0,0,0,0c0,0,0,0,0,0c0,0,0,0,0,0c0,0,0,0,1,0c0,0,0,0,0,0c0,0,0,0,0,0c0,0,0,0,0,0c0,0,0,0,0,0c0,0,0,0,0,0c0,0,0,0,0,0c0,0,0,0,0,0z' stroke-width='1' stroke='var(--cpu-medium, #A36D7B)' fill='var(--cpu-light, #B78C98)' />
 </g>
 
 </svg>

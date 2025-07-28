@@ -110,7 +110,7 @@
 <text font-family='Verdana' font-size='8px' fill='var(--text-summary, #262626)' x='413' y='56'>1.00MB</text>
 </g>
 <g><title>Max MEM 1.00MB</title>
-<polygon points='599,58 599,45 599,58 ' stroke-width='1' stroke='var(--mem-medium, #7E4E5B)' fill='var(--mem-medium, #7E4E5B)' />
+<path d='M599,58c0,0,0,-13,0,-13c0,0,0,13,0,13z' stroke-width='1' stroke='var(--mem-medium, #7E4E5B)' fill='var(--mem-medium, #7E4E5B)' />
 </g>
 <g><title>CPU Usage 1%, 58us</title>
 <use href='#icon_cpu' transform='translate(395 61) scale(0.6 0.6)' fill='var(--cpu-medium, #A36D7B)'/>
@@ -151,7 +151,7 @@
 <text font-family='Verdana' font-size='8px' fill='var(--text-summary, #262626)' x='413' y='125'>8.00MB</text>
 </g>
 <g><title>Max MEM 8.00MB</title>
-<polygon points='599,127 599,114 599,114 599,127 ' stroke-width='1' stroke='var(--mem-medium, #7E4E5B)' fill='var(--mem-medium, #7E4E5B)' />
+<path d='M599,127c0,0,0,-13,0,-13c0,0,0,0,0,0c0,0,0,13,0,13z' stroke-width='1' stroke='var(--mem-medium, #7E4E5B)' fill='var(--mem-medium, #7E4E5B)' />
 </g>
 <g><title>CPU Usage 57%, ∑1ms, 157us | 226us | 352us</title>
 <use href='#icon_cpu' transform='translate(395 130) scale(0.6 0.6)' fill='var(--cpu-medium, #A36D7B)'/>
@@ -163,7 +163,7 @@
   <rect x='368' y='96' width='24' height='82' stroke-width='0' fill='var(--cpu-light, #B78C98)' opacity='0.5'/>
 </g>
 <g><title>Max CPU 7.64</title>
-<polygon points='599,143 599,143 599,143 599,143 599,143 599,143 599,143 599,143 599,143 599,143 599,143 599,143 599,143 599,143 599,143 599,143 599,143 599,143 599,143 599,143 599,143 599,143 599,143 599,143 599,143 599,143 599,143 599,143 599,143 599,143 599,143 599,143 599,143 599,130 599,143 ' stroke-width='1' stroke='var(--cpu-medium, #A36D7B)' fill='var(--cpu-light, #B78C98)' />
+<path d='M599,143c0,0,0,0,0,0c0,0,0,0,0,0c0,0,0,0,0,0c0,0,0,0,0,0c0,0,0,0,0,0c0,0,0,0,0,0c0,0,0,0,0,0c0,0,0,0,0,0c0,0,0,0,0,0c0,0,0,0,0,0c0,0,0,0,0,0c0,0,0,0,0,0c0,0,0,0,0,0c0,0,0,0,0,0c0,0,0,0,0,0c0,0,0,0,0,0c0,0,0,0,0,0c0,0,0,0,0,0c0,0,0,0,0,0c0,0,0,0,0,0c0,0,0,0,0,0c0,0,0,0,0,0c0,0,0,0,0,0c0,0,0,0,0,0c0,0,0,0,0,0c0,0,0,0,0,0c0,0,0,0,0,0c0,0,0,0,0,0c0,0,0,0,0,0c0,0,0,0,0,0c0,0,0,0,0,0c0,0,0,0,0,0c0,0,0,-13,0,-13c0,0,0,13,0,13z' stroke-width='1' stroke='var(--cpu-medium, #A36D7B)' fill='var(--cpu-light, #B78C98)' />
 </g>
 <g><title>Stage 2, tasks: 8, finished: 8</title>
 <line x1='371' y1='96' x2='371' y2='178' stroke-width='6' stroke='var(--stage-text, #262626)' stroke-dasharray='1,1' />
@@ -197,7 +197,7 @@
 <text font-family='Verdana' font-size='8px' fill='var(--text-summary, #262626)' x='413' y='210'>3.00MB</text>
 </g>
 <g><title>Max MEM 3.00MB</title>
-<polygon points='599,212 599,199 599,212 ' stroke-width='1' stroke='var(--mem-medium, #7E4E5B)' fill='var(--mem-medium, #7E4E5B)' />
+<path d='M599,212c0,0,0,-13,0,-13c0,0,0,13,0,13z' stroke-width='1' stroke='var(--mem-medium, #7E4E5B)' fill='var(--mem-medium, #7E4E5B)' />
 </g>
 <g><title>CPU Usage 24%, ∑750us, 202us | 250us | 324us</title>
 <use href='#icon_cpu' transform='translate(395 215) scale(0.6 0.6)' fill='var(--cpu-medium, #A36D7B)'/>
@@ -256,7 +256,7 @@
 <text font-family='Verdana' font-size='8px' fill='var(--text-summary, #262626)' x='413' y='332'>3.00MB</text>
 </g>
 <g><title>Max MEM 3.00MB</title>
-<polygon points='599,334 599,321 599,321 599,334 ' stroke-width='1' stroke='var(--mem-medium, #7E4E5B)' fill='var(--mem-medium, #7E4E5B)' />
+<path d='M599,334c0,0,0,-13,0,-13c0,0,0,0,0,0c0,0,0,13,0,13z' stroke-width='1' stroke='var(--mem-medium, #7E4E5B)' fill='var(--mem-medium, #7E4E5B)' />
 </g>
 <g><title>CPU Usage 16%, ∑503us, 142us | 167us | 196us</title>
 <use href='#icon_cpu' transform='translate(395 337) scale(0.6 0.6)' fill='var(--cpu-medium, #A36D7B)'/>
@@ -491,7 +491,7 @@
   <text text-anchor='end' font-family='Verdana' font-size='8px' fill='var(--text-inv, #FFFFFF)' x='866' y='11'>1.00</text>
 </g>
 <g><title>Max CPU 9.50</title>
-<polygon points='599,26 599,26 599,26 599,26 599,26 599,26 599,26 599,26 599,26 599,26 599,26 599,26 599,26 599,26 599,26 599,26 599,26 599,26 599,26 599,26 599,26 599,26 599,26 599,26 599,26 599,26 599,26 599,26 599,26 599,26 599,26 599,26 599,26 599,13 599,26 ' stroke-width='1' stroke='var(--cpu-medium, #A36D7B)' fill='var(--cpu-light, #B78C98)' />
+<path d='M599,26c0,0,0,0,0,0c0,0,0,0,0,0c0,0,0,0,0,0c0,0,0,0,0,0c0,0,0,0,0,0c0,0,0,0,0,0c0,0,0,0,0,0c0,0,0,0,0,0c0,0,0,0,0,0c0,0,0,0,0,0c0,0,0,0,0,0c0,0,0,0,0,0c0,0,0,0,0,0c0,0,0,0,0,0c0,0,0,0,0,0c0,0,0,0,0,0c0,0,0,0,0,0c0,0,0,0,0,0c0,0,0,0,0,0c0,0,0,0,0,0c0,0,0,0,0,0c0,0,0,0,0,0c0,0,0,0,0,0c0,0,0,0,0,0c0,0,0,0,0,0c0,0,0,0,0,0c0,0,0,0,0,0c0,0,0,0,0,0c0,0,0,0,0,0c0,0,0,0,0,0c0,0,0,0,0,0c0,0,0,0,0,0c0,0,0,-13,0,-13c0,0,0,13,0,13z' stroke-width='1' stroke='var(--cpu-medium, #A36D7B)' fill='var(--cpu-light, #B78C98)' />
 </g>
 
 </svg>

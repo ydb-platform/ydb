@@ -290,7 +290,7 @@ void TColumnShard::Handle(NStat::TEvStatistics::TEvStatisticsRequest::TPtr& ev, 
 
     AFL_VERIFY(HasIndex());
     const auto& schemeShardLocalPathId = TSchemeShardLocalPathId::FromProto(record.GetTable().GetPathId());
-    const auto& internalPathId = TablesManager.ResolveInternalPathId(schemeShardLocalPathId);
+    const auto& internalPathId = TablesManager.ResolveInternalPathId(schemeShardLocalPathId, false);
     AFL_VERIFY(internalPathId);
     auto index = GetIndexAs<NOlap::TColumnEngineForLogs>();
     auto spg = index.GetGranuleOptional(*internalPathId);

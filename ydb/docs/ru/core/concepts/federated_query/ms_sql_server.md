@@ -46,9 +46,9 @@ SELECT * FROM ms_sql_server_datasource.<table_name>
 
 1. {% include [!](_includes/supported_requests.md) %}
 1. {% include [!](_includes/datetime_limits.md) %}
-1. {% include [!](_includes/predicate_pushdown.md) %}
+1. {% include [!](_includes/predicate_pushdown_preamble.md) %}
 
-    Поддерживаемые типы данных для пушдауна фильтров:
+   {% include [!](_includes/predicate_pushdown_examples.md) %}
 
     |Тип данных {{ ydb-short-name }}|
     |----|

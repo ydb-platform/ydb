@@ -48,7 +48,9 @@ SELECT * FROM postgresql_datasource.<table_name>
 
 1. {% include [!](_includes/supported_requests.md) %}
 1. {% include [!](_includes/datetime_limits.md) %}
-1. {% include [!](_includes/predicate_pushdown.md) %}
+1. {% include [!](_includes/predicate_pushdown_preamble.md) %}
+
+   {% include [!](_includes/predicate_pushdown_examples.md) %}
 
     Поддерживаемые типы данных для пушдауна фильтров:
 

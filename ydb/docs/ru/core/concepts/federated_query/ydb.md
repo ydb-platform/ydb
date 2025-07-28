@@ -51,7 +51,9 @@ SELECT * FROM ydb_datasource.<table_name>
 При работе с внешними источниками данных {{ ydb-short-name }} существует ряд ограничений:
 
 1. {% include [!](_includes/supported_requests.md) %}
-1. {% include [!](_includes/predicate_pushdown.md) %}
+1. {% include [!](_includes/predicate_pushdown_preamble.md) %}
+
+   {% include [!](_includes/predicate_pushdown_examples.md) %}
 
     Поддерживаемые типы данных для пушдауна фильтров:
 

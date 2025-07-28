@@ -605,7 +605,7 @@ def disconnect_pile(pile_id, pile_to_endpoints):
         state=ydb_bridge.PileState.DISCONNECTED
     ))
     request.specific_pile_ids.append(pile_id)
-    response = invoke_grpc('UpdateClusterState', request, stub_factory=bridge_grpc_server.BridgeServiceStub, endpoints=pile_to_endpoints[pile_id])
+    invoke_grpc('UpdateClusterState', request, stub_factory=bridge_grpc_server.BridgeServiceStub, endpoints=pile_to_endpoints[pile_id])
     other_pile_ids = [x for x in pile_to_endpoints.keys() if x != pile_id]
     request = ydb_bridge.UpdateClusterStateRequest()
     request.updates.add().CopyFrom(ydb_bridge.PileStateUpdate(
@@ -613,7 +613,7 @@ def disconnect_pile(pile_id, pile_to_endpoints):
         state=ydb_bridge.PileState.DISCONNECTED,
     ))
     request.specific_pile_ids.extend(other_pile_ids)
-    response = invoke_grpc('UpdateClusterState', request, stub_factory=bridge_grpc_server.BridgeServiceStub, endpoints=pile_to_endpoints[other_pile_ids[0]])
+    invoke_grpc('UpdateClusterState', request, stub_factory=bridge_grpc_server.BridgeServiceStub, endpoints=pile_to_endpoints[other_pile_ids[0]])
 
 
 def connect_pile(pile_id, pile_to_endpoints):
@@ -623,7 +623,7 @@ def connect_pile(pile_id, pile_to_endpoints):
         state=ydb_bridge.PileState.NOT_SYNCHRONIZED,
     ))
     request.specific_pile_ids.append(pile_id)
-    response = invoke_grpc('UpdateClusterState', request, stub_factory=bridge_grpc_server.BridgeServiceStub, endpoints=pile_to_endpoints[pile_id])
+    invoke_grpc('UpdateClusterState', request, stub_factory=bridge_grpc_server.BridgeServiceStub, endpoints=pile_to_endpoints[pile_id])
     other_pile_ids = [x for x in pile_to_endpoints.keys() if x != pile_id]
     request = ydb_bridge.UpdateClusterStateRequest()
     request.updates.add().CopyFrom(ydb_bridge.PileStateUpdate(
@@ -631,7 +631,7 @@ def connect_pile(pile_id, pile_to_endpoints):
         state=ydb_bridge.PileState.NOT_SYNCHRONIZED,
     ))
     request.specific_pile_ids.extend(other_pile_ids)
-    response = invoke_grpc('UpdateClusterState', request, stub_factory=bridge_grpc_server.BridgeServiceStub, endpoints=pile_to_endpoints[other_pile_ids[0]])
+    invoke_grpc('UpdateClusterState', request, stub_factory=bridge_grpc_server.BridgeServiceStub, endpoints=pile_to_endpoints[other_pile_ids[0]])
 
 
 def create_bsc_request(args):

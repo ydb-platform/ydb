@@ -52,6 +52,9 @@ public:
         if (params.Has("merge_records")) {
             request->Request.set_merge_records(MergeRecords);
         }
+        if (params.Has("return_hints")) {
+            request->Request.set_return_hints(FromStringWithDefault<bool>(params.Get("return_hints"), false));
+        }
         SetDuration(TDuration::MilliSeconds(Timeout), *request->Request.mutable_operation_params()->mutable_operation_timeout());
         return request;
     }
@@ -226,10 +229,10 @@ public:
                 TActorId cache = MakeDatabaseMetadataCacheId(activeNode);
                 auto request = MakeHolder<NHealthCheck::TEvSelfCheckRequestProto>();
                 Send(cache, request.Release(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession, activeNode);
-            } else {
-                SendHealthCheckRequest();
+                return;
             }
         }
+        SendHealthCheckRequest();
     }
 
     static YAML::Node GetSwagger() {

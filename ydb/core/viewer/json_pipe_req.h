@@ -6,6 +6,7 @@
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
 #include <ydb/core/cms/console/console.h>
 #include <ydb/core/grpc_services/db_metadata_cache.h>
+#include <ydb/core/kqp/common/events/script_executions.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <ydb/core/sys_view/common/events.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
@@ -208,7 +209,7 @@ protected:
     void SendRequestToPipe(TActorId pipe, IEventBase* ev, ui64 cookie = 0, NWilson::TTraceId traceId = {});
 
     template<typename TResponse>
-    TRequestResponse<TResponse> MakeRequest(TActorId recipient, IEventBase* ev, ui32 flags = 0, ui64 cookie = 0) {
+    [[nodiscard]] TRequestResponse<TResponse> MakeRequest(TActorId recipient, IEventBase* ev, ui32 flags = 0, ui64 cookie = 0) {
         TRequestResponse<TResponse> response(Span.CreateChild(TComponentTracingLevels::THttp::Detailed, TypeName(*ev)));
         SendRequest(recipient, ev, flags, cookie, response.Span.GetTraceId());
         if (flags & IEventHandle::FlagSubscribeOnSession) {
@@ -218,14 +219,14 @@ protected:
     }
 
     template<typename TResponse>
-    TRequestResponse<TResponse> MakeRequestToPipe(TActorId pipe, IEventBase* ev, ui64 cookie = 0) {
+    [[nodiscard]] TRequestResponse<TResponse> MakeRequestToPipe(TActorId pipe, IEventBase* ev, ui64 cookie = 0) {
         TRequestResponse<TResponse> response(Span.CreateChild(TComponentTracingLevels::THttp::Detailed, TypeName(*ev)));
         SendRequestToPipe(pipe, ev, cookie, response.Span.GetTraceId());
         return response;
     }
 
     template<typename TResponse>
-    TRequestResponse<TResponse> MakeRequestToTablet(TTabletId tabletId, IEventBase* ev, ui64 cookie = 0) {
+    [[nodiscard]] TRequestResponse<TResponse> MakeRequestToTablet(TTabletId tabletId, IEventBase* ev, ui64 cookie = 0) {
         TActorId pipe = ConnectTabletPipe(tabletId);
         TRequestResponse<TResponse> response(Span.CreateChild(TComponentTracingLevels::THttp::Detailed, TypeName(*ev)));
         if (response.Span) {
@@ -236,7 +237,7 @@ protected:
     }
 
     template<typename TRequest>
-    TRequestResponse<typename NNodeWhiteboard::WhiteboardResponse<TRequest>::Type> MakeWhiteboardRequest(TNodeId nodeId, TRequest* ev, ui32 flags = IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession) {
+    [[nodiscard]] TRequestResponse<typename NNodeWhiteboard::WhiteboardResponse<TRequest>::Type> MakeWhiteboardRequest(TNodeId nodeId, TRequest* ev, ui32 flags = IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession) {
         TActorId whiteboardServiceId = NNodeWhiteboard::MakeNodeWhiteboardServiceId(nodeId);
         TRequestResponse<typename NNodeWhiteboard::WhiteboardResponse<TRequest>::Type> response(Span.CreateChild(TComponentTracingLevels::THttp::Detailed, TypeName(*ev)));
         if (response.Span) {
@@ -246,7 +247,7 @@ protected:
         return response;
     }
 
-    TRequestResponse<TEvViewer::TEvViewerResponse> MakeViewerRequest(TNodeId nodeId, TEvViewer::TEvViewerRequest* ev, ui32 flags = IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession);
+    [[nodiscard]] TRequestResponse<TEvViewer::TEvViewerResponse> MakeViewerRequest(TNodeId nodeId, TEvViewer::TEvViewerRequest* ev, ui32 flags = IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession);
     void SendDelayedRequests();
     void RequestHiveDomainStats(TTabletId hiveId);
     void RequestHiveNodeStats(TTabletId hiveId, TPathId pathId);
@@ -277,6 +278,9 @@ protected:
 
     static bool IsSuccess(const TEvTxUserProxy::TEvProposeTransactionStatus& ev);
     static TString GetError(const TEvTxUserProxy::TEvProposeTransactionStatus& ev);
+
+    static bool IsSuccess(const NKqp::TEvGetScriptExecutionOperationResponse& ev);
+    static TString GetError(const NKqp::TEvGetScriptExecutionOperationResponse& ev);
 
     void UpdateSharedCacheTablet(TTabletId tabletId, std::unique_ptr<IEventBase> request);
 
@@ -316,10 +320,10 @@ protected:
     void RequestSchemeCacheNavigate(const TString& path);
     void RequestSchemeCacheNavigate(const TPathId& pathId);
 
-    TRequestResponse<TEvTxProxySchemeCache::TEvNavigateKeySetResult> MakeRequestSchemeCacheNavigate(const TString& path, ui64 cookie = 0);
-    TRequestResponse<TEvTxProxySchemeCache::TEvNavigateKeySetResult> MakeRequestSchemeCacheNavigate(TPathId pathId, ui64 cookie = 0);
-    TRequestResponse<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult> MakeRequestSchemeShardDescribe(TTabletId schemeShardId, const TString& path, const NKikimrSchemeOp::TDescribeOptions& options = {}, ui64 cookie = 0);
-    TRequestResponse<TEvTxProxySchemeCache::TEvNavigateKeySetResult> MakeRequestSchemeCacheNavigateWithToken(
+    [[nodiscard]] TRequestResponse<TEvTxProxySchemeCache::TEvNavigateKeySetResult> MakeRequestSchemeCacheNavigate(const TString& path, ui64 cookie = 0);
+    [[nodiscard]] TRequestResponse<TEvTxProxySchemeCache::TEvNavigateKeySetResult> MakeRequestSchemeCacheNavigate(TPathId pathId, ui64 cookie = 0);
+    [[nodiscard]] TRequestResponse<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult> MakeRequestSchemeShardDescribe(TTabletId schemeShardId, const TString& path, const NKikimrSchemeOp::TDescribeOptions& options = {}, ui64 cookie = 0);
+    [[nodiscard]] TRequestResponse<TEvTxProxySchemeCache::TEvNavigateKeySetResult> MakeRequestSchemeCacheNavigateWithToken(
         const TString& path, bool showPrivate, ui32 access, ui64 cookie = 0);
 
     TRequestResponse<TEvViewer::TEvViewerResponse> MakeRequestViewer(TNodeId nodeId, TEvViewer::TEvViewerRequest* request, ui32 flags = 0);

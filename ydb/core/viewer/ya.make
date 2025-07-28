@@ -88,7 +88,6 @@ SRCS(
     viewer_pdiskinfo.h
     viewer_pqconsumerinfo.h
     viewer_query.h
-    viewer_query_old.h
     viewer_render.h
     viewer_request.cpp
     viewer_request.h

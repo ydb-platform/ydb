@@ -6,19 +6,6 @@
 
 All spilling settings are located in the `table_service_config` section, which is at the same level as `host_configs`.
 
-```yaml
-table_service_config:
-  spilling_service_config:
-    local_file_config:
-      root: ""
-      max_total_size: 21474836480    # 20 GiB
-      max_file_size: 5368709120      # 5 GiB
-      max_file_part_size: 104857600  # 100 MB
-      io_thread_pool:
-        workers_count: 2
-        queue_size: 1000
-```
-
 ## Main Configuration Parameters
 
 ### Spilling Service (spilling_service_config)
@@ -64,8 +51,6 @@ table_service_config:
 **Recommendations:**
 
 - Set the value based on available disk space
-
-
 
 ### Thread Pool Configuration (TIoThreadPoolConfig)
 
@@ -228,24 +213,27 @@ table_service_config:
 1. **Spilling Service not started** / **Service not started**
 
    **Description:** Attempt to use spilling when Spilling Service is disabled.
-   
+
    **Solution:**
+
    - Enable spilling: `table_service_config.spilling_service_config.local_file_config.enable: true`
-   
+
    Read more about spilling architecture in the section [Spilling Architecture in {{ ydb-short-name }}](../../../concepts/spilling.md#spilling-architecture-in-ydb)
 
 2. **Total size limit exceeded: X/YMb**
 
    **Description:** Maximum total size of spilling files exceeded (parameter `max_total_size`).
-   
+
    **Solution:**
+
    - Increase `max_total_size` in configuration
 
 3. **Can not run operation**
 
    **Description:** I/O thread pool operation queue overflow.
-   
+
    **Solution:**
+
    - Increase `queue_size` in `io_thread_pool`
    - Increase `workers_count` for faster operation processing
    - Check disk performance

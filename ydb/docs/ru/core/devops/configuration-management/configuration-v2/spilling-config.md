@@ -215,23 +215,23 @@ table_service_config:
 1. **Spilling Service not started** / **Service not started**
 
    **Описание:** Попытка использования спиллинга при выключенном Spilling Service.
-   
+
    **Решение:**
    - Включите спиллинг: `table_service_config.spilling_service_config.local_file_config.enable: true`
-   
+
    Подробнее про архитектуру спиллинга читайте в разделе [Архитектура спиллинга в {{ ydb-short-name }}](../../../concepts/spilling.md#архитектура-спиллинга-в-ydb)
 
 2. **Total size limit exceeded: X/YMb**
 
    **Описание:** Превышен максимальный суммарный размер файлов спиллинга (параметр `max_total_size`).
-   
+
    **Решение:**
    - Увеличьте `max_total_size` в конфигурации
 
 3. **Can not run operation**
 
    **Описание:** Переполнение очереди операций в пуле потоков I/O.
-   
+
    **Решение:**
    - Увеличьте `queue_size` в `io_thread_pool`
    - Увеличьте `workers_count` для более быстрой обработки операций

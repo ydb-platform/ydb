@@ -169,7 +169,6 @@ message TQueryRequest {
     optional string PoolId = 35;
     optional string DatabaseId = 36;
     optional TKafkaApiOperationsRequest KafkaApiOperations = 37;
-    optional Ydb.Query.SchemaInclusionMode SchemaInclusionMode = 38;
 
     oneof OutputFormat {
         Ydb.Formats.ValueOutputFormat ValueOutputFormat = 1000;

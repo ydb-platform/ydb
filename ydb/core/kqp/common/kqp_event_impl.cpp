@@ -98,12 +98,14 @@ void TEvKqp::TEvQueryRequest::PrepareRemote() const {
             Record.MutableRequest()->SetDatabaseId(DatabaseId);
         }
 
-        std::visit([](auto&& format) {
+        std::visit([this](auto&& format) {
             using T = std::decay_t<decltype(format)>;
-            if constexpr (std::is_same_v<T, Ydb::Formats::ValueOutputFormat*>) {
-                Record.MutableRequest()->ValueOutputFormat(format);
-            } else if constexpr (std::is_same_v<T, Ydb::Formats::ArrowOutputFormat*>) {
-                Record.MutableRequest()->ArrowOutputFormat(format);
+            if constexpr (std::is_same_v<T, TValueOutputFormat>) {
+                format.ExportToProto(Record.MutableRequest()->MutableValueOutputFormat());
+            } else if constexpr (std::is_same_v<T, TArrowOutputFormat>) {
+                format.ExportToProto(Record.MutableRequest()->MutableArrowOutputFormat());
+            } else {
+                YQL_ENSURE(false, "Unreachable");
             }
         }, OutputFormat);
 
@@ -112,7 +114,6 @@ void TEvKqp::TEvQueryRequest::PrepareRemote() const {
         Record.MutableRequest()->SetAction(QueryAction);
         Record.MutableRequest()->SetType(QueryType);
         Record.MutableRequest()->SetSyntax(QuerySettings.Syntax);
-        Record.MutableRequest()->SetSchemaInclusionMode(QuerySettings.SchemaInclusionMode);
         if (HasOperationParams) {
             Record.MutableRequest()->SetCancelAfterMs(CancelAfter.MilliSeconds());
             Record.MutableRequest()->SetTimeoutMs(OperationTimeout.MilliSeconds());

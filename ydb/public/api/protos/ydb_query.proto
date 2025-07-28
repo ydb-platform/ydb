@@ -156,12 +156,6 @@ enum StatsMode {
     STATS_MODE_PROFILE = 40;    // Detailed execution stats including stats for individual tasks and channels
 }
 
-enum SchemaInclusionMode {
-    SCHEMA_INCLUSION_MODE_UNSPECIFIED = 0;
-    SCHEMA_INCLUSION_MODE_ALWAYS = 10;        // Always include schema in the response stream.
-    SCHEMA_INCLUSION_MODE_FIRST_ONLY = 20;    // Include schema only in the first part of the response stream.
-}
-
 message ExecuteQueryRequest {
     // Session identifier (required)
     string session_id = 1 [(Ydb.length).le = 1024];
@@ -196,9 +190,6 @@ message ExecuteQueryRequest {
         Ydb.Formats.ValueOutputFormat value_output_format = 100;
         Ydb.Formats.ArrowOutputFormat arrow_output_format = 101;
     }
-
-    // If Ydb.ResultSet schema is not needed, it can be omitted in the response stream.
-    SchemaInclusionMode schema_inclusion_mode = 12;
 }
 
 message ResultSetMeta {

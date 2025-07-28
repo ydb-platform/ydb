@@ -12,6 +12,7 @@
 #include <ydb/core/cms/console/configs_dispatcher.h>
 #include <ydb/core/engine/mkql_proto.h>
 #include <ydb/core/kqp/common/kqp.h>
+#include <ydb/core/kqp/common/kqp_output_formats.h>
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
 #include <ydb/core/kqp/gateway/utils/scheme_helpers.h>
 #include <ydb/core/kqp/rm_service/kqp_snapshot_manager.h>
@@ -2022,6 +2023,7 @@ public:
         auto ev = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>(
             NKikimrKqp::QUERY_ACTION_EXECUTE,
             NKikimrKqp::QUERY_TYPE_AST_SCAN,
+            TValueOutputFormat{},
             target,
             ctx,
             TString(), //sessionId

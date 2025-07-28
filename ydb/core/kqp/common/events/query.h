@@ -2,7 +2,7 @@
 #include <ydb/core/resource_pools/resource_pool_settings.h>
 #include <ydb/core/protos/kqp.pb.h>
 #include <ydb/core/kqp/common/simple/kqp_event_ids.h>
-#include <ydb/core/kqp/common/simple/helpers.h>
+#include <ydb/core/kqp/common/kqp_output_formats.h>
 #include <ydb/core/kqp/common/kqp_user_request_context.h>
 #include <ydb/core/grpc_services/base/iface.h>
 #include <ydb/core/grpc_services/cancelation/cancelation_event.h>
@@ -36,11 +36,6 @@ struct TQueryRequestSettings {
         return *this;
     }
 
-    TQueryRequestSettings& SetSchemaInclusionMode(const Ydb::Query::SchemaInclusionMode& schemaInclusionMode) {
-        SchemaInclusionMode = schemaInclusionMode;
-        return *this;
-    }
-
     TQueryRequestSettings& SetSupportStreamTrailingResult(bool flag) {
         SupportsStreamTrailingResult = flag;
         return *this;
@@ -55,7 +50,6 @@ struct TQueryRequestSettings {
     bool KeepSession = false;
     bool UseCancelAfter = true;
     ::Ydb::Query::Syntax Syntax = Ydb::Query::Syntax::SYNTAX_UNSPECIFIED;
-    Ydb::Query::SchemaInclusionMode SchemaInclusionMode = Ydb::Query::SchemaInclusionMode::SCHEMA_INCLUSION_MODE_UNSPECIFIED;
     bool SupportsStreamTrailingResult = false;
 };
 
@@ -136,21 +130,21 @@ public:
         return RequestCtx ? SessionId : Record.GetRequest().GetSessionId();
     }
 
-    const TOutputFormat& GetOutputFormat() const {
+    TOutputFormat GetOutputFormat() const {
         if (RequestCtx) {
             return OutputFormat;
         }
 
         auto req = Record.GetRequest();
         if (req.HasValueOutputFormat()) {
-            return req.GetValueOutputFormat();
+            return TValueOutputFormat::ImportFromProto(req.GetValueOutputFormat());
         }
 
         if (req.HasArrowOutputFormat()) {
-            return req.GetArrowOutputFormat();
+            return TArrowOutputFormat::ImportFromProto(req.GetArrowOutputFormat());
         }
 
-        return TOutputFormat{};
+        return TValueOutputFormat{};
     }
 
     NKikimrKqp::EQueryAction GetAction() const {
@@ -163,10 +157,6 @@ public:
 
     Ydb::Query::Syntax GetSyntax() const {
         return RequestCtx ? QuerySettings.Syntax : Record.GetRequest().GetSyntax();
-    }
-
-    Ydb::Query::SchemaInclusionMode GetSchemaInclusionMode() const {
-        return RequestCtx ? QuerySettings.SchemaInclusionMode : Record.GetRequest().GetSchemaInclusionMode();
     }
 
     bool HasPreparedQuery() const {

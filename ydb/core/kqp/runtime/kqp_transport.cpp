@@ -61,15 +61,15 @@ void TKqpProtoBuilder::BuildYdbResultSet(
     YQL_ENSURE(mkqlSrcRowType->GetKind() == NKikimr::NMiniKQL::TType::EKind::Struct);
     const auto* mkqlSrcRowStructType = static_cast<const TStructType*>(mkqlSrcRowType);
 
+    TColumnOrder order = columnHints ? TColumnOrder(*columnHints) : TColumnOrder{};
+
     std::vector<std::pair<TString, NScheme::TTypeInfo>> arrowSchema;
     std::set<std::string> arrowNotNullColumns;
 
-    bool unspecifiedFormat = std::holds_alternative<std::monostate>(outputFormat);
-    bool arrowFormat = std::holds_alternative<Ydb::Formats::ArrowOutputFormat>(outputFormat);
-    bool valueFormat = std::holds_alternative<Ydb::Formats::ValueOutputFormat>(outputFormat);
+    bool arrowFormat = std::holds_alternative<TArrowOutputFormat>(outputFormat);
+    bool valueFormat = std::holds_alternative<TValueOutputFormat>(outputFormat);
 
     if (fillSchema) {
-        TColumnOrder order = columnHints ? TColumnOrder(*columnHints) : TColumnOrder{};
         for (ui32 idx = 0; idx < mkqlSrcRowStructType->GetMembersCount(); ++idx) {
             auto* column = resultSet.add_columns();
             ui32 memberIndex = (!columnOrder || columnOrder->empty()) ? idx : (*columnOrder)[idx];
@@ -109,7 +109,7 @@ void TKqpProtoBuilder::BuildYdbResultSet(
 
     NDq::TDqDataSerializer dataSerializer(*TypeEnv, *HolderFactory, transportVersion);
 
-    if (valueFormat || unspecifiedFormat) {
+    if (valueFormat) {
         for (auto& part : data) {
             if (!part.ChunkCount()) {
                 continue;

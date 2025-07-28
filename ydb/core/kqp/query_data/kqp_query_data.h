@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/core/kqp/query_data/kqp_prepared_query.h>
+#include <ydb/core/kqp/common/kqp_output_formats.h>
 #include <yql/essentials/core/yql_data_provider.h>
 #include <yql/essentials/public/udf/udf_data_type.h>
 #include <yql/essentials/minikql/mkql_node.h>
@@ -82,7 +83,6 @@ struct TKqpExecuterTxResult {
     const TVector<TString>* ColumnHints = nullptr;
     TMaybe<ui32> QueryResultIndex = 0;
     NKikimr::NMiniKQL::TUnboxedValueBatch Rows;
-    NKqp::TOutputFormat OutputFormat;
     bool HasTrailingResult = false;
 
     explicit TKqpExecuterTxResult(
@@ -260,8 +260,7 @@ public:
 
     TTypedUnboxedValue GetTxResult(ui32 txIndex, ui32 resultIndex);
     NKikimrMiniKQL::TResult* GetMkqlTxResult(const NKqpProto::TKqpPhyResultBinding& rb, google::protobuf::Arena* arena);
-    Ydb::ResultSet* GetYdbTxResult(const NKqpProto::TKqpPhyResultBinding& rb, google::protobuf::Arena* arena, const TOutputFormat& outputFormat,
-        Ydb::Query::SchemaInclusionMode schemaInclusionMode, TMaybe<ui64> rowsLimitPerWrite);
+    Ydb::ResultSet* GetYdbTxResult(const NKqpProto::TKqpPhyResultBinding& rb, google::protobuf::Arena* arena, const TOutputFormat& outputFormat, TMaybe<ui64> rowsLimitPerWrite);
     bool HasTrailingTxResult(const NKqpProto::TKqpPhyResultBinding& rb);
 
     std::pair<NKikimr::NMiniKQL::TType*, NUdf::TUnboxedValue> GetInternalBindingValue(const NKqpProto::TKqpPhyParamBinding& paramBinding);

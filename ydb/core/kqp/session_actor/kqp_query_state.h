@@ -210,11 +210,7 @@ public:
         return RequestEv->GetSyntax();
     }
 
-    Ydb::Query::schemaInclusionMode GetSchemaInclusionMode() const {
-        return RequestEv->GetSchemaInclusionMode();
-    }
-
-    const TOutputFormat& GetOutputFormat() const {
+    TOutputFormat GetOutputFormat() const {
         return RequestEv->GetOutputFormat();
     }
 

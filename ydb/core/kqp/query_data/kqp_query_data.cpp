@@ -1,6 +1,8 @@
 #include "kqp_query_data.h"
 
 #include <ydb/core/protos/kqp_physical.pb.h>
+#include <ydb/public/api/protos/ydb_query.pb.h>
+#include <ydb/public/api/protos/ydb_formats.pb.h>
 #include <ydb/core/formats/arrow/arrow_batch_builder.h>
 #include <ydb/core/kqp/common/kqp_row_builder.h>
 #include <ydb/core/kqp/common/kqp_types.h>
@@ -95,9 +97,8 @@ void TKqpExecuterTxResult::FillYdb(Ydb::ResultSet* ydbResult, const TOutputForma
     std::vector<std::pair<TString, NScheme::TTypeInfo>> arrowSchema;
     std::set<std::string> arrowNotNullColumns;
 
-    bool unspecifiedFormat = std::holds_alternative<std::monostate>(outputFormat);
-    bool arrowFormat = std::holds_alternative<Ydb::Formats::ArrowOutputFormat>(outputFormat);
-    bool valueFormat = std::holds_alternative<Ydb::Formats::ValueOutputFormat>(outputFormat);
+    bool arrowFormat = std::holds_alternative<TArrowOutputFormat>(outputFormat);
+    bool valueFormat = std::holds_alternative<TValueOutputFormat>(outputFormat);
 
     if (fillSchema) {
         for (ui32 idx = 0; idx < mkqlSrcRowStructType->GetMembersCount(); ++idx) {
@@ -127,7 +128,7 @@ void TKqpExecuterTxResult::FillYdb(Ydb::ResultSet* ydbResult, const TOutputForma
         }
     }
 
-    if (valueFormat || unspecifiedFormat) {
+    if (valueFormat) {
         Rows.ForEachRow([&](const NUdf::TUnboxedValue& value) -> bool {
             if (rowsLimitPerWrite) {
                 if (*rowsLimitPerWrite == 0) {
@@ -306,22 +307,25 @@ bool TQueryData::HasTrailingTxResult(const NKqpProto::TKqpPhyResultBinding& rb) 
 }
 
 
-Ydb::ResultSet* TQueryData::GetYdbTxResult(const NKqpProto::TKqpPhyResultBinding& rb, google::protobuf::Arena* arena, const TOutputFormat& outputFormat,
-    Ydb::Query::SchemaInclusionMode schemaInclusionMode, TMaybe<ui64> rowsLimitPerWrite)
+Ydb::ResultSet* TQueryData::GetYdbTxResult(const NKqpProto::TKqpPhyResultBinding& rb, google::protobuf::Arena* arena, const TOutputFormat& outputFormat, TMaybe<ui64> rowsLimitPerWrite)
 {
     auto txIndex = rb.GetTxResultBinding().GetTxIndex();
     auto resultIndex = rb.GetTxResultBinding().GetResultIndex();
 
     YQL_ENSURE(HasResult(txIndex, resultIndex));
 
+    Ydb::Formats::SchemaInclusionMode mode = std::visit([](const auto& format) {
+        return format.SchemaInclusionMode;
+    }, outputFormat);
+
     bool fillSchema = false;
-    switch (schemaInclusionMode) {
-        case Ydb::Query::SchemaInclusionMode::SCHEMA_INCLUSION_MODE_UNSPECIFIED:
-        case Ydb::Query::SchemaInclusionMode::SCHEMA_INCLUSION_MODE_ALWAYS:
+    switch (mode) {
+        case Ydb::Formats::SchemaInclusionMode::SCHEMA_INCLUSION_MODE_UNSPECIFIED:
+        case Ydb::Formats::SchemaInclusionMode::SCHEMA_INCLUSION_MODE_ALWAYS:
             fillSchema = true;
             break;
-        case Ydb::Query::SchemaInclusionMode::SCHEMA_INCLUSION_MODE_FIRST_ONLY:
-            fillSchema = (BuiltResultIndex.find(resultIndex) == BuiltResultIndex.end());
+        case Ydb::Formats::SchemaInclusionMode::SCHEMA_INCLUSION_MODE_FIRST_ONLY:
+            fillSchema = (BuiltResultIndexes.find(resultIndex) == BuiltResultIndexes.end());
             break;
         default:
             break;

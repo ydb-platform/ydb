@@ -4,6 +4,7 @@
 #include "audit_dml_operations.h"
 
 #include <ydb/core/grpc_services/grpc_integrity_trails.h>
+#include <ydb/core/kqp/common/kqp_output_formats.h>
 #include <ydb/public/api/protos/ydb_scripting.pb.h>
 
 namespace NKikimr {
@@ -68,6 +69,7 @@ public:
         auto ev = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>(
             NKikimrKqp::QUERY_ACTION_EXECUTE,
             NKikimrKqp::QUERY_TYPE_SQL_SCRIPT,
+            NKqp::TValueOutputFormat{},
             SelfId(),
             Request_,
             TString(), //sessionId

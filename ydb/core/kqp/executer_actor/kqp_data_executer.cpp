@@ -96,7 +96,7 @@ public:
 
     TKqpDataExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TString& database,
         const TIntrusiveConstPtr<NACLib::TUserToken>& userToken,
-        TKqpRequestCounters::TPtr counters, bool streamResult,
+        TOutputFormat outputFormat, TKqpRequestCounters::TPtr counters, bool streamResult,
         const NKikimrConfig::TTableServiceConfig& tableServiceConfig,
         NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory,
         const TActorId& creator, const TIntrusivePtr<TUserRequestContext>& userRequestContext,
@@ -105,11 +105,10 @@ public:
         const TShardIdToTableInfoPtr& shardIdToTableInfo,
         const IKqpTransactionManagerPtr& txManager,
         const TActorId bufferActorId,
-        const TOutputFormat& outputFormat, Ydb::Query::SchemaInclusionMode schemaInclusionMode,
         TMaybe<TBatchOperationSettings> batchOperationSettings)
-        : TBase(std::move(request), std::move(asyncIoFactory), federatedQuerySetup, GUCSettings, database, userToken, counters, tableServiceConfig,
-            userRequestContext, statementResultIndex, TWilsonKqp::DataExecuter,
-            "DataExecuter", streamResult, bufferActorId, txManager, outputFormat, schemaInclusionMode, std::move(batchOperationSettings))
+        : TBase(std::move(request), std::move(asyncIoFactory), federatedQuerySetup, GUCSettings, database, userToken, std::move(outputFormat),
+            counters, tableServiceConfig, userRequestContext, statementResultIndex, TWilsonKqp::DataExecuter,
+            "DataExecuter", streamResult, bufferActorId, txManager, std::move(batchOperationSettings))
         , ShardIdToTableInfo(shardIdToTableInfo)
         , AllowOlapDataQuery(tableServiceConfig.GetAllowOlapDataQuery())
         , WaitCAStatsTimeout(TDuration::MilliSeconds(tableServiceConfig.GetQueryLimits().GetWaitCAStatsTimeoutMs()))
@@ -3051,16 +3050,16 @@ private:
 } // namespace
 
 IActor* CreateKqpDataExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TString& database, const TIntrusiveConstPtr<NACLib::TUserToken>& userToken,
-    TKqpRequestCounters::TPtr counters, bool streamResult, const NKikimrConfig::TTableServiceConfig& tableServiceConfig,
+    TOutputFormat outputFormat, TKqpRequestCounters::TPtr counters, bool streamResult, const NKikimrConfig::TTableServiceConfig& tableServiceConfig,
     NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory, const TActorId& creator,
     const TIntrusivePtr<TUserRequestContext>& userRequestContext, ui32 statementResultIndex,
     const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup, const TGUCSettings::TPtr& GUCSettings,
     const TShardIdToTableInfoPtr& shardIdToTableInfo, const IKqpTransactionManagerPtr& txManager, const TActorId bufferActorId,
-    const TOutputFormat& outputFormat, Ydb::Query::SchemaInclusionMode schemaInclusionMode, TMaybe<TBatchOperationSettings> batchOperationSettings)
+    TMaybe<TBatchOperationSettings> batchOperationSettings)
 {
-    return new TKqpDataExecuter(std::move(request), database, userToken, counters, streamResult, tableServiceConfig,
+    return new TKqpDataExecuter(std::move(request), database, userToken, std::move(outputFormat), counters, streamResult, tableServiceConfig,
         std::move(asyncIoFactory), creator, userRequestContext, statementResultIndex, federatedQuerySetup, GUCSettings,
-        shardIdToTableInfo, txManager, bufferActorId, outputFormat, schemaInclusionMode, std::move(batchOperationSettings));
+        shardIdToTableInfo, txManager, bufferActorId, std::move(batchOperationSettings));
 }
 
 } // namespace NKqp

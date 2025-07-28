@@ -134,14 +134,13 @@ public:
         const TGUCSettings::TPtr GUCSettings,
         const TString& database,
         const TIntrusiveConstPtr<NACLib::TUserToken>& userToken,
+        TOutputFormat outputFormat,
         TKqpRequestCounters::TPtr counters,
         const NKikimrConfig::TTableServiceConfig& tableServiceConfig,
         const TIntrusivePtr<TUserRequestContext>& userRequestContext,
         ui32 statementResultIndex,
         ui64 spanVerbosity = 0, TString spanName = "KqpExecuterBase",
         bool streamResult = false, const TActorId bufferActorId = {}, const IKqpTransactionManagerPtr& txManager = nullptr,
-        const TOutputFormat& outputFormat,
-        Ydb::Query::SchemaInclusionMode schemaInclusionMode,
         TMaybe<TBatchOperationSettings> batchOperationSettings = Nothing())
         : NActors::TActor<TDerived>(&TDerived::ReadyState)
         , Request(std::move(request))
@@ -152,6 +151,7 @@ public:
         , TxManager(txManager)
         , Database(database)
         , UserToken(userToken)
+        , OutputFormat(std::move(outputFormat))
         , Counters(counters)
         , ExecuterSpan(spanVerbosity, std::move(Request.TraceId), spanName)
         , Planner(nullptr)
@@ -162,8 +162,6 @@ public:
         , StatementResultIndex(statementResultIndex)
         , BlockTrackingMode(tableServiceConfig.GetBlockTrackingMode())
         , VerboseMemoryLimitException(tableServiceConfig.GetResourceManager().GetVerboseMemoryLimitException())
-        , OutputFormat(outputFormat)
-        , SchemaInclusionMode(schemaInclusionMode)
         , BatchOperationSettings(std::move(batchOperationSettings))
     {
         if (tableServiceConfig.HasArrayBufferMinFillPercentage()) {
@@ -346,14 +344,18 @@ protected:
                     vt->SetTxId(snap.TxId);
                 }
 
+                Ydb::Formats::SchemaInclusionMode mode = std::visit([](const auto& format) {
+                    return format.SchemaInclusionMode;
+                }, OutputFormat);
+
                 bool fillSchema = false;
-                switch (SchemaInclusionMode) {
-                    case Ydb::Query::SchemaInclusionMode::SCHEMA_INCLUSION_MODE_UNSPECIFIED:
-                    case Ydb::Query::SchemaInclusionMode::SCHEMA_INCLUSION_MODE_ALWAYS:
+                switch (mode) {
+                    case Ydb::Formats::SchemaInclusionMode::SCHEMA_INCLUSION_MODE_UNSPECIFIED:
+                    case Ydb::Formats::SchemaInclusionMode::SCHEMA_INCLUSION_MODE_ALWAYS:
                         fillSchema = true;
                         break;
-                    case Ydb::Query::SchemaInclusionMode::SCHEMA_INCLUSION_MODE_FIRST_ONLY:
-                        fillSchema = (BuiltResultIndex.find(resultIndex) == BuiltResultIndex.end());
+                    case Ydb::Formats::SchemaInclusionMode::SCHEMA_INCLUSION_MODE_FIRST_ONLY:
+                        fillSchema = (SentResultIndexes.find(resultIndex) == SentResultIndexes.end());
                         break;
                     default:
                         break;
@@ -2236,6 +2238,7 @@ protected:
     IKqpTransactionManagerPtr TxManager;
     const TString Database;
     const TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
+    TOutputFormat OutputFormat;
     TKqpRequestCounters::TPtr Counters;
     std::unique_ptr<TQueryExecutionStats> Stats;
     TInstant LastProgressStats;
@@ -2314,16 +2317,16 @@ private:
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 IActor* CreateKqpDataExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TString& database,
-    const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, TKqpRequestCounters::TPtr counters, bool streamResult,
-    const NKikimrConfig::TTableServiceConfig& tableServiceConfig,
+    const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, TOutputFormat outputFormat, TKqpRequestCounters::TPtr counters,
+    bool streamResult, const NKikimrConfig::TTableServiceConfig& tableServiceConfig,
     NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory, const TActorId& creator,
     const TIntrusivePtr<TUserRequestContext>& userRequestContext, ui32 statementResultIndex,
     const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup, const TGUCSettings::TPtr& GUCSettings,
     const TShardIdToTableInfoPtr& shardIdToTableInfo, const IKqpTransactionManagerPtr& txManager, const TActorId bufferActorId,
-    const TOutputFormat& outputFormat, Ydb::Query::SchemaInclusionMode schemaInclusionMode, TMaybe<TBatchOperationSettings> batchOperationSettings);
+    TMaybe<TBatchOperationSettings> batchOperationSettings);
 
 IActor* CreateKqpScanExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TString& database,
-    const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, TKqpRequestCounters::TPtr counters,
+    const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, TOutputFormat outputFormat, TKqpRequestCounters::TPtr counters,
     const NKikimrConfig::TTableServiceConfig& tableServiceConfig,
     NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory,
     TPreparedQueryHolder::TConstPtr preparedQuery,

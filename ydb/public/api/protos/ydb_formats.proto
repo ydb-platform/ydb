@@ -26,10 +26,19 @@ message CsvSettings {
     Quoting quoting = 5;
 }
 
+enum SchemaInclusionMode {
+    SCHEMA_INCLUSION_MODE_UNSPECIFIED = 0;
+    SCHEMA_INCLUSION_MODE_ALWAYS = 10;        // Always include schema in the response stream.
+    SCHEMA_INCLUSION_MODE_FIRST_ONLY = 20;    // Include schema only in the first part of the response stream.
+}
+
 /**
  * Ydb.Value output format for Query.ExecuteQueryRequest
 */
-message ValueOutputFormat {}
+message ValueOutputFormat {
+    // If Ydb.ResultSet schema is not needed, it can be omitted in the response stream.
+    SchemaInclusionMode schema_inclusion_mode = 1;
+}
 
 message ValueOutputFormatMeta {}
 
@@ -37,6 +46,9 @@ message ValueOutputFormatMeta {}
  * Arrow output format for Query.ExecuteQueryRequest
 */
 message ArrowOutputFormat {
+    // If Ydb.ResultSet schema is not needed, it can be omitted in the response stream.
+    SchemaInclusionMode schema_inclusion_mode = 1;
+
     message Compression {
         enum Type {
             COMPRESSION_UNSPECIFIED = 0;
@@ -49,7 +61,7 @@ message ArrowOutputFormat {
         int32 level = 2;
     }
 
-    Compression compression = 1;
+    Compression compression = 2;
 }
 
 message ArrowOutputFormatMeta {

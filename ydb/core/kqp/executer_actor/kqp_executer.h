@@ -124,13 +124,13 @@ struct TEvKqpExecuter {
 struct TKqpFederatedQuerySetup;
 
 IActor* CreateKqpExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TString& database,
-    const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, TKqpRequestCounters::TPtr counters,
+    const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, TOutputFormat outputFormat, TKqpRequestCounters::TPtr counters,
     const NKikimrConfig::TTableServiceConfig tableServiceConfig,
     NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory, TPreparedQueryHolder::TConstPtr preparedQuery, const TActorId& creator,
     const TIntrusivePtr<TUserRequestContext>& userRequestContext, ui32 statementResultIndex,
     const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup, const TGUCSettings::TPtr& GUCSettings,
     const TShardIdToTableInfoPtr& shardIdToTableInfo, const IKqpTransactionManagerPtr& txManager, const TActorId bufferActorId,
-    const TOutputFormat& outputFormat, Ydb::Query::SchemaInclusionMode schemaInclusionMode, TMaybe<TBatchOperationSettings> batchOperationSettings);
+    TMaybe<TBatchOperationSettings> batchOperationSettings);
 
 IActor* CreateKqpSchemeExecuter(
     TKqpPhyTxHolder::TConstPtr phyTx, NKikimrKqp::EQueryType queryType, const TActorId& target,

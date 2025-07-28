@@ -11,6 +11,7 @@
 #include <ydb/core/grpc_services/grpc_integrity_trails.h>
 #include <ydb/library/ydb_issue/issue_helpers.h>
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
+#include <ydb/core/kqp/common/kqp_output_formats.h>
 
 #include <ydb/library/services/services.pb.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
@@ -177,6 +178,7 @@ private:
         auto ev = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>(
             NKikimrKqp::QUERY_ACTION_EXECUTE,
             NKikimrKqp::QUERY_TYPE_SQL_SCRIPT_STREAMING,
+            NKqp::TValueOutputFormat{},
             SelfId(),
             Request_,
             TString(), //sessionId

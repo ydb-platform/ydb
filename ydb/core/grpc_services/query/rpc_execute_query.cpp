@@ -272,14 +272,10 @@ private:
 
         switch (req->output_format_case()) {
             case Ydb::Query::ExecuteQueryRequest::kValueOutputFormat:
-                auto valueOutputFormat = google::protobuf::Arena::CreateMessage<Ydb::Formats::ValueOutputFormat>(Request_->GetArena());
-                valueOutputFormat->CopyFrom(req->value_output_format());
-                outputFormat = valueOutputFormat;
+                outputFormat = NKqp::TValueOutputFormat::ImportFromProto(req->value_output_format());
                 break;
             case Ydb::Query::ExecuteQueryRequest::kArrowOutputFormat:
-                auto arrowOutputFormat = google::protobuf::Arena::CreateMessage<Ydb::Formats::ArrowOutputFormat>(Request_->GetArena());
-                arrowOutputFormat->CopyFrom(req->arrow_output_format());
-                outputFormat = arrowOutputFormat;
+                outputFormat = NKqp::TArrowOutputFormat::ImportFromProto(req->arrow_output_format());
                 break;
             default:
                 issues.AddIssue(MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR, "Unexpected output format"));
@@ -301,7 +297,6 @@ private:
             .SetKeepSession(false)
             .SetUseCancelAfter(false)
             .SetSyntax(syntax)
-            .SetSchemaInclusionMode(req->schema_inclusion_mode())
             .SetSupportStreamTrailingResult(true)
             .SetOutputChunkMaxSize(req->response_part_limit_bytes());
 

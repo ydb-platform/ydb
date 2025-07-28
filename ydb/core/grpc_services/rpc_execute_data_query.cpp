@@ -14,6 +14,7 @@
 #include <ydb/core/protos/query_stats.pb.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/library/operation_id/operation_id.h>
 
+#include <ydb/core/kqp/common/kqp_output_formats.h>
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
 
 #include <yql/essentials/public/issue/yql_issue.h>
@@ -146,6 +147,7 @@ public:
         auto ev = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>(
             queryAction,
             queryType,
+            NKqp::TValueOutputFormat{},
             SelfId(),
             Request_,
             req->session_id(),

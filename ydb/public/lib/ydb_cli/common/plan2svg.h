@@ -107,6 +107,20 @@ public:
     TStringBuilder Builder;
 };
 
+class TOperatorInput {
+
+public:
+    ui32 OperatorId = 0;
+    ui32 PlanNodeId = 0;
+    std::optional<ui32> StageId;
+    TString PrecomputeRef;
+    std::shared_ptr<TSingleMetric> Rows;
+
+    bool IsAssigned() {
+        return static_cast<bool>(OperatorId) || static_cast<bool>(PlanNodeId) || static_cast<bool>(PrecomputeRef);
+    }
+};
+
 class TOperatorInfo {
 
 public:
@@ -117,13 +131,9 @@ public:
     TString Info;
     std::shared_ptr<TSingleMetric> OutputRows;
     std::shared_ptr<TSingleMetric> OutputThroughput;
-    std::shared_ptr<TSingleMetric> InputRows;
-    std::shared_ptr<TSingleMetric> ExtraInputRows;
+    TOperatorInput Input1;
+    TOperatorInput Input2;
     std::shared_ptr<TSingleMetric> InputThroughput;
-    ui32 InputPlanNodeId = 0;
-    ui32 ExtraInputPlanNodeId = 0;
-    std::optional<ui32> RightStageId;
-    std::optional<ui32> LeftStageId;
     TString Estimations;
 };
 
@@ -231,12 +241,13 @@ struct TPlanViewConfig {
     bool Simplified = false;
 };
 
+class TPlanVisualizer;
+
 class TPlan {
 
 public:
-    TPlan(const TString& nodeType, TPlanViewConfig& config, std::map<std::string, std::shared_ptr<TStage>>& cteStages,
-        std::map<std::string, std::string>& cteSubPlans)
-        : NodeType(nodeType), Config(config), CteStages(cteStages), CteSubPlans(cteSubPlans) {
+    TPlan(const TString& nodeType, TPlanViewConfig& config, TPlanVisualizer& viz)
+        : NodeType(nodeType), Config(config), Viz(viz) {
         CpuTime = std::make_shared<TSummaryMetric>();
         WaitInputTime = std::make_shared<TSummaryMetric>();
         WaitOutputTime = std::make_shared<TSummaryMetric>();
@@ -269,12 +280,14 @@ public:
     void MarkLayout();
     void ResolveCteRefs();
     void ResolveOperatorInputs();
+    void PrintSeries(TStringBuilder& canvas, std::vector<std::pair<ui64, ui64>> series, ui64 maxValue, ui32 x, ui32 y, ui32 w, ui32 h, const TString& title, const TString& lineColor, const TString& fillColor);
     void PrintTimeline(TStringBuilder& background, TStringBuilder& canvas, const TString& title, TAggregation& firstMessage, TAggregation& lastMessage, ui32 x, ui32 y, ui32 w, ui32 h, const TString& color, bool backgroundRect = false);
     void PrintWaitTime(TStringBuilder& canvas, std::shared_ptr<TSingleMetric> metric, ui32 x, ui32 y, ui32 w, ui32 h, const TString& fillColor);
     void PrintDeriv(TStringBuilder& canvas, TMetricHistory& history, ui32 x, ui32 y, ui32 w, ui32 h, const TString& title, const TString& lineColor, const TString& fillColor = "");
     void PrintValues(TStringBuilder& canvas, std::shared_ptr<TSingleMetric> metric, ui32 x, ui32 y, ui32 w, ui32 h, const TString& title, const TString& lineColor, const TString& fillColor = "");
     void PrintStageSummary(TStringBuilder& background, ui32 viewLeft, ui32 viewWidth, ui32 y0, ui32 h, std::shared_ptr<TSingleMetric> metric, const TString& mediumColor, const TString& lightColor, const TString& textSum, const TString& tooltip, ui32 taskCount, const TString& iconRef, const TString& iconColor, const TString& iconScale, bool backgroundRect = false, const TString& peerId = "");
-    void PrintSvg(ui64 maxTime, ui32 timelineDelta, ui32& offsetY, TStringBuilder& background, TStringBuilder& canvas);
+    void PrepareSvg(ui64 maxTime, ui32 timelineDelta, ui32& offsetY);
+    void PrintSvg(TStringBuilder& builder);
     TString NodeType;
     std::vector<std::shared_ptr<TStage>> Stages;
     std::shared_ptr<TSummaryMetric> CpuTime;
@@ -310,15 +323,14 @@ public:
     ui32 Tasks = 0;
     ui64 UpdateTime = 0;
     std::vector<std::pair<std::string, std::shared_ptr<TConnection>>> CteRefs;
-    std::vector<std::pair<std::string, std::pair<std::shared_ptr<TStage>, ui32>>> MemberRefs;
     TString CtePlanRef;
     TPlan* CtePlan = nullptr;
     TPlanViewConfig& Config;
-    std::map<std::string, std::shared_ptr<TStage>>& CteStages;
-    std::map<std::string, std::string>& CteSubPlans;
+    TPlanVisualizer& Viz;
     std::unordered_map<ui32, TConnection*> NodeToConnection;
     std::unordered_map<TStage*, TConnection*> StageToExternalConnection;
     std::unordered_set<ui32> NodeToSource;
+    TStringBuilder Builder;
 };
 
 class TPlanVisualizer {
@@ -338,5 +350,5 @@ public:
     ui64 UpdateTime = 0;
     TPlanViewConfig Config;
     std::map<std::string, std::shared_ptr<TStage>> CteStages;
-    std::map<std::string, std::string> CteSubPlans;
+    std::map<std::string, TPlan*> CteSubPlans;
 };

@@ -944,9 +944,9 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
     }
 
     Y_UNIT_TEST(ExecuteQueryWithWorkloadManager) {
-        TKikimrSettings settings = TKikimrSettings().SetEnableResourcePools(true);
-        settings.AppConfig.MutableFeatureFlags()->SetEnableResourcePools(true);
-        auto kikimr = TKikimrRunner(settings);
+        TKikimrSettings serverSettings = TKikimrSettings().SetEnableResourcePools(true);
+        serverSettings.AppConfig.MutableFeatureFlags()->SetEnableResourcePools(true);
+        auto kikimr = TKikimrRunner(serverSettings);
         auto db = kikimr.GetQueryClient();
 
         TExecuteQuerySettings settings;

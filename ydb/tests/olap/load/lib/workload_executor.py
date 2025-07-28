@@ -531,7 +531,7 @@ class WorkloadTestBase(LoadSuiteBase):
 
         # Копируем cluster.yaml (если указан cluster_path)
         cluster_result = cls._copy_single_config(
-            host, cls.cluster_path, "/Berkanavt/kikimr/cfg/cluster.yaml", 
+            host, cls.cluster_path, "/Berkanavt/kikimr/cfg/cluster.yaml",
             "cluster config", None, host_log
         )
         if not cluster_result["success"]:
@@ -549,8 +549,8 @@ class WorkloadTestBase(LoadSuiteBase):
         return {"host": host, "success": True, "log": host_log}
 
     @classmethod
-    def _copy_single_config(cls, host: str, config_path: str, remote_path: str, 
-                           config_name: str, fallback_source: str, host_log: list) -> dict:
+    def _copy_single_config(cls, host: str, config_path: str, remote_path: str,
+                            config_name: str, fallback_source: str, host_log: list) -> dict:
         """Копирует один файл конфигурации"""
         if config_path:
             # Копируем внешний файл
@@ -561,21 +561,10 @@ class WorkloadTestBase(LoadSuiteBase):
                 return {"host": host, "success": False, "error": error_msg, "log": host_log}
 
             source = config_path
-            copy_method = lambda: copy_file(
-                local_path=config_path,
-                host=host,
-                remote_path=remote_path,
-                raise_on_error=False
-            )
             success_msg = f"Copied external {config_name} from {config_path}"
         elif fallback_source:
             # Используем локальный fallback
             source = fallback_source
-            copy_method = lambda: execute_command(
-                host=host,
-                cmd=f"sudo cp {fallback_source} {remote_path}",
-                raise_on_error=False
-            )
             success_msg = f"Copied local {config_name}"
         else:
             # Ничего не копируем
@@ -583,8 +572,21 @@ class WorkloadTestBase(LoadSuiteBase):
 
         # Выполняем копирование
         host_log.append(f"Copying {config_name} from {source}")
-        result = copy_method()
-        
+
+        if config_path:
+            result = copy_file(
+                local_path=config_path,
+                host=host,
+                remote_path=remote_path,
+                raise_on_error=False
+            )
+        else:
+            result = execute_command(
+                host=host,
+                cmd=f"sudo cp {fallback_source} {remote_path}",
+                raise_on_error=False
+            )
+
         # Проверяем результат
         if config_path and not result:
             error_msg = f"Failed to copy {config_name} to {remote_path} on {host}"

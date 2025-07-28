@@ -77,9 +77,9 @@ System components are integrated with Spilling Service and interact with it thro
 2. Generates a unique identifier for the blob
 3. Creates a spilling event (`TEvWrite`) with the blob and generated identifier
 4. Sends the event to Spilling Service
-5. **Suspends execution** and enters waiting state
+5. **Releases resources** and enters waiting mode, allowing other tasks to utilize computational resources
 
-**Waiting for results**: After sending the event, the compute component hands over execution to other components and stops executing itself until the blob is physically written to disk.
+**Waiting for results**: After sending the event, the compute component releases resources for other tasks and enters waiting mode, allowing the system to optimally utilize cluster computing resources until external storage write completion.
 
 **Response handling**: Spilling Service processes the event and returns a new `TEvWriteResult` event with write confirmation for the specified identifier or `TEvError` in case of error. Compute component can only continue after receiving confirmation.
 
@@ -99,9 +99,9 @@ sequenceDiagram
     CN->>CN: Spilling decision
     CN->>CN: Data serialization to blob
     CN->>SS: TEvWrite (blob + unique ID)
-    Note over CN: Stop execution<br/>and wait for confirmation
+    Note over CN: Release resources<br/>for other tasks
     SS->>SS: Queue in task queue
-    SS->>FS: Asynchronous data write to disk
+    SS->>FS: Asynchronous data write to external storage
     FS->>SS: Successful write confirmation
     SS->>CN: TEvWriteResult (success + ID)
     Note over CN: Continue execution
@@ -117,15 +117,15 @@ sequenceDiagram
 
     Note over CN: Need to recover<br/>spilled data
     CN->>SS: TEvRead (blob ID)
-    Note over CN: Wait for data recovery
-    SS->>FS: Read data from disk by ID
+    Note over CN: Wait for data loading<br/>from external storage
+    SS->>FS: Read data from external storage by ID
     FS->>SS: Blob data
     SS->>SS: Data deserialization
     SS->>CN: TEvReadResult (recovered data)
     Note over CN: Continue processing<br/>with recovered data
 ```
 
-**Data reading**: When data recovery is needed, the component sends a `TEvRead` event with blob identifier. Spilling Service reads data from disk and returns a `TEvReadResult` event with recovered data. Computations are also suspended while waiting for data.
+**Data reading**: When data recovery is needed, the component sends a `TEvRead` event with blob identifier. Spilling Service reads data from external storage and returns a `TEvReadResult` event with recovered data. During data loading, freed computational resources are utilized for processing other tasks.
 
 ### Types of spilling in {{ ydb-short-name }}
 

@@ -129,7 +129,7 @@ sequenceDiagram
 
 ### Types of spilling in {{ ydb-short-name }}
 
-{{ ydb-short-name }} implements two main types of spilling operating at different levels of the computational process:
+{{ ydb-short-name }} implements two main types of spilling operating at different levels of the computational process. These types work independently and can activate simultaneously within a single query, providing comprehensive memory management.
 
 #### 1. Compute Node Spilling
 
@@ -174,11 +174,7 @@ Data transfer channels continuously monitor their state:
 2. **Fill control**: System tracks buffer fill levels (NoLimit, SoftLimit, HardLimit)
 3. **Automatic spilling**: When limits are reached, data is automatically serialized and transferred to Spilling Service
 4. **Continued operation**: Channel continues accepting new data after freeing memory space
-5. **Recovery**: When the next stage is ready, data is read from disk and passed further
-
-#### Integration of spilling types
-
-Both spilling types work together and can activate simultaneously within one query. For example, when executing a complex analytical query:
+5. **Recovery**: When the next stage is ready, data is read from external storage and passed further
 
 ## See also
 

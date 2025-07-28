@@ -187,7 +187,7 @@
   <text x='390' y='133' class='texte'>32</text>
 </g>
 </g>
-<g class='selectable'><title>Stage 0</title>
+<g class='selectable selected'><title>Stage 0</title>
 <rect x='0' y='165' width='298' height='66' class='stage'/>
 <rect x='301' y='165' width='64' height='66' class='stage'/>
 <rect x='395' y='165' width='200' height='66' class='stage'/>
@@ -281,7 +281,7 @@
 <g><title>Output, Duration: 0.00 (3.49 | 3.49 | 3.49 - 3.49 | 3.49 | 3.49)</title><rect x='868' y='29' width='0' height='14' stroke-width='0' fill='var(--output-medium, #5781B9)'/>
 </g>
 </g>
-<g class='selectable selected'><title>Connection: HashShuffle KeyColumns: l_orderkey</title>
+<g class='selectable'><title>Connection: HashShuffle KeyColumns: l_orderkey</title>
 <g><title>Input from Stage 0</title>
 <circle cx='290' cy='149' r='7' class='stage' />
 <text x='290' y='153' class='textm'>0</text>

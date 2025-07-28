@@ -87,7 +87,7 @@ Y_UNIT_TEST_SUITE(KqpPragma) {
 
     Y_UNIT_TEST(MatchRecognizeWithTimeOrderRecoverer) {
         TKikimrSettings settings;
-        appConfig.MutableQueryServiceConfig()->SetEnableMatchRecognize(true);
+        settings.AppConfig.MutableQueryServiceConfig()->SetEnableMatchRecognize(true);
 
         TKikimrRunner kikimr(settings);
         NYdb::NScripting::TScriptingClient client(kikimr.GetDriver());
@@ -128,7 +128,7 @@ Y_UNIT_TEST_SUITE(KqpPragma) {
 
     Y_UNIT_TEST(MatchRecognizeWithoutTimeOrderRecoverer) {
         TKikimrSettings settings;
-        appConfig.MutableQueryServiceConfig()->SetEnableMatchRecognize(true);
+        settings.AppConfig.MutableQueryServiceConfig()->SetEnableMatchRecognize(true);
 
         TKikimrRunner kikimr(settings);
         NYdb::NScripting::TScriptingClient client(kikimr.GetDriver());

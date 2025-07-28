@@ -53,13 +53,19 @@ public:
         ChangedCount = IcbGroup->GetCounter("Icb/ChangedControlsCount");
     }
 
+    static NActors::NAudit::EAuditableAction IcbAuditResolver(const NMonitoring::IMonHttpRequest& request) {
+        HTTP_METHOD method = request.GetMethod();
+        return method == HTTP_METHOD_POST
+            ? NActors::NAudit::EAuditableAction::UpdateImmediateControlBoard
+            : NActors::NAudit::EAuditableAction::Unknown;
+    }
 
     void Bootstrap(const TActorContext &ctx) {
         auto mon = AppData(ctx)->Mon;
         if (mon) {
             NMonitoring::TIndexMonPage *actorsMonPage = mon->RegisterIndexPage("actors", "Actors");
             mon->RegisterActorPage(actorsMonPage, "icb", "Immediate Control Board", false,
-                    ctx.ExecutorThread.ActorSystem, ctx.SelfID);
+                    ctx.ExecutorThread.ActorSystem, ctx.SelfID, true, true, IcbAuditResolver);
         }
         Become(&TThis::StateFunc);
     }

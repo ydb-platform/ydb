@@ -1,5 +1,7 @@
 #pragma once
 
+#include <ydb/core/mon/audit/audit_action.h>
+
 #include <library/cpp/json/writer/json_value.h>
 #include <library/cpp/monlib/service/monservice.h>
 #include <library/cpp/monlib/dynamic_counters/counters.h>
@@ -50,6 +52,15 @@ public:
 
     virtual NMonitoring::TIndexMonPage* RegisterIndexPage(const TString& path, const TString& title) = 0;
 
+    template <typename TRequest>
+    using TAuditableActionResolver = std::function<NAudit::EAuditableAction(const TRequest&)>;
+
+    using TActorPageAuditableResolver = TAuditableActionResolver<const NMonitoring::IMonHttpRequest&>;
+
+    static NAudit::EAuditableAction DefaultActorPageAuditableResolver(const NMonitoring::IMonHttpRequest&) {
+        return NAudit::EAuditableAction::Unknown;
+    }
+
     struct TRegisterActorPageFields {
         TString Title;
         TString RelPath;
@@ -61,11 +72,13 @@ public:
         TVector<TString> AllowedSIDs;
         bool SortPages = true;
         TString MonServiceName = "utils";
+        TActorPageAuditableResolver AuditableResolver;
     };
 
     virtual NMonitoring::IMonPage* RegisterActorPage(TRegisterActorPageFields fields) = 0;
     NMonitoring::IMonPage* RegisterActorPage(NMonitoring::TIndexMonPage* index, const TString& relPath,
-        const TString& title, bool preTag, TActorSystem* actorSystem, const TActorId& actorId, bool useAuth = true, bool sortPages = true);
+        const TString& title, bool preTag, TActorSystem* actorSystem, const TActorId& actorId, bool useAuth = true, bool sortPages = true,
+        TActorPageAuditableResolver auditableResolver = DefaultActorPageAuditableResolver);
     virtual NMonitoring::IMonPage* RegisterCountersPage(const TString& path, const TString& title, TIntrusivePtr<::NMonitoring::TDynamicCounters> counters) = 0;
     virtual NMonitoring::IMonPage* FindPage(const TString& relPath) = 0;
     virtual void RegisterHandler(const TString& path, const TActorId& handler) = 0;

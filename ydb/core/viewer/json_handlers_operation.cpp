@@ -15,11 +15,13 @@ void InitOperationListJsonHandler(TJsonHandlers& handlers) {
 }
 
 void InitOperationCancelJsonHandler(TJsonHandlers& handlers) {
-    handlers.AddHandler("/operation/cancel", new TJsonHandler<TOperationCancel>(TOperationCancel::GetSwagger()));
+    handlers.AddHandler("/operation/cancel", new TJsonHandler<TOperationCancel>(TOperationCancel::GetSwagger()), 1,
+                        NActors::NAudit::EAuditableAction::CancelOperation);
 }
 
 void InitOperationForgetJsonHandler(TJsonHandlers& handlers) {
-    handlers.AddHandler("/operation/forget", new TJsonHandler<TOperationForget>(TOperationForget::GetSwagger()));
+    handlers.AddHandler("/operation/forget", new TJsonHandler<TOperationForget>(TOperationForget::GetSwagger()), 1,
+                        NActors::NAudit::EAuditableAction::ForgetOperation);
 }
 
 void InitOperationJsonHandlers(TJsonHandlers& jsonHandlers) {

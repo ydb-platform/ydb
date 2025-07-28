@@ -29,6 +29,8 @@ namespace NKikimr {
 
     NActors::IActor *CreateLoadTestActor(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters);
 
+    NActors::NAudit::EAuditableAction LoadServiceAuditResolver(const NMonitoring::IMonHttpRequest& request);
+
     NActors::IActor *CreateWriterLoadTest(const NKikimr::TEvLoadTestRequest::TStorageLoad& cmd,
             const NActors::TActorId& parent, TIntrusivePtr<::NMonitoring::TDynamicCounters> counters, ui64 tag);
 

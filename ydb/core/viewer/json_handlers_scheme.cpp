@@ -4,7 +4,8 @@
 namespace NKikimr::NViewer {
 
 void InitSchemeDirectoryHandler(TJsonHandlers& handlers) {
-    handlers.AddHandler("/scheme/directory", new TJsonSchemeDirectoryHandler(), 2);
+    handlers.AddHandler("/scheme/directory", new TJsonSchemeDirectoryHandler(), 2,
+                        NActors::NAudit::EAuditableAction::MakeDirectory);
 }
 
 void InitSchemeJsonHandlers(TJsonHandlers& jsonHandlers) {

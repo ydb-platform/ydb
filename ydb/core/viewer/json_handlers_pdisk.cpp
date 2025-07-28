@@ -10,11 +10,13 @@ void InitPDiskInfoJsonHandler(TJsonHandlers& handlers) {
 }
 
 void InitPDiskRestartJsonHandler(TJsonHandlers& handlers) {
-    handlers.AddHandler("/pdisk/restart", new TJsonHandler<TJsonPDiskRestart>(TJsonPDiskRestart::GetSwagger()));
+    handlers.AddHandler("/pdisk/restart", new TJsonHandler<TJsonPDiskRestart>(TJsonPDiskRestart::GetSwagger()), 1,
+                        NActors::NAudit::EAuditableAction::RestartPDisk);
 }
 
 void InitPDiskStatusJsonHandler(TJsonHandlers& handlers) {
-    handlers.AddHandler("/pdisk/status", new TJsonHandler<TPDiskStatus>(TPDiskStatus::GetSwagger()));
+    handlers.AddHandler("/pdisk/status", new TJsonHandler<TPDiskStatus>(TPDiskStatus::GetSwagger()), 1,
+                        NActors::NAudit::EAuditableAction::ChangePDiskStatus);
 }
 
 void InitPDiskJsonHandlers(TJsonHandlers& jsonHandlers) {

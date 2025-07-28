@@ -110,7 +110,7 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
         CreateLargeTable(kikimr, 1000, 1_KB, 64_KB);
 
         auto db = kikimr.GetQueryClient();
-        
+
         {
             auto result = db.ExecuteQuery(R"(
                 CREATE TABLE `/Root/DataShard` (
@@ -260,7 +260,7 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
         app.MutableTableServiceConfig()->MutableResourceManager()->SetMkqlLightProgramMemoryLimit(10);
         app.MutableTableServiceConfig()->MutableResourceManager()->SetQueryMemoryLimit(2000);
 
-        app.MutableResourceBrokerConfig()->CopyFrom(MakeResourceBrokerTestConfig(4));
+        app.MutableResourceBrokerConfig()->CopyFrom(MakeResourceBrokerTestConfig());
 
         app.MutableFeatureFlags()->SetEnableResourcePools(true);
 
@@ -269,7 +269,7 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
             .SetWithSampleTables(false);
 
         TKikimrRunner kikimr(settings);
-        CreateLargeTable(kikimr, 0, 0, 0);
+        CreateLargeTable(kikimr, 30, 10, 200000);
 
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_SLOW_LOG, NActors::NLog::PRI_ERROR);
 
@@ -499,7 +499,7 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
                 UPSERT INTO `/Root/LargeTable`
                 SELECT * FROM AS_TABLE($rows);
             )"), TTxControl::BeginTx().CommitTx(), paramsBuilder.Build()).ExtractValueSync();
- 
+
             switch (result.GetStatus()) {
             case EStatus::SUCCESS:
                 continue;

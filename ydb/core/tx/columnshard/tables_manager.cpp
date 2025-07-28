@@ -43,15 +43,15 @@ std::optional<NColumnShard::TSchemeShardLocalPathId> TTablesManager::ResolveSche
 }
 
 std::optional<TInternalPathId> TTablesManager::ResolveInternalPathIdOptional(
-    const NColumnShard::TSchemeShardLocalPathId schemeShardLocalPathId) const {
-    if (TabletPathId.has_value() && schemeShardLocalPathId == TabletPathId->SchemeShardLocalPathId) {
-        return { TabletPathId->InternalPathId };
-    }
+    const NColumnShard::TSchemeShardLocalPathId schemeShardLocalPathId, const bool withTabletPathId) const {
     if (const auto* internalPathId = SchemeShardLocalToInternal.FindPtr(schemeShardLocalPathId)) {
         return { *internalPathId };
     } else {
         AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("method", "resolve_internal_path_id")("ss_local", schemeShardLocalPathId)(
             "result", "not_found");
+        if (withTabletPathId && TabletPathId.has_value() && schemeShardLocalPathId == TabletPathId->SchemeShardLocalPathId) {
+            return { TabletPathId->InternalPathId };
+        }
         return std::nullopt;
     }
 }
@@ -593,10 +593,10 @@ TConclusion<std::shared_ptr<NOlap::ITableMetadataAccessor>> TTablesManager::Buil
 
 TConclusion<std::shared_ptr<NOlap::ITableMetadataAccessor>> TTablesManager::BuildTableMetadataAccessor(
     const TString& tablePath, const TSchemeShardLocalPathId externalPathId) {
-    const std::optional<TInternalPathId> internalPathId = ResolveInternalPathIdOptional(externalPathId);
+    const std::optional<TInternalPathId> internalPathId = ResolveInternalPathIdOptional(externalPathId, false);
     auto schemaAdapter = NOlap::NReader::NSimple::NSysView::NAbstract::ISchemaAdapter::TFactory::MakeHolder(TFsPath(tablePath).Fix().GetName());
     if (schemaAdapter) {
-        return schemaAdapter->BuildMetadataAccessor(tablePath, externalPathId, internalPathId);
+        return schemaAdapter->BuildMetadataAccessor(tablePath, TUnifiedOptionalPathId::BuildExternal(externalPathId, internalPathId));
     } else if (!internalPathId) {
         return TConclusionStatus::Fail(
             "incorrect table name and table id for scan start: " + tablePath + "::" + externalPathId.DebugString());

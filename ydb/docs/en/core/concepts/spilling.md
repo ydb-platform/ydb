@@ -143,7 +143,7 @@ ORDER BY total_amount DESC;
 
 #### 2. Channel Spilling
 
-This type of spilling operates at the level of data transfer between different query execution stages. Data transfer channels automatically buffer and offload data when buffers overflow. This helps avoid blocking the data-generating node execution even when the receiving node is not ready to accept data.
+This type of spilling operates at the level of data transfer between different query execution stages. Data transfer channels automatically buffer and offload data when buffers overflow. This helps avoid blocking the data-generating node execution even when one of the receiving nodes is not ready to accept data.
 
 **Operation mechanism:**
 

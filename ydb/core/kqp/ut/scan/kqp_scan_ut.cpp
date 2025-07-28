@@ -98,9 +98,11 @@ void CreateNullSampleTables(TKikimrRunner& kikimr) {
 Y_UNIT_TEST_SUITE(KqpScan) {
 
     Y_UNIT_TEST(StreamExecuteScanQueryCancelation) {
-        auto settings = TKikimrSettings().SetAppConfig(appConfig);
+        NKikimrConfig::TAppConfig appConfig;
         // This test expects SourceRead is enabled for ScanQuery
-        settings.AppConfig.MutableTableServiceConfig()->SetEnableKqpScanQuerySourceRead(true);
+        appConfig.MutableTableServiceConfig()->SetEnableKqpScanQuerySourceRead(true);
+        auto settings = TKikimrSettings()
+            .SetAppConfig(appConfig);
         TKikimrRunner kikimr{settings};
 
         NKqp::TKqpCounters counters(kikimr.GetTestServer().GetRuntime()->GetAppData().Counters);
@@ -1836,7 +1838,8 @@ Y_UNIT_TEST_SUITE(KqpScan) {
     }
 
     Y_UNIT_TEST(SecondaryIndex) {
-        TKikimrRunner kikimr;
+        NKikimrConfig::TAppConfig appConfig;
+        TKikimrRunner kikimr(TKikimrSettings().SetAppConfig(appConfig));
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 

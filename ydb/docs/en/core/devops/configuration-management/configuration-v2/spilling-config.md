@@ -103,7 +103,11 @@ The key parameter for spilling is **`activities_limit_percent`**, which determin
 
 ### File Descriptors
 
-For proper spilling operation, it is necessary to increase the limit of simultaneously open file descriptors to 10000.
+{% note warning %}
+
+For proper spilling operation in multi-node clusters, it is recommended to increase the limit of simultaneously open file descriptors to 10000. For small clusters (1-3 nodes), this setting is usually not required.
+
+{% endnote %}
 
 ## Configuration Examples
 

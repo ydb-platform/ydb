@@ -159,4 +159,4 @@ Data transfer channels continuously monitor their state:
 
 - [Spilling configuration](../devops/configuration-management/configuration-v2/spilling-config.md)
 - [{{ ydb-short-name }} monitoring](../devops/observability/monitoring.md)
-- [Performance diagnostics](../troubleshooting/performance/index.md) 
+- [Performance diagnostics](../troubleshooting/performance/index.md)

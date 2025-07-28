@@ -2,7 +2,6 @@
 #include "counters.h"
 #include "process.h"
 
-#include <ydb/core/base/memory_controller_iface.h>
 #include <ydb/core/tx/limiter/grouped_memory/usage/abstract.h>
 #include <ydb/core/tx/limiter/grouped_memory/usage/config.h>
 
@@ -104,7 +103,7 @@ public:
     void UnregisterAllocation(const ui64 externalProcessId, const ui64 externalScopeId, const ui64 allocationId);
     void UpdateAllocation(const ui64 externalProcessId, const ui64 externalScopeId, const ui64 allocationId, const ui64 volume);
 
-    void SetMemoryConsumer(TIntrusivePtr<NMemory::IMemoryConsumer> consumer);
+    void SetMemoryConsumptionUpdateFunction(std::function<void(ui64)> func);
     void UpdateMemoryLimits(const ui64 limit, const std::optional<ui64>& hardLimit);
 
     bool IsEmpty() const {

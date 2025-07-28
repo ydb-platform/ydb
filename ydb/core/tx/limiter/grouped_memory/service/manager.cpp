@@ -149,10 +149,10 @@ void TManager::UnregisterProcessScope(const ui64 externalProcessId, const ui64 e
     RefreshSignals();
 }
 
-void TManager::SetMemoryConsumer(TIntrusivePtr<NMemory::IMemoryConsumer> consumer) {
+void TManager::SetMemoryConsumptionUpdateFunction(std::function<void(ui64)> func) {
     AFL_ENSURE(DefaultStage);
 
-    DefaultStage->SetMemoryConsumer(std::move(consumer));
+    DefaultStage->SetMemoryConsumptionUpdateFunction(std::move(func));
 }
 
 void TManager::UpdateMemoryLimits(const ui64 limit, const std::optional<ui64>& hardLimit) {

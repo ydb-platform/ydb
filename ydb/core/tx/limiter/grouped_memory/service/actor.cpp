@@ -1,5 +1,7 @@
 #include "actor.h"
 
+#include <ydb/core/tx/columnshard/common/limits.h>
+
 namespace NKikimr::NOlap::NGroupedMemoryManager {
 
 void TMemoryLimiterActor::Bootstrap() {
@@ -62,14 +64,18 @@ void TMemoryLimiterActor::Handle(NEvents::TEvExternal::TEvStartProcessScope::TPt
 }
 
 void TMemoryLimiterActor::Handle(NMemory::TEvConsumerRegistered::TPtr& ev) {
-    for (auto& manager: Managers) {
-        manager->SetMemoryConsumer(std::move(ev->Get()->Consumer));
+    MemoryConsumptionAggregator->SetConsumer(std::move(ev->Get()->Consumer));
+    for (size_t i = 0; i < Managers.size(); ++i) {
+        Managers[i]->SetMemoryConsumptionUpdateFunction([aggregator = this->MemoryConsumptionAggregator, i](ui64 consumption) {
+            aggregator->SetConsumption(i, consumption);
+        });
     }
 }
 
 void TMemoryLimiterActor::Handle(NMemory::TEvConsumerLimit::TPtr& ev) {
-    ui64 limitBytes = ev->Get()->LimitBytes / (Config.GetCountBuckets() ? Config.GetCountBuckets() : 1);
-    std::optional<ui64> hardLimitBytes = ev->Get()->HardLimitBytes ? *ev->Get()->HardLimitBytes / (Config.GetCountBuckets() ? Config.GetCountBuckets() : 1) : ev->Get()->HardLimitBytes;
+    const ui64 countBuckets = Config.GetCountBuckets() ? Config.GetCountBuckets() : 1;
+    const ui64 limitBytes = ev->Get()->LimitBytes * NKikimr::NOlap::TGlobalLimits::GroupedMemoryLimiterSoftLimitCoefficient / countBuckets;
+    const ui64 hardLimitBytes = ev->Get()->LimitBytes / countBuckets;
     for (auto& manager: Managers) {
         manager->UpdateMemoryLimits(limitBytes, hardLimitBytes);
     }

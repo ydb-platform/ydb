@@ -1836,7 +1836,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
     }
 
     Y_UNIT_TEST(SecondaryIndex) {
-        TKikimrRunner kikimr(TKikimrSettings());
+        TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -2341,7 +2341,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
     }
 
     Y_UNIT_TEST(StreamLookupByFullPk) {
-        TKikimrRunner kikimr(TKikimrSettings());
+        TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         CreateSampleTables(kikimr);
 
@@ -2393,7 +2393,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
     }
 
     Y_UNIT_TEST(LimitOverSecondaryIndexRead) {
-        TKikimrRunner kikimr(TKikimrSettings());
+        TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -2431,7 +2431,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
     }
 
     Y_UNIT_TEST(TopSortOverSecondaryIndexRead) {
-        TKikimrRunner kikimr(TKikimrSettings());
+        TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 

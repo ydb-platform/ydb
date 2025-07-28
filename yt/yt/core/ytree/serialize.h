@@ -180,8 +180,6 @@ void Serialize(
 template <class T, class TTag>
 void Serialize(const TStrongTypedef<T, TTag>& value, NYson::IYsonConsumer* consumer);
 
-void Serialize(const TSize& value, NYson::IYsonConsumer* consumer);
-
 void Serialize(const NStatisticPath::TStatisticPath& path, NYson::IYsonConsumer* consumer);
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -300,8 +298,6 @@ void Deserialize(
 
 template <class T, class TTag>
 void Deserialize(TStrongTypedef<T, TTag>& value, INodePtr node);
-
-void Deserialize(TSize& value, INodePtr node);
 
 void Deserialize(NStatisticPath::TStatisticPath& path, INodePtr node);
 

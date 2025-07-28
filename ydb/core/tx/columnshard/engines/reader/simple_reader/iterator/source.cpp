@@ -30,7 +30,6 @@ void IDataSource::InitFetchingPlan(const std::shared_ptr<TFetchingScript>& fetch
 
 void IDataSource::StartProcessing(const std::shared_ptr<NCommon::IDataSource>& sourcePtr) {
     AFL_VERIFY(FetchingPlan);
-    AFL_VERIFY(ProcessingStarted);
     TFetchingScriptCursor cursor(FetchingPlan, 0);
     const auto& commonContext = *GetContext()->GetCommonContext();
     auto sourceCopy = sourcePtr;
@@ -49,7 +48,8 @@ void IDataSource::InitializeProcessing(const std::shared_ptr<NCommon::IDataSourc
         ProcessingStarted = true;
         SourceGroupGuard = GetContext()->GetProcessScopeGuard()->BuildGroupGuard(GetSequentialMemoryGroupIdx());
         SetMemoryGroupId(SourceGroupGuard->GetGroupId());
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("InitFetchingPlan", FetchingPlan->DebugString())("memory_source_idx", GetSequentialMemoryGroupIdx());
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("InitFetchingPlan", FetchingPlan->DebugString())(
+            "memory_source_idx", GetSequentialMemoryGroupIdx());
         //    NActors::TLogContextGuard logGuard(NActors::TLogContextBuilder::Build()("source", SourceIdx)("method", "InitFetchingPlan"));
     }
 }

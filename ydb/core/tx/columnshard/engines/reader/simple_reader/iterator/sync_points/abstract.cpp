@@ -60,8 +60,15 @@ TString ISyncPoint::DebugString() const {
     sb << "{" << PointName << ";" << PointIndex << ";" << IsFinished() << ";";
     if (SourcesSequentially.size()) {
         sb << "SRCS:[";
+        ui32 idx = 0;
         for (auto&& i : SourcesSequentially) {
             sb << "{" << i->GetSourceId() << "," << i->GetSequentialMemoryGroupIdx() << "}" << ",";
+            if (++idx == 10) {
+                break;
+            }
+        }
+        if (SourcesSequentially.size() > 10) {
+            sb << "... (" << SourcesSequentially.size() - idx << " more)";
         }
         sb << "];";
     }

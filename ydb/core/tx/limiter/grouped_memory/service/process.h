@@ -131,15 +131,25 @@ public:
     }
 
     void UnregisterGroup(const bool isPriorityProcess, const ui64 externalGroupId) {
-        AFL_INFO(NKikimrServices::GROUPED_MEMORY_LIMITER)("event", "remove_group")("external_group_id", externalGroupId);
-        UnregisterGroupImplExt(externalGroupId);
-        if (isPriorityProcess && (externalGroupId < GroupIds.GetMinExternalIdDef(externalGroupId))) {
-            Y_UNUSED(TryAllocateWaiting(isPriorityProcess, 0));
+        if (GroupIds.UnregisterExternalId(externalGroupId)) {
+            UnregisterGroupImplExt(externalGroupId);
+            AFL_INFO(NKikimrServices::GROUPED_MEMORY_LIMITER)("event", "remove_group")("external_group_id", externalGroupId)(
+                "min_group", GroupIds.GetMinExternalIdOptional());
+            if (isPriorityProcess && (externalGroupId < GroupIds.GetMinExternalIdDef(externalGroupId))) {
+                Y_UNUSED(TryAllocateWaiting(isPriorityProcess, 0));
+            }
+        } else {
+            AFL_WARN(NKikimrServices::GROUPED_MEMORY_LIMITER)("event", "remove_absent_group")("external_group_id", externalGroupId);
         }
     }
 
-    void RegisterGroup(const ui64 externalGroupId) {
+    void RegisterGroup(const bool isPriorityProcess, const ui64 externalGroupId) {
         Y_UNUSED(GroupIds.RegisterExternalId(externalGroupId));
+        AFL_INFO(NKikimrServices::GROUPED_MEMORY_LIMITER)("event", "register_group")("external_group_id", externalGroupId)(
+            "min_group", GroupIds.GetMinExternalIdOptional());
+        if (isPriorityProcess && (externalGroupId < GroupIds.GetMinExternalIdDef(externalGroupId))) {
+            Y_UNUSED(TryAllocateWaiting(isPriorityProcess, 0));
+        }
     }
 };
 
@@ -248,7 +258,7 @@ public:
     }
 
     void RegisterGroup(const ui64 externalScopeId, const ui64 externalGroupId) {
-        GetAllocationScopeVerified(externalScopeId).RegisterGroup(externalGroupId);
+        GetAllocationScopeVerified(externalScopeId).RegisterGroup(IsPriorityProcess(), externalGroupId);
     }
 
     void UnregisterScope(const ui64 externalScopeId) {

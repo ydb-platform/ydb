@@ -20,6 +20,10 @@ public:
         InternalIdIntoExternalId.clear();
     }
 
+    bool HasExternalId(const ui64 idExt) const {
+        return ExternalIdIntoInternalId.contains(idExt);
+    }
+
     const std::map<ui64, ui64>& GetInternalIdToExternalIds() const {
         return InternalIdIntoExternalId;
     }

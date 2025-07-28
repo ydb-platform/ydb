@@ -224,7 +224,7 @@ class TestExportImportS3(MixedClusterFixture):
             self._export_check_topic()
             self._import_check_topic()
 
-    def test_full_pipeline(self):
+    def test_all_scheme_objects(self):
         self._create_items()
         self._export_check()
         self._import_check()

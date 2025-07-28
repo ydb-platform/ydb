@@ -67,7 +67,7 @@ namespace NKikimr::NKqp::NFederatedQueryTest {
             appConfig->MutableQueryServiceConfig()->SetAllExternalDataSourcesAreAvailable(true);
         }
 
-        auto settings = TKikimrSettings(appConfig);
+        auto settings = TKikimrSettings(*appConfig);
 
         NYql::IHTTPGateway::TPtr httpGateway;
         if (initializeHttpGateway) {

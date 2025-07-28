@@ -243,4 +243,4 @@ table_service_config:
 - [Spilling Concept](../../../concepts/spilling.md)
 - [Memory Controller Configuration](../../../reference/configuration/index.md#memory-controller-config)
 - [{{ ydb-short-name }} Monitoring](../../observability/monitoring.md)
-- [Performance Diagnostics](../../../troubleshooting/performance/index.md) 
+- [Performance Diagnostics](../../../troubleshooting/performance/index.md)

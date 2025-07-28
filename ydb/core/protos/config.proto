@@ -1517,9 +1517,34 @@ message TAuditConfig {
         optional string LogJsonEnvelope = 3; // Json template with text field containing %message% placeholder. For example {"my_enveloped_message": "%message%"}. %message% will be replaced with real audit log message
     }
 
+    message TLogClassConfig {
+        enum ELogClass {
+            ClusterAdmin = 1;
+            DatabaseAdmin = 2;
+            Login = 3;
+            NodeRegistration = 4;
+            Ddl = 5;
+            Dml = 6;
+            Operations = 7;
+            Default = 1000; // For default settings for all other nonconfigured log classes
+        }
+
+        enum EAccountType {
+            Anonymous = 1;
+            User = 2;
+            Service = 3;
+            ServiceImpersonatedFromUser = 4;
+        }
+
+        optional ELogClass LogClass = 1; // Log class selector. Default is used for all log classes that were not included in config
+        optional bool WriteApiCalls = 2; // Enables audit logging for specified log class
+        repeated EAccountType ExcludeAccountType = 3; // If audit logging for log class is enabled, excludes logging for these account types
+    }
+
     optional TStderrBackend StderrBackend = 1;
     optional TFileBackend FileBackend = 2;
     optional TUnifiedAgentBackend UnifiedAgentBackend = 3;
+    repeated TLogClassConfig LogClassConfig = 4;
 };
 
 message THiveTabletLimit {

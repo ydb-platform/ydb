@@ -88,6 +88,9 @@ namespace NYql::NDq {
         }
 
         void FreeQuota(ui64 bytes, NKikimr::NMiniKQL::TScopedAlloc* alloc) {
+            if (!MkqlMemoryLimit) {
+                return;
+            }
             MemoryLimits.MemoryQuotaManager->FreeQuota(bytes);
             if (MemoryLimits.MemoryQuotaManager->IsReasonableToUseSpilling()) {
                 alloc->SetMaximumLimitValueReached(true);

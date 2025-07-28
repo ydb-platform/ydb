@@ -7,40 +7,20 @@ class TAccessor: public ITableMetadataAccessor {
 private:
     using TBase = ITableMetadataAccessor;
 
-    const NColumnShard::TUnifiedPathId PathId;
-
-    enum class EPathType {
-        Unsupported,
-        Table,
-        Store
-    };
-    const EPathType PathType;
-
-    static EPathType GetPathType(const TString& tablePath, const char (&tableSuffix)[], const char (&storeSuffix)[]) {
-        if (tablePath.EndsWith(tableSuffix)) {
-            return EPathType::Table;
-        } else if (tablePath.EndsWith(storeSuffix)) {
-            return EPathType::Store;
-        } else {
-            return EPathType::Unsupported;
-        }
-    }
+    const NColumnShard::TUnifiedOptionalPathId PathId;
 
 protected:
     std::optional<NColumnShard::TInternalPathId> GetTableFilterPathId() const {
-        return PathType == EPathType::Table ? std::optional{ PathId.GetInternalPathId() } : std::nullopt;
+        return PathId.GetInternalPathIdOptional();
     }
 
 public:
-    TAccessor(const TString& path, const NColumnShard::TUnifiedPathId& pathId, const char (&tableSuffix)[], const char (&storeSuffix)[])
+    TAccessor(const TString& path, const NColumnShard::TUnifiedOptionalPathId pathId)
         : TBase(path)
-        , PathId(pathId)
-        , PathType(GetPathType(path, tableSuffix, storeSuffix))
-    {
-        AFL_VERIFY(PathType != EPathType::Unsupported)("path", path);
+        , PathId(pathId) {
     }
 
-    virtual std::optional<NColumnShard::TUnifiedPathId> GetPathId() const override {
+    virtual std::optional<NColumnShard::TUnifiedOptionalPathId> GetPathId() const override {
         return PathId;
     }
 

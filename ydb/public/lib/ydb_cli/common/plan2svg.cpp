@@ -200,11 +200,13 @@ bool TAggregation::Load(const NJson::TJsonValue& node) {
         Avg = Sum / Count;
         if (auto* minNode = node.GetValueByPath("Min")) {
             Min = minNode->GetIntegerSafe();
+            Avg = std::max(Avg, Min);
         } else {
             Min = Avg;
         }
         if (auto* maxNode = node.GetValueByPath("Max")) {
             Max = maxNode->GetIntegerSafe();
+            Avg = std::min(Avg, Max);
         } else {
             Max = Avg;
         }
@@ -1506,10 +1508,13 @@ void TPlan::PrintSeries(TStringBuilder& canvas, std::vector<std::pair<ui64, ui64
     for (auto& item : series) {
         i32 px = x + item.first * w / MaxTime;
         i32 py = y + (h - std::max<ui32>(item.second * h / maxValue, 1));
-        canvas
-            << "c" << (px0 * 2 + px) / 3 - px0 << ',' << py0 - py0 << ',' << (px0 + px * 2) / 3 - px0 << ',' << py - py0 << ',' << px - px0 << ',' << py - py0;
-        px0 = px;
-        py0 = py;
+        if (px != px0 || py != py0) {
+            // we use integer arithmetics, ignore low-resolution spikes
+            canvas
+                << "c" << (px0 * 2 + px) / 3 - px0 << ',' << py0 - py0 << ',' << (px0 + px * 2) / 3 - px0 << ',' << py - py0 << ',' << px - px0 << ',' << py - py0;
+            px0 = px;
+            py0 = py;
+        }
     }
     i32 px = x + series.back().first * w / MaxTime;
     i32 py = y + (h - 1);
@@ -1529,9 +1534,9 @@ void TPlan::PrintDeriv(TStringBuilder& canvas, TMetricHistory& history, ui32 x, 
     }
 }
 
-void TPlan::PrintValues(TStringBuilder& canvas, std::shared_ptr<TSingleMetric> metric, ui32 x, ui32 y, ui32 w, ui32 h, const TString& title, const TString& lineColor, const TString& fillColor) {
-    if (metric->History.MaxValue != 0) {
-        PrintSeries(canvas, metric->History.Values, metric->History.MaxValue, x, y, w, h, title, lineColor, fillColor);
+void TPlan::PrintValues(TStringBuilder& canvas, TMetricHistory& history, ui32 x, ui32 y, ui32 w, ui32 h, const TString& title, const TString& lineColor, const TString& fillColor) {
+    if (history.MaxValue != 0) {
+        PrintSeries(canvas, history.Values, history.MaxValue, x, y, w, h, title, lineColor, fillColor);
     }
 }
 
@@ -1850,7 +1855,7 @@ void TPlan::PrepareSvg(ui64 maxTime, ui32 timelineDelta, ui32& offsetY) {
             }
 
             if (!s->MaxMemoryUsage->History.Values.empty()) {
-                PrintValues(s->Builder, s->MaxMemoryUsage, px, y0, pw, INTERNAL_HEIGHT, "Max MEM " + FormatBytes(s->MaxMemoryUsage->History.MaxValue), Config.Palette.MemMedium, Config.Palette.MemMedium);
+                PrintValues(s->Builder, s->MaxMemoryUsage->History, px, y0, pw, INTERNAL_HEIGHT, "Max MEM " + FormatBytes(s->MaxMemoryUsage->History.MaxValue), Config.Palette.MemMedium, Config.Palette.MemMedium);
             }
 
             if (s->SpillingComputeBytes && !s->SpillingComputeBytes->History.Deriv.empty()) {

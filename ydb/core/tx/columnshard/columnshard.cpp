@@ -107,6 +107,7 @@ void TColumnShard::OnActivateExecutor(const TActorContext& ctx) {
     Tiers->Start(Tiers);
     if (const auto& tiersSnapshot = NYDBTest::TControllers::GetColumnShardController()->GetOverrideTierConfigs(); !tiersSnapshot.empty()) {
         for (const auto& [id, tier] : tiersSnapshot) {
+            Tiers->ActivateTiers({ NTiers::TExternalStorageId(id) });
             Tiers->UpdateTierConfig(tier, NTiers::TExternalStorageId(id), false);
         }
     }

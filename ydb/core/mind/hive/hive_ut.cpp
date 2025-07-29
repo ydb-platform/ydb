@@ -7505,6 +7505,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         }
 
         TSubDomainKey newDomain(1'000'000, 52);
+        TSubDomainKey wrongOldDomain(1'000'000, 64);
 
         THolder<TEvHive::TEvCreateTablet> createTablet = MakeHolder<TEvHive::TEvCreateTablet>(testerTablet, 1, TTabletTypes::Dummy, BINDED_CHANNELS);
         createTablet->Record.MutableObjectDomain()->SetSchemeShard(TTestTxConfig::SchemeShard);
@@ -7532,6 +7533,12 @@ Y_UNIT_TEST_SUITE(THiveTest) {
             auto* p5 = pb.AddQueryParams();
             p5->SetKey("pathid");
             p5->SetValue(TStringBuilder() << newDomain.GetPathId());
+            auto* p6 = pb.AddQueryParams();
+            p6->SetKey("oldSchemeshard");
+            p6->SetValue(TStringBuilder() << wrongOldDomain.GetSchemeShard());
+            auto* p7 = pb.AddQueryParams();
+            p7->SetKey("oldPathid");
+            p7->SetValue(TStringBuilder() << wrongOldDomain.GetPathId());
             runtime.SendToPipe(hiveTablet, sender, new NMon::TEvRemoteHttpInfo(std::move(pb)), 0, GetPipeConfigWithRetries());
 
             TAutoPtr<IEventHandle> handle;
@@ -7548,13 +7555,48 @@ Y_UNIT_TEST_SUITE(THiveTest) {
             pb.SetPath("/app");
             auto* p1 = pb.AddQueryParams();
             p1->SetKey("TabletID");
-            p1->SetValue(TStringBuilder() << 0xfa5e7ab1e7); // non-existent id
+            p1->SetValue(TStringBuilder() << hiveTablet);
             auto* p2 = pb.AddQueryParams();
             p2->SetKey("page");
             p2->SetValue("SetDomain");
             auto* p3 = pb.AddQueryParams();
             p3->SetKey("tablet");
             p3->SetValue(TStringBuilder() << tablet);
+            auto* p4 = pb.AddQueryParams();
+            p4->SetKey("schemeshard");
+            p4->SetValue(TStringBuilder() << newDomain.GetSchemeShard());
+            auto* p5 = pb.AddQueryParams();
+            p5->SetKey("pathid");
+            p5->SetValue(TStringBuilder() << newDomain.GetPathId());
+            auto* p6 = pb.AddQueryParams();
+            p6->SetKey("oldSchemeshard");
+            p6->SetValue(TStringBuilder() << TTestTxConfig::SchemeShard);
+            auto* p7 = pb.AddQueryParams();
+            p7->SetKey("oldPathid");
+            p7->SetValue("1");
+            runtime.SendToPipe(hiveTablet, sender, new NMon::TEvRemoteHttpInfo(std::move(pb)), 0, GetPipeConfigWithRetries());
+
+            TAutoPtr<IEventHandle> handle;
+            auto resp = runtime.GrabEdgeEventRethrow<NMon::TEvRemoteJsonInfoRes>(handle);
+            Ctest << "Hive response: " << resp->Json << Endl;
+            NJson::TJsonValue value;
+            ReadJsonTree(resp->Json, &value, false);
+            UNIT_ASSERT_VALUES_EQUAL(value["status"].GetStringSafe(), "OK");
+        }
+
+        {
+            NActorsProto::TRemoteHttpInfo pb;
+            pb.SetMethod(HTTP_METHOD_POST);
+            pb.SetPath("/app");
+            auto* p1 = pb.AddQueryParams();
+            p1->SetKey("TabletID");
+            p1->SetValue(TStringBuilder() << hiveTablet);
+            auto* p2 = pb.AddQueryParams();
+            p2->SetKey("page");
+            p2->SetValue("SetDomain");
+            auto* p3 = pb.AddQueryParams();
+            p3->SetKey("tablet");
+            p3->SetValue(TStringBuilder() << 0xfa5e7ab1e7); // non-existent id
             auto* p4 = pb.AddQueryParams();
             p4->SetKey("schemeshard");
             p4->SetValue(TStringBuilder() << newDomain.GetSchemeShard());

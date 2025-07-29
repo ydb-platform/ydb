@@ -72,6 +72,12 @@ Y_UNIT_TEST_SUITE(AuditConfigTest) {
                 EnableLogging: true
             }
         )"), yexception);
+
+        UNIT_ASSERT_EXCEPTION(FromProtoText(R"(
+            LogClassConfig {
+                EnableLogging: true
+            }
+        )"), yexception);
     }
 }
 

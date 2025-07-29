@@ -19,7 +19,7 @@ struct TDefaultValueTraits {
         return a == b;
     }
 
-    using THashFnc = THash<TValue>;
+    using TValueHash = THash<TValue>;
 };
 
 template <class TKey, class TValue, class TKeyView = TKey, class TValueTraits = TDefaultValueTraits<TValue>,
@@ -245,7 +245,7 @@ private:
         }
 
         // Make a new subtree root with l and r as children
-        TBorder rightKeyCopy = rightOwnedKey;
+        TKey rightKeyCopy = rightOwnedKey;
         tptr->Reset((t = new TNode(
                          /*Parent=*/parent, /*Left=*/std::move(l), /*Right=*/std::move(r), /*Prio=*/prio, /*LeftKey=*/std::move(leftOwnedKey),
                          /*RightKey=*/std::move(rightOwnedKey), /*Value=*/std::move(value), /*LeftMode=*/leftKey.GetMode(),
@@ -603,7 +603,7 @@ private:
 private:
     TBorderComparator Comparator;
     THolder<TNode> Root;
-    THashMap<TValue, TIntrusiveList<TNode>, typename TValueTraits::THashFnc> Values;
+    THashMap<TValue, TIntrusiveList<TNode>, typename TValueTraits::TValueHash> Values;
 };
 }   // namespace NRangeTreap
 }   // namespace NKikimr

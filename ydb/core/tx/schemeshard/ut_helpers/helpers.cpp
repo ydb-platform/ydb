@@ -43,6 +43,44 @@ namespace NSchemeShardUT_Private {
         runtime.GrabEdgeEventRethrow<NConsole::TEvConsole::TEvConfigNotificationResponse>(handle);
     }
 
+    ////////// Hive
+
+    // Stop tablet.
+    // Also see ydb/core/mind/hive/hive_ut.cpp, SendStopTablet
+    void HiveStopTablet(TTestActorRuntime &runtime, ui64 hiveTablet, ui64 tabletId, ui32 nodeIndex) {
+        TActorId senderB = runtime.AllocateEdgeActor(nodeIndex);
+        runtime.SendToPipe(hiveTablet, senderB, new TEvHive::TEvStopTablet(tabletId), 0, GetPipeConfigWithRetries());
+        TAutoPtr<IEventHandle> handle;
+        auto event = runtime.GrabEdgeEventRethrow<TEvHive::TEvStopTabletResult>(handle);
+        UNIT_ASSERT(event);
+        const auto& stopResult = event->Record;
+        UNIT_ASSERT_EQUAL_C(stopResult.GetTabletID(), tabletId, stopResult.GetTabletID() << " != " << tabletId);
+        UNIT_ASSERT_EQUAL_C(stopResult.GetStatus(), NKikimrProto::OK, (ui32)stopResult.GetStatus() << " != " << (ui32)NKikimrProto::OK);
+    }
+
+    // Retrieve tablets that belong to the given subdomain
+    std::vector<NKikimrHive::TTabletInfo> HiveGetSubdomainTablets(TTestActorRuntime &runtime, const ui64 hiveTablet, const TPathId& subdomainPathId) {
+        TActorId senderA = runtime.AllocateEdgeActor();
+        runtime.SendToPipe(hiveTablet, senderA, new TEvHive::TEvRequestHiveInfo(), 0, GetPipeConfigWithRetries());
+        TAutoPtr<IEventHandle> handle;
+        auto event = runtime.GrabEdgeEventRethrow<TEvHive::TEvResponseHiveInfo>(handle);
+        UNIT_ASSERT(event);
+        const auto& response = event->Record;
+
+        // Cerr << "TEST: HiveGetSubdomainTablets: " << response.ShortDebugString() << Endl;
+
+        std::vector<NKikimrHive::TTabletInfo> result;
+        std::copy_if(response.GetTablets().begin(), response.GetTablets().end(),
+            std::back_inserter(result),
+            [&subdomainPathId] (auto& tablet) {
+                return (tablet.GetObjectDomain().GetSchemeShard() == subdomainPathId.OwnerId
+                    && tablet.GetObjectDomain().GetPathId() == subdomainPathId.LocalPathId
+                );
+            }
+        );
+        return result;
+    }
+
     template <typename TEvResponse, typename TEvRequest, typename TStatus>
     static ui32 ReliableProposeImpl(
         NActors::TTestActorRuntime& runtime, const TActorId& proposer,
@@ -1329,6 +1367,30 @@ namespace NSchemeShardUT_Private {
         // Row missing: Value { Struct { Optional { } } } }
         return result.GetValue().GetStruct(0).GetOptional().HasOptional();
     }
+
+    // Read records from a local table by a single component key
+    NKikimrMiniKQL::TResult ReadLocalTableRecords(TTestActorRuntime& runtime, ui64 tabletId, const TString& tableName, const TString& keyColumn) {
+        const auto query = Sprintf(
+            R"(
+                (
+                    (let range '('('%s (Null) (Void))))
+                    (let fields '('%s))
+                    (return (AsList
+                        (SetResult 'Result (SelectRange '%s range fields '()))
+                    ))
+                )
+            )",
+            keyColumn.c_str(),
+            keyColumn.c_str(),
+            tableName.c_str()
+        );
+        auto result = LocalMiniKQL(runtime, tabletId, query);
+        // Result: Value { Struct { Optional { Struct { List {
+        //     Struct { Optional { Uint64: 2 } } }
+        //     ...
+        // } } } } }
+        return result;
+    };
 
     ui64 GetDatashardState(TTestActorRuntime& runtime, ui64 tabletId) {
         NKikimrMiniKQL::TResult result;

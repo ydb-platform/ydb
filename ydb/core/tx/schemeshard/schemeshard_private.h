@@ -40,6 +40,7 @@ namespace TEvPrivate {
         EvRetryNodeSubscribe,
         EvRunDataErasure,
         EvRunTenantDataErasure,
+        EvTestNotifySubdomainCleanup,
         EvEnd
     };
 
@@ -167,6 +168,14 @@ namespace TEvPrivate {
 
         explicit TEvNotifyShardDeleted(const TShardIdx& shardIdx)
             : ShardIdx(shardIdx)
+        { }
+    };
+
+    struct TEvTestNotifySubdomainCleanup : public TEventLocal<TEvTestNotifySubdomainCleanup, EvTestNotifySubdomainCleanup> {
+        TPathId SubdomainPathId;
+
+        explicit TEvTestNotifySubdomainCleanup(const TPathId& subdomainPathId)
+            : SubdomainPathId(subdomainPathId)
         { }
     };
 

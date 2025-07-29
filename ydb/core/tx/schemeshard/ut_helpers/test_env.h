@@ -96,6 +96,9 @@ namespace NSchemeShardUT_Private {
         TActorId MeteringFake;
         THolder<NYdb::TDriver> YdbDriver;
 
+        TTestActorRuntime::TEventObserverHolder ExtSubdomainCleanupObserver;
+        THashSet<TPathId> ExtSubdomainCleanupComplete;
+
     public:
         static bool ENABLE_SCHEMESHARD_LOG;
 
@@ -131,6 +134,9 @@ namespace NSchemeShardUT_Private {
         void TestWaitShardDeletion(TTestActorRuntime& runtime, TSet<ui64> localIds);
         void TestWaitShardDeletion(TTestActorRuntime& runtime, ui64 schemeShard, TSet<ui64> localIds);
         void TestWaitShardDeletion(TTestActorRuntime& runtime, ui64 schemeShard, TSet<TShardIdx> shardIds);
+
+        void AddExtSubdomainCleanupObserver(NActors::TTestActorRuntime& runtime, const TPathId& subdomainPathId);
+        void WaitForExtSubdomainCleanup(NActors::TTestActorRuntime& runtime, const TPathId& subdomainPathId);
 
         void SimulateSleep(TTestActorRuntime& runtime, TDuration duration);
 

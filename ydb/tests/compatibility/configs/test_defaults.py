@@ -66,6 +66,6 @@ class ConfigDefaultValuesComparator:
         return '\n'.join([f'{path}: {msg}' for path, msg in self.errors])
 
 
-@pytest.mark.parametrize('old_version', ['stable-25-1', 'stable-25-1-3'])
-def test_compare_config_default_values_to_main(old_version: str) -> str:
-    return ConfigDefaultValuesComparator(old_version, 'current').compare_versions()
+@pytest.mark.parametrize(['old_version', 'new_version'], [['stable-25-1', 'current'], ['stable-25-1-3', 'current']])
+def test_compare_config_default_values(old_version: str, new_version: str) -> str:
+    return ConfigDefaultValuesComparator(old_version, new_version).compare_versions()

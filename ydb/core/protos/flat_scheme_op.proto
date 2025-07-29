@@ -577,6 +577,7 @@ message TCompactionSelectorConstructorContainer {
 message TCompactionPlannerConstructorContainer {
     optional string ClassName = 1;
     optional uint64 NodePortionsCountLimit = 2;
+    optional double WeightKff = 3 [default = 1.0];
 
     message TLOptimizer {
 
@@ -1963,7 +1964,7 @@ message TDirEntry {
     optional TPathVersion Version = 15;
     optional bool ChildrenExist = 16;
 
-    optional uint64 BalancerTabletID = 999; //temporary optimization for old PQ read/write protocol. Must be removed later
+    reserved 999;
 }
 
 // Describes single partition (range or point) of a table

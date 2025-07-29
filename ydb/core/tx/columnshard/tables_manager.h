@@ -229,7 +229,7 @@ public:   //IPathIdTranslator
     virtual std::optional<NColumnShard::TSchemeShardLocalPathId> ResolveSchemeShardLocalPathIdOptional(
         const TInternalPathId internalPathId) const override;
     virtual std::optional<TInternalPathId> ResolveInternalPathIdOptional(
-        const NColumnShard::TSchemeShardLocalPathId schemeShardLocalPathId) const override;
+        const NColumnShard::TSchemeShardLocalPathId schemeShardLocalPathId, const bool withTabletPathId) const override;
 
 public:
     TTablesManager(const std::shared_ptr<NOlap::IStoragesManager>& storagesManager,

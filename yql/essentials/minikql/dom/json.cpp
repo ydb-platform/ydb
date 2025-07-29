@@ -251,11 +251,11 @@ void WriteMap(const TUnboxedValuePod value, TJsonWriter& writer) {
             const TStringBuf str = key.AsStringRef();
             if constexpr (EncodeUtf8)
                 if (const auto from = AsciiSize(str); from < str.size())
-                    writer.WriteKey(EncodeUtf(str, from));
+                    writer.Write(EncodeUtf(str, from));
                 else
-                    writer.WriteKey(str);
+                    writer.Write(str);
             else
-                writer.WriteKey(str);
+                writer.Write(str);
             WriteValue<SkipMapEntity, EncodeUtf8>(payload, writer);
         }
     }

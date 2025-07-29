@@ -894,16 +894,16 @@ public:
 
     void PersistLongIncrementalRestoreOp(NIceDb::TNiceDb& db, const NKikimrSchemeOp::TLongIncrementalRestoreOp& op);
 
-    TTabletId GetGlobalHive(const TActorContext& ctx) const;
+    TTabletId GetGlobalHive() const;
 
     enum class EHiveSelection : uint8_t {
         ANY,
         IGNORE_TENANT,
     };
 
-    TTabletId ResolveHive(TPathId pathId, const TActorContext& ctx, EHiveSelection selection) const;
-    TTabletId ResolveHive(TPathId pathId, const TActorContext& ctx) const;
-    TTabletId ResolveHive(TShardIdx shardIdx, const TActorContext& ctx) const;
+    TTabletId ResolveHive(TPathId pathId, EHiveSelection selection) const;
+    TTabletId ResolveHive(TPathId pathId) const;
+    TTabletId ResolveHive(TShardIdx shardIdx) const;
     TShardIdx GetShardIdx(TTabletId tabletId) const;
     TShardIdx MustGetShardIdx(TTabletId tabletId) const;
     TTabletTypes::EType GetTabletType(TTabletId tabletId) const;

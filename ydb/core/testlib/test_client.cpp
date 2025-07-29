@@ -2763,9 +2763,10 @@ namespace Tests {
         return res;
     }
 
-    NKikimrScheme::TEvDescribeSchemeResult TClient::Describe(TTestActorRuntime* runtime, const TString& path, ui64 tabletId) {
+    NKikimrScheme::TEvDescribeSchemeResult TClient::Describe(TTestActorRuntime* runtime, const TString& path, ui64 tabletId, bool showPrivateTable) {
         TAutoPtr<NSchemeShard::TEvSchemeShard::TEvDescribeScheme> request(new NSchemeShard::TEvSchemeShard::TEvDescribeScheme());
         request->Record.SetPath(path);
+        request->Record.MutableOptions()->SetShowPrivateTable(showPrivateTable);
         const ui64 schemeRoot = GetPatchedSchemeRoot(tabletId, Domain, SupportsRedirect);
         TActorId sender = runtime->AllocateEdgeActor(0);
         ForwardToTablet(*runtime, schemeRoot, sender, request.Release(), 0);

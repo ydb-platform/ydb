@@ -91,7 +91,7 @@ void TReadShuffleDataCommand::DoExecute(ICommandContextPtr context)
             << TErrorAttribute("shuffle_handle", shuffleHandle);
     }
 
-    std::optional<std::pair<int, int>> writerIndexRange;
+    std::optional<IShuffleClient::TIndexRange> writerIndexRange;
     if (WriterIndexBegin.has_value()) {
         writerIndexRange = std::pair(*WriterIndexBegin, *WriterIndexEnd);
     }

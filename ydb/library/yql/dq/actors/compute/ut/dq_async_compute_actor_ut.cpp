@@ -527,7 +527,10 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
     }
 
     bool ReceiveData(auto&& cb, auto&& cbWatermark, auto dqInputChannel) {
-        auto ev = ActorSystem.GrabEdgeEvent<TEvDqCompute::TEvChannelData>({DstEdgeActor});
+        auto ev = ActorSystem.GrabEdgeEvent<TEvDqCompute::TEvChannelData>({DstEdgeActor}, TDuration::Seconds(20));
+        if (!ev) {
+            throw yexception() << "Failed";
+        }
         LOG_D("Got " << ev->Get()->Record.DebugString());
         TDqSerializedBatch sbatch;
         sbatch.Proto = ev->Get()->Record.GetChannelData().GetData();
@@ -712,6 +715,7 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
 
         TMap<ui32, ui32> receivedData;
         TMaybe<TInstant> watermark;
+        try {
         while (ReceiveData(
                 [this, &receivedData, &watermark](const NUdf::TUnboxedValue& val, ui32 column) {
                     UNIT_ASSERT(!!val);
@@ -735,6 +739,12 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
                 },
                 dqInputChannel))
         {}
+        } catch(...) {
+            DumpMonPage(asyncCA, [this](auto&& str) {
+                    LOG_D(str);
+                    });
+            throw;
+        }
         DumpMonPage(asyncCA, [this](auto&& str) {
             UNIT_ASSERT_STRING_CONTAINS(str, "<h3>Sources</h3>");
             UNIT_ASSERT_STRING_CONTAINS(str, LogPrefix);

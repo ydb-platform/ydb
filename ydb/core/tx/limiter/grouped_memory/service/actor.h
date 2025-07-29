@@ -103,18 +103,18 @@ private:
 
     const TConfig Config;
     const TString Name;
-    const std::shared_ptr<TCounters> Signals;
-    const std::shared_ptr<TStageFeatures> DefaultStage;
+    const TIntrusivePtr<::NMonitoring::TDynamicCounters> Signals;
+    TVector<std::shared_ptr<TCounters>> Counters;
+    TVector<std::shared_ptr<TStageFeatures>> DefaultStages;
     const NMemory::EMemoryConsumerKind ConsumerKind;
     TIntrusivePtr<TMemoryConsumptionAggregator> MemoryConsumptionAggregator;
 
 public:
-    TMemoryLimiterActor(const TConfig& config, const TString& name, const std::shared_ptr<TCounters>& signals,
-        const std::shared_ptr<TStageFeatures>& defaultStage, const NMemory::EMemoryConsumerKind consumerKind)
+    TMemoryLimiterActor(const TConfig& config, const TString& name, TIntrusivePtr<::NMonitoring::TDynamicCounters> signals,
+        const NMemory::EMemoryConsumerKind consumerKind)
         : Config(config)
         , Name(name)
         , Signals(signals)
-        , DefaultStage(defaultStage)
         , ConsumerKind(consumerKind)
         , MemoryConsumptionAggregator(new TMemoryConsumptionAggregator(Config.GetCountBuckets())) {
     }

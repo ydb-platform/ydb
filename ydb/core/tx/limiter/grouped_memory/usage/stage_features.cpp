@@ -140,8 +140,17 @@ void TStageFeatures::Add(const ui64 volume, const bool allocated) {
     UpdateConsumption(this);
 }
 
+
 void TStageFeatures::SetMemoryConsumptionUpdateFunction(std::function<void(ui64)> func) {
     MemoryConsumptionUpdate = std::move(func);
+}
+
+void TStageFeatures::AttachOwner(const std::shared_ptr<TStageFeatures>& owner) {
+    Owner = owner;
+}
+
+void TStageFeatures::AttachCounters(const std::shared_ptr<TStageCounters>& counters) {
+    Counters = counters;
 }
 
 void TStageFeatures::UpdateMemoryLimits(const ui64 limit, const std::optional<ui64>& hardLimit, bool& isLimitIncreased) {

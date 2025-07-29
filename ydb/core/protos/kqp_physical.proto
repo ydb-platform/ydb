@@ -246,10 +246,16 @@ message TKqpPhyTableOperation {
 message TKqpPhyCnUnionAll {
 }
 
+message TKqpPhyCnParallelUnionAll {
+}
+
 message TKqpPhyCnMap {
 }
 
 message THashV1 {
+}
+
+message THashV2 {
 }
 
 message TColumnShardHashV1 {
@@ -261,6 +267,7 @@ message TKqpPhyCnHashShuffle {
 
     oneof HashKind {
         THashV1 HashV1 = 2;
+        THashV2 HashV2 = 5;
         TColumnShardHashV1 ColumnShardHashV1 = 3;
     }
 
@@ -336,6 +343,7 @@ message TKqpPhyConnection {
         TKqpPhyCnMerge Merge = 11;
         TKqpPhyCnStreamLookup StreamLookup = 12;
         TKqpPhyCnSequencer Sequencer = 14;
+        TKqpPhyCnParallelUnionAll ParallelUnionAll = 15;
     };
 }
 
@@ -586,4 +594,6 @@ message TKqpPhyQuery {
     optional bool EnableOltpSink = 12;
     optional bool EnableOlapSink = 13;
     optional bool EnableHtapTx = 14;
+    optional bool ForceImmediateEffectsExecution = 15;
+    uint32 LangVer = 16;
 }

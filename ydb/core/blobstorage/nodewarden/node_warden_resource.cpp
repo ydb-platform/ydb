@@ -77,6 +77,12 @@ void TNodeWarden::ApplyServiceSet(const NKikimrBlobStorage::TNodeWardenServiceSe
 }
 
 void TNodeWarden::Handle(TEvNodeWardenQueryStorageConfig::TPtr ev) {
+    if (AppData()->BridgeModeEnabled && !BridgeInfo) {
+        // block until bridge information is filled in by distconf after bootstrapping
+        PendingQueryStorageConfigQ.push_back(ev);
+        return;
+    }
+
     Send(ev->Sender, new TEvNodeWardenStorageConfig(StorageConfig, nullptr, SelfManagementEnabled, BridgeInfo));
     if (ev->Get()->Subscribe) {
         StorageConfigSubscribers.insert(ev->Sender);
@@ -145,6 +151,19 @@ void TNodeWarden::Handle(TEvNodeWardenStorageConfig::TPtr ev) {
 
     TActivationContext::Send(new IEventHandle(TEvBlobStorage::EvNodeWardenStorageConfigConfirm, 0, ev->Sender, SelfId(),
         nullptr, ev->Cookie));
+
+    if (BridgeInfo) {
+        for (auto& ev : std::exchange(PendingQueryStorageConfigQ, {})) {
+            TAutoPtr<IEventHandle> temp(ev.Release());
+            Receive(temp);
+        }
+
+        using TEvBridgeInfoUpdate = NNodeWhiteboard::TEvWhiteboard::TEvBridgeInfoUpdate;
+        std::unique_ptr<TEvBridgeInfoUpdate> update(new TEvBridgeInfoUpdate);
+        update->Record.MutableClusterState()->CopyFrom(StorageConfig->GetClusterState());
+
+        Send(WhiteboardId, update.release());
+    }
 }
 
 void TNodeWarden::HandleUnsubscribe(STATEFN_SIG) {
@@ -174,7 +193,7 @@ void TNodeWarden::ApplyStateStorageConfig(const NKikimrBlobStorage::TStorageConf
     FETCH_CONFIG(stateStorage, StateStorage)
     FETCH_CONFIG(board, StateStorageBoard)
     FETCH_CONFIG(schemeBoard, SchemeBoard)
-    
+
     STLOG(PRI_DEBUG, BS_NODE, NW55, "ApplyStateStorageConfig",
         (StateStorageConfig, StorageConfig->GetStateStorageConfig()),
         (NewStateStorageInfo, *stateStorageInfo),
@@ -209,7 +228,7 @@ void TNodeWarden::ApplyStateStorageConfig(const NKikimrBlobStorage::TStorageConf
             || !std::equal(prev.CompatibleVersions.begin(), prev.CompatibleVersions.end(), cur.CompatibleVersions.begin());
     };
 
-    
+
     TActorSystem *as = TActivationContext::ActorSystem();
     const bool changedStateStorage = !StateStorageProxyConfigured || changed(*StateStorageInfo, *stateStorageInfo);
     const bool changedBoard = !StateStorageProxyConfigured || changed(*BoardInfo, *boardInfo);
@@ -249,8 +268,8 @@ void TNodeWarden::ApplyStateStorageConfig(const NKikimrBlobStorage::TStorageConf
                             Send(replicaId, new TEvStateStorage::TEvUpdateGroupConfig(info, nullptr, nullptr));
                         } else if (which == &BoardInfo && !newActorIds.contains(replicaId)) {
                             Send(replicaId, new TEvStateStorage::TEvUpdateGroupConfig(nullptr, info, nullptr));
-                        } else {
-                            // TODO(alexvru): update other kinds of replicas
+                        } else if (which == &SchemeBoardInfo && !newActorIds.contains(replicaId)) {
+                            Send(replicaId, new TEvStateStorage::TEvUpdateGroupConfig(nullptr, nullptr, info));
                         }
                         newActorIds.insert(replicaId);
                     }
@@ -334,7 +353,7 @@ void TNodeWarden::HandleIncrHugeInit(NIncrHuge::TEvIncrHugeInit::TPtr ev) {
 void TNodeWarden::Handle(TEvNodeWardenNotifyConfigMismatch::TPtr ev) {
     //TODO: config mismatch with node
     auto *msg = ev->Get();
-    STLOG(PRI_INFO, BS_NODE, NW51, "TEvNodeWardenNotifyConfigMismatch: NodeId: " << msg->NodeId 
+    STLOG(PRI_INFO, BS_NODE, NW51, "TEvNodeWardenNotifyConfigMismatch: NodeId: " << msg->NodeId
         << " ClusterStateGeneration: " << msg->ClusterStateGeneration << " ClusterStateGuid: " << msg->ClusterStateGuid);
 }
 

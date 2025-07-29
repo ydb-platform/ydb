@@ -1532,8 +1532,12 @@ Y_UNIT_TEST_SUITE(Mvp) {
         {
             TStringBuilder response;
             response << "HTTP/1.1 " << status << "\r\n"
-                    << "Connection: close\r\n"
-                    << "Content-Type: " << contentType << "\r\n";
+                     << "Connection: close\r\n"
+                     << "Content-Type: " << contentType << "\r\n"
+                     << "Access-Control-Allow-Origin: *\r\n"
+                     << "Access-Control-Allow-Credentials: true\r\n"
+                     << "Access-Control-Allow-Methods: GET, POST, OPTIONS\r\n"
+                     << "Access-Control-Allow-Headers: Authorization, Content-Type\r\n";
             for (const auto& [key, value] : extraHeaders) {
                 response << key << ": " << value << "\r\n";
             }
@@ -1623,6 +1627,10 @@ Y_UNIT_TEST_SUITE(Mvp) {
         NJson::TJsonValue json;
         NHttp::THeaders headers(outgoing->Response->Headers);
 
+        UNIT_ASSERT(headers.Has("Access-Control-Allow-Credentials"));
+        UNIT_ASSERT(headers.Has("Access-Control-Allow-Headers"));
+        UNIT_ASSERT(headers.Has("Access-Control-Allow-Methods"));
+        UNIT_ASSERT(headers.Has("Access-Control-Allow-Origin"));
         if (!outgoing->Response->Status.StartsWith("3") && outgoing->Response->Status != "404") {
             UNIT_ASSERT(headers.Has("Content-Type"));
             UNIT_ASSERT_STRINGS_EQUAL(headers.Get("Content-Type").NextTok(';'), "application/json");
@@ -1726,7 +1734,7 @@ Y_UNIT_TEST_SUITE(Mvp) {
         UNIT_ASSERT_VALUES_EQUAL(json[ORIGINAL_USER_TOKEN], TProfileServiceMock::VALID_USER_TOKEN);
         UNIT_ASSERT(json.Has(EXTENDED_INFO));
         UNIT_ASSERT(json[EXTENDED_ERRORS].Has("Ydb"));
-        UNIT_ASSERT_VALUES_EQUAL(json[EXTENDED_ERRORS]["Ydb"]["ClientError"], "Timeout while waiting for whoami info");
+        UNIT_ASSERT_VALUES_EQUAL(json[EXTENDED_ERRORS]["Ydb"]["ClientError"], "Timeout while waiting info");
         UNIT_ASSERT(!json[EXTENDED_ERRORS].Has("Iam"));
     }
 
@@ -1738,5 +1746,16 @@ Y_UNIT_TEST_SUITE(Mvp) {
         UNIT_ASSERT_VALUES_EQUAL(json[ORIGINAL_USER_TOKEN], TProfileServiceMock::VALID_USER_TOKEN);
         UNIT_ASSERT(!json.Has(EXTENDED_INFO));
         UNIT_ASSERT(!json.Has(EXTENDED_ERRORS));
+    }
+
+    Y_UNIT_TEST(GetAddressWithoutPort) {
+        UNIT_ASSERT_VALUES_EQUAL(GetAddressWithoutPort("[2001:db8::1]:8080"), "2001:db8::1");
+        UNIT_ASSERT_VALUES_EQUAL(GetAddressWithoutPort("2001:db8::1:8080"), "2001:db8::1:8080"); // raw IPv6
+        UNIT_ASSERT_VALUES_EQUAL(GetAddressWithoutPort("192.168.1.1:8080"), "192.168.1.1");
+        UNIT_ASSERT_VALUES_EQUAL(GetAddressWithoutPort("192.168.1.1"), "192.168.1.1");
+        UNIT_ASSERT_VALUES_EQUAL(GetAddressWithoutPort("localhost:9090"), "localhost");
+        UNIT_ASSERT_VALUES_EQUAL(GetAddressWithoutPort("localhost"), "localhost");
+        UNIT_ASSERT_VALUES_EQUAL(GetAddressWithoutPort("some.domain.name:1234"), "some.domain.name");
+        UNIT_ASSERT_VALUES_EQUAL(GetAddressWithoutPort("some.domain.name"), "some.domain.name");
     }
 }

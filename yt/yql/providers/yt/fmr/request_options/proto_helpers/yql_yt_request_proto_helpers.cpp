@@ -43,8 +43,7 @@ TFmrError FmrErrorFromProto(const NProto::TFmrError& protoError) {
 
 NProto::TYtTableRef YtTableRefToProto(const TYtTableRef& ytTableRef) {
     NProto::TYtTableRef protoYtTableRef;
-    protoYtTableRef.SetPath(ytTableRef.Path);
-    protoYtTableRef.SetCluster(ytTableRef.Cluster);
+    protoYtTableRef.SetRichPath(SerializeRichPath(ytTableRef.RichPath));
     if (ytTableRef.FilePath) {
         protoYtTableRef.SetFilePath(*ytTableRef.FilePath);
     }
@@ -53,8 +52,7 @@ NProto::TYtTableRef YtTableRefToProto(const TYtTableRef& ytTableRef) {
 
 TYtTableRef YtTableRefFromProto(const NProto::TYtTableRef protoYtTableRef) {
     TYtTableRef ytTableRef;
-    ytTableRef.Path = protoYtTableRef.GetPath();
-    ytTableRef.Cluster = protoYtTableRef.GetCluster();
+    ytTableRef.RichPath = DeserializeRichPath(protoYtTableRef.GetRichPath());
     if (protoYtTableRef.HasFilePath()) {
         ytTableRef.FilePath = protoYtTableRef.GetFilePath();
     }
@@ -64,8 +62,7 @@ TYtTableRef YtTableRefFromProto(const NProto::TYtTableRef protoYtTableRef) {
 NProto::TYtTableTaskRef YtTableTaskRefToProto(const TYtTableTaskRef& ytTableTaskRef) {
     NProto::TYtTableTaskRef protoYtTableTaskRef;
     for (auto& richPath: ytTableTaskRef.RichPaths) {
-        TString serializedRichPath = NYT::NodeToYsonString(NYT::PathToNode(richPath));
-        protoYtTableTaskRef.AddRichPath(serializedRichPath);
+        protoYtTableTaskRef.AddRichPath(SerializeRichPath(richPath));
     }
     for (auto& filePath: ytTableTaskRef.FilePaths) {
         protoYtTableTaskRef.AddFilePath(filePath);
@@ -76,10 +73,7 @@ NProto::TYtTableTaskRef YtTableTaskRefToProto(const TYtTableTaskRef& ytTableTask
 TYtTableTaskRef YtTableTaskRefFromProto(const NProto::TYtTableTaskRef protoYtTableTaskRef) {
     TYtTableTaskRef ytTableTaskRef;
     for (auto& serializedPath: protoYtTableTaskRef.GetRichPath()) {
-        auto node = NYT::NodeFromYsonString(serializedPath);
-        NYT::TRichYPath richPath;
-        NYT::Deserialize(richPath, node);
-        ytTableTaskRef.RichPaths.emplace_back(richPath);
+        ytTableTaskRef.RichPaths.emplace_back(DeserializeRichPath(serializedPath));
     }
     for (auto& filePath: protoYtTableTaskRef.GetFilePath()) {
         ytTableTaskRef.FilePaths.emplace_back(filePath);
@@ -415,7 +409,7 @@ NProto::TMapOperationParams MapOperationParamsToProto(const TMapOperationParams&
         auto protoFmrTableRef = FmrTableRefToProto(fmrTableRef);
         protoMapOperationParams.AddOutput()->Swap(&protoFmrTableRef);
     }
-    protoMapOperationParams.SetExecutable(mapOperationParams.Executable);
+    protoMapOperationParams.SetSerializedMapJobState(mapOperationParams.SerializedMapJobState);
     return protoMapOperationParams;
 }
 
@@ -428,7 +422,7 @@ TMapOperationParams MapOperationParamsFromProto(const NProto::TMapOperationParam
     for (auto& protoFmrTableRef: protoMapOperationParams.GetOutput()) {
         outputTables.emplace_back(FmrTableRefFromProto(protoFmrTableRef));
     }
-    return TMapOperationParams{.Input = inputTables, .Output = outputTables, .Executable = protoMapOperationParams.GetExecutable()};
+    return TMapOperationParams{.Input = inputTables, .Output = outputTables, .SerializedMapJobState = protoMapOperationParams.GetSerializedMapJobState()};
 }
 
 NProto::TMapTaskParams MapTaskParamsToProto(const TMapTaskParams& mapTaskParams) {
@@ -439,7 +433,7 @@ NProto::TMapTaskParams MapTaskParamsToProto(const TMapTaskParams& mapTaskParams)
         auto protoFmrTableOutputRef = FmrTableOutputRefToProto(fmrTableOutputRef);
         protoMapTaskParams.AddOutput()->Swap(&protoFmrTableOutputRef);
     }
-    protoMapTaskParams.SetExecutable(mapTaskParams.Executable);
+    protoMapTaskParams.SetSerializedMapJobState(mapTaskParams.SerializedMapJobState);
     return protoMapTaskParams;
 }
 
@@ -451,7 +445,7 @@ TMapTaskParams MapTaskParamsFromProto(const NProto::TMapTaskParams& protoMapTask
         outputTables.emplace_back(FmrTableOutputRefFromProto(protoFmrTableOutputRef));
     }
     mapTaskParams.Output = outputTables;
-    mapTaskParams.Executable = protoMapTaskParams.GetExecutable();
+    mapTaskParams.SerializedMapJobState = protoMapTaskParams.GetSerializedMapJobState();
     return mapTaskParams;
 }
 

@@ -631,7 +631,9 @@ NUdf::TUnboxedValuePod ValueToString(NUdf::EDataSlot type, NUdf::TUnboxedValuePo
     }
 
     case NUdf::EDataSlot::DyNumber: {
-        out << NDyNumber::DyNumberToString(value.AsStringRef());
+        const auto& res = NDyNumber::DyNumberToString(value.AsStringRef());
+        MKQL_ENSURE(res, "Invalid DyNumber value : " << EscapeC(TString(value.AsStringRef())));
+        out << *res;
         break;
     }
 
@@ -1038,7 +1040,7 @@ public:
             year++;
         }
         cctz::civil_second cs(year, month, day, 0, 0, 0);
-        auto unixSeconds = cctz::TimePointToUnixSeconds(tz.lookup(cs).pre);
+        auto unixSeconds = tz.lookup(cs).pre.time_since_epoch().count();
         value = unixSeconds / 86400ll;
         return NUdf::MIN_DATE32 <= value && value <= NUdf::MAX_DATE32;
     }
@@ -1065,7 +1067,7 @@ public:
             year++;
         }
         cctz::civil_second cs(year, month, day, hour, min, sec);
-        value = cctz::TimePointToUnixSeconds(tz.lookup(cs).pre);
+        value = tz.lookup(cs).pre.time_since_epoch().count();
         return NUdf::MIN_DATETIME64 <= value && value <= NUdf::MAX_DATETIME64;
     }
 
@@ -1286,7 +1288,7 @@ bool MakeTzDatetime(ui32 year, ui32 month, ui32 day, ui32 hour, ui32 min, ui32 s
     if (tzId) {
         const auto& tz = Singleton<TTimezones>()->GetZone(tzId);
         cctz::civil_second cs(year, month, day, hour, min, sec);
-        auto utcSeconds = cctz::TimePointToUnixSeconds(tz.lookup(cs).pre);
+        auto utcSeconds = tz.lookup(cs).pre.time_since_epoch().count();
         if (utcSeconds < 0 || utcSeconds >= (std::int_fast64_t) NUdf::MAX_DATETIME) {
             return false;
         }

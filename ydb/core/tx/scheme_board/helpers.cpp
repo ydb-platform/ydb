@@ -176,8 +176,32 @@ TString JsonFromDescribeSchemeResult(const TString& serialized) {
     return json;
 }
 
-bool ShouldIgnore(const TStateStorageInfo::TRingGroup& ringGroup) {
-    return ringGroup.WriteOnly || ringGroup.State == ERingGroupState::DISCONNECTED;
+TClusterState::TClusterState(const NKikimrSchemeBoard::TClusterState& proto)
+    : Generation(proto.GetGeneration())
+    , Guid(proto.GetGuid())
+{}
+
+TClusterState::TClusterState(const TStateStorageInfo* info)
+    : Generation(info ? info->ClusterStateGeneration : 0)
+    , Guid(info ? info->ClusterStateGuid : 0)
+{}
+
+void TClusterState::ToProto(NKikimrSchemeBoard::TClusterState& proto) const {
+    proto.SetGeneration(Generation);
+    proto.SetGuid(Guid);
+}
+
+TClusterState::operator bool() const {
+    return Generation || Guid;
+}
+
+void TClusterState::Out(IOutputStream& out) const {
+    out << std::format("{{Generation: {}, GUID: {}}}", Generation, Guid);
+}
+
+bool TClusterState::operator==(const TClusterState& other) const {
+    return Generation == other.Generation
+        && Guid == other.Guid;
 }
 
 } // NSchemeBoard

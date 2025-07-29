@@ -1,6 +1,6 @@
 PY3TEST()
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/ydbd_dep.inc)
-ENV(YDB_ENABLE_COLUMN_TABLES="true")
+ENV(STRESS_TEST_UTILITY="ydb/tests/stress/reconfig_state_storage_workload/reconfig_state_storage_workload")
 
 TEST_SRCS(
     reconfig_state_storage_workload_test.py
@@ -18,6 +18,7 @@ ENV(IAM_TOKEN="")
 
 DEPENDS(
     ydb/apps/ydb
+    ydb/tests/stress/reconfig_state_storage_workload
 )
 
 PEERDIR(

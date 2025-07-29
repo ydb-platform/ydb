@@ -5,8 +5,7 @@
 namespace NKikimr {
 
 bool IsBridgeMode(const TActorContext &ctx) {
-    const auto *bridgeConfig = AppData(ctx)->BridgeConfig;
-    return bridgeConfig && bridgeConfig->PilesSize() > 0;
+    return AppData(ctx)->BridgeModeEnabled;
 }
 
 } // NKikimr

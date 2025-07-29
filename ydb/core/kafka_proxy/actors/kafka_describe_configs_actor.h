@@ -7,6 +7,16 @@
 
 namespace NKafka {
 
+enum EConfigSource {
+    UNKNOWN = 0,
+    DYNAMIC_TOPIC_CONFIG = 1,
+    DYNAMIC_BROKER_CONFIG = 2,
+    DYNAMIC_DEFAULT_BROKER_CONFIG = 3,
+    STATIC_BROKER_CONFIG = 4,
+    DEFAULT_CONFIG = 5,
+    DYNAMIC_BROKER_LOGGER_CONFIG = 6,
+};
+
 class TDescribeConfigsRequest: public TKafkaTopicRequestCtx {
 public:
     using TKafkaTopicRequestCtx::TKafkaTopicRequestCtx;

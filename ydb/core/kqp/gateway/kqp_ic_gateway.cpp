@@ -29,6 +29,7 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/params/params.h>
 #include <ydb/services/metadata/abstract/kqp_common.h>
 #include <ydb/services/persqueue_v1/rpc_calls.h>
+#include <yql/essentials/providers/common/codec/yql_codec.h>
 
 #include <yql/essentials/public/issue/yql_issue_message.h>
 
@@ -93,7 +94,7 @@ bool ContainOnlyLiteralStages(NKikimr::NKqp::IKqpGateway::TExecPhysicalRequest& 
     return true;
 }
 
-void PrepareLiteralRequest(IKqpGateway::TExecPhysicalRequest& literalRequest, NKqpProto::TKqpPhyQuery& phyQuery, const TString& program, const NKikimrMiniKQL::TType& resultType) {
+void PrepareLiteralRequest(IKqpGateway::TExecPhysicalRequest& literalRequest, ui32 langVer, NKqpProto::TKqpPhyQuery& phyQuery, const TString& program, const NKikimrMiniKQL::TType& resultType) {
     literalRequest.NeedTxId = false;
     literalRequest.MaxAffectedShards = 0;
     literalRequest.TotalReadSizeLimitBytes = 0;
@@ -106,6 +107,8 @@ void PrepareLiteralRequest(IKqpGateway::TExecPhysicalRequest& literalRequest, NK
     auto& stageProgram = *stage.MutableProgram();
     stageProgram.SetRuntimeVersion(NYql::NDqProto::RUNTIME_VERSION_YQL_1_0);
     stageProgram.SetRaw(program);
+    YQL_ENSURE(langVer > 0);
+    stageProgram.SetLangVer(langVer);
     stage.SetOutputsCount(1);
 
     auto& taskResult = *transaction.AddResults();
@@ -116,9 +119,13 @@ void PrepareLiteralRequest(IKqpGateway::TExecPhysicalRequest& literalRequest, NK
 
 void FillLiteralResult(const IKqpGateway::TExecPhysicalResult& result, IKqpGateway::TExecuteLiteralResult& literalResult) {
     if (result.Success()) {
-        YQL_ENSURE(result.Results.size() == 1);
         literalResult.SetSuccess();
-        literalResult.Result = result.Results[0];
+        if (result.ExpectBinaryResults) {
+            literalResult.BinaryResult = result.BinaryResults[0];
+        } else {
+            YQL_ENSURE(result.Results.size() == 1);
+            literalResult.Result = result.Results[0];
+        }
     } else {
         literalResult.SetStatus(result.Status());
         literalResult.AddIssues(result.Issues());
@@ -136,7 +143,18 @@ void FillPhysicalResult(std::unique_ptr<TEvKqpExecuter::TEvTxResponse>& ev, IKqp
             auto& txResults = ev->GetTxResults();
             result.Results.reserve(txResults.size());
             for(auto& tx : txResults) {
-                result.Results.emplace_back(tx.GetMkql());
+                if (result.ExpectBinaryResults) {
+                    auto [type, uv] = tx.GetUV(params->TypeEnv(), params->HolderFactory());
+                    TStringStream out;
+                    NYson::TYsonWriter writer2((IOutputStream*)&out);
+                    writer2.OnBeginMap();
+                    writer2.OnKeyedItem("Data");
+                    writer2.OnRaw(WriteYsonValue(uv, type));
+                    writer2.OnEndMap();
+                    result.BinaryResults.push_back(out.Str());
+                } else {
+                    result.Results.emplace_back(tx.GetMkql());
+                }
             }
             params->AddTxHolders(std::move(ev->GetTxHolders()));
 
@@ -1845,35 +1863,25 @@ public:
         }
     }
 
-    TFuture<TExecuteLiteralResult> ExecuteLiteral(const TString& program, const NKikimrMiniKQL::TType& resultType, NKikimr::NKqp::TTxAllocatorState::TPtr txAlloc) override {
+    TExecuteLiteralResult ExecuteLiteralInstant(const TString& program, ui32 langVer, const NKikimrMiniKQL::TType& resultType, NKikimr::NKqp::TTxAllocatorState::TPtr txAlloc) override {
         auto preparedQuery = std::make_unique<NKikimrKqp::TPreparedQuery>();
         auto& phyQuery = *preparedQuery->MutablePhysicalQuery();
-        NKikimr::NKqp::IKqpGateway::TExecPhysicalRequest literalRequest(txAlloc);
-        PrepareLiteralRequest(literalRequest, phyQuery, program, resultType);
+        NKikimr::NKqp::IKqpGateway::TExecPhysicalRequest request(txAlloc);
+        PrepareLiteralRequest(request, langVer, phyQuery, program, resultType);
 
         NKikimr::NKqp::TPreparedQueryHolder queryHolder(preparedQuery.release(), txAlloc->HolderFactory.GetFunctionRegistry());
         NKikimr::NKqp::TQueryData::TPtr params = std::make_shared<NKikimr::NKqp::TQueryData>(txAlloc);
-        literalRequest.Transactions.emplace_back(queryHolder.GetPhyTx(0), params);
+        request.Transactions.emplace_back(queryHolder.GetPhyTx(0), params);
 
-        return ExecuteLiteral(std::move(literalRequest), params, 0).Apply([](const auto& future) {
-            const auto& result = future.GetValue();
-            TExecuteLiteralResult literalResult;
-            FillLiteralResult(result, literalResult);
-            return literalResult;
-        });
-    }
+        YQL_ENSURE(!request.Transactions.empty());
+        YQL_ENSURE(request.DataShardLocks.empty());
+        YQL_ENSURE(!request.NeedTxId);
+        YQL_ENSURE(ContainOnlyLiteralStages(request));
 
-    TExecuteLiteralResult ExecuteLiteralInstant(const TString& program, const NKikimrMiniKQL::TType& resultType, NKikimr::NKqp::TTxAllocatorState::TPtr txAlloc) override {
-        auto preparedQuery = std::make_unique<NKikimrKqp::TPreparedQuery>();
-        auto& phyQuery = *preparedQuery->MutablePhysicalQuery();
-        NKikimr::NKqp::IKqpGateway::TExecPhysicalRequest literalRequest(txAlloc);
-        PrepareLiteralRequest(literalRequest, phyQuery, program, resultType);
-
-        NKikimr::NKqp::TPreparedQueryHolder queryHolder(preparedQuery.release(), txAlloc->HolderFactory.GetFunctionRegistry());
-        NKikimr::NKqp::TQueryData::TPtr params = std::make_shared<NKikimr::NKqp::TQueryData>(txAlloc);
-        literalRequest.Transactions.emplace_back(queryHolder.GetPhyTx(0), params);
-
-        auto result = ExecuteLiteralInstant(std::move(literalRequest), params, 0);
+        auto ev = ::NKikimr::NKqp::ExecuteLiteral(std::move(request), Counters, TActorId{}, MakeIntrusive<TUserRequestContext>());
+        TExecPhysicalResult result;
+        result.ExpectBinaryResults = true;
+        FillPhysicalResult(ev, result, params, 0);
 
         TExecuteLiteralResult literalResult;
         FillLiteralResult(result, literalResult);
@@ -1889,18 +1897,6 @@ public:
         IActor* requestHandler = new TKqpExecLiteralRequestHandler(std::move(request), Counters, promise, params, txIndex);
         RegisterActor(requestHandler);
         return promise.GetFuture();
-    }
-
-    TExecPhysicalResult ExecuteLiteralInstant(TExecPhysicalRequest&& request, TQueryData::TPtr params, ui32 txIndex) override {
-        YQL_ENSURE(!request.Transactions.empty());
-        YQL_ENSURE(request.DataShardLocks.empty());
-        YQL_ENSURE(!request.NeedTxId);
-        YQL_ENSURE(ContainOnlyLiteralStages(request));
-
-        auto ev = ::NKikimr::NKqp::ExecuteLiteral(std::move(request), Counters, TActorId{}, MakeIntrusive<TUserRequestContext>());
-        TExecPhysicalResult result;
-        FillPhysicalResult(ev, result, params, txIndex);
-        return result;
     }
 
     TFuture<TQueryResult> ExecScanQueryAst(const TString& cluster, const TString& query,

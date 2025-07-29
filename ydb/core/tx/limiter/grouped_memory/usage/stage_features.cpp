@@ -36,6 +36,7 @@ TConclusionStatus TStageFeatures::Allocate(const ui64 volume) {
         auto* current = this;
         while (current) {
             current->Waiting.Sub(volume);
+            UpdateConsumption(current);
             if (current->Counters) {
                 current->Counters->Sub(volume, false);
             }
@@ -60,6 +61,7 @@ TConclusionStatus TStageFeatures::Allocate(const ui64 volume) {
         auto* current = this;
         while (current) {
             current->Usage.Add(volume);
+            UpdateConsumption(current);
             AFL_DEBUG(NKikimrServices::GROUPED_MEMORY_LIMITER)("name", current->Name)("event", "allocate")("usage", current->Usage.Val())(
                 "delta", volume);
             if (current->Counters) {
@@ -82,6 +84,7 @@ void TStageFeatures::Free(const ui64 volume, const bool allocated) {
         } else {
             current->Waiting.Sub(volume);
         }
+        UpdateConsumption(current);
         AFL_DEBUG(NKikimrServices::GROUPED_MEMORY_LIMITER)("name", current->Name)("event", "free")("usage", current->Usage.Val())(
             "delta", volume);
         current = current->Owner.get();
@@ -106,6 +109,8 @@ void TStageFeatures::UpdateVolume(const ui64 from, const ui64 to, const bool all
     if (Owner) {
         Owner->UpdateVolume(from, to, allocated);
     }
+
+    UpdateConsumption(this);
 }
 
 bool TStageFeatures::IsAllocatable(const ui64 volume, const ui64 additional) const {
@@ -131,13 +136,34 @@ void TStageFeatures::Add(const ui64 volume, const bool allocated) {
     if (Owner) {
         Owner->Add(volume, allocated);
     }
+
+    UpdateConsumption(this);
 }
 
-void TStageFeatures::UpdateMemoryLimits(const ui64 limit, const ui64 hardLimit, bool& isLimitIncreased) {
+void TStageFeatures::SetMemoryConsumptionUpdateFunction(std::function<void(ui64)> func) {
+    MemoryConsumptionUpdate = std::move(func);
+}
+
+void TStageFeatures::UpdateMemoryLimits(const ui64 limit, const std::optional<ui64>& hardLimit, bool& isLimitIncreased) {
     isLimitIncreased = limit > Limit;
 
     Limit = limit;
     HardLimit = hardLimit;
+
+    if (Counters) {
+        Counters->ValueSoftLimit->Set(Limit);
+        if (HardLimit) {
+            Counters->ValueHardLimit->Set(*HardLimit);
+        }
+    }
+}
+
+void TStageFeatures::UpdateConsumption(const TStageFeatures* current) const {
+    if (!current || !current->MemoryConsumptionUpdate) {
+        return;
+    }
+
+    current->MemoryConsumptionUpdate(current->Usage.Val());
 }
 
 }   // namespace NKikimr::NOlap::NGroupedMemoryManager

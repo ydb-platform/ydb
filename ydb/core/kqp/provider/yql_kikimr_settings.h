@@ -8,7 +8,6 @@
 #include <yql/essentials/core/cbo/cbo_optimizer_new.h>
 
 namespace NKikimrConfig {
-    enum TTableServiceConfig_EIndexAutoChooseMode : int;
     enum TTableServiceConfig_EBlockChannelsMode : int;
 }
 
@@ -47,6 +46,8 @@ public:
     /* No op just to avoid errors in Cloud Logging until they remove this from their queries */
     NCommon::TConfSetting<bool, Static> KqpPushOlapProcess;
 
+    NCommon::TConfSetting<bool, Static> KqpForceImmediateEffectsExecution;
+
     /* Compile time */
     NCommon::TConfSetting<ui64, Static> _CommitPerShardKeysSizeLimitBytes;
     NCommon::TConfSetting<TString, Static> _DefaultCluster;
@@ -58,7 +59,9 @@ public:
     NCommon::TConfSetting<ui64, Static> EnableSpillingNodes;
     NCommon::TConfSetting<TString, Static> OverridePlanner;
     NCommon::TConfSetting<bool, Static> UseGraceJoinCoreForMap;
+    NCommon::TConfSetting<bool, Static> UseBlockHashJoin;
     NCommon::TConfSetting<bool, Static> EnableOrderPreservingLookupJoin;
+    NCommon::TConfSetting<bool, Static> OptEnableParallelUnionAllConnectionsForExtend;
 
     NCommon::TConfSetting<TString, Static> OptOverrideStatistics;
     NCommon::TConfSetting<NYql::TOptimizerHints, Static> OptimizerHints;
@@ -69,11 +72,13 @@ public:
     NCommon::TConfSetting<bool, Static> OptEnableInplaceUpdate;
     NCommon::TConfSetting<bool, Static> OptEnablePredicateExtract;
     NCommon::TConfSetting<bool, Static> OptEnableOlapPushdown;
+    NCommon::TConfSetting<bool, Static> OptEnableOlapPushdownAggregate;
     NCommon::TConfSetting<bool, Static> OptEnableOlapPushdownProjections;
     NCommon::TConfSetting<bool, Static> OptEnableOlapProvideComputeSharding;
     NCommon::TConfSetting<bool, Static> OptUseFinalizeByKey;
     NCommon::TConfSetting<bool, Static> OptShuffleElimination;
     NCommon::TConfSetting<bool, Static> OptShuffleEliminationWithMap;
+    NCommon::TConfSetting<bool, Static> OptShuffleEliminationForAggregation;
     NCommon::TConfSetting<ui32, Static> CostBasedOptimizationLevel;
     NCommon::TConfSetting<bool, Static> UseBlockReader;
 
@@ -101,6 +106,7 @@ public:
     bool HasOptDisableTopSort() const;
     bool HasOptDisableSqlInToJoin() const;
     bool HasOptEnableOlapPushdown() const;
+    bool HasOptEnableOlapPushdownAggregate() const;
     bool HasOptEnableOlapPushdownProjections() const;
     bool HasOptEnableOlapProvideComputeSharding() const;
     bool HasOptUseFinalizeByKey() const;
@@ -169,7 +175,6 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
     bool EnableKqpScanQueryStreamIdxLookupJoin = false;
     bool EnableKqpDataQueryStreamIdxLookupJoin = false;
     NSQLTranslation::EBindingsMode BindingsMode = NSQLTranslation::EBindingsMode::ENABLED;
-    NKikimrConfig::TTableServiceConfig_EIndexAutoChooseMode IndexAutoChooserMode;
     bool EnableAstCache = false;
     bool EnablePgConstsToParams = false;
     ui64 ExtractPredicateRangesLimit = 0;
@@ -191,6 +196,7 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
     bool EnableSnapshotIsolationRW = false;
     bool AllowMultiBroadcasts = false;
     bool DefaultEnableShuffleElimination = false;
+    bool DefaultEnableShuffleEliminationForAggregation = false;
     bool FilterPushdownOverJoinOptionalSide = false;
     THashSet<TString> YqlCoreOptimizerFlags;
     bool EnableNewRBO = false;
@@ -199,6 +205,10 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
     bool EnableOlapSubstringPushdown = false;
     bool EnableIndexStreamWrite = false;
     bool EnableOlapPushdownProjections = false;
+    bool EnableParallelUnionAllConnectionsForExtend = false;
+
+    ui32 LangVer = NYql::MinLangVersion;
+    NYql::EBackportCompatibleFeaturesMode BackportMode = NYql::EBackportCompatibleFeaturesMode::Released;
 
     NDq::EHashShuffleFuncType DefaultHashShuffleFuncType = NDq::EHashShuffleFuncType::HashV1;
     NDq::EHashShuffleFuncType DefaultColumnShardHashShuffleFuncType = NDq::EHashShuffleFuncType::ColumnShardHashV1;
@@ -206,6 +216,7 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
     void SetDefaultEnabledSpillingNodes(const TString& node);
     ui64 GetEnabledSpillingNodes() const;
     bool GetEnableOlapPushdownProjections() const;
+    bool GetEnableParallelUnionAllConnectionsForExtend() const;
 };
 
 }

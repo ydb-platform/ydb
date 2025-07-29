@@ -577,6 +577,7 @@ message TCompactionSelectorConstructorContainer {
 message TCompactionPlannerConstructorContainer {
     optional string ClassName = 1;
     optional uint64 NodePortionsCountLimit = 2;
+    optional double WeightKff = 3 [default = 1.0];
 
     message TLOptimizer {
 
@@ -1070,10 +1071,17 @@ message TAlterCdcStream {
 
 message TDropCdcStream {
     optional string TableName = 1;
-    optional string StreamName = 2;
+    repeated string StreamName = 2;
+}
+
+message TRotateCdcStream {
+    optional string TableName = 1;
+    optional string OldStreamName = 2;
+    optional TCreateCdcStream NewStream = 3;
 }
 
 message TContinuousBackupDescription {
+    optional string StreamName = 1;
 }
 
 message TCreateContinuousBackup {
@@ -1089,6 +1097,7 @@ message TAlterContinuousBackup {
 
     message TTakeIncrementalBackup {
         optional string DstPath = 1;
+        optional string DstStreamPath = 2;
     }
 
     oneof Action {
@@ -1748,6 +1757,7 @@ message TModifyScheme {
     optional TCreateCdcStream CreateCdcStream = 45;
     optional TAlterCdcStream AlterCdcStream = 46;
     optional TDropCdcStream DropCdcStream = 47;
+    optional TRotateCdcStream RotateCdcStream = 83;
     optional TMove MoveTable = 48;
     optional TMove MoveTableIndex = 49;
     optional TSequenceDescription Sequence = 51;
@@ -1954,7 +1964,7 @@ message TDirEntry {
     optional TPathVersion Version = 15;
     optional bool ChildrenExist = 16;
 
-    optional uint64 BalancerTabletID = 999; //temporary optimization for old PQ read/write protocol. Must be removed later
+    reserved 999;
 }
 
 // Describes single partition (range or point) of a table

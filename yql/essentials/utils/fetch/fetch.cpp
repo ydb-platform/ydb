@@ -125,34 +125,70 @@ inline bool IsRedirectCode(unsigned code) {
     return false;
 }
 
-inline bool IsRetryCode(unsigned code) {
+} // unnamed
+
+ERetryErrorClass DefaultClassifyHttpCode(unsigned code) {
     switch (code) {
-        case HTTP_REQUEST_TIME_OUT:
-        case HTTP_AUTHENTICATION_TIMEOUT:
-        case HTTP_TOO_MANY_REQUESTS:
-        case HTTP_GATEWAY_TIME_OUT:
-        case HTTP_SERVICE_UNAVAILABLE:
-            return true;
+        case HTTP_REQUEST_TIME_OUT:             //408
+        case HTTP_AUTHENTICATION_TIMEOUT:       //419
+            return ERetryErrorClass::ShortRetry;
+        case HTTP_TOO_MANY_REQUESTS:            //429
+        case HTTP_SERVICE_UNAVAILABLE:          //503
+            return ERetryErrorClass::LongRetry;
+        default:
+            return IsServerError(code)
+                ? ERetryErrorClass::ShortRetry  //5xx
+                : ERetryErrorClass::NoRetry;
     }
-    return false;
 }
 
-} // unnamed
+IRetryPolicy<unsigned>::TPtr GetDefaultPolicy() {
+    static const auto policy = IRetryPolicy<unsigned>::GetExponentialBackoffPolicy(
+            /*retryClassFunction=*/DefaultClassifyHttpCode,
+            /*minDelay=*/TDuration::Seconds(1),
+            /*minLongRetryDelay:*/TDuration::Seconds(5),
+            /*maxDelay=*/TDuration::Minutes(1),
+            /*maxRetries=*/3,
+            /*maxTime=*/TDuration::Minutes(3),
+            /*scaleFactor=*/2
+    );
+    return policy;
+}
 
 THttpURL ParseURL(const TStringBuf addr) {
     return ParseURL(addr, THttpURL::FeaturesAll | NUri::TFeature::FeatureConvertHostIDN | NUri::TFeature::FeatureNoRelPath);
 }
 
-TFetchResultPtr Fetch(const THttpURL& url, const THttpHeaders& additionalHeaders, const TDuration& timeout, size_t retries, size_t redirects) {
+TFetchResultPtr Fetch(const THttpURL& url, const THttpHeaders& additionalHeaders, const TDuration& timeout, size_t redirects, const IRetryPolicy<unsigned>::TPtr& policy) {
+    const auto& actualPolicy = policy ? policy : GetDefaultPolicy();
     THttpURL currentUrl = url;
     for (size_t fetchNum = 0; fetchNum < redirects; ++fetchNum) {
+        IRetryPolicy<unsigned>::IRetryState::TPtr state = actualPolicy->CreateRetryState();
         unsigned responseCode = 0;
         TFetchResultPtr fr;
-        size_t fetchTry = 0;
-        do {
-            fr = TFetchResultImpl::Fetch(currentUrl, additionalHeaders, timeout);
-            responseCode = fr->GetRetCode();
-        } while (IsRetryCode(responseCode) && ++fetchTry < retries);
+        while (true) {
+            std::exception_ptr eptr;
+            try {
+                fr = TFetchResultImpl::Fetch(currentUrl, additionalHeaders, timeout);
+                responseCode = fr->GetRetCode();
+            } catch (const TSystemError& ex) {
+                if (ex.Status() != ETIMEDOUT) {
+                    throw;
+                }
+
+                responseCode = HTTP_REQUEST_TIME_OUT;
+                eptr = std::current_exception();
+            }
+
+            if (auto delay = state->GetNextRetryDelay(responseCode)) {
+                YQL_LOG(DEBUG) << "Connection failed. Retry delay: " << *delay;
+                Sleep(*delay);
+            } else if (eptr != nullptr) {
+                std::rethrow_exception(eptr);
+            } else {
+                break;
+            }
+        }
 
         if (responseCode >= 200 && responseCode < 300) {
             return fr;

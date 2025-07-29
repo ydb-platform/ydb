@@ -17,6 +17,7 @@ namespace NSQLComplete {
                     return defaultResult();
                 }
 
+                id->insert(0, "$");
                 if (const NYT::TNode* node = Env_->Parameters.FindPtr(*id)) {
                     return *node;
                 }

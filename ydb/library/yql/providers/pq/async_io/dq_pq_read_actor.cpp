@@ -352,7 +352,7 @@ private:
                 clusterState.ReadSession.reset();
             }
         }
-        ReadyBuffer = std::queue<TReadyBatch>{}; // clear read buffer
+        Reconnected = true;
         Metrics.ReconnectRate->Inc();
 
         Schedule(ReconnectPeriod, new TEvPrivate::TEvReconnectSession());
@@ -513,6 +513,7 @@ private:
     }
 
     i64 GetAsyncInputData(NKikimr::NMiniKQL::TUnboxedValueBatch& buffer, TMaybe<TInstant>& watermark, bool&, i64 freeSpace) override {
+        // called with bound allocator
         Metrics.InFlyAsyncInputData->Set(0);
         SRC_LOG_T("SessionId: " << GetSessionId() << " GetAsyncInputData freeSpace = " << freeSpace);
 
@@ -523,6 +524,11 @@ private:
             Metrics.ReconnectRate->Inc();
             Schedule(ReconnectPeriod, new TEvPrivate::TEvReconnectSession());
             InflightReconnect = true;
+        }
+
+        if (Reconnected) {
+            Reconnected = false;
+            ReadyBuffer = std::queue<TReadyBatch>{}; // clear read buffer
         }
 
         i64 usedSpace = 0;
@@ -673,6 +679,7 @@ private:
         THashMap<NYdb::NTopic::TPartitionSession::TPtr, std::pair<std::string, TList<std::pair<ui64, ui64>>>> OffsetRanges; // [start, end)
     };
 
+    // must be called with bound allocator
     bool MaybeReturnReadyBatch(NKikimr::NMiniKQL::TUnboxedValueBatch& buffer, TMaybe<TInstant>& watermark, i64& usedSpace) {
         if (ReadyBuffer.empty()) {
             SubscribeOnNextEvent();
@@ -709,6 +716,7 @@ private:
         return true;
     }
 
+    // must be called with bound allocator
     void PushWatermarkToReady(TInstant watermark) {
         SRC_LOG_D("SessionId: " << GetSessionId() << " New watermark " << watermark << " was generated");
 
@@ -720,6 +728,7 @@ private:
         ReadyBuffer.back().Watermark = watermark;
     }
 
+    // must be called (visited) with bound allocator
     struct TTopicEventProcessor {
         void operator()(NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent& event) {
             const auto partitionKey = MakePartitionKey(Cluster, event.GetPartitionSession());
@@ -853,6 +862,7 @@ private:
 private:
     bool InflightReconnect = false;
     TDuration ReconnectPeriod;
+    bool Reconnected = false;
     TMetrics Metrics;
     const i64 BufferSize;
     const THolderFactory& HolderFactory;

@@ -320,7 +320,7 @@ struct TNonceSet {
 
     TString ToString(bool isMultiline) const {
         TStringStream str;
-        const char *x = isMultiline ? "\n" : "";
+        const char *x = isMultiline ? "\n " : "";
         str << "{TNonceSet" << x;
         str << " Version# " << Version << x;
         str << " NonceSysLog# " << Value[NonceSysLog] << x;
@@ -435,7 +435,7 @@ struct TMetadataHeader {
 	if (magic) {
             hasher.Hash(magic, sizeof(ui64));
 	}
-#else 
+#else
 	Y_UNUSED(magic);
 #endif
         hasher.Hash(this, sizeof(TMetadataHeader) - sizeof(THash));
@@ -448,7 +448,7 @@ struct TMetadataHeader {
 	if (magic) {
             hasher.Hash(magic, sizeof(ui64));
 	}
-#else 
+#else
 	Y_UNUSED(magic);
 #endif
         hasher.Hash(this, sizeof(TMetadataHeader) - sizeof(THash));

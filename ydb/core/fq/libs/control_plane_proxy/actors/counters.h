@@ -134,6 +134,7 @@ enum ERequestTypeScope {
     RTS_DESCRIBE_BINDING,
     RTS_MODIFY_BINDING,
     RTS_DELETE_BINDING,
+    RTS_DELETE_FOLDER_RESOURCES,
     RTS_MAX,
 };
 
@@ -172,6 +173,7 @@ enum ERequestTypeCommon {
     RTC_CREATE_COMPUTE_DATABASE,
     RTC_LIST_CPS_ENTITY,
     RTC_RATE_LIMITER,
+    RTC_DELETE_FOLDER_RESOURCES,
     RTC_MAX,
 };
 
@@ -232,6 +234,7 @@ class TCounters : public virtual TThrRefBase {
         {MakeIntrusive<TRequestCommonCounters>("CreateComputeDatabase")},
         {MakeIntrusive<TRequestCommonCounters>("ListCPSEntities")},
         {MakeIntrusive<TRequestCommonCounters>("RateLimiter")},
+        {MakeIntrusive<TRequestCommonCounters>("DeleteFolderResources")},
     });
 
     TTtlCache<TMetricsScope, TRequestScopeCountersPtr, TMap> ScopeCounters{TTtlCacheSettings{}.SetTtl(TDuration::Days(1))};
@@ -284,6 +287,7 @@ public:
             "DescribeBinding",
             "ModifyBinding",
             "DeleteBinding",
+            "DeleteFolderResources",
         };
 
         auto scopeCounters = Counters

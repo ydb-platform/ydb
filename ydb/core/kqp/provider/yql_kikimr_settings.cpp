@@ -67,6 +67,7 @@ TKikimrConfiguration::TKikimrConfiguration() {
     REGISTER_SETTING(*this, _KqpYqlCombinerMemoryLimit).Lower(0ULL).Upper(1_GB);
 
     REGISTER_SETTING(*this, KqpPushOlapProcess);
+    REGISTER_SETTING(*this, KqpForceImmediateEffectsExecution);
 
     /* Compile time */
     REGISTER_SETTING(*this, _CommitPerShardKeysSizeLimitBytes);
@@ -82,15 +83,19 @@ TKikimrConfiguration::TKikimrConfiguration() {
     REGISTER_SETTING(*this, OptEnableInplaceUpdate);
     REGISTER_SETTING(*this, OptEnablePredicateExtract);
     REGISTER_SETTING(*this, OptEnableOlapPushdown);
+    REGISTER_SETTING(*this, OptEnableOlapPushdownAggregate);
     REGISTER_SETTING(*this, OptEnableOlapPushdownProjections);
     REGISTER_SETTING(*this, OptEnableOlapProvideComputeSharding);
     REGISTER_SETTING(*this, OptOverrideStatistics);
     REGISTER_SETTING(*this, OptimizerHints).Parser([](const TString& v) { return NYql::TOptimizerHints::Parse(v); });
     REGISTER_SETTING(*this, OptShuffleElimination);
     REGISTER_SETTING(*this, OptShuffleEliminationWithMap);
+    REGISTER_SETTING(*this, OptShuffleEliminationForAggregation);
     REGISTER_SETTING(*this, OverridePlanner);
     REGISTER_SETTING(*this, UseGraceJoinCoreForMap);
+    REGISTER_SETTING(*this, UseBlockHashJoin);
     REGISTER_SETTING(*this, EnableOrderPreservingLookupJoin);
+    REGISTER_SETTING(*this, OptEnableParallelUnionAllConnectionsForExtend);
 
     REGISTER_SETTING(*this, OptUseFinalizeByKey);
     REGISTER_SETTING(*this, CostBasedOptimizationLevel);
@@ -109,7 +114,6 @@ TKikimrConfiguration::TKikimrConfiguration() {
     /* Runtime */
     REGISTER_SETTING(*this, ScanQuery);
 
-    IndexAutoChooserMode = NKikimrConfig::TTableServiceConfig_EIndexAutoChooseMode_DISABLED;
     BlockChannelsMode = NKikimrConfig::TTableServiceConfig_EBlockChannelsMode_BLOCK_CHANNELS_SCALAR;
 }
 
@@ -151,6 +155,10 @@ bool TKikimrSettings::HasOptEnableInplaceUpdate() const {
 
 bool TKikimrSettings::HasOptEnableOlapPushdown() const {
     return GetOptionalFlagValue(OptEnableOlapPushdown.Get()) != EOptionalFlag::Disabled;
+}
+
+bool TKikimrSettings::HasOptEnableOlapPushdownAggregate() const {
+    return GetOptionalFlagValue(OptEnableOlapPushdownAggregate.Get()) != EOptionalFlag::Disabled;
 }
 
 bool TKikimrSettings::HasOptEnableOlapProvideComputeSharding() const {
@@ -198,4 +206,8 @@ bool TKikimrConfiguration::GetEnableOlapPushdownProjections() const {
     return ((GetOptionalFlagValue(OptEnableOlapPushdownProjections.Get()) == EOptionalFlag::Enabled) || EnableOlapPushdownProjections);
 }
 
+bool TKikimrConfiguration::GetEnableParallelUnionAllConnectionsForExtend() const {
+    return ((GetOptionalFlagValue(OptEnableParallelUnionAllConnectionsForExtend.Get()) == EOptionalFlag::Enabled) ||
+            EnableParallelUnionAllConnectionsForExtend);
+}
 }

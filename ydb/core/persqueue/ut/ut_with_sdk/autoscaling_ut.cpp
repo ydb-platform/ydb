@@ -4,7 +4,7 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <ydb/core/persqueue/partition_key_range/partition_key_range.h>
-#include <ydb/core/persqueue/partition_scale_manager.h>
+#include <ydb/core/persqueue/pqrb/partition_scale_manager.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/test_env.h>
 
@@ -116,7 +116,7 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
     }
 
     Y_UNIT_TEST(ReadingAfterSplitTest_AutoscaleAwareSDK_AutoCommit) {
-        ReadingAfterSplitTest(SdkVersion::Topic, true, false);
+        ReadingAfterSplitTest(SdkVersion::Topic, true, true);
     }
 
     Y_UNIT_TEST(ReadingAfterSplitTest_PQv1) {
@@ -421,7 +421,7 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
     }
 
     Y_UNIT_TEST(PartitionMerge_PreferedPartition_PQv1) {
-        PartitionMerge_PreferedPartition(SdkVersion::Topic, false);
+        PartitionMerge_PreferedPartition(SdkVersion::PQv1, false);
     }
 
     void PartitionSplit_ReadEmptyPartitions(SdkVersion sdk, bool autoscaleAwareSDK) {
@@ -963,9 +963,9 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
     }
 
     ui64 GetBalancerTabletId(TTopicSdkTestSetup& setup, const TString& topicPath) {
-        auto pathDescr = setup.GetServer().AnnoyingClient->Ls(topicPath)->Record.GetPathDescription().GetSelf();
-        auto balancerTabletId = pathDescr.GetBalancerTabletID();
-        Cerr << ">>>>> BalancerTabletID=" << balancerTabletId << Endl << Flush;
+        auto pathDescr = setup.GetServer().AnnoyingClient->Describe(&setup.GetRuntime(), topicPath, Tests::SchemeRoot, true);
+        auto balancerTabletId = pathDescr.GetPathDescription().GetPersQueueGroup().GetBalancerTabletID();
+        Cerr << ">>>>> TopicPath=" << topicPath << " BalancerTabletID=" << balancerTabletId << " describe=" << pathDescr.DebugString() << Endl;
         UNIT_ASSERT(balancerTabletId);
         return balancerTabletId;
     }

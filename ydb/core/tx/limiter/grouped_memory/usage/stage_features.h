@@ -1,4 +1,6 @@
 #pragma once
+
+#include <ydb/core/base/memory_controller_iface.h>
 #include <ydb/core/tx/limiter/grouped_memory/service/counters.h>
 
 #include <ydb/library/accessor/positive_integer.h>
@@ -15,6 +17,9 @@ private:
     YDB_ACCESSOR_DEF(TPositiveControlInteger, Waiting);
     std::shared_ptr<TStageFeatures> Owner;
     std::shared_ptr<TStageCounters> Counters;
+    std::function<void(ui64)> MemoryConsumptionUpdate;
+
+    void UpdateConsumption(const TStageFeatures* current) const;
 
 public:
     TString DebugString() const;
@@ -33,7 +38,8 @@ public:
     bool IsAllocatable(const ui64 volume, const ui64 additional) const;
     void Add(const ui64 volume, const bool allocated);
 
-    void UpdateMemoryLimits(const ui64 limit, const ui64 hardLimit, bool& isLimitIncreased);
+    void SetMemoryConsumptionUpdateFunction(std::function<void(ui64)> func);
+    void UpdateMemoryLimits(const ui64 limit, const std::optional<ui64>& hardLimit, bool& isLimitIncreased);
 };
 
 }   // namespace NKikimr::NOlap::NGroupedMemoryManager

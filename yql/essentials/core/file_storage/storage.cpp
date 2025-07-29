@@ -305,7 +305,7 @@ public:
         const bool result = NFs::Remove(storageFile);
 
         if (result || !storageFile.Exists()) {
-            ++CurrentFiles_;
+            --CurrentFiles_;
             CurrentSize_ -= prevFileSize;
         }
 

@@ -1,7 +1,6 @@
 #include "kqp_executer.h"
 #include "kqp_executer_impl.h"
 #include "kqp_locks_helper.h"
-#include "kqp_partition_helper.h"
 #include "kqp_planner.h"
 #include "kqp_table_resolver.h"
 #include "kqp_tasks_validate.h"
@@ -102,12 +101,13 @@ public:
         const TActorId& creator, const TIntrusivePtr<TUserRequestContext>& userRequestContext,
         ui32 statementResultIndex, const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup,
         const TGUCSettings::TPtr& GUCSettings,
+        TPartitionPruner::TConfig partitionPrunerConfig,
         const TShardIdToTableInfoPtr& shardIdToTableInfo,
         const IKqpTransactionManagerPtr& txManager,
         const TActorId bufferActorId,
-        TMaybe<TBatchOperationSettings> batchOperationSettings = Nothing())
-        : TBase(std::move(request), std::move(asyncIoFactory), federatedQuerySetup, GUCSettings, database, userToken, counters, executerConfig,
-            userRequestContext, statementResultIndex, TWilsonKqp::DataExecuter,
+        TMaybe<NBatchOperations::TSettings> batchOperationSettings = Nothing())
+        : TBase(std::move(request), std::move(asyncIoFactory), federatedQuerySetup, GUCSettings, std::move(partitionPrunerConfig),
+            database, userToken, counters, executerConfig, userRequestContext, statementResultIndex, TWilsonKqp::DataExecuter,
             "DataExecuter", streamResult, bufferActorId, txManager, std::move(batchOperationSettings))
         , ShardIdToTableInfo(shardIdToTableInfo)
         , AllowOlapDataQuery(executerConfig.TableServiceConfig.GetAllowOlapDataQuery())
@@ -212,7 +212,7 @@ public:
                     }
                 }
 
-                if (info.HasBatchOperationMaxKey()) {
+                if (!BatchOperationSettings.Empty() && info.HasBatchOperationMaxKey()) {
                     if (ResponseEv->BatchOperationMaxKeys.empty()) {
                         for (auto keyId : info.GetBatchOperationKeyIds()) {
                             ResponseEv->BatchOperationKeyIds.push_back(keyId);
@@ -1651,7 +1651,7 @@ private:
                 case NKqpProto::TKqpPhyTableOperation::kLookup: {
                     auto columns = BuildKqpColumns(op, tableInfo);
                     bool isFullScan = false;
-                    auto partitions = PrunePartitions(op, stageInfo, HolderFactory(), TypeEnv(), isFullScan);
+                    auto partitions = PartitionPruner.Prune(op, stageInfo, isFullScan);
                     auto readSettings = ExtractReadSettings(op, stageInfo, HolderFactory(), TypeEnv());
 
                     if (!readSettings.ItemsLimit && isFullScan) {
@@ -1673,7 +1673,7 @@ private:
                 case NKqpProto::TKqpPhyTableOperation::kDeleteRows: {
                     YQL_ENSURE(stage.InputsSize() <= 1, "Effect stage with multiple inputs: " << stage.GetProgramAst());
 
-                    auto result = PruneEffectPartitions(op, stageInfo, HolderFactory(), TypeEnv());
+                    auto result = PartitionPruner.PruneEffect(op, stageInfo);
                     for (auto& [shardId, shardInfo] : result) {
                         YQL_ENSURE(!shardInfo.KeyReadRanges);
                         YQL_ENSURE(shardInfo.KeyWriteRanges);
@@ -2064,7 +2064,7 @@ private:
                 }
 
                 if (stage.GetIsSinglePartition()) {
-                    YQL_ENSURE(stageInfo.Tasks.size() == 1, "Unexpected multiple tasks in single-partition stage");
+                    YQL_ENSURE(stageInfo.Tasks.size() <= 1, "Unexpected multiple tasks in single-partition stage");
                 }
 
                 TasksGraph.GetMeta().AllowWithSpilling |= stage.GetAllowWithSpilling();
@@ -2251,7 +2251,7 @@ private:
                     if (stage.SourcesSize() > 0 && stage.GetSources(0).GetTypeCase() == NKqpProto::TKqpSource::kReadRangesSource) {
                         const auto& source = stage.GetSources(0).GetReadRangesSource();
                         bool isFullScan;
-                        SourceScanStageIdToParititions[stageInfo.Id] = PrunePartitions(source, stageInfo, HolderFactory(), TypeEnv(), isFullScan);
+                        SourceScanStageIdToParititions[stageInfo.Id] = PartitionPruner.Prune(source, stageInfo, isFullScan);
                         if (isFullScan && !source.HasItemsLimit()) {
                             Counters->Counters->FullScansExecuted->Inc();
                         }
@@ -2834,7 +2834,7 @@ private:
                 auto* w = transaction.MutableWriteId();
                 w->SetNodeId(SelfId().NodeId());
                 w->SetKeyId(*writeId);
-            } else if (Request.TopicOperations.HasKafkaOperations() && Request.TopicOperations.HasWriteOperations()) {
+            } else if (Request.TopicOperations.HasKafkaOperations() && t.hasWrite) {
                 auto* w = transaction.MutableWriteId();
                 w->SetKafkaTransaction(true);
                 w->MutableKafkaProducerInstanceId()->SetId(Request.TopicOperations.GetKafkaProducerInstanceId().Id);
@@ -3058,12 +3058,13 @@ IActor* CreateKqpDataExecuter(IKqpGateway::TExecPhysicalRequest&& request, const
     NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory, const TActorId& creator,
     const TIntrusivePtr<TUserRequestContext>& userRequestContext, ui32 statementResultIndex,
     const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup, const TGUCSettings::TPtr& GUCSettings,
-    const TShardIdToTableInfoPtr& shardIdToTableInfo, const IKqpTransactionManagerPtr& txManager, const TActorId bufferActorId,
-    TMaybe<TBatchOperationSettings> batchOperationSettings)
+    TPartitionPruner::TConfig partitionPrunerConfig, const TShardIdToTableInfoPtr& shardIdToTableInfo,
+    const IKqpTransactionManagerPtr& txManager, const TActorId bufferActorId,
+    TMaybe<NBatchOperations::TSettings> batchOperationSettings)
 {
     return new TKqpDataExecuter(std::move(request), database, userToken, counters, streamResult, executerConfig,
         std::move(asyncIoFactory), creator, userRequestContext, statementResultIndex, federatedQuerySetup, GUCSettings,
-        shardIdToTableInfo, txManager, bufferActorId, std::move(batchOperationSettings));
+        std::move(partitionPrunerConfig), shardIdToTableInfo, txManager, bufferActorId, std::move(batchOperationSettings));
 }
 
 } // namespace NKqp

@@ -1164,6 +1164,10 @@ ISubOperation::TPtr TOperation::RestorePart(TTxState::ETxType txType, TTxState::
         return CreateDropCdcStreamAtTable(NextPartId(), txState, false);
     case TTxState::ETxType::TxDropCdcStreamAtTableDropSnapshot:
         return CreateDropCdcStreamAtTable(NextPartId(), txState, true);
+    case TTxState::ETxType::TxRotateCdcStream:
+        return CreateRotateCdcStreamImpl(NextPartId(), txState);
+    case TTxState::ETxType::TxRotateCdcStreamAtTable:
+        return CreateRotateCdcStreamAtTable(NextPartId(), txState);
 
     // Sequences
     case TTxState::ETxType::TxCreateSequence:
@@ -1250,7 +1254,7 @@ ISubOperation::TPtr TOperation::RestorePart(TTxState::ETxType txType, TTxState::
         return CreateAlterResourcePool(NextPartId(), txState);
 
     case TTxState::ETxType::TxRestoreIncrementalBackupAtTable:
-        return CreateRestoreIncrementalBackupAtTable(NextPartId(), txState);
+        return CreateRestoreIncrementalBackupAtTable(NextPartId(), txState, context);
 
     // BackupCollection
     case TTxState::ETxType::TxCreateBackupCollection:
@@ -1469,6 +1473,11 @@ TVector<ISubOperation::TPtr> TDefaultOperationFactory::MakeOperationParts(
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropCdcStreamImpl:
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropCdcStreamAtTable:
         Y_ABORT("multipart operations are handled before, also they require transaction details");
+    case NKikimrSchemeOp::EOperationType::ESchemeOpRotateCdcStream:
+        return CreateRotateCdcStream(op.NextPartId(), tx, context);
+    case NKikimrSchemeOp::EOperationType::ESchemeOpRotateCdcStreamImpl:
+    case NKikimrSchemeOp::EOperationType::ESchemeOpRotateCdcStreamAtTable:
+        Y_ABORT("multipart operations are handled before, also they require transaction details");
 
     case NKikimrSchemeOp::EOperationType::ESchemeOp_DEPRECATED_35:
         Y_ABORT("impossible");
@@ -1563,7 +1572,7 @@ TVector<ISubOperation::TPtr> TDefaultOperationFactory::MakeOperationParts(
     case NKikimrSchemeOp::EOperationType::ESchemeOpAlterBackupCollection:
         Y_ABORT("TODO: implement");
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropBackupCollection:
-        return {CreateDropBackupCollection(op.NextPartId(), tx)};
+        return CreateDropBackupCollectionCascade(op.NextPartId(), tx, context);
 
     case NKikimrSchemeOp::EOperationType::ESchemeOpBackupBackupCollection:
         return CreateBackupBackupCollection(op.NextPartId(), tx, context);

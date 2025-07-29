@@ -395,7 +395,7 @@ public:
 
     bool HandleError(TEvPQ::TEvError *ev, const TActorContext& ctx)
     {
-        PQ_LOG_D("Answer error topic: '" << TopicName << "'" <<
+        PQ_LOG_ERROR("Answer error topic: '" << TopicName << "'" <<
                  " partition: " << Partition <<
                  " messageNo: " << MessageNo <<
                  " requestId: " << ReqId <<
@@ -927,7 +927,7 @@ void TPersQueue::InitTxWrites(const NKikimrPQ::TTabletTxInfo& info,
             SubscribeWriteId(writeId, ctx);
         }
 
-        // this branch will be executed only if EnableKafkaTransactions feature flag is enabled, cause 
+        // this branch will be executed only if EnableKafkaTransactions feature flag is enabled, cause
         // sending transactional requests through Kafka API is restricted by feature flag here: ydb/core/kafka_proxy/kafka_connection.cpp
         if (txWrite.GetKafkaTransaction() && txWrite.HasCreatedAt()) {
             writeInfo.KafkaTransaction = true;
@@ -2029,7 +2029,7 @@ void TPersQueue::HandleWriteRequest(const ui64 responseCookie, NWilson::TTraceId
 
     TVector<TEvPQ::TEvWrite::TMsg> msgs;
 
-    bool mirroredPartition = Config.GetPartitionConfig().HasMirrorFrom();
+    bool mirroredPartition = MirroringEnabled(Config);
 
     if (!req.GetIsDirectWrite()) {
         if (!req.HasMessageNo()) {
@@ -2704,10 +2704,18 @@ void TPersQueue::HandleEventForSupportivePartition(const ui64 responseCookie,
         }
     } else {
         if (!req.GetNeedSupportivePartition()) {
+            // missing supportivce partition in kafka transaction means that we already committed and deleted transaction for current producerId + producerEpoch
+            NPersQueue::NErrorCode::EErrorCode errorCode = writeId.KafkaApiTransaction ?
+                NPersQueue::NErrorCode::KAFKA_TRANSACTION_MISSING_SUPPORTIVE_PARTITION : 
+                NPersQueue::NErrorCode::PRECONDITION_FAILED;
+            TString error = writeId.KafkaApiTransaction ?
+                "Kafka transaction and there is no supportive partition for current producerId and producerEpoch. It means GetOwnership request was not called from TPartitionWriter" :
+                "lost messages";
+
             ReplyError(ctx,
                        responseCookie,
-                       NPersQueue::NErrorCode::PRECONDITION_FAILED,
-                       "lost messages");
+                       errorCode,
+                       error);
             return;
         }
 
@@ -3184,7 +3192,7 @@ void TPersQueue::DeleteExpiredTransactions(const TActorContext& ctx)
 void TPersQueue::ScheduleDeleteExpiredKafkaTransactions() {
     TDuration kafkaTxnTimeout = TDuration::MilliSeconds(
         AppData()->KafkaProxyConfig.GetTransactionTimeoutMs() + KAFKA_TRANSACTION_DELETE_DELAY_MS);
-    
+
     auto txnExpired = [kafkaTxnTimeout](const TTxWriteInfo& txWriteInfo) {
         return txWriteInfo.KafkaTransaction && txWriteInfo.CreatedAt + kafkaTxnTimeout < TAppData::TimeProvider->Now();
     };
@@ -3978,17 +3986,17 @@ void TPersQueue::ScheduleProposeTransactionResult(const TDistributedTransaction&
 {
     PQ_LOG_D("schedule TEvProposeTransactionResult(PREPARED)");
     auto event = std::make_unique<TEvPersQueue::TEvProposeTransactionResult>();
-    
+
     event->Record.SetOrigin(TabletID());
     event->Record.SetStatus(NKikimrPQ::TEvProposeTransactionResult::PREPARED);
     event->Record.SetTxId(tx.TxId);
     event->Record.SetMinStep(tx.MinStep);
     event->Record.SetMaxStep(tx.MaxStep);
-    
+
     if (ProcessingParams) {
         event->Record.MutableDomainCoordinators()->CopyFrom(ProcessingParams->GetCoordinators());
     }
-    
+
     RepliesToActor.emplace_back(tx.SourceActor, std::move(event));
 }
 

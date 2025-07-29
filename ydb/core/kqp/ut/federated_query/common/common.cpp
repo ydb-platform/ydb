@@ -61,12 +61,13 @@ namespace NKikimr::NKqp::NFederatedQueryTest {
         featureFlags.SetEnableExternalDataSources(true);
         featureFlags.SetEnableScriptExecutionOperations(true);
         featureFlags.SetEnableExternalSourceSchemaInference(true);
+        featureFlags.SetEnableMoveColumnTable(true);
         if (!appConfig) {
             appConfig.emplace();
             appConfig->MutableQueryServiceConfig()->SetAllExternalDataSourcesAreAvailable(true);
         }
 
-        auto settings = TKikimrSettings();
+        auto settings = TKikimrSettings(*appConfig);
 
         NYql::IHTTPGateway::TPtr httpGateway;
         if (initializeHttpGateway) {
@@ -101,8 +102,6 @@ namespace NKikimr::NKqp::NFederatedQueryTest {
             .SetWithSampleTables(false)
             .SetDomainRoot(options.DomainRoot)
             .SetNodeCount(options.NodeCount);
-
-        settings = settings.SetAppConfig(appConfig.value());
 
         return std::make_shared<TKikimrRunner>(settings);
     }

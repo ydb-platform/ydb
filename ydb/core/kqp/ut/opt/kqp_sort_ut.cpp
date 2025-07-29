@@ -932,7 +932,7 @@ Y_UNIT_TEST_SUITE(KqpSort) {
             DECLARE $value AS Int32;
 
             SELECT *
-            FROM `/Root/TwoShard`
+            FROM `/Root/TwoShard` VIEW PRIMARY KEY
             WHERE Value2 != $value
             LIMIT $limit;
         )";
@@ -1128,10 +1128,7 @@ Y_UNIT_TEST_SUITE(KqpSort) {
     }
 
     Y_UNIT_TEST(UnionAllSortLimit) {
-        NKikimrConfig::TAppConfig appConfig;
-        auto serverSettings = TKikimrSettings()
-            .SetAppConfig(appConfig);
-
+        TKikimrSettings serverSettings;
         TKikimrRunner kikimr{serverSettings};
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();

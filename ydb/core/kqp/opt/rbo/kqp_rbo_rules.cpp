@@ -180,7 +180,7 @@ std::shared_ptr<IOperator> TPushFilterRule::SimpleTestAndApply(const std::shared
     }
 
     if (pushRight.size()) {
-        if (to_lower(join->JoinKind) == "left") {
+        if (join->JoinKind == "Left") {
             TVector<TFilterInfo> predicatesForRightSide;
             for (const auto& predicate : pushRight) {
                 if (IsNullRejectingPredicate(predicate, ctx)) {

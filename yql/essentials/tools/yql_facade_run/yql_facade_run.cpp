@@ -6,6 +6,7 @@
 #include <yql/essentials/providers/common/udf_resolve/yql_outproc_udf_resolver.h>
 #include <yql/essentials/providers/common/udf_resolve/yql_simple_udf_resolver.h>
 #include <yql/essentials/providers/common/udf_resolve/yql_udf_resolver_with_index.h>
+#include <yql/essentials/providers/common/udf_resolve/yql_udf_resolver_logger.h>
 #include <yql/essentials/core/yql_user_data_storage.h>
 #include <yql/essentials/core/yql_udf_resolver.h>
 #include <yql/essentials/core/yql_udf_index.h>
@@ -35,7 +36,6 @@
 #include <yql/essentials/public/result_format/yql_result_format_data.h>
 #include <yql/essentials/utils/failure_injector/failure_injector.h>
 #include <yql/essentials/utils/backtrace/backtrace.h>
-#include <yql/essentials/utils/log/log.h>
 #include <yql/essentials/utils/mem_limit.h>
 #include <yql/essentials/protos/yql_mount.pb.h>
 #include <yql/essentials/protos/pg_ext.pb.h>
@@ -279,6 +279,7 @@ void TFacadeRunOptions::Parse(int argc, const char *argv[]) {
             NKikimr::NMiniKQL::FindUdfsInDir(dir, &UdfsPaths);
         });
     opts.AddLongOption("udf-resolver", "Path to udf-resolver").Optional().RequiredArgument("PATH").StoreResult(&UdfResolverPath);
+    opts.AddLongOption("udf-resolver-log", "Path to udf resolver log").Optional().RequiredArgument("PATH").StoreResult(&UdfResolverLog);
     opts.AddLongOption("udf-resolver-filter-syscalls", "Filter syscalls in udf resolver").Optional().NoArgument().SetFlag(&UdfResolverFilterSyscalls);
     opts.AddLongOption("scan-udfs", "Scan specified udfs with external udf-resolver to use static function registry").NoArgument().SetFlag(&ScanUdfs);
 
@@ -523,6 +524,7 @@ void TFacadeRunOptions::Parse(int argc, const char *argv[]) {
 
 TFacadeRunner::TFacadeRunner(TString name)
     : Name_(std::move(name))
+    , YqlLogger_(std::make_unique<NYql::NLog::YqlLoggerScope>(&Cerr))
 {
 }
 
@@ -538,7 +540,6 @@ int TFacadeRunner::Main(int argc, const char *argv[]) {
     NYql::NBacktrace::EnableKikimrSymbolize();
     EnableKikimrBacktraceFormat();
 
-    NYql::NLog::YqlLoggerScope logger(&Cerr);
     try {
         return DoMain(argc, argv);
     }
@@ -700,12 +701,19 @@ int TFacadeRunner::DoMain(int argc, const char *argv[]) {
             RunOptions_.PrintInfo(TStringBuilder() << TInstant::Now().ToStringLocalUpToSeconds() << " UdfIndex done.");
         }
 
+        if (RunOptions_.UdfResolverLog) {
+            udfResolver = NCommon::CreateUdfResolverDecoratorWithLogger(FuncRegistry_.Get(), udfResolver, RunOptions_.UdfResolverLog, RunOptions_.OperationId);
+        }
+
         udfResolver = NCommon::CreateUdfResolverWithIndex(udfIndex, udfResolver, FileStorage_);
         RunOptions_.PrintInfo(TStringBuilder() << TInstant::Now().ToStringLocalUpToSeconds() << " Udfs scanned");
     } else {
         udfResolver = FileStorage_ && RunOptions_.UdfResolverPath
             ? NCommon::CreateOutProcUdfResolver(FuncRegistry_.Get(), FileStorage_, RunOptions_.UdfResolverPath, {}, {}, RunOptions_.UdfResolverFilterSyscalls, {})
             : NCommon::CreateSimpleUdfResolver(FuncRegistry_.Get(), FileStorage_, true);
+        if (RunOptions_.UdfResolverLog) {
+            udfResolver = NCommon::CreateUdfResolverDecoratorWithLogger(FuncRegistry_.Get(), udfResolver, RunOptions_.UdfResolverLog, RunOptions_.OperationId);
+        }
     }
 
     TVector<TDataProviderInitializer> dataProvidersInit;

@@ -158,6 +158,7 @@ private:
     struct TShardState {
         ui64 RetryAttempts = 0;
         std::unordered_set<ui64> Reads;
+        bool HasPipe = false;
     };
 
     struct TReads {
@@ -172,8 +173,8 @@ private:
             return Reads.find(readId);
         }
 
-        void insert(TReadState&& read) {
-            const auto [readIt, succeeded] = Reads.insert({read.Id, std::move(read)});
+        void insert(ui64 readId, TReadState&& read) {
+            const auto [readIt, succeeded] = Reads.insert({readId, std::move(read)});
             YQL_ENSURE(succeeded);
             ReadsPerShard[readIt->second.ShardId].Reads.emplace(readIt->second.Id);
         }
@@ -209,8 +210,11 @@ private:
 
         std::vector<TReadState*> GetShardReads(ui64 shardId) {
             auto it = ReadsPerShard.find(shardId);
-            YQL_ENSURE(it != ReadsPerShard.end());
             std::vector<TReadState*> result;
+            if (it == ReadsPerShard.end()) {
+                return result;
+            }
+
             for(ui64 readId: it->second.Reads) {
                 auto it = Reads.find(readId);
                 YQL_ENSURE(it != Reads.end());
@@ -218,6 +222,18 @@ private:
             }
 
             return result;
+        }
+
+        bool NeedToCreatePipe(ui64 shardId) {
+            return !ReadsPerShard[shardId].HasPipe;
+        }
+
+        void SetPipeCreated(ui64 shardId) {
+            ReadsPerShard[shardId].HasPipe = true;
+        }
+
+        void SetPipeDestroyed(ui64 shardId) {
+            ReadsPerShard[shardId].HasPipe = false;
         }
     };
 
@@ -495,8 +511,17 @@ private:
             request->Record.SetMaxRows(defaultSettings.GetMaxRows());
             request->Record.SetMaxBytes(defaultSettings.GetMaxBytes());
 
-            Send(PipeCacheId, new TEvPipeCache::TEvForward(request.Release(), read.ShardId, true),
+            const bool needToCreatePipe = Reads.NeedToCreatePipe(read.ShardId);
+
+            Send(PipeCacheId,
+                new TEvPipeCache::TEvForward(
+                    request.Release(), read.ShardId, TEvPipeCache::TEvForwardOptions{
+                        .AutoConnect = needToCreatePipe,
+                        .Subscribe = needToCreatePipe,
+                    }),
                 IEventHandle::FlagTrackDelivery);
+
+            Reads.SetPipeCreated(read.ShardId);
 
             CA_LOG_D("TEvReadAck was sent to shard: " << read.ShardId);
 
@@ -518,6 +543,8 @@ private:
         CA_LOG_D("TEvDeliveryProblem was received from tablet: " << ev->Get()->TabletId);
 
         const auto& tabletId = ev->Get()->TabletId;
+
+        Reads.SetPipeDestroyed(tabletId);
 
         TVector<TReadState*> toRetry;
         for (auto* read : Reads.GetShardReads(tabletId)) {
@@ -557,6 +584,7 @@ private:
 
         if ((read.State == EReadState::Running && read.LastSeqNo <= ev->Get()->LastSeqNo) || read.State == EReadState::Blocked) {
             if (ev->Get()->InstantStart) {
+                auto guard = BindAllocator();
                 auto requests = StreamLookupWorker->RebuildRequest(read.Id, ReadId);
                 for (auto& request : requests) {
                     StartTableRead(read.ShardId, std::move(request));
@@ -627,14 +655,27 @@ private:
             << ", lockTxId=" << record.GetLockTxId()
             << ", lockNodeId=" << record.GetLockNodeId());
 
-        Send(PipeCacheId, new TEvPipeCache::TEvForward(request.Release(), shardId, true),
-            IEventHandle::FlagTrackDelivery, 0, LookupActorSpan.GetTraceId());
+        const bool needToCreatePipe = Reads.NeedToCreatePipe(read.ShardId);
+
+        Send(PipeCacheId,
+            new TEvPipeCache::TEvForward(
+                request.Release(),
+                shardId,
+                TEvPipeCache::TEvForwardOptions{
+                    .AutoConnect = needToCreatePipe,
+                    .Subscribe = needToCreatePipe,
+                }),
+            IEventHandle::FlagTrackDelivery,
+            0,
+            LookupActorSpan.GetTraceId());
+
+        Reads.SetPipeCreated(read.ShardId);
 
         read.State = EReadState::Running;
 
         auto readId = read.Id;
         auto lastSeqNo = read.LastSeqNo;
-        Reads.insert(std::move(read));
+        Reads.insert(readId, std::move(read));
 
         if (auto delay = ShardTimeout()) {
             TlsActivationContext->Schedule(
@@ -666,6 +707,7 @@ private:
 
         auto delay = Reads.CalcDelayForShard(failedRead, allowInstantRetry);
         if (delay == TDuration::Zero()) {
+            auto guard = BindAllocator();
             auto requests = StreamLookupWorker->RebuildRequest(failedRead.Id, ReadId);
             for (auto& request : requests) {
                 StartTableRead(failedRead.ShardId, std::move(request));

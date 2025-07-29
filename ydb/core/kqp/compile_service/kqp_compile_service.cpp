@@ -122,15 +122,15 @@ public:
         : Counters(counters)
         , MaxSize(maxSize) {}
 
-    bool Enqueue(TKqpCompileRequest&& request) {
+    std::optional<TKqpCompileRequest> Enqueue(TKqpCompileRequest&& request) {
         if (Size() >= MaxSize) {
-            return false;
+            return request;
         }
 
         Queue.push_back(std::move(request));
         auto it = std::prev(Queue.end());
         QueryIndex[it->Query].insert(it);
-        return true;
+        return std::nullopt;
     }
 
     TMaybe<TKqpCompileRequest> Dequeue(const TInstant& now) {
@@ -292,8 +292,6 @@ private:
 
         bool defaultSyntaxVersion = TableServiceConfig.GetSqlVersion();
 
-        auto indexAutoChooser = TableServiceConfig.GetIndexAutoChooseMode();
-
         ui64 rangesLimit = TableServiceConfig.GetExtractPredicateRangesLimit();
         ui64 idxLookupPointsLimit = TableServiceConfig.GetIdxLookupJoinPointsLimit();
 
@@ -332,6 +330,8 @@ private:
 
         bool enableOlapPushdownProjections = TableServiceConfig.GetEnableOlapPushdownProjections();
 
+        ui32 defaultLangVer = TableServiceConfig.GetDefaultLangVer();
+
         TableServiceConfig.Swap(event.MutableConfig()->MutableTableServiceConfig());
         LOG_INFO(*TlsActivationContext, NKikimrServices::KQP_COMPILE_SERVICE, "Updated config");
 
@@ -342,7 +342,6 @@ private:
             TableServiceConfig.GetEnableKqpScanQueryStreamIdxLookupJoin() != enableKqpScanQueryStreamIdxLookupJoin ||
             TableServiceConfig.GetEnableKqpDataQueryStreamIdxLookupJoin() != enableKqpDataQueryStreamIdxLookupJoin ||
             TableServiceConfig.GetEnableKqpScanQuerySourceRead() != enableKqpScanQuerySourceRead ||
-            TableServiceConfig.GetIndexAutoChooseMode() != indexAutoChooser ||
             TableServiceConfig.GetAllowOlapDataQuery() != allowOlapDataQuery ||
             TableServiceConfig.GetEnableStreamWrite() != enableStreamWrite ||
             TableServiceConfig.GetEnableOlapSink() != enableOlapSink ||
@@ -370,7 +369,8 @@ private:
             TableServiceConfig.GetEnableOlapScalarApply() != enableOlapScalarApply ||
             TableServiceConfig.GetEnableOlapSubstringPushdown() != enableOlapSubstringPushdown ||
             TableServiceConfig.GetEnableIndexStreamWrite() != enableIndexStreamWrite ||
-            TableServiceConfig.GetEnableOlapPushdownProjections() != enableOlapPushdownProjections)
+            TableServiceConfig.GetEnableOlapPushdownProjections() != enableOlapPushdownProjections ||
+            TableServiceConfig.GetDefaultLangVer() != defaultLangVer)
         {
 
             QueryCache->Clear();
@@ -506,7 +506,8 @@ private:
             return CompileByAst(*request.QueryAst, compileRequest, ctx);
         }
 
-        if (!RequestsQueue.Enqueue(std::move(compileRequest))) {
+        auto overflow = RequestsQueue.Enqueue(std::move(compileRequest));
+        if (overflow.has_value()) {
             Counters->ReportCompileRequestRejected(dbCounters);
 
             LOG_WARN_S(ctx, NKikimrServices::KQP_COMPILE_SERVICE, "Requests queue size limit exceeded"
@@ -515,7 +516,8 @@ private:
 
             NYql::TIssue issue(NYql::TPosition(), TStringBuilder() <<
                 "Exceeded maximum number of requests in compile service queue.");
-            ReplyError(ev->Sender, "", Ydb::StatusIds::OVERLOADED, {issue}, ctx, compileRequest.Cookie, std::move(compileRequest.Orbit), std::move(compileRequest.CompileServiceSpan));
+            ReplyError(ev->Sender, "", Ydb::StatusIds::OVERLOADED, {issue},
+                ctx, overflow->Cookie, std::move(overflow->Orbit), std::move(overflow->CompileServiceSpan));
             return;
         }
 
@@ -587,7 +589,8 @@ private:
                 return CompileByAst(*request.QueryAst, compileRequest, ctx);
             }
 
-            if (!RequestsQueue.Enqueue(std::move(compileRequest))) {
+            auto overflow = RequestsQueue.Enqueue(std::move(compileRequest));
+            if (overflow.has_value()) {
                 Counters->ReportCompileRequestRejected(dbCounters);
 
                 LOG_WARN_S(ctx, NKikimrServices::KQP_COMPILE_SERVICE, "Requests queue size limit exceeded"
@@ -596,7 +599,8 @@ private:
 
                 NYql::TIssue issue(NYql::TPosition(), TStringBuilder() <<
                     "Exceeded maximum number of requests in compile service queue.");
-                ReplyError(ev->Sender, "", Ydb::StatusIds::OVERLOADED, {issue}, ctx, compileRequest.Cookie, std::move(compileRequest.Orbit), std::move(compileRequest.CompileServiceSpan));
+                ReplyError(ev->Sender, "", Ydb::StatusIds::OVERLOADED, {issue}, ctx,
+                    overflow->Cookie, std::move(overflow->Orbit), std::move(overflow->CompileServiceSpan));
                 return;
             }
         } else {
@@ -774,21 +778,23 @@ private:
 
         compileRequest.QueryAst = std::move(queryAst);
 
-        if (!RequestsQueue.Enqueue(std::move(compileRequest))) {
-            Counters->ReportCompileRequestRejected(compileRequest.DbCounters);
+        auto sender = compileRequest.Sender;
+        auto overflow = RequestsQueue.Enqueue(std::move(compileRequest));
+        if (overflow.has_value()) {
+            Counters->ReportCompileRequestRejected(overflow->DbCounters);
 
             LOG_WARN_S(ctx, NKikimrServices::KQP_COMPILE_SERVICE, "Requests queue size limit exceeded"
-                << ", sender: " << compileRequest.Sender
+                << ", sender: " << overflow->Sender
                 << ", queueSize: " << RequestsQueue.Size());
 
             NYql::TIssue issue(NYql::TPosition(), TStringBuilder() <<
                 "Exceeded maximum number of requests in compile service queue.");
-            ReplyError(compileRequest.Sender, "", Ydb::StatusIds::OVERLOADED, {issue}, ctx, compileRequest.Cookie, std::move(compileRequest.Orbit), std::move(compileRequest.CompileServiceSpan));
+            ReplyError(overflow->Sender, "", Ydb::StatusIds::OVERLOADED, {issue}, ctx, overflow->Cookie, std::move(overflow->Orbit), std::move(overflow->CompileServiceSpan));
             return;
         }
 
         LOG_DEBUG_S(ctx, NKikimrServices::KQP_COMPILE_SERVICE, "Added request to queue"
-            << ", sender: " << compileRequest.Sender
+            << ", sender: " << sender
             << ", queueSize: " << RequestsQueue.Size());
 
         ProcessQueue(ctx);
@@ -841,7 +847,7 @@ private:
             false, {}, compileResult->ReplayMessageUserView);
         newCompileResult->AllowCache = compileResult->AllowCache;
         newCompileResult->PreparedQuery = compileResult->PreparedQuery;
-        LOG_DEBUG_S(ctx, NKikimrServices::KQP_COMPILE_SERVICE, "Insert preparing query with params, queryId: " << query.SerializeToString());
+        LOG_DEBUG_S(ctx, NKikimrServices::KQP_COMPILE_SERVICE, "Insert preparing query with params, queryId: " << compileResult->Query->SerializeToString());
         return QueryCache->Insert(newCompileResult, TableServiceConfig.GetEnableAstCache(), isPerStatementExecution);
     }
 

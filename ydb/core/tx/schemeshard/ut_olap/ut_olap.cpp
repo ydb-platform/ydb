@@ -44,6 +44,7 @@ static const TString invalidStoreSchema = R"(
     }
 )";
 
+static const TString defaultTableName = "ColumnTable";
 static const TString defaultTableSchema = R"(
     Name: "ColumnTable"
     ColumnShardCount: 1
@@ -1195,6 +1196,82 @@ Y_UNIT_TEST_SUITE(TOlap) {
         WaitTableStats(runtime, shardId);
         CheckQuotaExceedance(runtime, TTestTxConfig::SchemeShard, "/MyRoot/SomeDatabase", false, DEBUG_HINT);
     }
+
+    Y_UNIT_TEST(MoveTableStats) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        runtime.GetAppData().FeatureFlags.SetEnableMoveColumnTable(true);
+
+        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
+        csController->SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(1));
+
+        TActorId sender = runtime.AllocateEdgeActor();
+        {
+            auto& appData = runtime.GetAppData();
+            appData.SchemeShardConfig.SetStatsBatchTimeoutMs(0);
+            appData.SchemeShardConfig.SetStatsMaxBatchSize(0);
+            // apply config via reboot
+            GracefulRestartTablet(runtime, TTestTxConfig::SchemeShard, sender);
+        }
+
+        ui64 txId = 100;
+
+        const auto initialTablePath = "/MyRoot/" + defaultTableName;
+        const auto movedTablePath = "/MyRoot/MovedColumnTable";
+
+        const auto expectedTablePathId = GetNextLocalPathId(runtime, txId);
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot/", defaultTableSchema);
+        env.TestWaitNotification(runtime, txId);
+
+        ui64 pathId = 0;
+        ui64 shardId = 0;
+        auto checkFn = [&](const NKikimrScheme::TEvDescribeSchemeResult& record) {
+            auto& sharding = record.GetPathDescription().GetColumnTableDescription().GetSharding();
+            UNIT_ASSERT_VALUES_EQUAL(record.GetPath(), initialTablePath);
+            pathId = record.GetPathId();
+            UNIT_ASSERT_VALUES_EQUAL(pathId, expectedTablePathId);
+            UNIT_ASSERT_VALUES_EQUAL(sharding.ColumnShardsSize(), 1);
+            shardId = sharding.GetColumnShards()[0];
+        };
+        TestLsPathId(runtime, expectedTablePathId, checkFn);
+        UNIT_ASSERT(shardId);
+
+        const ui32 rowsInBatch = 100000;
+        {   // Write data directly into shard
+            const auto& data = NTxUT::MakeTestBlob({ 0, rowsInBatch }, defaultYdbSchema, {}, { "timestamp" });
+            ui64 writeId = 0;
+            std::vector<ui64> writeIds;
+            txId = 200;
+            NTxUT::WriteData(runtime, sender, shardId, ++writeId, expectedTablePathId, data, defaultYdbSchema, &writeIds,
+                NEvWrite::EModificationType::Upsert, 0);
+        }
+
+        const auto& checkStat = [&](const TString& tablePath) -> bool {
+            for (auto i = 0; i != 60; ++i) {
+                runtime.SimulateSleep(TDuration::Seconds(1));
+                auto description = DescribePrivatePath(runtime, TTestTxConfig::SchemeShard, tablePath);
+                auto& tabletStats = description.GetPathDescription().GetTableStats();
+                if (tabletStats.GetRowCount() == rowsInBatch) {
+                    return true;
+                }
+            }
+            return false;
+        };
+
+        UNIT_ASSERT(checkStat(initialTablePath));
+
+        const auto expectedMovedTablePathId = GetNextLocalPathId(runtime, txId);
+
+        TestMoveTable(runtime, ++txId, initialTablePath, movedTablePath);
+
+        env.TestWaitNotification(runtime, txId);
+
+        TestLs(runtime, initialTablePath, false, NLs::PathNotExist);
+
+        TestLsPathId(runtime, expectedMovedTablePathId, NLs::PathStringEqual(movedTablePath));
+
+        UNIT_ASSERT(checkStat(movedTablePath));
+    }
 }
 
 Y_UNIT_TEST_SUITE(TOlapNaming) {
@@ -1205,6 +1282,20 @@ Y_UNIT_TEST_SUITE(TOlapNaming) {
         ui64 txId = 100;
 
         TString allowedChars = "_-0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
+
+        TString tableSchema = Sprintf(tableSchemaFormat.c_str(), allowedChars.c_str());
+
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot", tableSchema, {NKikimrScheme::StatusAccepted});
+        env.TestWaitNotification(runtime, txId);
+    }
+
+    Y_UNIT_TEST(CreateColumnTableExtraSymbolsOk) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        runtime.GetAppData().ColumnShardConfig.SetAllowExtraSymbolsForColumnTableColumns(true);
+        ui64 txId = 100;
+
+        TString allowedChars = "@_-0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
 
         TString tableSchema = Sprintf(tableSchemaFormat.c_str(), allowedChars.c_str());
 

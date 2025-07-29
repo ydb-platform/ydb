@@ -104,6 +104,11 @@ struct TEvTablet {
         EvGcForStepAckRequest, // from executer to sys tablet
         EvGcForStepAckResponse, // from sys tablet to executer
 
+        // between tablet resolver and sys tablet
+        EvTabletStateSubscribe = EvBoot + 3328,
+        EvTabletStateUnsubscribe,
+        EvTabletStateUpdate,
+
         EvEnd
     };
 
@@ -910,6 +915,43 @@ struct TEvTablet {
             , Status(status)
             , ErrorReason(std::move(errorReason))
         {}
+    };
+
+    struct TEvTabletStateSubscribe : TEventPB<TEvTabletStateSubscribe, NKikimrTabletBase::TEvTabletStateSubscribe, EvTabletStateSubscribe> {
+        TEvTabletStateSubscribe() = default;
+
+        TEvTabletStateSubscribe(ui64 tabletId, ui64 seqNo) {
+            Record.SetTabletId(tabletId);
+            Record.SetSeqNo(seqNo);
+        }
+    };
+
+    struct TEvTabletStateUnsubscribe : TEventPB<TEvTabletStateUnsubscribe, NKikimrTabletBase::TEvTabletStateUnsubscribe, EvTabletStateUnsubscribe> {
+        TEvTabletStateUnsubscribe() = default;
+
+        TEvTabletStateUnsubscribe(ui64 tabletId, ui64 seqNo) {
+            Record.SetTabletId(tabletId);
+            Record.SetSeqNo(seqNo);
+        }
+    };
+
+    struct TEvTabletStateUpdate : TEventPB<TEvTabletStateUpdate, NKikimrTabletBase::TEvTabletStateUpdate, EvTabletStateUpdate> {
+        using EState = NKikimrTabletBase::TEvTabletStateUpdate::EState;
+
+        TEvTabletStateUpdate() = default;
+
+        TEvTabletStateUpdate(ui64 tabletId, ui64 seqNo, EState state, const TActorId& userActorId = {}) {
+            Record.SetTabletId(tabletId);
+            Record.SetSeqNo(seqNo);
+            Record.SetState(state);
+            if (userActorId) {
+                ActorIdToProto(userActorId, Record.MutableUserActorId());
+            }
+        }
+
+        TActorId GetUserActorId() const {
+            return ActorIdFromProto(Record.GetUserActorId());
+        }
     };
 };
 

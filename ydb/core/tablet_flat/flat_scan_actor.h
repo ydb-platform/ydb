@@ -188,8 +188,8 @@ namespace NOps {
             }
 
             void RunLoader() {
-                for (auto req : Loader->Run({.PreloadIndex = false, .PreloadData = false})) {
-                    Send(MakeSharedPageCacheId(), new NSharedCache::TEvRequest(ReadPriority, req));
+                if (auto fetch = Loader->Run({.PreloadIndex = false, .PreloadData = false})) {
+                    Send(MakeSharedPageCacheId(), new NSharedCache::TEvRequest(ReadPriority, std::move(fetch.PageCollection), std::move(fetch.Pages)));
                     ++ReadsLeft;
                 }
 
@@ -217,7 +217,8 @@ namespace NOps {
                 --ReadsLeft;
 
                 Y_ENSURE(Loader);
-                Loader->Save(msg->Cookie, msg->Pages);
+                Y_ENSURE(msg->Cookie == 0);
+                Loader->Save(std::move(msg->Pages));
 
                 if (ReadsLeft == 0) {
                     RunLoader();
@@ -485,11 +486,14 @@ namespace NOps {
                     return;
                 }
 
-                while (auto req = Cache->GrabFetches()) {
-                    if (auto logl = Logger->Log(ELnLev::Debug))
-                        logl << NFmt::Do(*this) << " Fetches " << req->DebugString();
+                while (auto fetch = Cache->GetFetch()) {
+                    if (auto logl = Logger->Log(ELnLev::Debug)) {
+                        logl << NFmt::Do(*this) << " Fetches page collection " << fetch.PageCollection->Label()
+                            << " pages " << fetch.Pages.size()
+                            << " cookie " << fetch.Cookie;
+                    }
 
-                    Send(MakeSharedPageCacheId(), new NSharedCache::TEvRequest(Args.ReadPrio, req));
+                    Send(MakeSharedPageCacheId(), new NSharedCache::TEvRequest(Args.ReadPrio, std::move(fetch.PageCollection), std::move(fetch.Pages), fetch.Cookie));
                 }
 
                 if (ready == NTable::EReady::Page)
@@ -619,7 +623,7 @@ namespace NOps {
                 return Terminate(EStatus::StorageError);
             }
 
-            Cache->DoSave(std::move(msg.PageCollection), msg.Cookie, std::move(msg.Pages));
+            Cache->Save(std::move(msg.PageCollection), msg.Cookie, std::move(msg.Pages));
 
             if (MayProgress()) {
                 Spent->Alter(true /* resource available again */);

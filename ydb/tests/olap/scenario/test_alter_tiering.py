@@ -30,6 +30,7 @@ from moto.server import ThreadedMotoServer
 import boto3
 import datetime
 import random
+import os
 from typing import Iterable
 from string import ascii_lowercase
 
@@ -124,8 +125,8 @@ class TieringTestBase(BaseTestSet):
         LOGGER.info('Initializing test parameters')
         self.s3_endpoint = get_external_param('s3-endpoint', '')
         self.s3_buckets = list(get_external_param('s3-buckets', 'ydb-tiering-test-1,ydb-tiering-test-2').split(','))
-        self.s3_access_key = get_external_param('s3-access-key', 'access_key')
-        self.s3_secret_key = get_external_param('s3-secret-key', 'secret_key')
+        self.s3_access_key = os.getenv('S3_ACCESS_KEY', 'access_key')
+        self.s3_secret_key = os.getenv('S3_SECRET_KEY', 'secret_key')
 
         assert len(self.s3_buckets) == 2, len(self.s3_buckets)
 

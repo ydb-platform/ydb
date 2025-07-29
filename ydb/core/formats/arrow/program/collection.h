@@ -47,6 +47,11 @@ private:
     THashSet<i64> Markers;
 
 public:
+    void TakeSequenceFrom(const TAccessorsCollection& collection) {
+        AFL_VERIFY(ColumnIdsSequence.empty() || ColumnIdsSequence == collection.ColumnIdsSequence);
+        ColumnIdsSequence = collection.ColumnIdsSequence;
+    }
+
     bool HasMarker(const i64 marker) const {
         return Markers.contains(marker);
     }
@@ -444,8 +449,8 @@ public:
         return std::min(Filter->GetFilteredCount().value_or(recordsCount), defLimit);
     }
 
-    std::shared_ptr<NArrow::TColumnFilter> GetAppliedFilter() const {
-        return UseFilter ? Filter : nullptr;
+    const std::shared_ptr<NArrow::TColumnFilter>& GetAppliedFilter() const {
+        return UseFilter ? Filter : Default<std::shared_ptr<NArrow::TColumnFilter>>();
     }
 
     std::shared_ptr<NArrow::TColumnFilter> GetNotAppliedFilter() const {

@@ -45,6 +45,9 @@ void TExtensionWhoami::PatchResponse(NJson::TJsonValue& json, NJson::TJsonValue&
     TString messageOverride;
     NJson::TJsonValue* outJson = nullptr;
 
+    SetCORS(Context->Params->Request, Context->Params->HeadersOverride.Get());
+    Context->Params->HeadersOverride->Set("Content-Type", "application/json; charset=utf-8");
+
     if (json.Has(USER_SID) && json.Has(ORIGINAL_USER_TOKEN)) {
         statusOverride = "200";
         messageOverride = "OK";
@@ -62,7 +65,7 @@ void TExtensionWhoami::PatchResponse(NJson::TJsonValue& json, NJson::TJsonValue&
         }
         outJson = &errorJson;
     }
-    Context->Params->HeadersOverride->Set("Content-Type", "application/json; charset=utf-8");
+
     TStringStream content;
     NJson::WriteJson(&content, outJson, {
         .FloatToStringMode = EFloatToStringMode::PREC_NDIGITS,

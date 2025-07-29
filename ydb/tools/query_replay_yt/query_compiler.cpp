@@ -273,7 +273,6 @@ public:
     {
         Config->EnableAntlr4Parser = enableAntlr4Parser;
         Config->DefaultCostBasedOptimizationLevel = 2;
-        Config->IndexAutoChooserMode = NKikimrConfig::TTableServiceConfig_EIndexAutoChooseMode::TTableServiceConfig_EIndexAutoChooseMode_MAX_USED_PREFIX;
     }
 
     void Bootstrap() {

@@ -3,6 +3,7 @@
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/blobstorage.h>
+#include <ydb/core/base/memory_controller_iface.h>
 #include <ydb/core/base/tablet_pipe.h>
 
 #include <ydb/library/actors/core/actor.h>
@@ -134,6 +135,8 @@ private:
     const TCounterPtr ReadRequests;
     const TCounterPtr ReadsInQueue;
 
+    TIntrusivePtr<NMemory::IMemoryConsumer> MemoryConsumer;
+
 public:
     static constexpr auto ActorActivityType() {
         return NKikimrServices::TActivity::BLOB_CACHE_ACTOR;
@@ -178,6 +181,8 @@ public:
         LOG_S_NOTICE("MaxCacheDataSize: " << (i64)MaxCacheDataSize
             << " InFlightDataSize: " << (i64)InFlightDataSize);
 
+        Send(NMemory::MakeMemoryControllerId(), new NMemory::TEvConsumerRegister(NMemory::EMemoryConsumerKind::BlobCache));
+
         Become(&TBlobCache::StateFunc);
         ScheduleWakeup();
     }
@@ -191,10 +196,11 @@ private:
             HFunc(TEvBlobCache::TEvReadBlobRangeBatch, Handle);
             HFunc(TEvBlobCache::TEvCacheBlobRange, Handle);
             HFunc(TEvBlobCache::TEvForgetBlob, Handle);
-            HFunc(TEvBlobCache::TEvUpdateMaxCacheDataSize, Handle);
             HFunc(TEvBlobStorage::TEvGetResult, Handle);
             HFunc(TEvTabletPipe::TEvClientConnected, Handle);
             HFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
+            HFunc(NMemory::TEvConsumerRegistered, Handle);
+            HFunc(NMemory::TEvConsumerLimit, Handle);
         default:
             LOG_S_WARN("Unhandled event type: " << ev->GetTypeRewrite()
                        << " event: " << ev->ToString());
@@ -332,10 +338,16 @@ private:
         }
 
         CachedRanges.erase(begin, end);
+
+        UpdateConsumption();
     }
 
-    void Handle(TEvBlobCache::TEvUpdateMaxCacheDataSize::TPtr& ev, const TActorContext&) {
-        const i64 newMaxCacheDataSize = ev->Get()->MaxCacheDataSize;
+    void Handle(NMemory::TEvConsumerRegistered::TPtr& ev, const TActorContext&) {
+        MemoryConsumer = std::move(ev->Get()->Consumer);
+    }
+
+    void Handle(NMemory::TEvConsumerLimit::TPtr& ev, const TActorContext&) {
+        const i64 newMaxCacheDataSize = ev->Get()->LimitBytes;
         if (newMaxCacheDataSize == (i64)MaxCacheDataSize) {
             return;
         }
@@ -343,6 +355,14 @@ private:
         LOG_S_DEBUG("Updating max cache data size: " << newMaxCacheDataSize);
 
         MaxCacheDataSize = newMaxCacheDataSize;
+    }
+
+    void UpdateConsumption() {
+        if (!MemoryConsumer) {
+            return;
+        }
+
+        MemoryConsumer->SetConsumption(CacheDataSize);
     }
 
     void SendBatchReadRequestToDS(const std::vector<TBlobRange>& blobRanges, const ui64 cookie,
@@ -579,6 +599,8 @@ private:
             SizeBytes->Add(blobRange.Size);
             SizeBlobs->Inc();
         }
+
+        UpdateConsumption();
     }
 
     void Evict(const TActorContext&) {
@@ -603,6 +625,8 @@ private:
             SizeBytes->Set(CacheDataSize);
             SizeBlobs->Set(Cache.Size());
         }
+
+        UpdateConsumption();
     }
 };
 

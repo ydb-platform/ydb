@@ -7,6 +7,12 @@ namespace NKikimr::NMemory {
 enum class EMemoryConsumerKind {
     SharedCache,
     MemTable,
+    ScanGroupedMemoryLimiter,
+    CompGroupedMemoryLimiter,
+    BlobCache,
+    DataAccessorCache,
+    ColumnDataCache,
+    DeduplicationGroupedMemoryLimiter,
 };
 
 struct IMemoryConsumer : public TThrRefBase {
@@ -17,7 +23,7 @@ enum EEvMemory {
     EvConsumerRegister = EventSpaceBegin(TKikimrEvents::ES_MEMORY),
     EvConsumerRegistered,
     EvConsumerLimit,
-    
+
     EvMemTableRegister,
     EvMemTableRegistered,
     EvMemTableCompact,
@@ -49,8 +55,8 @@ struct TEvConsumerLimit : public TEventLocal<TEvConsumerLimit, EvConsumerLimit> 
     ui64 LimitBytes;
 
     TEvConsumerLimit(ui64 limitBytes)
-        : LimitBytes(limitBytes)
-    {}
+        : LimitBytes(limitBytes) {
+    }
 };
 
 struct TEvMemTableRegister : public TEventLocal<TEvMemTableRegister, EvMemTableRegister> {

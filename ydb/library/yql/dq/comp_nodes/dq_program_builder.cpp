@@ -20,7 +20,7 @@ TCallableBuilder TDqProgramBuilder::BuildCommonCombinerParams(
     const TProgramBuilder::TTernaryWideLambda& update,
     const TProgramBuilder::TBinaryWideLambda& finish)
 {
-    const auto wideComponents = GetWideComponents(AS_TYPE(TFlowType, flow.GetStaticType()));
+    const auto wideComponents = GetWideComponents(AS_TYPE(TStreamType, flow.GetStaticType()));
 
     std::vector<TType*> unblockedWideComponents;
     bool hasBlocks = UnwrapBlockTypes(wideComponents, unblockedWideComponents);
@@ -69,7 +69,7 @@ TCallableBuilder TDqProgramBuilder::BuildCommonCombinerParams(
         outputWideComponents.push_back(blockSizeBlockType);
     }
 
-    TCallableBuilder callableBuilder(GetTypeEnvironment(), operatorName, NewFlowType(NewMultiType(outputWideComponents)));
+    TCallableBuilder callableBuilder(GetTypeEnvironment(), operatorName, NewStreamType(NewMultiType(outputWideComponents)));
 
     callableBuilder.Add(flow);
     callableBuilder.Add(operatorParams);

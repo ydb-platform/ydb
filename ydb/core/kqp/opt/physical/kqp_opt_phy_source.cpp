@@ -6,6 +6,8 @@
 
 #include <ydb/public/lib/scheme_types/scheme_type_id.h>
 
+#include <ydb/library/yql/dq/type_ann/dq_type_ann.h>
+
 #include <ydb/library/yql/dq/opt/dq_opt.h>
 #include <yql/essentials/core/yql_opt_utils.h>
 
@@ -72,6 +74,11 @@ TExprBase KqpRewriteReadTable(TExprBase node, TExprContext& ctx, const TKqpOptim
         return node;
     }
 
+    bool stageContainsEmptyProgram = true;
+    if (stage.Program().Body().Raw() != matched->Expr.Raw()) {
+        stageContainsEmptyProgram = false;
+    }
+
     auto& tableDesc = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, matched->Table.Path());
     if (!UseSource(kqpCtx, tableDesc)) {
         return node;
@@ -107,6 +114,7 @@ TExprBase KqpRewriteReadTable(TExprBase node, TExprContext& ctx, const TKqpOptim
         settings.ItemsLimit = nullptr;
 
         matched->Settings = settings.BuildNode(ctx, matched->Settings.Pos());
+        stageContainsEmptyProgram = false;
     }
 
     if (kqpCtx.Config->HasMaxSequentialReadsInFlight()) {
@@ -141,6 +149,7 @@ TExprBase KqpRewriteReadTable(TExprBase node, TExprContext& ctx, const TKqpOptim
             .Ptr();
 
     if (skipNullColumns) {
+        stageContainsEmptyProgram = false;
         replaceExpr =
             Build<TCoExtractMembers>(ctx, node.Pos())
                 .Members(selectColumns)
@@ -152,6 +161,7 @@ TExprBase KqpRewriteReadTable(TExprBase node, TExprContext& ctx, const TKqpOptim
     }
 
     if (limit) {
+        stageContainsEmptyProgram = false;
         limit = ctx.ReplaceNodes(std::move(limit), argReplaces);
         replaceExpr =
             Build<TCoTake>(ctx, node.Pos())
@@ -177,10 +187,19 @@ TExprBase KqpRewriteReadTable(TExprBase node, TExprContext& ctx, const TKqpOptim
         .Done();
     inputs.insert(inputs.begin(), TExprBase(ctx.ReplaceNodes(source.Ptr(), sourceReplaces)));
 
+    if (settings.IsSorted()) {
+        stageContainsEmptyProgram = false;
+    }
+
+    TDqStageSettings newSettings = TDqStageSettings::Parse(stage);
+    if (stageContainsEmptyProgram) {
+        newSettings.SetPartitionMode(TDqStageSettings::EPartitionMode::Single);
+    }
+
     return Build<TDqStage>(ctx, stage.Pos())
         .Inputs().Add(inputs).Build()
         .Outputs(stage.Outputs())
-        .Settings(stage.Settings())
+        .Settings(newSettings.BuildNode(ctx, stage.Pos()))
         .Program()
             .Args(args)
             .Body(ctx.ReplaceNodes(stage.Program().Body().Ptr(), argReplaces))

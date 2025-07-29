@@ -59,7 +59,7 @@ public:
     {}
 
     void Bootstrap() {
-        if (TempTablesState.TempTables.empty()) {
+        if (TempTablesState.TempTables.empty() && !TempTablesState.HasCreateTableAs) {
             Finish();
             return;
         }

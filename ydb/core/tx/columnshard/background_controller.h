@@ -20,6 +20,7 @@ private:
     bool ActiveCleanupPortions = false;
     bool ActiveCleanupTables = false;
     bool ActiveCleanupInsertTable = false;
+    bool ActiveCleanupSchemas = false;
     YDB_READONLY(TMonotonic, LastIndexationInstant, TMonotonic::Zero());
 public:
     TBackgroundController(std::shared_ptr<TBackgroundControllerCounters> counters)
@@ -27,6 +28,20 @@ public:
     }
     THashSet<NOlap::TPortionAddress> GetConflictTTLPortions() const;
     THashSet<NOlap::TPortionAddress> GetConflictCompactionPortions() const;
+
+    bool IsCleanupSchemasActive() const {
+        return ActiveCleanupSchemas;
+    }
+
+    void OnCleanupSchemasStarted() {
+        AFL_VERIFY(!ActiveCleanupSchemas);
+        ActiveCleanupSchemas = true;
+    }
+
+    void OnCleanupSchemasFinished() {
+        AFL_VERIFY(ActiveCleanupSchemas);
+        ActiveCleanupSchemas = false;
+    }
 
     void UpdateWaitingPriority(const ui64 priority) {
         if (!WaitingCompactionPriority || *WaitingCompactionPriority < priority) {

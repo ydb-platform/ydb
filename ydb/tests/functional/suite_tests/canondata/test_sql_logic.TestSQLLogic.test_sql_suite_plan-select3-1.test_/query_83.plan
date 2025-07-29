@@ -111,12 +111,6 @@
                                                                         "Name": "TableFullScan",
                                                                         "Path": "/Root/sqllogictest_select3-1.test_plan/t1",
                                                                         "ReadColumns": [
-                                                                            "a",
-                                                                            "b",
-                                                                            "c",
-                                                                            "d"
-                                                                        ],
-                                                                        "ReadRanges": [
                                                                             "a (-\u221e, +\u221e)",
                                                                             "b (-\u221e, +\u221e)",
                                                                             "c (-\u221e, +\u221e)",
@@ -239,12 +233,6 @@
                                                         "Name": "TableFullScan",
                                                         "Path": "/Root/sqllogictest_select3-1.test_plan/t1",
                                                         "ReadColumns": [
-                                                            "a",
-                                                            "b",
-                                                            "c",
-                                                            "d"
-                                                        ],
-                                                        "ReadRanges": [
                                                             "a (-\u221e, +\u221e)",
                                                             "b (-\u221e, +\u221e)",
                                                             "c (-\u221e, +\u221e)",

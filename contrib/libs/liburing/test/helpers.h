@@ -31,7 +31,7 @@ enum t_test_result {
  * To avoid making large changes in tests, define a helper
  * function that wraps posix_memalign as our own aligned_alloc.
  */
-void *aligned_alloc(size_t alignment, size_t size);
+void *t_aligned_alloc(size_t alignment, size_t size);
 
 /*
  * Helper for binding socket to an ephemeral port.

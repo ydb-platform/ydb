@@ -47,7 +47,7 @@ TQuery::TQuery(const TQueryId& id, const TStaticAttributes& attrs)
 }
 
 NSnapshot::TQuery* TQuery::TakeSnapshot() const {
-    auto* newQuery = new NSnapshot::TQuery(GetId(), const_cast<TQuery*>(this));
+    auto* newQuery = new NSnapshot::TQuery(std::get<TQueryId>(GetId()), const_cast<TQuery*>(this));
     newQuery->Demand = Demand.load();
     return newQuery;
 }
@@ -56,14 +56,14 @@ NSnapshot::TQuery* TQuery::TakeSnapshot() const {
 // TPool
 ///////////////////////////////////////////////////////////////////////////////
 
-TPool::TPool(const TString& id, const TIntrusivePtr<TKqpCounters>& counters, const TStaticAttributes& attrs)
+TPool::TPool(const TPoolId& id, const TIntrusivePtr<TKqpCounters>& counters, const TStaticAttributes& attrs)
     : Id(id)
 {
     Update(attrs);
 
     Y_ENSURE(counters);
 
-    auto group = counters->GetKqpCounters()->GetSubgroup("scheduler/pool", Id);
+    auto group = counters->GetKqpCounters()->GetSubgroup("scheduler/pool", id);
 
     // TODO: since counters don't support float-point values, then use CPU * 1'000'000 to account with microsecond precision
 
@@ -84,7 +84,7 @@ TPool::TPool(const TString& id, const TIntrusivePtr<TKqpCounters>& counters, con
 }
 
 NSnapshot::TPool* TPool::TakeSnapshot() const {
-    auto* newPool = new NSnapshot::TPool(GetId(), Counters, *this);
+    auto* newPool = new NSnapshot::TPool(std::get<TPoolId>(GetId()), Counters, *this);
 
     Counters.Limit->Set(GetLimit() * 1'000'000);
     Counters.Guarantee->Set(GetGuarantee() * 1'000'000);
@@ -104,8 +104,8 @@ NSnapshot::TPool* TPool::TakeSnapshot() const {
 }
 
 void TPool::AddQuery(const TQueryPtr& query) {
-    Y_ENSURE(!Queries.contains(query->GetId()));
-    Queries.emplace(query->GetId(), query);
+    Y_ENSURE(!Queries.contains(std::get<TQueryId>(query->GetId())));
+    Queries.emplace(std::get<TQueryId>(query->GetId()), query);
     AddChild(query);
 
     query->Delay = Counters.Delay;
@@ -127,14 +127,14 @@ TQueryPtr TPool::GetQuery(const TQueryId& queryId) const {
 // TDatabase
 ///////////////////////////////////////////////////////////////////////////////
 
-TDatabase::TDatabase(const TString& id, const TStaticAttributes& attrs)
+TDatabase::TDatabase(const TDatabaseId& id, const TStaticAttributes& attrs)
     : Id(id)
 {
     Update(attrs);
 }
 
 NSnapshot::TDatabase* TDatabase::TakeSnapshot() const {
-    auto* newDatabase = new NSnapshot::TDatabase(GetId(), *this);
+    auto* newDatabase = new NSnapshot::TDatabase(std::get<TDatabaseId>(GetId()), *this);
     for (const auto& child : Children) {
         newDatabase->AddPool(std::shared_ptr<NSnapshot::TPool>(std::dynamic_pointer_cast<TPool>(child)->TakeSnapshot()));
     }
@@ -142,13 +142,13 @@ NSnapshot::TDatabase* TDatabase::TakeSnapshot() const {
 }
 
 void TDatabase::AddPool(const TPoolPtr& pool) {
-    Y_ENSURE(!Pools.contains(pool->GetId()));
-    Pools.emplace(pool->GetId(), pool);
+    Y_ENSURE(!Pools.contains(std::get<TPoolId>(pool->GetId())));
+    Pools.emplace(std::get<TPoolId>(pool->GetId()), pool);
     AddChild(pool);
 }
 
-TPoolPtr TDatabase::GetPool(const TString& poolId) const {
-    auto it = Pools.find(poolId);
+TPoolPtr TDatabase::GetPool(const TPoolId& id) const {
+    auto it = Pools.find(id);
     return it == Pools.end() ? nullptr : it->second;
 }
 
@@ -162,12 +162,12 @@ TRoot::TRoot(TIntrusivePtr<TKqpCounters> counters) {
 }
 
 void TRoot::AddDatabase(const TDatabasePtr& database) {
-    Y_ENSURE(!Databases.contains(database->GetId()));
-    Databases.emplace(database->GetId(), database);
+    Y_ENSURE(!Databases.contains(std::get<TDatabaseId>(database->GetId())));
+    Databases.emplace(std::get<TDatabaseId>(database->GetId()), database);
     AddChild(database);
 }
 
-TDatabasePtr TRoot::GetDatabase(const TString& id) const {
+TDatabasePtr TRoot::GetDatabase(const TDatabaseId& id) const {
     auto it = Databases.find(id);
     return it == Databases.end() ? nullptr : it->second;
 }

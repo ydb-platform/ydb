@@ -165,7 +165,7 @@ TYtConfiguration::TYtConfiguration(TTypeAnnotationContext& typeCtx)
             Y_UNUSED(cluster);
             UseNativeYtTypes = value;
         })
-        .Warning("Pragma UseTypeV2 is deprecated. Use UseNativeYtTypes instead");
+        .Deprecated("Pragma UseTypeV2 is deprecated. Use UseNativeYtTypes instead");
     REGISTER_SETTING(*this, UseNativeYtTypes);
     REGISTER_SETTING(*this, UseNativeDescSort);
     REGISTER_SETTING(*this, UseIntermediateSchema).Deprecated();
@@ -295,7 +295,7 @@ TYtConfiguration::TYtConfiguration(TTypeAnnotationContext& typeCtx)
             Y_UNUSED(cluster);
             MaxInputTables = value;
         })
-        .Warning("Pragma ExtendTableLimit is deprecated. Use MaxInputTables instead");
+        .Deprecated("Pragma ExtendTableLimit is deprecated. Use MaxInputTables instead");
     REGISTER_SETTING(*this, CommonJoinCoreLimit);
     REGISTER_SETTING(*this, CombineCoreLimit).Lower(1_MB); // Min 1Mb
     REGISTER_SETTING(*this, SwitchLimit).Lower(1_MB); // Min 1Mb
@@ -334,7 +334,7 @@ TYtConfiguration::TYtConfiguration(TTypeAnnotationContext& typeCtx)
                 JoinCollectColumnarStatistics = EJoinCollectColumnarStatisticsMode::Disable;
             }
         })
-        .Warning("Pragma JoinUseColumnarStatistics is deprecated. Use JoinCollectColumnarStatistics instead");
+        .Deprecated("Pragma JoinUseColumnarStatistics is deprecated. Use JoinCollectColumnarStatistics instead");
     REGISTER_SETTING(*this, JoinCollectColumnarStatistics)
         .Parser([](const TString& v) { return FromString<EJoinCollectColumnarStatisticsMode>(v); });
     REGISTER_SETTING(*this, JoinColumnarStatisticsFetcherMode)
@@ -468,6 +468,7 @@ TYtConfiguration::TYtConfiguration(TTypeAnnotationContext& typeCtx)
     REGISTER_SETTING(*this, JoinCommonUseMapMultiOut);
     REGISTER_SETTING(*this, _EnableYtPartitioning);
     REGISTER_SETTING(*this, EnableDynamicStoreReadInDQ);
+    REGISTER_SETTING(*this, UseDefaultArrowAllocatorInJobs);
     REGISTER_SETTING(*this, UseAggPhases);
     REGISTER_SETTING(*this, UsePartitionsByKeysForFinalAgg);
     REGISTER_SETTING(*this, ForceJobSizeAdjuster);

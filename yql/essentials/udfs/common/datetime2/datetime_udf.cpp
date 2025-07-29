@@ -1,11 +1,15 @@
 #include <yql/essentials/minikql/mkql_type_ops.h>
-#include <yql/essentials/public/udf/udf_helpers.h>
 #include <yql/essentials/minikql/datetime/datetime.h>
 #include <yql/essentials/minikql/datetime/datetime64.h>
 
+#include <yql/essentials/public/udf/udf_helpers.h>
 #include <yql/essentials/public/udf/arrow/udf_arrow_helpers.h>
 
+#include <yql/essentials/public/langver/yql_langver.h>
+
 #include <util/datetime/base.h>
+
+#include <concepts>
 
 using namespace NKikimr;
 using namespace NUdf;
@@ -131,11 +135,15 @@ const auto UsecondsInMinute = 60000000ll;
 const auto UsecondsInSecond = 1000000ll;
 const auto UsecondsInMilliseconds = 1000ll;
 
-template <const char* TFuncName, typename TResult, typename TWResult, ui32 ScaleAfterSeconds>
+template <
+    const char* TFuncName,
+    std::integral TResult,
+    std::integral TSignedResult,
+    std::integral TWResult,
+    ui32 ScaleAfterSeconds>
 class TToUnits {
 public:
     typedef bool TTypeAwareMarker;
-    using TSignedResult = typename std::make_signed<TResult>::type;
 
     static TResult DateCore(ui16 value) {
         return value * ui32(86400) * TResult(ScaleAfterSeconds);
@@ -775,7 +783,7 @@ TUnboxedValuePod DoAddYears(const TUnboxedValuePod& date, i64 years, const NUdf:
                 Split(arg, Reference<TMResourceName>(res), *valueBuilder);
                 sink(res);
             } catch (const std::exception& e) {
-                UdfTerminate((TStringBuilder() << e.what()).data());
+                UdfTerminate((TStringBuilder() << e.what()).c_str());
             }
         }
     };
@@ -920,7 +928,7 @@ TUnboxedValuePod DoAddYears(const TUnboxedValuePod& date, i64 years, const NUdf:
             storage.FromDate(builder, args[0].Get<ui16>());
             return result;
         } catch (const std::exception& e) {
-            UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data());
+            UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).c_str());
         }
     }
 
@@ -937,7 +945,7 @@ TUnboxedValuePod DoAddYears(const TUnboxedValuePod& date, i64 years, const NUdf:
             storage.FromDate32(valueBuilder->GetDateBuilder(), args[0].Get<i32>());
             return result;
         } catch (const std::exception& e) {
-            UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data());
+            UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).c_str());
         }
     }
 
@@ -955,7 +963,7 @@ TUnboxedValuePod DoAddYears(const TUnboxedValuePod& date, i64 years, const NUdf:
             storage.FromDatetime(builder, args[0].Get<ui32>());
             return result;
         } catch (const std::exception& e) {
-            UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data());
+            UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).c_str());
         }
     }
 
@@ -972,7 +980,7 @@ TUnboxedValuePod DoAddYears(const TUnboxedValuePod& date, i64 years, const NUdf:
             storage.FromDatetime64(valueBuilder->GetDateBuilder(), args[0].Get<i64>());
             return result;
         } catch (const std::exception& e) {
-            UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data());
+            UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).c_str());
         }
     }
 
@@ -990,7 +998,7 @@ TUnboxedValuePod DoAddYears(const TUnboxedValuePod& date, i64 years, const NUdf:
             storage.FromTimestamp(builder, args[0].Get<ui64>());
             return result;
         } catch (const std::exception& e) {
-            UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data());
+            UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).c_str());
         }
     }
 
@@ -1007,7 +1015,7 @@ TUnboxedValuePod DoAddYears(const TUnboxedValuePod& date, i64 years, const NUdf:
             storage.FromTimestamp64(valueBuilder->GetDateBuilder(), args[0].Get<i64>());
             return result;
         } catch (const std::exception& e) {
-            UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data());
+            UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).c_str());
         }
     }
 
@@ -1025,7 +1033,7 @@ TUnboxedValuePod DoAddYears(const TUnboxedValuePod& date, i64 years, const NUdf:
             storage.FromDate(builder, args[0].Get<ui16>(), args[0].GetTimezoneId());
             return result;
         } catch (const std::exception& e) {
-            UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data());
+            UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).c_str());
         }
     }
 
@@ -1043,7 +1051,7 @@ TUnboxedValuePod DoAddYears(const TUnboxedValuePod& date, i64 years, const NUdf:
             storage.FromDate32(builder, args[0].Get<i32>(), args[0].GetTimezoneId());
             return result;
         } catch (const std::exception& e) {
-            UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data());
+            UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).c_str());
         }
     }
 
@@ -1062,7 +1070,7 @@ TUnboxedValuePod DoAddYears(const TUnboxedValuePod& date, i64 years, const NUdf:
             storage.FromDatetime(builder, args[0].Get<ui32>(), args[0].GetTimezoneId());
             return result;
         } catch (const std::exception& e) {
-            UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data());
+            UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).c_str());
         }
     }
 
@@ -1080,7 +1088,7 @@ TUnboxedValuePod DoAddYears(const TUnboxedValuePod& date, i64 years, const NUdf:
             storage.FromDatetime64(builder, args[0].Get<i64>(), args[0].GetTimezoneId());
             return result;
         } catch (const std::exception& e) {
-            UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data());
+            UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).c_str());
         }
     }
 
@@ -1099,7 +1107,7 @@ TUnboxedValuePod DoAddYears(const TUnboxedValuePod& date, i64 years, const NUdf:
             storage.FromTimestamp(builder, args[0].Get<ui64>(), args[0].GetTimezoneId());
             return result;
         } catch (const std::exception& e) {
-            UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data());
+            UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).c_str());
         }
     }
 
@@ -1117,7 +1125,7 @@ TUnboxedValuePod DoAddYears(const TUnboxedValuePod& date, i64 years, const NUdf:
             storage.FromTimestamp64(builder, args[0].Get<i64>(), args[0].GetTimezoneId());
             return result;
         } catch (const std::exception& e) {
-            UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data());
+            UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).c_str());
         }
     }
 
@@ -1204,7 +1212,7 @@ TUnboxedValuePod DoAddYears(const TUnboxedValuePod& date, i64 years, const NUdf:
             UdfTerminate((TStringBuilder() << Pos_ << "Timestamp "
                                            << storage.ToString()
                                            << " cannot be casted to TzDate"
-            ).data());
+            ).c_str());
         }
     }
     END_SIMPLE_ARROW_UDF(TMakeTzDate, TMakeDateKernelExec<TTzDate>::Do);
@@ -1263,7 +1271,7 @@ TUnboxedValuePod DoAddYears(const TUnboxedValuePod& date, i64 years, const NUdf:
             UdfTerminate((TStringBuilder() << Pos_ << "Timestamp "
                                            << storage.ToString()
                                            << " cannot be casted to TzDate32"
-            ).data());
+            ).c_str());
         }
     }
 
@@ -1848,6 +1856,11 @@ TUnboxedValue GetTimezoneName(const IValueBuilder* valueBuilder, const TUnboxedV
                                                                                          \
     END_SIMPLE_ARROW_UDF(T##name, (TFromConverterKernel<argType, retType, usecMultiplier>::Do))
 
+#define DATETIME_FROM_CONVERTER_UDF_N(space, name, retType, argType, usecMultiplier)    \
+    namespace N##space {                                                                \
+        DATETIME_FROM_CONVERTER_UDF(name, retType, argType, usecMultiplier);            \
+    }
+
     DATETIME_FROM_CONVERTER_UDF(FromSeconds, TTimestamp, ui32, UsecondsInSecond);
     DATETIME_FROM_CONVERTER_UDF(FromMilliseconds, TTimestamp, ui64, UsecondsInMilliseconds);
     DATETIME_FROM_CONVERTER_UDF(FromMicroseconds, TTimestamp, ui64, 1);
@@ -1859,7 +1872,8 @@ TUnboxedValue GetTimezoneName(const IValueBuilder* valueBuilder, const TUnboxedV
     DATETIME_FROM_CONVERTER_UDF(IntervalFromDays, TInterval, i32, UsecondsInDay);
     DATETIME_FROM_CONVERTER_UDF(IntervalFromHours, TInterval, i32, UsecondsInHour);
     DATETIME_FROM_CONVERTER_UDF(IntervalFromMinutes, TInterval, i32, UsecondsInMinute);
-    DATETIME_FROM_CONVERTER_UDF(IntervalFromSeconds, TInterval, i32, UsecondsInSecond);
+    DATETIME_FROM_CONVERTER_UDF_N(Legacy, IntervalFromSeconds, TInterval, i32, UsecondsInSecond);
+    DATETIME_FROM_CONVERTER_UDF_N(Actual, IntervalFromSeconds, TInterval, i64, UsecondsInSecond);
     DATETIME_FROM_CONVERTER_UDF(IntervalFromMilliseconds, TInterval, i64, UsecondsInMilliseconds);
     DATETIME_FROM_CONVERTER_UDF(IntervalFromMicroseconds, TInterval, i64, 1);
 
@@ -2766,7 +2780,7 @@ private:
 
             return TUnboxedValuePod(new TImpl(Pos_, args[0], alwaysWriteFractionalSeconds));
         } catch (const std::exception& e) {
-            UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data());
+            UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).c_str());
         }
 
         class TImpl : public TBoxedValue {
@@ -2798,7 +2812,7 @@ private:
 
                     return result;
                 } catch (const std::exception& e) {
-                    UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data());
+                    UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).c_str());
                 }
             }
 
@@ -2990,7 +3004,8 @@ private:
                         break;
                     }
                     default:
-                        ythrow yexception() << "invalid format character: " << *ptr;
+                        throw yexception() << "character '" << *ptr << "' is not a valid format specifier."
+                                           << "\nSee documentation for valid format characters";
                     }
 
                     dataStart = ptr + 1U;
@@ -3061,7 +3076,7 @@ private:
             TUnboxedValue Run(const IValueBuilder*, const TUnboxedValuePod* args) const final try {
                 return TUnboxedValuePod(new TParse(args[0], Pos_));
             } catch (const std::exception& e) {
-                UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data());
+                UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).c_str());
             }
 
             const TSourcePosition Pos_;
@@ -3138,7 +3153,7 @@ private:
                 }
                 return result;
             } catch (const std::exception& e) {
-                UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data());
+                UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).c_str());
             }
         }
 
@@ -3457,7 +3472,12 @@ private:
         TIntervalFromDays,
         TIntervalFromHours,
         TIntervalFromMinutes,
-        TIntervalFromSeconds,
+
+        TLangVerForked<
+            NYql::MakeLangVersion(2025, 03),
+            NLegacy::TIntervalFromSeconds,
+            NActual::TIntervalFromSeconds>,
+
         TIntervalFromMilliseconds,
         TIntervalFromMicroseconds,
 
@@ -3503,9 +3523,13 @@ private:
         TBoundaryOfInterval<EndOfUDF, SimpleDatetimeToIntervalUdf<TMResourceName, EndOf<TTMStorage>>,
                                       SimpleDatetimeToIntervalUdf<TM64ResourceName, EndOf<TTM64Storage>>>,
 
-        TToUnits<ToSecondsUDF, ui32, i64, 1>,
-        TToUnits<ToMillisecondsUDF, ui64, i64, 1000>,
-        TToUnits<ToMicrosecondsUDF, ui64, i64, 1000000>,
+        TLangVerForked<
+            NYql::MakeLangVersion(2025, 03),
+            TToUnits<ToSecondsUDF, /* TResult = */ ui32, /* TSignedResult = */ i32, /* TWResult = */ i64, 1>,
+            TToUnits<ToSecondsUDF, /* TResult = */ ui32, /* TSignedResult = */ i64, /* TWResult = */ i64, 1>>,
+
+        TToUnits<ToMillisecondsUDF, /* TResult = */ ui64, /* TSignedResult = */ i64, /* TWResult = */ i64, 1000>,
+        TToUnits<ToMicrosecondsUDF, /* TResult = */ ui64, /* TSignedResult = */ i64, /* TWResult = */ i64, 1000000>,
 
         TFormat,
         TParse<ParseUDF, TMResourceName>,

@@ -3349,9 +3349,8 @@ namespace NTypeAnnImpl {
             bool isOptional = false;
             const TDataExprType* dataType = nullptr;
             if ((!IsDataOrOptionalOfData(type, isOptional, dataType) ||
-                !(dataType->GetSlot() == EDataSlot::String || dataType->GetSlot() == EDataSlot::Utf8) ||
-                dataType->IsOptionalOrNull()) &&
-                (!IsNull(*type) && ignoreNulls)
+                !(dataType->GetSlot() == EDataSlot::String || dataType->GetSlot() == EDataSlot::Utf8))
+                && (!ignoreNulls || !IsNull(*type))
             )
             {
                 ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(child->Pos()), TStringBuilder()
@@ -3769,6 +3768,24 @@ namespace NTypeAnnImpl {
         }
 
         if (!EnsureSpecificDataType(input->Head().Pos(), *dataType, EDataSlot::Bool, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        input->SetTypeAnn(input->Head().GetTypeAnn());
+        return IGraphTransformer::TStatus::Ok;
+    }
+
+    IGraphTransformer::TStatus UnessentialWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+        Y_UNUSED(output);
+
+        if (!EnsureArgsCount(*input, 2, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (!EnsureSpecificDataType(input->Head(), EDataSlot::Bool, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+        if (!EnsureSpecificDataType(*input->Child(1), EDataSlot::Bool, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
 
@@ -4982,7 +4999,7 @@ namespace NTypeAnnImpl {
         return IGraphTransformer::TStatus::Ok;
     }
 
-    IGraphTransformer::TStatus UnwrapWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+    IGraphTransformer::TStatus UnwrapWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
         if (!EnsureMinMaxArgsCount(*input, 1, 2, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
@@ -5020,6 +5037,9 @@ namespace NTypeAnnImpl {
         }
 
         input->SetTypeAnn(input->Head().GetTypeAnn()->Cast<TOptionalExprType>()->GetItemType());
+        if (ctx.Types.DebugPositions) {
+            input->SetPosAware();
+        }
         return IGraphTransformer::TStatus::Ok;
     }
 
@@ -6197,7 +6217,8 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             return IGraphTransformer::TStatus::Error;
         }
 
-        if (!EnsureComputable(input->Tail(), ctx.Expr)) {
+        auto& missingValue = input->Tail();
+        if (!EnsureComputable(missingValue, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
 
@@ -6208,11 +6229,13 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         TTypeAnnotationNode::TListType types;
         types.reserve(args.size());
         for (const auto& arg : args) {
+            // If any of lambda input args has null type just return the missing value.
             if (IsNull(*arg)) {
                 output = input->TailPtr();
                 return IGraphTransformer::TStatus::Repeat;
             }
 
+            // All arguments must be optional.
             if (!EnsureOptionalType(*arg, ctx.Expr)) {
                 return IGraphTransformer::TStatus::Error;
             }
@@ -6234,11 +6257,12 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         }
 
         const auto thenType = lambda->GetTypeAnn();
-        const auto elseType = input->Tail().GetTypeAnn();
-        if (input->Tail().IsCallable("Null") && (thenType->GetKind() == ETypeAnnotationKind::Optional ||
+        const auto elseType = missingValue.GetTypeAnn();
+        if (missingValue.IsCallable("Null") && (thenType->GetKind() == ETypeAnnotationKind::Optional ||
             thenType->GetKind() == ETypeAnnotationKind::Pg)) {
+            // Expand null type to the lambda return type.
             output = ctx.Expr.ChangeChild(*input, input->ChildrenSize() - 1,
-                ctx.Expr.NewCallable(input->Tail().Pos(), "Nothing", { ExpandType(input->Tail().Pos(), *thenType, ctx.Expr) }));
+                ctx.Expr.NewCallable(missingValue.Pos(), "Nothing", { ExpandType(missingValue.Pos(), *thenType, ctx.Expr) }));
             return IGraphTransformer::TStatus::Repeat;
         } else if (!IsSameAnnotation(*thenType, *elseType)) {
             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), TStringBuilder() << "mismatch of then/else types, then type: "
@@ -7026,7 +7050,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         return IGraphTransformer::TStatus::Repeat;
     }
 
-    IGraphTransformer::TStatus EnsureWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+    IGraphTransformer::TStatus EnsureWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
         Y_UNUSED(output);
         if (!EnsureMinMaxArgsCount(*input, 2, 3, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
@@ -7052,7 +7076,49 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         }
 
         input->SetTypeAnn(input->Head().GetTypeAnn());
+        if (ctx.Types.DebugPositions) {
+            input->SetPosAware();
+        }
         return IGraphTransformer::TStatus::Ok;
+    }
+
+    IGraphTransformer::TStatus RaiseErrorWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+        Y_UNUSED(output);
+        if (!EnsureArgsCount(*input, 1, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (!EnsureAtom(input->Head(), ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), input->Head().Content()));
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    IGraphTransformer::TStatus EnsureTypeKindWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+        if (!EnsureArgsCount(*input, 2, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (!EnsureComputable(input->Head(), ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (!EnsureAtom(input->Tail(), ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (ToString(input->Head().GetTypeAnn()->GetKind()) != input->Tail().Content()) {
+            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
+                TStringBuilder() << "Expected type kind: " <<
+                    input->Tail().Content() << ", but got: " <<
+                    input->Head().GetTypeAnn()->GetKind()));
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        output = input->HeadPtr();
+        return IGraphTransformer::TStatus::Repeat;
     }
 
     IGraphTransformer::TStatus ToIndexDictWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
@@ -7597,6 +7663,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         }
 
         // (7) settings
+        bool isStrict = false;
         TExprNode::TPtr settings;
         if (input->ChildrenSize() > 7) {
             settings = input->ChildPtr(7);
@@ -7618,6 +7685,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                     if (!EnsureTupleSize(*child, 1, ctx.Expr)) {
                         return IGraphTransformer::TStatus::Error;
                     }
+                    isStrict = true;
                 } else if (settingName == "blocks") {
                     if (!EnsureTupleSize(*child, 1, ctx.Expr)) {
                         return IGraphTransformer::TStatus::Error;
@@ -7849,6 +7917,10 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         }
 
         input->SetTypeAnn(cachedType);
+        if (ctx.Types.DebugPositions && !isStrict) {
+            input->SetPosAware();
+        }
+
         return IGraphTransformer::TStatus::Ok;
     }
 
@@ -8006,6 +8078,10 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         }
 
         input->SetTypeAnn(callableType);
+        if (ctx.Types.DebugPositions) {
+            input->SetPosAware();
+        }
+
         return IGraphTransformer::TStatus::Ok;
     }
 
@@ -12616,6 +12692,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["Not"] = &BoolOpt1Wrapper;
         Functions["NoPush"] = &NoPushWrapper;
         Functions["Likely"] = &NoPushWrapper;
+        Functions["Unessential"] = &UnessentialWrapper;
         Functions["Map"] = &MapWrapper;
         Functions["OrderedMap"] = &MapWrapper;
         Functions["MapNext"] = &MapNextWrapper;
@@ -12710,9 +12787,10 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["CoalesceMembers"] = &CoalesceMembersWrapper;
         Functions["Nvl"] = &NvlWrapper;
         Functions["Nanvl"] = &NanvlWrapper;
-        Functions["Unwrap"] = &UnwrapWrapper;
+        ExtFunctions["Unwrap"] = &UnwrapWrapper;
         Functions["Exists"] = &ExistsWrapper;
         Functions["BlockExists"] = &BlockExistsWrapper;
+        Functions["BlockValidUnwrap"] = &BlockValidUnwrapWrapper;
         Functions["Just"] = &JustWrapper;
         Functions["Optional"] = &OptionalWrapper;
         Functions["OptionalIf"] = &OptionalIfWrapper;
@@ -12800,7 +12878,9 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["PersistableRepr"] = &PersistableReprWrapper;
         Functions["EnsureConvertibleTo"] = &TypeAssertWrapper<false>;
         Functions["EnsureTupleSize"] = &TupleSizeAssertWrapper;
-        Functions["Ensure"] = &EnsureWrapper;
+        ExtFunctions["Ensure"] = &EnsureWrapper;
+        Functions["RaiseError"] = &RaiseErrorWrapper;
+        Functions["EnsureTypeKind"] = &EnsureTypeKindWrapper;
         Functions["TryMember"] = &TryMemberWrapper;
         Functions["ToIndexDict"] = &ToIndexDictWrapper;
         Functions["ToDict"] = &ToDictWrapper;

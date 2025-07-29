@@ -87,19 +87,7 @@ void TYdbClientCommandRoot::Config(TConfig& config) {
 int TYdbClientCommandRoot::Run(TConfig& config) {
     if (config.StorageUrl.has_value() && config.NeedToCheckForUpdate) {
         TYdbUpdater updater(config.StorageUrl.value());
-        if (config.ForceVersionCheck) {
-            Cout << "Force checking if there is a newer version..." << Endl;
-        }
-        if (updater.CheckIfUpdateNeeded(config.ForceVersionCheck)) {
-            NColorizer::TColors colors = NColorizer::AutoColors(Cerr);
-            Cerr << colors.Green() << "(!) New version of YDB CLI is available. Run 'ydb update' command for update. "
-                << "You can also disable further version checks with 'ydb version --disable-checks' command"
-                << colors.OldColor() << Endl;
-        } else if (config.ForceVersionCheck) {
-            NColorizer::TColors colors = NColorizer::AutoColors(Cerr);
-            Cout << colors.GreenColor() << "Current version is up to date"
-                << colors.OldColor() << Endl;
-        }
+        updater.PrintUpdateMessageIfNeeded(config.ForceVersionCheck);
     }
 
     return TClientCommandRoot::Run(config);

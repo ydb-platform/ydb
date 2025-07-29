@@ -135,6 +135,7 @@ SRCS(
     misc/histogram.cpp
     misc/adjusted_exponential_moving_average.cpp
     misc/id_generator.cpp
+    misc/inotify.cpp
     misc/fair_share_hierarchical_queue.cpp
     misc/linear_probe.cpp
     misc/relaxed_mpsc_queue.cpp
@@ -404,6 +405,7 @@ IF (NOT OPENSOURCE AND OS_LINUX)
         benchmarks
         bus/benchmarks
         yson/benchmark
+        ytree/benchmarks
     )
 ENDIF()
 

@@ -12,7 +12,7 @@
 #include <ydb/core/tx/columnshard/common/snapshot.h>
 #include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
 #include <ydb/core/tx/columnshard/engines/predicate/range.h>
-#include <ydb/core/tx/columnshard/engines/reader/common_reader/iterator/columns_set.h>
+#include <ydb/core/tx/columnshard/engines/reader/common_reader/common/columns_set.h>
 #include <ydb/core/tx/columnshard/engines/scheme/versions/filtered_scheme.h>
 #include <ydb/core/tx/columnshard/resource_subscriber/task.h>
 #include <ydb/core/tx/limiter/grouped_memory/usage/abstract.h>
@@ -70,6 +70,8 @@ public:
     void Start(const std::shared_ptr<IDataSource>& source, const std::shared_ptr<NArrow::NSSA::NGraph::NExecution::TCompiledGraph>& program,
         const TFetchingScriptCursor& step);
 
+    void Stop();
+
     const TFetchingStepSignals& GetCurrentStepSignalsVerified() const {
         AFL_VERIFY(!!CurrentStepSignals);
         return *CurrentStepSignals;
@@ -119,10 +121,12 @@ private:
     TAtomic SyncSectionFlag = 1;
     YDB_READONLY(ui64, SourceId, 0);
     YDB_READONLY(ui32, SourceIdx, 0);
+    static inline TAtomicCounter MemoryGroupCounter = 0;
+    YDB_READONLY(ui64, SequentialMemoryGroupIdx, MemoryGroupCounter.Inc());
     YDB_READONLY(TSnapshot, RecordSnapshotMin, TSnapshot::Zero());
     YDB_READONLY(TSnapshot, RecordSnapshotMax, TSnapshot::Zero());
     YDB_READONLY_DEF(std::shared_ptr<TSpecialReadContext>, Context);
-    YDB_READONLY(ui32, RecordsCount, 0);
+    std::optional<ui32> RecordsCountImpl;
     YDB_READONLY_DEF(std::optional<ui64>, ShardingVersionOptional);
     YDB_READONLY(bool, HasDeletions, false);
     std::optional<ui64> MemoryGroupId;
@@ -134,7 +138,12 @@ private:
     }
 
     virtual ui64 DoGetEntityRecordsCount() const override {
-        return RecordsCount;
+        if (RecordsCountImpl) {
+            return *RecordsCountImpl;
+        } else {
+            AFL_VERIFY(!!GetRecordsCountVirtual());
+            return GetRecordsCountVirtual();
+        }
     }
 
     std::optional<bool> IsSourceInMemoryFlag;
@@ -156,12 +165,73 @@ private:
 
     std::optional<NEvLog::TLogsThread> Events;
     std::unique_ptr<TFetchedData> StageData;
+    std::shared_ptr<TPortionDataAccessor> Accessor;
 
 protected:
     std::vector<std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>> ResourceGuards;
     std::unique_ptr<TFetchedResult> StageResult;
+    virtual ui32 GetRecordsCountVirtual() const {
+        AFL_VERIFY(false);
+        return 0;
+    }
 
 public:
+
+    const TPortionDataAccessor& GetPortionAccessor() const {
+        AFL_VERIFY(!!Accessor);
+        return *Accessor;
+    }
+
+    std::shared_ptr<TPortionDataAccessor> ExtractPortionAccessor() {
+        AFL_VERIFY(!!Accessor);
+        auto result = std::move(Accessor);
+        Accessor.reset();
+        return result;
+    }
+
+    bool HasPortionAccessor() const {
+        return !!Accessor;
+    }
+
+    void SetPortionAccessor(std::shared_ptr<TPortionDataAccessor>&& acc) {
+        AFL_VERIFY(!!acc);
+        AFL_VERIFY(!Accessor);
+        Accessor = std::move(acc);
+    }
+
+    template <class T>
+    const T* GetAs() const {
+        return static_cast<const T*>(this);
+    }
+
+    template <class T>
+    T* MutableAs() {
+        return static_cast<T*>(this);
+    }
+
+    virtual bool NeedPortionData() const {
+        return true;
+    }
+
+    std::optional<ui32> GetRecordsCountOptional() const {
+        return RecordsCountImpl;
+    }
+
+    virtual void InitRecordsCount(const ui32 recordsCount) {
+        AFL_VERIFY(!RecordsCountImpl);
+        RecordsCountImpl = recordsCount;
+        StageData->InitRecordsCount(recordsCount);
+    }
+
+    ui32 GetRecordsCount() const {
+        if (RecordsCountImpl) {
+            return *RecordsCountImpl;
+        } else {
+            AFL_VERIFY(!!GetRecordsCountVirtual());
+            return GetRecordsCountVirtual();
+        }
+    }
+
     void StartAsyncSection() {
         AFL_VERIFY(AtomicCas(&SyncSectionFlag, 0, 1));
     }
@@ -220,14 +290,14 @@ public:
     }
 
     IDataSource(const ui64 sourceId, const ui32 sourceIdx, const std::shared_ptr<TSpecialReadContext>& context,
-        const TSnapshot& recordSnapshotMin, const TSnapshot& recordSnapshotMax, const ui32 recordsCount,
+        const TSnapshot& recordSnapshotMin, const TSnapshot& recordSnapshotMax, const std::optional<ui32> recordsCount,
         const std::optional<ui64> shardingVersion, const bool hasDeletions)
         : SourceId(sourceId)
         , SourceIdx(sourceIdx)
         , RecordSnapshotMin(recordSnapshotMin)
         , RecordSnapshotMax(recordSnapshotMax)
         , Context(context)
-        , RecordsCount(recordsCount)
+        , RecordsCountImpl(recordsCount)
         , ShardingVersionOptional(shardingVersion)
         , HasDeletions(hasDeletions) {
         FOR_DEBUG_LOG(NKikimrServices::COLUMNSHARD_SCAN_EVLOG, Events.emplace(NEvLog::TLogsThread()));
@@ -240,12 +310,23 @@ public:
         return ResourceGuards;
     }
 
+    std::vector<std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>> ExtractResourceGuards() {
+        auto result = std::move(ResourceGuards);
+        ResourceGuards.clear();
+        return std::move(result);
+    }
+
     virtual THashMap<TChunkAddress, TString> DecodeBlobAddresses(NBlobOperations::NRead::TCompositeReadBlobs&& blobsOriginal) const = 0;
 
     bool IsSourceInMemory() const {
         AFL_VERIFY(IsSourceInMemoryFlag);
         return *IsSourceInMemoryFlag;
     }
+
+    bool HasSourceInMemoryFlag() const {
+        return !!IsSourceInMemoryFlag;
+    }
+
     void SetSourceInMemory(const bool value) {
         AFL_VERIFY(!IsSourceInMemoryFlag);
         IsSourceInMemoryFlag = value;
@@ -344,7 +425,7 @@ public:
     }
 
     std::unique_ptr<TFetchedData> ExtractStageData() {
-        AFL_VERIFY(StageData);
+        AFL_VERIFY(StageData)("source_id", SourceId);
         auto result = std::move(StageData);
         StageData.reset();
         return std::move(result);
@@ -355,7 +436,7 @@ public:
     }
 
     const TFetchedData& GetStageData() const {
-        AFL_VERIFY(StageData);
+        AFL_VERIFY(StageData)("source_id", SourceId);
         return *StageData;
     }
 

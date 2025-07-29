@@ -342,10 +342,10 @@ public:
         return result;
     }
 
-    TProcessorContext(const std::weak_ptr<IDataSource>& dataSource, const std::shared_ptr<NAccessor::TAccessorsCollection>& resources,
+    TProcessorContext(std::weak_ptr<IDataSource>&& dataSource, const std::shared_ptr<NAccessor::TAccessorsCollection>& resources,
         const std::optional<ui32> limit, const bool reverse)
         : Resources(resources)
-        , DataSource(dataSource)
+        , DataSource(std::move(dataSource))
         , Limit(limit)
         , Reverse(reverse) {
     }

@@ -4,7 +4,7 @@
 
 #include <ydb/core/tx/columnshard/blobs_reader/task.h>
 #include <ydb/core/tx/columnshard/engines/portions/data_accessor.h>
-#include <ydb/core/tx/columnshard/engines/reader/common_reader/iterator/columns_set.h>
+#include <ydb/core/tx/columnshard/engines/reader/common_reader/common/columns_set.h>
 #include <ydb/core/tx/conveyor_composite/usage/common.h>
 #include <ydb/core/tx/conveyor_composite/usage/service.h>
 #include <ydb/core/tx/limiter/grouped_memory/usage/abstract.h>
@@ -52,7 +52,7 @@ public:
 
 class TPortionsDataFetcher: TNonCopyable {
 private:
-    const TRequestInput Input;
+    TRequestInput Input;
     const std::shared_ptr<IFetchCallback> Callback;
     std::shared_ptr<TClassCounters> ClassCounters;
     NCounters::TStateSignalsOperator<EFetchingStage>::TGuard Guard;
@@ -69,7 +69,7 @@ public:
     }
 
     ui64 GetNecessaryDataMemory(
-        const std::shared_ptr<NReader::NCommon::TColumnsSetIds>& columnIds, const std::vector<TPortionDataAccessor>& acc) const {
+        const std::shared_ptr<NReader::NCommon::TColumnsSetIds>& columnIds, const std::vector<std::shared_ptr<TPortionDataAccessor>>& acc) const {
         return Callback->GetNecessaryDataMemory(columnIds, acc);
     }
 
@@ -80,13 +80,18 @@ public:
         , ClassCounters(Singleton<TCounters>()->GetClassCounters(Callback->GetClassName()))
         , Guard(ClassCounters->GetGuard(EFetchingStage::Created))
         , Script(script)
+        , CurrentContext(Input.GetMemoryProcessGuardOptional())
         , Environment(environment)
-        , ConveyorCategory(conveyorCategory) {
+        , ConveyorCategory(conveyorCategory)
+    {
         AFL_VERIFY(Environment);
         AFL_VERIFY(Callback);
     }
 
     ~TPortionsDataFetcher() {
+        if (NActors::TActorSystem::IsStopped() || Callback->IsAborted()) {
+            CurrentContext.Abort();
+        }
         AFL_VERIFY(NActors::TActorSystem::IsStopped() || IsFinishedFlag || Guard.GetStage() == EFetchingStage::Created
             || Callback->IsAborted())("stage", Guard.GetStage())("class_name", Callback->GetClassName());
     }
@@ -97,9 +102,17 @@ public:
     static void StartFullPortionsFetching(TRequestInput&& input, std::shared_ptr<IFetchCallback>&& callback,
         const std::shared_ptr<TEnvironment>& environment, const NConveyorComposite::ESpecialTaskCategory conveyorCategory);
 
-    static void StartColumnsFetching(TRequestInput&& input, std::shared_ptr<NReader::NCommon::TColumnsSetIds>& entityIds,
+    static void StartColumnsFetching(TRequestInput&& input, const std::shared_ptr<NReader::NCommon::TColumnsSetIds>& entityIds,
         std::shared_ptr<IFetchCallback>&& callback, const std::shared_ptr<TEnvironment>& environment,
         const NConveyorComposite::ESpecialTaskCategory conveyorCategory);
+
+    static void StartAssembledColumnsFetching(TRequestInput&& input, const std::shared_ptr<NReader::NCommon::TColumnsSetIds>& entityIds,
+        std::shared_ptr<IFetchCallback>&& callback, const std::shared_ptr<TEnvironment>& environment,
+        const NConveyorComposite::ESpecialTaskCategory conveyorCategory);
+
+    static void StartAssembledColumnsFetchingNoAllocation(TRequestInput&& input,
+        const std::shared_ptr<NReader::NCommon::TColumnsSetIds>& entityIds, std::shared_ptr<IFetchCallback>&& callback,
+        const std::shared_ptr<TEnvironment>& environment, const NConveyorComposite::ESpecialTaskCategory conveyorCategory);
 
     TScriptExecution& MutableScript() {
         return Script;

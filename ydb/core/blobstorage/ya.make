@@ -31,6 +31,7 @@ END()
 RECURSE(
     backpressure
     base
+    bridge
     crypto
     dsproxy
     groupinfo

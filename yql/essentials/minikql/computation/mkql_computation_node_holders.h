@@ -7,6 +7,7 @@
 
 #include <yql/essentials/minikql/aligned_page_pool.h>
 #include <yql/essentials/minikql/compact_hash.h>
+#include <yql/essentials/minikql/computation/mkql_datum_validate.h>
 #include <yql/essentials/minikql/mkql_node_serialization.h>
 #include <yql/essentials/minikql/mkql_type_ops.h>
 #include <yql/essentials/minikql/mkql_type_builder.h>
@@ -586,6 +587,7 @@ public:
         : TComputationValue(memInfo)
         , Datum_(std::move(datum))
     {
+        VALIDATE_DATUM_ARROW_BLOCK_CONSTRUCTOR(Datum_);
     }
 
     inline static const TArrowBlock& From(const NUdf::TUnboxedValuePod& value) {

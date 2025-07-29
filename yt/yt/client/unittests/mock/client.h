@@ -8,6 +8,8 @@
 #include <yt/yt/client/api/journal_writer.h>
 #include <yt/yt/client/api/transaction.h>
 
+#include <yt/yt/client/bundle_controller_client/bundle_controller_settings.h>
+
 #include <yt/yt/client/chaos_client/replication_card_cache.h>
 
 #include <yt/yt/client/scheduler/spec_patch.h>
@@ -30,8 +32,6 @@ class TMockClient
     : public IClient
 {
 public:
-    using TRange = std::pair<int, int>;
-
     const NTabletClient::ITableMountCachePtr& GetTableMountCache() override;
     void SetTableMountCache(NTabletClient::ITableMountCachePtr value);
 
@@ -902,7 +902,7 @@ public:
     MOCK_METHOD(TFuture<IRowBatchReaderPtr>, CreateShuffleReader, (
         const TSignedShuffleHandlePtr& shuffleHandle,
         int partitionIndex,
-        std::optional<TRange> writerIndexRange,
+        std::optional<TIndexRange> writerIndexRange,
         const TShuffleReaderOptions& options),
         (override));
 

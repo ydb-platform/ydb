@@ -254,6 +254,16 @@ struct TAccumulator {
             Portions.erase(it);
         }
     }
+
+    NJson::TJsonValue DoSerializeToJsonVisual() const {
+        NJson::TJsonValue result = NJson::JSON_MAP;
+        result.InsertValue("Portions", Portions.size());
+        result.InsertValue("PortionsCompacting", Compacting.size());
+        result.InsertValue("TotalBlobBytes", TotalBlobBytes);
+        result.InsertValue("LastCompaction", LastCompaction.ToString());
+        result.InsertValue("TimeExceeded", TimeExceeded);
+        return result;
+    }
 };
 
 struct TSimpleKeyCompare {
@@ -436,6 +446,14 @@ struct TLevel {
             }
         }
         return portions;
+    }
+
+    NJson::TJsonValue DoSerializeToJsonVisual() const {
+        NJson::TJsonValue result = NJson::JSON_MAP;
+        result.InsertValue("Portions", Portions.size());
+        result.InsertValue("PortionsCompacting", Compacting.size());
+        result.InsertValue("TotalBlobBytes", TotalBlobBytes);
+        return result;
     }
 };
 
@@ -665,11 +683,37 @@ private:
     }
 
     TString DoDebugString() const override {
-        return "TODO: DebugString";
+        return DoSerializeToJsonVisual().GetString();
     }
 
     NJson::TJsonValue DoSerializeToJsonVisual() const override {
-        return NJson::JSON_NULL;
+        NJson::TJsonValue compaction_info = NJson::JSON_MAP;
+        compaction_info.InsertValue("1-Name", "TILING");
+
+        auto& settings = compaction_info.InsertValue("2-Settings", NJson::JSON_MAP);
+        settings.InsertValue("Factor", Factor);
+        settings.InsertValue("MaxLevels", MaxLevels);
+        settings.InsertValue("ExpectedPortionCount", ExpectedPortionCount);
+        settings.InsertValue("ExpectedPortionSize", ExpectedPortionSize);
+        settings.InsertValue("MaxAccumulateCount", MaxAccumulateCount);
+        settings.InsertValue("MaxAccumulatePortionSize", MaxAccumulatePortionSize);
+        settings.InsertValue("MaxAccumulateTime", MaxAccumulateTime.ToString());
+        settings.InsertValue("MaxCompactionBytes", MaxCompactionBytes);
+        settings.InsertValue("FullCompactionUntilLevel", FullCompactionUntilLevel);
+        settings.InsertValue("FullCompactionMaxBytes", FullCompactionMaxBytes);
+        settings.InsertValue("CompactNextLevelEdges", CompactNextLevelEdges);
+
+        NJson::TJsonValue& levels = compaction_info.InsertValue("3-Levels",NJson::JSON_ARRAY);
+        for (size_t level_i = 0; level_i < Max(Accumulator.size(), Levels.size()); ++level_i) {
+            NJson::TJsonValue& level = levels.AppendValue(NJson::JSON_MAP);
+            if (level_i < Accumulator.size()) {
+                level.InsertValue("Accumulator", Accumulator[level_i].DoSerializeToJsonVisual());
+            }
+            if (level_i < Levels.size()) {
+                level.InsertValue("Level", Levels[level_i].DoSerializeToJsonVisual());
+            }
+        }
+        return compaction_info;
     }
 
 private:

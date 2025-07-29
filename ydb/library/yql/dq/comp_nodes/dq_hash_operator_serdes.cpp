@@ -25,9 +25,9 @@ TDqHashOperatorParams ParseCommonDqHashOperatorParams(TCallable& callable, const
 
     TDqHashOperatorParams result;
 
-    const auto inputType = AS_TYPE(TFlowType, callable.GetInput(NDqHashOperatorParams::Flow).GetStaticType());
+    const auto inputType = AS_TYPE(TStreamType, callable.GetInput(NDqHashOperatorParams::Input).GetStaticType());
     const auto inputWidth = GetWideComponentsCount(inputType);
-    const auto outputWidth = GetWideComponentsCount(AS_TYPE(TFlowType, callable.GetType()->GetReturnType()));
+    const auto outputWidth = GetWideComponentsCount(AS_TYPE(TStreamType, callable.GetType()->GetReturnType()));
 
     const auto keysSize = AS_VALUE(TTupleLiteral, callable.GetInput(NDqHashOperatorParams::KeyArgs))->GetValuesCount();
     const auto stateSize = AS_VALUE(TTupleLiteral, callable.GetInput(NDqHashOperatorParams::StateArgs))->GetValuesCount();

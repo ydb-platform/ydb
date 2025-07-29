@@ -14,6 +14,8 @@
 
 #include <inttypes.h>
 
+#include "aws/io/event_loop.h"
+
 #ifdef _MSC_VER
 /* allow declared initializer using address of automatic variable */
 #    pragma warning(disable : 4221)
@@ -28,6 +30,7 @@ struct aws_event_stream_rpc_client_connection {
     struct aws_allocator *allocator;
     struct aws_hash_table continuation_table;
     struct aws_client_bootstrap *bootstrap_ref;
+    struct aws_event_loop *event_loop;
     struct aws_atomic_var ref_count;
     struct aws_channel *channel;
     struct aws_channel_handler *event_stream_handler;
@@ -39,6 +42,7 @@ struct aws_event_stream_rpc_client_connection {
     aws_event_stream_rpc_client_on_connection_setup_fn *on_connection_setup;
     aws_event_stream_rpc_client_connection_protocol_message_fn *on_connection_protocol_message;
     aws_event_stream_rpc_client_on_connection_shutdown_fn *on_connection_shutdown;
+    aws_event_stream_rpc_client_on_connection_terminated_fn *on_connection_terminated;
     void *user_data;
     bool bootstrap_owned;
     bool enable_read_back_pressure;
@@ -49,6 +53,7 @@ struct aws_event_stream_rpc_client_continuation_token {
     struct aws_event_stream_rpc_client_connection *connection;
     aws_event_stream_rpc_client_stream_continuation_fn *continuation_fn;
     aws_event_stream_rpc_client_stream_continuation_closed_fn *closed_fn;
+    aws_event_stream_rpc_client_stream_continuation_terminated_fn *terminated_fn;
     void *user_data;
     struct aws_atomic_var ref_count;
     struct aws_atomic_var is_closed;
@@ -187,9 +192,7 @@ static void s_on_channel_shutdown_fn(
     aws_event_stream_rpc_client_connection_release(connection);
 }
 
-/* Set each continuation's is_closed=true.
- * A lock MUST be held while calling this.
- * For use with aws_hash_table_foreach(). */
+/* Set each continuation's is_closed=true. */
 static int s_mark_each_continuation_closed(void *context, struct aws_hash_element *p_element) {
     (void)context;
     struct aws_event_stream_rpc_client_continuation_token *continuation = p_element->value;
@@ -233,18 +236,31 @@ static int s_complete_and_clear_each_continuation(void *context, struct aws_hash
 static void s_clear_continuation_table(struct aws_event_stream_rpc_client_connection *connection) {
     AWS_ASSERT(!aws_event_stream_rpc_client_connection_is_open(connection));
 
+    struct aws_hash_table temp_table;
+    aws_hash_table_init(
+        &temp_table,
+        connection->allocator,
+        64,
+        aws_event_stream_rpc_hash_streamid,
+        aws_event_stream_rpc_streamid_eq,
+        NULL,
+        NULL);
+
     /* Use lock to ensure synchronization with code that adds entries to table.
      * Since connection was just marked closed, no further entries will be
-     * added to table once we acquire the lock. */
+     * added to table once we acquire the lock.
+     *
+     *  While no further entries can be added, there are concurrent execution paths where things can be
+     *  removed.  So rather than iterating the connection's table, swap it out for an empty one and iterate
+     *  the temporary table instead.  Removing from an empty table will be harmless.
+     */
     aws_mutex_lock(&connection->stream_lock);
-    aws_hash_table_foreach(&connection->continuation_table, s_mark_each_continuation_closed, NULL);
+    aws_hash_table_swap(&temp_table, &connection->continuation_table);
     aws_mutex_unlock(&connection->stream_lock);
 
-    /* Now release lock before invoking callbacks.
-     * It's safe to alter the table now without a lock, since no further
-     * entries can be added, and we've gone through the critical section
-     * above to ensure synchronization */
-    aws_hash_table_foreach(&connection->continuation_table, s_complete_and_clear_each_continuation, NULL);
+    aws_hash_table_foreach(&temp_table, s_mark_each_continuation_closed, NULL);
+    aws_hash_table_foreach(&temp_table, s_complete_and_clear_each_continuation, NULL);
+    aws_hash_table_clean_up(&temp_table);
 }
 
 int aws_event_stream_rpc_client_connection_connect(
@@ -268,6 +284,8 @@ int aws_event_stream_rpc_client_connection_connect(
     connection->allocator = allocator;
     aws_atomic_init_int(&connection->ref_count, 1);
     connection->bootstrap_ref = conn_options->bootstrap;
+    connection->event_loop = aws_event_loop_group_get_next_loop(connection->bootstrap_ref->event_loop_group);
+
     /* this is released in the connection release which gets called regardless of if this function is successful or
      * not*/
     aws_client_bootstrap_acquire(connection->bootstrap_ref);
@@ -276,6 +294,7 @@ int aws_event_stream_rpc_client_connection_connect(
     aws_mutex_init(&connection->stream_lock);
 
     connection->on_connection_shutdown = conn_options->on_connection_shutdown;
+    connection->on_connection_terminated = conn_options->on_connection_terminated;
     connection->on_connection_protocol_message = conn_options->on_connection_protocol_message;
     connection->on_connection_setup = conn_options->on_connection_setup;
     connection->user_data = conn_options->user_data;
@@ -307,6 +326,7 @@ int aws_event_stream_rpc_client_connection_connect(
         .enable_read_back_pressure = false,
         .setup_callback = s_on_channel_setup_fn,
         .shutdown_callback = s_on_channel_shutdown_fn,
+        .requested_event_loop = connection->event_loop,
     };
 
     if (aws_client_bootstrap_new_socket_channel(&bootstrap_options)) {
@@ -340,7 +360,15 @@ static void s_destroy_connection(struct aws_event_stream_rpc_client_connection *
     AWS_LOGF_DEBUG(AWS_LS_EVENT_STREAM_RPC_CLIENT, "id=%p: destroying connection.", (void *)connection);
     aws_hash_table_clean_up(&connection->continuation_table);
     aws_client_bootstrap_release(connection->bootstrap_ref);
+
+    aws_event_stream_rpc_client_on_connection_terminated_fn *terminated_fn = connection->on_connection_terminated;
+    void *terminated_user_data = connection->user_data;
+
     aws_mem_release(connection->allocator, connection);
+
+    if (terminated_fn) {
+        terminated_fn(terminated_user_data);
+    }
 }
 
 void aws_event_stream_rpc_client_connection_release(const struct aws_event_stream_rpc_client_connection *connection) {
@@ -434,13 +462,19 @@ static void s_on_protocol_message_written_fn(
         AWS_FATAL_ASSERT(message_args->continuation && "end stream flag was set but it wasn't on a continuation");
         aws_atomic_store_int(&message_args->continuation->is_closed, 1U);
 
+        int was_present = 0;
         aws_mutex_lock(&message_args->connection->stream_lock);
         aws_hash_table_remove(
-            &message_args->connection->continuation_table, &message_args->continuation->stream_id, NULL, NULL);
+            &message_args->connection->continuation_table, &message_args->continuation->stream_id, NULL, &was_present);
         aws_mutex_unlock(&message_args->connection->stream_lock);
 
-        /* Lock must NOT be held while invoking callback */
-        s_complete_continuation(message_args->continuation);
+        /*
+         * Whoever successfully removes the continuation from the table gets to complete it.
+         * Lock must NOT be held while invoking callback
+         */
+        if (was_present) {
+            s_complete_continuation(message_args->continuation);
+        }
     }
 
     message_args->flush_fn(error_code, message_args->user_data);
@@ -770,7 +804,6 @@ static void s_route_message_by_type(
         aws_mutex_unlock(&connection->stream_lock);
 
         continuation->continuation_fn(continuation, &message_args, continuation->user_data);
-        aws_event_stream_rpc_client_continuation_release(continuation);
 
         /* if it was a terminal stream message purge it from the hash table. The delete will decref the continuation. */
         if (message_flags & AWS_EVENT_STREAM_RPC_MESSAGE_FLAG_TERMINATE_STREAM) {
@@ -780,13 +813,21 @@ static void s_route_message_by_type(
                 (void *)connection,
                 (void *)continuation);
             aws_atomic_store_int(&continuation->is_closed, 1U);
+            int was_present = 0;
             aws_mutex_lock(&connection->stream_lock);
-            aws_hash_table_remove(&connection->continuation_table, &stream_id, NULL, NULL);
+            aws_hash_table_remove(&connection->continuation_table, &stream_id, NULL, &was_present);
             aws_mutex_unlock(&connection->stream_lock);
 
-            /* Note that we do not invoke callback while holding lock */
-            s_complete_continuation(continuation);
+            /*
+             * Whoever successfully removes the continuation from the table gets to complete it.
+             * Lock must NOT be held while invoking callback
+             */
+            if (was_present) {
+                s_complete_continuation(continuation);
+            }
         }
+
+        aws_event_stream_rpc_client_continuation_release(continuation);
     } else {
         if (message_type <= AWS_EVENT_STREAM_RPC_MESSAGE_TYPE_APPLICATION_ERROR ||
             message_type >= AWS_EVENT_STREAM_RPC_MESSAGE_TYPE_COUNT) {
@@ -915,6 +956,7 @@ struct aws_event_stream_rpc_client_continuation_token *aws_event_stream_rpc_clie
     aws_atomic_init_int(&continuation->is_complete, 0);
     continuation->continuation_fn = continuation_options->on_continuation;
     continuation->closed_fn = continuation_options->on_continuation_closed;
+    continuation->terminated_fn = continuation_options->on_continuation_terminated;
     continuation->user_data = continuation_options->user_data;
 
     return continuation;
@@ -959,7 +1001,15 @@ void aws_event_stream_rpc_client_continuation_release(
     if (ref_count == 1) {
         struct aws_allocator *allocator = continuation_mut->connection->allocator;
         aws_event_stream_rpc_client_connection_release(continuation_mut->connection);
+
+        aws_event_stream_rpc_client_stream_continuation_terminated_fn *terminated_fn = continuation_mut->terminated_fn;
+        void *terminated_user_data = continuation_mut->user_data;
+
         aws_mem_release(allocator, continuation_mut);
+
+        if (terminated_fn) {
+            terminated_fn(terminated_user_data);
+        }
     }
 }
 
@@ -1061,4 +1111,14 @@ int aws_event_stream_rpc_client_continuation_send_message(
 
     return s_send_protocol_message(
         continuation->connection, continuation, NULL, message_args, continuation->stream_id, flush_fn, user_data);
+}
+
+struct aws_event_loop *aws_event_stream_rpc_client_connection_get_event_loop(
+    const struct aws_event_stream_rpc_client_connection *connection) {
+
+    if (!connection) {
+        return NULL;
+    }
+
+    return connection->event_loop;
 }

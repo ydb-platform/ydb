@@ -2572,4 +2572,38 @@ TOperationProgress::EOpBlockStatus DetermineProgramBlockStatus(const TExprNode& 
     return status;
 }
 
+TExprNode::TPtr ReplaceUnessentials(TExprNode::TPtr predicate, TExprNode::TPtr row, const TNodeSet& banned, TExprContext& ctx) {
+    YQL_ENSURE(row->IsArgument());
+
+    std::vector<TExprNode::TPtr> unessentials;
+    bool hasEssentialRowUsage = false;
+    VisitExpr(predicate, [&](const TExprNode::TPtr& node) {
+        if (banned.contains(node.Get())) {
+            return false;
+        } else if (node == row) {
+            hasEssentialRowUsage = true;
+            return false;
+        } else if (node->IsCallable(TCoUnessential::CallableName())) {
+            // AssumeAs is guaranteed to be complete
+            unessentials.push_back(node);
+            return false;
+        }
+
+        return true;
+    });
+    if (unessentials.empty()) {
+        return predicate;
+    }
+
+    // Consider predicate as unessential if all row usages across predicate are Unessential
+    // Drop all Unessential conditions (= replace with AssumeAs) in that case, or keep them (= replace with Predicate) otherwise
+
+    TNodeOnNodeOwnedMap replaces;
+    for (const auto& unessential : unessentials) {
+        replaces.emplace(unessential.Get(), hasEssentialRowUsage ? unessential->ChildPtr(TCoUnessential::idx_Predicate) : unessential->ChildPtr(TCoUnessential::idx_AssumeAs));
+    }
+
+    return ctx.ReplaceNodes(std::move(predicate), replaces);
+}
+
 }

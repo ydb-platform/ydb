@@ -39,16 +39,4 @@ TSharedPageCacheCounters::TCounterPtr TSharedPageCacheCounters::ReplacementPolic
     return Counters->GetCounter(TStringBuilder() << "ReplacementPolicySize/" << policy);
 }
 
-TSharedPageCacheCounters::TCounterPtr TSharedPageCacheCounters::ActivePagesTier(ECacheTier tier) {
-    return Counters->GetCounter(TStringBuilder() << "Tier" << tier << "ActivePages");
-}
-
-TSharedPageCacheCounters::TCounterPtr TSharedPageCacheCounters::ActiveBytesTier(ECacheTier tier) {
-    return Counters->GetCounter(TStringBuilder() << "Tier" << tier << "ActiveBytes");
-}
-
-TSharedPageCacheCounters::TCounterPtr TSharedPageCacheCounters::LimitBytesTier(ECacheTier tier) {
-    return Counters->GetCounter(TStringBuilder() << "Tier" << tier << "LimitBytes");
-}
-
 } // namespace NKikimr::NSharedCache

@@ -1,6 +1,7 @@
 #include "dynamic_nameserver_impl.h"
 
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/base/counters.h>
 #include <ydb/core/base/nameservice.h>
 #include <ydb/core/mon/mon.h>
 #include <ydb/library/services/services.pb.h>
@@ -91,6 +92,7 @@ private:
                 ResetInterconnectProxyConfig(NodeId, ctx);
                 ListNodesCache->Invalidate(); // node was erased
             }
+            Owner->UpdateCounters();
             OnError(rec.GetStatus().GetReason(), ctx);
             return;
         }
@@ -105,6 +107,7 @@ private:
             ResetInterconnectProxyConfig(NodeId, ctx);
         Config->DynamicNodes.emplace(NodeId, node);
 
+        Owner->UpdateCounters();
         OnSuccess(ctx);
     }
 
@@ -240,6 +243,13 @@ void TDynamicNameserver::Bootstrap(const TActorContext &ctx)
         OpenPipe(domain->DomainUid);
     }
 
+    auto counters = GetServiceCounters(AppData(ctx)->Counters, "utils")->GetSubgroup("component", "nameserver");
+    ActiveDynamicNodesCounter = counters->GetCounter("ActiveDynamicNodes");
+    ExpiredDynamicNodesCounter = counters->GetCounter("ExpireDynamicNodes");
+    StaticNodesCounter = counters->GetCounter("StaticNodes");
+    EpochVersionCounter = counters->GetCounter("EpochVersion");
+    UpdateCounters();
+
     Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), new TEvNodeWardenQueryStorageConfig(true));
 
     Become(&TDynamicNameserver::StateFunc);
@@ -282,6 +292,7 @@ void TDynamicNameserver::ReplaceNameserverSetup(TIntrusivePtr<TTableNameserverSe
         for (const auto& subscriber : StaticNodeChangeSubscribers) {
             TActivationContext::Send(new IEventHandle(SelfId(), subscriber, new TEvInterconnect::TEvListNodes));
         }
+        UpdateCounters();
     }
 }
 
@@ -390,12 +401,19 @@ void TDynamicNameserver::SendNodesList(TActorId recipient, const TActorContext &
     if (ListNodesCache->NeedUpdate(now)) {
         auto newNodes = MakeIntrusive<TIntrusiveVector<TEvInterconnect::TNodeInfo>>();
         auto newExpire = TInstant::Max();
-        const bool bridgeModeEnabled = AppData()->BridgeConfig && AppData()->BridgeConfig->PilesSize();
+        const bool bridgeModeEnabled = AppData()->BridgeModeEnabled;
+        const auto& bridge = AppData()->BridgeConfig;
         auto newPileMap = bridgeModeEnabled
             ?  std::make_shared<TEvInterconnect::TEvNodesInfo::TPileMap>()
             : nullptr;
         if (newPileMap) {
-            newPileMap->resize(AppData()->BridgeConfig->PilesSize());
+            newPileMap->resize(bridge.PilesSize());
+        }
+        THashMap<TString, size_t> pileNameMap;
+        if (bridgeModeEnabled) {
+            for (size_t i = 0; i < bridge.PilesSize(); ++i) {
+                pileNameMap.emplace(bridge.GetPiles(i).GetName(), i);
+            }
         }
 
         for (const auto &pr : StaticConfig->StaticNodeTable) {
@@ -416,8 +434,12 @@ void TDynamicNameserver::SendNodesList(TActorId recipient, const TActorContext &
                                            pr.second.Host, pr.second.ResolveHost,
                                            pr.second.Port, pr.second.Location, false);
                     newExpire = std::min(newExpire, pr.second.Expire);
-                    if (pr.second.BridgePileId && newPileMap) {
-                        newPileMap->at(pr.second.BridgePileId->GetRawId()).push_back(pr.first);
+                    if (newPileMap) {
+                        TNodeLocation location(pr.second.Location);
+                        const auto& bridgePileName = location.GetBridgePileName();
+                        if (bridgePileName && pileNameMap.contains(*bridgePileName)) {
+                            newPileMap->at(pileNameMap[*bridgePileName]).push_back(pr.first);
+                        }
                     }
                 }
             }
@@ -518,6 +540,8 @@ void TDynamicNameserver::UpdateState(const NKikimrNodeBroker::TNodesInfo &rec,
         }
         config->Epoch = rec.GetEpoch();
     }
+
+    UpdateCounters();
 }
 
 void TDynamicNameserver::OnPipeDestroyed(ui32 domain, const TActorContext &ctx)
@@ -540,6 +564,18 @@ void TDynamicNameserver::OnPipeDestroyed(ui32 domain, const TActorContext &ctx)
     SyncInProgress = false;
 
     OpenPipe(DynamicConfigs[domain]->NodeBrokerPipe);
+}
+
+void TDynamicNameserver::UpdateCounters() {
+    auto info = AppData()->DomainsInfo;
+    if (info->Domain) {
+        const auto &config = DynamicConfigs[info->Domain->DomainUid];
+
+        *EpochVersionCounter = config->Epoch.Version;
+        *ActiveDynamicNodesCounter = config->DynamicNodes.size();
+        *ExpiredDynamicNodesCounter = config->ExpiredNodes.size();
+        *StaticNodesCounter = StaticConfig->StaticNodeTable.size();
+    }
 }
 
 void TDynamicNameserver::Handle(TEvInterconnect::TEvResolveNode::TPtr &ev,
@@ -805,6 +841,8 @@ void TDynamicNameserver::Handle(TEvNodeBroker::TEvUpdateNodes::TPtr &ev, const T
                 break;
         }
     }
+
+    UpdateCounters();
 }
 
 void TDynamicNameserver::Handle(TEvNodeBroker::TEvSyncNodesResponse::TPtr &ev, const TActorContext &ctx)

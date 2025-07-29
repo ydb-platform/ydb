@@ -1184,6 +1184,7 @@ struct TTopicInfo : TSimpleRefCount<TTopicInfo> {
     TShardIdx BalancerShardIdx = InvalidShardIdx;
     THashMap<ui32, TTopicTabletInfo::TTopicPartitionInfo*> Partitions;
     size_t ActivePartitionCount = 0;
+    THashSet<ui32> OffloadDonePartitions;
 
     TString PreSerializedPathDescription; // Cached path description
     TString PreSerializedPartitionsDescription; // Cached partition description
@@ -3142,167 +3143,36 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
 
         ui64 TableSize = 0;
 
-        ui64 ParentEnd() const noexcept {  // included
-            return ChildBegin - 1;
-        }
-        ui64 ChildEnd() const noexcept {  // included
-            return ChildBegin + ChildCount() - 1;
-        }
+        ui64 ParentEnd() const noexcept;
+        ui64 ChildEnd() const noexcept;
 
-        ui64 ParentCount() const noexcept {
-            return ParentEnd() - ParentBegin + 1;
-        }
-        ui64 ChildCount() const noexcept {
-            return ParentCount() * K;
-        }
+        ui64 ParentCount() const noexcept;
+        ui64 ChildCount() const noexcept;
 
-        TString DebugString() const {
-            return TStringBuilder()
-                << "{ " 
-                << "State = " << State
-                << ", Level = " << Level << " / " << Levels
-                << ", K = " << K
-                << ", Round = " << Round
-                << ", Parent = [" << ParentBegin << ".." << Parent << ".." << ParentEnd() << "]"
-                << ", Child = [" << ChildBegin << ".." << Child << ".." << ChildEnd() << "]"
-                << ", TableSize = " << TableSize
-                << " }";
-        }
+        TString DebugString() const;
 
-        bool NeedsAnotherLevel() const noexcept {
-            return Level < Levels;
-        }
-        bool NeedsAnotherParent() const noexcept {
-            return Parent < ParentEnd();
-        }
-
-        bool NextParent() noexcept {
-            if (!NeedsAnotherParent()) {
-                return false;
-            }
-            ++Parent;
-            Child += K;
-            return true;
-        }
-
-        bool NextLevel() noexcept {
-            if (!NeedsAnotherLevel()) {
-                return false;
-            }
-            NextLevel(ChildCount());
-            return true;
-        }
-
-        void PrefixIndexDone(ui64 shards) {
-            Y_ENSURE(NeedsAnotherLevel());
-            // There's two worst cases, but in both one shard contains TableSize rows
-            // 1. all rows have unique prefix (*), in such case we need 1 id for each row (parent, id in prefix table)
-            // 2. all unique prefixes have size K, so we have TableSize/K parents + TableSize childs
-            // * it doesn't work now, because now prefix should have at least K embeddings, but it's bug
-            NextLevel((2 * TableSize) * shards);
-            Parent = ParentEnd();
-        }
+        bool NeedsAnotherLevel() const noexcept;
+        bool NeedsAnotherParent() const noexcept;
+        bool NextParent() noexcept;
+        bool NextLevel() noexcept;
+        void PrefixIndexDone(ui64 shards);
 
         void Set(ui32 level,
-                 NTableIndex::TClusterId parentBegin, NTableIndex::TClusterId parent,
-                 NTableIndex::TClusterId childBegin, NTableIndex::TClusterId child,
-                 ui32 state, ui64 tableSize, ui32 round) {
-            Level = level;
-            Round = round;
-            ParentBegin = parentBegin;
-            Parent = parent;
-            ChildBegin = childBegin;
-            Child = child;
-            State = static_cast<EState>(state);
-            TableSize = tableSize;
-        }
+            NTableIndex::TClusterId parentBegin, NTableIndex::TClusterId parent,
+            NTableIndex::TClusterId childBegin, NTableIndex::TClusterId child,
+            ui32 state, ui64 tableSize, ui32 round);
 
-        NKikimrTxDataShard::EKMeansState GetUpload() const {
-            if (Level == 1) {
-                if (NeedsAnotherLevel()) {
-                    return NKikimrTxDataShard::EKMeansState::UPLOAD_MAIN_TO_BUILD;
-                } else {
-                    return NKikimrTxDataShard::EKMeansState::UPLOAD_MAIN_TO_POSTING;
-                }
-            } else {
-                if (NeedsAnotherLevel()) {
-                    return NKikimrTxDataShard::EKMeansState::UPLOAD_BUILD_TO_BUILD;
-                } else {
-                    return NKikimrTxDataShard::EKMeansState::UPLOAD_BUILD_TO_POSTING;
-                }
-            }
-        }
+        NKikimrTxDataShard::EKMeansState GetUpload() const;
 
-        TString WriteTo(bool needsBuildTable = false) const {
-            using namespace NTableIndex::NTableVectorKmeansTreeIndex;
-            TString name = PostingTable;
-            if (needsBuildTable || NeedsAnotherLevel()) {
-                name += Level % 2 != 0 ? BuildSuffix0 : BuildSuffix1;
-            }
-            return name;
-        }
-        TString ReadFrom() const {
-            Y_ENSURE(Level > 1);
-            using namespace NTableIndex::NTableVectorKmeansTreeIndex;
-            TString name = PostingTable;
-            name += Level % 2 != 0 ? BuildSuffix1 : BuildSuffix0;
-            return name;
-        }
+        TString WriteTo(bool needsBuildTable = false) const;
+        TString ReadFrom() const;
 
-        std::pair<NTableIndex::TClusterId, NTableIndex::TClusterId> RangeToBorders(const TSerializedTableRange& range) const {
-            const NTableIndex::TClusterId minParent = ParentBegin;
-            const NTableIndex::TClusterId maxParent = ParentEnd();
-            const NTableIndex::TClusterId parentFrom = [&, from = range.From.GetCells()] {
-                if (!from.empty()) {
-                    if (!from[0].IsNull()) {
-                        return from[0].AsValue<NTableIndex::TClusterId>() + static_cast<NTableIndex::TClusterId>(from.size() == 1);
-                    }
-                }
-                return minParent;
-            }();
-            const NTableIndex::TClusterId parentTo = [&, to = range.To.GetCells()] {
-                if (!to.empty()) {
-                    if (!to[0].IsNull()) {
-                        return to[0].AsValue<NTableIndex::TClusterId>() - static_cast<NTableIndex::TClusterId>(to.size() != 1 && to[1].IsNull());
-                    }
-                }
-                return maxParent;
-            }();
-            Y_ENSURE(minParent <= parentFrom, "minParent(" << minParent << ") > parentFrom(" << parentFrom << ") " << DebugString());
-            Y_ENSURE(parentFrom <= parentTo, "parentFrom(" << parentFrom << ") > parentTo(" << parentTo << ") " << DebugString());
-            Y_ENSURE(parentTo <= maxParent, "parentTo(" << parentTo << ") > maxParent(" << maxParent << ") " << DebugString());
-            return {parentFrom, parentTo};
-        }
+        std::pair<NTableIndex::TClusterId, NTableIndex::TClusterId> RangeToBorders(const TSerializedTableRange& range) const;
 
-        TString RangeToDebugStr(const TSerializedTableRange& range) const {
-            auto toStr = [&](const TSerializedCellVec& v) -> TString {
-                const auto cells = v.GetCells();
-                if (cells.empty()) {
-                    return "inf";
-                }
-                if (cells[0].IsNull()) {
-                    return "-inf";
-                }
-                auto str = TStringBuilder{} << "{ count: " << cells.size();
-                if (Level > 1) {
-                    str << ", parent: " << cells[0].AsValue<NTableIndex::TClusterId>();
-                    if (cells.size() != 1 && cells[1].IsNull()) {
-                        str << ", pk: null";
-                    }
-                }
-                return str << " }";
-            };
-            return TStringBuilder{} << "{ From: " << toStr(range.From) << ", To: " << toStr(range.To) << " }";
-        }
+        TString RangeToDebugStr(const TSerializedTableRange& range) const;
 
     private:
-        void NextLevel(ui64 childCount) noexcept {
-            ParentBegin = ChildBegin;
-            Parent = ParentBegin;
-            ChildBegin = ParentBegin + childCount;
-            Child = ChildBegin;
-            ++Level;
-        }
+        void NextLevel(ui64 childCount) noexcept;
     };
     TKMeans KMeans;
 
@@ -3676,7 +3546,7 @@ public:
                     indexInfo->KMeans.Rounds = NTableIndex::NTableVectorKmeansTreeIndex::DefaultKMeansRounds;
                     TString createError;
                     indexInfo->Clusters = NKikimr::NKMeans::CreateClusters(desc.settings().settings(), indexInfo->KMeans.Rounds, createError);
-                    Y_ENSURE(indexInfo->Clusters && createError == "");
+                    Y_ENSURE(indexInfo->Clusters, createError);
                     indexInfo->SpecializedIndexDescription = std::move(desc);
                 } break;
                 case NKikimrSchemeOp::TIndexCreationConfig::SPECIALIZEDINDEXDESCRIPTION_NOT_SET:
@@ -3889,6 +3759,116 @@ struct TSysViewInfo : TSimpleRefCount<TSysViewInfo> {
 
     ui64 AlterVersion = 0;
     NKikimrSysView::ESysViewType Type;
+};
+
+struct TIncrementalRestoreState {
+    TPathId BackupCollectionPathId;
+    ui64 OriginalOperationId;
+
+    // Sequential incremental backup processing
+    struct TIncrementalBackup {
+        TPathId BackupPathId;
+        TString BackupPath;
+        ui64 Timestamp;
+        bool Completed = false;
+
+        TIncrementalBackup(const TPathId& pathId, const TString& path, ui64 timestamp)
+            : BackupPathId(pathId), BackupPath(path), Timestamp(timestamp)
+        {}
+    };
+
+    // Table operation state for tracking DataShard completion
+    struct TTableOperationState {
+        TOperationId OperationId;
+        THashSet<TShardIdx> ExpectedShards;
+        THashSet<TShardIdx> CompletedShards;
+        THashSet<TShardIdx> FailedShards;
+
+        TTableOperationState() = default;
+        explicit TTableOperationState(const TOperationId& opId) : OperationId(opId) {}
+
+        bool AllShardsComplete() const {
+            return CompletedShards.size() + FailedShards.size() == ExpectedShards.size() && 
+                    !ExpectedShards.empty();
+        }
+
+        bool HasFailures() const {
+            return !FailedShards.empty();
+        }
+    };
+
+    TVector<TIncrementalBackup> IncrementalBackups; // Sorted by timestamp
+    ui32 CurrentIncrementalIdx = 0;
+    bool CurrentIncrementalStarted = false;
+
+    // Operation completion tracking for current incremental backup
+    THashSet<TOperationId> InProgressOperations;
+    THashSet<TOperationId> CompletedOperations;
+
+    // Table operation state tracking for DataShard completion
+    THashMap<TOperationId, TTableOperationState> TableOperations;
+
+    bool AllIncrementsProcessed() const {
+        return CurrentIncrementalIdx >= IncrementalBackups.size();
+    }
+
+    bool IsCurrentIncrementalComplete() const {
+        return CurrentIncrementalIdx < IncrementalBackups.size() && 
+                IncrementalBackups[CurrentIncrementalIdx].Completed;
+    }
+
+    bool AreAllCurrentOperationsComplete() const {
+        return InProgressOperations.empty() && !CompletedOperations.empty();
+    }
+
+    void MarkCurrentIncrementalComplete() {
+        if (CurrentIncrementalIdx < IncrementalBackups.size()) {
+            IncrementalBackups[CurrentIncrementalIdx].Completed = true;
+        }
+    }
+
+    void MoveToNextIncremental() {
+        if (CurrentIncrementalIdx < IncrementalBackups.size()) {
+            CurrentIncrementalIdx++;
+            CurrentIncrementalStarted = false;
+
+            // Reset operation tracking for next incremental
+            InProgressOperations.clear();
+            CompletedOperations.clear();
+            TableOperations.clear();
+        }
+    }
+
+    const TIncrementalBackup* GetCurrentIncremental() const {
+        if (CurrentIncrementalIdx < IncrementalBackups.size()) {
+            return &IncrementalBackups[CurrentIncrementalIdx];
+        }
+
+        return nullptr;
+    }
+
+    void AddIncrementalBackup(const TPathId& pathId, const TString& path, ui64 timestamp) {
+        IncrementalBackups.emplace_back(pathId, path, timestamp);
+
+        // Sort by timestamp to ensure chronological order
+        std::sort(IncrementalBackups.begin(), IncrementalBackups.end(), 
+                    [](const TIncrementalBackup& a, const TIncrementalBackup& b) {
+                        return a.Timestamp < b.Timestamp;
+                    });
+    }
+
+    void AddCurrentIncrementalOperation(const TOperationId& opId) {
+        InProgressOperations.insert(opId);
+    }
+
+    void MarkOperationComplete(const TOperationId& opId) {
+        InProgressOperations.erase(opId);
+        CompletedOperations.insert(opId);
+    }
+
+    bool AllCurrentIncrementalOperationsComplete() const {
+        return InProgressOperations.empty() && !CompletedOperations.empty();
+    }
 };
 
 bool ValidateTtlSettings(const NKikimrSchemeOp::TTTLSettings& ttl,

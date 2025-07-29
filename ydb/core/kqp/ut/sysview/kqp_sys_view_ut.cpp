@@ -311,8 +311,14 @@ order by SessionId;)", "%Y-%m-%d %H:%M:%S %Z", sessionsSet.front().GetId().data(
 
         for (size_t i = 0; i < 3; ++i) {
             expectedYson << Sprintf(R"([
-                [72057594046644480u];[%luu];["/Root/TuplePrimaryDescending"];[%luu]
+                [72057594046644480u];[%luu];["/Root/ReorderKey"];[%luu]
             ];)", i, startPathId + 10)  << Endl;
+        }
+      
+        for (size_t i = 0; i < 5; ++i) {
+            expectedYson << Sprintf(R"([
+                [72057594046644480u];[%luu];["/Root/ReorderOptionalKey"];[%luu]
+            ];)", i, startPathId + 11)  << Endl;
         }
 
         expectedYson << "]";

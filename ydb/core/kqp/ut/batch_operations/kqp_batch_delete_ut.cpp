@@ -137,15 +137,42 @@ void TestSimplePartitions(size_t maxBatchSize, size_t partitionLimit) {
     }
     {
         auto query = Q_(R"(
-            BATCH DELETE FROM TuplePrimaryDescending
+            BATCH DELETE FROM ReorderKey
                 WHERE Col3 = 0;
         )");
         auto result = session.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
         ExecQueryAndTestEmpty(session, R"(
-            SELECT count(*) FROM TuplePrimaryDescending
+            SELECT count(*) FROM ReorderKey
                 WHERE Col3 = 0;
+        )");
+    }
+    {
+        // With literal tx
+        auto query = Q_(R"(
+            BATCH DELETE FROM ReorderOptionalKey
+                WHERE k1 IN [0, 1, 2, 3];
+        )");
+        auto result = session.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        ExecQueryAndTestEmpty(session, R"(
+            SELECT count(*) FROM ReorderOptionalKey
+                WHERE k1 IN [0, 1, 2, 3];
+        )");
+    }
+    {
+        auto query = Q_(R"(
+            BATCH DELETE FROM ReorderOptionalKey
+                WHERE id = 2 AND (k2 IS NULL OR k2 >= 0);
+        )");
+        auto result = session.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        ExecQueryAndTestEmpty(session, R"(
+            SELECT count(*) FROM ReorderOptionalKey
+                WHERE id = 2 AND (k2 IS NULL OR k2 >= 0);
         )");
     }
 }
@@ -443,8 +470,7 @@ Y_UNIT_TEST_SUITE(KqpBatchDelete) {
 
         {
             auto query = Q_(R"(
-                BATCH DELETE FROM Test
-                    ON (Group, Name)
+                BATCH DELETE FROM Test ON (Group, Name)
                     VALUES (1u, "Anna");
             )");
 
@@ -455,7 +481,7 @@ Y_UNIT_TEST_SUITE(KqpBatchDelete) {
     }
 
     Y_UNIT_TEST(ColumnTable) {
-        TKikimrRunner kikimr(GetAppConfig());
+        TKikimrRunner kikimr(TKikimrSettings(GetAppConfig()).SetWithSampleTables(false));
         auto db = kikimr.GetQueryClient();
         auto session = db.GetSession().GetValueSync().GetSession();
 
@@ -500,7 +526,7 @@ Y_UNIT_TEST_SUITE(KqpBatchDelete) {
     }
 
     Y_UNIT_TEST(TableNotExists) {
-        TKikimrRunner kikimr(GetAppConfig());
+        TKikimrRunner kikimr(TKikimrSettings(GetAppConfig()).SetWithSampleTables(false));
         auto db = kikimr.GetQueryClient();
         auto session = db.GetSession().GetValueSync().GetSession();
 
@@ -553,7 +579,7 @@ Y_UNIT_TEST_SUITE(KqpBatchDelete) {
 
             auto result = session.ExecuteQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::BAD_REQUEST);
-            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "BATCH operation can be executed only in NoTx mode.", result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "BATCH operation can be executed only in the implicit transaction mode.", result.GetIssues().ToString());
         }
     }
 }

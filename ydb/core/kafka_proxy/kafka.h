@@ -70,7 +70,7 @@ public:
 static constexpr TKafkaVersions VersionsNever(0, -1);
 static constexpr TKafkaVersions VersionsAlways(0, Max<TKafkaVersion>());
 
-using TWritableBuf = NKikimr::NRawSocket::TBufferedWriter;
+using TWritableBuf = NKikimr::NRawSocket::TBufferedWriter<>;
 
 namespace NPrivate {
 

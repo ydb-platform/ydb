@@ -247,15 +247,14 @@ std::optional<std::vector<std::shared_ptr<TDeleteTrashImpl::IAction>>> TDeleteTr
 
 std::optional<std::vector<std::shared_ptr<TDeleteTrashImpl::IAction>>> TDeleteTrashImpl::KeysToDelete(
     NTabletFlatExecutor::TTransactionContext& txc) {
-    NIceDb::TNiceDb db(txc.DB);
     using namespace NColumnShard;
-    if (!Schema::Precharge<Schema::IndexColumns>(db, txc.DB.GetScheme())) {
+    if (!PrechargeV0(txc)) {
         return std::nullopt;
     }
-    if (!Schema::Precharge<Schema::IndexColumnsV1>(db, txc.DB.GetScheme())) {
+    if (!PrechargeV1(txc)) {
         return std::nullopt;
     }
-    if (!Schema::Precharge<Schema::IndexColumnsV2>(db, txc.DB.GetScheme())) {
+    if (!PrechargeV2(txc)) {
         return std::nullopt;
     }
 

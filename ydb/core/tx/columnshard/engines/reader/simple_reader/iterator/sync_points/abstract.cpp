@@ -8,10 +8,10 @@ namespace NKikimr::NOlap::NReader::NSimple {
 
 void ISyncPoint::OnSourcePrepared(std::shared_ptr<NCommon::IDataSource>&& sourceInput, TPlainReadData& reader) {
     const NActors::TLogContextGuard gLogging = NActors::TLogContextBuilder::Build()("sync_point", GetPointName())("aborted", AbortFlag)(
-        "tablet_id", Context->GetCommonContext()->GetReadMetadata()->GetTabletId());
+        "tablet_id", Context->GetCommonContext()->GetReadMetadata()->GetTabletId())("prepared_source_id", sourceInput->GetSourceId());
     if (AbortFlag) {
         FOR_DEBUG_LOG(NKikimrServices::COLUMNSHARD_SCAN_EVLOG, sourceInput->AddEvent("a" + GetShortPointName()));
-        AFL_WARN(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "sync_point_aborted")("source_id", sourceInput->GetSourceId());
+        AFL_WARN(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "sync_point_aborted");
         return;
     } else {
         FOR_DEBUG_LOG(NKikimrServices::COLUMNSHARD_SCAN_EVLOG, sourceInput->AddEvent("f" + GetShortPointName()));
@@ -60,8 +60,15 @@ TString ISyncPoint::DebugString() const {
     sb << "{" << PointName << ";" << PointIndex << ";" << IsFinished() << ";";
     if (SourcesSequentially.size()) {
         sb << "SRCS:[";
+        ui32 idx = 0;
         for (auto&& i : SourcesSequentially) {
-            sb << i->GetSourceId() << ",";
+            sb << "{" << i->GetSourceId() << "," << i->GetSequentialMemoryGroupIdx() << "}" << ",";
+            if (++idx == 10) {
+                break;
+            }
+        }
+        if (SourcesSequentially.size() > 10) {
+            sb << "... (" << SourcesSequentially.size() - idx << " more)";
         }
         sb << "];";
     }

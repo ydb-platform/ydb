@@ -1,7 +1,7 @@
 #include "distconf.h"
+#include "distconf_statestorage_config_generator.h"
 
 #include <ydb/core/mind/bscontroller/group_geometry_info.h>
-
 #include <ydb/library/yaml_config/yaml_config_helpers.h>
 #include <ydb/library/yaml_json/yaml_to_json.h>
 #include <library/cpp/streams/zstd/zstd.h>
@@ -577,104 +577,10 @@ namespace NKikimr::NStorage {
             std::optional<TBridgePileId> pileId = ResolveNodePileId(location);
             nodes[pileId][location.GetDataCenterId()].emplace_back(node.GetNodeId(), location);
         }
-
-        auto pickNodes = [&](std::vector<std::tuple<ui32, TNodeLocation>>& nodes, size_t ringsCount, size_t nodesInRing) {
-            Y_ABORT_UNLESS(ringsCount * nodesInRing <= nodes.size());
-            THashSet<ui32> disabled;
-            auto compByRack = [](const auto& x, const auto& y) {
-                return std::get<1>(x).GetRackId() < std::get<1>(y).GetRackId()
-                    || (std::get<1>(x).GetRackId() == std::get<1>(y).GetRackId() && std::get<0>(x) < std::get<0>(y));
-            };
-            auto compByState = [&](const auto& x, const auto& y) {
-                ui32 state1 = SelfHealNodesState.contains(std::get<0>(x)) ? SelfHealNodesState.at(std::get<0>(x)) : Max<ui32>();
-                ui32 state2 = SelfHealNodesState.contains(std::get<0>(y)) ? SelfHealNodesState.at(std::get<0>(y)) : Max<ui32>();
-                return state1 < state2 || (state1 == state2 && compByRack(x, y));
-            };
-            std::ranges::sort(nodes, compByState);
-            ui32 cnt = 0;
-            for (auto &[nodeId, _] : nodes) {
-                if (SelfHealNodesState[nodeId] == 0) {
-                    cnt++;
-                    continue;
-                }
-                if (cnt >= ringsCount * nodesInRing) {
-                    disabled.insert(nodeId);
-                } else {
-                    cnt++;
-                    goodConfig = false;
-                }
-            }
-            std::ranges::sort(nodes, compByRack);
-
-            std::vector<std::vector<ui32>> result;
-            result.resize(ringsCount);
-            auto iter = nodes.begin();
-            TNodeLocation location;
-            for(ui32 i : xrange(ringsCount)) {
-                std::vector<ui32> &ring = result[i];
-                while (ring.size() < nodesInRing) {
-                    ui32 nodeId = std::get<0>(*iter);
-                    location = std::get<1>(*iter);
-                    iter++;
-                    if (disabled.contains(nodeId)) {
-                        if (iter == nodes.end()) {
-                            iter = nodes.begin();
-                        }
-                        continue;
-                    }
-                    ring.push_back(nodeId);
-                    disabled.insert(nodeId);
-                }
-                while (iter != nodes.end() && std::get<1>(*iter).GetRackId() == location.GetRackId()) {
-                    ++iter;
-                }
-                if (iter == nodes.end()) {
-                    iter = nodes.begin();
-                }
-            }
-            return result;
-        };
-
         for (auto& [pileId, nodesByDataCenter] : nodes) {
-            size_t minNodesInDc = Max<size_t>();
-            for (auto& [_, v] : nodesByDataCenter) {
-                minNodesInDc = Min<size_t>(minNodesInDc, v.size());
-            }
-            const size_t datacenterCoeff = 1000 / nodesByDataCenter.size();
-            ui32 nodesInRing = minNodesInDc / datacenterCoeff + 1;
-
-            std::vector<std::vector<ui32>> rings;
-            const size_t maxNodesPerDataCenter = nodesByDataCenter.size() == 1 ? 8 : 3;
-            for (auto& [_, v] : nodesByDataCenter) {
-                size_t countToSelect = Min<size_t>(v.size(), maxNodesPerDataCenter);
-                if (v.size() < maxNodesPerDataCenter && nodesByDataCenter.size() > 1) {
-                    countToSelect = 1;
-                }
-                auto r = pickNodes(v, countToSelect, nodesInRing);
-                rings.insert(rings.end(), r.begin(), r.end());
-            }
-            auto *rg = ss->AddRingGroups();
-            if (pileId) {
-                pileId->CopyToProto(rg, &NKikimrConfig::TDomainsConfig::TStateStorage::TRing::SetBridgePileId);
-            }
-            ui32 ringsCnt = rings.size();
-            ui32 nToSelect = 1;
-            if (ringsCnt <= 2) {
-                nToSelect = 1;
-            } else if (ringsCnt < 8) {
-                nToSelect = 3;
-            } else if (ringsCnt == 8) {
-                nToSelect = 5;
-            } else if (ringsCnt > 8) {
-                nToSelect = 9;
-            }
-            rg->SetNToSelect(nToSelect);
-            for (auto &nodes : rings) {
-                auto *ring = rg->AddRing();
-                for(auto nodeId : nodes) {
-                    ring->AddNode(nodeId);
-                }
-            }
+            TStateStoragePerPileGenerator generator(nodesByDataCenter, SelfHealNodesState, pileId);
+            generator.AddRingGroup(ss);
+            goodConfig &= generator.IsGoodConfig();
         }
         return goodConfig;
     }

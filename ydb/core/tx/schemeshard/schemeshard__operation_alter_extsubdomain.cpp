@@ -400,7 +400,7 @@ public:
         auto path = context.SS->PathsById.at(pathId);
 
         auto ev = CreateEvCreateTablet(path, shardIdx, context);
-        auto rootHiveId = context.SS->GetGlobalHive(context.Ctx);
+        auto rootHiveId = context.SS->GetGlobalHive();
 
         LOG_D(DebugHint() << "Send CreateTablet event to Hive: " << rootHiveId << " msg:  "<< ev->Record.DebugString());
 
@@ -474,7 +474,7 @@ public:
         );
 
         auto rootHiveId = TTabletId(record.GetOrigin());
-        Y_ABORT_UNLESS(rootHiveId == context.SS->GetGlobalHive(context.Ctx));
+        Y_ABORT_UNLESS(rootHiveId == context.SS->GetGlobalHive());
 
         TShardInfo& shardInfo = context.SS->ShardInfos.at(shardIdx);
 
@@ -765,7 +765,7 @@ public:
             Y_ABORT_UNLESS(context.SS->SubDomains.contains(pathId));
             TSubDomainInfo::TConstPtr subDomain = context.SS->SubDomains.at(pathId);
 
-            const TTabletId hiveToSync = context.SS->ResolveHive(pathId, context.Ctx);
+            const TTabletId hiveToSync = context.SS->ResolveHive(pathId);
 
             auto event = MakeHolder<TEvHive::TEvUpdateDomain>();
             event->Record.SetTxId(ui64(OperationId.GetTxId()));

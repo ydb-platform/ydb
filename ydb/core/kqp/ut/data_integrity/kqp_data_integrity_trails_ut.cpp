@@ -43,10 +43,8 @@ Y_UNIT_TEST_SUITE(KqpDataIntegrityTrails) {
     Y_UNIT_TEST_QUAD(Upsert, LogEnabled, UseSink) {
         TStringStream ss;
         {
-            NKikimrConfig::TAppConfig appConfig;
-            appConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
             TKikimrSettings serverSettings;
-            serverSettings.SetAppConfig(appConfig);
+            serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
             serverSettings.LogStream = &ss;
             TKikimrRunner kikimr(serverSettings);
 
@@ -96,11 +94,9 @@ Y_UNIT_TEST_SUITE(KqpDataIntegrityTrails) {
     Y_UNIT_TEST_QUAD(UpsertEvWriteQueryService, isOlap, useOltpSink) {
         TStringStream ss;
         {
-            NKikimrConfig::TAppConfig AppConfig;
-            AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(useOltpSink);
-            AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(isOlap);
-
-            TKikimrSettings serverSettings = TKikimrSettings().SetAppConfig(AppConfig);
+            TKikimrSettings serverSettings;
+            serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(useOltpSink);
+            serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(isOlap);
             serverSettings.LogStream = &ss;
             TKikimrRunner kikimr(serverSettings);
             kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::DATA_INTEGRITY, NLog::PRI_TRACE);
@@ -236,10 +232,8 @@ Y_UNIT_TEST_SUITE(KqpDataIntegrityTrails) {
     Y_UNIT_TEST_TWIN(BrokenReadLock, UseSink) {
         TStringStream ss;
         {
-            NKikimrConfig::TAppConfig AppConfig;
-            AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
             TKikimrSettings serverSettings;
-            serverSettings.SetAppConfig(AppConfig);
+            serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
             serverSettings.LogStream = &ss;
             TKikimrRunner kikimr(serverSettings);
             kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::DATA_INTEGRITY, NLog::PRI_TRACE);

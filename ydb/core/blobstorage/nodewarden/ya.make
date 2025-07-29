@@ -26,6 +26,8 @@ SRCS(
     distconf_scatter_gather.cpp
     distconf_selfheal.h
     distconf_selfheal.cpp
+    distconf_statestorage_config_generator.h
+    distconf_statestorage_config_generator.cpp
     distconf_validate.cpp
     node_warden.h
     node_warden_cache.cpp

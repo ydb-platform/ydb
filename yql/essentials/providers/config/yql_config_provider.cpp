@@ -883,6 +883,14 @@ namespace {
 
                 Types_.UseBlocks = (name == "UseBlocks");
             }
+            else if (name == "DebugPositions" || name == "DisableDebugPositions") {
+                if (args.size() != 0) {
+                    ctx.AddError(TIssue(pos, TStringBuilder() << "Expected no arguments, but got " << args.size()));
+                    return false;
+                }
+
+                Types_.DebugPositions = (name == "DebugPositions");
+            }
             else if (name == "PgEmitAggApply" || name == "DisablePgEmitAggApply") {
                 if (args.size() != 0) {
                     ctx.AddError(TIssue(pos, TStringBuilder() << "Expected no arguments, but got " << args.size()));

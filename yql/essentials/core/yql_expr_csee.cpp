@@ -121,6 +121,10 @@ namespace {
             break;
         }
         case TExprNode::Callable:
+            if (node.IsPosAware()) {
+                auto pos = node.Pos();
+                hash = CseeHash(&pos, sizeof(pos), hash);
+            }
             if constexpr (UseDeterminsticHash) {
                 hash = CseeHash(node.Content().data(), node.Content().size(), hash);
             } else {
@@ -266,6 +270,13 @@ namespace {
             return left.Content().data() == right.Content().data() && left.GetFlagsToCompare() == right.GetFlagsToCompare();
 
         case TExprNode::Callable:
+            if (left.IsPosAware() != right.IsPosAware()) {
+                return false;
+            }
+
+            if (left.IsPosAware() && left.Pos() != right.Pos()) {
+                return false;
+            }
             // compare pointers due to intern
             if (left.Content().data() != right.Content().data()) {
                 return false;

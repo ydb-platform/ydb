@@ -309,7 +309,11 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvCreateQuery
 
         TSqlQueryBuilder writeQueryBuilder(YdbConnection->TablePathPrefix, "CreateQuery(write)");
         writeQueryBuilder.AddString("tenant", mapResult.TenantName);
-        writeQueryBuilder.AddString("node", mapResult.NodeIds);
+        std::optional<std::string> nodes;
+        if (mapResult.NodeIds) {
+            nodes = *mapResult.NodeIds;
+        }
+        writeQueryBuilder.AddValue("node", NYdb::TValueBuilder().OptionalString(nodes).Build());
         writeQueryBuilder.AddString("scope", scope);
         writeQueryBuilder.AddString("query_id", queryId);
         writeQueryBuilder.AddString("name", query.content().name());
@@ -1063,7 +1067,11 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyQuery
         writeQueryBuilder.AddInt64("revision", common.revision());
         writeQueryBuilder.AddInt64("status", query.meta().status());
         writeQueryBuilder.AddString("result_id", resultId);
-        writeQueryBuilder.AddString("node", mapResult.NodeIds);
+        std::optional<std::string> nodes;
+        if (mapResult.NodeIds) {
+            nodes = *mapResult.NodeIds;
+        }
+        writeQueryBuilder.AddValue("node", NYdb::TValueBuilder().OptionalString(nodes).Build());
 
         writeQueryBuilder.AddText(
             "$to_delete = (\n"

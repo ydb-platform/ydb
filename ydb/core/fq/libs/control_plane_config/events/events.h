@@ -28,7 +28,7 @@ struct TTenantInfo {
 
     struct TMapping {
         TString Vtenant;
-        TString NodeIds;       // empty - all nodes.
+        TMaybe<TString> NodeIds;       // empty - all nodes.
     };
 
     THashMap<TString /* subject type */, THashMap<TString /* subject id */, TMapping /* mapping */>> SubjectMapping;
@@ -46,7 +46,7 @@ struct TTenantInfo {
 
     struct TMapResult {
         TString TenantName;
-        TString NodeIds;
+        TMaybe<TString> NodeIds;
     };
     // this method must be thread safe
     TMapResult Assign(const TString& cloudId, const TString& scope, FederatedQuery::QueryContent::QueryType queryType, const TString& DefaultTenantName = "") const {

@@ -118,7 +118,6 @@ private:
     }
 
     void LoadTenantsAndMapping() {
-
         LoadInProgress = true;
         TDbExecutable::TPtr executable;
         auto& executer = TTenantExecuter::Create(executable, true, [computeConfig=ComputeConfig](TTenantExecuter& executer) { executer.State.reset(new TTenantInfo(computeConfig)); } );
@@ -169,7 +168,7 @@ private:
                         auto subject_id = *parser.ColumnParser(SUBJECT_ID_COLUMN_NAME).GetOptionalString();
                         auto vtenant = *parser.ColumnParser(VTENANT_COLUMN_NAME).GetOptionalString();
                         auto optionalNode = parser.ColumnParser(NODE_COLUMN_NAME).GetOptionalString();
-                        TString node;
+                        TMaybe<TString> node;
                         if (optionalNode) {
                             node = *optionalNode;
                         }

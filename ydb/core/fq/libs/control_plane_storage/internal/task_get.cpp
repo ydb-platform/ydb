@@ -28,14 +28,14 @@ struct TTaskInternal {
     TInstant Deadline;
     TString TenantName;
     TString NewTenantName;
-    TString NewNodeIds;
+    TMaybe<TString> NewNodeIds;
 };
 
 std::pair<TString, NYdb::TParams> MakeSql(const TTaskInternal& taskInternal, const TInstant& nowTimestamp, const TInstant& taskLeaseUntil) {
 
     if (taskInternal.ShouldSkipTask) {
 
-        if (taskInternal.NewTenantName || !taskInternal.NewNodeIds.empty()) {
+        if (taskInternal.NewTenantName || taskInternal.NewNodeIds) {
             const auto& task = taskInternal.Task;
             TSqlQueryBuilder queryBuilder(taskInternal.TablePathPrefix, "GetTask(move)");
             queryBuilder.AddString("tenant", taskInternal.TenantName);
@@ -52,7 +52,11 @@ std::pair<TString, NYdb::TParams> MakeSql(const TTaskInternal& taskInternal, con
             queryBuilder.AddUint64("generation", task.Generation);
             queryBuilder.AddTimestamp("retry_counter_update_time", taskInternal.RetryLimiter.RetryCounterUpdatedAt);
             queryBuilder.AddDouble("retry_rate", taskInternal.RetryLimiter.RetryRate);
-            queryBuilder.AddString("node", taskInternal.NewNodeIds);
+            std::optional<std::string> nodes;
+            if (taskInternal.NewNodeIds) {
+                nodes = *taskInternal.NewNodeIds;
+            }
+            queryBuilder.AddValue("node", NYdb::TValueBuilder().OptionalString(nodes).Build());
 
             // update queries
             queryBuilder.AddText(
@@ -306,8 +310,10 @@ void TControlPlaneStorageBase::FillGetTaskResult(Fq::Private::GetTaskResult& res
         *newTask->mutable_execution_limit() = NProtoInterop::CastToProto(ExtractLimit(task));
         *newTask->mutable_request_started_at() = task.Query.meta().started_at();
         *newTask->mutable_request_submitted_at() = task.Query.meta().submitted_at();
-        for (auto nodeId : task.NodeIds) {    
-            newTask->add_node_id(nodeId);
+        if (task.NodeIds) {
+            for (auto nodeId : *task.NodeIds) {    
+                newTask->add_node_id(nodeId);
+            }
         }
 
         newTask->set_restart_count(task.RetryCount);
@@ -337,6 +343,30 @@ void TControlPlaneStorageBase::FillGetTaskResult(Fq::Private::GetTaskResult& res
         *newTask->mutable_result_ttl() = task.Internal.result_ttl();
         *newTask->mutable_parameters() = task.Query.content().parameters();
     }
+}
+
+static TSet<ui64> ParseNodeIds(const TString& nodes) {
+    TSet<ui64> result;
+    const auto split = SplitString(nodes, ",");
+    for (const auto& item : split) {
+        auto it = std::find(item.begin(), item.end(), '-');
+        if (it != item.end()) {
+            auto beginStr = StripString(item.substr(0, it - item.begin()));
+            auto endStr = StripString(item.substr(it - item.begin() + 1));
+            ui64 begin, end;
+            if (beginStr.empty() || endStr.empty() || !TryFromString(beginStr, begin) || !TryFromString(endStr, end)) {
+                continue;
+            }
+            for (; begin <= end; ++begin) {
+                result.insert(begin);
+            }
+            continue;
+        }
+        if (ui64 value = 0; TryFromString(StripString(item), value)) {
+            result.insert(value);
+        }
+    }
+    return result;
 }
 
 void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvGetTaskRequest::TPtr& ev)
@@ -417,8 +447,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvGetTaskRequ
             auto node = parser.ColumnParser(NODE_COLUMN_NAME).GetOptionalString();
             CPS_LOG_AS_T(*actorSystem, "Node777" << node);
             if (node) {
-                auto nodeIds = Scan<ui64>(SplitString(TString(*node), ","));
-                task.NodeIdsSet = TSet<ui64>(nodeIds.begin(), nodeIds.end());
+                task.NodeIdsSet = ParseNodeIds(TString(*node));
                 task.NodeIds = *node;
             }
             if (!previousOwner.empty()) { // task lease timeout case only, other cases are updated at ping time

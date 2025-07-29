@@ -14,7 +14,7 @@ struct TTask {
     ui64 Generation = 0;
     TInstant Deadline;
     TSet<ui64> NodeIdsSet;
-    TString NodeIds;
+    TMaybe<TString> NodeIds;
 };
 
 class TResponseTasks {

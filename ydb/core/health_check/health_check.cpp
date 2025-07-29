@@ -622,7 +622,7 @@ public:
     }
 
     TString FilterDatabase;
-    THashMap<TSubDomainKey, TString> FilterDomainKey;
+    THashMap<TSubDomainKey, std::optional<TString>> FilterDomainKey; // nullopt for serverless
     TVector<TActorId> PipeClients;
     int Requests = 0;
     TString DomainPath;
@@ -1386,6 +1386,7 @@ public:
         if (response.IsOk()) {
             auto domainInfo = response.Get()->Request->ResultSet.begin()->DomainInfo;
             TString path = CanonizePath(response.Get()->Request->ResultSet.begin()->Path);
+            TSubDomainKey subDomainKey(domainInfo->DomainKey.OwnerId, domainInfo->DomainKey.LocalPathId);
             if (domainInfo->IsServerless()) {
                 if (NeedHealthCheckForServerless(domainInfo)) {
                     if (SharedDatabases.emplace(domainInfo->ResourcesDomainKey, path).second) {
@@ -1395,12 +1396,13 @@ public:
                     DatabaseState[path].ServerlessComputeResourcesMode = domainInfo->ServerlessComputeResourcesMode;
                 } else {
                     DatabaseState.erase(path);
+                    FilterDomainKey[subDomainKey] = std::nullopt;
                     RequestDone("TEvNavigateKeySetResult");
                     return;
                 }
             }
 
-            FilterDomainKey[TSubDomainKey(domainInfo->DomainKey.OwnerId, domainInfo->DomainKey.LocalPathId)] = path;
+            FilterDomainKey[subDomainKey] = path;
 
             TTabletId hiveId = domainInfo->Params.GetHive();
             if (hiveId) {
@@ -1423,6 +1425,8 @@ public:
             if (DescribeByPath.count(path) == 0) {
                 DescribeByPath[path] = RequestDescribe(schemeShardId, path);
             }
+        } else {
+            BLOG_D("TEvNavigateKeySetResult error: " << response.GetError());
         }
         RequestDone("TEvNavigateKeySetResult");
     }
@@ -1513,13 +1517,15 @@ public:
                     auto itDomain = FilterDomainKey.find(tenantId);
                     TDatabaseState* database = nullptr;
                     if (itDomain == FilterDomainKey.end()) {
+                        continue;
+                    } else if (!itDomain->second) {
                         if (!FilterDatabase || FilterDatabase == dbPath) {
                             database = &dbState;
                         } else {
                             continue;
                         }
                     } else {
-                        auto itDatabase = DatabaseState.find(itDomain->second);
+                        auto itDatabase = DatabaseState.find(*itDomain->second);
                         if (itDatabase != DatabaseState.end()) {
                             database = &itDatabase->second;
                         } else {
@@ -1550,8 +1556,8 @@ public:
                     if (hiveStat.HasNodeDomain()) {
                         TSubDomainKey domainKey(hiveStat.GetNodeDomain());
                         auto itFilterDomainKey = FilterDomainKey.find(domainKey);
-                        if (itFilterDomainKey != FilterDomainKey.end()) {
-                            TString path(itFilterDomainKey->second);
+                        if (itFilterDomainKey != FilterDomainKey.end() && itFilterDomainKey->second) {
+                            TString path(*itFilterDomainKey->second);
                             TDatabaseState& state(DatabaseState[path]);
                             state.ComputeNodeIds.emplace_back(hiveStat.GetNodeId());
                             state.NodeRestartsPerPeriod[hiveStat.GetNodeId()] = hiveStat.GetRestartsPerPeriod();
@@ -1848,8 +1854,8 @@ public:
             && databaseState.ServerlessComputeResourcesMode != NKikimrSubDomains::EServerlessComputeResourcesModeExclusive)
         {
             auto itDatabase = FilterDomainKey.find(TSubDomainKey(databaseState.ResourcePathId.OwnerId, databaseState.ResourcePathId.LocalPathId));
-            if (itDatabase != FilterDomainKey.end()) {
-                const TString& sharedDatabaseName = itDatabase->second;
+            if (itDatabase != FilterDomainKey.end() && itDatabase->second) {
+                const TString& sharedDatabaseName = *itDatabase->second;
                 TDatabaseState& sharedDatabase = DatabaseState[sharedDatabaseName];
                 computeNodeIds = &sharedDatabase.ComputeNodeIds;
             }

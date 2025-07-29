@@ -58,7 +58,7 @@ class TTestServer {
 public:
     TIpPort Port;
 
-    TTestServer(const TString& kafkaApiMode = "1", bool serverless = false, bool enableNativeKafkaBalancing = false) {
+    TTestServer(const TString& kafkaApiMode = "1", bool serverless = false, bool enableNativeKafkaBalancing = true) {
         TPortManager portManager;
         Port = portManager.GetTcpPort();
 
@@ -137,8 +137,8 @@ public:
         KikimrServer->GetRuntime()->SetLogPriority(NKikimrServices::GRPC_CLIENT, NLog::PRI_TRACE);
         KikimrServer->GetRuntime()->SetLogPriority(NKikimrServices::GRPC_PROXY_NO_CONNECT_ACCESS, NLog::PRI_TRACE);
 
-        if (enableNativeKafkaBalancing) {
-            KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableKafkaNativeBalancing(true);
+        if (!enableNativeKafkaBalancing) {
+            KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableKafkaNativeBalancing(false);
         }
         KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableKafkaTransactions(true);
 
@@ -1183,7 +1183,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
 
     void RunBalanceScenarionTest(bool forFederation) {
         TString protocolName = "roundrobin";
-        TInsecureTestServer testServer("2");
+        TInsecureTestServer testServer("2", false, false);
 
         TString topicName = "/Root/topic-0-test";
         TString shortTopicName = "topic-0-test";
@@ -1411,7 +1411,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
     Y_UNIT_TEST(BalanceScenarioCdc) {
 
         TString protocolName = "roundrobin";
-        TInsecureTestServer testServer("2");
+        TInsecureTestServer testServer("2", false, false);
 
 
         TString tableName = "/Root/table-0-test";

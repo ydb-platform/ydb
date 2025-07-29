@@ -282,13 +282,13 @@ public:
                 chunk->MutableChunkMetadata()->SetNumRows(20048);
                 chunk->MutableChunkMetadata()->SetRawBytes(1);
             }
-            AFL_VERIFY(portions.emplace(NOlap::TPortionAddress(TInternalPathId::FromRawValue(rowset.GetValue<NColumnShard::Schema::IndexColumnsV2::PathId>()), rowset.GetValue<NColumnShard::Schema::IndexColumnsV2::PortionId>()), std::move(metaProto)).second);
+            AFL_VERIFY(portions.emplace(NOlap::TPortionAddress(rowset.GetValue<NColumnShard::Schema::IndexColumnsV2::PathId>(), rowset.GetValue<NColumnShard::Schema::IndexColumnsV2::PortionId>()), std::move(metaProto)).second);
             UNIT_ASSERT(rowset.Next());
         }
 
         for (auto&& [key, metadata] : portions) {
             db.Table<Schema::IndexColumnsV2>()
-                .Key(key.GetPathId().GetRawValue(), key.GetPortionId())
+                .Key(key.GetPathId(), key.GetPortionId())
                 .Update(NIceDb::TUpdate<Schema::IndexColumnsV2::Metadata>(metadata.SerializeAsString()));
         }
     }

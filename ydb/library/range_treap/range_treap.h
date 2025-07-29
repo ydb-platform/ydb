@@ -245,11 +245,12 @@ private:
         }
 
         // Make a new subtree root with l and r as children
-        tptr->Reset(
-            (t = new TNode(
-                 /*Parent=*/parent, /*Left=*/std::move(l), /*Right=*/std::move(r), /*Prio=*/prio, /*LeftKey=*/std::move(leftOwnedKey),
-                 /*RightKey=*/rightOwnedKey, /*Value=*/std::move(value), /*LeftMode=*/leftKey.GetMode(), /*RightMode=*/rightKey.GetMode(),
-                 /*MaxRightKey=*/rightOwnedKey, /*MaxRightMode=*/rightKey.GetMode(), /*MaxRightTrivial=*/true)));
+        TBorder rightKeyCopy = rightOwnedKey;
+        tptr->Reset((t = new TNode(
+                         /*Parent=*/parent, /*Left=*/std::move(l), /*Right=*/std::move(r), /*Prio=*/prio, /*LeftKey=*/std::move(leftOwnedKey),
+                         /*RightKey=*/std::move(rightOwnedKey), /*Value=*/std::move(value), /*LeftMode=*/leftKey.GetMode(),
+                         /*RightMode=*/rightKey.GetMode(), /*MaxRightKey=*/std::move(rightOwnedKey), /*MaxRightMode=*/rightKey.GetMode(),
+                         /*MaxRightTrivial=*/true)));
         Values[t->Value].PushBack(t);
         ++Stats_.Inserts;
         ++Size_;

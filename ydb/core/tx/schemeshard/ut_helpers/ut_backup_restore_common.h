@@ -199,10 +199,6 @@ private:
 
 class TXxportRequest {
 public:
-    TXxportRequest(const char* type, const TVector<TString>& items, ui16 port) {
-        Request = Sprintf(RequestTemp, type, Reduce(items).c_str(), port);
-    }
-
     TXxportRequest(const char* type, const TVector<TString>& items) {
         Request = Sprintf(RequestTemp, type, Reduce(items).c_str());
         ui64 pos = Request.find("localhost:0");
@@ -210,6 +206,11 @@ public:
             Request.erase(pos, 11);
             Request.insert(pos, "localhost:%d");
         }
+    }
+
+    TXxportRequest(const char* type, const TVector<TString>& items, ui16 port)
+        : TXxportRequest(type, items) {
+        Request = Sprintf(Request.c_str(), port);
     }
 
     const TString& GetRequest() const {

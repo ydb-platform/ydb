@@ -131,6 +131,7 @@ void TBlobStorageController::TGroupInfo::FillInGroupParameters(
         FillInResources(params->MutableAssuredResources(), true);
         FillInResources(params->MutableCurrentResources(), false);
         FillInVDiskResources(params);
+        params->SetGroupSizeInUnits(GroupSizeInUnits);
     }
 }
 

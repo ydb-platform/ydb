@@ -598,6 +598,7 @@ private:
     void BeginDeleteTransaction(const TActorContext& ctx,
                                 TDistributedTransaction& tx,
                                 NKikimrPQ::TTransaction::EState state);
+    void ResendSplitMergeRequests(const TActorContext& ctx);
 };
 
 

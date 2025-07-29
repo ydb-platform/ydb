@@ -983,8 +983,36 @@ void TPartition::Handle(TEvPQ::TEvPartitionStatus::TPtr& ev, const TActorContext
             }
         }
     }
-    result.SetScaleStatus(SplitMergeEnabled(TabletConfig) ? ScaleStatus : NKikimrPQ::EScaleStatus::NORMAL);
+    if (SplitMergeEnabled(TabletConfig)) {
+        if (PartitionScaleParticipants.Defined()) {
+            result.MutableScaleParticipatingPartitions()->CopyFrom(*PartitionScaleParticipants);
+        }
+        result.SetScaleStatus(ScaleStatus);
+    } else {
+        result.SetScaleStatus(NKikimrPQ::EScaleStatus::NORMAL);
+    }
+
     ctx.Send(ev->Get()->Sender, new TEvPQ::TEvPartitionStatusResponse(result, Partition));
+}
+
+void TPartition::Handle(TEvPQ::TEvPartitionScaleStatusChanged::TPtr& ev, const TActorContext& ctx)
+{
+    const bool mirroredPartition = MirroringEnabled(Config);
+    const NKikimrPQ::TEvPartitionScaleStatusChanged& record = ev->Get()->Record;
+    if (mirroredPartition) {
+        if (record.HasParticipatingPartitions()) [[likely]] {
+            PQ_LOG_I("Got split-merge event from mirrorer: " << ev->ToString());
+
+            ScaleStatus = record.GetScaleStatus();
+            PartitionScaleParticipants.ConstructInPlace();
+            PartitionScaleParticipants->CopyFrom(record.GetParticipatingPartitions());
+            ctx.Send(Tablet, ev->Release());
+        } else {
+            PQ_LOG_W("Ignoring split-merge event from the mirrorer because it does not have participating partitions info: " << ev->ToString());
+        }
+    } else {
+        PQ_LOG_W("Ignoring split-merge event because mirroring is disabled: " << ev->ToString());
+    }
 }
 
 void TPartition::HandleOnInit(TEvPQ::TEvPartitionStatus::TPtr& ev, const TActorContext& ctx) {
@@ -3012,6 +3040,7 @@ void TPartition::EndChangePartitionConfig(NKikimrPQ::TPQTabletConfig&& config,
             ctx.Send(Mirrorer->Actor, new TEvPQ::TEvChangePartitionConfig(TopicConverter,
                                                                           Config));
         } else {
+            ScaleStatus = NKikimrPQ::EScaleStatus::NORMAL;
             CreateMirrorerActor();
         }
     } else {

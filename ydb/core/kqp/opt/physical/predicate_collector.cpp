@@ -143,7 +143,10 @@ bool AbstractTreeCanBePushed(const TExprBase& expr, const TExprNode* ) {
 
 bool CheckExpressionNodeForPushdown(const TExprBase& node, const TExprNode* lambdaArg) {
     if constexpr (NKikimr::NSsa::RuntimeVersion >= 5U) {
-        if (node.Maybe<TCoJust>() || node.Maybe<TCoCoalesce>()) {
+        if (node.Maybe<TCoJust>()) {
+            return false;
+        }
+        if (node.Maybe<TCoCoalesce>()) {
             return true;
         }
         // Temporary fix for https://github.com/ydb-platform/ydb/issues/7967

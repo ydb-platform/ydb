@@ -9271,6 +9271,20 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
+
+        {
+            auto query = Sprintf(R"(
+                --!syntax_v1
+                CREATE TRANSFER `/Root/transfer_di`
+                  FROM `/Root/topic` TO `/Root/table` USING ($x) -> { RETURN <| id:$x._offset |> }
+                WITH (
+                    DIRECTORY = "/Root"
+                );
+            )", kikimr.GetEndpoint().c_str());
+
+            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
     }
 
     Y_UNIT_TEST(CreateTransfer_QueryService) {
@@ -9539,6 +9553,20 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 WITH (
                     CONNECTION_STRING = "%s",
                     FLUSH_INTERVAL = Interval('PT1S')
+                );
+            )", kikimr.GetEndpoint().c_str());
+
+            const auto result = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            auto query = Sprintf(R"(
+                --!syntax_v1
+                CREATE TRANSFER `/Root/transfer_di`
+                  FROM `/Root/topic` TO `/Root/table` USING ($x) -> { RETURN <| id:$x._offset |> }
+                WITH (
+                    DIRECTORY = "/Root"
                 );
             )", kikimr.GetEndpoint().c_str());
 
@@ -10283,6 +10311,19 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 SET USING ($x) -> {
                     RETURN CAST($x as String);
                 };
+            )";
+
+            const auto result = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            auto query = R"(
+                --!syntax_v1
+                ALTER TRANSFER `/Root/transfer`
+                SET (
+                    DIRECTORY = "/Root"
+                );
             )";
 
             const auto result = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();

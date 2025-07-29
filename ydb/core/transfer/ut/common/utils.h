@@ -369,6 +369,7 @@ struct MainTestCase {
         std::optional<ui64> BatchSizeBytes = 8_MB;
         std::optional<std::string> ExpectedError;
         std::optional<std::string> Username;
+        std::optional<std::string> Directory;
 
         CreateTransferSettings() {};
 
@@ -409,7 +410,13 @@ struct MainTestCase {
             result.Username = username;
             return result;
         }
-};
+
+        static CreateTransferSettings WithDirectory(const TString& directory) {
+            CreateTransferSettings result;
+            result.Directory = directory;
+            return result;
+        }
+    };
 
     void CreateTransfer(const std::string& lambda, const CreateTransferSettings& settings = CreateTransferSettings()) {
         std::vector<std::string> options;
@@ -427,6 +434,9 @@ struct MainTestCase {
         }
         if (settings.Username) {
             options.push_back(TStringBuilder() <<  "TOKEN = '" << *settings.Username << "@builtin'" << Endl);
+        }
+        if (settings.Directory) {
+            options.push_back(TStringBuilder() <<  "DIRECTORY = '" << *settings.Directory << "'" << Endl);
         }
 
         std::string topicName = settings.TopicName.value_or(TopicName);

@@ -946,6 +946,8 @@ struct TTransferSettings : public TReplicationSettingsBase {
 
         return *Batching;
     }
+
+    TMaybe<TString> DirectoryPath;
 };
 
 struct TCreateTransferSettings {

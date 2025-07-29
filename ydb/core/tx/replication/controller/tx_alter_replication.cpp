@@ -47,6 +47,7 @@ public:
             auto& newSpecific = newConfig.GetTransferSpecific();
 
             alter = oldSpecific.GetTarget().GetTransformLambda() != newSpecific.GetTarget().GetTransformLambda()
+                || oldSpecific.GetTarget().GetDirectoryPath() != newSpecific.GetTarget().GetDirectoryPath()
                 || oldSpecific.GetBatching().GetBatchSizeBytes() != newSpecific.GetBatching().GetBatchSizeBytes()
                 || oldSpecific.GetBatching().GetFlushIntervalMilliSeconds() != newSpecific.GetBatching().GetFlushIntervalMilliSeconds();
         }

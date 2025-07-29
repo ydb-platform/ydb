@@ -167,6 +167,7 @@ static bool TransferSettingsEntry(std::map<TString, TNodePtr>& out,
         "ca_cert",
         "flush_interval",
         "batch_size_bytes",
+        "directory"
     };
 
     TSet<TString> stateSettings = {

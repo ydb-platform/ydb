@@ -278,12 +278,23 @@ private:
             input.Offset = message.GetOffset();
             input.SeqNo = message.GetSeqNo();
 
+            auto setError = [&](const auto& msg) {
+                ProcessingErrorStatus = TEvWorker::TEvGone::EStatus::SCHEME_ERROR;
+                ProcessingError = TStringBuilder() << "Error transform message partition " << partitionId << " offset " << message.GetOffset()
+                    << ": " << msg;
+            };
+
             try {
                 auto result = ProgramHolder->GetProgram()->Apply(NYql::NPureCalc::StreamFromVector(TVector{input}));
                 while (auto* m = result->Fetch()) {
                     TString tablePath;
                     if (m->Table) {
-                        tablePath = JoinPath({ Database, m->Table.value()});
+                        if (!DirectoryPath.empty()) {
+                            tablePath = JoinPath({ Database, m->Table.value()});
+                        } else {
+                            setError("it is not allowed to specify a table to write");
+                            break;
+                        }
                     } else {
                         tablePath = DefaultTablePath;
                     }
@@ -293,8 +304,10 @@ private:
 
                 LastProcessedOffset = message.GetOffset();
             } catch (const yexception& e) {
-                ProcessingErrorStatus = TEvWorker::TEvGone::EStatus::SCHEME_ERROR;
-                ProcessingError = TStringBuilder() << "Error transform message partition " << partitionId << " offset " << message.GetOffset() << ": " << e.what();
+                setError(e.what());
+            }
+
+            if (ProcessingError) {
                 break;
             }
         }
@@ -425,12 +438,14 @@ public:
             const TString& transformLambda,
             const TPathId& tablePathId,
             const TActorId& compileServiceId,
-            const NKikimrReplication::TBatchingSettings& batchingSettings)
+            const NKikimrReplication::TBatchingSettings& batchingSettings,
+            const TString& directoryPath)
         : TransformLambda(transformLambda)
         , TablePathId(tablePathId)
         , CompileServiceId(compileServiceId)
         , FlushInterval(TDuration::MilliSeconds(std::max<ui64>(batchingSettings.GetFlushIntervalMilliSeconds(), 1000)))
         , BatchSizeBytes(std::min<ui64>(batchingSettings.GetBatchSizeBytes(), 1_GB))
+        , DirectoryPath(directoryPath)
     {}
 
 private:
@@ -439,6 +454,7 @@ private:
     const TActorId CompileServiceId;
     const TDuration FlushInterval;
     const ui64 BatchSizeBytes;
+    const TString DirectoryPath;
     TActorId Worker;
 
     TString Database;
@@ -469,7 +485,7 @@ private:
 }; // TTransferWriter
 
 IActor* TTransferWriterFactory::Create(const Parameters& p) const {
-    return new TTransferWriter(p.TransformLambda, p.TablePathId, p.CompileServiceId, p.BatchingSettings);
+    return new TTransferWriter(p.TransformLambda, p.TablePathId, p.CompileServiceId, p.BatchingSettings, p.DirectoryPath);
 }
 
 }

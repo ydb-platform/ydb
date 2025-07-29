@@ -785,7 +785,8 @@ void ProcessingTargetTable(const std::string& tableType) {
                     |>,
                 ];
             };
-        )", testCase.TableName.data(), testCase.TableName.data()));
+        )", testCase.TableName.data(), testCase.TableName.data()),
+        MainTestCase::CreateTransferSettings::WithDirectory("/local"));
 
     testCase.Write({"Message-1"});
 

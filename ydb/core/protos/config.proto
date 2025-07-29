@@ -1792,6 +1792,8 @@ message TAuditConfig {
             Ddl = 5;
             Dml = 6;
             Operations = 7;
+            Export = 8;
+            Import = 9;
             Default = 1000; // For default settings for all other nonconfigured log classes
         }
 

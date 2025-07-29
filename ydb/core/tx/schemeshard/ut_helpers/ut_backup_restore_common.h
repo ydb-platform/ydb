@@ -168,7 +168,7 @@ public:
     }
 
     TString GetRestoredDir() const {
-        return Dir + "_restored";
+        return "/Restored" + Dir;
     }
                   
 protected:
@@ -192,7 +192,7 @@ private:
     const char* ImportRequestItemTemp = R"(
         items {
             source_prefix: "%s"
-            destination_path: "/MyRoot%s_restored"
+            destination_path: "/MyRoot/Restored%s"
         }
     )";
 };

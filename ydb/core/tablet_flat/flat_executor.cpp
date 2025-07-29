@@ -61,6 +61,11 @@ struct TCompactionChangesCtx {
     { }
 };
 
+struct TCachingParams {
+    bool IsSticky;
+    ECacheTier CacheTier;
+};
+
 class TMemTableMemoryConsumersCollection : public NTable::IMemTableMemoryConsumersCollection {
 public:
     TMemTableMemoryConsumersCollection(TActorSystem* actorSystem, TActorId owner)
@@ -235,9 +240,9 @@ void TExecutor::RecreatePageCollectionsCache()
 
     for (const auto &it : Database->GetScheme().Tables) {
         auto subset = Database->Subset(it.first, NTable::TEpoch::Max(), { }, { });
-
+        const auto& inMemoryColumns = GetInMemoryColumns(it.first);
         for (auto &partView : subset->Flatten) {
-            AddCachesOfBundle(partView);
+            AddCachesOfBundle(partView, inMemoryColumns);
         }
     }
 
@@ -691,7 +696,7 @@ void TExecutor::LogWaitingTransaction(TIntrusivePtr<NPageCollection::TPagesWaitP
     }
 }
 
-void TExecutor::AddCachesOfBundle(const NTable::TPartView &partView)
+void TExecutor::AddCachesOfBundle(const NTable::TPartView &partView, const THashMap<NTable::TTag, TCachingParams>& cachingParams)
 {
     auto *partStore = partView.As<NTable::TPartStore>();
 
@@ -702,8 +707,15 @@ void TExecutor::AddCachesOfBundle(const NTable::TPartView &partView)
             Stats->PacksMetaBytes += pack->Meta.Raw.size();
     }
 
-    for (auto &cache : partStore->PageCollections)
+    const auto& cachingParamsByGroup = GetCachingParamsByGroup(partView, cachingParams);
+
+    for (size_t collectionsIndex : xrange( partStore->PageCollections.size())) {
+        auto& cache = partStore->PageCollections[collectionsIndex];
+        if (collectionsIndex < cachingParamsByGroup.size()) {
+            cache->UpdateCacheTier(cachingParamsByGroup[collectionsIndex].CacheTier);
+        }
         AddSingleCache(cache);
+    }
 
     if (const auto &blobs = partStore->Pseudo)
         AddSingleCache(blobs);
@@ -712,8 +724,7 @@ void TExecutor::AddCachesOfBundle(const NTable::TPartView &partView)
 void TExecutor::AddSingleCache(const TIntrusivePtr<TPrivatePageCache::TInfo> &info)
 {
     PrivatePageCache->RegisterPageCollection(info);
-    // TODO: handle different cache tiers
-    Send(MakeSharedPageCacheId(), new NSharedCache::TEvAttach(info->PageCollection, ECacheTier::Regular));
+    Send(MakeSharedPageCacheId(), new NSharedCache::TEvAttach(info->PageCollection, info->GetCacheTier()));
 
     StickyPagesMemory += info->GetStickySize();
 
@@ -771,12 +782,12 @@ void TExecutor::RequestInMemPagesForDatabase(bool pendingOnly) {
         if (pendingOnly && !pr.second.PendingCacheEnable) {
             continue;
         }
-        auto stickyColumns = GetStickyColumns(tid);
-        if (stickyColumns) {
+        const auto& inMemoryColumns = GetInMemoryColumns(tid);
+        if (inMemoryColumns) {
             auto subset = Database->Subset(tid, NTable::TEpoch::Max(), { } , { });
 
             for (auto &partView: subset->Flatten)
-                RequestInMemPagesForPartStore(tid, partView, stickyColumns);
+                RequestInMemPagesForPartStore(partView, inMemoryColumns);
         }
         pr.second.PendingCacheEnable = false;
     }
@@ -1471,58 +1482,84 @@ bool TExecutor::ApplyReadyPartSwitches() {
     return true;
 }
 
-void TExecutor::RequestInMemPagesForPartStore(ui32 tableId, const NTable::TPartView &partView, const THashSet<NTable::TTag> &stickyColumns) {
-    Y_DEBUG_ABORT_UNLESS(stickyColumns);
+void TExecutor::RequestInMemPagesForPartStore(NTable::TPartView& partView, const THashMap<NTable::TTag, TCachingParams>& cachingParams) {
+    Y_DEBUG_ABORT_UNLESS(cachingParams);
 
-    auto rowScheme = RowScheme(tableId);
+    const auto& cachingParamsByGroup = GetCachingParamsByGroup(partView, cachingParams);
 
     for (size_t groupIndex : xrange(partView->GroupsCount)) {
-        bool stickyGroup = false;
-        for (const auto &column : partView->Scheme->Groups[groupIndex].Columns) {
-            if (stickyColumns.contains(column.Tag)) {
-                stickyGroup = true;
-                break;
-            }
+        const auto& params = cachingParamsByGroup[groupIndex];
+        auto partStore = partView.As<NTable::TPartStore>();
+        auto& cacheInfo = partStore->PageCollections[groupIndex];
+        bool tierChanged = cacheInfo->UpdateCacheTier(params.CacheTier);
+        if (tierChanged) {
+            Send(MakeSharedPageCacheId(), new NSharedCache::TEvAttach(cacheInfo->PageCollection, cacheInfo->GetCacheTier()));
         }
-
-        if (stickyGroup) {
-            auto partStore = partView.As<NTable::TPartStore>();
+        if (params.IsSticky || (tierChanged && params.CacheTier == NSharedCache::ECacheTier::TryKeepInMemory)) {
             Send(MakeSharedPageCacheId(), new NSharedCache::TEvRequest(
-                NBlockIO::EPriority::Bkgr, partStore->PageCollections[groupIndex]->PageCollection, partStore->GetPages(groupIndex)),
-                0, ui64(ESharedCacheRequestType::InMemPages));
+                NBlockIO::EPriority::Bkgr, cacheInfo->PageCollection, partStore->GetPages(groupIndex)),
+                0, ui64(params.IsSticky ? ESharedCacheRequestType::InMemPages : ESharedCacheRequestType::TryKeepInMemPages));
         }
     }
 }
 
-THashSet<NTable::TTag> TExecutor::GetStickyColumns(ui32 tableId) {
+THashMap<NTable::TTag, TCachingParams> TExecutor::GetInMemoryColumns(ui32 tableId) {
     auto *tableInfo = Scheme().GetTableInfo(tableId);
 
-    THashSet<NTable::TTag> stickyColumns;
+    THashMap<NTable::TTag, TCachingParams> cachingParams;
     if (!tableInfo) {
-        return stickyColumns;
+        return cachingParams;
     }
 
-    for (const auto &column : tableInfo->Columns) {
-        const auto* family = tableInfo->Families.FindPtr(column.second.Family);
-        if (family && family->Cache == NTable::NPage::ECache::Ever) {
-            stickyColumns.insert(column.first);
+    for (const auto& [tag, column] : tableInfo->Columns) {
+        const auto* family = tableInfo->Families.FindPtr(column.Family);
+        bool isSticky = family && family->Cache == NTable::NPage::ECache::Ever;
+        bool isTryKeepInMemory = family && family->CacheTier == ECacheTier::TryKeepInMemory;
+
+        if (isSticky || isTryKeepInMemory) {
+            cachingParams.emplace(tag, TCachingParams{
+                isSticky,
+                family->CacheTier
+            });
         }
     }
 
-    return stickyColumns;
+    return cachingParams;
+}
+
+
+TVector<TCachingParams> TExecutor::GetCachingParamsByGroup(const NTable::TPartView &partView, const THashMap<NTable::TTag, TCachingParams>& cachingParams) {
+    TVector<TCachingParams> cacheTiers(::Reserve(partView->GroupsCount));
+
+    for (size_t groupIndex : xrange(partView->GroupsCount)) {
+        bool isSticky = false;
+        ECacheTier cacheTier = ECacheTier::Regular;
+        for (const auto& column : partView->Scheme->Groups[groupIndex].Columns) {
+            if (const auto* params = cachingParams.FindPtr(column.Tag)) {
+                isSticky = isSticky || params->IsSticky;
+                cacheTier = cacheTier == ECacheTier::TryKeepInMemory ? cacheTier : params->CacheTier;
+            }
+            if (isSticky && cacheTier == ECacheTier::TryKeepInMemory) {
+                break;
+            }
+        }
+        cacheTiers.emplace_back(isSticky, cacheTier);
+    }
+
+    return cacheTiers;
 }
 
 void TExecutor::ApplyExternalPartSwitch(TPendingPartSwitch &partSwitch) {
     TVector<NTable::TPartView> newParts;
     newParts.reserve(partSwitch.NewBundles.size());
-    auto stickyColumns = GetStickyColumns(partSwitch.TableId);
+    const auto& inMemoryColumns = GetInMemoryColumns(partSwitch.TableId);
 
     for (auto &bundle : partSwitch.NewBundles) {
         auto* stage = bundle.GetStage<TPendingPartSwitch::TResultStage>();
         Y_ENSURE(stage && stage->PartView, "Missing bundle result in part switch");
-        AddCachesOfBundle(stage->PartView);
-        if (stickyColumns) {
-            RequestInMemPagesForPartStore(partSwitch.TableId, stage->PartView, stickyColumns);
+        AddCachesOfBundle(stage->PartView, inMemoryColumns);
+        if (inMemoryColumns) {
+            RequestInMemPagesForPartStore(stage->PartView, inMemoryColumns);
         }
         newParts.push_back(std::move(stage->PartView));
     }
@@ -3012,6 +3049,7 @@ void TExecutor::Handle(NSharedCache::TEvResult::TPtr &ev) {
     switch (requestType) {
     case ESharedCacheRequestType::Transaction:
     case ESharedCacheRequestType::InMemPages:
+    case ESharedCacheRequestType::TryKeepInMemPages:
         {
             TPrivatePageCache::TInfo *collectionInfo = PrivatePageCache->Info(msg->PageCollection->Label());
             if (!collectionInfo) {
@@ -3663,11 +3701,12 @@ void TExecutor::Handle(NOps::TEvResult *ops, TProdCompact *msg, bool cancelled) 
 
     if (results) {
         auto &gcDiscovered = commit->GcDelta.Created;
+        const auto& inMemoryColumns = GetInMemoryColumns(tableId);
 
         for (const auto &result : results) {
             const auto &newPart = result.Part;
 
-            AddCachesOfBundle(newPart);
+            AddCachesOfBundle(newPart, inMemoryColumns);
 
             auto *partStore = newPart.As<NTable::TPartStore>();
 

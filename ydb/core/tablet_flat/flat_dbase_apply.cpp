@@ -106,6 +106,14 @@ bool TSchemeModifier::Apply(const TAlterRecord &delta)
         changes |= ChangeTableSetting(table, family.Small, small);
         changes |= ChangeTableSetting(table, family.Large, large);
 
+        if (delta.HasCacheTier()) {
+            Y_ENSURE(delta.GetCacheTier() <= 1, "Invalid cache tier value");
+            if (ChangeTableSetting(table, family.CacheTier, static_cast<NSharedCache::ECacheTier>(delta.GetCacheTier()))) {
+                ChangeTableSetting(table, tableInfo.PendingCacheEnable, true);
+                changes |= true;
+            }
+        }
+
     } else if (action == TAlterRecord::AddColumnToFamily) {
         changes |= AddColumnToFamily(table, delta.GetColumnId(), delta.GetFamilyId());
     } else if (action == TAlterRecord::SetRoom) {

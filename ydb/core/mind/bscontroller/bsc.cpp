@@ -151,23 +151,24 @@ void TBlobStorageController::TGroupInfo::FillInResources(
         const TPDiskInfo *pdisk = vslot->PDisk;
         const auto& metrics = pdisk->Metrics;
         const ui32 shareFactor = countMaxSlots ? pdisk->ExpectedSlotCount : pdisk->NumActiveSlots;
+        const ui32 weight = TPDiskConfig::GetOwnerWeight(GroupSizeInUnits, pdisk->SlotSizeInUnits);
         ui64 vdiskSlotSize = 0;
         if (metrics.HasEnforcedDynamicSlotSize()) {
-            vdiskSlotSize = metrics.GetEnforcedDynamicSlotSize();
+            vdiskSlotSize = metrics.GetEnforcedDynamicSlotSize() * weight;
         } else if (metrics.GetTotalSize()) {
-            vdiskSlotSize = metrics.GetTotalSize() / shareFactor;
+            vdiskSlotSize = metrics.GetTotalSize() / shareFactor * weight;
         }
         if (vdiskSlotSize) {
             size = Min(size.value_or(Max<ui64>()), vdiskSlotSize);
         }
         if (metrics.HasMaxIOPS()) {
-            iops = Min(iops.value_or(Max<double>()), metrics.GetMaxIOPS() * 100 / shareFactor * 0.01);
+            iops = Min(iops.value_or(Max<double>()), metrics.GetMaxIOPS() * 100 / shareFactor * weight * 0.01);
         }
         if (metrics.HasMaxReadThroughput()) {
-            readThroughput = Min(readThroughput.value_or(Max<ui64>()), metrics.GetMaxReadThroughput() / shareFactor);
+            readThroughput = Min(readThroughput.value_or(Max<ui64>()), metrics.GetMaxReadThroughput() / shareFactor * weight);
         }
         if (metrics.HasMaxWriteThroughput()) {
-            writeThroughput = Min(writeThroughput.value_or(Max<ui64>()), metrics.GetMaxWriteThroughput() / shareFactor);
+            writeThroughput = Min(writeThroughput.value_or(Max<ui64>()), metrics.GetMaxWriteThroughput() / shareFactor * weight);
         }
         if (const auto& vm = vslot->Metrics; vm.HasOccupancy()) {
             occupancy = Max(occupancy.value_or(0), vm.GetOccupancy());

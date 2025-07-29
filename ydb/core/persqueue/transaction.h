@@ -109,6 +109,7 @@ struct TDistributedTransaction {
     bool Pending = false;
 
     void SetExecuteSpan(NWilson::TSpan&& span);
+    void EndExecuteSpan();
     NWilson::TSpan CreatePlanStepSpan(ui64 tabletId, ui64 step);
     void BeginWaitRSSpan(ui64 tabletId);
     void SetLastTabletSentByRS(ui64 tabletId);

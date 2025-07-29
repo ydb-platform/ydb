@@ -484,6 +484,14 @@ void TDistributedTransaction::SetExecuteSpan(NWilson::TSpan&& span)
     ExecuteSpan = std::move(span);
 }
 
+void TDistributedTransaction::EndExecuteSpan()
+{
+    if (ExecuteSpan) {
+        ExecuteSpan.End();
+        ExecuteSpan = {};
+    }
+}
+
 NWilson::TSpan TDistributedTransaction::CreatePlanStepSpan(ui64 tabletId, ui64 step)
 {
     auto span = CreateSpan("Topic.Transaction.Plan", tabletId);
@@ -561,6 +569,10 @@ void TDistributedTransaction::EndDeleteSpan()
 
 NWilson::TSpan TDistributedTransaction::CreateSpan(const char* name, ui64 tabletId)
 {
+    if (!ExecuteSpan) {
+        return {};
+    }
+
     auto span = ExecuteSpan.CreateChild(TWilsonTopic::ExecuteTransaction,
                                         name,
                                         NWilson::EFlags::AUTO_END);

@@ -4526,6 +4526,8 @@ void TPersQueue::CheckTxState(const TActorContext& ctx,
                  ", Expected " << tx.PartitionRepliesExpected);
 
         if (tx.PartitionRepliesCount == tx.PartitionRepliesExpected) {
+            tx.EndExecuteSpan();
+
             SendEvProposeTransactionResult(ctx, tx);
             PQ_LOG_TX_I("complete TxId " << tx.TxId);
 

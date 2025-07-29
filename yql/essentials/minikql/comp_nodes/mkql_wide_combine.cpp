@@ -678,27 +678,48 @@ private:
                 static_cast<NUdf::TUnboxedValue&>(processingState.Throat[i - KeyWidth]) = std::move(keyAndState[i]);
             }
 
-            if (InMemoryBucketsCount && !HasMemoryForProcessing() && IsSpillingWhileStateSplitAllowed()) {
-                ui32 bucketNumToSpill = GetLargestInMemoryBucketNumber();
+            if (!HasMemoryForProcessing() && IsSpillingWhileStateSplitAllowed()) {
+                if(InMemoryBucketsCount) {
+                    ui32 bucketNumToSpill = GetLargestInMemoryBucketNumber();
 
-                SplitStateSpillingBucket = bucketNumToSpill;
+                    SplitStateSpillingBucket = bucketNumToSpill;
 
-                auto& bucket = SpilledBuckets[bucketNumToSpill];
-                bucket.BucketState = TSpilledBucket::EBucketState::SpillingState;
-                SpillingBucketsCount++;
-                InMemoryBucketsCount--;
+                    auto& bucket = SpilledBuckets[bucketNumToSpill];
+                    bucket.BucketState = TSpilledBucket::EBucketState::SpillingState;
+                    SpillingBucketsCount++;
+                    InMemoryBucketsCount--;
 
-                while (const auto keyAndState = static_cast<NUdf::TUnboxedValue*>(bucket.InMemoryProcessingState->Extract())) {
-                    bucket.AsyncWriteOperation = bucket.SpilledState->WriteWideItem({keyAndState, KeyAndStateType->GetElementsCount()});
-                    for (size_t i = 0; i < KeyAndStateType->GetElementsCount(); ++i) {
-                        //releasing values stored in unsafe TUnboxedValue buffer
-                        keyAndState[i].UnRef();
+                    while (const auto keyAndState = static_cast<NUdf::TUnboxedValue*>(bucket.InMemoryProcessingState->Extract())) {
+                        bucket.AsyncWriteOperation = bucket.SpilledState->WriteWideItem({keyAndState, KeyAndStateType->GetElementsCount()});
+                        for (size_t i = 0; i < KeyAndStateType->GetElementsCount(); ++i) {
+                            //releasing values stored in unsafe TUnboxedValue buffer
+                            keyAndState[i].UnRef();
+                        }
+                        if (bucket.AsyncWriteOperation) return true;
                     }
-                    if (bucket.AsyncWriteOperation) return true;
-                }
 
-                bucket.AsyncWriteOperation = bucket.SpilledState->FinishWriting();
-                if (bucket.AsyncWriteOperation) return true;
+                    bucket.AsyncWriteOperation = bucket.SpilledState->FinishWriting();
+                    if (bucket.AsyncWriteOperation) return true;
+                } else {
+                    ui64 bucketToSpill = -1;
+                    ui64 maxSize = 0;
+                    for (int i = 0; i < 128; ++i) {
+                        ui64 estimatedSize = SpilledBuckets[i].SpilledState->GetEstimatedSize();
+                        if (estimatedSize > maxSize) {
+                            maxSize = estimatedSize;
+                            bucketToSpill = i;
+                        }
+                    }
+
+                    if (bucketToSpill != -1ULL) {
+                        SpilledBuckets[bucketToSpill].AsyncWriteOperation = SpilledBuckets[bucketToSpill].SpilledState->FinishWriting();
+                        MKQL_ENSURE(SpilledBuckets[bucketToSpill].AsyncWriteOperation, "MISHA ERROR");
+                        SplitStateSpillingBucket = bucketToSpill;
+                        return true;
+
+                    }
+
+                }
             }
         }
 
@@ -816,6 +837,36 @@ private:
             if (bucketToSpill.BucketState == TSpilledBucket::EBucketState::SpillingState) {
                 return true;
             }
+        }
+
+        ui64 bucketToSpill = -1;
+        ui64 maxSize = 0;
+        for (int i = 0; i < 128; ++i) {
+            auto& bucket = SpilledBuckets[i];
+            if (bucket.BucketState == TSpilledBucket::EBucketState::SpillingData) {
+                ui64 estimatedSize = SpilledBuckets[i].SpilledData->GetEstimatedSize();
+                if (estimatedSize > maxSize) {
+                    maxSize = estimatedSize;
+                    bucketToSpill = i;
+                }
+            } else if (bucket.BucketState == TSpilledBucket::EBucketState::SpillingState) {
+                ui64 estimatedSize = SpilledBuckets[i].SpilledState->GetEstimatedSize();
+                if (estimatedSize > maxSize) {
+                    maxSize = estimatedSize;
+                    bucketToSpill = i;
+                }
+            }
+        }
+
+        if (bucketToSpill != -1ULL) {
+            if (SpilledBuckets[bucketToSpill].BucketState == TSpilledBucket::EBucketState::SpillingData) {
+                SpilledBuckets[bucketToSpill].AsyncWriteOperation = SpilledBuckets[bucketToSpill].SpilledData->FinishWriting();
+            } else if (SpilledBuckets[bucketToSpill].BucketState == TSpilledBucket::EBucketState::SpillingState) {
+                SpilledBuckets[bucketToSpill].AsyncWriteOperation = SpilledBuckets[bucketToSpill].SpilledState->FinishWriting();
+            }
+            MKQL_ENSURE(SpilledBuckets[bucketToSpill].AsyncWriteOperation, "MISHA ERROR");
+            return true;
+
         }
         return false;
     }

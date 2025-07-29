@@ -22,6 +22,10 @@ public:
     {
     }
 
+    ui64 GetEstimatedSize() const {
+        return PackerEstimatedSize;
+    }
+
     /// Write wide UV item
     /// \returns
     ///  - nullopt, if thee values are accumulated

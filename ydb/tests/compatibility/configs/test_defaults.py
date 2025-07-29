@@ -1,9 +1,10 @@
 from __future__ import annotations
 import json
 import yatest.common
+import pytest
 
 
-class Differ:
+class ConfigDefaultValuesComparator:
     def __init__(self, old_version: str, new_version: str):
         self.errors: list[tuple[str, str]] = []
         self.old_version = old_version
@@ -65,9 +66,6 @@ class Differ:
         return '\n'.join([f'{path}: {msg}' for path, msg in self.errors])
 
 
-def test_stable_25_1__main():
-    return Differ('stable-25-1', 'current').compare_versions()
-
-
-def test_stable_25_1_3__main():
-    return Differ('stable-25-1-3', 'current').compare_versions()
+@pytest.mark.parametrize('old_version', ['stable-25-1', 'stable-25-1-3'])
+def test_compare_config_default_values_to_main(old_version: str) -> str:
+    return ConfigDefaultValuesComparator(old_version, 'current').compare_versions()

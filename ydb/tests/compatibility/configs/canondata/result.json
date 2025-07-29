@@ -1,8 +1,8 @@
 {
-    "test_defauts.test_stable_25_1_3__main": {
-        "uri": "file://test_defauts.test_stable_25_1_3__main/extracted"
+    "test_defaults.test_compare_config_default_values_to_main[stable-25-1-3]": {
+        "uri": "file://test_defaults.test_compare_config_default_values_to_main_stable-25-1-3_/extracted"
     },
-    "test_defauts.test_stable_25_1__main": {
-        "uri": "file://test_defauts.test_stable_25_1__main/extracted"
+    "test_defaults.test_compare_config_default_values_to_main[stable-25-1]": {
+        "uri": "file://test_defaults.test_compare_config_default_values_to_main_stable-25-1_/extracted"
     }
 }

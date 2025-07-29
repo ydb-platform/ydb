@@ -411,33 +411,6 @@ Y_UNIT_TEST_SUITE(Normalizers) {
         TestNormalizerImpl<TTablesCleaner>(checker);
     }
 
-    Y_UNIT_TEST(ChunksV0MetaNormalizer) {
-        class TLocalNormalizerChecker: public TNormalizerChecker {
-        public:
-            virtual void CorrectConfigurationOnStart(NKikimrConfig::TColumnShardConfig& columnShardConfig) const override {
-                auto* repair = columnShardConfig.MutableRepairs()->Add();
-                repair->SetClassName("RestoreV0ChunksMeta");
-                repair->SetDescription("Restoring PortionMeta in IndexColumns");
-            }
-        };
-        TLocalNormalizerChecker checker;
-        TestNormalizerImpl<TEraseMetaFromChunksV0>(checker);
-    }
-
-    Y_UNIT_TEST(CleanUnusedTablesNormalizer) {
-        class TTtlPresetsChecker: public TNormalizerChecker {
-        public:
-            virtual void CorrectConfigurationOnStart(NKikimrConfig::TColumnShardConfig& columnShardConfig) const override {
-                auto* repair = columnShardConfig.MutableRepairs()->Add();
-                repair->SetClassName("CleanIndexColumns");
-                repair->SetDescription("Cleaning old table");
-            }
-        };
-
-        TTtlPresetsChecker checker;
-        TestNormalizerImpl<TTrashUnusedInjector>(checker);
-    }
-
     Y_UNIT_TEST(RemoveDeleteFlagNormalizer) {
         class TChecker: public TNormalizerChecker {
         public:

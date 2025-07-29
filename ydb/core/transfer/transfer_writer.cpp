@@ -125,7 +125,6 @@ private:
             return;
         }
 
-        // TODO support row tables
         if (entry.Status == TNavigate::EStatus::PathNotTable || (entry.Kind != TNavigate::KindColumnTable && entry.Kind != TNavigate::KindTable)) {
             return LogCritAndLeave("Only tables are supported as transfer targets");
         }
@@ -264,7 +263,6 @@ private:
 
         PollSent = false;
 
-        //TableState->EnshureDataBatch();
         if (!LastWriteTime) {
             LastWriteTime = TInstant::Now();
         }

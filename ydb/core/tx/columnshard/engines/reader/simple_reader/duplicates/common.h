@@ -11,24 +11,6 @@
 
 namespace NKikimr::NOlap::NReader::NSimple::NDuplicateFiltering {
 
-class TColumnsData {
-private:
-    YDB_READONLY_DEF(std::shared_ptr<NArrow::TGeneralContainer>, Data);
-    YDB_READONLY_DEF(std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>, MemoryGuard);
-
-public:
-    TColumnsData(const std::shared_ptr<NArrow::TGeneralContainer>& data, const std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>& memory)
-        : Data(data)
-        , MemoryGuard(memory)
-    {
-        AFL_VERIFY(MemoryGuard);
-    }
-
-    ui64 GetRawSize() const {
-        return MemoryGuard->GetMemory();
-    }
-};
-
 class TRowRange {
 private:
     YDB_READONLY_DEF(ui64, Begin);

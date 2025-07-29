@@ -11,7 +11,7 @@ private:
     using TObject = typename TPolicy::TObject;
 
     virtual void DoOnResultReady(THashMap<TAddress, TObject>&& objectAddresses, THashSet<TAddress>&& removedAddresses,
-        THashMap<TAddress, TString>&& errorAddresses) const = 0;
+        THashMap<TAddress, TString>&& errorAddresses) = 0;
     virtual bool DoIsAborted() const = 0;
 
 public:
@@ -21,7 +21,7 @@ public:
         return DoIsAborted();
     }
     void OnResultReady(THashMap<TAddress, TObject>&& objectAddresses, THashSet<TAddress>&& removedAddresses,
-        THashMap<TAddress, TString>&& errorAddresses) const {
+        THashMap<TAddress, TString>&& errorAddresses) {
         DoOnResultReady(std::move(objectAddresses), std::move(removedAddresses), std::move(errorAddresses));
     }
 };

@@ -1,8 +1,11 @@
 #include "context.h"
 #include "source.h"
 
+#include <ydb/core/tx/columnshard/engines/reader/common_reader/common/accessors_ordering.h>
+#include <ydb/core/tx/columnshard/engines/reader/common_reader/constructor/read_metadata.h>
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/iterator/fetch_steps.h>
 #include <ydb/core/tx/columnshard/engines/reader/simple_reader/duplicates/manager.h>
+#include <ydb/core/tx/columnshard/engines/reader/simple_reader/iterator/collections/constructors.h>
 #include <ydb/core/tx/limiter/grouped_memory/usage/service.h>
 
 namespace NKikimr::NOlap::NReader::NSimple {
@@ -35,7 +38,7 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::DoGetColumnsFetchingPlan(
             needShardingFilter = true;
         }
     }
-    const bool preventDuplicates = GetReadMetadata()->GetDeduplicationPolicy() == EDeduplicationPolicy::PREVENT_DUPLICATES;
+    const bool preventDuplicates = NeedDuplicateFiltering();
     {
         auto& result = CacheFetchingScripts[needSnapshots ? 1 : 0][partialUsageByPK ? 1 : 0][useIndexes ? 1 : 0][needShardingFilter ? 1 : 0]
                                            [hasDeletions ? 1 : 0][preventDuplicates ? 1 : 0];
@@ -101,10 +104,17 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::BuildColumnsFetchingPlan(c
     return std::move(acc).Build();
 }
 
-void TSpecialReadContext::RegisterActors() {
+void TSpecialReadContext::RegisterActors(const NCommon::ISourcesConstructor& sources) {
     AFL_VERIFY(!DuplicatesManager);
-    if (GetReadMetadata()->GetDeduplicationPolicy() == EDeduplicationPolicy::PREVENT_DUPLICATES) {
-        DuplicatesManager = NActors::TActivationContext::Register(new NDuplicateFiltering::TDuplicateManager(*this));
+    if (NeedDuplicateFiltering()) {
+        const auto* portions = dynamic_cast<const NCommon::TSourcesConstructorWithAccessors<TSourceConstructor>*>(&sources);
+        AFL_VERIFY(portions);
+        NCommon::TPortionIntervalTree intervals;
+        for (const auto& portion : portions->GetConstructors()) {
+            intervals.AddRange(NCommon::TPortionIntervalTree::TOwnedRange(portion.GetPortion()->IndexKeyStart(), true,
+                                   portion.GetPortion()->IndexKeyEnd(), true), portion.GetPortion());
+        }
+        DuplicatesManager = NActors::TActivationContext::Register(new NDuplicateFiltering::TDuplicateManager(*this, std::move(intervals)));
     }
 }
 

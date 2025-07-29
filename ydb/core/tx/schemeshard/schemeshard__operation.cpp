@@ -1254,7 +1254,7 @@ ISubOperation::TPtr TOperation::RestorePart(TTxState::ETxType txType, TTxState::
         return CreateAlterResourcePool(NextPartId(), txState);
 
     case TTxState::ETxType::TxRestoreIncrementalBackupAtTable:
-        return CreateRestoreIncrementalBackupAtTable(NextPartId(), txState);
+        return CreateRestoreIncrementalBackupAtTable(NextPartId(), txState, context);
 
     // BackupCollection
     case TTxState::ETxType::TxCreateBackupCollection:

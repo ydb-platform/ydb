@@ -98,6 +98,49 @@ public:
 
 static_assert(sizeof(TSchemeShardLocalPathId) == sizeof(ui64));
 
+class TUnifiedOptionalPathId {
+private:
+    std::optional<TInternalPathId> InternalPathId;
+    std::optional<TSchemeShardLocalPathId> SchemeShardLocalPathId;
+
+public:
+    TUnifiedOptionalPathId(const std::optional<TInternalPathId> internalPathId, const std::optional<TSchemeShardLocalPathId> externalPathId)
+        : InternalPathId(internalPathId)
+        , SchemeShardLocalPathId(externalPathId) {
+    }
+
+    bool HasInternalPathId() const {
+        return !!InternalPathId;
+    }
+    bool HasSchemeShardLocalPathId() const {
+        return !!SchemeShardLocalPathId;
+    }
+
+    std::optional<TInternalPathId> GetInternalPathIdOptional() const {
+        return InternalPathId;
+    }
+    std::optional<TSchemeShardLocalPathId> GetSchemeShardLocalPathIdOptional() const {
+        return SchemeShardLocalPathId;
+    }
+
+    TInternalPathId GetInternalPathIdVerified() const;
+    TSchemeShardLocalPathId GetSchemeShardLocalPathIdVerified() const;
+
+    static TUnifiedOptionalPathId BuildFull(const TInternalPathId internalPathId, const TSchemeShardLocalPathId externalPathId) {
+        return TUnifiedOptionalPathId(internalPathId, externalPathId);
+    }
+
+    static TUnifiedOptionalPathId BuildInternal(
+        const TInternalPathId internalPathId, const std::optional<TSchemeShardLocalPathId> externalPathId = std::nullopt) {
+        return TUnifiedOptionalPathId(internalPathId, externalPathId);
+    }
+
+    static TUnifiedOptionalPathId BuildExternal(
+        const TSchemeShardLocalPathId externalPathId, const std::optional<TInternalPathId> internalPathId = std::nullopt) {
+        return TUnifiedOptionalPathId(internalPathId, externalPathId);
+    }
+};
+
 class TUnifiedPathId {
 private:
     TUnifiedPathId(const TInternalPathId internalPathId, const TSchemeShardLocalPathId externalPathId)
@@ -107,6 +150,12 @@ private:
 
 public:
     TUnifiedPathId() = default;
+    TUnifiedPathId(const TUnifiedOptionalPathId& optionalId)
+        : TUnifiedPathId(optionalId.GetInternalPathIdVerified(), optionalId.GetSchemeShardLocalPathIdVerified())
+    {
+    
+    }
+
     TInternalPathId InternalPathId;
     TSchemeShardLocalPathId SchemeShardLocalPathId;
 
@@ -122,8 +171,6 @@ public:
     }
 
     static TUnifiedPathId BuildValid(const TInternalPathId internalPathId, const TSchemeShardLocalPathId externalPathId);
-    static TUnifiedPathId BuildNoCheck(
-        const std::optional<TInternalPathId> internalPathId, const std::optional<TSchemeShardLocalPathId> externalPathId);
 };
 
 static_assert(sizeof(TUnifiedPathId) == 2 * sizeof(ui64));
@@ -137,17 +184,20 @@ using TInternalPathId = NColumnShard::TInternalPathId;
 class IPathIdTranslator {
 public:
     virtual ~IPathIdTranslator() = default;
-    virtual std::optional<NColumnShard::TSchemeShardLocalPathId> ResolveSchemeShardLocalPathIdOptional(const TInternalPathId internalPathId) const = 0;
+    virtual std::optional<NColumnShard::TSchemeShardLocalPathId> ResolveSchemeShardLocalPathIdOptional(
+        const TInternalPathId internalPathId) const = 0;
     virtual std::optional<TInternalPathId> ResolveInternalPathIdOptional(
-        const NColumnShard::TSchemeShardLocalPathId schemeShardLocalPathId) const = 0;
+        const NColumnShard::TSchemeShardLocalPathId schemeShardLocalPathId, const bool withTabletPathId) const = 0;
     std::optional<NColumnShard::TSchemeShardLocalPathId> ResolveSchemeShardLocalPathId(const TInternalPathId internalPathId) const {
         return ResolveSchemeShardLocalPathIdOptional(internalPathId);
     }
-    std::optional<TInternalPathId> ResolveInternalPathId(const NColumnShard::TSchemeShardLocalPathId schemeShardLocalPathId) const {
-        return ResolveInternalPathIdOptional(schemeShardLocalPathId);
+    std::optional<TInternalPathId> ResolveInternalPathId(
+        const NColumnShard::TSchemeShardLocalPathId schemeShardLocalPathId, const bool withTabletPathId) const {
+        return ResolveInternalPathIdOptional(schemeShardLocalPathId, withTabletPathId);
     }
     NColumnShard::TSchemeShardLocalPathId ResolveSchemeShardLocalPathIdVerified(const TInternalPathId internalPathId) const;
-    TInternalPathId ResolveInternalPathIdVerified(const NColumnShard::TSchemeShardLocalPathId schemeShardLocalPathId) const;
+    TInternalPathId ResolveInternalPathIdVerified(
+        const NColumnShard::TSchemeShardLocalPathId schemeShardLocalPathId, const bool withTabletPathId) const;
     NColumnShard::TUnifiedPathId GetUnifiedByInternalVerified(const TInternalPathId internalPathId) const;
 };
 

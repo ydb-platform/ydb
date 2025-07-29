@@ -809,6 +809,7 @@ TVector<std::pair<TString, TExprNode::TPtr>> CollectOlapOperationsForProjections
     auto asStructPred = [](const TExprNode::TPtr& node) -> bool { return !!TMaybeNode<TCoAsStruct>(node); };
     auto memberPred = [](const TExprNode::TPtr& node) { return !!TMaybeNode<TCoMember>(node); };
     THashSet<TString> projectionMembers;
+    ui32 nextMemberId = 0;
 
     TVector<std::pair<TString, TExprNode::TPtr>> olapOperationsForProjections;
     // Expressions for projections are placed in `AsStruct` callable.
@@ -823,17 +824,19 @@ TVector<std::pair<TString, TExprNode::TPtr>> CollectOlapOperationsForProjections
                         olapOperations.size() == 1) {
                         auto originalMember = TExprBase(originalMembers.front()).Cast<TCoMember>();
                         auto originalMemberName = TString(originalMember.Name());
-                        // Do not push projection for the same column, we are not ready for this.
-                        if (projectionMembers.contains(originalMemberName)) {
-                            return {};
-                        }
-                        projectionMembers.insert(originalMemberName);
 
-                        // We cannot push projection if some predicate for the same column still not pushed.
                         if (!predicateMembers.contains(originalMemberName)) {
+                            if (projectionMembers.contains(originalMemberName)) {
+                                originalMemberName = "__kqp_olap_projection_" + originalMemberName + ToString(nextMemberId++);
+                            } else {
+                                projectionMembers.insert(originalMemberName);
+                            }
+
                             auto newMember = Build<TCoMember>(ctx, node->Pos())
                                 .Struct(originalMember.Struct())
-                                .Name(originalMember.Name())
+                                .Name<TCoAtom>()
+                                    .Value(originalMemberName)
+                                    .Build()
                             .Done();
 
                             auto olapOperation = olapOperations.front();

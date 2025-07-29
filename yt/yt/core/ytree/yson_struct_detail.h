@@ -21,6 +21,7 @@ template <class T>
 struct TYsonSourceTraits
 {
     static constexpr bool IsValid = false;
+    static constexpr bool IsPullParser = false;
 
     static INodePtr AsNode(T& source)
         requires false;

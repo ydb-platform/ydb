@@ -2211,6 +2211,13 @@
             "uri": "https://{canondata_backend}/1942173/99e88108149e222741552e7e6cddef041d6a2846/resource.tar.gz#test_sql2yql.test_csee-nested_closure_in_l2_and_l1_unordered_/sql.yql"
         }
     ],
+    "test_sql2yql.test[csee-pos_aware]": [
+        {
+            "checksum": "382518a724fae4a031f1580ea5f64903",
+            "size": 2196,
+            "uri": "https://{canondata_backend}/1784117/d39d0599e286e4cc386ded7e3a8c8bc9d4d2b8c2/resource.tar.gz#test_sql2yql.test_csee-pos_aware_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[csee-same_closure_l2]": [
         {
             "checksum": "04afadbb9c75b52f6e356934325a12f4",
@@ -9480,6 +9487,11 @@
     "test_sql_format.test[csee-nested_closure_in_l2_and_l1_unordered]": [
         {
             "uri": "file://test_sql_format.test_csee-nested_closure_in_l2_and_l1_unordered_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[csee-pos_aware]": [
+        {
+            "uri": "file://test_sql_format.test_csee-pos_aware_/formatted.sql"
         }
     ],
     "test_sql_format.test[csee-same_closure_l2]": [

@@ -1,7 +1,11 @@
 #include "yql_yt_job_ut.h"
+
+#include <library/cpp/testing/unittest/tests_data.h>
 #include <util/string/split.h>
+
 #include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
 #include <yql/essentials/minikql/mkql_node_printer.h>
+
 #include <yt/yql/providers/yt/fmr/job/impl/yql_yt_job_impl.h>
 #include <yt/yql/providers/yt/fmr/process/yql_yt_job_fmr.h>
 #include <yt/yql/providers/yt/fmr/table_data_service/helpers/yql_yt_table_data_service_helpers.h>
@@ -18,7 +22,8 @@ Y_UNIT_TEST_SUITE(MapTests) {
         TFmrUserJob mapJob;
 
         TTempFileHandle tableDataServiceHostsFile;
-        ui16 port = 2345;
+        TPortManager pm;
+        const ui16 port = pm.GetPort();
         auto tableDataServiceServer = MakeTableDataServiceServer(port);
         std::vector<TTableDataServiceServerConnection> connections{{.Host = "localhost", .Port = port}};
         WriteHostsToFile(tableDataServiceHostsFile, 1, connections);
@@ -28,7 +33,10 @@ Y_UNIT_TEST_SUITE(MapTests) {
         fileWriter.Write(inputYsonContent.data(), inputYsonContent.size());
         fileWriter.Flush();
 
-        TYtTableTaskRef fileTask{.FilePaths = {inputYsonContentFile.Name()}};
+        TYtTableTaskRef fileTask{
+            .RichPaths = {NYT::TRichYPath().Path("test_path").Cluster("test_cluster")},
+            .FilePaths = {inputYsonContentFile.Name()}
+        };
         TFmrTableOutputRef fmrOutputRef{.TableId = "table_id", .PartId = "part_id"};
         TTaskTableRef taskTableRef(fileTask);
         TMapTaskParams mapTaskParams{

@@ -1,4 +1,4 @@
-name: Compare ydb configs in branches
+name: Compare-ydb-configs-in-branches
 on:
   schedule:
     - cron: "0 * * * *"  # Every hour

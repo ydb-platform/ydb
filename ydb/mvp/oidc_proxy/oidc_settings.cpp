@@ -33,11 +33,18 @@ const TVector<TStringBuf> TOpenIdConnectSettings::RESPONSE_HEADERS_WHITE_LIST = 
     "traceresponse"
 };
 
-void TOpenIdConnectSettings::InitTimeoutOverrides() {
-    TimeoutOverrides.clear();
-    if (AccessServiceType == NMvp::nebius_v1) {
+bool TOpenIdConnectSettings::EnabledExtensionWhoami() const {
+    return AccessServiceType == NMvp::nebius_v1 && !WhoamiExtendedInfoEndpoint.empty();
+}
+
+void TOpenIdConnectSettings::InitRequestTimeoutsByPath() {
+    RequestTimeoutsByPath.clear();
+
+    // For requests with enrichment (e.g. extended whoami), set an explicit timeout
+    // to avoid long waits in case YDB is slow or unresponsive
+    if (EnabledExtensionWhoami()) {
         for (auto path : WHOAMI_PATHS) {
-            TimeoutOverrides[path] = TDuration::Seconds(10);
+            RequestTimeoutsByPath[path] = TDuration::Seconds(10);
         }
     }
 }

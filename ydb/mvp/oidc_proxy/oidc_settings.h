@@ -32,8 +32,8 @@ struct TOpenIdConnectSettings {
     TString ClientSecret;
     std::vector<TString> AllowedProxyHosts;
     TString WhoamiExtendedInfoEndpoint;
-    TDuration RequestTimeout = DEFAULT_REQUEST_TIMEOUT;
-    THashMap<TStringBuf, TDuration> TimeoutOverrides;
+    TDuration DefaultRequestTimeout = DEFAULT_REQUEST_TIMEOUT;
+    THashMap<TStringBuf, TDuration> RequestTimeoutsByPath;
 
     NMvp::EAccessServiceType AccessServiceType = NMvp::yandex_v2;
     TString AuthUrlPath = DEFAULT_AUTH_URL_PATH;
@@ -41,7 +41,8 @@ struct TOpenIdConnectSettings {
     TString ExchangeUrlPath = DEFAULT_EXCHANGE_URL_PATH;
     TString ImpersonateUrlPath = DEFAULT_IMPERSONATE_URL_PATH;
 
-    void InitTimeoutOverrides();
+    bool EnabledExtensionWhoami() const;
+    void InitRequestTimeoutsByPath();
 
     TString GetAuthorizationString() const;
     TString GetAuthEndpointURL() const;

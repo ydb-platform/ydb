@@ -107,12 +107,12 @@ bool THandlerSessionServiceCheck::IsAuthorizedRequest(TStringBuf authHeader) {
 
 TDuration THandlerSessionServiceCheck::GetRequestTimeout() const {
     auto path = TStringBuf(ProtectedPage.Url).Before('?');
-    for (const auto& [suffix, timeout] : Settings.TimeoutOverrides) {
+    for (const auto& [suffix, timeout] : Settings.RequestTimeoutsByPath) {
         if (path.EndsWith(suffix)) {
             return timeout;
         }
     }
-    return Settings.RequestTimeout;
+    return Settings.DefaultRequestTimeout;
 }
 
 void THandlerSessionServiceCheck::ForwardUserRequest(TStringBuf authHeader, bool secure) {

@@ -16,7 +16,7 @@ TExtensionManager::TExtensionManager(const TActorId sender,
     ExtensionCtx->Params = MakeHolder<TProxiedResponseParams>();
     ExtensionCtx->Params->ProtectedPage = MakeHolder<TCrackedPage>(protectedPage);
     ExtensionCtx->Sender = sender;
-    Timeout = settings.RequestTimeout;
+    Timeout = settings.DefaultRequestTimeout;
 }
 
 void TExtensionManager::SetExtensionTimeout(TDuration timeout) {
@@ -59,11 +59,7 @@ void TExtensionManager::AddExtension(std::unique_ptr<IExtension> ext) {
 }
 
 bool TExtensionManager::NeedExtensionWhoami(const NHttp::THttpIncomingRequestPtr& request) const {
-    if (Settings.AccessServiceType == NMvp::yandex_v2) {
-        return false; // does not support whoami extension
-    }
-
-    if (request->Method == "OPTIONS" || Settings.WhoamiExtendedInfoEndpoint.empty()) {
+    if (!Settings.EnabledExtensionWhoami() || request->Method == "OPTIONS") {
         return false;
     }
 

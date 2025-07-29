@@ -65,7 +65,7 @@ public:
         return h;
     }
     bool operator==(const TDuplicateMapInfo& other) const {
-        return std::tie(MaxVersion, Rows, SourceId) == std::tie(other.MaxVersion, Rows, other.SourceId);
+        return std::tie(MaxVersion, Rows, SourceId) == std::tie(other.MaxVersion, other.Rows, other.SourceId);
     }
 
     TString DebugString() const {

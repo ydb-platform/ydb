@@ -190,7 +190,7 @@ TDuplicateManager::TDuplicateManager(const TSpecialReadContext& context, TPortio
             });
         return portions;
     }())
-    , FiltersCache(100)   // FIXME configure
+    , FiltersCache(100)
     , DataAccessorsManager(context.GetCommonContext()->GetDataAccessorsManager())
 {
 }
@@ -283,13 +283,15 @@ void TDuplicateManager::Handle(const NPrivate::TEvDuplicateSourceCacheResult::TP
             if (!mapInfo.GetRows().NumRows()) {
                 builtIntervals.insert(i);
             } else if (auto* findBuilding = BuildingFilters.FindPtr(mapInfo)) {
+                AFL_VERIFY(findBuilding->empty())("existing", findBuilding->front()->DebugString())("new", context->DebugString())(
+                    "key", mapInfo.DebugString());
                 findBuilding->emplace_back(context);
                 builtIntervals.insert(i);
             } else if (auto findCached = FiltersCache.Find(mapInfo); findCached != FiltersCache.End()) {
                 context->AddFilter(findCached.Key(), findCached.Value());
                 builtIntervals.insert(i);
             } else {
-                BuildingFilters[mapInfo].emplace_back(context);
+                AFL_VERIFY(BuildingFilters.emplace(mapInfo, std::vector<std::shared_ptr<TInternalFilterConstructor>>({context})).second);
             }
         }
     }
@@ -333,10 +335,9 @@ void TDuplicateManager::Handle(const NPrivate::TEvDuplicateSourceCacheResult::TP
             for (auto&& [source, segment] : segments) {
                 const auto* columnData = ev->Get()->GetConclusion()->FindPtr(source);
                 AFL_VERIFY(columnData)("source", source);
-                task->AddSource(*columnData, allocationGuard, TDuplicateMapInfo(maxVersion, segment, source));
-                Y_UNUSED(BuildingFilters
-                             .emplace(TDuplicateMapInfo(maxVersion, segment, source), std::vector<std::shared_ptr<TInternalFilterConstructor>>())
-                             .second);
+                TDuplicateMapInfo mapInfo(maxVersion, segment, source);
+                task->AddSource(*columnData, allocationGuard, mapInfo);
+                Y_UNUSED(BuildingFilters.emplace(mapInfo, std::vector<std::shared_ptr<TInternalFilterConstructor>>()).second);
             }
             NConveyorComposite::TDeduplicationServiceOperator::SendTaskToExecute(task);
         }
@@ -353,7 +354,7 @@ void TDuplicateManager::Handle(const NPrivate::TEvFilterConstructionResult::TPtr
         LOCAL_LOG_TRACE("event", "extract_constructed_filter")("range", key.DebugString());
         auto findWaiting = BuildingFilters.find(key);
         AFL_VERIFY(findWaiting != BuildingFilters.end());
-        for (const auto& callback : findWaiting->second) {
+        for (const std::shared_ptr<TInternalFilterConstructor>& callback : findWaiting->second) {
             callback->AddFilter(key, std::move(filter));
         }
         BuildingFilters.erase(findWaiting);

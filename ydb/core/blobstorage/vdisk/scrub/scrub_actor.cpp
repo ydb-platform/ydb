@@ -239,7 +239,7 @@ namespace NKikimr {
 
     void TScrubCoroImpl::CheckIntegrity(const TLogoBlobID& blobId, bool isHuge) {
         SendToBSProxy(SelfActorId, Info->GroupID, new TEvBlobStorage::TEvCheckIntegrity(blobId, TInstant::Max(),
-                NKikimrBlobStorage::EGetHandleClass::LowRead));
+                NKikimrBlobStorage::EGetHandleClass::LowRead, true));
         auto res = WaitForPDiskEvent<TEvBlobStorage::TEvCheckIntegrityResult>();
 
         TErasureType::EErasureSpecies erasure = Info->Type.GetErasure();

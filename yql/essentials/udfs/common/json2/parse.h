@@ -56,7 +56,7 @@ namespace NJson2Udf {
                 const auto json = args[0].AsStringRef();
                 return TryParseJsonDom(json, valueBuilder);
             } catch (const std::exception& e) {
-                UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data());
+                UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).c_str());
             }
         }
 

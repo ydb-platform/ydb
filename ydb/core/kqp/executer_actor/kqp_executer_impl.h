@@ -1172,6 +1172,8 @@ protected:
 
         auto& stage = stageInfo.Meta.GetStage(stageInfo.Id);
 
+        bool singlePartitionedStage = stage.GetIsSinglePartition();
+
         YQL_ENSURE(stage.GetSources(0).HasReadRangesSource());
         YQL_ENSURE(stage.GetSources(0).GetInputIndex() == 0 && stage.SourcesSize() == 1);
         for (auto& input : stage.inputs()) {
@@ -1408,7 +1410,7 @@ protected:
         bool isSequentialInFlight = source.GetSequentialInFlightShards() > 0 && partitions.size() > source.GetSequentialInFlightShards();
         bool isParallelPointRead = EnableParallelPointReadConsolidation && !isSequentialInFlight && !source.GetSorted() && IsParallelPointReadPossible(partitions);
 
-        if (partitions.size() > 0 && (isSequentialInFlight || isParallelPointRead)) {
+        if (partitions.size() > 0 && (isSequentialInFlight || isParallelPointRead || singlePartitionedStage)) {
             auto [startShard, shardInfo] = MakeVirtualTablePartition(source, stageInfo, HolderFactory(), TypeEnv());
 
             YQL_ENSURE(Stats);
@@ -1423,11 +1425,11 @@ protected:
             }
 
             if (shardInfo.KeyReadRanges) {
-                const TMaybe<ui64> nodeId = (isParallelPointRead) ? TMaybe<ui64>{SelfId().NodeId()} : Nothing();
+                const TMaybe<ui64> nodeId = (isParallelPointRead || singlePartitionedStage) ? TMaybe<ui64>{SelfId().NodeId()} : Nothing();
                 addPartition(startShard, nodeId, {}, shardInfo, inFlightShards);
                 fillRangesForTasks();
                 buildSinks();
-                return (isParallelPointRead) ? TMaybe<size_t>(partitions.size()) : Nothing();
+                return (isParallelPointRead || singlePartitionedStage) ? TMaybe<size_t>(partitions.size()) : Nothing();
             } else {
                 return 0;
             }
@@ -1465,6 +1467,7 @@ protected:
         ui32 inputTasks = 0;
         bool isShuffle = false;
         bool forceMapTasks = false;
+        bool isParallelUnionAll = false;
         ui32 mapCnt = 0;
 
 
@@ -1482,6 +1485,7 @@ protected:
                     case NKqpProto::TKqpPhyConnection::kMerge:
                     case NKqpProto::TKqpPhyConnection::kStreamLookup:
                     case NKqpProto::TKqpPhyConnection::kMap:
+                    case NKqpProto::TKqpPhyConnection::kParallelUnionAll:
                         break;
                     default:
                         YQL_ENSURE(false, "Unexpected connection type: " << (ui32)input.GetTypeCase() << Endl
@@ -1497,18 +1501,24 @@ protected:
                     isShuffle = true;
                     break;
                 }
-
-                case NKqpProto::TKqpPhyConnection::kStreamLookup:
+                case NKqpProto::TKqpPhyConnection::kStreamLookup: {
                     partitionsCount = originStageInfo.Tasks.size();
                     UnknownAffectedShardCount = true;
                     intros.push_back("Resetting compute tasks count because input " + ToString(inputIndex) + " is StreamLookup - " + ToString(partitionsCount));
                     break;
-                case NKqpProto::TKqpPhyConnection::kMap:
+                }
+                case NKqpProto::TKqpPhyConnection::kMap: {
                     partitionsCount = originStageInfo.Tasks.size();
                     forceMapTasks = true;
                     ++mapCnt;
                     intros.push_back("Resetting compute tasks count because input " + ToString(inputIndex) + " is Map - " + ToString(partitionsCount));
                     break;
+                }
+                case NKqpProto::TKqpPhyConnection::kParallelUnionAll: {
+                    inputTasks += originStageInfo.Tasks.size();
+                    isParallelUnionAll = true;
+                    break;
+                }
                 default:
                     break;
             }
@@ -1517,7 +1527,7 @@ protected:
 
         Y_ENSURE(mapCnt < 2, "There can be only < 2 'Map' connections");
 
-        if (isShuffle && !forceMapTasks) {
+        if ((isShuffle || isParallelUnionAll) && !forceMapTasks) {
             if (stage.GetTaskCount()) {
                 partitionsCount = stage.GetTaskCount();
                 intros.push_back("Manually overridden - " + ToString(partitionsCount));

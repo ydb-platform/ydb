@@ -3311,6 +3311,11 @@ public:
                     Add(Y("let", "world", Y(TString(ConfigureName), "world", configSource,
                         BuildQuotedAtom(Pos_, "Engine"), BuildQuotedAtom(Pos_, *ctx.Engine))));
                 }
+
+                if (ctx.DebugPositions) {
+                    Add(Y("let", "world", Y(TString(ConfigureName), "world", configSource,
+                        BuildQuotedAtom(Pos_, "DebugPositions"))));
+                }
             }
         }
 

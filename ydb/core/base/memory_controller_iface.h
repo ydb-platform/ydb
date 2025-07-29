@@ -53,11 +53,9 @@ struct TEvConsumerRegistered : public TEventLocal<TEvConsumerRegistered, EvConsu
 
 struct TEvConsumerLimit : public TEventLocal<TEvConsumerLimit, EvConsumerLimit> {
     ui64 LimitBytes;
-    std::optional<ui64> HardLimitBytes;
 
-    TEvConsumerLimit(ui64 limitBytes, std::optional<ui64> hardLimitBytes = std::nullopt)
-        : LimitBytes(limitBytes)
-        , HardLimitBytes(std::move(hardLimitBytes)) {
+    TEvConsumerLimit(ui64 limitBytes)
+        : LimitBytes(limitBytes) {
     }
 };
 

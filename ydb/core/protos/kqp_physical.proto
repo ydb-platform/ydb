@@ -246,6 +246,9 @@ message TKqpPhyTableOperation {
 message TKqpPhyCnUnionAll {
 }
 
+message TKqpPhyCnParallelUnionAll {
+}
+
 message TKqpPhyCnMap {
 }
 
@@ -340,6 +343,7 @@ message TKqpPhyConnection {
         TKqpPhyCnMerge Merge = 11;
         TKqpPhyCnStreamLookup StreamLookup = 12;
         TKqpPhyCnSequencer Sequencer = 14;
+        TKqpPhyCnParallelUnionAll ParallelUnionAll = 15;
     };
 }
 

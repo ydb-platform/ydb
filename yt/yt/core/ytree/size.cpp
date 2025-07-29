@@ -1,6 +1,7 @@
 #include "size.h"
 
 #include <yt/yt/core/misc/error.h>
+#include <yt/yt/core/ytree/convert.h>
 
 #include <util/string/cast.h>
 
@@ -63,6 +64,44 @@ TSize::TUnderlying DeserializeSizeWithSuffixesImpl(TStringBuf originalValue)
 TSize TSize::FromString(TStringBuf serializedValue)
 {
     return TSize(DeserializeSizeWithSuffixesImpl(serializedValue));
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void Serialize(const TSize& value, NYson::IYsonConsumer* consumer)
+{
+    Serialize(value.Underlying(), consumer);
+}
+
+void Deserialize(TSize& value, INodePtr node)
+{
+    if (node->GetType() == ENodeType::Int64) {
+        value = TSize(node->AsInt64()->GetValue());
+    } else if (node->GetType() == ENodeType::Uint64) {
+        value = TSize(CheckedIntegralCast<i64>(node->AsUint64()->GetValue()));
+    } else if (node->GetType() == ENodeType::String) {
+        value = TSize::FromString(node->AsString()->GetValue());
+    } else {
+        THROW_ERROR_EXCEPTION("Cannot parse TSize value from %Qlv",
+            node->GetType());
+    }
+}
+
+void Deserialize(TSize& value, NYson::TYsonPullParserCursor* cursor)
+{
+    if ((*cursor)->GetType() == NYson::EYsonItemType::Int64Value) {
+        value = TSize((*cursor)->UncheckedAsInt64());
+        cursor->Next();
+    } else if ((*cursor)->GetType() == NYson::EYsonItemType::Uint64Value) {
+        value = TSize(CheckedIntegralCast<i64>((*cursor)->UncheckedAsUint64()));
+        cursor->Next();
+    } else if ((*cursor)->GetType() == NYson::EYsonItemType::StringValue) {
+        value = TSize::FromString((*cursor)->UncheckedAsString());
+        cursor->Next();
+    } else {
+        THROW_ERROR_EXCEPTION("Cannot parse TSize value from %Qlv",
+            (*cursor)->GetType());
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////

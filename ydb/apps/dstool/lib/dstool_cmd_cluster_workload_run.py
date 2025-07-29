@@ -299,9 +299,9 @@ def do(args):
             print(f"Switching primary pile to {pile_id} with setting PRIMARY")
             common.set_primary_pile(pile_id, [x for x in all_piles if x != pile_id])
 
-        def do_disconnect_pile(pile_id):
+        def do_disconnect_pile(pile_id, pile_id_to_endpoints):
             print(f"Disconnecting pile {pile_id}")
-            common.disconnect_pile(pile_id)
+            common.disconnect_pile(pile_id, pile_id_to_endpoints)
 
         def do_connect_pile(pile_id, pile_id_to_hosts):
             print(f"Connecting pile {pile_id}")
@@ -425,7 +425,7 @@ def do(args):
                 possible_actions.append(('connect-pile', (do_connect_pile, random.choice(disconnected_piles), pile_id_to_endpoints)))
             if args.enable_disconnect_piles and len(synchronized_piles) > 0:
                 pile_to_disconnect = args.fixed_pile_for_disconnect if args.fixed_pile_for_disconnect is not None else random.choice([primary_pile] + synchronized_piles)
-                possible_actions.append(('disconnect-pile', (do_disconnect_pile, pile_to_disconnect)))
+                possible_actions.append(('disconnect-pile', (do_disconnect_pile, pile_to_disconnect, pile_id_to_endpoints)))
 
         if not possible_actions:
             common.print_if_not_quiet(args, 'Waiting for the next round...', file=sys.stdout)

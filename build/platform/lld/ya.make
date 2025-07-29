@@ -7,7 +7,9 @@ VERSION(${LLD_VERSION})
 
 # There is no backward compatibility between LLVM IR versions 16 and 18.
 # So, we need to select lld18 when using clang18 to compile src in LTO mode.
-IF (LLD_VERSION == 18)
+IF (LLD_VERSION == 20)
+    DECLARE_EXTERNAL_HOST_RESOURCES_BUNDLE_BY_JSON(LLD_ROOT lld20.json)
+ELSEIF (LLD_VERSION == 18)
     DECLARE_EXTERNAL_HOST_RESOURCES_BUNDLE_BY_JSON(LLD_ROOT lld18.json)
 ELSEIF (LLD_VERSION == 16)
     DECLARE_EXTERNAL_HOST_RESOURCES_BUNDLE_BY_JSON(LLD_ROOT lld16.json)

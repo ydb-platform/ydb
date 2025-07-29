@@ -346,12 +346,12 @@ bool TCreateParts::ProgressState(TOperationContext& context) {
 
         if (context.SS->AdoptedShards.contains(shard.Idx)) {
             auto ev = AdoptRequest(shard.Idx, context);
-            context.OnComplete.BindMsgToPipe(OperationId, context.SS->GetGlobalHive(context.Ctx), shard.Idx, ev.Release());
+            context.OnComplete.BindMsgToPipe(OperationId, context.SS->GetGlobalHive(), shard.Idx, ev.Release());
         } else {
             auto path = context.SS->PathsById.at(txState->TargetPathId);
             auto ev = CreateEvCreateTablet(path, shard.Idx, context);
 
-            auto hiveToRequest = context.SS->ResolveHive(shard.Idx, context.Ctx);
+            auto hiveToRequest = context.SS->ResolveHive(shard.Idx);
 
             LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                         DebugHint() << " CreateRequest"

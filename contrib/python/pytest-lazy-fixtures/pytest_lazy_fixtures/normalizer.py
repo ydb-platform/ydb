@@ -1,5 +1,7 @@
+from __future__ import annotations
+
 import copy
-from typing import Any, Dict, Iterable, Iterator, List, Tuple
+from typing import Any, Iterable, Iterator
 
 import pytest
 
@@ -7,7 +9,7 @@ from .lazy_fixture import LazyFixtureWrapper
 from .lazy_fixture_callable import LazyFixtureCallableWrapper
 
 
-def _get_fixturenames_closure_and_arg2fixturedefs(fm, metafunc, value) -> Tuple[List[str], Dict[str, Any]]:
+def _get_fixturenames_closure_and_arg2fixturedefs(fm, metafunc, value) -> tuple[list[str], dict[str, Any]]:
     if isinstance(value, LazyFixtureCallableWrapper):
         extra_fixturenames_args, arg2fixturedefs_args = _get_fixturenames_closure_and_arg2fixturedefs(
             fm,
@@ -33,7 +35,7 @@ def _get_fixturenames_closure_and_arg2fixturedefs(fm, metafunc, value) -> Tuple[
         return fixturenames_closure, arg2fixturedefs
     extra_fixturenames, arg2fixturedefs = [], {}
     # we need to check exact type
-    if type(value) is dict:  # noqa: E721
+    if type(value) is dict:
         value = list(value.values())
     # we need to check exact type
     if type(value) in {list, tuple, set}:
@@ -60,7 +62,7 @@ def _copy_metafunc(metafunc):
     return copied
 
 
-def _uniq(values: "Iterable[str]") -> "Iterator[str]":
+def _uniq(values: Iterable[str]) -> Iterator[str]:
     seen = set()
     for value in values:
         if value not in seen:

@@ -571,6 +571,7 @@ private:
         hFunc(TEvControlPlaneProxy::TEvDescribeBindingRequest, Handle);
         hFunc(TEvControlPlaneProxy::TEvModifyBindingRequest, Handle);
         hFunc(TEvControlPlaneProxy::TEvDeleteBindingRequest, Handle);
+        hFunc(TEvControlPlaneProxy::TEvDeleteFolderResourcesRequest, Handle);
         hFunc(NMon::TEvHttpInfo, Handle);
     )
 
@@ -2492,6 +2493,70 @@ private:
 
             Send(sender, ev->Get()->Response.release());
         }
+    }
+
+    void Handle(TEvControlPlaneProxy::TEvDeleteFolderResourcesRequest::TPtr& ev){
+        TInstant startTime = TInstant::Now();
+        // CPP_LOG_T("DeleteFolderResourcesRequest: " << request.DebugString());
+        const TString cloudId = ev->Get()->CloudId;
+        const TString subjectType = ev->Get()->SubjectType;
+        const TString scope = ev->Get()->Scope;
+        TString user = ev->Get()->User;
+        TString token = ev->Get()->Token;
+        const TString folderId = ev->Get()->FolderId;
+        const int byteSize = ev->Get()->GetByteSize();
+        TActorId sender = ev->Sender;
+        ui64 cookie = ev->Cookie;
+
+        auto probe = [=](const TDuration& delta, bool isSuccess, bool isTimeout) {
+            LWPROBE(DeleteFolderResourcesRequest, scope, user, folderId, delta, byteSize, isSuccess, isTimeout);
+        };
+
+        if (!cloudId) {
+            Register(new TResolveFolderActor<TEvControlPlaneProxy::TEvDeleteFolderResourcesRequest::TPtr,
+                                TEvControlPlaneProxy::TEvDeleteFolderResourcesResponse>
+                                (Counters.GetCommonCounters(RTC_RESOLVE_FOLDER), sender,
+                                 Config, scope, token,
+                                 probe, ev, cookie, QuotaManagerEnabled));
+
+            return;
+        }
+        if (!subjectType) {
+            Register(new TResolveSubjectTypeActor<TEvControlPlaneProxy::TEvDeleteFolderResourcesRequest::TPtr,
+                                    TEvControlPlaneProxy::TEvDeleteFolderResourcesResponse>
+                                    (Counters.GetCommonCounters(RTC_RESOLVE_SUBJECT_TYPE), sender,
+                                    Config, token,
+                                    probe, ev, cookie, AccessService));
+            return;
+        }
+
+        TRequestCounters requestCounters = Counters.GetCounters(cloudId, scope, RTS_DELETE_FOLDER_RESOURCES, RTC_DELETE_FOLDER_RESOURCES);
+        NYql::TIssues issues = ValidatePermissions(ev, {"yq.bindings.delete@as", "yq.queries.delete@as", "yq.connections.delete@as"});
+        if (issues) {
+            Send(ev->Sender, new TEvControlPlaneProxy::TEvDeleteFolderResourcesResponse(issues, subjectType), 0, ev->Cookie);
+            requestCounters.IncError();
+            TDuration delta = TInstant::Now() - startTime;
+            requestCounters.Common->LatencyMs->Collect(delta.MilliSeconds());
+            probe(delta, false, false);
+            return;
+        }
+
+        static const TPermissions availablePermissions {
+            TPermissions::TPermission::MANAGE_PUBLIC
+            | TPermissions::TPermission::MANAGE_PRIVATE
+            | TPermissions::TPermission::VIEW_PUBLIC
+            | TPermissions::TPermission::VIEW_PRIVATE
+        };
+
+        Register(new TDeleteFolderResourcesRequestActor (
+            ev,
+            Config,
+            ControlPlaneStorageServiceActorId(),
+            requestCounters,
+            probe,
+            availablePermissions));
+
+        // Send(sender, ev->Get()->Response.release());
     }
 
     void Handle(NMon::TEvHttpInfo::TPtr& ev) {

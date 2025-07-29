@@ -43,10 +43,33 @@ protected:
         auto table = context.SS->Tables.at(pathId);
 
         auto& op = *tx.MutableCreateIncrementalRestoreSrc();
-        op.MutableSrcPathId()->CopyFrom(RestoreOp.GetSrcPathIds(0));
-        op.SetSrcTablePath(RestoreOp.GetSrcTablePaths(0));
+        
+        // Check if we have the transaction data (normal operation) or need to reconstruct from state (restoration)
+        if (RestoreOp.GetSrcPathIds().size() > 0 && RestoreOp.GetSrcTablePaths().size() > 0) {
+            // Normal operation: use data from RestoreOp
+            op.MutableSrcPathId()->CopyFrom(RestoreOp.GetSrcPathIds(0));
+            op.SetSrcTablePath(RestoreOp.GetSrcTablePaths(0));
+            op.SetDstTablePath(RestoreOp.GetDstTablePath());
+        } else {
+            // Restoration: reconstruct data from transaction state
+            auto* txState = context.SS->FindTx(OperationId);
+            Y_ABORT_UNLESS(txState);
+            Y_ABORT_UNLESS(txState->SourcePathId);
+            
+            // Get source path info
+            Y_ABORT_UNLESS(context.SS->PathsById.contains(txState->SourcePathId));
+            auto srcPath = TPath::Init(txState->SourcePathId, context.SS);
+            
+            // Fill source data
+            txState->SourcePathId.ToProto(op.MutableSrcPathId());
+            op.SetSrcTablePath(srcPath.PathString());
+            
+            // Fill destination data
+            auto dstPath = TPath::Init(pathId, context.SS);
+            op.SetDstTablePath(dstPath.PathString());
+        }
+        
         pathId.ToProto(op.MutableDstPathId());
-        op.SetDstTablePath(RestoreOp.GetDstTablePath());
     }
 
 public:
@@ -235,8 +258,17 @@ public:
         Y_ABORT_UNLESS(txState);
         Y_ABORT_UNLESS(IsExpectedTxType(txState->TxType));
 
-        for (const auto& pathId : RestoreOp.GetSrcPathIds()) {
-            context.OnComplete.ReleasePathState(OperationId, TPathId::FromProto(pathId), TPathElement::EPathState::EPathStateNoChanges);
+        // Check if we have the transaction data (normal operation) or need to reconstruct from state (restoration)
+        if (RestoreOp.GetSrcPathIds().size() > 0) {
+            // Normal operation: use data from RestoreOp
+            for (const auto& pathId : RestoreOp.GetSrcPathIds()) {
+                context.OnComplete.ReleasePathState(OperationId, TPathId::FromProto(pathId), TPathElement::EPathState::EPathStateNoChanges);
+            }
+        } else {
+            // Restoration: use source path from transaction state
+            if (txState->SourcePathId) {
+                context.OnComplete.ReleasePathState(OperationId, txState->SourcePathId, TPathElement::EPathState::EPathStateNoChanges);
+            }
         }
 
         context.OnComplete.DoneOperation(OperationId);
@@ -473,9 +505,9 @@ ISubOperation::TPtr CreateRestoreIncrementalBackupAtTable(TOperationId id, const
     return MakeSubOperation<NIncrRestore::TNewRestoreFromAtTable>(id, tx);
 }
 
-ISubOperation::TPtr CreateRestoreIncrementalBackupAtTable(TOperationId id, TTxState::ETxState state) {
+ISubOperation::TPtr CreateRestoreIncrementalBackupAtTable(TOperationId id, TTxState::ETxState state, TOperationContext& context) {
     Y_ABORT_UNLESS(state != TTxState::Invalid);
-    return MakeSubOperation<NIncrRestore::TNewRestoreFromAtTable>(id, state);
+    return MakeSubOperation<NIncrRestore::TNewRestoreFromAtTable>(id, state, context);
 }
 
 bool CreateRestoreMultipleIncrementalBackups(

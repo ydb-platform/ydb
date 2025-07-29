@@ -1083,6 +1083,7 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
             recreateCollectionSettings);
         env.TestWaitNotification(runtime, txId);
     }
+
     Y_UNIT_TEST(DropCollectionDuringActiveOperation) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
@@ -1413,6 +1414,105 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/.backups/collections/" DEFAULT_NAME_1),
                           {NLs::PathNotExist});
+    }
+
+    Y_UNIT_TEST(RestorePathStatePersistenceAcrossRestart) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
+        ui64 txId = 100;
+
+        SetupLogging(runtime);
+        PrepareDirs(runtime, env, txId);
+
+        // Create test table
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "PersistentTable"
+            Columns { Name: "key" Type: "Uint32" }
+            Columns { Name: "value" Type: "Utf8" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // Create backup collection
+        TString collectionSettings = R"(
+            Name: "PersistenceTest"
+            ExplicitEntryList {
+                Entries {
+                    Type: ETypeTable
+                    Path: "/MyRoot/PersistentTable"
+                }
+            }
+            Cluster: {}
+            IncrementalBackupConfig: {}
+        )";
+
+        TestCreateBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections/", collectionSettings);
+        env.TestWaitNotification(runtime, txId);
+
+        // Create backups
+        TestBackupBackupCollection(runtime, ++txId, "/MyRoot",
+            R"(Name: ".backups/collections/PersistenceTest")");
+        env.TestWaitNotification(runtime, txId);
+
+        runtime.AdvanceCurrentTime(TDuration::Seconds(1));
+        TestBackupIncrementalBackupCollection(runtime, ++txId, "/MyRoot",
+            R"(Name: ".backups/collections/PersistenceTest")");
+        env.TestWaitNotification(runtime, txId);
+
+        // Drop table to prepare for restore test
+        TestDropTable(runtime, ++txId, "/MyRoot", "PersistentTable");
+        env.TestWaitNotification(runtime, txId);
+
+        // Verify table is gone
+        TestLs(runtime, "/MyRoot/PersistentTable", false, NLs::PathNotExist);
+
+        // Restart SchemeShard
+        TActorId sender = runtime.AllocateEdgeActor();
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, sender);
+
+        // Verify backup collection survived restart
+        TestLs(runtime, "/MyRoot/.backups/collections/PersistenceTest", false, NLs::PathExist);
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/.backups/collections/PersistenceTest"), {
+            NLs::PathExist,
+            NLs::IsBackupCollection
+        });
+
+        // Verify table is still gone
+        TestLs(runtime, "/MyRoot/PersistentTable", false, NLs::PathNotExist);
+
+        // Restore after restart
+        TestRestoreBackupCollection(runtime, ++txId, "/MyRoot",
+            R"(Name: ".backups/collections/PersistenceTest")");
+        env.TestWaitNotification(runtime, txId);
+
+        // Verify table is restored to correct path after restart
+        TestLs(runtime, "/MyRoot/PersistentTable", false, NLs::PathExist);
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/PersistentTable"), {
+            NLs::PathExist,
+            NLs::IsTable
+        });
+
+        // Verify backup collection path is still correct
+        TestLs(runtime, "/MyRoot/.backups/collections/PersistenceTest", false, NLs::PathExist);
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/.backups/collections/PersistenceTest"), {
+            NLs::PathExist,
+            NLs::IsBackupCollection
+        });
+
+        // Test another restart to verify persistence
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, sender);
+
+        // Final verification - all paths should be preserved
+        TestLs(runtime, "/MyRoot/PersistentTable", false, NLs::PathExist);
+        TestLs(runtime, "/MyRoot/.backups/collections/PersistenceTest", false, NLs::PathExist);
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/PersistentTable"), {
+            NLs::PathExist,
+            NLs::IsTable
+        });
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/.backups/collections/PersistenceTest"), {
+            NLs::PathExist,
+            NLs::IsBackupCollection
+        });
     }
 
     // TODO: DropCollectionWithIncrementalRestoreStateCleanup

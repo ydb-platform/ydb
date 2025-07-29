@@ -27,30 +27,53 @@ message CsvSettings {
 }
 
 enum SchemaInclusionMode {
+    // Unspecified mode, corresponds to SCHEMA_INCLUSION_MODE_ALWAYS mode.
     SCHEMA_INCLUSION_MODE_UNSPECIFIED = 0;
-    SCHEMA_INCLUSION_MODE_ALWAYS = 10;        // Always include schema in the response stream.
-    SCHEMA_INCLUSION_MODE_FIRST_ONLY = 20;    // Include schema only in the first part of the response stream.
+
+    // Always include schema in every Ydb.ResultSet in the response stream.
+    SCHEMA_INCLUSION_MODE_ALWAYS = 1;
+
+    // Include schema only in the first Ydb.ResultSet per result_set_index of the response stream.
+    SCHEMA_INCLUSION_MODE_FIRST_ONLY = 2;
 }
 
 /**
- * Ydb.Value output format for Query.ExecuteQueryRequest
-*/
+ * ValueOutputFormat is a standard output format for Ydb.Query.ExecuteQueryRequest.
+ * It is used to get Ydb.Value rows as a result of the query.
+ * The output format is specified in the Ydb.Query.ExecuteQueryRequest.output_format field.
+ *
+ * ValueOutputFormatMeta is a metadata for ValueOutputFormat.
+ * It is used to know the output format.
+ * It is only filled in Ydb.ResultSet.output_format_meta field.
+ */
 message ValueOutputFormat {
-    // If Ydb.ResultSet schema is not needed, it can be omitted in the response stream.
     SchemaInclusionMode schema_inclusion_mode = 1;
 }
 
 message ValueOutputFormatMeta {}
 
 /**
- * Arrow output format for Query.ExecuteQueryRequest
-*/
+ * ArrowOutputFormat is a custom output format for Ydb.Query.ExecuteQueryRequest.
+ * It is used to get a serialized Arrow record batch in the Ydb.ResultSet.data field with/without compression.
+ * The output format is specified in the Ydb.Query.ExecuteQueryRequest.output_format field.
+ *
+ * ArrowOutputFormatMeta is a metadata for ArrowOutputFormat.
+ * It is used to know the output format and get the schema of the Arrow record batch.
+ * It is only filled in Ydb.ResultSet.output_format_meta field.
+ */
 message ArrowOutputFormat {
     message Compression {
         enum Type {
+            // Unspecified mode, corresponds to COMPRESSION_NONE mode.
             COMPRESSION_UNSPECIFIED = 0;
+
+            // Binary data without compression.
             COMPRESSION_NONE = 1;
+
+            // Zstandard compression.
             COMPRESSION_ZSTD = 2;
+
+            // LZ4 frame compression.
             COMPRESSION_LZ4_FRAME = 3;
         }
 
@@ -58,13 +81,13 @@ message ArrowOutputFormat {
         int32 level = 2;
     }
 
-    // If Ydb.ResultSet schema is not needed, it can be omitted in the response stream.
     SchemaInclusionMode schema_inclusion_mode = 1;
-    // Compression codec to use.
+
     Compression compression = 2;
 }
 
 message ArrowOutputFormatMeta {
-    // It's filled only for SchemaInclusionMode ALWAYS or FIRST_ONLY (first part of the response stream).
+    // Schema of the arrow batch of the result.
+    // It is filled only for SCHEMA_INCLUSION_MODE_ALWAYS, SCHEMA_INCLUSION_MODE_FIRST_ONLY in ExecuteQueryRequest.output_format.
     bytes schema = 1;
 }

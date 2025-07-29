@@ -7358,6 +7358,8 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
     }
 
     Y_UNIT_TEST_TWIN(AsyncReplicationCommitInterval, UseQueryService) {
+        using namespace NReplication;
+
         TKikimrRunner kikimr;
         auto queryClient = kikimr.GetQueryClient();
         auto db = kikimr.GetTableClient();

@@ -92,7 +92,8 @@ public:
                 WaitAllocations.AddAllocationExt(externalGroupId, allocationInfo);
             } else if (allocationInfo->IsAllocatable(0) || (isPriorityProcess && externalGroupId <= GroupIds.GetMinExternalIdVerified())) {
                 Y_UNUSED(WaitAllocations.RemoveAllocationExt(externalGroupId, allocationInfo));
-                if (!allocationInfo->Allocate(OwnerActorId)) {
+                auto success = allocationInfo->Allocate(OwnerActorId);
+                if (!success) {
                     UnregisterAllocation(allocationInfo->GetIdentifier());
                 }
                 LWPROBE(Allocated, "on_register", allocationInfo->GetIdentifier(), stage->GetName(), stage->GetLimit(), stage->GetHardLimit().value_or(std::numeric_limits<ui64>::max()), stage->GetUsage().Val(), stage->GetWaiting().Val(), allocationInfo->GetAllocationTime(), false, success);

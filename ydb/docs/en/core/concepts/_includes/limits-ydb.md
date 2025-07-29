@@ -50,7 +50,7 @@ The table below lists the limits that apply to query execution.
 | Maximum query text length | 10 KB | The maximum allowable length of YQL query text. | Returns status code `BAD_REQUEST` |
 | Maximum size of parameter values | 50 MB | The maximum total size of parameters passed when executing a previously prepared query. | Returns status code `BAD_REQUEST` |
 | Maximum size of a row | 50 MB | The maximum total size of all fields of a single row returned or produced by the query. | Returns status code `PRECONDITION_FAILED` |
-| Maximum number of [locks](../contributor/datashard-locks-and-change-visibility) per DataShard | 10000 | The number of lock ranges per DataShard | Convert some locks to whole-shard locks (uses less memory, but locks the entire shard instead of just a part). |
+| Maximum number of [locks](../contributor/datashard-locks-and-change-visibility) per DataShard | 10000 | The number of lock ranges per DataShard | Converts some locks to whole-shard locks, which use less memory, but lock the entire shard instead of just a part. |
 
 {% cut "Legacy Limits" %}
 

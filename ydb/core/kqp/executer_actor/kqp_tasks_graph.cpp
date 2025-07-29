@@ -194,7 +194,6 @@ void FillKqpTasksGraphStages(TKqpTasksGraph& tasksGraph, const TVector<IKqpGatew
                     case NKqpProto::TKqpPhyTableOperation::kReadRange:
                     case NKqpProto::TKqpPhyTableOperation::kReadRanges:
                     case NKqpProto::TKqpPhyTableOperation::kReadOlapRange:
-                    case NKqpProto::TKqpPhyTableOperation::kLookup:
                         stageInfo.Meta.ShardOperations.insert(TKeyDesc::ERowOperation::Read);
                         break;
                     case NKqpProto::TKqpPhyTableOperation::kUpsertRows:

@@ -1102,8 +1102,6 @@ NSchemeShardUT_Private::TTestWithReboots::TTestWithReboots(bool killOnCommit, NS
     NoRebootEventTypes.insert(TEvIndexBuilder::EvGetRequest);
     NoRebootEventTypes.insert(TEvIndexBuilder::EvCancelRequest);
     NoRebootEventTypes.insert(TEvIndexBuilder::EvForgetRequest);
-    // without it, ut_vector_index_build_reboots test hangs on GetRequest on the very first reboot
-    NoRebootEventTypes.insert(TEvTablet::EvCommitResult);
 }
 
 void NSchemeShardUT_Private::TTestWithReboots::Run(std::function<void (TTestActorRuntime &, bool &)> testScenario) {

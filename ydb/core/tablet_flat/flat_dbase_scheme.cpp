@@ -30,7 +30,7 @@ TAutoPtr<TSchemeChanges> TScheme::GetSnapshot() const {
             auto &family = it.second;
 
             delta.AddFamily(table, it.first, family.Room);
-            delta.SetFamily(table, it.first, family.Cache, family.Codec);
+            delta.SetFamily(table, it.first, family.Cache, family.Codec, family.CacheTier);
             delta.SetFamilyBlobs(table, it.first, family.Small, family.Large);
         }
 
@@ -189,7 +189,7 @@ TAlter& TAlter::AddColumnToKey(ui32 table, ui32 column)
     return ApplyLastRecord();
 }
 
-TAlter& TAlter::SetFamily(ui32 table, ui32 family, ECache cache, ECodec codec)
+TAlter& TAlter::SetFamily(ui32 table, ui32 family, ECache cache, ECodec codec, ECacheTier cacheTier)
 {
     TAlterRecord& delta = *Log.AddDelta();
     delta.SetDeltaType(TAlterRecord::SetFamily);
@@ -198,6 +198,7 @@ TAlter& TAlter::SetFamily(ui32 table, ui32 family, ECache cache, ECodec codec)
     delta.SetInMemory(cache == ECache::Ever);
     delta.SetCodec(ui32(codec));
     delta.SetCache(ui32(cache));
+    delta.SetCacheTier(ui32(cacheTier));
 
     return ApplyLastRecord();
 }

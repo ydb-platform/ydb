@@ -53,14 +53,14 @@ public:
                 txc.DB.Alter()
                     .SetRoom(tableId, RoomId2, FamilyId2Channel, {FamilyId2Channel}, FamilyId2Channel)
                     .AddFamily(tableId, FamilyId2, RoomId2)
-                    .SetFamily(tableId, FamilyId2, NTable::NPage::ECache::None, NTable::NPage::ECodec::Plain)
+                    .SetFamily(tableId, FamilyId2, NTable::NPage::ECache::None, NTable::NPage::ECodec::Plain, NSharedCache::ECacheTier::Regular)
                     .AddColumn(tableId, "value_family_2", ValueFamily2ColumnId, NScheme::TString::TypeId, false)
                     .AddColumnToFamily(tableId, ValueFamily2ColumnId, FamilyId2);
 
                 txc.DB.Alter()
                     .SetRoom(tableId, RoomId3, FamilyId3Channel, {FamilyId3Channel}, FamilyId3Channel)
                     .AddFamily(tableId, FamilyId3, RoomId3)
-                    .SetFamily(tableId, FamilyId3, NTable::NPage::ECache::None, NTable::NPage::ECodec::Plain)
+                    .SetFamily(tableId, FamilyId3, NTable::NPage::ECache::None, NTable::NPage::ECodec::Plain, NSharedCache::ECacheTier::Regular)
                     .AddColumn(tableId, "value_family_3", ValueFamily3ColumnId, NScheme::TString::TypeId, false)
                     .AddColumnToFamily(tableId, ValueFamily3ColumnId, FamilyId3);
             }

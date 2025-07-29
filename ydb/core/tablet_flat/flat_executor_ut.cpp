@@ -3,6 +3,7 @@
 #include "util_fmt_abort.h"
 #include <ydb/core/base/counters.h>
 #include <ydb/core/testlib/actors/block_events.h>
+#include <ydb/core/testlib/actors/wait_events.h>
 
 namespace NKikimr {
 namespace NTabletFlatExecutor {
@@ -36,7 +37,7 @@ namespace NTabletFlatExecutor {
 
                 if (Groups) {
                     txc.DB.Alter()
-                        .SetFamily(TableId, AltFamilyId, NTable::NPage::ECache::None, NTable::NPage::ECodec::Plain)
+                        .SetFamily(TableId, AltFamilyId, NTable::NPage::ECache::None, NTable::NPage::ECodec::Plain, NSharedCache::ECacheTier::Regular)
                         .AddColumnToFamily(TableId, ColumnValueId, AltFamilyId);
                 }
 
@@ -2058,7 +2059,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_CompressedSelectRows) {
             using namespace NTable::NPage;
 
             txc.DB.Alter()
-                .SetFamily(TRowsModel::TableId, 0, ECache::None, ECodec::LZ4);
+                .SetFamily(TRowsModel::TableId, 0, ECache::None, ECodec::LZ4, NSharedCache::ECacheTier::Regular);
 
             return true;
         }
@@ -6268,7 +6269,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_StickyPages) {
         {
             using namespace NTable::NPage;
 
-            txc.DB.Alter().SetFamily(TRowsModel::TableId, Family, ECache::Ever, ECodec::Plain);
+            txc.DB.Alter().SetFamily(TRowsModel::TableId, Family, ECache::Ever, ECodec::Plain, ECacheTier::Regular);
 
             return true;
         }
@@ -6285,7 +6286,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_StickyPages) {
             using namespace NTable::NPage;
 
             txc.DB.Alter()
-                .SetFamily(TRowsModel::TableId, TRowsModel::AltFamilyId, ECache::None, ECodec::Plain)
+                .SetFamily(TRowsModel::TableId, TRowsModel::AltFamilyId, ECache::None, ECodec::Plain, NSharedCache::ECacheTier::Regular)
                 .AddColumnToFamily(TRowsModel::TableId, TRowsModel::ColumnValueId, TRowsModel::AltFamilyId);
 
             return true;
@@ -6700,6 +6701,405 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_StickyPages) {
 
         env.SendSync(new NFake::TEvExecute{ new TTxFullScan(failedAttempts) }, true);
         UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 0); // if at least one family of a group is for memory load it 
+    }
+}
+
+Y_UNIT_TEST_SUITE(TFlatTableExecutor_TryKeepInMemory) {
+    using EReady = NTable::EReady;
+    using ENext = NTable::ENext;
+
+    struct TTxFullScan : public ITransaction {
+        int& FailedAttempts;
+
+        TTxFullScan(int& failedAttempts)
+            : FailedAttempts(failedAttempts)
+        {
+            FailedAttempts = 0;
+        }
+
+        bool Execute(TTransactionContext &txc, const TActorContext &) override
+        {
+            TVector<NTable::TTag> tags{ { TRowsModel::ColumnKeyId, TRowsModel::ColumnValueId } };
+
+            auto iter = txc.DB.IterateRange(TRowsModel::TableId, { }, tags, {2, 0});
+            while (iter->Next(ENext::Data) == EReady::Data) {
+                // iterate over all rows
+            }
+
+            if (iter->Last() != EReady::Page) {
+                return true;
+            }
+            FailedAttempts++;
+            return false;
+        }
+
+        void Complete(const TActorContext &ctx) override
+        {
+            ctx.Send(ctx.SelfID, new NFake::TEvReturn);
+        }
+    };
+
+    struct TTxCachingFamily : public ITransaction {
+        using ECache = NTable::NPage::ECache;
+        using ECacheTier = NSharedCache::ECacheTier;
+
+        ui32 Family;
+        NTable::NPage::ECache Cache;
+        ECacheTier CacheTier;
+
+        TTxCachingFamily(ui32 family, ECache cache, ECacheTier cacheTier)
+            : Family(family)
+            , Cache(cache)
+            , CacheTier(cacheTier)
+        {}
+
+        bool Execute(TTransactionContext &txc, const TActorContext &) override {
+            txc.DB.Alter().SetFamily(TRowsModel::TableId, Family, Cache, NTable::NPage::ECodec::Plain, CacheTier);
+
+            return true;
+        }
+
+        void Complete(const TActorContext &ctx) override
+        {
+            ctx.Send(ctx.SelfID, new NFake::TEvReturn);
+        }
+    };
+
+    struct TTxAddFamily : public ITransaction {
+        bool Execute(TTransactionContext &txc, const TActorContext &) override
+        {
+            using namespace NTable::NPage;
+
+            txc.DB.Alter()
+                .SetFamily(TRowsModel::TableId, TRowsModel::AltFamilyId, ECache::None, ECodec::Plain, NSharedCache::ECacheTier::Regular)
+                .AddColumnToFamily(TRowsModel::TableId, TRowsModel::ColumnValueId, TRowsModel::AltFamilyId);
+
+            return true;
+        }
+
+        void Complete(const TActorContext &ctx) override
+        {
+            ctx.Send(ctx.SelfID, new NFake::TEvReturn);
+        }
+    };
+
+    void SetSharedCacheSize(TMyEnvBase &env, ui64 memoryLimit) {
+        TWaitForFirstEvent<NMemory::TEvConsumerLimit> wait(*env);
+        env->Send(MakeSharedPageCacheId(), TActorId{}, new NMemory::TEvConsumerLimit(memoryLimit));
+        wait.Wait();
+    }
+
+    void RestartAndClearCache(TMyEnvBase& env, ui64 memoryLimit = Max<ui64>()) {
+        env.SendSync(new TEvents::TEvPoison, false, true);
+        SetSharedCacheSize(env, 0_MB);
+        SetSharedCacheSize(env, memoryLimit);
+        env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
+    }
+
+    void SetupEnvironment(TMyEnvBase &env, std::optional<bool> bTreeIndex = {}) {
+        env->SetLogPriority(NKikimrServices::TABLET_SAUSAGECACHE, NActors::NLog::PRI_TRACE);
+        env->SetLogPriority(NKikimrServices::TABLET_EXECUTOR, NActors::NLog::PRI_TRACE);
+
+        if (bTreeIndex.has_value()) {
+            auto &appData = env->GetAppData();
+            appData.FeatureFlags.SetEnableLocalDBBtreeIndex(bTreeIndex.value());
+            appData.FeatureFlags.SetEnableLocalDBFlatIndex(!bTreeIndex.value());
+        }
+    }
+
+    Y_UNIT_TEST(TestOnceSharedCache) {
+        TMyEnvBase env;
+        TRowsModel rows;
+
+        SetupEnvironment(env);
+        env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
+        SetSharedCacheSize(env, 8_MB);
+        auto cacheCounters = GetSharedPageCounters(env);
+
+        env.SendSync(rows.MakeScheme(new TCompactionPolicy()));
+        env.SendSync(new NFake::TEvExecute{ new TTxCachingFamily(0, NTable::NPage::ECache::Once, ECacheTier::Regular) });
+
+        // 10 history pages
+        env.SendSync(rows.VersionTo(TRowVersion(1, 10)).RowTo(0).MakeRows(70, 950));
+        
+        // 10 data pages
+        env.SendSync(rows.VersionTo(TRowVersion(2, 20)).RowTo(0).MakeRows(70, 950));
+        
+        env.SendSync(new NFake::TEvCompact(TRowsModel::TableId));
+        env.WaitFor<NFake::TEvCompacted>();
+
+        int failedAttempts = 0;
+        env.SendSync(new NFake::TEvExecute{ new TTxFullScan(failedAttempts) });
+        UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 0); // should be cached
+        UNIT_ASSERT_VALUES_EQUAL(cacheCounters->CacheMissPages->Val(), 0);
+
+        // restart tablet
+        RestartAndClearCache(env, 8_MB);
+        UNIT_ASSERT_VALUES_EQUAL(cacheCounters->CacheMissPages->Val(), 4); // cache misses before preloading
+
+        // should not be preloaded in private cache
+        env.SendSync(new NFake::TEvExecute{ new TTxFullScan(failedAttempts) }, true);
+        UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 20);
+        UNIT_ASSERT_VALUES_EQUAL(cacheCounters->CacheMissPages->Val(), 24);
+    }
+
+    Y_UNIT_TEST(TestTryKeepInMemory) {
+        TMyEnvBase env;
+        TRowsModel rows;
+
+        SetupEnvironment(env);
+        env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
+        SetSharedCacheSize(env, 8_MB);
+        auto cacheCounters = GetSharedPageCounters(env);
+
+        env.SendSync(rows.MakeScheme(new TCompactionPolicy()));
+        env.SendSync(new NFake::TEvExecute{ new TTxCachingFamily(0, NTable::NPage::ECache::Once, ECacheTier::TryKeepInMemory) });
+
+        // 10 history pages
+        env.SendSync(rows.VersionTo(TRowVersion(1, 10)).RowTo(0).MakeRows(70, 950));
+        
+        // 10 data pages
+        env.SendSync(rows.VersionTo(TRowVersion(2, 20)).RowTo(0).MakeRows(70, 950));
+        
+        env.SendSync(new NFake::TEvCompact(TRowsModel::TableId));
+        env.WaitFor<NFake::TEvCompacted>();
+
+        int failedAttempts = 0;
+        env.SendSync(new NFake::TEvExecute{ new TTxFullScan(failedAttempts) });
+        UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 0);
+        UNIT_ASSERT_VALUES_EQUAL(cacheCounters->CacheMissPages->Val(), 0);
+
+        // restart tablet
+        RestartAndClearCache(env, 8_MB);
+        UNIT_ASSERT_VALUES_EQUAL(cacheCounters->CacheMissPages->Val(), 4); // cache misses before preloading
+
+        // should be preloaded
+        env.SendSync(new NFake::TEvExecute{ new TTxFullScan(failedAttempts) }, true);
+        UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 20); // TODO: preload
+        UNIT_ASSERT_VALUES_EQUAL(cacheCounters->CacheMissPages->Val(), 4); // should be no more cache misses
+    }
+
+    Y_UNIT_TEST(TestTryKeepInMemoryMain) {
+        TMyEnvBase env;
+        TRowsModel rows;
+
+        SetupEnvironment(env);
+        env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
+        SetSharedCacheSize(env, 8_MB);
+        auto cacheCounters = GetSharedPageCounters(env);
+
+        env.SendSync(rows.MakeScheme(new TCompactionPolicy(), true));
+        env.SendSync(new NFake::TEvExecute{ new TTxCachingFamily(0, NTable::NPage::ECache::Once, ECacheTier::TryKeepInMemory) });
+
+        // 1 historic[0] + 10 historic[1] pages
+        env.SendSync(rows.VersionTo(TRowVersion(1, 10)).RowTo(0).MakeRows(70, 950));
+        
+        // 1 groups[0] + 10 groups[1] pages
+        env.SendSync(rows.VersionTo(TRowVersion(2, 20)).RowTo(0).MakeRows(70, 950));
+        
+        env.SendSync(new NFake::TEvCompact(TRowsModel::TableId));
+        env.WaitFor<NFake::TEvCompacted>();
+
+        int failedAttempts = 0;
+        env.SendSync(new NFake::TEvExecute{ new TTxFullScan(failedAttempts) });
+        UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 0); // in shared cache
+        UNIT_ASSERT_VALUES_EQUAL(cacheCounters->CacheMissPages->Val(), 0);
+
+        // restart tablet
+        RestartAndClearCache(env, 8_MB);
+        UNIT_ASSERT_VALUES_EQUAL(cacheCounters->CacheMissPages->Val(), 4); // cache misses before preloading
+
+        env.SendSync(new NFake::TEvExecute{ new TTxFullScan(failedAttempts) }, true);
+        UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 12); // TODO: preload, should be: 10 historic[1] pages
+        UNIT_ASSERT_VALUES_EQUAL(cacheCounters->CacheMissPages->Val(), 14); // 10 historic[1] pages, 4 cache misses before preloading
+    }
+
+    Y_UNIT_TEST(TestTryKeepInMemoryAlt_FlatIndex) {
+        TMyEnvBase env;
+        TRowsModel rows;
+
+        SetupEnvironment(env, false);
+        env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
+        SetSharedCacheSize(env, 8_MB);
+        auto cacheCounters = GetSharedPageCounters(env);
+
+        env.SendSync(rows.MakeScheme(new TCompactionPolicy(), true));
+
+        env.SendSync(new NFake::TEvExecute{ new TTxCachingFamily(TRowsModel::AltFamilyId, NTable::NPage::ECache::Once, ECacheTier::TryKeepInMemory) });
+
+        // 1 historic[0] + 10 historic[1] pages
+        env.SendSync(rows.VersionTo(TRowVersion(1, 10)).RowTo(0).MakeRows(70, 950));
+        
+        // 1 groups[0] + 10 groups[1] pages
+        env.SendSync(rows.VersionTo(TRowVersion(2, 20)).RowTo(0).MakeRows(70, 950));
+        
+        env.SendSync(new NFake::TEvCompact(TRowsModel::TableId));
+        env.WaitFor<NFake::TEvCompacted>();
+
+        int failedAttempts = 0;
+        env.SendSync(new NFake::TEvExecute{ new TTxFullScan(failedAttempts) });
+        UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 0); // in shared cache
+        UNIT_ASSERT_VALUES_EQUAL(cacheCounters->CacheMissPages->Val(), 0);
+
+        // restart tablet
+        RestartAndClearCache(env, 8_MB);
+        UNIT_ASSERT_VALUES_EQUAL(cacheCounters->CacheMissPages->Val(), 6); // cache misses before preloading
+
+        env.SendSync(new NFake::TEvExecute{ new TTxFullScan(failedAttempts) }, true);
+        UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 12); // TODO: preload, should be: 1 groups[0], 1 historic[0], 3 index pages are sticky
+        UNIT_ASSERT_VALUES_EQUAL(cacheCounters->CacheMissPages->Val(), 8); // 1 groups[0], 1 historic[0], 6 cache misses before preloading, 3 index pages are sticky
+    }
+
+    Y_UNIT_TEST(TestTryKeepInMemoryAlt_BTreeIndex) {
+        TMyEnvBase env;
+        TRowsModel rows;
+
+        SetupEnvironment(env, true);
+        env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
+        SetSharedCacheSize(env, 8_MB);
+        auto cacheCounters = GetSharedPageCounters(env);
+
+        env.SendSync(rows.MakeScheme(new TCompactionPolicy(), true));
+
+        env.SendSync(new NFake::TEvExecute{ new TTxCachingFamily(TRowsModel::AltFamilyId, NTable::NPage::ECache::Once, ECacheTier::TryKeepInMemory) });
+
+        // 1 historic[0] + 10 historic[1] pages
+        env.SendSync(rows.VersionTo(TRowVersion(1, 10)).RowTo(0).MakeRows(70, 950));
+        
+        // 1 groups[0] + 10 groups[1] pages
+        env.SendSync(rows.VersionTo(TRowVersion(2, 20)).RowTo(0).MakeRows(70, 950));
+        
+        env.SendSync(new NFake::TEvCompact(TRowsModel::TableId));
+        env.WaitFor<NFake::TEvCompacted>();
+
+        int failedAttempts = 0;
+        env.SendSync(new NFake::TEvExecute{ new TTxFullScan(failedAttempts) });
+        UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 0); // in shared cache
+        UNIT_ASSERT_VALUES_EQUAL(cacheCounters->CacheMissPages->Val(), 0);
+
+        // restart tablet
+        RestartAndClearCache(env, 8_MB);
+        UNIT_ASSERT_VALUES_EQUAL(cacheCounters->CacheMissPages->Val(), 4); // cache misses before preloading
+
+        env.SendSync(new NFake::TEvExecute{ new TTxFullScan(failedAttempts) }, true);
+        UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 12); // TODO: preload, should be: index root nodes, 1 groups[0], 1 historic[0]
+        UNIT_ASSERT_VALUES_EQUAL(cacheCounters->CacheMissPages->Val(), 6); // 1 groups[0], 1 historic[0], 4 cache misses before preloading, should be index root nodes?
+    }
+
+    Y_UNIT_TEST(TestTryKeepInMemoryAll) {
+        TMyEnvBase env;
+        TRowsModel rows;
+
+        SetupEnvironment(env);
+        env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
+        SetSharedCacheSize(env, 8_MB);
+        auto cacheCounters = GetSharedPageCounters(env);
+
+        env.SendSync(rows.MakeScheme(new TCompactionPolicy(), true));
+        env.SendSync(new NFake::TEvExecute{ new TTxCachingFamily(0, NTable::NPage::ECache::Once, ECacheTier::TryKeepInMemory) });
+        env.SendSync(new NFake::TEvExecute{ new TTxCachingFamily(TRowsModel::AltFamilyId, NTable::NPage::ECache::Once, ECacheTier::TryKeepInMemory) });
+
+        // 1 historic[0] + 10 historic[1] pages
+        env.SendSync(rows.VersionTo(TRowVersion(1, 10)).RowTo(0).MakeRows(70, 950));
+        
+        // 1 groups[0] + 10 groups[1] pages
+        env.SendSync(rows.VersionTo(TRowVersion(2, 20)).RowTo(0).MakeRows(70, 950));
+        
+        env.SendSync(new NFake::TEvCompact(TRowsModel::TableId));
+        env.WaitFor<NFake::TEvCompacted>();
+
+        int failedAttempts = 0;
+        env.SendSync(new NFake::TEvExecute{ new TTxFullScan(failedAttempts) });
+        UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 0); // in shared cache
+        UNIT_ASSERT_VALUES_EQUAL(cacheCounters->CacheMissPages->Val(), 0);
+
+        // restart tablet
+        RestartAndClearCache(env, 8_MB);
+        UNIT_ASSERT_VALUES_EQUAL(cacheCounters->CacheMissPages->Val(), 4); // cache misses before preloading
+
+        // should have the same behaviour
+        env.SendSync(new NFake::TEvExecute{ new TTxFullScan(failedAttempts) }, true);
+        UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 12); // TODO: preload, should be 0
+        UNIT_ASSERT_VALUES_EQUAL(cacheCounters->CacheMissPages->Val(), 4); // should be no more cache misses
+    }
+
+    Y_UNIT_TEST(TestAlterAddFamilyTryKeepInMemory) {
+        TMyEnvBase env;
+        TRowsModel rows;
+
+        SetupEnvironment(env);
+        env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
+        SetSharedCacheSize(env, 8_MB);
+        auto cacheCounters = GetSharedPageCounters(env);
+
+        env.SendSync(rows.MakeScheme(new TCompactionPolicy()));
+
+        // 10 historic[0] pages
+        env.SendSync(rows.VersionTo(TRowVersion(1, 10)).RowTo(0).MakeRows(70, 950));
+        
+        // 10 groups[0] pages
+        env.SendSync(rows.VersionTo(TRowVersion(2, 20)).RowTo(0).MakeRows(70, 950));
+        
+        env.SendSync(new NFake::TEvCompact(TRowsModel::TableId));
+        env.WaitFor<NFake::TEvCompacted>();
+
+        // add family, old parts won't have it
+        env.SendSync(new NFake::TEvExecute{ new TTxAddFamily() });
+        env.SendSync(new NFake::TEvExecute{ new TTxCachingFamily(0, NTable::NPage::ECache::Once, ECacheTier::TryKeepInMemory) });
+        env.SendSync(new NFake::TEvExecute{ new TTxCachingFamily(TRowsModel::AltFamilyId, NTable::NPage::ECache::Once, ECacheTier::TryKeepInMemory) });
+
+        int failedAttempts = 0;
+        env.SendSync(new NFake::TEvExecute{ new TTxFullScan(failedAttempts) });
+        UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 0); // in shared cache
+        UNIT_ASSERT_VALUES_EQUAL(cacheCounters->CacheMissPages->Val(), 0);
+
+        // restart tablet
+        RestartAndClearCache(env, 8_MB);
+        UNIT_ASSERT_VALUES_EQUAL(cacheCounters->CacheMissPages->Val(), 4); // cache misses before preloading
+
+        env.SendSync(new NFake::TEvExecute{ new TTxFullScan(failedAttempts) }, true);
+        UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 20); // TODO: preload, should be 0
+        // 4 cache misses before preloading, all old and new colums in try-keep-in-memory family sould be preloaded
+        UNIT_ASSERT_VALUES_EQUAL(cacheCounters->CacheMissPages->Val(), 4);
+    }
+
+    Y_UNIT_TEST(TestAlterAddFamilyPartiallyTryKeepInMemory) {
+        TMyEnvBase env;
+        TRowsModel rows;
+
+        SetupEnvironment(env);
+        env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
+        SetSharedCacheSize(env, 8_MB);
+        auto cacheCounters = GetSharedPageCounters(env);
+
+        env.SendSync(rows.MakeScheme(new TCompactionPolicy()));
+
+        // 10 historic[0] pages
+        env.SendSync(rows.VersionTo(TRowVersion(1, 10)).RowTo(0).MakeRows(70, 950));
+        
+        // 10 groups[0] pages
+        env.SendSync(rows.VersionTo(TRowVersion(2, 20)).RowTo(0).MakeRows(70, 950));
+        
+        env.SendSync(new NFake::TEvCompact(TRowsModel::TableId));
+        env.WaitFor<NFake::TEvCompacted>();
+
+        // add family, old parts won't have it
+        env.SendSync(new NFake::TEvExecute{ new TTxAddFamily() });
+        env.SendSync(new NFake::TEvExecute{ new TTxCachingFamily(0, NTable::NPage::ECache::Once, ECacheTier::TryKeepInMemory) });
+
+        int failedAttempts = 0;
+        env.SendSync(new NFake::TEvExecute{ new TTxFullScan(failedAttempts) });
+        UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 0); // in shared cache
+        UNIT_ASSERT_VALUES_EQUAL(cacheCounters->CacheMissPages->Val(), 0);
+
+        // restart tablet
+        RestartAndClearCache(env, 8_MB);
+        UNIT_ASSERT_VALUES_EQUAL(cacheCounters->CacheMissPages->Val(), 4); // cache misses before preloading
+
+        env.SendSync(new NFake::TEvExecute{ new TTxFullScan(failedAttempts) }, true);
+        UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 20); // TODO: preload, should be 0
+        // 4 cache misses before preloading, if at least one family of a group is for memory load it 
+        UNIT_ASSERT_VALUES_EQUAL(cacheCounters->CacheMissPages->Val(), 4);
     }
 }
 

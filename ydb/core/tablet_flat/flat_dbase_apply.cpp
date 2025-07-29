@@ -99,12 +99,20 @@ bool TSchemeModifier::Apply(const TAlterRecord &delta)
 
         Y_ENSURE(ui32(cache) <= 2, "Invalid pages cache policy value");
         if (family.Cache != cache && cache == ECache::Ever) {
-            ChangeTableSetting(table, tableInfo.PendingCacheEnable, true);
+            ChangeTableSetting(table, tableInfo.PendingCacheUpdate, true);
         }
         changes |= ChangeTableSetting(table, family.Cache, cache);
         changes |= ChangeTableSetting(table, family.Codec, codec);
         changes |= ChangeTableSetting(table, family.Small, small);
         changes |= ChangeTableSetting(table, family.Large, large);
+
+        if (delta.HasCacheTier()) {
+            Y_ENSURE(delta.GetCacheTier() <= 1, "Invalid cache tier value");
+            if (ChangeTableSetting(table, family.CacheTier, static_cast<NSharedCache::ECacheTier>(delta.GetCacheTier()))) {
+                ChangeTableSetting(table, tableInfo.PendingCacheUpdate, true);
+                changes |= true;
+            }
+        }
 
     } else if (action == TAlterRecord::AddColumnToFamily) {
         changes |= AddColumnToFamily(table, delta.GetColumnId(), delta.GetFamilyId());

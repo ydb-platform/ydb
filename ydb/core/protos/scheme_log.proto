@@ -54,6 +54,7 @@ message TAlterRecord {
     optional uint32 Cache = 13;     // Read NPage::ECache for details
     optional uint32 Large = 14;     // When keep values in single blobs
     optional uint32 Small = 18;     // When pack values to outer blobs
+    optional uint32 CacheTier = 27; // NSharedCache::ECacheTier
 
     //_ Table: Attributes of single colimn
 

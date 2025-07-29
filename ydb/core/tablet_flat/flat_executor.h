@@ -500,6 +500,7 @@ class TExecutor
 
     ui64 UsedTabletMemory = 0;
     ui64 StickyPagesMemory = 0;
+    ui64 TryKeepInMemoryTierMemory = 0;
     ui64 TransactionPagesMemory = 0;
 
     TActorContext SelfCtx() const;
@@ -550,16 +551,19 @@ class TExecutor
     void TryActivateWaitingTransaction(TIntrusivePtr<NPageCollection::TPagesWaitPad>&& waitPad, TVector<NSharedCache::TEvResult::TLoaded>&& pages, TPrivatePageCache::TInfo* collectionInfo);
     void ActivateWaitingTransaction(TTransactionWaitPad& transaction);
     void LogWaitingTransaction(const TTransactionWaitPad& transaction);
-    void AddCachesOfBundle(const NTable::TPartView &partView);
+    void AddCachesOfBundle(const NTable::TPartView &partView, const THashMap<NTable::TTag, ECacheTier>& cacheTiers);
     void AddSingleCache(const TIntrusivePtr<TPrivatePageCache::TInfo> &info);
     void DropCachesOfBundle(const NTable::TPart &part);
     void DropSingleCache(const TLogoBlobID&);
 
     void TranslateCacheTouchesToSharedCache();
+    void UpdateCacheTiersForPartStore(NTable::TPartView& partView, const THashMap<NTable::TTag, ECacheTier>& cacheTiers);
     void RequestInMemPagesForDatabase(bool pendingOnly = false);
-    void RequestInMemPagesForPartStore(ui32 tableId, const NTable::TPartView &partView, const THashSet<NTable::TTag> &stickyColumns);
+    void RequestInMemPagesForPartStore(NTable::TPartView& partView, const THashSet<NTable::TTag>& stickyColumns);
     void StickInMemPages(NSharedCache::TEvResult *msg);
     THashSet<NTable::TTag> GetStickyColumns(ui32 tableId);
+    THashMap<NTable::TTag, ECacheTier> GetCacheTiers(ui32 tableId);
+    TVector<ECacheTier> GetCacheTiersByGroup(const NTable::TPartView &partView, const THashMap<NTable::TTag, ECacheTier>& cacheTiers);
     THolder<TScanSnapshot> PrepareScanSnapshot(ui32 table,
         const NTable::TCompactionParams* params, TRowVersion snapshot = TRowVersion::Max());
     void ReleaseScanLocks(TIntrusivePtr<TBarrier>, const NTable::TSubset&);

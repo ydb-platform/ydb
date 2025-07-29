@@ -10,6 +10,7 @@ namespace {
     struct TModel {
         using ECodec = NKikimr::NTable::NPage::ECodec;
         using ECache = NKikimr::NTable::NPage::ECache;
+        using ECacheTier = NSharedCache::ECacheTier;
 
         enum ETokens : ui32 {
             TableId = 1,
@@ -39,7 +40,7 @@ namespace {
             bld.AddTable("table1", TableId);
             bld.SetRoom(TableId, StoreIdOut, ChannelOut, {ChannelBlobs}, ChannelOut);
             bld.AddFamily(TableId, GroupId1, StoreIdDef);
-            bld.SetFamily(TableId, GroupId1, ECache::Ever, ECodec::LZ4);
+            bld.SetFamily(TableId, GroupId1, ECache::Ever, ECodec::LZ4, ECacheTier::TryKeepInMemory);
             bld.AddFamily(TableId, GroupId2, StoreIdOut);
             bld.AddColumn(TableId, "key", ColId1, NScheme::TSmallBoundedString::TypeId, false);
             bld.AddColumn(TableId, "value", ColId2, NScheme::TUint32::TypeId, false);
@@ -69,6 +70,7 @@ namespace {
                 UNIT_ASSERT(family->Cache == ECache::Ever);
                 UNIT_ASSERT(family->Codec == ECodec::LZ4);
                 UNIT_ASSERT(family->Large == Max<ui32>());
+                UNIT_ASSERT(family->CacheTier == ECacheTier::TryKeepInMemory);
             } else {
                 UNIT_FAIL("Cannot find primary group in scheme");
             }
@@ -99,7 +101,8 @@ namespace {
                 && a.Cache == b.Cache
                 && a.Codec == b.Codec
                 && a.Small == b.Small
-                && a.Large == b.Large;
+                && a.Large == b.Large
+                && a.CacheTier == b.CacheTier;
         }
 
         static bool IsTheSame(const TColumn &a, const TColumn &b) noexcept

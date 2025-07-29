@@ -50,6 +50,31 @@ namespace {
         );
     }
 
+    auto ZeroMeteringCpuTimeUs(TTestBasicRuntime& runtime) {
+        return std::make_tuple(
+            MakeHolder<TBlockEvents<TEvDataShard::TEvSampleKResponse>>(runtime, [&](const auto& ev) {
+                ev->Get()->Record.MutableMeteringStats()->SetCpuTimeUs(0);
+                return false;
+            }),
+            MakeHolder<TBlockEvents<TEvIndexBuilder::TEvUploadSampleKResponse>>(runtime, [&](const auto& ev) {
+                ev->Get()->Record.MutableMeteringStats()->SetCpuTimeUs(0);
+                return false;
+            }),
+            MakeHolder<TBlockEvents<TEvDataShard::TEvRecomputeKMeansResponse>>(runtime, [&](const auto& ev) {
+                ev->Get()->Record.MutableMeteringStats()->SetCpuTimeUs(0);
+                return false;
+            }),
+            MakeHolder<TBlockEvents<TEvDataShard::TEvReshuffleKMeansResponse>>(runtime, [&](const auto& ev) {
+                ev->Get()->Record.MutableMeteringStats()->SetCpuTimeUs(0);
+                return false;
+            }),
+            MakeHolder<TBlockEvents<TEvDataShard::TEvLocalKMeansResponse>>(runtime, [&](const auto& ev) {
+                ev->Get()->Record.MutableMeteringStats()->SetCpuTimeUs(0);
+                return false;
+            })
+        );
+    }
+
     void AddRead(TMeteringStats& stats, ui64 rows, ui64 bytes) {
         stats.SetReadRows(stats.GetReadRows() + rows);
         stats.SetReadBytes(stats.GetReadBytes() + bytes);
@@ -287,9 +312,6 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
         WriteVectorTableRows(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB/Table", 1, 50, 150);
         WriteVectorTableRows(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB/Table", 2, 150, 200);
 
-        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
-        runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
-
         TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB/Table"),
             {NLs::PathExist, NLs::IndexesCount(0), NLs::PathVersionEqual(3)});
 
@@ -388,12 +410,97 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
         }
     }
 
+    Y_UNIT_TEST_FLAG(Metering_Documentation_Formula_Build, smallRows) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        // runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
+        auto zeroMeteringCpuTimeUs = ZeroMeteringCpuTimeUs(runtime);
+
+        ui64 tenantSchemeShard = 0;
+        TestCreateServerLessDb(runtime, env, txId, tenantSchemeShard);
+
+        TestCreateTable(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB", R"(
+            Name: "Table"
+            Columns { Name: "key"       Type: "Uint32" }
+            Columns { Name: "embedding" Type: "String" }
+            Columns { Name: "prefix"    Type: "Uint32" }
+            Columns { Name: "value"     Type: "String" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId, tenantSchemeShard);
+
+        // Write data directly into shards
+        const ui32 levels = 3;
+        const ui32 tableRows = 1500;
+        const ui32 tableRowDimension = smallRows ? 500 : 5000;
+        const ui64 tableRowBytes = 4 + (tableRowDimension + 1); // key:Uint32 (4 bytes), embedding:String (vector_dimension + 1 bytes)
+        const ui64 tableBytes = tableRows * tableRowBytes;
+        for (ui32 rowId = 0; rowId < tableRows; rowId += 100) { // batching
+            WriteVectorTableRows(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB/Table", 0, rowId, rowId + 100, {}, tableRowDimension);
+        }
+
+        // Build vector index with max_shards_in_flight(1) to guarantee deterministic metering data
+        ui64 buildIndexTx = ++txId;
+        {
+            auto sender = runtime.AllocateEdgeActor();
+            auto request = CreateBuildIndexRequest(buildIndexTx, "/MyRoot/ServerLessDB", "/MyRoot/ServerLessDB/Table", TBuildIndexConfig{
+                "index1", NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree, {"embedding"}, {}
+            });
+            auto settings = request->Record.MutableSettings();
+            settings->set_max_shards_in_flight(1);
+            settings->MutableScanSettings()->SetMaxBatchRows(1); // the worst case with small buffer size
+            auto kmeansSettings = request->Record.MutableSettings()->mutable_index()->Mutableglobal_vector_kmeans_tree_index();
+            kmeansSettings->Mutablevector_settings()->Setlevels(levels);
+            kmeansSettings->Mutablevector_settings()->mutable_settings()->set_vector_dimension(tableRowDimension);
+            ForwardToTablet(runtime, tenantSchemeShard, sender, request);
+        }
+
+        env.TestWaitNotification(runtime, buildIndexTx, tenantSchemeShard);
+
+        {
+            ui64 dataSizeMB = (tableBytes + 1_MB - 1) / 1_MB;
+            ui32 rowCount = tableRows; // alias
+            ui64 formulaRequestUnitsApproximation = levels * Max<ui64>(dataSizeMB * 1152, dataSizeMB * 640 + rowCount * 0.5);
+
+            ui64 actualRequestUnits = smallRows ? 3415 : 18552; // TODO: cut from html
+            auto buildIndexHtml = TestGetBuildIndexHtml(runtime, tenantSchemeShard, buildIndexTx);
+            Cout << "BuildIndex " << buildIndexHtml << Endl;
+            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml, TStringBuilder() << "Request Units: " << actualRequestUnits << " ");
+
+            Cerr
+                << "dataSizeMB = " << dataSizeMB
+                << " rowCount = " << rowCount
+                << " expectedRequestUnits = " << formulaRequestUnitsApproximation
+                << " actualRequestUnits = " << actualRequestUnits
+                << Endl;
+            
+            // Note: in case of any cost changes, documentation is needed to be updated correspondingly.
+            // https://yandex.cloud/ru/docs/ydb/pricing/ru-special#vector-index
+            // or ensure manually that the difference is not really big
+            UNIT_ASSERT_LE(actualRequestUnits, formulaRequestUnitsApproximation);
+            if (smallRows) {
+                // here `formulaRequestUnitsApproximation` may be even a bit less than `actualRequestUnits`
+                // because we do not count `__ydb_parent` and `id` columns
+                UNIT_ASSERT_VALUES_EQUAL(actualRequestUnits, 3415);
+                UNIT_ASSERT_VALUES_EQUAL(formulaRequestUnitsApproximation, 4170);
+            } else {
+                // here `formulaRequestUnitsApproximation` much less than `actualRequestUnits`
+                // because we do less than 5 kmeans iterations or buffer some rows
+                UNIT_ASSERT_VALUES_EQUAL(actualRequestUnits, 18552);
+                UNIT_ASSERT_VALUES_EQUAL(formulaRequestUnitsApproximation, 27648);
+            }
+        }
+    }
+
     Y_UNIT_TEST(Metering_CommonDB) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
 
-        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        // runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
         runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
         auto deterministicMetering = MakeCpuMeteringDeterministic(runtime);
 
@@ -502,7 +609,7 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
         TTestEnv env(runtime);
         ui64 txId = 100;
 
-        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        // runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
         runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
         auto deterministicMetering = MakeCpuMeteringDeterministic(runtime);
 
@@ -716,7 +823,7 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
         TTestEnv env(runtime);
         ui64 txId = 100;
 
-        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        // runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
         runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
         auto deterministicMetering = MakeCpuMeteringDeterministic(runtime);
 

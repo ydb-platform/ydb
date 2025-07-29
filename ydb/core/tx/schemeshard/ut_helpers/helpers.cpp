@@ -2759,21 +2759,26 @@ namespace NSchemeShardUT_Private {
     }
 
     void WriteVectorTableRows(TTestActorRuntime& runtime, ui64 schemeShardId, ui64 txId, const TString & tablePath,
-        ui32 shard, ui32 min, ui32 max, std::vector<ui32> columnIds) {
+        ui32 shard, ui32 min, ui32 max, std::vector<ui32> columnIds, ui32 vectorDimension) {
         TVector<TCell> cells;
-        ui8 str[6] = { 0 };
-        str[4] = (ui8)Ydb::Table::VectorIndexSettings::VECTOR_TYPE_UINT8;
+        TVector<ui8> vec(vectorDimension + 1);
+        vec[vectorDimension] = (ui8)Ydb::Table::VectorIndexSettings::VECTOR_TYPE_UINT8;
         for (ui32 key = min; key < max; ++key) {
-            str[0] = ((key+106)* 7) % 256;
-            str[1] = ((key+106)*17) % 256;
-            str[2] = ((key+106)*37) % 256;
-            str[3] = ((key+106)*47) % 256;
+            for (ui32 index : xrange(vectorDimension)) {
+                vec[index] = ((key+106)* (10*index+7)) % 256;
+                if (index == 2) {
+                    vec[2] = ((key+106)*37) % 256;
+                }
+                if (index == 3) {
+                    vec[3] = ((key+106)*47) % 256;
+                }
+            }
             cells.emplace_back(TCell::Make(key));
-            cells.emplace_back(TCell((const char*)str, 5));
+            cells.emplace_back(TCell((const char*)vec.data(), vec.size()));
             // optional prefix ui32 column
             cells.emplace_back(TCell::Make(key % 17));
             // optionally use the same value for an additional covered string column
-            cells.emplace_back(TCell((const char*)str, 5));
+            cells.emplace_back(TCell((const char*)vec.data(), vec.size()));
         }
         if (!columnIds.size()) {
             columnIds = {1, 2, 3, 4};

@@ -243,6 +243,57 @@ public:
     }
 };
 
+class TTrashUnusedInjector: public NYDBTest::ILocalDBModifier {
+public:
+    void Apply(NTabletFlatExecutor::TTransactionContext& txc) const override {
+        using namespace NColumnShard;
+
+        NIceDb::TNiceDb db(txc.DB);
+
+        if (db.HaveTable<Schema::IndexColumns>()) {
+            for (size_t i = 0; i < 100; ++i) {
+                db.Table<Schema::IndexColumns>().Key(1 + i, 2 + i, 3 + i, 4 + i, 5 + i, 6 + i, 7 + i).Update();
+            }
+        }
+    }
+};
+
+template <ui64 ColumnId>
+class TExtraColumnsInjector: public NYDBTest::ILocalDBModifier {
+public:
+    void Apply(NTabletFlatExecutor::TTransactionContext& txc) const override {
+        using namespace NColumnShard;
+
+        NIceDb::TNiceDb db(txc.DB);
+
+        THashMap<NOlap::TPortionAddress, NKikimrTxColumnShard::TIndexPortionAccessor> portions;
+
+        auto rowset = db.Table<Schema::IndexColumnsV2>().Select();
+        UNIT_ASSERT(rowset.IsReady());
+
+        while (!rowset.EndOfSet()) {
+            auto metadataString = rowset.GetValue<NColumnShard::Schema::IndexColumnsV2::Metadata>();
+            NKikimrTxColumnShard::TIndexPortionAccessor metaProto;
+            AFL_VERIFY(metaProto.ParseFromArray(metadataString.data(), metadataString.size()))("event", "cannot parse metadata as protobuf");
+            {
+                auto chunk = metaProto.AddChunks();
+                chunk->SetSSColumnId(ColumnId);
+                chunk->MutableBlobRangeLink()->SetSize(1);
+                chunk->MutableChunkMetadata()->SetNumRows(20048);
+                chunk->MutableChunkMetadata()->SetRawBytes(1);
+            }
+            AFL_VERIFY(portions.emplace(NOlap::TPortionAddress(TInternalPathId::FromRawValue(rowset.GetValue<NColumnShard::Schema::IndexColumnsV2::PathId>()), rowset.GetValue<NColumnShard::Schema::IndexColumnsV2::PortionId>()), std::move(metaProto)).second);
+            UNIT_ASSERT(rowset.Next());
+        }
+
+        for (auto&& [key, metadata] : portions) {
+            db.Table<Schema::IndexColumnsV2>()
+                .Key(key.GetPathId().GetRawValue(), key.GetPortionId())
+                .Update(NIceDb::TUpdate<Schema::IndexColumnsV2::Metadata>(metadata.SerializeAsString()));
+        }
+    }
+};
+
 Y_UNIT_TEST_SUITE(Normalizers) {
     template <class TLocalDBModifier>
     void TestNormalizerImpl(const TNormalizerChecker& checker = TNormalizerChecker()) {
@@ -358,6 +409,61 @@ Y_UNIT_TEST_SUITE(Normalizers) {
         };
         TLocalNormalizerChecker checker;
         TestNormalizerImpl<TTablesCleaner>(checker);
+    }
+
+    Y_UNIT_TEST(ChunksV0MetaNormalizer) {
+        class TLocalNormalizerChecker: public TNormalizerChecker {
+        public:
+            virtual void CorrectConfigurationOnStart(NKikimrConfig::TColumnShardConfig& columnShardConfig) const override {
+                auto* repair = columnShardConfig.MutableRepairs()->Add();
+                repair->SetClassName("RestoreV0ChunksMeta");
+                repair->SetDescription("Restoring PortionMeta in IndexColumns");
+            }
+        };
+        TLocalNormalizerChecker checker;
+        TestNormalizerImpl<TEraseMetaFromChunksV0>(checker);
+    }
+
+    Y_UNIT_TEST(CleanUnusedTablesNormalizer) {
+        class TTtlPresetsChecker: public TNormalizerChecker {
+        public:
+            virtual void CorrectConfigurationOnStart(NKikimrConfig::TColumnShardConfig& columnShardConfig) const override {
+                auto* repair = columnShardConfig.MutableRepairs()->Add();
+                repair->SetClassName("CleanIndexColumns");
+                repair->SetDescription("Cleaning old table");
+            }
+        };
+
+        TTtlPresetsChecker checker;
+        TestNormalizerImpl<TTrashUnusedInjector>(checker);
+    }
+
+    Y_UNIT_TEST(RemoveDeleteFlagNormalizer) {
+        class TChecker: public TNormalizerChecker {
+        public:
+            virtual void CorrectConfigurationOnStart(NKikimrConfig::TColumnShardConfig& columnShardConfig) const override {
+                auto* repair = columnShardConfig.MutableRepairs()->Add();
+                repair->SetClassName("RemoveDeleteFlag");
+                repair->SetDescription("normalizer");
+            }
+        };
+
+        TChecker checker;
+        TestNormalizerImpl<TExtraColumnsInjector<NOlap::NPortion::TSpecialColumns::SPEC_COL_DELETE_FLAG_INDEX>>(checker);
+    }
+
+    Y_UNIT_TEST(RemoveWriteIdNormalizer) {
+        class TChecker: public TNormalizerChecker {
+        public:
+            virtual void CorrectConfigurationOnStart(NKikimrConfig::TColumnShardConfig& columnShardConfig) const override {
+                auto* repair = columnShardConfig.MutableRepairs()->Add();
+                repair->SetClassName("RemoveWriteId");
+                repair->SetDescription("normalizer");
+            }
+        };
+
+        TChecker checker;
+        TestNormalizerImpl<TExtraColumnsInjector<NOlap::NPortion::TSpecialColumns::SPEC_COL_WRITE_ID_INDEX>>(checker);
     }
 }
 

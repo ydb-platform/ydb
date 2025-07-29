@@ -2055,6 +2055,13 @@ struct Schema : NIceDb::Schema {
         >;
     };
 
+    struct SystemShardsToDelete : Table<124> {
+        struct ShardIdx : Column<1, NScheme::NTypeIds::Uint64> { using Type = TLocalShardIdx; };
+
+        using TKey = TableKey<ShardIdx>;
+        using TColumns = TableColumns<ShardIdx>;
+    };
+
     using TTables = SchemaTables<
         Paths,
         TxInFlight,
@@ -2172,7 +2179,8 @@ struct Schema : NIceDb::Schema {
         WaitingDataErasureTenants,
         TenantDataErasureGenerations,
         WaitingDataErasureShards,
-        KMeansTreeClusters
+        KMeansTreeClusters,
+        SystemShardsToDelete
     >;
 
     static constexpr ui64 SysParam_NextPathId = 1;

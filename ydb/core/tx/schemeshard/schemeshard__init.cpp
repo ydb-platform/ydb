@@ -669,6 +669,25 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
         return true;
     }
 
+    bool LoadSystemShardsToDelete(NIceDb::TNiceDb& db, TShardsToDeleteRows& shardsToDelete) const {
+        {
+            auto rowSet = db.Table<Schema::SystemShardsToDelete>().Range().Select();
+            if (!rowSet.IsReady()) {
+                return false;
+            }
+            while (!rowSet.EndOfSet()) {
+                const auto shardIdx = Self->MakeLocalId(rowSet.GetValue<Schema::SystemShardsToDelete::ShardIdx>());
+                shardsToDelete.emplace_back(shardIdx);
+
+                if (!rowSet.Next()) {
+                    return false;
+                }
+            }
+        }
+
+        return true;
+    }
+
     typedef std::tuple<TOperationId, TShardIdx, TTxState::ETxState> TTxShardRec;
     typedef TVector<TTxShardRec> TTxShardsRows;
 
@@ -3785,6 +3804,23 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             }
         }
 
+        // Read system shards to delete
+        {
+            TShardsToDeleteRows shardsToDelete;
+            if (!LoadSystemShardsToDelete(db, shardsToDelete)) {
+                return false;
+            }
+
+            LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                         "TTxInit for SystemShardToDelete"
+                             << ", read records: " << shardsToDelete.size()
+                             << ", at schemeshard: " << Self->TabletID());
+
+            for (auto& rec: shardsToDelete) {
+                OnComplete.DeleteSystemShard(std::get<0>(rec));
+            }
+        }
+
         // Read backup settings
         {
             TBackupSettingsRows backupSettings;
@@ -3840,7 +3876,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     auto desc = tableInfo->BackupSettings.MutableTable();
                     Y_ABORT_UNLESS(ParseFromStringNoSizeLimit(*desc, tableDesc));
                 }
-                
+
                 if (changefeedUnderlyingTopics) {
                     NKikimrSchemeOp::TChangefeedUnderlyingTopics wrapperOverTopics;
                     Y_ABORT_UNLESS(ParseFromStringNoSizeLimit(wrapperOverTopics, changefeedUnderlyingTopics));
@@ -4520,12 +4556,12 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 try {
                     fill(buildInfo);
                 } catch (const std::exception& exc) {
-                    LOG_ERROR_S(ctx, NKikimrServices::BUILD_INDEX, 
+                    LOG_ERROR_S(ctx, NKikimrServices::BUILD_INDEX,
                         "Init " << stepName << " unhandled exception, id#" << buildInfo.Id
                         << " " << TypeName(exc) << ": " << exc.what() << Endl
                         << TBackTrace::FromCurrentException().PrintToString()
                         << ", TIndexBuildInfo: " << buildInfo);
-        
+
                     // in-memory volatile state:
                     buildInfo.IsBroken = true;
                     buildInfo.AddIssue(TStringBuilder() << "Init " << stepName << " unhandled exception " << exc.what());
@@ -4536,7 +4572,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 const auto* buildInfoPtr = Self->IndexBuilds.FindPtr(id);
                 Y_ASSERT(buildInfoPtr);
                 if (!buildInfoPtr) {
-                    LOG_ERROR_S(ctx, NKikimrServices::BUILD_INDEX, 
+                    LOG_ERROR_S(ctx, NKikimrServices::BUILD_INDEX,
                         "Init " << stepName << " BuildInfo not found: id#" << id);
                     return;
                 }

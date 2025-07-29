@@ -587,7 +587,7 @@ NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime& runtime, const TTe
     app.FeatureFlags.SetEnableTableDatetime64(true);
     app.FeatureFlags.SetEnableVectorIndex(true);
     app.FeatureFlags.SetEnableColumnStore(true);
-    app.FeatureFlags.SetEnableStrictAclCheck(opts.EnableStrictAclCheck_);    
+    app.FeatureFlags.SetEnableStrictAclCheck(opts.EnableStrictAclCheck_);
     app.SetEnableMoveIndex(opts.EnableMoveIndex_);
     app.SetEnableChangefeedInitialScan(opts.EnableChangefeedInitialScan_);
     app.SetEnableNotNullDataColumns(opts.EnableNotNullDataColumns_);
@@ -918,6 +918,23 @@ void NSchemeShardUT_Private::TTestEnv::TestWaitShardDeletion(NActors::TTestActor
     TestWaitShardDeletion(runtime, TTestTxConfig::SchemeShard, std::move(localIds));
 }
 
+void NSchemeShardUT_Private::TTestEnv::AddExtSubdomainCleanupObserver(NActors::TTestActorRuntime& runtime, const TPathId& subdomainPathId) {
+    Cerr << "TESTENV: subdomain cleanup, start waiting, subdomain " << subdomainPathId << Endl;
+    ExtSubdomainCleanupComplete.erase(subdomainPathId);
+    ExtSubdomainCleanupObserver = runtime.AddObserver<TEvPrivate::TEvTestNotifySubdomainCleanup>([this](const auto& ev) {
+        ExtSubdomainCleanupComplete.insert(ev->Get()->SubdomainPathId);
+    });
+}
+
+void NSchemeShardUT_Private::TTestEnv::WaitForExtSubdomainCleanup(NActors::TTestActorRuntime& runtime, const TPathId& subdomainPathId) {
+    runtime.WaitFor("ExtSubdomainCleanup", [this, &subdomainPathId] {
+        return ExtSubdomainCleanupComplete.contains(subdomainPathId);
+    });
+    ExtSubdomainCleanupComplete.erase(subdomainPathId);
+    ExtSubdomainCleanupObserver.Remove();
+    Cerr << "TESTENV: subdomain cleanup, wait complete, subdomain " << subdomainPathId << Endl;
+}
+
 void NSchemeShardUT_Private::TTestEnv::SimulateSleep(NActors::TTestActorRuntime &runtime, TDuration duration) {
     auto sender = runtime.AllocateEdgeActor();
     runtime.Schedule(new IEventHandle(sender, sender, new TEvents::TEvWakeup()), duration);
@@ -1044,6 +1061,14 @@ NSchemeShardUT_Private::TTestWithReboots::TTestWithReboots(bool killOnCommit, NS
     TabletIds.push_back(datashard+7);
     TabletIds.push_back(datashard+8);
 
+    // Events used exclusively by test frameworks.
+    // No need for reboots on these as they aren't used in real operation mode.
+    NoRebootEventTypes.insert(TEvPrivate::EvTestNotifySubdomainCleanup);
+    NoRebootEventTypes.insert(TEvFakeHive::EvSubscribeToTabletDeletion);
+    NoRebootEventTypes.insert(TEvFakeHive::EvNotifyTabletDeleted);
+    NoRebootEventTypes.insert(TEvFakeHive::EvRequestDomainInfo);
+    NoRebootEventTypes.insert(TEvFakeHive::EvRequestDomainInfoReply);
+
     NoRebootEventTypes.insert(TEvSchemeShard::EvModifySchemeTransaction);
     NoRebootEventTypes.insert(TEvSchemeShard::EvDescribeScheme);
     NoRebootEventTypes.insert(TEvSchemeShard::EvNotifyTxCompletion);
@@ -1093,34 +1118,48 @@ struct NSchemeShardUT_Private::TTestWithReboots::TFinalizer {
 };
 
 void NSchemeShardUT_Private::TTestWithReboots::RunWithTabletReboots(std::function<void (TTestActorRuntime &, bool &)> testScenario) {
-    RunTestWithReboots(TabletIds, [&]() {
-        return [this](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event) {
-            return PassUserRequests(runtime, event);
-        };
-    },
-    [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& activeZone) {
-        TFinalizer finalizer(*this);
-        Prepare(dispatchName, setup, activeZone);
+    RunTestWithReboots(
+        TabletIds,
+        // filterFactory
+        [&]() {
+            return [this](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event) {
+                return PassUserRequests(runtime, event);
+            };
+        },
+        // testFunc
+        [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& activeZone) {
+            TFinalizer finalizer(*this);
+            Prepare(dispatchName, setup, activeZone);
 
-        activeZone = true;
-        testScenario(*Runtime, activeZone);
-    }, Max<ui32>(), Max<ui64>(), 0, 0, KillOnCommit);
+            activeZone = true;
+            testScenario(*Runtime, activeZone);
+        },
+        Max<ui32>(),
+        Max<ui64>(),
+        0,
+        0,
+        KillOnCommit
+    );
 }
 
 void NSchemeShardUT_Private::TTestWithReboots::RunWithPipeResets(std::function<void (TTestActorRuntime &, bool &)> testScenario) {
-    RunTestWithPipeResets(TabletIds,
-                          [&]() {
-        return [this](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event) {
-            return PassUserRequests(runtime, event);
-        };
-    },
-    [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& activeZone) {
-        TFinalizer finalizer(*this);
-        Prepare(dispatchName, setup, activeZone);
+    RunTestWithPipeResets(
+        TabletIds,
+        // filterFactory
+        [&]() {
+            return [this](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event) {
+                return PassUserRequests(runtime, event);
+            };
+        },
+        // testFunc
+        [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& activeZone) {
+            TFinalizer finalizer(*this);
+            Prepare(dispatchName, setup, activeZone);
 
-        activeZone = true;
-        testScenario(*Runtime, activeZone);
-    });
+            activeZone = true;
+            testScenario(*Runtime, activeZone);
+        }
+    );
 }
 
 void NSchemeShardUT_Private::TTestWithReboots::RunWithDelays(std::function<void (TTestActorRuntime &, bool &)> testScenario) {

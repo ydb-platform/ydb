@@ -81,11 +81,11 @@ public:
         AFL_VERIFY(stage);
         if (!GroupIds.HasExternalId(externalGroupId)) {
             LWPROBE(Allocated, "on_register", allocation->GetIdentifier(), stage->GetName(), stage->GetLimit(), stage->GetHardLimit().value_or(std::numeric_limits<ui64>::max()), stage->GetUsage().Val(), stage->GetWaiting().Val(), TDuration::Zero(), false, false);
-            AFL_VERIFY(!task->OnAllocated(std::make_shared<TAllocationGuard>(ExternalProcessId, ExternalScopeId, task->GetIdentifier(), OwnerActorId, task->GetMemory()), task))
+            AFL_VERIFY(!allocation->OnAllocated(std::make_shared<TAllocationGuard>(ExternalProcessId, ExternalScopeId, allocation->GetIdentifier(), OwnerActorId, allocation->GetMemory()), allocation))
                 ("ext_group", externalGroupId)("min_ext_group", GroupIds.GetMinExternalIdOptional())("stage", stage->GetName());
-            AFL_VERIFY(!AllocationInfo.contains(task->GetIdentifier()));
+            AFL_VERIFY(!AllocationInfo.contains(allocation->GetIdentifier()));
         } else {
-            auto allocationInfo = RegisterAllocationImpl(externalGroupId, task, stage);
+            auto allocationInfo = RegisterAllocationImpl(externalGroupId, allocation, stage);
 
             if (allocationInfo->GetAllocationStatus() != EAllocationStatus::Waiting) {
             } else if (WaitAllocations.GetMinExternalGroupId().value_or(externalGroupId) < externalGroupId) {

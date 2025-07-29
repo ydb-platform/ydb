@@ -57,17 +57,18 @@ public:
     class TTierGuard : NNonCopyable::TMoveOnly {
     private:
         NTiers::TExternalStorageId StorageId;
-        std::optional<NTiers::TTierConfig> Config;
+        NTiers::TTierConfig Config;
         TTiersManager* Owner;
         YDB_READONLY(ETierState, State, TTiersManager::ETierState::REQUESTED);
 
     public:
         bool HasConfig() const {
-            return !!Config;
+            return State == ETierState::AVAILABLE;
         }
 
         const NTiers::TTierConfig& GetConfigVerified() const {
-            return *TValidator::CheckNotNull(Config);
+            AFL_VERIFY(HasConfig());
+            return Config;
         }
 
         void UpsertConfig(NTiers::TTierConfig config) {
@@ -77,7 +78,6 @@ public:
 
         void ResetConfig() {
             State = ETierState::UNAVAILABLE;
-            Config.reset();
         }
 
         const NTiers::TExternalStorageId& GetStorageId() const {

@@ -1,3 +1,4 @@
+
 #include "mkql_counters.h"
 #include "mkql_rh_hash.h"
 #include "mkql_wide_combine.h"
@@ -407,6 +408,18 @@ class TSpillingSupportState : public TComputationValue<TSpillingSupportState> {
 
         EBucketState BucketState = EBucketState::InMemory;
         ui64 LineCount = 0;
+
+        /// Get total memory size used by spilling adapters in this bucket
+        size_t GetTotalSpillerMemorySize() const {
+            size_t total = 0;
+            if (SpilledState) {
+                total += SpilledState->GetBufferSize();
+            }
+            if (SpilledData) {
+                total += SpilledData->GetBufferSize();
+            }
+            return total;
+        }
     };
 
     enum class EOperatingMode {
@@ -609,13 +622,31 @@ private:
         ui32 largestInMemoryBucketNum = (ui32)-1;
         for (ui64 i = 0; i < SpilledBucketCount; ++i) {
             if (SpilledBuckets[i].BucketState == TSpilledBucket::EBucketState::InMemory) {
-                if (SpilledBuckets[i].LineCount >= maxSize) {
+                // Consider both line count and spiller buffer memory usage
+                ui64 bucketSize = SpilledBuckets[i].LineCount + (SpilledBuckets[i].GetTotalSpillerMemorySize() / 1024); // Convert bytes to approx. line equivalents
+                if (bucketSize >= maxSize) {
                     largestInMemoryBucketNum = i;
-                    maxSize = SpilledBuckets[i].LineCount;
+                    maxSize = bucketSize;
                 }
             }
         }
         return largestInMemoryBucketNum;
+    }
+
+    ui32 GetBucketWithLargestSpillerBuffer() const {
+        size_t maxSpillerSize = 0;
+        ui32 bucketWithLargestSpiller = (ui32)-1;
+        for (ui64 i = 0; i < SpilledBucketCount; ++i) {
+            if (SpilledBuckets[i].BucketState == TSpilledBucket::EBucketState::InMemory || 
+                SpilledBuckets[i].BucketState == TSpilledBucket::EBucketState::SpillingData) {
+                size_t spillerSize = SpilledBuckets[i].GetTotalSpillerMemorySize();
+                if (spillerSize > maxSpillerSize) {
+                    bucketWithLargestSpiller = i;
+                    maxSpillerSize = spillerSize;
+                }
+            }
+        }
+        return bucketWithLargestSpiller;
     }
 
     bool IsSpillingWhileStateSplitAllowed() const {
@@ -678,48 +709,41 @@ private:
                 static_cast<NUdf::TUnboxedValue&>(processingState.Throat[i - KeyWidth]) = std::move(keyAndState[i]);
             }
 
-            if (!HasMemoryForProcessing() && IsSpillingWhileStateSplitAllowed()) {
-                if(InMemoryBucketsCount) {
-                    ui32 bucketNumToSpill = GetLargestInMemoryBucketNumber();
-
-                    SplitStateSpillingBucket = bucketNumToSpill;
-
-                    auto& bucket = SpilledBuckets[bucketNumToSpill];
-                    bucket.BucketState = TSpilledBucket::EBucketState::SpillingState;
-                    SpillingBucketsCount++;
-                    InMemoryBucketsCount--;
-
-                    while (const auto keyAndState = static_cast<NUdf::TUnboxedValue*>(bucket.InMemoryProcessingState->Extract())) {
-                        bucket.AsyncWriteOperation = bucket.SpilledState->WriteWideItem({keyAndState, KeyAndStateType->GetElementsCount()});
-                        for (size_t i = 0; i < KeyAndStateType->GetElementsCount(); ++i) {
-                            //releasing values stored in unsafe TUnboxedValue buffer
-                            keyAndState[i].UnRef();
-                        }
-                        if (bucket.AsyncWriteOperation) return true;
-                    }
-
-                    bucket.AsyncWriteOperation = bucket.SpilledState->FinishWriting();
-                    if (bucket.AsyncWriteOperation) return true;
-                } else {
-                    ui64 bucketToSpill = -1;
-                    ui64 maxSize = 0;
-                    for (int i = 0; i < 128; ++i) {
-                        ui64 estimatedSize = SpilledBuckets[i].SpilledState->GetEstimatedSize();
-                        if (estimatedSize > maxSize) {
-                            maxSize = estimatedSize;
-                            bucketToSpill = i;
-                        }
-                    }
-
-                    if (bucketToSpill != -1ULL) {
-                        SpilledBuckets[bucketToSpill].AsyncWriteOperation = SpilledBuckets[bucketToSpill].SpilledState->FinishWriting();
-                        MKQL_ENSURE(SpilledBuckets[bucketToSpill].AsyncWriteOperation, "MISHA ERROR");
-                        SplitStateSpillingBucket = bucketToSpill;
+            if (InMemoryBucketsCount && !HasMemoryForProcessing() && IsSpillingWhileStateSplitAllowed()) {
+                // First, try to spill spiller buffers if yellow zone is reached
+                ui32 bucketWithLargestSpiller = GetBucketWithLargestSpillerBuffer();
+                if (bucketWithLargestSpiller != (ui32)-1) {
+                    auto& bucket = SpilledBuckets[bucketWithLargestSpiller];
+                    size_t spillerSize = bucket.GetTotalSpillerMemorySize();
+                    // If spiller buffer is reasonably large (> 1MB), try to spill it first
+                    if (spillerSize > 1_MB && ForceSpillSpillerBuffers(bucket)) {
+                        UDF_LOG(Logger, LogComponent, NUdf::ELogLevel::Info, 
+                            TStringBuilder() << "Force spilling spiller buffers during state split from bucket " 
+                            << bucketWithLargestSpiller << " size=" << (spillerSize/1_MB) << "MB");
                         return true;
-
                     }
-
                 }
+
+                ui32 bucketNumToSpill = GetLargestInMemoryBucketNumber();
+
+                SplitStateSpillingBucket = bucketNumToSpill;
+
+                auto& bucket = SpilledBuckets[bucketNumToSpill];
+                bucket.BucketState = TSpilledBucket::EBucketState::SpillingState;
+                SpillingBucketsCount++;
+                InMemoryBucketsCount--;
+
+                while (const auto keyAndState = static_cast<NUdf::TUnboxedValue*>(bucket.InMemoryProcessingState->Extract())) {
+                    bucket.AsyncWriteOperation = bucket.SpilledState->WriteWideItem({keyAndState, KeyAndStateType->GetElementsCount()});
+                    for (size_t i = 0; i < KeyAndStateType->GetElementsCount(); ++i) {
+                        //releasing values stored in unsafe TUnboxedValue buffer
+                        keyAndState[i].UnRef();
+                    }
+                    if (bucket.AsyncWriteOperation) return true;
+                }
+
+                bucket.AsyncWriteOperation = bucket.SpilledState->FinishWriting();
+                if (bucket.AsyncWriteOperation) return true;
             }
         }
 
@@ -806,6 +830,33 @@ private:
         SpillingBucketsCount--;
     }
 
+    // Force spill spiller buffers for a bucket to reduce memory usage
+    bool ForceSpillSpillerBuffers(TSpilledBucket& bucket) {
+        if (bucket.AsyncWriteOperation.has_value()) {
+            return false; // Already spilling
+        }
+
+        bool spillingStarted = false;
+
+        // Force spill state buffer if it has data
+        if (bucket.SpilledState && bucket.SpilledState->GetBufferSize() > 0) {
+            bucket.AsyncWriteOperation = bucket.SpilledState->FinishWriting();
+            if (bucket.AsyncWriteOperation) {
+                spillingStarted = true;
+            }
+        }
+
+        // Force spill data buffer if it has data and no state spilling is active
+        if (!spillingStarted && bucket.SpilledData && bucket.SpilledData->GetBufferSize() > 0) {
+            bucket.AsyncWriteOperation = bucket.SpilledData->FinishWriting();
+            if (bucket.AsyncWriteOperation) {
+                spillingStarted = true;
+            }
+        }
+
+        return spillingStarted;
+    }
+
     void UpdateSpillingBuckets() {
         for (ui64 i = 0; i < SpilledBucketCount; ++i) {
             auto& bucket = SpilledBuckets[i];
@@ -817,7 +868,16 @@ private:
                     SpillMoreStateFromBucket(bucket);
 
                 } else {
-                    bucket.SpilledData->AsyncWriteCompleted(bucket.AsyncWriteOperation->ExtractValue());
+                    // Complete async write for either SpilledData or forced spiller buffer spilling
+                    // We determine which one by checking which has more data
+                    if (bucket.SpilledData && bucket.SpilledData->GetBufferSize() > 0) {
+                        bucket.SpilledData->AsyncWriteCompleted(bucket.AsyncWriteOperation->ExtractValue());
+                    } else if (bucket.SpilledState && bucket.SpilledState->GetBufferSize() > 0) {
+                        bucket.SpilledState->AsyncWriteCompleted(bucket.AsyncWriteOperation->ExtractValue());
+                    } else {
+                        // Default to SpilledData for backward compatibility
+                        bucket.SpilledData->AsyncWriteCompleted(bucket.AsyncWriteOperation->ExtractValue());
+                    }
                     bucket.AsyncWriteOperation = std::nullopt;
                 }
             }
@@ -828,6 +888,22 @@ private:
         if (SpillingBucketsCount > 0) {
             return true;
         }
+
+        // First, try to spill spiller buffers from buckets with large buffers
+        ui32 bucketWithLargestSpiller = GetBucketWithLargestSpillerBuffer();
+        if (bucketWithLargestSpiller != (ui32)-1) {
+            auto& bucket = SpilledBuckets[bucketWithLargestSpiller];
+            size_t spillerSize = bucket.GetTotalSpillerMemorySize();
+            // If spiller buffer is reasonably large (> 1MB), try to spill it first
+            if (spillerSize > 1_MB && ForceSpillSpillerBuffers(bucket)) {
+                UDF_LOG(Logger, LogComponent, NUdf::ELogLevel::Info, 
+                    TStringBuilder() << "Force spilling spiller buffers from bucket " 
+                    << bucketWithLargestSpiller << " size=" << (spillerSize/1_MB) << "MB");
+                return true;
+            }
+        }
+
+        // If no spiller buffers to spill or they are small, proceed with regular bucket spilling
         while (InMemoryBucketsCount > 0) {
             ui32 maxLineBucketInd = GetLargestInMemoryBucketNumber();
             MKQL_ENSURE(maxLineBucketInd != (ui32)-1, "Internal logic error");
@@ -837,36 +913,6 @@ private:
             if (bucketToSpill.BucketState == TSpilledBucket::EBucketState::SpillingState) {
                 return true;
             }
-        }
-
-        ui64 bucketToSpill = -1;
-        ui64 maxSize = 0;
-        for (int i = 0; i < 128; ++i) {
-            auto& bucket = SpilledBuckets[i];
-            if (bucket.BucketState == TSpilledBucket::EBucketState::SpillingData) {
-                ui64 estimatedSize = SpilledBuckets[i].SpilledData->GetEstimatedSize();
-                if (estimatedSize > maxSize) {
-                    maxSize = estimatedSize;
-                    bucketToSpill = i;
-                }
-            } else if (bucket.BucketState == TSpilledBucket::EBucketState::SpillingState) {
-                ui64 estimatedSize = SpilledBuckets[i].SpilledState->GetEstimatedSize();
-                if (estimatedSize > maxSize) {
-                    maxSize = estimatedSize;
-                    bucketToSpill = i;
-                }
-            }
-        }
-
-        if (bucketToSpill != -1ULL) {
-            if (SpilledBuckets[bucketToSpill].BucketState == TSpilledBucket::EBucketState::SpillingData) {
-                SpilledBuckets[bucketToSpill].AsyncWriteOperation = SpilledBuckets[bucketToSpill].SpilledData->FinishWriting();
-            } else if (SpilledBuckets[bucketToSpill].BucketState == TSpilledBucket::EBucketState::SpillingState) {
-                SpilledBuckets[bucketToSpill].AsyncWriteOperation = SpilledBuckets[bucketToSpill].SpilledState->FinishWriting();
-            }
-            MKQL_ENSURE(SpilledBuckets[bucketToSpill].AsyncWriteOperation, "MISHA ERROR");
-            return true;
-
         }
         return false;
     }
@@ -2092,3 +2138,4 @@ IComputationNode* WrapWideLastCombinerWithSpilling(TCallable& callable, const TC
 
 }
 }
+

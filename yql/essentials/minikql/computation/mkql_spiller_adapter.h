@@ -22,7 +22,7 @@ public:
     {
     }
 
-    ui64 GetEstimatedSize() const {
+    ui64 GetBufferSize() const {
         return PackerEstimatedSize;
     }
 

@@ -1582,6 +1582,9 @@ message TImmediateControlsConfig {
             MinValue: 0,
             MaxValue: 1,
             DefaultValue: 0 }];
+
+        reserved 34;
+        reserved 35;
     }
 
     message TTabletControls {

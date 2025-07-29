@@ -30,6 +30,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     TKikimrSettings GetDefaultKikimrSettings() {
         TKikimrSettings settings;
         settings.SetWithSampleTables(false);
+        settings.SetColumnShardAlterObjectEnabled(true);
         return settings;
     }
 

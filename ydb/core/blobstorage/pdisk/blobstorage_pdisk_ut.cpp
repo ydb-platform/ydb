@@ -1081,6 +1081,100 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         UNIT_ASSERT_VALUES_EQUAL(writeLog(), NKikimrProto::OK);
     }
 
+    std::map<ui8, double> GetChunkOperationPriorities(bool read, const std::vector<ui8>& priorities) {
+        TActorTestContext testCtx{{}};
+        auto ioDuration = TDuration::MilliSeconds(5);
+        Cerr << "ioDuration# " << ioDuration << Endl;
+        testCtx.TestCtx.SectorMap->ImitateRandomWait = {ioDuration, ioDuration};
+
+        TVDiskMock vdisk(&testCtx);
+        vdisk.InitFull();
+
+        size_t chunksToReserve = priorities.size();
+        for (size_t i = 0; i < chunksToReserve; ++i) {
+            vdisk.ReserveChunk();
+        }
+
+        vdisk.CommitReservedChunks();
+        UNIT_ASSERT(vdisk.Chunks[EChunkState::COMMITTED].size() == chunksToReserve);
+        std::vector<TChunkIdx> chunks;
+        for (const auto& chunk : vdisk.Chunks[EChunkState::COMMITTED]) {
+            chunks.push_back(chunk);
+        }
+
+        auto seed = TInstant::Now().MicroSeconds();
+        Cerr << "seed# " << seed << Endl;
+        TReallyFastRng32 rng(seed);
+        size_t size = 128_KB;
+        size = size / vdisk.PDiskParams->AppendBlockSize * vdisk.PDiskParams->AppendBlockSize;
+
+        TSimpleTimer t;
+        const size_t eventsToSend = 1000 * priorities.size();
+        const size_t eventsToWait = eventsToSend / 5;
+        NPDisk::TEvChunkWrite::TPartsPtr parts = GenParts(rng, size);
+        for (size_t i = 0; i < eventsToSend; ++i) {
+            for (ui64 p = 0; p < priorities.size(); ++p) {
+                if (read) {
+                    testCtx.Send(new NPDisk::TEvChunkRead(vdisk.PDiskParams->Owner, vdisk.PDiskParams->OwnerRound,
+                            chunks[p], 0, size, priorities[p], (void*)p));
+                } else {
+                    testCtx.Send(new NPDisk::TEvChunkWrite(vdisk.PDiskParams->Owner, vdisk.PDiskParams->OwnerRound,
+                                chunks[p], 0, parts, (void*)p, false, priorities[p]));
+                }
+            }
+        }
+        Cout << (read ? "read" : "write") << " load. Time spent to send " << eventsToSend << " events# " << t.Get() << Endl;
+
+        std::vector<size_t> results(priorities.size(), 0);
+        for (size_t i = 0; i < eventsToWait; ++i) {
+            size_t cookie;
+            if (read) {
+                auto result = testCtx.Recv<NPDisk::TEvChunkReadResult>();
+                cookie = (size_t)result->Cookie;
+            } else {
+                auto result = testCtx.Recv<NPDisk::TEvChunkWriteResult>();
+                cookie = (size_t)result->Cookie;
+            }
+            results[cookie] += size;
+        }
+        auto max_v = *std::max_element(results.begin(), results.end());
+        Cout << "bytes_max# " << max_v << " weights: " << Endl;
+        std::map<ui8, double> shares;
+        for (size_t i = 0; i < results.size(); ++i) {
+            auto x = (double)results[i] / max_v;
+            shares[priorities[i]] = x;
+            Cout << "    " << Sprintf("%.3f", x) << " " << PriToString(priorities[i]) << Endl;
+        }
+        Cout << Endl;
+        return shares;
+    }
+
+    Y_UNIT_TEST(CheckChunkReadOperationPriorities) {
+        using namespace NPriRead;
+        std::vector<ui8> PriRead = {SyncLog, HullComp, HullOnlineRt, HullOnlineOther, HullLoad, HullLow};
+        auto shares = GetChunkOperationPriorities(true, PriRead);
+        
+        // compare with 10% tolerance
+        UNIT_ASSERT(shares[SyncLog] * 0.90 > shares[HullLoad]);
+        UNIT_ASSERT(shares[HullLoad] * 0.90 > shares[HullOnlineRt]);
+        UNIT_ASSERT(shares[HullOnlineRt] * 0.90 > shares[HullComp]);
+        UNIT_ASSERT(shares[HullOnlineRt] * 0.90 < shares[HullOnlineOther] &&
+                    shares[HullOnlineOther] * 0.90 < shares[HullOnlineRt]);
+        UNIT_ASSERT(shares[HullComp] * 0.90 > shares[HullLow]);
+    }
+
+    Y_UNIT_TEST(CheckChunkWriteOperationPriorities) {
+        using namespace NPriWrite;
+        std::vector<ui8> PriWrite = {SyncLog, HullFresh, HullHugeAsyncBlob, HullHugeUserData, HullComp};
+        auto shares = GetChunkOperationPriorities(false, PriWrite);
+        
+        // compare with 10% tolerance
+        UNIT_ASSERT(shares[SyncLog] * 0.90 > shares[HullHugeUserData]);
+        UNIT_ASSERT(shares[HullHugeUserData] * 0.90 > shares[HullComp]);
+        UNIT_ASSERT(shares[HullHugeUserData] * 0.90 < shares[HullHugeAsyncBlob] &&
+                    shares[HullHugeAsyncBlob] * 0.90 < shares[HullHugeUserData]);
+        UNIT_ASSERT(shares[HullComp] * 0.90 > shares[HullFresh]);
+    }
 }
 
 Y_UNIT_TEST_SUITE(PDiskCompatibilityInfo) {

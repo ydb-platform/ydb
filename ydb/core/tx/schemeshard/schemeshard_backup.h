@@ -24,6 +24,13 @@ struct TEvBackup {
         EvDeleteBackupCollectionRequest,
         EvDeleteBackupCollectionResponse,
 
+        EvGetIncrementalBackupRequest,
+        EvGetIncrementalBackupResponse,
+        EvForgetIncrementalBackupRequest,
+        EvForgetIncrementalBackupResponse,
+        EvListIncrementalBackupsRequest,
+        EvListIncrementalBackupsResponse,
+
         EvEnd
     };
 
@@ -50,6 +57,47 @@ struct TEvBackup {
     DECLARE_EVENT_CLASS(EvUpdateBackupCollectionResponse) {};
     DECLARE_EVENT_CLASS(EvDeleteBackupCollectionRequest) {};
     DECLARE_EVENT_CLASS(EvDeleteBackupCollectionResponse) {};
+
+    DECLARE_EVENT_CLASS(EvGetIncrementalBackupRequest) {
+        TEvGetIncrementalBackupRequest() = default;
+
+        explicit TEvGetIncrementalBackupRequest(const TString& dbName, ui64 incrementalBackupId) {
+            Record.SetDatabaseName(dbName);
+            Record.SetIncrementalBackupId(incrementalBackupId);
+        }
+    };
+    DECLARE_EVENT_CLASS(EvGetIncrementalBackupResponse) {};
+    DECLARE_EVENT_CLASS(EvForgetIncrementalBackupRequest) {
+        TEvForgetIncrementalBackupRequest() = default;
+
+        explicit TEvForgetIncrementalBackupRequest(
+            const ui64 txId,
+            const TString& dbName,
+            ui64 incrementalBackupId
+            ) {
+            Record.SetTxId(txId);
+            Record.SetDatabaseName(dbName);
+            Record.SetIncrementalBackupId(incrementalBackupId);
+        }
+    };
+    DECLARE_EVENT_CLASS(EvForgetIncrementalBackupResponse) {
+        TEvForgetIncrementalBackupResponse() = default;
+
+        explicit TEvForgetIncrementalBackupResponse(const ui64 txId) {
+            Record.SetTxId(txId);
+        }
+    };
+    DECLARE_EVENT_CLASS(EvListIncrementalBackupsRequest) {
+        TEvListIncrementalBackupsRequest() = default;
+
+        explicit TEvListIncrementalBackupsRequest(const TString& dbName, ui64 pageSize, TString pageToken) {
+            Record.SetDatabaseName(dbName);
+            Record.SetPageSize(pageSize);
+            Record.SetPageToken(pageToken);
+        }
+    };
+    DECLARE_EVENT_CLASS(EvListIncrementalBackupsResponse) {};
+
 
 #undef DECLARE_EVENT_CLASS
 

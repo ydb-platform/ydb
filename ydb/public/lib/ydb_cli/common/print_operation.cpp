@@ -405,6 +405,15 @@ void PrintOperationsList(const NOperation::TOperationsList<NYdb::NQuery::TScript
     PrintOperationsListImpl(operations, format);
 }
 
+// Incremental backup
+void PrintOperation(const NYdb::NBackup::TIncrementalBackupResponse& operation, EDataFormat format) {
+    PrintOperationImpl(operation, format);
+}
+
+void PrintOperationsList(const NOperation::TOperationsList<NYdb::NBackup::TIncrementalBackupResponse>& operations, EDataFormat format) {
+    PrintOperationsListImpl(operations, format);
+}
+
 }
 }
 

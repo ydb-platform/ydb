@@ -15,17 +15,27 @@ class TContinuousBackupCleaner : public TActorBootstrapped<TContinuousBackupClea
 public:
     TContinuousBackupCleaner(TActorId txAllocatorClient,
                              TActorId schemeShard,
+                             ui64 backupId,
+                             TPathId item,
                              const TString& workingDir,
                              const TString& tableName,
                              const TString& streamName)
         : TxAllocatorClient(txAllocatorClient)
         , SchemeShard(schemeShard)
+        , BackupId(backupId)
+        , Item(item)
         , WorkingDir(workingDir)
         , TableName(tableName)
         , StreamName(streamName)
     {}
 
     void Bootstrap() {
+        LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::FLAT_TX_SCHEMESHARD,
+            "Starting continuous backup cleaner:"
+            << " workingDir# " << WorkingDir
+            << " table# " << TableName
+            << " stream# " << StreamName);
+
         AllocateTxId();
         Become(&TContinuousBackupCleaner::StateWork);
     }
@@ -60,7 +70,7 @@ public:
         const auto status = record.GetStatus();
 
         if (status == NKikimrScheme::StatusAccepted) {
-            return ReplyAndDie();
+            return SubscribeTx(TxId);
         }
 
         if (status == NKikimrScheme::StatusPathDoesNotExist) {
@@ -74,8 +84,13 @@ public:
         ReplyAndDie(false, record.GetReason());
     }
 
+
+    void SubscribeTx(TTxId txId) {
+        Send(SelfId(), new TEvSchemeShard::TEvNotifyTxCompletion(ui64(txId)));
+    }
+
     void ReplyAndDie(bool success = true, const TString& error = "") {
-        Send(SchemeShard, new TEvPrivate::TEvContinuousBackupCleanerResult(success, error));
+        Send(SchemeShard, new TEvPrivate::TEvContinuousBackupCleanerResult(BackupId, Item, success, error));
         PassAway();
     }
 
@@ -87,6 +102,7 @@ public:
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvTxAllocatorClient::TEvAllocateResult, Handle);
             hFunc(TEvSchemeShard::TEvModifySchemeTransactionResult, Handle);
+            cFunc(TEvSchemeShard::TEvNotifyTxCompletionResult::EventType, ReplyAndDie);
             cFunc(TEvents::TEvWakeup::EventType, Retry);
             cFunc(TEvents::TEvPoisonPill::EventType, PassAway);
         }
@@ -95,20 +111,25 @@ public:
 private:
     TActorId TxAllocatorClient;
     TActorId SchemeShard;
+    ui64 BackupId;
+    TPathId Item;
     TString WorkingDir;
     TString TableName;
     TString StreamName;
+
     TTxId TxId;
 
 }; // TContinuousBackupCleaner
 
 IActor* CreateContinuousBackupCleaner(TActorId txAllocatorClient,
                                       TActorId schemeShard,
+                                      ui64 backupId,
+                                      TPathId item,
                                       const TString& workingDir,
                                       const TString& tableName,
                                       const TString& streamName)
 {
-    return new TContinuousBackupCleaner(txAllocatorClient, schemeShard, workingDir, tableName, streamName);
+    return new TContinuousBackupCleaner(txAllocatorClient, schemeShard, backupId, item, workingDir, tableName, streamName);
 }
 
 } // namespace NKikimr::NSchemeShard

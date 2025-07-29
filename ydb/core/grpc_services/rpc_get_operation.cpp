@@ -1,6 +1,7 @@
 #include "service_operation.h"
 
 #include "operation_helpers.h"
+#include "rpc_backup_base.h"
 #include "rpc_export_base.h"
 #include "rpc_import_base.h"
 #include "rpc_operation_request_base.h"
@@ -14,6 +15,7 @@
 #include <ydb/core/kqp/common/events/script_executions.h>
 #include <ydb/core/protos/flat_tx_scheme.pb.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
+#include <ydb/core/tx/schemeshard/schemeshard_backup.h>
 #include <ydb/core/tx/schemeshard/schemeshard_build_index.h>
 #include <ydb/core/tx/schemeshard/schemeshard_export.h>
 #include <ydb/core/tx/schemeshard/schemeshard_import.h>
@@ -48,6 +50,8 @@ class TGetOperationRPC : public TRpcOperationRequestActor<TGetOperationRPC, TEvG
             return "[GetIndexBuild]";
         case TOperationId::SCRIPT_EXECUTION:
             return "[GetScriptExecution]";
+         case TOperationId::INCREMENTAL_BACKUP:
+            return "[GetIncrementalBackup]";
         default:
             return "[Untagged]";
         }
@@ -61,6 +65,8 @@ class TGetOperationRPC : public TRpcOperationRequestActor<TGetOperationRPC, TEvG
             return new NSchemeShard::TEvImport::TEvGetImportRequest(GetDatabaseName(), RawOperationId_);
         case TOperationId::BUILD_INDEX:
             return new NSchemeShard::TEvIndexBuilder::TEvGetRequest(GetDatabaseName(), RawOperationId_);
+        case TOperationId::INCREMENTAL_BACKUP:
+            return new NSchemeShard::TEvBackup::TEvGetIncrementalBackupRequest(GetDatabaseName(), RawOperationId_);
         default:
             Y_ABORT("unreachable");
         }
@@ -91,6 +97,7 @@ public:
             case TOperationId::EXPORT:
             case TOperationId::IMPORT:
             case TOperationId::BUILD_INDEX:
+            case TOperationId::INCREMENTAL_BACKUP:
                 if (!TryGetId(OperationId_, RawOperationId_)) {
                     return ReplyWithStatus(StatusIds::BAD_REQUEST);
                 }
@@ -119,6 +126,7 @@ public:
             HFunc(NSchemeShard::TEvImport::TEvGetImportResponse, Handle);
             HFunc(NSchemeShard::TEvIndexBuilder::TEvGetResponse, Handle);
             HFunc(NKqp::TEvGetScriptExecutionOperationResponse, Handle);
+            HFunc(NSchemeShard::TEvBackup::TEvGetIncrementalBackupResponse, Handle);
 
         default:
             return StateBase(ev);
@@ -256,6 +264,17 @@ private:
         if (ev->Get()->Metadata) {
             deferred->mutable_metadata()->Swap(ev->Get()->Metadata.Get());
         }
+        Reply(resp, ctx);
+    }
+
+    void Handle(NSchemeShard::TEvBackup::TEvGetIncrementalBackupResponse::TPtr& ev, const TActorContext& ctx) {
+        const auto& record = ev->Get()->Record;
+
+        LOG_D("Handle TEvBackup::TEvGetIncrementalBackupResponse"
+            << ": record# " << record.ShortDebugString());
+
+        TEvGetOperationRequest::TResponse resp;
+        *resp.mutable_operation() = TIncrementalBackupConv::ToOperation(record.GetIncrementalBackup());
         Reply(resp, ctx);
     }
 

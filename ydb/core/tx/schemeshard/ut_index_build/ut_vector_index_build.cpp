@@ -367,6 +367,27 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
         }
     }
 
+    Y_UNIT_TEST(Metering_Documentation_Formula) {
+        for (ui32 levels : xrange(1, 10)) {
+            for (ui64 dataSizeMB : {1500, 500, 100, 0}) {
+                const ui64 rowCount = 500'000;
+
+                TMeteringStats stats;
+                stats.SetReadRows(5 * levels * rowCount);
+                stats.SetReadBytes(5 * levels * dataSizeMB * 1_MB);
+                stats.SetUploadRows(levels * rowCount);
+                stats.SetUploadBytes(levels * dataSizeMB * 1_MB);
+
+                TString explain;
+                const ui64 result = TRUCalculator::Calculate(stats, explain);
+
+                // Note: in case of any cost changes, documentation is needed to be updated correspondingly.
+                // https://yandex.cloud/ru/docs/ydb/pricing/ru-special#secondary-index
+                UNIT_ASSERT_VALUES_EQUAL_C(result, levels * Max<ui64>(dataSizeMB * 1152, dataSizeMB * 640 + rowCount * 0.5), explain);
+            }
+        }
+    }
+
     Y_UNIT_TEST(Metering_CommonDB) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
@@ -610,6 +631,8 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
                 << expectedBillingStats.GetUploadBytes() << "-" << expectedBillingStats.GetReadBytes();
             auto expectedId = TStringBuilder()
                 << "109-72075186233409549-2-" << previousBillId << "-" << newBillId;
+            // Note: in case of any cost changes, documentation is needed to be updated correspondingly.
+            // https://yandex.cloud/ru/docs/ydb/pricing/ru-special#vector-index
             auto expectedBill = TBillRecord()
                 .Id(expectedId)
                 .CloudId("CLOUD_ID_VAL").FolderId("FOLDER_ID_VAL").ResourceId("DATABASE_ID_VAL")
@@ -674,6 +697,8 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
                 << expectedBillingStats.GetUploadBytes() << "-" << expectedBillingStats.GetReadBytes();
             auto expectedId = TStringBuilder()
                 << "109-72075186233409549-2-" << previousBillId << "-" << newBillId;
+            // Note: in case of any cost changes, documentation is needed to be updated correspondingly.
+            // https://yandex.cloud/ru/docs/ydb/pricing/ru-special#vector-index
             auto expectedBill = TBillRecord()
                 .Id(expectedId)
                 .CloudId("CLOUD_ID_VAL").FolderId("FOLDER_ID_VAL").ResourceId("DATABASE_ID_VAL")
@@ -781,6 +806,8 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
                 << expectedBillingStats.GetUploadBytes() << "-" << expectedBillingStats.GetReadBytes();
             auto expectedId = TStringBuilder()
                 << "109-72075186233409549-2-" << previousBillId << "-" << newBillId;
+            // Note: in case of any cost changes, documentation is needed to be updated correspondingly.
+            // https://yandex.cloud/ru/docs/ydb/pricing/ru-special#vector-index
             auto expectedBill = TBillRecord()
                 .Id(expectedId)
                 .CloudId("CLOUD_ID_VAL").FolderId("FOLDER_ID_VAL").ResourceId("DATABASE_ID_VAL")
@@ -827,6 +854,8 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
                 << expectedBillingStats.GetUploadBytes() << "-" << expectedBillingStats.GetReadBytes();
             auto expectedId = TStringBuilder()
                 << "109-72075186233409549-2-" << previousBillId << "-" << newBillId;
+            // Note: in case of any cost changes, documentation is needed to be updated correspondingly.
+            // https://yandex.cloud/ru/docs/ydb/pricing/ru-special#vector-index
             auto expectedBill = TBillRecord()
                 .Id(expectedId)
                 .CloudId("CLOUD_ID_VAL").FolderId("FOLDER_ID_VAL").ResourceId("DATABASE_ID_VAL")
@@ -884,6 +913,8 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
                 << expectedBillingStats.GetUploadBytes() << "-" << expectedBillingStats.GetReadBytes();
             auto expectedId = TStringBuilder()
                 << "109-72075186233409549-2-" << previousBillId << "-" << newBillId;
+            // Note: in case of any cost changes, documentation is needed to be updated correspondingly.
+            // https://yandex.cloud/ru/docs/ydb/pricing/ru-special#vector-index
             auto expectedBill = TBillRecord()
                 .Id(expectedId)
                 .CloudId("CLOUD_ID_VAL").FolderId("FOLDER_ID_VAL").ResourceId("DATABASE_ID_VAL")

@@ -879,6 +879,9 @@
     "name": "DataWatermarks"
   },
   {
+    "name": "DebugPositions"
+  },
+  {
     "name": "DeriveColumnOrder"
   },
   {
@@ -919,6 +922,9 @@
   },
   {
     "name": "DisableCompactNamedExprs"
+  },
+  {
+    "name": "DisableDebugPositions"
   },
   {
     "name": "DisableDeriveColumnOrder"

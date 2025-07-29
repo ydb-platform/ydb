@@ -405,6 +405,7 @@ IF (NOT OPENSOURCE AND OS_LINUX)
         benchmarks
         bus/benchmarks
         yson/benchmark
+        ytree/benchmarks
     )
 ENDIF()
 

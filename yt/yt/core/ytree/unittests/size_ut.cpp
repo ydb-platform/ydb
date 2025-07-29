@@ -2,6 +2,8 @@
 
 #include <yt/yt/core/ytree/size.h>
 
+#include <yt/yt/core/ytree/convert.h>
+
 namespace NYT::NYTree {
 namespace {
 
@@ -205,6 +207,34 @@ TEST(TYTreeSizeTest, FromStringBoundaryCases)
     EXPECT_EQ(-9'000'000'000'000'000'000LL, DeserializeString("-9E"));
     EXPECT_THROW(DeserializeString("10E"), std::exception);
     EXPECT_THROW(DeserializeString("-10E"), std::exception);
+}
+
+template <class T>
+TSize ConvertTroughYsonString(T&& t, NYson::EYsonFormat format)
+{
+    return NYTree::ConvertTo<TSize>(NYson::ConvertToYsonString(std::forward<T>(t), format));
+}
+
+TEST(TYTreeSizeTest, ConvertFromYsonString)
+{
+    EXPECT_EQ(1, ConvertTroughYsonString(1, NYson::EYsonFormat::Binary));
+    EXPECT_EQ(2, ConvertTroughYsonString("2", NYson::EYsonFormat::Text));
+    EXPECT_EQ(3000, ConvertTroughYsonString("3K", NYson::EYsonFormat::Pretty));
+    EXPECT_EQ(4 * 1024 * 1024, ConvertTroughYsonString("4Mi", NYson::EYsonFormat::Binary));
+}
+
+template <class T>
+TSize ConvertTroughNode(T&& t)
+{
+    return NYTree::ConvertTo<TSize>(NYTree::ConvertToNode(NYson::ConvertToYsonString(std::forward<T>(t))));
+}
+
+TEST(TYTreeSizeTest, ConvertFromNode)
+{
+    EXPECT_EQ(1, ConvertTroughNode(1));
+    EXPECT_EQ(2, ConvertTroughNode("2"));
+    EXPECT_EQ(3000, ConvertTroughNode("3K"));
+    EXPECT_EQ(4 * 1024 * 1024, ConvertTroughNode("4Mi"));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

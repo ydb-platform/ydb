@@ -65,11 +65,11 @@ struct TError {
 };
 
 struct TYtTableRef {
-    TString Path;
-    TString Cluster;
-    TMaybe<TString> FilePath = Nothing();
+    NYT::TRichYPath RichPath; // Path to yt table
+    TMaybe<TString> FilePath = Nothing(); // Path to file corresponding to yt table, filled for file gateway
 
-    // TODO - maybe just use TRichYPath here also instead of Path and Cluster?
+    TString GetPath() const;
+    TString GetCluster() const;
 
     bool operator == (const TYtTableRef&) const = default;
 };
@@ -95,6 +95,8 @@ struct TFmrTableId {
     TFmrTableId(const TString& id);
 
     TFmrTableId(const TString& cluster, const TString& path);
+
+    TFmrTableId(const NYT::TRichYPath& richPath);
 
     void Save(IOutputStream* buffer) const;
     void Load(IInputStream* buffer);
@@ -172,13 +174,6 @@ namespace std {
     struct hash<NYql::NFmr::TFmrTableOutputRef> {
         size_t operator()(const NYql::NFmr::TFmrTableOutputRef& ref) const {
             return CombineHashes(hash<TString>()(ref.TableId), hash<TString>()(ref.PartId));
-        }
-    };
-
-    template<>
-    struct hash<NYql::NFmr::TYtTableRef> {
-        size_t operator()(const NYql::NFmr::TYtTableRef& ref) const {
-            return CombineHashes(hash<TString>()(ref.Cluster), hash<TString>()(ref.Path));
         }
     };
 }
@@ -294,5 +289,9 @@ struct TTaskState: public TThrRefBase {
 TTask::TPtr MakeTask(ETaskType taskType, const TString& taskId, const TTaskParams& taskParams, const TString& sessionId, const std::unordered_map<TFmrTableId, TClusterConnection>& clusterConnections = {}, const TMaybe<NYT::TNode>& jobSettings = Nothing());
 
 TTaskState::TPtr MakeTaskState(ETaskStatus taskStatus, const TString& taskId, const TMaybe<TFmrError>& taskErrorMessage = Nothing(), const TStatistics& stats = TStatistics());
+
+TString SerializeRichPath(const NYT::TRichYPath& richPath);
+
+NYT::TRichYPath DeserializeRichPath(const TString& serializedRichPath);
 
 } // namespace NYql::NFmr

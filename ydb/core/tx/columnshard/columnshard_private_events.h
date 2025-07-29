@@ -167,7 +167,7 @@ struct TEvPrivate {
             , Callback(callback)
         {
             AFL_VERIFY(Callback);
-            AFL_VERIFY(requests.size());
+            AFL_VERIFY(Requests.size());
         }
     };
 

@@ -45,7 +45,7 @@ protected:
     std::shared_ptr<ISnapshotSchema> ResultIndexSchema;
     ui64 TxId = 0;
     std::optional<ui64> LockId;
-    EDeduplicationPolicy DeduplicationPolicy = EDeduplicationPolicy::ALLOW_DUPLICATES;
+    EDeduplicationPolicy DeduplicationPolicy = EDeduplicationPolicy::PREVENT_DUPLICATES;
 
 public:
     using TConstPtr = std::shared_ptr<const TReadMetadataBase>;

@@ -3,6 +3,7 @@
 #include <ydb/core/kqp/compute_actor/kqp_compute_events.h>
 #include <ydb/core/tx/columnshard/blobs_action/abstract/storages_manager.h>
 #include <ydb/core/tx/columnshard/columnshard_private_events.h>
+#include <ydb/core/tx/columnshard/counters/duplicate_filtering.h>
 #include <ydb/core/tx/columnshard/counters/scan.h>
 #include <ydb/core/tx/columnshard/engines/reader/abstract/abstract.h>
 #include <ydb/core/tx/columnshard/engines/reader/abstract/read_context.h>
@@ -35,7 +36,7 @@ public:
         const std::shared_ptr<NDataAccessorControl::IDataAccessorsManager>& dataAccessorsManager,
         const TComputeShardingPolicy& computeShardingPolicy, ui32 scanId, ui64 txId, ui32 scanGen, ui64 requestCookie, ui64 tabletId,
         TDuration timeout, const TReadMetadataBase::TConstPtr& readMetadataRange, NKikimrDataEvents::EDataFormat dataFormat,
-        const NColumnShard::TScanCounters& scanCountersPool, const NConveyorComposite::TCPULimitsConfig& cpuLimits
+        const NColumnShard::TScanCounters& scanCountersPool, const NColumnShard::TDuplicateFilteringCounters& duplicateFilteringCounters, const NConveyorComposite::TCPULimitsConfig& cpuLimits
     );
 
     void Bootstrap(const TActorContext& ctx);
@@ -141,6 +142,7 @@ private:
     const TSmallVec<bool> SkipNullKeys;
     const TDuration Timeout;
     NColumnShard::TConcreteScanCounters ScanCountersPool;
+    NColumnShard::TDuplicateFilteringCounters DuplicateFilteringCounters;
 
     TMaybe<TString> AbortReason;
 

@@ -174,7 +174,7 @@ void TTxScan::Complete(const TActorContext& ctx) {
 
     auto scanActorId = ctx.Register(new TColumnShardScan(Self->SelfId(), scanComputeActor, Self->GetStoragesManager(),
         Self->DataAccessorsManager.GetObjectPtrVerified(), shardingPolicy, scanId, txId, scanGen, requestCookie, Self->TabletID(), timeout,
-        readMetadataRange, dataFormat, Self->Counters.GetScanCounters(), cpuLimits));
+        readMetadataRange, dataFormat, Self->Counters.GetScanCounters(), Self->Counters.GetDuplicateFilteringCounters(), cpuLimits));
     Self->InFlightReadsTracker.AddScanActorId(requestCookie, scanActorId);
 
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "TTxScan started")("actor_id", scanActorId)("trace_detailed", detailedInfo);

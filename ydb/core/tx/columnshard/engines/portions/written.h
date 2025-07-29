@@ -108,6 +108,10 @@ public:
             return *snapshotDefault;
         }
     }
+
+    virtual std::optional<TSnapshot> GetDataSnapshot(const std::optional<TSnapshot>& snapshotDefault = std::nullopt) const override {
+        return RecordSnapshotMin(snapshotDefault);
+    }
 };
 
 /// Ensure that TWrittenPortionInfo can be effectively assigned by moving the value.

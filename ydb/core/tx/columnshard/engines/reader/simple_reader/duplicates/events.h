@@ -24,41 +24,20 @@ public:
 
 class TEvRequestFilter: public NActors::TEventLocal<TEvRequestFilter, NColumnShard::TEvPrivate::EvRequestFilter> {
 private:
+    YDB_READONLY_DEF(TString, ExternalTaskId);
     NArrow::TSimpleRow MinPK;
     NArrow::TSimpleRow MaxPK;
     YDB_READONLY_DEF(ui64, SourceId);
     YDB_READONLY_DEF(ui64, RecordsCount);
     TSnapshot MaxVersion;
     YDB_READONLY_DEF(std::shared_ptr<IFilterSubscriber>, Subscriber);
+    YDB_READONLY_DEF(std::shared_ptr<const TAtomicCounter>, AbortionFlag);
 
 public:
     TEvRequestFilter(const IDataSource& source, const std::shared_ptr<IFilterSubscriber>& subscriber);
-};
 
-class TEvFilterConstructionResult
-    : public NActors::TEventLocal<TEvFilterConstructionResult, NColumnShard::TEvPrivate::EvFilterConstructionResult> {
-private:
-    using TFilters = THashMap<TDuplicateMapInfo, NArrow::TColumnFilter>;
-    TConclusion<TFilters> Result;
-
-public:
-    TEvFilterConstructionResult(TConclusion<TFilters>&& result)
-        : Result(std::move(result)) {
-        if (Result.IsSuccess()) {
-            for (const auto& [info, filter] : *Result) {
-                AFL_VERIFY(!!filter.GetRecordsCount() && filter.GetRecordsCountVerified() == info.GetRowsCount())(
-                                                                                             "filter", filter.GetRecordsCount().value_or(0))(
-                                                                                             "info", info.DebugString());
-            }
-        }
-    }
-
-    const TConclusion<TFilters>& GetConclusion() const {
-        return Result;
-    }
-
-    TFilters&& ExtractResult() {
-        return Result.DetachResult();
+    TSnapshot GetMaxVersion() const {
+        return MaxVersion;
     }
 };
 

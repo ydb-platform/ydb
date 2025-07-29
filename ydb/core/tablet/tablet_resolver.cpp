@@ -674,12 +674,12 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
         return std::make_pair(TActorId(), TActorId());
     }
 
-    bool SendForward(const TActorId& sender, const TEntry& entry, TEvTabletResolver::TEvForward* msg,
+    bool SendForward(const TActorId& sender, ui64 cookie, const TEntry& entry, TEvTabletResolver::TEvForward* msg,
                      bool* needFollowerUpdate = nullptr) {
         TResolveInfo info(*msg, TActivationContext::Now() - entry.LastResolved, needFollowerUpdate); // fills needFollowerUpdate in dtor
         const std::pair<TActorId, TActorId> endpoint = SelectForward(entry, info, msg->TabletID);
         if (endpoint.first) {
-            Send(sender, new TEvTabletResolver::TEvForwardResult(msg->TabletID, endpoint.second, endpoint.first, LastCacheEpoch));
+            Send(sender, new TEvTabletResolver::TEvForwardResult(msg->TabletID, endpoint.second, endpoint.first, LastCacheEpoch), 0, cookie);
             if (!!msg->Ev) {
                 Send(IEventHandle::Forward(std::move(msg->Ev), msg->SelectActor(endpoint.second, endpoint.first)));
             }
@@ -697,8 +697,8 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
     void SendQueued(TEntry& entry) {
         while (TEntry::TQueueEntry* x = entry.Queue.Head()) {
             TEvTabletResolver::TEvForward* msg = x->Ev->Get();
-            if (!SendForward(x->Ev->Sender, entry, msg)) {
-                Send(x->Ev->Sender, new TEvTabletResolver::TEvForwardResult(NKikimrProto::ERROR, entry.TabletId));
+            if (!SendForward(x->Ev->Sender, x->Ev->Cookie, entry, msg)) {
+                Send(x->Ev->Sender, new TEvTabletResolver::TEvForwardResult(NKikimrProto::ERROR, entry.TabletId), 0, x->Ev->Cookie);
             }
             entry.Queue.Pop();
         }
@@ -708,7 +708,7 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
 
     void SendQueuedError(ui64 tabletId, TEntry& entry, NKikimrProto::EReplyStatus status) {
         while (TEntry::TQueueEntry* x = entry.Queue.Head()) {
-            Send(x->Ev->Sender, new TEvTabletResolver::TEvForwardResult(status, tabletId));
+            Send(x->Ev->Sender, new TEvTabletResolver::TEvForwardResult(status, tabletId), 0, x->Ev->Cookie);
             entry.Queue.Pop();
         }
         // Free buffer memory
@@ -829,7 +829,7 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
 
         // allow some requests to bypass negative caching in low-load case
         if (InFlyResolveCounter->Val() > 20 && TabletsOnStopList.contains(tabletId)) {
-            Send(ev->Sender, new TEvTabletResolver::TEvForwardResult(NKikimrProto::ERROR, tabletId));
+            Send(ev->Sender, new TEvTabletResolver::TEvForwardResult(NKikimrProto::ERROR, tabletId), 0, ev->Cookie);
             return;
         }
 
@@ -846,7 +846,7 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
         switch (entry.State) {
             case TEntry::StNormal: {
                 bool needUpdate = false;
-                if (!SendForward(ev->Sender, entry, msg, &needUpdate)) {
+                if (!SendForward(ev->Sender, ev->Cookie, entry, msg, &needUpdate)) {
                     PushQueue(entry, ev);
                     needUpdate = true;
                 }
@@ -858,7 +858,7 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
             }
             case TEntry::StResolve: {
                 // Try to handle requests even while resolving
-                if (entry.CacheEpoch == 0 || !SendForward(ev->Sender, entry, msg)) {
+                if (entry.CacheEpoch == 0 || !SendForward(ev->Sender, ev->Cookie, entry, msg)) {
                     PushQueue(entry, ev);
                 }
                 break;

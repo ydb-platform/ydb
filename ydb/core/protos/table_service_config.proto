@@ -312,7 +312,7 @@ message TTableServiceConfig {
 
     optional uint64 QueryReplayCacheUploadTTLSec = 62 [default = 36000];
 
-    optional bool EnableQueryServiceSpilling = 63 [ default = false ];
+    optional bool EnableQueryServiceSpilling = 63 [ default = true ];
 
     optional uint32 DefaultCostBasedOptimizationLevel = 64 [default = 2];
 
@@ -320,7 +320,7 @@ message TTableServiceConfig {
 
     optional bool EnableImplicitQueryParameterTypes = 66 [ default = false ];
 
-    optional string EnableSpillingNodes = 67 [ default = "None" ];
+    optional string EnableSpillingNodes = 67 [ default = "All" ];
 
     message TComputeSchedulerSettings {
         optional uint64 AdvanceTimeIntervalUsec = 1 [default = 500000];

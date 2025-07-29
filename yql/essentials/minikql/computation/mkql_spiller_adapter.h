@@ -17,7 +17,7 @@ public:
         : Spiller(spiller)
         , ItemType(type)
         , SizeLimit(sizeLimit)
-        , Packer(type, EValuePackerVersion::V1)
+        , Packer(type, EValuePackerVersion::V1, 4_KB)
         , MemoryUsageReporter(memoryUsageReporter)
     {
     }

@@ -34,7 +34,7 @@ public:
         const NMiniKQL::THolderFactory& holderFactory, const TDqOutputChannelSettings& settings, const TLogFunc& logFunc,
         NDqProto::EDataTransportVersion transportVersion)
         : OutputType(outputType)
-        , Packer(OutputType, settings.BufferPageAllocSize)
+        , Packer(OutputType, 4_KB)
         , Width(OutputType->IsMulti() ? static_cast<NMiniKQL::TMultiType*>(OutputType)->GetElementsCount() : 1u)
         , Storage(settings.ChannelStorage)
         , HolderFactory(holderFactory)

@@ -716,10 +716,10 @@ private:
                     auto& bucket = SpilledBuckets[bucketWithLargestSpiller];
                     size_t spillerSize = bucket.GetTotalSpillerMemorySize();
                     // If spiller buffer is reasonably large (> 1MB), try to spill it first
-                    if (spillerSize > 1_MB && ForceSpillSpillerBuffers(bucket)) {
+                    if (spillerSize > 10_KB && ForceSpillSpillerBuffers(bucket)) {
                         UDF_LOG(Logger, LogComponent, NUdf::ELogLevel::Info, 
                             TStringBuilder() << "Force spilling spiller buffers during state split from bucket " 
-                            << bucketWithLargestSpiller << " size=" << (spillerSize/1_MB) << "MB");
+                            << bucketWithLargestSpiller << " size=" << (spillerSize/10_KB) << "MB");
                         return true;
                     }
                 }

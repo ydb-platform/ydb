@@ -63,6 +63,62 @@
             "uri": "file://test_sql_streaming.test_suites-GroupByHopWithDataWatermarks-default.txt_/plan.json"
         }
     },
+    "test_sql_streaming.test[suites-GroupByHoppingWindow-default.txt]": {
+        "Ast": {
+            "uri": "file://test_sql_streaming.test_suites-GroupByHoppingWindow-default.txt_/ast.txt"
+        },
+        "Plan": {
+            "uri": "file://test_sql_streaming.test_suites-GroupByHoppingWindow-default.txt_/plan.json"
+        }
+    },
+    "test_sql_streaming.test[suites-GroupByHoppingWindowByStringKey-default.txt]": {
+        "Ast": {
+            "uri": "file://test_sql_streaming.test_suites-GroupByHoppingWindowByStringKey-default.txt_/ast.txt"
+        },
+        "Plan": {
+            "uri": "file://test_sql_streaming.test_suites-GroupByHoppingWindowByStringKey-default.txt_/plan.json"
+        }
+    },
+    "test_sql_streaming.test[suites-GroupByHoppingWindowExprKey-default.txt]": {
+        "Ast": {
+            "uri": "file://test_sql_streaming.test_suites-GroupByHoppingWindowExprKey-default.txt_/ast.txt"
+        },
+        "Plan": {
+            "uri": "file://test_sql_streaming.test_suites-GroupByHoppingWindowExprKey-default.txt_/plan.json"
+        }
+    },
+    "test_sql_streaming.test[suites-GroupByHoppingWindowListKey-default.txt]": {
+        "Ast": {
+            "uri": "file://test_sql_streaming.test_suites-GroupByHoppingWindowListKey-default.txt_/ast.txt"
+        },
+        "Plan": {
+            "uri": "file://test_sql_streaming.test_suites-GroupByHoppingWindowListKey-default.txt_/plan.json"
+        }
+    },
+    "test_sql_streaming.test[suites-GroupByHoppingWindowNoKey-default.txt]": {
+        "Ast": {
+            "uri": "file://test_sql_streaming.test_suites-GroupByHoppingWindowNoKey-default.txt_/ast.txt"
+        },
+        "Plan": {
+            "uri": "file://test_sql_streaming.test_suites-GroupByHoppingWindowNoKey-default.txt_/plan.json"
+        }
+    },
+    "test_sql_streaming.test[suites-GroupByHoppingWindowPercentile-default.txt]": {
+        "Ast": {
+            "uri": "file://test_sql_streaming.test_suites-GroupByHoppingWindowPercentile-default.txt_/ast.txt"
+        },
+        "Plan": {
+            "uri": "file://test_sql_streaming.test_suites-GroupByHoppingWindowPercentile-default.txt_/plan.json"
+        }
+    },
+    "test_sql_streaming.test[suites-GroupByHoppingWindowTimeExtractorUnusedColumns-default.txt]": {
+        "Ast": {
+            "uri": "file://test_sql_streaming.test_suites-GroupByHoppingWindowTimeExtractorUnusedColumns-default.txt_/ast.txt"
+        },
+        "Plan": {
+            "uri": "file://test_sql_streaming.test_suites-GroupByHoppingWindowTimeExtractorUnusedColumns-default.txt_/plan.json"
+        }
+    },
     "test_sql_streaming.test[suites-GroupByHoppingWithDataWatermarks-default.txt]": {
         "Ast": {
             "uri": "file://test_sql_streaming.test_suites-GroupByHoppingWithDataWatermarks-default.txt_/ast.txt"

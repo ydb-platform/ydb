@@ -49,6 +49,7 @@ TEST_SRCS(
     test_select_limit.py
     test_select_timings.py
     test_stop.py
+    test_watermarks.py
     test_yds_bindings.py
     test_yq_streaming.py
 )

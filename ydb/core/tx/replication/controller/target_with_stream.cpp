@@ -22,7 +22,7 @@ void TTargetWithStream::Progress(const TActorContext& ctx) {
         }
         return;
     case EStreamState::Removing:
-        if (GetWorkers()) {
+        if (HasWorkers()) {
             RemoveWorkers(ctx);
         } else if (!StreamRemover) {
             StreamRemover = ctx.Register(CreateStreamRemover(replication, GetId(), ctx));

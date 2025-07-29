@@ -19,7 +19,7 @@ protected:
         return Replication;
     }
 
-    const THashMap<ui64, TWorker>& GetWorkers() const;
+    bool HasWorkers() const;
     void RemoveWorkers(const TActorContext& ctx);
 
 public:
@@ -65,6 +65,7 @@ public:
 
     void AddWorker(ui64 id) override;
     void RemoveWorker(ui64 id) override;
+    TVector<ui64> GetWorkers() const override;
     void UpdateLag(ui64 workerId, TDuration lag) override;
     const TMaybe<TDuration> GetLag() const override;
 

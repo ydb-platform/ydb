@@ -37,8 +37,8 @@ Y_UNIT_TEST_SUITE(LocalTableWriter) {
 
         env.Send<TEvWorker::TEvPoll>(writer, new TEvWorker::TEvData("TestSource", {
             TRecord(1, R"({"key":[1], "update":{"value":"10"}})"),
-            TRecord(2, R"({"key":[2], "update":{"value":"20"}})"),
-            TRecord(3, R"({"key":[3], "update":{"value":"30"}})"),
+            TRecord(2, R"({"key":[2], "reset":{"value":"20"}})"),
+            TRecord(3, R"({"key":[3], "erase":{}})"),
         }));
     }
 

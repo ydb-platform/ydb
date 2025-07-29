@@ -120,8 +120,16 @@ void TTargetBase::RemoveWorker(ui64 id) {
     Workers.erase(id);
 }
 
-const THashMap<ui64, TTargetBase::TWorker>& TTargetBase::GetWorkers() const {
-    return Workers;
+TVector<ui64> TTargetBase::GetWorkers() const {
+    TVector<ui64> result(::Reserve(Workers.size()));
+    for (const auto& [id, _] : Workers) {
+        result.push_back(id);
+    }
+    return result;
+}
+
+bool TTargetBase::HasWorkers() const {
+    return !Workers.empty();
 }
 
 void TTargetBase::RemoveWorkers(const TActorContext& ctx) {

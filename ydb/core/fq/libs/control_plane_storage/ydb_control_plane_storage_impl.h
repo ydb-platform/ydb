@@ -400,6 +400,7 @@ protected:
         RTS_CREATE_DATABASE,
         RTS_DESCRIBE_DATABASE,
         RTS_MODIFY_DATABASE,
+        RTS_DELETE_FOLDER_RESOURCES,
         RTS_MAX,
     };
 
@@ -427,7 +428,8 @@ protected:
         "PingTask",
         "CreateDatabase",
         "DescribeDatabase",
-        "ModifyDatabase"
+        "ModifyDatabase",
+        "DeleteFolderResources"
     };
 
     enum ERequestTypeCommon {
@@ -461,6 +463,7 @@ protected:
         RTC_CREATE_DATABASE,
         RTC_DESCRIBE_DATABASE,
         RTC_MODIFY_DATABASE,
+        RTC_DELETE_FOLDER_RESOURCES,
         RTC_MAX,
     };
 
@@ -514,7 +517,8 @@ protected:
             { MakeIntrusive<TRequestCommonCounters>("PingTask") },
             { MakeIntrusive<TRequestCommonCounters>("CreateDatabase") },
             { MakeIntrusive<TRequestCommonCounters>("DescribeDatabase") },
-            { MakeIntrusive<TRequestCommonCounters>("ModifyDatabase") }
+            { MakeIntrusive<TRequestCommonCounters>("ModifyDatabase") },
+            { MakeIntrusive<TRequestCommonCounters>("DeleteFolderResources") },
         });
 
         TTtlCache<TMetricsScope, TScopeCountersPtr, TMap> ScopeCounters{TTtlCacheSettings{}.SetTtl(TDuration::Days(1))};
@@ -863,6 +867,7 @@ public:
         hFunc(TEvControlPlaneStorage::TEvDescribeBindingRequest, Handle);
         hFunc(TEvControlPlaneStorage::TEvModifyBindingRequest, Handle);
         hFunc(TEvControlPlaneStorage::TEvDeleteBindingRequest, Handle);
+        hFunc(TEvControlPlaneStorage::TEvDeleteFolderResourcesRequest, Handle);
         hFunc(TEvControlPlaneStorage::TEvWriteResultDataRequest, Handle);
         hFunc(TEvControlPlaneStorage::TEvGetTaskRequest, Handle);
         hFunc(TEvControlPlaneStorage::TEvPingTaskRequest, Handle);
@@ -902,6 +907,8 @@ public:
     void Handle(TEvControlPlaneStorage::TEvDescribeBindingRequest::TPtr& ev);
     void Handle(TEvControlPlaneStorage::TEvModifyBindingRequest::TPtr& ev);
     void Handle(TEvControlPlaneStorage::TEvDeleteBindingRequest::TPtr& ev);
+
+    void Handle(TEvControlPlaneStorage::TEvDeleteFolderResourcesRequest::TPtr& ev);
 
     void Handle(TEvControlPlaneStorage::TEvWriteResultDataRequest::TPtr& ev);
     void Handle(TEvControlPlaneStorage::TEvGetTaskRequest::TPtr& ev);

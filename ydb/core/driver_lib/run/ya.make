@@ -108,6 +108,7 @@ PEERDIR(
     ydb/core/tx/conveyor/service
     ydb/core/tx/general_cache
     ydb/core/tx/columnshard/data_accessor/cache_policy
+    ydb/core/tx/columnshard/column_fetching
     ydb/core/tx/coordinator
     ydb/core/tx/datashard
     ydb/core/tx/limiter/grouped_memory/usage

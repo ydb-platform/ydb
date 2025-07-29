@@ -2504,6 +2504,7 @@ message TAppConfig {
     optional string StartupStorageYaml = 108;
     optional TCompositeConveyorConfig CompositeConveyorConfig = 109;
     optional TGeneralCacheConfig PortionsMetadataCache = 110;
+    optional TGeneralCacheConfig ColumnDataCache = 111;
 }
 
 message TYdbVersion {

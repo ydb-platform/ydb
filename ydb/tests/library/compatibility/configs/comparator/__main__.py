@@ -109,8 +109,105 @@ class Differ:
                 self.resolutions.append((name, result))
 
     def print_result(self) -> None:
-        print('<html><body><table border=1 valign="center">')
-        print('<thead style="position: sticky; top: 0; background: white; align: center"><tr><th style="padding-left: 10; padding-right: 10">field</th>')
+        print('''<style>
+.tab {
+    overflow: hidden;
+    border: 1px solid #4CAF50;
+    background-color: #AAFFAA;
+}
+
+
+.tab button {
+    background-color: inherit;
+    float: left;
+    border: none;
+    outline: none;
+    cursor: pointer;
+    padding: 14px 16px;
+    transition: 0.3s;
+}
+
+
+.tab button:hover {
+    background-color: #FFEB3B;
+}
+
+
+.tab button.active {
+    background-color: #4CAF50;
+  color: #fff;
+}
+
+
+.tabcontent {
+    display: none;
+    padding: 6px 12px;
+    border: 1px solid #4CAF50;
+    border-top: none;
+}
+</style>
+<script>
+function openDescr(evt, lang) {
+    var i, tabcontent, tablinks;
+
+    tabcontent = document.getElementsByClassName("tabcontent");
+    activeid = ""
+    for (i = 0; i < tabcontent.length; i++) {
+        if (tabcontent[i].style.display != "none") {
+            activeid = tabcontent[i].id
+        }
+        tabcontent[i].style.display = "none";
+    }
+    tablinks = document.getElementsByClassName("tablinks");
+    for (i = 0; i < tablinks.length; i++) {
+        tablinks[i].className = tablinks[i].className.replace(" active", "");
+    }
+    if (lang == activeid) {
+        return;
+    }
+    document.getElementById(lang).style.display = "block";
+    evt.currentTarget.className += " active";
+}
+</script>
+
+<html>
+<head>
+<meta charset="utf-8">
+<title>Сравнение конфигураций по-умолчанию YDBD</title>
+</head>
+<body>
+<div class="tab">
+  <button class="tablinks" onclick="openDescr(event, 'russian')">Описание</button>
+  <button class="tablinks" onclick="openDescr(event, 'english')">Description</button>
+</div>
+<div id=russian class="tabcontent">
+<h1>Сравнение конфигураций по-умолчанию YDBD разных версий</h1>
+В таблице ниже представлены изменения конфигураций по-умолчанию для разных версий YDBD. Cделано на основе описания конфигураций в <a href="https://github.com/ydb-platform/ydb/blob/main/ydb/core/protos/config.proto">протобуфе</a>.
+<p>
+Цвет означает критичность изменений в соседних ветках:
+<ul>
+<li><span style="font-weight:bold">Белый</span> означает, что поле полностью отсутсвует в данной версии конфигурации.</li>
+<li><span style="background-color: #aaffaa;font-weight:bold">Зеленый</span> - безопасное изменение, такое как добавление нового поля или включение Feature flag.</li>
+<li><span style="background-color: #ffffaa;font-weight:bold">Желтый</span> - изменение, которое может вызвать изменение поведения, но не должно быть критичным, например изменение значения по умолчанию.</li>
+<li><span style="background-color: #ffaaaa;font-weight:bold">Красный</span> - Плохое изменение, которое может все сломать: удаление полей, изменение их типа или id (в протобуфе), выключение Feature flag итд.</li>
+</ul>
+</p>
+</div>
+<div id=english class="tabcontent">
+<h1>Comparison of YDBD default configurations of different versions</h1>
+The table above shows the changes in default configurations for different versions of YDBD. Based on the description of configurations in the <a href="https://github.com/ydb-platform/ydb/blob/main/ydb/core/protos/config.proto">protobuf</a>.
+<p>
+The color indicates the criticality of the changes in the neighboring branches:
+<ul>
+<li><span style="font-weight:bold">White</span> means that the field is completely absent in this version of the configuration.</li>
+<li><span style="background-color: #aaffaa;font-weight:bold">Green</span> - a safe change, such as adding a new field or enabling the Feature flag.</li>
+<li><span style="background-color: #ffffaa;font-weight:bold">Yellow</span> - a change that may cause a change in behavior, but should not be critical, such as changing the default value.</li>
+<li><span style="background-color: #ffaaaa;font-weight:bold">Red</span> - A bad change that can break everything: removing fields, changing their type or id (in protobuf), disabling the Feature flag etc.</li>
+</ul>
+</p>
+</div>
+<table border=1 valign="center">''')
+        print('<thead style="position: sticky; top: 0; background: white; align: center"><tr><th style="padding-left: 10; padding-right: 10">config field \ branch</th>')
         for name in self.names:
             print(f'<th style="padding-left: 10; padding-right: 10">{name}</th>')
         print('</tr></thead>')

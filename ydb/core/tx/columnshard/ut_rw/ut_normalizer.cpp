@@ -243,21 +243,6 @@ public:
     }
 };
 
-class TTrashUnusedInjector: public NYDBTest::ILocalDBModifier {
-public:
-    void Apply(NTabletFlatExecutor::TTransactionContext& txc) const override {
-        using namespace NColumnShard;
-
-        NIceDb::TNiceDb db(txc.DB);
-
-        if (db.HaveTable<Schema::IndexColumns>()) {
-            for (size_t i = 0; i < 100; ++i) {
-                db.Table<Schema::IndexColumns>().Key(1 + i, 2 + i, 3 + i, 4 + i, 5 + i, 6 + i, 7 + i).Update();
-            }
-        }
-    }
-};
-
 template <ui64 ColumnId>
 class TExtraColumnsInjector: public NYDBTest::ILocalDBModifier {
 public:

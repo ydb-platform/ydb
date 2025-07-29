@@ -17,6 +17,13 @@ public:
     };
 
 private:
+    bool PrechargeV0(NTabletFlatExecutor::TTransactionContext& txc);
+    bool PrechargeV1(NTabletFlatExecutor::TTransactionContext& txc);
+    bool PrechargeV2(NTabletFlatExecutor::TTransactionContext& txc);
+    std::optional<std::vector<std::shared_ptr<IAction>>> LoadKeysV0(NTabletFlatExecutor::TTransactionContext& txc, const std::set<ui64>& columns);
+    std::optional<std::vector<std::shared_ptr<IAction>>> LoadKeysV1(NTabletFlatExecutor::TTransactionContext& txc, const std::set<ui64>& columns);
+    std::optional<std::vector<std::shared_ptr<IAction>>> LoadKeysV2(NTabletFlatExecutor::TTransactionContext& txc, const std::set<ui64>& columns);
+
     std::optional<std::vector<std::shared_ptr<IAction>>> KeysToDelete(NTabletFlatExecutor::TTransactionContext& txc);
 
     virtual std::set<ui64> GetColumnIdsToDelete() const = 0;

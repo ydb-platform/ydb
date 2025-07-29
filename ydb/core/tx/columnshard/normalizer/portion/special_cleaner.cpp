@@ -17,14 +17,15 @@ private:
     ui32 Chunk;
 
 public:
-    TDeleteChunksV0(ui32 index, ui64 granule, ui32 columnIdx, ui64 planStep, ui64 txId, ui64 portion, ui32 chunk)
-        : Index(index)
-        , Granule(granule)
-        , ColumnIdx(columnIdx)
-        , PlanStep(planStep)
-        , TxId(txId)
-        , Portion(portion)
-        , Chunk(chunk)
+    template <class TRowSet>
+    TDeleteChunksV0(TRowSet& rowset)
+        : Index(rowset.template GetValue<NColumnShard::Schema::IndexColumns::Index>())
+        , Granule(rowset.template GetValue<NColumnShard::Schema::IndexColumns::Granule>())
+        , ColumnIdx(rowset.template GetValue<NColumnShard::Schema::IndexColumns::ColumnIdx>())
+        , PlanStep(rowset.template GetValue<NColumnShard::Schema::IndexColumns::PlanStep>())
+        , TxId(rowset.template GetValue<NColumnShard::Schema::IndexColumns::TxId>())
+        , Portion(rowset.template GetValue<NColumnShard::Schema::IndexColumns::Portion>())
+        , Chunk(rowset.template GetValue<NColumnShard::Schema::IndexColumns::Chunk>())
     {
     }
 
@@ -42,11 +43,12 @@ private:
     ui32 ChunkIdx;
 
 public:
-    TDeleteChunksV1(ui64 pathId, ui64 portionId, ui32 ssColumnId, ui32 chunkIdx)
-        : PathId(pathId)
-        , PortionId(portionId)
-        , SSColumnId(ssColumnId)
-        , ChunkIdx(chunkIdx)
+    template <class TRowSet>
+    TDeleteChunksV1(TRowSet& rowset)
+        : PathId(rowset.template GetValue<NColumnShard::Schema::IndexColumnsV1::PathId>())
+        , PortionId(rowset.template GetValue<NColumnShard::Schema::IndexColumnsV1::PortionId>())
+        , SSColumnId(rowset.template GetValue<NColumnShard::Schema::IndexColumnsV1::SSColumnId>())
+        , ChunkIdx(rowset.template GetValue<NColumnShard::Schema::IndexColumnsV1::ChunkIdx>())
     {
     }
 
@@ -63,9 +65,10 @@ private:
     ui32 ColumnId;
 
 public:
-    TDeleteChunksV2(ui64 pathId, ui64 portionId, ui32 columnId)
-        : PathId(pathId)
-        , PortionId(portionId)
+    template <class TRowSet>
+    TDeleteChunksV2(TRowSet& rowset, const ui64 columnId)
+        : PathId(rowset.template GetValue<NColumnShard::Schema::IndexColumnsV2::PathId>())
+        , PortionId(rowset.template GetValue<NColumnShard::Schema::IndexColumnsV2::PortionId>())
         , ColumnId(columnId)
     {
     }
@@ -154,6 +157,94 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TDeleteTrashImpl::DoInit(
     return result;
 }
 
+bool TDeleteTrashImpl::PrechargeV0(NTabletFlatExecutor::TTransactionContext& txc) {
+    NIceDb::TNiceDb db(txc.DB);
+    using namespace NColumnShard;
+    return Schema::Precharge<Schema::IndexColumns>(db, txc.DB.GetScheme());
+}
+bool TDeleteTrashImpl::PrechargeV1(NTabletFlatExecutor::TTransactionContext& txc) {
+    NIceDb::TNiceDb db(txc.DB);
+    using namespace NColumnShard;
+    return Schema::Precharge<Schema::IndexColumnsV1>(db, txc.DB.GetScheme());
+}
+bool TDeleteTrashImpl::PrechargeV2(NTabletFlatExecutor::TTransactionContext& txc) {
+    NIceDb::TNiceDb db(txc.DB);
+    using namespace NColumnShard;
+    return Schema::Precharge<Schema::IndexColumnsV2>(db, txc.DB.GetScheme());
+}
+
+std::optional<std::vector<std::shared_ptr<TDeleteTrashImpl::IAction>>> TDeleteTrashImpl::LoadKeysV0(
+    NTabletFlatExecutor::TTransactionContext& txc, const std::set<ui64>& columnIdsToDelete) {
+    NIceDb::TNiceDb db(txc.DB);
+    using namespace NColumnShard;
+    std::vector<std::shared_ptr<TDeleteTrashImpl::IAction>> actions;
+    auto rowset =
+        db.Table<Schema::IndexColumns>().Select<Schema::IndexColumns::Index, Schema::IndexColumns::Granule, Schema::IndexColumns::ColumnIdx,
+            Schema::IndexColumns::PlanStep, Schema::IndexColumns::TxId, Schema::IndexColumns::Portion, Schema::IndexColumns::Chunk>();
+    if (!rowset.IsReady()) {
+        return std::nullopt;
+    }
+    while (!rowset.EndOfSet()) {
+        if (columnIdsToDelete.contains(rowset.GetValue<Schema::IndexColumns::ColumnIdx>())) {
+            actions.emplace_back(std::make_shared<TDeleteChunksV0>(rowset));
+        }
+        if (!rowset.Next()) {
+            return std::nullopt;
+        }
+    }
+    return actions;
+}
+
+std::optional<std::vector<std::shared_ptr<TDeleteTrashImpl::IAction>>> TDeleteTrashImpl::LoadKeysV1(
+    NTabletFlatExecutor::TTransactionContext& txc, const std::set<ui64>& columnIdsToDelete) {
+    NIceDb::TNiceDb db(txc.DB);
+    using namespace NColumnShard;
+    std::vector<std::shared_ptr<TDeleteTrashImpl::IAction>> actions;
+    auto rowset = db.Table<Schema::IndexColumnsV1>().Select<Schema::IndexColumnsV1::PathId, Schema::IndexColumnsV1::PortionId,
+        Schema::IndexColumnsV1::SSColumnId, Schema::IndexColumnsV1::ChunkIdx>();
+    if (!rowset.IsReady()) {
+        return std::nullopt;
+    }
+    while (!rowset.EndOfSet()) {
+        if (columnIdsToDelete.contains(rowset.GetValue<Schema::IndexColumnsV1::SSColumnId>())) {
+            actions.emplace_back(std::make_shared<TDeleteChunksV1>(rowset));
+        }
+        if (!rowset.Next()) {
+            return std::nullopt;
+        }
+    }
+
+    return actions;
+}
+
+std::optional<std::vector<std::shared_ptr<TDeleteTrashImpl::IAction>>> TDeleteTrashImpl::LoadKeysV2(
+    NTabletFlatExecutor::TTransactionContext& txc, const std::set<ui64>& columnIdsToDelete) {
+    NIceDb::TNiceDb db(txc.DB);
+    using namespace NColumnShard;
+    std::vector<std::shared_ptr<TDeleteTrashImpl::IAction>> actions;
+    auto rowset = db.Table<Schema::IndexColumnsV2>()
+                      .Select<Schema::IndexColumnsV2::PathId, Schema::IndexColumnsV2::PortionId, Schema::IndexColumnsV2::Metadata>();
+    if (!rowset.IsReady()) {
+        return std::nullopt;
+    }
+
+    while (!rowset.EndOfSet()) {
+        auto metadataString = rowset.GetValue<NColumnShard::Schema::IndexColumnsV2::Metadata>();
+        NKikimrTxColumnShard::TIndexPortionAccessor metaProto;
+        AFL_VERIFY(metaProto.ParseFromArray(metadataString.data(), metadataString.size()))("event", "cannot parse metadata as protobuf");
+
+        for (const auto& chunk : metaProto.GetChunks()) {
+            if (columnIdsToDelete.contains(chunk.GetSSColumnId())) {
+                actions.emplace_back(std::make_shared<TDeleteChunksV2>(rowset, chunk.GetSSColumnId()));
+            }
+        }
+        if (!rowset.Next()) {
+            return std::nullopt;
+        }
+    }
+    return actions;
+}
+
 std::optional<std::vector<std::shared_ptr<TDeleteTrashImpl::IAction>>> TDeleteTrashImpl::KeysToDelete(
     NTabletFlatExecutor::TTransactionContext& txc) {
     NIceDb::TNiceDb db(txc.DB);
@@ -171,66 +262,28 @@ std::optional<std::vector<std::shared_ptr<TDeleteTrashImpl::IAction>>> TDeleteTr
     const std::set<ui64> columnIdsToDelete = GetColumnIdsToDelete();
     std::vector<std::shared_ptr<TDeleteTrashImpl::IAction>> actions;
 
-    {
-        auto rowset =
-            db.Table<Schema::IndexColumns>().Select<Schema::IndexColumns::Index, Schema::IndexColumns::Granule, Schema::IndexColumns::ColumnIdx,
-                Schema::IndexColumns::PlanStep, Schema::IndexColumns::TxId, Schema::IndexColumns::Portion, Schema::IndexColumns::Chunk>();
-        if (!rowset.IsReady()) {
-            return std::nullopt;
+    if (auto newActions = LoadKeysV0(txc, columnIdsToDelete)) {
+        for (const auto& action : *newActions) {
+            actions.emplace_back(action);
         }
-        while (!rowset.EndOfSet()) {
-            if (columnIdsToDelete.contains(rowset.GetValue<Schema::IndexColumns::ColumnIdx>())) {
-                actions.emplace_back(std::make_shared<TDeleteChunksV0>(rowset.GetValue<Schema::IndexColumns::Index>(),
-                    rowset.GetValue<Schema::IndexColumns::Granule>(), rowset.GetValue<Schema::IndexColumns::ColumnIdx>(),
-                    rowset.GetValue<Schema::IndexColumns::PlanStep>(), rowset.GetValue<Schema::IndexColumns::TxId>(),
-                    rowset.GetValue<Schema::IndexColumns::Portion>(), rowset.GetValue<Schema::IndexColumns::Chunk>()));
-            }
-            if (!rowset.Next()) {
-                return std::nullopt;
-            }
-        }
+    } else {
+        return std::nullopt;
     }
 
-    {
-        auto rowset = db.Table<Schema::IndexColumnsV1>().Select<Schema::IndexColumnsV1::PathId, Schema::IndexColumnsV1::PortionId,
-            Schema::IndexColumnsV1::SSColumnId, Schema::IndexColumnsV1::ChunkIdx>();
-        if (!rowset.IsReady()) {
-            return std::nullopt;
+    if (auto newActions = LoadKeysV1(txc, columnIdsToDelete)) {
+        for (const auto& action : *newActions) {
+            actions.emplace_back(action);
         }
-        while (!rowset.EndOfSet()) {
-            if (columnIdsToDelete.contains(rowset.GetValue<Schema::IndexColumnsV1::SSColumnId>())) {
-                actions.emplace_back(std::make_shared<TDeleteChunksV1>(rowset.GetValue<Schema::IndexColumnsV1::PathId>(),
-                    rowset.GetValue<Schema::IndexColumnsV1::PortionId>(), rowset.GetValue<Schema::IndexColumnsV1::SSColumnId>(),
-                    rowset.GetValue<Schema::IndexColumnsV1::ChunkIdx>()));
-            }
-            if (!rowset.Next()) {
-                return std::nullopt;
-            }
-        }
+    } else {
+        return std::nullopt;
     }
 
-    {
-        auto rowset = db.Table<Schema::IndexColumnsV2>()
-                          .Select<Schema::IndexColumnsV2::PathId, Schema::IndexColumnsV2::PortionId, Schema::IndexColumnsV2::Metadata>();
-        if (!rowset.IsReady()) {
-            return std::nullopt;
+    if (auto newActions = LoadKeysV2(txc, columnIdsToDelete)) {
+        for (const auto& action : *newActions) {
+            actions.emplace_back(action);
         }
-
-        while (!rowset.EndOfSet()) {
-            auto metadataString = rowset.GetValue<NColumnShard::Schema::IndexColumnsV2::Metadata>();
-            NKikimrTxColumnShard::TIndexPortionAccessor metaProto;
-            AFL_VERIFY(metaProto.ParseFromArray(metadataString.data(), metadataString.size()))("event", "cannot parse metadata as protobuf");
-
-            for (const auto& chunk : metaProto.GetChunks()) {
-                if (columnIdsToDelete.contains(chunk.GetSSColumnId())) {
-                    actions.emplace_back(std::make_shared<TDeleteChunksV2>(rowset.GetValue<Schema::IndexColumnsV2::PathId>(),
-                        rowset.GetValue<Schema::IndexColumnsV2::PortionId>(), chunk.GetSSColumnId()));
-                }
-            }
-            if (!rowset.Next()) {
-                return std::nullopt;
-            }
-        }
+    } else {
+        return std::nullopt;
     }
 
     return actions;

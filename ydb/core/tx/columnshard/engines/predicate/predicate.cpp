@@ -110,6 +110,13 @@ std::pair<NKikimr::NOlap::TPredicate, NKikimr::NOlap::TPredicate> TPredicate::De
     const bool fromInclusive = range.FromInclusive || leftTrailingNull;
     const bool toInclusive = range.ToInclusive && !rightTrailingNull;
 
+    if (leftTrailingNull || rightTrailingNull) {
+        return {
+           TPredicate::Empty();
+           TPredicate::Empty();
+        };
+    }
+
     TString leftBorder = FromCells(leftCells, leftColumns);
     TString rightBorder = FromCells(rightCells, rightColumns);
     auto leftSchema = NArrow::MakeArrowSchema(leftColumns);
@@ -202,5 +209,15 @@ IOutputStream& operator<<(IOutputStream& out, const TPredicate& pred) {
 
     return out;
 }
-
+bool TPredicate::HasNulls() const {
+    if (!Batch) {
+        return false;
+    }
+    for (const auto& column : Batch->columns()) {
+        if (column->IsNull(0)) {
+            return true;
+        }
+    }
+    return false;
+}
 }   // namespace NKikimr::NOlap

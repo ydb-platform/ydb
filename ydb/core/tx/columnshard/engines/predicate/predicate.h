@@ -20,6 +20,7 @@ public:
     std::shared_ptr<arrow::RecordBatch> Batch;
     bool IsEqualSchema(const std::shared_ptr<arrow::Schema>& schema) const;
     bool IsEqualTo(const TPredicate& item) const;
+    bool HasNulls() const;
 
     NArrow::ECompareType GetCompareType() const {
         if (Operation == EOperation::GreaterEqual) {

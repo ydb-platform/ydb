@@ -24,6 +24,10 @@ TConclusionStatus TPKRangesFilter::Add(
     if ((!f || f->Empty()) && (!t || t->Empty())) {
         return TConclusionStatus::Success();
     }
+    if ((f && f->HasNulls()) || (t && t->HasNulls())) {
+        AFL_INFO(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "skip_predicate_with_null_pk");
+        return TConclusionStatus::Success(); // or insert a no-op predicate
+    }
     auto fromContainerConclusion = TPredicateContainer::BuildPredicateFrom(f, pkSchema);
     if (fromContainerConclusion.IsFail()) {
         AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "add_range_filter")("problem", "incorrect from container")(

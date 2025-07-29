@@ -1381,14 +1381,7 @@ private:
 
 
 class TKqpWriteTask {
-private:
-    enum class EState {
-        BUFFERING,
-        LOOKUP_MAIN_TABLE,
-        //LOOKUP_UNIQUE_INDEX,
-        FINISHED,
-    };
-
+public:
     struct TPathWriteInfo {
         IDataBatchProjectionPtr Projection = nullptr;
         IDataBatchProjectionPtr KeyProjection = nullptr;
@@ -1400,9 +1393,12 @@ private:
         IKqpBufferTableLookup* Lookup = nullptr;
     };
 
-    struct TWrite {
-        IDataBatchPtr NewBatch;
-        IDataBatchPtr OldBatch;
+private:
+    enum class EState {
+        BUFFERING,
+        LOOKUP_MAIN_TABLE,
+        //LOOKUP_UNIQUE_INDEX,
+        FINISHED,
     };
 
 public:
@@ -1411,18 +1407,19 @@ public:
             const i64 priority,
             const TPathId pathId,
             const NKikimrDataEvents::TEvWrite::TOperation::EOperationType operationType,
-            std::vector<std::pair<TKqpTableWriteActor*, IDataBatchProjectionPtr>> writes)
+            std::vector<TPathWriteInfo> writes,
+            std::vector<TPathLookupInfo> lookups)
         : Cookie(cookie)
         , Priority(priority)
         , PathId(pathId)
         , OperationType(operationType) {
 
-        for (const auto& [writeActor, projection] : writes) {
-            AFL_ENSURE(projection || writeActor->GetTableId().PathId == pathId);
-            PathWriteInfo[writeActor->GetTableId().PathId] = TPathWriteInfo{
-                .Projection = projection,
-                .WriteActor = writeActor,
-            };
+        for (const auto& write : writes) {
+            AFL_ENSURE(write.Projection || write.WriteActor->GetTableId().PathId == pathId);
+            PathWriteInfo[write.WriteActor->GetTableId().PathId] = write;
+        }
+        for (const auto& lookup : lookups) {
+            PathLookupInfo[lookup.Lookup->GetTableId().PathId] = lookup;
         }
     }
 
@@ -1515,10 +1512,7 @@ private:
             // We don't do uncessary copy here.
             Writes.reserve(BufferedBatches.size());
             for (auto& batch : BufferedBatches) {
-                Writes.push_back(TWrite {
-                    .NewBatch = std::move(batch),
-                    .OldBatch = nullptr,
-                });
+                Writes.emplace_back(std::move(batch));
             }
             BufferedBatches.clear();
 
@@ -1538,8 +1532,7 @@ private:
             return false;
         }
 
-        auto newRowsBatcher = CreateRowsBatcher(LookupNewColumns.size(), /* alloc */);
-        auto oldRowsBatcher = CreateRowsBatcher(LookupOldColumns.size(), /* alloc */);
+        auto rowsBatcher = CreateRowsBatcher(ProcessCells.size() + lookupInfo.Lookup->LookupColumnsCount() /*, alloc */);
 
         const auto& keyColumnTypes = lookupInfo.Lookup->GetKeyColumnTypes();
         lookupInfo.Lookup->ExtractResult(Cookie, [&](TConstArrayRef<TCell> cells) {
@@ -1554,22 +1547,25 @@ private:
             const auto& inputCells = ProcessCells[index];
             Y_UNUSED(inputCells);
 
-            // indexes for inputCells + readCells
+            for (const auto& cell : inputCells) {
+                rowsBatcher->AddCell(cell);
+            }
+            for (const auto& cell : readCells) {
+                rowsBatcher->AddCell(cell);
+            }
+            rowsBatcher->AddRow();
         });
 
         KeyToIndex.clear();
 
-        Writes.push_back(TWrite {
-            .NewBatch = nullptr, // std::move(batch),
-            .OldBatch = nullptr,
-        });
+        Writes.push_back(rowsBatcher->Flush());
 
         if (PathLookupInfo.size() > 1) {
             // Need to lookup unique indexes
             AFL_ENSURE(false);
         } else {
             // Write
-            AFL_ENSURE(false);
+            FlushWritesToActors();
             State = EState::BUFFERING;
         }
         return true;
@@ -1578,21 +1574,18 @@ private:
     void FlushWritesToActors() {
         for (auto& write : Writes) {
             // TODO: Track memory usage
-            Memory -= write.NewBatch->GetMemory();
-            if (write.OldBatch) {
-                Memory -= write.OldBatch->GetMemory();
-            }
-            WriteBatchToActors(std::move(write.NewBatch), std::move(write.OldBatch));
+            Memory -= write->GetMemory();
+            WriteBatchToActors(std::move(write));
         }
         Writes.clear();
     }
 
-    void WriteBatchToActors(IDataBatchPtr newBatch, IDataBatchPtr oldBatch) {
+    void WriteBatchToActors(IDataBatchPtr batch) {
         for (auto& [actorPathId, actorInfo] : PathWriteInfo) {
             // At first, write to indexes
             if (PathId != actorPathId) {
-                if (oldBatch) {
-                    actorInfo.KeyProjection->Fill(oldBatch);
+                if (actorInfo.KeyProjection) {
+                    actorInfo.KeyProjection->Fill(batch);
                     auto preparedKeyBatch = actorInfo.KeyProjection->Flush();
                     actorInfo.WriteActor->Write(
                         Cookie,
@@ -1600,7 +1593,7 @@ private:
                         std::move(preparedKeyBatch));
                     actorInfo.WriteActor->FlushBuffer(Cookie);
                 }
-                actorInfo.Projection->Fill(newBatch);
+                actorInfo.Projection->Fill(batch);
                 auto preparedBatch = actorInfo.Projection->Flush();
                 actorInfo.WriteActor->Write(
                     Cookie,
@@ -1614,10 +1607,11 @@ private:
 
         auto& actorInfo = PathWriteInfo.at(PathId);
         if (actorInfo.Projection) {
-            actorInfo.Projection->Fill(newBatch);
-            newBatch = actorInfo.Projection->Flush();
+            actorInfo.Projection->Fill(batch);
+            batch = actorInfo.Projection->Flush();
         }
-        PathWriteInfo.at(PathId).WriteActor->Write(Cookie, OperationType, std::move(newBatch));
+        AFL_ENSURE(!actorInfo.KeyProjection);
+        PathWriteInfo.at(PathId).WriteActor->Write(Cookie, OperationType, std::move(batch));
     }
 
     void CloseWrite() {
@@ -1637,15 +1631,12 @@ private:
     THashMap<TPathId, TPathWriteInfo> PathWriteInfo;
     THashMap<TPathId, TPathLookupInfo> PathLookupInfo;
 
-    TVector<ui32> LookupNewColumns;
-    TVector<ui32> LookupOldColumns;
-
     bool Closed = false;
     i64 Memory = 0;
 
     std::vector<IDataBatchPtr> BufferedBatches;
     std::vector<IDataBatchPtr> ProcessBatches;
-    std::vector<TWrite> Writes;
+    std::vector<IDataBatchPtr> Writes;
     std::vector<TConstArrayRef<TCell>> ProcessCells;
     THashMap<TConstArrayRef<TCell>, ui32, NKikimr::TCellVectorsHash, NKikimr::TCellVectorsEquals> KeyToIndex;
 };
@@ -2267,7 +2258,7 @@ public:
 
             token = TWriteToken{settings.TableId.PathId, CurrentWriteToken++};
 
-            std::vector<std::pair<TKqpTableWriteActor*, IDataBatchProjectionPtr>> writes;
+            std::vector<TKqpWriteTask::TPathWriteInfo> writes;
 
             AFL_ENSURE(writeInfo.Actors.size() > settings.Indexes.size());
             for (auto& indexSettings : settings.Indexes) {
@@ -2285,9 +2276,11 @@ public:
                     std::move(indexSettings.WriteIndex),
                     settings.Priority);
 
-                writes.emplace_back(
-                    writeInfo.Actors.at(indexSettings.TableId.PathId).WriteActor,
-                    projection);
+                writes.emplace_back(TKqpWriteTask::TPathWriteInfo{
+                    .Projection = projection,
+                    .KeyProjection = nullptr,
+                    .WriteActor = writeInfo.Actors.at(indexSettings.TableId.PathId).WriteActor,
+                });
             }
 
             writeInfo.Actors.at(settings.TableId.PathId).WriteActor->Open(
@@ -2296,9 +2289,11 @@ public:
                 std::move(settings.Columns),
                 std::move(settings.WriteIndex),
                 settings.Priority);
-            writes.emplace_back(
-                writeInfo.Actors.at(settings.TableId.PathId).WriteActor,
-                nullptr);
+            writes.emplace_back(TKqpWriteTask::TPathWriteInfo{
+                .Projection = nullptr,
+                .KeyProjection = nullptr,
+                .WriteActor = writeInfo.Actors.at(settings.TableId.PathId).WriteActor,
+            });
 
             WriteTasks.emplace(
                 token.Cookie,
@@ -2307,7 +2302,8 @@ public:
                     settings.Priority,
                     settings.TableId.PathId,
                     settings.OperationType,
-                    std::move(writes)
+                    std::move(writes),
+                    {}
                 });
         } else {
             token = *ev->Get()->Token;

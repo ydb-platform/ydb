@@ -33,8 +33,9 @@ public:
     virtual bool IsEmpty() const = 0;
     virtual i64 GetMemory() const = 0;
 
-    virtual void AddRow(const TConstArrayRef<TCell> row) = 0;
-    virtual IDataBatchPtr Flush(bool force) = 0;
+    virtual void AddCell(const TCell& cell) = 0;
+    virtual void AddRow() = 0;
+    virtual IDataBatchPtr Flush() = 0;
 };
 
 using IRowsBatcherPtr = TIntrusivePtr<IRowsBatcher>;
@@ -80,7 +81,7 @@ IDataBatchProjectionPtr CreateDataBatchProjection(
     const TConstArrayRef<ui32> outputWriteIndex,
     std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc);
 
-IDataBatchProjectionPtr CreateDataBatchKeyProjection(
+IDataBatchProjectionPtr CreateDataBatchProjection(
     std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc);
 
 std::vector<TConstArrayRef<TCell>> GetSortedUniqueRows(

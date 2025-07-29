@@ -831,26 +831,37 @@ private:
 class TRowsBatcherProxy : public IRowsBatcher {
 public:
     TRowsBatcherProxy(const size_t columnsCount, std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc) 
-        : RowBatcher(columnsCount, std::nullopt, alloc) {
+        : ColumnsCount(columnsCount)
+        , RowBatcher(columnsCount, std::nullopt, alloc) {
+        CurrentRow.reserve(columnsCount);
     }
 
     bool IsEmpty() const override {
-        return RowBatcher.IsEmpty();
+        return RowBatcher.IsEmpty() && CurrentRow.empty();
     }
 
     i64 GetMemory() const override {
         return RowBatcher.GetMemory();
     }
 
-    void AddRow(TConstArrayRef<TCell> row) override {
-        RowBatcher.AddRow(row);
+    void AddCell(const TCell& cell) override {
+        AFL_ENSURE(CurrentRow.size() < ColumnsCount);
+        CurrentRow.push_back(cell);
     }
 
-    IDataBatchPtr Flush(bool force) override {
-        return RowBatcher.Flush(force);
+    void AddRow() override {
+        AFL_ENSURE(CurrentRow.size() == ColumnsCount);
+        RowBatcher.AddRow(CurrentRow);
+        CurrentRow.clear();
+    }
+
+    IDataBatchPtr Flush() override {
+        return RowBatcher.Flush(true);
     }
 
 private:
+    size_t ColumnsCount;
+    TVector<TCell> CurrentRow;
     TRowsBatcher RowBatcher;
 };
 

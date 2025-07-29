@@ -3998,6 +3998,8 @@ public:
     TTabletId TabletId = 0;
     TTabletId SchemeShard = 0;
     TObjectId PathId = 0;
+    TTabletId OldSchemeShard = 0;
+    TObjectId OldPathId = 0;
     bool Success = false;
 
     TTxMonEvent_SetDomain(const TActorId& source, NMon::TEvRemoteHttpInfo::TPtr& ev, TSelf* hive)
@@ -4007,8 +4009,10 @@ public:
         , Source(source)
     {
         TabletId = FromStringWithDefault<TTabletId>(Event->Cgi().Get("tablet"), TabletId);
-        SchemeShard = FromStringWithDefault<TTabletId>(Event->Cgi().Get("schemeshard"), TabletId);
-        PathId = FromStringWithDefault<TObjectId>(Event->Cgi().Get("pathid"), TabletId);
+        SchemeShard = FromStringWithDefault<TTabletId>(Event->Cgi().Get("schemeshard"), SchemeShard);
+        PathId = FromStringWithDefault<TObjectId>(Event->Cgi().Get("pathid"), PathId);
+        OldSchemeShard = FromStringWithDefault<TTabletId>(Event->Cgi().Get("oldSchemeshard"), OldSchemeShard);
+        OldPathId = FromStringWithDefault<TObjectId>(Event->Cgi().Get("oldPathid"), OldPathId);
     }
 
     TTxType GetTxType() const override { return NHive::TXTYPE_MON_SET_DOMAIN; }
@@ -4016,6 +4020,7 @@ public:
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         TLeaderTabletInfo* tablet = Self->FindTablet(TabletId);
         TSubDomainKey newDomain(SchemeShard, PathId);
+        TSubDomainKey clientOldDomain(OldSchemeShard, OldPathId);
         if (tablet != nullptr) {
             NIceDb::TNiceDb db(txc.DB);
             auto rowset = db.Table<Schema::Tablet>().Key(TabletId).Select<Schema::Tablet::ObjectDomain>();
@@ -4023,13 +4028,18 @@ public:
                 return false;
             }
             TSubDomainKey oldDomain(rowset.GetValueOrDefault<Schema::Tablet::ObjectDomain>());
+            if (clientOldDomain && oldDomain != clientOldDomain) {
+                ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes(TStringBuilder() << "{\"status\": \"ERROR\", \"error\":\"Old domain does not match, have " << oldDomain <<  ", provided " << clientOldDomain << "\"}"));
+                return true;
+            }
             if (rowset.HaveValue<Schema::Tablet::ObjectDomain>() && (bool)oldDomain) {
                 if (oldDomain == newDomain) {
                     ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes(TStringBuilder() << "{\"status\":\"ALREADY\"}"));
-                } else {
+                    return true;
+                } else if (!clientOldDomain) {
                     ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes(TStringBuilder() << "{\"status\": \"ERROR\", \"error\":\"Domain already set to " << oldDomain << "\"}"));
+                    return true;
                 }
-                return true;
             }
             tablet->AssignDomains(newDomain, tablet->NodeFilter.AllowedDomains);
             tablet->TabletStorageInfo->TenantPathId = tablet->GetTenant();

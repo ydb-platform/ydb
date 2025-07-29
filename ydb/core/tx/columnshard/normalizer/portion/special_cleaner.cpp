@@ -133,20 +133,24 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TDeleteTrashImpl::DoInit(
     if (!keysToDelete) {
         return TConclusionStatus::Fail("Not ready");
     }
-    AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD)("normalizer", "TDeleteTrash")(
-        "message", TStringBuilder() << "found " << keysToDelete->size() << " rows to delete grouped in " << keysToDelete->size() << " batches");
 
     std::vector<INormalizerTask::TPtr> result;
     std::vector<std::shared_ptr<IAction>> batch;
+    ui64 batchCount = 0;
     for (auto&& action : *keysToDelete) {
         batch.emplace_back(std::move(action));
         if (batch.size() == MaxBatchSize) {
             result.emplace_back(std::make_shared<TTrivialNormalizerTask>(std::make_shared<TChanges>(std::move(batch))));
+            batch = {};
+            ++batchCount;
         }
     }
     if (!batch.empty()) {
         result.emplace_back(std::make_shared<TTrivialNormalizerTask>(std::make_shared<TChanges>(std::move(batch))));
+        ++batchCount;
     }
+    AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD)("normalizer", "TDeleteTrash")(
+        "message", TStringBuilder() << "found " << keysToDelete->size() << " columns to delete grouped in " << batchCount << " batches");
     return result;
 }
 

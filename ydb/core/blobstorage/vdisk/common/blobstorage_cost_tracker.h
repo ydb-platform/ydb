@@ -379,7 +379,7 @@ public:
     template<class TEvent>
     void CountScrubRequest(const TEvent& ev) {
         ui64 cost = GetCost(ev);
-        MonGroup->UserDiskCost() += cost;
+        MonGroup->ScrubDiskCost() += cost;
         CountRequest(cost);
     }
 

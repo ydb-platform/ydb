@@ -299,9 +299,7 @@ public:
         SpillerFactory = spillerFactory;
     }
 
-    void SetMemoryUsageReporter(TMemoryUsageReporter::TPtr memoryUsageReporter) override {
-        MemoryUsageReporter = memoryUsageReporter;
-    }
+
 
     TString GetOutputDebugString() override {
         if (AllocatedHolder->Output) {
@@ -567,7 +565,6 @@ public:
             SpillerFactory->SetTaskCounters(SpillingTaskCounters);
         }
         AllocatedHolder->ProgramParsed.CompGraph->GetContext().SpillerFactory = std::move(SpillerFactory);
-        AllocatedHolder->ProgramParsed.CompGraph->GetContext().MemoryUsageReporter = MemoryUsageReporter;
 
         for (ui32 i = 0; i < task.InputsSize(); ++i) {
             auto& inputDesc = task.GetInputs(i);
@@ -1028,7 +1025,6 @@ private:
 
 private:
     std::shared_ptr<ISpillerFactory> SpillerFactory;
-    TMemoryUsageReporter::TPtr MemoryUsageReporter;
     TIntrusivePtr<TSpillingTaskCounters> SpillingTaskCounters;
     NUdf::TUniquePtr<NUdf::ILogProvider> ComputationLogProvider;
 

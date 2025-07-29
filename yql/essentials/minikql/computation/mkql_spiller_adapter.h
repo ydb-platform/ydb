@@ -36,7 +36,9 @@ public:
         Packer.AddWideItem(wideItem.data(), wideItem.size());
         auto newPackerEstimatedSize = Packer.PackedSizeEstimate();
         Y_ENSURE(newPackerEstimatedSize >= PackerEstimatedSize, "MISHA size should be grater");
-        MemoryUsageReporter->ReportAllocate(newPackerEstimatedSize - PackerEstimatedSize);
+        if (MemoryUsageReporter) {
+            MemoryUsageReporter->ReportAllocate(newPackerEstimatedSize - PackerEstimatedSize);
+        }
         PackerEstimatedSize = newPackerEstimatedSize;
         if (newPackerEstimatedSize > SizeLimit) {
             return Spiller->Put(std::move(Packer.Finish()));
@@ -54,7 +56,9 @@ public:
 
     void AsyncWriteCompleted(ISpiller::TKey key) {
         StoredChunks.push_back(key);
-        MemoryUsageReporter->ReportFree(PackerEstimatedSize);
+        if (MemoryUsageReporter) {
+            MemoryUsageReporter->ReportFree(PackerEstimatedSize);
+        }
         PackerEstimatedSize = 0;
     }
 

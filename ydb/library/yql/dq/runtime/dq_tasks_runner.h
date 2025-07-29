@@ -455,7 +455,6 @@ public:
     virtual const NKikimr::NMiniKQL::TWatermark& GetWatermark() const = 0;
 
     virtual void SetSpillerFactory(std::shared_ptr<NKikimr::NMiniKQL::ISpillerFactory> spillerFactory) = 0;
-    virtual void SetMemoryUsageReporter(NKikimr::NMiniKQL::TMemoryUsageReporter::TPtr memoryUsageReporter) = 0;
     virtual TString GetOutputDebugString() = 0;
 };
 

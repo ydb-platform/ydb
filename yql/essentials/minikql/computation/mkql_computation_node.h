@@ -2,7 +2,6 @@
 
 #include "mkql_computation_node_list.h"
 #include "mkql_spiller_factory.h"
-#include "mkql_memory_usage_reporter.h"
 
 #include <yql/essentials/minikql/defs.h>
 #include <yql/essentials/minikql/mkql_node.h>
@@ -126,7 +125,7 @@ struct TComputationContext : public TComputationContextLLVM {
     const NUdf::ISecureParamsProvider *const SecureParamsProvider;
     const NUdf::ILogProvider* LogProvider;
     NYql::TLangVersion LangVer = NYql::UnknownLangVersion;
-    TMemoryUsageReporter::TPtr MemoryUsageReporter = nullptr;
+
 
     TComputationContext(const THolderFactory& holderFactory,
         const NUdf::IValueBuilder* builder,

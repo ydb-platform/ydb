@@ -1462,13 +1462,21 @@ void TCms::RemoveRequest(TEvCms::TEvManageRequestRequest::TPtr &ev, const TActor
 
 void TCms::ManuallyApproveRequest(TEvCms::TEvManageRequestRequest::TPtr &ev, const TActorContext &ctx)
 {
+    // This actor waits for permission response and then sends manage request response
+    // with approved permissions to the sender of the request while also removing scheduled request.
     class TRequestApproveActor : public TActorBootstrapped<TRequestApproveActor> {
     public:
+        TString RequestId;
+
+        TCmsStatePtr State;
 
         TActorId SendTo;
 
-        TRequestApproveActor(TActorId sendTo) : SendTo(sendTo) {}
-        
+        TRequestApproveActor(TString requestId, TCmsStatePtr state, TActorId sendTo)
+        : RequestId(std::move(requestId))
+        , State(std::move(state))
+        , SendTo(sendTo) {}
+
         void Bootstrap() {
             Become(&TRequestApproveActor::StateWork);
         }
@@ -1476,11 +1484,26 @@ void TCms::ManuallyApproveRequest(TEvCms::TEvManageRequestRequest::TPtr &ev, con
         void Handle(TEvCms::TEvPermissionResponse::TPtr &ev) {
             auto resp = ev->Get();
 
+            NKikimrCms::TStatus status = resp->Record.GetStatus();
+
             TAutoPtr<TEvCms::TEvManageRequestResponse> manageResponse = new TEvCms::TEvManageRequestResponse;
+
+            if (status.GetCode() != TStatus::ALLOW) {
+                manageResponse->Record.MutableStatus()->SetCode(status.GetCode());
+                manageResponse->Record.MutableStatus()->SetReason(status.GetReason());
+                auto handle = new IEventHandle(SendTo, SelfId(), manageResponse.Release(), 0, ev->Cookie);
+                Send(handle);
+                PassAway();
+                return;
+            }
+
             manageResponse->Record.MutableStatus()->SetCode(TStatus::OK);
             for (auto& permission : resp->Record.permissions()) {
                 manageResponse->Record.AddManuallyApprovedPermissions(permission.GetId());
             }
+
+            // Remove the scheduled request
+            State->ScheduledRequests.erase(RequestId);
 
             auto handle = new IEventHandle(SendTo, SelfId(), manageResponse.Release(), 0, ev->Cookie);
             Send(handle);
@@ -1498,13 +1521,15 @@ void TCms::ManuallyApproveRequest(TEvCms::TEvManageRequestRequest::TPtr &ev, con
         }
     };
 
-    auto actor = new TRequestApproveActor(ev->Sender);
+    auto &rec = ev->Get()->Record;
+
+    TString requestId = rec.GetRequestId();
+
+    auto actor = new TRequestApproveActor(requestId, State, ev->Sender);
     TActorId approveActorId = ctx.RegisterWithSameMailbox(actor);
 
-    auto &rec = ev->Get()->Record;
-    // Manual approval: forcefully grant permission for the request
     // Find the scheduled request by RequestId
-    auto it = State->ScheduledRequests.find(rec.GetRequestId());
+    auto it = State->ScheduledRequests.find(requestId);
     if (it == State->ScheduledRequests.end()) {
         return ReplyWithError<TEvCms::TEvManageRequestResponse>(
             ev, TStatus::WRONG_REQUEST, "Unknown request for manual approval", ctx);
@@ -1520,9 +1545,6 @@ void TCms::ManuallyApproveRequest(TEvCms::TEvManageRequestRequest::TPtr &ev, con
         perm->MutableAction()->CopyFrom(action);
         perm->SetDeadline(TInstant::Now().GetValue() + copy->Request.GetDuration());
     }
-
-    // Accept permissions and remove the scheduled request
-    State->ScheduledRequests.erase(it);
 
     AcceptPermissions(resp->Record, rec.GetRequestId(), rec.GetUser(), ctx, true);
 

@@ -95,7 +95,6 @@ protected:
 
         const ui64 tableId = restoreSrc.GetSrcPathId().GetLocalId();
         
-        // Check if source table exists in DataShard
         if (!DataShard.GetUserTables().contains(tableId)) {
             Abort(op, ctx, TStringBuilder() << "Source table for incremental restore not found in DataShard, tableId: " << tableId
                   << ", OwnerId: " << restoreSrc.GetSrcPathId().GetOwnerId() 
@@ -177,7 +176,6 @@ protected:
             return;
         }
 
-        // For incremental restore, get the source table ID from CreateIncrementalRestoreSrc
         if (!tx->GetSchemeTx().HasCreateIncrementalRestoreSrc()) {
             return;
         }
@@ -185,7 +183,6 @@ protected:
         const auto& restoreSrc = tx->GetSchemeTx().GetCreateIncrementalRestoreSrc();
         const ui64 tableId = restoreSrc.GetSrcPathId().GetLocalId();
 
-        // Check if the source table exists before trying to cancel the scan
         if (!DataShard.GetUserTables().contains(tableId)) {
             // Table not found, just reset the scan task
             tx->SetScanTask(0);

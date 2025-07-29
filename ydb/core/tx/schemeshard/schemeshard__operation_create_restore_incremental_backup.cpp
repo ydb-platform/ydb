@@ -44,7 +44,6 @@ protected:
 
         auto& op = *tx.MutableCreateIncrementalRestoreSrc();
         
-        // Check if we have the transaction data (normal operation) or need to reconstruct from state (restoration)
         if (RestoreOp.GetSrcPathIds().size() > 0 && RestoreOp.GetSrcTablePaths().size() > 0) {
             // Normal operation: use data from RestoreOp
             op.MutableSrcPathId()->CopyFrom(RestoreOp.GetSrcPathIds(0));
@@ -56,15 +55,12 @@ protected:
             Y_ABORT_UNLESS(txState);
             Y_ABORT_UNLESS(txState->SourcePathId);
             
-            // Get source path info
             Y_ABORT_UNLESS(context.SS->PathsById.contains(txState->SourcePathId));
             auto srcPath = TPath::Init(txState->SourcePathId, context.SS);
             
-            // Fill source data
             txState->SourcePathId.ToProto(op.MutableSrcPathId());
             op.SetSrcTablePath(srcPath.PathString());
             
-            // Fill destination data
             auto dstPath = TPath::Init(pathId, context.SS);
             op.SetDstTablePath(dstPath.PathString());
         }
@@ -258,14 +254,12 @@ public:
         Y_ABORT_UNLESS(txState);
         Y_ABORT_UNLESS(IsExpectedTxType(txState->TxType));
 
-        // Check if we have the transaction data (normal operation) or need to reconstruct from state (restoration)
+        // FIXME: should we release all path states here? Seems now our RestoreMultipleIncrementalBackups became Single again, need to fix it.
         if (RestoreOp.GetSrcPathIds().size() > 0) {
-            // Normal operation: use data from RestoreOp
             for (const auto& pathId : RestoreOp.GetSrcPathIds()) {
                 context.OnComplete.ReleasePathState(OperationId, TPathId::FromProto(pathId), TPathElement::EPathState::EPathStateNoChanges);
             }
         } else {
-            // Restoration: use source path from transaction state
             if (txState->SourcePathId) {
                 context.OnComplete.ReleasePathState(OperationId, txState->SourcePathId, TPathElement::EPathState::EPathStateNoChanges);
             }

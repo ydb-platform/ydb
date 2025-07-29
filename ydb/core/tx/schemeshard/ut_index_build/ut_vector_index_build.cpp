@@ -382,7 +382,7 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
                 const ui64 result = TRUCalculator::Calculate(stats, explain);
 
                 // Note: in case of any cost changes, documentation is needed to be updated correspondingly.
-                // https://yandex.cloud/ru/docs/ydb/pricing/ru-special#secondary-index
+                // https://yandex.cloud/ru/docs/ydb/pricing/ru-special#vector-index
                 UNIT_ASSERT_VALUES_EQUAL_C(result, levels * Max<ui64>(dataSizeMB * 1152, dataSizeMB * 640 + rowCount * 0.5), explain);
             }
         }

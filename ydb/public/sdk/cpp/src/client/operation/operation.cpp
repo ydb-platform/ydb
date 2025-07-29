@@ -10,6 +10,7 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/import/import.h>
 #include <ydb/public/sdk/cpp/src/client/ss_tasks/task.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_backup.h>
 
 #include <ydb/public/api/grpc/ydb_operation_v1.grpc.pb.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/library/operation_id/operation_id.h>
@@ -204,6 +205,12 @@ template TFuture<NQuery::TScriptExecutionOperation> TOperationClient::Get(const 
 template <>
 TFuture<TOperationsList<NQuery::TScriptExecutionOperation>> TOperationClient::List(ui64 pageSize, const std::string& pageToken) {
     return List<NQuery::TScriptExecutionOperation>("scriptexec", pageSize, pageToken);
+}
+
+template TFuture<NBackup::TIncrementalBackupResponse> TOperationClient::Get(const TOperation::TOperationId& id);
+template <>
+TFuture<TOperationsList<NBackup::TIncrementalBackupResponse>> TOperationClient::List(ui64 pageSize, const std::string& pageToken) {
+    return List<NBackup::TIncrementalBackupResponse>("incbackup", pageSize, pageToken);
 }
 
 } // namespace NOperation

@@ -46,6 +46,17 @@ protected:
         out.mutable_result()->PackFrom(result);
     }
 
+    template <typename TMetadata, typename TResult>
+    static void Fill(Operation& out, const TOperation& in) {
+        TMetadata metadata;
+        metadata.set_progress(in.GetProgress());
+        metadata.mutable_items_progress()->CopyFrom(in.GetItemsProgress());
+        out.mutable_metadata()->PackFrom(metadata);
+
+        TResult result;
+        out.mutable_result()->PackFrom(result);
+    }
+
 }; // TOperationConv
 
 }

@@ -66,6 +66,9 @@ std::string ProtoToString(const Ydb::TOperationId& proto) {
         case Ydb::TOperationId::SCRIPT_EXECUTION:
             res << "ydb://scriptexec";
             break;
+        case Ydb::TOperationId::INCREMENTAL_BACKUP:
+            res << "ydb://incbackup";
+            break;
         default:
             Y_ABORT_UNLESS(false, "unexpected kind");
     }

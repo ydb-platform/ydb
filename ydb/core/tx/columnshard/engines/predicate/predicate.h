@@ -15,7 +15,7 @@ private:
     EOperation Operation{ EOperation::Unspecified };
 
 public:
-    static TPredicate Empty();
+    static TPredicate MakeEmpty();
     static std::shared_ptr<arrow::RecordBatch> CutNulls(const std::shared_ptr<arrow::RecordBatch>& batch);
 
     std::shared_ptr<arrow::RecordBatch> Batch;

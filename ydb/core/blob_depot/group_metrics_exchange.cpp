@@ -83,8 +83,6 @@ namespace NKikimr::NBlobDepot {
 
             auto *wb = record.MutableWhiteboardUpdate();
             wb->SetGroupID(Config.GetVirtualGroupId());
-            wb->SetAllocatedSize(Data->GetTotalStoredDataSize());
-            wb->SetAvailableSize(params->GetAvailableSize());
             wb->SetReadThroughput(ReadThroughput);
             wb->SetWriteThroughput(WriteThroughput);
 

@@ -258,8 +258,8 @@ message TBSGroupStateInfo {
     optional EFlag Latency = 8 [(DefaultField) = true];
     optional uint32 Count = 13; // filled during group count
     optional string StoragePoolName = 14 [(DefaultField) = true]; // from BS_CONTROLLER
-    optional uint64 AllocatedSize = 15 [(InsignificantChangeAmount) = 100000000, (DefaultField) = true];
-    optional uint64 AvailableSize = 16 [(InsignificantChangeAmount) = 100000000,  (DefaultField) = true];
+    // optional uint64 AllocatedSize = 15 [(InsignificantChangeAmount) = 100000000, (DefaultField) = true];
+    // optional uint64 AvailableSize = 16 [(InsignificantChangeAmount) = 100000000,  (DefaultField) = true];
     optional uint64 ReadThroughput = 17 [(DefaultField) = true];
     optional uint64 WriteThroughput = 18 [(DefaultField) = true];
     optional bool Encryption = 19 [(DefaultField) = true];

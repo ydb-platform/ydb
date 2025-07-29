@@ -1685,7 +1685,7 @@ message TAuditConfig {
         }
 
         optional ELogClass LogClass = 1; // Log class selector. Default is used for all log classes that were not included in config
-        optional bool WriteApiCalls = 2; // Enables audit logging for specified log class
+        optional bool EnableLogging = 2; // Enables audit logging for specified log class
         repeated EAccountType ExcludeAccountType = 3; // If audit logging for log class is enabled, excludes logging for these account types
     }
 

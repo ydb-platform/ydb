@@ -48,11 +48,18 @@ public:
 
 class TTiersManager: public ITiersManager {
 public:
+    enum class ETierState {
+        REQUESTED = 1,
+        UNAVAILABLE = 2,
+        AVAILABLE = 3,
+    };
+
     class TTierGuard : NNonCopyable::TMoveOnly {
     private:
         NTiers::TExternalStorageId StorageId;
         std::optional<NTiers::TTierConfig> Config;
         TTiersManager* Owner;
+        YDB_READONLY(ETierState, State, TTiersManager::ETierState::REQUESTED);
 
     public:
         bool HasConfig() const {
@@ -64,7 +71,13 @@ public:
         }
 
         void UpsertConfig(NTiers::TTierConfig config) {
+            State = ETierState::AVAILABLE;
             Config = std::move(config);
+        }
+
+        void ResetConfig() {
+            State = ETierState::UNAVAILABLE;
+            Config.reset();
         }
 
         const NTiers::TExternalStorageId& GetStorageId() const {

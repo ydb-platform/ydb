@@ -230,7 +230,7 @@ private:
     const char* RequestTemp = R"(
         %sSettings {
             %s
-            endpoint: "localhost:%d"
+            endpoint: "localhost:0"
             scheme: HTTP
         }
     )";

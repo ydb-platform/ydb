@@ -20,7 +20,7 @@ def kikimr():
         cloud_mode=True,
         node_count={"/cp": TenantConfig(1), "/alpha": TenantConfig(1), "/beta": TenantConfig(2)},
         tenant_mapping={"alpha": "/alpha", "beta": "/beta"},
-        cloud_mapping={"a_cloud": ("alpha", None), "b_cloud": ("beta", "1"), "c_cloud": ("beta", "2")},
+        cloud_mapping={"a_cloud": ("alpha", None), "b_cloud": ("beta", "1 "), "c_cloud": ("beta", " 2"), "d_cloud": ("beta", " 1 - 2 ")},
     )
     kikimr = StreamingOverKikimr(kikimr_conf)
     kikimr.start_mvp_mock_server()
@@ -101,6 +101,14 @@ class TestMapping(TestYdsBase):
         assert self.wait_until((lambda: kikimr.tenants["/beta"].get_actor_count(1, "DQ_COMPUTE_ACTOR") == 0))
         c_client.abort_query(query_id)
         c_client.wait_query(query_id)
+
+        d_client = FederatedQueryClient("d_folder@d_cloud", streaming_over_kikimr=kikimr)
+        d_client.create_yds_connection("yds", os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"))
+        query_id = d_client.create_query("a", sql, type=fq.QueryContent.QueryType.STREAMING).result.query_id
+        kikimr.tenants["/beta"].wait_completed_checkpoints(query_id, kikimr.tenants["/beta"].get_completed_checkpoints(query_id) + 2)
+        assert self.wait_until(lambda: kikimr.tenants["/beta"].get_actor_count(1, "YQ_RUN_ACTOR") == 1 or kikimr.tenants["/beta"].get_actor_count(2, "YQ_RUN_ACTOR") == 1)
+        d_client.abort_query(query_id)
+        d_client.wait_query(query_id)
 
     def test_mapping_with_nodes_with_scheduler(self, kikimr):
         self.init_topics("test_mapping_with_nodes_with_scheduler", create_output=False)

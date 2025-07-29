@@ -9,10 +9,6 @@
 #include <ydb/library/formats/arrow/switch/switch_type.h>
 
 namespace NKikimr::NOlap {
-TPredicate TPredicate::Empty() {
-    return TPredicate(NKernels::EOperation::AlwaysTrue, std::shared_ptr<arrow::RecordBatch>());
-}
-
 TPredicate::TPredicate(EOperation op, std::shared_ptr<arrow::RecordBatch> batch) noexcept
     : Operation(op)
     , Batch(std::move(batch)) {
@@ -115,8 +111,8 @@ std::pair<NKikimr::NOlap::TPredicate, NKikimr::NOlap::TPredicate> TPredicate::De
 
     if (leftTrailingNull || rightTrailingNull) {
         return {
-           TPredicate::Empty();
-           TPredicate::Empty();
+           TPredicate::Empty(),
+           TPredicate::Empty()
         };
     }
 
@@ -223,4 +219,9 @@ bool TPredicate::HasNulls() const {
     }
     return false;
 }
+
+TPredicate TPredicate::Empty() {
+    return TPredicate(NKernels::EOperation::AlwaysTrue, std::shared_ptr<arrow::RecordBatch>());
+}
+
 }   // namespace NKikimr::NOlap

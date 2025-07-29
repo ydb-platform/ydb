@@ -827,7 +827,7 @@ TVector<std::pair<TString, TExprNode::TPtr>> CollectOlapOperationsForProjections
 
                         if (!predicateMembers.contains(originalMemberName)) {
                             if (projectionMembers.contains(originalMemberName)) {
-                                originalMemberName = originalMemberName + std::to_string(nextMemberId++);
+                                originalMemberName = "__kqp_olap_projection_" + originalMemberName + ToString(nextMemberId++);
                             } else {
                                 projectionMembers.insert(originalMemberName);
                             }

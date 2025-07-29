@@ -367,7 +367,7 @@ private:
             TableServiceConfig.GetEnableSpillingInHashJoinShuffleConnections() != enableSpillingInHashJoinShuffleConnections ||
             TableServiceConfig.GetEnableOlapScalarApply() != enableOlapScalarApply ||
             TableServiceConfig.GetEnableOlapSubstringPushdown() != enableOlapSubstringPushdown ||
-            TableServiceConfig.GetEnableTempTablesForUser() != enableTempTablesForUser
+            TableServiceConfig.GetEnableTempTablesForUser() != enableTempTablesForUser ||
             TableServiceConfig.GetEnableOlapPushdownProjections() != enableOlapPushdownProjections)
         {
 

@@ -1543,7 +1543,8 @@ void TCms::ManuallyApproveRequest(TEvCms::TEvManageRequestRequest::TPtr &ev, con
     for (const auto& action : copy->Request.GetActions()) {
         auto* perm = resp->Record.AddPermissions();
         perm->MutableAction()->CopyFrom(action);
-        perm->SetDeadline(TInstant::Now().GetValue() + copy->Request.GetDuration());
+        TInstant deadline = TActivationContext::Now() + TDuration::MicroSeconds(copy->Request.GetDuration());
+        perm->SetDeadline(deadline.GetValue());
     }
 
     AcceptPermissions(resp->Record, rec.GetRequestId(), rec.GetUser(), ctx, true);

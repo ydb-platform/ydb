@@ -2,6 +2,23 @@
 
 namespace NKikimr::NAudit {
 
+namespace {
+
+NACLibProto::ESubjectType ToSubjectType(NKikimrConfig::TAuditConfig::TLogClassConfig::EAccountType accountType) {
+    switch (accountType) {
+    case NKikimrConfig::TAuditConfig::TLogClassConfig::Anonymous:
+        return NACLibProto::SUBJECT_TYPE_ANONYMOUS;
+    case NKikimrConfig::TAuditConfig::TLogClassConfig::User:
+        return NACLibProto::SUBJECT_TYPE_USER;
+    case NKikimrConfig::TAuditConfig::TLogClassConfig::Service:
+        return NACLibProto::SUBJECT_TYPE_SERVICE;
+    case NKikimrConfig::TAuditConfig::TLogClassConfig::ServiceImpersonatedFromUser:
+        return NACLibProto::SUBJECT_TYPE_SERVICE_IMPERSONATED_FROM_USER;
+    }
+}
+
+}
+
 TAuditConfig::TAuditConfig(const NKikimrConfig::TAuditConfig& cfg)
     : NKikimrConfig::TAuditConfig(cfg)
 {
@@ -29,19 +46,6 @@ bool TAuditConfig::EnableLogging(NKikimrConfig::TAuditConfig::TLogClassConfig::E
         }
     }
     return true;
-}
-
-static NACLibProto::ESubjectType ToSubjectType(NKikimrConfig::TAuditConfig::TLogClassConfig::EAccountType accountType) {
-    switch (accountType) {
-    case NKikimrConfig::TAuditConfig::TLogClassConfig::Anonymous:
-        return NACLibProto::SUBJECT_TYPE_ANONYMOUS;
-    case NKikimrConfig::TAuditConfig::TLogClassConfig::User:
-        return NACLibProto::SUBJECT_TYPE_USER;
-    case NKikimrConfig::TAuditConfig::TLogClassConfig::Service:
-        return NACLibProto::SUBJECT_TYPE_SERVICE;
-    case NKikimrConfig::TAuditConfig::TLogClassConfig::ServiceImpersonatedFromUser:
-        return NACLibProto::SUBJECT_TYPE_SERVICE_IMPERSONATED_FROM_USER;
-    }
 }
 
 void TAuditConfig::ResetLogClassMap() {

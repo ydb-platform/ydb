@@ -99,7 +99,8 @@ struct TRequestCreatePQ {
         const TVector<TString>& important = {},
         std::optional<NKikimrPQ::TMirrorPartitionConfig> mirrorFrom = {},
         ui64 sourceIdMaxCount = 6000000,
-        ui64 sourceIdLifetime = 86400
+        ui64 sourceIdLifetime = 86400,
+        std::optional<NKikimrPQ::TPQTabletConfig::TPartitionStrategy> partitionStrategy = {}
     )
         : Topic(topic)
         , NumParts(numParts)
@@ -112,6 +113,7 @@ struct TRequestCreatePQ {
         , ReadRules(readRules)
         , Important(important)
         , MirrorFrom(mirrorFrom)
+        , PartitionStrategy(std::move(partitionStrategy))
         , SourceIdMaxCount(sourceIdMaxCount)
         , SourceIdLifetime(sourceIdLifetime)
     {}
@@ -131,6 +133,7 @@ struct TRequestCreatePQ {
     TVector<TString> Important;
 
     std::optional<NKikimrPQ::TMirrorPartitionConfig> MirrorFrom;
+    std::optional<NKikimrPQ::TPQTabletConfig::TPartitionStrategy> PartitionStrategy;
 
     ui64 SourceIdMaxCount;
     ui64 SourceIdLifetime;
@@ -187,6 +190,12 @@ struct TRequestCreatePQ {
             auto mirrorFromConfig = config->MutablePartitionConfig()->MutableMirrorFrom();
             mirrorFromConfig->CopyFrom(MirrorFrom.value());
         }
+
+        if (PartitionStrategy) {
+            auto* partitionStrategy = config->MutablePartitionStrategy();
+            partitionStrategy->CopyFrom(PartitionStrategy.value());
+        }
+
         return request;
     }
 };
@@ -998,14 +1007,15 @@ public:
         TVector<TString> important = {},
         std::optional<NKikimrPQ::TMirrorPartitionConfig> mirrorFrom = {},
         ui64 sourceIdMaxCount = 6000000,
-        ui64 sourceIdLifetime = 86400
+        ui64 sourceIdLifetime = 86400,
+        std::optional<NKikimrPQ::TPQTabletConfig::TPartitionStrategy> partitionStrategy = {}
     ) {
         Y_ABORT_UNLESS(name.StartsWith("rt3."));
 
         Cerr << "PQ Client: create topic: " << name << " with " << nParts << " partitions" << Endl;
         auto request = TRequestCreatePQ(
                 name, nParts, 0, lifetimeS, lowWatermark, writeSpeed, user, readSpeed, rr, important, mirrorFrom,
-                sourceIdMaxCount, sourceIdLifetime
+                sourceIdMaxCount, sourceIdLifetime, partitionStrategy
         );
         return CreateTopic(request);
     }

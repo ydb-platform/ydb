@@ -186,27 +186,32 @@ function openDescr(evt, lang) {
 </div>
 <div id=russian class="tabcontent">
 <h1>Сравнение дефолтных конфигураций ydbd разных версий</h1>
-В таблице ниже представлены изменения дефолтных конфигураций для разных версий ydbd. Сделано на основе описания конфигураций в <a href="https://github.com/ydb-platform/ydb/blob/main/ydb/core/protos/config.proto">протобуфе</a>.
+В таблице ниже представлены изменения дефолтных конфигураций для разных версий ydbd.
+Сделано на основе описания конфигураций в <a href="https://github.com/ydb-platform/ydb/blob/main/ydb/core/protos/config.proto">протобуфе</a>.
 <p>
 Цвет означает критичность изменений в соседних ветках:
 <ul>
 <li><span style="font-weight:bold">Белый</span> означает, что поле полностью отсутствует в данной версии конфигурации.</li>
 <li><span style="background-color: #aaffaa;font-weight:bold">Зеленый</span> - безопасное изменение, такое как добавление нового поля или включение Feature flag.</li>
-<li><span style="background-color: #ffffaa;font-weight:bold">Желтый</span> - изменение, которое может вызвать изменение поведения, но не должно быть критичным, например изменение значения по умолчанию.</li>
-<li><span style="background-color: #ffaaaa;font-weight:bold">Красный</span> - опасное изменение, которое может все сломать: удаление полей, изменение их типа или id (в протобуфе), выключение Feature flag итд.</li>
+<li><span style="background-color: #ffffaa;font-weight:bold">Желтый</span> - изменение, которое может вызвать изменение поведения,
+но не должно быть критичным, например изменение значения по умолчанию.</li>
+<li><span style="background-color: #ffaaaa;font-weight:bold">Красный</span> - опасное изменение,
+которое может все сломать: удаление полей,изменение их типа или id (в протобуфе), выключение Feature flag итд.</li>
 </ul>
 </p>
 </div>
 <div id=english class="tabcontent">
 <h1>Comparison of ydbd default configurations of different versions</h1>
-The table above shows the changes in default configurations for different versions of ydbd. Based on the description of configurations in the <a href="https://github.com/ydb-platform/ydb/blob/main/ydb/core/protos/config.proto">protobuf</a>.
+The table above shows the changes in default configurations for different versions of ydbd.
+Based on the description of configurations in the <a href="https://github.com/ydb-platform/ydb/blob/main/ydb/core/protos/config.proto">protobuf</a>.
 <p>
 The color indicates the criticality of the changes in the neighboring branches:
 <ul>
 <li><span style="font-weight:bold">White</span> means that the field is completely absent in this version of the configuration.</li>
 <li><span style="background-color: #aaffaa;font-weight:bold">Green</span> - a safe change, such as adding a new field or enabling the Feature flag.</li>
 <li><span style="background-color: #ffffaa;font-weight:bold">Yellow</span> - a change that may cause a change in behavior, but should not be critical, such as changing the default value.</li>
-<li><span style="background-color: #ffaaaa;font-weight:bold">Red</span> - A bad change that can break everything: removing fields, changing their type or id (in protobuf), disabling the Feature flag etc.</li>
+<li><span style="background-color: #ffaaaa;font-weight:bold">Red</span> - A danger change that can break everything:
+removing fields, changing their type or id (in protobuf), disabling the Feature flag etc.</li>
 </ul>
 </p>
 </div>

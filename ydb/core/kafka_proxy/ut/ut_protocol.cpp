@@ -2565,12 +2565,11 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
 
         {
             NYdb::NTopic::TTopicClient pqClient(*testServer.Driver);
-            // create input and output topics
             CreateTopic(pqClient, existedTopicName, 3, {consumerName});
         }
 
         { TKafkaTestClient client(testServer.Port);
-            // аутентифицируемся как пользователь с правами на чтение и запись
+            // authenticating as user with read and write rights
             TString userName = "user123@/Root";
             TString userPassword = "UsErPassword";
             client.AuthenticateToKafka(userName, userPassword);
@@ -2640,7 +2639,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
 
         {
             TKafkaTestClient client(testServer.Port);
-            // аутентифицируемся как пользователь без прав на запись
+            // authenticating as a user with no write rights
             TString userName = "usernorights@/Root";
             TString userPassword = "dummyPass";
             client.AuthenticateToKafka(userName, userPassword);
@@ -2667,7 +2666,6 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
 
         {
             NYdb::NTopic::TTopicClient pqClient(*testServer.Driver);
-            // create input and output topics
             CreateTopic(pqClient, existedTopicName, existedTopicPartitionsNum, {consumerName});
         }
 

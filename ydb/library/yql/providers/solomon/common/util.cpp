@@ -36,8 +36,8 @@ std::map<TString, TString> ExtractSelectorValues(const NSo::NProto::TDqSolomonSo
 
     size_t lbracePos = selectors.find('{');
     size_t rbracePos = selectors.find('}');
-    YQL_ENSURE(lbracePos <= selectors.size());
-    YQL_ENSURE(rbracePos <= selectors.size());
+    YQL_ENSURE(lbracePos != TString::npos);
+    YQL_ENSURE(rbracePos != TString::npos);
 
     if (lbracePos > 0) {
         TString name = StripString(selectors.substr(0, lbracePos));

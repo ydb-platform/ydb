@@ -1374,6 +1374,7 @@ struct TEvBlobStorage {
         TLogoBlobID Id;
         TInstant Deadline;
         NKikimrBlobStorage::EGetHandleClass GetHandleClass;
+        bool SingleLine;    // Print DataInfo in single line
 
         ui32 RestartCounter = 0;
         std::shared_ptr<TExecutionRelay> ExecutionRelay;
@@ -1381,10 +1382,12 @@ struct TEvBlobStorage {
         TEvCheckIntegrity(
                 const TLogoBlobID& id,
                 TInstant deadline,
-                NKikimrBlobStorage::EGetHandleClass getHandleClass)
+                NKikimrBlobStorage::EGetHandleClass getHandleClass,
+                bool singleLine = false)
             : Id(id)
             , Deadline(deadline)
             , GetHandleClass(getHandleClass)
+            , SingleLine(singleLine)
         {}
 
         TString Print(bool /*isFull*/) const {
@@ -1427,13 +1430,44 @@ struct TEvBlobStorage {
             PS_BLOB_IS_RECOVERABLE = 4,     // blob parts are definitely placed incorrectly or there are missing parts but blob may be recovered
             PS_BLOB_IS_LOST = 5,            // blob is lost/unrecoverable
         };
-        EPlacementStatus PlacementStatus = PS_OK;
+
+        static TString PlacementStatusToString(EPlacementStatus status) {
+            switch (status) {
+                case PS_OK:
+                    return "PS_OK";
+                case PS_REPLICATION_IN_PROGRESS:
+                    return "PS_REPLICATION_IN_PROGRESS";
+                case PS_UNKNOWN:
+                    return "PS_UNKNOWN";
+                case PS_BLOB_IS_RECOVERABLE:
+                    return "PS_BLOB_IS_RECOVERABLE";
+                case PS_BLOB_IS_LOST:
+                    return "PS_BLOB_IS_LOST";
+                default:
+                    return "BAD_PLACEMENT_STATUS";
+            }
+        }
 
         enum EDataStatus {
             DS_OK = 1,      // all data parts contain valid data
             DS_UNKNOWN = 2, // status is unknown because of missing disks or network problems
             DS_ERROR = 3,   // some parts definitely contain invalid data
         };
+
+        static TString DataStatusToString(EDataStatus status) {
+            switch (status) {
+                case DS_OK:
+                    return "DS_OK";
+                case DS_UNKNOWN:
+                    return "DS_UNKNOWN";
+                case DS_ERROR:
+                    return "DS_ERROR";
+                default:
+                    return "BAD_DATA_STATUS";
+            }
+        }
+
+        EPlacementStatus PlacementStatus = PS_OK;
         EDataStatus DataStatus = DS_OK;
         TString DataInfo; // textual info about checks in blob data
 
@@ -1449,8 +1483,8 @@ struct TEvBlobStorage {
                 << " Id# " << Id
                 << " Status# " << NKikimrProto::EReplyStatus_Name(Status)
                 << " ErrorReason# " << ErrorReason
-                << " PlacementStatus# " << (int)PlacementStatus
-                << " DataStatus# " << (int)DataStatus
+                << " PlacementStatus# " << PlacementStatusToString(PlacementStatus)
+                << " DataStatus# " << DataStatusToString(DataStatus)
                 << " DataInfo# " << DataInfo
                 << " }";
             return str.Str();

@@ -1501,6 +1501,202 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
         );
     }
 
+    Y_UNIT_TEST(ShopDemoIncrementalBackupScenario) {
+        TPortManager portManager;
+        TServer::TPtr server = new TServer(TServerSettings(portManager.GetPort(2134), {}, DefaultPQConfig())
+            .SetUseRealThreads(false)
+            .SetDomainName("Root")
+            .SetEnableChangefeedInitialScan(true)
+            .SetEnableBackupService(true)
+        );
+
+        auto& runtime = *server->GetRuntime();
+        const auto edgeActor = runtime.AllocateEdgeActor();
+
+        SetupLogging(runtime);
+        InitRoot(server, edgeActor);
+
+        // === DATABASE STRUCTURE CREATION ===
+        // Create orders table
+        CreateShardedTable(server, edgeActor, "/Root", "orders", 
+            TShardedTableOptions().Columns({
+                {"order_id", "Uint32", true, false},
+                {"customer_name", "Utf8", false, false},
+                {"order_date", "Utf8", false, false},
+                {"amount", "Uint32", false, false}
+            }));
+
+        // Create products table  
+        CreateShardedTable(server, edgeActor, "/Root", "products",
+            TShardedTableOptions().Columns({
+                {"product_id", "Uint32", true, false},
+                {"product_name", "Utf8", false, false},
+                {"price", "Uint32", false, false},
+                {"last_updated", "Utf8", false, false}
+            }));
+
+        // === BACKUP COLLECTION CREATION ===
+        ExecSQL(server, edgeActor, R"(
+            CREATE BACKUP COLLECTION `shop_backups`
+              ( TABLE `/Root/orders`
+              , TABLE `/Root/products`
+              )
+            WITH
+              ( STORAGE = 'cluster'
+              , INCREMENTAL_BACKUP_ENABLED = 'true'
+              );
+            )", false);
+
+        // === CHECKPOINT 1: Initial data + full backup ===
+        ExecSQL(server, edgeActor, R"(
+            UPSERT INTO `/Root/orders` (order_id, customer_name, order_date, amount) VALUES 
+                (1001, 'Иван Петров', '2024-01-01T10:00:00Z', 2500),
+                (1002, 'Мария Сидорова', '2024-01-01T10:15:00Z', 1800),
+                (1003, 'Алексей Иванов', '2024-01-01T10:30:00Z', 3200);
+        )");
+
+        ExecSQL(server, edgeActor, R"(
+            UPSERT INTO `/Root/products` (product_id, product_name, price, last_updated) VALUES
+                (501, 'Ноутбук Model A', 65000, '2024-01-01T09:00:00Z'),
+                (502, 'Мышь YdbTech', 2500, '2024-01-01T09:00:00Z'),
+                (503, 'Монитор 24"', 18000, '2024-01-01T09:00:00Z');
+        )");
+
+        // Check initial data
+        auto initialOrdersCount = KqpSimpleExec(runtime, R"(SELECT COUNT(*) FROM `/Root/orders`)");
+        auto initialProductsCount = KqpSimpleExec(runtime, R"(SELECT COUNT(*) FROM `/Root/products`)");
+        
+        UNIT_ASSERT_VALUES_EQUAL(initialOrdersCount, "{ items { uint64_value: 3 } }");
+        UNIT_ASSERT_VALUES_EQUAL(initialProductsCount, "{ items { uint64_value: 3 } }");
+
+        // Create full backup
+        ExecSQL(server, edgeActor, R"(BACKUP `shop_backups`;)", false);
+        SimulateSleep(server, TDuration::Seconds(5)); // Increased wait time for backup to complete
+
+        // Note: Skip backup verification as it may not be immediately accessible
+        // The main test verifies backup functionality via restore operation
+
+        // === CHECKPOINT 2: Changes + first incremental backup ===
+        
+        // New orders
+        ExecSQL(server, edgeActor, R"(
+            UPSERT INTO `/Root/orders` (order_id, customer_name, order_date, amount) VALUES 
+                (1004, 'Елена Козлова', '2024-01-01T11:00:00Z', 4100),
+                (1005, 'Дмитрий Волков', '2024-01-01T11:15:00Z', 2800);
+        )");
+
+        // Update product prices
+        ExecSQL(server, edgeActor, R"(
+            UPDATE `/Root/products` SET price = 63000, last_updated = '2024-01-01T11:30:00Z' WHERE product_id = 501;
+        )");
+        ExecSQL(server, edgeActor, R"(
+            UPDATE `/Root/products` SET price = 2300, last_updated = '2024-01-01T11:30:00Z' WHERE product_id = 502;
+        )");
+
+        // Cancel order (delete)
+        ExecSQL(server, edgeActor, R"(DELETE FROM `/Root/orders` WHERE order_id = 1002;)");
+
+        // Check state after changes
+        auto afterChanges1Count = KqpSimpleExec(runtime, R"(SELECT COUNT(*) FROM `/Root/orders`)");
+        UNIT_ASSERT_VALUES_EQUAL(afterChanges1Count, "{ items { uint64_value: 4 } }"); // 3 + 2 - 1 = 4
+
+        // Create first incremental backup
+        ExecSQL(server, edgeActor, R"(BACKUP `shop_backups` INCREMENTAL;)", false);
+        SimulateSleep(server, TDuration::Seconds(2));
+
+        // Note: Skip incremental backup verification as it may not be immediately accessible
+        // The main test verifies backup functionality via restore operation
+
+        // === CHECKPOINT 3: More changes + second incremental backup ===
+        
+        // Add more orders
+        ExecSQL(server, edgeActor, R"(
+            UPSERT INTO `/Root/orders` (order_id, customer_name, order_date, amount) VALUES 
+                (1006, 'Анна Смирнова', '2024-01-01T12:00:00Z', 5200),
+                (1007, 'Сергей Попов', '2024-01-01T12:15:00Z', 1950);
+        )");
+
+        // Add new product
+        ExecSQL(server, edgeActor, R"(
+            UPSERT INTO `/Root/products` (product_id, product_name, price, last_updated) VALUES
+                (504, 'Клавиатура Kikimr', 8500, '2024-01-01T12:30:00Z');
+        )");
+
+        // Check state after second changes
+        auto afterChanges2Count = KqpSimpleExec(runtime, R"(SELECT COUNT(*) FROM `/Root/orders`)");
+        UNIT_ASSERT_VALUES_EQUAL(afterChanges2Count, "{ items { uint64_value: 6 } }"); // 4 + 2 = 6
+
+        auto afterChanges2ProductsCount = KqpSimpleExec(runtime, R"(SELECT COUNT(*) FROM `/Root/products`)");
+        UNIT_ASSERT_VALUES_EQUAL(afterChanges2ProductsCount, "{ items { uint64_value: 4 } }"); // 3 + 1 = 4
+
+        // Create second incremental backup
+        ExecSQL(server, edgeActor, R"(BACKUP `shop_backups` INCREMENTAL;)", false);
+        SimulateSleep(server, TDuration::Seconds(2));
+
+        // === FINAL STATE CHECK ===
+        
+        // Check final state of main tables
+        auto finalOrdersState = KqpSimpleExec(runtime, R"(
+            SELECT order_id, customer_name FROM `/Root/orders`
+            ORDER BY order_id
+        )");
+
+        // Expected orders: 1001, 1003, 1004, 1005, 1006, 1007 (1002 was deleted)
+        TString expectedFinalOrders = 
+            "{ items { uint32_value: 1001 } items { text_value: \"Иван Петров\" } }, "
+            "{ items { uint32_value: 1003 } items { text_value: \"Алексей Иванов\" } }, "
+            "{ items { uint32_value: 1004 } items { text_value: \"Елена Козлова\" } }, "
+            "{ items { uint32_value: 1005 } items { text_value: \"Дмитрий Волков\" } }, "
+            "{ items { uint32_value: 1006 } items { text_value: \"Анна Смирнова\" } }, "
+            "{ items { uint32_value: 1007 } items { text_value: \"Сергей Попов\" } }";
+
+        UNIT_ASSERT_VALUES_EQUAL(finalOrdersState, expectedFinalOrders);
+
+        auto finalProductsState = KqpSimpleExec(runtime, R"(
+            SELECT product_id, product_name FROM `/Root/products`
+            ORDER BY product_id
+        )");
+
+        TString expectedFinalProducts = 
+            "{ items { uint32_value: 501 } items { text_value: \"Ноутбук Model A\" } }, "
+            "{ items { uint32_value: 502 } items { text_value: \"Мышь YdbTech\" } }, "
+            "{ items { uint32_value: 503 } items { text_value: \"Монитор 24\\\"\" } }, "
+            "{ items { uint32_value: 504 } items { text_value: \"Клавиатура Kikimr\" } }";
+
+        UNIT_ASSERT_VALUES_EQUAL(finalProductsState, expectedFinalProducts);
+
+        // === RESTORE TEST ===
+        
+        // Save expected state before dropping tables
+        auto expectedOrdersForRestore = KqpSimpleExec(runtime, R"(
+            SELECT order_id, customer_name, amount FROM `/Root/orders` ORDER BY order_id
+        )");
+        auto expectedProductsForRestore = KqpSimpleExec(runtime, R"(
+            SELECT product_id, product_name, price FROM `/Root/products` ORDER BY product_id
+        )");
+
+        // Drop tables
+        ExecSQL(server, edgeActor, R"(DROP TABLE `/Root/orders`;)", false);
+        ExecSQL(server, edgeActor, R"(DROP TABLE `/Root/products`;)", false);
+
+        // Restore from backup
+        ExecSQL(server, edgeActor, R"(RESTORE `shop_backups`;)", false);
+        SimulateSleep(server, TDuration::Seconds(10)); // More time for restore
+
+        // Check that data was restored correctly
+        auto restoredOrders = KqpSimpleExec(runtime, R"(
+            SELECT order_id, customer_name, amount FROM `/Root/orders` ORDER BY order_id
+        )");
+        auto restoredProducts = KqpSimpleExec(runtime, R"(
+            SELECT product_id, product_name, price FROM `/Root/products` ORDER BY product_id
+        )");
+
+        UNIT_ASSERT_VALUES_EQUAL(restoredOrders, expectedOrdersForRestore);
+        UNIT_ASSERT_VALUES_EQUAL(restoredProducts, expectedProductsForRestore);
+
+        // Test completed successfully - backup and restore operations work correctly
+    }
+
 } // Y_UNIT_TEST_SUITE(IncrementalBackup)
 
 } // NKikimr

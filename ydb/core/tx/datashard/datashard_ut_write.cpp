@@ -291,7 +291,7 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
 
         Cout << "========= Upsert data with other half of threshold constraint in index column (should fail) =========\n";
         {
-            TVector<ui32> columnIds = {1, 2};
+            TVector<ui32> columnIds = {1, 3};
             TVector<TCell> cells = {
                 TCell("sad"),
                 TCell("qwe"), 
@@ -355,7 +355,7 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
         Cout << "========= Verify data =========\n";
         {
             auto expectedState = "key = sad\\0, val1 = qwe\\0, val2 = zxc\\0, val3 = " + bigString + "\n"
-                                                    "key = xyz\\0, val1 = " + halfBigString1 + "\\0, val2 = NULL, val3 = NULL\n";
+                                                    "key = xyz\\0, val1 = " + halfBigString1 + ", val2 = NULL, val3 = NULL\n";
             auto tableState = ReadTable(server, shards, tableId);
             UNIT_ASSERT_STRINGS_EQUAL(tableState, expectedState);
         }

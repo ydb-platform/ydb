@@ -13,6 +13,8 @@ namespace {
             return NBackup::EBackupProgress::Preparing;
         case Ydb::Backup::BackupProgress::PROGRESS_TRANSFER_DATA:
             return NBackup::EBackupProgress::TransferData;
+            break;
+        case Ydb::Backup::BackupProgress::PROGRESS_DONE:
             return NBackup::EBackupProgress::Done;
         case Ydb::Backup::BackupProgress::PROGRESS_CANCELLATION:
             return NBackup::EBackupProgress::Cancellation;

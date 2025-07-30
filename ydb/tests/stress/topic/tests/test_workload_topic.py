@@ -6,20 +6,17 @@ import yatest
 from ydb.tests.library.stress.fixtures import StressFixture
 
 
-class TestYdbLogWorkload(StressFixture):
+class TestYdbTopicWorkload(StressFixture):
     @pytest.fixture(autouse=True, scope="function")
     def setup(self):
-        yield from self.setup_cluster(
-            column_shard_config={
-                'disabled_on_scheme_shard': False,
-            })
+        yield from self.setup_cluster()
 
-    @pytest.mark.parametrize('store_type', ['row', 'column'])
-    def test(self, store_type):
+    def test(self):
         yatest.common.execute([
             yatest.common.binary_path(os.environ["YDB_WORKLOAD_PATH"]),
             "--endpoint", self.endpoint,
             "--database", self.database,
-            "--store_type", store_type,
-            "--duration", "120",
+            "--duration", "60",
+            "--consumers", "50",
+            "--producers", "100",
         ])

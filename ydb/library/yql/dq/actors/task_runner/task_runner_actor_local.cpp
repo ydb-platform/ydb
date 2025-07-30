@@ -195,7 +195,7 @@ private:
                 LOG_T("Task runner. Watermarks. Injecting requested watermark " << watermarkRequested
                     << " to " << Outputs.size() << " outputs ");
 
-                for (const auto& channelId : Outputs) {
+                for (const auto& channelId : OutputsWithWatermarks) {
                     NDqProto::TWatermark watermark;
                     watermark.SetTimestampUs(watermarkRequested.MicroSeconds());
                     TaskRunner->GetOutputChannel(channelId)->Push(std::move(watermark));
@@ -444,6 +444,9 @@ private:
             } else {
                 for (auto& channel : output.GetChannels()) {
                     Outputs.emplace_back(channel.GetId());
+                    if (channel.GetWatermarksMode() != NDqProto::WATERMARKS_MODE_DISABLED) {
+                        OutputsWithWatermarks.emplace_back(channel.GetId());
+                    }
                 }
             }
         }
@@ -527,6 +530,7 @@ private:
     TVector<ui32> Sources;
     TVector<ui32> Sinks;
     TVector<ui32> Outputs;
+    TVector<ui32> OutputsWithWatermarks;
     TIntrusivePtr<NDq::IDqTaskRunner> TaskRunner;
     THolder<TDqMemoryQuota> MemoryQuota;
     ui64 ActorElapsedTicks = 0;

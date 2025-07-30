@@ -476,9 +476,9 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
                 });
         TComputeMemoryLimits memoryLimits;
         memoryLimits.ChannelBufferSize = 1_MB;
-        memoryLimits.MkqlLightProgramMemoryLimit = 10_MB;
-        memoryLimits.MkqlHeavyProgramMemoryLimit = 20_MB;
-        memoryLimits.MkqlProgramHardMemoryLimit = 30_MB;
+        memoryLimits.MkqlLightProgramMemoryLimit = 20_MB;
+        memoryLimits.MkqlHeavyProgramMemoryLimit = 30_MB;
+        memoryLimits.MkqlProgramHardMemoryLimit = 40_MB;
         memoryLimits.MemoryQuotaManager = std::make_shared<TGuaranteeQuotaManager>(64_MB, 32_MB);
         TComputeRuntimeSettings runtimeSettings;
         runtimeSettings.StatsMode = statsMode;
@@ -924,12 +924,12 @@ Y_UNIT_TEST_SUITE(TAsyncComputeActorTest) {
     Y_UNIT_TEST_F(Empty, TAsyncCATestFixture) { }
 
     Y_UNIT_TEST_F(Basic, TAsyncCATestFixture) {
-        TVector<ui32> sizes;
+        TVector<ui32> sizes{ 1, 2, 3, 4, 5, 51, 128, 251 };
         std::mt19937 rng;
         for (ui32 t = 0; t < 256; ++t) sizes.push_back(1 + rng() % 734);
         for (bool waitIntermediateAcks : { false, true }) {
             for (ui32 watermarkPeriod : { 0, 1, 3 }) {
-                for (ui32 packets : { 1, 2, 3, 4, 5, 51, 128, 251 }) {
+                for (ui32 packets : sizes) {
                     BasicTests(packets, watermarkPeriod, waitIntermediateAcks);
                 }
             }
@@ -948,9 +948,12 @@ Y_UNIT_TEST_SUITE(TAsyncComputeActorTest) {
     }
 
     Y_UNIT_TEST_F(InputTransform, TAsyncCATestFixture) {
+        TVector<ui32> sizes{ 1, 2, 3, 4, 5, 51, 128, 251 };
+        std::mt19937 rng;
+        for (ui32 t = 0; t < 256; ++t) sizes.push_back(1 + rng() % 734);
         for (bool waitIntermediateAcks : { false, true }) {
             for (ui32 watermarkPeriod : { 0, 1, 3 }) {
-                for (ui32 packets : { 1, 2, 3, 4, 5, 51, 111, 251 }) {
+                for (ui32 packets : sizes) {
                     InputTransformTests(packets, watermarkPeriod, waitIntermediateAcks);
                 }
             }

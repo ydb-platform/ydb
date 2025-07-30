@@ -35,8 +35,11 @@ class Differ:
             with open(name) as f:
                 content = json.load(f)
                 configs.append(content.get('proto'))
+                branch_name = content.get('branch')
+                if not branch_name:
+                    branch_name = os.path.basename(name)
                 self.branches.append({
-                    'branch_name' : content.get('branch', os.path.basename(name)),
+                    'branch_name' : branch_name,
                     'commit': content.get('commit')
                 })
         self._add_fields_dict(configs, [])

@@ -2135,9 +2135,16 @@ public:
                         maxTimeDifferenceUs = abs(itNodeSystemState->second->GetMaxClockSkewWithPeerUs());
                         databaseState.MaxTimeDifferenceNodeId = nodeId;
                     }
-                    auto& computeNode = *computeStatus.add_nodes();
-                    FillComputeNodeStatus(databaseState, nodeId, computeNode, {getContext(pileName), "COMPUTE_NODE"});
                 }
+            }
+            for (TNodeId nodeId : *computeNodeIds) {
+                auto itNodeSystemState = MergedNodeSystemState.find(nodeId);
+                TString pileName;
+                if (itNodeSystemState != MergedNodeSystemState.end()) {
+                    pileName = itNodeSystemState->second->GetBridgePileName();
+                }
+                auto& computeNode = *computeStatus.add_nodes();
+                FillComputeNodeStatus(databaseState, nodeId, computeNode, {getContext(pileName), "COMPUTE_NODE"});
             }
             for (auto& [_, ctx] : pileContext) {
                 report(ctx, ETags::PileComputeState);
@@ -3048,6 +3055,8 @@ public:
                 if (group->BridgePileId->GetRawId() < AppData()->BridgeConfig.PilesSize()) {
                     const auto& pileName = AppData()->BridgeConfig.GetPiles(group->BridgePileId->GetRawId()).GetName();
                     pileContext.Location.mutable_storage()->mutable_pool()->mutable_group()->mutable_pile()->set_name(pileName);
+                } else { // this fallback should not ever happen - but is used in tests
+                    pileContext.Location.mutable_storage()->mutable_pool()->mutable_group()->mutable_pile()->set_name(group->BridgePileId->ToString());
                 }
                 pileContext.Location.mutable_storage()->mutable_pool()->mutable_group()->set_id(0, ToString(group->Id));
                 CheckGroupVSlots(checker, group->VSlots, storageGroupStatus, pileContext);

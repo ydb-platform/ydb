@@ -50,7 +50,7 @@ class TGetOperationRPC : public TRpcOperationRequestActor<TGetOperationRPC, TEvG
             return "[GetIndexBuild]";
         case TOperationId::SCRIPT_EXECUTION:
             return "[GetScriptExecution]";
-         case TOperationId::INCREMENTAL_BACKUP:
+        case TOperationId::INCREMENTAL_BACKUP:
             return "[GetIncrementalBackup]";
         default:
             return "[Untagged]";

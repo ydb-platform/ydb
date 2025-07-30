@@ -6,18 +6,100 @@
 #include <util/string/split.h>
 #include <util/string/strip.h>
 
+#include <contrib/libs/re2/re2/re2.h>
+
 namespace {
 
-void InsertOrCheck(std::map<TString, TString>& selectors, const TString& name, const TString& value) {
-    if (auto it = selectors.find(name); it != selectors.end()) {
-        YQL_ENSURE(it->second == value, "You shouldn't specify \"" << name << "\" label in selectors");
+THolder<re2::RE2> CompileRE2WithCheck(const std::string& pattern) {
+    THolder<re2::RE2> re(new re2::RE2(pattern));
+    YQL_ENSURE(re->ok(), "Unable to compile regex " << pattern << ": " << re->error());
+    return re;
+}
+
+const TString LABEL_NAME_PATTERN        = R"( *[a-zA-Z0-9-._/]{1,50} *)";
+const TString LABEL_VALUE_PATTERN       = R"( *"[ -!#-&(-)+->@-_a-{}-~]{1,200}" *)";
+
+const TString SENSOR_NAME_PATTERN       = "(" + LABEL_VALUE_PATTERN + ")?({.*})";
+THolder<re2::RE2> SENSOR_NAME_RE        = CompileRE2WithCheck(SENSOR_NAME_PATTERN);
+
+const TString SELECTOR_PATTERN          = "(" + LABEL_NAME_PATTERN + "=" + LABEL_VALUE_PATTERN + ")";
+THolder<re2::RE2> SELECTOR_RE           = CompileRE2WithCheck(SELECTOR_PATTERN);
+
+const TString SELECTORS_FULL_PATTERN    = "{((" + SELECTOR_PATTERN + ",)*" + SELECTOR_PATTERN + ")?}";
+THolder<re2::RE2> SELECTORS_FULL_RE     = CompileRE2WithCheck(SELECTORS_FULL_PATTERN);
+
+TMaybe<TString> InsertOrCheck(std::map<TString, TString>& selectors, const TString& name, const TString& value) {
+    auto [it, inserted] = selectors.emplace(name, value);
+    if (!inserted && it->second != value) {
+        return TStringBuilder() << "You shouldn't specify \"" << name << "\" label in selectors";
     }
-    selectors[name] = value;
+    return {};
 }
 
 } // namespace
 
 namespace NYql::NSo {
+
+TMaybe<TString> ParseSelectorValues(const TString& selectors, std::map<TString, TString>& result) {
+    std::optional<TString> sensorName;
+    TString fullBrackets;
+    if (!RE2::FullMatch(selectors, *SENSOR_NAME_RE, &sensorName, &fullBrackets)) {
+        return "Selectors should be specified in [\"sensor_name\"]{[label_name1 = \"label_value1\", ...]} format";
+    };
+
+    if (sensorName) {
+        TString name = StripString(*sensorName);
+        result["name"] = name.substr(1, name.size() - 2);
+    }
+
+    if (!RE2::FullMatch(fullBrackets, *SELECTORS_FULL_RE)) {
+        return "Selectors should be specified in [\"sensor_name\"]{[label_name1 = \"label_value1\", ...]} format";
+    }
+
+    std::string_view fullBracketsView = fullBrackets;
+    TString selectorValue;
+    while (RE2::FindAndConsume(&fullBracketsView, *SELECTOR_RE, &selectorValue)) {
+        size_t eqPos = selectorValue.find("=");
+    
+        TString key = StripString(selectorValue.substr(0, eqPos));
+        TString value = StripString(selectorValue.substr(eqPos + 1, selectorValue.size() - eqPos - 1));
+    
+        result[key] = value.substr(1, value.size() - 2);
+    }
+
+    return {};
+}
+
+TMaybe<TString> BuildSelectorValues(const NSo::NProto::TDqSolomonSource& source, const TString& selectors, std::map<TString, TString>& result) {
+    #define RET_ON_ERROR(expr)      \
+        if (auto error = expr) {    \
+            return error;           \
+        }
+
+    RET_ON_ERROR(ParseSelectorValues(selectors, result));
+
+    if (source.GetClusterType() == NSo::NProto::CT_MONITORING) {
+        RET_ON_ERROR(InsertOrCheck(result, "cloudId", source.GetProject()));
+        RET_ON_ERROR(InsertOrCheck(result, "folderId", source.GetCluster()));
+        RET_ON_ERROR(InsertOrCheck(result, "service", source.GetService()));
+    } else {
+        RET_ON_ERROR(InsertOrCheck(result, "project", source.GetProject()));
+    }
+
+    if (source.GetClusterType() == NSo::NProto::CT_MONITORING) {
+        if (auto it = result.find("cloudId"); it != result.end()) {
+            result["project"] = it->second;
+            result.erase(it);
+        }
+        if (auto it = result.find("folderId"); it != result.end()) {
+            result["cluster"] = it->second;
+            result.erase(it);
+        }
+    }
+
+    #undef RET_ON_ERROR
+    return {};
+}
 
 NSo::NProto::ESolomonClusterType MapClusterType(TSolomonClusterConfig::ESolomonClusterType clusterType) {
     switch (clusterType) {
@@ -28,44 +110,6 @@ NSo::NProto::ESolomonClusterType MapClusterType(TSolomonClusterConfig::ESolomonC
         default:
             YQL_ENSURE(false, "Invalid cluster type " << ToString<ui32>(clusterType));
     }
-}
-
-std::map<TString, TString> ExtractSelectorValues(const NSo::NProto::TDqSolomonSource& source, const TString& selectors) {
-    YQL_ENSURE(selectors.size() >= 2, "Selectors should be at least 2 characters long");
-    std::map<TString, TString> result;
-
-    size_t lbracePos = selectors.find('{');
-    size_t rbracePos = selectors.find('}');
-    YQL_ENSURE(lbracePos != TString::npos);
-    YQL_ENSURE(rbracePos != TString::npos);
-
-    if (lbracePos > 0) {
-        TString name = StripString(selectors.substr(0, lbracePos));
-        YQL_ENSURE(name.size() >= 2 && name[0] == '"' && name[name.size() - 1] == '"');
-
-        result["name"] = name.substr(1, name.size() - 2);
-    }
-
-    auto selectorValues = StringSplitter(selectors.substr(lbracePos + 1, rbracePos - lbracePos - 1)).Split(',').SkipEmpty().ToList<TString>();
-    for (const auto& selectorValue : selectorValues) {
-        size_t eqPos = selectorValue.find("=");
-        YQL_ENSURE(eqPos != TString::npos);
-
-        TString key = StripString(selectorValue.substr(0, eqPos));
-        TString value = StripString(selectorValue.substr(eqPos + 1, selectorValue.size() - eqPos - 1));
-        YQL_ENSURE(!key.empty());
-        YQL_ENSURE(value.size() >= 2 && value[0] == '"' && value[value.size() - 1] == '"');
-
-        result[key] = value.substr(1, value.size() - 2);
-    }
-
-    InsertOrCheck(result, "project", source.GetProject());
-    if (source.GetClusterType() == NSo::NProto::CT_MONITORING) {
-        InsertOrCheck(result, "cluster", source.GetCluster());
-        InsertOrCheck(result, "service", source.GetService());
-    }
-
-    return result;
 }
 
 NProto::TDqSolomonSource FillSolomonSource(const TSolomonClusterConfig* config, const TString& project) {

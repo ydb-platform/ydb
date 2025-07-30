@@ -292,7 +292,10 @@ public:
         
         auto selectors = settings.Selectors().StringValue();
         if (!selectors.empty()) {
-            auto selectorValues = NSo::ExtractSelectorValues(source, selectors);
+            std::map<TString, TString> selectorValues;
+            if (auto error = NSo::BuildSelectorValues(source, selectors, selectorValues)) {
+                throw yexception() << *error;
+            }
             source.MutableSelectors()->insert(selectorValues.begin(), selectorValues.end());
         }
 

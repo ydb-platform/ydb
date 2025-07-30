@@ -67,7 +67,11 @@ public:
             if (auto maybeSelectors = ExtractSetting(settings, "selectors")) {
                 NSo::NProto::TDqSolomonSource source = NSo::FillSolomonSource(clusterDesc, soReadObject.Object().Project().StringValue());
                 
-                auto selectors = NSo::ExtractSelectorValues(source, *maybeSelectors);
+                std::map<TString, TString> selectors;
+                if (auto error = NSo::BuildSelectorValues(source, *maybeSelectors, selectors)) {
+                    ctx.AddError(TIssue(ctx.GetPosition(n->Pos()), *error));
+                    return TStatus::Error;
+                }
 
                 auto defaultReplica = (source.GetClusterType() == NSo::NProto::CT_SOLOMON ? "sas" : "cloud-prod-a");
                 auto solomonClientDefaultReplica = State_->Configuration->SolomonClientDefaultReplica.Get().OrElse(defaultReplica);

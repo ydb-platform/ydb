@@ -1,7 +1,6 @@
 #include "kqp_compute_scheduler_service.h"
 
 #include "tree/dynamic.h"
-#include "kqp_schedulable_actor.h"
 
 #include <ydb/core/kqp/common/events/workload_service.h>
 #include <ydb/core/kqp/common/simple/services.h>
@@ -18,8 +17,8 @@ constexpr double Epsilon = 1e-8;
 
 class TComputeSchedulerService : public NActors::TActorBootstrapped<TComputeSchedulerService> {
 public:
-    explicit TComputeSchedulerService(const NScheduler::TComputeSchedulerPtr& scheduler, const NScheduler::TOptions& options)
-        : Scheduler(scheduler)
+    explicit TComputeSchedulerService(const NScheduler::TOptions& options)
+        : Scheduler(std::make_shared<NScheduler::TComputeScheduler>(options.Counters))
         , UpdateFairSharePeriod(options.UpdateFairSharePeriod)
     {}
 
@@ -126,7 +125,12 @@ public:
             .Weight = std::max(ev->Get()->Weight, 0.0), // TODO: weight shouldn't be negative!
         };
 
-        Scheduler->AddOrUpdateQuery(databaseId, poolId.empty() ? NKikimr::NResourcePool::DEFAULT_POOL_ID : poolId, queryId, attrs);
+        auto query = Scheduler->AddOrUpdateQuery(databaseId, poolId.empty() ? NKikimr::NResourcePool::DEFAULT_POOL_ID : poolId, queryId, attrs);
+        if (ev->Cookie) {
+            auto response = MakeHolder<TEvQueryResponse>();
+            response->Query = query;
+            Send(ev->Sender, response.Release(), 0, queryId);
+        }
     }
 
     void Handle(TEvRemoveQuery::TPtr& ev) {
@@ -186,16 +190,8 @@ TComputeScheduler::TComputeScheduler(TIntrusivePtr<TKqpCounters> counters)
     : Root(std::make_shared<TRoot>(counters))
     , KqpCounters(counters)
 {
-    DetachedPool = std::make_shared<TPool>("(DETACHED)", counters);
-
     auto group = counters->GetKqpCounters();
     Counters.UpdateFairShare = group->GetCounter("scheduler/UpdateFairShare", true);
-}
-
-TSchedulableTaskFactory TComputeScheduler::CreateSchedulableTaskFactory() {
-    return [ptr = this->shared_from_this()](const NHdrf::TQueryId& queryId) {
-        return MakeHolder<TSchedulableTask>(ptr->GetQuery(queryId));
-    };
 }
 
 void TComputeScheduler::SetTotalCpuLimit(ui64 cpu) {
@@ -230,7 +226,7 @@ void TComputeScheduler::AddOrUpdatePool(const TString& databaseId, const TString
     }
 }
 
-void TComputeScheduler::AddOrUpdateQuery(const TString& databaseId, const TString& poolId, const NHdrf::TQueryId& queryId, const NHdrf::TStaticAttributes& attrs) {
+TQueryPtr TComputeScheduler::AddOrUpdateQuery(const TString& databaseId, const TString& poolId, const NHdrf::TQueryId& queryId, const NHdrf::TStaticAttributes& attrs) {
     Y_ENSURE(!poolId.empty());
 
     TWriteGuard lock(Mutex);
@@ -240,22 +236,16 @@ void TComputeScheduler::AddOrUpdateQuery(const TString& databaseId, const TStrin
     Y_ENSURE(pool);
 
     TQueryPtr query;
-    if (auto queryIt = DetachedQueries.find(queryId); queryIt != DetachedQueries.end()) {
-        query = queryIt->second;
-        query->Update(attrs);
-        DetachedQueries.erase(queryIt);
-        DetachedPool->RemoveQuery(queryId);
-        pool->AddQuery(query);
-        Y_ENSURE(Queries.emplace(queryId, query).second);
-    } else if (query = pool->GetQuery(queryId)) {
-        query->Update(attrs);
-    }
 
-    if (!query) {
+    if (query = pool->GetQuery(queryId)) {
+        query->Update(attrs);
+    } else {
         query = std::make_shared<TQuery>(queryId, attrs);
         pool->AddQuery(query);
         Y_ENSURE(Queries.emplace(queryId, query).second);
     }
+
+    return query;
 }
 
 void TComputeScheduler::RemoveQuery(const TString& databaseId, const TString& poolId, const NHdrf::TQueryId& queryId) {
@@ -289,30 +279,10 @@ void TComputeScheduler::UpdateFairShare() {
     Counters.UpdateFairShare->Add((TMonotonic::Now() - startTime).MicroSeconds());
 }
 
-TQueryPtr TComputeScheduler::GetQuery(const NHdrf::TQueryId& queryId) {
-    {
-        TReadGuard lock(Mutex);
-        if (auto queryIt = Queries.find(queryId); queryIt != Queries.end()) {
-            return queryIt->second;
-        }
-        if (auto queryIt = DetachedQueries.find(queryId); queryIt != DetachedQueries.end()) {
-            return queryIt->second;
-        }
-    }
-
-    TWriteGuard lock(Mutex);
-    auto [query, isEmplaced] = DetachedQueries.emplace(queryId, std::make_shared<TQuery>(queryId));
-    if (isEmplaced) {
-        DetachedPool->AddQuery(query->second);
-    }
-
-    return query->second;
-}
-
 } // namespace NScheduler
 
-IActor* CreateKqpComputeSchedulerService(const NScheduler::TComputeSchedulerPtr& scheduler, const NScheduler::TOptions& options) {
-    return new TComputeSchedulerService(scheduler, options);
+IActor* CreateKqpComputeSchedulerService(const NScheduler::TOptions& options) {
+    return new TComputeSchedulerService(options);
 }
 
 } // namespace NKikimr::NKqp

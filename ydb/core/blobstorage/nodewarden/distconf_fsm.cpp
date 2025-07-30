@@ -73,19 +73,23 @@ namespace NKikimr::NStorage {
         Y_ABORT_UNLESS(!ConsolePipeId);
         ConnectToConsole();
 
-        // start config collection even if we are doing it as a local leader
-        Invoke(TCollectConfigsAndPropose{});
-
         // switch state correctly
         if (InvokeQ.empty()) {
             Y_ABORT_UNLESS(RootState == ERootState::INITIAL);
-            RootState = ERootState::RELAX;
         } else {
             // this is upgrade from local quorum config collection, it is in flight right now
             Y_VERIFY_S(LocalQuorumObtained && (RootState == ERootState::INITIAL || RootState == ERootState::LOCAL_QUORUM_OP),
                 "LocalQuorumObtained# " << LocalQuorumObtained
                 << " RootState# " << RootState
                 << " InvokeQ.size# " << InvokeQ.size());
+        }
+
+        // start config collection even if we are doing it as a local leader
+        if (RootState == ERootState::INITIAL) {
+            RootState = ERootState::RELAX;
+        }
+        if (InvokeQ.empty() || RootState == ERootState::LOCAL_QUORUM_OP) {
+            Invoke(TCollectConfigsAndPropose{});
         }
 
         // start collecting syncers state if needed

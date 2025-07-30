@@ -13,8 +13,6 @@ namespace NKikimr::NStorage {
         TInvokeQuery Query;
 
         bool CheckSyncersAfterCommit = false;
-        bool IsRelay = false;
-        bool StartedExecutingQuery = false;
 
         ui32 WaitingReplyFromNode = 0;
 
@@ -47,6 +45,7 @@ namespace NKikimr::NStorage {
 
     public:
         TInvokeRequestHandlerActor(TDistributedConfigKeeper *self, TInvokeQuery&& query);
+        TInvokeRequestHandlerActor(TDistributedConfigKeeper *self, TInvokeExternalOperation&& query, ui32 hopNodeId);
 
         void HandleExecuteQuery();
         void Handle(TEvPrivate::TEvAbortQuery::TPtr ev);
@@ -173,18 +172,6 @@ namespace NKikimr::NStorage {
         void PassAway() override;
 
         STFUNC(StateFunc);
-
-        template<typename T>
-        void Wrap(T&& callback) {
-            try {
-                callback();
-            } catch (const TExError& error) {
-                Finish(error.Status, error.what());
-                if (error.IsCritical) {
-                    Y_DEBUG_ABORT("critical error during query processing: %s", error.what());
-                }
-            }
-        }
     };
 
 } // NKikimr::NStorage

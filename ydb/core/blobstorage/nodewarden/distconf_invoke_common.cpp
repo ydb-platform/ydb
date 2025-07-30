@@ -16,6 +16,17 @@ namespace NKikimr::NStorage {
         , Query(std::move(query))
     {}
 
+    TInvokeRequestHandlerActor::TInvokeRequestHandlerActor(TDistributedConfigKeeper *self,
+            TInvokeExternalOperation&& query, ui32 hopNodeId)
+        : TActor(&TThis::StateFunc)
+        , Self(self)
+        , LifetimeToken(Self->LifetimeToken)
+        , InvokePipelineGeneration(0) // we don't care about pipeline
+        , Query(std::move(query))
+        , WaitingReplyFromNode(hopNodeId)
+        , Subscriptions{{hopNodeId, {}}}
+    {}
+
     void TInvokeRequestHandlerActor::HandleExecuteQuery() {
         STLOG(PRI_DEBUG, BS_NODE, NWDC42, "HandleExecuteQuery",
             (SelfId, SelfId()),
@@ -25,33 +36,9 @@ namespace NKikimr::NStorage {
             (Query.InvokePipelineGeneration, InvokePipelineGeneration),
             (Keeper.InvokePipelineGeneration, Self->InvokePipelineGeneration));
 
-        if (Self->Binding) { // we aren't the root node, work as a relay and forward this query to the next bound node
-            auto *op = std::get_if<TInvokeExternalOperation>(&Query);
-            Y_ABORT_UNLESS(op);
+        if (InvokePipelineGeneration == Self->InvokePipelineGeneration) {
+            Y_ABORT_UNLESS(!Self->Binding);
 
-            if (op->SessionId) {
-                const auto it = Self->DirectBoundNodes.find(op->Sender.NodeId());
-                if (it == Self->DirectBoundNodes.end() || op->SessionId != it->second.SessionId) {
-                    // abort operation as we won't be able to return the result
-                    throw TExRace() << "Distconf tree reconfigured during query delivery";
-                }
-            }
-
-            const ui32 node = Self->Binding->NodeId;
-            auto ev = std::make_unique<TEvNodeConfigInvokeOnRoot>();
-            op->Command.Swap(&ev->Record);
-            Send(MakeBlobStorageNodeWardenID(node), ev.release(), IEventHandle::FlagSubscribeOnSession);
-            const auto [it, inserted] = Subscriptions.try_emplace(node);
-            Y_ABORT_UNLESS(inserted);
-            WaitingReplyFromNode = node;
-
-            // report this query as finished 'cause it doesn't block pipeline anymore
-            TActivationContext::Send(new IEventHandle(TEvPrivate::EvQueryFinished, 0, Self->SelfId(), SelfId(),
-                nullptr, InvokePipelineGeneration));
-
-            // mark this actor as a relay one to prevent it sending EvQueryFinished upon passing away
-            IsRelay = true;
-        } else if (InvokePipelineGeneration == Self->InvokePipelineGeneration) {
             switch (auto& state = Self->RootState) {
                 case ERootState::INITIAL:
                     state = ERootState::LOCAL_QUORUM_OP;
@@ -67,8 +54,10 @@ namespace NKikimr::NStorage {
                     Y_ABORT_S("unexpected RootState# " << state);
             }
 
-            StartedExecutingQuery = true;
             ExecuteQuery();
+        } else {
+            // TEvAbortQuery will come soon (must be already in mailbox)
+            Y_ABORT_UNLESS(InvokePipelineGeneration < Self->InvokePipelineGeneration);
         }
     }
 
@@ -394,7 +383,7 @@ namespace NKikimr::NStorage {
         PassAway();
 
         // reset root state in keeper actor if this query is still valid and there is no pending proposition
-        if (InvokePipelineGeneration == Self->InvokePipelineGeneration && !Self->CurrentProposition && StartedExecutingQuery) {
+        if (InvokePipelineGeneration == Self->InvokePipelineGeneration && !Self->CurrentProposition) {
             switch (auto& state = Self->RootState) {
                 case ERootState::IN_PROGRESS:
                     state = ERootState::RELAX;
@@ -411,15 +400,13 @@ namespace NKikimr::NStorage {
             }
         }
 
-        // switch to error state if needed; this actor would be already terminated and removed from mailbox, so no OnError
-        // call will get through
         if (switchToError) {
             InvokeOtherActor(*Self, &TDistributedConfigKeeper::SwitchToError, std::move(*switchToError), true);
         }
     }
 
     void TInvokeRequestHandlerActor::PassAway() {
-        if (!IsRelay && !LifetimeToken.expired()) {
+        if (!WaitingReplyFromNode && !LifetimeToken.expired()) {
             TActivationContext::Send(new IEventHandle(TEvPrivate::EvQueryFinished, 0, Self->SelfId(), SelfId(), nullptr,
                 InvokePipelineGeneration));
         }
@@ -431,10 +418,10 @@ namespace NKikimr::NStorage {
     }
 
     STFUNC(TInvokeRequestHandlerActor::StateFunc) {
-        Wrap([&] {
-            if (LifetimeToken.expired()) {
-                return PassAway();
-            }
+        if (LifetimeToken.expired()) {
+            return PassAway();
+        }
+        try {
             STRICT_STFUNC_BODY(
                 cFunc(TEvPrivate::EvExecuteQuery, HandleExecuteQuery);
                 hFunc(TEvPrivate::TEvAbortQuery, Handle);
@@ -453,16 +440,30 @@ namespace NKikimr::NStorage {
                 hFunc(TEvBlobStorage::TEvControllerConfigResponse, Handle);
                 hFunc(TEvBlobStorage::TEvControllerDistconfResponse, Handle);
             )
-        });
+        } catch (const TExError& error) {
+            Finish(error.Status, error.what());
+            if (error.IsCritical) {
+                Y_DEBUG_ABORT("critical error during query processing: %s", error.what());
+            }
+        }
     }
 
     void TDistributedConfigKeeper::Handle(TEvNodeConfigInvokeOnRoot::TPtr ev) {
-        Invoke(TInvokeExternalOperation{
-            .Command = std::move(ev->Get()->Record),
-            .Sender = ev->Sender,
-            .SessionId = ev->InterconnectSession,
-            .Cookie = ev->Cookie,
-        });
+        if (Binding) {
+            // we have binding, so we have to forward this message to 'hop' node and return answer
+            const ui32 hopNodeId = Binding->NodeId;
+            const TActorId actorId = RegisterWithSameMailbox(new TInvokeRequestHandlerActor(this, {.Sender = ev->Sender,
+                .SessionId = ev->InterconnectSession, .Cookie = ev->Cookie}, hopNodeId));
+            TActivationContext::Send(new IEventHandle(MakeBlobStorageNodeWardenID(hopNodeId), actorId,
+                ev->Release().Release(), IEventHandle::FlagSubscribeOnSession));
+        } else {
+            Invoke(TInvokeExternalOperation{
+                .Command = std::move(ev->Get()->Record),
+                .Sender = ev->Sender,
+                .SessionId = ev->InterconnectSession,
+                .Cookie = ev->Cookie,
+            });
+        }
     }
 
     void TDistributedConfigKeeper::Invoke(TInvokeQuery&& query) {

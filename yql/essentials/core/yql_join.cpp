@@ -2046,6 +2046,16 @@ bool IsEquality(TExprNode::TPtr predicate, TExprNode::TPtr& left, TExprNode::TPt
     return false;
 }
 
+bool IsMemberEquality(const TExprNode::TPtr& predicate, const TExprNode& row, TExprNode::TPtr& leftMember, TExprNode::TPtr& rightMember) {
+    if (!IsEquality(predicate, leftMember, rightMember)) {
+        return false;
+    }
+
+    return
+        leftMember->IsCallable("Member") && &leftMember->Head() == &row &&
+        rightMember->IsCallable("Member") && &rightMember->Head() == &row;
+}
+
 void GatherJoinInputs(const TExprNode::TPtr& expr, const TExprNode& row,
     const TParentsMap& parentsMap, const THashMap<TString, TString>& backRenameMap,
     const TJoinLabels& labels, TSet<ui32>& inputs, TSet<TStringBuf>& usedFields) {

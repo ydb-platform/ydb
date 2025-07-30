@@ -285,17 +285,23 @@ private:
             try {
                 auto result = ProgramHolder->GetProgram()->Apply(NYql::NPureCalc::StreamFromVector(TVector{input}));
                 while (auto* m = result->Fetch()) {
+                    if (ProcessingError) {
+                        // We must get all the messages from the result, otherwise we will fall with an error inside yql
+                        continue;
+                    }
+
                     TString tablePath;
                     if (m->Table) {
                         if (!DirectoryPath.empty()) {
                             tablePath = JoinPath({ Database, m->Table.value()});
                         } else {
                             setError("it is not allowed to specify a table to write");
-                            break;
+                            continue;
                         }
                     } else {
                         tablePath = DefaultTablePath;
                     }
+
                     
                     TableState->AddData(std::move(tablePath), m->Data);
                 }

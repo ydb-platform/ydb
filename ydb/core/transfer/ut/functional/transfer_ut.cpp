@@ -1,4 +1,4 @@
-#include "transfer_common.h"
+#include <ydb/core/transfer/ut/common/transfer_common.h>
 
 using namespace NReplicationTest;
 
@@ -1023,6 +1023,40 @@ Y_UNIT_TEST_SUITE(Transfer)
         testCase.DropTransfer();
         testCase.DropTable();
         testCase.DropTopic();
+    }
+
+    Y_UNIT_TEST(TargetTableWithoutDirectory)
+    {
+        MainTestCase testCase;
+        testCase.CreateTable(R"(
+                CREATE TABLE `%s` (
+                    Key Uint64 NOT NULL,
+                    Message Utf8,
+                    PRIMARY KEY (Key)
+                )  WITH (
+                    STORE = %s
+                );
+            )");
+        testCase.CreateTopic();
+
+        testCase.CreateTransfer(R"(
+                $l = ($x) -> {
+                    return [
+                        <|
+                            __ydb_table: "other_table",
+                            Key:CAST($x._offset AS Uint64),
+                            Message:CAST($x._data AS Utf8)
+                        |>
+                    ];
+                };
+            )");
+
+        testCase.Write({"Message-1"});
+        testCase.CheckTransferStateError("it is not allowed to specify a table to write");
+
+        testCase.DropTransfer();
+        testCase.DropTopic();
+        testCase.DropTable();
     }
 }
 

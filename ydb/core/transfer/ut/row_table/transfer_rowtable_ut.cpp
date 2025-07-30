@@ -1,4 +1,4 @@
-#include "transfer_common.h"
+#include <ydb/core/transfer/ut/common/transfer_common.h>
 
 Y_UNIT_TEST_SUITE(Transfer_RowTable)
 {

@@ -24,7 +24,9 @@ RECURSE(
 )
 
 RECURSE_FOR_TESTS(
+    ut/column_table
     ut/functional
     ut/large
+    ut/row_table
 )
 

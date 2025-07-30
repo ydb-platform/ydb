@@ -387,6 +387,28 @@ memory_controller_config:
   query_execution_limit_percent: 25
 ```
 
+### Memory limits for column tables
+
+The limits for column tables include:
+
+- Column Table Read Execution — the limit for executing column table read operations;
+- Column Table Compaction — the limit for executing column table compaction operations;
+- Column Table Cache — the general limit for various caches of column tables.
+
+The memory limit for column tables specifies the maximum fixed amount of memory that operations and cache can use.
+
+Column table limits can be set in two ways:
+
+- As a percentage of the hard memory limit available to the process;
+- As a fixed size in bytes.
+
+An example of the `memory_controller_config` section with a specified limit as a percentage of the hard limit for compaction:
+
+```yaml
+memory_controller_config:
+  column_tables_compaction_limit_percent: 20
+```
+
 ### Configuration parameters
 
 Each configuration parameter applies within the context of a single database node.
@@ -412,6 +434,9 @@ $Max(shared\_cache\_min\_percent * hard\_limit\_bytes / 100, shared\_cache\_min\
 | `mem_table_min_percent`&nbsp;/<br/>`mem_table_min_bytes` | 1% | Minimum threshold for the MemTable memory limit. |
 | `mem_table_max_percent`&nbsp;/<br/>`mem_table_max_bytes` | 3% | Maximum threshold for the MemTable memory limit. |
 | `query_execution_limit_percent`&nbsp;/<br/>`query_execution_limit_bytes` | 20% | KQP memory limit. |
+| `column_tables_read_execution_limit_percent`&nbsp;/<br/>`column_tables_read_execution_limit_bytes` | 20% | Memory limit for column tables reading operations. |
+| `column_tables_compaction_limit_percent`&nbsp;/<br/>`column_tables_compaction_limit_bytes` | 36% | Memory limit for column tables compaction operations. |
+| `column_tables_cache_limit_percent`&nbsp;/<br/>`column_tables_cache_limit_bytes` | 10% | Memory limit for column tables cache. |
 
 ## blob_storage_config: Static cluster group {#blob-storage-config}
 

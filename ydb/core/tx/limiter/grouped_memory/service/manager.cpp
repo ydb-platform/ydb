@@ -91,11 +91,12 @@ void TManager::UnregisterAllocation(const ui64 externalProcessId, const ui64 ext
 }
 
 void TManager::RegisterAllocation(const ui64 externalProcessId, const ui64 externalScopeId, const ui64 externalGroupId,
-    const std::shared_ptr<IAllocation>& task, const std::optional<ui32>& stageIdx) {
+    const std::shared_ptr<IAllocation>& allocation, const std::optional<ui32>& stageIdx) {
     if (auto* process = GetProcessMemoryByExternalIdOptional(externalProcessId)) {
-        process->RegisterAllocation(externalScopeId, externalGroupId, task, stageIdx);
+        process->RegisterAllocation(externalScopeId, externalGroupId, allocation, stageIdx);
     } else {
-        AFL_VERIFY(!task->OnAllocated(std::make_shared<TAllocationGuard>(externalProcessId, externalScopeId, task->GetIdentifier(), OwnerActorId, task->GetMemory()), task))(
+        LWPROBE(Allocated, "on_register", allocation->GetIdentifier(), "", std::numeric_limits<ui64>::max(), std::numeric_limits<ui64>::max(), 0, 0, TDuration::Zero(), false, false);
+        AFL_VERIFY(!allocation->OnAllocated(std::make_shared<TAllocationGuard>(externalProcessId, externalScopeId, allocation->GetIdentifier(), OwnerActorId, allocation->GetMemory()), allocation))(
                                                                "process", externalProcessId)("scope", externalScopeId)(
                                                                "ext_group", externalGroupId)("stage_idx", stageIdx);
     }

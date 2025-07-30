@@ -12,13 +12,6 @@ ELSE()
 ENDIF()
 
 PEERDIR(
-    library/cpp/getopt
-    library/cpp/regex/pcre
-    library/cpp/svnversion
-    ydb/core/testlib/default
-    yql/essentials/public/udf/service/exception_policy
-    ydb/public/lib/yson_value
-    ydb/public/sdk/cpp/src/client/result
 )
 
 YQL_LAST_ABI_VERSION()

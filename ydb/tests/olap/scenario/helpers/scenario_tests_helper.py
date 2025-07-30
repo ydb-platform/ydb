@@ -356,8 +356,8 @@ class ScenarioTestHelper:
                 status = error.status
                 allure.attach(f'{repr(status)}: {error}', 'request status', allure.attachment_type.TEXT)
 
-            if any(sub in str(error) for sub in ignore_error):
-                return (result, error) if return_error else result
+            if error and any(sub in str(error) for sub in ignore_error):
+                return error if return_error else result
 
             if status in expected_status:
                 return result

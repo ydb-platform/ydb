@@ -408,3 +408,11 @@ namespace NKikimr::NAutoConfigInitializer {
     }
 
 } // NKikimr::NActorSystemInitializer
+
+namespace NKikimr {
+    bool NeedToUseAutoConfig(const NKikimrConfig::TActorSystemConfig& config) {
+        return config.GetUseAutoConfig()
+            || config.HasNodeType()
+            || config.HasCpuCount();
+    }
+}

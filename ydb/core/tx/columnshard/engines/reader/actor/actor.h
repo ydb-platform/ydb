@@ -197,6 +197,7 @@ private:
     ui32 PageFaults = 0;
     TInstant StartWaitTime;
     TDuration WaitTime;
+    TInstant LastSend = TInstant::Now();
 };
 
 }   // namespace NKikimr::NOlap::NReader

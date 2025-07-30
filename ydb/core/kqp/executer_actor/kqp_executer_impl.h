@@ -48,7 +48,7 @@
 #include <ydb/library/actors/wilson/wilson_span.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
-
+#include <ydb/library/actors/async/wait_for_event.h>
 
 #include <util/generic/size_literals.h>
 
@@ -567,7 +567,7 @@ protected:
         ReportEventElapsedTime();
     }
 
-    void HandleReady(TEvKqpExecuter::TEvTxRequest::TPtr& ev) {
+    void HandleReady(TEvKqpExecuter::TEvTxRequest::TPtr ev) {
         TxId = ev->Get()->Record.GetRequest().GetTxId();
         Target = ActorIdFromProto(ev->Get()->Record.GetTarget());
 
@@ -578,7 +578,8 @@ protected:
         addQueryEvent->DatabaseId = Database;
         addQueryEvent->PoolId = poolId.empty() ? NResourcePool::DEFAULT_POOL_ID : poolId;
         addQueryEvent->QueryId = TxId;
-        this->Send(MakeKqpSchedulerServiceId(SelfId().NodeId()), addQueryEvent.Release());
+        this->Send(MakeKqpSchedulerServiceId(SelfId().NodeId()), addQueryEvent.Release(), 0, TxId);
+        Query = (co_await ActorWaitForEvent<NScheduler::TEvQueryResponse>(TxId))->Get()->Query; // TODO: Y_DEFER
 #endif
 
         auto lockTxId = Request.AcquireLocksTxId;
@@ -607,7 +608,7 @@ protected:
 
         if (BufferActorId && Request.LocksOp == ELocksOp::Rollback) {
             static_cast<TDerived*>(this)->Finalize();
-            return;
+            co_return;
         }
 
         ExecuterStateSpan = NWilson::TSpan(TWilsonKqp::ExecuterTableResolve, ExecuterSpan.GetTraceId(), "WaitForTableResolve", NWilson::EFlags::AUTO_END);
@@ -1717,6 +1718,9 @@ protected:
             .ArrayBufferMinFillPercentage = ArrayBufferMinFillPercentage,
             .BufferPageAllocSize = BufferPageAllocSize,
             .VerboseMemoryLimitException = VerboseMemoryLimitException,
+#if defined(USE_HDRF_SCHEDULER)
+            .Query = Query,
+#endif
         });
 
         auto err = Planner->PlanExecution();
@@ -2319,6 +2323,9 @@ protected:
     TMaybe<TInstant> CancelAt;
     TActorId Target;
     ui64 TxId = 0;
+#if defined(USE_HDRF_SCHEDULER)
+    NScheduler::NHdrf::NDynamic::TQueryPtr Query;
+#endif
 
     bool ShardsResolved = false;
     TKqpTasksGraph TasksGraph;

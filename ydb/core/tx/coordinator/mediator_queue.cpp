@@ -20,6 +20,16 @@ static constexpr size_t ConfirmedStepsToFlush = 2;
 // the number of rows as large transactions are problematic to commit.
 static constexpr size_t ConfirmedParticipantsToFlush = 10'000;
 
+// Coordinator must reconnect with mediator as quickly as possible if connection is lost.
+// Retry policy prevents the reconnect loop from becoming too aggressive.
+static NTabletPipe::TClientRetryPolicy MediatorSyncRetryPolicy{
+    .RetryLimitCount = std::numeric_limits<ui32>::max(),
+    .MinRetryTime = TDuration::MilliSeconds(1),
+    .MaxRetryTime = TDuration::MilliSeconds(10),
+    .BackoffMultiplier = 2,
+    .DoFirstRetryInstantly = true,
+};
+
 void TMediatorStep::SerializeTo(TEvTxCoordinator::TEvCoordinatorStep *msg) const {
     for (const TTx &tx : Transactions) {
         NKikimrTx::TCoordinatorTransaction *x = msg->Record.AddTransactions();
@@ -50,6 +60,7 @@ class TTxCoordinatorMediatorQueue : public TActorBootstrapped<TTxCoordinatorMedi
     size_t ConfirmedParticipants = 0;
     size_t ConfirmedSteps = 0;
 
+
     void Die(const TActorContext &ctx) override {
         if (PipeClient) {
             NTabletPipe::CloseClient(ctx, PipeClient);
@@ -66,7 +77,7 @@ class TTxCoordinatorMediatorQueue : public TActorBootstrapped<TTxCoordinatorMedi
             PipeClient = TActorId();
         }
 
-        PipeClient = ctx.RegisterWithSameMailbox(NTabletPipe::CreateClient(ctx.SelfID, Mediator));
+        PipeClient = ctx.RegisterWithSameMailbox(NTabletPipe::CreateClient(ctx.SelfID, Mediator, MediatorSyncRetryPolicy));
 
         LOG_DEBUG_S(ctx, NKikimrServices::TX_COORDINATOR_MEDIATOR_QUEUE, "Actor# " << ctx.SelfID.ToString()
             << " tablet# " << Coordinator << " SEND EvCoordinatorSync to# " << Mediator << " Mediator");

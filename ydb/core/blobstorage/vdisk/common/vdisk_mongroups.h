@@ -933,33 +933,60 @@ public:                                                                         
             COUNTER_DEF(BarriersBalance);
         };
 
+        ///////////////////////////////////////////////////////////////////////////////////
+        // TDeepScrubbingGroup
+        ///////////////////////////////////////////////////////////////////////////////////
         class TDeepScrubbingGroup : public TBase {
         public:
             GROUP_CONSTRUCTOR(TDeepScrubbingGroup)
             {
-                COUNTER_INIT(SmallBlobsChecked, true);
-                COUNTER_INIT(HugeBlobsChecked, true);
-                COUNTER_INIT(CheckIntegritySuccesses, false);
-                COUNTER_INIT(CheckIntegrityErrors, false);
-
-                COUNTER_INIT(PlacementIssuesSmallBlobs, false);
-                COUNTER_INIT(DataIssuesSmallBlobs, false);
-
-                COUNTER_INIT(PlacementIssuesHugeBlobs, false);
-                COUNTER_INIT(DataIssuesHugeBlobs, false);
+                COUNTER_INIT(BlobsChecked, true);
+                COUNTER_INIT(CheckIntegritySuccesses, true);
+                COUNTER_INIT(CheckIntegrityErrors, true);
+                COUNTER_INIT(UnknownDataStatus, true);
+                COUNTER_INIT(UnknownPlacementStatus, true);
+                COUNTER_INIT(DataIssues, true);
+                COUNTER_INIT(PlacementIssues, true);
             }
 
-            COUNTER_DEF(SmallBlobsChecked);
-            COUNTER_DEF(HugeBlobsChecked);
-
+            COUNTER_DEF(BlobsChecked);
             COUNTER_DEF(CheckIntegritySuccesses);
             COUNTER_DEF(CheckIntegrityErrors);
+            COUNTER_DEF(UnknownDataStatus);
+            COUNTER_DEF(UnknownPlacementStatus);
+            COUNTER_DEF(DataIssues);
+            COUNTER_DEF(PlacementIssues);
+        };
 
-            COUNTER_DEF(PlacementIssuesSmallBlobs);
-            COUNTER_DEF(DataIssuesSmallBlobs);
+        class TDeepScrubbingSubgroups {
+        public:
+            TDeepScrubbingSubgroups(TIntrusivePtr<NMonitoring::TDynamicCounters> counters) {
+                for (bool isHuge : {true, false}) {
+                    for (TErasureType::EErasureSpecies erasure :
+                            {TErasureType::ErasureNone, TErasureType::Erasure4Plus2Block,
+                            TErasureType::ErasureMirror3of4, TErasureType::ErasureMirror3dc}) {
+                        ::NMonitoring::TDynamicCounterPtr subgroup = counters
+                                ->GetSubgroup("blobSize", isHuge ? "huge" : "small")
+                                ->GetSubgroup("erasure", TErasureType::ErasureSpeciesName(erasure));
+                        Subgroups.insert({GetKey(isHuge, erasure), TDeepScrubbingGroup(subgroup)});
+                    }
+                }
+            }
 
-            COUNTER_DEF(PlacementIssuesHugeBlobs);
-            COUNTER_DEF(DataIssuesHugeBlobs);
+            TDeepScrubbingGroup* GetCounters(bool isHuge, TErasureType::EErasureSpecies erasure) {
+                auto it = Subgroups.find(GetKey(isHuge, erasure));
+                if (it == Subgroups.end()) {
+                    return nullptr;
+                }
+                return &it->second;
+            }
+
+        private:
+            std::unordered_map<ui64, TDeepScrubbingGroup> Subgroups;
+
+            ui64 GetKey(bool isHuge, TErasureType::EErasureSpecies erasure) {
+                return ((ui64)isHuge << 32) + (ui64)erasure;
+            }
         };
 
         ///////////////////////////////////////////////////////////////////////////////////

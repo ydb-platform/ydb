@@ -1647,8 +1647,7 @@ private:
             Y_DEBUG_ABORT_UNLESS(stageInfo.Meta.TablePath == op.GetTable().GetPath());
             switch (op.GetTypeCase()) {
                 case NKqpProto::TKqpPhyTableOperation::kReadRanges:
-                case NKqpProto::TKqpPhyTableOperation::kReadRange:
-                case NKqpProto::TKqpPhyTableOperation::kLookup: {
+                case NKqpProto::TKqpPhyTableOperation::kReadRange: {
                     auto columns = BuildKqpColumns(op, tableInfo);
                     bool isFullScan = false;
                     auto partitions = PartitionPruner.Prune(op, stageInfo, isFullScan);

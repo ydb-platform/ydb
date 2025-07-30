@@ -38,6 +38,10 @@ class WorkloadTestBase(LoadSuiteBase):
         get_external_param(
             "cluster_path",
             ""))  # Путь к кластеру
+    yaml_config: str = str(
+        get_external_param(
+            "yaml-config",
+            ""))  # Путь к yaml конфигурации
 
     @classmethod
     def setup_class(cls) -> None:
@@ -297,116 +301,11 @@ class WorkloadTestBase(LoadSuiteBase):
                             host_log.append("Deleted cluster.yaml")
 
                         # 3. Копируем config.yaml в cluster.yaml
-                        cluster_path = get_external_param("cluster_path", "")
-                        logging.info(
-                            f"Cluster path for {host}: {cluster_path}")
+                        copy_result = cls._copy_cluster_config(host, host_log)
+                        if not copy_result["success"]:
+                            return copy_result
 
-                        if cluster_path:
-                            # Если указан cluster_path, используем его как есть
-                            local_config_path = cluster_path
-                            host_log.append(
-                                f"Copying from {local_config_path}")
-                            logging.info(
-                                f"Copying config file from {local_config_path} to {host}"
-                            )
-
-                            # Проверяем, существует ли файл
-                            if not os.path.exists(local_config_path):
-                                error_msg = (
-                                    f"Config file does not exist: {local_config_path}"
-                                )
-                                host_log.append(error_msg)
-                                logging.error(error_msg)
-                                return {
-                                    "host": host,
-                                    "success": False,
-                                    "error": error_msg,
-                                    "log": host_log,
-                                }
-
-                            # Используем готовую функцию copy_file
-                            copy_result = copy_file(
-                                local_path=local_config_path,
-                                host=host,
-                                remote_path="/Berkanavt/kikimr/cfg/cluster.yaml",
-                                raise_on_error=False,
-                            )
-
-                            if copy_result is None or copy_result == "":
-                                error_msg = f"Failed to copy config file to cluster.yaml on {host} - copy_file returned: {copy_result}"
-                                host_log.append(error_msg)
-                                logging.error(error_msg)
-                                # Попробуем получить больше информации об
-                                # ошибке
-                                try:
-                                    # Проверим размер файла
-                                    file_size = os.path.getsize(
-                                        local_config_path)
-                                    logging.info(
-                                        f"Local config file size: {file_size} bytes"
-                                    )
-
-                                    # Проверим права доступа
-                                    file_mode = oct(os.stat(local_config_path).st_mode)[
-                                        -3:
-                                    ]
-                                    logging.info(
-                                        f"Local config file permissions: {file_mode}"
-                                    )
-
-                                except Exception as e:
-                                    logging.error(
-                                        f"Error checking file properties: {e}"
-                                    )
-
-                                return {
-                                    "host": host,
-                                    "success": False,
-                                    "error": error_msg,
-                                    "log": host_log,
-                                }
-                            else:
-                                host_log.append(
-                                    f"Copied config file to cluster.yaml: {copy_result}"
-                                )
-                                logging.info(
-                                    f"Successfully copied config file to {host}: {copy_result}"
-                                )
-                        else:
-                            # Если cluster_path не указан, используем локальное
-                            # копирование
-                            copy_cmd = "sudo cp /Berkanavt/kikimr/cfg/config.yaml /Berkanavt/kikimr/cfg/cluster.yaml"
-                            host_log.append("Using local cp command")
-                            logging.info(
-                                f"Using local cp command on {host}: {copy_cmd}"
-                            )
-
-                            copy_result = execute_command(
-                                host=host, cmd=copy_cmd, raise_on_error=False
-                            )
-
-                            copy_stderr = (
-                                copy_result.stderr if copy_result.stderr else ""
-                            )
-                            if copy_stderr and "error" in copy_stderr.lower():
-                                error_msg = f"Error copying config.yaml to cluster.yaml on {host}: {copy_stderr}"
-                                host_log.append(error_msg)
-                                logging.error(error_msg)
-                                return {
-                                    "host": host,
-                                    "success": False,
-                                    "error": error_msg,
-                                    "log": host_log,
-                                }
-                            else:
-                                host_log.append(
-                                    "Copied config.yaml to cluster.yaml")
-                                logging.info(
-                                    f"Successfully copied config.yaml on {host} using local cp"
-                                )
-
-                        logging.info(
-                            f"Completed nemesis config preparation for {host}")
+                        logging.info(f"Completed nemesis config preparation for {host}")
                         return {"host": host, "success": True, "log": host_log}
 
                     except Exception as e:
@@ -623,6 +522,84 @@ class WorkloadTestBase(LoadSuiteBase):
                 str(e), "Nemesis Error", attachment_type=allure.attachment_type.TEXT
             )
             return nemesis_log + [error_msg]
+
+    @classmethod
+    def _copy_cluster_config(cls, host: str, host_log: list) -> dict:
+        """Копирует конфигурацию кластера на хост"""
+        logging.info(f"Cluster path for {host}: {cls.cluster_path}")
+        logging.info(f"YAML config for {host}: {cls.yaml_config}")
+
+        # Копируем cluster.yaml (если указан cluster_path)
+        cluster_result = cls._copy_single_config(
+            host, cls.cluster_path, "/Berkanavt/kikimr/cfg/cluster.yaml",
+            "cluster config", None, host_log
+        )
+        if not cluster_result["success"]:
+            return cluster_result
+
+        # Копируем databases.yaml (если указан yaml_config)
+        if cls.yaml_config:
+            databases_result = cls._copy_single_config(
+                host, cls.yaml_config, "/Berkanavt/kikimr/cfg/databases.yaml",
+                "databases config", None, host_log
+            )
+            if not databases_result["success"]:
+                return databases_result
+
+        return {"host": host, "success": True, "log": host_log}
+
+    @classmethod
+    def _copy_single_config(cls, host: str, config_path: str, remote_path: str,
+                            config_name: str, fallback_source: str, host_log: list) -> dict:
+        """Копирует один файл конфигурации"""
+        if config_path:
+            # Копируем внешний файл
+            if not os.path.exists(config_path):
+                error_msg = f"{config_name} file does not exist: {config_path}"
+                host_log.append(error_msg)
+                logging.error(error_msg)
+                return {"host": host, "success": False, "error": error_msg, "log": host_log}
+
+            source = config_path
+            success_msg = f"Copied external {config_name} from {config_path}"
+        elif fallback_source:
+            # Используем локальный fallback
+            source = fallback_source
+            success_msg = f"Copied local {config_name}"
+        else:
+            # Ничего не копируем
+            return {"host": host, "success": True, "log": host_log}
+
+        # Выполняем копирование
+        host_log.append(f"Copying {config_name} from {source}")
+
+        if config_path:
+            result = copy_file(
+                local_path=config_path,
+                host=host,
+                remote_path=remote_path,
+                raise_on_error=False
+            )
+        else:
+            result = execute_command(
+                host=host,
+                cmd=f"sudo cp {fallback_source} {remote_path}",
+                raise_on_error=False
+            )
+
+        # Проверяем результат
+        if config_path and not result:
+            error_msg = f"Failed to copy {config_name} to {remote_path} on {host}"
+            host_log.append(error_msg)
+            return {"host": host, "success": False, "error": error_msg, "log": host_log}
+        elif not config_path and result.stderr and "error" in result.stderr.lower():
+            error_msg = f"Error copying {config_name} on {host}: {result.stderr}"
+            host_log.append(error_msg)
+            return {"host": host, "success": False, "error": error_msg, "log": host_log}
+
+        host_log.append(success_msg)
+        logging.info(f"Successfully copied {config_name} to {host}")
+        return {"host": host, "success": True, "log": host_log}
 
     def create_workload_result(
         self,

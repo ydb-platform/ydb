@@ -51,6 +51,7 @@ namespace TEvPrivate {
         EvVerifyPassword,
         EvLoginFinalize,
         EvContinuousBackupCleanerResult,
+        EvTestNotifySubdomainCleanup,
         EvEnd
     };
 
@@ -205,6 +206,14 @@ namespace TEvPrivate {
         { }
     };
 
+    struct TEvTestNotifySubdomainCleanup : public TEventLocal<TEvTestNotifySubdomainCleanup, EvTestNotifySubdomainCleanup> {
+        TPathId SubdomainPathId;
+
+        explicit TEvTestNotifySubdomainCleanup(const TPathId& subdomainPathId)
+            : SubdomainPathId(subdomainPathId)
+        { }
+    };
+
     struct TEvCompletePublication: public TEventLocal<TEvCompletePublication, EvCompletePublication> {
         const TOperationId OpId;
         const TPathId PathId;
@@ -284,7 +293,7 @@ namespace TEvPrivate {
 
     struct TEvProgressIncrementalRestore : public TEventLocal<TEvProgressIncrementalRestore, EvProgressIncrementalRestore> {
         ui64 OperationId;
-        
+
         explicit TEvProgressIncrementalRestore(ui64 operationId)
             : OperationId(operationId)
         {}

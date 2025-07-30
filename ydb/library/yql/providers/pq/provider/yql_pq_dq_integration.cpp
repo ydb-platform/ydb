@@ -115,8 +115,20 @@ public:
         return read;
     }
 
-    TMaybe<bool> CanWrite(const TExprNode&, TExprContext&) override {
-        YQL_ENSURE(false, "Unimplemented");
+    TMaybe<bool> CanWrite(const TExprNode& write, TExprContext&) override {
+        return TPqWriteTopic::Match(&write);
+    }
+
+    TExprNode::TPtr WrapWrite(const TExprNode::TPtr& writeNode, TExprContext& ctx) override {
+        TExprBase writeExpr(writeNode);
+        const auto write = writeExpr.Cast<TPqWriteTopic>();
+
+        return Build<TPqInsert>(ctx, write.Pos())
+            .World(write.World())
+            .DataSink(write.DataSink())
+            .Topic(write.Topic())
+            .Input(write.Input())
+            .Done().Ptr();
     }
 
     void RegisterMkqlCompiler(NCommon::TMkqlCallableCompilerBase& compiler) override {

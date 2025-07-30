@@ -49,7 +49,6 @@ namespace NKikimr::NKqp::NScheduler {
 
     struct TSchedulableTask;
     using TSchedulableTaskPtr = THolder<TSchedulableTask>;
-    using TSchedulableTaskFactory = std::function<TSchedulableTaskPtr(const NHdrf::TQueryId&)>;
 
 } // namespace NKikimr::NKqp::NScheduler
 

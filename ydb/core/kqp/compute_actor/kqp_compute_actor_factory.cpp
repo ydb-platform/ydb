@@ -82,7 +82,6 @@ struct TMemoryQuotaManager : public NYql::NDq::TGuaranteeQuotaManager {
 class TKqpCaFactory : public IKqpNodeComputeActorFactory {
     std::shared_ptr<NRm::IKqpResourceManager> ResourceManager_;
     NYql::NDq::IDqAsyncIoFactory::TPtr AsyncIoFactory;
-    NScheduler::TSchedulableTaskFactory SchedulableTaskFactory;
     const std::optional<TKqpFederatedQuerySetup> FederatedQuerySetup;
 
     std::atomic<ui64> MkqlLightProgramMemoryLimit = 0;
@@ -96,11 +95,9 @@ public:
     TKqpCaFactory(const NKikimrConfig::TTableServiceConfig::TResourceManager& config,
         std::shared_ptr<NRm::IKqpResourceManager> resourceManager,
         NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory,
-        NScheduler::TSchedulableTaskFactory schedulableTaskFactory,
         const std::optional<TKqpFederatedQuerySetup> federatedQuerySetup)
         : ResourceManager_(resourceManager)
         , AsyncIoFactory(asyncIoFactory)
-        , SchedulableTaskFactory(schedulableTaskFactory)
         , FederatedQuerySetup(federatedQuerySetup)
     {
         ApplyConfig(config);
@@ -136,7 +133,7 @@ public:
 
         auto&& schedulableOptions = args.SchedulableOptions;
 #if defined(USE_HDRF_SCHEDULER)
-        schedulableOptions.SchedulableTask = SchedulableTaskFactory(args.TxId);
+        schedulableOptions.SchedulableTask = MakeHolder<NScheduler::TSchedulableTask>(args.Query);
         schedulableOptions.IsSchedulable = !args.TxInfo->PoolId.empty() && args.TxInfo->PoolId != NResourcePool::DEFAULT_POOL_ID;
 #endif
 
@@ -253,10 +250,9 @@ public:
 std::shared_ptr<IKqpNodeComputeActorFactory> MakeKqpCaFactory(const NKikimrConfig::TTableServiceConfig::TResourceManager& config,
         std::shared_ptr<NRm::IKqpResourceManager> resourceManager,
         NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory,
-        NScheduler::TSchedulableTaskFactory schedulableTaskFactory,
         const std::optional<TKqpFederatedQuerySetup> federatedQuerySetup)
 {
-    return std::make_shared<TKqpCaFactory>(config, resourceManager, asyncIoFactory, schedulableTaskFactory, federatedQuerySetup);
+    return std::make_shared<TKqpCaFactory>(config, resourceManager, asyncIoFactory, federatedQuerySetup);
 }
 
 } // namespace NKikimr::NKqp::NComputeActor

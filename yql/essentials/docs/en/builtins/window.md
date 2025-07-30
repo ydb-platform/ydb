@@ -91,7 +91,7 @@ item  odd  lag1
 ```
 
 
-## FIRST_VALUE / LAST_VALUE
+## FIRST_VALUE / LAST_VALUE {#first-last-value}
 
 Access values from the first and last rows (using the `ORDER BY` clause for the window) of the [window frame](../syntax/window.md#frame). The only argument is the expression that you need to access.
 
@@ -240,7 +240,7 @@ WINDOW w AS (ORDER BY key);
 ```
 
 
-## SessionState() {#session-state}
+## SessionState {#session-state}
 
 A non-standard window function `SessionState()` (without arguments) lets you get the session calculation status from [SessionWindow](../syntax/group_by.md#session-window) for the current row.
 It's allowed only if `SessionWindow()` is present in the `PARTITION BY` section in the window definition.

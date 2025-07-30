@@ -17,6 +17,8 @@ void TShardDeleter::SendDeleteRequests(TTabletId hiveTabletId,
         NKikimr::NSchemeShard::TShardInfo>& shardsInfos,
         const NActors::TActorContext &ctx
     ) {
+    LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "SendDeleteRequests, shardsToDelete " << shardsToDelete.size()<< ", to hive " << hiveTabletId << ", at schemeshard " << MyTabletID);
+
     if (shardsToDelete.empty())
         return;
 

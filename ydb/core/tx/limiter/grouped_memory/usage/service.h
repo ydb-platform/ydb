@@ -79,6 +79,7 @@ public:
         } else {
             for (auto&& i : tasks) {
                 if (!i->IsAllocated()) {
+                    LWPROBE(Allocated, "disabled", i->GetIdentifier(), "", std::numeric_limits<ui64>::max(), std::numeric_limits<ui64>::max(), 0, 0, TDuration::Zero(), false, true);
                     AFL_VERIFY(i->OnAllocated(std::make_shared<TAllocationGuard>(0, 0, 0, NActors::TActorId(), i->GetMemory()), i));
                 }
             }

@@ -286,11 +286,9 @@ public:
                 MakeKqpCompileComputationPatternServiceID(SelfId().NodeId()), CompileComputationPatternService);
         }
 
-        auto scheduler = AppData()->ComputeScheduler = std::make_shared<NScheduler::TComputeScheduler>(Counters);
-
         ResourceManager_ = GetKqpResourceManager();
         CaFactory_ = NComputeActor::MakeKqpCaFactory(
-            TableServiceConfig.GetResourceManager(), ResourceManager_, AsyncIoFactory, scheduler->CreateSchedulableTaskFactory(), FederatedQuerySetup);
+            TableServiceConfig.GetResourceManager(), ResourceManager_, AsyncIoFactory, FederatedQuerySetup);
 
         KqpNodeService = TActivationContext::Register(CreateKqpNodeService(TableServiceConfig, ResourceManager_, CaFactory_, Counters, AsyncIoFactory, FederatedQuerySetup));
         TActivationContext::ActorSystem()->RegisterLocalService(
@@ -301,9 +299,10 @@ public:
             MakeKqpWorkloadServiceId(SelfId().NodeId()), KqpWorkloadService);
 
         NScheduler::TOptions schedulerOptions {
+            .Counters = Counters,
             .UpdateFairSharePeriod = TDuration::MicroSeconds(500'000),
         };
-        auto kqpSchedulerService = TActivationContext::Register(CreateKqpComputeSchedulerService(scheduler, schedulerOptions));
+        auto kqpSchedulerService = TActivationContext::Register(CreateKqpComputeSchedulerService(schedulerOptions));
         TActivationContext::ActorSystem()->RegisterLocalService(
             MakeKqpSchedulerServiceId(SelfId().NodeId()), kqpSchedulerService);
 

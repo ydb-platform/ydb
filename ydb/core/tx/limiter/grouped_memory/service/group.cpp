@@ -1,7 +1,11 @@
 #include "group.h"
 #include "process.h"
 
+#include <ydb/core/tx/limiter/grouped_memory/tracing/probes.h>
+
 namespace NKikimr::NOlap::NGroupedMemoryManager {
+
+LWTRACE_USING(YDB_GROUPED_MEMORY_PROVIDER);
 
 std::vector<std::shared_ptr<TAllocationInfo>> TGrouppedAllocations::AllocatePossible(const ui32 allocationsLimit) {
     std::vector<std::shared_ptr<TAllocationInfo>> result;
@@ -41,7 +45,10 @@ bool TAllocationGroups::Allocate(const bool isPriorityProcess, TProcessMemorySco
                 break;
             }
             for (auto&& i : allocated) {
-                if (!i->Allocate(scope.OwnerActorId)) {
+                bool success = i->Allocate(scope.OwnerActorId);
+                auto stage = i->GetStage();
+                LWPROBE(Allocated, "delayed", i->GetIdentifier(), stage->GetName(), stage->GetLimit(), stage->GetHardLimit().value_or(std::numeric_limits<ui64>::max()), stage->GetUsage().Val(), stage->GetWaiting().Val(), i->GetAllocationTime(), forced, success);
+                if (!success) {
                     toRemove.emplace_back(i->GetIdentifier());
                 } else if (!forced) {
                     AFL_VERIFY(++allocationsCount <= allocationsLimit)("count", allocationsCount)("limit", allocationsLimit);

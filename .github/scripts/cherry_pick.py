@@ -8,7 +8,7 @@ from github import Github, GithubException, GithubObject, Commit
 
 
 class CherryPickCreator:
-    def __init__(self, commits: str, target_branches: str, issue_number: int):
+    def __init__(self, commits: str, pulls: str, target_branches: str, issue_number: int):
         def __split(s: str, seps: str = ', '):
             if not s:
                 return []
@@ -28,9 +28,19 @@ class CherryPickCreator:
             self.issue = self.repo.get_issue(issue_number)
         except:
             self.issue = GithubObject.NotSet
-        self.commits: list[Commit.Commit] = []
+        self.commit_shas: list[str] = []
+        self.pr_title_list: list[str] = []
+        self.pr_body_list: list[str] = []
         for c in __split(commits):
-            self.commits.append(self.repo.get_commit(c))
+            commit = self.repo.get_commit(c)
+            self.pr_title_list.append(commit.sha)
+            self.pr_body_list.append(commit.html_url)
+            self.commit_shas.append(commit.sha)
+        for p in __split(pulls):
+            pull = self.repo.get_pull(int(p))
+            self.pr_title_list.append(f'PR {pull.number}')
+            self.pr_body_list.append(pull.html_url)
+            self.commit_shas.append(pull.merge_commit_sha)
         self.dtm = datetime.datetime.now().strftime("%y%m%d-%H%M")
         self.logger = logging.getLogger("cherry-pick")
         self.workflow_url = None
@@ -68,11 +78,11 @@ class CherryPickCreator:
         self.git_run("reset", "--hard")
         self.git_run("checkout", target_branch)
         self.git_run("checkout", "-b", dev_branch_name)
-        self.git_run("cherry-pick", "--allow-empty", *[c.sha for c in self.commits])
+        self.git_run("cherry-pick", "--allow-empty", *self.commit_shas)
         self.git_run("push", "--set-upstream", "origin", dev_branch_name)
 
-        pr_title = f"Cherry-pick {', '.join([c.sha for c in self.commits])} to {target_branch}"
-        pr_body = f"Cherry-pick {', '.join([c.html_url for c in self.commits])} to {target_branch}\n\n"
+        pr_title = f"Cherry-pick {', '.join(self.pr_title_list)} to {target_branch}"
+        pr_body = f"Cherry-pick {', '.join(self.pr_body_list)} to {target_branch}\n\n"
         if self.workflow_url:
             pr_body += f"PR was created by cherry-pick workflow [run]({self.workflow_url})"
         else:
@@ -84,7 +94,7 @@ class CherryPickCreator:
         self.add_summary(f'{target_branch}: PR {pr.html_url} created\n')
 
     def process(self):
-        if len(self.commits) == 0 or len(self.target_banches) == 0:
+        if len(self.commit_shas) == 0 or len(self.target_banches) == 0:
             self.add_summary("Noting to cherry-pick or no targets branches, my life is meaningless.")
             return
         self.git_run("clone", f"https://{self.token}@github.com/{self.repo_name}.git", "-c", "protocol.version=2", f"ydb-new-pr")
@@ -101,6 +111,7 @@ class CherryPickCreator:
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--commits", help="Comma or space separated list of commit SHAs")
+    parser.add_argument("--pulls", help="Comma or space separated list of PR numbers")
     parser.add_argument("--target-branches", help="Comma or space separated list of branchs to cherry-pick")
     parser.add_argument("--issue", help="Issue number for attach PR", type=int, default=0)
     args = parser.parse_args()

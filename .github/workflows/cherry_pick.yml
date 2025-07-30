@@ -6,6 +6,10 @@ on:
         type: string
         default: ""
         description: Comma or space separated commit SHAs for cherry-pick
+      pulls:
+        type: string
+        default: ""
+        description: Comma or space separated PR numbers for cherry-pick
       target_branches:
         default: ""
         description: Comma or space separated banches to cherry-pick
@@ -47,4 +51,8 @@ jobs:
           REPO: ${{ github.repository }}
           TOKEN: ${{ env.GH_TOKEN }}
         run: |
-          ./.github/scripts/cherry_pick.py --commits="${{ inputs.commits }}" --target-branch="${{ inputs.target_branches }}"  --issue=${{ inputs.issue_number }}
+          ./.github/scripts/cherry_pick.py \
+            --pulls="${{ inputs.pulls }}"
+            --commits="${{ inputs.commits }}" \
+            --target-branch="${{ inputs.target_branches }}" \
+            --issue=${{ inputs.issue_number }}

@@ -10,6 +10,7 @@
 #include "resource_profile.h"
 #include "event_filter.h"
 
+#include <ydb/core/audit/audit_config/audit_config.h>
 #include <ydb/core/control/immediate_control_board_impl.h>
 #include <ydb/core/grpc_services/grpc_helper.h>
 #include <ydb/core/jaeger_tracing/sampling_throttling_configurator.h>
@@ -56,7 +57,7 @@ struct TAppData::TImpl {
     NKikimrConfig::TColumnShardConfig ColumnShardConfig;
     NKikimrConfig::TSchemeShardConfig SchemeShardConfig;
     NKikimrConfig::TMeteringConfig MeteringConfig;
-    NKikimrConfig::TAuditConfig AuditConfig;
+    NKikimr::NAudit::TAuditConfig AuditConfig;
     NKikimrConfig::TCompactionConfig CompactionConfig;
     NKikimrConfig::TDomainsConfig DomainsConfig;
     NKikimrConfig::TBootstrap BootstrapConfig;

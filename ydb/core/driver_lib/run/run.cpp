@@ -30,6 +30,7 @@
 #include <ydb/core/control/immediate_control_board_actor.h>
 
 #include <ydb/library/actors/protos/services_common.pb.h>
+#include <ydb/core/audit/audit_config/audit_config.h>
 #include <ydb/core/cms/console/grpc_library_helper.h>
 #include <ydb/core/keyvalue/keyvalue.h>
 #include <ydb/core/formats/clickhouse_block.h>

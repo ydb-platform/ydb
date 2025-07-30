@@ -163,6 +163,10 @@ namespace NYamlConfig {
     class IConfigSwissKnife;
 }
 
+namespace NAudit {
+    class TAuditConfig;
+}
+
 struct TAppData {
     static const ui32 MagicTag = 0x2991AAF8;
     const ui32 Magic;
@@ -234,7 +238,7 @@ struct TAppData {
     NKikimrConfig::TColumnShardConfig& ColumnShardConfig;
     NKikimrConfig::TSchemeShardConfig& SchemeShardConfig;
     NKikimrConfig::TMeteringConfig& MeteringConfig;
-    NKikimrConfig::TAuditConfig& AuditConfig;
+    NKikimr::NAudit::TAuditConfig& AuditConfig;
     NKikimrConfig::TCompactionConfig& CompactionConfig;
     NKikimrConfig::TDomainsConfig& DomainsConfig;
     NKikimrConfig::TBootstrap& BootstrapConfig;

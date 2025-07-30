@@ -61,6 +61,7 @@ private:
             USER_ACCOUNT_TYPE,
             SERVICE_ACCOUNT_TYPE,
             ANONYMOUS_ACCOUNT_TYPE,
+            SERVICE_ACCOUNT_IMPERSONATED_FROM_USER_ACCOUNT_TYPE, // Service account credentials got from impersonation of user account
         };
 
         TString Subject;
@@ -463,7 +464,7 @@ private:
     }
 
     static void SetNebiusContainerId(nebius::iam::v1::AuthorizeCheck* pathsContainer, const TString& id) {
-        pathsContainer->set_container_id(id);
+        pathsContainer->set_managed_resource_id(id);
     }
 
     template <typename TTokenRecord>
@@ -656,14 +657,49 @@ private:
             return TPermissionRecord::TTypeCase::USER_ACCOUNT_TYPE;
         case Account::kServiceAccount:
             return TPermissionRecord::TTypeCase::SERVICE_ACCOUNT_TYPE;
+        case Account::kAnonymousAccount:
+            return TPermissionRecord::TTypeCase::ANONYMOUS_ACCOUNT_TYPE;
         default:
             return TPermissionRecord::TTypeCase::TYPE_NOT_SET;
         }
     }
 
+    typename TPermissionRecord::TTypeCase ConvertSubjectType(const nebius::iam::v1::Account::TypeCase& type, const nebius::iam::v1::ImpersonationInfo& impersonationInfo) {
+        typename TPermissionRecord::TTypeCase result = ConvertSubjectType(type);
+        if (result == TPermissionRecord::TTypeCase::SERVICE_ACCOUNT_TYPE) {
+            for (const nebius::iam::v1::ImpersonationInfo::ImpersonationAccount& impersonationAccount : impersonationInfo.chain()) {
+                for (const nebius::iam::v1::Account& account : impersonationAccount.account()) {
+                    if (ConvertSubjectType(account.GetTypeCase()) == TPermissionRecord::TTypeCase::USER_ACCOUNT_TYPE) {
+                        result = TPermissionRecord::TTypeCase::SERVICE_ACCOUNT_IMPERSONATED_FROM_USER_ACCOUNT_TYPE;
+                        break;
+                    }
+                }
+                if (result == TPermissionRecord::TTypeCase::SERVICE_ACCOUNT_IMPERSONATED_FROM_USER_ACCOUNT_TYPE) {
+                    break;
+                }
+            }
+        }
+        return result;
+    }
+
     template <>
     typename TPermissionRecord::TTypeCase ConvertSubjectType<nebius::iam::v1::AuthenticateResponse>(const nebius::iam::v1::AuthenticateResponse& response) {
         return ConvertSubjectType(response.account().type_case());
+    }
+
+    NACLibProto::ESubjectType ConvertSubjectTypeToProto(typename TPermissionRecord::TTypeCase type) {
+        switch (type) {
+        case TPermissionRecord::TTypeCase::TYPE_NOT_SET:
+            return NACLibProto::SUBJECT_TYPE_UNSPECIFIED;
+        case TPermissionRecord::TTypeCase::USER_ACCOUNT_TYPE:
+            return NACLibProto::SUBJECT_TYPE_USER;
+        case TPermissionRecord::TTypeCase::SERVICE_ACCOUNT_TYPE:
+            return NACLibProto::SUBJECT_TYPE_SERVICE;
+        case TPermissionRecord::TTypeCase::ANONYMOUS_ACCOUNT_TYPE:
+            return NACLibProto::SUBJECT_TYPE_ANONYMOUS;
+        case TPermissionRecord::TTypeCase::SERVICE_ACCOUNT_IMPERSONATED_FROM_USER_ACCOUNT_TYPE:
+            return NACLibProto::SUBJECT_TYPE_SERVICE_IMPERSONATED_FROM_USER;
+        }
     }
 
     template <typename TTokenRecord>
@@ -1198,7 +1234,7 @@ private:
                                 processingError = true;
                                 break;
                             }
-                            record.SubjectType = ConvertSubjectType(account.type_case());
+                            record.SubjectType = ConvertSubjectType(account.type_case(), result.impersonation_info());
                             for (auto& [_, permissionRecord] : record.Permissions) {
                                 if (permissionRecord.Error.empty()) {
                                     permissionRecord.Subject = record.Subject;
@@ -1221,8 +1257,8 @@ private:
                                 if (permissionRecord.IsRequired()) {
                                     hasRequiredPermissionFailed = true;
                                     errorMessage << permissionIt->first << " for";
-                                    if (check.container_id()) {
-                                        errorMessage << ' ' << check.container_id();
+                                    if (check.managed_resource_id()) {
+                                        errorMessage << ' ' << check.managed_resource_id();
                                     }
                                     for (const auto& resourcePath : check.resource_path().path()) {
                                         errorMessage << ' ' << resourcePath.id();
@@ -1758,6 +1794,7 @@ protected:
 
     template <typename TTokenRecord>
     void SetToken(const TString& key, TTokenRecord& record, TIntrusivePtr<NACLib::TUserToken> token) {
+        token->SetSubjectType(ConvertSubjectTypeToProto(record.SubjectType));
         TInstant now = TlsActivationContext->Now();
         record.Error.clear();
         EnrichUserTokenWithBuiltins(record, token);

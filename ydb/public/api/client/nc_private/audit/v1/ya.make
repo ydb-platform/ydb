@@ -1,3 +1,3 @@
 RECURSE(
-    v1
+    common
 )

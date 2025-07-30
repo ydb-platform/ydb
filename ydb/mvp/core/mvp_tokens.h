@@ -11,8 +11,8 @@
 #include <ydb/mvp/core/protos/mvp.pb.h>
 #include <ydb/mvp/core/core_ydb.h>
 #include <ydb/public/api/client/yc_private/iam/iam_token_service.grpc.pb.h>
-#include <ydb/public/api/client/nc_private/iam/token_service.grpc.pb.h>
-#include <ydb/public/api/client/nc_private/iam/token_exchange_service.grpc.pb.h>
+#include <ydb/public/api/client/nc_private/iam/v1/token_service.grpc.pb.h>
+#include <ydb/public/api/client/nc_private/iam/v1/token_exchange_service.grpc.pb.h>
 #include <ydb/public/api/protos/ydb_auth.pb.h>
 #include "grpc_log.h"
 

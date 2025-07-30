@@ -3,9 +3,13 @@ PROTO_LIBRARY()
 EXCLUDE_TAGS(GO_PROTO)
 
 GRPC()
+
 SRCS(
-    access_service.proto
-    access.proto
+    annotations.proto
+)
+
+PEERDIR(
+    ydb/public/api/client/nc_private/audit/v1/common
 )
 
 USE_COMMON_GOOGLE_APIS(
@@ -13,3 +17,7 @@ USE_COMMON_GOOGLE_APIS(
 )
 
 END()
+
+RECURSE(
+    v1
+)

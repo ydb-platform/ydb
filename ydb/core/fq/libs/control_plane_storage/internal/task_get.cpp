@@ -310,10 +310,8 @@ void TControlPlaneStorageBase::FillGetTaskResult(Fq::Private::GetTaskResult& res
         *newTask->mutable_execution_limit() = NProtoInterop::CastToProto(ExtractLimit(task));
         *newTask->mutable_request_started_at() = task.Query.meta().started_at();
         *newTask->mutable_request_submitted_at() = task.Query.meta().submitted_at();
-        if (task.NodeIds) {
-            for (auto nodeId : *task.NodeIds) {    
-                newTask->add_node_id(nodeId);
-            }
+        for (auto nodeId : task.NodeIdsSet) {
+            newTask->add_node_id(nodeId);
         }
 
         newTask->set_restart_count(task.RetryCount);

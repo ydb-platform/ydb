@@ -867,7 +867,7 @@ protected:
         for (const auto& [secretName, authInfo] : stage.GetSecureParams()) {
             const auto& structuredToken = NYql::CreateStructuredTokenParser(authInfo).ToBuilder().ReplaceReferences(SecureParams).ToJson();
             const auto& structuredTokenParser = NYql::CreateStructuredTokenParser(structuredToken);
-            YQL_ENSURE(structuredTokenParser.HasIAMToken(), "only token authentification supported for compute tasks");
+            YQL_ENSURE(structuredTokenParser.HasIAMToken(), "only token authentefiaction supported for compute tasks");
             secureParams.emplace(secretName, structuredTokenParser.GetIAMToken());
         }
     }
@@ -1031,6 +1031,51 @@ protected:
         }
     }
 
+    void RestoreSinks(const TStageInfo& stageInfo) {
+        const auto& stage = stageInfo.Meta.GetStage(stageInfo.Id);
+        if (stage.SinksSize() == 0) {
+            return;
+        }
+
+        YQL_ENSURE(stage.SinksSize() == 1, "multiple sinks are not supported");
+        const auto& sink = stage.GetSinks(0);
+
+        if (!sink.HasExternalSink()) {
+            YQL_ENSURE(false, "unsupported sink type for restore");
+        }
+
+        const auto& extSink = sink.GetExternalSink();
+        if (const auto sinkName = extSink.GetSinkName()) {
+            const auto structuredToken = NYql::CreateStructuredTokenParser(extSink.GetAuthInfo()).ToBuilder().ReplaceReferences(SecureParams).ToJson();
+            for (const auto taskId : stageInfo.Tasks) {
+                TasksGraph.GetTask(taskId).Meta.SecureParams.emplace(sinkName, structuredToken);
+            }
+        }
+    }
+
+    ui64 GetSelfNodeIdxInSnapshot(const TVector<NKikimrKqp::TKqpNodeResources>& resourceSnapshot) {
+        for (ui64 i = 0; i < resourceSnapshot.size(); ++i) {
+            if (resourceSnapshot[i].GetNodeId() == SelfId().NodeId()) {
+                return i;
+            }
+        }
+
+        return 0;
+    }
+
+    void FillReadTaskFromSource(TTask& task, const TString& sourceName, const TString& structuredToken, const TVector<NKikimrKqp::TKqpNodeResources>& resourceSnapshot, ui64 nodeOffset) {
+        if (structuredToken) {
+            task.Meta.SecureParams.emplace(sourceName, structuredToken);
+        }
+
+        if (resourceSnapshot.empty()) {
+            task.Meta.Type = TTaskMeta::TTaskType::Compute;
+        } else {
+            task.Meta.NodeId = resourceSnapshot[nodeOffset % resourceSnapshot.size()].GetNodeId();
+            task.Meta.Type = TTaskMeta::TTaskType::Scan;
+        }
+    }
+
     void BuildReadTasksFromSource(TStageInfo& stageInfo, const TVector<NKikimrKqp::TKqpNodeResources>& resourceSnapshot, ui32 scheduledTaskCount) {
         auto& intros = stageInfo.Introspections;
         const auto& stage = stageInfo.Meta.GetStage(stageInfo.Id);
@@ -1073,15 +1118,9 @@ protected:
             structuredToken = NYql::CreateStructuredTokenParser(externalSource.GetAuthInfo()).ToBuilder().ReplaceReferences(SecureParams).ToJson();
         }
 
-        ui64 selfNodeIdx = 0;
-        for (size_t i = 0; i < resourceSnapshot.size(); ++i) {
-            if (resourceSnapshot[i].GetNodeId() == SelfId().NodeId()) {
-                selfNodeIdx = i;
-                break;
-            }
-        }
-
+        ui64 nodeOffset = GetSelfNodeIdxInSnapshot(resourceSnapshot);
         TVector<ui64> tasksIds;
+        tasksIds.reserve(taskCount);
 
         // generate all tasks
         for (ui32 i = 0; i < taskCount; i++) {
@@ -1094,17 +1133,8 @@ protected:
                 input.SourceType = externalSource.GetType();
             }
 
-            if (structuredToken) {
-                task.Meta.SecureParams.emplace(sourceName, structuredToken);
-            }
+            FillReadTaskFromSource(task, sourceName, structuredToken, resourceSnapshot, nodeOffset++);
             FillSecureParamsFromStage(task.Meta.SecureParams, stage);
-
-            if (resourceSnapshot.empty()) {
-                task.Meta.Type = TTaskMeta::TTaskType::Compute;
-            } else {
-                task.Meta.NodeId = resourceSnapshot[(selfNodeIdx + i) % resourceSnapshot.size()].GetNodeId();
-                task.Meta.Type = TTaskMeta::TTaskType::Scan;
-            }
 
             tasksIds.push_back(task.Id);
         }
@@ -1122,6 +1152,29 @@ protected:
         for (auto taskId : tasksIds) {
             BuildSinks(stage, stageInfo, TasksGraph.GetTask(taskId));
         }
+    }
+
+    void RestoreReadTasksFromSource(const TStageInfo& stageInfo, const TVector<NKikimrKqp::TKqpNodeResources>& resourceSnapshot) {
+        const auto& stage = stageInfo.Meta.GetStage(stageInfo.Id);
+        YQL_ENSURE(stage.GetSources(0).HasExternalSource());
+        YQL_ENSURE(stage.SourcesSize() == 1, "multiple sources in one task are not supported");
+
+        const auto& externalSource = stage.GetSources(0).GetExternalSource();
+        const auto sourceName = externalSource.GetSourceName();
+
+        TString structuredToken;
+        if (sourceName) {
+            structuredToken = NYql::CreateStructuredTokenParser(externalSource.GetAuthInfo()).ToBuilder().ReplaceReferences(SecureParams).ToJson();
+        }
+
+        ui64 nodeOffset = GetSelfNodeIdxInSnapshot(resourceSnapshot);
+        for (const auto taskId : stageInfo.Tasks) {
+            auto& task = TasksGraph.GetTask(taskId);
+            FillReadTaskFromSource(task, sourceName, structuredToken, resourceSnapshot, nodeOffset++);
+            FillSecureParamsFromStage(task.Meta.SecureParams, stage);
+        }
+
+        RestoreSinks(stageInfo);
     }
 
     TVector<TVector<TShardRangesWithShardId>> DistributeShardsToTasks(TVector<TShardRangesWithShardId> shardsRanges, const size_t tasksCount, const TVector<NScheme::TTypeInfo>& keyTypes) {
@@ -1547,6 +1600,19 @@ protected:
             BuildSinks(stage, stageInfo, task);
             LOG_D("Stage " << stageInfo.Id << " create compute task: " << task.Id);
         }
+    }
+
+    void RestoreComputeTasks(const TStageInfo& stageInfo) {
+        const auto& stage = stageInfo.Meta.GetStage(stageInfo.Id);
+
+        for (const auto taskId : stageInfo.Tasks) {
+            auto& task = TasksGraph.GetTask(taskId);
+            task.Meta.Type = TTaskMeta::TTaskType::Compute;
+            task.Meta.ExecuterId = SelfId();
+            FillSecureParamsFromStage(task.Meta.SecureParams, stage);
+        }
+
+        RestoreSinks(stageInfo);
     }
 
     void FillReadInfo(TTaskMeta& taskMeta, ui64 itemsLimit, const NYql::ERequestSorting sorting) const

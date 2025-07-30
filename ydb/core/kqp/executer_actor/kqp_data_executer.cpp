@@ -427,6 +427,7 @@ public:
                 hFunc(NShardResolver::TEvShardsResolveStatus, HandleResolve);
                 hFunc(TEvPrivate::TEvResourcesSnapshot, HandleResolve);
                 hFunc(TEvSaveScriptExternalEffectResponse, HandleResolve);
+                hFunc(TEvSaveScriptPhysicalGraphResponse, HandleResolve);
                 hFunc(TEvDescribeSecretsResponse, HandleResolve);
                 hFunc(TEvKqp::TEvAbortExecution, HandleAbortExecution);
                 hFunc(TEvKqpBuffer::TEvError, Handle);
@@ -1990,10 +1991,7 @@ private:
         return false;
     }
 
-    void Execute() {
-        LWTRACK(KqpDataExecuterStartExecute, ResponseEv->Orbit, TxId);
-
-        size_t sourceScanPartitionsCount = 0;
+    void BuildGraphTasksFromTransactions(size_t& sourceScanPartitionsCount) {
         for (ui32 txIdx = 0; txIdx < Request.Transactions.size(); ++txIdx) {
             auto& tx = Request.Transactions[txIdx];
             auto scheduledTaskCount = ScheduleByCost(tx, ResourcesSnapshot);
@@ -2072,6 +2070,55 @@ private:
 
             ResponseEv->InitTxResult(tx.Body);
             BuildKqpTaskGraphResultChannels(TasksGraph, tx.Body, txIdx);
+        }
+    }
+
+    void RestoreGraphTasks() {
+        YQL_ENSURE(Request.QueryPhysicalGraph);
+        RestoreTasksGraphInfo(TasksGraph, *Request.QueryPhysicalGraph);
+
+        for (size_t txIdx = 0; txIdx < Request.Transactions.size(); ++txIdx) {
+            const auto tx = Request.Transactions[txIdx].Body;
+            for (size_t stageIdx = 0; stageIdx < tx->StagesSize(); ++stageIdx) {
+                const auto& stageInfo = TasksGraph.GetStageInfo({txIdx, stageIdx});
+                const auto& meta = stageInfo.Meta;
+                if (meta.ShardOperations || meta.ShardKind != NSchemeCache::ETableKind::KindUnknown) {
+                    YQL_ENSURE(false, "Restore is not supported for table operations");
+                }
+
+                const auto& stage = tx->GetStages(stageIdx);
+                LOG_D("Stage " << stageInfo.Id << " AST: " << stage.GetProgramAst());
+
+                if (stage.SourcesSize() > 0) {
+                    switch (stage.GetSources(0).GetTypeCase()) {
+                        case NKqpProto::TKqpSource::kExternalSource: {
+                            RestoreReadTasksFromSource(stageInfo, ResourcesSnapshot);
+                            break;
+                        }
+                        default: {
+                            YQL_ENSURE(false, "Unsupported source type for restore");
+                            break;
+                        }
+                    }
+                } else {
+                    RestoreComputeTasks(stageInfo);
+                }
+
+                TasksGraph.GetMeta().AllowWithSpilling |= stage.GetAllowWithSpilling();
+            }
+
+            ResponseEv->InitTxResult(tx);
+        }
+    }
+
+    void Execute() {
+        LWTRACK(KqpDataExecuterStartExecute, ResponseEv->Orbit, TxId);
+
+        size_t sourceScanPartitionsCount = 0;
+        if (!Request.QueryPhysicalGraph) {
+            BuildGraphTasksFromTransactions(sourceScanPartitionsCount);
+        } else {
+            RestoreGraphTasks();
         }
 
         TIssue validateIssue;
@@ -2190,6 +2237,35 @@ private:
 
         TasksGraph.GetMeta().UseFollowers = GetUseFollowers();
 
+        if (Request.SaveQueryPhysicalGraph) {
+            SavePhysicalGraph();
+        } else {
+            ResolveShards();
+        }
+    }
+
+    void SavePhysicalGraph() {
+        NKikimrKqp::TQueryPhysicalGraph physicalGraph;
+
+        YQL_ENSURE(Request.Transactions.size() == 1);
+        const auto preparedQuery = Request.Transactions[0].Body->GetPreparedQuery();
+        YQL_ENSURE(preparedQuery);
+        *physicalGraph.MutablePreparedQuery() = *preparedQuery;
+
+        PersistTasksGraphInfo(TasksGraph, physicalGraph);
+
+        const auto runScriptActorId = GetUserRequestContext()->RunScriptActorId;
+        Y_ENSURE(runScriptActorId);
+        this->Send(runScriptActorId, new TEvSaveScriptPhysicalGraphRequest(std::move(physicalGraph)));
+        Become(&TKqpDataExecuter::WaitResolveState);
+    }
+
+    void HandleResolve(TEvSaveScriptPhysicalGraphResponse::TPtr& ev) {
+        YQL_ENSURE(ev->Get()->Status == Ydb::StatusIds::SUCCESS, "failed to save script physical graph with issues: " << ev->Get()->Issues.ToOneLineString());
+        ResolveShards();
+    }
+
+    void ResolveShards() {
         if (RemoteComputeTasks) {
             TSet<ui64> shardIds;
             for (const auto& [shardId, _] : RemoteComputeTasks) {

@@ -4,14 +4,15 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/testing/unittest/tests_data.h>
 
-using namespace NActors;
+using namespace NMonitoring::NAudit;
 
-Y_UNIT_TEST_SUITE(TAuditTest) {
+Y_UNIT_TEST_SUITE(TUrlMatcherTest) {
     Y_UNIT_TEST(MatchExactPathOnly) {
-        NActors::NAudit::TUrlMatcher matcher;
+        NMonitoring::NAudit::TUrlMatcher matcher;
         matcher.AddPattern({.Path = "/a/b/c"});
 
         UNIT_ASSERT(matcher.Match("/a/b/c"));
+        UNIT_ASSERT(matcher.Match("a/b/c"));
         UNIT_ASSERT(matcher.Match("/a/b/c", "action=start"));
         UNIT_ASSERT(matcher.Match("/a/b/c/d"));
 
@@ -22,10 +23,11 @@ Y_UNIT_TEST_SUITE(TAuditTest) {
         UNIT_ASSERT(!matcher.Match("/c/b/a"));
         UNIT_ASSERT(!matcher.Match("/a/b/z"));
         UNIT_ASSERT(!matcher.Match("/A/B/C"));
+        UNIT_ASSERT(!matcher.Match("/a/b//c"));
     }
 
     Y_UNIT_TEST(MatchWithParamNameOnly) {
-        NActors::NAudit::TUrlMatcher matcher;
+        NMonitoring::NAudit::TUrlMatcher matcher;
         matcher.AddPattern({.Path = "/a/b", .ParamName = "mode"});
 
         UNIT_ASSERT(matcher.Match("/a/b", "mode="));
@@ -39,7 +41,7 @@ Y_UNIT_TEST_SUITE(TAuditTest) {
     }
 
     Y_UNIT_TEST(MatchWithParamNameAndValue) {
-        NActors::NAudit::TUrlMatcher matcher;
+        NMonitoring::NAudit::TUrlMatcher matcher;
         matcher.AddPattern({.Path = "/a/b", .ParamName = "action", .ParamValue = "start"});
         matcher.AddPattern({.Path = "/a/b", .ParamName = "action", .ParamValue = "stop"});
 
@@ -54,7 +56,7 @@ Y_UNIT_TEST_SUITE(TAuditTest) {
     }
 
     Y_UNIT_TEST(MatchWithWildcardPath) {
-        NActors::NAudit::TUrlMatcher matcher;
+        NMonitoring::NAudit::TUrlMatcher matcher;
         matcher.AddPattern({.Path = "/actors/blobstorageproxies/*", .ParamName = "PutSamplingRate"});
 
         UNIT_ASSERT(matcher.Match("/actors/blobstorageproxies/blobstorageproxy2181038080", "PutSamplingRate=1"));

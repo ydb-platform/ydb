@@ -195,6 +195,27 @@ class TestSecondaryIndexFollowers(RollingUpgradeAndDowngradeFixture):
         with ydb.QuerySessionPool(self.driver) as session_pool:
             session_pool.retry_operation_sync(operation)
 
+    def check_statistics(self, enable_followers):
+        queries = [
+            f"""
+                SELECT *
+                FROM `/Root/.sys/partition_stats`
+                WHERE
+                    (RowReads != 0 OR RangeReads != 0)
+                    AND Path = '/Root/{self.TABLE_NAME}/{self.INDEX_NAME}/indexImplTable'
+            """
+        ]
+
+        with ydb.QuerySessionPool(self.driver) as session_pool:
+            for _ in range(self.ATTEMPT_COUNT):
+                for query in queries:
+                    result_sets = session_pool.execute_with_retries(query)
+                    result_row_count = len(result_sets[0].rows)
+                    if result_row_count > 0:
+                        return
+                time.sleep(self.ATTEMPT_INTERVAL)
+            assert False, f"Expected reads but there is timeout waiting for read stats from '/Root/{self.TABLE_NAME}/{self.INDEX_NAME}/indexImplTable'"
+
     @pytest.mark.parametrize("enable_followers", [True, False])
     def test_secondary_index_followers(self, enable_followers):
         self.create_table(enable_followers)
@@ -202,3 +223,4 @@ class TestSecondaryIndexFollowers(RollingUpgradeAndDowngradeFixture):
         for _ in self.roll():
             self.write_data()
             self.read_data()
+            self.check_statistics(enable_followers)

@@ -24,7 +24,6 @@
 
 namespace NKikimr {
 
-const TDuration TabletResolverNegativeCacheTimeout = TDuration::MilliSeconds(300);
 const TDuration TabletResolverRefreshNodesPeriod = TDuration::Seconds(60);
 
 #define BLOG_TRACE(stream) LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TABLET_RESOLVER, stream)
@@ -36,41 +35,8 @@ const TDuration TabletResolverRefreshNodesPeriod = TDuration::Seconds(60);
 class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
     struct TEvPrivate {
         enum EEv {
-            EvPingTimeout = EventSpaceBegin(TEvents::ES_PRIVATE),
-            EvStopListRemoval,
-            EvRefreshNodes,
+            EvRefreshNodes = EventSpaceBegin(TEvents::ES_PRIVATE),
             EvEnd
-        };
-
-        struct TEvPingTimeout : public TEventLocal<TEvPingTimeout, EvPingTimeout> {
-            const ui64 TabletID;
-            TSchedulerCookieHolder Cookie;
-
-            TEvPingTimeout(ui64 tabletId, ISchedulerCookie* cookie)
-                : TabletID(tabletId)
-                , Cookie(cookie)
-            {}
-
-            TString ToString() const {
-                TStringStream str;
-                str << "{EvPingTimeout TabletID: " << TabletID;
-                if (Cookie.Get()) {
-                    str << " Cookie: present";
-                }
-                else {
-                    str << " Cookie: nullptr";
-                }
-                str << "}";
-                return str.Str();
-            }
-        };
-
-        struct TEvStopListRemoval : public TEventLocal<TEvStopListRemoval, EvStopListRemoval> {
-            const ui64 TabletID;
-
-            TEvStopListRemoval(ui64 tabletId)
-                : TabletID(tabletId)
-            {}
         };
 
         struct TEvRefreshNodes : public TEventLocal<TEvRefreshNodes, EvRefreshNodes> {
@@ -108,6 +74,7 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
         EState State = StResolve;
 
         bool InCache : 1 = false;
+        bool CurrentLeaderSuspect : 1 = false;
         bool CurrentLeaderProblem : 1 = false;
         bool CurrentLeaderProblemPermanent : 1 = false;
 
@@ -115,7 +82,7 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
         TActorId KnownLeader;
         TActorId KnownLeaderTablet;
 
-        TInstant LastResolved;
+        TMonotonic LastResolved;
 
         TVector<std::pair<TActorId, TActorId>> KnownFollowers;
 
@@ -235,7 +202,6 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
     TIntrusivePtr<TTabletResolverConfig> Config;
     THashMap<ui64, TEntry> Tablets;
     TTabletCache TabletCache;
-    THashSet<ui64> TabletsOnStopList;
     THashMap<ui32, TString> NodeToDcMapping;
 
     THashMap<ui32, ui64> NodeProblems;
@@ -286,14 +252,6 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
         }
     }
 
-    void AddTabletToStopList(ui64 tabletId) {
-        if (TabletResolverNegativeCacheTimeout) {
-            if (TabletsOnStopList.emplace(tabletId).second) {
-                Schedule(TabletResolverNegativeCacheTimeout, new TEvPrivate::TEvStopListRemoval(tabletId));
-            }
-        }
-    }
-
     void TabletResolveLoop(ui64 tabletId) {
         TEntry& entry = Tablets.at(tabletId);
         Y_ABORT_UNLESS(entry.State == TEntry::StResolve);
@@ -303,10 +261,28 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
             Tablets.erase(tabletId);
         };
 
+        Y_DEFER {
+            if (TlsActivationContext && entry.KnownLeader) {
+                UnsubscribeTabletState(entry.KnownLeader);
+            }
+        };
+
+        unsigned retryNumber = 0;
+        TDuration retryDelay;
         for (;;) {
             // On every iteration we make a new resolve request
             Y_ABORT_UNLESS(entry.State == TEntry::StResolve,
                 "Unexpected entry.State: %s", TEntry::StateToString(entry.State));
+
+            if (retryDelay) {
+                TDuration delay = (entry.LastResolved + retryDelay) - TActivationContext::Monotonic();
+                if (delay) {
+                    BLOG_TRACE("TabletResolveLoop tabletId: " << tabletId
+                        << " sleeping for retry delay " << delay);
+                    co_await AsyncSleepFor(delay);
+                }
+            }
+
             {
                 BLOG_TRACE("TabletResolveLoop tabletId: " << tabletId
                         << " sending TEvLookup");
@@ -315,24 +291,17 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
                     // StateStorage proxy is not configured on this node
                     BLOG_INFO("TabletResolveLoop tabletId: " << tabletId
                             << " StateStorage proxy not configured");
-                    SendQueuedError(tabletId, entry, NKikimrProto::ERROR);
+                    SendQueuedError(entry, NKikimrProto::ERROR);
                     break;
                 }
 
                 auto* msg = ev->Get();
-                const bool success = (msg->Status == NKikimrProto::OK); // TODO: handle 'locked' state?
 
                 BLOG_TRACE("TabletResolveLoop tabletId: " << tabletId
                     << " received TEvInfo Status: " << msg->Status
                     << " event: " << msg->ToString());
 
-                if (!success) {
-                    SendQueuedError(tabletId, entry, NKikimrProto::ERROR);
-                    AddTabletToStopList(tabletId);
-                    break;
-                }
-
-                // This will also send replies to all enqueued requests
+                // This will handle errors and send replies
                 ApplyEntryInfo(entry, *msg);
             }
 
@@ -343,15 +312,9 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
                 break;
             }
 
-            if (entry.CurrentLeaderProblem && entry.CurrentLeaderProblemPermanent && entry.KnownFollowers.empty()) {
-                // Don't cache a known bad leader without followers
-                BLOG_TRACE("TabletResolveLoop tabletId: " << tabletId
-                    << " resolved to a known problem leader " << entry.KnownLeader
-                    << " processing stopped with negative caching");
-                AddTabletToStopList(tabletId);
-                break;
-            }
-
+            // Note: we move to StNormal and wait even when resolve fails, but
+            // any attempt to resolve leader will wake us up and we will retry
+            // with an appropriate delay when necessary.
             entry.State = TEntry::StNormal;
 
             // Wait until the next iteration
@@ -362,10 +325,42 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
                     << " processing stopped for an evicted entry");
                 break;
             }
+
+            // Don't overload state storage when leader is inaccessible
+            if (entry.CurrentLeaderSuspect && entry.CurrentLeaderProblem) {
+                switch (++retryNumber) {
+                    case 1: {
+                        retryDelay = {};
+                        break;
+                    }
+                    case 2: {
+                        retryDelay = TDuration::MilliSeconds(1);
+                        break;
+                    }
+                    default: {
+                        retryDelay = Min(retryDelay * 2, TDuration::MilliSeconds(300));
+                        break;
+                    }
+                }
+            } else {
+                retryNumber = 0;
+                retryDelay = {};
+            }
+        }
+    }
+
+    void OnTabletAlive(ui64 tabletId, const TActorId& actorId) {
+        auto it = Tablets.find(tabletId);
+        if (it == Tablets.end()) {
+            return;
         }
 
-        if (entry.KnownLeader) {
-            UnsubscribeTabletState(entry.KnownLeader);
+        TEntry& entry = it->second;
+        if (entry.KnownLeader == actorId) {
+            // We just confirmed this leader is alive
+            entry.CurrentLeaderSuspect = false;
+            entry.CurrentLeaderProblem = false;
+            entry.CurrentLeaderProblemPermanent = false;
         }
     }
 
@@ -380,9 +375,6 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
             if (!entry.KnownLeaderTablet) {
                 entry.KnownLeaderTablet = userActorId;
             }
-            // We just confirmed this leader is active
-            entry.CurrentLeaderProblem = false;
-            entry.CurrentLeaderProblemPermanent = false;
             return;
         }
 
@@ -517,17 +509,23 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
                         BLOG_TRACE("TabletStateSubscriptionLoop tabletId: " << tabletId << " actor: " << actorId
                             << " received state update: " << msg->ToString());
                         subscription.State = msg->Record.GetState();
-                        if (subscription.State == NKikimrTabletBase::TEvTabletStateUpdate::StateActive) {
-                            if (auto userActorId = msg->GetUserActorId()) {
-                                OnTabletActive(tabletId, actorId, userActorId);
-                            }
-                        }
-                        if (subscription.State == NKikimrTabletBase::TEvTabletStateUpdate::StateTerminating ||
-                            subscription.State == NKikimrTabletBase::TEvTabletStateUpdate::StateDead)
-                        {
-                            OnTabletProblem(tabletId, actorId, /* permanent */ true);
-                            unsubscribe();
-                            co_return;
+                        switch (subscription.State) {
+                            case NKikimrTabletBase::TEvTabletStateUpdate::StateTerminating:
+                            case NKikimrTabletBase::TEvTabletStateUpdate::StateDead:
+                                OnTabletProblem(tabletId, actorId, /* permanent */ true);
+                                unsubscribe();
+                                co_return;
+
+                            case NKikimrTabletBase::TEvTabletStateUpdate::StateActive:
+                                OnTabletAlive(tabletId, actorId);
+                                if (auto userActorId = msg->GetUserActorId()) {
+                                    OnTabletActive(tabletId, actorId, userActorId);
+                                }
+                                break;
+
+                            default:
+                                OnTabletAlive(tabletId, actorId);
+                                break;
                         }
                         break;
                     }
@@ -540,7 +538,7 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
             // A small exponential backoff on retries: 0ms, 1ms, 2ms, 4ms, 8ms, 10ms
             switch (++retryNumber) {
                 case 1:
-                    retryDelay = TDuration::Zero();
+                    retryDelay = {};
                     break;
                 case 2:
                     retryDelay = TDuration::MilliSeconds(1);
@@ -676,7 +674,7 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
 
     bool SendForward(const TActorId& sender, ui64 cookie, const TEntry& entry, TEvTabletResolver::TEvForward* msg,
                      bool* needFollowerUpdate = nullptr) {
-        TResolveInfo info(*msg, TActivationContext::Now() - entry.LastResolved, needFollowerUpdate); // fills needFollowerUpdate in dtor
+        TResolveInfo info(*msg, TActivationContext::Monotonic() - entry.LastResolved, needFollowerUpdate); // fills needFollowerUpdate in dtor
         const std::pair<TActorId, TActorId> endpoint = SelectForward(entry, info, msg->TabletID);
         if (endpoint.first) {
             Send(sender, new TEvTabletResolver::TEvForwardResult(msg->TabletID, endpoint.second, endpoint.first, LastCacheEpoch), 0, cookie);
@@ -706,9 +704,9 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
         entry.Queue.Clear();
     }
 
-    void SendQueuedError(ui64 tabletId, TEntry& entry, NKikimrProto::EReplyStatus status) {
+    void SendQueuedError(TEntry& entry, NKikimrProto::EReplyStatus status) {
         while (TEntry::TQueueEntry* x = entry.Queue.Head()) {
-            Send(x->Ev->Sender, new TEvTabletResolver::TEvForwardResult(status, tabletId), 0, x->Ev->Cookie);
+            Send(x->Ev->Sender, new TEvTabletResolver::TEvForwardResult(status, entry.TabletId), 0, x->Ev->Cookie);
             entry.Queue.Pop();
         }
         // Free buffer memory
@@ -716,18 +714,31 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
     }
 
     void ApplyEntryInfo(TEntry& entry, TEvStateStorage::TEvInfo& msg) {
-        if (entry.KnownLeader != msg.CurrentLeader) {
+        if (entry.KnownLeader != msg.CurrentLeader || !msg.CurrentLeader) {
             if (entry.KnownLeader) {
                 UnsubscribeTabletState(entry.KnownLeader);
             }
             entry.KnownLeader = msg.CurrentLeader;
             entry.KnownLeaderTablet = msg.CurrentLeaderTablet;
-            entry.CurrentLeaderProblem = false;
-            entry.CurrentLeaderProblemPermanent = false;
-            if (entry.InCache && entry.KnownLeader) {
-                SubscribeTabletState(entry.TabletId, entry.KnownLeader);
+            if (entry.KnownLeader) {
+                entry.CurrentLeaderSuspect = false;
+                entry.CurrentLeaderProblem = false;
+                entry.CurrentLeaderProblemPermanent = false;
+                if (entry.InCache) {
+                    SubscribeTabletState(entry.TabletId, entry.KnownLeader);
+                }
+            } else {
+                // Note: currently state storage will reply with an error when
+                // the leader is missing, but this code path will handle
+                // followers without a leader in the future.
+                entry.CurrentLeaderSuspect = true;
+                entry.CurrentLeaderProblem = true;
+                entry.CurrentLeaderProblemPermanent = true;
             }
         } else {
+            if (entry.CurrentLeaderProblem) {
+                entry.CurrentLeaderSuspect = true;
+            }
             if (!entry.CurrentLeaderProblemPermanent) {
                 entry.CurrentLeaderProblem = false;
             }
@@ -738,13 +749,18 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
 
         entry.KnownFollowers = std::move(msg.Followers);
 
-        entry.LastResolved = TActivationContext::Now();
+        entry.LastResolved = TActivationContext::Monotonic();
         entry.CacheEpoch = ++LastCacheEpoch;
 
         BLOG_DEBUG("ApplyEntry tabletId: " << msg.TabletID
             << " leader: " << entry.KnownLeader
             << " followers: " << entry.KnownFollowers.size());
-        SendQueued(entry);
+
+        if (msg.Status == NKikimrProto::OK || !entry.KnownFollowers.empty()) {
+            SendQueued(entry);
+        } else {
+            SendQueuedError(entry, NKikimrProto::ERROR);
+        }
     }
 
     TEntry& GetEntry(ui64 tabletId) {
@@ -826,12 +842,6 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
     void Handle(TEvTabletResolver::TEvForward::TPtr& ev) {
         TEvTabletResolver::TEvForward* msg = ev->Get();
         const ui64 tabletId = msg->TabletID;
-
-        // allow some requests to bypass negative caching in low-load case
-        if (InFlyResolveCounter->Val() > 20 && TabletsOnStopList.contains(tabletId)) {
-            Send(ev->Sender, new TEvTabletResolver::TEvForwardResult(NKikimrProto::ERROR, tabletId), 0, ev->Cookie);
-            return;
-        }
 
         CheckDelayedNodeProblem(tabletId);
 
@@ -938,11 +948,6 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
         }
     }
 
-    void Handle(TEvPrivate::TEvStopListRemoval::TPtr& ev) {
-        TEvPrivate::TEvStopListRemoval* msg = ev->Get();
-        TabletsOnStopList.erase(msg->TabletID);
-    }
-
     void Handle(TEvInterconnect::TEvNodesInfo::TPtr& ev) {
         const TEvInterconnect::TEvNodesInfo* msg = ev->Get();
         bool distinct = false;
@@ -1034,7 +1039,6 @@ public:
             fFunc(TEvents::TEvUndelivered::EventType, HandleStream);
             hFunc(TEvInterconnect::TEvNodesInfo, Handle);
             hFunc(TEvPrivate::TEvRefreshNodes, Handle);
-            hFunc(TEvPrivate::TEvStopListRemoval, Handle);
             default:
                 BLOG_WARN("TTabletResolver::StateWork unexpected event type: " << Hex(ev->GetTypeRewrite()) << " event: " << ev->ToString());
                 break;

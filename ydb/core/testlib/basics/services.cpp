@@ -503,6 +503,11 @@ namespace NPDisk {
                 NSysView::MakeSysViewServiceID(runtime.GetNodeId(nodeIndex)), nodeIndex);
             Y_ABORT_UNLESS(sysViewServiceId, "Missing SysView Service on node %" PRIu32, nodeIndex);
             runtime.EnableScheduleForActor(sysViewServiceId);
+
+            // TabletResolver needs timers for retries
+            auto tabletResolverActorId = runtime.GetLocalServiceId(MakeTabletResolverID(), nodeIndex);
+            Y_ABORT_UNLESS(tabletResolverActorId, "Missing TabletResolver on node %" PRIu32, nodeIndex);
+            runtime.EnableScheduleForActor(tabletResolverActorId);
         }
 
 

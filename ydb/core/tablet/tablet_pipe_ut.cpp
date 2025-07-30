@@ -1553,6 +1553,94 @@ Y_UNIT_TEST_SUITE(TTabletPipeTest) {
         UNIT_ASSERT_C(gen2 > gen1, "gen1: " << gen1 << ", gen2: " << gen2);
     }
 
+    Y_UNIT_TEST(TestPipeConnectLoopUnknownTabletWithoutRetries) {
+        TTestBasicRuntime runtime(3);
+        // runtime.SetLogPriority(NKikimrServices::STATESTORAGE, NActors::NLog::PRI_TRACE);
+        // runtime.SetLogPriority(NKikimrServices::TABLET_RESOLVER, NActors::NLog::PRI_TRACE);
+        SetupTabletServices(runtime);
+
+        auto ts1 = runtime.GetCurrentTime();
+        for (int i = 1; i <= 10; ++i) {
+            auto sender2 = runtime.AllocateEdgeActor();
+            auto client2 = runtime.Register(NTabletPipe::CreateClient(sender2, TTestTxConfig::TxTablet0, NTabletPipe::TClientConfig{
+                .RetryPolicy = NTabletPipe::TClientRetryPolicy::WithoutRetries(),
+            }));
+            Y_UNUSED(client2);
+            Cerr << "... waiting for connect" << i << Endl;
+            auto ev = runtime.GrabEdgeEvent<TEvTabletPipe::TEvClientConnected>(sender2);
+            UNIT_ASSERT(ev);
+            auto* msg = ev->Get();
+            UNIT_ASSERT_VALUES_EQUAL(msg->Status, NKikimrProto::ERROR);
+        }
+        auto ts2 = runtime.GetCurrentTime();
+        auto d = ts2 - ts1;
+
+        UNIT_ASSERT_C(d > TDuration::MilliSeconds(10), "10 connect attempts required " << d);
+    }
+
+    Y_UNIT_TEST(TestPipeConnectLoopLeaderDownWithoutRetries) {
+        TTestBasicRuntime runtime(3);
+        // runtime.SetLogPriority(NKikimrServices::STATESTORAGE, NActors::NLog::PRI_TRACE);
+        // runtime.SetLogPriority(NKikimrServices::TABLET_RESOLVER, NActors::NLog::PRI_TRACE);
+        SetupTabletServices(runtime);
+
+        auto tablet1 = StartTestTablet(runtime,
+            CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::Dummy),
+            [](const TActorId & tablet, TTabletStorageInfo* info) {
+                return new TTabletStuckOnStop(tablet, info);
+            },
+            1);
+
+        {
+            Cerr << "... waiting for boot1" << Endl;
+            TDispatchOptions options;
+            options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot, 1));
+            runtime.DispatchEvents(options);
+        }
+
+        auto sender1 = runtime.AllocateEdgeActor();
+        auto client1 = runtime.Register(NTabletPipe::CreateClient(sender1, TTestTxConfig::TxTablet0, NTabletPipe::TClientConfig{
+            .RetryPolicy = NTabletPipe::TClientRetryPolicy::WithoutRetries(),
+        }));
+        Y_UNUSED(client1);
+
+        {
+            Cerr << "... waiting for connect1" << Endl;
+            auto ev = runtime.GrabEdgeEvent<TEvTabletPipe::TEvClientConnected>(sender1);
+            UNIT_ASSERT(ev);
+            auto* msg = ev->Get();
+            UNIT_ASSERT_VALUES_EQUAL(msg->Status, NKikimrProto::OK);
+        }
+
+        runtime.Send(client1, sender1, new TEvents::TEvPoison);
+        {
+            Cerr << "... waiting for client destroyed notification" << Endl;
+            auto ev = runtime.GrabEdgeEvent<TEvTabletPipe::TEvClientDestroyed>(sender1);
+            UNIT_ASSERT(ev);
+        }
+
+        runtime.Send(tablet1, TActorId(), new TEvents::TEvPoison);
+        runtime.SimulateSleep(TDuration::MilliSeconds(1));
+
+        auto ts1 = runtime.GetCurrentTime();
+        for (int i = 2; i <= 11; ++i) {
+            auto sender2 = runtime.AllocateEdgeActor();
+            auto client2 = runtime.Register(NTabletPipe::CreateClient(sender2, TTestTxConfig::TxTablet0, NTabletPipe::TClientConfig{
+                .RetryPolicy = NTabletPipe::TClientRetryPolicy::WithoutRetries(),
+            }));
+            Y_UNUSED(client2);
+            Cerr << "... waiting for connect" << i << Endl;
+            auto ev = runtime.GrabEdgeEvent<TEvTabletPipe::TEvClientConnected>(sender2);
+            UNIT_ASSERT(ev);
+            auto* msg = ev->Get();
+            UNIT_ASSERT_VALUES_EQUAL(msg->Status, NKikimrProto::ERROR);
+        }
+        auto ts2 = runtime.GetCurrentTime();
+        auto d = ts2 - ts1;
+
+        UNIT_ASSERT_C(d > TDuration::MilliSeconds(10), "10 reconnect attempts required " << d);
+    }
+
 }
 
 }

@@ -12,7 +12,7 @@ on:
         description: Comma or space separated PR numbers for cherry-pick
       target_branches:
         default: ""
-        description: Comma or space separated banches to cherry-pick
+        description: Comma or space separated branches to cherry-pick
       issue_number:
         default: 0
         type: number

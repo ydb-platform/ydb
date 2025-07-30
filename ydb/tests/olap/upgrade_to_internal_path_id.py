@@ -2,7 +2,6 @@ import pytest
 import ydb
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
-import time
 
 
 class TestUpgradeToInternalPathId:

@@ -211,16 +211,9 @@ public:
     }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
-        LOG_CRIT_S(ctx, NKikimrServices::TX_DATASHARD, "r314_innercnak execute ");
-        
         LOG_INFO_S(ctx, NKikimrServices::TX_DATASHARD, "TTxRequestChangeRecords Execute"
             << ": at tablet# " << Self->TabletID());
         
-        
-        LOG_NOTICE(ctx, NKikimrServices::TX_DATASHARD, "r314 was executed");
-           
-        //BLOG_NOTICE("r314 was executed");
-
         NIceDb::TNiceDb db(txc.DB);
         if (!Precharge(db) || !Select(db)) {
             return false;

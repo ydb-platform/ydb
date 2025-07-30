@@ -365,7 +365,7 @@ public:
     NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr Event;
     THttpMonRequestContainer Container;
     TIntrusivePtr<TActorMonPage> ActorMonPage;
-    NAudit::TAuditCtx AuditCtx;
+    NMonitoring::NAudit::TAuditCtx AuditCtx;
 
     THttpMonLegacyActorRequest(NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr event, TIntrusivePtr<TActorMonPage> actorMonPage)
         : Event(std::move(event))
@@ -576,7 +576,7 @@ class THttpMonLegacyIndexRequest : public TActorBootstrapped<THttpMonLegacyIndex
 public:
     NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr Event;
     THttpMonRequestContainer Container;
-    NAudit::TAuditCtx AuditCtx;
+    NMonitoring::NAudit::TAuditCtx AuditCtx;
 
     THttpMonLegacyIndexRequest(NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr event, NMonitoring::IMonPage* index)
         : Event(std::move(event))
@@ -1034,7 +1034,7 @@ public:
     NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr Event;
     TMon::TRegisterHandlerFields Fields;
     TMon::TRequestAuthorizer Authorizer;
-    NAudit::TAuditCtx AuditCtx;
+    NMonitoring::NAudit::TAuditCtx AuditCtx;
     NHttp::TEvHttpProxy::TEvSubscribeForCancel::TPtr CancelSubscriber;
 
     THttpMonAuthorizedActorRequest(NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr event, const TMon::TRegisterHandlerFields& fields, TMon::TRequestAuthorizer authorizer)

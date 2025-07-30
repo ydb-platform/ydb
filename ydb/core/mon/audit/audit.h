@@ -6,7 +6,7 @@
 
 #include <util/generic/string.h>
 
-namespace NActors::NAudit {
+namespace NMonitoring::NAudit {
 
 using TAuditParts = TVector<std::pair<TString, TString>>;
 

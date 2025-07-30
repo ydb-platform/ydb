@@ -186,7 +186,7 @@ TComputeScheduler::TComputeScheduler(TIntrusivePtr<TKqpCounters> counters)
     : Root(std::make_shared<TRoot>(counters))
     , KqpCounters(counters)
 {
-    DetachedPool = std::make_shared<TPool>("(detached)", counters);
+    DetachedPool = std::make_shared<TPool>("(DETACHED)", counters);
 
     auto group = counters->GetKqpCounters();
     Counters.UpdateFairShare = group->GetCounter("scheduler/UpdateFairShare", true);

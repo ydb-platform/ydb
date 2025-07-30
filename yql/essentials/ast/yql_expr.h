@@ -2208,6 +2208,14 @@ public:
         return bool(UnordChildren_);
     }
 
+    void SetPosAware() {
+        PosAware_ = 1;
+    }
+
+    bool IsPosAware() const {
+        return PosAware_;
+    }
+
     ~TExprNode() {
         Y_ABORT_UNLESS(Dead(), "Node (id: %lu, type: %s, content: '%s') not dead on destruction.",
             UniqueId_, ToString(Type_).data(),  TString(ContentUnchecked()).data());
@@ -2242,6 +2250,7 @@ private:
         , UnordChildren_(0)
         , ShallBeDisclosed_(0)
         , LiteralList_(0)
+        , PosAware_(0)
     {}
 
     TExprNode(const TExprNode&) = delete;
@@ -2311,6 +2320,7 @@ private:
         ui8 UnordChildren_    : 1; // NOLINT(readability-identifier-naming)
         ui8 ShallBeDisclosed_ : 1; // NOLINT(readability-identifier-naming)
         ui8 LiteralList_      : 1; // NOLINT(readability-identifier-naming)
+        ui8 PosAware_         : 1; // NOLINT(readability-identifier-naming)
     };
 };
 

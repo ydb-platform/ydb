@@ -12,6 +12,7 @@ SRCS(
     ydb_control_plane_storage_bindings.cpp
     ydb_control_plane_storage_compute_database.cpp
     ydb_control_plane_storage_connections.cpp
+    ydb_control_plane_storage_folder.cpp
     ydb_control_plane_storage_queries.cpp
     ydb_control_plane_storage_quotas.cpp
 )

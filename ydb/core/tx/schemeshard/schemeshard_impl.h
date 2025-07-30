@@ -680,6 +680,7 @@ public:
     void DropPaths(const THashSet<TPathId>& paths, TStepId step, TTxId txId, NIceDb::TNiceDb& db, const TActorContext& ctx);
 
     void DoShardsDeletion(const THashSet<TShardIdx>& shardIdx, const TActorContext& ctx);
+    void DoDeleteSystemShards(const THashSet<TShardIdx>& shards, const TActorContext& ctx);
 
     void SetPartitioning(TPathId pathId, const std::vector<TShardIdx>& partitioning);
     void SetPartitioning(TPathId pathId, TOlapStoreInfo::TPtr storeInfo);
@@ -778,6 +779,7 @@ public:
     void PersistParentDomain(NIceDb::TNiceDb& db, TPathId parentDomain) const;
     void PersistParentDomainEffectiveACL(NIceDb::TNiceDb& db, const TString& owner, const TString& effectiveACL, ui64 effectiveACLVersion) const;
     void PersistShardsToDelete(NIceDb::TNiceDb& db, const THashSet<TShardIdx>& shardsIdxs);
+    void PersistSystemShardsToDelete(NIceDb::TNiceDb& db, const THashSet<TShardIdx>& shardsIdxs);
     void PersistShardDeleted(NIceDb::TNiceDb& db, TShardIdx shardIdx, const TChannelsBindings& bindedChannels);
     void PersistUnknownShardDeleted(NIceDb::TNiceDb& db, TShardIdx shardIdx);
     void PersistTxShardStatus(NIceDb::TNiceDb& db, TOperationId opId, TShardIdx shardIdx, const TTxState::TShardStatus& status);

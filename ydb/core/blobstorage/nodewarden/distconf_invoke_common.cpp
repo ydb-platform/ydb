@@ -67,6 +67,7 @@ namespace NKikimr::NStorage {
                     Y_ABORT_S("unexpected RootState# " << state);
             }
 
+            StartedExecutingQuery = true;
             ExecuteQuery();
         }
     }
@@ -393,7 +394,7 @@ namespace NKikimr::NStorage {
         PassAway();
 
         // reset root state in keeper actor if this query is still valid and there is no pending proposition
-        if (InvokePipelineGeneration == Self->InvokePipelineGeneration && !Self->CurrentProposition) {
+        if (InvokePipelineGeneration == Self->InvokePipelineGeneration && !Self->CurrentProposition && StartedExecutingQuery) {
             switch (auto& state = Self->RootState) {
                 case ERootState::IN_PROGRESS:
                     state = ERootState::RELAX;
@@ -439,6 +440,7 @@ namespace NKikimr::NStorage {
                 hFunc(TEvPrivate::TEvAbortQuery, Handle);
                 hFunc(TEvNodeConfigInvokeOnRootResult, Handle);
                 hFunc(TEvNodeConfigGather, Handle);
+                hFunc(TEvPrivate::TEvConfigProposed, Handle);
                 hFunc(TEvInterconnect::TEvNodeConnected, Handle);
                 hFunc(TEvInterconnect::TEvNodeDisconnected, Handle);
                 hFunc(TEvBlobStorage::TEvVStatusResult, Handle);

@@ -130,7 +130,7 @@ namespace NKikimr::NStorage {
     void TDistributedConfigKeeper::IssueNextBindRequest() {
         Y_DEBUG_ABORT_UNLESS(IsSelfStatic);
 
-        if (RootState != ERootState::INITIAL || Binding) {
+        if (RootState != ERootState::INITIAL || Binding || !InvokeQ.empty()) {
             return; // we are either doing something, or binding is already in progress
         }
 

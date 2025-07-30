@@ -303,7 +303,7 @@ namespace NKikimr::NStorage {
         if (Scepter) {
             Y_ABORT_UNLESS(StorageConfig);
             Y_ABORT_UNLESS(GlobalQuorum);
-            Y_ABORT_UNLESS(RootState != ERootState::INITIAL && RootState != ERootState::ERROR_TIMEOUT);
+            Y_VERIFY_S(RootState != ERootState::INITIAL && RootState != ERootState::ERROR_TIMEOUT, "RootState# " << RootState);
             Y_ABORT_UNLESS(!Binding);
         } else {
             Y_VERIFY_S(RootState == ERootState::INITIAL || RootState == ERootState::ERROR_TIMEOUT ||

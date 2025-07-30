@@ -14,6 +14,7 @@ namespace NKikimr::NStorage {
 
         bool CheckSyncersAfterCommit = false;
         bool IsRelay = false;
+        bool StartedExecutingQuery = false;
 
         ui32 WaitingReplyFromNode = 0;
 

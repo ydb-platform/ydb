@@ -58,11 +58,7 @@ class TTestServer {
 public:
     TIpPort Port;
 
-<<<<<<< HEAD
-    TTestServer(const TString& kafkaApiMode = "1", bool serverless = false, bool enableNativeKafkaBalancing = false, bool enableAutoTopicCreation = false) {
-=======
-    TTestServer(const TString& kafkaApiMode = "1", bool serverless = false, bool enableNativeKafkaBalancing = true) {
->>>>>>> main
+    TTestServer(const TString& kafkaApiMode = "1", bool serverless = false, bool enableNativeKafkaBalancing = true, bool enableAutoTopicCreation = false) {
         TPortManager portManager;
         Port = portManager.GetTcpPort();
 

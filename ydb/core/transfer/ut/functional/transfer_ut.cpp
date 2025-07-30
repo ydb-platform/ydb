@@ -1105,5 +1105,49 @@ Y_UNIT_TEST_SUITE(Transfer)
         testCase.DropTransfer();
         testCase.DropTopic();
     }
+
+    Y_UNIT_TEST(TargetTableWriteInsideDirectory)
+    {
+        MainTestCase testCase;
+        testCase.CreateDirectory("/local/inner_directory0");
+        testCase.CreateDirectory("/local/inner_directory0/inner_directory1");
+
+        testCase.CreateTable(R"(
+                CREATE TABLE `%s` (
+                    Key Uint64 NOT NULL,
+                    Message Utf8,
+                    PRIMARY KEY (Key)
+                );
+            )");
+        testCase.ExecuteDDL(R"(
+                CREATE TABLE `inner_directory0/inner_directory1/table` (
+                    Key Uint64 NOT NULL,
+                    Message Utf8,
+                    PRIMARY KEY (Key)
+                );
+            )");
+
+        testCase.CreateTopic();
+
+        testCase.CreateTransfer(R"(
+                $l = ($x) -> {
+                    return [
+                        <|
+                            __ydb_table: "inner_directory1/table",
+                            Key:CAST($x._offset AS Uint64),
+                            Message:CAST($x._data AS Utf8)
+                        |>
+                    ];
+                };
+            )", MainTestCase::CreateTransferSettings::WithDirectory("/local/inner_directory0"));
+
+        testCase.Write({"Message-1"});
+        testCase.CheckResult("/local/inner_directory0/inner_directory1/table",{{
+            _C("Message", TString("Message-1"))
+        }});
+
+        testCase.DropTransfer();
+        testCase.DropTopic();
+    }
 }
 

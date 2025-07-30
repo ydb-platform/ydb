@@ -713,131 +713,25 @@ class StabilityCluster:
         return stats
 
     def get_state(self):
-        """
-        Получает состояние всех сервисов и процессов на всех нодах кластера параллельно.
-        Выводит аккуратную сводку состояния.
-        """
         logging.getLogger().setLevel(logging.WARNING)
         state_objects_dic = dict(list(DICT_OF_SERVICES.items()) + list(DICT_OF_PROCESSES.items()))
-        
-        print(f"{bcolors.BOLD}{bcolors.HEADER}=== СОСТОЯНИЕ КЛАСТЕРА ==={bcolors.ENDC}")
-        
-        # Собираем состояние всех нод параллельно
-        with ThreadPoolExecutor() as pool:
-            results = list(pool.map(self._get_node_state, self.kikimr_cluster.nodes.values()))
-        
-        # Выводим результаты в аккуратном формате
-        self._print_state_summary(results, state_objects_dic)
-    
-    def _get_node_state(self, node):
-        """
-        Получает состояние одной ноды.
-        
-        Args:
-            node: Нода кластера
-            
-        Returns:
-            dict: Состояние ноды
-        """
-        node_host = node.host.split(':')[0]
-        state_objects_dic = dict(list(DICT_OF_SERVICES.items()) + list(DICT_OF_PROCESSES.items()))
-        
-        node_state = {
-            'node': node_host,
-            'services': {},
-            'success': False
-        }
-        
-        try:
+        for node_id, node in enumerate(self.kikimr_cluster.nodes.values()):
+            node_host = node.host.split(':')[0]
+            print(f'{bcolors.BOLD}{node_host}{bcolors.ENDC}:')
             for state_object in state_objects_dic:
-                result = node.ssh_command(
-                    state_objects_dic[state_object]['status'],
-                    raise_on_error=False
-                )
-                if result:
+                try:
+                    result = node.ssh_command(
+                        state_objects_dic[state_object]['status'],
+                        raise_on_error=True
+                    )
                     status = result.decode('utf-8').replace('\n', '')
-                    node_state['services'][state_object] = status
-                else:
-                    node_state['services'][state_object] = 'Unknown'
-            
-            node_state['success'] = True
-            
-        except Exception as e:
-            node_state['error'] = str(e)
-        
-        return node_state
-    
-    def _print_state_summary(self, results, state_objects_dic):
-        """
-        Выводит аккуратную сводку состояния кластера.
-        
-        Args:
-            results: Результаты проверки состояния нод
-            state_objects_dic: Словарь сервисов и процессов
-        """
-        # Подсчитываем статистику
-        total_nodes = len(results)
-        successful_nodes = sum(1 for r in results if r.get('success', False))
-        
-        # Статистика по сервисам
-        service_stats = {}
-        for service_name in state_objects_dic.keys():
-            running_count = 0
-            total_count = 0
-            for result in results:
-                if result.get('success', False):
-                    total_count += 1
-                    status = result['services'].get(service_name, 'Unknown')
-                    if status == 'Running':
-                        running_count += 1
-            service_stats[service_name] = {
-                'running': running_count,
-                'total': total_count,
-                'percentage': (running_count / total_count * 100) if total_count > 0 else 0
-            }
-        
-        # Выводим общую статистику
-        print(f"\n{bcolors.BOLD}📊 ОБЩАЯ СТАТИСТИКА:{bcolors.ENDC}")
-        print(f"  ✅ Успешно проверено нод: {successful_nodes}/{total_nodes}")
-        
-        # Выводим статистику по сервисам
-        print(f"\n{bcolors.BOLD}🔧 СТАТУС СЕРВИСОВ:{bcolors.ENDC}")
-        for service_name, stats in service_stats.items():
-            percentage = stats['percentage']
-            if percentage == 100:
-                status_icon = "🟢"
-                status_color = bcolors.OKGREEN
-            elif percentage >= 50:
-                status_icon = "🟡"
-                status_color = bcolors.WARNING
-            else:
-                status_icon = "🔴"
-                status_color = bcolors.FAIL
-            
-            print(f"  {status_icon} {service_name}: {stats['running']}/{stats['total']} ({percentage:.1f}%)")
-        
-        # Выводим детальную информацию по нодам
-        print(f"\n{bcolors.BOLD}📋 ДЕТАЛЬНАЯ ИНФОРМАЦИЯ ПО НОДАМ:{bcolors.ENDC}")
-        for result in results:
-            if result.get('success', False):
-                node_host = result['node']
-                print(f"\n  {bcolors.BOLD}{node_host}{bcolors.ENDC}:")
-                
-                for service_name in state_objects_dic.keys():
-                    status = result['services'].get(service_name, 'Unknown')
-                    if status == 'Running':
-                        status_display = f"{bcolors.OKGREEN}{status}{bcolors.ENDC}"
+                    if status == 'Running' :
+                        status = bcolors.OKGREEN + status + bcolors.ENDC
                     else:
-                        status_display = f"{bcolors.FAIL}{status}{bcolors.ENDC}"
-                    print(f"    {service_name}: {status_display}")
-            else:
-                print(f"\n  {bcolors.FAIL}❌ {result['node']}: Ошибка - {result.get('error', 'Unknown error')}{bcolors.ENDC}")
-        
-        # Итоговое сообщение
-        if successful_nodes == total_nodes:
-            print(f"\n{bcolors.OKGREEN}🎉 Состояние кластера успешно получено!{bcolors.ENDC}")
-        else:
-            print(f"\n{bcolors.WARNING}⚠️  Состояние получено с предупреждениями{bcolors.ENDC}")
+                        status = bcolors.FAIL + status + bcolors.ENDC
+                    print(f'\t{state_object}:\t{status}')
+                except Exception as e:
+                    print(f'\t{state_object}:\t{bcolors.FAIL}{e}{bcolors.ENDC}')
 
     def cleanup(self, mode='all'):
         for node in self.kikimr_cluster.nodes.values():

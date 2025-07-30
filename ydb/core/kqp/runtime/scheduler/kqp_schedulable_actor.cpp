@@ -161,28 +161,24 @@ void TSchedulableActorHelper::StopExecution() {
 }
 
 TDuration TSchedulableActorHelper::CalculateDelay(TMonotonic) const {
-    const auto MaxDelay = TDuration::Seconds(3);
-    const auto MinDelay = TDuration::MicroSeconds(10);
-    const auto AttemptBonus = TDuration::MicroSeconds(5);
-
     const auto query = SchedulableTask->Query;
     const auto snapshot = query->GetSnapshot();
 
     const auto share = snapshot->FairShare;
 
     if (share < 1e-9) {
-        return MaxDelay;
+        return query->DelayParams->MaxDelay;
     }
 
     i64 delay =
-        + (query->CurrentTasksTime / share)               // current tasks to complete
-        + (query->WaitingTasksTime / share)               // waiting tasks to complete
-        // TODO: (currentUsage - averageUsage) * penalty  // penalty for usage since last snapshot
-        - (ExecuteAttempts * AttemptBonus.MicroSeconds()) // bonus for number of attempts
-        + (RandomNumber<ui64>() % 100)                    // random delay
+        + (query->CurrentTasksTime / share)                                          // current tasks to complete
+        + (query->WaitingTasksTime / share)                                          // waiting tasks to complete
+        // TODO: (currentUsage - averageUsage) * penalty                             // penalty for usage since last snapshot
+        - (ExecuteAttempts * query->DelayParams->AttemptBonus.MicroSeconds())        // bonus for number of attempts
+        + (RandomNumber<ui64>() % query->DelayParams->MaxRandomDelay.MicroSeconds()) // random delay
     ;
 
-    auto delayDuration = Min(MaxDelay, Max(MinDelay, TDuration::MicroSeconds(Max<i64>(0, delay))));
+    auto delayDuration = Min(query->DelayParams->MaxDelay, Max(query->DelayParams->MinDelay, TDuration::MicroSeconds(Max<i64>(0, delay))));
     if (query->Delay) {
         query->Delay->Collect(delayDuration.MicroSeconds());
     }

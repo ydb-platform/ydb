@@ -9,7 +9,7 @@
 #include <ydb/core/kqp/common/kqp_lwtrace_probes.h>
 #include <ydb/core/kqp/common/kqp_types.h>
 #include <ydb/core/kqp/runtime/kqp_transport.h>
-#include <ydb/core/kqp/runtime/scheduler/new/kqp_compute_scheduler_service.h>
+#include <ydb/core/kqp/runtime/scheduler/kqp_compute_scheduler_service.h>
 
 #include <ydb/core/actorlib_impl/long_timer.h>
 #include <ydb/core/base/appdata.h>
@@ -571,7 +571,6 @@ protected:
         TxId = ev->Get()->Record.GetRequest().GetTxId();
         Target = ActorIdFromProto(ev->Get()->Record.GetTarget());
 
-#if defined(USE_HDRF_SCHEDULER)
         const auto& poolId = GetUserRequestContext()->PoolId;
 
         auto addQueryEvent = MakeHolder<NScheduler::TEvAddQuery>();
@@ -580,7 +579,6 @@ protected:
         addQueryEvent->QueryId = TxId;
         this->Send(MakeKqpSchedulerServiceId(SelfId().NodeId()), addQueryEvent.Release(), 0, TxId);
         Query = (co_await ActorWaitForEvent<NScheduler::TEvQueryResponse>(TxId))->Get()->Query; // TODO: Y_DEFER
-#endif
 
         auto lockTxId = Request.AcquireLocksTxId;
         if (lockTxId.Defined() && *lockTxId == 0) {
@@ -1744,9 +1742,7 @@ protected:
             .ArrayBufferMinFillPercentage = ArrayBufferMinFillPercentage,
             .BufferPageAllocSize = BufferPageAllocSize,
             .VerboseMemoryLimitException = VerboseMemoryLimitException,
-#if defined(USE_HDRF_SCHEDULER)
             .Query = Query,
-#endif
         });
 
         auto err = Planner->PlanExecution();
@@ -2349,9 +2345,7 @@ protected:
     TMaybe<TInstant> CancelAt;
     TActorId Target;
     ui64 TxId = 0;
-#if defined(USE_HDRF_SCHEDULER)
     NScheduler::NHdrf::NDynamic::TQueryPtr Query;
-#endif
 
     bool ShardsResolved = false;
     TKqpTasksGraph TasksGraph;

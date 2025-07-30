@@ -78,7 +78,6 @@ private:
     virtual void DoOnEmptyStageData(const std::shared_ptr<NCommon::IDataSource>& sourcePtr) override;
 
     void Finalize(const std::optional<ui64> memoryLimit);
-    bool NeedFullAnswerFlag = true;
     std::optional<ui32> PurposeSyncPointIndex;
 
 protected:
@@ -94,14 +93,6 @@ public:
     void ClearMemoryGuards() {
         ResourceGuards.clear();
         SourceGroupGuard.reset();
-    }
-
-    bool NeedFullAnswer() const {
-        return NeedFullAnswerFlag;
-    }
-
-    void SetNeedFullAnswer(const bool value) {
-        NeedFullAnswerFlag = value;
     }
 
     ui32 GetPurposeSyncPointIndex() const {
@@ -509,6 +500,14 @@ private:
         return false;
     }
 
+    static ui32 CalcInputRecordsCount(const std::vector<std::shared_ptr<NCommon::IDataSource>>& sources) {
+        ui32 recordsCount = 0;
+        for (auto&& i : sources) {
+            recordsCount += i->GetStageData().GetTable()->GetRecordsCountActualVerified();
+        }
+        return recordsCount;
+    }
+
 public:
     ui64 GetLastSourceId() const {
         return LastSourceId;
@@ -597,8 +596,8 @@ public:
     TAggregationDataSource(
         std::vector<std::shared_ptr<NCommon::IDataSource>>&& sources, const std::shared_ptr<NCommon::TSpecialReadContext>& context)
         : TBase(EType::Aggregation, sources.back()->GetSourceId(), sources.back()->GetSourceIdx(), context,
-              sources.front()->GetAs<IDataSource>()->CopyStart(), sources.back()->GetAs<IDataSource>()->CopyFinish(),
-              TSnapshot::Zero(), TSnapshot::Zero(), std::nullopt, std::nullopt, false)
+              sources.front()->GetAs<IDataSource>()->CopyStart(), sources.back()->GetAs<IDataSource>()->CopyFinish(), TSnapshot::Zero(),
+              TSnapshot::Zero(), CalcInputRecordsCount(sources), std::nullopt, false)
         , Sources(std::move(sources))
         , LastSourceId(Sources.back()->GetSourceId())
         , LastSourceRecordsCount(Sources.back()->GetRecordsCount()) {

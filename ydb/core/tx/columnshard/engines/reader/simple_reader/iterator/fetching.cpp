@@ -226,16 +226,8 @@ TConclusion<bool> TPrepareResultStep::DoExecuteInplace(
     auto plan = std::move(acc).Build();
     AFL_VERIFY(!plan->IsFinished(0));
     source->MutableAs<IDataSource>()->InitFetchingPlan(plan);
-    if (source->GetAs<IDataSource>()->NeedFullAnswer()) {
-        TFetchingScriptCursor cursor(plan, 0);
-        const auto& commonContext = *context->GetCommonContext();
-        auto sCopy = source;
-        auto task = std::make_shared<TStepAction>(std::move(sCopy), std::move(cursor), commonContext.GetScanActorId(), false);
-        NConveyorComposite::TScanServiceOperator::SendTaskToExecute(task, commonContext.GetConveyorProcessId());
-        return false;
-    } else {
-        return true;
-    }
+    TFetchingScriptCursor cursor(plan, 0);
+    return cursor.Execute(source);
 }
 
 void TDuplicateFilter::TFilterSubscriber::OnFilterReady(NArrow::TColumnFilter&& filter) {

@@ -12,8 +12,25 @@ private:
     std::vector<std::shared_ptr<NCommon::IDataSource>> SourcesToAggregate;
     const std::shared_ptr<ISourcesCollection> Collection;
     const std::shared_ptr<TFetchingScript> AggregationScript;
+    const std::shared_ptr<TFetchingScript> RestoreResultScript;
     ui32 InFlightControl = 0;
     ui32 SourcesCount = 0;
+    bool AggregationActivity = true;
+    ui32 AggregationsCount = 0;
+    ui32 UselessAggregationsCount = 0;
+
+    virtual TString DoDebugString() const override {
+        TStringBuilder sb;
+        sb << "{";
+        sb << SourcesToAggregate.size() << ",";
+        sb << InFlightControl << ",";
+        sb << SourcesCount << ",";
+        sb << AggregationActivity << ",";
+        sb << AggregationsCount << ",";
+        sb << UselessAggregationsCount << ",";
+        sb << "}";
+        return sb;
+    }
 
     std::shared_ptr<NCommon::IDataSource> Flush() {
         if (SourcesToAggregate.empty()) {
@@ -31,7 +48,8 @@ private:
     }
 
     std::shared_ptr<NCommon::IDataSource> TryToFlush() {
-        if (SourcesToAggregate.size() >= 100 || (Collection->IsFinished() && Collection->GetSourcesInFlightCount() == SourcesCount) ||
+        if (!AggregationActivity || SourcesToAggregate.size() >= 100 ||
+            (Collection->IsFinished() && Collection->GetSourcesInFlightCount() == SourcesCount) ||
             Collection->GetMaxInFlight() == SourcesCount) {
             AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "flush")("to_aggr", SourcesToAggregate.size())(
                 "fin", Collection->IsFinished())("fly", Collection->GetSourcesInFlightCount())("count", SourcesCount)(
@@ -56,10 +74,30 @@ private:
     }
 
     virtual std::shared_ptr<NCommon::IDataSource> OnAddSource(const std::shared_ptr<NCommon::IDataSource>& source) override {
+        bool localAggregationActivity = true;
+        if (SourcesToAggregate.empty()) {
+            if (AggregationActivity) {
+                ui32 originalCount = source->GetRecordsCount();
+                if (!source->GetStageData().GetTable()->GetFilter().IsTotalAllowFilter()) {
+                    originalCount = source->GetStageData().GetTable()->GetFilter().GetFilteredCountVerified();
+                }
+                const ui32 aggrKeysCount = source->GetStageData().GetTable()->GetRecordsCountActualVerified();
+                localAggregationActivity = aggrKeysCount < 1000 || aggrKeysCount * 1.5 < originalCount;
+            } else {
+                localAggregationActivity = false;
+            }
+        }
         ++SourcesCount;
-        SourcesToAggregate.emplace_back(source);
-        source->MutableAs<IDataSource>()->ClearMemoryGuards();
-        return TryToFlush();
+        if (localAggregationActivity) {
+            SourcesToAggregate.emplace_back(source);
+            source->MutableAs<IDataSource>()->ClearMemoryGuards();
+            return TryToFlush();
+        } else {
+            ++InFlightControl;
+            SourcesSequentially.emplace_back(source);
+            source->MutableAs<IDataSource>()->InitFetchingPlan(RestoreResultScript);
+            return source;
+        }
     }
 
     virtual void DoAbort() override {
@@ -70,37 +108,56 @@ private:
         AFL_VERIFY(InFlightControl);
         --InFlightControl;
         AFL_VERIFY(!Next);
-        AFL_VERIFY(source->GetAs<IDataSource>()->GetType() == IDataSource::EType::Aggregation)("type", source->GetAs<IDataSource>()->GetType());
-        const TAggregationDataSource* aggrSource = static_cast<const TAggregationDataSource*>(source.get());
-        for (auto&& i : aggrSource->GetSources()) {
-            Collection->OnSourceFinished(i);
+        std::shared_ptr<IScanCursor> cursor;
+        if (source->GetAs<IDataSource>()->GetType() == IDataSource::EType::Aggregation) {
+            const TAggregationDataSource* aggrSource = static_cast<const TAggregationDataSource*>(source.get());
+            for (auto&& i : aggrSource->GetSources()) {
+                Collection->OnSourceFinished(i);
+                AFL_VERIFY(SourcesCount);
+                --SourcesCount;
+            }
+            cursor = std::make_shared<TNotSortedSimpleScanCursor>(aggrSource->GetLastSourceId(), aggrSource->GetLastSourceRecordsCount());
+        } else {
+            Collection->OnSourceFinished(source);
+            cursor = std::make_shared<TNotSortedSimpleScanCursor>(source->GetSourceId(), source->GetRecordsCount());
             AFL_VERIFY(SourcesCount);
             --SourcesCount;
         }
-        if (source->GetStageResult().IsEmpty()) {
-            return ESourceAction::Finish;
-        }
+        AFL_VERIFY(!source->GetStageResult().IsEmpty());
         auto resultChunk = source->MutableStageResult().ExtractResultChunk();
         AFL_VERIFY(source->GetStageResult().IsFinished());
-        if (resultChunk && resultChunk->HasData()) {
-            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "has_result")("source_id", aggrSource->GetLastSourceId())(
-                "source_idx", source->GetSourceIdx())("table", resultChunk->GetTable()->num_rows());
-            auto cursor = std::make_shared<TNotSortedSimpleScanCursor>(aggrSource->GetLastSourceId(), aggrSource->GetLastSourceRecordsCount());
-            reader.OnIntervalResult(
-                std::make_unique<TPartialReadResult>(source->ExtractResourceGuards(), source->MutableAs<IDataSource>()->ExtractGroupGuard(),
-                    resultChunk->ExtractTable(), std::move(cursor), Context->GetCommonContext(), std::nullopt));
+        AFL_VERIFY(resultChunk && resultChunk->HasData());
+        if (AggregationActivity) {
+            ++AggregationsCount;
+            if (resultChunk->GetTable()->num_rows() > 10000 && source->GetRecordsCount() < 5 * resultChunk->GetTable()->num_rows()) {
+                AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "useless_aggregation")("source_id", source->GetSourceId())("source_idx",
+                    source->GetSourceIdx())("table", resultChunk->GetTable()->num_rows())("original_count", source->GetRecordsCount())(
+                    "activity", AggregationActivity)("useless_count", UselessAggregationsCount)("aggr_count", AggregationsCount);
+                if (++UselessAggregationsCount > 0.5 * AggregationsCount && AggregationsCount > 7) {
+                    AggregationActivity = false;
+                }
+            }
         }
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "has_result")("source_id", source->GetSourceId())(
+            "source_idx", source->GetSourceIdx())("table", resultChunk->GetTable()->num_rows())("original_count", source->GetRecordsCount())(
+            "activity", AggregationActivity);
+        reader.OnIntervalResult(
+            std::make_unique<TPartialReadResult>(source->ExtractResourceGuards(), source->MutableAs<IDataSource>()->ExtractGroupGuard(),
+                resultChunk->ExtractTable(), std::move(cursor), Context->GetCommonContext(), std::nullopt));
         source->MutableAs<IDataSource>()->ClearResult();
         return ESourceAction::Finish;
     }
 
 public:
     TSyncPointResultsAggregationControl(const std::shared_ptr<ISourcesCollection>& collection,
-        const std::shared_ptr<TFetchingScript>& aggregationScript, const ui32 pointIndex, const std::shared_ptr<TSpecialReadContext>& context)
+        const std::shared_ptr<TFetchingScript>& aggregationScript, const std::shared_ptr<TFetchingScript>& restoreResultScript,
+        const ui32 pointIndex, const std::shared_ptr<TSpecialReadContext>& context)
         : TBase(pointIndex, "SYNC_AGGR", context, nullptr)
         , Collection(collection)
-        , AggregationScript(aggregationScript) {
+        , AggregationScript(aggregationScript)
+        , RestoreResultScript(restoreResultScript) {
         AFL_VERIFY(AggregationScript);
+        AFL_VERIFY(RestoreResultScript);
         AFL_VERIFY(pointIndex);
     }
 };

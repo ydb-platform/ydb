@@ -57,7 +57,11 @@ void ISyncPoint::OnSourcePrepared(std::shared_ptr<NCommon::IDataSource>&& source
 
 TString ISyncPoint::DebugString() const {
     TStringBuilder sb;
-    sb << "{" << PointName << ";" << PointIndex << ";" << IsFinished() << ";";
+    sb << "{" << PointName << ";IDX=" << PointIndex << ";FIN=" << IsFinished() << ";";
+    const TString details = DoDebugString();
+    if (!!details) {
+        sb << "DETAILS:" << details << ";";
+    }
     if (SourcesSequentially.size()) {
         sb << "SRCS:[";
         ui32 idx = 0;
@@ -92,9 +96,6 @@ void ISyncPoint::AddSource(std::shared_ptr<NCommon::IDataSource>&& source) {
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("source_id", source->GetSourceId());
     AFL_VERIFY(!AbortFlag);
     source->MutableAs<IDataSource>()->SetPurposeSyncPointIndex(GetPointIndex());
-    if (Next) {
-        source->MutableAs<IDataSource>()->SetNeedFullAnswer(false);
-    }
     AFL_VERIFY(!!source);
     if (!LastSourceIdx) {
         LastSourceIdx = source->GetSourceIdx();

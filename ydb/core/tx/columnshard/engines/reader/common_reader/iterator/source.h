@@ -220,6 +220,7 @@ public:
     virtual void InitRecordsCount(const ui32 recordsCount) {
         AFL_VERIFY(!RecordsCountImpl);
         RecordsCountImpl = recordsCount;
+        AFL_VERIFY(StageData);
         StageData->InitRecordsCount(recordsCount);
     }
 

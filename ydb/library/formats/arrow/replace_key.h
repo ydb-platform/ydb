@@ -299,14 +299,16 @@ private:
     }
 
 public:
-    using TBase::TBase;
+    ui64 GetHashPrecalculated() const {
+        return HashPrecalculated;
+    }
 
     bool operator==(const TReplaceKeyHashable& key) const {
         if (HashPrecalculated != key.HashPrecalculated) {
             return false;
         }
-        const ui32 count = GetColumnsCount();
-        Y_ABORT_UNLESS(count == key.GetColumnsCount());
+        const ui32 count = Columns->size();
+        Y_ABORT_UNLESS(count == key.Columns->size());
         for (ui32 i = 0; i < count; ++i) {
             Y_DEBUG_ABORT_UNLESS(Column(i).type_id() == key.Column(i).type_id());
             if (std::is_neq(TComparator::ConcreteTypedCompare<true>((*Types)[i], Column(i), Position, key.Column(i), key.GetPosition()))) {
@@ -553,3 +555,13 @@ static bool IsSelfSorted(const std::shared_ptr<arrow::RecordBatch>& batch) {
 }
 
 }   // namespace NKikimr::NArrow
+
+namespace std {
+template <>
+struct hash<NKikimr::NArrow::TReplaceKeyHashable> {
+    std::size_t operator()(const NKikimr::NArrow::TReplaceKeyHashable& obj) const {
+        return obj.GetHashPrecalculated();
+    }
+    hash() = default;
+};
+}   // namespace std

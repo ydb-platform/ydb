@@ -3,7 +3,7 @@
 #include <ydb/library/yverify_stream/yverify_stream.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/api.h>
-#include <util/digest/fnv.h>
+#include <contrib/libs/xxhash/xxhash.h>
 #include <util/string/cast.h>
 #include <util/system/yassert.h>
 #include <yql/essentials/parser/pg_wrapper/interface/type_desc.h>
@@ -68,10 +68,10 @@ public:
 
     ui64 CalcHash(const ValueType val) const {
         if constexpr (IsCType) {
-            return FnvHash<ui64>(&val, sizeof(val));
+            return XXH3_64bits((const ui8*)&val, sizeof(val));
         }
         if constexpr (IsStringView) {
-            return FnvHash<ui64>(val.data(), val.size());
+            return XXH3_64bits((const ui8*)val.data(), val.size());
         }
         Y_FAIL();
     }

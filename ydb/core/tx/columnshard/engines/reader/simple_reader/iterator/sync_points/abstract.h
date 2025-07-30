@@ -37,6 +37,9 @@ protected:
     }
 
     void OnSourceFinished();
+    virtual TString DoDebugString() const {
+        return "";
+    }
 
 public:
     virtual ~ISyncPoint() = default;

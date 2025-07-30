@@ -8,6 +8,7 @@
 #include <ydb/library/formats/arrow/switch/switch_type.h>
 
 #include <util/string/join.h>
+#include <yql/essentials/minikql/comp_nodes/mkql_rh_hash.h>
 
 #ifndef WIN32
 #ifdef NO_SANITIZE_THREAD
@@ -143,7 +144,7 @@ TConclusion<IResourceProcessor::EExecutionResult> TWithKeysAggregationProcessor:
             return TConclusionStatus::Fail("No expected column in GROUP BY result.");
         }
         if (auto columnId = TryFromString<ui32>(assign.result_column)) {
-            context.GetResources()->AddVerified(*columnId, column, false);
+            context.GetResources()->AddVerified(*columnId, column, false, true);
         } else {
             return TConclusionStatus::Fail("Incorrect column id from name: " + assign.result_column);
         }
@@ -276,10 +277,10 @@ private:
                 }
                 if (arrResultIndex) {
                     collectionResult->AddVerified(
-                        ColumnInfo.GetColumnId(), sources[*arrResultIndex]->GetAccessorVerified(ColumnInfo.GetColumnId()), false);
+                        ColumnInfo.GetColumnId(), sources[*arrResultIndex]->GetAccessorVerified(ColumnInfo.GetColumnId()), false, true);
                 } else {
                     collectionResult->AddVerified(ColumnInfo.GetColumnId(),
-                        NAccessor::TTrivialArray::BuildArrayFromScalar(type.BuildScalar(*result, arrays.front()->GetDataType())), false);
+                        NAccessor::TTrivialArray::BuildArrayFromScalar(type.BuildScalar(*result, arrays.front()->GetDataType())), false, true);
                 }
                 return true;
             })) {
@@ -412,7 +413,15 @@ private:
 
     virtual TConclusionStatus DoExecute(const std::vector<std::shared_ptr<TAccessorsCollection>>& sources,
         const std::shared_ptr<TAccessorsCollection>& collectionResult) const override {
-        THashMap<TReplaceKeyHashable, ui32> keyToIndex;
+        ui32 reserveCount = 0;
+        for (auto&& i : sources) {
+            reserveCount += i->GetRecordsCountActualVerified();
+        }
+        ui64 countCapacity = 4096;
+        while (countCapacity < 3 * reserveCount) {
+            countCapacity *= 2;
+            AFL_VERIFY(countCapacity < (1llu << 30));
+        }
         std::deque<std::vector<std::shared_ptr<arrow::Array>>> arraysStorage;
         std::vector<std::vector<ui32>> decoder;
         decoder.resize(sources.size());
@@ -420,59 +429,70 @@ private:
         std::vector<arrow::Type::type> types;
         types.resize(KeyColumns.size());
         keyBuilders.resize(KeyColumns.size());
-        for (ui32 sourceIdx = 0; sourceIdx < sources.size(); ++sourceIdx) {
-            auto& source = sources[sourceIdx];
-            AFL_VERIFY(source);
-            arraysStorage.emplace_back(std::vector<std::shared_ptr<arrow::Array>>());
-            auto& keyArrays = arraysStorage.back();
-            ui32 cIdx = 0;
-            std::optional<ui32> count;
-            for (auto&& c : KeyColumns) {
-                auto arr = source->GetArrayVerified(c.GetColumnId());
-                if (!types[cIdx]) {
-                    types[cIdx] = arr->type()->id();
-                    keyBuilders[cIdx] = NArrow::MakeBuilder(arr->type());
-                } else {
-                    AFL_VERIFY(types[cIdx] == arr->type()->id());
+        ui32 keysCount = 0;
+        {
+            NMiniKQL::TRobinHoodHashFixedMap<TReplaceKeyHashable, ui32> keyToIndex(countCapacity);
+            for (ui32 sourceIdx = 0; sourceIdx < sources.size(); ++sourceIdx) {
+                auto& source = sources[sourceIdx];
+                AFL_VERIFY(source);
+                arraysStorage.emplace_back(std::vector<std::shared_ptr<arrow::Array>>());
+                auto& keyArrays = arraysStorage.back();
+                ui32 cIdx = 0;
+                std::optional<ui32> count;
+                for (auto&& c : KeyColumns) {
+                    auto arr = source->GetArrayVerified(c.GetColumnId());
+                    if (!types[cIdx]) {
+                        types[cIdx] = arr->type()->id();
+                        keyBuilders[cIdx] = NArrow::MakeBuilder(arr->type());
+                    } else {
+                        AFL_VERIFY(types[cIdx] == arr->type()->id());
+                    }
+                    keyArrays.emplace_back(arr);
+                    if (!count) {
+                        count = arr->length();
+                    } else {
+                        AFL_VERIFY(*count == arr->length());
+                    }
+                    ++cIdx;
                 }
-                keyArrays.emplace_back(arr);
-                if (!count) {
-                    count = arr->length();
-                } else {
-                    AFL_VERIFY(*count == arr->length());
-                }
-                ++cIdx;
-            }
-            AFL_VERIFY(count);
-            decoder[sourceIdx].resize(*count);
-            TReplaceKeyHashable pos(keyArrays, 0, types);
-            while (!pos.IsFinished()) {
-                auto itInfo = keyToIndex.emplace(pos, keyToIndex.size());
-                if (itInfo.second) {
-                    ui32 idx = 0;
-                    for (auto&& k : keyArrays) {
-                        AFL_VERIFY(NArrow::Append(*keyBuilders[idx], types[idx], *k, pos.GetPosition()));
-                        ++idx;
+                AFL_VERIFY(count);
+                decoder[sourceIdx].resize(*count);
+                TReplaceKeyHashable pos(keyArrays, 0, types);
+                while (!pos.IsFinished()) {
+                    bool isNew;
+                    auto* it = keyToIndex.Insert(pos, isNew);
+                    if (isNew) {
+                        keyToIndex.RestorePayload(it, keysCount);
+                        ++keysCount;
+                        ui32 idx = 0;
+                        for (auto&& k : keyArrays) {
+                            AFL_VERIFY(NArrow::Append(*keyBuilders[idx], types[idx], *k, pos.GetPosition()));
+                            ++idx;
+                        }
+                    }
+                    ui32 keyIndex;
+                    keyToIndex.SavePayload(it, keyIndex);
+                    decoder[sourceIdx][pos.GetPosition()] = keyIndex;
+                    pos.Next();
+                    if (isNew) {
+                        keyToIndex.CheckGrow();
                     }
                 }
-                decoder[sourceIdx][pos.GetPosition()] = itInfo.first->second;
-                pos.Next();
             }
         }
-        const ui32 keysCount = keyToIndex.size();
         for (auto&& a : Aggregations) {
             auto conclusion = BuildColumn(keysCount, a, sources, decoder);
             if (conclusion.IsFail()) {
                 return conclusion;
             }
             collectionResult->AddVerified(
-                a.GetColumnInfo().GetColumnId(), std::make_shared<NAccessor::TTrivialArray>(conclusion.DetachResult()), false);
+                a.GetColumnInfo().GetColumnId(), std::make_shared<NAccessor::TTrivialArray>(conclusion.DetachResult()), false, true);
         }
         {
             ui32 idx = 0;
             for (auto&& k : KeyColumns) {
                 collectionResult->AddVerified(k.GetColumnId(),
-                    std::make_shared<NAccessor::TTrivialArray>(NArrow::FinishBuilder(std::move(keyBuilders[idx]))), false);
+                    std::make_shared<NAccessor::TTrivialArray>(NArrow::FinishBuilder(std::move(keyBuilders[idx]))), false, true);
                 ++idx;
             }
         }

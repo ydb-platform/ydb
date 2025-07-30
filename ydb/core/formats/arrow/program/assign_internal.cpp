@@ -20,7 +20,7 @@ TConclusion<IResourceProcessor::EExecutionResult> TCalculationProcessor::DoExecu
     if (result.IsFail()) {
         return result;
     }
-    context.GetResources()->AddVerified(GetOutputColumnIdOnce(), std::move(*result), false);
+    context.GetResources()->AddVerified(GetOutputColumnIdOnce(), std::move(*result), false, Function->IsAggregation());
     return IResourceProcessor::EExecutionResult::Success;
 }
 

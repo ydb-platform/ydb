@@ -9,22 +9,29 @@
 
 namespace NKikimr::NArrow::NAccessor {
 
-void TAccessorsCollection::Upsert(const ui32 columnId, const std::shared_ptr<IChunkedArray>& data, const bool withFilter) {
+void TAccessorsCollection::Upsert(
+    const ui32 columnId, const std::shared_ptr<IChunkedArray>& data, const bool withFilter, const bool isAggregation) {
     Remove(columnId, true);
-    AddVerified(columnId, data, withFilter);
+    AddVerified(columnId, data, withFilter, isAggregation);
 }
 
-void TAccessorsCollection::AddVerified(const ui32 columnId, const arrow::Datum& data, const bool withFilter) {
-    AddVerified(columnId, TAccessorCollectedContainer(data), withFilter);
+void TAccessorsCollection::AddVerified(const ui32 columnId, const arrow::Datum& data, const bool withFilter, const bool isAggregation) {
+    AddVerified(columnId, TAccessorCollectedContainer(data), withFilter, isAggregation);
 }
 
-void TAccessorsCollection::AddVerified(const ui32 columnId, const std::shared_ptr<IChunkedArray>& data, const bool withFilter) {
-    AddVerified(columnId, TAccessorCollectedContainer(data), withFilter);
+void TAccessorsCollection::AddVerified(
+    const ui32 columnId, const std::shared_ptr<IChunkedArray>& data, const bool withFilter, const bool isAggregation) {
+    AddVerified(columnId, TAccessorCollectedContainer(data), withFilter, isAggregation);
 }
 
-void TAccessorsCollection::AddVerified(const ui32 columnId, const TAccessorCollectedContainer& data, const bool withFilter) {
+void TAccessorsCollection::AddVerified(
+    const ui32 columnId, const TAccessorCollectedContainer& data, const bool withFilter, const bool isAggregation) {
     AFL_VERIFY(columnId);
-    if (UseFilter && withFilter && !Filter->IsTotalAllowFilter()) {
+    if (isAggregation) {
+        AFL_VERIFY(UseFilter);
+        RecordsCountActual = data->GetRecordsCount();
+        AFL_VERIFY(Accessors.emplace(columnId, data).second);
+    } else if (UseFilter && withFilter && !Filter->IsTotalAllowFilter()) {
         auto filtered = Filter->Apply(data.GetData());
         RecordsCountActual = filtered->GetRecordsCount();
         AFL_VERIFY(Accessors.emplace(columnId, filtered).second)("id", columnId);

@@ -159,45 +159,21 @@ bool TAsyncIndexChangeCollector::Collect(const TTableId& tableId, ERowOp rop,
             }
 
             ui64 sizeOfKey = 0;
-
+            
             for (TPos pos = 0; pos < userTable->KeyColumnIds.size(); ++pos) {
                 const auto& tag = userTable->KeyColumnIds.at(pos);
                 if (!KeyTagsSeen.contains(tag)) {
-                    sizeOfKey += key.at(pos).Size();
                     AddRawValue(KeyVals, tag, key.at(pos));
                 }
             }
             
-            LOG_NOTICE_S(NActors::TActivationContext::AsActorContext(), NKikimrServices::TX_DATASHARD, "r314_innercnak size " << sizeOfKey);
-            LOG_NOTICE_S(NActors::TActivationContext::AsActorContext(), NKikimrServices::TX_DATASHARD, "r314_ MAXIMUM  size " <<  NLimits::MaxWriteKeySize);
-
-            // experiment 
-            throw TKeySizeConstraintException();
-
-            // if (sizeOfKey > NLimits::MaxWriteKeySize) {
-            //     AddRecordStatus(ctx, record.GetOrder(), NKikimrChangeExchange::TEvStatus::STATUS_REJECT,
-            //         NKikimrChangeExchange::TEvStatus::REASON_SCHEME_ERROR,
-            //         TStringBuilder() << "Key is too big"
-            //             << ": actual " << keyBytes << " bytes"
-            //             << ", limit " << NLimits::MaxWriteKeySize << " bytes");
-            //     return false;
-            // }
-            
-            //NHive::GetLogPrefix("r314 was executed");
-           
-            LOG_NOTICE_S(NActors::TActivationContext::AsActorContext(), NKikimrServices::TX_DATASHARD, "r314_innercnak size " << sizeOfKey);
-            LOG_NOTICE_S(NActors::TActivationContext::AsActorContext(), NKikimrServices::TX_DATASHARD, "r314_ MAXIMUM  size " <<  NLimits::MaxWriteKeySize);
-
-            //    << ": size sizeOfKey" << sizeOfKey);
+            for (auto x : KeyVals) {
+                sizeOfKey += x.Value.Size();
+            }
 
             if (sizeOfKey > NLimits::MaxWriteKeySize) {
-            
-                needUpdate = false;
-                return; 
+                throw TKeySizeConstraintException();
             }
-            
-            //if (sizeOfKey > NLimits::MaxWriteKeySize) needUpdata = false return 
-            //    return false;
 
             for (const auto tag : index.DataColumnIds) {
                 if (updatedTagToPos.contains(tag)) {

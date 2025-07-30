@@ -559,9 +559,7 @@ public:
         } catch (const TUniqueConstrainException&) {
             return OnUniqueConstrainException(userDb, *writeOp, txc, ctx);
         } catch (const TKeySizeConstraintException&) {
-                //LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, "Operation " << writeOp << " at " << DataShard.TabletID() << " aborting. Conflict with another transaction.");
-                writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN, "Size of key in decomdary index");
-                //ResetChanges(userDb, *writeOp, txc);//NKikimrDataEvents::TEvWriteResult::STATUS_CONSTRAINT_VIOLATION
+                writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_CONSTRAINT_VIOLATION, TStringBuilder() << "Size of key in secondary index is more than " << NLimits::MaxWriteKeySize);
                 txc.DB.RollbackChanges();
                 LOG_ERROR_S(ctx, NKikimrDataEvents::TEvWriteResult::STATUS_CONSTRAINT_VIOLATION, "Operation " << *writeOp << " at " << DataShard.TabletID() << " aborting. Size of key of secondary index is too big.");
                 

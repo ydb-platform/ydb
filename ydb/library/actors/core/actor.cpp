@@ -406,7 +406,6 @@ namespace NActors {
                 (this->*StateFunc_)(ev);
             }
         } catch (const std::exception& exc) {
-            TBackTrace::FromCurrentException().PrintTo(Cerr);
             if (!OnUnhandledExceptionSafe(exc)) {
                 throw;
             }

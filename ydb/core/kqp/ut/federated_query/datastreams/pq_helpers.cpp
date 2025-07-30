@@ -168,7 +168,7 @@ TMockPqGateway::TMockPqGateway(const TMockPqGatewaySettings& settings)
     : Settings(settings)
 {
     for (const auto& [cluster, settings] : Settings.Clusters) {
-        Y_ENSURE(Settings.Topics.contains(settings.Database), "Topic settings for cluster " << settings.Database << " not found (specified in cluster " << cluster << ")");
+        Y_ENSURE(Settings.Topics.contains(settings.Database), "Topic settings for database " << settings.Database << " not found (specified in cluster " << cluster << ")");
     }
 }
 

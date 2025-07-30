@@ -150,25 +150,32 @@ void TBlobStorageController::TGroupInfo::FillInResources(
     for (const TVSlotInfo *vslot : VDisksInGroup) {
         const TPDiskInfo *pdisk = vslot->PDisk;
         const auto& metrics = pdisk->Metrics;
-        const ui32 shareFactor = countMaxSlots ? pdisk->ExpectedSlotCount : pdisk->NumActiveSlots;
-        const ui32 weight = TPDiskConfig::GetOwnerWeight(GroupSizeInUnits, pdisk->SlotSizeInUnits);
+
+        ui32 maxSlots = 0;
+        ui32 slotSizeInUnits = 0;
+        pdisk->ExtractInferredPDiskSettings(maxSlots, slotSizeInUnits);
+
         ui64 vdiskSlotSize = 0;
+        const ui32 weight = TPDiskConfig::GetOwnerWeight(GroupSizeInUnits, slotSizeInUnits);
         if (metrics.HasEnforcedDynamicSlotSize()) {
             vdiskSlotSize = metrics.GetEnforcedDynamicSlotSize() * weight;
         } else if (metrics.GetTotalSize()) {
+            const ui32 shareFactor = (countMaxSlots && maxSlots) ? maxSlots : pdisk->NumActiveSlots;
             vdiskSlotSize = metrics.GetTotalSize() / shareFactor * weight;
         }
         if (vdiskSlotSize) {
             size = Min(size.value_or(Max<ui64>()), vdiskSlotSize);
         }
+
+        const ui32 shareFactor = (countMaxSlots && maxSlots) ? maxSlots : pdisk->VSlotsOnPDisk.size();
         if (metrics.HasMaxIOPS()) {
-            iops = Min(iops.value_or(Max<double>()), metrics.GetMaxIOPS() * 100 / shareFactor * weight * 0.01);
+            iops = Min(iops.value_or(Max<double>()), metrics.GetMaxIOPS() * 100 / shareFactor * 0.01);
         }
         if (metrics.HasMaxReadThroughput()) {
-            readThroughput = Min(readThroughput.value_or(Max<ui64>()), metrics.GetMaxReadThroughput() / shareFactor * weight);
+            readThroughput = Min(readThroughput.value_or(Max<ui64>()), metrics.GetMaxReadThroughput() / shareFactor);
         }
         if (metrics.HasMaxWriteThroughput()) {
-            writeThroughput = Min(writeThroughput.value_or(Max<ui64>()), metrics.GetMaxWriteThroughput() / shareFactor * weight);
+            writeThroughput = Min(writeThroughput.value_or(Max<ui64>()), metrics.GetMaxWriteThroughput() / shareFactor);
         }
         if (const auto& vm = vslot->Metrics; vm.HasOccupancy()) {
             occupancy = Max(occupancy.value_or(0), vm.GetOccupancy());

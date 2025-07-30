@@ -41,4 +41,4 @@ private:
     TMetadata Metadata_;
 };
 
-} // namespace NYdb::NBackup
+} // namespace NYdb::inline Dev::NBackup

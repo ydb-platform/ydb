@@ -235,7 +235,7 @@ class TCounters : public virtual TThrRefBase {
         {MakeIntrusive<TRequestCommonCounters>("DeleteFolderResources")},
     });
 
-    TTtlCache<TMetricsScope, TScopeCountersPtr, TMap> ScopeCounters{TTtlCacheSettings{}.SetTtl(TDuration::Days(1))};
+    TTtlCache<TMetricsScope, TScopeCountersPtr, TMap> ScopeCounters{TTtlCacheSettings{}.SetTtl(TDuration::Days(1)).SetTouchOnGet(true)};
     ::NMonitoring::TDynamicCounterPtr Counters;
 
 public:

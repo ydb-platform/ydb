@@ -19,6 +19,17 @@ private:
     ui32 AggregationsCount = 0;
     ui32 UselessAggregationsCount = 0;
 
+    static inline const double CriticalBadAggregationKffForSource = 1.5;
+    static const ui32 GuaranteeNeedAggregationSourceRecordsCount = 1000;
+
+    static const ui32 AggregationPackSize = 100;
+
+    static const ui32 AggregatedResultKeysCountMinimalForControl = 10000;
+    static inline const double CriticalBadAggregationKffForAggregation = 5;
+
+    static inline const double UselessDetectorFractionKff = 0.5;
+    static const ui32 UselessDetectorCountLimit = 7;
+
     virtual TString DoDebugString() const override {
         TStringBuilder sb;
         sb << "{";
@@ -27,7 +38,7 @@ private:
         sb << SourcesCount << ",";
         sb << AggregationActivity << ",";
         sb << AggregationsCount << ",";
-        sb << UselessAggregationsCount << ",";
+        sb << UselessAggregationsCount;
         sb << "}";
         return sb;
     }
@@ -39,8 +50,7 @@ private:
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "aggregation_batching")("count", SourcesToAggregate.size());
         ++InFlightControl;
         auto result = std::make_shared<TAggregationDataSource>(std::move(SourcesToAggregate), Context);
-        result->SetPurposeSyncPointIndex(0);
-        result->SetPurposeSyncPointIndex(GetPointIndex());
+        result->InitPurposeSyncPointIndex(GetPointIndex());
         SourcesToAggregate.clear();
         SourcesSequentially.emplace_back(result);
         result->InitFetchingPlan(AggregationScript);
@@ -48,7 +58,7 @@ private:
     }
 
     std::shared_ptr<NCommon::IDataSource> TryToFlush() {
-        if (!AggregationActivity || SourcesToAggregate.size() >= 100 ||
+        if (!AggregationActivity || SourcesToAggregate.size() >= AggregationPackSize ||
             (Collection->IsFinished() && Collection->GetSourcesInFlightCount() == SourcesCount) ||
             Collection->GetMaxInFlight() == SourcesCount) {
             AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "flush")("to_aggr", SourcesToAggregate.size())(
@@ -82,7 +92,8 @@ private:
                     originalCount = source->GetStageData().GetTable()->GetFilter().GetFilteredCountVerified();
                 }
                 const ui32 aggrKeysCount = source->GetStageData().GetTable()->GetRecordsCountActualVerified();
-                localAggregationActivity = aggrKeysCount < 1000 || aggrKeysCount * 1.5 < originalCount;
+                localAggregationActivity =
+                    aggrKeysCount < GuaranteeNeedAggregationSourceRecordsCount || aggrKeysCount * CriticalBadAggregationKffForSource < originalCount;
             } else {
                 localAggregationActivity = false;
             }
@@ -129,11 +140,13 @@ private:
         AFL_VERIFY(resultChunk && resultChunk->HasData());
         if (AggregationActivity) {
             ++AggregationsCount;
-            if (resultChunk->GetTable()->num_rows() > 10000 && source->GetRecordsCount() < 5 * resultChunk->GetTable()->num_rows()) {
+            if (resultChunk->GetTable()->num_rows() > AggregatedResultKeysCountMinimalForControl &&
+                source->GetRecordsCount() < CriticalBadAggregationKffForAggregation * resultChunk->GetTable()->num_rows()) {
                 AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "useless_aggregation")("source_id", source->GetSourceId())("source_idx",
                     source->GetSourceIdx())("table", resultChunk->GetTable()->num_rows())("original_count", source->GetRecordsCount())(
                     "activity", AggregationActivity)("useless_count", UselessAggregationsCount)("aggr_count", AggregationsCount);
-                if (++UselessAggregationsCount > 0.5 * AggregationsCount && AggregationsCount > 7) {
+                if (++UselessAggregationsCount > UselessDetectorFractionKff * AggregationsCount &&
+                    AggregationsCount > UselessDetectorCountLimit) {
                     AggregationActivity = false;
                 }
             }

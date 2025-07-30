@@ -109,8 +109,13 @@ public:
         if (!PurposeSyncPointIndex) {
             AFL_VERIFY(value == 0);
         } else {
-            AFL_VERIFY(*PurposeSyncPointIndex < value);
+            AFL_VERIFY(*PurposeSyncPointIndex + 1 == value);
         }
+        PurposeSyncPointIndex = value;
+    }
+
+    void InitPurposeSyncPointIndex(const ui32 value) {
+        AFL_VERIFY(!PurposeSyncPointIndex);
         PurposeSyncPointIndex = value;
     }
 

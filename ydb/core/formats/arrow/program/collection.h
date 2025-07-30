@@ -171,10 +171,11 @@ public:
         return Accessors.contains(id) || Constants.contains(id);
     }
 
-    void AddVerified(const ui32 columnId, const arrow::Datum& data, const bool withFilter, const bool isAggregation = false);
-    void AddVerified(const ui32 columnId, const std::shared_ptr<IChunkedArray>& data, const bool withFilter, const bool isAggregation = false);
-    void AddVerified(const ui32 columnId, const TAccessorCollectedContainer& data, const bool withFilter, const bool isAggregation = false);
-    void Upsert(const ui32 columnId, const std::shared_ptr<IChunkedArray>& data, const bool withFilter, const bool isAggregation = false);
+    void AddVerified(const ui32 columnId, const arrow::Datum& data, const bool withFilter, const bool forceChangeCount = false);
+    void AddVerified(
+        const ui32 columnId, const std::shared_ptr<IChunkedArray>& data, const bool withFilter, const bool forceChangeCount = false);
+    void AddVerified(const ui32 columnId, const TAccessorCollectedContainer& data, const bool withFilter, const bool forceChangeCount = false);
+    void Upsert(const ui32 columnId, const std::shared_ptr<IChunkedArray>& data, const bool withFilter, const bool forceChangeCount = false);
 
     void AddConstantVerified(const ui32 columnId, const std::shared_ptr<arrow::Scalar>& scalar) {
         AFL_VERIFY(columnId);

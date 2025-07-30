@@ -47,7 +47,7 @@ public:
     virtual std::shared_ptr<NCommon::IDataSource> OnAddSource(const std::shared_ptr<NCommon::IDataSource>& source) {
         SourcesSequentially.emplace_back(source);
         if (!source->GetAs<IDataSource>()->HasFetchingPlan()) {
-            source->MutableAs<IDataSource>()->InitFetchingPlan(Context->GetColumnsFetchingPlan(source));
+            source->MutableAs<IDataSource>()->InitFetchingPlan(Context->GetColumnsFetchingPlan(source, !Next));
         }
         return source;
     }

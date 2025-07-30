@@ -84,15 +84,6 @@ TConclusion<bool> TStartPortionAccessorFetchingStep::DoExecuteInplace(
     return !source->MutableAs<IDataSource>()->StartFetchingAccessor(source, step);
 }
 
-TConclusion<bool> TDetectScript::DoExecuteInplace(
-    const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& /*step*/) const {
-    auto plan = source->GetContext()->GetColumnsFetchingPlan(source);
-    source->MutableAs<IDataSource>()->InitFetchingPlan(plan);
-    TFetchingScriptCursor cursor(plan, 0);
-    FOR_DEBUG_LOG(NKikimrServices::COLUMNSHARD_SCAN_EVLOG, source->AddEvent("sdmem"));
-    return cursor.Execute(source);
-}
-
 TConclusion<bool> TDetectInMemFlag::DoExecuteInplace(
     const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& /*step*/) const {
     if (source->HasSourceInMemoryFlag()) {
@@ -125,7 +116,8 @@ public:
         auto* plainReader = static_cast<TPlainReadData*>(&indexedDataRead);
         Source->MutableAs<IDataSource>()->SetCursor(std::move(Step));
         Source->StartSyncSection();
-        plainReader->MutableScanner().GetResultSyncPoint()->OnSourcePrepared(std::move(Source), *plainReader);
+        const ui32 syncPointIndex = Source->GetAs<IDataSource>()->GetPurposeSyncPointIndex();
+        plainReader->MutableScanner().GetSyncPoint(syncPointIndex)->OnSourcePrepared(std::move(Source), *plainReader);
         return true;
     }
 };
@@ -226,8 +218,12 @@ TConclusion<bool> TPrepareResultStep::DoExecuteInplace(
     auto plan = std::move(acc).Build();
     AFL_VERIFY(!plan->IsFinished(0));
     source->MutableAs<IDataSource>()->InitFetchingPlan(plan);
-    TFetchingScriptCursor cursor(plan, 0);
-    return cursor.Execute(source);
+    if (StartResultBuildingInplace) {
+        TFetchingScriptCursor cursor(plan, 0);
+        return cursor.Execute(source);
+    } else {
+        return true;
+    }
 }
 
 void TDuplicateFilter::TFilterSubscriber::OnFilterReady(NArrow::TColumnFilter&& filter) {

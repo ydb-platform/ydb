@@ -21,6 +21,8 @@ void ISyncPoint::OnSourcePrepared(std::shared_ptr<NCommon::IDataSource>&& source
     AFL_VERIFY(sourceInput->IsSyncSection())("source_id", sourceInput->GetSourceId());
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "OnSourcePrepared")("source_id", sourceInput->GetSourceId())(
         "prepared", IsSourcePrepared(sourceInput));
+    AFL_VERIFY(SourcesSequentially.size());
+    AFL_VERIFY(sourceInput->GetSourceId() != SourcesSequentially.front()->GetSourceId() || IsSourcePrepared(SourcesSequentially.front()));
     while (SourcesSequentially.size() && IsSourcePrepared(SourcesSequentially.front())) {
         auto source = SourcesSequentially.front();
         switch (OnSourceReady(source, reader)) {

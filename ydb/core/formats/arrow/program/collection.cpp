@@ -15,19 +15,19 @@ void TAccessorsCollection::Upsert(
     AddVerified(columnId, data, withFilter, isAggregation);
 }
 
-void TAccessorsCollection::AddVerified(const ui32 columnId, const arrow::Datum& data, const bool withFilter, const bool isAggregation) {
-    AddVerified(columnId, TAccessorCollectedContainer(data), withFilter, isAggregation);
+void TAccessorsCollection::AddVerified(const ui32 columnId, const arrow::Datum& data, const bool withFilter, const bool forceChangeCount) {
+    AddVerified(columnId, TAccessorCollectedContainer(data), withFilter, forceChangeCount);
 }
 
 void TAccessorsCollection::AddVerified(
-    const ui32 columnId, const std::shared_ptr<IChunkedArray>& data, const bool withFilter, const bool isAggregation) {
-    AddVerified(columnId, TAccessorCollectedContainer(data), withFilter, isAggregation);
+    const ui32 columnId, const std::shared_ptr<IChunkedArray>& data, const bool withFilter, const bool forceChangeCount) {
+    AddVerified(columnId, TAccessorCollectedContainer(data), withFilter, forceChangeCount);
 }
 
 void TAccessorsCollection::AddVerified(
-    const ui32 columnId, const TAccessorCollectedContainer& data, const bool withFilter, const bool isAggregation) {
+    const ui32 columnId, const TAccessorCollectedContainer& data, const bool withFilter, const bool forceChangeCount) {
     AFL_VERIFY(columnId);
-    if (isAggregation) {
+    if (forceChangeCount) {
         AFL_VERIFY(UseFilter);
         RecordsCountActual = data->GetRecordsCount();
         AFL_VERIFY(Accessors.emplace(columnId, data).second);

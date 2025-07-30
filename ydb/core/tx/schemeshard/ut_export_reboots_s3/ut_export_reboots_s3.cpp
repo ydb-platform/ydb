@@ -675,7 +675,7 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
     using S3Func = void (*)(const TVector<TTypedScheme>&, const TString&, const TTestEnvOptions&);
 
     void TestSingleTopic(S3Func func) {
-        auto topic = NDescUT::TSampleTopic(0, 2);
+        auto topic = NDescUT::TSimpleTopic(0, 2);
         func(
             {
                 {

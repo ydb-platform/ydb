@@ -126,7 +126,18 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
                 google::protobuf::util::MessageDifferencer md;
                 auto fieldComparator = google::protobuf::util::DefaultFieldComparator();
                 md.set_field_comparator(&fieldComparator);
-                UNIT_ASSERT(md.Compare(proto.GetCdcDataChange(), expected.at(i).GetCdcDataChange()));
+                
+                TString diff;
+                google::protobuf::io::StringOutputStream diffStream(&diff);
+                google::protobuf::util::MessageDifferencer::StreamReporter reporter(&diffStream);
+                md.ReportDifferencesTo(&reporter);
+                
+                bool isEqual = md.Compare(proto.GetCdcDataChange(), expected.at(i).GetCdcDataChange());
+                
+                UNIT_ASSERT_C(isEqual,
+                    "CDC data change mismatch at record " << i << ":\n" << diff
+                    << "\nActual: " << proto.GetCdcDataChange().ShortDebugString()
+                    << "\nExpected: " << expected.at(i).GetCdcDataChange().ShortDebugString());
             }
 
             if (records.size() >= expected.size()) {
@@ -148,9 +159,10 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
         auto& dcKey = *dc.MutableKey();
         dcKey.AddTags(1);
         dcKey.SetData(TSerializedCellVec::Serialize({keyCell}));
-        auto& upsert = *dc.MutableUpsert();
-        upsert.AddTags(2);
-        upsert.SetData(TSerializedCellVec::Serialize({valueCell}));
+        auto& newImage = *dc.MutableNewImage();
+        newImage.AddTags(2);
+        newImage.SetData(TSerializedCellVec::Serialize({valueCell}));
+        dc.MutableUpsert();
 
         return proto;
     }
@@ -1571,10 +1583,10 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
 
         // Create full backup
         ExecSQL(server, edgeActor, R"(BACKUP `shop_backups`;)", false);
-        SimulateSleep(server, TDuration::Seconds(5)); // Increased wait time for backup to complete
+        SimulateSleep(server, TDuration::Seconds(5));
 
-        // Note: Skip backup verification as it may not be immediately accessible
-        // The main test verifies backup functionality via restore operation
+        // Additional delay to ensure CDC streams are fully initialized for incremental backup
+        SimulateSleep(server, TDuration::Seconds(3));
 
         // === CHECKPOINT 2: Changes + first incremental backup ===
         
@@ -1602,10 +1614,7 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
 
         // Create first incremental backup
         ExecSQL(server, edgeActor, R"(BACKUP `shop_backups` INCREMENTAL;)", false);
-        SimulateSleep(server, TDuration::Seconds(2));
-
-        // Note: Skip incremental backup verification as it may not be immediately accessible
-        // The main test verifies backup functionality via restore operation
+        SimulateSleep(server, TDuration::Seconds(5));
 
         // === CHECKPOINT 3: More changes + second incremental backup ===
         
@@ -1631,7 +1640,7 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
 
         // Create second incremental backup
         ExecSQL(server, edgeActor, R"(BACKUP `shop_backups` INCREMENTAL;)", false);
-        SimulateSleep(server, TDuration::Seconds(2));
+        SimulateSleep(server, TDuration::Seconds(5));
 
         // === FINAL STATE CHECK ===
         
@@ -1693,8 +1702,6 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
 
         UNIT_ASSERT_VALUES_EQUAL(restoredOrders, expectedOrdersForRestore);
         UNIT_ASSERT_VALUES_EQUAL(restoredProducts, expectedProductsForRestore);
-
-        // Test completed successfully - backup and restore operations work correctly
     }
 
 } // Y_UNIT_TEST_SUITE(IncrementalBackup)

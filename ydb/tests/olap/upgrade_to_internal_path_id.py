@@ -9,13 +9,15 @@ class TestUpgradeToInternalPathId:
     session = None
     partition_count = 17
     num_rows = 1000
-    config = KikimrConfigGenerator(
-        use_in_memory_pdisks=False,
-        column_shard_config={"generate_internal_path_id": False}
-    )
+    config = None
 
     @pytest.fixture(autouse=True)
     def setup(self):
+        self.config = KikimrConfigGenerator(
+            use_in_memory_pdisks=False,
+            column_shard_config={"generate_internal_path_id": False}
+        )
+
         self.cluster = KiKiMR(self.config)
         self.cluster.start()
         driver = ydb.Driver(endpoint=self.cluster.nodes[1].endpoint, database="/Root")

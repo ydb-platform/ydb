@@ -1,13 +1,13 @@
 #include "url_matcher.h"
 #include <util/stream/str.h>
 
-namespace NActors::NAudit {
+namespace NMonitoring::NAudit {
 
 const TString ANY_PATH = "*";
 
 void TUrlMatcher::AddPattern(const TUrlPattern& pattern) {
     TStringBuf path = pattern.Path;
-    TNode* node = Root.Get();
+    TNode* node = &Root;
     if (path.StartsWith('/')) {
         path = path.Skip(1);
     }
@@ -15,18 +15,11 @@ void TUrlMatcher::AddPattern(const TUrlPattern& pattern) {
     while (path) {
         TStringBuf part;
         path.NextTok('/', part);
-
-        TString key(part);
-
-        auto& child = node->Children[key];
-        if (!child) {
-            child = MakeHolder<TNode>();
-        }
-        node = child.Get();
+        node = &node->Children[part];
     }
 
     if (pattern.ParamName.empty()) {
-        node->MatchedWithoutParams = true;
+        node->MatchWithoutParams = true;
     } else {
         TParamCondition param;
         param.Name = pattern.ParamName;
@@ -41,7 +34,7 @@ bool TUrlMatcher::Match(const TString& url, const TCgiParameters& params) const 
         path = path.Skip(1);
     }
 
-    const TNode* node = Root.Get();
+    const TNode* node = &Root;
 
     do {
         TStringBuf part;
@@ -53,15 +46,13 @@ bool TUrlMatcher::Match(const TString& url, const TCgiParameters& params) const 
         auto it = node->Children.find(part);
         if (it == node->Children.end()) {
             it = node->Children.find(ANY_PATH);
-            if (it == node->Children.end()) {
-                return false;
-            }
-            node = it->second.Get();
-        } else {
-            node = it->second.Get();
         }
+        if (it == node->Children.end()) {
+            return false;
+        }
+        node = &it->second;
 
-        if (node->MatchedWithoutParams) {
+        if (node->MatchWithoutParams) {
             return true;
         }
         for (const auto& p : node->MatchedParams) {

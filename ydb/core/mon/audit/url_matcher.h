@@ -8,7 +8,7 @@
 #include <util/generic/vector.h>
 #include <optional>
 
-namespace NActors::NAudit {
+namespace NMonitoring::NAudit {
 
 struct TUrlPattern {
     TString Path;
@@ -20,7 +20,7 @@ class TUrlMatcher {
 public:
     void AddPattern(const TUrlPattern& rule);
     bool Match(const TString& url, const TCgiParameters& params) const;
-    bool Match(const TString& url, const TString& params = "") const;
+    bool Match(const TString& url, const TString& params = {}) const;
 
 private:
     struct TParamCondition {
@@ -29,12 +29,12 @@ private:
     };
 
     struct TNode {
-        THashMap<TString, THolder<TNode>> Children;
-        bool MatchedWithoutParams = false;
+        THashMap<TString, TNode> Children;
+        bool MatchWithoutParams = false;
         TVector<TParamCondition> MatchedParams;
     };
 
-    THolder<TNode> Root = MakeHolder<TNode>();
+    TNode Root;
 };
 
 }

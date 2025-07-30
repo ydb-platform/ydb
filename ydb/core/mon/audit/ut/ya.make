@@ -9,7 +9,7 @@ PEERDIR(
 )
 
 SRCS(
-    audit_ut.cpp
+    url_matcher_ut.cpp
 )
 
 YQL_LAST_ABI_VERSION()

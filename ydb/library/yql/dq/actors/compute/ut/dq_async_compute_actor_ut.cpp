@@ -526,7 +526,10 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
         }
     }
 
-    bool ReceiveData(auto&& cb, auto&& cbWatermark, auto dqInputChannel) {
+    // cb(TUnboxedValue& value, ui32 column) is called for each value in a row
+    // cbWatermark(TInstant watermark) is called for each received watermark
+    // beforeFinalAck() is called before sending final ack (when CA is still definitely alive)
+    bool ReceiveData(auto&& cb, auto&& cbWatermark, auto&& beforeFinalAck, auto dqInputChannel) {
         auto ev = ActorSystem.GrabEdgeEvent<TEvDqCompute::TEvChannelData>({DstEdgeActor}, TDuration::Seconds(20));
         if (!ev) {
             throw yexception() << "Failed";
@@ -584,6 +587,9 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
         if (ev->Get()->Record.GetChannelData().HasWatermark()) {
             auto watermark = TInstant::MicroSeconds(ev->Get()->Record.GetChannelData().GetWatermark().GetTimestampUs());
             cbWatermark(watermark);
+        }
+        if (dqInputChannel->IsFinished()) {
+            beforeFinalAck();
         }
         if (!ev->Get()->Record.GetNoAck()) {
             auto ack = new TEvDqCompute::TEvChannelDataAck;
@@ -737,6 +743,14 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
                     watermark = receivedWatermark;
                     LOG_D("Got watermark " << *watermark);
                 },
+                [this, &asyncCA]() {
+                    DumpMonPage(asyncCA, [this](auto&& str) {
+                        UNIT_ASSERT_STRING_CONTAINS(str, "<h3>Sources</h3>");
+                        UNIT_ASSERT_STRING_CONTAINS(str, LogPrefix);
+                        // TODO add validation
+                        LOG_D(str);
+                    });
+                },
                 dqInputChannel))
         {}
         } catch(...) {
@@ -745,12 +759,6 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
                     });
             throw;
         }
-        DumpMonPage(asyncCA, [this](auto&& str) {
-            UNIT_ASSERT_STRING_CONTAINS(str, "<h3>Sources</h3>");
-            UNIT_ASSERT_STRING_CONTAINS(str, LogPrefix);
-            // TODO add validation
-            LOG_D(str);
-        });
         UNIT_ASSERT_EQUAL(receivedData.size(), val);
         for (; val > 0; --val) {
             UNIT_ASSERT_EQUAL_C(receivedData[val * val], 1, "expected count for " << (val * val));
@@ -881,14 +889,16 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
                     watermark = receivedWatermark;
                     LOG_D("Got watermark " << *watermark);
                 },
+                [this, &asyncCA]() {
+                    DumpMonPage(asyncCA, [this](auto&& str) {
+                        UNIT_ASSERT_STRING_CONTAINS(str, "<h3>Sources</h3>");
+                        UNIT_ASSERT_STRING_CONTAINS(str, LogPrefix);
+                        // TODO add validation
+                        LOG_D(str);
+                    });
+                },
                 dqInputChannel))
         {}
-        DumpMonPage(asyncCA, [this](auto&& str) {
-            UNIT_ASSERT_STRING_CONTAINS(str, "<h3>Sources</h3>");
-            UNIT_ASSERT_STRING_CONTAINS(str, LogPrefix);
-            // TODO add validation
-            LOG_D(str);
-        });
         UNIT_ASSERT_EQUAL(receivedData.size(), expectedData.size());
         for (auto [receivedVal, receivedCnt] : receivedData) {
             UNIT_ASSERT_EQUAL_C(receivedCnt, expectedData[receivedVal], "expected count for " << receivedVal << ": " << receivedCnt << " != " << expectedData[receivedVal]);

@@ -341,7 +341,7 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
         csController->WaitCompactions(TDuration::Seconds(5));
         THashSet<NColumnShard::TInternalPathId> pathsToLock;
         for (const auto& [_, pathIdTranslator] : csController->GetActiveTablets()) {
-            if (auto internalPathId = pathIdTranslator->ResolveInternalPathId(tablePathId)) {
+            if (auto internalPathId = pathIdTranslator->ResolveInternalPathId(tablePathId, false)) {
                 pathsToLock.insert(*internalPathId);
             }
         };

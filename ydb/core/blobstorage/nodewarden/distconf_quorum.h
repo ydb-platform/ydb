@@ -13,7 +13,7 @@ namespace NKikimr::NStorage {
         } else if (config.HasClusterState()) {
             const auto& clusterState = config.GetClusterState();
             for (size_t i = 0; i < clusterState.PerPileStateSize(); ++i) {
-                if (clusterState.GetPerPileState(i) != NKikimrBridge::TClusterState::DISCONNECTED) {
+                if (const auto state = clusterState.GetPerPileState(i); state != NKikimrBridge::TClusterState::DISCONNECTED) {
                     mandatoryPileIds.insert(TBridgePileId::FromValue(i));
                 }
             }
@@ -157,7 +157,7 @@ namespace NKikimr::NStorage {
             // strict datacenter majority
             if (ok <= err) {
                 if (out) {
-                    *out << " no-quorum:";
+                    *out << " no-quorum";
                     for (const auto& [_, value] : pileStatus) {
                         const auto [dcOk, dcErr] = value;
                         *out << ':' << dcOk << '/' << dcOk + dcErr;

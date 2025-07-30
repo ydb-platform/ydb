@@ -94,7 +94,7 @@ A [JSON](https://en.wikipedia.org/wiki/JSON) record has the following structure:
 }
 ```
 
-* `key`: An array of primary key component values. Always present.
+* `key`: An array of primary key component values. Always present. The order of elements matches the order of the columns listed in the primary key of the table.
 * `update`: Update flag. Present if a record matches the update operation. In `UPDATES` mode, it also contains the names and values of updated columns.
 * `erase`: Erase flag. Present if a record matches the erase operation.
 * `newImage`: Row snapshot that results from its being changed. Present in `NEW_IMAGE` and `NEW_AND_OLD_IMAGES` modes. Contains column names and values.

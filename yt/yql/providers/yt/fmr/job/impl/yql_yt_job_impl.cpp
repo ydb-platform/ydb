@@ -1,8 +1,10 @@
 #include <library/cpp/threading/future/core/future.h>
 #include <library/cpp/yson/node/node_io.h>
 
+#include <util/folder/tempdir.h>
 #include <util/stream/file.h>
 
+#include <util/system/shellcommand.h>
 #include <yt/cpp/mapreduce/common/helpers.h>
 #include <yt/yql/providers/yt/fmr/job/impl/yql_yt_job_impl.h>
 #include <yt/yql/providers/yt/fmr/job/impl/yql_yt_table_data_service_reader.h>
@@ -11,6 +13,7 @@
 #include <yt/yql/providers/yt/fmr/utils/yql_yt_parse_records.h>
 #include <yt/yql/providers/yt/fmr/utils/yql_yt_table_input_streams.h>
 #include <yt/yql/providers/yt/fmr/yt_job_service/interface/yql_yt_job_service.h>
+#include <yt/yql/providers/yt/fmr/request_options/proto_helpers/yql_yt_request_proto_helpers.h>
 
 #include <yql/essentials/utils/log/log.h>
 
@@ -19,9 +22,19 @@ namespace NYql::NFmr {
 class TFmrJob: public IFmrJob {
 public:
 
-    TFmrJob(ITableDataService::TPtr tableDataService, IYtJobService::TPtr ytJobService, const TFmrJobSettings& settings)
-        : TableDataService_(tableDataService), YtJobService_(ytJobService), Settings_(settings)
+    TFmrJob(
+        const TString& tableDataServiceDiscoveryFilePath,
+        IYtJobService::TPtr ytJobService,
+        TFmrUserJobLauncher::TPtr jobLauncher,
+        const TFmrJobSettings& settings
+    )
+        : TableDataServiceDiscoveryFilePath_(tableDataServiceDiscoveryFilePath)
+        , YtJobService_(ytJobService)
+        , JobLauncher_(jobLauncher)
+        , Settings_(settings)
     {
+        auto tableDataServiceDiscovery = MakeFileTableDataServiceDiscovery({.Path = tableDataServiceDiscoveryFilePath});
+        TableDataService_ = MakeTableDataServiceClient(tableDataServiceDiscovery);
     }
 
     virtual std::variant<TError, TStatistics> Download(
@@ -117,36 +130,45 @@ public:
     }
 
     virtual std::variant<TError, TStatistics> Map(
-        const TMapTaskParams& /* params */,
-        const std::unordered_map<TFmrTableId, TClusterConnection>& /* clusterConnections */,
+        const TMapTaskParams& params,
+        const std::unordered_map<TFmrTableId, TClusterConnection>& clusterConnections,
         std::shared_ptr<std::atomic<bool>> /* cancelFlag */
     ) override {
-        YQL_CLOG(ERROR, FastMapReduce) << "MAP NOT IMPLEMENTED";
-        ythrow yexception() << "Not implemented";
+        TFmrUserJob mapJob;
+        // deserialize map job and fill params
+        TStringStream serializedJobStateStream(params.SerializedMapJobState);
+        mapJob.Load(serializedJobStateStream);
+        FillMapFmrJob(mapJob, params, clusterConnections, TableDataServiceDiscoveryFilePath_, YtJobService_);
+
+        return JobLauncher_->LaunchJob(mapJob);
     }
 
 private:
-    ITableDataService::TPtr TableDataService_;
+    ITableDataService::TPtr TableDataService_; // Table data service http client
+    const TString TableDataServiceDiscoveryFilePath_;
     IYtJobService::TPtr YtJobService_;
+    TFmrUserJobLauncher::TPtr JobLauncher_;
     TFmrJobSettings Settings_;
 };
 
 IFmrJob::TPtr MakeFmrJob(
-    ITableDataService::TPtr tableDataService,
+    const TString& tableDataServiceDiscoveryFilePath,
     IYtJobService::TPtr ytJobService,
+    TFmrUserJobLauncher::TPtr jobLauncher,
     const TFmrJobSettings& settings
 ) {
-    return MakeIntrusive<TFmrJob>(tableDataService, ytJobService, settings);
+    return MakeIntrusive<TFmrJob>(tableDataServiceDiscoveryFilePath, ytJobService, jobLauncher, settings);
 }
 
 TJobResult RunJob(
     TTask::TPtr task,
-    ITableDataService::TPtr tableDataService,
+    const TString& tableDataServiceDiscoveryFilePath,
     IYtJobService::TPtr ytJobService,
+    TFmrUserJobLauncher::TPtr jobLauncher,
     std::shared_ptr<std::atomic<bool>> cancelFlag
 ) {
     TFmrJobSettings jobSettings = GetJobSettingsFromTask(task);
-    IFmrJob::TPtr job = MakeFmrJob(tableDataService, ytJobService, jobSettings);
+    IFmrJob::TPtr job = MakeFmrJob(tableDataServiceDiscoveryFilePath, ytJobService, jobLauncher, jobSettings);
 
     auto processTask = [job, task, cancelFlag] (auto&& taskParams) {
         using T = std::decay_t<decltype(taskParams)>;
@@ -179,13 +201,13 @@ void FillMapFmrJob(
     const TMapTaskParams& mapTaskParams,
     const std::unordered_map<TFmrTableId, TClusterConnection>& clusterConnections,
     const TString& tableDataServiceDiscoveryFilePath,
-    bool useFileGateway
+    IYtJobService::TPtr jobService
 ) {
     mapJob.SetTableDataService(tableDataServiceDiscoveryFilePath);
     mapJob.SetTaskInputTables(mapTaskParams.Input);
     mapJob.SetTaskFmrOutputTables(mapTaskParams.Output);
     mapJob.SetClusterConnections(clusterConnections);
-    mapJob.SetYtJobService(useFileGateway);
+    mapJob.SetYtJobService(jobService);
 }
 
 TFmrJobSettings GetJobSettingsFromTask(TTask::TPtr task) {

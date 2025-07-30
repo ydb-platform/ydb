@@ -90,10 +90,12 @@ TKikimrConfiguration::TKikimrConfiguration() {
     REGISTER_SETTING(*this, OptimizerHints).Parser([](const TString& v) { return NYql::TOptimizerHints::Parse(v); });
     REGISTER_SETTING(*this, OptShuffleElimination);
     REGISTER_SETTING(*this, OptShuffleEliminationWithMap);
+    REGISTER_SETTING(*this, OptShuffleEliminationForAggregation);
     REGISTER_SETTING(*this, OverridePlanner);
     REGISTER_SETTING(*this, UseGraceJoinCoreForMap);
     REGISTER_SETTING(*this, UseBlockHashJoin);
     REGISTER_SETTING(*this, EnableOrderPreservingLookupJoin);
+    REGISTER_SETTING(*this, OptEnableParallelUnionAllConnectionsForExtend);
 
     REGISTER_SETTING(*this, OptUseFinalizeByKey);
     REGISTER_SETTING(*this, CostBasedOptimizationLevel);
@@ -204,4 +206,8 @@ bool TKikimrConfiguration::GetEnableOlapPushdownProjections() const {
     return ((GetOptionalFlagValue(OptEnableOlapPushdownProjections.Get()) == EOptionalFlag::Enabled) || EnableOlapPushdownProjections);
 }
 
+bool TKikimrConfiguration::GetEnableParallelUnionAllConnectionsForExtend() const {
+    return ((GetOptionalFlagValue(OptEnableParallelUnionAllConnectionsForExtend.Get()) == EOptionalFlag::Enabled) ||
+            EnableParallelUnionAllConnectionsForExtend);
+}
 }

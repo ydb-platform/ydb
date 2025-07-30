@@ -6,6 +6,8 @@ on:
 concurrency:
   group: ${{ github.workflow }}
   cancel-in-progress: true
+env:
+  GH_TOKEN: ${{ secrets.YDBOT_TOKEN }}
 jobs:
   create-pr:
     runs-on: ubuntu-latest
@@ -13,11 +15,14 @@ jobs:
       - name: checkout
         uses: actions/checkout@v4
         with:
+          fetch-depth: 0
           sparse-checkout: |
             .github
             ydb/ci/
       - uses: ./.github/actions/rightlib_sync
         with:
-          command: create-pr
+          base_branch: main
+          head_branch: rightlib
+          label: rightlib
           repository: ${{ github.repository }}
-          gh_personal_access_token: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
+          gh_personal_access_token: ${{ env.GH_TOKEN }}

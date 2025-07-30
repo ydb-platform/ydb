@@ -91,6 +91,7 @@ namespace NLs {
     TCheckFunc ExtractTenantSysViewProcessor(ui64* tenantSVPId);
     TCheckFunc ExtractTenantStatisticsAggregator(ui64* tenantSAId);
     TCheckFunc ExtractDomainHive(ui64* domainHiveId);
+    TCheckFunc ExtractChildren(TVector<TString>* children);
 
     void NotFinished(const NKikimrScheme::TEvDescribeSchemeResult& record);
     void Finished(const NKikimrScheme::TEvDescribeSchemeResult& record);

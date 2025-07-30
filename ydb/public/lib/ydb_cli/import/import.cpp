@@ -582,8 +582,10 @@ private:
     // RequestInflight increases on sending a single request to server
     // Decreases on receiving any response for its request
     std::unique_ptr<std::counting_semaphore<>> RequestsInflight;
-    // Common pool between all files for building TValues
+    // Common pool between all files for building TValues and waiting for max inflight semaphore
     std::shared_ptr<TThreadPool> ProcessingPool;
+    // Common pool between all files for sending and resending requests
+    std::shared_ptr<TThreadPool> RetryPool;
     // Common single threaded pool to manage progress files and import batch statuses in background
     std::shared_ptr<TThreadPool> FileProgressPool;
     std::atomic<bool> Failed = false;
@@ -621,6 +623,8 @@ TImportFileClient::TImpl::TImpl(const TDriver& driver, const TClientCommand::TCo
     if (Settings.Format_ == EDataFormat::Csv || Settings.Format_ == EDataFormat::Tsv) {
         FileProgressPool = std::make_shared<TThreadPool>(IThreadPool::TParams().SetThreadNamePrefix("ProgrFileMgr"));
         FileProgressPool->Start(1);
+        RetryPool = std::make_shared<TThreadPool>(IThreadPool::TParams().SetThreadNamePrefix("Retry"));
+        RetryPool->Start(Settings.Threads_);
     }
     RequestsInflight = std::make_unique<std::counting_semaphore<>>(Settings.MaxInFlightRequests_);
 }
@@ -890,7 +894,6 @@ TAsyncStatus TImportFileClient::TImpl::UpsertTValueBuffer(const TString& dbPath,
 
 inline
 TAsyncStatus TImportFileClient::TImpl::UpsertTValueBuffer(const TString& dbPath, std::function<TValue()>&& buildFunc) {
-    // For the first attempt values are built before acquiring request inflight semaphore
     std::optional<TValue> prebuiltValue = buildFunc();
     auto retryFunc = [this, &dbPath, buildFunc = std::move(buildFunc), prebuiltValue = std::move(prebuiltValue)]
             (NYdb::NTable::TTableClient& tableClient) mutable -> TAsyncStatus {
@@ -905,8 +908,8 @@ TAsyncStatus TImportFileClient::TImpl::UpsertTValueBuffer(const TString& dbPath,
                     return NThreading::MakeFuture(status);
                 });
         };
-        // Running heavy building task on processing pool:
-        return NThreading::Async(std::move(buildTValueAndSendRequest), *ProcessingPool);
+        // Running and re-running (with building TValue) requests on a separate pool to avoid deadlocks
+        return NThreading::Async(std::move(buildTValueAndSendRequest), *RetryPool);
     };
     if (!RequestsInflight->try_acquire()) {
         if (Settings.Verbose_ && Settings.NewlineDelimited_) {
@@ -1004,8 +1007,8 @@ inline TAsyncStatus TImportFileClient::TImpl::UpsertTValueBufferOnArena(
                     return NThreading::MakeFuture(status);
                 });
         };
-        // Running heavy building task on processing pool:
-        return NThreading::Async(std::move(buildTValueAndSendRequest), *ProcessingPool);
+        // Running and re-running (with building TValue) requests on a separate pool to avoid deadlocks
+        return NThreading::Async(std::move(buildTValueAndSendRequest), *RetryPool);
     };
 
     if (!RequestsInflight->try_acquire()) {

@@ -2064,7 +2064,7 @@ private:
                 }
 
                 if (stage.GetIsSinglePartition()) {
-                    YQL_ENSURE(stageInfo.Tasks.size() == 1, "Unexpected multiple tasks in single-partition stage");
+                    YQL_ENSURE(stageInfo.Tasks.size() <= 1, "Unexpected multiple tasks in single-partition stage");
                 }
 
                 TasksGraph.GetMeta().AllowWithSpilling |= stage.GetAllowWithSpilling();

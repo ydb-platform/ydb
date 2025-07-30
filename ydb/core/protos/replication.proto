@@ -31,6 +31,7 @@ message TConnectionParams {
     optional string Endpoint = 1;
     optional string Database = 2;
     optional bool EnableSsl = 5;
+    optional string CaCert = 6;
     // credentials
     oneof Credentials {
         TStaticCredentials StaticCredentials = 3;
@@ -43,7 +44,7 @@ message TConsistencySettings {
     }
 
     message TGlobalConsistency {
-        optional uint64 CommitIntervalMilliSeconds = 1;
+        optional uint64 CommitIntervalMilliSeconds = 1 [default = 10000]; // 10s
     }
 
     oneof Level {

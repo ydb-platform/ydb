@@ -1008,6 +1008,8 @@ struct TEvBlobStorage {
         const TInstant Deadline;
         const NKikimrBlobStorage::EPutHandleClass HandleClass;
         const ETactic Tactic;
+        const bool IssueKeepFlag = false;
+        const bool IgnoreBlock = false;
         mutable NLWTrace::TOrbit Orbit;
         std::vector<std::pair<ui64, ui32>> ExtraBlockChecks; // (TabletId, Generation) pairs
 
@@ -1017,17 +1019,21 @@ struct TEvBlobStorage {
             , Deadline(origin.Deadline)
             , HandleClass(origin.HandleClass)
             , Tactic(origin.Tactic)
+            , IssueKeepFlag(origin.IssueKeepFlag)
+            , IgnoreBlock(origin.IgnoreBlock)
             , ExtraBlockChecks(origin.ExtraBlockChecks)
         {}
 
         TEvPut(const TLogoBlobID &id, TRcBuf &&buffer, TInstant deadline,
                NKikimrBlobStorage::EPutHandleClass handleClass = NKikimrBlobStorage::TabletLog,
-               ETactic tactic = TacticDefault)
+               ETactic tactic = TacticDefault, bool issueKeepFlag = false, bool ignoreBlock = false)
             : Id(id)
             , Buffer(std::move(buffer))
             , Deadline(deadline)
             , HandleClass(handleClass)
             , Tactic(tactic)
+            , IssueKeepFlag(issueKeepFlag)
+            , IgnoreBlock(ignoreBlock)
         {
             Y_ABORT_UNLESS(Id, "EvPut invalid: LogoBlobId must have non-zero tablet field, id# %s", Id.ToString().c_str());
             Y_ABORT_UNLESS(Buffer.size() < (40 * 1024 * 1024),
@@ -1045,15 +1051,15 @@ struct TEvBlobStorage {
 
         TEvPut(const TLogoBlobID &id, const TString &buffer, TInstant deadline,
                NKikimrBlobStorage::EPutHandleClass handleClass = NKikimrBlobStorage::TabletLog,
-               ETactic tactic = TacticDefault)
-            : TEvPut(id, TRcBuf(buffer), deadline, handleClass, tactic)
+               ETactic tactic = TacticDefault, bool issueKeepFlag = false)
+            : TEvPut(id, TRcBuf(buffer), deadline, handleClass, tactic, issueKeepFlag)
         {}
 
 
         TEvPut(const TLogoBlobID &id, const TSharedData &buffer, TInstant deadline,
                NKikimrBlobStorage::EPutHandleClass handleClass = NKikimrBlobStorage::TabletLog,
-               ETactic tactic = TacticDefault)
-            : TEvPut(id, TRcBuf(buffer), deadline, handleClass, tactic)
+               ETactic tactic = TacticDefault, bool issueKeepFlag = false)
+            : TEvPut(id, TRcBuf(buffer), deadline, handleClass, tactic, issueKeepFlag)
         {}
 
         TString Print(bool isFull) const {
@@ -1066,6 +1072,12 @@ struct TEvBlobStorage {
             str << " Deadline# " << Deadline.MilliSeconds();
             str << " HandleClass# " << HandleClass;
             str << " Tactic# " << TacticName(Tactic);
+            if (IssueKeepFlag) {
+                str << " IssueKeepFlag# " << IssueKeepFlag;
+            }
+            if (IgnoreBlock) {
+                str << " IgnoreBlock# " << IgnoreBlock;
+            }
             str << "}";
             return str.Str();
         }
@@ -1389,6 +1401,12 @@ struct TEvBlobStorage {
                 TResponse &response = Responses[i];
                 str << " {" << response.Id.ToString();
                 str << " " << NKikimrProto::EReplyStatus_Name(response.Status).data();
+                if (response.Keep) {
+                    str << " Keep";
+                }
+                if (response.DoNotKeep) {
+                    str << " DoNotKeep";
+                }
                 if (response.Shift) {
                     str << " Shift# " << response.Shift;
                 }

@@ -113,6 +113,12 @@
     "test_ydb_impex.TestImpex.test_import_file_with_bom[tsv-additional_args3-row]": {
         "uri": "file://test_ydb_impex.TestImpex.test_import_file_with_bom_tsv-additional_args3-row_/result.output"
     },
+    "test_ydb_impex.TestImpex.test_import_minimal_parallelism[csv-column]": {
+        "uri": "file://test_ydb_impex.TestImpex.test_import_minimal_parallelism_csv-column_/result.output"
+    },
+    "test_ydb_impex.TestImpex.test_import_minimal_parallelism[csv-row]": {
+        "uri": "file://test_ydb_impex.TestImpex.test_import_minimal_parallelism_csv-row_/result.output"
+    },
     "test_ydb_impex.TestImpex.test_import_stdin_with_bom[csv-additional_args0-column]": {
         "uri": "file://test_ydb_impex.TestImpex.test_import_stdin_with_bom_csv-additional_args0-column_/result.output"
     },

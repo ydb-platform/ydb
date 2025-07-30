@@ -22,20 +22,12 @@ private:
         const std::shared_ptr<TAccessorsCollection>& resources) const = 0;
 
     virtual std::optional<TIndexCheckOperation> DoGetIndexCheckerOperation() const = 0;
-    YDB_ACCESSOR_DEF(std::optional<ui32>, YqlOperationId);
+    YDB_READONLY_DEF(std::optional<ui32>, YqlOperationId);
     virtual NJson::TJsonValue DoDebugJson() const {
         return NJson::JSON_NULL;
     }
 public:
-    NJson::TJsonValue DebugJson() const {
-        NJson::TJsonValue result = NJson::JSON_MAP;
-        result.InsertValue("class_name", GetClassName());
-        auto details = DoDebugJson();
-        if (details.IsDefined()) {
-            result.InsertValue("details", std::move(details));
-        }
-        return result;
-    }
+    NJson::TJsonValue DebugJson() const;
 
     IKernelLogic() = default;
 
@@ -71,7 +63,6 @@ public:
 class TSimpleKernelLogic: public IKernelLogic {
 private:
     using TBase = IKernelLogic;
-    YDB_READONLY_DEF(std::optional<ui32>, YqlOperationId);
 
     virtual TConclusion<bool> DoExecute(const std::vector<TColumnChainInfo>& /*input*/, const std::vector<TColumnChainInfo>& /*output*/,
         const std::shared_ptr<TAccessorsCollection>& /*resources*/) const override {
@@ -86,14 +77,13 @@ private:
 public:
     TSimpleKernelLogic() = default;
     TSimpleKernelLogic(const ui32 yqlOperationId)
-        : TBase(yqlOperationId)
-        , YqlOperationId(yqlOperationId) {
+        : TBase(yqlOperationId) {
     }
 
     virtual TString SignalDescription() const override;
 
     virtual ECalculationHardness GetWeight() const override {
-        if (!YqlOperationId) {
+        if (!GetYqlOperationId()) {
             return ECalculationHardness::Unknown;
         }
         return ECalculationHardness::NotSpecified;

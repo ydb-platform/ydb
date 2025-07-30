@@ -826,6 +826,185 @@ Y_UNIT_TEST_SUITE(TYqlExtractPredicate) {
         UNIT_ASSERT(buildResult.PointPrefixLen == 2);
     }
 
+    Y_UNIT_TEST(ResidualLambdaMaxRangesWithExternalParamLimitTuple) {
+        TString prog =
+            "declare $param as Tuple<Int32>;\n"
+            "$src = [<|x:1, y:1, z:1|>, <|x:2, y:2, z:2|>];\n"
+            "select * from as_table($src) where x in $param";
+
+        TExprContext exprCtx;
+        TTypeAnnotationContextPtr typesCtx;
+        TExprNode::TPtr exprRoot = ParseAndOptimize(prog, exprCtx, typesCtx);
+        TExprNode::TPtr filterLambda = LocateFilterLambda(exprRoot);
+
+        THashSet<TString> usedColumns;
+        using NDetail::TPredicateRangeExtractor;
+
+        TPredicateExtractorSettings settings;
+        settings.MaxRanges = 1000;
+        settings.ExternalParameterMaxSize = 100;
+        auto extractor = MakePredicateRangeExtractor(settings);
+
+        UNIT_ASSERT(extractor->Prepare(filterLambda, *filterLambda->Head().Head().GetTypeAnn(), usedColumns, exprCtx, *typesCtx));
+
+        auto buildResult = extractor->BuildComputeNode({ "x", "y", "z"}, exprCtx, *typesCtx);
+
+        auto canonicalLambda = R"((
+(return (lambda '($1) (OptionalIf (Bool 'true) $1)))
+)
+)";
+
+        auto lambda = DumpNode(*buildResult.PrunedLambda, exprCtx);
+        // Cerr << lambda << Endl;
+        UNIT_ASSERT_STRINGS_EQUAL(lambda, canonicalLambda);
+        // Cerr << DumpNode(*buildResult.ComputeNode, exprCtx);
+    }
+
+    Y_UNIT_TEST(ResidualLambdaMaxRangesWithExternalParamLimit) {
+        TString prog =
+            "declare $param as List<Int32>;\n"
+            "$src = [<|x:1, y:1, z:1|>, <|x:2, y:2, z:2|>];\n"
+            "select * from as_table($src) where x in $param";
+
+        TExprContext exprCtx;
+        TTypeAnnotationContextPtr typesCtx;
+        TExprNode::TPtr exprRoot = ParseAndOptimize(prog, exprCtx, typesCtx);
+        TExprNode::TPtr filterLambda = LocateFilterLambda(exprRoot);
+
+        THashSet<TString> usedColumns;
+        using NDetail::TPredicateRangeExtractor;
+
+        TPredicateExtractorSettings settings;
+        settings.MaxRanges = 1000;
+        settings.ExternalParameterMaxSize = 100;
+        auto extractor = MakePredicateRangeExtractor(settings);
+
+        UNIT_ASSERT(extractor->Prepare(filterLambda, *filterLambda->Head().Head().GetTypeAnn(), usedColumns, exprCtx, *typesCtx));
+
+        auto buildResult = extractor->BuildComputeNode({ "x", "y", "z"}, exprCtx, *typesCtx);
+
+        auto canonicalLambda = R"((
+(return (lambda '($1) (OptionalIf (Bool 'true) $1)))
+)
+)";
+
+        auto lambda = DumpNode(*buildResult.PrunedLambda, exprCtx);
+        // Cerr << lambda << Endl;
+        UNIT_ASSERT_STRINGS_EQUAL(lambda, canonicalLambda);
+        // Cerr << DumpNode(*buildResult.ComputeNode, exprCtx);
+    }
+
+    Y_UNIT_TEST(ResidualLambdaMaxRangesWithExternalParamLimitTwoParams) {
+        TString prog =
+            "declare $param as List<Int32>;\n"
+            "declare $param2 as List<Int32>;\n"
+            "$src = [<|x:1, y:1, z:1|>, <|x:2, y:2, z:2|>];\n"
+            "select * from as_table($src) where x in $param and z in $param2";
+
+        TExprContext exprCtx;
+        TTypeAnnotationContextPtr typesCtx;
+        TExprNode::TPtr exprRoot = ParseAndOptimize(prog, exprCtx, typesCtx);
+        TExprNode::TPtr filterLambda = LocateFilterLambda(exprRoot);
+
+        THashSet<TString> usedColumns;
+        using NDetail::TPredicateRangeExtractor;
+
+        TPredicateExtractorSettings settings;
+        settings.MaxRanges = 1000;
+        settings.ExternalParameterMaxSize = 100;
+        auto extractor = MakePredicateRangeExtractor(settings);
+
+        UNIT_ASSERT(extractor->Prepare(filterLambda, *filterLambda->Head().Head().GetTypeAnn(), usedColumns, exprCtx, *typesCtx));
+
+        auto buildResult = extractor->BuildComputeNode({ "x", "y", "z"}, exprCtx, *typesCtx);
+
+        auto canonicalLambda = R"((
+(declare $param2 (ListType (DataType 'Int32)))
+(return (lambda '($1) (OptionalIf (And (SqlIn $param2 (Member $1 'z) '('('warnNoAnsi)))) $1)))
+)
+)";
+
+        auto lambda = DumpNode(*buildResult.PrunedLambda, exprCtx);
+        // Cerr << lambda << Endl;
+        UNIT_ASSERT_STRINGS_EQUAL(lambda, canonicalLambda);
+        // Cerr << DumpNode(*buildResult.ComputeNode, exprCtx);
+    }
+
+    Y_UNIT_TEST(ResidualLambdaMaxRangesParamLimitOverflow) {
+        TString prog =
+            "declare $param as List<Int32>;\n"
+            "$src = [<|x:1, y:1, z:1|>, <|x:2, y:2, z:2|>];\n"
+            "select * from as_table($src) where x in $param";
+
+        TExprContext exprCtx;
+        TTypeAnnotationContextPtr typesCtx;
+        TExprNode::TPtr exprRoot = ParseAndOptimize(prog, exprCtx, typesCtx);
+        TExprNode::TPtr filterLambda = LocateFilterLambda(exprRoot);
+
+        THashSet<TString> usedColumns;
+        using NDetail::TPredicateRangeExtractor;
+
+        TPredicateExtractorSettings settings;
+        settings.MaxRanges = 1000;
+        settings.ExternalParameterMaxSize = 1005;
+        auto extractor = MakePredicateRangeExtractor(settings);
+
+        UNIT_ASSERT(extractor->Prepare(filterLambda, *filterLambda->Head().Head().GetTypeAnn(), usedColumns, exprCtx, *typesCtx));
+
+        auto buildResult = extractor->BuildComputeNode({ "x", "y", "z"}, exprCtx, *typesCtx);
+
+        auto canonicalLambda = R"((
+(declare $param (ListType (DataType 'Int32)))
+(return (lambda '($1) (block '(
+  (let $2 (SqlIn $param (Member $1 'x) '('('warnNoAnsi))))
+  (return (OptionalIf $2 $1))
+))))
+)
+)";
+
+        auto lambda = DumpNode(*buildResult.PrunedLambda, exprCtx);
+        // Cerr << lambda << Endl;
+        UNIT_ASSERT_STRINGS_EQUAL(lambda, canonicalLambda);
+        // Cerr << DumpNode(*buildResult.ComputeNode, exprCtx);
+    }
+
+    Y_UNIT_TEST(ResidualLambdaMaxRanges) {
+        TString prog =
+            "declare $param as List<Int32>;\n"
+            "$src = [<|x:1, y:1, z:1|>, <|x:2, y:2, z:2|>];\n"
+            "select * from as_table($src) where x in $param";
+
+        TExprContext exprCtx;
+        TTypeAnnotationContextPtr typesCtx;
+        TExprNode::TPtr exprRoot = ParseAndOptimize(prog, exprCtx, typesCtx);
+        TExprNode::TPtr filterLambda = LocateFilterLambda(exprRoot);
+
+        THashSet<TString> usedColumns;
+        using NDetail::TPredicateRangeExtractor;
+
+        TPredicateExtractorSettings settings;
+        settings.MaxRanges = 1000;
+        auto extractor = MakePredicateRangeExtractor(settings);
+
+        UNIT_ASSERT(extractor->Prepare(filterLambda, *filterLambda->Head().Head().GetTypeAnn(), usedColumns, exprCtx, *typesCtx));
+
+        auto buildResult = extractor->BuildComputeNode({ "x", "y", "z"}, exprCtx, *typesCtx);
+
+        auto canonicalLambda = R"((
+(declare $param (ListType (DataType 'Int32)))
+(return (lambda '($1) (block '(
+  (let $2 (SqlIn $param (Member $1 'x) '('('warnNoAnsi))))
+  (return (OptionalIf $2 $1))
+))))
+)
+)";
+
+        auto lambda = DumpNode(*buildResult.PrunedLambda, exprCtx);
+        // Cerr << lambda << Endl;
+        UNIT_ASSERT_STRINGS_EQUAL(lambda, canonicalLambda);
+        // Cerr << DumpNode(*buildResult.ComputeNode, exprCtx);
+    }
+
     Y_UNIT_TEST(UnlimitedRangesResidual) {
         TString prog =
             "declare $param as List<Int32>;\n"

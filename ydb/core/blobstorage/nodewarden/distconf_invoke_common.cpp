@@ -38,44 +38,47 @@ namespace NKikimr::NStorage {
         if (LifetimeToken.expired()) {
             return FinishWithError(TResult::RACE, "Distributed config keeper terminated");
         }
+        if (InvokeActorQueueGeneration != Self->InvokeActorQueueGeneration) {
+            // actual request has been cancelled since it was signed up for bootstrap
+            return PassAway();
+        }
 
         STLOG(PRI_DEBUG, BS_NODE, NWDC42, "TInvokeRequestHandlerActor::Bootstrap", (Sender, Sender), (Cookie, Cookie),
-            (SelfId, SelfId()), (Binding, Self->Binding), (RootState, Self->RootState));
+            (SelfId, SelfId()), (Binding, Self->Binding), (RootState, Self->RootState), (ErrorReason, Self->ErrorReason),
+            (Record, Event ? &Event->Get()->Record : nullptr));
 
         ParentId = parentId;
         Become(&TThis::StateFunc);
 
-        if (Self->Binding) { // we aren't the root node
-            Y_ABORT_UNLESS(Event);
-            if (RequestSessionId) {
-                const auto it = Self->DirectBoundNodes.find(Sender.NodeId());
-                if (it == Self->DirectBoundNodes.end() || RequestSessionId != it->second.SessionId) {
-                    throw TExRace() << "Distconf tree reconfigured during query delivery";
+        Wrap([&] {
+            if (Self->Binding) { // we aren't the root node
+                Y_ABORT_UNLESS(Event);
+                if (RequestSessionId) {
+                    const auto it = Self->DirectBoundNodes.find(Sender.NodeId());
+                    if (it == Self->DirectBoundNodes.end() || RequestSessionId != it->second.SessionId) {
+                        throw TExRace() << "Distconf tree reconfigured during query delivery";
+                    }
                 }
-            }
-            const ui32 node = Self->Binding->RootNodeId; //Self->Binding->NodeId;
-            Send(MakeBlobStorageNodeWardenID(node), Event->Release(), IEventHandle::FlagSubscribeOnSession);
-            const auto [it, inserted] = Subscriptions.try_emplace(node);
-            Y_ABORT_UNLESS(inserted);
-            WaitingReplyFromNode = node;
-        } else if (Self->RootState == ERootState::ERROR_TIMEOUT) {
-            throw TExError() << Self->ErrorReason;
-        } else {
-            if (Event) {
-                if (const auto& record = Event->Get()->Record; record.HasSwitchBridgeClusterState()) {
-                    PrepareSwitchBridgeClusterState(record.GetSwitchBridgeClusterState());
-                } else if (record.HasAdvanceClusterStateGeneration()) {
-                    PrepareAdvanceClusterStateGeneration(record.GetAdvanceClusterStateGeneration());
-                } else if (record.HasMergeUnsyncedPileConfig()) {
-                    PrepareMergeUnsyncedPileConfig(record.GetMergeUnsyncedPileConfig());
+                const ui32 node = Self->Binding->NodeId;
+                Send(MakeBlobStorageNodeWardenID(node), Event->Release(), IEventHandle::FlagSubscribeOnSession);
+                const auto [it, inserted] = Subscriptions.try_emplace(node);
+                Y_ABORT_UNLESS(inserted);
+                WaitingReplyFromNode = node;
+            } else if (Self->RootState == ERootState::ERROR_TIMEOUT) {
+                throw TExError() << Self->ErrorReason;
+            } else {
+                if (Event) {
+                    if (const auto& record = Event->Get()->Record; record.HasSwitchBridgeClusterState()) {
+                        PrepareSwitchBridgeClusterState(record.GetSwitchBridgeClusterState());
+                    }
                 }
-            }
 
-            const bool scepterless = SwitchBridgeNewConfig &&
-                Self->HasConnectedNodeQuorum(*SwitchBridgeNewConfig, SpecificBridgePileIds);
-            Y_ABORT_UNLESS(InvokeActorQueueGeneration == Self->InvokeActorQueueGeneration);
-            InvokeOtherActor(*Self, &TDistributedConfigKeeper::OpQueueBegin, SelfId(), scepterless);
-        }
+                const bool scepterless = SwitchBridgeNewConfig &&
+                    Self->HasConnectedNodeQuorum(*SwitchBridgeNewConfig, SpecificBridgePileIds);
+                Y_ABORT_UNLESS(InvokeActorQueueGeneration == Self->InvokeActorQueueGeneration);
+                InvokeOtherActor(*Self, &TDistributedConfigKeeper::OpQueueBegin, SelfId(), scepterless);
+            }
+        });
     }
 
     void TInvokeRequestHandlerActor::OnError(const TString& errorReason) {
@@ -199,17 +202,11 @@ namespace NKikimr::NStorage {
             case TQuery::kSelfHealStateStorage:
                 return SelfHealStateStorage(record.GetSelfHealStateStorage());
 
+            case TQuery::kSelfHealNodesStateUpdate:
+                return SelfHealNodesStateUpdate(record.GetSelfHealNodesStateUpdate());
+
             case TQuery::kNotifyBridgeSyncFinished:
                 return NotifyBridgeSyncFinished(record.GetNotifyBridgeSyncFinished());
-
-            case TQuery::kMergeUnsyncedPileConfig:
-                return MergeUnsyncedPileConfig();
-
-            case TQuery::kNegotiateUnsyncedConnection:
-                return NegotiateUnsyncedConnection(record.GetNegotiateUnsyncedConnection());
-
-            case TQuery::kAdvanceClusterStateGeneration:
-                return AdvanceClusterStateGeneration();
 
             case TQuery::REQUEST_NOT_SET:
                 throw TExError() << "Request field not set";
@@ -232,7 +229,7 @@ namespace NKikimr::NStorage {
             } else if (auto r = Self->ProcessCollectConfigs(res->MutableCollectConfigs(), std::nullopt); r.ErrorReason) {
                 throw TExError() << *r.ErrorReason;
             } else if (r.ConfigToPropose) {
-                StartProposition(&r.ConfigToPropose.value(), false, r.PropositionBase ? &r.PropositionBase.value() : nullptr);
+                StartProposition(&r.ConfigToPropose.value(), r.PropositionBase ? &r.PropositionBase.value() : nullptr);
             } else {
                 FinishWithSuccess();
             }
@@ -276,7 +273,7 @@ namespace NKikimr::NStorage {
         StartProposition(&config);
     }
 
-    void TInvokeRequestHandlerActor::StartProposition(NKikimrBlobStorage::TStorageConfig *config, bool forceGeneration,
+    void TInvokeRequestHandlerActor::StartProposition(NKikimrBlobStorage::TStorageConfig *config,
             const NKikimrBlobStorage::TStorageConfig *propositionBase) {
         if (Self->CurrentProposition) {
             throw TExCriticalError() << "Config proposition request is already in flight";
@@ -332,7 +329,7 @@ namespace NKikimr::NStorage {
 
         Y_ABORT_UNLESS(InvokeActorQueueGeneration == Self->InvokeActorQueueGeneration);
         auto error = InvokeOtherActor(*Self, &TDistributedConfigKeeper::StartProposition, config, propositionBase,
-            std::move(SpecificBridgePileIds), SelfId(), CheckSyncersAfterCommit, forceGeneration);
+            std::move(SpecificBridgePileIds), SelfId(), CheckSyncersAfterCommit);
         if (error) {
             STLOG(PRI_DEBUG, BS_NODE, NWDC78, "Config update validation failed", (SelfId, SelfId()),
                 (Error, *error), (ProposedConfig, *config));
@@ -347,12 +344,7 @@ namespace NKikimr::NStorage {
         if (errorReason) {
             throw TExError() << "Config proposition failed: " << *errorReason;
         } else {
-            FinishWithSuccess([&](auto *record) {
-                if (MergedConfig) { // copy merged config in case of success, if we have any
-                    MergedConfig->Swap(record->MutableMergeUnsyncedPileConfig()->MutableMergedConfig());
-                }
-            });
-
+            FinishWithSuccess();
             Y_ABORT_UNLESS(InvokeActorQueueGeneration == Self->InvokeActorQueueGeneration);
             InvokeOtherActor(*Self, &TDistributedConfigKeeper::CheckForConfigUpdate);
         }
@@ -393,18 +385,28 @@ namespace NKikimr::NStorage {
     }
 
     void TInvokeRequestHandlerActor::FinishWithError(TResult::EStatus status, const TString& errorReason) {
+        STLOG(PRI_DEBUG, BS_NODE, NWDC61, "FinishWithError", (SelfId, SelfId()), (Status, status),
+            (ErrorReason, errorReason));
+
         if (Event) {
             Finish(Sender, SelfId(), PrepareResult(status, errorReason).release(), 0, Cookie);
         } else if (ReplaceConfig) {
             // this is just temporary failure
             // TODO(alexvru): backoff?
+            PassAway();
         } else {
             Y_ABORT_UNLESS(InvokeActorQueueGeneration == Self->InvokeActorQueueGeneration);
+            PassAway(); // pass away first, as SwitchToError would invoke OnError for this actor too
             InvokeOtherActor(*Self, &TDistributedConfigKeeper::SwitchToError, errorReason);
         }
     }
 
     void TInvokeRequestHandlerActor::PassAway() {
+        if (!LifetimeToken.expired() && Self->CurrentProposition) {
+            Y_ABORT_UNLESS(Self->CurrentProposition->ActorId == SelfId());
+            Y_ABORT_UNLESS(!Self->DeadActorWaitingForProposition);
+            Self->DeadActorWaitingForProposition = true;
+        }
         TActivationContext::Send(new IEventHandle(TEvPrivate::EvOpQueueEnd, 0, ParentId, SelfId(), nullptr,
             BeginRegistered ? InvokeActorQueueGeneration : 0));
         if (ControllerPipeId) {
@@ -513,7 +515,7 @@ namespace NKikimr::NStorage {
         Y_ABORT_UNLESS(ev->Sender == front.ActorId);
 
         if (CurrentProposition && CurrentProposition->ActorId == front.ActorId) {
-            DeadActorWaitingForProposition = true;
+            Y_ABORT_UNLESS(DeadActorWaitingForProposition);
             return; // transaction is still being proposed, although issuer actor is dead
         }
 

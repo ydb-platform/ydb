@@ -22,7 +22,7 @@ private:
     }
 
     virtual bool DoStartFetchingAccessor(
-        const std::shared_ptr<IDataSource>& /*sourcePtr*/, const NReader::NCommon::TFetchingScriptCursor& /*step*/) override {
+        const std::shared_ptr<NCommon::IDataSource>& /*sourcePtr*/, const NReader::NCommon::TFetchingScriptCursor& /*step*/) override {
         return false;
     }
 
@@ -163,7 +163,10 @@ public:
     TSourceData(const ui32 sourceId, const ui32 sourceIdx, const ui64 tabletId, const NOlap::TSnapshot& minSnapshot,
         const NOlap::TSnapshot& maxSnapshot, NArrow::TSimpleRow&& start, NArrow::TSimpleRow&& finish, const std::optional<ui32> recordsCount,
         const std::shared_ptr<NReader::NCommon::TSpecialReadContext>& context)
-        : TBase(sourceId, sourceIdx, context, std::move(start), std::move(finish), minSnapshot, maxSnapshot, recordsCount, std::nullopt, false)
+        : TBase(EType::SysInfo, sourceId, sourceIdx, context, 
+            TReplaceKeyAdapter(context->GetReadMetadata()->IsDescSorted() ? std::move(finish) : std::move(start), context->GetReadMetadata()->IsDescSorted()), 
+            TReplaceKeyAdapter(context->GetReadMetadata()->IsDescSorted() ? std::move(start) : std::move(finish), context->GetReadMetadata()->IsDescSorted()), 
+            minSnapshot, maxSnapshot, recordsCount, std::nullopt, false)
         , TabletId(tabletId) {
     }
 };

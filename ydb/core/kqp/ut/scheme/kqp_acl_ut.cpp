@@ -217,10 +217,9 @@ Y_UNIT_TEST_SUITE(KqpAcl) {
                 primary key (id)
             ) WITH (STORE=%s);
         )", isOlap ? "COLUMN" : "ROW");
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
-        auto settings = NKqp::TKikimrSettings().SetAppConfig(appConfig);
-        TKikimrRunner kikimr(appConfig);
+        NKqp::TKikimrSettings settings;
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+        TKikimrRunner kikimr(settings);
 
         {
             auto driverConfig = TDriverConfig()
@@ -503,11 +502,10 @@ Y_UNIT_TEST_SUITE(KqpAcl) {
     }
 
     Y_UNIT_TEST_QUAD(AclDml, UseSink, IsOlap) {
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
-        appConfig.MutableTableServiceConfig()->SetEnableOlapSink(IsOlap);
-        auto settings = NKqp::TKikimrSettings().SetAppConfig(appConfig);
-        TKikimrRunner kikimr(appConfig);
+        NKqp::TKikimrSettings settings;
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(IsOlap);
+        TKikimrRunner kikimr(settings);
 
         {
             auto driverConfig = TDriverConfig()
@@ -628,11 +626,10 @@ Y_UNIT_TEST_SUITE(KqpAcl) {
     }
 
     Y_UNIT_TEST_QUAD(AclRevoke, UseSink, IsOlap) {
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
-        appConfig.MutableTableServiceConfig()->SetEnableOlapSink(IsOlap);
-        auto settings = NKqp::TKikimrSettings().SetAppConfig(appConfig);
-        TKikimrRunner kikimr(appConfig);
+        NKqp::TKikimrSettings settings;
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(IsOlap);
+        TKikimrRunner kikimr(settings);
 
         {
             auto driverConfig = TDriverConfig()
@@ -776,13 +773,9 @@ Y_UNIT_TEST_SUITE(KqpAcl) {
     }
 
     Y_UNIT_TEST_QUAD(AclTemporary, IsOlap, UseAdmin) {
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(true);
-        appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
-        auto settings = NKqp::TKikimrSettings()
-            .SetAppConfig(appConfig)
-            .SetWithSampleTables(false)
-            .SetEnableTempTables(true);
+        auto settings = NKqp::TKikimrSettings().SetWithSampleTables(false).SetEnableTempTables(true);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(true);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
         TKikimrRunner kikimr(settings);
         if (UseAdmin) {
             kikimr.GetTestClient().GrantConnect("user_write@builtin");

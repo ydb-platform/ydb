@@ -187,6 +187,10 @@ arrow::Datum DoConvertScalar(TType* type, const T& value, arrow::MemoryPool& poo
         return NYql::MakePgScalar(AS_TYPE(TPgType, type), value, pool);
     }
 
+    if (IsSingularType(type)) {
+        return arrow::MakeNullScalar(arrowType);
+    }
+
     MKQL_ENSURE(false, "Unsupported type " << *type);
 }
 

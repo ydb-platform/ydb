@@ -100,6 +100,7 @@ struct TCgi {
 
     struct TActions {
         static constexpr TStringBuf SplitOneToOne = "SplitOneToOne";
+        static constexpr TStringBuf ForceDropUnsafe = "ForceDropUnsafe";
     };
 };
 
@@ -329,6 +330,95 @@ private:
     TActorId PipeCache;
 };
 
+class TMonitoringForceDropUnsafe : public TActorBootstrapped<TMonitoringForceDropUnsafe> {
+private:
+    NMon::TEvRemoteHttpInfo::TPtr Ev;
+    ui64 SchemeShardId;
+    TString Path;
+
+    ui64 TxId = 0;
+    TActorId PipeCache;
+
+public:
+    TMonitoringForceDropUnsafe(NMon::TEvRemoteHttpInfo::TPtr&& ev, ui64 schemeShardId, const TString& path)
+        : Ev(std::move(ev))
+        , SchemeShardId(schemeShardId)
+        , Path(path)
+    {}
+
+    void Bootstrap() {
+        Send(MakeTxProxyID(), new TEvTxUserProxy::TEvAllocateTxId);
+        Become(&TThis::StateWaitTxId);
+    }
+
+    STFUNC(StateWaitTxId) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(TEvTxUserProxy::TEvAllocateTxIdResult, Handle);
+        }
+    }
+
+    void Handle(TEvTxUserProxy::TEvAllocateTxIdResult::TPtr& ev) {
+        TxId = ev->Get()->TxId;
+
+        auto propose = [&]() {
+            auto result = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(TxId, SchemeShardId);
+
+            auto& modifyScheme = *result->Record.AddTransaction();
+            modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpForceDropUnsafe);
+            modifyScheme.SetInternal(true);
+            modifyScheme.SetWorkingDir(TString(ExtractParent(Path)));
+
+            auto& drop = *modifyScheme.MutableDrop();
+            drop.SetName(TString(ExtractBase(Path)));
+
+            return result;
+        }();
+
+        PipeCache = MakePipePerNodeCacheID(EPipePerNodeCache::Leader);
+        Send(PipeCache, new TEvPipeCache::TEvForward(propose.Release(), SchemeShardId, /* subscribe */ true));
+
+        Become(&TThis::StateWaitProposed);
+    }
+
+    STFUNC(StateWaitProposed) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(TEvSchemeShard::TEvModifySchemeTransactionResult, Handle);
+            hFunc(TEvPipeCache::TEvDeliveryProblem, Handle);
+        }
+    }
+
+    void Handle(TEvSchemeShard::TEvModifySchemeTransactionResult::TPtr& ev) {
+        TString text;
+        try {
+            NProtobufJson::Proto2Json(ev->Get()->Record, text, {
+                .EnumMode = NProtobufJson::TProto2JsonConfig::EnumName,
+                .FieldNameMode = NProtobufJson::TProto2JsonConfig::FieldNameSnakeCaseDense,
+                .MapAsObject = true,
+            });
+        } catch (const std::exception& e) {
+            Send(Ev->Sender, new NMon::TEvRemoteBinaryInfoRes(
+                "HTTP/1.1 500 Internal Error\r\nConnection: Close\r\n\r\nUnexpected failure to serialize the response\r\n"));
+            PassAway();
+        }
+
+        Send(Ev->Sender, new NMon::TEvRemoteJsonInfoRes(text));
+        PassAway();
+    }
+
+    void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr&) {
+        Send(Ev->Sender, new NMon::TEvRemoteBinaryInfoRes(
+            TStringBuilder() << "HTTP/1.1 502 Bad Gateway\r\nConnection: Close\r\n\r\nSchemeShard tablet disconnected\r\n"));
+        PassAway();
+    }
+
+    void PassAway() override {
+        if (PipeCache) {
+            Send(PipeCache, new TEvPipeCache::TEvUnlink(0));
+        }
+        TActorBootstrapped::PassAway();
+    }
+};
+
 struct TSchemeShard::TTxMonitoring : public NTabletFlatExecutor::TTransactionBase<TSchemeShard> {
     NMon::TEvRemoteHttpInfo::TPtr Ev;
     TStringStream Answer;
@@ -346,6 +436,8 @@ public:
         Y_UNUSED(txc);
 
         const TCgiParameters& cgi = Ev->Get()->Cgi();
+
+        LOG_DEBUG(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, TStringBuilder() << "TTxMonitoring.Execute: " << cgi.Print());
 
         if (cgi.Has(TCgi::Action)) {
             HandleAction(cgi.Get(TCgi::Action), cgi, ctx);
@@ -607,6 +699,25 @@ private:
     TString SubmitButton(const TStringBuf value) const {
         return TStringBuilder()
             << "<div class=\"col-md-4\"><input class=\"btn btn-default\" type=\"submit\" value=\"" << value << "\"></div>" << Endl;
+    }
+
+    void ActionForceDropUnsafe(const TPathId pathId, TStringStream& str) const {
+        // Duplicate params in query string in addition to form-urlencoded body
+        // to give user clear knowledge what parameters were.
+        // Params in the body are the actually used ones, query parameters will be ignored
+        // (see ydb/core/tablet/tablet_monitoring_proxy.cpp).
+        const TString actionUrl = TStringBuilder() << "app?" << TCgi::TabletID.AsCgiParam(Self->TabletID())
+            << "&" << TCgi::Action.AsCgiParam(TCgi::TActions::ForceDropUnsafe)
+            << "&" << TCgi::OwnerPathId.AsCgiParam(pathId.OwnerId)
+            << "&" << TCgi::LocalPathId.AsCgiParam(pathId.LocalPathId)
+        ;
+        str << "<form action='" << actionUrl << "' method='POST' id='tblMonSSFrm' name='tblMonSSFrm' class='form-group' accept-charset='utf-8'>" << Endl;
+        str << TCgi::TabletID.AsHiddenInput(Self->TabletID());
+        str << TCgi::Action.AsHiddenInput(TCgi::TActions::ForceDropUnsafe);
+        str << TCgi::OwnerPathId.AsHiddenInput(pathId.OwnerId);
+        str << TCgi::LocalPathId.AsHiddenInput(pathId.LocalPathId);
+        str << R"(<div style='display: flex; align-items: center;'>)" << SubmitButton("ForceDropUnsafe") << "</div>";
+        str << "</form>" << Endl;
     }
 
     void OutputAdminPage(TStringStream& str) const {
@@ -1137,7 +1248,7 @@ private:
             auto localACL = TSecurityObject(path->Owner, path->ACL, path->IsContainer());
             auto effectiveACL = TSecurityObject(path->Owner, path->CachedEffectiveACL.GetForSelf(), path->IsContainer());
 
-            TAG(TH4) {str << "Path info " << pathId << "</a>";}
+            TAG(TH4) {str << "Path info " << pathId;}
             PRE () {
                 str << "Path: " << Self->PathToString(path) << Endl
                     << "PathId: " << pathId << Endl
@@ -1161,11 +1272,11 @@ private:
                     << "User attrs alter version  " << path->UserAttrs->AlterVersion << Endl
                     << "User attrs count          " << path->UserAttrs->Attrs.size() << Endl
                     << "DbRefCount count          " << path->DbRefCount << Endl
-                    << "ShardsInside count        " << path->GetShardsInside() << Endl;
+                    << "Shards inside count       " << path->GetShardsInside() << Endl;
             }
 
             if (path->UserAttrs->Attrs) {
-                TAG(TH4) {str << "UserAttrs for pathId " << pathId << "</a>";}
+                TAG(TH4) {str << "UserAttrs : " << path->UserAttrs->Attrs.size();}
                 TABLE_SORTABLE_CLASS("UserAttrs") {
                     TABLEHEAD() {
                         TABLER() {
@@ -1183,7 +1294,7 @@ private:
             }
 
             if (path->GetChildren().size()) {
-                TAG(TH4) {str << "Childrens for pathId " << pathId << "</a>";}
+                TAG(TH4) {str << "Childrens : " << path->GetChildren().size();}
                 TABLE_SORTABLE_CLASS("UserAttrs") {
                     TABLEHEAD() {
                         TABLER() {
@@ -1208,39 +1319,40 @@ private:
                 }
             }
 
-            auto shards = Self->CollectAllShards({pathId});
+            const auto& shards = Self->CollectAllShards({pathId});
 
-            TAG(TH4) {str << "Shards for pathId " << pathId << "</a>";}
-            TABLE_SORTABLE_CLASS("ShardForPath") {
-                TABLEHEAD() {
-                    TABLER() {
-                        TABLEH() {str << "ShardIdx";}
-                        TABLEH() {str << "TableId";}
-                        TABLEH() {str << "IsActive";}
+            if (!shards.empty()) {
+                TAG(TH4) {str << "Shards inside : " << shards.size();}
+                TABLE_SORTABLE_CLASS("ShardForPath") {
+                    TABLEHEAD() {
+                        TABLER() {
+                            TABLEH() {str << "ShardIdx";}
+                            TABLEH() {str << "TableId";}
+                            TABLEH() {str << "IsActive";}
+                        }
                     }
-                }
 
-                TPath path_ = TPath::Init(pathId, Self);
+                    TPath path_ = TPath::Init(pathId, Self);
 
-                for (const auto& shardIdx: shards) {
-                    TABLER() {
-                        TABLED() {
-                            str << LinkToShardInfo(shardIdx);
-                        }
-                        TABLED() {
-                            str << LinkToTablet(shardIdx);
-                        }
-                        TABLED() {
-                            if (path->Dropped() || !path->IsTable() || !Self->Tables.contains(pathId)) {
-                                str << "path is dropped or is not a table";
-                            } else {
-                                const TTableInfo::TPtr table = Self->Tables.at(pathId);
-                                str << (table->GetShard2PartitionIdx().contains(shardIdx) ? "Active" : "Inactive");
+                    for (const auto& shardIdx: shards) {
+                        TABLER() {
+                            TABLED() {
+                                str << LinkToShardInfo(shardIdx);
+                            }
+                            TABLED() {
+                                str << LinkToTablet(shardIdx);
+                            }
+                            TABLED() {
+                                if (path->Dropped() || !path->IsTable() || !Self->Tables.contains(pathId)) {
+                                    str << "path is dropped or is not a table";
+                                } else {
+                                    const TTableInfo::TPtr table = Self->Tables.at(pathId);
+                                    str << (table->GetShard2PartitionIdx().contains(shardIdx) ? "Active" : "Inactive");
+                                }
                             }
                         }
                     }
                 }
-                str << "\n";
             }
         }
     }
@@ -1425,9 +1537,7 @@ private:
     void OutputPathInfoPage(TPathId pathId, TStringStream& str) {
         HTML(str) {
             if (!Self->PathsById.contains(pathId)) {
-                TAG(TH4) {
-                    str << "No path item for tablet " << pathId << "</a>";
-                }
+                TAG(TH4) {str << "No path item for pathId " << pathId;}
                 return;
             }
 
@@ -1436,10 +1546,14 @@ private:
             auto& path = Self->PathsById.at(pathId);
 
             if (Self->Operations.contains(path->LastTxId)) {
+                TAG(TH3) {str << "Active transaction " << path->LastTxId;}
                 OutputOperationInfo(path->LastTxId, str);
             }
 
             //add path specific object
+
+            TAG(TH3) {str << "Admin actions:";}
+            ActionForceDropUnsafe(pathId, str);
         }
     }
     void OutputShardInfoPageByShardIdx(TShardIdx shardIdx, TStringStream& str) const {
@@ -1518,6 +1632,21 @@ private:
             }
 
             ctx.Register(new TMonitoringShardSplitOneToOne(std::move(Ev), Self->TabletID(), pathId, tabletId));
+            return;
+
+        } else if (action == TCgi::TActions::ForceDropUnsafe) {
+            const TPathId pathId(
+                FromStringWithDefault<ui64>(cgi.Get(TCgi::OwnerPathId), InvalidOwnerId),
+                FromStringWithDefault<ui64>(cgi.Get(TCgi::LocalPathId), InvalidLocalPathId)
+            );
+
+            const auto path = TPath::Init(pathId, Self);
+            if (!path) {
+                SendBadRequest(TStringBuilder() << "Cannot find path with PathId " << pathId, ctx);
+                return;
+            }
+
+            ctx.Register(new TMonitoringForceDropUnsafe(std::move(Ev), Self->TabletID(), path.PathString()));
             return;
         }
 

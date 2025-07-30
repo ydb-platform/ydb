@@ -25,7 +25,8 @@ private:
     std::unique_ptr<TManager> Manager;
 
     void HandleMain(NPublic::TEvents<TPolicy>::TEvAskData::TPtr& ev) {
-        Manager->AddRequest(std::make_shared<TRequest>(ev->Get()->ExtractAddresses(), ev->Get()->ExtractCallback(), ev->Get()->GetConsumer()));
+        Manager->AddRequest(
+            std::make_shared<TRequest>(ev->Get()->ExtractAddresses(), ev->Get()->ExtractCallback(), ev->Get()->GetConsumer(), ev->Get()->GetStartRequestInstant()));
     }
 
     void HandleMain(NMemory::TEvConsumerRegistered::TPtr& ev) {

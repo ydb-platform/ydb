@@ -63,41 +63,17 @@ void TPrivatePageCache::RegisterPageCollection(TIntrusivePtr<TInfo> info) {
     }
 }
 
-TPrivatePageCache::TPage::TWaitQueuePtr TPrivatePageCache::ForgetPageCollection(TIntrusivePtr<TInfo> info) {
-    // todo: amortize destruction cost (how?)
-
-    TPage::TWaitQueuePtr ret;
+void TPrivatePageCache::ForgetPageCollection(TIntrusivePtr<TInfo> info) {
     for (const auto& kv : info->PageMap) {
         auto* page = kv.second.Get();
         Y_DEBUG_ABORT_UNLESS(page);
-
-        if (page->LoadState == TPage::LoadStateRequested) {
-            while (TPrivatePageCacheWaitPad *x = page->WaitQueue->Pop()) {
-                if (0 == x->Dec()) {
-                    if (!ret)
-                        ret = new TPrivatePageCache::TPage::TWaitQueue;
-                    ret->Push(x);
-                }
-            }
-            page->WaitQueue.Destroy();
-        }
 
         if (page->PinPad) {
             page->PinPad.Drop();
             Stats.PinnedSetSize -= page->Size;
-
             if (page->LoadState != TPage::LoadStateLoaded)
                 Stats.PinnedLoadSize -= page->Size;
         }
-    }
-
-    // Completely forget page collection
-    for (const auto& kv : info->PageMap) {
-        auto* page = kv.second.Get();
-        Y_DEBUG_ABORT_UNLESS(page);
-
-            Y_ENSURE(!page->WaitQueue, "non-empty wait queue in forgotten page.");
-            Y_ENSURE(!page->PinPad, "non-empty pin pad in forgotten page.");
 
         if (page->SharedBody)
             Stats.TotalSharedBody -= page->Size;
@@ -111,8 +87,6 @@ TPrivatePageCache::TPage::TWaitQueuePtr TPrivatePageCache::ForgetPageCollection(
     PageCollections.erase(info->Id);
     ToTouchShared.erase(info->Id);
     --Stats.TotalCollections;
-
-    return ret;
 }
 
 TPrivatePageCache::TInfo* TPrivatePageCache::Info(TLogoBlobID id) {
@@ -149,48 +123,6 @@ void TPrivatePageCache::Unpin(TPage *page, TPrivatePageCachePinPad *pad) {
             TryUnload(page);
         }
     }
-}
-
-std::pair<ui32, ui64> TPrivatePageCache::Request(TVector<TPageId> &pages, TPrivatePageCacheWaitPad *waitPad, TInfo *info) {
-    ui32 blocksToRequest = 0;
-    ui64 bytesToRequest = 0;
-
-    auto it = pages.begin();
-    auto end = pages.end();
-
-    while (it != end) {
-        TPage *page = info->EnsurePage(*it);
-        switch (page->LoadState) {
-        case TPage::LoadStateNo:
-        case TPage::LoadStateRequestedAsync:
-            page->LoadState = TPage::LoadStateRequested;
-            bytesToRequest += page->Size;
-
-            Y_ENSURE(!page->WaitQueue);
-            page->WaitQueue = new TPage::TWaitQueue();
-            page->WaitQueue->Push(waitPad);
-            waitPad->Inc();
-
-            ++blocksToRequest;
-            ++it;
-            break;
-        case TPage::LoadStateLoaded:
-            Y_TABLET_ERROR("must not request already loaded pages");
-        case TPage::LoadStateRequested:
-            if (!page->WaitQueue)
-                page->WaitQueue = new TPage::TWaitQueue();
-
-            page->WaitQueue->Push(waitPad);
-            waitPad->Inc();
-
-            --end;
-            if (end != it)
-                *it = *end;
-            break;
-        }
-    }
-    pages.erase(end, pages.end());
-    return std::make_pair(blocksToRequest, bytesToRequest);
 }
 
 void TPrivatePageCache::TryLoad(TPage *page) {
@@ -393,7 +325,7 @@ void TPrivatePageCache::DropSharedBody(TInfo *info, TPageId pageId) {
     }
 }
 
-TPrivatePageCache::TPage::TWaitQueuePtr TPrivatePageCache::ProvideBlock(
+void TPrivatePageCache::ProvideBlock(
         NSharedCache::TEvResult::TLoaded&& loaded, TInfo *info)
 {
     Y_DEBUG_ABORT_UNLESS(loaded.Page && loaded.Page.IsUsed());
@@ -413,20 +345,6 @@ TPrivatePageCache::TPage::TWaitQueuePtr TPrivatePageCache::ProvideBlock(
     Stats.TotalSharedBody += page->Size;
     Stats.TotalPinnedBody += page->Size;
     TryUnload(page);
-
-    TPage::TWaitQueuePtr ret;
-    if (page->WaitQueue) {
-        while (TPrivatePageCacheWaitPad *x = page->WaitQueue->Pop()) {
-            if (0 == x->Dec()) {
-                if (!ret)
-                    ret = new TPage::TWaitQueue();
-                ret->Push(x);
-            }
-        }
-        page->WaitQueue.Destroy();
-    }
-
-    return ret;
 }
 
 THashMap<TLogoBlobID, TIntrusivePtr<TPrivatePageCache::TInfo>> TPrivatePageCache::DetachPrivatePageCache() {

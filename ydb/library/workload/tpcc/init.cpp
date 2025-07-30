@@ -254,17 +254,17 @@ void InitSync(const NConsoleClient::TClientCommand::TConfig& connectionConfig, c
             PRAGMA TablePathPrefix("{}");
 
             CREATE TABLE {} (
-                H_C_W_ID    Int32,
-                H_C_ID      Int32,
-                H_C_D_ID    Int32,
+                H_C_W_ID    Int32        NOT NULL,
+                H_C_D_ID    Int32        NOT NULL,
+                H_C_ID      Int32        NOT NULL,
+                H_C_NANO_TS Int64        NOT NULL,
                 H_D_ID      Int32,
                 H_W_ID      Int32,
                 H_DATE      Timestamp,
                 H_AMOUNT    Double,
                 H_DATA      Utf8,
-                H_C_NANO_TS Int64        NOT NULL,
 
-                PRIMARY KEY (H_C_W_ID, H_C_NANO_TS)
+                PRIMARY KEY (H_C_W_ID, H_C_D_ID, H_C_ID, H_C_NANO_TS)
             )
             {};
         )", runConfig.Path.c_str(), TABLE_HISTORY, historyPartitionClause.c_str());

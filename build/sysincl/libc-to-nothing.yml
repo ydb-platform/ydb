@@ -122,6 +122,7 @@
   - sys/cdefs.h
   - syscall.h
   - sys/dir.h
+  - sys/dr.h
   - sys/epoll.h
   - sys/errno.h
   - sys/eventfd.h
@@ -129,6 +130,7 @@
   - sys/fanotify.h
   - sys/fcntl.h
   - sys/file.h
+  - sys/frame.h
   - sys/fsuid.h
   - sys/ifunc.h
   - sys/inotify.h
@@ -138,6 +140,7 @@
   - sys/hwcap.h
   - sys/kd.h
   - syslog.h
+  - sys/ldr.h
   - sys/mman.h
   - sys/mount.h
   - sys/msg.h
@@ -153,6 +156,7 @@
   - sys/quota.h
   - sys/reboot.h
   - sys/resource.h
+  - sys/rset.h
   - sys/select.h
   - sys/sem.h
   - sys/sendfile.h

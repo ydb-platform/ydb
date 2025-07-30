@@ -332,7 +332,8 @@ namespace NKikimr::NStorage {
                 if (TActorId& actorId = group.WorkingSyncers[item.TargetBridgePileId]; !actorId) {
                     STLOG(PRI_DEBUG, BS_NODE, NW64, "starting syncer actor", (GroupId, item.GroupId),
                         (TargetBridgePileId, item.TargetBridgePileId));
-                    actorId = Register(NBridge::CreateSyncerActor(NeedGroupInfo(groupId), item.TargetBridgePileId));
+                    actorId = Register(NBridge::CreateSyncerActor(NeedGroupInfo(groupId), item.TargetBridgePileId,
+                        item.GroupId));
                 }
             } else if (const auto it = Groups.find(groupId); it != Groups.end()) {
                 TGroupRecord& group = it->second;

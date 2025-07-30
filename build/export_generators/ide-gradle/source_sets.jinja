@@ -14,42 +14,46 @@
 #}
         {{ module }}.srcDir({{ PatchRoots(dir) }})
 {%-     endif -%}
+{%- endmacro -%}
+
+{%- macro TargetSets(current_target, target_subdir, reldir = "") -%}
+{%-     if current_target.source_sets|length -%}
+{%-         if auto_resource_sets -%}
+{%-             set source_sets = current_target.source_sets|rejectattr('dir', 'eq', 'resources')|rejectattr('dir', 'eq', 'src/' + target_subdir + '/resources') -%}
+{%-         else -%}
+{%-             set source_sets = current_target.source_sets -%}
+{%-         endif -%}
+{%-     else -%}
+{%-         set source_sets = [] -%}
+{%-     endif -%}
+{%-     if source_sets|length -%}
+{%-         for source_set in source_sets -%}
+{{ SomeSet(source_set, "java", reldir) }}
+{%-         endfor -%}
+{%-     endif -%}
+{%-     if current_target.resource_sets|length -%}
+{%-         set resource_sets = current_target.resource_sets -%}
+{%-     else -%}
+{%-         set resource_sets = [] -%}
+{%-     endif -%}
+{%-     if auto_resource_sets and current_target.source_sets|length -%}
+{%-         set source2resource_sets = current_target.source_sets|selectattr('dir', 'in', ['resources', 'src/' + target_subdir + '/resources']) -%}
+{%-         if source2resource_sets|length -%}
+{%-             set resource_sets = resource_sets + source2resource_sets -%}
+{%-         endif -%}
+{%-     endif -%}
+{%-     if resource_sets|length -%}
+{%-         for resource_set in resource_sets -%}
+{{ SomeSet(resource_set, "resources", reldir) }}
+{%-         endfor -%}
+{%-     endif -%}
 {%- endmacro %}
 
 sourceSets {
-{%- set target_jar_source_set = target.jar_source_set|unique -%}
-{%- set target_jar_resource_set = target.jar_resource_set|unique -%}
-{%- if target_jar_source_set|length or target_jar_resource_set|length or target.source_sets|length or target.resource_sets|length or proto_template %}
+{%- if target.source_sets|length or target.resource_sets|length or proto_template %}
     main {
-{#- DEPRECATED vvvvvvvvvvvvvvvv -#}
-{%-     if target_jar_source_set|length and not(target.source_sets|length) -%}
-{%-         for source_set in target_jar_source_set -%}
-{%-             set srcdir_glob = split(source_set, ':') -%}
-{%-             set srcdir = srcdir_glob[0] %}
-        java.srcDir({{ PatchRoots(srcdir) }})
-{%-         endfor -%}
-{%-     endif -%}
-
-{%-     if target_jar_resource_set|length and not(target.resource_sets|length) -%}
-{%-         for resource_set in target_jar_resource_set -%}
-{%-             set resdir_glob = split(resource_set, ':') -%}
-{%-             set resdir = resdir_glob[0] %}
-        resources.srcDir({{ PatchRoots(resdir) }})
-{%-         endfor -%}
-{%-     endif -%}
-{#- DEPRECATED ^^^^^^^^^^^^^^^^ -#}
-
-{%-     if target.source_sets|length -%}
-{%-         for source_set in target.source_sets -%}
-{{ SomeSet(source_set, "java") }}
-{%-         endfor -%}
-{%-     endif -%}
-
-{%-     if target.resource_sets|length -%}
-{%-         for resource_set in target.resource_sets -%}
-{{ SomeSet(resource_set, "resources") }}
-{%-         endfor -%}
-{%-     endif -%}
+{#- glue -#}
+{{ TargetSets(target, "main") }}
 
 {%-     if proto_template and symlinks_to_generated %}
         java.srcDir("generated/source/proto/main/java")
@@ -73,38 +77,7 @@ sourceSets {
 {%-         if extra_target.test_reldir -%}
 {%-             set reldir = extra_target.test_reldir + "/" -%}
 {%-         endif -%}
-{#- DEPRECATED vvvvvvvvvvvvvvvv -#}
-{%-         if extra_target.jar_source_set|length and not(extra_target.source_sets|length) -%}
-{%-             for source_set in extra_target.jar_source_set|unique -%}
-{%-                 set srcdir_glob = split(source_set, ':', 2) -%}
-{%-                 if srcdir_glob[0][0] == "/" -%}
-{#-                     Absolute path in glob -#}
-{%-                     set srcdir = srcdir_glob[0] -%}
-{%-                 else -%}
-{%-                     set srcdir = reldir + srcdir_glob[0] -%}
-{%-                 endif %}
-        java.srcDir({{ PatchRoots(srcdir) }})
-{%-             endfor -%}
-{%-         endif -%}
-{%-         if extra_target.jar_resource_set|length and not(extra_target.resource_sets|length) -%}
-{%-             for resource_set in extra_target.jar_resource_set|unique -%}
-{%-                 set resdir_glob = split(resource_set, ':', 2) -%}
-{%-                 if resdir_glob[0][0] == "/" -%}
-{#-                     Absolute path in glob -#}
-{%-                     set resdir = resdir_glob[0] -%}
-{%-                 else -%}
-{%-                     set resdir = reldir + resdir_glob[0] -%}
-{%-                 endif %}
-        resources.srcDir({{ PatchRoots(resdir) }})
-{%-             endfor -%}
-{%-         endif -%}
-{#- DEPRECATED ^^^^^^^^^^^^^^^^ -#}
-{%-         for source_set in extra_target.source_sets -%}
-{{ SomeSet(source_set, "java", reldir) }}
-{%-         endfor -%}
-{%-         for resource_set in extra_target.resource_sets -%}
-{{ SomeSet(resource_set, "resources", reldir) }}
-{%-         endfor -%}
+{{ TargetSets(extra_target, "test", reldir) }}
 {%-     endfor %}
     }
 {%      else %}

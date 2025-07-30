@@ -58,23 +58,23 @@ private:
         TPyGilLocker lock;
         TPyObjectPtr module = CompileModule(FunctionName_, source);
         if (!module) {
-            UdfTerminate((TStringBuilder() << Ctx_->Pos << "Failed to compile module: " << GetLastErrorAsString()).data());
+            UdfTerminate((TStringBuilder() << Ctx_->Pos << "Failed to compile module: " << GetLastErrorAsString()).c_str());
         }
 
         TPyObjectPtr function(PyObject_GetAttrString(module.Get(), FunctionName_.data()));
         if (!function) {
-            UdfTerminate((TStringBuilder() << Ctx_->Pos << "Failed to find entry point: " << GetLastErrorAsString()).data());
+            UdfTerminate((TStringBuilder() << Ctx_->Pos << "Failed to find entry point: " << GetLastErrorAsString()).c_str());
         }
 
         if (!PyCallable_Check(function.Get())) {
-            UdfTerminate((TStringBuilder() << Ctx_->Pos << "Entry point is not a callable").data());
+            UdfTerminate((TStringBuilder() << Ctx_->Pos << "Entry point is not a callable").c_str());
         }
 
         try {
             SetupCallableSettings(castCtx, function.Get());
         } catch (const yexception& e) {
             UdfTerminate((TStringBuilder() << Ctx_->Pos << "Failed to setup callable settings: "
-                                           << e.what()).data());
+                                           << e.what()).c_str());
         }
         return FromPyCallable(castCtx, FunctionType_, function.Release());
     }

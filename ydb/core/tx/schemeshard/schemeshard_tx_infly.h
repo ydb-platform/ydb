@@ -12,26 +12,7 @@
 #include <util/generic/hash.h>
 #include <util/generic/hash_set.h>
 
-namespace NKikimr {
-namespace NSchemeShard {
-
-struct TNotifications {
-    TTxId TxId = InvalidTxId;
-    THashSet<TActorId> Actors;
-
-    void Add(const TActorId& actor, TTxId txId) {
-        Y_ABORT_UNLESS(!TxId || TxId == txId);
-        TxId = txId;
-        Actors.insert(actor);
-    }
-
-    void Swap(TNotifications& notifications) {
-        std::swap(TxId, notifications.TxId);
-        Actors.swap(notifications.Actors);
-    }
-
-    bool Empty() const { return Actors.empty(); }
-};
+namespace NKikimr::NSchemeShard {
 
 // Describes in-progress operation
 struct TTxState {
@@ -309,7 +290,6 @@ struct TTxState {
 
     TMessageSeqNo SchemeOpSeqNo;       // For SS -> DS propose events
 
-//    TNotifications Notify; // volatile set of actors that requested completion notification
     TInstant StartTime = TInstant::Zero();
 
     TTxState()
@@ -834,5 +814,4 @@ struct TTxState {
     }
 };
 
-}
 }

@@ -272,7 +272,7 @@ namespace NActors {
                 complete = FeedInlinePayload(task, event);
             } else if (SendViaRdma) {
                 complete = FeedRdmaPayload(task, event, rdmaDeviceIndex); // TODO: improve error handling
-                Y_ABORT_UNLESS(complete && *complete, "RDMA payload serialization failed for event, we need to improve error handling here");
+                Y_ABORT_UNLESS(!complete || *complete, "RDMA payload serialization failed for event, we need to improve error handling here");
             } else {
                 complete = FeedExternalPayload(task, event);
             }
@@ -344,11 +344,13 @@ namespace NActors {
         Y_ABORT_UNLESS(rdmaDeviceIndex >= 0);
         NActorsInterconnect::TRdmaCreds rdmaCreds;
         if (!SerializeEventRdma(event, rdmaCreds, rdmaDeviceIndex)) {
+            Y_ABORT("RDMA payload serialization failed for event");
             return std::nullopt; // serialization failed
         }
 
         // Part = | TChannelPart | EXdcCommand::RDMA_READ | rdmaCreds.Size | rdmaCreds |
         size_t partSize = sizeof(TChannelPart) + sizeof(ui8) + sizeof(ui16) + rdmaCreds.ByteSizeLong();
+        Y_ABORT_UNLESS(partSize < 4096);
 
         if (partSize > Max<ui16>() || partSize > task.GetInternalFreeAmount()) {
             // TODO: support split into multiple parts

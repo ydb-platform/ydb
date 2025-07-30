@@ -15,17 +15,76 @@ struct TEvTestSerialization : public TEventPB<TEvTestSerialization, NInterconnec
 
 Y_UNIT_TEST_SUITE(RdmaXdc) {
 
-    TEvTestSerialization* MakeTestEvent(ui64 blobId, NInterconnect::NRdma::IMemPool* memPool = nullptr) {
+    TEvTestSerialization* MakeMultuGlueTestEvent(ui64 blobId, NInterconnect::NRdma::IMemPool* memPool) {
+        auto ev = new TEvTestSerialization();
+        ev->Record.SetBlobID(blobId);
+        ev->Record.SetBuffer("hello world");
+        auto buf = memPool->AllocRcBuf(5000, 0).value();
+        auto b = buf.data();
+        TRcBuf rcbuf1(TRcBuf::Piece, b, b + 500, buf);
+        std::fill(rcbuf1.UnsafeGetDataMut(), rcbuf1.UnsafeGetDataMut() + 500, 'X');
+        TRcBuf rcbuf2(TRcBuf::Piece, b + 500, b + 2000, buf);
+        std::fill(rcbuf2.UnsafeGetDataMut(), rcbuf2.UnsafeGetDataMut() + 1500, 'Y');
+        TRcBuf rcbuf3(TRcBuf::Piece, b + 2000, b + 5000, buf);
+        std::fill(rcbuf3.UnsafeGetDataMut(), rcbuf3.UnsafeGetDataMut() + 3000, 'Z');
+        ev->AddPayload(TRcBuf(std::move(rcbuf1)));
+        ev->AddPayload(TRcBuf(std::move(rcbuf2)));
+        ev->AddPayload(TRcBuf(std::move(rcbuf3)));
+
+        UNIT_ASSERT(ev->AllowExternalDataChannel());
+        return ev;
+    }
+
+    TEvTestSerialization* MakeTestEvent(ui64 blobId, NInterconnect::NRdma::IMemPool* memPool = nullptr, bool withGlue = false, bool withOffset = false) {
         auto ev = new TEvTestSerialization();
         ev->Record.SetBlobID(blobId);
         ev->Record.SetBuffer("hello world");
         if (!memPool) {
-            ev->AddPayload(TRope(TString(5000, 'X')));
+            TRope tmp(TString(5000, 'X'));
+            if (withOffset) {
+                tmp.Insert(tmp.End(), TRope(TString(999, 'Z'))); 
+            }
+            ev->AddPayload(std::move(tmp));
         } else {
             auto buf = memPool->AllocRcBuf(5000, 0).value();
-            std::fill(buf.GetDataMut(), buf.GetDataMut() + 5000, 'X');
-            ev->AddPayload(TRope(std::move(buf)));
-            UNIT_ASSERT_VALUES_EQUAL(ev->GetPayload().back().size(), 5000);
+            // TRope can "glue" rcbufs in they have same backend and placed in the contiguous memory regions
+            if (withGlue) {
+                auto b = buf.data();
+                TRcBuf rcbuf1(TRcBuf::Piece, b, b + 2500, buf);
+                std::fill(rcbuf1.UnsafeGetDataMut(), rcbuf1.UnsafeGetDataMut() + 2500, 'X');
+                TRcBuf rcbuf2(TRcBuf::Piece, b + 2500, b + 5000, buf);
+                std::fill(rcbuf2.UnsafeGetDataMut(), rcbuf2.UnsafeGetDataMut() + 2500, 'X');
+                TRope rope1(std::move(rcbuf1));
+                if (withOffset) {
+                    TRcBuf rcbuf3 = memPool->AllocRcBuf(999, 0).value();
+                    std::fill(rcbuf3.UnsafeGetDataMut(), rcbuf3.UnsafeGetDataMut() + 999, 'Z');
+                    rope1.Insert(rope1.Begin(), TRope(std::move(rcbuf3)));
+                }
+                ev->AddPayload(std::move(rope1));
+                TRope tmp(std::move(rcbuf2));
+                if (withOffset) {
+                    TRcBuf rcbuf3 = memPool->AllocRcBuf(999, 0).value();
+                    std::fill(rcbuf3.UnsafeGetDataMut(), rcbuf3.UnsafeGetDataMut() + 999, 'Z');
+                    tmp.Insert(tmp.End(), TRope(std::move(rcbuf3)));
+                }
+                ev->AddPayload(std::move(tmp));
+                {
+                    auto it = ev->GetPayload().rbegin();
+                    UNIT_ASSERT_VALUES_EQUAL(it->size(), withOffset ? 3499 : 2500);
+                    it++;
+                    UNIT_ASSERT_VALUES_EQUAL(it->size(), withOffset ? 3499 : 2500);
+                }
+            } else {
+                std::fill(buf.GetDataMut(), buf.GetDataMut() + 5000, 'X');
+                TRope tmp(std::move(buf));
+                if (withOffset) {
+                    TRcBuf rcbuf3 = memPool->AllocRcBuf(999, 0).value();
+                    std::fill(rcbuf3.UnsafeGetDataMut(), rcbuf3.UnsafeGetDataMut() + 999, 'Z');
+                    tmp.Insert(tmp.End(), TRope(std::move(rcbuf3))); 
+                }
+                ev->AddPayload(std::move(tmp));
+                UNIT_ASSERT_VALUES_EQUAL(ev->GetPayload().back().size(), withOffset ? 5999 : 5000);
+            }
         }
         UNIT_ASSERT(ev->AllowExternalDataChannel());
         return ev;
@@ -289,6 +348,113 @@ Y_UNIT_TEST_SUITE(RdmaXdc) {
         Sleep(TDuration::MilliSeconds(1000));
         UNIT_ASSERT_VALUES_EQUAL(recieverPtr->ReceivedEvents, 1);
     }
+
+    Y_UNIT_TEST(SendRdmaWithRegionOffset) {
+        TTestICCluster cluster(2);
+        auto memPool = NInterconnect::NRdma::CreateDummyMemPool();
+        auto* ev = MakeTestEvent(123, memPool.get(), false, true);
+
+        auto recieverPtr = new TReceiveActor([](TEvTestSerialization::TPtr ev) {
+            Cerr << "Blob ID: " << ev->Get()->Record.GetBlobID() << Endl;
+            UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetBlobID(), 123);
+            UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetBuffer(), "hello world");
+            UNIT_ASSERT_VALUES_EQUAL(ev->Get()->GetPayload().size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(ev->Get()->GetPayload()[0].GetSize(), 5999);
+            UNIT_ASSERT_VALUES_EQUAL(ev->Get()->GetPayload()[0].ConvertToString(), TString(5000, 'X') + TString(999, 'Z'));
+        });
+        const TActorId receiver = cluster.RegisterActor(recieverPtr, 1);
+
+        Sleep(TDuration::MilliSeconds(1000));
+
+        auto senderPtr = new TSendActor(receiver, ev);
+        cluster.RegisterActor(senderPtr, 2);
+
+        Sleep(TDuration::MilliSeconds(1000));
+        UNIT_ASSERT_VALUES_EQUAL(recieverPtr->ReceivedEvents, 1);
+    }
+
+    Y_UNIT_TEST(SendRdmaWithGlueWithRegionOffset) {
+        TTestICCluster cluster(2);
+        auto memPool = NInterconnect::NRdma::CreateIncrementalMemPool();
+        auto* ev = MakeTestEvent(123, memPool.get(), true, true);
+
+        auto recieverPtr = new TReceiveActor([](TEvTestSerialization::TPtr ev) {
+            Cerr << "Blob ID: " << ev->Get()->Record.GetBlobID() << Endl;
+            UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetBlobID(), 123);
+            UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetBuffer(), "hello world");
+            UNIT_ASSERT_VALUES_EQUAL(ev->Get()->GetPayload().size(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(ev->Get()->GetPayload()[0].GetSize(), 3499);
+            UNIT_ASSERT_VALUES_EQUAL(ev->Get()->GetPayload()[1].GetSize(), 3499);
+            const TString pattern1 = TString(999, 'Z') + TString(2500, 'X');
+            const TString pattern2 = TString(2500, 'X') + TString(999, 'Z'); 
+            UNIT_ASSERT_VALUES_EQUAL(ev->Get()->GetPayload()[0].ConvertToString(), pattern1);
+            UNIT_ASSERT_VALUES_EQUAL(ev->Get()->GetPayload()[1].ConvertToString(), pattern2);
+        });
+        const TActorId receiver = cluster.RegisterActor(recieverPtr, 1);
+
+        Sleep(TDuration::MilliSeconds(1000));
+
+        auto senderPtr = new TSendActor(receiver, ev);
+        cluster.RegisterActor(senderPtr, 2);
+
+        Sleep(TDuration::MilliSeconds(1000));
+        UNIT_ASSERT_VALUES_EQUAL(recieverPtr->ReceivedEvents, 1);
+    }
+
+    Y_UNIT_TEST(SendRdmaWithGlue) {
+        TTestICCluster cluster(2);
+        auto memPool = NInterconnect::NRdma::CreateIncrementalMemPool();
+        auto* ev = MakeTestEvent(123, memPool.get(), true, false);
+
+        auto recieverPtr = new TReceiveActor([](TEvTestSerialization::TPtr ev) {
+            Cerr << "Blob ID: " << ev->Get()->Record.GetBlobID() << Endl;
+            UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetBlobID(), 123);
+            UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetBuffer(), "hello world");
+            UNIT_ASSERT_VALUES_EQUAL(ev->Get()->GetPayload().size(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(ev->Get()->GetPayload()[0].GetSize(), 2500);
+            UNIT_ASSERT_VALUES_EQUAL(ev->Get()->GetPayload()[1].GetSize(), 2500);
+            UNIT_ASSERT_VALUES_EQUAL(ev->Get()->GetPayload()[0].ConvertToString(), TString(2500, 'X'));
+            UNIT_ASSERT_VALUES_EQUAL(ev->Get()->GetPayload()[1].ConvertToString(), TString(2500, 'X'));
+        });
+        const TActorId receiver = cluster.RegisterActor(recieverPtr, 1);
+
+        Sleep(TDuration::MilliSeconds(1000));
+
+        auto senderPtr = new TSendActor(receiver, ev);
+        cluster.RegisterActor(senderPtr, 2);
+
+        Sleep(TDuration::MilliSeconds(1000));
+        UNIT_ASSERT_VALUES_EQUAL(recieverPtr->ReceivedEvents, 1);
+    }
+
+    Y_UNIT_TEST(SendRdmaWithMultiGlue) {
+        TTestICCluster cluster(2);
+        auto memPool = NInterconnect::NRdma::CreateIncrementalMemPool();
+        auto* ev = MakeMultuGlueTestEvent(123, memPool.get());
+
+        auto recieverPtr = new TReceiveActor([](TEvTestSerialization::TPtr ev) {
+            Cerr << "Blob ID: " << ev->Get()->Record.GetBlobID() << Endl;
+            UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetBlobID(), 123);
+            UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetBuffer(), "hello world");
+            UNIT_ASSERT_VALUES_EQUAL(ev->Get()->GetPayload().size(), 3);
+            UNIT_ASSERT_VALUES_EQUAL(ev->Get()->GetPayload()[0].GetSize(), 500);
+            UNIT_ASSERT_VALUES_EQUAL(ev->Get()->GetPayload()[1].GetSize(), 1500);
+            UNIT_ASSERT_VALUES_EQUAL(ev->Get()->GetPayload()[2].GetSize(), 3000);
+            UNIT_ASSERT_VALUES_EQUAL(ev->Get()->GetPayload()[0].ConvertToString(), TString(500, 'X'));
+            UNIT_ASSERT_VALUES_EQUAL(ev->Get()->GetPayload()[1].ConvertToString(), TString(1500, 'Y'));
+            UNIT_ASSERT_VALUES_EQUAL(ev->Get()->GetPayload()[2].ConvertToString(), TString(3000, 'Z'));
+        });
+        const TActorId receiver = cluster.RegisterActor(recieverPtr, 1);
+
+        Sleep(TDuration::MilliSeconds(1000));
+
+        auto senderPtr = new TSendActor(receiver, ev);
+        cluster.RegisterActor(senderPtr, 2);
+
+        Sleep(TDuration::MilliSeconds(1000));
+        UNIT_ASSERT_VALUES_EQUAL(recieverPtr->ReceivedEvents, 1);
+    }
+
 
     Y_UNIT_TEST(SendMix) {
         TTestICCluster cluster(2);

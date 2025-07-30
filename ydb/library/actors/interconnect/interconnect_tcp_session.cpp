@@ -254,9 +254,9 @@ namespace NActors {
             return;
         }
 
-        LOG_INFO_IC_SESSION("ICS09", "handshake done sender: %s self: %s peer: %s socket: %" PRIi64,
+        LOG_INFO_IC_SESSION("ICS09", "handshake done sender: %s self: %s peer: %s socket: %" PRIi64 " qp: %d",
             ev->Sender.ToString().data(), ev->Get()->Self.ToString().data(), ev->Get()->Peer.ToString().data(),
-            i64(*ev->Get()->Socket));
+            i64(*ev->Get()->Socket), (ev->Get()->Qp ? (int)ev->Get()->Qp->GetQpNum() : -1));
 
         NewConnectionSet = TActivationContext::Now();
         BytesWrittenToSocket = 0;

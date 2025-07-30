@@ -24,10 +24,6 @@ class CherryPickCreator:
         self.token = os.environ["TOKEN"]
         self.gh = Github(login_or_token=self.token)
         self.repo = self.gh.get_repo(self.repo_name)
-        try:
-            self.issue = self.repo.get_issue(args.issue)
-        except:
-            self.issue = GithubObject.NotSet
         self.commit_shas: list[str] = []
         self.pr_title_list: list[str] = []
         self.pr_body_list: list[str] = []
@@ -53,6 +49,7 @@ class CherryPickCreator:
             )
 
     def add_summary(self, msg):
+        logging.info(msg)
         summary_path = os.getenv('GITHUB_STEP_SUMMARY')
         if summary_path:
             with open(summary_path, 'a') as summary:
@@ -87,7 +84,7 @@ class CherryPickCreator:
             pr_body += "PR was created by cherry-pick script"
 
         pr = self.repo.create_pull(
-            target_branch, dev_branch_name, title=pr_title, body=pr_body, maintainer_can_modify=True, issue=self.issue
+            target_branch, dev_branch_name, title=pr_title, body=pr_body, maintainer_can_modify=True
         )
         self.add_summary(f'{target_branch}: PR {pr.html_url} created\n')
 
@@ -111,7 +108,6 @@ def main():
     parser.add_argument("--commits", help="Comma or space separated list of commit SHAs")
     parser.add_argument("--pulls", help="Comma or space separated list of PR numbers")
     parser.add_argument("--target-branches", help="Comma or space separated list of branchs to cherry-pick")
-    parser.add_argument("--issue", help="Issue number for attach PR", type=int, default=0)
     args = parser.parse_args()
 
     log_fmt = "%(asctime)s - %(levelname)s - %(name)s - %(message)s"

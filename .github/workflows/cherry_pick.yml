@@ -13,10 +13,6 @@ on:
       target_branches:
         default: ""
         description: Comma or space separated branches to cherry-pick
-      issue_number:
-        default: 0
-        type: number
-        description: Issue number for attach PRs
 
 concurrency:
   group: ${{ github.workflow }}
@@ -50,9 +46,9 @@ jobs:
         env:
           REPO: ${{ github.repository }}
           TOKEN: ${{ env.GH_TOKEN }}
+          GITHUB_STEP_SUMMARY: ${{ env.GITHUB_STEP_SUMMARY }}
         run: |
           ./.github/scripts/cherry_pick.py \
             --pulls="${{ inputs.pulls }}" \
             --commits="${{ inputs.commits }}" \
-            --target-branches="${{ inputs.target_branches }}" \
-            --issue=${{ inputs.issue_number }}
+            --target-branches="${{ inputs.target_branches }}"

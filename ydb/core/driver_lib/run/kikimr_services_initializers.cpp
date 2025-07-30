@@ -504,11 +504,6 @@ static TInterconnectSettings GetInterconnectSettings(const NKikimrConfig::TInter
     return result;
 }
 
-bool NeedToUseAutoConfig(const NKikimrConfig::TActorSystemConfig& config) {
-    return config.GetUseAutoConfig()
-        || config.HasNodeType()
-        || config.HasCpuCount();
-}
 
 void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* setup,
                                                    const NKikimr::TAppData* appData) {

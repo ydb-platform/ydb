@@ -222,7 +222,7 @@ private:
     }
 
     void RunLeaseUpdater() {
-        Register(CreateScriptLeaseUpdateActor(SelfId(), Database, ExecutionId, LeaseDuration, Counters));
+        Register(CreateScriptLeaseUpdateActor(SelfId(), Database, ExecutionId, LeaseDuration, LeaseGeneration, Counters));
         LeaseUpdateQueryRunning = true;
         Counters->ReportRunActorLeaseUpdateBacklog(TInstant::Now() - LeaseUpdateScheduleTime);
     }
@@ -724,7 +724,7 @@ private:
     const TString ExecutionId;
     NKikimrKqp::TEvQueryRequest Request;
     const TString Database;
-    const ui64 LeaseGeneration;
+    const i64 LeaseGeneration;
     const TDuration LeaseDuration;
     const TDuration ResultsTtl;
     const TDuration ProgressStatsPeriod;

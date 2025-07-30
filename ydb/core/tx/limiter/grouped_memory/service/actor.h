@@ -46,6 +46,12 @@ public:
         load += delta;
         Load[load].emplace(item);
     }
+
+    TLoad GetLoad(const T& item) const {
+        auto it = Items.find(item);
+        AFL_VERIFY(it != Items.end())("error", "Load item is not found");
+        return it->second;
+    }
 };
 
 class TMemoryConsumptionAggregator: public TThrRefBase {
@@ -145,7 +151,7 @@ public:
         }
     }
 private:
-    size_t AcquireManager(ui64 externalProcessId);
+    size_t AcquireManager(ui64 externalProcessId, int delta = 1);
     size_t ReleaseManager(ui64 externalProcessId);
     size_t GetManager(ui64 externalProcessId);
 };

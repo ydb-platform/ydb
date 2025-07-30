@@ -14,12 +14,11 @@ namespace {
 class TFmrYtJobService: public IYtJobService {
 public:
     NYT::TRawTableReaderPtr MakeReader(
-        const std::variant<NYT::TRichYPath, TString>& inputTableRef,
+        const TYtTableRef& ytTablePart,
         const TClusterConnection& clusterConnection,
         const TYtReaderSettings& readerSettings
     ) override {
-        auto richPath = std::get<NYT::TRichYPath>(inputTableRef);
-        //YQL_CLOG(DEBUG, FastMapReduce) << "Creating reader for input yt table with path " << NYT::NodeToCanonicalYsonString(NYT::PathToNode(richPath));
+        auto richPath = ytTablePart.RichPath;
         YQL_ENSURE(richPath.Cluster_);
         TFmrTableId fmrId(*richPath.Cluster_, richPath.Path_);
         auto client = CreateClient(clusterConnection);
@@ -40,13 +39,11 @@ public:
     ) override {
         auto client = CreateClient(clusterConnection);
         auto transaction = client->AttachTransaction(GetGuid(clusterConnection.TransactionId));
-        TString ytPath = NYT::AddPathPrefix(ytTable.Path, "//");
-        auto richPath = NYT::TRichYPath(ytPath).Cluster(ytTable.Cluster).Append(true);
         auto writerOptions = NYT::TTableWriterOptions();
         if (writerSetttings.MaxRowWeight) {
             writerOptions.Config(NYT::TNode()("max_row_weight", *writerSetttings.MaxRowWeight));
         }
-        return transaction->CreateRawWriter(richPath, NYT::TFormat::YsonBinary(), writerOptions);
+        return transaction->CreateRawWriter(ytTable.RichPath, NYT::TFormat::YsonBinary(), writerOptions);
     }
 };
 

@@ -236,7 +236,7 @@ namespace NKikimr::NStorage {
             throw TExError() << "Current configuration is recommended. Nothing to self-heal.";
         }
         if (nodesToReplace.size() == 1 && needReconfigSS != ReconfigType::FULL && needReconfigSSB != ReconfigType::FULL && needReconfigSB != ReconfigType::FULL) {
-            STLOG(PRI_DEBUG, BS_NODE, NW52, "Need to reconfig one node " << nodesToReplace.begin()->first << " to " << nodesToReplace.begin()->second
+            STLOG(PRI_DEBUG, BS_NODE, NW100, "Need to reconfig one node " << nodesToReplace.begin()->first << " to " << nodesToReplace.begin()->second
                 , (CurrentConfig, currentConfig), (TargetConfig, targetConfig));
 
             TQuery::TReassignStateStorageNode cmd;
@@ -251,7 +251,7 @@ namespace NKikimr::NStorage {
 
         AdjustRingGroupActorIdOffsetInRecommendedStateStorageConfig(&targetConfig);
 
-        STLOG(PRI_DEBUG, BS_NODE, NW52, "Need to reconfig, starting StateStorageSelfHealActor", (CurrentConfig, currentConfig), (TargetConfig, targetConfig));
+        STLOG(PRI_DEBUG, BS_NODE, NW101, "Need to reconfig, starting StateStorageSelfHealActor", (CurrentConfig, currentConfig), (TargetConfig, targetConfig));
 
         Self->StateStorageSelfHealActor = Register(new TStateStorageSelfhealActor(Sender, Cookie,
             TDuration::Seconds(waitForConfigStep), std::move(currentConfig), std::move(targetConfig)));

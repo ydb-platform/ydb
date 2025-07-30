@@ -388,6 +388,7 @@ struct TTypeAnnotationContext: public TThrRefBase {
     TLangVersion LangVer = MinLangVersion;
     EBackportCompatibleFeaturesMode BackportMode = EBackportCompatibleFeaturesMode::None;
     bool UseTypeDiffForConvertToError = false;
+    bool DebugPositions = false;
     THashMap<TString, TIntrusivePtr<TOptimizerStatistics::TColumnStatMap>> ColumnStatisticsByTableName;
     THashMap<ui64, std::shared_ptr<TOptimizerStatistics>> StatisticsMap;
     TIntrusivePtr<ITimeProvider> TimeProvider;

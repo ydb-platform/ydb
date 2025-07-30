@@ -1,18 +1,23 @@
+{%- macro IncludeGlobs(some_set, dir) -%}
+.include({%- for glob in some_set.globs -%}"{{ glob }}"{%- if not loop.last -%}, {%- endif -%}{%- endfor -%})
+{%- endmacro -%}
+
 {%- macro SomeSet(some_set, module, reldir = "") -%}
 {%-     set dir = some_set.dir -%}
 {%-     if (reldir != "") and (dir[0] != "/") -%}
 {#-         Relative path in tests #}
 {%-         set dir = reldir + dir -%}
-{%-     endif -%}
-{%-     if some_set.globs|join('')|replace('*', '') != some_set.globs|join('') %}
+{%-     endif %}
         {{ module }}.srcDir({{ PatchRoots(dir) }})
+{%-     if module == 'resources' -%}
+{%-         if not('**/*' in some_set.globs) -%}
+{{ IncludeGlobs(some_set, dir) }}
+{%-         endif -%}
 {%-     else -%}
-{#- TODO Use single source file from each glob
-{%-         for glob in some_set.globs %}
-        {{ module }}.include({{ PatchRoots(dir, false, false, "/" + glob) }})
-{%-         endfor -%}
-#}
-        {{ module }}.srcDir({{ PatchRoots(dir) }})
+{%-         if some_set.globs|join('')|replace('*', '') == some_set.globs|join('') -%}
+{#- Use single source file from each glob -#}
+{{ IncludeGlobs(some_set, dir) }}
+{%-         endif -%}
 {%-     endif -%}
 {%- endmacro -%}
 

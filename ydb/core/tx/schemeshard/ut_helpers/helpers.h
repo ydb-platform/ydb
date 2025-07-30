@@ -83,6 +83,11 @@ namespace NSchemeShardUT_Private {
     NKikimrMiniKQL::TResult LocalMiniKQL(TTestActorRuntime& runtime, ui64 tabletId, const TString& query);
 
     bool CheckLocalRowExists(TTestActorRuntime& runtime, ui64 tabletId, const TString& tableName, const TString& keyColumn, ui64 keyValue);
+    NKikimrMiniKQL::TResult ReadLocalTableRecords(TTestActorRuntime& runtime, ui64 tabletId, const TString& tableName, const TString& keyColumn);
+
+    ////////// hive
+    void HiveStopTablet(TTestActorRuntime &runtime, ui64 hiveTablet, ui64 tabletId, ui32 nodeIndex);
+    std::vector<NKikimrHive::TTabletInfo> HiveGetSubdomainTablets(TTestActorRuntime &runtime, const ui64 hiveTablet, const TPathId& subdomainPathId);
 
     ////////// describe options
     struct TDescribeOptionsBuilder : public NKikimrSchemeOp::TDescribeOptions {

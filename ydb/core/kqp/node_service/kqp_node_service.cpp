@@ -77,6 +77,7 @@ public:
         , AsyncIoFactory(std::move(asyncIoFactory))
         , FederatedQuerySetup(federatedQuerySetup)
         , State_(std::make_shared<TNodeServiceState>())
+        , AccountDefaultPoolInScheduler(config.GetComputeSchedulerSettings().GetAccountDefaultPool())
     {
         if (config.HasIteratorReadsRetrySettings()) {
             SetIteratorReadsRetrySettings(config.GetIteratorReadsRetrySettings());
@@ -87,8 +88,6 @@ public:
         if (config.HasWriteActorSettings()) {
             SetWriteActorSettings(config.GetWriteActorSettings());
         }
-
-        // TODO: initialize scheduler settings here?
     }
 
     void Bootstrap() {
@@ -166,11 +165,15 @@ private:
 
         Send(MakeKqpSchedulerServiceId(SelfId().NodeId()), new NScheduler::TEvAddPool(databaseId, poolId));
 
-        auto addQueryEvent = MakeHolder<NScheduler::TEvAddQuery>();
-        addQueryEvent->DatabaseId = msg.GetDatabase();
-        addQueryEvent->PoolId = poolId;
-        addQueryEvent->QueryId = txId;
-        Send(MakeKqpSchedulerServiceId(SelfId().NodeId()), addQueryEvent.Release(), 0, txId);
+        NScheduler::NHdrf::NDynamic::TQueryPtr query;
+        if (poolId != NResourcePool::DEFAULT_POOL_ID || AccountDefaultPoolInScheduler) {
+            auto addQueryEvent = MakeHolder<NScheduler::TEvAddQuery>();
+            addQueryEvent->DatabaseId = msg.GetDatabase();
+            addQueryEvent->PoolId = poolId;
+            addQueryEvent->QueryId = txId;
+            Send(MakeKqpSchedulerServiceId(SelfId().NodeId()), addQueryEvent.Release(), 0, txId);
+            query = (co_await ActorWaitForEvent<NScheduler::TEvQueryResponse>(txId))->Get()->Query;
+        }
 
         auto now = TAppData::TimeProvider->Now();
         NKqpNode::TTasksRequest request(txId, ev->Sender, now);
@@ -220,8 +223,6 @@ private:
             txId, TInstant::Now(), ResourceManager_->GetCounters(),
             poolId, msg.GetMemoryPoolPercent(),
             msg.GetDatabase(), Config.GetVerboseMemoryLimitException());
-
-        auto query = (co_await ActorWaitForEvent<NScheduler::TEvQueryResponse>(txId))->Get()->Query;
 
         const ui32 tasksCount = msg.GetTasks().size();
         for (auto& dqTask: *msg.MutableTasks()) {
@@ -514,6 +515,8 @@ private:
 
     // state sharded by TxId
     std::shared_ptr<TNodeServiceState> State_;
+
+    bool AccountDefaultPoolInScheduler = false;
 };
 
 

@@ -54,6 +54,10 @@ namespace NKikimr::NKqp::NScheduler {
         }
 
         void DoExecuteImpl() override {
+            if (!IsAccountable()) {
+                return TBase::DoExecuteImpl();
+            }
+
             // TODO: account waiting on mailbox?
 
             const auto now = Now();

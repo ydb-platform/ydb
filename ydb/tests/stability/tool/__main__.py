@@ -552,13 +552,13 @@ class StabilityCluster:
 
     def stop_nemesis(self):
         print(f"{bcolors.BOLD}{bcolors.HEADER}=== ОСТАНОВКА NEMESIS ==={bcolors.ENDC}")
-        
+
         # Останавливаем nemesis на всех нодах
         with ThreadPoolExecutor() as pool:
             pool.map(lambda node: node.ssh_command(DICT_OF_SERVICES['nemesis']['stop_command'], raise_on_error=False), self.kikimr_cluster.nodes.values())
-        
+
         print(f"{bcolors.OKGREEN}Nemesis остановлен на всех нодах{bcolors.ENDC}")
-        
+
         # Автоматически восстанавливаем кластер после остановки nemesis
         print(f"\n{bcolors.BOLD}{bcolors.OKCYAN}=== АВТОМАТИЧЕСКОЕ ВОССТАНОВЛЕНИЕ ПОСЛЕ ОСТАНОВКИ NEMESIS ==={bcolors.ENDC}")
         self.restore_cluster()
@@ -569,18 +569,18 @@ class StabilityCluster:
         Восстанавливает только порты и маршруты, не трогает сервисы YDB.
         """
         print(f"{bcolors.BOLD}{bcolors.HEADER}=== ВОССТАНОВЛЕНИЕ СЕТЕВОЙ СВЯЗАННОСТИ ==={bcolors.ENDC}")
-        
+
         # Счетчики для итоговой статистики
         total_nodes = len(self.kikimr_cluster.nodes.values())
         restored_nodes = 0
         cleared_fw_rules = 0
         cleared_routes = 0
         available_ports = 0
-        
+
         with ThreadPoolExecutor() as pool:
             # Восстанавливаем сетевую связанность всех нод параллельно
             results = list(pool.map(self._restore_node, self.kikimr_cluster.nodes.values()))
-        
+
         # Подсчитываем результаты
         for result in results:
             if result:
@@ -588,11 +588,11 @@ class StabilityCluster:
                 cleared_fw_rules += result.get('fw_cleared', 0)
                 cleared_routes += result.get('routes_cleared', 0)
                 available_ports += result.get('available_ports', 0)
-        
+
         # Выводим итоговую статистику
         print(f"\n{bcolors.BOLD}📊 ИТОГОВАЯ СТАТИСТИКА:{bcolors.ENDC}")
         print(f"  ✅ Восстановлено нод: {restored_nodes}/{total_nodes}")
-        
+
         # Статистика нарушений
         total_violations = cleared_fw_rules + cleared_routes
         if total_violations > 0:
@@ -600,16 +600,8 @@ class StabilityCluster:
             print(f"    • Правил ip6tables: {cleared_fw_rules}")
             print(f"    • Недоступных маршрутов: {cleared_routes}")
         else:
-            print(f"  ✅ Нарушений не обнаружено")
-        
-        # Подробная информация о портах
-        total_ports = total_nodes * 4  # 4 порта на ноду
-        port_percentage = (available_ports / total_ports * 100) if total_ports > 0 else 0
-        print(f"  🔌 Доступных портов YDB: {available_ports}/{total_ports} ({port_percentage:.1f}%)")
-        
-        if port_percentage < 50:
-            print(f"  ⚠️  Многие порты недоступны - возможно, сервисы YDB не запущены")
-        
+            print("  ✅ Нарушений не обнаружено")
+
         # Итоговое сообщение
         if restored_nodes == total_nodes:
             if total_violations > 0:
@@ -623,15 +615,15 @@ class StabilityCluster:
         """
         Восстанавливает сетевую связанность ноды кластера.
         Восстанавливает только порты и маршруты, не трогает сервисы YDB.
-        
+
         Args:
             node: Нода кластера для восстановления
-            
+
         Returns:
             dict: Статистика восстановления ноды
         """
         node_host = node.host.split(':')[0]
-        
+
         # Статистика для возврата
         stats = {
             'node': node_host,
@@ -640,12 +632,12 @@ class StabilityCluster:
             'available_ports': 0,
             'success': False
         }
-        
+
         try:
             # 1. Проверяем и восстанавливаем сетевые правила
             fw_rules_cleared = 0
             routes_cleared = 0
-            
+
             # Проверяем правила ip6tables YDB_FW
             fw_check = node.ssh_command("sudo /sbin/ip6tables -w -L YDB_FW 2>/dev/null | grep -v 'Chain YDB_FW' | grep -v 'target' | wc -l", raise_on_error=False)
             if fw_check:
@@ -658,7 +650,7 @@ class StabilityCluster:
                             print(f"    🔧 Найдено и очищено {rules_count} правил ip6tables")
                 except (ValueError, AttributeError):
                     pass
-            
+
             # Проверяем и удаляем недоступные маршруты
             unreach_result = node.ssh_command("sudo /usr/bin/ip -6 route show | grep unreachable", raise_on_error=False)
             if unreach_result:
@@ -669,29 +661,28 @@ class StabilityCluster:
                         ip_match = re.search(r'unreachable\s+([^\s]+)', route)
                         if ip_match:
                             ip = ip_match.group(1)
-                            del_result = node.ssh_command(f"sudo /usr/bin/ip -6 route del unreachable {ip}", raise_on_error=False)
-                            # Увеличиваем счетчик независимо от результата, так как команда была выполнена
+                            node.ssh_command(f"sudo /usr/bin/ip -6 route del unreachable {ip}", raise_on_error=False)
                             routes_cleared += 1
                             found_routes += 1
-                
+
                 if found_routes > 0:
                     print(f"    🔧 Найдено и удалено {found_routes} недоступных маршрутов")
-            
+
             # 2. Проверяем сетевую доступность
             ports_to_check = [2135, 2136, 8765, 19001]
             available_ports_count = 0
-            
+
             for port in ports_to_check:
                 port_result = node.ssh_command(f"nc -z localhost {port}", raise_on_error=False)
                 if port_result:
                     available_ports_count += 1
-            
+
             # Обновляем статистику
             stats['fw_cleared'] = fw_rules_cleared
             stats['routes_cleared'] = routes_cleared
             stats['available_ports'] = available_ports_count
             stats['success'] = True
-            
+
             # Краткий вывод для ноды с указанием нарушений
             status_icon = "✅" if stats['success'] else "❌"
             violations = []
@@ -699,17 +690,17 @@ class StabilityCluster:
                 violations.append(f"FW:{fw_rules_cleared}")
             if routes_cleared > 0:
                 violations.append(f"Routes:{routes_cleared}")
-            
+
             if violations:
                 violations_str = f" [Исправлено: {', '.join(violations)}]"
             else:
                 violations_str = " [Нарушений не найдено]"
-            
+
             print(f"{status_icon} {node_host}: Ports={available_ports_count}/4{violations_str}")
-            
+
         except Exception as e:
             print(f"❌ {node_host}: Ошибка - {e}")
-        
+
         return stats
 
     def get_state(self):

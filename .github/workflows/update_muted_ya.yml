@@ -2,20 +2,20 @@ name: Update Muted tests
 
 on:
   schedule:
-    - cron: "0 */2 * * *"  # At the beginning of every 2nd hour
+    - cron: "0 6-20/2 * * *"  # Every 2 hours from 6:00 to 20:00 UTC
   workflow_dispatch:
     inputs:
       branches:
         description: 'Comma-separated list of branches to process'
         required: false
-        default: 'main,stable-25-1,stable-25-1-1'
+        default: 'main,stable-25-1,stable-25-1-analytics'
 
 env:
   GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
   BRANCH_FOR_PR: update-muted-ya
   TITLE: "Update muted_ya.txt"
   REVIEWERS: "['ci']"
-  LABEL: mute-unmute
+  LABELS: "mute-unmute,not-for-changelog,ok-to-test"
   BUILD_TYPE: relwithdebinfo # Используем только один тип сборки
 
 jobs:
@@ -29,7 +29,7 @@ jobs:
           if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
             echo "branches=$(echo '${{ github.event.inputs.branches }}' | jq -R -s -c 'split(",")')" >> $GITHUB_OUTPUT
           else
-            echo "branches=$(echo '["main","stable-25-1","stable-25-1-1"]' | jq -c .)" >> $GITHUB_OUTPUT
+            echo "branches=$(echo '["main","stable-25-1","stable-25-1-analytics"]' | jq -c .)" >> $GITHUB_OUTPUT
           fi
 
   update-muted-tests:
@@ -97,16 +97,14 @@ jobs:
             echo "Reset branch ${PR_BRANCH} to origin/${{ env.BASE_BRANCH }}"
             git reset --hard origin/${{ env.BASE_BRANCH }}
           fi
-          
-          git push origin ${PR_BRANCH} --force
-        
+                  
       - name: Run create_new_muted_ya.py
         run: |
-          .github/scripts/tests/create_new_muted_ya.py update_muted_ya --build_type=${{ env.BUILD_TYPE }}
+          .github/scripts/tests/create_new_muted_ya.py update_muted_ya --branch=${{ env.BASE_BRANCH }}
 
-      - name: Move new_muted_ya_with_flaky.txt to muted_ya.txt
+      - name: Move new_muted_ya.txt to config
         run: |
-          cp mute_update/new_muted_ya_with_flaky.txt .github/config/muted_ya.txt
+          cp mute_update/new_muted_ya.txt .github/config/muted_ya.txt
 
       - name: Check if changes exist
         id: changes_check
@@ -128,51 +126,51 @@ jobs:
           
           PR_BODY+=$'# Muted tests update for ${{ env.BASE_BRANCH }}\n\n'
 
-          if [ -s mute_update/deleted_tests_in_mute_debug.txt ]; then
-              DELETED_COUNT=$(wc -l < mute_update/deleted_tests_in_mute_debug.txt)
+          if [ -s mute_update/to_delete_debug.txt ]; then
+              DELETED_COUNT=$(wc -l < mute_update/to_delete_debug.txt)
               PR_BODY+=$'**Removed from mute: '"${DELETED_COUNT}**"$'\n\n'
               PR_BODY+=$'```\n'
-              PR_BODY+=$(cat mute_update/deleted_tests_in_mute_debug.txt)
+              PR_BODY+=$(cat mute_update/to_delete_debug.txt)
               PR_BODY+=$'\n```\n\n'
           fi
-          if [ -s mute_update/flaky_debug.txt ]; then
-              FLAKY_COUNT=$(wc -l < mute_update/flaky_debug.txt)
-              PR_BODY+=$'**Muted flaky: '"${FLAKY_COUNT}**"$'\n\n'
+          if [ -s mute_update/to_mute_debug.txt ]; then
+              MUTED_COUNT=$(wc -l < mute_update/to_mute_debug.txt)
+              PR_BODY+=$'**Muted flaky: '"${MUTED_COUNT}**"$'\n\n'
               PR_BODY+=$'```\n'
-              PR_BODY+=$(cat mute_update/flaky_debug.txt)
+              PR_BODY+=$(cat mute_update/to_mute_debug.txt)
               PR_BODY+=$'\n```\n\n'
-              
-              # Создаем ссылку на дашборд с тестами из flaky.txt (а не flaky_debug.txt)
-              if [ -s mute_update/flaky.txt ]; then
-                BASE_URL="https://datalens.yandex.cloud/34xnbsom67hcq-ydb-autotests-test-history-link?branch=${{ env.BASE_BRANCH }}"
-                MAX_TESTS=50
-                TEST_COUNT=0
-                
-                # Создаем временный файл для URL
-                echo "${BASE_URL}" > dashboard_url.txt
-                
-                # Для каждого теста из flaky.txt, добавляем его в URL
-                while read -r test_name && [ ${TEST_COUNT} -lt ${MAX_TESTS} ]; do
-                  # Заменяем пробелы на "/"
-                  formatted_name=$(echo "${test_name}" | tr ' ' '/')
-                  # Добавляем параметр в URL
-                  echo -n "&full_name=${formatted_name}" >> dashboard_url.txt
-                  TEST_COUNT=$((TEST_COUNT+1))
-                done < mute_update/flaky.txt
-                
-                # Получаем полную URL
-                DASHBOARD_URL=$(cat dashboard_url.txt)
-                
-                # Добавляем ссылку на дашборд в описание
-                PR_BODY+=$'**Dashboard Link:**\n'
-                PR_BODY+=$"[View history of flaky tests on Dashboard](${DASHBOARD_URL})\n\n"
+
+              # Добавляем ссылку на дашборд с mute-кандидатами
+              if [ -s mute_update/to_mute.txt ]; then
+                  BASE_URL="https://datalens.yandex.cloud/34xnbsom67hcq-ydb-autotests-test-history-link?branch=${{ env.BASE_BRANCH }}"
+                  MAX_TESTS=50
+                  TEST_COUNT=0
+                  FULL_URL="${BASE_URL}"
+                  while read -r test_name && [ ${TEST_COUNT} -lt ${MAX_TESTS} ]; do
+                    # Заменяем только первый пробел на слэш для формата suite/test
+                    formatted_name=$(echo "${test_name}" | sed 's/ /\//')
+
+                    # URL-кодируем спецсимволы: пробел, слэш, [, ], плюс, минус
+                    encoded_name=$(echo "${formatted_name}" \
+                      | sed 's/ /%20/g' \
+                      | sed 's/\//%2F/g' \
+                      | sed 's/\[/%5B/g' \
+                      | sed 's/\]/%5D/g' \
+                      | sed 's/+/%2B/g' \
+                      | sed 's/-/%2D/g')
+
+                    FULL_URL="${FULL_URL}&full_name=${encoded_name}"
+                    TEST_COUNT=$((TEST_COUNT+1))
+                  done < mute_update/to_mute.txt
+                  PR_BODY+=$"[View history of muted flaky tests on Dashboard](${FULL_URL})"
+                  PR_BODY+=$'\n'
               fi
           fi
-          if [ -s mute_update/muted_stable_debug.txt ]; then
-              MUTED_STABLE_COUNT=$(wc -l < mute_update/muted_stable_debug.txt)
-              PR_BODY+=$'**Unmuted stable: '"${MUTED_STABLE_COUNT}**"$'\n\n'
+          if [ -s mute_update/to_unmute_debug.txt ]; then
+              UNMUTED_COUNT=$(wc -l < mute_update/to_unmute_debug.txt)
+              PR_BODY+=$'**Unmuted stable: '"${UNMUTED_COUNT}**"$'\n\n'
               PR_BODY+=$'```\n'
-              PR_BODY+=$(cat mute_update/muted_stable_debug.txt)
+              PR_BODY+=$(cat mute_update/to_unmute_debug.txt)
               PR_BODY+=$'\n```\n\n'
           fi
 
@@ -236,11 +234,12 @@ jobs:
               repo: context.repo.repo,
               body: completeBody
             });
-      
+            
+            const labelsToAdd = process.env.LABELS.split(',');
             github.rest.issues.addLabels({
               ...context.repo,
               issue_number: ${{ steps.create_or_update_pr.outputs.pr_number }},
-              labels: ['${{ env.LABEL }}']
+              labels: labelsToAdd
             });
 
       - name: Add reviewers
@@ -253,3 +252,17 @@ jobs:
           pull_number: ${{ steps.create_or_update_pr.outputs.pr_number }}
           team_reviewers: ${{ env.REVIEWERS }}
           token: ${{ secrets.YDBOT_TOKEN }}
+      - name: Enable auto-merge
+        if: env.changes == 'true'
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.YDBOT_TOKEN }}
+          script: |
+            const pr = ${{ steps.create_or_update_pr.outputs.pr_number }};
+            await github.rest.pulls.update({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: pr,
+              auto_merge: true
+            });
+

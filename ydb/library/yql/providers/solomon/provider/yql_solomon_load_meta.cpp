@@ -67,13 +67,7 @@ public:
             if (auto maybeSelectors = ExtractSetting(settings, "selectors")) {
                 NSo::NProto::TDqSolomonSource source = NSo::FillSolomonSource(clusterDesc, soReadObject.Object().Project().StringValue());
                 
-                auto selectors = NSo::ExtractSelectorValues(*maybeSelectors);
-                if (source.GetClusterType() == NSo::NProto::CT_MONITORING) {
-                    selectors["cluster"] = source.GetCluster();
-                    selectors["service"] = soReadObject.Object().Project().StringValue();
-                } else {
-                    selectors["project"] = source.GetProject();
-                }
+                auto selectors = NSo::ExtractSelectorValues(source, *maybeSelectors);
 
                 auto defaultReplica = (source.GetClusterType() == NSo::NProto::CT_SOLOMON ? "sas" : "cloud-prod-a");
                 auto solomonClientDefaultReplica = State_->Configuration->SolomonClientDefaultReplica.Get().OrElse(defaultReplica);

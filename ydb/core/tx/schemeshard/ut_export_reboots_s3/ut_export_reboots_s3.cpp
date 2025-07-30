@@ -683,7 +683,7 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
                 topic.GetScheme().DebugString()
                 }
             }
-            , NDescUT::TExportRequest({topic.GetExportRequestItem()}).GetRequest()
+            , topic.GetExportRequest()
             , TTestWithReboots::GetDefaultTestEnvOptions());
     }
 

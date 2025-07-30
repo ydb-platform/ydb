@@ -5631,7 +5631,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         TTestEnv env(runtime);
         ui64 txId = 100;
         runtime.SetLogPriority(NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
-        auto topic = NDescUT::TSampleTopic(0, 2);
+        auto topic = NDescUT::TSimpleTopic(0, 2);
 
         const auto data = GenerateTestData({
                 EPathTypePersQueueGroup,
@@ -5648,7 +5648,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         TS3Mock s3Mock(ConvertTestData(bucketContent), TS3Mock::TSettings(port));
         UNIT_ASSERT(s3Mock.Start());
 
-        TestImport(runtime, ++txId, "/MyRoot", NDescUT::TImportRequest(port, {topic.GetImportRequestItem()}).GetRequest());
+        TestImport(runtime, ++txId, "/MyRoot", topic.GetImportRequest(port));
         env.TestWaitNotification(runtime, txId);
         TestGetImport(runtime, txId, "/MyRoot",  isCorrupted ? Ydb::StatusIds::CANCELLED : Ydb::StatusIds::SUCCESS);
 
@@ -5689,16 +5689,16 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         runtime.SetLogPriority(NKikimrServices::EXPORT, NActors::NLog::PRI_TRACE);
         runtime.SetLogPriority(NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
 
-        auto topic = NDescUT::TSampleTopic(1, 0);
+        auto topic = NDescUT::TSimpleTopic(1, 0);
 
         TestCreatePQGroup(runtime, ++txId, "/MyRoot", topic.GetScheme().DebugString());
         env.TestWaitNotification(runtime, txId);
 
-        TestExport(runtime, ++txId, "/MyRoot", NDescUT::TExportRequest(port, {topic.GetExportRequestItem()}).GetRequest());
+        TestExport(runtime, ++txId, "/MyRoot", topic.GetExportRequest(port));
         env.TestWaitNotification(runtime, txId);
         TestGetExport(runtime, txId, "/MyRoot");
 
-        TestImport(runtime, ++txId, "/MyRoot", NDescUT::TImportRequest(port, {topic.GetImportRequestItem()}).GetRequest());
+        TestImport(runtime, ++txId, "/MyRoot", topic.GetImportRequest(port));
         env.TestWaitNotification(runtime, txId);
         TestGetImport(runtime, txId, "/MyRoot", Ydb::StatusIds::SUCCESS);
 
@@ -6259,12 +6259,12 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
     }
 
     Y_UNIT_TEST(ShouldSucceedOnSingleTopic) {
-        auto topic = NDescUT::TSampleTopic(0, 2);
+        auto topic = NDescUT::TSimpleTopic(0, 2);
         ShouldSucceed({{topic.GetDir(),
             {
                 EPathTypePersQueueGroup,
                 topic.GetPublicProto().DebugString()
             }
-        }}, NDescUT::TImportRequest({topic.GetImportRequestItem()}).GetRequest());
+        }}, topic.GetImportRequest());
     }
 }

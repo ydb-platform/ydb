@@ -148,59 +148,6 @@ public:
     }
 };
 
-template <typename TSchemeProto, typename TPublicProto>
-class TSchemeObjectDescriber : public TObjectDescriber<TSchemeProto, TPublicProto> 
-                             , public TFileDescriber
-{
-public:
-    TSchemeObjectDescriber(const TString& dir, const TString& name) 
-                  : TFileDescriber(dir, name)
-                  , Permissions(dir) {
-        ExportRequestItem = GetItemsFromTemp(ExportRequestItemTemp);
-        ImportRequestItem = GetItemsFromTemp(ImportRequestItemTemp);
-    }
-    
-    const TPermissions& GetPermissions() const {
-        return Permissions;
-    }
-    
-    const TString& GetExportRequestItem() const {
-        return ExportRequestItem;
-    }
-
-    const TString& GetImportRequestItem() const {
-        return ImportRequestItem;
-    }
-
-    TString GetRestoredDir() const {
-        return "/Restored" + Dir;
-    }
-                  
-protected:
-    const TPermissions Permissions;
-    TString ExportRequestItem;
-    TString ImportRequestItem;
-
-private:
-    TString GetItemsFromTemp(const char* temp) {
-        return Sprintf(temp, Dir.c_str(), Dir.c_str());
-    }
-
-    const char* ExportRequestItemTemp = R"(
-        items {
-            source_path: "/MyRoot%s"
-            destination_prefix: "%s"
-        }
-    )";
-
-    const char* ImportRequestItemTemp = R"(
-        items {
-            source_prefix: "%s"
-            destination_path: "/MyRoot/Restored%s"
-        }
-    )";
-};
-
 class TXxportRequest {
 public:
     TXxportRequest(const char* type, const TVector<TString>& items) {
@@ -259,14 +206,87 @@ public:
                   : TXxportRequest("ImportFromS3", items) {}
 };
 
+template <typename TSchemeProto, typename TPublicProto>
+class TSchemeObjectDescriber : public TObjectDescriber<TSchemeProto, TPublicProto> 
+                             , public TFileDescriber
+{
+public:
+    TSchemeObjectDescriber(const TString& dir, const TString& name) 
+                  : TFileDescriber(dir, name)
+                  , Permissions(dir) {
+        ExportRequestItem = GetItemsFromTemp(ExportRequestItemTemp);
+        ImportRequestItem = GetItemsFromTemp(ImportRequestItemTemp);
+        ExportRequest = NDescUT::TExportRequest({GetExportRequestItem()}).GetRequest();
+        ImportRequest = NDescUT::TImportRequest({GetImportRequestItem()}).GetRequest();
+    }
+    
+    const TPermissions& GetPermissions() const {
+        return Permissions;
+    }
+    
+    const TString& GetExportRequestItem() const {
+        return ExportRequestItem;
+    }
+
+    const TString& GetImportRequestItem() const {
+        return ImportRequestItem;
+    }
+
+    TString GetRestoredDir() const {
+        return "/Restored" + Dir;
+    }
+
+    TString GetExportRequest(ui32 port) const {
+        return NDescUT::TExportRequest(port, {GetExportRequestItem()}).GetRequest();
+    }
+
+    TString GetImportRequest(ui32 port) const {
+        return NDescUT::TImportRequest(port, {GetImportRequestItem()}).GetRequest();
+    }
+
+    const TString& GetExportRequest() const {
+        return ExportRequest;
+    }
+
+    const TString& GetImportRequest() const {
+        return ImportRequest;
+    }
+                  
+protected:
+    const TPermissions Permissions;
+    TString ExportRequestItem;
+    TString ImportRequestItem;
+    TString ExportRequest;
+    TString ImportRequest;
+
+private:
+    TString GetItemsFromTemp(const char* temp) {
+        return Sprintf(temp, Dir.c_str(), Dir.c_str());
+    }
+
+    const char* ExportRequestItemTemp = R"(
+        items {
+            source_path: "/MyRoot%s"
+            destination_prefix: "%s"
+        }
+    )";
+
+    const char* ImportRequestItemTemp = R"(
+        items {
+            source_prefix: "%s"
+            destination_path: "/MyRoot/Restored%s"
+        }
+    )";
+};
+
 class TSimpleTopic : public TSchemeObjectDescriber<NKikimrSchemeOp::TPersQueueGroupDescription,
                                              Ydb::Topic::CreateTopicRequest> 
 {
 private:
-    class TConsumer : public TObjectDescriber<NKikimrPQ::TPQTabletConfig::TConsumer,
+    class TSimpleConsumer : public TObjectDescriber<NKikimrPQ::TPQTabletConfig::TConsumer,
                                             Ydb::Topic::Consumer> {
     public:
-        TConsumer(ui64 number, bool important = false) {
+        TSimpleConsumer(ui64 number, bool important = false) {
             google::protobuf::TextFormat::ParseFromString(Sprintf(ConsumerScheme, number), &Scheme);
             google::protobuf::TextFormat::ParseFromString(Sprintf(ConsumerPublic, number), &PublicProto);
             Scheme.SetImportant(important);
@@ -297,7 +317,7 @@ public:
         google::protobuf::TextFormat::ParseFromString(TopicPublic, &PublicProto);
 
         for (ui64 i = 0; i < countConsumers; ++i) {
-            auto consumer = TConsumer(i, i % 2);
+            auto consumer = TSimpleConsumer(i, i % 2);
             *Scheme.MutablePQTabletConfig()->AddConsumers() = consumer.GetScheme();
             *PublicProto.mutable_consumers()->Add() = consumer.GetPublicProto();
         }

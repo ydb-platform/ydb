@@ -8,7 +8,7 @@ from github import Github, GithubException, GithubObject, Commit
 
 
 class CherryPickCreator:
-    def __init__(self, commits: str, pulls: str, target_branches: str, issue_number: int):
+    def __init__(self, args):
         def __split(s: str, seps: str = ', '):
             if not s:
                 return []
@@ -20,23 +20,23 @@ class CherryPickCreator:
             return result
 
         self.repo_name = os.environ["REPO"]
-        self.target_banches = __split(target_branches)
+        self.target_branches = __split(args.target_branches)
         self.token = os.environ["TOKEN"]
         self.gh = Github(login_or_token=self.token)
         self.repo = self.gh.get_repo(self.repo_name)
         try:
-            self.issue = self.repo.get_issue(issue_number)
+            self.issue = self.repo.get_issue(args.issue)
         except:
             self.issue = GithubObject.NotSet
         self.commit_shas: list[str] = []
         self.pr_title_list: list[str] = []
         self.pr_body_list: list[str] = []
-        for c in __split(commits):
+        for c in __split(args.commits):
             commit = self.repo.get_commit(c)
             self.pr_title_list.append(commit.sha)
             self.pr_body_list.append(commit.html_url)
             self.commit_shas.append(commit.sha)
-        for p in __split(pulls):
+        for p in __split(args.pulls):
             pull = self.repo.get_pull(int(p))
             self.pr_title_list.append(f'PR {pull.number}')
             self.pr_body_list.append(pull.html_url)
@@ -44,7 +44,6 @@ class CherryPickCreator:
         self.dtm = datetime.datetime.now().strftime("%y%m%d-%H%M")
         self.logger = logging.getLogger("cherry-pick")
         self.workflow_url = None
-        self.summary = None
         self.__detect_env()
 
     def __detect_env(self):
@@ -52,13 +51,12 @@ class CherryPickCreator:
             self.workflow_url = (
                 f"{os.environ['GITHUB_SERVER_URL']}/{self.repo_name}/actions/runs/{os.environ['GITHUB_RUN_ID']}"
             )
-        summary_path = os.getenv('GITHUB_STEP_SUMMARY')
-        if summary_path:
-            self.summary = open(summary_path, 'a')
 
     def add_summary(self, msg):
-        if self.summary:
-            self.summary.write(msg)
+        summary_path = os.getenv('GITHUB_STEP_SUMMARY')
+        if summary_path:
+            with open(summary_path, 'a') as summary:
+                summary.write(msg)
 
     def git_run(self, *args):
         args = ["git"] + list(args)
@@ -94,12 +92,12 @@ class CherryPickCreator:
         self.add_summary(f'{target_branch}: PR {pr.html_url} created\n')
 
     def process(self):
-        if len(self.commit_shas) == 0 or len(self.target_banches) == 0:
+        if len(self.commit_shas) == 0 or len(self.target_branches) == 0:
             self.add_summary("Noting to cherry-pick or no targets branches, my life is meaningless.")
             return
         self.git_run("clone", f"https://{self.token}@github.com/{self.repo_name}.git", "-c", "protocol.version=2", f"ydb-new-pr")
         os.chdir(f"ydb-new-pr")
-        for target in self.target_banches:
+        for target in self.target_branches:
             try:
                 self.create_pr_for_branch(target)
             except GithubException as e:
@@ -118,8 +116,7 @@ def main():
 
     log_fmt = "%(asctime)s - %(levelname)s - %(name)s - %(message)s"
     logging.basicConfig(format=log_fmt, level=logging.DEBUG)
-    cherryPicker = CherryPickCreator(args.commits, args.target_branches, args.issue)
-    cherryPicker.process()
+    CherryPickCreator(args).process()
 
 
 if __name__ == "__main__":

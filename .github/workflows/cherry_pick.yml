@@ -54,5 +54,5 @@ jobs:
           ./.github/scripts/cherry_pick.py \
             --pulls="${{ inputs.pulls }}"
             --commits="${{ inputs.commits }}" \
-            --target-branch="${{ inputs.target_branches }}" \
+            --target-branches="${{ inputs.target_branches }}" \
             --issue=${{ inputs.issue_number }}

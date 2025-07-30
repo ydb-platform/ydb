@@ -1,5 +1,6 @@
 #pragma once
 
+#include <util/datetime/base.h>
 #include <util/generic/ptr.h>
 #include <util/stream/output.h>
 
@@ -49,6 +50,14 @@ namespace NKikimr::NKqp::NScheduler {
 
     struct TSchedulableTask;
     using TSchedulableTaskPtr = THolder<TSchedulableTask>;
+
+    // These params are used when calculating delay for schedulable task, but are taken from the scheduler configuration.
+    struct TDelayParams {
+        const TDuration MaxDelay;
+        const TDuration MinDelay;
+        const TDuration AttemptBonus;
+        const TDuration MaxRandomDelay;
+    };
 
 } // namespace NKikimr::NKqp::NScheduler
 

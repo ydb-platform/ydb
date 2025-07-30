@@ -107,9 +107,7 @@ TKqpPlanner::TKqpPlanner(TKqpPlanner::TArgs&& args)
     , ArrayBufferMinFillPercentage(args.ArrayBufferMinFillPercentage)
     , BufferPageAllocSize(args.BufferPageAllocSize)
     , VerboseMemoryLimitException(args.VerboseMemoryLimitException)
-#if defined(USE_HDRF_SCHEDULER)
     , Query(args.Query)
-#endif
 {
     Y_UNUSED(MkqlMemoryLimit);
     if (GUCSettings) {
@@ -263,16 +261,6 @@ std::unique_ptr<TEvKqpNode::TEvStartKqpTasksRequest> TKqpPlanner::SerializeReque
 
     if (UserRequestContext->PoolConfig.has_value()) {
         request.SetMemoryPoolPercent(UserRequestContext->PoolConfig->QueryMemoryLimitPercentPerNode);
-
-#if !defined(USE_HDRF_SCHEDULER)
-        request.SetPoolMaxCpuShare(UserRequestContext->PoolConfig->TotalCpuLimitPercentPerNode / 100.0);
-        if (UserRequestContext->PoolConfig->QueryCpuLimitPercentPerNode >= 0) {
-            request.SetQueryCpuShare(UserRequestContext->PoolConfig->QueryCpuLimitPercentPerNode / 100.0);
-        }
-        if (UserRequestContext->PoolConfig->ResourceWeight >= 0) {
-            request.SetResourceWeight(UserRequestContext->PoolConfig->ResourceWeight);
-        }
-#endif
     }
 
     if (UserToken) {
@@ -520,9 +508,7 @@ TString TKqpPlanner::ExecuteDataComputeTask(ui64 taskId, ui32 computeTasksSize) 
         .BlockTrackingMode = BlockTrackingMode,
         .UserToken = UserToken,
         .Database = Database,
-#if defined(USE_HDRF_SCHEDULER)
         .Query = Query,
-#endif
     });
 
     if (const auto* rmResult = std::get_if<NRm::TKqpRMAllocateResult>(&startResult)) {

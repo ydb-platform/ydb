@@ -10,7 +10,7 @@ namespace NKikimr::NKqp::NScheduler {
 
 class TComputeScheduler : public std::enable_shared_from_this<TComputeScheduler> {
 public:
-    explicit TComputeScheduler(TIntrusivePtr<TKqpCounters> counters);
+    TComputeScheduler(TIntrusivePtr<TKqpCounters> counters, const TDelayParams& delayParams);
 
     void SetTotalCpuLimit(ui64 cpu);
     ui64 GetTotalCpuLimit() const;
@@ -26,9 +26,10 @@ public:
 
 private:
     TRWMutex Mutex;
-    NHdrf::NDynamic::TRootPtr Root;                                        // protected by Mutex
-    THashMap<NHdrf::TQueryId, NHdrf::NDynamic::TQueryPtr> Queries;         // protected by Mutex
+    NHdrf::NDynamic::TRootPtr Root;                                // protected by Mutex
+    THashMap<NHdrf::TQueryId, NHdrf::NDynamic::TQueryPtr> Queries; // protected by Mutex
 
+    const TDelayParams DelayParams;
     TIntrusivePtr<TKqpCounters> KqpCounters;
 
     struct {
@@ -40,6 +41,7 @@ using TComputeSchedulerPtr = std::shared_ptr<TComputeScheduler>;
 
 struct TOptions {
     TIntrusivePtr<TKqpCounters> Counters;
+    TDelayParams DelayParams;
     TDuration UpdateFairSharePeriod;
 };
 

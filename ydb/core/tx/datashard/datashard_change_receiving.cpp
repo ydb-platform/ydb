@@ -151,7 +151,7 @@ class TDataShard::TTxApplyChangeRecords: public TTransactionBase<TDataShard> {
         recordStatus.SetReason(reason);
 
         if (error) {
-            LOG_CRIT_S(ctx, NKikimrServices::TX_DATASHARD, "Cannot apply change record"
+            LOG_CRIT_S(ctx, NKikimrServices::TX_DATASHARD, "r314 Cannot apply change record"
                 << ": error# " << error
                 << ", at tablet# " << Self->TabletID());
         }

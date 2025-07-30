@@ -29,7 +29,8 @@ NTable::EReady TDataShardUserDb::SelectRow(
 {
     auto tid = Self.GetLocalTableId(tableId);
     Y_ENSURE(tid != 0, "Unexpected SelectRow for an unknown table");
-
+    LOG_CRIT_S(NActors::TActivationContext::AsActorContext(), NKikimrServices::TX_DATASHARD, "r314_innercnak 23complete ");
+        
     if (snapshot) {
         // Note: snapshot is used by change collector to check scan snapshot state
         // We don't want to apply any tx map or observer to reproduce whatever scan observes
@@ -105,6 +106,8 @@ void TDataShardUserDb::UpsertRow(
     const ui32 DefaultFilledColumnCount
 )
 {
+    LOG_CRIT_S(NActors::TActivationContext::AsActorContext(), NKikimrServices::TX_DATASHARD, "r314_22d2innercnak complete ");
+    
     auto localTableId = Self.GetLocalTableId(tableId);
     Y_ENSURE(localTableId != 0, "Unexpected UpdateRow for an unknown table");
 

@@ -2263,6 +2263,12 @@ NKikimrDataEvents::TEvWriteResult Upsert(TTestActorRuntime& runtime, TActorId se
     return Write(runtime, sender, shardId, std::move(request), expectedStatus);
 }
 
+NKikimrDataEvents::TEvWriteResult Upsert(TTestActorRuntime& runtime, TActorId sender, ui64 shardId, const TTableId& tableId, std::optional<ui64> txId, NKikimrDataEvents::TEvWrite::ETxMode txMode, const std::vector<ui32>& columnIds, const std::vector<TCell>& cells, NKikimrDataEvents::TEvWriteResult::EStatus expectedStatus)
+{
+    auto request = MakeWriteRequest(txId, txMode, NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT, tableId, columnIds, cells);
+    return Write(runtime, sender, shardId, std::move(request), expectedStatus);
+}
+
 NKikimrDataEvents::TEvWriteResult UpsertOneKeyValue(TTestActorRuntime& runtime, TActorId sender, ui64 shardId, const TTableId& tableId, const TVector<TShardedTableOptions::TColumn>& columns, ui64 key, ui64 value, std::optional<ui64> txId, NKikimrDataEvents::TEvWrite::ETxMode txMode, NKikimrDataEvents::TEvWriteResult::EStatus expectedStatus)
 {
     auto request = MakeWriteRequestOneKeyValue(txId, txMode, NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT, tableId, columns, key, value);

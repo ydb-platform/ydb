@@ -257,6 +257,8 @@ public:
         TWriteOperation* writeOp = TWriteOperation::CastWriteOperation(op);
         const ui64 tabletId = DataShard.TabletID();
 
+        LOG_CRIT_S(ctx, NKikimrDataEvents::TEvWriteResult::STATUS_CONSTRAINT_VIOLATION, "Operation " << *writeOp << " at " << DataShard.TabletID() << " r314 aborting in start function.");
+                
         LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "Executing write operation for " << *op << " at " << tabletId);
 
         if (op->Result() || op->HasResultSentFlag() || op->IsImmediate() && CheckRejectDataTx(op, ctx)) {
@@ -426,7 +428,13 @@ public:
             if (writeTx->HasOperations()) {
                 for (validatedOperationIndex = 0; validatedOperationIndex < writeTx->GetOperations().size(); ++validatedOperationIndex) {
                     const TValidatedWriteTxOperation& validatedOperation = writeTx->GetOperations()[validatedOperationIndex];
-                    DoUpdateToUserDb(userDb, validatedOperation, txc);
+                    
+                    LOG_CRIT_S(ctx, NKikimrDataEvents::TEvWriteResult::STATUS_CONSTRAINT_VIOLATION, "Operation " << *writeOp << " at " << DataShard.TabletID() << " r314 aborting.");
+                
+                    DoUpdateToUserDb(userDb, validatedOperation, txc); // r314 ловить ошибку тут
+                    LOG_ERROR_S(ctx, NKikimrDataEvents::TEvWriteResult::STATUS_CONSTRAINT_VIOLATION, "Operation " << *writeOp << " at " << DataShard.TabletID() << " r314 aborting.");
+                
+
                     LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "Executed write operation for " << *writeOp << " at " << DataShard.TabletID() << ", row count=" << validatedOperation.GetMatrix().GetRowCount());
                 }
                 validatedOperationIndex = SIZE_MAX;
@@ -550,6 +558,14 @@ public:
             return EExecutionStatus::Executed;
         } catch (const TUniqueConstrainException&) {
             return OnUniqueConstrainException(userDb, *writeOp, txc, ctx);
+        } catch (const TKeySizeConstraintException&) {
+                //LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, "Operation " << writeOp << " at " << DataShard.TabletID() << " aborting. Conflict with another transaction.");
+                writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN, "Size of key in decomdary index");
+                //ResetChanges(userDb, *writeOp, txc);//NKikimrDataEvents::TEvWriteResult::STATUS_CONSTRAINT_VIOLATION
+                txc.DB.RollbackChanges();
+                LOG_ERROR_S(ctx, NKikimrDataEvents::TEvWriteResult::STATUS_CONSTRAINT_VIOLATION, "Operation " << *writeOp << " at " << DataShard.TabletID() << " aborting. Size of key of secondary index is too big.");
+                
+                return EExecutionStatus::Executed;
         }
 
         Pipeline.AddCommittingOp(op);

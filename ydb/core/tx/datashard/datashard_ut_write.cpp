@@ -189,6 +189,108 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
         }
     }
 
+    Y_UNIT_TEST(ExecSQLBIG) {
+
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings
+            .SetDomainName("Root")
+            .SetUseRealThreads(false)
+            .SetEnableDataColumnForIndexTable(true)
+            .SetEnableUuidAsPrimaryKey(true);
+        //
+        auto [runtime, server, sender] = TestCreateServer(serverSettings);
+
+        auto opts = TShardedTableOptions()
+            .Columns({
+                {"key", "String", true, false},           // key (id=1)
+                {"val1", "String", false, false},
+                {"val2", "String", false, false}
+            }).Indexes({{"by_val1", {"val1"}, {}, NKikimrSchemeOp::EIndexTypeGlobalAsync}});
+        //opts.Indexes({{"by_val1", {"val1"}, {}, NKikimrSchemeOp::EIndexTypeGlobalUnique}});
+            //Indexes({2, 3}); // ???
+            // 33 554437
+            // 16 777216
+
+        runtime.GetAppData().FeatureFlags.SetEnableDataShardVolatileTransactions(true);
+
+        auto [shards, tableId] = CreateShardedTable(server, sender, "/Root", "table-1", opts);
+        const ui64 shard = shards[0];
+        ui64 txId = 100;
+
+        auto s1 = TString(5,  'a');
+        auto s2 = TString(NLimits::MaxWriteKeySize + 1,  'a');
+        
+       //auto s3 = TString((1 << 23) + 5,  'a');
+
+        auto testInterruptor = TCell(s1.c_str(), s1.size());
+
+        auto bigCell1 = TCell::Make(s1);
+        auto bigCell2 = TCell::Make(s2);
+
+
+        Cout << "========= Insert initial data unique error =========\n";
+        {
+            TVector<ui32> columnIds = {1, 2};
+            TVector<TCell> cells = {
+                TCell("sad"),
+                TCell("qwe"), 
+                TCell("asd"),
+                TCell(s2.c_str(), s2.size()) // должен падать
+            };
+
+            auto result = Upsert(runtime, sender, shard, tableId, txId, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE, columnIds, cells);
+
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);          
+        }
+
+
+        Cout << "========= Verify initial data =========\n";
+        {
+            //auto expectedState = "key = asd\\0, val1 = qwe\\0, val2 = NULL\nkey = sad\\0, val1 = qwe\\0, val2 = NULL\n";
+            auto expectedState = "key = asd\\0, val1 = " + s2 + "\\0, val2 = NULL\nkey = sad\\0, val1 = qwe\\0, val2 = NULL\n";
+            
+            auto tableState = ReadTable(server, shards, tableId);
+            UNIT_ASSERT_STRINGS_EQUAL(tableState, expectedState);
+        }
+
+        Cout << "========= Insert initial data treshold error =========\n";
+        {
+            TVector<ui32> columnIds = {1, 2};
+            TVector<TCell> cells = {
+                TCell(s1.c_str(), s1.size()),
+                //bigCell1, // тест проходит
+                TCell(s2.c_str(), s2.size()), // тест валится по threshold 1049600
+            };
+
+            auto result = Upsert(runtime, sender, shard, tableId, txId, NKikimrDataEvents::TEvWrite::MODE_VOLATILE_PREPARE, columnIds, cells, NKikimrDataEvents::TEvWriteResult::STATUS_PREPARED);
+
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NKikimrDataEvents::TEvWriteResult::STATUS_PREPARED);          
+        }
+
+        Cout << "========= Wait for completed transaction =========\n";
+        {
+            auto writeResult = WaitForWriteCompleted(runtime, sender, NKikimrDataEvents::TEvWriteResult::STATUS_ABORTED);
+
+
+        }
+   
+        auto bufOfAaaaaaString1 = EscapeC(bigCell1.Data(), bigCell1.Size());
+        auto bufOfAaaaaaString2 = EscapeC(bigCell2.Data(), bigCell2.Size());
+
+
+        //auto expectedState = "key = " + bufOfAaaaaaString1 + ", val1 = " + bufOfAaaaaaString2 + ", val2 = NULL\n";
+
+        Cout << "========= Verify initial data =========\n";
+        {
+            auto expectedState = "key = asd\\0, val1 = qwe\\0, val2 = NULL\nkey = sad\\0, val1 = qwe\\0, val2 = NULL\n";
+            auto tableState = ReadTable(server, shards, tableId);
+            UNIT_ASSERT_STRINGS_EQUAL(tableState, expectedState);
+        }
+
+        return;
+    }
+
     Y_UNIT_TEST(IncrementImmediate) {
         
         auto [runtime, server, sender] = TestCreateServer();

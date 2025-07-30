@@ -604,6 +604,27 @@ memory_controller_config:
   query_execution_limit_percent: 25
 ```
 
+### Лимиты памяти для колоночных таблиц
+
+К лимитам колоночных таблицам относятся:
+
+- Column Tables Read Execution - лимит на выполнение операций чтения колоночных таблиц;
+- Column Tables Compaction -лимит на выполнение операций компактизации колоночных таблиц;
+- Column Tables Cache - общий лимит на различные кеши колоночных таблиц.
+
+Лимит памяти для колоночных таблиц указывает максимальное фиксированное количество памяти, которые операции и кэш могут использовать. При этом для операций чтения используется мягкий лимит, который не должен превышаться при нормальных условиях и который составляет 30% от заданного фиксированного лимита.
+
+Лимиты колоночных таблиц могут настраиваться двумя способами:
+- Процент от жёсткого лимита памяти, доступного для процесса;
+- Фиксированный размер в байтах.
+
+Пример секции `memory_controller_config` с указанным лимитом в процентах от жёсткого лимита для компактизации:
+
+```yaml
+memory_controller_config:
+  column_tables_compaction_limit_percent: 20
+```
+
 ### Параметры конфигурации
 
 Каждый параметр конфигурации применяется в контексте одного узла базы данных.
@@ -629,6 +650,9 @@ $Max(shared\_cache\_min\_percent * hard\_limit\_bytes / 100, shared\_cache\_min\
 | `mem_table_min_percent`&nbsp;/<br/>`mem_table_min_bytes` | 1% | Минимальный порог для лимита памяти MemTable. |
 | `mem_table_max_percent`&nbsp;/<br/>`mem_table_max_bytes` | 3% | Максимальный порог для лимита памяти MemTable. |
 | `query_execution_limit_percent`&nbsp;/<br/>`query_execution_limit_bytes` | 20% | Лимит памяти для KQP. |
+| `column_tables_read_execution_limit_percent`&nbsp;/<br/>`column_tables_read_execution_limit_bytes` | 20% | Лимит памяти для операций чтения колоночных таблиц. |
+| `column_tables_compaction_limit_percent`&nbsp;/<br/>`column_tables_compaction_limit_bytes` | 36% | Лимит памяти для операций компактизации колоночных таблиц. |
+| `column_tables_cache_limit_percent`&nbsp;/<br/>`column_tables_cache_limit_bytes` | 4% | Лимит памяти для кэша колоночных таблиц. |
 
 ## blob_storage_config — статическая группа кластера {#blob-storage-config}
 

@@ -734,8 +734,7 @@ protected:
         if (!pileMap) {
             return;
         }
-        for (size_t pileId = 0; pileId < pileMap->size(); ++pileId) {
-            const auto& pile = (*pileMap)[pileId];
+        for (const auto& pile : *pileMap) {
             auto* pileInfo = newInfo.MutablePiles()->Add();
             for (const auto nodeId : pile) {
                 pileInfo->MutableNodeIds()->Add(nodeId);

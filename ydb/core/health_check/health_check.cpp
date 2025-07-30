@@ -846,22 +846,10 @@ public:
         return UnknownStaticGroups.contains(groupId) || (!HaveAllBSControllerInfo() && IsStaticGroup(groupId));
     }
 
-    bool HaveStorageConfig() {
-        if (!NodeWardenStorageConfig->IsOk()) {
-            return false;
-        }
-        if (IsBridgeMode(TActivationContext::AsActorContext())) {
-            return (bool)(NodeWardenStorageConfig->Get()->BridgeInfo);
-        }
-        return true;
-    }
-
     void Handle(TEvNodeWardenStorageConfig::TPtr ev) {
-        if (HaveStorageConfig()) {
-            return;
-        }
         NodeWardenStorageConfig->Set(std::move(ev));
         const NKikimrBlobStorage::TStorageConfig& config = *NodeWardenStorageConfig->Get()->Config;
+        RequestDone("TEvNodeWardenStorageConfig");
         if (config.GetSelfManagementConfig().GetEnabled() && config.GetGeneration() == 0) {
             auto result = MakeHolder<TEvSelfCheckResult>();
             result->Result.set_self_check_result(Ydb::Monitoring::SelfCheck_Result::SelfCheck_Result_MAINTENANCE_REQUIRED);
@@ -919,9 +907,6 @@ public:
                     }
                 }
             }
-        }
-        if (HaveStorageConfig()) {
-            RequestDone("TEvNodeWardenStorageConfig");
         }
     }
 
@@ -1168,7 +1153,7 @@ public:
 
     [[nodiscard]] TRequestResponse<TEvNodeWardenStorageConfig> RequestStorageConfig() {
         TRequestResponse<TEvNodeWardenStorageConfig> response(Span.CreateChild(TComponentTracingLevels::TTablet::Detailed, TypeName<TEvNodeWardenQueryStorageConfig>()));
-        Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), new TEvNodeWardenQueryStorageConfig(true), 0/*flags*/, 0/*cookie*/, response.Span.GetTraceId());
+        Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), new TEvNodeWardenQueryStorageConfig(false), 0/*flags*/, 0/*cookie*/, response.Span.GetTraceId());
         ++Requests;
         return response;
     }
@@ -2101,12 +2086,13 @@ public:
         }
         std::sort(computeNodeIds->begin(), computeNodeIds->end());
         computeNodeIds->erase(std::unique(computeNodeIds->begin(), computeNodeIds->end()), computeNodeIds->end());
+        bool bridgeMode = NodeWardenStorageConfig && NodeWardenStorageConfig->Get()->BridgeInfo;
         if (computeNodeIds->empty()) {
             context.ReportStatus(Ydb::Monitoring::StatusFlag::RED, "There are no compute nodes", ETags::ComputeState);
         } else {
             std::vector<TString> activePiles = {""};
             std::unordered_map<TString, TSelfCheckContext> pileContext;
-            if (IsBridgeMode(TActivationContext::AsActorContext())) {
+            if (bridgeMode) {
                 for (size_t i = 0; i < AppData()->BridgeConfig.PilesSize(); ++i) {
                     const auto& pile = NodeWardenStorageConfig->Get()->BridgeInfo->Piles[i];
                     const auto& pileName = AppData()->BridgeConfig.GetPiles(i).GetName();
@@ -2155,7 +2141,7 @@ public:
             context.ReportStatus(systemStatus, "Compute has issues with system tablets", ETags::ComputeState, {ETags::SystemTabletState});
         }
         FillComputeDatabaseStatus(databaseState, computeStatus, {&context, "COMPUTE_QUOTA"});
-        if (IsBridgeMode(TActivationContext::AsActorContext())) {
+        if (bridgeMode) {
             context.ReportWithMaxChildStatus("There are compute issues", ETags::ComputeState, {ETags::PileComputeState});
         } else {
             report(context, ETags::ComputeState);

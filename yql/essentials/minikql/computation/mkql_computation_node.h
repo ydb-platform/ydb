@@ -126,6 +126,7 @@ struct TComputationContext : public TComputationContextLLVM {
     const NUdf::ILogProvider* LogProvider;
     NYql::TLangVersion LangVer = NYql::UnknownLangVersion;
 
+
     TComputationContext(const THolderFactory& holderFactory,
         const NUdf::IValueBuilder* builder,
         const TComputationOptsFull& opts,

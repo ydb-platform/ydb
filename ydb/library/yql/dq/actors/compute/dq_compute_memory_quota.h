@@ -73,6 +73,35 @@ namespace NYql::NDq {
             });
         }
 
+        bool AllocateQuota(ui64 bytes, NKikimr::NMiniKQL::TScopedAlloc* alloc) {
+            bool allocated = MemoryLimits.MemoryQuotaManager->AllocateQuota(bytes);
+            if (MemoryLimits.MemoryQuotaManager->IsReasonableToUseSpilling()) {
+                alloc->SetMaximumLimitValueReached(true);
+            } else {
+                alloc->SetMaximumLimitValueReached(false);
+            }
+
+            if (MkqlMemoryQuota) {
+                MkqlMemoryQuota->Add(bytes);
+            }
+            return allocated;
+        }
+
+        void FreeQuota(ui64 bytes, NKikimr::NMiniKQL::TScopedAlloc* alloc) {
+            if (!MkqlMemoryLimit) {
+                return;
+            }
+            MemoryLimits.MemoryQuotaManager->FreeQuota(bytes);
+            if (MemoryLimits.MemoryQuotaManager->IsReasonableToUseSpilling()) {
+                alloc->SetMaximumLimitValueReached(true);
+            } else {
+                alloc->SetMaximumLimitValueReached(false);
+            }
+            if (MkqlMemoryQuota) {
+                MkqlMemoryQuota->Sub(bytes);
+            }
+        }
+
         void TryShrinkMemory(NKikimr::NMiniKQL::TScopedAlloc* alloc) {
             if (alloc->GetAllocated() - alloc->GetUsed() > MemoryLimits.MinMemFreeSize) {
                 alloc->ReleaseFreePages();

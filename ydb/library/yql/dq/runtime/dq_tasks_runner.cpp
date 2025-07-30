@@ -299,6 +299,8 @@ public:
         SpillerFactory = spillerFactory;
     }
 
+
+
     TString GetOutputDebugString() override {
         if (AllocatedHolder->Output) {
             switch (AllocatedHolder->Output->GetFillLevel()) {
@@ -760,7 +762,7 @@ public:
     }
 
     ERunStatus Run() final {
-        LOG(TStringBuilder() << "Run task: " << TaskId);
+        // LOG(TStringBuilder() << "Run task: " << TaskId);
         if (!AllocatedHolder->ResultStream) {
             auto guard = BindAllocator();
             TBindTerminator term(AllocatedHolder->ProgramParsed.CompGraph->GetTerminator());

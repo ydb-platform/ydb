@@ -40,6 +40,7 @@ protected:
     explicit TSchedulableActorHelper(TOptions&& options);
 
     static TMonotonic Now();
+    bool IsAccountable() const;
     bool IsSchedulable() const;
 
     bool StartExecution(TMonotonic now);

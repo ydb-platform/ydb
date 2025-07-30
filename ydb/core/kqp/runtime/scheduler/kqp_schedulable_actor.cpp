@@ -97,7 +97,6 @@ TSchedulableActorHelper::TSchedulableActorHelper(TOptions&& options)
     , Schedulable(options.IsSchedulable)
     , LastExecutionTime(AverageExecutionTime)
 {
-    Y_ENSURE(SchedulableTask);
 }
 
 // static
@@ -105,11 +104,16 @@ TMonotonic TSchedulableActorHelper::Now() {
     return TMonotonic::Now();
 }
 
+bool TSchedulableActorHelper::IsAccountable() const {
+    return !!SchedulableTask;
+}
+
 bool TSchedulableActorHelper::IsSchedulable() const {
     return Schedulable;
 }
 
 bool TSchedulableActorHelper::StartExecution(TMonotonic now) {
+    Y_ASSERT(SchedulableTask);
     Y_ASSERT(!Executed);
 
     Y_DEFER {
@@ -147,6 +151,8 @@ bool TSchedulableActorHelper::StartExecution(TMonotonic now) {
 }
 
 void TSchedulableActorHelper::StopExecution() {
+    Y_ASSERT(SchedulableTask);
+
     if (Executed) {
         Y_ASSERT(!Throttled);
 
@@ -161,6 +167,8 @@ void TSchedulableActorHelper::StopExecution() {
 }
 
 TDuration TSchedulableActorHelper::CalculateDelay(TMonotonic) const {
+    Y_ASSERT(SchedulableTask);
+
     const auto query = SchedulableTask->Query;
     const auto snapshot = query->GetSnapshot();
 

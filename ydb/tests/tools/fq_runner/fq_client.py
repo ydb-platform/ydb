@@ -229,6 +229,23 @@ class FederatedQueryClient(object):
         return FederatedQueryClient.Response(response.operation.issues, result, check_issues)
 
     @retry.retry_intrusive
+    def list_queries(self, visibility, name_substring=None, limit=100, check_issues=True, page_token=""):
+        request = fq.ListQueriesRequest()
+        request.filter.visibility = visibility
+        request.limit = limit
+        request.page_token = page_token
+        if name_substring:
+            request.filter.name = name_substring
+        response = self.service.ListQueries(
+            request,
+            metadata=self._create_meta(),
+            timeout=CONTROL_PLANE_REQUEST_TIMEOUT,
+        )
+        result = fq.ListQueriesResult()
+        response.operation.result.Unpack(result)
+        return FederatedQueryClient.Response(response.operation.issues, result, check_issues)
+
+    @retry.retry_intrusive
     def control_query(self, query_id, action, check_issues=True):
         request = fq.ControlQueryRequest()
         request.query_id = query_id

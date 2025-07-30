@@ -30,6 +30,6 @@ message TMemoryControllerConfig {
     optional uint64 ColumnTablesReadExecutionLimitBytes = 201;
     optional float ColumnTablesCompactionLimitPercent = 202 [default = 36];
     optional uint64 ColumnTablesCompactionLimitBytes = 203;
-    optional float ColumnTablesCacheLimitPercent = 204 [default = 4];
+    optional float ColumnTablesCacheLimitPercent = 204 [default = 10];
     optional uint64 ColumnTablesCacheLimitBytes = 205;
 }

@@ -134,8 +134,12 @@ public:
         , NodePortionsCountLimit(nodePortionsCountLimit) {
         Counters->NodePortionsCountLimit->Set(NodePortionsCountLimit);
     }
-    bool IsOverloaded() const {
-        if (NodePortionsCountLimit <= NodePortionsCounter.Val()) {
+    bool IsOverloaded(const std::optional<ui32>& dynamicNodePortionsCountLimit) const {
+        if (dynamicNodePortionsCountLimit) {
+            if (*dynamicNodePortionsCountLimit <= NodePortionsCounter.Val()) {
+                return true;
+            }
+        } else if (NodePortionsCountLimit <= NodePortionsCounter.Val()) {
             return true;
         }
         return DoIsOverloaded();

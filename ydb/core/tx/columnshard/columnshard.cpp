@@ -87,6 +87,7 @@ void TColumnShard::TrySwitchToWork(const TActorContext& ctx) {
     ctx.Send(SelfId(), new NActors::TEvents::TEvWakeup());
     ctx.Send(SelfId(), new TEvPrivate::TEvPeriodicWakeup());
     ctx.Send(SelfId(), new TEvPrivate::TEvPingSnapshotsUsage());
+    Send(NMemory::MakeMemoryControllerId(), new NMemory::TEvPortionsConsumerRegister());
     NYDBTest::TControllers::GetColumnShardController()->OnSwitchToWork(TabletID());
     AFL_VERIFY(!!StartInstant);
     Counters.GetCSCounters().Initialization.OnSwitchToWork(TMonotonic::Now() - *StartInstant, TMonotonic::Now() - CreateInstant);

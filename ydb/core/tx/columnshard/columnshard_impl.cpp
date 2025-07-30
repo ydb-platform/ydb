@@ -972,6 +972,7 @@ void TColumnShard::Die(const TActorContext& ctx) {
     UnregisterMediatorTimeCast();
     NYDBTest::TControllers::GetColumnShardController()->OnTabletStopped(*this);
     Send(SpaceWatcherId, new NActors::TEvents::TEvPoison);
+    Send(NMemory::MakeMemoryControllerId(), new NMemory::TEvPortionsConsumerUnregister());
     IActor::Die(ctx);
 }
 
@@ -1506,6 +1507,17 @@ void TColumnShard::OnTieringModified(const std::optional<TInternalPathId> pathId
 const NKikimr::NColumnShard::NTiers::TManager* TColumnShard::GetTierManagerPointer(const TString& tierId) const {
     Y_ABORT_UNLESS(!!Tiers);
     return Tiers->GetManagerOptional(tierId);
+}
+
+void TColumnShard::Handle(NMemory::TEvConsumerRegistered::TPtr&, const TActorContext&) {
+    // TODO: Calculate consumption
+}
+
+void TColumnShard::Handle(NMemory::TEvConsumerLimit::TPtr& ev, const TActorContext&) {
+    const ui64 limitBytes = ev->Get()->LimitBytes;
+    const ui64 averagePortionSize = 2 << 10; // TODO: calculate bytes in optimizer
+
+    DynamicNodePortionsCountLimit = limitBytes / averagePortionSize;
 }
 
 } // namespace NKikimr::NColumnShard

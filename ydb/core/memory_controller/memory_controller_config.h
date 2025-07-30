@@ -108,4 +108,8 @@ inline ui64 GetDataAccessorCacheBytes(const NKikimrConfig::TMemoryControllerConf
 inline ui64 GetColumnDataCacheBytes(const NKikimrConfig::TMemoryControllerConfig& config, const ui64 hardLimitBytes) {
     return GetColumnTablesCacheLimitBytes(config, hardLimitBytes) * NKikimr::NOlap::TGlobalLimits::ColumnDataCacheCoefficient;
 }
+
+inline ui64 GetPortionsBytes(const NKikimrConfig::TMemoryControllerConfig& config, const ui64 hardLimitBytes) {
+    return GetColumnTablesCacheLimitBytes(config, hardLimitBytes) * NKikimr::NOlap::TGlobalLimits::PortionsCoefficient;
+}
 }

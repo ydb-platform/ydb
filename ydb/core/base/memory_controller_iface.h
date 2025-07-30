@@ -13,6 +13,7 @@ enum class EMemoryConsumerKind {
     DataAccessorCache,
     ColumnDataCache,
     DeduplicationGroupedMemoryLimiter,
+    Portions,
 };
 
 struct IMemoryConsumer : public TThrRefBase {
@@ -29,6 +30,9 @@ enum EEvMemory {
     EvMemTableCompact,
     EvMemTableCompacted,
     EvMemTableUnregister,
+
+    EvPortionsConsumerRegister,
+    EvPortionsConsumerUnregister,
 
     EvEnd
 };
@@ -101,6 +105,12 @@ struct TEvMemTableUnregister : public TEventLocal<TEvMemTableUnregister, EvMemTa
     TEvMemTableUnregister(ui32 table)
         : Table(table)
     {}
+};
+
+struct TEvPortionsConsumerRegister: public TEventLocal<TEvPortionsConsumerRegister, EvPortionsConsumerRegister> {
+};
+
+struct TEvPortionsConsumerUnregister: public TEventLocal<TEvPortionsConsumerUnregister, EvPortionsConsumerUnregister> {
 };
 
 inline TActorId MakeMemoryControllerId(ui64 id = 0) {

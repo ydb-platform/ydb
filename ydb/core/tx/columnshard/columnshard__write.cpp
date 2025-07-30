@@ -62,7 +62,7 @@ TColumnShard::EOverloadStatus TColumnShard::CheckOverloadedWait(const TInternalP
         if (TablesManager.GetPrimaryIndexAsVerified<NOlap::TColumnEngineForLogs>()
                 .GetGranuleVerified(pathId)
                 .GetOptimizerPlanner()
-                .IsOverloaded()) {
+                .IsOverloaded(DynamicNodePortionsCountLimit)) {
             return EOverloadStatus::OverloadCompaction;
         }
     }

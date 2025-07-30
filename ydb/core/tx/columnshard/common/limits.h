@@ -29,13 +29,14 @@ public:
 
     static constexpr double GroupedMemoryLimiterSoftLimitCoefficient = 0.3;
 
-    static constexpr double BlobCacheCoefficient = 0.4;
-    static constexpr double DataAccessorCoefficient = 0.3;
-    static constexpr double ColumnDataCacheCoefficient = 0.3;
+    static constexpr double BlobCacheCoefficient = 0.16;
+    static constexpr double DataAccessorCoefficient = 0.12;
+    static constexpr double ColumnDataCacheCoefficient = 0.12;
+    static constexpr double PortionsCoefficient = 0.6;
 
-    static_assert((BlobCacheCoefficient + DataAccessorCoefficient + ColumnDataCacheCoefficient - 1.0 < std::numeric_limits<double>::epsilon()) &&
-                      (1.0 - (BlobCacheCoefficient + DataAccessorCoefficient + ColumnDataCacheCoefficient) <
-                          std::numeric_limits<double>::epsilon()), "Cache coefficients sum must be equal to 1.0");
+    static_assert((BlobCacheCoefficient + DataAccessorCoefficient + ColumnDataCacheCoefficient + PortionsCoefficient - 1.0 < std::numeric_limits<double>::epsilon()) &&
+            (1.0 - (BlobCacheCoefficient + DataAccessorCoefficient + ColumnDataCacheCoefficient + PortionsCoefficient) < std::numeric_limits<double>::epsilon()),
+        "Cache coefficients sum must be equal to 1.0");
 
     static constexpr double DeduplicationInScanMemoryFraction = 0.5;
 };

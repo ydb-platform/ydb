@@ -52,7 +52,7 @@ jobs:
           TOKEN: ${{ env.GH_TOKEN }}
         run: |
           ./.github/scripts/cherry_pick.py \
-            --pulls="${{ inputs.pulls }}"
+            --pulls="${{ inputs.pulls }}" \
             --commits="${{ inputs.commits }}" \
             --target-branches="${{ inputs.target_branches }}" \
             --issue=${{ inputs.issue_number }}

@@ -215,4 +215,7 @@ TExprNode::TPtr MakeAtomList(TPositionHandle pos, const C& container, TExprConte
 
 TExprNode::TPtr ReplaceUnessentials(TExprNode::TPtr predicate, TExprNode::TPtr row, const TNodeSet& banned, TExprContext& ctx);
 
+bool IsDependsOnUsage(const TExprNode& node, const TParentsMap& parentsMap);
+bool IsNormalizedDependsOn(const TExprNode& node);
+
 }

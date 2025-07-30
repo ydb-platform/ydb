@@ -1064,6 +1064,21 @@ namespace {
                     ctx.AddError(TIssue(pos, TStringBuilder() << "Expected `default|dq|ytflow', but got: " << arg));
                     return false;
                 }
+            } else if (name == "NormalizeDependsOn") {
+                if (args.size() > 1) {
+                    ctx.AddError(TIssue(pos, TStringBuilder() << "Expected at most 1 argument, but got " << args.size()));
+                    return false;
+                }
+
+                bool res = true;
+                if (!args.empty()) {
+                    if (!TryFromString(args[0], res)) {
+                        ctx.AddError(TIssue(pos, TStringBuilder() << "Expected bool, but got: " << args[0]));
+                        return false;
+                    }
+                }
+
+                Types_.NormalizeDependsOn = res;
             } else {
                 ctx.AddError(TIssue(pos, TStringBuilder() << "Unsupported command: " << name));
                 return false;

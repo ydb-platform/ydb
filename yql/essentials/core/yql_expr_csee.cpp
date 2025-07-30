@@ -499,7 +499,7 @@ namespace {
             }
             internal.erase(&node);
         } else {
-            insideDependsOn = insideDependsOn || node.IsCallable("DependsOn");
+            insideDependsOn = insideDependsOn || NNodes::TCoDependsOnBase::Match(&node);
             node.ForEachChild(std::bind(&CalculateCompletness, std::placeholders::_1, insideDependsOn, level, std::ref(internal),
                 std::ref(visited), std::ref(visitedInsideDependsOn)));
         }

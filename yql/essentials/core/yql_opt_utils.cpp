@@ -475,7 +475,7 @@ bool HaveFieldsSubset(const TExprNode::TPtr& start, const TExprNode& arg, TField
                 usedFields.emplace(parent->Tail().Content());
             else
                 usedFields.emplace(parent->Tail().Content(), parent->TailPtr());
-        } else if (allowDependsOn && parent->IsCallable("DependsOn")) {
+        } else if (allowDependsOn && TCoDependsOnBase::Match(parent)) {
             continue;
         } else {
             // unknown node
@@ -509,7 +509,7 @@ TExprNode::TPtr AddMembersUsedInside(const TExprNode::TPtr& start, const TExprNo
 
     TNodeSet nodes;
     VisitExpr(start, [&](const TExprNode::TPtr& node) {
-        if (!node->IsCallable("DependsOn"))
+        if (!TCoDependsOnBase::Match(node.Get()))
             nodes.emplace(node.Get());
         return true;
     });
@@ -1689,7 +1689,7 @@ std::pair<TExprNode::TPtr, TExprNode::TPtr> ReplaceDependsOn(TExprNode::TPtr lam
     auto placeHolder = ctx.NewArgument(lambda->Pos(), "placeholder");
 
     auto status = OptimizeExpr(lambda, lambda, [&placeHolder, arg = &lambda->Head().Head()](const TExprNode::TPtr& node, TExprContext& ctx) -> TExprNode::TPtr {
-        if (TCoDependsOn::Match(node.Get()) && &node->Head() == arg) {
+        if (TCoDependsOnBase::Match(node.Get()) && &node->Head() == arg) {
             return ctx.ChangeChild(*node, 0, TExprNode::TPtr(placeHolder));
         }
         return node;
@@ -1880,7 +1880,7 @@ TExprNode::TPtr FindNonYieldTransparentNodeImpl(const TExprNode::TPtr& root, con
     auto depensOnFlow = [&flowSources](const TExprNode::TPtr& node) {
         return !!FindNode(node,
             [](const TExprNode::TPtr& n) {
-                return !TCoDependsOn::Match(n.Get());
+                return !TCoDependsOnBase::Match(n.Get());
             },
             [&flowSources](const TExprNode::TPtr& n) {
                 return flowSources.contains(n.Get());
@@ -1890,7 +1890,7 @@ TExprNode::TPtr FindNonYieldTransparentNodeImpl(const TExprNode::TPtr& root, con
 
     auto candidates = FindNodes(root,
         [&flowSources](const TExprNode::TPtr& node) {
-            if (flowSources.contains(node.Get()) || TCoDependsOn::Match(node.Get())) {
+            if (flowSources.contains(node.Get()) || TCoDependsOnBase::Match(node.Get())) {
                 return false;
             }
             if (node->ChildrenSize() > 0 && node->Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::World) {
@@ -2045,14 +2045,14 @@ bool HasDependsOn(const TExprNode::TPtr& root, const TExprNode::TPtr& arg) {
     size_t insideDependsOn = 0;
 
     VisitExpr(root, [&](const TExprNode::TPtr& node) {
-        if (node->IsCallable("DependsOn")) {
+        if (TCoDependsOnBase::Match(node.Get())) {
             ++insideDependsOn;
         } else if (insideDependsOn && node == arg) {
             withDependsOn = true;
         }
         return !withDependsOn;
     }, [&](const TExprNode::TPtr& node) {
-        if (node->IsCallable("DependsOn")) {
+        if (TCoDependsOnBase::Match(node.Get())) {
             YQL_ENSURE(insideDependsOn > 0);
             --insideDependsOn;
         }
@@ -2604,6 +2604,35 @@ TExprNode::TPtr ReplaceUnessentials(TExprNode::TPtr predicate, TExprNode::TPtr r
     }
 
     return ctx.ReplaceNodes(std::move(predicate), replaces);
+}
+
+bool IsDependsOnUsage(const TExprNode& node, const TParentsMap& parentsMap) {
+    if (TCoDependsOnBase::Match(&node)) {
+        return true;
+    } else if (node.IsList()) {
+        auto it = parentsMap.find(&node);
+        if (it != parentsMap.end()) {
+            auto& listUsages = it->second;
+            if (AllOf(listUsages.begin(), listUsages.end(), [](const TExprNode* usage) { return TCoDependsOnBase::Match(usage); })) {
+                return true;
+            }
+        }
+    }
+
+    return false;
+}
+
+bool IsNormalizedDependsOn(const TExprNode& node) {
+    YQL_ENSURE(TCoDependsOnBase::Match(&node));
+
+    if (TCoDataCtor::Match(&node.Head()) || node.Head().IsArgument()) {
+        return true;
+    }
+    if (node.Head().IsList() && AllOf(node.Head().Children(), [](const TExprNode::TPtr& child) { return TCoDataCtor::Match(child.Get()) || child->IsArgument(); })) {
+        return true;
+    }
+
+    return false;
 }
 
 }

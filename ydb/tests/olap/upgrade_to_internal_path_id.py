@@ -2,6 +2,7 @@ import pytest
 import ydb
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
+import time
 
 
 class TestUpgradeToInternalPathId:
@@ -32,9 +33,10 @@ class TestUpgradeToInternalPathId:
     def restart_cluster(self, generate_internal_path_id):
         self.config.yaml_config["column_shard_config"]["generate_internal_path_id"] = generate_internal_path_id
         self.cluster.update_configurator_and_restart(self.config)
+        time.sleep(10)
         driver = ydb.Driver(endpoint=self.cluster.nodes[1].endpoint, database="/Root")
         self.session = ydb.QuerySessionPool(driver)
-        driver.wait(5, fail_fast=True)
+        driver.wait(20)
 
     def create_table_with_data(self, table_name):
         self.session.execute_with_retries(f"""

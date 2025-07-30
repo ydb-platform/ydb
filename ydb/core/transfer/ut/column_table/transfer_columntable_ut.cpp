@@ -118,4 +118,9 @@ Y_UNIT_TEST_SUITE(Transfer_ColumnTable)
     {
         ProcessingTargetTable(TableType);
     }
+
+    Y_UNIT_TEST(ProcessingTargetTableOtherType)
+    {
+        ProcessingTargetTableOtherType(TableType);
+    }
 }

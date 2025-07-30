@@ -61,6 +61,14 @@ private:
         ctx.Send(Sender, ev, 0, Cookie);
     }
 
+    bool ValidateTable(TString& errorMessage) override {
+        if (GetTableKind() != NSchemeCache::TSchemeCacheNavigate::KindTable) {
+            errorMessage = "Only the OLTP table is supported";
+            return false;
+        }
+        return true;
+    }
+
     void RaiseIssue(const NYql::TIssue& issue) override {
         Issues.AddIssue(issue);
     }

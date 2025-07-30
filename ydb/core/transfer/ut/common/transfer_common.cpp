@@ -811,6 +811,64 @@ void ProcessingTargetTable(const std::string& tableType) {
     testCase.DropTopic();
 }
 
+void ProcessingTargetTableOtherType(const std::string& tableType) {
+    MainTestCase testCase(std::nullopt, tableType);
+
+    testCase.CreateTable(R"(
+            CREATE TABLE `%s` (
+                Key Uint64 NOT NULL,
+                Message Utf8,
+                PRIMARY KEY (Key)
+            )  WITH (
+                STORE = %s
+            );
+        )");
+
+    auto otherType = tableType == "ROW" ? "COLUMN" : "ROW";
+    testCase.ExecuteDDL(Sprintf(R"(
+            CREATE TABLE `%s_1` (
+                Key Uint64 NOT NULL,
+                Message Utf8,
+                PRIMARY KEY (Key)
+            )  WITH (
+                STORE = %s
+            );
+        )", testCase.TableName.data(), otherType));
+
+
+    testCase.CreateTopic(1);
+    testCase.CreateTransfer(Sprintf(R"(
+            $l = ($x) -> {
+                return [
+                    <|
+                        Key: $x._offset,
+                        Message:CAST($x._data AS Utf8)
+                    |>,
+                    <|
+                        __ydb_table: "%s_1",
+                        Key: $x._offset,
+                        Message:CAST($x._data || "_1" AS Utf8)
+                    |>,
+                ];
+            };
+        )", testCase.TableName.data(), testCase.TableName.data()),
+        MainTestCase::CreateTransferSettings::WithDirectory("/local"));
+
+    testCase.Write({"Message-1"});
+
+    testCase.CheckResult({{
+        _C("Key", ui64{0}),
+        _C("Message", TString{"Message-1"}),
+    }});
+
+    testCase.CheckTransferStateError("Error: Bulk upsert to table 'local/Table_");
+
+
+    testCase.DropTransfer();
+    testCase.DropTable();
+    testCase.DropTopic();
+}
+
 void Upsert_DifferentBatch(const std::string& tableType) {
     MainTestCase testCase(std::nullopt, tableType);
     testCase.CreateTable(R"(

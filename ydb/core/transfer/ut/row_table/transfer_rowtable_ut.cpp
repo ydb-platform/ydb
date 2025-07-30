@@ -129,6 +129,11 @@ Y_UNIT_TEST_SUITE(Transfer_RowTable)
         ProcessingTargetTable(TableType);
     }
 
+    Y_UNIT_TEST(ProcessingTargetTableOtherType)
+    {
+        ProcessingTargetTableOtherType(TableType);
+    }
+
     Y_UNIT_TEST(TableWithSyncIndex) {
         MainTestCase testCase(std::nullopt, TableType);
 

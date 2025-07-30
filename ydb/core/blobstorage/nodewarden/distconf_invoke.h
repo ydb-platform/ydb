@@ -158,6 +158,7 @@ namespace NKikimr::NStorage {
 
         void AdvanceGeneration();
         void StartProposition(NKikimrBlobStorage::TStorageConfig *config, bool acceptLocalQuorum = false,
+            bool requireScepter = true, bool mindPrev = true,
             const NKikimrBlobStorage::TStorageConfig *propositionBase = nullptr);
         void Handle(TEvPrivate::TEvConfigProposed::TPtr ev);
 

@@ -215,6 +215,8 @@ void TNodeWarden::Handle(TEvNodeWardenQueryCacheResult::TPtr ev) {
         if (success) {
             Y_DEBUG_ABORT_UNLESS(groupInfo.GetGroupGeneration() == generation);
             ApplyGroupInfo(groupId, generation, &groupInfo, false, false);
+        } else {
+            Y_DEBUG_ABORT("failed to parse group configuration");
         }
     }
 }

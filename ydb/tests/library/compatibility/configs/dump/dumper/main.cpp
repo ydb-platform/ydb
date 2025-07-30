@@ -1,6 +1,8 @@
 #include <ydb/core/protos/config.pb.h>
 #include <library/cpp/json/json_value.h>
 #include <library/cpp/json/json_writer.h>
+#include <library/cpp/svnversion/svnversion.h>
+#include <util/string/split.h>
 
 #include <google/protobuf/descriptor.h>
 #include <google/protobuf/descriptor.pb.h>
@@ -146,5 +148,7 @@ int main(int argc, const char** argv) {
     const auto defaultConf = NKikimrConfig::TAppConfig::default_instance();
     NJson::TJsonValue json;
     Proto2Json(defaultConf, json["proto"]);
+    json["branch"] = StringSplitter(GetBranch()).Split('/').ToList<TString>().back();
+    json["commit"] = GetProgramCommitId();
     NJson::WriteJson(&Cout, &json, true, true);
 }

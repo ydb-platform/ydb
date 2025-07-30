@@ -892,7 +892,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
 
             if (target.HasDirectoryPath()) {
                 auto toWriteDir = TPathToResolve(pbModifyScheme);
-                toWriteDir.Path = SplitPath(target.GetDstPath());
+                toWriteDir.Path = SplitPath(target.GetDirectoryPath());
                 toWriteDir.RequireAccess = NACLib::EAccessRights::UpdateRow;
                 ResolveForACL.push_back(toWriteDir);
             }

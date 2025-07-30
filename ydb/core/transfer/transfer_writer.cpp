@@ -133,10 +133,6 @@ private:
             return;
         }
 
-        auto path = entry.Path;
-        path.pop_back();
-        Database = JoinPath(path);
-
         DefaultTablePath = JoinPath(entry.Path);
 
         if (entry.Kind == TNavigate::KindColumnTable) {
@@ -292,8 +288,14 @@ private:
 
                     TString tablePath;
                     if (m->Table) {
-                        if (!DirectoryPath.empty()) {
-                            tablePath = JoinPath({ Database, m->Table.value()});
+                        if (TargetDirectoryPath) {
+                            auto table = TFsPath(JoinPath({ DirectoryPath, m->Table.value()}));
+                            if (table.IsSubpathOf(TargetDirectoryPath.value())) {
+                                tablePath = table;
+                            } else {
+                                setError(TStringBuilder() << "the target table '" << m->Table.value() << "' is outside target directory");
+                                continue;
+                            }
                         } else {
                             setError("it is not allowed to specify a table to write");
                             continue;
@@ -302,7 +304,6 @@ private:
                         tablePath = DefaultTablePath;
                     }
 
-                    
                     TableState->AddData(std::move(tablePath), m->Data);
                 }
 
@@ -438,18 +439,41 @@ public:
         return NKikimrServices::TActivity::REPLICATION_TRANSFER_WRITER;
     }
 
+    static std::optional<TFsPath> MakeTargetDirectoryPath(const TString& database, const TString& directoryPath) {
+        if (directoryPath.empty()) {
+            return std::nullopt;
+        }
+
+        TFsPath db(database);
+        TFsPath dir(directoryPath);
+
+        if (dir.IsNonStrictSubpathOf(db)) {
+            return dir;
+        }
+
+        auto fullPath = dir.RelativePath(db);
+        if (fullPath.IsNonStrictSubpathOf(db)) {
+            return fullPath;
+        }
+
+        return std::nullopt;
+    }
+
     explicit TTransferWriter(
             const TString& transformLambda,
             const TPathId& tablePathId,
             const TActorId& compileServiceId,
             const NKikimrReplication::TBatchingSettings& batchingSettings,
-            const TString& directoryPath)
+            const TString& directoryPath,
+            const TString& database)
         : TransformLambda(transformLambda)
         , TablePathId(tablePathId)
         , CompileServiceId(compileServiceId)
         , FlushInterval(TDuration::MilliSeconds(std::max<ui64>(batchingSettings.GetFlushIntervalMilliSeconds(), 1000)))
         , BatchSizeBytes(std::min<ui64>(batchingSettings.GetBatchSizeBytes(), 1_GB))
         , DirectoryPath(directoryPath)
+        , Database(database)
+        , TargetDirectoryPath(MakeTargetDirectoryPath(database, directoryPath))
     {}
 
 private:
@@ -459,9 +483,10 @@ private:
     const TDuration FlushInterval;
     const ui64 BatchSizeBytes;
     const TString DirectoryPath;
+    const TString Database;
+    const std::optional<TFsPath> TargetDirectoryPath;
     TActorId Worker;
 
-    TString Database;
     TString DefaultTablePath;
 
     ITableKindState::TPtr TableState;
@@ -489,7 +514,7 @@ private:
 }; // TTransferWriter
 
 IActor* TTransferWriterFactory::Create(const Parameters& p) const {
-    return new TTransferWriter(p.TransformLambda, p.TablePathId, p.CompileServiceId, p.BatchingSettings, p.DirectoryPath);
+    return new TTransferWriter(p.TransformLambda, p.TablePathId, p.CompileServiceId, p.BatchingSettings, p.DirectoryPath, p.Database);
 }
 
 }

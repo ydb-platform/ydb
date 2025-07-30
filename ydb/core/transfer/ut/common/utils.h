@@ -6,6 +6,7 @@
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/scheme/scheme.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/accessor.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_scripting.h>
@@ -211,6 +212,12 @@ struct MainTestCase {
 
     ~MainTestCase() {
         Driver.Stop(true);
+    }
+
+    void CreateDirectory(const std::string& directoryName) {
+        NScheme::TSchemeClient schemeClient(Driver);
+        auto result = schemeClient.MakeDirectory(directoryName).GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToOneLineString());
     }
 
     auto Session() {
@@ -421,26 +428,26 @@ struct MainTestCase {
     void CreateTransfer(const std::string& lambda, const CreateTransferSettings& settings = CreateTransferSettings()) {
         std::vector<std::string> options;
         if (!settings.LocalTopic) {
-            options.push_back(TStringBuilder() << "CONNECTION_STRING = 'grpc://" << ConnectionString << "'" << Endl);
+            options.push_back(TStringBuilder() << "CONNECTION_STRING = 'grpc://" << ConnectionString << "'");
         }
         if (settings.ConsumerName) {
-            options.push_back(TStringBuilder() <<  "CONSUMER = '" << *settings.ConsumerName << "'" << Endl);
+            options.push_back(TStringBuilder() <<  "CONSUMER = '" << *settings.ConsumerName << "'");
         }
         if (settings.FlushInterval) {
-            options.push_back(TStringBuilder() <<  "FLUSH_INTERVAL = Interval('PT" << settings.FlushInterval->Seconds() << "S')" << Endl);
+            options.push_back(TStringBuilder() <<  "FLUSH_INTERVAL = Interval('PT" << settings.FlushInterval->Seconds() << "S')");
         }
         if (settings.BatchSizeBytes) {
-            options.push_back(TStringBuilder() <<  "BATCH_SIZE_BYTES = " << *settings.BatchSizeBytes << Endl);
+            options.push_back(TStringBuilder() <<  "BATCH_SIZE_BYTES = " << *settings.BatchSizeBytes);
         }
         if (settings.Username) {
-            options.push_back(TStringBuilder() <<  "TOKEN = '" << *settings.Username << "@builtin'" << Endl);
+            options.push_back(TStringBuilder() <<  "TOKEN = '" << *settings.Username << "@builtin'");
         }
         if (settings.Directory) {
-            options.push_back(TStringBuilder() <<  "DIRECTORY = '" << *settings.Directory << "'" << Endl);
+            options.push_back(TStringBuilder() <<  "DIRECTORY = '" << *settings.Directory << "'");
         }
 
         std::string topicName = settings.TopicName.value_or(TopicName);
-        std::string optionsStr = JoinRange(",", options.begin(), options.end());
+        std::string optionsStr = JoinRange(",\n", options.begin(), options.end());
 
         auto ddl = Sprintf(R"(
             %s;

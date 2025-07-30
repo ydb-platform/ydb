@@ -856,13 +856,7 @@ void ProcessingTargetTableOtherType(const std::string& tableType) {
 
     testCase.Write({"Message-1"});
 
-    testCase.CheckResult({{
-        _C("Key", ui64{0}),
-        _C("Message", TString{"Message-1"}),
-    }});
-
-    testCase.CheckTransferStateError("Error: Bulk upsert to table 'local/Table_");
-
+    testCase.CheckTransferStateError("Error: Bulk upsert to table '/local/Table_");
 
     testCase.DropTransfer();
     testCase.DropTable();

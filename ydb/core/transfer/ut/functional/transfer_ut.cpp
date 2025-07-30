@@ -1058,5 +1058,52 @@ Y_UNIT_TEST_SUITE(Transfer)
         testCase.DropTopic();
         testCase.DropTable();
     }
+
+    Y_UNIT_TEST(TargetTableWriteOutsideDirectory)
+    {
+        MainTestCase testCase;
+        testCase.CreateDirectory("/local/inner_directory");
+
+        testCase.CreateTable(R"(
+                CREATE TABLE `inner_directory/%s` (
+                    Key Uint64 NOT NULL,
+                    Message Utf8,
+                    PRIMARY KEY (Key)
+                );
+            )");
+        testCase.ExecuteDDL(R"(
+                CREATE TABLE `outside_directorty_table` (
+                    Key Uint64 NOT NULL,
+                    Message Utf8,
+                    PRIMARY KEY (Key)
+                );
+            )");
+
+        testCase.CreateTopic();
+
+        testCase.ExecuteDDL(Sprintf(R"(
+                $l = ($x) -> {
+                    return [
+                        <|
+                            __ydb_table: "../outside_directorty_table",
+                            Key:CAST($x._offset AS Uint64),
+                            Message:CAST($x._data AS Utf8)
+                        |>
+                    ];
+                };
+
+                CREATE TRANSFER `%s`
+                FROM `%s` TO `inner_directory/%s` USING $l
+                WITH (
+                    DIRECTORY = "/local/inner_directory"
+                );
+            )", testCase.TransferName.data(), testCase.TopicName.data(), testCase.TableName.data()));
+
+        testCase.Write({"Message-1"});
+        testCase.CheckTransferStateError("is outside target directory");
+
+        testCase.DropTransfer();
+        testCase.DropTopic();
+    }
 }
 

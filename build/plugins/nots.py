@@ -166,7 +166,6 @@ TS_TEST_FIELDS_BASE = (
     df.TestName.value,
     df.TestRecipes.value,
     df.TestTimeout.from_unit,
-    df.TsConfigPath.from_unit,
 )
 
 TS_TEST_SPECIFIC_FIELDS = {

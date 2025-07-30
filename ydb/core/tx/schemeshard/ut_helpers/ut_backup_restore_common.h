@@ -80,27 +80,29 @@ protected:
 };
 
 template <typename TPublicProto>
-class TPublicDescriber {
+class TPublicProtoDescriber {
 public:
-    const TPublicProto& GetPublic() const {
-        return Public;
+    const TPublicProto& GetPublicProto() const {
+        return PublicProto;
     }
 
     bool CompareWithString(const TString& str) const {
         TPublicProto proto;
         google::protobuf::TextFormat::ParseFromString(str, &proto);
 
-        return Public.DebugString() == proto.DebugString();
+        return PublicProto.DebugString() == proto.DebugString();
     } 
+
 protected:
-    TPublicProto Public;
+    TPublicProto PublicProto;
 };
 
 class TFileDescriber {
 public:
     TFileDescriber(const TString& dir, const TString& name) 
                   : Dir(dir)
-                  , Path(dir + name) {}
+                  , Path(dir + name) 
+    {}
 
     const TString& GetDir() const {
         return Dir;
@@ -115,20 +117,22 @@ protected:
     const TString Path;
 };
 
-class TPermissions : public TPublicDescriber<Ydb::Scheme::ModifyPermissionsRequest>
-                   , public TFileDescriber {
+class TPermissions : public TPublicProtoDescriber<Ydb::Scheme::ModifyPermissionsRequest>
+                   , public TFileDescriber
+{
 public:
     TPermissions(const TString& dir) : TFileDescriber(dir, "/permissions.pb") {
         google::protobuf::TextFormat::ParseFromString(
                                 R"(actions {
                                     change_owner: "root@builtin"
-                                })", &Public);
+                                })", &PublicProto);
     }
 };
 
 template <typename TSchemeProto, typename TPublicProto>
 class TObjectDescriber : public TSchemeDescriber<TSchemeProto>
-                       , public TPublicDescriber<TPublicProto> {
+                       , public TPublicProtoDescriber<TPublicProto>
+{
 public:
     template <typename TFormat>
     TFormat Get() const {return {};}
@@ -140,13 +144,14 @@ public:
 
     template <>
     const TPublicProto& Get<const TPublicProto&>() const {
-        return this->GetPublic();
+        return this->GetPublicProto();
     }
 };
 
 template <typename TSchemeProto, typename TPublicProto>
 class TSchemeObjectDescriber : public TObjectDescriber<TSchemeProto, TPublicProto> 
-                             , public TFileDescriber {
+                             , public TFileDescriber
+{
 public:
     TSchemeObjectDescriber(const TString& dir, const TString& name) 
                   : TFileDescriber(dir, name)
@@ -177,7 +182,6 @@ protected:
     TString ImportRequestItem;
 
 private:
-
     TString GetItemsFromTemp(const char* temp) {
         return Sprintf(temp, Dir.c_str(), Dir.c_str());
     }
@@ -202,7 +206,7 @@ public:
     TXxportRequest(const char* type, const TVector<TString>& items) {
         Request = Sprintf(RequestTemp, type, Reduce(items).c_str());
         ui64 pos = Request.find("localhost:0");
-        if (pos != std::string::npos) {
+        if (pos != TString::npos) {
             Request.erase(pos, 11);
             Request.insert(pos, "localhost:%d");
         }
@@ -255,18 +259,19 @@ public:
                   : TXxportRequest("ImportFromS3", items) {}
 };
 
-class TTopic : public TSchemeObjectDescriber<NKikimrSchemeOp::TPersQueueGroupDescription,
-                                             Ydb::Topic::CreateTopicRequest> {
+class TSimpleTopic : public TSchemeObjectDescriber<NKikimrSchemeOp::TPersQueueGroupDescription,
+                                             Ydb::Topic::CreateTopicRequest> 
+{
 private:
     class TConsumer : public TObjectDescriber<NKikimrPQ::TPQTabletConfig::TConsumer,
                                             Ydb::Topic::Consumer> {
     public:
         TConsumer(ui64 number, bool important = false) {
             google::protobuf::TextFormat::ParseFromString(Sprintf(ConsumerScheme, number), &Scheme);
-            google::protobuf::TextFormat::ParseFromString(Sprintf(ConsumerPublic, number), &Public);
+            google::protobuf::TextFormat::ParseFromString(Sprintf(ConsumerPublic, number), &PublicProto);
             Scheme.SetImportant(important);
             if (important) 
-                Public.set_important(important);
+                PublicProto.set_important(important);
         }
 
     private:
@@ -286,24 +291,24 @@ private:
     };
 
 public:
-    TTopic(ui64 number, ui64 countConsumers = 0) 
+    TSimpleTopic(ui64 number, ui64 countConsumers = 0) 
        : TSchemeObjectDescriber(Sprintf("/Topic_%d", number), "/create_topic.pb") {
         google::protobuf::TextFormat::ParseFromString(Sprintf(TopicScheme, number), &Scheme);
-        google::protobuf::TextFormat::ParseFromString(TopicPublic, &Public);
+        google::protobuf::TextFormat::ParseFromString(TopicPublic, &PublicProto);
 
         for (ui64 i = 0; i < countConsumers; ++i) {
             auto consumer = TConsumer(i, i % 2);
             *Scheme.MutablePQTabletConfig()->AddConsumers() = consumer.GetScheme();
-            *Public.mutable_consumers()->Add() = consumer.GetPublic();
+            *PublicProto.mutable_consumers()->Add() = consumer.GetPublicProto();
         }
     }
 
     const ::google::protobuf::RepeatedPtrField<Ydb::Topic::Consumer>& GetConsumers() const {
-        return Public.consumers();
+        return PublicProto.consumers();
     }
 
     TString GetCorruptedPublicFile() const {
-        Ydb::Topic::CreateTopicRequest corrupted = this->GetPublic();
+        Ydb::Topic::CreateTopicRequest corrupted = this->GetPublicProto();
         google::protobuf::Duration duration;
         duration.set_seconds(-1);
         duration.set_nanos(0);
@@ -325,7 +330,7 @@ private:
 
     const char* TopicPublic = R"(
         partitioning_settings {
-            min_active_partitions: 2
+            min_active_partitions: 1
             max_active_partitions: 1
             auto_partitioning_settings {
                 strategy: AUTO_PARTITIONING_STRATEGY_DISABLED
@@ -348,4 +353,4 @@ private:
     )";
 };
 
-} //NDesc
+} //NDescUT

@@ -5631,11 +5631,11 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         TTestEnv env(runtime);
         ui64 txId = 100;
         runtime.SetLogPriority(NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
-        auto topic = NDescUT::TTopic(0, 2);
+        auto topic = NDescUT::TSampleTopic(0, 2);
 
         const auto data = GenerateTestData({
                 EPathTypePersQueueGroup,
-                isCorrupted ? topic.GetCorruptedPublicFile() : topic.GetPublic().DebugString()
+                isCorrupted ? topic.GetCorruptedPublicFile() : topic.GetPublicProto().DebugString()
         });
 
         THashMap<TString, TTestDataWithScheme> bucketContent;
@@ -5689,7 +5689,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         runtime.SetLogPriority(NKikimrServices::EXPORT, NActors::NLog::PRI_TRACE);
         runtime.SetLogPriority(NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
 
-        auto topic = NDescUT::TTopic(1, 0);
+        auto topic = NDescUT::TSampleTopic(1, 0);
 
         TestCreatePQGroup(runtime, ++txId, "/MyRoot", topic.GetScheme().DebugString());
         env.TestWaitNotification(runtime, txId);
@@ -6259,11 +6259,11 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
     }
 
     Y_UNIT_TEST(ShouldSucceedOnSingleTopic) {
-        auto topic = NDescUT::TTopic(0, 2);
+        auto topic = NDescUT::TSampleTopic(0, 2);
         ShouldSucceed({{topic.GetDir(),
             {
                 EPathTypePersQueueGroup,
-                topic.GetPublic().DebugString()
+                topic.GetPublicProto().DebugString()
             }
         }}, NDescUT::TImportRequest({topic.GetImportRequestItem()}).GetRequest());
     }

@@ -238,7 +238,6 @@ private:
                 }
             }
         }
-        Cerr << "  found  " << node.NodeId << Endl;
 
         response->Record.ClearError();
         auto& group = *response->Record.MutableNodes();

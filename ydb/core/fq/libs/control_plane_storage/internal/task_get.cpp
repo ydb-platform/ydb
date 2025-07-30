@@ -443,7 +443,6 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvGetTaskRequ
             );
             auto lastSeenAt = parser.ColumnParser(LAST_SEEN_AT_COLUMN_NAME).GetOptionalTimestamp().value_or(TInstant::Zero());
             auto node = parser.ColumnParser(NODE_COLUMN_NAME).GetOptionalString();
-            CPS_LOG_AS_T(*actorSystem, "Node777" << node);
             if (node) {
                 task.NodeIdsSet = ParseNodeIds(TString(*node));
                 task.NodeIds = *node;

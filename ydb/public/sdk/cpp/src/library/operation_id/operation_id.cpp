@@ -308,6 +308,10 @@ TOperationId::EKind ParseKind(const std::string_view value) {
         return TOperationId::SCRIPT_EXECUTION;
     }
 
+    if (value.starts_with("incbackup")) {
+        return TOperationId::INCREMENTAL_BACKUP;
+    }
+
     return TOperationId::UNUSED;
 }
 

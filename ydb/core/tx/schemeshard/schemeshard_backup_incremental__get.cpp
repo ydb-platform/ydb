@@ -68,13 +68,12 @@ public:
     bool Reply(const Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS, const TString& errorMessage = TString())
     {
         Y_ABORT_UNLESS(Response);
-        auto& record = Response->Record;
-        record.SetStatus(status);
+        auto& backup = *Response->Record.MutableIncrementalBackup();
+        backup.SetStatus(status);
         if (errorMessage) {
-            auto& issue = *record.MutableIssues()->Add();
+            auto& issue = *backup.MutableIssues()->Add();
             issue.set_severity(NYql::TSeverityIds::S_ERROR);
             issue.set_message(errorMessage);
-
         }
 
         LOG_D("Reply " << Response->Record.ShortDebugString());

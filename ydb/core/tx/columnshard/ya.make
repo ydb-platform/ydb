@@ -42,6 +42,7 @@ PEERDIR(
     ydb/core/tx/columnshard/blobs_action
     ydb/core/tx/columnshard/blobs_action/storages_manager
     ydb/core/tx/columnshard/blobs_reader
+    ydb/core/tx/columnshard/column_fetching
     ydb/core/tx/columnshard/common
     ydb/core/tx/columnshard/counters
     ydb/core/tx/columnshard/data_accessor

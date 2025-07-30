@@ -317,7 +317,7 @@ private:
         std::vector<std::shared_ptr<TPortionDataAccessor>> accessors = context.ExtractPortionAccessors();
         auto blobs = TPortionDataAccessor::DecodeBlobAddresses(accessors, schemas, context.ExtractBlobs());
         for (ui64 i = 0; i < fetchingContext->GetInput().GetPortions().size(); ++i) {
-            AFL_VERIFY(i < context.GetPortionAccessors().size());
+            AFL_VERIFY(i < accessors.size());
             const auto& accessor = accessors[i];
             const auto& portion = fetchingContext->GetInput().GetPortions()[i];
             AFL_VERIFY(accessor->GetPortionInfo().GetAddress() == portion->GetPortionInfo()->GetAddress());

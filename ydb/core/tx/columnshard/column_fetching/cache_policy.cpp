@@ -21,12 +21,13 @@ private:
 
     virtual void DoAskData(const THashMap<EConsumer, THashSet<TAddress>>& objectAddressesByConsumer, const std::shared_ptr<TSelf>& selfPtr,
         const ui64 cookie) const override {
-        THashMap<TActorId, THashMap<NColumnShard::TEvPrivate::TEvAskColumnData::TPortionRequest, std::vector<ui32>>> columns;
+        THashMap<TActorId, THashMap<NColumnShard::TEvPrivate::TEvAskColumnData::TPortionRequest, std::set<ui32>>> columns;
         for (const auto& [consumer, addresses] : objectAddressesByConsumer) {
             for (const auto& address : addresses) {
+                AFL_VERIFY(
                 columns[address.GetTabletActorId()]
                        [NColumnShard::TEvPrivate::TEvAskColumnData::TPortionRequest(address.GetInternalPortionAddress(), consumer)]
-                           .emplace_back(address.GetPortionId());
+                           .emplace(address.GetColumnId()).second);
             }
         }
         for (auto&& [tablet, request] : columns) {

@@ -6,7 +6,9 @@ SRCS(
 
 PEERDIR(
     ydb/core/tx/general_cache
-    ydb/core/tx/columnshard
+    ydb/library/actors/core
+    ydb/core/tx/columnshard/engines/portions
+    ydb/core/tx/columnshard/resource_subscriber
 )
 
 END()

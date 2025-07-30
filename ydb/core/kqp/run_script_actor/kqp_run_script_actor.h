@@ -16,7 +16,7 @@ namespace NKikimr::NKqp {
 struct TKqpRunScriptActorSettings {
     TString Database;
     TString ExecutionId;
-    ui64 LeaseGeneration = 0;
+    i64 LeaseGeneration = 0;
     TDuration LeaseDuration;
     TDuration ResultsTtl;
     TDuration ProgressStatsPeriod;

@@ -2,11 +2,15 @@
 
 #include <ydb/core/formats/arrow/reader/position.h>
 #include <ydb/core/tx/columnshard/blobs_reader/read_coordinator.h>
+#include <ydb/core/tx/columnshard/engines/reader/tracing/probes.h>
 #include <ydb/core/tx/columnshard/resource_subscriber/actor.h>
 
 #include <yql/essentials/core/issue/yql_issue.h>
 
 namespace NKikimr::NOlap::NReader {
+
+LWTRACE_USING(YDB_CS_READER);
+
 constexpr TDuration SCAN_HARD_TIMEOUT = TDuration::Minutes(60);
 constexpr TDuration COMPUTE_HARD_TIMEOUT = TDuration::Minutes(10);
 
@@ -77,9 +81,13 @@ void TColumnShardScan::Bootstrap(const TActorContext& ctx) {
 }
 
 void TColumnShardScan::HandleScan(NColumnShard::TEvPrivate::TEvTaskProcessedResult::TPtr& ev) {
+    TDuration delta = TDuration::Zero();
     if (ChunksLimiter.HasMore()) {
-        WaitTime += TInstant::Now() - StartWaitTime;
+        delta = TInstant::Now() - StartWaitTime;
+        WaitTime += delta;
     }
+    StartWaitTime = TInstant::Now();
+    LWPROBE(TaskProcessed, TabletId, ScanId, TxId, delta);
     auto g = Stats->MakeGuard("task_result", IS_INFO_LOG_ENABLED(NKikimrServices::TX_COLUMNSHARD_SCAN));
     auto& result = ev->Get()->MutableResult();
     if (result.IsFail()) {
@@ -98,6 +106,8 @@ void TColumnShardScan::HandleScan(NColumnShard::TEvPrivate::TEvTaskProcessedResu
 void TColumnShardScan::HandleScan(NKqp::TEvKqpCompute::TEvScanDataAck::TPtr& ev) {
     StartWaitTime = TInstant::Now();
     auto g = Stats->MakeGuard("ack", IS_INFO_LOG_ENABLED(NKikimrServices::TX_COLUMNSHARD_SCAN));
+
+    LWPROBE(AckReceived, TabletId, ScanId, TxId, LastResultInstant ? TDuration::MilliSeconds((TMonotonic::Now() - *LastResultInstant).MilliSeconds()) : TDuration::Zero());
 
     AFL_VERIFY(!AckReceivedInstant);
     AckReceivedInstant = TMonotonic::Now();
@@ -402,7 +412,9 @@ bool TColumnShardScan::SendResult(bool pageFault, bool lastBatch) {
     Result->WaitTime = WaitTime;
     Result->RawBytes = ScanCountersPool.GetRawBytes();
 
+    LWPROBE(SendResult, TabletId, ScanId, TxId, Result->GetRowsCount(), (Result->ArrowBatch ? NArrow::GetTableDataSize(Result->ArrowBatch) : 0), Result->CpuTime, Result->WaitTime, TInstant::Now() - LastSend, Result->Finished);
     Send(ScanComputeActorId, Result.Release(), IEventHandle::FlagTrackDelivery);   // TODO: FlagSubscribeOnSession ?
+    LastSend = TInstant::Now();
 
     if (Finished || ++BuildResultCounter % 100 == 0) {
         ReportStats();

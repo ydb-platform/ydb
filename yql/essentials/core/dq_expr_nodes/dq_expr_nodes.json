@@ -189,6 +189,11 @@
         "Match": {"Type": "Callable", "Name": "DqCnUnionAll"}
     },
     {
+        "Name": "TDqCnParallelUnionAll",
+        "Base": "TDqConnection",
+        "Match": {"Type": "Callable", "Name": "DqCnParallelUnionAll"}
+    },
+    {
         "Name": "TDqCnMap",
         "Base": "TDqConnection",
         "Match": {"Type": "Callable", "Name": "DqCnMap"}

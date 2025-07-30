@@ -85,3 +85,7 @@ namespace NKikimr::NAutoConfigInitializer {
     void ApplyAutoConfig(NKikimrConfig::TGRpcConfig *config, const NKikimrConfig::TActorSystemConfig &asConfig);
 
 } // NKikimr::NActorSystemInitializer
+
+namespace NKikimr {
+    bool NeedToUseAutoConfig(const NKikimrConfig::TActorSystemConfig& config);
+}

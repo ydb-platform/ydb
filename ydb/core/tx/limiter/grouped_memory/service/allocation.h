@@ -19,8 +19,9 @@ private:
     YDB_READONLY(ui64, Identifier, 0);
     YDB_READONLY(ui64, ProcessId, 0);
     YDB_READONLY(ui64, ScopeId, 0);
-    const std::shared_ptr<TStageFeatures> Stage;
+    YDB_READONLY(std::shared_ptr<TStageFeatures>, Stage, nullptr);
     bool AllocationFailed = false;
+    TInstant StartInstant = TInstant::Now();
 
 public:
     ~TAllocationInfo();
@@ -31,6 +32,10 @@ public:
 
     ui64 GetAllocatedVolume() const {
         return AllocatedVolume;
+    }
+
+    TDuration GetAllocationTime() const {
+        return TInstant::Now() - StartInstant;
     }
 
     [[nodiscard]] bool Allocate(const NActors::TActorId& ownerId);

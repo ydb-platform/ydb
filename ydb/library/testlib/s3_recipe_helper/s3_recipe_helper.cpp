@@ -5,6 +5,7 @@
 #include <util/string/builder.h>
 
 #include <aws/core/Aws.h>
+#include <aws/s3/model/ListMultipartUploadsRequest.h>
 
 Y_TEST_HOOK_BEFORE_RUN(InitAwsAPI) {
     Aws::InitAPI(Aws::SDKOptions());
@@ -128,6 +129,22 @@ namespace NTestUtils {
         Aws::S3::S3Client s3Client = MakeS3Client();
 
         return GetAllObjects(bucket, separator, s3Client);
+    }
+
+    ui64 GetUncommittedUploadsCount(const TString& bucket, Aws::S3::S3Client& s3Client) {
+        Aws::S3::Model::ListMultipartUploadsRequest listReq;
+        listReq.WithBucket(bucket);
+
+        Aws::S3::Model::ListMultipartUploadsOutcome outcome = s3Client.ListMultipartUploads(listReq);
+        UNIT_ASSERT(outcome.IsSuccess());
+
+        return outcome.GetResult().GetUploads().size();
+    }
+
+    ui64 GetUncommittedUploadsCount(const TString& bucket) {
+        Aws::S3::S3Client s3Client = MakeS3Client();
+
+        return GetUncommittedUploadsCount(bucket, s3Client);
     }
 
     TString GetBucketLocation(const TStringBuf bucket) {

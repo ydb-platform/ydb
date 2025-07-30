@@ -17,7 +17,7 @@ class TDependencyTracker {
 private:
     using TKeys = TVector<TOperationKey>;
 
-    struct TOperationPtrTraits {
+    struct TOperationPtrTraits: NRangeTreap::TDefaultValueTraits<TOperation::TPtr> {
         static bool Less(const TOperation::TPtr& a, const TOperation::TPtr& b) noexcept {
             return a.Get() < b.Get();
         }

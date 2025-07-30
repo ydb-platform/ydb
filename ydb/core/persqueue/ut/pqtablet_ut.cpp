@@ -34,6 +34,7 @@ struct TTxOperation {
     TMaybe<ui64> End;
     TString Path;
     TMaybe<ui32> SupportivePartition;
+    bool KafkaTransaction = false;
 };
 
 struct TConfigParams {
@@ -236,6 +237,7 @@ protected:
     // returns owner cookie for this supportive partition
     TString CreateSupportivePartitionForKafka(const NKafka::TProducerInstanceId& producerInstanceId);
     void SendKafkaTxnWriteRequest(const NKafka::TProducerInstanceId& producerInstanceId, const TString& ownerCookie);
+    void CommitKafkaTransaction(NKafka::TProducerInstanceId producerInstanceId, ui64 txId);
 
     std::unique_ptr<TEvPersQueue::TEvRequest> MakeGetOwnershipRequest(const TGetOwnershipRequestParams& params,
                                                                       const TActorId& pipe) const;
@@ -356,6 +358,9 @@ void TPQTabletFixture::SendProposeTransactionRequest(const TProposeTransactionPa
             operation->SetPath(txOp.Path);
             if (txOp.SupportivePartition.Defined()) {
                 operation->SetSupportivePartition(*txOp.SupportivePartition);
+            }
+            if (txOp.KafkaTransaction) {
+                operation->SetKafkaTransaction(true);
             }
 
             partitions.insert(txOp.Partition);
@@ -801,6 +806,23 @@ void TPQTabletFixture::SendKafkaTxnWriteRequest(const NKafka::TProducerInstanceI
     UNIT_ASSERT(response != nullptr);
     UNIT_ASSERT(response->Record.GetPartitionResponse().HasCookie());
     UNIT_ASSERT_VALUES_EQUAL(123, response->Record.GetPartitionResponse().GetCookie());
+}
+
+void TPQTabletFixture::CommitKafkaTransaction(NKafka::TProducerInstanceId producerInstanceId, ui64 txId) {
+    SendProposeTransactionRequest({.TxId=txId,
+                                  .Senders={Ctx->TabletId}, .Receivers={Ctx->TabletId},
+                                  .TxOps={
+                                    {.Partition=0, .Path="/topic", .KafkaTransaction=true},
+                                  },
+                                  .WriteId=TWriteId(producerInstanceId)
+                                  });
+    WaitProposeTransactionResponse({.TxId=txId,
+                                   .Status=NKikimrPQ::TEvProposeTransactionResult::PREPARED});
+    SendPlanStep({.Step=100, .TxIds={txId}});
+    WaitPlanStepAck({.Step=100, .TxIds={txId}}); // TEvPlanStepAck для координатора
+    WaitPlanStepAccepted({.Step=100});
+    WaitProposeTransactionResponse({.TxId=txId,
+                                   .Status=NKikimrPQ::TEvProposeTransactionResult::COMPLETE});
 }
 
 void TPQTabletFixture::WaitWriteResponse(const TWriteResponseMatcher& matcher)
@@ -2338,9 +2360,7 @@ Y_UNIT_TEST_F(Kafka_Transaction_Supportive_Partitions_Should_Be_Deleted_After_Ti
 
     // wait till supportive partition for this kafka transaction is deleted
     WaitForExactSupportivePartitionsCount(0);
-    // validate that TxWrite for this transaction is deleted
-    auto txInfo2 = GetTxWritesFromKV();
-    UNIT_ASSERT_VALUES_EQUAL(txInfo2.TxWritesSize(), 0);
+    WaitForExactTxWritesCount(0);
 }
 
 Y_UNIT_TEST_F(Non_Kafka_Transaction_Supportive_Partitions_Should_Not_Be_Deleted_After_Timeout, TPQTabletFixture)
@@ -2412,6 +2432,125 @@ Y_UNIT_TEST_F(In_Kafka_Txn_Only_Supportive_Partitions_That_Exceeded_Timeout_Shou
     UNIT_ASSERT_VALUES_EQUAL(txInfo.GetTxWrites(0).GetWriteId().GetKafkaProducerInstanceId().GetId(), producerInstanceId2.Id);
 }
 
+Y_UNIT_TEST_F(Kafka_Transaction_Incoming_Before_Previous_TEvDeletePartitionDone_Came_Should_Be_Processed_After_Previous_Complete_Erasure, TPQTabletFixture) {
+    NKafka::TProducerInstanceId producerInstanceId = {1, 0};
+    const ui64 txId = 67890;
+    PQTabletPrepare({.partitions=1}, {}, *Ctx);
+    EnsurePipeExist();
+    TString ownerCookie = CreateSupportivePartitionForKafka(producerInstanceId);
+
+    // send data to create blobs for supportive partitions
+    SendKafkaTxnWriteRequest(producerInstanceId, ownerCookie);
+    ui32 fisrtSupportivePartitionId = WaitForExactTxWritesCount(1).GetTxWrites(0).GetInternalPartitionId();
+    
+    TAutoPtr<IEventHandle> deleteDoneEvent;
+    bool seenEvent = false;
+    // add observer for TEvPQ::TEvDeletePartitionDone request and skip it
+    auto observer = [&](TAutoPtr<IEventHandle>& input) {
+        if (!seenEvent && input->CastAsLocal<TEvPQ::TEvDeletePartitionDone>()) {
+            Cout << "Dropping TEvPQ::TEvDeletePartitionDone" << Endl;
+            deleteDoneEvent = input;
+            seenEvent = true;
+            return TTestActorRuntimeBase::EEventAction::DROP;
+        }
+        
+        return TTestActorRuntimeBase::EEventAction::PROCESS;
+    };
+    Ctx->Runtime->SetObserverFunc(observer);
+
+    CommitKafkaTransaction(producerInstanceId, txId);
+
+    // wait for delete response and save it
+    TDispatchOptions options;
+    options.CustomFinalCondition = [&seenEvent]() {
+        return seenEvent;
+    };
+    UNIT_ASSERT(Ctx->Runtime->DispatchEvents(options));
+
+    // send another GetOwnership request to enforce new suportive partition creation (it imitates new transaction start for same proudcer epoch)
+    auto request = MakeGetOwnershipRequest({.Partition=0,
+                     .WriteId=TWriteId{producerInstanceId},
+                     .NeedSupportivePartition=true,
+                     .Owner=DEFAULT_OWNER,
+                     .Cookie=5}, Pipe);
+    Ctx->Runtime->SendToPipe(Pipe,
+                             Ctx->Edge,
+                             request.release(),
+                             0, 0);
+
+    // send TEvPQ::TEvDeletePartitionDone 
+    Ctx->Runtime->SendToPipe(Pipe,
+                             Ctx->Edge,
+                             deleteDoneEvent.Release()->Get<TEvPQ::TEvDeletePartitionDone>(),
+                             0, 0);
+    
+    WaitForTheTransactionToBeDeleted(txId);
+    auto txInfo = GetTxWritesFromKV();
+    UNIT_ASSERT_EQUAL(txInfo.TxWritesSize(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(txInfo.GetTxWrites(0).GetWriteId().GetKafkaProducerInstanceId().GetId(), producerInstanceId.Id);
+    UNIT_ASSERT_VALUES_UNEQUAL(txInfo.GetTxWrites(0).GetInternalPartitionId(), fisrtSupportivePartitionId);
+    TString ownerCookie2 = WaitGetOwnershipResponse({.Cookie=5, .Status=NMsgBusProxy::MSTATUS_OK});
+    UNIT_ASSERT_VALUES_UNEQUAL(ownerCookie2, ownerCookie);
+}
+
+Y_UNIT_TEST_F(Kafka_Transaction_Incoming_Before_Previous_Is_In_DELETED_State_Should_Be_Processed_After_Previous_Complete_Erasure, TPQTabletFixture) {
+    NKafka::TProducerInstanceId producerInstanceId = {1, 0};
+    const ui64 txId = 67890;
+    PQTabletPrepare({.partitions=1}, {}, *Ctx);
+    EnsurePipeExist();
+    TString ownerCookie = CreateSupportivePartitionForKafka(producerInstanceId);
+
+    // send data to create blobs for supportive partitions
+    SendKafkaTxnWriteRequest(producerInstanceId, ownerCookie);
+    WaitForExactTxWritesCount(1);
+    
+    TAutoPtr<IEventHandle> keyValueResponse;
+    bool seenDeletePartitionsDoneEvent = false;
+    bool seenKeyValResponse = false;
+    // add observer for TEvPQ::TEvDeletePartitionDone request and skip it
+    auto observer = [&](TAutoPtr<IEventHandle>& input) {
+        if (!seenDeletePartitionsDoneEvent && input->CastAsLocal<TEvPQ::TEvDeletePartitionDone>()) {
+            seenDeletePartitionsDoneEvent = true;
+        } else if (seenDeletePartitionsDoneEvent && !seenKeyValResponse && input->CastAsLocal<TEvKeyValue::TEvResponse>()) {
+            // next TEvKeyValue::TEvResponse after TEvPQ::TEvDeletePartitionDone contains info about successull deletion of writeInfo from KV
+            keyValueResponse = input;
+            seenKeyValResponse = true;
+            return TTestActorRuntimeBase::EEventAction::DROP;
+        }
+        
+        return TTestActorRuntimeBase::EEventAction::PROCESS;
+    };
+    Ctx->Runtime->SetObserverFunc(observer);
+
+    CommitKafkaTransaction(producerInstanceId, txId);
+
+    // wait for delete response and save it
+    TDispatchOptions options;
+    options.CustomFinalCondition = [&seenKeyValResponse]() {
+        return seenKeyValResponse;
+    };
+    UNIT_ASSERT(Ctx->Runtime->DispatchEvents(options));
+
+    // send another GetOwnership request to enforce new suportive partition creation (it imitates new transaction start for same proudcer epoch)
+    auto request = MakeGetOwnershipRequest({.Partition=0,
+                     .WriteId=TWriteId{producerInstanceId},
+                     .NeedSupportivePartition=true,
+                     .Owner=DEFAULT_OWNER,
+                     .Cookie=5}, Pipe);
+    Ctx->Runtime->SendToPipe(Pipe,
+                             Ctx->Edge,
+                             request.release(),
+                             0, 0);
+
+    // send TEvKeyValue::TEvResponse 
+    Ctx->Runtime->SendToPipe(Pipe,
+                             Ctx->Edge,
+                             keyValueResponse.Release()->Get<TEvKeyValue::TEvResponse>(),
+                             0, 0);
+    
+    TString ownerCookie2 = WaitGetOwnershipResponse({.Cookie=5, .Status=NMsgBusProxy::MSTATUS_OK});
+    UNIT_ASSERT_VALUES_UNEQUAL(ownerCookie2, ownerCookie);
+}
 }
 
 }

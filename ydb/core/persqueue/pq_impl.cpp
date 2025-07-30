@@ -2584,8 +2584,8 @@ const TPartitionInfo& TPersQueue::GetPartitionInfo(const NKikimrClient::TPersQue
     ui32 originalPartitionId = req.GetPartition();
 
     Y_ABORT_UNLESS(TxWrites.contains(writeId) && TxWrites.at(writeId).Partitions.contains(originalPartitionId),
-                   "PQ %" PRIu64 ", WriteId {%" PRIu64 ", %" PRIu64 "}, Partition %" PRIu32,
-                   TabletID(), writeId.NodeId, writeId.KeyId, originalPartitionId);
+                   "PQ %" PRIu64 ", WriteId %s, Partition %" PRIu32,
+                   TabletID(), writeId.ToString().data(), originalPartitionId);
 
     const TPartitionId& partitionId = TxWrites.at(writeId).Partitions.at(originalPartitionId);
     Y_ABORT_UNLESS(Partitions.contains(partitionId));
@@ -2674,7 +2674,13 @@ void TPersQueue::HandleEventForSupportivePartition(const ui64 responseCookie,
     const TWriteId writeId = GetWriteId(req);
     ui32 originalPartitionId = req.GetPartition();
 
-    if (TxWrites.contains(writeId) && TxWrites.at(writeId).Partitions.contains(originalPartitionId)) {
+    if (writeId.KafkaApiTransaction && TxWrites.contains(writeId) && !TxWrites.at(writeId).Partitions.contains(originalPartitionId)) {
+        // This branch happens when previous Kafka transaction has committed and we recieve write for next one
+        // after PQ has deleted supportive partition and before it has deleted writeId from TxWrites (tx has not transaitioned to DELETED state) 
+        PQ_LOG_D("GetOwnership request for the next Kafka transaction while previous is being deleted. Saving it till the complete delete of the previous tx.%01");
+        KafkaNextTransactionRequests[writeId.KafkaProducerInstanceId] = event;
+        return;
+    } else if (TxWrites.contains(writeId) && TxWrites.at(writeId).Partitions.contains(originalPartitionId)) {
         //
         // - вспомогательная партиция уже существует
         // - если партиция инициализирована, то
@@ -2683,11 +2689,17 @@ void TPersQueue::HandleEventForSupportivePartition(const ui64 responseCookie,
         // -     добавить сообщение в очередь для партиции
         //
         const TTxWriteInfo& writeInfo = TxWrites.at(writeId);
-        if (writeInfo.TxId.Defined()) {
+        if (writeInfo.TxId.Defined() && writeId.IsTopicApiTransaction()) {
             ReplyError(ctx,
                        responseCookie,
                        NPersQueue::NErrorCode::BAD_REQUEST,
                        "it is forbidden to write after a commit");
+            return;
+        } else if (writeInfo.TxId.Defined() && writeId.KafkaApiTransaction) {
+            // This branch happens when previous Kafka transaction has committed and we recieve write for next one
+            // before PQ has deleted supportive partition for previous transaction
+            PQ_LOG_D("GetOwnership request for the next Kafka transaction while previous is being deleted. Saving it till the complete delete of the previous tx.%02");
+            KafkaNextTransactionRequests[writeId.KafkaProducerInstanceId] = event;
             return;
         }
 
@@ -3203,6 +3215,7 @@ void TPersQueue::ScheduleDeleteExpiredKafkaTransactions() {
 
     for (auto& pair : TxWrites) {
         if (txnExpired(pair.second)) {
+            PQ_LOG_D("Transaction for Kafka producer " << pair.first.KafkaProducerInstanceId << " is expired");
             BeginDeletePartitions(pair.second);
         }
     }
@@ -4631,6 +4644,14 @@ void TPersQueue::CheckTxState(const TActorContext& ctx,
         // If this was the last transaction, then you need to send responses to messages about changes
         // in the status of the PQ tablet (if they came)
         TryReturnTabletStateAll(ctx);
+
+        if (tx.WriteId->KafkaApiTransaction) {
+            auto it = KafkaNextTransactionRequests.find(tx.WriteId->KafkaProducerInstanceId);
+            if (it != KafkaNextTransactionRequests.end()) {
+                Handle(it->second, ctx);
+                KafkaNextTransactionRequests.erase(it);
+            }
+        }
         break;
     }
 }
@@ -5207,6 +5228,7 @@ void TPersQueue::DeletePartition(const TPartitionId& partitionId, const TActorCo
     const TPartitionInfo& partition = p->second;
     ctx.Send(partition.Actor, new TEvents::TEvPoisonPill());
 
+    PQ_LOG_D("DeletePartition " << partitionId);
     Partitions.erase(partitionId);
 }
 
@@ -5240,7 +5262,7 @@ void TPersQueue::Handle(TEvPQ::TEvDeletePartitionDone::TPtr& ev, const TActorCon
                     TryExecuteTxs(ctx, *tx);
                 }
             }
-        } else if (writeInfo.KafkaTransaction) {
+        } else if (writeInfo.KafkaTransaction) { // case when kafka transaction haven't even started in KQP, but data for it was already written in partition
             DeleteWriteId(writeId);
         }
     }

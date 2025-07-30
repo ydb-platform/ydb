@@ -1028,6 +1028,17 @@ namespace {
                     return false;
                 }
                 Types_.MaxAggPushdownPredicates = value;
+            } else if (name == "AndOverOrExpansionLimit") {
+                if (args.size() != 1) {
+                    ctx.AddError(TIssue(pos, TStringBuilder() << "Expected single numeric argument, but got " << args.size()));
+                    return false;
+                }
+                ui32 value;
+                if (!TryFromString(args[0], value)) {
+                    ctx.AddError(TIssue(pos, TStringBuilder() << "Expected non-negative integer, but got: " << args[0]));
+                    return false;
+                }
+                Types_.AndOverOrExpansionLimit = value;
             } else if (name == "Engine") {
                 if (args.size() != 1) {
                     ctx.AddError(TIssue(pos, TStringBuilder() << "Expected at most 1 argument, but got " << args.size()));

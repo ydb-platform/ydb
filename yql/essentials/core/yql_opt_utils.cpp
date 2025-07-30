@@ -769,6 +769,24 @@ EDictType SelectDictType(EDictType type, const TTypeAnnotationNode* keyType) {
     return EDictType::Sorted;
 }
 
+void GetLogicalOpTerms(const std::string_view& op, const TExprNode::TPtr& predicate, TExprNode::TListType& terms) {
+    if (predicate->IsCallable(op)) {
+        for (auto& child : predicate->Children()) {
+            GetLogicalOpTerms(op, child, terms);
+        }
+    } else {
+        terms.push_back(predicate);
+    }
+}
+
+void GetAndTerms(const TExprNode::TPtr& predicate, TExprNode::TListType& terms) {
+    GetLogicalOpTerms("And", predicate, terms);
+}
+
+void GetOrTerms(const TExprNode::TPtr& predicate, TExprNode::TListType& terms) {
+    GetLogicalOpTerms("Or", predicate, terms);
+}
+
 TExprNode::TPtr MakeSingleGroupRow(const TExprNode& aggregateNode, TExprNode::TPtr reduced, TExprContext& ctx) {
     auto pos = aggregateNode.Pos();
     auto aggregatedColumns = aggregateNode.Child(2);
@@ -1317,6 +1335,51 @@ TExprNode::TPtr ExpandSkipNullFields(const TExprNode::TPtr& node, TExprContext& 
                 .Seal()
             .Seal()
         .Seal().Build();
+}
+
+TExprNode::TListType ExpandAndOverOr(const TExprNode::TPtr& predicate, TExprContext& ctx, const TTypeAnnotationContext& types) {
+    if (!predicate->IsCallable("And")) {
+        return {};
+    }
+
+    TExprNode::TListType andTerms;
+    GetAndTerms(predicate, andTerms);
+    if (andTerms.size() == 1) {
+        return {};
+    }
+
+    TVector<TExprNode::TListType> orParts;
+    for (const auto& andTerm : andTerms) {
+        TExprNode::TListType orTerms;
+        GetOrTerms(andTerm, orTerms);
+        orParts.push_back(std::move(orTerms));
+    }
+    if (!AnyOf(orParts, [](const auto& orPart) { return orPart.size() > 1; })) {
+        return {};
+    }
+
+    TExprNode::TListType orArgs;
+    TVector<size_t> currTerm(orParts.size());
+    for (size_t termsCount = 0; currTerm[0] < orParts[0].size(); termsCount++) {
+        if (termsCount > types.AndOverOrExpansionLimit) {
+            return {};
+        }
+
+        TExprNode::TListType andArgs;
+        for (size_t i = 0; i < currTerm.size(); i++) {
+            andArgs.push_back(orParts[i][currTerm[i]]);
+        }
+
+        currTerm[currTerm.size() - 1]++;
+        for (size_t i = currTerm.size() - 1; i > 0 && currTerm[i] >= orParts[i].size(); i--) {
+            currTerm[i] = 0;
+            currTerm[i - 1]++;
+        }
+
+        orArgs.push_back(ctx.NewCallable(predicate->Pos(), "And", std::move(andArgs)));
+    }
+
+    return orArgs;
 }
 
 void ExtractSimpleKeys(const TExprNode* keySelectorBody, const TExprNode* keySelectorArg, TVector<TStringBuf>& columns) {

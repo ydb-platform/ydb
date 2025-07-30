@@ -467,6 +467,7 @@ struct TTypeAnnotationContext: public TThrRefBase {
     ui32 MaxAggPushdownPredicates = 6; // algorithm complexity is O(2^N)
     ui32 PruneKeysMemLimit = 128 * 1024 * 1024;
     bool NormalizeDependsOn = false;
+    ui32 AndOverOrExpansionLimit = 100;
 
     TMaybe<TColumnOrder> LookupColumnOrder(const TExprNode& node) const;
     IGraphTransformer::TStatus SetColumnOrder(const TExprNode& node, const TColumnOrder& columnOrder, TExprContext& ctx);

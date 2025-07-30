@@ -15,7 +15,7 @@ class TLockSharingInfo;
 namespace NKikimr::NOlap::NReader::NCommon {
 
 struct TPortionIntervalTreeValueTraits: NRangeTreap::TDefaultValueTraits<std::shared_ptr<TPortionInfo>> {
-    struct THashFnc {
+    struct TValueHash {
         ui64 operator()(const std::shared_ptr<TPortionInfo>& value) const {
             return THash<TPortionAddress>()(value->GetAddress());
         }

@@ -410,7 +410,6 @@ public:
 
     virtual const TSnapshot& RecordSnapshotMin(const std::optional<TSnapshot>& snapshotDefault = std::nullopt) const = 0;
     virtual const TSnapshot& RecordSnapshotMax(const std::optional<TSnapshot>& snapshotDefault = std::nullopt) const = 0;
-    virtual std::optional<TSnapshot> GetDataSnapshot(const std::optional<TSnapshot>& snapshotDefault = std::nullopt) const = 0;
 
     ISnapshotSchema::TPtr GetSchema(const TVersionedIndex& index) const;
 

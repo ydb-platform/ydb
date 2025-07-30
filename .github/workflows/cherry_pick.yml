@@ -1,0 +1,50 @@
+name: Cherry-pick
+on:
+  workflow_dispatch:
+    inputs:
+      commits:
+        type: string
+        default: ""
+        description: Comma or space separated commit SHAs for cherry-pick
+      target_branches:
+        default: ""
+        description: Comma or space separated banches to cherry-pick
+      issue_number:
+        default: 0
+        type: number
+        description: Issue number for attach PRs
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: true
+env:
+  GH_TOKEN: ${{ secrets.YDBOT_TOKEN }}
+jobs:
+  create-pr:
+    runs-on: ubuntu-latest
+    steps:
+      - name: checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          sparse-checkout: |
+            .github
+      - name: install packages
+        shell: bash
+        run: |
+          pip install PyGithub==2.5.0
+
+      - name: configure
+        shell: bash
+        run: |
+            git config --global user.name YDBot
+            git config --global user.email ydbot@ydb.tech
+            git config --local github.token ${{ env.GH_TOKEN }}
+
+      - name: run-command
+        shell: bash
+        env:
+          REPO: ${{ github.repository }}
+          TOKEN: ${{ env.GH_TOKEN }}
+        run: |
+          ./.github/scripts/cherry_pick.py --commits="${{ inputs.commits }}" --target-branch="${{ inputs.target_branches }}"  --issue=${{ inputs.issue_number }}

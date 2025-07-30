@@ -21,6 +21,16 @@ NActors::IActor* CreateKafkaProduceActor(const TContext::TPtr context) {
     return new TKafkaProduceActor(context);
 }
 
+TString GetAsStr(std::set<ui64>& numbers) {
+    auto builder = TStringBuilder() << "{";
+    auto it = numbers.begin();
+    while (it != numbers.end()) {
+        builder << *it << " ";
+        ++it;
+    }
+    return builder << "}";
+}
+
 TString TKafkaProduceActor::LogPrefix() {
     TStringBuilder sb;
     sb << "TKafkaProduceActor " << SelfId() << " State: ";
@@ -408,6 +418,8 @@ void TKafkaProduceActor::HandleAccepting(TEvPartitionWriter::TEvWriteAccepted::T
     if (expectedCookies.empty()) {
         Become(&TKafkaProduceActor::StateWork);
         ProcessRequests(ctx);
+    } else {
+        KAFKA_LOG_W("Still in Accepting state after TEvPartitionWriter::TEvWriteAccepted cause cookies are expected: " << GetAsStr(expectedCookies));
     }
 }
 
@@ -425,12 +437,7 @@ void TKafkaProduceActor::Handle(TEvPartitionWriter::TEvWriteResponse::TPtr reque
         KAFKA_LOG_W("Produce actor: Received TEvWriteResponse with unexpected cookie " << cookie);
         return;
     }
-
     auto& cookieInfo = it->second;
-    auto& partitionResult = cookieInfo.Request->Results[cookieInfo.Position];
-    partitionResult.ErrorCode = EKafkaErrors::NONE_ERROR;
-    partitionResult.Value = request;
-    cookieInfo.Request->WaitResultCookies.erase(cookie);
 
     // Missing supportive partition means that we wrote in transaction and that transaction ended, thus suppprtive partition was deleted
     // it means that we are writing in a new transaction and need to create a new partition writer (cause only partition writer in init state properly creates supportive partition)
@@ -453,9 +460,16 @@ void TKafkaProduceActor::Handle(TEvPartitionWriter::TEvWriteResponse::TPtr reque
             TransactionalWriters.erase(txnIt);
         }
     }
+    
+    auto& partitionResult = cookieInfo.Request->Results[cookieInfo.Position];
+    partitionResult.ErrorCode = EKafkaErrors::NONE_ERROR;
+    partitionResult.Value = request;
+    cookieInfo.Request->WaitResultCookies.erase(cookie);
 
     if (cookieInfo.Request->WaitResultCookies.empty()) {
         SendResults(ctx);
+    } else {
+        KAFKA_LOG_T("Skipping sending results in Handle TEvPartitionWriter::TEvWriteResponse. WaitResultCookies=" << GetAsStr(cookieInfo.Request->WaitResultCookies));
     }
 
     Cookies.erase(cookie);
@@ -485,6 +499,7 @@ void TKafkaProduceActor::SendResults(const TActorContext& ctx) {
         bool expired = expireTime > pendingRequest->StartTime;
 
         if (!expired && !pendingRequest->WaitResultCookies.empty()) {
+            KAFKA_LOG_T("Skipping sending results. Expired=" << expired << " WaitResultCookies=" << GetAsStr(pendingRequest->WaitResultCookies));
             return;
         }
 
@@ -520,6 +535,12 @@ void TKafkaProduceActor::SendResults(const TActorContext& ctx) {
                     partitionResponse.ErrorMessage = result.ErrorMessage;
 
                     SendMetrics(TStringBuilder() << topicData.Name, recordsCount, "failed_messages", ctx);
+                } else if (expired) {
+                    KAFKA_LOG_ERROR("Partition write expired.");
+                    SendMetrics(TStringBuilder() << topicData.Name, recordsCount, "failed_messages", ctx);
+                    partitionResponse.ErrorCode = EKafkaErrors::REQUEST_TIMED_OUT;
+                    metricsErrorCode = EKafkaErrors::REQUEST_TIMED_OUT;
+                    partitionResponse.ErrorMessage = TStringBuilder() << "No answer from partition writer for " << REQUEST_EXPIRATION_INTERVAL << " seconds";
                 } else {
                     auto* msg = result.Value->Get();
                     if (msg->IsSuccess()) {
@@ -632,7 +653,8 @@ void TKafkaProduceActor::RecreatePartitionWriterAndRetry(ui64 cookie, const TAct
             }
         }
 
-        
+        cookieInfo.Request->WaitResultCookies.erase(cookie);
+        cookieInfo.Request->WaitAcceptingCookies.erase(cookie);
         Cookies.erase(it);
     }
 }

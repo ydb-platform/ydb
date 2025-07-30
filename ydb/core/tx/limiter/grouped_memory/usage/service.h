@@ -122,7 +122,7 @@ using TCompMemoryLimiterOperator = TServiceOperatorImpl<TCompMemoryLimiterPolicy
 
 class TDeduplicationMemoryLimiterPolicy {
 public:
-    static const inline TString Name = "Deduplication";
+    static const inline TString Name = "Dedu";
     static const inline NMemory::EMemoryConsumerKind ConsumerKind = NMemory::EMemoryConsumerKind::DeduplicationGroupedMemoryLimiter;
     static constexpr bool ExternalProcessIdAllocation = false;
 };

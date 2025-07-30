@@ -1755,6 +1755,10 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
         sil->AddServiceInitializer(new TGeneralCachePortionsMetadataInitializer(runConfig));
     }
 
+    if (serviceMask.EnableGeneralCacheColumnData) {
+        sil->AddServiceInitializer(new TGeneralCacheColumnDataInitializer(runConfig));
+    }
+
     if (serviceMask.EnableCms) {
         sil->AddServiceInitializer(new TCmsServiceInitializer(runConfig));
     }

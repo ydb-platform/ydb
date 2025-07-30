@@ -21,6 +21,7 @@
 #include <ydb/core/tablet/tablet_list_renderer.h>
 #include <ydb/core/tablet_flat/shared_sausagecache.h>
 #include <ydb/core/tx/columnshard/data_accessor/cache_policy/policy.h>
+#include <ydb/core/tx/columnshard/column_fetching/cache_policy.h>
 #include <ydb/core/tx/scheme_board/replica.h>
 #include <ydb/core/client/server/grpc_proxy_status.h>
 #include <ydb/core/scheme/tablet_scheme.h>
@@ -172,6 +173,13 @@ namespace NPDisk {
 			NGeneralCache::NPublic::TConfig::BuildDefault(), runtime.GetDynamicCounters(nodeIndex));
 		runtime.AddLocalService(NOlap::NDataAccessorControl::TGeneralCache::MakeServiceId(runtime.GetNodeId(nodeIndex)),
 			TActorSetupCmd(actor, TMailboxType::ReadAsFilled, 0), nodeIndex);
+    }
+
+    void SetupCSColumnDataCache(TTestActorRuntime& runtime, ui32 nodeIndex) {
+        auto* actor = NOlap::NColumnFetching::TGeneralCache::CreateService(
+            NGeneralCache::NPublic::TConfig::BuildDefault(), runtime.GetDynamicCounters(nodeIndex));
+        runtime.AddLocalService(NOlap::NColumnFetching::TGeneralCache::MakeServiceId(runtime.GetNodeId(nodeIndex)),
+            TActorSetupCmd(actor, TMailboxType::ReadAsFilled, 0), nodeIndex);
     }
 
     void SetupBlobCache(TTestActorRuntime& runtime, ui32 nodeIndex)
@@ -468,6 +476,7 @@ namespace NPDisk {
             SetupSharedPageCache(runtime, nodeIndex, sharedCacheConfig ? *sharedCacheConfig : defaultSharedCacheConfig);
             SetupBlobCache(runtime, nodeIndex);
             SetupCSMetadataCache(runtime, nodeIndex);
+            SetupCSColumnDataCache(runtime, nodeIndex);
             SetupSysViewService(runtime, nodeIndex);
             SetupQuoterService(runtime, nodeIndex);
             SetupStatService(runtime, nodeIndex);

@@ -433,6 +433,25 @@ Y_UNIT_TEST_SUITE(DeepScrubbing) {
             , PartCorruptionMask(partCorruptionMask)
         {}
 
+        struct TAggregateScrubMetrics {
+            TAggregateScrubMetrics(TString counterName, bool isHuge, TErasureType::EErasureSpecies erasure)
+                : CounterName(counterName)
+                , IsHuge(isHuge)
+                , Erasure(erasure)
+            {}
+
+            ui64 operator()(TIntrusivePtr<NMonitoring::TDynamicCounters> counters) const {
+                return counters->GetSubgroup("subsystem", "deepScrubbing")
+                        ->GetSubgroup("blobSize", IsHuge ? "huge" : "small")
+                        ->GetSubgroup("erasure", TErasureType::ErasureSpeciesName(Erasure))
+                        ->GetCounter(CounterName, true)->Val();
+            }
+
+            TString CounterName;
+            bool IsHuge;
+            TErasureType::EErasureSpecies Erasure;
+        };
+
         void RunTest() {
             Initialize();
             AllocateEdgeActor(true);
@@ -506,19 +525,16 @@ Y_UNIT_TEST_SUITE(DeepScrubbing) {
                 }
             }
 
+            bool isHuge = (BlobSize == EBlobSize::Val_HugeBlob);
+
             std::vector<ui32> pdiskLayout = MakePDiskLayout(BaseConfig, groupInfo->GetTopology(), GroupId);
 
             ui64 blobsScrubbed =
-                    Env->AggregateVDiskCounters(Env->StoragePoolName, NodeCount, Erasure.BlobSubgroupSize(),
-                            GroupId, pdiskLayout, "deepScrubbing", "SmallBlobsChecked", false) +
-                    Env->AggregateVDiskCounters(Env->StoragePoolName, NodeCount, Erasure.BlobSubgroupSize(),
-                            GroupId, pdiskLayout, "deepScrubbing", "HugeBlobsChecked", false);
-
+                    Env->AggregateVDiskCountersWithCallback(Env->StoragePoolName, NodeCount, Erasure.BlobSubgroupSize(),
+                            GroupId, pdiskLayout, TAggregateScrubMetrics("BlobsChecked", isHuge, Erasure.GetErasure()));
             ui64 dataIssues =
-                    Env->AggregateVDiskCounters(Env->StoragePoolName, NodeCount, Erasure.BlobSubgroupSize(),
-                            GroupId, pdiskLayout, "deepScrubbing", "DataIssuesSmallBlobs", false) +
-                    Env->AggregateVDiskCounters(Env->StoragePoolName, NodeCount, Erasure.BlobSubgroupSize(),
-                            GroupId, pdiskLayout, "deepScrubbing", "DataIssuesHugeBlobs", false);
+                    Env->AggregateVDiskCountersWithCallback(Env->StoragePoolName, NodeCount, Erasure.BlobSubgroupSize(),
+                            GroupId, pdiskLayout, TAggregateScrubMetrics("DataIssues", isHuge, Erasure.GetErasure()));
 
             UNIT_ASSERT_VALUES_UNEQUAL_C(blobsScrubbed, 0, makePrefix());
             UNIT_ASSERT_VALUES_UNEQUAL_C(dataIssues, 0, makePrefix()

@@ -439,7 +439,6 @@ void TKafkaOffsetFetchActor::CreateConsumerGroupIfNecessary(const TString& topic
                                     const TString& originalTopicName,
                                     const TString& groupId,
                                     const std::vector<TOffsetFetchResponsePartitions>& topicPartitions) {
-    // consumer is not added to the topic case
     TopicGroupIdAndPath consumerTopicRequest = TopicGroupIdAndPath{groupId, topicPath};
     if (ConsumerTopicAlterRequestAttempts.find(consumerTopicRequest) == ConsumerTopicAlterRequestAttempts.end()) {
         ConsumerTopicAlterRequestAttempts.insert(consumerTopicRequest);

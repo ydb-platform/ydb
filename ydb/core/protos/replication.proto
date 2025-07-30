@@ -43,7 +43,7 @@ message TConsistencySettings {
     }
 
     message TGlobalConsistency {
-        optional uint64 CommitIntervalMilliSeconds = 1;
+        optional uint64 CommitIntervalMilliSeconds = 1 [default = 10000]; // 10s
     }
 
     oneof Level {

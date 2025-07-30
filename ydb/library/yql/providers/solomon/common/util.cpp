@@ -43,13 +43,13 @@ std::map<TString, TString> ExtractSelectorValues(const NSo::NProto::TDqSolomonSo
         TString name = StripString(selectors.substr(0, lbracePos));
         YQL_ENSURE(name.size() >= 2 && name[0] == '"' && name[name.size() - 1] == '"');
 
-        result["name"] = name.substr(0, name.size() - 2);
+        result["name"] = name.substr(1, name.size() - 2);
     }
 
     auto selectorValues = StringSplitter(selectors.substr(lbracePos + 1, rbracePos - lbracePos - 1)).Split(',').SkipEmpty().ToList<TString>();
     for (const auto& selectorValue : selectorValues) {
         size_t eqPos = selectorValue.find("=");
-        YQL_ENSURE(eqPos <= selectorValue.size());
+        YQL_ENSURE(eqPos != TString::npos);
 
         TString key = StripString(selectorValue.substr(0, eqPos));
         TString value = StripString(selectorValue.substr(eqPos + 1, selectorValue.size() - eqPos - 1));

@@ -89,28 +89,30 @@ namespace NKikimr::NStorage {
     }
 
     void TInvokeRequestHandlerActor::Handle(TEvInterconnect::TEvNodeConnected::TPtr ev) {
-        const ui32 nodeId = ev->Get()->NodeId;
-        if (const auto it = Subscriptions.find(nodeId); it != Subscriptions.end()) {
-            it->second = ev->Sender;
-        }
+        const auto it = Subscriptions.find(ev->Get()->NodeId);
+        Y_ABORT_UNLESS(it != Subscriptions.end());
+        Y_ABORT_UNLESS(!it->second || it->second == ev->Sender);
+        it->second = ev->Sender;
     }
 
     void TInvokeRequestHandlerActor::Handle(TEvInterconnect::TEvNodeDisconnected::TPtr ev) {
         const ui32 nodeId = ev->Get()->NodeId;
-        Subscriptions.erase(nodeId);
+        const auto it = Subscriptions.find(nodeId);
+        Y_ABORT_UNLESS(it != Subscriptions.end());
+        Y_ABORT_UNLESS(!it->second || it->second == ev->Sender);
+        Subscriptions.erase(it);
         for (auto [begin, end] = NodeToVDisk.equal_range(nodeId); begin != end; ++begin) {
             OnVStatusError(begin->second);
         }
         if (nodeId == WaitingReplyFromNode) {
-            throw TExRace() << "Root node disconnected";
+            throw TExRace() << "Hop node disconnected";
         }
     }
 
     void TInvokeRequestHandlerActor::UnsubscribeInterconnect() {
-        for (auto it = Subscriptions.begin(); it != Subscriptions.end(); ) {
-            const TActorId actorId = it->second ? it->second : TActivationContext::InterconnectProxy(it->first);
+        for (const auto& [nodeId, proxyId] : Subscriptions) {
+            const TActorId actorId = proxyId ? proxyId : TActivationContext::InterconnectProxy(nodeId);
             TActivationContext::Send(new IEventHandle(TEvents::TSystem::Unsubscribe, 0, actorId, SelfId(), nullptr, 0));
-            Subscriptions.erase(it++);
         }
     }
 

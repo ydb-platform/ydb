@@ -53,6 +53,7 @@ namespace NKikimr::NStorage {
             Send(actorId, new TEvBlobStorage::TEvVStatus(vdiskId), flags);
             if (actorId.NodeId() != SelfId().NodeId()) {
                 NodeToVDisk.emplace(actorId.NodeId(), vdiskId);
+                Subscriptions.try_emplace(actorId.NodeId());
             }
             ActorToVDisk.emplace(actorId, vdiskId);
             PendingVDiskIds.emplace(vdiskId);

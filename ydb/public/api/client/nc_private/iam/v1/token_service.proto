@@ -1,0 +1,74 @@
+syntax = "proto3";
+
+package nebius.iam.v1;
+
+import "google/protobuf/timestamp.proto";
+import "ydb/public/api/client/nc_private/annotations.proto";
+import "ydb/public/api/client/nc_private/audit/annotations.proto";
+import "ydb/public/api/client/nc_private/iam/v1/token.proto";
+
+option java_multiple_files = true;
+option java_outer_classname = "TokenServiceProto";
+option java_package = "ai.nebius.iam.token.v1";
+
+service TokenService {
+  option (api_service_name) = "tokens.iam";
+  option (audit.service_audit).enabled = true;
+
+  rpc Exchange(ExchangeTokenRequest) returns (CreateTokenResponse); // not auth for jwt exchange
+  rpc Create(CreateTokenRequest) returns (CreateTokenResponse); // auth, used under service acc
+  // List of signature public keys from all regions
+  rpc GetMultiRegionSignaturePublicKeys(GetMultiRegionSignaturePublicKeysRequest) returns (GetMultiRegionSignaturePublicKeysResponse);
+  rpc GetLimitedTokenInfo(GetLimitedTokenInfoRequest) returns (GetLimitedTokenInfoResponse); // return limited info about token for cpl
+}
+
+//https://www.rfc-editor.org/rfc/rfc8693.html
+message ExchangeTokenRequest {
+  string grant_type = 1; // required - urn:ietf:params:oauth:grant-type:token-exchange
+  string requested_token_type = 2; // optional type of requested token, default is urn:ietf:params:oauth:token-type:access_token
+  string subject_token = 3  [(credentials) = true]; // required - could be self signed JWT token
+  string subject_token_type = 4; //required, in case of jwt - urn:ietf:params:oauth:token-type:jwt
+  repeated string scopes = 5; // optional (scopes of the token)
+  string audience = 6; //optional, name of the oauth client id on which this token will be used
+  string actor_token = 7 [(credentials) = true]; //optional, subject token for impersonation/delegation (who want to impersonate/delegate) in subject_token.
+  string actor_token_type = 8; //optional, token type for the impersonation/delegation (who want to impersonate/delegate). Usually it's urn:ietf:params:oauth:token-type:access_token
+  repeated string resource = 9; // optional, list of resources approved to use by token, if applicable
+}
+
+message CreateTokenRequest {
+  string token_type = 1; // optional, by default - urn:ietf:params:oauth:token-type:access_token
+  string subject_id = 2; // optional - used for impersonation subject creation and for metadata service token creation
+  string audience = 3; //optional,  name of the client id on which this token will be used
+  repeated string scopes = 4; // optional
+}
+
+message CreateTokenResponse {
+  string access_token = 1 [(credentials) = true]; // required
+  string issued_token_type = 2; //required
+  string token_type = 3; // required - Bearer
+  int64 expires_in = 4; //
+  repeated string scopes = 5;
+}
+
+message GetMultiRegionSignaturePublicKeysRequest {}
+
+message GetMultiRegionSignaturePublicKeysResponse {
+  repeated RegionSignaturePublicKeyPack items = 2;
+
+  message RegionSignaturePublicKeyPack {
+    string region_id = 1;
+    repeated SignaturePublicKey keys = 2;
+    bool loaded = 3;
+    google.protobuf.Timestamp loaded_at = 4;
+  }
+}
+
+message GetLimitedTokenInfoRequest {
+  string token = 1 [(credentials) = true];
+}
+
+message GetLimitedTokenInfoResponse {
+  string id = 1;
+  string subject_id = 2;
+  Actor actor = 3;
+}

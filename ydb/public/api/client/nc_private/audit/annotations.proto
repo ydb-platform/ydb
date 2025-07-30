@@ -1,0 +1,110 @@
+syntax = "proto3";
+
+package nebius.audit;
+
+import "google/protobuf/descriptor.proto";
+import "ydb/public/api/client/nc_private/audit/v1/common/action.proto";
+
+option java_multiple_files = true;
+option java_outer_classname = "AnnotationsProto";
+option java_package = "ai.nebius.audit";
+
+// Priorities in resource type resolution:
+// explicit at method >> explicit at service >> automatic
+extend google.protobuf.ServiceOptions {
+  // Specifies default audit settings for service methods. Can be overridden on method level. Most methods should
+  // be marked as auditable and if not then reason should be provided. For most auditable methods it is also
+  // expected to have affected resource type specified.
+  // Note. This is a marker option. There is no direct impact on method execution. It is used by audit SDK and DPL
+  // to validate audit events and make coverage.
+  // In case of any questions please contact audit trails team.
+  ServiceAudit service_audit = 50004;
+}
+
+extend google.protobuf.MethodOptions {
+  // Specifies audit settings of a service method. Most methods should be marked as auditable and if not
+  // then reason should be provided. For most auditable methods it is also expected to have affected resource type
+  // specified. It has the highest priority (if specified) out of audit settings on service level and automatic detection.
+  // Note. This is a marker option. There is no direct impact on method execution. It is used by audit SDK and DPL
+  // to validate audit events and make coverage.
+  // In case of any questions please contact audit trails team.
+  MethodAudit method_audit = 50002;
+}
+
+extend google.protobuf.MessageOptions {
+  // Marker extension for auditable requests to resources
+  AuditableRequest auditable_request = 50003;
+}
+
+// Contains audit settings for a auditable RPC method
+message MethodAuditMetadata {
+  oneof activities {
+    // Specifies NID-based type of resource that is affected by the method, e.g. "project" or "serviceaccount".
+    // Method action is inferred from:
+    // 1. request message (if it is marked as `auditable_request`)
+    // 2. method name otherwise
+    // This is a default option when method performs a single action on resources of a fixed type.
+    string resource_type = 1;
+    // Specifies method activities as an explicit list of pairs <resource_type, action> for all possible audit events
+    // that can be produced by the method. Annotation should contain all possible activities performed in the method,
+    // but just subset of it can be encountered in the produced audit event for particular call. I.e. any activity
+    // from the description can be encountered in the event, but not necessary all of them must be present ("OR").
+    // Optionally specifies main activity (resource and action), e.g. for failed event processing audit when no real
+    // action was performed
+    MultipleAuditedActivities multiple_audited_activities = 2;
+    // Specifies single activity of the method. It is used as a short way to set method's action and resource type.
+    AuditedActivity default_activity = 3;
+  }
+}
+
+message NonAuditMetadata {
+  // Indicates reason why method or service is not auditable
+  string reason = 1;
+}
+
+// Toggles audit for all service methods
+message ServiceAudit {
+  oneof decision  {
+    // service is auditable
+    bool enabled = 1;
+    // service is auditable and resource type is specified explicitly. It should be used only for cases
+    // when resource type inference is not possible based on present CRUD methods
+    string enabled_with_resource_type = 2;
+    // service should not be auditable
+    NonAuditMetadata disabled = 3;
+  }
+}
+
+// Toggles audit for a service method
+message MethodAudit {
+  oneof decision  {
+    // method is auditable
+    MethodAuditMetadata enabled = 1;
+    // method should not be auditable
+    NonAuditMetadata disabled = 2;
+  }
+}
+
+// Specifies all possible activities that can be produced by a service method call. Not described activities will be
+// complained by event validator.
+// Note: it does NOT require to have ALL activities in each event, just all valid options.
+message MultipleAuditedActivities {
+  // Optional default activity. If specified then it is not required to be duplicated in `audited_activities` list.
+  // Usually used in case of failed processing or when no action was performed on any resource
+  AuditedActivity default_activity = 1;
+  // All possible audited activities that produce audit events during the call besides main activity
+  repeated AuditedActivity audited_activities = 2;
+}
+
+// Activity as an action on resource
+message AuditedActivity {
+  // NID-based type of resource that is affected by the method, e.g. "project" or "serviceaccount"
+  string resource_type = 1;
+  // Action on the resource
+  nebius.audit.v1.common.Action action = 2;
+}
+
+// Contains settings of a request from auditable method
+message AuditableRequest {
+  nebius.audit.v1.common.Action action = 1;
+}

@@ -1,0 +1,44 @@
+syntax = "proto3";
+
+package nebius.audit.v1.common;
+
+import "ydb/public/api/client/nc_private/audit/v1/common/action_type.proto";
+
+option java_multiple_files = true;
+option java_outer_classname = "ActionProto";
+option java_package = "ai.nebius.audit.v1.common";
+
+enum Action {
+  ACTION_UNSPECIFIED = 0;
+  CREATE = 1 [(action_type) = ACTION_TYPE_MODIFY];
+  UPDATE = 2 [(action_type) = ACTION_TYPE_MODIFY];
+  UPSERT = 3 [(action_type) = ACTION_TYPE_MODIFY];
+  GET = 4 [(action_type) = ACTION_TYPE_READ];
+  DELETE = 5 [(action_type) = ACTION_TYPE_MODIFY];
+  SET_ACCESS_BINDINGS = 6 [(action_type) = ACTION_TYPE_MODIFY];
+  UPDATE_ACCESS_BINDINGS = 7 [(action_type) = ACTION_TYPE_MODIFY];
+  LIST = 8 [(action_type) = ACTION_TYPE_READ];
+  ROTATE = 9 [(action_type) = ACTION_TYPE_MODIFY];
+  SCHEDULE_FOR_DELETION = 10 [(action_type) = ACTION_TYPE_MODIFY];
+  UNDELETE = 11 [(action_type) = ACTION_TYPE_MODIFY];
+  EXCHANGE = 12 [(action_type) = ACTION_TYPE_MODIFY];
+  REVOKE = 13 [(action_type) = ACTION_TYPE_MODIFY];
+  START = 14 [(action_type) = ACTION_TYPE_MODIFY];
+  STOP = 15 [(action_type) = ACTION_TYPE_MODIFY];
+  LOGIN = 16 [(action_type) = ACTION_TYPE_READ];
+  SEND_CONFIRMATION = 17 [(action_type) = ACTION_TYPE_MODIFY];
+  CONFIRM = 18 [(action_type) = ACTION_TYPE_MODIFY];
+  UNREF = 19 [(action_type) = ACTION_TYPE_READ];
+  RESEND = 20 [(action_type) = ACTION_TYPE_MODIFY];
+  ACCEPT = 21 [(action_type) = ACTION_TYPE_MODIFY];
+  GET_OR_CREATE = 22 [(action_type) = ACTION_TYPE_UNSPECIFIED];
+  VALIDATE = 23 [(action_type) = ACTION_TYPE_READ];
+  ENCRYPT = 24 [(action_type) = ACTION_TYPE_READ];
+  DECRYPT = 25 [(action_type) = ACTION_TYPE_READ];
+  GENERATE_DATA_KEY = 26 [(action_type) = ACTION_TYPE_READ];
+  GET_PUBLIC_KEY = 27 [(action_type) = ACTION_TYPE_READ];
+  SIGN_HASH = 28 [(action_type) = ACTION_TYPE_READ];
+  GET_USAGE = 29 [(action_type) = ACTION_TYPE_READ];
+  GET_BY_KEY = 30 [(action_type) = ACTION_TYPE_READ];
+  CREATE_OR_RECREATE = 31 [(action_type) = ACTION_TYPE_MODIFY];
+}

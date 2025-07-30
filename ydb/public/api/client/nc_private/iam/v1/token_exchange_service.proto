@@ -1,0 +1,19 @@
+syntax = "proto3";
+
+package nebius.iam.v1;
+
+import "ydb/public/api/client/nc_private/annotations.proto";
+import "ydb/public/api/client/nc_private/audit/annotations.proto";
+import "ydb/public/api/client/nc_private/iam/v1/token_service.proto";
+
+option java_multiple_files = true;
+option java_outer_classname = "TokenExchangeServiceProto";
+option java_package = "ai.nebius.iam.token.v1";
+
+service TokenExchangeService {
+  option (api_service_name) = "tokens.iam";
+  option (service_visibility) = PUBLIC;
+  option (audit.service_audit).enabled = true;
+
+  rpc Exchange(ExchangeTokenRequest) returns (CreateTokenResponse);
+}

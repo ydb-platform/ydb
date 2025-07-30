@@ -14,3 +14,7 @@ PEERDIR(
 )
 
 END()
+
+RECURSE(
+    audit_config
+)

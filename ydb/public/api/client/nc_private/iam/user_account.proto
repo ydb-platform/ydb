@@ -1,0 +1,15 @@
+syntax = "proto3";
+
+package nebius.iam.v1;
+
+import "ydb/public/api/client/nc_private/iam/sensitive.proto";
+
+option java_multiple_files = true;
+option java_outer_classname = "UserAccountProto";
+option java_package = "ai.nebius.iam.identity.v1";
+
+message UserAccountExternalId {
+  string federation_user_account_id = 1 [(sensitive) = true];
+  string federation_id = 2;
+}
+

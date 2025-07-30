@@ -357,7 +357,7 @@ public:
                 break;
             case Ydb::Query::StatsMode::STATS_MODE_UNSPECIFIED:
             default:
-                StatsMode = NYql::NDqProto::EDqStatsMode::DQ_STATS_MODE_FULL;
+                StatsMode = NYql::NDqProto::EDqStatsMode::DQ_STATS_MODE_BASIC;
                 break;
         }
     }

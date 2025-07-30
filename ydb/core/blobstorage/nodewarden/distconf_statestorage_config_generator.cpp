@@ -10,9 +10,12 @@ namespace NKikimr::NStorage {
 
     TStateStoragePerPileGenerator::TStateStoragePerPileGenerator(THashMap<TString, std::vector<std::tuple<ui32, TNodeLocation>>>& nodes
         , const std::unordered_map<ui32, ui32>& selfHealNodesState
-        , const std::optional<TBridgePileId>& pileId)
+        , const std::optional<TBridgePileId>& pileId
+        , std::unordered_set<ui32>& usedNodes
+    )
         : PileId(pileId)
         , SelfHealNodesState(selfHealNodesState)
+        , UsedNodes(usedNodes)
     {
         FillNodeGroups(nodes);
         CalculateRingsParameters();
@@ -27,19 +30,12 @@ namespace NKikimr::NStorage {
             for (auto& n : dc) {
                 NodeGroups[0].Nodes.emplace_back(n);
                 ui32 nodeId = std::get<0>(n);
-                if (SelfHealNodesState.contains(nodeId)) {
-                    ui32 state = SelfHealNodesState.at(nodeId);
-                    BadNodeState = Max(BadNodeState, state);
-                    auto& states = NodeGroups[0].State;
-                    states.resize(BadNodeState + 1);
-                    states[state]++;
-                }
+                ui32 state = CalcNodeState(nodeId);
+                NodeGroups[0].State[state]++;
             }
-            for (auto& ng : NodeGroups) {
-                ng.State.resize(BadNodeState + 1);
-            }
+
             std::ranges::sort(NodeGroups, [&](const auto& x, const auto& y) {
-                for (ui32 idx : xrange(BadNodeState + 1)) {
+                for (ui32 idx : xrange(NodeStatesSize)) {
                     if (x.State[idx] != y.State[idx]) {
                         return x.State[idx] < y.State[idx];
                     }
@@ -47,7 +43,6 @@ namespace NKikimr::NStorage {
                 return x.Nodes.size() < y.Nodes.size() || (x.Nodes.size() > 0 && x.Nodes.size() == y.Nodes.size() && std::get<0>(x.Nodes[0]) < std::get<0>(y.Nodes[0]));
             });
         }
-        BadNodeState++;
         Y_ABORT_UNLESS(NodeGroups.size() > 0 && NodeGroups[0].Nodes.size() > 0);
     }
 
@@ -90,8 +85,19 @@ namespace NKikimr::NStorage {
             auto *ring = rg->AddRing();
             for(auto nodeId : nodes) {
                 ring->AddNode(nodeId);
+                UsedNodes.insert(nodeId);
             }
         }
+    }
+
+    ui32 TStateStoragePerPileGenerator::CalcNodeState(ui32 nodeId) {
+        ui32 state = SelfHealNodesState.contains(nodeId) ? SelfHealNodesState.at(nodeId) : (NodeStatesSize - 1);
+        Y_ABORT_UNLESS(state < NodeStatesSize);
+        Y_ABORT_UNLESS(state != NCms::NSentinel::TNodeStatusComputer::ENodeState::PRETTY_GOOD);
+        if (state == 0 && UsedNodes.contains(nodeId)) {
+            state++;
+        }
+        return state;
     }
 
     bool TStateStoragePerPileGenerator::PickNodesSimpleStrategy(TNodeGroup& group, ui32 stateLimit, bool ignoreRacks) {
@@ -111,8 +117,7 @@ namespace NKikimr::NStorage {
                 }
                 ui32 nodeId = std::get<0>(*iter);
                 location = std::get<1>(*iter);
-                ui32 state = SelfHealNodesState.contains(nodeId) ? SelfHealNodesState.at(nodeId) : BadNodeState;
-                if (state <= stateLimit) {
+                if (CalcNodeState(nodeId) <= stateLimit) {
                     ring.push_back(nodeId);
                 }
                 iter++;
@@ -130,16 +135,12 @@ namespace NKikimr::NStorage {
     }
 
     void TStateStoragePerPileGenerator::PickNodes(TNodeGroup& group) {
-        std::unordered_map<TString, std::vector<ui32>> rackStates;
+        std::unordered_map<TString, std::array<ui32, NodeStatesSize>> rackStates;
         for (auto& n : group.Nodes) {
             auto rack = std::get<1>(n).GetRackId();
             auto nodeId = std::get<0>(n);
-            ui32 state = SelfHealNodesState.contains(nodeId) ? SelfHealNodesState.at(nodeId) : BadNodeState;
             auto& rackState = rackStates[rack];
-            if (rackState.empty()) {
-                rackState.resize(BadNodeState + 1);
-            }
-            rackState[state]++;
+            rackState[CalcNodeState(nodeId)]++;
         }
 
         auto compByRack = [&](const auto& x, const auto& y) {
@@ -148,13 +149,13 @@ namespace NKikimr::NStorage {
             if (rackX == rackY) {
                 auto nodeX = std::get<0>(x);
                 auto nodeY = std::get<0>(y);
-                ui32 state1 = SelfHealNodesState.contains(nodeX) ? SelfHealNodesState.at(nodeX) : BadNodeState;
-                ui32 state2 = SelfHealNodesState.contains(nodeY) ? SelfHealNodesState.at(nodeY) : BadNodeState;
+                ui32 state1 = CalcNodeState(nodeX);
+                ui32 state2 = CalcNodeState(nodeY);
                 return state1 < state2 || (state1 == state2 && nodeX < nodeY);
             }
             auto& rackStateX = rackStates[rackX];
             auto& rackStateY = rackStates[rackY];
-            for (ui32 idx : xrange(BadNodeState + 1)) {
+            for (ui32 idx : xrange(NodeStatesSize)) {
                 if (rackStateX[idx] != rackStateY[idx]) {
                     return rackStateX[idx] > rackStateY[idx];
                 }
@@ -163,12 +164,14 @@ namespace NKikimr::NStorage {
         };
 
         std::ranges::sort(group.Nodes, compByRack);
-        for (ui32 stateLimit : xrange(BadNodeState + 1)) {
+        for (ui32 stateLimit : xrange(NodeStatesSize)) {
             if (PickNodesSimpleStrategy(group, stateLimit, rackStates.size() < RingsInGroupCount)) {
+                GoodConfig &= stateLimit <= 1;
                 return;
             }
         }
-        Y_ABORT_UNLESS(PickNodesSimpleStrategy(group, Max<ui32>(), true));
+        GoodConfig = false;
+        Y_ABORT_UNLESS(PickNodesSimpleStrategy(group, NodeStatesSize, true));
     }
 
 }

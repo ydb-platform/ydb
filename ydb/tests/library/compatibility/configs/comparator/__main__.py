@@ -27,14 +27,18 @@ class Differ:
     def __init__(self):
         self.fields: list[tuple[str, list[FieldInfo]]] = []
         self.resolutions: list[tuple[str, list[tuple[Resolution, str]]]] = []
-        self.names: list[str] = []
+        self.branches: list[dict[str, str]] = []
 
     def load_files(self, names: list[str]):
         configs = []
         for name in names:
             with open(name) as f:
-                configs.append(json.load(f).get('proto'))
-            self.names.append(os.path.basename(name))
+                content = json.load(f)
+                configs.append(content.get('proto'))
+                self.branches.append({
+                    'branch_name' : content.get('branch', os.path.basename(name)),
+                    'commit': content.get('commit')
+                })
         self._add_fields_dict(configs, [])
 
     def _add_fields_dict(self, fields: list[dict], path: list[str]):
@@ -173,7 +177,7 @@ function openDescr(evt, lang) {
 <html>
 <head>
 <meta charset="utf-8">
-<title>Сравнение конфигураций по-умолчанию YDBD</title>
+<title>Сравнение дефолтных конфигураций ydbd</title>
 </head>
 <body>
 <div class="tab">
@@ -181,21 +185,21 @@ function openDescr(evt, lang) {
   <button class="tablinks" onclick="openDescr(event, 'english')">Description</button>
 </div>
 <div id=russian class="tabcontent">
-<h1>Сравнение конфигураций по-умолчанию YDBD разных версий</h1>
-В таблице ниже представлены изменения конфигураций по-умолчанию для разных версий YDBD. Cделано на основе описания конфигураций в <a href="https://github.com/ydb-platform/ydb/blob/main/ydb/core/protos/config.proto">протобуфе</a>.
+<h1>Сравнение дефолтных конфигураций ydbd разных версий</h1>
+В таблице ниже представлены изменения дефолтных конфигураций для разных версий ydbd. Сделано на основе описания конфигураций в <a href="https://github.com/ydb-platform/ydb/blob/main/ydb/core/protos/config.proto">протобуфе</a>.
 <p>
 Цвет означает критичность изменений в соседних ветках:
 <ul>
-<li><span style="font-weight:bold">Белый</span> означает, что поле полностью отсутсвует в данной версии конфигурации.</li>
+<li><span style="font-weight:bold">Белый</span> означает, что поле полностью отсутствует в данной версии конфигурации.</li>
 <li><span style="background-color: #aaffaa;font-weight:bold">Зеленый</span> - безопасное изменение, такое как добавление нового поля или включение Feature flag.</li>
 <li><span style="background-color: #ffffaa;font-weight:bold">Желтый</span> - изменение, которое может вызвать изменение поведения, но не должно быть критичным, например изменение значения по умолчанию.</li>
-<li><span style="background-color: #ffaaaa;font-weight:bold">Красный</span> - Плохое изменение, которое может все сломать: удаление полей, изменение их типа или id (в протобуфе), выключение Feature flag итд.</li>
+<li><span style="background-color: #ffaaaa;font-weight:bold">Красный</span> - опасное изменение, которое может все сломать: удаление полей, изменение их типа или id (в протобуфе), выключение Feature flag итд.</li>
 </ul>
 </p>
 </div>
 <div id=english class="tabcontent">
-<h1>Comparison of YDBD default configurations of different versions</h1>
-The table above shows the changes in default configurations for different versions of YDBD. Based on the description of configurations in the <a href="https://github.com/ydb-platform/ydb/blob/main/ydb/core/protos/config.proto">protobuf</a>.
+<h1>Comparison of ydbd default configurations of different versions</h1>
+The table above shows the changes in default configurations for different versions of ydbd. Based on the description of configurations in the <a href="https://github.com/ydb-platform/ydb/blob/main/ydb/core/protos/config.proto">protobuf</a>.
 <p>
 The color indicates the criticality of the changes in the neighboring branches:
 <ul>
@@ -207,9 +211,14 @@ The color indicates the criticality of the changes in the neighboring branches:
 </p>
 </div>
 <table border=1 valign="center">''')
-        print('<thead style="position: sticky; top: 0; background: white; align: center"><tr><th style="padding-left: 10; padding-right: 10">config field \ branch</th>')
-        for name in self.names:
-            print(f'<th style="padding-left: 10; padding-right: 10">{name}</th>')
+        print('<thead style="position: sticky; top: 0; background: white; align: center">')
+        print('<tr><th style="padding-left: 10; padding-right: 10">config field \\ branch, commit</th>')
+        for b in self.branches:
+            br_text = b['branch_name']
+            c = b.get('commit')
+            if c:
+                br_text += f'<br/><a href="https://github.com/ydb-platform/ydb/commit/{c}">{c[0:7]}</a>'
+            print(f'<th style="padding-left: 10; padding-right: 10">{br_text}</th>')
         print('</tr></thead>')
         print('<tbody>')
         for field, result in self.resolutions:

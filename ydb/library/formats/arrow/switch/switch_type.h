@@ -3,6 +3,7 @@
 #include <ydb/library/yverify_stream/yverify_stream.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/api.h>
+#include <util/digest/fnv.h>
 #include <util/string/cast.h>
 #include <util/system/yassert.h>
 #include <yql/essentials/parser/pg_wrapper/interface/type_desc.h>
@@ -63,6 +64,28 @@ public:
     template <class TExt>
     static std::shared_ptr<TArray> CastArray(const std::shared_ptr<TExt>& arr) {
         return std::static_pointer_cast<TArray>(arr);
+    }
+
+    ui64 CalcHash(const ValueType val) const {
+        if constexpr (IsCType) {
+            return FnvHash<ui64>(&val, sizeof(val));
+        }
+        if constexpr (IsStringView) {
+            return FnvHash<ui64>(val.data(), val.size());
+        }
+        Y_FAIL();
+    }
+
+    void AppendValue(arrow::ArrayBuilder& builder, const ValueType val) const {
+        if constexpr (IsCType) {
+            TStatusValidator::Validate(static_cast<TBuilder&>(builder).Append(val));
+            return;
+        }
+        if constexpr (IsStringView) {
+            TStatusValidator::Validate(static_cast<TBuilder&>(builder).Append(val));
+            return;
+        }
+        Y_FAIL();
     }
 
     template <class TValue>
@@ -255,9 +278,10 @@ bool Append(arrow::ArrayBuilder& builder, const std::vector<typename T::c_type>&
 }
 
 template <typename T>
-[[nodiscard]] bool Append(T& builder, const arrow::Array& array, int position, ui64* recordSize = nullptr) {
+[[nodiscard]] bool Append(T& builder, const arrow::Type::type typeId, const arrow::Array& array, int position, ui64* recordSize = nullptr) {
     Y_DEBUG_ABORT_UNLESS(builder.type()->id() == array.type_id());
-    return SwitchType(array.type_id(), [&](const auto& type) {
+    Y_DEBUG_ABORT_UNLESS(typeId == array.type_id());
+    return SwitchType(typeId, [&](const auto& type) {
         using TWrap = std::decay_t<decltype(type)>;
         using TArray = typename arrow::TypeTraits<typename TWrap::T>::ArrayType;
         using TBuilder = typename arrow::TypeTraits<typename TWrap::T>::BuilderType;
@@ -290,6 +314,11 @@ template <typename T>
         Y_ABORT_UNLESS(false, "unpredictable variant");
         return false;
     });
+}
+
+template <typename T>
+[[nodiscard]] bool Append(T& builder, const arrow::Array& array, int position, ui64* recordSize = nullptr) {
+    return Append<T>(builder, array.type_id(), array, position, recordSize);
 }
 
 }   // namespace NKikimr::NArrow

@@ -42,6 +42,9 @@ void TAccessorsCollection::AddVerified(const ui32 columnId, const TAccessorColle
 
 std::shared_ptr<arrow::Array> TAccessorsCollection::GetArrayVerified(const ui32 columnId) const {
     auto chunked = GetAccessorVerified(columnId)->GetChunkedArray();
+    if (chunked->num_chunks() == 1) {
+        return chunked->chunk(0);
+    }
     arrow::FieldVector fields = { GetFieldVerified(columnId) };
     auto schema = std::make_shared<arrow::Schema>(fields);
     return NArrow::ToBatch(arrow::Table::Make(schema, { chunked }))->column(0);

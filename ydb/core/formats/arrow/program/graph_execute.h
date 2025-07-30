@@ -154,11 +154,13 @@ public:
                     return nullptr;
                 }
             } else {
-                return nullptr;
+//                return nullptr;
             }
         }
-        if (aggregators.size()) {
+        if (aggregators.size() > 1) {
             return std::make_shared<TCompositeResourcesAggregator>(std::move(aggregators));
+        } else if (aggregators.size() == 1) {
+            return aggregators.front();
         } else {
             return nullptr;
         }

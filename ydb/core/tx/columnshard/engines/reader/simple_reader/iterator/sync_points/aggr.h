@@ -70,8 +70,7 @@ private:
         AFL_VERIFY(InFlightControl);
         --InFlightControl;
         AFL_VERIFY(!Next);
-        AFL_VERIFY(source->GetAs<IDataSource>()->GetType() == IDataSource::EType::Aggregation)(
-            "type", source->GetAs<IDataSource>()->GetType());
+        AFL_VERIFY(source->GetAs<IDataSource>()->GetType() == IDataSource::EType::Aggregation)("type", source->GetAs<IDataSource>()->GetType());
         const TAggregationDataSource* aggrSource = static_cast<const TAggregationDataSource*>(source.get());
         for (auto&& i : aggrSource->GetSources()) {
             Collection->OnSourceFinished(i);
@@ -89,7 +88,7 @@ private:
             auto cursor = std::make_shared<TNotSortedSimpleScanCursor>(aggrSource->GetLastSourceId(), aggrSource->GetLastSourceRecordsCount());
             reader.OnIntervalResult(
                 std::make_unique<TPartialReadResult>(source->ExtractResourceGuards(), source->MutableAs<IDataSource>()->ExtractGroupGuard(),
-                resultChunk->ExtractTable(), std::move(cursor), Context->GetCommonContext(), std::nullopt));
+                    resultChunk->ExtractTable(), std::move(cursor), Context->GetCommonContext(), std::nullopt));
         }
         source->MutableAs<IDataSource>()->ClearResult();
         return ESourceAction::Finish;

@@ -3,11 +3,14 @@
 #include "permutations.h"
 
 #include "switch/compare.h"
+#include "switch/switch_type.h"
 
 #include <ydb/library/actors/core/log.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/api.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/compute/api_vector.h>
+#include <library/cpp/string_utils/base64/base64.h>
+#include <util/digest/fnv.h>
 #include <util/string/builder.h>
 #include <util/string/join.h>
 
@@ -19,6 +22,10 @@ using TArrayVec = std::vector<std::shared_ptr<arrow::Array>>;
 
 template <typename TArrayVecPtr>
 class TReplaceKeyTemplate {
+protected:
+    TArrayVecPtr Columns = nullptr;
+    ui64 Position = 0;
+
 public:
     static constexpr bool IsOwning = std::is_same_v<TArrayVecPtr, std::shared_ptr<TArrayVec>>;
 
@@ -236,10 +243,6 @@ public:
     const TArrayVecPtr& GetColumns() const {
         return Columns;
     }
-
-private:
-    TArrayVecPtr Columns = nullptr;
-    ui64 Position = 0;
 };
 
 class TReplaceKeyView;
@@ -270,6 +273,71 @@ public:
 
     TReplaceKeyView(const std::vector<std::shared_ptr<arrow::Array>>& columns, const ui64 position)
         : TBase(&columns, position) {
+    }
+
+    TReplaceKey GetToStore() const {
+        return TReplaceKey(std::make_shared<std::vector<std::shared_ptr<arrow::Array>>>(*GetColumns()), GetPosition());
+    }
+};
+
+class TReplaceKeyHashable: public TReplaceKeyTemplate<const TArrayVec*> {
+private:
+    using TBase = TReplaceKeyTemplate<const TArrayVec*>;
+    ui64 HashPrecalculated = 0;
+    const std::vector<arrow::Type::type>* Types = nullptr;
+
+    ui64 CalcHash() const {
+        size_t result = 0;
+        for (auto&& i : *Columns) {
+            AFL_VERIFY(NArrow::SwitchType(i->type_id(), [&](const auto& type) {
+                auto* arr = type.CastArray(i.get());
+                result = CombineHashes<size_t>(result, type.CalcHash(type.GetValue(*arr, Position)));
+                return true;
+            }));
+        }
+        return result;
+    }
+
+public:
+    using TBase::TBase;
+
+    bool operator==(const TReplaceKeyHashable& key) const {
+        if (HashPrecalculated != key.HashPrecalculated) {
+            return false;
+        }
+        const ui32 count = GetColumnsCount();
+        Y_ABORT_UNLESS(count == key.GetColumnsCount());
+        for (ui32 i = 0; i < count; ++i) {
+            Y_DEBUG_ABORT_UNLESS(Column(i).type_id() == key.Column(i).type_id());
+            if (std::is_neq(TComparator::ConcreteTypedCompare<true>((*Types)[i], Column(i), Position, key.Column(i), key.GetPosition()))) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    explicit operator size_t() const {
+        return HashPrecalculated;
+    }
+
+    bool IsFinished() const {
+        return (*GetColumns()).front()->length() == GetPosition();
+    }
+
+    void Next() {
+        AFL_VERIFY(GetPosition() < (*GetColumns()).front()->length());
+        ++Position;
+        if (!IsFinished()) {
+            HashPrecalculated = CalcHash();
+        }
+    }
+
+    TReplaceKeyHashable(
+        const std::vector<std::shared_ptr<arrow::Array>>& columns, const ui64 position, const std::vector<arrow::Type::type>& types)
+        : TBase(&columns, position)
+        , HashPrecalculated(CalcHash())
+        , Types(&types) {
+        AFL_VERIFY(Types);
     }
 
     TReplaceKey GetToStore() const {

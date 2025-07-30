@@ -4,17 +4,16 @@
 
 namespace NKikimr::NStorage {
 
-    class TDistributedConfigKeeper::TInvokeRequestHandlerActor : public TActorBootstrapped<TInvokeRequestHandlerActor> {
+    class TDistributedConfigKeeper::TInvokeRequestHandlerActor : public TActor<TInvokeRequestHandlerActor> {
         friend class TDistributedConfigKeeper;
 
         TDistributedConfigKeeper* const Self;
         const std::weak_ptr<TLifetimeToken> LifetimeToken;
-        const ui64 InvokeActorQueueGeneration;
+        const ui64 InvokePipelineGeneration;
         TInvokeQuery Query;
 
-        bool BeginRegistered = false;
-
         bool CheckSyncersAfterCommit = false;
+        bool IsRelay = false;
 
         ui32 WaitingReplyFromNode = 0;
 
@@ -26,8 +25,6 @@ namespace NKikimr::NStorage {
         THashMap<ui64, TGatherCallback> ScatterTasks;
 
         std::shared_ptr<TLifetimeToken> RequestHandlerToken = std::make_shared<TLifetimeToken>();
-
-        std::optional<TString> PassedAwayBacktrace;
 
     public: // Error handling
         struct TExError : yexception {
@@ -50,7 +47,8 @@ namespace NKikimr::NStorage {
     public:
         TInvokeRequestHandlerActor(TDistributedConfigKeeper *self, TInvokeQuery&& query);
 
-        void Bootstrap();
+        void HandleExecuteQuery();
+        void Handle(TEvPrivate::TEvAbortQuery::TPtr ev);
 
         void Handle(TEvNodeConfigInvokeOnRootResult::TPtr ev);
 
@@ -161,6 +159,7 @@ namespace NKikimr::NStorage {
         void AdvanceGeneration();
         void StartProposition(NKikimrBlobStorage::TStorageConfig *config, bool acceptLocalQuorum = false,
             const NKikimrBlobStorage::TStorageConfig *propositionBase = nullptr);
+        void Handle(TEvPrivate::TEvConfigProposed::TPtr ev);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Query termination and result delivery
@@ -173,13 +172,6 @@ namespace NKikimr::NStorage {
         void PassAway() override;
 
         STFUNC(StateFunc);
-
-        ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-        // Notifications from distconf
-
-        void OnError(const TString& errorReason);
-        void OnBeginOperation();
-        void OnConfigProposed(const std::optional<TString>& errorReason);
 
         template<typename T>
         void Wrap(T&& callback) {

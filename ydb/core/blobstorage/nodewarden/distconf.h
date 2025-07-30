@@ -77,7 +77,10 @@ namespace NKikimr::NStorage {
                EvStorageConfigLoaded,
                EvStorageConfigStored,
                EvReconnect,
-               EvOpQueueEnd,
+               EvExecuteQuery,
+               EvAbortQuery,
+               EvQueryFinished,
+               EvConfigProposed,
             };
 
             struct TEvStorageConfigLoaded : TEventLocal<TEvStorageConfigLoaded, EvStorageConfigLoaded> {
@@ -88,6 +91,22 @@ namespace NKikimr::NStorage {
 
             struct TEvStorageConfigStored : TEventLocal<TEvStorageConfigStored, EvStorageConfigStored> {
                 std::vector<std::tuple<TString, bool, std::optional<ui64>>> StatusPerPath;
+            };
+
+            struct TEvAbortQuery : TEventLocal<TEvAbortQuery, EvAbortQuery> {
+                TString ErrorReason;
+
+                TEvAbortQuery(TString errorReason)
+                    : ErrorReason(std::move(errorReason))
+                {}
+            };
+
+            struct TEvConfigProposed : TEventLocal<TEvConfigProposed, EvConfigProposed> {
+                std::optional<TString> ErrorReason;
+
+                TEvConfigProposed(std::optional<TString> errorReason)
+                    : ErrorReason(std::move(errorReason))
+                {}
             };
         };
 
@@ -263,7 +282,6 @@ namespace NKikimr::NStorage {
             NKikimrBlobStorage::TStorageConfig StorageConfig; // storage config being proposed
             TActorId ActorId; // actor id waiting for this operation to complete
             bool CheckSyncersAfterCommit; // shall we check Bridge syncers after commit has been made
-            ui64 InvokeActorQueueGeneration;
         };
         std::optional<TProposition> CurrentProposition;
 
@@ -297,9 +315,6 @@ namespace NKikimr::NStorage {
         ui64 NextSubscribeCookie = 1;
         THashMap<ui64, ui32> SubscriptionCookieMap;
         THashSet<ui32> UnsubscribeQueue;
-
-        // child actors
-        THashSet<TActorId> ChildActors;
 
         // pipe to Console
         TActorId ConsolePipeId;
@@ -520,18 +535,13 @@ namespace NKikimr::NStorage {
         struct TLifetimeToken {};
         std::shared_ptr<TLifetimeToken> LifetimeToken = std::make_shared<TLifetimeToken>();
 
-        ui64 InvokeActorQueueGeneration = 1;
+        ui64 InvokePipelineGeneration = 1;
 
         void Handle(TEvNodeConfigInvokeOnRoot::TPtr ev);
         void Invoke(TInvokeQuery&& query);
+        void HandleQueryFinished(STFUNC_SIG);
 
         void OpQueueOnError(const TString& errorReason);
-
-        void OpQueueBegin(TActorId actorId);
-        void OpQueueProcessFront();
-        void HandleOpQueueEnd(STFUNC_SIG);
-
-        TInvokeRequestHandlerActor *GetInvokeRequestHandlerActor(TActorId actorId);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Dynamic node interaction

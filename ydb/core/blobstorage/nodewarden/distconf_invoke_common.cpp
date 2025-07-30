@@ -9,67 +9,70 @@ namespace NKikimr::NStorage {
     using TInvokeRequestHandlerActor = TDistributedConfigKeeper::TInvokeRequestHandlerActor;
 
     TInvokeRequestHandlerActor::TInvokeRequestHandlerActor(TDistributedConfigKeeper *self, TInvokeQuery&& query)
-        : Self(self)
+        : TActor(&TThis::StateFunc)
+        , Self(self)
         , LifetimeToken(Self->LifetimeToken)
-        , InvokeActorQueueGeneration(Self->InvokeActorQueueGeneration)
+        , InvokePipelineGeneration(Self->InvokePipelineGeneration)
         , Query(std::move(query))
-    {
-    }
+    {}
 
-    void TInvokeRequestHandlerActor::Bootstrap() {
-        if (LifetimeToken.expired()) {
-            return Finish(TResult::RACE, "Distributed config keeper terminated");
-        }
-        if (InvokeActorQueueGeneration != Self->InvokeActorQueueGeneration) {
-            // actual request has been cancelled since it was signed up for bootstrap
-            return PassAway();
-        }
-
-        STLOG(PRI_DEBUG, BS_NODE, NWDC42, "TInvokeRequestHandlerActor::Bootstrap",
+    void TInvokeRequestHandlerActor::HandleExecuteQuery() {
+        STLOG(PRI_DEBUG, BS_NODE, NWDC42, "HandleExecuteQuery",
             (SelfId, SelfId()),
             (Binding, Self->Binding),
             (RootState, Self->RootState),
-            (ErrorReason, Self->ErrorReason));
+            (ErrorReason, Self->ErrorReason),
+            (Query.InvokePipelineGeneration, InvokePipelineGeneration),
+            (Keeper.InvokePipelineGeneration, Self->InvokePipelineGeneration));
 
-        Become(&TThis::StateFunc);
+        if (Self->Binding) { // we aren't the root node, work as a relay and forward this query to the next bound node
+            auto *op = std::get_if<TInvokeExternalOperation>(&Query);
+            Y_ABORT_UNLESS(op);
 
-        Wrap([&] {
-            if (Self->Binding) { // we aren't the root node
-                auto *op = std::get_if<TInvokeExternalOperation>(&Query);
-                Y_ABORT_UNLESS(op);
-
-                if (op->SessionId) {
-                    const auto it = Self->DirectBoundNodes.find(op->Sender.NodeId());
-                    if (it == Self->DirectBoundNodes.end() || op->SessionId != it->second.SessionId) {
-                        throw TExRace() << "Distconf tree reconfigured during query delivery";
-                    }
+            if (op->SessionId) {
+                const auto it = Self->DirectBoundNodes.find(op->Sender.NodeId());
+                if (it == Self->DirectBoundNodes.end() || op->SessionId != it->second.SessionId) {
+                    // abort operation as we won't be able to return the result
+                    throw TExRace() << "Distconf tree reconfigured during query delivery";
                 }
-
-                const ui32 node = Self->Binding->NodeId;
-                auto ev = std::make_unique<TEvNodeConfigInvokeOnRoot>();
-                op->Command.Swap(&ev->Record);
-                Send(MakeBlobStorageNodeWardenID(node), ev.release(), IEventHandle::FlagSubscribeOnSession);
-                const auto [it, inserted] = Subscriptions.try_emplace(node);
-                Y_ABORT_UNLESS(inserted);
-                WaitingReplyFromNode = node;
-            } else if (Self->RootState == ERootState::ERROR_TIMEOUT) {
-                throw TExError() << Self->ErrorReason;
-            } else {
-                Y_ABORT_UNLESS(InvokeActorQueueGeneration == Self->InvokeActorQueueGeneration);
-                InvokeOtherActor(*Self, &TDistributedConfigKeeper::OpQueueBegin, SelfId());
             }
-        });
-    }
 
-    void TInvokeRequestHandlerActor::OnError(const TString& errorReason) {
-        Finish(TResult::RACE, errorReason);
-    }
+            const ui32 node = Self->Binding->NodeId;
+            auto ev = std::make_unique<TEvNodeConfigInvokeOnRoot>();
+            op->Command.Swap(&ev->Record);
+            Send(MakeBlobStorageNodeWardenID(node), ev.release(), IEventHandle::FlagSubscribeOnSession);
+            const auto [it, inserted] = Subscriptions.try_emplace(node);
+            Y_ABORT_UNLESS(inserted);
+            WaitingReplyFromNode = node;
 
-    void TInvokeRequestHandlerActor::OnBeginOperation() {
-        BeginRegistered = true;
-        Wrap([&] {
+            // report this query as finished 'cause it doesn't block pipeline anymore
+            TActivationContext::Send(new IEventHandle(TEvPrivate::EvQueryFinished, 0, Self->SelfId(), SelfId(),
+                nullptr, InvokePipelineGeneration));
+
+            // mark this actor as a relay one to prevent it sending EvQueryFinished upon passing away
+            IsRelay = true;
+        } else if (InvokePipelineGeneration == Self->InvokePipelineGeneration) {
+            switch (auto& state = Self->RootState) {
+                case ERootState::INITIAL:
+                    state = ERootState::LOCAL_QUORUM_OP;
+                    break;
+
+                case ERootState::RELAX:
+                    state = ERootState::IN_PROGRESS;
+                    break;
+
+                case ERootState::LOCAL_QUORUM_OP:
+                case ERootState::IN_PROGRESS:
+                case ERootState::ERROR_TIMEOUT:
+                    Y_ABORT_S("unexpected RootState# " << state);
+            }
+
             ExecuteQuery();
-        });
+        }
+    }
+
+    void TInvokeRequestHandlerActor::Handle(TEvPrivate::TEvAbortQuery::TPtr ev) {
+        Finish(TResult::RACE, ev->Get()->ErrorReason);
     }
 
     void TInvokeRequestHandlerActor::Handle(TEvNodeConfigInvokeOnRootResult::TPtr ev) {
@@ -124,10 +127,6 @@ namespace NKikimr::NStorage {
                             auto *response = record->MutableQueryConfig();
                             if (Self->StorageConfig) {
                                 response->MutableConfig()->CopyFrom(*Self->StorageConfig);
-                            }
-                            if (Self->CurrentProposition) {
-                                // TODO(alexvru): this can't actually happen?
-                                response->MutableCurrentProposedStorageConfig()->CopyFrom(Self->CurrentProposition->StorageConfig);
                             }
                         });
 
@@ -302,7 +301,7 @@ namespace NKikimr::NStorage {
             propositionBase = Self->StorageConfig.get();
         }
 
-        Y_ABORT_UNLESS(InvokeActorQueueGeneration == Self->InvokeActorQueueGeneration);
+        Y_ABORT_UNLESS(InvokePipelineGeneration == Self->InvokePipelineGeneration);
         auto error = InvokeOtherActor(*Self, &TDistributedConfigKeeper::StartProposition, config, propositionBase,
             SelfId(), CheckSyncersAfterCommit);
         if (error) {
@@ -312,12 +311,14 @@ namespace NKikimr::NStorage {
         }
     }
 
-    void TInvokeRequestHandlerActor::OnConfigProposed(const std::optional<TString>& errorReason) {
-        STLOG(PRI_DEBUG, BS_NODE, NWDC64, "OnConfigProposed", (SelfId, SelfId()), (ErrorReason, errorReason),
+    void TInvokeRequestHandlerActor::Handle(TEvPrivate::TEvConfigProposed::TPtr ev) {
+        auto& msg = *ev->Get();
+
+        STLOG(PRI_DEBUG, BS_NODE, NWDC64, "OnConfigProposed", (SelfId, SelfId()), (ErrorReason, msg.ErrorReason),
             (RootState, Self->RootState));
 
-        if (errorReason) {
-            throw TExError() << "Config proposition failed: " << *errorReason;
+        if (msg.ErrorReason) {
+            throw TExError() << "Config proposition failed: " << *msg.ErrorReason;
         } else {
             Finish(TResult::OK, std::nullopt);
         }
@@ -378,7 +379,7 @@ namespace NKikimr::NStorage {
                 // TODO(alexvru): backoff?
             },
             [&](TProposeConfig&) {
-                Y_ABORT_UNLESS(InvokeActorQueueGeneration == Self->InvokeActorQueueGeneration);
+                Y_ABORT_UNLESS(InvokePipelineGeneration == Self->InvokePipelineGeneration);
                 if (status != TResult::OK) { // we were asked to commit config, but error has occured
                     Y_ABORT_UNLESS(errorReason);
                     switchToError.emplace(*errorReason);
@@ -389,6 +390,24 @@ namespace NKikimr::NStorage {
         // terminate this actor
         PassAway();
 
+        // reset root state in keeper actor if this query is still valid and there is no pending proposition
+        if (InvokePipelineGeneration == Self->InvokePipelineGeneration && !Self->CurrentProposition) {
+            switch (auto& state = Self->RootState) {
+                case ERootState::IN_PROGRESS:
+                    state = ERootState::RELAX;
+                    break;
+
+                case ERootState::LOCAL_QUORUM_OP:
+                    state = Self->Scepter ? ERootState::RELAX : ERootState::INITIAL;
+                    break;
+
+                case ERootState::INITIAL:
+                case ERootState::ERROR_TIMEOUT:
+                case ERootState::RELAX:
+                    Y_ABORT_S("unexpected RootState# " << state);
+            }
+        }
+
         // switch to error state if needed; this actor would be already terminated and removed from mailbox, so no OnError
         // call will get through
         if (switchToError) {
@@ -397,33 +416,25 @@ namespace NKikimr::NStorage {
     }
 
     void TInvokeRequestHandlerActor::PassAway() {
-        Y_VERIFY_S(!PassedAwayBacktrace, "already passed away: " << *PassedAwayBacktrace);
-        FormatBackTrace(std::make_unique<TStringOutput>(PassedAwayBacktrace.emplace()).get());
-
-        TActorId parentId;
-        if (!LifetimeToken.expired()) {
-            parentId = Self->SelfId();
-            if (Self->CurrentProposition) {
-                Y_ABORT_UNLESS(Self->CurrentProposition->ActorId == SelfId());
-                Y_ABORT_UNLESS(!Self->DeadActorWaitingForProposition);
-                Self->DeadActorWaitingForProposition = true;
-            }
+        if (!IsRelay && !LifetimeToken.expired()) {
+            TActivationContext::Send(new IEventHandle(TEvPrivate::EvQueryFinished, 0, Self->SelfId(), SelfId(), nullptr,
+                InvokePipelineGeneration));
         }
-        TActivationContext::Send(new IEventHandle(TEvPrivate::EvOpQueueEnd, 0, parentId, SelfId(), nullptr,
-            BeginRegistered ? InvokeActorQueueGeneration : 0));
         if (ControllerPipeId) {
             NTabletPipe::CloseAndForgetClient(SelfId(), ControllerPipeId);
         }
         UnsubscribeInterconnect();
-        TActorBootstrapped::PassAway();
+        TActor::PassAway();
     }
 
     STFUNC(TInvokeRequestHandlerActor::StateFunc) {
         Wrap([&] {
             if (LifetimeToken.expired()) {
-                throw TExRace() << "Distributed config keeper terminated";
+                return PassAway();
             }
             STRICT_STFUNC_BODY(
+                cFunc(TEvPrivate::EvExecuteQuery, HandleExecuteQuery);
+                hFunc(TEvPrivate::TEvAbortQuery, Handle);
                 hFunc(TEvNodeConfigInvokeOnRootResult, Handle);
                 hFunc(TEvNodeConfigGather, Handle);
                 hFunc(TEvInterconnect::TEvNodeConnected, Handle);
@@ -452,112 +463,40 @@ namespace NKikimr::NStorage {
 
     void TDistributedConfigKeeper::Invoke(TInvokeQuery&& query) {
         const TActorId actorId = RegisterWithSameMailbox(new TInvokeRequestHandlerActor(this, std::move(query)));
-        ChildActors.insert(actorId);
-    }
-
-    void TDistributedConfigKeeper::OpQueueBegin(TActorId actorId) {
-        Y_ABORT_UNLESS(!Binding); // no operation can begin while we are bound
-        Y_ABORT_UNLESS(RootState != ERootState::ERROR_TIMEOUT);
-
         InvokeQ.push_back(TInvokeOperation{actorId});
         if (InvokeQ.size() == 1) {
-            OpQueueProcessFront();
+            TActivationContext::Send(new IEventHandle(TEvPrivate::EvExecuteQuery, 0, actorId, {}, nullptr, 0));
         }
     }
 
-    void TDistributedConfigKeeper::OpQueueProcessFront() {
-        Y_ABORT_UNLESS(!Binding); // no operation can begin when we are bound
-
-        if (InvokeQ.empty()) {
-            return CheckForConfigUpdate();
-        }
-
-        // find the actor who issued this request; it is always on the same mailbox
-        const auto& item = InvokeQ.front();
-        auto *actor = GetInvokeRequestHandlerActor(item.ActorId);
-        if (item.ActorId && !actor) {
-            // this actor has died and we have to wait for its OpQueueEnd message, which is probably in mailbox
-            return;
-        }
-
-        bool doBeginOperation = false;
-
-        switch (RootState) {
-            case ERootState::INITIAL:
-                RootState = ERootState::LOCAL_QUORUM_OP;
-                doBeginOperation = true;
-                break;
-
-            case ERootState::RELAX:
-                RootState = ERootState::IN_PROGRESS;
-                doBeginOperation = true;
-                break;
-
-            case ERootState::IN_PROGRESS:
-                // maybe system proposition is in flight (triggered by relaxed state)
-                break;
-
-            case ERootState::LOCAL_QUORUM_OP:
-            case ERootState::ERROR_TIMEOUT:
-                Y_FAIL_S("unexpected state in OpQueueProcessFront# " << RootState);
-        }
-
-        if (doBeginOperation && actor) {
-            Y_ABORT_UNLESS(actor->InvokeActorQueueGeneration == InvokeActorQueueGeneration);
-            InvokeOtherActor(*actor, &TInvokeRequestHandlerActor::OnBeginOperation);
-        }
-    }
-
-    void TDistributedConfigKeeper::HandleOpQueueEnd(STFUNC_SIG) {
-        const size_t numErased = ChildActors.erase(ev->Sender);
-        Y_ABORT_UNLESS(numErased);
-
-        if (ev->Cookie != InvokeActorQueueGeneration) {
-            return; // this is mass error termination, we ignore this -- the queue should be empty by now
+    void TDistributedConfigKeeper::HandleQueryFinished(STFUNC_SIG) {
+        if (ev->Cookie != InvokePipelineGeneration) {
+            Y_ABORT_UNLESS(ev->Cookie < InvokePipelineGeneration);
+            return; // a race with aborted query
         }
 
         Y_ABORT_UNLESS(!InvokeQ.empty());
-        const auto& front = InvokeQ.front();
-        Y_ABORT_UNLESS(ev->Sender == front.ActorId);
-
-        if (CurrentProposition && CurrentProposition->ActorId == front.ActorId) {
-            Y_ABORT_UNLESS(DeadActorWaitingForProposition);
-            return; // transaction is still being proposed, although issuer actor is dead
+        auto& front = InvokeQ.front();
+        Y_ABORT_UNLESS(front.ActorId == ev->Sender);
+        if (CurrentProposition) {
+            Y_ABORT_UNLESS(CurrentProposition->ActorId == ev->Sender);
+            Y_ABORT_UNLESS(!DeadActorWaitingForProposition);
+            DeadActorWaitingForProposition = true;
+        } else {
+            InvokeQ.pop_front();
+            if (!InvokeQ.empty()) {
+                TActivationContext::Send(new IEventHandle(TEvPrivate::EvExecuteQuery, 0, InvokeQ.front().ActorId, {},
+                    nullptr, 0));
+            }
         }
-
-        switch (RootState) {
-            case ERootState::LOCAL_QUORUM_OP:
-                RootState = Scepter ? ERootState::RELAX : ERootState::INITIAL;
-                break;
-
-            case ERootState::IN_PROGRESS:
-                RootState = ERootState::RELAX;
-                break;
-
-            default:
-                Y_FAIL_S("unexpected state in HandleOpQueueEnd# " << RootState);
-        }
-
-        InvokeQ.pop_front();
-
-        OpQueueProcessFront();
     }
 
     void TDistributedConfigKeeper::OpQueueOnError(const TString& errorReason) {
         for (const auto& item : std::exchange(InvokeQ, {})) {
-            if (auto *actor = GetInvokeRequestHandlerActor(item.ActorId)) {
-                Y_ABORT_UNLESS(actor->InvokeActorQueueGeneration == InvokeActorQueueGeneration);
-                InvokeOtherActor(*actor, &TInvokeRequestHandlerActor::OnError, errorReason);
-            }
+            Send(item.ActorId, new TEvPrivate::TEvAbortQuery(errorReason));
         }
         DeadActorWaitingForProposition = false;
-
-        // increment generation to just dismiss any incoming OpQueueEnd's
-        ++InvokeActorQueueGeneration;
-    }
-
-    TInvokeRequestHandlerActor *TDistributedConfigKeeper::GetInvokeRequestHandlerActor(TActorId actorId) {
-        return static_cast<TInvokeRequestHandlerActor*>(TlsActivationContext->Mailbox.FindActor(actorId.LocalId()));
+        ++InvokePipelineGeneration;
     }
 
 } // NKikimr::NStorage

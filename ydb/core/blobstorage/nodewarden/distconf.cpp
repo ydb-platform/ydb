@@ -80,8 +80,8 @@ namespace NKikimr::NStorage {
     }
 
     void TDistributedConfigKeeper::PassAway() {
-        for (const TActorId& actorId : ChildActors) {
-            TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, actorId, SelfId(), nullptr, 0));
+        for (const auto& item : InvokeQ) {
+            TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, item.ActorId, SelfId(), nullptr, 0));
         }
         TActorBootstrapped::PassAway();
     }
@@ -417,7 +417,7 @@ namespace NKikimr::NStorage {
             hFunc(TEvNodeWardenDynamicConfigPush, Handle);
             cFunc(TEvPrivate::EvReconnect, HandleReconnect);
             hFunc(NMon::TEvHttpInfo, Handle);
-            fFunc(TEvPrivate::EvOpQueueEnd, HandleOpQueueEnd);
+            fFunc(TEvPrivate::EvQueryFinished, HandleQueryFinished);
             cFunc(TEvents::TSystem::Wakeup, HandleWakeup);
             cFunc(TEvents::TSystem::Poison, PassAway);
             hFunc(TEvTabletPipe::TEvClientConnected, Handle);

@@ -477,11 +477,7 @@ namespace NKikimr::NStorage {
 
         auto finishWithError = [&](TString error) {
             Y_ABORT_UNLESS(proposition.ActorId);
-            if (auto *actor = GetInvokeRequestHandlerActor(proposition.ActorId)) {
-                actor->OnConfigProposed(error);
-            } else if (proposition.InvokeActorQueueGeneration == InvokeActorQueueGeneration) {
-                Y_ABORT_UNLESS(DeadActorWaitingForProposition);
-            }
+            Send(proposition.ActorId, new TEvPrivate::TEvConfigProposed(std::move(error)));
         };
 
         std::vector<TSuccessfulDisk> successfulDisks;
@@ -500,11 +496,7 @@ namespace NKikimr::NStorage {
 
             // this proposition came from actor -- we notify that actor and finish operation
             Y_ABORT_UNLESS(proposition.ActorId);
-            if (auto *actor = GetInvokeRequestHandlerActor(proposition.ActorId)) {
-                actor->OnConfigProposed(std::nullopt);
-            } else if (proposition.InvokeActorQueueGeneration == InvokeActorQueueGeneration) {
-                Y_ABORT_UNLESS(DeadActorWaitingForProposition);
-            }
+            Send(proposition.ActorId, new TEvPrivate::TEvConfigProposed(std::nullopt));
 
             // in case of successful proposition we trigger syncers (if needed)
             if (proposition.CheckSyncersAfterCommit) {
@@ -525,20 +517,23 @@ namespace NKikimr::NStorage {
             Y_ABORT_UNLESS(!InvokeQ.empty());
             const auto& front = InvokeQ.front();
             Y_ABORT_UNLESS(proposition.ActorId == front.ActorId);
-            Y_ABORT_UNLESS(!GetInvokeRequestHandlerActor(front.ActorId));
+            Y_ABORT_UNLESS(!TlsActivationContext->Mailbox.FindActor(front.ActorId.LocalId())); // actor is really dead
 
             if (RootState == ERootState::LOCAL_QUORUM_OP) {
                 RootState = Scepter ? ERootState::RELAX : ERootState::INITIAL;
             } else if (RootState == ERootState::IN_PROGRESS) {
                 RootState = ERootState::RELAX;
             } else {
-                return;
+                Y_ABORT_S("unexpected RootState# " << RootState);
             }
 
             InvokeQ.pop_front();
             DeadActorWaitingForProposition = false;
 
-            OpQueueProcessFront();
+            if (!InvokeQ.empty()) {
+                TActivationContext::Send(new IEventHandle(TEvPrivate::EvExecuteQuery, 0, InvokeQ.front().ActorId,
+                    SelfId(), nullptr, 0));
+            }
         }
     }
 
@@ -795,7 +790,6 @@ namespace NKikimr::NStorage {
             .StorageConfig = *configToPropose,
             .ActorId = actorId,
             .CheckSyncersAfterCommit = checkSyncersAfterCommit,
-            .InvokeActorQueueGeneration = InvokeActorQueueGeneration,
         });
 
         // issue scatter task

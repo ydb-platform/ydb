@@ -183,7 +183,7 @@ class TTablet : public TActor<TTablet> {
     };
 
     struct TLeaderInfo : public TIntrusiveListItem<TLeaderInfo> {
-        TActorId FollowerId;
+        const TActorId FollowerId;
         TActorId InterconnectSession;
         ui32 FollowerAttempt;
         ui64 StreamCounter;
@@ -198,8 +198,9 @@ class TTablet : public TActor<TTablet> {
         ui32 ConfirmedGCStep;
         bool PresentInList;
 
-        TLeaderInfo(EFollowerSyncState syncState = EFollowerSyncState::Pending)
-            : FollowerAttempt(Max<ui32>())
+        explicit TLeaderInfo(const TActorId& followerId, EFollowerSyncState syncState)
+            : FollowerId(followerId)
+            , FollowerAttempt(Max<ui32>())
             , StreamCounter(0)
             , SyncState(syncState)
             , LastSyncAttempt(TInstant::Zero())

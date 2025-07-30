@@ -1673,7 +1673,6 @@ public:
             txCtx->TxManager->AddTopicsToShards();
         }
 
-        // request?
         auto executerActor = CreateKqpExecuter(std::move(request), Settings.Database,
             QueryState ? QueryState->UserToken : TIntrusiveConstPtr<NACLib::TUserToken>(),
             RequestCounters, TExecuterConfig(Settings.MutableExecuterConfig, Settings.TableService),

@@ -364,7 +364,6 @@ message TSystemStateInfo {
     optional uint64 NetworkWriteThroughput = 42;
     optional uint32 RealNumberOfCpus = 43; // number of cpus without cgroups limitations
     repeated TSystemThreadInfo Threads = 44;
-    optional string BridgePileName = 45;
 }
 
 message TEvSystemStateRequest {

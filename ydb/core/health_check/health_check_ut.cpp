@@ -2753,22 +2753,22 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
                 case 0:
                     ev->Get()->Record.MutableSystemStateInfo(0)->SetMaxClockSkewWithPeerUs(15'000);
                     ev->Get()->Record.MutableSystemStateInfo(0)->SetMaxClockSkewPeerId(nodeBase + 1);
-                    ev->Get()->Record.MutableSystemStateInfo(0)->SetBridgePileName("pile0");
+                    ev->Get()->Record.MutableSystemStateInfo(0)->MutableLocation()->SetBridgePileName("pile0");
                     break;
                 case 1:
                     ev->Get()->Record.MutableSystemStateInfo(0)->SetMaxClockSkewWithPeerUs(15'000);
                     ev->Get()->Record.MutableSystemStateInfo(0)->SetMaxClockSkewPeerId(nodeBase);
-                    ev->Get()->Record.MutableSystemStateInfo(0)->SetBridgePileName("pile0");
+                    ev->Get()->Record.MutableSystemStateInfo(0)->MutableLocation()->SetBridgePileName("pile0");
                     break;
                 case 2:
                     ev->Get()->Record.MutableSystemStateInfo(0)->SetMaxClockSkewWithPeerUs(30'000);
                     ev->Get()->Record.MutableSystemStateInfo(0)->SetMaxClockSkewPeerId(nodeBase + 3);
-                    ev->Get()->Record.MutableSystemStateInfo(0)->SetBridgePileName("pile1");
+                    ev->Get()->Record.MutableSystemStateInfo(0)->MutableLocation()->SetBridgePileName("pile1");
                     break;
                 case 3:
                     ev->Get()->Record.MutableSystemStateInfo(0)->SetMaxClockSkewWithPeerUs(30'000);
                     ev->Get()->Record.MutableSystemStateInfo(0)->SetMaxClockSkewPeerId(nodeBase + 2);
-                    ev->Get()->Record.MutableSystemStateInfo(0)->SetBridgePileName("pile1");
+                    ev->Get()->Record.MutableSystemStateInfo(0)->MutableLocation()->SetBridgePileName("pile1");
                     break;
             }
         });

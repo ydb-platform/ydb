@@ -2129,7 +2129,7 @@ public:
             for (TNodeId nodeId : *computeNodeIds) {
                 auto itNodeSystemState = MergedNodeSystemState.find(nodeId);
                 if (itNodeSystemState != MergedNodeSystemState.end()) {
-                    const TString& pileName = itNodeSystemState->second->GetBridgePileName();
+                    const TString& pileName = itNodeSystemState->second->GetLocation().GetBridgePileName();
                     if (std::count(activePiles.begin(), activePiles.end(), pileName) > 0
                             && abs(itNodeSystemState->second->GetMaxClockSkewWithPeerUs()) > maxTimeDifferenceUs) {
                         maxTimeDifferenceUs = abs(itNodeSystemState->second->GetMaxClockSkewWithPeerUs());
@@ -2141,7 +2141,7 @@ public:
                 auto itNodeSystemState = MergedNodeSystemState.find(nodeId);
                 TString pileName;
                 if (itNodeSystemState != MergedNodeSystemState.end()) {
-                    pileName = itNodeSystemState->second->GetBridgePileName();
+                    pileName = itNodeSystemState->second->GetLocation().GetBridgePileName();
                 }
                 auto& computeNode = *computeStatus.add_nodes();
                 FillComputeNodeStatus(databaseState, nodeId, computeNode, {getContext(pileName), "COMPUTE_NODE"});

@@ -594,7 +594,7 @@ protected:
         if (!IsBridgeMode(ctx)) {
             return true;
         }
-        return SystemStateInfo.GetBridgePileName() == info.GetPeerBridgePileName();
+        return SystemStateInfo.GetLocation().GetBridgePileName() == info.GetPeerBridgePileName();
     }
 
     void Handle(TEvWhiteboard::TEvNodeStateUpdate::TPtr &ev, const TActorContext &ctx) {
@@ -739,10 +739,6 @@ protected:
             auto* pileInfo = newInfo.MutablePiles()->Add();
             for (const auto nodeId : pile) {
                 pileInfo->MutableNodeIds()->Add(nodeId);
-                if (nodeId == SelfId().NodeId()) {
-                    Y_ABORT_UNLESS(pileId < AppData(ctx)->BridgeConfig.PilesSize());
-                    SystemStateInfo.SetBridgePileName(AppData(ctx)->BridgeConfig.GetPiles(pileId).GetName());
-                }
             }
         }
         if (!google::protobuf::util::MessageDifferencer::Equals(newInfo, BridgeNodesInfo)) {

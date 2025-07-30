@@ -25,6 +25,7 @@ WAIT_QUERY_TIMEOUT = 200.0
 WAIT_QUERY_SLEEP_TIME = 2.0
 WAIT_QUERY_STATUS_TIMEOUT = 150.0
 
+
 class FederatedQueryException(Exception):
     def __init__(self, issues, result=None):
         super(FederatedQueryException, self).__init__(str(issues))

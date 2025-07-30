@@ -14,6 +14,7 @@ class TBlobStorageGroupCheckIntegrityRequest
     const TLogoBlobID Id;
     const TInstant Deadline;
     const NKikimrBlobStorage::EGetHandleClass GetHandleClass;
+    const bool SingleLine;
 
     TGroupQuorumTracker QuorumTracker;
 
@@ -162,8 +163,10 @@ class TBlobStorageGroupCheckIntegrityRequest
             }
         }
 
+        char separator = SingleLine ? ' ' : '\n';
+
         const auto& dataChecker = Info->GetTopology().GetDataIntegrityChecker();
-        auto partsState = dataChecker.GetDataState(Id, PartsData);
+        auto partsState = dataChecker.GetDataState(Id, PartsData, separator);
 
         if (partsState.IsOk) {
             PendingResult->DataStatus = (PendingResult->PlacementStatus == TEvCheckIntegrityResult::PS_UNKNOWN) ?
@@ -173,10 +176,10 @@ class TBlobStorageGroupCheckIntegrityRequest
         }
 
         TStringStream str;
-        str << "Disks:" << Endl;
+        str << "Disks:" << separator;
         for (ui32 diskIdx = 0; diskIdx < Info->Type.BlobSubgroupSize(); ++diskIdx) {
             auto vDiskIdShort = Info->GetTopology().GetVDiskInSubgroup(diskIdx, Id.Hash());
-            str << diskIdx << ": " << Info->CreateVDiskID(vDiskIdShort) << Endl;
+            str << diskIdx << ": " << Info->CreateVDiskID(vDiskIdShort) << separator;
         }
 
         PendingResult->DataInfo = str.Str();
@@ -199,6 +202,7 @@ public:
         , Id(params.Common.Event->Id)
         , Deadline(params.Common.Event->Deadline)
         , GetHandleClass(params.Common.Event->GetHandleClass)
+        , SingleLine(params.Common.Event->SingleLine)
         , QuorumTracker(Info.Get())
     {}
 

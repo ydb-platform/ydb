@@ -10,6 +10,7 @@
 #include <ydb/core/blob_depot/mon_main.h>
 #include <ydb/library/aclib/aclib.h>
 #include <ydb/library/yaml_config/yaml_config.h>
+#include <ydb/library/yql/providers/pq/gateway/dummy/yql_pq_dummy_gateway.h>
 #include <ydb/tests/tools/kqprun/runlib/application.h>
 #include <ydb/tests/tools/kqprun/runlib/utils.h>
 #include <ydb/tests/tools/kqprun/src/kqp_runner.h>
@@ -421,6 +422,12 @@ class TMain : public TMainBase {
     THashMap<TString, TString> TablesMapping;
     bool EmulateYt = false;
 
+    struct TTopicSettings {
+        bool CancelOnFileFinish = false;
+    };
+    std::unordered_map<TString, TTopicSettings> TopicsSettings;
+    std::unordered_map<TString, NYql::TDummyTopic> PqFilesMapping;
+
 protected:
     void RegisterOptions(NLastGetopt::TOpts& options) override {
         options.SetTitle("KqpRun -- tool to execute queries by using kikimr provider (instead of dq provider in DQrun tool)");
@@ -505,6 +512,36 @@ protected:
                 if (!TablesMapping.emplace(tableName, filePath).second) {
                     ythrow yexception() << "Got duplicated table name: " << tableName;
                 }
+            });
+
+        options.AddLongOption("emulate-pq", "Emulate YDS with local file, accepts list of tables to emulate with following format: topic@file (can be used in query from cluster `pq`)")
+            .RequiredArgument("topic@file")
+            .Handler1([this](const NLastGetopt::TOptsParser* option) {
+                TStringBuf topicName;
+                TStringBuf others;
+                TStringBuf(option->CurVal()).Split('@', topicName, others);
+
+                TStringBuf path;
+                TStringBuf partitionCountStr;
+                others.Split(':', path, partitionCountStr);
+                const size_t partitionCount = !partitionCountStr.empty() ? FromString<size_t>(partitionCountStr) : 1;
+                if (!partitionCount) {
+                    ythrow yexception() << "Topic partition count should be at least one";
+                }
+
+                if (topicName.empty() || path.empty()) {
+                    ythrow yexception() << "Incorrect PQ file mapping, expected form topic@path[:partitions_count]";
+                }
+
+                if (!PqFilesMapping.emplace(topicName, NYql::TDummyTopic("pq", TString(topicName), TString(path), partitionCount)).second) {
+                    ythrow yexception() << "Got duplicated topic name: " << topicName;
+                }
+            });
+
+        options.AddLongOption("cancel-on-file-finish", "Cancel emulate YDS topics when topic file finished")
+            .RequiredArgument("topic")
+            .Handler1([this](const NLastGetopt::TOptsParser* option) {
+                TopicsSettings[option->CurVal()].CancelOnFileFinish = true;
             });
 
         options.AddLongOption('c', "app-config", "File with app config (TAppConfig for ydb tenant)")
@@ -870,6 +907,21 @@ protected:
             RunnerOptions.YdbSettings.ComputationFactory = NYql::NFile::GetYtFileFactory(ytFileServices);
         } else if (!TablesMapping.empty()) {
             ythrow yexception() << "Tables mapping is not supported without emulate YT mode";
+        }
+
+        if (!PqFilesMapping.empty()) {
+            const auto fileGateway = MakeIntrusive<NYql::TDummyPqGateway>(true);
+            for (auto [_, topic] : PqFilesMapping) {
+                if (const auto it = TopicsSettings.find(topic.TopicName); it != TopicsSettings.end()) {
+                    topic.CancelOnFileFinish = it->second.CancelOnFileFinish;
+                    TopicsSettings.erase(it);
+                }
+                fileGateway->AddDummyTopic(topic);
+            }
+            RunnerOptions.YdbSettings.PqGateway = fileGateway;
+        }
+        if (!TopicsSettings.empty()) {
+            ythrow yexception() << "Found topic settings for not existing topic: '" << TopicsSettings.begin()->first << "'";
         }
 
 #ifdef PROFILE_MEMORY_ALLOCATIONS

@@ -301,16 +301,22 @@ namespace NKikimr::NStorage {
         }
 
         if (Scepter) {
-            Y_ABORT_UNLESS(StorageConfig && GlobalQuorum);
+            Y_ABORT_UNLESS(StorageConfig);
+            Y_ABORT_UNLESS(GlobalQuorum);
             Y_ABORT_UNLESS(RootState != ERootState::INITIAL && RootState != ERootState::ERROR_TIMEOUT);
             Y_ABORT_UNLESS(!Binding);
         } else {
-            Y_ABORT_UNLESS(RootState == ERootState::INITIAL || RootState == ERootState::ERROR_TIMEOUT ||
-                RootState == ERootState::LOCAL_QUORUM_OP);
+            Y_VERIFY_S(RootState == ERootState::INITIAL || RootState == ERootState::ERROR_TIMEOUT ||
+                RootState == ERootState::LOCAL_QUORUM_OP, "RootState# " << RootState);
 
             // we can't have connection to the Console without being the root node
             Y_ABORT_UNLESS(!ConsolePipeId);
             Y_ABORT_UNLESS(!ConsoleConnected);
+        }
+
+        if (RootState == ERootState::LOCAL_QUORUM_OP) {
+            Y_ABORT_UNLESS(!InvokeQ.empty());
+            Y_ABORT_UNLESS(LocalQuorumObtained);
         }
     }
 #endif

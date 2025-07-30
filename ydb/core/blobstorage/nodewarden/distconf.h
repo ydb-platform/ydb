@@ -394,7 +394,7 @@ namespace NKikimr::NStorage {
         // Root node operation
 
         void CheckRootNodeStatus();
-        void BecomeRoot(bool upgradeFromLocal);
+        void BecomeRoot();
         void ObtainedLocalQuorum();
         void UnbecomeRoot();
         void HandleErrorTimeout();
@@ -435,7 +435,7 @@ namespace NKikimr::NStorage {
         void Perform(TEvGather::TCollectConfigs *response, const TEvScatter::TCollectConfigs& request, TScatterTask& task);
         void Perform(TEvGather::TProposeStorageConfig *response, const TEvScatter::TProposeStorageConfig& request, TScatterTask& task);
 
-        void SwitchToError(const TString& reason);
+        void SwitchToError(const TString& reason, bool timeout = true);
 
         std::optional<TString> StartProposition(NKikimrBlobStorage::TStorageConfig *configToPropose,
             const NKikimrBlobStorage::TStorageConfig *propositionBase, TActorId actorId, bool checkSyncersAfterCommit);

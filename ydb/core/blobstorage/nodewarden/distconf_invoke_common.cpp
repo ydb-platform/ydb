@@ -55,12 +55,6 @@ namespace NKikimr::NStorage {
             } else if (Self->RootState == ERootState::ERROR_TIMEOUT) {
                 throw TExError() << Self->ErrorReason;
             } else {
-                if (auto *ptr = std::get_if<TInvokeExternalOperation>(&Query)) {
-                    if (ptr->Command.HasSwitchBridgeClusterState()) {
-                        PrepareSwitchBridgeClusterState(ptr->Command.GetSwitchBridgeClusterState());
-                    }
-                }
-
                 Y_ABORT_UNLESS(InvokeActorQueueGeneration == Self->InvokeActorQueueGeneration);
                 InvokeOtherActor(*Self, &TDistributedConfigKeeper::OpQueueBegin, SelfId());
             }
@@ -165,7 +159,7 @@ namespace NKikimr::NStorage {
                         return BootstrapCluster(op.Command.GetBootstrapCluster().GetSelfAssemblyUUID());
 
                     case TQuery::kSwitchBridgeClusterState:
-                        return SwitchBridgeClusterState();
+                        return SwitchBridgeClusterState(op.Command.GetSwitchBridgeClusterState());
 
                     case TQuery::kReconfigStateStorage:
                         return ReconfigStateStorage(op.Command.GetReconfigStateStorage());
@@ -398,7 +392,7 @@ namespace NKikimr::NStorage {
         // switch to error state if needed; this actor would be already terminated and removed from mailbox, so no OnError
         // call will get through
         if (switchToError) {
-            InvokeOtherActor(*Self, &TDistributedConfigKeeper::SwitchToError, std::move(*switchToError));
+            InvokeOtherActor(*Self, &TDistributedConfigKeeper::SwitchToError, std::move(*switchToError), true);
         }
     }
 

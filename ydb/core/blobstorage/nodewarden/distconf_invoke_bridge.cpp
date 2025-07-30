@@ -12,8 +12,10 @@ namespace NKikimr::NStorage {
         }
     }
 
-    void TInvokeRequestHandlerActor::PrepareSwitchBridgeClusterState(const TQuery::TSwitchBridgeClusterState& cmd) {
+    void TInvokeRequestHandlerActor::SwitchBridgeClusterState(const TQuery::TSwitchBridgeClusterState& cmd) {
         NeedBridgeMode();
+
+        RunCommonChecks(/*requireScepter=*/ false);
 
         const auto& newClusterState = cmd.GetNewClusterState();
 
@@ -71,17 +73,6 @@ namespace NKikimr::NStorage {
             }
         }
 
-        SwitchBridgeNewConfig.emplace(GetSwitchBridgeNewConfig(newClusterState));
-    }
-
-    void TInvokeRequestHandlerActor::SwitchBridgeClusterState() {
-        RunCommonChecks(/*requireScepter=*/ false);
-        Y_ABORT_UNLESS(SwitchBridgeNewConfig);
-        StartProposition(&SwitchBridgeNewConfig.value());
-    }
-
-    NKikimrBlobStorage::TStorageConfig TInvokeRequestHandlerActor::GetSwitchBridgeNewConfig(
-            const NKikimrBridge::TClusterState& newClusterState) {
         NKikimrBlobStorage::TStorageConfig config = *Self->StorageConfig;
         auto *clusterState = config.MutableClusterState();
         size_t changedPileIndex = Max<size_t>();
@@ -101,43 +92,41 @@ namespace NKikimr::NStorage {
             entry->AddUnsyncedPiles(i); // all piles are unsynced by default
         }
 
-        if (changedPileIndex == Max<size_t>()) {
-            return config;
-        }
-
-        for (size_t i = 0; i < details->PileSyncStateSize(); ++i) {
-            if (const auto& state = details->GetPileSyncState(i); state.GetBridgePileId() == changedPileIndex) {
-                details->MutablePileSyncState()->DeleteSubrange(i, 1);
-                break;
-            }
-        }
-
-        switch (clusterState->GetPerPileState(changedPileIndex)) {
-            case NKikimrBridge::TClusterState::DISCONNECTED:
-                // this pile is not disconnected, there is no reason to synchronize it anymore
-                for (size_t i = 0; i < details->PileSyncStateSize(); ++i) {
-                    const auto& item = details->GetPileSyncState(i);
-                    if (item.GetBridgePileId() != changedPileIndex) {
-                        break;
-                    }
+        if (changedPileIndex != Max<size_t>()) {
+            for (size_t i = 0; i < details->PileSyncStateSize(); ++i) {
+                if (const auto& state = details->GetPileSyncState(i); state.GetBridgePileId() == changedPileIndex) {
                     details->MutablePileSyncState()->DeleteSubrange(i, 1);
                     break;
                 }
-                break;
+            }
 
-            case NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_1:
-                break;
+            switch (clusterState->GetPerPileState(changedPileIndex)) {
+                case NKikimrBridge::TClusterState::DISCONNECTED:
+                    // this pile is not disconnected, there is no reason to synchronize it anymore
+                    for (size_t i = 0; i < details->PileSyncStateSize(); ++i) {
+                        const auto& item = details->GetPileSyncState(i);
+                        if (item.GetBridgePileId() != changedPileIndex) {
+                            break;
+                        }
+                        details->MutablePileSyncState()->DeleteSubrange(i, 1);
+                        break;
+                    }
+                    break;
 
-            case NKikimrBridge::TClusterState::SYNCHRONIZED:
-            case NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_2:
-                Y_ABORT("invalid transition");
+                case NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_1:
+                    break;
 
-            case NKikimrBridge::TClusterState_EPileState_TClusterState_EPileState_INT_MIN_SENTINEL_DO_NOT_USE_:
-            case NKikimrBridge::TClusterState_EPileState_TClusterState_EPileState_INT_MAX_SENTINEL_DO_NOT_USE_:
-                Y_ABORT();
+                case NKikimrBridge::TClusterState::SYNCHRONIZED:
+                case NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_2:
+                    Y_ABORT("invalid transition");
+
+                case NKikimrBridge::TClusterState_EPileState_TClusterState_EPileState_INT_MIN_SENTINEL_DO_NOT_USE_:
+                case NKikimrBridge::TClusterState_EPileState_TClusterState_EPileState_INT_MAX_SENTINEL_DO_NOT_USE_:
+                    Y_ABORT();
+            }
         }
 
-        return config;
+        StartProposition(&config);
     }
 
     void TInvokeRequestHandlerActor::NotifyBridgeSyncFinished(const TQuery::TNotifyBridgeSyncFinished& cmd) {

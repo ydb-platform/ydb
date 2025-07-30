@@ -27,8 +27,6 @@ namespace NKikimr::NStorage {
 
         std::shared_ptr<TLifetimeToken> RequestHandlerToken = std::make_shared<TLifetimeToken>();
 
-        std::optional<NKikimrBlobStorage::TStorageConfig> SwitchBridgeNewConfig;
-
         std::optional<TString> PassedAwayBacktrace;
 
     public: // Error handling
@@ -153,10 +151,7 @@ namespace NKikimr::NStorage {
 
         void NeedBridgeMode();
 
-        void PrepareSwitchBridgeClusterState(const TQuery::TSwitchBridgeClusterState& cmd);
-        void SwitchBridgeClusterState();
-
-        NKikimrBlobStorage::TStorageConfig GetSwitchBridgeNewConfig(const NKikimrBridge::TClusterState& newClusterState);
+        void SwitchBridgeClusterState(const TQuery::TSwitchBridgeClusterState& cmd);
 
         void NotifyBridgeSyncFinished(const TQuery::TNotifyBridgeSyncFinished& cmd);
 

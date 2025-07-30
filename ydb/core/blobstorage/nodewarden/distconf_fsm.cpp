@@ -12,9 +12,7 @@ namespace NKikimr::NStorage {
             << " RootState# " << RootState
             << " Scepter# " << (Scepter ? ToString(Scepter->Id) : "<null>"));
 
-        const bool localPileQuorumBefore = LocalPileQuorum;
-        const bool globalQuorumBefore = GlobalQuorum;
-
+        // update quorum flags, if something has changed
         if (!std::exchange(QuorumValid, true)) {
             // create a list of connected nodes
             std::vector<TNodeIdentifier> connected;
@@ -45,38 +43,27 @@ namespace NKikimr::NStorage {
             }
         }
 
-        if (Binding) { // can't become root node
-            Y_ABORT_UNLESS(!Scepter);
+        // check if we can't start any root activities right now
+        if (Binding || RootState == ERootState::ERROR_TIMEOUT) {
             return;
         }
 
-        const bool canBecomeRoot = RootState == ERootState::INITIAL
-            || RootState == ERootState::LOCAL_QUORUM_OP && LocalPileQuorum;
-
-        if (globalQuorumBefore < GlobalQuorum && canBecomeRoot) { // we have just acquired the global quorum
-            Y_ABORT_UNLESS(!Scepter);
+        if (!Scepter && GlobalQuorum) {
             Scepter = std::make_shared<TScepter>();
-            LocalQuorumObtained = true; // local quorum is also obtained
-            BecomeRoot(localPileQuorumBefore);
-        } else if (GlobalQuorum < globalQuorumBefore) { // lost it
-            SwitchToError("quorum lost");
+            BecomeRoot();
+        } else if (Scepter && !GlobalQuorum) {
+            // if we have local pile quorum, then do not switch into error state, we'll start collecting configs locally
+            SwitchToError("quorum lost", !LocalPileQuorum);
         }
 
-        if (LocalPileQuorum < localPileQuorumBefore) { // we have just lost local pile quorum
+        if (!LocalPileQuorum) {
             UnbindNodesFromOtherPiles();
-        } else if (!GlobalQuorum && LocalPileQuorum && !std::exchange(LocalQuorumObtained, true)) {
+        } else if (!Scepter && RootState == ERootState::INITIAL && !std::exchange(LocalQuorumObtained, true)) {
             ObtainedLocalQuorum();
         }
-
-        Y_ABORT_UNLESS(!Scepter || GlobalQuorum); // we can only have scepter when we have the global quorum
     }
 
-    void TDistributedConfigKeeper::BecomeRoot(bool upgradeFromLocal) {
-        Y_VERIFY_S(RootState == ERootState::INITIAL || (upgradeFromLocal && RootState == ERootState::LOCAL_QUORUM_OP),
-            "Scepter# " << (Scepter ? ToString(Scepter->Id) : "<null>") << " RootState# " << RootState
-            << " UpgradeFromLocal# " << upgradeFromLocal << " GlobalQuorum# " << GlobalQuorum
-            << " LocalPileQuorum# " << LocalPileQuorum);
-
+    void TDistributedConfigKeeper::BecomeRoot() {
         WorkingSyncersByNode.clear();
         WorkingSyncers.clear();
         SyncerArrangeInFlight = false;
@@ -86,15 +73,19 @@ namespace NKikimr::NStorage {
         Y_ABORT_UNLESS(!ConsolePipeId);
         ConnectToConsole();
 
-        // trigger first operation
-        if (!upgradeFromLocal) {
+        // start config collection even if we are doing it as a local leader
+        Invoke(TCollectConfigsAndPropose{});
+
+        // switch state correctly
+        if (InvokeQ.empty()) {
             Y_ABORT_UNLESS(RootState == ERootState::INITIAL);
             RootState = ERootState::RELAX;
-            Invoke(TCollectConfigsAndPropose{});
-        } else if (RootState == ERootState::INITIAL) {
-            RootState = ERootState::RELAX;
         } else {
-            Y_ABORT_UNLESS(RootState == ERootState::LOCAL_QUORUM_OP);
+            // this is upgrade from local quorum config collection, it is in flight right now
+            Y_VERIFY_S(LocalQuorumObtained && (RootState == ERootState::INITIAL || RootState == ERootState::LOCAL_QUORUM_OP),
+                "LocalQuorumObtained# " << LocalQuorumObtained
+                << " RootState# " << RootState
+                << " InvokeQ.size# " << InvokeQ.size());
         }
 
         // start collecting syncers state if needed
@@ -103,6 +94,7 @@ namespace NKikimr::NStorage {
 
     void TDistributedConfigKeeper::ObtainedLocalQuorum() {
         Y_ABORT_UNLESS(RootState == ERootState::INITIAL);
+        Y_ABORT_UNLESS(InvokeQ.empty());
         Invoke(TCollectConfigsAndPropose{});
     }
 
@@ -115,23 +107,30 @@ namespace NKikimr::NStorage {
         UnbindNodesFromOtherPiles();
     }
 
-    void TDistributedConfigKeeper::SwitchToError(const TString& reason) {
-        STLOG(PRI_NOTICE, BS_NODE, NWDC38, "SwitchToError", (RootState, RootState), (Reason, reason));
+    void TDistributedConfigKeeper::SwitchToError(const TString& reason, bool timeout) {
+        STLOG(PRI_NOTICE, BS_NODE, NWDC38, "SwitchToError", (RootState, RootState), (Reason, reason), (Timeout, timeout));
         if (Scepter) {
             UnbecomeRoot();
             Scepter.reset();
             ++ScepterCounter;
         }
         Y_ABORT_UNLESS(RootState != ERootState::ERROR_TIMEOUT);
-        RootState = ERootState::ERROR_TIMEOUT;
-        ErrorReason = reason;
+        if (timeout) {
+            RootState = ERootState::ERROR_TIMEOUT;
+            ErrorReason = reason;
+        } else {
+            RootState = ERootState::INITIAL;
+        }
         OpQueueOnError(reason);
         CurrentProposition.reset();
         CurrentSelfAssemblyUUID.reset();
         ApplyConfigUpdateToDynamicNodes(true);
         AbortAllScatterTasks(std::nullopt);
-        const TDuration timeout = TDuration::FromValue(ErrorTimeout.GetValue() * (25 + RandomNumber(51u)) / 50);
-        TActivationContext::Schedule(timeout, new IEventHandle(TEvPrivate::EvErrorTimeout, 0, SelfId(), {}, nullptr, 0));
+        if (RootState == ERootState::ERROR_TIMEOUT) {
+            const TDuration timeout = TDuration::FromValue(ErrorTimeout.GetValue() * (25 + RandomNumber(51u)) / 50);
+            TActivationContext::Schedule(timeout, new IEventHandle(TEvPrivate::EvErrorTimeout, 0, SelfId(), {}, nullptr, 0));
+        }
+        LocalQuorumObtained = false; // we can obtain this quorum again
     }
 
     void TDistributedConfigKeeper::HandleErrorTimeout() {
@@ -141,7 +140,6 @@ namespace NKikimr::NStorage {
         Y_ABORT_UNLESS(InvokeQ.empty());
         RootState = ERootState::INITIAL;
         ErrorReason = {};
-        LocalQuorumObtained = false; // we can obtain it again
     }
 
     void TDistributedConfigKeeper::ProcessGather(TEvGather *res) {
@@ -763,7 +761,9 @@ namespace NKikimr::NStorage {
             if (propositionBase->GetGeneration() == configToPropose->GetGeneration()) {
                 configToPropose->SetGeneration(propositionBase->GetGeneration() + 1);
             } else {
-                Y_ABORT_UNLESS(propositionBase->GetGeneration() < configToPropose->GetGeneration());
+                Y_VERIFY_S(propositionBase->GetGeneration() < configToPropose->GetGeneration(),
+                    "PropositionBase# " << SingleLineProto(*propositionBase)
+                    << " ConfigToPropose# " << SingleLineProto(*configToPropose));
             }
             configToPropose->MutablePrevConfig()->CopyFrom(*propositionBase);
             configToPropose->MutablePrevConfig()->ClearPrevConfig();

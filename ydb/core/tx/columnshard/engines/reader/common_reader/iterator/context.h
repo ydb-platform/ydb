@@ -42,8 +42,8 @@ protected:
 
 public:
     template <class T>
-    std::shared_ptr<TFetchingScript> GetColumnsFetchingPlan(const std::shared_ptr<T>& source) {
-        return GetColumnsFetchingPlan(std::static_pointer_cast<IDataSource>(source));
+    std::shared_ptr<TFetchingScript> GetColumnsFetchingPlan(const std::shared_ptr<T>& source, const bool isFinalSyncPoint) {
+        return DoGetColumnsFetchingPlan(std::static_pointer_cast<IDataSource>(source), isFinalSyncPoint);
     }
 
     std::shared_ptr<TFetchingScript> GetColumnsFetchingPlan(const std::shared_ptr<NCommon::IDataSource>& source, const bool isFinalSyncPoint) {

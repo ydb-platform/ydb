@@ -223,8 +223,6 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        LOG_CRIT_S(ctx, NKikimrServices::TX_DATASHARD, "r314_innercnak complete ");
-            
         size_t sent = 0;
         for (auto& kv : RecordsToSend) {
             const auto& to = kv.first;

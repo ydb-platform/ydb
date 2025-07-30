@@ -212,7 +212,7 @@ public:
             hFunc(NSchemeShard::NBackground::TEvListResponse, Handle);
             hFunc(TEvIndexBuilder::TEvListResponse, Handle);
             hFunc(NKqp::TEvListScriptExecutionOperationsResponse, Handle);
-            hFunc(TEvBackup::TEvListIncrementalBackupsResponse, Handle)
+            hFunc(TEvBackup::TEvListIncrementalBackupsResponse, Handle);
         default:
             return StateBase(ev);
         }

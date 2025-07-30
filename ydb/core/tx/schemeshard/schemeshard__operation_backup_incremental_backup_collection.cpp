@@ -101,8 +101,7 @@ public:
         backupInfo->State = TIncrementalBackupInfo::EState::Transferring;
 
         for (const auto& streamPathId : streamPathIds) {
-            TPathId pathId;
-            pathId.FromProto(streamPathId);
+            TPathId pathId = TPathId::FromProto(streamPathId);
 
             auto& item = backupInfo->Items[pathId];
             item.PathId = pathId;
@@ -207,7 +206,7 @@ TVector<ISubOperation::TPtr> CreateBackupIncrementalBackupCollection(TOperationI
         if (!CreateAlterContinuousBackup(opId, modifyScheme, context, result, stream)) {
             return result;
         }
-        streams.emplace_back(stream);
+        streams.push_back(stream);
     }
 
     CreateLongIncrementalBackupOp(opId, bcPath, result, streams);

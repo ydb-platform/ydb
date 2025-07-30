@@ -195,8 +195,8 @@ bool CreateAlterContinuousBackup(TOperationId opId, const TTxTransaction& tx, TO
 }
 
 bool CreateAlterContinuousBackup(TOperationId opId, const TTxTransaction& tx, TOperationContext& context, TVector<ISubOperation::TPtr>& result) {
-    TPathId outStream;
-    return CreateAlterContinuousBackup(opId, tx, context, result, outStream);
+    TPathId unused;
+    return CreateAlterContinuousBackup(opId, tx, context, result, unused);
 }
 
 TVector<ISubOperation::TPtr> CreateAlterContinuousBackup(TOperationId opId, const TTxTransaction& tx, TOperationContext& context) {
@@ -204,7 +204,6 @@ TVector<ISubOperation::TPtr> CreateAlterContinuousBackup(TOperationId opId, cons
 
     CreateAlterContinuousBackup(opId, tx, context, result);
 
-    return result;
     return result;
 }
 

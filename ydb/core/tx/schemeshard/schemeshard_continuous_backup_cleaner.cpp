@@ -86,7 +86,7 @@ public:
 
 
     void SubscribeTx(TTxId txId) {
-        Send(SelfId(), new TEvSchemeShard::TEvNotifyTxCompletion(ui64(txId)));
+        Send(SchemeShard, new TEvSchemeShard::TEvNotifyTxCompletion(ui64(txId)));
     }
 
     void ReplyAndDie(bool success = true, const TString& error = "") {

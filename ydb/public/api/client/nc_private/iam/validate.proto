@@ -1,0 +1,89 @@
+// Copyright 2023 Buf Technologies, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+syntax = "proto3";
+package buf.validate;
+
+import "google/protobuf/descriptor.proto";
+import "google/protobuf/duration.proto";
+import "google/protobuf/timestamp.proto";
+option go_package = "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate";
+option java_multiple_files = true;
+option java_outer_classname = "ValidateProto";
+option java_package = "build.buf.validate";
+
+message Constraint {
+    // `id` is a string that serves as a machine-readable name for this Constraint.
+    // It should be unique within its scope, which could be either a message or a field.
+    string id = 1;
+
+    // `message` is an optional field that provides a human-readable error message
+    // for this Constraint when the CEL expression evaluates to false. If a
+    // non-empty message is provided, any strings resulting from the CEL
+    // expression evaluation are ignored.
+    string message = 2;
+
+    // `expression` is the actual CEL expression that will be evaluated for
+    // validation. This string must resolve to either a boolean or a string
+    // value. If the expression evaluates to false or a non-empty string, the
+    // validation is considered failed, and the message is rejected.
+    string expression = 3;
+}
+
+// FieldOptions is an extension to google.protobuf.FieldOptions. It allows
+// the addition of validation rules at the field level. These rules can be
+// applied to incoming messages to ensure they meet certain criteria before
+// being processed.
+extend google.protobuf.FieldOptions {
+  // Rules specify the validations to be performed on this field. By default,
+  // no validation is performed against a field.
+  optional FieldConstraints field = 1159;
+}
+
+// FieldRules encapsulates the rules for each type of field. Depending on the
+// field, the correct set should be used to ensure proper validations.
+message FieldConstraints {
+  // `cel` is a repeated field used to represent a textual expression
+  // in the Common Expression Language (CEL) syntax. For more information on
+  // CEL, [see our documentation](https://github.com/bufbuild/protovalidate/blob/main/docs/cel.md).
+  //
+  // ```proto
+  // message MyMessage {
+  //   // The field `value` must be greater than 42.
+  //   optional int32 value = 1 [(buf.validate.field).cel = {
+  //     id: "my_message.value",
+  //     message: "value must be greater than 42",
+  //     expression: "this > 42",
+  //   }];
+  // }
+  // ```
+  repeated Constraint cel = 23;
+  // If `required` is true, the field must be populated. A populated field can be
+  // described as "serialized in the wire format," which includes:
+  //
+  // - the following "nullable" fields must be explicitly set to be considered populated:
+  //   - singular message fields (whose fields may be unpopulated/default values)
+  //   - member fields of a oneof (may be their default value)
+  //   - proto3 optional fields (may be their default value)
+  //   - proto2 scalar fields (both optional and required)
+  // - proto3 scalar fields must be non-zero to be considered populated
+  // - repeated and map fields must be non-empty to be considered populated
+  //
+  // ```proto
+  // message MyMessage {
+  //   // The field `value` must be set to a non-null value.
+  //   optional MyOtherMessage value = 1 [(buf.validate.field).required = true];
+  // }
+  // ```
+  bool required = 25;
+}

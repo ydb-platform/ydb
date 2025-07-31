@@ -1,4 +1,5 @@
 #include <ydb/apps/ydb/commands/ydb_root.h>
+#include <ydb/core/driver_lib/gwp_asan_init/gwp_asan_init.h>
 #include <ydb/public/lib/ydb_cli/commands/ydb_service_topic.h>
 
 TVector<NYdb::NTopic::ECodec> NYdb::NConsoleClient::InitAllowedCodecs() {
@@ -10,6 +11,9 @@ TVector<NYdb::NTopic::ECodec> NYdb::NConsoleClient::InitAllowedCodecs() {
 }
 
 int main(int argc, char **argv) {
+    // Initialize GWP-ASan early for memory error detection
+    NKikimr::InitializeGwpAsan();
+    
     try {
         return NYdb::NConsoleClient::NewYdbClient(argc, argv);
     }

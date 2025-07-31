@@ -3,6 +3,7 @@ RECURSE(
     cli_base
     cli_config_base
     cli_utils
+    gwp_asan_init
     run
     version
 )

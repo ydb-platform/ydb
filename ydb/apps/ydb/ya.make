@@ -17,6 +17,7 @@ SRCS(
 
 PEERDIR(
     ydb/apps/ydb/commands
+    ydb/core/driver_lib/gwp_asan_init
 )
 
 RESOURCE(

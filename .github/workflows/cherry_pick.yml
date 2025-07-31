@@ -9,11 +9,7 @@ on:
           List of commits to cherry-pick. 
           Can be represented as full or short commit SHA, PR number or URL to commit or PR.
           Separated by space, comma or line end.
-
-          Example:
-          ```
-          http://github.com/ydb-platform/ydb/commit/3682a252630dd45588d32fc481d08a26124ccde3, 5682a25,http://github.com/ydb-platform/ydb/pull/12344 123245
-          ```
+          Example: "sha5682 123245"
         required: true
       target_branches:
         default: ""

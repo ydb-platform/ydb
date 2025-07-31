@@ -26,9 +26,9 @@ When memory usage approaches the limit, the system:
 
 ## Spilling in {{ ydb-short-name }}
 
-### Spilling architecture in {{ ydb-short-name }}
+### Spilling Architecture in {{ ydb-short-name }}
 
-The spilling mechanism in {{ ydb-short-name }} includes two main levels: backend - a service for storing data in external storage, and frontend - components that interact with this service and manage memory. Currently disk is used as external storage.
+The spilling mechanism in {{ ydb-short-name }} includes two main levels: the backend—a service for storing data in external storage, and the frontend—components that interact with this service and manage memory. Currently, a local disk is used as the external storage.
 
 #### Spilling Service
 

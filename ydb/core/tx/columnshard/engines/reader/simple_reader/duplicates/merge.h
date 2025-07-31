@@ -18,7 +18,7 @@ private:
     std::shared_ptr<arrow::Schema> PKSchema;
     std::vector<std::string> VersionColumnNames;
     TActorId Owner;
-    NColumnShard::TDuplicateFilteringCounters Counters;
+    std::shared_ptr<NColumnShard::TDuplicateFilteringCounters> Counters;
     std::optional<NArrow::NMerger::TCursor> MaxVersion;
     NArrow::TSimpleRow Finish;
     bool IncludeFinish;
@@ -34,7 +34,7 @@ private:
 
 public:
     TBuildDuplicateFilters(const std::shared_ptr<arrow::Schema>& sortingSchema, const std::optional<NArrow::NMerger::TCursor>& maxVersion,
-        const NArrow::TSimpleRow& finish, const bool includeFinish, const NColumnShard::TDuplicateFilteringCounters& counters,
+        const NArrow::TSimpleRow& finish, const bool includeFinish, const std::shared_ptr<NColumnShard::TDuplicateFilteringCounters>& counters,
         const TActorId& owner)
         : PKSchema(sortingSchema)
         , VersionColumnNames(IIndexInfo::GetSnapshotColumnNames())

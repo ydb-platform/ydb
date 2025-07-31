@@ -29,7 +29,7 @@ private:
 
     const TActorId ColumnShardActorId;
     const std::shared_ptr<NCommon::TColumnsSet> PKColumns;
-    NColumnShard::TDuplicateFilteringCounters Counters;
+    std::shared_ptr<NColumnShard::TDuplicateFilteringCounters> Counters;
     const TPortionIntervalTree Intervals;
     const THashMap<ui64, std::shared_ptr<TPortionInfo>> Portions;
     TLRUCache<TDuplicateMapInfo, NArrow::TColumnFilter> FiltersCache;

@@ -179,21 +179,30 @@ message Column {
 
 // Represents table-like structure with ordered set of rows and columns
 message ResultSet {
-    // Metadata of columns. Can be empty for custom Ydb.Formats.SchemaInclusionMode
+    enum Format {
+        // Unspecified, corresponds to FORMAT_VALUE
+        FORMAT_UNSPECIFIED = 0;
+
+        // Used to get Ydb.Value as a result in Ydb.ResultSet.rows field
+        FORMAT_VALUE = 1;
+
+        // Used to get Arrow record batch as a result in Ydb.ResultSet.data field
+        FORMAT_ARROW = 2;
+    }
+
+    // Metadata of columns.
+    // May be empty for custom Ydb.Query.SchemaInclusionMode.
     repeated Column columns = 1;
-    // Rows of table, only for OUTPUT_FORMAT_VALUE
+    // Rows of table, are only filled for FORMAT_VALUE
     repeated Value rows = 2;
     // Flag indicates the result was truncated
     bool truncated = 3;
-    // Output format of the result
-    Formats.OutputFormat output_format = 4;
+    // Format of the result set rows
+    Format format = 4;
 
-    // Metadata of the requested output format
-    oneof output_format_meta {
-        // It is only filled for OUTPUT_FORMAT_ARROW.
-        Formats.ArrowOutputFormatMeta arrow_output_format_meta = 5;
-    }
+    // Metadata of the result set rows, only used for FORMAT_ARROW
+    Formats.ArrowFormatMeta arrow_format_meta = 5;
 
-    // Binary data for compressible formats
+    // Binary data for compressible formats of rows
     bytes data = 100;
 }

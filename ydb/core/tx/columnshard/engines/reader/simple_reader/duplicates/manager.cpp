@@ -217,45 +217,22 @@ void TDuplicateManager::Handle(const NPrivate::TEvDuplicateSourceCacheResult::TP
         return;
     }
 
-    THashMap<ui64, std::shared_ptr<NArrow::TGeneralContainer>> dataByPortion;
-    {
-        auto fieldByColumn = GetFetchingColumns();
-        std::vector<std::shared_ptr<arrow::Field>> fields;
-        for (const auto& [_, field] : fieldByColumn) {
-            fields.emplace_back(field);
-        }
-
-        THashMap<ui64, THashMap<ui32, std::shared_ptr<NArrow::NAccessor::IChunkedArray>>> columnsByPortion;
-        for (auto&& [address, data] : ev->Get()->ExtractResult()) {
-            AFL_VERIFY(columnsByPortion[address.GetPortionId()].emplace(address.GetColumnId(), data).second);
-        }
-
-        for (auto& [portion, columns] : columnsByPortion) {
-            std::vector<std::shared_ptr<NArrow::NAccessor::IChunkedArray>> sortedColumns;
-            for (const auto& [columnId, field] : fieldByColumn) {
-                auto column = columns.FindPtr(columnId);
-                AFL_VERIFY(column);
-                sortedColumns.emplace_back(*column);
-            }
-            std::shared_ptr<NArrow::TGeneralContainer> container = std::make_shared<NArrow::TGeneralContainer>(fields, std::move(sortedColumns));
-            AFL_VERIFY(dataByPortion.emplace(portion, std::move(container)).second);
-        }
-    }
-
+    THashMap<ui64, std::shared_ptr<NArrow::TGeneralContainer>> dataByPortion =
+        ev->Get()->ExtractResult().ExtractDataByPortion(GetFetchingColumns());
     const std::shared_ptr<TInternalFilterConstructor>& context = ev->Get()->GetContext();
     const TEvRequestFilter* filterRequest = context->GetRequest()->Get();
     const TColumnDataSplitter& splitter = context->GetIntervals();
     const TSnapshot maxVersion = context->GetRequest()->Get()->GetMaxVersion();
     auto allocationGuard = ev->Get()->ExtractAllocationGuard();
 
-    THashMap<ui64, std::vector<TRowRange>> splitted;
+    THashMap<ui64, std::vector<TRowRange>> rangesByPortion;
     for (const auto& [id, data] : dataByPortion) {
-        splitted[id] = splitter.SplitPortion(data);
+        rangesByPortion[id] = splitter.SplitPortion(data);
     }
 
     THashSet<ui64> builtIntervals;
     {
-        const auto& splittedMain = *TValidator::CheckNotNull(splitted.FindPtr(filterRequest->GetSourceId()));
+        const auto& splittedMain = *TValidator::CheckNotNull(rangesByPortion.FindPtr(filterRequest->GetSourceId()));
         AFL_VERIFY(splittedMain.size() == splitter.NumIntervals());
         for (ui64 i = 0; i < splitter.NumIntervals(); ++i) {
             TDuplicateMapInfo mapInfo(maxVersion, splittedMain[i], filterRequest->GetSourceId());
@@ -282,7 +259,7 @@ void TDuplicateManager::Handle(const NPrivate::TEvDuplicateSourceCacheResult::TP
     }
 
     std::vector<THashMap<ui64, TRowRange>> intervals(splitter.NumIntervals());
-    for (auto&& [source, portionIntervals] : splitted) {
+    for (auto&& [source, portionIntervals] : rangesByPortion) {
         for (ui64 i = 0; i < portionIntervals.size(); ++i) {
             if (portionIntervals[i].NumRows()) {
                 intervals[i].emplace(source, std::move(portionIntervals[i]));

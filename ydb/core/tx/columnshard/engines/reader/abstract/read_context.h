@@ -53,7 +53,6 @@ private:
     YDB_READONLY_DEF(std::shared_ptr<IStoragesManager>, StoragesManager);
     YDB_READONLY_DEF(std::shared_ptr<NDataAccessorControl::IDataAccessorsManager>, DataAccessorsManager);
     const NColumnShard::TConcreteScanCounters Counters;
-    YDB_READONLY_DEF(NColumnShard::TDuplicateFilteringCounters, DuplicateFilteringCounters);
     TReadMetadataBase::TConstPtr ReadMetadata;
     NResourceBroker::NSubscribe::TTaskContext ResourcesTaskContext;
     const ui64 ScanId;
@@ -153,10 +152,9 @@ public:
 
     TReadContext(const std::shared_ptr<IStoragesManager>& storagesManager,
         const std::shared_ptr<NDataAccessorControl::IDataAccessorsManager>& dataAccessorsManager,
-        const NColumnShard::TConcreteScanCounters& counters, const NColumnShard::TDuplicateFilteringCounters& duplicateFilteringCounters,
-        const TReadMetadataBase::TConstPtr& readMetadata, const TActorId& scanActorId, const TActorId& columnShardActorId,
-        const TActorId& resourceSubscribeActorId, const TActorId& readCoordinatorActorId, const TComputeShardingPolicy& computeShardingPolicy,
-        const ui64 scanId, const NConveyorComposite::TCPULimitsConfig& cpuLimits);
+        const NColumnShard::TConcreteScanCounters& counters, const TReadMetadataBase::TConstPtr& readMetadata, const TActorId& scanActorId,
+        const TActorId& columnShardActorId, const TActorId& resourceSubscribeActorId, const TActorId& readCoordinatorActorId,
+        const TComputeShardingPolicy& computeShardingPolicy, const ui64 scanId, const NConveyorComposite::TCPULimitsConfig& cpuLimits);
 };
 
 class IDataReader {

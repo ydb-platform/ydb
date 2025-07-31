@@ -56,7 +56,7 @@ void TBuildDuplicateFilters::DoExecute(const std::shared_ptr<ITask>& /*taskPtr*/
         filtersBuilder.AddSource(interval.GetSourceId());
     }
     merger.DrainToControlPoint(filtersBuilder, IncludeFinish);
-    Counters.OnRowsMerged(filtersBuilder.GetRowsAdded(), filtersBuilder.GetRowsSkipped(), 0);
+    Counters->OnRowsMerged(filtersBuilder.GetRowsAdded(), filtersBuilder.GetRowsSkipped(), 0);
 
     THashMap<ui64, NArrow::TColumnFilter> filtersBySource = std::move(filtersBuilder).ExtractFilters();
     THashMap<TDuplicateMapInfo, NArrow::TColumnFilter> filters;

@@ -156,7 +156,7 @@ TDuplicateManager::TDuplicateManager(const TSpecialReadContext& context, const s
     : TActor(&TDuplicateManager::StateMain)
     , ColumnShardActorId(context.GetCommonContext()->GetColumnShardActorId())
     , PKColumns(context.GetPKColumns())
-    , Counters(context.GetCommonContext()->GetDuplicateFilteringCounters())
+    , Counters(context.GetCommonContext()->GetCounters().GetDuplicateFilteringCounters())
     , Intervals([&portions]() {
         TPortionIntervalTree intervals;
         for (const auto& portion : portions) {

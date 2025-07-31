@@ -791,7 +791,7 @@ void TTablet::HandleByLeader(TEvTablet::TEvFollowerAttach::TPtr &ev) {
         auto followerItPair = LeaderInfo.emplace(
             std::piecewise_construct,
             std::forward_as_tuple(ev->Sender),
-            std::forward_as_tuple(EFollowerSyncState::Pending));
+            std::forward_as_tuple(ev->Sender, EFollowerSyncState::Pending));
         Y_ABORT_UNLESS(followerItPair.second);
 
         followerIt = followerItPair.first;
@@ -799,7 +799,6 @@ void TTablet::HandleByLeader(TEvTablet::TEvFollowerAttach::TPtr &ev) {
 
     TLeaderInfo &followerInfo = followerIt->second;
 
-    followerInfo.FollowerId = followerId;
     followerInfo.InterconnectSession = ev->InterconnectSession;
     followerInfo.FollowerAttempt = record.GetFollowerAttempt();
     followerInfo.StreamCounter = 0;
@@ -940,7 +939,7 @@ void TTablet::HandleStateStorageInfoUpgrade(TEvStateStorage::TEvInfo::TPtr &ev) 
                 auto itPair = LeaderInfo.emplace(
                     std::piecewise_construct,
                     std::forward_as_tuple(xpair.first),
-                    std::forward_as_tuple(EFollowerSyncState::NeedSync));
+                    std::forward_as_tuple(xpair.first, EFollowerSyncState::NeedSync));
                 // some followers could be already present by active TEvFollowerAttach
                 if (itPair.second)
                     TrySyncToFollower(itPair.first);

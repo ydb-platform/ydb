@@ -1932,7 +1932,7 @@ private:
         const auto& requestContext = GetUserRequestContext();
         auto scriptExternalEffect = std::make_unique<TEvSaveScriptExternalEffectRequest>(
             requestContext->CurrentExecutionId, requestContext->Database,
-            requestContext->CustomerSuppliedId, UserToken ? UserToken->GetUserSID() : ""
+            requestContext->CustomerSuppliedId
         );
         for (const auto& transaction : Request.Transactions) {
             for (const auto& secretName : transaction.Body->GetSecretNames()) {

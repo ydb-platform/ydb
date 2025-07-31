@@ -4,7 +4,6 @@ ydb/core/blobstorage/dsproxy/ut TDSProxyPutTest.TestBlock42PutStatusOkWith_1_1_V
 ydb/core/blobstorage/dsproxy/ut TDSProxyPutTest.TestBlock42PutStatusOkWith_2_0_VdiskErrors
 ydb/core/blobstorage/dsproxy/ut_fat TBlobStorageProxyTest.TestBatchedPutRequestDoesNotContainAHugeBlob
 ydb/core/blobstorage/pdisk/ut TPDiskTest.FailedToFormatDiskInfoUpdate
-ydb/core/blobstorage/pdisk/ut TPDiskTest.PDiskSlotSizeInUnits
 ydb/core/blobstorage/ut_blobstorage GroupReconfiguration.BsControllerDoesNotDisableGroupNoRequestsToNodesWVDisks
 ydb/core/blobstorage/ut_blobstorage/ut_group_reconfiguration GroupReconfigurationRace.Test_block42
 ydb/core/blobstorage/ut_blobstorage/ut_huge HugeBlobOnlineSizeChange.Compaction
@@ -169,11 +168,6 @@ ydb/tests/functional/config test_config_migration.py.TestConfigMigrationToV2.tes
 ydb/tests/functional/config test_distconf.py.TestKiKiMRDistConfBasic.test_cluster_expand_with_distconf
 ydb/tests/functional/config test_distconf.py.TestKiKiMRDistConfBasic.test_cluster_expand_with_seed_nodes
 ydb/tests/functional/config test_distconf.py.TestKiKiMRDistConfBasic.test_cluster_is_operational_with_distconf
-ydb/tests/functional/config test_distconf_generate_config.py.TestKiKiMRDistConfGenerateConfig2Nodes.test
-ydb/tests/functional/config test_distconf_generate_config.py.TestKiKiMRDistConfGenerateConfig3Nodes.test
-ydb/tests/functional/config test_distconf_generate_config.py.TestKiKiMRDistConfGenerateConfig6Nodes.test
-ydb/tests/functional/config test_distconf_generate_config.py.TestKiKiMRDistConfGenerateConfig8Nodes.test
-ydb/tests/functional/config test_distconf_generate_config.py.TestKiKiMRDistConfGenerateConfig9Nodes.test
 ydb/tests/functional/hive test_drain.py.TestHive.test_drain_on_stop
 ydb/tests/functional/postgresql test_postgres.py.TestPostgresSuite.test_postgres_suite[select_1]
 ydb/tests/functional/restarts test_restarts.py.TestRestartSingleBlock42.test_restart_single_node_is_ok

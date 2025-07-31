@@ -21,6 +21,7 @@ namespace NKikimr::NKqp::NFederatedQueryTest {
         TString DomainRoot = "Root";
         ui32 NodeCount = 1;
         NYql::ISecuredServiceAccountCredentialsFactory::TPtr CredentialsFactory;
+        bool EnableScriptExecutionBackgroundChecks = true;
     };
 
     std::shared_ptr<TKikimrRunner> MakeKikimrRunner(

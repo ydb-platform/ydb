@@ -7838,7 +7838,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
             UpdateBridgeInfo([](std::shared_ptr<TBridgeInfo> newState) {
                 for (ui32 i = 0; i < newState->Piles.size(); ++i) {
                     if (newState->Piles[i].State == NKikimrBridge::TClusterState::DISCONNECTED) {
-                        newState->Piles[i].State = NKikimrBridge::TClusterState::NOT_SYNCHRONIZED;
+                        newState->Piles[i].State = NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_1;
                     }
                 }
             });
@@ -7847,7 +7847,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         void Synchronize() {
             UpdateBridgeInfo([](std::shared_ptr<TBridgeInfo> newState) {
                 for (ui32 i = 0; i < newState->Piles.size(); ++i) {
-                    if (newState->Piles[i].State == NKikimrBridge::TClusterState::NOT_SYNCHRONIZED) {
+                    if (newState->Piles[i].State == NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_1) {
                         newState->Piles[i].State = NKikimrBridge::TClusterState::SYNCHRONIZED;
                     }
                 }

@@ -94,6 +94,12 @@ from .lib.workload_my_workload import TestMyWorkload
 # Тест автоматически будет импортирован и запущен
 ```
 
+### 3. Добавление новго файла в ya.make
+
+Добавить новые файлы с тестами и путь до ворклоада в `ydb/tests/olap/load/ya.make` и в `ydb/tests/olap/load/lib/ya.make`
+
+
+
 ---
 
 ## Setup и Teardown

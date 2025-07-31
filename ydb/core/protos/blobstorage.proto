@@ -1318,6 +1318,7 @@ message TEvControllerSelectGroupsResult {
         optional uint64 AvailableSize = 9; // bytes as reported by VDisk metrics (pessimistic case)
         optional uint64 AllocatedSize = 10; // the same basis
         optional NKikimrBlobStorage.TPDiskSpaceColor.E SpaceColor = 11;
+        optional uint32 GroupSizeInUnits = 14;
     }
     message TMatchingGroupList {
         repeated TGroupParameters Groups = 1;

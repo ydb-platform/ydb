@@ -691,7 +691,7 @@ namespace NSchemeShardUT_Private {
     ui32 CountRows(TTestActorRuntime& runtime, const TString& table);
 
     void WriteVectorTableRows(TTestActorRuntime& runtime, ui64 schemeShardId, ui64 txId, const TString & tablePath,
-        ui32 shard, ui32 min, ui32 max, std::vector<ui32> columnIds = {});
+        ui32 shard, ui32 min, ui32 max, std::vector<ui32> columnIds = {}, ui32 vectorDimension = 4);
 
     void TestCreateServerLessDb(TTestActorRuntime& runtime, TTestEnv& env, ui64& txId, ui64& tenantSchemeShard);
 

@@ -2321,6 +2321,45 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         }
     }
 
+    Y_UNIT_TEST(TestTabletsInUnresolvaleDatabase) {
+        TPortManager tp;
+        ui16 port = tp.GetPort(2134);
+        ui16 grpcPort = tp.GetPort(2135);
+        auto settings = TServerSettings(port)
+                .SetNodeCount(2)
+                .SetDynamicNodeCount(1)
+                .SetUseRealThreads(false)
+                .SetDomainName("Root");
+        TServer server(settings);
+        server.EnableGRpc(grpcPort);
+
+        TClient client(settings);
+
+        TTestActorRuntime* runtime = server.GetRuntime();
+        TActorId sender = runtime->AllocateEdgeActor();
+
+        // only have local on dynamic nodes
+        runtime->Send(new IEventHandle(MakeLocalID(runtime->GetNodeId(0)), sender, new TEvents::TEvPoisonPill()));
+        runtime->Send(new IEventHandle(MakeLocalID(runtime->GetNodeId(1)), sender, new TEvents::TEvPoisonPill()));
+
+        server.SetupDynamicLocalService(2, "Root");
+        server.StartPQTablets(1);
+        server.DestroyDynamicLocalService(2);
+        auto observer = runtime->AddObserver<TEvTxProxySchemeCache::TEvNavigateKeySetResult>([](auto&& ev) {
+            for (auto& entry : ev->Get()->Request->ResultSet) {
+                entry.Status = TSchemeCacheNavigate::EStatus::RedirectLookupError;
+            }
+        });
+        runtime->AdvanceCurrentTime(TDuration::Minutes(5));
+
+        TAutoPtr<IEventHandle> handle;
+        runtime->Send(new IEventHandle(NHealthCheck::MakeHealthCheckID(), sender, new NHealthCheck::TEvSelfCheckRequest(), 0));
+        auto result = runtime->GrabEdgeEvent<NHealthCheck::TEvSelfCheckResult>(handle)->Result;
+        Cerr << result.ShortDebugString();
+
+        UNIT_ASSERT(!HasTabletIssue(result));
+    }
+
     void SendHealthCheckConfigUpdate(TTestActorRuntime &runtime, const TActorId& sender, const NKikimrConfig::THealthCheckConfig &cfg) {
         auto *event = new NConsole::TEvConsole::TEvConfigureRequest;
 

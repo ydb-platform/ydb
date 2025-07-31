@@ -3,7 +3,7 @@
 #include <ydb/core/blobstorage/nodewarden/node_warden_events.h>
 #include <ydb/core/util/stlog.h>
 
-namespace NKikimr::NStorage::NBridge {
+namespace NKikimr::NBridge {
 
     TSyncerActor::TSyncerActor(TIntrusivePtr<TBlobStorageGroupInfo> info, TBridgePileId targetPileId, TGroupId groupId)
         : Info(std::move(info))
@@ -38,7 +38,7 @@ namespace NKikimr::NStorage::NBridge {
 
     void TSyncerActor::Terminate(std::optional<TString> errorReason) {
         STLOG(PRI_DEBUG, BS_BRIDGE_SYNC, BRSS04, "syncing finished", (LogId, LogId), (ErrorReason, errorReason));
-        auto ev = std::make_unique<TEvNodeConfigInvokeOnRoot>();
+        auto ev = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
         auto& record = ev->Record;
         auto *notify = record.MutableNotifyBridgeSyncFinished();
         notify->SetGeneration(StorageConfig->GetClusterState().GetGeneration());
@@ -60,13 +60,13 @@ namespace NKikimr::NStorage::NBridge {
         BridgeInfo = std::move(ev->Get()->BridgeInfo);
         Y_ABORT_UNLESS(BridgeInfo);
         const auto& targetPile = *BridgeInfo->GetPile(TargetPileId);
-        if (targetPile.State != NKikimrBridge::TClusterState::NOT_SYNCHRONIZED) {
+        if (!PileStateTraits(targetPile.State).RequiresDataQuorum) {
             // there is absolutely no need in synchronization: pile is either marked synchronized (what would be strange),
             // or it is disconnected; we terminate in either case
-            return Terminate("target pile is not NOT_SYNCHRONIZED anymore");
+            return Terminate("target pile is not in data quorum state");
         }
-        if (!initial && BridgeInfo->GetPile(SourcePileId)->State != NKikimrBridge::TClusterState::SYNCHRONIZED) {
-            return Terminate("source pile is not SYNCHRONIZED anymore");
+        if (!initial && !PileStateTraits(BridgeInfo->GetPile(SourcePileId)->State).RequiresDataQuorum) {
+            return Terminate("source pile is not in data quorum state");
         }
         if (initial) {
             InitiateSync();
@@ -75,7 +75,7 @@ namespace NKikimr::NStorage::NBridge {
 
     void TSyncerActor::InitiateSync() {
         // remember our source pile (primary one) on first start; actually, we can pick any of SYNCHRONIZED
-        Y_ABORT_UNLESS(BridgeInfo->PrimaryPile->State == NKikimrBridge::TClusterState::SYNCHRONIZED);
+        Y_ABORT_UNLESS(PileStateTraits(BridgeInfo->PrimaryPile->State).RequiresDataQuorum);
         SourcePileId = BridgeInfo->PrimaryPile->BridgePileId;
         const auto& groups = Info->GetBridgeGroupIds();
         Y_ABORT_UNLESS(groups.size() == std::size(BridgeInfo->Piles));
@@ -409,4 +409,4 @@ namespace NKikimr::NStorage::NBridge {
         return new TSyncerActor(std::move(info), targetPileId, groupId);
     }
 
-} // NKikimr::NStorage::NBridge
+} // NKikimr::NBridge

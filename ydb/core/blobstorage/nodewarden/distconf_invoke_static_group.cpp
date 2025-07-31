@@ -53,6 +53,7 @@ namespace NKikimr::NStorage {
             Send(actorId, new TEvBlobStorage::TEvVStatus(vdiskId), flags);
             if (actorId.NodeId() != SelfId().NodeId()) {
                 NodeToVDisk.emplace(actorId.NodeId(), vdiskId);
+                Subscriptions.try_emplace(actorId.NodeId());
             }
             ActorToVDisk.emplace(actorId, vdiskId);
             PendingVDiskIds.emplace(vdiskId);
@@ -102,7 +103,9 @@ namespace NKikimr::NStorage {
             throw TExError() << "Self-management is not enabled";
         }
 
-        const auto& record = Event->Get()->Record;
+        auto *op = std::get_if<TInvokeExternalOperation>(&Query);
+        Y_ABORT_UNLESS(op);
+        const auto& record = op->Command;
         const auto& cmd = record.GetReassignGroupDisk();
 
         STLOG(PRI_DEBUG, BS_NODE, NWDC75, "ReassignGroupDiskExecute", (SelfId, SelfId()));
@@ -314,7 +317,7 @@ namespace NKikimr::NStorage {
         }
 
         if (!changes) {
-            return FinishWithSuccess();
+            return Finish(TResult::OK, std::nullopt);
         }
 
         StartProposition(&config);

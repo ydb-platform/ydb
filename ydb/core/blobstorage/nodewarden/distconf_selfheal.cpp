@@ -60,7 +60,7 @@ namespace NKikimr::NStorage {
         fillRingGroups(&NKikimrBlobStorage::TStateStorageConfig::MutableStateStorageConfig);
         fillRingGroups(&NKikimrBlobStorage::TStateStorageConfig::MutableStateStorageBoardConfig);
         fillRingGroups(&NKikimrBlobStorage::TStateStorageConfig::MutableSchemeBoardConfig);
-        STLOG(PRI_DEBUG, BS_NODE, NW52, "TStateStorageSelfhealActor::RequestChangeStateStorage",
+        STLOG(PRI_DEBUG, BS_NODE, NW70, "TStateStorageSelfhealActor::RequestChangeStateStorage",
                 (StateStorageReconfigurationStep, (ui32)StateStorageReconfigurationStep), (StateStorageConfig, config));
 
         AllowNextStep = false;

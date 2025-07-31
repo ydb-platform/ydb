@@ -53,6 +53,11 @@ namespace NSQLHighlight {
 
             vim << R"(")";
 
+            // Prevent a range pattern conflict
+            if (unit.RangePattern) {
+                SubstGlobal(vim, "|\\n", "");
+            }
+
             return vim;
         }
 
@@ -108,7 +113,7 @@ namespace NSQLHighlight {
                 case EUnitKind::QuotedIdentifier:
                     return {"Special", "Underlined"};
                 case EUnitKind::BindParameterIdentifier:
-                    return {"Identifier"};
+                    return {"Define"};
                 case EUnitKind::TypeIdentifier:
                     return {"Type"};
                 case EUnitKind::FunctionIdentifier:

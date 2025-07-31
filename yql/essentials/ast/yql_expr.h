@@ -2395,6 +2395,7 @@ struct TExprStep {
         LoadTablesMetadata,
         RewriteIO,
         Recapture,
+        NormalizeDependsOn,
         LastLevel
     };
 

@@ -5615,6 +5615,10 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         TTabletTypes::EType tabletType = TTabletTypes::Dummy;
         std::vector<ui64> tablets;
 
+        // Use default maximums
+        // Otherwise test might depend on the environment
+        auto observer = runtime.AddObserver<TEvLocal::TEvStatus>([](auto&& ev) { ev->Get()->Record.ClearResourceMaximum(); });
+
         CreateTestBootstrapper(runtime, CreateTestTabletInfo(hiveTablet, TTabletTypes::Hive), &CreateDefaultHive);
 
         for (ui64 i = 0; i < 10; ++i) {

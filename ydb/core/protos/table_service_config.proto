@@ -384,11 +384,11 @@ message TTableServiceConfig {
 
     optional TBatchOperationSettings BatchOperationSettings = 81;
 
-    optional bool EnableFoldUdfs = 82 [ default = false ];
+    optional bool EnableFoldUdfs = 82 [ default = true ];
 
-    optional bool FilterPushdownOverJoinOptionalSide = 83 [ default = false];
+    optional bool FilterPushdownOverJoinOptionalSide = 83 [ default = true];
 
-    optional bool EnableSpillingInHashJoinShuffleConnections = 85 [default = false];
+    optional bool EnableSpillingInHashJoinShuffleConnections = 85 [default = true];
 
     optional bool EnableOlapScalarApply = 86 [default = true];
     optional bool EnableOlapSubstringPushdown = 87 [default = true];

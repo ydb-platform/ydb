@@ -1930,7 +1930,7 @@ private:
             if (!finalizers.empty()) {
                 DataProvidersFinalizer = [finalizers = std::move(finalizers)](const NYql::IGraphTransformer::TStatus&) {
                     TVector<TFuture<void>> futures;
-                    for (auto f : finalizers) {
+                    for (const auto& f : finalizers) {
                         futures.push_back(f());
                     }
                     return WaitAll(futures);

@@ -315,6 +315,8 @@ namespace NKikimr {
         // when there is more work to do, return false; MUST NOT return true unless all pending requests are finished
         bool MainCycle(TVector<std::unique_ptr<IEventBase>>& msgsForYard) {
             for (;;) {
+                MaxInFlightWrites = GetMaxInFlightWrites();
+                MaxInFlightReads = GetMaxInFlightReads();
                 switch (State) {
                     case EState::Invalid:
                         Y_ABORT("unexpected state");

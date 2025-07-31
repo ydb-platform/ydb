@@ -125,6 +125,7 @@ namespace NKikimr {
                     const ui32 chunksCouldBeFreedViaCompaction = calcStat.GetTotalChunksCouldBeFreedViaCompaction();
                     const ui64 totalUselessSize = calcStat.GetTotalUselessSize();
                     DCtx->DefragMonGroup.ChunksCouldBeFreedViaCompaction() = chunksCouldBeFreedViaCompaction;
+                    DCtx->DefragMonGroup.TotalUselessBytesInHugeChunks() = totalUselessSize;
                     if (DCtx->VCfg->FeatureFlags.GetEnableCompDefragIndependacy() && NeedCompaction(totalUselessSize, chunksCouldBeFreedViaCompaction)) {
                         STLOG(PRI_INFO, BS_VDISK_DEFRAG, BSVDD10, VDISKP(DCtx->VCtx->VDiskLogPrefix, "run full compaction"),
                             (ChunksCouldBeFreedViaCompaction, chunksCouldBeFreedViaCompaction), (TotalUselessSize, totalUselessSize));

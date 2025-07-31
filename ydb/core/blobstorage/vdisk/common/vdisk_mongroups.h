@@ -618,11 +618,13 @@ public:                                                                         
                 COUNTER_INIT_IF_EXTENDED(DefragBytesRewritten, true);
                 COUNTER_INIT_IF_EXTENDED(DefragThreshold, false);
                 COUNTER_INIT_IF_EXTENDED(ChunksCouldBeFreedViaCompaction, false);
+                COUNTER_INIT_IF_EXTENDED(TotalUselessBytesInHugeChunks, false);
             }
 
             COUNTER_DEF(DefragBytesRewritten);
             COUNTER_DEF(DefragThreshold);
             COUNTER_DEF(ChunksCouldBeFreedViaCompaction);
+            COUNTER_DEF(TotalUselessBytesInHugeChunks);
         };
 
         ///////////////////////////////////////////////////////////////////////////////////

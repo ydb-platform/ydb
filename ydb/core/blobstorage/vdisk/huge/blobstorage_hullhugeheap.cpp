@@ -203,9 +203,11 @@ namespace NKikimr {
                 LockedChunks.insert(std::move(nh));
                 return true;
             } else {
-                auto [it, _] = LockedChunks.try_emplace(chunkId);
-                it->second.FreeSlots.Reset(0, SlotsInChunk);
-                // return LockedChunks.contains(chunkId);
+                auto [it, inserted] = LockedChunks.try_emplace(chunkId);
+                if (inserted) {
+                    // chunks was full
+                    it->second.FreeSlots.Reset(0, SlotsInChunk);
+                }
                 return true;
             }
         }

@@ -179,9 +179,7 @@ message Column {
 
 // Represents table-like structure with ordered set of rows and columns
 message ResultSet {
-    // Metadata of columns. It is filled:
-    // - SCHEMA_INCLUSION_MODE_ALWAYS: in every Ydb.ResultSet.
-    // - SCHEMA_INCLUSION_MODE_FIRST_ONLY: in the first Ydb.ResultSet per result_set_index.
+    // Metadata of columns. Can be empty for custom Ydb.Formats.SchemaInclusionMode
     repeated Column columns = 1;
     // Rows of table, only for OUTPUT_FORMAT_VALUE
     repeated Value rows = 2;
@@ -190,12 +188,11 @@ message ResultSet {
     // Output format of the result
     Formats.OutputFormat output_format = 4;
 
-    // Metadata of the output format.
-    // It is to get metadata for the requested output format.
+    // Metadata of the requested output format
     oneof output_format_meta {
         Formats.ArrowOutputFormatMeta arrow_output_format_meta = 5;
     }
 
-    // Binary data for compressed rows or/and other formats
+    // Binary data for compressible formats
     bytes data = 100;
 }

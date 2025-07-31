@@ -30,10 +30,10 @@ enum OutputFormat {
     // Unspecified, corresponds to OUTPUT_FORMAT_VALUE.
     OUTPUT_FORMAT_UNSPECIFIED = 0;
 
-    // Default, used to get Ydb.Value as a result of the query in Ydb.ResultSet.rows field.
+    // It is used to get Ydb.Value as a result of the query in Ydb.ResultSet.rows field.
     OUTPUT_FORMAT_VALUE = 1;
 
-    // Arrow output format, used to get binary representation of the result in Ydb.ResultSet.data field.
+    // It is used to get Arrow record batch as a result of the query in Ydb.ResultSet.data field.
     OUTPUT_FORMAT_ARROW = 2;
 }
 
@@ -53,6 +53,8 @@ enum SchemaInclusionMode {
  * It is used to configure schema inclusion mode.
  */
 message ValueOutputFormatSettings {
+    // Fill Ydb.ResultSet.columns field.
+    // Default: SCHEMA_INCLUSION_MODE_ALWAYS
     SchemaInclusionMode schema_inclusion_mode = 1;
 }
 
@@ -80,8 +82,12 @@ message ArrowOutputFormatSettings {
         int32 level = 2;
     }
 
+    // Fill Ydb.ResultSet.columns and Ydb.ResultSet.arrow_output_format_meta.schema fields.
+    // Default: SCHEMA_INCLUSION_MODE_FIRST_ONLY
     SchemaInclusionMode schema_inclusion_mode = 1;
 
+    // Compress the binary data in Ydb.ResultSet.data field.
+    // Default: COMPRESSION_NONE
     Compression compression = 2;
 }
 
@@ -90,8 +96,6 @@ message ArrowOutputFormatSettings {
  * It is used to get the schema of the Arrow record batch.
  */
 message ArrowOutputFormatMeta {
-    // Schema of the arrow batch of the result. It is filled:
-    // - SCHEMA_INCLUSION_MODE_ALWAYS: in every Ydb.ResultSet.
-    // - SCHEMA_INCLUSION_MODE_FIRST_ONLY: in the first Ydb.ResultSet per result_set_index.
+    // Schema of the arrow batch of the result. Can be empty for custom Ydb.Formats.SchemaInclusionMode.
     bytes schema = 1;
 }

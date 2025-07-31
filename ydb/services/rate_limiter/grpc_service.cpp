@@ -40,7 +40,7 @@ void TRateLimiterGRpcService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger)
 #error SETUP_METHOD macro collision
 #endif
 
-#define SETUP_METHOD(methodName, cb, rps)                                                    \
+#define SETUP_METHOD(methodName, cb, rps, auditMode)                                         \
     MakeIntrusive<NGRpcService::TGRpcRequest<                                                \
         Ydb::RateLimiter::Y_CAT(methodName, Request),                                        \
         Ydb::RateLimiter::Y_CAT(methodName, Response),                                       \
@@ -49,13 +49,13 @@ void TRateLimiterGRpcService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger)
         this,                                                                                \
         &Service_,                                                                           \
         CQ,                                                                                  \
-        [this](NYdbGrpc::IRequestContextBase* reqCtx) {                                         \
+        [this](NYdbGrpc::IRequestContextBase* reqCtx) {                                      \
             NGRpcService::ReportGrpcReqToMon(*ActorSystem, reqCtx->GetPeer());               \
             ActorSystem->Send(GRpcRequestProxyId,                                            \
                 new NGRpcService::TGrpcRequestOperationCall<                                 \
                     Ydb::RateLimiter::Y_CAT(methodName, Request),                            \
                     Ydb::RateLimiter::Y_CAT(methodName, Response)>                           \
-                        (reqCtx, &cb, TRequestAuxSettings{TRateLimiterMode::rps, nullptr})); \
+                        (reqCtx, &cb, TRequestAuxSettings{TRateLimiterMode::rps, nullptr, auditMode})); \
         },                                                                                   \
         &Ydb::RateLimiter::V1::RateLimiterService::AsyncService::Y_CAT(Request, methodName), \
         "RateLimiter/" Y_STRINGIZE(methodName),                                              \
@@ -63,12 +63,12 @@ void TRateLimiterGRpcService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger)
         getCounterBlock("rate_limiter", Y_STRINGIZE(methodName))                             \
     )->Run()
 
-    SETUP_METHOD(CreateResource, DoCreateRateLimiterResource, Rps);
-    SETUP_METHOD(AlterResource, DoAlterRateLimiterResource, Rps);
-    SETUP_METHOD(DropResource, DoDropRateLimiterResource, Rps);
-    SETUP_METHOD(ListResources, DoListRateLimiterResources, Rps);
-    SETUP_METHOD(DescribeResource, DoDescribeRateLimiterResource, Rps);
-    SETUP_METHOD(AcquireResource, DoAcquireRateLimiterResource, Off);
+    SETUP_METHOD(CreateResource, DoCreateRateLimiterResource, Rps, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Ddl));
+    SETUP_METHOD(AlterResource, DoAlterRateLimiterResource, Rps, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Ddl));
+    SETUP_METHOD(DropResource, DoDropRateLimiterResource, Rps, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Ddl));
+    SETUP_METHOD(ListResources, DoListRateLimiterResources, Rps, TAuditMode::NonModifying());
+    SETUP_METHOD(DescribeResource, DoDescribeRateLimiterResource, Rps, TAuditMode::NonModifying());
+    SETUP_METHOD(AcquireResource, DoAcquireRateLimiterResource, Off, TAuditMode::NonModifying());
 
 #undef SETUP_METHOD
 }

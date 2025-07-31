@@ -16,7 +16,7 @@ private:
     };
 
 public:
-    TAuditConfig() = default;
+    TAuditConfig();
     TAuditConfig(const NKikimrConfig::TAuditConfig&);
     TAuditConfig& operator=(const NKikimrConfig::TAuditConfig&);
 

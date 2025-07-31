@@ -1560,8 +1560,19 @@ private:
 
     class TReadyBlock {
     public:
-        TReadyBlock(TEvS3Provider::TEvNextBlock::TPtr& event) : PathInd(event->Get()->PathIndex) { Block.swap(*event->Get()->Block); }
-        TReadyBlock(TEvS3Provider::TEvNextRecordBatch::TPtr& event) : Batch(event->Get()->Batch), PathInd(event->Get()->PathIndex) {}
+        TReadyBlock(TEvS3Provider::TEvNextBlock::TPtr& event)
+            : PathInd(event->Get()->PathIndex)
+        {
+            const auto& block = event->Get()->Block;
+            YQL_ENSURE(block);
+            Block.swap(*block);
+        }
+
+        TReadyBlock(TEvS3Provider::TEvNextRecordBatch::TPtr& event)
+            : Batch(event->Get()->Batch)
+            , PathInd(event->Get()->PathIndex)
+        {}
+
         NDB::Block Block;
         std::shared_ptr<arrow::RecordBatch> Batch;
         size_t PathInd;
@@ -1745,7 +1756,9 @@ private:
 
     void HandleNextBlock(TEvS3Provider::TEvNextBlock::TPtr& next) {
         YQL_ENSURE(!ReadSpec->Arrow);
-        auto rows = next->Get()->Block->rows();
+        const auto& block = next->Get()->Block;
+        YQL_ENSURE(block);
+        auto rows = block->rows();
         IngressStats.Bytes += next->Get()->IngressDelta;
         IngressStats.DecompressedBytes += next->Get()->IngressDecompressedDelta;
         IngressStats.Rows += rows;

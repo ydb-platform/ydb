@@ -125,7 +125,7 @@ TVector<ISubOperation::TPtr> CancelBuildIndex(TOperationId nextId, const TTxTran
     TPath table = TPath::Resolve(tablePath, context.SS);
 
     TVector<ISubOperation::TPtr> result;
-    {
+    if (!indexName.empty()) {
         auto finalize = TransactionTemplate(table.Parent().PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpFinalizeBuildIndexMainTable);
         *finalize.MutableLockGuard() = tx.GetLockGuard();
         auto op = finalize.MutableFinalizeBuildIndexMainTable();
@@ -148,6 +148,18 @@ TVector<ISubOperation::TPtr> CancelBuildIndex(TOperationId nextId, const TTxTran
         operation->SetName(index.Base()->Name);
 
         result.push_back(CreateDropTableIndex(NextPartId(nextId, result), tableIndexDropping));
+    } else {
+        auto mainTableAlter = TransactionTemplate(table.Parent().PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpAlterTable);
+        *mainTableAlter.MutableLockGuard() = tx.GetLockGuard();
+        auto op = mainTableAlter.MutableAlterTable();
+        op->SetName(table.LeafName());
+
+        for (const auto& col : config.GetColumnsToDrop()) {
+            auto colInfo = op->AddDropColumns();
+            colInfo->SetName(col.GetColumnName());
+        }
+
+        result.push_back(CreateAlterTable(NextPartId(nextId, result), mainTableAlter));
     }
 
     if (!indexName.empty()) {

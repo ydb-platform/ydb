@@ -1645,6 +1645,7 @@ message TIndexBuildControl {
     optional string IndexName = 2;
     optional uint64 SnapshotTxId = 3;
     optional uint64 BuildIndexId = 4;
+    repeated NKikimrIndexBuilder.TColumnBuildSetting ColumnsToDrop = 5;
 }
 
 message TLockConfig {

@@ -47,14 +47,6 @@ private:
     THashSet<i64> Markers;
 
 public:
-    ui64 GetMemoryUsage() const {
-        ui64 result = 0;
-        for (auto&& i : Accessors) {
-            result += i.second.GetRawSizeVerified();
-        }
-        return result;
-    }
-
     void TakeSequenceFrom(const TAccessorsCollection& collection) {
         AFL_VERIFY(ColumnIdsSequence.empty() || ColumnIdsSequence == collection.ColumnIdsSequence);
         ColumnIdsSequence = collection.ColumnIdsSequence;

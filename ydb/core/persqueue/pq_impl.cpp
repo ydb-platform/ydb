@@ -2695,7 +2695,7 @@ void TPersQueue::HandleEventForSupportivePartition(const ui64 responseCookie,
                        NPersQueue::NErrorCode::BAD_REQUEST,
                        "it is forbidden to write after a commit");
             return;
-        } else if (writeInfo.TxId.Defined() && writeId.KafkaApiTransaction) {
+        } else if (writeInfo.TxId.Defined() && writeId.IsKafkaApiTransaction()) {
             // This branch happens when previous Kafka transaction has committed and we recieve write for next one
             // before PQ has deleted supportive partition for previous transaction
             PQ_LOG_D("GetOwnership request for the next Kafka transaction while previous is being deleted. Saving it till the complete delete of the previous tx.%02");
@@ -3217,6 +3217,16 @@ void TPersQueue::ScheduleDeleteExpiredKafkaTransactions() {
         if (txnExpired(pair.second)) {
             PQ_LOG_D("Transaction for Kafka producer " << pair.first.KafkaProducerInstanceId << " is expired");
             BeginDeletePartitions(pair.second);
+        }
+    }
+}
+
+void TPersQueue::TryContinueKafkaWrites(const TMaybe<TWriteId> writeId, const TActorContext& ctx) {
+    if (writeId.Defined() && writeId->IsKafkaApiTransaction()) {
+        auto it = KafkaNextTransactionRequests.find(writeId->KafkaProducerInstanceId);
+        if (it != KafkaNextTransactionRequests.end()) {
+            Handle(it->second, ctx);
+            KafkaNextTransactionRequests.erase(it);
         }
     }
 }
@@ -4645,13 +4655,7 @@ void TPersQueue::CheckTxState(const TActorContext& ctx,
         // in the status of the PQ tablet (if they came)
         TryReturnTabletStateAll(ctx);
 
-        if (tx.WriteId->KafkaApiTransaction) {
-            auto it = KafkaNextTransactionRequests.find(tx.WriteId->KafkaProducerInstanceId);
-            if (it != KafkaNextTransactionRequests.end()) {
-                Handle(it->second, ctx);
-                KafkaNextTransactionRequests.erase(it);
-            }
-        }
+        TryContinueKafkaWrites(tx.WriteId, ctx);
         break;
     }
 }

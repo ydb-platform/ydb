@@ -1,5 +1,5 @@
 #include "audit.h"
-#include "auditable_actions.h"
+#include "auditable_actions.cpp"
 
 #include <ydb/core/audit/audit_log.h>
 #include <ydb/core/audit/audit_config/audit_config.h>
@@ -19,7 +19,7 @@ namespace {
     const TStringBuf TRUNCATED_SUFFIX = "**TRUNCATED_BY_YDB**";
 
     // audit event has limit of 4 MB, but we limit body size to 2 MB
-    const size_t MAX_AUDIT_BODY_SIZE = 2 * 1024 * 1024 - TRUNCATED_SUFFIX.size();
+    const size_t MAX_AUDIT_BODY_SIZE = 2_MB - TRUNCATED_SUFFIX.size();
 
     enum ERequestStatus {
         Success,
@@ -45,6 +45,14 @@ namespace {
             case ERequestStatus::Error: return "ERROR";
         }
         return EMPTY_VALUE;
+    }
+
+    inline TUrlMatcher CreateAuditableActionsMatcher() {
+        TUrlMatcher policy;
+        for (const auto& pattern : AUDITABLE_ACTIONS) {
+            policy.AddPattern(pattern);
+        }
+        return policy;
     }
 }
 
@@ -96,10 +104,11 @@ void TAuditCtx::InitAudit(const NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPt
     }
     if (!request->Body.Empty()) {
         TStringBuilder auditBody;
-        if (request->Body.size() > MAX_AUDIT_BODY_SIZE) {
-            auditBody << request->Body.substr(0, MAX_AUDIT_BODY_SIZE) << TRUNCATED_SUFFIX;
+        TStringBuf body = request->Body;
+        if (body.size() > MAX_AUDIT_BODY_SIZE) {
+            auditBody << body.SubString(0, MAX_AUDIT_BODY_SIZE) << TRUNCATED_SUFFIX;
         } else {
-            auditBody << request->Body;
+            auditBody << body;
         }
 
         AddAuditLogPart("body", auditBody);
@@ -112,8 +121,8 @@ void TAuditCtx::AddAuditLogParts(const TIntrusiveConstPtr<NACLib::TUserToken>& u
     }
     SubjectType = userToken ? userToken->GetSubjectType() : NACLibProto::SUBJECT_TYPE_ANONYMOUS;
     if (userToken) {
-        AddAuditLogPart("subject", userToken->GetUserSID());
-        AddAuditLogPart("sanitized_token", userToken->GetSanitizedToken());
+        Subject = userToken->GetUserSID();
+        SanitizedToken = userToken->GetSanitizedToken();
     }
 }
 
@@ -127,9 +136,13 @@ void TAuditCtx::FinishAudit(const NHttp::THttpOutgoingResponsePtr& response) {
     auto status = GetStatus(response);
 
     AUDIT_LOG(
+        AddAuditLogPart("subject", (Subject ? Subject : EMPTY_VALUE));
+        AddAuditLogPart("sanitized_token", (SanitizedToken ? SanitizedToken : EMPTY_VALUE));
+
         for (const auto& [name, value] : Parts) {
             AUDIT_PART(name, (!value.empty() ? value : EMPTY_VALUE))
         }
+
         AUDIT_PART("status", ToString(status));
         if (status != ERequestStatus::Success) {
             AUDIT_PART("reason", response.Get()->Message);

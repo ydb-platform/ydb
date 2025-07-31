@@ -1,9 +1,15 @@
-#include "auditable_actions.h"
+#include "url_matcher.h"
 
 #include <util/generic/string.h>
+#include <util/generic/vector.h>
 
 namespace NMonitoring::NAudit {
-    const TVector<TUrlPattern> AUDITABLE_ACTIONS = {
+
+// Audit logging is based on HTTP methods like POST or PUT
+// but some handlers use GET for changes
+// AUDITABLE_ACTIONS lists URLs that always require audit logging
+// despite the HTTP methods associated with getting information
+const TVector<TUrlPattern> AUDITABLE_ACTIONS = {
     {.Path = "/actors/blobstorageproxies/*", .ParamName = "PutSamplingRate"},
     {.Path = "/actors/blobstorageproxies/*", .ParamName = "GetSamplingRate"},
     {.Path = "/actors/blobstorageproxies/*", .ParamName = "DiscoverSamplingRate"},

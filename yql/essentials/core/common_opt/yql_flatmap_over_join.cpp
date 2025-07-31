@@ -333,6 +333,134 @@ TExprNode::TPtr SingleInputPredicatePushdownOverEquiJoin(
     return ret;
 }
 
+TExprNode::TListType ExtractOrPredicatesOverEquiJoin(const TExprNode::TPtr& predicate,
+    const TExprNode& row, const THashMap<TString, TString>& backRenameMap,
+    const TJoinLabels& labels, TExprContext& ctx, const TTypeAnnotationContext& types)
+{
+    if (!predicate->IsCallable("Or")) {
+        return {};
+    }
+
+    auto orTerms = predicate->Children();
+    if (!AnyOf(orTerms, [](const auto& orTerm) { return orTerm->IsCallable("And"); })) {
+        return {};
+    }
+
+    TNodeMap<TSet<ui32>> joinInputs;
+    if (!GatherJoinInputsForAllNodes(predicate, row, backRenameMap, labels, joinInputs)) {
+        // non-Member usages of row struct
+        return {};
+    }
+    auto it = joinInputs.find(predicate.Get());
+    YQL_ENSURE(it != joinInputs.end());
+    auto& predicateInputs = it->second;
+
+    THashMap<ui32, TExprNode::TListType> extractedPredicatesByInput;
+    TExprNode::TListType extractedConstantPredicates;
+
+    THashSet<ui32> forbiddenInputs;
+    bool constantPredicateForbidden = false;
+
+    size_t expansionSize = 0;
+    TDeque<TExprNode::TPtr> orTermsToProcess(orTerms.begin(), orTerms.end());
+    while (!orTermsToProcess.empty()) {
+        auto processOrTerm = [&]() {
+            auto orTerm = orTermsToProcess.front();
+            orTermsToProcess.pop_front();
+
+            TSet<ui32> orTermInputs;
+            THashMap<ui32, TExprNode::TListType> orTermExtractedPredicatesByInput;
+            TExprNode::TListType orTermExtractedConstantPredicates;
+            bool seenConstantPredicatesInOrTerm = false;
+
+            TExprNode::TListType innerAndTerms;
+            GetAndTerms(orTerm, innerAndTerms);
+            for (const auto& innerAndTerm : innerAndTerms) {
+                auto it = joinInputs.find(innerAndTerm.Get());
+                YQL_ENSURE(it != joinInputs.end());
+                auto& innerInputs = it->second;
+
+                if (!IsStrict(innerAndTerm)) {
+                    // Non-strict predicate can't be pushed down
+                    forbiddenInputs.insert(innerInputs.begin(), innerInputs.end());
+                    continue;
+                }
+
+                if (innerInputs.empty()) {
+                    orTermExtractedConstantPredicates.push_back(innerAndTerm);
+                    seenConstantPredicatesInOrTerm = true;
+                } else if (innerInputs.size() == 1) {
+                    ui32 input = *innerInputs.begin();
+                    orTermExtractedPredicatesByInput[input].push_back(innerAndTerm);
+                    orTermInputs.insert(input);
+                } else {
+                    auto expanded = ExpandAndOverOr(orTerm, ctx, types);
+                    if (!expanded.empty() && expansionSize + expanded.size() <= types.AndOverOrExpansionLimit) {
+                        // Update orTermsToProcess with terms after expansion and repeat
+                        for (auto it = expanded.rbegin(); it != expanded.rend(); it++) {
+                            orTermsToProcess.push_front(std::move(*it));
+                            // joinInputs update is not needed
+                            // as innerAndTerm can't be newly constructed node
+                        }
+                        expansionSize += expanded.size();
+                        return;
+                    }
+
+                    // Predicates with multiple inputs cannot be handled
+                    forbiddenInputs.insert(innerInputs.begin(), innerInputs.end());
+                }
+            }
+
+            if (orTermInputs.size() < predicateInputs.size()) {
+                for (ui32 input : predicateInputs) {
+                    if (!orTermInputs.contains(input)) {
+                        // Can't construct narrowing predicate for the input
+                        // if some OR term doesn't impose any conditions for that input
+                        forbiddenInputs.insert(input);
+                    }
+                }
+            }
+            for (auto& [input, terms]: orTermExtractedPredicatesByInput) {
+                if (!forbiddenInputs.contains(input)) {
+                    auto& predicates = extractedPredicatesByInput[input];
+                    predicates.insert(predicates.end(), terms.begin(), terms.end());
+                }
+            }
+
+            if (!constantPredicateForbidden && !seenConstantPredicatesInOrTerm) {
+                // Can't construct narrowing constant predicate
+                // if some OR term doesn't impose any conditions independent from inputs
+                constantPredicateForbidden = true;
+            }
+            if (!constantPredicateForbidden) {
+                extractedConstantPredicates.insert(
+                    extractedConstantPredicates.end(),
+                    orTermExtractedConstantPredicates.begin(),
+                    orTermExtractedConstantPredicates.end()
+                );
+            }
+        };
+        processOrTerm();
+    }
+
+    auto trueLiteral = Build<TCoBool>(ctx, predicate->Pos())
+        .Literal().Build("true")
+        .Done().Ptr();
+
+    TExprNode::TListType resultingPredicates;
+    for (ui32 input : predicateInputs) {
+        auto& predicates = extractedPredicatesByInput[input];
+        if (!predicates.empty() && !forbiddenInputs.contains(input)) {
+            resultingPredicates.push_back(ctx.NewCallable(predicate->Pos(), "Unessential", {ctx.NewCallable(predicate->Pos(), "Or", std::move(predicates)), trueLiteral}));
+        }
+    }
+    if (!constantPredicateForbidden && !extractedConstantPredicates.empty()) {
+        resultingPredicates.push_back(ctx.NewCallable(predicate->Pos(), "Unessential", {ctx.NewCallable(predicate->Pos(), "Or", std::move(extractedConstantPredicates)), trueLiteral}));
+    }
+
+    return resultingPredicates;
+}
+
 void CountLabelsInputUsage(TExprNode::TPtr joinTree, THashMap<TString, int>& counters) {
     if (joinTree->IsAtom()) {
         counters[joinTree->Content()]++;
@@ -1007,6 +1135,12 @@ bool IsEqualityFilterOverJoinEnabled(const TTypeAnnotationContext* types) {
     return IsOptimizerEnabled<flag>(*types) && !IsOptimizerDisabled<flag>(*types);
 }
 
+bool IsExtractOrPredicatesOverEquiJoinEnabled(const TTypeAnnotationContext* types) {
+    YQL_ENSURE(types);
+    static const char flag[] = "ExtractOrPredicatesOverEquiJoin";
+    return IsOptimizerEnabled<flag>(*types) && !IsOptimizerDisabled<flag>(*types);
+}
+
 struct TExtraInputPredicates {
     TExprNode::TPtr Row;
     TExprNodeList Preds;
@@ -1516,7 +1650,7 @@ TExprBase FlatMapOverEquiJoin(
 
         const bool ordered = node.Maybe<TCoOrderedFlatMap>().IsValid();
 
-        for (const auto& andTerm : andTerms) {
+        for (auto andTerm : andTerms) {
             if (IsNoPush(*andTerm)) {
                 continue;
             }
@@ -1527,7 +1661,7 @@ TExprBase FlatMapOverEquiJoin(
             if (!multiUsage && inputs.size() == 0) {
                 YQL_CLOG(DEBUG, Core) << "ConstantPredicatePushdownOverEquiJoin";
                 ret = ConstantPredicatePushdownOverEquiJoin(equiJoin.Ptr(), andTerm, ordered, ctx);
-                extraPredicate = FuseAndTerms(node.Pos(), andTerms, andTerm, isPg, ctx);
+                extraPredicate = FuseAndTerms(node.Pos(), andTerms, andTerm, {}, isPg, ctx);
                 break;
             }
 
@@ -1547,7 +1681,7 @@ TExprBase FlatMapOverEquiJoin(
                 if (newJoin != equiJoin.Ptr()) {
                     YQL_CLOG(DEBUG, Core) << "SingleInputPredicatePushdownOverEquiJoin";
                     ret = newJoin;
-                    extraPredicate = FuseAndTerms(node.Pos(), andTerms, andTerm, isPg, ctx);
+                    extraPredicate = FuseAndTerms(node.Pos(), andTerms, andTerm, {}, isPg, ctx);
                     break;
                 } else if (types->FilterPushdownOverJoinOptionalSide) {
                     auto twoJoins = FilterPushdownOverJoinOptionalSide(
@@ -1566,7 +1700,7 @@ TExprBase FlatMapOverEquiJoin(
                     if (twoJoins != equiJoin.Ptr()) {
                         YQL_CLOG(DEBUG, Core) << "RightSidePredicatePushdownOverLeftJoin";
                         ret = twoJoins;
-                        extraPredicate = FuseAndTerms(node.Pos(), andTerms, andTerm, isPg, ctx);
+                        extraPredicate = FuseAndTerms(node.Pos(), andTerms, andTerm, {}, isPg, ctx);
                         break;
                     }
 
@@ -1579,7 +1713,23 @@ TExprBase FlatMapOverEquiJoin(
                 if (newJoin != equiJoin.Ptr()) {
                     YQL_CLOG(DEBUG, Core) << "DecayCrossJoinIntoInner";
                     ret = newJoin;
-                    extraPredicate = FuseAndTerms(node.Pos(), andTerms, andTerm, isPg, ctx);
+                    extraPredicate = FuseAndTerms(node.Pos(), andTerms, andTerm, {}, isPg, ctx);
+                    break;
+                }
+            }
+
+            if (IsExtractOrPredicatesOverEquiJoinEnabled(types)) {
+                // This optimizer tries to extract predicates from OR terms that can be pushed down to EquiJoin inputs as pre-conditions
+                // For example, in SELECT ... FROM a JOIN b ON ... WHERE (f(a) AND g(b)) OR (x(a) AND y(b)) statement
+                // f(a) OR x(a), g(b) OR y(b) are extracted for respective inputs
+
+                auto extractedPredicates = ExtractOrPredicatesOverEquiJoin(andTerm, row, backRenameMap, labels, ctx, *types);
+                if (!extractedPredicates.empty()) {
+                    YQL_CLOG(DEBUG, Core) << "ExtractOrPredicatesOverEquiJoin";
+                    ret = equiJoin.Ptr();
+                    auto newAndTerm = ctx.NewCallable(andTerm->Pos(), "NoPush", {andTerm});
+                    andTerms.insert(andTerms.end(), extractedPredicates.begin(), extractedPredicates.end());
+                    extraPredicate = FuseAndTerms(node.Pos(), andTerms, andTerm, std::move(newAndTerm), isPg, ctx);
                     break;
                 }
             }

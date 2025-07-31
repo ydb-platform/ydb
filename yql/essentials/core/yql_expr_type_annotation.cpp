@@ -4169,34 +4169,54 @@ bool EnsureStructOrOptionalStructType(TPositionHandle position, const TTypeAnnot
     return true;
 }
 
-bool EnsureDependsOn(const TExprNode& node, TExprContext& ctx) {
+bool EnsureDependsOn(const TExprNode& node, TExprContext& ctx, bool inner) {
     if (HasError(node.GetTypeAnn(), ctx)) {
         return false;
     }
 
+    const std::string_view expected = inner ? "InnerDependsOn" : "DependsOn";
     if (!node.IsCallable()) {
-        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() << "Expected DependsOn, but got node with type: " << node.Type()));
+        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() << "Expected " << expected << ", but got node with type: " << node.Type()));
         return false;
     }
 
-    if (!node.IsCallable("DependsOn")) {
-        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() << "Expected DependsOn, but got callable: " << node.Content()));
+    if (!node.IsCallable(expected)) {
+        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() << "Expected " << expected << ", but got callable: " << node.Content()));
         return false;
     }
 
     return true;
 }
 
-bool EnsureDependsOnTail(const TExprNode& node, TExprContext& ctx, unsigned requiredArgumentCount, unsigned requiredDependsOnCount) {
-    if (!EnsureMinArgsCount(node, requiredArgumentCount+requiredDependsOnCount, ctx)) {
-        return false;
+IGraphTransformer::TStatus EnsureDependsOnTailAndRewrite(
+    const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx, const TTypeAnnotationContext& types,
+    unsigned requiredArgumentCount, unsigned requiredDependsOnCount
+) {
+    if (!EnsureMinArgsCount(*input, requiredArgumentCount + requiredDependsOnCount, ctx)) {
+        return IGraphTransformer::TStatus::Error;
     }
-    for (unsigned i = requiredArgumentCount; i < node.ChildrenSize(); ++i) {
-        if (!EnsureDependsOn(*node.Child(i), ctx)) {
-            return false;
+    if (input->ChildrenSize() == requiredArgumentCount) {
+        return IGraphTransformer::TStatus::Ok;
+    }
+
+    bool inner = input->Child(requiredArgumentCount)->IsCallable("InnerDependsOn");
+    for (unsigned i = requiredArgumentCount; i < input->ChildrenSize(); ++i) {
+        if (!EnsureDependsOn(*input->Child(i), ctx, inner)) {
+            return IGraphTransformer::TStatus::Error;
         }
     }
-    return true;
+    if (inner || !types.NormalizeDependsOn) {
+        return IGraphTransformer::TStatus::Ok;
+    }
+
+    TExprNode::TListType newChildren;
+    newChildren.insert(newChildren.begin(), input->Children().begin(), input->Children().begin() + requiredArgumentCount);
+    for (unsigned i = requiredArgumentCount; i < input->ChildrenSize(); ++i) {
+        newChildren.push_back(ctx.RenameNode(*input->Child(i), "InnerDependsOn"));
+    }
+
+    output = ctx.ChangeChildren(*input, std::move(newChildren));
+    return IGraphTransformer::TStatus::Repeat;
 }
 
 const TTypeAnnotationNode* MakeTypeHandleResourceType(TExprContext& ctx) {

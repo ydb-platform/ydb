@@ -7203,6 +7203,15 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
         return node;
     };
 
+    map["DependsOn"] = [](const TExprNode::TPtr& node, TExprContext& /*ctx*/, TOptimizeContext& optCtx) {
+        if (!optCtx.Types->NormalizeDependsOn) {
+            return node;
+        }
+
+        YQL_CLOG(DEBUG, Core) << "Drop non-inner DependsOn";
+        return node->HeadPtr();
+    };
+
     // will be applied to any callable after all above
     map[""] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
         YQL_ENSURE(node->IsCallable());

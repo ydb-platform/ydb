@@ -193,9 +193,9 @@ message ResultSet {
     // Metadata of the output format.
     // It is to get metadata for the requested output format.
     oneof output_format_meta {
-        Formats.ArrowOutputFormatMeta arrow_output_format_meta = 100;
+        Formats.ArrowOutputFormatMeta arrow_output_format_meta = 5;
     }
 
     // Binary data for compressed rows or/and other formats
-    bytes data = 1000;
+    bytes data = 100;
 }

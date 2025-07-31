@@ -190,8 +190,8 @@ message ExecuteQueryRequest {
     // Format settings for the result sets.
     // It is used to configure the output format and its settings.
     oneof output_format_settings {
-        Ydb.Formats.ValueOutputFormatSettings value_output_format_settings = 100;
-        Ydb.Formats.ArrowOutputFormatSettings arrow_output_format_settings = 101;
+        Ydb.Formats.ValueOutputFormatSettings value_output_format_settings = 13;
+        Ydb.Formats.ArrowOutputFormatSettings arrow_output_format_settings = 14;
     }
 }
 

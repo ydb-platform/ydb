@@ -14,7 +14,6 @@
 * 19310:Added ability to enable followers (read replicas) for covered secondary indexes. [#19310](https://github.com/ydb-platform/ydb/pull/19310) ([azevaykin](https://github.com/azevaykin))
 * 19504:Implemented a [vector index](./dev/vector-indexes.md) for approximate vector search. [#19504](https://github.com/ydb-platform/ydb/pull/19504) ([kungurtsev](https://github.com/kunga))
 * 20691:YMQ: Do not send x-amz-crc32 HTTP header (AWS does not do it) [#20691](https://github.com/ydb-platform/ydb/pull/20691) ([qyryq](https://github.com/qyryq))
-* 20982:Добавлен новый протокол в Node Broker, устраняющий долгий запуск узлов на больших кластерах https://github.com/ydb-platform/ydb/issues/11064 [#20982](https://github.com/ydb-platform/ydb/pull/20982) ([Ilia Shakhov](https://github.com/pixcc))
 
 ### Bug fixes
 

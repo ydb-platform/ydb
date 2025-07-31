@@ -1,6 +1,7 @@
 #pragma once
 
 #include "compute_storage.h"
+#include "spiller_memory_reporter.h"
 
 #include <yql/essentials/minikql/computation/mkql_spiller_factory.h>
 #include <ydb/library/yql/dq/actors/spilling/spilling_counters.h>
@@ -24,16 +25,13 @@ public:
         SpillingTaskCounters_ = spillingTaskCounters;
     }
 
-    void SetMemoryUsageReporter(NKikimr::NMiniKQL::TMemoryUsageReporter::TPtr memoryUsageReporter) override {
-        MemoryUsageReporter_ = memoryUsageReporter;
-    }
-
-    NKikimr::NMiniKQL::TMemoryUsageReporter::TPtr GetMemoryUsageReporter() const override {
-        return MemoryUsageReporter_;
+    void SetMemoryReportingCallbacks(std::function<bool(ui64)> reportAlloc, std::function<void(ui64)> reportFree) override {
+        ReportFreeCallback_ = reportFree;
+        ReportAllocCallback_ = reportAlloc;
     }
 
     NKikimr::NMiniKQL::ISpiller::TPtr CreateSpiller() override {
-        return std::make_shared<TDqComputeStorage>(TxId_, WakeUpCallback_, ErrorCallback_, SpillingTaskCounters_, ActorSystem_);
+        return std::make_shared<TDqComputeStorage>(TxId_, WakeUpCallback_, ErrorCallback_, SpillingTaskCounters_, MakeSpillerMemoryUsageReporter(ReportAllocCallback_, ReportFreeCallback_), ActorSystem_);
     }
 
 private:
@@ -42,7 +40,8 @@ private:
     TWakeUpCallback WakeUpCallback_;
     TErrorCallback ErrorCallback_;
     TIntrusivePtr<TSpillingTaskCounters> SpillingTaskCounters_;
-    NKikimr::NMiniKQL::TMemoryUsageReporter::TPtr MemoryUsageReporter_;
+    TSpillerMemoryUsageReporter::TReportFreeCallback ReportFreeCallback_ = nullptr;
+    TSpillerMemoryUsageReporter::TReportAllocCallback ReportAllocCallback_ = nullptr;
 };
 
 } // namespace NYql::NDq

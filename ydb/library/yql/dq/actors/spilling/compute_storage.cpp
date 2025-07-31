@@ -8,7 +8,10 @@ namespace NYql::NDq {
 using namespace NActors;
 
 TDqComputeStorage::TDqComputeStorage(TTxId txId, TWakeUpCallback wakeUpCallback, TErrorCallback errorCallback,
-    TIntrusivePtr<TSpillingTaskCounters> spillingTaskCounters, TActorSystem* actorSystem) : ActorSystem_(actorSystem) {
+    TIntrusivePtr<TSpillingTaskCounters> spillingTaskCounters, TSpillerMemoryUsageReporter::TPtr memoryUsageReporter, TActorSystem* actorSystem) 
+    : ActorSystem_(actorSystem)
+    , MemoryUsageReporter_(memoryUsageReporter)
+{
     TStringStream spillerName;
     spillerName << "Spiller" << "_" << CreateGuidAsString();
     ComputeStorageActor_ = CreateDqComputeStorageActor(txId, spillerName.Str(), wakeUpCallback, errorCallback, spillingTaskCounters);
@@ -42,6 +45,15 @@ NThreading::TFuture<void> TDqComputeStorage::Delete(TKey key) {
 
 NThreading::TFuture<std::optional<TChunkedBuffer>> TDqComputeStorage::Extract(TKey key) {
     return GetInternal(key, true);
+}
+
+void TDqComputeStorage::ReportAlloc(ui64 bytes) {
+    // TODO: collect 10KB and only then report
+    MemoryUsageReporter_->ReportAlloc(bytes);
+}
+
+void TDqComputeStorage::ReportFree(ui64 bytes)  {
+    MemoryUsageReporter_->ReportFree(bytes);
 }
 
 NThreading::TFuture<std::optional<TChunkedBuffer>> TDqComputeStorage::GetInternal(TKey key, bool removeBlobAfterRead) {

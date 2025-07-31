@@ -1,6 +1,7 @@
 #pragma once
 
 #include "compute_storage_actor.h"
+#include "spiller_memory_reporter.h"
 
 #include <ydb/library/yql/dq/common/dq_common.h>
 #include <yql/essentials/minikql/computation/mkql_spiller.h>
@@ -17,7 +18,7 @@ class TDqComputeStorage : public NKikimr::NMiniKQL::ISpiller
 {
 public:
     TDqComputeStorage(TTxId txId, TWakeUpCallback wakeUpCallback, TErrorCallback errorCallback,
-        TIntrusivePtr<TSpillingTaskCounters> spillingTaskCounters, NActors::TActorSystem* actorSystem);
+        TIntrusivePtr<TSpillingTaskCounters> spillingTaskCounters, TSpillerMemoryUsageReporter::TPtr memoryUsageReporter, NActors::TActorSystem* actorSystem);
 
     ~TDqComputeStorage();
 
@@ -29,12 +30,16 @@ public:
 
     NThreading::TFuture<void> Delete(TKey key) override;
 
+    void ReportAlloc(ui64 bytes) override;
+    void ReportFree(ui64 bytes) override;
+
 private:
     NThreading::TFuture<std::optional<TChunkedBuffer>> GetInternal(TKey key, bool removeBlobAfterRead);
 
     NActors::TActorSystem* ActorSystem_;
     IDqComputeStorageActor* ComputeStorageActor_;
     NActors::TActorId ComputeStorageActorId_;
+    TSpillerMemoryUsageReporter::TPtr MemoryUsageReporter_;
 };
 
 } // namespace NYql::NDq

@@ -1,7 +1,6 @@
 #pragma once
 
 #include "mkql_spiller.h"
-#include "mkql_memory_usage_reporter.h"
 
 namespace NYql::NDq {
 struct TSpillingTaskCounters;
@@ -16,8 +15,7 @@ public:
 
     virtual void SetTaskCounters(const TIntrusivePtr<NYql::NDq::TSpillingTaskCounters>& spillingTaskCounters) = 0;
 
-    virtual void SetMemoryUsageReporter(TMemoryUsageReporter::TPtr memoryUsageReporter) = 0;
-    virtual TMemoryUsageReporter::TPtr GetMemoryUsageReporter() const = 0;
+    virtual void SetMemoryReportingCallbacks(std::function<bool(ui64)> reportAlloc, std::function<void(ui64)> reportFree) = 0;
 
     virtual ~ISpillerFactory(){}
 };

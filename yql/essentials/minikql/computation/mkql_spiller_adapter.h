@@ -13,12 +13,11 @@ namespace NKikimr::NMiniKQL {
 ///When interaction with ISpiller is required, Write and Read operations return a Future
 class TWideUnboxedValuesSpillerAdapter {
 public:
-    TWideUnboxedValuesSpillerAdapter(ISpiller::TPtr spiller, TMemoryUsageReporter::TPtr memoryUsageReporter, const TMultiType* type, size_t sizeLimit)
+    TWideUnboxedValuesSpillerAdapter(ISpiller::TPtr spiller, const TMultiType* type, size_t sizeLimit)
         : Spiller(spiller)
         , ItemType(type)
         , SizeLimit(sizeLimit)
-        , Packer(type, EValuePackerVersion::V1, 4_KB)
-        , MemoryUsageReporter(memoryUsageReporter)
+        , Packer(type, EValuePackerVersion::V1)
     {
     }
 
@@ -34,12 +33,12 @@ public:
     ///    Design note: not using Subscribe on a Future here to avoid possible race condition
     std::optional<NThreading::TFuture<ISpiller::TKey>> WriteWideItem(const TArrayRef<NUdf::TUnboxedValuePod>& wideItem) {
         Packer.AddWideItem(wideItem.data(), wideItem.size());
+
         auto newPackerEstimatedSize = Packer.PackedSizeEstimate();
-        Y_ENSURE(newPackerEstimatedSize >= PackerEstimatedSize, "MISHA size should be grater");
-        if (MemoryUsageReporter) {
-            MemoryUsageReporter->ReportAllocate(newPackerEstimatedSize - PackerEstimatedSize);
-        }
+        Y_ENSURE(newPackerEstimatedSize >= PackerEstimatedSize, "Internal logic error");
+        Spiller->ReportAlloc(newPackerEstimatedSize - PackerEstimatedSize);
         PackerEstimatedSize = newPackerEstimatedSize;
+
         if (newPackerEstimatedSize > SizeLimit) {
             return Spiller->Put(std::move(Packer.Finish()));
         } else {
@@ -56,9 +55,7 @@ public:
 
     void AsyncWriteCompleted(ISpiller::TKey key) {
         StoredChunks.push_back(key);
-        if (MemoryUsageReporter) {
-            MemoryUsageReporter->ReportFree(PackerEstimatedSize);
-        }
+        Spiller->ReportFree(PackerEstimatedSize);
         PackerEstimatedSize = 0;
     }
 
@@ -100,7 +97,6 @@ private:
     ui64 PackerEstimatedSize = 0;
     std::deque<ISpiller::TKey> StoredChunks;
     std::optional<TUnboxedValueBatch> CurrentBatch;
-    TMemoryUsageReporter::TPtr MemoryUsageReporter;
 };
 
 }//namespace NKikimr::NMiniKQL

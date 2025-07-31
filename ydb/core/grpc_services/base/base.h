@@ -26,6 +26,7 @@
 #include <ydb/core/grpc_streaming/grpc_streaming.h>
 #include <ydb/core/tx/scheme_board/events.h>
 #include <ydb/core/base/events.h>
+#include <ydb/core/protos/config.pb.h>
 #include <ydb/core/util/ulid.h>
 
 #include <ydb/library/actors/wilson/wilson_span.h>
@@ -339,9 +340,25 @@ enum class TRateLimiterMode : ui8 {
 #define RLSWITCH(mode) \
     IsRlAllowed() ? mode : TRateLimiterMode::Off
 
-enum class TAuditMode : bool {
-    Off = false,
-    Auditable = true,
+struct TAuditMode {
+    using TLogClassConfig = NKikimrConfig::TAuditConfig::TLogClassConfig;
+    using ELogClass = TLogClassConfig::ELogClass;
+
+    bool IsModifying = true; // Log by default according to default settings
+    ELogClass LogClass = TLogClassConfig::Default;
+
+    static TAuditMode NonModifying() {
+        return TAuditMode{
+            .IsModifying = false
+        };
+    }
+
+    static TAuditMode Modifying(ELogClass logClass) {
+        return TAuditMode{
+            .IsModifying = true,
+            .LogClass = logClass
+        };
+    }
 };
 
 class ICheckerIface;
@@ -357,7 +374,7 @@ public:
 struct TRequestAuxSettings {
     TRateLimiterMode RlMode = TRateLimiterMode::Off;
     void (*CustomAttributeProcessor)(const TSchemeBoardEvents::TDescribeSchemeResult& schemeData, ICheckerIface*) = nullptr;
-    TAuditMode AuditMode = TAuditMode::Off;
+    TAuditMode AuditMode = {};
     NJaegerTracing::ERequestType RequestType = NJaegerTracing::ERequestType::UNSPECIFIED;
 };
 
@@ -423,7 +440,10 @@ public:
     virtual void Pass(const IFacilityProvider& facility) = 0;
 
     // audit
-    virtual bool IsAuditable() const {
+    virtual TAuditMode GetAuditMode() const {
+        return {};
+    }
+    virtual bool IsDmlAuditable() const {
         return false;
     }
     virtual void SetAuditLogHook(TAuditLogHook&& hook) = 0;
@@ -731,28 +751,29 @@ namespace {
 
 }
 
-template <ui32 TRpcId, typename TReq, typename TResp, TRateLimiterMode RlMode = TRateLimiterMode::Off>
+template <ui32 TRpcId, typename TReq, typename TResp>
 class TGRpcRequestBiStreamWrapper
     : public IRequestProxyCtx
-    , public TEventLocal<TGRpcRequestBiStreamWrapper<TRpcId, TReq, TResp, RlMode>, TRpcId>
+    , public TEventLocal<TGRpcRequestBiStreamWrapper<TRpcId, TReq, TResp>, TRpcId>
 {
 private:
     void ReplyWithYdbStatus(Ydb::StatusIds::StatusCode status) override {
         Ctx_->Attach(TActorId());
         TResponse resp;
         FillYdbStatus(resp, IssueManager_.GetIssues(), status);
+        AuditLogRequestEnd(status);
         Ctx_->WriteAndFinish(std::move(resp), grpc::Status::OK);
     }
+
 public:
     using TRequest = TReq;
     using TResponse = TResp;
     using IStreamCtx = NGRpcServer::IGRpcStreamingContext<TRequest, TResponse>;
-    static constexpr TRateLimiterMode RateLimitMode = RlMode;
 
-    TGRpcRequestBiStreamWrapper(TIntrusivePtr<IStreamCtx> ctx, bool rlAllowed = true)
+    TGRpcRequestBiStreamWrapper(TIntrusivePtr<IStreamCtx> ctx, TRequestAuxSettings auxSettings = {})
         : Ctx_(ctx)
-        , RlAllowed_(rlAllowed)
         , TraceId(GetPeerMetaValues(NYdb::YDB_TRACE_ID_HEADER))
+        , AuxSettings(std::move(auxSettings))
     {
         if (!TraceId) {
             TraceId = UlidGen.Next().ToString();
@@ -765,11 +786,19 @@ public:
     }
 
     TRateLimiterMode GetRlMode() const override {
-        return RlAllowed_ ? RateLimitMode : TRateLimiterMode::Off;
+        return AuxSettings.RlMode;
     }
 
     bool TryCustomAttributeProcess(const TSchemeBoardEvents::TDescribeSchemeResult&, ICheckerIface*) override {
         return false;
+    }
+
+    TAuditMode GetAuditMode() const override {
+        return AuxSettings.AuditMode;
+    }
+
+    bool IsDmlAuditable() const override {
+        return AuxSettings.AuditMode.IsModifying && AuxSettings.AuditMode.LogClass == TAuditMode::TLogClassConfig::Dml && !this->IsInternalCall();
     }
 
     const TMaybe<TString> GetYdbToken() const override {
@@ -790,6 +819,7 @@ public:
     }
 
     void ReplyUnauthenticated(const TString& in) override {
+        AuditLogRequestEnd(Ydb::StatusIds::UNAUTHORIZED);
         Ctx_->Finish(grpc::Status(grpc::StatusCode::UNAUTHENTICATED, MakeAuthError(in, IssueManager_)));
     }
 
@@ -849,10 +879,6 @@ public:
         return {};
     }
 
-    IStreamCtx* GetStreamCtx() {
-        return Ctx_.Get();
-    }
-
     const TString& GetRequestName() const override {
         return TRequest::descriptor()->name();
     }
@@ -899,8 +925,8 @@ public:
         Y_ABORT("unimplemented");
     }
 
-    void SetAuditLogHook(TAuditLogHook&&) override {
-        Y_ABORT("unimplemented for TGRpcRequestBiStreamWrapper");
+    void SetAuditLogHook(TAuditLogHook&& hook) override {
+        AuditLogHook = std::move(hook);
     }
 
     // IRequestProxyCtx
@@ -919,11 +945,48 @@ public:
 
     // IRequestCtxBase
     //
-    void AddAuditLogPart(const TStringBuf&, const TString&) override {
-        Y_ABORT("unimplemented for TGRpcRequestBiStreamWrapper");
+    void AddAuditLogPart(const TStringBuf& name, const TString& value) override {
+        AuditLogParts.emplace_back(name, value);
     }
     const TAuditLogParts& GetAuditLogParts() const override {
-        Y_ABORT("unimplemented for TGRpcRequestBiStreamWrapper");
+        return AuditLogParts;
+    }
+
+    void AuditLogRequestEnd(Ydb::StatusIds::StatusCode status) {
+        if (AuditLogHook) {
+            AuditLogHook(status, GetAuditLogParts());
+            // Drop hook to avoid double logging in case when operation implemention
+            // invokes both FinishRequest() (indirectly) and FinishStream()
+            AuditLogHook = nullptr;
+        }
+    }
+
+    // IStreamCtx usage
+    void Attach(TActorId actor) {
+        Ctx_->Attach(actor);
+    }
+
+    bool Read() {
+        return Ctx_->Read();
+    }
+
+    bool Write(TResponse&& message, const grpc::WriteOptions& options = {}) {
+        return Ctx_->Write(std::move(message), options);
+    }
+
+    bool Finish(Ydb::StatusIds::StatusCode status, const grpc::Status& grpcStatus = grpc::Status::OK) {
+        AuditLogRequestEnd(status);
+        return Ctx_->Finish(grpcStatus);
+    }
+
+    bool WriteAndFinish(TResponse&& message, Ydb::StatusIds::StatusCode status, const grpc::Status& grpcStatus = grpc::Status::OK) {
+        AuditLogRequestEnd(status);
+        return Ctx_->WriteAndFinish(std::move(message), grpcStatus);
+    }
+
+    bool WriteAndFinish(TResponse&& message, Ydb::StatusIds::StatusCode status, const grpc::WriteOptions& options, const grpc::Status& grpcStatus = grpc::Status::OK) {
+        AuditLogRequestEnd(status);
+        return Ctx_->WriteAndFinish(std::move(message), options, grpcStatus);
     }
 
 private:
@@ -932,12 +995,15 @@ private:
     inline static const TString EmptySerializedTokenMessage_;
     NYql::TIssueManager IssueManager_;
     TMaybe<NRpcService::TRlPath> RlPath_;
-    bool RlAllowed_;
     IGRpcProxyCounters::TPtr Counters_;
     NWilson::TSpan Span_;
     bool IsTracingDecided_ = false;
     TULIDGenerator UlidGen;
     TMaybe<TString> TraceId;
+    const TRequestAuxSettings AuxSettings;
+
+    TAuditLogParts AuditLogParts;
+    TAuditLogHook AuditLogHook;
 };
 
 template <typename TDerived>
@@ -1216,6 +1282,9 @@ public:
                     (void*)(res->data()), res->size(), freeResult, res);
         grpc::Slice sl = grpc::Slice(slice, grpc::Slice::STEAL_REF);
         auto data = grpc::ByteBuffer(&sl, 1);
+        if (flag == IRequestCtx::EStreamCtrl::FINISH) {
+            AuditLogRequestEnd(status);
+        }
         Ctx_->Reply(&data, status, flag);
     }
 
@@ -1260,7 +1329,7 @@ public:
 
     void FinishStream(ui32 status) override {
         // End Of Request for streaming requests
-        AuditLogRequestEnd(status);
+        AuditLogRequestEnd(Ydb::StatusIds::StatusCode(status));
         Ctx_->FinishStreamingOk();
     }
 
@@ -1336,10 +1405,10 @@ public:
     }
 
 private:
-    void Reply(NProtoBuf::Message *resp, ui32 status) override {
+    void Reply(NProtoBuf::Message* resp, ui32 status) override {
         // End Of Request for non streaming requests
         if (RequestFinished) {
-            AuditLogRequestEnd(status);
+            AuditLogRequestEnd(Ydb::StatusIds::StatusCode(status));
         }
         if (RespHook) {
             TRespHook hook = std::move(RespHook);
@@ -1348,7 +1417,7 @@ private:
         return Ctx_->Reply(resp, status);
     }
 
-    void AuditLogRequestEnd(ui32 status) {
+    void AuditLogRequestEnd(Ydb::StatusIds::StatusCode status) {
         if (AuditLogHook) {
             AuditLogHook(status, GetAuditLogParts());
             // Drop hook to avoid double logging in case when operation implemention
@@ -1484,8 +1553,12 @@ public:
 
     // IRequestCtxBaseMtSafe
     //
-    bool IsAuditable() const override {
-        return (AuxSettings.AuditMode == TAuditMode::Auditable) && !this->IsInternalCall();
+    TAuditMode GetAuditMode() const override {
+        return AuxSettings.AuditMode;
+    }
+
+    bool IsDmlAuditable() const override {
+        return AuxSettings.AuditMode.IsModifying && AuxSettings.AuditMode.LogClass == TAuditMode::TLogClassConfig::Dml && !this->IsInternalCall();
     }
 
 private:

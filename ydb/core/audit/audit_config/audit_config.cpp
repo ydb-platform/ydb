@@ -19,6 +19,10 @@ NACLibProto::ESubjectType ToSubjectType(NKikimrConfig::TAuditConfig::TLogClassCo
 
 }
 
+TAuditConfig::TAuditConfig() {
+    ResetLogClassMap();
+}
+
 TAuditConfig::TAuditConfig(const NKikimrConfig::TAuditConfig& cfg)
     : NKikimrConfig::TAuditConfig(cfg)
 {

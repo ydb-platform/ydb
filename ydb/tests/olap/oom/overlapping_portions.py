@@ -90,9 +90,9 @@ class TestOverlappingPortions(object):
             f"""
             CREATE TABLE `{table_path}` (
                 ts Timestamp NOT NULL,
-                s String,
-                val Uint64,
-                PRIMARY KEY(ts),
+                s String NOT NULL,
+                val Uint64 NOT NULL,
+                PRIMARY KEY(ts, s, val),
             )
             WITH (
                 STORE = COLUMN,

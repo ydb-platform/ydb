@@ -36,7 +36,7 @@ bool TUrlMatcher::Match(const TString& url, const TCgiParameters& params) const 
 
     const TNode* node = &Root;
 
-    do {
+    while (path) {
         TStringBuf part;
         if (!path.NextTok('/', part)) {
             part = path;
@@ -51,16 +51,16 @@ bool TUrlMatcher::Match(const TString& url, const TCgiParameters& params) const 
             return false;
         }
         node = &it->second;
+    };
 
-        if (node->MatchWithoutParams) {
+    if (node->MatchWithoutParams) {
+        return true;
+    }
+    for (const auto& p : node->MatchedParams) {
+        if (params.Has(p.Name) && (p.ExpectedValue.empty() || params.Get(p.Name) == p.ExpectedValue)) {
             return true;
         }
-        for (const auto& p : node->MatchedParams) {
-            if (params.Has(p.Name) && (p.ExpectedValue.empty() || params.Get(p.Name) == p.ExpectedValue)) {
-                return true;
-            }
-        }
-    } while (path);
+    }
 
     return false;
 }

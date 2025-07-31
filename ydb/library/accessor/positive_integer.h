@@ -28,10 +28,15 @@ public:
 	ui64 GetDec() const;
 	ui64 Val() const;
 
-	TPositiveControlInteger& operator =(const ui64 val) {
-		Value.Set(val);
-		return *this;
-	}
+    TPositiveControlInteger& operator=(const ui64 val) {
+        Value = val;
+        return *this;
+    }
+
+    TPositiveControlInteger& operator+=(const ui64 val) {
+        Value.Add(val);
+        return *this;
+    }
 
 	bool operator!() const {
 		return !Value.Val();
@@ -39,9 +44,9 @@ public:
 	operator ui64() const {
 		return Value.Val();
 	}
-	ui64 operator++() {
-		return Inc();
-	}
+    ui64 operator++() {
+        return Inc();
+    }
 	ui64 operator--() {
 		return Dec();
 	}

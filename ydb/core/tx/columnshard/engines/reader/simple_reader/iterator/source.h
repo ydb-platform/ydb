@@ -85,8 +85,6 @@ public:
     }
 
     void ClearMemoryGuards() {
-        AFL_VERIFY(ResourceGuards.size());
-        AFL_VERIFY(!!SourceGroupGuard);
         ResourceGuards.clear();
         SourceGroupGuard.reset();
     }

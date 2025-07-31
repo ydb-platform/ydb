@@ -99,6 +99,13 @@ void InitializeGwpAsan() {
         return;
     }
     
+    // Print configuration information in debug builds or when explicitly requested
+    const char* DebugEnv = getenv("GWP_ASAN_DEBUG");
+    if (DebugEnv && strcmp(DebugEnv, "1") == 0) {
+        fprintf(stderr, "GWP-ASan: Enabled with SampleRate=%d, MaxSimultaneousAllocations=%d\n", 
+                Opts.SampleRate, Opts.MaxSimultaneousAllocations);
+    }
+    
     // Initialize the guarded pool allocator
     GPA.init(Opts);
     
@@ -108,6 +115,16 @@ void InitializeGwpAsan() {
     }
     
     GwpAsanInitialized = true;
+#else
+    // No-op when GWP-ASan is not available
+    static bool WarningShown = false;
+    if (!WarningShown) {
+        const char* DebugEnv = getenv("GWP_ASAN_DEBUG");
+        if (DebugEnv && strcmp(DebugEnv, "1") == 0) {
+            fprintf(stderr, "GWP-ASan: Not available on this platform/compiler\n");
+        }
+        WarningShown = true;
+    }
 #endif
 }
 

@@ -64,7 +64,7 @@ private:
 
             virtual void DoOnResultReady(THashMap<NGeneralCache::TGlobalPortionAddress, std::shared_ptr<TPortionDataAccessor>>&& objectAddresses,
                 THashSet<NGeneralCache::TGlobalPortionAddress>&& removedAddresses,
-                THashMap<NGeneralCache::TGlobalPortionAddress, TString>&& errorAddresses) override {
+                ::NKikimr::NGeneralCache::NPublic::TErrorAddresses<NGeneralCache::TPortionsMetadataCachePolicy>&& errorAddresses) override {
                 AFL_VERIFY(removedAddresses.empty());
                 THashMap<ui64, std::shared_ptr<TPortionDataAccessor>> objects;
                 for (auto&& i : objectAddresses) {
@@ -72,7 +72,7 @@ private:
                 }
                 TDataAccessorsResult result;
                 result.AddData(std::move(objects));
-                for (auto&& i : errorAddresses) {
+                for (auto&& i : errorAddresses.GetErrors()) {
                     result.AddError(i.first.GetPathId(), i.second);
                 }
                 AccessorsCallback->OnResult(RequestId, std::move(result));

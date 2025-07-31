@@ -16,33 +16,22 @@ private:
     using TAddress = NGeneralCache::TGlobalColumnAddress;
 
     TActorId Owner;
-    TActorId ColumnShardActorId;
     YDB_READONLY_DEF(std::shared_ptr<TInternalFilterConstructor>, Context);
     std::vector<TPortionInfo::TConstPtr> Portions;
     std::shared_ptr<NGroupedMemoryManager::TAllocationGuard> AllocationGuard;
 
 private:
-    void OnDone() {
-        AFL_VERIFY(Owner);
-        Owner = TActorId();
-    }
-
-    bool IsDone() const {
-        return !Owner;
-    }
-
     virtual void DoOnResultReady(THashMap<TAddress, std::shared_ptr<NArrow::NAccessor::IChunkedArray>>&& objectAddresses,
-        THashSet<TAddress>&& /*removedAddresses*/, THashMap<TAddress, TString>&& errorAddresses) override {
-        if (!errorAddresses.empty()) {
-            TActorContext::AsActorContext().Send(Owner, new NPrivate::TEvDuplicateSourceCacheResult(Context, errorAddresses.begin()->second));
-            OnDone();
+        THashSet<TAddress>&& /*removedAddresses*/,
+        ::NKikimr::NGeneralCache::NPublic::TErrorAddresses<NGeneralCache::TColumnDataCachePolicy>&& errorAddresses) override {
+        if (errorAddresses.HasErrors()) {
+            TActorContext::AsActorContext().Send(Owner, new NPrivate::TEvDuplicateSourceCacheResult(Context, errorAddresses.GetErrorMessage()));
             return;
         }
 
         AFL_VERIFY(AllocationGuard);
         TActorContext::AsActorContext().Send(
             Owner, new NPrivate::TEvDuplicateSourceCacheResult(Context, std::move(objectAddresses), std::move(AllocationGuard)));
-        OnDone();
     }
 
     virtual bool DoIsAborted() const override {
@@ -50,10 +39,9 @@ private:
     }
 
 public:
-    TColumnFetchingCallback(const TActorId& owner, const TActorId& columnShardActorId, std::shared_ptr<TInternalFilterConstructor>&& context,
-        const std::vector<TPortionInfo::TConstPtr>& portions)
+    TColumnFetchingCallback(
+        const TActorId& owner, std::shared_ptr<TInternalFilterConstructor>&& context, const std::vector<TPortionInfo::TConstPtr>& portions)
         : Owner(owner)
-        , ColumnShardActorId(columnShardActorId)
         , Context(std::move(context))
         , Portions(std::move(portions))
     {
@@ -62,7 +50,6 @@ public:
     void OnError(const TString& errorMessage) {
         AFL_VERIFY(Owner);
         TActorContext::AsActorContext().Send(Owner, new NPrivate::TEvDuplicateSourceCacheResult(Context, errorMessage));
-        OnDone();
     }
 
     void SetAllocationGuard(std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>&& allocationGuard) {
@@ -70,16 +57,14 @@ public:
         AllocationGuard = allocationGuard;
         AFL_VERIFY(AllocationGuard);
     }
-
-    ~TColumnFetchingCallback() {
-        AFL_VERIFY(IsDone());
-    }
 };
 
 class TColumnDataAllocation: public NGroupedMemoryManager::IAllocation {
 private:
     std::shared_ptr<TColumnFetchingCallback> Callback;
-    THashSet<NGeneralCache::TColumnDataCachePolicy::TAddress> ColumnsToFetch;
+    THashSet<TPortionAddress> Portions;
+    std::set<ui32> Columns;
+    std::shared_ptr<NColumnFetching::TColumnDataManager> ColumnDataManager;
 
 private:
     virtual void DoOnAllocationImpossible(const TString& errorMessage) override {
@@ -88,16 +73,18 @@ private:
     virtual bool DoOnAllocated(std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>&& guard,
         const std::shared_ptr<NGroupedMemoryManager::IAllocation>& /*allocation*/) override {
         Callback->SetAllocationGuard(std::move(guard));
-        NColumnFetching::TGeneralCache::AskObjects(NBlobOperations::EConsumer::DUPLICATE_FILTERING, std::move(ColumnsToFetch), Callback);
+        ColumnDataManager->AskColumnData(NBlobOperations::EConsumer::DUPLICATE_FILTERING, Portions, Columns, std::move(Callback));
         return true;
     }
 
 public:
-    TColumnDataAllocation(const std::shared_ptr<TColumnFetchingCallback>& callback,
-        THashSet<NGeneralCache::TColumnDataCachePolicy::TAddress>&& columnsToFetch, const ui64 mem)
+    TColumnDataAllocation(const std::shared_ptr<TColumnFetchingCallback>& callback, const THashSet<TPortionAddress>& portions,
+        const std::set<ui32>& columns, const std::shared_ptr<NColumnFetching::TColumnDataManager>& columnDataManager, const ui64 mem)
         : NGroupedMemoryManager::IAllocation(mem)
         , Callback(callback)
-        , ColumnsToFetch(std::move(columnsToFetch))
+        , Portions(portions)
+        , Columns(columns)
+        , ColumnDataManager(columnDataManager)
     {
     }
 };
@@ -105,15 +92,15 @@ public:
 class TColumnDataAccessorFetching: public IDataAccessorRequestsSubscriber {
 private:
     std::shared_ptr<TColumnFetchingCallback> Callback;
-    TActorId ColumnShardActorId;
-    std::vector<TPortionAddress> Portions;
+    std::shared_ptr<NColumnFetching::TColumnDataManager> ColumnDataManager;
+    THashSet<TPortionAddress> Portions;
     std::set<ui32> Columns;
 
 private:
     virtual void DoOnRequestsFinished(TDataAccessorsResult&& result) override {
         AFL_VERIFY(Callback);
         if (result.HasErrors()) {
-            Callback->OnError(result.GetErrorsByPathId().begin()->second);
+            Callback->OnError(result.GetErrorMessage());
             return;
         }
 
@@ -122,26 +109,20 @@ private:
             mem += accessor->GetColumnRawBytes(Columns);
         }
 
-        THashSet<NGeneralCache::TColumnDataCachePolicy::TAddress> columnsToFetch;
-        for (const auto& portion : Portions) {
-            for (const ui32 column : Columns) {
-                columnsToFetch.emplace(ColumnShardActorId, portion, column);
-            }
-        }
-        AFL_VERIFY(!columnsToFetch.empty());
         NGroupedMemoryManager::TDeduplicationMemoryLimiterOperator::SendToAllocation(Callback->GetContext()->GetMemoryProcessId(),
             Callback->GetContext()->GetMemoryScopeId(), Callback->GetContext()->GetMemoryGroupId(),
-            { std::make_shared<TColumnDataAllocation>(Callback, std::move(columnsToFetch), mem) }, std::nullopt);
+            { std::make_shared<TColumnDataAllocation>(Callback, Portions, Columns, ColumnDataManager, mem) }, std::nullopt);
     }
     virtual const std::shared_ptr<const TAtomicCounter>& DoGetAbortionFlag() const override {
         return Default<std::shared_ptr<const TAtomicCounter>>();
     }
 
 public:
-    TColumnDataAccessorFetching(const std::shared_ptr<TColumnFetchingCallback>& callback, const TActorId& columnShardActorId,
-        const std::vector<TPortionAddress>& portions, const std::set<ui32>& columns)
+    TColumnDataAccessorFetching(const std::shared_ptr<TColumnFetchingCallback>& callback,
+        const std::shared_ptr<NColumnFetching::TColumnDataManager>& columnDataManager, const THashSet<TPortionAddress>& portions,
+        const std::set<ui32>& columns)
         : Callback(callback)
-        , ColumnShardActorId(columnShardActorId)
+        , ColumnDataManager(columnDataManager)
         , Portions(portions)
         , Columns(columns)
     {
@@ -154,7 +135,6 @@ public:
 
 TDuplicateManager::TDuplicateManager(const TSpecialReadContext& context, const std::deque<NSimple::TSourceConstructor>& portions)
     : TActor(&TDuplicateManager::StateMain)
-    , ColumnShardActorId(context.GetCommonContext()->GetColumnShardActorId())
     , PKColumns(context.GetPKColumns())
     , Counters(context.GetCommonContext()->GetCounters().GetDuplicateFilteringCounters())
     , Intervals([&portions]() {
@@ -175,6 +155,7 @@ TDuplicateManager::TDuplicateManager(const TSpecialReadContext& context, const s
     }())
     , FiltersCache(100)
     , DataAccessorsManager(context.GetCommonContext()->GetDataAccessorsManager())
+    , ColumnDataManager(context.GetCommonContext()->GetColumnDataManager())
 {
 }
 
@@ -195,9 +176,9 @@ void TDuplicateManager::Handle(const TEvRequestFilter::TPtr& ev) {
     LOCAL_LOG_TRACE("event", "request_filter")("source", ev->Get()->GetSourceId())("fetching_sources", sourcesToFetch.size());
     AFL_VERIFY(sourcesToFetch.size());
     if (sourcesToFetch.size() == 1 && ev->Get()->GetMaxVersion() >= source->RecordSnapshotMax(ev->Get()->GetMaxVersion())) {
-        AFL_VERIFY(sourcesToFetch.front()->GetPortionId() == ev->Get()->GetSourceId());
+        AFL_VERIFY((*sourcesToFetch.begin())->GetPortionId() == ev->Get()->GetSourceId());
         auto filter = NArrow::TColumnFilter::BuildAllowFilter();
-        filter.Add(true, sourcesToFetch.front()->GetRecordsCount());
+        filter.Add(true, (*sourcesToFetch.begin())->GetRecordsCount());
         ev->Get()->GetSubscriber()->OnFilterReady(std::move(filter));
         return;
     }
@@ -207,9 +188,9 @@ void TDuplicateManager::Handle(const TEvRequestFilter::TPtr& ev) {
     std::shared_ptr<TInternalFilterConstructor> constructor = std::make_shared<TInternalFilterConstructor>(ev, std::move(splitter));
 
     {
-        std::vector<TPortionAddress> portionAddresses;
+        THashSet<TPortionAddress> portionAddresses;
         for (const auto& portion : sourcesToFetch) {
-            portionAddresses.emplace_back(portion->GetAddress());
+            portionAddresses.insert(portion->GetAddress());
         }
         std::set<ui32> columns;
         for (const auto& [columnId, _] : GetFetchingColumns()) {
@@ -219,8 +200,8 @@ void TDuplicateManager::Handle(const TEvRequestFilter::TPtr& ev) {
         std::shared_ptr<TDataAccessorsRequest> request =
             std::make_shared<TDataAccessorsRequest>(NBlobOperations::EConsumer::DUPLICATE_FILTERING);
         request->RegisterSubscriber(std::make_shared<TColumnDataAccessorFetching>(
-            std::make_shared<TColumnFetchingCallback>(SelfId(), ColumnShardActorId, std::move(constructor), sourcesToFetch), ColumnShardActorId,
-            portionAddresses, columns));
+            std::make_shared<TColumnFetchingCallback>(SelfId(), std::move(constructor), sourcesToFetch), ColumnDataManager, portionAddresses,
+            columns));
         for (auto&& source : sourcesToFetch) {
             request->AddPortion(source);
         }

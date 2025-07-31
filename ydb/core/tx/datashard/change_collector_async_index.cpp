@@ -156,7 +156,7 @@ bool TAsyncIndexChangeCollector::Collect(const TTableId& tableId, ERowOp rop,
                     }
                 }
             }
-            
+
             for (TPos pos = 0; pos < userTable->KeyColumnIds.size(); ++pos) {
                 const auto& tag = userTable->KeyColumnIds.at(pos);
                 if (!KeyTagsSeen.contains(tag)) {
@@ -168,7 +168,7 @@ bool TAsyncIndexChangeCollector::Collect(const TTableId& tableId, ERowOp rop,
             for (auto x : KeyVals) {
                 sizeOfKey += x.Value.Size();
             }
-            
+
             if (sizeOfKey > NLimits::MaxWriteKeySize) {
                 throw TKeySizeConstraintException();
             }

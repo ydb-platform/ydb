@@ -111,8 +111,10 @@ void TAuditCtx::AddAuditLogParts(const TIntrusiveConstPtr<NACLib::TUserToken>& u
         return;
     }
     SubjectType = userToken ? userToken->GetSubjectType() : NACLibProto::SUBJECT_TYPE_ANONYMOUS;
-    AddAuditLogPart("subject", userToken->GetUserSID());
-    AddAuditLogPart("sanitized_token", userToken->GetSanitizedToken());
+    if (userToken) {
+        AddAuditLogPart("subject", userToken->GetUserSID());
+        AddAuditLogPart("sanitized_token", userToken->GetSanitizedToken());
+    }
 }
 
 void TAuditCtx::FinishAudit(const NHttp::THttpOutgoingResponsePtr& response) {

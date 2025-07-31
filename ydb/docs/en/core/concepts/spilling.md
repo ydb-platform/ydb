@@ -1,6 +1,6 @@
 # Spilling
 
-## Spilling concept
+## Spilling in General
 
 **Spilling** is a memory management mechanism that temporarily offloads data exceeding available cluster RAM capacity to external storage. Spilling enables execution of user queries that require processing large data volumes exceeding available RAM.
 

@@ -462,9 +462,10 @@ namespace NKikimr::NStorage {
         // Generate state storage config
 
         std::unordered_map<ui32, ui32> SelfHealNodesState;
-        
-        bool GenerateStateStorageConfig(NKikimrConfig::TDomainsConfig::TStateStorage *ss,
-            const NKikimrBlobStorage::TStorageConfig& baseConfig);
+
+        bool GenerateStateStorageConfig(NKikimrConfig::TDomainsConfig::TStateStorage *ss
+            , const NKikimrBlobStorage::TStorageConfig& baseConfig
+            , std::unordered_set<ui32>& usedNodes);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Bridge ops

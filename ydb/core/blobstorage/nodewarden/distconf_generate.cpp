@@ -113,9 +113,10 @@ namespace NKikimr::NStorage {
             config->MutableStateStorageBoardConfig()->CopyFrom(ss);
             config->MutableSchemeBoardConfig()->CopyFrom(ss);
         } else if (!Cfg->DomainsConfig->StateStorageSize()) { // no StateStorage config, generate a new one
-            GenerateStateStorageConfig(config->MutableStateStorageConfig(), *config);
-            GenerateStateStorageConfig(config->MutableStateStorageBoardConfig(), *config);
-            GenerateStateStorageConfig(config->MutableSchemeBoardConfig(), *config);
+            std::unordered_set<ui32> usedNodes;
+            GenerateStateStorageConfig(config->MutableStateStorageConfig(), *config, usedNodes);
+            GenerateStateStorageConfig(config->MutableStateStorageBoardConfig(), *config, usedNodes);
+            GenerateStateStorageConfig(config->MutableSchemeBoardConfig(), *config, usedNodes);
         }
 
         config->SetSelfAssemblyUUID(selfAssemblyUUID);
@@ -569,7 +570,7 @@ namespace NKikimr::NStorage {
     }
 
     bool TDistributedConfigKeeper::GenerateStateStorageConfig(NKikimrConfig::TDomainsConfig::TStateStorage *ss,
-            const NKikimrBlobStorage::TStorageConfig& baseConfig) {
+            const NKikimrBlobStorage::TStorageConfig& baseConfig, std::unordered_set<ui32>& usedNodes) {
         std::map<std::optional<TBridgePileId>, THashMap<TString, std::vector<std::tuple<ui32, TNodeLocation>>>> nodes;
         bool goodConfig = true;
         for (const auto& node : baseConfig.GetAllNodes()) {
@@ -578,7 +579,7 @@ namespace NKikimr::NStorage {
             nodes[pileId][location.GetDataCenterId()].emplace_back(node.GetNodeId(), location);
         }
         for (auto& [pileId, nodesByDataCenter] : nodes) {
-            TStateStoragePerPileGenerator generator(nodesByDataCenter, SelfHealNodesState, pileId);
+            TStateStoragePerPileGenerator generator(nodesByDataCenter, SelfHealNodesState, pileId, usedNodes);
             generator.AddRingGroup(ss);
             goodConfig &= generator.IsGoodConfig();
         }

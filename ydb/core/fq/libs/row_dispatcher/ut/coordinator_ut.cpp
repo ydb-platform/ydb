@@ -40,6 +40,10 @@ public:
         database.SetEndpoint("YDB_ENDPOINT");
         database.SetDatabase("YDB_DATABASE");
         database.SetToken("");
+        
+        auto* item = config.AddReadGroupTopicPartitionsLimit();
+        item->SetReadGroup(ReadGroup2);
+        item->SetLimit(5);
 
         Coordinator = Runtime.Register(NewCoordinator(
             LocalRowDispatcherId,
@@ -60,7 +64,7 @@ public:
     }
 
     NYql::NPq::NProto::TDqPqTopicSource BuildPqTopicSourceSettings(
-        TString endpoint, TString topic)
+        TString endpoint, TString topic, const TString& readGroup)
     {
         NYql::NPq::NProto::TDqPqTopicSource settings;
         settings.SetTopicPath(topic);
@@ -68,6 +72,7 @@ public:
         settings.SetEndpoint(endpoint);
         settings.MutableToken()->SetName("token");
         settings.SetDatabase("Database");
+        settings.SetReadGroup(readGroup);
         return settings;
     }
 
@@ -85,9 +90,9 @@ public:
         //UNIT_ASSERT(eventHolder.Get() != nullptr);
     }
 
-    void MockRequest(NActors::TActorId readActorId, TString endpoint, TString topicName, const std::vector<ui64>& partitionId) {
+    void MockRequest(NActors::TActorId readActorId, TString endpoint, TString topicName, const std::vector<ui64>& partitionId, const TString& readGroup = ReadGroup1) {
         auto event = new NFq::TEvRowDispatcher::TEvCoordinatorRequest(
-            BuildPqTopicSourceSettings(endpoint, topicName),
+            BuildPqTopicSourceSettings(endpoint, topicName, readGroup),
             partitionId);
         Runtime.Send(new NActors::IEventHandle(Coordinator, readActorId, event));
     }
@@ -108,6 +113,8 @@ public:
     NActors::TActorId RowDispatcher2Id;
     NActors::TActorId ReadActor1;
     NActors::TActorId ReadActor2;
+    static constexpr const char ReadGroup1[]  = "connection1";
+    static constexpr const char ReadGroup2[] = "connection2";
 };
 
 Y_UNIT_TEST_SUITE(CoordinatorTests) {
@@ -172,6 +179,16 @@ Y_UNIT_TEST_SUITE(CoordinatorTests) {
 
         MockRequest(ReadActor2, "endpoint2", "topic1", {3});
         ExpectResult(ReadActor2);
+    }
+
+    Y_UNIT_TEST_F(UseReadGroupTopicLimit, TFixture) {
+        ExpectCoordinatorChangesSubscribe();
+        TSet<NActors::TActorId> rowDispatcherIds{RowDispatcher1Id, RowDispatcher2Id, LocalRowDispatcherId};
+                for (auto id : rowDispatcherIds) {
+            Ping(id);
+        }
+        MockRequest(ReadActor1, "endpoint1", "topic1", {0, 1, 2, 3}, ReadGroup2);
+        ExpectResult(ReadActor1);
     }
 }
 

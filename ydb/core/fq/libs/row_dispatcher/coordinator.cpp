@@ -179,6 +179,7 @@ class TActorCoordinator : public TActorBootstrapped<TActorCoordinator> {
     std::unordered_map<TActorId, TCoordinatorRequest> PendingReadActors;
     TCoordinatorMetrics Metrics;
     THashSet<TActorId> InterconnectSessions;
+    THashMap<TString, ui64> ReadGroupTopicPartitionsLimit;
 
 public:
     TActorCoordinator(
@@ -216,11 +217,12 @@ private:
     void AddRowDispatcher(NActors::TActorId actorId, bool isLocal);
     void PrintInternalState();
     TTopicInfo& GetOrCreateTopicInfo(const TTopicKey& topic);
-    std::optional<TActorId> GetAndUpdateLocation(const TPartitionKey& key);  // std::nullopt if TopicPartitionsLimitPerNode reached
+    std::optional<TActorId> GetAndUpdateLocation(const TPartitionKey& key, ui64 limitPerNode);  // std::nullopt if TopicPartitionsLimitPerNode reached
     bool ComputeCoordinatorRequest(TActorId readActorId, const TCoordinatorRequest& request);
     void UpdatePendingReadActors();
     void UpdateInterconnectSessions(const NActors::TActorId& interconnectSession);
     TString GetInternalState();
+    ui64 GetLimitPerNode(const TString& readGroup);
 };
 
 TActorCoordinator::TActorCoordinator(
@@ -238,6 +240,9 @@ TActorCoordinator::TActorCoordinator(
 {
     Metrics.PartitionsLimitPerNode->Set(Config.GetTopicPartitionsLimitPerNode());
     AddRowDispatcher(localRowDispatcherId, true);
+    for (const auto& limitItem : config.GetReadGroupTopicPartitionsLimit()) {
+        ReadGroupTopicPartitionsLimit[limitItem.GetReadGroup()] = limitItem.GetLimit();
+    }
 }
 
 void TActorCoordinator::Bootstrap() {
@@ -372,7 +377,7 @@ TActorCoordinator::TTopicInfo& TActorCoordinator::GetOrCreateTopicInfo(const TTo
     return TopicsInfo.insert({topic, TTopicInfo(Metrics, topic.TopicName)}).first->second;
 }
 
-std::optional<TActorId> TActorCoordinator::GetAndUpdateLocation(const TPartitionKey& key) {
+std::optional<TActorId> TActorCoordinator::GetAndUpdateLocation(const TPartitionKey& key, ui64 limitPerNode) {
     Y_ENSURE(!PartitionLocations.contains(key));
 
     auto& topicInfo = GetOrCreateTopicInfo(key.Topic);
@@ -396,7 +401,7 @@ std::optional<TActorId> TActorCoordinator::GetAndUpdateLocation(const TPartition
     }
     Y_ENSURE(bestLocation, "Local row dispatcher should always be connected");
 
-    if (Config.GetTopicPartitionsLimitPerNode() > 0 && bestNumberPartitions >= Config.GetTopicPartitionsLimitPerNode()) {
+    if (Config.GetTopicPartitionsLimitPerNode() > 0 && bestNumberPartitions >= limitPerNode) {
         topicInfo.AddPendingPartition(key);
         return std::nullopt;
     }
@@ -432,12 +437,22 @@ void TActorCoordinator::Handle(NFq::TEvRowDispatcher::TEvCoordinatorRequest::TPt
     }
 }
 
+ui64 TActorCoordinator::GetLimitPerNode(const TString& readGroup) {
+    auto it = ReadGroupTopicPartitionsLimit.find(readGroup);
+    if (it != ReadGroupTopicPartitionsLimit.end()) {
+        return it->second;
+    }
+    return Config.GetTopicPartitionsLimitPerNode();
+}
+
 bool TActorCoordinator::ComputeCoordinatorRequest(TActorId readActorId, const TCoordinatorRequest& request) {
     const auto& source = request.Record.GetSource();
 
     Y_ENSURE(!RowDispatchers.empty());
 
     bool hasPendingPartitions = false;
+    ui64 limitPerNode = GetLimitPerNode(source.GetReadGroup());
+    
     TMap<NActors::TActorId, TSet<ui64>> tmpResult;
     for (auto& partitionId : request.Record.GetPartitionIds()) {
         TTopicKey topicKey{source.GetEndpoint(), source.GetDatabase(), source.GetTopicPath()};
@@ -447,7 +462,7 @@ bool TActorCoordinator::ComputeCoordinatorRequest(TActorId readActorId, const TC
         if (locationIt != PartitionLocations.end()) {
             rowDispatcherId = locationIt->second;
         } else {
-            if (const auto maybeLocation = GetAndUpdateLocation(key)) {
+            if (const auto maybeLocation = GetAndUpdateLocation(key, limitPerNode)) {
                 rowDispatcherId = *maybeLocation;
             } else {
                 hasPendingPartitions = true;

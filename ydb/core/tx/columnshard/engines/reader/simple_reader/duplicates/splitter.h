@@ -48,7 +48,7 @@ private:
     std::vector<TBorder> Borders;
 
 public:
-    TColumnDataSplitter(THashMap<ui64, NArrow::TFirstLastSpecialKeys> sources, const NArrow::TFirstLastSpecialKeys& bounds) {
+    TColumnDataSplitter(const THashMap<ui64, NArrow::TFirstLastSpecialKeys>& sources, const NArrow::TFirstLastSpecialKeys& bounds) {
         for (const auto& [id, specials] : sources) {
             if (specials.GetFirst() > bounds.GetFirst()) {
                 Borders.emplace_back(TBorder::First(specials.GetFirst()));

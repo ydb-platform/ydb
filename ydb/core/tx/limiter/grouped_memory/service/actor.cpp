@@ -40,7 +40,7 @@ void TMemoryLimiterActor::Handle(NEvents::TEvExternal::TEvFinishTask::TPtr& ev) 
 void TMemoryLimiterActor::Handle(NEvents::TEvExternal::TEvTaskUpdated::TPtr& ev) {
     auto& event = *ev->Get();
     const size_t index = GetManager(event.GetExternalProcessId());
-    LWPROBE(UpdateTask, index, event.GetExternalProcessId(), event.GetExternalScopeId(), event.GetAllocationId(), event.GetVolume(), LoadQueue.GetLoad(index));
+    LWPROBE(TaskUpdated, index, event.GetExternalProcessId(), event.GetExternalScopeId(), event.GetAllocationId(), LoadQueue.GetLoad(index));
     Managers[index]->AllocationUpdated(
         event.GetExternalProcessId(), event.GetExternalScopeId(), event.GetAllocationId());
 }

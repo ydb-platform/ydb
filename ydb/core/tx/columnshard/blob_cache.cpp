@@ -354,7 +354,7 @@ private:
 
         LOG_S_DEBUG("Updating max cache data size: " << newMaxCacheDataSize);
 
-//        MaxCacheDataSize = newMaxCacheDataSize;
+        MaxCacheDataSize = newMaxCacheDataSize;
     }
 
     void UpdateConsumption() {

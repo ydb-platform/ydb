@@ -308,9 +308,9 @@ public:
             },
             .UpdateFairSharePeriod = TDuration::MilliSeconds(TableServiceConfig.GetComputeSchedulerSettings().GetUpdateFairShareMs()),
         };
-        auto kqpSchedulerService = TActivationContext::Register(CreateKqpComputeSchedulerService(schedulerOptions));
+        KqpComputeSchedulerService = TActivationContext::Register(CreateKqpComputeSchedulerService(schedulerOptions));
         TActivationContext::ActorSystem()->RegisterLocalService(
-            MakeKqpSchedulerServiceId(SelfId().NodeId()), kqpSchedulerService);
+            MakeKqpSchedulerServiceId(SelfId().NodeId()), KqpComputeSchedulerService);
 
         NActors::TMon* mon = AppData()->Mon;
         if (mon) {
@@ -407,6 +407,7 @@ public:
         Send(KqpNodeService, new TEvents::TEvPoison);
 
         Send(KqpWorkloadService, new TEvents::TEvPoison());
+        Send(KqpComputeSchedulerService, new TEvents::TEvPoison());
 
         LocalSessions->ForEachNode([this](TNodeId node) {
             Send(TActivationContext::InterconnectProxy(node), new TEvents::TEvUnsubscribe);
@@ -1552,6 +1553,8 @@ private:
             return false;
         }
 
+        // TODO: add database to scheduler
+
         switch (ScriptExecutionsCreationStatus) {
             case EScriptExecutionsCreationStatus::NotStarted:
                 ScriptExecutionsCreationStatus = EScriptExecutionsCreationStatus::Pending;
@@ -1725,6 +1728,7 @@ private:
             ResourcePoolsCache.UpdateDatabaseInfo(ev->Get()->DatabaseId, ev->Get()->Serverless);
         }
         DatabasesCache.UpdateDatabaseInfo(ev, ActorContext());
+        // TODO: update info for compute scheduler too
     }
 
     void Handle(TEvKqp::TEvDelayedRequestError::TPtr& ev) {
@@ -1780,6 +1784,7 @@ private:
     TActorId SpillingService;
     TActorId WhiteBoardService;
     TActorId KqpWorkloadService;
+    TActorId KqpComputeSchedulerService;
     NYql::NDq::IDqAsyncIoFactory::TPtr AsyncIoFactory;
 
     enum class EScriptExecutionsCreationStatus {

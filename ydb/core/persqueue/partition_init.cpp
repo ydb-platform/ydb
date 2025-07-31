@@ -761,7 +761,9 @@ void TInitDataStep::Execute(const TActorContext &ctx) {
     for (auto& p : Partition()->HeadKeys) {
         keys.push_back({p.Key.Data(), p.Key.Size()});
     }
-    Y_ABORT_UNLESS(keys.size() < Partition()->TotalMaxCount);
+    Y_ABORT_UNLESS(keys.size() < Partition()->TotalMaxCount,
+                   "keys.size=%" PRISZT ", TotalMaxCount=%" PRIu32,
+                   keys.size(), Partition()->TotalMaxCount);
     if (keys.empty()) {
         Done(ctx);
         return;
@@ -808,7 +810,9 @@ void TInitDataStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActorConte
 
                 dataKeysHead[currentLevel].AddKey(key, size);
                 Y_ABORT_UNLESS(dataKeysHead[currentLevel].KeysCount() < AppData(ctx)->PQConfig.GetMaxBlobsPerLevel());
-                Y_ABORT_UNLESS(!dataKeysHead[currentLevel].NeedCompaction());
+                Y_ABORT_UNLESS(!dataKeysHead[currentLevel].NeedCompaction(),
+                               "currentLevel=%" PRIu32 ", key=%s, size=%" PRIu32,
+                               currentLevel, key.ToString().data(), size);
 
                 PQ_LOG_D("read res partition offset " << offset << " endOffset " << Partition()->EndOffset
                         << " key " << key.GetOffset() << "," << key.GetCount() << " valuesize " << read.GetValue().size()

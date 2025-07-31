@@ -485,6 +485,8 @@ runs:
               --is_test_result_ignored $IS_TEST_RESULT_IGNORED \
               --comment_color_file summary_color.txt \
               --comment_text_file summary_text.txt \
+              --pr_number "${{ github.event.number }}" \
+              --workflow_run_id "${{ github.run_id }}" \
               "Tests" $CURRENT_PUBLIC_DIR/ya-test.html "$CURRENT_JUNIT_XML_PATH"
           fi
 

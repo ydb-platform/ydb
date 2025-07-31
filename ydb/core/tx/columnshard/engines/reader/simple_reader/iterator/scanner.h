@@ -20,10 +20,6 @@ private:
     std::vector<std::shared_ptr<ISyncPoint>> SyncPoints;
 
 public:
-    const std::shared_ptr<ISyncPoint>& GetResultSyncPoint() const {
-        return SyncPoints.back();
-    }
-
     const std::shared_ptr<ISyncPoint>& GetSyncPoint(const ui32 index) const {
         AFL_VERIFY(index < SyncPoints.size());
         return SyncPoints[index];

@@ -50,21 +50,10 @@ public:
 };
 
 class IDataSource: public NCommon::IDataSource {
-public:
-    enum class EType {
-        SysInfo,
-        Portion,
-        Aggregation
-    };
-
 private:
     using TBase = NCommon::IDataSource;
-    YDB_READONLY(EType, Type, EType::Portion);
-    const TReplaceKeyAdapter Start;
-    const TReplaceKeyAdapter Finish;
     virtual NJson::TJsonValue DoDebugJson() const = 0;
     std::shared_ptr<TFetchingScript> FetchingPlan;
-    YDB_READONLY(TPKRangeFilter::EUsageClass, UsageClass, TPKRangeFilter::EUsageClass::PartialUsage);
     YDB_ACCESSOR(ui32, ResultRecordsCount, 0);
     bool ProcessingStarted = false;
     bool IsStartedByCursor = false;
@@ -78,7 +67,6 @@ private:
     virtual void DoOnEmptyStageData(const std::shared_ptr<NCommon::IDataSource>& sourcePtr) override;
 
     void Finalize(const std::optional<ui64> memoryLimit);
-    bool NeedFullAnswerFlag = true;
     std::optional<ui32> PurposeSyncPointIndex;
 
 protected:
@@ -91,17 +79,14 @@ protected:
     virtual bool DoStartFetchingAccessor(const std::shared_ptr<NCommon::IDataSource>& sourcePtr, const TFetchingScriptCursor& step) = 0;
 
 public:
+    static bool CheckTypeCast(const EType type) {
+        return type == NCommon::IDataSource::EType::SimplePortion || type == NCommon::IDataSource::EType::SimpleAggregation ||
+               type == NCommon::IDataSource::EType::SimpleSysInfo;
+    }
+
     void ClearMemoryGuards() {
         ResourceGuards.clear();
         SourceGroupGuard.reset();
-    }
-
-    bool NeedFullAnswer() const {
-        return NeedFullAnswerFlag;
-    }
-
-    void SetNeedFullAnswer(const bool value) {
-        NeedFullAnswerFlag = value;
     }
 
     ui32 GetPurposeSyncPointIndex() const {
@@ -118,8 +103,13 @@ public:
         if (!PurposeSyncPointIndex) {
             AFL_VERIFY(value == 0);
         } else {
-            AFL_VERIFY(*PurposeSyncPointIndex < value);
+            AFL_VERIFY(*PurposeSyncPointIndex + 1 == value);
         }
+        PurposeSyncPointIndex = value;
+    }
+
+    void InitPurposeSyncPointIndex(const ui32 value) {
+        AFL_VERIFY(!PurposeSyncPointIndex);
         PurposeSyncPointIndex = value;
     }
 
@@ -133,20 +123,6 @@ public:
     void SetUsedRawBytes(const ui64 value) {
         AFL_VERIFY(!UsedRawBytes);
         UsedRawBytes = value;
-    }
-
-    const TReplaceKeyAdapter& GetStart() const {
-        return Start;
-    }
-    const TReplaceKeyAdapter& GetFinish() const {
-        return Finish;
-    }
-
-    TReplaceKeyAdapter CopyStart() const {
-        return Start;
-    }
-    TReplaceKeyAdapter CopyFinish() const {
-        return Finish;
     }
 
     bool GetIsStartedByCursor() const {
@@ -189,23 +165,10 @@ public:
 
     void ContinueCursor(const std::shared_ptr<NCommon::IDataSource>& sourcePtr);
 
-    template <bool Reverse>
-    class TCompareStartForScanSequence {
-    public:
-        bool operator()(const std::shared_ptr<IDataSource>& l, const std::shared_ptr<IDataSource>& r) const {
-            const std::partial_ordering compareResult = l->GetStart().Compare(r->GetStart());
-            if (compareResult == std::partial_ordering::equivalent) {
-                return l->GetSourceId() < r->GetSourceId();
-            } else {
-                return Reverse ? compareResult == std::partial_ordering::greater : compareResult == std::partial_ordering::less;
-            }
-        };
-    };
-
     virtual NArrow::TSimpleRow GetStartPKRecordBatch() const = 0;
 
     void StartProcessing(const std::shared_ptr<NCommon::IDataSource>& sourcePtr);
-    void InitializeProcessing(const std::shared_ptr<NCommon::IDataSource>& sourcePtr);
+    virtual void InitializeProcessing(const std::shared_ptr<NCommon::IDataSource>& sourcePtr);
     virtual ui64 PredictAccessorsSize(const std::set<ui32>& entityIds) const = 0;
 
     bool StartFetchingAccessor(const std::shared_ptr<NCommon::IDataSource>& sourcePtr, const TFetchingScriptCursor& step) {
@@ -246,8 +209,6 @@ public:
         NJson::TJsonValue result = NJson::JSON_MAP;
         result.InsertValue("source_id", GetSourceId());
         result.InsertValue("source_idx", GetSourceIdx());
-        result.InsertValue("start", Start.DebugString());
-        result.InsertValue("finish", Finish.DebugString());
         result.InsertValue("specific", DoDebugJson());
         return result;
     }
@@ -255,21 +216,9 @@ public:
     bool OnIntervalFinished(const ui32 intervalIdx);
 
     IDataSource(const EType type, const ui64 sourceId, const ui32 sourceIdx, const std::shared_ptr<NCommon::TSpecialReadContext>& context,
-        TReplaceKeyAdapter&& start, TReplaceKeyAdapter&& finish, const TSnapshot& recordSnapshotMin, const TSnapshot& recordSnapshotMax,
-        const std::optional<ui32> recordsCount, const std::optional<ui64> shardingVersion, const bool hasDeletions)
-        : TBase(sourceId, sourceIdx, context, recordSnapshotMin, recordSnapshotMax, recordsCount, shardingVersion, hasDeletions)
-        , Type(type)
-        , Start(std::move(start))
-        , Finish(std::move(finish)) {
-        if (context->GetReadMetadata()->IsDescSorted()) {
-            UsageClass = GetContext()->GetReadMetadata()->GetPKRangesFilter().GetUsageClass(Finish.GetValue(), Start.GetValue());
-        } else {
-            UsageClass = GetContext()->GetReadMetadata()->GetPKRangesFilter().GetUsageClass(Start.GetValue(), Finish.GetValue());
-        }
-        AFL_VERIFY(UsageClass != TPKRangeFilter::EUsageClass::NoUsage);
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "portions_for_merge")("start", Start.DebugString())(
-            "finish", Finish.DebugString());
-        AFL_VERIFY_DEBUG(Start.Compare(Finish) != std::partial_ordering::greater);
+        const TSnapshot& recordSnapshotMin, const TSnapshot& recordSnapshotMax, const std::optional<ui32> recordsCount,
+        const std::optional<ui64> shardingVersion, const bool hasDeletions)
+        : TBase(type, sourceId, sourceIdx, context, recordSnapshotMin, recordSnapshotMax, recordsCount, shardingVersion, hasDeletions) {
     }
 
     virtual ~IDataSource() = default;
@@ -280,14 +229,13 @@ private:
     using TBase = IDataSource;
     const TPortionInfo::TConstPtr Portion;
     std::shared_ptr<ISnapshotSchema> Schema;
+    const TReplaceKeyAdapter Start;
+    const TReplaceKeyAdapter Finish;
+
+    YDB_READONLY(TPKRangeFilter::EUsageClass, UsageClass, TPKRangeFilter::EUsageClass::PartialUsage);
 
     void NeedFetchColumns(const std::set<ui32>& columnIds, TBlobsAction& blobsAction,
         THashMap<TChunkAddress, TPortionDataAccessor::TAssembleBlobInfo>& nullBlocks, const std::shared_ptr<NArrow::TColumnFilter>& filter);
-
-    virtual void InitUsedRawBytes() override {
-        AFL_VERIFY(!UsedRawBytes);
-        UsedRawBytes = GetPortionAccessor().GetColumnRawBytes(GetContext()->GetAllUsageColumns()->GetColumnIds(), false);
-    }
 
     virtual bool DoStartFetchingColumns(
         const std::shared_ptr<NCommon::IDataSource>& sourcePtr, const TFetchingScriptCursor& step, const TColumnsSetIds& columns) override;
@@ -319,6 +267,8 @@ private:
         NJson::TJsonValue result = NJson::JSON_MAP;
         result.InsertValue("type", "portion");
         result.InsertValue("info", Portion->DebugString());
+        result.InsertValue("start", Start.DebugString());
+        result.InsertValue("finish", Finish.DebugString());
         return result;
     }
 
@@ -344,6 +294,15 @@ private:
     virtual bool DoStartFetchingAccessor(const std::shared_ptr<NCommon::IDataSource>& sourcePtr, const TFetchingScriptCursor& step) override;
 
 public:
+    virtual void InitUsedRawBytes() override {
+        AFL_VERIFY(!UsedRawBytes);
+        UsedRawBytes = GetPortionAccessor().GetColumnRawBytes(GetContext()->GetAllUsageColumns()->GetColumnIds(), false);
+    }
+
+    static bool CheckTypeCast(const EType type) {
+        return type == NCommon::IDataSource::EType::SimplePortion;
+    }
+
     virtual TString GetEntityStorageId(const ui32 entityId) const override {
         return Portion->GetEntityStorageId(entityId, Schema->GetIndexInfo());
     }
@@ -360,8 +319,20 @@ public:
         return Schema;
     }
 
+    const TReplaceKeyAdapter& GetStart() const {
+        return Start;
+    }
+    const TReplaceKeyAdapter& GetFinish() const {
+        return Finish;
+    }
+
     virtual ui64 PredictAccessorsSize(const std::set<ui32>& entityIds) const override {
         return Portion->GetApproxChunksCount(entityIds.size()) * sizeof(TColumnRecord);
+    }
+
+    virtual void InitializeProcessing(const std::shared_ptr<NCommon::IDataSource>& sourcePtr) override {
+        AFL_VERIFY(HasPortionAccessor())("type", GetType());
+        TBase::InitializeProcessing(sourcePtr);
     }
 
     virtual NArrow::TSimpleRow GetStartPKRecordBatch() const override {
@@ -509,7 +480,19 @@ private:
         return false;
     }
 
+    static ui32 CalcInputRecordsCount(const std::vector<std::shared_ptr<NCommon::IDataSource>>& sources) {
+        ui32 recordsCount = 0;
+        for (auto&& i : sources) {
+            recordsCount += i->GetStageData().GetTable()->GetRecordsCountActualVerified();
+        }
+        return recordsCount;
+    }
+
 public:
+    static bool CheckTypeCast(const EType type) {
+        return type == NCommon::IDataSource::EType::SimpleAggregation;
+    }
+
     ui64 GetLastSourceId() const {
         return LastSourceId;
     }
@@ -596,9 +579,8 @@ public:
 
     TAggregationDataSource(
         std::vector<std::shared_ptr<NCommon::IDataSource>>&& sources, const std::shared_ptr<NCommon::TSpecialReadContext>& context)
-        : TBase(EType::Aggregation, sources.back()->GetSourceId(), sources.back()->GetSourceIdx(), context,
-              sources.front()->GetAs<IDataSource>()->CopyStart(), sources.back()->GetAs<IDataSource>()->CopyFinish(),
-              TSnapshot::Zero(), TSnapshot::Zero(), std::nullopt, std::nullopt, false)
+        : TBase(EType::SimpleAggregation, sources.back()->GetSourceId(), sources.back()->GetSourceIdx(), context, TSnapshot::Zero(), TSnapshot::Zero(),
+              CalcInputRecordsCount(sources), std::nullopt, false)
         , Sources(std::move(sources))
         , LastSourceId(Sources.back()->GetSourceId())
         , LastSourceRecordsCount(Sources.back()->GetRecordsCount()) {

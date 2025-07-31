@@ -84,17 +84,12 @@ TConclusion<bool> TStartPortionAccessorFetchingStep::DoExecuteInplace(
     return !source->MutableAs<IDataSource>()->StartFetchingAccessor(source, step);
 }
 
-TConclusion<bool> TDetectScript::DoExecuteInplace(
-    const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& /*step*/) const {
-    auto plan = source->GetContext()->GetColumnsFetchingPlan(source);
-    source->MutableAs<IDataSource>()->InitFetchingPlan(plan);
-    TFetchingScriptCursor cursor(plan, 0);
-    FOR_DEBUG_LOG(NKikimrServices::COLUMNSHARD_SCAN_EVLOG, source->AddEvent("sdmem"));
-    return cursor.Execute(source);
-}
-
 TConclusion<bool> TDetectInMemFlag::DoExecuteInplace(
     const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& /*step*/) const {
+    if (!source->NeedPortionData()) {
+        source->SetSourceInMemory(true);
+        source->MutableAs<IDataSource>()->InitUsedRawBytes();
+    }
     if (source->HasSourceInMemoryFlag()) {
         return true;
     }
@@ -125,7 +120,8 @@ public:
         auto* plainReader = static_cast<TPlainReadData*>(&indexedDataRead);
         Source->MutableAs<IDataSource>()->SetCursor(std::move(Step));
         Source->StartSyncSection();
-        plainReader->MutableScanner().GetResultSyncPoint()->OnSourcePrepared(std::move(Source), *plainReader);
+        const ui32 syncPointIndex = Source->GetAs<IDataSource>()->GetPurposeSyncPointIndex();
+        plainReader->MutableScanner().GetSyncPoint(syncPointIndex)->OnSourcePrepared(std::move(Source), *plainReader);
         return true;
     }
 };
@@ -135,7 +131,8 @@ public:
 
 NKikimr::TConclusion<bool> TInitializeSourceStep::DoExecuteInplace(
     const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& /*step*/) const {
-    source->MutableAs<IDataSource>()->InitializeProcessing(source);
+    auto* simpleSource = source->MutableAs<IDataSource>();
+    simpleSource->InitializeProcessing(source);
     return true;
 }
 
@@ -147,7 +144,7 @@ TConclusion<bool> TPortionAccessorFetchedStep::DoExecuteInplace(
 
 TConclusion<bool> TStepAggregationSources::DoExecuteInplace(
     const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& /*step*/) const {
-    AFL_VERIFY(source->GetAs<IDataSource>()->GetType() == IDataSource::EType::Aggregation);
+    AFL_VERIFY(source->GetType() == IDataSource::EType::SimpleAggregation);
     auto* aggrSource = static_cast<const TAggregationDataSource*>(source.get());
     std::vector<std::shared_ptr<NArrow::NSSA::TAccessorsCollection>> collections;
     for (auto&& i : aggrSource->GetSources()) {
@@ -163,7 +160,7 @@ TConclusion<bool> TStepAggregationSources::DoExecuteInplace(
 
 TConclusion<bool> TCleanAggregationSources::DoExecuteInplace(
     const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& /*step*/) const {
-    AFL_VERIFY(source->GetAs<IDataSource>()->GetType() == IDataSource::EType::Aggregation);
+    AFL_VERIFY(source->GetType() == IDataSource::EType::SimpleAggregation);
     auto* aggrSource = static_cast<const TAggregationDataSource*>(source.get());
     for (auto&& i : aggrSource->GetSources()) {
         i->MutableAs<IDataSource>()->ClearResult();
@@ -226,13 +223,9 @@ TConclusion<bool> TPrepareResultStep::DoExecuteInplace(
     auto plan = std::move(acc).Build();
     AFL_VERIFY(!plan->IsFinished(0));
     source->MutableAs<IDataSource>()->InitFetchingPlan(plan);
-    if (source->GetAs<IDataSource>()->NeedFullAnswer()) {
+    if (StartResultBuildingInplace) {
         TFetchingScriptCursor cursor(plan, 0);
-        const auto& commonContext = *context->GetCommonContext();
-        auto sCopy = source;
-        auto task = std::make_shared<TStepAction>(std::move(sCopy), std::move(cursor), commonContext.GetScanActorId(), false);
-        NConveyorComposite::TScanServiceOperator::SendTaskToExecute(task, commonContext.GetConveyorProcessId());
-        return false;
+        return cursor.Execute(source);
     } else {
         return true;
     }

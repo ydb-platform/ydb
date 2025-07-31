@@ -121,6 +121,7 @@ namespace Tests {
         NKikimrPQ::TPQConfig PQConfig;
         NKikimrPQ::TPQClusterDiscoveryConfig PQClusterDiscoveryConfig;
         NKikimrNetClassifier::TNetClassifierConfig NetClassifierConfig;
+        NKikimrConfig::TBridgeConfig BridgeConfig;
         ui32 Domain = TestDomain;
         bool SupportsRedirect = true;
         TString TracePath;
@@ -179,6 +180,7 @@ namespace Tests {
         bool Verbose = true;
         bool UseSectorMap = false;
         TVector<TIntrusivePtr<NFake::TProxyDS>> ProxyDSMocks;
+        bool EnableStorage = true;
 
         std::function<IActor*(const TTicketParserSettings&)> CreateTicketParser = NKikimr::CreateTicketParser;
         std::shared_ptr<TGrpcServiceFactory> GrpcServiceFactory;
@@ -286,6 +288,11 @@ namespace Tests {
             return *this;
         }
 
+        TServerSettings& SetEnableStorage(bool enable) {
+            EnableStorage = enable;
+            return *this;
+        }
+
         template <typename TService, typename...TParams>
         TServerSettings& RegisterGrpcService(
             const TString& name,
@@ -299,10 +306,11 @@ namespace Tests {
             return *this;
         }
 
-        explicit TServerSettings(ui16 port, const NKikimrProto::TAuthConfig authConfig = {}, const NKikimrPQ::TPQConfig pqConfig = {})
+        explicit TServerSettings(ui16 port, const NKikimrProto::TAuthConfig authConfig = {}, const NKikimrPQ::TPQConfig pqConfig = {}, const NKikimrConfig::TBridgeConfig& bridgeConfig = {})
             : Port(port)
             , AuthConfig(authConfig)
             , PQConfig(pqConfig)
+            , BridgeConfig(bridgeConfig)
         {
             AddStoragePool("test", "/" + DomainName + ":test");
             AppConfig = std::make_shared<NKikimrConfig::TAppConfig>();

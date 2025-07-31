@@ -13,15 +13,15 @@ In data processing systems, including {{ ydb-short-name }}, spilling is essentia
 
 Spilling operates based on the memory hierarchy principle:
 
-1. **Random Access Memory (RAM)** — fast but limited resource.
+1. **Random Access Memory (RAM)** — fast but limited.
 2. **External storage** — slower but more capacious.
 
 When memory usage approaches the limit, the system:
 
-- serializes part of the data;
-- saves it to external storage;
-- frees the corresponding memory;
-- when necessary — loads data back into memory to continue computations.
+- serializes part of the data
+- saves it to external storage
+- frees the corresponding memory
+- loads data back into memory, when necessary, to continue computations
 
 
 ## Spilling in {{ ydb-short-name }}

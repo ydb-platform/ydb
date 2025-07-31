@@ -423,7 +423,7 @@ namespace orc {
       // fallback to DIRECT encoding.
       // The decision to use patched base was based on zigzag values, but the
       // actual patching is done on base reduced literals.
-      if ((option.brBits100p - option.brBits95p) != 0) {
+      if ((option.brBits100p - option.brBits95p) != 0 && std::abs(option.min) < BASE_VALUE_LIMIT) {
         option.encoding = PATCHED_BASE;
         preparePatchedBlob(option);
         return;

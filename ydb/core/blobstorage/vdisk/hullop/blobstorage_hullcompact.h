@@ -2,7 +2,7 @@
 
 #include "defs.h"
 #include "blobstorage_hullcompactworker.h"
-#include <ydb/core/blobstorage/vdisk/common/vdisk_messages_quoter.h>
+#include <ydb/core/blobstorage/vdisk/common/vdisk_events_quoter.h>
 #include <ydb/core/blobstorage/vdisk/hullop/blobstorage_hullload.h>
 #include <ydb/core/blobstorage/vdisk/huge/blobstorage_hullhuge.h>
 #include <library/cpp/random_provider/random_provider.h>

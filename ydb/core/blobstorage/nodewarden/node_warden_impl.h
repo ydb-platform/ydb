@@ -193,8 +193,8 @@ namespace NKikimr::NStorage {
             , FreshCompMaxInFlightWrites(10, 1, 1000)
             , HullCompMaxInFlightWrites(10, 1, 1000)
             , HullCompMaxInFlightReads(20, 1, 1000)
-            , HullCompFullCompPeriodSec(1, 1, 6'048'00)
-            , HullCompThrottlerBytesRate(0, 0, 1'073'741'824)
+            , HullCompFullCompPeriodSec(1, 1, 604'800)
+            , HullCompThrottlerBytesRate(0, 0, 10'000'000'000) // 10 GB/s
             , CostMetricsParametersByMedia({
                 TCostMetricsParameters{200},
                 TCostMetricsParameters{50},

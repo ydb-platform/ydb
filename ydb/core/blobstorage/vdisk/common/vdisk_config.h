@@ -2,7 +2,7 @@
 #include "defs.h"
 
 #include "vdisk_performance_params.h"
-#include "vdisk_messages_quoter.h"
+#include "vdisk_events_quoter.h"
 
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo.h>
 #include <ydb/core/base/blobstorage.h>

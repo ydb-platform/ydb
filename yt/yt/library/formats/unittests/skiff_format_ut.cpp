@@ -2,8 +2,9 @@
 
 #include <yt/yt/library/logical_type_shortcuts/logical_type_shortcuts.h>
 #include "value_examples.h"
-#include "row_helpers.h"
 #include "yson_helpers.h"
+
+#include <yt/yt/tests/cpp/library/row_helpers.h>
 
 #include <yt/yt/client/formats/config.h>
 #include <yt/yt/client/formats/parser.h>

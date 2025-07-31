@@ -300,7 +300,7 @@ private:
     But we know for sure that all writes coming after the commit of the kafka transaction refer to the next transaction. 
     That's why we queue them here till previous transaction is completely deleted (all supportive partitions are deleted and writeId is erased from TxWrites).
      */
-    THashMap<NKafka::TProducerInstanceId, TEvPersQueue::TEvRequest::TPtr, NKafka::TProducerInstanceIdHashFn> KafkaNextTransactionRequests = {};
+    THashMap<NKafka::TProducerInstanceId, TEvPersQueue::TEvRequest::TPtr, NKafka::TProducerInstanceIdHashFn> KafkaNextTransactionRequests;
 
     // PLANNED -> CALCULATING -> CALCULATED -> WAIT_RS -> EXECUTING -> EXECUTED
     THashMap<TDistributedTransaction::EState, TDeque<ui64>> TxsOrder;
@@ -466,6 +466,7 @@ private:
 
     void DeleteExpiredTransactions(const TActorContext& ctx);
     void ScheduleDeleteExpiredKafkaTransactions();
+    void TryContinueKafkaWrites(const TMaybe<TWriteId> writeId, const TActorContext& ctx);
     void Handle(TEvPersQueue::TEvCancelTransactionProposal::TPtr& ev, const TActorContext& ctx);
 
     void SetTxCounters();

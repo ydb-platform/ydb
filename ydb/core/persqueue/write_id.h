@@ -43,6 +43,11 @@ struct TWriteId {
         return !KafkaApiTransaction;
     }
 
+    bool IsKafkaApiTransaction() const 
+    {
+        return KafkaApiTransaction;
+    }
+
     bool KafkaApiTransaction = false;
     // these fields are used to identify topic api transaction
     ui64 NodeId = 0;

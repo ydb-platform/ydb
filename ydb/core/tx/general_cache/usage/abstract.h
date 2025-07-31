@@ -18,6 +18,7 @@ public:
             sb << error << ';';
         }
         sb << ']';
+        return sb;
     }
 
     THashMap<typename TPolicy::TAddress, TString> GetErrors() const {

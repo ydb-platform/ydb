@@ -27,14 +27,14 @@ class TDuplicateManager: public NActors::TActor<TDuplicateManager> {
 private:
     inline static TAtomicCounter NextRequestId = 0;
 
-    const TActorId ColumnShardActorId;
     const std::shared_ptr<NCommon::TColumnsSet> PKColumns;
     std::shared_ptr<NColumnShard::TDuplicateFilteringCounters> Counters;
     const TPortionIntervalTree Intervals;
     const THashMap<ui64, std::shared_ptr<TPortionInfo>> Portions;
     TLRUCache<TDuplicateMapInfo, NArrow::TColumnFilter> FiltersCache;
     THashMap<TDuplicateMapInfo, std::vector<std::shared_ptr<TInternalFilterConstructor>>> BuildingFilters;
-    std::shared_ptr<NDataAccessorControl::IDataAccessorsManager> DataAccessorsManager;
+    const std::shared_ptr<NDataAccessorControl::IDataAccessorsManager> DataAccessorsManager;
+    const std::shared_ptr<NColumnFetching::TColumnDataManager> ColumnDataManager;
 
 private:
     STATEFN(StateMain) {

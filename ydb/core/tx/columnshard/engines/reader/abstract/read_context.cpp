@@ -11,17 +11,17 @@ IDataReader::IDataReader(const std::shared_ptr<TReadContext>& context)
 
 TReadContext::TReadContext(const std::shared_ptr<IStoragesManager>& storagesManager,
     const std::shared_ptr<NDataAccessorControl::IDataAccessorsManager>& dataAccessorsManager,
-    const NColumnShard::TConcreteScanCounters& counters, const TReadMetadataBase::TConstPtr& readMetadata, const TActorId& scanActorId,
-    const TActorId& columnShardActorId, const TActorId& resourceSubscribeActorId, const TActorId& readCoordinatorActorId,
+        const std::shared_ptr<NColumnFetching::TColumnDataManager>& columnDataManager,
+    const NColumnShard::TConcreteScanCounters& counters, const TReadMetadataBase::TConstPtr& readMetadata, const TActorId& scanActorId, const TActorId& resourceSubscribeActorId, const TActorId& readCoordinatorActorId,
     const TComputeShardingPolicy& computeShardingPolicy, const ui64 scanId, const NConveyorComposite::TCPULimitsConfig& cpuLimits)
     : StoragesManager(storagesManager)
     , DataAccessorsManager(dataAccessorsManager)
+    , ColumnDataManager(columnDataManager)
     , Counters(counters)
     , ReadMetadata(readMetadata)
     , ResourcesTaskContext("CS::SCAN_READ", counters.ResourcesSubscriberCounters)
     , ScanId(scanId)
     , ScanActorId(scanActorId)
-    , ColumnShardActorId(columnShardActorId)
     , ResourceSubscribeActorId(resourceSubscribeActorId)
     , ReadCoordinatorActorId(readCoordinatorActorId)
     , ComputeShardingPolicy(computeShardingPolicy)

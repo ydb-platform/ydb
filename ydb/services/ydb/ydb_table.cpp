@@ -86,24 +86,24 @@ void TGRpcYdbTableService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
     }                                                                                                        \
     }
 
-    ADD_REQUEST_LIMIT(CreateSession, DoCreateSessionRequest, Rps, CREATESESSION, TAuditMode::NonModifying(TAuditMode::TLogClassConfig::Dml))
-    ADD_REQUEST_LIMIT(KeepAlive, DoKeepAliveRequest, Rps, KEEPALIVE, TAuditMode::NonModifying(TAuditMode::TLogClassConfig::Dml))
+    ADD_REQUEST_LIMIT(CreateSession, DoCreateSessionRequest, Rps, CREATESESSION, TAuditMode::NonModifying())
+    ADD_REQUEST_LIMIT(KeepAlive, DoKeepAliveRequest, Rps, KEEPALIVE, TAuditMode::NonModifying())
     ADD_REQUEST_LIMIT(AlterTable, DoAlterTableRequest, Rps, ALTERTABLE, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Ddl))
     ADD_REQUEST_LIMIT(CreateTable, DoCreateTableRequest, Rps, CREATETABLE, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Ddl))
     ADD_REQUEST_LIMIT(DropTable, DoDropTableRequest, Rps, DROPTABLE, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Ddl))
-    ADD_REQUEST_LIMIT(DescribeTable, DoDescribeTableRequest, Rps, DESCRIBETABLE, TAuditMode::NonModifying(TAuditMode::TLogClassConfig::Ddl))
-    ADD_REQUEST_LIMIT(DescribeExternalDataSource, DoDescribeExternalDataSourceRequest, Rps, DESCRIBEEXTERNALDATASOURCE, TAuditMode::NonModifying(TAuditMode::TLogClassConfig::Ddl))
-    ADD_REQUEST_LIMIT(DescribeExternalTable, DoDescribeExternalTableRequest, Rps, DESCRIBEEXTERNALTABLE, TAuditMode::NonModifying(TAuditMode::TLogClassConfig::Ddl))
-    ADD_REQUEST_LIMIT(DescribeSystemView, DoDescribeSystemViewRequest, Rps, DESCRIBESYSTEMVIEW, TAuditMode::NonModifying(TAuditMode::TLogClassConfig::Ddl))
+    ADD_REQUEST_LIMIT(DescribeTable, DoDescribeTableRequest, Rps, DESCRIBETABLE, TAuditMode::NonModifying())
+    ADD_REQUEST_LIMIT(DescribeExternalDataSource, DoDescribeExternalDataSourceRequest, Rps, DESCRIBEEXTERNALDATASOURCE, TAuditMode::NonModifying())
+    ADD_REQUEST_LIMIT(DescribeExternalTable, DoDescribeExternalTableRequest, Rps, DESCRIBEEXTERNALTABLE, TAuditMode::NonModifying())
+    ADD_REQUEST_LIMIT(DescribeSystemView, DoDescribeSystemViewRequest, Rps, DESCRIBESYSTEMVIEW, TAuditMode::NonModifying())
     ADD_REQUEST_LIMIT(CopyTable, DoCopyTableRequest, Rps, COPYTABLE, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Ddl))
     ADD_REQUEST_LIMIT(CopyTables, DoCopyTablesRequest, Rps, COPYTABLES, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Ddl))
     ADD_REQUEST_LIMIT(RenameTables, DoRenameTablesRequest, Rps, RENAMETABLES, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Ddl))
-    ADD_REQUEST_LIMIT(ExplainDataQuery, DoExplainDataQueryRequest, Rps, EXPLAINDATAQUERY, TAuditMode::NonModifying(TAuditMode::TLogClassConfig::Dml))
+    ADD_REQUEST_LIMIT(ExplainDataQuery, DoExplainDataQueryRequest, Rps, EXPLAINDATAQUERY, TAuditMode::NonModifying())
     ADD_REQUEST_LIMIT(ExecuteSchemeQuery, DoExecuteSchemeQueryRequest, Rps, EXECUTESCHEMEQUERY, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Ddl))
     ADD_REQUEST_LIMIT(BeginTransaction, DoBeginTransactionRequest, Rps, BEGINTRANSACTION, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Dml))
-    ADD_REQUEST_LIMIT(DescribeTableOptions, DoDescribeTableOptionsRequest, Rps, DESCRIBETABLEOPTIONS, TAuditMode::NonModifying(TAuditMode::TLogClassConfig::Ddl))
+    ADD_REQUEST_LIMIT(DescribeTableOptions, DoDescribeTableOptionsRequest, Rps, DESCRIBETABLEOPTIONS, TAuditMode::NonModifying())
 
-    ADD_REQUEST_LIMIT(DeleteSession, DoDeleteSessionRequest, Off, DELETESESSION, TAuditMode::NonModifying(TAuditMode::TLogClassConfig::Dml))
+    ADD_REQUEST_LIMIT(DeleteSession, DoDeleteSessionRequest, Off, DELETESESSION, TAuditMode::NonModifying())
     ADD_REQUEST_LIMIT(CommitTransaction, DoCommitTransactionRequest, Off, COMMITTRANSACTION, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Dml))
     ADD_REQUEST_LIMIT(RollbackTransaction, DoRollbackTransactionRequest, Off, ROLLBACKTRANSACTION, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Dml))
 
@@ -111,9 +111,9 @@ void TGRpcYdbTableService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
     ADD_REQUEST_LIMIT(ExecuteDataQuery, DoExecuteDataQueryRequest, Ru, EXECUTEDATAQUERY, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Dml))
     ADD_REQUEST_LIMIT(BulkUpsert, DoBulkUpsertRequest, Ru, BULKUPSERT, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Dml))
 
-    ADD_STREAM_REQUEST_LIMIT(StreamExecuteScanQuery, ExecuteScanQueryRequest, ExecuteScanQueryPartialResponse, DoExecuteScanQueryRequest, RuOnProgress, STREAMEXECUTESCANQUERY, false, TAuditMode::NonModifying(TAuditMode::TLogClassConfig::Dml))
-    ADD_STREAM_REQUEST_LIMIT(StreamReadTable, ReadTableRequest, ReadTableResponse, DoReadTableRequest, RuOnProgress, STREAMREADTABLE, false, TAuditMode::NonModifying(TAuditMode::TLogClassConfig::Dml))
-    ADD_STREAM_REQUEST_LIMIT(ReadRows, ReadRowsRequest, ReadRowsResponse, DoReadRowsRequest, Ru, READROWS, true, TAuditMode::NonModifying(TAuditMode::TLogClassConfig::Dml))
+    ADD_STREAM_REQUEST_LIMIT(StreamExecuteScanQuery, ExecuteScanQueryRequest, ExecuteScanQueryPartialResponse, DoExecuteScanQueryRequest, RuOnProgress, STREAMEXECUTESCANQUERY, false, TAuditMode::NonModifying())
+    ADD_STREAM_REQUEST_LIMIT(StreamReadTable, ReadTableRequest, ReadTableResponse, DoReadTableRequest, RuOnProgress, STREAMREADTABLE, false, TAuditMode::NonModifying())
+    ADD_STREAM_REQUEST_LIMIT(ReadRows, ReadRowsRequest, ReadRowsResponse, DoReadRowsRequest, Ru, READROWS, true, TAuditMode::NonModifying())
 
 #undef ADD_REQUEST_LIMIT
 #undef ADD_STREAM_REQUEST_LIMIT

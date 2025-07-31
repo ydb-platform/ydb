@@ -661,7 +661,7 @@ void TKesusGRpcService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
     ADD_REQUEST(CreateNode, CreateNodeRequest, CreateNodeResponse, NGRpcService::DoCreateCoordinationNode, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Ddl));
     ADD_REQUEST(AlterNode, AlterNodeRequest, AlterNodeResponse, NGRpcService::DoAlterCoordinationNode, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Ddl));
     ADD_REQUEST(DropNode, DropNodeRequest, DropNodeResponse, NGRpcService::DoDropCoordinationNode, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Ddl));
-    ADD_REQUEST(DescribeNode, DescribeNodeRequest, DescribeNodeResponse, NGRpcService::DoDescribeCoordinationNode, TAuditMode::NonModifying(TAuditMode::TLogClassConfig::Ddl));
+    ADD_REQUEST(DescribeNode, DescribeNodeRequest, DescribeNodeResponse, NGRpcService::DoDescribeCoordinationNode, TAuditMode::NonModifying());
 
 #undef ADD_REQUEST
 

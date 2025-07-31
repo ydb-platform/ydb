@@ -30,13 +30,13 @@ void TGRpcDynamicConfigService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logge
     ADD_REQUEST(DropConfig, DoDropConfigRequest, TAuditMode::Modifying(TAuditMode::TLogClassConfig::ClusterAdmin))
     ADD_REQUEST(AddVolatileConfig, DoAddVolatileConfigRequest, TAuditMode::Modifying(TAuditMode::TLogClassConfig::ClusterAdmin))
     ADD_REQUEST(RemoveVolatileConfig, DoRemoveVolatileConfigRequest, TAuditMode::Modifying(TAuditMode::TLogClassConfig::ClusterAdmin))
-    ADD_REQUEST(GetConfig, DoGetConfigRequest, TAuditMode::NonModifying(TAuditMode::TLogClassConfig::ClusterAdmin))
-    ADD_REQUEST(GetMetadata, DoGetMetadataRequest, TAuditMode::NonModifying(TAuditMode::TLogClassConfig::ClusterAdmin))
-    ADD_REQUEST(GetNodeLabels, DoGetNodeLabelsRequest, TAuditMode::NonModifying(TAuditMode::TLogClassConfig::ClusterAdmin))
-    ADD_REQUEST(ResolveConfig, DoResolveConfigRequest, TAuditMode::NonModifying(TAuditMode::TLogClassConfig::ClusterAdmin))
-    ADD_REQUEST(ResolveAllConfig, DoResolveAllConfigRequest, TAuditMode::NonModifying(TAuditMode::TLogClassConfig::ClusterAdmin))
-    ADD_REQUEST(FetchStartupConfig, DoFetchStartupConfigRequest, TAuditMode::NonModifying(TAuditMode::TLogClassConfig::ClusterAdmin))
-    ADD_REQUEST(GetConfigurationVersion, DoGetConfigurationVersionRequest, TAuditMode::NonModifying(TAuditMode::TLogClassConfig::ClusterAdmin))
+    ADD_REQUEST(GetConfig, DoGetConfigRequest, TAuditMode::NonModifying())
+    ADD_REQUEST(GetMetadata, DoGetMetadataRequest, TAuditMode::NonModifying())
+    ADD_REQUEST(GetNodeLabels, DoGetNodeLabelsRequest, TAuditMode::NonModifying())
+    ADD_REQUEST(ResolveConfig, DoResolveConfigRequest, TAuditMode::NonModifying())
+    ADD_REQUEST(ResolveAllConfig, DoResolveAllConfigRequest, TAuditMode::NonModifying())
+    ADD_REQUEST(FetchStartupConfig, DoFetchStartupConfigRequest, TAuditMode::NonModifying())
+    ADD_REQUEST(GetConfigurationVersion, DoGetConfigurationVersionRequest, TAuditMode::NonModifying())
 
 #undef ADD_REQUEST
 }

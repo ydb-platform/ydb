@@ -181,15 +181,15 @@ void TGRpcTopicService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
     })
 
     ADD_REQUEST(DescribeTopic, TopicService, DescribeTopicRequest, DescribeTopicResponse, {
-        ActorSystem_->Send(GRpcRequestProxyId_, new TEvDescribeTopicRequest(ctx, &DoDescribeTopicRequest, TRequestAuxSettings{.RlMode = RLSWITCH(TRateLimiterMode::Rps), .AuditMode = TAuditMode::NonModifying(TAuditMode::TLogClassConfig::Ddl), .RequestType = NJaegerTracing::ERequestType::TOPIC_DESCRIBETOPIC}));
+        ActorSystem_->Send(GRpcRequestProxyId_, new TEvDescribeTopicRequest(ctx, &DoDescribeTopicRequest, TRequestAuxSettings{.RlMode = RLSWITCH(TRateLimiterMode::Rps), .AuditMode = TAuditMode::NonModifying(), .RequestType = NJaegerTracing::ERequestType::TOPIC_DESCRIBETOPIC}));
     })
 
     ADD_REQUEST(DescribeConsumer, TopicService, DescribeConsumerRequest, DescribeConsumerResponse, {
-        ActorSystem_->Send(GRpcRequestProxyId_, new TEvDescribeConsumerRequest(ctx, &DoDescribeConsumerRequest, TRequestAuxSettings{.RlMode = RLSWITCH(TRateLimiterMode::Rps), .AuditMode = TAuditMode::NonModifying(TAuditMode::TLogClassConfig::Ddl), .RequestType = NJaegerTracing::ERequestType::TOPIC_DESCRIBECONSUMER}));
+        ActorSystem_->Send(GRpcRequestProxyId_, new TEvDescribeConsumerRequest(ctx, &DoDescribeConsumerRequest, TRequestAuxSettings{.RlMode = RLSWITCH(TRateLimiterMode::Rps), .AuditMode = TAuditMode::NonModifying(), .RequestType = NJaegerTracing::ERequestType::TOPIC_DESCRIBECONSUMER}));
     })
 
     ADD_REQUEST(DescribePartition, TopicService, DescribePartitionRequest, DescribePartitionResponse, {
-        ActorSystem_->Send(GRpcRequestProxyId_, new TEvDescribePartitionRequest(ctx, &DoDescribePartitionRequest, TRequestAuxSettings{.RlMode = RLSWITCH(TRateLimiterMode::Rps), .CustomAttributeProcessor = YdsProcessAttr, .AuditMode = TAuditMode::NonModifying(TAuditMode::TLogClassConfig::Ddl), .RequestType = NJaegerTracing::ERequestType::TOPIC_DESCRIBEPARTITION}));
+        ActorSystem_->Send(GRpcRequestProxyId_, new TEvDescribePartitionRequest(ctx, &DoDescribePartitionRequest, TRequestAuxSettings{.RlMode = RLSWITCH(TRateLimiterMode::Rps), .CustomAttributeProcessor = YdsProcessAttr, .AuditMode = TAuditMode::NonModifying(), .RequestType = NJaegerTracing::ERequestType::TOPIC_DESCRIBEPARTITION}));
     })
 #undef ADD_REQUEST
 

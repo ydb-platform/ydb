@@ -33,9 +33,9 @@ void TGRpcYdbClickhouseInternalService::SetupIncomingRequests(NYdbGrpc::TLoggerP
         }, &Ydb::ClickhouseInternal::V1::ClickhouseInternalService::AsyncService::Request ## NAME, \
         #NAME, logger, getCounterBlock("clickhouse_internal", #NAME), getLimiter("ClickhouseInternal", #NAME, DEFAULT_MAX_IN_FLIGHT))->Run();
 
-    ADD_REQUEST(Scan, ScanRequest, ScanResponse, DoReadColumnsRequest, TAuditMode::NonModifying(TAuditMode::TLogClassConfig::Dml));
-    ADD_REQUEST(GetShardLocations, GetShardLocationsRequest, GetShardLocationsResponse, DoGetShardLocationsRequest, TAuditMode::NonModifying(TAuditMode::TLogClassConfig::Ddl));
-    ADD_REQUEST(DescribeTable, DescribeTableRequest, DescribeTableResponse, DoKikhouseDescribeTableRequest, TAuditMode::NonModifying(TAuditMode::TLogClassConfig::Ddl));
+    ADD_REQUEST(Scan, ScanRequest, ScanResponse, DoReadColumnsRequest, TAuditMode::NonModifying());
+    ADD_REQUEST(GetShardLocations, GetShardLocationsRequest, GetShardLocationsResponse, DoGetShardLocationsRequest, TAuditMode::NonModifying());
+    ADD_REQUEST(DescribeTable, DescribeTableRequest, DescribeTableResponse, DoKikhouseDescribeTableRequest, TAuditMode::NonModifying());
     ADD_REQUEST(CreateSnapshot, CreateSnapshotRequest, CreateSnapshotResponse, DoKikhouseCreateSnapshotRequest, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Ddl));
     ADD_REQUEST(RefreshSnapshot, RefreshSnapshotRequest, RefreshSnapshotResponse, DoKikhouseRefreshSnapshotRequest, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Ddl));
     ADD_REQUEST(DiscardSnapshot, DiscardSnapshotRequest, DiscardSnapshotResponse, DoKikhouseDiscardSnapshotRequest, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Ddl));

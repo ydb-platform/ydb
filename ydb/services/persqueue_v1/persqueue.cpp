@@ -105,7 +105,7 @@ void TGRpcPersQueueService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
     })
 
     ADD_REQUEST(DescribeTopic, PersQueueService, DescribeTopicRequest, DescribeTopicResponse, {
-        ActorSystem_->Send(GRpcRequestProxyId_, new TEvPQDescribeTopicRequest(ctx, &DoPQDescribeTopicRequest, TRequestAuxSettings{RLSWITCH(TRateLimiterMode::Rps), nullptr, TAuditMode::NonModifying(TAuditMode::TLogClassConfig::Ddl)}));
+        ActorSystem_->Send(GRpcRequestProxyId_, new TEvPQDescribeTopicRequest(ctx, &DoPQDescribeTopicRequest, TRequestAuxSettings{RLSWITCH(TRateLimiterMode::Rps), nullptr, TAuditMode::NonModifying()}));
     })
 
     ADD_REQUEST(AddReadRule, PersQueueService, AddReadRuleRequest, AddReadRuleResponse, {

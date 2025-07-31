@@ -33,7 +33,7 @@ void TGRpcDiscoveryService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
             }, &Ydb::Discovery::V1::DiscoveryService::AsyncService::Request ## NAME,                            \
             #NAME, logger, getCounterBlock("discovery", #NAME))->Run();
 
-    ADD_REQUEST(WhoAmI, &DoWhoAmIRequest, TAuditMode::NonModifying(TAuditMode::TLogClassConfig::Login))
+    ADD_REQUEST(WhoAmI, &DoWhoAmIRequest, TAuditMode::NonModifying())
     ADD_REQUEST(NodeRegistration, &DoNodeRegistrationRequest, TAuditMode::Modifying(TAuditMode::TLogClassConfig::NodeRegistration))
 
 #ifdef ADD_LEGACY_REQUEST

@@ -25,12 +25,12 @@ void TGRpcYdbLogStoreService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger)
         #NAME, logger, getCounterBlock("logstore", #NAME))->Run();
 
     ADD_REQUEST(CreateLogStore, DoCreateLogStoreRequest, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Ddl))
-    ADD_REQUEST(DescribeLogStore, DoDescribeLogStoreRequest, TAuditMode::NonModifying(TAuditMode::TLogClassConfig::Ddl))
+    ADD_REQUEST(DescribeLogStore, DoDescribeLogStoreRequest, TAuditMode::NonModifying())
     ADD_REQUEST(DropLogStore, DoDropLogStoreRequest, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Ddl))
     ADD_REQUEST(AlterLogStore, DoAlterLogStoreRequest, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Ddl))
 
     ADD_REQUEST(CreateLogTable, DoCreateLogTableRequest, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Ddl))
-    ADD_REQUEST(DescribeLogTable, DoDescribeLogTableRequest, TAuditMode::NonModifying(TAuditMode::TLogClassConfig::Ddl))
+    ADD_REQUEST(DescribeLogTable, DoDescribeLogTableRequest, TAuditMode::NonModifying())
     ADD_REQUEST(DropLogTable, DoDropLogTableRequest, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Ddl))
     ADD_REQUEST(AlterLogTable, DoAlterLogTableRequest, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Ddl))
 

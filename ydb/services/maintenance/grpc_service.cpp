@@ -29,11 +29,11 @@ void TGRpcMaintenanceService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger)
             }, &Maintenance::V1::MaintenanceService::AsyncService::Request ## NAME,                             \
             #NAME, logger, getCounterBlock("maintenance", #NAME))->Run();
 
-    ADD_REQUEST(ListClusterNodes, ListClusterNodesRequest, ListClusterNodesResponse, DoListClusterNodes, TAuditMode::NonModifying(TAuditMode::TLogClassConfig::ClusterAdmin));
+    ADD_REQUEST(ListClusterNodes, ListClusterNodesRequest, ListClusterNodesResponse, DoListClusterNodes, TAuditMode::NonModifying());
     ADD_REQUEST(CreateMaintenanceTask, CreateMaintenanceTaskRequest, MaintenanceTaskResponse, DoCreateMaintenanceTask, TAuditMode::Modifying(TAuditMode::TLogClassConfig::ClusterAdmin));
     ADD_REQUEST(RefreshMaintenanceTask, RefreshMaintenanceTaskRequest, MaintenanceTaskResponse, DoRefreshMaintenanceTask, TAuditMode::Modifying(TAuditMode::TLogClassConfig::ClusterAdmin));
-    ADD_REQUEST(GetMaintenanceTask, GetMaintenanceTaskRequest, GetMaintenanceTaskResponse, DoGetMaintenanceTask, TAuditMode::NonModifying(TAuditMode::TLogClassConfig::ClusterAdmin));
-    ADD_REQUEST(ListMaintenanceTasks, ListMaintenanceTasksRequest, ListMaintenanceTasksResponse, DoListMaintenanceTasks, TAuditMode::NonModifying(TAuditMode::TLogClassConfig::ClusterAdmin));
+    ADD_REQUEST(GetMaintenanceTask, GetMaintenanceTaskRequest, GetMaintenanceTaskResponse, DoGetMaintenanceTask, TAuditMode::NonModifying());
+    ADD_REQUEST(ListMaintenanceTasks, ListMaintenanceTasksRequest, ListMaintenanceTasksResponse, DoListMaintenanceTasks, TAuditMode::NonModifying());
     ADD_REQUEST(DropMaintenanceTask, DropMaintenanceTaskRequest, ManageMaintenanceTaskResponse, DoDropMaintenanceTask, TAuditMode::Modifying(TAuditMode::TLogClassConfig::ClusterAdmin));
     ADD_REQUEST(CompleteAction, CompleteActionRequest, ManageActionResponse, DoCompleteAction, TAuditMode::Modifying(TAuditMode::TLogClassConfig::ClusterAdmin));
 

@@ -35,7 +35,7 @@ void TGRpcMonitoringService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) 
             }, &Ydb::Monitoring::V1::MonitoringService::AsyncService::Request ## NAME,                          \
             #NAME, logger, getCounterBlock("monitoring", #NAME))->Run();
 
-    ADD_REQUEST_NEW(SelfCheck, DoSelfCheckRequest, TAuditMode::NonModifying(TAuditMode::TLogClassConfig::ClusterAdmin));
+    ADD_REQUEST_NEW(SelfCheck, DoSelfCheckRequest, TAuditMode::NonModifying());
 
 #define ADD_REQUEST_OLD(NAME, IN, OUT, ACTION) \
     MakeIntrusive<TGRpcRequest<Ydb::Monitoring::IN, Ydb::Monitoring::OUT, TGRpcMonitoringService>>(this, &Service_, CQ_, \

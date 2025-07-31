@@ -26,10 +26,10 @@ void TGRpcOperationService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
             }, &Operation::V1::OperationService::AsyncService::Request ## NAME,                                 \
             #NAME, logger, getCounterBlock("operation", #NAME))->Run();
 
-    ADD_REQUEST(GetOperation, DoGetOperationRequest, TGrpcRequestOperationCall, TAuditMode::NonModifying(TAuditMode::TLogClassConfig::Operations))
+    ADD_REQUEST(GetOperation, DoGetOperationRequest, TGrpcRequestOperationCall, TAuditMode::NonModifying())
     ADD_REQUEST(CancelOperation, DoCancelOperationRequest, TGrpcRequestNoOperationCall, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Operations))
     ADD_REQUEST(ForgetOperation, DoForgetOperationRequest, TGrpcRequestNoOperationCall, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Operations))
-    ADD_REQUEST(ListOperations, DoListOperationsRequest, TGrpcRequestNoOperationCall, TAuditMode::NonModifying(TAuditMode::TLogClassConfig::Operations))
+    ADD_REQUEST(ListOperations, DoListOperationsRequest, TGrpcRequestNoOperationCall, TAuditMode::NonModifying())
 
 #undef ADD_REQUEST
 }

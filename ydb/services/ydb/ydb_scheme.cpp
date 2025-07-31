@@ -27,9 +27,9 @@ void TGRpcYdbSchemeService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
 
     ADD_REQUEST(MakeDirectory, DoMakeDirectoryRequest, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Ddl))
     ADD_REQUEST(RemoveDirectory, DoRemoveDirectoryRequest, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Ddl))
-    ADD_REQUEST(ListDirectory, DoListDirectoryRequest, TAuditMode::NonModifying(TAuditMode::TLogClassConfig::Ddl))
-    ADD_REQUEST(DescribePath, DoDescribePathRequest, TAuditMode::NonModifying(TAuditMode::TLogClassConfig::Ddl))
-    ADD_REQUEST(ModifyPermissions, DoModifyPermissionsRequest, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Ddl))
+    ADD_REQUEST(ListDirectory, DoListDirectoryRequest, TAuditMode::NonModifying())
+    ADD_REQUEST(DescribePath, DoDescribePathRequest, TAuditMode::NonModifying())
+    ADD_REQUEST(ModifyPermissions, DoModifyPermissionsRequest, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Acl))
 #undef ADD_REQUEST
 }
 

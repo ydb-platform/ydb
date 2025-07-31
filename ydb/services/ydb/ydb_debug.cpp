@@ -69,11 +69,11 @@ void TGRpcYdbDebugService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
         }  \
     }
 
-    ADD_REQUEST(PingGrpcProxy, GrpcProxyRequest, GrpcProxyResponse, DoGrpcProxyPing, PROXY, TAuditMode::NonModifying(TAuditMode::TLogClassConfig::ClusterAdmin));
-    ADD_REQUEST(PingKqpProxy, KqpProxyRequest, KqpProxyResponse, DoKqpPing, KQP, TAuditMode::NonModifying(TAuditMode::TLogClassConfig::ClusterAdmin));
-    ADD_REQUEST(PingSchemeCache, SchemeCacheRequest, SchemeCacheResponse, DoSchemeCachePing, SCHEME_CACHE, TAuditMode::NonModifying(TAuditMode::TLogClassConfig::ClusterAdmin));
-    ADD_REQUEST(PingTxProxy, TxProxyRequest, TxProxyResponse, DoTxProxyPing, TX_PROXY, TAuditMode::NonModifying(TAuditMode::TLogClassConfig::ClusterAdmin));
-    ADD_REQUEST(PingActorChain, ActorChainRequest, ActorChainResponse, DoActorChainPing, ACTOR_CHAIN, TAuditMode::NonModifying(TAuditMode::TLogClassConfig::ClusterAdmin));
+    ADD_REQUEST(PingGrpcProxy, GrpcProxyRequest, GrpcProxyResponse, DoGrpcProxyPing, PROXY, TAuditMode::NonModifying());
+    ADD_REQUEST(PingKqpProxy, KqpProxyRequest, KqpProxyResponse, DoKqpPing, KQP, TAuditMode::NonModifying());
+    ADD_REQUEST(PingSchemeCache, SchemeCacheRequest, SchemeCacheResponse, DoSchemeCachePing, SCHEME_CACHE, TAuditMode::NonModifying());
+    ADD_REQUEST(PingTxProxy, TxProxyRequest, TxProxyResponse, DoTxProxyPing, TX_PROXY, TAuditMode::NonModifying());
+    ADD_REQUEST(PingActorChain, ActorChainRequest, ActorChainResponse, DoActorChainPing, ACTOR_CHAIN, TAuditMode::NonModifying());
 
 #undef ADD_REQUEST
 

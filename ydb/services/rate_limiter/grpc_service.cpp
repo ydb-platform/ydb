@@ -34,9 +34,9 @@ void TRateLimiterGRpcService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger)
     SETUP_RL_METHOD(CreateResource, DoCreateRateLimiterResource, Rps, RATELIMITER_CREATE_RESOURCE, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Ddl));
     SETUP_RL_METHOD(AlterResource, DoAlterRateLimiterResource, Rps, RATELIMITER_ALTER_RESOURCE, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Ddl));
     SETUP_RL_METHOD(DropResource, DoDropRateLimiterResource, Rps, RATELIMITER_DROP_RESOURCE, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Ddl));
-    SETUP_RL_METHOD(ListResources, DoListRateLimiterResources, Rps, RATELIMITER_LIST_RESOURCES, TAuditMode::NonModifying(TAuditMode::TLogClassConfig::Ddl));
-    SETUP_RL_METHOD(DescribeResource, DoDescribeRateLimiterResource, Rps, RATELIMITER_DESCRIBE_RESOURCE, TAuditMode::NonModifying(TAuditMode::TLogClassConfig::Ddl));
-    SETUP_RL_METHOD(AcquireResource, DoAcquireRateLimiterResource, Off, RATELIMITER_ACQUIRE_RESOURCE, TAuditMode::NonModifying(TAuditMode::TLogClassConfig::Dml));
+    SETUP_RL_METHOD(ListResources, DoListRateLimiterResources, Rps, RATELIMITER_LIST_RESOURCES, TAuditMode::NonModifying());
+    SETUP_RL_METHOD(DescribeResource, DoDescribeRateLimiterResource, Rps, RATELIMITER_DESCRIBE_RESOURCE, TAuditMode::NonModifying());
+    SETUP_RL_METHOD(AcquireResource, DoAcquireRateLimiterResource, Off, RATELIMITER_ACQUIRE_RESOURCE, TAuditMode::NonModifying());
 
     #undef SETUP_RL_METHOD
 }

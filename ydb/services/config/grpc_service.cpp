@@ -29,7 +29,7 @@ void TConfigGRpcService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
         SETUP_METHOD(methodName, method, rlMode, requestType, Config, config, auditModeFlags)
 
     SETUP_BS_METHOD(ReplaceConfig, DoReplaceConfig, Rps, CONFIG_REPLACECONFIG, TAuditMode::Modifying(TAuditMode::TLogClassConfig::ClusterAdmin));
-    SETUP_BS_METHOD(FetchConfig, DoFetchConfig, Rps, CONFIG_FETCHCONFIG, TAuditMode::NonModifying(TAuditMode::TLogClassConfig::ClusterAdmin));
+    SETUP_BS_METHOD(FetchConfig, DoFetchConfig, Rps, CONFIG_FETCHCONFIG, TAuditMode::NonModifying());
     SETUP_BS_METHOD(BootstrapCluster, DoBootstrapCluster, Rps, CONFIG_BOOTSTRAP, TAuditMode::Modifying(TAuditMode::TLogClassConfig::ClusterAdmin));
 
     #undef SETUP_BS_METHOD

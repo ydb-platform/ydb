@@ -23,8 +23,8 @@ void TGRpcYdbExportService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
         }, &Ydb::Export::V1::ExportService::AsyncService::Request ## NAME, \
         #NAME, logger, getCounterBlock("export", #NAME))->Run();
 
-    ADD_REQUEST(ExportToYt, ExportToYtRequest, ExportToYtResponse, DoExportToYtRequest, TAuditMode::NonModifying(TAuditMode::TLogClassConfig::Export));
-    ADD_REQUEST(ExportToS3, ExportToS3Request, ExportToS3Response, DoExportToS3Request, TAuditMode::NonModifying(TAuditMode::TLogClassConfig::Export));
+    ADD_REQUEST(ExportToYt, ExportToYtRequest, ExportToYtResponse, DoExportToYtRequest, TAuditMode::NonModifying());
+    ADD_REQUEST(ExportToS3, ExportToS3Request, ExportToS3Response, DoExportToS3Request, TAuditMode::NonModifying());
 #undef ADD_REQUEST
 }
 

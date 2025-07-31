@@ -23,7 +23,7 @@ void TGRpcYdbObjectStorageService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr lo
         }, &Ydb::ObjectStorage::V1::ObjectStorageService::AsyncService::Request ## NAME, \
         #NAME, logger, getCounterBlock("object-storage-list", #NAME))->Run();
 
-    ADD_REQUEST(List, ListingRequest, ListingResponse, DoObjectStorageListingRequest, TAuditMode::NonModifying(TAuditMode::TLogClassConfig::Ddl));
+    ADD_REQUEST(List, ListingRequest, ListingResponse, DoObjectStorageListingRequest, TAuditMode::NonModifying());
 #undef ADD_REQUEST
 }
 

@@ -24,10 +24,10 @@ void TGRpcBackupService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
         }, &Ydb::Backup::V1::BackupService::AsyncService::Request ## NAME, \
         #NAME, logger, getCounterBlock("backup", #NAME))->Run();
 
-    ADD_REQUEST(FetchBackupCollections, FetchBackupCollectionsRequest, FetchBackupCollectionsResponse, DoFetchBackupCollectionsRequest, TAuditMode::NonModifying(TAuditMode::TLogClassConfig::DatabaseAdmin));
-    ADD_REQUEST(ListBackupCollections, ListBackupCollectionsRequest, ListBackupCollectionsResponse, DoListBackupCollectionsRequest, TAuditMode::NonModifying(TAuditMode::TLogClassConfig::DatabaseAdmin));
+    ADD_REQUEST(FetchBackupCollections, FetchBackupCollectionsRequest, FetchBackupCollectionsResponse, DoFetchBackupCollectionsRequest, TAuditMode::NonModifying());
+    ADD_REQUEST(ListBackupCollections, ListBackupCollectionsRequest, ListBackupCollectionsResponse, DoListBackupCollectionsRequest, TAuditMode::NonModifying());
     ADD_REQUEST(CreateBackupCollection, CreateBackupCollectionRequest, CreateBackupCollectionResponse, DoCreateBackupCollectionRequest, TAuditMode::Modifying(TAuditMode::TLogClassConfig::DatabaseAdmin));
-    ADD_REQUEST(ReadBackupCollection, ReadBackupCollectionRequest, ReadBackupCollectionResponse, DoReadBackupCollectionRequest, TAuditMode::NonModifying(TAuditMode::TLogClassConfig::DatabaseAdmin));
+    ADD_REQUEST(ReadBackupCollection, ReadBackupCollectionRequest, ReadBackupCollectionResponse, DoReadBackupCollectionRequest, TAuditMode::NonModifying());
     ADD_REQUEST(UpdateBackupCollection, UpdateBackupCollectionRequest, UpdateBackupCollectionResponse, DoUpdateBackupCollectionRequest, TAuditMode::Modifying(TAuditMode::TLogClassConfig::DatabaseAdmin));
     ADD_REQUEST(DeleteBackupCollection, DeleteBackupCollectionRequest, DeleteBackupCollectionResponse, DoDeleteBackupCollectionRequest, TAuditMode::Modifying(TAuditMode::TLogClassConfig::DatabaseAdmin));
 

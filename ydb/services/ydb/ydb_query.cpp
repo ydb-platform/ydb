@@ -58,10 +58,10 @@ void TGRpcYdbQueryService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
 
     ADD_REQUEST(ExecuteQuery, ExecuteQueryRequest, ExecuteQueryResponsePart, DoExecuteQuery, EXECUTEQUERY, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Dml));
     ADD_REQUEST(ExecuteScript, ExecuteScriptRequest, Ydb::Operations::Operation, DoExecuteScript, EXECUTESCRIPT, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Dml));
-    ADD_REQUEST(FetchScriptResults, FetchScriptResultsRequest, FetchScriptResultsResponse, DoFetchScriptResults, FETCHSCRIPTRESULTS, TAuditMode::NonModifying(TAuditMode::TLogClassConfig::Dml));
-    ADD_REQUEST(CreateSession, CreateSessionRequest, CreateSessionResponse, DoCreateSession, CREATESESSION, TAuditMode::NonModifying(TAuditMode::TLogClassConfig::Dml));
-    ADD_REQUEST(DeleteSession, DeleteSessionRequest, DeleteSessionResponse, DoDeleteSession, DELETESESSION, TAuditMode::NonModifying(TAuditMode::TLogClassConfig::Dml));
-    ADD_REQUEST(AttachSession, AttachSessionRequest, SessionState, DoAttachSession, ATTACHSESSION, TAuditMode::NonModifying(TAuditMode::TLogClassConfig::Dml));
+    ADD_REQUEST(FetchScriptResults, FetchScriptResultsRequest, FetchScriptResultsResponse, DoFetchScriptResults, FETCHSCRIPTRESULTS, TAuditMode::NonModifying());
+    ADD_REQUEST(CreateSession, CreateSessionRequest, CreateSessionResponse, DoCreateSession, CREATESESSION, TAuditMode::NonModifying());
+    ADD_REQUEST(DeleteSession, DeleteSessionRequest, DeleteSessionResponse, DoDeleteSession, DELETESESSION, TAuditMode::NonModifying());
+    ADD_REQUEST(AttachSession, AttachSessionRequest, SessionState, DoAttachSession, ATTACHSESSION, TAuditMode::NonModifying());
     ADD_REQUEST(BeginTransaction, BeginTransactionRequest, BeginTransactionResponse, DoBeginTransaction, BEGINTRANSACTION, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Dml));
     ADD_REQUEST(CommitTransaction, CommitTransactionRequest, CommitTransactionResponse, DoCommitTransaction, COMMITTRANSACTION, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Dml));
     ADD_REQUEST(RollbackTransaction, RollbackTransactionRequest, RollbackTransactionResponse, DoRollbackTransaction, ROLLBACKTRANSACTION, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Dml));

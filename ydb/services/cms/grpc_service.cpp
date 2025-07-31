@@ -27,11 +27,11 @@ void TGRpcCmsService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
 
     ADD_REQUEST(CreateDatabase, DoCreateTenantRequest, TGrpcRequestOperationCall, TAuditMode::Modifying(TAuditMode::TLogClassConfig::ClusterAdmin))
     ADD_REQUEST(AlterDatabase, DoAlterTenantRequest, TGrpcRequestOperationCall, TAuditMode::Modifying(TAuditMode::TLogClassConfig::ClusterAdmin))
-    ADD_REQUEST(GetDatabaseStatus, DoGetTenantStatusRequest, TGrpcRequestOperationCall, TAuditMode::NonModifying(TAuditMode::TLogClassConfig::ClusterAdmin))
-    ADD_REQUEST(ListDatabases, DoListTenantsRequest, TGrpcRequestOperationCall, TAuditMode::NonModifying(TAuditMode::TLogClassConfig::ClusterAdmin))
+    ADD_REQUEST(GetDatabaseStatus, DoGetTenantStatusRequest, TGrpcRequestOperationCall, TAuditMode::NonModifying())
+    ADD_REQUEST(ListDatabases, DoListTenantsRequest, TGrpcRequestOperationCall, TAuditMode::NonModifying())
     ADD_REQUEST(RemoveDatabase, DoRemoveTenantRequest, TGrpcRequestOperationCall, TAuditMode::Modifying(TAuditMode::TLogClassConfig::ClusterAdmin))
-    ADD_REQUEST(DescribeDatabaseOptions, DoDescribeTenantOptionsRequest, TGrpcRequestOperationCall, TAuditMode::NonModifying(TAuditMode::TLogClassConfig::ClusterAdmin))
-    ADD_REQUEST(GetScaleRecommendation, DoGetScaleRecommendationRequest, TGrpcRequestNoOperationCall, TAuditMode::NonModifying(TAuditMode::TLogClassConfig::ClusterAdmin))
+    ADD_REQUEST(DescribeDatabaseOptions, DoDescribeTenantOptionsRequest, TGrpcRequestOperationCall, TAuditMode::NonModifying())
+    ADD_REQUEST(GetScaleRecommendation, DoGetScaleRecommendationRequest, TGrpcRequestNoOperationCall, TAuditMode::NonModifying())
 
 #undef ADD_REQUEST
 }

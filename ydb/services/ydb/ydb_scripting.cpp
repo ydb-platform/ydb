@@ -43,7 +43,7 @@ void TGRpcYdbScriptingService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger
     ADD_REQUEST(ExplainYql, ExplainYqlRequest, ExplainYqlResponse, {
         ActorSystem_->Send(GRpcRequestProxyId_,
             new TGrpcRequestOperationCall<ExplainYqlRequest, ExplainYqlResponse>
-                (ctx, &DoExplainYqlScript, TRequestAuxSettings{RLSWITCH(TRateLimiterMode::Rps), nullptr, TAuditMode::NonModifying(TAuditMode::TLogClassConfig::Dml)}));
+                (ctx, &DoExplainYqlScript, TRequestAuxSettings{RLSWITCH(TRateLimiterMode::Rps), nullptr, TAuditMode::NonModifying()}));
     })
 #undef ADD_REQUEST
 }

@@ -204,5 +204,5 @@ message ResultSet {
     Formats.ArrowFormatMeta arrow_format_meta = 5;
 
     // Binary data for compressible formats of rows
-    bytes data = 100;
+    bytes data = 15;
 }

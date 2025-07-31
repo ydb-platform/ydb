@@ -150,7 +150,7 @@ namespace NKikimr::NStorage {
             }
 
             if (!driveSize) {
-                STLOG(PRI_ERROR, BS_NODE, NW91, "Unable to determine drive size for inferring PDisk slot count",
+                STLOG(PRI_ERROR, BS_NODE, NW96, "Unable to determine drive size for inferring PDisk slot count",
                     (Path, path), (Details, outDetails.Str()));
             } else {
                 InferPDiskSlotCount(pdiskConfig, driveSize, unitSizeInBytes);

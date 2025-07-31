@@ -1,5 +1,4 @@
 import "ydb/public/api/protos/draft/persqueue_error_codes.proto";
-import "ydb/public/api/protos/draft/persqueue_common.proto";
 
 import "ydb/public/api/protos/annotations/sensitive.proto";
 

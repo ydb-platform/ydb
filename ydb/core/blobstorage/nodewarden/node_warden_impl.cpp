@@ -167,7 +167,6 @@ STATEFN(TNodeWarden::StateOnline) {
         fFunc(TEvBlobStorage::EvNodeWardenUpdateCache, ForwardToDistributedConfigKeeper);
         fFunc(TEvBlobStorage::EvNodeWardenQueryCache, ForwardToDistributedConfigKeeper);
         fFunc(TEvBlobStorage::EvNodeWardenUnsubscribeFromCache, ForwardToDistributedConfigKeeper);
-        fFunc(TEvBlobStorage::EvNodeWardenUpdateConfigFromPeer, ForwardToDistributedConfigKeeper);
 
         hFunc(TEvNodeWardenQueryBaseConfig, Handle);
         hFunc(TEvNodeConfigInvokeOnRootResult, Handle);
@@ -1557,12 +1556,6 @@ bool NKikimr::NStorage::DeriveStorageConfig(const NKikimrConfig::TAppConfig& app
                 *errorReason = TStringBuilder() << "mandatory pile name is missing for node " << r->GetNodeId();
                 return false;
             }
-            const auto it = piles.find(*bridgePileName);
-            if (it == piles.end()) {
-                *errorReason = TStringBuilder() << "incorrect pile name " << *bridgePileName;
-                return false;
-            }
-            it->second.CopyToProto(r, &NKikimrBlobStorage::TNodeIdentifier::SetBridgePileId);
         } else if (bridgePileName) {
             *errorReason = "pile name can't be specified when Bridge mode is not enabled";
             return false;

@@ -46,9 +46,50 @@ public:
         load += delta;
         Load[load].emplace(item);
     }
+
+    TLoad GetLoad(const T& item) const {
+        auto it = Items.find(item);
+        AFL_VERIFY(it != Items.end())("error", "Load item is not found");
+        return it->second;
+    }
 };
 
+class TMemoryConsumptionAggregator: public TThrRefBase {
+public:
+    TMemoryConsumptionAggregator(size_t managersCount)
+        : ManagerConsumption(managersCount) {
+    }
+
+    void SetConsumer(TIntrusivePtr<NKikimr::NMemory::IMemoryConsumer> consumer) {
+        std::lock_guard lock(Mutex);
+        Consumer = std::move(consumer);
+    }
+
+    void SetConsumption(size_t managerIndex, ui64 newConsumption) {
+        std::lock_guard lock(Mutex);
+        AFL_VERIFY(managerIndex < ManagerConsumption.size())("error", "Manager index is out of range")("index", managerIndex)("managersCount", ManagerConsumption.size());
+
+        auto& managerConsumption = ManagerConsumption[managerIndex];
+        AFL_VERIFY(managerConsumption <= TotalConsumption)("error", "Manager consumption is more than total consumption")("managerConsumption", managerConsumption)("totalConsumption", TotalConsumption);
+
+        TotalConsumption -= managerConsumption;
+        TotalConsumption += newConsumption;
+
+        managerConsumption = newConsumption;
+
+        if (Consumer) {
+            Consumer->SetConsumption(TotalConsumption);
+        }
+    }
+
+private:
+    std::mutex Mutex;
+    ui64 TotalConsumption = 0;
+    TVector<ui64> ManagerConsumption;
+    TIntrusivePtr<NKikimr::NMemory::IMemoryConsumer> Consumer;
+};
 }
+
 class TManager;
 class TMemoryLimiterActor: public NActors::TActorBootstrapped<TMemoryLimiterActor> {
 private:
@@ -65,6 +106,7 @@ private:
     const std::shared_ptr<TCounters> Signals;
     const std::shared_ptr<TStageFeatures> DefaultStage;
     const NMemory::EMemoryConsumerKind ConsumerKind;
+    TIntrusivePtr<TMemoryConsumptionAggregator> MemoryConsumptionAggregator;
 
 public:
     TMemoryLimiterActor(const TConfig& config, const TString& name, const std::shared_ptr<TCounters>& signals,
@@ -73,7 +115,8 @@ public:
         , Name(name)
         , Signals(signals)
         , DefaultStage(defaultStage)
-        , ConsumerKind(consumerKind) {
+        , ConsumerKind(consumerKind)
+        , MemoryConsumptionAggregator(new TMemoryConsumptionAggregator(Config.GetCountBuckets())) {
     }
 
     void Handle(NEvents::TEvExternal::TEvStartTask::TPtr& ev);
@@ -108,7 +151,7 @@ public:
         }
     }
 private:
-    size_t AcquireManager(ui64 externalProcessId);
+    size_t AcquireManager(ui64 externalProcessId, int delta = 1);
     size_t ReleaseManager(ui64 externalProcessId);
     size_t GetManager(ui64 externalProcessId);
 };

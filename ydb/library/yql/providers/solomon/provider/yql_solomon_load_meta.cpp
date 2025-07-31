@@ -67,12 +67,10 @@ public:
             if (auto maybeSelectors = ExtractSetting(settings, "selectors")) {
                 NSo::NProto::TDqSolomonSource source = NSo::FillSolomonSource(clusterDesc, soReadObject.Object().Project().StringValue());
                 
-                auto selectors = NSo::ExtractSelectorValues(*maybeSelectors);
-                if (source.GetClusterType() == NSo::NProto::CT_MONITORING) {
-                    selectors["cluster"] = source.GetCluster();
-                    selectors["service"] = soReadObject.Object().Project().StringValue();
-                } else {
-                    selectors["project"] = source.GetProject();
+                std::map<TString, TString> selectors;
+                if (auto error = NSo::BuildSelectorValues(source, *maybeSelectors, selectors)) {
+                    ctx.AddError(TIssue(ctx.GetPosition(n->Pos()), *error));
+                    return TStatus::Error;
                 }
 
                 auto defaultReplica = (source.GetClusterType() == NSo::NProto::CT_SOLOMON ? "sas" : "cloud-prod-a");

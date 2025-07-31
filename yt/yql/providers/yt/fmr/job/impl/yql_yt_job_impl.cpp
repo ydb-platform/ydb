@@ -74,8 +74,6 @@ public:
     ) override {
         try {
             const auto ytTable = params.Output;
-            const auto cluster = params.Output.Cluster;
-            const auto path = params.Output.Path;
             const auto tableId = params.Input.TableId;
             const auto tableRanges = params.Input.TableRanges;
 

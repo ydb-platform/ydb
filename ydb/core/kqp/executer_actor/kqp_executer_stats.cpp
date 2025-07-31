@@ -791,6 +791,9 @@ NDqProto::TDqStageStats* GetOrCreateStageStats(const NYql::NDq::TStageId& stageI
     newStage->SetStageId(stageId.StageId);
     newStage->SetStageGuid(stageProto.GetStageGuid());
     newStage->SetProgram(stageProto.GetProgramAst());
+    for (const auto& intro: stageInfo.Introspections) {
+        newStage->AddIntrospections(intro);
+    }
     return newStage;
 }
 
@@ -1746,29 +1749,37 @@ void TQueryExecutionStats::Finish() {
             auto& external = *ingress.MutableExternal();
             ui32 finishedPartitions = 0;
             for (auto& [partitionId, partitionStat] : externalPartitionStat.Stat) {
-                auto& externalRows = *external.MutableExternalRows();
-                externalRows.SetMin(NonZeroMin(externalRows.GetMin(), partitionStat.ExternalRows));
-                externalRows.SetMax(std::max(externalRows.GetMax(), partitionStat.ExternalRows));
-                externalRows.SetSum(externalRows.GetSum() + partitionStat.ExternalRows);
-                externalRows.SetCnt(externalRows.GetCnt() + 1);
+                if (partitionStat.ExternalRows) {
+                    auto& externalRows = *external.MutableExternalRows();
+                    externalRows.SetMin(NonZeroMin(externalRows.GetMin(), partitionStat.ExternalRows));
+                    externalRows.SetMax(std::max(externalRows.GetMax(), partitionStat.ExternalRows));
+                    externalRows.SetSum(externalRows.GetSum() + partitionStat.ExternalRows);
+                    externalRows.SetCnt(externalRows.GetCnt() + 1);
+                }
 
-                auto& externalBytes = *external.MutableExternalBytes();
-                externalBytes.SetMin(NonZeroMin(externalBytes.GetMin(), partitionStat.ExternalBytes));
-                externalBytes.SetMax(std::max(externalBytes.GetMax(), partitionStat.ExternalBytes));
-                externalBytes.SetSum(externalBytes.GetSum() + partitionStat.ExternalBytes);
-                externalBytes.SetCnt(externalBytes.GetCnt() + 1);
+                if (partitionStat.ExternalBytes) {
+                    auto& externalBytes = *external.MutableExternalBytes();
+                    externalBytes.SetMin(NonZeroMin(externalBytes.GetMin(), partitionStat.ExternalBytes));
+                    externalBytes.SetMax(std::max(externalBytes.GetMax(), partitionStat.ExternalBytes));
+                    externalBytes.SetSum(externalBytes.GetSum() + partitionStat.ExternalBytes);
+                    externalBytes.SetCnt(externalBytes.GetCnt() + 1);
+                }
 
-                auto& firstMessageMs = *external.MutableFirstMessageMs();
-                firstMessageMs.SetMin(NonZeroMin(firstMessageMs.GetMin(), partitionStat.FirstMessageMs));
-                firstMessageMs.SetMax(std::max(firstMessageMs.GetMax(), partitionStat.FirstMessageMs));
-                firstMessageMs.SetSum(firstMessageMs.GetSum() + partitionStat.FirstMessageMs);
-                firstMessageMs.SetCnt(firstMessageMs.GetCnt() + 1);
+                if (partitionStat.FirstMessageMs) {
+                    auto& firstMessageMs = *external.MutableFirstMessageMs();
+                    firstMessageMs.SetMin(NonZeroMin(firstMessageMs.GetMin(), partitionStat.FirstMessageMs));
+                    firstMessageMs.SetMax(std::max(firstMessageMs.GetMax(), partitionStat.FirstMessageMs));
+                    firstMessageMs.SetSum(firstMessageMs.GetSum() + partitionStat.FirstMessageMs);
+                    firstMessageMs.SetCnt(firstMessageMs.GetCnt() + 1);
+                }
 
-                auto& lastMessageMs = *external.MutableLastMessageMs();
-                lastMessageMs.SetMin(NonZeroMin(lastMessageMs.GetMin(), partitionStat.LastMessageMs));
-                lastMessageMs.SetMax(std::max(lastMessageMs.GetMax(), partitionStat.LastMessageMs));
-                lastMessageMs.SetSum(lastMessageMs.GetSum() + partitionStat.LastMessageMs);
-                lastMessageMs.SetCnt(lastMessageMs.GetCnt() + 1);
+                if (partitionStat.LastMessageMs) {
+                    auto& lastMessageMs = *external.MutableLastMessageMs();
+                    lastMessageMs.SetMin(NonZeroMin(lastMessageMs.GetMin(), partitionStat.LastMessageMs));
+                    lastMessageMs.SetMax(std::max(lastMessageMs.GetMax(), partitionStat.LastMessageMs));
+                    lastMessageMs.SetSum(lastMessageMs.GetSum() + partitionStat.LastMessageMs);
+                    lastMessageMs.SetCnt(lastMessageMs.GetCnt() + 1);
+                }
 
                 finishedPartitions += partitionStat.Finished;
             }

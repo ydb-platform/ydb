@@ -1,4 +1,5 @@
 #include "distconf_invoke.h"
+#include "distconf_quorum.h"
 
 #include <ydb/core/audit/audit_log.h>
 #include <ydb/core/util/address_classifier.h>
@@ -7,245 +8,198 @@ namespace NKikimr::NStorage {
 
     using TInvokeRequestHandlerActor = TDistributedConfigKeeper::TInvokeRequestHandlerActor;
 
-    TInvokeRequestHandlerActor::TInvokeRequestHandlerActor(TDistributedConfigKeeper *self,
-            std::unique_ptr<TEventHandle<TEvNodeConfigInvokeOnRoot>>&& ev)
-        : Self(self)
+    TInvokeRequestHandlerActor::TInvokeRequestHandlerActor(TDistributedConfigKeeper *self, TInvokeQuery&& query)
+        : TActor(&TThis::StateFunc)
+        , Self(self)
         , LifetimeToken(Self->LifetimeToken)
-        , InvokeActorQueueGeneration(Self->InvokeActorQueueGeneration)
-        , Event(std::move(ev))
-        , Sender(Event->Sender)
-        , Cookie(Event->Cookie)
-        , RequestSessionId(Event->InterconnectSession)
-    {}
-
-    TInvokeRequestHandlerActor::TInvokeRequestHandlerActor(TDistributedConfigKeeper *self)
-        : Self(self)
-        , LifetimeToken(Self->LifetimeToken)
-        , InvokeActorQueueGeneration(Self->InvokeActorQueueGeneration)
-        , Cookie()
+        , InvokePipelineGeneration(Self->InvokePipelineGeneration)
+        , Query(std::move(query))
     {}
 
     TInvokeRequestHandlerActor::TInvokeRequestHandlerActor(TDistributedConfigKeeper *self,
-            NKikimrBlobStorage::TStorageConfig&& config)
-        : Self(self)
+            TInvokeExternalOperation&& query, ui32 hopNodeId)
+        : TActor(&TThis::StateFunc)
+        , Self(self)
         , LifetimeToken(Self->LifetimeToken)
-        , InvokeActorQueueGeneration(Self->InvokeActorQueueGeneration)
-        , Cookie()
-        , ReplaceConfig(std::move(config))
+        , InvokePipelineGeneration(0) // we don't care about pipeline
+        , Query(std::move(query))
+        , WaitingReplyFromNode(hopNodeId)
+        , Subscriptions{{hopNodeId, {}}}
     {}
 
-    void TInvokeRequestHandlerActor::Bootstrap(TActorId parentId) {
-        if (LifetimeToken.expired()) {
-            return FinishWithError(TResult::RACE, "Distributed config keeper terminated");
-        }
-        if (InvokeActorQueueGeneration != Self->InvokeActorQueueGeneration) {
-            // actual request has been cancelled since it was signed up for bootstrap
-            return PassAway();
-        }
+    void TInvokeRequestHandlerActor::HandleExecuteQuery() {
+        STLOG(PRI_DEBUG, BS_NODE, NWDC42, "HandleExecuteQuery",
+            (SelfId, SelfId()),
+            (Binding, Self->Binding),
+            (RootState, Self->RootState),
+            (ErrorReason, Self->ErrorReason),
+            (Query.InvokePipelineGeneration, InvokePipelineGeneration),
+            (Keeper.InvokePipelineGeneration, Self->InvokePipelineGeneration));
 
-        STLOG(PRI_DEBUG, BS_NODE, NWDC42, "TInvokeRequestHandlerActor::Bootstrap", (Sender, Sender), (Cookie, Cookie),
-            (SelfId, SelfId()), (Binding, Self->Binding), (RootState, Self->RootState));
+        if (InvokePipelineGeneration == Self->InvokePipelineGeneration) {
+            Y_ABORT_UNLESS(!Self->Binding);
 
-        ParentId = parentId;
-        Become(&TThis::StateFunc);
+            switch (auto& state = Self->RootState) {
+                case ERootState::INITIAL:
+                    state = ERootState::LOCAL_QUORUM_OP;
+                    break;
 
-        Wrap([&] {
-            if (Self->Binding) { // we aren't the root node
-                Y_ABORT_UNLESS(Event);
-                if (RequestSessionId) {
-                    const auto it = Self->DirectBoundNodes.find(Sender.NodeId());
-                    if (it == Self->DirectBoundNodes.end() || RequestSessionId != it->second.SessionId) {
-                        throw TExRace() << "Distconf tree reconfigured during query delivery";
-                    }
-                }
-                const ui32 node = Self->Binding->RootNodeId; //Self->Binding->NodeId;
-                Send(MakeBlobStorageNodeWardenID(node), Event->Release(), IEventHandle::FlagSubscribeOnSession);
-                const auto [it, inserted] = Subscriptions.try_emplace(node);
-                Y_ABORT_UNLESS(inserted);
-                WaitingReplyFromNode = node;
-            } else if (Self->RootState == ERootState::ERROR_TIMEOUT) {
-                throw TExError() << Self->ErrorReason;
-            } else {
-                if (Event) {
-                    if (const auto& record = Event->Get()->Record; record.HasSwitchBridgeClusterState()) {
-                        PrepareSwitchBridgeClusterState(record.GetSwitchBridgeClusterState());
-                    } else if (record.HasAdvanceClusterStateGeneration()) {
-                        PrepareAdvanceClusterStateGeneration(record.GetAdvanceClusterStateGeneration());
-                    } else if (record.HasMergeUnsyncedPileConfig()) {
-                        PrepareMergeUnsyncedPileConfig(record.GetMergeUnsyncedPileConfig());
-                    }
-                }
+                case ERootState::RELAX:
+                    state = ERootState::IN_PROGRESS;
+                    break;
 
-                const bool scepterless = SwitchBridgeNewConfig &&
-                    Self->HasConnectedNodeQuorum(*SwitchBridgeNewConfig, SpecificBridgePileIds);
-                Y_ABORT_UNLESS(InvokeActorQueueGeneration == Self->InvokeActorQueueGeneration);
-                InvokeOtherActor(*Self, &TDistributedConfigKeeper::OpQueueBegin, SelfId(), scepterless);
+                case ERootState::LOCAL_QUORUM_OP:
+                case ERootState::IN_PROGRESS:
+                case ERootState::ERROR_TIMEOUT:
+                    Y_ABORT_S("unexpected RootState# " << state);
             }
-        });
-    }
 
-    void TInvokeRequestHandlerActor::OnError(const TString& errorReason) {
-        if (Event || ReplaceConfig) {
-            FinishWithError(TResult::RACE, errorReason);
+            ExecuteQuery();
         } else {
-            // otherwise this would cause loop (SwitchToError -> OnError -> SwitchToError)
-            PassAway();
+            // TEvAbortQuery will come soon (must be already in mailbox)
+            Y_ABORT_UNLESS(InvokePipelineGeneration < Self->InvokePipelineGeneration);
         }
     }
 
-    void TInvokeRequestHandlerActor::OnNoQuorum() {
-        FinishWithError(TResult::NO_QUORUM, "No quorum obtained");
-    }
-
-    void TInvokeRequestHandlerActor::OnBeginOperation() {
-        BeginRegistered = true;
-        Wrap([&] {
-            ExecuteQuery();
-        });
+    void TInvokeRequestHandlerActor::Handle(TEvPrivate::TEvAbortQuery::TPtr ev) {
+        Finish(TResult::RACE, ev->Get()->ErrorReason);
     }
 
     void TInvokeRequestHandlerActor::Handle(TEvNodeConfigInvokeOnRootResult::TPtr ev) {
+        auto *op = std::get_if<TInvokeExternalOperation>(&Query);
+        Y_ABORT_UNLESS(op);
         if (ev->HasEvent()) {
-            Finish(Sender, SelfId(), ev->ReleaseBase().Release(), ev->Flags, Cookie);
+            TActivationContext::Send(new IEventHandle(op->Sender, SelfId(), ev->ReleaseBase().Release(), ev->Flags,
+                op->Cookie));
         } else {
-            Finish(ev->Type, ev->Flags, Sender, SelfId(), ev->ReleaseChainBuffer(), Cookie);
+            TActivationContext::Send(new IEventHandle(ev->Type, ev->Flags, op->Sender, SelfId(), ev->ReleaseChainBuffer(),
+                op->Cookie));
         }
+        PassAway();
     }
 
     void TInvokeRequestHandlerActor::Handle(TEvInterconnect::TEvNodeConnected::TPtr ev) {
-        const ui32 nodeId = ev->Get()->NodeId;
-        if (const auto it = Subscriptions.find(nodeId); it != Subscriptions.end()) {
-            it->second = ev->Sender;
-        }
+        const auto it = Subscriptions.find(ev->Get()->NodeId);
+        Y_ABORT_UNLESS(it != Subscriptions.end());
+        Y_ABORT_UNLESS(!it->second || it->second == ev->Sender);
+        it->second = ev->Sender;
     }
 
     void TInvokeRequestHandlerActor::Handle(TEvInterconnect::TEvNodeDisconnected::TPtr ev) {
         const ui32 nodeId = ev->Get()->NodeId;
-        Subscriptions.erase(nodeId);
+        const auto it = Subscriptions.find(nodeId);
+        Y_ABORT_UNLESS(it != Subscriptions.end());
+        Y_ABORT_UNLESS(!it->second || it->second == ev->Sender);
+        Subscriptions.erase(it);
         for (auto [begin, end] = NodeToVDisk.equal_range(nodeId); begin != end; ++begin) {
             OnVStatusError(begin->second);
         }
         if (nodeId == WaitingReplyFromNode) {
-            throw TExRace() << "Root node disconnected";
+            throw TExRace() << "Hop node disconnected";
         }
     }
 
     void TInvokeRequestHandlerActor::UnsubscribeInterconnect() {
-        for (auto it = Subscriptions.begin(); it != Subscriptions.end(); ) {
-            const TActorId actorId = it->second ? it->second : TActivationContext::InterconnectProxy(it->first);
+        for (const auto& [nodeId, proxyId] : Subscriptions) {
+            const TActorId actorId = proxyId ? proxyId : TActivationContext::InterconnectProxy(nodeId);
             TActivationContext::Send(new IEventHandle(TEvents::TSystem::Unsubscribe, 0, actorId, SelfId(), nullptr, 0));
-            Subscriptions.erase(it++);
         }
     }
 
     void TInvokeRequestHandlerActor::ExecuteQuery() {
-        if (!Event) {
-            if (ReplaceConfig) {
-                StartProposition(&ReplaceConfig.value());
-            } else {
-                ExecuteInitialRootAction();
-            }
-            return;
-        }
+        std::visit(TOverloaded{
+            [&](TInvokeExternalOperation& op) {
+                STLOG(PRI_DEBUG, BS_NODE, NWDC43, "ExecuteQuery", (SelfId, SelfId()), (Command, op.Command));
+                switch (op.Command.GetRequestCase()) {
+                    case TQuery::kUpdateConfig:
+                        return UpdateConfig(op.Command.MutableUpdateConfig());
 
-        auto& record = Event->Get()->Record;
-        STLOG(PRI_DEBUG, BS_NODE, NWDC43, "ExecuteQuery", (SelfId, SelfId()), (Record, record));
-        switch (record.GetRequestCase()) {
-            case TQuery::kUpdateConfig:
-                return UpdateConfig(record.MutableUpdateConfig());
+                    case TQuery::kQueryConfig:
+                        return Finish(TResult::OK, std::nullopt, [&](auto *record) {
+                            auto *response = record->MutableQueryConfig();
+                            if (Self->StorageConfig) {
+                                response->MutableConfig()->CopyFrom(*Self->StorageConfig);
+                            }
+                        });
 
-            case TQuery::kQueryConfig:
-                return FinishWithSuccess([&](auto *record) {
-                    auto *response = record->MutableQueryConfig();
-                    if (Self->StorageConfig) {
-                        response->MutableConfig()->CopyFrom(*Self->StorageConfig);
+                    case TQuery::kReassignGroupDisk:
+                        return ReassignGroupDisk(op.Command.GetReassignGroupDisk());
+
+                    case TQuery::kStaticVDiskSlain:
+                        return StaticVDiskSlain(op.Command.GetStaticVDiskSlain());
+
+                    case TQuery::kDropDonor:
+                        return DropDonor(op.Command.GetDropDonor());
+
+                    case TQuery::kReassignStateStorageNode:
+                        return ReassignStateStorageNode(op.Command.GetReassignStateStorageNode());
+
+                    case TQuery::kAdvanceGeneration:
+                        return AdvanceGeneration();
+
+                    case TQuery::kFetchStorageConfig: {
+                        const auto& request = op.Command.GetFetchStorageConfig();
+                        return FetchStorageConfig(request.GetMainConfig(), request.GetStorageConfig(),
+                            request.GetAddExplicitConfigs(), request.GetAddSectionsForMigrationToV1());
                     }
-                    if (Self->CurrentProposition) {
-                        // TODO(alexvru): this can't actually happen?
-                        response->MutableCurrentProposedStorageConfig()->CopyFrom(Self->CurrentProposition->StorageConfig);
+
+                    case TQuery::kReplaceStorageConfig:
+                        return ReplaceStorageConfig(op.Command.GetReplaceStorageConfig());
+
+                    case TQuery::kBootstrapCluster:
+                        return BootstrapCluster(op.Command.GetBootstrapCluster().GetSelfAssemblyUUID());
+
+                    case TQuery::kSwitchBridgeClusterState:
+                        return SwitchBridgeClusterState(op.Command.GetSwitchBridgeClusterState());
+
+                    case TQuery::kReconfigStateStorage:
+                        return ReconfigStateStorage(op.Command.GetReconfigStateStorage());
+
+                    case TQuery::kGetStateStorageConfig:
+                        return GetStateStorageConfig(op.Command.GetGetStateStorageConfig());
+
+                    case TQuery::kSelfHealStateStorage:
+                        return SelfHealStateStorage(op.Command.GetSelfHealStateStorage());
+
+                    case TQuery::kSelfHealNodesStateUpdate:
+                        return SelfHealNodesStateUpdate(op.Command.GetSelfHealNodesStateUpdate());
+
+                    case TQuery::kNotifyBridgeSyncFinished:
+                        return NotifyBridgeSyncFinished(op.Command.GetNotifyBridgeSyncFinished());
+
+                    case TQuery::REQUEST_NOT_SET:
+                        throw TExError() << "Request field not set";
+                }
+
+                throw TExError() << "Unhandled request";
+            },
+            [&](TCollectConfigsAndPropose&) {
+                STLOG(PRI_DEBUG, BS_NODE, NWDC19, "Starting config collection");
+
+                TEvScatter task;
+                task.MutableCollectConfigs();
+                IssueScatterTask(std::move(task), [this](TEvGather *res) {
+                    Y_ABORT_UNLESS(Self->StorageConfig); // it can't just disappear
+                    Y_ABORT_UNLESS(!Self->CurrentProposition);
+
+                    if (!res->HasCollectConfigs()) {
+                        throw TExError() << "Incorrect CollectConfigs response";
+                    } else if (auto r = Self->ProcessCollectConfigs(res->MutableCollectConfigs(), std::nullopt); r.ErrorReason) {
+                        throw TExError() << *r.ErrorReason;
+                    } else if (r.ConfigToPropose) {
+                        CheckSyncersAfterCommit = r.CheckSyncersAfterCommit;
+                        StartProposition(&r.ConfigToPropose.value(), true,
+                            r.PropositionBase ? &r.PropositionBase.value() : nullptr);
+                    } else {
+                        Finish(TResult::OK, std::nullopt);
                     }
                 });
-
-            case TQuery::kReassignGroupDisk:
-                return ReassignGroupDisk(record.GetReassignGroupDisk());
-
-            case TQuery::kStaticVDiskSlain:
-                return StaticVDiskSlain(record.GetStaticVDiskSlain());
-
-            case TQuery::kDropDonor:
-                return DropDonor(record.GetDropDonor());
-
-            case TQuery::kReassignStateStorageNode:
-                return ReassignStateStorageNode(record.GetReassignStateStorageNode());
-
-            case TQuery::kAdvanceGeneration:
-                return AdvanceGeneration();
-
-            case TQuery::kFetchStorageConfig: {
-                const auto& request = record.GetFetchStorageConfig();
-                return FetchStorageConfig(request.GetMainConfig(), request.GetStorageConfig(),
-                    request.GetAddExplicitConfigs(), request.GetAddSectionsForMigrationToV1());
+            },
+            [&](TProposeConfig& op) {
+                CheckSyncersAfterCommit = op.CheckSyncersAfterCommit;
+                StartProposition(&op.Config);
             }
-
-            case TQuery::kReplaceStorageConfig:
-                return ReplaceStorageConfig(record.GetReplaceStorageConfig());
-
-            case TQuery::kBootstrapCluster:
-                return BootstrapCluster(record.GetBootstrapCluster().GetSelfAssemblyUUID());
-
-            case TQuery::kSwitchBridgeClusterState:
-                return SwitchBridgeClusterState();
-
-            case TQuery::kReconfigStateStorage:
-                return ReconfigStateStorage(record.GetReconfigStateStorage());
-
-            case TQuery::kGetStateStorageConfig:
-                return GetStateStorageConfig(record.GetGetStateStorageConfig());
-
-            case TQuery::kSelfHealStateStorage:
-                return SelfHealStateStorage(record.GetSelfHealStateStorage());
-
-            case TQuery::kSelfHealNodesStateUpdate:
-                return SelfHealNodesStateUpdate(record.GetSelfHealNodesStateUpdate());
-
-            case TQuery::kNotifyBridgeSyncFinished:
-                return NotifyBridgeSyncFinished(record.GetNotifyBridgeSyncFinished());
-
-            case TQuery::kMergeUnsyncedPileConfig:
-                return MergeUnsyncedPileConfig();
-
-            case TQuery::kNegotiateUnsyncedConnection:
-                return NegotiateUnsyncedConnection(record.GetNegotiateUnsyncedConnection());
-
-            case TQuery::kAdvanceClusterStateGeneration:
-                return AdvanceClusterStateGeneration();
-
-            case TQuery::REQUEST_NOT_SET:
-                throw TExError() << "Request field not set";
-        }
-
-        throw TExError() << "Unhandled request";
-    }
-
-    void TInvokeRequestHandlerActor::ExecuteInitialRootAction() {
-        STLOG(PRI_DEBUG, BS_NODE, NWDC19, "Starting config collection", (Scepter, Self->Scepter->Id));
-
-        TEvScatter task;
-        task.MutableCollectConfigs();
-        IssueScatterTask(std::move(task), [this](TEvGather *res) {
-            Y_ABORT_UNLESS(Self->StorageConfig); // it can't just disappear
-            Y_ABORT_UNLESS(!Self->CurrentProposition);
-
-            if (!res->HasCollectConfigs()) {
-                throw TExError() << "Incorrect CollectConfigs response";
-            } else if (auto r = Self->ProcessCollectConfigs(res->MutableCollectConfigs(), std::nullopt); r.ErrorReason) {
-                throw TExError() << *r.ErrorReason;
-            } else if (r.ConfigToPropose) {
-                StartProposition(&r.ConfigToPropose.value(), false, r.PropositionBase ? &r.PropositionBase.value() : nullptr);
-            } else {
-                FinishWithSuccess();
-            }
-        });
+        }, Query);
     }
 
     void TInvokeRequestHandlerActor::IssueScatterTask(TEvScatter&& task, TGatherCallback callback) {
@@ -285,18 +239,18 @@ namespace NKikimr::NStorage {
         StartProposition(&config);
     }
 
-    void TInvokeRequestHandlerActor::StartProposition(NKikimrBlobStorage::TStorageConfig *config, bool forceGeneration,
+    void TInvokeRequestHandlerActor::StartProposition(NKikimrBlobStorage::TStorageConfig *config, bool acceptLocalQuorum,
             const NKikimrBlobStorage::TStorageConfig *propositionBase) {
-        if (Self->CurrentProposition) {
-            throw TExCriticalError() << "Config proposition request is already in flight";
-        }
-
         if (auto error = UpdateClusterState(config)) {
             throw TExError() << *error;
+        } else if (!Self->HasConnectedNodeQuorum(*config, acceptLocalQuorum)) {
+            throw TExError() << "No quorum to start propose/commit configuration";
+        } else if (!acceptLocalQuorum && !Self->Scepter) {
+            throw TExError() << "No scepter";
         }
 
-        if (Event) {
-            if (const auto& record = Event->Get()->Record; record.HasReplaceStorageConfig()) {
+        if (const auto *op = std::get_if<TInvokeExternalOperation>(&Query)) {
+            if (const auto& record = op->Command; record.HasReplaceStorageConfig()) {
                 AUDIT_LOG(
                     const auto& replaceConfig = record.GetReplaceStorageConfig();
 
@@ -339,9 +293,9 @@ namespace NKikimr::NStorage {
             propositionBase = Self->StorageConfig.get();
         }
 
-        Y_ABORT_UNLESS(InvokeActorQueueGeneration == Self->InvokeActorQueueGeneration);
+        Y_ABORT_UNLESS(InvokePipelineGeneration == Self->InvokePipelineGeneration);
         auto error = InvokeOtherActor(*Self, &TDistributedConfigKeeper::StartProposition, config, propositionBase,
-            std::move(SpecificBridgePileIds), SelfId(), CheckSyncersAfterCommit, forceGeneration);
+            SelfId(), CheckSyncersAfterCommit);
         if (error) {
             STLOG(PRI_DEBUG, BS_NODE, NWDC78, "Config update validation failed", (SelfId, SelfId()),
                 (Error, *error), (ProposedConfig, *config));
@@ -349,30 +303,25 @@ namespace NKikimr::NStorage {
         }
     }
 
-    void TInvokeRequestHandlerActor::OnConfigProposed(const std::optional<TString>& errorReason) {
-        STLOG(PRI_DEBUG, BS_NODE, NWDC64, "OnConfigProposed", (SelfId, SelfId()), (ErrorReason, errorReason),
+    void TInvokeRequestHandlerActor::Handle(TEvPrivate::TEvConfigProposed::TPtr ev) {
+        auto& msg = *ev->Get();
+
+        STLOG(PRI_DEBUG, BS_NODE, NWDC64, "OnConfigProposed", (SelfId, SelfId()), (ErrorReason, msg.ErrorReason),
             (RootState, Self->RootState));
 
-        if (errorReason) {
-            throw TExError() << "Config proposition failed: " << *errorReason;
+        if (msg.ErrorReason) {
+            throw TExError() << "Config proposition failed: " << *msg.ErrorReason;
         } else {
-            FinishWithSuccess([&](auto *record) {
-                if (MergedConfig) { // copy merged config in case of success, if we have any
-                    MergedConfig->Swap(record->MutableMergeUnsyncedPileConfig()->MutableMergedConfig());
-                }
-            });
-
-            Y_ABORT_UNLESS(InvokeActorQueueGeneration == Self->InvokeActorQueueGeneration);
-            InvokeOtherActor(*Self, &TDistributedConfigKeeper::CheckForConfigUpdate);
+            Finish(TResult::OK, std::nullopt);
         }
     }
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Query termination and result delivery
 
-    void TInvokeRequestHandlerActor::RunCommonChecks() {
+    void TInvokeRequestHandlerActor::RunCommonChecks(bool requireScepter) {
         Y_ABORT_UNLESS(
-            Self->RootState == ERootState::SCEPTERLESS_OPERATION ||
+            Self->RootState == ERootState::LOCAL_QUORUM_OP ||
             Self->RootState == ERootState::IN_PROGRESS
         );
 
@@ -382,57 +331,103 @@ namespace NKikimr::NStorage {
             throw TExError() << "No agreed StorageConfig";
         } else if (auto error = ValidateConfig(*Self->StorageConfig)) {
             throw TExError() << "Current config validation failed: " << *error;
+        } else if (requireScepter && !Self->Scepter) {
+            throw TExError() << "No scepter";
         }
     }
 
-    std::unique_ptr<TEvNodeConfigInvokeOnRootResult> TInvokeRequestHandlerActor::PrepareResult(TResult::EStatus status,
-            std::optional<TStringBuf> errorReason) {
-        auto ev = std::make_unique<TEvNodeConfigInvokeOnRootResult>();
-        auto *record = &ev->Record;
-        record->SetStatus(status);
+    void TInvokeRequestHandlerActor::Finish(TResult::EStatus status, std::optional<TStringBuf> errorReason,
+            const std::function<void(TResult*)>& callback) {
+        TResult record;
+        record.SetStatus(status);
         if (errorReason) {
-            record->SetErrorReason(errorReason->data(), errorReason->size());
+            record.SetErrorReason(errorReason->data(), errorReason->size());
         }
         if (Self->Scepter) {
-            auto *s = record->MutableScepter();
+            auto *s = record.MutableScepter();
             s->SetId(Self->Scepter->Id);
             s->SetNodeId(SelfId().NodeId());
         }
-        return ev;
-    }
+        if (callback) {
+            callback(&record);
+        }
 
-    void TInvokeRequestHandlerActor::FinishWithError(TResult::EStatus status, const TString& errorReason) {
-        if (Event) {
-            Finish(Sender, SelfId(), PrepareResult(status, errorReason).release(), 0, Cookie);
-        } else if (ReplaceConfig) {
-            // this is just temporary failure
-            // TODO(alexvru): backoff?
-            PassAway();
-        } else {
-            Y_ABORT_UNLESS(InvokeActorQueueGeneration == Self->InvokeActorQueueGeneration);
-            PassAway(); // pass away first, as SwitchToError would invoke OnError for this actor too
-            InvokeOtherActor(*Self, &TDistributedConfigKeeper::SwitchToError, errorReason);
+        STLOG(PRI_DEBUG, BS_NODE, NWDC61, "Finish", (SelfId, SelfId()), (Record, record));
+
+        std::optional<TString> switchToError; // when set, we will switch distconf keeper to error state with this reason
+
+        std::visit(TOverloaded{
+            [&](TInvokeExternalOperation& op) {
+                auto ev = std::make_unique<TEvNodeConfigInvokeOnRootResult>();
+                record.Swap(&ev->Record);
+                auto handle = std::make_unique<IEventHandle>(op.Sender, SelfId(), ev.release(), 0, op.Cookie);
+                if (op.SessionId) {
+                    handle->Rewrite(TEvInterconnect::EvForward, op.SessionId);
+                }
+                TActivationContext::Send(handle.release());
+            },
+            [&](TCollectConfigsAndPropose&) {
+                // this is just temporary failure
+                // TODO(alexvru): backoff?
+            },
+            [&](TProposeConfig&) {
+                Y_ABORT_UNLESS(InvokePipelineGeneration == Self->InvokePipelineGeneration);
+                if (status != TResult::OK) { // we were asked to commit config, but error has occured
+                    Y_ABORT_UNLESS(errorReason);
+                    switchToError.emplace(*errorReason);
+                }
+            }
+        }, Query);
+
+        // terminate this actor
+        PassAway();
+
+        // reset root state in keeper actor if this query is still valid and there is no pending proposition
+        if (InvokePipelineGeneration == Self->InvokePipelineGeneration && !Self->CurrentProposition) {
+            switch (auto& state = Self->RootState) {
+                case ERootState::IN_PROGRESS:
+                    state = ERootState::RELAX;
+                    break;
+
+                case ERootState::LOCAL_QUORUM_OP:
+                    state = Self->Scepter ? ERootState::RELAX : ERootState::INITIAL;
+                    break;
+
+                case ERootState::INITIAL:
+                case ERootState::ERROR_TIMEOUT:
+                case ERootState::RELAX:
+                    Y_ABORT_S("unexpected RootState# " << state);
+            }
+        }
+
+        if (switchToError) {
+            InvokeOtherActor(*Self, &TDistributedConfigKeeper::SwitchToError, std::move(*switchToError), true);
         }
     }
 
     void TInvokeRequestHandlerActor::PassAway() {
-        TActivationContext::Send(new IEventHandle(TEvPrivate::EvOpQueueEnd, 0, ParentId, SelfId(), nullptr,
-            BeginRegistered ? InvokeActorQueueGeneration : 0));
+        if (!WaitingReplyFromNode && !LifetimeToken.expired()) {
+            TActivationContext::Send(new IEventHandle(TEvPrivate::EvQueryFinished, 0, Self->SelfId(), SelfId(), nullptr,
+                InvokePipelineGeneration));
+        }
         if (ControllerPipeId) {
             NTabletPipe::CloseAndForgetClient(SelfId(), ControllerPipeId);
         }
         UnsubscribeInterconnect();
-        TActorBootstrapped::PassAway();
+        TActor::PassAway();
     }
 
     STFUNC(TInvokeRequestHandlerActor::StateFunc) {
-        Wrap([&] {
-            if (LifetimeToken.expired()) {
-                throw TExRace() << "Distributed config keeper terminated";
-            }
+        if (LifetimeToken.expired()) {
+            return PassAway();
+        }
+        try {
             STRICT_STFUNC_BODY(
+                cFunc(TEvPrivate::EvExecuteQuery, HandleExecuteQuery);
+                hFunc(TEvPrivate::TEvAbortQuery, Handle);
                 hFunc(TEvNodeConfigInvokeOnRootResult, Handle);
                 hFunc(TEvNodeConfigGather, Handle);
+                hFunc(TEvPrivate::TEvConfigProposed, Handle);
                 hFunc(TEvInterconnect::TEvNodeConnected, Handle);
                 hFunc(TEvInterconnect::TEvNodeDisconnected, Handle);
                 hFunc(TEvBlobStorage::TEvVStatusResult, Handle);
@@ -445,130 +440,68 @@ namespace NKikimr::NStorage {
                 hFunc(TEvBlobStorage::TEvControllerConfigResponse, Handle);
                 hFunc(TEvBlobStorage::TEvControllerDistconfResponse, Handle);
             )
-        });
+        } catch (const TExError& error) {
+            Finish(error.Status, error.what());
+            if (error.IsCritical) {
+                Y_DEBUG_ABORT("critical error during query processing: %s", error.what());
+            }
+        }
     }
 
     void TDistributedConfigKeeper::Handle(TEvNodeConfigInvokeOnRoot::TPtr ev) {
-        std::unique_ptr<TEventHandle<TEvNodeConfigInvokeOnRoot>> evPtr(ev.Release());
-        ChildActors.insert(RegisterWithSameMailbox(new TInvokeRequestHandlerActor(this, std::move(evPtr))));
+        if (Binding) {
+            // we have binding, so we have to forward this message to 'hop' node and return answer
+            const ui32 hopNodeId = Binding->NodeId;
+            const TActorId actorId = RegisterWithSameMailbox(new TInvokeRequestHandlerActor(this, {.Sender = ev->Sender,
+                .SessionId = ev->InterconnectSession, .Cookie = ev->Cookie}, hopNodeId));
+            TActivationContext::Send(new IEventHandle(MakeBlobStorageNodeWardenID(hopNodeId), actorId,
+                ev->Release().Release(), IEventHandle::FlagSubscribeOnSession));
+        } else {
+            Invoke(TInvokeExternalOperation{
+                .Command = std::move(ev->Get()->Record),
+                .Sender = ev->Sender,
+                .SessionId = ev->InterconnectSession,
+                .Cookie = ev->Cookie,
+            });
+        }
     }
 
-    void TDistributedConfigKeeper::OpQueueBegin(TActorId actorId, bool scepterless) {
-        Y_ABORT_UNLESS(!Binding); // no operation can begin while we are bound
-        Y_ABORT_UNLESS(RootState != ERootState::ERROR_TIMEOUT);
-
-        InvokeQ.push_back(TInvokeOperation{actorId, scepterless});
+    void TDistributedConfigKeeper::Invoke(TInvokeQuery&& query) {
+        const TActorId actorId = RegisterWithSameMailbox(new TInvokeRequestHandlerActor(this, std::move(query)));
+        InvokeQ.push_back(TInvokeOperation{actorId});
         if (InvokeQ.size() == 1) {
-            OpQueueProcessFront();
+            TActivationContext::Send(new IEventHandle(TEvPrivate::EvExecuteQuery, 0, actorId, {}, nullptr, 0));
         }
     }
 
-    void TDistributedConfigKeeper::OpQueueProcessFront() {
-        Y_ABORT_UNLESS(!Binding); // no operation can begin when we are bound
-
-        if (InvokeQ.empty()) {
-            return;
-        }
-
-        // find the actor who issued this request; it is always on the same mailbox
-        const auto& item = InvokeQ.front();
-        auto *actor = GetInvokeRequestHandlerActor(item.ActorId);
-        if (item.ActorId && !actor) {
-            // this actor has died and we have to wait for its OpQueueEnd message, which is probably in mailbox
-            return;
-        }
-
-        void (TInvokeRequestHandlerActor::*pfn)() = nullptr;
-
-        switch (RootState) {
-            case ERootState::INITIAL:
-                if (item.Scepterless) {
-                    // this is scepterless operation and this is root node that doesn't have full quorum
-                    RootState = ERootState::SCEPTERLESS_OPERATION;
-                    pfn = &TInvokeRequestHandlerActor::OnBeginOperation;
-                } else { // this is not scepterless operation and we have no scepter, meaning no quorum
-                    pfn = &TInvokeRequestHandlerActor::OnNoQuorum;
-                }
-                break;
-
-            case ERootState::RELAX:
-                RootState = ERootState::IN_PROGRESS;
-                pfn = &TInvokeRequestHandlerActor::OnBeginOperation;
-                break;
-
-            case ERootState::IN_PROGRESS:
-                // maybe system proposition is in flight (triggered by relaxed state)
-                break;
-
-            case ERootState::SCEPTERLESS_OPERATION:
-            case ERootState::ERROR_TIMEOUT:
-                Y_FAIL_S("unexpected state in OpQueueProcessFront# " << RootState);
-        }
-
-        if (pfn && actor) {
-            Y_ABORT_UNLESS(actor->InvokeActorQueueGeneration == InvokeActorQueueGeneration);
-            InvokeOtherActor(*actor, pfn);
-        }
-    }
-
-    void TDistributedConfigKeeper::HandleOpQueueEnd(STFUNC_SIG) {
-        const size_t numErased = ChildActors.erase(ev->Sender);
-        Y_ABORT_UNLESS(numErased);
-
-        if (ev->Cookie != InvokeActorQueueGeneration) {
-            return; // this is mass error termination, we ignore this -- the queue should be empty by now
+    void TDistributedConfigKeeper::HandleQueryFinished(STFUNC_SIG) {
+        if (ev->Cookie != InvokePipelineGeneration) {
+            Y_ABORT_UNLESS(ev->Cookie < InvokePipelineGeneration);
+            return; // a race with aborted query
         }
 
         Y_ABORT_UNLESS(!InvokeQ.empty());
-        const auto& front = InvokeQ.front();
-        Y_ABORT_UNLESS(ev->Sender == front.ActorId);
-
-        if (CurrentProposition && CurrentProposition->ActorId == front.ActorId) {
+        auto& front = InvokeQ.front();
+        Y_ABORT_UNLESS(front.ActorId == ev->Sender);
+        if (CurrentProposition) {
+            Y_ABORT_UNLESS(CurrentProposition->ActorId == ev->Sender);
+            Y_ABORT_UNLESS(!DeadActorWaitingForProposition);
             DeadActorWaitingForProposition = true;
-            return; // transaction is still being proposed, although issuer actor is dead
+        } else {
+            InvokeQ.pop_front();
+            if (!InvokeQ.empty()) {
+                TActivationContext::Send(new IEventHandle(TEvPrivate::EvExecuteQuery, 0, InvokeQ.front().ActorId, {},
+                    nullptr, 0));
+            }
         }
-
-        switch (RootState) {
-            case ERootState::SCEPTERLESS_OPERATION:
-                Y_ABORT_UNLESS(front.Scepterless);
-                RootState = ERootState::INITIAL;
-                break;
-
-            case ERootState::IN_PROGRESS:
-                RootState = ERootState::RELAX;
-                break;
-
-            default:
-                Y_FAIL_S("unexpected state in HandleOpQueueEnd# " << RootState);
-        }
-
-        InvokeQ.pop_front();
-
-        OpQueueProcessFront();
-    }
-
-    void TDistributedConfigKeeper::OpQueueOnBecomeRoot() {
-    }
-
-    void TDistributedConfigKeeper::OpQueueOnUnbecomeRoot() {
-        OpQueueOnError("Scepter lost during query execution");
     }
 
     void TDistributedConfigKeeper::OpQueueOnError(const TString& errorReason) {
         for (const auto& item : std::exchange(InvokeQ, {})) {
-            if (auto *actor = GetInvokeRequestHandlerActor(item.ActorId)) {
-                Y_ABORT_UNLESS(actor->InvokeActorQueueGeneration == InvokeActorQueueGeneration);
-                InvokeOtherActor(*actor, &TInvokeRequestHandlerActor::OnError, errorReason);
-            }
+            Send(item.ActorId, new TEvPrivate::TEvAbortQuery(errorReason));
         }
         DeadActorWaitingForProposition = false;
-
-        // increment generation to just dismiss any incoming OpQueueEnd's
-        ++InvokeActorQueueGeneration;
-    }
-
-    TInvokeRequestHandlerActor *TDistributedConfigKeeper::GetInvokeRequestHandlerActor(TActorId actorId) {
-        return static_cast<TInvokeRequestHandlerActor*>(TlsActivationContext->Mailbox.FindActor(actorId.LocalId()));
+        ++InvokePipelineGeneration;
     }
 
 } // NKikimr::NStorage

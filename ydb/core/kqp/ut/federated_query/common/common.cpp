@@ -67,7 +67,7 @@ namespace NKikimr::NKqp::NFederatedQueryTest {
             appConfig->MutableQueryServiceConfig()->SetAllExternalDataSourcesAreAvailable(true);
         }
 
-        auto settings = TKikimrSettings();
+        auto settings = TKikimrSettings(*appConfig);
 
         NYql::IHTTPGateway::TPtr httpGateway;
         if (initializeHttpGateway) {
@@ -103,7 +103,7 @@ namespace NKikimr::NKqp::NFederatedQueryTest {
             .SetDomainRoot(options.DomainRoot)
             .SetNodeCount(options.NodeCount);
 
-        settings = settings.SetAppConfig(appConfig.value());
+        settings.EnableScriptExecutionBackgroundChecks = options.EnableScriptExecutionBackgroundChecks;
 
         return std::make_shared<TKikimrRunner>(settings);
     }

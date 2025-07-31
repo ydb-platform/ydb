@@ -71,7 +71,7 @@ public:
     }
 };
 
-class TConstructor: public NAbstract::ISourcesConstructor {
+class TConstructor: public NCommon::ISourcesConstructor {
 private:
     std::deque<TGranuleDataConstructor> Constructors;
     const ui64 TabletId;
@@ -85,8 +85,8 @@ private:
     virtual bool DoIsFinished() const override {
         return Constructors.empty();
     }
-    virtual std::shared_ptr<NReader::NCommon::IDataSource> DoExtractNext(
-        const std::shared_ptr<NReader::NCommon::TSpecialReadContext>& context) override {
+    virtual std::shared_ptr<NReader::NCommon::IDataSource> DoTryExtractNext(
+        const std::shared_ptr<NReader::NCommon::TSpecialReadContext>& context, const ui32 /*inFlightCurrentLimit*/) override {
         AFL_VERIFY(Constructors.size());
         std::shared_ptr<NReader::NCommon::IDataSource> result = Constructors.front().Construct(context);
         Constructors.pop_front();

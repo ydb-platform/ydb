@@ -12,7 +12,7 @@ RUN_PROGRAM(
 
 RUN_PROGRAM(
     yql/essentials/tools/yql_highlight --generate="vim"
-    STDOUT yql_test.vim
+    STDOUT yql_new.vim
 )
 
 END()

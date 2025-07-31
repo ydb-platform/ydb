@@ -270,10 +270,10 @@ TConclusionStatus TLeakedBlobsNormalizer::LoadPortionBlobIds(
         if (itIndexes != Indexes.end()) {
             indexes = std::move(itIndexes->second);
         }
-        TPortionDataAccessor accessor =
+        std::shared_ptr<TPortionDataAccessor> accessor =
             TPortionAccessorConstructor::BuildForLoading(i.second->Build(), std::move(itRecords->second), std::move(indexes));
         THashMap<TString, THashSet<TUnifiedBlobId>> blobIdsByStorage;
-        accessor.FillBlobIdsByStorage(blobIdsByStorage, tablesManager.GetPrimaryIndexAsVerified<TColumnEngineForLogs>().GetVersionedIndex());
+        accessor->FillBlobIdsByStorage(blobIdsByStorage, tablesManager.GetPrimaryIndexAsVerified<TColumnEngineForLogs>().GetVersionedIndex());
         auto it = blobIdsByStorage.find(NBlobOperations::TGlobal::DefaultStorageId);
         if (it == blobIdsByStorage.end()) {
             continue;

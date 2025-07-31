@@ -363,7 +363,9 @@ public:
                 StatsMode = NYql::NDqProto::EDqStatsMode::DQ_STATS_MODE_BASIC;
                 break;
         }
-   //     Cerr << "StatsMode = " << (int) StatsMode << Endl;
+        if (Params.Automatic) {
+            StatsMode = NYql::NDqProto::EDqStatsMode::DQ_STATS_MODE_BASIC;
+        }
     }
 
     static constexpr char ActorName[] = "YQ_RUN_ACTOR";
@@ -451,9 +453,11 @@ private:
         hFunc(NMon::TEvHttpInfo, Handle);
 
         // Ignore tail of action events after normal work.
+        IgnoreFunc(TEvPrivate::TEvProgramFinished);
         IgnoreFunc(TEvents::TEvAsyncContinue);
         IgnoreFunc(NActors::TEvents::TEvUndelivered);
         IgnoreFunc(TEvents::TEvGraphParams);
+        IgnoreFunc(NActors::TEvents::TEvWakeup);
         IgnoreFunc(TEvents::TEvQueryActionResult);
         IgnoreFunc(TEvCheckpointCoordinator::TEvZeroCheckpointDone);
         IgnoreFunc(TEvCheckpointCoordinator::TEvRaiseTransientIssues);

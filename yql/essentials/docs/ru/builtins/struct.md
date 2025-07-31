@@ -426,7 +426,7 @@ SELECT
   ForceSpreadMembers([('a',1),('a',2),('c',100)],['a','b']); -- (a: 2, b: null)
 ```
 
-## StructUnion, StructIntersection, StructDifference, StructSymmetricDifference
+## StructUnion, StructIntersection, StructDifference, StructSymmetricDifference {#struct-combining}
 
 Комбинируют две структуры одним из четырех способов, используя предоставленную функцию для слияния полей с одинаковыми именами:
 

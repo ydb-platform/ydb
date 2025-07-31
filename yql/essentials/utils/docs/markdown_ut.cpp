@@ -2,7 +2,7 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
-using namespace NSQLComplete;
+using namespace NYql::NDocs;
 
 Y_UNIT_TEST_SUITE(MarkdownParserTests) {
 
@@ -51,26 +51,23 @@ SELECT
 FROM my_table;
 ```
 )";
-        TVector<TMarkdownSection> sections;
+        TMarkdownPage page = ParseMarkdownPage(markdown);
 
-        TStringStream input(markdown);
-        ParseMarkdown(input, [&](TMarkdownSection&& section) {
-            sections.emplace_back(std::move(section));
-        });
+        UNIT_ASSERT_VALUES_EQUAL(page.SectionsByAnchor.size(), 2);
 
-        UNIT_ASSERT_VALUES_EQUAL(sections.size(), 2);
+        const auto& coelcese = page.SectionsByAnchor["coalesce"];
+        UNIT_ASSERT_STRING_CONTAINS(coelcese.Header.Content, "COALESCE");
+        UNIT_ASSERT_VALUES_EQUAL(coelcese.Header.Anchor, "coalesce");
+        UNIT_ASSERT_STRING_CONTAINS(coelcese.Body, "Iterates");
+        UNIT_ASSERT_STRING_CONTAINS(coelcese.Body, "COALESCE");
+        UNIT_ASSERT_GE(Count(coelcese.Body, '\n'), 5);
 
-        UNIT_ASSERT_STRING_CONTAINS(sections[0].Header.Content, "COALESCE");
-        UNIT_ASSERT_VALUES_EQUAL(sections[0].Header.Anchor, "#coalesce");
-        UNIT_ASSERT_STRING_CONTAINS(sections[0].Body, "Iterates");
-        UNIT_ASSERT_STRING_CONTAINS(sections[0].Body, "COALESCE");
-        UNIT_ASSERT_GE(Count(sections[0].Body, '\n'), 5);
-
-        UNIT_ASSERT_STRING_CONTAINS(sections[1].Header.Content, "Random");
-        UNIT_ASSERT_VALUES_EQUAL(sections[1].Header.Anchor, "#random");
-        UNIT_ASSERT_STRING_CONTAINS(sections[1].Body, "Generates");
-        UNIT_ASSERT_STRING_CONTAINS(sections[1].Body, "Random");
-        UNIT_ASSERT_GE(Count(sections[1].Body, '\n'), 5);
+        const auto& random = page.SectionsByAnchor["random"];
+        UNIT_ASSERT_STRING_CONTAINS(random.Header.Content, "Random");
+        UNIT_ASSERT_VALUES_EQUAL(random.Header.Anchor, "random");
+        UNIT_ASSERT_STRING_CONTAINS(random.Body, "Generates");
+        UNIT_ASSERT_STRING_CONTAINS(random.Body, "Random");
+        UNIT_ASSERT_GE(Count(random.Body, '\n'), 5);
     }
 
 } // Y_UNIT_TEST_SUITE(MarkdownParserTests)

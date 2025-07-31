@@ -52,7 +52,7 @@ namespace NKikimr::NStorage {
             throw TExError() << "No stored YAML for storage config";
         }
 
-        FinishWithSuccess([&](auto *record) {
+        Finish(TResult::OK, std::nullopt, [&](TResult *record) {
             auto *res = record->MutableFetchStorageConfig();
             if (fetchMain) {
                 res->SetYAML(Self->MainConfigYaml);
@@ -171,7 +171,7 @@ namespace NKikimr::NStorage {
             if (request.HasSwitchDedicatedStorageSection()) {
                 throw TExError() << "Switching dedicated storage section mode without providing any new config";
             } else { // finish this request prematurely: no configs are actually changed
-                return FinishWithSuccess();
+                return Finish(TResult::OK, std::nullopt);
             }
         }
 
@@ -264,7 +264,9 @@ namespace NKikimr::NStorage {
 
     void TInvokeRequestHandlerActor::ReplaceStorageConfigResume(const std::optional<TString>& storageConfigYaml, ui64 expectedMainYamlVersion,
             ui64 expectedStorageYamlVersion, bool enablingDistconf) {
-        const auto& request = Event->Get()->Record.GetReplaceStorageConfig();
+        auto *op = std::get_if<TInvokeExternalOperation>(&Query);
+        Y_ABORT_UNLESS(op);
+        const auto& request = op->Command.GetReplaceStorageConfig();
 
         auto switchDedicatedStorageSection = request.HasSwitchDedicatedStorageSection()
             ? std::make_optional(request.GetSwitchDedicatedStorageSection())
@@ -305,7 +307,7 @@ namespace NKikimr::NStorage {
 
         if (auto error = ValidateConfig(*Self->StorageConfig)) {
             throw TExError() << "ReplaceStorageConfig current config validation failed: " << *error;
-        } else if (auto error = ValidateConfigUpdate(*Self->StorageConfig, ProposedStorageConfig, false)) {
+        } else if (auto error = ValidateConfigUpdate(*Self->StorageConfig, ProposedStorageConfig)) {
             throw TExError() << "ReplaceStorageConfig config validation failed: " << *error;
         }
 
@@ -351,8 +353,9 @@ namespace NKikimr::NStorage {
             } else if (r.IsDistconfDisabledQuorum) {
                 // distconf is disabled on the majority of nodes; we have just to replace configs
                 // and then to restart these nodes in order to enable it in future
-                FinishWithSuccess([&](auto *record) { record->MutableReplaceStorageConfig()->SetAllowEnablingDistconf(true); },
-                    TResult::CONTINUE_BSC, "proceed with BSC");
+                Finish(TResult::CONTINUE_BSC, "proceed with BSC", [&](TResult *record) {
+                    record->MutableReplaceStorageConfig()->SetAllowEnablingDistconf(true);
+                });
             } else {
                 ConnectToController();
             }
@@ -397,7 +400,9 @@ namespace NKikimr::NStorage {
 
         auto request = std::make_unique<TEvBlobStorage::TEvControllerDistconfRequest>();
         auto& record = request->Record;
-        const auto& replaceStorageConfig = Event->Get()->Record.GetReplaceStorageConfig();
+        auto *op = std::get_if<TInvokeExternalOperation>(&Query);
+        Y_ABORT_UNLESS(op);
+        const auto& replaceStorageConfig = op->Command.GetReplaceStorageConfig();
 
         // provide the full main config to the recipient (in case when user changes it, or when we are managing it)
         if (NewYaml) {
@@ -533,7 +538,7 @@ namespace NKikimr::NStorage {
 
         if (Self->StorageConfig->GetGeneration()) {
             if (Self->StorageConfig->GetSelfAssemblyUUID() == selfAssemblyUUID) { // repeated command, it's ok
-                return FinishWithSuccess();
+                return Finish(TResult::OK, std::nullopt);
             } else {
                 throw TExError() << "Bootstrap on already bootstrapped cluster";
             }
@@ -555,9 +560,10 @@ namespace NKikimr::NStorage {
             } else if (auto r = Self->ProcessCollectConfigs(res->MutableCollectConfigs(), selfAssemblyUUID); r.ErrorReason) {
                 throw TExError() << *r.ErrorReason;
             } else if (r.ConfigToPropose) {
+                CheckSyncersAfterCommit = r.CheckSyncersAfterCommit;
                 StartProposition(&r.ConfigToPropose.value());
             } else { // no new proposition has been made
-                FinishWithSuccess();
+                Finish(TResult::OK, std::nullopt);
             }
         };
 

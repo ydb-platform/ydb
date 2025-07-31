@@ -198,9 +198,9 @@ message TFeatureFlags {
     optional bool EnableDataErasure = 172 [default = false];
     optional bool EnableShowCreate = 173 [default = false];
     optional bool EnableChangefeedsExport = 174 [default = false];
-    optional bool EnableKafkaNativeBalancing = 175 [default = false];
+    optional bool EnableKafkaNativeBalancing = 175 [default = true];
     optional bool EnableTabletRestartOnUnhandledExceptions = 176 [default = true];
-    optional bool EnableKafkaTransactions = 177 [default = false];
+    optional bool EnableKafkaTransactions = 177 [default = true];
     optional bool EnableLoginCache = 178 [default = false];
     optional bool SwitchToConfigV2 = 179 [default = false];
     optional bool SwitchToConfigV1 = 180 [default = false];

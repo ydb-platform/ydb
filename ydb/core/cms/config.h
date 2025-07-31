@@ -17,6 +17,7 @@ struct TCmsSentinelConfig {
         bool Enable;
         ui32 NodeBadStateLimit;
         ui32 NodeGoodStateLimit;
+        ui32 NodePrettyGoodStateLimit;
         TDuration WaitForConfigStep;
         TDuration RelaxTime;
     };
@@ -65,6 +66,7 @@ struct TCmsSentinelConfig {
         ssConfig->SetRelaxTime(StateStorageSelfHealConfig.RelaxTime.GetValue());
         ssConfig->SetNodeBadStateLimit(StateStorageSelfHealConfig.NodeBadStateLimit);
         ssConfig->SetNodeGoodStateLimit(StateStorageSelfHealConfig.NodeGoodStateLimit);
+        ssConfig->SetNodePrettyGoodStateLimit(StateStorageSelfHealConfig.NodePrettyGoodStateLimit);
 
         config.SetDataCenterRatio(DataCenterRatio);
         config.SetRoomRatio(RoomRatio);
@@ -97,6 +99,7 @@ struct TCmsSentinelConfig {
         StateStorageSelfHealConfig.Enable = ssConfig.GetEnable();
         StateStorageSelfHealConfig.NodeBadStateLimit = ssConfig.GetNodeBadStateLimit();
         StateStorageSelfHealConfig.NodeGoodStateLimit = ssConfig.GetNodeGoodStateLimit();
+        StateStorageSelfHealConfig.NodePrettyGoodStateLimit = ssConfig.GetNodePrettyGoodStateLimit();
         StateStorageSelfHealConfig.WaitForConfigStep = TDuration::MicroSeconds(ssConfig.GetWaitForConfigStep());
         StateStorageSelfHealConfig.RelaxTime = TDuration::MicroSeconds(ssConfig.GetRelaxTime());
 

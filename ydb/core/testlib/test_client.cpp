@@ -557,6 +557,10 @@ namespace Tests {
             appData.TransferWriterFactory = Settings->TransferWriterFactory;
             appData.WorkloadManagerConfig.MergeFrom(Settings->AppConfig->GetWorkloadManagerConfig());
             appData.QueryServiceConfig.MergeFrom(Settings->AppConfig->GetQueryServiceConfig());
+            appData.BridgeConfig.MergeFrom(Settings->BridgeConfig);
+            if (appData.BridgeConfig.PilesSize() > 0) {
+                appData.BridgeModeEnabled = true;
+            }
 
             appData.DynamicNameserviceConfig = new TDynamicNameserviceConfig;
             auto dnConfig = appData.DynamicNameserviceConfig;
@@ -565,7 +569,7 @@ namespace Tests {
             dnConfig->MaxDynamicNodeId = 1024 + 100;
         });
 
-        const bool mockDisk = (StaticNodes() + DynamicNodes()) == 1 && Settings->EnableMockOnSingleNode;
+        const bool mockDisk = ((StaticNodes() + DynamicNodes()) == 1 && Settings->EnableMockOnSingleNode) || !Settings->EnableStorage;
         if (!Settings->AppConfig->HasSharedCacheConfig()) {
             Settings->AppConfig->MutableSharedCacheConfig()->SetMemoryLimit(32_MB);
         }
@@ -615,7 +619,9 @@ namespace Tests {
             WaitForSysViewsRosterUpdate();
         }
 
-        SetupStorage();
+        if (Settings->EnableStorage) {
+            SetupStorage();
+        }
     }
 
     void TServer::SetupActorSystemConfig() {
@@ -1342,7 +1348,10 @@ namespace Tests {
             Runtime->RegisterService(NKqp::MakeKqpProxyID(Runtime->GetNodeId(nodeIdx)), kqpProxyServiceId, nodeIdx);
 
             IActor* scriptFinalizeService = NKqp::CreateKqpFinalizeScriptService(
-                Settings->AppConfig->GetQueryServiceConfig(), federatedQuerySetupFactory, Settings->S3ActorsFactory
+                Settings->AppConfig->GetQueryServiceConfig(),
+                federatedQuerySetupFactory,
+                Settings->S3ActorsFactory,
+                Settings->EnableScriptExecutionBackgroundChecks
             );
             TActorId scriptFinalizeServiceId = Runtime->Register(scriptFinalizeService, nodeIdx, userPoolId);
             Runtime->RegisterService(NKqp::MakeKqpFinalizeScriptServiceId(Runtime->GetNodeId(nodeIdx)), scriptFinalizeServiceId, nodeIdx);
@@ -2763,9 +2772,10 @@ namespace Tests {
         return res;
     }
 
-    NKikimrScheme::TEvDescribeSchemeResult TClient::Describe(TTestActorRuntime* runtime, const TString& path, ui64 tabletId) {
+    NKikimrScheme::TEvDescribeSchemeResult TClient::Describe(TTestActorRuntime* runtime, const TString& path, ui64 tabletId, bool showPrivateTable) {
         TAutoPtr<NSchemeShard::TEvSchemeShard::TEvDescribeScheme> request(new NSchemeShard::TEvSchemeShard::TEvDescribeScheme());
         request->Record.SetPath(path);
+        request->Record.MutableOptions()->SetShowPrivateTable(showPrivateTable);
         const ui64 schemeRoot = GetPatchedSchemeRoot(tabletId, Domain, SupportsRedirect);
         TActorId sender = runtime->AllocateEdgeActor(0);
         ForwardToTablet(*runtime, schemeRoot, sender, request.Release(), 0);

@@ -3570,9 +3570,17 @@ void TSchemeShard::PersistShardsToDelete(NIceDb::TNiceDb& db, const THashSet<TSh
     }
 }
 
+void TSchemeShard::PersistSystemShardsToDelete(NIceDb::TNiceDb& db, const THashSet<TShardIdx>& shardsIdxs) {
+    for (auto& shardIdx : shardsIdxs) {
+        Y_ABORT_UNLESS(IsLocalId(shardIdx));
+        db.Table<Schema::SystemShardsToDelete>().Key(shardIdx.GetLocalId()).Update();
+    }
+}
+
 void TSchemeShard::PersistShardDeleted(NIceDb::TNiceDb& db, TShardIdx shardIdx, const TChannelsBindings& bindedChannels) {
     if (shardIdx.GetOwnerId() == TabletID()) {
         db.Table<Schema::ShardsToDelete>().Key(shardIdx.GetLocalId()).Delete();
+        db.Table<Schema::SystemShardsToDelete>().Key(shardIdx.GetLocalId()).Delete();
         db.Table<Schema::Shards>().Key(shardIdx.GetLocalId()).Delete();
         for (ui32 channelId = 0; channelId < bindedChannels.size(); ++channelId) {
             db.Table<Schema::ChannelsBinding>().Key(shardIdx.GetLocalId(), channelId).Delete();
@@ -3591,6 +3599,7 @@ void TSchemeShard::PersistShardDeleted(NIceDb::TNiceDb& db, TShardIdx shardIdx, 
 void TSchemeShard::PersistUnknownShardDeleted(NIceDb::TNiceDb& db, TShardIdx shardIdx) {
     if (shardIdx.GetOwnerId() == TabletID()) {
         db.Table<Schema::ShardsToDelete>().Key(shardIdx.GetLocalId()).Delete();
+        db.Table<Schema::SystemShardsToDelete>().Key(shardIdx.GetLocalId()).Delete();
     }
 
     db.Table<Schema::MigratedShardsToDelete>().Key(shardIdx.GetOwnerId(), shardIdx.GetLocalId()).Delete();
@@ -4416,8 +4425,8 @@ void TSchemeShard::PersistLongIncrementalRestoreOp(NIceDb::TNiceDb& db, const NK
             NIceDb::TUpdate<Schema::IncrementalRestoreOperations::Operation>(data));
 }
 
-TTabletId TSchemeShard::GetGlobalHive(const TActorContext& ctx) const {
-    return TTabletId(AppData(ctx)->DomainsInfo->GetHive());
+TTabletId TSchemeShard::GetGlobalHive() const {
+    return TTabletId(AppData()->DomainsInfo->GetHive());
 }
 
 TShardIdx TSchemeShard::GetShardIdx(TTabletId tabletId) const {
@@ -4451,9 +4460,9 @@ TTabletTypes::EType TSchemeShard::GetTabletType(TTabletId tabletId) const {
     return pShardInfo->TabletType;
 }
 
-TTabletId TSchemeShard::ResolveHive(TPathId pathId, const TActorContext& ctx, EHiveSelection selection) const {
+TTabletId TSchemeShard::ResolveHive(TPathId pathId, EHiveSelection selection) const {
     if (!PathsById.contains(pathId)) {
-        return GetGlobalHive(ctx);
+        return GetGlobalHive();
     }
 
     TSubDomainInfo::TPtr subdomain = ResolveDomainInfo(pathId);
@@ -4468,33 +4477,37 @@ TTabletId TSchemeShard::ResolveHive(TPathId pathId, const TActorContext& ctx, EH
         return subdomain->GetSharedHive();
     }
 
-    return GetGlobalHive(ctx);
+    return GetGlobalHive();
 }
 
-TTabletId TSchemeShard::ResolveHive(TPathId pathId, const TActorContext& ctx) const {
-    return ResolveHive(pathId, ctx, EHiveSelection::ANY);
+TTabletId TSchemeShard::ResolveHive(TPathId pathId) const {
+    return ResolveHive(pathId, EHiveSelection::ANY);
 }
 
-TTabletId TSchemeShard::ResolveHive(TShardIdx shardIdx, const TActorContext& ctx) const {
+TTabletId TSchemeShard::ResolveHive(TShardIdx shardIdx) const {
     if (!ShardInfos.contains(shardIdx)) {
-        return GetGlobalHive(ctx);
+        return GetGlobalHive();
     }
 
-    return ResolveHive(ShardInfos.at(shardIdx).PathId, ctx, EHiveSelection::ANY);
+    return ResolveHive(ShardInfos.at(shardIdx).PathId, EHiveSelection::ANY);
 }
 
 void TSchemeShard::DoShardsDeletion(const THashSet<TShardIdx>& shardIdxs, const TActorContext& ctx) {
     TMap<TTabletId, THashSet<TShardIdx>> shardsPerHive;
     for (TShardIdx shardIdx : shardIdxs) {
-        TTabletId hiveToRequest = ResolveHive(shardIdx, ctx);
+        TTabletId hiveToRequest = ResolveHive(shardIdx);
 
         shardsPerHive[hiveToRequest].emplace(shardIdx);
     }
 
-    for (const auto& item: shardsPerHive) {
-        const auto& hive = item.first;
-        const auto& shards = item.second;
+    for (const auto& [hive, shards] : shardsPerHive) {
         ShardDeleter.SendDeleteRequests(hive, shards, ShardInfos, ctx);
+    }
+}
+
+void TSchemeShard::DoDeleteSystemShards(const THashSet<TShardIdx>& shards, const TActorContext& ctx) {
+    if (!shards.empty()) {
+        ShardDeleter.SendDeleteRequests(GetGlobalHive(), shards, ShardInfos, ctx);
     }
 }
 
@@ -5241,6 +5254,9 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
         HFuncTraced(TEvPrivate::TEvCleanDroppedPaths, Handle);
         HFuncTraced(TEvPrivate::TEvCleanDroppedSubDomains, Handle);
         HFuncTraced(TEvPrivate::TEvSubscribeToShardDeletion, Handle);
+
+        // Test-only notification
+        IgnoreFunc(TEvPrivate::TEvTestNotifySubdomainCleanup);
 
         HFuncTraced(TEvPrivate::TEvPersistTableStats, Handle);
         HFuncTraced(TEvPrivate::TEvPersistTopicStats, Handle);
@@ -6005,14 +6021,29 @@ void TSchemeShard::Handle(TEvTabletPipe::TEvServerDisconnected::TPtr &, const TA
 
 void TSchemeShard::Handle(TEvSchemeShard::TEvSyncTenantSchemeShard::TPtr& ev, const TActorContext& ctx) {
     const auto& record = ev->Get()->Record;
-    LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-               "Handle TEvSyncTenantSchemeShard"
-                   << ", at schemeshard: " << TabletID()
-                   << ", msg: " << record.DebugString());
+    LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Handle TEvSyncTenantSchemeShard, at schemeshard: " << TabletID()
+        << ", msg: " << record.ShortDebugString()
+    );
     Y_VERIFY_S(IsDomainSchemeShard, "unexpected message: schemeshard: " << TabletID() << " mgs: " << record.DebugString());
 
+    const TPathId pathId(record.GetDomainSchemeShard(), record.GetDomainPathId());
+
+    if (!SubDomains.contains(pathId)) {
+        LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Handle TEvSyncTenantSchemeShard, at schemeshard: " << TabletID()
+            << ", ignore spurious message from dropped subdomain's schemeshard (partial cleanup)" << pathId
+        );
+        return;
+    }
+
+    if (!PathsById.contains(pathId)) {
+        LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Handle TEvSyncTenantSchemeShard, at schemeshard: " << TabletID()
+            << ", ignore spurious message from dropped subdomain's schemeshard (full cleanup)" << pathId
+        );
+        return;
+    }
+
     if (SubDomainsLinks.Sync(ev, ctx)) {
-        Execute(CreateTxSyncTenant(TPathId(record.GetDomainSchemeShard(), record.GetDomainPathId())), ctx);
+        Execute(CreateTxSyncTenant(pathId), ctx);
     }
 }
 

@@ -125,9 +125,11 @@ public:
         : TFileDescriber(dir, "/permissions.pb")
     {
         google::protobuf::TextFormat::ParseFromString(
-                                R"(actions {
-                                    change_owner: "root@builtin"
-                                })", &PublicProto);
+            R"(actions {
+                change_owner: "root@builtin"
+            })", 
+            &PublicProto
+        );
     }
 };
 

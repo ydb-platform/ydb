@@ -49,7 +49,7 @@ class CherryPickCreator:
         self.dtm = datetime.datetime.now().strftime("%y%m%d-%H%M")
         self.logger = logging.getLogger("cherry-pick")
         try:
-            self.workflow_url = self.repo.get_workflow_run(os.getenv('GITHUB_RUN_ID', 0)).html_url
+            self.workflow_url = self.repo.get_workflow_run(int(os.getenv('GITHUB_RUN_ID', 0))).html_url
         except:
             self.workflow_url = None
 

@@ -10,6 +10,7 @@ Y_UNIT_TEST_SUITE(KqpOlapDelete) {
 
         TTestHelper testHelper(runnerSettings);
         auto client = testHelper.GetKikimr().GetQueryClient();
+        testHelper.GetKikimr().GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::TX_COLUMNSHARD_SCAN, NActors::NLog::PRI_TRACE);
 
         TVector<TTestHelper::TColumnSchema> schema = {
             TTestHelper::TColumnSchema().SetName("time").SetType(NScheme::NTypeIds::Timestamp).SetNullable(false),

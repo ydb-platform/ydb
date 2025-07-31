@@ -36,7 +36,7 @@ public:
     std::shared_ptr<ITableMetadataAccessor> TableMetadataAccessor;
     std::shared_ptr<NOlap::TPKRangesFilter> PKRangesFilter;
     NYql::NDqProto::EDqStatsMode StatsMode = NYql::NDqProto::EDqStatsMode::DQ_STATS_MODE_NONE;
-    EDeduplicationPolicy DeduplicationPolicy = EDeduplicationPolicy::ALLOW_DUPLICATES;
+    EDeduplicationPolicy DeduplicationPolicy = EDeduplicationPolicy::PREVENT_DUPLICATES;
 
     bool IsReverseSort() const {
         return Sorting == ERequestSorting::DESC;

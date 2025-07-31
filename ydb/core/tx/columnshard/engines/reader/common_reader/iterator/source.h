@@ -187,6 +187,14 @@ protected:
 
 public:
 
+    ui64 GetReservedMemory() const {
+        ui64 result = 0;
+        for (auto&& i : ResourceGuards) {
+            result += i->GetMemory();
+        }
+        return result;
+    }
+
     const TPortionDataAccessor& GetPortionAccessor() const {
         AFL_VERIFY(!!Accessor);
         return *Accessor;

@@ -13,8 +13,7 @@ public:
     )
         : ITableKindState(selfId, result)
     {
-        NavigateResult.reset(result.Release());
-        Path = JoinPath(NavigateResult->ResultSet.front().Path);
+        Path = JoinPath(result->ResultSet.front().Path);
     }
 
     NKqp::IDataBatcherPtr CreateDataBatcher() override {
@@ -43,7 +42,6 @@ public:
     }
 
 private:
-    std::shared_ptr<const NSchemeCache::TSchemeCacheNavigate> NavigateResult;
     TString Path;
 };
 

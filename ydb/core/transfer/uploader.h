@@ -41,7 +41,6 @@ private:
 
         TActivationContext::AsActorContext().RegisterWithSameMailbox(
             CreateUploaderInternal(tablePath, data, cookie)
-            //
         );
         CookieMapping[cookie] = tablePath;
     }

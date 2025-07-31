@@ -69,7 +69,14 @@ public:
                     break;
                 default:
                     Y_ABORT("Invalid state");
-                }
+            }
+        }
+
+        if (alter && Replication->GetState() == TReplication::EState::Error) {
+            Replication->SetState(TReplication::EState::Ready);
+            if (desiredState == TReplication::EState::Error) {
+                desiredState = TReplication::EState::Ready;
+            }
         }
 
         auto issue = Replication->GetIssue();

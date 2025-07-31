@@ -1149,5 +1149,44 @@ Y_UNIT_TEST_SUITE(Transfer)
         testCase.DropTransfer();
         testCase.DropTopic();
     }
+
+    Y_UNIT_TEST(AlterTargetDirectory)
+    {
+        MainTestCase testCase;
+        testCase.CreateTable(R"(
+                CREATE TABLE `%s` (
+                    Key Uint64 NOT NULL,
+                    Message Utf8,
+                    PRIMARY KEY (Key)
+                )  WITH (
+                    STORE = %s
+                );
+            )");
+        testCase.CreateTopic(1);
+
+        testCase.CreateTransfer(Sprintf(R"(
+                $l = ($x) -> {
+                    return [
+                        <|
+                            __ydb_table: "%s",
+                            Key:CAST($x._offset AS Uint64),
+                            Message:CAST($x._data AS Utf8)
+                        |>
+                    ];
+                };
+            )", testCase.TableName.data()));
+
+        testCase.Write({"Message-1"});
+        testCase.CheckTransferStateError("it is not allowed to specify a table to write");
+
+        testCase.AlterTransfer(MainTestCase::AlterTransferSettings::WithDirectory("/local"));
+        testCase.CheckResult({{
+            _C("Message", TString("Message-1"))
+        }});
+
+        testCase.DropTransfer();
+        testCase.DropTopic();
+        testCase.DropTable();
+    }
 }
 

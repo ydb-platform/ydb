@@ -463,9 +463,10 @@ struct MainTestCase {
     }
 
     struct AlterTransferSettings {
-        std::optional<TString> TransformLambda;
+        std::optional<std::string> TransformLambda;
         std::optional<TDuration> FlushInterval;
         std::optional<ui64> BatchSizeBytes;
+        std::optional<std::string> Directory;
 
         AlterTransferSettings()
             : FlushInterval(std::nullopt)
@@ -483,6 +484,12 @@ struct MainTestCase {
             result.TransformLambda = lambda;
             return result;
         }
+
+        static AlterTransferSettings WithDirectory(const std::string& directory) {
+            AlterTransferSettings result;
+            result.Directory = directory;
+            return result;
+        }
     };
 
     void AlterTransfer(const std::string& lambda) {
@@ -490,30 +497,33 @@ struct MainTestCase {
     }
 
     void AlterTransfer(const AlterTransferSettings& settings, bool success = true) {
-        TString lambda = settings.TransformLambda ? *settings.TransformLambda : "";
-        TString setLambda = settings.TransformLambda ? "SET USING $l" : "";
+        std::string lambda = settings.TransformLambda ? *settings.TransformLambda : "";
+        std::string setLambda = settings.TransformLambda ? "SET USING $l" : "";
 
-        TStringBuilder sb;
+        std::vector<std::string> options;
         if (settings.FlushInterval) {
-            sb << "FLUSH_INTERVAL = Interval('PT" << settings.FlushInterval->Seconds() << "S')" << Endl;
+            options.push_back(TStringBuilder() << "FLUSH_INTERVAL = Interval('PT" << settings.FlushInterval->Seconds() << "S')");
         }
         if (settings.BatchSizeBytes) {
-            sb << ", BATCH_SIZE_BYTES = " << *settings.BatchSizeBytes << Endl;
+            options.push_back(TStringBuilder() << "BATCH_SIZE_BYTES = " << *settings.BatchSizeBytes);
         }
 
-        TString setOptions;
-        if (!sb.empty()) {
-            setOptions = TStringBuilder() << "SET (" << sb << " )";
+        if (settings.Directory) {
+            options.push_back(TStringBuilder() << "DIRECTORY = \"" << *settings.Directory << "\"");
         }
 
-        auto res = Session().ExecuteQuery(Sprintf(R"(
+        std::string setOptions;
+        if (!options.empty()) {
+            setOptions = TStringBuilder() << "SET (" << JoinRange(",\n", options.begin(), options.end()) << " )";
+        }
+
+        ExecuteDDL(Sprintf(R"(
             %s;
 
             ALTER TRANSFER `%s`
             %s
             %s;
-        )", lambda.data(), TransferName.data(), setLambda.data(), setOptions.data()), TTxControl::NoTx()).GetValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(success, res.IsSuccess(), res.GetIssues().ToString());
+        )", lambda.data(), TransferName.data(), setLambda.data(), setOptions.data()), success);
     }
 
     void DropTransfer() {

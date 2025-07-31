@@ -189,17 +189,8 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
         }
     }
 
-    Y_UNIT_TEST(ExecSQLBIG) {
-
-        TPortManager pm;
-        TServerSettings serverSettings(pm.GetPort(2134));
-        serverSettings
-            .SetDomainName("Root")
-            .SetUseRealThreads(false)
-            .SetEnableDataColumnForIndexTable(true)
-            .SetEnableUuidAsPrimaryKey(true);
-
-        auto [runtime, server, sender] = TestCreateServer(serverSettings);
+    Y_UNIT_TEST(AsyncIndexKeySizeConstraint) {
+        auto [runtime, server, sender] = TestCreateServer();
 
         auto opts = TShardedTableOptions()
             .Columns({
@@ -210,17 +201,13 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
                 
             }).Indexes({{"by_val12", {"val1", "val2"}, {}, NKikimrSchemeOp::EIndexTypeGlobalAsync}});
 
-        runtime.GetAppData().FeatureFlags.SetEnableDataShardVolatileTransactions(true);
-
         auto [shards, tableId] = CreateShardedTable(server, sender, "/Root", "table-1", opts);
         const ui64 shard = shards[0];
         ui64 txId = 100;
-
        
         auto bigString = TString(NLimits::MaxWriteKeySize + 1,  'a');
         auto halfBigString1 = TString(NLimits::MaxWriteKeySize / 2,  'a');
         auto halfBigString2 = TString(bigString.size() - halfBigString1.size(),  'a');
-        
 
         Cout << "========= Insert normal data {sad, qwe, null} =========\n";
         {

@@ -154,6 +154,10 @@ public:
 private:
     void FillBlobsMetaData(const NKikimrClient::TKeyValueResponse::TReadRangeResult& range, const TActorContext& ctx);
     void FormHeadAndProceed();
+
+    // request to delete and rename keys from the new version
+    THolder<TEvKeyValue::TEvRequest> CompatibilityRequest;
+    bool WaitForDeleteAndRename = false;
 };
 
 class TInitDataStep: public TBaseKVStep {

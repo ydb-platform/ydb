@@ -12,6 +12,8 @@
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/public/lib/base/msgbus.h>
 
+#include <library/cpp/string_utils/base64/base64.h>
+#include <library/cpp/streams/bzip2/bzip2.h>
 #include <library/cpp/testing/unittest/registar.h>
 
 
@@ -137,6 +139,68 @@ void PQTabletPrepare(const TTabletPreparationParameters& parameters,
     PQTabletPrepare(parameters, users, *context.Runtime, context.TabletId, context.Edge);
 }
 
+
+// Allows you to create a topic with the required set of keys. The keys and values are taken from the resource file.
+// The values are expected to be BZIP2 compressed and BASE64 encoded.
+void PQTabletPrepareFromResource(const TTabletPreparationParameters& parameters,
+                                 const TVector<std::pair<TString, bool>>& users,
+                                 const TString& resourceName,
+                                 TTestActorRuntime& runtime,
+                                 ui64 tabletId,
+                                 TActorId edge)
+{
+    PQTabletPrepare(parameters,
+                    users,
+                    runtime,
+                    tabletId,
+                    edge);
+
+    auto request = MakeHolder<TEvKeyValue::TEvRequest>();
+    size_t count = 0;
+
+    for (TStringStream stream(NResource::Find(resourceName)); true; ++count) {
+        TString key, encoded;
+
+        stream >> key >> encoded;
+        if (key.empty() || encoded.empty()) {
+            break;
+        }
+
+        auto decoded = Base64Decode(encoded);
+        TStringInput decodedStream(decoded);
+        TBZipDecompress decompressor(&decodedStream);
+
+        auto* cmd = request->Record.AddCmdWrite();
+        cmd->SetKey(key);
+        cmd->SetValue(decompressor.ReadAll());
+    }
+
+    runtime.SendToPipe(tabletId, edge, request.Release(), 0, GetPipeConfigWithRetries());
+
+    TAutoPtr<IEventHandle> handle;
+    auto* response = runtime.GrabEdgeEvent<TEvKeyValue::TEvResponse>(handle);
+    UNIT_ASSERT(response);
+    UNIT_ASSERT(response->Record.HasStatus());
+    UNIT_ASSERT_EQUAL(response->Record.GetStatus(), NMsgBusProxy::MSTATUS_OK);
+
+    UNIT_ASSERT_VALUES_EQUAL(response->Record.WriteResultSize(), count);
+
+    for (size_t i = 0; i < response->Record.WriteResultSize(); ++i) {
+        const auto &result = response->Record.GetWriteResult(i);
+        UNIT_ASSERT(result.HasStatus());
+        UNIT_ASSERT_EQUAL(result.GetStatus(), NKikimrProto::OK);
+    }
+
+    PQTabletRestart(runtime, tabletId, edge);
+}
+
+void PQTabletPrepareFromResource(const TTabletPreparationParameters& parameters,
+                                 const TVector<std::pair<TString, bool>>& users,
+                                 const TString& resourceName,
+                                 TTestContext& context)
+{
+    PQTabletPrepareFromResource(parameters, users, resourceName, *context.Runtime, context.TabletId, context.Edge);
+}
 
 void CmdGetOffset(const ui32 partition, const TString& user, i64 expectedOffset, TTestContext& tc, i64 ctime,
                   ui64 writeTime) {

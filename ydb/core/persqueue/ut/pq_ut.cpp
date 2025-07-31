@@ -2669,5 +2669,34 @@ Y_UNIT_TEST(PQ_Tablet_Does_Not_Remove_The_Blob_Until_The_Reading_Is_Complete)
     UNIT_ASSERT(!keys.contains("d0000000000_00000000000000000003_00000_0000000001_00014"));
 }
 
+Y_UNIT_TEST(Test_The_Partition_And_Blob_Created_By_The_New_Version_1)
+{
+    TTestContext tc;
+    TFinalizer finalizer(tc);
+    tc.Prepare();
+
+    // This file contains all the combinations of neighboring keys. There are blobs in it 
+    // if you write messages in the topic in this order
+    // * 15 420Kb
+    // * 1 9Mb
+    // * 1 2Mb
+    // * 1 4Mb
+    // * 1 5Mb
+    // * 5 100Kb
+    PQTabletPrepareFromResource({.partitions = 1}, {}, "new_version_topic.dat", tc);
+}
+
+Y_UNIT_TEST(Test_The_Partition_And_Blob_Created_By_The_New_Version_2)
+{
+    TTestContext tc;
+    TFinalizer finalizer(tc);
+    tc.Prepare();
+
+    // This test checks the situation when the user recorded several messages, but they did not have
+    // time to repackage them. Their keys end in `?`. It is expected that after restarting the partition,
+    // the keys will end in `|`.
+    PQTabletPrepareFromResource({.partitions = 1}, {}, "new_version_topic_only_user_writes.dat", tc);
+}
+
 } // Y_UNIT_TEST_SUITE(TPQTest)
 } // namespace NKikimr::NPQ

@@ -60,6 +60,9 @@ RESOURCE(
     ydb/core/persqueue/ut/resources/counters_pqproxy.html counters_pqproxy.html
 
     ydb/core/persqueue/ut/resources/counters_labeled.json counters_labeled.json
+
+    ydb/core/persqueue/ut/resources/new_version_topic.dat new_version_topic.dat
+    ydb/core/persqueue/ut/resources/new_version_topic_only_user_writes.dat new_version_topic_only_user_writes.dat
 )
 
 END()

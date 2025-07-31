@@ -184,12 +184,14 @@ message ExecuteQueryRequest {
     // In case when stats_period_ms is specified and is non-zero, query statistics will be additionally sent every stats_period_ms milliseconds beginning from the start of query execution.
     int64 stats_period_ms = 11 [(Ydb.value) = ">= 0"];
 
-    // Format of data in the result sets.
-    // It's for get Ydb.ResultSet with Ydb.Value rows or other custom data.
-    // For the selected output format is filled output_format_meta field in Ydb.ResultSet.
-    oneof output_format {
-        Ydb.Formats.ValueOutputFormat value_output_format = 100;
-        Ydb.Formats.ArrowOutputFormat arrow_output_format = 101;
+    // Output format of the result sets.
+    Ydb.Formats.OutputFormat output_format = 12;
+
+    // Format settings for the result sets.
+    // It is used to configure the output format and its settings.
+    oneof output_format_settings {
+        Ydb.Formats.ValueOutputFormatSettings value_output_format_settings = 100;
+        Ydb.Formats.ArrowOutputFormatSettings arrow_output_format_settings = 101;
     }
 }
 

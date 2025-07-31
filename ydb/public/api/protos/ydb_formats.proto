@@ -26,6 +26,17 @@ message CsvSettings {
     Quoting quoting = 5;
 }
 
+enum OutputFormat {
+    // Unspecified, corresponds to OUTPUT_FORMAT_VALUE.
+    OUTPUT_FORMAT_UNSPECIFIED = 0;
+
+    // Default, used to get Ydb.Value as a result of the query in Ydb.ResultSet.rows field.
+    OUTPUT_FORMAT_VALUE = 1;
+
+    // Arrow output format, used to get binary representation of the result in Ydb.ResultSet.data field.
+    OUTPUT_FORMAT_ARROW = 2;
+}
+
 enum SchemaInclusionMode {
     // Unspecified mode, corresponds to SCHEMA_INCLUSION_MODE_ALWAYS mode.
     SCHEMA_INCLUSION_MODE_UNSPECIFIED = 0;
@@ -38,30 +49,18 @@ enum SchemaInclusionMode {
 }
 
 /**
- * ValueOutputFormat is a standard output format for Ydb.Query.ExecuteQueryRequest.
- * It is used to get Ydb.Value rows as a result of the query.
- * The output format is specified in the Ydb.Query.ExecuteQueryRequest.output_format field.
- *
- * ValueOutputFormatMeta is a metadata for ValueOutputFormat.
- * It is used to know the output format.
- * It is only filled in Ydb.ResultSet.output_format_meta field.
+ * ValueOutputFormatSettings is settings for OUTPUT_FORMAT_VALUE in Ydb.Query.ExecuteQueryRequest.
+ * It is used to configure schema inclusion mode.
  */
-message ValueOutputFormat {
+message ValueOutputFormatSettings {
     SchemaInclusionMode schema_inclusion_mode = 1;
 }
 
-message ValueOutputFormatMeta {}
-
 /**
- * ArrowOutputFormat is a custom output format for Ydb.Query.ExecuteQueryRequest.
- * It is used to get a serialized Arrow record batch in the Ydb.ResultSet.data field with/without compression.
- * The output format is specified in the Ydb.Query.ExecuteQueryRequest.output_format field.
- *
- * ArrowOutputFormatMeta is a metadata for ArrowOutputFormat.
- * It is used to know the output format and get the schema of the Arrow record batch.
- * It is only filled in Ydb.ResultSet.output_format_meta field.
+ * ArrowOutputFormatSettings is settings for OUTPUT_FORMAT_ARROW in Ydb.Query.ExecuteQueryRequest.
+ * It is used to configure compression and schema inclusion mode.
  */
-message ArrowOutputFormat {
+message ArrowOutputFormatSettings {
     message Compression {
         enum Type {
             // Unspecified mode, corresponds to COMPRESSION_NONE mode.
@@ -86,8 +85,13 @@ message ArrowOutputFormat {
     Compression compression = 2;
 }
 
+/**
+ * ArrowOutputFormatMeta is a metadata for OUTPUT_FORMAT_ARROW in Ydb.ResultSet.
+ * It is used to get the schema of the Arrow record batch.
+ */
 message ArrowOutputFormatMeta {
-    // Schema of the arrow batch of the result.
-    // It is filled only for SCHEMA_INCLUSION_MODE_ALWAYS, SCHEMA_INCLUSION_MODE_FIRST_ONLY in ExecuteQueryRequest.output_format.
+    // Schema of the arrow batch of the result. It is filled:
+    // - SCHEMA_INCLUSION_MODE_ALWAYS: in every Ydb.ResultSet.
+    // - SCHEMA_INCLUSION_MODE_FIRST_ONLY: in the first Ydb.ResultSet per result_set_index.
     bytes schema = 1;
 }

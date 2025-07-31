@@ -68,7 +68,7 @@ namespace NActors {
         }
         for (ui32 i = 0; i < Config.IO.size(); ++i) {
             poolInfos.push_back(TPoolShortInfo{
-                .PoolId = static_cast<i16>(Config.IO[poolIds[i]].PoolId),
+                .PoolId = static_cast<i16>(Config.IO[i].PoolId),
                 .SharedThreadCount = 0,
                 .ForeignSlots = 0,
                 .InPriorityOrder = false,

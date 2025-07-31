@@ -81,7 +81,7 @@ private:
 class TPortionsMemoryConsumer: public TMemoryConsumer {
 public:
     TPortionsMemoryConsumer()
-        : TMemoryConsumer(EMemoryConsumerKind::PortionsLimiter, {}) {
+        : TMemoryConsumer(EMemoryConsumerKind::PortionsMetaData, {}) {
     }
 
     ui64 GetConsumption() const override {
@@ -138,7 +138,7 @@ public:
         , ResourceBrokerSelfConfig(resourceBrokerConfig)
         , Counters(counters)
     {
-        Consumers.emplace(EMemoryConsumerKind::PortionsLimiter, MakeIntrusive<TPortionsMemoryConsumer>());
+        Consumers.emplace(EMemoryConsumerKind::PortionsMetaData, MakeIntrusive<TPortionsMemoryConsumer>());
     }
 
     void Bootstrap(const TActorContext& ctx) {
@@ -377,7 +377,7 @@ private:
             case EMemoryConsumerKind::ScanGroupedMemoryLimiter:
             case EMemoryConsumerKind::CompGroupedMemoryLimiter:
             case EMemoryConsumerKind::DeduplicationGroupedMemoryLimiter:
-            case EMemoryConsumerKind::PortionsLimiter:
+            case EMemoryConsumerKind::PortionsMetaData:
                 return consumer.Consumption;
         }
     }
@@ -396,7 +396,7 @@ private:
             case EMemoryConsumerKind::DeduplicationGroupedMemoryLimiter:
                 Send(consumer.ActorId, new TEvConsumerLimit(limitBytes));
                 break;
-            case EMemoryConsumerKind::PortionsLimiter:
+            case EMemoryConsumerKind::PortionsMetaData:
                 NKikimr::NOlap::NStorageOptimizer::IOptimizerPlanner::SetDynamicPortionsCountLimit(limitBytes / NKikimr::NOlap::TGlobalLimits::AveragePortionSizeLimit);
                 break;
         }
@@ -511,7 +511,7 @@ private:
                 stats.SetColumnTablesCompactionLimit(limitBytes);
                 break;
             }
-            case EMemoryConsumerKind::PortionsLimiter:
+            case EMemoryConsumerKind::PortionsMetaData:
             case EMemoryConsumerKind::DataAccessorCache:
             case EMemoryConsumerKind::ColumnDataCache:
             case EMemoryConsumerKind::BlobCache: {
@@ -567,7 +567,7 @@ private:
                 result.MaxBytes = result.MinBytes;
                 break;
             }
-            case EMemoryConsumerKind::PortionsLimiter: {
+            case EMemoryConsumerKind::PortionsMetaData: {
                 result.MinBytes = GetPortionsBytes(Config, hardLimitBytes);
                 result.MaxBytes = result.MinBytes;
                 break;

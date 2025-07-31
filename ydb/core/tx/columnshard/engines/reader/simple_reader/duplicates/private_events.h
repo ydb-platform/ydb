@@ -39,13 +39,13 @@ public:
 class TEvDuplicateSourceCacheResult
     : public NActors::TEventLocal<TEvDuplicateSourceCacheResult, NColumnShard::TEvPrivate::EvDuplicateSourceCacheResult> {
 private:
-    using TDataBySource = THashMap<ui64, std::shared_ptr<NArrow::TGeneralContainer>>;
-    TConclusion<TDataBySource> Result;
+    using TColumnData = THashMap<NGeneralCache::TGlobalColumnAddress, std::shared_ptr<NArrow::NAccessor::IChunkedArray>>;
+    TConclusion<TColumnData> Result;
     YDB_READONLY_DEF(std::shared_ptr<TInternalFilterConstructor>, Context);
     std::shared_ptr<NGroupedMemoryManager::TAllocationGuard> AllocationGuard;
 
 public:
-    TEvDuplicateSourceCacheResult(const std::shared_ptr<TInternalFilterConstructor>& context, TDataBySource&& data,
+    TEvDuplicateSourceCacheResult(const std::shared_ptr<TInternalFilterConstructor>& context, TColumnData&& data,
         std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>&& allocationGuard)
         : Result(std::move(data))
         , Context(context)
@@ -60,8 +60,12 @@ public:
     {
     }
 
-    const TConclusion<TDataBySource>& GetConclusion() const {
+    const TConclusion<TColumnData>& GetConclusion() const {
         return Result;
+    }
+
+    TColumnData&& ExtractResult() {
+        return Result.DetachResult();
     }
 
     std::shared_ptr<NGroupedMemoryManager::TAllocationGuard> ExtractAllocationGuard() {

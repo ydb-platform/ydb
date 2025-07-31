@@ -13,13 +13,11 @@ namespace NKikimr::NOlap::NReader::NSimple::NDuplicateFiltering {
 namespace {
 class TColumnFetchingCallback: public ::NKikimr::NGeneralCache::NPublic::ICallback<NGeneralCache::TColumnDataCachePolicy> {
 private:
-    using TAddress = NGeneralCache::TColumnDataCachePolicy::TAddress;
-    using TObject = NGeneralCache::TColumnDataCachePolicy::TObject;
+    using TAddress = NGeneralCache::TGlobalColumnAddress;
 
     TActorId Owner;
     TActorId ColumnShardActorId;
     YDB_READONLY_DEF(std::shared_ptr<TInternalFilterConstructor>, Context);
-    std::map<ui32, std::shared_ptr<arrow::Field>> Columns;
     std::vector<TPortionInfo::TConstPtr> Portions;
     std::shared_ptr<NGroupedMemoryManager::TAllocationGuard> AllocationGuard;
 
@@ -33,38 +31,17 @@ private:
         return !Owner;
     }
 
-    virtual void DoOnResultReady(THashMap<TAddress, TObject>&& objectAddresses, THashSet<TAddress>&& /*removedAddresses*/,
-        THashMap<TAddress, TString>&& errorAddresses) override {
+    virtual void DoOnResultReady(THashMap<TAddress, std::shared_ptr<NArrow::NAccessor::IChunkedArray>>&& objectAddresses,
+        THashSet<TAddress>&& /*removedAddresses*/, THashMap<TAddress, TString>&& errorAddresses) override {
         if (!errorAddresses.empty()) {
             TActorContext::AsActorContext().Send(Owner, new NPrivate::TEvDuplicateSourceCacheResult(Context, errorAddresses.begin()->second));
             OnDone();
             return;
         }
 
-        std::vector<std::shared_ptr<arrow::Field>> fields;
-        for (const auto& [_, field] : Columns) {
-            fields.emplace_back(field);
-        }
-
-        THashMap<ui64, std::shared_ptr<NArrow::TGeneralContainer>> result;
-        for (const TPortionInfo::TConstPtr& portion : Portions) {
-            std::vector<std::shared_ptr<NArrow::NAccessor::IChunkedArray>> columns;
-            for (const auto& [columnId, field] : Columns) {
-                std::shared_ptr<NArrow::NAccessor::IChunkedArray>* findColumn =
-                    objectAddresses.FindPtr(NGeneralCache::TGlobalColumnAddress(ColumnShardActorId, portion->GetAddress(), columnId));
-                AFL_VERIFY(findColumn)("portion", portion->DebugString())("column", columnId);
-                AFL_VERIFY(field->type()->Equals((*findColumn)->GetDataType()))("field", field->ToString())(
-                    "column", (*findColumn)->GetDataType()->ToString())("portion", portion->DebugString())("column_id", columnId);
-                columns.emplace_back(*findColumn);
-            }
-            std::shared_ptr<NArrow::TGeneralContainer> container = std::make_shared<NArrow::TGeneralContainer>(fields, std::move(columns));
-            result.emplace(portion->GetPortionId(), std::move(container));
-        }
-
-        AFL_VERIFY(Owner);
         AFL_VERIFY(AllocationGuard);
         TActorContext::AsActorContext().Send(
-            Owner, new NPrivate::TEvDuplicateSourceCacheResult(Context, std::move(result), std::move(AllocationGuard)));
+            Owner, new NPrivate::TEvDuplicateSourceCacheResult(Context, std::move(objectAddresses), std::move(AllocationGuard)));
         OnDone();
     }
 
@@ -74,11 +51,10 @@ private:
 
 public:
     TColumnFetchingCallback(const TActorId& owner, const TActorId& columnShardActorId, std::shared_ptr<TInternalFilterConstructor>&& context,
-        std::map<ui32, std::shared_ptr<arrow::Field>>&& columns, const std::vector<TPortionInfo::TConstPtr>& portions)
+        const std::vector<TPortionInfo::TConstPtr>& portions)
         : Owner(owner)
         , ColumnShardActorId(columnShardActorId)
         , Context(std::move(context))
-        , Columns(std::move(columns))
         , Portions(std::move(portions))
     {
     }
@@ -223,31 +199,21 @@ void TDuplicateManager::Handle(const TEvRequestFilter::TPtr& ev) {
         borders, NArrow::TFirstLastSpecialKeys(source->IndexKeyStart(), source->IndexKeyEnd(), source->IndexKeyStart().GetSchema()));
     std::shared_ptr<TInternalFilterConstructor> constructor = std::make_shared<TInternalFilterConstructor>(ev, std::move(splitter));
 
-    std::map<ui32, std::shared_ptr<arrow::Field>> fieldsByColumn;
-    {
-        for (const auto& columnId : PKColumns->GetColumnIds()) {
-            fieldsByColumn.emplace(columnId, PKColumns->GetFilteredSchemaVerified().GetFieldByColumnIdVerified(columnId));
-        }
-        for (const auto& columnId : TIndexInfo::GetSnapshotColumnIds()) {
-            fieldsByColumn.emplace(columnId, IIndexInfo::GetColumnFieldVerified(columnId));
-        }
-    }
-
     {
         std::vector<TPortionAddress> portionAddresses;
         for (const auto& portion : sourcesToFetch) {
             portionAddresses.emplace_back(portion->GetAddress());
         }
         std::set<ui32> columns;
-        for (const auto& [columnId, _] : fieldsByColumn) {
+        for (const auto& [columnId, _] : GetFetchingColumns()) {
             columns.emplace(columnId);
         }
 
         std::shared_ptr<TDataAccessorsRequest> request =
             std::make_shared<TDataAccessorsRequest>(NBlobOperations::EConsumer::DUPLICATE_FILTERING);
         request->RegisterSubscriber(std::make_shared<TColumnDataAccessorFetching>(
-            std::make_shared<TColumnFetchingCallback>(SelfId(), ColumnShardActorId, std::move(constructor), std::move(fieldsByColumn),
-                sourcesToFetch), ColumnShardActorId, portionAddresses, columns));
+            std::make_shared<TColumnFetchingCallback>(SelfId(), ColumnShardActorId, std::move(constructor), sourcesToFetch), ColumnShardActorId,
+            portionAddresses, columns));
         for (auto&& source : sourcesToFetch) {
             request->AddPortion(source);
         }
@@ -263,6 +229,25 @@ void TDuplicateManager::Handle(const NPrivate::TEvDuplicateSourceCacheResult::TP
         return;
     }
 
+    THashMap<ui64, std::shared_ptr<NArrow::TGeneralContainer>> dataByPortion;
+    {
+        auto columns = GetFetchingColumns();
+        std::vector<std::shared_ptr<arrow::Field>> fields;
+        for (const auto& [_, field] : columns) {
+            fields.emplace_back(field);
+        }
+
+        THashMap<ui64, std::vector<std::shared_ptr<NArrow::NAccessor::IChunkedArray>>> columnsByPortion;
+        for (auto&& [address, data] : ev->Get()->ExtractResult()) {
+            columnsByPortion[address.GetPortionId()].emplace_back(data);
+        }
+
+        for (auto& [portion, columns] : columnsByPortion) {
+            std::shared_ptr<NArrow::TGeneralContainer> container = std::make_shared<NArrow::TGeneralContainer>(fields, std::move(columns));
+            AFL_VERIFY(dataByPortion.emplace(portion, std::move(container)).second);
+        }
+    }
+
     const std::shared_ptr<TInternalFilterConstructor>& context = ev->Get()->GetContext();
     const TEvRequestFilter* filterRequest = context->GetRequest()->Get();
     const TColumnDataSplitter& splitter = context->GetIntervals();
@@ -270,7 +255,7 @@ void TDuplicateManager::Handle(const NPrivate::TEvDuplicateSourceCacheResult::TP
     auto allocationGuard = ev->Get()->ExtractAllocationGuard();
 
     THashMap<ui64, std::vector<TRowRange>> splitted;
-    for (const auto& [id, data] : *ev->Get()->GetConclusion()) {
+    for (const auto& [id, data] : dataByPortion) {
         splitted[id] = splitter.SplitPortion(data);
     }
 
@@ -333,7 +318,7 @@ void TDuplicateManager::Handle(const NPrivate::TEvDuplicateSourceCacheResult::TP
             const std::shared_ptr<TBuildDuplicateFilters> task = std::make_shared<TBuildDuplicateFilters>(
                 finish.GetKey().GetSchema(), maxVersionBatch, finish.GetKey(), finish.GetIsLast(), Counters, SelfId());
             for (auto&& [source, segment] : segments) {
-                const auto* columnData = ev->Get()->GetConclusion()->FindPtr(source);
+                const auto* columnData = dataByPortion.FindPtr(source);
                 AFL_VERIFY(columnData)("source", source);
                 TDuplicateMapInfo mapInfo(maxVersion, segment, source);
                 task->AddSource(*columnData, allocationGuard, mapInfo);

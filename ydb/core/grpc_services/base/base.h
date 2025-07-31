@@ -353,10 +353,9 @@ struct TAuditMode {
     bool IsModifying = true; // Log by default according to default settings
     ELogClass LogClass = TLogClassConfig::Default;
 
-    static TAuditMode NonModifying(ELogClass logClass) {
+    static TAuditMode NonModifying() {
         return TAuditMode{
-            .IsModifying = false,
-            .LogClass = logClass
+            .IsModifying = false
         };
     }
 

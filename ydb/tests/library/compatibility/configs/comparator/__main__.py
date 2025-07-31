@@ -190,7 +190,7 @@ function showGreen(evt) {
 <div class="tab">
   <button class="tablinks" onclick="openDescr(event, 'russian')">Описание</button>
   <button class="tablinks" onclick="openDescr(event, 'english')">Description</button>
-  <button class="" onclick="showGreen(event)">Show green</button>
+  <button class="" onclick="showGreen(event)">Show all diff</button>
 </div>
 <div id=russian class="tabcontent">
 <h1>Сравнение дефолтных конфигураций ydbd разных версий</h1>

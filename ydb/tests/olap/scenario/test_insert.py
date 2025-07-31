@@ -47,7 +47,7 @@ class TestInsert(BaseTestSet):
         sth = ScenarioTestHelper(ctx)
         log: str = sth.get_full_path("log" + table)
         cnt: str = sth.get_full_path("cnt" + table)
-        ignore_error: tuple[str] = {
+        ignore_error: Set[str] = {
             "Transaction locks invalidated"
         }
         for iteration in range(rows_count):

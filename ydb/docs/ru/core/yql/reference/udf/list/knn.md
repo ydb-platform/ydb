@@ -70,14 +70,14 @@ Knn::FloatFromBinaryString(String{Flags:AutoMap})->List<Float>?
 Функции сериализации векторных данных преобразуют массив элементов в байтовую строку следующего формата:
 
 - **Основная часть** — непрерывный массив элементов ([knn-serializer.h](https://github.com/ydb-platform/ydb/blob/0b506f56e399e0b4e6a6a4267799da68a3164bf7/ydb/library/yql/udfs/common/knn/knn-serializer.h#L19))
-- **Заголовок** — 1 байт в конце строки, обозначающий тип данных ([knn-defines.h](https://github.com/ydb-platform/ydb/blob/24026648dd7463d58e1470aa8981b17677116e7c/ydb/library/yql/udfs/common/knn/knn-defines.h#L5)):  
+- **Тип** — 1 байт в конце строки, обозначающий тип данных ([knn-defines.h](https://github.com/ydb-platform/ydb/blob/24026648dd7463d58e1470aa8981b17677116e7c/ydb/library/yql/udfs/common/knn/knn-defines.h#L5)):  
   `1` — `Float` (4 байта на элемент),  
   `2` — `Uint8` (1 байт на элемент),  
   `3` — `Int8` (1 байт на элемент),  
   `10` — `Bit` (1 бит на элемент)  
   
 
-Например, вектор из 5 элементов типа `Float` сериализуется в строку длиной 21 байт: 4 байта × 5 элементов (основная часть) + 1 байт (заголовок) = 21 байт.
+Например, вектор из 5 элементов типа `Float` сериализуется в строку длиной 21 байт: 4 байта × 5 элементов (основная часть) + 1 байт (тип) = 21 байт.
 
 #### Детали имплементации {#functions-convert-details}
 

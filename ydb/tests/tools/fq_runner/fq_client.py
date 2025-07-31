@@ -15,13 +15,15 @@ import ydb.public.api.protos.draft.fq_pb2 as fq
 from google.protobuf.duration_pb2 import Duration
 from google.protobuf.timestamp_pb2 import Timestamp
 
-from ydb.tests.library.common.helpers import plain_or_under_sanitizer
 from ydb.tests.tools.fq_runner.kikimr_runner import StreamingOverKikimr
 
 final_statuses = [fq.QueryMeta.COMPLETED, fq.QueryMeta.FAILED, fq.QueryMeta.ABORTED_BY_SYSTEM,
                   fq.QueryMeta.ABORTED_BY_USER, fq.QueryMeta.PAUSED]
 
-CONTROL_PLANE_REQUEST_TIMEOUT = plain_or_under_sanitizer(30.0, 60.0)
+CONTROL_PLANE_REQUEST_TIMEOUT = 60.0
+WAIT_QUERY_TIMEOUT = 200.0
+WAIT_QUERY_SLEEP_TIME = 0.5
+WAIT_QUERY_STATUS_TIMEOUT = 150.0
 
 
 class FederatedQueryException(Exception):
@@ -298,7 +300,7 @@ class FederatedQueryClient(object):
         return result.status
 
     # TODO: merge wait_query() and wait_query_status
-    def wait_query(self, query_id, timeout=plain_or_under_sanitizer(40, 200), statuses=final_statuses):
+    def wait_query(self, query_id, timeout=WAIT_QUERY_TIMEOUT, statuses=final_statuses):
         start = time.time()
         deadline = start + timeout
         while True:
@@ -316,10 +318,10 @@ class FederatedQueryClient(object):
                     response.result.query.issue,
                     response.result.query.transient_issue
                 )
-            time.sleep(plain_or_under_sanitizer(0.5, 2))
+            time.sleep(WAIT_QUERY_SLEEP_TIME)
 
     # Wait query status or one of statuses in list
-    def wait_query_status(self, query_id, expected_status, timeout=plain_or_under_sanitizer(60, 150)):
+    def wait_query_status(self, query_id, expected_status, timeout=WAIT_QUERY_STATUS_TIMEOUT):
         statuses = expected_status if isinstance(expected_status, list) else [expected_status]
         return self.wait_query(query_id, timeout, statuses=statuses).query.meta.status
 

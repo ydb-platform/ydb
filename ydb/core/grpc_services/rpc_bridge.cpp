@@ -29,11 +29,14 @@ namespace {
             switch (from.GetPerPileState(pileId.GetRawId())) {
                 case NKikimrBridge::TClusterState::DISCONNECTED:
                     return Ydb::Bridge::DISCONNECTED;
-                case NKikimrBridge::TClusterState::NOT_SYNCHRONIZED:
+                case NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_1:
+                case NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_2:
                     return Ydb::Bridge::NOT_SYNCHRONIZED;
                 case NKikimrBridge::TClusterState::SYNCHRONIZED:
-                default:
                     return Ydb::Bridge::SYNCHRONIZED;
+                case NKikimrBridge::TClusterState_EPileState_TClusterState_EPileState_INT_MIN_SENTINEL_DO_NOT_USE_:
+                case NKikimrBridge::TClusterState_EPileState_TClusterState_EPileState_INT_MAX_SENTINEL_DO_NOT_USE_:
+                    Y_ABORT();
             }
         }
     }
@@ -185,7 +188,7 @@ public:
                     internalState = NKikimrBridge::TClusterState::SYNCHRONIZED;
                     break;
                 case Ydb::Bridge::NOT_SYNCHRONIZED:
-                    internalState = NKikimrBridge::TClusterState::NOT_SYNCHRONIZED;
+                    internalState = NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_1;
                     break;
                 case Ydb::Bridge::DISCONNECTED:
                     internalState = NKikimrBridge::TClusterState::DISCONNECTED;

@@ -5,7 +5,11 @@
 #include <ydb/library/accessor/validator.h>
 #include <ydb/library/signals/object_counter.h>
 
+#include <ydb/core/tx/limiter/grouped_memory/tracing/probes.h>
+
 namespace NKikimr::NOlap::NGroupedMemoryManager {
+
+LWTRACE_USING(YDB_GROUPED_MEMORY_PROVIDER);
 
 class TProcessMemoryScope: public NColumnShard::TMonitoringObjectsCounter<TProcessMemoryScope> {
 private:
@@ -26,6 +30,8 @@ private:
     void UnregisterGroupImplExt(const ui64 externalGroupId) {
         auto data = WaitAllocations.ExtractGroupExt(externalGroupId);
         for (auto&& allocation : data) {
+            auto stage = allocation->GetStage();
+            LWPROBE(Allocated, "on_unregister", allocation->GetIdentifier(), stage->GetName(), stage->GetLimit(), stage->GetHardLimit().value_or(std::numeric_limits<ui64>::max()), stage->GetUsage().Val(), stage->GetWaiting().Val(), allocation->GetAllocationTime(), false, false);
             AFL_VERIFY(!allocation->Allocate(OwnerActorId));
         }
     }
@@ -69,25 +75,28 @@ public:
         return true;
     }
 
-    void RegisterAllocation(const bool isPriorityProcess, const ui64 externalGroupId, const std::shared_ptr<IAllocation>& task,
+    void RegisterAllocation(const bool isPriorityProcess, const ui64 externalGroupId, const std::shared_ptr<IAllocation>& allocation,
         const std::shared_ptr<TStageFeatures>& stage) {
-        AFL_VERIFY(task);
+        AFL_VERIFY(allocation);
         AFL_VERIFY(stage);
         if (!GroupIds.HasExternalId(externalGroupId)) {
-            AFL_VERIFY(!task->OnAllocated(std::make_shared<TAllocationGuard>(ExternalProcessId, ExternalScopeId, task->GetIdentifier(), OwnerActorId, task->GetMemory()), task))
+            LWPROBE(Allocated, "on_register", allocation->GetIdentifier(), stage->GetName(), stage->GetLimit(), stage->GetHardLimit().value_or(std::numeric_limits<ui64>::max()), stage->GetUsage().Val(), stage->GetWaiting().Val(), TDuration::Zero(), false, false);
+            AFL_VERIFY(!allocation->OnAllocated(std::make_shared<TAllocationGuard>(ExternalProcessId, ExternalScopeId, allocation->GetIdentifier(), OwnerActorId, allocation->GetMemory()), allocation))
                 ("ext_group", externalGroupId)("min_ext_group", GroupIds.GetMinExternalIdOptional())("stage", stage->GetName());
-            AFL_VERIFY(!AllocationInfo.contains(task->GetIdentifier()));
+            AFL_VERIFY(!AllocationInfo.contains(allocation->GetIdentifier()));
         } else {
-            auto allocationInfo = RegisterAllocationImpl(externalGroupId, task, stage);
+            auto allocationInfo = RegisterAllocationImpl(externalGroupId, allocation, stage);
 
             if (allocationInfo->GetAllocationStatus() != EAllocationStatus::Waiting) {
             } else if (WaitAllocations.GetMinExternalGroupId().value_or(externalGroupId) < externalGroupId) {
                 WaitAllocations.AddAllocationExt(externalGroupId, allocationInfo);
             } else if (allocationInfo->IsAllocatable(0) || (isPriorityProcess && externalGroupId <= GroupIds.GetMinExternalIdVerified())) {
                 Y_UNUSED(WaitAllocations.RemoveAllocationExt(externalGroupId, allocationInfo));
-                if (!allocationInfo->Allocate(OwnerActorId)) {
+                auto success = allocationInfo->Allocate(OwnerActorId);
+                if (!success) {
                     UnregisterAllocation(allocationInfo->GetIdentifier());
                 }
+                LWPROBE(Allocated, "on_register", allocationInfo->GetIdentifier(), stage->GetName(), stage->GetLimit(), stage->GetHardLimit().value_or(std::numeric_limits<ui64>::max()), stage->GetUsage().Val(), stage->GetWaiting().Val(), allocationInfo->GetAllocationTime(), false, success);
             } else {
                 WaitAllocations.AddAllocationExt(externalGroupId, allocationInfo);
             }

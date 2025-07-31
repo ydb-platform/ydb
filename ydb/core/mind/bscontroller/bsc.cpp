@@ -131,6 +131,7 @@ void TBlobStorageController::TGroupInfo::FillInGroupParameters(
         FillInResources(params->MutableAssuredResources(), true);
         FillInResources(params->MutableCurrentResources(), false);
         FillInVDiskResources(params);
+        params->SetGroupSizeInUnits(GroupSizeInUnits);
     }
 }
 
@@ -423,9 +424,8 @@ void TBlobStorageController::ApplyStorageConfig(bool ignoreDistconf) {
     InvokeOnRootTimer.Reset();
     InvokeOnRootCmd.reset();
 
-    if (StorageConfig->HasClusterStateHistory()) {
-        const auto& history = StorageConfig->GetClusterStateHistory();
-        for (const auto& unsynced : history.GetPileSyncState()) {
+    if (StorageConfig->HasClusterStateDetails()) {
+        for (const auto& unsynced : StorageConfig->GetClusterStateDetails().GetPileSyncState()) {
             if (unsynced.GetUnsyncedBSC()) {
                 auto ev = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
                 auto& record = ev->Record;

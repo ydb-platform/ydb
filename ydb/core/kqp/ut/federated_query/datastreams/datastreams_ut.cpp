@@ -1,5 +1,3 @@
-#include "pq_helpers.h"
-
 #include <ydb/core/external_sources/external_source.h>
 #include <ydb/core/kqp/common/events/events.h>
 #include <ydb/core/kqp/common/kqp_script_executions.h>
@@ -11,6 +9,7 @@
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_scripting.h>
 
+#include <ydb/library/testlib/pq_helpers/mock_pq_gateway.h>
 #include <ydb/library/testlib/s3_recipe_helper/s3_recipe_helper.h>
 #include <ydb/library/yql/providers/s3/actors/yql_s3_actors_factory_impl.h>
 
@@ -448,7 +447,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
     }
 
-    Y_UNIT_TEST(RestoreScriptPhysicalGraph) {
+    Y_UNIT_TEST(RestoreScriptPhysicalGraphBasic) {
         constexpr char writeBucket[] = "test_bucket_restore_script_physical_graph";
         CreateBucket(writeBucket);
 
@@ -550,8 +549,11 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         constexpr char writeBucket[] = "test_bucket_restore_script_physical_graph_on_retry";
         CreateBucket(writeBucket);
 
+        const auto pqGateway = CreateMockPqGateway();
+
+        constexpr char topicName[] = "restoreScriptTopicOnRetry";
         size_t numberEvents = 0;
-        const auto topicEvents = [&](TMockPqSession meta) -> NTopic::TReadSessionEvent::TEvent {
+        pqGateway->AddEventProvider(topicName, [&](TMockPqSession meta) -> NTopic::TReadSessionEvent::TEvent {
             numberEvents++;
 
             if (numberEvents == 1) {
@@ -559,26 +561,10 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
             }
 
             return MakePqMessage(numberEvents, R"({"key":"key1", "value": "value1"})", meta);
-        };
-
-        constexpr char pqSourceName[] = "sourceName";
-        constexpr char topicName[] = "restoreScriptTopicOnRetry";
-        const TMockPqGatewaySettings pqGatewaySettings = {
-            .Clusters = {{
-                JoinPath({"/Root", pqSourceName}), {
-                    .Database = GetEnv("YDB_DATABASE"),
-                    .ExpectedQueriesToCluster = 1
-                }
-            }},
-            .Topics = {{
-                GetEnv("YDB_DATABASE"), {{
-                    topicName, {.EventGen = topicEvents}
-                }}
-            }}
-        };
+        });
 
         auto kikimr = NFederatedQueryTest::MakeKikimrRunner(true, nullptr, nullptr, std::nullopt, NYql::NDq::CreateS3ActorsFactory(), {
-            .PqGateway = MakeIntrusive<TMockPqGateway>(pqGatewaySettings)
+            .PqGateway = pqGateway
         });
         auto db = kikimr->GetQueryClient();
 
@@ -593,6 +579,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         }
 
         constexpr char s3SinkName[] = "s3Sink";
+        constexpr char pqSourceName[] = "sourceName";
         {
             const auto query = fmt::format(R"(
                 CREATE EXTERNAL DATA SOURCE `{s3_sink}` WITH (

@@ -1031,38 +1031,6 @@ protected:
         }
     }
 
-    void RestoreSinks(const TStageInfo& stageInfo) {
-        const auto& stage = stageInfo.Meta.GetStage(stageInfo.Id);
-        if (stage.SinksSize() == 0) {
-            return;
-        }
-
-        YQL_ENSURE(stage.SinksSize() == 1, "multiple sinks are not supported");
-        const auto& sink = stage.GetSinks(0);
-
-        if (!sink.HasExternalSink()) {
-            YQL_ENSURE(false, "unsupported sink type for restore");
-        }
-
-        const auto& extSink = sink.GetExternalSink();
-        if (const auto sinkName = extSink.GetSinkName()) {
-            const auto structuredToken = NYql::CreateStructuredTokenParser(extSink.GetAuthInfo()).ToBuilder().ReplaceReferences(SecureParams).ToJson();
-            for (const auto taskId : stageInfo.Tasks) {
-                TasksGraph.GetTask(taskId).Meta.SecureParams.emplace(sinkName, structuredToken);
-            }
-        }
-    }
-
-    ui64 GetSelfNodeIdxInSnapshot(const TVector<NKikimrKqp::TKqpNodeResources>& resourceSnapshot) {
-        for (ui64 i = 0; i < resourceSnapshot.size(); ++i) {
-            if (resourceSnapshot[i].GetNodeId() == SelfId().NodeId()) {
-                return i;
-            }
-        }
-
-        return 0;
-    }
-
     void FillReadTaskFromSource(TTask& task, const TString& sourceName, const TString& structuredToken, const TVector<NKikimrKqp::TKqpNodeResources>& resourceSnapshot, ui64 nodeOffset) {
         if (structuredToken) {
             task.Meta.SecureParams.emplace(sourceName, structuredToken);
@@ -1118,7 +1086,24 @@ protected:
             structuredToken = NYql::CreateStructuredTokenParser(externalSource.GetAuthInfo()).ToBuilder().ReplaceReferences(SecureParams).ToJson();
         }
 
-        ui64 nodeOffset = GetSelfNodeIdxInSnapshot(resourceSnapshot);
+        ui64 nodeOffset = 0;
+        for (size_t i = 0; i < resourceSnapshot.size(); ++i) {
+            if (resourceSnapshot[i].GetNodeId() == SelfId().NodeId()) {
+                nodeOffset = i;
+                break;
+            }
+        }
+
+        if (Request.QueryPhysicalGraph) {
+            for (const auto taskId : stageInfo.Tasks) {
+                auto& task = TasksGraph.GetTask(taskId);
+                FillReadTaskFromSource(task, sourceName, structuredToken, resourceSnapshot, nodeOffset++);
+                FillSecureParamsFromStage(task.Meta.SecureParams, stage);
+                BuildSinks(stage, stageInfo, task);
+            }
+            return;
+        }
+
         TVector<ui64> tasksIds;
         tasksIds.reserve(taskCount);
 
@@ -1152,29 +1137,6 @@ protected:
         for (auto taskId : tasksIds) {
             BuildSinks(stage, stageInfo, TasksGraph.GetTask(taskId));
         }
-    }
-
-    void RestoreReadTasksFromSource(const TStageInfo& stageInfo, const TVector<NKikimrKqp::TKqpNodeResources>& resourceSnapshot) {
-        const auto& stage = stageInfo.Meta.GetStage(stageInfo.Id);
-        YQL_ENSURE(stage.GetSources(0).HasExternalSource());
-        YQL_ENSURE(stage.SourcesSize() == 1, "multiple sources in one task are not supported");
-
-        const auto& externalSource = stage.GetSources(0).GetExternalSource();
-        const auto sourceName = externalSource.GetSourceName();
-
-        TString structuredToken;
-        if (sourceName) {
-            structuredToken = NYql::CreateStructuredTokenParser(externalSource.GetAuthInfo()).ToBuilder().ReplaceReferences(SecureParams).ToJson();
-        }
-
-        ui64 nodeOffset = GetSelfNodeIdxInSnapshot(resourceSnapshot);
-        for (const auto taskId : stageInfo.Tasks) {
-            auto& task = TasksGraph.GetTask(taskId);
-            FillReadTaskFromSource(task, sourceName, structuredToken, resourceSnapshot, nodeOffset++);
-            FillSecureParamsFromStage(task.Meta.SecureParams, stage);
-        }
-
-        RestoreSinks(stageInfo);
     }
 
     TVector<TVector<TShardRangesWithShardId>> DistributeShardsToTasks(TVector<TShardRangesWithShardId> shardsRanges, const size_t tasksCount, const TVector<NScheme::TTypeInfo>& keyTypes) {
@@ -1517,6 +1479,17 @@ protected:
         auto& intros = stageInfo.Introspections;
         auto& stage = stageInfo.Meta.GetStage(stageInfo.Id);
 
+        if (Request.QueryPhysicalGraph) {
+            for (const auto taskId : stageInfo.Tasks) {
+                auto& task = TasksGraph.GetTask(taskId);
+                task.Meta.Type = TTaskMeta::TTaskType::Compute;
+                task.Meta.ExecuterId = SelfId();
+                FillSecureParamsFromStage(task.Meta.SecureParams, stage);
+                BuildSinks(stage, stageInfo, task);
+            }
+            return;
+        }
+
         ui32 partitionsCount = 1;
         ui32 inputTasks = 0;
         bool isShuffle = false;
@@ -1600,19 +1573,6 @@ protected:
             BuildSinks(stage, stageInfo, task);
             LOG_D("Stage " << stageInfo.Id << " create compute task: " << task.Id);
         }
-    }
-
-    void RestoreComputeTasks(const TStageInfo& stageInfo) {
-        const auto& stage = stageInfo.Meta.GetStage(stageInfo.Id);
-
-        for (const auto taskId : stageInfo.Tasks) {
-            auto& task = TasksGraph.GetTask(taskId);
-            task.Meta.Type = TTaskMeta::TTaskType::Compute;
-            task.Meta.ExecuterId = SelfId();
-            FillSecureParamsFromStage(task.Meta.SecureParams, stage);
-        }
-
-        RestoreSinks(stageInfo);
     }
 
     void FillReadInfo(TTaskMeta& taskMeta, ui64 itemsLimit, const NYql::ERequestSorting sorting) const

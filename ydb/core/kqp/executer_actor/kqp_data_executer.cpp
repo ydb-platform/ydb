@@ -1991,7 +1991,15 @@ private:
         return false;
     }
 
-    void BuildGraphTasksFromTransactions(size_t& sourceScanPartitionsCount) {
+    void Execute() {
+        LWTRACK(KqpDataExecuterStartExecute, ResponseEv->Orbit, TxId);
+
+        const bool graphRestored = Request.QueryPhysicalGraph != nullptr;
+        if (graphRestored) {
+            RestoreTasksGraphInfo(TasksGraph, *Request.QueryPhysicalGraph);
+        }
+
+        size_t sourceScanPartitionsCount = 0;
         for (ui32 txIdx = 0; txIdx < Request.Transactions.size(); ++txIdx) {
             auto& tx = Request.Transactions[txIdx];
             auto scheduledTaskCount = ScheduleByCost(tx, ResourcesSnapshot);
@@ -2001,6 +2009,11 @@ private:
                 const auto stageId = TStageId(txIdx, stageIdx);
                 auto& stageInfo = TasksGraph.GetStageInfo(stageId);
                 AFL_ENSURE(stageInfo.Id == stageId);
+
+                if (graphRestored && (stageInfo.Meta.ShardOperations || stageInfo.Meta.ShardKind != NSchemeCache::ETableKind::KindUnknown)) {
+                    ReplyErrorAndDie(Ydb::StatusIds::INTERNAL_ERROR, YqlIssue({}, NYql::TIssuesIds::KIKIMR_INTERNAL_ERROR, "Restore is not supported for table operations"));
+                    return;
+                }
 
                 if (stageInfo.Meta.ShardKind == NSchemeCache::ETableKind::KindAsyncIndexTable) {
                     TMaybe<TString> error;
@@ -2065,60 +2078,13 @@ private:
                 }
 
                 TasksGraph.GetMeta().AllowWithSpilling |= stage.GetAllowWithSpilling();
-                BuildKqpStageChannels(TasksGraph, stageInfo, TxId, /* enableSpilling */ TasksGraph.GetMeta().AllowWithSpilling, tx.Body->EnableShuffleElimination());
+                if (!graphRestored) {
+                    BuildKqpStageChannels(TasksGraph, stageInfo, TxId, /* enableSpilling */ TasksGraph.GetMeta().AllowWithSpilling, tx.Body->EnableShuffleElimination());
+                }
             }
 
             ResponseEv->InitTxResult(tx.Body);
             BuildKqpTaskGraphResultChannels(TasksGraph, tx.Body, txIdx);
-        }
-    }
-
-    void RestoreGraphTasks() {
-        YQL_ENSURE(Request.QueryPhysicalGraph);
-        RestoreTasksGraphInfo(TasksGraph, *Request.QueryPhysicalGraph);
-
-        for (size_t txIdx = 0; txIdx < Request.Transactions.size(); ++txIdx) {
-            const auto tx = Request.Transactions[txIdx].Body;
-            for (size_t stageIdx = 0; stageIdx < tx->StagesSize(); ++stageIdx) {
-                const auto& stageInfo = TasksGraph.GetStageInfo({txIdx, stageIdx});
-                const auto& meta = stageInfo.Meta;
-                if (meta.ShardOperations || meta.ShardKind != NSchemeCache::ETableKind::KindUnknown) {
-                    YQL_ENSURE(false, "Restore is not supported for table operations");
-                }
-
-                const auto& stage = tx->GetStages(stageIdx);
-                LOG_D("Stage " << stageInfo.Id << " AST: " << stage.GetProgramAst());
-
-                if (stage.SourcesSize() > 0) {
-                    switch (stage.GetSources(0).GetTypeCase()) {
-                        case NKqpProto::TKqpSource::kExternalSource: {
-                            RestoreReadTasksFromSource(stageInfo, ResourcesSnapshot);
-                            break;
-                        }
-                        default: {
-                            YQL_ENSURE(false, "Unsupported source type for restore");
-                            break;
-                        }
-                    }
-                } else {
-                    RestoreComputeTasks(stageInfo);
-                }
-
-                TasksGraph.GetMeta().AllowWithSpilling |= stage.GetAllowWithSpilling();
-            }
-
-            ResponseEv->InitTxResult(tx);
-        }
-    }
-
-    void Execute() {
-        LWTRACK(KqpDataExecuterStartExecute, ResponseEv->Orbit, TxId);
-
-        size_t sourceScanPartitionsCount = 0;
-        if (!Request.QueryPhysicalGraph) {
-            BuildGraphTasksFromTransactions(sourceScanPartitionsCount);
-        } else {
-            RestoreGraphTasks();
         }
 
         TIssue validateIssue;

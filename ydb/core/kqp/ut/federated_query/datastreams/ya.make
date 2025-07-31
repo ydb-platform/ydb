@@ -7,7 +7,6 @@ SIZE(MEDIUM)
 
 SRCS(
     datastreams_ut.cpp
-    pq_helpers.cpp
 )
 
 PEERDIR(
@@ -15,6 +14,7 @@ PEERDIR(
     ydb/core/kqp
     ydb/core/kqp/ut/common
     ydb/core/kqp/ut/federated_query/common
+    ydb/library/testlib/pq_helpers
     ydb/library/testlib/s3_recipe_helper
     yql/essentials/sql/pg
     yql/essentials/parser/pg_wrapper

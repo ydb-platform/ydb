@@ -1188,5 +1188,74 @@ Y_UNIT_TEST_SUITE(Transfer)
         testCase.DropTopic();
         testCase.DropTable();
     }
+
+    Y_UNIT_TEST(WriteToNotExists)
+    {
+        MainTestCase testCase;
+        testCase.CreateTable(R"(
+                CREATE TABLE `%s` (
+                    Key Uint64 NOT NULL,
+                    Message Utf8,
+                    PRIMARY KEY (Key)
+                )  WITH (
+                    STORE = %s
+                );
+            )");
+        testCase.CreateTopic(1);
+
+        testCase.CreateTransfer(R"(
+                $l = ($x) -> {
+                    return [
+                        <|
+                            __ydb_table: "not_exists_table",
+                            Key:CAST($x._offset AS Uint64),
+                            Message:CAST($x._data AS Utf8)
+                        |>
+                    ];
+                };
+            )", MainTestCase::CreateTransferSettings::WithDirectory("/local"));
+
+        testCase.Write({"Message-1"});
+        testCase.CheckTransferStateError(" unknown table");
+
+        testCase.DropTransfer();
+        testCase.DropTopic();
+        testCase.DropTable();
+    }
+
+    Y_UNIT_TEST(WriteToNotTable)
+    {
+        MainTestCase testCase;
+        testCase.CreateTable(R"(
+                CREATE TABLE `%s` (
+                    Key Uint64 NOT NULL,
+                    Message Utf8,
+                    PRIMARY KEY (Key)
+                )  WITH (
+                    STORE = %s
+                );
+            )");
+        testCase.CreateTopic(1);
+
+        testCase.CreateTransfer(Sprintf(R"(
+                $l = ($x) -> {
+                    return [
+                        <|
+                            __ydb_table: "%s",
+                            Key:CAST($x._offset AS Uint64),
+                            Message:CAST($x._data AS Utf8)
+                        |>
+                    ];
+                };
+            )", testCase.TopicName.data()),
+            MainTestCase::CreateTransferSettings::WithDirectory("/local"));
+
+        testCase.Write({"Message-1"});
+        testCase.CheckTransferStateError(" unknown table");
+
+        testCase.DropTransfer();
+        testCase.DropTopic();
+        testCase.DropTable();
+    }
 }
 

@@ -339,7 +339,7 @@ public:
 private:
     const char* TopicScheme = R"(
         Name: "Topic_%d"
-        TotalGroupCount: 2
+        TotalGroupCount: 1
         PartitionPerTablet: 1
         PQTabletConfig {
             PartitionConfig {

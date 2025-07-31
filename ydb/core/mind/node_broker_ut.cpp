@@ -4608,10 +4608,25 @@ Y_UNIT_TEST_SUITE(TDynamicNameserverTest) {
         TVector<NKikimrNodeBroker::TResolveNode> resolveRequests;
 
         auto logRequests = [&](TAutoPtr<IEventHandle> &event) -> auto {
-            if (event->GetTypeRewrite() == TEvNodeBroker::EvListNodes)
-                listRequests.push_back(event->Get<TEvNodeBroker::TEvListNodes>()->Record);
-            else if (event->GetTypeRewrite() == TEvNodeBroker::EvResolveNode)
-                resolveRequests.push_back(event->Get<TEvNodeBroker::TEvResolveNode>()->Record);
+            switch (event->GetTypeRewrite()) {
+                case TEvInterconnect::EvListNodes:
+                    if (runtime.FindActorName(event->Sender) == "TABLET_RESOLVER_ACTOR") {
+                        // block TEvListNodes from tablet resolver
+                        return TTestActorRuntime::EEventAction::DROP;
+                    }
+                    break;
+
+                case TEvNodeBroker::EvListNodes:
+                    listRequests.push_back(event->Get<TEvNodeBroker::TEvListNodes>()->Record);
+                    break;
+
+                case TEvNodeBroker::EvResolveNode:
+                    resolveRequests.push_back(event->Get<TEvNodeBroker::TEvResolveNode>()->Record);
+                    break;
+
+                default:
+                    break;
+            }
             return TTestActorRuntime::EEventAction::PROCESS;
         };
 

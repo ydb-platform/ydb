@@ -557,7 +557,7 @@ namespace NActors {
             node->ActorSystem = MakeActorSystem(nodeIndex, node);
         }
 
-        node->ActorSystem->Start();
+        StartActorSystem(nodeIndex, node);
     }
 
     bool TTestActorRuntimeBase::AllowSendFrom(TNodeDataBase* node, TAutoPtr<IEventHandle>& ev) {
@@ -1606,12 +1606,12 @@ namespace NActors {
         TGuard<TMutex> guard(Mutex);
         if (allow) {
             if (VERBOSE) {
-                Cerr << "Actor " << actorId << " added to schedule whitelist";
+                Cerr << "Actor " << actorId << " added to schedule whitelist\n";
             }
             ScheduleWhiteList.insert(actorId);
         } else {
             if (VERBOSE) {
-                Cerr << "Actor " << actorId << " removed from schedule whitelist";
+                Cerr << "Actor " << actorId << " removed from schedule whitelist\n";
             }
             ScheduleWhiteList.erase(actorId);
         }
@@ -1840,6 +1840,27 @@ namespace NActors {
         }
 
         return actorSystem;
+    }
+
+    void TTestActorRuntimeBase::StartActorSystem(ui32 nodeIndex, TNodeDataBase* node) {
+        Y_UNUSED(nodeIndex);
+
+        node->ActorSystem->Start();
+
+        if (!UseRealThreads) {
+            for (const auto& cmd : node->LocalServices) {
+                auto it = ScheduleWhiteList.find(cmd.first);
+                if (it != ScheduleWhiteList.end()) {
+                    if (TActorId actorId = node->ActorSystem->LookupLocalService(cmd.first)) {
+                        if (VERBOSE) {
+                            Cerr << "Service " << cmd.first << " actor " << actorId << " added to schedule whitelist\n";
+                        }
+                        ScheduleWhiteList.insert(actorId);
+                        ScheduleWhiteListParent[actorId] = cmd.first;
+                    }
+                }
+            }
+        }
     }
 
     TActorSystem* TTestActorRuntimeBase::SingleSys() const {

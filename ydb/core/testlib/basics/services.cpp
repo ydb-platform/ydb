@@ -86,6 +86,9 @@ namespace NPDisk {
         IActor* tabletResolver = CreateTabletResolver(tabletResolverConfig);
         runtime.AddLocalService(MakeTabletResolverID(),
             TActorSetupCmd(tabletResolver, TMailboxType::Revolving, 0), nodeIndex);
+
+        // TabletResolver needs timers for retries
+        runtime.EnableScheduleForActor(MakeTabletResolverID());
     }
 
     void SetupTabletPipePerNodeCaches(TTestActorRuntime& runtime, ui32 nodeIndex, bool forceFollowers)
@@ -503,11 +506,6 @@ namespace NPDisk {
                 NSysView::MakeSysViewServiceID(runtime.GetNodeId(nodeIndex)), nodeIndex);
             Y_ABORT_UNLESS(sysViewServiceId, "Missing SysView Service on node %" PRIu32, nodeIndex);
             runtime.EnableScheduleForActor(sysViewServiceId);
-
-            // TabletResolver needs timers for retries
-            auto tabletResolverActorId = runtime.GetLocalServiceId(MakeTabletResolverID(), nodeIndex);
-            Y_ABORT_UNLESS(tabletResolverActorId, "Missing TabletResolver on node %" PRIu32, nodeIndex);
-            runtime.EnableScheduleForActor(tabletResolverActorId);
         }
 
 

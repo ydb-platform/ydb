@@ -329,18 +329,12 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
             // Don't overload state storage when leader is inaccessible
             if (entry.CurrentLeaderSuspect && entry.CurrentLeaderProblem) {
                 switch (++retryNumber) {
-                    case 1: {
-                        retryDelay = {};
-                        break;
-                    }
-                    case 2: {
+                    case 1:
                         retryDelay = TDuration::MilliSeconds(1);
                         break;
-                    }
-                    default: {
+                    default:
                         retryDelay = Min(retryDelay * 2, TDuration::MilliSeconds(300));
                         break;
-                    }
                 }
             } else {
                 retryNumber = 0;

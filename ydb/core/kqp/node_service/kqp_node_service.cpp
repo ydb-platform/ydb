@@ -159,12 +159,6 @@ private:
 
         Y_ASSERT(!poolId.empty());
 
-        auto addDatabaseEvent = MakeHolder<NScheduler::TEvAddDatabase>();
-        addDatabaseEvent->Id = databaseId;
-        Send(MakeKqpSchedulerServiceId(SelfId().NodeId()), addDatabaseEvent.Release());
-
-        Send(MakeKqpSchedulerServiceId(SelfId().NodeId()), new NScheduler::TEvAddPool(databaseId, poolId));
-
         NScheduler::NHdrf::NDynamic::TQueryPtr query;
         if (!databaseId.empty() && (poolId != NResourcePool::DEFAULT_POOL_ID || AccountDefaultPoolInScheduler)) {
             auto addQueryEvent = MakeHolder<NScheduler::TEvAddQuery>();

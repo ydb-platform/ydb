@@ -2861,21 +2861,23 @@ ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = UPSERT_OPTIONS,
                 SELECT
                     AvailableSize,
                     BoxId,
+                    DecommitStatus,
+                    ExpectedSlotCount,
                     Guid,
+                    InferPDiskSlotCountFromUnitSize,
                     Kind,
                     NodeId,
-                    PDiskId,
+                    NumActiveSlots,
                     Path,
+                    PDiskId,
                     ReadCentric,
                     SharedWithOS,
+                    SlotSizeInUnits,
                     State,
                     Status,
                     StatusChangeTimestamp,
                     TotalSize,
-                    Type,
-                    ExpectedSlotCount,
-                    NumActiveSlots,
-                    DecommitStatus
+                    Type
                 FROM `/Root/.sys/ds_pdisks`
                 WHERE BoxId IS NOT NULL;
             )").GetValueSync();
@@ -2892,25 +2894,27 @@ ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = UPSERT_OPTIONS,
             }
         }
 
-        TYsonFieldChecker check(ysonString, 17);
+        TYsonFieldChecker check(ysonString, 19);
 
         check.Uint64(0u); // AvailableSize
         check.Uint64(999u); // BoxId
+        check.String("DECOMMIT_NONE"); // DecommitStatus
+        check.Uint64(16); // ExpectedSlotCount
         check.Uint64(123u); // Guid
+        check.Uint64(0); // InferPDiskSlotCountFromUnitSize
         check.Uint64(0u); // Kind
         check.Uint64(env.GetServer().GetRuntime()->GetNodeId(0)); // NodeId
-        check.Uint64(1u); // PDiskId
+        check.Uint64(2); // NumActiveSlots
         check.StringContains("pdisk_1.dat"); // Path
+        check.Uint64(1u); // PDiskId
         check.Bool(false); // ReadCentric
         check.Bool(false); // SharedWithOS
+        check.Uint64(0u); // SlotSizeInUnits
         check.String("Initial"); // State
         check.String("ACTIVE"); // Status
         check.Null(); // StatusChangeTimestamp
         check.Uint64(0u); // TotalSize
         check.String("ROT"); // Type
-        check.Uint64(16); // ExpectedSlotCount
-        check.Uint64(2); // NumActiveSlots
-        check.String("DECOMMIT_NONE"); // DecommitStatus
     }
 
     Y_UNIT_TEST(VSlotsFields) {
@@ -2990,6 +2994,7 @@ ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = UPSERT_OPTIONS,
                     Generation,
                     GetFastLatency,
                     GroupId,
+                    GroupSizeInUnits,
                     LifeCyclePhase,
                     PutTabletLogLatency,
                     PutUserDataLatency,
@@ -3012,7 +3017,7 @@ ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = UPSERT_OPTIONS,
             }
         }
 
-        TYsonFieldChecker check(ysonString, 15);
+        TYsonFieldChecker check(ysonString, 16);
 
         check.Uint64(0u); // AllocatedSize
         check.Uint64GreaterOrEquals(0u); // AvailableSize
@@ -3022,6 +3027,7 @@ ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = UPSERT_OPTIONS,
         check.Uint64(1u); // Generation
         check.Null(); // GetFastLatency
         check.Uint64(2181038080u); // GroupId
+        check.Uint64(0u); // GroupSizeInUnits
         check.Uint64(0u); // LifeCyclePhase
         check.Null(); // PutTabletLogLatency
         check.Null(); // PutUserDataLatency
@@ -3042,6 +3048,7 @@ ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = UPSERT_OPTIONS,
             auto it = client.StreamExecuteScanQuery(R"(
                 SELECT
                     BoxId,
+                    DefaultGroupSizeInUnits,
                     EncryptionMode,
                     ErasureSpecies,
                     Generation,
@@ -3067,9 +3074,10 @@ ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = UPSERT_OPTIONS,
             }
         }
 
-        TYsonFieldChecker check(ysonString, 11);
+        TYsonFieldChecker check(ysonString, 12);
 
         check.Uint64(999u); // BoxId
+        check.Uint64(0u); // DefaultGroupSizeInUnits
         check.Uint64(0u); // EncryptionMode
         check.String("none"); // ErasureSpecies
         check.Uint64(1u); // Generation

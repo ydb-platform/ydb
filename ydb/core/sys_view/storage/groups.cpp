@@ -41,6 +41,7 @@ public:
             {T::ExpectedStatus::ColumnId, {E::kInfoFieldNumber, V::kExpectedStatusFieldNumber}},
             {T::ProxyGroupId::ColumnId, {E::kInfoFieldNumber, V::kProxyGroupIdFieldNumber}},
             {T::BridgePileId::ColumnId, {E::kInfoFieldNumber, V::kBridgePileIdFieldNumber}},
+            {T::GroupSizeInUnits::ColumnId, {E::kInfoFieldNumber, V::kGroupSizeInUnitsFieldNumber}},
         };
         return fieldMap;
     }

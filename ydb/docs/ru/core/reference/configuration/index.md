@@ -652,7 +652,7 @@ $Max(shared\_cache\_min\_percent * hard\_limit\_bytes / 100, shared\_cache\_min\
 | `mem_table_max_percent`&nbsp;/<br/>`mem_table_max_bytes` | 3% | Максимальный порог для лимита памяти MemTable. |
 | `query_execution_limit_percent`&nbsp;/<br/>`query_execution_limit_bytes` | 20% | Лимит памяти для KQP. |
 | `column_tables_read_execution_limit_percent`&nbsp;/<br/>`column_tables_read_execution_limit_bytes` | 20% | Лимит памяти для операций чтения колоночных таблиц. |
-| `column_tables_compaction_limit_percent`&nbsp;/<br/>`column_tables_compaction_limit_bytes` | 36% | Лимит памяти для операций компактизации колоночных таблиц. |
+| `column_tables_compaction_limit_percent`&nbsp;/<br/>`column_tables_compaction_limit_bytes` | 20% | Лимит памяти для операций компактизации колоночных таблиц. |
 | `column_tables_cache_limit_percent`&nbsp;/<br/>`column_tables_cache_limit_bytes` | 10% | Лимит памяти для кэша колоночных таблиц. |
 
 ## blob_storage_config — статическая группа кластера {#blob-storage-config}

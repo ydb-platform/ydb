@@ -435,7 +435,7 @@ $Max(shared\_cache\_min\_percent * hard\_limit\_bytes / 100, shared\_cache\_min\
 | `mem_table_max_percent`&nbsp;/<br/>`mem_table_max_bytes` | 3% | Maximum threshold for the MemTable memory limit. |
 | `query_execution_limit_percent`&nbsp;/<br/>`query_execution_limit_bytes` | 20% | KQP memory limit. |
 | `column_tables_read_execution_limit_percent`&nbsp;/<br/>`column_tables_read_execution_limit_bytes` | 20% | Memory limit for column tables reading operations. |
-| `column_tables_compaction_limit_percent`&nbsp;/<br/>`column_tables_compaction_limit_bytes` | 36% | Memory limit for column tables compaction operations. |
+| `column_tables_compaction_limit_percent`&nbsp;/<br/>`column_tables_compaction_limit_bytes` | 20% | Memory limit for column tables compaction operations. |
 | `column_tables_cache_limit_percent`&nbsp;/<br/>`column_tables_cache_limit_bytes` | 10% | Memory limit for column tables cache. |
 
 ## blob_storage_config: Static cluster group {#blob-storage-config}

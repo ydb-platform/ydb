@@ -11,12 +11,9 @@ public:
     void SetTaskCounters(const TIntrusivePtr<NYql::NDq::TSpillingTaskCounters>& /*spillingTaskCounters*/) override {
     }
 
-    void SetMemoryUsageReporter(TMemoryUsageReporter::TPtr memoryUsageReporter) override {
-        MemoryUsageReporter_ = memoryUsageReporter;
-    }
-
-    TMemoryUsageReporter::TPtr GetMemoryUsageReporter() const override {
-        return MemoryUsageReporter_;
+    void SetMemoryReportingCallbacks(std::function<bool(ui64)> reportAlloc, std::function<void(ui64)> reportFree) override {
+        ReportAllocCallback_ = std::move(reportAlloc);
+        ReportFreeCallback_ = std::move(reportFree);
     }
 
     ISpiller::TPtr CreateSpiller() override {
@@ -29,9 +26,18 @@ public:
         return Spillers_;
     }
 
+    const std::function<bool(ui64)>& GetReportAllocCallback() const {
+        return ReportAllocCallback_;
+    }
+
+    const std::function<void(ui64)>& GetReportFreeCallback() const {
+        return ReportFreeCallback_;
+    }
+
 private:
     std::vector<ISpiller::TPtr> Spillers_;
-    TMemoryUsageReporter::TPtr MemoryUsageReporter_;
+    std::function<bool(ui64)> ReportAllocCallback_;
+    std::function<void(ui64)> ReportFreeCallback_;
 };
 
 } // namespace NKikimr::NMiniKQL

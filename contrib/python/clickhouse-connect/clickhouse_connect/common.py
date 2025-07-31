@@ -41,8 +41,9 @@ def build_client_name(client_name: str):
             os_user = f'; os_user:{getpass.getuser()}'
         except Exception:  # pylint: disable=broad-except
             pass
-    return (f'{client_name}{product_name}clickhouse-connect/{version()}' +
+    full_name = (f'{client_name}{product_name}clickhouse-connect/{version()}' +
             f' (lv:py/{py_version}; mode:sync; os:{sys.platform}{os_user})')
+    return full_name.encode('ascii', 'ignore').decode()
 
 
 def get_setting(name: str):

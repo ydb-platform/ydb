@@ -3,7 +3,7 @@ import re
 import pytz
 
 from io import IOBase
-from typing import Any, Tuple, Dict, Sequence, Optional, Union, Generator
+from typing import Any, Tuple, Dict, Sequence, Optional, Union, Generator, BinaryIO
 from datetime import tzinfo
 
 from pytz.exceptions import UnknownTimeZoneError
@@ -52,7 +52,8 @@ class QueryContext(BaseQueryContext):
                  as_pandas: bool = False,
                  streaming: bool = False,
                  apply_server_tz: bool = False,
-                 external_data: Optional[ExternalData] = None):
+                 external_data: Optional[ExternalData] = None,
+                 transport_settings: Optional[Dict[str, str]] = None):
         """
         Initializes various configuration settings for the query context
 
@@ -85,7 +86,8 @@ class QueryContext(BaseQueryContext):
                          column_formats,
                          encoding,
                          use_extended_dtypes if use_extended_dtypes is not None else False,
-                         use_numpy if use_numpy is not None else False)
+                         use_numpy if use_numpy is not None else False,
+                         transport_settings=transport_settings)
         self.query = query
         self.parameters = parameters or {}
         self.use_none = True if use_none is None else use_none
@@ -189,7 +191,8 @@ class QueryContext(BaseQueryContext):
                      use_extended_dtypes: Optional[bool] = None,
                      as_pandas: bool = False,
                      streaming: bool = False,
-                     external_data: Optional[ExternalData] = None) -> 'QueryContext':
+                     external_data: Optional[ExternalData] = None,
+                     transport_settings: Optional[Dict[str, str]] = None) -> 'QueryContext':
         """
         Creates Query context copy with parameters overridden/updated as appropriate.
         """
@@ -210,7 +213,8 @@ class QueryContext(BaseQueryContext):
                             as_pandas,
                             streaming,
                             self.apply_server_tz,
-                            self.external_data if external_data is None else external_data)
+                            self.external_data if external_data is None else external_data,
+                            self.transport_settings if transport_settings is None else transport_settings)
 
     def _update_query(self):
         self.final_query, self.bind_params = bind_query(self.query, self.parameters, self.server_tz)
@@ -374,7 +378,7 @@ def to_arrow_batches(buffer: IOBase) -> StreamContext:
     return StreamContext(buffer, reader)
 
 
-def arrow_buffer(table, compression: Optional[str] = None) -> Tuple[Sequence[str], bytes]:
+def arrow_buffer(table, compression: Optional[str] = None) -> Tuple[Sequence[str], Union[bytes, BinaryIO]]:
     pyarrow = check_arrow()
     options = None
     if compression in ('zstd', 'lz4'):

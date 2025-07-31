@@ -218,35 +218,37 @@ private:
         }
 
         auto& resultSet = self->ResultSets_[resultSetIndex];
-        resultSet.set_type(inRsProto.type());
 
         if (resultSet.columns().empty()) {
             resultSet.mutable_columns()->CopyFrom(inRsProto.columns());
         }
 
-        switch (resultSet.type()) {
-            case Ydb::ResultSet::MESSAGE: {
+        switch (inRsProto.output_format_meta_case()) {
+            case Ydb::ResultSet::OutputFormatMetaCase::kValueOutputFormatMeta: {
+                resultSet.mutable_value_output_format_meta()->CopyFrom(inRsProto.value_output_format_meta());
                 resultSet.mutable_rows()->Reserve(resultSet.mutable_rows()->size() + inRsProto.rows_size());
                 for (const auto& row : inRsProto.rows()) {
                     *resultSet.mutable_rows()->Add() = row;
                 }
                 break;
             }
-            case Ydb::ResultSet::ARROW: {
-                if (resultSet.arrow_batch_settings().schema().empty()) {
-                    const auto& protoSchema = inRsProto.arrow_batch_settings().schema();
-                    resultSet.mutable_arrow_batch_settings()->set_schema(protoSchema);
+            case Ydb::ResultSet::OutputFormatMetaCase::kArrowOutputFormatMeta: {
+                resultSet.mutable_arrow_output_format_meta()->CopyFrom(inRsProto.arrow_output_format_meta());
+                if (resultSet.arrow_output_format_meta().schema().empty()) {
+                    const auto& protoSchema = inRsProto.arrow_output_format_meta().schema();
+                    resultSet.mutable_arrow_output_format_meta()->set_schema(protoSchema);
                 }
 
-                const auto& schema = resultSet.arrow_batch_settings().schema();
+                const auto& schema = resultSet.arrow_output_format_meta().schema();
                 auto trySerializedBatch = NArrow::CombineSerializedBatches(resultSet.data(), inRsProto.data(), schema);
                 if (trySerializedBatch.ok()) {
                     resultSet.set_data(*trySerializedBatch);
                 }
                 break;
             }
-            default:
+            default: {
                 break;
+            }
         }
     }
 };
@@ -262,7 +264,6 @@ public:
         request.set_exec_mode(::Ydb::Query::ExecMode(settings.ExecMode_));
         request.set_stats_mode(::Ydb::Query::StatsMode(settings.StatsMode_));
         request.set_pool_id(TStringType{settings.ResourcePool_});
-        request.set_result_set_type(Ydb::ResultSet::Type(settings.ResultSetType_));
         request.mutable_query_content()->set_text(TStringType{query});
         request.mutable_query_content()->set_syntax(::Ydb::Query::Syntax(settings.Syntax_));
         if (session.has_value()) {
@@ -272,6 +273,15 @@ public:
                     std::holds_alternative<std::string>(txControl.Tx_)) {
             throw TContractViolation("Interactive tx must use explisit session");
         }
+
+        std::visit([&request](const auto& outputFormat) {
+            using T = std::decay_t<decltype(outputFormat)>;
+            if constexpr (std::is_same_v<T, TValueOutputFormat>) {
+                outputFormat.ExportToProto(request.mutable_value_output_format());
+            } else if constexpr (std::is_same_v<T, TArrowOutputFormat>) {
+                outputFormat.ExportToProto(request.mutable_arrow_output_format());
+            }
+        }, settings.OutputFormat_);
 
         if (settings.ConcurrentResultSets_) {
             request.set_concurrent_result_sets(*settings.ConcurrentResultSets_);

@@ -12,6 +12,8 @@
 
 #include <library/cpp/threading/future/future.h>
 
+#include <ydb/public/api/protos/ydb_formats.pb.h>
+
 namespace NYdb::inline Dev::NQuery {
 
 enum class ESyntax {
@@ -75,12 +77,65 @@ private:
 
 using TAsyncExecuteQueryIterator = NThreading::TFuture<TExecuteQueryIterator>;
 
+struct TOutputFormatBase {
+    TOutputFormatBase(Ydb::Formats::SchemaInclusionMode mode = Ydb::Formats::SchemaInclusionMode::SCHEMA_INCLUSION_MODE_ALWAYS)
+        : SchemaInclusionMode(mode)
+    {}
+
+    Ydb::Formats::SchemaInclusionMode SchemaInclusionMode;
+};
+
+struct TValueOutputFormat : public TOutputFormatBase {
+    TValueOutputFormat(Ydb::Formats::SchemaInclusionMode mode = Ydb::Formats::SchemaInclusionMode::SCHEMA_INCLUSION_MODE_ALWAYS)
+        : TOutputFormatBase(mode)
+    {}
+
+    void ExportToProto(Ydb::Formats::ValueOutputFormat* proto) const {
+        proto->set_schema_inclusion_mode(SchemaInclusionMode);
+    }
+
+    static TValueOutputFormat ImportFromProto(const Ydb::Formats::ValueOutputFormat& proto) {
+        return TValueOutputFormat{proto.schema_inclusion_mode()};
+    }
+};
+
+struct TArrowOutputFormat : public TOutputFormatBase {
+    enum class ECompression {
+        UNSPECIFIED = 0,
+        NONE = 1,
+        ZSTD = 2,
+        LZ4_FRAME = 3,
+    };
+
+    TArrowOutputFormat(ECompression compression = ECompression::NONE, i32 level = std::numeric_limits<i32>::min(),
+        Ydb::Formats::SchemaInclusionMode mode = Ydb::Formats::SchemaInclusionMode::SCHEMA_INCLUSION_MODE_ALWAYS)
+        : TOutputFormatBase(mode)
+        , Compression(compression)
+        , CompressionLevel(level)
+    {}
+
+    void ExportToProto(Ydb::Formats::ArrowOutputFormat* proto) const {
+        proto->mutable_compression()->set_type(static_cast<Ydb::Formats::ArrowOutputFormat::Compression::Type>(Compression));
+        proto->mutable_compression()->set_level(CompressionLevel);
+        proto->set_schema_inclusion_mode(SchemaInclusionMode);
+    }
+
+    static TArrowOutputFormat ImportFromProto(const Ydb::Formats::ArrowOutputFormat& proto) {
+        return TArrowOutputFormat{ECompression(proto.compression().type()), proto.compression().level(), proto.schema_inclusion_mode()};
+    }
+
+    ECompression Compression;
+    i32 CompressionLevel;
+};
+
+using TOutputFormat = std::variant<TValueOutputFormat, TArrowOutputFormat>;
+
 struct TExecuteQuerySettings : public TRequestSettings<TExecuteQuerySettings> {
     FLUENT_SETTING_OPTIONAL(uint32_t, OutputChunkMaxSize);
     FLUENT_SETTING_DEFAULT(ESyntax, Syntax, ESyntax::YqlV1);
     FLUENT_SETTING_DEFAULT(EExecMode, ExecMode, EExecMode::Execute);
     FLUENT_SETTING_DEFAULT(EStatsMode, StatsMode, EStatsMode::None);
-    FLUENT_SETTING_DEFAULT(TResultSet::EType, ResultSetType, TResultSet::EType::Unspecified);
+    FLUENT_SETTING_DEFAULT(TOutputFormat, OutputFormat, TValueOutputFormat());
     FLUENT_SETTING_OPTIONAL(bool, ConcurrentResultSets);
     FLUENT_SETTING(std::string, ResourcePool);
     FLUENT_SETTING_OPTIONAL(std::chrono::milliseconds, StatsCollectPeriod);

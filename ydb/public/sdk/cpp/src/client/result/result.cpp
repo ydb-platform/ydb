@@ -55,25 +55,34 @@ public:
             ColumnsMeta_.push_back(TColumn(meta.name(), TType(meta.type())));
         }
 
-        if (ProtoResultSet_.type() == Ydb::ResultSet::ARROW) {
-            auto trySchema = NArrow::DeserializeSchema(ProtoResultSet_.arrow_batch_settings().schema());
-            if (!trySchema.ok()) {
-                return;
+        switch (ProtoResultSet_.output_format_meta_case()) {
+            case Ydb::ResultSet::OutputFormatMetaCase::kValueOutputFormatMeta: {
+                break;
             }
+            case Ydb::ResultSet::OutputFormatMetaCase::kArrowOutputFormatMeta: {
+                auto trySchema = NArrow::DeserializeSchema(ProtoResultSet_.arrow_output_format_meta().schema());
+                if (!trySchema.ok()) {
+                    return;
+                }
 
-            auto tryBatch = NArrow::DeserializeBatch(ProtoResultSet_.data(), *trySchema);
-            if (!tryBatch.ok()) {
-                return;
+                auto tryBatch = NArrow::DeserializeBatch(ProtoResultSet_.data(), *trySchema);
+                if (!tryBatch.ok()) {
+                    return;
+                }
+
+                ArrowBatch = std::move(*tryBatch);
+                break;
             }
-
-            arrow_batch = std::move(*tryBatch);
+            default: {
+                break;
+            }
         }
     }
 
 public:
     const Ydb::ResultSet ProtoResultSet_;
     std::vector<TColumn> ColumnsMeta_;
-    std::shared_ptr<arrow::RecordBatch> arrow_batch;
+    std::shared_ptr<arrow::RecordBatch> ArrowBatch;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -89,14 +98,16 @@ size_t TResultSet::ColumnsCount() const {
 }
 
 size_t TResultSet::RowsCount() const {
-    switch (GetType()) {
-        case TResultSet::EType::Unspecified:
-        case TResultSet::EType::Message:
+    switch (Impl_->ProtoResultSet_.output_format_meta_case()) {
+        case Ydb::ResultSet::OutputFormatMetaCase::kValueOutputFormatMeta: {
             return Impl_->ProtoResultSet_.rows_size();
-        case TResultSet::EType::Arrow:
-            return Impl_->arrow_batch->num_rows();
-        default:
+        }
+        case Ydb::ResultSet::OutputFormatMetaCase::kArrowOutputFormatMeta: {
+            return Impl_->ArrowBatch->num_rows();
+        }
+        default: {
             return 0;
+        }
     }
 }
 
@@ -108,12 +119,8 @@ const std::vector<TColumn>& TResultSet::GetColumnsMeta() const {
     return Impl_->ColumnsMeta_;
 }
 
-TResultSet::EType TResultSet::GetType() const {
-    return TResultSet::EType(Impl_->ProtoResultSet_.type());
-}
-
 std::shared_ptr<arrow::RecordBatch> TResultSet::GetArrowBatch() const {
-    return Impl_->arrow_batch;
+    return Impl_->ArrowBatch;
 }
 
 const TString& TResultSet::GetSerializedArrowBatch() const {
@@ -121,28 +128,11 @@ const TString& TResultSet::GetSerializedArrowBatch() const {
 }
 
 const TString& TResultSet::GetSerializedArrowBatchSchema() const {
-    return Impl_->ProtoResultSet_.arrow_batch_settings().schema();
+    return Impl_->ProtoResultSet_.arrow_output_format_meta().schema();
 }
 
 const Ydb::ResultSet& TResultSet::GetProto() const {
     return Impl_->ProtoResultSet_;
-}
-
-IOutputStream& operator<<(IOutputStream& out, const TResultSet::EType& type) {
-    out << "TResultSet::EType::";
-    switch (type) {
-        case TResultSet::EType::Unspecified:
-            out << "Unspecified";
-            break;
-        case TResultSet::EType::Message:
-            out << "Message";
-            break;
-        case TResultSet::EType::Arrow:
-            out << "Arrow";
-            break;
-    }
-
-    return out;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

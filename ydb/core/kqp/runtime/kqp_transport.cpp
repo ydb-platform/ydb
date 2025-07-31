@@ -109,6 +109,17 @@ void TKqpProtoBuilder::BuildYdbResultSet(
 
     NDq::TDqDataSerializer dataSerializer(*TypeEnv, *HolderFactory, transportVersion);
 
+    ui32 rowsCount = 0;
+    if (arrowFormat) {
+        for (const auto& part : data) {
+            if (!part.ChunkCount()) {
+                continue;
+            }
+
+            rowsCount += part.RowCount();
+        }
+    }
+
     if (valueFormat) {
         for (auto& part : data) {
             if (!part.ChunkCount()) {
@@ -125,7 +136,26 @@ void TKqpProtoBuilder::BuildYdbResultSet(
 
         resultSet.mutable_value_output_format_meta();
     } else if (arrowFormat) {
-        NArrow::TArrowBatchBuilder batchBuilder(arrow::Compression::UNCOMPRESSED, arrowNotNullColumns);
+        const auto& format = std::get<TArrowOutputFormat>(outputFormat);
+        auto compression = format.Compression;
+        i32 compressionLevel = format.CompressionLevel;
+
+        arrow::Compression::type codec = arrow::Compression::UNCOMPRESSED;
+        switch (compression) {
+            case TArrowOutputFormat::ECompression::ZSTD:
+                codec = arrow::Compression::ZSTD;
+                break;
+            case TArrowOutputFormat::ECompression::LZ4_FRAME:
+                codec = arrow::Compression::LZ4_FRAME;
+                break;
+            default:
+                break;
+        }
+
+        NArrow::TArrowBatchBuilder batchBuilder(codec, compressionLevel, arrowNotNullColumns);
+
+        batchBuilder.Reserve(rowsCount);
+
         YQL_ENSURE(batchBuilder.Start(arrowSchema).ok());
 
         TRowBuilder rowBuilder(arrowSchema.size());
@@ -140,8 +170,9 @@ void TKqpProtoBuilder::BuildYdbResultSet(
 
             rows.ForEachRow([&](const NUdf::TUnboxedValue& value) {
                 for (size_t i = 0; i < arrowSchema.size(); ++i) {
+                    ui32 memberIndex = (!columnOrder || columnOrder->empty()) ? i : (*columnOrder)[i];
                     const auto& [name, type] = arrowSchema[i];
-                    rowBuilder.AddCell(i, type, value.GetElement(i), type.GetPgTypeMod(name));
+                    rowBuilder.AddCell(i, type, value.GetElement(memberIndex), type.GetPgTypeMod(name));
                 }
 
                 auto cells = rowBuilder.BuildCells();

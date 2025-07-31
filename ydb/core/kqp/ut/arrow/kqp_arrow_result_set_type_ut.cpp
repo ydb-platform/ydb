@@ -96,7 +96,7 @@ void CreateAllColumnsOlap(TQueryClient& client) {
     UNIT_ASSERT_C(insertResult.IsSuccess(), insertResult.GetIssues().ToString());
 }
 
-void CompareResultSets(const TResultSet& messageResultSet, const TResultSet& arrowResultSet) {
+void CompareResultSetsSize(const TResultSet& messageResultSet, const TResultSet& arrowResultSet) {
     UNIT_ASSERT_VALUES_EQUAL(messageResultSet.RowsCount(), arrowResultSet.RowsCount());
     UNIT_ASSERT_VALUES_EQUAL(messageResultSet.ColumnsCount(), arrowResultSet.ColumnsCount());
 
@@ -125,15 +125,15 @@ Y_UNIT_TEST_SUITE(KqpArrowResultSetType) {
         )", (isOlap) ? "OlapTable" : "OltpTable");
 
         auto messageResponse = client.ExecuteQuery(query, TTxControl::BeginTx().CommitTx(),
-            TExecuteQuerySettings().ResultSetType(TResultSet::EType::Message)).GetValueSync();
+            TExecuteQuerySettings().OutputFormat(TValueOutputFormat{})).GetValueSync();
 
         auto arrowResponse = client.ExecuteQuery(query, TTxControl::BeginTx().CommitTx(),
-            TExecuteQuerySettings().ResultSetType(TResultSet::EType::Arrow)).GetValueSync();
+            TExecuteQuerySettings().OutputFormat(TArrowOutputFormat{})).GetValueSync();
 
         UNIT_ASSERT_C(messageResponse.IsSuccess(), messageResponse.GetIssues().ToString());
         UNIT_ASSERT_C(arrowResponse.IsSuccess(), arrowResponse.GetIssues().ToString());
 
-        CompareResultSets(messageResponse.GetResultSet(0), arrowResponse.GetResultSet(0));
+        CompareResultSetsSize(messageResponse.GetResultSet(0), arrowResponse.GetResultSet(0));
     }
 
     Y_UNIT_TEST(LargeTable) {
@@ -148,15 +148,15 @@ Y_UNIT_TEST_SUITE(KqpArrowResultSetType) {
         )");
 
         auto messageResponse = client.ExecuteQuery(query, TTxControl::BeginTx().CommitTx(),
-            TExecuteQuerySettings().ResultSetType(TResultSet::EType::Message)).GetValueSync();
+            TExecuteQuerySettings().OutputFormat(TValueOutputFormat{})).GetValueSync();
 
         auto arrowResponse = client.ExecuteQuery(query, TTxControl::BeginTx().CommitTx(),
-            TExecuteQuerySettings().ResultSetType(TResultSet::EType::Arrow)).GetValueSync();
+            TExecuteQuerySettings().OutputFormat(TArrowOutputFormat{})).GetValueSync();
 
         UNIT_ASSERT_C(messageResponse.IsSuccess(), messageResponse.GetIssues().ToString());
         UNIT_ASSERT_C(arrowResponse.IsSuccess(), arrowResponse.GetIssues().ToString());
 
-        CompareResultSets(messageResponse.GetResultSet(0), arrowResponse.GetResultSet(0));
+        CompareResultSetsSize(messageResponse.GetResultSet(0), arrowResponse.GetResultSet(0));
     }
 
     Y_UNIT_TEST(LargeLimitTable) {
@@ -171,15 +171,15 @@ Y_UNIT_TEST_SUITE(KqpArrowResultSetType) {
         )");
 
         auto messageResponse = client.ExecuteQuery(query, TTxControl::BeginTx().CommitTx(),
-            TExecuteQuerySettings().ResultSetType(TResultSet::EType::Message)).GetValueSync();
+            TExecuteQuerySettings().OutputFormat(TValueOutputFormat{})).GetValueSync();
 
         auto arrowResponse = client.ExecuteQuery(query, TTxControl::BeginTx().CommitTx(),
-            TExecuteQuerySettings().ResultSetType(TResultSet::EType::Arrow)).GetValueSync();
+            TExecuteQuerySettings().OutputFormat(TArrowOutputFormat{})).GetValueSync();
 
         UNIT_ASSERT_C(messageResponse.IsSuccess(), messageResponse.GetIssues().ToString());
         UNIT_ASSERT_C(arrowResponse.IsSuccess(), arrowResponse.GetIssues().ToString());
 
-        CompareResultSets(messageResponse.GetResultSet(0), arrowResponse.GetResultSet(0));
+        CompareResultSetsSize(messageResponse.GetResultSet(0), arrowResponse.GetResultSet(0));
     }
 
     Y_UNIT_TEST_TWIN(Returning, isOlap) {
@@ -211,15 +211,248 @@ Y_UNIT_TEST_SUITE(KqpArrowResultSetType) {
         }
 
         auto messageResponse = client.ExecuteQuery(query, TTxControl::BeginTx().CommitTx(),
-            TExecuteQuerySettings().ResultSetType(TResultSet::EType::Message)).GetValueSync();
+            TExecuteQuerySettings().OutputFormat(TValueOutputFormat{})).GetValueSync();
 
         auto arrowResponse = client.ExecuteQuery(query, TTxControl::BeginTx().CommitTx(),
-            TExecuteQuerySettings().ResultSetType(TResultSet::EType::Arrow)).GetValueSync();
+            TExecuteQuerySettings().OutputFormat(TArrowOutputFormat{})).GetValueSync();
 
         UNIT_ASSERT_C(messageResponse.IsSuccess(), messageResponse.GetIssues().ToString());
         UNIT_ASSERT_C(arrowResponse.IsSuccess(), arrowResponse.GetIssues().ToString());
 
-        CompareResultSets(messageResponse.GetResultSet(0), arrowResponse.GetResultSet(0));
+        CompareResultSetsSize(messageResponse.GetResultSet(0), arrowResponse.GetResultSet(0));
+    }
+
+    Y_UNIT_TEST(ColumnOrder_1) {
+        auto kikimr = CreateKikimrRunner();
+        auto client = kikimr.GetQueryClient();
+
+        {
+            auto result = client.ExecuteQuery(R"(
+                SELECT Name, Amount FROM Test WHERE Group = 2;
+            )", TTxControl::BeginTx().CommitTx(), TExecuteQuerySettings().OutputFormat(TArrowOutputFormat{})).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            auto batch = result.GetResultSet(0).GetArrowBatch();
+            UNIT_ASSERT_VALUES_EQUAL(batch->num_rows(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(batch->num_columns(), 2);
+
+            std::vector<std::tuple<std::string, ui64>> expected = {{"Tony", 7200}};
+
+            auto nameColumn = std::static_pointer_cast<arrow::BinaryArray>(batch->column(0));
+            auto amountColumn = std::static_pointer_cast<arrow::UInt64Array>(batch->column(1));
+
+            for (int64_t i = 0; i < batch->num_rows(); ++i) {
+                const auto& row = expected[i];
+
+                UNIT_ASSERT(!nameColumn->IsNull(i));
+                UNIT_ASSERT_VALUES_EQUAL(nameColumn->GetString(i), std::get<0>(row));
+
+                UNIT_ASSERT(!amountColumn->IsNull(i));
+                UNIT_ASSERT_VALUES_EQUAL(amountColumn->Value(i), std::get<1>(row));
+
+            }
+        }
+        {
+            auto result = client.ExecuteQuery(R"(
+                SELECT Amount, Name FROM Test WHERE Group = 2;
+            )", TTxControl::BeginTx().CommitTx(), TExecuteQuerySettings().OutputFormat(TArrowOutputFormat{})).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            auto batch = result.GetResultSet(0).GetArrowBatch();
+            UNIT_ASSERT_VALUES_EQUAL(batch->num_rows(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(batch->num_columns(), 2);
+
+            std::vector<std::tuple<ui64, std::string>> expected = {{7200, "Tony"}};
+
+            auto amountColumn = std::static_pointer_cast<arrow::UInt64Array>(batch->column(0));
+            auto nameColumn = std::static_pointer_cast<arrow::BinaryArray>(batch->column(1));
+
+            for (int64_t i = 0; i < batch->num_rows(); ++i) {
+                const auto& row = expected[i];
+
+                UNIT_ASSERT(!amountColumn->IsNull(i));
+                UNIT_ASSERT_VALUES_EQUAL(amountColumn->Value(i), std::get<0>(row));
+
+                UNIT_ASSERT(!nameColumn->IsNull(i));
+                UNIT_ASSERT_VALUES_EQUAL(nameColumn->GetString(i), std::get<1>(row));
+
+            }
+        }
+        {
+            auto result = client.ExecuteQuery(R"(
+                SELECT Comment, Amount, Name FROM Test ORDER BY Amount DESC;
+            )", TTxControl::BeginTx().CommitTx(), TExecuteQuerySettings().OutputFormat(TArrowOutputFormat{})).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            auto batch = result.GetResultSet(0).GetArrowBatch();
+            UNIT_ASSERT_VALUES_EQUAL(batch->num_rows(), 3);
+            UNIT_ASSERT_VALUES_EQUAL(batch->num_columns(), 3);
+
+            std::vector<std::tuple<std::string, ui64, std::string>> expected = {{"None", 7200, "Tony"}, {"None", 3500, "Anna"}, {"None", 300, "Paul"}};
+
+            auto commentColumn = std::static_pointer_cast<arrow::BinaryArray>(batch->column(0));
+            auto amountColumn = std::static_pointer_cast<arrow::UInt64Array>(batch->column(1));
+            auto nameColumn = std::static_pointer_cast<arrow::BinaryArray>(batch->column(2));
+
+            for (int64_t i = 0; i < batch->num_rows(); ++i) {
+                const auto& row = expected[i];
+
+                UNIT_ASSERT(!commentColumn->IsNull(i));
+                UNIT_ASSERT_VALUES_EQUAL(commentColumn->GetString(i), std::get<0>(row));
+
+                UNIT_ASSERT(!amountColumn->IsNull(i));
+                UNIT_ASSERT_VALUES_EQUAL(amountColumn->Value(i), std::get<1>(row));
+
+                UNIT_ASSERT(!nameColumn->IsNull(i));
+                UNIT_ASSERT_VALUES_EQUAL(nameColumn->GetString(i), std::get<2>(row));
+
+            }
+        }
+    }
+
+    Y_UNIT_TEST(ColumnOrder_2) {
+        auto kikimr = CreateKikimrRunner();
+        auto client = kikimr.GetQueryClient();
+
+        {
+            auto result = client.ExecuteQuery(R"(
+                CREATE TABLE TestUtf8 (
+                    id Int32 NOT NULL,
+                    name Utf8,
+                    is_valid Bool,
+                    PRIMARY KEY(id, name)
+                );
+            )", TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        {
+            auto result = client.ExecuteQuery(R"(
+                INSERT INTO TestUtf8 (id, name, is_valid) VALUES (1, "John", true), (2, "John", false);
+            )", TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        {
+            auto result = client.ExecuteQuery(R"(
+                SELECT name, is_valid FROM TestUtf8 WHERE is_valid = true;
+            )", TTxControl::BeginTx().CommitTx(), TExecuteQuerySettings().OutputFormat(TArrowOutputFormat{})).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            auto batch = result.GetResultSet(0).GetArrowBatch();
+            UNIT_ASSERT_VALUES_EQUAL(batch->num_rows(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(batch->num_columns(), 2);
+
+            std::vector<std::tuple<std::string, bool>> expected = {{"John", true}};
+
+            auto nameColumn = std::static_pointer_cast<arrow::StringArray>(batch->column(0));
+            auto isValidColumn = std::static_pointer_cast<arrow::BooleanArray>(batch->column(1));
+
+            for (int64_t i = 0; i < batch->num_rows(); ++i) {
+                const auto& row = expected[i];
+
+                UNIT_ASSERT(!nameColumn->IsNull(i));
+                UNIT_ASSERT_VALUES_EQUAL(nameColumn->GetString(i), std::get<0>(row));
+
+                UNIT_ASSERT(!isValidColumn->IsNull(i));
+                UNIT_ASSERT_VALUES_EQUAL(isValidColumn->Value(i), std::get<1>(row));
+            }
+        }
+        {
+            auto result = client.ExecuteQuery(R"(
+                SELECT is_valid, name FROM TestUtf8 WHERE is_valid = false;
+            )", TTxControl::BeginTx().CommitTx(), TExecuteQuerySettings().OutputFormat(TArrowOutputFormat{})).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            auto batch = result.GetResultSet(0).GetArrowBatch();
+            UNIT_ASSERT_VALUES_EQUAL(batch->num_rows(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(batch->num_columns(), 2);
+
+            std::vector<std::tuple<bool, std::string>> expected = {{false, "John"}};
+
+            auto isValidColumn = std::static_pointer_cast<arrow::BooleanArray>(batch->column(0));
+            auto nameColumn = std::static_pointer_cast<arrow::StringArray>(batch->column(1));
+
+            for (int64_t i = 0; i < batch->num_rows(); ++i) {
+                const auto& row = expected[i];
+
+                UNIT_ASSERT(!isValidColumn->IsNull(i));
+                UNIT_ASSERT_VALUES_EQUAL(isValidColumn->Value(i), std::get<0>(row));
+
+                UNIT_ASSERT(!nameColumn->IsNull(i));
+                UNIT_ASSERT_VALUES_EQUAL(nameColumn->GetString(i), std::get<1>(row));
+            }
+        }
+    }
+
+    Y_UNIT_TEST(Compression_ZSTD) {
+        auto kikimr = CreateKikimrRunner();
+        auto client = kikimr.GetQueryClient();
+
+        {
+            auto result = client.ExecuteQuery(R"(
+                SELECT Comment, Amount, Name FROM Test ORDER BY Amount DESC;
+            )", TTxControl::BeginTx().CommitTx(), TExecuteQuerySettings().OutputFormat(TArrowOutputFormat(TArrowOutputFormat::ECompression::ZSTD))).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            auto batch = result.GetResultSet(0).GetArrowBatch();
+            UNIT_ASSERT_VALUES_EQUAL(batch->num_rows(), 3);
+            UNIT_ASSERT_VALUES_EQUAL(batch->num_columns(), 3);
+
+            std::vector<std::tuple<std::string, ui64, std::string>> expected = {{"None", 7200, "Tony"}, {"None", 3500, "Anna"}, {"None", 300, "Paul"}};
+
+            auto commentColumn = std::static_pointer_cast<arrow::BinaryArray>(batch->column(0));
+            auto amountColumn = std::static_pointer_cast<arrow::UInt64Array>(batch->column(1));
+            auto nameColumn = std::static_pointer_cast<arrow::BinaryArray>(batch->column(2));
+
+            for (int64_t i = 0; i < batch->num_rows(); ++i) {
+                const auto& row = expected[i];
+
+                UNIT_ASSERT(!commentColumn->IsNull(i));
+                UNIT_ASSERT_VALUES_EQUAL(commentColumn->GetString(i), std::get<0>(row));
+
+                UNIT_ASSERT(!amountColumn->IsNull(i));
+                UNIT_ASSERT_VALUES_EQUAL(amountColumn->Value(i), std::get<1>(row));
+
+                UNIT_ASSERT(!nameColumn->IsNull(i));
+                UNIT_ASSERT_VALUES_EQUAL(nameColumn->GetString(i), std::get<2>(row));
+
+            }
+        }
+    }
+
+    Y_UNIT_TEST(Compression_LZ4_FRAME) {
+        auto kikimr = CreateKikimrRunner();
+        auto client = kikimr.GetQueryClient();
+
+        {
+            auto result = client.ExecuteQuery(R"(
+                SELECT Comment, Amount, Name FROM Test ORDER BY Amount DESC;
+            )", TTxControl::BeginTx().CommitTx(), TExecuteQuerySettings().OutputFormat(TArrowOutputFormat(TArrowOutputFormat::ECompression::LZ4_FRAME))).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            auto batch = result.GetResultSet(0).GetArrowBatch();
+            UNIT_ASSERT_VALUES_EQUAL(batch->num_rows(), 3);
+            UNIT_ASSERT_VALUES_EQUAL(batch->num_columns(), 3);
+
+            std::vector<std::tuple<std::string, ui64, std::string>> expected = {{"None", 7200, "Tony"}, {"None", 3500, "Anna"}, {"None", 300, "Paul"}};
+
+            auto commentColumn = std::static_pointer_cast<arrow::BinaryArray>(batch->column(0));
+            auto amountColumn = std::static_pointer_cast<arrow::UInt64Array>(batch->column(1));
+            auto nameColumn = std::static_pointer_cast<arrow::BinaryArray>(batch->column(2));
+
+            for (int64_t i = 0; i < batch->num_rows(); ++i) {
+                const auto& row = expected[i];
+
+                UNIT_ASSERT(!commentColumn->IsNull(i));
+                UNIT_ASSERT_VALUES_EQUAL(commentColumn->GetString(i), std::get<0>(row));
+
+                UNIT_ASSERT(!amountColumn->IsNull(i));
+                UNIT_ASSERT_VALUES_EQUAL(amountColumn->Value(i), std::get<1>(row));
+
+                UNIT_ASSERT(!nameColumn->IsNull(i));
+                UNIT_ASSERT_VALUES_EQUAL(nameColumn->GetString(i), std::get<2>(row));
+
+            }
+        }
     }
 }
 

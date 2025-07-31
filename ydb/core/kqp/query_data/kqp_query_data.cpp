@@ -143,7 +143,25 @@ void TKqpExecuterTxResult::FillYdb(Ydb::ResultSet* ydbResult, const TOutputForma
 
         ydbResult->mutable_value_output_format_meta();
     } else if (arrowFormat) {
-        NArrow::TArrowBatchBuilder batchBuilder(arrow::Compression::UNCOMPRESSED, arrowNotNullColumns);
+        const auto& format = std::get<TArrowOutputFormat>(outputFormat);
+        auto compression = format.Compression;
+        i32 compressionLevel = format.CompressionLevel;
+
+        arrow::Compression::type codec = arrow::Compression::UNCOMPRESSED;
+        switch (compression) {
+            case TArrowOutputFormat::ECompression::ZSTD:
+                codec = arrow::Compression::ZSTD;
+                break;
+            case TArrowOutputFormat::ECompression::LZ4_FRAME:
+                codec = arrow::Compression::LZ4_FRAME;
+                break;
+            default:
+                break;
+        }
+
+        NArrow::TArrowBatchBuilder batchBuilder(codec, compressionLevel, arrowNotNullColumns);
+
+        batchBuilder.Reserve(Rows.RowCount());
         YQL_ENSURE(batchBuilder.Start(arrowSchema).ok());
 
         TRowBuilder rowBuilder(arrowSchema.size());
@@ -157,8 +175,9 @@ void TKqpExecuterTxResult::FillYdb(Ydb::ResultSet* ydbResult, const TOutputForma
             }
 
             for (size_t i = 0; i < arrowSchema.size(); ++i) {
+                ui32 memberIndex = (!ColumnOrder || ColumnOrder->empty()) ? i : (*ColumnOrder)[i];
                 const auto& [name, type] = arrowSchema[i];
-                rowBuilder.AddCell(i, type, row.GetElement(i), type.GetPgTypeMod(name));
+                rowBuilder.AddCell(i, type, row.GetElement(memberIndex), type.GetPgTypeMod(name));
             }
 
             auto cells = rowBuilder.BuildCells();

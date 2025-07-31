@@ -1,8 +1,6 @@
 #pragma once
 
 #include <ydb/public/api/protos/ydb_formats.pb.h>
-#include <ydb/public/api/protos/ydb_query.pb.h>
-
 #include <variant>
 
 namespace NKikimr::NKqp {
@@ -37,8 +35,8 @@ struct TArrowOutputFormat : public TOutputFormatBase {
         LZ4_FRAME = 3,
     };
 
-    TArrowOutputFormat(Ydb::Formats::SchemaInclusionMode mode = Ydb::Formats::SchemaInclusionMode::SCHEMA_INCLUSION_MODE_ALWAYS,
-        ECompression compression = ECompression::NONE, int32_t level = std::numeric_limits<int32_t>::min())
+    TArrowOutputFormat(ECompression compression = ECompression::NONE, i32 level = std::numeric_limits<i32>::min(),
+        Ydb::Formats::SchemaInclusionMode mode = Ydb::Formats::SchemaInclusionMode::SCHEMA_INCLUSION_MODE_ALWAYS)
         : TOutputFormatBase(mode)
         , Compression(compression)
         , CompressionLevel(level)
@@ -51,11 +49,11 @@ struct TArrowOutputFormat : public TOutputFormatBase {
     }
 
     static TArrowOutputFormat ImportFromProto(const Ydb::Formats::ArrowOutputFormat& proto) {
-        return TArrowOutputFormat{proto.schema_inclusion_mode(), ECompression(proto.compression().type()), proto.compression().level()};
+        return TArrowOutputFormat{ECompression(proto.compression().type()), proto.compression().level(), proto.schema_inclusion_mode()};
     }
 
     ECompression Compression;
-    int32_t CompressionLevel;
+    i32 CompressionLevel;
 };
 
 using TOutputFormat = std::variant<TValueOutputFormat, TArrowOutputFormat>;

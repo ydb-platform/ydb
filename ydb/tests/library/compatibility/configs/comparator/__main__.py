@@ -218,7 +218,7 @@ removing fields, changing their type or id (in protobuf), disabling the Feature 
 </ul>
 </p>
 </div>
-<table border=1 valign="center">''')
+<table border=1 valign="center" width="100%">''')
         print('<thead style="position: sticky; top: 0; background: white; align: center">')
         print('<tr><th style="padding-left: 10; padding-right: 10">config field \\ branch, commit</th>')
         for b in self.branches:

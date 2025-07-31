@@ -101,6 +101,7 @@ namespace NDiscovery {
                 }
             }
             xres->set_ssl_target_name_override(entry.GetTargetNameOverride());
+            xres->set_bridge_pile_name(entry.GetBridgePileName());
         }
 
         if (IsSafeLocationMarker(entry.GetDataCenter())) {

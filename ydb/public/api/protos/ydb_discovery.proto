@@ -34,11 +34,27 @@ message EndpointInfo {
     // endpoint is using certificate chain valid for a balancer hostname, and
     // not this specific node hostname.
     string ssl_target_name_override = 10;
+
+    optional string bridge_pile_name = 11;
+}
+
+enum PileState {
+    DISCONNECTED = 0; // disconnected from the cluster (no connectivity to other piles)
+    NOT_SYNCHRONIZED = 1; // not synchronized with primary, cannot be promoted
+    SYNCHRONIZED = 2; // fully synchronized with primary, may be promoted
+    PROMOTE = 3; // pile is being promoted to primary
+    PRIMARY = 4; // pile is primary
+}
+
+message PileInfo {
+    string bridge_pile_name = 1;
+    PileState state = 2;
 }
 
 message ListEndpointsResult {
     repeated EndpointInfo endpoints = 1;
     string self_location = 2;
+    repeated PileInfo piles = 3;
 }
 
 message ListEndpointsResponse {

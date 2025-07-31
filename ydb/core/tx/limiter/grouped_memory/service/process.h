@@ -81,7 +81,7 @@ public:
         AFL_VERIFY(stage);
         if (!GroupIds.HasExternalId(externalGroupId)) {
             LWPROBE(Allocated, "on_register", allocation->GetIdentifier(), stage->GetName(), stage->GetLimit(), stage->GetHardLimit().value_or(std::numeric_limits<ui64>::max()), stage->GetUsage().Val(), stage->GetWaiting().Val(), TDuration::Zero(), false, false);
-            AFL_VERIFY(!allocation->OnAllocated(std::make_shared<TAllocationGuard>(ExternalProcessId, ExternalScopeId, allocation->GetIdentifier(), OwnerActorId, allocation->GetMemory()), allocation))
+            AFL_VERIFY(!allocation->OnAllocated(std::make_shared<TAllocationGuard>(ExternalProcessId, ExternalScopeId, allocation->GetIdentifier(), OwnerActorId, allocation->GetMemory(), nullptr), allocation))
                 ("ext_group", externalGroupId)("min_ext_group", GroupIds.GetMinExternalIdOptional())("stage", stage->GetName());
             AFL_VERIFY(!AllocationInfo.contains(allocation->GetIdentifier()));
         } else {
@@ -103,8 +103,8 @@ public:
         }
     }
 
-    bool UpdateAllocation(const ui64 allocationId, const ui64 volume) {
-        GetAllocationInfoVerified(allocationId).SetAllocatedVolume(volume);
+    bool AllocationUpdated(const ui64 allocationId) {
+        GetAllocationInfoVerified(allocationId);
         return true;
     }
 
@@ -223,8 +223,8 @@ public:
         return PriorityProcessFlag;
     }
 
-    bool UpdateAllocation(const ui64 externalScopeId, const ui64 allocationId, const ui64 volume) {
-        if (GetAllocationScopeVerified(externalScopeId).UpdateAllocation(allocationId, volume)) {
+    bool AllocationUpdated(const ui64 externalScopeId, const ui64 allocationId) {
+        if (GetAllocationScopeVerified(externalScopeId).AllocationUpdated(allocationId)) {
             RefreshMemoryUsage();
             return true;
         } else {

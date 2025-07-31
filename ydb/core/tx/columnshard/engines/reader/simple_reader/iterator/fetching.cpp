@@ -126,10 +126,15 @@ public:
     }
 };
 
-
 }   // namespace
 
-NKikimr::TConclusion<bool> TInitializeSourceStep::DoExecuteInplace(
+TConclusion<bool> TUpdateAggregatedMemoryStep::DoExecuteInplace(
+    const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& /*step*/) const {
+    source->MutableAs<TPortionDataSource>()->ActualizeAggregatedMemoryGuards();
+    return true;
+}
+
+TConclusion<bool> TInitializeSourceStep::DoExecuteInplace(
     const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& /*step*/) const {
     auto* simpleSource = source->MutableAs<IDataSource>();
     simpleSource->InitializeProcessing(source);

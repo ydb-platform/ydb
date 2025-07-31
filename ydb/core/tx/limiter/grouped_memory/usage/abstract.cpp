@@ -7,18 +7,20 @@ namespace NKikimr::NOlap::NGroupedMemoryManager {
 
 TAllocationGuard::~TAllocationGuard() {
     if (TlsActivationContext && !Released) {
+        Stage->Free(Memory, true);
         NActors::TActivationContext::AsActorContext().Send(
             ActorId, std::make_unique<NEvents::TEvExternal::TEvFinishTask>(ProcessId, ScopeId, AllocationId));
     }
 }
 
-void TAllocationGuard::Update(const ui64 newVolume) {
+void TAllocationGuard::Update(const ui64 newVolume, const bool notify) {
     AFL_VERIFY(!Released);
-    Memory = newVolume;
-    if (TlsActivationContext) {
+    Stage->UpdateVolume(Memory, newVolume, true);
+    if (notify && TlsActivationContext) {
         NActors::TActivationContext::AsActorContext().Send(
-            ActorId, std::make_unique<NEvents::TEvExternal::TEvUpdateTask>(ProcessId, ScopeId, AllocationId, newVolume));
+            ActorId, std::make_unique<NEvents::TEvExternal::TEvTaskUpdated>(ProcessId, ScopeId, AllocationId));
     }
+    Memory = newVolume;
 }
 
 bool IAllocation::OnAllocated(std::shared_ptr<TAllocationGuard>&& guard, const std::shared_ptr<NGroupedMemoryManager::IAllocation>& allocation) {

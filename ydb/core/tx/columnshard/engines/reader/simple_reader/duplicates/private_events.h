@@ -1,8 +1,8 @@
 #pragma once
 
 #include "context.h"
-#include "events.h"
 
+#include <ydb/core/tx/columnshard/column_fetching/cache_policy.h>
 #include <ydb/core/tx/columnshard/columnshard_private_events.h>
 #include <ydb/core/tx/columnshard/engines/reader/simple_reader/duplicates/common.h>
 

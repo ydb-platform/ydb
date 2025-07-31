@@ -9,6 +9,7 @@
 #include <ydb/core/tx/columnshard/counters/duplicate_filtering.h>
 #include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/iterator/default_fetching.h>
+#include <ydb/core/tx/columnshard/engines/reader/simple_reader/iterator/collections/constructors.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/range_treap/range_treap.h>
@@ -24,7 +25,6 @@ namespace NKikimr::NOlap::NReader::NSimple::NDuplicateFiltering {
 
 class TDuplicateManager: public NActors::TActor<TDuplicateManager> {
 private:
-    using TPortionIntervalTree = NCommon::TPortionIntervalTree;
     inline static TAtomicCounter NextRequestId = 0;
 
     const TActorId ColumnShardActorId;
@@ -90,7 +90,7 @@ private:
     }
 
 public:
-    TDuplicateManager(const TSpecialReadContext& context, TPortionIntervalTree&& portions);
+    TDuplicateManager(const TSpecialReadContext& context, const std::deque<NSimple::TSourceConstructor>& portions);
 };
 
 }   // namespace NKikimr::NOlap::NReader::NSimple::NDuplicateFiltering

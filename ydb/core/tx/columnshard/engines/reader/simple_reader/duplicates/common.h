@@ -11,6 +11,25 @@
 
 namespace NKikimr::NOlap::NReader::NSimple::NDuplicateFiltering {
 
+struct TPortionIntervalTreeValueTraits: NRangeTreap::TDefaultValueTraits<std::shared_ptr<TPortionInfo>> {
+    struct TValueHash {
+        ui64 operator()(const std::shared_ptr<TPortionInfo>& value) const {
+            return THash<TPortionAddress>()(value->GetAddress());
+        }
+    };
+
+    static bool Less(const std::shared_ptr<TPortionInfo>& a, const std::shared_ptr<TPortionInfo>& b) noexcept {
+        return a->GetAddress() == b->GetAddress();
+    }
+
+    static bool Equal(const std::shared_ptr<TPortionInfo>& a, const std::shared_ptr<TPortionInfo>& b) noexcept {
+        return a->GetAddress() == b->GetAddress();
+    }
+};
+
+using TPortionIntervalTree =
+    NRangeTreap::TRangeTreap<NArrow::TSimpleRow, std::shared_ptr<TPortionInfo>, NArrow::TSimpleRow, TPortionIntervalTreeValueTraits>;
+
 class TRowRange {
 private:
     YDB_READONLY_DEF(ui64, Begin);

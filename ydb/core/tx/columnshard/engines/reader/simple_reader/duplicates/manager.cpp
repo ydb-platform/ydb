@@ -152,12 +152,19 @@ public:
 #define LOCAL_LOG_TRACE \
     AFL_TRACE(NKikimrServices::TX_COLUMNSHARD_SCAN)("component", "duplicates_manager")("self", TActivationContext::AsActorContext().SelfID)
 
-TDuplicateManager::TDuplicateManager(const TSpecialReadContext& context, TPortionIntervalTree&& portions)
+TDuplicateManager::TDuplicateManager(const TSpecialReadContext& context, const std::deque<NSimple::TSourceConstructor>& portions)
     : TActor(&TDuplicateManager::StateMain)
     , ColumnShardActorId(context.GetCommonContext()->GetColumnShardActorId())
     , PKColumns(context.GetPKColumns())
     , Counters(context.GetCommonContext()->GetDuplicateFilteringCounters())
-    , Intervals(std::move(portions))
+    , Intervals([&portions]() {
+        TPortionIntervalTree intervals;
+        for (const auto& portion : portions) {
+            intervals.AddRange(TPortionIntervalTree::TOwnedRange(portion.GetPortion()->IndexKeyStart(), true,
+                                   portion.GetPortion()->IndexKeyEnd(), true), portion.GetPortion());
+        }
+        return intervals;
+    }())
     , Portions([this]() {
         THashMap<ui64, std::shared_ptr<TPortionInfo>> portions;
         Intervals.EachRange(

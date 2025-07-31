@@ -119,10 +119,6 @@ class Differ:
 
     def print_result(self) -> None:
         print('''<style>
-.greenLine {
-    display: none;
-}
-
 .tab {
     overflow: hidden;
     border: 1px solid #4CAF50;
@@ -190,7 +186,7 @@ function showGreen(evt) {
 <div class="tab">
   <button class="tablinks" onclick="openDescr(event, 'russian')">Описание</button>
   <button class="tablinks" onclick="openDescr(event, 'english')">Description</button>
-  <button class="" onclick="showGreen(event)">Show all diff</button>
+  <button class="active" onclick="showGreen(event)">Show all diff</button>
 </div>
 <div id=russian class="tabcontent">
 <h1>Сравнение дефолтных конфигураций ydbd разных версий</h1>

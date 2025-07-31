@@ -23,7 +23,8 @@ Y_UNIT_TEST_SUITE(TUrlMatcherTest) {
         UNIT_ASSERT(!matcher.Match("/c/b/a"));
         UNIT_ASSERT(!matcher.Match("/a/b/z"));
         UNIT_ASSERT(!matcher.Match("/A/B/C"));
-        UNIT_ASSERT(!matcher.Match("/a/b//c"));
+        UNIT_ASSERT(!matcher.Match("//a/b/c"));
+        UNIT_ASSERT(!matcher.Match("/a/b///c"));
     }
 
     Y_UNIT_TEST(MatchWithParamNameOnly) {

@@ -1,5 +1,5 @@
 #include "audit.h"
-#include "audit_force.h"
+#include "auditable_actions.h"
 
 #include <ydb/core/audit/audit_log.h>
 #include <ydb/core/audit/audit_config/audit_config.h>

@@ -1779,7 +1779,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
         }
 
         void FillSystemViewEntry(TNavigateContext* context, TNavigate::TEntry& entry,
-            NSysView::ISystemViewResolver::ETarget target) const
+            NSysView::ISystemViewResolver::ESource target) const
         {
             auto sysViewInfo = entry.TableId.SysViewInfo;
 
@@ -1810,8 +1810,8 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                 }
 
                 entry.Kind = TNavigate::KindTable;
-                if (target == NSysView::ISystemViewResolver::ETarget::OlapStore ||
-                    target == NSysView::ISystemViewResolver::ETarget::ColumnTable)
+                if (target == NSysView::ISystemViewResolver::ESource::OlapStore ||
+                    target == NSysView::ISystemViewResolver::ESource::ColumnTable)
                 {
                     // OLAP sys views are represented by OLAP tables
                     entry.Kind =TNavigate::KindColumnTable;
@@ -1857,16 +1857,16 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                 if (Kind == TNavigate::KindPath) {
                     auto split = SplitPath(Path);
                     if (split.size() == 1) {
-                        return FillSystemViewEntry(context, entry, NSysView::ISystemViewResolver::ETarget::Domain);
+                        return FillSystemViewEntry(context, entry, NSysView::ISystemViewResolver::ESource::Domain);
                     }
                 } else if (Kind == TNavigate::KindSubdomain || Kind == TNavigate::KindExtSubdomain) {
-                    return FillSystemViewEntry(context, entry, NSysView::ISystemViewResolver::ETarget::SubDomain);
+                    return FillSystemViewEntry(context, entry, NSysView::ISystemViewResolver::ESource::SubDomain);
                 } else if (Kind == TNavigate::KindOlapStore) {
-                    FillSystemViewEntry(context, entry, NSysView::ISystemViewResolver::ETarget::OlapStore);
+                    FillSystemViewEntry(context, entry, NSysView::ISystemViewResolver::ESource::OlapStore);
                     entry.OlapStoreInfo = OlapStoreInfo;
                     return;
                 } else if (Kind == TNavigate::KindColumnTable) {
-                    FillSystemViewEntry(context, entry, NSysView::ISystemViewResolver::ETarget::ColumnTable);
+                    FillSystemViewEntry(context, entry, NSysView::ISystemViewResolver::ESource::ColumnTable);
                     entry.OlapStoreInfo = OlapStoreInfo;
                     entry.ColumnTableInfo = ColumnTableInfo;
                     return;
@@ -2028,7 +2028,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
         }
 
         void FillSystemViewEntry(TResolveContext* context, TResolve::TEntry& entry,
-            NSysView::ISystemViewResolver::ETarget target) const
+            NSysView::ISystemViewResolver::ESource target) const
         {
             TKeyDesc& keyDesc = *entry.KeyDescription;
             auto sysViewInfo = keyDesc.TableId.SysViewInfo;
@@ -2079,12 +2079,12 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                 if (Kind == TNavigate::KindPath) {
                     auto split = SplitPath(Path);
                     if (split.size() == 1) {
-                        return FillSystemViewEntry(context, entry, NSysView::ISystemViewResolver::ETarget::Domain);
+                        return FillSystemViewEntry(context, entry, NSysView::ISystemViewResolver::ESource::Domain);
                     }
                 } else if (Kind == TNavigate::KindSubdomain || Kind == TNavigate::KindExtSubdomain) {
-                    return FillSystemViewEntry(context, entry, NSysView::ISystemViewResolver::ETarget::SubDomain);
+                    return FillSystemViewEntry(context, entry, NSysView::ISystemViewResolver::ESource::SubDomain);
                 } else if (Kind == TNavigate::KindOlapStore) {
-                    FillSystemViewEntry(context, entry, NSysView::ISystemViewResolver::ETarget::OlapStore);
+                    FillSystemViewEntry(context, entry, NSysView::ISystemViewResolver::ESource::OlapStore);
                     // Add all shards of the OLAP store
                     auto partitions = std::make_shared<TVector<TKeyDesc::TPartitionInfo>>();
                     for (ui64 columnShard : OlapStoreInfo->Description.GetColumnShards()) {
@@ -2094,7 +2094,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                     keyDesc.Partitioning = std::move(partitions);
                     return;
                 } else if (Kind == TNavigate::KindColumnTable) {
-                    FillSystemViewEntry(context, entry, NSysView::ISystemViewResolver::ETarget::ColumnTable);
+                    FillSystemViewEntry(context, entry, NSysView::ISystemViewResolver::ESource::ColumnTable);
                     // Add all shards of the OLAP table
                     auto shardingInfo = NSharding::IShardingBase::BuildFromProto(ColumnTableInfo->Description.GetSharding());
                     if (shardingInfo.IsFail()) {

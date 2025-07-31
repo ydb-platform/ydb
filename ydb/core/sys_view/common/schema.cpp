@@ -3,9 +3,7 @@
 #include <ydb/core/base/appdata.h>
 #include <yql/essentials/parser/pg_catalog/catalog.h>
 
-namespace {
-    using NKikimrSysView::ESysViewType;
-}
+using NKikimrSysView::ESysViewType;
 
 namespace NKikimr {
 namespace NSysView {
@@ -125,6 +123,11 @@ struct TSchemaFiller {
     }
 };
 
+template <typename Schema>
+void FillSchema(ISystemViewResolver::TSchema& schema) {
+    TSchemaFiller<Schema>::Fill(schema);
+}
+
 class TSystemViewResolver : public ISystemViewResolver {
 public:
     TSystemViewResolver() {
@@ -155,19 +158,19 @@ public:
         return false;
     }
 
-    TMaybe<TSchema> GetSystemViewSchema(const TStringBuf viewName, ETarget target) const override final {
+    TMaybe<TSchema> GetSystemViewSchema(const TStringBuf viewName, ESource sourceObjectType) const override final {
         const TSchema* view = nullptr;
-        switch (target) {
-        case ETarget::Domain:
+        switch (sourceObjectType) {
+        case ESource::Domain:
             view = DomainSystemViews.FindPtr(viewName);
             break;
-        case ETarget::SubDomain:
+        case ESource::SubDomain:
             view = SubDomainSystemViews.FindPtr(viewName);
             break;
-        case ETarget::OlapStore:
+        case ESource::OlapStore:
             view = OlapStoreSystemViews.FindPtr(viewName);
             break;
-        case ETarget::ColumnTable:
+        case ESource::ColumnTable:
             view = ColumnTableSystemViews.FindPtr(viewName);
             break;
         }
@@ -179,28 +182,28 @@ public:
         return view ? TMaybe<TSchema>(*view) : Nothing();
     }
 
-    TVector<TString> GetSystemViewNames(ETarget target) const override {
+    TVector<TString> GetSystemViewNames(ESource sourceObjectType) const override {
         TVector<TString> result;
-        switch (target) {
-        case ETarget::Domain:
+        switch (sourceObjectType) {
+        case ESource::Domain:
             result.reserve(DomainSystemViews.size());
             for (const auto& [name, _] : DomainSystemViews) {
                 result.push_back(name);
             }
             break;
-        case ETarget::SubDomain:
+        case ESource::SubDomain:
             result.reserve(SubDomainSystemViews.size());
             for (const auto& [name, _] : SubDomainSystemViews) {
                 result.push_back(name);
             }
             break;
-        case ETarget::OlapStore:
+        case ESource::OlapStore:
             result.reserve(OlapStoreSystemViews.size());
             for (const auto& [name, _] : OlapStoreSystemViews) {
                 result.push_back(name);
             }
             break;
-        case ETarget::ColumnTable:
+        case ESource::ColumnTable:
             result.reserve(ColumnTableSystemViews.size());
             for (const auto& [name, _] : ColumnTableSystemViews) {
                 result.push_back(name);
@@ -210,15 +213,15 @@ public:
         return result;
     }
 
-    const THashMap<TString, ESysViewType>& GetSystemViewsTypes(ETarget target) const override {
-        switch (target) {
-        case ETarget::Domain:
+    const THashMap<TString, ESysViewType>& GetSystemViewsTypes(ESource sourceObjectType) const override {
+        switch (sourceObjectType) {
+        case ESource::Domain:
             return DomainSystemViewTypes;
-        case ETarget::SubDomain:
+        case ESource::SubDomain:
             return SubDomainSystemViewTypes;
-        case ETarget::OlapStore:
+        case ESource::OlapStore:
             return OlapStoreSystemViewTypes;
-        case ETarget::ColumnTable:
+        case ESource::ColumnTable:
             return ColumnTableSystemViewTypes;
         }
     }
@@ -268,22 +271,6 @@ private:
     }
 
     template <typename Table>
-    void RegisterSystemView(const TStringBuf& name, ESysViewType type) {
-        TSchemaFiller<Table>::Fill(DomainSystemViews[name]);
-        DomainSystemViewTypes[name] = type;
-        TSchemaFiller<Table>::Fill(SubDomainSystemViews[name]);
-        SubDomainSystemViewTypes[name] = type;
-        TSchemaFiller<Table>::Fill(SystemViews[type]);
-    }
-
-    template <typename Table>
-    void RegisterDomainSystemView(const TStringBuf& name, ESysViewType type) {
-        TSchemaFiller<Table>::Fill(DomainSystemViews[name]);
-        DomainSystemViewTypes[name] = type;
-        TSchemaFiller<Table>::Fill(SystemViews[type]);
-    }
-
-    template <typename Table>
     void RegisterOlapStoreSystemView(const TStringBuf& name) {
         TSchemaFiller<Table>::Fill(OlapStoreSystemViews[name]);
     }
@@ -294,31 +281,34 @@ private:
     }
 
     void RegisterSystemViews() {
-        RegisterSystemView<Schema::PartitionStats>(PartitionStatsName, ESysViewType::EPartitionStats);
+        for (const auto& registryRecord : Registry.SysViews) {
+            TSchema schema;
+            registryRecord.FillSchemaFunc(schema);
+            SystemViews[registryRecord.Type] = schema;
 
-        RegisterSystemView<Schema::Nodes>(NodesName, ESysViewType::ENodes);
-
-        RegisterSystemView<Schema::QueryStats>(TopQueriesByDuration1MinuteName, ESysViewType::ETopQueriesByDurationOneMinute);
-        RegisterSystemView<Schema::QueryStats>(TopQueriesByDuration1HourName, ESysViewType::ETopQueriesByDurationOneHour);
-        RegisterSystemView<Schema::QueryStats>(TopQueriesByReadBytes1MinuteName, ESysViewType::ETopQueriesByReadBytesOneMinute);
-        RegisterSystemView<Schema::QueryStats>(TopQueriesByReadBytes1HourName, ESysViewType::ETopQueriesByReadBytesOneHour);
-        RegisterSystemView<Schema::QueryStats>(TopQueriesByCpuTime1MinuteName, ESysViewType::ETopQueriesByCpuTimeOneMinute);
-        RegisterSystemView<Schema::QueryStats>(TopQueriesByCpuTime1HourName, ESysViewType::ETopQueriesByCpuTimeOneHour);
-        RegisterSystemView<Schema::QueryStats>(TopQueriesByRequestUnits1MinuteName, ESysViewType::ETopQueriesByRequestUnitsOneMinute);
-        RegisterSystemView<Schema::QueryStats>(TopQueriesByRequestUnits1HourName, ESysViewType::ETopQueriesByRequestUnitsOneHour);
-        RegisterSystemView<Schema::QuerySessions>(QuerySessions, ESysViewType::EQuerySessions);
-        // don't have approved schema yet
-        // RegisterSystemView<Schema::CompileCacheQueries>(CompileCacheQueries, ESysViewType::ECompileCacheQueries);
-
-        RegisterDomainSystemView<Schema::PDisks>(PDisksName, ESysViewType::EPDisks);
-        RegisterDomainSystemView<Schema::VSlots>(VSlotsName, ESysViewType::EVSlots);
-        RegisterDomainSystemView<Schema::Groups>(GroupsName, ESysViewType::EGroups);
-        RegisterDomainSystemView<Schema::StoragePools>(StoragePoolsName, ESysViewType::EStoragePools);
-        RegisterDomainSystemView<Schema::StorageStats>(StorageStatsName, ESysViewType::EStorageStats);
-
-        RegisterDomainSystemView<Schema::Tablets>(TabletsName, ESysViewType::ETablets);
-
-        RegisterSystemView<Schema::QueryMetrics>(QueryMetricsName, ESysViewType::EQueryMetricsOneMinute);
+            for (const auto sourceObjectType : registryRecord.SourceObjectTypes) {
+                switch (sourceObjectType) {
+                case ESource::Domain: {
+                    DomainSystemViews[registryRecord.Name] = schema;
+                    DomainSystemViewTypes[registryRecord.Name] = registryRecord.Type;
+                    break;
+                };
+                case ESource::SubDomain: {
+                    SubDomainSystemViews[registryRecord.Name] = schema;
+                    SubDomainSystemViewTypes[registryRecord.Name] = registryRecord.Type;
+                    break;
+                };
+                case ESource::OlapStore: {
+                    OlapStoreSystemViews[registryRecord.Name] = schema;
+                    break;
+                };
+                case ESource::ColumnTable: {
+                    ColumnTableSystemViews[registryRecord.Name] = schema;
+                    break;
+                };
+                }
+            }
+        }
 
         RegisterOlapStoreSystemView<Schema::PrimaryIndexStats>(StorePrimaryIndexStatsName);
         RegisterOlapStoreSystemView<Schema::PrimaryIndexSchemaStats>(StorePrimaryIndexSchemaStatsName);
@@ -331,25 +321,7 @@ private:
         RegisterColumnTableSystemView<Schema::PrimaryIndexGranuleStats>(TablePrimaryIndexGranuleStatsName);
         RegisterColumnTableSystemView<Schema::PrimaryIndexOptimizerStats>(TablePrimaryIndexOptimizerStatsName);
 
-        RegisterSystemView<Schema::TopPartitions>(TopPartitionsByCpu1MinuteName, ESysViewType::ETopPartitionsByCpuOneMinute);
-        RegisterSystemView<Schema::TopPartitions>(TopPartitionsByCpu1HourName, ESysViewType::ETopPartitionsByCpuOneHour);
-        RegisterSystemView<Schema::TopPartitionsTli>(TopPartitionsByTli1MinuteName, ESysViewType::ETopPartitionsByTliOneMinute);
-        RegisterSystemView<Schema::TopPartitionsTli>(TopPartitionsByTli1HourName, ESysViewType::ETopPartitionsByTliOneHour);
-
         RegisterPgTablesSystemViews();
-
-        RegisterSystemView<Schema::ResourcePoolClassifiers>(ResourcePoolClassifiersName, ESysViewType::EResourcePoolClassifiers);
-        RegisterSystemView<Schema::ResourcePools>(ResourcePoolsName, ESysViewType::EResourcePools);
-
-        {
-            using namespace NAuth;
-            RegisterSystemView<Schema::AuthUsers>(UsersName, ESysViewType::EAuthUsers);
-            RegisterSystemView<Schema::AuthGroups>(NAuth::GroupsName, ESysViewType::EAuthGroups);
-            RegisterSystemView<Schema::AuthGroupMembers>(GroupMembersName, ESysViewType::EAuthGroupMembers);
-            RegisterSystemView<Schema::AuthOwners>(OwnersName, ESysViewType::EAuthOwners);
-            RegisterSystemView<Schema::AuthPermissions>(PermissionsName, ESysViewType::EAuthPermissions);
-            RegisterSystemView<Schema::AuthPermissions>(EffectivePermissionsName, ESysViewType::EAuthEffectivePermissions);
-        }
     }
 
 private:
@@ -368,7 +340,11 @@ class TSystemViewRewrittenResolver : public ISystemViewResolver {
 public:
 
     TSystemViewRewrittenResolver() {
-        TSchemaFiller<Schema::ShowCreate>::Fill(SystemViews[ShowCreateName]);
+        for (const auto& registryRecord : Registry.RewrittenSysViews) {
+            TSchema schema;
+            registryRecord.FillSchemaFunc(schema);
+            SystemViews[registryRecord.Name] = std::move(schema);
+        }
     }
 
     bool IsSystemViewPath(const TVector<TString>& path, TSystemViewPath& sysViewPath) const override final {
@@ -385,8 +361,8 @@ public:
         return false;
     }
 
-    TMaybe<TSchema> GetSystemViewSchema(const TStringBuf viewName, ETarget target) const override final {
-        Y_UNUSED(target);
+    TMaybe<TSchema> GetSystemViewSchema(const TStringBuf viewName, ESource sourceObjectType) const override final {
+        Y_UNUSED(sourceObjectType);
         const TSchema* view = SystemViews.FindPtr(viewName);
         return view ? TMaybe<TSchema>(*view) : Nothing();
     }
@@ -396,13 +372,13 @@ public:
         return Nothing();
     }
 
-    TVector<TString> GetSystemViewNames(ETarget target) const override {
-        Y_UNUSED(target);
+    TVector<TString> GetSystemViewNames(ESource sourceObjectType) const override {
+        Y_UNUSED(sourceObjectType);
         return {};
     }
 
-    const THashMap<TString, ESysViewType>& GetSystemViewsTypes(ETarget target) const override {
-        Y_UNUSED(target);
+    const THashMap<TString, ESysViewType>& GetSystemViewsTypes(ESource sourceObjectType) const override {
+        Y_UNUSED(sourceObjectType);
         return SystemViewTypes;
     }
 

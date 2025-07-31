@@ -11,30 +11,42 @@
 namespace NKikimr {
 namespace NSysView {
 
-constexpr TStringBuf PartitionStatsName = "partition_stats";
-constexpr TStringBuf NodesName = "nodes";
-constexpr TStringBuf QuerySessions = "query_sessions";
-constexpr TStringBuf CompileCacheQueries = "compile_cache_queries";
-constexpr TStringBuf ResourcePoolsName = "resource_pools";
+class ISystemViewResolver {
+public:
+    virtual ~ISystemViewResolver() = default;
 
-constexpr TStringBuf TopQueriesByDuration1MinuteName = "top_queries_by_duration_one_minute";
-constexpr TStringBuf TopQueriesByDuration1HourName = "top_queries_by_duration_one_hour";
-constexpr TStringBuf TopQueriesByReadBytes1MinuteName = "top_queries_by_read_bytes_one_minute";
-constexpr TStringBuf TopQueriesByReadBytes1HourName = "top_queries_by_read_bytes_one_hour";
-constexpr TStringBuf TopQueriesByCpuTime1MinuteName = "top_queries_by_cpu_time_one_minute";
-constexpr TStringBuf TopQueriesByCpuTime1HourName = "top_queries_by_cpu_time_one_hour";
-constexpr TStringBuf TopQueriesByRequestUnits1MinuteName = "top_queries_by_request_units_one_minute";
-constexpr TStringBuf TopQueriesByRequestUnits1HourName = "top_queries_by_request_units_one_hour";
+    enum class ESource : ui8 {
+        Domain,
+        SubDomain,
+        OlapStore,
+        ColumnTable
+    };
 
-constexpr TStringBuf PDisksName = "ds_pdisks";
-constexpr TStringBuf VSlotsName = "ds_vslots";
-constexpr TStringBuf GroupsName = "ds_groups";
-constexpr TStringBuf StoragePoolsName = "ds_storage_pools";
-constexpr TStringBuf StorageStatsName = "ds_storage_stats";
+    struct TSystemViewPath {
+        TVector<TString> Parent;
+        TString ViewName;
+    };
 
-constexpr TStringBuf TabletsName = "hive_tablets";
+    struct TSchema {
+        THashMap<NTable::TTag, TSysTables::TTableColumnInfo> Columns;
+        TVector<NScheme::TTypeInfo> KeyColumnTypes;
+    };
 
-constexpr TStringBuf QueryMetricsName = "query_metrics_one_minute";
+    virtual bool IsSystemViewPath(const TVector<TString>& path, TSystemViewPath& sysViewPath) const = 0;
+
+    virtual TMaybe<TSchema> GetSystemViewSchema(const TStringBuf viewName, ESource sourceObjectType) const = 0;
+
+    virtual TMaybe<TSchema> GetSystemViewSchema(NKikimrSysView::ESysViewType viewType) const = 0;
+
+    virtual bool IsSystemView(const TStringBuf viewName) const = 0;
+
+    virtual TVector<TString> GetSystemViewNames(ESource target) const = 0;
+
+    virtual const THashMap<TString, NKikimrSysView::ESysViewType>& GetSystemViewsTypes(ESource target) const = 0;
+};
+
+template <typename Schema>
+void FillSchema(ISystemViewResolver::TSchema& schema);
 
 constexpr TStringBuf StorePrimaryIndexStatsName = "store_primary_index_stats";
 constexpr TStringBuf StorePrimaryIndexSchemaStatsName = "store_primary_index_schema_stats";
@@ -47,29 +59,9 @@ constexpr TStringBuf TablePrimaryIndexPortionStatsName = "primary_index_portion_
 constexpr TStringBuf TablePrimaryIndexGranuleStatsName = "primary_index_granule_stats";
 constexpr TStringBuf TablePrimaryIndexOptimizerStatsName = "primary_index_optimizer_stats";
 
-constexpr TStringBuf TopPartitionsByCpu1MinuteName = "top_partitions_one_minute";
-constexpr TStringBuf TopPartitionsByCpu1HourName = "top_partitions_one_hour";
-
-constexpr TStringBuf TopPartitionsByTli1MinuteName = "top_partitions_by_tli_one_minute";
-constexpr TStringBuf TopPartitionsByTli1HourName = "top_partitions_by_tli_one_hour";
-
 constexpr TStringBuf PgTablesName = "pg_tables";
 constexpr TStringBuf InformationSchemaTablesName = "tables";
 constexpr TStringBuf PgClassName = "pg_class";
-
-constexpr TStringBuf ResourcePoolClassifiersName = "resource_pool_classifiers";
-
-constexpr TStringBuf ShowCreateName = "show_create";
-
-namespace NAuth {
-    constexpr TStringBuf UsersName = "auth_users";
-    constexpr TStringBuf GroupsName = "auth_groups";
-    constexpr TStringBuf GroupMembersName = "auth_group_members";
-    constexpr TStringBuf OwnersName = "auth_owners";
-    constexpr TStringBuf PermissionsName = "auth_permissions";
-    constexpr TStringBuf EffectivePermissionsName = "auth_effective_permissions";
-}
-
 
 struct Schema : NIceDb::Schema {
     struct PartitionStats : Table<1> {
@@ -860,42 +852,87 @@ struct Schema : NIceDb::Schema {
     };
 };
 
+struct SysViewsRegistryRecord {
+    using FillSchemaPointer = void(*)(ISystemViewResolver::TSchema&);
+
+    const TStringBuf Name;
+    const NKikimrSysView::ESysViewType Type;
+    const TSet<ISystemViewResolver::ESource> SourceObjectTypes;
+    const FillSchemaPointer FillSchemaFunc;
+};
+
+struct SysViewsRegistry {
+    using ESysViewType = NKikimrSysView::ESysViewType;
+    using ESource = ISystemViewResolver::ESource;
+
+    SysViewsRegistry() {
+        for (const auto& registryRecord : SysViews) {
+            SysViewTypesMap.emplace(registryRecord.Name, registryRecord.Type);
+        }
+
+        for (const auto& registryRecord : RewrittenSysViews) {
+            SysViewTypesMap.emplace(registryRecord.Name, registryRecord.Type);
+        }
+
+        SysViewTypesMap.emplace(PgTablesName, ESysViewType::EPgTables);
+        SysViewTypesMap.emplace(InformationSchemaTablesName, ESysViewType::EInformationSchemaTables);
+        SysViewTypesMap.emplace(PgClassName, ESysViewType::EPgClass);
+    }
+
+    const TVector<SysViewsRegistryRecord> SysViews = {
+        {"partition_stats", ESysViewType::EPartitionStats, {ESource::Domain, ESource::SubDomain},  &FillSchema<Schema::PartitionStats>},
+        {"nodes", ESysViewType::ENodes, {ESource::Domain, ESource::SubDomain},  &FillSchema<Schema::Nodes>},
+
+        {"top_queries_by_duration_one_minute", ESysViewType::ETopQueriesByDurationOneMinute, {ESource::Domain, ESource::SubDomain},  &FillSchema<Schema::QueryStats>},
+        {"top_queries_by_duration_one_hour", ESysViewType::ETopQueriesByDurationOneHour, {ESource::Domain, ESource::SubDomain},  &FillSchema<Schema::QueryStats>},
+        {"top_queries_by_read_bytes_one_minute", ESysViewType::ETopQueriesByReadBytesOneMinute, {ESource::Domain, ESource::SubDomain},  &FillSchema<Schema::QueryStats>},
+        {"top_queries_by_read_bytes_one_hour", ESysViewType::ETopQueriesByReadBytesOneHour, {ESource::Domain, ESource::SubDomain},  &FillSchema<Schema::QueryStats>},
+        {"top_queries_by_cpu_time_one_minute", ESysViewType::ETopQueriesByCpuTimeOneMinute, {ESource::Domain, ESource::SubDomain},  &FillSchema<Schema::QueryStats>},
+        {"top_queries_by_cpu_time_one_hour", ESysViewType::ETopQueriesByCpuTimeOneHour, {ESource::Domain, ESource::SubDomain},  &FillSchema<Schema::QueryStats>},
+        {"top_queries_by_request_units_one_minute", ESysViewType::ETopQueriesByRequestUnitsOneMinute, {ESource::Domain, ESource::SubDomain},  &FillSchema<Schema::QueryStats>},
+        {"top_queries_by_request_units_one_hour", ESysViewType::ETopQueriesByRequestUnitsOneHour, {ESource::Domain, ESource::SubDomain},  &FillSchema<Schema::QueryStats>},
+
+        {"query_sessions", ESysViewType::EQuerySessions, {ESource::Domain, ESource::SubDomain},  &FillSchema<Schema::QuerySessions>},
+        {"query_metrics_one_minute", ESysViewType::EQueryMetricsOneMinute, {ESource::Domain, ESource::SubDomain},  &FillSchema<Schema::QueryMetrics>},
+        // don't have approved schema yet
+        // {"compile_cache_queries", ESysViewType::ECompileCacheQueries, {ESource::Domain, ESource::SubDomain},  &FillSchema<Schema::CompileCacheQueries>},
+
+        {"ds_pdisks", ESysViewType::EPDisks, {ESource::Domain},  &FillSchema<Schema::PDisks>},
+        {"ds_vslots", ESysViewType::EVSlots, {ESource::Domain},  &FillSchema<Schema::VSlots>},
+        {"ds_groups", ESysViewType::EGroups, {ESource::Domain},  &FillSchema<Schema::Groups>},
+        {"ds_storage_pools", ESysViewType::EStoragePools, {ESource::Domain},  &FillSchema<Schema::StoragePools>},
+        {"ds_storage_stats", ESysViewType::EStorageStats, {ESource::Domain},  &FillSchema<Schema::StorageStats>},
+        {"hive_tablets", ESysViewType::ETablets, {ESource::Domain},  &FillSchema<Schema::Tablets>},
+
+        {"top_partitions_one_minute", ESysViewType::ETopPartitionsByCpuOneMinute, {ESource::Domain, ESource::SubDomain},  &FillSchema<Schema::TopPartitions>},
+        {"top_partitions_one_hour", ESysViewType::ETopPartitionsByCpuOneHour, {ESource::Domain, ESource::SubDomain},  &FillSchema<Schema::TopPartitions>},
+        {"top_partitions_by_tli_one_minute", ESysViewType::ETopPartitionsByTliOneMinute, {ESource::Domain, ESource::SubDomain},  &FillSchema<Schema::TopPartitionsTli>},
+        {"top_partitions_by_tli_one_hour", ESysViewType::ETopPartitionsByTliOneHour, {ESource::Domain, ESource::SubDomain},  &FillSchema<Schema::TopPartitionsTli>},
+
+        {"resource_pool_classifiers", ESysViewType::EResourcePoolClassifiers, {ESource::Domain, ESource::SubDomain},  &FillSchema<Schema::ResourcePoolClassifiers>},
+        {"resource_pools", ESysViewType::EResourcePools, {ESource::Domain, ESource::SubDomain},  &FillSchema<Schema::ResourcePools>},
+
+        {"auth_users", ESysViewType::EAuthUsers, {ESource::Domain, ESource::SubDomain},  &FillSchema<Schema::AuthUsers>},
+        {"auth_groups", ESysViewType::EAuthGroups, {ESource::Domain, ESource::SubDomain},  &FillSchema<Schema::AuthGroups>},
+        {"auth_group_members", ESysViewType::EAuthGroupMembers, {ESource::Domain, ESource::SubDomain},  &FillSchema<Schema::AuthGroupMembers>},
+        {"auth_owners", ESysViewType::EAuthOwners, {ESource::Domain, ESource::SubDomain},  &FillSchema<Schema::AuthOwners>},
+        {"auth_permissions", ESysViewType::EAuthPermissions, {ESource::Domain, ESource::SubDomain},  &FillSchema<Schema::AuthPermissions>},
+        {"auth_effective_permissions", ESysViewType::EAuthEffectivePermissions, {ESource::Domain, ESource::SubDomain},  &FillSchema<Schema::AuthPermissions>},
+    };
+
+    // don't have approved schema yet
+        // RegisterSystemView<Schema::CompileCacheQueries>(CompileCacheQueries, ESysViewType::ECompileCacheQueries);
+
+    const TVector<SysViewsRegistryRecord> RewrittenSysViews = {
+        {"show_create", ESysViewType::EShowCreate, {},  &FillSchema<Schema::ShowCreate>},
+    };
+
+    THashMap<TStringBuf, ESysViewType> SysViewTypesMap;
+
+} const Registry;
+
 bool MaybeSystemViewPath(const TVector<TString>& path);
 bool MaybeSystemViewFolderPath(const TVector<TString>& path);
-
-class ISystemViewResolver {
-public:
-    virtual ~ISystemViewResolver() = default;
-
-    enum class ETarget : ui8 {
-        Domain,
-        SubDomain,
-        OlapStore,
-        ColumnTable
-    };
-
-    struct TSystemViewPath {
-        TVector<TString> Parent;
-        TString ViewName;
-    };
-
-    struct TSchema {
-        THashMap<NTable::TTag, TSysTables::TTableColumnInfo> Columns;
-        TVector<NScheme::TTypeInfo> KeyColumnTypes;
-    };
-
-    virtual bool IsSystemViewPath(const TVector<TString>& path, TSystemViewPath& sysViewPath) const = 0;
-
-    virtual TMaybe<TSchema> GetSystemViewSchema(const TStringBuf viewName, ETarget target) const = 0;
-
-    virtual TMaybe<TSchema> GetSystemViewSchema(NKikimrSysView::ESysViewType viewType) const = 0;
-
-    virtual bool IsSystemView(const TStringBuf viewName) const = 0;
-
-    virtual TVector<TString> GetSystemViewNames(ETarget target) const = 0;
-
-    virtual const THashMap<TString, NKikimrSysView::ESysViewType>& GetSystemViewsTypes(ETarget target) const = 0;
-};
 
 THolder<ISystemViewResolver> CreateSystemViewResolver();
 

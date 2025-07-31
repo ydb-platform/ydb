@@ -113,7 +113,7 @@ private:
     void StartScan() {
         if (!AppData()->FeatureFlags.GetEnableShowCreate()) {
             ReplyErrorAndDie(Ydb::StatusIds::SCHEME_ERROR,
-                TStringBuilder() << "Sys view is not supported: " << ShowCreateName);
+                TStringBuilder() << "Sys view 'show_create' is not supported");
             return;
         }
 

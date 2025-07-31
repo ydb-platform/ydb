@@ -139,8 +139,8 @@ void TSchemeShard::CollectSysViewUpdates(const TActorContext& ctx) {
     }
 
     const auto sysViewDirType = IsDomainSchemeShard
-        ? NSysView::ISystemViewResolver::ETarget::Domain
-        : NSysView::ISystemViewResolver::ETarget::SubDomain;
+        ? NSysView::ISystemViewResolver::ESource::Domain
+        : NSysView::ISystemViewResolver::ESource::SubDomain;
     const auto sysViewsRegistry = NSysView::CreateSystemViewResolver()->GetSystemViewsTypes(sysViewDirType);
 
     // create absent system views only if there's no '.sys' entry or '.sys' is a directory

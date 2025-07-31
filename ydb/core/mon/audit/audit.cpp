@@ -16,7 +16,10 @@ namespace {
     const TString DEFAULT_OPERATION = "HTTP REQUEST";
     const TString EMPTY_VALUE = "{none}";
     const TString X_FORWARDED_FOR_HEADER = "X-Forwarded-For";
-    const size_t MAX_AUDIT_BODY_SIZE = 2 * 1024 * 1024; // 2 MB (4MB limit per event)
+    const TStringBuf TRUNCATED_SUFFIX = "**TRUNCATED_BY_YDB**";
+
+    // audit event has limit of 4 MB, but we limit body size to 2 MB
+    const size_t MAX_AUDIT_BODY_SIZE = 2 * 1024 * 1024 - TRUNCATED_SUFFIX.size();
 
     enum ERequestStatus {
         Success,
@@ -92,7 +95,14 @@ void TAuditCtx::InitAudit(const NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPt
         AddAuditLogPart("params", ToString(params));
     }
     if (!request->Body.Empty()) {
-        AddAuditLogPart("body", ToString(request->Body.substr(0, MAX_AUDIT_BODY_SIZE)));
+        TStringBuilder auditBody;
+        if (request->Body.size() > MAX_AUDIT_BODY_SIZE) {
+            auditBody << request->Body.substr(0, MAX_AUDIT_BODY_SIZE) << TRUNCATED_SUFFIX;
+        } else {
+            auditBody << request->Body;
+        }
+
+        AddAuditLogPart("body", auditBody);
     }
 }
 

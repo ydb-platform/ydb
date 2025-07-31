@@ -21,6 +21,8 @@ void ISyncPoint::OnSourcePrepared(std::shared_ptr<NCommon::IDataSource>&& source
     AFL_VERIFY(sourceInput->IsSyncSection())("source_id", sourceInput->GetSourceId());
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "OnSourcePrepared")("source_id", sourceInput->GetSourceId())(
         "prepared", IsSourcePrepared(sourceInput));
+    AFL_VERIFY(SourcesSequentially.size());
+    AFL_VERIFY(sourceInput->GetSourceId() != SourcesSequentially.front()->GetSourceId() || IsSourcePrepared(SourcesSequentially.front()));
     while (SourcesSequentially.size() && IsSourcePrepared(SourcesSequentially.front())) {
         auto source = SourcesSequentially.front();
         switch (OnSourceReady(source, reader)) {
@@ -57,7 +59,11 @@ void ISyncPoint::OnSourcePrepared(std::shared_ptr<NCommon::IDataSource>&& source
 
 TString ISyncPoint::DebugString() const {
     TStringBuilder sb;
-    sb << "{" << PointName << ";" << PointIndex << ";" << IsFinished() << ";";
+    sb << "{" << PointName << ";IDX=" << PointIndex << ";FIN=" << IsFinished() << ";";
+    const TString details = DoDebugString();
+    if (!!details) {
+        sb << "DETAILS:" << details << ";";
+    }
     if (SourcesSequentially.size()) {
         sb << "SRCS:[";
         ui32 idx = 0;
@@ -92,9 +98,6 @@ void ISyncPoint::AddSource(std::shared_ptr<NCommon::IDataSource>&& source) {
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("source_id", source->GetSourceId());
     AFL_VERIFY(!AbortFlag);
     source->MutableAs<IDataSource>()->SetPurposeSyncPointIndex(GetPointIndex());
-    if (Next) {
-        source->MutableAs<IDataSource>()->SetNeedFullAnswer(false);
-    }
     AFL_VERIFY(!!source);
     if (!LastSourceIdx) {
         LastSourceIdx = source->GetSourceIdx();

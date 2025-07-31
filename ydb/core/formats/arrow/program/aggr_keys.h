@@ -164,18 +164,7 @@ private:
     std::vector<TColumnChainInfo> AggregationKeys;
     std::vector<TWithKeysAggregationOption> Aggregations;
 
-    /*
-    virtual std::shared_ptr<IResourceProcessor> BuildResultsAggregator() const override {
-        std::vector<TColumnChainInfo> input = AggregationKeys;
-        std::vector<TWithKeysAggregationOption> aggrOptions;
-        for (auto&& i : Aggregations) {
-            input.emplace_back(i.GetOutput());
-            aggrOptions.emplace_back({ i.GetOutput() }, i.GetOutput(), i.GetSecondaryAggregationId());
-        }
-        auto output = input;
-        return std::make_shared<TWithKeysAggregationProcessor>(std::move(input), std::move(output), AggregationKeys, aggrOptions);
-    }
-*/
+    virtual std::shared_ptr<IResourcesAggregator> BuildResultsAggregator() const override;
 
     virtual TConclusion<EExecutionResult> DoExecute(const TProcessorContext& context, const TExecutionNodeContext& nodeContext) const override;
 

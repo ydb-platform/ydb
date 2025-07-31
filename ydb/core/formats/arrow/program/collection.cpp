@@ -9,22 +9,29 @@
 
 namespace NKikimr::NArrow::NAccessor {
 
-void TAccessorsCollection::Upsert(const ui32 columnId, const std::shared_ptr<IChunkedArray>& data, const bool withFilter) {
+void TAccessorsCollection::Upsert(
+    const ui32 columnId, const std::shared_ptr<IChunkedArray>& data, const bool withFilter, const bool isAggregation) {
     Remove(columnId, true);
-    AddVerified(columnId, data, withFilter);
+    AddVerified(columnId, data, withFilter, isAggregation);
 }
 
-void TAccessorsCollection::AddVerified(const ui32 columnId, const arrow::Datum& data, const bool withFilter) {
-    AddVerified(columnId, TAccessorCollectedContainer(data), withFilter);
+void TAccessorsCollection::AddVerified(const ui32 columnId, const arrow::Datum& data, const bool withFilter, const bool forceChangeCount) {
+    AddVerified(columnId, TAccessorCollectedContainer(data), withFilter, forceChangeCount);
 }
 
-void TAccessorsCollection::AddVerified(const ui32 columnId, const std::shared_ptr<IChunkedArray>& data, const bool withFilter) {
-    AddVerified(columnId, TAccessorCollectedContainer(data), withFilter);
+void TAccessorsCollection::AddVerified(
+    const ui32 columnId, const std::shared_ptr<IChunkedArray>& data, const bool withFilter, const bool forceChangeCount) {
+    AddVerified(columnId, TAccessorCollectedContainer(data), withFilter, forceChangeCount);
 }
 
-void TAccessorsCollection::AddVerified(const ui32 columnId, const TAccessorCollectedContainer& data, const bool withFilter) {
+void TAccessorsCollection::AddVerified(
+    const ui32 columnId, const TAccessorCollectedContainer& data, const bool withFilter, const bool forceChangeCount) {
     AFL_VERIFY(columnId);
-    if (UseFilter && withFilter && !Filter->IsTotalAllowFilter()) {
+    if (forceChangeCount) {
+        AFL_VERIFY(UseFilter);
+        RecordsCountActual = data->GetRecordsCount();
+        AFL_VERIFY(Accessors.emplace(columnId, data).second);
+    } else if (UseFilter && withFilter && !Filter->IsTotalAllowFilter()) {
         auto filtered = Filter->Apply(data.GetData());
         RecordsCountActual = filtered->GetRecordsCount();
         AFL_VERIFY(Accessors.emplace(columnId, filtered).second)("id", columnId);
@@ -42,6 +49,9 @@ void TAccessorsCollection::AddVerified(const ui32 columnId, const TAccessorColle
 
 std::shared_ptr<arrow::Array> TAccessorsCollection::GetArrayVerified(const ui32 columnId) const {
     auto chunked = GetAccessorVerified(columnId)->GetChunkedArray();
+    if (chunked->num_chunks() == 1) {
+        return chunked->chunk(0);
+    }
     arrow::FieldVector fields = { GetFieldVerified(columnId) };
     auto schema = std::make_shared<arrow::Schema>(fields);
     return NArrow::ToBatch(arrow::Table::Make(schema, { chunked }))->column(0);

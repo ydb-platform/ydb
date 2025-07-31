@@ -96,7 +96,7 @@ TConclusion<bool> TDetectInMem::DoExecuteInplace(
         source->SetSourceInMemory(true);
     }
     AFL_VERIFY(!source->GetAs<IDataSource>()->NeedAccessorsFetching());
-    auto plan = source->GetContext()->GetColumnsFetchingPlan(source);
+    auto plan = source->GetContext()->GetColumnsFetchingPlan(source, true);
     source->MutableAs<IDataSource>()->InitFetchingPlan(plan);
     TFetchingScriptCursor cursor(plan, 0);
     return cursor.Execute(source);

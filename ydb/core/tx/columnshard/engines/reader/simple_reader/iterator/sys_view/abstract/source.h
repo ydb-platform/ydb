@@ -11,6 +11,8 @@ class TSourceData: public NReader::NSimple::IDataSource {
 private:
     using TBase = NReader::NSimple::IDataSource;
     YDB_READONLY(ui64, TabletId, 0);
+    const NCommon::TReplaceKeyAdapter Start;
+    const NCommon::TReplaceKeyAdapter Finish;
 
     virtual TConclusion<bool> DoStartFetchImpl(const NArrow::NSSA::TProcessorContext& /*context*/,
         const std::vector<std::shared_ptr<NReader::NCommon::IKernelFetchLogic>>& /*fetchersExt*/) override {
@@ -61,18 +63,18 @@ private:
 
     virtual NArrow::TSimpleRow GetStartPKRecordBatch() const override {
         if (GetContext()->GetReadMetadata()->IsDescSorted()) {
-            return GetFinish().GetValue();
+            return Finish.GetValue();
         } else {
-            return GetStart().GetValue();
+            return Start.GetValue();
         }
     }
 
     virtual NArrow::TSimpleRow GetMinPK() const override {
-        return GetStart().GetValue();
+        return Start.GetValue();
     }
 
     virtual NArrow::TSimpleRow GetMaxPK() const override {
-        return GetFinish().GetValue();
+        return Finish.GetValue();
     }
 
     virtual THashMap<TChunkAddress, TString> DecodeBlobAddresses(
@@ -160,14 +162,17 @@ protected:
     }
 
 public:
+    static bool CheckTypeCast(const EType type) {
+        return type == NCommon::IDataSource::EType::SimpleSysInfo;
+    }
+
     TSourceData(const ui32 sourceId, const ui32 sourceIdx, const ui64 tabletId, const NOlap::TSnapshot& minSnapshot,
         const NOlap::TSnapshot& maxSnapshot, NArrow::TSimpleRow&& start, NArrow::TSimpleRow&& finish, const std::optional<ui32> recordsCount,
         const std::shared_ptr<NReader::NCommon::TSpecialReadContext>& context)
-        : TBase(EType::SysInfo, sourceId, sourceIdx, context, 
-            TReplaceKeyAdapter(context->GetReadMetadata()->IsDescSorted() ? std::move(finish) : std::move(start), context->GetReadMetadata()->IsDescSorted()), 
-            TReplaceKeyAdapter(context->GetReadMetadata()->IsDescSorted() ? std::move(start) : std::move(finish), context->GetReadMetadata()->IsDescSorted()), 
-            minSnapshot, maxSnapshot, recordsCount, std::nullopt, false)
-        , TabletId(tabletId) {
+        : TBase(EType::SimpleSysInfo, sourceId, sourceIdx, context, minSnapshot, maxSnapshot, recordsCount, std::nullopt, false)
+        , TabletId(tabletId)
+        , Start(context->GetReadMetadata()->IsDescSorted() ? std::move(finish) : std::move(start), context->GetReadMetadata()->IsDescSorted())
+        , Finish(context->GetReadMetadata()->IsDescSorted() ? std::move(start) : std::move(finish), context->GetReadMetadata()->IsDescSorted()) {
     }
 };
 

@@ -399,12 +399,21 @@ bool TPortionDataSource::DoStartFetchingAccessor(const std::shared_ptr<NCommon::
 
 TPortionDataSource::TPortionDataSource(
     const ui32 sourceIdx, const std::shared_ptr<TPortionInfo>& portion, const std::shared_ptr<NCommon::TSpecialReadContext>& context)
-    : TBase(EType::Portion, portion->GetPortionId(), sourceIdx, context, TReplaceKeyAdapter::BuildStart(*portion, *context->GetReadMetadata()),
-          TReplaceKeyAdapter::BuildFinish(*portion, *context->GetReadMetadata()), portion->RecordSnapshotMin(TSnapshot::Zero()),
+    : TBase(EType::SimplePortion, portion->GetPortionId(), sourceIdx, context, portion->RecordSnapshotMin(TSnapshot::Zero()),
           portion->RecordSnapshotMax(TSnapshot::Zero()), portion->GetRecordsCount(), portion->GetShardingVersionOptional(),
           portion->GetMeta().GetDeletionsCount())
     , Portion(portion)
-    , Schema(GetContext()->GetReadMetadata()->GetLoadSchemaVerified(*portion)) {
+    , Schema(GetContext()->GetReadMetadata()->GetLoadSchemaVerified(*portion))
+    , Start(TReplaceKeyAdapter::BuildStart(*portion, *context->GetReadMetadata()))
+    , Finish(TReplaceKeyAdapter::BuildFinish(*portion, *context->GetReadMetadata())) {
+    AFL_VERIFY_DEBUG(Start.Compare(Finish) != std::partial_ordering::greater)("start", Start.DebugString())("finish", Finish.DebugString());
+    if (context->GetReadMetadata()->IsDescSorted()) {
+        UsageClass = GetContext()->GetReadMetadata()->GetPKRangesFilter().GetUsageClass(Finish.GetValue(), Start.GetValue());
+    } else {
+        UsageClass = GetContext()->GetReadMetadata()->GetPKRangesFilter().GetUsageClass(Start.GetValue(), Finish.GetValue());
+    }
+    AFL_VERIFY(UsageClass != TPKRangeFilter::EUsageClass::NoUsage);
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "portions_for_merge")("start", Start.DebugString())("finish", Finish.DebugString());
 }
 
 TConclusion<bool> TPortionDataSource::DoStartReserveMemory(const NArrow::NSSA::TProcessorContext& context,

@@ -7,25 +7,24 @@
 
 namespace NKikimr::NOlap::NReader::NSimple {
 
-std::shared_ptr<TFetchingScript> TSpecialReadContext::DoGetColumnsFetchingPlan(const std::shared_ptr<NCommon::IDataSource>& sourceExt) {
-    const auto source = std::static_pointer_cast<IDataSource>(sourceExt);
-    const bool needSnapshots = GetReadMetadata()->GetRequestSnapshot() < source->GetRecordSnapshotMax();
-    if (!sourceExt->NeedPortionData()) {
-        sourceExt->SetSourceInMemory(true);
-        source->InitUsedRawBytes();
-    } else {
-        AFL_VERIFY(source->HasPortionAccessor());
-    }
+std::shared_ptr<TFetchingScript> TSpecialReadContext::DoGetColumnsFetchingPlan(
+    const std::shared_ptr<NCommon::IDataSource>& sourceExt, const bool isFinalSyncPoint) {
     const bool partialUsageByPK = [&]() {
-        switch (source->GetUsageClass()) {
-            case TPKRangeFilter::EUsageClass::PartialUsage:
-                return true;
-            case TPKRangeFilter::EUsageClass::NoUsage:
-                return true;
-            case TPKRangeFilter::EUsageClass::FullUsage:
-                return false;
+        if (sourceExt->GetType() == NCommon::IDataSource::EType::SimplePortion) {
+            const auto source = std::static_pointer_cast<TPortionDataSource>(sourceExt);
+            switch (source->GetUsageClass()) {
+                case TPKRangeFilter::EUsageClass::PartialUsage:
+                    return true;
+                case TPKRangeFilter::EUsageClass::NoUsage:
+                    return true;
+                case TPKRangeFilter::EUsageClass::FullUsage:
+                    return false;
+            }
         }
+        return false;
     }();
+    const auto* source = sourceExt->GetAs<IDataSource>();
+    const bool needSnapshots = GetReadMetadata()->GetRequestSnapshot() < source->GetRecordSnapshotMax();
 
     const bool useIndexes = false;
     const bool hasDeletions = source->GetHasDeletions();
@@ -43,8 +42,8 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::DoGetColumnsFetchingPlan(c
         if (result.NeedInitialization()) {
             TGuard<TMutex> g(Mutex);
             if (auto gInit = result.StartInitialization()) {
-                gInit->InitializationFinished(
-                    BuildColumnsFetchingPlan(needSnapshots, partialUsageByPK, useIndexes, needShardingFilter, hasDeletions, preventDuplicates));
+                gInit->InitializationFinished(BuildColumnsFetchingPlan(
+                    needSnapshots, partialUsageByPK, useIndexes, needShardingFilter, hasDeletions, preventDuplicates, isFinalSyncPoint));
             }
             AFL_VERIFY(!result.NeedInitialization());
         }
@@ -53,7 +52,8 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::DoGetColumnsFetchingPlan(c
 }
 
 std::shared_ptr<TFetchingScript> TSpecialReadContext::BuildColumnsFetchingPlan(const bool needSnapshots, const bool partialUsageByPredicateExt,
-    const bool /*useIndexes*/, const bool needFilterSharding, const bool needFilterDeletion, const bool preventDuplicates) const {
+    const bool /*useIndexes*/, const bool needFilterSharding, const bool needFilterDeletion, const bool preventDuplicates,
+    const bool isFinalSyncPoint) const {
     const bool partialUsageByPredicate = partialUsageByPredicateExt && GetPredicateColumns()->GetColumnsCount();
 
     NCommon::TFetchingScriptBuilder acc(*this);
@@ -96,7 +96,7 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::BuildColumnsFetchingPlan(c
     }
     if (!GetSourcesAggregationScript()) {
         acc.AddStep(std::make_shared<NCommon::TBuildStageResultStep>());
-        acc.AddStep(std::make_shared<TPrepareResultStep>());
+        acc.AddStep(std::make_shared<TPrepareResultStep>(isFinalSyncPoint));
     }
     return std::move(acc).Build();
 }

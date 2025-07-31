@@ -316,6 +316,10 @@ void GenerateExtendedInfo(TTestActorRuntime &runtime, NKikimrBlobStorage::TBaseC
             groupShift = nodeIndex * groupsPerNode;
         }
 
+        if (nodeIndex < options.NodesWithoutPDisksCount) {
+            continue;
+        }
+
         for (ui32 pdiskIndex = 0; pdiskIndex < pdisks; ++pdiskIndex) {
             auto pdiskId = nodeId * pdisks + pdiskIndex;
             auto &pdisk = node.PDiskStateInfo[pdiskId];

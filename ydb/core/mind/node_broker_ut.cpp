@@ -905,6 +905,7 @@ void CheckAsyncResolveNode(TTestActorRuntime &runtime, ui32 nodeId, const TStrin
     UNIT_ASSERT(reply);
 
     UNIT_ASSERT_VALUES_EQUAL(reply->NodeId, nodeId);
+    UNIT_ASSERT(!reply->Addresses.empty());
     UNIT_ASSERT_VALUES_EQUAL(reply->Addresses[0].GetAddress(), addr);
 }
 
@@ -4778,6 +4779,10 @@ Y_UNIT_TEST_SUITE(TDynamicNameserverTest) {
         runtime.WaitFor("cache miss", [&]{return resolveBlock.size() >= 1 || syncBlock.size() >= 1; });
 
         // Reboot NodeBroker to break pipe
+        TBlockEvents<TEvTabletPipe::TEvClientConnected> connectBlock(runtime,
+            [&](auto& ev) {
+                return runtime.FindActorName(ev->GetRecipientRewrite()) == "NAMESERVICE";
+            });
         RebootTablet(runtime, MakeNodeBrokerID(), sender);
 
         // Resolve request is failed, because pipe was broken
@@ -4787,6 +4792,7 @@ Y_UNIT_TEST_SUITE(TDynamicNameserverTest) {
         resolveBlock.Stop();
         syncBlock.Stop();
         deltaBlock.Stop();
+        connectBlock.Stop().Unblock();
 
         // The following requests should be OK
         CheckResolveNode(runtime, sender, NODE1, "1.2.3.4");

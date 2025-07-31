@@ -64,7 +64,7 @@ rows {
         bytes_value: "from"
       }
       payload {
-        bytes_value: "seconds: 1702046439\n"
+        bytes_value: "seconds: 1\n"
       }
     }
     pairs {
@@ -96,12 +96,12 @@ rows {
         bytes_value: "to"
       }
       payload {
-        bytes_value: "seconds: 1702046739\n"
+        bytes_value: "seconds: 86401\n"
       }
     }
   }
   items {
-    uint32_value: 0
+    uint32_value: 10
   }
   items {
     bytes_value: "RATE"
@@ -141,7 +141,7 @@ rows {
         bytes_value: "from"
       }
       payload {
-        bytes_value: "seconds: 1702046439\n"
+        bytes_value: "seconds: 1\n"
       }
     }
     pairs {
@@ -173,12 +173,12 @@ rows {
         bytes_value: "to"
       }
       payload {
-        bytes_value: "seconds: 1702046739\n"
+        bytes_value: "seconds: 86401\n"
       }
     }
   }
   items {
-    uint32_value: 0
+    uint32_value: 20
   }
   items {
     bytes_value: "RATE"
@@ -218,7 +218,7 @@ rows {
         bytes_value: "from"
       }
       payload {
-        bytes_value: "seconds: 1702046439\n"
+        bytes_value: "seconds: 1\n"
       }
     }
     pairs {
@@ -250,12 +250,12 @@ rows {
         bytes_value: "to"
       }
       payload {
-        bytes_value: "seconds: 1702046739\n"
+        bytes_value: "seconds: 86401\n"
       }
     }
   }
   items {
-    uint32_value: 0
+    uint32_value: 30
   }
   items {
     bytes_value: "RATE"

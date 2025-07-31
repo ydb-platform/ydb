@@ -64,17 +64,20 @@ public:
 
     TDqSolomonMetricsQueueActor(
         ui64 consumersCount,
+        TDqSolomonReadParams&& readParams,
         ui64 pageSize,
         ui64 prefetchSize,
         ui64 batchCountLimit,
-        TDqSolomonReadParams&& readParams,
+        TDuration truePointsFindRange,
         std::shared_ptr<NYdb::ICredentialsProvider> credentialsProvider)
         : CurrentPage(0)
         , ConsumersCount(consumersCount)
+        , ReadParams(std::move(readParams))
         , PageSize(pageSize)
         , PrefetchSize(prefetchSize)
         , BatchCountLimit(batchCountLimit)
-        , ReadParams(std::move(readParams))
+        , TrueRangeFrom(TInstant::Seconds(ReadParams.Source.GetFrom()) - truePointsFindRange)
+        , TrueRangeTo(TInstant::Seconds(ReadParams.Source.GetTo()) + truePointsFindRange)
         , CredentialsProvider(credentialsProvider)
         , SolomonClient(NSo::ISolomonAccessorClient::Make(ReadParams.Source, CredentialsProvider))
     {}
@@ -276,7 +279,7 @@ private:
         std::map<TString, TString> selectors(ReadParams.Source.GetSelectors().begin(), ReadParams.Source.GetSelectors().end());
         ListingFuture = 
             SolomonClient
-                ->ListMetrics(selectors, PageSize, CurrentPage++)
+                ->ListMetrics(selectors, TrueRangeFrom, TrueRangeTo, PageSize, CurrentPage++)
                 .Subscribe([actorSystem, selfId = SelfId()](
                                 NThreading::TFuture<NSo::TListMetricsResponse> future) -> void {
                     try {
@@ -418,10 +421,12 @@ private:
     std::vector<NSo::MetricQueue::TMetric> Metrics;
     TMaybe<TString> MaybeIssues;
     
-    ui64 PageSize;
-    ui64 PrefetchSize;
-    ui64 BatchCountLimit;
     const TDqSolomonReadParams ReadParams;
+    const ui64 PageSize;
+    const ui64 PrefetchSize;
+    const ui64 BatchCountLimit;
+    const TInstant TrueRangeFrom;
+    const TInstant TrueRangeTo;
     const std::shared_ptr<NYdb::ICredentialsProvider> CredentialsProvider;
     const NSo::ISolomonAccessorClient::TPtr SolomonClient;
 
@@ -454,7 +459,12 @@ NActors::IActor* CreateSolomonMetricsQueueActor(
         batchCountLimit = FromString<ui64>(it->second);
     }
 
-    return new TDqSolomonMetricsQueueActor(consumersCount, pageSize, prefetchSize, batchCountLimit, std::move(readParams), credentialsProvider);
+    ui64 truePointsFindRange = 301;
+    if (auto it = settings.find("truePointsFindRange"); it != settings.end()) {
+        truePointsFindRange = FromString<ui64>(it->second);
+    }
+
+    return new TDqSolomonMetricsQueueActor(consumersCount, std::move(readParams), pageSize, prefetchSize, batchCountLimit, TDuration::Seconds(truePointsFindRange), credentialsProvider);
 }
 
 } // namespace NYql::NDq

@@ -837,7 +837,7 @@ public:
         std::vector<ui32> readIndex)
             : Columns(BuildColumns(inputColumns))
             , WriteIndex(std::move(writeIndex))
-            , ReadIndex(readIndex)
+            , ReadIndex(std::move(readIndex))
             , RowBatcher(Columns.size(), std::nullopt, alloc)
             , Alloc(alloc) {
     }
@@ -1106,12 +1106,16 @@ IDataBatchProjectionPtr CreateDataBatchProjection(
 IDataBatcherPtr CreateColumnDataBatcher(const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> inputColumns,
         std::vector<ui32> writeIndex, std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc,
         std::vector<ui32> readIndex) {
+    Y_ABORT_UNLESS(writeIndex.size() == inputColumns.size());
+    Y_ABORT_UNLESS(readIndex.empty() || readIndex.size() == inputColumns.size());
     return MakeIntrusive<TColumnDataBatcher>(inputColumns, std::move(writeIndex), std::move(alloc), std::move(readIndex));
 }
 
 IDataBatcherPtr CreateRowDataBatcher(const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> inputColumns,
         std::vector<ui32> writeIndex, std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc,
         std::vector<ui32> readIndex) {
+    Y_ABORT_UNLESS(writeIndex.size() == inputColumns.size());
+    Y_ABORT_UNLESS(readIndex.empty() || readIndex.size() == inputColumns.size());
     return MakeIntrusive<TRowDataBatcher>(inputColumns, std::move(writeIndex), std::move(alloc), std::move(readIndex));
 }
 

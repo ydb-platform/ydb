@@ -572,10 +572,12 @@ protected:
         TxId = ev->Get()->Record.GetRequest().GetTxId();
         Target = ActorIdFromProto(ev->Get()->Record.GetTarget());
 
+        const auto& databaseId = GetUserRequestContext()->DatabaseId;
         const auto& poolId = GetUserRequestContext()->PoolId.empty() ? NResourcePool::DEFAULT_POOL_ID : GetUserRequestContext()->PoolId;
-        if (poolId != NResourcePool::DEFAULT_POOL_ID || AccountDefaultPoolInScheduler) {
+
+        if (!databaseId.empty() && (poolId != NResourcePool::DEFAULT_POOL_ID || AccountDefaultPoolInScheduler)) {
             auto addQueryEvent = MakeHolder<NScheduler::TEvAddQuery>();
-            addQueryEvent->DatabaseId = Database;
+            addQueryEvent->DatabaseId = databaseId;
             addQueryEvent->PoolId = poolId;
             addQueryEvent->QueryId = TxId;
             this->Send(MakeKqpSchedulerServiceId(SelfId().NodeId()), addQueryEvent.Release(), 0, TxId);

@@ -36,7 +36,7 @@ namespace NKikimr::NKqp::NScheduler {
         }
 
         void PassAway() override {
-            if (!PassedAway) {
+            if (!PassedAway && IsAccountable()) {
                 PassedAway = true;
                 StopExecution();
             }

@@ -254,7 +254,6 @@ std::unique_ptr<TEvKqpNode::TEvStartKqpTasksRequest> TKqpPlanner::SerializeReque
         request.SetSerializedGUCSettings(SerializedGUCSettings);
     }
 
-    // TODO: is it the same value?
     request.SetDatabase(Database);
     request.SetDatabaseId(UserRequestContext->DatabaseId);
     request.SetPoolId(UserRequestContext->PoolId);

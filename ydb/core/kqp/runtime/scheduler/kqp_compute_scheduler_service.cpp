@@ -218,7 +218,7 @@ void TComputeScheduler::AddOrUpdatePool(const TString& databaseId, const TString
 
     TWriteGuard lock(Mutex);
     auto database = Root->GetDatabase(databaseId);
-    Y_ENSURE(database);
+    Y_ENSURE(database, "Database not found: " << databaseId);
 
     if (auto pool = database->GetPool(poolId)) {
         pool->Update(attrs);
@@ -232,9 +232,9 @@ TQueryPtr TComputeScheduler::AddOrUpdateQuery(const TString& databaseId, const T
 
     TWriteGuard lock(Mutex);
     auto database = Root->GetDatabase(databaseId);
-    Y_ENSURE(database);
+    Y_ENSURE(database, "Database not found: " << databaseId);
     auto pool = database->GetPool(poolId);
-    Y_ENSURE(pool);
+    Y_ENSURE(pool, "Pool not found: " << poolId);
 
     TQueryPtr query;
 

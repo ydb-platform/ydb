@@ -1805,7 +1805,7 @@ private:
         TypesCtx->AddDataSink(NYql::GenericProviderName, NYql::CreateGenericDataSink(state));
     }
 
-    void InitYtProvider() {
+   auto InitYtProvider() {
         TString userName = CreateGuidAsString();
         if (SessionCtx->GetUserToken() && SessionCtx->GetUserToken()->GetUserSID()) {
             userName = SessionCtx->GetUserToken()->GetUserSID();
@@ -1827,7 +1827,7 @@ private:
         TypesCtx->AddDataSource(YtProviderName, CreateYtDataSource(ytState));
         TypesCtx->AddDataSink(YtProviderName, CreateYtDataSink(ytState));
 
-        DataProvidersFinalizer = [ytGateway = FederatedQuerySetup->YtGateway, sessionId](const NYql::IGraphTransformer::TStatus&) {
+        return [ytGateway = FederatedQuerySetup->YtGateway, sessionId]() {
             return ytGateway->CloseSession(NYql::IYtGateway::TCloseSessionOptions(sessionId));
         };
     }
@@ -1854,7 +1854,7 @@ private:
         TypesCtx->AddDataSink(NYql::SolomonProviderName, NYql::CreateSolomonDataSink(solomonState));
     }
 
-    void InitPqProvider() {
+    auto InitPqProvider() {
         TString sessionId = CreateGuidAsString();
         auto state = MakeIntrusive<TPqState>(sessionId);
         state->SupportRtmrMode = false;
@@ -1868,6 +1868,10 @@ private:
 
         TypesCtx->AddDataSource(NYql::PqProviderName, NYql::CreatePqDataSource(state, state->Gateway));
         TypesCtx->AddDataSink(NYql::PqProviderName, NYql::CreatePqDataSink(state, state->Gateway));
+
+        return [pqGateway = FederatedQuerySetup->PqGateway, sessionId]() {
+            return pqGateway->CloseSession(sessionId);
+        };
     }
 
     void Init(EKikimrQueryType queryType) {
@@ -1908,14 +1912,29 @@ private:
         if (addExternalDataSources && FederatedQuerySetup) {
             InitS3Provider(queryType);
             InitGenericProvider();
+
+            TVector<std::function<TFuture<void>()>> finalizers;
             if (FederatedQuerySetup->YtGateway) {
-                InitYtProvider();
+                auto ytFinalizer = InitYtProvider();
+                finalizers.push_back(ytFinalizer);
+                
             }
             if (FederatedQuerySetup->SolomonGateway) {
                 InitSolomonProvider();
             }
             if (FederatedQuerySetup->PqGateway) {
-                InitPqProvider();
+                auto pqFinalizer = InitPqProvider();
+                finalizers.push_back(pqFinalizer);
+            }
+
+            if (!finalizers.empty()) {
+                DataProvidersFinalizer = [finalizers = std::move(finalizers)](const NYql::IGraphTransformer::TStatus&) {
+                    TVector<TFuture<void>> futures;
+                    for (auto f : finalizers) {
+                        futures.push_back(f());
+                    }
+                    return WaitAll(futures);
+                };
             }
         }
 

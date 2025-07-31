@@ -213,7 +213,7 @@ public:
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         LOG_INFO_S(ctx, NKikimrServices::TX_DATASHARD, "TTxRequestChangeRecords Execute"
             << ": at tablet# " << Self->TabletID());
-        
+
         NIceDb::TNiceDb db(txc.DB);
         if (!Precharge(db) || !Select(db)) {
             return false;

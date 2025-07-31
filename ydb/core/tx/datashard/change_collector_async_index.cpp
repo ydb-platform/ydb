@@ -2,7 +2,6 @@
 #include "datashard_impl.h"
 #include "datashard_user_db.h"
 
-#include <ydb/core/mind/hive/hive_log.h>
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
 
 namespace NKikimr {

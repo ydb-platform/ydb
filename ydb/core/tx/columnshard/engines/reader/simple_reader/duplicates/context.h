@@ -9,11 +9,12 @@ namespace NKikimr::NOlap::NReader::NSimple::NDuplicateFiltering {
 
 class TInternalFilterConstructor: TMoveOnly {
 private:
-    TEvRequestFilter::TPtr OriginalRequest;
+    const TEvRequestFilter::TPtr OriginalRequest;
     const TColumnDataSplitter Intervals;
     const std::shared_ptr<NGroupedMemoryManager::TProcessGuard> ProcessGuard;
     const std::shared_ptr<NGroupedMemoryManager::TScopeGuard> ScopeGuard;
     const std::shared_ptr<NGroupedMemoryManager::TGroupGuard> GroupGuard;
+    bool Done = false;
 
     std::map<TRowRange, NArrow::TColumnFilter> FiltersByRange;
 
@@ -27,7 +28,7 @@ private:
         AFL_VERIFY(!IsDone());
         AFL_VERIFY(IsReady());
         OriginalRequest->Get()->GetSubscriber()->OnFilterReady(std::move(FiltersByRange.begin()->second));
-        OriginalRequest.Reset();
+        Done = true;
         AFL_VERIFY(IsDone());
     }
 
@@ -57,12 +58,12 @@ public:
     }
 
     bool IsDone() const {
-        return !OriginalRequest;
+        return Done;
     }
 
     void Abort(const TString& error) {
         OriginalRequest->Get()->GetSubscriber()->OnFailure(error);
-        OriginalRequest.Reset();
+        Done = true;
     }
 
     const TEvRequestFilter::TPtr& GetRequest() const {

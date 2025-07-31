@@ -190,6 +190,7 @@ message ResultSet {
 
     // Metadata of the requested output format
     oneof output_format_meta {
+        // It is only filled for OUTPUT_FORMAT_ARROW.
         Formats.ArrowOutputFormatMeta arrow_output_format_meta = 5;
     }
 

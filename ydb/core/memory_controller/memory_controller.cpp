@@ -558,17 +558,17 @@ private:
                 break;
             }
             case EMemoryConsumerKind::DataAccessorCache: {
-                result.MinBytes = GetDataAccessorCacheBytes(Config, hardLimitBytes);
+                result.MinBytes = GetDataAccessorCacheLimitBytes(Config, hardLimitBytes);
                 result.MaxBytes = result.MinBytes;
                 break;
             }
             case EMemoryConsumerKind::ColumnDataCache: {
-                result.MinBytes = GetColumnDataCacheBytes(Config, hardLimitBytes);
+                result.MinBytes = GetColumnDataCacheLimitBytes(Config, hardLimitBytes);
                 result.MaxBytes = result.MinBytes;
                 break;
             }
             case EMemoryConsumerKind::PortionsMetaData: {
-                result.MinBytes = GetPortionsBytes(Config, hardLimitBytes);
+                result.MinBytes = GetPortionsMetaDataLimitBytes(Config, hardLimitBytes);
                 result.MaxBytes = result.MinBytes;
                 break;
             }

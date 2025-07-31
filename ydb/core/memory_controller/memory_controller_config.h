@@ -101,15 +101,15 @@ inline ui64 GetBlobCacheLimitBytes(const NKikimrConfig::TMemoryControllerConfig&
     return GetColumnTablesCacheLimitBytes(config, hardLimitBytes) * NKikimr::NOlap::TGlobalLimits::BlobCacheCoefficient;
 }
 
-inline ui64 GetDataAccessorCacheBytes(const NKikimrConfig::TMemoryControllerConfig& config, const ui64 hardLimitBytes) {
+inline ui64 GetDataAccessorCacheLimitBytes(const NKikimrConfig::TMemoryControllerConfig& config, const ui64 hardLimitBytes) {
     return GetColumnTablesCacheLimitBytes(config, hardLimitBytes) * NKikimr::NOlap::TGlobalLimits::DataAccessorCoefficient;
 }
 
-inline ui64 GetColumnDataCacheBytes(const NKikimrConfig::TMemoryControllerConfig& config, const ui64 hardLimitBytes) {
+inline ui64 GetColumnDataCacheLimitBytes(const NKikimrConfig::TMemoryControllerConfig& config, const ui64 hardLimitBytes) {
     return GetColumnTablesCacheLimitBytes(config, hardLimitBytes) * NKikimr::NOlap::TGlobalLimits::ColumnDataCacheCoefficient;
 }
 
-inline ui64 GetPortionsBytes(const NKikimrConfig::TMemoryControllerConfig& config, const ui64 hardLimitBytes) {
+inline ui64 GetPortionsMetaDataLimitBytes(const NKikimrConfig::TMemoryControllerConfig& config, const ui64 hardLimitBytes) {
     return GetColumnTablesCacheLimitBytes(config, hardLimitBytes) * NKikimr::NOlap::TGlobalLimits::PortionsCoefficient;
 }
 }

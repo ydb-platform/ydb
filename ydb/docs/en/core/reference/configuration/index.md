@@ -361,6 +361,8 @@ The minimum memory limit threshold for cache components isn't reserved, meaning 
 
 If needed, both the minimum and maximum thresholds should be overridden; otherwise, any missing threshold will have a default value.
 
+Column Tables Cache component limit is fixed.
+
 Example of the `memory_controller_config` section with specified shared cache limits:
 
 ```yaml
@@ -382,6 +384,8 @@ The memory limit for each activity component specifies the maximum amount of mem
 As a result, while the combined individual limits of the activity components might collectively exceed the activities memory limit, each component's individual limit should be less than this overall cap. Additionally, the sum of the minimum memory limits for the cache components, plus the activities memory limit, must be less than the soft memory limit.
 
 There are some other activity components that currently do not have individual memory limits.
+
+Column Tables activity components limits are fixed.
 
 Example of the `memory_controller_config` section with a specified KQP limit:
 

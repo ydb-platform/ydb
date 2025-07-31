@@ -1,5 +1,6 @@
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/provider/yql_kikimr_provider_impl.h>
+#include <ydb/core/base/table_vector_index.h>
 
 #include <yql/essentials/core/type_ann/type_ann_core.h>
 #include "yql/essentials/core/type_ann/type_ann_impl.h"
@@ -1912,6 +1913,142 @@ TStatus AnnotateStreamLookupConnection(const TExprNode::TPtr& node, TExprContext
     return TStatus::Ok;
 }
 
+TStatus AnnotateVectorResolveConnection(const TExprNode::TPtr& node, TExprContext& ctx, const TString& cluster,
+    const TKikimrTablesData& tablesData) {
+
+    if (!EnsureArgsCount(*node, 4, ctx)) {
+        return TStatus::Error;
+    }
+
+    if (!EnsureCallable(*node->Child(TKqpCnVectorResolve::idx_Output), ctx)) {
+        return TStatus::Error;
+    }
+
+    if (!TDqOutput::Match(node->Child(TKqpCnVectorResolve::idx_Output))) {
+        ctx.AddError(TIssue(ctx.GetPosition(node->Child(TKqpCnVectorResolve::idx_Output)->Pos()),
+            TStringBuilder() << "Expected " << TDqOutput::CallableName()));
+        return TStatus::Error;
+    }
+
+    // Check table
+    auto table = ResolveTable(node->Child(TKqpCnVectorResolve::idx_Table), ctx, cluster, tablesData);
+    auto tableDesc = table.second;
+    if (!tableDesc) {
+        return TStatus::Error;
+    }
+
+    YQL_ENSURE(tableDesc->Metadata, "Expected loaded metadata");
+
+    auto indexName = node->Child(TKqpCnVectorResolve::idx_Index)->Content();
+    TIndexDescription *indexDesc = nullptr;
+    for (auto& index: tableDesc->Metadata->Indexes) {
+        if (index.Name == indexName) {
+            indexDesc = &index;
+        }
+    }
+    //TKikimrTableMetadataPtr indexMeta = tableDesc->Metadata->GetIndexMetadata().first;
+    if (!indexDesc) {
+        ctx.AddError(TIssue(ctx.GetPosition(node->Child(TKqpCnVectorResolve::idx_Index)->Pos()),
+            TStringBuilder() << "Index does not exist"));
+        return TStatus::Error;
+    }
+    if (indexDesc->Type != TIndexDescription::EType::GlobalSyncVectorKMeansTree) {
+        ctx.AddError(TIssue(ctx.GetPosition(node->Child(TKqpCnVectorResolve::idx_Index)->Pos()),
+            TStringBuilder() << "Index is not a vector index"));
+        return TStatus::Error;
+    }
+
+    // Check transform input type
+    auto inputTypeNode = node->Child(TKqpCnVectorResolve::idx_InputType);
+    if (!EnsureType(*inputTypeNode, ctx)) {
+        return TStatus::Error;
+    }
+
+    auto inputType = inputTypeNode->GetTypeAnn()->Cast<TTypeExprType>()->GetType();
+    const TTypeAnnotationNode* inputItemType;
+    if (!EnsureNewSeqType<false>(node->Pos(), *inputType, ctx, &inputItemType)) {
+        return TStatus::Error;
+    }
+
+    YQL_ENSURE(inputItemType);
+
+    if (!EnsureStructType(node->Pos(), *inputItemType, ctx)) {
+        return TStatus::Error;
+    }
+
+    const auto& inputColumns = inputItemType->Cast<TStructExprType>()->GetItems();
+    TSet<TString> inputColSet;
+    for (const auto& keyColumn : inputColumns) {
+        inputColSet.insert(TString(keyColumn->GetName()));
+    }
+
+    // Input should contain PK columns, index key columns and index data columns
+    for (const auto& keyColumn : tableDesc->Metadata->KeyColumnNames) {
+        if (!inputColSet.contains(keyColumn)) {
+            ctx.AddError(TIssue(ctx.GetPosition(node->Child(TKqpCnVectorResolve::idx_InputType)->Pos()),
+                TStringBuilder() << "Input must contain all table PK columns"));
+            return TStatus::Error;
+        }
+    }
+    for (const auto& keyColumn : indexDesc->KeyColumns) {
+        if (!inputColSet.contains(keyColumn)) {
+            ctx.AddError(TIssue(ctx.GetPosition(node->Child(TKqpCnVectorResolve::idx_InputType)->Pos()),
+                TStringBuilder() << "Input must contain all vector index key columns"));
+            return TStatus::Error;
+        }
+    }
+    for (const auto& keyColumn : indexDesc->DataColumns) {
+        if (!inputColSet.contains(keyColumn)) {
+            ctx.AddError(TIssue(ctx.GetPosition(node->Child(TKqpCnVectorResolve::idx_InputType)->Pos()),
+                TStringBuilder() << "Input must contain all vector index data columns"));
+            return TStatus::Error;
+        }
+    }
+
+    // Generate output type
+    TVector<const TItemExprType*> rowItems;
+    inputColSet.clear();
+
+    // First cluster ID
+    rowItems.push_back(ctx.MakeType<TItemExprType>(NTableIndex::NTableVectorKmeansTreeIndex::ParentColumn, ctx.MakeType<TDataExprType>(EDataSlot::Uint64)));
+
+    // Then primary key columns
+    for (const auto& keyColumn : tableDesc->Metadata->KeyColumnNames) {
+        auto type = tableDesc->GetColumnType(keyColumn);
+        YQL_ENSURE(type, "No key column: " << keyColumn);
+
+        auto itemType = ctx.MakeType<TItemExprType>(keyColumn, type);
+        if (!itemType->Validate(node->Pos(), ctx)) {
+            return TStatus::Error;
+        }
+        rowItems.push_back(itemType);
+    }
+
+    // Then index data columns which are not also part of the PK
+    for (const auto& dataColumn : indexDesc->DataColumns) {
+        if (inputColSet.contains(dataColumn)) {
+            continue;
+        }
+        auto type = tableDesc->GetColumnType(dataColumn);
+        YQL_ENSURE(type, "No data column: " << dataColumn);
+
+        auto itemType = ctx.MakeType<TItemExprType>(dataColumn, type);
+        if (!itemType->Validate(node->Pos(), ctx)) {
+            return TStatus::Error;
+        }
+        rowItems.push_back(itemType);
+    }
+
+    auto rowType = ctx.MakeType<TStructExprType>(rowItems);
+    if (!rowType->Validate(node->Pos(), ctx)) {
+        return TStatus::Error;
+    }
+
+    node->SetTypeAnn(ctx.MakeType<TStreamExprType>(rowType));
+
+    return TStatus::Ok;
+}
+
 TStatus AnnotateIndexLookupJoin(const TExprNode::TPtr& node, TExprContext& ctx) {
 
     if (!EnsureArgsCount(*node, 4, ctx)) {
@@ -2316,6 +2453,10 @@ TAutoPtr<IGraphTransformer> CreateKqpTypeAnnotationTransformer(const TString& cl
 
             if (TKqpCnStreamLookup::Match(input.Get())) {
                 return AnnotateStreamLookupConnection(input, ctx, cluster, *tablesData, config->SystemColumnsEnabled());
+            }
+
+            if (TKqpCnVectorResolve::Match(input.Get())) {
+                return AnnotateVectorResolveConnection(input, ctx, cluster, *tablesData);
             }
 
             if (TKqlIndexLookupJoinBase::Match(input.Get())) {

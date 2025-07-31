@@ -1515,6 +1515,7 @@ protected:
                     case NKqpProto::TKqpPhyConnection::kStreamLookup:
                     case NKqpProto::TKqpPhyConnection::kMap:
                     case NKqpProto::TKqpPhyConnection::kParallelUnionAll:
+                    case NKqpProto::TKqpPhyConnection::kVectorResolve:
                         break;
                     default:
                         YQL_ENSURE(false, "Unexpected connection type: " << (ui32)input.GetTypeCase() << Endl
@@ -1546,6 +1547,12 @@ protected:
                 case NKqpProto::TKqpPhyConnection::kParallelUnionAll: {
                     inputTasks += originStageInfo.Tasks.size();
                     isParallelUnionAll = true;
+                    break;
+                }
+                case NKqpProto::TKqpPhyConnection::kVectorResolve: {
+                    partitionsCount = originStageInfo.Tasks.size();
+                    UnknownAffectedShardCount = true;
+                    intros.push_back("Resetting compute tasks count because input " + ToString(inputIndex) + " is VectorResolve - " + ToString(partitionsCount));
                     break;
                 }
                 default:

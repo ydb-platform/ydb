@@ -8,6 +8,7 @@ import "google/protobuf/any.proto";
 import "ydb/core/protos/flat_scheme_op.proto";
 import "ydb/library/mkql_proto/protos/minikql.proto";
 import "ydb/library/yql/dq/proto/dq_tasks.proto";
+import "ydb/public/api/protos/ydb_table.proto";
 import "ydb/public/api/protos/ydb_value.proto";
 import "ydb/core/protos/index_builder.proto";
 import "ydb/core/protos/sys_view_types.proto";
@@ -313,6 +314,17 @@ message TKqpPhyCnStreamLookup {
     bool IsTableImmutable = 10;
 }
 
+message TKqpPhyCnVectorResolve {
+    optional Ydb.Table.VectorIndexSettings IndexSettings = 1;
+    TKqpPhyTableId Table = 2;
+    TKqpPhyTableId LevelTable = 3;
+    repeated string Columns = 4;
+    uint32 VectorColumnIndex = 5;
+    repeated uint32 CopyColumnIndexes = 6;
+    bytes InputType = 7;
+    bytes OutputType = 8;
+}
+
 message TKqpPhyCnSequencer {
     TKqpPhyTableId Table = 1;
     repeated string Columns = 2;
@@ -339,6 +351,7 @@ message TKqpPhyConnection {
         TKqpPhyCnStreamLookup StreamLookup = 12;
         TKqpPhyCnSequencer Sequencer = 14;
         TKqpPhyCnParallelUnionAll ParallelUnionAll = 15;
+        TKqpPhyCnVectorResolve VectorResolve = 16;
     };
 }
 

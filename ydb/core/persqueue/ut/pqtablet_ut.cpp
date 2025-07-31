@@ -261,6 +261,9 @@ protected:
     NKikimrPQ::TTabletTxInfo WaitForExactTxWritesCount(ui32 expectedCount);
     NKikimrPQ::TTabletTxInfo GetTxWritesFromKV();
 
+    template<class EventType>
+    void AddOneTimeEventObserver(bool& seenEvent, std::function<TTestActorRuntimeBase::EEventAction(TAutoPtr<IEventHandle>&)> callback = [](){return TTestActorRuntimeBase::EEventAction::PROCESS;});
+
     //
     // TODO(abcdef): для тестирования повторных вызовов нужны примитивы Send+Wait
     //
@@ -1303,6 +1306,19 @@ NKikimrPQ::TTabletTxInfo TPQTabletFixture::GetTxWritesFromKV() {
         UNIT_FAIL("Unexpected status from KV tablet" << result.GetStatus());
         return {};
     }
+}
+
+template<class EventType>
+void TPQTabletFixture::AddOneTimeEventObserver(bool& seenEvent, std::function<TTestActorRuntimeBase::EEventAction(TAutoPtr<IEventHandle>&)> callback) {
+    auto observer = [&](TAutoPtr<IEventHandle>& input) {
+        if (!seenEvent && input->CastAsLocal<EventType>()) {
+            seenEvent = true;
+            return callback(input);
+        }
+        
+        return TTestActorRuntimeBase::EEventAction::PROCESS;
+    };
+    Ctx->Runtime->SetObserverFunc(observer);
 }
 
 Y_UNIT_TEST_F(Parallel_Transactions_1, TPQTabletFixture)
@@ -2446,45 +2462,31 @@ Y_UNIT_TEST_F(Kafka_Transaction_Incoming_Before_Previous_TEvDeletePartitionDone_
     TAutoPtr<IEventHandle> deleteDoneEvent;
     bool seenEvent = false;
     // add observer for TEvPQ::TEvDeletePartitionDone request and skip it
-    auto observer = [&](TAutoPtr<IEventHandle>& input) {
-        if (!seenEvent && input->CastAsLocal<TEvPQ::TEvDeletePartitionDone>()) {
-            Cout << "Dropping TEvPQ::TEvDeletePartitionDone" << Endl;
-            deleteDoneEvent = input;
-            seenEvent = true;
-            return TTestActorRuntimeBase::EEventAction::DROP;
-        }
-        
-        return TTestActorRuntimeBase::EEventAction::PROCESS;
-    };
-    Ctx->Runtime->SetObserverFunc(observer);
+    AddOneTimeEventObserver<TEvPQ::TEvDeletePartitionDone>(seenEvent, [&deleteDoneEvent](TAutoPtr<IEventHandle>& eventHandle) {
+        deleteDoneEvent = eventHandle;
+        return TTestActorRuntimeBase::EEventAction::DROP;
+    });
 
     CommitKafkaTransaction(producerInstanceId, txId);
 
     // wait for delete response and save it
     TDispatchOptions options;
-    options.CustomFinalCondition = [&seenEvent]() {
-        return seenEvent;
-    };
+    options.CustomFinalCondition = [&seenEvent]() {return seenEvent;};
     UNIT_ASSERT(Ctx->Runtime->DispatchEvents(options));
 
     // send another GetOwnership request to enforce new suportive partition creation (it imitates new transaction start for same proudcer epoch)
-    auto request = MakeGetOwnershipRequest({.Partition=0,
+    SendGetOwnershipRequest({.Partition=0,
                      .WriteId=TWriteId{producerInstanceId},
                      .NeedSupportivePartition=true,
                      .Owner=DEFAULT_OWNER,
-                     .Cookie=5}, Pipe);
-    Ctx->Runtime->SendToPipe(Pipe,
-                             Ctx->Edge,
-                             request.release(),
-                             0, 0);
-
-    // send TEvPQ::TEvDeletePartitionDone 
+                     .Cookie=5});
+    // now we can eventually send TEvPQ::TEvDeletePartitionDone 
     Ctx->Runtime->SendToPipe(Pipe,
                              Ctx->Edge,
                              deleteDoneEvent.Release()->Get<TEvPQ::TEvDeletePartitionDone>(),
                              0, 0);
-    
     WaitForTheTransactionToBeDeleted(txId);
+
     auto txInfo = GetTxWritesFromKV();
     UNIT_ASSERT_EQUAL(txInfo.TxWritesSize(), 1);
     UNIT_ASSERT_VALUES_EQUAL(txInfo.GetTxWrites(0).GetWriteId().GetKafkaProducerInstanceId().GetId(), producerInstanceId.Id);
@@ -2526,28 +2528,23 @@ Y_UNIT_TEST_F(Kafka_Transaction_Incoming_Before_Previous_Is_In_DELETED_State_Sho
 
     // wait for delete response and save it
     TDispatchOptions options;
-    options.CustomFinalCondition = [&seenKeyValResponse]() {
-        return seenKeyValResponse;
-    };
+    options.CustomFinalCondition = [&seenKeyValResponse]() {return seenKeyValResponse;};
     UNIT_ASSERT(Ctx->Runtime->DispatchEvents(options));
 
     // send another GetOwnership request to enforce new suportive partition creation (it imitates new transaction start for same proudcer epoch)
-    auto request = MakeGetOwnershipRequest({.Partition=0,
+    SendGetOwnershipRequest({.Partition=0,
                      .WriteId=TWriteId{producerInstanceId},
                      .NeedSupportivePartition=true,
                      .Owner=DEFAULT_OWNER,
-                     .Cookie=5}, Pipe);
-    Ctx->Runtime->SendToPipe(Pipe,
-                             Ctx->Edge,
-                             request.release(),
-                             0, 0);
+                     .Cookie=5});
 
-    // send TEvKeyValue::TEvResponse 
+    // eventually send TEvKeyValue::TEvResponse 
     Ctx->Runtime->SendToPipe(Pipe,
                              Ctx->Edge,
                              keyValueResponse.Release()->Get<TEvKeyValue::TEvResponse>(),
                              0, 0);
     
+    // wait for a deferred response for last GetOwnership request we sent
     TString ownerCookie2 = WaitGetOwnershipResponse({.Cookie=5, .Status=NMsgBusProxy::MSTATUS_OK});
     UNIT_ASSERT_VALUES_UNEQUAL(ownerCookie2, ownerCookie);
 }

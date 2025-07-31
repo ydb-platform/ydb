@@ -7,6 +7,7 @@
 #include <ydb/core/persqueue/utils.h>
 #include <ydb/core/protos/grpc_pq_old.pb.h>
 #include <ydb/public/api/protos/draft/persqueue_common.pb.h>
+#include <util/string/join.h>
 
 namespace NKafka {
 
@@ -19,16 +20,6 @@ static constexpr TDuration WRITER_EXPIRATION_INTERVAL = TDuration::Minutes(5);
 
 NActors::IActor* CreateKafkaProduceActor(const TContext::TPtr context) {
     return new TKafkaProduceActor(context);
-}
-
-TString GetAsStr(std::set<ui64>& numbers) {
-    auto builder = TStringBuilder() << "{";
-    auto it = numbers.begin();
-    while (it != numbers.end()) {
-        builder << *it << " ";
-        ++it;
-    }
-    return builder << "}";
 }
 
 TString TKafkaProduceActor::LogPrefix() {
@@ -419,7 +410,7 @@ void TKafkaProduceActor::HandleAccepting(TEvPartitionWriter::TEvWriteAccepted::T
         Become(&TKafkaProduceActor::StateWork);
         ProcessRequests(ctx);
     } else {
-        KAFKA_LOG_W("Still in Accepting state after TEvPartitionWriter::TEvWriteAccepted cause cookies are expected: " << GetAsStr(expectedCookies));
+        KAFKA_LOG_W("Still in Accepting state after TEvPartitionWriter::TEvWriteAccepted cause cookies are expected: " << JoinSeq(", ", expectedCookies));
     }
 }
 
@@ -469,7 +460,7 @@ void TKafkaProduceActor::Handle(TEvPartitionWriter::TEvWriteResponse::TPtr reque
     if (cookieInfo.Request->WaitResultCookies.empty()) {
         SendResults(ctx);
     } else {
-        KAFKA_LOG_T("Skipping sending results in Handle TEvPartitionWriter::TEvWriteResponse. WaitResultCookies=" << GetAsStr(cookieInfo.Request->WaitResultCookies));
+        KAFKA_LOG_T("Skipping sending results in Handle TEvPartitionWriter::TEvWriteResponse. WaitResultCookies=" << JoinSeq(", ", cookieInfo.Request->WaitResultCookies));
     }
 
     Cookies.erase(cookie);
@@ -499,7 +490,7 @@ void TKafkaProduceActor::SendResults(const TActorContext& ctx) {
         bool expired = expireTime > pendingRequest->StartTime;
 
         if (!expired && !pendingRequest->WaitResultCookies.empty()) {
-            KAFKA_LOG_T("Skipping sending results. Expired=" << expired << " WaitResultCookies=" << GetAsStr(pendingRequest->WaitResultCookies));
+            KAFKA_LOG_T("Skipping sending results. Expired=" << expired << " WaitResultCookies=" << JoinSeq(", ", pendingRequest->WaitResultCookies));
             return;
         }
 

@@ -36,16 +36,54 @@ public:
     }
 };
 
+class TDuplicateSourceCacheResult {
+private:
+    using TColumnData = THashMap<NGeneralCache::TGlobalColumnAddress, std::shared_ptr<NArrow::NAccessor::IChunkedArray>>;
+    TColumnData DataByAddress;
+
+public:
+    TDuplicateSourceCacheResult(TColumnData&& data)
+        : DataByAddress(std::move(data))
+    {
+    }
+
+    THashMap<ui64, std::shared_ptr<NArrow::TGeneralContainer>> ExtractDataByPortion(
+        const std::map<ui32, std::shared_ptr<arrow::Field>>& fieldByColumn) {
+        THashMap<ui64, std::shared_ptr<NArrow::TGeneralContainer>> dataByPortion;
+        std::vector<std::shared_ptr<arrow::Field>> fields;
+        for (const auto& [_, field] : fieldByColumn) {
+            fields.emplace_back(field);
+        }
+
+        THashMap<ui64, THashMap<ui32, std::shared_ptr<NArrow::NAccessor::IChunkedArray>>> columnsByPortion;
+        for (auto&& [address, data] : DataByAddress) {
+            AFL_VERIFY(columnsByPortion[address.GetPortionId()].emplace(address.GetColumnId(), data).second);
+        }
+
+        for (auto& [portion, columns] : columnsByPortion) {
+            std::vector<std::shared_ptr<NArrow::NAccessor::IChunkedArray>> sortedColumns;
+            for (const auto& [columnId, field] : fieldByColumn) {
+                auto column = columns.FindPtr(columnId);
+                AFL_VERIFY(column);
+                sortedColumns.emplace_back(*column);
+            }
+            std::shared_ptr<NArrow::TGeneralContainer> container = std::make_shared<NArrow::TGeneralContainer>(fields, std::move(sortedColumns));
+            AFL_VERIFY(dataByPortion.emplace(portion, std::move(container)).second);
+        }
+
+        return dataByPortion;
+    }
+};
+
 class TEvDuplicateSourceCacheResult
     : public NActors::TEventLocal<TEvDuplicateSourceCacheResult, NColumnShard::TEvPrivate::EvDuplicateSourceCacheResult> {
 private:
-    using TColumnData = THashMap<NGeneralCache::TGlobalColumnAddress, std::shared_ptr<NArrow::NAccessor::IChunkedArray>>;
-    TConclusion<TColumnData> Result;
+    TConclusion<TDuplicateSourceCacheResult> Result;
     YDB_READONLY_DEF(std::shared_ptr<TInternalFilterConstructor>, Context);
     std::shared_ptr<NGroupedMemoryManager::TAllocationGuard> AllocationGuard;
 
 public:
-    TEvDuplicateSourceCacheResult(const std::shared_ptr<TInternalFilterConstructor>& context, TColumnData&& data,
+    TEvDuplicateSourceCacheResult(const std::shared_ptr<TInternalFilterConstructor>& context, TDuplicateSourceCacheResult&& data,
         std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>&& allocationGuard)
         : Result(std::move(data))
         , Context(context)
@@ -60,11 +98,11 @@ public:
     {
     }
 
-    const TConclusion<TColumnData>& GetConclusion() const {
+    const TConclusion<TDuplicateSourceCacheResult>& GetConclusion() const {
         return Result;
     }
 
-    TColumnData&& ExtractResult() {
+    TDuplicateSourceCacheResult&& ExtractResult() {
         return Result.DetachResult();
     }
 

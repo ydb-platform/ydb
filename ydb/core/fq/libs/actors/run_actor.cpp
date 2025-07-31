@@ -82,8 +82,8 @@
 #include <util/string/split.h>
 #include <util/system/hostname.h>
 
-#include <library/cpp/scheme/scheme.h>
 #include <library/cpp/protobuf/util/pb_io.h>
+#include <library/cpp/scheme/scheme.h>
 
 #define LOG_E(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "QueryId: " << Params.QueryId << " " << stream)
 #define LOG_W(stream) LOG_WARN_S( *TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "QueryId: " << Params.QueryId << " " << stream)
@@ -360,15 +360,16 @@ public:
                 break;
             case Ydb::Query::StatsMode::STATS_MODE_UNSPECIFIED:
             default:
-                StatsMode = NYql::NDqProto::EDqStatsMode::DQ_STATS_MODE_FULL;
+                StatsMode = NYql::NDqProto::EDqStatsMode::DQ_STATS_MODE_BASIC;
                 break;
         }
+   //     Cerr << "StatsMode = " << (int) StatsMode << Endl;
     }
 
     static constexpr char ActorName[] = "YQ_RUN_ACTOR";
 
     void Bootstrap() {
-        LOG_D("Start run actor. Compute state: " << FederatedQuery::QueryMeta::ComputeStatus_Name(Params.Status));
+        LOG_D("Start run actor. Compute state: " << FederatedQuery::QueryMeta::ComputeStatus_Name(Params.Status) <<  "StatsMode = " << (int) StatsMode);
 
         FillConnections();
 
@@ -1700,6 +1701,7 @@ private:
 
         Yql::DqsProto::TWorkerFilter workerFilter;
         for (auto nodeId : Params.NodeIds) {
+      //      Cerr << "set workerFilter " << nodeId << Endl;
             workerFilter.AddNodeId(nodeId);
         }
 

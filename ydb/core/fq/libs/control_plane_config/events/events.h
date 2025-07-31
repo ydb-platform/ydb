@@ -28,7 +28,7 @@ struct TTenantInfo {
 
     struct TMapping {
         TString Vtenant;
-        TMaybe<TString> NodeIds;       // empty - all nodes.
+        TMaybe<TString> NodeIds;
     };
 
     THashMap<TString /* subject type */, THashMap<TString /* subject id */, TMapping /* mapping */>> SubjectMapping;
@@ -52,7 +52,7 @@ struct TTenantInfo {
     TMapResult Assign(const TString& cloudId, const TString& scope, FederatedQuery::QueryContent::QueryType queryType, const TString& DefaultTenantName = "") const {
         auto pinTenants = ComputeConfig.GetPinTenantNames(queryType, scope);
         if (pinTenants) {
-            return TMapResult{pinTenants[MultiHash(cloudId) % pinTenants.size()], ""};
+            return TMapResult{pinTenants[MultiHash(cloudId) % pinTenants.size()], Nothing()};
         }
 
         TMapping empty;

@@ -27,6 +27,12 @@ public:
 	}
 	ui64 GetDec() const;
 	ui64 Val() const;
+
+	TPositiveControlInteger& operator =(const ui64 val) {
+		Value.Set(val);
+		return *this;
+	}
+
 	bool operator!() const {
 		return !Value.Val();
 	}

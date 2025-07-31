@@ -117,8 +117,18 @@ public:
 };
 
 class IDataSource: public ICursorEntity, public NArrow::NSSA::IDataSource {
+public:
+    enum class EType {
+        Undefined,
+        SimpleSysInfo,
+        SimplePortion,
+        SimpleAggregation,
+        PlainPortion
+    };
+
 private:
     TAtomic SyncSectionFlag = 1;
+    YDB_READONLY(EType, Type, EType::Undefined);
     YDB_READONLY(ui64, SourceId, 0);
     YDB_READONLY(ui32, SourceIdx, 0);
     static inline TAtomicCounter MemoryGroupCounter = 0;
@@ -201,11 +211,13 @@ public:
 
     template <class T>
     const T* GetAs() const {
+        AFL_VERIFY(T::CheckTypeCast(Type))("type", Type);
         return static_cast<const T*>(this);
     }
 
     template <class T>
     T* MutableAs() {
+        AFL_VERIFY(T::CheckTypeCast(Type))("type", Type);
         return static_cast<T*>(this);
     }
 
@@ -290,10 +302,11 @@ public:
         return std::nullopt;
     }
 
-    IDataSource(const ui64 sourceId, const ui32 sourceIdx, const std::shared_ptr<TSpecialReadContext>& context,
+    IDataSource(const EType type, const ui64 sourceId, const ui32 sourceIdx, const std::shared_ptr<TSpecialReadContext>& context,
         const TSnapshot& recordSnapshotMin, const TSnapshot& recordSnapshotMax, const std::optional<ui32> recordsCount,
         const std::optional<ui64> shardingVersion, const bool hasDeletions)
-        : SourceId(sourceId)
+        : Type(type)
+        , SourceId(sourceId)
         , SourceIdx(sourceIdx)
         , RecordSnapshotMin(recordSnapshotMin)
         , RecordSnapshotMax(recordSnapshotMax)

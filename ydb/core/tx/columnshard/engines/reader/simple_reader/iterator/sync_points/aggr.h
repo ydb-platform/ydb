@@ -120,7 +120,7 @@ private:
         --InFlightControl;
         AFL_VERIFY(!Next);
         std::shared_ptr<IScanCursor> cursor;
-        if (source->GetAs<IDataSource>()->GetType() == IDataSource::EType::Aggregation) {
+        if (source->GetType() == IDataSource::EType::SimpleAggregation) {
             const TAggregationDataSource* aggrSource = static_cast<const TAggregationDataSource*>(source.get());
             for (auto&& i : aggrSource->GetSources()) {
                 Collection->OnSourceFinished(i);
@@ -129,6 +129,7 @@ private:
             }
             cursor = std::make_shared<TNotSortedSimpleScanCursor>(aggrSource->GetLastSourceId(), aggrSource->GetLastSourceRecordsCount());
         } else {
+            AFL_VERIFY(source->GetType() == IDataSource::EType::SimplePortion);
             Collection->OnSourceFinished(source);
             cursor = std::make_shared<TNotSortedSimpleScanCursor>(source->GetSourceId(), source->GetRecordsCount());
             AFL_VERIFY(SourcesCount);

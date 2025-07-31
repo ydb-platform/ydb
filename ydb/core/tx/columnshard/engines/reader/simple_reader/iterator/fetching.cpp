@@ -86,6 +86,10 @@ TConclusion<bool> TStartPortionAccessorFetchingStep::DoExecuteInplace(
 
 TConclusion<bool> TDetectInMemFlag::DoExecuteInplace(
     const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& /*step*/) const {
+    if (!source->NeedPortionData()) {
+        source->SetSourceInMemory(true);
+        source->MutableAs<IDataSource>()->InitUsedRawBytes();
+    }
     if (source->HasSourceInMemoryFlag()) {
         return true;
     }
@@ -127,7 +131,8 @@ public:
 
 NKikimr::TConclusion<bool> TInitializeSourceStep::DoExecuteInplace(
     const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& /*step*/) const {
-    source->MutableAs<IDataSource>()->InitializeProcessing(source);
+    auto* simpleSource = source->MutableAs<IDataSource>();
+    simpleSource->InitializeProcessing(source);
     return true;
 }
 
@@ -139,7 +144,7 @@ TConclusion<bool> TPortionAccessorFetchedStep::DoExecuteInplace(
 
 TConclusion<bool> TStepAggregationSources::DoExecuteInplace(
     const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& /*step*/) const {
-    AFL_VERIFY(source->GetAs<IDataSource>()->GetType() == IDataSource::EType::Aggregation);
+    AFL_VERIFY(source->GetType() == IDataSource::EType::SimpleAggregation);
     auto* aggrSource = static_cast<const TAggregationDataSource*>(source.get());
     std::vector<std::shared_ptr<NArrow::NSSA::TAccessorsCollection>> collections;
     for (auto&& i : aggrSource->GetSources()) {
@@ -155,7 +160,7 @@ TConclusion<bool> TStepAggregationSources::DoExecuteInplace(
 
 TConclusion<bool> TCleanAggregationSources::DoExecuteInplace(
     const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& /*step*/) const {
-    AFL_VERIFY(source->GetAs<IDataSource>()->GetType() == IDataSource::EType::Aggregation);
+    AFL_VERIFY(source->GetType() == IDataSource::EType::SimpleAggregation);
     auto* aggrSource = static_cast<const TAggregationDataSource*>(source.get());
     for (auto&& i : aggrSource->GetSources()) {
         i->MutableAs<IDataSource>()->ClearResult();

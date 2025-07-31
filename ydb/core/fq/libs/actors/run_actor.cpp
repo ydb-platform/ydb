@@ -360,6 +360,9 @@ public:
                 StatsMode = NYql::NDqProto::EDqStatsMode::DQ_STATS_MODE_FULL;
                 break;
         }
+        if (Params.Automatic) {
+            StatsMode = NYql::NDqProto::EDqStatsMode::DQ_STATS_MODE_BASIC;
+        }
     }
 
     static constexpr char ActorName[] = "YQ_RUN_ACTOR";

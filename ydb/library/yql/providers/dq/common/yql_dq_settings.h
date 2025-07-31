@@ -29,6 +29,11 @@ struct TDqSettings {
         File        /* "file" */,
     };
 
+    enum class EValuePackerVersion {
+        V0,
+        V1,
+    };
+
     struct TDefault {
         static constexpr ui32 MaxTasksPerStage = 20U;
         static constexpr ui32 MaxTasksPerOperation = 70U;
@@ -63,6 +68,7 @@ struct TDqSettings {
         static constexpr bool SplitStageOnDqReplicate = true;
         static constexpr ui64 EnableSpillingNodes = 0;
         static constexpr bool EnableSpillingInChannels = false;
+        static constexpr EValuePackerVersion ValuePackerVersion = EValuePackerVersion::V0;
     };
 
     using TPtr = std::shared_ptr<TDqSettings>;
@@ -143,6 +149,7 @@ public:
 
     NCommon::TConfSetting<ui64, Static> EnableSpillingNodes;
     NCommon::TConfSetting<bool, Static> EnableSpillingInChannels;
+    NCommon::TConfSetting<EValuePackerVersion, Static> ValuePackerVersion;
 
     NCommon::TConfSetting<ui64, Static> _MaxAttachmentsSize;
     NCommon::TConfSetting<bool, Static> DisableCheckpoints;
@@ -202,6 +209,7 @@ public:
         SAVE_SETTING(TaskRunnerStats);
         SAVE_SETTING(SpillingEngine);
         SAVE_SETTING(EnableSpillingInChannels);
+        SAVE_SETTING(ValuePackerVersion);
         SAVE_SETTING(DisableCheckpoints);
         SAVE_SETTING(Scheduler);
 #undef SAVE_SETTING
@@ -245,6 +253,15 @@ public:
     bool IsSpillingInChannelsEnabled() const {
         if (!IsSpillingEngineEnabled()) return false;
         return EnableSpillingInChannels.Get().GetOrElse(TDqSettings::TDefault::EnableSpillingInChannels) != false;
+    }
+
+    NYql::NDqProto::EValuePackerVersion GetValuePackerVersion() const {
+        switch (ValuePackerVersion.Get().GetOrElse(TDqSettings::TDefault::ValuePackerVersion)) {
+            case EValuePackerVersion::V0:
+                return NYql::NDqProto::EValuePackerVersion::VALUE_PACKER_VERSION_V0;
+            case EValuePackerVersion::V1:
+                return NYql::NDqProto::EValuePackerVersion::VALUE_PACKER_VERSION_V1;
+        }
     }
 
     ui64 GetEnabledSpillingNodes() const {

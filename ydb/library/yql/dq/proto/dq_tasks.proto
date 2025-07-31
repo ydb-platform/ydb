@@ -232,4 +232,5 @@ message TDqTask {
     optional uint32 ArrayBufferMinFillPercentage = 20;
     optional bool DisableMetering = 22;
     optional uint64 BufferPageAllocSize = 23;
+    EValuePackerVersion ValuePackerVersion = 24;
 }

@@ -163,7 +163,7 @@ struct TFixture : public TPqIoTestFixture {
         });
         UNIT_ASSERT_C(typeMkql, "Failed to create multi type");
 
-        NKikimr::NMiniKQL::TValuePackerTransport<true> packer(typeMkql);
+        NKikimr::NMiniKQL::TValuePackerTransport<true> packer(typeMkql, NKikimr::NMiniKQL::EValuePackerVersion::V0);
 
         TVector<NUdf::TUnboxedValue> values = {
             NUdf::TUnboxedValuePod(intValue),

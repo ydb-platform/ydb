@@ -1673,7 +1673,9 @@ message TAuditConfig {
             NodeRegistration = 4;
             Ddl = 5;
             Dml = 6;
-            Operations = 7;
+            Operations = 7; // Operations API. See ydb/public/api/grpc/ydb_operation_v1.proto
+            ExportImport = 8;
+            Acl = 9;
             Default = 1000; // For default settings for all other nonconfigured log classes
         }
 

@@ -63,11 +63,11 @@ TReadSessionActor<UseMigrationProtocol>::TReadSessionActor(
 {
     Y_ASSERT(Request);
 
-    if (auto values = Request->GetStreamCtx()->GetPeerMetaValues(NYdb::YDB_APPLICATION_NAME); !values.empty()) {
-        UserAgent = values[0];
+    if (auto value = Request->GetPeerMetaValues(NYdb::YDB_APPLICATION_NAME)) {
+        UserAgent = *value;
     }
-    if (auto values = Request->GetStreamCtx()->GetPeerMetaValues(NYdb::YDB_SDK_BUILD_INFO_HEADER); !values.empty()) {
-        SdkBuildInfo = values[0];
+    if (auto value = Request->GetPeerMetaValues(NYdb::YDB_SDK_BUILD_INFO_HEADER)) {
+        SdkBuildInfo = *value;
     }
 }
 
@@ -78,7 +78,7 @@ void TReadSessionActor<UseMigrationProtocol>::Bootstrap(const TActorContext& ctx
            ->GetNamedCounter("sensor", "SessionsCreatedTotal", true));
     }
 
-    Request->GetStreamCtx()->Attach(ctx.SelfID);
+    Request->Attach(ctx.SelfID);
     if (!ReadFromStreamOrDie(ctx)) {
         return;
     }
@@ -95,7 +95,7 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(typename IContext::TEvNotif
 
 template <bool UseMigrationProtocol>
 bool TReadSessionActor<UseMigrationProtocol>::ReadFromStreamOrDie(const TActorContext& ctx) {
-    if (!Request->GetStreamCtx()->Read()) {
+    if (!Request->Read()) {
         LOG_INFO_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " grpc read failed at start");
         Die(ctx);
         return false;
@@ -138,7 +138,7 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(typename IContext::TEvReadF
     if constexpr (UseMigrationProtocol) {
         switch (request.request_case()) {
             case TClientMessage::kInitRequest: {
-                return (void)ctx.Send(ctx.SelfID, new TEvReadInit(request, Request->GetStreamCtx()->GetPeerName()));
+                return (void)ctx.Send(ctx.SelfID, new TEvReadInit(request, Request->GetPeerName()));
             }
 
             case TClientMessage::kStatus: {
@@ -207,7 +207,7 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(typename IContext::TEvReadF
     } else {
         switch (request.client_message_case()) {
             case TClientMessage::kInitRequest: {
-                return (void)ctx.Send(ctx.SelfID, new TEvReadInit(request, Request->GetStreamCtx()->GetPeerName()));
+                return (void)ctx.Send(ctx.SelfID, new TEvReadInit(request, Request->GetPeerName()));
             }
 
             case TClientMessage::kReadRequest: {
@@ -302,9 +302,10 @@ bool TReadSessionActor<UseMigrationProtocol>::WriteToStreamOrDie(const TActorCon
 
     bool res = false;
     if (!finish) {
-        res = Request->GetStreamCtx()->Write(std::move(response));
+        res = Request->Write(std::move(response));
     } else {
-        res = Request->GetStreamCtx()->WriteAndFinish(std::move(response), grpc::Status::OK);
+        const Ydb::StatusIds::StatusCode status = response.status();
+        res = Request->WriteAndFinish(std::move(response), status);
     }
 
     if (!res) {
@@ -372,6 +373,11 @@ void TReadSessionActor<UseMigrationProtocol>::Die(const TActorContext& ctx) {
     }
     if (SessionsActive) {
         PartsPerSession.DecFor(Partitions.size(), 1);
+    }
+
+    if (Request) {
+        // Write to audit log if it is needed and we have not written yet.
+        Request->AuditLogRequestEnd(Ydb::StatusIds::SUCCESS);
     }
 
     LOG_INFO_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " is DEAD");
@@ -1634,7 +1640,8 @@ void TReadSessionActor<UseMigrationProtocol>::CloseSession(PersQueue::ErrorCode:
         }
     } else {
         LOG_INFO_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " closed");
-        if (!Request->GetStreamCtx()->Finish(grpc::Status::OK)) {
+        const Ydb::StatusIds::StatusCode statusCode = ConvertPersQueueInternalCodeToStatus(code);
+        if (!Request->Finish(statusCode)) {
             LOG_INFO_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " grpc double finish failed");
         }
     }
@@ -1786,7 +1793,7 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(NGRpcService::TGRpcRequestP
         if (ev->Get()->Retryable) {
             TServerMessage serverMessage;
             serverMessage.set_status(Ydb::StatusIds::UNAVAILABLE);
-            Request->GetStreamCtx()->WriteAndFinish(std::move(serverMessage), grpc::Status::OK);
+            Request->WriteAndFinish(std::move(serverMessage), Ydb::StatusIds::UNAVAILABLE);
         } else {
             Request->RaiseIssues(ev->Get()->Issues);
             Request->ReplyUnauthenticated("refreshed token is invalid");

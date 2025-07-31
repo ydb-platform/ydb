@@ -14,7 +14,6 @@ Y_UNIT_TEST_SUITE(TUrlMatcherTest) {
         UNIT_ASSERT(matcher.Match("/a/b/c"));
         UNIT_ASSERT(matcher.Match("a/b/c"));
         UNIT_ASSERT(matcher.Match("/a/b/c", "action=start"));
-        UNIT_ASSERT(matcher.Match("/a/b/c/d"));
 
         UNIT_ASSERT(!matcher.Match(""));
         UNIT_ASSERT(!matcher.Match("/"));
@@ -25,6 +24,7 @@ Y_UNIT_TEST_SUITE(TUrlMatcherTest) {
         UNIT_ASSERT(!matcher.Match("/A/B/C"));
         UNIT_ASSERT(!matcher.Match("//a/b/c"));
         UNIT_ASSERT(!matcher.Match("/a/b///c"));
+        UNIT_ASSERT(!matcher.Match("/a/b/c/d"));
     }
 
     Y_UNIT_TEST(MatchWithParamNameOnly) {
@@ -39,6 +39,7 @@ Y_UNIT_TEST_SUITE(TUrlMatcherTest) {
         UNIT_ASSERT(!matcher.Match("/a/b"));
         UNIT_ASSERT(!matcher.Match("/a", "mode=1"));
         UNIT_ASSERT(!matcher.Match("/a/b", "other=1"));
+        UNIT_ASSERT(!matcher.Match("/a/b/c", "mode=1"));
     }
 
     Y_UNIT_TEST(MatchWithParamNameAndValue) {
@@ -49,11 +50,11 @@ Y_UNIT_TEST_SUITE(TUrlMatcherTest) {
         UNIT_ASSERT(matcher.Match("/a/b", "action=start"));
         UNIT_ASSERT(matcher.Match("/a/b", "action=stop"));
         UNIT_ASSERT(matcher.Match("/a/b", "k=stop&action=start"));
-        UNIT_ASSERT(matcher.Match("/a/b/c", "action=start"));
 
         UNIT_ASSERT(!matcher.Match("/a/b"));
         UNIT_ASSERT(!matcher.Match("/a/b", "action=restart"));
         UNIT_ASSERT(!matcher.Match("/a/b", "k=stop"));
+        UNIT_ASSERT(!matcher.Match("/a/b/c", "action=start"));
     }
 
     Y_UNIT_TEST(MatchWithWildcardPath) {

@@ -165,6 +165,7 @@ static bool TransferSettingsEntry(std::map<TString, TNodePtr>& out,
         "password_secret_name",
         "flush_interval",
         "batch_size_bytes",
+        "directory",
     };
 
     TSet<TString> stateSettings = {

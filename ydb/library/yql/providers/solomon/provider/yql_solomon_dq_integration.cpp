@@ -354,6 +354,9 @@ public:
         auto computeActorBatchSize = solomonConfig->ComputeActorBatchSize.Get().OrElse(100);
         sourceSettings.insert({"computeActorBatchSize", ToString(computeActorBatchSize)});
 
+        auto truePointsFindRange = solomonConfig->_TruePointsFindRange.Get().OrElse(301);
+        sourceSettings.insert({"truePointsFindRange", ToString(truePointsFindRange)});
+
         auto maxApiInflight = solomonConfig->MaxApiInflight.Get().OrElse(40);
         sourceSettings.insert({"maxApiInflight", ToString(maxApiInflight)});
 

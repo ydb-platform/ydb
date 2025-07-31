@@ -168,7 +168,6 @@ namespace NActors {
             }
 
             if (!UseRealThreads) {
-                Cerr << "reset appdata for node " << nodeId << Endl;
                 node->AppData0.reset(new NKikimr::TAppData(0, 0, 0, 0, { }, App0->TypeRegistry, App0->FunctionRegistry, App0->FormatFactory, nullptr));
                 node->SchedulerPool.Reset(CreateExecutorPoolStub(this, nodeIndex, node, 0));
                 node->MailboxTable.Reset(new TMailboxTable());

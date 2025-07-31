@@ -14,20 +14,6 @@
 * 19310:Added ability to enable followers (read replicas) for covered secondary indexes. [#19310](https://github.com/ydb-platform/ydb/pull/19310) ([azevaykin](https://github.com/azevaykin))
 * 19504:Implemented a [vector index](./dev/vector-indexes.md) for approximate vector search. [#19504](https://github.com/ydb-platform/ydb/pull/19504) ([kungurtsev](https://github.com/kunga))
 * 20691:YMQ: Do not send x-amz-crc32 HTTP header (AWS does not do it) [#20691](https://github.com/ydb-platform/ydb/pull/20691) ([qyryq](https://github.com/qyryq))
-* 21038:This PR enables these frameworks to work with YDB Topics through Kafka API:
-- Kafka Connect
-- Confluent Schema Registry
-- Kafka Streams
-- Apache Flink
-- AKHQ
-- several others smaller ones
-
-Features added by this PR:
-- Support for kafka transactions
-- Support for compacted topics
-- Support for storing metadata during offset commit
-- Support for DESCRIBE_CONFIGS, DESCRIBE_GROUPS, LIST_GROUPS requests
-- Several critical bug fixes in Kafka API [#21038](https://github.com/ydb-platform/ydb/pull/21038) ([Andrey Serebryanskiy](https://github.com/a-serebryanskiy))
 * 20982:Добавлен новый протокол в Node Broker, устраняющий долгий запуск узлов на больших кластерах https://github.com/ydb-platform/ydb/issues/11064 [#20982](https://github.com/ydb-platform/ydb/pull/20982) ([Ilia Shakhov](https://github.com/pixcc))
 
 ### Bug fixes
@@ -53,7 +39,6 @@ Original commit: 7b5e0194f5ddeab1c864112b1716b70b969ac7b2 [#20633](https://githu
 * 20155:Fixed use after free in CPU scheduler, fixed verify fail in CS CPU limiter: https://github.com/ydb-platform/ydb/issues/20116 [#20155](https://github.com/ydb-platform/ydb/pull/20155) ([Pisarenko Grigoriy](https://github.com/GrigoriyPA))
 * 20083:Поправил коммит оффсетов сообщений топика при чтении. До фикса пользователь получал ошибку "Unable to navigate:path: 'Root/logbroker-federation/--cut--/stable/guidance' status: PathErrorUnknown\n". Сломали начиная с 25-1-2 [#20083](https://github.com/ydb-platform/ydb/pull/20083) ([Nikolay Shestakov](https://github.com/nshestakov))
 * 21355:add gettxtype in txwrite (#21314) [#21355](https://github.com/ydb-platform/ydb/pull/21355) ([r314-git](https://github.com/r314-git))
-* 21134:Cherry-pick from main fix for KIKIMR-23489 [#21134](https://github.com/ydb-platform/ydb/pull/21134) ([Denis Khalikov](https://github.com/denis0x0D))
 
 ### YDB UI
 

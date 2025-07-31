@@ -219,19 +219,25 @@ void TDuplicateManager::Handle(const NPrivate::TEvDuplicateSourceCacheResult::TP
 
     THashMap<ui64, std::shared_ptr<NArrow::TGeneralContainer>> dataByPortion;
     {
-        auto columns = GetFetchingColumns();
+        auto fieldByColumn = GetFetchingColumns();
         std::vector<std::shared_ptr<arrow::Field>> fields;
-        for (const auto& [_, field] : columns) {
+        for (const auto& [_, field] : fieldByColumn) {
             fields.emplace_back(field);
         }
 
-        THashMap<ui64, std::vector<std::shared_ptr<NArrow::NAccessor::IChunkedArray>>> columnsByPortion;
+        THashMap<ui64, THashMap<ui32, std::shared_ptr<NArrow::NAccessor::IChunkedArray>>> columnsByPortion;
         for (auto&& [address, data] : ev->Get()->ExtractResult()) {
-            columnsByPortion[address.GetPortionId()].emplace_back(data);
+            AFL_VERIFY(columnsByPortion[address.GetPortionId()].emplace(address.GetColumnId(), data).second);
         }
 
         for (auto& [portion, columns] : columnsByPortion) {
-            std::shared_ptr<NArrow::TGeneralContainer> container = std::make_shared<NArrow::TGeneralContainer>(fields, std::move(columns));
+            std::vector<std::shared_ptr<NArrow::NAccessor::IChunkedArray>> sortedColumns;
+            for (const auto& [columnId, field] : fieldByColumn) {
+                auto column = columns.FindPtr(columnId);
+                AFL_VERIFY(column);
+                sortedColumns.emplace_back(*column);
+            }
+            std::shared_ptr<NArrow::TGeneralContainer> container = std::make_shared<NArrow::TGeneralContainer>(fields, std::move(sortedColumns));
             AFL_VERIFY(dataByPortion.emplace(portion, std::move(container)).second);
         }
     }

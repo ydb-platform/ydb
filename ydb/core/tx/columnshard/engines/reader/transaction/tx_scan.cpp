@@ -66,6 +66,9 @@ void TTxScan::Complete(const TActorContext& ctx) {
         LOG_S_DEBUG("TTxScan prepare txId: " << txId << " scanId: " << scanId << " at tablet " << Self->TabletID());
 
         TReadDescription read(Self->TabletID(), snapshot, sorting);
+        read.DeduplicationPolicy = AppDataVerified().FeatureFlags.GetEnableDuplicateFilterInColumnShard()
+                                       ? EDeduplicationPolicy::PREVENT_DUPLICATES
+                                       : EDeduplicationPolicy::ALLOW_DUPLICATES;
         read.TxId = txId;
         if (request.HasLockTxId()) {
             read.LockId = request.GetLockTxId();
@@ -86,8 +89,12 @@ void TTxScan::Complete(const TActorContext& ctx) {
         }
 
         const TString defaultReader = [&]() {
-            const TString defGlobal =
-                AppDataVerified().ColumnShardConfig.GetReaderClassName() ? AppDataVerified().ColumnShardConfig.GetReaderClassName() : "SIMPLE";
+            const TString defGlobal = []() -> TString {
+                if (const auto reader = AppDataVerified().ColumnShardConfig.GetReaderClassName()) {
+                    return reader;
+                }
+                return AppDataVerified().FeatureFlags.GetEnableDuplicateFilterInColumnShard() ? "SIMPLE" : "PLAIN";
+            }();
             if (Self->HasIndex()) {
                 return Self->GetIndexAs<TColumnEngineForLogs>()
                     .GetVersionedIndex()

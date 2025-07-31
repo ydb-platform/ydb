@@ -46,9 +46,9 @@ public:
     }
 
     void AddSource(const std::shared_ptr<TColumnsData>& batch, const TDuplicateMapInfo& interval) {
-        AFL_VERIFY(interval.GetRowsCount());
-        AFL_VERIFY(interval.GetOffset() < batch->GetData()->GetRecordsCount())("interval", interval.DebugString())(
-                                            "records", batch->GetData()->GetRecordsCount());
+        AFL_VERIFY(interval.GetRows().NumRows());
+        AFL_VERIFY(interval.GetRows().GetBegin() < batch->GetData()->GetRecordsCount())("interval", interval.DebugString())(
+                                                     "records", batch->GetData()->GetRecordsCount());
         AFL_VERIFY(SourcesById.emplace(interval, batch).second);
     }
 };

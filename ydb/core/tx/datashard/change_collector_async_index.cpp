@@ -156,8 +156,6 @@ bool TAsyncIndexChangeCollector::Collect(const TTableId& tableId, ERowOp rop,
                     }
                 }
             }
-
-            ui64 sizeOfKey = 0;
             
             for (TPos pos = 0; pos < userTable->KeyColumnIds.size(); ++pos) {
                 const auto& tag = userTable->KeyColumnIds.at(pos);
@@ -165,11 +163,12 @@ bool TAsyncIndexChangeCollector::Collect(const TTableId& tableId, ERowOp rop,
                     AddRawValue(KeyVals, tag, key.at(pos));
                 }
             }
-            
+
+            ui64 sizeOfKey = 0;
             for (auto x : KeyVals) {
                 sizeOfKey += x.Value.Size();
             }
-
+            
             if (sizeOfKey > NLimits::MaxWriteKeySize) {
                 throw TKeySizeConstraintException();
             }

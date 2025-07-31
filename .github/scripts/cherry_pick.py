@@ -39,7 +39,7 @@ class CherryPickCreator:
         self.commit_shas: list[str] = []
         self.pr_title_list: list[str] = []
         self.pr_body_list: list[str] = []
-        for w in __split(args.what):
+        for w in __split(args.commits):
             id = w.split('/')[-1]
             try:
                 __add_pull(int(id))
@@ -114,7 +114,7 @@ class CherryPickCreator:
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "--what",
+        "--commits",
         help="List of commits to cherry-pick. Can be represented as full or short commit SHA, PR number or URL to commit or PR. Separated by space, comma or line end.",
     )
     parser.add_argument(

@@ -2,10 +2,18 @@ name: Cherry-pick
 on:
   workflow_dispatch:
     inputs:
-      what:
+      commits:
         type: string
         default: ""
-        description: List of commits to cherry-pick. Can be represented as full or short commit SHA, PR number or URL to commit or PR. Separated by space, comma or line end.
+        description: |
+          List of commits to cherry-pick. 
+          Can be represented as full or short commit SHA, PR number or URL to commit or PR.
+          Separated by space, comma or line end.
+
+          Example:
+          ```
+          http://github.com/ydb-platform/ydb/commit/3682a252630dd45588d32fc481d08a26124ccde3, 5682a25,http://github.com/ydb-platform/ydb/pull/12344 123245
+          ```
         required: true
       target_branches:
         default: ""
@@ -47,5 +55,5 @@ jobs:
           GITHUB_STEP_SUMMARY: ${{ env.GITHUB_STEP_SUMMARY }}
         run: |
           ./.github/scripts/cherry_pick.py \
-            --what="${{ inputs.what }}" \
+            --commits="${{ inputs.commits }}" \
             --target-branches="${{ inputs.target_branches }}"

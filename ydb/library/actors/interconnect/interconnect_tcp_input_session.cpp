@@ -68,7 +68,9 @@ namespace NActors {
     ) {
         using namespace NInterconnect::NRdma;
 
-        Y_DEBUG_ABORT_UNLESS(memReg.GetSize() >= offset + cred.GetSize());
+        Y_DEBUG_ABORT_UNLESS(memReg.GetSize() >= offset + cred.GetSize(),
+            "memReg sz: %d, offset: %d, cred sz: %d", memReg.GetSize(), offset, cred.GetSize());
+
         TMonotonic cur = TMonotonic::Now();
         auto reply = [notify, channel, cur](NActors::TActorSystem* as, TEvRdmaIoDone* ioDone) {
             TEvRdmaReadDone* rdmaReadDone = new TEvRdmaReadDone(std::unique_ptr<TEvRdmaIoDone>(ioDone), cur, channel);
@@ -112,21 +114,36 @@ namespace NActors {
     ) {
         auto& pendingEvent = PendingEvents.back();
 
-        ui32 curOffset = 0;
+        ui32 mrOffset = 0;
+
+        auto curMemReg = pendingEvent.RdmaBuffers.front();
         for (const auto& cred : creds.GetCreds()) {
-            auto curMemReg = pendingEvent.RdmaBuffers.front();
 
-            auto err = SendRdmaReadRequest(qp, cq, cred, curMemReg, curOffset, pendingEvent.RdmaSizeLeft, notify, channel);
-            if (!std::holds_alternative<TRdmaReadReqOk>(err)) {
-                return err;
-            }
+            ui32 credOffset = 0;
+            NActorsInterconnect::TRdmaCred credCopy = cred;
+            do {
+                Y_DEBUG_ABORT_UNLESS(!pendingEvent.RdmaBuffers.empty());
 
-            curOffset += cred.GetSize();
+                credCopy.SetAddress(cred.GetAddress() + credOffset);
+                credCopy.SetSize(std::min(cred.GetSize() - credOffset, (ui64)curMemReg.GetSize() - mrOffset));
+                auto err = SendRdmaReadRequest(qp, cq, credCopy, curMemReg, mrOffset, pendingEvent.RdmaSizeLeft, notify, channel);
+                if (!std::holds_alternative<TRdmaReadReqOk>(err)) {
+                    return err;
+                }
 
-            if (curOffset == curMemReg.GetSize()) {  // section finished
-                pendingEvent.RdmaBuffers.pop_front();
-                curOffset = 0;
-            }
+                mrOffset += credCopy.GetSize();
+                credOffset += credCopy.GetSize(); 
+
+                if (mrOffset == curMemReg.GetSize()) {  // section finished
+                    pendingEvent.RdmaBuffers.pop_front();
+                    mrOffset = 0;
+                    if (pendingEvent.RdmaBuffers.empty()) {
+                        break;
+                    } else {
+                        curMemReg = pendingEvent.RdmaBuffers.front();
+                    }
+                }
+            } while (credOffset < cred.GetSize());
         }
         return TRdmaReadReqOk{};
     }

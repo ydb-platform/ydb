@@ -18,7 +18,7 @@ RUN_PROGRAM(
    OUT_NOAUTO stable-25-1-2
 )
 
-RUN_PROGRAM(   
+RUN_PROGRAM(
    ydb/tests/library/compatibility/binaries/downloader download stable-25-1-3/release/config-meta.json stable-25-1-3
    OUT_NOAUTO stable-25-1-3
 )

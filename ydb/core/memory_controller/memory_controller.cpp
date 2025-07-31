@@ -81,11 +81,11 @@ private:
 class TPortionsMemoryConsumer: public TMemoryConsumer {
 public:
     TPortionsMemoryConsumer()
-        : TMemoryConsumer(EMemoryConsumerKind::PortionsMetaData, {}) {
+        : TMemoryConsumer(EMemoryConsumerKind::PortionsMetaDataCache, {}) {
     }
 
     ui64 GetConsumption() const override {
-        return NKikimr::NOlap::NStorageOptimizer::IOptimizerPlanner::GetNodePortionsCount() * NKikimr::NOlap::TGlobalLimits::AveragePortionSizeLimit;
+        return NKikimr::NOlap::NStorageOptimizer::IOptimizerPlanner::GetNodePortionsConsumption();
     }
 };
 
@@ -138,7 +138,7 @@ public:
         , ResourceBrokerSelfConfig(resourceBrokerConfig)
         , Counters(counters)
     {
-        Consumers.emplace(EMemoryConsumerKind::PortionsMetaData, MakeIntrusive<TPortionsMemoryConsumer>());
+        Consumers.emplace(EMemoryConsumerKind::PortionsMetaDataCache, MakeIntrusive<TPortionsMemoryConsumer>());
     }
 
     void Bootstrap(const TActorContext& ctx) {
@@ -377,7 +377,7 @@ private:
             case EMemoryConsumerKind::ScanGroupedMemoryLimiter:
             case EMemoryConsumerKind::CompGroupedMemoryLimiter:
             case EMemoryConsumerKind::DeduplicationGroupedMemoryLimiter:
-            case EMemoryConsumerKind::PortionsMetaData:
+            case EMemoryConsumerKind::PortionsMetaDataCache:
                 return consumer.Consumption;
         }
     }
@@ -396,8 +396,8 @@ private:
             case EMemoryConsumerKind::DeduplicationGroupedMemoryLimiter:
                 Send(consumer.ActorId, new TEvConsumerLimit(limitBytes));
                 break;
-            case EMemoryConsumerKind::PortionsMetaData:
-                NKikimr::NOlap::NStorageOptimizer::IOptimizerPlanner::SetDynamicPortionsCountLimit(limitBytes / NKikimr::NOlap::TGlobalLimits::AveragePortionSizeLimit);
+            case EMemoryConsumerKind::PortionsMetaDataCache:
+                NKikimr::NOlap::NStorageOptimizer::IOptimizerPlanner::SetPortionsCacheLimit(limitBytes);
                 break;
         }
     }
@@ -511,7 +511,7 @@ private:
                 stats.SetColumnTablesCompactionLimit(limitBytes);
                 break;
             }
-            case EMemoryConsumerKind::PortionsMetaData:
+            case EMemoryConsumerKind::PortionsMetaDataCache:
             case EMemoryConsumerKind::DataAccessorCache:
             case EMemoryConsumerKind::ColumnDataCache:
             case EMemoryConsumerKind::BlobCache: {
@@ -567,7 +567,7 @@ private:
                 result.MaxBytes = result.MinBytes;
                 break;
             }
-            case EMemoryConsumerKind::PortionsMetaData: {
+            case EMemoryConsumerKind::PortionsMetaDataCache: {
                 result.MinBytes = GetPortionsMetaDataLimitBytes(Config, hardLimitBytes);
                 result.MaxBytes = result.MinBytes;
                 break;

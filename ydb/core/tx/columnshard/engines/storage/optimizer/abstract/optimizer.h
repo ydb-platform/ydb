@@ -3,6 +3,7 @@
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/formats/arrow/reader/position.h>
+#include <ydb/core/tx/columnshard/common/limits.h>
 #include <ydb/core/tx/columnshard/common/path_id.h>
 #include <ydb/core/tx/columnshard/common/portion.h>
 
@@ -126,12 +127,12 @@ protected:
     }
 
 public:
-    static ui64 GetNodePortionsCount() {
-        return NodePortionsCounter.Val();
+    static ui64 GetNodePortionsConsumption() {
+        return NodePortionsCounter.Val() * NKikimr::NOlap::TGlobalLimits::AveragePortionSizeLimit;
     }
 
-    static void SetDynamicPortionsCountLimit(const ui32 dynamicPortionsCountLimit) {
-        DynamicPortionsCountLimit = dynamicPortionsCountLimit;
+    static void SetPortionsCacheLimit(const ui32 portionsCacheLimitBytes) {
+        DynamicPortionsCountLimit = portionsCacheLimitBytes / NKikimr::NOlap::TGlobalLimits::AveragePortionSizeLimit;
     }
 
     virtual ui32 GetAppropriateLevel(const ui32 baseLevel, const TPortionInfoForCompaction& /*info*/) const {

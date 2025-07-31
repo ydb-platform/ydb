@@ -10,9 +10,6 @@ In data processing systems, including {{ ydb-short-name }}, spilling is essentia
 - executing complex analytical operations (aggregations, sorting, table joins) over large datasets;
 - optimizing query performance through intermediate materialization of part of the data in external memory, which in certain scenarios can accelerate overall execution time.
 
-## Spilling principles
-
-### Core concepts
 
 Spilling operates based on the memory hierarchy principle:
 

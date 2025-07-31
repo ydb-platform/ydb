@@ -4,6 +4,7 @@
 #include <ydb/core/sys_view/common/schema.h>
 #include <ydb/core/tx/columnshard/engines/reader/actor/actor.h>
 #include <ydb/core/tx/columnshard/engines/reader/plain_reader/constructor/constructor.h>
+#include <ydb/core/tx/columnshard/engines/reader/simple_reader/constructor/constructor.h>
 #include <ydb/core/tx/columnshard/transactions/locks/read_start.h>
 
 namespace NKikimr::NOlap::NReader {
@@ -55,7 +56,7 @@ void TTxInternalScan::Complete(const TActorContext& ctx) {
         }
         read.LockId = LockId;
         read.DeduplicationPolicy = EDeduplicationPolicy::PREVENT_DUPLICATES;
-        std::unique_ptr<IScannerConstructor> scannerConstructor(new NPlain::TIndexScannerConstructor(context));
+        std::unique_ptr<IScannerConstructor> scannerConstructor(new NSimple::TIndexScannerConstructor(context));
         read.ColumnIds = request.GetColumnIds();
         read.SetScanCursor(nullptr);
         if (request.RangesFilter) {

@@ -1979,9 +1979,20 @@
             ]
         },
         {
-            "Name": "TCoDependsOn",
+            "Name": "TCoDependsOnBase",
             "Base": "TCoInputBase",
+            "Match": {"Type": "CallableBase"},
+            "Builder": {"Generate": "None"}
+        },
+        {
+            "Name": "TCoDependsOn",
+            "Base": "TCoDependsOnBase",
             "Match": {"Type": "Callable", "Name": "DependsOn"}
+        },
+        {
+            "Name": "TCoInnerDependsOn",
+            "Base": "TCoDependsOnBase",
+            "Match": {"Type": "Callable", "Name": "InnerDependsOn"}
         },
         {
             "Name": "TCoParameter",

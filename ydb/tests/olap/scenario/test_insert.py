@@ -58,7 +58,7 @@ class TestInsert(BaseTestSet):
                     retries=0, fail_on_error=False, return_error=True, ignore_error=ignore_error,
                 )
                 if result == []:  # query succeeded
-                    logger.info(f'I nserting data to {cnt}, iteration {iteration}, attempt {attempt}... succeeded')
+                    logger.info(f'Inserting data to {cnt}, iteration {iteration}, attempt {attempt}... succeeded')
                     break
                 elif isinstance(result, issues.Error):
                     if not any(e in str(result) for e in ignore_error):

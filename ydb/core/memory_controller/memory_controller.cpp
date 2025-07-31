@@ -1,7 +1,6 @@
 #include "memory_controller.h"
 #include "memory_controller_config.h"
 #include "memtable_collection.h"
-#include "portions_collection.h"
 
 #include <ydb/core/base/counters.h>
 #include <ydb/core/base/localdb.h>
@@ -17,6 +16,7 @@
 #include <ydb/core/tx/columnshard/blob_cache.h>
 #include <ydb/core/tx/columnshard/common/limits.h>
 #include <ydb/core/tx/columnshard/data_accessor/cache_policy/policy.h>
+#include <ydb/core/tx/columnshard/engines/storage/optimizer/abstract/optimizer.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/actors/core/process_stats.h>
@@ -81,7 +81,7 @@ private:
 struct TConsumerState {
     const EMemoryConsumerKind Kind;
     const TActorId ActorId;
-    const ui64 Consumption;
+    ui64 Consumption;
     ui64 MinBytes = 0;
     ui64 MaxBytes = 0;
     bool CanZeroLimit = false;
@@ -122,13 +122,13 @@ public:
         : Interval(interval)
         , MemTables(std::make_shared<TMemTableMemoryConsumersCollection>(counters,
             Consumers.emplace(EMemoryConsumerKind::MemTable, MakeIntrusive<TMemoryConsumer>(EMemoryConsumerKind::MemTable, TActorId{})).first->second))
-        , PortionConsumers(std::make_shared<TPortionsMemoryConsumersCollection>(
-            Consumers.emplace(EMemoryConsumerKind::Portions, MakeIntrusive<TMemoryConsumer>(EMemoryConsumerKind::Portions, TActorId{})).first->second))
         , ProcessMemoryInfoProvider(std::move(processMemoryInfoProvider))
         , Config(config)
         , ResourceBrokerSelfConfig(resourceBrokerConfig)
         , Counters(counters)
-    {}
+    {
+        Consumers.emplace(EMemoryConsumerKind::PortionsCache, MakeIntrusive<TMemoryConsumer>(EMemoryConsumerKind::PortionsCache, TActorId{}));
+    }
 
     void Bootstrap(const TActorContext& ctx) {
         Become(&TThis::StateWork);
@@ -165,9 +165,6 @@ private:
             HFunc(TEvMemTableRegister, Handle);
             HFunc(TEvMemTableUnregister, Handle);
             HFunc(TEvMemTableCompacted, Handle);
-
-            HFunc(TEvPortionsConsumerRegister, Handle);
-            HFunc(TEvPortionsConsumerUnregister, Handle);
 
             HFunc(TEvResourceBroker::TEvConfigureResult, Handle);
         }
@@ -336,17 +333,6 @@ private:
             "ResourceBroker configure result " << msg->Record.ShortDebugString());
     }
 
-    void Handle(TEvPortionsConsumerRegister::TPtr& ev, const TActorContext& ctx) {
-        auto consumer = PortionConsumers->Register(ev->Sender);
-        LOG_TRACE_S(ctx, NKikimrServices::MEMORY_CONTROLLER, "Portions consumer " << ev->Sender << " registered");
-        Send(ev->Sender, new TEvConsumerRegistered(std::move(consumer)));
-    }
-
-    void Handle(TEvPortionsConsumerUnregister::TPtr& ev, const TActorContext& ctx) {
-        PortionConsumers->Unregister(ev->Sender);
-        LOG_TRACE_S(ctx, NKikimrServices::MEMORY_CONTROLLER, "Portions consumer " << ev->Sender << " unregistered");
-    }
-
     double BinarySearchCoefficient(const TVector<TConsumerState>& consumers, ui64 availableMemory) {
         static const ui32 BinarySearchIterations = 20;
 
@@ -380,7 +366,7 @@ private:
             case EMemoryConsumerKind::ScanGroupedMemoryLimiter:
             case EMemoryConsumerKind::CompGroupedMemoryLimiter:
             case EMemoryConsumerKind::DeduplicationGroupedMemoryLimiter:
-            case EMemoryConsumerKind::Portions:
+            case EMemoryConsumerKind::PortionsCache:
                 return consumer.Consumption;
         }
     }
@@ -399,8 +385,8 @@ private:
             case EMemoryConsumerKind::DeduplicationGroupedMemoryLimiter:
                 Send(consumer.ActorId, new TEvConsumerLimit(limitBytes));
                 break;
-            case EMemoryConsumerKind::Portions:
-                ApplyPortionsLimit(limitBytes);
+            case EMemoryConsumerKind::PortionsCache:
+                NKikimr::NOlap::NStorageOptimizer::IOptimizerPlanner::SetDynamicPortionsCountLimit(limitBytes / (2 << 10));
                 break;
         }
     }
@@ -411,13 +397,6 @@ private:
             LOG_TRACE_S(TlsActivationContext->AsActorContext(), NKikimrServices::MEMORY_CONTROLLER, "Request MemTable compaction of table " <<
                 consumer.first->Table << " with " << HumanReadableBytes(consumer.second));
             Send(consumer.first->Owner, new TEvMemTableCompact(consumer.first->Table, consumer.second));
-        }
-    }
-
-    void ApplyPortionsLimit(ui64 limitBytes) const {
-        auto consumers = PortionConsumers->GetRegisteredConsumers();
-        for (const auto& consumer : consumers) {
-            Send(consumer->Owner, new TEvConsumerLimit(limitBytes));
         }
     }
 
@@ -521,7 +500,7 @@ private:
                 stats.SetColumnTablesCompactionLimit(limitBytes);
                 break;
             }
-            case EMemoryConsumerKind::Portions:
+            case EMemoryConsumerKind::PortionsCache:
             case EMemoryConsumerKind::DataAccessorCache:
             case EMemoryConsumerKind::ColumnDataCache:
             case EMemoryConsumerKind::BlobCache: {
@@ -577,9 +556,10 @@ private:
                 result.MaxBytes = result.MinBytes;
                 break;
             }
-            case EMemoryConsumerKind::Portions: {
+            case EMemoryConsumerKind::PortionsCache: {
                 result.MinBytes = GetPortionsBytes(Config, hardLimitBytes);
                 result.MaxBytes = result.MinBytes;
+                result.Consumption = NKikimr::NOlap::NStorageOptimizer::IOptimizerPlanner::GetNodePortionsCount() * (2 << 10);
                 break;
             }
         }
@@ -595,7 +575,6 @@ private:
     const TDuration Interval;
     TMap<EMemoryConsumerKind, TIntrusivePtr<TMemoryConsumer>> Consumers;
     std::shared_ptr<TMemTableMemoryConsumersCollection> MemTables;
-    std::shared_ptr<TPortionsMemoryConsumersCollection> PortionConsumers;
     const TIntrusiveConstPtr<IProcessMemoryInfoProvider> ProcessMemoryInfoProvider;
     NKikimrConfig::TMemoryControllerConfig Config;
     TResourceBrokerConfig ResourceBrokerSelfConfig;

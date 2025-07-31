@@ -102,6 +102,7 @@ private:
     const ui32 NodePortionsCountLimit = 0;
     double WeightKff = 1;
     static inline TAtomicCounter NodePortionsCounter = 0;
+    static inline std::atomic<ui32> DynamicPortionsCountLimit = 0;
     TPositiveControlInteger LocalPortionsCount;
     std::shared_ptr<TCounters> Counters = std::make_shared<TCounters>();
 
@@ -125,6 +126,14 @@ protected:
     }
 
 public:
+    static ui64 GetNodePortionsCount() {
+        return NodePortionsCounter.Val();
+    }
+
+    static void SetDynamicPortionsCountLimit(const ui32 dynamicPortionsCountLimit) {
+        DynamicPortionsCountLimit = dynamicPortionsCountLimit;
+    }
+
     virtual ui32 GetAppropriateLevel(const ui32 baseLevel, const TPortionInfoForCompaction& /*info*/) const {
         return baseLevel;
     }
@@ -134,9 +143,10 @@ public:
         , NodePortionsCountLimit(nodePortionsCountLimit) {
         Counters->NodePortionsCountLimit->Set(NodePortionsCountLimit);
     }
-    bool IsOverloaded(const std::optional<ui32>& dynamicNodePortionsCountLimit) const {
-        if (dynamicNodePortionsCountLimit) {
-            if (*dynamicNodePortionsCountLimit <= NodePortionsCounter.Val()) {
+    bool IsOverloaded() const {
+        auto dynamicPortionsCountLimit = DynamicPortionsCountLimit.load();
+        if (dynamicPortionsCountLimit) {
+            if (dynamicPortionsCountLimit <= NodePortionsCounter.Val()) {
                 return true;
             }
         } else if (NodePortionsCountLimit <= NodePortionsCounter.Val()) {

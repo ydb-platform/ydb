@@ -30,7 +30,6 @@
 #include "transactions/tx_controller.h"
 #include "common/path_id.h"
 
-#include <ydb/core/base/memory_controller_iface.h>
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/statistics/events.h>
 #include <ydb/core/tablet/tablet_counters.h>
@@ -299,9 +298,6 @@ class TColumnShard: public TActor<TColumnShard>, public NTabletFlatExecutor::TTa
     void Handle(NColumnShard::TEvPrivate::TEvAskColumnData::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvTxProxySchemeCache::TEvWatchNotifyUpdated::TPtr& ev, const TActorContext& ctx);
 
-    void Handle(NMemory::TEvConsumerRegistered::TPtr& ev, const TActorContext& ctx);
-    void Handle(NMemory::TEvConsumerLimit::TPtr& ev, const TActorContext& ctx);
-
     void HandleInit(TEvPrivate::TEvTieringModified::TPtr& ev, const TActorContext&);
 
     ITransaction* CreateTxInitSchema();
@@ -323,8 +319,7 @@ class TColumnShard: public TActor<TColumnShard>, public NTabletFlatExecutor::TTa
     void CleanupActors(const TActorContext& ctx);
     void BecomeBroken(const TActorContext& ctx);
     void TrySwitchToWork(const TActorContext& ctx);
-    static inline int iiii = 0;
-    int current1111 = iiii++;
+
     bool IsAnyChannelYellowStop() const {
         return Executor()->GetStats().IsAnyChannelYellowStop;
     }
@@ -462,9 +457,6 @@ protected:
             HFunc(NColumnShard::TEvPrivate::TEvAskColumnData, Handle);
             HFunc(TEvTxProxySchemeCache::TEvWatchNotifyUpdated, Handle);
 
-            HFunc(NMemory::TEvConsumerRegistered, Handle);
-            HFunc(NMemory::TEvConsumerLimit, Handle);
-
             default:
                 if (!HandleDefaultEvents(ev, SelfId())) {
                     LOG_S_WARN("TColumnShard.StateWork at " << TabletID() << " unhandled event type: " << ev->GetTypeName()
@@ -539,8 +531,6 @@ private:
     NDataShard::TSysLocks SysLocks;
     TSpaceWatcher* SpaceWatcher;
     TActorId SpaceWatcherId;
-
-    std::optional<ui32> DynamicNodePortionsCountLimit;
 
     void TryRegisterMediatorTimeCast();
     void UnregisterMediatorTimeCast();

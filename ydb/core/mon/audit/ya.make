@@ -5,7 +5,7 @@ RECURSE_FOR_TESTS(
 LIBRARY()
 
 SRCS(
-    audit_force.cpp
+    auditable_actions.cpp
     audit.cpp
     url_matcher.cpp
 )

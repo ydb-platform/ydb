@@ -2,17 +2,15 @@ name: Cherry-pick
 on:
   workflow_dispatch:
     inputs:
-      commits:
+      what:
         type: string
         default: ""
-        description: Comma or space separated commit SHAs for cherry-pick
-      pulls:
-        type: string
-        default: ""
-        description: Comma or space separated PR numbers for cherry-pick
+        description: List of commits to cherry-pick. Can be represented as full or short commit SHA, PR number or URL to commit or PR. Separated by space, comma or line end.
+        required: true
       target_branches:
         default: ""
         description: Comma or space separated branches to cherry-pick
+        required: true
 
 concurrency:
   group: ${{ github.workflow }}
@@ -49,6 +47,5 @@ jobs:
           GITHUB_STEP_SUMMARY: ${{ env.GITHUB_STEP_SUMMARY }}
         run: |
           ./.github/scripts/cherry_pick.py \
-            --pulls="${{ inputs.pulls }}" \
-            --commits="${{ inputs.commits }}" \
+            --what="${{ inputs.what }}" \
             --target-branches="${{ inputs.target_branches }}"

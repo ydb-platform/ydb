@@ -1488,6 +1488,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
 
         ui32 nodeId = runtime.GetNodeId(0);
         {
+            runtime.SimulateSleep(TDuration::MilliSeconds(100));
             runtime.SendToPipe(hiveTablet, sender, new TEvHive::TEvDrainNode(nodeId));
             {
                 TDispatchOptions options;
@@ -1502,9 +1503,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
                     wasDedup = true;
                 }
             });
-            while (!wasDedup) {
-                runtime.DispatchEvents({});
-            }
+            runtime.WaitFor("dedup", [&]{ return wasDedup; }, TDuration::Seconds(1));
         }
     }
 

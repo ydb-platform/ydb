@@ -76,6 +76,19 @@ private:
         return NextRequestId.Inc();
     }
 
+    std::map<ui32, std::shared_ptr<arrow::Field>> GetFetchingColumns() const {
+        std::map<ui32, std::shared_ptr<arrow::Field>> fieldsByColumn;
+        {
+            for (const auto& columnId : PKColumns->GetColumnIds()) {
+                fieldsByColumn.emplace(columnId, PKColumns->GetFilteredSchemaVerified().GetFieldByColumnIdVerified(columnId));
+            }
+            for (const auto& columnId : TIndexInfo::GetSnapshotColumnIds()) {
+                fieldsByColumn.emplace(columnId, IIndexInfo::GetColumnFieldVerified(columnId));
+            }
+        }
+        return fieldsByColumn;
+    }
+
 public:
     TDuplicateManager(const TSpecialReadContext& context, TPortionIntervalTree&& portions);
 };

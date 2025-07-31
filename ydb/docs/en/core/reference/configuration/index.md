@@ -353,6 +353,7 @@ The cache components include:
 
 - Shared cache
 - MemTable
+- Column Tables Cache
 
 Each cache component's limits are dynamically recalculated every second to ensure that each component consumes memory proportionally to its limit thresholds while the total consumed memory stays close to the target memory utilization.
 
@@ -373,6 +374,8 @@ memory_controller_config:
 The activity components include:
 
 - KQP
+- Column Tables Read Execution
+- Column Tables Compaction
 
 The memory limit for each activity component specifies the maximum amount of memory it can attempt to use. However, to prevent the {{ ydb-short-name }} process from exceeding the soft memory limit, the total consumption of activity components is further constrained by an additional limit known as the activities memory limit. If the total memory usage of the activity components exceeds this limit, any additional memory requests will be denied.
 
@@ -385,28 +388,6 @@ Example of the `memory_controller_config` section with a specified KQP limit:
 ```yaml
 memory_controller_config:
   query_execution_limit_percent: 25
-```
-
-### Memory limits for column tables
-
-The limits for column tables include:
-
-- Column Table Read Execution — the limit for executing column table read operations;
-- Column Table Compaction — the limit for executing column table compaction operations;
-- Column Table Cache — the general limit for various caches of column tables.
-
-The memory limit for column tables specifies the maximum fixed amount of memory that operations and cache can use.
-
-Column table limits can be set in two ways:
-
-- As a percentage of the hard memory limit available to the process;
-- As a fixed size in bytes.
-
-An example of the `memory_controller_config` section with a specified limit as a percentage of the hard limit for compaction:
-
-```yaml
-memory_controller_config:
-  column_tables_compaction_limit_percent: 20
 ```
 
 ### Configuration parameters

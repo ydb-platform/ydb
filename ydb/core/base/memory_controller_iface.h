@@ -13,7 +13,7 @@ enum class EMemoryConsumerKind {
     DataAccessorCache,
     ColumnDataCache,
     DeduplicationGroupedMemoryLimiter,
-    PortionsCache,
+    PortionsLimiter,
 };
 
 struct IMemoryConsumer : public TThrRefBase {

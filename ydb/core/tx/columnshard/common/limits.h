@@ -13,18 +13,17 @@ public:
 
     static constexpr inline ui64 DefaultReadSequentiallyBufferSize = ((ui64)8) << 20;
 
-    static constexpr double CompactionIndexationQueueLimitCoefficient = 0.055;
-    static constexpr double CompactionTtlQueueLimitCoefficient = 0.055;
-    static constexpr double CompactionGeneralQueueLimitCoefficient = 0.165;
-    static constexpr double CompactionNormalizerQueueLimitCoefficient = 0.165;
-    static constexpr double GroupedMemoryLimiterCompactionLimitCoefficient = 0.56;
+    static constexpr double CompactionIndexationQueueLimitCoefficient = 0.125;
+    static constexpr double CompactionTtlQueueLimitCoefficient = 0.125;
+    static constexpr double CompactionGeneralQueueLimitCoefficient = 0.375;
+    static constexpr double CompactionNormalizerQueueLimitCoefficient = 0.375;
 
     static_assert((CompactionIndexationQueueLimitCoefficient + CompactionTtlQueueLimitCoefficient +
                    CompactionGeneralQueueLimitCoefficient + CompactionNormalizerQueueLimitCoefficient +
-                   GroupedMemoryLimiterCompactionLimitCoefficient - 1.0 < std::numeric_limits<double>::epsilon()) &&
+                   - 1.0 < std::numeric_limits<double>::epsilon()) &&
                   (1.0 - (CompactionIndexationQueueLimitCoefficient + CompactionTtlQueueLimitCoefficient +
-                   CompactionGeneralQueueLimitCoefficient + CompactionNormalizerQueueLimitCoefficient +
-                   GroupedMemoryLimiterCompactionLimitCoefficient) < std::numeric_limits<double>::epsilon()),
+                   CompactionGeneralQueueLimitCoefficient + CompactionNormalizerQueueLimitCoefficient)
+                   < std::numeric_limits<double>::epsilon()),
                   "Compaction coefficients sum must be equal to 1.0");
 
     static constexpr double GroupedMemoryLimiterSoftLimitCoefficient = 0.3;
@@ -39,5 +38,7 @@ public:
         "Cache coefficients sum must be equal to 1.0");
 
     static constexpr double DeduplicationInScanMemoryFraction = 0.5;
+
+    static constexpr ui64 AveragePortionSizeLimit = 2 << 10;
 };
 }

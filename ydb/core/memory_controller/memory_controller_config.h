@@ -94,7 +94,7 @@ inline ui64 GetDeduplicationGroupedMemoryLimiterLimitBytes(const NKikimrConfig::
 }
 
 inline ui64 GetCompGroupedMemoryLimiterLimitBytes(const NKikimrConfig::TMemoryControllerConfig& config, const ui64 hardLimitBytes) {
-    return GetColumnTablesCompactionLimitBytes(config, hardLimitBytes) * NKikimr::NOlap::TGlobalLimits::GroupedMemoryLimiterCompactionLimitCoefficient;
+    return GetColumnTablesCompactionLimitBytes(config, hardLimitBytes);
 }
 
 inline ui64 GetBlobCacheLimitBytes(const NKikimrConfig::TMemoryControllerConfig& config, const ui64 hardLimitBytes) {

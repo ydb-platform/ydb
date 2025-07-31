@@ -63,7 +63,7 @@ public:
     {
     }
 
-    ui64 GetConsumption() const {
+    virtual ui64 GetConsumption() const {
         return Consumption;
     }
 
@@ -78,10 +78,21 @@ private:
     std::atomic<ui64> Consumption = 0;
 };
 
+class TPortionsMemoryConsumer: public TMemoryConsumer {
+public:
+    TPortionsMemoryConsumer()
+        : TMemoryConsumer(EMemoryConsumerKind::PortionsLimiter, {}) {
+    }
+
+    ui64 GetConsumption() const override {
+        return NKikimr::NOlap::NStorageOptimizer::IOptimizerPlanner::GetNodePortionsCount() * NKikimr::NOlap::TGlobalLimits::AveragePortionSizeLimit;
+    }
+};
+
 struct TConsumerState {
     const EMemoryConsumerKind Kind;
     const TActorId ActorId;
-    ui64 Consumption;
+    const ui64 Consumption;
     ui64 MinBytes = 0;
     ui64 MaxBytes = 0;
     bool CanZeroLimit = false;
@@ -127,7 +138,7 @@ public:
         , ResourceBrokerSelfConfig(resourceBrokerConfig)
         , Counters(counters)
     {
-        Consumers.emplace(EMemoryConsumerKind::PortionsCache, MakeIntrusive<TMemoryConsumer>(EMemoryConsumerKind::PortionsCache, TActorId{}));
+        Consumers.emplace(EMemoryConsumerKind::PortionsLimiter, MakeIntrusive<TPortionsMemoryConsumer>());
     }
 
     void Bootstrap(const TActorContext& ctx) {
@@ -366,7 +377,7 @@ private:
             case EMemoryConsumerKind::ScanGroupedMemoryLimiter:
             case EMemoryConsumerKind::CompGroupedMemoryLimiter:
             case EMemoryConsumerKind::DeduplicationGroupedMemoryLimiter:
-            case EMemoryConsumerKind::PortionsCache:
+            case EMemoryConsumerKind::PortionsLimiter:
                 return consumer.Consumption;
         }
     }
@@ -385,8 +396,8 @@ private:
             case EMemoryConsumerKind::DeduplicationGroupedMemoryLimiter:
                 Send(consumer.ActorId, new TEvConsumerLimit(limitBytes));
                 break;
-            case EMemoryConsumerKind::PortionsCache:
-                NKikimr::NOlap::NStorageOptimizer::IOptimizerPlanner::SetDynamicPortionsCountLimit(limitBytes / (2 << 10));
+            case EMemoryConsumerKind::PortionsLimiter:
+                NKikimr::NOlap::NStorageOptimizer::IOptimizerPlanner::SetDynamicPortionsCountLimit(limitBytes / NKikimr::NOlap::TGlobalLimits::AveragePortionSizeLimit);
                 break;
         }
     }
@@ -500,7 +511,7 @@ private:
                 stats.SetColumnTablesCompactionLimit(limitBytes);
                 break;
             }
-            case EMemoryConsumerKind::PortionsCache:
+            case EMemoryConsumerKind::PortionsLimiter:
             case EMemoryConsumerKind::DataAccessorCache:
             case EMemoryConsumerKind::ColumnDataCache:
             case EMemoryConsumerKind::BlobCache: {
@@ -556,10 +567,9 @@ private:
                 result.MaxBytes = result.MinBytes;
                 break;
             }
-            case EMemoryConsumerKind::PortionsCache: {
+            case EMemoryConsumerKind::PortionsLimiter: {
                 result.MinBytes = GetPortionsBytes(Config, hardLimitBytes);
                 result.MaxBytes = result.MinBytes;
-                result.Consumption = NKikimr::NOlap::NStorageOptimizer::IOptimizerPlanner::GetNodePortionsCount() * (2 << 10);
                 break;
             }
         }

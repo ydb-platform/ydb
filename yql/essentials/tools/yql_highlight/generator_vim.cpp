@@ -1,4 +1,4 @@
-#include "generate_vim.h"
+#include "generator_vim.h"
 
 #include <yql/essentials/utils/yql_panic.h>
 
@@ -163,6 +163,10 @@ namespace NSQLHighlight {
 
         out << "let b:current_syntax = \"yql\"" << '\n';
         out.Flush();
+    }
+
+    IGenerator::TPtr MakeVimGenerator() {
+        return MakeOnlyFileGenerator(GenerateVim);
     }
 
 } // namespace NSQLHighlight

@@ -1,0 +1,96 @@
+name: Rebase and Check Command
+
+on:
+  issue_comment:
+    types: [created]
+
+jobs:
+  rebase-and-check:
+    # Only run on PR comments
+    if: github.event.issue.pull_request && contains(github.event.comment.body, '/rebase-and-check')
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+      pull-requests: write
+    steps:
+      - name: Check if user has permission
+        id: check-permission
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const userLogin = context.payload.comment.user.login;
+            const issueAuthor = context.payload.issue.user.login;
+            
+            // Allow PR author or repository collaborators
+            if (userLogin === issueAuthor) {
+              console.log("User is the PR author");
+              return true;
+            }
+            
+            try {
+              const response = await github.rest.repos.checkCollaborator({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                username: userLogin,
+              });
+              console.log("User is a collaborator");
+              return response.status === 204;
+            } catch (error) {
+              if (error.status === 404) {
+                console.log("User is not a collaborator");
+                return false;
+              }
+              throw error;
+            }
+
+      - name: Add rebase-and-check label
+        if: steps.check-permission.outputs.result == 'true'
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const prNumber = context.payload.issue.number;
+            
+            try {
+              await github.rest.issues.addLabels({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: prNumber,
+                labels: ['rebase-and-check']
+              });
+              
+              console.log(`Added rebase-and-check label to PR #${prNumber}`);
+              
+              // Add a reaction to show the command was processed
+              await github.rest.reactions.createForIssueComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: context.payload.comment.id,
+                content: '+1'
+              });
+              
+            } catch (error) {
+              console.error('Error adding label:', error);
+              
+              // Add a confused reaction to show something went wrong
+              await github.rest.reactions.createForIssueComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: context.payload.comment.id,
+                content: 'confused'
+              });
+            }
+
+      - name: Comment on permission denied
+        if: steps.check-permission.outputs.result == 'false'
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            await github.rest.reactions.createForIssueComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              comment_id: context.payload.comment.id,
+              content: '-1'
+            });

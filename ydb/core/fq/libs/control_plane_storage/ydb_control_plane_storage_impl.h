@@ -43,6 +43,7 @@
 #include <ydb/core/fq/libs/quota_manager/events/events.h>
 #include <ydb/core/fq/libs/ydb/util.h>
 #include <ydb/core/fq/libs/ydb/ydb.h>
+#include <ydb/core/kqp/proxy_service/kqp_script_execution_retries.h>
 
 namespace NFq {
 
@@ -694,11 +695,11 @@ protected:
     void UpdateTaskInfo(
         NActors::TActorSystem* actorSystem, Fq::Private::PingTaskRequest& request, const std::shared_ptr<TFinalStatus>& finalStatus, FederatedQuery::Query& query,
         FederatedQuery::Internal::QueryInternal& internal, FederatedQuery::Job& job, TString& owner,
-        TRetryLimiter& retryLimiter, TDuration& backoff, TInstant& expireAt) const;
+        NKikimr::NKqp::TRetryLimiter& retryLimiter, TDuration& backoff, TInstant& expireAt) const;
 
     void FillQueryStatistics(
         const std::shared_ptr<TFinalStatus>& finalStatus, const FederatedQuery::Query& query,
-        const FederatedQuery::Internal::QueryInternal& internal, const TRetryLimiter& retryLimiter) const;
+        const FederatedQuery::Internal::QueryInternal& internal, const NKikimr::NKqp::TRetryLimiter& retryLimiter) const;
 
     void Handle(TEvControlPlaneStorage::TEvFinalStatusReport::TPtr& ev);
 

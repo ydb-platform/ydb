@@ -26,7 +26,7 @@ public:
                 continue;
             }
             if (pileInfo.State != wardenPileInfo.State) {
-                if (wardenPileInfo.State == NKikimrBridge::TClusterState::DISCONNECTED) {
+                if (!NBridge::PileStateTraits(wardenPileInfo.State).AllowsConnection) {
                     for (auto nodeId : pileInfo.Nodes) {
                         auto* nodeInfo = Self->FindNode(nodeId);
                         if (!nodeInfo) {

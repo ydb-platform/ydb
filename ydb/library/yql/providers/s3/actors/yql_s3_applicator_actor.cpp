@@ -224,7 +224,7 @@ public:
     : ParentId(parentId)
     , Gateway(gateway) 
     , QueryId(queryId)
-    , KeyPrefix(jobId + "_")
+    , KeyPrefix(jobId ? jobId + "_" : "")
     , KeySubPrefix(restartNumber ? ToString(*restartNumber) + "_" : "")
     , Commit(commit)
     , SecureParams(secureParams)

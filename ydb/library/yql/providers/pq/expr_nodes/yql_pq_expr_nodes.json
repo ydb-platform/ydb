@@ -124,6 +124,17 @@
             ]
         },
         {
+            "Name": "TPqInsert",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "PqInsert"},
+            "Children": [
+                {"Index": 0, "Name": "World", "Type": "TExprBase"},
+                {"Index": 1, "Name": "DataSink", "Type": "TPqDataSink"},
+                {"Index": 2, "Name": "Topic", "Type": "TPqTopic"},
+                {"Index": 3, "Name": "Input", "Type": "TExprBase"}
+            ]
+        },
+        {
             "Name": "TPqClusterConfig",
             "Base": "TCallable",
             "Match": {"Type": "Callable", "Name": "PqClusterConfig"},

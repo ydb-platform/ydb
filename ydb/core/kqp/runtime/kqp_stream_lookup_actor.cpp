@@ -39,6 +39,7 @@ public:
         , Snapshot(settings.GetSnapshot().GetStep(), settings.GetSnapshot().GetTxId())
         , AllowInconsistentReads(settings.GetAllowInconsistentReads())
         , UseFollowers(settings.GetAllowUseFollowers())
+        , IsTableImmutable(settings.GetIsTableImmutable())
         , PipeCacheId(UseFollowers ? FollowersPipeCacheId : MainPipeCacheId)
         , LockTxId(settings.HasLockTxId() ? settings.GetLockTxId() : TMaybe<ui64>())
         , NodeLockId(settings.HasLockNodeId() ? settings.GetLockNodeId() : TMaybe<ui32>())
@@ -433,7 +434,7 @@ private:
 
         if (UseFollowers) {
             YQL_ENSURE(Locks.empty());
-            if (!record.GetFinished()) {
+            if (!record.GetFinished() && !IsTableImmutable) {
                 RuntimeError("read from follower returned partial data.", NYql::NDqProto::StatusIds::INTERNAL_ERROR);
                 return;
             }
@@ -792,6 +793,7 @@ private:
     IKqpGateway::TKqpSnapshot Snapshot;
     const bool AllowInconsistentReads;
     const bool UseFollowers;
+    const bool IsTableImmutable;
     const TActorId PipeCacheId;
     const TMaybe<ui64> LockTxId;
     const TMaybe<ui32> NodeLockId;

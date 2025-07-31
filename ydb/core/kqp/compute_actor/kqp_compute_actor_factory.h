@@ -131,6 +131,10 @@ public:
         TSchedulableOptions SchedulableOptions;
         TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
         TString Database;
+
+#if defined(USE_HDRF_SCHEDULER)
+        NScheduler::NHdrf::NDynamic::TQueryPtr Query;
+#endif
     };
 
     typedef std::variant<TActorId, NKikimr::NKqp::NRm::TKqpRMAllocateResult> TActorStartResult;
@@ -142,7 +146,6 @@ public:
 std::shared_ptr<IKqpNodeComputeActorFactory> MakeKqpCaFactory(const NKikimrConfig::TTableServiceConfig::TResourceManager& config,
         std::shared_ptr<NRm::IKqpResourceManager> resourceManager,
         NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory,
-        NScheduler::TSchedulableTaskFactory schedulableTaskFactory,
         const std::optional<TKqpFederatedQuerySetup> federatedQuerySetup);
 
 } // namespace NKikimr::NKqp::NComputeActor

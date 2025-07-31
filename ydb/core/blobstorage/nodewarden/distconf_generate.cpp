@@ -143,10 +143,10 @@ namespace NKikimr::NStorage {
         THashMap<ui32, TNodeLocation> nodeLocations;
         THashSet<ui32> allowedNodeIds;
         for (const auto& node : config->GetAllNodes()) {
-            nodeLocations.try_emplace(node.GetNodeId(), node.GetLocation());
-            const auto pfn = &NKikimrBlobStorage::TNodeIdentifier::GetBridgePileId;
-            if (bridgePileId && TBridgePileId::FromProto(&node, pfn) == *bridgePileId) {
-                allowedNodeIds.emplace(node.GetNodeId());
+            TNodeLocation location(node.GetLocation());
+            nodeLocations.try_emplace(node.GetNodeId(), location);
+            if (bridgePileId && *bridgePileId == ResolveNodePileId(location)) {
+                allowedNodeIds.insert(node.GetNodeId());
             }
         }
 
@@ -573,11 +573,8 @@ namespace NKikimr::NStorage {
         std::map<std::optional<TBridgePileId>, THashMap<TString, std::vector<std::tuple<ui32, TNodeLocation>>>> nodes;
         bool goodConfig = true;
         for (const auto& node : baseConfig.GetAllNodes()) {
-            std::optional<TBridgePileId> pileId = node.HasBridgePileId()
-                ? std::make_optional(TBridgePileId::FromProto(&node, &NKikimrBlobStorage::TNodeIdentifier::GetBridgePileId))
-                : std::nullopt;
-
             TNodeLocation location(node.GetLocation());
+            std::optional<TBridgePileId> pileId = ResolveNodePileId(location);
             nodes[pileId][location.GetDataCenterId()].emplace_back(node.GetNodeId(), location);
         }
         for (auto& [pileId, nodesByDataCenter] : nodes) {
@@ -588,12 +585,8 @@ namespace NKikimr::NStorage {
         return goodConfig;
     }
 
-    bool TDistributedConfigKeeper::UpdateConfig(NKikimrBlobStorage::TStorageConfig *config,
-            const THashMap<TBridgePileId, NKikimrBlobStorage::TStorageConfig*>& persistedConfigForUnsyncedPile) {
-        if (UpdateBridgeConfig(config, persistedConfigForUnsyncedPile)) {
-            return true;
-        }
-        return false;
+    bool TDistributedConfigKeeper::UpdateConfig(NKikimrBlobStorage::TStorageConfig *config, bool& checkSyncersAfterCommit) {
+        return UpdateBridgeConfig(config, checkSyncersAfterCommit);
     }
 
 } // NKikimr::NStorage

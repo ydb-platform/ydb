@@ -109,12 +109,7 @@ void TSpecialReadContext::RegisterActors(const NCommon::ISourcesConstructor& sou
     if (NeedDuplicateFiltering()) {
         const auto* portions = dynamic_cast<const NCommon::TSourcesConstructorWithAccessors<TSourceConstructor>*>(&sources);
         AFL_VERIFY(portions);
-        NCommon::TPortionIntervalTree intervals;
-        for (const auto& portion : portions->GetConstructors()) {
-            intervals.AddRange(NCommon::TPortionIntervalTree::TOwnedRange(portion.GetPortion()->IndexKeyStart(), true,
-                                   portion.GetPortion()->IndexKeyEnd(), true), portion.GetPortion());
-        }
-        DuplicatesManager = NActors::TActivationContext::Register(new NDuplicateFiltering::TDuplicateManager(*this, std::move(intervals)));
+        DuplicatesManager = NActors::TActivationContext::Register(new NDuplicateFiltering::TDuplicateManager(*this, portions->GetConstructors()));
     }
 }
 

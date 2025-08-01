@@ -1050,6 +1050,10 @@ private:
     TDeque<NWilson::TSpan> TxForPersistSpans;
 
     bool CanProcessUserActionAndTransactionEvents() const;
+
+    void DumpState();
+    void DumpKeys(const TString& name, const std::deque<TDataKey>& keys);
+    void DumpKeyLevels();
 };
 
 } // namespace NKikimr::NPQ

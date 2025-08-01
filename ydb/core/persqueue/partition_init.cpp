@@ -806,6 +806,36 @@ void TInitDataStep::Execute(const TActorContext &ctx) {
     ctx.Send(Partition()->Tablet, request.Release());
 }
 
+void TPartition::DumpKeys(const TString& name, const std::deque<TDataKey>& keys)
+{
+    Cerr << "=== " << name << " ===" << Endl;
+    for (const auto& k : keys) {
+        Cerr << k.Key.ToString() << " " << k.Size << Endl;
+    }
+}
+
+void TPartition::DumpKeyLevels()
+{
+    Cerr << "=== key levels ===" << Endl;
+    for (size_t i = 0; i < DataKeysHead.size(); ++i) {
+        const auto& level = DataKeysHead[i];
+        Cerr << i << ") " << level.Border() << " " << level.Sum() << " " << level.RecsCount() << " " << level.InternalPartsCount() << Endl;
+        for (ui32 j = 0; j < level.KeysCount(); ++j) {
+            Cerr << "    " << j << ") " << level.GetKey(j).ToString() << " " << level.GetSize(j) << Endl;
+        }
+    }
+}
+
+void TPartition::DumpState()
+{
+    DumpKeys("body keys", DataKeysBody);
+    DumpKeys("head keys", HeadKeys);
+    DumpKeyLevels();
+    //DumpCompactedKeys();
+    //DumpHead("head");
+    //DumpHead("new head");
+}
+
 void TInitDataStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActorContext &ctx) {
     if (!ValidateResponse(*this, ev, ctx)) {
         PoisonPill(ctx);
@@ -841,7 +871,7 @@ void TInitDataStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActorConte
                 Y_ABORT_UNLESS(dataKeysHead[currentLevel].KeysCount() < AppData(ctx)->PQConfig.GetMaxBlobsPerLevel());
                 Y_ABORT_UNLESS(!dataKeysHead[currentLevel].NeedCompaction(),
                                "currentLevel=%" PRIu32 ", key=%s, size=%" PRIu32,
-                               currentLevel, key.ToString().data(), size);
+                               (Partition()->DumpState(), currentLevel), key.ToString().data(), size);
 
                 PQ_LOG_D("read res partition offset " << offset << " endOffset " << Partition()->EndOffset
                         << " key " << key.GetOffset() << "," << key.GetCount() << " valuesize " << read.GetValue().size()
@@ -850,7 +880,9 @@ void TInitDataStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActorConte
 
                 Y_ABORT_UNLESS(offset + 1 >= Partition()->StartOffset);
                 Y_ABORT_UNLESS(offset < Partition()->EndOffset);
-                Y_ABORT_UNLESS(size == read.GetValue().size(), "size=%d == read.GetValue().size() = %d", size, read.GetValue().size());
+                Y_ABORT_UNLESS(size == read.GetValue().size(),
+                               "size=%" PRIu32 ", read.GetValue().size()=%" PRISZT,
+                               size, read.GetValue().size());
 
                 for (TBlobIterator it(key, read.GetValue()); it.IsValid(); it.Next()) {
                     head.AddBatch(it.GetBatch());

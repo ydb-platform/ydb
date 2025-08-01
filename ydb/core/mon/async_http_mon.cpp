@@ -1,27 +1,27 @@
 #include "async_http_mon.h"
-#include <ydb/library/actors/core/actor_bootstrapped.h>
-#include <ydb/library/actors/http/http_proxy.h>
+#include "mon_impl.h"
+
 #include <ydb/core/base/appdata.h>
-#include <ydb/core/grpc_services/base/base.h>
+#include <ydb/core/base/counters.h>
+#include <ydb/core/base/monitoring_provider.h>
 #include <ydb/core/base/ticket_parser.h>
+#include <ydb/core/grpc_services/base/base.h>
+#include <ydb/core/mon/audit/audit.h>
+#include <ydb/core/protos/mon.pb.h>
+
+#include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/probes.h>
+#include <ydb/library/actors/http/http_proxy.h>
 
 #include <library/cpp/json/json_writer.h>
 #include <library/cpp/lwtrace/all.h>
 #include <library/cpp/lwtrace/mon/mon_lwtrace.h>
-#include <ydb/library/actors/core/probes.h>
-#include <ydb/core/base/monitoring_provider.h>
-
-#include <library/cpp/monlib/service/pages/version_mon_page.h>
-#include <library/cpp/monlib/service/pages/mon_page.h>
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 #include <library/cpp/monlib/dynamic_counters/page.h>
+#include <library/cpp/monlib/service/pages/mon_page.h>
+#include <library/cpp/monlib/service/pages/version_mon_page.h>
 
 #include <util/system/hostname.h>
-
-#include <ydb/core/base/counters.h>
-#include <ydb/core/protos/mon.pb.h>
-
-#include "mon_impl.h"
 
 namespace NActors {
 
@@ -191,6 +191,7 @@ public:
     NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr Event;
     THttpMonRequestContainer Container;
     TIntrusivePtr<TActorMonPage> ActorMonPage;
+    NMonitoring::NAudit::TAuditCtx AuditCtx;
 
     THttpMonLegacyActorRequest(NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr event, TIntrusivePtr<TActorMonPage> actorMonPage)
         : Event(std::move(event))
@@ -206,6 +207,7 @@ public:
         if (Event->Get()->Request->Method == "OPTIONS") {
             return ReplyOptionsAndPassAway();
         }
+        AuditCtx.InitAudit(Event);
         Become(&THttpMonLegacyActorRequest::StateFunc);
         if (ActorMonPage->Authorizer) {
             NActors::IEventHandle* handle = ActorMonPage->Authorizer(SelfId(), Container);
@@ -217,6 +219,7 @@ public:
         SendRequest();
     }
     void ReplyWith(NHttp::THttpOutgoingResponsePtr response) {
+        AuditCtx.FinishAudit(response);
         TString url(Event->Get()->Request->URL.Before('?'));
         TString status(response->Status);
         NMonitoring::THistogramPtr ResponseTimeHgram = NKikimr::GetServiceCounters(NKikimr::AppData()->Counters,
@@ -344,6 +347,7 @@ public:
         }
         TString serializedToken;
         if (result && result->UserToken) {
+            AuditCtx.AddAuditLogParts(result->UserToken);
             serializedToken = result->UserToken->GetSerializedToken();
         }
         Send(ActorMonPage->TargetActorId, new NMon::TEvHttpInfo(
@@ -404,6 +408,7 @@ class THttpMonLegacyIndexRequest : public TActorBootstrapped<THttpMonLegacyIndex
 public:
     NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr Event;
     THttpMonRequestContainer Container;
+    NMonitoring::NAudit::TAuditCtx AuditCtx;
 
     THttpMonLegacyIndexRequest(NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr event, NMonitoring::IMonPage* index)
         : Event(std::move(event))
@@ -415,12 +420,14 @@ public:
     }
 
     void Bootstrap() {
+        AuditCtx.InitAudit(Event);
         ProcessRequest();
     }
 
     void ProcessRequest() {
         Container.Page->Output(Container);
         NHttp::THttpOutgoingResponsePtr response = Event->Get()->Request->CreateResponseString(Container.Str());
+        AuditCtx.FinishAudit(response);
         Send(Event->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(response));
         PassAway();
     }

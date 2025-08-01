@@ -4637,7 +4637,8 @@ void TPersQueue::CheckTxState(const TActorContext& ctx,
 
     case NKikimrPQ::TTransaction::DELETING:
         // The PQ tablet has persisted its state. Now she can delete the transaction and take the next one.
-        DeleteWriteId(tx.WriteId);
+        TMaybe<TWriteId> writeId = tx.WriteId; // copy writeId to save for kafka transaction after erase
+        DeleteWriteId(writeId);
         PQ_LOG_D("delete TxId " << tx.TxId);
         Txs.erase(tx.TxId);
         SetTxInFlyCounter();
@@ -4646,7 +4647,7 @@ void TPersQueue::CheckTxState(const TActorContext& ctx,
         // in the status of the PQ tablet (if they came)
         TryReturnTabletStateAll(ctx);
 
-        TryContinueKafkaWrites(tx.WriteId, ctx);
+        TryContinueKafkaWrites(writeId, ctx);
         break;
     }
 }

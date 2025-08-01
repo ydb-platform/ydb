@@ -17,15 +17,17 @@ struct TUpdateClusterStateSettings : public TOperationRequestSettings<TUpdateClu
 struct TGetClusterStateSettings : public TOperationRequestSettings<TGetClusterStateSettings> {};
 
 enum class EPileState {
-    DISCONNECTED = Ydb::Bridge::DISCONNECTED,
-    NOT_SYNCHRONIZED = Ydb::Bridge::NOT_SYNCHRONIZED,
-    SYNCHRONIZED = Ydb::Bridge::SYNCHRONIZED,
-    PROMOTE = Ydb::Bridge::PROMOTE,
-    PRIMARY = Ydb::Bridge::PRIMARY,
+    UNSPECIFIED = Ydb::Bridge::PileState::UNSPECIFIED,
+    DISCONNECTED = Ydb::Bridge::PileState::DISCONNECTED,
+    NOT_SYNCHRONIZED = Ydb::Bridge::PileState::NOT_SYNCHRONIZED,
+    SYNCHRONIZED = Ydb::Bridge::PileState::SYNCHRONIZED,
+    PROMOTE = Ydb::Bridge::PileState::PROMOTE,
+    PRIMARY = Ydb::Bridge::PileState::PRIMARY,
+    SUSPENDED = Ydb::Bridge::PileState::SUSPENDED,
 };
 
 struct TPileStateUpdate {
-    std::uint32_t PileId = 0;
+    std::string PileName;
     EPileState State = EPileState::DISCONNECTED;
 };
 
@@ -52,7 +54,7 @@ public:
     ~TBridgeClient();
 
     TAsyncStatus UpdateClusterState(const std::vector<TPileStateUpdate>& updates,
-        const std::vector<std::uint32_t>& specificPileIds, const TUpdateClusterStateSettings& settings = {});
+        const std::vector<std::string>& quorumPiles, const TUpdateClusterStateSettings& settings = {});
 
     TAsyncGetClusterStateResult GetClusterState(const TGetClusterStateSettings& settings = {});
 

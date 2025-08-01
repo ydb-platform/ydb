@@ -15,7 +15,7 @@
 namespace NYdb::NConsoleClient {
 
 namespace {
-    Ydb::Bridge::PileState ParsePileState(TString stateStr) {
+    Ydb::Bridge::PileState::State ParsePileState(TString stateStr) {
         TString stateStrUpper = stateStr;
         stateStrUpper.to_upper();
 
@@ -34,17 +34,22 @@ namespace {
         if (stateStrUpper == "PRIMARY") {
             return Ydb::Bridge::PileState::PRIMARY;
         }
+        if (stateStrUpper == "SUSPENDED") {
+            return Ydb::Bridge::PileState::SUSPENDED;
+        }
         ythrow yexception() << "Invalid pile state: \"" << stateStr
-            << "\". Please use one of: DISCONNECTED, NOT_SYNCHRONIZED, SYNCHRONIZED, PROMOTE, PRIMARY.";
+            << "\". Please use one of: DISCONNECTED, NOT_SYNCHRONIZED, SYNCHRONIZED, PROMOTE, PRIMARY, SUSPENDED.";
     }
 
     TString PileStateToString(NYdb::NBridge::EPileState state) {
         switch (state) {
+            case NYdb::NBridge::EPileState::UNSPECIFIED: return "UNSPECIFIED";
             case NYdb::NBridge::EPileState::DISCONNECTED: return "DISCONNECTED";
             case NYdb::NBridge::EPileState::NOT_SYNCHRONIZED: return "NOT_SYNCHRONIZED";
             case NYdb::NBridge::EPileState::SYNCHRONIZED: return "SYNCHRONIZED";
             case NYdb::NBridge::EPileState::PROMOTE: return "PROMOTE";
             case NYdb::NBridge::EPileState::PRIMARY: return "PRIMARY";
+            case NYdb::NBridge::EPileState::SUSPENDED: return "SUSPENDED";
         }
         return "UNKNOWN";
     }
@@ -65,13 +70,13 @@ TCommandBridgeUpdate::TCommandBridgeUpdate(bool allowEmptyDatabase)
 
 void TCommandBridgeUpdate::Config(TConfig& config) {
     TYdbCommand::Config(config);
-    config.Opts->AddLongOption("set", "Set new state for a pile. Format: <pile-id>:<state>. Can be used multiple times.")
-        .RequiredArgument("ID:STATE").Handler([this](const TString& value) {
+    config.Opts->AddLongOption("set", "Set new state for a pile. Format: <pile-name>:<state>. Can be used multiple times.")
+        .RequiredArgument("NAME:STATE").Handler([this](const TString& value) {
             PileStateUpdates.push_back(value);
         });
-    config.Opts->AddLongOption("specific-pile-id", "Acquire quorum only for specific set of piles. Can be used multiple times.")
-        .RequiredArgument("ID").Handler([this](const TString& value) {
-            SpecificPileIds.push_back(FromString(value));
+    config.Opts->AddLongOption("quorum-pile", "Acquire quorum only for specific set of piles. Can be used multiple times.")
+        .RequiredArgument("NAME").Handler([this](const TString& value) {
+            QuorumPiles.push_back(value);
         });
     config.Opts->AddLongOption('f', "file", "Path to a JSON file with state updates.")
         .RequiredArgument("PATH").StoreResult(&FilePath);
@@ -90,12 +95,12 @@ void TCommandBridgeUpdate::Parse(TConfig& config) {
 
     if (!PileStateUpdates.empty()) {
         for (const auto& updateStr : PileStateUpdates) {
-            TStringBuf pileIdStr, stateStr;
-            if (!TStringBuf(updateStr).TrySplit(':', pileIdStr, stateStr) || pileIdStr.empty() || stateStr.empty()) {
-                ythrow yexception() << "Invalid format for --set option. Expected '<pile-id>:<state>'.";
+            TStringBuf pileNameStr, stateStr;
+            if (!TStringBuf(updateStr).TrySplit(':', pileNameStr, stateStr) || pileNameStr.empty() || stateStr.empty()) {
+                ythrow yexception() << "Invalid format for --set option. Expected '<pile-name>:<state>'.";
             }
             NYdb::NBridge::TPileStateUpdate update;
-            update.PileId = FromString<ui32>(pileIdStr);
+            update.PileName = pileNameStr;
             update.State = static_cast<NYdb::NBridge::EPileState>(ParsePileState(TString(stateStr)));
             Updates.push_back(update);
         }
@@ -113,11 +118,11 @@ void TCommandBridgeUpdate::Parse(TConfig& config) {
         }
 
         for (const auto& item : jsonValue.GetArray()) {
-            if (!item.IsMap() || !item.Has("pile_id") || !item.Has("state")) {
-                ythrow yexception() << "Invalid object in JSON array: each item must be an object with string \"state\" and integer \"pile_id\" keys.";
+            if (!item.IsMap() || !item.Has("pile_name") || !item.Has("state")) {
+                ythrow yexception() << "Invalid object in JSON array: each item must be an object with string \"state\" and string \"pile_name\" keys.";
             }
             NYdb::NBridge::TPileStateUpdate update;
-            update.PileId = item["pile_id"].GetInteger();
+            update.PileName = item["pile_name"].GetString();
             update.State = static_cast<NYdb::NBridge::EPileState>(ParsePileState(item["state"].GetString()));
             Updates.push_back(update);
         }
@@ -128,7 +133,12 @@ int TCommandBridgeUpdate::Run(TConfig& config) {
     auto driver = std::make_unique<TDriver>(CreateDriver(config));
     auto client = NYdb::NBridge::TBridgeClient(*driver);
 
-    auto result = client.UpdateClusterState(Updates, SpecificPileIds).GetValueSync();
+    std::vector<std::string> quorumPiles;
+    for (const auto& s : QuorumPiles) {
+        quorumPiles.push_back(std::string(s));
+    }
+
+    auto result = client.UpdateClusterState(Updates, quorumPiles).GetValueSync();
     NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
 
     Cout << "Cluster state updated successfully." << Endl;
@@ -171,7 +181,7 @@ int TCommandBridgeGet::Run(TConfig& config) {
             NJson::TJsonValue json(NJson::JSON_ARRAY);
             for (const auto& s : state) {
                 NJson::TJsonValue item(NJson::JSON_MAP);
-                item.InsertValue("pile_id", s.PileId);
+                item.InsertValue("pile_name", s.PileName);
                 item.InsertValue("state", PileStateToString(s.State));
                 json.AppendValue(item);
             }
@@ -180,16 +190,16 @@ int TCommandBridgeGet::Run(TConfig& config) {
             break;
         }
         case EDataFormat::Csv: {
-            Cout << "pile_id,state" << Endl;
+            Cout << "pile_name,state" << Endl;
             for (const auto& s : state) {
-                Cout << s.PileId << "," << PileStateToString(s.State) << Endl;
+                Cout << s.PileName << "," << PileStateToString(s.State) << Endl;
             }
             break;
         }
         default: {
             TStringStream ss;
             for (const auto& s : state) {
-                ss << "Pile " << s.PileId << ": " << PileStateToString(s.State) << Endl;
+                ss << "Pile " << s.PileName << ": " << PileStateToString(s.State) << Endl;
             }
             Cout << ss.Str();
             break;

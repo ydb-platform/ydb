@@ -1,5 +1,6 @@
 #pragma once
 
+#include <ydb/core/kqp/common/kqp_result_set_format_settings.h>
 #include <ydb/core/kqp/query_data/kqp_prepared_query.h>
 #include <yql/essentials/core/yql_data_provider.h>
 #include <yql/essentials/public/udf/udf_data_type.h>
@@ -101,11 +102,11 @@ struct TKqpExecuterTxResult {
         const NKikimr::NMiniKQL::THolderFactory& factory);
     NKikimrMiniKQL::TResult* GetMkql(google::protobuf::Arena* arena);
     NKikimrMiniKQL::TResult GetMkql();
-    Ydb::ResultSet* GetYdb(google::protobuf::Arena* arena, Ydb::ResultSet::Type resultSetType, TMaybe<ui64> rowsLimitPerWrite);
+    Ydb::ResultSet* GetYdb(google::protobuf::Arena* arena, const TResultSetFormatSettings& resultSetFormatSettings, bool fillSchema, TMaybe<ui64> rowsLimitPerWrite);
     bool HasTrailingResults();
 
     void FillMkql(NKikimrMiniKQL::TResult* mkqlResult);
-    void FillYdb(Ydb::ResultSet* ydbResult, Ydb::ResultSet::Type resultSetType, TMaybe<ui64> rowsLimitPerWrite);
+    void FillYdb(Ydb::ResultSet* ydbResult, const TResultSetFormatSettings& resultSetFormatSettings, bool fillSchema, TMaybe<ui64> rowsLimitPerWrite);
 };
 
 struct TTimeAndRandomProvider {
@@ -207,6 +208,7 @@ private:
     THashMap<ui32, TVector<TKqpExecuterTxResult>> TxResults;
     TVector<TVector<TKqpPhyTxHolder::TConstPtr>> TxHolders;
     TTxAllocatorState::TPtr AllocState;
+    THashSet<ui32> BuiltResultIndexes;
     mutable TPartitionedParamMap PartitionedParams;
 
 public:
@@ -244,6 +246,10 @@ public:
         return resultIndex < TxResults[txIndex].size();
     }
 
+    void AddBuiltResultIndex(ui32 resultIndex) {
+        BuiltResultIndexes.insert(resultIndex);
+    }
+
     void ValidateParameter(const TString& name, const NKikimrMiniKQL::TType& type, NMiniKQL::TTypeEnvironment& txTypeEnv);
     void PrepareParameters(const TKqpPhyTxHolder::TConstPtr& tx, const TPreparedQueryHolder::TConstPtr& preparedQuery,
         NMiniKQL::TTypeEnvironment& txTypeEnv);
@@ -254,8 +260,7 @@ public:
 
     TTypedUnboxedValue GetTxResult(ui32 txIndex, ui32 resultIndex);
     NKikimrMiniKQL::TResult* GetMkqlTxResult(const NKqpProto::TKqpPhyResultBinding& rb, google::protobuf::Arena* arena);
-    Ydb::ResultSet* GetYdbTxResult(const NKqpProto::TKqpPhyResultBinding& rb, google::protobuf::Arena* arena,
-        Ydb::ResultSet::Type resultSetType, TMaybe<ui64> rowsLimitPerWrite);
+    Ydb::ResultSet* GetYdbTxResult(const NKqpProto::TKqpPhyResultBinding& rb, google::protobuf::Arena* arena, const TResultSetFormatSettings& resultSetFormatSettings, TMaybe<ui64> rowsLimitPerWrite);
     bool HasTrailingTxResult(const NKqpProto::TKqpPhyResultBinding& rb);
 
     std::pair<NKikimr::NMiniKQL::TType*, NUdf::TUnboxedValue> GetInternalBindingValue(const NKqpProto::TKqpPhyParamBinding& paramBinding);

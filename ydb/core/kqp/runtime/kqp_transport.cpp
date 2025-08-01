@@ -53,31 +53,39 @@ void TKqpProtoBuilder::BuildYdbResultSet(
     Ydb::ResultSet& resultSet,
     TVector<NYql::NDq::TDqSerializedBatch>&& data,
     NKikimr::NMiniKQL::TType* mkqlSrcRowType,
-    Ydb::ResultSet::Type resultSetType,
+    const TResultSetFormatSettings& resultSetFormatSettings,
+    bool fillSchema,
     const TVector<ui32>* columnOrder,
     const TVector<TString>* columnHints)
 {
     YQL_ENSURE(mkqlSrcRowType->GetKind() == NKikimr::NMiniKQL::TType::EKind::Struct);
     const auto* mkqlSrcRowStructType = static_cast<const TStructType*>(mkqlSrcRowType);
 
-    resultSet.set_type(resultSetType);
+    TColumnOrder order = columnHints ? TColumnOrder(*columnHints) : TColumnOrder{};
 
     std::vector<std::pair<TString, NScheme::TTypeInfo>> arrowSchema;
     std::set<std::string> arrowNotNullColumns;
 
-    TColumnOrder order = columnHints ? TColumnOrder(*columnHints) : TColumnOrder{};
-    for (ui32 idx = 0; idx < mkqlSrcRowStructType->GetMembersCount(); ++idx) {
-        auto* column = resultSet.add_columns();
-        ui32 memberIndex = (!columnOrder || columnOrder->empty()) ? idx : (*columnOrder)[idx];
+    if (fillSchema) {
+        for (ui32 idx = 0; idx < mkqlSrcRowStructType->GetMembersCount(); ++idx) {
+            auto* column = resultSet.add_columns();
+            ui32 memberIndex = (!columnOrder || columnOrder->empty()) ? idx : (*columnOrder)[idx];
 
-        auto columnName = TString(columnHints && columnHints->size() ? order.at(idx).LogicalName : mkqlSrcRowStructType->GetMemberName(memberIndex));
-        auto* columnType = mkqlSrcRowStructType->GetMemberType(memberIndex);
+            auto columnName = TString(columnHints && columnHints->size() ? order.at(idx).LogicalName : mkqlSrcRowStructType->GetMemberName(memberIndex));
+            auto* columnType = mkqlSrcRowStructType->GetMemberType(memberIndex);
 
-        column->set_name(columnName);
-        ExportTypeToProto(columnType, *column->mutable_type());
+            column->set_name(columnName);
+            ExportTypeToProto(columnType, *column->mutable_type());
+        }
+    }
 
-        if (resultSetType == Ydb::ResultSet::ARROW) {
-            if (columnType->GetKind() != TType::EKind::Pg && !columnType->IsOptional()) {
+    if (resultSetFormatSettings.IsArrowFormat()) {
+        for (ui32 idx = 0; idx < mkqlSrcRowStructType->GetMembersCount(); ++idx) {
+            ui32 memberIndex = (!columnOrder || columnOrder->empty()) ? idx : (*columnOrder)[idx];
+            auto columnName = TString(columnHints && columnHints->size() ? order.at(idx).LogicalName : mkqlSrcRowStructType->GetMemberName(memberIndex));
+            auto* columnType = mkqlSrcRowStructType->GetMemberType(memberIndex);
+
+            if (columnType->GetKind() != TType::EKind::Optional) {
                 arrowNotNullColumns.insert(columnName);
             }
 
@@ -96,53 +104,82 @@ void TKqpProtoBuilder::BuildYdbResultSet(
         transportVersion = static_cast<NDqProto::EDataTransportVersion>(data.front().Proto.GetTransportVersion());
     }
 
-    NArrow::TArrowBatchBuilder batchBuilder(arrow::Compression::UNCOMPRESSED, arrowNotNullColumns);
-    YQL_ENSURE(batchBuilder.Start(arrowSchema).ok());
-
-    TRowBuilder rowBuilder(arrowSchema.size());
-
     NDq::TDqDataSerializer dataSerializer(*TypeEnv, *HolderFactory, transportVersion);
-    for (auto& part : data) {
-        if (part.ChunkCount()) {
+
+    ui32 rowsCount = 0;
+    if (resultSetFormatSettings.IsArrowFormat()) {
+        for (const auto& part : data) {
+            if (!part.ChunkCount()) {
+                continue;
+            }
+
+            rowsCount += part.RowCount();
+        }
+    }
+
+    if (resultSetFormatSettings.IsValueFormat()) {
+        for (auto& part : data) {
+            if (!part.ChunkCount()) {
+                continue;
+            }
+
             TUnboxedValueBatch rows(mkqlSrcRowType);
             dataSerializer.Deserialize(std::move(part), mkqlSrcRowType, rows);
 
-            switch (resultSetType) {
-                case Ydb::ResultSet::UNSPECIFIED:
-                    resultSet.set_type(Ydb::ResultSet::MESSAGE);
-                case Ydb::ResultSet::MESSAGE:{
-                    rows.ForEachRow([&](const NUdf::TUnboxedValue& value) {
-                        ExportValueToProto(mkqlSrcRowType, value, *resultSet.add_rows(), columnOrder);
-                    });
-                    break;
-                }
-                case Ydb::ResultSet::ARROW:{
-                    rows.ForEachRow([&](const NUdf::TUnboxedValue& value) {
-                        for (size_t i = 0; i < arrowSchema.size(); ++i) {
-                            const auto& [name, type] = arrowSchema[i];
-                            rowBuilder.AddCell(i, type, value.GetElement(i), type.GetPgTypeMod(name));
-                        }
-
-                        auto cells = rowBuilder.BuildCells();
-                        batchBuilder.AddRow(cells);
-                    });
-
-                    std::shared_ptr<arrow::RecordBatch> batch = batchBuilder.FlushBatch(false);
-
-                    TString serializedBatch = NArrow::SerializeBatchNoCompression(batch);
-                    YQL_ENSURE(serializedBatch);
-
-                    TString serializedSchema = NArrow::SerializeSchema(*batch->schema());
-                    YQL_ENSURE(serializedSchema);
-
-                    resultSet.set_data(std::move(serializedBatch));
-                    resultSet.mutable_arrow_batch_settings()->set_schema(std::move(serializedSchema));
-                    break;
-                }
-                default:
-                    break;
-            }
+            rows.ForEachRow([&](const NUdf::TUnboxedValue& value) {
+                ExportValueToProto(mkqlSrcRowType, value, *resultSet.add_rows(), columnOrder);
+            });
         }
+
+        resultSet.set_format(Ydb::ResultSet::FORMAT_VALUE);
+    } else if (resultSetFormatSettings.IsArrowFormat()) {
+        NArrow::TArrowBatchBuilder batchBuilder(arrow::Compression::UNCOMPRESSED, arrowNotNullColumns);
+
+        batchBuilder.Reserve(rowsCount);
+        YQL_ENSURE(batchBuilder.Start(arrowSchema).ok());
+
+        TRowBuilder rowBuilder(arrowSchema.size());
+        for (auto& part : data) {
+            if (!part.ChunkCount()) {
+                continue;
+            }
+
+            TUnboxedValueBatch rows(mkqlSrcRowType);
+            dataSerializer.Deserialize(std::move(part), mkqlSrcRowType, rows);
+
+            rows.ForEachRow([&](const NUdf::TUnboxedValue& value) {
+                for (size_t i = 0; i < arrowSchema.size(); ++i) {
+                    ui32 memberIndex = (!columnOrder || columnOrder->empty()) ? i : (*columnOrder)[i];
+                    const auto& [name, type] = arrowSchema[i];
+                    rowBuilder.AddCell(i, type, value.GetElement(memberIndex), type.GetPgTypeMod(name));
+                }
+
+                auto cells = rowBuilder.BuildCells();
+                batchBuilder.AddRow(cells);
+            });
+        }
+
+        std::shared_ptr<arrow::RecordBatch> batch = batchBuilder.FlushBatch(false);
+
+        auto writeOptions = arrow::ipc::IpcWriteOptions::Defaults();
+        writeOptions.use_threads = false;
+
+        if (auto arrowFormatSettings = resultSetFormatSettings.GetArrowFormatSettings()) {
+            arrowFormatSettings->FillWriteOptions(writeOptions);
+        }
+
+        TString serializedBatch = NArrow::SerializeBatch(batch, writeOptions);
+        resultSet.set_data(std::move(serializedBatch));
+
+        TString serializedSchema;
+        if (fillSchema && batch) {
+            serializedSchema = NArrow::SerializeSchema(*batch->schema());
+        }
+
+        resultSet.mutable_arrow_format_meta()->set_schema(std::move(serializedSchema));
+        resultSet.set_format(Ydb::ResultSet::FORMAT_ARROW);
+    } else {
+        YQL_ENSURE(false, "Unknown output format");
     }
 }
 

@@ -19,7 +19,8 @@ TEvKqp::TEvQueryRequest::TEvQueryRequest(
     const ::Ydb::Table::QueryCachePolicy* queryCachePolicy,
     const ::Ydb::Operations::OperationParams* operationParams,
     const TQueryRequestSettings& querySettings,
-    const TString& poolId)
+    const TString& poolId,
+    std::optional<NKqp::TArrowFormatSettings> arrowFormatSettings)
     : RequestCtx(ctx)
     , RequestActorId(requestActorId)
     , Database(CanonizePath(ctx->GetDatabaseName().GetOrElse("")))
@@ -35,7 +36,9 @@ TEvKqp::TEvQueryRequest::TEvQueryRequest(
     , QueryCachePolicy(queryCachePolicy)
     , HasOperationParams(operationParams)
     , QuerySettings(querySettings)
+    , ArrowFormatSettings(std::move(arrowFormatSettings))
 {
+
     if (HasOperationParams) {
         OperationTimeout = GetDuration(operationParams->operation_timeout());
         if (QuerySettings.UseCancelAfter) {
@@ -95,18 +98,23 @@ void TEvKqp::TEvQueryRequest::PrepareRemote() const {
             Record.MutableRequest()->SetDatabaseId(DatabaseId);
         }
 
+        if (ArrowFormatSettings) {
+            ArrowFormatSettings->ExportToProto(Record.MutableRequest()->MutableArrowFormatSettings());
+        }
+
         Record.MutableRequest()->SetUsePublicResponseDataFormat(true);
         Record.MutableRequest()->SetSessionId(SessionId);
         Record.MutableRequest()->SetAction(QueryAction);
         Record.MutableRequest()->SetType(QueryType);
         Record.MutableRequest()->SetSyntax(QuerySettings.Syntax);
-        Record.MutableRequest()->SetResultSetType(QuerySettings.ResultSetType);
         if (HasOperationParams) {
             Record.MutableRequest()->SetCancelAfterMs(CancelAfter.MilliSeconds());
             Record.MutableRequest()->SetTimeoutMs(OperationTimeout.MilliSeconds());
         }
         Record.MutableRequest()->SetIsInternalCall(RequestCtx->IsInternalCall());
         Record.MutableRequest()->SetOutputChunkMaxSize(QuerySettings.OutputChunkMaxSize);
+        Record.MutableRequest()->SetSchemaInclusionMode(QuerySettings.SchemaInclusionMode);
+        Record.MutableRequest()->SetResultSetFormat(QuerySettings.ResultSetFormat);
 
         RequestCtx.reset();
     }

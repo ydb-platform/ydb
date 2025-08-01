@@ -268,6 +268,14 @@ private:
             }
         }
 
+        Ydb::Query::SchemaInclusionMode schemaInclusionMode = req->schema_inclusion_mode();
+        Ydb::ResultSet::Format resultSetFormat = req->result_set_format();
+
+        std::optional<NKqp::TArrowFormatSettings> arrowFormatSettings;
+        if (req->has_arrow_format_settings()) {
+            arrowFormatSettings = NKqp::TArrowFormatSettings::ImportFromProto(req->arrow_format_settings());
+        }
+
         AuditContextAppend(Request_.get(), *req);
         NDataIntegrity::LogIntegrityTrails(traceId, *req, ctx);
 
@@ -283,9 +291,10 @@ private:
             .SetKeepSession(false)
             .SetUseCancelAfter(false)
             .SetSyntax(syntax)
-            .SetResultSetType(req->result_set_type())
             .SetSupportStreamTrailingResult(true)
-            .SetOutputChunkMaxSize(req->response_part_limit_bytes());
+            .SetOutputChunkMaxSize(req->response_part_limit_bytes())
+            .SetSchemaInclusionMode(schemaInclusionMode)
+            .SetResultSetFormat(resultSetFormat);
 
         auto ev = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>(
             QueryAction,
@@ -301,7 +310,8 @@ private:
             cachePolicy,
             nullptr, // operationParams
             settings,
-            req->pool_id());
+            req->pool_id(),
+            std::move(arrowFormatSettings));
 
         ev->SetProgressStatsPeriod(TDuration::MilliSeconds(req->stats_period_ms()));
         ev->Record.MutableRequest()->SetCollectDiagnostics(NeedCollectDiagnostics(*req));

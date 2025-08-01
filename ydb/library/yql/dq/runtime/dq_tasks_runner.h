@@ -407,6 +407,10 @@ public:
         return Task_->HasEnableSpilling() && Task_->GetEnableSpilling();
     }
 
+    NYql::NDqProto::EValuePackerVersion GetValuePackerVersion() const {
+        return Task_->GetValuePackerVersion();
+    }
+
 private:
 
     // external callback to retrieve parameter value.

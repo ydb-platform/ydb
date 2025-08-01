@@ -530,7 +530,8 @@ public:
 protected:
     TValueBuilderBase(TValueBuilderBase&&);
 
-    TValueBuilderBase(google::protobuf::Arena* arena = nullptr);
+    TValueBuilderBase();
+    explicit TValueBuilderBase(google::protobuf::Arena* arena);
 
     TValueBuilderBase(const TType& type);
 
@@ -546,7 +547,8 @@ private:
 
 class TValueBuilder : public TValueBuilderBase<TValueBuilder> {
 public:
-    TValueBuilder(google::protobuf::Arena* arena = nullptr);
+    TValueBuilder();
+    explicit TValueBuilder(google::protobuf::Arena* arena);
 
     TValueBuilder(const TType& type);
 

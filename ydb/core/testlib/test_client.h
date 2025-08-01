@@ -121,6 +121,7 @@ namespace Tests {
         NKikimrPQ::TPQConfig PQConfig;
         NKikimrPQ::TPQClusterDiscoveryConfig PQClusterDiscoveryConfig;
         NKikimrNetClassifier::TNetClassifierConfig NetClassifierConfig;
+        NKikimrConfig::TBridgeConfig BridgeConfig;
         ui32 Domain = TestDomain;
         bool SupportsRedirect = true;
         TString TracePath;
@@ -149,6 +150,7 @@ namespace Tests {
         bool EnableKqpSpilling = false;
         bool EnableYq = false;
         bool EnableYqGrpc = false;
+        bool EnableScriptExecutionBackgroundChecks = true;
         TDuration KeepSnapshotTimeout = TDuration::Zero();
         ui64 ChangesQueueItemsLimit = 0;
         ui64 ChangesQueueBytesLimit = 0;
@@ -178,6 +180,7 @@ namespace Tests {
         bool Verbose = true;
         bool UseSectorMap = false;
         TVector<TIntrusivePtr<NFake::TProxyDS>> ProxyDSMocks;
+        bool EnableStorage = true;
         bool EnableStorageProxy = false;
 
         std::function<IActor*(const TTicketParserSettings&)> CreateTicketParser = NKikimr::CreateTicketParser;
@@ -234,10 +237,12 @@ namespace Tests {
         TServerSettings& SetComputationFactory(NMiniKQL::TComputationNodeFactory computationFactory) { ComputationFactory = std::move(computationFactory); return *this; }
         TServerSettings& SetYtGateway(NYql::IYtGateway::TPtr ytGateway) { YtGateway = std::move(ytGateway); return *this; }
         TServerSettings& SetSolomonGateway(NYql::ISolomonGateway::TPtr solomonGateway) { SolomonGateway = std::move(solomonGateway); return *this; }
+        TServerSettings& SetPqGateway(NYql::IPqGateway::TPtr pqGateway) { PqGateway = std::move(pqGateway); return *this; }
         TServerSettings& SetDqTaskTransformFactory(NYql::TTaskTransformFactory value) { DqTaskTransformFactory = std::move(value); return *this; }
         TServerSettings& SetInitializeFederatedQuerySetupFactory(bool value) { InitializeFederatedQuerySetupFactory = value; return *this; }
         TServerSettings& SetVerbose(bool value) { Verbose = value; return *this; }
         TServerSettings& SetUseSectorMap(bool value) { UseSectorMap = value; return *this; }
+        TServerSettings& SetEnableScriptExecutionBackgroundChecks(bool value) { EnableScriptExecutionBackgroundChecks = value; return *this; }
         TServerSettings& SetScanReaskToResolve(const ui32 count) {
             AppConfig->MutableTableServiceConfig()->MutableResourceManager()->MutableShardsScanningPolicy()->SetReaskShardRetriesCount(count);
             return *this;
@@ -286,6 +291,11 @@ namespace Tests {
         }
         TServerSettings& SetEnableStorageProxy(bool value) { EnableStorageProxy = value; return *this; }
 
+        TServerSettings& SetEnableStorage(bool enable) {
+            EnableStorage = enable;
+            return *this;
+        }
+
         template <typename TService, typename...TParams>
         TServerSettings& RegisterGrpcService(
             const TString& name,
@@ -299,10 +309,11 @@ namespace Tests {
             return *this;
         }
 
-        explicit TServerSettings(ui16 port, const NKikimrProto::TAuthConfig authConfig = {}, const NKikimrPQ::TPQConfig pqConfig = {})
+        explicit TServerSettings(ui16 port, const NKikimrProto::TAuthConfig authConfig = {}, const NKikimrPQ::TPQConfig pqConfig = {}, const NKikimrConfig::TBridgeConfig& bridgeConfig = {})
             : Port(port)
             , AuthConfig(authConfig)
             , PQConfig(pqConfig)
+            , BridgeConfig(bridgeConfig)
         {
             AddStoragePool("test", "/" + DomainName + ":test");
             AppConfig = std::make_shared<NKikimrConfig::TAppConfig>();
@@ -590,7 +601,7 @@ namespace Tests {
         ui32 FlatQueryRaw(TTestActorRuntime* runtime, const TString &query, TFlatQueryOptions& opts, NKikimrClient::TResponse& response, int retryCnt = 10);
 
         bool Compile(const TString &mkql, TString &compiled);
-        NKikimrScheme::TEvDescribeSchemeResult Describe(TTestActorRuntime* runtime, const TString& path, ui64 tabletId = SchemeRoot);
+        NKikimrScheme::TEvDescribeSchemeResult Describe(TTestActorRuntime* runtime, const TString& path, ui64 tabletId = SchemeRoot, bool showPrivateTable = false);
         TString CreateStoragePool(const TString& poolKind, const TString& partOfName, ui32 groups = 1);
         NKikimrBlobStorage::TDefineStoragePool DescribeStoragePool(const TString& name);
         void RemoveStoragePool(const TString& name);

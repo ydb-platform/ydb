@@ -235,8 +235,8 @@ message TKqpTransaction {
 
 message TEvKqpInputActorResultInfo {
     repeated NKikimrDataEvents.TLock Locks = 1;
-    optional string SerializedEndRow = 2;
-    repeated uint32 EndRowColumnIds = 3;
+    optional string BatchOperationMaxKey = 2;
+    repeated uint32 BatchOperationKeyIds = 3;
 }
 
 message TKqpReadRangesSourceSettings {
@@ -433,8 +433,15 @@ message TAlterCdcStreamNotice {
 message TDropCdcStreamNotice {
     optional NKikimrProto.TPathID PathId = 1;
     optional uint64 TableSchemaVersion = 2;
-    optional NKikimrProto.TPathID StreamPathId = 3;
+    repeated NKikimrProto.TPathID StreamPathId = 3;
     optional TSnapshot DropSnapshot = 4;
+}
+
+message TRotateCdcStreamNotice {
+    optional NKikimrProto.TPathID PathId = 1;
+    optional uint64 TableSchemaVersion = 2;
+    optional NKikimrProto.TPathID OldStreamPathId = 3;
+    optional NKikimrSchemeOp.TCdcStreamDescription NewStreamDescription = 4;
 }
 
 message TAsyncIndexInfo {
@@ -498,6 +505,7 @@ message TFlatSchemeTransaction {
     optional TCreateCdcStreamNotice CreateCdcStreamNotice = 18;
     optional TAlterCdcStreamNotice AlterCdcStreamNotice = 19;
     optional TDropCdcStreamNotice DropCdcStreamNotice = 20;
+    optional TRotateCdcStreamNotice RotateCdcStreamNotice = 24;
     optional TMoveIndex MoveIndex = 21;
 
     optional NKikimrSchemeOp.TRestoreIncrementalBackup CreateIncrementalRestoreSrc = 22;
@@ -1676,6 +1684,25 @@ message TEvRecomputeKMeansResponse {
     optional NKikimrIndexBuilder.TMeteringStats MeteringStats = 12;
 }
 
+message TEvIncrementalRestoreResponse {
+    enum Status {
+        SUCCESS = 0;
+        RETRY = 1;
+        ERROR = 2;
+    }
+    
+    optional uint64 TxId = 1;
+    optional uint64 TableId = 2;
+    optional uint64 OperationId = 3;
+    optional uint32 IncrementalIdx = 4;
+    optional Status RestoreStatus = 5;
+    optional string ErrorMessage = 6;
+    optional uint64 ProcessedRows = 7;
+    optional uint64 ProcessedBytes = 8;
+    optional bytes LastProcessedKey = 9;
+    optional uint64 ShardIdx = 10;
+}
+
 message TEvPrefixKMeansRequest {
     optional uint64 Id = 1;
 
@@ -2227,6 +2254,12 @@ message TTxVolatileDetails {
     // When true marks an arbiter for other participants
     // Arbiters hold outgoing readsets until the transaction is decided
     optional bool IsArbiter = 9;
+
+    // When true readset expectations are disabled
+    // This is used when converting non-volatile distributed transactions to
+    // optimistic volatile execution for compatibility with shards which don't
+    // support readset flags.
+    optional bool DisableExpectations = 10;
 }
 
 // Sent by datashard when some overload reason stopped being relevant

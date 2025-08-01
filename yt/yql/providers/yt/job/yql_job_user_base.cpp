@@ -163,7 +163,7 @@ void TYqlUserJobBase::DoImpl() {
     YQL_ENSURE(LambdaCode);
     TRuntimeNode rootNode = DeserializeRuntimeNode(LambdaCode, *Env);
     THashMap<TString, TRuntimeNode> extraArgs;
-    rootNode = builder.TransformAndOptimizeProgram(rootNode, MakeTransformProvider(&extraArgs));
+    rootNode = builder.TransformAndOptimizeProgram(rootNode, MakeTransformProvider(&extraArgs, GetJobFactoryPrefix()));
 
     MkqlIOSpecs.Reset(new TMkqlIOSpecs());
     if (UseSkiff) {

@@ -169,10 +169,10 @@ namespace NKikimr::NStorage {
     struct TEvNodeWardenUpdateConfigFromPeer
         : TEventLocal<TEvNodeWardenUpdateConfigFromPeer, TEvBlobStorage::EvNodeWardenUpdateConfigFromPeer>
     {
-        NKikimrBlobStorage::TStorageConfig StorageConfig;
+        NKikimrBlobStorage::TStorageConfig Config;
 
-        TEvNodeWardenUpdateConfigFromPeer(NKikimrBlobStorage::TStorageConfig&& storageConfig)
-            : StorageConfig(std::move(storageConfig))
+        TEvNodeWardenUpdateConfigFromPeer(NKikimrBlobStorage::TStorageConfig config)
+            : Config(std::move(config))
         {}
     };
 

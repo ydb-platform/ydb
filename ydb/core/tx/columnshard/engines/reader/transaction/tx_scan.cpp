@@ -52,7 +52,7 @@ void TTxScan::Complete(const TActorContext& ctx) {
     const TString table = request.GetTablePath();
     const auto dataFormat = request.GetDataFormat();
     const TDuration timeout = TDuration::MilliSeconds(request.GetTimeoutMs());
-    const NColumnShard::TSchemeShardLocalPathId ssPathId = NColumnShard::TSchemeShardLocalPathId::FromRawValue(request.GetLocalPathId());
+    const NColumnShard::TSchemeShardLocalPathId ssPathId = NColumnShard::TSchemeShardLocalPathId::FromProto(request);
     NConveyorComposite::TCPULimitsConfig cpuLimits;
     cpuLimits.DeserializeFromProto(request).Validate();
     if (scanGen > 1) {
@@ -81,7 +81,7 @@ void TTxScan::Complete(const TActorContext& ctx) {
                 read.TableMetadataAccessor = accConclusion.DetachResult();
             }
             if (auto pathId = read.TableMetadataAccessor->GetPathId()) {
-                Self->Counters.GetColumnTablesCounters()->GetPathIdCounter(pathId->GetInternalPathId())->OnReadEvent();
+                Self->Counters.GetColumnTablesCounters()->GetPathIdCounter(pathId->GetInternalPathIdOptional().value_or(TInternalPathId::FromRawValue(0)))->OnReadEvent();
             }
         }
 
@@ -172,12 +172,9 @@ void TTxScan::Complete(const TActorContext& ctx) {
     TComputeShardingPolicy shardingPolicy;
     AFL_VERIFY(shardingPolicy.DeserializeFromProto(request.GetComputeShardingPolicy()));
 
-    const auto& scheduler = AppData(ctx)->ComputeScheduler;
-    auto schedulableTask = scheduler ? scheduler->CreateSchedulableTaskFactory()(txId) : nullptr;
-
     auto scanActorId = ctx.Register(new TColumnShardScan(Self->SelfId(), scanComputeActor, Self->GetStoragesManager(),
         Self->DataAccessorsManager.GetObjectPtrVerified(), shardingPolicy, scanId, txId, scanGen, requestCookie, Self->TabletID(), timeout,
-        readMetadataRange, dataFormat, Self->Counters.GetScanCounters(), cpuLimits, std::move(schedulableTask)));
+        readMetadataRange, dataFormat, Self->Counters.GetScanCounters(), cpuLimits));
     Self->InFlightReadsTracker.AddScanActorId(requestCookie, scanActorId);
 
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "TTxScan started")("actor_id", scanActorId)("trace_detailed", detailedInfo);

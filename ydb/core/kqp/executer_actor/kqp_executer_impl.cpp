@@ -42,7 +42,7 @@ void TEvKqpExecuter::TEvTxResponse::TakeResult(ui32 idx, NDq::TDqSerializedBatch
     if (rows.RowCount()) {
         NDq::TDqDataSerializer dataSerializer(
             AllocState->TypeEnv, AllocState->HolderFactory,
-            static_cast<NDqProto::EDataTransportVersion>(rows.Proto.GetTransportVersion()));
+            static_cast<NDqProto::EDataTransportVersion>(rows.Proto.GetTransportVersion()), NDq::FromProto(rows.Proto.GetValuePackerVersion()));
         dataSerializer.Deserialize(std::move(rows), result.MkqlItemType, result.Rows);
     }
 }

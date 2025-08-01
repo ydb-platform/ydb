@@ -219,6 +219,7 @@ class TDataShard
     class TTxCdcStreamEmitHeartbeats;
     class TTxUpdateFollowerReadEdge;
     class TTxRemoveSchemaSnapshots;
+    class TTxIncrementalRestore;
     class TTxCleanupUncommitted;
     class TTxVacuum;
     class TTxCompleteVacuum;
@@ -1937,10 +1938,16 @@ public:
         const TPathId& pathId, ui64 tableSchemaVersion,
         const TPathId& streamPathId, NKikimrSchemeOp::ECdcStreamState state);
 
-    TUserTable::TPtr AlterTableDropCdcStream(
+    TUserTable::TPtr AlterTableDropCdcStreams(
         const TActorContext& ctx, TTransactionContext& txc,
         const TPathId& pathId, ui64 tableSchemaVersion,
-        const TPathId& streamPathId);
+        const TVector<TPathId>& streamPathId);
+
+    TUserTable::TPtr AlterTableRotateCdcStream(
+        const TActorContext& ctx, TTransactionContext& txc,
+        const TPathId& pathId, ui64 tableSchemaVersion,
+        const TPathId& oldStreamPathId,
+        const NKikimrSchemeOp::TCdcStreamDescription& newStreamDesc);
 
     TUserTable::TPtr CreateUserTable(TTransactionContext& txc, const NKikimrSchemeOp::TTableDescription& tableScheme);
     TUserTable::TPtr AlterUserTable(const TActorContext& ctx, TTransactionContext& txc,
@@ -2516,7 +2523,7 @@ private:
 
     TTxProgressIdempotentScalarQueue<TEvPrivate::TEvProgressTransaction> PlanQueue;
     TTxProgressIdempotentScalarScheduleQueue<TEvPrivate::TEvCleanupTransaction> CleanupQueue;
-    TTxProgressQueue<ui64, TNoOpDestroy, TEvPrivate::TEvProgressResendReadSet> ResendReadSetQueue;
+    TTxProgressQueue<ui64, TEvPrivate::TEvProgressResendReadSet> ResendReadSetQueue;
 
     struct TPipeServerInfoOverloadSubscribersTag {};
 

@@ -246,7 +246,7 @@ Y_UNIT_TEST_SUITE(KqpLocks) {
         appConfig.MutableTableServiceConfig()->SetEnableOltpSink(useSink);
         appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
         appConfig.MutableTableServiceConfig()->SetEnableHtapTx(true);
-        auto settings = TKikimrSettings().SetAppConfig(appConfig).SetWithSampleTables(false);
+        auto settings = TKikimrSettings(appConfig).SetWithSampleTables(false);
 
         auto kikimr = std::make_unique<TKikimrRunner>(settings);
 

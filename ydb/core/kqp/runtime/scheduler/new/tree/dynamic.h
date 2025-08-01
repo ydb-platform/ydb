@@ -47,6 +47,7 @@ namespace NKikimr::NKqp::NScheduler::NHdrf::NDynamic {
 
         virtual ~TTreeElementBase() = default;
         virtual NSnapshot::TTreeElementBase* TakeSnapshot() const = 0;
+        virtual const TId& GetId() const = 0;
 
         void AddChild(const TTreeElementPtr& element);
         void RemoveChild(const TTreeElementPtr& element);
@@ -64,7 +65,7 @@ namespace NKikimr::NKqp::NScheduler::NHdrf::NDynamic {
     public:
         explicit TQuery(const TQueryId& id, const TStaticAttributes& attrs = {});
 
-        const TQueryId& GetId() const {
+        const TId& GetId() const override {
             return Id;
         }
 
@@ -76,14 +77,14 @@ namespace NKikimr::NKqp::NScheduler::NHdrf::NDynamic {
         NMonitoring::THistogramPtr Delay; // TODO: hacky counter for delays from queries - initialize from pool
 
     private:
-        const TQueryId Id;
+        const TId Id;
     };
 
     class TPool : public TTreeElementBase {
     public:
-        TPool(const TString& id, const TIntrusivePtr<TKqpCounters>& counters, const TStaticAttributes& attrs = {});
+        TPool(const TPoolId& id, const TIntrusivePtr<TKqpCounters>& counters, const TStaticAttributes& attrs = {});
 
-        const TString& GetId() const {
+        const TId& GetId() const override {
             return Id;
         }
 
@@ -94,35 +95,40 @@ namespace NKikimr::NKqp::NScheduler::NHdrf::NDynamic {
         NSnapshot::TPool* TakeSnapshot() const override;
 
     private:
-        const TString Id;
+        const TId Id;
         THashMap<TQueryId, TQueryPtr> Queries;
         TPoolCounters Counters;
     };
 
     class TDatabase : public TTreeElementBase {
     public:
-        explicit TDatabase(const TString& id, const TStaticAttributes& attrs = {});
+        explicit TDatabase(const TDatabaseId& id, const TStaticAttributes& attrs = {});
 
-        const TString& GetId() const {
+        const TId& GetId() const override {
             return Id;
         }
 
         void AddPool(const TPoolPtr& pool);
-        TPoolPtr GetPool(const TString& poolId) const;
+        TPoolPtr GetPool(const TPoolId& id) const;
 
         NSnapshot::TDatabase* TakeSnapshot() const override;
 
     private:
-        const TString Id;
-        THashMap<TString /* poolId */, TPoolPtr> Pools;
+        const TId Id;
+        THashMap<TPoolId, TPoolPtr> Pools;
     };
 
     class TRoot : public TTreeElementBase, public TSnapshotSwitch<NSnapshot::TRootPtr> {
     public:
         explicit TRoot(TIntrusivePtr<TKqpCounters> counters);
 
+        const TId& GetId() const override {
+            static const TId id("(ROOT)");
+            return id;
+        }
+
         void AddDatabase(const TDatabasePtr& database);
-        TDatabasePtr GetDatabase(const TString& id) const;
+        TDatabasePtr GetDatabase(const TDatabaseId& id) const;
 
         NSnapshot::TRoot* TakeSnapshot() const override;
 
@@ -130,7 +136,7 @@ namespace NKikimr::NKqp::NScheduler::NHdrf::NDynamic {
         ui64 TotalLimit = Infinity();
 
     private:
-        THashMap<TString /* name */, TDatabasePtr> Databases;
+        THashMap<TDatabaseId, TDatabasePtr> Databases;
 
         struct {
             NMonitoring::TDynamicCounters::TCounterPtr TotalLimit;

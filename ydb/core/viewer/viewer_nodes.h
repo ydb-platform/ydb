@@ -3224,7 +3224,7 @@ public:
                 if (FieldsAvailable.test(+ENodeFields::ReceiveThroughput) && FieldsRequested.test(+ENodeFields::ReceiveThroughput)) {
                     jsonNode.SetReceiveThroughput(node->ReceiveThroughput);
                 }
-                if ((FieldsAvailable.test(+ENodeFields::NodeInfo) || FieldsAvailable.test(+ENodeFields::SystemState)) && FieldsRequested.test(+ENodeFields::SystemState)) {
+                if ((FieldsAvailable.test(+ENodeFields::NodeInfo) || FieldsAvailable.test(+ENodeFields::SystemState)) && (FieldsRequested & FieldsSystemState).any()) {
                     *jsonNode.MutableSystemState() = std::move(node->SystemState);
                 }
                 if (FieldsAvailable.test(+ENodeFields::PDisks) && FieldsRequested.test(+ENodeFields::PDisks)) {

@@ -247,8 +247,8 @@ public:
     TRuntimeNode FromBlocks(TRuntimeNode flow);
     TRuntimeNode WideFromBlocks(TRuntimeNode flow);
     TRuntimeNode ListFromBlocks(TRuntimeNode list);
-    TRuntimeNode WideSkipBlocks(TRuntimeNode flow, TRuntimeNode count);
-    TRuntimeNode WideTakeBlocks(TRuntimeNode flow, TRuntimeNode count);
+    TRuntimeNode WideSkipBlocks(TRuntimeNode stream, TRuntimeNode count);
+    TRuntimeNode WideTakeBlocks(TRuntimeNode stream, TRuntimeNode count);
     TRuntimeNode WideTopBlocks(TRuntimeNode flow, TRuntimeNode count, const std::vector<std::pair<ui32, TRuntimeNode>>& keys);
     TRuntimeNode WideTopSortBlocks(TRuntimeNode flow, TRuntimeNode count, const std::vector<std::pair<ui32, TRuntimeNode>>& keys);
     TRuntimeNode WideSortBlocks(TRuntimeNode flow, const std::vector<std::pair<ui32, TRuntimeNode>>& keys);
@@ -806,7 +806,8 @@ private:
     TRuntimeNode BuildFilterNulls(TRuntimeNode list, const TArrayRef<std::conditional_t<OnStruct, const std::string_view, const ui32>>& members,
         const std::conditional_t<OnStruct, std::vector<std::pair<std::string_view, TType*>>, std::vector<TType*>>& filteredItems);
 
-    TRuntimeNode BuildWideTopOrSort(const std::string_view& callableName, TRuntimeNode flow, TMaybe<TRuntimeNode> count, const std::vector<std::pair<ui32, TRuntimeNode>>& keys);
+    TRuntimeNode BuildWideTopOrSort(const std::string_view& callableName, TRuntimeNode flow, TMaybe<TRuntimeNode> count, const std::vector<std::pair<ui32, TRuntimeNode>>& keys, bool isBlocks);
+    TRuntimeNode BuildWideTopOrSortImpl(const std::string_view& callableName, TRuntimeNode flow, TMaybe<TRuntimeNode> count, const std::vector<std::pair<ui32, TRuntimeNode>>& keys, TType::EKind streamKind);
 
     TRuntimeNode InvokeBinary(const std::string_view& callableName, TType* type, TRuntimeNode data1, TRuntimeNode data2);
     TRuntimeNode AggrCompare(const std::string_view& callableName, TRuntimeNode data1, TRuntimeNode data2);

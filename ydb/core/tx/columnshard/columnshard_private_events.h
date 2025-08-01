@@ -13,6 +13,7 @@
 #include <ydb/core/tx/columnshard/normalizer/abstract/abstract.h>
 #include <ydb/core/tx/columnshard/resource_subscriber/container.h>
 #include <ydb/core/tx/data_events/write_data.h>
+#include <ydb/core/tx/limiter/grouped_memory/usage/abstract.h>
 #include <ydb/core/tx/priorities/usage/abstract.h>
 
 namespace NKikimr::NOlap::NReader {
@@ -24,6 +25,11 @@ class IBlobsWritingAction;
 class TPortionInfo;
 class TPortionInfoConstructor;
 }   // namespace NKikimr::NOlap
+
+namespace NKikimr::NOlap::NGeneralCache {
+class TColumnDataCachePolicy;
+class TGlobalColumnAddress;
+}   // namespace NKikimr::NOlap::NGeneralCache
 
 namespace NKikimr::NColumnShard {
 
@@ -68,6 +74,7 @@ struct TEvPrivate {
         EvRemovePortionDataAccessor,
         EvClearCacheDataAccessor,
         EvMetadataAccessorsInfo,
+        EvAskColumnData,
 
         EvRequestFilter,
         EvFilterConstructionResult,
@@ -119,6 +126,51 @@ struct TEvPrivate {
         }
     };
 
+    class TEvAskColumnData: public NActors::TEventLocal<TEvAskColumnData, NColumnShard::TEvPrivate::EEv::EvAskColumnData> {
+    public:
+        class TPortionRequest {
+        private:
+            NOlap::TPortionAddress Portion;
+            YDB_READONLY_DEF(NOlap::NBlobOperations::EConsumer, Consumer);
+
+        public:
+            TPortionRequest(const NOlap::TPortionAddress& portion, const NOlap::NBlobOperations::EConsumer consumer)
+                : Portion(portion)
+                , Consumer(consumer)
+            {
+            }
+
+            operator size_t() const {
+                ui64 h = 0;
+                h = CombineHashes(h, THash<NOlap::TPortionAddress>()(Portion));
+                h = CombineHashes(h, (size_t)Consumer);
+                return h;
+            }
+            bool operator==(const TPortionRequest& other) const {
+                return Portion == other.Portion && Consumer == other.Consumer;
+            }
+
+            NOlap::TPortionAddress GetPortionAddress() const {
+                return Portion;
+            }
+        };
+
+    private:
+        using TCallback = NKikimr::NGeneralCache::NSource::IObjectsProcessor<NOlap::NGeneralCache::TColumnDataCachePolicy>;
+        using TColumnIdsByRequest = THashMap<TPortionRequest, std::set<ui32>>;
+        YDB_READONLY_DEF(TColumnIdsByRequest, Requests);
+        YDB_READONLY_DEF(std::shared_ptr<TCallback>, Callback);
+
+    public:
+        explicit TEvAskColumnData(TColumnIdsByRequest&& requests, const std::shared_ptr<TCallback>& callback)
+            : Requests(std::move(requests))
+            , Callback(callback)
+        {
+            AFL_VERIFY(Callback);
+            AFL_VERIFY(Requests.size());
+        }
+    };
+
     class TEvStartCompaction: public NActors::TEventLocal<TEvStartCompaction, EvStartCompaction> {
     private:
         YDB_READONLY_DEF(std::shared_ptr<NPrioritiesQueue::TAllocationGuard>, Guard);
@@ -135,13 +187,13 @@ struct TEvPrivate {
         TCounterGuard ScanCounter;
 
     public:
-        TConclusion<std::shared_ptr<NOlap::NReader::IApplyAction>> ExtractResult() {
-            return std::move(Result);
+        TConclusion<std::shared_ptr<NOlap::NReader::IApplyAction>>& MutableResult() {
+            return Result;
         }
 
         TEvTaskProcessedResult(
-            const TConclusion<std::shared_ptr<NOlap::NReader::IApplyAction>>& result, TCounterGuard&& scanCounters)
-            : Result(result)
+            TConclusion<std::shared_ptr<NOlap::NReader::IApplyAction>>&& result, TCounterGuard&& scanCounters)
+            : Result(std::move(result))
             , ScanCounter(std::move(scanCounters)) {
         }
     };

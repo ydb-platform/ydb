@@ -36,6 +36,7 @@ import "ydb/core/protos/tablet.proto";
 import "ydb/core/protos/tenant_pool.proto";
 import "ydb/core/protos/tenant_slot_broker.proto";
 import "ydb/core/protos/workload_manager_config.proto";
+import "ydb/core/protos/nbs/blockstore.proto";
 import "ydb/library/actors/protos/interconnect.proto";
 import "yql/essentials/core/file_storage/proto/file_storage.proto";
 import "yql/essentials/providers/common/proto/gateways_config.proto";
@@ -165,8 +166,6 @@ message TStaticNameserviceConfig {
         repeated TEndpoint Endpoint = 7;
 
         optional NActorsInterconnect.TNodeLocation WalleLocation = 8 [deprecated=true];
-
-        optional string BridgePileName = 9; // realm name for bridged installations (starting from 0)
     }
 
     repeated TNode Node = 1;
@@ -273,6 +272,7 @@ message TDomainsConfig {
         repeated string ViewerAllowedSIDs = 6;
         repeated string RegisterDynamicNodeAllowedSIDs = 8;
         repeated string BootstrapAllowedSIDs = 9;
+        repeated string DatabaseAllowedSIDs = 10;
 
         message TUser {
             optional string Name = 1;
@@ -353,7 +353,7 @@ message TBlobStorageConfig {
     repeated NKikimrBlobStorage.TDefineHostConfig DefineHostConfig = 10;
     optional NKikimrBlobStorage.TDefineBox DefineBox = 11;
 
-    optional NKikimrBlobStorage.TUpdateSettings BscSettings = 12;
+    optional NKikimrBlobStorage.TBscConfig BscSettings = 12;
  }
 
 message TSelfManagementConfig {
@@ -712,6 +712,7 @@ message TGroupedMemoryLimiterConfig {
     optional bool Enabled = 1 [default = true];
     optional uint64 MemoryLimit = 2;
     optional uint64 HardMemoryLimit = 3;
+    optional uint64 CountBuckets = 4;
 }
 
 message TExternalIndexConfig {
@@ -1058,6 +1059,7 @@ message TSqsConfig {
         optional bool EnableCloudEvents = 1 [default = false];
         optional bool TenantMode = 2 [default = false];
         optional uint64 RetryTimeoutSeconds = 3;
+        optional string UnifiedAgentUri = 4;
     }
 
     optional TYcSearchEventsConfig YcSearchEventsConfig = 66;
@@ -1604,7 +1606,7 @@ message TImmediateControlsConfig {
             MinValue: 1,
             MaxValue: 1000,
             DefaultValue: 10 }];
-        
+
         optional uint64 HullCompMaxInFlightWrites = 31 [(ControlOptions) = {
             Description: "Max writes inflight for level compaction",
             MinValue: 1,
@@ -1616,6 +1618,15 @@ message TImmediateControlsConfig {
             MinValue: 1,
             MaxValue: 1000,
             DefaultValue: 20 }];
+
+        optional uint64 EnableDeepScrubbing = 33 [(ControlOptions) = {
+            Description: "Run CheckIntegrity requests during Scrub process instead of usual scrubbing",
+            MinValue: 0,
+            MaxValue: 1,
+            DefaultValue: 0 }];
+
+        reserved 34;
+        reserved 35;
     }
 
     message TTabletControls {
@@ -1794,7 +1805,6 @@ message TAuditConfig {
         TXT = 2;                        // Outputs audit log in format: "<time>: k1=v1, k2=v2, ..." where <time> is ISO 8601 format time string, k1, k2, ..., kn - fields of audit log message and v1, v2, ..., vn are their values
         JSON_LOG_COMPATIBLE = 3;        // Outputs audit log in format: "{"@timestamp": "<ISO 8601 time>", "@log_type": "audit", "k1": "v1", "k2": "v2", ...}" where @timestamp is ISO 8601 format time string, k1, k2, ..., kn - fields of audit log message and v1, v2, ..., vn are their values // Suitable for output both debug log and audit log to the same destination (stderr)
         FORMAT_4 = 4;                   // Reserved
-        YANDEX_CLOUD_EVENTS = 5;        // Reserved for Yandex.Cloud environment. Defaults to JSON elsewhere
     }
 
     message TStderrBackend {
@@ -1814,9 +1824,36 @@ message TAuditConfig {
         optional string LogJsonEnvelope = 3; // Json template with text field containing %message% placeholder. For example {"my_enveloped_message": "%message%"}. %message% will be replaced with real audit log message
     }
 
+    message TLogClassConfig {
+        enum ELogClass {
+            ClusterAdmin = 1;
+            DatabaseAdmin = 2;
+            Login = 3;
+            NodeRegistration = 4;
+            Ddl = 5;
+            Dml = 6;
+            Operations = 7; // Operations API. See ydb/public/api/grpc/ydb_operation_v1.proto
+            ExportImport = 8;
+            Acl = 9;
+            Default = 1000; // For default settings for all other nonconfigured log classes
+        }
+
+        enum EAccountType {
+            Anonymous = 1;
+            User = 2;
+            Service = 3;
+            ServiceImpersonatedFromUser = 4;
+        }
+
+        optional ELogClass LogClass = 1; // Log class selector. Default is used for all log classes that were not included in config
+        optional bool EnableLogging = 2; // Enables audit logging for specified log class
+        repeated EAccountType ExcludeAccountType = 3; // If audit logging for log class is enabled, excludes logging for these account types
+    }
+
     optional TStderrBackend StderrBackend = 1;
     optional TFileBackend FileBackend = 2;
     optional TUnifiedAgentBackend UnifiedAgentBackend = 3;
+    repeated TLogClassConfig LogClassConfig = 4;
 };
 
 message THiveTabletLimit {
@@ -2501,6 +2538,7 @@ message TAppConfig {
     optional TWorkloadManagerConfig WorkloadManagerConfig = 90;
     optional TBridgeConfig BridgeConfig = 91;
     optional TGroupedMemoryLimiterConfig CompGroupedMemoryLimiterConfig = 92;
+    optional TBlockstoreConfig BlockstoreConfig = 93;
 
     repeated TNamedConfig NamedConfigs = 100;
     optional string ClusterYamlConfig = 101;
@@ -2514,6 +2552,7 @@ message TAppConfig {
     optional string StartupStorageYaml = 108;
     optional TCompositeConveyorConfig CompositeConveyorConfig = 109;
     optional TGeneralCacheConfig PortionsMetadataCache = 110;
+    optional TGeneralCacheConfig ColumnDataCache = 111;
 }
 
 message TYdbVersion {

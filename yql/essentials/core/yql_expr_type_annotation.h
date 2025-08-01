@@ -189,8 +189,11 @@ template <bool WithOptional, bool WithList = true, bool WithStream = true>
 bool EnsureNewSeqType(TPositionHandle position, const TTypeAnnotationNode& type, TExprContext& ctx, const TTypeAnnotationNode** itemType = nullptr);
 bool EnsureAnySeqType(const TExprNode& node, TExprContext& ctx);
 bool EnsureAnySeqType(TPositionHandle position, const TTypeAnnotationNode& type, TExprContext& ctx);
-bool EnsureDependsOn(const TExprNode& node, TExprContext& ctx);
-bool EnsureDependsOnTail(const TExprNode& node, TExprContext& ctx, unsigned requiredArgumentCount, unsigned requiredDependsOnCount = 0);
+bool EnsureDependsOn(const TExprNode& node, TExprContext& ctx, bool inner = false);
+IGraphTransformer::TStatus EnsureDependsOnTailAndRewrite(
+    const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx, const TTypeAnnotationContext& types,
+    unsigned requiredArgumentCount, unsigned requiredDependsOnCount = 0
+);
 
 const TTypeAnnotationNode* MakeTypeHandleResourceType(TExprContext& ctx);
 bool EnsureTypeHandleResourceType(const TExprNode& node, TExprContext& ctx);
@@ -334,6 +337,7 @@ bool EnsureBlockOrScalarType(TPositionHandle position, const TTypeAnnotationNode
 bool EnsureScalarType(const TExprNode& node, TExprContext& ctx);
 bool EnsureScalarType(TPositionHandle position, const TTypeAnnotationNode& type, TExprContext& ctx);
 const TTypeAnnotationNode* GetBlockItemType(const TTypeAnnotationNode& type, bool& isScalar);
+const TTypeAnnotationNode* UnpackOptionalBlockItemType(const TTypeAnnotationNode& type, TExprContext& ctx, bool convertToScalar);
 
 const TTypeAnnotationNode* AggApplySerializedStateType(const TExprNode::TPtr& input, TExprContext& ctx);
 bool GetSumResultType(const TPositionHandle& pos, const TTypeAnnotationNode& inputType, const TTypeAnnotationNode*& retType, TExprContext& ctx);

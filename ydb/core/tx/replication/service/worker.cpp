@@ -229,6 +229,20 @@ class TWorker: public TActorBootstrapped<TWorker> {
         }
     }
 
+    void Handle(TEvWorker::TEvDataEnd::TPtr& ev) {
+        LOG_D("Handle " << ev->Get()->ToString());
+
+        if (ev->Sender != Reader) {
+            LOG_W("Data end from unknown actor"
+                << ": sender# " << ev->Sender);
+            return;
+        }
+
+        if (Writer) {
+            Send(ev->Forward(Writer));
+        }
+    }
+
     void Handle(TEvWorker::TEvGone::TPtr& ev) {
         if (ev->Sender == Reader) {
             LOG_I("Reader has gone"
@@ -335,7 +349,7 @@ public:
             hFunc(TEvWorker::TEvPoll, Handle);
             hFunc(TEvWorker::TEvCommit, Handle);
             hFunc(TEvWorker::TEvData, Handle);
-            hFunc(TEvWorker::TEvDataEnd, Forward);
+            hFunc(TEvWorker::TEvDataEnd, Handle);
             hFunc(TEvWorker::TEvGone, Handle);
             hFunc(TEvService::TEvGetTxId, Forward);
             hFunc(TEvService::TEvTxIdResult, Handle);

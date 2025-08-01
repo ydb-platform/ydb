@@ -120,7 +120,7 @@ message TFeatureFlags {
     optional bool EnableTopicSplitMerge = 95 [default = true];
     optional bool EnableChangefeedDynamoDBStreamsFormat = 96 [default = true];
     optional bool ForceColumnTablesCompositeMarks = 97 [default = false];
-    optional bool EnableSubscriptionsInDiscovery = 98 [default = false, (RequireRestart) = true];
+    optional bool EnableSubscriptionsInDiscovery = 98 [default = true, (RequireRestart) = true];
     optional bool EnableGetNodeLabels = 99 [default = false];
     optional bool EnableTopicMessageMeta = 100 [default = true];
     optional bool EnableIcNodeCache = 101 [default = true, (RequireRestart) = true];
@@ -155,7 +155,7 @@ message TFeatureFlags {
     optional bool EnableColumnStatistics = 130 [default = false];
     optional bool EnableSingleCompositeActionGroup = 131 [default = false];
     optional bool EnableResourcePoolsOnServerless = 132 [default = false];
-    optional bool EnableVectorIndex = 133 [default = false];
+    optional bool EnableVectorIndex = 133 [default = true];
     optional bool EnableChangefeedsOnIndexTables = 134 [default = true];
     optional bool EnableResourcePoolsCounters = 135 [default = false];
     optional bool EnableOptionalColumnsInColumnShard = 136 [default = false];
@@ -198,9 +198,9 @@ message TFeatureFlags {
     optional bool EnableDataErasure = 172 [default = false];
     optional bool EnableShowCreate = 173 [default = false];
     optional bool EnableChangefeedsExport = 174 [default = false];
-    optional bool EnableKafkaNativeBalancing = 175 [default = false];
+    optional bool EnableKafkaNativeBalancing = 175 [default = true];
     optional bool EnableTabletRestartOnUnhandledExceptions = 176 [default = true];
-    optional bool EnableKafkaTransactions = 177 [default = false];
+    optional bool EnableKafkaTransactions = 177 [default = true];
     optional bool EnableLoginCache = 178 [default = false];
     optional bool SwitchToConfigV2 = 179 [default = false];
     optional bool SwitchToConfigV1 = 180 [default = false];
@@ -209,11 +209,12 @@ message TFeatureFlags {
     optional bool EnableExportAutoDropping = 183 [default = false];
     optional bool EnableThrottlingReport = 184 [default = true];
     optional bool EnableNodeBrokerDeltaProtocol = 185 [default = false];
-    optional bool EnableAccessToIndexImplTables = 186 [default = false];
+    optional bool EnableAccessToIndexImplTables = 186 [default = true];
     optional bool EnableAddUniqueIndex = 187 [default = false];
     optional bool EnableSharedMetadataAccessorCache = 188 [default = true, deprecated = true];
     optional bool RequireDbPrefixInSecretName = 189 [default = false];
     optional bool EnableSystemNamesProtection = 190 [default = false];
     optional bool EnableRealSystemViewPaths = 191 [default = false, (RequireRestart) = true];
     optional bool EnableCSSchemasCollapsing = 192 [default = true];
+    optional bool EnableMoveColumnTable = 193 [default = false];
 }

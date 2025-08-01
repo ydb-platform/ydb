@@ -6,15 +6,12 @@
 
 namespace NKikimr::NOlap::NReader::NSimple::NSysView::NSchemas {
 
-TAccessor::TAccessor(const TString& tablePath, const NColumnShard::TSchemeShardLocalPathId externalPathId,
-    const std::optional<NColumnShard::TInternalPathId> internalPathId)
-    : TBase(tablePath)
-    , PathId(NColumnShard::TUnifiedPathId::BuildNoCheck(internalPathId, externalPathId)) {
-    AFL_VERIFY(CheckTablePath(GetTablePath()));
+TAccessor::TAccessor(const TString& tablePath, const NColumnShard::TUnifiedOptionalPathId pathId)
+    : TBase(tablePath, pathId) {
 }
 
 std::unique_ptr<NReader::NCommon::ISourcesConstructor> TAccessor::SelectMetadata(const TSelectMetadataContext& context,
-    const NReader::TReadDescription& readDescription, const bool /*withUncommitted*/, const bool isPlain) const {
+    const NReader::TReadDescription& readDescription, const NColumnShard::IResolveWriteIdToLockId& /*resolver*/, const bool isPlain) const {
     AFL_VERIFY(!isPlain);
     return std::make_unique<TConstructor>(
         context.GetEngine(), readDescription.GetTabletId(), readDescription.PKRangesFilter, readDescription.IsReverseSort());

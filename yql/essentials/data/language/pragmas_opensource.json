@@ -597,6 +597,9 @@
     "name": "yt.UseColumnarStatistics"
   },
   {
+    "name": "yt.UseDefaultArrowAllocatorInJobs"
+  },
+  {
     "name": "yt.UseDefaultTentativePoolTrees"
   },
   {
@@ -876,6 +879,9 @@
     "name": "DataWatermarks"
   },
   {
+    "name": "DebugPositions"
+  },
+  {
     "name": "DeriveColumnOrder"
   },
   {
@@ -916,6 +922,9 @@
   },
   {
     "name": "DisableCompactNamedExprs"
+  },
+  {
+    "name": "DisableDebugPositions"
   },
   {
     "name": "DisableDeriveColumnOrder"
@@ -1098,9 +1107,6 @@
     "name": "PackageVersion"
   },
   {
-    "name": "PathPrefix"
-  },
-  {
     "name": "PositionalUnionAll"
   },
   {
@@ -1138,6 +1144,9 @@
   },
   {
     "name": "StrictJoinKeyTypes"
+  },
+  {
+    "name": "TablePathPrefix"
   },
   {
     "name": "Udf"

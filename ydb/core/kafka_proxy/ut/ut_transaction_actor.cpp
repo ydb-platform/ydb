@@ -15,7 +15,7 @@ namespace {
         public:
             TDummyKqpActor() : TActor<TDummyKqpActor>(&TDummyKqpActor::StateFunc) {}
 
-            void SetValidationResponse(const TString& transactionalId, i64 producerId, i32 producerEpoch, const std::unordered_map<TString, i32>& consumerGenerations = {}) {
+            void SetValidationResponse(const TString& transactionalId, i64 producerId, i32 producerEpoch, const TMaybe<std::unordered_map<TString, i32>>& consumerGenerations = Nothing()) {
                 TransactionalIdToReturn = transactionalId;
                 ProducerIdToReturn = producerId;
                 ProducerEpochToReturn = producerEpoch;
@@ -81,8 +81,10 @@ namespace {
                 record.SetYdbStatus(Ydb::StatusIds::SUCCESS);
                 auto* producerState = record.MutableResponse()->AddYdbResults();
                 *producerState = CreateProducerStateResultsSet();
-                auto* consumersState = record.MutableResponse()->AddYdbResults();
-                *consumersState = CreateConsumersStatesResultSet();
+                if (ConsumerGenerationsToReturn.Defined()) {
+                    auto* consumersState = record.MutableResponse()->AddYdbResults();
+                    *consumersState = CreateConsumersStatesResultSet();
+                }
                 
                 response->Record = record;
                 return response;
@@ -140,7 +142,7 @@ namespace {
                     "  }\n"
                     "}\n";
 
-                for (auto& [consumerName, generation] : ConsumerGenerationsToReturn) {
+                for (auto& [consumerName, generation] : *ConsumerGenerationsToReturn) {
                     builder <<
                         "rows {\n"
                         "  items {\n"
@@ -159,7 +161,7 @@ namespace {
             TString TransactionalIdToReturn = "";
             i64 ProducerIdToReturn = 0;
             i32 ProducerEpochToReturn = 0;
-            std::unordered_map<TString, i32> ConsumerGenerationsToReturn = {};
+            TMaybe<std::unordered_map<TString, i32>> ConsumerGenerationsToReturn = Nothing();
             bool ReturnSuccessOnCommit = true;
         };
 
@@ -294,7 +296,7 @@ namespace {
             // Arguments:
             // 1. callback - function, that will be called on recieving the response from KQP om commit request
             // 2. consumerGenerationsToReturnInValidationRequest - map of consumer name to its generation to ensure proper validation of consumer state by actor
-            void AddObserverForAddOperationsRequest(std::function<void(const TEvKqp::TEvQueryRequest*)> callback, std::unordered_map<TString, i32> consumerGenerationsToReturnInValidationRequest = {}) {
+            void AddObserverForAddOperationsRequest(std::function<void(const TEvKqp::TEvQueryRequest*)> callback, TMaybe<std::unordered_map<TString, i32>> consumerGenerationsToReturnInValidationRequest = Nothing()) {
                 DummyKqpActor->SetValidationResponse(TransactionalId, ProducerId, ProducerEpoch, consumerGenerationsToReturnInValidationRequest);
 
                 auto observer = [callback = std::move(callback), this](TAutoPtr<IEventHandle>& input) {

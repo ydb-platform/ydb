@@ -37,10 +37,11 @@ TApiVersionsResponseData::TPtr GetApiVersions() {
     AddApiKey<TAddPartitionsToTxnRequestData>(response->ApiKeys, ADD_PARTITIONS_TO_TXN, {.MaxVersion=3});
     AddApiKey<TAddOffsetsToTxnRequestData>(response->ApiKeys, ADD_OFFSETS_TO_TXN, {.MaxVersion=3});
     AddApiKey<TTxnOffsetCommitRequestData>(response->ApiKeys, TXN_OFFSET_COMMIT, {.MaxVersion=3});
+    AddApiKey<TDescribeConfigsRequestData>(response->ApiKeys, DESCRIBE_CONFIGS, {.MaxVersion=4});
+    AddApiKey<TListOffsetsRequestData>(response->ApiKeys, LIST_OFFSETS, {.MinVersion=0, .MaxVersion=7});
     AddApiKey<TEndTxnRequestData>(response->ApiKeys, END_TXN, {.MaxVersion=3});
     AddApiKey<TSaslHandshakeRequestData>(response->ApiKeys, SASL_HANDSHAKE, {.MaxVersion=1});
     AddApiKey<TSaslAuthenticateRequestData>(response->ApiKeys, SASL_AUTHENTICATE, {.MaxVersion=2});
-    AddApiKey<TListOffsetsRequestData>(response->ApiKeys, LIST_OFFSETS, {.MinVersion=1, .MaxVersion=1});
     AddApiKey<TListGroupsRequestData>(response->ApiKeys, LIST_GROUPS, {.MinVersion=0, .MaxVersion=4});
     AddApiKey<TDescribeGroupsRequestData>(response->ApiKeys, DESCRIBE_GROUPS, {.MinVersion=0, .MaxVersion=5});
     AddApiKey<TFetchRequestData>(response->ApiKeys, FETCH, {.MaxVersion=3});
@@ -48,8 +49,8 @@ TApiVersionsResponseData::TPtr GetApiVersions() {
     AddApiKey<TSyncGroupRequestData>(response->ApiKeys, SYNC_GROUP, {.MaxVersion=3});
     AddApiKey<TLeaveGroupRequestData>(response->ApiKeys, LEAVE_GROUP, {.MaxVersion=2});
     AddApiKey<THeartbeatRequestData>(response->ApiKeys, HEARTBEAT, {.MaxVersion=4});
-    AddApiKey<TFindCoordinatorRequestData>(response->ApiKeys, FIND_COORDINATOR, {.MaxVersion=0});
-    AddApiKey<TOffsetCommitRequestData>(response->ApiKeys, OFFSET_COMMIT, {.MaxVersion=0});
+    AddApiKey<TFindCoordinatorRequestData>(response->ApiKeys, FIND_COORDINATOR, {.MaxVersion=4});
+    AddApiKey<TOffsetCommitRequestData>(response->ApiKeys, OFFSET_COMMIT, {.MaxVersion=8});
     AddApiKey<TOffsetFetchRequestData>(response->ApiKeys, OFFSET_FETCH, {.MaxVersion=8});
     AddApiKey<TCreateTopicsRequestData>(response->ApiKeys, CREATE_TOPICS, {.MaxVersion=7});
     AddApiKey<TAlterConfigsRequestData>(response->ApiKeys, ALTER_CONFIGS, {.MaxVersion=2});

@@ -19,6 +19,7 @@ WITH (option = value [, ...])
 
 
     * `CONNECTION_STRING` — a [connection string](../../../concepts/connect.md#connection_string) for the source database (mandatory).
+    * `CA_CERT` — a [root certificate for TLS](../../../concepts/connect.md#tls-cert). Optional parameter. Can be specified if the source database supports an encrypted data interchange protocol (`CONNECTION_STRING` starts with `grpcs://`).
     * Authentication details for the source database (mandatory) depending on the authentication method:
 
         * [Access token](../../../recipes/ydb-sdk/auth-access-token.md):
@@ -29,6 +30,11 @@ WITH (option = value [, ...])
 
             * `USER` — a database user name.
             * `PASSWORD_SECRET_NAME` — the name of the [secret](../../../concepts/datamodel/secrets.md) that contains the password for the source database user.
+
+* `CONSISTENCY_LEVEL` — [consistency level of replicated data](../../../concepts/async-replication.md#consistency-levels):
+  * `ROW` — [row-level data consistency](../../../concepts/async-replication.md#consistency-level-row). Default mode.
+  * `GLOBAL` — [global data consistency](../../../concepts/async-replication.md#consistency-level-global). Additionally can be specified:
+    * `COMMIT_INTERVAL` — [change commit interval](../../../concepts/async-replication.md#commit-interval) in [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601) format. The default value is 10 seconds.
 
 ## Examples {#examples}
 
@@ -81,6 +87,43 @@ FOR `/Root/another_database` AS `/Root/my_database`
 WITH (
     CONNECTION_STRING = 'grpcs://example.com:2135/?database=/Root/another_database',
     TOKEN_SECRET_NAME = 'my_secret'
+);
+```
+
+The following statement creates an asynchronous replication instance with a TLS root certificate specified:
+
+```yql
+CREATE ASYNC REPLICATION my_consistent_replication
+FOR original_table AS replica_table
+WITH (
+    CONNECTION_STRING = 'grpcs://example.com:2135/?database=/Root/another_database',
+    TOKEN_SECRET_NAME = 'my_secret',
+    CA_CERT = '-----BEGIN CERTIFICATE-----...'
+);
+```
+
+The following statement creates an asynchronous replication instance in global data consistency mode (default change commit interval is 10 seconds):
+
+```yql
+CREATE ASYNC REPLICATION my_consistent_replication
+FOR original_table AS replica_table
+WITH (
+    CONNECTION_STRING = 'grpcs://example.com:2135/?database=/Root/another_database',
+    TOKEN_SECRET_NAME = 'my_secret',
+    CONSISTENCY_LEVEL = 'GLOBAL'
+);
+```
+
+The following statement creates an asynchronous replication instance in global data consistency mode with a one-minute change commit interval:
+
+```yql
+CREATE ASYNC REPLICATION my_consistent_replication_1min_commit_interval
+FOR original_table AS replica_table
+WITH (
+    CONNECTION_STRING = 'grpcs://example.com:2135/?database=/Root/another_database',
+    TOKEN_SECRET_NAME = 'my_secret',
+    CONSISTENCY_LEVEL = 'GLOBAL',
+    COMMIT_INTERVAL = Interval('PT1M')
 );
 ```
 

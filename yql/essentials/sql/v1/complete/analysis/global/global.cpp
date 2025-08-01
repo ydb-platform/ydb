@@ -242,6 +242,14 @@ namespace NSQLComplete {
 } // namespace NSQLComplete
 
 template <>
+void Out<NSQLComplete::TFunctionContext>(IOutputStream& out, const NSQLComplete::TFunctionContext& value) {
+    out << "TFunctionContext { ";
+    out << "Name: " << value.Name;
+    out << ", Args: " << value.ArgumentNumber;
+    out << " }";
+}
+
+template <>
 void Out<NSQLComplete::TColumnContext>(IOutputStream& out, const NSQLComplete::TColumnContext& value) {
     out << "TColumnContext { ";
     out << "Tables: " << JoinSeq(", ", value.Tables);

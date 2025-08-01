@@ -4,7 +4,6 @@
 #include "schemeshard__operation_create_cdc_stream.h"
 #include "schemeshard_impl.h"
 
-#include <ydb/core/tx/schemeshard/backup/constants.h>
 
 namespace NKikimr::NSchemeShard {
 
@@ -65,6 +64,7 @@ TVector<ISubOperation::TPtr> CreateBackupBackupCollection(TOperationId opId, con
     Y_ABORT_UNLESS(context.SS->BackupCollections.contains(bcPath->PathId));
     const auto& bc = context.SS->BackupCollections[bcPath->PathId];
     bool incrBackupEnabled = bc->Description.HasIncrementalBackupConfig();
+    TString streamName = NBackup::ToX509String(TlsActivationContext->AsActorContext().Now()) + "_continuousBackupImpl";
 
     for (const auto& item : bc->Description.GetExplicitEntryList().GetEntries()) {
         auto& desc = *copyTables.Add();
@@ -85,8 +85,8 @@ TVector<ISubOperation::TPtr> CreateBackupBackupCollection(TOperationId opId, con
             NKikimrSchemeOp::TCreateCdcStream createCdcStreamOp;
             createCdcStreamOp.SetTableName(item.GetPath());
             auto& streamDescription = *createCdcStreamOp.MutableStreamDescription();
-            streamDescription.SetName(NBackup::CB_CDC_STREAM_NAME);
-            streamDescription.SetMode(NKikimrSchemeOp::ECdcStreamModeUpdate);
+            streamDescription.SetName(streamName);
+            streamDescription.SetMode(NKikimrSchemeOp::ECdcStreamModeNewImage);
             streamDescription.SetFormat(NKikimrSchemeOp::ECdcStreamFormatProto);
 
             const auto sPath = TPath::Resolve(item.GetPath(), context.SS);
@@ -105,8 +105,8 @@ TVector<ISubOperation::TPtr> CreateBackupBackupCollection(TOperationId opId, con
             NKikimrSchemeOp::TCreateCdcStream createCdcStreamOp;
             createCdcStreamOp.SetTableName(item.GetPath());
             auto& streamDescription = *createCdcStreamOp.MutableStreamDescription();
-            streamDescription.SetName(NBackup::CB_CDC_STREAM_NAME);
-            streamDescription.SetMode(NKikimrSchemeOp::ECdcStreamModeUpdate);
+            streamDescription.SetName(streamName);
+            streamDescription.SetMode(NKikimrSchemeOp::ECdcStreamModeNewImage);
             streamDescription.SetFormat(NKikimrSchemeOp::ECdcStreamFormatProto);
 
             const auto sPath = TPath::Resolve(item.GetPath(), context.SS);
@@ -123,9 +123,9 @@ TVector<ISubOperation::TPtr> CreateBackupBackupCollection(TOperationId opId, con
                 }
             }
 
-            const auto streamPath = sPath.Child(NBackup::CB_CDC_STREAM_NAME);
+            const auto streamPath = sPath.Child(streamName);
 
-            NCdc::DoCreatePqPart(result, createCdcStreamOp, opId, streamPath, NBackup::CB_CDC_STREAM_NAME, table, boundaries, false);
+            NCdc::DoCreatePqPart(result, createCdcStreamOp, opId, streamPath, streamName, table, boundaries, false);
         }
     }
 

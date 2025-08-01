@@ -1,6 +1,7 @@
 #pragma once
 
 #include <util/generic/ptr.h>
+#include <util/stream/output.h>
 
 #include <memory>
 
@@ -8,6 +9,10 @@ namespace NKikimr::NKqp::NScheduler {
 
     namespace NHdrf {
         using TQueryId = ui64;
+        using TPoolId = TString;
+        using TDatabaseId = TPoolId;
+
+        using TId = std::variant<TQueryId, TPoolId>;
 
         struct TStaticAttributes;
 
@@ -44,6 +49,13 @@ namespace NKikimr::NKqp::NScheduler {
 
     struct TSchedulableTask;
     using TSchedulableTaskPtr = THolder<TSchedulableTask>;
-    using TSchedulableTaskFactory = std::function<TSchedulableTaskPtr(const NHdrf::TQueryId&)>;
 
 } // namespace NKikimr::NKqp::NScheduler
+
+Y_DECLARE_OUT_SPEC(inline, NKikimr::NKqp::NScheduler::NHdrf::TId, out, id) {
+    if (id.index() == 0) {
+        out << std::get<NKikimr::NKqp::NScheduler::NHdrf::TQueryId>(id);
+    } else {
+        out << std::get<NKikimr::NKqp::NScheduler::NHdrf::TPoolId>(id);
+    }
+}

@@ -331,6 +331,27 @@
             "uri": "https://{canondata_backend}/1920236/e2416b57cd9baa140c086892d357d5945ed0fdb1/resource.tar.gz#test.test_blocks-and-default.txt-Results_/results.txt"
         }
     ],
+    "test.test[blocks-ifpresent_null_last_argument-default.txt-Debug]": [
+        {
+            "checksum": "2b05be58b7a982833f555532cf99f0e4",
+            "size": 528,
+            "uri": "https://{canondata_backend}/1817427/e082b12fff160def638c040519bd57f755d945c6/resource.tar.gz#test.test_blocks-ifpresent_null_last_argument-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[blocks-ifpresent_null_last_argument-default.txt-Peephole]": [
+        {
+            "checksum": "7c35b55d6b2fc1e91041d98e2b354fd7",
+            "size": 868,
+            "uri": "https://{canondata_backend}/1817427/e082b12fff160def638c040519bd57f755d945c6/resource.tar.gz#test.test_blocks-ifpresent_null_last_argument-default.txt-Peephole_/opt.yql"
+        }
+    ],
+    "test.test[blocks-ifpresent_null_last_argument-default.txt-Results]": [
+        {
+            "checksum": "1993947d69f5b7f0ad36e992bc61629f",
+            "size": 1160,
+            "uri": "https://{canondata_backend}/1817427/e082b12fff160def638c040519bd57f755d945c6/resource.tar.gz#test.test_blocks-ifpresent_null_last_argument-default.txt-Results_/results.txt"
+        }
+    ],
     "test.test[blocks-pg_call-default.txt-Debug]": [
         {
             "checksum": "34def2ef08f7d1306e6bfe6afe7bde8f",
@@ -860,6 +881,20 @@
             "checksum": "4ad35e4c7ed8a66ee777351d78fd6d3a",
             "size": 1392,
             "uri": "https://{canondata_backend}/1942100/8a8d7c2be621747f507193c25049fe75678399a1/resource.tar.gz#test.test_optimizers-or_absorption--Results_/results.txt"
+        }
+    ],
+    "test.test[optimizers-unessential-default.txt-Debug]": [
+        {
+            "checksum": "b04b757a765b544439ff4efdb2bb5769",
+            "size": 377,
+            "uri": "https://{canondata_backend}/1946324/f48252f08f66fde772ee491cadbccdba0a3ab459/resource.tar.gz#test.test_optimizers-unessential-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[optimizers-unessential-default.txt-Results]": [
+        {
+            "checksum": "6b5d671789300c5873f894412aa41aa8",
+            "size": 990,
+            "uri": "https://{canondata_backend}/1946324/f48252f08f66fde772ee491cadbccdba0a3ab459/resource.tar.gz#test.test_optimizers-unessential-default.txt-Results_/results.txt"
         }
     ],
     "test.test[optimizers-unordered_over_extract_members_topsort-default.txt-Debug]": [

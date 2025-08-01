@@ -98,6 +98,10 @@ namespace NSQLComplete {
                EndsWith({RULE(Value_constructor)}, stack);
     }
 
+    bool IsLikelyTableFunctionStack(const TParserCallStack& stack) {
+        return EndsWith({RULE(Table_ref), RULE(An_id_expr), RULE(Id_expr)}, stack);
+    }
+
     bool IsLikelyHintStack(const TParserCallStack& stack) {
         return ContainsRule(RULE(Id_hint), stack) ||
                Contains({RULE(External_call_param), RULE(An_id)}, stack);
@@ -117,6 +121,10 @@ namespace NSQLComplete {
                           RULE(Table_ref),
                           RULE(Table_key),
                           RULE(Id_table_or_type)}, stack));
+    }
+
+    bool IsLikelyTableArgStack(const TParserCallStack& stack) {
+        return Contains({RULE(Table_arg)}, stack);
     }
 
     bool IsLikelyClusterStack(const TParserCallStack& stack) {

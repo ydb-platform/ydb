@@ -21,6 +21,7 @@
 #include <ydb/core/tablet/tablet_list_renderer.h>
 #include <ydb/core/tablet_flat/shared_sausagecache.h>
 #include <ydb/core/tx/columnshard/data_accessor/cache_policy/policy.h>
+#include <ydb/core/tx/columnshard/column_fetching/cache_policy.h>
 #include <ydb/core/tx/scheme_board/replica.h>
 #include <ydb/core/client/server/grpc_proxy_status.h>
 #include <ydb/core/scheme/tablet_scheme.h>
@@ -174,6 +175,13 @@ namespace NPDisk {
 			TActorSetupCmd(actor, TMailboxType::ReadAsFilled, 0), nodeIndex);
     }
 
+    void SetupCSColumnDataCache(TTestActorRuntime& runtime, ui32 nodeIndex) {
+        auto* actor = NOlap::NColumnFetching::TGeneralCache::CreateService(
+            NGeneralCache::NPublic::TConfig::BuildDefault(), runtime.GetDynamicCounters(nodeIndex));
+        runtime.AddLocalService(NOlap::NColumnFetching::TGeneralCache::MakeServiceId(runtime.GetNodeId(nodeIndex)),
+            TActorSetupCmd(actor, TMailboxType::ReadAsFilled, 0), nodeIndex);
+    }
+
     void SetupBlobCache(TTestActorRuntime& runtime, ui32 nodeIndex)
     {
         runtime.AddLocalService(NBlobCache::MakeBlobCacheServiceId(),
@@ -199,21 +207,23 @@ namespace NPDisk {
         return info;
     }
 
-    static TIntrusivePtr<TStateStorageInfo> GenerateStateStorageInfo(const TVector<TActorId> &replicas, ui32 NToSelect, ui32 nrings, ui32 ringSize)
+    static TIntrusivePtr<TStateStorageInfo> GenerateStateStorageInfo(const TVector<TActorId> &replicas, ui32 NToSelect, ui32 nrings, ui32 ringSize, ui32 ringGroups = 1)
     {
-        Y_ABORT_UNLESS(replicas.size() >= nrings * ringSize);
+        Y_ABORT_UNLESS(replicas.size() >= ringGroups * nrings * ringSize);
         Y_ABORT_UNLESS(NToSelect <= nrings);
 
         auto info = MakeIntrusive<TStateStorageInfo>();
-        info->RingGroups.resize(1);
-        auto& group = info->RingGroups.back();
-        group.NToSelect = NToSelect;
-        group.Rings.resize(nrings);
-
+        info->RingGroups.resize(ringGroups);
         ui32 inode = 0;
-        for (size_t i = 0; i < nrings; ++i) {
-            for (size_t j = 0; j < ringSize; ++j) {
-                group.Rings[i].Replicas.push_back(replicas[inode++]);
+        for (ui32 rg : xrange(ringGroups)) {
+            auto& group = info->RingGroups[rg];
+            group.NToSelect = NToSelect;
+            group.Rings.resize(nrings);
+
+            for (size_t i = 0; i < nrings; ++i) {
+                for (size_t j = 0; j < ringSize; ++j) {
+                    group.Rings[i].Replicas.push_back(replicas[inode++]);
+                }
             }
         }
 
@@ -231,31 +241,32 @@ namespace NPDisk {
         TTestActorRuntime &runtime,
         ui32 NToSelect,
         ui32 nrings,
-        ui32 ringSize)
+        ui32 ringSize,
+        ui32 ringGroups)
     {
         TVector<TActorId> ssreplicas;
-        for (size_t i = 0; i < nrings * ringSize; ++i) {
+        for (size_t i = 0; i < ringGroups * nrings * ringSize; ++i) {
             ssreplicas.push_back(MakeStateStorageReplicaID(runtime.GetNodeId(i), i));
         }
 
         TVector<TActorId> breplicas;
-        for (size_t i = 0; i < nrings * ringSize; ++i) {
+        for (size_t i = 0; i < ringGroups * nrings * ringSize; ++i) {
             breplicas.push_back(MakeBoardReplicaID(runtime.GetNodeId(i), i));
         }
 
         TVector<TActorId> sbreplicas;
-        for (size_t i = 0; i < nrings * ringSize; ++i) {
+        for (size_t i = 0; i < ringGroups * nrings * ringSize; ++i) {
             sbreplicas.push_back(MakeSchemeBoardReplicaID(runtime.GetNodeId(i), i));
         }
 
         const TActorId ssproxy = MakeStateStorageProxyID();
 
-        auto ssInfo = GenerateStateStorageInfo(ssreplicas, NToSelect, nrings, ringSize);
-        auto sbInfo = GenerateStateStorageInfo(sbreplicas, NToSelect, nrings, ringSize);
-        auto bInfo = GenerateStateStorageInfo(breplicas, NToSelect, nrings, ringSize);
+        auto ssInfo = GenerateStateStorageInfo(ssreplicas, NToSelect, nrings, ringSize, ringGroups);
+        auto sbInfo = GenerateStateStorageInfo(sbreplicas, NToSelect, nrings, ringSize, ringGroups);
+        auto bInfo = GenerateStateStorageInfo(breplicas, NToSelect, nrings, ringSize, ringGroups);
 
 
-        for (ui32 ssIndex = 0; ssIndex < nrings * ringSize; ++ssIndex) {
+        for (ui32 ssIndex = 0; ssIndex < ringGroups * nrings * ringSize; ++ssIndex) {
             runtime.AddLocalService(ssreplicas[ssIndex],
                 TActorSetupCmd(CreateStateStorageReplica(ssInfo.Get(), ssIndex), TMailboxType::Revolving, 0), ssIndex);
             runtime.AddLocalService(sbreplicas[ssIndex],
@@ -320,7 +331,7 @@ namespace NPDisk {
     namespace {
 
         void AddReplicas(TStateStorageInfo::TRingGroup& group, const TVector<TActorId>& replicas) {
-            group.NToSelect = replicas.size();
+            group.NToSelect = group.NToSelect ? group.NToSelect : replicas.size();
             group.Rings.resize(replicas.size());
             for (size_t i = 0; i < replicas.size(); ++i) {
                 // one replica per ring
@@ -337,45 +348,51 @@ namespace NPDisk {
     }
 
     TStateStorageSetupper CreateCustomStateStorageSetupper(const TVector<TStateStorageInfo::TRingGroup>& ringGroups, int replicasInRingGroup) {
+        THashMap<ui32, TVector<ui32>> ringGroupsIdToNodeIds;
+        for (ui32 i = 0; i < ringGroups.size(); ++i) {
+            ringGroupsIdToNodeIds[i] = TVector<ui32>(replicasInRingGroup, 0);
+        }
+        return CreateCustomStateStorageSetupper(ringGroups, ringGroupsIdToNodeIds);
+    }
+
+    TStateStorageSetupper CreateCustomStateStorageSetupper(const TVector<TStateStorageInfo::TRingGroup>& ringGroups,
+                                                           const THashMap<ui32, TVector<ui32>>& ringGroupIdToNodeIds) {
         return [=](TTestActorRuntime& runtime, ui32 nodeIndex) {
+            TSet<ui32> nodes;
+            for (const auto& [_, nodeIds] : ringGroupIdToNodeIds) {
+                nodes.insert(nodeIds.begin(), nodeIds.end());
+            }
             auto ssInfo = GenerateStateStorageInfo(ringGroups);
             auto sbInfo = GenerateStateStorageInfo(ringGroups);
             auto bInfo = GenerateStateStorageInfo(ringGroups);
+            for (const auto& [pileId, nodeIds] : ringGroupIdToNodeIds) {
+                auto addReplicas = [&](auto& group, auto makeId) {
+                    TVector<TActorId> replicas;
+                    for (ui32 i = 0; i < nodeIds.size(); ++i) {
+                        replicas.emplace_back(makeId(runtime.GetNodeId(nodeIds[i]), nodeIds.size() * pileId + i));
+                    }
+                    AddReplicas(group, replicas);
+                    return replicas;
+                };
 
-            for (size_t ringGroup = 0; ringGroup < ringGroups.size(); ++ringGroup) {
-                TVector<TActorId> ssreplicas;
-                for (int i = 0; i < replicasInRingGroup; ++i) {
-                    ssreplicas.emplace_back(MakeStateStorageReplicaID(runtime.GetNodeId(0), replicasInRingGroup * ringGroup + i));
-                }
-                AddReplicas(ssInfo->RingGroups[ringGroup], ssreplicas);
+                auto ssreplicas = addReplicas(ssInfo->RingGroups[pileId], MakeStateStorageReplicaID);
+                auto sbreplicas = addReplicas(sbInfo->RingGroups[pileId], MakeSchemeBoardReplicaID);
+                auto breplicas = addReplicas(bInfo->RingGroups[pileId], MakeBoardReplicaID);
 
-                TVector<TActorId> sbreplicas;
-                for (int i = 0; i < replicasInRingGroup; ++i) {
-                    sbreplicas.emplace_back(MakeSchemeBoardReplicaID(runtime.GetNodeId(0), replicasInRingGroup * ringGroup + i));
-                }
-                AddReplicas(sbInfo->RingGroups[ringGroup], sbreplicas);
-
-                TVector<TActorId> breplicas;
-                for (int i = 0; i < replicasInRingGroup; ++i) {
-                    breplicas.emplace_back(MakeBoardReplicaID(runtime.GetNodeId(0), replicasInRingGroup * ringGroup + i));
-                }
-                AddReplicas(bInfo->RingGroups[ringGroup], breplicas);
-
-                if (nodeIndex == 0) {
-                    for (int i = 0; i < replicasInRingGroup; ++i) {
-                        runtime.AddLocalService(ssreplicas[i],
-                            TActorSetupCmd(CreateStateStorageReplica(ssInfo.Get(), replicasInRingGroup * ringGroup + i), TMailboxType::Revolving, 0),
-                            nodeIndex
-                        );
-                        runtime.AddLocalService(sbreplicas[i],
-                            TActorSetupCmd(CreateSchemeBoardReplica(sbInfo.Get(), replicasInRingGroup * ringGroup + i), TMailboxType::Revolving, 0),
-                            nodeIndex
-                        );
-                        runtime.AddLocalService(breplicas[i],
-                            TActorSetupCmd(CreateStateStorageBoardReplica(bInfo.Get(), replicasInRingGroup * ringGroup + i), TMailboxType::Revolving, 0),
+                auto addLocalServices = [&](const TVector<TActorId>& replicas, auto createCmd, auto* info) {
+                    for (ui32 i = 0; i < nodeIds.size(); ++i) {
+                        runtime.AddLocalService(
+                            replicas[i],
+                            TActorSetupCmd(createCmd(info, nodeIds.size() * pileId + i), TMailboxType::Revolving, 0),
                             nodeIndex
                         );
                     }
+                };
+
+                if (nodes.contains(nodeIndex)) {
+                    addLocalServices(ssreplicas, CreateStateStorageReplica, ssInfo.Get());
+                    addLocalServices(sbreplicas, CreateSchemeBoardReplica, sbInfo.Get());
+                    addLocalServices(breplicas, CreateStateStorageBoardReplica, bInfo.Get());
                 }
             }
 
@@ -462,6 +479,7 @@ namespace NPDisk {
             SetupSharedPageCache(runtime, nodeIndex, sharedCacheConfig ? *sharedCacheConfig : defaultSharedCacheConfig);
             SetupBlobCache(runtime, nodeIndex);
             SetupCSMetadataCache(runtime, nodeIndex);
+            SetupCSColumnDataCache(runtime, nodeIndex);
             SetupSysViewService(runtime, nodeIndex);
             SetupQuoterService(runtime, nodeIndex);
             SetupStatService(runtime, nodeIndex);

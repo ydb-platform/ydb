@@ -10,6 +10,11 @@
 
 namespace NKqpRun {
 
+struct TScriptRequest {
+    TRequestOptions Options;
+    std::vector<NKikimrKqp::TScriptExecutionRetryState::TMapping> RetryMapping;
+};
+
 struct TSchemeMeta {
     TString Ast;
 };
@@ -40,7 +45,7 @@ public:
 
     TRequestResult SchemeQueryRequest(const TRequestOptions& query, TSchemeMeta& meta) const;
 
-    TRequestResult ScriptRequest(const TRequestOptions& script, TString& operation) const;
+    TRequestResult ScriptRequest(const TScriptRequest& script, TString& operation) const;
 
     TRequestResult QueryRequest(const TRequestOptions& query, TQueryMeta& meta, std::vector<Ydb::ResultSet>& resultSets, TProgressCallback progressCallback) const;
 

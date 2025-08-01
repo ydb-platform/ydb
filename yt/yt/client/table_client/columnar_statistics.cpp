@@ -70,87 +70,79 @@ TUnversionedOwningValue ApproximateMaxValue(TUnversionedValue value)
     }
 }
 
-template <typename TRow>
-void UpdateLargeColumnarStatistics(TLargeColumnarStatistics& statistics, TRange<TRow> rows)
+void UpdateLargeColumnarStatistics(TLargeColumnarStatistics* statistics, TUnversionedValue value)
 {
-    for (auto row : rows) {
-        for (const auto& value : row) {
-            if (value.Type != EValueType::Null) {
-                auto valueNoFlags = value;
-                valueNoFlags.Flags = EValueFlags::None;
-                auto fingerprint = TBitwiseUnversionedValueHash()(valueNoFlags);
-                statistics.ColumnHyperLogLogDigests[value.Id].Add(fingerprint);
+    if (value.Type != EValueType::Null) {
+        auto valueNoFlags = value;
+        valueNoFlags.Flags = EValueFlags::None;
+        auto fingerprint = TBitwiseUnversionedValueHash()(valueNoFlags);
+        statistics->ColumnHyperLogLogDigests[value.Id].Add(fingerprint);
+    }
+}
+
+void UpdateColumnarStatistics(
+    TUnversionedValue value,
+    i64 dataWeight,
+    TColumnarStatistics* statistics,
+    std::vector<TUnversionedValue>* minValues,
+    std::vector<TUnversionedValue>* maxValues,
+    bool needsValueStatistics,
+    bool needsLargeStatistics)
+{
+    if (Y_UNLIKELY(static_cast<int>(value.Id) >= statistics->GetColumnCount())) {
+        statistics->Resize(value.Id + 1);
+
+        if (needsValueStatistics) {
+            minValues->resize(value.Id + 1, NullUnversionedValue);
+            maxValues->resize(value.Id + 1, NullUnversionedValue);
+        }
+    }
+
+    statistics->ColumnDataWeights[value.Id] += dataWeight;
+
+    if (needsValueStatistics) {
+        auto& minValue = (*minValues)[value.Id];
+        auto& maxValue = (*maxValues)[value.Id];
+        if (IsAnyOrComposite(value.Type)) {
+            // Composite and YSON values are not comparable.
+            minValue = MakeSentinelValue<TUnversionedValue>(EValueType::Min);
+            maxValue = MakeSentinelValue<TUnversionedValue>(EValueType::Max);
+        } else if (value.Type != EValueType::Null) {
+            if (minValue == NullUnversionedValue || value < minValue) {
+                minValue = value;
             }
+            if (maxValue == NullUnversionedValue || value > maxValue) {
+                maxValue = value;
+            }
+        }
+
+        statistics->ColumnNonNullValueCounts[value.Id] += (value.Type != EValueType::Null);
+
+        if (needsLargeStatistics) {
+            UpdateLargeColumnarStatistics(&statistics->LargeStatistics, value);
         }
     }
 }
 
-template <typename TRow>
-void UpdateColumnarStatistics(TColumnarStatistics& statistics, TRange<TRow> rows)
+void UpdateMinAndMax(
+    TColumnarStatistics* statistics,
+    TRange<TUnversionedValue> minValues,
+    TRange<TUnversionedValue> maxValues)
 {
-    int maxId = -1;
-    for (const auto& values : rows) {
-        for (const auto& value : values) {
-            maxId = std::max<int>(maxId, value.Id);
-        }
-    }
-    if (maxId >= statistics.GetColumnCount()) {
-        statistics.Resize(maxId + 1);
-    }
+    YT_VERIFY(minValues.size() == maxValues.size());
+    YT_VERIFY(std::ssize(minValues) == statistics->GetColumnCount());
 
-    for (const auto& values : rows) {
-        for (const auto& value : values) {
-            statistics.ColumnDataWeights[value.Id] += GetDataWeight(value);
-        }
-    }
-
-    if (!statistics.HasValueStatistics()) {
-        return;
-    }
-
-    if (statistics.HasLargeStatistics()) {
-        UpdateLargeColumnarStatistics(statistics.LargeStatistics, rows);
-    }
-
-    // Vectors for precalculation of minimum and maximum values from rows that we are adding.
-    std::vector<TUnversionedValue> minValues(maxId + 1, NullUnversionedValue);
-    std::vector<TUnversionedValue> maxValues(maxId + 1, NullUnversionedValue);
-
-    for (const auto& row : rows) {
-        for (const auto& value : row) {
-            if (value.Type == EValueType::Composite || value.Type == EValueType::Any) {
-                // Composite and YSON values are not comparable.
-                minValues[value.Id] = MakeSentinelValue<TUnversionedValue>(EValueType::Min);
-                maxValues[value.Id] = MakeSentinelValue<TUnversionedValue>(EValueType::Max);
-            } else if (value.Type != EValueType::Null) {
-                if (minValues[value.Id] == NullUnversionedValue || value < minValues[value.Id]) {
-                    minValues[value.Id] = value;
-                }
-                if (maxValues[value.Id] == NullUnversionedValue || value > maxValues[value.Id]) {
-                    maxValues[value.Id] = value;
-                }
-            }
-        }
-    }
-
-    for (int index = 0; index <= maxId; ++index) {
-
+    for (int index = 0; index < std::ssize(minValues); ++index) {
         if (minValues[index] != NullUnversionedValue &&
-            (statistics.ColumnMinValues[index] == NullUnversionedValue || statistics.ColumnMinValues[index] > minValues[index]))
+            (statistics->ColumnMinValues[index] == NullUnversionedValue || statistics->ColumnMinValues[index] > minValues[index]))
         {
-            statistics.ColumnMinValues[index] = ApproximateMinValue(minValues[index]);
+            statistics->ColumnMinValues[index] = ApproximateMinValue(minValues[index]);
         }
 
         if (maxValues[index] != NullUnversionedValue &&
-            (statistics.ColumnMaxValues[index] == NullUnversionedValue || statistics.ColumnMaxValues[index] < maxValues[index]))
+            (statistics->ColumnMaxValues[index] == NullUnversionedValue || statistics->ColumnMaxValues[index] < maxValues[index]))
         {
-            statistics.ColumnMaxValues[index] = ApproximateMaxValue(maxValues[index]);
-        }
-    }
-
-    for (const auto& row : rows) {
-        for (const auto& value : row) {
-            statistics.ColumnNonNullValueCounts[value.Id] += (value.Type != EValueType::Null);
+            statistics->ColumnMaxValues[index] = ApproximateMaxValue(maxValues[index]);
         }
     }
 }
@@ -339,7 +331,18 @@ void TColumnarStatistics::Update(TRange<TUnversionedRow> rows)
 {
     ReadDataSizeEstimate.reset();
 
-    UpdateColumnarStatistics(*this, rows);
+    std::vector<TUnversionedValue> minValues(GetColumnCount(), NullUnversionedValue);
+    std::vector<TUnversionedValue> maxValues(GetColumnCount(), NullUnversionedValue);
+
+    for (auto row : rows) {
+        for (auto value : row) {
+            UpdateColumnarStatistics(value, GetDataWeight(value), this, &minValues, &maxValues, HasValueStatistics(), HasLargeStatistics());
+        }
+    }
+
+    if (HasValueStatistics()) {
+        UpdateMinAndMax(this, minValues, maxValues);
+    }
 
     if (ChunkRowCount) {
         ChunkRowCount = *ChunkRowCount + rows.Size();
@@ -350,23 +353,24 @@ void TColumnarStatistics::Update(TRange<TVersionedRow> rows)
 {
     ReadDataSizeEstimate.reset();
 
-    std::vector<TRange<TUnversionedValue>> keyColumnRows;
-    keyColumnRows.reserve(rows.Size());
-    for (const auto& row : rows) {
-        keyColumnRows.emplace_back(row.Keys());
-    }
-    UpdateColumnarStatistics(*this, TRange(keyColumnRows));
-
-    std::vector<TRange<TVersionedValue>> valueColumnRows;
-    valueColumnRows.reserve(rows.Size());
-    for (const auto& row : rows) {
-        valueColumnRows.emplace_back(row.Values());
-    }
-    UpdateColumnarStatistics(*this, TRange(valueColumnRows));
+    std::vector<TUnversionedValue> minValues(GetColumnCount(), NullUnversionedValue);
+    std::vector<TUnversionedValue> maxValues(GetColumnCount(), NullUnversionedValue);
 
     for (const auto& row : rows) {
+        for (const auto& value: row.Keys()) {
+            UpdateColumnarStatistics(value, GetDataWeight(value), this, &minValues, &maxValues, HasValueStatistics(), HasLargeStatistics());
+        }
+
+        for (const auto& value: row.Values()) {
+            UpdateColumnarStatistics(value, GetDataWeight(value), this, &minValues, &maxValues, HasValueStatistics(), HasLargeStatistics());
+        }
+
         TimestampTotalWeight = TimestampTotalWeight.value_or(0) +
             (row.GetWriteTimestampCount() + row.GetDeleteTimestampCount()) * sizeof(TTimestamp);
+    }
+
+    if (HasValueStatistics()) {
+        UpdateMinAndMax(this, minValues, maxValues);
     }
 
     if (ChunkRowCount) {
@@ -393,6 +397,7 @@ TColumnarStatistics TColumnarStatistics::SelectByColumnNames(const TNameTablePtr
             }
         }
     }
+
     result.TimestampTotalWeight = TimestampTotalWeight;
     result.LegacyChunkDataWeight = LegacyChunkDataWeight;
 

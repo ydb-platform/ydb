@@ -613,6 +613,10 @@ public:
         queryProto.SetEnableOltpSink(Config->EnableOltpSink);
         queryProto.SetEnableOlapSink(Config->EnableOlapSink);
         queryProto.SetEnableHtapTx(Config->EnableHtapTx);
+        queryProto.SetLangVer(Config->LangVer);
+
+        queryProto.SetForceImmediateEffectsExecution(
+            Config->KqpForceImmediateEffectsExecution.Get().GetOrElse(false));
 
         for (const auto& queryBlock : dataQueryBlocks) {
             auto queryBlockSettings = TKiDataQueryBlockSettings::Parse(queryBlock);
@@ -672,10 +676,10 @@ public:
             YQL_ENSURE(type->GetKind() == ETypeAnnotationKind::Struct);
 
             NKikimrMiniKQL::TType kikimrProto;
+            auto typeBuilder = NKikimr::NMiniKQL::TTypeBuilder(TypeEnv);
+            NKikimr::NMiniKQL::TType* resultType = NYql::NCommon::BuildType(result.Pos(), *type, typeBuilder);
 
-            if (!NYql::ExportTypeToKikimrProto(*type, kikimrProto, ctx)) {
-                return false;
-            }
+            ExportTypeToProto(resultType, kikimrProto);
 
             auto resultMetaColumns = queryBindingProto.MutableResultSetMeta()->Mutablecolumns();
             for (size_t i = 0; i < kikimrProto.GetStruct().MemberSize(); i++) {
@@ -929,6 +933,7 @@ private:
         auto& programProto = *stageProto.MutableProgram();
         programProto.SetRuntimeVersion(NYql::NDqProto::ERuntimeVersion::RUNTIME_VERSION_YQL_1_0);
         programProto.SetRaw(programBytecode);
+        programProto.SetLangVer(Config->LangVer);
 
         stagePredictor.SerializeToKqpSettings(*programProto.MutableSettings());
 
@@ -1453,6 +1458,11 @@ private:
             return;
         }
 
+        if (connection.Maybe<TDqCnParallelUnionAll>()) {
+            connectionProto.MutableParallelUnionAll();
+            return;
+        }
+
         if (auto maybeShuffle = connection.Maybe<TDqCnHashShuffle>()) {
             const auto& shuffle = maybeShuffle.Cast();
             auto& shuffleProto = *connectionProto.MutableHashShuffle();
@@ -1469,6 +1479,10 @@ private:
                 using enum NDq::EHashShuffleFuncType;
                 case HashV1: {
                     shuffleProto.MutableHashV1();
+                    break;
+                }
+                case HashV2: {
+                    shuffleProto.MutableHashV2();
                     break;
                 }
                 case ColumnShardHashV1: {

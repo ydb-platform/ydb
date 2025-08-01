@@ -783,7 +783,7 @@ TUnboxedValuePod DoAddYears(const TUnboxedValuePod& date, i64 years, const NUdf:
                 Split(arg, Reference<TMResourceName>(res), *valueBuilder);
                 sink(res);
             } catch (const std::exception& e) {
-                UdfTerminate((TStringBuilder() << e.what()).data());
+                UdfTerminate((TStringBuilder() << e.what()).c_str());
             }
         }
     };
@@ -928,7 +928,7 @@ TUnboxedValuePod DoAddYears(const TUnboxedValuePod& date, i64 years, const NUdf:
             storage.FromDate(builder, args[0].Get<ui16>());
             return result;
         } catch (const std::exception& e) {
-            UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data());
+            UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).c_str());
         }
     }
 
@@ -945,7 +945,7 @@ TUnboxedValuePod DoAddYears(const TUnboxedValuePod& date, i64 years, const NUdf:
             storage.FromDate32(valueBuilder->GetDateBuilder(), args[0].Get<i32>());
             return result;
         } catch (const std::exception& e) {
-            UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data());
+            UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).c_str());
         }
     }
 
@@ -963,7 +963,7 @@ TUnboxedValuePod DoAddYears(const TUnboxedValuePod& date, i64 years, const NUdf:
             storage.FromDatetime(builder, args[0].Get<ui32>());
             return result;
         } catch (const std::exception& e) {
-            UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data());
+            UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).c_str());
         }
     }
 
@@ -980,7 +980,7 @@ TUnboxedValuePod DoAddYears(const TUnboxedValuePod& date, i64 years, const NUdf:
             storage.FromDatetime64(valueBuilder->GetDateBuilder(), args[0].Get<i64>());
             return result;
         } catch (const std::exception& e) {
-            UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data());
+            UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).c_str());
         }
     }
 
@@ -998,7 +998,7 @@ TUnboxedValuePod DoAddYears(const TUnboxedValuePod& date, i64 years, const NUdf:
             storage.FromTimestamp(builder, args[0].Get<ui64>());
             return result;
         } catch (const std::exception& e) {
-            UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data());
+            UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).c_str());
         }
     }
 
@@ -1015,7 +1015,7 @@ TUnboxedValuePod DoAddYears(const TUnboxedValuePod& date, i64 years, const NUdf:
             storage.FromTimestamp64(valueBuilder->GetDateBuilder(), args[0].Get<i64>());
             return result;
         } catch (const std::exception& e) {
-            UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data());
+            UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).c_str());
         }
     }
 
@@ -1033,7 +1033,7 @@ TUnboxedValuePod DoAddYears(const TUnboxedValuePod& date, i64 years, const NUdf:
             storage.FromDate(builder, args[0].Get<ui16>(), args[0].GetTimezoneId());
             return result;
         } catch (const std::exception& e) {
-            UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data());
+            UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).c_str());
         }
     }
 
@@ -1051,7 +1051,7 @@ TUnboxedValuePod DoAddYears(const TUnboxedValuePod& date, i64 years, const NUdf:
             storage.FromDate32(builder, args[0].Get<i32>(), args[0].GetTimezoneId());
             return result;
         } catch (const std::exception& e) {
-            UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data());
+            UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).c_str());
         }
     }
 
@@ -1070,7 +1070,7 @@ TUnboxedValuePod DoAddYears(const TUnboxedValuePod& date, i64 years, const NUdf:
             storage.FromDatetime(builder, args[0].Get<ui32>(), args[0].GetTimezoneId());
             return result;
         } catch (const std::exception& e) {
-            UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data());
+            UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).c_str());
         }
     }
 
@@ -1088,7 +1088,7 @@ TUnboxedValuePod DoAddYears(const TUnboxedValuePod& date, i64 years, const NUdf:
             storage.FromDatetime64(builder, args[0].Get<i64>(), args[0].GetTimezoneId());
             return result;
         } catch (const std::exception& e) {
-            UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data());
+            UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).c_str());
         }
     }
 
@@ -1107,7 +1107,7 @@ TUnboxedValuePod DoAddYears(const TUnboxedValuePod& date, i64 years, const NUdf:
             storage.FromTimestamp(builder, args[0].Get<ui64>(), args[0].GetTimezoneId());
             return result;
         } catch (const std::exception& e) {
-            UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data());
+            UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).c_str());
         }
     }
 
@@ -1125,7 +1125,7 @@ TUnboxedValuePod DoAddYears(const TUnboxedValuePod& date, i64 years, const NUdf:
             storage.FromTimestamp64(builder, args[0].Get<i64>(), args[0].GetTimezoneId());
             return result;
         } catch (const std::exception& e) {
-            UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data());
+            UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).c_str());
         }
     }
 
@@ -1212,7 +1212,7 @@ TUnboxedValuePod DoAddYears(const TUnboxedValuePod& date, i64 years, const NUdf:
             UdfTerminate((TStringBuilder() << Pos_ << "Timestamp "
                                            << storage.ToString()
                                            << " cannot be casted to TzDate"
-            ).data());
+            ).c_str());
         }
     }
     END_SIMPLE_ARROW_UDF(TMakeTzDate, TMakeDateKernelExec<TTzDate>::Do);
@@ -1271,7 +1271,7 @@ TUnboxedValuePod DoAddYears(const TUnboxedValuePod& date, i64 years, const NUdf:
             UdfTerminate((TStringBuilder() << Pos_ << "Timestamp "
                                            << storage.ToString()
                                            << " cannot be casted to TzDate32"
-            ).data());
+            ).c_str());
         }
     }
 
@@ -2780,7 +2780,7 @@ private:
 
             return TUnboxedValuePod(new TImpl(Pos_, args[0], alwaysWriteFractionalSeconds));
         } catch (const std::exception& e) {
-            UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data());
+            UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).c_str());
         }
 
         class TImpl : public TBoxedValue {
@@ -2812,7 +2812,7 @@ private:
 
                     return result;
                 } catch (const std::exception& e) {
-                    UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data());
+                    UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).c_str());
                 }
             }
 
@@ -3004,7 +3004,8 @@ private:
                         break;
                     }
                     default:
-                        ythrow yexception() << "invalid format character: " << *ptr;
+                        throw yexception() << "character '" << *ptr << "' is not a valid format specifier."
+                                           << "\nSee documentation for valid format characters";
                     }
 
                     dataStart = ptr + 1U;
@@ -3075,7 +3076,7 @@ private:
             TUnboxedValue Run(const IValueBuilder*, const TUnboxedValuePod* args) const final try {
                 return TUnboxedValuePod(new TParse(args[0], Pos_));
             } catch (const std::exception& e) {
-                UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data());
+                UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).c_str());
             }
 
             const TSourcePosition Pos_;
@@ -3152,7 +3153,7 @@ private:
                 }
                 return result;
             } catch (const std::exception& e) {
-                UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data());
+                UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).c_str());
             }
         }
 

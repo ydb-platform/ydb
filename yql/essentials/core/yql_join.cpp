@@ -1,4 +1,5 @@
 #include "yql_join.h"
+#include "yql_expr_optimize.h"
 #include "yql_expr_type_annotation.h"
 #include "yql_opt_utils.h"
 
@@ -1991,22 +1992,25 @@ void GatherAndTerms(const TExprNode::TPtr& predicate, TExprNode::TListType& andT
     }
 }
 
-TExprNode::TPtr FuseAndTerms(TPositionHandle position, const TExprNode::TListType& andTerms, const TExprNode::TPtr& exclude, bool isPg, TExprContext& ctx) {
+TExprNode::TPtr FuseAndTerms(TPositionHandle position, const TExprNode::TListType& andTerms, const TExprNode::TPtr& exclude, TExprNode::TPtr&& replaceWith, bool isPg, TExprContext& ctx) {
     TExprNode::TPtr prevAndNode = nullptr;
     TNodeSet added;
-    for (const auto& otherAndTerm : andTerms) {
-        if (otherAndTerm == exclude) {
-            continue;
+    for (auto term : andTerms) {
+        if (term == exclude) {
+            if (!replaceWith) {
+                continue;
+            }
+            term = std::move(replaceWith);
         }
 
-        if (!added.insert(otherAndTerm.Get()).second) {
+        if (!added.insert(term.Get()).second) {
             continue;
         }
 
         if (!prevAndNode) {
-            prevAndNode = otherAndTerm;
+            prevAndNode = term;
         } else {
-            prevAndNode = ctx.NewCallable(position, "And", { prevAndNode, otherAndTerm });
+            prevAndNode = ctx.NewCallable(position, "And", { prevAndNode, term });
         }
     }
 
@@ -2046,6 +2050,16 @@ bool IsEquality(TExprNode::TPtr predicate, TExprNode::TPtr& left, TExprNode::TPt
     return false;
 }
 
+bool IsMemberEquality(const TExprNode::TPtr& predicate, const TExprNode& row, TExprNode::TPtr& leftMember, TExprNode::TPtr& rightMember) {
+    if (!IsEquality(predicate, leftMember, rightMember)) {
+        return false;
+    }
+
+    return
+        leftMember->IsCallable("Member") && &leftMember->Head() == &row &&
+        rightMember->IsCallable("Member") && &rightMember->Head() == &row;
+}
+
 void GatherJoinInputs(const TExprNode::TPtr& expr, const TExprNode& row,
     const TParentsMap& parentsMap, const THashMap<TString, TString>& backRenameMap,
     const TJoinLabels& labels, TSet<ui32>& inputs, TSet<TStringBuf>& usedFields) {
@@ -2072,6 +2086,52 @@ void GatherJoinInputs(const TExprNode::TPtr& expr, const TExprNode& row,
             break;
         }
     }
+}
+
+bool GatherJoinInputsForAllNodes(const TExprNode::TPtr& expr, const TExprNode& row,
+    const THashMap<TString, TString>& backRenameMap, const TJoinLabels& labels, TNodeMap<TSet<ui32>>& inputs
+){
+    bool memberOnly = true;
+    VisitExpr(
+        expr,
+        [&](const TExprNode::TPtr& node) {
+            if (!memberOnly) {
+                return false;
+            } else if (node->IsCallable("Member") && node->HeadPtr().Get() == &row) {
+                return false;
+            }
+
+            return true;
+        },
+        [&](const TExprNode::TPtr& node) {
+            if (node->IsCallable("Member") && node->HeadPtr().Get() == &row) {
+                auto field = node->Tail().Content();
+                // rename used fields
+                if (auto renamed = backRenameMap.FindPtr(field)) {
+                    field = *renamed;
+                }
+
+                TStringBuf part1;
+                TStringBuf part2;
+                SplitTableName(field, part1, part2);
+                inputs[node.Get()] = {*labels.FindInputIndex(part1)};
+            } else if (node.Get() == &row) {
+                // non-Member usage of row struct
+                memberOnly = false;
+            } else {
+                TSet<ui32> usedInputs;
+                for (const auto& child : node->Children()) {
+                    auto& childUsedInputs = inputs[child.Get()];
+                    usedInputs.insert(childUsedInputs.begin(), childUsedInputs.end());
+                }
+                inputs[node.Get()] = std::move(usedInputs);
+            }
+
+            return true;
+        }
+    );
+
+    return memberOnly;
 }
 
 bool IsCachedJoinOption(TStringBuf name) {

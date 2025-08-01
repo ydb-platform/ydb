@@ -111,23 +111,33 @@ class TRunScriptActor : public NActors::TActorBootstrapped<TRunScriptActor> {
     };
 
 public:
-    TRunScriptActor(const NKikimrKqp::TEvQueryRequest& request, const TKqpRunScriptActorSettings& settings, NKikimrConfig::TQueryServiceConfig&& queryServiceConfig)
-        : ExecutionId(settings.ExecutionId)
+    TRunScriptActor(const NKikimrKqp::TEvQueryRequest& request, TKqpRunScriptActorSettings&& settings, NKikimrConfig::TQueryServiceConfig&& queryServiceConfig)
+        : ExecutionId(std::move(settings.ExecutionId))
         , Request(request)
-        , Database(settings.Database)
+        , Database(std::move(settings.Database))
         , LeaseGeneration(settings.LeaseGeneration)
         , LeaseDuration(settings.LeaseDuration)
         , ResultsTtl(settings.ResultsTtl)
         , ProgressStatsPeriod(settings.ProgressStatsPeriod)
         , QueryServiceConfig(std::move(queryServiceConfig))
+        , SaveQueryPhysicalGraph(settings.SaveQueryPhysicalGraph)
+        , PhysicalGraph(std::move(settings.PhysicalGraph))
         , Counters(settings.Counters)
-    {
-        UserRequestContext = MakeIntrusive<TUserRequestContext>(Request.GetTraceId(), Database, "", ExecutionId, Request.GetTraceId());
-    }
+    {}
 
     static constexpr char ActorName[] = "KQP_RUN_SCRIPT_ACTOR";
 
     void Bootstrap() {
+        const auto& traceId = Request.GetTraceId();
+        UserRequestContext = MakeIntrusive<TUserRequestContext>(
+            traceId,
+            Database,
+            /* SessionId*/ "",
+            ExecutionId,
+            /* CustomerSuppliedId */ traceId,
+            SelfId()
+        );
+
         Become(&TRunScriptActor::StateFunc);
     }
 
@@ -137,6 +147,8 @@ private:
         hFunc(NActors::TEvents::TEvPoison, Handle);
         hFunc(TEvKqpExecuter::TEvStreamData, Handle);
         hFunc(TEvKqpExecuter::TEvExecuterProgress, Handle);
+        hFunc(TEvSaveScriptPhysicalGraphRequest, Handle);
+        hFunc(TEvSaveScriptPhysicalGraphResponse, Handle);
         hFunc(TEvKqp::TEvQueryResponse, Handle);
         hFunc(TEvKqp::TEvCreateSessionResponse, Handle);
         IgnoreFunc(TEvKqp::TEvCloseSessionResponse);
@@ -166,20 +178,31 @@ private:
     void Handle(TEvKqp::TEvCreateSessionResponse::TPtr& ev) {
         const auto& resp = ev->Get()->Record;
         if (resp.GetYdbStatus() != Ydb::StatusIds::SUCCESS) {
+            auto error = TStringBuilder() << "Create new session failed with " << resp.GetYdbStatus();
             if (resp.GetResourceExhausted()) {
+                Issues.AddIssue(error << " (resource exhausted)");
                 Finish(Ydb::StatusIds::OVERLOADED);
             } else {
+                Issues.AddIssue(error);
                 Finish(Ydb::StatusIds::INTERNAL_ERROR);
             }
-        } else {
-            SessionId = resp.GetResponse().GetSessionId();
-            UserRequestContext->SessionId = SessionId;
+            return;
+        }
 
-            if (RunState == ERunState::Running) {
-                Start();
-            } else {
-                CloseSession();
-            }
+        const auto& session = resp.GetResponse();
+        if (session.GetNodeId() != SelfId().NodeId()) {
+            Issues.AddIssue(TStringBuilder() << "Session created on wrong node " << session.GetNodeId() << ", expected local session on node " << SelfId().NodeId());
+            Finish(Ydb::StatusIds::INTERNAL_ERROR);
+            return;
+        }
+
+        SessionId = session.GetSessionId();
+        UserRequestContext->SessionId = SessionId;
+
+        if (RunState == ERunState::Running) {
+            Start();
+        } else {
+            CloseSession();
         }
     }
 
@@ -194,10 +217,15 @@ private:
     }
 
     void Start() {
+        // Expecting that session actor and executor started on the same node with run script actor
         auto ev = MakeHolder<TEvKqp::TEvQueryRequest>();
         ev->Record = Request;
         ev->Record.MutableRequest()->SetSessionId(SessionId);
+        ev->SetSaveQueryPhysicalGraph(SaveQueryPhysicalGraph);
         ev->SetUserRequestContext(UserRequestContext);
+        if (PhysicalGraph) {
+            ev->SetQueryPhysicalGraph(std::move(*PhysicalGraph));
+        }
         if (ev->Record.GetRequest().GetCollectStats() >= Ydb::Table::QueryStatsCollection::STATS_COLLECTION_FULL) {
             ev->SetProgressStatsPeriod(ProgressStatsPeriod ? ProgressStatsPeriod : TDuration::MilliSeconds(QueryServiceConfig.GetProgressStatsPeriodMs()));
         }
@@ -207,7 +235,9 @@ private:
         LOG_I("Start Script Execution");
         SendToKqpProxy(std::move(ev));
 
-        Register(CreateScriptProgressActor(ExecutionId, Database, "{}"));
+        if (!SaveQueryPhysicalGraph) {
+            Register(CreateScriptProgressActor(ExecutionId, Database, "{}"));
+        }
     }
 
     void Handle(TEvCheckAliveRequest::TPtr& ev) {
@@ -222,7 +252,7 @@ private:
     }
 
     void RunLeaseUpdater() {
-        Register(CreateScriptLeaseUpdateActor(SelfId(), Database, ExecutionId, LeaseDuration, Counters));
+        Register(CreateScriptLeaseUpdateActor(SelfId(), Database, ExecutionId, LeaseDuration, LeaseGeneration, Counters));
         LeaseUpdateQueryRunning = true;
         Counters->ReportRunActorLeaseUpdateBacklog(TInstant::Now() - LeaseUpdateScheduleTime);
     }
@@ -482,6 +512,27 @@ private:
         );
     }
 
+    void Handle(TEvSaveScriptPhysicalGraphRequest::TPtr& ev) {
+        if (RunState != ERunState::Running) {
+            Send(ev->Sender, new TEvSaveScriptPhysicalGraphResponse(Ydb::StatusIds::INTERNAL_ERROR, {NYql::TIssue("Script execution is not running")}));
+            return;
+        }
+
+        if (PhysicalGraphSender) {
+            Send(ev->Sender, new TEvSaveScriptPhysicalGraphResponse(Ydb::StatusIds::INTERNAL_ERROR, {NYql::TIssue("Can not save graph twice")}));
+            return;
+        }
+
+        PhysicalGraphSender = ev->Sender;
+        Register(CreateSaveScriptExecutionPhysicalGraphActor(SelfId(), Database, ExecutionId, std::move(ev->Get()->PhysicalGraph), QueryServiceConfig));
+    }
+
+    void Handle(TEvSaveScriptPhysicalGraphResponse::TPtr& ev) {
+        Y_ABORT_UNLESS(PhysicalGraphSender);
+        Forward(ev, *PhysicalGraphSender);
+        Register(CreateScriptProgressActor(ExecutionId, Database, "{}"));
+    }
+
     void Handle(TEvKqp::TEvQueryResponse::TPtr& ev) {
         if (RunState != ERunState::Running) {
             return;
@@ -724,11 +775,14 @@ private:
     const TString ExecutionId;
     NKikimrKqp::TEvQueryRequest Request;
     const TString Database;
-    const ui64 LeaseGeneration;
+    const i64 LeaseGeneration;
     const TDuration LeaseDuration;
     const TDuration ResultsTtl;
     const TDuration ProgressStatsPeriod;
     const NKikimrConfig::TQueryServiceConfig QueryServiceConfig;
+    const bool SaveQueryPhysicalGraph = false;
+    std::optional<NKikimrKqp::TQueryPhysicalGraph> PhysicalGraph;
+    std::optional<TActorId> PhysicalGraphSender;
     TIntrusivePtr<TKqpCounters> Counters;
     TString SessionId;
     TInstant LeaseUpdateScheduleTime;
@@ -739,11 +793,11 @@ private:
     ERunState RunState = ERunState::Created;
     std::forward_list<TEvKqp::TEvCancelScriptExecutionRequest::TPtr> CancelRequests;
 
-    // Result
+    // Result info
     NYql::TIssues Issues;
     Ydb::StatusIds::StatusCode Status = Ydb::StatusIds::STATUS_CODE_UNSPECIFIED;
 
-    // Result
+    // Result data
     std::vector<TResultSetInfo> ResultSetInfos;
     TMap<ui64, TProducerState> StreamChannels;
     std::optional<TInstant> ExpireAt;
@@ -760,8 +814,8 @@ private:
 
 } // namespace
 
-NActors::IActor* CreateRunScriptActor(const NKikimrKqp::TEvQueryRequest& request, const TKqpRunScriptActorSettings& settings, NKikimrConfig::TQueryServiceConfig queryServiceConfig) {
-    return new TRunScriptActor(request, settings, std::move(queryServiceConfig));
+NActors::IActor* CreateRunScriptActor(const NKikimrKqp::TEvQueryRequest& request, TKqpRunScriptActorSettings&& settings, NKikimrConfig::TQueryServiceConfig queryServiceConfig) {
+    return new TRunScriptActor(request, std::move(settings), std::move(queryServiceConfig));
 }
 
 } // namespace NKikimr::NKqp

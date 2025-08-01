@@ -29,6 +29,11 @@
             "uri": "file://test.test_BlockTo_/results.txt"
         }
     ],
+    "test.test[DateTimeInvalidSpecifierFail]": [
+        {
+            "uri": "file://test.test_DateTimeInvalidSpecifierFail_/extracted"
+        }
+    ],
     "test.test[EndOf]": [
         {
             "uri": "file://test.test_EndOf_/results.txt"

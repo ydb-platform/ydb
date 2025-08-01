@@ -1,4 +1,5 @@
 PROTO_LIBRARY()
+PROTOC_FATAL_WARNINGS()
 
 SET(PROTOC_TRANSITIVE_HEADERS "no")
 
@@ -166,6 +167,7 @@ GENERATE_ENUM_SERIALIZATION(shared_cache.pb.h)
 PEERDIR(
     ydb/core/config/protos
     ydb/core/fq/libs/config/protos
+    ydb/core/protos/nbs
     ydb/core/protos/schemeshard
     ydb/core/scheme/protos
     ydb/core/tx/columnshard/common/protos

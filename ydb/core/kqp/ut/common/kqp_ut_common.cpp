@@ -149,6 +149,7 @@ TKikimrRunner::TKikimrRunner(const TKikimrSettings& settings) {
     ServerSettings->S3ActorsFactory = settings.S3ActorsFactory;
     ServerSettings->Controls = settings.Controls;
     ServerSettings->SetEnableForceFollowers(settings.EnableForceFollowers);
+    ServerSettings->SetEnableScriptExecutionBackgroundChecks(settings.EnableScriptExecutionBackgroundChecks);
     ServerSettings->SetEnableStorageProxy(settings.EnableStorageProxy);
 
     if (!settings.FeatureFlags.HasEnableOlapCompression()) {
@@ -209,8 +210,7 @@ TKikimrRunner::TKikimrRunner(const TVector<NKikimrKqp::TKqpSetting>& kqpSettings
 
 TKikimrRunner::TKikimrRunner(const NKikimrConfig::TAppConfig& appConfig, const TString& authToken,
     const TString& domainRoot, ui32 nodeCount)
-    : TKikimrRunner(TKikimrSettings()
-        .SetAppConfig(appConfig)
+    : TKikimrRunner(TKikimrSettings(appConfig)
         .SetAuthToken(authToken)
         .SetDomainRoot(domainRoot)
         .SetNodeCount(nodeCount)) {}
@@ -218,8 +218,7 @@ TKikimrRunner::TKikimrRunner(const NKikimrConfig::TAppConfig& appConfig, const T
 TKikimrRunner::TKikimrRunner(const NKikimrConfig::TAppConfig& appConfig,
     const TVector<NKikimrKqp::TKqpSetting>& kqpSettings, const TString& authToken, const TString& domainRoot,
     ui32 nodeCount)
-    : TKikimrRunner(TKikimrSettings()
-        .SetAppConfig(appConfig)
+    : TKikimrRunner(TKikimrSettings(appConfig)
         .SetKqpSettings(kqpSettings)
         .SetAuthToken(authToken)
         .SetDomainRoot(domainRoot)
@@ -1705,7 +1704,6 @@ void WaitForCompaction(Tests::TServer* server, const TString& path, bool compact
 }
 
 NJson::TJsonValue SimplifyPlan(NJson::TJsonValue& opt, const TGetPlanParams& params) {
-    Cout << opt.GetStringRobust() << Endl;
     if (!opt.IsMap()) {
         return {};
     }

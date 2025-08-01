@@ -19,6 +19,26 @@ NKikimrConfig::TAppConfig GetAppConfig(bool pointConsolidation = false) {
     return appConfig;
 }
 
+class TTaskCountExtractor : public NJson::IScanCallback {
+public:
+    THashMap<int, int> TasksCountPerStage;
+
+    bool Do(const TString& path, NJson::TJsonValue* parent, NJson::TJsonValue& value) {
+        Y_UNUSED(path, parent);
+
+        if (value.IsMap() && value.Has("Tasks")) {
+            int taskCount = value["Tasks"].GetIntegerSafe();
+            UNIT_ASSERT(value.Has("PhysicalStageId"));
+            int stageId = value["PhysicalStageId"].GetIntegerSafe();
+            auto [_, success] = TasksCountPerStage.emplace(stageId, taskCount);
+            UNIT_ASSERT_C(success, TStringBuilder() << "duplicatedStage " << stageId);
+        }
+
+        return true;
+    }
+
+};
+
 void CreateSampleTables(TSession& session) {
     {
         const auto query = Q_(R"(
@@ -134,10 +154,16 @@ Y_UNIT_TEST_SUITE(KqpPointConsolidation) {
             UNIT_ASSERT_VALUES_EQUAL(result.GetResultSets()[0].RowsCount(), 2);
 
             NJson::TJsonValue plan;
-            UNIT_ASSERT(NJson::ReadJsonTree(*result.GetStats()->GetPlan(), &plan));
 
-            const auto tasksCount = plan["Plan"]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0]["Stats"]["Tasks"].GetIntegerSafe();
-            UNIT_ASSERT_VALUES_EQUAL(tasksCount, PointConsolidation ? 1 : 2);
+            Cerr << result.GetStats()->GetPlan() << Endl;
+            Cerr << result.GetStats()->GetAst() << Endl;
+
+            UNIT_ASSERT(NJson::ReadJsonTree(*result.GetStats()->GetPlan(), &plan));
+            auto statsExtractor = TTaskCountExtractor();
+            plan.Scan(statsExtractor);
+
+            UNIT_ASSERT_VALUES_EQUAL(statsExtractor.TasksCountPerStage.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(statsExtractor.TasksCountPerStage.at(0), 1);
         }
         {
             /*
@@ -162,8 +188,11 @@ Y_UNIT_TEST_SUITE(KqpPointConsolidation) {
             NJson::TJsonValue plan;
             UNIT_ASSERT(NJson::ReadJsonTree(*result.GetStats()->GetPlan(), &plan));
 
-            const auto tasksCount = plan["Plan"]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0]["Stats"]["Tasks"].GetIntegerSafe();
-            UNIT_ASSERT_VALUES_EQUAL(tasksCount, PointConsolidation ? 1 : 4);
+            auto statsExtractor = TTaskCountExtractor();
+            plan.Scan(statsExtractor);
+
+            UNIT_ASSERT_VALUES_EQUAL(statsExtractor.TasksCountPerStage.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(statsExtractor.TasksCountPerStage.at(0), 1);
         }
         {
             /*
@@ -188,8 +217,12 @@ Y_UNIT_TEST_SUITE(KqpPointConsolidation) {
             NJson::TJsonValue plan;
             UNIT_ASSERT(NJson::ReadJsonTree(*result.GetStats()->GetPlan(), &plan));
 
-            const auto tasksCount = plan["Plan"]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0]["Stats"]["Tasks"].GetIntegerSafe();
-            UNIT_ASSERT_VALUES_EQUAL(tasksCount, PointConsolidation ? 1 : 2);
+            auto statsExtractor = TTaskCountExtractor();
+            plan.Scan(statsExtractor);
+
+            UNIT_ASSERT_VALUES_EQUAL(statsExtractor.TasksCountPerStage.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(statsExtractor.TasksCountPerStage.at(0), 1);
+
         }
         {
             /*
@@ -214,8 +247,11 @@ Y_UNIT_TEST_SUITE(KqpPointConsolidation) {
             NJson::TJsonValue plan;
             UNIT_ASSERT(NJson::ReadJsonTree(*result.GetStats()->GetPlan(), &plan));
 
-            const auto tasksCount = plan["Plan"]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0]["Stats"]["Tasks"].GetIntegerSafe();
-            UNIT_ASSERT_VALUES_EQUAL(tasksCount, PointConsolidation ? 4 : 4);
+            auto statsExtractor = TTaskCountExtractor();
+            plan.Scan(statsExtractor);
+
+            UNIT_ASSERT_VALUES_EQUAL(statsExtractor.TasksCountPerStage.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(statsExtractor.TasksCountPerStage.at(0), 1);
         }
         {
             /*
@@ -240,8 +276,12 @@ Y_UNIT_TEST_SUITE(KqpPointConsolidation) {
             NJson::TJsonValue plan;
             UNIT_ASSERT(NJson::ReadJsonTree(*result.GetStats()->GetPlan(), &plan));
 
-            const auto tasksCount = plan["Plan"]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0]["Stats"]["Tasks"].GetIntegerSafe();
-            UNIT_ASSERT_VALUES_EQUAL(tasksCount, PointConsolidation ? 4 : 4);
+            auto statsExtractor = TTaskCountExtractor();
+            plan.Scan(statsExtractor);
+
+            UNIT_ASSERT_VALUES_EQUAL(statsExtractor.TasksCountPerStage.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(statsExtractor.TasksCountPerStage.at(0), 1);
+
         }
         {
             /*
@@ -266,8 +306,11 @@ Y_UNIT_TEST_SUITE(KqpPointConsolidation) {
             NJson::TJsonValue plan;
             UNIT_ASSERT(NJson::ReadJsonTree(*result.GetStats()->GetPlan(), &plan));
 
-            const auto tasksCount = plan["Plan"]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0]["Stats"]["Tasks"].GetIntegerSafe();
-            UNIT_ASSERT_VALUES_EQUAL(tasksCount, PointConsolidation ? 2 : 2);
+            auto statsExtractor = TTaskCountExtractor();
+            plan.Scan(statsExtractor);
+
+            UNIT_ASSERT_VALUES_EQUAL(statsExtractor.TasksCountPerStage.size(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(statsExtractor.TasksCountPerStage.at(0), 2);
         }
     }
 
@@ -343,9 +386,9 @@ Y_UNIT_TEST_SUITE(KqpPointConsolidation) {
             auto resultSet = ResultSetToSortedVector(result);
             auto expected = std::vector<ResultSetRow>{
                 {70640909, 4}, {141281818, 3}, {211922728, 3}, {268435455, 2},
-                {353204547, 2}, {423845456, 1}, {494486365, 0}, {536870911, 0}, 
+                {353204547, 2}, {423845456, 1}, {494486365, 0}, {536870911, 0},
                 {635768184, 4}, {706409094, 4}, {777050003, 3}, {805306367, 3},
-                {918331822, 2}, {988972731, 1}, {1073741823, 1}, {1130254550, 0}, 
+                {918331822, 2}, {988972731, 1}, {1073741823, 1}, {1130254550, 0},
                 {1200895460, 0}, {1271536369, 4}, {1342177279, 4}
             };
 

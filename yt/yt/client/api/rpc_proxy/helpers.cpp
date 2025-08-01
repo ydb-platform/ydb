@@ -442,7 +442,6 @@ void ToProto(
     }
 }
 
-
 void FromProto(
     NApi::TOperationEvent* result,
     const NProto::TOperationEvent& proto)
@@ -1822,6 +1821,28 @@ NQueryTrackerClient::EQueryState ConvertQueryStateFromProto(
     YT_ABORT();
 }
 
+NApi::EJobStderrType ConvertJobStderrTypeFromProto(
+    NProto::EJobStderrType proto)
+{
+    switch (proto) {
+        case NProto::EJobStderrType::JST_USER_JOB_STDERR:
+            return NApi::EJobStderrType::UserJobStderr;
+        case NProto::EJobStderrType::JST_GPU_CHECK_STDERR:
+            return NApi::EJobStderrType::GpuCheckStderr;
+    }
+}
+
+NProto::EJobStderrType ConvertJobStderrTypeToProto(
+    NApi::EJobStderrType jobStderrType)
+{
+    switch (jobStderrType) {
+        case NApi::EJobStderrType::UserJobStderr:
+            return NProto::EJobStderrType::JST_USER_JOB_STDERR;
+        case NApi::EJobStderrType::GpuCheckStderr:
+            return NProto::EJobStderrType::JST_GPU_CHECK_STDERR;
+    }
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 void FillRequest(
@@ -1831,6 +1852,9 @@ void FillRequest(
 {
     ToProto(req->mutable_path(), path);
     req->set_cookie_count(options.CookieCount);
+    if (options.Timeout) {
+        req->set_timeout(options.Timeout->GetValue());
+    }
 
     if (options.TransactionId) {
         ToProto(req->mutable_transactional_options(), options);
@@ -1844,6 +1868,9 @@ void ParseRequest(
 {
     *mutablePath = FromProto<NYPath::TRichYPath>(req.path());
     mutableOptions->CookieCount = req.cookie_count();
+    if (req.has_timeout()) {
+        mutableOptions->Timeout = TDuration::FromValue(req.timeout());
+    }
     if (req.has_transactional_options()) {
         FromProto(mutableOptions, req.transactional_options());
     }

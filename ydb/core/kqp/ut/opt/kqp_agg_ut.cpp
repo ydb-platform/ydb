@@ -192,11 +192,8 @@ Y_UNIT_TEST_SUITE(KqpAgg) {
     }
 
     Y_UNIT_TEST_TWIN(AggHashShuffle, UseSink) {
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
-        auto settings = TKikimrSettings()
-            .SetAppConfig(appConfig)
-            .SetWithSampleTables(true);
+        auto settings = TKikimrSettings().SetWithSampleTables(true);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
 
         TKikimrRunner kikimr(settings);
         {
@@ -309,6 +306,17 @@ Y_UNIT_TEST_SUITE(KqpAgg) {
                        sum(CASE WHEN (t1.a IN (SELECT t3.a FROM t3)) THEN 1 ELSE 0 END)
                 FROM t1;
             )",
+           R"(
+                SELECT sum(CASE WHEN (t1.a IN (SELECT t2.a FROM t2)) THEN 1 ELSE 0 END),
+                       sum(CASE WHEN (t1.a IN (SELECT t3.a FROM t3)) THEN 1 ELSE 0 END)
+                FROM t1 left outer join t2 on t1.a = t2.a
+                        left outer join t3 on t1.a = t3.a;
+            )",
+        };
+
+        std::vector<TString> results = {
+            R"([[[3];[3]]])",
+            R"([[[3];[3]]])",
         };
 
         for (ui32 i = 0; i < queries.size(); ++i) {
@@ -323,7 +331,7 @@ Y_UNIT_TEST_SUITE(KqpAgg) {
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
 
             TString output = FormatResultSetYson(result.GetResultSet(0));
-            UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(result.GetResultSet(0)), "[[[3];[3]]]");
+            UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(result.GetResultSet(0)), results[i]);
         }
     }
 }

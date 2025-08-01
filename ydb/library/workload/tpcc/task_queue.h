@@ -212,7 +212,7 @@ struct TTask<void> {
 class ITaskQueue {
 public:
     struct TThreadStats {
-        constexpr static size_t BUCKET_COUNT = 128;
+        constexpr static size_t BUCKET_COUNT = 4096;
         constexpr static size_t MAX_HIST_VALUE = 32768;
 
         TThreadStats() = default;

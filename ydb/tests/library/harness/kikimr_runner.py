@@ -10,6 +10,7 @@ from importlib_resources import read_binary
 from google.protobuf import text_format
 import yaml
 import subprocess
+import requests
 
 from six.moves.queue import Queue
 
@@ -20,9 +21,8 @@ from . import daemon
 from . import kikimr_config
 from . import kikimr_node_interface
 from . import kikimr_cluster_interface
-
-import ydb.core.protos.blobstorage_config_pb2 as bs
 from ydb.public.api.protos.ydb_status_codes_pb2 import StatusIds
+import ydb.core.protos.blobstorage_config_pb2 as bs
 from ydb.tests.library.predicates.blobstorage import blobstorage_controller_has_started_on_some_node
 
 
@@ -388,6 +388,12 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
         if token is not None:
             env = os.environ.copy()
             env['YDB_TOKEN'] = token
+        elif self.__configurator.enable_static_auth:
+            # If no token is provided, use the default user from the configuration
+            default_user = next(iter(self.__configurator.yaml_config["domains_config"]["security_config"]["default_users"]))
+            env = os.environ.copy()
+            env['YDB_USER'] = default_user["name"]
+            env['YDB_PASSWORD'] = default_user["password"]
 
         logger.debug("Executing command = {}".format(full_command))
         try:
@@ -494,8 +500,17 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
             )
             pools[p['name']] = p['kind']
 
+        root_token = self.__configurator.default_clusteradmin
+        if not root_token and self.__configurator.enable_static_auth:
+            root_token = requests.post("http://localhost:%s/login" % self.nodes[1].mon_port, json={
+                "user": self.__configurator.yaml_config["domains_config"]["security_config"]["default_users"][0]["name"],
+                "password": self.__configurator.yaml_config["domains_config"]["security_config"]["default_users"][0]["password"]
+            }).cookies.get('ydb_session_id')
+            logger.info("Obtained root token: %s" % root_token)
+
         if len(pools) > 0:
-            self.client.bind_storage_pools(self.domain_name, pools)
+            logger.info("Binding storage pools to domain %s: %s", self.domain_name, pools)
+            self.client.bind_storage_pools(self.domain_name, pools, token=root_token)
             default_pool_name = list(pools.keys())[0]
         else:
             default_pool_name = ""
@@ -504,7 +519,7 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
         logger.info("Cluster started and initialized")
 
         if bs_needed:
-            self.client.add_config_item(read_binary(__name__, "resources/default_profile.txt"), token=self.__configurator.default_clusteradmin)
+            self.client.add_config_item(read_binary(__name__, "resources/default_profile.txt"), token=root_token)
 
     def __run_node(self, node_id):
         """
@@ -864,6 +879,10 @@ class KikimrExternalNode(daemon.ExternalNodeDaemon, kikimr_node_interface.NodeIn
             kikimr_next_path,
             node_id,
             host,
+            datacenter,
+            rack,
+            bridge_pile_name,
+            bridge_pile_id,
             ssh_username,
             port,
             mon_port,
@@ -879,6 +898,10 @@ class KikimrExternalNode(daemon.ExternalNodeDaemon, kikimr_node_interface.NodeIn
         self.__grpc_port = port
         self.__mon_port = mon_port
         self.__ic_port = ic_port
+        self.__datacenter = datacenter
+        self.__rack = rack
+        self.__bridge_pile_name = bridge_pile_name
+        self.__bridge_pile_id = bridge_pile_id
         self.__configurator = configurator
         self.__mbus_port = mbus_port
         self.logger = logger.getChild(self.__class__.__name__)
@@ -967,6 +990,22 @@ mon={mon}""".format(
     @property
     def host(self):
         return self.__host
+
+    @property
+    def datacenter(self):
+        return self.__datacenter
+
+    @property
+    def rack(self):
+        return self.__rack
+
+    @property
+    def bridge_pile_name(self):
+        return self.__bridge_pile_name
+
+    @property
+    def bridge_pile_id(self):
+        return self.__bridge_pile_id
 
     @property
     def port(self):

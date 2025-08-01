@@ -830,7 +830,7 @@ bool TCms::CheckSysTabletsNode(const TActionOptions &opts,
                                const TNodeInfo &node,
                                TErrorInfo &error) const
 {
-    if (node.Services & EService::DynamicNode || node.PDisks.size()) {
+    if (node.Services & EService::DynamicNode) {
         return true;
     }
 
@@ -1253,6 +1253,9 @@ void TCms::AddHostState(const TClusterInfoPtr &clusterInfo, const TNodeInfo &nod
         host->SetPileId(*node.PileId);
     }
     node.Location.Serialize(host->MutableLocation(), false);
+    if (const auto bridgePileName = node.Location.GetBridgePileName(); bridgePileName) {
+        host->MutableLocation()->SetBridgePileName(*bridgePileName);
+    }
     for (auto marker : node.Markers) {
         host->AddMarkers(marker);
     }

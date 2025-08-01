@@ -40,8 +40,8 @@ TUnboxedImmutableComputationNode::TUnboxedImmutableComputationNode(TMemoryUsageI
 }
 
 TUnboxedImmutableComputationNode::~TUnboxedImmutableComputationNode() {
-    MKQL_MEM_RETURN(MemInfo_, this, sizeof(*this));
     TlsAllocState->UnlockObject(UnboxedValue_);
+    MKQL_MEM_RETURN(MemInfo_, this, sizeof(*this));
 }
 
 NUdf::TUnboxedValue TUnboxedImmutableComputationNode::GetValue(TComputationContext& compCtx) const {

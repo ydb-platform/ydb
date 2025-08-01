@@ -680,6 +680,11 @@ public:
             }
         }
 
+        if (newShards.empty()) {
+            NotifyCA();
+            return;
+        }
+
         YQL_ENSURE(!newShards.empty());
         if (!state->IsFake) {
             Counters->IteratorsReadSplits->Add(newShards.size() - 1);
@@ -805,11 +810,23 @@ public:
 
         state->FillEvRead(*ev, KeyColumnTypes, Settings->GetReverse());
 
-        for (const auto& column : Settings->GetColumns()) {
+        BatchOperationReadColumns.clear();
+
+        auto columnsSize = static_cast<size_t>(Settings->GetColumns().size());
+        size_t notSystemColumnsIndex = 0;
+        for (size_t i = 0; i < columnsSize; ++i) {
+            const auto& column = Settings->GetColumns()[i];
             if (!IsSystemColumn(column.GetId())) {
                 record.AddColumns(column.GetId());
+
+                if (Settings->GetIsBatch() && column.GetIsPrimary()) {
+                    BatchOperationReadColumns.emplace_back(notSystemColumnsIndex, column.GetId());
+                }
+                notSystemColumnsIndex++;
             }
         }
+
+        YQL_ENSURE(!Settings->GetIsBatch() || BatchOperationReadColumns.size() == KeyColumnTypes.size());
 
         if (CollectDuplicateStats) {
             for (const auto& column : DuplicateCheckExtraColumns) {
@@ -919,7 +936,8 @@ public:
     }
 
     void HandleRead(TEvDataShard::TEvReadResult::TPtr ev) {
-        const auto& record = ev->Get()->Record;
+        auto& msg = *ev->Get();
+        const auto& record = msg.Record;
         auto id = record.GetReadId();
         if (!Reads[id] || Reads[id].Finished) {
             // dropped read
@@ -1039,19 +1057,20 @@ public:
         CA_LOG_D("Taken " << Locks.size() << " locks");
         Reads[id].SerializedContinuationToken = record.GetContinuationToken();
 
-        ui64 seqNo = ev->Get()->Record.GetSeqNo();
-        Reads[id].RegisterMessage(*ev->Get());
+        ui64 seqNo = record.GetSeqNo();
+        Reads[id].RegisterMessage(msg);
 
-        if (Settings->GetIsBatch() && ev->Get()->GetRowsCount() > 0) {
-            SerializedEndRow = TSerializedCellVec{ev->Get()->GetCells(ev->Get()->GetRowsCount() - 1)};
+        if (Settings->GetIsBatch() && msg.GetRowsCount() > 0) {
+            auto cells = msg.GetCells(msg.GetRowsCount() - 1);
+            BatchOperationMaxRow = TSerializedCellVec{cells};
         }
 
-        ReceivedRowCount += ev->Get()->GetRowsCount();
+        ReceivedRowCount += msg.GetRowsCount();
 
         CA_LOG_D(TStringBuilder() << "new data for read #" << id
-            << " seqno = " << ev->Get()->Record.GetSeqNo()
-            << " finished = " << ev->Get()->Record.GetFinished());
-        CA_LOG_T(TStringBuilder() << "read #" << id << " pushed " << DebugPrintCells(ev->Get()) << " continuation token " << DebugPrintContionuationToken(record.GetContinuationToken()));
+            << " seqno = " << seqNo
+            << " finished = " << record.GetFinished());
+        CA_LOG_T(TStringBuilder() << "read #" << id << " pushed " << DebugPrintCells(&msg) << " continuation token " << DebugPrintContionuationToken(record.GetContinuationToken()));
 
         Results.push({Reads[id].Shard->TabletId, THolder<TEventHandle<TEvDataShard::TEvReadResult>>(ev.Release()), id, seqNo});
         NotifyCA();
@@ -1495,15 +1514,19 @@ public:
         for (auto& lock : BrokenLocks) {
             resultInfo.AddLocks()->CopyFrom(lock);
         }
+        if (Settings->GetIsBatch() && !BatchOperationMaxRow.GetCells().empty()) {
+            std::vector<TCell> keyRow;
+            auto cells = BatchOperationMaxRow.GetCells();
 
-        if (Settings->GetIsBatch() && SerializedEndRow) {
-            for (const auto& column : Settings->GetColumns()) {
-                if (!IsSystemColumn(column.GetId())) {
-                    resultInfo.AddEndRowColumnIds(column.GetId());
-                }
+            for (const auto& meta : BatchOperationReadColumns) {
+                keyRow.push_back(cells[meta.ReadIndex]);
+                resultInfo.AddBatchOperationKeyIds(meta.ColumnId);
             }
 
-            resultInfo.SetSerializedEndRow(SerializedEndRow.ReleaseBuffer());
+            if (!keyRow.empty()) {
+                YQL_ENSURE(keyRow.size() == KeyColumnTypes.size());
+                resultInfo.SetBatchOperationMaxKey(TSerializedCellVec::Serialize(keyRow));
+            }
         }
 
         result.PackFrom(resultInfo);
@@ -1626,13 +1649,14 @@ private:
     TVector<TResultColumn> DuplicateCheckExtraColumns;
     TVector<ui32> DuplicateCheckColumnRemap;
 
-    struct TReadColumnInfo {
-        ui32 Id;
-        NScheme::TTypeInfo TypeInfo;
-        bool IsPrimary = false;
+    struct TBatchOperationColumnMeta {
+        size_t ReadIndex;
+        ui32 ColumnId;
     };
 
-    TSerializedCellVec SerializedEndRow; // For BATCH operations only
+    // For BATCH operations only
+    TVector<TBatchOperationColumnMeta> BatchOperationReadColumns;
+    TSerializedCellVec BatchOperationMaxRow;
 };
 
 

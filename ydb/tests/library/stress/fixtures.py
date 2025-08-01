@@ -20,14 +20,16 @@ class StressFixture:
 
         self.cluster = KiKiMR(self.config)
         self.cluster.start()
+        self.database = "/Root"
         self.endpoint = "grpc://%s:%s" % ('localhost', self.cluster.nodes[1].port)
+        self.mon_endpoint = f"http://localhost:{self.cluster.nodes[1].mon_port}"
 
         self.driver = ydb.Driver(
             ydb.DriverConfig(
-                database='/Root',
+                database=self.database,
                 endpoint=self.endpoint
             )
         )
-        self.driver.wait()
+        self.driver.wait(timeout=60)
         yield
         self.cluster.stop()

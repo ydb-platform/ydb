@@ -74,8 +74,8 @@ public:
 
     void Bootstrap(const TActorContext& ctx) {
         Y_UNUSED(ctx);
-        Request_->GetStreamCtx()->Attach(SelfId());
-        Request_->GetStreamCtx()->Read();
+        Request_->Attach(SelfId());
+        Request_->Read();
         Become(&TBiStreamPingRequestRPC::StateWork);
     }
 
@@ -93,12 +93,22 @@ public:
     void Handle(TGRpcRequestProxy::TEvRefreshTokenResponse::TPtr& ev, const TActorContext& ctx) {
         LOG_ERROR_S(ctx, NKikimrServices::GRPC_SERVER,
             "Received TEvRefreshTokenResponse, Authenticated = " << ev->Get()->Authenticated);
-        Request_->GetStreamCtx()->Write(std::move(Resp_));
+        Request_->Write(std::move(Resp_));
+        Ydb::StatusIds::StatusCode status = ev->Get()->Authenticated ? Ydb::StatusIds::SUCCESS : Ydb::StatusIds::UNAUTHORIZED;
         auto grpcStatus = grpc::Status(ev->Get()->Authenticated ?
             grpc::StatusCode::OK : grpc::StatusCode::UNAUTHENTICATED,
             "");
-        Request_->GetStreamCtx()->Finish(grpcStatus);
+        Request_->Finish(status, grpcStatus);
         PassAway();
+    }
+
+    void PassAway() override {
+        if (Request_) {
+            // Write to audit log if it is needed and we have not written yet.
+            Request_->AuditLogRequestEnd(Ydb::StatusIds::SUCCESS);
+        }
+
+        TActorBootstrapped::PassAway();
     }
 
     STFUNC(StateWork) {

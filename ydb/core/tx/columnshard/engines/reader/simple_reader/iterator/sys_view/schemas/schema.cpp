@@ -22,38 +22,12 @@ std::shared_ptr<arrow::Schema> TSchemaAdapter::GetPKSchema() {
 
 TIndexInfo TSchemaAdapter::GetIndexInfo(
     const std::shared_ptr<IStoragesManager>& storagesManager, const std::shared_ptr<TSchemaObjectsCache>& schemaObjectsCache) const {
-    //PrimaryIndexSchemaStats
-
-    static NKikimrSchemeOp::TColumnTableSchema proto = []() {
-        NKikimrSchemeOp::TColumnTableSchema proto;
-        ui32 currentId = 0;
-        const auto pred = [&](const TString& name, const NScheme::TTypeId typeId, const std::optional<ui32> entityId = std::nullopt) {
-            auto* col = proto.AddColumns();
-            col->SetId(entityId.value_or(++currentId));
-            col->SetName(name);
-            col->SetTypeId(typeId);
-        };
-        pred("TabletId", NScheme::NTypeIds::Uint64);
-        pred("PresetId", NScheme::NTypeIds::Uint64);
-        pred("SchemaVersion", NScheme::NTypeIds::Uint64);
-        pred("SchemaSnapshotPlanStep", NScheme::NTypeIds::Uint64);
-        pred("SchemaSnapshotTxId", NScheme::NTypeIds::Uint64);
-        pred("SchemaDetails", NScheme::NTypeIds::Utf8);
-
-        proto.AddKeyColumnNames("TabletId");
-        proto.AddKeyColumnNames("PresetId");
-        proto.AddKeyColumnNames("SchemaVersion");
-        return proto;
-    }();
-
-    auto indexInfo = TIndexInfo::BuildFromProto(GetPresetId(), proto, storagesManager, schemaObjectsCache);
-    AFL_VERIFY(indexInfo);
-    return std::move(*indexInfo);
+    return TBase::GetIndexInfo<NKikimr::NSysView::Schema::PrimaryIndexSchemaStats>(storagesManager, schemaObjectsCache);
 }
 
-std::shared_ptr<ITableMetadataAccessor> TSchemaAdapter::BuildMetadataAccessor(const TString& tableName,
-    const NColumnShard::TSchemeShardLocalPathId externalPathId, const std::optional<NColumnShard::TInternalPathId> internalPathId) const {
-    return std::make_shared<TAccessor>(tableName, externalPathId, internalPathId);
+std::shared_ptr<ITableMetadataAccessor> TSchemaAdapter::BuildMetadataAccessor(
+    const TString& tableName, const NColumnShard::TUnifiedOptionalPathId pathId) const {
+    return std::make_shared<TAccessor>(tableName, pathId);
 }
 
 }   // namespace NKikimr::NOlap::NReader::NSimple::NSysView::NSchemas

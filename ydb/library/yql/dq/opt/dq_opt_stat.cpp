@@ -416,7 +416,13 @@ void InferStatisticsForMapJoin(const TExprNode::TPtr& input, TTypeAnnotationCont
  * Compute statistics for grace join
  * FIX: Currently we treat all join the same from the cost perspective, need to refine cost function
  */
-void InferStatisticsForGraceJoin(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx, const IProviderContext& ctx, TOptimizerHints hints) {
+void InferStatisticsForGraceJoin(
+    const TExprNode::TPtr& input,
+    TTypeAnnotationContext* typeCtx,
+    const IProviderContext& ctx,
+    TOptimizerHints hints,
+    TShufflingOrderingsByJoinLabels* shufflingOrderingsByJoinLabels
+) {
     auto inputNode = TExprBase(input);
     auto join = inputNode.Cast<TCoGraceJoinCore>();
 
@@ -480,21 +486,29 @@ void InferStatisticsForGraceJoin(const TExprNode::TPtr& input, TTypeAnnotationCo
 
     resStats->Labels = std::make_shared<TVector<TString>>();
     resStats->Labels->insert(resStats->Labels->begin(), unionOfLabels.begin(), unionOfLabels.end());
-    typeCtx->SetStats(join.Raw(), resStats);
-    YQL_CLOG(TRACE, CoreDq) << "Infer statistics for GraceJoin: " << resStats->ToString();
+
+    if (shufflingOrderingsByJoinLabels) {
+        auto maybeShufflingOrdering = shufflingOrderingsByJoinLabels->GetShufflingOrderigsByJoinLabels(unionOfLabels);
+        if (maybeShufflingOrdering) {
+            resStats->LogicalOrderings = *maybeShufflingOrdering;
+        }
+    }
+
+    YQL_CLOG(TRACE, CoreDq) << "Infer statistics for GraceJoin with labels: " << "[" << JoinSeq(", ", unionOfLabels) << "]" << ", stats: " << resStats->ToString();
+    typeCtx->SetStats(join.Raw(), std::move(resStats));
 }
 
 /**
  * Infer statistics for DqJoin
  * DqJoin is an intermediary join representantation in Dq
  */
-void InferStatisticsForDqJoin(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx, const IProviderContext& ctx, TOptimizerHints hints) {
+void InferStatisticsForDqJoinBase(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx, const IProviderContext& ctx, TOptimizerHints hints) {
     if (auto stats = typeCtx->GetStats(TExprBase(input).Raw())) {
         return;
     }
 
     auto inputNode = TExprBase(input);
-    auto join = inputNode.Cast<TDqJoin>();
+    auto join = inputNode.Cast<TDqJoinBase>();
 
     auto leftArg = join.LeftInput();
     auto rightArg = join.RightInput();
@@ -506,9 +520,12 @@ void InferStatisticsForDqJoin(const TExprNode::TPtr& input, TTypeAnnotationConte
         return;
     }
 
-    auto joinAlgo = FromString<EJoinAlgoType>(join.JoinAlgo().StringValue());
-    if (joinAlgo == EJoinAlgoType::Undefined && join.JoinType().StringValue() != "Cross" /* we don't set any join algo to cross join */) {
-        return;
+    EJoinAlgoType joinAlgo = EJoinAlgoType::Undefined;
+    if (auto dqJoin = TMaybeNode<TDqJoin>(input)) {
+        joinAlgo = FromString<EJoinAlgoType>(dqJoin.Cast().JoinAlgo().StringValue());
+        if (joinAlgo == EJoinAlgoType::Undefined && join.JoinType().StringValue() != "Cross" /* we don't set any join algo to cross join */) {
+            return;
+        }
     }
 
     auto leftLabels = InferLabels(leftStats, join.LeftJoinKeyNames());
@@ -553,6 +570,11 @@ void InferStatisticsForDqJoin(const TExprNode::TPtr& input, TTypeAnnotationConte
 
     resStats->Labels = std::make_shared<TVector<TString>>();
     resStats->Labels->insert(resStats->Labels->begin(), unionOfLabels.begin(), unionOfLabels.end());
+
+    if (auto maybeMapJoin = TMaybeNode<TDqPhyMapJoin>(inputNode.Raw())) {
+        resStats->SortingOrderings = leftStats->SortingOrderings;
+    }
+
     typeCtx->SetStats(join.Raw(), resStats);
     YQL_CLOG(TRACE, CoreDq) << "Infer statistics for DqJoin: " << resStats->ToString();
 }
@@ -738,7 +760,7 @@ void InferStatisticsForAggregateBase(const TExprNode::TPtr& input, TTypeAnnotati
     aggStats->Aliases = inputStats->Aliases;
 
     auto orderingInfo = GetAggregationBaseShuffleOrderingInfo(agg, typeCtx->OrderingsFSM, inputStats->TableAliases.Get());
-    aggStats->ShuffleOrderingIdx = orderingInfo.OrderingIdx;
+    aggStats->ShufflingOrderingIdx = orderingInfo.OrderingIdx;
     if (typeCtx->OrderingsFSM) {
         aggStats->LogicalOrderings = typeCtx->OrderingsFSM->CreateState(orderingInfo.OrderingIdx);
     }
@@ -951,8 +973,6 @@ std::shared_ptr<TOptimizerStatistics> RemoveSorting(const std::shared_ptr<TOptim
 
 std::shared_ptr<TOptimizerStatistics> RemoveSorting(const std::shared_ptr<TOptimizerStatistics>& stats, const TExprNode::TPtr& input) {
     if (
-        TCoTopBase::Match(input.Get()) ||
-        TCoSortBase::Match(input.Get()) ||
         TDqCnHashShuffle::Match(input.Get()) ||
         TDqCnBroadcast::Match(input.Get()) ||
         TDqCnUnionAll::Match(input.Get())
@@ -961,6 +981,32 @@ std::shared_ptr<TOptimizerStatistics> RemoveSorting(const std::shared_ptr<TOptim
     } else {
         return stats;
     }
+}
+
+std::shared_ptr<TOptimizerStatistics> RemoveShuffling(const std::shared_ptr<TOptimizerStatistics>& stats) {
+    if (stats->LogicalOrderings.HasState()) {
+        auto newStats = *stats;
+        newStats.LogicalOrderings.RemoveState();
+        return std::make_shared<TOptimizerStatistics>(std::move(newStats));
+    } else {
+        return stats;
+    }
+}
+
+std::shared_ptr<TOptimizerStatistics> RemoveShuffling(const std::shared_ptr<TOptimizerStatistics>& stats, const TExprNode::TPtr& input) {
+    if (
+        TDqCnMerge::Match(input.Get()) ||
+        TDqCnBroadcast::Match(input.Get()) ||
+        TDqCnUnionAll::Match(input.Get())
+    ) {
+        return RemoveShuffling(stats);
+    } else {
+        return stats;
+    }
+}
+
+std::shared_ptr<TOptimizerStatistics> RemoveOrderings(const std::shared_ptr<TOptimizerStatistics>& stats, const TExprNode::TPtr& input) {
+    return RemoveSorting(RemoveShuffling(stats, input), input);
 }
 
 void InferStatisticsForAsStruct(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx) {
@@ -1074,6 +1120,34 @@ void InferStatisticsForSortBase(const TExprNode::TPtr& input, TTypeAnnotationCon
     typeCtx->SetStats(inputNode.Raw(), std::move(topStats));
 }
 
+template <typename TAggregationCallable>
+void InferStatisticsForAggregationCallable(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx) {
+    auto inputNode = TExprBase(input);
+    auto aggr = inputNode.Cast<TAggregationCallable>();
+
+    auto inputStats = typeCtx->GetStats(aggr.Input().Raw());
+    if (!inputStats) {
+        return;
+    }
+
+    TOptimizerStatistics aggStats = *inputStats;
+
+    auto& shufflingsFSM = typeCtx->OrderingsFSM;
+    if (shufflingsFSM) {
+        auto shuffling = TShuffling(GetKeySelectorOrdering(aggr.KeySelectorLambda()));
+        std::int64_t orderingIdx = shufflingsFSM->FDStorage.FindShuffling(shuffling, inputStats->TableAliases.Get());
+        if (!inputStats->LogicalOrderings.ContainsShuffle(orderingIdx)) {
+            aggStats.LogicalOrderings = shufflingsFSM->CreateState(orderingIdx);
+        }
+        aggStats.ShufflingOrderingIdx = orderingIdx;
+    }
+
+    YQL_CLOG(TRACE, CoreDq) << "Infer statistics for " << input->Content() << " with stats: " << aggStats.ToString();
+    typeCtx->SetStats(aggr.Raw(), std::make_shared<TOptimizerStatistics>(std::move(aggStats)));
+}
+
+template void InferStatisticsForAggregationCallable<TCoShuffleByKeys>(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx);
+
 void InferStatisticsForEquiJoin(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx) {
     auto equiJoin = TExprBase(input).Cast<TCoEquiJoin>();
 
@@ -1133,42 +1207,38 @@ TOrderingInfo GetAggregationBaseShuffleOrderingInfo(
     const TSimpleSharedPtr<TOrderingsStateMachine>& shufflingsFSM,
     TTableAliasMap* tableAlias
 ) {
-    TVector<TJoinColumn> shuffling;
-    shuffling.reserve(aggregationBase.Keys().Size());
+    TVector<TJoinColumn> ordering;
+    ordering.reserve(aggregationBase.Keys().Size());
     for (const auto& key: aggregationBase.Keys()) {
         TString aggregationKey = key.StringValue();
-        shuffling.emplace_back(TJoinColumn::FromString(aggregationKey));
+        ordering.emplace_back(TJoinColumn::FromString(aggregationKey));
     }
 
     std::int64_t orderingIdx = -1;
     if (shufflingsFSM) {
-        orderingIdx = shufflingsFSM->FDStorage.FindInterestingOrderingIdx(shuffling, TOrdering::EShuffle, tableAlias);
+        auto shuffling = TShuffling(ordering);
+        orderingIdx = shufflingsFSM->FDStorage.FindShuffling(shuffling, tableAlias);
     }
 
     return TOrderingInfo{
         .OrderingIdx = orderingIdx,
-        .Ordering = std::move(shuffling)
+        .Ordering = std::move(ordering)
     };
 }
 
-
-template <typename TSortCallable>
-TOrderingInfo GetSortingOrderingInfoImpl(
-    const TSortCallable& sortCallable,
-     const TSimpleSharedPtr<TOrderingsStateMachine>& sortingsFSM,
-    TTableAliasMap* tableAlias
+TVector<TJoinColumn> GetKeySelectorOrdering(
+    const NNodes::TCoLambda& keySelector
 ) {
-    const auto& keySelector = sortCallable.KeySelectorLambda();
-    TVector<TJoinColumn> sorting;
+    TVector<TJoinColumn> ordering;
     if (auto body = keySelector.Body().template Maybe<TCoMember>()) {
-        sorting.push_back(TJoinColumn::FromString(body.Cast().Name().StringValue()));
+        ordering.push_back(TJoinColumn::FromString(body.Cast().Name().StringValue()));
     } else if (auto body = keySelector.Body().template Maybe<TExprList>()) {
         for (size_t i = 0; i < body.Cast().Size(); ++i) {
             auto item = body.Cast().Item(i);
 
-            auto collectMember = [&sorting](auto&& self, const TExprBase& item) -> void {
+            auto collectMember = [&ordering](auto&& self, const TExprBase& item) -> void {
                 if (auto member = item.Maybe<TCoMember>()) {
-                    sorting.push_back(TJoinColumn::FromString(member.Cast().Name().StringValue()));
+                    ordering.push_back(TJoinColumn::FromString(member.Cast().Name().StringValue()));
                 }
 
                 if (auto coalesce = item.Maybe<TCoCoalesce>()) {
@@ -1179,6 +1249,18 @@ TOrderingInfo GetSortingOrderingInfoImpl(
             collectMember(collectMember, item);
         }
     }
+
+    return ordering;
+}
+
+template <typename TSortCallable>
+TOrderingInfo GetSortingOrderingInfoImpl(
+    const TSortCallable& sortCallable,
+     const TSimpleSharedPtr<TOrderingsStateMachine>& sortingsFSM,
+    TTableAliasMap* tableAlias
+) {
+    const auto& keySelector = sortCallable.KeySelectorLambda();
+    TVector<TJoinColumn> sorting = GetKeySelectorOrdering(keySelector);
 
     auto getDirection = [] (TExprBase expr) {
         if (!expr.Maybe<TCoBool>()) {

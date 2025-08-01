@@ -940,14 +940,14 @@ TEST(MakeTime, SysSecondsLimits) {
   }
 }
 
-TEST(MakeTime, LocalTimeLibC) {
+TEST(MakeTime, DISABLED_LocalTimeLibC) {
   // Checks that cctz and libc agree on transition points in [1970:2037].
   //
   // We limit this test case to environments where:
   //  1) we know how to change the time zone used by localtime()/mktime(),
   //  2) cctz and localtime()/mktime() will use similar-enough tzdata, and
   //  3) we have some idea about how mktime() behaves during transitions.
-#if defined(__linux__) && defined(__GLIBC__) && !defined(__ANDROID__) && defined(CCTZ_TEST_LIBC_LOCALTIME)
+#if defined(__linux__) && defined(__GLIBC__) && !defined(__ANDROID__)
   const char* const ep = getenv("TZ");
   std::string tz_name = (ep != nullptr) ? ep : "";
   for (const char* const* np = kTimeZoneNames; *np != nullptr; ++np) {

@@ -11,7 +11,7 @@
 `Uint64` | ✓ | ✓
 `Float` | ✓ | ☓
 `Double` | ✓ | ☓
-`Decimal` | ☓ | ☓
+`Decimal` | ✓ | ☓
 `String` | ✓ | ✓
 `Utf8` | ✓ | ✓
 `Json` | ✓ | ☓

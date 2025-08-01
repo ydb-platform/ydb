@@ -156,11 +156,7 @@ private:
         sql << "select `key`, `created`, " << revName << " as `modified`, 0L as `version`, `value`, `lease` from $Victims;" << std::endl;
         sql << "delete from `current` on select `key` from $Victims;" << std::endl;
         sql << "delete from `leases` where `id` in $Leases;" << std::endl;
-        if constexpr (NotifyWatchtower) {
-            sql << "select `key`, `value`, `created`, `modified`, `version`, `lease` from $Victims;" << std::endl;
-        } else {
-            sql << "select count(*) from $Victims;" << std::endl;
-        }
+        sql << "select count(*) from $Victims;" << std::endl;
 
         Stuff->Client->ExecuteQuery(sql.str(), TTxControl::BeginTx().CommitTx(), params.Build()).Subscribe([my = this->SelfId(), stuff = TSharedStuff::TWeakPtr(Stuff)](const auto& future) {
             if (const auto lock = stuff.lock()) {
@@ -184,22 +180,8 @@ private:
             }
         } else {
             ExpiredLeases.clear();
-            if constexpr (NotifyWatchtower) {
-                for (auto parser = NYdb::TResultSetParser(ev->Get()->Results.front()); parser.TryNextRow(); ++deleted) {
-                    TData oldData;
-                    oldData.Value = NYdb::TValueParser(parser.GetValue("value")).GetString();
-                    oldData.Created = NYdb::TValueParser(parser.GetValue("created")).GetInt64();
-                    oldData.Modified = NYdb::TValueParser(parser.GetValue("modified")).GetInt64();
-                    oldData.Version = NYdb::TValueParser(parser.GetValue("version")).GetInt64();
-                    oldData.Lease = NYdb::TValueParser(parser.GetValue("lease")).GetInt64();
-                    auto key = NYdb::TValueParser(parser.GetValue("key")).GetString();
-
-                    ctx.Send(Stuff->Watchtower, std::make_unique<TEvChange>(std::move(key), Revision, std::move(oldData)));
-                }
-            } else {
-                if (auto parser = NYdb::TResultSetParser(ev->Get()->Results.front()); parser.TryNextRow()) {
-                    deleted = NYdb::TValueParser(parser.GetValue(0)).GetUint64();
-                }
+            if (auto parser = NYdb::TResultSetParser(ev->Get()->Results.front()); parser.TryNextRow()) {
+                deleted = NYdb::TValueParser(parser.GetValue(0)).GetUint64();
             }
         }
 

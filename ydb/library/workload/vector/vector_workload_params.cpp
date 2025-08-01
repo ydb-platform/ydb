@@ -52,6 +52,8 @@ void TVectorWorkloadParams::ConfigureOpts(NLastGetopt::TOpts& opts, const EComma
             .DefaultValue(10).StoreResult(&RecallThreads);
         opts.AddLongOption( "recall", "Measure recall metrics. It trains on 'targets' vector by bruce-force search.")
             .StoreTrue(&Recall);
+        opts.AddLongOption( "non-indexed", "Take vector settings from the index, but search without the index.")
+            .StoreTrue(&NonIndexedSearch);
     };
 
     switch (commandType) {
@@ -146,6 +148,10 @@ void TVectorWorkloadParams::Init() {
         Y_ABORT_UNLESS(tableDescription.GetPrimaryKeyColumns().size() == 1,
             "Only single key is supported. But table %s has %d key columns", QueryTableName.c_str(), tableDescription.GetPrimaryKeyColumns().size());
         QueryTableKeyColumn = tableDescription.GetPrimaryKeyColumns().at(0);
+    }
+
+    if (NonIndexedSearch) {
+        IndexName = "";
     }
 }
 

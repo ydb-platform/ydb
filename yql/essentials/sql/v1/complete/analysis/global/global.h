@@ -18,6 +18,13 @@ namespace NSQLComplete {
         TString Cluster;
     };
 
+    struct TFunctionContext {
+        TString Name;
+        size_t ArgumentNumber = 0;
+
+        friend bool operator==(const TFunctionContext& lhs, const TFunctionContext& rhs) = default;
+    };
+
     // TODO(YQL-19747): Try to refactor to use Map/Set data structures
     struct TColumnContext {
         TVector<TAliased<TTableId>> Tables;
@@ -37,7 +44,7 @@ namespace NSQLComplete {
     struct TGlobalContext {
         TMaybe<TUseContext> Use;
         TVector<TString> Names;
-        TMaybe<TString> EnclosingFunction;
+        TMaybe<TFunctionContext> EnclosingFunction;
         TMaybe<TColumnContext> Column;
     };
 

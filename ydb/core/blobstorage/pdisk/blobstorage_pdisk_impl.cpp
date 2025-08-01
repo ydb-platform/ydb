@@ -1630,6 +1630,10 @@ void TPDisk::WhiteboardReport(TWhiteboardReport &whiteboardReport) {
             pdiskState.SetEnforcedDynamicSlotSize(minSlotSize);
         }
         pDiskMetrics.SetState(state);
+        pDiskMetrics.SetSlotSizeInUnits(Cfg->SlotSizeInUnits);
+        if (ExpectedSlotCount) {
+            pDiskMetrics.SetSlotCount(ExpectedSlotCount);
+        }
     }
 
     PCtx->ActorSystem->Send(whiteboardReport.Sender, reportResult);
@@ -2071,6 +2075,7 @@ void TPDisk::YardResize(TYardResize &ev) {
     TStringStream errorReason;
     NKikimrProto::EReplyStatus errStatus = CheckOwnerAndRound(&ev, errorReason);
     if (errStatus != NKikimrProto::OK) {
+        Mon.YardResize.CountResponse();
         PCtx->ActorSystem->Send(ev.Sender, new NPDisk::TEvYardResizeResult(errStatus, {}, errorReason.Str()));
         return;
     }
@@ -2083,9 +2088,10 @@ void TPDisk::YardResize(TYardResize &ev) {
 
     auto result = std::make_unique<NPDisk::TEvYardResizeResult>(NKikimrProto::OK, GetStatusFlags(ev.Owner, ev.OwnerGroupType), TString());
     if (Cfg->ReadOnly) {
+        Mon.YardResize.CountResponse();
         PCtx->ActorSystem->Send(ev.Sender, result.release());
     } else {
-        WriteSysLogRestorePoint(new TCompletionEventSender(this, ev.Sender, result.release()),
+        WriteSysLogRestorePoint(new TCompletionEventSender(this, ev.Sender, result.release(), Mon.YardResize.Results),
             TReqId(TReqId::YardResize, 0), {});
     }
 }
@@ -2330,7 +2336,7 @@ void TPDisk::Slay(TSlay &evSlay) {
         TVDiskID vDiskId = evSlay.VDiskId;
         vDiskId.GroupGeneration = -1;
         auto it = VDiskOwners.find(vDiskId);
-        
+
         for (auto& pendingInit : PendingYardInits) {
             if (vDiskId == pendingInit->VDiskIdWOGeneration()) {
                 TStringStream str;
@@ -2999,7 +3005,7 @@ NKikimrProto::EReplyStatus TPDisk::CheckOwnerAndRound(TRequestBase* req, TString
 
     if (!IsOwnerUser(req->Owner)) {
         if (req->Owner == OwnerUnallocated && req->OwnerRound == 0) {
-            return NKikimrProto::OK; 
+            return NKikimrProto::OK;
         }
         err << "  ownerId# " << req->Owner << " < Begin# " << (ui32)OwnerBeginUser
             << " or >= End# " << (ui32)OwnerEndUser << " Marker# BPD72";
@@ -4343,7 +4349,7 @@ void TPDisk::ProgressShredState() {
                     << " ShredGeneration# " << ShredGeneration
                     << " ShredState# " << (ui32)ShredState);
                 // Send/schedule a request to retry
-                THolder<TCompletionEventSender> completion(new TCompletionEventSender(this, PCtx->PDiskActor, new NPDisk::TEvContinueShred())); 
+                THolder<TCompletionEventSender> completion(new TCompletionEventSender(this, PCtx->PDiskActor, new NPDisk::TEvContinueShred()));
                 if (ReleaseUnusedLogChunks(completion.Get())) {
                     ContinueShredsInFlight++;
                     WriteSysLogRestorePoint(completion.Release(), TReqId(TReqId::ShredPDisk, 0), {});
@@ -4367,7 +4373,7 @@ void TPDisk::ProgressShredState() {
             }
         }
         // Looks good, but there still can be chunks that need to be shredded still int transition between states.
-        // For example, log chunks are removed from the log chunk list on log cut but added to free chunk list on log cut 
+        // For example, log chunks are removed from the log chunk list on log cut but added to free chunk list on log cut
         // write operation completion. So, walk through the whole chunk list and check.
         for (ui32 chunkIdx = Format.SystemChunkCount; chunkIdx < ChunkState.size(); ++chunkIdx) {
             TChunkState &state = ChunkState[chunkIdx];
@@ -4382,7 +4388,7 @@ void TPDisk::ProgressShredState() {
                         << ", there are already ContinueShredsInFlight# " << ContinueShredsInFlight.load()
                         << " so just wait for it to arrive. "
                         << " ShredGeneration# " << ShredGeneration);
-                    return; 
+                    return;
                 } else {
                     LOG_DEBUG_S(*PCtx->ActorSystem, NKikimrServices::BS_PDISK_SHRED,
                         "PDisk# " << PCtx->PDiskId

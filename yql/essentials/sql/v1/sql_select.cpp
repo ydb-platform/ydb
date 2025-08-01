@@ -1351,94 +1351,46 @@ TSqlSelect::TSelectKindResult TSqlSelect::SelectKind(const TRule_select_kind_par
     }
 }
 
-template<typename TRule>
-TSourcePtr TSqlSelect::Build(const TRule& node, TPosition pos, TSelectKindResult&& first) {
-    if (node.GetBlock2().empty()) {
-        return std::move(first.Source);
+template <typename TRule>
+    requires std::same_as<TRule, TRule_union_op> ||
+             std::same_as<TRule, TRule_intersect_op>
+bool TSqlSelect::IsAllQualifiedOp(const TRule& node) {
+    if (!node.HasBlock2()) {
+        return false;
     }
 
-    auto blocks = node.GetBlock2();
+    const TString token = ToLowerUTF8(Token(node.GetBlock2().GetToken1()));
+    if (token == "all") {
+        return true;
+    } else if (token == "distinct") {
+        return false;
+    } else {
+        Y_ABORT("You should change implementation according to grammar changes. Invalid token: %s", token.c_str());
+    }
+}
 
-    TPosition opPos = pos; // Position of first select
-    TVector<TSortSpecificationPtr> orderBy;
-    bool assumeOrderBy = false;
-    TNodePtr skipTake;
-    TWriteSettings outermostSettings;
-    outermostSettings.Discard = first.Settings.Discard;
-
-    TVector<TSourcePtr> sources{ std::move(first.Source)};
-    bool currentQuantifier = false;
-    TString currentSelectOperator;
-
-    for (int i = 0; i < blocks.size(); ++i) {
-        auto& b = blocks[i];
-        const bool first = (i == 0);
-        const bool last = (i + 1 == blocks.size());
-        TSelectKindPlacement placement;
-        placement.IsLastInSelectOp = last;
-
-        TSelectKindResult next = SelectKind(b.GetRule_select_kind_parenthesis2(), pos, placement);
-        if (!next) {
-            return nullptr;
-        }
-
-        if (last) {
-            orderBy = next.SelectOpOrderBy;
-            assumeOrderBy = next.SelectOpAssumeOrderBy;
-            skipTake = next.SelectOpSkipTake;
-            outermostSettings.Label = next.Settings.Label;
-        }
-
-        auto selectOp = b.GetRule_select_op1();
-        const TString selectOperator = ToLowerUTF8(Token(selectOp.GetToken1()));
-        if (selectOperator == "union") {
-            // nothing
-        } else if (selectOperator == "intersect" || selectOperator == "except") {
-            if (!IsBackwardCompatibleFeatureAvailable(Ctx_.Settings.LangVer, MakeLangVersion(2025, 3), Ctx_.Settings.BackportMode)) {
-                Ctx_.Error() << "INTERSECT and EXCEPT are available starting from 2025.03 version.";
-                return nullptr;
-            }
-        } else {
-            Y_ABORT("You should change implementation according to grammar changes. Invalid token: %s", selectOperator.c_str());
-        }
-
-        bool quantifier = false;
-        if (selectOp.HasBlock2()) {
-            const TString token = ToLowerUTF8(Token(selectOp.GetBlock2().GetToken1()));
-            if (token == "all") {
-                quantifier = true;
-            } else if (token == "distinct") {
-                // nothing
-            } else {
-                Y_ABORT("You should change implementation according to grammar changes. Invalid token: %s", token.c_str());
-            }
-        }
-
-        // currentSelectOperator == "" <=> first == true
-        if (!first) {
-            if (currentSelectOperator == selectOperator) {
-                if (currentSelectOperator == "union") {
-                    if (currentQuantifier != quantifier) {
-                        auto source = BuildSelectOp(pos, std::move(sources), currentSelectOperator, currentQuantifier, {});
-                        sources.clear();
-                        sources.emplace_back(std::move(source));
-                    }
-                } else {
-                    Ctx_.Error() << "Multiple usage of INTERSECT and EXCEPT is not implemented yet.";
-                    return nullptr;
-                }
-            } else {
-                Ctx_.Error() << "Simultaneous usage of UNION, INTERSECT, and EXCEPT is not implemented yet.";
-                return nullptr;
-            }
-        }
-
-        sources.emplace_back(std::move(next.Source));
-        currentQuantifier = quantifier;
-        currentSelectOperator = selectOperator;
+template <typename TRule>
+    requires std::same_as<TRule, TRule_select_stmt> ||
+             std::same_as<TRule, TRule_select_unparenthesized_stmt>
+TSourcePtr TSqlSelect::BuildStmt(const TRule& node, TPosition& pos) {
+    TBuildExtra extra;
+    auto result = BuildUnionException(node, pos, extra);
+    pos = extra.FirstPos;
+    if (!result) {
+        return nullptr;
     }
 
-    auto result = BuildSelectOp(pos, std::move(sources), currentSelectOperator, currentQuantifier, outermostSettings);
+    if (extra.First.Source == extra.Last.Source) {
+        return result;
+    }
+
+    TVector<TSortSpecificationPtr> orderBy = extra.Last.SelectOpOrderBy;
+    bool assumeOrderBy = extra.Last.SelectOpAssumeOrderBy;
+    TNodePtr skipTake = extra.Last.SelectOpSkipTake;
+    TWriteSettings outermostSettings = {
+        .Discard = extra.First.Settings.Discard,
+        .Label = extra.Last.Settings.Label,
+    };
 
     if (orderBy) {
         TVector<TNodePtr> groupByExpr;
@@ -1454,48 +1406,177 @@ TSourcePtr TSqlSelect::Build(const TRule& node, TPosition pos, TSelectKindResult
         bool stream = false;
 
         TVector<TNodePtr> terms;
-        terms.push_back(BuildColumn(opPos, "*", ""));
+        terms.push_back(BuildColumn(pos, "*", ""));
 
-        result = BuildSelectCore(Ctx_, opPos, std::move(result), groupByExpr, groupBy, compactGroupBy, groupBySuffix,
+        result = BuildSelectCore(Ctx_, pos, std::move(result), groupByExpr, groupBy, compactGroupBy, groupBySuffix,
             assumeOrderBy, orderBy, having, std::move(winSpecs), legacyHoppingWindowSpec, std::move(terms),
             distinct, std::move(without), forceWithout, stream, outermostSettings, {}, {});
 
-        result = BuildSelect(opPos, std::move(result), skipTake);
+        result = BuildSelect(pos, std::move(result), skipTake);
     } else if (skipTake) {
-        result = BuildSelect(opPos, std::move(result), skipTake);
+        result = BuildSelect(pos, std::move(result), skipTake);
     }
 
     return result;
 }
 
-TSourcePtr TSqlSelect::Build(const TRule_select_stmt& node, TPosition& selectPos) {
-    TMaybe<TSelectKindPlacement> placement;
-    if (!node.GetBlock2().empty()) {
-        placement.ConstructInPlace();
-        placement->IsFirstInSelectOp = true;
+template <typename TRule>
+    requires std::same_as<TRule, TRule_select_stmt> ||
+             std::same_as<TRule, TRule_select_unparenthesized_stmt>
+TSourcePtr TSqlSelect::BuildUnionException(const TRule& node, TPosition& pos, TSqlSelect::TBuildExtra& extra) {
+    const TSelectKindPlacement firstPlacement = {
+        .IsFirstInSelectOp = true,
+        .IsLastInSelectOp = node.GetBlock2().empty(),
+    };
+
+    TSourcePtr first;
+    if constexpr (std::is_same_v<TRule, TRule_select_stmt>) {
+        first = BuildIntersection(node.GetRule_select_stmt_intersect1(), pos, firstPlacement, extra);
+    } else if constexpr (std::is_same_v<TRule, TRule_select_unparenthesized_stmt>) {
+        first = BuildIntersection(node.GetRule_select_unparenthesized_stmt_intersect1(), pos, firstPlacement, extra);
+    } else {
+        static_assert(false, "Change implementation according to grammar changes.");
     }
 
-    auto res = SelectKind(node.GetRule_select_kind_parenthesis1(), selectPos, placement);
-    if (!res) {
+    if (first == nullptr) {
         return nullptr;
     }
 
-    return Build(node, selectPos, std::move(res));
+    TVector<TSourcePtr> sources = {std::move(first)};
+    TString lastOp = "";
+    bool isLastAllQualified = false;
+
+    const auto& tail = node.GetBlock2();
+    for (int i = 0; i < tail.size(); ++i) {
+        const auto& nextBlock = tail[i];
+
+        TString nextOp = ToLowerUTF8(Token(nextBlock.GetRule_union_op1().GetToken1()));
+        bool isNextAllQualified = IsAllQualifiedOp(nextBlock.GetRule_union_op1());
+
+        TSelectKindPlacement nextPlacement = {
+            .IsFirstInSelectOp = false,
+            .IsLastInSelectOp = (i + 1 == tail.size()),
+        };
+        TSourcePtr next = BuildIntersection(nextBlock.GetRule_select_stmt_intersect2(), pos, nextPlacement, extra);
+        if (!next) {
+            return nullptr;
+        }
+
+        bool areArgsInflattable = ((isLastAllQualified != isNextAllQualified) ||
+                                   (lastOp != nextOp) ||
+                                   (nextOp != "union"));
+
+        if ((i != 0) && areArgsInflattable) {
+            auto source = BuildSelectOp(pos, std::move(sources), lastOp, isLastAllQualified, /* settings = */ {});
+            Y_ENSURE(source);
+
+            sources.clear();
+            sources.emplace_back(std::move(source));
+        }
+
+        sources.emplace_back(std::move(next));
+        lastOp = std::move(nextOp);
+        isLastAllQualified = isNextAllQualified;
+    }
+
+    if (tail.empty()) {
+        return sources[0];
+    }
+
+    Y_ENSURE(extra.First);
+    TWriteSettings outermostSettings;
+    outermostSettings.Discard = extra.First.Settings.Discard;
+    if (extra.Last) {
+        outermostSettings.Label = extra.Last.Settings.Label;
+    }
+
+    return BuildSelectOp(pos, std::move(sources), lastOp, isLastAllQualified, outermostSettings);
+}
+
+template <typename TRule>
+    requires std::same_as<TRule, TRule_select_stmt_intersect> ||
+             std::same_as<TRule, TRule_select_unparenthesized_stmt_intersect>
+TSourcePtr TSqlSelect::BuildIntersection(
+    const TRule& node,
+    TPosition& pos,
+    TSelectKindPlacement placement,
+    TSqlSelect::TBuildExtra& extra)
+{
+    const TSelectKindPlacement firstPlacement = {
+        .IsFirstInSelectOp = placement.IsFirstInSelectOp,
+        .IsLastInSelectOp = node.GetBlock2().empty() && placement.IsLastInSelectOp,
+    };
+
+    TSelectKindResult first;
+    if constexpr (std::is_same_v<TRule, TRule_select_stmt_intersect>) {
+        first = BuildAtom(node.GetRule_select_kind_parenthesis1(), pos, firstPlacement, extra);
+    } else if constexpr (std::is_same_v<TRule, TRule_select_unparenthesized_stmt_intersect>) {
+        first = BuildAtom(node.GetRule_select_kind_partial1(), pos, firstPlacement, extra);
+    } else {
+        static_assert(false, "Change implementation according to grammar changes.");
+    }
+
+    if (!first) {
+        return nullptr;
+    }
+
+    TSourcePtr result = first.Source;
+
+    const auto& tail = node.GetBlock2();
+    for (int i = 0; i < tail.size(); ++i) {
+        const auto& nextBlock = tail[i];
+
+        TString nextOp = ToLowerUTF8(Token(nextBlock.GetRule_intersect_op1().GetToken1()));
+        bool isNextAllQualified = IsAllQualifiedOp(nextBlock.GetRule_intersect_op1());
+
+        TSelectKindPlacement nextPlacement = {
+            .IsFirstInSelectOp = false,
+            .IsLastInSelectOp = (i + 1 == tail.size()) && placement.IsLastInSelectOp,
+        };
+        TSelectKindResult next = BuildAtom(nextBlock.GetRule_select_kind_parenthesis2(), pos, nextPlacement, extra);
+        if (!next) {
+            return nullptr;
+        }
+
+        result = BuildSelectOp(pos, {std::move(result), std::move(next.Source)}, nextOp, isNextAllQualified, /* settings = */ {});
+        Y_ENSURE(result);
+    }
+
+    return result;
+}
+
+template <typename TRule>
+    requires std::same_as<TRule, TRule_select_kind_parenthesis> ||
+             std::same_as<TRule, TRule_select_kind_partial>
+TSqlSelect::TSelectKindResult TSqlSelect::BuildAtom(
+    const TRule& node,
+    TPosition& pos,
+    TSelectKindPlacement placement,
+    TBuildExtra& extra)
+{
+    TSqlSelect::TSelectKindResult result;
+    if (placement.IsFirstInSelectOp && placement.IsLastInSelectOp) {
+        result = SelectKind(node, pos, /* placement = */ Nothing());
+    } else {
+        result = SelectKind(node, pos, placement);
+    }
+
+    if (placement.IsFirstInSelectOp) {
+        extra.First = result;
+        extra.FirstPos = pos;
+    }
+    if (placement.IsLastInSelectOp) {
+        extra.Last = result;
+    }
+    return result;
+}
+
+TSourcePtr TSqlSelect::Build(const TRule_select_stmt& node, TPosition& selectPos) {
+    return BuildStmt(node, selectPos);
 }
 
 TSourcePtr TSqlSelect::Build(const TRule_select_unparenthesized_stmt& node, TPosition& selectPos) {
-    TMaybe<TSelectKindPlacement> placement;
-    if (!node.GetBlock2().empty()) {
-        placement.ConstructInPlace();
-        placement->IsFirstInSelectOp = true;
-    }
-
-    auto res = SelectKind(node.GetRule_select_kind_partial1(), selectPos, placement);
-    if (!res) {
-        return nullptr;
-    }
-
-    return Build(node, selectPos, std::move(res));
+    return BuildStmt(node, selectPos);
 }
 
 } // namespace NSQLTranslationV1

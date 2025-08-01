@@ -25,6 +25,7 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <library/cpp/monlib/service/pages/templates.h>
 #include <ydb/library/actors/wilson/wilson_span.h>
+#include <ydb/library/actors/async/wait_for_event.h>
 
 #include <util/string/join.h>
 
@@ -145,7 +146,7 @@ private:
 
     static constexpr double SecToUsec = 1e6;
 
-    void HandleWork(TEvKqpNode::TEvStartKqpTasksRequest::TPtr& ev) {
+    void HandleWork(TEvKqpNode::TEvStartKqpTasksRequest::TPtr ev) {
         NWilson::TSpan sendTasksSpan(TWilsonKqp::KqpNodeSendTasks, NWilson::TTraceId(ev->TraceId), "KqpNode.SendTasks", NWilson::EFlags::AUTO_END);
 
         NHPTimer::STime workHandlerStart = ev->SendTime;
@@ -168,11 +169,12 @@ private:
         LOG_D("TxId: " << txId << ", new compute tasks request from " << requester
             << " with " << msg.GetTasks().size() << " tasks: " << TasksIdsStr(msg.GetTasks()));
 
-#if defined(USE_HDRF_SCHEDULER)
-        Y_ASSERT(!msg.GetPoolId().empty());
-
-        const auto& databaseId = msg.GetDatabaseId();
         const auto& poolId = msg.GetPoolId();
+
+#if defined(USE_HDRF_SCHEDULER)
+        const auto& databaseId = msg.GetDatabaseId();
+
+        Y_ASSERT(!poolId.empty());
 
         auto addDatabaseEvent = MakeHolder<NScheduler::TEvAddDatabase>();
         addDatabaseEvent->Id = databaseId;
@@ -182,9 +184,9 @@ private:
 
         auto addQueryEvent = MakeHolder<NScheduler::TEvAddQuery>();
         addQueryEvent->DatabaseId = msg.GetDatabase();
-        addQueryEvent->PoolId = msg.GetPoolId();
+        addQueryEvent->PoolId = poolId;
         addQueryEvent->QueryId = txId;
-        Send(MakeKqpSchedulerServiceId(SelfId().NodeId()), addQueryEvent.Release());
+        Send(MakeKqpSchedulerServiceId(SelfId().NodeId()), addQueryEvent.Release(), 0, txId);
 #endif
 
         auto now = TAppData::TimeProvider->Now();
@@ -200,7 +202,7 @@ private:
 
         if (bucket.Exists(txId, requester)) {
             LOG_E("TxId: " << txId << ", requester: " << requester << ", request already exists");
-            return ReplyError(txId, request.Executer, msg, NKikimrKqp::TEvStartKqpTasksResponse::INTERNAL_ERROR);
+            co_return ReplyError(txId, request.Executer, msg, NKikimrKqp::TEvStartKqpTasksResponse::INTERNAL_ERROR);
         }
 
         NRm::EKqpMemoryPool memoryPool;
@@ -262,8 +264,12 @@ private:
 
         TIntrusivePtr<NRm::TTxState> txInfo = MakeIntrusive<NRm::TTxState>(
             txId, TInstant::Now(), ResourceManager_->GetCounters(),
-            msg.GetPoolId(), msg.GetMemoryPoolPercent(),
+            poolId, msg.GetMemoryPoolPercent(),
             msg.GetDatabase(), Config.GetVerboseMemoryLimitException());
+
+#if defined(USE_HDRF_SCHEDULER)
+        auto query = (co_await ActorWaitForEvent<NScheduler::TEvQueryResponse>(txId))->Get()->Query;
+#endif
 
         const ui32 tasksCount = msg.GetTasks().size();
         for (auto& dqTask: *msg.MutableTasks()) {
@@ -311,6 +317,8 @@ private:
                 .State = State_,
 #if !defined(USE_HDRF_SCHEDULER)
                 .SchedulableOptions = std::move(schedulingTaskOptions),
+#else
+                .Query = query,
 #endif
                 // TODO: block tracking mode is not set!
             };
@@ -326,7 +334,7 @@ private:
                 ReplyError(txId, request.Executer, msg, rmResult->GetStatus(), rmResult->GetFailReason());
                 bucket.NewRequest(std::move(request));
                 TerminateTx(txId, rmResult->GetFailReason());
-                return;
+                co_return;
             }
 
             auto& taskCtx = request.InFlyTasks[dqTask.GetId()];

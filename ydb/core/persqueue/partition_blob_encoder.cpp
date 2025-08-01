@@ -3,14 +3,15 @@
 
 namespace NKikimr::NPQ {
 
-TPartitionBlobEncoder::TPartitionBlobEncoder(const TPartitionId& partition, bool fastWrite)
+TPartitionBlobEncoder::TPartitionBlobEncoder(const TPartitionId& partition, bool fastWrite, bool saveMessageKey)
     : StartOffset(0)
     , EndOffset(0)
-    , PartitionedBlob(partition, 0, "", 0, 0, 0, Head, NewHead, true, false, 8_MB)
+    , PartitionedBlob(partition, 0, "", 0, 0, 0, Head, NewHead, true, false, 8_MB, saveMessageKey)
     , NewHeadKey{TKey{}, 0, TInstant::Zero(), 0}
     , BodySize(0)
     , MaxWriteResponsesSize(0)
     , ForFastWrite(fastWrite)
+    , SaveMessageKey(saveMessageKey)
 {
 }
 
@@ -365,7 +366,8 @@ void TPartitionBlobEncoder::ClearPartitionedBlob(const TPartitionId& partitionId
                                        NewHead,
                                        true,
                                        false,
-                                       maxBlobSize);
+                                       maxBlobSize,
+                                       SaveMessageKey);
 }
 
 void TPartitionBlobEncoder::SyncHeadKeys()
@@ -526,7 +528,7 @@ bool TPartitionBlobEncoder::IsLastBatchPacked() const
 
 void TPartitionBlobEncoder::PackLastBatch()
 {
-    NewHead.MutableLastBatch().Pack();
+    NewHead.MutableLastBatch().Pack(SaveMessageKey);
     NewHead.PackedSize += NewHead.GetLastBatch().GetPackedSize(); //add real packed size for this blob
 
     NewHead.PackedSize -= GetMaxHeaderSize(); //instead of upper bound

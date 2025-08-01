@@ -7974,5 +7974,97 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
         }
     }
 
+    Y_UNIT_TEST(CompactificationCompatLayerRead) {
+        TServerSettings settings = PQSettings(0, 1);
+        settings.PQConfig.SetTopicsAreFirstClassCitizen(true);
+        settings.PQConfig.SetRoot("/Root");
+        settings.PQConfig.SetDatabase("/Root");
+        settings.UseRealThreads = true;
+//        settings.SetEnableTopicServiceTx(true);
+        NPersQueue::TTestServer server{settings};
+        Cerr << "Server created\n";
+        auto observer = [&](TAutoPtr<IEventHandle>& ev) {
+            Cerr << "=== Got some event for god sake\n";
+            if (auto event = ev->CastAsLocal<TEvPersQueue::TEvResponse>(); event) {
+                Cerr << "=== Got TEvResponse\n";
+                if (event->Record.HasPartitionResponse() && event->Record.GetPartitionResponse().HasCmdReadResult()) {
+                    Cerr << "=== Got cmd read result\n";
+                    const auto& readResult = event->Record.GetPartitionResponse().GetCmdReadResult();
+                    for (const auto& res : readResult.GetResult()) {
+                        Cerr << "=== Got result " << res.GetOffset() << res.GetPartNo() << "\n";
+                    }
+                }
+            } else if (auto event = ev->CastAsLocal<TEvPQ::TEvBlobRequest>(); event) {
+                Cerr << "=== Got blob request\n";
+            } else if (auto event = ev->CastAsLocal<TEvPQ::TEvBlobResponse>(); event) {
+                Cerr << "=== Got blob response\n";
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        };
+        server.GetRuntime()->SetObserverFunc(observer);
+        server.EnableLogs({ NKikimrServices::PERSQUEUE }, NActors::NLog::PRI_INFO);
+
+        TString topic1 = "new-topic3";
+
+        NYdb::TDriverConfig config;
+        config.SetEndpoint(TStringBuilder() << "localhost:" + ToString(server.GrpcPort));
+        config.SetDatabase("/Root");
+        config.SetAuthToken("root@builtin");
+        auto driver = NYdb::TDriver(config);
+        Cerr << "First dispatch\n";
+        server.GetRuntime()->DispatchEvents();
+
+        NYdb::NTopic::TTopicClient topicClient(driver);
+        auto res = topicClient.CreateTopic(topic1, NYdb::NTopic::TCreateTopicSettings{}.BeginAddConsumer("user1").EndAddConsumer());
+        Cerr << "Second dispatch\n";
+        server.GetRuntime()->DispatchEvents();
+        Cerr << "Wait topic create\n";
+        auto status = res.GetValueSync();
+        Cerr << "Topic create done\n";
+        UNIT_ASSERT(status.IsSuccess());
+        NYdb::NTopic::TWriteSessionSettings wsSettings;
+        wsSettings.Path(topic1)
+                  .MessageGroupId("base64:AAAAaaaa____----12")
+                  .Codec(NYdb::NPersQueue::ECodec::RAW);
+
+        auto writer = topicClient.CreateSimpleBlockingWriteSession(wsSettings);
+        server.GetRuntime()->DispatchEvents();
+
+        writer->Write(TString{3000, 'a'});
+        server.GetRuntime()->DispatchEvents();
+        writer->Write(TString{1000, 'a'});
+        server.GetRuntime()->DispatchEvents();
+        writer->Write(TString{2000, 'a'});
+        server.GetRuntime()->DispatchEvents();
+        writer->Close();
+        server.GetRuntime()->DispatchEvents();
+        Cerr << "===Write done\n";
+
+        NYdb::NTopic::TReadSessionSettings readSettings;
+        readSettings.ConsumerName("user1").AppendTopics(std::string(topic1));
+        auto reader = topicClient.CreateReadSession(readSettings);
+        ui64 totalMessages = 0;
+        while(true) {
+            auto ev = reader->GetEvent(true);
+            UNIT_ASSERT(ev.has_value());
+            if (auto spsEv = std::get_if<NYdb::NTopic::TReadSessionEvent::TStartPartitionSessionEvent>(&*ev)) {
+                spsEv->Confirm();
+            } else if (auto dataEv = std::get_if<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent>(&*ev)) {
+                const auto& messages = dataEv->GetMessages();
+                for (const auto& msg : messages) {
+                    Cerr << "===Got message from oofset: " << msg.GetOffset() << Endl;
+                    ++totalMessages;
+                }
+                break;
+            } else if (auto close = std::get_if<NYdb::NTopic::TSessionClosedEvent>(&*ev)) {
+                Cerr << "Session closed: " << close->GetIssues().ToString() << Endl;
+                UNIT_FAIL("Session failed");
+            } else {
+                UNIT_FAIL("Unknown event");
+            }
+        }
+        UNIT_ASSERT(totalMessages == 3);
+    }
+
 }
 }

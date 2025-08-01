@@ -74,6 +74,7 @@ ydb/core/tx/conveyor_composite/ut CompositeConveyorTests.TestUniformDistribution
 ydb/core/tx/schemeshard/ut_background_cleaning TSchemeshardBackgroundCleaningTest.SchemeshardBackgroundCleaningTestCreateCleanManyTables
 ydb/core/tx/schemeshard/ut_export_reboots_s3 TExportToS3WithRebootsTests.ForgetShouldSucceedOnManyTables
 ydb/core/tx/schemeshard/ut_export_reboots_s3 unittest.[*/*] chunk
+ydb/core/tx/schemeshard/ut_extsubdomain_reboots TSchemeShardTestExtSubdomainReboots.DropExtSubdomain-AlterDatabaseCreateHiveFirst-ExternalHive
 ydb/core/tx/schemeshard/ut_index_build_reboots IndexBuildTestReboots.BaseCase
 ydb/core/tx/schemeshard/ut_index_build_reboots unittest.[*/*] chunk
 ydb/core/tx/schemeshard/ut_login_large TSchemeShardLoginLargeTest.RemoveLogin_Many

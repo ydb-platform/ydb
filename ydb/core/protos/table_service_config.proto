@@ -386,7 +386,7 @@ message TTableServiceConfig {
 
     optional bool EnableFoldUdfs = 82 [ default = true ];
 
-    optional bool FilterPushdownOverJoinOptionalSide = 83 [ default = true];
+    optional bool FilterPushdownOverJoinOptionalSide = 83 [ default = false];
 
     optional bool EnableSpillingInHashJoinShuffleConnections = 85 [default = true];
 

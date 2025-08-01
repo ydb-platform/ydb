@@ -895,6 +895,34 @@
             "uri": "https://{canondata_backend}/1920236/97f248ad438e8879d0fc75f582d39c0a52739159/resource.tar.gz#test.test_match_recognize-greedy_quantifiers-default.txt-Results_/results.txt"
         }
     ],
+    "test.test[optimizers-logical_bools_with_side_effects_skipped-default.txt-Debug]": [
+        {
+            "checksum": "8b6626a9dab8801a26b7c73c581d72f0",
+            "size": 343,
+            "uri": "https://{canondata_backend}/1937424/404e8a831034e9c9055eefc2070368b6e8e04027/resource.tar.gz#test.test_optimizers-logical_bools_with_side_effects_skipped-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[optimizers-logical_bools_with_side_effects_skipped-default.txt-Results]": [
+        {
+            "checksum": "b5fae5a6253aedc595c8dcbc9c51f8b3",
+            "size": 697,
+            "uri": "https://{canondata_backend}/1777230/220101b1390e4d8c183e830315896697c87b2bab/resource.tar.gz#test.test_optimizers-logical_bools_with_side_effects_skipped-default.txt-Results_/results.txt"
+        }
+    ],
+    "test.test[optimizers-logical_bools_with_side_effects_unreachable-default.txt-Debug]": [
+        {
+            "checksum": "659dd68806d5307bbd1469116079e6fa",
+            "size": 304,
+            "uri": "https://{canondata_backend}/1777230/220101b1390e4d8c183e830315896697c87b2bab/resource.tar.gz#test.test_optimizers-logical_bools_with_side_effects_unreachable-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[optimizers-logical_bools_with_side_effects_unreachable-default.txt-Results]": [
+        {
+            "checksum": "4e0454ff3e398b0998ff20c20092ef8e",
+            "size": 698,
+            "uri": "https://{canondata_backend}/1777230/220101b1390e4d8c183e830315896697c87b2bab/resource.tar.gz#test.test_optimizers-logical_bools_with_side_effects_unreachable-default.txt-Results_/results.txt"
+        }
+    ],
     "test.test[optimizers-unordered_over_sort_multiusage-default.txt-Debug]": [
         {
             "checksum": "2c91f3dc50584c24136bd3f942a53f3c",

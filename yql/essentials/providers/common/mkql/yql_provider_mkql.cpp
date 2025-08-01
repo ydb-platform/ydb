@@ -2432,7 +2432,7 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         return MkqlBuildExpr(node.Head(), ctx);
     });
 
-    AddCallable({"WithWorld"}, [](const TExprNode& node, TMkqlBuildContext& ctx) {
+    AddCallable({"WithWorld", "WithSideEffectsMode"}, [](const TExprNode& node, TMkqlBuildContext& ctx) {
         return MkqlBuildExpr(node.Head(), ctx);
     });
 

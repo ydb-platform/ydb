@@ -43,7 +43,6 @@ void NFq::TYdbControlPlaneStorageActor::Handle(NFq::TEvControlPlaneStorage::TEvD
     if (IsSuperUser(user)) {
         permissions.SetAll();
     }
-    const TString folderId = event.FolderId;
 
     TSqlQueryBuilder queryBuilder(YdbConnection->TablePathPrefix, "DeleteFolderResources");
     queryBuilder.AddString("scope", scope);

@@ -93,26 +93,40 @@ class NemesisProcess(threading.Thread):
         self.__init_pq()
 
         while self.__is_running.is_set() and self.__pq:
+            current_time = time.time()
+            next_priority = self.__pq.peek_priority()
+            self.__logger.debug("Current time: %f, Next priority: %f, Queue size: %d", 
+                               current_time, next_priority, len(self.__pq))
+            
             while self.__is_running.is_set() and time.time() < self.__pq.peek_priority():
                 time.sleep(1)
             if not self.__is_running.is_set():
                 break
 
             nemesis = self.__pq.pop()
+            self.__logger.info("=== EXECUTING NEMESIS: %s ===", str(nemesis))
+            self.__logger.info("Current time: %f, Executing nemesis: %s", time.time(), str(nemesis))
+            
             try:
                 nemesis.inject_fault()
+                self.__logger.info("=== NEMESIS COMPLETED: %s ===", str(nemesis))
             except Exception:
                 self.__logger.exception(
                     'Inject fault for nemesis = {nemesis} failed.'.format(
                         nemesis=nemesis,
                     )
                 )
+                self.__logger.info("=== NEMESIS FAILED: %s ===", str(nemesis))
 
             next_schedule = nemesis.next_schedule()
+            self.__logger.debug("Next schedule for %s: %s", str(nemesis), next_schedule)
+            
             # Добавляем обратно в очередь только если next_schedule не None
             if next_schedule is not None:
                 priority = time.time() + next_schedule
                 self.__pq.add_task(task=nemesis, priority=priority)
+                self.__logger.debug("Re-added nemesis to queue: %s with priority: %f (in %f seconds)", 
+                                   str(nemesis), priority, next_schedule)
             else:
                 self.__logger.debug("Nemesis disabled, not adding back to queue: %s", nemesis)
 

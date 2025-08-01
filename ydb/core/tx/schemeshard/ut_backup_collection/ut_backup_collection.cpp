@@ -1,5 +1,5 @@
-    #include <ydb/core/testlib/actors/block_events.h>
-    #include <ydb/core/tx/replication/service/worker.h>
+#include <ydb/core/testlib/actors/block_events.h>
+#include <ydb/core/tx/replication/service/worker.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <library/cpp/string_utils/base64/base64.h>

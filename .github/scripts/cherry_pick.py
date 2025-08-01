@@ -94,7 +94,7 @@ class CherryPickCreator:
         self.add_summary(f'{target_branch}: PR {pr.html_url} created\n')
 
     def process(self):
-        self.add_summary(f"Cherry-pick {', '.join(self.pr_body_list)} to {', '.join(self.target_branches)}")
+        self.add_summary(f"Cherry-pick {', '.join(self.pr_body_list)} to {', '.join(self.target_branches)}\n")
         if len(self.commit_shas) == 0 or len(self.target_branches) == 0:
             self.add_summary("Noting to cherry-pick or no targets branches, my life is meaningless.")
             return

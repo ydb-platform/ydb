@@ -1,3 +1,5 @@
+    #include <ydb/core/testlib/actors/block_events.h>
+    #include <ydb/core/tx/replication/service/worker.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <library/cpp/string_utils/base64/base64.h>
@@ -11,6 +13,7 @@ using namespace NSchemeShardUT_Private;
 Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
     void SetupLogging(TTestActorRuntimeBase& runtime) {
         runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::REPLICATION_SERVICE, NActors::NLog::PRI_TRACE);
     }
 
     TString DefaultCollectionSettings() {
@@ -1567,6 +1570,77 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
             R"(Name: ".backups/collections/)" DEFAULT_NAME_1 R"(")");
         const auto backupId = txId;
         env.TestWaitNotification(runtime, backupId);
+
+        auto r1 = TestGetIncrementalBackup(runtime, backupId, "/MyRoot");
+        UNIT_ASSERT_VALUES_EQUAL(r1.GetIncrementalBackup().GetProgress(), Ydb::Backup::BackupProgress::PROGRESS_TRANSFER_DATA);
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/.backups/collections/" DEFAULT_NAME_1), {
+            NLs::PathExist,
+            NLs::IsBackupCollection,
+            NLs::ChildrenCount(2),
+            NLs::Finished,
+        });
+
+        runtime.SimulateSleep(TDuration::Seconds(5));
+
+        auto r2 = TestGetIncrementalBackup(runtime, backupId, "/MyRoot");
+        UNIT_ASSERT_VALUES_EQUAL(r2.GetIncrementalBackup().GetProgress(), Ydb::Backup::BackupProgress::PROGRESS_DONE);
+
+        TestForgetIncrementalBackup(runtime, txId++, "/MyRoot", backupId);
+
+        TestGetIncrementalBackup(runtime, backupId, "/MyRoot", Ydb::StatusIds::NOT_FOUND);
+    }
+
+    Y_UNIT_TEST(EmptyIncrementalBackupRace) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
+        ui64 txId = 100;
+
+        SetupLogging(runtime);
+
+        PrepareDirs(runtime, env, txId);
+
+        TestCreateBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections/", DefaultIncrementalCollectionSettings());
+
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/.backups/collections/" DEFAULT_NAME_1), {
+            NLs::PathExist,
+            NLs::IsBackupCollection,
+        });
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table1"
+            Columns { Name: "key" Type: "Utf8" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestBackupBackupCollection(runtime, ++txId, "/MyRoot",
+            R"(Name: ".backups/collections/)" DEFAULT_NAME_1 R"(")");
+        env.TestWaitNotification(runtime, txId);
+
+        runtime.AdvanceCurrentTime(TDuration::Seconds(1));
+
+        // TEvDataEnd should be received before TEvHandshake with writer
+        TBlockEvents<NReplication::NService::TEvWorker::TEvHandshake> block(runtime);
+        runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == NReplication::NService::TEvWorker::TEvDataEnd::EventType) {
+                block.Unblock();
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        TestBackupIncrementalBackupCollection(runtime, ++txId, "/MyRoot",
+            R"(Name: ".backups/collections/)" DEFAULT_NAME_1 R"(")");
+        const auto backupId = txId;
+        env.TestWaitNotification(runtime, backupId);
+
+        runtime.WaitFor("block handshakes with reader & writer", [&] { return block.size() == 2; });
+
+        // Unblock TEvHandhshake with reader, but stil block TEvHandshake with writer
+        block.Stop();
+        block.Unblock(1);
 
         auto r1 = TestGetIncrementalBackup(runtime, backupId, "/MyRoot");
         UNIT_ASSERT_VALUES_EQUAL(r1.GetIncrementalBackup().GetProgress(), Ydb::Backup::BackupProgress::PROGRESS_TRANSFER_DATA);

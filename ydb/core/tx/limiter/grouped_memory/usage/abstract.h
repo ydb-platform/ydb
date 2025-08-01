@@ -84,7 +84,6 @@ public:
         , AllocationId(allocationId)
         , Memory(memory)
         , Stage(stage) {
-        AFL_VERIFY(Stage);
     }
 
     void Release() {

@@ -21,6 +21,7 @@ namespace NInterconnect::NRdma {
     class TMemRegion: public NNonCopyable::TMoveOnly, public IContiguousChunk {
     public:
         TMemRegion(TChunkPtr chunk, uint32_t offset, uint32_t size) noexcept;
+        TMemRegion(TMemRegion&& other) noexcept = default;
         ~TMemRegion();
 
         void*    GetAddr() const;
@@ -35,7 +36,7 @@ namespace NInterconnect::NRdma {
         size_t GetOccupiedMemorySize() const override;
         EInnerType GetInnerType() const noexcept override;
     protected:
-        const TChunkPtr Chunk;
+        TChunkPtr Chunk;
         const uint32_t Offset;
         const uint32_t Size;
     };
@@ -88,4 +89,5 @@ namespace NInterconnect::NRdma {
 
     std::shared_ptr<IMemPool> CreateDummyMemPool() noexcept;
     std::shared_ptr<IMemPool> CreateIncrementalMemPool() noexcept;
+    std::shared_ptr<IMemPool> CreateSlotMemPool() noexcept;
 }

@@ -74,9 +74,9 @@ private:
     std::atomic<ui64> Consumption = 0;
 };
 
-class TPortionsMemoryConsumer: public TMemoryConsumer {
+class TColumnTablesPortionsMetaDataCacheMemoryConsumer: public TMemoryConsumer {
 public:
-    TPortionsMemoryConsumer()
+    TColumnTablesPortionsMetaDataCacheMemoryConsumer()
         : TMemoryConsumer(EMemoryConsumerKind::ColumnTablesPortionsMetaDataCache, {}) {
     }
 
@@ -134,7 +134,7 @@ public:
         , ResourceBrokerSelfConfig(resourceBrokerConfig)
         , Counters(counters)
     {
-        Consumers.emplace(EMemoryConsumerKind::ColumnTablesPortionsMetaDataCache, MakeIntrusive<TPortionsMemoryConsumer>());
+        Consumers.emplace(EMemoryConsumerKind::ColumnTablesPortionsMetaDataCache, MakeIntrusive<TColumnTablesPortionsMetaDataCacheMemoryConsumer>());
     }
 
     void Bootstrap(const TActorContext& ctx) {
@@ -558,7 +558,7 @@ private:
                 break;
             }
             case EMemoryConsumerKind::ColumnTablesPortionsMetaDataCache: {
-                result.MaxBytes = result.MinBytes = GetPortionsMetaDataCacheLimitBytes(Config, hardLimitBytes);
+                result.MinBytes = result.MaxBytes = GetPortionsMetaDataCacheLimitBytes(Config, hardLimitBytes);
                 break;
             }
         }

@@ -30,7 +30,7 @@ struct TSettings {
     ui32 FullCompactionUntilLevel = 0;
     ui64 FullCompactionMaxBytes = -1;
     bool CompactNextLevelEdges = false;
-    std::optional<ui64> NodePortionsCountLimit = 1000000;
+    std::optional<ui64> NodePortionsCountLimit{};
 
     NJson::TJsonValue SettingsJson;
 

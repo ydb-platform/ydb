@@ -14,6 +14,8 @@
 #include <contrib/libs/apache/arrow/cpp/src/arrow/type.h>
 #include <library/cpp/object_factory/object_factory.h>
 
+#include <utility>
+
 namespace NKikimr::NOlap {
 class TColumnEngineChanges;
 class IStoragesManager;
@@ -100,10 +102,10 @@ private:
     virtual bool DoIsOverloaded() const {
         return false;
     }
-    const std::optional<ui32> NodePortionsCountLimit{};
+    const std::optional<ui64> NodePortionsCountLimit{};
     double WeightKff = 1;
     static inline TAtomicCounter NodePortionsCounter = 0;
-    static inline std::atomic<ui32> DynamicPortionsCountLimit = 1000000;
+    static inline std::atomic<ui64> DynamicPortionsCountLimit = 1000000;
     TPositiveControlInteger LocalPortionsCount;
     std::shared_ptr<TCounters> Counters = std::make_shared<TCounters>();
 
@@ -131,29 +133,31 @@ public:
         return NodePortionsCounter.Val() * NKikimr::NOlap::TGlobalLimits::AveragePortionSizeLimit;
     }
 
-    static void SetPortionsCacheLimit(const ui32 portionsCacheLimitBytes) {
-        DynamicPortionsCountLimit = portionsCacheLimitBytes / NKikimr::NOlap::TGlobalLimits::AveragePortionSizeLimit;
+    static void SetPortionsCacheLimit(const ui64 portionsCacheLimitBytes) {
+        DynamicPortionsCountLimit.store(portionsCacheLimitBytes / NKikimr::NOlap::TGlobalLimits::AveragePortionSizeLimit);
     }
 
     virtual ui32 GetAppropriateLevel(const ui32 baseLevel, const TPortionInfoForCompaction& /*info*/) const {
         return baseLevel;
     }
 
-    IOptimizerPlanner(const TInternalPathId pathId, const std::optional<ui32>& nodePortionsCountLimit)
+    IOptimizerPlanner(const TInternalPathId pathId, const std::optional<ui64>& nodePortionsCountLimit)
         : PathId(pathId)
         , NodePortionsCountLimit(nodePortionsCountLimit) {
         Counters->NodePortionsCountLimit->Set(NodePortionsCountLimit ? *NodePortionsCountLimit : DynamicPortionsCountLimit.load());
     }
+
     bool IsOverloaded() const {
         if (NodePortionsCountLimit) {
-            if (*NodePortionsCountLimit <= NodePortionsCounter.Val()) {
+            if (std::cmp_less_equal(*NodePortionsCountLimit, NodePortionsCounter.Val())) {
                 return true;
             }
-        } else if (DynamicPortionsCountLimit < NodePortionsCounter.Val()) {
+        } else if (std::cmp_less_equal(DynamicPortionsCountLimit.load(), NodePortionsCounter.Val())) {
             return true;
         }
         return DoIsOverloaded();
     }
+
     TConclusionStatus CheckWriteData() const {
         return DoCheckWriteData();
     }
@@ -249,7 +253,7 @@ public:
     using TProto = NKikimrSchemeOp::TCompactionPlannerConstructorContainer;
 
 private:
-    std::optional<ui32> NodePortionsCountLimit = 1000000;
+    std::optional<ui64> NodePortionsCountLimit{};
     double WeightKff = 1.0;
 
     virtual TConclusion<std::shared_ptr<IOptimizerPlanner>> DoBuildPlanner(const TBuildContext& context) const = 0;
@@ -259,7 +263,7 @@ private:
     virtual bool DoApplyToCurrentObject(IOptimizerPlanner& current) const = 0;
 
 public:
-    std::optional<ui32> GetNodePortionsCountLimit() const {
+    std::optional<ui64> GetNodePortionsCountLimit() const {
         return NodePortionsCountLimit;
     }
 
@@ -309,8 +313,8 @@ public:
     void SerializeToProto(TProto& proto) const {
         if (NodePortionsCountLimit) {
             proto.SetNodePortionsCountLimit(*NodePortionsCountLimit);
-            proto.SetWeightKff(WeightKff);
         }
+        proto.SetWeightKff(WeightKff);
         DoSerializeToProto(proto);
     }
 

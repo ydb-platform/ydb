@@ -158,11 +158,11 @@ inline ui64 GetColumnTablesNormalizerQueueLimitBytes(const NKikimrConfig::TMemor
 static constexpr float ColumnTablesBlobCacheFraction = 0.125f; // 2/16
 static constexpr float ColumnTablesColumnTablesDataAccessorCacheFraction = 0.125f; // 2/16
 static constexpr float ColumnTablesColumnDataCacheFraction = 0.125f; // 2/16
-static constexpr float ColumnTablesPortionsMetaDataCacheCoefficient = 0.625f; // 10/16
+static constexpr float ColumnTablesPortionsMetaDataCacheFraction = 0.625f; // 10/16
 static_assert(ColumnTablesBlobCacheFraction
     + ColumnTablesColumnTablesDataAccessorCacheFraction
     + ColumnTablesColumnDataCacheFraction
-    + ColumnTablesPortionsMetaDataCacheCoefficient == 1);
+    + ColumnTablesPortionsMetaDataCacheFraction == 1);
 
 inline ui64 GetColumnTablesBlobCacheLimitBytes(const NKikimrConfig::TMemoryControllerConfig& config, const ui64 hardLimitBytes) {
     return GetFraction(ColumnTablesBlobCacheFraction,
@@ -180,7 +180,7 @@ inline ui64 GetColumnTablesColumnDataCacheLimitBytes(const NKikimrConfig::TMemor
 }
 
 inline ui64 GetPortionsMetaDataCacheLimitBytes(const NKikimrConfig::TMemoryControllerConfig& config, const ui64 hardLimitBytes) {
-    return GetFraction(ColumnTablesPortionsMetaDataCacheCoefficient,
+    return GetFraction(ColumnTablesPortionsMetaDataCacheFraction,
         GetColumnTablesCacheLimitBytes(config, hardLimitBytes));
 }
 }

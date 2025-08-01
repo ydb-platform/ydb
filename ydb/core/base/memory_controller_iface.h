@@ -7,13 +7,14 @@ namespace NKikimr::NMemory {
 enum class EMemoryConsumerKind {
     SharedCache,
     MemTable,
+
     ColumnTablesScanGroupedMemory,
     ColumnTablesCompGroupedMemory,
     ColumnTablesBlobCache,
     ColumnTablesDataAccessorCache,
     ColumnTablesColumnDataCache,
     ColumnTablesDeduplicationGroupedMemory,
-    ColumnTablesPortionsMetaDataCache
+    ColumnTablesPortionsMetaDataCache,
 };
 
 struct IMemoryConsumer : public TThrRefBase {

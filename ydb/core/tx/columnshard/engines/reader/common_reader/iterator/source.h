@@ -229,6 +229,22 @@ public:
         return static_cast<T*>(this);
     }
 
+    template <class T>
+    const T* GetOptionalAs() const {
+        if (!T::CheckTypeCast(Type)) {
+            return nullptr;
+        }
+        return static_cast<const T*>(this);
+    }
+
+    template <class T>
+    T* MutableOptionalAs() {
+        if (!T::CheckTypeCast(Type)) {
+            return nullptr;
+        }
+        return static_cast<T*>(this);
+    }
+
     virtual bool NeedPortionData() const {
         return true;
     }

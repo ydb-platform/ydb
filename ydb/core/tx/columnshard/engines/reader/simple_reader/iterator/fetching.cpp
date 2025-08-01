@@ -130,7 +130,9 @@ public:
 
 TConclusion<bool> TUpdateAggregatedMemoryStep::DoExecuteInplace(
     const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& /*step*/) const {
-    source->MutableAs<TPortionDataSource>()->ActualizeAggregatedMemoryGuards();
+    if (auto* portionSource = source->MutableOptionalAs<TPortionDataSource>()) {
+        portionSource->ActualizeAggregatedMemoryGuards();
+    }
     return true;
 }
 

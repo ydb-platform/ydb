@@ -2,6 +2,8 @@
 #include "utils.h"
 #include "partition_log.h"
 
+#include <ydb/library/wilson_ids/wilson.h>
+
 namespace NKikimr::NPQ {
 
 TDistributedTransaction::TDistributedTransaction(const NKikimrPQ::TTransaction& tx) :
@@ -57,6 +59,28 @@ TDistributedTransaction::TDistributedTransaction(const NKikimrPQ::TTransaction& 
 
     if (tx.HasWriteId()) {
         WriteId = GetWriteId(tx);
+    }
+
+    if (tx.HasExecuteTraceId()) {
+        NWilson::TTraceId traceId(tx.GetExecuteTraceId());
+        ExecuteSpan = NWilson::TSpan(TWilsonTopic::ExecuteTransaction,
+                                     std::move(traceId),
+                                     "Topic.Transaction",
+                                     NWilson::EFlags::AUTO_END);
+    }
+    if (tx.HasWaitRSTraceId()) {
+        NWilson::TTraceId traceId(tx.GetWaitRSTraceId());
+        WaitRSSpan = NWilson::TSpan(TWilsonTopic::ExecuteTransaction,
+                                    std::move(traceId),
+                                    "Topic.Transaction.WaitRS",
+                                    NWilson::EFlags::AUTO_END);
+    }
+    if (tx.HasWaitRSAcksTraceId()) {
+        NWilson::TTraceId traceId(tx.GetWaitRSAcksTraceId());
+        WaitRSAcksSpan = NWilson::TSpan(TWilsonTopic::ExecuteTransaction,
+                                        std::move(traceId),
+                                        "Topic.Transaction.WaitRSAcks",
+                                        NWilson::EFlags::AUTO_END);
     }
 }
 
@@ -395,6 +419,16 @@ NKikimrPQ::TTransaction TDistributedTransaction::Serialize(EState state) {
     Y_ABORT_UNLESS(SourceActor != TActorId());
     ActorIdToProto(SourceActor, tx.MutableSourceActor());
 
+    if (ExecuteSpan) {
+        ExecuteSpan.GetTraceId().Serialize(tx.MutableExecuteTraceId());
+    }
+    if (WaitRSSpan) {
+        WaitRSSpan.GetTraceId().Serialize(tx.MutableWaitRSTraceId());
+    }
+    if (WaitRSAcksSpan) {
+        WaitRSAcksSpan.GetTraceId().Serialize(tx.MutableWaitRSAcksTraceId());
+    }
+
     return tx;
 }
 
@@ -443,6 +477,113 @@ const TVector<NKikimrTx::TEvReadSet>& TDistributedTransaction::GetBindedMsgs(ui6
     static TVector<NKikimrTx::TEvReadSet> empty;
 
     return empty;
+}
+
+void TDistributedTransaction::SetExecuteSpan(NWilson::TSpan&& span)
+{
+    ExecuteSpan = std::move(span);
+}
+
+void TDistributedTransaction::EndExecuteSpan()
+{
+    if (ExecuteSpan) {
+        ExecuteSpan.End();
+        ExecuteSpan = {};
+    }
+}
+
+NWilson::TSpan TDistributedTransaction::CreatePlanStepSpan(ui64 tabletId, ui64 step)
+{
+    auto span = CreateSpan("Topic.Transaction.Plan", tabletId);
+    span.Attribute("PlanStep", static_cast<i64>(step));
+    return span;
+}
+
+void TDistributedTransaction::BeginWaitRSSpan(ui64 tabletId)
+{
+    if (!WaitRSSpan) {
+        WaitRSSpan = CreateSpan("Topic.Transaction.WaitRS", tabletId);
+    }
+}
+
+void TDistributedTransaction::SetLastTabletSentByRS(ui64 tabletId)
+{
+    if (WaitRSSpan) {
+        WaitRSSpan.Attribute("LastTabletId", static_cast<i64>(tabletId));
+    }
+}
+
+void TDistributedTransaction::EndWaitRSSpan()
+{
+    if (WaitRSSpan) {
+        WaitRSSpan.End();
+        WaitRSSpan = {};
+    }
+}
+
+void TDistributedTransaction::BeginWaitRSAcksSpan(ui64 tabletId)
+{
+    WaitRSAcksSpan = CreateSpan("Topic.Transaction.WaitRSAcks", tabletId);
+}
+
+void TDistributedTransaction::EndWaitRSAcksSpan()
+{
+    if (WaitRSAcksSpan) {
+        WaitRSAcksSpan.End();
+        WaitRSAcksSpan = {};
+    }
+}
+
+void TDistributedTransaction::BeginPersistSpan(ui64 tabletId, EState state, const NWilson::TTraceId& traceId)
+{
+    PersistSpan = CreateSpan("Topic.Transaction.Persist", tabletId);
+    PersistSpan.Attribute("State", NKikimrPQ::TTransaction_EState_Name(state));
+    if (traceId) {
+        PersistSpan.Link(traceId);
+    }
+}
+
+void TDistributedTransaction::EndPersistSpan()
+{
+    if (PersistSpan) {
+        PersistSpan.End();
+        PersistSpan = {};
+    }
+}
+
+void TDistributedTransaction::BeginDeleteSpan(ui64 tabletId, const NWilson::TTraceId& traceId)
+{
+    DeleteSpan = CreateSpan("Topic.Transaction.Delete", tabletId);
+    if (traceId) {
+        DeleteSpan.Link(traceId);
+    }
+}
+
+void TDistributedTransaction::EndDeleteSpan()
+{
+    if (DeleteSpan) {
+        DeleteSpan.End();
+        DeleteSpan = {};
+    }
+}
+
+NWilson::TSpan TDistributedTransaction::CreateSpan(const char* name, ui64 tabletId)
+{
+    if (!ExecuteSpan) {
+        return {};
+    }
+
+    auto span = ExecuteSpan.CreateChild(TWilsonTopic::ExecuteTransaction,
+                                        name,
+                                        NWilson::EFlags::AUTO_END);
+    span.Attribute("TxId", static_cast<i64>(TxId));
+    span.Attribute("TabletId", static_cast<i64>(tabletId));
+    return span;
+}
+
+NWilson::TTraceId TDistributedTransaction::GetExecuteSpanTraceId()
+{
+    return ExecuteSpan.GetTraceId();
 }
 
 }

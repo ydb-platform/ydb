@@ -27,7 +27,7 @@ Where:
 * **Index_name** is the unique name of the index to be used to access data.
 * **SYNC** indicates synchronous data writes to the index. If not specified, synchronous.
 * **Index_type** is the index type. Only `vector_kmeans_tree` is supported now.
-* **Index_columns** is a list of comma-separated column names in the created table to be used for a search in the index. The last column in the list is used as embedding, the other columns are used as prefix columns.
+* **Index_columns** is a list of comma-separated column names in the created table to be used for a search in the index. The last column in the list is used as embedding, the other columns are used as filtered columns.
 * **Cover_columns** is a list of comma-separated column names in the created table, which will be stored in the index in addition to the search columns, making it possible to fetch additional data without accessing the table for it.
 * **Index_parameters** is a list of comma-separated key-value parameters:
     * parameters for any vector **index_type**:

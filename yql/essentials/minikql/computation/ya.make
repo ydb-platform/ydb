@@ -17,8 +17,6 @@ SRCS(
     mkql_value_builder.cpp
     mkql_computation_pattern_cache.cpp
     presort.cpp
-    mkql_spiller_adapter_ut.cpp
-    mkql_vector_spiller_adapter_ut.cpp
 )
 
 PEERDIR(
@@ -28,12 +26,6 @@ PEERDIR(
     yql/essentials/public/udf
     yql/essentials/public/udf/arrow
     yql/essentials/minikql/arrow
-    yql/essentials/minikql/computation
-    yql/essentials/minikql/mkql_type_builder
-    yql/essentials/minikql/mkql_node
-    yql/essentials/minikql/mkql_alloc
-    library/cpp/testing/unittest
-    library/cpp/threading/future/core
 )
 
 YQL_LAST_ABI_VERSION()
@@ -48,5 +40,3 @@ RECURSE(
 RECURSE_FOR_TESTS(
     llvm16/ut
 )
-
-TEST_TYPE = UNIT

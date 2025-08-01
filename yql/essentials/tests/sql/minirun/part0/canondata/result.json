@@ -782,6 +782,20 @@
             "uri": "https://{canondata_backend}/1946324/fbb1b986a8af3f4a5932aa11a3d24263ba935543/resource.tar.gz#test.test_join-eq_over_join_bad_rotate-default.txt-Results_/results.txt"
         }
     ],
+    "test.test[join-skip_nulls_tuple-default.txt-Debug]": [
+        {
+            "checksum": "a7eb8180b127ef9df34197c8fcd40875",
+            "size": 1376,
+            "uri": "https://{canondata_backend}/1031349/4ddce9b1bae305ab4c259d07baf263c2d3c1c548/resource.tar.gz#test.test_join-skip_nulls_tuple-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[join-skip_nulls_tuple-default.txt-Results]": [
+        {
+            "checksum": "172efbc039f18ac38b08250744720e9d",
+            "size": 2848,
+            "uri": "https://{canondata_backend}/1031349/4ddce9b1bae305ab4c259d07baf263c2d3c1c548/resource.tar.gz#test.test_join-skip_nulls_tuple-default.txt-Results_/results.txt"
+        }
+    ],
     "test.test[json-json_query/common_syntax-default.txt-Debug]": [
         {
             "checksum": "f9ce44fdf704adf735b1895d221411f0",

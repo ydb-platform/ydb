@@ -1,5 +1,7 @@
 // clang-format off
 #include "yql_generic_provider_impl.h"
+#include "yql_generic_list.h"
+#include "yql_generic_describe.h"
 
 #include <library/cpp/json/json_reader.h>
 #include <ydb/core/fq/libs/result_formatter/result_formatter.h>
@@ -21,6 +23,7 @@
 #include <ydb/library/yql/providers/generic/expr_nodes/yql_generic_expr_nodes.h>
 #include <yql/essentials/utils/log/log.h>
 #include <ydb/core/external_sources/iceberg_fields.h>
+#include <yql/essentials/core/services/yql_transform_pipeline.h>
 
 namespace NYql {
     using namespace NNodes;
@@ -635,7 +638,7 @@ namespace NYql {
     };
 
     THolder<IGraphTransformer> CreateGenericLoadTableMetadataTransformer(TGenericState::TPtr state) {
-        return MakeHolder<TGenericLoadTableMetadataTransformer>(std::move(state));
+        return MakeHolder<TGenericDescribeTransformer>(std::move(state));
     }
 
 } // namespace NYql

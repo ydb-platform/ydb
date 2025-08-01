@@ -1,5 +1,6 @@
 #include "yql_generic_provider_impl.h"
 #include "yql_generic_predicate_pushdown.h"
+#include "yql_generic_list.h"
 
 #include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
 #include <yql/essentials/core/yql_opt_utils.h>
@@ -15,6 +16,7 @@
 #include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
 #include <yql/essentials/utils/log/log.h>
 #include <yql/essentials/providers/common/provider/yql_provider.h>
+#include <yql/essentials/core/services/yql_transform_pipeline.h>
 
 namespace NYql {
 
@@ -210,7 +212,14 @@ namespace NYql {
     } // namespace
 
     THolder<IGraphTransformer> CreateGenericPhysicalOptProposalTransformer(TGenericState::TPtr state) {
-        return MakeHolder<TGenericPhysicalOptProposalTransformer>(state);
+        auto a = TAutoPtr<IGraphTransformer>(new TGenericPhysicalOptProposalTransformer(state));
+        auto b = TAutoPtr<IGraphTransformer>(new TGenericListTransformer(state));
+
+        return TTransformationPipeline(state->Types)
+           .Add(a, "PushFilters")
+           .Add(b, "ListSplits")
+           .Build();
+
     }
 
 } // namespace NYql

@@ -67,6 +67,7 @@ namespace NYql {
         }
 
         void AddTable(const TTableAddress& tableAddress, TTableMeta&& tableMeta);
+        bool AttachSplitsToTable(const TTableAddress& tableAddress, const std::vector<NYql::NConnector::NApi::TSplit>& splits);
         TGetTableResult GetTable(const TTableAddress& tableAddress) const;
 
         TTypeAnnotationContext* Types;

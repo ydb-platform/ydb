@@ -1358,7 +1358,7 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
     WriteTimestampEstimate = p.Msg.WriteTimestamp > 0 ? TInstant::MilliSeconds(p.Msg.WriteTimestamp) : WriteTimestamp;
     TClientBlob blob(p.Msg.SourceId, p.Msg.SeqNo, std::move(p.Msg.Data), std::move(partData), WriteTimestampEstimate,
                      TInstant::MilliSeconds(p.Msg.CreateTimestamp == 0 ? curOffset : p.Msg.CreateTimestamp),
-                     p.Msg.UncompressedSize, p.Msg.PartitionKey, p.Msg.ExplicitHashKey); //remove curOffset when LB will report CTime
+                     p.Msg.UncompressedSize, p.Msg.PartitionKey, p.Msg.ExplicitHashKey, p.Msg.MessageKey); //remove curOffset when LB will report CTime
 
     const ui64 writeLagMs =
         (WriteTimestamp - TInstant::MilliSeconds(p.Msg.CreateTimestamp)).MilliSeconds();
@@ -1416,8 +1416,9 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
             }
 
             Y_ABORT_UNLESS(!BlobEncoder.NewHead.GetLastBatch().Packed);
-            BlobEncoder.NewHead.AddBlob(x);
-            BlobEncoder.NewHead.PackedSize += x.GetBlobSize();
+            BlobEncoder.NewHead.AddBlob(x, AppData()->FeatureFlags.GetEnableTopicMessageKeySaving());
+            BlobEncoder.NewHead.PackedSize += x.GetBlobSize(
+                AppData()->FeatureFlags.GetEnableTopicMessageKeySaving());
             if (BlobEncoder.NewHead.GetLastBatch().GetUnpackedSize() >= BATCH_UNPACK_SIZE_BORDER) {
                 BlobEncoder.PackLastBatch();
             }
@@ -1774,6 +1775,7 @@ void TPartition::EndAppendHeadWithNewWrites(const TActorContext& ctx)
                 .UncompressedSize = 0,
                 .PartitionKey = {},
                 .ExplicitHashKey = {},
+                .MessageKey = {},
                 .External = false,
                 .IgnoreQuotaDeadline = true,
                 .HeartbeatVersion = std::nullopt,

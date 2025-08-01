@@ -3,9 +3,10 @@
 #include "key.h"
 
 #include <util/datetime/base.h>
-#include <util/generic/size_literals.h>
 #include <util/generic/maybe.h>
+#include <util/generic/size_literals.h>
 #include <util/generic/vector.h>
+#include <ydb/core/base/appdata.h>
 
 #include <deque>
 
@@ -31,6 +32,7 @@ struct TClientBlob {
     static const ui8 HAS_TS2 = 4;
     static const ui8 HAS_US = 8;
     static const ui8 HAS_KINESIS = 16;
+    static const ui8 HAS_MESSAGE_KEY = 32;
 
     TString SourceId;
     ui64 SeqNo;
@@ -42,6 +44,7 @@ struct TClientBlob {
     bool HadUncompressed = false;
     TString PartitionKey;
     TString ExplicitHashKey;
+    TString MessageKey;
 
     TClientBlob()
         : SeqNo(0)
@@ -49,7 +52,7 @@ struct TClientBlob {
     {}
 
     TClientBlob(const TString& sourceId, const ui64 seqNo, const TString&& data, TMaybe<TPartData> &&partData, TInstant writeTimestamp, TInstant createTimestamp,
-                const ui64 uncompressedSize, const TString& partitionKey, const TString& explicitHashKey)
+                const ui64 uncompressedSize, const TString& partitionKey, const TString& explicitHashKey, const TString& messageKey)
         : SourceId(sourceId)
         , SeqNo(seqNo)
         , Data(std::move(data))
@@ -60,6 +63,7 @@ struct TClientBlob {
         , HadUncompressed(uncompressedSize > 0)
         , PartitionKey(partitionKey)
         , ExplicitHashKey(explicitHashKey)
+        , MessageKey(messageKey)
     {
         Y_ABORT_UNLESS(PartitionKey.size() <= 256);
     }
@@ -77,9 +81,13 @@ struct TClientBlob {
         }
         return 0;
     }
+    ui32 GetMessageKeySize(bool saveMessageKey) const {
+        return saveMessageKey ? MessageKey.size() + 1 : 0;
+    }
 
-    ui32 GetBlobSize() const {
-        return GetPartDataSize() + OVERHEAD + SourceId.size() + Data.size() + (UncompressedSize == 0 ? 0 : sizeof(ui32)) + GetKinesisSize();
+    ui32 GetBlobSize(bool saveMessageKey) const {
+        return GetPartDataSize() + OVERHEAD + SourceId.size() + Data.size() + (UncompressedSize == 0 ? 0 : sizeof(ui32)) +
+        GetKinesisSize() + GetMessageKeySize(saveMessageKey);
     }
 
     ui16 GetPartNo() const {
@@ -100,7 +108,7 @@ struct TClientBlob {
 
     static constexpr ui32 OVERHEAD = sizeof(ui32)/*totalSize*/ + sizeof(ui64)/*SeqNo*/ + sizeof(ui16) /*SourceId*/ + sizeof(ui64) /*WriteTimestamp*/ + sizeof(ui64) /*CreateTimestamp*/;
 
-    void SerializeTo(TBuffer& buffer) const;
+    void SerializeTo(TBuffer& buffer, bool saveMessageKey) const;
     static TClientBlob Deserialize(const char *data, ui32 size);
 
     static void CheckBlob(const TKey& key, const TString& blob);
@@ -141,21 +149,21 @@ struct TBatch {
         Header.SetInternalPartsCount(0);
     }
 
-    static TBatch FromBlobs(const ui64 offset, std::deque<TClientBlob>&& blobs) {
+    static TBatch FromBlobs(const ui64 offset, std::deque<TClientBlob>&& blobs, bool saveMessageKey) {
         Y_ABORT_UNLESS(!blobs.empty());
         TBatch batch(offset, blobs.front().GetPartNo());
         for (auto& b : blobs) {
-            batch.AddBlob(b);
+          batch.AddBlob(b, saveMessageKey);
         }
         return batch;
     }
 
-    void AddBlob(const TClientBlob &b) {
+    void AddBlob(const TClientBlob& b, bool saveMessageKey) {
         ui32 count = GetCount();
         ui32 unpackedSize = GetUnpackedSize();
         ui32 i = Blobs.size();
         Blobs.push_back(b);
-        unpackedSize += b.GetBlobSize();
+        unpackedSize += b.GetBlobSize(saveMessageKey);
         if (b.IsLastPart())
             ++count;
         else {
@@ -209,7 +217,7 @@ struct TBatch {
     }
 
     ui32 GetPackedSize() const { Y_ABORT_UNLESS(Packed); return sizeof(ui16) + PackedData.size() + Header.ByteSize(); }
-    void Pack();
+    void Pack(bool saveMessageKey);
     void Unpack();
     void UnpackTo(TVector<TClientBlob> *result) const;
     void UnpackToType0(TVector<TClientBlob> *result) const;
@@ -268,8 +276,8 @@ private:
             : Batch(batch)
         {}
 
-        void Pack() {
-            Batch.Pack();
+        void Pack(bool saveMessageKey) {
+            Batch.Pack(saveMessageKey);
         }
 
         void Unpack() {
@@ -308,7 +316,7 @@ public:
     TBatchAccessor MutableBatch(ui32 idx);
     TBatchAccessor MutableLastBatch();
     TBatch ExtractFirstBatch();
-    void AddBlob(const TClientBlob& blob);
+    void AddBlob(const TClientBlob& blob, bool saveMessageKey);
 
     friend IOutputStream& operator <<(IOutputStream& out, const THead& value);
 };
@@ -325,7 +333,7 @@ public:
 
     TPartitionedBlob(const TPartitionId& partition, const ui64 offset, const TString& sourceId, const ui64 seqNo,
                      const ui16 totalParts, const ui32 totalSize, THead& head, THead& newHead, bool headCleared, bool needCompactHead, const ui32 maxBlobSize,
-                     ui16 nextPartNo = 0, bool fastWrite = true);
+                     bool saveMessageKey, ui16 nextPartNo = 0, bool fastWrite = true);
 
     struct TFormedBlobInfo {
         TKey Key;
@@ -385,6 +393,7 @@ private:
     bool NeedCompactHead;
     ui32 MaxBlobSize;
     bool FastWrite = true;
+    bool SaveMessageKey;
 };
 
 }// NPQ

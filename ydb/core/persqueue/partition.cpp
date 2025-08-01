@@ -276,7 +276,7 @@ void AddCheckDiskRequest(TEvKeyValue::TEvRequest *request, ui32 numChannels) {
 TPartition::TPartition(ui64 tabletId, const TPartitionId& partition, const TActorId& tablet, ui32 tabletGeneration, const TActorId& blobCache,
                        const NPersQueue::TTopicConverterPtr& topicConverter, TString dcId, bool isServerless,
                        const NKikimrPQ::TPQTabletConfig& tabletConfig, const TTabletCountersBase& counters, bool subDomainOutOfSpace, ui32 numChannels,
-                       const TActorId& writeQuoterActorId, bool newPartition, TVector<TTransaction> distrTxs)
+                       const TActorId& writeQuoterActorId, const NKikimrConfig::TFeatureFlags& featureFlags, bool newPartition, TVector<TTransaction> distrTxs)
     : Initializer(this)
     , TabletID(tabletId)
     , TabletGeneration(tabletGeneration)
@@ -292,8 +292,8 @@ TPartition::TPartition(ui64 tabletId, const TPartitionId& partition, const TActo
     , Tablet(tablet)
     , BlobCache(blobCache)
     , DeletedKeys(std::make_shared<std::deque<TString>>())
-    , CompactionBlobEncoder(partition, false)
-    , BlobEncoder(partition, true)
+    , CompactionBlobEncoder(partition, false, featureFlags.GetEnableTopicMessageKeySaving())
+    , BlobEncoder(partition, true, featureFlags.GetEnableTopicMessageKeySaving())
     , GapSize(0)
     , IsServerless(isServerless)
     , ReadingTimestamp(false)

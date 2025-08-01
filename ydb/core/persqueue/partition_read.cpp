@@ -375,8 +375,9 @@ ui64 GetFirstHeaderOffset(const TKey& key, const TString& blob)
 bool TReadInfo::UpdateUsage(const TClientBlob& blob,
                             ui32& cnt, ui32& size, ui32& lastBlobSize) const
 {
-    size += blob.GetBlobSize();
-    lastBlobSize += blob.GetBlobSize();
+    size += blob.GetBlobSize(AppData()->FeatureFlags.GetEnableTopicMessageKeySaving());
+    lastBlobSize += blob.GetBlobSize(
+        AppData()->FeatureFlags.GetEnableTopicMessageKeySaving());
 
     if (blob.IsLastPart()) {
         bool messageSkippingBehaviour =
@@ -561,10 +562,10 @@ TReadAnswer TReadInfo::FormAnswer(
 
     ui32 lastBlobSize = 0;
     const TVector<TRequestedBlob>& blobs = response->GetBlobs();
-
+    const bool saveMsgKey = AppData()->FeatureFlags.GetEnableTopicMessageKeySaving();
     auto updateUsage = [&](const TClientBlob& blob) {
-        size += blob.GetBlobSize();
-        lastBlobSize += blob.GetBlobSize();
+        size += blob.GetBlobSize(saveMsgKey);
+        lastBlobSize += blob.GetBlobSize(saveMsgKey);
         if (blob.IsLastPart()) {
             bool messageSkippingBehaviour = AppData()->PQConfig.GetTopicsAreFirstClassCitizen() &&
                     ReadTimestampMs > blob.WriteTimestamp.MilliSeconds();
@@ -610,7 +611,7 @@ TReadAnswer TReadInfo::FormAnswer(
         for (const auto& writeBlob : Cached) {
             VERIFY_RESULT_BLOB(writeBlob, 0u);
 
-            readResult->SetBlobsCachedSize(readResult->GetBlobsCachedSize() + writeBlob.GetBlobSize());
+            readResult->SetBlobsCachedSize(readResult->GetBlobsCachedSize() + writeBlob.GetBlobSize(saveMsgKey));
 
             if (userInfo) {
                 userInfo->AddTimestampToCache(

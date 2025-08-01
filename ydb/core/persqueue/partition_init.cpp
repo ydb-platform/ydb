@@ -858,6 +858,7 @@ void TInitDataStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActorConte
                 Y_ABORT_UNLESS(offset < Partition()->CompactionBlobEncoder.EndOffset,
                                "offset=%" PRIu64 ", CompactionBlobEncoder.EndOffset=%" PRIu64,
                                offset, Partition()->CompactionBlobEncoder.EndOffset);
+
                 Y_ABORT_UNLESS(size == read.GetValue().size(), "size=%d == read.GetValue().size() = %d", size, read.GetValue().size());
 
                 for (TBlobIterator it(key, read.GetValue()); it.IsValid(); it.Next()) {

@@ -9,7 +9,7 @@ namespace NKikimr::NPQ {
 class TKeyLevel;
 
 struct TPartitionBlobEncoder {
-    explicit TPartitionBlobEncoder(const TPartitionId& partition, bool fastWrite);
+    explicit TPartitionBlobEncoder(const TPartitionId& partition, bool fastWrite, bool saveMessageKey);
 
     void CheckHeadConsistency(const TVector<ui32>& compactLevelBorder,
                               const ui32 totalLevels,
@@ -107,6 +107,7 @@ struct TPartitionBlobEncoder {
     void Dump() const;
 
     bool ForFastWrite = true;
+    bool SaveMessageKey = false;
 };
 
 }

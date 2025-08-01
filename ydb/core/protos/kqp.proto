@@ -892,6 +892,7 @@ message TScriptExecutionOperationMeta {
     optional google.protobuf.Duration LeaseDuration = 9;
     optional google.protobuf.Duration ProgressStatsPeriod = 10;
     optional TRlPath RlPath = 11;
+    optional bool SaveQueryPhysicalGraph = 12;
 }
 
 // stored in column "retry_state" of .metadata/script_executions table
@@ -915,6 +916,17 @@ message TScriptExecutionRetryState {
     optional uint64 RetryCounter = 2;
     optional google.protobuf.Timestamp RetryCounterUpdatedAt = 3;
     optional double RetryRate = 4;
+}
+
+// stored in column "physical_graph" of .metadata/script_executions table
+message TQueryPhysicalGraph {
+    message TTask {
+        optional uint64 TxId = 1;
+        optional NYql.NDqProto.TDqTask DqTask = 2;
+    }
+
+    optional TPreparedQuery PreparedQuery = 1;
+    repeated TTask Tasks = 2;
 }
 
 /// KQP workload manager Events

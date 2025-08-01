@@ -40,4 +40,8 @@ NActors::IActor* CreateScriptProgressActor(const TString& executionId, const TSt
 // Check lease expiration for running script execution operations
 IActor* CreateRefreshScriptExecutionLeasesActor(const TActorId& replyActorId, const NKikimrConfig::TQueryServiceConfig& queryServiceConfig, TIntrusivePtr<TKqpCounters> counters);
 
+// Script execution physical graph management
+IActor* CreateSaveScriptExecutionPhysicalGraphActor(const TActorId& replyActorId, const TString& database, const TString& executionId, NKikimrKqp::TQueryPhysicalGraph&& physicalGraph, const NKikimrConfig::TQueryServiceConfig& queryServiceConfig);
+IActor* CreateGetScriptExecutionPhysicalGraphActor(const TActorId& replyActorId, const TString& database, const TString& executionId);
+
 } // namespace NKikimr::NKqp

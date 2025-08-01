@@ -12,7 +12,7 @@ def format_sql_value(value, type_name):
     if type_name == "String" or type_name == "Utf8":
         return f"'{value}'"
     if type_name in non_pk_types.keys() or type_name == "Datetime64" or type_name == "Date32" or type_name == "Datetime" or \
-            type_name == "Date" or type_name == "UUID" or type_name == "DyNumber" or type_name == "Decimal(35,10)" or type_name == "Decimal(22,9)" or type_name == "Decimal(15,0)" or type_name == "Decimal(12,2)":
+            type_name == "Date" or type_name == "UUID" or type_name == "DyNumber" or type_name == "Decimal(35,10)" or type_name == "Decimal(22,9)" or type_name == "Decimal(15,0)":
         return f"CAST('{value}' AS {type_name})"
     return f"CAST({value} AS {type_name})"
 
@@ -49,7 +49,6 @@ index_second_sync = {
 
 index_three_sync = {
     "Bool": lambda i: bool(i),
-    "Decimal(12,2)": lambda i: "{}.12".format(i),
     "Decimal(15,0)": lambda i: "{}".format(i),
     "Decimal(22,9)": lambda i: "{}.123".format(i),
     "Decimal(35,10)": lambda i: "{}.123456".format(i),
@@ -58,7 +57,6 @@ index_three_sync = {
 }
 
 index_three_sync_not_Bool = {
-    "Decimal(12,2)": lambda i: "{}.12".format(i),
     "Decimal(15,0)": lambda i: "{}".format(i),
     "Decimal(22,9)": lambda i: "{}.123".format(i),
     "Decimal(35,10)": lambda i: "{}.123456".format(i),
@@ -84,7 +82,6 @@ index_first_not_Bool = {
     # "Uint16": lambda i: i, https://github.com/ydb-platform/ydb/issues/15842
     "Int8": lambda i: i,
     "Uint8": lambda i: i,
-    "Decimal(12,2)": lambda i: "{}.12".format(i),
     "Decimal(15,0)": lambda i: "{}".format(i),
     "Decimal(22,9)": lambda i: "{}.123".format(i),
     "Decimal(35,10)": lambda i: "{}.123456".format(i),
@@ -100,7 +97,6 @@ index_first = {
     "Int8": lambda i: i,
     "Uint8": lambda i: i,
     "Bool": lambda i: bool(i),
-    "Decimal(12,2)": lambda i: "{}.12".format(i),
     "Decimal(15,0)": lambda i: "{}".format(i),
     "Decimal(22,9)": lambda i: "{}.123".format(i),
     "Decimal(35,10)": lambda i: "{}.123456".format(i),
@@ -123,7 +119,6 @@ index_second = {
 
 null_types = {
     "Int64": lambda i: i,
-    "Decimal(12,2)": lambda i: "{}.12".format(i),
     "Decimal(22,9)": lambda i: "{}.123".format(i),
     "Decimal(35,10)": lambda i: "{}.123456".format(i),
     "String": lambda i: f"String {i}",
@@ -139,7 +134,6 @@ pk_types = {
     "Int8": lambda i: i,
     "Uint8": lambda i: i,
     "Bool": lambda i: bool(i),
-    "Decimal(12,2)": lambda i: "{}.12".format(i),
     "Decimal(15,0)": lambda i: "{}".format(i),
     "Decimal(22,9)": lambda i: "{}.123".format(i),
     "Decimal(35,10)": lambda i: "{}.123456".format(i),

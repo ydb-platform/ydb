@@ -2484,7 +2484,7 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         // Pile #1: There are 0 rings locked on this pile => it is possible to lock.
         env.CheckPermissionRequest("user", true, false, true, true, MODE_MAX_AVAILABILITY, TStatus::ALLOW,
                                     MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(0), 60000000, "storage"));
-        // Pile #0: There are 0 rings locked on this pile => it is possible to lock.                            
+        // Pile #0: There are 0 rings locked on this pile => it is possible to lock.
         env.CheckPermissionRequest("user", true, false, true, true, MODE_MAX_AVAILABILITY, TStatus::ALLOW,
                                     MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(1), 60000000, "storage"));
         // Pile #1: There is already one ring locked on this pile => it is not possible to lock.

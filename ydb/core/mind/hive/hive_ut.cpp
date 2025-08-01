@@ -1497,12 +1497,24 @@ Y_UNIT_TEST_SUITE(THiveTest) {
             }
             Ctest << "Register killer\n";
             runtime.Register(CreateTabletKiller(hiveTablet));
+
             bool wasDedup = false;
             auto observerHolder = runtime.AddObserver<TEvHive::TEvDrainNodeResult>([&](auto&& event) {
                 if (event->Get()->Record.GetStatus() == NKikimrProto::EReplyStatus::ALREADY) {
                     wasDedup = true;
                 }
             });
+
+            // Wait until domain hive retries drain
+            TBlockEvents<TEvHive::TEvDrainNode> blockedDrain(runtime);
+            runtime.WaitFor("drain retry", [&]{ return blockedDrain.size() >= 1; }, TDuration::Seconds(1));
+
+            // Let tenant hive finish its drain
+            runtime.SimulateSleep(TDuration::MilliSeconds(100));
+
+            // Unblock the drain retry
+            blockedDrain.Stop().Unblock();
+
             runtime.WaitFor("dedup", [&]{ return wasDedup; }, TDuration::Seconds(1));
         }
     }

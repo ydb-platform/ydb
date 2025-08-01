@@ -392,7 +392,6 @@ static constexpr char ActorName[] = "YQ_CONTROL_PLANE_PROXY_REQUEST_ACTOR";
         if (CanSendRequest()) {
             Send(ServiceId,
                  new TEvControlPlaneStorage::TEvDeleteFolderResourcesRequest(RequestProxy->Get()->Scope,
-                              RequestProxy->Get()->FolderId,
                               RequestProxy->Get()->User,
                               RequestProxy->Get()->Token,
                               RequestProxy->Get()->CloudId,

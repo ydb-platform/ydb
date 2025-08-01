@@ -101,13 +101,25 @@ Vector indexes can be created:
 
 ## Using Vector Indexes {#select}
 
-Queries to vector indexes are executed using the `VIEW` syntax in YQL. For filtered indexes, specify the columns in the `WHERE` clause:
+Queries to vector indexes are executed using the `VIEW` syntax in YQL:
 
 ```yql
 DECLARE $query_vector AS List<Uint8>;
 
 SELECT user, data
 FROM my_table VIEW my_index
+ORDER BY Knn::CosineSimilarity(embedding, $query_vector) DESC
+LIMIT 10;
+```
+
+For filtered indexes, specify the columns in the `WHERE` clause:
+
+```yql
+DECLARE $query_vector AS List<Uint8>;
+
+SELECT user, data
+FROM my_table VIEW my_index
+WHERE user = 'john'
 ORDER BY Knn::CosineSimilarity(embedding, $query_vector) DESC
 LIMIT 10;
 ```

@@ -102,13 +102,25 @@ ALTER TABLE my_table
 
 ## Использование векторных индексов {#select}
 
-Запросы к векторным индексам выполняются с использованием синтаксиса `VIEW` в YQL. Для индексов с фильтрацией укажите соответствующие колонки в условии `WHERE`:
+Запросы к векторным индексам выполняются с использованием синтаксиса `VIEW` в YQL:
 
 ```yql
 DECLARE $query_vector AS List<Uint8>;
 
 SELECT user, data
 FROM my_table VIEW my_index
+ORDER BY Knn::CosineSimilarity(embedding, $query_vector) DESC
+LIMIT 10;
+```
+
+Для индексов с фильтрацией укажите соответствующие колонки в условии `WHERE`:
+
+```yql
+DECLARE $query_vector AS List<Uint8>;
+
+SELECT user, data
+FROM my_table VIEW my_index
+WHERE user = 'john'
 ORDER BY Knn::CosineSimilarity(embedding, $query_vector) DESC
 LIMIT 10;
 ```

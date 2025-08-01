@@ -21,8 +21,10 @@ struct TKqpRunScriptActorSettings {
     TDuration ResultsTtl;
     TDuration ProgressStatsPeriod;
     TIntrusivePtr<TKqpCounters> Counters;
+    bool SaveQueryPhysicalGraph = false;
+    std::optional<NKikimrKqp::TQueryPhysicalGraph> PhysicalGraph;
 };
 
-NActors::IActor* CreateRunScriptActor(const NKikimrKqp::TEvQueryRequest& request, const TKqpRunScriptActorSettings& settings, NKikimrConfig::TQueryServiceConfig queryServiceConfig);
+NActors::IActor* CreateRunScriptActor(const NKikimrKqp::TEvQueryRequest& request, TKqpRunScriptActorSettings&& settings, NKikimrConfig::TQueryServiceConfig queryServiceConfig);
 
 } // namespace NKikimr::NKqp

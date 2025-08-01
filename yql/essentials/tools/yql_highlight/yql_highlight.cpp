@@ -1,8 +1,7 @@
-#include "generate_textmate.h"
-#include "generate_vim.h"
-#include "json.h"
+#include "generator_json.h"
+#include "generator_textmate.h"
+#include "generator_vim.h"
 
-#include <yql/essentials/sql/v1/highlight/sql_highlight_json.h>
 #include <yql/essentials/sql/v1/highlight/sql_highlight.h>
 #include <yql/essentials/sql/v1/highlight/sql_highlighter.h>
 
@@ -14,23 +13,24 @@
 
 using namespace NSQLHighlight;
 
-int RunGenerateJSON() {
-    THighlighting highlighting = MakeHighlighting();
-    Print(Cout, ToJson(highlighting));
-    return 0;
-}
+using TGeneratorFactory = std::function<IGenerator::TPtr()>;
 
-int RunGenerateTextMate() {
-    THighlighting highlighting = MakeHighlighting();
-    GenerateTextMate(Cout, highlighting);
-    return 0;
-}
+using TGeneratorMap = THashMap<TString, TGeneratorFactory>;
 
-int RunGenerateVim() {
-    THighlighting highlighting = MakeHighlighting();
-    GenerateVim(Cout, highlighting);
-    return 0;
-}
+const TGeneratorMap generators = {
+    {"json", MakeJsonGenerator},
+    {"tmlanguage", MakeTextMateJsonGenerator},
+    {"tmbundle", MakeTextMateBundleGenerator},
+    {"vim", MakeVimGenerator},
+};
+
+const TVector<TString> targets = []() {
+    TVector<TString> result;
+    for (const auto& [name, _] : generators) {
+        result.push_back(name);
+    }
+    return result;
+}();
 
 int RunHighlighter() {
     THashMap<EUnitKind, NColorizer::EAnsiCode> ColorByKind = {
@@ -64,28 +64,34 @@ int RunHighlighter() {
 
 int Run(int argc, char* argv[]) {
     TString target;
+    TString path;
 
     NLastGetopt::TOpts opts = NLastGetopt::TOpts::Default();
     opts.AddLongOption('g', "generate", "generate a highlighting configuration")
         .RequiredArgument("target")
-        .Choices({"json", "textmate", "vim"})
+        .Choices(targets)
         .StoreResult(&target);
+    opts.AddLongOption('o', "output", "path to output file")
+        .OptionalArgument("path")
+        .StoreResult(&path);
     opts.SetFreeArgsNum(0);
     opts.AddHelpOption();
 
     NLastGetopt::TOptsParseResult res(&opts, argc, argv);
     if (res.Has("generate")) {
-        if (target == "json") {
-            return RunGenerateJSON();
+        const TGeneratorFactory* generator = generators.FindPtr(target);
+        Y_ENSURE(generator, "No generator for target '" << target << "'");
+
+        if (res.Has("output")) {
+            TFsPath stdpath(path.c_str());
+            (*generator)()->Write(stdpath, MakeHighlighting());
+        } else {
+            (*generator)()->Write(Cout, MakeHighlighting());
         }
-        if (target == "textmate") {
-            return RunGenerateTextMate();
-        }
-        if (target == "vim") {
-            return RunGenerateVim();
-        }
-        Y_ABORT();
+
+        return 0;
     }
+
     return RunHighlighter();
 }
 

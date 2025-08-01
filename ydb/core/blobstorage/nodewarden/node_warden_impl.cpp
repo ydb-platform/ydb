@@ -167,6 +167,7 @@ STATEFN(TNodeWarden::StateOnline) {
         fFunc(TEvBlobStorage::EvNodeWardenUpdateCache, ForwardToDistributedConfigKeeper);
         fFunc(TEvBlobStorage::EvNodeWardenQueryCache, ForwardToDistributedConfigKeeper);
         fFunc(TEvBlobStorage::EvNodeWardenUnsubscribeFromCache, ForwardToDistributedConfigKeeper);
+        fFunc(TEvBlobStorage::EvNodeWardenUpdateConfigFromPeer, ForwardToDistributedConfigKeeper);
 
         hFunc(TEvNodeWardenQueryBaseConfig, Handle);
         hFunc(TEvNodeConfigInvokeOnRootResult, Handle);

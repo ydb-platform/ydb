@@ -11,7 +11,7 @@
 #include <ydb/library/yql/dq/common/rope_over_buffer.h>
 #include <library/cpp/testing/unittest/gtest.h>
 #include <library/cpp/testing/unittest/registar.h>
-#include <ydb/tests/fq/pq_async_io/mock_pq_gateway.h>
+#include <ydb/library/testlib/pq_helpers/mock_pq_gateway.h>
 
 #include <thread>
 
@@ -19,6 +19,8 @@ namespace NYql::NDq {
 
 const ui64 PartitionId1 = 666;
 const ui64 PartitionId2 = 667;
+
+using namespace NTestUtils;
 
 struct TFixture : public TPqIoTestFixture {
     TFixture() {
@@ -65,7 +67,7 @@ struct TFixture : public TPqIoTestFixture {
                 actor.GetHolderFactory(),
                 MakeIntrusive<NMonitoring::TDynamicCounters>(),
                 freeSpace,
-                CreateMockPqGateway(*CaSetup->Runtime, {}) // XXX Is this correct XXX
+                CreateMockPqGateway({.Runtime = CaSetup->Runtime.get()})
                 );
 
             actor.InitAsyncInput(dqSource, dqSourceAsActor);
@@ -163,7 +165,7 @@ struct TFixture : public TPqIoTestFixture {
         });
         UNIT_ASSERT_C(typeMkql, "Failed to create multi type");
 
-        NKikimr::NMiniKQL::TValuePackerTransport<true> packer(typeMkql);
+        NKikimr::NMiniKQL::TValuePackerTransport<true> packer(typeMkql, NKikimr::NMiniKQL::EValuePackerVersion::V0);
 
         TVector<NUdf::TUnboxedValue> values = {
             NUdf::TUnboxedValuePod(intValue),

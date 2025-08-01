@@ -493,7 +493,7 @@ namespace NKikimr::NStorage {
         }
 
         if (TStringStream err; HasConfigQuorum(proposition.StorageConfig, successfulDisks, BridgePileNameMap,
-                *Cfg, true, &err)) {
+                *Cfg, proposition.MindPrev, &err)) {
             // apply configuration and spread it
             ApplyStorageConfig(proposition.StorageConfig);
             FanOutReversePush(StorageConfig.get(), true /*recurseConfigUpdate*/);
@@ -752,7 +752,8 @@ namespace NKikimr::NStorage {
     }
 
     std::optional<TString> TDistributedConfigKeeper::StartProposition(NKikimrBlobStorage::TStorageConfig *configToPropose,
-            const NKikimrBlobStorage::TStorageConfig *propositionBase, TActorId actorId, bool checkSyncersAfterCommit) {
+            const NKikimrBlobStorage::TStorageConfig *propositionBase, TActorId actorId, bool checkSyncersAfterCommit,
+            bool mindPrev) {
         // ensure we are not proposing any other config right now
         Y_ABORT_UNLESS(!CurrentProposition);
 
@@ -794,6 +795,7 @@ namespace NKikimr::NStorage {
             .StorageConfig = *configToPropose,
             .ActorId = actorId,
             .CheckSyncersAfterCommit = checkSyncersAfterCommit,
+            .MindPrev = mindPrev,
         });
 
         // issue scatter task

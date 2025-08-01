@@ -13,7 +13,6 @@ import "ydb/public/api/protos/ydb_status_codes.proto";
 import "ydb/public/api/protos/ydb_table.proto";
 import "ydb/public/api/protos/ydb_value.proto";
 import "ydb/public/api/protos/ydb_issue_message.proto";
-import "ydb/public/api/protos/ydb_topic.proto";
 import "ydb/public/api/protos/ydb_query.proto";
 import "ydb/library/mkql_proto/protos/minikql.proto";
 import "ydb/library/yql/dq/actors/protos/dq_events.proto";
@@ -893,6 +892,7 @@ message TScriptExecutionOperationMeta {
     optional google.protobuf.Duration LeaseDuration = 9;
     optional google.protobuf.Duration ProgressStatsPeriod = 10;
     optional TRlPath RlPath = 11;
+    optional bool SaveQueryPhysicalGraph = 12;
 }
 
 // stored in column "retry_state" of .metadata/script_executions table
@@ -916,6 +916,17 @@ message TScriptExecutionRetryState {
     optional uint64 RetryCounter = 2;
     optional google.protobuf.Timestamp RetryCounterUpdatedAt = 3;
     optional double RetryRate = 4;
+}
+
+// stored in column "physical_graph" of .metadata/script_executions table
+message TQueryPhysicalGraph {
+    message TTask {
+        optional uint64 TxId = 1;
+        optional NYql.NDqProto.TDqTask DqTask = 2;
+    }
+
+    optional TPreparedQuery PreparedQuery = 1;
+    repeated TTask Tasks = 2;
 }
 
 /// KQP workload manager Events

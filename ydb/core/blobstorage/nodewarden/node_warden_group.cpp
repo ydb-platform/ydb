@@ -117,16 +117,9 @@ namespace NKikimr::NStorage {
 
         // forget pending queries
         if (fromController) {
-            group.GetGroupRequestPending = false;
             group.ProposeRequestPending = false;
-        } else if (fromResolver) {
-            group.GetGroupRequestPending = false;
         }
-
-        if (group.GroupResolver && !group.GetGroupRequestPending) {
-            TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, group.GroupResolver, {}, nullptr, 0));
-            group.GroupResolver = {};
-        }
+        group.GetGroupRequestPending = false;
 
         // update group content and encryption stuff
         bool groupChanged = false; // did the 'Group' field change somehow?
@@ -265,6 +258,11 @@ namespace NKikimr::NStorage {
                 GroupPendingQueue.erase(it);
             }
         }
+
+        if (group.GroupResolver && group.Info) {
+            TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, group.GroupResolver, {}, nullptr, 0));
+            group.GroupResolver = {};
+        }
     }
 
     void TNodeWarden::RequestGroupConfig(ui32 groupId, TGroupRecord& group) {
@@ -278,6 +276,7 @@ namespace NKikimr::NStorage {
             SendToController(std::make_unique<TEvBlobStorage::TEvControllerGetGroup>(LocalNodeId, &groupId, &groupId + 1));
             group.GroupResolver = RegisterWithSameMailbox(CreateGroupResolverActor(groupId));
             group.GetGroupRequestPending = true;
+            Send(SelfId(), new TEvNodeWardenQueryCache(Sprintf("G%08" PRIx32, groupId), true));
         }
     }
 

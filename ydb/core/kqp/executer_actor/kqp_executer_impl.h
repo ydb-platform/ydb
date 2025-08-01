@@ -867,7 +867,7 @@ protected:
         for (const auto& [secretName, authInfo] : stage.GetSecureParams()) {
             const auto& structuredToken = NYql::CreateStructuredTokenParser(authInfo).ToBuilder().ReplaceReferences(SecureParams).ToJson();
             const auto& structuredTokenParser = NYql::CreateStructuredTokenParser(structuredToken);
-            YQL_ENSURE(structuredTokenParser.HasIAMToken(), "only token authentification supported for compute tasks");
+            YQL_ENSURE(structuredTokenParser.HasIAMToken(), "only token authentication supported for compute tasks");
             secureParams.emplace(secretName, structuredTokenParser.GetIAMToken());
         }
     }
@@ -1031,6 +1031,19 @@ protected:
         }
     }
 
+    void FillReadTaskFromSource(TTask& task, const TString& sourceName, const TString& structuredToken, const TVector<NKikimrKqp::TKqpNodeResources>& resourceSnapshot, ui64 nodeOffset) {
+        if (structuredToken) {
+            task.Meta.SecureParams.emplace(sourceName, structuredToken);
+        }
+
+        if (resourceSnapshot.empty()) {
+            task.Meta.Type = TTaskMeta::TTaskType::Compute;
+        } else {
+            task.Meta.NodeId = resourceSnapshot[nodeOffset % resourceSnapshot.size()].GetNodeId();
+            task.Meta.Type = TTaskMeta::TTaskType::Scan;
+        }
+    }
+
     void BuildReadTasksFromSource(TStageInfo& stageInfo, const TVector<NKikimrKqp::TKqpNodeResources>& resourceSnapshot, ui32 scheduledTaskCount) {
         auto& intros = stageInfo.Introspections;
         const auto& stage = stageInfo.Meta.GetStage(stageInfo.Id);
@@ -1073,15 +1086,26 @@ protected:
             structuredToken = NYql::CreateStructuredTokenParser(externalSource.GetAuthInfo()).ToBuilder().ReplaceReferences(SecureParams).ToJson();
         }
 
-        ui64 selfNodeIdx = 0;
+        ui64 nodeOffset = 0;
         for (size_t i = 0; i < resourceSnapshot.size(); ++i) {
             if (resourceSnapshot[i].GetNodeId() == SelfId().NodeId()) {
-                selfNodeIdx = i;
+                nodeOffset = i;
                 break;
             }
         }
 
+        if (Request.QueryPhysicalGraph) {
+            for (const auto taskId : stageInfo.Tasks) {
+                auto& task = TasksGraph.GetTask(taskId);
+                FillReadTaskFromSource(task, sourceName, structuredToken, resourceSnapshot, nodeOffset++);
+                FillSecureParamsFromStage(task.Meta.SecureParams, stage);
+                BuildSinks(stage, stageInfo, task);
+            }
+            return;
+        }
+
         TVector<ui64> tasksIds;
+        tasksIds.reserve(taskCount);
 
         // generate all tasks
         for (ui32 i = 0; i < taskCount; i++) {
@@ -1094,17 +1118,8 @@ protected:
                 input.SourceType = externalSource.GetType();
             }
 
-            if (structuredToken) {
-                task.Meta.SecureParams.emplace(sourceName, structuredToken);
-            }
+            FillReadTaskFromSource(task, sourceName, structuredToken, resourceSnapshot, nodeOffset++);
             FillSecureParamsFromStage(task.Meta.SecureParams, stage);
-
-            if (resourceSnapshot.empty()) {
-                task.Meta.Type = TTaskMeta::TTaskType::Compute;
-            } else {
-                task.Meta.NodeId = resourceSnapshot[(selfNodeIdx + i) % resourceSnapshot.size()].GetNodeId();
-                task.Meta.Type = TTaskMeta::TTaskType::Scan;
-            }
 
             tasksIds.push_back(task.Id);
         }
@@ -1463,6 +1478,17 @@ protected:
     void BuildComputeTasks(TStageInfo& stageInfo, const ui32 nodesCount) {
         auto& intros = stageInfo.Introspections;
         auto& stage = stageInfo.Meta.GetStage(stageInfo.Id);
+
+        if (Request.QueryPhysicalGraph) {
+            for (const auto taskId : stageInfo.Tasks) {
+                auto& task = TasksGraph.GetTask(taskId);
+                task.Meta.Type = TTaskMeta::TTaskType::Compute;
+                task.Meta.ExecuterId = SelfId();
+                FillSecureParamsFromStage(task.Meta.SecureParams, stage);
+                BuildSinks(stage, stageInfo, task);
+            }
+            return;
+        }
 
         ui32 partitionsCount = 1;
         ui32 inputTasks = 0;

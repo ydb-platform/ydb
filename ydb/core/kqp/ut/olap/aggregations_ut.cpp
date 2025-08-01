@@ -12,8 +12,7 @@ namespace NKikimr::NKqp {
 
 Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
     Y_UNIT_TEST(Aggregation) {
-        auto settings = TKikimrSettings()
-            .SetWithSampleTables(false);
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
 
         TLocalHelper(kikimr).CreateTestOlapTable();
@@ -151,8 +150,7 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
     }
 
     Y_UNIT_TEST(AggregationCountGroupByPushdown) {
-        auto settings = TKikimrSettings()
-            .SetWithSampleTables(false);
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
 
         TLocalHelper(kikimr).CreateTestOlapTable();

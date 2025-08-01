@@ -58,7 +58,7 @@ namespace NKikimr {
             const bool AllowsConnection;
         };
 
-        static constexpr TPileStateTraits PileStateTraits(const NKikimrBridge::TClusterState::EPileState state) {
+        static constexpr TPileStateTraits PileStateTraits(NKikimrBridge::TClusterState::EPileState state) {
             switch (state) {                                               //  DQ     CQ     AC
                 case NKikimrBridge::TClusterState::SYNCHRONIZED:       return {true,  true,  true };
                 case NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_1: return {false, false, true };
@@ -67,6 +67,7 @@ namespace NKikimr {
 
                 case NKikimrBridge::TClusterState_EPileState_TClusterState_EPileState_INT_MIN_SENTINEL_DO_NOT_USE_:
                 case NKikimrBridge::TClusterState_EPileState_TClusterState_EPileState_INT_MAX_SENTINEL_DO_NOT_USE_:
+                    Y_ABORT();
                     return {};
             }
         }

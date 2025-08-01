@@ -178,7 +178,9 @@ private:
 
     NKikimr::Tests::TServerSettings GetServerSettings(ui32 grpcPort) {
         auto serverSettings = TBase::GetServerSettings(Settings_, grpcPort, Settings_.VerboseLevel >= EVerbose::InitLogs);
-        serverSettings.SetDataCenterCount(Settings_.DcCount);
+        serverSettings
+            .SetDataCenterCount(Settings_.DcCount)
+            .SetPqGateway(Settings_.PqGateway);
 
         SetStorageSettings(serverSettings);
 

@@ -160,7 +160,7 @@ bool CreateAlterContinuousBackup(TOperationId opId, const TTxTransaction& tx, TO
         createCdcStreamOp.SetTableName(tableName);
         auto& streamDescription = *createCdcStreamOp.MutableStreamDescription();
         streamDescription.SetName(newStreamName);
-        streamDescription.SetMode(NKikimrSchemeOp::ECdcStreamModeUpdate);
+        streamDescription.SetMode(NKikimrSchemeOp::ECdcStreamModeNewImage);
         streamDescription.SetFormat(NKikimrSchemeOp::ECdcStreamFormatProto);
 
         rotateCdcStreamOp.MutableNewStream()->CopyFrom(createCdcStreamOp);

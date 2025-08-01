@@ -669,12 +669,31 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         return runtime.GrabEdgeEvent<NHealthCheck::TEvSelfCheckResult>(handle)->Result;
     }
 
+    struct TLocationFilter {
+        std::vector<std::function<bool(const Ydb::Monitoring::Location&)>> Filters;
+
+        bool operator()(const Ydb::Monitoring::Location& location) {
+            auto reverseApply = [&](auto&& func) { return func(location); };
+            return std::ranges::all_of(Filters, reverseApply);
+        }
+
+        TLocationFilter& Pool(const TString& name) {
+            Filters.emplace_back([=](auto&& location) { return location.storage().pool().name() == name; });
+            return *this;
+        }
+
+        TLocationFilter& Pile(const TString& name) {
+            Filters.emplace_back([=](auto&& location) { return location.storage().pool().group().pile().name() == name || location.compute().pile().name() == name; });
+            return *this;
+        }
+    };
+
     void CheckHcResultHasIssuesWithStatus(Ydb::Monitoring::SelfCheckResult& result, const TString& type,
                                           const Ydb::Monitoring::StatusFlag::Status expectingStatus, ui32 total,
-                                          std::string_view pool = "/Root:test") {
+                                          TLocationFilter locationFilter = {}) {
         int issuesCount = 0;
         for (const auto& issue_log : result.Getissue_log()) {
-            if (issue_log.type() == type && issue_log.location().storage().pool().name() == pool && issue_log.status() == expectingStatus) {
+            if (issue_log.type() == type && locationFilter(issue_log.location()) && issue_log.status() == expectingStatus) {
                 issuesCount++;
             }
         }
@@ -798,28 +817,28 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
 
     Y_UNIT_TEST(YellowGroupIssueWhenPartialGroupStatus) {
         auto result = RequestHcWithVdisks(NKikimrBlobStorage::TGroupStatus::PARTIAL, TVDisks{NKikimrBlobStorage::ERROR});
-        CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::YELLOW, 1);
+        CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::YELLOW, 1, TLocationFilter().Pool("/Root:test"));
     }
 
     Y_UNIT_TEST(BlueGroupIssueWhenPartialGroupStatusAndReplicationDisks) {
         auto result = RequestHcWithVdisks(NKikimrBlobStorage::TGroupStatus::PARTIAL, TVDisks{NKikimrBlobStorage::REPLICATING});
-        CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::BLUE, 1);
+        CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::BLUE, 1, TLocationFilter().Pool("/Root:test"));
     }
 
     Y_UNIT_TEST(OrangeGroupIssueWhenDegradedGroupStatus) {
         auto result = RequestHcWithVdisks(NKikimrBlobStorage::TGroupStatus::DEGRADED, TVDisks{2, NKikimrBlobStorage::ERROR});
-        CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::ORANGE, 1);
+        CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::ORANGE, 1, TLocationFilter().Pool("/Root:test"));
     }
 
     Y_UNIT_TEST(RedGroupIssueWhenDisintegratedGroupStatus) {
         auto result = RequestHcWithVdisks(NKikimrBlobStorage::TGroupStatus::DISINTEGRATED, TVDisks{3, NKikimrBlobStorage::ERROR});
-        CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::RED, 1);
+        CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::RED, 1, TLocationFilter().Pool("/Root:test"));
     }
 
     Y_UNIT_TEST(StaticGroupIssue) {
         auto result = RequestHcWithVdisks(NKikimrBlobStorage::TGroupStatus::PARTIAL, TVDisks{NKikimrBlobStorage::ERROR}, /*forStatic*/ true);
         Cerr << result.ShortDebugString() << Endl;
-        CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::YELLOW, 1, "static");
+        CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::YELLOW, 1, TLocationFilter().Pool("static"));
     }
 
     Y_UNIT_TEST(GreenStatusWhenCreatingGroup) {
@@ -848,59 +867,67 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
     Y_UNIT_TEST(OnlyDiskIssueOnSpaceIssues) {
         auto result = RequestHcWithVdisks(NKikimrBlobStorage::TGroupStatus::PARTIAL, TVDisks{3, NKikimrBlobStorage::READY}, false, 0.9);
         Cerr << result.ShortDebugString() << Endl;
-        CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::YELLOW, 0);
-        CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::RED, 0);
-        CheckHcResultHasIssuesWithStatus(result, "PDISK", Ydb::Monitoring::StatusFlag::YELLOW, 3, "");
+        CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::YELLOW, 0, TLocationFilter().Pool("/Root:test"));
+        CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::RED, 0, TLocationFilter().Pool("/Root:test"));
+        CheckHcResultHasIssuesWithStatus(result, "PDISK", Ydb::Monitoring::StatusFlag::YELLOW, 3);
     }
 
     Y_UNIT_TEST(OnlyDiskIssueOnInitialPDisks) {
         auto result = RequestHcWithVdisks(NKikimrBlobStorage::TGroupStatus::PARTIAL, TVDisks{3, {NKikimrBlobStorage::READY, NKikimrBlobStorage::TPDiskState::DeviceIoError}});
         Cerr << result.ShortDebugString() << Endl;
-        CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::YELLOW, 0);
-        CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::ORANGE, 0);
-        CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::RED, 0);
-        CheckHcResultHasIssuesWithStatus(result, "PDISK", Ydb::Monitoring::StatusFlag::RED, 3, "");
+        CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::YELLOW, 0, TLocationFilter().Pool("/Root:test"));
+        CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::ORANGE, 0, TLocationFilter().Pool("/Root:test"));
+        CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::RED, 0, TLocationFilter().Pool("/Root:test"));
+        CheckHcResultHasIssuesWithStatus(result, "PDISK", Ydb::Monitoring::StatusFlag::RED, 3);
     }
 
     Y_UNIT_TEST(OnlyDiskIssueOnFaultyPDisks) {
         auto result = RequestHcWithVdisks(NKikimrBlobStorage::TGroupStatus::PARTIAL, TVDisks{3, {NKikimrBlobStorage::READY, NKikimrBlobStorage::FAULTY}});
         Cerr << result.ShortDebugString() << Endl;
-        CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::YELLOW, 0);
-        CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::ORANGE, 0);
-        CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::RED, 0);
-        CheckHcResultHasIssuesWithStatus(result, "PDISK", Ydb::Monitoring::StatusFlag::RED, 3, "");
+        CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::YELLOW, 0, TLocationFilter().Pool("/Root:test"));
+        CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::ORANGE, 0, TLocationFilter().Pool("/Root:test"));
+        CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::RED, 0, TLocationFilter().Pool("/Root:test"));
+        CheckHcResultHasIssuesWithStatus(result, "PDISK", Ydb::Monitoring::StatusFlag::RED, 3);
     }
 
     Y_UNIT_TEST(BridgeGroupNoIssues) {
         auto result = RequestHcWithBridgeVdisks({2, TVDisks{8, NKikimrBlobStorage::READY}});
         Cerr << result.ShortDebugString() << Endl;
-        CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::YELLOW, 0);
-        CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::ORANGE, 0);
-        CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::RED, 0);
+        CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::YELLOW, 0, TLocationFilter().Pool("/Root:test"));
+        CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::ORANGE, 0, TLocationFilter().Pool("/Root:test"));
+        CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::RED, 0, TLocationFilter().Pool("/Root:test"));
     }
 
     Y_UNIT_TEST(BridgeGroupDegradedInBothPiles) {
         auto result = RequestHcWithBridgeVdisks({2, TVDisks{2, NKikimrBlobStorage::ERROR}});
         Cerr << result.ShortDebugString() << Endl;
-        CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::ORANGE, 1);
+        CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::ORANGE, 1, TLocationFilter().Pool("/Root:test"));
+        CheckHcResultHasIssuesWithStatus(result, "BRIDGE_GROUP", Ydb::Monitoring::StatusFlag::ORANGE, 1, TLocationFilter().Pool("/Root:test").Pile("0"));
+        CheckHcResultHasIssuesWithStatus(result, "BRIDGE_GROUP", Ydb::Monitoring::StatusFlag::ORANGE, 1, TLocationFilter().Pool("/Root:test").Pile("1"));
     }
 
     Y_UNIT_TEST(BridgeGroupDegradedInOnePile) {
         auto result = RequestHcWithBridgeVdisks({TVDisks{2, NKikimrBlobStorage::ERROR}, TVDisks{NKikimrBlobStorage::REPLICATING}});
         Cerr << result.ShortDebugString() << Endl;
         CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::ORANGE, 1);
+        CheckHcResultHasIssuesWithStatus(result, "BRIDGE_GROUP", Ydb::Monitoring::StatusFlag::ORANGE, 1, TLocationFilter().Pool("/Root:test").Pile("0"));
+        CheckHcResultHasIssuesWithStatus(result, "BRIDGE_GROUP", Ydb::Monitoring::StatusFlag::ORANGE, 0, TLocationFilter().Pool("/Root:test").Pile("1"));
     }
 
     Y_UNIT_TEST(BridgeGroupDeadInOnePile) {
         auto result = RequestHcWithBridgeVdisks({TVDisks{3, NKikimrBlobStorage::ERROR}, TVDisks{8, NKikimrBlobStorage::READY}});
         Cerr << result.ShortDebugString() << Endl;
         CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::ORANGE, 1);
+        CheckHcResultHasIssuesWithStatus(result, "BRIDGE_GROUP", Ydb::Monitoring::StatusFlag::RED, 1, TLocationFilter().Pool("/Root:test").Pile("0"));
+        CheckHcResultHasIssuesWithStatus(result, "BRIDGE_GROUP", Ydb::Monitoring::StatusFlag::RED, 0, TLocationFilter().Pool("/Root:test").Pile("1"));
     }
 
     Y_UNIT_TEST(BridgeGroupDeadInBothPiles) {
         auto result = RequestHcWithBridgeVdisks({2, TVDisks{3, NKikimrBlobStorage::ERROR}});
         Cerr << result.ShortDebugString() << Endl;
-        CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::RED, 1);
+        CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::RED, 1, TLocationFilter().Pool("/Root:test"));
+        CheckHcResultHasIssuesWithStatus(result, "BRIDGE_GROUP", Ydb::Monitoring::StatusFlag::RED, 1, TLocationFilter().Pool("/Root:test").Pile("0"));
+        CheckHcResultHasIssuesWithStatus(result, "BRIDGE_GROUP", Ydb::Monitoring::StatusFlag::RED, 1, TLocationFilter().Pool("/Root:test").Pile("1"));;
     }
 
     /* HC currently infers group status on its own, so it's never unknown
@@ -2728,6 +2755,74 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
 
         UNIT_ASSERT_VALUES_EQUAL(result.self_check_result(), Ydb::Monitoring::SelfCheck::MAINTENANCE_REQUIRED);
         UNIT_ASSERT(std::ranges::any_of(result.issue_log(), [](auto&& issue) { return issue.message() == "Cluster is not bootstrapped"; }));
+    }
+
+    Y_UNIT_TEST(BridgeTimeDifference) {
+        TPortManager tp;
+        ui16 port = tp.GetPort(2134);
+        ui16 grpcPort = tp.GetPort(2135);
+        NKikimrConfig::TBridgeConfig bridgeConfig;
+        bridgeConfig.AddPiles()->SetName("pile0");
+        bridgeConfig.AddPiles()->SetName("pile1");
+        auto settings = TServerSettings(port, {}, {}, bridgeConfig)
+                .SetNodeCount(4)
+                .SetUseRealThreads(false)
+                .SetEnableStorage(false)
+                .SetDomainName("Root");
+        TServer server(settings);
+        server.EnableGRpc(grpcPort);
+        TClient client(settings);
+        TTestActorRuntime& runtime = *server.GetRuntime();
+
+        auto bridgeInfo = std::make_shared<TBridgeInfo>();
+        bridgeInfo->Piles.push_back(TBridgeInfo::TPile{.BridgePileId = TBridgePileId::FromValue(0), .State = NKikimrBridge::TClusterState::SYNCHRONIZED, .IsPrimary = true});
+        bridgeInfo->Piles.push_back(TBridgeInfo::TPile{.BridgePileId = TBridgePileId::FromValue(1), .State = NKikimrBridge::TClusterState::SYNCHRONIZED});
+        bridgeInfo->SelfNodePile = bridgeInfo->Piles.data();
+        bridgeInfo->PrimaryPile = bridgeInfo->Piles.data();
+
+        auto configObserver = runtime.AddObserver<TEvNodeWardenStorageConfig>([&](TEvNodeWardenStorageConfig::TPtr& ev) {
+            ev->Get()->BridgeInfo = bridgeInfo;
+        });
+
+        auto wbObserver = runtime.AddObserver<TEvWhiteboard::TEvSystemStateResponse>([nodeBase = runtime.GetNodeId(0)](TEvWhiteboard::TEvSystemStateResponse::TPtr& ev) {
+            auto nodeId = ev->Sender.NodeId();
+            switch (nodeId - nodeBase) {
+                default:
+                    break;
+                case 0:
+                    ev->Get()->Record.MutableSystemStateInfo(0)->SetMaxClockSkewWithPeerUs(15'000);
+                    ev->Get()->Record.MutableSystemStateInfo(0)->SetMaxClockSkewPeerId(nodeBase + 1);
+                    ev->Get()->Record.MutableSystemStateInfo(0)->MutableLocation()->SetBridgePileName("pile0");
+                    break;
+                case 1:
+                    ev->Get()->Record.MutableSystemStateInfo(0)->SetMaxClockSkewWithPeerUs(15'000);
+                    ev->Get()->Record.MutableSystemStateInfo(0)->SetMaxClockSkewPeerId(nodeBase);
+                    ev->Get()->Record.MutableSystemStateInfo(0)->MutableLocation()->SetBridgePileName("pile0");
+                    break;
+                case 2:
+                    ev->Get()->Record.MutableSystemStateInfo(0)->SetMaxClockSkewWithPeerUs(30'000);
+                    ev->Get()->Record.MutableSystemStateInfo(0)->SetMaxClockSkewPeerId(nodeBase + 3);
+                    ev->Get()->Record.MutableSystemStateInfo(0)->MutableLocation()->SetBridgePileName("pile1");
+                    break;
+                case 3:
+                    ev->Get()->Record.MutableSystemStateInfo(0)->SetMaxClockSkewWithPeerUs(30'000);
+                    ev->Get()->Record.MutableSystemStateInfo(0)->SetMaxClockSkewPeerId(nodeBase + 2);
+                    ev->Get()->Record.MutableSystemStateInfo(0)->MutableLocation()->SetBridgePileName("pile1");
+                    break;
+            }
+        });
+
+        TActorId sender = runtime.AllocateEdgeActor();
+        TAutoPtr<IEventHandle> handle;
+
+        auto *request = new NHealthCheck::TEvSelfCheckRequest;
+        request->Request.set_return_verbose_status(true);
+        request->Database = "/Root";
+        runtime.Send(new IEventHandle(NHealthCheck::MakeHealthCheckID(), sender, request, 0));
+        auto result = runtime.GrabEdgeEvent<NHealthCheck::TEvSelfCheckResult>(handle)->Result;
+
+        Ctest << result.ShortDebugString() << Endl;
+        CheckHcResultHasIssuesWithStatus(result, "NODES_TIME_DIFFERENCE", Ydb::Monitoring::StatusFlag::YELLOW, 1, TLocationFilter().Pile("pile0"));
     }
 }
 }

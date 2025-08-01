@@ -282,6 +282,7 @@ namespace NKikimr::NStorage {
             NKikimrBlobStorage::TStorageConfig StorageConfig; // storage config being proposed
             TActorId ActorId; // actor id waiting for this operation to complete
             bool CheckSyncersAfterCommit; // shall we check Bridge syncers after commit has been made
+            bool MindPrev; // mind previous configuration quorum
         };
         std::optional<TProposition> CurrentProposition;
 
@@ -453,7 +454,8 @@ namespace NKikimr::NStorage {
         void SwitchToError(const TString& reason, bool timeout = true);
 
         std::optional<TString> StartProposition(NKikimrBlobStorage::TStorageConfig *configToPropose,
-            const NKikimrBlobStorage::TStorageConfig *propositionBase, TActorId actorId, bool checkSyncersAfterCommit);
+            const NKikimrBlobStorage::TStorageConfig *propositionBase, TActorId actorId, bool checkSyncersAfterCommit,
+            bool mindPrev);
 
         void CheckForConfigUpdate();
 
@@ -462,9 +464,10 @@ namespace NKikimr::NStorage {
         // Generate state storage config
 
         std::unordered_map<ui32, ui32> SelfHealNodesState;
-        
-        bool GenerateStateStorageConfig(NKikimrConfig::TDomainsConfig::TStateStorage *ss,
-            const NKikimrBlobStorage::TStorageConfig& baseConfig);
+
+        bool GenerateStateStorageConfig(NKikimrConfig::TDomainsConfig::TStateStorage *ss
+            , const NKikimrBlobStorage::TStorageConfig& baseConfig
+            , std::unordered_set<ui32>& usedNodes);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Bridge ops

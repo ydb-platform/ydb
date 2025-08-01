@@ -79,6 +79,12 @@ Y_UNIT_TEST_SUITE(AuditConfigTest) {
             }
         )"), yexception);
     }
+
+    Y_UNIT_TEST(DefaultInitialization) {
+        using TLogClassConfig = NKikimrConfig::TAuditConfig::TLogClassConfig;
+        TAuditConfig cfg;
+        UNIT_ASSERT(!cfg.EnableLogging(TLogClassConfig::Login, NACLibProto::SUBJECT_TYPE_USER));
+    }
 }
 
 } // namespace NKikimr::NAudit

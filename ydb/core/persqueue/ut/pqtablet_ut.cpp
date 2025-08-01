@@ -2459,11 +2459,11 @@ Y_UNIT_TEST_F(Kafka_Transaction_Incoming_Before_Previous_TEvDeletePartitionDone_
     SendKafkaTxnWriteRequest(producerInstanceId, ownerCookie);
     ui32 fisrtSupportivePartitionId = WaitForExactTxWritesCount(1).GetTxWrites(0).GetInternalPartitionId();
     
-    TAutoPtr<IEventHandle> deleteDoneEvent;
+    TAutoPtr<TEvPQ::TEvDeletePartitionDone> deleteDoneEvent;
     bool seenEvent = false;
     // add observer for TEvPQ::TEvDeletePartitionDone request and skip it
     AddOneTimeEventObserver<TEvPQ::TEvDeletePartitionDone>(seenEvent, [&deleteDoneEvent](TAutoPtr<IEventHandle>& eventHandle) {
-        deleteDoneEvent = eventHandle;
+        deleteDoneEvent = eventHandle->Release<TEvPQ::TEvDeletePartitionDone>();
         return TTestActorRuntimeBase::EEventAction::DROP;
     });
 
@@ -2483,7 +2483,7 @@ Y_UNIT_TEST_F(Kafka_Transaction_Incoming_Before_Previous_TEvDeletePartitionDone_
     // now we can eventually send TEvPQ::TEvDeletePartitionDone 
     Ctx->Runtime->SendToPipe(Pipe,
                              Ctx->Edge,
-                             deleteDoneEvent.Release()->Get<TEvPQ::TEvDeletePartitionDone>(),
+                             deleteDoneEvent.Release(),
                              0, 0);
     WaitForTheTransactionToBeDeleted(txId);
 
@@ -2506,7 +2506,7 @@ Y_UNIT_TEST_F(Kafka_Transaction_Incoming_Before_Previous_Is_In_DELETED_State_Sho
     SendKafkaTxnWriteRequest(producerInstanceId, ownerCookie);
     WaitForExactTxWritesCount(1);
     
-    TAutoPtr<IEventHandle> keyValueResponse;
+    TAutoPtr<TEvKeyValue::TEvResponse> keyValueResponse;
     bool seenDeletePartitionsDoneEvent = false;
     bool seenKeyValResponse = false;
     // add observer for TEvPQ::TEvDeletePartitionDone request and skip it
@@ -2515,7 +2515,7 @@ Y_UNIT_TEST_F(Kafka_Transaction_Incoming_Before_Previous_Is_In_DELETED_State_Sho
             seenDeletePartitionsDoneEvent = true;
         } else if (seenDeletePartitionsDoneEvent && !seenKeyValResponse && input->CastAsLocal<TEvKeyValue::TEvResponse>()) {
             // next TEvKeyValue::TEvResponse after TEvPQ::TEvDeletePartitionDone contains info about successull deletion of writeInfo from KV
-            keyValueResponse = input;
+            keyValueResponse = input->Release<TEvKeyValue::TEvResponse>();
             seenKeyValResponse = true;
             return TTestActorRuntimeBase::EEventAction::DROP;
         }
@@ -2541,7 +2541,7 @@ Y_UNIT_TEST_F(Kafka_Transaction_Incoming_Before_Previous_Is_In_DELETED_State_Sho
     // eventually send TEvKeyValue::TEvResponse 
     Ctx->Runtime->SendToPipe(Pipe,
                              Ctx->Edge,
-                             keyValueResponse.Release()->Get<TEvKeyValue::TEvResponse>(),
+                             keyValueResponse.Release(),
                              0, 0);
     
     // wait for a deferred response for last GetOwnership request we sent

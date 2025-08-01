@@ -559,26 +559,6 @@ static EKeyPosition KeyPosition(const TKey& lhs, const TKey& rhs)
     }
 }
 
-static TString FindFirstHeadKey(const THashSet<TString>& keys)
-{
-    TString key;
-
-    for (const auto& k : keys) {
-        if (k.back() != '|') {
-            continue;
-        }
-        if (key.empty()) {
-            key = k;
-            continue;
-        }
-        if (k < key) {
-            key = k;
-        }
-    }
-
-    return key;
-}
-
 static THashSet<TString> FilterBlobsMetaData(const NKikimrClient::TKeyValueResponse::TReadRangeResult& range,
                                              const TPartitionId& partitionId)
 {
@@ -634,6 +614,83 @@ static THashSet<TString> FilterBlobsMetaData(const NKikimrClient::TKeyValueRespo
     return {filtered.begin(), filtered.end()};
 }
 
+THolder<TEvKeyValue::TEvRequest> MakeCompatibilityRequest(const THashSet<TString>& actualKeys,
+                                                          const NKikimrClient::TKeyValueResponse::TReadRangeResult& range)
+{
+    auto request = MakeHolder<TEvKeyValue::TEvRequest>();
+
+    for (size_t i = 0; i < range.PairSize(); ++i) {
+        const auto& pair = range.GetPair(i);
+        if (actualKeys.contains(pair.GetKey())) {
+            continue;
+        }
+        auto* cmd = request->Record.AddCmdDeleteRange();
+        auto* range = cmd->MutableRange();
+        range->SetFrom(pair.GetKey());
+        range->SetIncludeFrom(true);
+        range->SetTo(pair.GetKey());
+        range->SetIncludeTo(true);
+    }
+
+    TVector<TString> keys{actualKeys.begin(), actualKeys.end()};
+    std::sort(keys.begin(), keys.end());
+
+    // [0, head)         -- Body
+    // [head, fastWrite) -- Head
+    // [fastWrite, inf)  -- FastWrite
+    size_t head = 0;
+    size_t fastWrite = 0;
+
+    for (head = 0; head < keys.size(); ++head) {
+        const auto& e = keys[head];
+        if ((e.back() == '|') || (e.back() == '?')) {
+            // Head or FastWrite
+            break;
+        }
+    }
+
+    for (fastWrite = head; fastWrite < keys.size(); ++fastWrite) {
+        const auto& e = keys[fastWrite];
+        Y_ABORT_UNLESS((e.back() == '|') || (e.back() == '?'),
+                       "strange key: %s", e.data());
+        if (e.back() != '|') {
+            // FastWrite
+            break;
+        }
+    }
+
+    Y_ABORT_UNLESS(head <= fastWrite);
+
+    //for (size_t i = fastWrite; i < keys.size(); ++i) {
+    //    const auto& e = keys[i];
+    //    Y_ABORT_UNLESS(e.back() == '?',
+    //                   "strange key: %s", e.data());
+    //}
+
+    if (fastWrite < keys.size()) {
+        // exist FastWrite
+        for (size_t i = head; i < keys.size(); ++i) {
+            TString newKey = keys[i];
+            if ((newKey.back() != '|') && (newKey.back() != '?')) {
+                continue;
+            }
+
+            newKey.pop_back();
+
+            auto* cmd = request->Record.AddCmdRename();
+            cmd->SetOldKey(keys[i]);
+            cmd->SetNewKey(newKey);
+        }
+    }
+
+    if ((request->Record.CmdDeleteRangeSize() == 0) && (request->Record.CmdRenameSize() == 0)) {
+        // All the keys are correct. We don't need to delete or rename anything
+        request = nullptr;
+    }
+
+    return request;
+}
+
 void TInitDataRangeStep::FillBlobsMetaData(const NKikimrClient::TKeyValueResponse::TReadRangeResult& range, const TActorContext&) {
     auto& endOffset = Partition()->EndOffset;
     auto& startOffset = Partition()->StartOffset;
@@ -645,41 +702,18 @@ void TInitDataRangeStep::FillBlobsMetaData(const NKikimrClient::TKeyValueRespons
 
     // If there are multiple keys for a message, then only the key that contains more messages remains.
     //
-    // Extra keys will be added to the queue for deletion.
-    const auto actualKeys = FilterBlobsMetaData(range,
-                                                PartitionId());
-    const TString firstHeadKey = FindFirstHeadKey(actualKeys);
-
-    CompatibilityRequest = MakeHolder<TEvKeyValue::TEvRequest>();
+    // Extra keys will be deleted.
+    CompatibilityRequest =
+        MakeCompatibilityRequest(FilterBlobsMetaData(range, PartitionId()),
+                                 range);
+    if (CompatibilityRequest) {
+        return;
+    }
 
     for (ui32 i = 0; i < range.PairSize(); ++i) {
         const auto& pair = range.GetPair(i);
         Y_ABORT_UNLESS(pair.GetStatus() == NKikimrProto::OK); //this is readrange without keys, only OK could be here
         TKey k = MakeKeyFromString(pair.GetKey(), PartitionId());
-        if (!actualKeys.contains(pair.GetKey())) {
-            // It is necessary to remove the extra blob
-            auto* cmd = CompatibilityRequest->Record.AddCmdDeleteRange();
-            auto* range = cmd->MutableRange();
-            range->SetFrom(pair.GetKey());
-            range->SetIncludeFrom(true);
-            range->SetTo(pair.GetKey());
-            range->SetIncludeTo(true);
-            continue;
-        }
-        if (pair.GetKey().back() == '?') {
-            // We need to rename the new keys. At the same time, the location relative to the "head" must be
-            // taken into account
-            TString newKey = pair.GetKey();
-            if (newKey < firstHeadKey) {
-                newKey.resize(newKey.size() - 1);
-            } else {
-                newKey.back() = '|';
-            }
-            auto* cmd = CompatibilityRequest->Record.AddCmdRename();
-            cmd->SetOldKey(pair.GetKey());
-            cmd->SetNewKey(newKey);
-            continue;
-        }
         if (dataKeysBody.empty()) { //no data - this is first pair of first range
             head.Offset = endOffset = startOffset = k.GetOffset();
             if (k.GetPartNo() > 0) {
@@ -708,11 +742,6 @@ void TInitDataRangeStep::FillBlobsMetaData(const NKikimrClient::TKeyValueRespons
                                   TInstant::Seconds(pair.GetCreationUnixTime()),
                                   dataKeysBody.empty() ? 0 : dataKeysBody.back().CumulativeSize + dataKeysBody.back().Size,
                                   Partition()->MakeBlobKeyToken(k.ToString()));
-    }
-
-    if ((CompatibilityRequest->Record.CmdDeleteRangeSize() == 0) && (CompatibilityRequest->Record.CmdRenameSize() == 0)) {
-        // All the keys are correct. We don't need to delete or rename anything
-        CompatibilityRequest = nullptr;
     }
 
     Y_ABORT_UNLESS(endOffset >= startOffset);

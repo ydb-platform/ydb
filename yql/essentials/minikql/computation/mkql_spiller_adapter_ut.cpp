@@ -1,3 +1,4 @@
+
 #include "mkql_spiller_adapter.h"
 #include "mock_spiller_ut.h"
 #include "mock_spiller_factory_ut.h"
@@ -6,6 +7,7 @@
 #include <yql/essentials/minikql/mkql_type_builder.h>
 #include <yql/essentials/minikql/mkql_node.h>
 #include <yql/essentials/minikql/mkql_alloc.h>
+#include <yql/essentials/minikql/mkql_string_util.h>
 
 namespace NKikimr::NMiniKQL {
 
@@ -31,7 +33,7 @@ namespace {
         return {
             NUdf::TUnboxedValuePod(val1),
             NUdf::TUnboxedValuePod(val2),
-            NUdf::TUnboxedValuePod::Embedded(str.substr(0, 23)) // Ограничиваем размер для Embedded
+            MakeString(NUdf::TStringRef(str))
         };
     }
 
@@ -211,11 +213,11 @@ Y_UNIT_TEST_SUITE(TWideUnboxedValuesSpillerAdapterTest) {
         auto spiller = CreateMockSpiller();
         auto mockSpiller = static_cast<TMockSpiller*>(spiller.get());
         
-        TWideUnboxedValuesSpillerAdapter adapter(spiller, multiType, 50); // Very small size limit
+        TWideUnboxedValuesSpillerAdapter adapter(spiller, multiType, 10); // Very small size limit
         
-        // Create a large string (but not too large for Embedded)
-        TString largeString(20, 'x');
-        auto item = CreateTestWideItem(1, 100, largeString);
+        // Create a string
+        TString testString("test_string");
+        auto item = CreateTestWideItem(1, 100, testString);
         
         // This should immediately spill due to size
         auto future = adapter.WriteWideItem(item);
@@ -241,7 +243,7 @@ Y_UNIT_TEST_SUITE(TWideUnboxedValuesSpillerAdapterTest) {
         std::vector<NUdf::TUnboxedValue> extractedItem(3);
         auto extractFuture = adapter.ExtractWideItem(extractedItem);
         UNIT_ASSERT(!extractFuture.has_value());
-        VerifyWideItem(extractedItem, 1, 100, largeString);
+        VerifyWideItem(extractedItem, 1, 100, testString);
     }
 
     Y_UNIT_TEST(TestMockSpillerFactory) {

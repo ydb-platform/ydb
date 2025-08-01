@@ -398,7 +398,7 @@ private:
     }
 
     template <typename TRequest, typename TTokenRecord>
-    static THolder<TRequest> CreateAccessServiceRequest(const TString& key, const TTokenRecord& record) {
+    THolder<TRequest> CreateAccessServiceRequest(const TString& key, const TTokenRecord& record) const {
         auto request = MakeHolder<TRequest>(key);
 
         if (record.Signature.AccessKeyId) {
@@ -498,6 +498,10 @@ private:
     template <typename TTokenRecord>
     void AccessServiceBulkAuthorize(const TString& key, TTokenRecord& record) const {
         auto request = CreateAccessServiceRequest<TEvAccessServiceBulkAuthorizeRequest>(key, record);
+        if (Config.HasAccessServiceTokenName()) {
+            request->Token = AppData()->GetToken(Config.GetAccessServiceTokenName());
+            BLOG_TRACE("Create BulkAuthorize request with token: " << MaskTicket(request->Token));
+        }
         TStringBuilder requestForPermissions;
         for (const auto& [permissionName, permissionRecord] : record.Permissions) {
             auto action = request->Request.mutable_actions()->add_items();

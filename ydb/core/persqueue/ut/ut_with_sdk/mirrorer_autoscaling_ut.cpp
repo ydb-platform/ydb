@@ -94,7 +94,7 @@ namespace NKikimr::NPersQueueTests {
                     Cerr << "PARTITION " << LabeledOutput(part.GetPartitionId(), part.GetActive()) << Endl;
                 }
             }
-            if (0) {
+            if (1) {
                 Cerr << "DESCR " << stage << " " << LabeledOutput(name) << Endl;
                 auto descr = server.AnnoyingClient->DescribeTopic({name});
                 Cerr << LabeledOutput(descr.DebugString()) << Endl;
@@ -224,7 +224,7 @@ namespace NKikimr::NPersQueueTests {
             UNIT_ASSERT_VALUES_EQUAL(CountPartitionsByStatus(srcTopicFullName, server).Active, 2);
             UNIT_ASSERT_VALUES_EQUAL(CountPartitionsByStatus(dstTopicFullName, server).Active, 2);
             for (TString name : {srcTopicFullName, dstTopicFullName}) {
-                PrintTopicDescription(name, "33", server);
+                PrintTopicDescription(name, "3", server);
             }
 
             ui64 txId = 1006;

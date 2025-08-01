@@ -373,6 +373,35 @@ void TMirrorer::TryToWrite(const TActorContext& ctx) {
     WriteRequestTimestamp = ctx.Now();
 }
 
+void TMirrorer::TryToSplitMerge(const TActorContext& ctx) {
+    if (!EndPartitionSessionEvent) {
+        return;
+    }
+    if (WriteRequestInFlight || !Queue.empty()) {
+        return;
+    }
+    const bool isSplit = EndPartitionSessionEvent->GetAdjacentPartitionIds().empty();
+    if (!isSplit) {
+        LOG_WARN_S(ctx, NKikimrServices::PQ_MIRRORER, MirrorerDescription() << " topic merge not supported yet.");
+        return;
+    }
+    if (EndPartitionSessionEvent->GetChildPartitionIds().empty()) {
+        LOG_WARN_S(ctx, NKikimrServices::PQ_MIRRORER, MirrorerDescription() << " split-merge operation has no child partitions");
+        return;
+    }
+    const ::NKikimrPQ::EScaleStatus value = isSplit ? NKikimrPQ::EScaleStatus::NEED_SPLIT : NKikimrPQ::EScaleStatus::NEED_MERGE;
+    THolder request = MakeHolder<TEvPQ::TEvPartitionScaleStatusChanged>();
+    request->Record.SetPartitionId(Partition);
+    request->Record.SetScaleStatus(value);
+    auto* relation = request->Record.MutableSplitMergePartitionsRelation();
+    for (const auto& p : EndPartitionSessionEvent->GetChildPartitionIds()) {
+        relation->AddChildPartitionIds(p);
+    }
+    for (const auto& p : EndPartitionSessionEvent->GetAdjacentPartitionIds()) {
+        relation->AddAdjacentPartitionIds(p);
+    }
+    Send(TabletActor, std::move(request));
+}
 
 void TMirrorer::HandleInitCredentials(TEvPQ::TEvInitCredentials::TPtr& /*ev*/, const TActorContext& ctx) {
     if (CredentialsRequestInFlight) {
@@ -440,6 +469,7 @@ void TMirrorer::HandleRetryWrite(TEvPQ::TEvRetryWrite::TPtr& /*ev*/, const TActo
 void TMirrorer::HandleWakeup(const TActorContext& ctx) {
     TryToRead(ctx);
     TryToWrite(ctx);
+    TryToSplitMerge(ctx);
 }
 
 void TMirrorer::CreateConsumer(TEvPQ::TEvCreateConsumer::TPtr&, const TActorContext& ctx) {
@@ -676,6 +706,11 @@ void TMirrorer::DoProcessNextReaderEvent(const TActorContext& ctx, bool wakeup) 
         ProcessError(ctx, TStringBuilder() << " read session closed: " << closeSessionEvent->DebugString());
         ScheduleConsumerCreation(ctx);
         return;
+    } else if (auto* endPartitionSessionEvent = std::get_if<TPersQueueReadEvent::TEndPartitionSessionEvent>(&event.value())) {
+        LOG_INFO_S(ctx, NKikimrServices::PQ_MIRRORER, MirrorerDescription()
+            << " got end partion session event: " << endPartitionSessionEvent->DebugString());
+        Y_VERIFY_S(!EndPartitionSessionEvent.has_value(), MirrorerDescription() << " already has end partition session event");
+        EndPartitionSessionEvent = *endPartitionSessionEvent;
     } else {
         ProcessError(ctx, TStringBuilder() << " got unmatched event: " << event.value().index());
         ScheduleConsumerCreation(ctx);

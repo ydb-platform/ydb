@@ -13,6 +13,7 @@ ui64 TopicPartitionReserveThroughput(const NKikimrPQ::TPQTabletConfig& config);
 
 bool MirroringEnabled(const NKikimrPQ::TPQTabletConfig& config);
 bool SplitMergeEnabled(const NKikimrPQ::TPQTabletConfig& config);
+bool MirrorFromEnabled(const NKikimrPQ::TPQTabletConfig& config);
 
 size_t CountActivePartitions(const ::google::protobuf::RepeatedPtrField< ::NKikimrPQ::TPQTabletConfig_TPartition >& partitions);
 

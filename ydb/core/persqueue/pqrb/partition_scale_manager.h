@@ -44,12 +44,26 @@ private:
         ui64 CurPartitions;
     };
 
+    struct TPrescribedPartitionIds {
+        std::vector<ui32> ChildPartitionIds;
+        std::vector<ui32> AdjacentPartitionIds;
+    };
+
+    struct TPartitionSplitRequest {
+        ui32 PartitionId{};
+        TMaybe<TPrescribedPartitionIds> PrescribedPartitionIds;
+    };
+
+    struct TBuildSplitScaleRequestResult;
+
 public:
     TPartitionScaleManager(const TString& topicName, const TString& topicPath, const TString& databasePath, ui64 pathId, int version, const NKikimrPQ::TPQTabletConfig& config, const TPartitionGraph& partitionGraph);
 
 public:
     void HandleScaleStatusChange(const ui32 partition, NKikimrPQ::EScaleStatus scaleStatus, const TActorContext& ctx);
+    void HandleScaleStatusChange(const ui32 partition, NKikimrPQ::EScaleStatus scaleStatus, std::vector<ui32> childPartitionsIds, std::vector<ui32> adjacentPartitionIds, const TActorContext& ctx);
     void HandleScaleRequestResult(TPartitionScaleRequest::TEvPartitionScaleRequestDone::TPtr& ev, const TActorContext& ctx);
+
     void TrySendScaleRequest(const TActorContext& ctx);
     void UpdateBalancerConfig(ui64 pathId, int version, const NKikimrPQ::TPQTabletConfig& config);
     void UpdateDatabasePath(const TString& dbPath);
@@ -60,6 +74,9 @@ private:
     using TPartitionMerge = NKikimrSchemeOp::TPersQueueGroupDescription_TPartitionMerge;
 
     std::pair<std::vector<TPartitionSplit>, std::vector<TPartitionMerge>> BuildScaleRequest(const TActorContext& ctx);
+    TBuildSplitScaleRequestResult BuildSplitScaleRequest(const TPartitionSplitRequest& splitParameters) const;
+    void HandleScaleStatusChange(TPartitionSplitRequest split, NKikimrPQ::EScaleStatus scaleStatus, const TActorContext& ctx);
+    TString LogPrefix() const;
 
 public:
     static const ui64 TRY_SCALE_REQUEST_WAKE_UP_TAG = 10;
@@ -75,12 +92,13 @@ private:
     TDuration RequestTimeout = TDuration::MilliSeconds(0);
     TInstant LastResponseTime = TInstant::Zero();
 
-    std::unordered_set<ui32> PartitionsToSplit;
+    std::map<ui32, TPartitionSplitRequest> PartitionsToSplit;
 
     TBalancerConfig BalancerConfig;
     const TPartitionGraph& PartitionGraph;
 
     bool RequestInflight = false;
+    bool MirrorFromMode = false;
 };
 
 } // namespace NPQ

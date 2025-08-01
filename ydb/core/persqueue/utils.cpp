@@ -41,6 +41,11 @@ bool SplitMergeEnabled(const NKikimrPQ::TPQTabletConfig& config) {
     return config.has_partitionstrategy() && config.partitionstrategy().has_partitionstrategytype() && config.partitionstrategy().partitionstrategytype() != ::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_DISABLED;
 }
 
+bool MirrorFromEnabled(const NKikimrPQ::TPQTabletConfig& config) {
+    const auto& partitionConfig = config.GetPartitionConfig();
+    return partitionConfig.HasMirrorFrom();
+}
+
 size_t CountActivePartitions(const ::google::protobuf::RepeatedPtrField< ::NKikimrPQ::TPQTabletConfig_TPartition >& partitions) {
     return std::count_if(partitions.begin(), partitions.end(), [](const auto& p) {
         return p.GetStatus() == ::NKikimrPQ::ETopicPartitionStatus::Active;

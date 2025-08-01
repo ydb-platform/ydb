@@ -1080,6 +1080,13 @@ message TEvReadingPartitionStartedRequest {
 message TEvPartitionScaleStatusChanged {
     required uint32 PartitionId = 1;
     required EScaleStatus ScaleStatus = 2;
+
+    message TSplitMergePartitionsRelation {
+        repeated uint32 ChildPartitionIds = 1;
+        repeated uint32 AdjacentPartitionIds = 2;
+    };
+
+    optional TSplitMergePartitionsRelation SplitMergePartitionsRelation = 3;
 };
 
 message TPartitions {

@@ -1,7 +1,7 @@
 from ydb.tests.datashard.lib.types_of_variables import cleanup_type_name
 
 
-def create_table_sql_request(table_name: str, columns: dict[str, dict[str]], pk_columns: dict[str, dict[str]], index_columns: dict[str, dict[str]], unique: str, sync: str) -> str:
+def create_table_sql_request(table_name: str, columns: dict[str, dict[str]], pk_columns: dict[str, dict[str]], index_columns: dict[str, dict[str]], unique: str, sync: str, store: str = "") -> str:
     create_columns = []
     for prefix in columns.keys():
         if (prefix != "ttl_" or columns[prefix][0] != "") and len(columns[prefix]) != 0:
@@ -22,9 +22,10 @@ def create_table_sql_request(table_name: str, columns: dict[str, dict[str]], pk_
             {", ".join(create_columns)},
             PRIMARY KEY(
                 {", ".join(create_primary_key)}
-                ),
-            {", ".join(create_index)}
+                )
+            {f", {', '.join(create_index)}" if create_index else ""}
             )
+        {f"WITH (STORE = {store})" if store else ""}
     """
     return sql_create
 

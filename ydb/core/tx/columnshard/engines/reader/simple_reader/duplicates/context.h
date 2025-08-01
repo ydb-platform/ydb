@@ -38,11 +38,14 @@ public:
         AFL_VERIFY(filterExt.GetRecordsCountVerified() == info.GetRows().NumRows())("filter", filterExt.GetRecordsCountVerified())(
                                                             "info", info.GetRows().NumRows());
         AFL_VERIFY(FiltersByRange.emplace(info.GetRows(), filterExt).second)("info", info.DebugString());
+        AFL_VERIFY(info.GetRows().GetEnd() <= OriginalRequest->Get()->GetRecordsCount())("range", info.GetRows().DebugString())(
+                                                "requested", OriginalRequest->Get()->GetRecordsCount());
 
         while (FiltersByRange.size() > 1 && FiltersByRange.begin()->first.GetEnd() >= std::next(FiltersByRange.begin())->first.GetBegin()) {
             auto l = FiltersByRange.begin();
             auto r = std::next(FiltersByRange.begin());
-            AFL_VERIFY(l->first.GetEnd() == r->first.GetBegin())("l", l->first.DebugString())("r", r->first.DebugString());
+            AFL_VERIFY(l->first.GetEnd() == r->first.GetBegin())("l", l->first.DebugString())("r", r->first.DebugString())(
+                                              "reason", "intersection_prohibited");
             TRowRange range = TRowRange(l->first.GetBegin(), r->first.GetEnd());
             NArrow::TColumnFilter filter = l->second;
             filter.Append(r->second);

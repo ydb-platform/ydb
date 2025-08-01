@@ -113,7 +113,7 @@ public:
     NActors::TActorId RowDispatcher2Id;
     NActors::TActorId ReadActor1;
     NActors::TActorId ReadActor2;
-    static constexpr const char ReadGroup1[]  = "connection1";
+    static constexpr const char ReadGroup1[] = "connection1";
     static constexpr const char ReadGroup2[] = "connection2";
 };
 
@@ -184,7 +184,7 @@ Y_UNIT_TEST_SUITE(CoordinatorTests) {
     Y_UNIT_TEST_F(UseReadGroupTopicLimit, TFixture) {
         ExpectCoordinatorChangesSubscribe();
         TSet<NActors::TActorId> rowDispatcherIds{RowDispatcher1Id, RowDispatcher2Id, LocalRowDispatcherId};
-                for (auto id : rowDispatcherIds) {
+        for (auto id : rowDispatcherIds) {
             Ping(id);
         }
         MockRequest(ReadActor1, "endpoint1", "topic1", {0, 1, 2, 3}, ReadGroup2);

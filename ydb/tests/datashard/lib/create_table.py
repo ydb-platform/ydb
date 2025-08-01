@@ -23,7 +23,7 @@ def create_table_sql_request(table_name: str, columns: dict[str, dict[str]], pk_
             PRIMARY KEY(
                 {", ".join(create_primary_key)}
                 )
-            {f", {', '.join(create_index)}" if create_index else ""}
+            {f", {", ".join(create_index)}" if create_index else ""}
             )
         {f"WITH (STORE = {store})" if store else ""}
     """

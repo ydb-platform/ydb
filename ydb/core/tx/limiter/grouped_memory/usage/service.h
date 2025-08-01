@@ -18,7 +18,7 @@ private:
     TConfig ServiceConfig = TConfig::BuildDisabledConfig();
     std::shared_ptr<TCounters> Counters;
     std::shared_ptr<TStageFeatures> DefaultStageFeatures =
-        std::make_shared<TStageFeatures>("DEFAULT", ((ui64)3) << 30, ((ui64)10) << 30, nullptr, nullptr);
+        std::make_shared<TStageFeatures>("DEFAULT", std::nullopt, std::nullopt, nullptr, nullptr);
     using TSelf = TServiceOperatorImpl<TMemoryLimiterPolicy>;
     static void Register(const TConfig& serviceConfig, TIntrusivePtr<::NMonitoring::TDynamicCounters> counters) {
         Singleton<TSelf>()->Counters = std::make_shared<TCounters>(counters, TMemoryLimiterPolicy::Name);

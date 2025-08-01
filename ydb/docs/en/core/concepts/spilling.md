@@ -59,25 +59,23 @@ Data is saved in files on the local file system. Spilling Service ensures:
 
 In case of unexpected restart, obsolete files are automatically deleted.
 
-#### Components using spilling
+#### Components Using Spilling
 
-System components are integrated with Spilling Service and interact with it through actor system events:
+System components are integrated with the Spilling Service and interact with it through actor system events:
 
-**Memory state monitoring**: Compute nodes continuously monitor memory state through the allocator. The allocator informs nodes about decreasing free memory volume. However, the system does not wait for complete memory exhaustion, since the spilling process also requires additional memory resources for serialization and buffering.
+- **Memory state monitoring**: Compute nodes continuously monitor memory state through the allocator. The allocator informs nodes about decreasing free memory volume. However, the system does not wait for complete memory exhaustion, since the spilling process also requires additional memory resources for serialization and buffering.
+- **Event dispatch**: When spilling is required, the compute component (data transfer channel or compute core) performs the following actions:
 
-**Event dispatch**: When spilling necessity is detected, the compute component (data transfer channel or compute core) performs the following actions:
+    1. Serializes data into a blob
+    2. Generates a unique identifier for the blob
+    3. Creates a spilling request with the blob and generated identifier
+    4. Sends the request to the Spilling Service
+    5. Releases resources and enters waiting mode, allowing other tasks to utilize computational resources
 
-1. Serializes data into a blob
-2. Generates a unique identifier for the blob
-3. Creates a spilling request with the blob and generated identifier
-4. Sends the request to Spilling Service
-5. Releases resources and enters waiting mode, allowing other tasks to utilize computational resources
+- **Waiting for results**: After sending the request, the compute component releases resources for other tasks and enters waiting mode, allowing the system to optimally utilize cluster computing resources until the external storage write is complete.
+- **Response handling**: The Spilling Service processes the request and returns a write confirmation for the specified identifier or an error message. The compute component can continue only after receiving confirmation.
 
-**Waiting for results**: After sending the request, the compute component releases resources for other tasks and enters waiting mode, allowing the system to optimally utilize cluster computing resources until external storage write completion.
-
-**Response handling**: Spilling Service processes the request and returns write confirmation for the specified identifier or error message. Compute component can only continue after receiving confirmation.
-
-**Spilling workflow diagram:**
+##### Spilling Workflow Diagram
 
 ```mermaid
 sequenceDiagram

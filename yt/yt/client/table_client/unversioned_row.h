@@ -994,6 +994,15 @@ struct THash<NYT::NTableClient::TUnversionedRow>
     }
 };
 
+template <>
+struct THash<NYT::NTableClient::TUnversionedOwningRow>
+{
+    inline size_t operator()(NYT::NTableClient::TUnversionedOwningRow row) const
+    {
+        return NYT::NTableClient::TDefaultUnversionedRowHash()(row);
+    }
+};
+
 template <class T>
     requires std::derived_from<std::remove_cvref_t<T>, NYT::NTableClient::TUnversionedRow>
 struct NYT::TFormatArg<T>

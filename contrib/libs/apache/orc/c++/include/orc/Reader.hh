@@ -498,9 +498,11 @@ namespace orc {
     /**
      * Get the statistics about a stripe.
      * @param stripeIndex the index of the stripe (0 to N-1) to get statistics about
-     * @return the statistics about that stripe
+     * @param includeRowIndex whether the row index of the stripe is included
+     * @return the statistics about that stripe and row group index statistics
      */
-    virtual std::unique_ptr<StripeStatistics> getStripeStatistics(uint64_t stripeIndex) const = 0;
+    virtual std::unique_ptr<StripeStatistics> getStripeStatistics(
+        uint64_t stripeIndex, bool includeRowIndex = true) const = 0;
 
     /**
      * Get the length of the data stripes in the file.

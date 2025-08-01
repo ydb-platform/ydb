@@ -8,22 +8,25 @@ namespace NYT::NConcurrency {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-
-class TPeriodicYielder
+class TPeriodicYielderGuard
     : public NProfiling::TWallTimer
     , private TContextSwitchGuard
 {
 public:
-    TPeriodicYielder(TDuration period = TDuration::MilliSeconds(30));
-
     bool NeedYield() const;
 
     //! Returns true, if we have released the thread and got back to execution.
     bool TryYield() const;
 
 private:
-    TCpuDuration CpuPeriod_;
+    std::optional<TCpuDuration> CpuPeriod_;
+
+    TPeriodicYielderGuard(std::optional<TDuration> period = std::nullopt);
+
+    friend TPeriodicYielderGuard CreatePeriodicYielder(std::optional<TDuration> period);
 };
+
+TPeriodicYielderGuard CreatePeriodicYielder(std::optional<TDuration> period = std::nullopt);
 
 ////////////////////////////////////////////////////////////////////////////////
 

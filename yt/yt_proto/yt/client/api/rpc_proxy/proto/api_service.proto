@@ -670,6 +670,7 @@ message TReqSelectRows
     optional int64 rowset_processing_batch_size = 29;
     optional int64 write_rowset_size = 30;
     optional int64 max_join_batch_size = 31;
+    optional bool use_order_by_in_join_subqueries = 32;
 
     optional TSuppressableAccessTrackingOptions suppressable_access_tracking_options = 104;
 

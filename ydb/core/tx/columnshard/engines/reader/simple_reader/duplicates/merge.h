@@ -48,6 +48,7 @@ public:
 
     void AddSource(const std::shared_ptr<NArrow::TGeneralContainer>& batch,
         const std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>& guard, const TDuplicateMapInfo& interval) {
+        AFL_VERIFY(guard);
         AFL_VERIFY(interval.GetRows().NumRows());
         AFL_VERIFY(interval.GetRows().GetBegin() < batch->GetRecordsCount())("interval", interval.DebugString())(
                                                      "records", batch->GetRecordsCount());

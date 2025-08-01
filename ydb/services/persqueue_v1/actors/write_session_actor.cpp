@@ -128,6 +128,7 @@ inline void FillExtraFieldsForDataChunk(
 template <>
 inline void FillChunkDataFromReq(
     NKikimrPQClient::TDataChunk& proto,
+    TString& ,
     const Ydb::PersQueue::V1::StreamingWriteClientMessage::WriteRequest& writeRequest,
     const i32 messageIndex
 ) {
@@ -140,6 +141,7 @@ inline void FillChunkDataFromReq(
 template <>
 inline void FillChunkDataFromReq(
     NKikimrPQClient::TDataChunk& proto,
+    TString& messageKey,
     const Ydb::Topic::StreamWriteMessage::WriteRequest& writeRequest,
     const i32 messageIndex
 ) {
@@ -152,6 +154,14 @@ inline void FillChunkDataFromReq(
     }
     proto.SetData(msg.data());
     auto* msgMeta = proto.MutableMessageMeta();
+    for (const auto& item : msg.metadata_items()) {
+        if (item.key() != "__key") {
+            auto* res = msgMeta->Add();
+            res->set_key(item.key());
+            res->set_value(item.value());
+            messageKey = item.value();
+        }
+    }
     *msgMeta = msg.metadata_items();
 }
 
@@ -1182,9 +1192,10 @@ void TWriteSessionActor<UseMigrationProtocol>::PrepareRequest(THolder<TEvWrite>&
     auto& request = pendingRequest->PartitionWriteRequest->Record;
     ui64 payloadSize = 0;
 
+    TString messageKey;
     auto addDataMigration = [&](const StreamingWriteClientMessage::WriteRequest& writeRequest, const i32 messageIndex) {
         auto w = request.MutablePartitionRequest()->AddCmdWrite();
-        w->SetData(GetSerializedData(InitMeta, writeRequest, messageIndex));
+        w->SetData(GetSerializedData(InitMeta, messageKey, writeRequest, messageIndex));
         if (UseDeduplication) {
             w->SetSourceId(NPQ::NSourceIdEncoding::EncodeSimple(SourceId));
         }
@@ -1200,9 +1211,13 @@ void TWriteSessionActor<UseMigrationProtocol>::PrepareRequest(THolder<TEvWrite>&
     ui64 maxMessageMetadataSize = 0;
     auto addData = [&](const Topic::StreamWriteMessage::WriteRequest& writeRequest, const i32 messageIndex) {
         const auto& msg = writeRequest.messages(messageIndex);
+        messageKey.clear();
 
         auto w = request.MutablePartitionRequest()->AddCmdWrite();
-        w->SetData(GetSerializedData(InitMeta, writeRequest, messageIndex));
+        w->SetData(GetSerializedData(InitMeta, messageKey, writeRequest, messageIndex));
+        if (!messageKey.empty()) {
+            w->SetMessageKey(messageKey);
+        }
         if (UseDeduplication) {
             w->SetSourceId(NPQ::NSourceIdEncoding::EncodeSimple(SourceId));
         } else {
@@ -1219,9 +1234,6 @@ void TWriteSessionActor<UseMigrationProtocol>::PrepareRequest(THolder<TEvWrite>&
         ui64 currMetadataSize = 0;
         for (const auto& metaItem : msg.metadata_items()) {
             currMetadataSize += metaItem.key().size() + metaItem.value().size();
-            if (metaItem.key() == "__key") {
-                w->SetPartitionKey(metaItem.value());
-            }
         }
         maxMessageMetadataSize = std::max(maxMessageMetadataSize, currMetadataSize);
     };

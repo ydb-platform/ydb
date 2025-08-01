@@ -15,6 +15,7 @@
 
 #include <ydb/core/keyvalue/keyvalue_events.h>
 #include <ydb/core/jaeger_tracing/sampling_throttling_control.h>
+#include <ydb/core/protos/feature_flags.pb.h>
 #include <ydb/library/persqueue/counter_time_keeper/counter_time_keeper.h>
 
 #include <ydb/library/actors/core/actor.h>
@@ -483,6 +484,7 @@ public:
                const NKikimrPQ::TPQTabletConfig& config, const TTabletCountersBase& counters, bool SubDomainOutOfSpace, ui32 numChannels,
                const TActorId& writeQuoterActorId,
                TIntrusivePtr<NJaegerTracing::TSamplingThrottlingControl> samplingControl,
+               const NKikimrConfig::TFeatureFlags& featureFlags,
                bool newPartition = false);
 
     void Bootstrap(const TActorContext& ctx);

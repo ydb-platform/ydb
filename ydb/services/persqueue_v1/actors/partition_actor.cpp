@@ -594,6 +594,20 @@ bool FillBatchedData(
             message->set_message_group_id(GetBatchSourceId(currentBatch));
             auto* msgMeta = message->mutable_metadata_items();
             *msgMeta = (proto.GetMessageMeta());
+            bool hasKey = false;
+            if (r.HasMessageKey()) {
+                for (const auto& metaItem : proto.GetMessageMeta()) {
+                    if (metaItem.key() == "__key") {
+                        hasKey = true;
+                        break;
+                    }
+                }
+                if (!hasKey) {
+                    auto* keyItem = msgMeta->Add();
+                    keyItem->set_key("__key");
+                    keyItem->set_value(r.GetMessageKey());
+                }
+            }
         }
         hasData = true;
     }

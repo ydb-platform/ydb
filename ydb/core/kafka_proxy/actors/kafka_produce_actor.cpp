@@ -307,7 +307,7 @@ std::pair<EKafkaErrors, THolder<TEvPartitionWriter::TEvWriteRequest>> Convert(
             auto res = proto.AddMessageMeta();
             res->set_key("__key");
             res->set_value(static_cast<const char*>(record.Key->data()), record.Key->size());
-            w->SetPartitionKey(res->value());
+            w->SetMessageKey(res->value());
         }
 
         if (record.Value) {
@@ -453,7 +453,7 @@ void TKafkaProduceActor::Handle(TEvPartitionWriter::TEvWriteResponse::TPtr reque
             TransactionalWriters.erase(txnIt);
         }
     }
-    
+
     auto& partitionResult = cookieInfo.Request->Results[cookieInfo.Position];
     partitionResult.ErrorCode = EKafkaErrors::NONE_ERROR;
     partitionResult.Value = request;
@@ -547,9 +547,9 @@ void TKafkaProduceActor::SendResults(const TActorContext& ctx) {
                             partitionResponse.BaseOffset = writeResults.at(0).GetOffset();
                         }
                     } else {
-                        KAFKA_LOG_ERROR("Produce actor: Partition result with error: ErrorCode=" 
-                            << static_cast<int>(Convert(msg->GetError().Code)) 
-                            << ", ErrorMessage=" << msg->GetError().Reason 
+                        KAFKA_LOG_ERROR("Produce actor: Partition result with error: ErrorCode="
+                            << static_cast<int>(Convert(msg->GetError().Code))
+                            << ", ErrorMessage=" << msg->GetError().Reason
                             << ", Error from writer=" << static_cast<int>(msg->Record.GetErrorCode())
                             << ", #02");
                         SendMetrics(TStringBuilder() << topicData.Name, recordsCount, "failed_messages", ctx);
@@ -645,7 +645,6 @@ void TKafkaProduceActor::RecreatePartitionWriterAndRetry(ui64 cookie, const TAct
                 }
             }
         }
-
         cookieInfo.Request->WaitResultCookies.erase(cookie);
         cookieInfo.Request->WaitAcceptingCookies.erase(cookie);
         Cookies.erase(it);

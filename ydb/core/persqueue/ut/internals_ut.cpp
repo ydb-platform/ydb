@@ -20,8 +20,8 @@ Y_UNIT_TEST(TestPartitionedBlobSimpleTest) {
     THead head;
     THead newHead;
 
-    TPartitionedBlob blob(TPartitionId(0), 0, "sourceId", 1, 1, 10, head, newHead, false, false, 8_MB);
-    TClientBlob clientBlob("sourceId", 1, "valuevalue", TMaybe<TPartData>(), TInstant::MilliSeconds(1), TInstant::MilliSeconds(1), 0, "123", "123");
+    TPartitionedBlob blob(TPartitionId(0), 0, "sourceId", 1, 1, 10, head, newHead, false, false, 8_MB, false);
+    TClientBlob clientBlob("sourceId", 1, "valuevalue", TMaybe<TPartData>(), TInstant::MilliSeconds(1), TInstant::MilliSeconds(1), 0, "123", "123", "1234");
     UNIT_ASSERT(blob.IsInited());
     TString error;
     UNIT_ASSERT(blob.IsNextPart("sourceId", 1, 0, &error));
@@ -43,15 +43,15 @@ void Test(bool headCompacted, ui32 parts, ui32 partSize, ui32 leftInHead)
         TString value(100_KB, 'a');
         head.AddBlob(TClientBlob(
             "sourceId" + TString(1,'a' + rand() % 26), i + 1, std::move(value), TMaybe<TPartData>(),
-            TInstant::MilliSeconds(i + 1),  TInstant::MilliSeconds(i + 1), 1, "", ""
-        ));
+            TInstant::MilliSeconds(i + 1),  TInstant::MilliSeconds(i + 1), 1, "", "", ""
+        ), false);
         if (!headCompacted)
             all.push_back(head.GetLastBatch().Blobs.back());
     }
-    head.MutableLastBatch().Pack();
+    head.MutableLastBatch().Pack(false);
     UNIT_ASSERT(head.GetLastBatch().Header.GetFormat() == NKikimrPQ::TBatchHeader::ECompressed);
     head.MutableLastBatch().Unpack();
-    head.MutableLastBatch().Pack();
+    head.MutableLastBatch().Pack(false);
     TString str;
     head.GetLastBatch().SerializeTo(str);
     auto header = ExtractHeader(str.c_str(), str.size());
@@ -67,14 +67,14 @@ void Test(bool headCompacted, ui32 parts, ui32 partSize, ui32 leftInHead)
         TString value(100_KB, 'a');
         newHead.AddBlob(TClientBlob(
             "sourceId2", i + 1, std::move(value), TMaybe<TPartData>(),
-            TInstant::MilliSeconds(i + 1000), TInstant::MilliSeconds(i + 1000), 1, "", ""
-        ));
+            TInstant::MilliSeconds(i + 1000), TInstant::MilliSeconds(i + 1000), 1, "", "", ""
+        ), false);
         all.push_back(newHead.GetLastBatch().Blobs.back()); //newHead always glued
     }
     newHead.PackedSize = newHead.GetLastBatch().GetUnpackedSize();
     TString value2(partSize, 'b');
     ui32 maxBlobSize = 8 << 20;
-    TPartitionedBlob blob(TPartitionId(0), newHead.GetNextOffset(), "sourceId3", 1, parts, parts * value2.size(), head, newHead, headCompacted, false, maxBlobSize);
+    TPartitionedBlob blob(TPartitionId(0), newHead.GetNextOffset(), "sourceId3", 1, parts, parts * value2.size(), head, newHead, headCompacted, false, maxBlobSize, false);
 
     TVector<TPartitionedBlob::TFormedBlobInfo> formed;
 
@@ -86,7 +86,7 @@ void Test(bool headCompacted, ui32 parts, ui32 partSize, ui32 leftInHead)
         TString v = value2;
         TClientBlob clientBlob(
             "soruceId3", 1, std::move(v), std::move(partData),
-            TInstant::MilliSeconds(1), TInstant::MilliSeconds(1), 1, "", ""
+            TInstant::MilliSeconds(1), TInstant::MilliSeconds(1), 1, "", "", ""
         );
         all.push_back(clientBlob);
         auto res = blob.Add(std::move(clientBlob));
@@ -144,7 +144,7 @@ void Test(bool headCompacted, ui32 parts, ui32 partSize, ui32 leftInHead)
     for (const auto& p : blob.GetClientBlobs()) {
         real.push_back(p);
         c++;
-        s += p.GetBlobSize();
+        s += p.GetBlobSize(false);
     }
 
     UNIT_ASSERT(c == leftInHead);
@@ -173,21 +173,21 @@ Y_UNIT_TEST(TestPartitionedBigTest) {
     Test(true, 1, 512_KB - 9 - sizeof(ui64) - sizeof(ui16) - 100, 1); //serialized size of client blob is 512_KB - 100
     Test(true, 101, 512_KB - 9 - sizeof(ui64) - sizeof(ui16) - 100, 7); //serialized size of client blob is 512_KB - 100
 }
-
-Y_UNIT_TEST(TestBatchPacking) {
-    TBatch batch;
-    for (ui32 i = 0; i < 100; ++i) {
+void BatchPackingTest (bool saveMessageKey) {
+  TBatch batch;
+  TString messageKey = saveMessageKey ? "message-key" : "";
+  for (ui32 i = 0; i < 100; ++i) {
     TString value(10, 'a');
         batch.AddBlob(TClientBlob(
             "sourceId1", i + 1, std::move(value), TMaybe<TPartData>(),
-            TInstant::MilliSeconds(1), TInstant::MilliSeconds(1), 0, "", ""
-        ));
+            TInstant::MilliSeconds(1), TInstant::MilliSeconds(1), 0, "", "", messageKey
+        ), saveMessageKey);
     }
-    batch.Pack();
+    batch.Pack(saveMessageKey);
     TBuffer b = batch.PackedData;
     UNIT_ASSERT(batch.Header.GetFormat() == NKikimrPQ::TBatchHeader::ECompressed);
     batch.Unpack();
-    batch.Pack();
+    batch.Pack(saveMessageKey);
     UNIT_ASSERT(batch.PackedData == b);
     TString str;
     batch.SerializeTo(str);
@@ -199,16 +199,25 @@ Y_UNIT_TEST(TestBatchPacking) {
     TBatch batch3;
     batch3.AddBlob(TClientBlob(
         "sourceId", 999'999'999'999'999ll, "abacaba", TPartData{33, 66, 4'000'000'000u},
-        TInstant::MilliSeconds(999'999'999'999ll), TInstant::MilliSeconds(1000), 0, "", ""
-    ));
-    batch3.Pack();
+        TInstant::MilliSeconds(999'999'999'999ll), TInstant::MilliSeconds(1000), 0, "", "", messageKey
+    ), saveMessageKey);
+
+    batch3.Pack(saveMessageKey);
     UNIT_ASSERT(batch3.Header.GetFormat() == NKikimrPQ::TBatchHeader::EUncompressed);
     batch3.Unpack();
     Y_ABORT_UNLESS(batch3.Blobs.size() == 1);
 }
 
-const TString ToHex(const TString& value) {
-    return TStringBuilder() << HexText(TBasicStringBuf(value));
+Y_UNIT_TEST(TestBatchPacking) {
+    BatchPackingTest(false);
+}
+
+Y_UNIT_TEST(TestBatchPackingWithMsgKey) {
+    BatchPackingTest(true);
+}
+
+const TString ToHex(const TString &value) {
+  return TStringBuilder() << HexText(TBasicStringBuf(value));
 }
 
 Y_UNIT_TEST(TestKeyRange) {
@@ -322,8 +331,7 @@ Y_UNIT_TEST(RestoreKeys) {
     }
 }
 
-} //Y_UNIT_TEST_SUITE
-
+} // Y_UNIT_TEST_SUITE
 
 } // TInternalsTest
 } // namespace NKikimr::NPQ

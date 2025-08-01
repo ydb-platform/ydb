@@ -278,7 +278,7 @@ TPartition::TPartition(ui64 tabletId, const TPartitionId& partition, const TActo
                        const NKikimrPQ::TPQTabletConfig& tabletConfig, const TTabletCountersBase& counters, bool subDomainOutOfSpace, ui32 numChannels,
                        const TActorId& writeQuoterActorId,
                        TIntrusivePtr<NJaegerTracing::TSamplingThrottlingControl> samplingControl,
-                       bool newPartition)
+                       const NKikimrConfig::TFeatureFlags& featureFlags, bool newPartition)
     : Initializer(this)
     , TabletID(tabletId)
     , TabletGeneration(tabletGeneration)
@@ -295,7 +295,7 @@ TPartition::TPartition(ui64 tabletId, const TPartitionId& partition, const TActo
     , WriteInflightSize(0)
     , Tablet(tablet)
     , BlobCache(blobCache)
-    , PartitionedBlob(partition, 0, "", 0, 0, 0, Head, NewHead, true, false, 8_MB)
+    , PartitionedBlob(partition, 0, "", 0, 0, 0, Head, NewHead, true, false, 8_MB, featureFlags.GetEnableTopicMessageKeySaving())
     , NewHeadKey{TKey{}, 0, TInstant::Zero(), 0}
     , BodySize(0)
     , MaxWriteResponsesSize(0)
@@ -320,8 +320,7 @@ TPartition::TPartition(ui64 tabletId, const TPartitionId& partition, const TActo
     , WriteBufferIsFullCounter(nullptr)
     , WriteLagMs(TDuration::Minutes(1), 100)
     , LastEmittedHeartbeat(TRowVersion::Min())
-    , SamplingControl(samplingControl)
-{
+    , SamplingControl(samplingControl) {
     TabletCounters.Populate(Counters);
 }
 
@@ -1431,7 +1430,7 @@ TPartition::EProcessResult TPartition::ApplyWriteInfoResponse(TTransaction& tx) 
         WriteKeysSizeEstimate += tx.WriteInfo->SrcIdInfo.size();
         WriteKeysSizeEstimate += tx.WriteInfo->BlobsFromHead.size();
         for (const auto& blob : tx.WriteInfo->BlobsFromHead) {
-            WriteCycleSizeEstimate += blob.GetBlobSize();
+            WriteCycleSizeEstimate += blob.GetBlobSize(AppData()->FeatureFlags.GetEnableTopicMessageKeySaving());
         }
     }
 
@@ -2628,7 +2627,8 @@ void TPartition::CommitWriteOperations(TTransaction& t)
                                            NewHead,
                                            Parameters->HeadCleared,  // headCleared
                                            needCompactHead,          // needCompactHead
-                                           MaxBlobSize);
+                                           MaxBlobSize,
+                                           AppData()->FeatureFlags.GetEnableTopicMessageKeySaving());
 
         for (auto& k : t.WriteInfo->BodyKeys) {
             PQ_LOG_D("add key " << k.Key.ToString());

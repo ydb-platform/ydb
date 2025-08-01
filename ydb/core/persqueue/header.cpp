@@ -7,7 +7,7 @@ namespace NKikimr {
 namespace NPQ {
 
 
-const ui32 MAX_HEADER_SIZE = 32; // max TBatchHeader size
+const ui32 MAX_HEADER_SIZE = 34; // max TBatchHeader size
 
 
 ui32 GetMaxHeaderSize() {

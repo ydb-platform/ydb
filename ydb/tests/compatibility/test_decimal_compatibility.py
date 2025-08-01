@@ -6,7 +6,7 @@ from ydb.tests.oss.ydb_sdk_import import ydb
 
 class DecimalCompatibilityBase:
 
-    def check_decimal_support(self):
+    def skip_if_unsupported_version(self):
         if (min(self.versions) < (25, 1)):
             pytest.skip("Decimal types are not supported in this version")
 
@@ -113,7 +113,7 @@ class TestDecimalMixedCluster(MixedClusterFixture, DecimalCompatibilityBase):
     def test_decimal_mixed_cluster(self):
         table_name = "decimal_mixed_test"
 
-        self.check_decimal_support()
+        self.skip_if_unsupported_version()
 
         with ydb.QuerySessionPool(self.driver) as session_pool:
             columns_schema = """
@@ -157,7 +157,7 @@ class TestDecimalRestartToAnotherVersion(RestartToAnotherVersionFixture, Decimal
     def test_decimal_version_change(self):
         table_name = "decimal_version_test"
 
-        self.check_decimal_support()
+        self.skip_if_unsupported_version()
 
         with ydb.QuerySessionPool(self.driver) as session_pool:
             columns_schema = """
@@ -226,7 +226,7 @@ class TestDecimalRollingUpgrade(RollingUpgradeAndDowngradeFixture, DecimalCompat
     def test_decimal_rolling_upgrade(self):
         table_name = "decimal_rolling_test"
 
-        self.check_decimal_support()
+        self.skip_if_unsupported_version()
 
         with ydb.QuerySessionPool(self.driver) as session_pool:
             columns_schema = """
@@ -288,7 +288,7 @@ class TestDecimalOperations(RestartToAnotherVersionFixture, DecimalCompatibility
     def test_decimal_operations(self):
         table_name = "decimal_operations_test"
 
-        self.check_decimal_support()
+        self.skip_if_unsupported_version()
 
         with ydb.QuerySessionPool(self.driver) as session_pool:
             columns_schema = """

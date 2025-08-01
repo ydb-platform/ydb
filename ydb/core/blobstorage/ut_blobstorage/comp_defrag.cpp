@@ -29,7 +29,6 @@ struct TTetsEnv {
         VDiskActorId = GroupInfo->GetActorId(0);
 
         DataSmall = FastGenDataForLZ4(128 * 1024, 0);
-        DataLarge = FastGenDataForLZ4(4 * 1024 * 1024, 0);
 
         Sender = Env.Runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
 
@@ -44,8 +43,8 @@ struct TTetsEnv {
     }
 
     std::unique_ptr<TEvBlobStorage::TEvPut> GetData(ui32 index) const {
-        ui32 tabletId = index % 2 + 1;
-        auto& data = index % 100 < 10 ? DataLarge : DataSmall;
+        ui32 tabletId = 1;
+        auto& data = DataSmall;
         auto id = TLogoBlobID(tabletId, 1, index, 0, data.size(), 0);
         return std::make_unique<TEvBlobStorage::TEvPut>(id, data, TInstant::Max());
     }

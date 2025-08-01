@@ -101,7 +101,7 @@ public:
     void RegisterAllocation(const ui64 externalProcessId, const ui64 externalScopeId, const ui64 externalGroupId,
         const std::shared_ptr<IAllocation>& allocation, const std::optional<ui32>& stageIdx);
     void UnregisterAllocation(const ui64 externalProcessId, const ui64 externalScopeId, const ui64 allocationId);
-    void UpdateAllocation(const ui64 externalProcessId, const ui64 externalScopeId, const ui64 allocationId, const ui64 volume);
+    void AllocationUpdated(const ui64 externalProcessId, const ui64 externalScopeId, const ui64 allocationId);
 
     void SetMemoryConsumptionUpdateFunction(std::function<void(ui64)> func);
     void UpdateMemoryLimits(const ui64 limit, const std::optional<ui64>& hardLimit);

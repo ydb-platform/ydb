@@ -1,5 +1,4 @@
 #include "flat_sausagecache.h"
-#include "util_fmt_abort.h"
 #include <util/generic/xrange.h>
 
 namespace NKikimr {
@@ -68,13 +67,6 @@ void TPrivatePageCache::ForgetPageCollection(TIntrusivePtr<TInfo> info) {
         auto* page = kv.second.Get();
         Y_DEBUG_ABORT_UNLESS(page);
 
-        if (page->PinPad) {
-            page->PinPad.Drop();
-            Stats.PinnedSetSize -= page->Size;
-            if (page->LoadState != TPage::LoadStateLoaded)
-                Stats.PinnedLoadSize -= page->Size;
-        }
-
         if (page->SharedBody)
             Stats.TotalSharedBody -= page->Size;
         if (page->PinnedBody)
@@ -95,34 +87,6 @@ TPrivatePageCache::TInfo* TPrivatePageCache::Info(TLogoBlobID id) {
         return x->Get();
     else
         return nullptr;
-}
-
-TIntrusivePtr<TPrivatePageCachePinPad> TPrivatePageCache::Pin(TPage *page) {
-    Y_DEBUG_ABORT_UNLESS(page);
-    if (page && !page->PinPad) {
-        page->PinPad = new TPrivatePageCachePinPad();
-        Stats.PinnedSetSize += page->Size;
-
-        TryLoad(page);
-
-        if (page->LoadState != TPage::LoadStateLoaded)
-            Stats.PinnedLoadSize += page->Size;
-    }
-
-    return page->PinPad;
-}
-
-void TPrivatePageCache::Unpin(TPage *page, TPrivatePageCachePinPad *pad) {
-    if (page && page->PinPad.Get() == pad) {
-        if (page->PinPad.RefCount() == 1) {
-            page->PinPad.Drop();
-            Stats.PinnedSetSize -= page->Size;
-            if (page->LoadState != TPage::LoadStateLoaded)
-                Stats.PinnedLoadSize -= page->Size;
-
-            TryUnload(page);
-        }
-    }
 }
 
 void TPrivatePageCache::TryLoad(TPage *page) {
@@ -149,18 +113,16 @@ void TPrivatePageCache::TryLoad(TPage *page) {
 
 void TPrivatePageCache::TPrivatePageCache::TryUnload(TPage *page) {
     if (page->LoadState == TPage::LoadStateLoaded) {
-        if (!page->PinPad) {
-            ToTouchShared[page->Info->Id].insert(page->Id);
-            page->LoadState = TPage::LoadStateNo;
-            if (Y_LIKELY(page->PinnedBody)) {
-                Stats.TotalPinnedBody -= page->Size;
-                if (!page->SharedBody) {
-                    Stats.TotalExclusive -= page->Size;
-                }
-                page->PinnedBody = { };
+        ToTouchShared[page->Info->Id].insert(page->Id); // TODO: what about retries?
+        page->LoadState = TPage::LoadStateNo;
+        if (Y_LIKELY(page->PinnedBody)) {
+            Stats.TotalPinnedBody -= page->Size;
+            if (!page->SharedBody) {
+                Stats.TotalExclusive -= page->Size;
             }
-            page->SharedBody.UnUse();
+            page->PinnedBody = { };
         }
+        page->SharedBody.UnUse();
     }
 }
 
@@ -203,10 +165,10 @@ const TSharedData* TPrivatePageCache::Lookup(TPageId pageId, TInfo *info) {
     return nullptr;
 }
 
-void TPrivatePageCache::CountTouches(TPinned &pinned, ui32 &newPages, ui64 &newMemory, ui64 &pinnedMemory) {
+void TPrivatePageCache::CountTouches(TPinned &pinned, ui32 &touchedUnpinnedPages, ui64 &touchedUnpinnedMemory, ui64 &touchedPinnedMemory) {
     if (pinned.empty()) {
-        newPages += Stats.CurrentCacheHits;
-        newMemory += Stats.CurrentCacheHitSize;
+        touchedUnpinnedPages += Stats.CurrentCacheHits;
+        touchedUnpinnedMemory += Stats.CurrentCacheHitSize;
         return;
     }
 
@@ -214,16 +176,16 @@ void TPrivatePageCache::CountTouches(TPinned &pinned, ui32 &newPages, ui64 &newM
         bool isPinned = pinned[page.Info->Id].contains(page.Id);
 
         if (!isPinned) {
-            newPages++;
+            touchedUnpinnedPages++;
         }
 
         // Note: it seems useless to count sticky pages in tx usage
         // also we want to read index from Env
         if (!page.IsSticky()) {
             if (isPinned) {
-                pinnedMemory += page.Size;
+                touchedPinnedMemory += page.Size;
             } else {
-                newMemory += page.Size;
+                touchedUnpinnedMemory += page.Size;
             }
         }
     }
@@ -231,10 +193,16 @@ void TPrivatePageCache::CountTouches(TPinned &pinned, ui32 &newPages, ui64 &newM
 
 void TPrivatePageCache::PinTouches(TPinned &pinned, ui32 &touchedPages, ui32 &pinnedPages, ui64 &pinnedMemory) {
     for (auto &page : Touches) {
+        if (Y_UNLIKELY(!page.SharedBody)) {
+            continue;
+        }
+
         auto &pinnedCollection = pinned[page.Info->Id];
         
         // would insert only if first seen
-        if (pinnedCollection.insert(std::make_pair(page.Id, Pin(&page))).second) {
+        if (auto inserted = pinnedCollection.insert(std::make_pair(page.Id, page.SharedBody)); inserted.second) {
+            Y_ENSURE(inserted.first->second.IsUsed());
+
             pinnedPages++;
             // Note: it seems useless to count sticky pages in tx usage
             // also we want to read index from Env
@@ -246,33 +214,17 @@ void TPrivatePageCache::PinTouches(TPinned &pinned, ui32 &touchedPages, ui32 &pi
     }
 }
 
-void TPrivatePageCache::PinToLoad(TPinned &pinned, ui32 &pinnedPages, ui64 &pinnedMemory) {
+void TPrivatePageCache::CountToLoad(TPinned &pinned, ui32 &toLoadPages, ui64 &toLoadMemory) {
     for (auto &page : ToLoad) {
         auto &pinnedCollection = pinned[page.Info->Id];
 
-        // would insert only if first seen
-        if (pinnedCollection.insert(std::make_pair(page.Id, Pin(&page))).second) {
-            pinnedPages++;
-            // Note: it seems useless to count sticky pages in tx usage
-            // also we want to read index from Env
-            if (!page.IsSticky()) {
-                pinnedMemory += page.Size;
-            }
-        }
-    }
-}
+        Y_ASSERT(!pinnedCollection.contains(page.Id));
 
-void TPrivatePageCache::UnpinPages(TPinned &pinned, size_t &unpinnedPages) {
-    for (auto &xinfoid : pinned) {
-        if (TPrivatePageCache::TInfo *info = Info(xinfoid.first)) {
-            for (auto &x : xinfoid.second) {
-                TPageId pageId = x.first;
-                TPrivatePageCachePinPad *pad = x.second.Get();
-                x.second.Reset();
-                TPage *page = info->GetPage(pageId);
-                Unpin(page, pad);
-                unpinnedPages++;
-            }
+        toLoadPages++;
+        // Note: it seems useless to count sticky pages in tx usage
+        // also we want to read index from Env
+        if (!page.IsSticky()) {
+            toLoadMemory += page.Size;
         }
     }
 }
@@ -325,14 +277,10 @@ void TPrivatePageCache::DropSharedBody(TInfo *info, TPageId pageId) {
     }
 }
 
-void TPrivatePageCache::ProvideBlock(
-        NSharedCache::TEvResult::TLoaded&& loaded, TInfo *info)
+void TPrivatePageCache::ProvideBlock(TPageId pageId, TSharedPageRef sharedBody, TInfo *info)
 {
-    Y_DEBUG_ABORT_UNLESS(loaded.Page && loaded.Page.IsUsed());
-    TPage *page = info->EnsurePage(loaded.PageId);
-
-    if (page->LoadState != TPage::LoadStateLoaded && page->PinPad)
-        Stats.PinnedLoadSize -= page->Size;
+    Y_DEBUG_ABORT_UNLESS(sharedBody && sharedBody.IsUsed());
+    TPage *page = info->EnsurePage(pageId);
 
     if (Y_UNLIKELY(page->SharedBody))
         Stats.TotalSharedBody -= page->Size;
@@ -341,7 +289,7 @@ void TPrivatePageCache::ProvideBlock(
     if (Y_UNLIKELY(page->PinnedBody && !page->SharedBody))
         Stats.TotalExclusive -= page->Size;
 
-    page->Fill(std::move(loaded.Page));
+    page->Fill(std::move(sharedBody));
     Stats.TotalSharedBody += page->Size;
     Stats.TotalPinnedBody += page->Size;
     TryUnload(page);
@@ -358,7 +306,7 @@ THashMap<TLogoBlobID, TIntrusivePtr<TPrivatePageCache::TInfo>> TPrivatePageCache
     return ret;
 }
 
-THashMap<TLogoBlobID, THashSet<TPrivatePageCache::TPageId>> TPrivatePageCache::GetPrepareSharedTouched() {
+THashMap<TLogoBlobID, THashSet<TPageId>> TPrivatePageCache::GetPrepareSharedTouched() {
     return std::move(ToTouchShared);
 }
 

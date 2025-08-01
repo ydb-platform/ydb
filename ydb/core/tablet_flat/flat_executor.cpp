@@ -644,50 +644,65 @@ void TExecutor::PlanTransactionActivation() {
     }
 }
 
-void TExecutor::TryActivateWaitingTransaction(TIntrusivePtr<NPageCollection::TPagesWaitPad>&& waitPad) {
+void TExecutor::TryActivateWaitingTransaction(TIntrusivePtr<NPageCollection::TPagesWaitPad>&& waitPad, TVector<NSharedCache::TEvResult::TLoaded>&& loadedPages, TPrivatePageCache::TInfo* collectionInfo) {
     Y_ENSURE(waitPad);
     Y_ENSURE(waitPad->PendingRequests);
-    if (--waitPad->PendingRequests) {
-        LogWaitingTransaction(std::move(waitPad));
+    --waitPad->PendingRequests;
+
+    auto it = TransactionWaitPads.find(waitPad.Get());
+    if (it == TransactionWaitPads.end()) {
+        return;
+    }
+    TTransactionWaitPad& transaction = *it->second;
+    
+    if (collectionInfo) {
+        auto &pinnedCollection = transaction.Seat->Pinned[collectionInfo->Id];
+        for (auto& loaded : loadedPages) {
+            auto inserted = pinnedCollection.insert(std::make_pair(loaded.PageId, loaded.Page));
+            Y_ENSURE(inserted.second);
+            Y_ENSURE(inserted.first->second.IsUsed());
+        }
+    }
+
+    if (waitPad->PendingRequests) {
+        LogWaitingTransaction(transaction);
     } else {
-        ActivateWaitingTransaction(std::move(waitPad));
+        ActivateWaitingTransaction(transaction);
+        TransactionWaitPads.erase(it);
     }
 }
 
-void TExecutor::ActivateWaitingTransaction(TIntrusivePtr<NPageCollection::TPagesWaitPad>&& waitPad) {
+void TExecutor::ActivateWaitingTransaction(TTransactionWaitPad& transaction) {
     bool activate = CanExecuteTransaction();
     bool cancelled = false;
-    if (auto it = TransactionWaitPads.find(waitPad.Get()); it != TransactionWaitPads.end()) {
-        it->second->WaitingSpan.EndOk();
-        TSeat* seat = it->second->Seat;
-        Y_ENSURE(seat->State == ESeatState::Waiting);
-        seat->State = ESeatState::None;
-        TransactionWaitPads.erase(it);
-        if (seat->Cancelled) {
-            FinishCancellation(seat, false);
-            cancelled = true;
-            if (auto logl = Logger->Log(ELnLev::Debug)) {
-                logl << NFmt::Do(*this) << " " << NFmt::Do(*seat) << " cancelled";
-            }
-        } else {
-            EnqueueActivation(seat, activate);
-            if (auto logl = Logger->Log(ELnLev::Debug)) {
-                logl << NFmt::Do(*this) << " " << NFmt::Do(*seat) << " activated";
-            }
+
+    transaction.WaitingSpan.EndOk();
+    TSeat* seat = transaction.Seat;
+    Y_ENSURE(seat->State == ESeatState::Waiting);
+    seat->State = ESeatState::None;
+
+    if (seat->Cancelled) {
+        FinishCancellation(seat, false);
+        cancelled = true;
+        if (auto logl = Logger->Log(ELnLev::Debug)) {
+            logl << NFmt::Do(*this) << " " << NFmt::Do(*seat) << " cancelled";
+        }
+    } else {
+        EnqueueActivation(seat, activate);
+        if (auto logl = Logger->Log(ELnLev::Debug)) {
+            logl << NFmt::Do(*this) << " " << NFmt::Do(*seat) << " activated";
         }
     }
+
     if (cancelled && activate) {
         PlanTransactionActivation();
         MaybeRelaxRejectProbability();
     }
 }
 
-void TExecutor::LogWaitingTransaction(TIntrusivePtr<NPageCollection::TPagesWaitPad>&& waitPad) {
-    if (auto it = TransactionWaitPads.find(waitPad.Get()); it != TransactionWaitPads.end()) {
-        TSeat* seat = it->second->Seat;
-        if (auto logl = Logger->Log(ELnLev::Debug)) {
-            logl << NFmt::Do(*this) << " " << NFmt::Do(*seat) << " still waiting " << waitPad->PendingRequests << " requests";
-        }
+void TExecutor::LogWaitingTransaction(const TTransactionWaitPad& transaction) {
+    if (auto logl = Logger->Log(ELnLev::Debug)) {
+        logl << NFmt::Do(*this) << " " << NFmt::Do(*transaction.Seat) << " still waiting " << transaction.PendingRequests << " requests";
     }
 }
 
@@ -752,8 +767,6 @@ void TExecutor::DropSingleCache(const TLogoBlobID &label)
     // it activates all transactions that are waiting for being dropped page collection
     Send(MakeSharedPageCacheId(), new NSharedCache::TEvDetach(label));
 
-    Counters->Simple()[TExecutorCounters::CACHE_PINNED_SET] = PrivatePageCache->GetStats().PinnedSetSize;
-    Counters->Simple()[TExecutorCounters::CACHE_PINNED_LOAD] = PrivatePageCache->GetStats().PinnedLoadSize;
     Counters->Simple()[TExecutorCounters::CACHE_TOTAL_STICKY] = StickyPagesMemory;
 }
 
@@ -2072,13 +2085,9 @@ void TExecutor::UnpinTransactionPages(TSeat &seat) {
     Y_ENSURE(TransactionPagesMemory >= seat.MemoryTouched);
     TransactionPagesMemory -= seat.MemoryTouched;
 
-    size_t unpinnedPages = 0;
-    PrivatePageCache->UnpinPages(seat.Pinned, unpinnedPages);
     seat.Pinned.clear();
     seat.MemoryTouched = 0;
 
-    Counters->Simple()[TExecutorCounters::CACHE_PINNED_SET] = PrivatePageCache->GetStats().PinnedSetSize;
-    Counters->Simple()[TExecutorCounters::CACHE_PINNED_LOAD] = PrivatePageCache->GetStats().PinnedLoadSize;
     Counters->Simple()[TExecutorCounters::CACHE_TOTAL_USED] = TransactionPagesMemory;
 }
 
@@ -2116,7 +2125,7 @@ void TExecutor::PostponeTransaction(TSeat* seat, TPageCollectionTxEnv &env,
     ui64 newTouchedBytes = seat->MemoryTouched - prevTouched;
     prevTouched = seat->MemoryTouched;
 
-    PrivatePageCache->PinToLoad(seat->Pinned, newPinnedPages, seat->MemoryTouched);
+    PrivatePageCache->CountToLoad(seat->Pinned, newPinnedPages, seat->MemoryTouched);
     ui64 loadBytes = seat->MemoryTouched - prevTouched;
     TransactionPagesMemory += seat->MemoryTouched - prevTouched;
 
@@ -2246,8 +2255,6 @@ void TExecutor::PostponeTransaction(TSeat* seat, TPageCollectionTxEnv &env,
         AppTxCounters->TxCumulative(txType, COUNTER_TT_BYTES_READ).Increment(loadBytes);
     }
 
-    Counters->Simple()[TExecutorCounters::CACHE_PINNED_SET] = PrivatePageCache->GetStats().PinnedSetSize;
-    Counters->Simple()[TExecutorCounters::CACHE_PINNED_LOAD] = PrivatePageCache->GetStats().PinnedLoadSize;
     Counters->Simple()[TExecutorCounters::CACHE_TOTAL_USED] = TransactionPagesMemory;
 }
 
@@ -3016,7 +3023,7 @@ void TExecutor::Handle(NSharedCache::TEvResult::TPtr &ev) {
             TPrivatePageCache::TInfo *collectionInfo = PrivatePageCache->Info(msg->PageCollection->Label());
             if (!collectionInfo) {
                 if (requestType == ESharedCacheRequestType::Transaction) {
-                    TryActivateWaitingTransaction(std::move(msg->WaitPad));
+                    TryActivateWaitingTransaction(std::move(msg->WaitPad), std::move(msg->Pages), collectionInfo);
                 }
                 return;
             }
@@ -3037,10 +3044,11 @@ void TExecutor::Handle(NSharedCache::TEvResult::TPtr &ev) {
                 StickInMemPages(msg);
             }
             for (auto& loaded : msg->Pages) {
-                PrivatePageCache->ProvideBlock(std::move(loaded), collectionInfo);
+                PrivatePageCache->ProvideBlock(loaded.PageId, loaded.Page, collectionInfo);
             }
             if (requestType == ESharedCacheRequestType::Transaction) {
-                TryActivateWaitingTransaction(std::move(msg->WaitPad));
+                Y_ASSERT(msg->Pages);
+                TryActivateWaitingTransaction(std::move(msg->WaitPad), std::move(msg->Pages), collectionInfo);
             }
         }
         return;
@@ -4492,10 +4500,6 @@ void TExecutor::RenderHtmlPage(NMon::TEvRemoteHttpInfo::TPtr &ev) const {
                     }
                 }
             }
-
-            TAG(TH3) {str << "Storage:";}
-            DIV_CLASS("row") {str << "Bytes pinned in cache: " << PrivatePageCache->GetStats().PinnedSetSize << Endl; }
-            DIV_CLASS("row") {str << "Bytes pinned to load: " << PrivatePageCache->GetStats().PinnedLoadSize << Endl; }
 
             TAG(TH3) {str << "Resource usage:";}
             DIV_CLASS("row") {str << "used tablet memory: " << UsedTabletMemory; }

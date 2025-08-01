@@ -146,11 +146,20 @@ void TStageFeatures::SetMemoryConsumptionUpdateFunction(std::function<void(ui64)
 }
 
 void TStageFeatures::AttachOwner(const std::shared_ptr<TStageFeatures>& owner) {
+    if (Owner) {
+        return;
+    }
     Owner = owner;
 }
 
 void TStageFeatures::AttachCounters(const std::shared_ptr<TStageCounters>& counters) {
     Counters = counters;
+    if (Counters) {
+        Counters->ValueSoftLimit->Set(Limit);
+        if (HardLimit) {
+            Counters->ValueHardLimit->Set(*HardLimit);
+        }
+    }
 }
 
 void TStageFeatures::UpdateMemoryLimits(const ui64 limit, const std::optional<ui64>& hardLimit, bool& isLimitIncreased) {

@@ -424,6 +424,7 @@ namespace NKikimr {
             Y_UNUSED(ctx);
             const ui32 blocksInChunk = LocRecCtx->PDiskCtx->Dsk->ChunkSize / LocRecCtx->PDiskCtx->Dsk->AppendBlockSize;
             Y_ABORT_UNLESS(LocRecCtx->PDiskCtx->Dsk->AppendBlockSize * blocksInChunk == LocRecCtx->PDiskCtx->Dsk->ChunkSize);
+            const bool chunksSoftLocking = Config->FeatureFlags.GetEnableCompDefragIndependacy();
 
             auto logFunc = [&] (const TString &msg) {
                 LOG_DEBUG(ctx, BS_HULLHUGE, msg);
@@ -442,6 +443,7 @@ namespace NKikimr {
                             Config->MaxLogoBlobDataSize + TDiskBlob::HeaderSize,
                             Config->HugeBlobOverhead,
                             Config->HugeBlobsFreeChunkReservation,
+                            chunksSoftLocking,
                             logFunc);
             } else {
                 // read existing one
@@ -463,7 +465,7 @@ namespace NKikimr {
                             Config->MaxLogoBlobDataSize + TDiskBlob::HeaderSize,
                             Config->HugeBlobOverhead,
                             Config->HugeBlobsFreeChunkReservation,
-                            lsn, entryPoint, logFunc);
+                            lsn, entryPoint, chunksSoftLocking, logFunc);
             }
             HugeBlobCtx = std::make_shared<THugeBlobCtx>(
                     LocRecCtx->RepairedHuge->Heap->BuildHugeSlotsMap(),

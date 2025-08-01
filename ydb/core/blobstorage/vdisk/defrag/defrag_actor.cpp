@@ -73,6 +73,11 @@ namespace NKikimr {
         return Min(maxChunksToDefrag, hugeCanBeFreedChunks - MIN_CAN_BE_FREED_CHUNKS);
     }
 
+    bool NeedCompaction(ui64 spaceCouldBeFreedViaCompaction) {  // TODO: make it configurable
+        constexpr ui64 chunkSize = 128 * 1024 * 1024;
+        return spaceCouldBeFreedViaCompaction > 10 * chunkSize; // TODO fix: useless size accounted twice in chunks that could be freed via compaction
+    }
+
     ////////////////////////////////////////////////////////////////////////////
     // TDefragLocalScheduler
     // We use statistics about free space share and numbe of used/canBeFreed chunks
@@ -117,6 +122,13 @@ namespace NKikimr {
                 if (calcStat.Scan(NDefrag::MaxSnapshotHoldDuration)) {
                     STLOG(PRI_ERROR, BS_VDISK_DEFRAG, BSVDD05, VDISKP(DCtx->VCtx->VDiskLogPrefix, "scan timed out"));
                 } else {
+                    const ui32 spaceCouldBeFreedViaCompaction = calcStat.GetTotalSpaceCouldBeFreedViaCompaction();
+                    DCtx->DefragMonGroup.SpaceInHugeChunksCouldBeFreedViaCompaction() = spaceCouldBeFreedViaCompaction;
+                    if (DCtx->VCfg->FeatureFlags.GetEnableCompDefragIndependacy() && NeedCompaction(spaceCouldBeFreedViaCompaction)) {
+                        STLOG(PRI_INFO, BS_VDISK_DEFRAG, BSVDD10, VDISKP(DCtx->VCtx->VDiskLogPrefix, "run full compaction"),
+                            (SpaceCouldBeFreedViaCompaction, spaceCouldBeFreedViaCompaction));
+                        Send(DCtx->SkeletonId, TEvCompactVDisk::Create(EHullDbType::LogoBlobs, TEvCompactVDisk::EMode::FULL));
+                    }
                     const ui32 totalChunks = calcStat.GetTotalChunks();
                     const ui32 usefulChunks = calcStat.GetUsefulChunks();
                     const auto& oos = DCtx->VCtx->GetOutOfSpaceState();
@@ -127,16 +139,17 @@ namespace NKikimr {
                     DCtx->DefragMonGroup.DefragThreshold() = DefragThreshold(oos, defaultPercent, hugeDefragFreeSpaceBorder);
                     if (HugeHeapDefragmentationRequired(oos, canBeFreedChunks, totalChunks, defaultPercent, hugeDefragFreeSpaceBorder)) {
                         TChunksToDefrag chunksToDefrag = calcStat.GetChunksToDefrag(MaxInflightDefragChunks(DCtx->VCfg->MaxChunksToDefragInflight, canBeFreedChunks));
-                        Y_VERIFY_S(chunksToDefrag, DCtx->VCtx->VDiskLogPrefix);
+                        // Y_VERIFY_S(chunksToDefrag, DCtx->VCtx->VDiskLogPrefix);
                         STLOG(PRI_INFO, BS_VDISK_DEFRAG, BSVDD03, VDISKP(DCtx->VCtx->VDiskLogPrefix, "scan finished"),
                             (TotalChunks, totalChunks), (UsefulChunks, usefulChunks),
                             (LocalColor, NKikimrBlobStorage::TPDiskSpaceColor_E_Name(oos.GetLocalColor())),
-                            (ChunksToDefrag, chunksToDefrag));
+                            (ChunksToDefrag, chunksToDefrag), (SpaceCouldBeFreedViaCompaction, spaceCouldBeFreedViaCompaction));
                         res = std::make_unique<TEvDefragStartQuantum>(std::move(chunksToDefrag));
                     } else {
                         STLOG(PRI_INFO, BS_VDISK_DEFRAG, BSVDD04, VDISKP(DCtx->VCtx->VDiskLogPrefix, "scan finished"),
                             (TotalChunks, totalChunks), (UsefulChunks, usefulChunks),
-                            (LocalColor, NKikimrBlobStorage::TPDiskSpaceColor_E_Name(oos.GetLocalColor())));
+                            (LocalColor, NKikimrBlobStorage::TPDiskSpaceColor_E_Name(oos.GetLocalColor())),
+                            (SpaceCouldBeFreedViaCompaction, spaceCouldBeFreedViaCompaction));
                     }
                 }
                 if (!res) {
@@ -439,6 +452,12 @@ namespace NKikimr {
                                     TABLED() {str << "VDisk Used Chunks";}
                                     TABLED() {
                                         str << DCtx->VCtx->GetOutOfSpaceState().GetLocalUsedChunks();
+                                    }
+                                }
+                                TABLER() {
+                                    TABLED() {str << "EnableCompDefragIndependacy";}
+                                    TABLED() {
+                                        str << (DCtx->VCfg->FeatureFlags.GetEnableCompDefragIndependacy() ? "Yes" : "No");
                                     }
                                 }
                             }

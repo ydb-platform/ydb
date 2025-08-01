@@ -2,6 +2,10 @@ name: Cherry-pick
 on:
   workflow_dispatch:
     inputs:
+      commit_sha:
+        type: string
+        description: Commit to get scripts
+        default: ""
       commits:
         type: string
         default: ""
@@ -28,7 +32,8 @@ jobs:
       - name: checkout
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          fetch-depth: 1
+          ref: ${{ inputs.commit_sha }}
           sparse-checkout: |
             .github
       - name: install packages

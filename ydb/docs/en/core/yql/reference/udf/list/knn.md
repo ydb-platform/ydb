@@ -75,7 +75,7 @@ Conversion functions for vector data convert an array of elements into a byte st
   `1` — `Float` (4 bytes per element)
   `2` — `Uint8` (1 byte per element)
   `3` — `Int8` (1 byte per element)
-  `10` — `Bit` (1 byte per element)
+  `10` — `Bit` (1 bit per element)
 
 For example, a vector of 5 elements of type `Float` will be serialized into a 21-byte string:  
 4 bytes × 5 elements (main part) + 1 byte (type) = 21 bytes.

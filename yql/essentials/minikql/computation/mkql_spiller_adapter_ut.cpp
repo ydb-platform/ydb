@@ -278,6 +278,52 @@ Y_UNIT_TEST_SUITE(TWideUnboxedValuesSpillerAdapterTest) {
         UNIT_ASSERT(factory->GetReportFreeCallback());
     }
 
+    Y_UNIT_TEST(TestNoMemoryReportingCallbacks) {
+        TScopedAlloc Alloc(__LOCATION__);
+        TTypeEnvironment TypeEnv(Alloc);
+        
+        auto multiType = CreateTestMultiType(TypeEnv);
+        auto spiller = CreateMockSpiller();
+        auto mockSpiller = static_cast<TMockSpiller*>(spiller.get());
+        
+        // Create adapter with very small size limit to force spilling
+        TWideUnboxedValuesSpillerAdapter adapter(spiller, multiType, 10);
+        
+        // Create test data
+        TString testString("test_string");
+        auto item = CreateTestWideItem(1, 100, testString);
+        
+        // Write item - should spill due to small size limit
+        auto future = adapter.WriteWideItem(item);
+        UNIT_ASSERT(future.has_value());
+        
+        // Wait for async operation
+        auto key = future->GetValueSync();
+        adapter.AsyncWriteCompleted(key);
+        
+        // Verify that ReportAlloc and ReportFree were called even without callbacks
+        UNIT_ASSERT(mockSpiller->GetAllocCalls().size() >= 1);
+        UNIT_ASSERT(mockSpiller->GetFreeCalls().size() >= 1);
+        
+        // Read back the data
+        auto holderFactory = CreateTestHolderFactory();
+        std::vector<NUdf::TUnboxedValue> readItem(3);
+        auto readFuture = adapter.ExtractWideItem(readItem);
+        UNIT_ASSERT(readFuture.has_value());
+        
+        auto rope = readFuture->GetValueSync();
+        UNIT_ASSERT(rope.has_value());
+        adapter.AsyncReadCompleted(std::move(*rope), holderFactory);
+        
+        std::vector<NUdf::TUnboxedValue> extractedItem(3);
+        auto extractFuture = adapter.ExtractWideItem(extractedItem);
+        UNIT_ASSERT(!extractFuture.has_value());
+        VerifyWideItem(extractedItem, 1, 100, testString);
+        
+        // Verify adapter is empty after reading
+        UNIT_ASSERT(adapter.Empty());
+    }
+
 } // Y_UNIT_TEST_SUITE
 
 } // namespace NKikimr::NMiniKQL

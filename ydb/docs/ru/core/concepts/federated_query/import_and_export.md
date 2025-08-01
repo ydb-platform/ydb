@@ -28,9 +28,9 @@ WITH (
 AS SELECT * FROM s3_external_table
 ```
 
-В результате будет создана [колоночная таблица](../datamodel/table.md#column-oriented-tables) со схемой, соответствующей использованной для импорта [внешней таблицы](../datamodel/external_table.md). Колонки, указанные в `PRIMARY KEY`, должны быть помечены как `NOT NULL` во внешней таблице.
+В результате будет создана [колоночная таблица](../datamodel/table.md#column-oriented-tables) со схемой, соответствующей используемой для импорта [внешней таблице](../datamodel/external_table.md). Колонки, указанные в `PRIMARY KEY`, должны быть помечены как `NOT NULL` во внешней таблице.
 
-Пример импорта данных из внешнего источника данных указывающего на [PostgreSQL](postgresql.md#query) в существующую таблицу:
+Пример импорта данных из внешнего источника данных, указывающего на [PostgreSQL](postgresql.md#query), в существующую таблицу:
 
 ```yql
 UPSERT INTO target_table

@@ -99,7 +99,7 @@ static constexpr float ColumnTablesDeduplicationGroupedMemoryFraction = 0.5f; //
 static_assert(ColumnTablesReadExecutionFraction + ColumnTablesDeduplicationGroupedMemoryFraction == 1);
 
 inline ui64 GetColumnTablesScanGroupedMemoryLimitBytes(const NKikimrConfig::TMemoryControllerConfig& config, const ui64 hardLimitBytes) {
-    return GetFraction(ColumnTablesReadExecutionFraction, 
+    return GetFraction(ColumnTablesReadExecutionFraction,
         GetColumnTablesReadExecutionLimitBytes(config, hardLimitBytes));
 }
 inline ui64 GetColumnTablesDeduplicationGroupedMemoryLimitBytes(const NKikimrConfig::TMemoryControllerConfig& config, const ui64 hardLimitBytes) {
@@ -116,20 +116,17 @@ inline ui64 GetColumnTablesDeduplicationGroupedMemoryLimitBytes(const NKikimrCon
 // - ColumnTablesNormalizerQueue
 
 // keep fractions as power of 2 to avoid precision loss
-static constexpr float ColumnTablesCompGroupedMemoryFraction = 0.5f; // 8/16
-static constexpr float ColumnTablesCompactionIndexationQueueFraction = 0.0625f; // 1/16
-static constexpr float ColumnTablesTtlQueueFraction = 0.0625f; // 1/16
-static constexpr float ColumnTablesGeneralQueueFraction = 0.1875f; // 3/16
-static constexpr float ColumnTablesNormalizerQueueFraction = 0.1875f; // 3/16
-static_assert(ColumnTablesCompGroupedMemoryFraction
-    + ColumnTablesCompactionIndexationQueueFraction
+static constexpr float ColumnTablesCompactionIndexationQueueFraction = 0.125f; // 2/16
+static constexpr float ColumnTablesTtlQueueFraction = 0.125f; // 2/16
+static constexpr float ColumnTablesGeneralQueueFraction = 0.375f; // 6/16
+static constexpr float ColumnTablesNormalizerQueueFraction = 0.375f; // 6/16
+static_assert(ColumnTablesCompactionIndexationQueueFraction
     + ColumnTablesTtlQueueFraction
     + ColumnTablesGeneralQueueFraction
     + ColumnTablesNormalizerQueueFraction == 1);
 
 inline ui64 GetColumnTablesCompGroupedMemoryLimitBytes(const NKikimrConfig::TMemoryControllerConfig& config, const ui64 hardLimitBytes) {
-    return GetFraction(ColumnTablesCompGroupedMemoryFraction,
-        GetColumnTablesCompactionLimitBytes(config, hardLimitBytes));
+    return GetColumnTablesCompactionLimitBytes(config, hardLimitBytes);
 }
 
 inline ui64 GetColumnTablesCompactionIndexationQueueLimitBytes(const NKikimrConfig::TMemoryControllerConfig& config, const ui64 hardLimitBytes) {
@@ -158,10 +155,14 @@ inline ui64 GetColumnTablesNormalizerQueueLimitBytes(const NKikimrConfig::TMemor
 // - ColumnTablesColumnDataCache
 
 // keep fractions as power of 2 to avoid precision loss
-static constexpr float ColumnTablesBlobCacheFraction = 0.375f; // 6/16
-static constexpr float ColumnTablesColumnTablesDataAccessorCacheFraction = 0.3125f; // 5/16
-static constexpr float ColumnTablesColumnDataCacheFraction = 0.3125f; // 5/16
-static_assert(ColumnTablesBlobCacheFraction + ColumnTablesColumnTablesDataAccessorCacheFraction + ColumnTablesColumnDataCacheFraction == 1);
+static constexpr float ColumnTablesBlobCacheFraction = 0.125f; // 2/16
+static constexpr float ColumnTablesColumnTablesDataAccessorCacheFraction = 0.125f; // 2/16
+static constexpr float ColumnTablesColumnDataCacheFraction = 0.125f; // 2/16
+static constexpr float ColumnTablesPortionsMetaDataCacheFraction = 0.625f; // 10/16
+static_assert(ColumnTablesBlobCacheFraction
+    + ColumnTablesColumnTablesDataAccessorCacheFraction
+    + ColumnTablesColumnDataCacheFraction
+    + ColumnTablesPortionsMetaDataCacheFraction == 1);
 
 inline ui64 GetColumnTablesBlobCacheLimitBytes(const NKikimrConfig::TMemoryControllerConfig& config, const ui64 hardLimitBytes) {
     return GetFraction(ColumnTablesBlobCacheFraction,
@@ -178,4 +179,8 @@ inline ui64 GetColumnTablesColumnDataCacheLimitBytes(const NKikimrConfig::TMemor
         GetColumnTablesCacheLimitBytes(config, hardLimitBytes));
 }
 
+inline ui64 GetPortionsMetaDataCacheLimitBytes(const NKikimrConfig::TMemoryControllerConfig& config, const ui64 hardLimitBytes) {
+    return GetFraction(ColumnTablesPortionsMetaDataCacheFraction,
+        GetColumnTablesCacheLimitBytes(config, hardLimitBytes));
+}
 }

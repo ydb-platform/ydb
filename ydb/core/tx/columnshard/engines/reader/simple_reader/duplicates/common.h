@@ -19,7 +19,7 @@ struct TPortionIntervalTreeValueTraits: NRangeTreap::TDefaultValueTraits<std::sh
     };
 
     static bool Less(const std::shared_ptr<TPortionInfo>& a, const std::shared_ptr<TPortionInfo>& b) noexcept {
-        return a->GetAddress() == b->GetAddress();
+        return a->GetAddress() < b->GetAddress();
     }
 
     static bool Equal(const std::shared_ptr<TPortionInfo>& a, const std::shared_ptr<TPortionInfo>& b) noexcept {

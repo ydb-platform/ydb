@@ -22,6 +22,10 @@ class AbstractDataCenterNemesis(Nemesis, base.AbstractMonitoredNemesis):
         self._interval_schedule = Schedule.from_tuple_or_int(duration)
 
     def next_schedule(self):
+        # Если nemesis отключен, возвращаем None (не добавляется в очередь)
+        if hasattr(self, '_disabled') and self._disabled:
+            return None
+        
         if self._current_dc is not None:
             return next(self._interval_schedule)
         return super(AbstractDataCenterNemesis, self).next_schedule()
@@ -43,12 +47,19 @@ class AbstractDataCenterNemesis(Nemesis, base.AbstractMonitoredNemesis):
     def prepare_state(self):
         self._dc_to_nodes, self._data_centers = self._validate_datacenters(self._cluster)
         if len(self._data_centers) < 2:
-            self.logger.error("No datacenters found in cluster or only one datacenter found")
-            raise Exception("No datacenters found in cluster or only one datacenter found")
+            self.logger.warning("No datacenters found in cluster or only one datacenter found - nemesis will be disabled")
+            self._disabled = True
+            return
 
+        self._disabled = False
         self._dc_cycle_iterator = self._create_dc_cycle()
 
     def inject_fault(self):
+        # Если nemesis отключен, ничего не делаем
+        if hasattr(self, '_disabled') and self._disabled:
+            self.logger.info("DataCenterNemesis is disabled due to insufficient datacenters")
+            return
+
         if self.extract_fault():
             return
 

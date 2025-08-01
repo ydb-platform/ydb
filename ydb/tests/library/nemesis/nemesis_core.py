@@ -108,8 +108,13 @@ class NemesisProcess(threading.Thread):
                     )
                 )
 
-            priority = time.time() + nemesis.next_schedule()
-            self.__pq.add_task(task=nemesis, priority=priority)
+            next_schedule = nemesis.next_schedule()
+            # Добавляем обратно в очередь только если next_schedule не None
+            if next_schedule is not None:
+                priority = time.time() + next_schedule
+                self.__pq.add_task(task=nemesis, priority=priority)
+            else:
+                self.__logger.debug("Nemesis disabled, not adding back to queue: %s", nemesis)
 
     def __init_pq(self):
         self.__logger.info("NemesisProcess started")
@@ -130,8 +135,14 @@ class NemesisProcess(threading.Thread):
 
         # noinspection PyTypeChecker
         for nemesis in self.__nemesis_list:
-            priority = time.time() + nemesis.next_schedule()
-            self.__pq.add_task(nemesis, priority=priority)
+            next_schedule = nemesis.next_schedule()
+            # Добавляем в очередь только если next_schedule не None
+            if next_schedule is not None:
+                priority = time.time() + next_schedule
+                self.__pq.add_task(nemesis, priority=priority)
+                self.__logger.debug("Added nemesis to queue: %s with priority: %s", nemesis, priority)
+            else:
+                self.__logger.debug("Skipped nemesis (disabled): %s", nemesis)
 
         self.__logger.debug("Initial PriorityQueue = " + str(self.__pq))
 

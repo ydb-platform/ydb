@@ -8,7 +8,6 @@ PEERDIR(
     ydb/core/change_exchange
     ydb/core/fq/libs/row_dispatcher/events
     ydb/core/io_formats/cell_maker
-    ydb/core/persqueue/purecalc
     ydb/core/protos
     ydb/core/scheme
     ydb/core/scheme_types

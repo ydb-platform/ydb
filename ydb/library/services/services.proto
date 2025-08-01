@@ -424,6 +424,10 @@ enum EServiceKikimr {
     BSCONFIG = 3200;
 
     NAMESERVICE = 3300;
+
+    BRIDGE = 3400;
+
+    TRANSFER = 3500;
 };
 
 message TActivity {

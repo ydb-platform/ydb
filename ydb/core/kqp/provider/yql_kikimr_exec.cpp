@@ -870,6 +870,14 @@ namespace {
                 }
 
                 dstSettings.ConsumerName = value;
+            } else if (name == "directory") {
+                auto value = ToString(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value());
+                if (value.empty()) {
+                    ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
+                        TStringBuilder() << name << " must be not empty"));
+                    return false;
+                }
+                dstSettings.DirectoryPath = value;
             }
         }
 

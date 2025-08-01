@@ -12,7 +12,7 @@ PEERDIR(
 )
 
 SRCS(
-    transfer_ut.cpp
+    transfer_rowtable_ut.cpp
 )
 
 INCLUDE(${ARCADIA_ROOT}/ydb/public/tools/ydb_recipe/recipe.inc)

@@ -74,6 +74,7 @@ void ComplexKey(const std::string& tableType) {
                 Key2 Uint64 NOT NULL,
                 Value2 Utf8,
                 Key4 Uint64 NOT NULL,
+                ___Value3 Utf8,
                 PRIMARY KEY (Key3, Key2, Key1, Key4)
             )  WITH (
                 STORE = %s
@@ -90,6 +91,7 @@ void ComplexKey(const std::string& tableType) {
                         Key4:CAST(4 AS Uint64),
                         Key3:CAST(3 AS Uint64),
                         Value1:CAST("value-1" AS Utf8),
+                        ___Value3:CAST("value-3" AS Utf8)
                     |>
                 ];
             };
@@ -104,6 +106,7 @@ void ComplexKey(const std::string& tableType) {
             _C("Key4", ui64(4)),
             _C("Value1", TString("value-1")),
             _C("Value2", TString("value-2")),
+            _C("___Value3", TString("value-3")),
         }}
     });
 }
@@ -535,6 +538,137 @@ void ProcessingCDCMessage(const std::string& tableType) {
     testCase.DropTransfer();
     testCase.DropTable();
     testCase.DropSourceTable();
+}
+
+void ProcessingTargetTable(const std::string& tableType) {
+    MainTestCase testCase(std::nullopt, tableType);
+
+    testCase.CreateTable(R"(
+            CREATE TABLE `%s` (
+                Key Uint64 NOT NULL,
+                Message Utf8,
+                PRIMARY KEY (Key)
+            )  WITH (
+                STORE = %s
+            );
+        )");
+    
+    testCase.ExecuteDDL(Sprintf(R"(
+            CREATE TABLE `%s_1` (
+                Key Uint64 NOT NULL,
+                Message Utf8,
+                PRIMARY KEY (Key)
+            )  WITH (
+                STORE = %s
+            );
+        )", testCase.TableName.data(), tableType.data()));
+
+    testCase.ExecuteDDL(Sprintf(R"(
+            CREATE TABLE `%s_2` (
+                Key Uint64 NOT NULL,
+                Message Utf8,
+                PRIMARY KEY (Key)
+            )  WITH (
+                STORE = %s
+            );
+        )", testCase.TableName.data(), tableType.data()));
+
+    testCase.CreateTopic(1);
+    testCase.CreateTransfer(Sprintf(R"(
+            $l = ($x) -> {
+                return [
+                    <|
+                        Key: $x._offset,
+                        Message:CAST($x._data AS Utf8)
+                    |>,
+                    <|
+                        __ydb_table: "%s_1",
+                        Key: $x._offset,
+                        Message:CAST($x._data || "_1" AS Utf8)
+                    |>,
+                    <|
+                        __ydb_table: "%s_2",
+                        Key: $x._offset,
+                        Message:CAST($x._data || "_2" AS Utf8)
+                    |>,
+                ];
+            };
+        )", testCase.TableName.data(), testCase.TableName.data()),
+        MainTestCase::CreateTransferSettings::WithDirectory("/local"));
+
+    testCase.Write({"Message-1"});
+
+    testCase.CheckResult({{
+        _C("Key", ui64{0}),
+        _C("Message", TString{"Message-1"}),
+    }});
+
+    testCase.CheckResult(TStringBuilder() << testCase.TableName << "_1", {{
+        _C("Key", ui64{0}),
+        _C("Message", TString{"Message-1_1"}),
+    }});
+
+    testCase.CheckResult(TStringBuilder() << testCase.TableName << "_2", {{
+        _C("Key", ui64{0}),
+        _C("Message", TString{"Message-1_2"}),
+    }});
+
+
+    testCase.DropTransfer();
+    testCase.DropTable();
+    testCase.DropTopic();
+}
+
+void ProcessingTargetTableOtherType(const std::string& tableType) {
+    MainTestCase testCase(std::nullopt, tableType);
+
+    testCase.CreateTable(R"(
+            CREATE TABLE `%s` (
+                Key Uint64 NOT NULL,
+                Message Utf8,
+                PRIMARY KEY (Key)
+            )  WITH (
+                STORE = %s
+            );
+        )");
+
+    auto otherType = tableType == "ROW" ? "COLUMN" : "ROW";
+    testCase.ExecuteDDL(Sprintf(R"(
+            CREATE TABLE `%s_1` (
+                Key Uint64 NOT NULL,
+                Message Utf8,
+                PRIMARY KEY (Key)
+            )  WITH (
+                STORE = %s
+            );
+        )", testCase.TableName.data(), otherType));
+
+
+    testCase.CreateTopic(1);
+    testCase.CreateTransfer(Sprintf(R"(
+            $l = ($x) -> {
+                return [
+                    <|
+                        Key: $x._offset,
+                        Message:CAST($x._data AS Utf8)
+                    |>,
+                    <|
+                        __ydb_table: "%s_1",
+                        Key: $x._offset,
+                        Message:CAST($x._data || "_1" AS Utf8)
+                    |>,
+                ];
+            };
+        )", testCase.TableName.data(), testCase.TableName.data()),
+        MainTestCase::CreateTransferSettings::WithDirectory("/local"));
+
+    testCase.Write({"Message-1"});
+
+    testCase.CheckTransferStateError("Error: Bulk upsert to table '/local/Table_");
+
+    testCase.DropTransfer();
+    testCase.DropTable();
+    testCase.DropTopic();
 }
 
 void Upsert_DifferentBatch(const std::string& tableType) {

@@ -1,4 +1,4 @@
-#include "transfer_common.h"
+#include <ydb/core/transfer/ut/common/transfer_common.h>
 
 using namespace NReplicationTest;
 
@@ -1023,6 +1023,239 @@ Y_UNIT_TEST_SUITE(Transfer)
         testCase.DropTransfer();
         testCase.DropTable();
         testCase.DropTopic();
+    }
+
+    Y_UNIT_TEST(TargetTableWithoutDirectory)
+    {
+        MainTestCase testCase;
+        testCase.CreateTable(R"(
+                CREATE TABLE `%s` (
+                    Key Uint64 NOT NULL,
+                    Message Utf8,
+                    PRIMARY KEY (Key)
+                )  WITH (
+                    STORE = %s
+                );
+            )");
+        testCase.CreateTopic();
+
+        testCase.CreateTransfer(R"(
+                $l = ($x) -> {
+                    return [
+                        <|
+                            __ydb_table: "other_table",
+                            Key:CAST($x._offset AS Uint64),
+                            Message:CAST($x._data AS Utf8)
+                        |>
+                    ];
+                };
+            )");
+
+        testCase.Write({"Message-1"});
+        testCase.CheckTransferStateError("it is not allowed to specify a table to write");
+
+        testCase.DropTransfer();
+        testCase.DropTopic();
+        testCase.DropTable();
+    }
+
+    Y_UNIT_TEST(TargetTableWriteOutsideDirectory)
+    {
+        MainTestCase testCase;
+        testCase.CreateDirectory("/local/inner_directory");
+
+        testCase.CreateTable(R"(
+                CREATE TABLE `inner_directory/%s` (
+                    Key Uint64 NOT NULL,
+                    Message Utf8,
+                    PRIMARY KEY (Key)
+                );
+            )");
+        testCase.ExecuteDDL(R"(
+                CREATE TABLE `outside_directorty_table` (
+                    Key Uint64 NOT NULL,
+                    Message Utf8,
+                    PRIMARY KEY (Key)
+                );
+            )");
+
+        testCase.CreateTopic();
+
+        testCase.ExecuteDDL(Sprintf(R"(
+                $l = ($x) -> {
+                    return [
+                        <|
+                            __ydb_table: "../outside_directorty_table",
+                            Key:CAST($x._offset AS Uint64),
+                            Message:CAST($x._data AS Utf8)
+                        |>
+                    ];
+                };
+
+                CREATE TRANSFER `%s`
+                FROM `%s` TO `inner_directory/%s` USING $l
+                WITH (
+                    DIRECTORY = "/local/inner_directory"
+                );
+            )", testCase.TransferName.data(), testCase.TopicName.data(), testCase.TableName.data()));
+
+        testCase.Write({"Message-1"});
+        testCase.CheckTransferStateError("is outside target directory");
+
+        testCase.DropTransfer();
+        testCase.DropTopic();
+    }
+
+    Y_UNIT_TEST(TargetTableWriteInsideDirectory)
+    {
+        MainTestCase testCase;
+        testCase.CreateDirectory("/local/inner_directory0");
+        testCase.CreateDirectory("/local/inner_directory0/inner_directory1");
+
+        testCase.CreateTable(R"(
+                CREATE TABLE `%s` (
+                    Key Uint64 NOT NULL,
+                    Message Utf8,
+                    PRIMARY KEY (Key)
+                );
+            )");
+        testCase.ExecuteDDL(R"(
+                CREATE TABLE `inner_directory0/inner_directory1/table` (
+                    Key Uint64 NOT NULL,
+                    Message Utf8,
+                    PRIMARY KEY (Key)
+                );
+            )");
+
+        testCase.CreateTopic();
+
+        testCase.CreateTransfer(R"(
+                $l = ($x) -> {
+                    return [
+                        <|
+                            __ydb_table: "inner_directory1/table",
+                            Key:CAST($x._offset AS Uint64),
+                            Message:CAST($x._data AS Utf8)
+                        |>
+                    ];
+                };
+            )", MainTestCase::CreateTransferSettings::WithDirectory("/local/inner_directory0"));
+
+        testCase.Write({"Message-1"});
+        testCase.CheckResult("/local/inner_directory0/inner_directory1/table",{{
+            _C("Message", TString("Message-1"))
+        }});
+
+        testCase.DropTransfer();
+        testCase.DropTopic();
+    }
+
+    Y_UNIT_TEST(AlterTargetDirectory)
+    {
+        MainTestCase testCase;
+        testCase.CreateTable(R"(
+                CREATE TABLE `%s` (
+                    Key Uint64 NOT NULL,
+                    Message Utf8,
+                    PRIMARY KEY (Key)
+                )  WITH (
+                    STORE = %s
+                );
+            )");
+        testCase.CreateTopic(1);
+
+        testCase.CreateTransfer(Sprintf(R"(
+                $l = ($x) -> {
+                    return [
+                        <|
+                            __ydb_table: "%s",
+                            Key:CAST($x._offset AS Uint64),
+                            Message:CAST($x._data AS Utf8)
+                        |>
+                    ];
+                };
+            )", testCase.TableName.data()));
+
+        testCase.Write({"Message-1"});
+        testCase.CheckTransferStateError("it is not allowed to specify a table to write");
+
+        testCase.AlterTransfer(MainTestCase::AlterTransferSettings::WithDirectory("/local"));
+        testCase.CheckResult({{
+            _C("Message", TString("Message-1"))
+        }});
+
+        testCase.DropTransfer();
+        testCase.DropTopic();
+        testCase.DropTable();
+    }
+
+    Y_UNIT_TEST(WriteToNotExists)
+    {
+        MainTestCase testCase;
+        testCase.CreateTable(R"(
+                CREATE TABLE `%s` (
+                    Key Uint64 NOT NULL,
+                    Message Utf8,
+                    PRIMARY KEY (Key)
+                )  WITH (
+                    STORE = %s
+                );
+            )");
+        testCase.CreateTopic(1);
+
+        testCase.CreateTransfer(R"(
+                $l = ($x) -> {
+                    return [
+                        <|
+                            __ydb_table: "not_exists_table",
+                            Key:CAST($x._offset AS Uint64),
+                            Message:CAST($x._data AS Utf8)
+                        |>
+                    ];
+                };
+            )", MainTestCase::CreateTransferSettings::WithDirectory("/local"));
+
+        testCase.Write({"Message-1"});
+        testCase.CheckTransferStateError(" unknown table");
+
+        testCase.DropTransfer();
+        testCase.DropTopic();
+        testCase.DropTable();
+    }
+
+    Y_UNIT_TEST(WriteToNotTable)
+    {
+        MainTestCase testCase;
+        testCase.CreateTable(R"(
+                CREATE TABLE `%s` (
+                    Key Uint64 NOT NULL,
+                    Message Utf8,
+                    PRIMARY KEY (Key)
+                )  WITH (
+                    STORE = %s
+                );
+            )");
+        testCase.CreateTopic(1);
+
+        testCase.CreateTransfer(Sprintf(R"(
+                $l = ($x) -> {
+                    return [
+                        <|
+                            __ydb_table: "%s",
+                            Key:CAST($x._offset AS Uint64),
+                            Message:CAST($x._data AS Utf8)
+                        |>
+                    ];
+                };
+            )", testCase.TopicName.data()),
+            MainTestCase::CreateTransferSettings::WithDirectory("/local"));
+
+        testCase.Write({"Message-1"});
+        testCase.CheckTransferStateError(" unknown table");
+
+        testCase.DropTransfer();
+        testCase.DropTopic();
+        testCase.DropTable();
     }
 }
 

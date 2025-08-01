@@ -1,24 +1,20 @@
+#include "events.h"
+#include "logging.h"
+#include "scheme.h"
+#include "table_kind_state.h"
 #include "transfer_writer.h"
 
-#include <ydb/core/tx/replication/service/logging.h>
 #include <ydb/core/tx/replication/service/worker.h>
 
 #include <ydb/core/fq/libs/row_dispatcher/events/data_plane.h>
 #include <ydb/core/fq/libs/row_dispatcher/purecalc_compilation/compile_service.h>
-#include <ydb/core/kqp/runtime/kqp_write_table.h>
 #include <ydb/core/tx/replication/ydb_proxy/topic_message.h>
-#include <ydb/core/tx/tx_proxy/proxy.h>
-#include <ydb/core/tx/tx_proxy/upload_rows.h>
-#include <ydb/core/persqueue/purecalc/purecalc.h> // should be after topic_message
+#include "purecalc.h" // should be after topic_message
 #include <ydb/core/protos/replication.pb.h>
 #include <ydb/core/tx/scheme_cache/helpers.h>
-#include <ydb/core/tx/tx_proxy/upload_rows_common_impl.h>
-#include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/services/services.pb.h>
-#include <ydb/public/lib/scheme_types/scheme_type_id.h>
 
-#include <yql/essentials/providers/common/schema/parser/yql_type_parser.h>
 #include <yql/essentials/public/purecalc/helpers/stream/stream_from_vector.h>
 
 using namespace NFq::NRowDispatcher;
@@ -28,457 +24,6 @@ namespace NKikimr::NReplication::NTransfer {
 
 namespace {
 
-constexpr const char* RESULT_COLUMN_NAME = "__ydb_r";
-
-using namespace NYql::NPureCalc;
-using namespace NKikimr::NMiniKQL;
-
-struct TSchemaColumn {
-    TString Name;
-    ui32 Id;
-    NScheme::TTypeInfo PType;
-    bool KeyColumn;
-    bool Nullable;
-
-    bool operator==(const TSchemaColumn& other) const = default;
-
-    TString ToString() const;
-
-    TString TypeName() const {
-        return NScheme::TypeName(PType);
-    }
-};
-
-struct TScheme {
-    TVector<TSchemaColumn> TopicColumns;
-    TVector<TSchemaColumn> TableColumns;
-    TVector<NKikimrKqp::TKqpColumnMetadataProto> ColumnsMetadata;
-    std::vector<ui32> WriteIndex;
-    std::shared_ptr<TVector<std::pair<TString, Ydb::Type>>> Types = std::make_shared<TVector<std::pair<TString, Ydb::Type>>>();
-};
-
-struct TOutputType {
-    NUdf::TUnboxedValue Value;
-    NMiniKQL::TUnboxedValueBatch Data;
-};
-
-class TMessageOutputSpec : public NYql::NPureCalc::TOutputSpecBase {
-public:
-    explicit TMessageOutputSpec(const TScheme& tableScheme, const NYT::TNode& schema)
-        : TableScheme(tableScheme)
-        , Schema(schema)
-    {}
-
-public:
-    const NYT::TNode& GetSchema() const override {
-        return Schema;
-    }
-
-    const TVector<NKikimrKqp::TKqpColumnMetadataProto>& GetTableColumns() const {
-        return TableScheme.ColumnsMetadata;
-    }
-
-private:
-    const TScheme TableScheme;
-    const NYT::TNode Schema;
-};
-
-class TOutputListImpl final: public IStream<TOutputType*> {
-protected:
-    TWorkerHolder<IPullListWorker> WorkerHolder_;
-    const TMessageOutputSpec& OutputSpec;
-
-public:
-    explicit TOutputListImpl(const TMessageOutputSpec& outputSpec, TWorkerHolder<IPullListWorker> worker)
-        : WorkerHolder_(std::move(worker))
-        , OutputSpec(outputSpec)
-    {
-        Row.resize(1);
-    }
-
-public:
-    TOutputType* Fetch() override {
-        TBindTerminator bind(WorkerHolder_->GetGraph().GetTerminator());
-
-        with_lock(WorkerHolder_->GetScopedAlloc()) {
-            Out.Data.clear();
-
-            NYql::NUdf::TUnboxedValue value;
-
-            if (!WorkerHolder_->GetOutputIterator().Next(value)) {
-                return nullptr;
-            }
-
-            Out.Value = value.GetElement(0);
-
-            const auto& columns = OutputSpec.GetTableColumns();
-            for (size_t i = 0; i < columns.size(); ++i) {
-                const auto& column = columns[i];
-                if (column.GetNotNull() && !Out.Value.GetElement(i)) {
-                    throw yexception() << "The value of the '" << column.GetName() << "' column must be non-NULL";
-                }
-            }
-
-            Out.Data.PushRow(&Out.Value, 1);
-
-            return &Out;
-        }
-    }
-
-private:
-    std::vector<NUdf::TUnboxedValue> Row;
-    TOutputType Out;
-};
-
-} // namespace
-
-} // namespace NKikimr::NReplication::NTransfer
-
-
-template <>
-struct NYql::NPureCalc::TOutputSpecTraits<NKikimr::NReplication::NTransfer::TMessageOutputSpec> {
-    static const constexpr bool IsPartial = false;
-
-    static const constexpr bool SupportPullListMode = true;
-
-    using TOutputItemType = NKikimr::NReplication::NTransfer::TOutputType*;
-    using TPullStreamReturnType = THolder<IStream<TOutputItemType>>;
-    using TPullListReturnType = THolder<IStream<TOutputItemType>>;
-
-    static TPullListReturnType ConvertPullListWorkerToOutputType(
-        const NKikimr::NReplication::NTransfer::TMessageOutputSpec& outputSpec,
-        TWorkerHolder<IPullListWorker> worker
-    ) {
-        return MakeHolder<NKikimr::NReplication::NTransfer::TOutputListImpl>(outputSpec, std::move(worker));
-    }
-};
-
-
-namespace NKikimr::NReplication::NTransfer {
-
-namespace {
-
-NYT::TNode CreateTypeNode(const TString& fieldType) {
-    return NYT::TNode::CreateList()
-        .Add("DataType")
-        .Add(fieldType);
-}
-
-NYT::TNode CreateOptionalTypeNode(const TString& fieldType) {
-    return NYT::TNode::CreateList()
-        .Add("OptionalType")
-        .Add(CreateTypeNode(fieldType));
-}
-
-void AddField(NYT::TNode& node, const TString& fieldName, const TString& fieldType) {
-    node.Add(
-        NYT::TNode::CreateList()
-            .Add(fieldName)
-            .Add(CreateOptionalTypeNode(fieldType))
-    );
-}
-
-NYT::TNode MakeOutputSchema(const TVector<TSchemaColumn>& columns) {
-    auto structMembers = NYT::TNode::CreateList();
-
-    for (const auto& column : columns) {
-        AddField(structMembers, column.Name, column.TypeName());
-    }
-
-    auto rootMembers = NYT::TNode::CreateList();
-    rootMembers.Add(
-        NYT::TNode::CreateList()
-            .Add(RESULT_COLUMN_NAME)
-            .Add(NYT::TNode::CreateList()
-                .Add("StructType")
-                .Add(std::move(structMembers)))
-    );
-
-    return NYT::TNode::CreateList()
-        .Add("StructType")
-        .Add(std::move(rootMembers));
-}
-
-class TProgramHolder : public NFq::IProgramHolder {
-public:
-    using TPtr = TIntrusivePtr<TProgramHolder>;
-
-public:
-    TProgramHolder(
-        const TScheme& tableScheme,
-        const TString& sql
-    )
-        : TopicColumns()
-        , TableScheme(tableScheme)
-        , Sql(sql)
-    {}
-
-public:
-    void CreateProgram(NYql::NPureCalc::IProgramFactoryPtr programFactory) override {
-        // Program should be stateless because input values
-        // allocated on another allocator and should be released
-        Program = programFactory->MakePullListProgram(
-            NYdb::NTopic::NPurecalc::TMessageInputSpec(),
-            TMessageOutputSpec(TableScheme, MakeOutputSchema(TableScheme.TableColumns)),
-            Sql,
-            NYql::NPureCalc::ETranslationMode::SQL
-        );
-    }
-
-    NYql::NPureCalc::TPullListProgram<NYdb::NTopic::NPurecalc::TMessageInputSpec, TMessageOutputSpec>* GetProgram() {
-        return Program.Get();
-    }
-
-private:
-    const TVector<TSchemaColumn> TopicColumns;
-    const TScheme TableScheme;
-    const TString Sql;
-
-    THolder<NYql::NPureCalc::TPullListProgram<NYdb::NTopic::NPurecalc::TMessageInputSpec, TMessageOutputSpec>> Program;
-};
-
-TScheme BuildScheme(const TAutoPtr<NSchemeCache::TSchemeCacheNavigate>& nav) {
-    const auto& entry = nav->ResultSet.at(0);
-
-    TScheme result;
-
-    result.TableColumns.reserve(entry.Columns.size());
-    result.ColumnsMetadata.reserve(entry.Columns.size());
-    result.WriteIndex.reserve(entry.Columns.size());
-
-    size_t keyColumns = CountIf(entry.Columns, [](auto& c) {
-        return c.second.KeyOrder >= 0;
-    });
-
-    result.TableColumns.resize(keyColumns);
-
-    for (const auto& [_, column] : entry.Columns) {
-        auto notNull = entry.NotNullColumns.contains(column.Name);
-        if (column.KeyOrder >= 0) {
-            result.TableColumns[column.KeyOrder] = {column.Name, column.Id, column.PType, column.KeyOrder >= 0, !notNull};
-        } else {
-            result.TableColumns.emplace_back(column.Name, column.Id, column.PType, column.KeyOrder >= 0, !notNull);
-        }
-    }
-
-    std::map<TString, TSysTables::TTableColumnInfo> columns;
-    for (const auto& [_, column] : entry.Columns) {
-        columns[column.Name] = column;
-    }
-
-    size_t i = keyColumns;
-    for (const auto& [_, column] : columns) {
-        result.ColumnsMetadata.emplace_back();
-        auto& c = result.ColumnsMetadata.back();
-        result.WriteIndex.push_back(column.KeyOrder >= 0 ? column.KeyOrder : i++);
-
-        c.SetName(column.Name);
-        c.SetId(column.Id);
-        c.SetTypeId(column.PType.GetTypeId());
-        c.SetNotNull(entry.NotNullColumns.contains(column.Name));
-
-        if (NScheme::NTypeIds::IsParametrizedType(column.PType.GetTypeId())) {
-            NScheme::ProtoFromTypeInfo(column.PType, "", *c.MutableTypeInfo());
-        }
-
-        Ydb::Type type;
-        type.set_type_id(static_cast<Ydb::Type::PrimitiveTypeId>(column.PType.GetTypeId()));
-        result.Types->emplace_back(column.Name, type);
-    }
-
-    return result;
-}
-
-class ITableKindState {
-public:
-    using TPtr = std::unique_ptr<ITableKindState>;
-
-    ITableKindState(const TActorId& selfId, const TAutoPtr<NSchemeCache::TSchemeCacheNavigate>& result)
-        : SelfId(selfId)
-        , Scheme(BuildScheme(result))
-    {}
-
-    virtual ~ITableKindState() = default;
-
-    void EnshureDataBatch() {
-        if (!Batcher) {
-            Batcher = CreateDataBatcher();
-        }
-    }
-
-    void AddData(const NMiniKQL::TUnboxedValueBatch &data) {
-        Batcher->AddData(data);
-    }
-
-    i64 BatchSize() const {
-        return Batcher->GetMemory();
-    }
-
-    virtual NKqp::IDataBatcherPtr CreateDataBatcher() = 0;
-    virtual bool Flush() = 0;
-
-    virtual std::pair<TString, bool> Handle(TEvents::TEvCompleted::TPtr& ev) = 0;
-    virtual std::pair<TString, bool> Handle(TEvTxUserProxy::TEvUploadRowsResponse::TPtr& ev) = 0;
-
-    const TScheme& GetScheme() const {
-        return Scheme;
-    }
-
-protected:
-    const TActorId SelfId;
-    const TScheme Scheme;
-
-    NKqp::IDataBatcherPtr Batcher;
-};
-
-class TColumnTableState : public ITableKindState {
-public:
-    TColumnTableState(
-        const TActorId& selfId,
-        TAutoPtr<NSchemeCache::TSchemeCacheNavigate>& result
-    )
-        : ITableKindState(selfId, result)
-    {
-        NavigateResult.reset(result.Release());
-        Path = JoinPath(NavigateResult->ResultSet.front().Path);
-    }
-
-    NKqp::IDataBatcherPtr CreateDataBatcher() override {
-        return NKqp::CreateColumnDataBatcher(Scheme.ColumnsMetadata, Scheme.WriteIndex);
-    }
-
-    bool Flush() override {
-        auto doWrite = [&]() {
-            Issues = std::make_shared<NYql::TIssues>();
-
-            NTxProxy::DoLongTxWriteSameMailbox(TActivationContext::AsActorContext(), SelfId /* replyTo */, { /* longTxId */ }, { /* dedupId */ },
-                NavigateResult->DatabaseName, Path, NavigateResult, Data, Issues);
-        };
-
-        if (Data) {
-            doWrite();
-            return true;
-        }
-
-        if (!Batcher || !Batcher->GetMemory()) {
-            return false;
-        }
-
-        NKqp::IDataBatchPtr batch = Batcher->Build();
-        auto data = batch->ExtractBatch();
-
-        Data = reinterpret_pointer_cast<arrow::RecordBatch>(data);
-        Y_VERIFY(Data);
-
-        doWrite();
-        return true;
-    }
-
-    std::pair<TString, bool> Handle(TEvents::TEvCompleted::TPtr& ev) override {
-        if (ev->Get()->Status == Ydb::StatusIds::SUCCESS) {
-            Data.reset();
-            Issues.reset();
-
-            return {"", false};
-        }
-
-        return {Issues->ToOneLineString(), true};
-    }
-
-    std::pair<TString, bool> Handle(TEvTxUserProxy::TEvUploadRowsResponse::TPtr&) override {
-        Y_UNREACHABLE();
-    }
-
-private:
-    std::shared_ptr<const NSchemeCache::TSchemeCacheNavigate> NavigateResult;
-    TString Path;
-
-    std::shared_ptr<arrow::RecordBatch> Data;
-    std::shared_ptr<NYql::TIssues> Issues;
-};
-
-class TRowTableState : public ITableKindState {
-public:
-    TRowTableState(
-        const TActorId& selfId,
-        TAutoPtr<NSchemeCache::TSchemeCacheNavigate>& result
-    )
-        : ITableKindState(selfId, result)
-    {
-        Path = JoinPath(result->ResultSet.front().Path);
-    }
-
-    NKqp::IDataBatcherPtr CreateDataBatcher() override {
-        return NKqp::CreateRowDataBatcher(GetScheme().ColumnsMetadata, GetScheme().WriteIndex);
-    }
-
-    bool Flush() override {
-        auto doWrite = [&]() {
-            TActivationContext::AsActorContext().RegisterWithSameMailbox(
-                NTxProxy::CreateUploadRowsInternal(SelfId, Path, GetScheme().Types, Data, NTxProxy::EUploadRowsMode::Normal)
-            );
-        };
-
-        if (Data) {
-            doWrite();
-            return true;
-        }
-
-        if (!Batcher || !Batcher->GetMemory()) {
-            return false;
-        }
-
-        NKqp::IDataBatchPtr batch = Batcher->Build();
-
-        auto data = reinterpret_pointer_cast<TOwnedCellVecBatch>(batch->ExtractBatch());
-        Y_VERIFY(data);
-
-        Data = std::make_shared<TVector<std::pair<TSerializedCellVec, TString>>>();
-        for (auto r : *data) {
-            TVector<TCell> key;
-            TVector<TCell> value;
-
-            for (size_t i = 0; i < r.size(); ++i) {
-                auto& column = GetScheme().TableColumns[i];
-                if (column.KeyColumn) {
-                    key.push_back(r[i]);
-                } else {
-                    value.push_back(r[i]);
-                }
-            }
-
-            TSerializedCellVec serializedKey(key);
-            TString serializedValue = TSerializedCellVec::Serialize(value);
-
-            Data->emplace_back(serializedKey, serializedValue);
-        }
-
-        doWrite();
-        return true;
-    }
-
-    std::pair<TString, bool> Handle(TEvents::TEvCompleted::TPtr&) override {
-        Y_UNREACHABLE();
-    }
-
-    std::pair<TString, bool> Handle(TEvTxUserProxy::TEvUploadRowsResponse::TPtr& ev) override {
-        if (ev->Get()->Status == Ydb::StatusIds::SUCCESS) {
-            Data.reset();
-
-            return {"", false};
-        }
-
-        auto retry = ev->Get()->Status != Ydb::StatusIds::SCHEME_ERROR;
-        return {ev->Get()->Issues.ToOneLineString(), retry};
-    }
-
-
-private:
-    TString Path;
-
-    // { KeyVec , data }
-    std::shared_ptr<TVector<std::pair<TSerializedCellVec, TString>>> Data;
-};
 
 enum class ETag {
     FlushTimeout,
@@ -580,7 +125,6 @@ private:
             return;
         }
 
-        // TODO support row tables
         if (entry.Status == TNavigate::EStatus::PathNotTable || (entry.Kind != TNavigate::KindColumnTable && entry.Kind != TNavigate::KindTable)) {
             return LogCritAndLeave("Only tables are supported as transfer targets");
         }
@@ -589,10 +133,12 @@ private:
             return;
         }
 
+        DefaultTablePath = JoinPath(entry.Path);
+
         if (entry.Kind == TNavigate::KindColumnTable) {
-            TableState = std::make_unique<TColumnTableState>(SelfId(), result);
+            TableState = CreateColumnTableState(SelfId(), result);
         } else {
-            TableState = std::make_unique<TRowTableState>(SelfId(), result);
+            TableState = CreateRowTableState(SelfId(), result);
         }
 
         CompileTransferLambda();
@@ -603,7 +149,7 @@ private:
         LOG_D("CompileTransferLambda: worker# " << Worker);
 
         NFq::TPurecalcCompileSettings settings = {};
-        auto programHolder = MakeIntrusive<TProgramHolder>(TableState->GetScheme(), GenerateSql());
+        auto programHolder = CreateProgramHolder(TableState->GetScheme(), GenerateSql());
         auto result = std::make_unique<NFq::TEvRowDispatcher::TEvPurecalcCompileRequest>(std::move(programHolder), settings);
 
         Send(CompileServiceId, result.release(), 0, ++InFlightCompilationId);
@@ -624,8 +170,8 @@ private:
         TStringBuilder sb;
         sb << TransformLambda;
         sb << "SELECT * FROM (\n";
-        sb << "  SELECT $__ydb_transfer_lambda(TableRow()) AS " << RESULT_COLUMN_NAME << " FROM Input\n";
-        sb << ") FLATTEN BY " << RESULT_COLUMN_NAME << ";\n";
+        sb << "  SELECT $__ydb_transfer_lambda(TableRow()) AS " << SystemColumns::Root << " FROM Input\n";
+        sb << ") FLATTEN BY " << SystemColumns::Root << ";\n";
         LOG_T("SQL: " << sb);
         return sb;
     }
@@ -645,10 +191,10 @@ private:
             return LogCritAndLeave(TStringBuilder() << "Compilation failed: " << result->Issues.ToOneLineString());
         }
 
-        auto r = dynamic_cast<TProgramHolder*>(ev->Get()->ProgramHolder.Release());
+        auto r = dynamic_cast<IProgramHolder*>(ev->Get()->ProgramHolder.Release());
         Y_ENSURE(result, "Unexpected compile response");
 
-        ProgramHolder = TIntrusivePtr<TProgramHolder>(r);
+        ProgramHolder = TIntrusivePtr<IProgramHolder>(r);
 
         StartWork();
     }
@@ -713,13 +259,12 @@ private:
 
         PollSent = false;
 
-        TableState->EnshureDataBatch();
         if (!LastWriteTime) {
             LastWriteTime = TInstant::Now();
         }
 
         for (auto& message : records) {
-            NYdb::NTopic::NPurecalc::TMessage input;
+            TMessage input;
             input.Data = std::move(message.GetData());
             input.MessageGroupId = std::move(message.GetMessageGroupId());
             input.Partition = partitionId;
@@ -727,16 +272,47 @@ private:
             input.Offset = message.GetOffset();
             input.SeqNo = message.GetSeqNo();
 
+            auto setError = [&](const auto& msg) {
+                ProcessingErrorStatus = TEvWorker::TEvGone::EStatus::SCHEME_ERROR;
+                ProcessingError = TStringBuilder() << "Error transform message partition " << partitionId << " offset " << message.GetOffset()
+                    << ": " << msg;
+            };
+
             try {
                 auto result = ProgramHolder->GetProgram()->Apply(NYql::NPureCalc::StreamFromVector(TVector{input}));
                 while (auto* m = result->Fetch()) {
-                    TableState->AddData(m->Data);
+                    if (ProcessingError) {
+                        // We must get all the messages from the result, otherwise we will fall with an error inside yql
+                        continue;
+                    }
+
+                    TString tablePath;
+                    if (m->Table) {
+                        if (TargetDirectoryPath) {
+                            auto table = TFsPath(JoinPath({ DirectoryPath, m->Table.value()}));
+                            if (table.IsSubpathOf(TargetDirectoryPath.value())) {
+                                tablePath = table;
+                            } else {
+                                setError(TStringBuilder() << "the target table '" << m->Table.value() << "' is outside target directory");
+                                continue;
+                            }
+                        } else {
+                            setError("it is not allowed to specify a table to write");
+                            continue;
+                        }
+                    } else {
+                        tablePath = DefaultTablePath;
+                    }
+
+                    TableState->AddData(std::move(tablePath), m->Data);
                 }
 
                 LastProcessedOffset = message.GetOffset();
             } catch (const yexception& e) {
-                ProcessingErrorStatus = TEvWorker::TEvGone::EStatus::SCHEME_ERROR;
-                ProcessingError = TStringBuilder() << "Error transform message partition " << partitionId << " offset " << message.GetOffset() << ": " << e.what();
+                setError(e.what());
+            }
+
+            if (ProcessingError) {
                 break;
             }
         }
@@ -769,8 +345,7 @@ private:
 private:
     STFUNC(StateWrite) {
         switch (ev->GetTypeRewrite()) {
-            hFunc(TEvents::TEvCompleted, Handle);
-            hFunc(TEvTxUserProxy::TEvUploadRowsResponse, Handle);
+            hFunc(NTransferPrivate::TEvWriteCompleeted, Handle);
 
             hFunc(TEvWorker::TEvHandshake, Handle);
             hFunc(TEvWorker::TEvData, HoldHandle);
@@ -780,31 +355,16 @@ private:
         }
     }
 
-    void Handle(TEvTxUserProxy::TEvUploadRowsResponse::TPtr& ev) {
-        LOG_D("Handle TEvTxUserProxy::TEvUploadRowsResponse"
+    void Handle(NTransferPrivate::TEvWriteCompleeted::TPtr& ev) {
+        LOG_D("Handle NTransferPrivate::TEvWriteCompleeted"
             << ": worker# " << Worker
             << " status# " << ev->Get()->Status
             << " issues# " << ev->Get()->Issues.ToOneLineString());
 
-        auto [error, retry] = TableState->Handle(ev);
-        HandleWriteResult(ev->Get()->Status, error, retry);
-    }
+        const auto status = ev->Get()->Status;
+        const auto& error = ev->Get()->Issues.ToOneLineString();
 
-    void Handle(TEvents::TEvCompleted::TPtr& ev) {
-        LOG_D("Handle TEvents::TEvCompleted"
-            << ": worker# " << Worker
-            << " status# " << ev->Get()->Status);
-
-        auto [error, retry] = TableState->Handle(ev);
-        HandleWriteResult(ev->Get()->Status, error, retry);
-    }
-
-    void HandleWriteResult(ui32 status, const TString& error, bool retry) {
-        if (ui32(NYdb::EStatus::SUCCESS) != status && retry && Delay < MaxRetryDelay && !PendingLeave()) {
-            return LogWarnAndRetry(error);
-        }
-
-        if (error && !ProcessingError) {
+        if (status != Ydb::StatusIds::SUCCESS && error && !ProcessingError) {
             ProcessingError = error;
         }
 
@@ -837,7 +397,6 @@ private:
     }
 
 private:
-
     bool PendingLeave() {
         return PendingRecords && PendingRecords->empty();
     }
@@ -850,19 +409,6 @@ private:
         }
 
         return LogPrefix.GetRef();
-    }
-
-    template <typename TResult>
-    bool CheckResult(const TResult& result, const TStringBuf marker) {
-        if (result.IsSuccess()) {
-            return true;
-        }
-
-        LOG_E("Error at '" << marker << "'"
-            << ", error# " << result);
-        RetryOrLeave(result.GetError());
-
-        return false;
     }
 
     void Retry() {
@@ -893,16 +439,41 @@ public:
         return NKikimrServices::TActivity::REPLICATION_TRANSFER_WRITER;
     }
 
+    static std::optional<TFsPath> MakeTargetDirectoryPath(const TString& database, const TString& directoryPath) {
+        if (directoryPath.empty()) {
+            return std::nullopt;
+        }
+
+        TFsPath db(database);
+        TFsPath dir(directoryPath);
+
+        if (dir.IsNonStrictSubpathOf(db)) {
+            return dir;
+        }
+
+        auto fullPath = dir.RelativePath(db);
+        if (fullPath.IsNonStrictSubpathOf(db)) {
+            return fullPath;
+        }
+
+        return std::nullopt;
+    }
+
     explicit TTransferWriter(
             const TString& transformLambda,
             const TPathId& tablePathId,
             const TActorId& compileServiceId,
-            const NKikimrReplication::TBatchingSettings& batchingSettings)
+            const NKikimrReplication::TBatchingSettings& batchingSettings,
+            const TString& directoryPath,
+            const TString& database)
         : TransformLambda(transformLambda)
         , TablePathId(tablePathId)
         , CompileServiceId(compileServiceId)
         , FlushInterval(TDuration::MilliSeconds(std::max<ui64>(batchingSettings.GetFlushIntervalMilliSeconds(), 1000)))
         , BatchSizeBytes(std::min<ui64>(batchingSettings.GetBatchSizeBytes(), 1_GB))
+        , DirectoryPath(directoryPath)
+        , Database(database)
+        , TargetDirectoryPath(MakeTargetDirectoryPath(database, directoryPath))
     {}
 
 private:
@@ -910,13 +481,18 @@ private:
     const TPathId TablePathId;
     const TActorId CompileServiceId;
     const TDuration FlushInterval;
-    const i64 BatchSizeBytes;
+    const ui64 BatchSizeBytes;
+    const TString DirectoryPath;
+    const TString Database;
+    const std::optional<TFsPath> TargetDirectoryPath;
     TActorId Worker;
+
+    TString DefaultTablePath;
 
     ITableKindState::TPtr TableState;
 
     size_t InFlightCompilationId = 0;
-    TProgramHolder::TPtr ProgramHolder;
+    IProgramHolder::TPtr ProgramHolder;
 
     mutable bool WakeupScheduled = false;
     mutable bool PollSent = false;
@@ -938,7 +514,7 @@ private:
 }; // TTransferWriter
 
 IActor* TTransferWriterFactory::Create(const Parameters& p) const {
-    return new TTransferWriter(p.TransformLambda, p.TablePathId, p.CompileServiceId, p.BatchingSettings);
+    return new TTransferWriter(p.TransformLambda, p.TablePathId, p.CompileServiceId, p.BatchingSettings, p.DirectoryPath, p.Database);
 }
 
 }

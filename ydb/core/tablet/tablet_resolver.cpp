@@ -322,6 +322,15 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
                 break;
             }
 
+            if (entry.KnownLeader && entry.CurrentLeaderSuspect && !entry.CurrentLeaderProblemPermanent) {
+                // Send a best-effort ping request to a suspicious leader
+                // Don't track delivery or node disconnections, since this is
+                // only needed when older stable versions don't support tablet
+                // state subscriptions.
+                // TODO(snaury): remove in 2026.
+                Send(entry.KnownLeader, new TEvTablet::TEvPing(tabletId, 0), 0, entry.CacheEpoch);
+            }
+
             // Note: we move to StNormal and wait even when resolve fails, but
             // any attempt to resolve leader will wake us up and we will retry
             // with an appropriate delay when necessary.
@@ -913,6 +922,29 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
         }
     }
 
+    void Handle(TEvTablet::TEvPong::TPtr& ev) {
+        auto* msg = ev->Get();
+        const ui64 tabletId = msg->Record.GetTabletID();
+
+        BLOG_TRACE("Handle TEvPong tabletId: " << tabletId << " actor: " << ev->Sender << " cookie: " << ev->Cookie);
+
+        auto it = Tablets.find(tabletId);
+        if (it == Tablets.end()) {
+            return;
+        }
+
+        TEntry& entry = it->second;
+        if (ev->Sender != entry.KnownLeader || entry.CurrentLeaderProblemPermanent) {
+            return;
+        }
+
+        if (ev->Cookie == 0 || ev->Cookie == entry.CacheEpoch) {
+            // We have confirmed this tablet instance was alive in the current cache epoch
+            // Note: older versions don't relay request cookie and it will always be zero
+            entry.MarkLeaderAlive();
+        }
+    }
+
     void Handle(TEvInterconnect::TEvNodeConnected::TPtr& ev) {
         auto& session = InterconnectSessions[ev->Sender];
 
@@ -1031,6 +1063,7 @@ public:
             hFunc(TEvTabletResolver::TEvForward, Handle);
             hFunc(TEvTabletResolver::TEvTabletProblem, Handle);
             hFunc(TEvTabletResolver::TEvNodeProblem, Handle);
+            hFunc(TEvTablet::TEvPong, Handle);
             hFunc(TEvInterconnect::TEvNodeConnected, Handle);
             hFunc(TEvInterconnect::TEvNodeDisconnected, Handle);
             fFunc(TEvStateStorage::TEvInfo::EventType, HandleStream);

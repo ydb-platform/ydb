@@ -92,6 +92,10 @@ TDqConfiguration::TDqConfiguration() {
                 EnableDqReplicate = true;
             }
         });
+    REGISTER_SETTING(*this, ValuePackerVersion).Parser([](const TString& v) {
+            return FromString<TDqSettings::EValuePackerVersion>(v);
+        });
+
     REGISTER_SETTING(*this, DisableLLVMForBlockStages);
     REGISTER_SETTING(*this, SplitStageOnDqReplicate)
         .ValueSetter([this](const TString&, bool value) {

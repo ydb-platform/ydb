@@ -121,6 +121,9 @@ struct TEvKqp {
         TDuration ForgetAfter;
         TDuration ResultsTtl;
         TDuration ProgressStatsPeriod;
+        std::vector<NKikimrKqp::TScriptExecutionRetryState::TMapping> RetryMapping;
+        bool SaveQueryPhysicalGraph = false;
+        std::optional<NKikimrKqp::TQueryPhysicalGraph> QueryPhysicalGraph;
     };
 
     struct TEvScriptResponse : public TEventLocal<TEvScriptResponse, TKqpEvents::EvScriptResponse> {

@@ -1,6 +1,6 @@
 import socket
 from ipaddress import IPv4Address, IPv6Address
-from typing import Union, MutableSequence, Sequence
+from typing import Union, MutableSequence, Sequence, Any
 
 from clickhouse_connect.datatypes.base import ClickHouseType
 from clickhouse_connect.driver.common import write_array, int_size, first_value
@@ -20,7 +20,7 @@ class IPv4(ClickHouseType):
     python_type = IPv4Address
     byte_size = 4
 
-    def _read_column_binary(self, source: ByteSource, num_rows: int, ctx: QueryContext):
+    def _read_column_binary(self, source: ByteSource, num_rows: int, ctx: QueryContext, _read_state: Any):
         if self.read_format(ctx) == 'int':
             return source.read_array(self._array_type, num_rows)
         if self.read_format(ctx) == 'string':
@@ -58,7 +58,7 @@ class IPv6(ClickHouseType):
     python_type = IPv6Address
     byte_size = 16
 
-    def _read_column_binary(self, source: ByteSource, num_rows: int, ctx: QueryContext):
+    def _read_column_binary(self, source: ByteSource, num_rows: int, ctx: QueryContext, _read_state: Any):
         if self.read_format(ctx) == 'string':
             return self._read_binary_str(source, num_rows)
         return self._read_binary_ip(source, num_rows)

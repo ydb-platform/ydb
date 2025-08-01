@@ -176,8 +176,8 @@ void TExecutorBootLogic::LoadEntry(TIntrusivePtr<NBoot::TLoadBlobs> entry) {
     }
 }
 
-NBoot::TSpawned TExecutorBootLogic::LoadPages(NBoot::IStep *step, TAutoPtr<NPageCollection::TFetch> req) {
-    auto success = Loads.insert(std::make_pair(req->PageCollection.Get(), step)).second;
+NBoot::TSpawned TExecutorBootLogic::LoadPages(NBoot::IStep *step, NTable::TLoader::TFetch&& fetch) {
+    auto success = Loads.insert(std::make_pair(fetch.PageCollection.Get(), step)).second;
 
     Y_ENSURE(success, "IPageCollection queued twice for loading");
 
@@ -185,7 +185,8 @@ NBoot::TSpawned TExecutorBootLogic::LoadPages(NBoot::IStep *step, TAutoPtr<NPage
         NSharedCache::MakeSharedPageCacheId(),
         new NSharedCache::TEvRequest(
             NBlockIO::EPriority::Fast,
-            req),
+            std::move(fetch.PageCollection),
+            std::move(fetch.Pages)),
         0, (ui64)ESharedCacheRequestType::BootLogic);
 
     return NBoot::TSpawned(true);

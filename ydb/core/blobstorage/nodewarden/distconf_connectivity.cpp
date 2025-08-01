@@ -15,10 +15,6 @@ namespace NKikimr::NStorage {
 
         std::deque<std::unique_ptr<IEventHandle>> PendingEvents;
 
-        bool HasScepter = false;
-        std::optional<ui32> RootNodeId;
-        bool HasQuorumInPile = false;
-
         static constexpr TStringBuf DistconfKey = "distconf";
 
         using TClusterState = NKikimrBridge::TClusterState;
@@ -68,7 +64,7 @@ namespace NKikimr::NStorage {
             // disconnect peers if needed
             TActorSystem* const as = TActivationContext::ActorSystem();
             for (const auto& pile : BridgeInfo->Piles) {
-                if (pile.State != TClusterState::DISCONNECTED) {
+                if (NBridge::PileStateTraits(pile.State).AllowsConnection) {
                     continue;
                 }
                 if (pile.BridgePileId == SelfBridgePileId) {
@@ -93,7 +89,7 @@ namespace NKikimr::NStorage {
             TActorSystem* const as = TActivationContext::ActorSystem();
 
             for (const auto& pile : BridgeInfo->Piles) {
-                if (pile.State != TClusterState::DISCONNECTED) {
+                if (NBridge::PileStateTraits(pile.State).AllowsConnection) {
                     continue;
                 }
                 const size_t index = pile.BridgePileId.GetRawId();
@@ -142,7 +138,7 @@ namespace NKikimr::NStorage {
                     // peer node is a dynamic node
                 } else if (pile == BridgeInfo->SelfNodePile && IsSelfStatic && peerNodeId <= MaxStaticNodeId) {
                     // allow connecting static nodes within the same pile, even disconnected
-                } else if (pile->State == TClusterState::DISCONNECTED) {
+                } else if (!NBridge::PileStateTraits(pile->State).AllowsConnection) {
                     error = "can't establish connection to node belonging to disconnected pile";
                 }
                 if (!error) {
@@ -171,9 +167,6 @@ namespace NKikimr::NStorage {
             std::optional<TString> error;
             NKikimrBlobStorage::TConnectivityPayload outgoing;
 
-            // definitely fill out self pile id
-            SelfBridgePileId.CopyToProto(&outgoing, &decltype(outgoing)::SetBridgePileId);
-
             const ui32 peerNodeId = ev->Get()->PeerNodeId;
 
             // extract the payload, if we have one
@@ -181,11 +174,6 @@ namespace NKikimr::NStorage {
             auto& params = ev->Get()->Params;
             if (const auto it = params.find(DistconfKey); it != params.end() && !incoming.ParseFromString(it->second)) {
                 error = "failed to parse incoming connectivity check payload";
-            }
-
-            // report this node's configuration into outgoing message (unless this is unconfigured dynamic node)
-            if (StorageConfig) {
-                outgoing.MutableStorageConfig()->CopyFrom(*StorageConfig);
             }
 
             // obtain peer's pile id (we must have one)
@@ -223,7 +211,7 @@ namespace NKikimr::NStorage {
                 );
             } else if (!incoming.HasStorageConfig()) {
                 error = "missing mandatory peer storage configuration section in handshake";
-            } else if (auto res = ProcessPeerConfig(*peerBridgePileId, std::move(*incoming.MutableStorageConfig()), outgoing)) {
+            } else if (auto res = CheckPeerConfig(*peerBridgePileId, incoming.GetStorageConfig(), &outgoing)) {
                 error = std::move(res);
             }
 
@@ -238,16 +226,9 @@ namespace NKikimr::NStorage {
             auto& params = ev->Get()->Params;
             NKikimrBlobStorage::TConnectivityPayload incoming;
             if (const auto it = params.find(DistconfKey); it != params.end() && incoming.ParseFromString(it->second)) {
-                if (incoming.HasStorageConfig() && !IsSelfStatic && incoming.HasBridgePileId() &&
-                        TBridgePileId::FromProto(&incoming, &decltype(incoming)::GetBridgePileId) == SelfBridgePileId) {
-                    // TODO(alexvru): apply storage config for trustworthy peers
+                if (incoming.HasStorageConfig()) {
                     Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), new TEvNodeWardenUpdateConfigFromPeer(
-                        std::move(*incoming.MutableStorageConfig())));
-                }
-                if (incoming.HasInvokeOnRoot()) {
-                    auto cmdEv = std::make_unique<TEvNodeConfigInvokeOnRoot>();
-                    cmdEv->Record.Swap(incoming.MutableInvokeOnRoot());
-                    Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), cmdEv.release());
+                        incoming.GetStorageConfig()));
                 }
             }
         }
@@ -257,9 +238,9 @@ namespace NKikimr::NStorage {
             // this function is invoked when one of peers is dynamic -- in this case we accept connection only when they
             // are both in synchronized state
             if (BridgeInfo) { // this may be missing if this node is dynamic and no configuration yet received
-                if (BridgeInfo->SelfNodePile->State == TClusterState::DISCONNECTED) {
+                if (!NBridge::PileStateTraits(BridgeInfo->SelfNodePile->State).AllowsConnection) {
                     return "can't establish connection to node belonging to disconnected pile: local disconnected";
-                } else if (BridgeInfo->GetPile(peerBridgePileId)->State == TClusterState::DISCONNECTED) {
+                } else if (!NBridge::PileStateTraits(BridgeInfo->GetPile(peerBridgePileId)->State).AllowsConnection) {
                     return "can't establish connection to node belonging to disconnected pile: remote disconnected";
                 }
             }
@@ -268,9 +249,9 @@ namespace NKikimr::NStorage {
                     return error;
                 }
                 const auto& cs = peerConfig->GetClusterState();
-                if (cs.GetPerPileState(SelfBridgePileId.GetRawId()) == TClusterState::DISCONNECTED) {
+                if (!NBridge::PileStateTraits(cs.GetPerPileState(SelfBridgePileId.GetRawId())).AllowsConnection) {
                     return "can't establish connection to node belonging to disconnected pile (as seen by peer): local disconnected";
-                } else if (cs.GetPerPileState(peerBridgePileId.GetRawId()) == TClusterState::DISCONNECTED) {
+                } else if (!NBridge::PileStateTraits(cs.GetPerPileState(peerBridgePileId.GetRawId())).AllowsConnection) {
                     return "can't establish connection to node belonging to disconnected pile (as seen by peer): remote disconnected";
                 }
             } else if (isPeerStatic) {
@@ -279,28 +260,11 @@ namespace NKikimr::NStorage {
             return std::nullopt;
         }
 
-        std::optional<TString> ProcessPeerConfig(TBridgePileId peerBridgePileId,
-                NKikimrBlobStorage::TStorageConfig&& config, NKikimrBlobStorage::TConnectivityPayload& outgoing) {
-            auto updateConfigAndReturn = [&] {
-                Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), new TEvNodeWardenUpdateConfigFromPeer(std::move(config)));
-                return std::nullopt;
-            };
-
+        std::optional<TString> CheckPeerConfig(TBridgePileId peerBridgePileId,
+                const NKikimrBlobStorage::TStorageConfig& config,
+                NKikimrBlobStorage::TConnectivityPayload *outgoing) {
             Y_ABORT_UNLESS(StorageConfig);
             Y_ABORT_UNLESS(BridgeInfo);
-
-            const auto *peerPile = BridgeInfo->GetPile(peerBridgePileId);
-            if (peerPile == BridgeInfo->SelfNodePile) {
-                // no extra checks when connecting nodes from the same pile
-                return updateConfigAndReturn();
-            } else if (peerPile->State == TClusterState::DISCONNECTED) {
-                // peer pile is considered disconnected according to our config; this is incoming connection and we
-                // should definitely drop it
-                return "can't establish connection to node belonging to disconnected pile: remote disconnected";
-            } else if (BridgeInfo->SelfNodePile->State == TClusterState::DISCONNECTED) {
-                // we are self-isolating, so we drop connections from any other piles
-                return "can't establish connection to node belonging to disconnected pile: local disconnected";
-            }
 
             // obtain cluster state from other party and check if they are the same as the one we have; this may trigger
             // generation sync (but still would return error)
@@ -308,64 +272,65 @@ namespace NKikimr::NStorage {
                 return TStringBuilder() << "peer storage config invalid: " << *error;
             } else if (auto error = ValidateClusterState(*StorageConfig)) {
                 return TStringBuilder() << "local storage config invalid: " << *error;
-            } else if (auto error = CheckStateCompatibility(StorageConfig->GetClusterState(),
-                    config.GetClusterState(), outgoing)) {
-                return error;
-            }
-
-            // we don't have to do anything else if we are both synchronized
-            if (BridgeInfo->SelfNodePile->State == TClusterState::SYNCHRONIZED && peerPile->State == TClusterState::SYNCHRONIZED) {
-                return updateConfigAndReturn();
-            }
-
-            // see if we have unsynced configs for us or for peer; if we don't, then there is no reason to continue checking
-            auto hasUnsyncedStorageConfig = [&](const auto& config, TBridgePileId bridgePileId) {
-                if (BridgeInfo->GetPile(bridgePileId)->State == TClusterState::SYNCHRONIZED) {
-                    return false; // this pile is synchronized, no reason to doubt configs
-                }
-                const auto *pss = GetPileSyncState(config, bridgePileId);
-                return pss && pss->GetUnsyncedStorageConfig();
-            };
-            // we evaluate the worst case, when unsynced states are a bit different on this side and on peer's
-            if (!hasUnsyncedStorageConfig(*StorageConfig, SelfBridgePileId) &&
-                    !hasUnsyncedStorageConfig(*StorageConfig, peerBridgePileId) &&
-                    !hasUnsyncedStorageConfig(config, SelfBridgePileId) &&
-                    !hasUnsyncedStorageConfig(config, peerBridgePileId)) {
-                return updateConfigAndReturn();
             }
 
             // local/peer side is returning from DISCONNECTED state, validate cluster histories to ensure there were no
             // definite split brain
-            if (auto error = ValidateClusterStateHistory(config)) {
+            if (auto error = ValidateClusterStateDetails(config)) {
                 return TStringBuilder() << "peer cluster state history invalid: " << *error;
-            } else if (auto error = ValidateClusterStateHistory(*StorageConfig)) {
+            } else if (auto error = ValidateClusterStateDetails(*StorageConfig)) {
                 return TStringBuilder() << "local cluster state history invalid: " << *error;
-            } else if (auto error = CheckHistoryCompatibility(StorageConfig->GetClusterStateHistory(), config.GetClusterStateHistory())) {
+            } else if (auto error = CheckHistoryCompatibility(StorageConfig->GetClusterStateDetails(), config.GetClusterStateDetails())) {
                 // histories are incompatible, connection won't ever be possible
                 return error;
             }
 
-            // check if peer config is the same as ours; in this case we can continue transition, otherwise we start
-            // merging machinery
-            if (StorageConfig->GetGeneration() == config.GetGeneration() && StorageConfig->GetFingerprint() == config.GetFingerprint()) {
-                return updateConfigAndReturn();
+            const auto *peerPile = BridgeInfo->GetPile(peerBridgePileId);
+            if (peerPile == BridgeInfo->SelfNodePile) {
+                // no extra checks when connecting nodes from the same pile
+                return std::nullopt;
             }
 
-            if (BridgeInfo->SelfNodePile->State == TClusterState::SYNCHRONIZED && peerPile->State == TClusterState::NOT_SYNCHRONIZED) {
-                // we are the one active party
-                auto cmdEv = std::make_unique<TEvNodeConfigInvokeOnRoot>();
-                cmdEv->Record.MutableMergeUnsyncedPileConfig()->MutablePileConfig()->CopyFrom(config);
-                Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), cmdEv.release());
-            } else if (BridgeInfo->SelfNodePile->State == TClusterState::NOT_SYNCHRONIZED && peerPile->State == TClusterState::SYNCHRONIZED) {
-                // we are the party trying to join synchronized domain and we have incoming connection from the active
-                // domain -- send 'em our configuration to trigger merging mechanism
-                outgoing.MutableInvokeOnRoot()->MutableMergeUnsyncedPileConfig()->MutablePileConfig()->CopyFrom(*StorageConfig);
-
-                // TODO(alexvru): check if we just need to merge this configuration in?
-                Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), new TEvNodeWardenUpdateConfigFromPeer(std::move(config)));
+            if (StorageConfig->GetGeneration() == config.GetGeneration() && StorageConfig->GetFingerprint() != config.GetFingerprint()) {
+                return "config fingerprint mismatch";
             }
 
-            return "configs are different";
+            const NKikimrBlobStorage::TStorageConfig& newerConfig =
+                StorageConfig->GetGeneration() < config.GetGeneration()
+                    ? config
+                    : *StorageConfig;
+
+            const auto& cs = newerConfig.GetClusterState();
+
+            std::optional<TString> error;
+
+            if (!NBridge::PileStateTraits(cs.GetPerPileState(peerBridgePileId.GetRawId())).AllowsConnection) {
+                error = "peer is not allowed to connect";
+            } else if (!NBridge::PileStateTraits(cs.GetPerPileState(SelfBridgePileId.GetRawId())).AllowsConnection) {
+                error = "local node is not allowed to accept peer";
+            }
+
+            if (!error) {
+                const auto& myClusterState = StorageConfig->GetClusterState();
+                const auto& peerClusterState = config.GetClusterState();
+                if (myClusterState.GetGeneration() < peerClusterState.GetGeneration()) {
+                    error = "local cluster state is obsolete";
+                } else if (peerClusterState.GetGeneration() < myClusterState.GetGeneration()) {
+                    error = "peer cluster state is obsolete";
+                }
+            }
+
+            if (error) {
+                if (config.GetGeneration() < StorageConfig->GetGeneration()) {
+                    outgoing->MutableStorageConfig()->CopyFrom(*StorageConfig);
+                } else if (StorageConfig->GetGeneration() < config.GetGeneration()) {
+                    Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), new TEvNodeWardenUpdateConfigFromPeer(config));
+                } else {
+                    Y_ABORT();
+                }
+            }
+
+            return error;
         }
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -389,79 +354,65 @@ namespace NKikimr::NStorage {
             return std::nullopt;
         }
 
-        std::optional<TString> CheckStateCompatibility(const NKikimrBridge::TClusterState& my,
-                const NKikimrBridge::TClusterState& peer, NKikimrBlobStorage::TConnectivityPayload& outgoing) {
-            Y_ABORT_UNLESS(my.PerPileStateSize() == peer.PerPileStateSize());
-            if (!std::ranges::equal(my.GetPerPileState(), peer.GetPerPileState()) ||
-                    my.GetPrimaryPile() != peer.GetPrimaryPile() ||
-                    my.GetPromotedPile() != peer.GetPromotedPile()) {
-                return "ClusterState is different";
+        ////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+        std::optional<TString> ValidateClusterStateDetails(const NKikimrBlobStorage::TStorageConfig& config) {
+            if (!config.HasClusterStateDetails()) {
+                return "ClusterStateDetails section is missing in StorageConfig";
             }
-            if (my.GetGeneration() < peer.GetGeneration()) {
-                // start advancing our generation to the desired one
-                auto cmdEv = std::make_unique<TEvNodeConfigInvokeOnRoot>();
-                cmdEv->Record.MutableAdvanceClusterStateGeneration()->SetGeneration(peer.GetGeneration());
-                Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), cmdEv.release());
-                return "ClusterState generation mismatch: updating local";
-            } else if (peer.GetGeneration() < my.GetGeneration()) {
-                outgoing.MutableInvokeOnRoot()->MutableAdvanceClusterStateGeneration()->SetGeneration(my.GetGeneration());
-                return "ClusterState generation mismatch: updating peer";
+            if (const auto& history = config.GetClusterStateDetails().GetUnsyncedHistory(); history.empty()) {
+                return "empty UnsyncedEntries in ClusterStateDetails";
+            } else {
+                const auto& lastItem = history[history.size() - 1];
+                if (!NBridge::IsSameClusterState(lastItem.GetClusterState(), config.GetClusterState())) {
+                    return "last item in UnsyncedHistory does not match ClusterState";
+                }
             }
+            return std::nullopt;
+        }
+
+        std::optional<TString> CheckHistoryCompatibility(const NKikimrBridge::TClusterStateDetails& my,
+                const NKikimrBridge::TClusterStateDetails& peer) {
+            const auto& myHistory = my.GetUnsyncedHistory();
+            const auto& peerHistory = peer.GetUnsyncedHistory();
+            int myIndex = 0;
+            int peerIndex = 0;
+
+            while (myIndex < myHistory.size() && peerIndex < peerHistory.size()) {
+                const auto& myItem = myHistory[myIndex];
+                const auto& peerItem = peerHistory[peerIndex];
+                if (myItem.GetClusterState().GetGeneration() < peerItem.GetClusterState().GetGeneration()) {
+                    if (myItem.UnsyncedPilesSize()) {
+                        return "local history has extra item";
+                    }
+                    ++myIndex;
+                } else if (peerItem.GetClusterState().GetGeneration() < myItem.GetClusterState().GetGeneration()) {
+                    if (myItem.UnsyncedPilesSize()) {
+                        return "peer history has extra item";
+                    }
+                    ++peerIndex;
+                } else if (!NBridge::IsSameClusterState(myItem.GetClusterState(), peerItem.GetClusterState()) ||
+                        myItem.GetOperationGuid() != peerItem.GetOperationGuid()) {
+                    return "history of local and peer piles have been has been diverged";
+                } else {
+                    ++myIndex, ++peerIndex;
+                }
+            }
+
             return std::nullopt;
         }
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-        std::optional<TString> ValidateClusterStateHistory(const NKikimrBlobStorage::TStorageConfig& config) {
-            if (!config.HasClusterStateHistory()) {
-                return "ClusterStateHistory section is missing in StorageConfig";
-            }
-            if (const auto& entries = config.GetClusterStateHistory().GetUnsyncedEntries(); entries.empty()) {
-                return "empty UnsyncedEntries in ClusterStateHistory";
-            } else {
-                const auto& item = entries[entries.size() - 1];
-                const auto& itemState = item.GetClusterState();
-                const auto& clusterState = config.GetClusterState();
-                if (!std::ranges::equal(itemState.GetPerPileState(), clusterState.GetPerPileState()) ||
-                        itemState.GetPrimaryPile() != clusterState.GetPrimaryPile() ||
-                        itemState.GetPromotedPile() != clusterState.GetPromotedPile() ||
-                        itemState.GetGeneration() != clusterState.GetGeneration()) {
-                    return "last item in UnsyncedEntries does not match ClusterState";
-                }
-            }
-            return std::nullopt;
-        }
+        ////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-        std::optional<TString> CheckHistoryCompatibility(const NKikimrBridge::TClusterStateHistory& my,
-                const NKikimrBridge::TClusterStateHistory& peer) {
-            // check if we have to run config synchronization procedure
-            const auto& myEntries = my.GetUnsyncedEntries();
-            const auto& peerEntries = peer.GetUnsyncedEntries();
-            if (!myEntries.empty() && !peerEntries.empty()) {
-                const auto& myItem = myEntries[myEntries.size() - 1];
-                const auto& peerItem = peerEntries[peerEntries.size() - 1];
-                if (!NProtoBuf::util::MessageDifferencer::Equals(myItem, peerItem)) {
-                    // last entries are out of sync, we have to bring them together
-                }
-            }
-
-            return std::nullopt;
-        }
-
-        void Handle(TEvPrivate::TEvUpdateRootState::TPtr ev) {
-            auto& msg = *ev->Get();
-            HasScepter = msg.HasScepter;
-            RootNodeId = msg.RootNodeId;
-            HasQuorumInPile = msg.HasQuorumInPile;
-        }
-
-        const NKikimrBridge::TClusterStateHistory::TPileSyncState *GetPileSyncState(
+        const NKikimrBridge::TClusterStateDetails::TPileSyncState *GetPileSyncState(
                 const NKikimrBlobStorage::TStorageConfig& config, TBridgePileId bridgePileId) {
-            if (!config.HasClusterStateHistory()) {
+            if (!config.HasClusterStateDetails()) {
                 return nullptr;
             }
-            for (const auto& item : config.GetClusterStateHistory().GetPileSyncState()) {
-                const auto id = TBridgePileId::FromProto(&item, &NKikimrBridge::TClusterStateHistory::TPileSyncState::GetBridgePileId);
+            for (const auto& item : config.GetClusterStateDetails().GetPileSyncState()) {
+                const auto id = TBridgePileId::FromProto(&item, &NKikimrBridge::TClusterStateDetails::TPileSyncState::GetBridgePileId);
                 if (id == bridgePileId) {
                     return &item;
                 }
@@ -479,7 +430,6 @@ namespace NKikimr::NStorage {
             hFunc(TEvInterconnect::TEvPrepareOutgoingConnection, Handle)
             hFunc(TEvInterconnect::TEvCheckIncomingConnection, Handle)
             hFunc(TEvInterconnect::TEvNotifyOutgoingConnectionEstablished, Handle)
-            hFunc(TEvPrivate::TEvUpdateRootState, Handle)
             hFunc(TEvNodeConfigInvokeOnRootResult, Handle)
         )
     };

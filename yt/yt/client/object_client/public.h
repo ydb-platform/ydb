@@ -19,6 +19,7 @@ namespace NYT::NObjectClient {
 
 namespace NProto {
 
+class TPrerequisiteRevision;
 class TUserDirectory;
 
 } // namespace NProto

@@ -80,6 +80,9 @@ using MemberUpdaterFunc = std::function<bool (TString& memberName, const TTypeAn
 bool UpdateStructMembers(TExprContext& ctx, const TExprNode::TPtr& node, const TStringBuf& goal, TExprNode::TListType& members,
     MemberUpdaterFunc updaterFunc = MemberUpdaterFunc(), const TTypeAnnotationNode* nodeType = nullptr);
 
+void GetAndTerms(const TExprNode::TPtr& predicate, TExprNode::TListType& terms);
+void GetOrTerms(const TExprNode::TPtr& predicate, TExprNode::TListType& terms);
+
 TExprNode::TPtr MakeSingleGroupRow(const TExprNode& aggregateNode, TExprNode::TPtr reduced, TExprContext& ctx);
 TExprNode::TPtr ExpandRemoveMember(const TExprNode::TPtr& node, TExprContext& ctx);
 TExprNode::TPtr ExpandRemoveMembers(const TExprNode::TPtr& node, TExprContext& ctx);
@@ -92,6 +95,7 @@ TExprNode::TPtr ExpandReplaceMember(const TExprNode::TPtr& node, TExprContext& c
 TExprNode::TPtr ExpandFlattenByColumns(const TExprNode::TPtr& node, TExprContext& ctx);
 TExprNode::TPtr ExpandCastStruct(const TExprNode::TPtr& node, TExprContext& ctx);
 TExprNode::TPtr ExpandSkipNullFields(const TExprNode::TPtr& node, TExprContext& ctx);
+TExprNode::TListType ExpandAndOverOr(const TExprNode::TPtr& predicate, TExprContext& ctx, const TTypeAnnotationContext& types);
 
 void ExtractSimpleKeys(const TExprNode* keySelectorBody, const TExprNode* keySelectorArg, TVector<TStringBuf>& columns);
 inline void ExtractSimpleKeys(const TExprNode& keySelectorLambda, TVector<TStringBuf>& columns) {
@@ -212,5 +216,10 @@ TExprNode::TPtr MakeAtomList(TPositionHandle pos, const C& container, TExprConte
     }
     return ctx.NewList(pos, std::move(atoms));
 }
+
+TExprNode::TPtr ReplaceUnessentials(TExprNode::TPtr predicate, TExprNode::TPtr row, const TNodeSet& banned, TExprContext& ctx);
+
+bool IsDependsOnUsage(const TExprNode& node, const TParentsMap& parentsMap);
+bool IsNormalizedDependsOn(const TExprNode& node);
 
 }

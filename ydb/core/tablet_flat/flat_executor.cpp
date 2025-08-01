@@ -1194,18 +1194,6 @@ void TExecutor::ApplyFollowerAuxUpdate(const TString &auxBody) {
     }
 }
 
-void TExecutor::RequestFromSharedCache(TAutoPtr<NPageCollection::TFetch> fetch,
-    NBlockIO::EPriority priority,
-    ESharedCacheRequestType requestType)
-{
-    Y_ENSURE(fetch->Pages.size() > 0, "Got TFetch req w/o any page");
-
-    Send(MakeSharedPageCacheId(), new NSharedCache::TEvRequest(
-        priority,
-        fetch),
-        0, (ui64)requestType);
-}
-
 void TExecutor::AddFollowerPartSwitch(
         const NKikimrExecutorFlat::TTablePartSwitch &switchProto,
         const NKikimrExecutorFlat::TFollowerPartSwitchAux::TBySwitch *aux,
@@ -1326,13 +1314,12 @@ bool TExecutor::PrepareExternalPart(TPendingPartSwitch &partSwitch, TPendingPart
     }
 
     if (auto* stage = bundle.GetStage<TPendingPartSwitch::TLoaderStage>()) {
-        if (auto fetch = stage->Loader.Run({.PreloadIndex = true, .PreloadData = PreloadTablesData.contains(partSwitch.TableId)})) {
-            Y_ENSURE(fetch.size() == 1, "Cannot handle loads from more than one page collection");
-
-            for (auto req : fetch) {
-                stage->Fetching = req->PageCollection.Get();
-                RequestFromSharedCache(req, NBlockIO::EPriority::Fast, ESharedCacheRequestType::PendingInit);
-            }
+        if (auto fetch = stage->Loader.Run({.PreloadIndex = true, .PreloadData = PreloadTablesData.contains(partSwitch.TableId)})) {            
+            stage->Fetching = fetch.PageCollection.Get();
+            
+            Send(MakeSharedPageCacheId(), new NSharedCache::TEvRequest(
+                NBlockIO::EPriority::Fast, std::move(fetch.PageCollection), std::move(fetch.Pages)),
+                0, ui64(ESharedCacheRequestType::PendingInit));
 
             ++partSwitch.PendingLoads;
             return true;
@@ -1499,9 +1486,10 @@ void TExecutor::RequestInMemPagesForPartStore(ui32 tableId, const NTable::TPartV
         }
 
         if (stickyGroup) {
-            auto req = partView.As<NTable::TPartStore>()->GetPages(groupIndex);
-            // TODO: only request missing pages
-            RequestFromSharedCache(req, NBlockIO::EPriority::Bkgr, ESharedCacheRequestType::InMemPages);
+            auto partStore = partView.As<NTable::TPartStore>();
+            Send(MakeSharedPageCacheId(), new NSharedCache::TEvRequest(
+                NBlockIO::EPriority::Bkgr, partStore->PageCollections[groupIndex]->PageCollection, partStore->GetPages(groupIndex)),
+                0, ui64(ESharedCacheRequestType::InMemPages));
         }
     }
 }
@@ -2224,12 +2212,11 @@ void TExecutor::PostponeTransaction(TSeat* seat, TPageCollectionTxEnv &env,
             logl << "]";
         }
 
-        auto *req = new NPageCollection::TFetch(0, pageCollectionInfo->PageCollection, std::move(pages));
-        req->TraceId = waitPad->GetWaitingTraceId();
-        req->WaitPad = waitPad;
+        auto request = new NSharedCache::TEvRequest(NBlockIO::EPriority::Fast, pageCollectionInfo->PageCollection, std::move(pages));
+        request->TraceId = waitPad->GetWaitingTraceId();
+        request->WaitPad = waitPad;
         ++waitPad->PendingRequests;
-
-        RequestFromSharedCache(req, NBlockIO::EPriority::Fast, ESharedCacheRequestType::Transaction);
+        Send(MakeSharedPageCacheId(), request, 0, ui64(ESharedCacheRequestType::Transaction));
     }
 
     if (auto logl = Logger->Log(ELnLev::Debug)) {
@@ -2314,6 +2301,7 @@ void TExecutor::CommitTransactionLog(std::unique_ptr<TSeat> seat, TPageCollectio
             || change->Scheme
             || change->Annex  /* Required for replication to followers */
             || change->RemovedRowVersions  /* Required for replication to followers */
+            || change->Truncated
             || env.MakeSnap
             || env.DropSnap
             || env.LoanBundle
@@ -2430,37 +2418,8 @@ void TExecutor::CommitTransactionLog(std::unique_ptr<TSeat> seat, TPageCollectio
             commit->WaitFollowerGcAck = true; // as we could collect some page collections
 
             for (auto &subset: garbage) {
-                ui64 total = 0;
-                TDeque<NTable::NFwd::TSieve> sieve(subset->Flatten.size() + 1);
-
-                for (auto seq: xrange(subset->Flatten.size())) {
-                    sieve[seq] = {
-                        subset->Flatten[seq]->Blobs,
-                        subset->Flatten[seq]->Large,
-                        subset->Flatten[seq].Slices,
-                        { }
-                    };
-
-                    total += sieve[seq].Total();
-                }
-
-                { /* the last sieve corresponds to all TMemTable tables blobs */
-                    sieve.back() = {
-                        NTable::TMemTable::MakeBlobsPage(subset->Frozen),
-                        nullptr,
-                        nullptr,
-                        { }
-                    };
-
-                    total += sieve.back().Total();
-                }
-
-                UtilizeSubset(*subset, { total, 0, std::move(sieve) }, { }, commit);
+                UtilizeSubset(*subset, commit);
             }
-
-            TIntrusivePtr<TBarrier> barrier(new TBarrier(commit->Step));
-            Y_ENSURE(InFlyCompactionGcBarriers.emplace(commit->Step, barrier).second);
-            GcLogic->HoldBarrier(barrier->Step);
         }
 
         NKikimrExecutorFlat::TFollowerPartSwitchAux aux;
@@ -2594,6 +2553,71 @@ void TExecutor::CommitTransactionLog(std::unique_ptr<TSeat> seat, TPageCollectio
             InFlySnapCollectionBarriers.emplace(commit->Step, std::move(result.Barriers));
         }
 
+        if (auto truncated = std::move(change->Truncated)) {
+            commit->WaitFollowerGcAck = true; // as we could collect some page collections
+
+            for (auto& record : truncated) {
+                ui32 table = record.Table;
+                TAutoPtr<NTable::TSubset> subset = std::move(record.Subset);
+
+                // Serialize removed subset as if it was compacted into nothing
+                NKikimrExecutorFlat::TTablePartSwitch proto;
+                proto.SetTableId(table);
+
+                NTable::TSnapEdge edge(change->Stamp - 1, subset->Head);
+                LogicRedo->CutLog(table, edge, commit->GcDelta);
+
+                auto* sx = proto.MutableTableSnapshoted();
+                sx->SetTable(table);
+                sx->SetGeneration(ExpandGenStepPair(edge.TxStamp).first);
+                sx->SetStep(ExpandGenStepPair(edge.TxStamp).second);
+                sx->SetHead(edge.Head.ToProto());
+
+                UtilizeSubset(*subset, commit);
+
+                TVector<TLogoBlobID> partLabels;
+                for (auto& gone : subset->Flatten) {
+                    LogoBlobIDFromLogoBlobID(gone->Label, proto.AddLeavingBundles());
+                    partLabels.push_back(gone->Label);
+                }
+                for (auto& gone : subset->ColdParts) {
+                    LogoBlobIDFromLogoBlobID(gone->Label, proto.AddLeavingBundles());
+                    partLabels.push_back(gone->Label);
+                }
+                for (auto& gone : subset->TxStatus) {
+                    LogoBlobIDFromLogoBlobID(gone->Label, proto.AddLeavingTxStatus());
+                }
+
+                const auto logicResult = CompactionLogic->RemovedParts(table, partLabels);
+
+                Y_ENSURE(!logicResult.Changes.SliceChanges, "Unexpected slice changes when removing parts");
+
+                if (logicResult.Changes.StateChanges) {
+                    auto* x = proto.MutableCompactionChanges();
+                    x->SetTable(table);
+                    x->SetStrategy(logicResult.Strategy);
+                    x->MutableKeyValues()->Reserve(logicResult.Changes.StateChanges.size());
+                    for (const auto& kv : logicResult.Changes.StateChanges) {
+                        auto* p = x->AddKeyValues();
+                        p->SetKey(kv.first);
+                        if (kv.second) {
+                            p->SetValue(kv.second);
+                        }
+                    }
+                }
+
+                // Make sure ongoing compactions are cancelled and state resets
+                // CompactionLogic->RestartTable(table);
+
+                // Finalize the part switch blob and attach it to commit
+                {
+                    auto body = proto.SerializeAsString();
+                    auto glob = CommitManager->Turns.One(commit->Refs, std::move(body), true);
+                    Y_UNUSED(glob);
+                }
+            }
+        }
+
         bool hadPendingPartSwitches = bool(PendingPartSwitches);
 
         aux.MutableBySwitchAux()->Reserve(aux.BySwitchAuxSize() + env.LoanBundle.size() + env.LoanTxStatus.size());
@@ -2714,10 +2738,6 @@ void TExecutor::CommitTransactionLog(std::unique_ptr<TSeat> seat, TPageCollectio
                     borrowUpdate.second,
                     commit);
             }
-
-            TIntrusivePtr<TBarrier> barrier(new TBarrier(commit->Step));
-            Y_ENSURE(InFlyCompactionGcBarriers.emplace(commit->Step, barrier).second);
-            GcLogic->HoldBarrier(barrier->Step);
         }
 
         if (env.LoanConfirmation) {
@@ -2728,13 +2748,16 @@ void TExecutor::CommitTransactionLog(std::unique_ptr<TSeat> seat, TPageCollectio
                     xupd.second.BorrowId,
                     commit);
             }
+        }
+
+        if (commit && commit->WaitFollowerGcAck) {
             TIntrusivePtr<TBarrier> barrier(new TBarrier(commit->Step));
             Y_ENSURE(InFlyCompactionGcBarriers.emplace(commit->Step, barrier).second);
             GcLogic->HoldBarrier(barrier->Step);
         }
 
-        if (commitResult.Commit) {
-            AttachLeaseCommit(commitResult.Commit.Get());
+        if (commit) {
+            AttachLeaseCommit(commit);
             CommitManager->Commit(commitResult.Commit);
         }
 
@@ -3061,7 +3084,8 @@ void TExecutor::Handle(NSharedCache::TEvResult::TPtr &ev) {
                 return Broken();
             }
 
-            foundStage->Loader.Save(msg->Cookie, msg->Pages);
+            Y_ENSURE(msg->Cookie == 0);
+            foundStage->Loader.Save(std::move(msg->Pages));
             foundSwitch->PendingLoads--;
 
             if (PrepareExternalPart(*foundSwitch, *foundBundle)) {
@@ -3492,6 +3516,36 @@ void TExecutor::UtilizeSubset(const NTable::TSubset &subset,
     }
 
     Counters->Cumulative()[TExecutorCounters::DB_ELOBS_ITEMS_GONE].Increment(seen.Total - seen.Seen);
+}
+
+void TExecutor::UtilizeSubset(const NTable::TSubset &subset, TLogCommit *commit)
+{
+    ui64 total = 0;
+    TDeque<NTable::NFwd::TSieve> sieve(subset.Flatten.size() + 1);
+
+    for (auto seq: xrange(subset.Flatten.size())) {
+        sieve[seq] = {
+            subset.Flatten[seq]->Blobs,
+            subset.Flatten[seq]->Large,
+            subset.Flatten[seq].Slices,
+            { }
+        };
+
+        total += sieve[seq].Total();
+    }
+
+    { /* the last sieve corresponds to all TMemTable tables blobs */
+        sieve.back() = {
+            NTable::TMemTable::MakeBlobsPage(subset.Frozen),
+            nullptr,
+            nullptr,
+            { }
+        };
+
+        total += sieve.back().Total();
+    }
+
+    UtilizeSubset(subset, { total, 0, std::move(sieve) }, { }, commit);
 }
 
 void TExecutor::ReleaseScanLocks(TIntrusivePtr<TBarrier> barrier, const NTable::TSubset &subset)

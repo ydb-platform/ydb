@@ -43,6 +43,7 @@
 #include <ydb/core/fq/libs/quota_manager/events/events.h>
 #include <ydb/core/fq/libs/ydb/util.h>
 #include <ydb/core/fq/libs/ydb/ydb.h>
+#include <ydb/core/kqp/proxy_service/kqp_script_execution_retries.h>
 
 namespace NFq {
 
@@ -400,6 +401,7 @@ protected:
         RTS_CREATE_DATABASE,
         RTS_DESCRIBE_DATABASE,
         RTS_MODIFY_DATABASE,
+        RTS_DELETE_FOLDER_RESOURCES,
         RTS_MAX,
     };
 
@@ -427,7 +429,8 @@ protected:
         "PingTask",
         "CreateDatabase",
         "DescribeDatabase",
-        "ModifyDatabase"
+        "ModifyDatabase",
+        "DeleteFolderResources"
     };
 
     enum ERequestTypeCommon {
@@ -461,6 +464,7 @@ protected:
         RTC_CREATE_DATABASE,
         RTC_DESCRIBE_DATABASE,
         RTC_MODIFY_DATABASE,
+        RTC_DELETE_FOLDER_RESOURCES,
         RTC_MAX,
     };
 
@@ -514,7 +518,8 @@ protected:
             { MakeIntrusive<TRequestCommonCounters>("PingTask") },
             { MakeIntrusive<TRequestCommonCounters>("CreateDatabase") },
             { MakeIntrusive<TRequestCommonCounters>("DescribeDatabase") },
-            { MakeIntrusive<TRequestCommonCounters>("ModifyDatabase") }
+            { MakeIntrusive<TRequestCommonCounters>("ModifyDatabase") },
+            { MakeIntrusive<TRequestCommonCounters>("DeleteFolderResources") },
         });
 
         TTtlCache<TMetricsScope, TScopeCountersPtr, TMap> ScopeCounters{TTtlCacheSettings{}.SetTtl(TDuration::Days(1))};
@@ -690,11 +695,11 @@ protected:
     void UpdateTaskInfo(
         NActors::TActorSystem* actorSystem, Fq::Private::PingTaskRequest& request, const std::shared_ptr<TFinalStatus>& finalStatus, FederatedQuery::Query& query,
         FederatedQuery::Internal::QueryInternal& internal, FederatedQuery::Job& job, TString& owner,
-        TRetryLimiter& retryLimiter, TDuration& backoff, TInstant& expireAt) const;
+        NKikimr::NKqp::TRetryLimiter& retryLimiter, TDuration& backoff, TInstant& expireAt) const;
 
     void FillQueryStatistics(
         const std::shared_ptr<TFinalStatus>& finalStatus, const FederatedQuery::Query& query,
-        const FederatedQuery::Internal::QueryInternal& internal, const TRetryLimiter& retryLimiter) const;
+        const FederatedQuery::Internal::QueryInternal& internal, const NKikimr::NKqp::TRetryLimiter& retryLimiter) const;
 
     void Handle(TEvControlPlaneStorage::TEvFinalStatusReport::TPtr& ev);
 
@@ -863,6 +868,7 @@ public:
         hFunc(TEvControlPlaneStorage::TEvDescribeBindingRequest, Handle);
         hFunc(TEvControlPlaneStorage::TEvModifyBindingRequest, Handle);
         hFunc(TEvControlPlaneStorage::TEvDeleteBindingRequest, Handle);
+        hFunc(TEvControlPlaneStorage::TEvDeleteFolderResourcesRequest, Handle);
         hFunc(TEvControlPlaneStorage::TEvWriteResultDataRequest, Handle);
         hFunc(TEvControlPlaneStorage::TEvGetTaskRequest, Handle);
         hFunc(TEvControlPlaneStorage::TEvPingTaskRequest, Handle);
@@ -902,6 +908,8 @@ public:
     void Handle(TEvControlPlaneStorage::TEvDescribeBindingRequest::TPtr& ev);
     void Handle(TEvControlPlaneStorage::TEvModifyBindingRequest::TPtr& ev);
     void Handle(TEvControlPlaneStorage::TEvDeleteBindingRequest::TPtr& ev);
+
+    void Handle(TEvControlPlaneStorage::TEvDeleteFolderResourcesRequest::TPtr& ev);
 
     void Handle(TEvControlPlaneStorage::TEvWriteResultDataRequest::TPtr& ev);
     void Handle(TEvControlPlaneStorage::TEvGetTaskRequest::TPtr& ev);

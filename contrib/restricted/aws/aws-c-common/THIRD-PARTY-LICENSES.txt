@@ -34,7 +34,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 ------
 
-** cJSON; version 1.7.16 -- https://github.com/DaveGamble/cJSON
+** cJSON; version 1.7.18 -- https://github.com/DaveGamble/cJSON
 Copyright (c) 2009-2017 Dave Gamble and cJSON contributors
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -57,7 +57,7 @@ THE SOFTWARE.
 
 ------
 
-** libcbor; version 0.11.0 -- https://github.com/PJK/libcbor
+** libcbor; version 0.12.0 -- https://github.com/PJK/libcbor
 Copyright (c) 2014-2017 Pavel Kalvoda
 
 MIT License

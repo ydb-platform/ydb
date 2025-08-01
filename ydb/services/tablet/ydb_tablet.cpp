@@ -25,7 +25,7 @@ void TGRpcYdbTabletService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
 #error ADD_REQUEST_LIMIT macro already defined
 #endif
 
-#define ADD_REQUEST_LIMIT(NAME, CB, LIMIT_TYPE, ...) do {                                                               \
+#define ADD_REQUEST_LIMIT(NAME, CB, LIMIT_TYPE, AUDIT_MODE) do {                                                        \
     for (size_t i = 0; i < HandlersPerCompletionQueue; ++i) {                                                           \
         for (auto* cq: CQS) {                                                                                           \
             auto proxy = GRpcProxies_[proxyCounter++ % GRpcProxies_.size()];                                            \
@@ -37,7 +37,7 @@ void TGRpcYdbTabletService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
                             new TGrpcRequestNoOperationCall<Ydb::Tablet::NAME##Request, Ydb::Tablet::NAME##Response>    \
                                 (ctx, &CB, TRequestAuxSettings {                                                        \
                                     .RlMode = RLSWITCH(TRateLimiterMode::LIMIT_TYPE),                                   \
-                                    __VA_OPT__(.AuditMode = TAuditMode::__VA_ARGS__,)                                   \
+                                    .AuditMode = AUDIT_MODE,                                                            \
                                 }));                                                                                    \
                     }, &Ydb::Tablet::V1::TabletService::AsyncService::Request ## NAME,                                  \
                     #NAME, logger, getCounterBlock("tablet", #NAME))->Run();                                            \
@@ -45,9 +45,9 @@ void TGRpcYdbTabletService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
     }                                                                                                                   \
 } while(0)
 
-    ADD_REQUEST_LIMIT(ExecuteTabletMiniKQL, DoExecuteTabletMiniKQLRequest, Rps, Auditable);
-    ADD_REQUEST_LIMIT(ChangeTabletSchema, DoChangeTabletSchemaRequest, Rps, Auditable);
-    ADD_REQUEST_LIMIT(RestartTablet, DoRestartTabletRequest, Rps);
+    ADD_REQUEST_LIMIT(ExecuteTabletMiniKQL, DoExecuteTabletMiniKQLRequest, Rps, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Dml));
+    ADD_REQUEST_LIMIT(ChangeTabletSchema, DoChangeTabletSchemaRequest, Rps, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Ddl));
+    ADD_REQUEST_LIMIT(RestartTablet, DoRestartTabletRequest, Rps, TAuditMode::Modifying(TAuditMode::TLogClassConfig::ClusterAdmin));
 
 #undef ADD_REQUEST_LIMIT
 }

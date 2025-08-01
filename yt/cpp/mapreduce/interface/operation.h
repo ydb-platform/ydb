@@ -3323,6 +3323,10 @@ struct IOperation
     virtual TMaybe<TOperationBriefProgress> GetBriefProgress() = 0;
 
     ///
+    /// Get operation alerts.
+    virtual TMaybe<THashMap<TString, TYtError>> GetAlerts() = 0;
+
+    ///
     /// @brief Abort operation.
     ///
     /// Operation will be finished immediately.

@@ -1,11 +1,12 @@
 #include "yql_yt_job_fmr.h"
 #include <util/thread/pool.h>
 #include <yt/yql/providers/yt/common/yql_configuration.h>
+#include <yt/yql/providers/yt/fmr/request_options/proto_helpers/yql_yt_request_proto_helpers.h>
 #include <yt/yql/providers/yt/fmr/utils/yql_yt_parse_records.h>
 #include <yt/yql/providers/yt/fmr/utils/yql_yt_table_input_streams.h>
 #include <yql/essentials/utils/log/log.h>
 
-namespace NYql {
+namespace NYql::NFmr {
 
 void TFmrUserJob::Save(IOutputStream& s) const {
     TYqlUserJobBase::Save(s);
@@ -13,7 +14,6 @@ void TFmrUserJob::Save(IOutputStream& s) const {
         InputTables_,
         OutputTables_,
         ClusterConnections_,
-        UseFileGateway_,
         TableDataServiceDiscoveryFilePath_
     );
 }
@@ -24,7 +24,6 @@ void TFmrUserJob::Load(IInputStream& s) {
         InputTables_,
         OutputTables_,
         ClusterConnections_,
-        UseFileGateway_,
         TableDataServiceDiscoveryFilePath_
     );
 }
@@ -70,8 +69,6 @@ void TFmrUserJob::InitializeFmrUserJob() {
     UnionInputTablesQueue_ = MakeIntrusive<TFmrRawTableQueue>(inputTablesSize);
     QueueReader_ = MakeIntrusive<TFmrRawTableQueueReader>(UnionInputTablesQueue_);
 
-    YtJobService_ = UseFileGateway_ ? MakeFileYtJobSerivce() : MakeYtJobSerivce();
-
     auto tableDataServiceDiscovery = MakeFileTableDataServiceDiscovery({.Path = TableDataServiceDiscoveryFilePath_});
     TableDataService_ = MakeTableDataServiceClient(tableDataServiceDiscovery);
 
@@ -80,10 +77,26 @@ void TFmrUserJob::InitializeFmrUserJob() {
     }
 }
 
-void TFmrUserJob::DoFmrJob() {
+TStatistics TFmrUserJob::GetStatistics() {
+    YQL_ENSURE(OutputTables_.size() == TableDataServiceWriters_.size());
+    TStatistics mapJobStats;
+    for (ui64 i = 0; i < OutputTables_.size(); ++i) {
+        auto stats = TableDataServiceWriters_[i]->GetStats();
+        mapJobStats.OutputTables.emplace(OutputTables_[i], stats);
+    }
+    auto serializedProtoMapJobStats = StatisticsToProto(mapJobStats).SerializeAsStringOrThrow();
+
+    TFileOutput statsOutput("stats.bin");
+    statsOutput.Write(serializedProtoMapJobStats.data(), serializedProtoMapJobStats.size());
+    statsOutput.Flush();
+    return mapJobStats;
+}
+
+TStatistics TFmrUserJob::DoFmrJob() {
     InitializeFmrUserJob();
     FillQueueFromInputTables();
     TYqlUserJobBase::Do();
+    return GetStatistics();
 }
 
-} // namespace NYql
+} // namespace NYql::NFmr

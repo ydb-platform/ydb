@@ -169,12 +169,16 @@ namespace NKikimr {
     struct TPutRecoveryLogRecOpt {
         TLogoBlobID Id;
         TString Data;
+        bool IssueKeepFlag;
 
-        static TString Serialize(const TBlobStorageGroupType &gtype, const TLogoBlobID &id, const TRope &rope);
+        static TString Serialize(const TBlobStorageGroupType &gtype, const TLogoBlobID &id, const TRope &rope,
+            bool issueKeepFlag);
         // Will serialize inplace if container has enough headroom and right (single) underlying type
-        static TRcBuf SerializeZeroCopy(const TBlobStorageGroupType &gtype, const TLogoBlobID &id, TRope &&rope);
+        static TRcBuf SerializeZeroCopy(const TBlobStorageGroupType &gtype, const TLogoBlobID &id, TRope &&rope,
+            bool issueKeepFlag);
         // Will serialize inplace if container has enough headroom
-        static TRcBuf SerializeZeroCopy(const TBlobStorageGroupType &gtype, const TLogoBlobID &id, TRcBuf &&data);
+        static TRcBuf SerializeZeroCopy(const TBlobStorageGroupType &gtype, const TLogoBlobID &id, TRcBuf &&data,
+            bool issueKeepFlag);
         bool ParseFromString(const TBlobStorageGroupType &gtype, const TString &data);
         bool ParseFromArray(const TBlobStorageGroupType &gtype, const char* data, size_t size);
         TString ToString() const;

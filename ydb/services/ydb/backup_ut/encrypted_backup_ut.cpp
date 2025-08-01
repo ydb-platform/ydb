@@ -607,14 +607,6 @@ Y_UNIT_TEST_SUITE_F(EncryptedExportTest, TBackupEncryptionTestFixture) {
             });
         }
 
-        // Topics can't restore to a new dir
-        // Create dir
-        // TODO: remove after fix
-        {
-            auto res = YdbSchemeClient().MakeDirectory("/Root/Restored").GetValueSync();
-            UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
-        }
-
         {
             NImport::TImportFromS3Settings importSettings = MakeImportSettings("Prefix", "/Root/Restored");
             importSettings

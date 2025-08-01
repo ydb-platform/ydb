@@ -30,6 +30,7 @@
 #include <ydb/core/control/immediate_control_board_actor.h>
 
 #include <ydb/library/actors/protos/services_common.pb.h>
+#include <ydb/core/audit/audit_config/audit_config.h>
 #include <ydb/core/cms/console/grpc_library_helper.h>
 #include <ydb/core/keyvalue/keyvalue.h>
 #include <ydb/core/formats/clickhouse_block.h>
@@ -260,7 +261,7 @@ public:
 
         appData->CompactionConfig = Config.GetCompactionConfig();
         appData->BackgroundCleaningConfig = Config.GetBackgroundCleaningConfig();
-        appData->DataErasureConfig = Config.GetDataErasureConfig();
+        appData->ShredConfig = Config.GetDataErasureConfig();
     }
 };
 
@@ -1130,7 +1131,7 @@ void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
 {
     const auto& cfg = runConfig.AppConfig;
 
-    bool useAutoConfig = !cfg.HasActorSystemConfig() || (cfg.GetActorSystemConfig().HasUseAutoConfig() && cfg.GetActorSystemConfig().GetUseAutoConfig());
+    bool useAutoConfig = !cfg.HasActorSystemConfig() || NeedToUseAutoConfig(cfg.GetActorSystemConfig());
     bool useSharedThreads = cfg.HasActorSystemConfig() && cfg.GetActorSystemConfig().HasUseSharedThreads() && cfg.GetActorSystemConfig().GetUseSharedThreads();
     NAutoConfigInitializer::TASPools pools = NAutoConfigInitializer::GetASPools(cfg.GetActorSystemConfig(), useAutoConfig);
     TMap<TString, ui32> servicePools = NAutoConfigInitializer::GetServicePools(cfg.GetActorSystemConfig(), useAutoConfig);
@@ -1752,6 +1753,10 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
 
     if (serviceMask.EnableGeneralCachePortionsMetadata) {
         sil->AddServiceInitializer(new TGeneralCachePortionsMetadataInitializer(runConfig));
+    }
+
+    if (serviceMask.EnableGeneralCacheColumnData) {
+        sil->AddServiceInitializer(new TGeneralCacheColumnDataInitializer(runConfig));
     }
 
     if (serviceMask.EnableCms) {

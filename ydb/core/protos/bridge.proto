@@ -6,8 +6,9 @@ message TClusterState {
     // each realm state in relation to primary one
     enum EPileState {
         DISCONNECTED = 0; // disconnected from the cluster (no other node connects to this realm)
-        NOT_SYNCHRONIZED = 1; // not synchronized with primary, may not be promoted -- synchronization needs to complete first
-        SYNCHRONIZED = 2; // fully synchronized with primary, may be promoted
+        NOT_SYNCHRONIZED_1 = 1; // not synchonized with primary, can't be promoted, doesn't take part in any quorum
+        NOT_SYNCHRONIZED_2 = 2; // not synchonized with primary, can't be promoted, takes part in all quorums
+        SYNCHRONIZED = 3; // fully synchronized with primary, may be promoted
     }
     repeated EPileState PerPileState = 1; // a state for every realm, including primary
     uint32 PrimaryPile = 2; // the current primary (must be SYNCHRONIZED)
@@ -15,20 +16,19 @@ message TClusterState {
     uint64 Generation = 4; // cluster state generation (which must be increasing strictly by one)
 }
 
-message TClusterStateHistory {
-    message TUnsyncedEntry {
+message TClusterStateDetails {
+    message TUnsyncedHistory {
         TClusterState ClusterState = 1;
         fixed64 OperationGuid = 2;
         repeated uint32 UnsyncedPiles = 3; // a list of pile ids that did not refer to this entry; trimmed when empty
     }
-    repeated TUnsyncedEntry UnsyncedEntries = 1; // entries stored in order of ascending Generation
+    repeated TUnsyncedHistory UnsyncedHistory = 1; // entries stored in order of ascending Generation
 
     message TPileSyncState {
         uint32 BridgePileId = 1;
         repeated string PermanentErrorReasons = 2; // a set of detected permanent errors for this pile
         repeated uint32 UnsyncedGroupIds = 3; // a set of unsynced groups for this pile
         bool UnsyncedBSC = 4; // true if BSC is not synced with this configuration yet
-        bool UnsyncedStorageConfig = 5; // TStorageConfig is not synced after being DISCONNECTED, needs special procedure for nodes to establish connectivity
     }
     repeated TPileSyncState PileSyncState = 2; // per-pile sync state for current generation
 }

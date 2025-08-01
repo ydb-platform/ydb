@@ -130,7 +130,12 @@ namespace NSQLTranslationV1 {
 
         TStringBuilder body;
         for (const auto& pattern : patterns) {
-            body << "(" << pattern.Body << ")|";
+            TString regex = pattern.Body;
+            if (pattern.Body.Contains('|')) {
+                regex.prepend('(');
+                regex.append(')');
+            }
+            body << regex << "|";
         }
         Y_ENSURE(body.back() == '|');
         body.pop_back();

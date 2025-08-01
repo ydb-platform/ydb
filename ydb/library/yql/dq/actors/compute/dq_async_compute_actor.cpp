@@ -256,6 +256,12 @@ private:
             html << "CheckpointingMode: " << NDqProto::ECheckpointingMode_Name(info.CheckpointingMode) << "<br />";
             DUMP(info, FreeSpace);
             html << "IsPaused: " << info.IsPaused() << "<br />";
+
+            if (const auto* channelStats = Channels->GetInputChannelStats(id)) {
+                DUMP_PREFIXED("InputChannelStats.", (*channelStats), PollRequests);
+                DUMP_PREFIXED("InputChannelStats.", (*channelStats), ResentMessages);
+            }
+
             auto channel = info.Channel;
             if (!channel) {
                 auto stats = GetTaskRunnerStats();
@@ -337,6 +343,24 @@ private:
                 html << "AsyncData.Watermark: " << info.AsyncData->Watermark << "<br />";
             }
 
+            if (const auto* channelStats = Channels->GetOutputChannelStats(id)) {
+                DUMP_PREFIXED("OutputChannelStats.", (*channelStats), ResentMessages);
+            }
+            const auto& peerState = Channels->GetOutputChannelInFlightState(id);
+            html << "OutputChannelInFlightState: " << peerState.DebugString() << "<br />";
+            DUMP((*Channels), ShouldSkipData, (id));
+            DUMP((*Channels), HasFreeMemoryInChannel, (id));
+            DUMP((*Channels), CanSendChannelData, (id));
+
+            if (const auto& stats = info.Stats) {
+                DUMP((*stats), BlockedByCapacity);
+                DUMP((*stats), NoDstActorId);
+                DUMP((*stats), BlockedTime);
+                if (stats->StartBlockedTime) {
+                    DUMP(*(*stats), StartBlockedTime);
+                }
+            }
+
             auto channel = info.Channel;
             if (!channel) {
                 auto stats = GetTaskRunnerStats();
@@ -365,8 +389,6 @@ private:
                 const auto& popStats = channel->GetPopStats();
                 html << "DqOutputChannel.PopStats.ChannelId: " << popStats.ChannelId << "<br />";
                 html << "DqOutputChannel.PopStats.DstStageId: " << popStats.DstStageId << "<br />";
-                html << "DqOutputChannel.PopStats.MaxMemoryUsage: " << popStats.MaxMemoryUsage << "<br />";
-                html << "DqOutputChannel.PopStats.MaxRowsInMemory: " << popStats.MaxRowsInMemory << "<br />";
                 html << "DqOutputChannel.PopStats.SerializationTime: " << popStats.SerializationTime.ToString() << "<br />";
                 html << "DqOutputChannel.PopStats.SpilledBytes: " << popStats.SpilledBytes << "<br />";
                 html << "DqOutputChannel.PopStats.SpilledRows: " << popStats.SpilledRows << "<br />";

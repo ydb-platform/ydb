@@ -2783,7 +2783,7 @@ bool RewriteYtCommonJoin(TYtEquiJoin equiJoin, const TJoinLabels& labels, TYtJoi
         chopperSwitch = Build<TCoLambda>(ctx, pos)
             .Args({"key", "item"})
             .Body<TYtIsKeySwitch>()
-                .DependsOn()
+                .DependsOn<TCoDependsOn>()
                     .Input("item")
                 .Build()
             .Build()

@@ -58,7 +58,7 @@ struct TTestContext {
         , Vb(HolderFactory)
         , TransportVersion(transportVersion)
         , IsWide(width == WIDE_CHANNEL)
-        , Ds(TypeEnv, HolderFactory, TransportVersion)
+        , Ds(TypeEnv, HolderFactory, TransportVersion, EValuePackerVersion::V0)
     {
         //TMultiType::Create(ui32 elementsCount, TType *const *elements, const TTypeEnvironment &env)
         if (bigRows) {

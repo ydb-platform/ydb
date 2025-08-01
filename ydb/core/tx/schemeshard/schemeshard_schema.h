@@ -2044,7 +2044,7 @@ struct Schema : NIceDb::Schema {
 
     struct DataErasureGenerations : Table<115> {
         struct Generation : Column<1, NScheme::NTypeIds::Uint64> {};
-        struct Status : Column<2, NScheme::NTypeIds::Uint32> { using Type = EDataErasureStatus; };
+        struct Status : Column<2, NScheme::NTypeIds::Uint32> { using Type = EShredStatus; };
         struct StartTime : Column<3, NScheme::NTypeIds::Timestamp> {};
 
         using TKey = TableKey<Generation>;
@@ -2054,11 +2054,12 @@ struct Schema : NIceDb::Schema {
             StartTime
         >;
     };
+    using ShredGenerations = DataErasureGenerations;
 
     struct WaitingDataErasureTenants : Table<116> {
         struct OwnerPathId : Column<1, NScheme::NTypeIds::Uint64> { using Type = TOwnerId; };
         struct LocalPathId : Column<2, NScheme::NTypeIds::Uint64> { using Type = TLocalPathId; };
-        struct Status : Column<3, NScheme::NTypeIds::Uint32> { using Type = EDataErasureStatus; };
+        struct Status : Column<3, NScheme::NTypeIds::Uint32> { using Type = EShredStatus; };
 
         using TKey = TableKey<OwnerPathId, LocalPathId>;
         using TColumns = TableColumns<
@@ -2067,10 +2068,11 @@ struct Schema : NIceDb::Schema {
             Status
         >;
     };
+    using WaitingShredTenants = WaitingDataErasureTenants;
 
     struct TenantDataErasureGenerations : Table<117> {
         struct Generation : Column<1, NScheme::NTypeIds::Uint64> {};
-        struct Status : Column<2, NScheme::NTypeIds::Uint32> { using Type = EDataErasureStatus; };
+        struct Status : Column<2, NScheme::NTypeIds::Uint32> { using Type = EShredStatus; };
 
         using TKey = TableKey<Generation>;
         using TColumns = TableColumns<
@@ -2078,11 +2080,12 @@ struct Schema : NIceDb::Schema {
             Status
         >;
     };
+    using TenantShredGenerations = TenantDataErasureGenerations;
 
     struct WaitingDataErasureShards : Table<118> {
         struct OwnerShardIdx :  Column<1, NScheme::NTypeIds::Uint64> { using Type = TOwnerId; };
         struct LocalShardIdx :  Column<2, NScheme::NTypeIds::Uint64> { using Type = TLocalShardIdx; };
-        struct Status : Column<3, NScheme::NTypeIds::Uint32> { using Type = EDataErasureStatus; };
+        struct Status : Column<3, NScheme::NTypeIds::Uint32> { using Type = EShredStatus; };
 
         using TKey = TableKey<OwnerShardIdx, LocalShardIdx>;
         using TColumns = TableColumns<
@@ -2091,6 +2094,7 @@ struct Schema : NIceDb::Schema {
             Status
         >;
     };
+    using WaitingShredShards = WaitingDataErasureShards;
 
     struct SysView : Table<119> {
         struct PathId : Column<1, NScheme::NTypeIds::Uint64> { using Type = TLocalPathId; };
@@ -2141,7 +2145,7 @@ struct Schema : NIceDb::Schema {
         struct OperationId : Column<1, NScheme::NTypeIds::Uint64> {};
         struct State : Column<2, NScheme::NTypeIds::Uint32> {};
         struct CurrentIncrementalIdx : Column<3, NScheme::NTypeIds::Uint32> {};
-        
+
         using TKey = TableKey<OperationId>;
         using TColumns = TableColumns<OperationId, State, CurrentIncrementalIdx>;
     };
@@ -2152,9 +2156,16 @@ struct Schema : NIceDb::Schema {
         struct ShardIdx : Column<2, NScheme::NTypeIds::Uint64> {};
         struct Status : Column<3, NScheme::NTypeIds::Uint32> {};
         struct LastKey : Column<4, NScheme::NTypeIds::String> {};
-        
+
         using TKey = TableKey<OperationId, ShardIdx>;
         using TColumns = TableColumns<OperationId, ShardIdx, Status, LastKey>;
+    };
+
+    struct SystemShardsToDelete : Table<124> {
+        struct ShardIdx : Column<1, NScheme::NTypeIds::Uint64> { using Type = TLocalShardIdx; };
+
+        using TKey = TableKey<ShardIdx>;
+        using TColumns = TableColumns<ShardIdx>;
     };
 
     using TTables = SchemaTables<
@@ -2278,7 +2289,8 @@ struct Schema : NIceDb::Schema {
         IncrementalRestoreOperations,
         KMeansTreeClusters,
         IncrementalRestoreState,
-        IncrementalRestoreShardProgress
+        IncrementalRestoreShardProgress,
+        SystemShardsToDelete
     >;
 
     static constexpr ui64 SysParam_NextPathId = 1;

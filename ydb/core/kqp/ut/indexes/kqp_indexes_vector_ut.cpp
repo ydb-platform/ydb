@@ -369,12 +369,10 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
     }
 
     Y_UNIT_TEST(BuildIndexTimesAndUser) {
-        NKikimrConfig::TAppConfig appConfig;
         NKikimrConfig::TFeatureFlags featureFlags;
         featureFlags.SetEnableVectorIndex(true);
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
-            .SetAppConfig(appConfig)
             .SetFeatureFlags(featureFlags)
             .SetKqpSettings({setting});
 

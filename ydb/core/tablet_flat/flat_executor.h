@@ -522,6 +522,7 @@ class TExecutor
     void CheckCollectionBarrier(TIntrusivePtr<TBarrier> &barrier);
     void UtilizeSubset(const NTable::TSubset&, const NTable::NFwd::TSeen&,
         THashSet<TLogoBlobID> reusedBundles, TLogCommit *commit);
+    void UtilizeSubset(const NTable::TSubset&, TLogCommit *commit);
     bool PrepareExternalPart(TPendingPartSwitch &partSwitch, NTable::TPartComponents &&pc);
     bool PrepareExternalPart(TPendingPartSwitch &partSwitch, TPendingPartSwitch::TNewBundle &bundle);
     bool PrepareExternalTxStatus(TPendingPartSwitch &partSwitch, const NPageCollection::TLargeGlobId &dataId, NTable::TEpoch epoch, const TString &data);
@@ -559,8 +560,6 @@ class TExecutor
     void RequestInMemPagesForPartStore(ui32 tableId, const NTable::TPartView &partView, const THashSet<NTable::TTag> &stickyColumns);
     void StickInMemPages(NSharedCache::TEvResult *msg);
     THashSet<NTable::TTag> GetStickyColumns(ui32 tableId);
-    void RequestFromSharedCache(TAutoPtr<NPageCollection::TFetch> fetch,
-        NBlockIO::EPriority way, ESharedCacheRequestType requestCategory);
     THolder<TScanSnapshot> PrepareScanSnapshot(ui32 table,
         const NTable::TCompactionParams* params, TRowVersion snapshot = TRowVersion::Max());
     void ReleaseScanLocks(TIntrusivePtr<TBarrier>, const NTable::TSubset&);

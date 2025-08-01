@@ -5692,13 +5692,13 @@ consumers {
               scheme: HTTP
               items {
                 source_prefix: "/Topic"
-                destination_path: "/MyRoot/Topic"
+                destination_path: "/MyRoot/Restored/Topic"
               }
             }
         )", port));
         env.TestWaitNotification(runtime, txId);
 
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/Topic"), {
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Restored/Topic"), {
             NLs::PathExist,
         });
     }

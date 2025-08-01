@@ -54,7 +54,6 @@ SRCS(
     concurrency/async_stream.cpp
     concurrency/config.cpp
     GLOBAL concurrency/configure_fiber_manager.cpp
-    concurrency/context_switch_aware_periodic_yielder.cpp
     concurrency/coroutine.cpp
     concurrency/delayed_executor.cpp
     concurrency/execution_stack.cpp
@@ -406,6 +405,7 @@ IF (NOT OPENSOURCE AND OS_LINUX)
         benchmarks
         bus/benchmarks
         yson/benchmark
+        ytree/benchmarks
     )
 ENDIF()
 

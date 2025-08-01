@@ -52,7 +52,8 @@ void TBuildDuplicateFilters::DoExecute(const std::shared_ptr<ITask>& /*taskPtr*/
     merger.PutControlPoint(Finish.BuildSortablePosition(), false);
     TFiltersBuilder filtersBuilder;
     for (const auto& [interval, data] : SourcesById) {
-        merger.AddSource(data->GetData(), nullptr, NArrow::NMerger::TIterationOrder::Forward(interval.GetOffset()), interval.GetSourceId());
+        merger.AddSource(
+            data->GetData(), nullptr, NArrow::NMerger::TIterationOrder::Forward(interval.GetRows().GetBegin()), interval.GetSourceId());
         filtersBuilder.AddSource(interval.GetSourceId());
     }
     merger.DrainToControlPoint(filtersBuilder, IncludeFinish);

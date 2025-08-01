@@ -107,6 +107,9 @@ TKqpPlanner::TKqpPlanner(TKqpPlanner::TArgs&& args)
     , ArrayBufferMinFillPercentage(args.ArrayBufferMinFillPercentage)
     , BufferPageAllocSize(args.BufferPageAllocSize)
     , VerboseMemoryLimitException(args.VerboseMemoryLimitException)
+#if defined(USE_HDRF_SCHEDULER)
+    , Query(args.Query)
+#endif
 {
     Y_UNUSED(MkqlMemoryLimit);
     if (GUCSettings) {
@@ -516,7 +519,10 @@ TString TKqpPlanner::ExecuteDataComputeTask(ui64 taskId, ui32 computeTasksSize) 
         .RlPath = Nothing(),
         .BlockTrackingMode = BlockTrackingMode,
         .UserToken = UserToken,
-        .Database = Database
+        .Database = Database,
+#if defined(USE_HDRF_SCHEDULER)
+        .Query = Query,
+#endif
     });
 
     if (const auto* rmResult = std::get_if<NRm::TKqpRMAllocateResult>(&startResult)) {

@@ -4,6 +4,7 @@
 #include "flat_table_subset.h"
 #include "flat_dbase_misc.h"
 #include "flat_dbase_apply.h"
+#include "flat_dbase_change.h"
 #include "flat_dbase_scheme.h"
 #include "flat_redo_writer.h"
 #include "flat_redo_player.h"
@@ -137,7 +138,32 @@ namespace NTable {
             bool SchemeModified = false;
             bool DataModified = false;
             bool RollbackPrepared = false;
+            bool Truncated = false;
         };
+
+        void PrepareRollback(TTableWrapper& wrap) {
+            if (!wrap.Created && !wrap.RollbackPrepared) {
+                wrap.BackupMemStats();
+                wrap->PrepareRollback();
+                wrap.RollbackPrepared = true;
+                Prepared.push_back(wrap.Table);
+            }
+        }
+
+        TEpoch PrepareSnapshot(TTableWrapper& wrap) {
+            if (!wrap.EpochSnapshot) {
+                wrap.EpochSnapshot.emplace(wrap->Snapshot());
+                // When this is an existing table we also simulate
+                // EvFlush that is inserted in the redo log.
+                if (!wrap.Created) {
+                    Flushed.push_back(wrap.Table);
+                    if (wrap.Touch(Begin_, Serial_)) {
+                        Affects.push_back(wrap.Table);
+                    }
+                }
+            }
+            return *wrap.EpochSnapshot;
+        }
 
     public:
         using TEdges = THashMap<ui32, TSnapEdge>;
@@ -189,26 +215,11 @@ namespace NTable {
                 auto* info = Scheme->GetTableInfo(table);
                 Y_ENSURE(info, "No scheme for existing table " << table);
 
-                if (!wrap->Created && !wrap->RollbackPrepared) {
-                    wrap->BackupMemStats();
-                    (*wrap)->PrepareRollback();
-                    wrap->RollbackPrepared = true;
-                    Prepared.push_back(table);
-                }
+                PrepareRollback(*wrap);
 
-                if (!wrap->EpochSnapshot) {
-                    // We always flush mem table on schema modification,
-                    // which happens at the "start" of transaction.
-                    wrap->EpochSnapshot.emplace((*wrap)->Snapshot());
-                    // When this is an existing table we also simulate
-                    // EvFlush that is inserted in the redo log.
-                    if (!wrap->Created) {
-                        Flushed.push_back(table);
-                        if (wrap->Touch(Begin_, Serial_)) {
-                            Affects.push_back(table);
-                        }
-                    }
-                }
+                // We always flush mem table on schema modification,
+                // which happens at the "start" of transaction.
+                PrepareSnapshot(*wrap);
 
                 (*wrap)->SetScheme(*info);
 
@@ -223,12 +234,7 @@ namespace NTable {
         {
             Y_ENSURE(InTransaction);
             TTableWrapper& wrap = Get(table, true);
-            if (!wrap.Created && !wrap.RollbackPrepared) {
-                wrap.BackupMemStats();
-                wrap->PrepareRollback();
-                wrap.RollbackPrepared = true;
-                Prepared.push_back(table);
-            }
+            PrepareRollback(wrap);
             if (wrap.Touch(Begin_, Serial_)) {
                 Affects.push_back(table);
             }
@@ -264,16 +270,24 @@ namespace NTable {
             Y_ENSURE(InTransaction);
             auto& wrap = Get(tid, true);
             Y_ENSURE(!wrap.DataModified, "Cannot flush a modified table");
-            if (!wrap.EpochSnapshot) {
-                Y_ENSURE(!wrap.Created);
-                wrap.EpochSnapshot.emplace(wrap->Snapshot());
-                // Simulate inserting and processing EvFlush
-                Flushed.push_back(tid);
-                if (wrap.Touch(Begin_, Serial_)) {
-                    Affects.push_back(tid);
-                }
+            return PrepareSnapshot(wrap);
+        }
+
+        void TruncateTable(ui32 tid)
+        {
+            Y_ENSURE(InTransaction);
+            auto& wrap = Get(tid, true);
+            Y_ENSURE(!wrap.Truncated, "Cannot truncate a truncated table");
+            Y_ENSURE(!wrap.DataModified, "Cannot truncate a modified table");
+            if (wrap.Created) {
+                // New tables have nothing to truncate
+                return;
             }
-            return *wrap.EpochSnapshot;
+            PrepareRollback(wrap);
+            PrepareSnapshot(wrap);
+            wrap->PrepareTruncate();
+            wrap.DataModified = true;
+            wrap.Truncated = true;
         }
 
         void CommitTransaction(TTxStamp stamp, TArrayRef<const TMemGlob> annex, NRedo::TWriter& writer)
@@ -292,6 +306,12 @@ namespace NTable {
                 auto& wrap = it->second;
                 Y_ENSURE(wrap.RollbackPrepared);
                 wrap->CommitChanges(annex);
+                if (wrap.Truncated) {
+                    TAutoPtr<TSubset> subset = wrap->Subset(TEpoch::Max());
+                    wrap->Replace(*subset, { }, { });
+                    Truncated.push_back({ tid, std::move(subset) });
+                    wrap.Truncated = false;
+                }
                 wrap.RestoreMemStats(Stats);
                 wrap.RollbackPrepared = false;
                 wrap.DataModified = false;
@@ -351,6 +371,7 @@ namespace NTable {
                     auto& wrap = Tables.at(tid);
                     Y_ENSURE(wrap.Dropped);
                     Y_ENSURE(!wrap.DataModified, "Unexpected drop of a modified table");
+                    Y_ENSURE(!wrap.Truncated, "Unexpected drop of a truncated table");
                     if (wrap.RollbackPrepared) {
                         wrap->CommitChanges(annex);
                         wrap.RestoreMemStats(Stats);
@@ -377,6 +398,7 @@ namespace NTable {
                     wrap.Created = false;
                     wrap.DataModified = false;
                     Y_ENSURE(!wrap.RollbackPrepared);
+                    Y_ENSURE(!wrap.Truncated);
                     wrap.EpochSnapshot.reset();
                     wrap->CommitNewTable(annex);
                     wrap.Aggr(Stats, true /* enter */);
@@ -400,6 +422,7 @@ namespace NTable {
                 wrap.RollbackPrepared = false;
                 wrap.SchemeModified = false;
                 wrap.DataModified = false;
+                wrap.Truncated = false;
             }
             Prepared.clear();
 
@@ -851,6 +874,7 @@ namespace NTable {
         const TAutoPtr<TScheme> Scheme;
         TGarbage Garbage;       /* Unused full table subsets */
         TVector<ui32> Deleted;
+        TVector<TChange::TTruncate> Truncated;
         TDbStats Stats;
         ui64 First_ = Max<ui64>(); /* First used serial after Switch() */
     };

@@ -1128,10 +1128,7 @@ Y_UNIT_TEST_SUITE(KqpSort) {
     }
 
     Y_UNIT_TEST(UnionAllSortLimit) {
-        NKikimrConfig::TAppConfig appConfig;
-        auto serverSettings = TKikimrSettings()
-            .SetAppConfig(appConfig);
-
+        TKikimrSettings serverSettings;
         TKikimrRunner kikimr{serverSettings};
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();

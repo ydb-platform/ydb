@@ -6,6 +6,7 @@ SRCS(
     linter.cpp
     lexer.cpp
     parser.cpp
+    settings.cpp
     translator.cpp
     format.cpp
 )

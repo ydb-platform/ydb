@@ -12,8 +12,6 @@ class TComputeScheduler : public std::enable_shared_from_this<TComputeScheduler>
 public:
     explicit TComputeScheduler(TIntrusivePtr<TKqpCounters> counters);
 
-    TSchedulableTaskFactory CreateSchedulableTaskFactory();
-
     void SetTotalCpuLimit(ui64 cpu);
     ui64 GetTotalCpuLimit() const;
 
@@ -21,20 +19,15 @@ public:
 
     void AddOrUpdatePool(const TString& databaseId, const TString& poolId, const NHdrf::TStaticAttributes& attrs);
 
-    void AddOrUpdateQuery(const TString& databaseId, const TString& poolId, const NHdrf::TQueryId& queryId, const NHdrf::TStaticAttributes& attrs);
+    NHdrf::NDynamic::TQueryPtr AddOrUpdateQuery(const TString& databaseId, const TString& poolId, const NHdrf::TQueryId& queryId, const NHdrf::TStaticAttributes& attrs);
     void RemoveQuery(const TString& databaseId, const TString& poolId, const NHdrf::TQueryId& queryId);
 
     void UpdateFairShare();
 
 private:
-    NHdrf::NDynamic::TQueryPtr GetQuery(const NHdrf::TQueryId& queryId);
-
-private:
     TRWMutex Mutex;
     NHdrf::NDynamic::TRootPtr Root;                                        // protected by Mutex
     THashMap<NHdrf::TQueryId, NHdrf::NDynamic::TQueryPtr> Queries;         // protected by Mutex
-    THashMap<NHdrf::TQueryId, NHdrf::NDynamic::TQueryPtr> DetachedQueries; // protected by Mutex
-    NHdrf::NDynamic::TPoolPtr DetachedPool;                                // protected by Mutex
 
     TIntrusivePtr<TKqpCounters> KqpCounters;
 
@@ -46,6 +39,7 @@ private:
 using TComputeSchedulerPtr = std::shared_ptr<TComputeScheduler>;
 
 struct TOptions {
+    TIntrusivePtr<TKqpCounters> Counters;
     TDuration UpdateFairSharePeriod;
 };
 
@@ -57,6 +51,7 @@ struct TEvents {
         EvRemovePool,
         EvAddQuery,
         EvRemoveQuery,
+        EvQueryResponse,
     };
 };
 
@@ -97,8 +92,12 @@ struct TEvRemoveQuery : public TEventLocal<TEvRemoveQuery, TEvents::EvRemoveQuer
     NHdrf::TQueryId QueryId;
 };
 
+struct TEvQueryResponse : public TEventLocal<TEvQueryResponse, TEvents::EvQueryResponse> {
+    NHdrf::NDynamic::TQueryPtr Query;
+};
+
 } // namespace NKikimr::NKqp::NScheduler
 
 namespace NKikimr::NKqp {
-    IActor* CreateKqpComputeSchedulerService(const NScheduler::TComputeSchedulerPtr& scheduler, const NScheduler::TOptions& options);
+    IActor* CreateKqpComputeSchedulerService(const NScheduler::TOptions& options);
 }

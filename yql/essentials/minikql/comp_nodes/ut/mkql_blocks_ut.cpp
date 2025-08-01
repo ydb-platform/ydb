@@ -343,8 +343,8 @@ void TestChunked(bool withBlockExpand) {
     if (withBlockExpand) {
         node = pb.BlockExpandChunked(node);
         // WideTakeBlocks won't work on chunked blocks
-        node = pb.WideTakeBlocks(node, pb.NewDataLiteral<ui64>(19));
-        node = pb.ToFlow(pb.WideFromBlocks(pb.FromFlow(node)));
+        node = pb.WideTakeBlocks(pb.FromFlow(node), pb.NewDataLiteral<ui64>(19));
+        node = pb.ToFlow(pb.WideFromBlocks(node));
     } else {
         // WideFromBlocks should support chunked blocks
         node = pb.ToFlow(pb.WideFromBlocks(pb.FromFlow(node)));

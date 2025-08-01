@@ -5,7 +5,8 @@
 #include "olap/bg_tasks/adapter/adapter.h"
 #include "olap/bg_tasks/events/global.h"
 #include "schemeshard.h"
-#include "schemeshard__data_erasure_manager.h"
+#include "schemeshard_continuous_backup_cleaner.h"
+#include "schemeshard__shred_manager.h"
 #include "schemeshard_svp_migration.h"
 
 #include <ydb/core/base/appdata.h>
@@ -228,7 +229,7 @@ void TSchemeShard::ActivateAfterInitialization(const TActorContext& ctx, TActiva
     StartStopCompactionQueues();
     BackgroundCleaningQueue->Start();
 
-    StartStopDataErasure();
+    StartStopShred();
 
     ctx.Send(TxAllocatorClient, MakeHolder<TEvTxAllocatorClient::TEvAllocate>(InitiateCachedTxIdsCount));
 
@@ -572,8 +573,8 @@ void TSchemeShard::Clear() {
         UpdateBorrowedCompactionQueueMetrics();
     }
 
-    if (DataErasureManager) {
-        DataErasureManager->Clear();
+    if (ShredManager) {
+        ShredManager->Clear();
     }
 
     ClearTempDirsState();
@@ -2454,8 +2455,8 @@ void TSchemeShard::PersistRemoveSubDomain(NIceDb::TNiceDb& db, const TPathId& pa
             db.Table<Schema::StoragePools>().Key(pathId.LocalPathId, pool.GetName(), pool.GetKind()).Delete();
         }
 
-        if (DataErasureManager->Remove(pathId)) {
-            db.Table<Schema::WaitingDataErasureTenants>().Key(pathId.OwnerId, pathId.LocalPathId).Delete();
+        if (ShredManager->Remove(pathId)) {
+            db.Table<Schema::WaitingShredTenants>().Key(pathId.OwnerId, pathId.LocalPathId).Delete();
         }
 
         db.Table<Schema::SubDomains>().Key(pathId.LocalPathId).Delete();
@@ -3569,9 +3570,17 @@ void TSchemeShard::PersistShardsToDelete(NIceDb::TNiceDb& db, const THashSet<TSh
     }
 }
 
+void TSchemeShard::PersistSystemShardsToDelete(NIceDb::TNiceDb& db, const THashSet<TShardIdx>& shardsIdxs) {
+    for (auto& shardIdx : shardsIdxs) {
+        Y_ABORT_UNLESS(IsLocalId(shardIdx));
+        db.Table<Schema::SystemShardsToDelete>().Key(shardIdx.GetLocalId()).Update();
+    }
+}
+
 void TSchemeShard::PersistShardDeleted(NIceDb::TNiceDb& db, TShardIdx shardIdx, const TChannelsBindings& bindedChannels) {
     if (shardIdx.GetOwnerId() == TabletID()) {
         db.Table<Schema::ShardsToDelete>().Key(shardIdx.GetLocalId()).Delete();
+        db.Table<Schema::SystemShardsToDelete>().Key(shardIdx.GetLocalId()).Delete();
         db.Table<Schema::Shards>().Key(shardIdx.GetLocalId()).Delete();
         for (ui32 channelId = 0; channelId < bindedChannels.size(); ++channelId) {
             db.Table<Schema::ChannelsBinding>().Key(shardIdx.GetLocalId(), channelId).Delete();
@@ -3590,6 +3599,7 @@ void TSchemeShard::PersistShardDeleted(NIceDb::TNiceDb& db, TShardIdx shardIdx, 
 void TSchemeShard::PersistUnknownShardDeleted(NIceDb::TNiceDb& db, TShardIdx shardIdx) {
     if (shardIdx.GetOwnerId() == TabletID()) {
         db.Table<Schema::ShardsToDelete>().Key(shardIdx.GetLocalId()).Delete();
+        db.Table<Schema::SystemShardsToDelete>().Key(shardIdx.GetLocalId()).Delete();
     }
 
     db.Table<Schema::MigratedShardsToDelete>().Key(shardIdx.GetOwnerId(), shardIdx.GetLocalId()).Delete();
@@ -4415,8 +4425,8 @@ void TSchemeShard::PersistLongIncrementalRestoreOp(NIceDb::TNiceDb& db, const NK
             NIceDb::TUpdate<Schema::IncrementalRestoreOperations::Operation>(data));
 }
 
-TTabletId TSchemeShard::GetGlobalHive(const TActorContext& ctx) const {
-    return TTabletId(AppData(ctx)->DomainsInfo->GetHive());
+TTabletId TSchemeShard::GetGlobalHive() const {
+    return TTabletId(AppData()->DomainsInfo->GetHive());
 }
 
 TShardIdx TSchemeShard::GetShardIdx(TTabletId tabletId) const {
@@ -4450,9 +4460,9 @@ TTabletTypes::EType TSchemeShard::GetTabletType(TTabletId tabletId) const {
     return pShardInfo->TabletType;
 }
 
-TTabletId TSchemeShard::ResolveHive(TPathId pathId, const TActorContext& ctx, EHiveSelection selection) const {
+TTabletId TSchemeShard::ResolveHive(TPathId pathId, EHiveSelection selection) const {
     if (!PathsById.contains(pathId)) {
-        return GetGlobalHive(ctx);
+        return GetGlobalHive();
     }
 
     TSubDomainInfo::TPtr subdomain = ResolveDomainInfo(pathId);
@@ -4467,33 +4477,37 @@ TTabletId TSchemeShard::ResolveHive(TPathId pathId, const TActorContext& ctx, EH
         return subdomain->GetSharedHive();
     }
 
-    return GetGlobalHive(ctx);
+    return GetGlobalHive();
 }
 
-TTabletId TSchemeShard::ResolveHive(TPathId pathId, const TActorContext& ctx) const {
-    return ResolveHive(pathId, ctx, EHiveSelection::ANY);
+TTabletId TSchemeShard::ResolveHive(TPathId pathId) const {
+    return ResolveHive(pathId, EHiveSelection::ANY);
 }
 
-TTabletId TSchemeShard::ResolveHive(TShardIdx shardIdx, const TActorContext& ctx) const {
+TTabletId TSchemeShard::ResolveHive(TShardIdx shardIdx) const {
     if (!ShardInfos.contains(shardIdx)) {
-        return GetGlobalHive(ctx);
+        return GetGlobalHive();
     }
 
-    return ResolveHive(ShardInfos.at(shardIdx).PathId, ctx, EHiveSelection::ANY);
+    return ResolveHive(ShardInfos.at(shardIdx).PathId, EHiveSelection::ANY);
 }
 
 void TSchemeShard::DoShardsDeletion(const THashSet<TShardIdx>& shardIdxs, const TActorContext& ctx) {
     TMap<TTabletId, THashSet<TShardIdx>> shardsPerHive;
     for (TShardIdx shardIdx : shardIdxs) {
-        TTabletId hiveToRequest = ResolveHive(shardIdx, ctx);
+        TTabletId hiveToRequest = ResolveHive(shardIdx);
 
         shardsPerHive[hiveToRequest].emplace(shardIdx);
     }
 
-    for (const auto& item: shardsPerHive) {
-        const auto& hive = item.first;
-        const auto& shards = item.second;
+    for (const auto& [hive, shards] : shardsPerHive) {
         ShardDeleter.SendDeleteRequests(hive, shards, ShardInfos, ctx);
+    }
+}
+
+void TSchemeShard::DoDeleteSystemShards(const THashSet<TShardIdx>& shards, const TActorContext& ctx) {
+    if (!shards.empty()) {
+        ShardDeleter.SendDeleteRequests(GetGlobalHive(), shards, ShardInfos, ctx);
     }
 }
 
@@ -4869,6 +4883,9 @@ void TSchemeShard::Die(const TActorContext &ctx) {
     for (TActorId schemeQueryExecutor : RunningImportSchemeQueryExecutors) {
         ctx.Send(schemeQueryExecutor, new TEvents::TEvPoisonPill());
     }
+    for (TActorId continuousBackupCleaner : RunningContinuousBackupCleaners) {
+        ctx.Send(continuousBackupCleaner, new TEvents::TEvPoisonPill());
+    }
 
     IndexBuildPipes.Shutdown(ctx);
     CdcStreamScanPipes.Shutdown(ctx);
@@ -4929,7 +4946,7 @@ void TSchemeShard::OnActivateExecutor(const TActorContext &ctx) {
     EnableVectorIndex = appData->FeatureFlags.GetEnableVectorIndex();
     EnableResourcePoolsOnServerless = appData->FeatureFlags.GetEnableResourcePoolsOnServerless();
     EnableExternalDataSourcesOnServerless = appData->FeatureFlags.GetEnableExternalDataSourcesOnServerless();
-    EnableDataErasure = appData->FeatureFlags.GetEnableDataErasure();
+    EnableShred = appData->FeatureFlags.GetEnableDataErasure();
     EnableExternalSourceSchemaInference = appData->FeatureFlags.GetEnableExternalSourceSchemaInference();
 
     ConfigureCompactionQueues(appData->CompactionConfig, ctx);
@@ -4939,7 +4956,7 @@ void TSchemeShard::OnActivateExecutor(const TActorContext &ctx) {
     MaxRestoreBuildIndexShardsInFlight = appData->SchemeShardConfig.GetMaxRestoreBuildIndexShardsInFlight();
 
     ConfigureBackgroundCleaningQueue(appData->BackgroundCleaningConfig, ctx);
-    ConfigureDataErasureManager(appData->DataErasureConfig);
+    ConfigureShredManager(appData->ShredConfig);
     ConfigureExternalSources(appData->QueryServiceConfig, ctx);
 
     if (appData->ChannelProfiles) {
@@ -5238,6 +5255,9 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
         HFuncTraced(TEvPrivate::TEvCleanDroppedSubDomains, Handle);
         HFuncTraced(TEvPrivate::TEvSubscribeToShardDeletion, Handle);
 
+        // Test-only notification
+        IgnoreFunc(TEvPrivate::TEvTestNotifySubdomainCleanup);
+
         HFuncTraced(TEvPrivate::TEvPersistTableStats, Handle);
         HFuncTraced(TEvPrivate::TEvPersistTopicStats, Handle);
 
@@ -5254,17 +5274,20 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
         HFuncTraced(TEvInterconnect::TEvNodeDisconnected, Handle);
         HFuncTraced(TEvPrivate::TEvRetryNodeSubscribe, Handle);
 
-        //data erasure
-        HFuncTraced(TEvSchemeShard::TEvWakeupToRunDataErasure, DataErasureManager->WakeupToRunDataErasure);
-        HFuncTraced(TEvSchemeShard::TEvTenantDataErasureRequest, Handle);
+        // shred
+        HFuncTraced(TEvSchemeShard::TEvWakeupToRunShred, ShredManager->WakeupToRunShred);
+        HFuncTraced(TEvSchemeShard::TEvTenantShredRequest, Handle);
         HFuncTraced(TEvDataShard::TEvVacuumResult, Handle);
         HFuncTraced(TEvKeyValue::TEvVacuumResponse, Handle);
-        HFuncTraced(TEvPrivate::TEvAddNewShardToDataErasure, Handle);
-        HFuncTraced(TEvSchemeShard::TEvTenantDataErasureResponse, Handle);
-        HFuncTraced(TEvSchemeShard::TEvDataErasureInfoRequest, Handle);
-        HFuncTraced(TEvSchemeShard::TEvDataErasureManualStartupRequest, Handle);
+        HFuncTraced(TEvPrivate::TEvAddNewShardToShred, Handle);
+        HFuncTraced(TEvSchemeShard::TEvTenantShredResponse, Handle);
+        HFuncTraced(TEvSchemeShard::TEvShredInfoRequest, Handle);
+        HFuncTraced(TEvSchemeShard::TEvShredManualStartupRequest, Handle);
         HFuncTraced(TEvBlobStorage::TEvControllerShredResponse, Handle);
-        HFuncTraced(TEvSchemeShard::TEvWakeupToRunDataErasureBSC, Handle);
+        HFuncTraced(TEvSchemeShard::TEvWakeupToRunShredBSC, Handle);
+
+        HFuncTraced(TEvPersQueue::TEvOffloadStatus, Handle);
+        HFuncTraced(TEvPrivate::TEvContinuousBackupCleanerResult, Handle);
 
     default:
         if (!HandleDefaultEvents(ev, SelfId())) {
@@ -5935,7 +5958,7 @@ void TSchemeShard::Handle(TEvTabletPipe::TEvClientConnected::TPtr &ev, const TAc
 
     BorrowedCompactionHandleDisconnect(tabletId, clientId);
     ConditionalEraseHandleDisconnect(tabletId, clientId, ctx);
-    DataErasureManager->HandleDisconnect(tabletId, clientId, ctx);
+    ShredManager->HandleDisconnect(tabletId, clientId, ctx);
     RestartPipeTx(tabletId, ctx);
 }
 
@@ -5986,7 +6009,7 @@ void TSchemeShard::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr &ev, const TAc
 
     BorrowedCompactionHandleDisconnect(tabletId, clientId);
     ConditionalEraseHandleDisconnect(tabletId, clientId, ctx);
-    DataErasureManager->HandleDisconnect(tabletId, clientId, ctx);
+    ShredManager->HandleDisconnect(tabletId, clientId, ctx);
     RestartPipeTx(tabletId, ctx);
 }
 
@@ -5998,14 +6021,29 @@ void TSchemeShard::Handle(TEvTabletPipe::TEvServerDisconnected::TPtr &, const TA
 
 void TSchemeShard::Handle(TEvSchemeShard::TEvSyncTenantSchemeShard::TPtr& ev, const TActorContext& ctx) {
     const auto& record = ev->Get()->Record;
-    LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-               "Handle TEvSyncTenantSchemeShard"
-                   << ", at schemeshard: " << TabletID()
-                   << ", msg: " << record.DebugString());
+    LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Handle TEvSyncTenantSchemeShard, at schemeshard: " << TabletID()
+        << ", msg: " << record.ShortDebugString()
+    );
     Y_VERIFY_S(IsDomainSchemeShard, "unexpected message: schemeshard: " << TabletID() << " mgs: " << record.DebugString());
 
+    const TPathId pathId(record.GetDomainSchemeShard(), record.GetDomainPathId());
+
+    if (!SubDomains.contains(pathId)) {
+        LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Handle TEvSyncTenantSchemeShard, at schemeshard: " << TabletID()
+            << ", ignore spurious message from dropped subdomain's schemeshard (partial cleanup)" << pathId
+        );
+        return;
+    }
+
+    if (!PathsById.contains(pathId)) {
+        LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Handle TEvSyncTenantSchemeShard, at schemeshard: " << TabletID()
+            << ", ignore spurious message from dropped subdomain's schemeshard (full cleanup)" << pathId
+        );
+        return;
+    }
+
     if (SubDomainsLinks.Sync(ev, ctx)) {
-        Execute(CreateTxSyncTenant(TPathId(record.GetDomainSchemeShard(), record.GetDomainPathId())), ctx);
+        Execute(CreateTxSyncTenant(pathId), ctx);
     }
 }
 
@@ -7410,7 +7448,6 @@ void TSchemeShard::SetPartitioning(TPathId pathId, TTableInfo::TPtr tableInfo, T
         newPartitioningSet.reserve(newPartitioning.size());
         const auto& oldPartitioning = tableInfo->GetPartitions();
 
-        std::vector<TShardIdx> newDataErasureShards;
         for (const auto& p: newPartitioning) {
             if (!oldPartitioning.empty())
                 newPartitioningSet.insert(p.ShardIdx);
@@ -7420,7 +7457,6 @@ void TSchemeShard::SetPartitioning(TPathId pathId, TTableInfo::TPtr tableInfo, T
             if (it != partitionStats.end()) {
                 EnqueueBackgroundCompaction(p.ShardIdx, it->second);
                 UpdateShardMetrics(p.ShardIdx, it->second);
-                newDataErasureShards.push_back(p.ShardIdx);
             }
         }
 
@@ -7535,8 +7571,8 @@ void TSchemeShard::ApplyConsoleConfigs(const NKikimrConfig::TAppConfig& appConfi
     }
 
     if (appConfig.HasDataErasureConfig()) {
-        const auto& dataErasureConfig = appConfig.GetDataErasureConfig();
-        ConfigureDataErasureManager(dataErasureConfig);
+        const auto& shredConfig = appConfig.GetDataErasureConfig();
+        ConfigureShredManager(shredConfig);
     }
 
     if (appConfig.HasSchemeShardConfig()) {
@@ -7569,7 +7605,7 @@ void TSchemeShard::ApplyConsoleConfigs(const NKikimrConfig::TAppConfig& appConfi
             BackgroundCleaningQueue->Start();
         }
 
-        StartStopDataErasure();
+        StartStopShred();
     }
 }
 
@@ -7597,7 +7633,7 @@ void TSchemeShard::ApplyConsoleConfigs(const NKikimrConfig::TFeatureFlags& featu
     EnableResourcePoolsOnServerless = featureFlags.GetEnableResourcePoolsOnServerless();
     EnableVectorIndex = featureFlags.GetEnableVectorIndex();
     EnableExternalDataSourcesOnServerless = featureFlags.GetEnableExternalDataSourcesOnServerless();
-    EnableDataErasure = featureFlags.GetEnableDataErasure();
+    EnableShred = featureFlags.GetEnableDataErasure();
     EnableExternalSourceSchemaInference = featureFlags.GetEnableExternalSourceSchemaInference();
 }
 
@@ -7961,63 +7997,110 @@ void TSchemeShard::Handle(TEvSchemeShard::TEvListUsers::TPtr &ev, const TActorCo
     Execute(CreateTxListUsers(ev), ctx);
 }
 
-void TSchemeShard::Handle(TEvSchemeShard::TEvDataErasureInfoRequest::TPtr& ev, const TActorContext& ctx) {
+void TSchemeShard::Handle(TEvSchemeShard::TEvShredInfoRequest::TPtr& ev, const TActorContext& ctx) {
     LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::FLAT_TX_SCHEMESHARD,
-        "Handle TEvDataErasureInfoRequest, at schemeshard: " << TabletID());
+        "Handle TEvShredInfoRequest, at schemeshard: " << TabletID());
 
-    NKikimrScheme::TEvDataErasureInfoResponse::EStatus status = NKikimrScheme::TEvDataErasureInfoResponse::UNSPECIFIED;
+    NKikimrScheme::TEvShredInfoResponse::EStatus status = NKikimrScheme::TEvShredInfoResponse::UNSPECIFIED;
 
-    switch (DataErasureManager->GetStatus()) {
-    case EDataErasureStatus::UNSPECIFIED:
-        status = NKikimrScheme::TEvDataErasureInfoResponse::UNSPECIFIED;
+    switch (ShredManager->GetStatus()) {
+    case EShredStatus::UNSPECIFIED:
+        status = NKikimrScheme::TEvShredInfoResponse::UNSPECIFIED;
         break;
-    case EDataErasureStatus::COMPLETED:
-        status = NKikimrScheme::TEvDataErasureInfoResponse::COMPLETED;
+    case EShredStatus::COMPLETED:
+        status = NKikimrScheme::TEvShredInfoResponse::COMPLETED;
         break;
-    case EDataErasureStatus::IN_PROGRESS:
-        status = NKikimrScheme::TEvDataErasureInfoResponse::IN_PROGRESS_TENANT;
+    case EShredStatus::IN_PROGRESS:
+        status = NKikimrScheme::TEvShredInfoResponse::IN_PROGRESS_TENANT;
         break;
-    case EDataErasureStatus::IN_PROGRESS_BSC:
-        status = NKikimrScheme::TEvDataErasureInfoResponse::IN_PROGRESS_BSC;
+    case EShredStatus::IN_PROGRESS_BSC:
+        status = NKikimrScheme::TEvShredInfoResponse::IN_PROGRESS_BSC;
         break;
     }
-    ctx.Send(ev->Sender, new TEvSchemeShard::TEvDataErasureInfoResponse(DataErasureManager->GetGeneration(), status));
+    ctx.Send(ev->Sender, new TEvSchemeShard::TEvShredInfoResponse(ShredManager->GetGeneration(), status));
 }
 
-void TSchemeShard::Handle(TEvSchemeShard::TEvDataErasureManualStartupRequest::TPtr&, const TActorContext&) {
-    RunDataErasure(true);
+void TSchemeShard::Handle(TEvSchemeShard::TEvShredManualStartupRequest::TPtr&, const TActorContext&) {
+    RunShred(true);
 }
 
-void TSchemeShard::Handle(TEvSchemeShard::TEvTenantDataErasureRequest::TPtr& ev, const TActorContext& ctx) {
+void TSchemeShard::Handle(TEvSchemeShard::TEvTenantShredRequest::TPtr& ev, const TActorContext& ctx) {
     LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::FLAT_TX_SCHEMESHARD,
-        "Handle TEvTenantDataErasureRequest, at schemeshard: " << TabletID());
-    Execute(CreateTxRunTenantDataErasure(ev), ctx);
+        "Handle TEvTenantShredRequest, at schemeshard: " << TabletID());
+    Execute(CreateTxRunTenantShred(ev), ctx);
 }
 
 void TSchemeShard::Handle(TEvDataShard::TEvVacuumResult::TPtr& ev, const TActorContext& ctx) {
-    Execute(CreateTxCompleteDataErasureShard<TEvDataShard::TEvVacuumResult::TPtr>(ev), ctx);
+    Execute(CreateTxCompleteShredShard<TEvDataShard::TEvVacuumResult::TPtr>(ev), ctx);
 }
 
 void TSchemeShard::Handle(TEvKeyValue::TEvVacuumResponse::TPtr& ev, const TActorContext& ctx) {
-    Execute(this->CreateTxCompleteDataErasureShard(ev), ctx);
+    Execute(this->CreateTxCompleteShredShard(ev), ctx);
 }
 
-void TSchemeShard::Handle(TEvPrivate::TEvAddNewShardToDataErasure::TPtr& ev, const TActorContext& ctx) {
-    Execute(CreateTxAddNewShardToDataErasure(ev), ctx);
+void TSchemeShard::Handle(TEvPrivate::TEvAddNewShardToShred::TPtr& ev, const TActorContext& ctx) {
+    Execute(CreateTxAddNewShardToShred(ev), ctx);
 }
 
-void TSchemeShard::Handle(TEvSchemeShard::TEvTenantDataErasureResponse::TPtr& ev, const TActorContext& ctx) {
-    Execute(CreateTxCompleteDataErasureTenant(ev), ctx);
+void TSchemeShard::Handle(TEvSchemeShard::TEvTenantShredResponse::TPtr& ev, const TActorContext& ctx) {
+    Execute(CreateTxCompleteShredTenant(ev), ctx);
 }
 
 void TSchemeShard::Handle(TEvBlobStorage::TEvControllerShredResponse::TPtr& ev, const TActorContext& ctx) {
     LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::FLAT_TX_SCHEMESHARD,
         "Handle TEvControllerShredResponse, at schemeshard: " << TabletID());
-    Execute(CreateTxCompleteDataErasureBSC(ev), ctx);
+    Execute(CreateTxCompleteShredBSC(ev), ctx);
 }
 
-void TSchemeShard::Handle(TEvSchemeShard::TEvWakeupToRunDataErasureBSC::TPtr&, const TActorContext&) {
-    DataErasureManager->SendRequestToBSC();
+void TSchemeShard::Handle(TEvSchemeShard::TEvWakeupToRunShredBSC::TPtr&, const TActorContext&) {
+    ShredManager->SendRequestToBSC();
+}
+
+void TSchemeShard::Handle(TEvPersQueue::TEvOffloadStatus::TPtr& ev, const TActorContext&) {
+    auto tabletId = TTabletId(ev->Get()->Record.GetTabletId());
+    auto shardIdx = MustGetShardIdx(tabletId);
+
+    Y_ABORT_UNLESS(ShardInfos.contains(shardIdx));
+    const auto& shardInfo = ShardInfos.at(shardIdx);
+    Y_ABORT_UNLESS(shardInfo.TabletType == ETabletType::PersQueue);
+
+    Y_ABORT_UNLESS(Topics.contains(shardInfo.PathId));
+    const auto& topic = Topics.at(shardInfo.PathId);
+
+    ui32 partitionId = ev->Get()->Record.GetPartitionId();
+    Y_ABORT_UNLESS(topic->Partitions.contains(partitionId));
+
+    topic->OffloadDonePartitions.insert(partitionId);
+    if (topic->OffloadDonePartitions.size() == topic->TotalPartitionCount) {
+        Y_ABORT_UNLESS(PathsById.contains(shardInfo.PathId));
+        const auto& topicPath = PathsById.at(shardInfo.PathId);
+        const auto& streamPath = PathsById.at(topicPath->ParentPathId);
+        const auto& tablePath = PathsById.at(streamPath->ParentPathId);
+        const auto& workingDir = PathToString(PathsById.at(tablePath->ParentPathId));
+
+        LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::FLAT_TX_SCHEMESHARD,
+            "Starting continuous backup cleaner:"
+            << " workingDir# " << workingDir
+            << " table# " << tablePath->Name
+            << " stream# " << streamPath->Name);
+
+        auto cleaner = CreateContinuousBackupCleaner(
+            TxAllocatorClient,
+            SelfId(),
+            workingDir,
+            tablePath->Name,
+            streamPath->Name
+        );
+        RunningContinuousBackupCleaners.insert(Register(cleaner));
+    }
+}
+
+void TSchemeShard::Handle(TEvPrivate::TEvContinuousBackupCleanerResult::TPtr& ev, const TActorContext&) {
+    RunningContinuousBackupCleaners.erase(ev->Sender);
+    if (!ev->Get()->Success) {
+        LOG_ERROR_S(TlsActivationContext->AsActorContext(), NKikimrServices::FLAT_TX_SCHEMESHARD,
+            "Continuous backup cleaner has failed: " << ev->Get()->Error);
+    }
 }
 
 void TSchemeShard::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext&) {
@@ -8211,36 +8294,36 @@ TDuration TSchemeShard::SendBaseStatsToSA() {
         + RandomNumber<ui64>(SendStatsIntervalMaxSeconds - SendStatsIntervalMinSeconds));
 }
 
-THolder<TDataErasureManager> TSchemeShard::CreateDataErasureManager(const NKikimrConfig::TDataErasureConfig& config) {
+THolder<TShredManager> TSchemeShard::CreateShredManager(const NKikimrConfig::TDataErasureConfig& config) {
     if (IsDomainSchemeShard) {
-        return MakeHolder<TRootDataErasureManager>(this, config);
+        return MakeHolder<TRootShredManager>(this, config);
     } else {
-        return MakeHolder<TTenantDataErasureManager>(this, config);
+        return MakeHolder<TTenantShredManager>(this, config);
     }
 }
 
-void TSchemeShard::ConfigureDataErasureManager(const NKikimrConfig::TDataErasureConfig& config) {
-    if (DataErasureManager) {
-        DataErasureManager->UpdateConfig(config);
+void TSchemeShard::ConfigureShredManager(const NKikimrConfig::TDataErasureConfig& config) {
+    if (ShredManager) {
+        ShredManager->UpdateConfig(config);
     } else {
-        DataErasureManager = CreateDataErasureManager(config);
+        ShredManager = CreateShredManager(config);
     }
 }
 
-void TSchemeShard::StartStopDataErasure() {
-    if (EnableDataErasure) {
-        DataErasureManager->Start();
+void TSchemeShard::StartStopShred() {
+    if (EnableShred) {
+        ShredManager->Start();
     } else {
-        DataErasureManager->Stop();
+        ShredManager->Stop();
     }
 }
 
-void TSchemeShard::MarkFirstRunRootDataErasureManager() {
-    Execute(CreateTxDataErasureManagerInit(), this->ActorContext());
+void TSchemeShard::MarkFirstRunRootShredManager() {
+    Execute(CreateTxShredManagerInit(), this->ActorContext());
 }
 
-void TSchemeShard::RunDataErasure(bool isNewDataErasure) {
-    Execute(CreateTxRunDataErasure(isNewDataErasure), this->ActorContext());
+void TSchemeShard::RunShred(bool isNewShred) {
+    Execute(CreateTxRunShred(isNewShred), this->ActorContext());
 }
 
 } // namespace NSchemeShard

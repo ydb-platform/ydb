@@ -137,9 +137,9 @@ protected:
     TDuration GetAverageTime() const;
 
     template <class THandlerFunc>
-    void SetQueryResultHandler(THandlerFunc handler, const TString& stateDescrption = "") {
+    void SetQueryResultHandler(THandlerFunc handler, const TString& stateDescription = "") {
         QueryResultHandler = static_cast<TQueryResultHandler>(handler);
-        StateDescription = stateDescrption;
+        StateDescription = stateDescription;
     }
 
     template <class THandlerFunc>

@@ -142,6 +142,30 @@ private:
     bool IsFilterRoot(const ui32 identifier) const;
 
 public:
+    std::shared_ptr<IResourcesAggregator> GetResultsAggregationProcessor() const {
+        if (ResultRoot->GetProcessor()->GetProcessorType() != EProcessorType::Projection) {
+            return nullptr;
+        }
+        std::vector<std::shared_ptr<IResourcesAggregator>> aggregators;
+        for (auto&& i : ResultRoot->GetInputEdges()) {
+            if (i->GetProcessor()->IsAggregation()) {
+                aggregators.emplace_back(i->GetProcessor()->BuildResultsAggregator());
+                if (!aggregators.back()) {
+                    return nullptr;
+                }
+            } else {
+//                return nullptr;
+            }
+        }
+        if (aggregators.size() > 1) {
+            return std::make_shared<TCompositeResourcesAggregator>(std::move(aggregators));
+        } else if (aggregators.size() == 1) {
+            return aggregators.front();
+        } else {
+            return nullptr;
+        }
+    }
+
     const THashMap<ui64, std::shared_ptr<TNode>>& GetNodes() const {
         return Nodes;
     }

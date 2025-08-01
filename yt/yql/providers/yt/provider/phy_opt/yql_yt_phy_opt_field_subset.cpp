@@ -42,7 +42,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::LambdaFieldsSubset(TYtW
                 return op;
             }
             extract = p;
-        } else if (!TCoDependsOn::Match(p)) {
+        } else if (!TCoDependsOnBase::Match(p)) {
             return op;
         }
     }

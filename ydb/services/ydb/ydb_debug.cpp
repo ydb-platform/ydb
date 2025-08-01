@@ -50,7 +50,7 @@ void TGRpcYdbDebugService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
 #ifdef ADD_REQUEST
 #error ADD_REQUEST macro already defined
 #endif
-#define ADD_REQUEST(NAME, IN, OUT, CB, REQUEST_TYPE) \
+#define ADD_REQUEST(NAME, IN, OUT, CB, REQUEST_TYPE, AUDIT_MODE) \
     for (size_t i = 0; i < HandlersPerCompletionQueue; ++i) {  \
         for (auto* cq: CQS) { \
             MakeIntrusive<TGRpcRequest<IN, OUT, TGRpcYdbDebugService>>(this, &Service_, cq, \
@@ -60,6 +60,7 @@ void TGRpcYdbDebugService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
                         new TGrpcRequestNoOperationCall<IN, OUT> \
                             (ctx, &CB, TRequestAuxSettings { \
                                 .RlMode = RLSWITCH(TRateLimiterMode::Rps), \
+                                .AuditMode = AUDIT_MODE, \
                                 .RequestType = NJaegerTracing::ERequestType::PING_##REQUEST_TYPE, \
                             })); \
                 }, &Ydb::Debug::V1::DebugService::AsyncService::Request ## NAME, \
@@ -68,11 +69,11 @@ void TGRpcYdbDebugService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
         }  \
     }
 
-    ADD_REQUEST(PingGrpcProxy, GrpcProxyRequest, GrpcProxyResponse, DoGrpcProxyPing, PROXY);
-    ADD_REQUEST(PingKqpProxy, KqpProxyRequest, KqpProxyResponse, DoKqpPing, KQP);
-    ADD_REQUEST(PingSchemeCache, SchemeCacheRequest, SchemeCacheResponse, DoSchemeCachePing, SCHEME_CACHE);
-    ADD_REQUEST(PingTxProxy, TxProxyRequest, TxProxyResponse, DoTxProxyPing, TX_PROXY);
-    ADD_REQUEST(PingActorChain, ActorChainRequest, ActorChainResponse, DoActorChainPing, ACTOR_CHAIN);
+    ADD_REQUEST(PingGrpcProxy, GrpcProxyRequest, GrpcProxyResponse, DoGrpcProxyPing, PROXY, TAuditMode::NonModifying());
+    ADD_REQUEST(PingKqpProxy, KqpProxyRequest, KqpProxyResponse, DoKqpPing, KQP, TAuditMode::NonModifying());
+    ADD_REQUEST(PingSchemeCache, SchemeCacheRequest, SchemeCacheResponse, DoSchemeCachePing, SCHEME_CACHE, TAuditMode::NonModifying());
+    ADD_REQUEST(PingTxProxy, TxProxyRequest, TxProxyResponse, DoTxProxyPing, TX_PROXY, TAuditMode::NonModifying());
+    ADD_REQUEST(PingActorChain, ActorChainRequest, ActorChainResponse, DoActorChainPing, ACTOR_CHAIN, TAuditMode::NonModifying());
 
 #undef ADD_REQUEST
 

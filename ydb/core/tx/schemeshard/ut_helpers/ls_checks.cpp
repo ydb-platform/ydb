@@ -165,6 +165,14 @@ TCheckFunc ExtractDomainHive(ui64* domainHiveId) {
     };
 }
 
+TCheckFunc ExtractChildren(TVector<TString>* children) {
+    return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
+        for (const auto& c : record.GetPathDescription().GetChildren()) {
+            children->push_back(c.GetName());
+        }
+    };
+}
+
 void InExternalSubdomain(const NKikimrScheme::TEvDescribeSchemeResult& record) {
     PathRedirected(record);
 

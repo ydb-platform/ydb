@@ -32,25 +32,22 @@ The spilling mechanism in {{ ydb-short-name }} includes two main levels: the bac
 
 #### Spilling Service
 
-This component is an [actor service](glossary.md#actor-service) that initializes at node startup. The service is designated as **Spilling Service**.
+This component is an [actor service](glossary.md#actor-service) that initializes at node startup. The service is designated as the **Spilling Service**.
 
-The service processes tasks (or events in terms of the [actor system](glossary.md#actor-system)). Events can contain the following types of jobs:
+The service processes tasks (or events, in terms of the [actor system](glossary.md#actor-system)). Events can include the following types of jobs:
 
-* saving data blobs.
-* loading data blobs.
-* deleting data blobs.
+* saving data blobs
+* loading data blobs
+* deleting data blobs
 
-The main function of the service is to implement storage that saves data blobs by client-provided identifier and ensures blob retrieval by that identifier.
+The main function of the service is to implement storage that saves data blobs by a client-provided identifier and ensures blob retrieval by that identifier.
 
 Main service components:
 
-**Task queue**: The service maintains an internal queue of read and write operations. All spilling requests are placed in this queue and processed asynchronously.
-
-**Thread pool**: A pool of worker threads is used to perform I/O operations. The number of threads is [configurable](../devops/configuration-management/configuration-v2/spilling-config.md#workerscount) and affects service performance.
-
-**File management**: The service automatically creates, deletes, and manages files on disk.
-
-**Resource monitoring**: The service monitors disk space usage, number of active operations, and other performance metrics.
+- **Task queue**: The service maintains an internal queue of read and write operations. All spilling requests are placed in this queue and processed asynchronously.
+- **Thread pool**: A pool of worker threads is used to perform I/O operations. The number of threads is [configurable](../devops/configuration-management/configuration-v2/spilling-config.md#workerscount) and affects service performance.
+- **File management**: The service automatically creates, deletes, and manages files on disk.
+- **Resource monitoring**: The service monitors disk space usage, the number of active operations, and other performance metrics.
 
 #### Data storage
 

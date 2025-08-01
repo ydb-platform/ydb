@@ -1111,6 +1111,20 @@
             "uri": "https://{canondata_backend}/1942278/20dbdd767909c3fcc7023936b9c0982a3a69d607/resource.tar.gz#test.test_optimizers-logical_bools_with_side_effects_override-default.txt-Results_/results.txt"
         }
     ],
+    "test.test[optimizers-x_not_x_side_effects-default.txt-Debug]": [
+        {
+            "checksum": "3a6d7d2c548f8192694ff607180e0e59",
+            "size": 1120,
+            "uri": "https://{canondata_backend}/1942278/f4f1c6731c6a38129e26a7e2d99c6ae5860f2f28/resource.tar.gz#test.test_optimizers-x_not_x_side_effects-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[optimizers-x_not_x_side_effects-default.txt-Results]": [
+        {
+            "checksum": "3b1579ab54e14836b918486d506ebdd4",
+            "size": 3299,
+            "uri": "https://{canondata_backend}/1925821/38fd86a99564b7856daee64ca39f901bcb4d5069/resource.tar.gz#test.test_optimizers-x_not_x_side_effects-default.txt-Results_/results.txt"
+        }
+    ],
     "test.test[order_by-tuple01-default.txt-Debug]": [
         {
             "checksum": "b563a580bb15eea69a29f6e0f4683687",

@@ -98,27 +98,27 @@ sequenceDiagram
 
 - **Data reading**: When data recovery is needed, the component sends a read request with the blob identifier. The Spilling Service reads data from external storage and returns a response with the recovered data. During data loading, freed computational resources are utilized for processing other tasks.
 
-### Types of spilling in {{ ydb-short-name }}
+### Types of Spilling in {{ ydb-short-name }}
 
 {{ ydb-short-name }} implements two main types of spilling operating at different levels of the computational process. These types work independently and can activate simultaneously within a single query, providing comprehensive memory management.
 
-#### 1. Compute Node Spilling
+#### Compute Node Spilling
 
-{{ ydb-short-name }} compute cores automatically offload intermediate data to disk when executing operations requiring significant memory. This type of spilling is implemented at the level of individual computational operations and activates when memory limits are reached.
+{{ ydb-short-name }} compute cores automatically offload intermediate data to disk when executing operations that require significant memory. This type of spilling is implemented at the level of individual computational operations and activates when memory limits are reached.
 
-**Main usage scenarios:**
+Main usage scenarios:
 
-* **Aggregations** — when grouping large data volumes, the system offloads intermediate hash tables to disk
-* **Sorting** — when sorting results exceeding available memory, external sorting is applied using temporary files
-* **Join operations** — when joining large tables, Grace Hash Join algorithm is used with data partitioning and offloading to disk
+* **Aggregations** — when grouping large data volumes, the system offloads intermediate hash tables to disk  
+* **Sorting** — when sorting results exceed available memory, external sorting is applied using temporary files  
+* **Join operations** — when joining large tables, the Grace Hash Join algorithm is used with data partitioning and offloading to disk  
 
-**Operation mechanism:**
+##### Operation mechanism
 
 Compute nodes contain specialized objects for monitoring memory usage. When data volume approaches the set limit:
 
-1. System switches to spilling mode
+1. The system switches to spilling mode
 2. Data is serialized and divided into blocks (buckets)
-3. Part of blocks is transferred to Spilling Service for disk storage
+3. Part of the blocks is transferred to the Spilling Service for disk storage
 4. Metadata about data location is kept in memory
 5. When necessary, data is loaded back and processed
 

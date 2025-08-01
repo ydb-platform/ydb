@@ -49,6 +49,8 @@ struct TAttributeDictionarySerializer
 
 void ValidateYTreeKey(IAttributeDictionary::TKeyView key);
 
+[[noreturn]] void ThrowYPathResolutionDepthExceeded(TYPathBuf path);
+
 void ValidateYPathResolutionDepth(TYPathBuf path, int depth);
 
 //! Helps implementing IAttributeDictionary::ListPairs by delegating to

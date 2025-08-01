@@ -144,7 +144,7 @@ TPartitionResult PartitionInputTablesIntoTasks(
     if (!fmrPartitionStatus) {
         return TPartitionResult{.PartitionStatus = false};
     }
-    YQL_CLOG(INFO, FastMapReduce) << "Successfully partitioned input fmr tables into " << gottenFmrTasks.size() << " tasks";
+    YQL_CLOG(INFO, FastMapReduce) << "Successfully partitioned " << fmrInputTables.size() << " input fmr tables into " << gottenFmrTasks.size() << " tasks";
     for (auto& fmrTask: gottenFmrTasks) {
         YQL_CLOG(DEBUG, FastMapReduce) << fmrTask;
         currentTasks.emplace_back(fmrTask);

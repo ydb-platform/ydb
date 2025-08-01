@@ -475,7 +475,7 @@ bool HaveFieldsSubset(const TExprNode::TPtr& start, const TExprNode& arg, TField
                 usedFields.emplace(parent->Tail().Content());
             else
                 usedFields.emplace(parent->Tail().Content(), parent->TailPtr());
-        } else if (allowDependsOn && parent->IsCallable("DependsOn")) {
+        } else if (allowDependsOn && TCoDependsOnBase::Match(parent)) {
             continue;
         } else {
             // unknown node
@@ -509,7 +509,7 @@ TExprNode::TPtr AddMembersUsedInside(const TExprNode::TPtr& start, const TExprNo
 
     TNodeSet nodes;
     VisitExpr(start, [&](const TExprNode::TPtr& node) {
-        if (!node->IsCallable("DependsOn"))
+        if (!TCoDependsOnBase::Match(node.Get()))
             nodes.emplace(node.Get());
         return true;
     });
@@ -767,6 +767,24 @@ EDictType SelectDictType(EDictType type, const TTypeAnnotationNode* keyType) {
 
     YQL_ENSURE(keyType->IsComparableInternal());
     return EDictType::Sorted;
+}
+
+void GetLogicalOpTerms(const std::string_view& op, const TExprNode::TPtr& predicate, TExprNode::TListType& terms) {
+    if (predicate->IsCallable(op)) {
+        for (auto& child : predicate->Children()) {
+            GetLogicalOpTerms(op, child, terms);
+        }
+    } else {
+        terms.push_back(predicate);
+    }
+}
+
+void GetAndTerms(const TExprNode::TPtr& predicate, TExprNode::TListType& terms) {
+    GetLogicalOpTerms("And", predicate, terms);
+}
+
+void GetOrTerms(const TExprNode::TPtr& predicate, TExprNode::TListType& terms) {
+    GetLogicalOpTerms("Or", predicate, terms);
 }
 
 TExprNode::TPtr MakeSingleGroupRow(const TExprNode& aggregateNode, TExprNode::TPtr reduced, TExprContext& ctx) {
@@ -1319,6 +1337,51 @@ TExprNode::TPtr ExpandSkipNullFields(const TExprNode::TPtr& node, TExprContext& 
         .Seal().Build();
 }
 
+TExprNode::TListType ExpandAndOverOr(const TExprNode::TPtr& predicate, TExprContext& ctx, const TTypeAnnotationContext& types) {
+    if (!predicate->IsCallable("And")) {
+        return {};
+    }
+
+    TExprNode::TListType andTerms;
+    GetAndTerms(predicate, andTerms);
+    if (andTerms.size() == 1) {
+        return {};
+    }
+
+    TVector<TExprNode::TListType> orParts;
+    for (const auto& andTerm : andTerms) {
+        TExprNode::TListType orTerms;
+        GetOrTerms(andTerm, orTerms);
+        orParts.push_back(std::move(orTerms));
+    }
+    if (!AnyOf(orParts, [](const auto& orPart) { return orPart.size() > 1; })) {
+        return {};
+    }
+
+    TExprNode::TListType orArgs;
+    TVector<size_t> currTerm(orParts.size());
+    for (size_t termsCount = 0; currTerm[0] < orParts[0].size(); termsCount++) {
+        if (termsCount > types.AndOverOrExpansionLimit) {
+            return {};
+        }
+
+        TExprNode::TListType andArgs;
+        for (size_t i = 0; i < currTerm.size(); i++) {
+            andArgs.push_back(orParts[i][currTerm[i]]);
+        }
+
+        currTerm[currTerm.size() - 1]++;
+        for (size_t i = currTerm.size() - 1; i > 0 && currTerm[i] >= orParts[i].size(); i--) {
+            currTerm[i] = 0;
+            currTerm[i - 1]++;
+        }
+
+        orArgs.push_back(ctx.NewCallable(predicate->Pos(), "And", std::move(andArgs)));
+    }
+
+    return orArgs;
+}
+
 void ExtractSimpleKeys(const TExprNode* keySelectorBody, const TExprNode* keySelectorArg, TVector<TStringBuf>& columns) {
     if (keySelectorBody->IsList()) {
         for (auto& child: keySelectorBody->Children()) {
@@ -1689,7 +1752,7 @@ std::pair<TExprNode::TPtr, TExprNode::TPtr> ReplaceDependsOn(TExprNode::TPtr lam
     auto placeHolder = ctx.NewArgument(lambda->Pos(), "placeholder");
 
     auto status = OptimizeExpr(lambda, lambda, [&placeHolder, arg = &lambda->Head().Head()](const TExprNode::TPtr& node, TExprContext& ctx) -> TExprNode::TPtr {
-        if (TCoDependsOn::Match(node.Get()) && &node->Head() == arg) {
+        if (TCoDependsOnBase::Match(node.Get()) && &node->Head() == arg) {
             return ctx.ChangeChild(*node, 0, TExprNode::TPtr(placeHolder));
         }
         return node;
@@ -1880,7 +1943,7 @@ TExprNode::TPtr FindNonYieldTransparentNodeImpl(const TExprNode::TPtr& root, con
     auto depensOnFlow = [&flowSources](const TExprNode::TPtr& node) {
         return !!FindNode(node,
             [](const TExprNode::TPtr& n) {
-                return !TCoDependsOn::Match(n.Get());
+                return !TCoDependsOnBase::Match(n.Get());
             },
             [&flowSources](const TExprNode::TPtr& n) {
                 return flowSources.contains(n.Get());
@@ -1890,7 +1953,7 @@ TExprNode::TPtr FindNonYieldTransparentNodeImpl(const TExprNode::TPtr& root, con
 
     auto candidates = FindNodes(root,
         [&flowSources](const TExprNode::TPtr& node) {
-            if (flowSources.contains(node.Get()) || TCoDependsOn::Match(node.Get())) {
+            if (flowSources.contains(node.Get()) || TCoDependsOnBase::Match(node.Get())) {
                 return false;
             }
             if (node->ChildrenSize() > 0 && node->Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::World) {
@@ -2045,14 +2108,14 @@ bool HasDependsOn(const TExprNode::TPtr& root, const TExprNode::TPtr& arg) {
     size_t insideDependsOn = 0;
 
     VisitExpr(root, [&](const TExprNode::TPtr& node) {
-        if (node->IsCallable("DependsOn")) {
+        if (TCoDependsOnBase::Match(node.Get())) {
             ++insideDependsOn;
         } else if (insideDependsOn && node == arg) {
             withDependsOn = true;
         }
         return !withDependsOn;
     }, [&](const TExprNode::TPtr& node) {
-        if (node->IsCallable("DependsOn")) {
+        if (TCoDependsOnBase::Match(node.Get())) {
             YQL_ENSURE(insideDependsOn > 0);
             --insideDependsOn;
         }
@@ -2570,6 +2633,69 @@ TOperationProgress::EOpBlockStatus DetermineProgramBlockStatus(const TExprNode& 
     });
 
     return status;
+}
+
+TExprNode::TPtr ReplaceUnessentials(TExprNode::TPtr predicate, TExprNode::TPtr row, const TNodeSet& banned, TExprContext& ctx) {
+    YQL_ENSURE(row->IsArgument());
+
+    std::vector<TExprNode::TPtr> unessentials;
+    bool hasEssentialRowUsage = false;
+    VisitExpr(predicate, [&](const TExprNode::TPtr& node) {
+        if (banned.contains(node.Get())) {
+            return false;
+        } else if (node == row) {
+            hasEssentialRowUsage = true;
+            return false;
+        } else if (node->IsCallable(TCoUnessential::CallableName())) {
+            // AssumeAs is guaranteed to be complete
+            unessentials.push_back(node);
+            return false;
+        }
+
+        return true;
+    });
+    if (unessentials.empty()) {
+        return predicate;
+    }
+
+    // Consider predicate as unessential if all row usages across predicate are Unessential
+    // Drop all Unessential conditions (= replace with AssumeAs) in that case, or keep them (= replace with Predicate) otherwise
+
+    TNodeOnNodeOwnedMap replaces;
+    for (const auto& unessential : unessentials) {
+        replaces.emplace(unessential.Get(), hasEssentialRowUsage ? unessential->ChildPtr(TCoUnessential::idx_Predicate) : unessential->ChildPtr(TCoUnessential::idx_AssumeAs));
+    }
+
+    return ctx.ReplaceNodes(std::move(predicate), replaces);
+}
+
+bool IsDependsOnUsage(const TExprNode& node, const TParentsMap& parentsMap) {
+    if (TCoDependsOnBase::Match(&node)) {
+        return true;
+    } else if (node.IsList()) {
+        auto it = parentsMap.find(&node);
+        if (it != parentsMap.end()) {
+            auto& listUsages = it->second;
+            if (AllOf(listUsages.begin(), listUsages.end(), [](const TExprNode* usage) { return TCoDependsOnBase::Match(usage); })) {
+                return true;
+            }
+        }
+    }
+
+    return false;
+}
+
+bool IsNormalizedDependsOn(const TExprNode& node) {
+    YQL_ENSURE(TCoDependsOnBase::Match(&node));
+
+    if (TCoDataCtor::Match(&node.Head()) || node.Head().IsArgument()) {
+        return true;
+    }
+    if (node.Head().IsList() && AllOf(node.Head().Children(), [](const TExprNode::TPtr& child) { return TCoDataCtor::Match(child.Get()) || child->IsArgument(); })) {
+        return true;
+    }
+
+    return false;
 }
 
 }

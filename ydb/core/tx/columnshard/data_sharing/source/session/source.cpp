@@ -40,11 +40,13 @@ NKikimr::TConclusionStatus TSourceSession::DeserializeFromProto(const NKikimrCol
     return TConclusionStatus::Success();
 }
 
-TConclusion<std::unique_ptr<NTabletFlatExecutor::ITransaction>> TSourceSession::AckFinished(NColumnShard::TColumnShard* self, const std::shared_ptr<TSourceSession>& selfPtr) {
+TConclusion<std::unique_ptr<NTabletFlatExecutor::ITransaction>> TSourceSession::AckFinished(
+    NColumnShard::TColumnShard* self, const std::shared_ptr<TSourceSession>& selfPtr) {
     return std::unique_ptr<NTabletFlatExecutor::ITransaction>(new TTxFinishAckToSource(self, selfPtr, "ack_finished"));
 }
 
-TConclusion<std::unique_ptr<NTabletFlatExecutor::ITransaction>> TSourceSession::AckData(NColumnShard::TColumnShard* self, const ui32 receivedPackIdx, const std::shared_ptr<TSourceSession>& selfPtr) {
+TConclusion<std::unique_ptr<NTabletFlatExecutor::ITransaction>> TSourceSession::AckData(
+    NColumnShard::TColumnShard* self, const ui32 receivedPackIdx, const std::shared_ptr<TSourceSession>& selfPtr) {
     auto ackResult = Cursor->AckData(receivedPackIdx);
     if (!ackResult) {
         return ackResult;
@@ -57,7 +59,8 @@ TConclusion<std::unique_ptr<NTabletFlatExecutor::ITransaction>> TSourceSession::
     }
 }
 
-TConclusion<std::unique_ptr<NTabletFlatExecutor::ITransaction>> TSourceSession::AckLinks(NColumnShard::TColumnShard* self, const TTabletId tabletId, const ui32 receivedPackIdx, const std::shared_ptr<TSourceSession>& selfPtr) {
+TConclusion<std::unique_ptr<NTabletFlatExecutor::ITransaction>> TSourceSession::AckLinks(
+    NColumnShard::TColumnShard* self, const TTabletId tabletId, const ui32 receivedPackIdx, const std::shared_ptr<TSourceSession>& selfPtr) {
     auto ackResult = Cursor->AckLinks(tabletId, receivedPackIdx);
     if (!ackResult) {
         return ackResult;
@@ -74,14 +77,16 @@ void TSourceSession::SaveCursorToDatabase(NIceDb::TNiceDb& db) {
     GetCursorVerified()->SaveToDatabase(db, GetSessionId());
 }
 
-void TSourceSession::ActualizeDestination(const NColumnShard::TColumnShard& shard, const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) {
+void TSourceSession::ActualizeDestination(
+    const NColumnShard::TColumnShard& shard, const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) {
     AFL_VERIFY(IsInProgress() || IsPrepared());
     AFL_VERIFY(Cursor);
     if (Cursor->IsValid()) {
         if (!Cursor->IsAckDataReceived()) {
             const THashMap<TInternalPathId, NEvents::TPathIdData>& packPortions = Cursor->GetSelected();
 
-            auto ev = std::make_unique<NEvents::TEvSendDataFromSource>(GetSessionId(), Cursor->GetPackIdx(), SelfTabletId, packPortions, Cursor->GetSelectedSchemas());
+            auto ev = std::make_unique<NEvents::TEvSendDataFromSource>(
+                GetSessionId(), Cursor->GetPackIdx(), SelfTabletId, packPortions, Cursor->GetSelectedSchemas());
             NActors::TActivationContext::AsActorContext().Send(MakePipePerNodeCacheID(false),
                 new TEvPipeCache::TEvForward(ev.release(), (ui64)DestinationTabletId, true), IEventHandle::FlagTrackDelivery, GetRuntimeId());
         }
@@ -104,14 +109,17 @@ void TSourceSession::ActualizeDestination(const NColumnShard::TColumnShard& shar
     }
 }
 
-void TSourceSession::StartCursor(const NColumnShard::TColumnShard& shard, THashMap<TInternalPathId, std::vector<TPortionDataAccessor>>&& portions, std::vector<NOlap::TSchemaPresetVersionInfo>&& schemeHistory) {
+void TSourceSession::StartCursor(const NColumnShard::TColumnShard& shard,
+    THashMap<TInternalPathId, std::vector<std::shared_ptr<TPortionDataAccessor>>>&& portions,
+    std::vector<NOlap::TSchemaPresetVersionInfo>&& schemeHistory) {
     AFL_VERIFY(Cursor);
     AFL_VERIFY(Cursor->Start(shard.GetStoragesManager(), std::move(portions), std::move(schemeHistory), shard.GetIndexAs<TColumnEngineForLogs>().GetVersionedIndex()));
     ActualizeDestination(shard, shard.GetDataLocksManager());
 }
 
-TConclusionStatus TSourceSession::DoStart(NColumnShard::TColumnShard& shard, THashMap<TInternalPathId, std::vector<TPortionDataAccessor>>&& portions) {
+TConclusionStatus TSourceSession::DoStart(
+    NColumnShard::TColumnShard& shard, THashMap<TInternalPathId, std::vector<std::shared_ptr<TPortionDataAccessor>>>&& portions) {
     shard.Execute(new TTxStartSourceCursor(this, &shard, std::move(portions), "start_source_cursor"));
     return TConclusionStatus::Success();
 }
-} // namespace NKikimr::NOlap::NDataSharing
+}   // namespace NKikimr::NOlap::NDataSharing

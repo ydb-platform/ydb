@@ -1254,7 +1254,7 @@ ISubOperation::TPtr TOperation::RestorePart(TTxState::ETxType txType, TTxState::
         return CreateAlterResourcePool(NextPartId(), txState);
 
     case TTxState::ETxType::TxRestoreIncrementalBackupAtTable:
-        return CreateRestoreIncrementalBackupAtTable(NextPartId(), txState);
+        return CreateRestoreIncrementalBackupAtTable(NextPartId(), txState, context);
 
     // BackupCollection
     case TTxState::ETxType::TxCreateBackupCollection:
@@ -1572,7 +1572,7 @@ TVector<ISubOperation::TPtr> TDefaultOperationFactory::MakeOperationParts(
     case NKikimrSchemeOp::EOperationType::ESchemeOpAlterBackupCollection:
         Y_ABORT("TODO: implement");
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropBackupCollection:
-        return {CreateDropBackupCollection(op.NextPartId(), tx)};
+        return CreateDropBackupCollectionCascade(op.NextPartId(), tx, context);
 
     case NKikimrSchemeOp::EOperationType::ESchemeOpBackupBackupCollection:
         return CreateBackupBackupCollection(op.NextPartId(), tx, context);

@@ -100,7 +100,7 @@ namespace NKafka {
             template<class EventType>
             bool ProducerInRequestIsValid(TMessagePtr<EventType> kafkaRequest);
             TString GetFullTopicPath(const TString& topicName);
-            TString GetYqlWithTablesNames(const TString& templateStr);
+            TString GetYqlWithTablesNames();
             NYdb::TParams BuildSelectParams();
             THolder<NKikimr::NKqp::TEvKqp::TEvQueryRequest> BuildAddKafkaOperationsRequest(const TString& kqpTransactionId);
             void HandleSelectResponse(const NKqp::TEvKqp::TEvQueryResponse& response, const TActorContext& ctx);

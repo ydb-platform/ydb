@@ -632,6 +632,13 @@ class _freeze_time:
         self.as_kwarg = as_kwarg
         self.real_asyncio = real_asyncio
 
+    # mypy objects to this because Type is Callable, but Pytype needs it because
+    # (unlike mypy's) its inference does not assume class decorators always leave
+    # the type unchanged.
+    @overload
+    def __call__(self, func: Type[T2]) -> Type[T2]:  # type: ignore[overload-overlap]
+        ...
+
     @overload
     def __call__(self, func: "Callable[P, Awaitable[Any]]") -> "Callable[P, Awaitable[Any]]":
         ...
@@ -645,6 +652,8 @@ class _freeze_time:
             return self.decorate_class(func)
         elif inspect.iscoroutinefunction(func):
             return self.decorate_coroutine(func)
+        elif inspect.isgeneratorfunction(func):
+            return self.decorate_generator_function(func) # type: ignore
         return self.decorate_callable(func)  # type: ignore
 
     def decorate_class(self, klass: Type[T2]) -> Type[T2]:
@@ -693,7 +702,6 @@ class _freeze_time:
             klass.tearDown = tearDown  # type: ignore[method-assign]
 
         else:
-
             seen = set()
 
             klasses = klass.mro()
@@ -707,7 +715,20 @@ class _freeze_time:
                         continue
 
                     try:
-                        setattr(klass, attr, self(attr_value))
+                        if attr_value.__dict__.get("_pytestfixturefunction") and hasattr(attr_value, "__pytest_wrapped__"):
+                            # PYTEST==8.2.x (and maybe others)
+                            # attr_value is a pytest fixture
+                            # In other words: attr_value == fixture(original_method)
+                            # We need to keep the fixture itself intact to ensure pytest still treats it as a fixture
+                            # We still want to freeze time inside the original_method though
+                            attr_value.__pytest_wrapped__.obj = self(attr_value.__pytest_wrapped__.obj)
+                        elif attr_value.__dict__.get("_fixture_function"):
+                            # PYTEST==8.4.x
+                            # Same
+                            attr_value._fixture_function = self(attr_value._fixture_function)
+                        else:
+                            # Wrap the entire method inside 'freeze_time'
+                            setattr(klass, attr, self(attr_value))
                     except (AttributeError, TypeError):
                         # Sometimes we can't set this for built-in types and custom callables
                         continue
@@ -895,20 +916,33 @@ class _freeze_time:
     def decorate_coroutine(self, coroutine: "Callable[P, Awaitable[T]]") -> "Callable[P, Awaitable[T]]":
         return wrap_coroutine(self, coroutine)
 
+    def _call_with_time_factory(self, time_factory: Union[StepTickTimeFactory, TickingDateTimeFactory, FrozenDateTimeFactory], func: "Callable[P, T]", *args: "P.args", **kwargs: "P.kwargs") -> T:
+        if self.as_arg and self.as_kwarg:
+            assert False, "You can't specify both as_arg and as_kwarg at the same time. Pick one."
+        if self.as_arg:
+            result = func(time_factory, *args, **kwargs)  # type: ignore
+        if self.as_kwarg:
+            kwargs[self.as_kwarg] = time_factory
+            result = func(*args, **kwargs)
+        else:
+            result = func(*args, **kwargs)
+        return result
+
+    def decorate_generator_function(self, func: "Callable[P, Iterator[T]]") -> "Callable[P, Iterator[T]]":
+
+        @functools.wraps(func)
+        def wrapper(*args: "P.args", **kwargs: "P.kwargs") -> Iterator[T]:
+            with self as time_factory:
+                yield from self._call_with_time_factory(time_factory, func, *args, **kwargs)
+
+        return wrapper
+
     def decorate_callable(self, func: "Callable[P, T]") -> "Callable[P, T]":
+
         @functools.wraps(func)
         def wrapper(*args: "P.args", **kwargs: "P.kwargs") -> T:
             with self as time_factory:
-                if self.as_arg and self.as_kwarg:
-                    assert False, "You can't specify both as_arg and as_kwarg at the same time. Pick one."
-                elif self.as_arg:
-                    result = func(time_factory, *args, **kwargs)  # type: ignore
-                elif self.as_kwarg:
-                    kwargs[self.as_kwarg] = time_factory
-                    result = func(*args, **kwargs)
-                else:
-                    result = func(*args, **kwargs)
-            return result
+                return self._call_with_time_factory(time_factory, func, *args, **kwargs)
 
         return wrapper
 

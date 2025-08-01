@@ -11,21 +11,22 @@ Y_UNIT_TEST_SUITE(ParseRecordTests) {
     Y_UNIT_TEST(MockParseRecord) {
         TString inputYsonContent = "{\"key\"=\"075\";\"subkey\"=\"1\";\"value\"=\"abc\"};\n"
                                    "{\"key\"=\"800\";\"subkey\"=\"2\";\"value\"=\"ddd\"};\n";
-        TYtTableRef testYtTable = TYtTableRef{.Path = "test_path", .Cluster = "hahn"};
         auto richPath = NYT::TRichYPath("test_path").Cluster("test_cluster");
+        TYtTableRef testYtTable{.RichPath = richPath};
         std::unordered_map<TString, TString> inputTables{{NYT::NodeToCanonicalYsonString(NYT::PathToNode(richPath)), inputYsonContent}};
 
-        std::unordered_map<TYtTableRef, TString> outputTables;
+        std::unordered_map<TString, TString> outputTables;
 
         auto ytJobService = MakeMockYtJobService(inputTables, outputTables);
 
-        auto reader = ytJobService->MakeReader(richPath);
+        auto reader = ytJobService->MakeReader(testYtTable);
         auto writer = ytJobService->MakeWriter(testYtTable, TClusterConnection());
         auto cancelFlag = std::make_shared<std::atomic<bool>>(false);
         ParseRecords(reader, writer, 1, 10, cancelFlag);
         writer->Flush();
         UNIT_ASSERT_VALUES_EQUAL(outputTables.size(), 1);
-        UNIT_ASSERT(outputTables.contains(testYtTable));
-        UNIT_ASSERT_NO_DIFF(outputTables[testYtTable], inputYsonContent);
+        TString serializedRichPath = SerializeRichPath(richPath);
+        UNIT_ASSERT(outputTables.contains(serializedRichPath));
+        UNIT_ASSERT_NO_DIFF(outputTables[serializedRichPath], inputYsonContent);
     }
 }

@@ -1,5 +1,7 @@
-#include "row_helpers.h"
 #include "yson_helpers.h"
+
+#include <yt/yt/tests/cpp/library/row_helpers.h>
+
 #include "yt/yt/client/table_client/public.h"
 
 #include <yt/yt/core/test_framework/framework.h>

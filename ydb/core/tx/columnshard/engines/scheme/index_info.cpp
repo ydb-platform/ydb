@@ -582,7 +582,8 @@ TIndexInfo::TIndexInfo(const TIndexInfo& original, const TSchemaDiffView& diff, 
         Indexes = original.Indexes;
         for (auto&& i : diff.GetModifiedIndexes()) {
             if (!i.second) {
-                AFL_VERIFY(Indexes.erase(i.first));
+                // It is possible to have a non-existent element here after merging schemas
+                Indexes.erase(i.first);
             } else {
                 auto it = Indexes.find(i.first);
                 NIndexes::TIndexMetaContainer meta;

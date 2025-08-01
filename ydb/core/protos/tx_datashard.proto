@@ -433,7 +433,7 @@ message TAlterCdcStreamNotice {
 message TDropCdcStreamNotice {
     optional NKikimrProto.TPathID PathId = 1;
     optional uint64 TableSchemaVersion = 2;
-    optional NKikimrProto.TPathID StreamPathId = 3;
+    repeated NKikimrProto.TPathID StreamPathId = 3;
     optional TSnapshot DropSnapshot = 4;
 }
 

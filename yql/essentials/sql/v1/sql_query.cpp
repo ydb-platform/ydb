@@ -64,6 +64,7 @@ static bool AsyncReplicationSettingsEntry(std::map<TString, TNodePtr>& out,
         "user",
         "password",
         "password_secret_name",
+        "ca_cert",
     };
 
     TSet<TString> modeSettings = {
@@ -163,8 +164,10 @@ static bool TransferSettingsEntry(std::map<TString, TNodePtr>& out,
         "user",
         "password",
         "password_secret_name",
+        "ca_cert",
         "flush_interval",
         "batch_size_bytes",
+        "directory",
     };
 
     TSet<TString> stateSettings = {
@@ -239,11 +242,11 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
 
     switch (altCase) {
         case TRule_sql_stmt_core::kAltSqlStmtCore1: {
-            bool success = false;
-            TNodePtr nodeExpr = PragmaStatement(core.GetAlt_sql_stmt_core1().GetRule_pragma_stmt1(), success);
+            TMaybe<TNodePtr> success = PragmaStatement(core.GetAlt_sql_stmt_core1().GetRule_pragma_stmt1());
             if (!success) {
                 return false;
             }
+            auto& nodeExpr = *success;
             if (nodeExpr) {
                 AddStatementToBlocks(blocks, nodeExpr);
             }
@@ -2224,6 +2227,16 @@ bool TSqlQuery::AlterTableAction(const TRule_alter_table_action& node, TAlterTab
 
         break;
     }
+    case TRule_alter_table_action::kAltAlterTableAction18: {
+        // ALTER COLUMN id SET NOT NULL
+        const auto& alterRule = node.GetAlt_alter_table_action18().GetRule_alter_table_alter_column_set_not_null1();
+
+        if (!AlterTableAlterColumnSetNotNull(alterRule, params)) {
+            return false;
+        }
+
+        break;
+    }
 
     case TRule_alter_table_action::ALT_NOT_SET: {
         AltNotImplemented("alter_table_action", node);
@@ -2565,6 +2578,13 @@ bool TSqlQuery::AlterTableAlterColumnDropNotNull(const TRule_alter_table_alter_c
     return true;
 }
 
+bool TSqlQuery::AlterTableAlterColumnSetNotNull(const TRule_alter_table_alter_column_set_not_null& node, TAlterTableParameters& params) {
+    TString name = Id(node.GetRule_an_id3(), *this);
+    const TPosition pos(Context().Pos());
+    params.AlterColumns.emplace_back(pos, name, nullptr, false, TVector<TIdentifier>(), false, nullptr, TColumnSchema::ETypeOfChange::SetNotNullConstraint);
+    return true;
+}
+
 bool TSqlQuery::AlterTableAddChangefeed(const TRule_alter_table_add_changefeed& node, TAlterTableParameters& params) {
     TSqlExpression expr(Ctx_, Mode_);
     return CreateChangefeed(node.GetRule_changefeed2(), expr, params.AddChangefeeds);
@@ -2602,9 +2622,644 @@ void TSqlQuery::AlterTableDropChangefeed(const TRule_alter_table_drop_changefeed
     params.DropChangefeeds.emplace_back(IdEx(node.GetRule_an_id3(), *this));
 }
 
+namespace {
+#define CB_SIG TVector<TDeferredAtom>& values [[maybe_unused]], bool pragmaValueDefault [[maybe_unused]], TStringBuf pragma [[maybe_unused]], TSqlQuery& query [[maybe_unused]]
+
+using PragmaStatementCb = std::function<TMaybe<TNodePtr>(CB_SIG)>;
+
+struct TPragmaDescr {
+    TString CanonicalName;
+    PragmaStatementCb Cb;
+};
+
+template<typename T, std::convertible_to<T> U>
+PragmaStatementCb SetCtxField(T TContext::* ParamPtr, U ParamValue) requires std::movable<U> {
+    return [ParamPtr, ParamValue = std::move(ParamValue)](CB_SIG) {
+        auto& Ctx_ = query.Context();
+        Ctx_.*ParamPtr = std::move(ParamValue);
+        return TNodePtr{};
+    };
+}
+
+THashMap<TString, TPragmaDescr>::value_type TableElemExt(TString name, PragmaStatementCb cb) {
+    TString normalizedName(name);
+    TMaybe<TIssue> err = NormalizeName({}, normalizedName);
+    Y_ABORT_UNLESS(err.Empty(), "%s", err->GetMessage().c_str());
+    return {std::move(normalizedName), TPragmaDescr{std::move(name), std::move(cb)}};
+}
+
+#define TABLE_ELEM(name, param, value) TableElemExt(name, SetCtxField((&TContext::param), (value)))
+#define PAIRED_TABLE_ELEM(name, param) TABLE_ELEM(name, param, true), TABLE_ELEM("Disable" name, param, false)
+
+THashMap<TString, TPragmaDescr> PragmaDescrs{
+    TableElemExt("Udf", [](CB_SIG) -> TMaybe<TNodePtr> {
+        auto& ctx = query.Context();
+        if ((values.size() != 1 && values.size() != 2) || pragmaValueDefault) {
+            query.Error() << "Expected file alias as pragma value";
+            return {};
+        }
+
+        if (ctx.Settings.FileAliasPrefix) {
+            if (values.size() == 1) {
+                values.emplace_back(TDeferredAtom(ctx.Pos(), ""));
+            }
+
+            TString prefix;
+            if (!values[1].GetLiteral(prefix, ctx)) {
+                query.Error() << "Expected literal UDF module prefix in views";
+                return {};
+            }
+
+            values[1] = TDeferredAtom(ctx.Pos(), ctx.Settings.FileAliasPrefix + prefix);
+        }
+
+        return BuildPragma(ctx.Pos(), TString(ConfigProviderName), "ImportUdfs", values, false);
+    }),
+    TableElemExt("PackageVersion", [](CB_SIG) -> TMaybe<TNodePtr> {
+        auto& ctx = query.Context();
+        if (values.size() != 2 || pragmaValueDefault) {
+            query.Error() << "Expected package name and version";
+            return {};
+        }
+
+        ui32 version = 0;
+        TString versionString;
+        TString packageName;
+        if (!values[0].GetLiteral(packageName, ctx) || !values[1].GetLiteral(versionString, ctx)) {
+            return {};
+        }
+
+        if (!PackageVersionFromString(versionString, version)) {
+            query.Error() << "Unable to parse package version, possible values 0, 1, draft, release";
+            return {};
+        }
+
+        ctx.SetPackageVersion(packageName, version);
+        return BuildPragma(ctx.Pos(), TString(ConfigProviderName), "SetPackageVersion", TVector<TDeferredAtom>{values[0], TDeferredAtom(values[1].Build()->GetPos(), ToString(version))}, false);
+    }),
+    TableElemExt("File", [](CB_SIG) -> TMaybe<TNodePtr> {
+        auto& ctx = query.Context();
+        if (values.size() < 2U || values.size() > 3U || pragmaValueDefault) {
+            query.Error() << "Expected file alias, url and optional token name as pragma values";
+            return {};
+        }
+
+        return BuildPragma(ctx.Pos(), TString(ConfigProviderName), "AddFileByUrl", values, false);
+    }),
+    TableElemExt("FileOption", [](CB_SIG) -> TMaybe<TNodePtr> {
+        auto& ctx = query.Context();
+        if (values.size() < 3U) {
+            query.Error() << "Expected file alias, option key and value";
+            return {};
+        }
+
+        return BuildPragma(ctx.Pos(), TString(ConfigProviderName), "SetFileOption", values, false);
+    }),
+    TableElemExt("Folder", [](CB_SIG) -> TMaybe<TNodePtr> {
+        auto& ctx = query.Context();
+        if (values.size() < 2U || values.size() > 3U || pragmaValueDefault) {
+            query.Error() << "Expected folder alias, url and optional token name as pragma values";
+            return {};
+        }
+        return BuildPragma(ctx.Pos(), TString(ConfigProviderName), "AddFolderByUrl", values, false);
+    }),
+    TableElemExt("Library", [](CB_SIG) -> TMaybe<TNodePtr> {
+        auto& ctx = query.Context();
+        if (values.size() < 1) {
+            query.Error() << "Expected non-empty file alias";
+            return {};
+        }
+        if (values.size() > 3) {
+            query.Error() << "Expected file alias and optional url and token name as pragma values";
+            return {};
+        }
+
+        TString alias;
+        if (!values.front().GetLiteral(alias, ctx)) {
+            return {};
+        }
+
+        TContext::TLibraryStuff library;
+        std::get<TPosition>(library) = values.front().Build()->GetPos();
+        if (values.size() > 1) {
+            auto& first = std::get<1U>(library);
+            first.emplace();
+            first->second = values[1].Build()->GetPos();
+            if (!values[1].GetLiteral(first->first, ctx)) {
+                return {};
+            }
+
+            TSet<TString> names;
+            SubstParameters(first->first, Nothing(), &names);
+            for (const auto& name : names) {
+                auto namedNode = query.GetNamedNode(name);
+                if (!namedNode) {
+                    return {};
+                }
+            }
+            if (values.size() > 2) {
+                auto& second = std::get<2U>(library);
+                second.emplace();
+                second->second = values[2].Build()->GetPos();
+                if (!values[2].GetLiteral(second->first, ctx)) {
+                    return {};
+                }
+            }
+        }
+
+        ctx.Libraries[alias] = std::move(library);
+        return TNodePtr{};
+    }),
+    TableElemExt("Package", [](CB_SIG) -> TMaybe<TNodePtr> {
+        auto& ctx = query.Context();
+        if (values.size() < 2U || values.size() > 3U) {
+            query.Error() << "Expected package name, url and optional token name as pragma values";
+            return {};
+        }
+
+        TString packageName;
+        if (!values.front().GetLiteral(packageName, ctx)) {
+            return {};
+        }
+
+        TContext::TPackageStuff package;
+        std::get<TPosition>(package) = values.front().Build()->GetPos();
+
+        auto fillLiteral = [&](auto& literal, size_t index) {
+            if (values.size() <= index) {
+                return true;
+            }
+
+            constexpr bool optional = std::is_base_of_v<
+                std::optional<TContext::TLiteralWithPosition>,
+                std::decay_t<decltype(literal)>>;
+
+            TContext::TLiteralWithPosition* literalPtr;
+
+            if constexpr (optional) {
+                literal.emplace();
+                literalPtr = &*literal;
+            } else {
+                literalPtr = &literal;
+            }
+
+            literalPtr->second = values[index].Build()->GetPos();
+
+            if (!values[index].GetLiteral(literalPtr->first, ctx)) {
+                return false;
+            }
+
+            return true;
+        };
+
+        // fill url
+        auto& urlLiteral = std::get<1U>(package);
+        if (!fillLiteral(urlLiteral, 1U)) {
+            return {};
+        }
+
+        TSet<TString> names;
+        SubstParameters(urlLiteral.first, Nothing(), &names);
+        for (const auto& name : names) {
+            auto namedNode = query.GetNamedNode(name);
+            if (!namedNode) {
+                return {};
+            }
+        }
+
+        // fill token
+        if (!fillLiteral(std::get<2U>(package), 2U)) {
+            return {};
+        }
+
+        ctx.Packages[packageName] = std::move(package);
+        return TNodePtr{};
+    }),
+    TableElemExt("OverrideLibrary", [](CB_SIG) -> TMaybe<TNodePtr> {
+        auto& ctx = query.Context();
+        if (values.size() != 1U) {
+            query.Error() << "Expected override library alias as pragma value";
+            return {};
+        }
+
+        TString alias;
+        if (!values.front().GetLiteral(alias, ctx)) {
+            return {};
+        }
+
+        TContext::TOverrideLibraryStuff overrideLibrary;
+        std::get<TPosition>(overrideLibrary) = values.front().Build()->GetPos();
+
+        ctx.OverrideLibraries[alias] = std::move(overrideLibrary);
+        return TNodePtr{};
+    }),
+    TableElemExt("EquiJoin", [](CB_SIG) -> TMaybe<TNodePtr> {
+        return TNodePtr{};
+    }),
+    TableElemExt("TablePathPrefix", [](CB_SIG) -> TMaybe<TNodePtr> {
+        auto& ctx = query.Context();
+        TString value;
+        TMaybe<TString> arg;
+
+        if (values.size() == 1 || values.size() == 2) {
+            if (!values.front().GetLiteral(value, ctx)) {
+                return {};
+            }
+
+            if (values.size() == 2) {
+                arg = value;
+                if (!values.back().GetLiteral(value, ctx)) {
+                    return {};
+                }
+            }
+
+            if (!ctx.SetPathPrefix(value, arg)) {
+                return {};
+            }
+        } else {
+            query.Error() << "Expected path prefix or tuple of (Provider, PathPrefix) or"
+                          << " (Cluster, PathPrefix) as pragma value";
+            return {};
+        }
+
+        return TNodePtr{};
+    }),
+    TableElemExt("GroupByLimit", [](CB_SIG) -> TMaybe<TNodePtr> {
+        auto& ctx = query.Context();
+        if (values.size() != 1 || !values[0].GetLiteral() || !TryFromString(*values[0].GetLiteral(), ctx.PragmaGroupByLimit)) {
+            query.Error() << "Expected unsigned integer literal as a single argument for: " << pragma;
+            return {};
+        }
+        return TNodePtr{};
+    }),
+    TableElemExt("GroupByCubeLimit", [](CB_SIG) -> TMaybe<TNodePtr> {
+        auto& ctx = query.Context();
+        if (values.size() != 1 || !values[0].GetLiteral() || !TryFromString(*values[0].GetLiteral(), ctx.PragmaGroupByCubeLimit)) {
+            query.Error() << "Expected unsigned integer literal as a single argument for: " << pragma;
+            return {};
+        }
+        return TNodePtr{};
+    }),
+    TableElemExt("ResultRowsLimit", [](CB_SIG) -> TMaybe<TNodePtr> {
+        auto& ctx = query.Context();
+        if (values.size() != 1 || !values[0].GetLiteral() || !TryFromString(*values[0].GetLiteral(), ctx.ResultRowsLimit)) {
+            query.Error() << "Expected unsigned integer literal as a single argument for: " << pragma;
+            return {};
+        }
+
+        return TNodePtr{};
+    }),
+    TableElemExt("ResultSizeLimit", [](CB_SIG) -> TMaybe<TNodePtr> {
+        auto& ctx = query.Context();
+        if (values.size() != 1 || !values[0].GetLiteral() || !TryFromString(*values[0].GetLiteral(), ctx.ResultSizeLimit)) {
+            query.Error() << "Expected unsigned integer literal as a single argument for: " << pragma;
+            return {};
+        }
+
+        return TNodePtr{};
+    }),
+    TableElemExt("RuntimeLogLevel", [](CB_SIG) -> TMaybe<TNodePtr> {
+        auto& ctx = query.Context();
+        if (values.size() != 1 || !values[0].GetLiteral()) {
+            query.Error() << "Expected LogLevel as a single argument for: " << pragma;
+            return {};
+        }
+
+        auto value = to_title(*values[0].GetLiteral());
+        if (!NUdf::TryLevelFromString(value)) {
+            query.Error() << "Expected LogLevel as a single argument for: " << pragma;
+            return {};
+        }
+
+        ctx.RuntimeLogLevel = value;
+        return TNodePtr{};
+    }),
+    TableElemExt("Warning", [](CB_SIG) -> TMaybe<TNodePtr> {
+        auto& ctx = query.Context();
+        if (values.size() != 2U || values.front().Empty() || values.back().Empty()) {
+            query.Error() << "Expected arguments <action>, <issueId> for: " << pragma;
+            return {};
+        }
+
+        TString action;
+        TString codePattern;
+        if (!values[0].GetLiteral(action, ctx) || !values[1].GetLiteral(codePattern, ctx)) {
+            return {};
+        }
+
+        TWarningRule rule;
+        TString parseError;
+        auto parseResult = TWarningRule::ParseFrom(codePattern, action, rule, parseError);
+        switch (parseResult) {
+            case TWarningRule::EParseResult::PARSE_OK:
+                break;
+            case TWarningRule::EParseResult::PARSE_PATTERN_FAIL:
+            case TWarningRule::EParseResult::PARSE_ACTION_FAIL:
+                ctx.Error() << parseError;
+                return {};
+            default:
+                Y_ENSURE(false, "Unknown parse result");
+        }
+
+        ctx.WarningPolicy.AddRule(rule);
+        if (rule.GetPattern() == "*" && rule.GetAction() == EWarningAction::ERROR) {
+            // Keep 'unused symbol' warning as warning unless explicitly set to error
+            ctx.SetWarningPolicyFor(TIssuesIds::YQL_UNUSED_SYMBOL, EWarningAction::DEFAULT);
+        }
+
+        return TNodePtr{};
+    }),
+    TableElemExt("Greetings", [](CB_SIG) -> TMaybe<TNodePtr> {
+        auto& ctx = query.Context();
+        if (values.size() > 1) {
+            query.Error() << "Multiple arguments are not expected for " << pragma;
+            return {};
+        }
+
+        if (values.empty()) {
+            values.emplace_back(TDeferredAtom(ctx.Pos(), "Hello, world! And best wishes from the YQL Team!"));
+        }
+
+        TString arg;
+        if (!values.front().GetLiteral(arg, ctx)) {
+            return {};
+        }
+        ctx.Info(ctx.Pos()) << arg;
+        return TNodePtr{};
+    }),
+    TableElemExt("WarningMsg", [](CB_SIG) -> TMaybe<TNodePtr> {
+        auto& ctx = query.Context();
+        if (values.size() != 1 || !values[0].GetLiteral()) {
+            query.Error() << "Expected string literal as a single argument for: " << pragma;
+            return {};
+        }
+        ctx.Warning(ctx.Pos(), TIssuesIds::YQL_PRAGMA_WARNING_MSG) << *values[0].GetLiteral();
+        return TNodePtr{};
+    }),
+    TableElemExt("ErrorMsg", [](CB_SIG) -> TMaybe<TNodePtr> {
+        auto& ctx = query.Context();
+        if (values.size() != 1 || !values[0].GetLiteral()) {
+            query.Error() << "Expected string literal as a single argument for: " << pragma;
+            return {};
+        }
+        ctx.Error(ctx.Pos()) << *values[0].GetLiteral();
+        return TNodePtr{};
+    }),
+    TableElemExt("ClassicDivision", [](CB_SIG) -> TMaybe<TNodePtr> {
+        auto& ctx = query.Context();
+        if (values.size() != 1 || !values[0].GetLiteral() || !TryFromString(*values[0].GetLiteral(), ctx.Scoped->PragmaClassicDivision)) {
+            query.Error() << "Expected boolean literal as a single argument for: " << pragma;
+            return {};
+        }
+        return TNodePtr{};
+    }),
+    TableElemExt("CheckedOps", [](CB_SIG) -> TMaybe<TNodePtr> {
+        auto& ctx = query.Context();
+        if (values.size() != 1 || !values[0].GetLiteral() || !TryFromString(*values[0].GetLiteral(), ctx.Scoped->PragmaCheckedOps)) {
+            query.Error() << "Expected boolean literal as a single argument for: " << pragma;
+            return {};
+        }
+        return TNodePtr{};
+    }),
+    TableElemExt("DisableUnordered", [](CB_SIG) -> TMaybe<TNodePtr> {
+        auto& ctx = query.Context();
+        ctx.Warning(ctx.Pos(), TIssuesIds::YQL_DEPRECATED_PRAGMA)
+            << "Use of deprecated DisableUnordered pragma. It will be dropped soon";
+        return TNodePtr{};
+    }),
+    TableElemExt("RotateJoinTree", [](CB_SIG) -> TMaybe<TNodePtr> {
+        auto& ctx = query.Context();
+        if (values.size() != 1 || !values[0].GetLiteral() || !TryFromString(*values[0].GetLiteral(), ctx.RotateJoinTree)) {
+            query.Error() << "Expected boolean literal as a single argument for: " << pragma;
+            return {};
+        }
+        return TNodePtr{};
+    }),
+    TableElemExt("EnableSystemColumns", [](CB_SIG) -> TMaybe<TNodePtr> {
+        auto& ctx = query.Context();
+        if (values.size() != 1 || !values[0].GetLiteral() || !TryFromString(*values[0].GetLiteral(), ctx.EnableSystemColumns)) {
+            query.Error() << "Expected boolean literal as a single argument for: " << pragma;
+            return {};
+        }
+        return TNodePtr{};
+    }),
+    TableElemExt("AnsiOrderByLimitInUnionAll", [](CB_SIG) -> TMaybe<TNodePtr> {
+        return TNodePtr{};
+    }),
+    TableElemExt("DisableAnsiOrderByLimitInUnionAll", [](CB_SIG) -> TMaybe<TNodePtr> {
+        query.Error() << "DisableAnsiOrderByLimitInUnionAll pragma is deprecated and no longer supported";
+        return {};
+    }),
+    TableElemExt("RegexUseRe2", [](CB_SIG) -> TMaybe<TNodePtr> {
+        auto& ctx = query.Context();
+        if (values.size() != 1U || !values.front().GetLiteral() || !TryFromString(*values.front().GetLiteral(), ctx.PragmaRegexUseRe2)) {
+            query.Error() << "Expected 'true' or 'false' for: " << pragma;
+            return {};
+        }
+        return TNodePtr{};
+    }),
+    TableElemExt("PositionalUnionAll", [](CB_SIG) -> TMaybe<TNodePtr> {
+        auto& ctx = query.Context();
+        ctx.PositionalUnionAll = true;
+        // PositionalUnionAll implies OrderedColumns
+        ctx.OrderedColumns = true;
+        return TNodePtr{};
+    }),
+    TableElemExt("PqReadBy", [](CB_SIG) -> TMaybe<TNodePtr> {
+        auto& ctx = query.Context();
+        if (values.size() != 1 || !values[0].GetLiteral()) {
+            query.Error() << "Expected string literal as a single argument for: " << pragma;
+            return {};
+        }
+
+        // special guard to raise error on situation:
+        // use cluster1;
+        // pragma PqReadPqBy="cluster2";
+        const TString* currentClusterLiteral = ctx.Scoped->CurrCluster.GetLiteral();
+        if (currentClusterLiteral && *values[0].GetLiteral() != "dq" && *currentClusterLiteral != *values[0].GetLiteral()) {
+            query.Error() << "Cluster in PqReadPqBy pragma differs from cluster specified in USE statement: " << *values[0].GetLiteral() << " != " << *currentClusterLiteral;
+            return {};
+        }
+
+        ctx.PqReadByRtmrCluster = *values[0].GetLiteral();
+        return TNodePtr{};
+    }),
+    // BEGIN TODO: Convert Scoped fields to PAIRED_TABLE_ELEM macro.
+    TableElemExt("StrictJoinKeyTypes", [](CB_SIG) -> TMaybe<TNodePtr> {
+        auto& ctx = query.Context();
+        ctx.Scoped->StrictJoinKeyTypes = true;
+        return TNodePtr{};
+    }),
+    TableElemExt("DisableStrictJoinKeyTypes", [](CB_SIG) -> TMaybe<TNodePtr> {
+        auto& ctx = query.Context();
+        ctx.Scoped->StrictJoinKeyTypes = false;
+        return TNodePtr{};
+    }),
+    TableElemExt("UnicodeLiterals", [](CB_SIG) -> TMaybe<TNodePtr> {
+        auto& ctx = query.Context();
+        ctx.Scoped->UnicodeLiterals = true;
+        return TNodePtr{};
+    }),
+    TableElemExt("DisableUnicodeLiterals", [](CB_SIG) -> TMaybe<TNodePtr> {
+        auto& ctx = query.Context();
+        ctx.Scoped->UnicodeLiterals = false;
+        return TNodePtr{};
+    }),
+    TableElemExt("WarnUntypedStringLiterals", [](CB_SIG) -> TMaybe<TNodePtr> {
+        auto& ctx = query.Context();
+        ctx.Scoped->WarnUntypedStringLiterals = true;
+        return TNodePtr{};
+    }),
+    TableElemExt("DisableWarnUntypedStringLiterals", [](CB_SIG) -> TMaybe<TNodePtr> {
+        auto& ctx = query.Context();
+        ctx.Scoped->WarnUntypedStringLiterals = false;
+        return TNodePtr{};
+    }),
+    // END TODO
+
+    TableElemExt("DataWatermarks", [](CB_SIG) -> TMaybe<TNodePtr> {
+        auto& ctx = query.Context();
+        if (values.size() != 1 || !values[0].GetLiteral() || !(*values[0].GetLiteral() == "enable" || *values[0].GetLiteral() == "disable"))
+        {
+            query.Error() << "Expected `enable|disable' argument for: " << pragma;
+            return {};
+        }
+
+        if (*values[0].GetLiteral() == "enable") {
+            ctx.PragmaDataWatermarks = true;
+        } else if (*values[0].GetLiteral() == "disable") {
+            ctx.PragmaDataWatermarks = false;
+        }
+
+        return TNodePtr{};
+    }),
+    TableElemExt("DisableFlexibleTypes", [](CB_SIG) -> TMaybe<TNodePtr> {
+        auto& ctx = query.Context();
+        ctx.Warning(ctx.Pos(), TIssuesIds::YQL_DEPRECATED_PRAGMA)
+            << "Deprecated pragma DisableFlexibleTypes - it will be removed soon. "
+               "Consider submitting bug report if FlexibleTypes doesn't work for you";
+        ctx.FlexibleTypes = false;
+        return TNodePtr{};
+    }),
+    TableElemExt("FeatureR010", [](CB_SIG) -> TMaybe<TNodePtr> {
+        auto& ctx = query.Context();
+        if (values.size() == 1 && values[0].GetLiteral()) {
+            const auto& value = *values[0].GetLiteral();
+            if ("prototype" == value) {
+                ctx.FeatureR010 = true;
+            } else {
+                return {};
+            }
+        } else {
+            return {};
+        }
+        return TNodePtr{};
+    }),
+    TableElemExt("CostBasedOptimizer", [](CB_SIG) -> TMaybe<TNodePtr> {
+        auto& ctx = query.Context();
+        if (values.size() == 1 && values[0].GetLiteral()) {
+            ctx.CostBasedOptimizer = to_lower(*values[0].GetLiteral());
+        }
+        if (values.size() != 1 || !values[0].GetLiteral() || !(ctx.CostBasedOptimizer == "disable" || ctx.CostBasedOptimizer == "pg" || ctx.CostBasedOptimizer == "native"))
+        {
+            query.Error() << "Expected `disable|pg|native' argument for: " << pragma;
+            return {};
+        }
+        return TNodePtr{};
+    }),
+    TableElemExt("DisableCompactNamedExprs", [](CB_SIG) -> TMaybe<TNodePtr> {
+        auto& ctx = query.Context();
+        ctx.Warning(ctx.Pos(), TIssuesIds::YQL_DEPRECATED_PRAGMA)
+            << "Deprecated pragma DisableCompactNamedExprs - it will be removed soon. "
+               "Consider submitting bug report if CompactNamedExprs doesn't work for you";
+        ctx.CompactNamedExprs = false;
+        return TNodePtr{};
+    }),
+    TableElemExt("Engine", [](CB_SIG) -> TMaybe<TNodePtr> {
+        auto& ctx = query.Context();
+
+        const TString* literal = values.size() == 1
+                                     ? values[0].GetLiteral()
+                                     : nullptr;
+
+        if (!literal || !(*literal == "default" || *literal == "dq" || *literal == "ytflow")) {
+            query.Error() << "Expected `default|dq|ytflow' argument for: " << pragma;
+            return {};
+        }
+
+        if (*literal == "ytflow") {
+            if (ctx.DqEngineForce) {
+                query.Error() << "Expected `disable|auto` argument for DqEngine pragma "
+                              << " with " << pragma << " pragma argument `ytflow`";
+                return {};
+            }
+
+            ctx.DqEngineEnable = false;
+        } else if (*literal == "dq") {
+            ctx.DqEngineEnable = true;
+            ctx.DqEngineForce = true;
+        }
+
+        ctx.Engine = *literal;
+        return TNodePtr{};
+    }),
+
+    // TMaybe<bool> fields.
+    PAIRED_TABLE_ELEM("AnsiInForEmptyOrNullableItemsCollections", AnsiInForEmptyOrNullableItemsCollections),
+    PAIRED_TABLE_ELEM("AnsiRankForNullableKeys", AnsiRankForNullableKeys),
+    PAIRED_TABLE_ELEM("JsonQueryReturnsJsonDocument", JsonQueryReturnsJsonDocument),
+    PAIRED_TABLE_ELEM("EmitAggApply", EmitAggApply),
+    PAIRED_TABLE_ELEM("CompactGroupBy", CompactGroupBy),
+
+    // bool fields.
+    TABLE_ELEM("RefSelect", PragmaRefSelect, true),
+    TABLE_ELEM("SampleSelect", PragmaSampleSelect, true),
+    TABLE_ELEM("AllowDotInAlias", PragmaAllowDotInAlias, true),
+    TABLE_ELEM("DirectRead", PragmaDirectRead, true),
+    TABLE_ELEM("AutoCommit", PragmaAutoCommit, true),
+    TABLE_ELEM("UseTablePrefixForEach", PragmaUseTablePrefixForEach, true),
+    PAIRED_TABLE_ELEM("SimpleColumns", SimpleColumns),
+    PAIRED_TABLE_ELEM("DebugPositions", DebugPositions),
+    PAIRED_TABLE_ELEM("CoalesceJoinKeysOnQualifiedAll", CoalesceJoinKeysOnQualifiedAll),
+    PAIRED_TABLE_ELEM("PullUpFlatMapOverJoin", PragmaPullUpFlatMapOverJoin),
+    PAIRED_TABLE_ELEM("FilterPushdownOverJoinOptionalSide", FilterPushdownOverJoinOptionalSide),
+    TABLE_ELEM("AllowUnnamedColumns", WarnUnnamedColumns, false),
+    TABLE_ELEM("WarnUnnamedColumns", WarnUnnamedColumns, true),
+    TABLE_ELEM("DiscoveryMode", DiscoveryMode, true),
+    // TODO DqEngine/blockengine
+    PAIRED_TABLE_ELEM("AnsiOptionalAs", AnsiOptionalAs),
+    PAIRED_TABLE_ELEM("WarnOnAnsiAliasShadowing", WarnOnAnsiAliasShadowing),
+    PAIRED_TABLE_ELEM("OrderedColumns", OrderedColumns),
+    PAIRED_TABLE_ELEM("DeriveColumnOrder", DeriveColumnOrder),
+    TABLE_ELEM("BogousStarInGroupByOverJoin", BogousStarInGroupByOverJoin, true),
+    PAIRED_TABLE_ELEM("UnorderedSubqueries", UnorderedSubqueries),
+    TABLE_ELEM("FlexibleTypes", FlexibleTypes, true),
+    PAIRED_TABLE_ELEM("AnsiCurrentRow", AnsiCurrentRow),
+    PAIRED_TABLE_ELEM("UseBlocks", UseBlocks),
+    PAIRED_TABLE_ELEM("EmitTableSource", EmitTableSource),
+    PAIRED_TABLE_ELEM("AnsiLike", AnsiLike),
+    PAIRED_TABLE_ELEM("UnorderedResult", UnorderedResult),
+    TABLE_ELEM("CompactNamedExprs", CompactNamedExprs, true),
+    PAIRED_TABLE_ELEM("ValidateUnusedExprs", ValidateUnusedExprs),
+    PAIRED_TABLE_ELEM("AnsiImplicitCrossJoin", AnsiImplicitCrossJoin),
+    PAIRED_TABLE_ELEM("DistinctOverWindow", DistinctOverWindow),
+    PAIRED_TABLE_ELEM("SeqMode", SeqMode),
+    PAIRED_TABLE_ELEM("EmitUnionMerge", EmitUnionMerge),
+    PAIRED_TABLE_ELEM("DistinctOverKeys", DistinctOverKeys),
+    PAIRED_TABLE_ELEM("GroupByExprAfterWhere", GroupByExprAfterWhere),
+    PAIRED_TABLE_ELEM("FailOnGroupByExprOverride", FailOnGroupByExprOverride),
+    PAIRED_TABLE_ELEM("OptimizeSimpleILIKE", OptimizeSimpleIlike),
+};
+
+#undef PAIRED_TABLE_ELEM
+#undef TABLE_ELEM
+#undef TableElemExt
+
+#undef CB_SIG
+} // namespace
+
 /// @see EnumeratePragmas too
-TNodePtr TSqlQuery::PragmaStatement(const TRule_pragma_stmt& stmt, bool& success) {
-    success = false;
+TMaybe<TNodePtr> TSqlQuery::PragmaStatement(const TRule_pragma_stmt& stmt) {
     const TString& prefix = OptIdPrefixAsStr(stmt.GetRule_opt_id_prefix_or_type2(), *this);
     const TString& lowerPrefix = to_lower(prefix);
     const TString pragma(Id(stmt.GetRule_an_id3(), *this));
@@ -2619,10 +3274,14 @@ TNodePtr TSqlQuery::PragmaStatement(const TRule_pragma_stmt& stmt, bool& success
     TVector<TDeferredAtom> values;
     TVector<const TRule_pragma_value*> pragmaValues;
     bool pragmaValueDefault = false;
+
+    // Gather all pragma values (if any).
     if (stmt.GetBlock4().HasAlt1()) {
+        // pragma=value
         pragmaValues.push_back(&stmt.GetBlock4().GetAlt1().GetRule_pragma_value2());
     }
     else if (stmt.GetBlock4().HasAlt2()) {
+        // pragma(value,value...)
         pragmaValues.push_back(&stmt.GetBlock4().GetAlt2().GetRule_pragma_value2());
         for (auto& additionalValue : stmt.GetBlock4().GetAlt2().GetBlock3()) {
             pragmaValues.push_back(&additionalValue.GetRule_pragma_value2());
@@ -2644,6 +3303,7 @@ TNodePtr TSqlQuery::PragmaStatement(const TRule_pragma_stmt& stmt, bool& success
     const bool withFileAlias = normalizedPragma == "file" || normalizedPragma == "folder" || normalizedPragma == "library" || normalizedPragma == "udf";
     for (auto pragmaValue : pragmaValues) {
         if (pragmaValue->HasAlt_pragma_value3()) {
+            // Quoted string.
             auto value = Token(pragmaValue->GetAlt_pragma_value3().GetToken1());
             auto parsed = StringContentOrIdContent(Ctx_, Ctx_.Pos(), value);
             if (!parsed) {
@@ -2661,9 +3321,11 @@ TNodePtr TSqlQuery::PragmaStatement(const TRule_pragma_stmt& stmt, bool& success
             && pragmaValue->GetAlt_pragma_value2().GetRule_id1().HasAlt_id2()
             && "default" == to_lower(Id(pragmaValue->GetAlt_pragma_value2().GetRule_id1(), *this)))
         {
+            // 'DEFAULT' keyword.
             pragmaValueDefault = true;
         }
         else if (withConfigure && pragmaValue->HasAlt_pragma_value5()) {
+            // Bind parameter.
             TString bindName;
             if (!NamedNodeImpl(pragmaValue->GetAlt_pragma_value5().GetRule_bind_parameter1(), bindName, *this)) {
                 return {};
@@ -2695,450 +3357,16 @@ TNodePtr TSqlQuery::PragmaStatement(const TRule_pragma_stmt& stmt, bool& success
             return{};
         }
 
-        if (normalizedPragma == "refselect") {
-            Ctx_.PragmaRefSelect = true;
-            Ctx_.IncrementMonCounter("sql_pragma", "RefSelect");
-        } else if (normalizedPragma == "sampleselect") {
-            Ctx_.PragmaSampleSelect = true;
-            Ctx_.IncrementMonCounter("sql_pragma", "SampleSelect");
-        } else if (normalizedPragma == "allowdotinalias") {
-            Ctx_.PragmaAllowDotInAlias = true;
-            Ctx_.IncrementMonCounter("sql_pragma", "AllowDotInAlias");
-        } else if (normalizedPragma == "udf") {
-            if ((values.size() != 1 && values.size() != 2) || pragmaValueDefault) {
-                Error() << "Expected file alias as pragma value";
+        if (auto descr = PragmaDescrs.FindPtr(normalizedPragma)) {
+            TMaybe<TNodePtr> result = descr->Cb(values, pragmaValueDefault, pragma, *this);
+
+            if (!result) {
                 Ctx_.IncrementMonCounter("sql_errors", "BadPragmaValue");
-                return {};
-            }
-
-            if (Ctx_.Settings.FileAliasPrefix) {
-                if (values.size() == 1) {
-                    values.emplace_back(TDeferredAtom(Ctx_.Pos(), ""));
-                }
-
-                TString prefix;
-                if (!values[1].GetLiteral(prefix, Ctx_)) {
-                    Error() << "Expected literal UDF module prefix in views";
-                    Ctx_.IncrementMonCounter("sql_errors", "BadPragmaValue");
-                    return {};
-                }
-
-                values[1] = TDeferredAtom(Ctx_.Pos(), Ctx_.Settings.FileAliasPrefix + prefix);
-            }
-
-            Ctx_.IncrementMonCounter("sql_pragma", "udf");
-            success = true;
-            return BuildPragma(Ctx_.Pos(), TString(ConfigProviderName), "ImportUdfs", values, false);
-        } else if (normalizedPragma == "packageversion") {
-            if (values.size() != 2 || pragmaValueDefault) {
-                Error() << "Expected package name and version";
-                Ctx_.IncrementMonCounter("sql_errors", "BadPragmaValue");
-                return {};
-            }
-
-            ui32 version = 0;
-            TString versionString;
-            TString packageName;
-            if (!values[0].GetLiteral(packageName, Ctx_) || !values[1].GetLiteral(versionString, Ctx_)) {
-                Ctx_.IncrementMonCounter("sql_errors", "BadPragmaValue");
-                return {};
-            }
-
-            if (!PackageVersionFromString(versionString, version)) {
-                Error() << "Unable to parse package version, possible values 0, 1, draft, release";
-                Ctx_.IncrementMonCounter("sql_errors", "BadPragmaValue");
-                return {};
-            }
-
-            Ctx_.SetPackageVersion(packageName, version);
-            Ctx_.IncrementMonCounter("sql_pragma", "PackageVersion");
-            success = true;
-            return BuildPragma(Ctx_.Pos(), TString(ConfigProviderName), "SetPackageVersion", TVector<TDeferredAtom>{ values[0], TDeferredAtom(values[1].Build()->GetPos(), ToString(version)) }, false);
-        } else if (normalizedPragma == "file") {
-            if (values.size() < 2U || values.size() > 3U || pragmaValueDefault) {
-                Error() << "Expected file alias, url and optional token name as pragma values";
-                Ctx_.IncrementMonCounter("sql_errors", "BadPragmaValue");
-                return {};
-            }
-
-            Ctx_.IncrementMonCounter("sql_pragma", "file");
-            success = true;
-            return BuildPragma(Ctx_.Pos(), TString(ConfigProviderName), "AddFileByUrl", values, false);
-        } else if (normalizedPragma == "fileoption") {
-            if (values.size() < 3U) {
-                Error() << "Expected file alias, option key and value";
-                Ctx_.IncrementMonCounter("sql_errors", "BadPragmaValue");
-                return {};
-            }
-
-            Ctx_.IncrementMonCounter("sql_pragma", "FileOption");
-            success = true;
-            return BuildPragma(Ctx_.Pos(), TString(ConfigProviderName), "SetFileOption", values, false);
-        } else if (normalizedPragma == "folder") {
-            if (values.size() < 2U || values.size() > 3U || pragmaValueDefault) {
-                Error() << "Expected folder alias, url and optional token name as pragma values";
-                Ctx_.IncrementMonCounter("sql_errors", "BadPragmaValue");
-                return {};
-            }
-            Ctx_.IncrementMonCounter("sql_pragma", "folder");
-            success = true;
-            return BuildPragma(Ctx_.Pos(), TString(ConfigProviderName), "AddFolderByUrl", values, false);
-        } else if (normalizedPragma == "library") {
-            if (values.size() < 1) {
-                Error() << "Expected non-empty file alias";
-                Ctx_.IncrementMonCounter("sql_errors", "BadPragmaValue");
-                return{};
-            }
-            if (values.size() > 3) {
-                Error() << "Expected file alias and optional url and token name as pragma values";
-                Ctx_.IncrementMonCounter("sql_errors", "BadPragmaValue");
-                return{};
-            }
-
-            TString alias;
-            if (!values.front().GetLiteral(alias, Ctx_)) {
-                Ctx_.IncrementMonCounter("sql_errors", "BadPragmaValue");
-                return{};
-            }
-
-            TContext::TLibraryStuff library;
-            std::get<TPosition>(library) = values.front().Build()->GetPos();
-            if (values.size() > 1) {
-                auto& first = std::get<1U>(library);
-                first.emplace();
-                first->second = values[1].Build()->GetPos();
-                if (!values[1].GetLiteral(first->first, Ctx_)) {
-                    Ctx_.IncrementMonCounter("sql_errors", "BadPragmaValue");
-                    return{};
-                }
-
-                TSet<TString> names;
-                SubstParameters(first->first, Nothing(), &names);
-                for (const auto& name : names) {
-                    auto namedNode = GetNamedNode(name);
-                    if (!namedNode) {
-                        return{};
-                    }
-                }
-                if (values.size() > 2) {
-                    auto& second = std::get<2U>(library);
-                    second.emplace();
-                    second->second = values[2].Build()->GetPos();
-                    if (!values[2].GetLiteral(second->first, Ctx_)) {
-                        Ctx_.IncrementMonCounter("sql_errors", "BadPragmaValue");
-                        return{};
-                    }
-                }
-            }
-
-            Ctx_.Libraries[alias] = std::move(library);
-            Ctx_.IncrementMonCounter("sql_pragma", "library");
-        } else if (normalizedPragma == "package") {
-            if (values.size() < 2U || values.size() > 3U) {
-                Error() << "Expected package name, url and optional token name as pragma values";
-                Ctx_.IncrementMonCounter("sql_errors", "BadPragmaValue");
-                return {};
-            }
-
-            TString packageName;
-            if (!values.front().GetLiteral(packageName, Ctx_)) {
-                Ctx_.IncrementMonCounter("sql_errors", "BadPragmaValue");
-                return {};
-            }
-
-            TContext::TPackageStuff package;
-            std::get<TPosition>(package) = values.front().Build()->GetPos();
-
-            auto fillLiteral = [&](auto& literal, size_t index) {
-                if (values.size() <= index) {
-                    return true;
-                }
-
-                constexpr bool optional = std::is_base_of_v<
-                    std::optional<TContext::TLiteralWithPosition>,
-                    std::decay_t<decltype(literal)>
-                >;
-
-                TContext::TLiteralWithPosition* literalPtr;
-
-                if constexpr (optional) {
-                    literal.emplace();
-                    literalPtr = &*literal;
-                } else {
-                    literalPtr = &literal;
-                }
-
-                literalPtr->second = values[index].Build()->GetPos();
-
-                if (!values[index].GetLiteral(literalPtr->first, Ctx_)) {
-                    Ctx_.IncrementMonCounter("sql_errors", "BadPragmaValue");
-                    return false;
-                }
-
-                return true;
-            };
-
-            // fill url
-            auto& urlLiteral = std::get<1U>(package);
-            if (!fillLiteral(urlLiteral, 1U)) {
-                return {};
-            }
-
-            TSet<TString> names;
-            SubstParameters(urlLiteral.first, Nothing(), &names);
-            for (const auto& name : names) {
-                auto namedNode = GetNamedNode(name);
-                if (!namedNode) {
-                    return {};
-                }
-            }
-
-            // fill token
-            if (!fillLiteral(std::get<2U>(package), 2U)) {
-                return {};
-            }
-
-            Ctx_.Packages[packageName] = std::move(package);
-            Ctx_.IncrementMonCounter("sql_pragma", "package");
-        } else if (normalizedPragma == "overridelibrary") {
-            if (values.size() != 1U) {
-                Error() << "Expected override library alias as pragma value";
-                Ctx_.IncrementMonCounter("sql_errors", "BadPragmaValue");
-                return {};
-            }
-
-            TString alias;
-            if (!values.front().GetLiteral(alias, Ctx_)) {
-                Ctx_.IncrementMonCounter("sql_errors", "BadPragmaValue");
-                return {};
-            }
-
-            TContext::TOverrideLibraryStuff overrideLibrary;
-            std::get<TPosition>(overrideLibrary) = values.front().Build()->GetPos();
-
-            Ctx_.OverrideLibraries[alias] = std::move(overrideLibrary);
-            Ctx_.IncrementMonCounter("sql_pragma", "overridelibrary");
-        } else if (normalizedPragma == "directread") {
-            Ctx_.PragmaDirectRead = true;
-            Ctx_.IncrementMonCounter("sql_pragma", "DirectRead");
-        } else if (normalizedPragma == "equijoin") {
-            Ctx_.IncrementMonCounter("sql_pragma", "EquiJoin");
-        } else if (normalizedPragma == "autocommit") {
-            Ctx_.PragmaAutoCommit = true;
-            Ctx_.IncrementMonCounter("sql_pragma", "AutoCommit");
-        } else if (normalizedPragma == "usetableprefixforeach") {
-            Ctx_.PragmaUseTablePrefixForEach = true;
-            Ctx_.IncrementMonCounter("sql_pragma", "UseTablePrefixForEach");
-        } else if (normalizedPragma == "tablepathprefix") {
-            TString value;
-            TMaybe<TString> arg;
-
-            if (values.size() == 1 || values.size() == 2) {
-                if (!values.front().GetLiteral(value, Ctx_)) {
-                    Ctx_.IncrementMonCounter("sql_errors", "BadPragmaValue");
-                    return {};
-                }
-
-                if (values.size() == 2) {
-                    arg = value;
-                    if (!values.back().GetLiteral(value, Ctx_)) {
-                        Ctx_.IncrementMonCounter("sql_errors", "BadPragmaValue");
-                        return {};
-                    }
-                }
-
-                if (!Ctx_.SetPathPrefix(value, arg)) {
-                    return {};
-                }
             } else {
-                Error() << "Expected path prefix or tuple of (Provider, PathPrefix) or"
-                        << " (Cluster, PathPrefix) as pragma value";
-                Ctx_.IncrementMonCounter("sql_errors", "BadPragmaValue");
-                return {};
+                Ctx_.IncrementMonCounter("sql_pragma", descr->CanonicalName);
             }
 
-            Ctx_.IncrementMonCounter("sql_pragma", "PathPrefix");
-        } else if (normalizedPragma == "groupbylimit") {
-            if (values.size() != 1 || !values[0].GetLiteral() || !TryFromString(*values[0].GetLiteral(), Ctx_.PragmaGroupByLimit)) {
-                Error() << "Expected unsigned integer literal as a single argument for: " << pragma;
-                Ctx_.IncrementMonCounter("sql_errors", "BadPragmaValue");
-                return {};
-            }
-            Ctx_.IncrementMonCounter("sql_pragma", "GroupByLimit");
-        } else if (normalizedPragma == "groupbycubelimit") {
-            if (values.size() != 1 || !values[0].GetLiteral() || !TryFromString(*values[0].GetLiteral(), Ctx_.PragmaGroupByCubeLimit)) {
-                Error() << "Expected unsigned integer literal as a single argument for: " << pragma;
-                Ctx_.IncrementMonCounter("sql_errors", "BadPragmaValue");
-                return {};
-            }
-            Ctx_.IncrementMonCounter("sql_pragma", "GroupByCubeLimit");
-        } else if (normalizedPragma == "simplecolumns") {
-            Ctx_.SimpleColumns = true;
-            Ctx_.IncrementMonCounter("sql_pragma", "SimpleColumns");
-        } else if (normalizedPragma == "disablesimplecolumns") {
-            Ctx_.SimpleColumns = false;
-            Ctx_.IncrementMonCounter("sql_pragma", "DisableSimpleColumns");
-        } else if (normalizedPragma == "coalescejoinkeysonqualifiedall") {
-            Ctx_.CoalesceJoinKeysOnQualifiedAll = true;
-            Ctx_.IncrementMonCounter("sql_pragma", "CoalesceJoinKeysOnQualifiedAll");
-        } else if (normalizedPragma == "disablecoalescejoinkeysonqualifiedall") {
-            Ctx_.CoalesceJoinKeysOnQualifiedAll = false;
-            Ctx_.IncrementMonCounter("sql_pragma", "DisableCoalesceJoinKeysOnQualifiedAll");
-        } else if (normalizedPragma == "resultrowslimit") {
-            if (values.size() != 1 || !values[0].GetLiteral() || !TryFromString(*values[0].GetLiteral(), Ctx_.ResultRowsLimit)) {
-                Error() << "Expected unsigned integer literal as a single argument for: " << pragma;
-                Ctx_.IncrementMonCounter("sql_errors", "BadPragmaValue");
-                return {};
-            }
-
-            Ctx_.IncrementMonCounter("sql_pragma", "ResultRowsLimit");
-        } else if (normalizedPragma == "resultsizelimit") {
-            if (values.size() != 1 || !values[0].GetLiteral() || !TryFromString(*values[0].GetLiteral(), Ctx_.ResultSizeLimit)) {
-                Error() << "Expected unsigned integer literal as a single argument for: " << pragma;
-                Ctx_.IncrementMonCounter("sql_errors", "BadPragmaValue");
-                return {};
-            }
-
-            Ctx_.IncrementMonCounter("sql_pragma", "ResultSizeLimit");
-        } else if (normalizedPragma == "runtimeloglevel") {
-            if (values.size() != 1 || !values[0].GetLiteral()) {
-                Error() << "Expected LogLevel as a single argument for: " << pragma;
-                Ctx_.IncrementMonCounter("sql_errors", "BadPragmaValue");
-                return {};
-            }
-
-            auto value = to_title(*values[0].GetLiteral());
-            if (!NUdf::TryLevelFromString(value)) {
-                Error() << "Expected LogLevel as a single argument for: " << pragma;
-                Ctx_.IncrementMonCounter("sql_errors", "BadPragmaValue");
-                return {};
-            }
-
-            Ctx_.RuntimeLogLevel = value;
-            Ctx_.IncrementMonCounter("sql_pragma", "RuntimeLogLevel");
-        } else if (normalizedPragma == "warning") {
-            if (values.size() != 2U || values.front().Empty() || values.back().Empty()) {
-                Error() << "Expected arguments <action>, <issueId> for: " << pragma;
-                Ctx_.IncrementMonCounter("sql_errors", "BadPragmaValue");
-                return {};
-            }
-
-            TString action;
-            TString codePattern;
-            if (!values[0].GetLiteral(action, Ctx_) || !values[1].GetLiteral(codePattern, Ctx_)) {
-                Ctx_.IncrementMonCounter("sql_errors", "BadPragmaValue");
-                return {};
-            }
-
-            TWarningRule rule;
-            TString parseError;
-            auto parseResult = TWarningRule::ParseFrom(codePattern, action, rule, parseError);
-            switch (parseResult) {
-                case TWarningRule::EParseResult::PARSE_OK:
-                    break;
-                case TWarningRule::EParseResult::PARSE_PATTERN_FAIL:
-                case TWarningRule::EParseResult::PARSE_ACTION_FAIL:
-                    Ctx_.Error() << parseError;
-                    return {};
-                default:
-                    Y_ENSURE(false, "Unknown parse result");
-            }
-
-            Ctx_.WarningPolicy.AddRule(rule);
-            if (rule.GetPattern() == "*" && rule.GetAction() == EWarningAction::ERROR) {
-                // Keep 'unused symbol' warning as warning unless explicitly set to error
-                Ctx_.SetWarningPolicyFor(TIssuesIds::YQL_UNUSED_SYMBOL, EWarningAction::DEFAULT);
-            }
-
-            Ctx_.IncrementMonCounter("sql_pragma", "warning");
-        } else if (normalizedPragma == "greetings") {
-            if (values.size() > 1) {
-                Error() << "Multiple arguments are not expected for " << pragma;
-                Ctx_.IncrementMonCounter("sql_errors", "BadPragmaValue");
-                return {};
-            }
-
-            if (values.empty()) {
-                values.emplace_back(TDeferredAtom(Ctx_.Pos(), "Hello, world! And best wishes from the YQL Team!"));
-            }
-
-            TString arg;
-            if (!values.front().GetLiteral(arg, Ctx_)) {
-                Ctx_.IncrementMonCounter("sql_errors", "BadPragmaValue");
-                return {};
-            }
-            Ctx_.Info(Ctx_.Pos()) << arg;
-        } else if (normalizedPragma == "warningmsg") {
-            if (values.size() != 1 || !values[0].GetLiteral()) {
-                Error() << "Expected string literal as a single argument for: " << pragma;
-                Ctx_.IncrementMonCounter("sql_errors", "BadPragmaValue");
-                return {};
-            }
-            Ctx_.Warning(Ctx_.Pos(), TIssuesIds::YQL_PRAGMA_WARNING_MSG) << *values[0].GetLiteral();
-        } else if (normalizedPragma == "errormsg") {
-            if (values.size() != 1 || !values[0].GetLiteral()) {
-                Error() << "Expected string literal as a single argument for: " << pragma;
-                Ctx_.IncrementMonCounter("sql_errors", "BadPragmaValue");
-                return {};
-            }
-            Ctx_.Error(Ctx_.Pos()) << *values[0].GetLiteral();
-        } else if (normalizedPragma == "classicdivision") {
-            if (values.size() != 1 || !values[0].GetLiteral() || !TryFromString(*values[0].GetLiteral(), Ctx_.Scoped->PragmaClassicDivision)) {
-                Error() << "Expected boolean literal as a single argument for: " << pragma;
-                Ctx_.IncrementMonCounter("sql_errors", "BadPragmaValue");
-                return {};
-            }
-            Ctx_.IncrementMonCounter("sql_pragma", "ClassicDivision");
-        } else if (normalizedPragma == "checkedops") {
-            if (values.size() != 1 || !values[0].GetLiteral() || !TryFromString(*values[0].GetLiteral(), Ctx_.Scoped->PragmaCheckedOps)) {
-                Error() << "Expected boolean literal as a single argument for: " << pragma;
-                Ctx_.IncrementMonCounter("sql_errors", "BadPragmaValue");
-                return {};
-            }
-            Ctx_.IncrementMonCounter("sql_pragma", "CheckedOps");
-        } else if (normalizedPragma == "disableunordered") {
-            Ctx_.Warning(Ctx_.Pos(), TIssuesIds::YQL_DEPRECATED_PRAGMA)
-                << "Use of deprecated DisableUnordered pragma. It will be dropped soon";
-        } else if (normalizedPragma == "pullupflatmapoverjoin") {
-            Ctx_.PragmaPullUpFlatMapOverJoin = true;
-            Ctx_.IncrementMonCounter("sql_pragma", "PullUpFlatMapOverJoin");
-        } else if (normalizedPragma == "disablepullupflatmapoverjoin") {
-            Ctx_.PragmaPullUpFlatMapOverJoin = false;
-            Ctx_.IncrementMonCounter("sql_pragma", "DisablePullUpFlatMapOverJoin");
-        } else if (normalizedPragma == "filterpushdownoverjoinoptionalside") {
-            Ctx_.FilterPushdownOverJoinOptionalSide = true;
-            Ctx_.IncrementMonCounter("sql_pragma", "FilterPushdownOverJoinOptionalSide");
-        } else if (normalizedPragma == "disablefilterpushdownoverjoinoptionalside") {
-            Ctx_.FilterPushdownOverJoinOptionalSide = false;
-            Ctx_.IncrementMonCounter("sql_pragma", "DisableFilterPushdownOverJoinOptionalSide");
-        } else if (normalizedPragma == "rotatejointree") {
-            if (values.size() != 1 || !values[0].GetLiteral() || !TryFromString(*values[0].GetLiteral(), Ctx_.RotateJoinTree)) {
-                Error() << "Expected boolean literal as a single argument for: " << pragma;
-                Ctx_.IncrementMonCounter("sql_errors", "BadPragmaValue");
-                return {};
-            }
-        } else if (normalizedPragma == "allowunnamedcolumns") {
-            Ctx_.WarnUnnamedColumns = false;
-            Ctx_.IncrementMonCounter("sql_pragma", "AllowUnnamedColumns");
-        } else if (normalizedPragma == "warnunnamedcolumns") {
-            Ctx_.WarnUnnamedColumns = true;
-            Ctx_.IncrementMonCounter("sql_pragma", "WarnUnnamedColumns");
-        } else if (normalizedPragma == "discoverymode") {
-            Ctx_.DiscoveryMode = true;
-            Ctx_.IncrementMonCounter("sql_pragma", "DiscoveryMode");
-        } else if (normalizedPragma == "enablesystemcolumns") {
-            if (values.size() != 1 || !values[0].GetLiteral() || !TryFromString(*values[0].GetLiteral(), Ctx_.EnableSystemColumns)) {
-                Error() << "Expected boolean literal as a single argument for: " << pragma;
-                Ctx_.IncrementMonCounter("sql_errors", "BadPragmaValue");
-                return {};
-            }
-            Ctx_.IncrementMonCounter("sql_pragma", "EnableSystemColumns");
-        } else if (normalizedPragma == "ansiinforemptyornullableitemscollections") {
-            Ctx_.AnsiInForEmptyOrNullableItemsCollections = true;
-            Ctx_.IncrementMonCounter("sql_pragma", "AnsiInForEmptyOrNullableItemsCollections");
-        } else if (normalizedPragma == "disableansiinforemptyornullableitemscollections") {
-            Ctx_.AnsiInForEmptyOrNullableItemsCollections = false;
-            Ctx_.IncrementMonCounter("sql_pragma", "DisableAnsiInForEmptyOrNullableItemsCollections");
+            return result;
         } else if (normalizedPragma == "dqengine" || normalizedPragma == "blockengine") {
             Ctx_.IncrementMonCounter("sql_pragma", "DqEngine");
             if (values.size() != 1 || !values[0].GetLiteral()
@@ -3177,292 +3405,6 @@ TNodePtr TSqlQuery::PragmaStatement(const TRule_pragma_stmt& stmt, bool& success
                     force = true;
                 }
             }
-        } else if (normalizedPragma == "ansirankfornullablekeys") {
-            Ctx_.AnsiRankForNullableKeys = true;
-            Ctx_.IncrementMonCounter("sql_pragma", "AnsiRankForNullableKeys");
-        } else if (normalizedPragma == "disableansirankfornullablekeys") {
-            Ctx_.AnsiRankForNullableKeys = false;
-            Ctx_.IncrementMonCounter("sql_pragma", "DisableAnsiRankForNullableKeys");
-        } else if (normalizedPragma == "ansiorderbylimitinunionall") {
-            Ctx_.IncrementMonCounter("sql_pragma", "AnsiOrderByLimitInUnionAll");
-        } else if (normalizedPragma == "disableansiorderbylimitinunionall") {
-            Error() << "DisableAnsiOrderByLimitInUnionAll pragma is deprecated and no longer supported";
-            Ctx_.IncrementMonCounter("sql_errors", "DeprecatedPragma");
-            return {};
-        } else if (normalizedPragma == "ansioptionalas") {
-            Ctx_.AnsiOptionalAs = true;
-            Ctx_.IncrementMonCounter("sql_pragma", "AnsiOptionalAs");
-        } else if (normalizedPragma == "disableansioptionalas") {
-            Ctx_.AnsiOptionalAs = false;
-            Ctx_.IncrementMonCounter("sql_pragma", "DisableAnsiOptionalAs");
-        } else if (normalizedPragma == "warnonansialiasshadowing") {
-            Ctx_.WarnOnAnsiAliasShadowing = true;
-            Ctx_.IncrementMonCounter("sql_pragma", "WarnOnAnsiAliasShadowing");
-        } else if (normalizedPragma == "disablewarnonansialiasshadowing") {
-            Ctx_.WarnOnAnsiAliasShadowing = false;
-            Ctx_.IncrementMonCounter("sql_pragma", "DisableWarnOnAnsiAliasShadowing");
-        } else if (normalizedPragma == "regexusere2") {
-            if (values.size() != 1U || !values.front().GetLiteral() || !TryFromString(*values.front().GetLiteral(), Ctx_.PragmaRegexUseRe2)) {
-                Error() << "Expected 'true' or 'false' for: " << pragma;
-                Ctx_.IncrementMonCounter("sql_errors", "BadPragmaValue");
-                return {};
-            }
-            Ctx_.IncrementMonCounter("sql_pragma", "RegexUseRe2");
-        } else if (normalizedPragma == "jsonqueryreturnsjsondocument") {
-            Ctx_.JsonQueryReturnsJsonDocument = true;
-            Ctx_.IncrementMonCounter("sql_pragma", "JsonQueryReturnsJsonDocument");
-        } else if (normalizedPragma == "disablejsonqueryreturnsjsondocument") {
-            Ctx_.JsonQueryReturnsJsonDocument = false;
-            Ctx_.IncrementMonCounter("sql_pragma", "DisableJsonQueryReturnsJsonDocument");
-        } else if (normalizedPragma == "orderedcolumns") {
-            Ctx_.OrderedColumns = true;
-            Ctx_.IncrementMonCounter("sql_pragma", "OrderedColumns");
-        } else if (normalizedPragma == "derivecolumnorder") {
-            Ctx_.DeriveColumnOrder = true;
-            Ctx_.IncrementMonCounter("sql_pragma", "DeriveColumnOrder");
-        } else if (normalizedPragma == "disablederivecolumnorder") {
-            Ctx_.DeriveColumnOrder = false;
-            Ctx_.IncrementMonCounter("sql_pragma", "DisableDeriveColumnOrder");
-        } else if (normalizedPragma == "disableorderedcolumns") {
-            Ctx_.OrderedColumns = false;
-            Ctx_.IncrementMonCounter("sql_pragma", "DisableOrderedColumns");
-        } else if (normalizedPragma == "positionalunionall") {
-            Ctx_.PositionalUnionAll = true;
-            // PositionalUnionAll implies OrderedColumns
-            Ctx_.OrderedColumns = true;
-            Ctx_.IncrementMonCounter("sql_pragma", "PositionalUnionAll");
-        } else if (normalizedPragma == "pqreadby") {
-            if (values.size() != 1 || !values[0].GetLiteral()) {
-                Error() << "Expected string literal as a single argument for: " << pragma;
-                Ctx_.IncrementMonCounter("sql_errors", "BadPragmaValue");
-                return {};
-            }
-
-            // special guard to raise error on situation:
-            // use cluster1;
-            // pragma PqReadPqBy="cluster2";
-            const TString* currentClusterLiteral = Ctx_.Scoped->CurrCluster.GetLiteral();
-            if (currentClusterLiteral && *values[0].GetLiteral() != "dq" && *currentClusterLiteral != *values[0].GetLiteral()) {
-                Error() << "Cluster in PqReadPqBy pragma differs from cluster specified in USE statement: " << *values[0].GetLiteral() << " != " << *currentClusterLiteral;
-                Ctx_.IncrementMonCounter("sql_errors", "BadPragmaValue");
-                return {};
-            }
-
-            Ctx_.PqReadByRtmrCluster = *values[0].GetLiteral();
-            Ctx_.IncrementMonCounter("sql_pragma", "PqReadBy");
-        } else if (normalizedPragma == "bogousstaringroupbyoverjoin") {
-            Ctx_.BogousStarInGroupByOverJoin = true;
-            Ctx_.IncrementMonCounter("sql_pragma", "BogousStarInGroupByOverJoin");
-        } else if (normalizedPragma == "strictjoinkeytypes") {
-            Ctx_.Scoped->StrictJoinKeyTypes = true;
-            Ctx_.IncrementMonCounter("sql_pragma", "StrictJoinKeyTypes");
-        } else if (normalizedPragma == "disablestrictjoinkeytypes") {
-            Ctx_.Scoped->StrictJoinKeyTypes = false;
-            Ctx_.IncrementMonCounter("sql_pragma", "DisableStrictJoinKeyTypes");
-        } else if (normalizedPragma == "unicodeliterals") {
-            Ctx_.Scoped->UnicodeLiterals = true;
-            Ctx_.IncrementMonCounter("sql_pragma", "UnicodeLiterals");
-        } else if (normalizedPragma == "disableunicodeliterals") {
-            Ctx_.Scoped->UnicodeLiterals = false;
-            Ctx_.IncrementMonCounter("sql_pragma", "DisableUnicodeLiterals");
-        } else if (normalizedPragma == "warnuntypedstringliterals") {
-            Ctx_.Scoped->WarnUntypedStringLiterals = true;
-            Ctx_.IncrementMonCounter("sql_pragma", "WarnUntypedStringLiterals");
-        } else if (normalizedPragma == "disablewarnuntypedstringliterals") {
-            Ctx_.Scoped->WarnUntypedStringLiterals = false;
-            Ctx_.IncrementMonCounter("sql_pragma", "DisableWarnUntypedStringLiterals");
-        } else if (normalizedPragma == "unorderedsubqueries") {
-            Ctx_.UnorderedSubqueries = true;
-            Ctx_.IncrementMonCounter("sql_pragma", "UnorderedSubqueries");
-        } else if (normalizedPragma == "disableunorderedsubqueries") {
-            Ctx_.UnorderedSubqueries = false;
-            Ctx_.IncrementMonCounter("sql_pragma", "DisableUnorderedSubqueries");
-        } else if (normalizedPragma == "datawatermarks") {
-            if (values.size() != 1 || !values[0].GetLiteral()
-                || ! (*values[0].GetLiteral() == "enable" || *values[0].GetLiteral() == "disable"))
-            {
-                Error() << "Expected `enable|disable' argument for: " << pragma;
-                Ctx_.IncrementMonCounter("sql_errors", "BadPragmaValue");
-                return {};
-            }
-
-            if (*values[0].GetLiteral() == "enable") {
-                Ctx_.PragmaDataWatermarks = true;
-            } else if (*values[0].GetLiteral() == "disable") {
-                Ctx_.PragmaDataWatermarks = false;
-            }
-
-            Ctx_.IncrementMonCounter("sql_pragma", "DataWatermarks");
-        } else if (normalizedPragma == "flexibletypes") {
-            Ctx_.FlexibleTypes = true;
-            Ctx_.IncrementMonCounter("sql_pragma", "FlexibleTypes");
-        } else if (normalizedPragma == "disableflexibletypes") {
-            Ctx_.Warning(Ctx_.Pos(), TIssuesIds::YQL_DEPRECATED_PRAGMA)
-                << "Deprecated pragma DisableFlexibleTypes - it will be removed soon. "
-                   "Consider submitting bug report if FlexibleTypes doesn't work for you";
-            Ctx_.FlexibleTypes = false;
-            Ctx_.IncrementMonCounter("sql_pragma", "DisableFlexibleTypes");
-        } else if (normalizedPragma == "ansicurrentrow") {
-            Ctx_.AnsiCurrentRow = true;
-            Ctx_.IncrementMonCounter("sql_pragma", "AnsiCurrentRow");
-        } else if (normalizedPragma == "disableansicurrentrow") {
-            Ctx_.AnsiCurrentRow = false;
-            Ctx_.IncrementMonCounter("sql_pragma", "DisableAnsiCurrentRow");
-        } else if (normalizedPragma == "emitaggapply") {
-            Ctx_.EmitAggApply = true;
-            Ctx_.IncrementMonCounter("sql_pragma", "EmitAggApply");
-        } else if (normalizedPragma == "disableemitaggapply") {
-            Ctx_.EmitAggApply = false;
-            Ctx_.IncrementMonCounter("sql_pragma", "DisableEmitAggApply");
-        } else if (normalizedPragma == "useblocks") {
-            Ctx_.UseBlocks = true;
-            Ctx_.IncrementMonCounter("sql_pragma", "UseBlocks");
-        } else if (normalizedPragma == "disableuseblocks") {
-            Ctx_.UseBlocks = false;
-            Ctx_.IncrementMonCounter("sql_pragma", "DisableUseBlocks");
-        } else if (normalizedPragma == "emittablesource") {
-            Ctx_.EmitTableSource = true;
-            Ctx_.IncrementMonCounter("sql_pragma", "EmitTableSource");
-        } else if (normalizedPragma == "disableemittablesource") {
-            Ctx_.EmitTableSource = false;
-            Ctx_.IncrementMonCounter("sql_pragma", "DisableEmitTableSource");
-        } else if (normalizedPragma == "ansilike") {
-            Ctx_.AnsiLike = true;
-            Ctx_.IncrementMonCounter("sql_pragma", "AnsiLike");
-        } else if (normalizedPragma == "disableansilike") {
-            Ctx_.AnsiLike = false;
-            Ctx_.IncrementMonCounter("sql_pragma", "DisableAnsiLike");
-        } else if (normalizedPragma == "unorderedresult") {
-            Ctx_.UnorderedResult = true;
-            Ctx_.IncrementMonCounter("sql_pragma", "UnorderedResult");
-        } else if (normalizedPragma == "disableunorderedresult") {
-            Ctx_.UnorderedResult = false;
-            Ctx_.IncrementMonCounter("sql_pragma", "DisableUnorderedResult");
-        } else if (normalizedPragma == "featurer010") {
-            if (values.size() == 1 && values[0].GetLiteral()) {
-                const auto& value = *values[0].GetLiteral();
-                if ("prototype" == value)
-                    Ctx_.FeatureR010 = true;
-                else {
-                    Ctx_.IncrementMonCounter("sql_errors", "BadPragmaValue");
-                    return {};
-                }
-            }
-            else {
-                Ctx_.IncrementMonCounter("sql_errors", "BadPragmaValue");
-                return {};
-            }
-            Ctx_.IncrementMonCounter("sql_pragma", "FeatureR010");
-        } else if (normalizedPragma == "compactgroupby") {
-            Ctx_.CompactGroupBy = true;
-            Ctx_.IncrementMonCounter("sql_pragma", "CompactGroupBy");
-        } else if (normalizedPragma == "disablecompactgroupby") {
-            Ctx_.CompactGroupBy = false;
-            Ctx_.IncrementMonCounter("sql_pragma", "DisableCompactGroupBy");
-        } else if (normalizedPragma == "costbasedoptimizer") {
-            Ctx_.IncrementMonCounter("sql_pragma", "CostBasedOptimizer");
-            if (values.size() == 1 && values[0].GetLiteral()) {
-                Ctx_.CostBasedOptimizer = to_lower(*values[0].GetLiteral());
-            }
-            if (values.size() != 1 || !values[0].GetLiteral()
-                || ! (Ctx_.CostBasedOptimizer == "disable" || Ctx_.CostBasedOptimizer == "pg" || Ctx_.CostBasedOptimizer == "native"))
-            {
-                Error() << "Expected `disable|pg|native' argument for: " << pragma;
-                Ctx_.IncrementMonCounter("sql_errors", "BadPragmaValue");
-                return {};
-            }
-        } else if (normalizedPragma == "compactnamedexprs") {
-            Ctx_.CompactNamedExprs = true;
-            Ctx_.IncrementMonCounter("sql_pragma", "CompactNamedExprs");
-        } else if (normalizedPragma == "disablecompactnamedexprs") {
-            Ctx_.Warning(Ctx_.Pos(), TIssuesIds::YQL_DEPRECATED_PRAGMA)
-                << "Deprecated pragma DisableCompactNamedExprs - it will be removed soon. "
-                   "Consider submitting bug report if CompactNamedExprs doesn't work for you";
-            Ctx_.CompactNamedExprs = false;
-            Ctx_.IncrementMonCounter("sql_pragma", "DisableCompactNamedExprs");
-        } else if (normalizedPragma == "validateunusedexprs") {
-            Ctx_.ValidateUnusedExprs = true;
-            Ctx_.IncrementMonCounter("sql_pragma", "ValidateUnusedExprs");
-        } else if (normalizedPragma == "disablevalidateunusedexprs") {
-            Ctx_.ValidateUnusedExprs = false;
-            Ctx_.IncrementMonCounter("sql_pragma", "DisableValidateUnusedExprs");
-        } else if (normalizedPragma == "ansiimplicitcrossjoin") {
-            Ctx_.AnsiImplicitCrossJoin = true;
-            Ctx_.IncrementMonCounter("sql_pragma", "AnsiImplicitCrossJoin");
-        } else if (normalizedPragma == "disableansiimplicitcrossjoin") {
-            Ctx_.AnsiImplicitCrossJoin = false;
-            Ctx_.IncrementMonCounter("sql_pragma", "DisableAnsiImplicitCrossJoin");
-        } else if (normalizedPragma == "distinctoverwindow") {
-            Ctx_.DistinctOverWindow = true;
-            Ctx_.IncrementMonCounter("sql_pragma", "DistinctOverWindow");
-        } else if (normalizedPragma == "disabledistinctoverwindow") {
-            Ctx_.DistinctOverWindow = false;
-            Ctx_.IncrementMonCounter("sql_pragma", "DisableDistinctOverWindow");
-        } else if (normalizedPragma == "seqmode") {
-            Ctx_.SeqMode = true;
-            Ctx_.IncrementMonCounter("sql_pragma", "SeqMode");
-        } else if (normalizedPragma == "disableseqmode") {
-            Ctx_.SeqMode = false;
-            Ctx_.IncrementMonCounter("sql_pragma", "DisableSeqMode");
-        } else if (normalizedPragma == "emitunionmerge") {
-            Ctx_.EmitUnionMerge = true;
-            Ctx_.IncrementMonCounter("sql_pragma", "EmitUnionMerge");
-        } else if (normalizedPragma == "disableemitunionmerge") {
-            Ctx_.EmitUnionMerge = false;
-            Ctx_.IncrementMonCounter("sql_pragma", "DisableEmitUnionMerge");
-        } else if (normalizedPragma == "distinctoverkeys") {
-            Ctx_.DistinctOverKeys = true;
-            Ctx_.IncrementMonCounter("sql_pragma", "DistinctOverKeys");
-        } else if (normalizedPragma == "disabledistinctoverkeys") {
-            Ctx_.DistinctOverKeys = false;
-            Ctx_.IncrementMonCounter("sql_pragma", "DisableDistinctOverKeys");
-        } else if (normalizedPragma == "groupbyexprafterwhere") {
-            Ctx_.GroupByExprAfterWhere = true;
-            Ctx_.IncrementMonCounter("sql_pragma", "GroupByExprAfterWhere");
-        } else if (normalizedPragma == "disablegroupbyexprafterwhere") {
-            Ctx_.GroupByExprAfterWhere = false;
-            Ctx_.IncrementMonCounter("sql_pragma", "DisableGroupByExprAfterWhere");
-        } else if (normalizedPragma == "failongroupbyexproverride") {
-            Ctx_.FailOnGroupByExprOverride = true;
-            Ctx_.IncrementMonCounter("sql_pragma", "FailOnGroupByExprOverride");
-        } else if (normalizedPragma == "disablefailongroupbyexproverride") {
-            Ctx_.FailOnGroupByExprOverride = false;
-            Ctx_.IncrementMonCounter("sql_pragma", "DisableFailOnGroupByExprOverride");
-        } else if (normalizedPragma == "engine") {
-            Ctx_.IncrementMonCounter("sql_pragma", "Engine");
-
-            const TString* literal = values.size() == 1
-                ? values[0].GetLiteral()
-                : nullptr;
-
-            if (!literal || ! (*literal == "default" || *literal == "dq" || *literal == "ytflow")) {
-                Error() << "Expected `default|dq|ytflow' argument for: " << pragma;
-                Ctx_.IncrementMonCounter("sql_errors", "BadPragmaValue");
-                return {};
-            }
-
-            if (*literal == "ytflow") {
-                if (Ctx_.DqEngineForce) {
-                    Error() << "Expected `disable|auto` argument for DqEngine pragma "
-                        << " with " << pragma << " pragma argument `ytflow`";
-
-                        Ctx_.IncrementMonCounter("sql_errors", "BadPragmaValue");
-                        return {};
-                }
-
-                Ctx_.DqEngineEnable = false;
-            } else if (*literal == "dq") {
-                Ctx_.DqEngineEnable = true;
-                Ctx_.DqEngineForce = true;
-            }
-
-            Ctx_.Engine = *literal;
-        } else if (normalizedPragma == "optimizesimpleilike") {
-            Ctx_.OptimizeSimpleIlike = true;
-            Ctx_.IncrementMonCounter("sql_pragma", "OptimizeSimpleILIKE");
-        } else if (normalizedPragma == "disableoptimizesimpleilike") {
-            Ctx_.OptimizeSimpleIlike = false;
-            Ctx_.IncrementMonCounter("sql_pragma", "DisableOptimizeSimpleILIKE");
         } else {
             Error() << "Unknown pragma: " << pragma;
             Ctx_.IncrementMonCounter("sql_errors", "UnknownPragma");
@@ -3478,53 +3420,47 @@ TNodePtr TSqlQuery::PragmaStatement(const TRule_pragma_stmt& stmt, bool& success
             if (normalizedPragma == "fast") {
                 Ctx_.Warning(Ctx_.Pos(), TIssuesIds::YQL_DEPRECATED_PRAGMA)
                     << "Use of deprecated yson.Fast pragma. It will be dropped soon";
-                success = true;
-                return {};
+                return TNodePtr{};
             } else if (normalizedPragma == "autoconvert") {
                 Ctx_.PragmaYsonAutoConvert = true;
-                success = true;
-                return {};
+                return TNodePtr{};
             } else if (normalizedPragma == "strict") {
                 if (values.size() == 0U) {
                     Ctx_.PragmaYsonStrict = true;
-                    success = true;
+                    return TNodePtr{};
                 } else if (values.size() == 1U && values.front().GetLiteral() && TryFromString(*values.front().GetLiteral(), Ctx_.PragmaYsonStrict)) {
-                    success = true;
-                } else {
-                    Error() << "Expected 'true', 'false' or no parameter for: " << pragma;
-                    Ctx_.IncrementMonCounter("sql_errors", "BadPragmaValue");
+                    return TNodePtr{};
                 }
+                Error() << "Expected 'true', 'false' or no parameter for: " << pragma;
+                Ctx_.IncrementMonCounter("sql_errors", "BadPragmaValue");
                 return {};
             } else if (normalizedPragma == "disablestrict") {
                 if (values.size() == 0U) {
                     Ctx_.PragmaYsonStrict = false;
-                    success = true;
-                    return {};
+                    return TNodePtr{};
                 }
                 bool pragmaYsonDisableStrict;
                 if (values.size() == 1U && values.front().GetLiteral() && TryFromString(*values.front().GetLiteral(), pragmaYsonDisableStrict)) {
                     Ctx_.PragmaYsonStrict = !pragmaYsonDisableStrict;
-                    success = true;
-                } else {
-                    Error() << "Expected 'true', 'false' or no parameter for: " << pragma;
-                    Ctx_.IncrementMonCounter("sql_errors", "BadPragmaValue");
+                    return TNodePtr{};
                 }
+
+                Error() << "Expected 'true', 'false' or no parameter for: " << pragma;
+                Ctx_.IncrementMonCounter("sql_errors", "BadPragmaValue");
                 return {};
             } else if (normalizedPragma == "casttostring" || normalizedPragma == "disablecasttostring") {
                 const bool allow = normalizedPragma == "casttostring";
                 if (values.size() == 0U) {
                     Ctx_.YsonCastToString = allow;
-                    success = true;
-                    return {};
+                    return TNodePtr{};
                 }
                 bool pragmaYsonCastToString;
                 if (values.size() == 1U && values.front().GetLiteral() && TryFromString(*values.front().GetLiteral(), pragmaYsonCastToString)) {
                     Ctx_.PragmaYsonStrict = allow ? pragmaYsonCastToString : !pragmaYsonCastToString;
-                    success = true;
-                } else {
-                    Error() << "Expected 'true', 'false' or no parameter for: " << pragma;
-                    Ctx_.IncrementMonCounter("sql_errors", "BadPragmaValue");
+                    return TNodePtr{};
                 }
+                Error() << "Expected 'true', 'false' or no parameter for: " << pragma;
+                Ctx_.IncrementMonCounter("sql_errors", "BadPragmaValue");
                 return {};
             } else {
                 Error() << "Unknown pragma: '" << pragma << "'";
@@ -3555,12 +3491,10 @@ TNodePtr TSqlQuery::PragmaStatement(const TRule_pragma_stmt& stmt, bool& success
             }
         }
 
-        success = true;
         Ctx_.IncrementMonCounter("sql_pragma", pragma);
         return BuildPragma(Ctx_.Pos(), lowerPrefix, normalizedPragma, values, pragmaValueDefault);
     }
-    success = true;
-    return {};
+    return TNodePtr{};
 }
 
 TNodePtr TSqlQuery::Build(const TRule_delete_stmt& stmt) {
@@ -3994,54 +3928,23 @@ bool TSqlQuery::ParseTableStoreFeatures(std::map<TString, TDeferredAtom> & resul
 }
 
 void EnumeratePragmas(std::function<void(std::string_view)> callback) {
-    callback("ClassicDivision");
-    callback("StrictJoinKeyTypes");
-    callback("DisableStrictJoinKeyTypes");
-    callback("CheckedOps");
-    callback("UnicodeLiterals");
-    callback("DisableUnicodeLiterals");
-    callback("WarnUntypedStringLiterals");
-    callback("DisableWarnUntypedStringLiterals");
-    callback("File");
-    callback("FileOption");
-    callback("Folder");
-    callback("Udf");
-    callback("Library");
-    callback("Package");
-    callback("PackageVersion");
-    callback("RefSelect");
-    callback("SampleSelect");
-    callback("AllowDotInAlias");
-    callback("OverrideLibrary");
-    callback("DirectRead");
-    callback("AutoCommit");
-    callback("UseTablePrefixForEach");
-    callback("PathPrefix");
-    callback("GroupByLimit");
-    callback("GroupByCubeLimit");
-    callback("SimpleColumns");
-    callback("DisableSimpleColumns");
-    callback("ResultRowsLimit");
-    callback("ResultSizeLimit");
-    callback("RuntimeLogLevel");
-    callback("Warning");
-    callback("Greetings");
-    callback("WarningMsg");
-    callback("ErrorMsg");
-    callback("AllowUnnamedColumns");
-    callback("WarnUnnamedColumns");
-    callback("DiscoveryMode");
-    callback("EnableSystemColumns");
+    THashSet<TStringBuf> deprecatedPragmas = {
+        "EquiJoin",
+        "DisableUnordered",
+        "AnsiOrderByLimitInUnionAll",
+        "DisableAnsiOrderByLimitInUnionAll",
+    };
+
+    for (const auto& [_, descr] : PragmaDescrs) {
+        if (deprecatedPragmas.contains(descr.CanonicalName)) {
+            continue;
+        }
+        callback(descr.CanonicalName);
+    }
+
     callback("DqEngine");
     callback("BlockEngine");
-    callback("JsonQueryReturnsJsonDocument");
-    callback("DisableJsonQueryReturnsJsonDocument");
-    callback("PositionalUnionAll");
-    callback("PqReadBy");
-    callback("DataWatermarks");
-    callback("FeatureR010");
-    callback("CostBasedOptimizer");
-    callback("Engine");
+
     callback("yson.AutoConvert");
     callback("yson.Strict");
     callback("yson.DisableStrict");

@@ -1,3 +1,65 @@
+370aa581 webp_js/README.md: add some more code formatting (``)
+f83c6b32 CMakeLists: add warning for incorrect emscripten config
+6a3e656b update ChangeLog (tag: v1.6.0-rc1)
+bf0bf1e7 api.md: add WebPValidateDecoderConfig to pseudocode
+e8ae210d update NEWS
+ce53efd7 bump version to 1.6.0
+1c333170 update AUTHORS
+85e098e5 webpmux: fix heap overflow w/-get/-set
+418340d8 Merge "Make histogram allocation and access more readable and type-safe." into main
+23ce76fa Merge "VP8BitReaderSetBuffer: move NULL check to call site" into main
+bbf3cbb1 VP8BitReaderSetBuffer: move NULL check to call site
+f6b87e03 Fix const style guide
+8852f89a Have lossless return the same results with/without -mt
+e015dcc0 Make histogram allocation and access more readable and type-safe.
+753ed11e enc_neon.c: fix aarch64 compilation w/gcc < 8.5.0
+0cd0b7a7 enc_fuzzer.cc: remove duplicate <cstdlib> include
+2209ffba swig,cosmetics: normalize includes
+15e2e1ee analysis_enc.c: remove unused include
+98c27801 IWYU: Include all headers for symbols used in files.
+eb3ff781 Only use valid histograms in VP8LHistogramSet
+57e324e2 Refactor VP8LHistogram histogram_enc.cc
+7191a602 Merge "Generalize trivial histograms" into main
+19696e0a Merge "alpha_processing_sse2: quiet signed conv warning" into main
+89b01ecc Merge "cwebp: add `-resize_mode`" into main
+52a430a7 Generalize trivial histograms
+e53e2130 Cache all costs in the histograms
+f8b360c4 alpha_processing_sse2: quiet signed conv warning
+eb4f8137 cwebp: add `-resize_mode`
+ad52d5fc dec/dsp/enc/utils,cosmetics: rm struct member '_' suffix
+ed7cd6a7 utils.c,cosmetics: rm struct member '_' suffix
+3a23b0f0 random_utils.[hc],cosmetics: rm struct member '_' suffix
+a99d0e6f quant_levels_dec_utils.c,cosmetics: rm struct member '_' suffix
+1ed4654d huffman_encode_utils.[hc],cosmetics: rm struct member '_' suffix
+f0689e48 config_enc.c,cosmetics: rm struct member '_' suffix
+24262266 mux,cosmetics: rm struct member '_' suffix
+3f54b1aa demux,cosmetics: rm struct member '_' suffix
+295804e4 examples,cosmetics: rm struct member '_' suffix
+5225592f Refactor VP8LHistogram to hide initializations from the user.
+00338240 Remove some computations in histogram clustering
+44f91b0d Speed DispatchAlpha_SSE2 up
+ee8e8c62 Fix member naming for VP8LHistogram
+a1ad3f1e Merge "Remove now unused ExtraCostCombined" into main
+321561b4 Remove now unused ExtraCostCombined
+e0ae21d2 WebPMemoryWriterClear: use WebPMemoryWriterInit
+a4183d94 Remove the computation of ExtraCost when comparing histograms
+f2b3f527 Get AVX2 into WebP lossless
+7c70ff7a Clean dsp/lossless includes
+9dd5ae81 Use the full register in PredictorSub13_SSE2
+613be8fc Makefile.vc: add /MP to CFLAGS
+1d86819f Merge changes I1437390a,I10a20de5,I1ac777d1 into main
+743a5f09 enc_neon: enable vld1q_u8_x4 for clang & msvc
+565da148 pngdec.c: add support for 'eXIf' tag
+319860e9 pngdec.c: support ImageMagick app1 exif text data
+815fc1e1 pngdec.c: add missing #ifdef for png_get_iCCP
+980b708e enc_neon: fix build w/aarch64 gcc < 9.4.0
+73b728cb cmake: bump minimum version to 3.16
+6a22b670 Add a function to validate a WebPDecoderConfig
+7ed2b10e Use consistently signed stride types.
+654bfb04 Avoid nullptr arithmetic in VP8BitReaderSetBuffer
+f8f24107 Fix potential "divide by zero" in examples found by coverity
+2af6c034 Merge tag 'v1.5.0'
+a4d7a715 update ChangeLog (tag: v1.5.0, origin/1.5.0)
 c3d85ce4 update NEWS
 ad14e811 tests/fuzzer/*: add missing <string_view> include
 74cd026e fuzz_utils.cc: fix build error w/WEBP_REDUCE_SIZE

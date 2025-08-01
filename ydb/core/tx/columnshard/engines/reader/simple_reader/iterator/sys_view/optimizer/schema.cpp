@@ -25,9 +25,9 @@ TIndexInfo TSchemaAdapter::GetIndexInfo(
     return TBase::GetIndexInfo<NKikimr::NSysView::Schema::PrimaryIndexOptimizerStats>(storagesManager, schemaObjectsCache);
 }
 
-std::shared_ptr<ITableMetadataAccessor> TSchemaAdapter::BuildMetadataAccessor(const TString& tableName,
-    const NColumnShard::TSchemeShardLocalPathId externalPathId, const std::optional<NColumnShard::TInternalPathId> internalPathId) const {
-    return std::make_shared<TAccessor>(tableName, externalPathId, internalPathId);
+std::shared_ptr<ITableMetadataAccessor> TSchemaAdapter::BuildMetadataAccessor(
+    const TString& tableName, const NColumnShard::TUnifiedOptionalPathId pathId) const {
+    return std::make_shared<TAccessor>(tableName, pathId);
 }
 
 }   // namespace NKikimr::NOlap::NReader::NSimple::NSysView::NOptimizer

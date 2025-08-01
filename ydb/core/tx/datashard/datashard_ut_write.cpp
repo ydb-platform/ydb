@@ -189,6 +189,167 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
         }
     }
 
+    Y_UNIT_TEST(AsyncIndexKeySizeConstraint) {
+        auto [runtime, server, sender] = TestCreateServer();
+
+        auto opts = TShardedTableOptions()
+            .Columns({
+                {"key", "String", true, false},
+                {"val1", "String", false, false},
+                {"val2", "String", false, false},
+                {"val3", "String", false, false}
+                
+            }).Indexes({{"by_val12", {"val1", "val2"}, {}, NKikimrSchemeOp::EIndexTypeGlobalAsync}});
+
+        auto [shards, tableId] = CreateShardedTable(server, sender, "/Root", "table-1", opts);
+        const ui64 shard = shards[0];
+        ui64 txId = 100;
+       
+        auto bigString = TString(NLimits::MaxWriteKeySize + 1,  'a');
+        auto halfBigString1 = TString(NLimits::MaxWriteKeySize / 2,  'a');
+        auto halfBigString2 = TString(bigString.size() - halfBigString1.size(),  'a');
+
+        Cout << "========= Insert normal data {sad, qwe, null} =========\n";
+        {
+            TVector<ui32> columnIds = {1, 2};
+            TVector<TCell> cells = {
+                TCell("sad"),
+                TCell("qwe"),
+            };
+
+            auto result = Upsert(runtime, sender, shard, tableId, txId, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE, columnIds, cells, NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
+
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
+        }
+        
+        Cout << "========= Verify data =========\n";
+        {
+            auto expectedState = "key = sad\\0, val1 = qwe\\0, val2 = NULL, val3 = NULL\n";
+            auto tableState = ReadTable(server, shards, tableId);
+            UNIT_ASSERT_STRINGS_EQUAL(tableState, expectedState);
+        }
+
+        Cout << "========= Insert data with big string in index column =========\n";
+        {
+            TVector<ui32> columnIds = {1, 2};
+            TVector<TCell> cells = {
+                TCell("sad"),
+                TCell("not qwe string"), // should not change
+                TCell("asdasdg"),
+                TCell(bigString.c_str(), bigString.size())
+            };
+
+            auto result = Upsert(runtime, sender, shard, tableId, txId, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE, columnIds, cells, NKikimrDataEvents::TEvWriteResult::STATUS_CONSTRAINT_VIOLATION);
+
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NKikimrDataEvents::TEvWriteResult::STATUS_CONSTRAINT_VIOLATION);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetIssues().size(), 1);
+            UNIT_ASSERT(result.GetIssues(0).message().Contains("Size of key in secondary index is more than 1049600"));
+        }
+
+        Cout << "========= Verify data (no changes should be) =========\n";
+        {
+            auto expectedState = "key = sad\\0, val1 = qwe\\0, val2 = NULL, val3 = NULL\n";
+            auto tableState = ReadTable(server, shards, tableId);
+            UNIT_ASSERT_STRINGS_EQUAL(tableState, expectedState);
+        }
+
+        Cout << "========= Insert initial data with half of threshold constraint in index column =========\n";
+        {
+            TVector<ui32> columnIds = {1, 2};
+            TVector<TCell> cells = {
+                TCell("sad"),
+                TCell("qwe"), 
+                TCell("xyz"),
+                TCell(halfBigString1.c_str(), halfBigString1.size())
+            };
+
+            auto result = Upsert(runtime, sender, shard, tableId, txId, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE, columnIds, cells, NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
+
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
+        }
+
+        Cout << "========= Verify data =========\n";
+        {
+            auto expectedState = "key = sad\\0, val1 = qwe\\0, val2 = NULL, val3 = NULL\n"
+                                                    "key = xyz\\0, val1 = " + halfBigString1 + ", val2 = NULL, val3 = NULL\n";
+            auto tableState = ReadTable(server, shards, tableId);
+            UNIT_ASSERT_STRINGS_EQUAL(tableState, expectedState);
+        }
+
+        Cout << "========= Upsert data with other half of threshold constraint in index column (should fail) =========\n";
+        {
+            TVector<ui32> columnIds = {1, 3};
+            TVector<TCell> cells = {
+                TCell("sad"),
+                TCell("qwe"), 
+                TCell("xyz"),
+                TCell(halfBigString2.c_str(), halfBigString2.size())
+            };
+
+            auto result = Upsert(runtime, sender, shard, tableId, txId, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE, columnIds, cells, NKikimrDataEvents::TEvWriteResult::STATUS_CONSTRAINT_VIOLATION);
+
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NKikimrDataEvents::TEvWriteResult::STATUS_CONSTRAINT_VIOLATION);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetIssues().size(), 1);
+            UNIT_ASSERT(result.GetIssues(0).message().Contains("Size of key in secondary index is more than 1049600"));
+        }
+
+        Cout << "========= Verify data =========\n";
+        {
+            auto expectedState = "key = sad\\0, val1 = qwe\\0, val2 = NULL, val3 = NULL\n"
+                                                    "key = xyz\\0, val1 = " + halfBigString1 + ", val2 = NULL, val3 = NULL\n";
+            auto tableState = ReadTable(server, shards, tableId);
+            UNIT_ASSERT_STRINGS_EQUAL(tableState, expectedState);
+        }
+
+        Cout << "========= Upsert data with threshold constraint in index column and key column in sum (should fail) =========\n";
+        {
+            TVector<ui32> columnIds = {1, 2};
+            TVector<TCell> cells = {
+                TCell(halfBigString1.c_str(), halfBigString1.size()),
+                TCell(halfBigString2.c_str(), halfBigString2.size())
+            };
+
+            auto result = Upsert(runtime, sender, shard, tableId, txId, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE, columnIds, cells, NKikimrDataEvents::TEvWriteResult::STATUS_CONSTRAINT_VIOLATION);
+
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NKikimrDataEvents::TEvWriteResult::STATUS_CONSTRAINT_VIOLATION);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetIssues().size(), 1);
+            UNIT_ASSERT(result.GetIssues(0).message().Contains("Size of key in secondary index is more than 1049600"));
+        }
+
+        Cout << "========= Verify data =========\n";
+        {
+            auto expectedState = "key = sad\\0, val1 = qwe\\0, val2 = NULL, val3 = NULL\n"
+                                                    "key = xyz\\0, val1 = " + halfBigString1 + ", val2 = NULL, val3 = NULL\n";
+            auto tableState = ReadTable(server, shards, tableId);
+            UNIT_ASSERT_STRINGS_EQUAL(tableState, expectedState);
+        }
+
+        Cout << "========= Upsert data with threshold constraint for key in NOT index column =========\n";
+        {
+            TVector<ui32> columnIds = {1, 2, 3, 4};
+            TVector<TCell> cells = {
+                TCell("sad"),
+                TCell("qwe"),
+                TCell("zxc"),
+                TCell(bigString.c_str(), bigString.size())
+            };
+
+            auto result = Upsert(runtime, sender, shard, tableId, txId, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE, columnIds, cells, NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
+
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
+        }
+
+        Cout << "========= Verify data =========\n";
+        {
+            auto expectedState = "key = sad\\0, val1 = qwe\\0, val2 = zxc\\0, val3 = " + bigString + "\n"
+                                                    "key = xyz\\0, val1 = " + halfBigString1 + ", val2 = NULL, val3 = NULL\n";
+            auto tableState = ReadTable(server, shards, tableId);
+            UNIT_ASSERT_STRINGS_EQUAL(tableState, expectedState);
+        }
+
+        return;
+    }
+
     Y_UNIT_TEST(IncrementImmediate) {
         
         auto [runtime, server, sender] = TestCreateServer();
@@ -557,20 +718,33 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
     Y_UNIT_TEST(WriteImmediateBadRequest) {
         auto [runtime, server, sender] = TestCreateServer();
 
-        auto opts = TShardedTableOptions().Columns({{"key", "Utf8", true, false}});
+        auto opts = TShardedTableOptions().Columns({
+            {"key", "Utf8", true, true},
+            {"value1", "Uint32", false, false},
+            {"value2", "Uint32", false, true},
+        });
         auto [shards, tableId] = CreateShardedTable(server, sender, "/Root", "table-1", opts);
         const ui64 shard = shards[0];
+
+        auto prepareEvWrite = [&](
+            NKikimrDataEvents::TEvWrite::TOperation::EOperationType opType,
+            TSerializedCellMatrix matrix,
+            const std::vector<ui32>& columnIds) {
+            auto evWrite = std::make_unique<NKikimr::NEvents::TDataEvents::TEvWrite>(100, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
+            ui64 payloadIndex = NKikimr::NEvWrite::TPayloadWriter<NKikimr::NEvents::TDataEvents::TEvWrite>(*evWrite).AddDataToPayload(matrix.ReleaseBuffer());
+            evWrite->AddOperation(opType, tableId, columnIds, payloadIndex, NKikimrDataEvents::FORMAT_CELLVEC);
+            return evWrite;
+        };
 
         Cout << "========= Send immediate write with huge key=========\n";
         {
             TString hugeStringValue(NLimits::MaxWriteKeySize + 1, 'X');
-            TSerializedCellMatrix matrix({TCell(hugeStringValue.c_str(), hugeStringValue.size())}, 1, 1);
+            TSerializedCellMatrix matrix({TCell(hugeStringValue.c_str(), hugeStringValue.size()), TCell::Make(ui32(123))}, 1, 2);
 
-            auto evWrite = std::make_unique<NKikimr::NEvents::TDataEvents::TEvWrite>(100, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
-            ui64 payloadIndex = NKikimr::NEvWrite::TPayloadWriter<NKikimr::NEvents::TDataEvents::TEvWrite>(*evWrite).AddDataToPayload(matrix.ReleaseBuffer());
-            evWrite->AddOperation(NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT, tableId, {1}, payloadIndex, NKikimrDataEvents::FORMAT_CELLVEC);
-
-            const auto writeResult = Write(runtime, sender, shard, std::move(evWrite), NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST);
+            const auto writeResult = Write(
+                runtime, sender, shard,
+                prepareEvWrite(NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT, std::move(matrix), {1, 3}),
+                NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST);
             UNIT_ASSERT_VALUES_EQUAL(writeResult.GetIssues().size(), 1);
             UNIT_ASSERT(writeResult.GetIssues(0).message().Contains("Row key size of 1049601 bytes is larger than the allowed threshold 1049600"));
         }
@@ -594,6 +768,43 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
             const auto writeResult = Write(runtime, sender, shards[0], std::move(evWrite), NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST);
             UNIT_ASSERT_VALUES_EQUAL(writeResult.GetIssues().size(), 1);
             UNIT_ASSERT(writeResult.GetIssues(0).message().Contains("OPERATION_UNSPECIFIED operation is not supported now"));
+        }
+
+        Cout << "========= Send immediate write with NULL value for NOT NULL column=========\n";
+        {
+            TString stringValue("KEY");
+            TSerializedCellMatrix matrix(
+                {TCell(stringValue.data(), stringValue.size()), TCell()},
+                1, 2);
+
+            const auto writeResult = Write(
+                runtime, sender, shard,
+                prepareEvWrite(NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT, matrix, {1, 3}),
+                NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST);
+            UNIT_ASSERT_VALUES_EQUAL(writeResult.GetIssues().size(), 1);
+            UNIT_ASSERT(writeResult.GetIssues(0).message().Contains("NULL value for NON NULL column"));
+        }
+
+        Cout << "========= Send immediate write without data for NOT NULL column=========\n";
+        {
+            TString stringValue("KEY");
+            TSerializedCellMatrix matrix(
+                {TCell(stringValue.data(), stringValue.size()), TCell::Make(ui32(123))},
+                1, 2);
+
+            // Insert should fail.
+            const auto insertResult = Write(
+                runtime, sender, shard,
+                prepareEvWrite(NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INSERT, matrix, {1, 2}),
+                NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST);
+            UNIT_ASSERT_VALUES_EQUAL(insertResult.GetIssues().size(), 1);
+            UNIT_ASSERT(insertResult.GetIssues(0).message().Contains("Missing inserted values for NON NULL column"));
+
+            // Update should complete successfully.
+            const auto updateResult = Write(
+                runtime, sender, shard,
+                prepareEvWrite(NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPDATE, matrix, {1, 2}),
+                NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
         }
     }
 

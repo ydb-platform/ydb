@@ -3,6 +3,7 @@
 #include "source.h"
 
 #include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
+#include <ydb/core/tx/columnshard/engines/reader/common_reader/common/accessors_ordering.h>
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/constructor/read_metadata.h>
 #include <ydb/core/tx/columnshard/engines/reader/simple_reader/iterator/context.h>
 #include <ydb/core/tx/columnshard/engines/reader/simple_reader/iterator/source.h>
@@ -44,43 +45,36 @@ public:
         return Finish;
     }
 
-    struct TComparator {
+    class TComparator {
     private:
-        const bool IsReverse;
+        const ERequestSorting Sorting;
 
     public:
-        TComparator(const bool isReverse)
-            : IsReverse(isReverse) {
+        TComparator(const ERequestSorting sorting)
+            : Sorting(sorting) {
+            AFL_VERIFY(Sorting != ERequestSorting::NONE);
         }
 
         bool operator()(const TPortionDataConstructor& l, const TPortionDataConstructor& r) const {
-            if (IsReverse) {
-                return r.Finish < l.Finish;
+            if (Sorting == ERequestSorting::DESC) {
+                return l.Finish < r.Finish;
             } else {
-                return l.Start < r.Start;
+                return r.Start < l.Start;
             }
         }
     };
 
+    std::shared_ptr<NReader::NSimple::IDataSource> Construct(
+        const std::shared_ptr<NCommon::TSpecialReadContext>& context, std::shared_ptr<TPortionDataAccessor>&& accessor);
     std::shared_ptr<NReader::NSimple::IDataSource> Construct(const std::shared_ptr<NCommon::TSpecialReadContext>& context);
 };
 
-class TConstructor: public NAbstract::ISourcesConstructor {
+class TConstructor: public NCommon::TSourcesConstructorWithAccessors<TPortionDataConstructor> {
 private:
-    const ERequestSorting Sorting;
+    using TBase = NCommon::TSourcesConstructorWithAccessors<TPortionDataConstructor>;
     ui32 CurrentSourceIdx = 0;
-    std::deque<TPortionDataConstructor> Constructors;
 
-    virtual void DoClear() override {
-        Constructors.clear();
-    }
-    virtual void DoAbort() override {
-        Constructors.clear();
-    }
-    virtual bool DoIsFinished() const override {
-        return Constructors.empty();
-    }
-    virtual std::shared_ptr<NReader::NCommon::IDataSource> DoExtractNext(
+    virtual std::shared_ptr<NReader::NCommon::IDataSource> DoTryExtractNextImpl(
         const std::shared_ptr<NReader::NCommon::TSpecialReadContext>& context) override;
     virtual void DoInitCursor(const std::shared_ptr<IScanCursor>& /*cursor*/) override {
     }

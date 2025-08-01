@@ -613,11 +613,9 @@ Y_UNIT_TEST_SUITE(KqpYql) {
     }
 
     Y_UNIT_TEST(UuidPrimaryKeyDisabled) {
-        NKikimrConfig::TAppConfig appConfig;
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetEnableUuidAsPrimaryKey(false)
-            .SetAppConfig(appConfig)
             .SetKqpSettings({setting});
         TKikimrRunner kikimr(serverSettings.SetWithSampleTables(false));
 
@@ -683,10 +681,8 @@ Y_UNIT_TEST_SUITE(KqpYql) {
     }
 
     Y_UNIT_TEST(UuidPrimaryKey) {
-        NKikimrConfig::TAppConfig appConfig;
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
-            .SetAppConfig(appConfig)
             .SetKqpSettings({setting});
         TKikimrRunner kikimr(serverSettings.SetWithSampleTables(false));
 
@@ -830,10 +826,8 @@ Y_UNIT_TEST_SUITE(KqpYql) {
     }
 
     Y_UNIT_TEST(TestUuidPrimaryKeyPrefixSearch) {
-        NKikimrConfig::TAppConfig appConfig;
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
-            .SetAppConfig(appConfig)
             .SetKqpSettings({setting});
         TKikimrRunner kikimr(serverSettings.SetWithSampleTables(false));
 
@@ -885,10 +879,8 @@ Y_UNIT_TEST_SUITE(KqpYql) {
     }
 
     Y_UNIT_TEST(TestUuidDefaultColumn) {
-        NKikimrConfig::TAppConfig appConfig;
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
-            .SetAppConfig(appConfig)
             .SetKqpSettings({setting});
         TKikimrRunner kikimr(serverSettings.SetWithSampleTables(false));
 
@@ -969,10 +961,8 @@ Y_UNIT_TEST_SUITE(KqpYql) {
     }
 
     Y_UNIT_TEST(PgIntPrimaryKey) {
-        NKikimrConfig::TAppConfig appConfig;
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
-            .SetAppConfig(appConfig)
             .SetKqpSettings({setting});
         TKikimrRunner kikimr(serverSettings.SetWithSampleTables(false));
 

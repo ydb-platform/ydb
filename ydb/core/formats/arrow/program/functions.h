@@ -24,9 +24,16 @@ public:
 class IStepFunction {
 protected:
     bool NeedConcatenation = false;
+    virtual NJson::TJsonValue DoDebugJson() const {
+        return NJson::JSON_MAP;
+    }
 
 public:
     virtual bool IsAggregation() const = 0;
+
+    virtual std::shared_ptr<IResourcesAggregator> BuildResultsAggregator(const TColumnChainInfo& /*output*/) const {
+        return nullptr;
+    }
 
     arrow::compute::ExecContext* GetContext() const {
         return GetCustomExecContext();
@@ -40,12 +47,19 @@ public:
     virtual TConclusion<arrow::Datum> Call(
         const TExecFunctionContext& context, const std::shared_ptr<TAccessorsCollection>& resources) const = 0;
     virtual TConclusionStatus CheckIO(const std::vector<TColumnChainInfo>& input, const std::vector<TColumnChainInfo>& output) const = 0;
+    NJson::TJsonValue DebugJson() const {
+        NJson::TJsonValue result = DoDebugJson();
+        if (NeedConcatenation) {
+            result.InsertValue("need_concatenation", NeedConcatenation);
+        }
+        return result;
+    }
 };
 
 class TInternalFunction: public IStepFunction {
 private:
     using TBase = IStepFunction;
-    std::shared_ptr<arrow::compute::FunctionOptions> FunctionOptions;
+    YDB_READONLY_DEF(std::shared_ptr<arrow::compute::FunctionOptions>, FunctionOptions);
 
 private:
     virtual std::vector<std::string> GetRegistryFunctionNames() const = 0;

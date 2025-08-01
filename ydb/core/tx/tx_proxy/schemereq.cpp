@@ -760,9 +760,18 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
 
             auto& config = pbModifyScheme.GetReplication().GetConfig();
             auto& target = config.GetTransferSpecific().GetTarget();
+
+            std::vector<TString> pathForChecking;
             if (target.HasDstPath()) {
+                pathForChecking.push_back(target.GetDstPath());
+            }
+            if (target.HasDirectoryPath()) {
+                pathForChecking.push_back(target.GetDirectoryPath());
+            }
+
+            for (const auto& path : pathForChecking) {
                 auto toWriteTable = TPathToResolve(pbModifyScheme);
-                toWriteTable.Path = SplitPath(target.GetDstPath());
+                toWriteTable.Path = SplitPath(path);
                 toWriteTable.RequireAccess = NACLib::EAccessRights::UpdateRow;
                 ResolveForACL.push_back(toWriteTable);
             }
@@ -875,10 +884,18 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
 
             auto& config = pbModifyScheme.GetReplication().GetConfig();
             auto& target = config.GetTransferSpecific().GetTarget();
+
             auto toWriteTable = TPathToResolve(pbModifyScheme);
             toWriteTable.Path = SplitPath(target.GetDstPath());
             toWriteTable.RequireAccess = NACLib::EAccessRights::UpdateRow;
             ResolveForACL.push_back(toWriteTable);
+
+            if (target.HasDirectoryPath()) {
+                auto toWriteDir = TPathToResolve(pbModifyScheme);
+                toWriteDir.Path = SplitPath(target.GetDirectoryPath());
+                toWriteDir.RequireAccess = NACLib::EAccessRights::UpdateRow;
+                ResolveForACL.push_back(toWriteDir);
+            }
 
             break;
         }

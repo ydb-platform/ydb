@@ -2496,6 +2496,9 @@ public:
             if (const auto& staticCreds = settings.Settings.StaticCredentials) {
                 staticCreds->Serialize(*params.MutableStaticCredentials());
             }
+            if (const auto& caCert = settings.Settings.CaCert) {
+                params.SetCaCert(*caCert);
+            }
             if (settings.Settings.RowConsistency) {
                 config.MutableConsistencySettings()->MutableRow();
             }
@@ -2563,14 +2566,20 @@ public:
                 state.MutableStandBy();
             }
 
-            if (settings.Settings.ConnectionString || settings.Settings.Endpoint || settings.Settings.Database ||
-                    settings.Settings.OAuthToken || settings.Settings.StaticCredentials) {
+            if (settings.Settings.ConnectionString
+                || settings.Settings.Endpoint
+                || settings.Settings.Database
+                || settings.Settings.OAuthToken
+                || settings.Settings.StaticCredentials
+                || settings.Settings.CaCert
+            ) {
                 auto& config = *op.MutableConfig();
                 auto& params = *config.MutableSrcConnectionParams();
                 if (const auto& connectionString = settings.Settings.ConnectionString) {
                     const auto parseResult = NYdb::ParseConnectionString(*connectionString);
                     params.SetEndpoint(TString{parseResult.Endpoint});
                     params.SetDatabase(TString{parseResult.Database});
+                    params.SetEnableSsl(parseResult.EnableSsl);
                 }
                 if (const auto& endpoint = settings.Settings.Endpoint) {
                     params.SetEndpoint(*endpoint);
@@ -2583,6 +2592,9 @@ public:
                 }
                 if (const auto& staticCreds = settings.Settings.StaticCredentials) {
                     staticCreds->Serialize(*params.MutableStaticCredentials());
+                }
+                if (const auto& caCert = settings.Settings.CaCert) {
+                    params.SetCaCert(*caCert);
                 }
             }
 
@@ -2671,8 +2683,6 @@ public:
             op.SetName(pathPair.second);
 
             auto& config = *op.MutableConfig();
-
-
             auto& params = *config.MutableSrcConnectionParams();
             if (const auto& connectionString = settings.Settings.ConnectionString) {
                 const auto parseResult = NYdb::ParseConnectionString(*connectionString);
@@ -2692,6 +2702,9 @@ public:
             if (const auto& staticCreds = settings.Settings.StaticCredentials) {
                 staticCreds->Serialize(*params.MutableStaticCredentials());
             }
+            if (const auto& caCert = settings.Settings.CaCert) {
+                params.SetCaCert(*caCert);
+            }
 
             {
                 const auto& [src, dst, lambda] = settings.Target;
@@ -2707,6 +2720,9 @@ public:
                 }
                 if (settings.Settings.ConsumerName) {
                     target.SetConsumerName(*settings.Settings.ConsumerName);
+                }
+                if (settings.Settings.DirectoryPath) {
+                    target.SetDirectoryPath(*settings.Settings.DirectoryPath);
                 }
             }
 
@@ -2762,6 +2778,10 @@ public:
                 }
             }
 
+            if (settings.Settings.DirectoryPath) {
+                op.MutableAlterTransfer()->SetDirectoryPath(*settings.Settings.DirectoryPath);
+            }
+
             if (const auto& done = settings.Settings.StateDone) {
                 auto& state = *op.MutableState();
                 state.MutableDone()->SetFailoverMode(
@@ -2774,14 +2794,20 @@ public:
                 state.MutableStandBy();
             }
 
-            if (settings.Settings.ConnectionString || settings.Settings.Endpoint || settings.Settings.Database ||
-                    settings.Settings.OAuthToken || settings.Settings.StaticCredentials) {
+            if (settings.Settings.ConnectionString
+                || settings.Settings.Endpoint
+                || settings.Settings.Database
+                || settings.Settings.OAuthToken
+                || settings.Settings.StaticCredentials
+                || settings.Settings.CaCert
+            ) {
                 auto& config = *op.MutableConfig();
                 auto& params = *config.MutableSrcConnectionParams();
                 if (const auto& connectionString = settings.Settings.ConnectionString) {
                     const auto parseResult = NYdb::ParseConnectionString(*connectionString);
                     params.SetEndpoint(TString{parseResult.Endpoint});
                     params.SetDatabase(TString{parseResult.Database});
+                    params.SetEnableSsl(parseResult.EnableSsl);
                 }
                 if (const auto& endpoint = settings.Settings.Endpoint) {
                     params.SetEndpoint(*endpoint);
@@ -2794,6 +2820,9 @@ public:
                 }
                 if (const auto& staticCreds = settings.Settings.StaticCredentials) {
                     staticCreds->Serialize(*params.MutableStaticCredentials());
+                }
+                if (const auto& caCert = settings.Settings.CaCert) {
+                    params.SetCaCert(*caCert);
                 }
             }
 
@@ -2897,16 +2926,10 @@ public:
         return Gateway->GetCollectedSchemeData();
     }
 
-    TFuture<TExecuteLiteralResult> ExecuteLiteral(const TString& program,
+    TExecuteLiteralResult ExecuteLiteralInstant(const TString& program, ui32 langVer,
         const NKikimrMiniKQL::TType& resultType, NKikimr::NKqp::TTxAllocatorState::TPtr txAlloc) override
     {
-        return Gateway->ExecuteLiteral(program, resultType, txAlloc);
-    }
-
-    TExecuteLiteralResult ExecuteLiteralInstant(const TString& program,
-        const NKikimrMiniKQL::TType& resultType, NKikimr::NKqp::TTxAllocatorState::TPtr txAlloc) override
-    {
-        return Gateway->ExecuteLiteralInstant(program, resultType, txAlloc);
+        return Gateway->ExecuteLiteralInstant(program, langVer, resultType, txAlloc);
     }
 
 private:

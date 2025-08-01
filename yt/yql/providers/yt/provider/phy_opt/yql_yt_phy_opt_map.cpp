@@ -409,4 +409,58 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::CombineByKey(TExprBase 
         .Done();
 }
 
+TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::UnessentialFilter(TExprBase node, TExprContext& ctx) const {
+    const auto ytMap = node.Cast<TYtMap>();
+    const auto flatMap = ytMap.Mapper().Body().Maybe<TCoFlatMapBase>();
+    if (!flatMap) {
+        return node;
+    }
+    if (flatMap.Cast().Input().Ptr() != ytMap.Mapper().Args().Arg(0).Ptr()) {
+        return node;
+    }
+
+    auto flatMapLambda = flatMap.Cast().Lambda();
+    if (!IsFilterFlatMap(flatMapLambda)) {
+        return node;
+    }
+
+    auto row = flatMapLambda.Args().Arg(0).Ptr();
+    auto predicate = flatMapLambda.Body().Ref().ChildPtr(TCoConditionalValueBase::idx_Predicate);
+
+    TNodeSet banned;
+    VisitExpr(predicate, [&](const TExprNode::TPtr& node) {
+        if (TYtOutput::Match(node.Get())) {
+            // Prevent ReplaceUnessentials to go deeper than current operation
+            banned.insert(node.Get());
+            return false;
+        }
+        return true;
+    });
+
+    auto newPredicate = ReplaceUnessentials(predicate, row, banned, ctx);
+    if (newPredicate == predicate) {
+        return node;
+    }
+
+    auto newFilter = ctx.ChangeChild(flatMapLambda.Body().Ref(), TCoConditionalValueBase::idx_Predicate, std::move(newPredicate));
+    auto newFlatMapLambda = ctx.ChangeChild(flatMapLambda.Ref(), TCoLambda::idx_Body, std::move(newFilter));
+    return Build<TYtMap>(ctx, node.Pos())
+        .InitFrom(ytMap)
+        .Mapper<TCoLambda>()
+            .Args({"stream"})
+            .Body<TCoFlatMapBase>()
+                .CallableName(flatMap.Ref().Content())
+                .Input("stream")
+                .Lambda<TCoLambda>()
+                    .Args({"item"})
+                    .Body<TExprApplier>()
+                        .Apply(TCoLambda(newFlatMapLambda))
+                        .With(0, "item")
+                    .Build()
+                .Build()
+            .Build()
+        .Build()
+        .Done();
+}
+
 }  // namespace NYql

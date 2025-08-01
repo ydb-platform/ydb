@@ -1,6 +1,6 @@
 #include <yt/yt/core/test_framework/framework.h>
 
-#include "row_helpers.h"
+#include <yt/yt/tests/cpp/library/row_helpers.h>
 
 #include <yt/yt/library/formats/arrow_parser.h>
 
@@ -149,6 +149,37 @@ std::string MakeIntListArrow(const std::vector<std::optional<std::vector<int32_t
     Verify(listBuilder->Finish(&listArray));
     std::vector<std::shared_ptr<arrow::Array>> columns = {listArray};
 
+    auto recordBatch = arrow::RecordBatch::Make(arrowSchema, columns[0]->length(), columns);
+
+    return MakeOutputFromRecordBatch(recordBatch);
+}
+
+std::string MakeIntListDictionaryArrow(
+    const std::vector<int32_t>& listValues, int64_t numRows)
+{
+    auto* pool = arrow::default_memory_pool();
+
+    auto valueBuilder = std::make_shared<arrow::Int32Builder>(pool);
+    auto listBuilder = std::make_unique<arrow::ListBuilder>(pool, valueBuilder);
+
+    Verify(listBuilder->Append());
+    for (int32_t value : listValues) {
+        Verify(valueBuilder->Append(value));
+    }
+    std::shared_ptr<arrow::Array> dictArray;
+    Verify(listBuilder->Finish(&dictArray));
+
+    arrow::Int8Builder indicesBuilder(pool);
+    Verify(indicesBuilder.AppendValues(std::vector<int8_t>(numRows, 0)));
+    std::shared_ptr<arrow::Array> indicesArray;
+    Verify(indicesBuilder.Finish(&indicesArray));
+
+    auto dictType = arrow::dictionary(arrow::int8(), dictArray->type());
+    auto dictColumn = std::make_shared<arrow::DictionaryArray>(dictType, indicesArray, dictArray);
+
+    std::vector<std::shared_ptr<arrow::Array>> columns = {dictColumn};
+
+    auto arrowSchema = arrow::schema({arrow::field("list", dictColumn->type())});
     auto recordBatch = arrow::RecordBatch::Make(arrowSchema, columns[0]->length(), columns);
 
     return MakeOutputFromRecordBatch(recordBatch);
@@ -774,6 +805,26 @@ TEST(TArrowParserTest, ListOfIntegers)
 
     auto thirdNode = GetComposite(collectedRows.GetRowValue(2, "list"));
     ASSERT_EQ(ConvertToYsonTextStringStable(thirdNode), "[4;5;]");
+}
+
+TEST(TArrowParserTest, DictionaryList)
+{
+    auto tableSchema = New<TTableSchema>(std::vector<TColumnSchema>{
+        TColumnSchema("list", ListLogicalType(SimpleLogicalType(ESimpleLogicalValueType::Int64))),
+    });
+
+    TCollectingValueConsumer collectedRows(tableSchema);
+
+    auto parser = CreateParserForArrow(&collectedRows);
+
+    auto data = MakeIntListDictionaryArrow(std::vector{1, 2, 3}, 3);
+
+    parser->Read(data);
+    parser->Finish();
+
+    ASSERT_EQ(ConvertToYsonTextStringStable(GetComposite(collectedRows.GetRowValue(0, "list"))), "[1;2;3;]");
+    ASSERT_EQ(ConvertToYsonTextStringStable(GetComposite(collectedRows.GetRowValue(1, "list"))), "[1;2;3;]");
+    ASSERT_EQ(ConvertToYsonTextStringStable(GetComposite(collectedRows.GetRowValue(2, "list"))), "[1;2;3;]");
 }
 
 TEST(TArrowParserTest, ListOfStrings)

@@ -355,6 +355,7 @@ message THiveStorageGroupStats {
     optional uint64 MaximumSize = 9;
     optional uint64 AllocatedSize = 10;
     optional uint64 AvailableSize = 11;
+    optional uint32 GroupSizeInUnits = 12;
 }
 
 message THiveStoragePoolStats {

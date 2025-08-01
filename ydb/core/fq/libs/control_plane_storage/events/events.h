@@ -163,6 +163,8 @@ struct TEvControlPlaneStorage {
         EvCreateRateLimiterResourceResponse,
         EvDeleteRateLimiterResourceRequest,
         EvDeleteRateLimiterResourceResponse,
+        EvDeleteFolderResourcesRequest,
+        EvDeleteFolderResourcesResponse,
         EvDbRequestResult, // private // internal_events.h
         EvCreateDatabaseRequest,
         EvCreateDatabaseResponse,
@@ -850,6 +852,77 @@ struct TEvControlPlaneStorage {
         FederatedQuery::QueryContent::QueryType QueryType = FederatedQuery::QueryContent::QUERY_TYPE_UNSPECIFIED;
         NYql::TIssues Issues;
         NYql::TIssues TransientIssues;
+    };
+
+    struct TEvDeleteFolderResourcesRequest : NActors::TEventLocal<TEvDeleteFolderResourcesRequest, EvDeleteFolderResourcesRequest> {
+        explicit TEvDeleteFolderResourcesRequest(
+            const TString& folderId,
+            const TString& scope,
+            const TString& user,
+            const TString& token,
+            const TString& cloudId,
+            TPermissions permissions,
+            TMaybe<TQuotaMap> quotas,
+            TTenantInfo::TPtr tenantInfo,
+            const FederatedQuery::Internal::ComputeDatabaseInternal& computeDatabase)
+            : FolderId(folderId)
+            , Scope(scope)
+            , User(user)
+            , Token(token)
+            , CloudId(cloudId)
+            , Permissions(permissions)
+            , Quotas(std::move(quotas))
+            , TenantInfo(tenantInfo)
+            , ComputeDatabase(computeDatabase) { }
+
+        size_t GetByteSize() const {
+            return sizeof(*this)
+                    + FolderId.size()
+                    + Scope.size()
+                    + User.size()
+                    + Token.size()
+                    + CloudId.size();
+        }
+
+        TString FolderId;
+        TString Scope;
+        TString User;
+        TString Token;
+        TString CloudId;
+        TPermissions Permissions;
+        TMaybe<TQuotaMap> Quotas;
+        TTenantInfo::TPtr TenantInfo;
+        FederatedQuery::Internal::ComputeDatabaseInternal ComputeDatabase;
+        bool ExtractSensitiveFields = false;
+    };
+
+    struct TEvDeleteFolderResourcesResponse : NActors::TEventLocal<TEvDeleteFolderResourcesResponse, EvDeleteFolderResourcesResponse> {
+        static constexpr bool Auditable = false;
+        explicit TEvDeleteFolderResourcesResponse(const Ydb::Operations::Operation& result)
+            : Result(result)
+        {
+        }
+
+        explicit TEvDeleteFolderResourcesResponse(const NYql::TIssues& issues)
+            : Issues(issues)
+        {
+        }
+
+        explicit TEvDeleteFolderResourcesResponse(const Ydb::Operations::Operation& result, const NYql::TIssues& issues)
+            : Result(result), Issues(issues)
+        {
+        }
+
+        size_t GetByteSize() const {
+            return sizeof(*this)
+                    + Result.ByteSizeLong()
+                    + GetIssuesByteSize(Issues)
+                    + GetDebugInfoByteSize(DebugInfo);
+        }
+
+        Ydb::Operations::Operation Result;
+        NYql::TIssues Issues;
+        TDebugInfoPtr DebugInfo;
     };
 };
 

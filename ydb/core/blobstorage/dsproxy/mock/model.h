@@ -70,7 +70,7 @@ namespace NFake {
             Y_ABORT_UNLESS(id == id.FullID());
 
             // validate put against set blocks
-            if (IsBlocked(id.TabletID(), id.Generation())) {
+            if (!msg->IgnoreBlock && IsBlocked(id.TabletID(), id.Generation())) {
                 return new TEvBlobStorage::TEvPutResult(NKikimrProto::BLOCKED, id, GetStorageStatusFlags(), GroupId, 0.f);
             }
             for (const auto& [tabletId, generation] : msg->ExtraBlockChecks) {
@@ -320,7 +320,7 @@ namespace NFake {
         }
 
         TEvBlobStorage::TEvCollectGarbageResult* Handle(TEvBlobStorage::TEvCollectGarbage *msg) {
-            if (IsBlocked(msg->TabletId, msg->RecordGeneration) && (msg->CollectGeneration != Max<ui32>() ||
+            if (!msg->IgnoreBlock && IsBlocked(msg->TabletId, msg->RecordGeneration) && (msg->CollectGeneration != Max<ui32>() ||
                     msg->CollectStep != Max<ui32>() || Blocks.at(msg->TabletId) != Max<ui32>())) {
                 return new TEvBlobStorage::TEvCollectGarbageResult(NKikimrProto::BLOCKED,
                         msg->TabletId, msg->RecordGeneration, msg->PerGenerationCounter, msg->Channel);

@@ -3474,6 +3474,7 @@ void TPartition::ScheduleReplyError(const ui64 dst,
                                     NPersQueue::NErrorCode::EErrorCode errorCode,
                                     const TString& error)
 {
+    PQ_LOG_ERROR("Got error: " << error);
     Replies.emplace_back(Tablet,
                          MakeReplyError(dst,
                                         errorCode,

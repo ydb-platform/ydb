@@ -68,7 +68,7 @@ TVector<ISubOperation::TPtr> CreateNewContinuousBackup(TOperationId opId, const 
     createCdcStreamOp.SetTableName(tableName);
     auto& streamDescription = *createCdcStreamOp.MutableStreamDescription();
     streamDescription.SetName(streamName);
-    streamDescription.SetMode(NKikimrSchemeOp::ECdcStreamModeUpdate);
+    streamDescription.SetMode(NKikimrSchemeOp::ECdcStreamModeNewImage);
     streamDescription.SetFormat(NKikimrSchemeOp::ECdcStreamFormatProto);
 
     TVector<ISubOperation::TPtr> result;

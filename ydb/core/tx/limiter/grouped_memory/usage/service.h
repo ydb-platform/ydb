@@ -79,7 +79,8 @@ public:
         } else {
             for (auto&& i : tasks) {
                 if (!i->IsAllocated()) {
-                    AFL_VERIFY(i->OnAllocated(std::make_shared<TAllocationGuard>(0, 0, 0, NActors::TActorId(), i->GetMemory()), i));
+                    LWPROBE(Allocated, "disabled", i->GetIdentifier(), "", std::numeric_limits<ui64>::max(), std::numeric_limits<ui64>::max(), 0, 0, TDuration::Zero(), false, true);
+                    AFL_VERIFY(i->OnAllocated(std::make_shared<TAllocationGuard>(0, 0, 0, NActors::TActorId(), i->GetMemory(), nullptr), i));
                 }
             }
             return false;
@@ -121,7 +122,7 @@ using TCompMemoryLimiterOperator = TServiceOperatorImpl<TCompMemoryLimiterPolicy
 
 class TDeduplicationMemoryLimiterPolicy {
 public:
-    static const inline TString Name = "Deduplication";
+    static const inline TString Name = "Dedu";
     static const inline NMemory::EMemoryConsumerKind ConsumerKind = NMemory::EMemoryConsumerKind::DeduplicationGroupedMemoryLimiter;
     static constexpr bool ExternalProcessIdAllocation = false;
 };

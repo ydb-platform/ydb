@@ -50,7 +50,7 @@ public:
 
         auto& drop = *modifyScheme.MutableDropCdcStream();
         drop.SetTableName(TableName);
-        drop.SetStreamName(StreamName);
+        drop.AddStreamName(StreamName);
 
         return propose;
     }

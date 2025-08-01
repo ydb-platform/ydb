@@ -32,8 +32,6 @@ private:
     YDB_READONLY_DEF(std::shared_ptr<NIndexes::TIndexesCollection>, Indexes);
     YDB_READONLY(bool, Aborted, false);
 
-    std::shared_ptr<NGroupedMemoryManager::TAllocationGuard> AccessorsGuard;
-    std::optional<TPortionDataAccessor> PortionAccessor;
     THashMap<NArrow::NSSA::IDataSource::TCheckIndexContext, std::shared_ptr<NIndexes::IIndexMeta>> DataAddrToIndex;
 
 public:
@@ -90,32 +88,13 @@ public:
     }
 
     void InitRecordsCount(const ui32 recordsCount) {
+        AFL_VERIFY(Table);
         AFL_VERIFY(!Table->HasData());
         Table = std::make_shared<NArrow::NAccessor::TAccessorsCollection>(recordsCount);
     }
 
-    void SetAccessorsGuard(std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>&& guard) {
-        AFL_VERIFY(!AccessorsGuard);
-        AFL_VERIFY(!!guard);
-        AccessorsGuard = std::move(guard);
-    }
-
     void SetUseFilter(const bool value) {
         Table->SetFilterUsage(value);
-    }
-
-    bool HasPortionAccessor() const {
-        return !!PortionAccessor;
-    }
-
-    void SetPortionAccessor(TPortionDataAccessor&& accessor) {
-        AFL_VERIFY(!PortionAccessor);
-        PortionAccessor = std::move(accessor);
-    }
-
-    const TPortionDataAccessor& GetPortionAccessor() const {
-        AFL_VERIFY(!!PortionAccessor);
-        return *PortionAccessor;
     }
 
     ui32 GetFilteredCount(const ui32 recordsCount, const ui32 defLimit) const {

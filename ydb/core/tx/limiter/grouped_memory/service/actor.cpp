@@ -73,6 +73,9 @@ void TMemoryLimiterActor::Handle(NEvents::TEvExternal::TEvStartProcess::TPtr& ev
     const size_t index = AcquireManager(ev->Get()->GetExternalProcessId());
     LWPROBE(StartProcess, index, event.GetExternalProcessId(), LoadQueue.GetLoad(index));
     for (auto& stage : event.GetStages()) {
+        if (!stage) {
+            continue;
+        }
         stage->AttachOwner(DefaultStages[index]);
         stage->AttachCounters(Counters[index]->BuildStageCounters(stage->GetName()));
     }

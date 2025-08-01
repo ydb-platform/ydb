@@ -122,16 +122,6 @@ Compute nodes contain specialized objects for monitoring memory usage. When data
 4. Metadata about data location is kept in memory
 5. When necessary, data is loaded back and processed
 
-```sql
--- Example query that may trigger spilling in compute cores
-SELECT
-    user_id,
-    COUNT(*) as orders_count,
-    SUM(amount) as total_amount
-FROM orders
-GROUP BY user_id
-ORDER BY total_amount DESC;
-```
 
 #### 2. Channel Spilling
 

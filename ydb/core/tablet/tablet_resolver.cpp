@@ -25,6 +25,14 @@ namespace NKikimr {
 
 const TDuration TabletResolverRefreshNodesPeriod = TDuration::Seconds(60);
 
+static constexpr ui32 TabletSuspectInstantRetryCount = 0;
+static constexpr TDuration TabletSuspectMinRetryDelay = TDuration::MilliSeconds(1);
+static constexpr TDuration TabletSuspectMaxRetryDelay = TDuration::MilliSeconds(50);
+
+static constexpr ui32 TabletSubscriptionInstantRetryCount = 1;
+static constexpr TDuration TabletSubscriptionMinRetryDelay = TDuration::MilliSeconds(1);
+static constexpr TDuration TabletSubscriptionMaxRetryDelay = TDuration::MilliSeconds(10);
+
 #define BLOG_TRACE(stream) LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TABLET_RESOLVER, stream)
 #define BLOG_DEBUG(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TABLET_RESOLVER, stream)
 #define BLOG_INFO(stream) LOG_INFO_S(*TlsActivationContext, NKikimrServices::TABLET_RESOLVER, stream)
@@ -347,13 +355,12 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
 
             // Don't overload state storage when leader is inaccessible
             if (entry.CurrentLeaderSuspect && entry.CurrentLeaderProblem) {
-                switch (++retryNumber) {
-                    case 1:
-                        retryDelay = TDuration::MilliSeconds(1);
-                        break;
-                    default:
-                        retryDelay = Min(retryDelay * 2, TDuration::MilliSeconds(300));
-                        break;
+                if (++retryNumber <= TabletSuspectInstantRetryCount) {
+                    retryDelay = {};
+                } else if (!retryDelay) {
+                    retryDelay = TabletSuspectMinRetryDelay;
+                } else {
+                    retryDelay = Min(retryDelay * 2, TabletSuspectMaxRetryDelay);
                 }
             } else {
                 retryNumber = 0;
@@ -546,16 +553,12 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
             }
 
             // A small exponential backoff on retries: 0ms, 1ms, 2ms, 4ms, 8ms, 10ms
-            switch (++retryNumber) {
-                case 1:
-                    retryDelay = {};
-                    break;
-                case 2:
-                    retryDelay = TDuration::MilliSeconds(1);
-                    break;
-                default:
-                    retryDelay = Min(retryDelay * 2, TDuration::MilliSeconds(10));
-                    break;
+            if (++retryNumber <= TabletSubscriptionInstantRetryCount) {
+                retryDelay = {};
+            } else if (!retryDelay) {
+                retryDelay = TabletSubscriptionMinRetryDelay;
+            } else {
+                retryDelay = Min(retryDelay * 2, TabletSubscriptionMaxRetryDelay);
             }
         }
     }

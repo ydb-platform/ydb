@@ -123,21 +123,21 @@ Compute nodes contain specialized objects for monitoring memory usage. When data
 5. When necessary, data is loaded back and processed
 
 
-#### 2. Channel Spilling
+#### Channel Spilling
 
-This type of spilling operates at the level of data transfer between different query execution stages. Data transfer channels automatically buffer and offload data when buffers overflow. This helps avoid blocking the data-generating node execution even when one of the receiving nodes is not ready to accept data.
+This type of spilling operates at the level of data transfer between different query execution stages. Data transfer channels automatically buffer and offload data when buffers overflow. This helps avoid blocking the execution of the data-generating node, even when one of the receiving nodes is not ready to accept data.
 
-**Operation mechanism:**
+##### Operation mechanism
 
 Data transfer channels continuously monitor their state:
 
-1. **Buffering**: Incoming data accumulates in channel internal buffers
-2. **Fill control**: System tracks buffer fill levels
-3. **Automatic spilling**: When limits are reached, data is automatically serialized and transferred to Spilling Service
-4. **Continued operation**: Channel continues accepting new data after freeing memory space
-5. **Recovery**: When the next stage is ready, data is read from external storage and passed further
+1. **Buffering**: Incoming data accumulates in the channel’s internal buffers  
+2. **Fill control**: The system tracks buffer fill levels  
+3. **Automatic spilling**: When limits are reached, data is automatically serialized and transferred to the Spilling Service  
+4. **Continued operation**: The channel continues accepting new data after freeing memory space  
+5. **Recovery**: When the next stage is ready, data is read from external storage and passed further  
 
-## See also
+## See Also
 
 - [Spilling configuration](../devops/configuration-management/configuration-v2/spilling-config.md)
 - [{{ ydb-short-name }} monitoring](../devops/observability/monitoring.md)

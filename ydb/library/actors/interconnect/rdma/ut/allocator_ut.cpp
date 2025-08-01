@@ -59,7 +59,7 @@ Y_UNIT_TEST_SUITE(Allocator) {
 
     template <bool IncrementalPool>
     std::shared_ptr<NInterconnect::NRdma::IMemPool> CreateMemPool() {
-        return IncrementalPool ? NInterconnect::NRdma::CreateIncrementalMemPool() : NInterconnect::NRdma::CreateDummyMemPool(); 
+        return IncrementalPool ? NInterconnect::NRdma::CreateIncrementalMemPool() : NInterconnect::NRdma::CreateSlotMemPool();
     }
 
 
@@ -120,12 +120,14 @@ Y_UNIT_TEST_SUITE(Allocator) {
         Cerr << "Average time per allocation: " << s / NUM_THREADS << " ms" << Endl;
     }
 
-    Y_UNIT_TEST(AllocMemoryWithMemPoolAsyncRandomOrderDealloc) {
+    Y_UNIT_TEST_TWIN(AllocMemoryWithMemPoolAsyncRandomOrderDealloc, IncrementalPool) {
         const ui32 NUM_THREADS = 4;
         const ui32 NUM_ALLOC = 10000000;
-        const ui32 BUF_SIZE = 4 * 1024;
+        const ui32 BUF_SIZE = 1 * 1024 * 1024;
 
-        auto memPool = CreateMemPool<true>();
+        auto memPool = CreateMemPool<IncrementalPool>();
+        // auto memPool = NInterconnect::NRdma::CreateIncrementalMemPool();
+        // auto memPool = NInterconnect::NRdma::CreateSlotMemPool();
 
         std::vector<std::thread> threads;
         std::vector<ui64> times(NUM_THREADS);

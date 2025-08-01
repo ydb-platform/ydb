@@ -66,9 +66,8 @@ void TTxScan::Complete(const TActorContext& ctx) {
         LOG_S_DEBUG("TTxScan prepare txId: " << txId << " scanId: " << scanId << " at tablet " << Self->TabletID());
 
         TReadDescription read(Self->TabletID(), snapshot, sorting);
-        read.DeduplicationPolicy = AppDataVerified().ColumnShardConfig.GetDefaultEnableDeduplication()
-                                       ? EDeduplicationPolicy::PREVENT_DUPLICATES
-                                       : EDeduplicationPolicy::ALLOW_DUPLICATES;
+        read.DeduplicationPolicy = AppDataVerified().ColumnShardConfig.GetDeduplicationEnabled() ? EDeduplicationPolicy::PREVENT_DUPLICATES
+                                                                                                 : EDeduplicationPolicy::ALLOW_DUPLICATES;
         read.TxId = txId;
         if (request.HasLockTxId()) {
             read.LockId = request.GetLockTxId();

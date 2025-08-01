@@ -6,7 +6,6 @@
 #include <ydb/core/tx/columnshard/engines/reader/common/stats.h>
 
 #include <ydb/library/formats/arrow/replace_key.h>
-#include <ydb/library/range_treap/range_treap.h>
 
 namespace NKikimr::NColumnShard {
 class TLockSharingInfo;

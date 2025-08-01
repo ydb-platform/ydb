@@ -67,7 +67,6 @@ public:
     }
 
     const TEvRequestFilter::TPtr& GetRequest() const {
-        AFL_VERIFY(!!OriginalRequest);
         return OriginalRequest;
     }
 

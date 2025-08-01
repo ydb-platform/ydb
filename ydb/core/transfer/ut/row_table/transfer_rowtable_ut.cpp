@@ -1,4 +1,4 @@
-#include "transfer_common.h"
+#include <ydb/core/transfer/ut/common/transfer_common.h>
 
 Y_UNIT_TEST_SUITE(Transfer_RowTable)
 {
@@ -122,6 +122,16 @@ Y_UNIT_TEST_SUITE(Transfer_RowTable)
     Y_UNIT_TEST(ProcessingCDCMessage)
     {
         ProcessingCDCMessage(TableType);
+    }
+
+    Y_UNIT_TEST(ProcessingTargetTable)
+    {
+        ProcessingTargetTable(TableType);
+    }
+
+    Y_UNIT_TEST(ProcessingTargetTableOtherType)
+    {
+        ProcessingTargetTableOtherType(TableType);
     }
 
     Y_UNIT_TEST(TableWithSyncIndex) {

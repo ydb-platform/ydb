@@ -20,7 +20,7 @@ private:
 
 private:
     bool IsReady() const {
-        return !FiltersByRange.empty() && FiltersByRange.begin()->first.GetBegin() == 0 &&
+        return FiltersByRange.size() == 1 && FiltersByRange.begin()->first.GetBegin() == 0 &&
                FiltersByRange.begin()->first.GetEnd() == OriginalRequest->Get()->GetRecordsCount();
     }
 

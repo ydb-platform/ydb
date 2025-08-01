@@ -29,7 +29,7 @@ struct TColumn {
 bool operator==(const TColumn& col1, const TColumn& col2);
 bool operator!=(const TColumn& col1, const TColumn& col2);
 
-struct TArrowResult {
+struct TResultArrow {
     std::string Schema;
     std::vector<std::string> Data;
 };
@@ -39,8 +39,8 @@ class TResultSet {
     friend class TResultSetParser;
     friend class NYdb::TProtoAccessor;
 public:
-    TResultSet(const Ydb::ResultSet& proto, const TArrowResult& arrowResult = TArrowResult{});
-    TResultSet(Ydb::ResultSet&& proto, TArrowResult&& arrowResult = TArrowResult{});
+    TResultSet(const Ydb::ResultSet& proto);
+    TResultSet(Ydb::ResultSet&& proto);
 
     //! Returns number of columns
     size_t ColumnsCount() const;
@@ -54,11 +54,11 @@ public:
     //! Returns meta information (name, type) for columns
     const std::vector<TColumn>& GetColumnsMeta() const;
 
-    //! Returns schema of Arrow record batches
-    const std::string& GetArrowSchema() const;
+    //! Set Arrow record batch with serialized schema and data
+    void SetArrowResult(const TResultArrow& resultArrow);
 
-    //! Returns Arrow record batches
-    const std::vector<std::string>& GetArrowData() const;
+    //! Returns Arrow record batch with serialized schema and data
+    const TResultArrow& GetArrowResult() const;
 
 private:
     const Ydb::ResultSet& GetProto() const;

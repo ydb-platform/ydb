@@ -9,17 +9,14 @@ using namespace NYdb::NQuery;
 
 namespace {
 
-TKikimrRunner CreateKikimrRunner(bool isOlap = false) {
+TKikimrRunner CreateKikimrRunner() {
     NKikimrConfig::TAppConfig appConfig;
-    appConfig.MutableTableServiceConfig()->SetEnableOlapSink(isOlap);
-
-    auto settings = TKikimrSettings().SetAppConfig(appConfig);
-    return TKikimrRunner(settings);
+    appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+    return TKikimrRunner(TKikimrSettings().SetAppConfig(appConfig));
 }
 
-void CreateAllColumnsOltp(TQueryClient& client) {
+void FillOltpTypesTable(TQueryClient& client) {
     auto createResult = client.ExecuteQuery(R"(
-        --!syntax_v1
         CREATE TABLE `/Root/OltpTable` (
             Key Uint64,
             BoolValue Bool,
@@ -51,16 +48,14 @@ void CreateAllColumnsOltp(TQueryClient& client) {
     UNIT_ASSERT_C(createResult.IsSuccess(), createResult.GetIssues().ToString());
 
     auto insertResult = client.ExecuteQuery(R"(
-        --!syntax_v1
         INSERT INTO `/Root/OltpTable` (Key, BoolValue, Int8Value, Uint8Value, Int16Value, Uint16Value, Int32Value, Uint32Value, Int64Value, Uint64Value, FloatValue, DoubleValue, StringValue, Utf8Value, DateValue, DatetimeValue, TimestampValue, IntervalValue, DecimalValue, JsonValue, YsonValue, JsonDocumentValue, DyNumberValue, Int32NotNullValue) VALUES
         (42, true, -1, 1, -2, 2, -3, 3, -4, 4, CAST(3.0 AS Float), 4.0, "five", Utf8("six"), Date("2007-07-07"), Datetime("2008-08-08T08:08:08Z"), Timestamp("2009-09-09T09:09:09.09Z"), Interval("P10D"), CAST("11.11" AS Decimal(22, 9)), "[12]", "[13]", JsonDocument("[14]"), DyNumber("15.15"), 123);
     )", TTxControl::BeginTx().CommitTx()).GetValueSync();
     UNIT_ASSERT_C(insertResult.IsSuccess(), insertResult.GetIssues().ToString());
 }
 
-void CreateAllColumnsOlap(TQueryClient& client) {
+void FillOlapTypesTable(TQueryClient& client) {
     auto createResult = client.ExecuteQuery(R"(
-        --!syntax_v1
         CREATE TABLE `/Root/OlapTable` (
             Key Uint64 NOT NULL,
             Int8Value Int8,
@@ -89,45 +84,50 @@ void CreateAllColumnsOlap(TQueryClient& client) {
     UNIT_ASSERT_C(createResult.IsSuccess(), createResult.GetIssues().ToString());
 
     auto insertResult = client.ExecuteQuery(R"(
-        --!syntax_v1
         INSERT INTO `/Root/OlapTable` (Key, Int8Value, Uint8Value, Int16Value, Uint16Value, Int32Value, Uint32Value, Int64Value, Uint64Value, FloatValue, DoubleValue, StringValue, Utf8Value, DateValue, DatetimeValue, TimestampValue, JsonValue, YsonValue, JsonDocumentValue) VALUES
         (42, -1, 1, -2, 2, -3, 3, -4, 4, CAST(3.0 AS Float), 4.0, "five", Utf8("six"), Date("2007-07-07"), Datetime("2008-08-08T08:08:08Z"), Timestamp("2009-09-09T09:09:09.09Z"), "[12]", "[13]", JsonDocument("[14]"));
     )", TTxControl::BeginTx().CommitTx()).GetValueSync();
     UNIT_ASSERT_C(insertResult.IsSuccess(), insertResult.GetIssues().ToString());
 }
 
-void CompareResultSetsSize(const TResultSet& messageResultSet, const TResultSet& arrowResultSet) {
-    UNIT_ASSERT_VALUES_EQUAL(messageResultSet.ColumnsCount(), arrowResultSet.ColumnsCount());
-    UNIT_ASSERT(messageResultSet.RowsCount() == 0 || !arrowResultSet.GetArrowSchema().empty());
+void AssertRecordBatchSize(const TResultSet& messageResultSet, const TResultSet& arrowResultSet) {
+    UNIT_ASSERT_VALUES_EQUAL_C(messageResultSet.ColumnsCount(), arrowResultSet.ColumnsCount(), "Columns count mismatch");
 
-    auto schema = NArrow::DeserializeSchema(TString(arrowResultSet.GetArrowSchema()));
+    auto [schema, recordBatches] = arrowResultSet.GetArrowResult();
 
-    size_t arrowRowsCount = 0;
-    for (const auto& data : arrowResultSet.GetArrowData()) {
-        auto batch = NArrow::DeserializeBatch(TString(data), schema);
-        UNIT_ASSERT_VALUES_EQUAL(batch->num_columns(), messageResultSet.ColumnsCount());
-
-        arrowRowsCount += batch->num_rows();
+    if (messageResultSet.RowsCount() == 0) {
+        UNIT_ASSERT_C(schema.empty(), "Schema should be empty");
+        UNIT_ASSERT_C(recordBatches.empty(), "Record batches should be empty");
+        return;
     }
 
-    UNIT_ASSERT_VALUES_EQUAL(messageResultSet.RowsCount(), arrowRowsCount);
+    auto arrowSchema = NArrow::DeserializeSchema(TString(schema));
+    size_t arrowRowsCount = 0;
+
+    for (const auto& recordBatch : recordBatches) {
+        auto batch = NArrow::DeserializeBatch(TString(recordBatch), arrowSchema);
+        arrowRowsCount += batch->num_rows();
+
+        UNIT_ASSERT_VALUES_EQUAL_C(batch->num_columns(), messageResultSet.ColumnsCount(), "Columns count mismatch");
+    }
+
+    UNIT_ASSERT_VALUES_EQUAL_C(messageResultSet.RowsCount(), arrowRowsCount, "Rows count mismatch");
 }
 
 } // namespace
 
 Y_UNIT_TEST_SUITE(KqpResultSetFormatArrow) {
     Y_UNIT_TEST_TWIN(AllTypes, isOlap) {
-        auto kikimr = CreateKikimrRunner(isOlap);
+        auto kikimr = CreateKikimrRunner();
         auto client = kikimr.GetQueryClient();
 
         if (isOlap) {
-            CreateAllColumnsOlap(client);
+            FillOlapTypesTable(client);
         } else {
-            CreateAllColumnsOltp(client);
+            FillOltpTypesTable(client);
         }
 
         const TString query = Sprintf(R"(
-            --!syntax_v1
             SELECT * FROM `/Root/%s`;
         )", (isOlap) ? "OlapTable" : "OltpTable");
 
@@ -140,7 +140,7 @@ Y_UNIT_TEST_SUITE(KqpResultSetFormatArrow) {
         UNIT_ASSERT_C(messageResponse.IsSuccess(), messageResponse.GetIssues().ToString());
         UNIT_ASSERT_C(arrowResponse.IsSuccess(), arrowResponse.GetIssues().ToString());
 
-        CompareResultSetsSize(messageResponse.GetResultSet(0), arrowResponse.GetResultSet(0));
+        AssertRecordBatchSize(messageResponse.GetResultSet(0), arrowResponse.GetResultSet(0));
     }
 
     Y_UNIT_TEST(LargeTable) {
@@ -150,7 +150,6 @@ Y_UNIT_TEST_SUITE(KqpResultSetFormatArrow) {
         CreateLargeTable(kikimr, 10000, 4, 10, 5000, 10);
 
         const TString query = Sprintf(R"(
-            --!syntax_v1
             SELECT * FROM `/Root/LargeTable`;
         )");
 
@@ -163,7 +162,7 @@ Y_UNIT_TEST_SUITE(KqpResultSetFormatArrow) {
         UNIT_ASSERT_C(messageResponse.IsSuccess(), messageResponse.GetIssues().ToString());
         UNIT_ASSERT_C(arrowResponse.IsSuccess(), arrowResponse.GetIssues().ToString());
 
-        CompareResultSetsSize(messageResponse.GetResultSet(0), arrowResponse.GetResultSet(0));
+        AssertRecordBatchSize(messageResponse.GetResultSet(0), arrowResponse.GetResultSet(0));
     }
 
     Y_UNIT_TEST(LargeLimitTable) {
@@ -173,7 +172,6 @@ Y_UNIT_TEST_SUITE(KqpResultSetFormatArrow) {
         CreateLargeTable(kikimr, 10000, 4, 10, 5000, 10);
 
         const TString query = Sprintf(R"(
-            --!syntax_v1
             SELECT * FROM `/Root/LargeTable` LIMIT 70000;
         )");
 
@@ -186,30 +184,28 @@ Y_UNIT_TEST_SUITE(KqpResultSetFormatArrow) {
         UNIT_ASSERT_C(messageResponse.IsSuccess(), messageResponse.GetIssues().ToString());
         UNIT_ASSERT_C(arrowResponse.IsSuccess(), arrowResponse.GetIssues().ToString());
 
-        CompareResultSetsSize(messageResponse.GetResultSet(0), arrowResponse.GetResultSet(0));
+        AssertRecordBatchSize(messageResponse.GetResultSet(0), arrowResponse.GetResultSet(0));
     }
 
     Y_UNIT_TEST_TWIN(Returning, isOlap) {
-        auto kikimr = CreateKikimrRunner(isOlap);
+        auto kikimr = CreateKikimrRunner();
         auto client = kikimr.GetQueryClient();
 
         TString query;
 
         if (isOlap) {
-            CreateAllColumnsOlap(client);
+            FillOlapTypesTable(client);
             query = R"(
-                --!syntax_v1
-                UPSERT INTO `/Root/OlapTable` (Key, Int8Value, Uint8Value, Int16Value, Uint16Value, Int32Value, Uint32Value, Int64Value, Uint64Value, FloatValue, DoubleValue, StringValue, Utf8Value, DateValue, DatetimeValue, TimestampValue, JsonValue, YsonValue, JsonDocumentValue) VALUES
+                    UPSERT INTO `/Root/OlapTable` (Key, Int8Value, Uint8Value, Int16Value, Uint16Value, Int32Value, Uint32Value, Int64Value, Uint64Value, FloatValue, DoubleValue, StringValue, Utf8Value, DateValue, DatetimeValue, TimestampValue, JsonValue, YsonValue, JsonDocumentValue) VALUES
                 (43, -1, 1, -2, 2, -3, 3, -4, 4, CAST(3.0 AS Float), 4.0, "five", Utf8("six"), Date("2007-07-07"), Datetime("2008-08-08T08:08:08Z"), Timestamp("2009-09-09T09:09:09.09Z"), "[12]", "[13]", JsonDocument("[14]")),
                 (44, -1, 1, -2, 2, -3, 3, -4, 4, CAST(3.0 AS Float), 4.0, "five", Utf8("six"), Date("2007-07-07"), Datetime("2008-08-08T08:08:08Z"), Timestamp("2009-09-09T09:09:09.09Z"), "[12]", "[13]", JsonDocument("[14]")),
                 (45, -1, 1, -2, 2, -3, 3, -4, 4, CAST(3.0 AS Float), 4.0, "five", Utf8("six"), Date("2007-07-07"), Datetime("2008-08-08T08:08:08Z"), Timestamp("2009-09-09T09:09:09.09Z"), "[12]", "[13]", JsonDocument("[14]"))
                 RETURNING *;
             )";
         } else {
-            CreateAllColumnsOltp(client);
+            FillOltpTypesTable(client);
             query = R"(
-                --!syntax_v1
-                UPSERT INTO `/Root/OltpTable` (Key, BoolValue, Int8Value, Uint8Value, Int16Value, Uint16Value, Int32Value, Uint32Value, Int64Value, Uint64Value, FloatValue, DoubleValue, StringValue, Utf8Value, DateValue, DatetimeValue, TimestampValue, IntervalValue, DecimalValue, JsonValue, YsonValue, JsonDocumentValue, DyNumberValue, Int32NotNullValue) VALUES
+                    UPSERT INTO `/Root/OltpTable` (Key, BoolValue, Int8Value, Uint8Value, Int16Value, Uint16Value, Int32Value, Uint32Value, Int64Value, Uint64Value, FloatValue, DoubleValue, StringValue, Utf8Value, DateValue, DatetimeValue, TimestampValue, IntervalValue, DecimalValue, JsonValue, YsonValue, JsonDocumentValue, DyNumberValue, Int32NotNullValue) VALUES
                 (43, true, -1, 1, -2, 2, -3, 3, -4, 4, CAST(3.0 AS Float), 4.0, "five", Utf8("six"), Date("2007-07-07"), Datetime("2008-08-08T08:08:08Z"), Timestamp("2009-09-09T09:09:09.09Z"), Interval("P10D"), CAST("11.11" AS Decimal(22, 9)), "[12]", "[13]", JsonDocument("[14]"), DyNumber("15.15"), 123),
                 (44, true, -1, 1, -2, 2, -3, 3, -4, 4, CAST(3.0 AS Float), 4.0, "five", Utf8("six"), Date("2007-07-07"), Datetime("2008-08-08T08:08:08Z"), Timestamp("2009-09-09T09:09:09.09Z"), Interval("P10D"), CAST("11.11" AS Decimal(22, 9)), "[12]", "[13]", JsonDocument("[14]"), DyNumber("15.15"), 123),
                 (45, true, -1, 1, -2, 2, -3, 3, -4, 4, CAST(3.0 AS Float), 4.0, "five", Utf8("six"), Date("2007-07-07"), Datetime("2008-08-08T08:08:08Z"), Timestamp("2009-09-09T09:09:09.09Z"), Interval("P10D"), CAST("11.11" AS Decimal(22, 9)), "[12]", "[13]", JsonDocument("[14]"), DyNumber("15.15"), 123)
@@ -226,7 +222,7 @@ Y_UNIT_TEST_SUITE(KqpResultSetFormatArrow) {
         UNIT_ASSERT_C(messageResponse.IsSuccess(), messageResponse.GetIssues().ToString());
         UNIT_ASSERT_C(arrowResponse.IsSuccess(), arrowResponse.GetIssues().ToString());
 
-        CompareResultSetsSize(messageResponse.GetResultSet(0), arrowResponse.GetResultSet(0));
+        AssertRecordBatchSize(messageResponse.GetResultSet(0), arrowResponse.GetResultSet(0));
     }
 
     Y_UNIT_TEST(ColumnOrder_1) {
@@ -239,11 +235,13 @@ Y_UNIT_TEST_SUITE(KqpResultSetFormatArrow) {
             )", TTxControl::BeginTx().CommitTx(), TExecuteQuerySettings().Format(EResultSetFormat::Arrow)).GetValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 
-            UNIT_ASSERT(!result.GetResultSet(0).GetArrowSchema().empty());
-            UNIT_ASSERT(!result.GetResultSet(0).GetArrowData().empty());
+            auto [schema, recordBatches] = result.GetResultSet(0).GetArrowResult();
 
-            auto schema = NArrow::DeserializeSchema(TString(result.GetResultSet(0).GetArrowSchema()));
-            auto batch = NArrow::DeserializeBatch(TString(result.GetResultSet(0).GetArrowData()[0]), schema);
+            UNIT_ASSERT(!schema.empty());
+            UNIT_ASSERT(!recordBatches.empty());
+
+            auto arrowSchema = NArrow::DeserializeSchema(TString(schema));
+            auto batch = NArrow::DeserializeBatch(TString(recordBatches[0]), arrowSchema);
 
             UNIT_ASSERT_VALUES_EQUAL(batch->num_rows(), 1);
             UNIT_ASSERT_VALUES_EQUAL(batch->num_columns(), 2);
@@ -270,11 +268,13 @@ Y_UNIT_TEST_SUITE(KqpResultSetFormatArrow) {
             )", TTxControl::BeginTx().CommitTx(), TExecuteQuerySettings().Format(EResultSetFormat::Arrow)).GetValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 
-            UNIT_ASSERT(!result.GetResultSet(0).GetArrowSchema().empty());
-            UNIT_ASSERT(!result.GetResultSet(0).GetArrowData().empty());
+            auto [schema, recordBatches] = result.GetResultSet(0).GetArrowResult();
 
-            auto schema = NArrow::DeserializeSchema(TString(result.GetResultSet(0).GetArrowSchema()));
-            auto batch = NArrow::DeserializeBatch(TString(result.GetResultSet(0).GetArrowData()[0]), schema);
+            UNIT_ASSERT(!schema.empty());
+            UNIT_ASSERT(!recordBatches.empty());
+
+            auto arrowSchema = NArrow::DeserializeSchema(TString(schema));
+            auto batch = NArrow::DeserializeBatch(TString(recordBatches[0]), arrowSchema);
 
             UNIT_ASSERT_VALUES_EQUAL(batch->num_rows(), 1);
             UNIT_ASSERT_VALUES_EQUAL(batch->num_columns(), 2);
@@ -300,11 +300,13 @@ Y_UNIT_TEST_SUITE(KqpResultSetFormatArrow) {
             )", TTxControl::BeginTx().CommitTx(), TExecuteQuerySettings().Format(EResultSetFormat::Arrow)).GetValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 
-            UNIT_ASSERT(!result.GetResultSet(0).GetArrowSchema().empty());
-            UNIT_ASSERT(!result.GetResultSet(0).GetArrowData().empty());
+            auto [schema, recordBatches] = result.GetResultSet(0).GetArrowResult();
 
-            auto schema = NArrow::DeserializeSchema(TString(result.GetResultSet(0).GetArrowSchema()));
-            auto batch = NArrow::DeserializeBatch(TString(result.GetResultSet(0).GetArrowData()[0]), schema);
+            UNIT_ASSERT(!schema.empty());
+            UNIT_ASSERT(!recordBatches.empty());
+
+            auto arrowSchema = NArrow::DeserializeSchema(TString(schema));
+            auto batch = NArrow::DeserializeBatch(TString(recordBatches[0]), arrowSchema);
 
             UNIT_ASSERT_VALUES_EQUAL(batch->num_rows(), 3);
             UNIT_ASSERT_VALUES_EQUAL(batch->num_columns(), 3);
@@ -357,11 +359,13 @@ Y_UNIT_TEST_SUITE(KqpResultSetFormatArrow) {
             )", TTxControl::BeginTx().CommitTx(), TExecuteQuerySettings().Format(EResultSetFormat::Arrow)).GetValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 
-            UNIT_ASSERT(!result.GetResultSet(0).GetArrowSchema().empty());
-            UNIT_ASSERT(!result.GetResultSet(0).GetArrowData().empty());
+            auto [schema, recordBatches] = result.GetResultSet(0).GetArrowResult();
 
-            auto schema = NArrow::DeserializeSchema(TString(result.GetResultSet(0).GetArrowSchema()));
-            auto batch = NArrow::DeserializeBatch(TString(result.GetResultSet(0).GetArrowData()[0]), schema);
+            UNIT_ASSERT(!schema.empty());
+            UNIT_ASSERT(!recordBatches.empty());
+
+            auto arrowSchema = NArrow::DeserializeSchema(TString(schema));
+            auto batch = NArrow::DeserializeBatch(TString(recordBatches[0]), arrowSchema);
 
             UNIT_ASSERT_VALUES_EQUAL(batch->num_rows(), 1);
             UNIT_ASSERT_VALUES_EQUAL(batch->num_columns(), 2);
@@ -387,11 +391,13 @@ Y_UNIT_TEST_SUITE(KqpResultSetFormatArrow) {
             )", TTxControl::BeginTx().CommitTx(), TExecuteQuerySettings().Format(EResultSetFormat::Arrow)).GetValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 
-            UNIT_ASSERT(!result.GetResultSet(0).GetArrowSchema().empty());
-            UNIT_ASSERT(!result.GetResultSet(0).GetArrowData().empty());
+            auto [schema, recordBatches] = result.GetResultSet(0).GetArrowResult();
 
-            auto schema = NArrow::DeserializeSchema(TString(result.GetResultSet(0).GetArrowSchema()));
-            auto batch = NArrow::DeserializeBatch(TString(result.GetResultSet(0).GetArrowData()[0]), schema);
+            UNIT_ASSERT(!schema.empty());
+            UNIT_ASSERT(!recordBatches.empty());
+
+            auto arrowSchema = NArrow::DeserializeSchema(TString(schema));
+            auto batch = NArrow::DeserializeBatch(TString(recordBatches[0]), arrowSchema);
 
             UNIT_ASSERT_VALUES_EQUAL(batch->num_rows(), 1);
             UNIT_ASSERT_VALUES_EQUAL(batch->num_columns(), 2);
@@ -429,11 +435,13 @@ Y_UNIT_TEST_SUITE(KqpResultSetFormatArrow) {
             )", TTxControl::BeginTx().CommitTx(), settings).GetValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 
-            UNIT_ASSERT(!result.GetResultSet(0).GetArrowSchema().empty());
-            UNIT_ASSERT(!result.GetResultSet(0).GetArrowData().empty());
+            auto [schema, recordBatches] = result.GetResultSet(0).GetArrowResult();
 
-            auto schema = NArrow::DeserializeSchema(TString(result.GetResultSet(0).GetArrowSchema()));
-            auto batch = NArrow::DeserializeBatch(TString(result.GetResultSet(0).GetArrowData()[0]), schema);
+            UNIT_ASSERT(!schema.empty());
+            UNIT_ASSERT(!recordBatches.empty());
+
+            auto arrowSchema = NArrow::DeserializeSchema(TString(schema));
+            auto batch = NArrow::DeserializeBatch(TString(recordBatches[0]), arrowSchema);
 
             UNIT_ASSERT_VALUES_EQUAL(batch->num_rows(), 3);
             UNIT_ASSERT_VALUES_EQUAL(batch->num_columns(), 3);
@@ -476,11 +484,13 @@ Y_UNIT_TEST_SUITE(KqpResultSetFormatArrow) {
             )", TTxControl::BeginTx().CommitTx(), settings).GetValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 
-            UNIT_ASSERT(!result.GetResultSet(0).GetArrowSchema().empty());
-            UNIT_ASSERT(!result.GetResultSet(0).GetArrowData().empty());
+            auto [schema, recordBatches] = result.GetResultSet(0).GetArrowResult();
 
-            auto schema = NArrow::DeserializeSchema(TString(result.GetResultSet(0).GetArrowSchema()));
-            auto batch = NArrow::DeserializeBatch(TString(result.GetResultSet(0).GetArrowData()[0]), schema);
+            UNIT_ASSERT(!schema.empty());
+            UNIT_ASSERT(!recordBatches.empty());
+
+            auto arrowSchema = NArrow::DeserializeSchema(TString(schema));
+            auto batch = NArrow::DeserializeBatch(TString(recordBatches[0]), arrowSchema);
 
             UNIT_ASSERT_VALUES_EQUAL(batch->num_rows(), 3);
             UNIT_ASSERT_VALUES_EQUAL(batch->num_columns(), 3);

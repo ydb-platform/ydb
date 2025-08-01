@@ -1,4 +1,4 @@
-P#include <library/cpp/testing/unittest/tests_data.h>
+#include <library/cpp/testing/unittest/tests_data.h>
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <grpcpp/client_context.h>

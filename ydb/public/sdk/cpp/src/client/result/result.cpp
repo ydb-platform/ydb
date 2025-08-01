@@ -36,16 +36,14 @@ bool operator!=(const TColumn& col1, const TColumn& col2) {
 
 class TResultSet::TImpl {
 public:
-    TImpl(const Ydb::ResultSet& proto, const TArrowResult& arrowResult = TArrowResult{})
+    TImpl(const Ydb::ResultSet& proto)
         : ProtoResultSet_(proto)
-        , ArrowResult_(arrowResult)
     {
         Init();
     }
 
-    TImpl(Ydb::ResultSet&& proto, TArrowResult&& arrowResult = TArrowResult{})
+    TImpl(Ydb::ResultSet&& proto)
         : ProtoResultSet_(std::move(proto))
-        , ArrowResult_(std::move(arrowResult))
     {
         Init();
     }
@@ -60,16 +58,16 @@ public:
 public:
     const Ydb::ResultSet ProtoResultSet_;
     std::vector<TColumn> ColumnsMeta_;
-    TArrowResult ArrowResult_;
+    TResultArrow ResultArrow_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TResultSet::TResultSet(const Ydb::ResultSet& proto, const TArrowResult& arrowResult)
-    : Impl_(new TResultSet::TImpl(proto, arrowResult)) {}
+TResultSet::TResultSet(const Ydb::ResultSet& proto)
+    : Impl_(new TResultSet::TImpl(proto)) {}
 
-TResultSet::TResultSet(Ydb::ResultSet&& proto, TArrowResult&& arrowResult)
-    : Impl_(new TResultSet::TImpl(std::move(proto), std::move(arrowResult))) {}
+TResultSet::TResultSet(Ydb::ResultSet&& proto)
+    : Impl_(new TResultSet::TImpl(std::move(proto))) {}
 
 size_t TResultSet::ColumnsCount() const {
     return Impl_->ColumnsMeta_.size();
@@ -91,12 +89,12 @@ const Ydb::ResultSet& TResultSet::GetProto() const {
     return Impl_->ProtoResultSet_;
 }
 
-const std::string& TResultSet::GetArrowSchema() const {
-    return Impl_->ArrowResult_.Schema;
+void TResultSet::SetArrowResult(const TResultArrow& resultArrow) {
+    Impl_->ResultArrow_ = resultArrow;
 }
 
-const std::vector<std::string>& TResultSet::GetArrowData() const {
-    return Impl_->ArrowResult_.Data;
+const TResultArrow& TResultSet::GetArrowResult() const {
+    return Impl_->ResultArrow_;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

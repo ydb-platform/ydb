@@ -150,7 +150,7 @@ struct TExecuteQueryBuffer : public TThrRefBase, TNonCopyable {
     std::vector<Ydb::ResultSet> ResultSets_;
     std::optional<TExecStats> Stats_;
     std::optional<TTransaction> Tx_;
-    std::vector<TArrowResult> ArrowResults_;
+    std::unordered_map<size_t, TResultArrow> ResultsArrow_;
 
     void Next() {
         TPtr self(this);
@@ -170,21 +170,20 @@ struct TExecuteQueryBuffer : public TThrRefBase, TNonCopyable {
                     std::vector<NYdb::NIssue::TIssue> issues;
                     std::vector<Ydb::ResultSet> resultProtos;
                     std::optional<TTransaction> tx;
-                    std::vector<TArrowResult> arrowResults;
+                    std::unordered_map<size_t, TResultArrow> resultsArrow;
 
                     std::swap(self->Issues_, issues);
                     std::swap(self->ResultSets_, resultProtos);
                     std::swap(self->Tx_, tx);
-                    std::swap(self->ArrowResults_, arrowResults);
+                    std::swap(self->ResultsArrow_, resultsArrow);
 
                     std::vector<TResultSet> resultSets;
-                    for (size_t i = 0; i < resultProtos.size(); ++i) {
-                        auto& proto = resultProtos[i];
-                        if (proto.format() == Ydb::ResultSet::FORMAT_VALUE) {
-                            resultSets.emplace_back(std::move(proto));
-                        } else if (proto.format() == Ydb::ResultSet::FORMAT_ARROW) {
-                            resultSets.emplace_back(std::move(proto), std::move(arrowResults[i]));
-                        }
+                    for (auto& proto : resultProtos) {
+                        resultSets.emplace_back(std::move(proto));
+                    }
+
+                    for (auto& [index, arrowResult] : resultsArrow) {
+                        resultSets[index].SetArrowResult(std::move(arrowResult));
                     }
 
                     self->Promise_.SetValue(TExecuteQueryResult(
@@ -226,11 +225,7 @@ struct TExecuteQueryBuffer : public TThrRefBase, TNonCopyable {
                         break;
                     }
                     case Ydb::ResultSet::FORMAT_ARROW: {
-                        if (self->ArrowResults_.size() <= part.GetResultSetIndex()) {
-                            self->ArrowResults_.resize(part.GetResultSetIndex() + 1);
-                        }
-
-                        auto& arrowResult = self->ArrowResults_[part.GetResultSetIndex()];
+                        auto& arrowResult = self->ResultsArrow_[part.GetResultSetIndex()];
                         if (arrowResult.Schema.empty()) {
                             arrowResult.Schema = inRsProto.arrow_format_meta().schema();
                         }

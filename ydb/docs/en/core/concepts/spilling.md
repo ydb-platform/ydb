@@ -49,15 +49,15 @@ Main service components:
 - **File management**: The service automatically creates, deletes, and manages files on disk.
 - **Resource monitoring**: The service monitors disk space usage, the number of active operations, and other performance metrics.
 
-#### Data storage
+#### Data Storage
 
-Data is saved in files on the local file system. Spilling Service ensures:
+Data is saved in files on the local file system. The Spilling Service ensures:
 
-* distribution of records between files;
-* file deletion;
-* data lifecycle management.
+* distribution of records between files
+* file deletion
+* data lifecycle management
 
-In case of unexpected restart, obsolete files are automatically deleted.
+In case of an unexpected restart, obsolete files are automatically deleted.
 
 #### Components Using Spilling
 

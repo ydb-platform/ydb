@@ -105,6 +105,7 @@ public:
             .ConsumerName(config.GetConsumer())
             .MaxMemoryUsageBytes(maxMemoryUsageBytes)
             .Decompress(false)
+            .AutoPartitioningSupport(true)
             .RetryPolicy(NYdb::NTopic::IRetryPolicy::GetNoRetryPolicy());
         if (logger) {
             settings.Log(logger.GetRef());

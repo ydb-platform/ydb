@@ -1429,6 +1429,7 @@ message TPersQueueGroupDescription {
     message TPartitionSplit {
         required uint32 Partition = 1;
         required bytes SplitBoundary = 2;
+        repeated uint32 ChildPartitionIds = 3; // use the prescribed ids instead of auto generating new ones
     }
     repeated TPartitionSplit Split = 15;
 

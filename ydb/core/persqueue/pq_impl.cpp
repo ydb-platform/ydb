@@ -3179,6 +3179,7 @@ void TPersQueue::HandleWakeup(const TActorContext& ctx) {
     MeteringSink.MayFlush(ctx.Now());
     DeleteExpiredTransactions(ctx);
     SetTxCounters();
+    ResendSplitMergeRequests(ctx);
     ctx.Schedule(TDuration::Seconds(5), new TEvents::TEvWakeup());
 }
 
@@ -5207,8 +5208,37 @@ void TPersQueue::Handle(TEvPQ::TEvReadingPartitionStatusRequest::TPtr& ev, const
 
 void TPersQueue::Handle(TEvPQ::TEvPartitionScaleStatusChanged::TPtr& ev, const TActorContext& ctx)
 {
+    const bool mirroredPartition = Config.GetPartitionConfig().HasMirrorFrom();
+    const TEvPQ::TEvPartitionScaleStatusChanged *s = ev->Get();
+    if (mirroredPartition && s->Record.HasSplitMergePartitionsRelation()) {
+        PQ_LOG_I("Got mirrorer split merge request" << ev->ToString());
+        auto [_, repeat] = MirrorScaleStatusRequests.insert_or_assign(s->Record.GetPartitionId(), s->Record);
+        if (repeat) {
+            PQ_LOG_I("Got duplicated split merge request");
+        }
+        ResendSplitMergeRequests(ctx);
+        return;
+    }
+
     if (ReadBalancerActorId) {
         ctx.Send(ReadBalancerActorId, ev->Release().Release());
+    }
+}
+
+void TPersQueue::ResendSplitMergeRequests(const TActorContext& ctx)
+{
+    if (MirrorScaleStatusRequests.empty()) {
+        return;
+    }
+    if (!ReadBalancerActorId) {
+        PQ_LOG_D("Postpone " << MirrorScaleStatusRequests.size() << " split merge requests");
+        return;
+    }
+    for (const auto& [partitionId, request] : MirrorScaleStatusRequests) {
+        PQ_LOG_I("Send split merge request for partition " << partitionId);
+        THolder<TEvPQ::TEvPartitionScaleStatusChanged> ev = MakeHolder<TEvPQ::TEvPartitionScaleStatusChanged>();
+        ev->Record.CopyFrom(request);
+        ctx.Send(ReadBalancerActorId, std::move(ev));
     }
 }
 

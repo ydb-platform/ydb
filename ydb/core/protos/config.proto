@@ -35,6 +35,7 @@ import "ydb/core/protos/table_service_config.proto";
 import "ydb/core/protos/tablet.proto";
 import "ydb/core/protos/tenant_pool.proto";
 import "ydb/core/protos/tenant_slot_broker.proto";
+import "ydb/core/protos/nbs/blockstore.proto";
 import "ydb/library/actors/protos/interconnect.proto";
 import "yql/essentials/core/file_storage/proto/file_storage.proto";
 import "yql/essentials/providers/common/proto/gateways_config.proto";
@@ -2367,6 +2368,7 @@ message TAppConfig {
     optional TDataErasureConfig DataErasureConfig = 88;
     optional THealthCheckConfig HealthCheckConfig = 89;
     optional TGroupedMemoryLimiterConfig CompGroupedMemoryLimiterConfig = 92;
+    optional TBlockstoreConfig BlockstoreConfig = 93;
 
     repeated TNamedConfig NamedConfigs = 100;
     optional string ClusterYamlConfig = 101;

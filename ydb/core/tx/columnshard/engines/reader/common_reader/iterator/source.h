@@ -187,6 +187,14 @@ protected:
 
 public:
 
+    ui64 GetReservedMemory() const {
+        ui64 result = 0;
+        for (auto&& i : ResourceGuards) {
+            result += i->GetMemory();
+        }
+        return result;
+    }
+
     const TPortionDataAccessor& GetPortionAccessor() const {
         AFL_VERIFY(!!Accessor);
         return *Accessor;
@@ -218,6 +226,22 @@ public:
     template <class T>
     T* MutableAs() {
         AFL_VERIFY(T::CheckTypeCast(Type))("type", Type);
+        return static_cast<T*>(this);
+    }
+
+    template <class T>
+    const T* GetOptionalAs() const {
+        if (!T::CheckTypeCast(Type)) {
+            return nullptr;
+        }
+        return static_cast<const T*>(this);
+    }
+
+    template <class T>
+    T* MutableOptionalAs() {
+        if (!T::CheckTypeCast(Type)) {
+            return nullptr;
+        }
         return static_cast<T*>(this);
     }
 

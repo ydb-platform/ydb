@@ -84,6 +84,27 @@ public:
                type == NCommon::IDataSource::EType::SimpleSysInfo;
     }
 
+    void ActualizeAggregatedMemoryGuards() {
+        const ui64 originalRecordsCount = GetRecordsCount();
+        AFL_VERIFY(originalRecordsCount);
+        if (!HasStageData()) {
+            return;
+        }
+        const ui64 resultRecordsCount = GetStageData().GetTable() ? GetStageData().GetTable()->GetRecordsCountActualOptional().value_or(0) : 0;
+        if (!resultRecordsCount) {
+            ClearMemoryGuards();
+            return;
+        }
+        if (originalRecordsCount <= resultRecordsCount) {
+            return;
+        }
+
+        const double kffCorrection = resultRecordsCount * 1.0 / originalRecordsCount;
+        for (auto&& i : ResourceGuards) {
+            i->Update(kffCorrection * i->GetMemory(), false);
+        }
+    }
+
     void ClearMemoryGuards() {
         ResourceGuards.clear();
         SourceGroupGuard.reset();

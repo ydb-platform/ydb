@@ -393,7 +393,7 @@ WITH
 
 {% note info %}
 
-Запись в формате Parquet возможна только с использованием алгоритма сжатия [Snappy](https://ru.wikipedia.org/wiki/Snappy_(библиотека)). При записи типы `List` и `Tuple` переводятся соответственно в логические parquet типы `List` и `Struct`.
+Запись в формате Parquet возможна только с использованием алгоритма сжатия [Snappy](https://ru.wikipedia.org/wiki/Snappy_(библиотека)). При записи типы `List` и `Tuple` переводятся соответственно в логические Parquet-типы `List` и `Struct`.
 
 {% endnote %}
 

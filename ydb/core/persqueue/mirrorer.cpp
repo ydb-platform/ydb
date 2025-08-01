@@ -378,6 +378,7 @@ void TMirrorer::TryToSplitMerge(const TActorContext& ctx) {
         return;
     }
     if (WriteRequestInFlight || !Queue.empty()) {
+        LOG_INFO_S(ctx, NKikimrServices::PQ_MIRRORER, MirrorerDescription() << " postpone split-merge event until all write operations completed");
         return;
     }
     const bool isSplit = EndPartitionSessionEvent->GetAdjacentPartitionIds().empty();
@@ -393,14 +394,15 @@ void TMirrorer::TryToSplitMerge(const TActorContext& ctx) {
     THolder request = MakeHolder<TEvPQ::TEvPartitionScaleStatusChanged>();
     request->Record.SetPartitionId(Partition);
     request->Record.SetScaleStatus(value);
-    auto* relation = request->Record.MutableSplitMergePartitionsRelation();
+    auto* relation = request->Record.MutableParticipatingPartitions();
     for (const auto& p : EndPartitionSessionEvent->GetChildPartitionIds()) {
         relation->AddChildPartitionIds(p);
     }
     for (const auto& p : EndPartitionSessionEvent->GetAdjacentPartitionIds()) {
         relation->AddAdjacentPartitionIds(p);
     }
-    Send(TabletActor, std::move(request));
+    Send(PartitionActor, std::move(request));
+    EndPartitionSessionEvent = std::nullopt;
 }
 
 void TMirrorer::HandleInitCredentials(TEvPQ::TEvInitCredentials::TPtr& /*ev*/, const TActorContext& ctx) {
@@ -566,6 +568,7 @@ void TMirrorer::ScheduleConsumerCreation(const TActorContext& ctx) {
         ReadSession->Close(TDuration::Zero());
     ReadSession = nullptr;
     PartitionStream = nullptr;
+    EndPartitionSessionEvent = std::nullopt;
     ReadFuturesInFlight = 0;
     ReadFeatures.clear();
     WaitNextReaderEventInFlight = false;
@@ -709,7 +712,10 @@ void TMirrorer::DoProcessNextReaderEvent(const TActorContext& ctx, bool wakeup) 
     } else if (auto* endPartitionSessionEvent = std::get_if<TPersQueueReadEvent::TEndPartitionSessionEvent>(&event.value())) {
         LOG_INFO_S(ctx, NKikimrServices::PQ_MIRRORER, MirrorerDescription()
             << " got end partion session event: " << endPartitionSessionEvent->DebugString());
-        Y_VERIFY_S(!EndPartitionSessionEvent.has_value(), MirrorerDescription() << " already has end partition session event");
+        if (EndPartitionSessionEvent.has_value()) {
+            LOG_WARN_S(ctx, NKikimrServices::PQ_MIRRORER, MirrorerDescription() << " already has end partition session event");
+            EndPartitionSessionEvent.reset();
+        }
         EndPartitionSessionEvent = *endPartitionSessionEvent;
     } else {
         ProcessError(ctx, TStringBuilder() << " got unmatched event: " << event.value().index());

@@ -233,7 +233,7 @@ namespace NKikimr::NPersQueueTests {
                 PrintTopicDescription(name, "4", server);
             }
             UNIT_ASSERT_VALUES_EQUAL(CountPartitionsByStatus(srcTopicFullName, server).Active, 3);
-            UNIT_ASSERT_VALUES_EQUAL(CountPartitionsByStatus(dstTopicFullName, server).Active, 2); // MAYBE changes
+            UNIT_ASSERT_VALUES_EQUAL(CountPartitionsByStatus(dstTopicFullName, server).Active, 3);
 
             // write to source topic
             TVector<ui32> messagesPerPartition(partitionsCount, 0);

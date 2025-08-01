@@ -455,7 +455,12 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvStatusResponse::TPtr& ev, c
         }
 
         if (SplitMergeEnabled(TabletConfig) && PartitionsScaleManager) {
-            PartitionsScaleManager->HandleScaleStatusChange(partitionId, partRes.GetScaleStatus(), ctx); // XXX TODO
+            PartitionsScaleManager->HandleScaleStatusChange(
+                partitionId,
+                partRes.GetScaleStatus(),
+                partRes.HasScaleParticipatingPartitions() ? MakeMaybe(partRes.GetScaleParticipatingPartitions()) : Nothing(),
+                ctx
+            );
         }
 
         AggregatedStats.AggrStats(partitionId, partRes.GetPartitionSize(), partRes.GetUsedReserveSize());
@@ -970,16 +975,12 @@ void TPersQueueReadBalancer::Handle(TEvPQ::TEvPartitionScaleStatusChanged::TPtr&
     }
 
     if (PartitionsScaleManager) {
-        if (record.HasSplitMergePartitionsRelation()) {
-            std::vector<ui32> childrenIds{record.GetSplitMergePartitionsRelation().GetChildPartitionIds().begin(),
-                                          record.GetSplitMergePartitionsRelation().GetChildPartitionIds().end()};
-            std::vector<ui32> adjacentIds{record.GetSplitMergePartitionsRelation().GetAdjacentPartitionIds().begin(),
-                                          record.GetSplitMergePartitionsRelation().GetAdjacentPartitionIds().end()};
-
-            PartitionsScaleManager->HandleScaleStatusChange(record.GetPartitionId(), record.GetScaleStatus(), std::move(childrenIds), std::move(adjacentIds), ctx);
-        } else { /// XXX TODO: join
-         PartitionsScaleManager->HandleScaleStatusChange(record.GetPartitionId(), record.GetScaleStatus(), ctx);
-        }
+        PartitionsScaleManager->HandleScaleStatusChange(
+            record.GetPartitionId(),
+            record.GetScaleStatus(),
+            record.HasParticipatingPartitions() ? MakeMaybe(record.GetParticipatingPartitions()) : Nothing(),
+            ctx
+        );
     } else {
         PQ_LOG_NOTICE("Skip TEvPartitionScaleStatusChanged: scale manager isn`t initialized.");
     }

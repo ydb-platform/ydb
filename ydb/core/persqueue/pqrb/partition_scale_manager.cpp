@@ -23,37 +23,25 @@ TPartitionScaleManager::TPartitionScaleManager(
     , DatabasePath(databasePath)
     , BalancerConfig(pathId, version, config)
     , PartitionGraph(partitionGraph)
-    , MirrorFromMode(MirrorFromEnabled(config)) {
+    , MirroredFromSomewhere(MirrorFromEnabled(config)) {
     }
 
 TString TPartitionScaleManager::LogPrefix() const {
     return TStringBuilder() << "[TPartitionScaleManager: " << TopicName << "] ";
 }
 
-void TPartitionScaleManager::HandleScaleStatusChange(const ui32 partitionId, NKikimrPQ::EScaleStatus scaleStatus, const TActorContext& ctx) {
-    return HandleScaleStatusChange(TPartitionSplitRequest{.PartitionId = partitionId}, scaleStatus, ctx);
-}
-
-void TPartitionScaleManager::HandleScaleStatusChange(TPartitionScaleManager::TPartitionSplitRequest split, NKikimrPQ::EScaleStatus scaleStatus, const TActorContext& ctx) {
+void TPartitionScaleManager::HandleScaleStatusChange(const ui32 partition, NKikimrPQ::EScaleStatus scaleStatus, TMaybe<NKikimrPQ::TPartitionScaleParticipants> participants, const TActorContext& ctx) {
     if (scaleStatus == NKikimrPQ::EScaleStatus::NEED_SPLIT) {
-        PQ_LOG_D("TPartitionScaleManager::HandleScaleStatusChange need to split partition " << split.partitionId);
-        PartitionsToSplit.try_emplace(split.PartitionId, std::move(split));
+        PQ_LOG_D("TPartitionScaleManager::HandleScaleStatusChange need to split partition " << partition);
+        TPartitionScaleOperationInfo op{
+            .PartitionId = partition,
+            .PartitionScaleParticipants = std::move(participants),
+        };
+        PartitionsToSplit.insert_or_assign(partition, std::move(op));
         TrySendScaleRequest(ctx);
     } else {
-        PartitionsToSplit.erase(split.PartitionId);
+        PartitionsToSplit.erase(partition);
     }
-}
-
-void TPartitionScaleManager::HandleScaleStatusChange(const ui32 partition, NKikimrPQ::EScaleStatus scaleStatus, std::vector<ui32> childPartitionsIds, std::vector<ui32> adjacentPartitionIds, const TActorContext& ctx) {
-    TPartitionSplitRequest request{
-        .PartitionId = partition,
-        .PrescribedPartitionIds = TPrescribedPartitionIds{
-            .ChildPartitionIds = std::move(childPartitionsIds),
-            .AdjacentPartitionIds = std::move(adjacentPartitionIds),
-        },
-    };
-
-    return HandleScaleStatusChange(std::move(request), scaleStatus, ctx);
 }
 
 void TPartitionScaleManager::TrySendScaleRequest(const TActorContext& ctx) {
@@ -101,7 +89,7 @@ std::pair<std::vector<TPartitionSplit>, std::vector<TPartitionMerge>> TPartition
     size_t allowedSplitsCount = BalancerConfig.MaxActivePartitions > BalancerConfig.CurPartitions ? BalancerConfig.MaxActivePartitions - BalancerConfig.CurPartitions : 0;
     auto partitionIt = PartitionsToSplit.begin();
     while (allowedSplitsCount > 0 && partitionIt != PartitionsToSplit.end()) {
-        const auto& [partitionId, splitParameters] = *partitionIt;
+        const auto& [_, splitParameters] = *partitionIt;
         TBuildSplitScaleRequestResult req = BuildSplitScaleRequest(splitParameters);
         if (req.Split) {
             splitsToApply.push_back(std::move(*req.Split));
@@ -118,17 +106,17 @@ std::pair<std::vector<TPartitionSplit>, std::vector<TPartitionMerge>> TPartition
 }
 
 
-TPartitionScaleManager::TBuildSplitScaleRequestResult TPartitionScaleManager::BuildSplitScaleRequest(const TPartitionSplitRequest& splitParameters) const {
+TPartitionScaleManager::TBuildSplitScaleRequestResult TPartitionScaleManager::BuildSplitScaleRequest(const TPartitionScaleOperationInfo& splitParameters) const {
     const ui32 partitionId = splitParameters.PartitionId;
-    if (MirrorFromMode)  {
-        if (!splitParameters.PrescribedPartitionIds.Defined()) {
+    if (MirroredFromSomewhere)  {
+        if (!splitParameters.PartitionScaleParticipants.Defined()) {
             PQ_LOG_NOTICE("TPartitionScaleManager::BuildScaleRequest split request for mirrored topic doesn't have prescribed partition ids. Topic# " << TopicName << ", partition# " << partitionId);
             return {.Split = Nothing(), .Remove = true};
         }
     }
     const auto* node = PartitionGraph.GetPartition(partitionId);
     if (node == nullptr) {
-        if (splitParameters.PrescribedPartitionIds.Defined()) {
+        if (splitParameters.PartitionScaleParticipants.Defined()) {
             PQ_LOG_NOTICE("TPartitionScaleManager::BuildScaleRequest attempt to split partition that was not created yet. Topic# " << TopicName << ", partition# " << partitionId);
             return {.Split = Nothing(), .Remove = false};
         } else {
@@ -145,6 +133,11 @@ TPartitionScaleManager::TBuildSplitScaleRequestResult TPartitionScaleManager::Bu
             return {.Split = Nothing(), .Remove = true};
         }
 
+        if (splitParameters.PartitionScaleParticipants.Defined() && splitParameters.PartitionScaleParticipants->AdjacentPartitionIdsSize() != 0) {
+            PQ_LOG_ERROR("TPartitionScaleManager::BuildScaleRequest split request cannot have adjacent partitions. Topic# " << TopicName << ", partition# " << partitionId);
+            return {.Split = Nothing(), .Remove = true};
+        }
+
         PQ_LOG_D("TPartitionScaleManager::BuildScaleRequest partition split ranges. From# '" << ToHex(from)
                 << "'. To# '" << ToHex(to) << "'. Mid# '" << ToHex(mid)
                 << "'. Topic# " << TopicName << ". Partition# " << partitionId);
@@ -152,16 +145,16 @@ TPartitionScaleManager::TBuildSplitScaleRequestResult TPartitionScaleManager::Bu
         TPartitionSplit split;
         split.set_partition(partitionId);
         split.set_splitboundary(mid);
-        if (splitParameters.PrescribedPartitionIds.Defined()) {
-            for (const auto& childPartitionId : splitParameters.PrescribedPartitionIds->ChildPartitionIds) {
+        if (splitParameters.PartitionScaleParticipants.Defined()) {
+            for (const auto& childPartitionId : splitParameters.PartitionScaleParticipants->GetChildPartitionIds()) {
                 split.add_childpartitionids(childPartitionId);
             }
         }
         return {.Split = std::move(split), .Remove = false};
     } else {
-        if (splitParameters.PrescribedPartitionIds.Defined()) {
+        if (splitParameters.PartitionScaleParticipants.Defined()) {
             const auto nodeChildrenIds = std::ranges::transform_view(node->DirectChildren, &TPartitionGraph::Node::Id);
-            const auto& prescribedChildrenIds = splitParameters.PrescribedPartitionIds->ChildPartitionIds;
+            const auto& prescribedChildrenIds = splitParameters.PartitionScaleParticipants->GetChildPartitionIds();
             if (!std::ranges::is_permutation(nodeChildrenIds, prescribedChildrenIds)) {
                 const std::string mappingStr = fmt::format("([{}]->[{}])", fmt::join(nodeChildrenIds, ","), fmt::join(prescribedChildrenIds, ","));
                 PQ_LOG_ERROR("TPartitionScaleManager::BuildScaleRequest trying to split partition into different set of children partitions " << mappingStr << ". Topic# " << TopicName << ", partition# " << partitionId);
@@ -193,7 +186,7 @@ void TPartitionScaleManager::Die(const TActorContext& ctx) {
 
 void TPartitionScaleManager::UpdateBalancerConfig(ui64 pathId, int version, const NKikimrPQ::TPQTabletConfig& config) {
     BalancerConfig = TBalancerConfig(pathId, version, config);
-    MirrorFromMode = MirrorFromEnabled(config);
+    MirroredFromSomewhere = MirrorFromEnabled(config);
 }
 
 void TPartitionScaleManager::UpdateDatabasePath(const TString& dbPath) {

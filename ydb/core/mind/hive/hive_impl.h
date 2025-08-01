@@ -429,6 +429,7 @@ protected:
     TFollowerUpdates PendingFollowerUpdates;
     std::queue<TTabletId> StopTenantTabletsQueue;
     std::queue<TTabletId> ResumeTenantTabletsQueue;
+    bool NotEnoughResources = false;
 
     struct TPendingCreateTablet {
         NKikimrHive::TEvCreateTablet CreateTablet;
@@ -621,7 +622,8 @@ protected:
 
     struct TNoNodeFound {};
     struct TTooManyTabletsStarting {};
-    using TBestNodeResult = std::variant<TNodeInfo*, TNoNodeFound, TTooManyTabletsStarting>;
+    struct TNotEnoughResources {};
+    using TBestNodeResult = std::variant<TNodeInfo*, TNoNodeFound, TTooManyTabletsStarting, TNotEnoughResources>;
 
     TBestNodeResult FindBestNode(const TTabletInfo& tablet, TNodeId suggestedNodeId = 0);
 

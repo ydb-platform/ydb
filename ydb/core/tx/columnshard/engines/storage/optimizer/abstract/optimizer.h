@@ -100,10 +100,10 @@ private:
     virtual bool DoIsOverloaded() const {
         return false;
     }
-    const ui32 NodePortionsCountLimit = 0;
+    const std::optional<ui32> NodePortionsCountLimit{};
     double WeightKff = 1;
     static inline TAtomicCounter NodePortionsCounter = 0;
-    static inline std::atomic<ui32> DynamicPortionsCountLimit = 0;
+    static inline std::atomic<ui32> DynamicPortionsCountLimit = 1000000;
     TPositiveControlInteger LocalPortionsCount;
     std::shared_ptr<TCounters> Counters = std::make_shared<TCounters>();
 
@@ -139,18 +139,17 @@ public:
         return baseLevel;
     }
 
-    IOptimizerPlanner(const TInternalPathId pathId, const ui32 nodePortionsCountLimit)
+    IOptimizerPlanner(const TInternalPathId pathId, const std::optional<ui32>& nodePortionsCountLimit)
         : PathId(pathId)
         , NodePortionsCountLimit(nodePortionsCountLimit) {
-        Counters->NodePortionsCountLimit->Set(NodePortionsCountLimit);
+        Counters->NodePortionsCountLimit->Set(NodePortionsCountLimit ? *NodePortionsCountLimit : DynamicPortionsCountLimit.load());
     }
     bool IsOverloaded() const {
-        auto dynamicPortionsCountLimit = DynamicPortionsCountLimit.load();
-        if (dynamicPortionsCountLimit) {
-            if (dynamicPortionsCountLimit <= NodePortionsCounter.Val()) {
+        if (NodePortionsCountLimit) {
+            if (*NodePortionsCountLimit <= NodePortionsCounter.Val()) {
                 return true;
             }
-        } else if (NodePortionsCountLimit <= NodePortionsCounter.Val()) {
+        } else if (DynamicPortionsCountLimit < NodePortionsCounter.Val()) {
             return true;
         }
         return DoIsOverloaded();
@@ -250,7 +249,7 @@ public:
     using TProto = NKikimrSchemeOp::TCompactionPlannerConstructorContainer;
 
 private:
-    ui32 NodePortionsCountLimit = 1000000;
+    std::optional<ui32> NodePortionsCountLimit = 1000000;
     double WeightKff = 1.0;
 
     virtual TConclusion<std::shared_ptr<IOptimizerPlanner>> DoBuildPlanner(const TBuildContext& context) const = 0;
@@ -260,7 +259,7 @@ private:
     virtual bool DoApplyToCurrentObject(IOptimizerPlanner& current) const = 0;
 
 public:
-    ui32 GetNodePortionsCountLimit() const {
+    std::optional<ui32> GetNodePortionsCountLimit() const {
         return NodePortionsCountLimit;
     }
 
@@ -308,8 +307,10 @@ public:
 
     virtual TString GetClassName() const = 0;
     void SerializeToProto(TProto& proto) const {
-        proto.SetNodePortionsCountLimit(NodePortionsCountLimit);
-        proto.SetWeightKff(WeightKff);
+        if (NodePortionsCountLimit) {
+            proto.SetNodePortionsCountLimit(*NodePortionsCountLimit);
+            proto.SetWeightKff(WeightKff);
+        }
         DoSerializeToProto(proto);
     }
 

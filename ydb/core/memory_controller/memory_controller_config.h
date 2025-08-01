@@ -93,8 +93,9 @@ GET_LIMIT(ColumnTablesCacheLimit)
 // - ColumnTablesScanGroupedMemory
 // - ColumnTablesDeduplicationGroupedMemory
 
-static constexpr float ColumnTablesReadExecutionFraction = 0.5;
-static constexpr float ColumnTablesDeduplicationGroupedMemoryFraction = 0.5;
+// keep fractions as power of 2 to avoid precision loss
+static constexpr float ColumnTablesReadExecutionFraction = 0.5f; // 1/2
+static constexpr float ColumnTablesDeduplicationGroupedMemoryFraction = 0.5f; // 1/2
 static_assert(ColumnTablesReadExecutionFraction + ColumnTablesDeduplicationGroupedMemoryFraction == 1);
 
 inline ui64 GetColumnTablesScanGroupedMemoryLimitBytes(const NKikimrConfig::TMemoryControllerConfig& config, const ui64 hardLimitBytes) {
@@ -114,11 +115,12 @@ inline ui64 GetColumnTablesDeduplicationGroupedMemoryLimitBytes(const NKikimrCon
 // - ColumnTablesGeneralQueue
 // - ColumnTablesNormalizerQueue
 
-static constexpr float ColumnTablesCompGroupedMemoryFraction = 0.56;
-static constexpr float ColumnTablesCompactionIndexationQueueFraction = 0.055;
-static constexpr float ColumnTablesTtlQueueFraction = 0.055;
-static constexpr float ColumnTablesGeneralQueueFraction = 0.165;
-static constexpr float ColumnTablesNormalizerQueueFraction = 0.165;
+// keep fractions as power of 2 to avoid precision loss
+static constexpr float ColumnTablesCompGroupedMemoryFraction = 0.5f; // 8/16
+static constexpr float ColumnTablesCompactionIndexationQueueFraction = 0.0625f; // 1/16
+static constexpr float ColumnTablesTtlQueueFraction = 0.0625f; // 1/16
+static constexpr float ColumnTablesGeneralQueueFraction = 0.1875f; // 3/16
+static constexpr float ColumnTablesNormalizerQueueFraction = 0.1875f; // 3/16
 static_assert(ColumnTablesCompGroupedMemoryFraction
     + ColumnTablesCompactionIndexationQueueFraction
     + ColumnTablesTtlQueueFraction
@@ -155,9 +157,10 @@ inline ui64 GetColumnTablesNormalizerQueueLimitBytes(const NKikimrConfig::TMemor
 // - ColumnTablesDeduplicationGroupedMemory
 // - ColumnTablesColumnDataCache
 
-static constexpr float ColumnTablesBlobCacheFraction = 0.4;
-static constexpr float ColumnTablesColumnTablesDataAccessorCacheFraction = 0.3;
-static constexpr float ColumnTablesColumnDataCacheFraction = 0.3;
+// keep fractions as power of 2 to avoid precision loss
+static constexpr float ColumnTablesBlobCacheFraction = 0.375f; // 6/16
+static constexpr float ColumnTablesColumnTablesDataAccessorCacheFraction = 0.3125f; // 5/16
+static constexpr float ColumnTablesColumnDataCacheFraction = 0.3125f; // 5/16
 static_assert(ColumnTablesBlobCacheFraction + ColumnTablesColumnTablesDataAccessorCacheFraction + ColumnTablesColumnDataCacheFraction == 1);
 
 inline ui64 GetColumnTablesBlobCacheLimitBytes(const NKikimrConfig::TMemoryControllerConfig& config, const ui64 hardLimitBytes) {

@@ -941,6 +941,13 @@ void TSelectRowsCommand::Register(TRegistrar registrar)
             return command->Options.MaxJoinBatchSize;
         })
         .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<bool>(
+        "use_order_by_in_join_subqueries",
+        [] (TThis* command) -> auto& {
+            return command->Options.UseOrderByInJoinSubqueries;
+        })
+        .Optional(/*init*/ false);
 }
 
 bool TSelectRowsCommand::HasResponseParameters() const

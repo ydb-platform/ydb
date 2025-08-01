@@ -12,7 +12,7 @@ def collect_fixtures(config: pytest.Config, items: list[pytest.Item]):
         for marker in item.own_markers:
             if marker.name != "parametrize":
                 continue
-            params = marker.args[1]
+            params = marker.args[1] if len(marker.args) > 1 else marker.kwargs["argvalues"]
             arg2fixturedefs = {}
             for param in params:
                 _, _arg2fixturedefs = get_fixturenames_closure_and_arg2fixturedefs(fm, item.parent, param)

@@ -157,11 +157,13 @@ private:
                 Col("stats", NScheme::NTypeIds::JsonDocument),
                 Col("expire_at", NScheme::NTypeIds::Timestamp), // Will be deleted from database after this deadline.
                 Col("customer_supplied_id", NScheme::NTypeIds::Text),
-                Col("user_token", NScheme::NTypeIds::Text), // UsedSID
+                Col("user_token", NScheme::NTypeIds::Text), // UserSID
                 Col("user_group_sids", NScheme::NTypeIds::JsonDocument),
                 Col("script_sinks", NScheme::NTypeIds::JsonDocument),
                 Col("script_secret_names", NScheme::NTypeIds::JsonDocument),
                 Col("retry_state", NScheme::NTypeIds::JsonDocument),
+                Col("graph_compressed", NScheme::NTypeIds::String),
+                Col("graph_compression_method", NScheme::NTypeIds::Text),
             },
             { "database", "execution_id" },
             NKikimrServices::KQP_PROXY,
@@ -267,7 +269,8 @@ class TCreateScriptOperationQuery : public TQueryBase {
 public:
     TCreateScriptOperationQuery(const TString& executionId, const TActorId& runScriptActorId,
         const NKikimrKqp::TEvQueryRequest& req, const NKikimrKqp::TScriptExecutionOperationMeta& meta,
-        TDuration maxRunTime, const NKikimrKqp::TScriptExecutionRetryState& retryState)
+        TDuration maxRunTime, const NKikimrKqp::TScriptExecutionRetryState& retryState,
+        const std::optional<NKikimrKqp::TQueryPhysicalGraph>& physicalGraph, const NKikimrConfig::TQueryServiceConfig& queryServiceConfig)
         : TQueryBase(__func__, executionId)
         , ExecutionId(executionId)
         , RunScriptActorId(runScriptActorId)
@@ -275,6 +278,8 @@ public:
         , Meta(meta)
         , MaxRunTime(Max(maxRunTime, TDuration::Days(1)))
         , RetryState(retryState)
+        , PhysicalGraph(physicalGraph)
+        , Compressor(queryServiceConfig.GetQueryArtifactsCompressionMethod(), queryServiceConfig.GetQueryArtifactsCompressionMinSize())
     {}
 
     void OnRunQuery() override {
@@ -295,15 +300,19 @@ public:
             DECLARE $user_sid AS Text;
             DECLARE $user_group_sids AS JsonDocument;
             DECLARE $parameters AS String;
+            DECLARE $graph_compressed AS Optional<String>;
+            DECLARE $graph_compression_method AS Optional<Text>;
 
             UPSERT INTO `.metadata/script_executions` (
                 database, execution_id, run_script_actor_id, execution_status, execution_mode, start_ts,
                 query_text, syntax, meta, expire_at, retry_state,
-                user_token, user_group_sids, parameters
+                user_token, user_group_sids, parameters,
+                graph_compressed, graph_compression_method
             ) VALUES (
                 $database, $execution_id, $run_script_actor_id, $execution_status, $execution_mode, CurrentUtcTimestamp(),
                 $query_text, $syntax, $meta, CurrentUtcTimestamp() + $execution_meta_ttl, $retry_state,
-                $user_sid, $user_group_sids, $parameters
+                $user_sid, $user_group_sids, $parameters,
+                $graph_compressed, $graph_compression_method
             );
 
             UPSERT INTO `.metadata/script_execution_leases` (
@@ -316,6 +325,12 @@ public:
         )";
 
         const auto token = NACLib::TUserToken(Request.GetUserToken());
+
+        std::optional<TString> graphCompressionMethod;
+        std::optional<TString> graphCompressed;
+        if (PhysicalGraph) {
+            std::tie(graphCompressionMethod, graphCompressed) = Compressor.Compress(PhysicalGraph->SerializeAsString());
+        }
 
         NYdb::TParamsBuilder params;
         params
@@ -363,6 +378,12 @@ public:
                 .Build()
             .AddParam("$parameters")
                 .String(SerializeParameters())
+                .Build()
+            .AddParam("$graph_compressed")
+                .OptionalString(graphCompressed)
+                .Build()
+            .AddParam("$graph_compression_method")
+                .OptionalUtf8(graphCompressionMethod)
                 .Build();
 
         RunDataQuery(sql, &params);
@@ -432,6 +453,8 @@ private:
     const NKikimrKqp::TScriptExecutionOperationMeta Meta;
     const TDuration MaxRunTime;
     const NKikimrKqp::TScriptExecutionRetryState RetryState;
+    const std::optional<NKikimrKqp::TQueryPhysicalGraph> PhysicalGraph;
+    const NFq::TCompressor Compressor;
 };
 
 class TCreateScriptExecutionActor : public TActorBootstrapped<TCreateScriptExecutionActor> {
@@ -450,40 +473,53 @@ public:
 
         const auto& ev = *Event->Get();
         const auto& eventProto = ev.Record;
+        const auto& request = eventProto.GetRequest();
+        if (ev.SaveQueryPhysicalGraph) {
+            if (request.GetAction() != NKikimrKqp::QUERY_ACTION_EXECUTE) {
+                SendFailResponse(Ydb::StatusIds::INTERNAL_ERROR, {NYql::TIssue(TStringBuilder() << "Save query physical graph is allowed only for execute action (got " << NKikimrKqp::EQueryAction_Name(request.GetAction()) << ")")});
+                return;
+            }
+            if (request.HasTxControl()) {
+                SendFailResponse(Ydb::StatusIds::INTERNAL_ERROR, {NYql::TIssue(TStringBuilder() << "Save query physical graph is not allowed inside not implicit transaction")});
+                return;
+            }
+        }
+
         const auto& meta = GetOperationMeta();
-        const TKqpRunScriptActorSettings settings = {
-            .Database = eventProto.GetRequest().GetDatabase(),
+
+        // Start request
+        RunScriptActorId = Register(CreateRunScriptActor(eventProto, {
+            .Database = request.GetDatabase(),
             .ExecutionId = ExecutionId,
             .LeaseGeneration = 1,
             .LeaseDuration = LeaseDuration,
             .ResultsTtl = GetDuration(meta.GetResultsTtl()),
             .ProgressStatsPeriod = ev.ProgressStatsPeriod,
             .Counters = Counters,
-        };
-
-        // Start request
-        RunScriptActorId = Register(CreateRunScriptActor(eventProto, settings, QueryServiceConfig));
-        Register(new TCreateScriptOperationQuery(ExecutionId, RunScriptActorId, ev.Record, meta, MaxRunTime, GetRetryState()));
+            .SaveQueryPhysicalGraph = ev.SaveQueryPhysicalGraph,
+            .PhysicalGraph = ev.QueryPhysicalGraph,
+        }, QueryServiceConfig));
+        Register(new TCreateScriptOperationQuery(ExecutionId, RunScriptActorId, ev.Record, meta, MaxRunTime, GetRetryState(), ev.QueryPhysicalGraph, QueryServiceConfig));
     }
 
     void Handle(TEvPrivate::TEvCreateScriptOperationResponse::TPtr& ev) {
-        if (ev->Get()->Status == Ydb::StatusIds::SUCCESS) {
-            Send(RunScriptActorId, new TEvents::TEvWakeup());
-            Send(Event->Sender, new TEvKqp::TEvScriptResponse(
-                ScriptExecutionOperationFromExecutionId(ev->Get()->ExecutionId),
-                ev->Get()->ExecutionId,
-                Ydb::Query::EXEC_STATUS_STARTING,
-                GetExecModeFromAction(Event->Get()->Record.GetRequest().GetAction())
-            ));
-        } else {
-            SendFailResponse(ev->Get()->Status, ev->Get()->Issues);
+        if (const auto status = ev->Get()->Status; status != Ydb::StatusIds::SUCCESS) {
+            SendFailResponse(status, ev->Get()->Issues);
+            return;
         }
+
+        Send(RunScriptActorId, new TEvents::TEvWakeup());
+        Send(Event->Sender, new TEvKqp::TEvScriptResponse(
+            ScriptExecutionOperationFromExecutionId(ev->Get()->ExecutionId),
+            ev->Get()->ExecutionId,
+            Ydb::Query::EXEC_STATUS_STARTING,
+            GetExecModeFromAction(Event->Get()->Record.GetRequest().GetAction())
+        ));
         PassAway();
     }
 
     void HandleException(const std::exception& ex) {
         SendFailResponse(Ydb::StatusIds::INTERNAL_ERROR, {NYql::TIssue(TStringBuilder() << "Got unexpected exception: " << ex.what())});
-        PassAway();
     }
 
     STRICT_STFUNC_EXC(StateFunc,
@@ -492,9 +528,12 @@ public:
     )
 
 private:
-    void SendFailResponse(Ydb::StatusIds::StatusCode status, const NYql::TIssues& issues) const {
-        Send(RunScriptActorId, new TEvents::TEvPoison());
+    void SendFailResponse(Ydb::StatusIds::StatusCode status, const NYql::TIssues& issues) {
+        if (RunScriptActorId) {
+            Send(RunScriptActorId, new TEvents::TEvPoison());
+        }
         Send(Event->Sender, new TEvKqp::TEvScriptResponse(status, issues));
+        PassAway();
     }
 
     NKikimrKqp::TScriptExecutionOperationMeta GetOperationMeta() const {
@@ -507,6 +546,7 @@ private:
         meta.SetResourcePoolId(request.GetPoolId());
         meta.SetClientAddress(request.GetClientAddress());
         meta.SetCollectStats(request.GetCollectStats());
+        meta.SetSaveQueryPhysicalGraph(ev.SaveQueryPhysicalGraph);
         *meta.MutableRlPath() = eventProto.GetRlPath();
         SetDuration(LeaseDuration, *meta.MutableLeaseDuration());
         SetDuration(ev.ProgressStatsPeriod, *meta.MutableProgressStatsPeriod());
@@ -754,7 +794,9 @@ public:
                 issues,
                 transient_issues,
                 user_token,
-                user_group_sids
+                user_group_sids,
+                graph_compressed,
+                graph_compression_method
             FROM `.metadata/script_executions`
             WHERE database = $database AND execution_id = $execution_id AND
                   (expire_at > CurrentUtcTimestamp() OR expire_at IS NULL);
@@ -827,6 +869,7 @@ public:
         auto& request = *queryRequest.MutableRequest();
 
         NKikimrKqp::TScriptExecutionOperationMeta meta;
+        std::optional<NKikimrKqp::TQueryPhysicalGraph> physicalGraph;
 
         {   // Execution info
             NYdb::TResultSetParser result(ResultSets[0]);
@@ -902,6 +945,22 @@ public:
                 }
             }
 
+            if (const std::optional<TString> graphCompressed = result.ColumnParser("graph_compressed").GetOptionalString()) {
+                const std::optional<TString> compressionMethod = result.ColumnParser("graph_compression_method").GetOptionalUtf8();
+                if (!compressionMethod) {
+                    Finish(Ydb::StatusIds::INTERNAL_ERROR, "Graph compression method is not found");
+                    return;
+                }
+
+                const NFq::TCompressor compressor(*compressionMethod);
+                const auto& graph = compressor.Decompress(*graphCompressed);
+
+                if (!physicalGraph.emplace().ParseFromString(graph)) {
+                    Finish(Ydb::StatusIds::INTERNAL_ERROR, "Query physical graph is corrupted");
+                    return;
+                }
+            }
+
             const std::optional<TString> queryText = result.ColumnParser("query_text").GetOptionalUtf8();
             if (!queryText) {
                 Finish(Ydb::StatusIds::INTERNAL_ERROR, "Query text is not found");
@@ -941,7 +1000,7 @@ public:
         request.SetCollectStats(meta.GetCollectStats());
         request.SetPoolId(meta.GetResourcePoolId());
 
-        const TKqpRunScriptActorSettings settings = {
+        RunScriptActorId = Register(CreateRunScriptActor(queryRequest, {
             .Database = request.GetDatabase(),
             .ExecutionId = ExecutionId,
             .LeaseGeneration = LeaseGeneration + 1,
@@ -949,9 +1008,9 @@ public:
             .ResultsTtl = GetDuration(meta.GetResultsTtl()),
             .ProgressStatsPeriod = GetDuration(meta.GetProgressStatsPeriod()),
             .Counters = Counters,
-        };
-
-        RunScriptActorId = Register(CreateRunScriptActor(queryRequest, settings, QueryServiceConfig));
+            .SaveQueryPhysicalGraph = meta.GetSaveQueryPhysicalGraph(),
+            .PhysicalGraph = std::move(physicalGraph)
+        }, QueryServiceConfig));
         RestartScriptExecution();
     }
 
@@ -3825,6 +3884,8 @@ private:
 };
 
 class TListExpiredLeasesQueryActor : public TQueryBase {
+    static constexpr ui64 MAX_LISTED_LEASES = 100;
+
 public:
     TListExpiredLeasesQueryActor()
         : TQueryBase(__func__, "")
@@ -3837,6 +3898,7 @@ public:
         TString sql = R"(
             -- TListExpiredLeasesQueryActor::OnRunQuery
             DECLARE $max_lease_deadline AS Timestamp;
+            DECLARE $max_listed_leases AS Uint64;
 
             SELECT
                 database,
@@ -3844,22 +3906,32 @@ public:
             FROM `.metadata/script_execution_leases`
             WHERE lease_deadline < $max_lease_deadline
               AND (expire_at > CurrentUtcTimestamp() OR expire_at IS NULL)
+            LIMIT $max_listed_leases;
         )";
 
         NYdb::TParamsBuilder params;
         params
             .AddParam("$max_lease_deadline")
                 .Timestamp(LeaseDeadline)
+                .Build()
+            .AddParam("$max_listed_leases")
+                .Uint64(MAX_LISTED_LEASES)
                 .Build();
 
-        RunStreamQuery(sql, &params);
+        RunDataQuery(sql, &params, TTxControl::BeginAndCommitTx(true));
     }
 
-    void OnStreamResult(NYdb::TResultSet&& resultSet) override {
-        std::vector<TEvListExpiredLeasesResponse::TLeaseInfo> leases;
-        leases.reserve(resultSet.RowsCount());
+    void OnQueryResult() override {
+        if (ResultSets.size() != 1) {
+            Finish(Ydb::StatusIds::INTERNAL_ERROR, "Unexpected database response");
+            return;
+        }
 
-        NYdb::TResultSetParser result(resultSet);
+        std::vector<TEvListExpiredLeasesResponse::TLeaseInfo> leases;
+        const auto rowsCount = ResultSets[0].RowsCount();
+        leases.reserve(rowsCount);
+
+        NYdb::TResultSetParser result(ResultSets[0]);
         while (result.TryNextRow()) {
             const std::optional<TString> database = result.ColumnParser("database").GetOptionalUtf8();
             if (!database) {
@@ -3879,10 +3951,10 @@ public:
         if (!leases.empty()) {
             KQP_PROXY_LOG_D(LogPrefix() << "Found " << leases.size() << " expired leases");
             Send(Owner, new TEvListExpiredLeasesResponse(std::move(leases)));
+        } else if (rowsCount) {
+            KQP_PROXY_LOG_E(LogPrefix() << "More than " << MAX_LISTED_LEASES << " expired leases is corrupted");
         }
-    }
 
-    void OnQueryResult() override {
         Finish();
     }
 
@@ -3993,6 +4065,146 @@ private:
     NYql::TIssues Issues;
 };
 
+class TSaveScriptExecutionPhysicalGraphActor : public TQueryBase {
+public:
+    TSaveScriptExecutionPhysicalGraphActor(const TString& database, const TString& executionId,
+        const NKikimrKqp::TQueryPhysicalGraph& physicalGraph, const NKikimrConfig::TQueryServiceConfig& queryServiceConfig)
+        : TQueryBase(__func__, executionId)
+        , Database(database)
+        , ExecutionId(executionId)
+        , PhysicalGraph(physicalGraph)
+        , Compressor(queryServiceConfig.GetQueryArtifactsCompressionMethod(), queryServiceConfig.GetQueryArtifactsCompressionMinSize())
+    {}
+
+    void OnRunQuery() override {
+        TString sql = R"(
+            -- TSaveScriptExecutionPhysicalGraphActor::OnRunQuery
+            DECLARE $execution_id AS Text;
+            DECLARE $database AS Text;
+            DECLARE $graph_compressed AS String;
+            DECLARE $graph_compression_method AS Text;
+
+            UPSERT INTO `.metadata/script_executions` (
+                execution_id, database, graph_compressed, graph_compression_method
+            ) VALUES (
+                $execution_id, $database, $graph_compressed, $graph_compression_method
+            );
+        )";
+
+        const auto [graphCompressionMethod, graphCompressed] = Compressor.Compress(PhysicalGraph.SerializeAsString());
+
+        NYdb::TParamsBuilder params;
+        params
+            .AddParam("$execution_id")
+                .Utf8(ExecutionId)
+                .Build()
+            .AddParam("$database")
+                .Utf8(Database)
+                .Build()
+            .AddParam("$graph_compressed")
+                .String(graphCompressed)
+                .Build()
+            .AddParam("$graph_compression_method")
+                .Utf8(graphCompressionMethod)
+                .Build();
+
+        RunDataQuery(sql, &params);
+    }
+
+    void OnQueryResult() override {
+        Finish();
+    }
+
+    void OnFinish(Ydb::StatusIds::StatusCode status, NYql::TIssues&& issues) override {
+        Send(Owner, new TEvSaveScriptPhysicalGraphResponse(status, std::move(issues)));
+    }
+
+private:
+    const TString Database;
+    const TString ExecutionId;
+    const NKikimrKqp::TQueryPhysicalGraph PhysicalGraph;
+    const NFq::TCompressor Compressor;
+};
+
+class TGetScriptExecutionPhysicalGraphActor : public TQueryBase {
+public:
+    TGetScriptExecutionPhysicalGraphActor(const TString& database, const TString& executionId)
+        : TQueryBase(__func__, executionId)
+        , Database(database)
+        , ExecutionId(executionId)
+    {}
+
+    void OnRunQuery() override {
+        TString sql = R"(
+            -- TGetScriptExecutionPhysicalGraphActor::OnRunQuery
+            DECLARE $execution_id AS Text;
+            DECLARE $database AS Text;
+
+            SELECT
+                graph_compressed,
+                graph_compression_method
+            FROM `.metadata/script_executions`
+            WHERE database = $database AND execution_id = $execution_id AND
+                  (expire_at > CurrentUtcTimestamp() OR expire_at IS NULL);
+        )";
+
+        NYdb::TParamsBuilder params;
+        params
+            .AddParam("$execution_id")
+                .Utf8(ExecutionId)
+                .Build()
+            .AddParam("$database")
+                .Utf8(Database)
+                .Build();
+
+        RunDataQuery(sql, &params);
+    }
+
+    void OnQueryResult() override {
+        if (ResultSets.size() != 1) {
+            Finish(Ydb::StatusIds::INTERNAL_ERROR, "Unexpected database response");
+            return;
+        }
+
+        NYdb::TResultSetParser result(ResultSets[0]);
+        if (!result.TryNextRow()) {
+            Finish(Ydb::StatusIds::NOT_FOUND, "No such execution");
+            return;
+        }
+
+        const std::optional<TString> graphCompressed = result.ColumnParser("graph_compressed").GetOptionalString();
+        if (!graphCompressed) {
+            Finish(Ydb::StatusIds::NOT_FOUND, "Graph is not saved");
+            return;
+        }
+
+        const std::optional<TString> compressionMethod = result.ColumnParser("graph_compression_method").GetOptionalUtf8();
+        if (!compressionMethod) {
+            Finish(Ydb::StatusIds::INTERNAL_ERROR, "Graph compression method is not found");
+            return;
+        }
+
+        const NFq::TCompressor compressor(*compressionMethod);
+        const auto& graph = compressor.Decompress(*graphCompressed);
+
+        if (!PhysicalGraph.ParseFromString(graph)) {
+            Finish(Ydb::StatusIds::INTERNAL_ERROR, "Query physical graph is corrupted");
+            return;
+        }
+
+        Finish();
+    }
+
+    void OnFinish(Ydb::StatusIds::StatusCode status, NYql::TIssues&& issues) override {
+        Send(Owner, new TEvGetScriptPhysicalGraphResponse(status, std::move(PhysicalGraph), std::move(issues)));
+    }
+
+private:
+    const TString Database;
+    const TString ExecutionId;
+    NKikimrKqp::TQueryPhysicalGraph PhysicalGraph;
+};
+
 } // anonymous namespace
 
 IActor* CreateScriptExecutionCreatorActor(TEvKqp::TEvScriptRequest::TPtr&& ev, const NKikimrConfig::TQueryServiceConfig& queryServiceConfig, TIntrusivePtr<TKqpCounters> counters, TDuration maxRunTime) {
@@ -4055,10 +4267,18 @@ IActor* CreateRefreshScriptExecutionLeasesActor(const TActorId& replyActorId, co
     return new TRefreshScriptExecutionLeasesActor(replyActorId, queryServiceConfig, counters);
 }
 
+IActor* CreateSaveScriptExecutionPhysicalGraphActor(const TActorId& replyActorId, const TString& database, const TString& executionId, NKikimrKqp::TQueryPhysicalGraph&& physicalGraph, const NKikimrConfig::TQueryServiceConfig& queryServiceConfig) {
+    return new TQueryRetryActor<TSaveScriptExecutionPhysicalGraphActor, TEvSaveScriptPhysicalGraphResponse, TString, TString, NKikimrKqp::TQueryPhysicalGraph, NKikimrConfig::TQueryServiceConfig>(replyActorId, database, executionId, std::move(physicalGraph), queryServiceConfig);
+}
+
+IActor* CreateGetScriptExecutionPhysicalGraphActor(const TActorId& replyActorId, const TString& database, const TString& executionId) {
+    return new TQueryRetryActor<TGetScriptExecutionPhysicalGraphActor, TEvGetScriptPhysicalGraphResponse, TString, TString>(replyActorId, database, executionId);
+}
+
 namespace NPrivate {
 
 IActor* CreateCreateScriptOperationQueryActor(const TString& executionId, const TActorId& runScriptActorId, const NKikimrKqp::TEvQueryRequest& record, const NKikimrKqp::TScriptExecutionOperationMeta& meta) {
-    return new TCreateScriptOperationQuery(executionId, runScriptActorId, record, meta, SCRIPT_TIMEOUT_LIMIT, {});
+    return new TCreateScriptOperationQuery(executionId, runScriptActorId, record, meta, SCRIPT_TIMEOUT_LIMIT, {}, std::nullopt, {});
 }
 
 IActor* CreateCheckLeaseStatusActor(const TActorId& replyActorId, const TString& database, const TString& executionId, ui64 cookie) {

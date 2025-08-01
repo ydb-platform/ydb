@@ -1,36 +1,18 @@
 #pragma once
 
-#include <ydb/library/yql/udfs/common/clickhouse/client/src/IO/ReadBuffer.h>
-#include <contrib/libs/brotli/c/include/brotli/decode.h>
 #include "output_queue.h"
 
-namespace NYql {
+namespace NDB {
 
-namespace NBrotli {
+// forward declaration for <ydb/library/yql/udfs/common/clickhouse/client/src/IO/ReadBuffer.h>
+class ReadBuffer;
 
-class TReadBuffer : public NDB::ReadBuffer {
-public:
-    TReadBuffer(NDB::ReadBuffer& source);
-    ~TReadBuffer();
-private:
-    bool nextImpl() final;
+} // namespace NDB
 
-    NDB::ReadBuffer& Source_;
-    std::vector<char> InBuffer, OutBuffer;
+namespace NYql::NBrotli {
 
-    BrotliDecoderState* DecoderState_;
-
-    bool SubstreamFinished_ = false;
-    bool InputExhausted_ = false;
-    size_t InputAvailable_ = 0;
-    size_t InputSize_ = 0;
-
-    void InitDecoder();
-    void FreeDecoder();
-};
+std::unique_ptr<NDB::ReadBuffer> MakeDecompressor(NDB::ReadBuffer& source);
 
 IOutputQueue::TPtr MakeCompressor(std::optional<int> cLevel = {});
 
-}
-
-}
+} // namespace NYql::NBrotli

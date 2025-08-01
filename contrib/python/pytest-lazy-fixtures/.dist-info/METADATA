@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: pytest-lazy-fixtures
-Version: 1.3.0
+Version: 1.3.1
 Summary: Allows you to use fixtures in @pytest.mark.parametrize.
 Project-URL: Homepage, https://github.com/dev-petrov/pytest-lazy-fixtures
 Project-URL: Repository, https://github.com/dev-petrov/pytest-lazy-fixtures
@@ -28,6 +28,7 @@ Improvements that have been made in this project:
 1. You can use fixtures in any data structures
 2. You can access the attributes of fixtures
 3. You can use functions in fixtures
+4. It is compatible with [pytest-deadfixtures](https://github.com/jllorencetti/pytest-deadfixtures)
 
 ## Installation
 

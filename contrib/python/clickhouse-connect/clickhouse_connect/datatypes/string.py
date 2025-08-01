@@ -1,4 +1,4 @@
-from typing import Sequence, MutableSequence, Union, Collection
+from typing import Sequence, MutableSequence, Union, Collection, Any
 
 from clickhouse_connect.driver.common import first_value
 from clickhouse_connect.driver.ctypes import data_conv
@@ -30,10 +30,10 @@ class String(ClickHouseType):
                 total += len(x)
         return total // len(sample) + 1
 
-    def _read_column_binary(self, source: ByteSource, num_rows: int, ctx: QueryContext):
+    def _read_column_binary(self, source: ByteSource, num_rows: int, ctx: QueryContext, _read_state: Any):
         return source.read_str_col(num_rows, self._active_encoding(ctx))
 
-    def _read_nullable_column(self, source: ByteSource, num_rows: int, ctx: QueryContext) -> Sequence:
+    def _read_nullable_column(self, source: ByteSource, num_rows: int, ctx: QueryContext, read_state: Any) -> Sequence:
         return source.read_str_col(num_rows, self._active_encoding(ctx), True, self._active_null(ctx))
 
     def _finalize_column(self, column: Sequence, ctx: QueryContext) -> Sequence:
@@ -75,7 +75,7 @@ class FixedString(ClickHouseType):
     def np_type(self):
         return f'<U{self.byte_size}'
 
-    def _read_column_binary(self, source: ByteSource, num_rows: int, ctx: QueryContext):
+    def _read_column_binary(self, source: ByteSource, num_rows: int, ctx: QueryContext, _read_state: Any):
         if self.read_format(ctx) == 'string':
             return source.read_fixed_str_col(self.byte_size, num_rows, ctx.encoding or self.encoding )
         return source.read_bytes_col(self.byte_size, num_rows)

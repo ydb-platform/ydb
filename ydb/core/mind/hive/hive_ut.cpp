@@ -5606,6 +5606,55 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         UNIT_ASSERT_VALUES_EQUAL(tabletsOnNodes.size(), 1);
     }
 
+    Y_UNIT_TEST(TestNotEnoughResources) {
+        TTestBasicRuntime runtime(1, false);
+        Setup(runtime, true);
+        const ui64 hiveTablet = MakeDefaultHiveID();
+        const ui64 testerTablet = MakeTabletID(false, 1);
+        TActorId senderA = runtime.AllocateEdgeActor();
+        TTabletTypes::EType tabletType = TTabletTypes::Dummy;
+        std::vector<ui64> tablets;
+
+        // Use default maximums
+        // Otherwise test might depend on the environment
+        auto observer = runtime.AddObserver<TEvLocal::TEvStatus>([](auto&& ev) { ev->Get()->Record.ClearResourceMaximum(); });
+
+        CreateTestBootstrapper(runtime, CreateTestTabletInfo(hiveTablet, TTabletTypes::Hive), &CreateDefaultHive);
+
+        for (ui64 i = 0; i < 10; ++i) {
+            auto createTablet = MakeHolder<TEvHive::TEvCreateTablet>(testerTablet, 100500 + i, tabletType, BINDED_CHANNELS);
+            ui64 tablet = SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(createTablet), 0, true);
+            WaitForTabletIsUp(runtime, tablet, 0);
+            tablets.push_back(tablet);
+        }
+
+        for (auto tablet: tablets) {
+            THolder<TEvHive::TEvTabletMetrics> metrics = MakeHolder<TEvHive::TEvTabletMetrics>();
+            NKikimrHive::TTabletMetrics* metric = metrics->Record.AddTabletMetrics();
+            metric->SetTabletID(tablet);
+            metric->MutableResourceUsage()->SetMemory(250'000'000'000ull);
+            runtime.SendToPipe(hiveTablet, senderA, metrics.Release());
+        }
+
+        auto createTablet = MakeHolder<TEvHive::TEvCreateTablet>(testerTablet, 100500 + tablets.size(), tabletType, BINDED_CHANNELS);
+        ui64 newTablet = SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(createTablet), 0, false);
+
+        MakeSureTabletIsDown(runtime, newTablet, 0);
+
+        runtime.AdvanceCurrentTime(TDuration::Minutes(1));
+
+        for (auto tablet : tablets) {
+            THolder<TEvHive::TEvTabletMetrics> metrics = MakeHolder<TEvHive::TEvTabletMetrics>();
+            NKikimrHive::TTabletMetrics* metric = metrics->Record.AddTabletMetrics();
+            metric->SetTabletID(tablet);
+            metric->MutableResourceUsage()->SetMemory(5'000'000);
+            runtime.SendToPipe(hiveTablet, senderA, metrics.Release());
+        }
+
+        WaitForTabletIsUp(runtime, newTablet, 0);
+
+    }
+
     Y_UNIT_TEST(TestUpdateTabletsObjectUpdatesMetrics) {
         TTestBasicRuntime runtime(1, false);
         Setup(runtime, true);

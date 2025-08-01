@@ -1,6 +1,6 @@
 #include <yt/yt/core/test_framework/framework.h>
 
-#include "row_helpers.h"
+#include <yt/yt/tests/cpp/library/row_helpers.h>
 
 #include <yt/yt/library/formats/arrow_parser.h>
 

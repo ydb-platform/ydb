@@ -429,6 +429,7 @@ namespace NKikimr::NStorage {
             hFunc(TEvNodeWardenQueryCache, Handle);
             hFunc(TEvNodeWardenUnsubscribeFromCache, Handle);
             hFunc(TEvNodeWardenManageSyncersResult, Handle);
+            hFunc(TEvNodeWardenUpdateConfigFromPeer, [this](auto ev) { ApplyStorageConfig(ev->Get()->Config); });
         )
         for (ui32 nodeId : std::exchange(UnsubscribeQueue, {})) {
             UnsubscribeInterconnect(nodeId);
@@ -621,11 +622,12 @@ namespace NKikimr::NStorage {
             }
         }
 
-        Y_ABORT_UNLESS(bridgeInfo->SelfNodePile);
+        Y_VERIFY_S(bridgeInfo->SelfNodePile, "SelfNodeId# " << selfNodeId << " Config# " << SingleLineProto(config));
 
         const NKikimrBridge::TClusterState *state = config.HasClusterState()
             ? &config.GetClusterState()
             : nullptr;
+        Y_VERIFY_S(state, SingleLineProto(config));
 
         const size_t numPiles = cfg->BridgeConfig->PilesSize();
         Y_ABORT_UNLESS(!state || state->PerPileStateSize() == numPiles);

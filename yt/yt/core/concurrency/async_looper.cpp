@@ -10,8 +10,8 @@ namespace NYT::NConcurrency {
 
 TAsyncLooper::TAsyncLooper(
     IInvokerPtr invoker,
-    TCallback<TFuture<void>(bool)> asyncStart,
-    TCallback<void(bool)> syncFinish,
+    TCallback<TFuture<void>()> asyncStart,
+    TClosure syncFinish,
     const NLogging::TLogger& logger)
     : Invoker_(std::move(invoker))
     , AsyncStart_(std::move(asyncStart))
@@ -73,7 +73,7 @@ void TAsyncLooper::DoStart()
             // ignore this case on our side.
             State_ = EState::Running;
             YT_LOG_DEBUG("Starting looper");
-            StartLoop(/*cleanStart*/ true, guard);
+            StartLoop(guard);
             break;
 
         default:
@@ -81,7 +81,7 @@ void TAsyncLooper::DoStart()
     }
 }
 
-void TAsyncLooper::StartLoop(bool cleanStart, const TGuard& guard)
+void TAsyncLooper::StartLoop(const TGuard& guard)
 {
     YT_ASSERT_SPINLOCK_AFFINITY(StateLock_);
     YT_VERIFY(State_ == EState::Running);
@@ -101,7 +101,7 @@ void TAsyncLooper::StartLoop(bool cleanStart, const TGuard& guard)
             Stage_ = EStage::Idle;
         });
         auto unguard = Unguard(guard);
-        future = AsyncStart_(cleanStart);
+        future = AsyncStart_();
 
     } catch (const TFiberCanceledException&) {
         // We got canceled -- this is normal.
@@ -115,7 +115,6 @@ void TAsyncLooper::StartLoop(bool cleanStart, const TGuard& guard)
         YT_LOG_FATAL("Unexpected error encountered during the async step");
     }
 
-    bool wasRestarted = false;
     switch (State_) {
         case EState::NotRunning:
             // We have been stopped during the async step
@@ -133,9 +132,6 @@ void TAsyncLooper::StartLoop(bool cleanStart, const TGuard& guard)
             YT_LOG_DEBUG("Looper restart occured during the async part. Next loop will be a clean start");
 
             State_ = EState::Running;
-            wasRestarted = true;
-            // Next step, should it occur
-            // will have cleanStart == true
             break;
 
         case EState::Running:
@@ -156,14 +152,12 @@ void TAsyncLooper::StartLoop(bool cleanStart, const TGuard& guard)
             .Apply(BIND(
                 &TAsyncLooper::AfterStart,
                 MakeWeak(this),
-                cleanStart,
-                wasRestarted,
                 EpochNumber_)
                     .AsyncVia(Invoker_));
     }
 }
 
-void TAsyncLooper::AfterStart(bool cleanStart, bool wasRestarted, ui64 epochNumber, const TError& error)
+void TAsyncLooper::AfterStart(ui64 epochNumber, const TError& error)
 {
     if (!error.IsOK()) {
         YT_LOG_WARNING(error, "Async start failed unexpectedly. Stopping looper");
@@ -198,17 +192,17 @@ void TAsyncLooper::AfterStart(bool cleanStart, bool wasRestarted, ui64 epochNumb
         Stage_ = EStage::Busy;
     }
 
-    DoStep(cleanStart, wasRestarted);
+    DoStep();
 }
 
-void TAsyncLooper::DoStep(bool cleanStart, bool wasRestarted)
+void TAsyncLooper::DoStep()
 {
-    auto cleanup = Finally([this, wasRestarted] {
-        FinishStep(wasRestarted);
+    auto cleanup = Finally([this] {
+        FinishStep();
     });
 
     try {
-        SyncFinish_(cleanStart);
+        SyncFinish_();
     } catch (const TFiberCanceledException&) {
         // We got canceled -- this is normal.
         throw;
@@ -222,7 +216,7 @@ void TAsyncLooper::DoStep(bool cleanStart, bool wasRestarted)
     }
 }
 
-void TAsyncLooper::FinishStep(bool wasRestarted)
+void TAsyncLooper::FinishStep()
 {
     auto guard = Guard(StateLock_);
 
@@ -246,18 +240,13 @@ void TAsyncLooper::FinishStep(bool wasRestarted)
             YT_LOG_DEBUG("Looper restart occured during the sync step");
 
             State_ = EState::Running;
-            StartLoop(/*cleanStart*/ true, guard);
+            StartLoop(guard);
             return;
 
         case EState::Running:
             // Nothing has happened
             // -> continue the current chain of loops.
-            // NB(arkady-e1ppa): If |wasRestarted| is |true|
-            // then we have been restarted during the async step
-            // of this loop iteration. In order to be able to
-            // reliable ever restart the async part, we will
-            // enforce clean start of the next iteration.
-            StartLoop(/*cleanStart*/ wasRestarted, guard);
+            StartLoop(guard);
             return;
 
         default:

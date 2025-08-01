@@ -41,11 +41,7 @@ and timeout (by default, the maximum response time from healthcheck). Documentat
 * 18859:Added support for Board reconfiguration in StateStorage via DistConf. [#18859](https://github.com/ydb-platform/ydb/pull/18859) ([Evgenik2](https://github.com/Evgenik2))
 * 19134:Added the `running` status to script execution statuses (improved output for the get script execution operation). [#19134](https://github.com/ydb-platform/ydb/pull/19134) ([Pisarenko Grigoriy](https://github.com/GrigoriyPA))
 * 18444:Added support for a new external data source [OpenSearch](https://opensearch.org/) in federated queries. [#18444](https://github.com/ydb-platform/ydb/pull/18444) ([Arslan Giniyatullin](https://github.com/Arslanka))
-* 21183:In addition to https://github.com/ydb-platform/ydb/pull/18333 and https://github.com/ydb-platform/ydb/pull/20231.
-
-There is implements the function of writing to the unified agent for cloud events in YMQ.
-
-In addition, a mapper was implemented that turns a C++ structure into a protobuf structure in order to serialize it and send it to a unified agent. [#21183](https://github.com/ydb-platform/ydb/pull/21183) ([flown4qqqq](https://github.com/flown4qqqq))
+* 21183:Added audit log events for [YMQ](https://yandex.cloud/ru/services/message-queue) events. [#21183](https://github.com/ydb-platform/ydb/pull/21183) ([flown4qqqq](https://github.com/flown4qqqq))
 * 21172:raw bytes have been supported [#21172](https://github.com/ydb-platform/ydb/pull/21172) ([Oleg Doronin](https://github.com/dorooleg))
 * 21010:Add more attributes to DSProxy and VDisk spans to make it easier to find them in the metrics explorer. [#21010](https://github.com/ydb-platform/ydb/pull/21010) ([Sergey Belyakov](https://github.com/serbel324))
 * 20966:- Introduced new Distributed Storage parameter `InferPDiskSlotCountFromUnitSize` that infers `ExpectedSlotCount` and `SlotSizeInUnits` from this value and drive size. [#20966](https://github.com/ydb-platform/ydb/pull/20966) ([Yaroslav Dynnikov](https://github.com/rosik))

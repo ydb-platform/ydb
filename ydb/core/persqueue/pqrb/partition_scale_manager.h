@@ -14,7 +14,7 @@
 #include <util/generic/fwd.h>
 #include <util/generic/string.h>
 
-#include <unordered_map>
+#include <map>
 #include <utility>
 
 namespace NKikimr {
@@ -44,14 +44,9 @@ private:
         ui64 CurPartitions;
     };
 
-    struct TPrescribedPartitionIds {
-        std::vector<ui32> ChildPartitionIds;
-        std::vector<ui32> AdjacentPartitionIds;
-    };
-
-    struct TPartitionSplitRequest {
+    struct TPartitionScaleOperationInfo {
         ui32 PartitionId{};
-        TMaybe<TPrescribedPartitionIds> PrescribedPartitionIds;
+        TMaybe<NKikimrPQ::TPartitionScaleParticipants> PartitionScaleParticipants;
     };
 
     struct TBuildSplitScaleRequestResult;
@@ -60,8 +55,7 @@ public:
     TPartitionScaleManager(const TString& topicName, const TString& topicPath, const TString& databasePath, ui64 pathId, int version, const NKikimrPQ::TPQTabletConfig& config, const TPartitionGraph& partitionGraph);
 
 public:
-    void HandleScaleStatusChange(const ui32 partition, NKikimrPQ::EScaleStatus scaleStatus, const TActorContext& ctx);
-    void HandleScaleStatusChange(const ui32 partition, NKikimrPQ::EScaleStatus scaleStatus, std::vector<ui32> childPartitionsIds, std::vector<ui32> adjacentPartitionIds, const TActorContext& ctx);
+    void HandleScaleStatusChange(const ui32 partition, NKikimrPQ::EScaleStatus scaleStatus, TMaybe<NKikimrPQ::TPartitionScaleParticipants> participants, const TActorContext& ctx);
     void HandleScaleRequestResult(TPartitionScaleRequest::TEvPartitionScaleRequestDone::TPtr& ev, const TActorContext& ctx);
 
     void TrySendScaleRequest(const TActorContext& ctx);
@@ -74,8 +68,7 @@ private:
     using TPartitionMerge = NKikimrSchemeOp::TPersQueueGroupDescription_TPartitionMerge;
 
     std::pair<std::vector<TPartitionSplit>, std::vector<TPartitionMerge>> BuildScaleRequest(const TActorContext& ctx);
-    TBuildSplitScaleRequestResult BuildSplitScaleRequest(const TPartitionSplitRequest& splitParameters) const;
-    void HandleScaleStatusChange(TPartitionSplitRequest split, NKikimrPQ::EScaleStatus scaleStatus, const TActorContext& ctx);
+    TBuildSplitScaleRequestResult BuildSplitScaleRequest(const TPartitionScaleOperationInfo& splitParameters) const;
     TString LogPrefix() const;
 
 public:
@@ -92,13 +85,13 @@ private:
     TDuration RequestTimeout = TDuration::MilliSeconds(0);
     TInstant LastResponseTime = TInstant::Zero();
 
-    std::map<ui32, TPartitionSplitRequest> PartitionsToSplit;
+    std::map<ui32, TPartitionScaleOperationInfo> PartitionsToSplit;
 
     TBalancerConfig BalancerConfig;
     const TPartitionGraph& PartitionGraph;
 
     bool RequestInflight = false;
-    bool MirrorFromMode = false;
+    bool MirroredFromSomewhere = false;
 };
 
 } // namespace NPQ

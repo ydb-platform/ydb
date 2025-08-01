@@ -246,8 +246,6 @@ private:
     TVector<TAutoPtr<TEvPersQueue::TEvHasDataInfo>> HasDataRequests;
     TVector<std::pair<TAutoPtr<TEvPersQueue::TEvUpdateConfig>, TActorId> > UpdateConfigRequests;
 
-    THashMap<ui32, NKikimrPQ::TEvPartitionScaleStatusChanged> MirrorScaleStatusRequests;
-
 public:
     struct TPipeInfo {
         TActorId PartActor;
@@ -586,8 +584,6 @@ private:
     void ProcessPendingEvents();
 
     void AckReadSetsToTablet(ui64 tabletId, const TActorContext& ctx);
-
-    void ResendSplitMergeRequests(const TActorContext& ctx);
 };
 
 

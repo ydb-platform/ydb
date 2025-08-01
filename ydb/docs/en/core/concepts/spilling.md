@@ -96,7 +96,7 @@ sequenceDiagram
     SS->>CN: Return data
 ```
 
-**Data reading**: When data recovery is needed, the component sends a read request with blob identifier. Spilling Service reads data from external storage and returns a data response with recovered data. During data loading, freed computational resources are utilized for processing other tasks.
+- **Data reading**: When data recovery is needed, the component sends a read request with the blob identifier. The Spilling Service reads data from external storage and returns a response with the recovered data. During data loading, freed computational resources are utilized for processing other tasks.
 
 ### Types of spilling in {{ ydb-short-name }}
 

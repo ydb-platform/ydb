@@ -1,9 +1,10 @@
 #pragma once
+
 #include <ydb/core/resource_pools/resource_pool_settings.h>
 #include <ydb/core/protos/kqp.pb.h>
-#include <ydb/core/kqp/common/simple/kqp_event_ids.h>
-#include <ydb/core/kqp/common/kqp_output_formats.h>
+#include <ydb/core/kqp/common/kqp_result_set_format_settings.h>
 #include <ydb/core/kqp/common/kqp_user_request_context.h>
+#include <ydb/core/kqp/common/simple/kqp_event_ids.h>
 #include <ydb/core/grpc_services/base/iface.h>
 #include <ydb/core/grpc_services/cancelation/cancelation_event.h>
 #include <ydb/core/grpc_services/cancelation/cancelation.h>
@@ -46,10 +47,22 @@ struct TQueryRequestSettings {
         return *this;
     }
 
+    TQueryRequestSettings& SetSchemaInclusionMode(const ::Ydb::Query::SchemaInclusionMode& mode) {
+        SchemaInclusionMode = mode;
+        return *this;
+    }
+
+    TQueryRequestSettings& SetResultSetFormat(const ::Ydb::ResultSet::Format& format) {
+        ResultSetFormat = format;
+        return *this;
+    }
+
     ui64 OutputChunkMaxSize = 0;
     bool KeepSession = false;
     bool UseCancelAfter = true;
     ::Ydb::Query::Syntax Syntax = Ydb::Query::Syntax::SYNTAX_UNSPECIFIED;
+    ::Ydb::Query::SchemaInclusionMode SchemaInclusionMode = Ydb::Query::SchemaInclusionMode::SCHEMA_INCLUSION_MODE_UNSPECIFIED;
+    ::Ydb::ResultSet::Format ResultSetFormat = Ydb::ResultSet::FORMAT_UNSPECIFIED;
     bool SupportsStreamTrailingResult = false;
 };
 
@@ -58,7 +71,6 @@ public:
     TEvQueryRequest(
         NKikimrKqp::EQueryAction queryAction,
         NKikimrKqp::EQueryType queryType,
-        TOutputFormat outputFormat,
         TActorId requestActorId,
         const std::shared_ptr<NGRpcService::IRequestCtxMtSafe>& ctx,
         const TString& sessionId,
@@ -70,7 +82,8 @@ public:
         const ::Ydb::Table::QueryCachePolicy* queryCachePolicy,
         const ::Ydb::Operations::OperationParams* operationParams,
         const TQueryRequestSettings& querySettings = TQueryRequestSettings(),
-        const TString& poolId = "");
+        const TString& poolId = "",
+        std::optional<NKqp::TArrowFormatSettings> arrowFormatSettings = std::nullopt);
 
     TEvQueryRequest() {
         Record.MutableRequest()->SetUsePublicResponseDataFormat(true);
@@ -128,23 +141,6 @@ public:
 
     const TString& GetSessionId() const {
         return RequestCtx ? SessionId : Record.GetRequest().GetSessionId();
-    }
-
-    TOutputFormat GetOutputFormat() const {
-        if (RequestCtx) {
-            return OutputFormat;
-        }
-
-        auto req = Record.GetRequest();
-        if (req.HasValueOutputFormat()) {
-            return TValueOutputFormat::ImportFromProto(req.GetValueOutputFormat());
-        }
-
-        if (req.HasArrowOutputFormat()) {
-            return TArrowOutputFormat::ImportFromProto(req.GetArrowOutputFormat());
-        }
-
-        return TValueOutputFormat{};
     }
 
     NKikimrKqp::EQueryAction GetAction() const {
@@ -384,6 +380,22 @@ public:
         DatabaseId = databaseId;
     }
 
+    ::Ydb::Query::SchemaInclusionMode GetSchemaInclusionMode() const {
+        return RequestCtx ? QuerySettings.SchemaInclusionMode : Record.GetRequest().GetSchemaInclusionMode();
+    }
+
+    ::Ydb::ResultSet::Format GetResultSetFormat() const {
+        return RequestCtx ? QuerySettings.ResultSetFormat : Record.GetRequest().GetResultSetFormat();
+    }
+
+    bool HasArrowFormatSettings() const {
+        return ArrowFormatSettings.has_value();
+    }
+
+    std::optional<NKqp::TArrowFormatSettings> GetArrowFormatSettings() const {
+        return ArrowFormatSettings;
+    }
+
     mutable NKikimrKqp::TEvQueryRequest Record;
 
 private:
@@ -394,7 +406,6 @@ private:
     mutable TString TraceId;
     mutable TString RequestType;
     mutable TIntrusiveConstPtr<NACLib::TUserToken> Token_;
-    TOutputFormat OutputFormat;
     TActorId RequestActorId;
     TString Database;
     TString DatabaseId;
@@ -415,6 +426,7 @@ private:
     TIntrusivePtr<TUserRequestContext> UserRequestContext;
     TDuration ProgressStatsPeriod;
     std::optional<NResourcePool::TPoolSettings> PoolConfig;
+    std::optional<NKqp::TArrowFormatSettings> ArrowFormatSettings;
 };
 
 struct TEvDataQueryStreamPart: public TEventPB<TEvDataQueryStreamPart,

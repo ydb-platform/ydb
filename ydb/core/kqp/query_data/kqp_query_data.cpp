@@ -77,9 +77,9 @@ void TKqpExecuterTxResult::FillMkql(NKikimrMiniKQL::TResult* mkqlResult) {
     }
 }
 
-Ydb::ResultSet* TKqpExecuterTxResult::GetYdb(google::protobuf::Arena* arena, const TOutputFormat& outputFormat, bool fillSchema, TMaybe<ui64> rowsLimitPerWrite) {
+Ydb::ResultSet* TKqpExecuterTxResult::GetYdb(google::protobuf::Arena* arena, const TResultSetFormatSettings& resultSetFormatSettings, bool fillSchema, TMaybe<ui64> rowsLimitPerWrite) {
     Ydb::ResultSet* ydbResult = google::protobuf::Arena::CreateMessage<Ydb::ResultSet>(arena);
-    FillYdb(ydbResult, outputFormat, fillSchema, rowsLimitPerWrite);
+    FillYdb(ydbResult, resultSetFormatSettings, fillSchema, rowsLimitPerWrite);
     return ydbResult;
 }
 
@@ -87,7 +87,7 @@ bool TKqpExecuterTxResult::HasTrailingResults() {
     return HasTrailingResult;
 }
 
-void TKqpExecuterTxResult::FillYdb(Ydb::ResultSet* ydbResult, const TOutputFormat& outputFormat, bool fillSchema, TMaybe<ui64> rowsLimitPerWrite) {
+void TKqpExecuterTxResult::FillYdb(Ydb::ResultSet* ydbResult, const TResultSetFormatSettings& resultSetFormatSettings, bool fillSchema, TMaybe<ui64> rowsLimitPerWrite) {
     YQL_ENSURE(ydbResult);
     YQL_ENSURE(!Rows.IsWide());
     YQL_ENSURE(MkqlItemType->GetKind() == NKikimr::NMiniKQL::TType::EKind::Struct);
@@ -96,9 +96,6 @@ void TKqpExecuterTxResult::FillYdb(Ydb::ResultSet* ydbResult, const TOutputForma
 
     std::vector<std::pair<TString, NScheme::TTypeInfo>> arrowSchema;
     std::set<std::string> arrowNotNullColumns;
-
-    bool arrowFormat = std::holds_alternative<TArrowOutputFormat>(outputFormat);
-    bool valueFormat = std::holds_alternative<TValueOutputFormat>(outputFormat);
 
     if (fillSchema) {
         for (ui32 idx = 0; idx < mkqlSrcRowStructType->GetMembersCount(); ++idx) {
@@ -113,7 +110,7 @@ void TKqpExecuterTxResult::FillYdb(Ydb::ResultSet* ydbResult, const TOutputForma
         }
     }
 
-    if (arrowFormat) {
+    if (resultSetFormatSettings.IsArrowFormat()) {
         for (ui32 idx = 0; idx < mkqlSrcRowStructType->GetMembersCount(); ++idx) {
             ui32 memberIndex = (!ColumnOrder || ColumnOrder->empty()) ? idx : (*ColumnOrder)[idx];
             auto columnName = ColumnHints && ColumnHints->size() ? ColumnHints->at(idx) : TString(mkqlSrcRowStructType->GetMemberName(memberIndex));
@@ -128,7 +125,7 @@ void TKqpExecuterTxResult::FillYdb(Ydb::ResultSet* ydbResult, const TOutputForma
         }
     }
 
-    if (valueFormat) {
+    if (resultSetFormatSettings.IsValueFormat()) {
         Rows.ForEachRow([&](const NUdf::TUnboxedValue& value) -> bool {
             if (rowsLimitPerWrite) {
                 if (*rowsLimitPerWrite == 0) {
@@ -141,25 +138,9 @@ void TKqpExecuterTxResult::FillYdb(Ydb::ResultSet* ydbResult, const TOutputForma
             return true;
         });
 
-        ydbResult->mutable_value_output_format_meta();
-    } else if (arrowFormat) {
-        const auto& format = std::get<TArrowOutputFormat>(outputFormat);
-        auto compression = format.Compression;
-        i32 compressionLevel = format.CompressionLevel;
-
-        arrow::Compression::type codec = arrow::Compression::UNCOMPRESSED;
-        switch (compression) {
-            case TArrowOutputFormat::ECompression::ZSTD:
-                codec = arrow::Compression::ZSTD;
-                break;
-            case TArrowOutputFormat::ECompression::LZ4_FRAME:
-                codec = arrow::Compression::LZ4_FRAME;
-                break;
-            default:
-                break;
-        }
-
-        NArrow::TArrowBatchBuilder batchBuilder(codec, compressionLevel, arrowNotNullColumns);
+        ydbResult->set_format(Ydb::ResultSet::FORMAT_VALUE);
+    } else if (resultSetFormatSettings.IsArrowFormat()) {
+        NArrow::TArrowBatchBuilder batchBuilder(arrow::Compression::UNCOMPRESSED, arrowNotNullColumns);
 
         batchBuilder.Reserve(Rows.RowCount());
         YQL_ENSURE(batchBuilder.Start(arrowSchema).ok());
@@ -187,13 +168,23 @@ void TKqpExecuterTxResult::FillYdb(Ydb::ResultSet* ydbResult, const TOutputForma
 
         std::shared_ptr<arrow::RecordBatch> batch = batchBuilder.FlushBatch(false);
 
-        TString serializedBatch = NArrow::SerializeBatchNoCompression(batch);
+        auto writeOptions = arrow::ipc::IpcWriteOptions::Defaults();
+        writeOptions.use_threads = false;
+
+        if (auto arrowFormatSettings = resultSetFormatSettings.GetArrowFormatSettings()) {
+            arrowFormatSettings->FillWriteOptions(writeOptions);
+        }
+
+        TString serializedBatch = NArrow::SerializeBatch(batch, writeOptions);
         ydbResult->set_data(std::move(serializedBatch));
 
+        TString serializedSchema;
         if (fillSchema && batch) {
-            TString serializedSchema = NArrow::SerializeSchema(*batch->schema());
-            ydbResult->mutable_arrow_output_format_meta()->set_schema(std::move(serializedSchema));
+            serializedSchema = NArrow::SerializeSchema(*batch->schema());
         }
+
+        ydbResult->mutable_arrow_format_meta()->set_schema(std::move(serializedSchema));
+        ydbResult->set_format(Ydb::ResultSet::FORMAT_ARROW);
     } else {
         YQL_ENSURE(false, "Unknown output format");
     }
@@ -325,37 +316,27 @@ bool TQueryData::HasTrailingTxResult(const NKqpProto::TKqpPhyResultBinding& rb) 
     return TxResults[txIndex][resultIndex].HasTrailingResults();
 }
 
-
-Ydb::ResultSet* TQueryData::GetYdbTxResult(const NKqpProto::TKqpPhyResultBinding& rb, google::protobuf::Arena* arena, const TOutputFormat& outputFormat, TMaybe<ui64> rowsLimitPerWrite)
+Ydb::ResultSet* TQueryData::GetYdbTxResult(const NKqpProto::TKqpPhyResultBinding& rb, google::protobuf::Arena* arena, const TResultSetFormatSettings& resultSetFormatSettings, TMaybe<ui64> rowsLimitPerWrite)
 {
     auto txIndex = rb.GetTxResultBinding().GetTxIndex();
     auto resultIndex = rb.GetTxResultBinding().GetResultIndex();
 
     YQL_ENSURE(HasResult(txIndex, resultIndex));
 
-    Ydb::Formats::SchemaInclusionMode mode = std::visit([](const auto& format) {
-        return format.SchemaInclusionMode;
-    }, outputFormat);
-
     bool fillSchema = false;
-    switch (mode) {
-        case Ydb::Formats::SchemaInclusionMode::SCHEMA_INCLUSION_MODE_UNSPECIFIED:
-        case Ydb::Formats::SchemaInclusionMode::SCHEMA_INCLUSION_MODE_ALWAYS:
-            fillSchema = true;
-            break;
-        case Ydb::Formats::SchemaInclusionMode::SCHEMA_INCLUSION_MODE_FIRST_ONLY:
-            fillSchema = (BuiltResultIndexes.find(resultIndex) == BuiltResultIndexes.end());
-            break;
-        default:
-            break;
+    if (resultSetFormatSettings.IsSchemaInclusionAlways()) {
+        fillSchema = true;
+    } else if (resultSetFormatSettings.IsSchemaInclusionFirstOnly()) {
+        fillSchema = (BuiltResultIndexes.find(resultIndex) == BuiltResultIndexes.end());
+    } else {
+        YQL_ENSURE(false, "Unexpected schema inclusion mode");
     }
 
     AddBuiltResultIndex(resultIndex);
 
     auto g = TypeEnv().BindAllocator();
-    return TxResults[txIndex][resultIndex].GetYdb(arena, outputFormat, fillSchema, rowsLimitPerWrite);
+    return TxResults[txIndex][resultIndex].GetYdb(arena, resultSetFormatSettings, fillSchema, rowsLimitPerWrite);
 }
-
 
 void TQueryData::AddTxResults(ui32 txIndex, TVector<TKqpExecuterTxResult>&& results) {
     auto g = TypeEnv().BindAllocator();

@@ -1500,7 +1500,7 @@ public:
 
         auto executerActor = CreateKqpExecuter(std::move(request), Settings.Database,
             QueryState ? QueryState->UserToken : TIntrusiveConstPtr<NACLib::TUserToken>(),
-            QueryState ? QueryState->GetOutputFormat() : TValueOutputFormat{},
+            QueryState ? QueryState->GetResultSetFormatSettings() : TResultSetFormatSettings{},
             RequestCounters, Settings.TableService,
             AsyncIoFactory, QueryState ? QueryState->PreparedQuery : nullptr, SelfId(),
             QueryState ? QueryState->UserRequestContext : MakeIntrusive<TUserRequestContext>("", Settings.Database, SessionId),
@@ -2098,7 +2098,7 @@ public:
                     if (QueryState->QueryData->HasTrailingTxResult(phyQuery.GetResultBindings(i))) {
                         auto ydbResult = QueryState->QueryData->GetYdbTxResult(
                             phyQuery.GetResultBindings(i), response->GetArena(),
-                            QueryState->GetOutputFormat(), {});
+                            QueryState->GetResultSetFormatSettings(), {});
 
                         YQL_ENSURE(ydbResult);
                         ++trailingResultsCount;
@@ -2116,7 +2116,7 @@ public:
 
                 auto* ydbResult = QueryState->QueryData->GetYdbTxResult(
                     phyQuery.GetResultBindings(i), response->GetArena(),
-                    QueryState->GetOutputFormat(), effectiveRowsLimit);
+                    QueryState->GetResultSetFormatSettings(), effectiveRowsLimit);
                 response->AddYdbResults()->Swap(ydbResult);
             }
         }

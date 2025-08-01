@@ -1,7 +1,6 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/result/result.h>
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/fatal_error_handlers/handlers.h>
-#include <ydb/public/sdk/cpp/src/library/arrow/arrow_helpers.h>
 
 #include <ydb/public/api/protos/ydb_common.pb.h>
 #include <ydb/public/api/protos/ydb_value.pb.h>
@@ -37,14 +36,16 @@ bool operator!=(const TColumn& col1, const TColumn& col2) {
 
 class TResultSet::TImpl {
 public:
-    TImpl(const Ydb::ResultSet& proto)
+    TImpl(const Ydb::ResultSet& proto, const TArrowResult& arrowResult = TArrowResult{})
         : ProtoResultSet_(proto)
+        , ArrowResult_(arrowResult)
     {
         Init();
     }
 
-    TImpl(Ydb::ResultSet&& proto)
+    TImpl(Ydb::ResultSet&& proto, TArrowResult&& arrowResult = TArrowResult{})
         : ProtoResultSet_(std::move(proto))
+        , ArrowResult_(std::move(arrowResult))
     {
         Init();
     }
@@ -54,61 +55,28 @@ public:
         for (auto& meta : ProtoResultSet_.columns()) {
             ColumnsMeta_.push_back(TColumn(meta.name(), TType(meta.type())));
         }
-
-        switch (ProtoResultSet_.output_format_meta_case()) {
-            case Ydb::ResultSet::OutputFormatMetaCase::kValueOutputFormatMeta: {
-                break;
-            }
-            case Ydb::ResultSet::OutputFormatMetaCase::kArrowOutputFormatMeta: {
-                auto trySchema = NArrow::DeserializeSchema(ProtoResultSet_.arrow_output_format_meta().schema());
-                if (!trySchema.ok()) {
-                    return;
-                }
-
-                auto tryBatch = NArrow::DeserializeBatch(ProtoResultSet_.data(), *trySchema);
-                if (!tryBatch.ok()) {
-                    return;
-                }
-
-                ArrowBatch = std::move(*tryBatch);
-                break;
-            }
-            default: {
-                break;
-            }
-        }
     }
 
 public:
     const Ydb::ResultSet ProtoResultSet_;
     std::vector<TColumn> ColumnsMeta_;
-    std::shared_ptr<arrow::RecordBatch> ArrowBatch;
+    TArrowResult ArrowResult_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TResultSet::TResultSet(const Ydb::ResultSet& proto)
-    : Impl_(new TResultSet::TImpl(proto)) {}
+TResultSet::TResultSet(const Ydb::ResultSet& proto, const TArrowResult& arrowResult)
+    : Impl_(new TResultSet::TImpl(proto, arrowResult)) {}
 
-TResultSet::TResultSet(Ydb::ResultSet&& proto)
-    : Impl_(new TResultSet::TImpl(std::move(proto))) {}
+TResultSet::TResultSet(Ydb::ResultSet&& proto, TArrowResult&& arrowResult)
+    : Impl_(new TResultSet::TImpl(std::move(proto), std::move(arrowResult))) {}
 
 size_t TResultSet::ColumnsCount() const {
     return Impl_->ColumnsMeta_.size();
 }
 
 size_t TResultSet::RowsCount() const {
-    switch (Impl_->ProtoResultSet_.output_format_meta_case()) {
-        case Ydb::ResultSet::OutputFormatMetaCase::kValueOutputFormatMeta: {
-            return Impl_->ProtoResultSet_.rows_size();
-        }
-        case Ydb::ResultSet::OutputFormatMetaCase::kArrowOutputFormatMeta: {
-            return Impl_->ArrowBatch->num_rows();
-        }
-        default: {
-            return 0;
-        }
-    }
+    return Impl_->ProtoResultSet_.rows_size();
 }
 
 bool TResultSet::Truncated() const {
@@ -119,20 +87,16 @@ const std::vector<TColumn>& TResultSet::GetColumnsMeta() const {
     return Impl_->ColumnsMeta_;
 }
 
-std::shared_ptr<arrow::RecordBatch> TResultSet::GetArrowBatch() const {
-    return Impl_->ArrowBatch;
-}
-
-const TString& TResultSet::GetSerializedArrowBatch() const {
-    return Impl_->ProtoResultSet_.data();
-}
-
-const TString& TResultSet::GetSerializedArrowBatchSchema() const {
-    return Impl_->ProtoResultSet_.arrow_output_format_meta().schema();
-}
-
 const Ydb::ResultSet& TResultSet::GetProto() const {
     return Impl_->ProtoResultSet_;
+}
+
+const std::string& TResultSet::GetArrowSchema() const {
+    return Impl_->ArrowResult_.Schema;
+}
+
+const std::vector<std::string>& TResultSet::GetArrowData() const {
+    return Impl_->ArrowResult_.Data;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

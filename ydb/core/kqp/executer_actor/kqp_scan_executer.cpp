@@ -44,13 +44,13 @@ public:
 
     TKqpScanExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TString& database,
         const TIntrusiveConstPtr<NACLib::TUserToken>& userToken,
-        TOutputFormat outputFormat, TKqpRequestCounters::TPtr counters,
+        TResultSetFormatSettings resultSetFormatSettings, TKqpRequestCounters::TPtr counters,
         const NKikimrConfig::TTableServiceConfig& tableServiceConfig,
         NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory,
         TPreparedQueryHolder::TConstPtr preparedQuery,
         const TIntrusivePtr<TUserRequestContext>& userRequestContext,
         ui32 statementResultIndex, const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup, const TGUCSettings::TPtr& GUCSettings)
-        : TBase(std::move(request), std::move(asyncIoFactory), federatedQuerySetup, GUCSettings, database, userToken, std::move(outputFormat), counters, tableServiceConfig,
+        : TBase(std::move(request), std::move(asyncIoFactory), federatedQuerySetup, GUCSettings, database, userToken, std::move(resultSetFormatSettings), counters, tableServiceConfig,
             userRequestContext, statementResultIndex, TWilsonKqp::ScanExecuter, "ScanExecuter",
             false
         )
@@ -329,14 +329,14 @@ private:
 } // namespace
 
 IActor* CreateKqpScanExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TString& database,
-    const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, TOutputFormat outputFormat, TKqpRequestCounters::TPtr counters,
+    const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, TResultSetFormatSettings resultSetFormatSettings, TKqpRequestCounters::TPtr counters,
     const NKikimrConfig::TTableServiceConfig& tableServiceConfig,
     NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory,
     TPreparedQueryHolder::TConstPtr preparedQuery,
     const TIntrusivePtr<TUserRequestContext>& userRequestContext, ui32 statementResultIndex,
     const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup, const TGUCSettings::TPtr& GUCSettings)
 {
-    return new TKqpScanExecuter(std::move(request), database, userToken, std::move(outputFormat), counters, tableServiceConfig, std::move(asyncIoFactory),
+    return new TKqpScanExecuter(std::move(request), database, userToken, std::move(resultSetFormatSettings), counters, tableServiceConfig, std::move(asyncIoFactory),
         preparedQuery, userRequestContext, statementResultIndex,
         federatedQuerySetup, GUCSettings);
 }

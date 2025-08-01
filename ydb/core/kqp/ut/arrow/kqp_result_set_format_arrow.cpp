@@ -97,18 +97,25 @@ void CreateAllColumnsOlap(TQueryClient& client) {
 }
 
 void CompareResultSetsSize(const TResultSet& messageResultSet, const TResultSet& arrowResultSet) {
-    UNIT_ASSERT_VALUES_EQUAL(messageResultSet.RowsCount(), arrowResultSet.RowsCount());
     UNIT_ASSERT_VALUES_EQUAL(messageResultSet.ColumnsCount(), arrowResultSet.ColumnsCount());
+    UNIT_ASSERT(messageResultSet.RowsCount() == 0 || !arrowResultSet.GetArrowSchema().empty());
 
-    std::shared_ptr<arrow::RecordBatch> batch = arrowResultSet.GetArrowBatch();
+    auto schema = NArrow::DeserializeSchema(TString(arrowResultSet.GetArrowSchema()));
 
-    UNIT_ASSERT_VALUES_EQUAL(messageResultSet.RowsCount(), static_cast<size_t>(batch->num_rows()));
-    UNIT_ASSERT_VALUES_EQUAL(messageResultSet.ColumnsCount(), static_cast<size_t>(batch->num_columns()));
+    size_t arrowRowsCount = 0;
+    for (const auto& data : arrowResultSet.GetArrowData()) {
+        auto batch = NArrow::DeserializeBatch(TString(data), schema);
+        UNIT_ASSERT_VALUES_EQUAL(batch->num_columns(), messageResultSet.ColumnsCount());
+
+        arrowRowsCount += batch->num_rows();
+    }
+
+    UNIT_ASSERT_VALUES_EQUAL(messageResultSet.RowsCount(), arrowRowsCount);
 }
 
 } // namespace
 
-Y_UNIT_TEST_SUITE(KqpArrowResultSetType) {
+Y_UNIT_TEST_SUITE(KqpResultSetFormatArrow) {
     Y_UNIT_TEST_TWIN(AllTypes, isOlap) {
         auto kikimr = CreateKikimrRunner(isOlap);
         auto client = kikimr.GetQueryClient();
@@ -125,10 +132,10 @@ Y_UNIT_TEST_SUITE(KqpArrowResultSetType) {
         )", (isOlap) ? "OlapTable" : "OltpTable");
 
         auto messageResponse = client.ExecuteQuery(query, TTxControl::BeginTx().CommitTx(),
-            TExecuteQuerySettings().OutputFormat(TValueOutputFormat{})).GetValueSync();
+            TExecuteQuerySettings().Format(EResultSetFormat::Value)).GetValueSync();
 
         auto arrowResponse = client.ExecuteQuery(query, TTxControl::BeginTx().CommitTx(),
-            TExecuteQuerySettings().OutputFormat(TArrowOutputFormat{})).GetValueSync();
+            TExecuteQuerySettings().Format(EResultSetFormat::Arrow)).GetValueSync();
 
         UNIT_ASSERT_C(messageResponse.IsSuccess(), messageResponse.GetIssues().ToString());
         UNIT_ASSERT_C(arrowResponse.IsSuccess(), arrowResponse.GetIssues().ToString());
@@ -148,10 +155,10 @@ Y_UNIT_TEST_SUITE(KqpArrowResultSetType) {
         )");
 
         auto messageResponse = client.ExecuteQuery(query, TTxControl::BeginTx().CommitTx(),
-            TExecuteQuerySettings().OutputFormat(TValueOutputFormat{})).GetValueSync();
+            TExecuteQuerySettings().Format(EResultSetFormat::Value)).GetValueSync();
 
         auto arrowResponse = client.ExecuteQuery(query, TTxControl::BeginTx().CommitTx(),
-            TExecuteQuerySettings().OutputFormat(TArrowOutputFormat{})).GetValueSync();
+            TExecuteQuerySettings().Format(EResultSetFormat::Arrow)).GetValueSync();
 
         UNIT_ASSERT_C(messageResponse.IsSuccess(), messageResponse.GetIssues().ToString());
         UNIT_ASSERT_C(arrowResponse.IsSuccess(), arrowResponse.GetIssues().ToString());
@@ -171,10 +178,10 @@ Y_UNIT_TEST_SUITE(KqpArrowResultSetType) {
         )");
 
         auto messageResponse = client.ExecuteQuery(query, TTxControl::BeginTx().CommitTx(),
-            TExecuteQuerySettings().OutputFormat(TValueOutputFormat{})).GetValueSync();
+            TExecuteQuerySettings().Format(EResultSetFormat::Value)).GetValueSync();
 
         auto arrowResponse = client.ExecuteQuery(query, TTxControl::BeginTx().CommitTx(),
-            TExecuteQuerySettings().OutputFormat(TArrowOutputFormat{})).GetValueSync();
+            TExecuteQuerySettings().Format(EResultSetFormat::Arrow)).GetValueSync();
 
         UNIT_ASSERT_C(messageResponse.IsSuccess(), messageResponse.GetIssues().ToString());
         UNIT_ASSERT_C(arrowResponse.IsSuccess(), arrowResponse.GetIssues().ToString());
@@ -211,10 +218,10 @@ Y_UNIT_TEST_SUITE(KqpArrowResultSetType) {
         }
 
         auto messageResponse = client.ExecuteQuery(query, TTxControl::BeginTx().CommitTx(),
-            TExecuteQuerySettings().OutputFormat(TValueOutputFormat{})).GetValueSync();
+            TExecuteQuerySettings().Format(EResultSetFormat::Value)).GetValueSync();
 
         auto arrowResponse = client.ExecuteQuery(query, TTxControl::BeginTx().CommitTx(),
-            TExecuteQuerySettings().OutputFormat(TArrowOutputFormat{})).GetValueSync();
+            TExecuteQuerySettings().Format(EResultSetFormat::Arrow)).GetValueSync();
 
         UNIT_ASSERT_C(messageResponse.IsSuccess(), messageResponse.GetIssues().ToString());
         UNIT_ASSERT_C(arrowResponse.IsSuccess(), arrowResponse.GetIssues().ToString());
@@ -229,10 +236,15 @@ Y_UNIT_TEST_SUITE(KqpArrowResultSetType) {
         {
             auto result = client.ExecuteQuery(R"(
                 SELECT Name, Amount FROM Test WHERE Group = 2;
-            )", TTxControl::BeginTx().CommitTx(), TExecuteQuerySettings().OutputFormat(TArrowOutputFormat{})).GetValueSync();
+            )", TTxControl::BeginTx().CommitTx(), TExecuteQuerySettings().Format(EResultSetFormat::Arrow)).GetValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 
-            auto batch = result.GetResultSet(0).GetArrowBatch();
+            UNIT_ASSERT(!result.GetResultSet(0).GetArrowSchema().empty());
+            UNIT_ASSERT(!result.GetResultSet(0).GetArrowData().empty());
+
+            auto schema = NArrow::DeserializeSchema(TString(result.GetResultSet(0).GetArrowSchema()));
+            auto batch = NArrow::DeserializeBatch(TString(result.GetResultSet(0).GetArrowData()[0]), schema);
+
             UNIT_ASSERT_VALUES_EQUAL(batch->num_rows(), 1);
             UNIT_ASSERT_VALUES_EQUAL(batch->num_columns(), 2);
 
@@ -255,10 +267,15 @@ Y_UNIT_TEST_SUITE(KqpArrowResultSetType) {
         {
             auto result = client.ExecuteQuery(R"(
                 SELECT Amount, Name FROM Test WHERE Group = 2;
-            )", TTxControl::BeginTx().CommitTx(), TExecuteQuerySettings().OutputFormat(TArrowOutputFormat{})).GetValueSync();
+            )", TTxControl::BeginTx().CommitTx(), TExecuteQuerySettings().Format(EResultSetFormat::Arrow)).GetValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 
-            auto batch = result.GetResultSet(0).GetArrowBatch();
+            UNIT_ASSERT(!result.GetResultSet(0).GetArrowSchema().empty());
+            UNIT_ASSERT(!result.GetResultSet(0).GetArrowData().empty());
+
+            auto schema = NArrow::DeserializeSchema(TString(result.GetResultSet(0).GetArrowSchema()));
+            auto batch = NArrow::DeserializeBatch(TString(result.GetResultSet(0).GetArrowData()[0]), schema);
+
             UNIT_ASSERT_VALUES_EQUAL(batch->num_rows(), 1);
             UNIT_ASSERT_VALUES_EQUAL(batch->num_columns(), 2);
 
@@ -275,16 +292,20 @@ Y_UNIT_TEST_SUITE(KqpArrowResultSetType) {
 
                 UNIT_ASSERT(!nameColumn->IsNull(i));
                 UNIT_ASSERT_VALUES_EQUAL(nameColumn->GetString(i), std::get<1>(row));
-
             }
         }
         {
             auto result = client.ExecuteQuery(R"(
                 SELECT Comment, Amount, Name FROM Test ORDER BY Amount DESC;
-            )", TTxControl::BeginTx().CommitTx(), TExecuteQuerySettings().OutputFormat(TArrowOutputFormat{})).GetValueSync();
+            )", TTxControl::BeginTx().CommitTx(), TExecuteQuerySettings().Format(EResultSetFormat::Arrow)).GetValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 
-            auto batch = result.GetResultSet(0).GetArrowBatch();
+            UNIT_ASSERT(!result.GetResultSet(0).GetArrowSchema().empty());
+            UNIT_ASSERT(!result.GetResultSet(0).GetArrowData().empty());
+
+            auto schema = NArrow::DeserializeSchema(TString(result.GetResultSet(0).GetArrowSchema()));
+            auto batch = NArrow::DeserializeBatch(TString(result.GetResultSet(0).GetArrowData()[0]), schema);
+
             UNIT_ASSERT_VALUES_EQUAL(batch->num_rows(), 3);
             UNIT_ASSERT_VALUES_EQUAL(batch->num_columns(), 3);
 
@@ -305,7 +326,6 @@ Y_UNIT_TEST_SUITE(KqpArrowResultSetType) {
 
                 UNIT_ASSERT(!nameColumn->IsNull(i));
                 UNIT_ASSERT_VALUES_EQUAL(nameColumn->GetString(i), std::get<2>(row));
-
             }
         }
     }
@@ -334,10 +354,15 @@ Y_UNIT_TEST_SUITE(KqpArrowResultSetType) {
         {
             auto result = client.ExecuteQuery(R"(
                 SELECT name, is_valid FROM TestUtf8 WHERE is_valid = true;
-            )", TTxControl::BeginTx().CommitTx(), TExecuteQuerySettings().OutputFormat(TArrowOutputFormat{})).GetValueSync();
+            )", TTxControl::BeginTx().CommitTx(), TExecuteQuerySettings().Format(EResultSetFormat::Arrow)).GetValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 
-            auto batch = result.GetResultSet(0).GetArrowBatch();
+            UNIT_ASSERT(!result.GetResultSet(0).GetArrowSchema().empty());
+            UNIT_ASSERT(!result.GetResultSet(0).GetArrowData().empty());
+
+            auto schema = NArrow::DeserializeSchema(TString(result.GetResultSet(0).GetArrowSchema()));
+            auto batch = NArrow::DeserializeBatch(TString(result.GetResultSet(0).GetArrowData()[0]), schema);
+
             UNIT_ASSERT_VALUES_EQUAL(batch->num_rows(), 1);
             UNIT_ASSERT_VALUES_EQUAL(batch->num_columns(), 2);
 
@@ -359,10 +384,15 @@ Y_UNIT_TEST_SUITE(KqpArrowResultSetType) {
         {
             auto result = client.ExecuteQuery(R"(
                 SELECT is_valid, name FROM TestUtf8 WHERE is_valid = false;
-            )", TTxControl::BeginTx().CommitTx(), TExecuteQuerySettings().OutputFormat(TArrowOutputFormat{})).GetValueSync();
+            )", TTxControl::BeginTx().CommitTx(), TExecuteQuerySettings().Format(EResultSetFormat::Arrow)).GetValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 
-            auto batch = result.GetResultSet(0).GetArrowBatch();
+            UNIT_ASSERT(!result.GetResultSet(0).GetArrowSchema().empty());
+            UNIT_ASSERT(!result.GetResultSet(0).GetArrowData().empty());
+
+            auto schema = NArrow::DeserializeSchema(TString(result.GetResultSet(0).GetArrowSchema()));
+            auto batch = NArrow::DeserializeBatch(TString(result.GetResultSet(0).GetArrowData()[0]), schema);
+
             UNIT_ASSERT_VALUES_EQUAL(batch->num_rows(), 1);
             UNIT_ASSERT_VALUES_EQUAL(batch->num_columns(), 2);
 
@@ -388,12 +418,23 @@ Y_UNIT_TEST_SUITE(KqpArrowResultSetType) {
         auto client = kikimr.GetQueryClient();
 
         {
+            auto settings = TExecuteQuerySettings()
+                .Format(EResultSetFormat::Arrow)
+                .ArrowFormatSettings(TArrowFormatSettings()
+                    .CompressionCodec(TArrowFormatSettings::TCompressionCodec()
+                        .Type(TArrowFormatSettings::TCompressionCodec::EType::Zstd)));
+
             auto result = client.ExecuteQuery(R"(
                 SELECT Comment, Amount, Name FROM Test ORDER BY Amount DESC;
-            )", TTxControl::BeginTx().CommitTx(), TExecuteQuerySettings().OutputFormat(TArrowOutputFormat(TArrowOutputFormat::ECompression::ZSTD))).GetValueSync();
+            )", TTxControl::BeginTx().CommitTx(), settings).GetValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 
-            auto batch = result.GetResultSet(0).GetArrowBatch();
+            UNIT_ASSERT(!result.GetResultSet(0).GetArrowSchema().empty());
+            UNIT_ASSERT(!result.GetResultSet(0).GetArrowData().empty());
+
+            auto schema = NArrow::DeserializeSchema(TString(result.GetResultSet(0).GetArrowSchema()));
+            auto batch = NArrow::DeserializeBatch(TString(result.GetResultSet(0).GetArrowData()[0]), schema);
+
             UNIT_ASSERT_VALUES_EQUAL(batch->num_rows(), 3);
             UNIT_ASSERT_VALUES_EQUAL(batch->num_columns(), 3);
 
@@ -424,12 +465,23 @@ Y_UNIT_TEST_SUITE(KqpArrowResultSetType) {
         auto client = kikimr.GetQueryClient();
 
         {
+            auto settings = TExecuteQuerySettings()
+                .Format(EResultSetFormat::Arrow)
+                .ArrowFormatSettings(TArrowFormatSettings()
+                    .CompressionCodec(TArrowFormatSettings::TCompressionCodec()
+                        .Type(TArrowFormatSettings::TCompressionCodec::EType::Lz4Frame)));
+
             auto result = client.ExecuteQuery(R"(
                 SELECT Comment, Amount, Name FROM Test ORDER BY Amount DESC;
-            )", TTxControl::BeginTx().CommitTx(), TExecuteQuerySettings().OutputFormat(TArrowOutputFormat(TArrowOutputFormat::ECompression::LZ4_FRAME))).GetValueSync();
+            )", TTxControl::BeginTx().CommitTx(), settings).GetValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 
-            auto batch = result.GetResultSet(0).GetArrowBatch();
+            UNIT_ASSERT(!result.GetResultSet(0).GetArrowSchema().empty());
+            UNIT_ASSERT(!result.GetResultSet(0).GetArrowData().empty());
+
+            auto schema = NArrow::DeserializeSchema(TString(result.GetResultSet(0).GetArrowSchema()));
+            auto batch = NArrow::DeserializeBatch(TString(result.GetResultSet(0).GetArrowData()[0]), schema);
+
             UNIT_ASSERT_VALUES_EQUAL(batch->num_rows(), 3);
             UNIT_ASSERT_VALUES_EQUAL(batch->num_columns(), 3);
 
@@ -450,7 +502,6 @@ Y_UNIT_TEST_SUITE(KqpArrowResultSetType) {
 
                 UNIT_ASSERT(!nameColumn->IsNull(i));
                 UNIT_ASSERT_VALUES_EQUAL(nameColumn->GetString(i), std::get<2>(row));
-
             }
         }
     }

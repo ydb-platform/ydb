@@ -472,7 +472,7 @@ private:
         auto bufferActorId = RegisterWithSameMailbox(bufferActor);
 
         auto batchSettings = TBatchOperationSettings(partInfo->LimitSize, BatchOperationSettings.MinBatchSize);
-        auto executerActor = CreateKqpExecuter(std::move(request), Database, UserToken, TValueOutputFormat{}, RequestCounters,
+        auto executerActor = CreateKqpExecuter(std::move(request), Database, UserToken, TResultSetFormatSettings{}, RequestCounters,
             TableServiceConfig, AsyncIoFactory, PreparedQuery, SelfId(), UserRequestContext, StatementResultIndex,
             FederatedQuerySetup, GUCSettings, ShardIdToTableInfo, txManager, bufferActorId, std::move(batchSettings));
         auto exId = RegisterWithSameMailbox(executerActor);

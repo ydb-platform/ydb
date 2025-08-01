@@ -1,5 +1,4 @@
 RECURSE(
-    arrow
     decimal
     grpc/client
     issue

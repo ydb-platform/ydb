@@ -16,7 +16,6 @@ PEERDIR(
     ydb/public/sdk/cpp/src/client/proto
     ydb/public/sdk/cpp/src/client/types
     ydb/public/sdk/cpp/src/client/types/status
-    contrib/libs/apache/arrow
 )
 
 END()

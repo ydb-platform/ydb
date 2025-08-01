@@ -53,7 +53,7 @@ void TKqpProtoBuilder::BuildYdbResultSet(
     Ydb::ResultSet& resultSet,
     TVector<NYql::NDq::TDqSerializedBatch>&& data,
     NKikimr::NMiniKQL::TType* mkqlSrcRowType,
-    const TOutputFormat& outputFormat,
+    const TResultSetFormatSettings& resultSetFormatSettings,
     bool fillSchema,
     const TVector<ui32>* columnOrder,
     const TVector<TString>* columnHints)
@@ -65,9 +65,6 @@ void TKqpProtoBuilder::BuildYdbResultSet(
 
     std::vector<std::pair<TString, NScheme::TTypeInfo>> arrowSchema;
     std::set<std::string> arrowNotNullColumns;
-
-    bool arrowFormat = std::holds_alternative<TArrowOutputFormat>(outputFormat);
-    bool valueFormat = std::holds_alternative<TValueOutputFormat>(outputFormat);
 
     if (fillSchema) {
         for (ui32 idx = 0; idx < mkqlSrcRowStructType->GetMembersCount(); ++idx) {
@@ -82,7 +79,7 @@ void TKqpProtoBuilder::BuildYdbResultSet(
         }
     }
 
-    if (arrowFormat) {
+    if (resultSetFormatSettings.IsArrowFormat()) {
         for (ui32 idx = 0; idx < mkqlSrcRowStructType->GetMembersCount(); ++idx) {
             ui32 memberIndex = (!columnOrder || columnOrder->empty()) ? idx : (*columnOrder)[idx];
             auto columnName = TString(columnHints && columnHints->size() ? order.at(idx).LogicalName : mkqlSrcRowStructType->GetMemberName(memberIndex));
@@ -110,7 +107,7 @@ void TKqpProtoBuilder::BuildYdbResultSet(
     NDq::TDqDataSerializer dataSerializer(*TypeEnv, *HolderFactory, transportVersion);
 
     ui32 rowsCount = 0;
-    if (arrowFormat) {
+    if (resultSetFormatSettings.IsArrowFormat()) {
         for (const auto& part : data) {
             if (!part.ChunkCount()) {
                 continue;
@@ -120,7 +117,7 @@ void TKqpProtoBuilder::BuildYdbResultSet(
         }
     }
 
-    if (valueFormat) {
+    if (resultSetFormatSettings.IsValueFormat()) {
         for (auto& part : data) {
             if (!part.ChunkCount()) {
                 continue;
@@ -134,32 +131,14 @@ void TKqpProtoBuilder::BuildYdbResultSet(
             });
         }
 
-        resultSet.mutable_value_output_format_meta();
-    } else if (arrowFormat) {
-        const auto& format = std::get<TArrowOutputFormat>(outputFormat);
-        auto compression = format.Compression;
-        i32 compressionLevel = format.CompressionLevel;
-
-        arrow::Compression::type codec = arrow::Compression::UNCOMPRESSED;
-        switch (compression) {
-            case TArrowOutputFormat::ECompression::ZSTD:
-                codec = arrow::Compression::ZSTD;
-                break;
-            case TArrowOutputFormat::ECompression::LZ4_FRAME:
-                codec = arrow::Compression::LZ4_FRAME;
-                break;
-            default:
-                break;
-        }
-
-        NArrow::TArrowBatchBuilder batchBuilder(codec, compressionLevel, arrowNotNullColumns);
+        resultSet.set_format(Ydb::ResultSet::FORMAT_VALUE);
+    } else if (resultSetFormatSettings.IsArrowFormat()) {
+        NArrow::TArrowBatchBuilder batchBuilder(arrow::Compression::UNCOMPRESSED, arrowNotNullColumns);
 
         batchBuilder.Reserve(rowsCount);
-
         YQL_ENSURE(batchBuilder.Start(arrowSchema).ok());
 
         TRowBuilder rowBuilder(arrowSchema.size());
-
         for (auto& part : data) {
             if (!part.ChunkCount()) {
                 continue;
@@ -182,13 +161,23 @@ void TKqpProtoBuilder::BuildYdbResultSet(
 
         std::shared_ptr<arrow::RecordBatch> batch = batchBuilder.FlushBatch(false);
 
-        TString serializedBatch = NArrow::SerializeBatchNoCompression(batch);
+        auto writeOptions = arrow::ipc::IpcWriteOptions::Defaults();
+        writeOptions.use_threads = false;
+
+        if (auto arrowFormatSettings = resultSetFormatSettings.GetArrowFormatSettings()) {
+            arrowFormatSettings->FillWriteOptions(writeOptions);
+        }
+
+        TString serializedBatch = NArrow::SerializeBatch(batch, writeOptions);
         resultSet.set_data(std::move(serializedBatch));
 
+        TString serializedSchema;
         if (fillSchema && batch) {
-            TString serializedSchema = NArrow::SerializeSchema(*batch->schema());
-            resultSet.mutable_arrow_output_format_meta()->set_schema(std::move(serializedSchema));
+            serializedSchema = NArrow::SerializeSchema(*batch->schema());
         }
+
+        resultSet.mutable_arrow_format_meta()->set_schema(std::move(serializedSchema));
+        resultSet.set_format(Ydb::ResultSet::FORMAT_ARROW);
     } else {
         YQL_ENSURE(false, "Unknown output format");
     }

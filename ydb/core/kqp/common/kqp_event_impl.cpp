@@ -8,7 +8,6 @@ namespace NKikimr::NKqp {
 TEvKqp::TEvQueryRequest::TEvQueryRequest(
     NKikimrKqp::EQueryAction queryAction,
     NKikimrKqp::EQueryType queryType,
-    TOutputFormat outputFormat,
     TActorId requestActorId,
     const std::shared_ptr<NGRpcService::IRequestCtxMtSafe>& ctx,
     const TString& sessionId,
@@ -20,9 +19,9 @@ TEvKqp::TEvQueryRequest::TEvQueryRequest(
     const ::Ydb::Table::QueryCachePolicy* queryCachePolicy,
     const ::Ydb::Operations::OperationParams* operationParams,
     const TQueryRequestSettings& querySettings,
-    const TString& poolId)
+    const TString& poolId,
+    std::optional<NKqp::TArrowFormatSettings> arrowFormatSettings)
     : RequestCtx(ctx)
-    , OutputFormat(std::move(outputFormat))
     , RequestActorId(requestActorId)
     , Database(CanonizePath(ctx->GetDatabaseName().GetOrElse("")))
     , SessionId(sessionId)
@@ -37,6 +36,7 @@ TEvKqp::TEvQueryRequest::TEvQueryRequest(
     , QueryCachePolicy(queryCachePolicy)
     , HasOperationParams(operationParams)
     , QuerySettings(querySettings)
+    , ArrowFormatSettings(std::move(arrowFormatSettings))
 {
 
     if (HasOperationParams) {
@@ -98,16 +98,9 @@ void TEvKqp::TEvQueryRequest::PrepareRemote() const {
             Record.MutableRequest()->SetDatabaseId(DatabaseId);
         }
 
-        std::visit([this](auto&& format) {
-            using T = std::decay_t<decltype(format)>;
-            if constexpr (std::is_same_v<T, TValueOutputFormat>) {
-                format.ExportToProto(Record.MutableRequest()->MutableValueOutputFormat());
-            } else if constexpr (std::is_same_v<T, TArrowOutputFormat>) {
-                format.ExportToProto(Record.MutableRequest()->MutableArrowOutputFormat());
-            } else {
-                YQL_ENSURE(false, "Unreachable");
-            }
-        }, OutputFormat);
+        if (ArrowFormatSettings) {
+            ArrowFormatSettings->ExportToProto(Record.MutableRequest()->MutableArrowFormatSettings());
+        }
 
         Record.MutableRequest()->SetUsePublicResponseDataFormat(true);
         Record.MutableRequest()->SetSessionId(SessionId);
@@ -120,6 +113,8 @@ void TEvKqp::TEvQueryRequest::PrepareRemote() const {
         }
         Record.MutableRequest()->SetIsInternalCall(RequestCtx->IsInternalCall());
         Record.MutableRequest()->SetOutputChunkMaxSize(QuerySettings.OutputChunkMaxSize);
+        Record.MutableRequest()->SetSchemaInclusionMode(QuerySettings.SchemaInclusionMode);
+        Record.MutableRequest()->SetResultSetFormat(QuerySettings.ResultSetFormat);
 
         RequestCtx.reset();
     }

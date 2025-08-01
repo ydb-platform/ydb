@@ -169,11 +169,9 @@ message TQueryRequest {
     optional string PoolId = 35;
     optional string DatabaseId = 36;
     optional TKafkaApiOperationsRequest KafkaApiOperations = 37;
-
-    oneof OutputFormat {
-        Ydb.Formats.ValueOutputFormat ValueOutputFormat = 1000;
-        Ydb.Formats.ArrowOutputFormat ArrowOutputFormat = 1001;
-    }
+    optional Ydb.Query.SchemaInclusionMode SchemaInclusionMode = 38;
+    optional Ydb.ResultSet.Format ResultSetFormat = 39;
+    optional Ydb.Formats.ArrowFormatSettings ArrowFormatSettings = 40;
 }
 
 message TKqpPathIdProto {

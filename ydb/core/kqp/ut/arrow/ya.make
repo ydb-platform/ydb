@@ -8,7 +8,7 @@ SIZE(MEDIUM)
 SRCS(
     kqp_arrow_in_channels_ut.cpp
     kqp_types_arrow_ut.cpp
-    kqp_arrow_result_set_type_ut.cpp
+    kqp_result_set_format_arrow.cpp
 )
 
 PEERDIR(

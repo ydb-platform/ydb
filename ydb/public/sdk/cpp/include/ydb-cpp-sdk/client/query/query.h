@@ -38,6 +38,18 @@ enum class EStatsMode {
     Profile = 40,
 };
 
+enum class ESchemaInclusionMode {
+    Unspecified = 0,
+    Always = 1,
+    FirstOnly = 2,
+};
+
+enum class EResultSetFormat {
+    Unspecified = 0,
+    Value = 1,
+    Arrow = 2,
+};
+
 std::optional<EStatsMode> ParseStatsMode(std::string_view statsMode);
 std::string_view StatsModeToString(const EStatsMode statsMode);
 
@@ -48,6 +60,26 @@ enum class EExecStatus {
     Canceled = 30,
     Completed = 40,
     Failed = 50,
+};
+
+struct TArrowFormatSettings {
+    using TSelf = TArrowFormatSettings;
+
+    struct TCompressionCodec {
+        using TSelf = TCompressionCodec;
+
+        enum class EType {
+            Unspecified = 0,
+            None = 1,
+            Zstd = 2,
+            Lz4Frame = 3,
+        };
+
+        FLUENT_SETTING_DEFAULT(EType, Type, EType::Unspecified);
+        FLUENT_SETTING_OPTIONAL(int32_t, Level);
+    };
+
+    FLUENT_SETTING_OPTIONAL(TCompressionCodec, CompressionCodec);
 };
 
 using TAsyncExecuteQueryPart = NThreading::TFuture<TExecuteQueryPart>;
@@ -77,68 +109,17 @@ private:
 
 using TAsyncExecuteQueryIterator = NThreading::TFuture<TExecuteQueryIterator>;
 
-struct TOutputFormatBase {
-    TOutputFormatBase(Ydb::Formats::SchemaInclusionMode mode = Ydb::Formats::SchemaInclusionMode::SCHEMA_INCLUSION_MODE_ALWAYS)
-        : SchemaInclusionMode(mode)
-    {}
-
-    Ydb::Formats::SchemaInclusionMode SchemaInclusionMode;
-};
-
-struct TValueOutputFormat : public TOutputFormatBase {
-    TValueOutputFormat(Ydb::Formats::SchemaInclusionMode mode = Ydb::Formats::SchemaInclusionMode::SCHEMA_INCLUSION_MODE_ALWAYS)
-        : TOutputFormatBase(mode)
-    {}
-
-    void ExportToProto(Ydb::Formats::ValueOutputFormat* proto) const {
-        proto->set_schema_inclusion_mode(SchemaInclusionMode);
-    }
-
-    static TValueOutputFormat ImportFromProto(const Ydb::Formats::ValueOutputFormat& proto) {
-        return TValueOutputFormat{proto.schema_inclusion_mode()};
-    }
-};
-
-struct TArrowOutputFormat : public TOutputFormatBase {
-    enum class ECompression {
-        UNSPECIFIED = 0,
-        NONE = 1,
-        ZSTD = 2,
-        LZ4_FRAME = 3,
-    };
-
-    TArrowOutputFormat(ECompression compression = ECompression::NONE, i32 level = std::numeric_limits<i32>::min(),
-        Ydb::Formats::SchemaInclusionMode mode = Ydb::Formats::SchemaInclusionMode::SCHEMA_INCLUSION_MODE_ALWAYS)
-        : TOutputFormatBase(mode)
-        , Compression(compression)
-        , CompressionLevel(level)
-    {}
-
-    void ExportToProto(Ydb::Formats::ArrowOutputFormat* proto) const {
-        proto->mutable_compression()->set_type(static_cast<Ydb::Formats::ArrowOutputFormat::Compression::Type>(Compression));
-        proto->mutable_compression()->set_level(CompressionLevel);
-        proto->set_schema_inclusion_mode(SchemaInclusionMode);
-    }
-
-    static TArrowOutputFormat ImportFromProto(const Ydb::Formats::ArrowOutputFormat& proto) {
-        return TArrowOutputFormat{ECompression(proto.compression().type()), proto.compression().level(), proto.schema_inclusion_mode()};
-    }
-
-    ECompression Compression;
-    i32 CompressionLevel;
-};
-
-using TOutputFormat = std::variant<TValueOutputFormat, TArrowOutputFormat>;
-
 struct TExecuteQuerySettings : public TRequestSettings<TExecuteQuerySettings> {
     FLUENT_SETTING_OPTIONAL(uint32_t, OutputChunkMaxSize);
     FLUENT_SETTING_DEFAULT(ESyntax, Syntax, ESyntax::YqlV1);
     FLUENT_SETTING_DEFAULT(EExecMode, ExecMode, EExecMode::Execute);
     FLUENT_SETTING_DEFAULT(EStatsMode, StatsMode, EStatsMode::None);
-    FLUENT_SETTING_DEFAULT(TOutputFormat, OutputFormat, TValueOutputFormat());
     FLUENT_SETTING_OPTIONAL(bool, ConcurrentResultSets);
     FLUENT_SETTING(std::string, ResourcePool);
     FLUENT_SETTING_OPTIONAL(std::chrono::milliseconds, StatsCollectPeriod);
+    FLUENT_SETTING_DEFAULT(ESchemaInclusionMode, SchemaInclusionMode, ESchemaInclusionMode::Unspecified);
+    FLUENT_SETTING_DEFAULT(EResultSetFormat, Format, EResultSetFormat::Value);
+    FLUENT_SETTING_OPTIONAL(TArrowFormatSettings, ArrowFormatSettings);
 };
 
 struct TBeginTxSettings : public TRequestSettings<TBeginTxSettings> {};

@@ -8,7 +8,6 @@
 #include <ydb/core/actorlib_impl/long_timer.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/library/ydb_issue/issue_helpers.h>
-#include <ydb/core/kqp/common/kqp_output_formats.h>
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
 #include <ydb/core/kqp/opt/kqp_query_plan.h>
 
@@ -238,7 +237,6 @@ private:
         auto ev = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>(
             action,
             NKikimrKqp::QUERY_TYPE_SQL_SCAN,
-            NKqp::TValueOutputFormat{},
             SelfId(),
             Request_,
             TString(), //sessionId

@@ -11,7 +11,6 @@ PEERDIR(
     ydb/public/sdk/cpp/src/client/types/fatal_error_handlers
     ydb/public/sdk/cpp/src/client/value
     ydb/public/sdk/cpp/src/client/proto
-    ydb/public/sdk/cpp/src/library/arrow
 )
 
 END()

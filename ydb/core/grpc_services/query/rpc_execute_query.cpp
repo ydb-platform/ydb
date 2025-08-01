@@ -268,18 +268,12 @@ private:
             }
         }
 
-        NKqp::TOutputFormat outputFormat;
+        Ydb::Query::SchemaInclusionMode schemaInclusionMode = req->schema_inclusion_mode();
+        Ydb::ResultSet::Format resultSetFormat = req->result_set_format();
 
-        switch (req->output_format_case()) {
-            case Ydb::Query::ExecuteQueryRequest::kValueOutputFormat:
-                outputFormat = NKqp::TValueOutputFormat::ImportFromProto(req->value_output_format());
-                break;
-            case Ydb::Query::ExecuteQueryRequest::kArrowOutputFormat:
-                outputFormat = NKqp::TArrowOutputFormat::ImportFromProto(req->arrow_output_format());
-                break;
-            default:
-                issues.AddIssue(MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR, "Unexpected output format"));
-                return ReplyFinishStream(Ydb::StatusIds::BAD_REQUEST, std::move(issues));
+        std::optional<NKqp::TArrowFormatSettings> arrowFormatSettings;
+        if (req->has_arrow_format_settings()) {
+            arrowFormatSettings = NKqp::TArrowFormatSettings::ImportFromProto(req->arrow_format_settings());
         }
 
         AuditContextAppend(Request_.get(), *req);
@@ -298,12 +292,13 @@ private:
             .SetUseCancelAfter(false)
             .SetSyntax(syntax)
             .SetSupportStreamTrailingResult(true)
-            .SetOutputChunkMaxSize(req->response_part_limit_bytes());
+            .SetOutputChunkMaxSize(req->response_part_limit_bytes())
+            .SetSchemaInclusionMode(schemaInclusionMode)
+            .SetResultSetFormat(resultSetFormat);
 
         auto ev = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>(
             QueryAction,
             queryType,
-            std::move(outputFormat),
             SelfId(),
             Request_,
             req->session_id(),
@@ -315,7 +310,8 @@ private:
             cachePolicy,
             nullptr, // operationParams
             settings,
-            req->pool_id());
+            req->pool_id(),
+            std::move(arrowFormatSettings));
 
         ev->SetProgressStatsPeriod(TDuration::MilliSeconds(req->stats_period_ms()));
         ev->Record.MutableRequest()->SetCollectDiagnostics(NeedCollectDiagnostics(*req));

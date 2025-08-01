@@ -51,7 +51,7 @@ message ArrowFormatSettings {
 
         // Compression level for the codec.
         // If is not specified, the default level of the codec type is used.
-        int32 level = 2;
+        optional int32 level = 2;
     }
 
     // Codec for compressing binary data in Ydb.ResultSet.data field

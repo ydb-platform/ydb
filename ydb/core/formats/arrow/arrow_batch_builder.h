@@ -153,11 +153,6 @@ public:
         arrow::Compression::type codec = arrow::Compression::UNCOMPRESSED,
         const std::set<std::string>& notNullColumns = {},
         arrow::MemoryPool* memoryPool = arrow::default_memory_pool());
-    TArrowBatchBuilder(
-        arrow::Compression::type codec,
-        ui32 compressionLevel,
-        const std::set<std::string>& notNullColumns,
-        arrow::MemoryPool* memoryPool = arrow::default_memory_pool());
     ~TArrowBatchBuilder() = default;
 
     bool Start(const std::vector<std::pair<TString, NScheme::TTypeInfo>>& columns,

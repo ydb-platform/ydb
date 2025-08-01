@@ -199,23 +199,6 @@ TArrowBatchBuilder::TArrowBatchBuilder(
     WriteOptions.use_threads = false;
 }
 
-TArrowBatchBuilder::TArrowBatchBuilder(
-        arrow::Compression::type codec,
-        ui32 compressionLevel,
-        const std::set<std::string>& notNullColumns,
-        arrow::MemoryPool* memoryPool)
-    : WriteOptions(arrow::ipc::IpcWriteOptions::Defaults())
-    , NotNullColumns(notNullColumns)
-    , MemoryPool(memoryPool)
-{
-    Y_ABORT_UNLESS(arrow::util::Codec::IsAvailable(codec));
-    auto resCodec = arrow::util::Codec::Create(codec, compressionLevel);
-    Y_ABORT_UNLESS(resCodec.ok());
-
-    WriteOptions.codec.reset((*resCodec).release());
-    WriteOptions.use_threads = false;
-}
-
 arrow::Status TArrowBatchBuilder::Start(const std::vector<std::pair<TString, NScheme::TTypeInfo>>& ydbColumns) {
     YdbSchema = ydbColumns;
     auto schema = MakeArrowSchema(ydbColumns, NotNullColumns);

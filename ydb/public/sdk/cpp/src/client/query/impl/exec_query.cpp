@@ -14,7 +14,6 @@
 #include <ydb/public/api/grpc/ydb_query_v1.grpc.pb.h>
 
 #include <library/cpp/threading/future/core/coroutine_traits.h>
-#include <ydb/public/sdk/cpp/src/library/arrow/arrow_helpers.h>
 
 namespace NYdb::inline Dev::NQuery {
 
@@ -151,6 +150,7 @@ struct TExecuteQueryBuffer : public TThrRefBase, TNonCopyable {
     std::vector<Ydb::ResultSet> ResultSets_;
     std::optional<TExecStats> Stats_;
     std::optional<TTransaction> Tx_;
+    std::vector<TArrowResult> ArrowResults_;
 
     void Next() {
         TPtr self(this);
@@ -170,14 +170,21 @@ struct TExecuteQueryBuffer : public TThrRefBase, TNonCopyable {
                     std::vector<NYdb::NIssue::TIssue> issues;
                     std::vector<Ydb::ResultSet> resultProtos;
                     std::optional<TTransaction> tx;
+                    std::vector<TArrowResult> arrowResults;
 
                     std::swap(self->Issues_, issues);
                     std::swap(self->ResultSets_, resultProtos);
                     std::swap(self->Tx_, tx);
+                    std::swap(self->ArrowResults_, arrowResults);
 
                     std::vector<TResultSet> resultSets;
-                    for (auto& proto : resultProtos) {
-                        resultSets.emplace_back(std::move(proto));
+                    for (size_t i = 0; i < resultProtos.size(); ++i) {
+                        auto& proto = resultProtos[i];
+                        if (proto.format() == Ydb::ResultSet::FORMAT_VALUE) {
+                            resultSets.emplace_back(std::move(proto));
+                        } else if (proto.format() == Ydb::ResultSet::FORMAT_ARROW) {
+                            resultSets.emplace_back(std::move(proto), std::move(arrowResults[i]));
+                        }
                     }
 
                     self->Promise_.SetValue(TExecuteQueryResult(
@@ -199,7 +206,42 @@ struct TExecuteQueryBuffer : public TThrRefBase, TNonCopyable {
                 auto inRs = part.ExtractResultSet();
                 auto& inRsProto = TProtoAccessor::GetProto(inRs);
 
-                self->AddResultSet(self, inRsProto, part.GetResultSetIndex());
+                // TODO: Use result sets metadata
+                if (self->ResultSets_.size() <= part.GetResultSetIndex()) {
+                    self->ResultSets_.resize(part.GetResultSetIndex() + 1);
+                }
+
+                auto& resultSet = self->ResultSets_[part.GetResultSetIndex()];
+                if (resultSet.columns().empty()) {
+                    resultSet.mutable_columns()->CopyFrom(inRsProto.columns());
+                }
+
+                resultSet.set_format(inRsProto.format());
+                switch (inRsProto.format()) {
+                    case Ydb::ResultSet::FORMAT_VALUE: {
+                        resultSet.mutable_rows()->Reserve(resultSet.mutable_rows()->size() + inRsProto.rows_size());
+                        for (const auto& row : inRsProto.rows()) {
+                            *resultSet.mutable_rows()->Add() = row;
+                        }
+                        break;
+                    }
+                    case Ydb::ResultSet::FORMAT_ARROW: {
+                        if (self->ArrowResults_.size() <= part.GetResultSetIndex()) {
+                            self->ArrowResults_.resize(part.GetResultSetIndex() + 1);
+                        }
+
+                        auto& arrowResult = self->ArrowResults_[part.GetResultSetIndex()];
+                        if (arrowResult.Schema.empty()) {
+                            arrowResult.Schema = inRsProto.arrow_format_meta().schema();
+                        }
+                        if (!inRsProto.data().empty()) {
+                            arrowResult.Data.push_back(inRsProto.data());
+                        }
+                        break;
+                    }
+                    default:
+                        break;
+                }
             }
 
             if (const auto& tx = part.GetTransaction()) {
@@ -208,48 +250,6 @@ struct TExecuteQueryBuffer : public TThrRefBase, TNonCopyable {
 
             self->Next();
         });
-    }
-
-private:
-    void AddResultSet(TPtr self, const Ydb::ResultSet& inRsProto, uint64_t resultSetIndex) {
-        // TODO: Use result sets metadata
-        if (self->ResultSets_.size() <= resultSetIndex) {
-            self->ResultSets_.resize(resultSetIndex + 1);
-        }
-
-        auto& resultSet = self->ResultSets_[resultSetIndex];
-
-        if (resultSet.columns().empty()) {
-            resultSet.mutable_columns()->CopyFrom(inRsProto.columns());
-        }
-
-        switch (inRsProto.output_format_meta_case()) {
-            case Ydb::ResultSet::OutputFormatMetaCase::kValueOutputFormatMeta: {
-                resultSet.mutable_value_output_format_meta()->CopyFrom(inRsProto.value_output_format_meta());
-                resultSet.mutable_rows()->Reserve(resultSet.mutable_rows()->size() + inRsProto.rows_size());
-                for (const auto& row : inRsProto.rows()) {
-                    *resultSet.mutable_rows()->Add() = row;
-                }
-                break;
-            }
-            case Ydb::ResultSet::OutputFormatMetaCase::kArrowOutputFormatMeta: {
-                resultSet.mutable_arrow_output_format_meta()->CopyFrom(inRsProto.arrow_output_format_meta());
-                if (resultSet.arrow_output_format_meta().schema().empty()) {
-                    const auto& protoSchema = inRsProto.arrow_output_format_meta().schema();
-                    resultSet.mutable_arrow_output_format_meta()->set_schema(protoSchema);
-                }
-
-                const auto& schema = resultSet.arrow_output_format_meta().schema();
-                auto trySerializedBatch = NArrow::CombineSerializedBatches(resultSet.data(), inRsProto.data(), schema);
-                if (trySerializedBatch.ok()) {
-                    resultSet.set_data(*trySerializedBatch);
-                }
-                break;
-            }
-            default: {
-                break;
-            }
-        }
     }
 };
 
@@ -266,6 +266,8 @@ public:
         request.set_pool_id(TStringType{settings.ResourcePool_});
         request.mutable_query_content()->set_text(TStringType{query});
         request.mutable_query_content()->set_syntax(::Ydb::Query::Syntax(settings.Syntax_));
+        request.set_schema_inclusion_mode(::Ydb::Query::SchemaInclusionMode(settings.SchemaInclusionMode_));
+        request.set_result_set_format(::Ydb::ResultSet::Format(settings.Format_));
         if (session.has_value()) {
             request.set_session_id(TStringType{session->GetId()});
         } else if ((std::holds_alternative<TTxSettings>(txControl.Tx_) && !txControl.CommitTx_) ||
@@ -273,15 +275,6 @@ public:
                     std::holds_alternative<std::string>(txControl.Tx_)) {
             throw TContractViolation("Interactive tx must use explisit session");
         }
-
-        std::visit([&request](const auto& outputFormat) {
-            using T = std::decay_t<decltype(outputFormat)>;
-            if constexpr (std::is_same_v<T, TValueOutputFormat>) {
-                outputFormat.ExportToProto(request.mutable_value_output_format());
-            } else if constexpr (std::is_same_v<T, TArrowOutputFormat>) {
-                outputFormat.ExportToProto(request.mutable_arrow_output_format());
-            }
-        }, settings.OutputFormat_);
 
         if (settings.ConcurrentResultSets_) {
             request.set_concurrent_result_sets(*settings.ConcurrentResultSets_);
@@ -293,6 +286,19 @@ public:
 
         if (settings.StatsCollectPeriod_) {
             request.set_stats_period_ms(settings.StatsCollectPeriod_->count());
+        }
+
+        if (settings.ArrowFormatSettings_) {
+            auto formatSettings = request.mutable_arrow_format_settings();
+            if (settings.ArrowFormatSettings_->CompressionCodec_) {
+                auto codec = formatSettings->mutable_compression_codec();
+                auto type = settings.ArrowFormatSettings_->CompressionCodec_->Type_;
+                codec->set_type(::Ydb::Formats::ArrowFormatSettings_CompressionCodec_Type(type));
+
+                if (settings.ArrowFormatSettings_->CompressionCodec_->Level_) {
+                    codec->set_level(*settings.ArrowFormatSettings_->CompressionCodec_->Level_);
+                }
+            }
         }
 
         if (txControl.HasTx()) {

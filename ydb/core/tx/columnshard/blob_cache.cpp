@@ -181,7 +181,7 @@ public:
         LOG_S_NOTICE("MaxCacheDataSize: " << (i64)MaxCacheDataSize
             << " InFlightDataSize: " << (i64)InFlightDataSize);
 
-        Send(NMemory::MakeMemoryControllerId(), new NMemory::TEvConsumerRegister(NMemory::EMemoryConsumerKind::BlobCache));
+        Send(NMemory::MakeMemoryControllerId(), new NMemory::TEvConsumerRegister(NMemory::EMemoryConsumerKind::ColumnTablesBlobCache));
 
         Become(&TBlobCache::StateFunc);
         ScheduleWakeup();

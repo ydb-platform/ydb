@@ -91,7 +91,7 @@ public:
         const NActors::TActorId& serviceActorId);
 
     static NMemory::EMemoryConsumerKind GetConsumerKind() {
-        return NMemory::EMemoryConsumerKind::ColumnDataCache;
+        return NMemory::EMemoryConsumerKind::ColumnTablesColumnDataCache;
     }
 };
 

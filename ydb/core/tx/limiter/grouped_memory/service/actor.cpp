@@ -37,12 +37,12 @@ void TMemoryLimiterActor::Handle(NEvents::TEvExternal::TEvFinishTask::TPtr& ev) 
     Managers[index]->UnregisterAllocation(event.GetExternalProcessId(), event.GetExternalScopeId(), event.GetAllocationId());
 }
 
-void TMemoryLimiterActor::Handle(NEvents::TEvExternal::TEvUpdateTask::TPtr& ev) {
+void TMemoryLimiterActor::Handle(NEvents::TEvExternal::TEvTaskUpdated::TPtr& ev) {
     auto& event = *ev->Get();
     const size_t index = GetManager(event.GetExternalProcessId());
-    LWPROBE(UpdateTask, index, event.GetExternalProcessId(), event.GetExternalScopeId(), event.GetAllocationId(), event.GetVolume(), LoadQueue.GetLoad(index));
-    Managers[index]->UpdateAllocation(
-        event.GetExternalProcessId(), event.GetExternalScopeId(), event.GetAllocationId(), event.GetVolume());
+    LWPROBE(TaskUpdated, index, event.GetExternalProcessId(), event.GetExternalScopeId(), event.GetAllocationId(), LoadQueue.GetLoad(index));
+    Managers[index]->AllocationUpdated(
+        event.GetExternalProcessId(), event.GetExternalScopeId(), event.GetAllocationId());
 }
 
 void TMemoryLimiterActor::Handle(NEvents::TEvExternal::TEvFinishGroup::TPtr& ev) {

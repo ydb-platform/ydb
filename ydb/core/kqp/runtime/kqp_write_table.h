@@ -39,12 +39,14 @@ using IDataBatcherPtr = TIntrusivePtr<IDataBatcher>;
 IDataBatcherPtr CreateRowDataBatcher(
     const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> inputColumns,
     std::vector<ui32> writeIndex,
-    std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc = nullptr);
+    std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc = nullptr,
+    std::vector<ui32> readIndex = {});
 
 IDataBatcherPtr CreateColumnDataBatcher(
     const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> inputColumns,
     std::vector<ui32> writeIndex,
-    std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc = nullptr);
+    std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc = nullptr,
+    std::vector<ui32> readIndex = {});
 
 class IDataBatchProjection : public TThrRefBase {
 public:

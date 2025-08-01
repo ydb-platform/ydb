@@ -203,6 +203,8 @@ struct TSelectRowsOptions
     //! For internal use only.
     //! Use original table schema in result rowset.
     bool UseOriginalTableSchema = false;
+    //! Minimizes request rate to dictionary tables when executing joins.
+    bool UseOrderByInJoinSubqueries = false;
 };
 
 struct TFallbackReplicaOptions

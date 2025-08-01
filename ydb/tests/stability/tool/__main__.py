@@ -551,8 +551,157 @@ class StabilityCluster:
         print(f"{bcolors.OKGREEN}Завершено выполнение остановки {workload_name} на всех узлах{bcolors.ENDC}")
 
     def stop_nemesis(self):
+        print(f"{bcolors.BOLD}{bcolors.HEADER}=== ОСТАНОВКА NEMESIS ==={bcolors.ENDC}")
+
+        # Останавливаем nemesis на всех нодах
         with ThreadPoolExecutor() as pool:
             pool.map(lambda node: node.ssh_command(DICT_OF_SERVICES['nemesis']['stop_command'], raise_on_error=False), self.kikimr_cluster.nodes.values())
+
+        print(f"{bcolors.OKGREEN}Nemesis остановлен на всех нодах{bcolors.ENDC}")
+
+        # Автоматически восстанавливаем кластер после остановки nemesis
+        print(f"\n{bcolors.BOLD}{bcolors.OKCYAN}=== АВТОМАТИЧЕСКОЕ ВОССТАНОВЛЕНИЕ ПОСЛЕ ОСТАНОВКИ NEMESIS ==={bcolors.ENDC}")
+        self.restore_cluster()
+
+    def restore_cluster(self):
+        """
+        Восстанавливает сетевую связанность кластера, нарушенную nemesis.
+        Восстанавливает только порты и маршруты, не трогает сервисы YDB.
+        """
+        print(f"{bcolors.BOLD}{bcolors.HEADER}=== ВОССТАНОВЛЕНИЕ СЕТЕВОЙ СВЯЗАННОСТИ ==={bcolors.ENDC}")
+
+        # Счетчики для итоговой статистики
+        total_nodes = len(self.kikimr_cluster.nodes.values())
+        restored_nodes = 0
+        cleared_fw_rules = 0
+        cleared_routes = 0
+        available_ports = 0
+
+        with ThreadPoolExecutor() as pool:
+            # Восстанавливаем сетевую связанность всех нод параллельно
+            results = list(pool.map(self._restore_node, self.kikimr_cluster.nodes.values()))
+
+        # Подсчитываем результаты
+        for result in results:
+            if result:
+                restored_nodes += 1
+                cleared_fw_rules += result.get('fw_cleared', 0)
+                cleared_routes += result.get('routes_cleared', 0)
+                available_ports += result.get('available_ports', 0)
+
+        # Выводим итоговую статистику
+        print(f"\n{bcolors.BOLD}📊 ИТОГОВАЯ СТАТИСТИКА:{bcolors.ENDC}")
+        print(f"  ✅ Восстановлено нод: {restored_nodes}/{total_nodes}")
+
+        # Статистика нарушений
+        total_violations = cleared_fw_rules + cleared_routes
+        if total_violations > 0:
+            print(f"  🔧 Исправлено нарушений: {total_violations}")
+            print(f"    • Правил ip6tables: {cleared_fw_rules}")
+            print(f"    • Недоступных маршрутов: {cleared_routes}")
+        else:
+            print("  ✅ Нарушений не обнаружено")
+
+        # Итоговое сообщение
+        if restored_nodes == total_nodes:
+            if total_violations > 0:
+                print(f"\n{bcolors.OKGREEN}🎉 Восстановление завершено! Исправлено {total_violations} нарушений.{bcolors.ENDC}")
+            else:
+                print(f"\n{bcolors.OKGREEN}🎉 Восстановление завершено! Нарушений не обнаружено.{bcolors.ENDC}")
+        else:
+            print(f"\n{bcolors.WARNING}⚠️  Восстановление завершено с предупреждениями{bcolors.ENDC}")
+
+    def _restore_node(self, node):
+        """
+        Восстанавливает сетевую связанность ноды кластера.
+        Восстанавливает только порты и маршруты, не трогает сервисы YDB.
+
+        Args:
+            node: Нода кластера для восстановления
+
+        Returns:
+            dict: Статистика восстановления ноды
+        """
+        node_host = node.host.split(':')[0]
+
+        # Статистика для возврата
+        stats = {
+            'node': node_host,
+            'fw_cleared': 0,
+            'routes_cleared': 0,
+            'available_ports': 0,
+            'success': False
+        }
+
+        try:
+            # 1. Проверяем и восстанавливаем сетевые правила
+            fw_rules_cleared = 0
+            routes_cleared = 0
+
+            # Проверяем правила ip6tables YDB_FW
+            fw_check = node.ssh_command("sudo /sbin/ip6tables -w -L YDB_FW 2>/dev/null | grep -v 'Chain YDB_FW' | grep -v 'target' | wc -l", raise_on_error=False)
+            if fw_check:
+                try:
+                    rules_count = int(fw_check.decode('utf-8').strip())
+                    if rules_count > 0:
+                        fw_result = node.ssh_command("sudo /sbin/ip6tables -w -F YDB_FW", raise_on_error=False)
+                        if fw_result:
+                            fw_rules_cleared = rules_count
+                            print(f"    🔧 Найдено и очищено {rules_count} правил ip6tables")
+                except (ValueError, AttributeError):
+                    pass
+
+            # Проверяем и удаляем недоступные маршруты
+            unreach_result = node.ssh_command("sudo /usr/bin/ip -6 route show | grep unreachable", raise_on_error=False)
+            if unreach_result:
+                unreach_routes = unreach_result.decode('utf-8').strip().split('\n')
+                found_routes = 0
+                for route in unreach_routes:
+                    if route.strip():
+                        ip_match = re.search(r'unreachable\s+([^\s]+)', route)
+                        if ip_match:
+                            ip = ip_match.group(1)
+                            node.ssh_command(f"sudo /usr/bin/ip -6 route del unreachable {ip}", raise_on_error=False)
+                            routes_cleared += 1
+                            found_routes += 1
+
+                if found_routes > 0:
+                    print(f"    🔧 Найдено и удалено {found_routes} недоступных маршрутов")
+
+            # 2. Проверяем сетевую доступность
+            ports_to_check = [2135, 2136, 8765, 19001]
+            available_ports_count = 0
+
+            for port in ports_to_check:
+                port_result = node.ssh_command(f"nc -z localhost {port}", raise_on_error=False)
+                if port_result:
+                    available_ports_count += 1
+
+            # Обновляем статистику
+            stats['fw_cleared'] = fw_rules_cleared
+            stats['routes_cleared'] = routes_cleared
+            stats['available_ports'] = available_ports_count
+            stats['success'] = True
+
+            # Краткий вывод для ноды с указанием нарушений
+            status_icon = "✅" if stats['success'] else "❌"
+            violations = []
+            if fw_rules_cleared > 0:
+                violations.append(f"FW:{fw_rules_cleared}")
+            if routes_cleared > 0:
+                violations.append(f"Routes:{routes_cleared}")
+
+            if violations:
+                violations_str = f" [Исправлено: {', '.join(violations)}]"
+            else:
+                violations_str = " [Нарушений не найдено]"
+
+            print(f"{status_icon} {node_host}: Ports={available_ports_count}/4{violations_str}")
+
+        except Exception as e:
+            print(f"❌ {node_host}: Ошибка - {e}")
+
+        return stats
 
     def get_state(self):
         logging.getLogger().setLevel(logging.WARNING)
@@ -561,16 +710,19 @@ class StabilityCluster:
             node_host = node.host.split(':')[0]
             print(f'{bcolors.BOLD}{node_host}{bcolors.ENDC}:')
             for state_object in state_objects_dic:
-                result = node.ssh_command(
-                    state_objects_dic[state_object]['status'],
-                    raise_on_error=True
-                )
-                status = result.decode('utf-8').replace('\n', '')
-                if status == 'Running' :
-                    status = bcolors.OKGREEN + status + bcolors.ENDC
-                else:
-                    status = bcolors.FAIL + status + bcolors.ENDC
-                print(f'\t{state_object}:\t{status}')
+                try:
+                    result = node.ssh_command(
+                        state_objects_dic[state_object]['status'],
+                        raise_on_error=True
+                    )
+                    status = result.decode('utf-8').replace('\n', '')
+                    if status == 'Running' :
+                        status = bcolors.OKGREEN + status + bcolors.ENDC
+                    else:
+                        status = bcolors.FAIL + status + bcolors.ENDC
+                    print(f'\t{state_object}:\t{status}')
+                except Exception as e:
+                    print(f'\t{state_object}:\t{bcolors.FAIL}{e}{bcolors.ENDC}')
 
     def cleanup(self, mode='all'):
         for node in self.kikimr_cluster.nodes.values():
@@ -1089,7 +1241,8 @@ Common usage scenarios:
         "deploy_ydb": "Deploy YDB cluster and configure it",
         "deploy_tools": "Deploy workload tools to the cluster nodes",
         "start_nemesis": "Start the nemesis service",
-        "stop_nemesis": "Stop the nemesis service",
+        "stop_nemesis": "Stop the nemesis service and automatically restore cluster",
+        "restore_cluster": "Restore network connectivity (ports and routes) caused by nemesis",
         "start_default_workloads": "Start all default workloads on the cluster",
         "start_workload_simple_queue_row": "Start simple_queue workload with row storage",
         "start_workload_simple_queue_column": "Start simple_queue workload with column storage",
@@ -1112,7 +1265,7 @@ Common usage scenarios:
     action_categories = {
         "CLUSTER MANAGEMENT": [
             "deploy_ydb", "deploy_tools", "start_nemesis", "stop_nemesis",
-            "get_state", "perform_checks"
+            "restore_cluster", "get_state", "perform_checks"
         ],
         "ERROR HANDLING": [
             "get_errors", "get_errors_aggr", "get_errors_last"
@@ -1438,6 +1591,10 @@ def main():
 
         if action == "start_nemesis":
             stability_cluster.start_nemesis()
+            stability_cluster.get_state()
+
+        if action == "restore_cluster":
+            stability_cluster.restore_cluster()
             stability_cluster.get_state()
 
         if action == "perform_checks":

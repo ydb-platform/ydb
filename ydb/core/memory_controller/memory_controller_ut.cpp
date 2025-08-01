@@ -1,5 +1,6 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/testing/unittest/tests_data.h>
+#include <memory_controller_config.h>
 #include <ydb/core/tablet/resource_broker.h>
 #include <ydb/core/tablet_flat/shared_sausagecache.h>
 #include <ydb/core/tx/datashard/ut_common/datashard_ut_common.h>
@@ -61,10 +62,8 @@ private:
             resourceBrokerSelfConfig.LimitBytes = resourceBrokerConfig.GetResourceLimit().GetMemory();
         }
         for (const auto& queue : resourceBrokerConfig.GetQueues()) {
-            if (queue.GetName() == NLocalDb::KqpResourceManagerQueue) {
-                if (queue.HasLimit() && queue.GetLimit().HasMemory()) {
-                    resourceBrokerSelfConfig.QueryExecutionLimitBytes = queue.GetLimit().GetMemory();
-                }
+            if (queue.HasLimit() && queue.GetLimit().HasMemory()) {
+                resourceBrokerSelfConfig.QueueLimits[queue.GetName()] = queue.GetLimit().GetMemory();
             }
         }
         Cerr << "ResourceBrokerSelfConfig: " << resourceBrokerSelfConfig.ToString() << Endl;
@@ -508,53 +507,40 @@ Y_UNIT_TEST(ResourceBroker_ConfigCS) {
     auto memoryControllerConfig = serverSettings.AppConfig->MutableMemoryControllerConfig();
     memoryControllerConfig->SetColumnTablesCompactionLimitPercent(compactionMemoryLimitPercent);
 
-    ui64 currentHardMemoryLimit = 1000_MB;
-    auto resourceBrokerConfig = serverSettings.AppConfig->MutableResourceBrokerConfig();
-    resourceBrokerConfig->MutableResourceLimit()->SetMemory(currentHardMemoryLimit);
-
-    auto addQueueWithMemoryLimit = [&](const TString& name, const ui64 memoryLimit) {
-        auto queue = resourceBrokerConfig->AddQueues();
-        queue->SetName(name);
-        queue->MutableLimit()->SetMemory(memoryLimit);
-    };
-
-    addQueueWithMemoryLimit(NLocalDb::ColumnShardCompactionIndexationQueue, 1_MB);
-    addQueueWithMemoryLimit(NLocalDb::ColumnShardCompactionTtlQueue, 1_MB);
-    addQueueWithMemoryLimit(NLocalDb::ColumnShardCompactionGeneralQueue, 1_MB);
-    addQueueWithMemoryLimit(NLocalDb::ColumnShardCompactionNormalizerQueue, 1_MB);
-
     auto server = MakeIntrusive<TWithMemoryControllerServer>(serverSettings);
-    server->ProcessMemoryInfo->CGroupLimit = currentHardMemoryLimit;
     auto& runtime = *server->GetRuntime();
     TAutoPtr<IEventHandle> handle;
     auto sender = runtime.AllocateEdgeActor();
-
     InitRoot(server, sender);
 
+    ui64 currentHardMemoryLimit = 1000_MB;
+    server->ProcessMemoryInfo->CGroupLimit = currentHardMemoryLimit;
     runtime.SimulateSleep(TDuration::Seconds(2));
 
     auto checkMemoryLimit = [&](const TString& queueName, const double coeff) {
         runtime.Send(new IEventHandle(MakeResourceBrokerID(), sender, new TEvResourceBroker::TEvConfigRequest(queueName)));
         auto config = runtime.GrabEdgeEvent<TEvResourceBroker::TEvConfigResponse>(handle);
-        UNIT_ASSERT_VALUES_EQUAL(config->QueueConfig->GetLimit().GetMemory(),
-            static_cast<ui64>(currentHardMemoryLimit * coeff * compactionMemoryLimitPercent / 100));
+        UNIT_ASSERT_DOUBLES_EQUAL_C(
+            static_cast<double>(config->QueueConfig->GetLimit().GetMemory()),
+            static_cast<double>(currentHardMemoryLimit * coeff * compactionMemoryLimitPercent / 100),
+            1_KB,
+            queueName << " " << coeff);
     };
 
-    using OlapLimits = NKikimr::NOlap::TGlobalLimits;
-    checkMemoryLimit(NLocalDb::ColumnShardCompactionIndexationQueue, OlapLimits::CompactionIndexationQueueLimitCoefficient);
-    checkMemoryLimit(NLocalDb::ColumnShardCompactionTtlQueue, OlapLimits::CompactionTtlQueueLimitCoefficient);
-    checkMemoryLimit(NLocalDb::ColumnShardCompactionGeneralQueue, OlapLimits::CompactionGeneralQueueLimitCoefficient);
-    checkMemoryLimit(NLocalDb::ColumnShardCompactionNormalizerQueue, OlapLimits::CompactionNormalizerQueueLimitCoefficient);
+    checkMemoryLimit(NLocalDb::ColumnShardCompactionIndexationQueue, ColumnTablesCompactionIndexationQueueFraction);
+    checkMemoryLimit(NLocalDb::ColumnShardCompactionTtlQueue, ColumnTablesTtlQueueFraction);
+    checkMemoryLimit(NLocalDb::ColumnShardCompactionGeneralQueue, ColumnTablesGeneralQueueFraction);
+    checkMemoryLimit(NLocalDb::ColumnShardCompactionNormalizerQueue, ColumnTablesNormalizerQueueFraction);
 
-    // Check memory change
+    Cerr << "Check memory change" << Endl;
     currentHardMemoryLimit = 100_MB;
     server->ProcessMemoryInfo->CGroupLimit = currentHardMemoryLimit;
     runtime.SimulateSleep(TDuration::Seconds(2));
 
-    checkMemoryLimit(NLocalDb::ColumnShardCompactionIndexationQueue, OlapLimits::CompactionIndexationQueueLimitCoefficient);
-    checkMemoryLimit(NLocalDb::ColumnShardCompactionTtlQueue, OlapLimits::CompactionTtlQueueLimitCoefficient);
-    checkMemoryLimit(NLocalDb::ColumnShardCompactionGeneralQueue, OlapLimits::CompactionGeneralQueueLimitCoefficient);
-    checkMemoryLimit(NLocalDb::ColumnShardCompactionNormalizerQueue, OlapLimits::CompactionNormalizerQueueLimitCoefficient);
+    checkMemoryLimit(NLocalDb::ColumnShardCompactionIndexationQueue, ColumnTablesCompactionIndexationQueueFraction);
+    checkMemoryLimit(NLocalDb::ColumnShardCompactionTtlQueue, ColumnTablesTtlQueueFraction);
+    checkMemoryLimit(NLocalDb::ColumnShardCompactionGeneralQueue, ColumnTablesGeneralQueueFraction);
+    checkMemoryLimit(NLocalDb::ColumnShardCompactionNormalizerQueue, ColumnTablesNormalizerQueueFraction);
 }
 
 Y_UNIT_TEST(GroupedMemoryLimiter_ConfigCS) {
@@ -584,15 +570,27 @@ Y_UNIT_TEST(GroupedMemoryLimiter_ConfigCS) {
 
     auto checkMemoryLimits = [&]() {
         using OlapLimits = NKikimr::NOlap::TGlobalLimits;
-        UNIT_ASSERT_VALUES_EQUAL(static_cast<ui64>(currentHardMemoryLimit * OlapLimits::GroupedMemoryLimiterSoftLimitCoefficient *
-                                                   (1.0 - OlapLimits::DeduplicationInScanMemoryFraction) * readExecutionMemoryLimitPercent /
-                                                   100), scanLimits->GetLimit());
-        UNIT_ASSERT_VALUES_EQUAL(currentHardMemoryLimit * (1.0 - OlapLimits::DeduplicationInScanMemoryFraction) * readExecutionMemoryLimitPercent / 100, scanLimits->GetHardLimit());
 
-        UNIT_ASSERT_VALUES_EQUAL(static_cast<ui64>(currentHardMemoryLimit * OlapLimits::GroupedMemoryLimiterSoftLimitCoefficient * compactionMemoryLimitPercent / 100),
-            compactionLimits->GetLimit());
-        UNIT_ASSERT_VALUES_EQUAL(static_cast<ui64>(currentHardMemoryLimit * compactionMemoryLimitPercent / 100),
-            compactionLimits->GetHardLimit());
+        UNIT_ASSERT_DOUBLES_EQUAL(
+            static_cast<double>(currentHardMemoryLimit * OlapLimits::GroupedMemoryLimiterSoftLimitCoefficient *
+                (1.0 - ColumnTablesDeduplicationGroupedMemoryFraction) * readExecutionMemoryLimitPercent / 100),
+            static_cast<double>(scanLimits->GetLimit()),
+            1_KB);
+
+        UNIT_ASSERT_DOUBLES_EQUAL(
+            static_cast<double>(currentHardMemoryLimit * (1.0 - ColumnTablesDeduplicationGroupedMemoryFraction) * readExecutionMemoryLimitPercent / 100),
+            static_cast<double>(scanLimits->GetHardLimit().value()),
+            1_KB);
+
+        UNIT_ASSERT_DOUBLES_EQUAL(
+            static_cast<double>(currentHardMemoryLimit * OlapLimits::GroupedMemoryLimiterSoftLimitCoefficient * compactionMemoryLimitPercent / 100),
+            static_cast<double>(compactionLimits->GetLimit()),
+            1_KB);
+
+        UNIT_ASSERT_DOUBLES_EQUAL(
+            static_cast<double>(currentHardMemoryLimit * compactionMemoryLimitPercent / 100.0),
+            static_cast<double>(compactionLimits->GetHardLimit().value()),
+            1_KB);
     };
 
     runtime.SimulateSleep(TDuration::Seconds(2));

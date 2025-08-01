@@ -114,6 +114,9 @@ private:
     int DescribeExternalTable(const TDriver& driver);
     int PrintExternalTableResponsePretty(const NYdb::NTable::TExternalTableDescription& result) const;
 
+    int DescribeSystemView(const TDriver& driver);
+    int PrintSystemViewResponsePretty(const NYdb::NTable::TSystemViewDescription& result) const;
+
     int TryTopicConsumerDescribeOrFail(NYdb::TDriver& driver, const NScheme::TDescribePathResult& result);
     std::pair<TString, TString> ParseTopicConsumer() const;
     int PrintConsumerResponsePretty(const NYdb::NTopic::TConsumerDescription& description) const;

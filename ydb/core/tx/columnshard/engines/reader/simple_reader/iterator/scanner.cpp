@@ -26,7 +26,7 @@ TScanHead::TScanHead(std::unique_ptr<NCommon::ISourcesConstructor>&& sourcesCons
             std::make_shared<TNotSortedCollection>(Context, std::move(sourcesConstructor), Context->GetReadMetadata()->GetLimitRobustOptional());
         SyncPoints.emplace_back(std::make_shared<TSyncPointResult>(SyncPoints.size(), context, SourcesCollection));
         SyncPoints.emplace_back(std::make_shared<TSyncPointResultsAggregationControl>(
-            SourcesCollection, Context->GetSourcesAggregationScript(), SyncPoints.size(), context));
+            SourcesCollection, Context->GetSourcesAggregationScript(), Context->GetRestoreResultScript(), SyncPoints.size(), context));
     } else if (Context->GetReadMetadata()->IsSorted()) {
         if (Context->GetReadMetadata()->HasLimit()) {
             auto collection = std::make_shared<TScanWithLimitCollection>(Context, std::move(sourcesConstructor));

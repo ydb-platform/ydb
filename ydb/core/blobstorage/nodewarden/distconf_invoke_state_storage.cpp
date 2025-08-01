@@ -9,9 +9,10 @@ namespace NKikimr::NStorage {
     bool TInvokeRequestHandlerActor::GetRecommendedStateStorageConfig(NKikimrBlobStorage::TStateStorageConfig* currentConfig) {
         const NKikimrBlobStorage::TStorageConfig &config = *Self->StorageConfig;
         bool result = true;
-        result &= Self->GenerateStateStorageConfig(currentConfig->MutableStateStorageConfig(), config);
-        result &= Self->GenerateStateStorageConfig(currentConfig->MutableStateStorageBoardConfig(), config);
-        result &= Self->GenerateStateStorageConfig(currentConfig->MutableSchemeBoardConfig(), config);
+        std::unordered_set<ui32> usedNodes;
+        result &= Self->GenerateStateStorageConfig(currentConfig->MutableStateStorageConfig(), config, usedNodes);
+        result &= Self->GenerateStateStorageConfig(currentConfig->MutableStateStorageBoardConfig(), config, usedNodes);
+        result &= Self->GenerateStateStorageConfig(currentConfig->MutableSchemeBoardConfig(), config, usedNodes);
         return result;
     }
 
@@ -71,7 +72,7 @@ namespace NKikimr::NStorage {
     void TInvokeRequestHandlerActor::GetStateStorageConfig(const TQuery::TGetStateStorageConfig& cmd) {
         RunCommonChecks();
 
-        FinishWithSuccess([&](auto *record) {
+        Finish(TResult::OK, std::nullopt, [&](auto *record) {
             auto* currentConfig = record->MutableStateStorageConfig();
 
             if (cmd.GetRecommended()) {
@@ -253,10 +254,11 @@ namespace NKikimr::NStorage {
 
         STLOG(PRI_DEBUG, BS_NODE, NW101, "Need to reconfig, starting StateStorageSelfHealActor", (CurrentConfig, currentConfig), (TargetConfig, targetConfig));
 
-        Self->StateStorageSelfHealActor = Register(new TStateStorageSelfhealActor(Sender, Cookie,
+        auto *op = std::get_if<TInvokeExternalOperation>(&Query);
+        Y_ABORT_UNLESS(op);
+        Self->StateStorageSelfHealActor = Register(new TStateStorageSelfhealActor(op->Sender, op->Cookie,
             TDuration::Seconds(waitForConfigStep), std::move(currentConfig), std::move(targetConfig)));
-        auto ev = PrepareResult(TResult::OK, std::nullopt);
-        FinishWithSuccess();
+        Finish(TResult::OK, std::nullopt);
     }
 
     void TInvokeRequestHandlerActor::ReconfigStateStorage(const NKikimrBlobStorage::TStateStorageConfig& cmd) {

@@ -16,13 +16,20 @@ namespace NKikimr::NKqp::NFederatedQueryTest {
         return result;
     }
 
-    NYdb::NQuery::TScriptExecutionOperation WaitScriptExecutionOperation(const NYdb::TOperation::TOperationId& operationId, const NYdb::TDriver& ydbDriver) {
+    NYdb::NQuery::TScriptExecutionOperation WaitScriptExecutionOperation(const NYdb::TOperation::TOperationId& operationId, const NYdb::TDriver& ydbDriver, std::function<void()> onRunningCallback) {
         NYdb::NOperation::TOperationClient client(ydbDriver);
         while (1) {
             auto op = client.Get<NYdb::NQuery::TScriptExecutionOperation>(operationId).GetValueSync();
+
+            if (onRunningCallback && op.Metadata().ExecStatus == NYdb::NQuery::EExecStatus::Running) {
+                onRunningCallback();
+                onRunningCallback = nullptr;
+            }
+
             if (op.Ready()) {
                 return op;
             }
+
             UNIT_ASSERT_C(op.Status().IsSuccess(), TStringBuilder() << op.Status().GetStatus() << ":" << op.Status().GetIssues().ToString());
             Sleep(TDuration::MilliSeconds(10));
         }
@@ -90,7 +97,7 @@ namespace NKikimr::NKqp::NFederatedQueryTest {
             NYql::NDq::CreateReadActorFactoryConfig(appConfig->GetQueryServiceConfig().GetS3()),
             nullptr,
             NYql::TPqGatewayConfig{},
-            NKqp::MakePqGateway(driver, NYql::TPqGatewayConfig{}),
+            options.PqGateway ? options.PqGateway : NKqp::MakePqGateway(driver, NYql::TPqGatewayConfig{}),
             nullptr,
             driver);
 
@@ -102,6 +109,8 @@ namespace NKikimr::NKqp::NFederatedQueryTest {
             .SetWithSampleTables(false)
             .SetDomainRoot(options.DomainRoot)
             .SetNodeCount(options.NodeCount);
+
+        settings.EnableScriptExecutionBackgroundChecks = options.EnableScriptExecutionBackgroundChecks;
 
         return std::make_shared<TKikimrRunner>(settings);
     }

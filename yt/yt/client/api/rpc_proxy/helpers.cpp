@@ -1852,6 +1852,9 @@ void FillRequest(
 {
     ToProto(req->mutable_path(), path);
     req->set_cookie_count(options.CookieCount);
+    if (options.Timeout) {
+        req->set_timeout(options.Timeout->GetValue());
+    }
 
     if (options.TransactionId) {
         ToProto(req->mutable_transactional_options(), options);
@@ -1865,6 +1868,9 @@ void ParseRequest(
 {
     *mutablePath = FromProto<NYPath::TRichYPath>(req.path());
     mutableOptions->CookieCount = req.cookie_count();
+    if (req.has_timeout()) {
+        mutableOptions->Timeout = TDuration::FromValue(req.timeout());
+    }
     if (req.has_transactional_options()) {
         FromProto(mutableOptions, req.transactional_options());
     }

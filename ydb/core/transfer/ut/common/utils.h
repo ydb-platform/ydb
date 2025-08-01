@@ -6,6 +6,7 @@
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/scheme/scheme.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/accessor.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_scripting.h>
@@ -213,6 +214,12 @@ struct MainTestCase {
         Driver.Stop(true);
     }
 
+    void CreateDirectory(const std::string& directoryName) {
+        NScheme::TSchemeClient schemeClient(Driver);
+        auto result = schemeClient.MakeDirectory(directoryName).GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToOneLineString());
+    }
+
     auto Session() {
         return TableClient.GetSession().GetValueSync().GetSession();
     }
@@ -369,6 +376,7 @@ struct MainTestCase {
         std::optional<ui64> BatchSizeBytes = 8_MB;
         std::optional<std::string> ExpectedError;
         std::optional<std::string> Username;
+        std::optional<std::string> Directory;
 
         CreateTransferSettings() {};
 
@@ -409,28 +417,37 @@ struct MainTestCase {
             result.Username = username;
             return result;
         }
-};
+
+        static CreateTransferSettings WithDirectory(const TString& directory) {
+            CreateTransferSettings result;
+            result.Directory = directory;
+            return result;
+        }
+    };
 
     void CreateTransfer(const std::string& lambda, const CreateTransferSettings& settings = CreateTransferSettings()) {
         std::vector<std::string> options;
         if (!settings.LocalTopic) {
-            options.push_back(TStringBuilder() << "CONNECTION_STRING = 'grpc://" << ConnectionString << "'" << Endl);
+            options.push_back(TStringBuilder() << "CONNECTION_STRING = 'grpc://" << ConnectionString << "'");
         }
         if (settings.ConsumerName) {
-            options.push_back(TStringBuilder() <<  "CONSUMER = '" << *settings.ConsumerName << "'" << Endl);
+            options.push_back(TStringBuilder() <<  "CONSUMER = '" << *settings.ConsumerName << "'");
         }
         if (settings.FlushInterval) {
-            options.push_back(TStringBuilder() <<  "FLUSH_INTERVAL = Interval('PT" << settings.FlushInterval->Seconds() << "S')" << Endl);
+            options.push_back(TStringBuilder() <<  "FLUSH_INTERVAL = Interval('PT" << settings.FlushInterval->Seconds() << "S')");
         }
         if (settings.BatchSizeBytes) {
-            options.push_back(TStringBuilder() <<  "BATCH_SIZE_BYTES = " << *settings.BatchSizeBytes << Endl);
+            options.push_back(TStringBuilder() <<  "BATCH_SIZE_BYTES = " << *settings.BatchSizeBytes);
         }
         if (settings.Username) {
-            options.push_back(TStringBuilder() <<  "TOKEN = '" << *settings.Username << "@builtin'" << Endl);
+            options.push_back(TStringBuilder() <<  "TOKEN = '" << *settings.Username << "@builtin'");
+        }
+        if (settings.Directory) {
+            options.push_back(TStringBuilder() <<  "DIRECTORY = '" << *settings.Directory << "'");
         }
 
         std::string topicName = settings.TopicName.value_or(TopicName);
-        std::string optionsStr = JoinRange(",", options.begin(), options.end());
+        std::string optionsStr = JoinRange(",\n", options.begin(), options.end());
 
         auto ddl = Sprintf(R"(
             %s;
@@ -446,9 +463,10 @@ struct MainTestCase {
     }
 
     struct AlterTransferSettings {
-        std::optional<TString> TransformLambda;
+        std::optional<std::string> TransformLambda;
         std::optional<TDuration> FlushInterval;
         std::optional<ui64> BatchSizeBytes;
+        std::optional<std::string> Directory;
 
         AlterTransferSettings()
             : FlushInterval(std::nullopt)
@@ -466,6 +484,12 @@ struct MainTestCase {
             result.TransformLambda = lambda;
             return result;
         }
+
+        static AlterTransferSettings WithDirectory(const std::string& directory) {
+            AlterTransferSettings result;
+            result.Directory = directory;
+            return result;
+        }
     };
 
     void AlterTransfer(const std::string& lambda) {
@@ -473,30 +497,33 @@ struct MainTestCase {
     }
 
     void AlterTransfer(const AlterTransferSettings& settings, bool success = true) {
-        TString lambda = settings.TransformLambda ? *settings.TransformLambda : "";
-        TString setLambda = settings.TransformLambda ? "SET USING $l" : "";
+        std::string lambda = settings.TransformLambda ? *settings.TransformLambda : "";
+        std::string setLambda = settings.TransformLambda ? "SET USING $l" : "";
 
-        TStringBuilder sb;
+        std::vector<std::string> options;
         if (settings.FlushInterval) {
-            sb << "FLUSH_INTERVAL = Interval('PT" << settings.FlushInterval->Seconds() << "S')" << Endl;
+            options.push_back(TStringBuilder() << "FLUSH_INTERVAL = Interval('PT" << settings.FlushInterval->Seconds() << "S')");
         }
         if (settings.BatchSizeBytes) {
-            sb << ", BATCH_SIZE_BYTES = " << *settings.BatchSizeBytes << Endl;
+            options.push_back(TStringBuilder() << "BATCH_SIZE_BYTES = " << *settings.BatchSizeBytes);
         }
 
-        TString setOptions;
-        if (!sb.empty()) {
-            setOptions = TStringBuilder() << "SET (" << sb << " )";
+        if (settings.Directory) {
+            options.push_back(TStringBuilder() << "DIRECTORY = \"" << *settings.Directory << "\"");
         }
 
-        auto res = Session().ExecuteQuery(Sprintf(R"(
+        std::string setOptions;
+        if (!options.empty()) {
+            setOptions = TStringBuilder() << "SET (" << JoinRange(",\n", options.begin(), options.end()) << " )";
+        }
+
+        ExecuteDDL(Sprintf(R"(
             %s;
 
             ALTER TRANSFER `%s`
             %s
             %s;
-        )", lambda.data(), TransferName.data(), setLambda.data(), setOptions.data()), TTxControl::NoTx()).GetValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(success, res.IsSuccess(), res.GetIssues().ToString());
+        )", lambda.data(), TransferName.data(), setLambda.data(), setOptions.data()), success);
     }
 
     void DropTransfer() {
@@ -644,6 +671,10 @@ struct MainTestCase {
     }
 
     std::pair<i64, Ydb::ResultSet> DoRead(const TExpectations& expectations) {
+        return DoRead(TableName, expectations);
+    }
+
+    std::pair<i64, Ydb::ResultSet> DoRead(const std::string& tableName, const TExpectations& expectations) {
         auto& e = expectations.front();
 
         TStringBuilder columns;
@@ -655,7 +686,7 @@ struct MainTestCase {
         }
 
 
-        auto res = ExecuteQuery(Sprintf("SELECT %s FROM `%s` ORDER BY %s", columns.data(), TableName.data(), columns.data()), false);
+        auto res = ExecuteQuery(Sprintf("SELECT %s FROM `%s` ORDER BY %s", columns.data(), tableName.data(), columns.data()), false);
         if (!res.IsSuccess()) {
             TResultSet r{Ydb::ResultSet()};
             return {-1, NYdb::TProtoAccessor::GetProto(r)};
@@ -665,9 +696,9 @@ struct MainTestCase {
         return {proto.rowsSize(), proto};
     }
 
-    void CheckResult(const TExpectations& expectations) {
+    void CheckResult(const std::string& tableName, const TExpectations& expectations) {
         for (size_t attempt = 20; attempt--; ) {
-            auto res = DoRead(expectations);
+            auto res = DoRead(tableName, expectations);
             Cerr << "Attempt=" << attempt << " count=" << res.first << Endl << Flush;
             if (res.first == (ssize_t)expectations.size()) {
                 const Ydb::ResultSet& proto = res.second;
@@ -689,6 +720,10 @@ struct MainTestCase {
 
         CheckTransferState(TTransferDescription::EState::Running);
         UNIT_ASSERT_C(false, "Unable to wait transfer result");
+    }
+
+    void CheckResult(const TExpectations& expectations) {
+        CheckResult(TableName, expectations);
     }
 
     TTransferDescription CheckTransferState(TTransferDescription::EState expected) {

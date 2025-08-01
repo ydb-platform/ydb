@@ -1,4 +1,5 @@
-from typing import List, Sequence, Collection
+from collections import namedtuple
+from typing import List, Sequence, Collection, Any
 
 from clickhouse_connect.datatypes.base import ClickHouseType, TypeDef
 from clickhouse_connect.datatypes.registry import get_from_name
@@ -16,31 +17,40 @@ STRING_DATA_TYPE: ClickHouseType
 
 json_serialization_format = 0x1
 
+VariantState = namedtuple('VariantState', 'discriminator_node element_states')
+
+
 class Variant(ClickHouseType):
     _slots = 'element_types'
     python_type = object
 
     def __init__(self, type_def: TypeDef):
         super().__init__(type_def)
-        self.element_types:List[ClickHouseType] = [get_from_name(name) for name in type_def.values]
+        self.element_types: List[ClickHouseType] = [get_from_name(name) for name in type_def.values]
         self._name_suffix = f"({', '.join(ch_type.name for ch_type in self.element_types)})"
 
     @property
     def insert_name(self):
         return 'String'
 
-    def read_column_prefix(self, source: ByteSource, ctx:QueryContext):
-        if source.read_uint64() != 0:
-            raise DataError(f'Unexpected discriminator format in Variant column {ctx.column_name}')
+    def read_column_prefix(self, source: ByteSource, ctx: QueryContext) -> VariantState:
+        discriminator_mode = source.read_uint64()
+        element_states = [e_type.read_column_prefix(source, ctx) for e_type in self.element_types]
+        return VariantState(discriminator_mode, element_states)
 
-    def read_column_data(self, source: ByteSource, num_rows: int, ctx: QueryContext) -> Sequence:
-        return read_variant_column(self.element_types, source, num_rows, ctx)
+    def _read_column_binary(self, source: ByteSource, num_rows: int, ctx: QueryContext,
+                            read_state: VariantState) -> Sequence:
+        return read_variant_column(source, num_rows, ctx, self.element_types, read_state.element_states)
 
     def write_column_data(self, column: Sequence, dest: bytearray, ctx: InsertContext):
         write_str_values(self, column, dest, ctx)
 
 
-def read_variant_column(variant_types: List[ClickHouseType], source: ByteSource, num_rows:int, ctx: QueryContext) -> Sequence:
+def read_variant_column(source: ByteSource,
+                        num_rows: int,
+                        ctx: QueryContext,
+                        variant_types: List[ClickHouseType],
+                        element_states: List[Any]) -> Sequence:
     v_count = len(variant_types)
     discriminators = source.read_array('B', num_rows)
     # We have to count up how many of each discriminator there are in the block to read the sub columns correctly
@@ -52,7 +62,7 @@ def read_variant_column(variant_types: List[ClickHouseType], source: ByteSource,
     # Read all the sub-columns
     for ix in range(v_count):
         if disc_rows[ix] > 0:
-            sub_columns[ix] = variant_types[ix].read_column_data(source, disc_rows[ix], ctx)
+            sub_columns[ix] = variant_types[ix].read_column_data(source, disc_rows[ix], ctx, element_states[ix])
     # Now we have to walk through each of the discriminators again to assign the correct value from
     # the sub-column to the final result column
     sub_indexes = [0] * v_count
@@ -67,38 +77,43 @@ def read_variant_column(variant_types: List[ClickHouseType], source: ByteSource,
     return col
 
 
+DynamicState = namedtuple('DynamicState', 'struct_version variant_types variant_states')
+
+
+def read_dynamic_prefix(_, source: ByteSource, ctx: QueryContext) -> DynamicState:
+    struct_version = source.read_uint64()
+    if struct_version == 1:
+        source.read_leb128()  # max dynamic types, we ignore this value
+    elif struct_version != 2:
+        raise DataError('Unrecognized dynamic structure version')
+    num_variants = source.read_leb128()
+    variant_types = [get_from_name(source.read_leb128_str()) for _ in range(num_variants)]
+    variant_types.append(STRING_DATA_TYPE)
+    if source.read_uint64() != 0:  # discriminator format, currently only 0 is recognized
+        raise DataError('Unexpected discriminator format in Variant column prefix')
+    variant_states = [e_type.read_column_prefix(source, ctx) for e_type in variant_types]
+    return DynamicState(struct_version, variant_types, variant_states)
+
+
 class Dynamic(ClickHouseType):
     python_type = object
+    read_column_prefix = read_dynamic_prefix
 
     @property
     def insert_name(self):
         return 'String'
 
-    def __init__(self, type_def:TypeDef):
+    def __init__(self, type_def: TypeDef):
         super().__init__(type_def)
         if type_def.keys and type_def.keys[0] == 'max_types':
             self._name_suffix = f'(max_types={type_def.values[0]})'
 
-    def read_column(self, source: ByteSource, num_rows:int, ctx:QueryContext):
-        variant_types = read_dynamic_prefix(source)
-        return read_variant_column(variant_types, source, num_rows, ctx)
+    def _read_column_binary(self, source: ByteSource, num_rows: int, ctx: QueryContext,
+                            read_state: DynamicState) -> Sequence:
+        return read_variant_column(source, num_rows, ctx, read_state.variant_types, read_state.variant_states)
 
     def write_column_data(self, column: Sequence, dest: bytearray, ctx: InsertContext):
         write_str_values(self, column, dest, ctx)
-
-
-def read_dynamic_prefix(source: ByteSource) -> List[ClickHouseType]:
-    serialize_version = source.read_uint64()
-    if serialize_version == 1:
-        source.read_leb128()  # max dynamic types, we ignore this value
-    elif serialize_version != 2:
-        raise DataError('Unrecognized dynamic structure version')
-    num_variants = source.read_leb128()
-    variant_types = [get_from_name(source.read_leb128_str()) for _ in range(num_variants)]
-    variant_types.append(STRING_DATA_TYPE)
-    if source.read_uint64() != 0: # discriminator format, currently only 0 is recognized
-        raise DataError('Unexpected discriminator format in Variant column prefix')
-    return variant_types
 
 
 def json_sample_size(_, sample: Collection) -> int:
@@ -113,7 +128,7 @@ def json_sample_size(_, sample: Collection) -> int:
     return total // len(sample) + 1
 
 
-def write_json(ch_type:ClickHouseType, column: Sequence, dest: bytearray, ctx: InsertContext):
+def write_json(ch_type: ClickHouseType, column: Sequence, dest: bytearray, ctx: InsertContext):
     first = first_value(column, ch_type.nullable)
     write_col = column
     encoding = ctx.encoding or ch_type.encoding
@@ -124,7 +139,7 @@ def write_json(ch_type:ClickHouseType, column: Sequence, dest: bytearray, ctx: I
     handle_error(data_conv.write_str_col(write_col, ch_type.nullable, encoding, dest), ctx)
 
 
-def write_str_values(ch_type:ClickHouseType, column: Sequence, dest: bytearray, ctx: InsertContext):
+def write_str_values(ch_type: ClickHouseType, column: Sequence, dest: bytearray, ctx: InsertContext):
     encoding = ctx.encoding or ch_type.encoding
     col = [''] * len(column)
     for ix, v in enumerate(column):
@@ -133,6 +148,9 @@ def write_str_values(ch_type:ClickHouseType, column: Sequence, dest: bytearray, 
         else:
             col[ix] = str(v)
     handle_error(data_conv.write_str_col(col, False, encoding, dest), ctx)
+
+
+JSONState = namedtuple('JSONState', 'serialize_version dynamic_paths typed_states dynamic_states')
 
 
 class JSON(ClickHouseType):
@@ -148,7 +166,7 @@ class JSON(ClickHouseType):
     typed_types = []
     skips = []
 
-    def __init__(self, type_def:TypeDef):
+    def __init__(self, type_def: TypeDef):
         super().__init__(type_def)
         typed_paths = []
         typed_types = []
@@ -200,25 +218,26 @@ class JSON(ClickHouseType):
         if json_serialization_format > 0:
             write_uint64(json_serialization_format, dest)
 
-    def read_column_prefix(self, source: ByteSource, ctx: QueryContext):
+    def read_column_prefix(self, source: ByteSource, ctx: QueryContext) -> JSONState:
         serialize_version = source.read_uint64()
         if serialize_version == 0:
             source.read_leb128()  # max dynamic types, we ignore this value
         elif serialize_version != 2:
-            raise DataError(f'Unrecognized dynamic structure version: {serialize_version} column: `{ctx.column_name}`')
-
-    # pylint: disable=too-many-locals
-    def _read_column_binary(self, source: ByteSource, num_rows: int, ctx: QueryContext):
+            raise DataError(f'Unrecognized json structure version: {serialize_version} column: `{ctx.column_name}`')
         dynamic_path_cnt = source.read_leb128()
         dynamic_paths = [source.read_leb128_str() for _ in range(dynamic_path_cnt)]
-        for typed in self.typed_types:
-            typed.read_column_prefix(source, ctx)
-        dynamic_variants = [read_dynamic_prefix(source) for _ in range(dynamic_path_cnt)]
-        # C++ prefix read ends here
+        typed_states = [typed.read_column_prefix(source, ctx) for typed in self.typed_types]
+        dynamic_states = [read_dynamic_prefix(self, source, ctx) for _ in range(dynamic_path_cnt)]
+        return JSONState(serialize_version, dynamic_paths, typed_states, dynamic_states)
 
-        typed_columns = [ch_type.read_column_data(source, num_rows, ctx) for ch_type in self.typed_types]
-        dynamic_columns = [read_variant_column(dynamic_variants[ix], source, num_rows, ctx) for ix in range(dynamic_path_cnt)]
-        SHARED_DATA_TYPE.read_column_data(source, num_rows, ctx)
+    # pylint: disable=too-many-locals
+    def _read_column_binary(self, source: ByteSource, num_rows: int, ctx: QueryContext, read_state: JSONState):
+        typed_columns = [ch_type.read_column_data(source, num_rows, ctx, read_state)
+                         for ch_type, read_state in zip(self.typed_types, read_state.typed_states)]
+        dynamic_columns = [
+            read_variant_column(source, num_rows, ctx, dynamic_state.variant_types, dynamic_state.variant_states)
+            for dynamic_state in read_state.dynamic_states]
+        SHARED_DATA_TYPE.read_column_data(source, num_rows, ctx, None)
         col = []
         for row_num in range(num_rows):
             top = {}
@@ -233,7 +252,7 @@ class JSON(ClickHouseType):
                         item[key] = child
                     item = child
                 item[chain[-1]] = value
-            for ix, field in enumerate(dynamic_paths):
+            for ix, field in enumerate(read_state.dynamic_paths):
                 value = dynamic_columns[ix][row_num]
                 if value is None:
                     continue

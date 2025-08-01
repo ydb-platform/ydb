@@ -23,7 +23,7 @@ namespace NBlobStorageNodeWardenTest{
 
 Y_UNIT_TEST_SUITE(TDistconfGenerateConfigTest) {
 
-    NKikimrConfig::TDomainsConfig::TStateStorage GenerateSimpleStateStorage(ui32 nodes) {
+    NKikimrConfig::TDomainsConfig::TStateStorage GenerateSimpleStateStorage(ui32 nodes, std::unordered_set<ui32> usedNodes = {}) {
         NKikimr::NStorage::TDistributedConfigKeeper keeper(nullptr, nullptr, true);
         NKikimrConfig::TDomainsConfig::TStateStorage ss;
         NKikimrBlobStorage::TStorageConfig config;
@@ -31,11 +31,11 @@ Y_UNIT_TEST_SUITE(TDistconfGenerateConfigTest) {
             auto *node = config.AddAllNodes();
             node->SetNodeId(i + 1);
         }
-        keeper.GenerateStateStorageConfig(&ss, config);
+        keeper.GenerateStateStorageConfig(&ss, config, usedNodes);
         return ss;
     }
 
-    NKikimrConfig::TDomainsConfig::TStateStorage GenerateDCStateStorage(ui32 dcCnt, ui32 racksCnt,  ui32 nodesInRack, std::unordered_map<ui32, ui32> nodesState = {}) {
+    NKikimrConfig::TDomainsConfig::TStateStorage GenerateDCStateStorage(ui32 dcCnt, ui32 racksCnt,  ui32 nodesInRack, std::unordered_map<ui32, ui32> nodesState = {}, std::unordered_set<ui32> usedNodes = {}) {
         NKikimrBlobStorage::TStorageConfig config;
         ui32 nodeId = 1;
         NKikimr::NStorage::TDistributedConfigKeeper keeper(nullptr, nullptr, true);
@@ -54,7 +54,7 @@ Y_UNIT_TEST_SUITE(TDistconfGenerateConfigTest) {
         for(auto [nodeId, state] : nodesState) {
             keeper.SelfHealNodesState[nodeId] = state;
         }
-        keeper.GenerateStateStorageConfig(&ss, config);
+        keeper.GenerateStateStorageConfig(&ss, config, usedNodes);
         return ss;
     }
 
@@ -128,23 +128,32 @@ Y_UNIT_TEST_SUITE(TDistconfGenerateConfigTest) {
     }
 
     Y_UNIT_TEST(IgnoreNodes) {
-        CheckStateStorage(GenerateDCStateStorage(1, 1, 20, { {3, 1} }), 5, {1, 2, 4, 5, 6, 7, 8, 9});
-        CheckStateStorage(GenerateDCStateStorage(1, 1, 20, { {3, 1}, {7, 3}, {10, 2} }), 5, {1, 2, 4, 5, 6, 8, 9, 11});
-        CheckStateStorage(GenerateDCStateStorage(1, 1, 10, { {3, 1}, {7, 3}, {10, 2} }), 5, {1, 2, 3, 4, 5, 6, 8, 9});
-        CheckStateStorage(GenerateDCStateStorage(1, 1, 10, { {3, 2}, {7, 3}, {10, 1} }), 5, {1, 2, 4, 5, 6, 8, 9, 10});
-        CheckStateStorage(GenerateDCStateStorage(3, 3, 3, { {13, 1} }), 9, {1, 4, 7, 10, 14, 16, 19, 22, 25});
+        CheckStateStorage(GenerateDCStateStorage(1, 1, 20, { {3, 2} }), 5, {1, 2, 4, 5, 6, 7, 8, 9});
+        CheckStateStorage(GenerateDCStateStorage(1, 1, 20, { {3, 2}, {7, 4}, {10, 3} }), 5, {1, 2, 4, 5, 6, 8, 9, 11});
+        CheckStateStorage(GenerateDCStateStorage(1, 1, 10, { {3, 2}, {7, 4}, {10, 3} }), 5, {1, 2, 3, 4, 5, 6, 8, 9});
+        CheckStateStorage(GenerateDCStateStorage(1, 1, 10, { {3, 3}, {7, 4}, {10, 2} }), 5, {1, 2, 4, 5, 6, 8, 9, 10});
+        CheckStateStorage(GenerateDCStateStorage(3, 3, 3, { {13, 2} }), 9, {1, 4, 7, 10, 14, 16, 19, 22, 25});
     }
 
     Y_UNIT_TEST(BadRack) {
         CheckStateStorage(GenerateDCStateStorage(3, 3, 3, { {13, 5}, {14, 3}, {15, 4} }), 9, {1, 4, 7, 10, 14, 16, 19, 22, 25});
         CheckStateStorage(GenerateDCStateStorage(3, 3, 3, { {13, 2}, {14, 3}, {15, 4} }), 9, {1, 4, 7, 10, 13, 16, 19, 22, 25});
-        CheckStateStorage(GenerateDCStateStorage(3, 3, 3, { {13, 2}, {14, 3}, {15, 1} }), 9, {1, 4, 7, 10, 15, 16, 19, 22, 25});
+        CheckStateStorage(GenerateDCStateStorage(3, 3, 3, { {13, 3}, {14, 4}, {15, 2} }), 9, {1, 4, 7, 10, 15, 16, 19, 22, 25});
     }
 
     Y_UNIT_TEST(ExtraDCHelp) {
-        CheckStateStorage(GenerateDCStateStorage(4, 3, 1, { {3, 1} }), 9, {1, 2, 4, 5, 6, 7, 8, 9, 10});
-        CheckStateStorage(GenerateDCStateStorage(4, 3, 1, { {6, 1} }), 9, {1, 2, 3, 4, 5, 7, 8, 9, 10});
-        CheckStateStorage(GenerateDCStateStorage(4, 3, 1, { {9, 1}, {8, 4} }), 9, {1, 2, 3, 4, 5, 6, 7, 10, 11});
+        CheckStateStorage(GenerateDCStateStorage(4, 3, 1, { {3, 2} }), 9, {1, 2, 4, 5, 6, 7, 8, 9, 10});
+        CheckStateStorage(GenerateDCStateStorage(4, 3, 1, { {6, 2} }), 9, {1, 2, 3, 4, 5, 7, 8, 9, 10});
+        CheckStateStorage(GenerateDCStateStorage(4, 3, 1, { {9, 2}, {8, 4} }), 9, {1, 2, 3, 4, 5, 6, 7, 10, 11});
+    }
+
+
+    Y_UNIT_TEST(UsedNodes) {
+        CheckStateStorage(GenerateDCStateStorage(3, 3, 3, { {13, 2} }, { 1, 2, 3, 4, 5, 6 }), 9, {1, 4, 7, 10, 14, 16, 19, 22, 25});
+        CheckStateStorage(GenerateDCStateStorage(1, 1, 20, { {3, 2} }, { 1, 2, 3, 4, 9 }), 5, {5, 6, 7, 8, 10, 11, 12, 13});
+        CheckStateStorage(GenerateDCStateStorage(3, 3, 3, { {13, 2} }, { 4, 16 }), 9, {1, 5, 7, 10, 14, 17, 19, 22, 25});
+        CheckStateStorage(GenerateDCStateStorage(4, 3, 1, { {3, 2} }, { 1 }), 9, {2, 4, 5, 6, 7, 8, 9, 10, 11});
+
     }
 }
 }

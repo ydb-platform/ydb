@@ -113,9 +113,10 @@ namespace NKikimr::NStorage {
             config->MutableStateStorageBoardConfig()->CopyFrom(ss);
             config->MutableSchemeBoardConfig()->CopyFrom(ss);
         } else if (!Cfg->DomainsConfig->StateStorageSize()) { // no StateStorage config, generate a new one
-            GenerateStateStorageConfig(config->MutableStateStorageConfig(), *config);
-            GenerateStateStorageConfig(config->MutableStateStorageBoardConfig(), *config);
-            GenerateStateStorageConfig(config->MutableSchemeBoardConfig(), *config);
+            std::unordered_set<ui32> usedNodes;
+            GenerateStateStorageConfig(config->MutableStateStorageConfig(), *config, usedNodes);
+            GenerateStateStorageConfig(config->MutableStateStorageBoardConfig(), *config, usedNodes);
+            GenerateStateStorageConfig(config->MutableSchemeBoardConfig(), *config, usedNodes);
         }
 
         config->SetSelfAssemblyUUID(selfAssemblyUUID);
@@ -143,10 +144,10 @@ namespace NKikimr::NStorage {
         THashMap<ui32, TNodeLocation> nodeLocations;
         THashSet<ui32> allowedNodeIds;
         for (const auto& node : config->GetAllNodes()) {
-            nodeLocations.try_emplace(node.GetNodeId(), node.GetLocation());
-            const auto pfn = &NKikimrBlobStorage::TNodeIdentifier::GetBridgePileId;
-            if (bridgePileId && TBridgePileId::FromProto(&node, pfn) == *bridgePileId) {
-                allowedNodeIds.emplace(node.GetNodeId());
+            TNodeLocation location(node.GetLocation());
+            nodeLocations.try_emplace(node.GetNodeId(), location);
+            if (bridgePileId && *bridgePileId == ResolveNodePileId(location)) {
+                allowedNodeIds.insert(node.GetNodeId());
             }
         }
 
@@ -569,31 +570,24 @@ namespace NKikimr::NStorage {
     }
 
     bool TDistributedConfigKeeper::GenerateStateStorageConfig(NKikimrConfig::TDomainsConfig::TStateStorage *ss,
-            const NKikimrBlobStorage::TStorageConfig& baseConfig) {
+            const NKikimrBlobStorage::TStorageConfig& baseConfig, std::unordered_set<ui32>& usedNodes) {
         std::map<std::optional<TBridgePileId>, THashMap<TString, std::vector<std::tuple<ui32, TNodeLocation>>>> nodes;
         bool goodConfig = true;
         for (const auto& node : baseConfig.GetAllNodes()) {
-            std::optional<TBridgePileId> pileId = node.HasBridgePileId()
-                ? std::make_optional(TBridgePileId::FromProto(&node, &NKikimrBlobStorage::TNodeIdentifier::GetBridgePileId))
-                : std::nullopt;
-
             TNodeLocation location(node.GetLocation());
+            std::optional<TBridgePileId> pileId = ResolveNodePileId(location);
             nodes[pileId][location.GetDataCenterId()].emplace_back(node.GetNodeId(), location);
         }
         for (auto& [pileId, nodesByDataCenter] : nodes) {
-            TStateStoragePerPileGenerator generator(nodesByDataCenter, SelfHealNodesState, pileId);
+            TStateStoragePerPileGenerator generator(nodesByDataCenter, SelfHealNodesState, pileId, usedNodes);
             generator.AddRingGroup(ss);
             goodConfig &= generator.IsGoodConfig();
         }
         return goodConfig;
     }
 
-    bool TDistributedConfigKeeper::UpdateConfig(NKikimrBlobStorage::TStorageConfig *config,
-            const THashMap<TBridgePileId, NKikimrBlobStorage::TStorageConfig*>& persistedConfigForUnsyncedPile) {
-        if (UpdateBridgeConfig(config, persistedConfigForUnsyncedPile)) {
-            return true;
-        }
-        return false;
+    bool TDistributedConfigKeeper::UpdateConfig(NKikimrBlobStorage::TStorageConfig *config, bool& checkSyncersAfterCommit) {
+        return UpdateBridgeConfig(config, checkSyncersAfterCommit);
     }
 
 } // NKikimr::NStorage

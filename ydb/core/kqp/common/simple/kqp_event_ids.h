@@ -165,6 +165,13 @@ struct TKqpScriptExecutionEvents {
         EvDescribeSecretsResponse,
         EvSaveScriptResultPartFinished,
         EvScriptExecutionsTableCreationFinished,
+        EvScriptExecutionRestarted,
+        EvListExpiredLeasesResponse,
+        EvRefreshScriptExecutionLeasesResponse,
+        EvStartScriptExecutionBackgroundChecks,
+        EvSaveScriptPhysicalGraphRequest,
+        EvSaveScriptPhysicalGraphResponse,
+        EvGetScriptPhysicalGraphResponse,
     };
 };
 

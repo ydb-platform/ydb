@@ -22,6 +22,8 @@ public:
         const TActorId& CompileServiceId;
         const NKikimrReplication::TBatchingSettings& BatchingSettings;
         const TString& RunAsUser;
+        const TString& DirectoryPath;
+        const TString& Database;
     };
 
     virtual IActor* Create(const Parameters& parameters) const = 0;

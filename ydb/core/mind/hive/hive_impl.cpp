@@ -282,7 +282,10 @@ void THive::ExecuteProcessBootQueue(NIceDb::TNiceDb&, TSideEffects& sideEffects)
                 if (std::holds_alternative<TTooManyTabletsStarting>(bestNodeResult)) {
                     delayedTablets.push_back(record);
                     break;
-                } else if (std::holds_alternative<TNoNodeFound>(bestNodeResult)) {
+                } else {
+                    if (std::holds_alternative<TNotEnoughResources>(bestNodeResult)) {
+                        NotEnoughResources = true;
+                    }
                     for (const TActorId actorToNotify : tablet->ActorsToNotifyOnRestart) {
                         sideEffects.Send(actorToNotify, new TEvPrivate::TEvRestartComplete(tablet->GetFullTabletId(), "boot delay"));
                     }
@@ -1448,7 +1451,7 @@ THive::TBestNodeResult THive::FindBestNode(const TTabletInfo& tablet, TNodeId su
         }
         if (debugState.NodesWithoutResources == nodesLeft) {
             tablet.BootState = BootStateNotEnoughResources;
-            return TNoNodeFound();
+            return TNotEnoughResources();
         }
         if (debugState.NodesWithoutLocation == nodesLeft) {
             tablet.BootState = BootStateNodesLocationUnknown;
@@ -2195,6 +2198,7 @@ void THive::Handle(TEvHive::TEvRequestHiveStorageStats::TPtr& ev) {
             pbGroup.SetMaximumSize(group.MaximumResources.Size);
             pbGroup.SetAllocatedSize(group.GroupParameters.GetAllocatedSize());
             pbGroup.SetAvailableSize(group.GroupParameters.GetAvailableSize());
+            pbGroup.SetGroupSizeInUnits(group.GroupParameters.GetGroupSizeInUnits());
         }
     }
     Send(ev->Sender, response.Release(), 0, ev->Cookie);

@@ -254,9 +254,9 @@ namespace
     }
 }
 
-bool insertData(MutableColumn & column, const StringRef & value)
+bool insertData(MutableColumn & column, const StringRef & value, const arrow::Type::type typeId)
 {
-    switch (column.type()->id())
+    switch (typeId)
     {
         case arrow::Type::UINT8:
             return insertNumber(column, unalignedLoad<UInt8>(value.data));
@@ -364,9 +364,9 @@ StringRef serializeValueIntoArena(const IColumn& column, size_t row, Arena & poo
     throw Exception(std::string(__FUNCTION__) + " unexpected type " + column.type()->ToString());
 }
 
-const char * deserializeAndInsertFromArena(MutableColumn& column, const char * pos)
+const char * deserializeAndInsertFromArena(MutableColumn& column, const char * pos, const arrow::Type::type typeId)
 {
-    switch (column.type()->id())
+    switch (typeId)
     {
         case arrow::Type::UINT8:
             return deserializeNumberFromArena(assert_cast<MutableColumnUInt8 &>(column), pos);

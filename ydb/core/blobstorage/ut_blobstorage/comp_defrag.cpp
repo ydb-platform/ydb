@@ -56,11 +56,11 @@ struct TTetsEnv {
         });
     }
 
-    ui64 AggregateVDiskCounters(const TString& subsystem, const TString& counter, std::unordered_map<TString, TString> labels = {}) {
+    ui64 AggregateVDiskCounters(const TString& subsystem, const TString& counter) {
         return Env.AggregateVDiskCounters(
             "test", Env.Settings.NodeCount,
             GroupInfo->GetTotalVDisksNum(), GroupInfo->GroupID.GetRawId(),
-            PdiskLayout, subsystem, counter, labels
+            PdiskLayout, subsystem, counter
         );
     }
 

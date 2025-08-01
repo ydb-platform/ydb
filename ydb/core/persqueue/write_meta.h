@@ -49,16 +49,16 @@ NKikimrPQClient::TDataChunk GetInitialDataChunk(const TWriteRequestInit& init, c
 }
 
 template <class TData>
-void FillChunkDataFromReq(NKikimrPQClient::TDataChunk& proto, const TData& data, int);
+void FillChunkDataFromReq(NKikimrPQClient::TDataChunk& proto, TString& messageKey, const TData& data, int);
 
 template <class TData>
-void FillChunkDataFromReq(NKikimrPQClient::TDataChunk& proto, const TData& data);
+void FillChunkDataFromReq(NKikimrPQClient::TDataChunk& proto, TString&, const TData& data);
 
 template <typename... TArgs>
-TString GetSerializedData(const NKikimrPQClient::TDataChunk& init, TArgs&...args) {
+TString GetSerializedData(const NKikimrPQClient::TDataChunk& init, TString& key, TArgs&...args) {
     NKikimrPQClient::TDataChunk proto;
     proto.CopyFrom(init);
-    FillChunkDataFromReq(proto, std::forward<TArgs>(args)...);
+    FillChunkDataFromReq(proto, key, std::forward<TArgs>(args)...);
 
     TString str;
     bool res = proto.SerializeToString(&str);

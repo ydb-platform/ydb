@@ -155,16 +155,21 @@ void TKafkaFetchActor::FillRecordsBatch(const NKikimrClient::TPersQueueFetchResp
         if (record.DataChunk.GetChunkType() != NKikimrPQClient::TDataChunk::REGULAR) {
             continue;
         }
+        bool keySet = false;
 
         for (auto& metadata : record.DataChunk.GetMessageMeta()) {
             if (metadata.key() == "__key") {
                 record.Key = metadata.value();
+                keySet = true;
             } else {
                 TKafkaHeader header;
                 header.Key = metadata.key();
                 header.Value = metadata.value();
                 record.Headers.push_back(header);
             }
+        }
+        if (!keySet && result.HasMessageKey()) {
+            record.Key = result.GetMessageKey();
         }
 
         record.Value = record.DataChunk.GetData();

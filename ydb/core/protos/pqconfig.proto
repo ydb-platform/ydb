@@ -902,6 +902,7 @@ message TBatchHeader {
     }
     optional uint32 Format = 7; //for EPayloadFormat
     optional bool HasKinesis = 8;
+    optional bool HasMessageKey = 9;
 }
 
 message TUserInfo {

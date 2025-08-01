@@ -91,6 +91,7 @@ message TPersQueuePartitionRequest {
         optional string ClientDC = 11;
 
         optional string PartitionKey = 13;
+        optional bytes MessageKey = 20;
         optional bytes ExplicitHash = 14;
 
         optional bool ExternalOperation = 15 [ default = false ];
@@ -176,7 +177,7 @@ message TPersQueuePartitionRequest {
     optional bool IsDirectWrite = 18 [default = false];
     optional uint64 PutUnitsSize = 19;
     optional int64 InitialSeqNo = 26;
-    optional bool MeteringV2Enabled = 27 [default = false]; 
+    optional bool MeteringV2Enabled = 27 [default = false];
 }
 
 message TPersQueueMetaRequest {
@@ -407,6 +408,7 @@ message TCmdReadResult {
 
         optional string PartitionKey = 11;
         optional bytes ExplicitHash = 12;
+        optional bytes MessageKey = 13;
     }
     optional uint64 MaxOffset = 2;
     repeated TResult Result = 3;

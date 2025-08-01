@@ -432,10 +432,10 @@ TReadAnswer TReadInfo::FormAnswer(
 
     ui32 lastBlobSize = 0;
     const TVector<TRequestedBlob>& blobs = response->GetBlobs();
-
+    const bool saveMsgKey = AppData()->FeatureFlags.GetEnableTopicMessageKeySaving();
     auto updateUsage = [&](const TClientBlob& blob) {
-        size += blob.GetBlobSize();
-        lastBlobSize += blob.GetBlobSize();
+        size += blob.GetBlobSize(saveMsgKey);
+        lastBlobSize += blob.GetBlobSize(saveMsgKey);
         if (blob.IsLastPart()) {
             bool messageSkippingBehaviour = AppData()->PQConfig.GetTopicsAreFirstClassCitizen() &&
                     ReadTimestampMs > blob.WriteTimestamp.MilliSeconds();
@@ -558,7 +558,7 @@ TReadAnswer TReadInfo::FormAnswer(
         for (const auto& writeBlob : Cached) {
             VERIFY_RESULT_BLOB(writeBlob, 0u);
 
-            readResult->SetBlobsCachedSize(readResult->GetBlobsCachedSize() + writeBlob.GetBlobSize());
+            readResult->SetBlobsCachedSize(readResult->GetBlobsCachedSize() + writeBlob.GetBlobSize(saveMsgKey));
 
             if (userInfo) {
                 userInfo->AddTimestampToCache(
@@ -678,6 +678,7 @@ TVector<TClientBlob> TPartition::GetReadRequestFromHead(
         pos = Head.FindPos(startOffset, partNo);
         Y_ABORT_UNLESS(pos != Max<ui32>());
     }
+    const bool saveMessageKey = AppData()->FeatureFlags.GetEnableTopicMessageKeySaving();
     ui32 lastBlobSize = 0;
     for (;pos < Head.GetBatches().size(); ++pos) {
 
@@ -722,8 +723,8 @@ TVector<TClientBlob> TPartition::GetReadRequestFromHead(
                     break;
                 }
             }
-            size += blobs[i].GetBlobSize();
-            lastBlobSize += blobs[i].GetBlobSize();
+            size += blobs[i].GetBlobSize(saveMessageKey);
+            lastBlobSize += blobs[i].GetBlobSize(saveMessageKey);
             res.push_back(blobs[i]);
 
             if (!firstAddedBlobOffset)

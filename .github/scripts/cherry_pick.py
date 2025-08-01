@@ -23,26 +23,27 @@ class CherryPickCreator:
             commit = self.repo.get_commit(c)
             pulls = commit.get_pulls()
             if pulls.totalCount > 0:
-                title = f"{pulls.get_page(0)[0].title} (#{pulls.get_page(0)[0].number})"
-                body = f"{pulls.get_page(0)[0].title} ({pulls.get_page(0)[0].html_url})"
+                pr = pulls.get_page(0)[0]
+                if single:
+                    self.pr_title_list.append(pr.title)
+                else:
+                    self.pr_title_list.append(f'commit {commit.sha}')
+                self.pr_body_list.append(f"* commit {commit.html_url}: {pr.title }")
             else:
-                title = ''
-                body = ""
-
-            if single:
-                self.pr_title_list.append(f"commit {commit.sha}: '{title}'")
-            else:
-                self.pr_title_list.append(commit.sha)
-            self.pr_body_list.append(f"commit {commit.html_url}: '{body}'")
+                if single:
+                    self.pr_title_list.append(f'cherry-pick commit {commit.sha}')
+                else:
+                    self.pr_title_list.append(f'commit {commit.sha}')
+                self.pr_body_list.append(f"* commit {commit.html_url}")
             self.commit_shas.append(commit.sha)
 
         def __add_pull(p: int, single: bool):
             pull = self.repo.get_pull(p)
             if single:
-                self.pr_title_list.append(f"PR {pull.number} '{pull.title}'")
+                self.pr_title_list.append(f"{pull.title}")
             else:
                 self.pr_title_list.append(f'PR {pull.number}')
-            self.pr_body_list.append(f"PR {pull.html_url}: '{pull.title}'")
+            self.pr_body_list.append(f"* PR {pull.html_url}")
             self.commit_shas.append(pull.merge_commit_sha)
 
         self.repo_name = os.environ["REPO"]
@@ -69,8 +70,10 @@ class CherryPickCreator:
             self.workflow_url = None
 
     def pr_title(self, target_branch) -> str:
-        return f"[{target_branch}] Cherry-pick {', '.join(self.pr_title_list)}"
-    
+        if len(self.pr_title_list) == 1:
+            return f"{target_branch}: {self.pr_title_list[0]}"
+        return f"{target_branch}: cherry-pick {', '.join(self.pr_title_list)}"
+
     def pr_body(self, with_wf: bool) -> str:
         commits = '\n'.join(self.pr_body_list)
         pr_body = f"Cherry-pick:\n{commits}\n"
@@ -115,7 +118,7 @@ class CherryPickCreator:
         self.add_summary(f'{target_branch}: PR {pr.html_url} created')
 
     def process(self):
-        br = ', '.join(self.target_branches)
+        br = ', '.join([f'[{b}]({self.repo.html_url}/tree/{b})' for b in self.target_branches])
         self.logger.info(self.pr_title(br))
         self.add_summary(f"{self.pr_body(False)}to {br}")
         if len(self.commit_shas) == 0 or len(self.target_branches) == 0:

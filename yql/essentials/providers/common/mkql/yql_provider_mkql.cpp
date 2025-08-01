@@ -687,7 +687,7 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         const auto arg = MkqlBuildExpr(node.Head(), ctx);
         const auto lambda = [&](TRuntimeNode::TList items) { return MkqlBuildWideLambda(node.Tail(), ctx, items); };
         TRuntimeNode result = ctx.ProgramBuilder.WideMap(arg, lambda);
-        if (IsWideBlockType(*node.GetTypeAnn()->Cast<TFlowExprType>()->GetItemType())) {
+        if (IsWideBlockType(*GetWideFlowOrStreamComponents(*node.GetTypeAnn()))) {
             result = ctx.ProgramBuilder.BlockExpandChunked(result);
         }
         return result;

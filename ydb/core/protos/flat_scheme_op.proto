@@ -1862,6 +1862,55 @@ message TCopySequence {
     optional string CopyFrom = 1;
 }
 
+
+// ChangeConstraint Begin
+
+/*
+ChangeConstraint's plan:
+
+1. KQP -|TChangeConstraintRequest|-> SchemeShard_begin
+2. SchemeShard_begin -|TModifyScheme|-> SchemeShard_modify_scheme
+3. SchemeShard_modify_scheme -|TChangeConstraintCheck|-> SchemeShard_check
+4. SchemeShard_check -|TEvCheckConstraintCreateRequest|-> DataShard
+5. DataShard -|TEvCheckConstraintCreateResponse|-> SchemeShard_check
+6. SchemeShard_check saves operation's result in localDB
+7. SchemeShard_check -|TChangeConstraintFinalize|-> SchemeShard_finalize
+8. SchemeShard_finalize -|TModifyScheme|-> SchemeShard_modify_scheme
+9. SchemeShard_modify_scheme -|???|-> KQP
+*/
+
+message TChangeConstraintSetting {
+    enum EChangeConstraintAction {
+        DropNotNull = 1;
+        SetNotNull = 2;
+    }
+
+    optional string TableName = 1;
+    optional string ColumnName = 2;
+    optional EChangeConstraintAction Action = 3;
+}
+
+message TChangeConstraintRequest {
+    optional TChangeConstraintSetting ChangeConstraintSetting = 1;
+}
+
+message TChangeConstraintCheck {
+    optional TChangeConstraintSetting ChangeConstraintSetting = 1;
+}
+
+message TChangeConstraintFinalize {
+    enum EStatus {
+        Success = 0;
+        ColumnConstraintViolation = 1;
+    }
+
+    optional TChangeConstraintSetting ChangeConstraintSetting = 1;
+    optional EStatus Status = 2;
+}
+
+// ChangeConstraint End
+
+
 // "Script", used by client to parse text files with multiple DDL commands
 message TModifyScript {
     repeated TModifyScheme ModifyScheme = 1;

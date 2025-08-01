@@ -214,7 +214,6 @@ namespace NKikimr {
             using TAggrBySlotSize = THashMap<ui32, TAggrSlotInfo>; // slotSize -> TAggrSlotInfo
             const std::shared_ptr<THugeBlobCtx> HugeBlobCtx;
             TPerChunkMap PerChunkMap;
-            ui64 TotalUselessSize = 0;
 
         private:
             TAggrBySlotSize AggregatePerSlotSize() const {
@@ -243,9 +242,6 @@ namespace NKikimr {
                 }
                 it->second.UsefulSlots += useful;
                 it->second.UselessSlots += !useful;
-                if (!useful) {
-                    TotalUselessSize += part.Size;
-                }
             }
 
             TChunksToDefrag GetChunksToDefrag(size_t maxChunksToDefrag) const {
@@ -294,16 +290,18 @@ namespace NKikimr {
                 return result;
             }
 
-            ui32 GetTotalChunksCouldBeFreedViaCompaction() const {
-                ui32 totalFreeChunks = 0;
+            ui64 GetTotalSpaceCouldBeFreedViaCompaction() const {
+                ui64 totalSpaceCouldBeFreed = 0;
                 for (const auto& [chunkIdx, chunk] : PerChunkMap) {
-                    totalFreeChunks += (chunk.UsefulSlots == 0);
+                    if (chunk.UsefulSlots == 0) {
+                        // this chunk almost certainly in locked state, compaction will unlock it
+                        totalSpaceCouldBeFreed += chunk.NumberOfSlotsInChunk * chunk.SlotSize;
+                    } else {
+                        // this chunk has some obsolete or behind the barrier slots, so we can free them
+                        totalSpaceCouldBeFreed += chunk.UselessSlots * chunk.SlotSize;
+                    }
                 }
-                return totalFreeChunks;
-            }
-
-            ui64 GetTotalUselessSize() const {
-                return TotalUselessSize;
+                return totalSpaceCouldBeFreed;
             }
 
             void Output(IOutputStream &str) const {
@@ -338,12 +336,8 @@ namespace NKikimr {
             return ChunksMap.GetChunksToDefrag(maxChunksToDefrag);
         }
 
-        ui64 GetTotalUselessSize() const {
-            return ChunksMap.GetTotalUselessSize();
-        }
-
-        ui32 GetTotalChunksCouldBeFreedViaCompaction() const {
-            return ChunksMap.GetTotalChunksCouldBeFreedViaCompaction();
+        ui64 GetTotalSpaceCouldBeFreedViaCompaction() const {
+            return ChunksMap.GetTotalSpaceCouldBeFreedViaCompaction();
         }
 
         void Add(TDiskPart part, const TLogoBlobID& id, bool useful, const void* /*sst*/) {

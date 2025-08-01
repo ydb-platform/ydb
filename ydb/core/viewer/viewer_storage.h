@@ -301,7 +301,7 @@ public:
                     stats.SetMaximumIOPS(stats.GetMaximumIOPS() + pbGroup.GetMaximumIOPS());
                     stats.SetMaximumThroughput(stats.GetMaximumThroughput() + pbGroup.GetMaximumThroughput());
                     stats.SetMaximumSize(stats.GetMaximumSize() + pbGroup.GetMaximumSize());
-                    stats.SetGroupSizeInUnits(pbGroup.GetGroupSizeInUnits());
+                    stats.SetGroupSizeInUnits(stats.GetGroupSizeInUnits() + pbGroup.GetGroupSizeInUnits());
                 }
             }
         }

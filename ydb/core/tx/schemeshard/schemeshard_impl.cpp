@@ -534,14 +534,17 @@ bool TSchemeShard::ApplyStorageConfig(
         return pools.cend();
     };
 
-    auto allocateChannel = [&] (const TStoragePool& pool, bool reuseExisting = true) -> ui32 {
+    auto allocateChannel = [&] (const TStoragePool& pool, const ui32 reuseIndex = 0) -> ui32 {
         auto it = reverseBinding.find(pool.GetName());
         if (it != reverseBinding.end()) {
-            if (reuseExisting) {
-                return it->second[0];
+            // Try to reuse an existing channel if possible
+            if (reuseIndex < it->second.size()) {
+                // If we have a channel with the required index, use it
+                return it->second[reuseIndex];
             }
         }
 
+        // Otherwise, allocate a new channel
         ui32 channel = channelsBinding.size();
         channelsBinding.emplace_back();
         channelsBinding.back().SetStoragePoolName(pool.GetName());
@@ -597,8 +600,8 @@ bool TSchemeShard::ApplyStorageConfig(
         externalChannelsCount = Max<ui32>(externalChannelsCount, 1);
         LOCAL_CHECK(externalChannelsCount < Max<ui8>(), "more than 255 external channels requested");
         for (ui32 i = 0; i < externalChannelsCount; ++i) {
-            // In case if we have 1 external channel, leave old behavior untouched and reuse channel by pool's name
-            ui32 channel = allocateChannel(*externalPool, externalChannelsCount == 1 ? true : false);
+            // In case if we have only 1 external channel, we will have old behavior
+            ui32 channel = allocateChannel(*externalPool, i);
             room.AssignChannel(NKikimrStorageSettings::TChannelPurpose::External, channel);
         }
     }

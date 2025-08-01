@@ -1,6 +1,5 @@
 #pragma once
 #include <util/system/types.h>
-#include <limits>
 
 namespace NKikimr::NOlap {
 class TGlobalLimits {
@@ -14,5 +13,7 @@ public:
     static constexpr inline ui64 DefaultReadSequentiallyBufferSize = ((ui64)8) << 20;
 
     static constexpr double GroupedMemoryLimiterSoftLimitCoefficient = 0.3;
+
+    static constexpr ui64 AveragePortionSizeLimit = 2 << 10;
 };
 }

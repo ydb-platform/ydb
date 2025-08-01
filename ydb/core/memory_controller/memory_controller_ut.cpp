@@ -512,7 +512,7 @@ Y_UNIT_TEST(ResourceBroker_ConfigCS) {
     TAutoPtr<IEventHandle> handle;
     auto sender = runtime.AllocateEdgeActor();
     InitRoot(server, sender);
-    
+
     ui64 currentHardMemoryLimit = 1000_MB;
     server->ProcessMemoryInfo->CGroupLimit = currentHardMemoryLimit;
     runtime.SimulateSleep(TDuration::Seconds(2));
@@ -578,17 +578,17 @@ Y_UNIT_TEST(GroupedMemoryLimiter_ConfigCS) {
             1_KB);
 
         UNIT_ASSERT_DOUBLES_EQUAL(
-            static_cast<double>(currentHardMemoryLimit * (1.0 - ColumnTablesDeduplicationGroupedMemoryFraction) * readExecutionMemoryLimitPercent / 100), 
+            static_cast<double>(currentHardMemoryLimit * (1.0 - ColumnTablesDeduplicationGroupedMemoryFraction) * readExecutionMemoryLimitPercent / 100),
             static_cast<double>(scanLimits->GetHardLimit().value()),
             1_KB);
 
         UNIT_ASSERT_DOUBLES_EQUAL(
-            static_cast<double>(currentHardMemoryLimit * ColumnTablesCompGroupedMemoryFraction * OlapLimits::GroupedMemoryLimiterSoftLimitCoefficient * compactionMemoryLimitPercent / 100),
+            static_cast<double>(currentHardMemoryLimit * OlapLimits::GroupedMemoryLimiterSoftLimitCoefficient * compactionMemoryLimitPercent / 100),
             static_cast<double>(compactionLimits->GetLimit()),
             1_KB);
-        
+
         UNIT_ASSERT_DOUBLES_EQUAL(
-            static_cast<double>(currentHardMemoryLimit * ColumnTablesCompGroupedMemoryFraction * compactionMemoryLimitPercent / 100),
+            static_cast<double>(currentHardMemoryLimit * compactionMemoryLimitPercent / 100.0),
             static_cast<double>(compactionLimits->GetHardLimit().value()),
             1_KB);
     };

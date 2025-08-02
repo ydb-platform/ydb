@@ -25,6 +25,9 @@ private:
 
 public:
     ITableMetadataAccessor(const TString& tablePath);
+    virtual bool NeedDuplicateFiltering() const {
+        return true;
+    }
     virtual bool NeedStalenessChecker() const {
         return true;
     }

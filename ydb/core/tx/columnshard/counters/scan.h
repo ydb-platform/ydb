@@ -1,13 +1,14 @@
 #pragma once
 #include "sub_columns.h"
 
-#include <ydb/library/signals/histogram.h>
-#include <ydb/library/signals/owner.h>
-
 #include <ydb/core/protos/table_stats.pb.h>
+#include <ydb/core/tx/columnshard/counters/duplicate_filtering.h>
 #include <ydb/core/tx/columnshard/resource_subscriber/counters.h>
 #include <ydb/core/tx/columnshard/resource_subscriber/task.h>
 #include <ydb/core/tx/columnshard/resources/memory.h>
+
+#include <ydb/library/signals/histogram.h>
+#include <ydb/library/signals/owner.h>
 
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 
@@ -156,6 +157,7 @@ private:
     NMonitoring::TDynamicCounters::TCounterPtr RecordsAcceptedByHeader;
     NMonitoring::TDynamicCounters::TCounterPtr RecordsDeniedByHeader;
     std::shared_ptr<TSubColumnCounters> SubColumnCounters;
+    std::shared_ptr<TDuplicateFilteringCounters> DuplicateFilteringCounters;
 
     NMonitoring::TDynamicCounters::TCounterPtr HangingRequests;
 
@@ -163,6 +165,11 @@ public:
     const std::shared_ptr<TSubColumnCounters>& GetSubColumns() const {
         AFL_VERIFY(SubColumnCounters);
         return SubColumnCounters;
+    }
+
+    const std::shared_ptr<TDuplicateFilteringCounters>& GetDuplicateFilteringCounters() const {
+        AFL_VERIFY(DuplicateFilteringCounters);
+        return DuplicateFilteringCounters;
     }
 
     void OnNoIndexBlobs(const ui32 recordsCount) const {

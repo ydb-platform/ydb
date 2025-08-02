@@ -1,5 +1,4 @@
 import "ydb/library/actors/protos/actors.proto";
-import "ydb/library/actors/protos/interconnect.proto";
 import "ydb/core/protos/base.proto";
 import "ydb/core/protos/blobstorage/blobstorage_base3.proto";
 import "ydb/core/protos/blobstorage/entity_status.proto";

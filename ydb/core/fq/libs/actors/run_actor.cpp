@@ -82,6 +82,9 @@
 #include <util/string/split.h>
 #include <util/system/hostname.h>
 
+#include <library/cpp/protobuf/util/pb_io.h>
+#include <library/cpp/scheme/scheme.h>
+
 #define LOG_E(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "QueryId: " << Params.QueryId << " " << stream)
 #define LOG_W(stream) LOG_WARN_S( *TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "QueryId: " << Params.QueryId << " " << stream)
 #define LOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "QueryId: " << Params.QueryId << " " << stream)
@@ -357,7 +360,7 @@ public:
                 break;
             case Ydb::Query::StatsMode::STATS_MODE_UNSPECIFIED:
             default:
-                StatsMode = NYql::NDqProto::EDqStatsMode::DQ_STATS_MODE_FULL;
+                StatsMode = NYql::NDqProto::EDqStatsMode::DQ_STATS_MODE_BASIC;
                 break;
         }
         if (Params.Automatic) {
@@ -368,7 +371,7 @@ public:
     static constexpr char ActorName[] = "YQ_RUN_ACTOR";
 
     void Bootstrap() {
-        LOG_D("Start run actor. Compute state: " << FederatedQuery::QueryMeta::ComputeStatus_Name(Params.Status));
+        LOG_D("Start run actor. Compute state: " << FederatedQuery::QueryMeta::ComputeStatus_Name(Params.Status) <<  "StatsMode = " << (int) StatsMode);
 
         FillConnections();
 
@@ -1699,6 +1702,16 @@ private:
         apply("WatermarksIdlePartitions", "true");
         apply("EnableChannelStats", "true");
         apply("ExportStats", "true");
+
+        Yql::DqsProto::TWorkerFilter workerFilter;
+        for (auto nodeId : Params.NodeIds) {
+      //      Cerr << "set workerFilter " << nodeId << Endl;
+            workerFilter.AddNodeId(nodeId);
+        }
+
+        TStringStream stream;
+        SerializeToTextFormat(workerFilter, stream);
+        apply("WorkerFilter", stream.Str());
 
         switch (Params.QueryType) {
         case FederatedQuery::QueryContent::STREAMING: {

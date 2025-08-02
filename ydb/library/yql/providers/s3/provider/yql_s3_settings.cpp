@@ -65,7 +65,7 @@ void TS3Configuration::Init(const TS3GatewayConfig& config, TIntrusivePtr<TTypeA
         config.HasMaxInflightListsPerQuery() ? config.GetMaxInflightListsPerQuery() : 1;
     ListingCallbackThreadCount = config.HasListingCallbackThreadCount()
                                      ? config.GetListingCallbackThreadCount()
-                                     : 1;
+                                     : 0;
     ListingCallbackPerThreadQueueSize = config.HasListingCallbackPerThreadQueueSize()
                                             ? config.GetListingCallbackPerThreadQueueSize()
                                             : 100;

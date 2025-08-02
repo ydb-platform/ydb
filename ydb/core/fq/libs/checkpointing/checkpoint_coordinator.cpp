@@ -50,6 +50,7 @@ TCheckpointCoordinator::TCheckpointCoordinator(TCoordinatorId coordinatorId,
 void TCheckpointCoordinator::Handle(NFq::TEvCheckpointCoordinator::TEvReadyState::TPtr& ev) {
     CC_LOG_D("TEvReadyState, streaming disposition " << StreamingDisposition << ", state load mode " << FederatedQuery::StateLoadMode_Name(StateLoadMode));
     ControlId = ev->Sender;
+    NeedSendRunToCA = ev->Get()->NeedSendRunToCA;
 
     for (const auto& task : ev->Get()->Tasks) {
         auto& actorId = TaskIdToActor[task.Id];
@@ -315,10 +316,7 @@ void TCheckpointCoordinator::Handle(const NYql::NDq::TEvDqCompute::TEvRestoreFro
         }
 
         ScheduleNextCheckpoint();
-        CC_LOG_I("[" << checkpoint << "] State restored, send TEvRun to " << AllActors.size() << " actors");
-        for (const auto& [actor, transport] : AllActors) {
-            transport->EventsQueue.Send(new NYql::NDq::TEvDqCompute::TEvRun());
-        }
+        StartAllTasks();
     }
 }
 
@@ -420,12 +418,11 @@ void TCheckpointCoordinator::InjectCheckpoint(const TCheckpointId& checkpointId,
 }
 
 void TCheckpointCoordinator::StartAllTasks() {
-    if (!GraphIsRunning) {
+    if (!GraphIsRunning && NeedSendRunToCA) {
         CC_LOG_I("Send TEvRun to all actors");
         for (const auto& [actor, transport] : AllActors) {
             transport->EventsQueue.Send(new NYql::NDq::TEvDqCompute::TEvRun());
         }
-        GraphIsRunning = true;
     }
 }
 
@@ -596,16 +593,14 @@ void TCheckpointCoordinator::Handle(NActors::TEvInterconnect::TEvNodeConnected::
 }
 
 void TCheckpointCoordinator::Handle(NActors::TEvents::TEvUndelivered::TPtr& ev) {
-    CC_LOG_D("Handle undelivered");
-
-    if (const auto actorIt = AllActors.find(ev->Sender); actorIt != AllActors.end()) {
-        actorIt->second->EventsQueue.HandleUndelivered(ev);
-    }
-
     TStringBuilder message;
     message << "Undelivered Event " << ev->Get()->SourceType
         << " from " << SelfId() << " (Self) to " << ev->Sender
         << " Reason: " << ev->Get()->Reason << " Cookie: " << ev->Cookie;
+    CC_LOG_D(message);
+    if (const auto actorIt = AllActors.find(ev->Sender); actorIt != AllActors.end()) {
+        actorIt->second->EventsQueue.HandleUndelivered(ev);
+    }
     OnError(NYql::NDqProto::StatusIds::UNAVAILABLE, message, {});
 }
 

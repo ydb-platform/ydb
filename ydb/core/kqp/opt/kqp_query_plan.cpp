@@ -1176,7 +1176,7 @@ private:
         } else if (auto maybeList = TMaybeNode<TCoAtomList>(node)) {
             auto listPtr = maybeList.Cast().Ptr();
             size_t listSize = listPtr->Children().size();
-            if (listSize == 3) {
+            if (listSize == 3 || listSize == 4 /*OpType optional field*/) {
                 THashMap<TString, TString> strComp = {
                     {"eq", " == "},
                     {"neq", " != "},

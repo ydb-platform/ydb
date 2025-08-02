@@ -1847,7 +1847,8 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             R"((`dt32`, `id`) >= (CAST('1998-12-01' AS Date32), 3))",
             R"((`dtm`, `id`) >= (CAST('1998-12-01' AS DateTime), 3))",
             R"((`dtm64`, `id`) >= (CAST('1998-12-01' AS DateTime64), 3))",
-            R"((`ts64`, `id`) >= (Timestamp("1970-01-01T00:00:03.000001Z"), 3))"
+            R"((`ts64`, `id`) >= (Timestamp("1970-01-01T00:00:03.000001Z"), 3))",
+            R"(dt >= dt)",
         };
 
         std::vector<TString> testDataBlocks = {
@@ -1876,10 +1877,27 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             R"(dtm64 >= dtm)",
             R"(dt >= ts)",
             R"(dt >= ts64)",
-            //R"(dt >= dt)", Failed in runtime
 
             // 2. Arithmetic
-            // R"(dt <= dt - inter64)", KqpOlapCompiler cannot deduce result type
+            R"(dt <= dt - inter64)",
+            R"(dt <= dt - Interval("P100D"))",
+            R"(dt32 <= dt32 - inter64)",
+            R"(dt32 <= dt32 - Interval("P100D"))",
+            R"(dtm <= dtm - inter64)",
+            R"(dtm <= dtm - Interval("P100D"))",
+            R"(dtm64 <= dtm64 - inter64)",
+            R"(dtm64 <= dtm64 - Interval("P100D"))",
+            R"(ts <= ts - inter64)",
+            R"(ts <= ts - Interval("P100D"))",
+            R"(ts64 <= ts64 - inter64)",
+            R"(ts64 <= ts64 - Interval("P100D"))",
+
+            R"(inter64 <= dt - Date('2001-01-01'))",
+            R"(inter64 <= dt32 - Date32('2001-01-01'))",
+            R"(inter64 <= dtm - DateTime('1998-12-01T15:30:00Z'))",
+            R"(inter64 <= dtm64 - DateTime64('1998-12-01T15:30:00Z'))",
+            R"(inter64 <= ts - Timestamp("1970-01-01T00:00:03.000001Z"))",
+            R"(inter64 <= ts64 - Timestamp64("1970-01-01T00:00:03.000001Z"))",
         };
 
         auto queryPrefix = R"(

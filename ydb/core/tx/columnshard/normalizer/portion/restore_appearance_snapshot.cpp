@@ -57,14 +57,12 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TNormalizer::DoInit(
         }
 
         while (!rowset.EndOfSet()) {
-            if (rowset.template GetValueOrDefault<IndexPortions::InsertWriteId>(0)) {
-                continue;
+            if (!rowset.template GetValueOrDefault<IndexPortions::InsertWriteId>(0)) {
+                TPortionLoadContext portion(rowset);
+                if (!portion.GetMetaProto().HasCompactedPortion() || !portion.GetMetaProto().GetCompactedPortion().HasAppearanceSnapshot()) {
+                    AFL_VERIFY(portions0.emplace(portion.GetAddress(), portion.GetMetaProto()).second);
+                }
             }
-            TPortionLoadContext portion(rowset);
-            if (portion.GetMetaProto().HasCompactedPortion() && portion.GetMetaProto().GetCompactedPortion().HasAppearanceSnapshot()) {
-                continue;
-            }
-            AFL_VERIFY(portions0.emplace(portion.GetAddress(), portion.GetMetaProto()).second);
 
             if (!rowset.Next()) {
                 return TConclusionStatus::Fail("Not ready");

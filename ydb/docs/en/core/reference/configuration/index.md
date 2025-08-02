@@ -353,12 +353,15 @@ The cache components include:
 
 - Shared cache
 - MemTable
+- Column Tables Cache
 
 Each cache component's limits are dynamically recalculated every second to ensure that each component consumes memory proportionally to its limit thresholds while the total consumed memory stays close to the target memory utilization.
 
 The minimum memory limit threshold for cache components isn't reserved, meaning the memory remains available until it is actually used. However, once this memory is filled, the components typically retain the data, operating within their current memory limit. Consequently, the sum of the minimum memory limits for cache components is expected to be less than the target memory utilization.
 
 If needed, both the minimum and maximum thresholds should be overridden; otherwise, any missing threshold will have a default value.
+
+Column Tables Cache component limit is fixed.
 
 Example of the `memory_controller_config` section with specified shared cache limits:
 
@@ -373,12 +376,16 @@ memory_controller_config:
 The activity components include:
 
 - KQP
+- Column Tables Read Execution
+- Column Tables Compaction
 
 The memory limit for each activity component specifies the maximum amount of memory it can attempt to use. However, to prevent the {{ ydb-short-name }} process from exceeding the soft memory limit, the total consumption of activity components is further constrained by an additional limit known as the activities memory limit. If the total memory usage of the activity components exceeds this limit, any additional memory requests will be denied.
 
 As a result, while the combined individual limits of the activity components might collectively exceed the activities memory limit, each component's individual limit should be less than this overall cap. Additionally, the sum of the minimum memory limits for the cache components, plus the activities memory limit, must be less than the soft memory limit.
 
 There are some other activity components that currently do not have individual memory limits.
+
+Column Tables activity components limits are fixed.
 
 Example of the `memory_controller_config` section with a specified KQP limit:
 
@@ -412,6 +419,9 @@ $Max(shared\_cache\_min\_percent * hard\_limit\_bytes / 100, shared\_cache\_min\
 | `mem_table_min_percent`&nbsp;/<br/>`mem_table_min_bytes` | 1% | Minimum threshold for the MemTable memory limit. |
 | `mem_table_max_percent`&nbsp;/<br/>`mem_table_max_bytes` | 3% | Maximum threshold for the MemTable memory limit. |
 | `query_execution_limit_percent`&nbsp;/<br/>`query_execution_limit_bytes` | 20% | KQP memory limit. |
+| `column_tables_read_execution_limit_percent`&nbsp;/<br/>`column_tables_read_execution_limit_bytes` | 20% | Memory limit for column tables reading operations. |
+| `column_tables_compaction_limit_percent`&nbsp;/<br/>`column_tables_compaction_limit_bytes` | 20% | Memory limit for column tables compaction operations. |
+| `column_tables_cache_limit_percent`&nbsp;/<br/>`column_tables_cache_limit_bytes` | 10% | Memory limit for column tables cache. |
 
 ## blob_storage_config: Static cluster group {#blob-storage-config}
 

@@ -145,7 +145,7 @@ public:
 class TCompactedPortionInfoConstructor: public TPortionInfoConstructor {
 private:
     using TBase = TPortionInfoConstructor;
-    std::optional<TSnapshot> AppearanceSnapshot;
+    YDB_READONLY_DEF(std::optional<TSnapshot>, AppearanceSnapshot);
 
 public:
     using TBase::TBase;

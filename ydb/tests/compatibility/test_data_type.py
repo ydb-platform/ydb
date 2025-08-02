@@ -9,8 +9,13 @@ from ydb.tests.datashard.lib.types_of_variables import pk_types, non_pk_types, c
 
 
 class TestDataType(RestartToAnotherVersionFixture):
+    @pytest.fixture
+    def store_type(self):
+        return "ROW"
+
     @pytest.fixture(autouse=True, scope="function")
-    def setup(self):
+    def setup(self, store_type):
+        self.store_type = store_type
         self.pk_types = []
         self.pk_types.append({"Int64": lambda i: i})
         self.count_table = 1
@@ -30,7 +35,7 @@ class TestDataType(RestartToAnotherVersionFixture):
                     "col_": self.all_types.keys(),
                 }
             )
-            self.table_names.append(f"table_{i}")
+            self.table_names.append(f"table_{i}_{self.store_type.lower()}")
         yield from self.setup_cluster(
             extra_feature_flags={
                 "enable_parameterized_decimal": True,
@@ -127,13 +132,19 @@ class TestDataType(RestartToAnotherVersionFixture):
                     index_columns={},
                     unique="",
                     sync="",
+                    store=self.store_type,
                 )
             )
         with ydb.QuerySessionPool(self.driver) as session_pool:
             for query in querys:
                 session_pool.execute_with_retries(query)
 
+    @pytest.mark.parametrize("store_type", ["ROW", "COLUMN"], indirect=True)
     def test_data_type(self):
+        if any("Decimal" in type_name for type_name in self.all_types.keys()) and self.store_type == "COLUMN":
+            if (min(self.versions) < (25, 1)):
+                pytest.skip("Decimal types are not supported in this version")
+
         self.create_table()
 
         self.write_data()

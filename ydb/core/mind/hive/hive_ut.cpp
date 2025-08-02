@@ -32,6 +32,7 @@
 
 #include <ydb/library/actors/interconnect/interconnect_impl.h>
 
+#include <library/cpp/json/json_reader.h>
 #include <library/cpp/malloc/api/malloc.h>
 #include <ydb/library/actors/core/interconnect.h>
 #include <util/stream/null.h>
@@ -7692,6 +7693,276 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         }
 
         MakeSureTabletIsUp(runtime, tabletId, 0);
+    }
+
+    Y_UNIT_TEST(TestSetDomain) {
+        TTestBasicRuntime runtime(1, false);
+        Setup(runtime, true);
+
+        const ui64 hiveTablet = MakeDefaultHiveID();
+        const ui64 testerTablet = MakeTabletID(false, 1);
+        const TActorId hiveActor = CreateTestBootstrapper(runtime, CreateTestTabletInfo(hiveTablet, TTabletTypes::Hive), &CreateDefaultHive);
+        runtime.EnableScheduleForActor(hiveActor);
+        MakeSureTabletIsUp(runtime, hiveTablet, 0);
+        TActorId sender = runtime.AllocateEdgeActor(0);
+
+        {
+            TDispatchOptions options;
+            options.FinalEvents.emplace_back(TEvLocal::EvSyncTablets);
+            runtime.DispatchEvents(options);
+        }
+
+        THolder<TEvHive::TEvCreateTablet> createTablet = MakeHolder<TEvHive::TEvCreateTablet>(testerTablet, 1, TTabletTypes::Dummy, BINDED_CHANNELS);
+        createTablet->Record.AddAllowedDomains();
+        createTablet->Record.MutableAllowedDomains(0)->SetSchemeShard(TTestTxConfig::SchemeShard);
+        createTablet->Record.MutableAllowedDomains(0)->SetPathId(1);
+        ui64 tablet = SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(createTablet), 0, true);
+
+        MakeSureTabletIsUp(runtime, tablet, 0);
+
+        TString program = TStringBuilder() << "((let result (UpdateRow 'Tablet '('('TabletID (Uint64  '" << tablet << " ))) '('('ObjectDomain))))(return result))";
+        auto mkql = std::make_unique<TEvTablet::TEvLocalMKQL>();
+        mkql->Record.MutableProgram()->MutableProgram()->SetText(program);
+        runtime.SendToPipe(hiveTablet, sender, mkql.release());
+        {
+            TAutoPtr<IEventHandle> handle;
+            runtime.GrabEdgeEvent<TEvTablet::TEvLocalMKQLResponse>(handle);
+        }
+
+        {
+            runtime.Register(CreateTabletKiller(hiveTablet));
+            TDispatchOptions options;
+            options.FinalEvents.emplace_back(TEvLocal::EvSyncTablets);
+            runtime.DispatchEvents(options);
+        }
+
+        TSubDomainKey newDomain(1'000'000, 52);
+
+        {
+            NActorsProto::TRemoteHttpInfo pb;
+            pb.SetMethod(HTTP_METHOD_POST);
+            pb.SetPath("/app");
+            auto* p1 = pb.AddQueryParams();
+            p1->SetKey("TabletID");
+            p1->SetValue(TStringBuilder() << hiveTablet);
+            auto* p2 = pb.AddQueryParams();
+            p2->SetKey("page");
+            p2->SetValue("SetDomain");
+            auto* p3 = pb.AddQueryParams();
+            p3->SetKey("tablet");
+            p3->SetValue(TStringBuilder() << tablet);
+            auto* p4 = pb.AddQueryParams();
+            p4->SetKey("schemeshard");
+            p4->SetValue(TStringBuilder() << newDomain.GetSchemeShard());
+            auto* p5 = pb.AddQueryParams();
+            p5->SetKey("pathid");
+            p5->SetValue(TStringBuilder() << newDomain.GetPathId());
+            runtime.SendToPipe(hiveTablet, sender, new NMon::TEvRemoteHttpInfo(std::move(pb)), 0, GetPipeConfigWithRetries());
+
+            TAutoPtr<IEventHandle> handle;
+            auto resp = runtime.GrabEdgeEventRethrow<NMon::TEvRemoteJsonInfoRes>(handle);
+            Ctest << "Hive response: " << resp->Json << Endl;
+            NJson::TJsonValue value;
+            ReadJsonTree(resp->Json, &value, false);
+            UNIT_ASSERT_VALUES_EQUAL(value["status"].GetStringSafe(), "OK");
+        }
+
+        {
+            auto ev = std::make_unique<TEvHive::TEvRequestHiveNodeStats>();
+            ev->Record.MutableFilterTabletsByObjectDomain()->CopyFrom(newDomain);
+            ev->Record.SetReturnExtendedTabletInfo(true);
+            runtime.SendToPipe(hiveTablet, sender, ev.release(), 0, GetPipeConfigWithRetries());
+            TAutoPtr<IEventHandle> handle;
+            auto resp = runtime.GrabEdgeEventRethrow<TEvHive::TEvResponseHiveNodeStats>(handle);
+            Ctest << "Hive response: " << resp->Record.ShortDebugString() << Endl;
+            UNIT_ASSERT_VALUES_EQUAL(resp->Record.GetNodeStats(0).GetStateStats(0).GetCount(), 1);
+        }
+    }
+
+    Y_UNIT_TEST(TestSetDomainAlready) {
+        TTestBasicRuntime runtime(1, false);
+        Setup(runtime, true);
+
+        const ui64 hiveTablet = MakeDefaultHiveID();
+        const ui64 testerTablet = MakeTabletID(false, 1);
+        const TActorId hiveActor = CreateTestBootstrapper(runtime, CreateTestTabletInfo(hiveTablet, TTabletTypes::Hive), &CreateDefaultHive);
+        runtime.EnableScheduleForActor(hiveActor);
+        MakeSureTabletIsUp(runtime, hiveTablet, 0);
+        TActorId sender = runtime.AllocateEdgeActor(0);
+
+        {
+            TDispatchOptions options;
+            options.FinalEvents.emplace_back(TEvLocal::EvSyncTablets);
+            runtime.DispatchEvents(options);
+        }
+
+        TSubDomainKey newDomain(1'000'000, 52);
+
+        THolder<TEvHive::TEvCreateTablet> createTablet = MakeHolder<TEvHive::TEvCreateTablet>(testerTablet, 1, TTabletTypes::Dummy, BINDED_CHANNELS);
+        createTablet->Record.AddAllowedDomains();
+        createTablet->Record.MutableAllowedDomains(0)->SetSchemeShard(TTestTxConfig::SchemeShard);
+        createTablet->Record.MutableAllowedDomains(0)->SetPathId(1);
+        createTablet->Record.MutableObjectDomain()->SetSchemeShard(newDomain.GetSchemeShard());
+        createTablet->Record.MutableObjectDomain()->SetPathId(newDomain.GetPathId());
+        ui64 tablet = SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(createTablet), 0, true);
+
+        MakeSureTabletIsUp(runtime, tablet, 0);
+
+        {
+            NActorsProto::TRemoteHttpInfo pb;
+            pb.SetMethod(HTTP_METHOD_POST);
+            pb.SetPath("/app");
+            auto* p1 = pb.AddQueryParams();
+            p1->SetKey("TabletID");
+            p1->SetValue(TStringBuilder() << hiveTablet);
+            auto* p2 = pb.AddQueryParams();
+            p2->SetKey("page");
+            p2->SetValue("SetDomain");
+            auto* p3 = pb.AddQueryParams();
+            p3->SetKey("tablet");
+            p3->SetValue(TStringBuilder() << tablet);
+            auto* p4 = pb.AddQueryParams();
+            p4->SetKey("schemeshard");
+            p4->SetValue(TStringBuilder() << newDomain.GetSchemeShard());
+            auto* p5 = pb.AddQueryParams();
+            p5->SetKey("pathid");
+            p5->SetValue(TStringBuilder() << newDomain.GetPathId());
+            runtime.SendToPipe(hiveTablet, sender, new NMon::TEvRemoteHttpInfo(std::move(pb)), 0, GetPipeConfigWithRetries());
+
+            TAutoPtr<IEventHandle> handle;
+            auto resp = runtime.GrabEdgeEventRethrow<NMon::TEvRemoteJsonInfoRes>(handle);
+            Ctest << "Hive response: " << resp->Json << Endl;
+            NJson::TJsonValue value;
+            ReadJsonTree(resp->Json, &value, false);
+            UNIT_ASSERT_VALUES_EQUAL(value["status"].GetStringSafe(), "ALREADY");
+        }
+    }
+
+    Y_UNIT_TEST(TestSetDomainError) {
+        TTestBasicRuntime runtime(1, false);
+        Setup(runtime, true);
+
+        const ui64 hiveTablet = MakeDefaultHiveID();
+        const ui64 testerTablet = MakeTabletID(false, 1);
+        const TActorId hiveActor = CreateTestBootstrapper(runtime, CreateTestTabletInfo(hiveTablet, TTabletTypes::Hive), &CreateDefaultHive);
+        runtime.EnableScheduleForActor(hiveActor);
+        MakeSureTabletIsUp(runtime, hiveTablet, 0);
+        TActorId sender = runtime.AllocateEdgeActor(0);
+
+        {
+            TDispatchOptions options;
+            options.FinalEvents.emplace_back(TEvLocal::EvSyncTablets);
+            runtime.DispatchEvents(options);
+        }
+
+        TSubDomainKey newDomain(1'000'000, 52);
+        TSubDomainKey wrongOldDomain(1'000'000, 64);
+
+        THolder<TEvHive::TEvCreateTablet> createTablet = MakeHolder<TEvHive::TEvCreateTablet>(testerTablet, 1, TTabletTypes::Dummy, BINDED_CHANNELS);
+        createTablet->Record.MutableObjectDomain()->SetSchemeShard(TTestTxConfig::SchemeShard);
+        createTablet->Record.MutableObjectDomain()->SetPathId(1);
+        ui64 tablet = SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(createTablet), 0, true);
+
+        MakeSureTabletIsUp(runtime, tablet, 0);
+
+        {
+            NActorsProto::TRemoteHttpInfo pb;
+            pb.SetMethod(HTTP_METHOD_POST);
+            pb.SetPath("/app");
+            auto* p1 = pb.AddQueryParams();
+            p1->SetKey("TabletID");
+            p1->SetValue(TStringBuilder() << hiveTablet);
+            auto* p2 = pb.AddQueryParams();
+            p2->SetKey("page");
+            p2->SetValue("SetDomain");
+            auto* p3 = pb.AddQueryParams();
+            p3->SetKey("tablet");
+            p3->SetValue(TStringBuilder() << tablet);
+            auto* p4 = pb.AddQueryParams();
+            p4->SetKey("schemeshard");
+            p4->SetValue(TStringBuilder() << newDomain.GetSchemeShard());
+            auto* p5 = pb.AddQueryParams();
+            p5->SetKey("pathid");
+            p5->SetValue(TStringBuilder() << newDomain.GetPathId());
+            auto* p6 = pb.AddQueryParams();
+            p6->SetKey("oldSchemeshard");
+            p6->SetValue(TStringBuilder() << wrongOldDomain.GetSchemeShard());
+            auto* p7 = pb.AddQueryParams();
+            p7->SetKey("oldPathid");
+            p7->SetValue(TStringBuilder() << wrongOldDomain.GetPathId());
+            runtime.SendToPipe(hiveTablet, sender, new NMon::TEvRemoteHttpInfo(std::move(pb)), 0, GetPipeConfigWithRetries());
+
+            TAutoPtr<IEventHandle> handle;
+            auto resp = runtime.GrabEdgeEventRethrow<NMon::TEvRemoteJsonInfoRes>(handle);
+            Ctest << "Hive response: " << resp->Json << Endl;
+            NJson::TJsonValue value;
+            ReadJsonTree(resp->Json, &value, false);
+            UNIT_ASSERT_VALUES_EQUAL(value["status"].GetStringSafe(), "ERROR");
+        }
+
+        {
+            NActorsProto::TRemoteHttpInfo pb;
+            pb.SetMethod(HTTP_METHOD_POST);
+            pb.SetPath("/app");
+            auto* p1 = pb.AddQueryParams();
+            p1->SetKey("TabletID");
+            p1->SetValue(TStringBuilder() << hiveTablet);
+            auto* p2 = pb.AddQueryParams();
+            p2->SetKey("page");
+            p2->SetValue("SetDomain");
+            auto* p3 = pb.AddQueryParams();
+            p3->SetKey("tablet");
+            p3->SetValue(TStringBuilder() << tablet);
+            auto* p4 = pb.AddQueryParams();
+            p4->SetKey("schemeshard");
+            p4->SetValue(TStringBuilder() << newDomain.GetSchemeShard());
+            auto* p5 = pb.AddQueryParams();
+            p5->SetKey("pathid");
+            p5->SetValue(TStringBuilder() << newDomain.GetPathId());
+            auto* p6 = pb.AddQueryParams();
+            p6->SetKey("oldSchemeshard");
+            p6->SetValue(TStringBuilder() << TTestTxConfig::SchemeShard);
+            auto* p7 = pb.AddQueryParams();
+            p7->SetKey("oldPathid");
+            p7->SetValue("1");
+            runtime.SendToPipe(hiveTablet, sender, new NMon::TEvRemoteHttpInfo(std::move(pb)), 0, GetPipeConfigWithRetries());
+
+            TAutoPtr<IEventHandle> handle;
+            auto resp = runtime.GrabEdgeEventRethrow<NMon::TEvRemoteJsonInfoRes>(handle);
+            Ctest << "Hive response: " << resp->Json << Endl;
+            NJson::TJsonValue value;
+            ReadJsonTree(resp->Json, &value, false);
+            UNIT_ASSERT_VALUES_EQUAL(value["status"].GetStringSafe(), "OK");
+        }
+
+        {
+            NActorsProto::TRemoteHttpInfo pb;
+            pb.SetMethod(HTTP_METHOD_POST);
+            pb.SetPath("/app");
+            auto* p1 = pb.AddQueryParams();
+            p1->SetKey("TabletID");
+            p1->SetValue(TStringBuilder() << hiveTablet);
+            auto* p2 = pb.AddQueryParams();
+            p2->SetKey("page");
+            p2->SetValue("SetDomain");
+            auto* p3 = pb.AddQueryParams();
+            p3->SetKey("tablet");
+            p3->SetValue(TStringBuilder() << 0xfa5e7ab1e7); // non-existent id
+            auto* p4 = pb.AddQueryParams();
+            p4->SetKey("schemeshard");
+            p4->SetValue(TStringBuilder() << newDomain.GetSchemeShard());
+            auto* p5 = pb.AddQueryParams();
+            p5->SetKey("pathid");
+            p5->SetValue(TStringBuilder() << newDomain.GetPathId());
+            runtime.SendToPipe(hiveTablet, sender, new NMon::TEvRemoteHttpInfo(std::move(pb)), 0, GetPipeConfigWithRetries());
+
+            TAutoPtr<IEventHandle> handle;
+            auto resp = runtime.GrabEdgeEventRethrow<NMon::TEvRemoteJsonInfoRes>(handle);
+            Ctest << "Hive response: " << resp->Json << Endl;
+            NJson::TJsonValue value;
+            ReadJsonTree(resp->Json, &value, false);
+            UNIT_ASSERT_VALUES_EQUAL(value["status"].GetStringSafe(), "ERROR");
+        }
     }
 
     Y_UNIT_TEST(TestTabletsStartingCounter) {

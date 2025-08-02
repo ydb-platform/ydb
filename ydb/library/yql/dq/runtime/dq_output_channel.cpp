@@ -115,7 +115,7 @@ public:
 
     // Try to split data before push to fulfill ChunkSizeLimit
     void DoPushSafe(NUdf::TUnboxedValue* values, ui32 width) {
-        // We allow to push after HardLimit. Client (TR) should check FillLevel and do not push it rhere is no space
+        // We allow to push after HardLimit. Client (TR) should check FillLevel and do not push if there is no space
 
         if (Finished) {
             return;

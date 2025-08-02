@@ -24,5 +24,5 @@ END()
 
 RECURSE(
     lib
-    large
+    #large skip reason https://github.com/ydb-platform/ydb/issues/16128
 )

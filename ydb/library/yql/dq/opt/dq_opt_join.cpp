@@ -1,3 +1,4 @@
+
 #include "dq_opt_join.h"
 #include "dq_opt_phy.h"
 
@@ -13,6 +14,37 @@ namespace NYql::NDq {
 using namespace NYql::NNodes;
 
 namespace {
+
+TExprNode::TPtr ExpandJoinInput(const TStructExprType& type, TExprNode::TPtr&& arg, TExprContext& ctx, std::vector<std::pair<TString, const TTypeAnnotationNode*>>& convertedItems, TPositionHandle position) {
+    return ctx.Builder(arg->Pos())
+            .Callable("ExpandMap")
+                .Add(0, std::move(arg))
+                .Lambda(1)
+                    .Param("item")
+                    .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+                        auto i = 0U;
+                        for (const auto& item : type.GetItems()) {
+                            parent.Callable(i, "Member")
+                                .Arg(0, "item")
+                                .Atom(1, item->GetName())
+                            .Seal();
+                            i++;
+                        }
+                        for (const auto& convertedItem : convertedItems) {
+                            parent.Callable(i, "StrictCast")
+                                .Callable(0, "Member")
+                                    .Arg(0, "item")
+                                    .Atom(1, convertedItem.first)
+                                .Seal()
+                                .Add(1, ExpandType(position, *convertedItem.second, ctx))
+                            .Seal();
+                            i++;
+                        }
+                        return parent;
+                    })
+                .Seal()
+            .Seal().Build();
+}
 
 struct TJoinInputDesc {
     TJoinInputDesc(TMaybe<THashSet<TStringBuf>> labels, const TExprBase& input,
@@ -497,6 +529,79 @@ TDqJoinBase DqMakePhyMapJoin(const TDqJoin& join, const TExprBase& leftInput, co
             .RightJoinKeyNames(join.RightJoinKeyNames())
             .Done();
     }
+}
+
+TExprNode::TPtr DqBuildBlockHashJoinCore(
+    const TDqJoin& join,
+    TExprNode::TPtr&& leftWideFlow,
+    TExprNode::TPtr&& rightWideFlow,
+    const std::vector<ui32>& leftKeys,
+    const std::vector<ui32>& rightKeys,
+    bool selfJoin,
+    TExprContext& ctx) {
+    
+    const auto pos = join.Pos();
+    
+    // Convert inputs to blocks - wrap with WideToBlocks(FromFlow(...))
+    auto leftInputBlocks = ctx.Builder(pos)
+        .Callable("WideToBlocks")
+            .Callable(0, "FromFlow")
+                .Add(0, std::move(leftWideFlow))
+            .Seal()
+        .Seal()
+        .Build();
+    
+    TExprNode::TPtr rightInputBlocks;
+    if (!selfJoin) {
+        rightInputBlocks = ctx.Builder(pos)
+            .Callable("WideToBlocks")
+                .Callable(0, "FromFlow")
+                    .Add(0, std::move(rightWideFlow))
+                .Seal()
+            .Seal()
+            .Build();
+    }
+
+    // Create BlockHashJoinCore - use GraceSelfJoinCore for selfJoin case
+    TString callableName = selfJoin ? "GraceSelfJoinCore" : "BlockHashJoinCore";
+    auto builder = ctx.Builder(pos).Callable(callableName);
+    
+    builder.Add(0, std::move(leftInputBlocks));
+    if (!selfJoin) {
+        builder.Add(1, std::move(rightInputBlocks));
+    }
+    
+    int shift = selfJoin ? 1 : 2;
+    builder.Add(shift, join.JoinType().Ptr())
+           .List(shift + 1)
+               .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+                   for (ui32 i = 0U; i < leftKeys.size(); ++i) {
+                       parent.Atom(i, ctx.GetIndexAsString(leftKeys[i]), TNodeFlags::Default);
+                   }
+                   return parent;
+               })
+           .Seal()
+           .List(shift + 2)
+               .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+                   for (ui32 i = 0U; i < rightKeys.size(); ++i) {
+                       parent.Atom(i, ctx.GetIndexAsString(rightKeys[i]), TNodeFlags::Default);
+                   }
+                   return parent;
+               })
+           .Seal();
+
+    auto blockJoinCore = builder.Seal().Build();
+
+    // Convert back to wide flow - ToFlow(WideFromBlocks(BlockHashJoinCore))
+    auto result = ctx.Builder(pos)
+        .Callable("ToFlow")
+            .Callable(0, "WideFromBlocks")
+                .Add(0, std::move(blockJoinCore))
+            .Seal()
+        .Seal()
+        .Build();
+
+    return result;
 }
 
 } // namespace
@@ -1151,25 +1256,7 @@ TExprBase DqBuildJoinDict(const TDqJoin& join, TExprContext& ctx) {
 
 namespace {
 
-TExprNode::TPtr ExpandJoinInput(const TStructExprType& type, TExprNode::TPtr&& arg, TExprContext& ctx) {
-    return ctx.Builder(arg->Pos())
-            .Callable("ExpandMap")
-                .Add(0, std::move(arg))
-                .Lambda(1)
-                    .Param("item")
-                    .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
-                        auto i = 0U;
-                        for (const auto& item : type.GetItems()) {
-                            parent.Callable(i++, "Member")
-                                .Arg(0, "item")
-                                .Atom(1, item->GetName())
-                                .Seal();
-                        }
-                        return parent;
-                    })
-                .Seal()
-            .Seal().Build();
-}
+
 
 TExprNode::TPtr SqueezeJoinInputToDict(TExprNode::TPtr&& input, size_t width, const std::vector<ui32>& keys, bool withPayloads, bool multiRow, TExprContext& ctx) {
     YQL_ENSURE(width > 0U && !keys.empty());
@@ -1664,8 +1751,10 @@ TExprBase DqBuildHashJoin(
     TCoArgument leftInputArg{ctx.NewArgument(join.LeftInput().Pos(), "_dq_join_left")};
     TCoArgument rightInputArg{ctx.NewArgument(join.RightInput().Pos(), "_dq_join_right")};
 
-    auto leftWideFlow = ExpandJoinInput(*leftStructType, leftInputArg.Ptr(), ctx);
-    auto rightWideFlow = ExpandJoinInput(*rightStructType, rightInputArg.Ptr(), ctx);
+    // For standard Grace join we don't need type conversions
+    std::vector<std::pair<TString, const TTypeAnnotationNode*>> emptyConversions;
+    auto leftWideFlow = ExpandJoinInput(*leftStructType, leftInputArg.Ptr(), ctx, emptyConversions, join.Pos());
+    auto rightWideFlow = ExpandJoinInput(*rightStructType, rightInputArg.Ptr(), ctx, emptyConversions, join.Pos());
 
     const auto leftFullWidth = leftNames.size();
     const auto rightFullWidth = rightNames.size();
@@ -1687,70 +1776,60 @@ TExprBase DqBuildHashJoin(
         case EHashJoinMode::GraceAndSelf:
         case EHashJoinMode::Grace:
             if (useBlockHashJoin) {
-                // Create TDqPhyBlockHashJoin node with structured inputs - peephole will handle conversion
-                // Pass the original structured inputs, not wide flows
-                hashJoin = Build<TDqPhyBlockHashJoin>(ctx, join.Pos())
-                    .LeftInput(leftInputArg)
-                    .RightInput(rightInputArg)
-                    .LeftLabel(join.LeftLabel())
-                    .RightLabel(join.RightLabel())
-                    .JoinType(join.JoinType())
-                    .JoinKeys(join.JoinKeys())
-                    .LeftJoinKeyNames(join.LeftJoinKeyNames())
-                    .RightJoinKeyNames(join.RightJoinKeyNames())
-                    .Done().Ptr();
-                break;
+                // Use BlockHashJoinCore instead of GraceJoinCore
+                hashJoin = DqBuildBlockHashJoinCore(join, std::move(leftWideFlow), std::move(rightWideFlow), leftKeys, rightKeys, selfJoin, ctx);
+            } else {
+                // Original GraceJoinCore logic
+                hashJoin = ctx.Builder(join.Pos())
+                    .Callable(callableName)
+                        .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+                            parent.Add(0, std::move(leftWideFlow));
+                            if (selfJoin == false) {
+                                parent.Add(1, std::move(rightWideFlow));
+                            }
+                            return parent;
+                        })
+                        .Add(shift, join.JoinType().Ptr())
+                        .List(shift + 1)
+                            .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+                                for (ui32 i = 0U; i < leftKeys.size(); ++i) {
+                                    parent.Atom(i, ctx.GetIndexAsString(leftKeys[i]), TNodeFlags::Default);
+                                }
+                                return parent;
+                            })
+                        .Seal()
+                        .List(shift + 2)
+                            .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+                                for (ui32 i = 0U; i < rightKeys.size(); ++i) {
+                                    parent.Atom(i, ctx.GetIndexAsString(rightKeys[i]), TNodeFlags::Default);
+                                }
+                                return parent;
+                            })
+                        .Seal()
+                        .List(shift + 3)
+                            .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+                                for (ui32 i = 0U; i < leftNames.size(); ++i) {
+                                    parent.Atom(2*i, ctx.GetIndexAsString(i), TNodeFlags::Default);
+                                    parent.Atom(2*i + 1, ctx.GetIndexAsString(i), TNodeFlags::Default);
+                                }
+                                return parent;
+                            })
+                        .Seal()
+                        .List(shift + 4)
+                            .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+                                for (ui32 i = 0U; i < rightNames.size(); ++i) {
+                                    parent.Atom(2*i, ctx.GetIndexAsString(i), TNodeFlags::Default);
+                                    parent.Atom(2*i + 1, ctx.GetIndexAsString(leftNames.size() + i), TNodeFlags::Default);
+                                }
+                                return parent;
+                            })
+                        .Seal()
+                        .List(shift + 5).Add(join.LeftJoinKeyNames().Ref().ChildrenList()).Seal()
+                        .List(shift + 6).Add(join.RightJoinKeyNames().Ref().ChildrenList()).Seal()
+                        .List(shift + 7).Add(std::move(flags)).Seal()
+                    .Seal()
+                    .Build();
             }
-
-            hashJoin = ctx.Builder(join.Pos())
-                .Callable(callableName)
-                    .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
-                        parent.Add(0, std::move(leftWideFlow));
-                        if (selfJoin == false) {
-                            parent.Add(1, std::move(rightWideFlow));
-                        }
-                        return parent;
-                    })
-                    .Add(shift, join.JoinType().Ptr())
-                    .List(shift + 1)
-                        .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
-                            for (ui32 i = 0U; i < leftKeys.size(); ++i) {
-                                parent.Atom(i, ctx.GetIndexAsString(leftKeys[i]), TNodeFlags::Default);
-                            }
-                            return parent;
-                        })
-                    .Seal()
-                    .List(shift + 2)
-                        .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
-                            for (ui32 i = 0U; i < rightKeys.size(); ++i) {
-                                parent.Atom(i, ctx.GetIndexAsString(rightKeys[i]), TNodeFlags::Default);
-                            }
-                            return parent;
-                        })
-                    .Seal()
-                    .List(shift + 3)
-                        .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
-                            for (ui32 i = 0U; i < leftNames.size(); ++i) {
-                                parent.Atom(2*i, ctx.GetIndexAsString(i), TNodeFlags::Default);
-                                parent.Atom(2*i + 1, ctx.GetIndexAsString(i), TNodeFlags::Default);
-                            }
-                            return parent;
-                        })
-                    .Seal()
-                    .List(shift + 4)
-                        .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
-                            for (ui32 i = 0U; i < rightNames.size(); ++i) {
-                                parent.Atom(2*i, ctx.GetIndexAsString(i), TNodeFlags::Default);
-                                parent.Atom(2*i + 1, ctx.GetIndexAsString(leftNames.size() + i), TNodeFlags::Default);
-                            }
-                            return parent;
-                        })
-                    .Seal()
-                    .List(shift + 5).Add(join.LeftJoinKeyNames().Ref().ChildrenList()).Seal()
-                    .List(shift + 6).Add(join.RightJoinKeyNames().Ref().ChildrenList()).Seal()
-                    .List(shift + 7).Add(std::move(flags)).Seal()
-                .Seal()
-                .Build();
             break;
         case EHashJoinMode::Map:
             if (leftKind || joinType == "Inner"sv) {
@@ -1833,7 +1912,7 @@ TExprBase DqBuildHashJoin(
                                     .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
                                         for (ui32 i = 0U; i < rightNames.size(); ++i) {
                                             parent.Atom(2*i, ctx.GetIndexAsString(i), TNodeFlags::Default);
-                                            parent.Atom(2*i + 1, ctx.GetIndexAsString(i + leftNames.size()), TNodeFlags::Default);
+                                            parent.Atom(2*i + 1, ctx.GetIndexAsString(i), TNodeFlags::Default);
                                         }
                                         return parent;
                                     })
@@ -1933,46 +2012,46 @@ TExprBase DqBuildHashJoin(
             ythrow yexception() << "Invalid hash join mode: " << mode;
     }
 
-    if (!useBlockHashJoin) {
-        std::vector<TString> fullColNames;
-        for (const auto& v: leftNames) {
-            if (leftTableName.empty()) {
-                fullColNames.emplace_back(v.first);
-            } else {
-                fullColNames.emplace_back(FullColumnName(leftTableName, v.first));
-            }
+    // Apply NarrowMap to convert wide output to structured output for all join types
+    std::vector<TString> fullColNames;
+    for (const auto& v: leftNames) {
+        if (leftTableName.empty()) {
+            fullColNames.emplace_back(v.first);
+        } else {
+            fullColNames.emplace_back(FullColumnName(leftTableName, v.first));
         }
+    }
 
-        for (const auto& v: rightNames ) {
-            if (rightTableName.empty()) {
-                fullColNames.emplace_back(v.first);
-            } else {
-                fullColNames.emplace_back(FullColumnName(rightTableName, v.first));
-            }
+    for (const auto& v: rightNames ) {
+        if (rightTableName.empty()) {
+            fullColNames.emplace_back(v.first);
+        } else {
+            fullColNames.emplace_back(FullColumnName(rightTableName, v.first));
         }
+    }
 
-        hashJoin = ctx.Builder(join.Pos())
-            .Callable("NarrowMap")
-                .Add(0, std::move(hashJoin))
-                .Lambda(1)
-                    .Params("output", fullColNames.size())
-                    .Callable("AsStruct")
-                        .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
-                            ui32 i = 0U;
-                            for (const auto& colName : fullColNames) {
-                                parent.List(i)
-                                    .Atom(0, colName)
-                                    .Arg(1, "output", i)
-                                .Seal();
-                                i++;
-                            }
-                            return parent;
-                        })
-                    .Seal()
+    // Apply NarrowMap to convert wide output to structured output for all join types
+    hashJoin = ctx.Builder(join.Pos())
+        .Callable("NarrowMap")
+            .Add(0, std::move(hashJoin))
+            .Lambda(1)
+                .Params("output", fullColNames.size())
+                .Callable("AsStruct")
+                    .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+                        ui32 i = 0U;
+                        for (const auto& colName : fullColNames) {
+                            parent.List(i)
+                                .Atom(0, colName)
+                                .Arg(1, "output", i)
+                            .Seal();
+                            i++;
+                        }
+                        return parent;
+                    })
                 .Seal()
             .Seal()
-            .Build();
-    }
+        .Seal()
+        .Build();
 
     // this func add join to the stage and add connection to it. we do this instead of map connection to reduce data network interacting
     auto addJoinToStage =
@@ -2067,4 +2146,7 @@ TExprBase DqBuildHashJoin(
         .Done();
 }
 
+
+
 } // namespace NYql::NDq
+

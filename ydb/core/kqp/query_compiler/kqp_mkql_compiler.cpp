@@ -472,7 +472,29 @@ TIntrusivePtr<IMkqlCallableCompiler> CreateKqlCompiler(const TKqlCompileContext&
                 leftKeyColumns, rightKeyColumns, returnType);
         });
 
-
+    compiler->AddCallable(TDqPhyHashCombine::CallableName(), [&ctx](const TExprNode& node, TMkqlBuildContext& buildCtx) {
+        TDqPhyHashCombine hc(&node);
+        const auto flow = MkqlBuildExpr(*node.Child(0U), buildCtx);
+        i64 memLimit = 0LL;
+        TryFromString<i64>(node.Child(1U)->Content(), memLimit);
+        const auto keyExtractor = [&](TRuntimeNode::TList items) {
+            return MkqlBuildWideLambda(*node.Child(2U), buildCtx, items);
+        };
+        const auto init = [&](TRuntimeNode::TList keys, TRuntimeNode::TList items) {
+            keys.insert(keys.cend(), items.cbegin(), items.cend());
+            return MkqlBuildWideLambda(*node.Child(3U), buildCtx, keys);
+        };
+        const auto update = [&](TRuntimeNode::TList keys, TRuntimeNode::TList items, TRuntimeNode::TList state) {
+            keys.insert(keys.cend(), items.cbegin(), items.cend());
+            keys.insert(keys.cend(), state.cbegin(), state.cend());
+            return MkqlBuildWideLambda(*node.Child(4U), buildCtx, keys);
+        };
+        const auto finish = [&](TRuntimeNode::TList keys, TRuntimeNode::TList state) {
+            keys.insert(keys.cend(), state.cbegin(), state.cend());
+            return MkqlBuildWideLambda(*node.Child(5U), buildCtx, keys);
+        };
+        return ctx.PgmBuilder().DqHashCombine(flow, memLimit, keyExtractor, init, update, finish);
+    });
 
     return compiler;
 }

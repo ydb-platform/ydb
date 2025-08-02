@@ -1273,6 +1273,20 @@ TStatus AnnotateDqBlockHashJoinCore(const TExprNode::TPtr& node, TExprContext& c
     return IGraphTransformer::TStatus(TStatus::Ok);
 }
 
+TStatus AnnotateDqHashCombine(const TExprNode::TPtr& input, TExprContext& ctx) {
+    if (!EnsureArgsCount(*input, 6, ctx)) {
+        return TStatus::Error;
+    }
+
+    if (!input->Child(5)->GetTypeAnn()) {
+        return TStatus::Error;
+    }
+
+    input->SetTypeAnn(ctx.MakeType<TStreamExprType>(input->Child(5)->GetTypeAnn()));
+
+    return TStatus::Ok;
+}
+
 THolder<IGraphTransformer> CreateDqTypeAnnotationTransformer(TTypeAnnotationContext& typesCtx) {
     auto coreTransformer = CreateExtCallableTypeAnnotationTransformer(typesCtx);
 
@@ -1390,6 +1404,10 @@ THolder<IGraphTransformer> CreateDqTypeAnnotationTransformer(TTypeAnnotationCont
 
             if (TDqPhyLength::Match(input.Get())) {
                 return AnnotateDqPhyLength(input, ctx);
+            }
+
+            if (TDqPhyHashCombine::Match(input.Get())) {
+                return AnnotateDqHashCombine(input, ctx);
             }
 
             return coreTransformer->Transform(input, output, ctx);

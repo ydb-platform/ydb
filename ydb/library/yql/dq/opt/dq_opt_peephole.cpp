@@ -875,7 +875,7 @@ TExprBase DqPeepholeRewriteBlockHashJoin(const TExprBase& node, TExprContext& ct
     const TString leftTableLabel(GetTableLabel(blockHashJoin.LeftLabel()));
     const TString rightTableLabel(GetTableLabel(blockHashJoin.RightLabel()));
 
-    // Extract key columns using TDqJoinBase API 
+    // Extract key columns using TDqJoinBase API
     auto [leftKeyColumnNodes, rightKeyColumnNodes] = JoinKeysToAtoms(ctx, blockHashJoin, leftTableLabel, rightTableLabel);
 
     const auto itemTypeLeft = GetSequenceItemType(blockHashJoin.LeftInput(), false, ctx)->Cast<TStructExprType>();
@@ -944,11 +944,11 @@ TExprBase DqPeepholeRewriteBlockHashJoin(const TExprBase& node, TExprContext& ct
     }
 
     // Expand inputs to wide flows (using ExpandJoinInput like GraceJoin)
-    auto leftWideFlow = ExpandJoinInput(*itemTypeLeft, 
-        ctx.NewCallable(blockHashJoin.LeftInput().Pos(), "ToFlow", {blockHashJoin.LeftInput().Ptr()}), 
+    auto leftWideFlow = ExpandJoinInput(*itemTypeLeft,
+        ctx.NewCallable(blockHashJoin.LeftInput().Pos(), "ToFlow", {blockHashJoin.LeftInput().Ptr()}),
         ctx, leftConvertedItems, pos);
-    auto rightWideFlow = ExpandJoinInput(*itemTypeRight, 
-        ctx.NewCallable(blockHashJoin.RightInput().Pos(), "ToFlow", {blockHashJoin.RightInput().Ptr()}), 
+    auto rightWideFlow = ExpandJoinInput(*itemTypeRight,
+        ctx.NewCallable(blockHashJoin.RightInput().Pos(), "ToFlow", {blockHashJoin.RightInput().Ptr()}),
         ctx, rightConvertedItems, pos);
 
     // Convert wide flows to wide streams
@@ -967,7 +967,7 @@ TExprBase DqPeepholeRewriteBlockHashJoin(const TExprBase& node, TExprContext& ct
     // Check if we need to convert inputs to blocks
     // For now, assume most inputs are scalar and need conversion to blocks
     bool needsLeftToBlocks = true;  // TODO: check actual input types
-    bool needsRightToBlocks = true; // TODO: check actual input types 
+    bool needsRightToBlocks = true; // TODO: check actual input types
     bool needsFromBlocks = true;    // TODO: check if output should be scalar
 
     if (needsLeftToBlocks) {
@@ -1033,6 +1033,40 @@ TExprBase DqPeepholeRewriteBlockHashJoin(const TExprBase& node, TExprContext& ct
         .Build();
 
     return TExprBase(result);
+}
+
+NNodes::TExprBase DqPeepholeRewriteWideCombiner([[maybe_unused]] const NNodes::TExprBase& node, [[maybe_unused]]  TExprContext& ctx) {
+    if (!node.Maybe<TCoWideCombiner>()) {
+        return node;
+    }
+    const auto wideCombiner = node.Cast<TCoWideCombiner>();
+    i64 memLimit = 0;
+    const bool withLimit = TryFromString<i64>(wideCombiner.MemLimit().Value(), memLimit);
+    if (!withLimit) {
+        return node;
+    }
+
+    auto cloneLambda = [&](const auto& lambdaStub) {
+        return lambdaStub.Ptr(); // we could do a deep copy via ctx.DeepCopyLambda(lambdaStub.Ref()) but we would lose types and constraints
+    };
+
+    auto inputFromFlow = NNodes::TExprBase(ctx.Builder(node.Pos()).Callable("FromFlow").Add(0, wideCombiner.Input().Ptr()).Seal().Build());
+    auto dqPhyCombine = Build<TDqPhyHashCombine>(ctx, node.Pos())
+        .Input(inputFromFlow)
+        .MemLimit(wideCombiner.MemLimit())
+        .KeyExtractor(cloneLambda(wideCombiner.KeyExtractor()))
+        .InitHandler(cloneLambda(wideCombiner.InitHandler()))
+        .UpdateHandler(cloneLambda(wideCombiner.UpdateHandler()))
+        .FinishHandler(cloneLambda(wideCombiner.FinishHandler()))
+    .Done();
+
+    return NNodes::TExprBase(
+        ctx.Builder(node.Pos())
+            .Callable("ToFlow")
+                .Add(0, dqPhyCombine.Ptr())
+            .Seal()
+            .Build()
+    );
 }
 
 } // namespace NYql::NDq

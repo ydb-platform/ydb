@@ -89,7 +89,7 @@ TWritePortionsToMerge::TWritePortionsToMerge(
         i.GetPortionConstructor().MutablePortionConstructor().SetPortionId(++idx);
         i.GetPortionConstructor().MutablePortionConstructor().MutableMeta().SetCompactionLevel(0);
         i.RegisterFakeBlobIds();
-        i.FinalizePortionConstructor();
+        i.FinalizePortionConstructor(TSnapshot::Zero());
     }
 }
 

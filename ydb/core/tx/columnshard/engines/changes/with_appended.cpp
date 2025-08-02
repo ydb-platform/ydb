@@ -85,9 +85,9 @@ void TChangesWithAppend::DoCompile(TFinalizationContext& context) {
     }
 }
 
-void TChangesWithAppend::DoOnAfterCompile() {
+void TChangesWithAppend::DoOnAfterCompile(const TFinalizationContext& context) {
     for (auto&& i : AppendedPortions) {
-        i.FinalizePortionConstructor();
+        i.FinalizePortionConstructor(context.GetSnapshot());
     }
 }
 

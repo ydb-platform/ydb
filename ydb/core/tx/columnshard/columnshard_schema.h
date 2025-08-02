@@ -876,6 +876,10 @@ private:
     YDB_READONLY_DEF(std::optional<NOlap::TSnapshot>, DeprecatedMinSnapshot);
 
 public:
+    TPortionAddress GetAddress() const {
+        return TPortionAddress(PathId, PortionId);
+    }
+
     template <class TSource>
     TPortionLoadContext(const TSource& rowset) {
         PathId = TInternalPathId::FromRawValue(rowset.template GetValue<NColumnShard::Schema::IndexPortions::PathId>());

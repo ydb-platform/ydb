@@ -77,7 +77,7 @@ bool TPartition::ExecRequestForCompaction(TWriteMsg& p, TProcessParametersBase& 
     WriteTimestampEstimate = p.Msg.WriteTimestamp > 0 ? TInstant::MilliSeconds(p.Msg.WriteTimestamp) : WriteTimestamp;
     TClientBlob blob(p.Msg.SourceId, p.Msg.SeqNo, std::move(p.Msg.Data), std::move(partData), WriteTimestampEstimate,
                         TInstant::MilliSeconds(p.Msg.CreateTimestamp == 0 ? curOffset : p.Msg.CreateTimestamp),
-                        p.Msg.UncompressedSize, p.Msg.PartitionKey, p.Msg.ExplicitHashKey); //remove curOffset when LB will report CTime
+                        p.Msg.UncompressedSize, p.Msg.PartitionKey, p.Msg.ExplicitHashKey, p.Msg.MessageKey); //remove curOffset when LB will report CTime
 
     bool lastBlobPart = blob.IsLastPart();
 
@@ -296,6 +296,7 @@ void TPartition::BlobsForCompactionWereRead(const TVector<NPQ::TRequestedBlob>& 
                     .UncompressedSize = blob.UncompressedSize,
                     .PartitionKey = blob.PartitionKey,
                     .ExplicitHashKey = blob.ExplicitHashKey,
+                    .MessageKey = blob.MessageKey,
                     .External = false,
                     .IgnoreQuotaDeadline = true,
                     .HeartbeatVersion = std::nullopt,

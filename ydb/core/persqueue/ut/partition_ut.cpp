@@ -410,6 +410,7 @@ TPartition* TPartitionFixture::CreatePartitionActor(const TPartitionId& id,
                                      false,
                                      1,
                                      quoterId,
+                                     Ctx->Runtime->GetAppData(0).FeatureFlags,
                                      newPartition,
                                      std::move(txs));
     ActorId = Ctx->Runtime->Register(actor);
@@ -873,7 +874,7 @@ void TPartitionFixture::WaitBlobReadRequest()
     UNIT_ASSERT_VALUES_EQUAL(event->Record.CmdReadSize(), 1);
 }
 
-TBatch CreateBatch(size_t count) {
+TBatch CreateBatch(size_t count, bool saveMessageKey = false) {
     TBatch batch;
 
     for (size_t i = 0; i < count; ++i) {
@@ -881,11 +882,11 @@ TBatch CreateBatch(size_t count) {
 
         TString data = TStringBuilder() << "message-data-" << i;
         TClientBlob blob("source-id-1", 13 + i /* seqNo */, std::move(data), {} /* partData */, TInstant::Now() - TDuration::MilliSeconds(10) /* writeTimestamp */,
-        TInstant::Now() - TDuration::MilliSeconds(50) /* createTimestamp */, data.size(), "partitionKey", "explicitHashKey");
+        TInstant::Now() - TDuration::MilliSeconds(50) /* createTimestamp */, data.size(), "partitionKey", "explicitHashKey", "messageKey");
         batch.AddBlob(blob);
     }
 
-    batch.Pack();
+    batch.Pack(saveMessageKey);
 
     return batch;
 }
@@ -980,7 +981,7 @@ void TPartitionFixture::SendDataRangeResponse(ui32 partitionId,
 
     pair->SetStatus(NKikimrProto::OK);
     pair->SetKey(key.Data(), key.Size());
-    pair->SetValueSize(684);
+    pair->SetValueSize(686);
     pair->SetCreationUnixTime(TInstant::Now().Seconds());
 
     Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
@@ -3137,7 +3138,7 @@ Y_UNIT_TEST_F(ConflictingSrcIdForTxWithHead, TPartitionTxTestHelper) {
     TTxBatchingTestParams params {.WriterSessions{"src1"}, .EndOffset=1};
     Init(std::move(params));
 
-    NPQ::TClientBlob clientBlob("src1", 10, "valuevalue", TMaybe<TPartData>(), TInstant::MilliSeconds(1), TInstant::MilliSeconds(1), 0, "123", "123");
+    NPQ::TClientBlob clientBlob("src1", 10, "valuevalue", TMaybe<TPartData>(), TInstant::MilliSeconds(1), TInstant::MilliSeconds(1), 0, "123", "123", "1234");
 
     auto tx1 = MakeAndSendWriteTx({{"src1", {1, 10}}}, std::move(clientBlob));
     AddAndSendNormalWrite("src1", 8, 8);

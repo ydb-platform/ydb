@@ -27,7 +27,7 @@ using namespace NSchemeCache;
 using namespace NPQ;
 
 template <>
-void FillChunkDataFromReq(NKikimrPQClient::TDataChunk& proto, const NPersQueue::TWriteRequest::TData& data) {
+void FillChunkDataFromReq(NKikimrPQClient::TDataChunk& proto, TString&, const NPersQueue::TWriteRequest::TData& data) {
     proto.SetData(data.GetData());
     proto.SetSeqNo(data.GetSeqNo());
     proto.SetCreateTime(data.GetCreateTimeMs());
@@ -737,9 +737,10 @@ void TWriteSessionActor::GenerateNextWriteRequest(const TActorContext& ctx) {
     Writes.clear();
 
     i64 diff = 0;
+    TString tmp;
     auto addData = [&](const TWriteRequest::TData& data) {
         auto w = request.MutablePartitionRequest()->AddCmdWrite();
-        w->SetData(GetSerializedData(InitMeta, data));
+        w->SetData(GetSerializedData(InitMeta, tmp, data));
         w->SetClientDC(ClientDC);
         w->SetSeqNo(data.GetSeqNo());
         w->SetSourceId(NPQ::NSourceIdEncoding::EncodeSimple(SourceId)); // EncodeSimple is needed for compatibility with LB

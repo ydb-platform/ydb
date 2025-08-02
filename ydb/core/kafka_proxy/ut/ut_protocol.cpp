@@ -1036,6 +1036,9 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             auto data = record.Value.value();
             auto dataStr = TString(data.data(), data.size());
             UNIT_ASSERT_VALUES_EQUAL(dataStr, value);
+            auto key = record.Key.value();
+            auto keyStr = TString(key.data(), key.size());
+            UNIT_ASSERT_VALUES_EQUAL(keyStr, key);
 
             auto headerKey = record.Headers[0].Key.value();
             auto headerKeyStr = TString(headerKey.data(), headerKey.size());
@@ -3785,5 +3788,46 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         auto offsetFetchResponse = kafkaClient.OffsetFetch(consumerName, topicsToPartitionsToFetch);
         UNIT_ASSERT_VALUES_EQUAL(offsetFetchResponse->ErrorCode, EKafkaErrors::NONE_ERROR);
         UNIT_ASSERT_VALUES_EQUAL(offsetFetchResponse->Groups[0].Topics[0].Partitions[0].CommittedOffset, 0);
+    }
+
+    Y_UNIT_TEST(ReadMetadataFromTopicProto) {
+        TInsecureTestServer testServer("1", false, true);
+        TKafkaTestClient kafkaClient(testServer.Port);
+        NYdb::NTopic::TTopicClient pqClient(*testServer.Driver);
+        // use random values to avoid parallel execution problems
+        TString topicName = TStringBuilder()
+                                << "topic-" << RandomNumber<ui64>();
+        TString consumerName = "my-consumer";
+
+        // create input and output topics
+        CreateTopic(pqClient, topicName, 3, {consumerName});
+
+        // produce data to input topic (to commit offsets in further steps)
+        NYdb::NTopic::TWriteSessionSettings wsSettings;
+        wsSettings.Path(topicName).ProducerId("12345").PartitionId(0);
+        auto writer = pqClient.CreateSimpleBlockingWriteSession(wsSettings);
+        NYdb::NTopic::TWriteMessage msg1("Data-12345");
+        NYdb::NTopic::TWriteMessage msg2("Data-67890");
+        msg1.MessageMeta({{"__key", "key1"}});
+        msg2.MessageMeta({{"__key", "key2"}});
+        writer->Write(std::move(msg1));
+        writer->Write(std::move(msg2));
+        writer->Close();
+
+        // validate data is accessible in target topic
+        auto fetchResponse1 = kafkaClient.Fetch({{topicName, {0}}});
+        UNIT_ASSERT_VALUES_EQUAL(
+            fetchResponse1->ErrorCode,
+            static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
+        UNIT_ASSERT_VALUES_EQUAL(fetchResponse1->Responses[0].Partitions.size(), 1);
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            fetchResponse1->Responses[0].Partitions[0].Records->Records.size(),
+            2);
+        auto record1 = fetchResponse1->Responses[0].Partitions[0].Records->Records[0];
+        UNIT_ASSERT_VALUES_EQUAL(TString(record1.Key.value().data(), record1.Key.value().size()), "key1");
+
+        auto record2 = fetchResponse1->Responses[0].Partitions[0].Records->Records[1];
+        UNIT_ASSERT_VALUES_EQUAL(TString(record2.Key.value().data(), record2.Key.value().size()), "key2");
     }
 } // Y_UNIT_TEST_SUITE(KafkaProtocol)

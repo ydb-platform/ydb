@@ -79,7 +79,7 @@ void ISyncPoint::AddSource(const std::shared_ptr<IDataSource>& source) {
     if (!LastSourceIdx) {
         LastSourceIdx = source->GetSourceIdx();
     } else {
-        AFL_VERIFY(*LastSourceIdx < source->GetSourceIdx());
+        AFL_VERIFY(*LastSourceIdx < source->GetSourceIdx())("idx_last", *LastSourceIdx)("idx_new", source->GetSourceIdx());
     }
     LastSourceIdx = source->GetSourceIdx();
     SourcesSequentially.emplace_back(source);

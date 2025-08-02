@@ -206,5 +206,6 @@ message TFeatureFlags {
     optional bool EnableNodeBrokerDeltaProtocol = 185 [default = false];
     optional bool EnableAccessToIndexImplTables = 186 [default = false];
     optional bool EnableSharedMetadataAccessorCache = 188 [default = true, deprecated = true];
+    optional bool EnableCSSchemasCollapsing = 192 [default = false];
     optional bool EnableMoveColumnTable = 193 [default = false];
 }

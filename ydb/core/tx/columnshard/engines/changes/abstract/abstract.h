@@ -240,10 +240,10 @@ class TGranuleMeta;
 
 class TDataAccessorsInitializationContext {
 private:
-    YDB_READONLY_DEF(std::shared_ptr<TVersionedIndex>, VersionedIndex);
+    YDB_READONLY_DEF(std::shared_ptr<const TVersionedIndex>, VersionedIndex);
 
 public:
-    TDataAccessorsInitializationContext(const std::shared_ptr<TVersionedIndex>& versionedIndex)
+    TDataAccessorsInitializationContext(const std::shared_ptr<const TVersionedIndex>& versionedIndex)
         : VersionedIndex(versionedIndex) {
         AFL_VERIFY(VersionedIndex);
     }

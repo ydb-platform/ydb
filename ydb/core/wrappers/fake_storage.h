@@ -72,6 +72,11 @@ private:
 public:
     TFakeExternalStorage() = default;
 
+    void Clear() {
+        TGuard<TMutex> g(Mutex);
+        BucketStorages.clear();
+    }
+
     static i64 GetWritesCount() {
         return TFakeBucketStorage::GetWritesCount();
     }

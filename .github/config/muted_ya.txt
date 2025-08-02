@@ -447,4 +447,5 @@ ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generate
 ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestTxOptions]
 ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestXactMultiStmt]
 ydb/tests/stress/mixedpy test_mixed.py.TestYdbWorkload.test[column]
+ydb/tests/stress/topic/tests test_workload_topic.py.TestYdbTopicWorkload.test
 ydb/tools/stress_tool/ut TDeviceTestTool.PDiskTestLogWrite

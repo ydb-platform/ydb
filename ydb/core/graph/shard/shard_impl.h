@@ -42,8 +42,6 @@ public:
 //protected:
     std::vector<TAggregateSettings> AggregateSettings = { // proper ordering is important
         {.PeriodToStart = TDuration::Days(7)}, // clear
-        {.PeriodToStart = TDuration::Hours(24), .SampleSize = TDuration::Seconds(60)}, // downsample
-        {.PeriodToStart = TDuration::Hours(1), .SampleSize = TDuration::Seconds(10)} // downsample
     };
 
     void ExecuteTxInitSchema();

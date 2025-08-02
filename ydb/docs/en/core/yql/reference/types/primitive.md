@@ -17,9 +17,9 @@ The terms "simple", "primitive", and "elementary" data types are used synonymous
 | `Uint16` | An unsigned integer.<br/>Acceptable values: from 0 to 2<sup>16</sup>–1. | — |
 | `Uint32` | An unsigned integer.<br/>Acceptable values: from 0 to 2<sup>32</sup>–1. | — |
 | `Uint64` | An unsigned integer.<br/>Acceptable values: from 0 to 2<sup>64</sup>–1. | — |
-| `Float` | A real number with variable precision, 4 bytes in size. | {% if feature_map_tables %}Can't be used in the primary key{% endif %} |
-| `Double` | A real number with variable precision, 8 bytes in size. | {% if feature_map_tables %}Can't be used in the primary key{% endif %} |
-| `Decimal(precision, scale)` | A real number with the specified precision, 16 bytes in size. Precision is the maximum total number of decimal digits stored and can range from 1 to 35. Scale is the maximum number of decimal digits stored to the right of the decimal point and can range from 0 to the precision value. | {% if feature_map_tables %}Can't be used in the primary key{% endif %} |
+| `Float` | A real number with variable precision, 4 bytes in size. | {% if feature_map_tables %}Can't be used in the primary key or in columns that form the key of a secondary index{% endif %} |
+| `Double` | A real number with variable precision, 8 bytes in size. | {% if feature_map_tables %}Can't be used in the primary key or in columns that form the key of a secondary index{% endif %} |
+| `Decimal(precision, scale)` | A real number with the specified precision, 16 bytes in size. Precision is the maximum total number of decimal digits stored and can range from 1 to 35. Scale is the maximum number of decimal digits stored to the right of the decimal point and can range from 0 to the precision value. | {% if feature_map_tables %}Can't be used in the primary key or in columns that form the key of a secondary index{% endif %} |
 {% if feature_map_tables %}
 |`DyNumber` | A binary representation of a real number with an accuracy of up to 38 digits.<br/>Acceptable values: positive numbers from 1×10<sup>-130</sup> up to 1×10<sup>126</sup>–1, negative numbers from -1×10<sup>126</sup>–1 to -1×10<sup>-130</sup>, and 0.<br/>Compatible with the `Number` type in AWS DynamoDB. It's not recommended for {{ backend_name_lower }}-native applications. | — |
 {% endif %}
@@ -31,9 +31,9 @@ The terms "simple", "primitive", and "elementary" data types are used synonymous
 | ----- | ----- | ----- |
 | `String` | A string that can contain any binary data | — |
 | `Utf8` | Text encoded in [UTF-8](https://en.wikipedia.org/wiki/UTF-8) | — |
-| `Json` | [JSON](https://en.wikipedia.org/wiki/JSON) represented as text | Doesn't support matching{% if feature_map_tables %}, can't be used in the primary key{% endif %} |
-| `JsonDocument` | [JSON](https://en.wikipedia.org/wiki/JSON) in an indexed binary representation | Doesn't support matching{% if feature_map_tables %}, can't be used in the primary key{% endif %} |
-| `Yson` | [YSON](../udf/list/yson.md) in a textual or binary representation. | Doesn't support matching{% if feature_map_tables %}, can't be used in the primary key{% endif %} |
+| `Json` | [JSON](https://en.wikipedia.org/wiki/JSON) represented as text | Doesn't support matching{% if feature_map_tables %}, can't be used in the primary key or in columns that form the key of a secondary index{% endif %} |
+| `JsonDocument` | [JSON](https://en.wikipedia.org/wiki/JSON) in an indexed binary representation | Doesn't support matching{% if feature_map_tables %}, can't be used in the primary key or in columns that form the key of a secondary index{% endif %} |
+| `Yson` | [YSON](../udf/list/yson.md) in a textual or binary representation. | Doesn't support matching{% if feature_map_tables %}, can't be used in the primary key or in columns that form the key of a secondary index{% endif %} |
 | `Uuid` | Universally unique identifier [UUID](https://tools.ietf.org/html/rfc4122) | — |
 
 {% note info "Cell size restrictions" %}
@@ -63,7 +63,7 @@ To store numbers (JSON Number) in `JsonDocument`, as well as for arithmetic oper
 | `Date` | Date, precision to the day | Range of values for all time types except `Interval`: From 00:00 01.01.1970 to 00:00 01.01.2106. Internal `Date` representation: Unsigned 16-bit integer |
 | `Datetime` | Date/time, precision to the second | Internal representation: Unsigned 32-bit integer |
 | `Timestamp` | Date/time, precision to the microsecond | Internal representation: Unsigned 64-bit integer |
-| `Interval` | Time interval (signed), precision to microseconds | Value range: From -136 years to +136 years. Internal representation: Signed 64-bit integer. {% if feature_map_tables %}Can't be used in the primary key{% endif %} |
+| `Interval` | Time interval (signed), precision to microseconds | Value range: From -136 years to +136 years. Internal representation: Signed 64-bit integer. {% if feature_map_tables %}Can't be used in the primary key or in columns that form the key of a secondary index{% endif %} |
 | `TzDate` | Date with time zone label, precision to the day | Not supported in table columns |
 | `TzDateTime` | Date/time with time zone label, precision to the second | Not supported in table columns |
 | `TzTimestamp` | Date/time with time zone label, precision to the microsecond | Not supported in table columns |

@@ -21,7 +21,7 @@ TConstructor::TConstructor(
     std::vector<ISnapshotSchema::TPtr> current;
     std::deque<TDataSourceConstructor> constructors;
     for (auto&& i : schemasAll) {
-        if (current.size() && current.back()->GetPresetId() != i->GetPresetId()) {
+        if (current.size() && current.back()->GetIndexInfo().GetPresetId() != i->GetIndexInfo().GetPresetId()) {
             constructors.emplace_back(TabletId, std::move(current));
             if (!pkFilter->IsUsed(constructors.back().GetStart(), constructors.back().GetFinish())) {
                 constructors.pop_back();

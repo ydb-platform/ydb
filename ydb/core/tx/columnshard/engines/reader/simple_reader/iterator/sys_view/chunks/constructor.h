@@ -20,8 +20,8 @@ private:
 public:
     TPortionDataConstructor(const NColumnShard::TUnifiedPathId& pathId, const ui64 tabletId, const TPortionInfo::TConstPtr& portion,
         const ISnapshotSchema::TPtr& schema)
-        : TBase(tabletId, Portion->GetPortionId(), TSchemaAdapter::GetPKSimpleRow(PathId, TabletId, Portion->GetPortionId(), 0, 0),
-              TSchemaAdapter::GetPKSimpleRow(PathId, TabletId, Portion->GetPortionId(), Max<ui32>(), Max<ui32>()))
+        : TBase(tabletId, portion->GetPortionId(), TSchemaAdapter::GetPKSimpleRow(pathId, tabletId, portion->GetPortionId(), 0, 0),
+              TSchemaAdapter::GetPKSimpleRow(pathId, tabletId, portion->GetPortionId(), Max<ui32>(), Max<ui32>()))
         , PathId(pathId)
         , Portion(portion)
         , Schema(schema) {
@@ -32,7 +32,7 @@ public:
     std::shared_ptr<NReader::NSimple::IDataSource> Construct(const std::shared_ptr<NCommon::TSpecialReadContext>& context);
 };
 
-class TConstructor: public NAbstract::TSourcesConstructorWithAccessors<TPortionDataConstructor> {
+class TConstructor: public NCommon::TSourcesConstructorWithAccessors<TPortionDataConstructor> {
 private:
     using TBase = NCommon::TSourcesConstructorWithAccessors<TPortionDataConstructor>;
     ui32 CurrentSourceIdx = 0;

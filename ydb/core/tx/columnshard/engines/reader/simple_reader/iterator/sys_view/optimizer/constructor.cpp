@@ -9,13 +9,13 @@ TConstructor::TConstructor(const NOlap::IPathIdTranslator& pathIdTranslator, con
     const ERequestSorting sorting)
     : TBase(sorting, tabletId) {
     const TColumnEngineForLogs* engineImpl = dynamic_cast<const TColumnEngineForLogs*>(&engine);
-    std::vector<TDataSourceConstructor> constructors;
+    std::deque<TDataSourceConstructor> constructors;
     for (auto&& i : engineImpl->GetTables()) {
         if (internalPathId && *internalPathId != i.first) {
             continue;
         }
-        constructors.emplace_back(pathIdTranslator, TabletId, i.second);
-        if (!pkFilter->IsUsed(constructors.back().GetStart(), Constructors.back().GetFinish())) {
+        constructors.emplace_back(pathIdTranslator.ResolveSchemeShardLocalPathIdVerified(i.first), TabletId, i.second);
+        if (!pkFilter->IsUsed(constructors.back().GetStart(), constructors.back().GetFinish())) {
             constructors.pop_back();
         }
     }

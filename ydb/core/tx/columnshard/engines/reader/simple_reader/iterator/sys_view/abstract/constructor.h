@@ -1,18 +1,19 @@
 #pragma once
 #include "source.h"
 
+#include <ydb/core/tx/columnshard/engines/reader/common_reader/common/accessors_ordering.h>
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/constructor/read_metadata.h>
 #include <ydb/core/tx/columnshard/engines/reader/simple_reader/iterator/context.h>
 #include <ydb/core/tx/columnshard/engines/reader/simple_reader/iterator/source.h>
 
 namespace NKikimr::NOlap::NReader::NSimple::NSysView::NAbstract {
 
-class TDataSourceConstructor: public ICursorEntity {
+class TDataSourceConstructor: public ICursorEntity, public TMoveOnly {
 private:
-    const ui64 TabletId;
+    ui64 TabletId;
+    ui32 SourceId = 0;
     NArrow::TSimpleRow Start;
     NArrow::TSimpleRow Finish;
-    const ui32 SourceId = 0;
     ui32 SourceIdx = 0;
     bool SourceIdxInitialized = false;
 
@@ -75,7 +76,7 @@ public:
             AFL_VERIFY(Sorting != ERequestSorting::NONE);
         }
 
-        bool operator()(const TPortionDataConstructor& l, const TPortionDataConstructor& r) const {
+        bool operator()(const TDataSourceConstructor& l, const TDataSourceConstructor& r) const {
             if (Sorting == ERequestSorting::DESC) {
                 return l.Finish < r.Finish;
             } else {
@@ -104,15 +105,15 @@ private:
         constructor.SetIndex(CurrentSourceIdx++);
         return constructor.Construct(context);
     }
-    virtual void DoInitCursor(const std::shared_ptr<IScanCursor>& /*cursor*/) override {
+    virtual void DoInitCursor(const std::shared_ptr<IScanCursor>& cursor) override {
         while (Constructors.GetSize()) {
             bool usage = false;
             if (!cursor->CheckEntityIsBorder(Constructors.MutableNextObject(), usage)) {
-                Constructors.DropNextConstructor();
+                Constructors.PopFront();
                 continue;
             }
             AFL_VERIFY(!usage);
-            Constructors.DropNextConstructor();
+            Constructors.PopFront();
             break;
         }
     }
@@ -121,14 +122,13 @@ private:
     }
 
 protected:
-    TOrderedObjects<TDataSourceConstructorImpl> Constructors;
+    NCommon::TOrderedObjects<TDataSourceConstructorImpl> Constructors;
     const ui64 TabletId;
 
 public:
     TConstructor(const ERequestSorting sorting, const ui64 tabletId)
         : Constructors(sorting)
-        , TabletId(tabletId)
-    {
+        , TabletId(tabletId) {
     }
 };
 

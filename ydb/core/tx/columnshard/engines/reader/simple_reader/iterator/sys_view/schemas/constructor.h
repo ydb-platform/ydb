@@ -15,16 +15,17 @@ private:
 
 public:
     TDataSourceConstructor(const ui64 tabletId, std::vector<ISnapshotSchema::TPtr>&& schemas)
-        : TBase(tabletId, Schemas.front()->GetIndexInfo().GetPresetId(),
-              TSchemaAdapter::GetPKSimpleRow(TabletId, Schemas.front()->GetIndexInfo().GetPresetId(), Schemas.front()->GetVersion()),
-              TSchemaAdapter::GetPKSimpleRow(TabletId, Schemas.back()->GetIndexInfo().GetPresetId(), Schemas.back()->GetVersion())) {
+        : TBase(tabletId, schemas.front()->GetIndexInfo().GetPresetId(),
+              TSchemaAdapter::GetPKSimpleRow(tabletId, schemas.front()->GetIndexInfo().GetPresetId(), schemas.front()->GetVersion()),
+              TSchemaAdapter::GetPKSimpleRow(tabletId, schemas.back()->GetIndexInfo().GetPresetId(), schemas.back()->GetVersion()))
+        , Schemas(std::move(schemas))
+    {
         if (Schemas.size() > 1) {
-            AFL_VERIFY(GetStart() < GetFinish())("start", Start.DebugString())("finish", Finish.DebugString());
+            AFL_VERIFY(GetStart() < GetFinish())("start", GetStart().DebugString())("finish", GetFinish().DebugString());
         }
     }
 
     std::shared_ptr<NReader::NSimple::IDataSource> Construct(const std::shared_ptr<NReader::NCommon::TSpecialReadContext>& context) {
-        AFL_VERIFY(SourceId);
         return std::make_shared<TSourceData>(
             GetSourceId(), GetSourceIdx(), GetTabletId(), std::move(Schemas), ExtractStart(), ExtractFinish(), context);
     }

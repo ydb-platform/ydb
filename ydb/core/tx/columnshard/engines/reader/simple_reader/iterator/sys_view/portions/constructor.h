@@ -16,8 +16,8 @@ private:
 
 public:
     TDataSourceConstructor(const NColumnShard::TUnifiedPathId& pathId, const ui64 tabletId, const std::vector<TPortionInfo::TConstPtr>& portions)
-        : TBase(tabletId, Portions.back()->GetPortionId(), TSchemaAdapter::GetPKSimpleRow(PathId, TabletId, Portions.front()->GetPortionId()),
-              TSchemaAdapter::GetPKSimpleRow(PathId, TabletId, Portions.back()->GetPortionId()))
+        : TBase(tabletId, portions.back()->GetPortionId(), TSchemaAdapter::GetPKSimpleRow(pathId, tabletId, portions.front()->GetPortionId()),
+              TSchemaAdapter::GetPKSimpleRow(pathId, tabletId, portions.back()->GetPortionId()))
         , PathId(pathId)
         , Portions(portions) {
     }

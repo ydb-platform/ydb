@@ -64,7 +64,7 @@
 
 ## Таблицы {#tables}
 
-Каждой таблице в базе данных также соответствует одноименная директория в иерархии директорий файловой структуры, в которой находятся:
+Каждой таблице в базе данных соответствует одноимённая директория в файловой структуре, в которой находятся:
 
 - Файл `scheme.pb`, содержащий информацию о структуре таблицы и её параметрах в формате [text protobuf](https://developers.google.com/protocol-buffers/docs/reference/cpp/google.protobuf.text_format)
 - Файл `permissions.pb`, содержащий информацию об ACL таблицы и её владельце в формате [text protobuf](https://developers.google.com/protocol-buffers/docs/reference/cpp/google.protobuf.text_format)
@@ -73,13 +73,22 @@
   - Файл `changefeed_description.pb`, содержащий информацию о потоке изменений в формате [text protobuf](https://developers.google.com/protocol-buffers/docs/reference/cpp/google.protobuf.text_format)
   - Файл `topic_description.pb`, содержащий информацию о нижележащем топике в формате [text protobuf](https://developers.google.com/protocol-buffers/docs/reference/cpp/google.protobuf.text_format)
 
-## Файлы с данными {#datafiles}
+### Файлы с данными {#datafiles}
 
 Формат файлов с данными - `.csv`, одна строка соответствует одной записи в таблице, без строки с заголовками колонок. Для строк применяется  представление в urlencoded формате. Например, строка файла для таблицы с колонками uint64 и utf8, содержащая число 1 и строку "Привет" соответственно, выглядит таким образом:
 
 ```text
 1,"%D0%9F%D1%80%D0%B8%D0%B2%D0%B5%D1%82"
 ```
+
+## Представления (views) {#views}
+
+Каждому [представлению](../../../../concepts/datamodel/view.md) в базе данных соответствует одноимённая директория в файловой структуре, в которой находятся:
+
+- Файл `create_view.sql`, содержащий определение представления в виде текста YQL-запроса [CREATE VIEW](../../../../yql/reference/syntax/create-view.md)
+- Файл `permissions.pb`, содержащий информацию об ACL представления и его владельце в формате [text protobuf](https://developers.google.com/protocol-buffers/docs/reference/cpp/google.protobuf.text_format)
+
+Взаимное расположение представлений и объектов, на которые они ссылаются, сохраняется при восстановлении. Подробнее читайте в статье [{#T}](../view-backup.md).
 
 ## Контрольные суммы {#checksums}
 

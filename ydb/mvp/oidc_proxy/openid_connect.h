@@ -1,6 +1,6 @@
 #pragma once
 #include "cracked_page.h"
-#include "extension_context.h"
+#include "extension.h"
 #include "context.h"
 #include "oidc_settings.h"
 #include <ydb/library/actors/core/events.h>
@@ -16,6 +16,7 @@
 namespace NMVP::NOIDC {
 
 struct TOpenIdConnectSettings;
+struct TExtensionContext;
 
 constexpr TStringBuf IAM_TOKEN_SCHEME = "Bearer ";
 constexpr TStringBuf IAM_TOKEN_SCHEME_LOWER = "bearer ";

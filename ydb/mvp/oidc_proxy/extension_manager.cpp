@@ -16,6 +16,11 @@ TExtensionManager::TExtensionManager(const TActorId sender,
     ExtensionCtx->Params = MakeHolder<TProxiedResponseParams>();
     ExtensionCtx->Params->ProtectedPage = MakeHolder<TCrackedPage>(protectedPage);
     ExtensionCtx->Sender = sender;
+    Timeout = settings.DefaultRequestTimeout;
+}
+
+void TExtensionManager::SetExtensionTimeout(TDuration timeout) {
+    Timeout = timeout;
 }
 
 void TExtensionManager::SetRequest(NHttp::THttpIncomingRequestPtr request) {
@@ -24,9 +29,9 @@ void TExtensionManager::SetRequest(NHttp::THttpIncomingRequestPtr request) {
 
 void TExtensionManager::SetOverrideResponse(NHttp::TEvHttpProxy::TEvHttpIncomingResponse::TPtr event) {
     ExtensionCtx->Params->HeadersOverride = MakeHolder<NHttp::THeadersBuilder>();
-    ExtensionCtx->Params->ResponseError = event ? event->Get()->GetError() : "Timeout while waiting info";
+    ExtensionCtx->Params->ResponseError = event->Get()->GetError();
 
-    if (!event || !event->Get()->Response)
+    if (!event->Get()->Response)
         return;
 
     auto& response = event->Get()->Response;
@@ -40,32 +45,28 @@ void TExtensionManager::SetOverrideResponse(NHttp::TEvHttpProxy::TEvHttpIncoming
 }
 
 void TExtensionManager::AddExtensionWhoami() {
-    EnrichmentExtension = true;
-    AddExtension(NActors::TActivationContext::ActorSystem()->Register(new TExtensionWhoami(Settings, AuthHeader)));
+    auto ext = std::make_unique<TExtensionWhoami>(Settings, AuthHeader, Timeout);
+    AddExtension(std::move(ext));
 }
 
 void TExtensionManager::AddExtensionFinal() {
-    AddExtension(NActors::TActivationContext::ActorSystem()->Register(new TExtensionFinal(Settings)));
+    auto ext = std::make_unique<TExtensionFinal>(Settings);
+    AddExtension(std::move(ext));
 }
 
-void TExtensionManager::AddExtension(const NActors::TActorId& stage) {
-    ExtensionCtx->Route.push(stage);
+void TExtensionManager::AddExtension(std::unique_ptr<IExtension> ext) {
+    ExtensionCtx->Steps.push(std::move(ext));
 }
 
 bool TExtensionManager::NeedExtensionWhoami(const NHttp::THttpIncomingRequestPtr& request) const {
-    if (Settings.AccessServiceType == NMvp::yandex_v2) {
-        return false; // does not support whoami extension
-    }
-
-    if (request->Method == "OPTIONS" || Settings.WhoamiExtendedInfoEndpoint.empty()) {
+    if (!Settings.EnabledExtensionWhoami() || request->Method == "OPTIONS") {
         return false;
     }
 
     TCrackedPage page(request);
     auto path = TStringBuf(page.Url).Before('?');
 
-    static constexpr TStringBuf WHOAMI_PATHS[] = { "/viewer/json/whoami", "/viewer/whoami" };
-    for (const auto& whoamiPath : WHOAMI_PATHS) {
+    for (const auto& whoamiPath : Settings.WHOAMI_PATHS) {
         if (path.EndsWith(whoamiPath)) {
             return true;
         }
@@ -80,17 +81,13 @@ void TExtensionManager::ArrangeExtensions(const NHttp::THttpIncomingRequestPtr& 
     AddExtensionFinal();
 }
 
-bool TExtensionManager::HasEnrichmentExtension() {
-    return EnrichmentExtension;
-}
-
 void TExtensionManager::StartExtensionProcess(NHttp::THttpIncomingRequestPtr request,
                                               NHttp::TEvHttpProxy::TEvHttpIncomingResponse::TPtr event) {
     SetRequest(std::move(request));
     SetOverrideResponse(std::move(event));
 
-    const auto route = ExtensionCtx->Route.Next();
-    NActors::TActivationContext::ActorSystem()->Send(route, new TEvPrivate::TEvExtensionRequest(std::move(ExtensionCtx)));
+    const auto step = ExtensionCtx->Steps.Next();
+    step->Execute(std::move(ExtensionCtx));
 }
 
 } // NMVP::NOIDC

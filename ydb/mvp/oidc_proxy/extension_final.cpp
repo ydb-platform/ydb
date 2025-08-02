@@ -81,14 +81,14 @@ TString TExtensionFinal::GetFixedLocationHeader(TStringBuf location) {
     return TString(location);
 }
 
-void TExtensionFinal::Handle(TEvPrivate::TEvExtensionRequest::TPtr ev) {
-    Context = std::move(ev->Get()->Context);
+void TExtensionFinal::Execute(TIntrusivePtr<TExtensionContext> ctx) {
+    Context = std::move(ctx);
     if (Context->Params->StatusOverride) {
         SetProxyResponseHeaders();
         SetProxyResponseBody();
     }
 
-    ContinueAndPassAway();
+    Context->Continue();
 }
 
 } // NMVP::NOIDC

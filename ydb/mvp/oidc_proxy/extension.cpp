@@ -2,34 +2,36 @@
 
 namespace NMVP::NOIDC {
 
-void TExtension::Bootstrap() {
-    Become(&TExtension::StateWork);
+void TExtensionContext::Reply(NHttp::THttpOutgoingResponsePtr httpResponse) {
+    NActors::TActivationContext::Send(Sender, std::make_unique<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(std::move(httpResponse)));
 }
 
-void TExtension::ReplyAndPassAway(NHttp::THttpOutgoingResponsePtr httpResponse) {
-    Send(Context->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(std::move(httpResponse)));
-    PassAway();
-}
-
-void TExtension::ReplyAndPassAway() {
-    auto& params = Context->Params;
-    if (params->StatusOverride) {
-        return ReplyAndPassAway(params->Request->CreateResponse(params->StatusOverride, params->MessageOverride, *params->HeadersOverride, params->BodyOverride));
+void TExtensionContext::Reply() {
+    if (Params->StatusOverride) {
+        return Reply(Params->Request->CreateResponse(Params->StatusOverride, Params->MessageOverride, *Params->HeadersOverride, Params->BodyOverride));
     } else {
         static constexpr size_t MAX_LOGGED_SIZE = 1024;
-        BLOG_D("Can not process request to protected resource:\n" << Context->Params->Request->GetObfuscatedData().substr(0, MAX_LOGGED_SIZE));
-        return ReplyAndPassAway(CreateResponseForNotExistingResponseFromProtectedResource(Context->Params->Request, Context->Params->ResponseError));
+        BLOG_D("Can not process request to protected resource:\n" << Params->Request->GetObfuscatedData().substr(0, MAX_LOGGED_SIZE));
+        return Reply(CreateResponseForNotExistingResponseFromProtectedResource(Params->Request, Params->ResponseError));
     }
 }
 
-void TExtension::ContinueAndPassAway() {
-    if (!Context->Route.empty()) {
-        const auto route = Context->Route.Next();
-        Send(route, new TEvPrivate::TEvExtensionRequest(std::move(Context)));
-        PassAway();
+void TExtensionContext::Continue() {
+    const auto step = Steps.Next();
+    if (step) {
+        step->Execute(this);
     } else {
-        ReplyAndPassAway();
+        Reply();
     }
+}
+
+std::unique_ptr<IExtension> TExtensionsSteps::Next() {
+    if (empty()) {
+        return nullptr;
+    }
+    auto target = std::move(front());
+    pop();
+    return target;
 }
 
 } // NMVP::NOIDC

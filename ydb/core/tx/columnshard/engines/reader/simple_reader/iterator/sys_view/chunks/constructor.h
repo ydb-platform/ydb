@@ -10,73 +10,46 @@
 #include <ydb/core/tx/columnshard/engines/reader/simple_reader/iterator/sys_view/abstract/constructor.h>
 
 namespace NKikimr::NOlap::NReader::NSimple::NSysView::NChunks {
-class TPortionDataConstructor {
+class TPortionDataConstructor: public NAbstract::TDataSourceConstructor {
 private:
+    using TBase = NAbstract::TDataSourceConstructor;
     NColumnShard::TUnifiedPathId PathId;
-    ui64 TabletId;
     YDB_READONLY_DEF(TPortionInfo::TConstPtr, Portion);
     ISnapshotSchema::TPtr Schema;
-    NArrow::TSimpleRow Start;
-    NArrow::TSimpleRow Finish;
-    ui32 SourceId = 0;
-    ui32 SourceIdx = 0;
 
 public:
-    void SetIndex(const ui32 index) {
-        AFL_VERIFY(!SourceId);
-        SourceIdx = index;
-        SourceId = index + 1;
-    }
-
     TPortionDataConstructor(const NColumnShard::TUnifiedPathId& pathId, const ui64 tabletId, const TPortionInfo::TConstPtr& portion,
         const ISnapshotSchema::TPtr& schema)
-        : PathId(pathId)
-        , TabletId(tabletId)
+        : TBase(tabletId, Portion->GetPortionId(), TSchemaAdapter::GetPKSimpleRow(PathId, TabletId, Portion->GetPortionId(), 0, 0),
+              TSchemaAdapter::GetPKSimpleRow(PathId, TabletId, Portion->GetPortionId(), Max<ui32>(), Max<ui32>()))
+        , PathId(pathId)
         , Portion(portion)
-        , Schema(schema)
-        , Start(TSchemaAdapter::GetPKSimpleRow(PathId, TabletId, Portion->GetPortionId(), 0, 0))
-        , Finish(TSchemaAdapter::GetPKSimpleRow(PathId, TabletId, Portion->GetPortionId(), Max<ui32>(), Max<ui32>())) {
+        , Schema(schema) {
     }
-
-    const NArrow::TSimpleRow& GetStart() const {
-        return Start;
-    }
-    const NArrow::TSimpleRow& GetFinish() const {
-        return Finish;
-    }
-
-    class TComparator {
-    private:
-        const ERequestSorting Sorting;
-
-    public:
-        TComparator(const ERequestSorting sorting)
-            : Sorting(sorting) {
-            AFL_VERIFY(Sorting != ERequestSorting::NONE);
-        }
-
-        bool operator()(const TPortionDataConstructor& l, const TPortionDataConstructor& r) const {
-            if (Sorting == ERequestSorting::DESC) {
-                return l.Finish < r.Finish;
-            } else {
-                return r.Start < l.Start;
-            }
-        }
-    };
 
     std::shared_ptr<NReader::NSimple::IDataSource> Construct(
         const std::shared_ptr<NCommon::TSpecialReadContext>& context, std::shared_ptr<TPortionDataAccessor>&& accessor);
     std::shared_ptr<NReader::NSimple::IDataSource> Construct(const std::shared_ptr<NCommon::TSpecialReadContext>& context);
 };
 
-class TConstructor: public NCommon::TSourcesConstructorWithAccessors<TPortionDataConstructor> {
+class TConstructor: public NAbstract::TSourcesConstructorWithAccessors<TPortionDataConstructor> {
 private:
     using TBase = NCommon::TSourcesConstructorWithAccessors<TPortionDataConstructor>;
     ui32 CurrentSourceIdx = 0;
 
-    virtual std::shared_ptr<NReader::NCommon::IDataSource> DoTryExtractNextImpl(
+    virtual std::shared_ptr<NReader::NCommon::IDataSource> DoExtractNextImpl(
         const std::shared_ptr<NReader::NCommon::TSpecialReadContext>& context) override;
-    virtual void DoInitCursor(const std::shared_ptr<IScanCursor>& /*cursor*/) override {
+    virtual void DoInitCursor(const std::shared_ptr<IScanCursor>& cursor) override {
+        while (TBase::GetConstructorsCount()) {
+            bool usage = false;
+            if (!cursor->CheckEntityIsBorder(TBase::MutableNextConstructor(), usage)) {
+                TBase::DropNextConstructor();
+                continue;
+            }
+            AFL_VERIFY(!usage);
+            TBase::DropNextConstructor();
+            break;
+        }
     }
     virtual TString DoDebugString() const override {
         return Default<TString>();

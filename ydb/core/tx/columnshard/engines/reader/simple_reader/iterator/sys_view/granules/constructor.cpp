@@ -6,21 +6,20 @@ namespace NKikimr::NOlap::NReader::NSimple::NSysView::NGranules {
 
 TConstructor::TConstructor(const NOlap::IPathIdTranslator& pathIdTranslator, const IColumnEngine& engine, const ui64 tabletId,
     const std::optional<NOlap::TInternalPathId> internalPathId, const std::shared_ptr<NOlap::TPKRangesFilter>& pkFilter,
-    const bool isReverseSort)
-    : TabletId(tabletId) {
+    const ERequestSorting sorting)
+    : TBase(sorting, tabletId) {
     const TColumnEngineForLogs* engineImpl = dynamic_cast<const TColumnEngineForLogs*>(&engine);
-    std::vector<std::shared_ptr<TGranuleMeta>> granulesAll;
+    std::deque<TDataSourceConstructor> constructors;
     for (auto&& i : engineImpl->GetTables()) {
         if (internalPathId && *internalPathId != i.first) {
             continue;
         }
-        AddConstructors(pathIdTranslator, i.second, pkFilter);
+        constructors.emplace_back(pathIdTranslator, TabletId, i.second);
+        if (!pkFilter->IsUsed(constructors.back().GetStart(), constructors.back().GetFinish())) {
+            constructors.pop_back();
+        }
     }
-
-    std::sort(Constructors.begin(), Constructors.end(), TGranuleDataConstructor::TComparator(isReverseSort));
-    for (ui32 idx = 0; idx < Constructors.size(); ++idx) {
-        Constructors[idx].SetIndex(idx);
-    }
+    Constructors.Initialize(std::move(constructors));
 }
 
 }   // namespace NKikimr::NOlap::NReader::NSimple::NSysView::NGranules

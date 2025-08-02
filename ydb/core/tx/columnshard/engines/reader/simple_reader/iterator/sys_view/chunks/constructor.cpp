@@ -8,7 +8,7 @@ namespace NKikimr::NOlap::NReader::NSimple::NSysView::NChunks {
 std::shared_ptr<IDataSource> TPortionDataConstructor::Construct(const std::shared_ptr<NReader::NCommon::TSpecialReadContext>& context) {
     AFL_VERIFY(SourceId);
     return std::make_shared<TSourceData>(
-        SourceId, SourceIdx, PathId, TabletId, std::move(Portion), std::move(Start), std::move(Finish), context, std::move(Schema));
+        GetSourceId(), GetSourceIdx(), PathId, GetTabletId(), std::move(Portion), ExtractStart(), ExtractFinish(), context, std::move(Schema));
 }
 
 std::shared_ptr<IDataSource> TPortionDataConstructor::Construct(
@@ -18,7 +18,7 @@ std::shared_ptr<IDataSource> TPortionDataConstructor::Construct(
     return result;
 }
 
-std::shared_ptr<NCommon::IDataSource> TConstructor::DoTryExtractNextImpl(const std::shared_ptr<NReader::NCommon::TSpecialReadContext>& context) {
+std::shared_ptr<NCommon::IDataSource> TConstructor::DoExtractNextImpl(const std::shared_ptr<NReader::NCommon::TSpecialReadContext>& context) {
     auto constructor = PopObjectWithAccessor();
     constructor.MutableObject().SetIndex(CurrentSourceIdx);
     ++CurrentSourceIdx;

@@ -171,6 +171,8 @@ struct TPDiskConfig : public TThrRefBase {
 
     bool PlainDataChunks = false;
 
+    bool SeparateHugePriorities = false;
+
     bool MetadataOnly = false;
 
     bool ReadOnly = false;
@@ -331,6 +333,7 @@ struct TPDiskConfig : public TThrRefBase {
         str << " CompletionThreadsCount# " << CompletionThreadsCount << x;
         str << " UseNoopScheduler# " << (UseNoopScheduler ? "true" : "false") << x;
         str << " PlainDataChunks# " << PlainDataChunks << x;
+        str << " SeparateHugePriorities# " << SeparateHugePriorities << x;
         str << "}";
         return str.Str();
     }
@@ -429,6 +432,10 @@ struct TPDiskConfig : public TThrRefBase {
 
         if (cfg->HasSlotSizeInUnits()) {
             SlotSizeInUnits = cfg->GetSlotSizeInUnits();
+        }
+
+        if (cfg->HasSeparateHugePriorities()) {
+            SeparateHugePriorities = cfg->GetSeparateHugePriorities();
         }
     }
 

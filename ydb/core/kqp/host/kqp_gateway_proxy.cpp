@@ -292,6 +292,10 @@ bool ConvertCreateTableSettingsToProto(NYql::TKikimrTableMetadataPtr metadata, Y
         }
     }
 
+    if (const auto count = metadata->TableSettings.ExternalDataChannelsCount) {
+        proto.mutable_storage_settings()->set_external_data_channels_count(*count);
+    }
+
     proto.set_temporary(metadata->Temporary);
 
     return true;

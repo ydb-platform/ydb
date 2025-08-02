@@ -3842,6 +3842,7 @@ R"___(<main>: Error: Transaction not found: , code: 2015
                     .SetTabletCommitLog1("ssd")
                     .SetExternal("hdd")
                     .SetStoreExternalBlobs(true)
+                    .SetExternalDataChannelsCount(7U)
                 .EndStorageSettings()
                 .BeginColumnFamily("default")
                     .SetData("ssd")
@@ -3875,6 +3876,7 @@ R"___(<main>: Error: Transaction not found: , code: 2015
             const auto& settings = res.GetTableDescription().GetStorageSettings();
             UNIT_ASSERT_VALUES_EQUAL(settings.GetExternal(), "hdd");
             UNIT_ASSERT_VALUES_EQUAL(settings.GetStoreExternalBlobs().value(), true);
+            UNIT_ASSERT_VALUES_EQUAL(settings.GetExternalDataChannelsCount().value(), 7U);
             const auto& families = res.GetTableDescription().GetColumnFamilies();
             UNIT_ASSERT_EQUAL(families.size(), 2);
             UNIT_ASSERT_VALUES_EQUAL(families[0].GetName(), "default");

@@ -1381,6 +1381,28 @@ namespace NSchemeShardUT_Private {
         return TestCancelImport(runtime, TTestTxConfig::SchemeShard, txId, dbName, importId, expectedStatus);
     }
 
+    NKikimrBackup::TEvGetIncrementalBackupResponse TestGetIncrementalBackup(TTestActorRuntime& runtime, ui64 id, const TString& dbName,
+            Ydb::StatusIds::StatusCode expectedStatus) {
+        ForwardToTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor(), new TEvBackup::TEvGetIncrementalBackupRequest(dbName, id));
+
+        TAutoPtr<IEventHandle> handle;
+        auto ev = runtime.GrabEdgeEvent<TEvBackup::TEvGetIncrementalBackupResponse>(handle);
+        UNIT_ASSERT_EQUAL(ev->Record.GetIncrementalBackup().GetStatus(), expectedStatus);
+
+        return ev->Record;
+    }
+
+    NKikimrBackup::TEvForgetIncrementalBackupResponse TestForgetIncrementalBackup(TTestActorRuntime& runtime, ui64 txId, const TString& dbName, ui64 backupId,
+            Ydb::StatusIds::StatusCode expectedStatus) {
+        ForwardToTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor(), new TEvBackup::TEvForgetIncrementalBackupRequest(txId, dbName, backupId));
+
+        TAutoPtr<IEventHandle> handle;
+        auto ev = runtime.GrabEdgeEvent<TEvBackup::TEvForgetIncrementalBackupResponse>(handle);
+        UNIT_ASSERT_EQUAL(ev->Record.GetStatus(), expectedStatus);
+
+        return ev->Record;
+    }
+
     NKikimrSchemeOp::TCreateSolomonVolume TakeTabletsFromAnotherSolomonVol(TString name, TString ls, ui32 count) {
         NKikimrSchemeOp::TCreateSolomonVolume volume;
 

@@ -27,6 +27,21 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
         )";
     }
 
+    TString DefaultIncrementalCollectionSettings() {
+        return R"(
+            Name: ")" DEFAULT_NAME_1 R"("
+
+            ExplicitEntryList {
+                Entries {
+                    Type: ETypeTable
+                    Path: "/MyRoot/Table1"
+                }
+            }
+            Cluster {}
+            IncrementalBackupConfig {}
+        )";
+    }
+
     TString CollectionSettings(const TString& name) {
         return Sprintf(R"(
             Name: "%s"
@@ -1517,4 +1532,59 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
 
     // TODO: DropCollectionWithIncrementalRestoreStateCleanup
 
+    Y_UNIT_TEST(IncrementalBackupOperation) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
+        ui64 txId = 100;
+
+        SetupLogging(runtime);
+
+        PrepareDirs(runtime, env, txId);
+
+        TestCreateBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections/", DefaultIncrementalCollectionSettings());
+
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/.backups/collections/" DEFAULT_NAME_1), {
+            NLs::PathExist,
+            NLs::IsBackupCollection,
+        });
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table1"
+            Columns { Name: "key" Type: "Utf8" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestBackupBackupCollection(runtime, ++txId, "/MyRoot",
+            R"(Name: ".backups/collections/)" DEFAULT_NAME_1 R"(")");
+        env.TestWaitNotification(runtime, txId);
+
+        runtime.AdvanceCurrentTime(TDuration::Seconds(1));
+
+        TestBackupIncrementalBackupCollection(runtime, ++txId, "/MyRoot",
+            R"(Name: ".backups/collections/)" DEFAULT_NAME_1 R"(")");
+        const auto backupId = txId;
+        env.TestWaitNotification(runtime, backupId);
+
+        auto r1 = TestGetIncrementalBackup(runtime, backupId, "/MyRoot");
+        UNIT_ASSERT_VALUES_EQUAL(r1.GetIncrementalBackup().GetProgress(), Ydb::Backup::BackupProgress::PROGRESS_TRANSFER_DATA);
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/.backups/collections/" DEFAULT_NAME_1), {
+            NLs::PathExist,
+            NLs::IsBackupCollection,
+            NLs::ChildrenCount(2),
+            NLs::Finished,
+        });
+
+        runtime.SimulateSleep(TDuration::Seconds(5));
+
+        auto r2 = TestGetIncrementalBackup(runtime, backupId, "/MyRoot");
+        UNIT_ASSERT_VALUES_EQUAL(r2.GetIncrementalBackup().GetProgress(), Ydb::Backup::BackupProgress::PROGRESS_DONE);
+
+        TestForgetIncrementalBackup(runtime, txId++, "/MyRoot", backupId);
+
+        TestGetIncrementalBackup(runtime, backupId, "/MyRoot", Ydb::StatusIds::NOT_FOUND);
+    }
 } // TBackupCollectionTests

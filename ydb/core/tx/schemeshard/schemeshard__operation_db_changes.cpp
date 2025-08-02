@@ -112,6 +112,10 @@ void TStorageChanges::Apply(TSchemeShard* ss, NTabletFlatExecutor::TTransactionC
     for (const auto& op : LongIncrementalRestoreOps) {
         ss->PersistLongIncrementalRestoreOp(db, op);
     }
+
+    for (const auto& id : IncrementalBackups) {
+        ss->PersistIncrementalBackup(db, id);
+    }
 }
 
 }

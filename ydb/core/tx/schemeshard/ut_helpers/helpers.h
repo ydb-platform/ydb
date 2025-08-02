@@ -6,11 +6,13 @@
 #include <ydb/core/cms/console/console.h>
 #include <ydb/core/engine/mkql_engine_flat.h>
 #include <ydb/core/persqueue/ut/common/pq_ut_common.h>
+#include <ydb/core/protos/backup.pb.h>
 #include <ydb/core/protos/tx_datashard.pb.h>
 #include <ydb/core/testlib/minikql_compile.h>
 #include <ydb/core/testlib/tx_helpers.h>
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
+#include <ydb/core/tx/schemeshard/schemeshard_backup.h>
 #include <ydb/core/tx/schemeshard/schemeshard_build_index.h>
 #include <ydb/core/tx/schemeshard/schemeshard_export.h>
 #include <ydb/core/tx/schemeshard/schemeshard_import.h>
@@ -475,6 +477,12 @@ namespace NSchemeShardUT_Private {
     NKikimrImport::TEvCancelImportResponse TestCancelImport(TTestActorRuntime& runtime, ui64 schemeshardId, ui64 txId, const TString& dbName, ui64 importId,
             Ydb::StatusIds::StatusCode expectedStatus = Ydb::StatusIds::SUCCESS);
     NKikimrImport::TEvCancelImportResponse TestCancelImport(TTestActorRuntime& runtime, ui64 txId, const TString& dbName, ui64 importId,
+            Ydb::StatusIds::StatusCode expectedStatus = Ydb::StatusIds::SUCCESS);
+
+    ////////// backup
+    NKikimrBackup::TEvGetIncrementalBackupResponse TestGetIncrementalBackup(TTestActorRuntime& runtime, ui64 id, const TString& dbName,
+            Ydb::StatusIds::StatusCode expectedStatus = Ydb::StatusIds::SUCCESS);
+    NKikimrBackup::TEvForgetIncrementalBackupResponse TestForgetIncrementalBackup(TTestActorRuntime& runtime, ui64 txId, const TString& dbName, ui64 backupId,
             Ydb::StatusIds::StatusCode expectedStatus = Ydb::StatusIds::SUCCESS);
 
     ////////// datashard

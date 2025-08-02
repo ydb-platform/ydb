@@ -933,6 +933,7 @@ public:
         TVector<TPathId> TablesToClean;
         TDeque<TPathId> BlockStoreVolumesToClean;
         TVector<TPathId> RestoreTablesToUnmark;
+        TVector<ui64> IncrementalBackupIds;
     };
 
     void SubscribeToTempTableOwners();
@@ -1230,9 +1231,6 @@ public:
     void Handle(TEvSchemeShard::TEvShredManualStartupRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvSchemeShard::TEvWakeupToRunShredBSC::TPtr& ev, const TActorContext& ctx);
 
-    void Handle(TEvPersQueue::TEvOffloadStatus::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvPrivate::TEvContinuousBackupCleanerResult::TPtr& ev, const TActorContext& ctx);
-
     void Handle(TEvSchemeShard::TEvProcessingRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvSchemeShard::TEvSyncTenantSchemeShard::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvSchemeShard::TEvUpdateTenantSchemeShard::TPtr& ev, const TActorContext& ctx);
@@ -1421,6 +1419,37 @@ public:
     void Handle(TEvBackup::TEvReadBackupCollectionRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvBackup::TEvUpdateBackupCollectionRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvBackup::TEvDeleteBackupCollectionRequest::TPtr& ev, const TActorContext& ctx);
+
+    TMap<ui64, TIncrementalBackupInfo::TPtr> IncrementalBackups;
+
+    void PersistIncrementalBackup(NIceDb::TNiceDb& db, ui64 id);
+    static void PersistIncrementalBackup(NIceDb::TNiceDb& db, const TIncrementalBackupInfo& info);
+    static void PersistRemoveIncrementalBackup(NIceDb::TNiceDb& db, const TIncrementalBackupInfo& info);
+    static void PersistIncrementalBackupState(NIceDb::TNiceDb& db, const TIncrementalBackupInfo& info);
+    static void PersistIncrementalBackupItem(NIceDb::TNiceDb& db, ui64 backupId, const TIncrementalBackupInfo::TItem& item);
+
+    struct TIncrementalBackup {
+        struct TTxGet;
+        struct TTxForget;
+        struct TTxList;
+
+        struct TTxProgress;
+    };
+
+    NTabletFlatExecutor::ITransaction* CreateTxGet(TEvBackup::TEvGetIncrementalBackupRequest::TPtr& ev);
+    NTabletFlatExecutor::ITransaction* CreateTxForget(TEvBackup::TEvForgetIncrementalBackupRequest::TPtr& ev);
+    NTabletFlatExecutor::ITransaction* CreateTxList(TEvBackup::TEvListIncrementalBackupsRequest::TPtr& ev);
+    NTabletFlatExecutor::ITransaction* CreateTxProgress(ui64 id);
+    NTabletFlatExecutor::ITransaction* CreateTxProgress(TEvPrivate::TEvContinuousBackupCleanerResult::TPtr& ev);
+    NTabletFlatExecutor::ITransaction* CreateTxProgress(TEvPersQueue::TEvOffloadStatus::TPtr& ev);
+
+    void Handle(TEvBackup::TEvGetIncrementalBackupRequest::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvBackup::TEvForgetIncrementalBackupRequest::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvBackup::TEvListIncrementalBackupsRequest::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPersQueue::TEvOffloadStatus::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPrivate::TEvContinuousBackupCleanerResult::TPtr& ev, const TActorContext& ctx);
+
+    void ResumeIncrementalBackups(const TVector<ui64>& incrementalBackupsIds, const TActorContext& ctx);
     // } // NBackup
 
     void FillTableSchemaVersion(ui64 schemaVersion, NKikimrSchemeOp::TTableDescription *tableDescr) const;

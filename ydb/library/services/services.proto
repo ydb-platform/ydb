@@ -372,6 +372,7 @@ enum EServiceKikimr {
     // Replication
     REPLICATION_CONTROLLER = 1200;
     REPLICATION_SERVICE = 1201;
+    LOCAL_YDB_PROXY = 1202;
 
     // Blob depot
     BLOB_DEPOT = 1300;

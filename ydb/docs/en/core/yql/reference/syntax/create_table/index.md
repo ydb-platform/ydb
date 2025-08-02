@@ -20,8 +20,15 @@ The invocation of `CREATE TABLE` creates {% if concept_table %}a [table]({{ conc
         ...
         columnN typeN,
 {% if feature_secondary_index == true %}
-        INDEX index1_name GLOBAL ON ( column ),
-        INDEX index2_name GLOBAL ON ( column1, column2, ... ),
+        INDEX `<index_name>`
+          [GLOBAL|LOCAL]
+          [UNIQUE]
+          [SYNC|ASYNC]
+          [USING <index_type>]
+          ON ( <index_columns> )
+          [COVER ( <cover_columns> )]
+          [WITH ( <parameter_name> = <parameter_value>[, ...])]
+        ...
 {% endif %}
 {% if feature_map_tables %}
         PRIMARY KEY ( column, ... ),

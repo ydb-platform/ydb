@@ -5,6 +5,7 @@
 #include <ydb/core/blobstorage/crypto/default.h>
 #include <ydb/core/blobstorage/incrhuge/incrhuge_keeper.h>
 #include <ydb/core/blobstorage/nodewarden/node_warden_events.h>
+#include <ydb/core/protos/blobstorage/vdisk_location.pb.h>
 #include <ydb/library/pdisk_io/file_params.h>
 #include <ydb/library/pdisk_io/wcache.h>
 #include <library/cpp/streams/zstd/zstd.h>

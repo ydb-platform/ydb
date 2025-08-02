@@ -1,7 +1,8 @@
 #pragma once
 
-#include "defs.h"
 #include "blob_depot_tablet.h"
+
+#include <ydb/core/protos/blob_depot.pb.h>
 
 namespace NKikimr::NBlobDepot {
 

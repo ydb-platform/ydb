@@ -1,6 +1,6 @@
 syntax = "proto3";
 
-import "ydb/core/protos/blobstorage_base3.proto";
+import "ydb/core/protos/blobstorage/blobstorage_base3.proto";
 import "ydb/core/protos/blobstorage_disk.proto";
 import "ydb/core/protos/blobstorage_disk_color.proto";
 import "ydb/core/protos/blobstorage_pdisk_config.proto";

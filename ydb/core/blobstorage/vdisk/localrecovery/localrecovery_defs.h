@@ -1,10 +1,13 @@
 #pragma once
 
-#include "defs.h"
 #include <ydb/core/base/blobstorage.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_mongroups.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_pdiskctx.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk.h>
+
+namespace NKikimrBlobStorage {
+    class TLocalRecoveryInfo;
+}
 
 namespace NKikimr {
     namespace NLocRecovery {

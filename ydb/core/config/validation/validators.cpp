@@ -3,6 +3,8 @@
 #include <ydb/core/config/protos/marker.pb.h>
 #include <ydb/core/protos/blobstorage.pb.h>
 #include <ydb/core/protos/blobstorage_disk.pb.h>
+#include <ydb/core/protos/blobstorage/group_info.pb.h>
+#include <ydb/core/protos/blobstorage/vdisk_location.pb.h>
 
 #include <library/cpp/protobuf/json/util.h>
 

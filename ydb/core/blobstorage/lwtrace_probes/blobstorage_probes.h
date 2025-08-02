@@ -1,7 +1,5 @@
 #pragma once
 
-//#include <ydb/core/protos/base.pb.h>
-
 #include <library/cpp/lwtrace/all.h>
 
 // Helper class for printing pdisk id in the same was as it done for counters

@@ -3,6 +3,8 @@
 
 #include <ydb/core/blobstorage/crypto/default.h>
 #include <ydb/core/blobstorage/vdisk/vdisk_actor.h>
+#include <ydb/core/protos/blobstorage/entity_status.pb.h>
+#include <ydb/core/protos/blobstorage/vdisk_location.pb.h>
 
 #include <util/string/split.h>
 

@@ -1,6 +1,5 @@
 #pragma once
 
-#include "defs.h"
 #include "blobstorage_synclogformat.h"
 #include "blobstorage_synclogmsgimpl.h"
 

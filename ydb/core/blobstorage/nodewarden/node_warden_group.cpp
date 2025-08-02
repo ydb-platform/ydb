@@ -3,9 +3,8 @@
 #include "node_warden_events.h"
 
 #include <ydb/core/blobstorage/bridge/syncer/syncer.h>
-
 #include <ydb/core/blob_depot/agent/agent.h>
-
+#include <ydb/core/protos/blobstorage/entity_status.pb.h>
 #include <ydb/core/util/random.h>
 
 namespace NKikimr::NStorage {

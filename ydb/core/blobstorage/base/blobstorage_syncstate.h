@@ -1,6 +1,5 @@
 #pragma once
 
-#include "defs.h"
 #include <ydb/core/blobstorage/vdisk/common/blobstorage_vdisk_guids.h>
 
 #include <ydb/core/protos/blobstorage.pb.h>
@@ -9,6 +8,10 @@
 
 #include <util/stream/input.h>
 #include <util/string/printf.h>
+
+namespace NKikimrBlobStorage {
+    class TSyncState;
+}
 
 namespace NKikimr {
 

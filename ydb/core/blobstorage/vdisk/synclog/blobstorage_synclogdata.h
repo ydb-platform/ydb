@@ -1,14 +1,11 @@
 #pragma once
 
-#include "defs.h"
 #include "blobstorage_synclogmem.h"
 #include "blobstorage_synclogdsk.h"
-#include "blobstorage_synclogneighbors.h"
 
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo.h>
 #include <ydb/core/blobstorage/vdisk/common/blobstorage_vdisk_guids.h>
 
-#include <ydb/core/protos/blobstorage_vdisk_internal.pb.h>
 #include <ydb/core/base/blobstorage.h>
 
 #include <ydb/library/actors/core/hfunc.h>
@@ -16,6 +13,10 @@
 #include <util/generic/deque.h>
 #include <util/generic/queue.h>
 #include <util/generic/algorithm.h>
+
+namespace NKikimrVDiskData {
+    class TSyncLogEntryPoint;
+}
 
 namespace NKikimr {
     namespace NSyncLog {

@@ -1,6 +1,5 @@
 #pragma once
 
-#include "defs.h"
 #include "blobstorage_hullstorageratio.h"
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk.h>
 #include <ydb/core/blobstorage/vdisk/common/disk_part.h>
@@ -14,7 +13,6 @@
 
 // FIXME: only for TIngressCache (put it to vdisk/common)
 #include <ydb/core/blobstorage/vdisk/ingress/blobstorage_ingress.h>
-#include <ydb/core/protos/blobstorage_vdisk_internal.pb.h>
 
 namespace NKikimr {
 

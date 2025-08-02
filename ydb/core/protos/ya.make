@@ -19,7 +19,6 @@ SRCS(
     blob_depot_config.proto
     blobstorage.proto
     blobstorage_base.proto
-    blobstorage_base3.proto
     blobstorage_config.proto
     blobstorage_disk.proto
     blobstorage_disk_color.proto
@@ -167,6 +166,7 @@ GENERATE_ENUM_SERIALIZATION(shared_cache.pb.h)
 PEERDIR(
     ydb/core/config/protos
     ydb/core/fq/libs/config/protos
+    ydb/core/protos/blobstorage
     ydb/core/protos/nbs
     ydb/core/protos/schemeshard
     ydb/core/scheme/protos

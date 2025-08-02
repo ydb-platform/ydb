@@ -13,7 +13,8 @@
 #include <ydb/core/base/domain.h>
 #include <ydb/core/erasure/erasure.h>
 #include <ydb/core/protos/auth.pb.h>
-#include <ydb/core/protos/blobstorage_base3.pb.h>
+#include <ydb/core/protos/blobstorage/blobstorage_base3.pb.h>
+#include <ydb/core/protos/blobstorage/group_info.pb.h>
 #include <ydb/core/protos/blobstorage_config.pb.h>
 #include <ydb/core/protos/tablet.pb.h>
 #include <library/cpp/json/writer/json.h>

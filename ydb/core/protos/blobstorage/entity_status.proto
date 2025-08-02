@@ -1,0 +1,9 @@
+package NKikimrBlobStorage;
+option java_package = "ru.yandex.kikimr.proto";
+
+enum EEntityStatus {
+    INITIAL = 1; // entity was generated from the current state by the configuration request
+    CREATE  = 2; // entity was just created and notification is being pushed to the warden
+    DESTROY = 3; // entity was just destroyed and the notification is being pushed to the warden
+    RESTART = 4; // entity has changed config or changed environment and should be restarted by warden
+}

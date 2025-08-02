@@ -29,6 +29,7 @@
 #include <ydb/core/util/tuples.h>
 
 #include <ydb/core/protos/blobstorage_distributed_config.pb.h>
+#include <ydb/core/protos/blobstorage/vdisk_location.pb.h>
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/core/sys_view/common/events.h>
 

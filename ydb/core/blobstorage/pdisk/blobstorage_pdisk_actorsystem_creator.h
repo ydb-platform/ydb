@@ -12,10 +12,6 @@
 #include <ydb/library/actors/core/scheduler_basic.h>
 #include <ydb/core/control/lib/immediate_control_board_impl.h>
 #include <ydb/core/grpc_services/grpc_helper.h>
-#include <ydb/core/protos/config.pb.h>
-#include <ydb/core/protos/netclassifier.pb.h>
-#include <ydb/core/protos/shared_cache.pb.h>
-#include <ydb/core/protos/datashard_config.pb.h>
 #include <ydb/core/base/feature_flags.h>
 #include <ydb/core/base/nameservice.h>
 #include <ydb/core/base/channel_profiles.h>

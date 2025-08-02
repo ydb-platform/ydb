@@ -23,6 +23,14 @@
 using namespace NKikimr;
 using namespace NStorage;
 
+TNodeWarden::TVSlotId::TVSlotId(const NKikimrBlobStorage::TVDiskLocation& proto)
+    : TVSlotId(proto.GetNodeID(), proto.GetPDiskID(), proto.GetVDiskSlotID()) {}
+
+TNodeWarden::TVSlotId TNodeWarden::TVDiskRecord::GetVSlotId() const {
+    const auto& loc = Config.GetVDiskLocation();
+    return {loc.GetNodeID(), loc.GetPDiskID(), loc.GetVDiskSlotID()};
+}
+
 TNodeWarden::TNodeWarden(const TIntrusivePtr<TNodeWardenConfig> &cfg)
     : Cfg(cfg)
     , EnablePutBatching(Cfg->FeatureFlags.GetEnablePutBatchingForBlobStorage(), false, true)

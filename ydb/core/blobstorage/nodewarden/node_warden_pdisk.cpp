@@ -3,6 +3,7 @@
 #include "node_warden_impl.h"
 
 #include <ydb/core/blobstorage/crypto/default.h>
+#include <ydb/core/protos/blobstorage/entity_status.pb.h>
 #include <ydb/library/pdisk_io/file_params.h>
 #include <ydb/library/pdisk_io/wcache.h>
 

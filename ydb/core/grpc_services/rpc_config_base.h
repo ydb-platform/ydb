@@ -7,7 +7,7 @@
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
 #include <ydb/core/blobstorage/base/blobstorage_console_events.h>
 #include <ydb/core/blobstorage/nodewarden/node_warden_events.h>
-#include <ydb/core/protos/blobstorage_base3.pb.h>
+#include <ydb/core/protos/blobstorage/blobstorage_base3.pb.h>
 #include <ydb/core/base/tabletid.h>
 #include <ydb/core/mind/bscontroller/bsc.h>
 #include <ydb/library/ydb_issue/issue_helpers.h>

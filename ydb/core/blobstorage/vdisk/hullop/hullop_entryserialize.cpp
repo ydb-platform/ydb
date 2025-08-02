@@ -1,5 +1,8 @@
 #include "hullop_entryserialize.h"
 
+#include <ydb/core/protos/blobstorage_vdisk_internal.pb.h>
+#include <util/stream/str.h>
+
 namespace NKikimr {
 
     ////////////////////////////////////////////////////////////////////////////

@@ -1,5 +1,4 @@
 #pragma once
-#include "defs.h"
 
 #include <ydb/core/blobstorage/base/blobstorage_oos_defs.h>
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo.h>

@@ -1,6 +1,8 @@
 syntax = "proto2";
 
 import "ydb/core/config/protos/marker.proto";
+import "ydb/core/protos/blobstorage/entity_status.proto";
+import "ydb/core/protos/blobstorage/vdisk_location.proto";
 import "ydb/core/protos/blobstorage.proto";
 import "ydb/core/protos/blobstorage_config.proto";
 import "ydb/core/protos/blobstorage_disk.proto";

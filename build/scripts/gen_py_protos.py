@@ -52,11 +52,20 @@ def main():
 
     assert out_dir_temp, 'Param "{0}" not found'.format(OUT_DIR_ARG)
 
-    result = subprocess.run(args, capture_output=True, text=True)
-    if result.returncode != 0:
-        print("stdout:\n", result.stdout)
-        print("stderr:\n", result.stderr)
-        raise RuntimeError(f"Protoc failed with exit code {result.returncode} for command: {' '.join(args)}")
+    proc = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    stdout, stderr = proc.communicate()
+
+    if proc.returncode != 0:
+        raise RuntimeError(
+            "Protoc failed with exit code {code} for command: {cmd}\n"
+            "--- stdout ---\n{stdout}\n"
+            "--- stderr ---\n{stderr}\n".format(
+                code=proc.returncode,
+                cmd=' '.join(args),
+                stdout=stdout.decode('utf-8', 'replace'),
+                stderr=stderr.decode('utf-8', 'replace'),
+            )
+        )
 
     temp_name = out_dir_temp
     orig_name = out_dir_orig

@@ -280,9 +280,11 @@ void Init(
 
     ui64 mkqlInitialMemoryLimit = 8_GB;
     auto taskCounters = protoConfig.GetEnableTaskCounters() ? appData->Counters->GetSubgroup("counters", "dq_tasks") : nullptr;
+    auto userCounters = appData->Counters->GetSubgroup("counters", "utils");
     auto workerManagerCounters = NYql::NDqs::TWorkerManagerCounters(
         yqCounters->GetSubgroup("subsystem", "worker_manager"),
-        taskCounters);
+        taskCounters,
+        userCounters);
 
     if (protoConfig.GetResourceManager().GetEnabled()) {
         mkqlInitialMemoryLimit = protoConfig.GetResourceManager().GetMkqlInitialMemoryLimit();

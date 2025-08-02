@@ -65,6 +65,7 @@ namespace NFq {
 #define ACTIVE_WORKERS_COLUMN_NAME "active_workers"
 #define MEMORY_LIMIT_COLUMN_NAME "memory_limit"
 #define MEMORY_ALLOCATED_COLUMN_NAME "memory_allocated"
+#define CPU_USAGE_COLUMN_NAME "cpu_usage"
 #define INTERCONNECT_PORT_COLUMN_NAME "interconnect_port"
 #define NODE_ADDRESS_COLUMN_NAME "node_address"
 #define DATA_CENTER_COLUMN_NAME "data_center"

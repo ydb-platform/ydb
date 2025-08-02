@@ -1436,6 +1436,7 @@ message TPersQueueGroupDescription {
     message TPartitionMerge {
         required uint32 Partition = 1;
         required uint32 AdjacentPartition = 2;
+        optional uint32 ChildPartitionId = 3; // use the prescribed id instead of auto generating new one
     }
     repeated TPartitionMerge Merge = 16;
 }

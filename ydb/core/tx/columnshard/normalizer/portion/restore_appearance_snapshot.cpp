@@ -24,7 +24,7 @@ public:
         const TSnapshot ss = TSnapshot::MaxForPlanInstant(TInstant::Now());
         for (auto&& i : Portions) {
             auto copy = i.second;
-            *copy.MutableCompacted()->MutableAppearanceSnapshot() = ss.SerializeToProto();
+            ss.SerializeToProto(*copy.MutableCompactedPortion()->MutableAppearanceSnapshot());
             db.Table<IndexPortions>()
                 .Key(i.first.GetPathId().GetRawValue(), i.first.GetPortionId())
                 .Update(NIceDb::TUpdate<IndexPortions::Metadata>(copy.SerializeAsString()));
@@ -42,6 +42,7 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TNormalizer::DoInit(
     const TNormalizationController& /*controller*/, NTabletFlatExecutor::TTransactionContext& txc) {
     using namespace NColumnShard;
     NIceDb::TNiceDb db(txc.DB);
+    using IndexPortions = NColumnShard::Schema::IndexPortions;
 
     bool ready = true;
     ready = ready & Schema::Precharge<Schema::IndexPortions>(db, txc.DB.GetScheme());

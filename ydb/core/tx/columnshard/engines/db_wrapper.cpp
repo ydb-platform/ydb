@@ -143,12 +143,13 @@ bool TDbWrapper::LoadPortions(const std::optional<TInternalPathId> pathId,
             } else {
                 AFL_VERIFY(metaProto.HasCompactedPortion());
                 AFL_VERIFY(metaProto.GetCompactedPortion().HasAppearanceSnapshot());
-                portion = std::make_unique<TCompactedPortionInfoConstructor>(
+                auto cPortion = std::make_unique<TCompactedPortionInfoConstructor>(
                     TInternalPathId::FromRawValue(rowset.template GetValue<IndexPortions::PathId>()),
                     rowset.template GetValue<IndexPortions::PortionId>());
-                TSnapshot snapshot;
-                snapshot.DeserializeFromProto(metaProto.GetAppearanceSnapshot()).Validate();
-                portion->SetAppearanceSnapshot(snapshot);
+                TSnapshot snapshot = TSnapshot::Zero();
+                snapshot.DeserializeFromProto(metaProto.GetCompactedPortion().GetAppearanceSnapshot()).Validate();
+                cPortion->SetAppearanceSnapshot(snapshot);
+                portion = std::move(cPortion);
             }
             portion->SetSchemaVersion(rowset.template GetValue<IndexPortions::SchemaVersion>());
             if (rowset.template HaveValue<IndexPortions::ShardingVersion>() && rowset.template GetValue<IndexPortions::ShardingVersion>()) {

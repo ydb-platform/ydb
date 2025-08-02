@@ -14,6 +14,7 @@ namespace NSysView {
 constexpr TStringBuf PartitionStatsName = "partition_stats";
 constexpr TStringBuf NodesName = "nodes";
 constexpr TStringBuf QuerySessions = "query_sessions";
+constexpr TStringBuf CompileCacheQueries = "compile_cache_queries";
 constexpr TStringBuf ResourcePoolsName = "resource_pools";
 
 constexpr TStringBuf TopQueriesByDuration1MinuteName = "top_queries_by_duration_one_minute";
@@ -832,6 +833,23 @@ struct Schema : NIceDb::Schema {
         >;
     };
 
+    struct CompileCacheQueries : Table<25> {
+        struct NodeId : Column<1, NScheme::NTypeIds::Uint32> {};
+        struct CompilationId : Column<2, NScheme::NTypeIds::Uint64> {};
+        struct Query : Column<3, NScheme::NTypeIds::Utf8> {};
+        struct AccessCount : Column<4, NScheme::NTypeIds::Uint64> {};
+        struct CompiledQueryAt : Column<5, NScheme::NTypeIds::Timestamp> {};
+        struct UserSID : Column<6, NScheme::NTypeIds::Utf8> {};
+
+        using TKey = TableKey<NodeId, CompilationId>;
+        using TColumns = TableColumns<
+            NodeId,
+            CompilationId,
+            Query,
+            AccessCount,
+            CompiledQueryAt,
+            UserSID>;
+    };
 };
 
 bool MaybeSystemViewPath(const TVector<TString>& path);

@@ -307,6 +307,7 @@ private:
         RegisterSystemView<Schema::QueryStats>(TopQueriesByRequestUnits1MinuteName, ESysViewType::ETopQueriesByRequestUnitsOneMinute);
         RegisterSystemView<Schema::QueryStats>(TopQueriesByRequestUnits1HourName, ESysViewType::ETopQueriesByRequestUnitsOneHour);
         RegisterSystemView<Schema::QuerySessions>(QuerySessions, ESysViewType::EQuerySessions);
+        RegisterSystemView<Schema::CompileCacheQueries>(CompileCacheQueries, ESysViewType::ECompileCacheQueries);
 
         RegisterDomainSystemView<Schema::PDisks>(PDisksName, ESysViewType::EPDisks);
         RegisterDomainSystemView<Schema::VSlots>(VSlotsName, ESysViewType::EVSlots);

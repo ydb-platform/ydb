@@ -18,7 +18,7 @@ constexpr double Epsilon = 1e-8;
 class TComputeSchedulerService : public NActors::TActorBootstrapped<TComputeSchedulerService> {
 public:
     explicit TComputeSchedulerService(const NScheduler::TOptions& options)
-        : Scheduler(std::make_shared<NScheduler::TComputeScheduler>(options.Counters))
+        : Scheduler(std::make_shared<NScheduler::TComputeScheduler>(options.Counters, options.DelayParams))
         , UpdateFairSharePeriod(options.UpdateFairSharePeriod)
     {}
 
@@ -186,8 +186,9 @@ namespace NKikimr::NKqp {
 
 namespace NScheduler {
 
-TComputeScheduler::TComputeScheduler(TIntrusivePtr<TKqpCounters> counters)
+TComputeScheduler::TComputeScheduler(TIntrusivePtr<TKqpCounters> counters, const TDelayParams& delayParams)
     : Root(std::make_shared<TRoot>(counters))
+    , DelayParams(delayParams)
     , KqpCounters(counters)
 {
     auto group = counters->GetKqpCounters();
@@ -217,7 +218,7 @@ void TComputeScheduler::AddOrUpdatePool(const TString& databaseId, const TString
 
     TWriteGuard lock(Mutex);
     auto database = Root->GetDatabase(databaseId);
-    Y_ENSURE(database);
+    Y_ENSURE(database, "Database not found: " << databaseId);
 
     if (auto pool = database->GetPool(poolId)) {
         pool->Update(attrs);
@@ -231,16 +232,16 @@ TQueryPtr TComputeScheduler::AddOrUpdateQuery(const TString& databaseId, const T
 
     TWriteGuard lock(Mutex);
     auto database = Root->GetDatabase(databaseId);
-    Y_ENSURE(database);
+    Y_ENSURE(database, "Database not found: " << databaseId);
     auto pool = database->GetPool(poolId);
-    Y_ENSURE(pool);
+    Y_ENSURE(pool, "Pool not found: " << poolId);
 
     TQueryPtr query;
 
     if (query = pool->GetQuery(queryId)) {
         query->Update(attrs);
     } else {
-        query = std::make_shared<TQuery>(queryId, attrs);
+        query = std::make_shared<TQuery>(queryId, &DelayParams, attrs);
         pool->AddQuery(query);
         Y_ENSURE(Queries.emplace(queryId, query).second);
     }
@@ -282,6 +283,11 @@ void TComputeScheduler::UpdateFairShare() {
 } // namespace NScheduler
 
 IActor* CreateKqpComputeSchedulerService(const NScheduler::TOptions& options) {
+    Y_ENSURE(options.UpdateFairSharePeriod > TDuration::Zero());
+    Y_ENSURE(options.DelayParams.MaxDelay > TDuration::Zero());
+    Y_ENSURE(options.DelayParams.MinDelay > TDuration::Zero());
+    Y_ENSURE(options.DelayParams.AttemptBonus > TDuration::Zero());
+    Y_ENSURE(options.DelayParams.MaxRandomDelay > TDuration::Zero());
     return new TComputeSchedulerService(options);
 }
 

@@ -300,11 +300,17 @@ public:
 
         NScheduler::TOptions schedulerOptions {
             .Counters = Counters,
-            .UpdateFairSharePeriod = TDuration::MicroSeconds(500'000),
+            .DelayParams = {
+                .MaxDelay = TDuration::MicroSeconds(TableServiceConfig.GetComputeSchedulerSettings().GetMaxTaskDelayUs()),
+                .MinDelay = TDuration::MicroSeconds(TableServiceConfig.GetComputeSchedulerSettings().GetMinTaskDelayUs()),
+                .AttemptBonus = TDuration::MicroSeconds(TableServiceConfig.GetComputeSchedulerSettings().GetAttemptTaskBonusUs()),
+                .MaxRandomDelay = TDuration::MicroSeconds(TableServiceConfig.GetComputeSchedulerSettings().GetMaxTaskRandomDelayUs()),
+            },
+            .UpdateFairSharePeriod = TDuration::MilliSeconds(TableServiceConfig.GetComputeSchedulerSettings().GetUpdateFairShareMs()),
         };
-        auto kqpSchedulerService = TActivationContext::Register(CreateKqpComputeSchedulerService(schedulerOptions));
+        KqpComputeSchedulerService = TActivationContext::Register(CreateKqpComputeSchedulerService(schedulerOptions));
         TActivationContext::ActorSystem()->RegisterLocalService(
-            MakeKqpSchedulerServiceId(SelfId().NodeId()), kqpSchedulerService);
+            MakeKqpSchedulerServiceId(SelfId().NodeId()), KqpComputeSchedulerService);
 
         NActors::TMon* mon = AppData()->Mon;
         if (mon) {
@@ -401,6 +407,7 @@ public:
         Send(KqpNodeService, new TEvents::TEvPoison);
 
         Send(KqpWorkloadService, new TEvents::TEvPoison());
+        Send(KqpComputeSchedulerService, new TEvents::TEvPoison());
 
         LocalSessions->ForEachNode([this](TNodeId node) {
             Send(TActivationContext::InterconnectProxy(node), new TEvents::TEvUnsubscribe);
@@ -571,12 +578,10 @@ public:
             return;
         }
 
-#if defined(USE_HDRF_SCHEDULER)
         // TODO: not the best place for adding database.
         auto addDatabaseEvent = MakeHolder<NScheduler::TEvAddDatabase>();
         addDatabaseEvent->Id = ev->Get()->GetDatabaseId();
         Send(MakeKqpSchedulerServiceId(SelfId().NodeId()), addDatabaseEvent.Release());
-#endif
 
         const TString& database = ev->Get()->GetDatabase();
         const TString& traceId = ev->Get()->GetTraceId();
@@ -1473,10 +1478,8 @@ private:
             ev->Get()->SetPoolConfig(poolConfig);
         }
 
-#if defined(USE_HDRF_SCHEDULER)
         Y_ASSERT(!poolId.empty());
         Send(MakeKqpSchedulerServiceId(SelfId().NodeId()), new NScheduler::TEvAddPool(databaseId, poolId, poolConfig));
-#endif
 
         return true;
     }
@@ -1549,6 +1552,8 @@ private:
         if (!DatabasesCache.SetDatabaseIdOrDefer(ev, static_cast<i32>(requestType), ActorContext())) {
             return false;
         }
+
+        // TODO: add database to scheduler
 
         switch (ScriptExecutionsCreationStatus) {
             case EScriptExecutionsCreationStatus::NotStarted:
@@ -1723,6 +1728,7 @@ private:
             ResourcePoolsCache.UpdateDatabaseInfo(ev->Get()->DatabaseId, ev->Get()->Serverless);
         }
         DatabasesCache.UpdateDatabaseInfo(ev, ActorContext());
+        // TODO: update info for compute scheduler too
     }
 
     void Handle(TEvKqp::TEvDelayedRequestError::TPtr& ev) {
@@ -1778,6 +1784,7 @@ private:
     TActorId SpillingService;
     TActorId WhiteBoardService;
     TActorId KqpWorkloadService;
+    TActorId KqpComputeSchedulerService;
     NYql::NDq::IDqAsyncIoFactory::TPtr AsyncIoFactory;
 
     enum class EScriptExecutionsCreationStatus {

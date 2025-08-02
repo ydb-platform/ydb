@@ -36,7 +36,7 @@ namespace NKikimr::NKqp::NScheduler {
         }
 
         void PassAway() override {
-            if (!PassedAway) {
+            if (!PassedAway && IsAccountable()) {
                 PassedAway = true;
                 StopExecution();
             }
@@ -54,6 +54,10 @@ namespace NKikimr::NKqp::NScheduler {
         }
 
         void DoExecuteImpl() override {
+            if (!IsAccountable()) {
+                return TBase::DoExecuteImpl();
+            }
+
             // TODO: account waiting on mailbox?
 
             const auto now = Now();

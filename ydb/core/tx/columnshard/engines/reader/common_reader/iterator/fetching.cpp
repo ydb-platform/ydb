@@ -5,7 +5,6 @@
 #include "source.h"
 #include "sub_columns_fetching.h"
 
-#include <ydb/core/kqp/runtime/scheduler/new/kqp_schedulable_actor.h>
 #include <ydb/core/tx/columnshard/blobs_reader/actor.h>
 
 #include <util/string/builder.h>

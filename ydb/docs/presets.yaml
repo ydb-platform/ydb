@@ -62,6 +62,7 @@ default:
 
   datalens-name: DataLens
   airflow-name: Apache Airflow™
+  spark-name: Apache Spark™
   ydb-airflow: false
   ydb-finebi: false
   ydb-superset: false

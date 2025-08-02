@@ -1,4 +1,6 @@
-#include "actor_persqueue_client_iface.h"
+#include <ydb/core/persqueue/actor_persqueue_client_iface.h>
+#include <ydb/core/persqueue/events/internal.h>
+
 #include <ydb/core/tx/schemeshard/ut_helpers/test_env.h>
 
 #include <ydb/public/sdk/cpp/src/client/persqueue_public/ut/ut_utils/test_server.h>

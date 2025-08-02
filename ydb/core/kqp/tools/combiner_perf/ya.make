@@ -46,6 +46,7 @@ ENDIF()
 
 SRCS(
     converters.cpp
+    dq_combine_vs.cpp
     factories.cpp
     printout.cpp
     simple.cpp

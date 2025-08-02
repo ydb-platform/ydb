@@ -17,7 +17,6 @@ END()
 
 RECURSE(
     audit
-    buf
     common
     iam
 )

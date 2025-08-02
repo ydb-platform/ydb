@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package nebius.common.v1;
 
-import "ydb/public/api/client/nc_private/buf/validate/validate.proto";
+//import "ydb/public/api/client/nc_private/buf/validate/validate.proto";
 import "google/protobuf/timestamp.proto";
 import "ydb/public/api/client/nc_private/annotations.proto";
 
@@ -24,7 +24,7 @@ message ResourceMetadata {
   // @exclude (e.g., Move VPC network to another IAM container).
   // @exclude Parent is IMMUTABLE by default.
   // @exclude If API supports `move` then use custom annotation on resource level (resource_behavior) = MOVABLE
-  string parent_id = 2 [(buf.validate.field).required = true];
+  string parent_id = 2; // [(buf.validate.field).required = true];
 
   // Human readable name for the resource.
   // @exclude If the resource is not marked with ResourceBehavior.UNNAMED then name must be unique within resource_type and parent_id.
@@ -42,9 +42,9 @@ message ResourceMetadata {
   // @exclude * If a user in a modifying request (e.g., Update, Delete) sends back a resource_version which matches the current
   // @exclude   resource_version value or does not send a resource_version at all (that is, send 0), the service MUST permit the request
   // @exclude   (unless there is some other reason for failure).
-  int64 resource_version = 4 [
-    (buf.validate.field).int64.gte = 0
-  ];
+  int64 resource_version = 4; // [
+  //   (buf.validate.field).int64.gte = 0
+  // ];
 
   // Timestamp indicating when the resource was created.
   google.protobuf.Timestamp created_at = 5 [(field_behavior) = OUTPUT_ONLY];

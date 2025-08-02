@@ -5,7 +5,7 @@ package nebius.common.v1;
 import "google/protobuf/any.proto";
 import "google/protobuf/timestamp.proto";
 import "google/rpc/status.proto";
-import "ydb/public/api/client/nc_private/buf/validate/validate.proto";
+//import "ydb/public/api/client/nc_private/buf/validate/validate.proto";
 import "ydb/public/api/client/nc_private/annotations.proto";
 
 option java_multiple_files = true;
@@ -44,7 +44,7 @@ message Operation {
   // All the header names *must* be converted to lower case.
   // Validator is based on:
   // https://httpwg.org/specs/rfc9110.html#considerations.for.new.field.names
-  map<string, RequestHeader> request_headers = 11 [(buf.validate.field).map.keys.string = {pattern: "^[a-z][-a-z\\.]*$"}];
+  map<string, RequestHeader> request_headers = 11; // [(buf.validate.field).map.keys.string = {pattern: "^[a-z][-a-z\\.]*$"}];
 
   // ID of the resource that this operation creates, updates, deletes or otherwise changes.
   //

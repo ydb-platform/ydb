@@ -111,7 +111,7 @@ struct TSimd8 {
     }
 
     static Y_FORCE_INLINE TSimd8<T> LoadStream(const T values[32]) {
-        return _mm256_stream_load_si256(reinterpret_cast<__m256i *>(values));
+        return _mm256_stream_load_si256(reinterpret_cast<const __m256i *>(values));
     }
 
     Y_FORCE_INLINE void Store(T dst[32]) const {

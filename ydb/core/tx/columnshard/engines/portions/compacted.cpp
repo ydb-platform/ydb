@@ -8,9 +8,9 @@ namespace NKikimr::NOlap {
 
 void TCompactedPortionInfo::DoSaveMetaToDatabase(const std::vector<TUnifiedBlobId>& blobIds, NIceDb::TNiceDb& db) const {
     auto metaProto = GetMeta().SerializeToProto(blobIds, NPortion::EProduced::SPLIT_COMPACTED);
-    AFL_VERIFY(AppearenceSnapshot.IsValid());
+    AFL_VERIFY(AppearanceSnapshot.Valid());
     auto* compactedProto = metaProto.MutableCompactedPortion();
-    compactedProto->MutableAppearenceSnapshot() = AppearenceSnapshot.SerializeToProto();
+    AppearanceSnapshot.SerializeToProto(*compactedProto->MutableAppearanceSnapshot());
     using IndexPortions = NColumnShard::Schema::IndexPortions;
     const auto removeSnapshot = GetRemoveSnapshotOptional();
     db.Table<IndexPortions>()

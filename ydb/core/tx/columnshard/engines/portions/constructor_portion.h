@@ -145,19 +145,19 @@ public:
 class TCompactedPortionInfoConstructor: public TPortionInfoConstructor {
 private:
     using TBase = TPortionInfoConstructor;
-    std::optional<TSnapshot> AppearenceSnapshot;
+    std::optional<TSnapshot> AppearanceSnapshot;
 
 public:
     using TBase::TBase;
 
-    void SetAppearenceSnapshot(const TSnapshot snapshot) {
-        AFL_VERIFY(!AppearenceSnapshot);
-        AppearenceSnapshot = snapshot;
+    void SetAppearanceSnapshot(const TSnapshot snapshot) {
+        AFL_VERIFY(!AppearanceSnapshot);
+        AppearanceSnapshot = snapshot;
     }
 
     TCompactedPortionInfoConstructor(const TCompactedPortionInfo& portion, const bool withMetadata)
         : TBase(portion, withMetadata)
-        , AppearenceSnapshot(portion.AppearenceSnapshot) {
+        , AppearanceSnapshot(portion.AppearanceSnapshot) {
     }
 
     virtual EPortionType GetType() const override {

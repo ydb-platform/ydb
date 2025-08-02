@@ -209,7 +209,7 @@ public:
         AFL_VERIFY(!PortionResult);
         if (PortionConstructor->MutablePortionConstructor().GetType() == EPortionType::Compacted) {
             static_cast<TCompactedPortionInfoConstructor*>(&PortionConstructor->MutablePortionConstructor())
-                ->SetAppearenceSnapshot(finalizationSnapshot);
+                ->SetAppearanceSnapshot(finalizationSnapshot);
         }
         PortionResult = PortionConstructor->Build(true);
         PortionConstructor.reset();

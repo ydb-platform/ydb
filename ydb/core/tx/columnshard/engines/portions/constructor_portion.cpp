@@ -61,8 +61,8 @@ std::shared_ptr<TPortionInfo> TWrittenPortionInfoConstructor::BuildPortionImpl(T
 
 std::shared_ptr<TPortionInfo> TCompactedPortionInfoConstructor::BuildPortionImpl(TPortionMeta&& meta) {
     auto result = std::make_shared<TCompactedPortionInfo>(std::move(meta));
-    AFL_VERIFY(AppearenceSnapshot);
-    result->AppearenceSnapshot = *AppearenceSnapshot;
+    AFL_VERIFY(AppearanceSnapshot);
+    result->AppearanceSnapshot = *AppearanceSnapshot;
     return result;
 }
 

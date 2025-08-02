@@ -44,6 +44,7 @@ void InsertAllColumnsAndCheckSelectAll(TKikimrRunner* runner) {
             YsonValue Yson,
             JsonDocumentValue JsonDocument,
             DyNumberValue DyNumber,
+            UuidValue Uuid,
             Int32NotNullValue Int32 NOT NULL,
             PRIMARY KEY (Key)
         );
@@ -52,18 +53,18 @@ void InsertAllColumnsAndCheckSelectAll(TKikimrRunner* runner) {
 
     auto insertResult = session.ExecuteDataQuery(R"(
         --!syntax_v1
-        INSERT INTO `/Root/Tmp` (Key, BoolValue, Int32Value, Uint32Value, Int64Value, Uint64Value, FloatValue, DoubleValue, StringValue, Utf8Value, DateValue, DatetimeValue, TimestampValue, IntervalValue, DecimalValue, JsonValue, YsonValue, JsonDocumentValue, DyNumberValue, Int32NotNullValue) VALUES
-        (42, true, -1, 1, -2, 2, CAST(3.0 AS Float), 4.0, "five", Utf8("six"), Date("2007-07-07"), Datetime("2008-08-08T08:08:08Z"), Timestamp("2009-09-09T09:09:09.09Z"), Interval("P10D"), CAST("11.11" AS Decimal(22, 9)), "[12]", "[13]", JsonDocument("[14]"), DyNumber("15.15"), 123);
+        INSERT INTO `/Root/Tmp` (Key, BoolValue, Int32Value, Uint32Value, Int64Value, Uint64Value, FloatValue, DoubleValue, StringValue, Utf8Value, DateValue, DatetimeValue, TimestampValue, IntervalValue, DecimalValue, JsonValue, YsonValue, JsonDocumentValue, DyNumberValue, UuidValue, Int32NotNullValue) VALUES
+        (42, true, -1, 1, -2, 2, CAST(3.0 AS Float), 4.0, "five", Utf8("six"), Date("2007-07-07"), Datetime("2008-08-08T08:08:08Z"), Timestamp("2009-09-09T09:09:09.09Z"), Interval("P10D"), CAST("11.11" AS Decimal(22, 9)), "[12]", "[13]", JsonDocument("[14]"), DyNumber("15.15"), Uuid("00000000-0000-0000-0000-000000000011"), 123);
     )", TTxControl::BeginTx().CommitTx()).GetValueSync();
     UNIT_ASSERT_C(insertResult.IsSuccess(), insertResult.GetIssues().ToString());
 
-    auto it = db.StreamExecuteScanQuery("SELECT Key, BoolValue, Int32Value, Uint32Value, Int64Value, Uint64Value, FloatValue, DoubleValue, StringValue, Utf8Value, DateValue, DatetimeValue, TimestampValue, IntervalValue, DecimalValue, JsonValue, YsonValue, JsonDocumentValue, DyNumberValue, Int32NotNullValue FROM `/Root/Tmp`").GetValueSync();
+    auto it = db.StreamExecuteScanQuery("SELECT Key, BoolValue, Int32Value, Uint32Value, Int64Value, Uint64Value, FloatValue, DoubleValue, StringValue, Utf8Value, DateValue, DatetimeValue, TimestampValue, IntervalValue, DecimalValue, JsonValue, YsonValue, JsonDocumentValue, DyNumberValue, UuidValue, Int32NotNullValue FROM `/Root/Tmp`").GetValueSync();
     UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
     auto streamPart = it.ReadNext().GetValueSync();
     UNIT_ASSERT_C(streamPart.IsSuccess(), streamPart.GetIssues().ToString());
     auto resultSet = streamPart.ExtractResultSet();
     auto columns = resultSet.GetColumnsMeta();
-    UNIT_ASSERT_C(columns.size() == 20, "Wrong columns count");
+    UNIT_ASSERT_C(columns.size() == 21, "Wrong columns count");
     NYdb::TResultSetParser parser(resultSet);
     UNIT_ASSERT_C(parser.TryNextRow(), "Row is missing");
     UNIT_ASSERT(parser.ColumnParser(0).GetOptionalUint64().value() == 42);
@@ -86,7 +87,8 @@ void InsertAllColumnsAndCheckSelectAll(TKikimrRunner* runner) {
     UNIT_ASSERT(parser.ColumnParser(16).GetOptionalYson().value() == "[13]");
     UNIT_ASSERT(parser.ColumnParser(17).GetOptionalJsonDocument().value() == "[14]");
     UNIT_ASSERT(parser.ColumnParser(18).GetOptionalDyNumber().value() == ".1515e2");
-    UNIT_ASSERT(parser.ColumnParser(19).GetInt32() == 123);
+    UNIT_ASSERT(parser.ColumnParser(19).GetOptionalUuid().value().ToString() == "00000000-0000-0000-0000-000000000011");
+    UNIT_ASSERT(parser.ColumnParser(20).GetInt32() == 123);
 }
 
 }

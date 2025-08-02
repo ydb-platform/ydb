@@ -434,6 +434,7 @@ bool CanRebuildForWideChannelOutput(const TDqOutput& output) {
 
 bool IsSupportedForWide(const TDqConnection& conn) {
     if (!(conn.Maybe<TDqCnHashShuffle>() ||
+          conn.Maybe<TDqCnStreamLookup>() ||
           conn.Maybe<TDqCnMerge>() ||
           conn.Maybe<TDqCnUnionAll>() ||
           conn.Maybe<TDqCnBroadcast>() ||
@@ -453,7 +454,7 @@ bool IsSupportedForWide(const TDqConnection& conn) {
 
 bool IsSupportedForWideBlocks(const TDqConnection& conn) {
     // currently all connections supporting wide channels also support wide block channels
-    return IsSupportedForWide(conn);
+    return !conn.Maybe<TDqCnStreamLookup>() && IsSupportedForWide(conn);
 }
 
 const TStructExprType* GetStageOutputItemType(const TDqPhyStage& stage) {

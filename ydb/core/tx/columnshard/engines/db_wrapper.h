@@ -27,6 +27,7 @@ class TPortionInfo;
 class TPortionInfoConstructor;
 
 class IDbWrapper {
+
 public:
     virtual ~IDbWrapper() = default;
 

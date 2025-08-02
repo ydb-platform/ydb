@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/core/base/appdata_fwd.h>
+#include <ydb/core/erasure/erasure.h>
 #include <ydb/core/protos/base.pb.h>
 #include <ydb/core/protos/blobstorage_base.pb.h>
 #include <ydb/core/protos/whiteboard_disk_states.pb.h>

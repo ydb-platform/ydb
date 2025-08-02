@@ -1460,6 +1460,99 @@ void TCms::RemoveRequest(TEvCms::TEvManageRequestRequest::TPtr &ev, const TActor
     }
 }
 
+void TCms::ManuallyApproveRequest(TEvCms::TEvManageRequestRequest::TPtr &ev, const TActorContext &ctx)
+{
+    // This actor waits for permission response and then sends manage request response
+    // with approved permissions to the sender of the request while also removing scheduled request.
+    class TRequestApproveActor : public TActorBootstrapped<TRequestApproveActor> {
+    public:
+        TString RequestId;
+
+        TCmsStatePtr State;
+
+        TActorId SendTo;
+
+        TRequestApproveActor(TString requestId, TCmsStatePtr state, TActorId sendTo)
+        : RequestId(std::move(requestId))
+        , State(std::move(state))
+        , SendTo(sendTo) {}
+
+        void Bootstrap() {
+            Become(&TRequestApproveActor::StateWork);
+        }
+
+        void Handle(TEvCms::TEvPermissionResponse::TPtr &ev) {
+            auto resp = ev->Get();
+
+            NKikimrCms::TStatus status = resp->Record.GetStatus();
+
+            TAutoPtr<TEvCms::TEvManageRequestResponse> manageResponse = new TEvCms::TEvManageRequestResponse;
+
+            if (status.GetCode() != TStatus::ALLOW) {
+                manageResponse->Record.MutableStatus()->SetCode(status.GetCode());
+                manageResponse->Record.MutableStatus()->SetReason(status.GetReason());
+                auto handle = new IEventHandle(SendTo, SelfId(), manageResponse.Release(), 0, ev->Cookie);
+                Send(handle);
+                PassAway();
+                return;
+            }
+
+            manageResponse->Record.MutableStatus()->SetCode(TStatus::OK);
+            for (auto& permission : resp->Record.permissions()) {
+                manageResponse->Record.AddManuallyApprovedPermissions(permission.GetId());
+            }
+
+            // Remove the scheduled request
+            State->ScheduledRequests.erase(RequestId);
+
+            auto handle = new IEventHandle(SendTo, SelfId(), manageResponse.Release(), 0, ev->Cookie);
+            Send(handle);
+
+            PassAway();
+        }
+        STFUNC(StateWork) {
+            switch (ev->GetTypeRewrite()) {
+                hFunc(TEvCms::TEvPermissionResponse, Handle);
+                default:
+                    LOG_ERROR_S(*TlsActivationContext, NKikimrServices::CMS,
+                                "Unexpected event type: " << ev->GetTypeName());
+                    break;
+            }
+        }
+    };
+
+    auto &rec = ev->Get()->Record;
+
+    TString requestId = rec.GetRequestId();
+
+    auto actor = new TRequestApproveActor(requestId, State, ev->Sender);
+    TActorId approveActorId = ctx.RegisterWithSameMailbox(actor);
+
+    // Find the scheduled request by RequestId
+    auto it = State->ScheduledRequests.find(requestId);
+    if (it == State->ScheduledRequests.end()) {
+        return ReplyWithError<TEvCms::TEvManageRequestResponse>(
+            ev, TStatus::WRONG_REQUEST, "Unknown request for manual approval", ctx);
+    }
+
+    TAutoPtr<TRequestInfo> copy = new TRequestInfo(it->second);
+
+    // Create a permission for each action in the scheduled request
+    TAutoPtr<TEvCms::TEvPermissionResponse> resp = new TEvCms::TEvPermissionResponse;
+    resp->Record.MutableStatus()->SetCode(TStatus::ALLOW);
+    for (const auto& action : copy->Request.GetActions()) {
+        auto* perm = resp->Record.AddPermissions();
+        perm->MutableAction()->CopyFrom(action);
+        TInstant deadline = TActivationContext::Now() + TDuration::MicroSeconds(copy->Request.GetDuration());
+        perm->SetDeadline(deadline.GetValue());
+    }
+
+    AcceptPermissions(resp->Record, rec.GetRequestId(), rec.GetUser(), ctx, true);
+
+    auto handle = new IEventHandle(approveActorId, SelfId(), resp.Release(), 0, ev->Cookie);
+    Execute(CreateTxStorePermissions(std::move(ev->Release()), handle, rec.GetUser(), std::move(copy)), ctx);
+}
+
 void TCms::GetNotifications(TEvCms::TEvManageNotificationRequest::TPtr &ev, bool all,
                             const TActorContext &ctx)
 {
@@ -1856,6 +1949,10 @@ void TCms::Handle(TEvCms::TEvManageRequestRequest::TPtr &ev, const TActorContext
     case TManageRequestRequest::REJECT:
         RemoveRequest(ev, ctx);
         return;
+    case TManageRequestRequest::APPROVE: {
+        ManuallyApproveRequest(ev, ctx);
+        return;
+    }
     default:
         return ReplyWithError<TEvCms::TEvManageRequestResponse>(
             ev, TStatus::WRONG_REQUEST, "Unknown command", ctx);

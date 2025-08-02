@@ -254,6 +254,16 @@ public:
     }
 };
 
+class TClientCommandApproveRequest : public TClientCommandManageRequest
+{
+public:
+    TClientCommandApproveRequest()
+        : TClientCommandManageRequest("approve", {}, "Approve scheduled request",
+                                      NKikimrCms::TManageRequestRequest::APPROVE, true)
+    {
+    }
+};
+
 class TClientCommandCheckRequest : public TCmsClientCommand
 {
 public:
@@ -589,6 +599,7 @@ public:
         AddCommand(std::make_unique<TClientCommandGetRequest>());
         AddCommand(std::make_unique<TClientCommandListRequest>());
         AddCommand(std::make_unique<TClientCommandRejectRequest>());
+        AddCommand(std::make_unique<TClientCommandApproveRequest>());
         AddCommand(std::make_unique<TClientCommandCheckRequest>());
     }
 };

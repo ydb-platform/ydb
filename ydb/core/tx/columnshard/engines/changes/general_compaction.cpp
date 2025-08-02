@@ -116,6 +116,7 @@ void TGeneralCompactColumnEngineChanges::BuildAppendedPortionsByChunks(
             }
             dataColumnIds.emplace((ui32)IIndexInfo::ESpecialColumn::WRITE_ID);
         }
+        dataColumnIds.insert(IIndexInfo::GetSnapshotColumnIds().begin(), IIndexInfo::GetSnapshotColumnIds().end());
         resultFiltered = std::make_shared<TFilteredSnapshotSchema>(resultSchema, dataColumnIds);
         {
             auto seqDataColumnIds = dataColumnIds;

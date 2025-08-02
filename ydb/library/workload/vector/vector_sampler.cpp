@@ -19,7 +19,7 @@ TVectorSampler::TVectorSampler(const TVectorWorkloadParams& params)
 
 ui64 TVectorSampler::SelectOneId(bool min) {
     std::string query = std::format(R"_(--!syntax_v1
-        SELECT CAST({1} AS uint64) AS id FROM {0} ORDER BY {1} {2} LIMIT 1;
+        SELECT Unwrap(CAST({1} AS uint64)) AS id FROM {0} ORDER BY {1} {2} LIMIT 1;
     )_", Params.TableName.c_str(), Params.KeyColumn.c_str(), min ? "" : "DESC");
 
     // Execute the query
@@ -132,13 +132,13 @@ void TVectorSampler::SampleExistingVectors() {
         std::string vectorQuery;
         if (Params.PrefixColumn) {
             vectorQuery = std::format(R"_(--!syntax_v1
-                SELECT CAST({0} as uint64) as id, Unwrap({1}) as embedding, Unwrap({2}) as prefix_value
+                SELECT Unwrap(CAST({0} as uint64)) as id, Unwrap({1}) as embedding, Unwrap({2}) as prefix_value
                 FROM {3}
                 WHERE {0} = {4};
             )_", Params.KeyColumn.c_str(), Params.EmbeddingColumn.c_str(), Params.PrefixColumn->c_str(), Params.TableName.c_str(), randomId);
         } else {
             vectorQuery = std::format(R"_(--!syntax_v1
-                SELECT CAST({0} as uint64) as id, Unwrap({1}) as embedding
+                SELECT Unwrap(CAST({0} as uint64)) as id, Unwrap({1}) as embedding
                 FROM {2}
                 WHERE {0} = {3};
             )_", Params.KeyColumn.c_str(), Params.EmbeddingColumn.c_str(), Params.TableName.c_str(), randomId);

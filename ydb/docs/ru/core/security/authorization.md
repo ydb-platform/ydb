@@ -74,7 +74,7 @@
 
 [Права доступа](../concepts/glossary.md#access-right) в {{ ydb-short-name }} привязаны не к [субъекту](../concepts/glossary.md#access-subject), а к [объекту доступа](../concepts/glossary.md#access-object).
 
-У каждого объекта доступа есть список прав — [ACL](../concepts/glossary.md#access-acl) (Access Control List) — он хранит все предоставленные [субъектам доступа](../concepts/glossary.md#subject) (пользователям и группам) права на объект.
+У каждого объекта доступа есть список прав — [ACL](../concepts/glossary.md#access-control-list) (Access Control List) — он хранит все предоставленные [субъектам доступа](../concepts/glossary.md#subject) (пользователям и группам) права на объект.
 
 По умолчанию, права наследуются от родителей потомкам по дереву объектов доступа.
 

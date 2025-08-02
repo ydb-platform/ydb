@@ -204,9 +204,13 @@ public:
 
     }
 
-    void FinalizePortionConstructor() {
+    void FinalizePortionConstructor(const TSnapshot& finalizationSnapshot) {
         AFL_VERIFY(!!PortionConstructor);
         AFL_VERIFY(!PortionResult);
+        if (PortionConstructor->MutablePortionConstructor().GetType() == EPortionType::Compacted) {
+            static_cast<TCompactedPortionInfoConstructor*>(&PortionConstructor->MutablePortionConstructor())
+                ->SetAppearenceSnapshot(finalizationSnapshot);
+        }
         PortionResult = PortionConstructor->Build(true);
         PortionConstructor.reset();
     }

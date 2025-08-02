@@ -5,12 +5,13 @@ namespace NKikimr::NOlap {
 
 class TCompactedPortionInfo: public TPortionInfo {
 private:
+    TSnapshot AppearenceSnapshot = TSnapshot::Zero();
     using TBase = TPortionInfo;
-    friend class TPortionInfoConstructor;
+    friend class TCompactedPortionInfoConstructor;
     virtual void DoSaveMetaToDatabase(const std::vector<TUnifiedBlobId>& blobIds, NIceDb::TNiceDb& db) const override;
 
     virtual bool DoIsVisible(const TSnapshot& snapshot, const bool /*checkCommitSnapshot*/) const override {
-        return RecordSnapshotMin(std::nullopt) <= snapshot;
+        return RecordSnapshotMin(std::nullopt) <= snapshot && AppearenceSnapshot <= snapshot;
     }
 
     virtual EPortionType GetPortionType() const override {

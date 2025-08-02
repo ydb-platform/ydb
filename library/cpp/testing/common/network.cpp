@@ -183,21 +183,27 @@ namespace {
 
     private:
         THolder<NTesting::IPort> TryAcquirePort(ui16 port) const {
-            auto lock = MakeHolder<TFileLock>(TString(SyncDir_ / ::ToString(port)));
-            if (!lock->TryAcquire()) {
+            try {
+                auto lock = MakeHolder<TFileLock>(TString(SyncDir_ / ::ToString(port)));
+                if (!lock->TryAcquire()) {
+                    return nullptr;
+                }
+
+                TInet6StreamSocket sock;
+                Y_VERIFY_SYSERROR(INVALID_SOCKET != static_cast<SOCKET>(sock));
+
+                TSockAddrInet6 addr("::", port);
+                if (sock.Bind(&addr) != 0) {
+                    lock->Release();
+                    Y_ABORT_UNLESS(EADDRINUSE == LastSystemError(), "unexpected error: %d, port: %d", LastSystemError(), port);
+                    return nullptr;
+                }
+                return MakeHolder<TPortGuard>(port, std::move(lock));
+            }
+            catch (...) {
                 return nullptr;
             }
 
-            TInet6StreamSocket sock;
-            Y_VERIFY_SYSERROR(INVALID_SOCKET != static_cast<SOCKET>(sock));
-
-            TSockAddrInet6 addr("::", port);
-            if (sock.Bind(&addr) != 0) {
-                lock->Release();
-                Y_ABORT_UNLESS(EADDRINUSE == LastSystemError(), "unexpected error: %d, port: %d", LastSystemError(), port);
-                return nullptr;
-            }
-            return MakeHolder<TPortGuard>(port, std::move(lock));
         }
 
     private:

@@ -834,17 +834,17 @@ struct Schema : NIceDb::Schema {
     };
 
     struct CompileCacheQueries : Table<25> {
-        struct NodeId : Column<1, NScheme::NTypeIds::Uint32> {};
-        struct CompilationId : Column<2, NScheme::NTypeIds::Uint64> {};
+        struct QueryId : Column<1, NScheme::NTypeIds::Utf8> {};
+        struct NodeId : Column<2, NScheme::NTypeIds::Uint32> {};
         struct Query : Column<3, NScheme::NTypeIds::Utf8> {};
         struct AccessCount : Column<4, NScheme::NTypeIds::Uint64> {};
         struct CompiledQueryAt : Column<5, NScheme::NTypeIds::Timestamp> {};
         struct UserSID : Column<6, NScheme::NTypeIds::Utf8> {};
 
-        using TKey = TableKey<NodeId, CompilationId>;
+        using TKey = TableKey<QueryId>;
         using TColumns = TableColumns<
+            QueryId,
             NodeId,
-            CompilationId,
             Query,
             AccessCount,
             CompiledQueryAt,

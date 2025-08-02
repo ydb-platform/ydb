@@ -33,12 +33,12 @@ public:
 
     struct TExtractorsMap : public THashMap<NTable::TTag, TExtractor> {
         TExtractorsMap() {
-            insert({TSchema::NodeId::ColumnId, [] (const TCompileCacheQuery&, ui32 nodeId) {  // 1
-                return TCell::Make<ui32>(nodeId);
+            insert({TSchema::QueryId::ColumnId, [] (const TCompileCacheQuery& info, ui32) { // 1
+                return TCell(info.GetQueryId().data(), info.GetQueryId().size());
             }});
 
-            insert({TSchema::CompilationId::ColumnId, [] (const TCompileCacheQuery& info, ui32) { // 2
-                return TCell::Make<ui64>(info.GetCompilationId());
+            insert({TSchema::NodeId::ColumnId, [] (const TCompileCacheQuery&, ui32 nodeId) {  // 2
+                return TCell::Make<ui32>(nodeId);
             }});
 
             insert({TSchema::Query::ColumnId, [] (const TCompileCacheQuery& info, ui32) {  // 3
@@ -66,14 +66,14 @@ public:
     {
         const auto& cellsFrom = TableRange.From.GetCells();
         if (cellsFrom.size() == 1 && !cellsFrom[0].IsNull()) {
-            SessionIdFrom = cellsFrom[0].AsBuf();
-            SessionIdFromInclusive = TableRange.FromInclusive;
+            QueryIdFrom = cellsFrom[0].AsBuf();
+            QueryIdFromInclusive = TableRange.FromInclusive;
         }
 
         const auto& cellsTo = TableRange.To.GetCells();
         if (cellsTo.size() == 1 && !cellsTo[0].IsNull()) {
-            SessionIdTo = cellsTo[0].AsBuf();
-            SessionIdToInclusive = TableRange.ToInclusive;
+            QueryIdTo = cellsTo[0].AsBuf();
+            QueryIdToInclusive = TableRange.ToInclusive;
         }
 
         static TExtractorsMap extractors;
@@ -99,7 +99,7 @@ public:
             hFunc(NKqp::TEvKqp::TEvAbortExecution, HandleAbortExecution);
             cFunc(TEvents::TEvWakeup::EventType, HandleTimeout);
             cFunc(TEvents::TEvPoison::EventType, PassAway);
-            hFunc(NKqp::TEvKqp::TEvListSessionsResponse, Handle);
+            hFunc(NKqp::TEvKqp::TEvListQueryCacheQueriesResponse, Handle);
             hFunc(NKqp::TEvKqp::TEvListProxyNodesResponse, Handle);
             default:
                 LOG_CRIT(*TlsActivationContext, NKikimrServices::SYSTEM_VIEWS,
@@ -144,19 +144,19 @@ private:
 
         if (!PendingNodes.empty() && !PendingRequest)  {
             const auto& nodeId = PendingNodes.front();
-            auto kqpProxyId = NKqp::MakeKqpProxyID(nodeId);
-            auto req = std::make_unique<NKikimr::NKqp::TEvKqp::TEvListSessionsRequest>();
+            auto kqpProxyId = NKqp::MakeKqpCompileServiceID(nodeId);
+            auto req = std::make_unique<NKikimr::NKqp::TEvKqp::TEvListQueryCacheQueriesRequest>();
             req->Record.SetTenantName(TenantName);
             if (!ContinuationToken.empty()) {
-                req->Record.SetSessionIdStart(ContinuationToken);
-                req->Record.SetSessionIdStartInclusive(true);
+                req->Record.SetQueryIdStart(ContinuationToken);
+                req->Record.SetQueryIdStartInclusive(true);
             } else {
-                req->Record.SetSessionIdStart(SessionIdFrom);
-                req->Record.SetSessionIdStartInclusive(SessionIdFromInclusive);
+                req->Record.SetQueryIdStart(QueryIdFrom);
+                req->Record.SetQueryIdStartInclusive(QueryIdFromInclusive);
             }
 
-            req->Record.SetSessionIdEnd(SessionIdTo);
-            req->Record.SetSessionIdEndInclusive(SessionIdToInclusive);
+            req->Record.SetQueryIdEnd(QueryIdTo);
+            req->Record.SetQueryIdEndInclusive(QueryIdToInclusive);
             req->Record.MutableColumns()->Add(ColumnsToRead.begin(), ColumnsToRead.end());
             if (FreeSpace == 0) {
                 FreeSpace = 1_KB;
@@ -185,14 +185,14 @@ private:
         StartScan();
     }
 
-    void Handle(NKqp::TEvKqp::TEvListSessionsResponse::TPtr& ev) {
+    void Handle(NKqp::TEvKqp::TEvListQueryCacheQueriesResponse::TPtr& ev) {
         auto& record = ev->Get()->Record;
         LastResponse = std::move(record);
         ProcessRows();
     }
 
     void Undelivered(TEvents::TEvUndelivered::TPtr& ev) {
-        if (ev->Get()->SourceType == NKqp::TKqpEvents::EvListSessionsRequest) {
+        if (ev->Get()->SourceType == NKqp::TKqpEvents::EvListCompileCacheQueriesRequest) {
             ui32 nodeId = ev->Cookie;
             LOG_INFO_S(TlsActivationContext->AsActorContext(), NKikimrServices::SYSTEM_VIEWS,
                 "Received undelivered response for node_id: " << nodeId);
@@ -244,10 +244,10 @@ private:
     }
 
 private:
-    TString SessionIdFrom;
-    bool SessionIdFromInclusive = false;
-    TString SessionIdTo;
-    bool SessionIdToInclusive = false;
+    TString QueryIdFrom;
+    bool QueryIdFromInclusive = false;
+    TString QueryIdTo;
+    bool QueryIdToInclusive = false;
 
     TString ContinuationToken;
 

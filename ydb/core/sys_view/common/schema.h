@@ -245,6 +245,8 @@ struct Schema : NIceDb::Schema {
         struct NumActiveSlots : Column<16, NScheme::NTypeIds::Uint32> {};
         struct DecommitStatus : Column<17, NScheme::NTypeIds::Utf8> {};
         struct State : Column<18, NScheme::NTypeIds::Utf8> {};
+        struct SlotSizeInUnits : Column<19, NScheme::NTypeIds::Uint32> {};
+        struct InferPDiskSlotCountFromUnitSize : Column<20, NScheme::NTypeIds::Uint64> {};
 
         using TKey = TableKey<NodeId, PDiskId>;
         using TColumns = TableColumns<
@@ -264,7 +266,9 @@ struct Schema : NIceDb::Schema {
             StatusChangeTimestamp,
             ExpectedSlotCount,
             NumActiveSlots,
-            DecommitStatus>;
+            DecommitStatus,
+            SlotSizeInUnits,
+            InferPDiskSlotCountFromUnitSize>;
     };
 
     struct VSlots : Table<5> {
@@ -327,6 +331,7 @@ struct Schema : NIceDb::Schema {
         struct ExpectedStatus : Column<18, NScheme::NTypeIds::Utf8> {};
         struct ProxyGroupId : Column<19, NScheme::NTypeIds::Uint32> {};
         struct BridgePileId : Column<20, NScheme::NTypeIds::Uint32> {};
+        struct GroupSizeInUnits : Column<21, NScheme::NTypeIds::Uint32> {};
 
         using TKey = TableKey<GroupId>;
         using TColumns = TableColumns<
@@ -347,7 +352,8 @@ struct Schema : NIceDb::Schema {
             OperatingStatus,
             ExpectedStatus,
             ProxyGroupId,
-            BridgePileId>;
+            BridgePileId,
+            GroupSizeInUnits>;
     };
 
     struct StoragePools : Table<7> {
@@ -362,6 +368,7 @@ struct Schema : NIceDb::Schema {
         struct EncryptionMode : Column<9, NScheme::NTypeIds::Uint32> {};
         struct SchemeshardId : Column<10, NScheme::NTypeIds::Uint64> {};
         struct PathId : Column<11, NScheme::NTypeIds::Uint64> {};
+        struct DefaultGroupSizeInUnits : Column<12, NScheme::NTypeIds::Uint32> {};
 
         using TKey = TableKey<BoxId, StoragePoolId>;
         using TColumns = TableColumns<
@@ -375,7 +382,8 @@ struct Schema : NIceDb::Schema {
             NumGroups,
             EncryptionMode,
             SchemeshardId,
-            PathId>;
+            PathId,
+            DefaultGroupSizeInUnits>;
     };
 
     struct Tablets : Table<8> {

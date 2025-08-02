@@ -562,6 +562,20 @@ public:
             Y_ABORT("unexpected EDriveStatus");
         }
 
+        void ExtractInferredPDiskSettings(ui32& slotCount, ui32& slotSizeInUnits) const {
+            if (Metrics.HasSlotCount()) {
+                slotCount = Metrics.GetSlotCount();
+                slotSizeInUnits = Metrics.GetSlotSizeInUnits();
+            } else if (InferPDiskSlotCountFromUnitSize != 0) {
+                // inferred values are unknown yet
+                slotCount = 0;
+                slotSizeInUnits = 0;
+            } else {
+                slotCount = ExpectedSlotCount;
+                slotSizeInUnits = SlotSizeInUnits;
+            }
+        }
+
         TString PathOrSerial() const {
             return Path ? Path : ExpectedSerial;
         }
@@ -2396,6 +2410,20 @@ public:
             if (const auto it = prev.find(pdiskId); it != prev.end()) {
                 TStaticPDiskInfo& item = it->second;
                 PDiskMetrics = std::move(item.PDiskMetrics);
+            }
+        }
+
+        void ExtractInferredPDiskSettings(ui32& slotCount, ui32& slotSizeInUnits) const {
+            if (PDiskMetrics && PDiskMetrics->HasSlotCount()) {
+                slotCount = PDiskMetrics->GetSlotCount();
+                slotSizeInUnits = PDiskMetrics->GetSlotSizeInUnits();
+            } else if (InferPDiskSlotCountFromUnitSize != 0) {
+                // inferred values are unknown yet
+                slotCount = 0;
+                slotSizeInUnits = 0;
+            } else {
+                slotCount = ExpectedSlotCount ? ExpectedSlotCount : StaticSlotUsage;
+                slotSizeInUnits = 0; // Not available for static PDisks
             }
         }
     };

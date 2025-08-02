@@ -41,6 +41,8 @@ public:
             {T::ExpectedSlotCount::ColumnId, {E::kInfoFieldNumber, V::kExpectedSlotCountFieldNumber}},
             {T::NumActiveSlots::ColumnId, {E::kInfoFieldNumber, V::kNumActiveSlotsFieldNumber}},
             {T::DecommitStatus::ColumnId, {E::kInfoFieldNumber, V::kDecommitStatusFieldNumber}},
+            {T::SlotSizeInUnits::ColumnId, {E::kInfoFieldNumber, V::kSlotSizeInUnitsFieldNumber}},
+            {T::InferPDiskSlotCountFromUnitSize::ColumnId, {E::kInfoFieldNumber, V::kInferPDiskSlotCountFromUnitSizeFieldNumber}},
         };
         return fieldMap;
     }

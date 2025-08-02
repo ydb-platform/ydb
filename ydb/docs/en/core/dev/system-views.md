@@ -476,3 +476,115 @@ Table structure:
 |--------|-------------|
 | `Path` | Path to the access object.<br />Type: `Utf8`.<br />Key: `0`. |
 | `Sid` | SID of the access object owner.<br />Type: `Utf8`. |
+
+## Blob storage {#blob-storage}
+
+The following system views provide information about the blob storage subsystem, including PDisks, VSlots, groups, and storage pools.
+
+### PDisks {#pdisks}
+
+The `pdisks` view contains information about physical disks (PDisks) in the blob storage subsystem.
+
+Table structure:
+
+| Column | Description |
+|--------|-------------|
+| `NodeId` | ID of the node where the PDisk is located.<br/>Type: `Uint32`.<br/>Key: `0`. |
+| `PDiskId` | ID of the PDisk on the node.<br/>Type: `Uint32`.<br/>Key: `1`. |
+| `Type` | Type of the PDisk (ROT, SSD, NVME).<br/>Type: `Utf8`. |
+| `Kind` | PDisk category kind.<br/>Type: `Uint64`. |
+| `Path` | Path to the PDisk device.<br/>Type: `Utf8`. |
+| `Guid` | Unique identifier of the PDisk.<br/>Type: `Uint64`. |
+| `BoxId` | ID of the box containing this PDisk.<br/>Type: `Uint64`. |
+| `SharedWithOs` | Whether the PDisk is shared with the operating system.<br/>Type: `Bool`. |
+| `ReadCentric` | Whether the PDisk is optimized for read operations.<br/>Type: `Bool`. |
+| `AvailableSize` | Available space on the PDisk in bytes.<br/>Type: `Uint64`. |
+| `TotalSize` | Total size of the PDisk in bytes.<br/>Type: `Uint64`. |
+| `StatusV2` | Current status of the PDisk.<br/>Type: `Utf8`. |
+| `StatusChangeTimestamp` | Timestamp of the last status change.<br/>Type: `Timestamp`. |
+| `EnforcedDynamicSlotSize` | Enforced slot size for dynamic allocation.<br/>Type: `Uint64`. |
+| `ExpectedSlotCount` | Expected number of slots on this PDisk.<br/>Type: `Uint32`. |
+| `NumActiveSlots` | Number of currently active slots.<br/>Type: `Uint32`. |
+| `Category` | PDisk category.<br/>Type: `Uint64`. |
+| `DecommitStatus` | Decommission status of the PDisk.<br/>Type: `Utf8`. |
+| `State` | Current state of the PDisk.<br/>Type: `Utf8`. |
+| `SlotSizeInUnits` | Slot size in units for this PDisk.<br/>Type: `Uint32`. |
+| `InferPDiskSlotCountFromUnitSize` | Unit size used for inferring PDisk slot count from drive size.<br/>Type: `Uint64`. |
+
+### VSlots {#vslots}
+
+The `vslots` view contains information about virtual slots (VSlots) in the blob storage subsystem.
+
+Table structure:
+
+| Column | Description |
+|--------|-------------|
+| `NodeId` | ID of the node where the VSlot is located.<br/>Type: `Uint32`.<br/>Key: `0`. |
+| `PDiskId` | ID of the PDisk containing this VSlot.<br/>Type: `Uint32`.<br/>Key: `1`. |
+| `VSlotId` | ID of the VSlot on the PDisk.<br/>Type: `Uint32`.<br/>Key: `2`. |
+| `GroupId` | ID of the group this VSlot belongs to.<br/>Type: `Uint32`. |
+| `GroupGeneration` | Generation of the group.<br/>Type: `Uint32`. |
+| `FailRealm` | Fail realm index.<br/>Type: `Uint32`. |
+| `FailDomain` | Fail domain index.<br/>Type: `Uint32`. |
+| `VDisk` | VDisk index.<br/>Type: `Uint32`. |
+| `AllocatedSize` | Allocated size in bytes.<br/>Type: `Uint64`. |
+| `AvailableSize` | Available size in bytes.<br/>Type: `Uint64`. |
+| `StatusV2` | Current status of the VSlot.<br/>Type: `Utf8`. |
+| `Kind` | Type of the VSlot.<br/>Type: `Utf8`. |
+| `IsBeingDeleted` | Whether the VSlot is being deleted.<br/>Type: `Bool`. |
+| `DiskSpace` | Disk space information.<br/>Type: `Utf8`. |
+| `Replicated` | Whether the VSlot is replicated.<br/>Type: `Bool`. |
+| `State` | Current state of the VSlot.<br/>Type: `Utf8`. |
+| `IsThrottling` | Whether throttling is active.<br/>Type: `Bool`. |
+| `ThrottlingRate` | Throttling rate.<br/>Type: `Uint32`. |
+
+### Groups {#groups}
+
+The `groups` view contains information about blob storage groups.
+
+Table structure:
+
+| Column | Description |
+|--------|-------------|
+| `GroupId` | ID of the group.<br/>Type: `Uint32`.<br/>Key: `0`. |
+| `Generation` | Generation of the group.<br/>Type: `Uint32`. |
+| `BoxId` | ID of the box containing this group.<br/>Type: `Uint64`. |
+| `StoragePoolId` | ID of the storage pool containing this group.<br/>Type: `Uint64`. |
+| `EncryptionMode` | Encryption mode used by the group.<br/>Type: `Uint32`. |
+| `LifeCyclePhase` | Current life cycle phase of the group.<br/>Type: `Uint32`. |
+| `AllocatedSize` | Allocated size in bytes.<br/>Type: `Uint64`. |
+| `AvailableSize` | Available size in bytes.<br/>Type: `Uint64`. |
+| `SeenOperational` | Whether the group has been seen operational.<br/>Type: `Bool`. |
+| `ErasureSpeciesV2` | Erasure species used by the group.<br/>Type: `Utf8`. |
+| `PutTabletLogLatency` | Latency for tablet log operations.<br/>Type: `Uint64`. |
+| `PutUserDataLatency` | Latency for user data operations.<br/>Type: `Uint64`. |
+| `GetFastLatency` | Latency for fast get operations.<br/>Type: `Uint64`. |
+| `LayoutCorrect` | Whether the group layout is correct.<br/>Type: `Bool`. |
+| `OperatingStatus` | Current operating status.<br/>Type: `Utf8`. |
+| `ExpectedStatus` | Expected status of the group.<br/>Type: `Utf8`. |
+| `ProxyGroupId` | ID of the proxy group.<br/>Type: `Uint32`. |
+| `BridgePileId` | ID of the bridge pile.<br/>Type: `Uint32`. |
+| `GroupSizeInUnits` | Size of the group in units.<br/>Type: `Uint32`. |
+
+### Storage pools {#storage-pools}
+
+The `storage_pools` view contains information about storage pools in the blob storage subsystem.
+
+Table structure:
+
+| Column | Description |
+|--------|-------------|
+| `BoxId` | ID of the box containing this storage pool.<br/>Type: `Uint64`.<br/>Key: `0`. |
+| `StoragePoolId` | ID of the storage pool.<br/>Type: `Uint64`.<br/>Key: `1`. |
+| `Name` | Name of the storage pool.<br/>Type: `Utf8`. |
+| `Generation` | Generation of the storage pool configuration.<br/>Type: `Uint64`. |
+| `Kind` | Kind of the storage pool.<br/>Type: `Utf8`. |
+| `NumGroups` | Number of groups in the storage pool.<br/>Type: `Uint32`. |
+| `EncryptionMode` | Encryption mode used by the storage pool.<br/>Type: `Uint32`. |
+| `SchemeshardId` | ID of the scheme shard.<br/>Type: `Uint64`. |
+| `PathId` | ID of the path.<br/>Type: `Uint64`. |
+| `ErasureSpeciesV2` | Erasure species used by the storage pool.<br/>Type: `Utf8`. |
+| `VDiskKindV2` | Type of VDisks used in the storage pool.<br/>Type: `Utf8`. |
+| `PDiskFilter` | Filter for PDisks in the storage pool.<br/>Type: `Utf8`. |
+| `PDiskFilterData` | Serialized PDisk filter data.<br/>Type: `Bytes`. |
+| `DefaultGroupSizeInUnits` | Default group size in units for new groups.<br/>Type: `Uint32`. |

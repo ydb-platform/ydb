@@ -52,8 +52,11 @@ def main():
 
     assert out_dir_temp, 'Param "{0}" not found'.format(OUT_DIR_ARG)
 
-    retcode = subprocess.call(args)
-    assert not retcode, 'Protoc failed for command {}'.format(' '.join(args))
+    result = subprocess.run(args, capture_output=True, text=True)
+    if result.returncode != 0:
+        print("stdout:\n", result.stdout)
+        print("stderr:\n", result.stderr)
+        raise RuntimeError(f"Protoc failed with exit code {result.returncode} for command: {' '.join(args)}")
 
     temp_name = out_dir_temp
     orig_name = out_dir_orig

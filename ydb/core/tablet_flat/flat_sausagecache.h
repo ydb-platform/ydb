@@ -136,6 +136,14 @@ public:
             return StickyPagesSize;
         }
 
+        bool UpdateCacheTier(ECacheTier newCacheTier) {
+            return std::exchange(CacheTier, newCacheTier) == newCacheTier;
+        }
+
+        ECacheTier GetCacheTier() const noexcept {
+            return CacheTier;
+        }
+
         const TLogoBlobID Id;
         const TIntrusiveConstPtr<NPageCollection::IPageCollection> PageCollection;
         TPageMap<THolder<TPage>> PageMap;
@@ -147,6 +155,7 @@ public:
         // storing sticky pages used refs guarantees that they won't be offload from Shared Cache
         THashMap<TPageId, TSharedPageRef> StickyPages;
         ui64 StickyPagesSize = 0;
+        ECacheTier CacheTier = ECacheTier::Regular;
     };
 
 public:

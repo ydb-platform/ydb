@@ -285,6 +285,7 @@ enum class ESharedCacheRequestType : ui64 {
     InMemPages,
     PendingInit,
     BootLogic,
+    TryKeepInMemPages,
 };
 
 struct TExecutorStatsImpl : public TExecutorStats {
@@ -303,6 +304,8 @@ struct TTransactionWaitPad : public NPageCollection::TPagesWaitPad {
 };
 
 struct TCompactionChangesCtx;
+
+struct TCachingParams;
 
 struct TExecutorCaches {
     THashMap<TLogoBlobID, TIntrusivePtr<TPrivatePageCache::TInfo>> PageCaches;
@@ -550,16 +553,17 @@ class TExecutor
     void TryActivateWaitingTransaction(TIntrusivePtr<NPageCollection::TPagesWaitPad>&& waitPad);
     void ActivateWaitingTransaction(TIntrusivePtr<NPageCollection::TPagesWaitPad>&& waitPad);
     void LogWaitingTransaction(TIntrusivePtr<NPageCollection::TPagesWaitPad>&& waitPad);
-    void AddCachesOfBundle(const NTable::TPartView &partView);
+    void AddCachesOfBundle(const NTable::TPartView &partView, const THashMap<NTable::TTag, TCachingParams>& cachingParams);
     void AddSingleCache(const TIntrusivePtr<TPrivatePageCache::TInfo> &info);
     void DropCachesOfBundle(const NTable::TPart &part);
     void DropSingleCache(const TLogoBlobID&);
 
     void TranslateCacheTouchesToSharedCache();
     void RequestInMemPagesForDatabase(bool pendingOnly = false);
-    void RequestInMemPagesForPartStore(ui32 tableId, const NTable::TPartView &partView, const THashSet<NTable::TTag> &stickyColumns);
+    void RequestInMemPagesForPartStore(NTable::TPartView &partView, const THashMap<NTable::TTag, TCachingParams>& cachingParams);
     void StickInMemPages(NSharedCache::TEvResult *msg);
-    THashSet<NTable::TTag> GetStickyColumns(ui32 tableId);
+    THashMap<NTable::TTag, TCachingParams> GetInMemoryColumns(ui32 tableId);
+    TVector<TCachingParams> GetCachingParamsByGroup(const NTable::TPartView &partView, const THashMap<NTable::TTag, TCachingParams>& cachingParams);
     THolder<TScanSnapshot> PrepareScanSnapshot(ui32 table,
         const NTable::TCompactionParams* params, TRowVersion snapshot = TRowVersion::Max());
     void ReleaseScanLocks(TIntrusivePtr<TBarrier>, const NTable::TSubset&);

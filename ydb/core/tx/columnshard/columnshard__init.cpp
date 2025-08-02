@@ -286,7 +286,7 @@ bool TTxInitSchema::Execute(TTransactionContext& txc, const TActorContext&) {
     // Enable compression for the SmallBlobs table
     const auto* smallBlobsDefaultColumnFamily = txc.DB.GetScheme().DefaultFamilyFor(Schema::SmallBlobs::TableId);
     if (!smallBlobsDefaultColumnFamily || smallBlobsDefaultColumnFamily->Codec != NTable::TAlter::ECodec::LZ4) {
-        txc.DB.Alter().SetFamily(Schema::SmallBlobs::TableId, 0, NTable::TAlter::ECache::None, NTable::TAlter::ECodec::LZ4);
+        txc.DB.Alter().SetFamily(Schema::SmallBlobs::TableId, 0, NTable::TAlter::ECache::None, NTable::TAlter::ECodec::LZ4, NSharedCache::ECacheTier::Regular);
     }
 
     // SmallBlobs table has compaction policy suitable for a big table

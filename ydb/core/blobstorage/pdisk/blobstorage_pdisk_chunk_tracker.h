@@ -99,6 +99,10 @@ public:
         RedistributeQuotas();
     }
 
+    ui32 GetOwnerWeight(TOwner id) {
+        return QuotaForOwner[id].GetWeight();
+    }
+
     void RemoveOwner(TOwner id) {
         bool isFound = false;
         for (ui64 idx = 0; idx < ActiveOwnerIds.size(); ++idx) {
@@ -380,6 +384,11 @@ public:
         OwnerQuota->RemoveOwner(owner);
     }
 
+    ui32 GetOwnerWeight(TOwner owner) {
+        Y_VERIFY(IsOwnerUser(owner));
+        return OwnerQuota->GetOwnerWeight(owner);
+    }
+
     ui32 GetNumActiveSlots() const {
         return OwnerQuota->GetNumActiveSlots();
     }
@@ -429,10 +438,10 @@ public:
     }
     /////////////////////////////////////////////////////
 
-    i64 GetOwnerFree(TOwner owner) const {
+    i64 GetOwnerFree(TOwner owner, bool personal) const {
         if (IsOwnerUser(owner)) {
-            // fix for CLOUDINC-1822: remove OwnerQuota->GetFree(owner) since it broke group balancing in Hive
-            return SharedQuota->GetFree();
+            // See CLOUDINC-1822: OwnerQuota->GetFree(owner) broke group balancing in Hive and was replaced by SharedQuota
+            return personal ? OwnerQuota->GetFree(owner) : SharedQuota->GetFree();
         } else {
             switch (owner) {
                 case OwnerCommonStaticLog:

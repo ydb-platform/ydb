@@ -11,23 +11,24 @@
 
 namespace NKikimr::NOlap::NReader::NSimple::NDuplicateFiltering {
 
-class TColumnsData {
-private:
-    YDB_READONLY_DEF(std::shared_ptr<NArrow::TGeneralContainer>, Data);
-    YDB_READONLY_DEF(std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>, MemoryGuard);
+struct TPortionIntervalTreeValueTraits: NRangeTreap::TDefaultValueTraits<std::shared_ptr<TPortionInfo>> {
+    struct TValueHash {
+        ui64 operator()(const std::shared_ptr<TPortionInfo>& value) const {
+            return THash<TPortionAddress>()(value->GetAddress());
+        }
+    };
 
-public:
-    TColumnsData(const std::shared_ptr<NArrow::TGeneralContainer>& data, const std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>& memory)
-        : Data(data)
-        , MemoryGuard(memory)
-    {
-        AFL_VERIFY(MemoryGuard);
+    static bool Less(const std::shared_ptr<TPortionInfo>& a, const std::shared_ptr<TPortionInfo>& b) noexcept {
+        return a->GetAddress() == b->GetAddress();
     }
 
-    ui64 GetRawSize() const {
-        return MemoryGuard->GetMemory();
+    static bool Equal(const std::shared_ptr<TPortionInfo>& a, const std::shared_ptr<TPortionInfo>& b) noexcept {
+        return a->GetAddress() == b->GetAddress();
     }
 };
+
+using TPortionIntervalTree =
+    NRangeTreap::TRangeTreap<NArrow::TSimpleRow, std::shared_ptr<TPortionInfo>, NArrow::TSimpleRow, TPortionIntervalTreeValueTraits>;
 
 class TRowRange {
 private:

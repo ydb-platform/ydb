@@ -241,8 +241,9 @@ TConclusion<bool> TPrepareResultStep::DoExecuteInplace(
 void TDuplicateFilter::TFilterSubscriber::OnFilterReady(NArrow::TColumnFilter&& filter) {
     if (auto source = Source.lock()) {
         AFL_TRACE(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "fetch_filter")("source", source->GetSourceId())(
-            "filter", filter.DebugString());
+            "filter", filter.DebugString())("aborted", source->GetContext()->IsAborted());
         if (source->GetContext()->IsAborted()) {
+            OnDone();
             return;
         }
         if (const std::shared_ptr<NArrow::TColumnFilter> appliedFilter = source->GetStageData().GetAppliedFilter()) {
@@ -255,12 +256,14 @@ void TDuplicateFilter::TFilterSubscriber::OnFilterReady(NArrow::TColumnFilter&& 
         auto task = std::make_shared<TStepAction>(std::move(source), std::move(Step), scanActorId, false);
         NConveyorComposite::TScanServiceOperator::SendTaskToExecute(task, convActorId);
     }
+    OnDone();
 }
 
 void TDuplicateFilter::TFilterSubscriber::OnFailure(const TString& reason) {
     if (auto source = Source.lock()) {
         source->GetContext()->GetCommonContext()->AbortWithError("cannot build duplicate filter: " + reason);
     }
+    OnDone();
 }
 
 TDuplicateFilter::TFilterSubscriber::TFilterSubscriber(const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step)

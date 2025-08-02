@@ -28,6 +28,7 @@ TConstructor::TConstructor(
             }
             current.clear();
         }
+        current.emplace_back(i);
     }
     if (current.size()) {
         constructors.emplace_back(TabletId, std::move(current));

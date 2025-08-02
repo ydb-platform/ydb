@@ -15,7 +15,7 @@ private:
 
 public:
     TDataSourceConstructor(const ui64 tabletId, std::vector<ISnapshotSchema::TPtr>&& schemas)
-        : TBase(tabletId, schemas.front()->GetIndexInfo().GetPresetId(),
+        : TBase(tabletId, schemas.front()->GetIndexInfo().GetPresetId() + 1,
               TSchemaAdapter::GetPKSimpleRow(tabletId, schemas.front()->GetIndexInfo().GetPresetId(), schemas.front()->GetVersion()),
               TSchemaAdapter::GetPKSimpleRow(tabletId, schemas.back()->GetIndexInfo().GetPresetId(), schemas.back()->GetVersion()))
         , Schemas(std::move(schemas))

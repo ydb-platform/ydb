@@ -77,7 +77,7 @@ def validate_sql(sql_query):
         pytest.skip('Using of system \'kikimr\' is not allowed in SUBQUERY')
 
     if 'concat(' in sql_query.lower() or 'each(' in sql_query.lower():
-        pytest.skip('CONCAT is not supported on Kikimr clusters')
+        pytest.skip('CONCAT is not supported on YDB clusters')
 
     if (
         'range(' in sql_query.lower()
@@ -86,7 +86,7 @@ def validate_sql(sql_query):
         or 'like(' in sql_query.lower()
         or '_strict(' in sql_query.lower()
     ):
-        pytest.skip('RANGE is not supported on Kikimr clusters')
+        pytest.skip('RANGE is not supported on YDB clusters')
 
     if 'discard' in sql_query.lower():
         pytest.skip('DISCARD not supported in YDB queries')

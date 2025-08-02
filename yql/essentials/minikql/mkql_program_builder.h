@@ -408,7 +408,7 @@ public:
     TRuntimeNode SkipNullElements(TRuntimeNode list, const TArrayRef<const ui32>& elements);
 
     TRuntimeNode ExpandMap(TRuntimeNode flow, const TExpandLambda& handler);
-    TRuntimeNode WideMap(TRuntimeNode flow, const TWideLambda& handler);
+    TRuntimeNode WideMap(TRuntimeNode flowOrStream, const TWideLambda& handler);
     TRuntimeNode NarrowMap(TRuntimeNode flow, const TNarrowLambda& handler);
     TRuntimeNode NarrowFlatMap(TRuntimeNode flow, const TNarrowLambda& handler);
     TRuntimeNode NarrowMultiMap(TRuntimeNode flow, const TWideLambda& handler);

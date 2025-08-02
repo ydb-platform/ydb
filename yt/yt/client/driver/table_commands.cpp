@@ -948,6 +948,13 @@ void TSelectRowsCommand::Register(TRegistrar registrar)
             return command->Options.UseOrderByInJoinSubqueries;
         })
         .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<EStatisticsAggregation>(
+        "statistics_aggregation",
+        [] (TThis* command) -> auto& {
+            return command->Options.StatisticsAggregation;
+        })
+        .Optional(/*init*/ false);
 }
 
 bool TSelectRowsCommand::HasResponseParameters() const

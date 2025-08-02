@@ -963,6 +963,13 @@ bool TYsonStructParameter<TValue>::CanOmitValue(const TYsonStructBase* self) con
         return false;
     }
 
+    using TDefaultValue = decltype((*DefaultCtor_)());
+    using TCanOmitValueResult = decltype(NYT::NYTree::NDetail::CanOmitValue(&value, static_cast<TDefaultValue*>(nullptr)));
+    if constexpr (!std::is_same_v<bool, TCanOmitValueResult>) {
+        // TCanOmitValueResult is either bool or std::integral_constant. In the latter case there's no need to call the function.
+        return TCanOmitValueResult::value;
+    }
+
     auto defaultValue = (*DefaultCtor_)();
     return NYT::NYTree::NDetail::CanOmitValue(&value, &defaultValue);
 }

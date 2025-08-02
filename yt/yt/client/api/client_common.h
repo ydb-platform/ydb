@@ -12,6 +12,8 @@
 
 #include <yt/yt/client/tablet_client/public.h>
 
+#include <yt/yt/client/query_client/public.h>
+
 #include <yt/yt/core/rpc/public.h>
 
 namespace NYT::NApi {
@@ -188,6 +190,8 @@ struct TSelectRowsOptions
     std::optional<i64> WriteRowsetSize;
     //! Tune join row batch size.
     std::optional<i64> MaxJoinBatchSize;
+    //! Determines the way statistics are aggregated across subqueries.
+    NQueryClient::EStatisticsAggregation StatisticsAggregation = NQueryClient::EStatisticsAggregation::None;
     //! Allow queries without any condition on key columns.
     bool AllowFullScan = true;
     //! Allow queries with join condition which implies foreign query with IN operator.

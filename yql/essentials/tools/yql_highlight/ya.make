@@ -16,6 +16,7 @@ IF (NOT EXPORT_CMAKE OR NOT OPENSOURCE OR OPENSOURCE_PROJECT != "yt")
         generator.cpp
         json.cpp
         yql_highlight.cpp
+        yqls_highlight.cpp
     )
 
     END()

@@ -766,27 +766,37 @@ TExprNode::TPtr SimplifyLogical(const TExprNode::TPtr& node, TExprContext& ctx, 
     }
 
     if (literals) {
-        YQL_CLOG(DEBUG, Core) << node->Content() <<  " over literal bools";
         TExprNode::TListType children;
         children.reserve(size);
+        bool hasSideEffects = false;
         for (ui32 i = 0U; i < size; ++i) {
             if (node->Child(i)->IsCallable("Bool")) {
                 const bool value = FromString<bool>(node->Child(i)->Head().Content());
                 if (AndOr != value) {
-                    auto res = ctx.WrapByCallableIf(IsOptBoolType(*node), "Just", node->ChildPtr(i));
-                    res = KeepWorld(res, *node, ctx, *optCtx.Types);
-                    return res;
+                    if (!hasSideEffects) {
+                        YQL_CLOG(DEBUG, Core) << node->Content() <<  " over literal bools - const";
+                        auto res = ctx.WrapByCallableIf(IsOptBoolType(*node), "Just", node->ChildPtr(i));
+                        res = KeepWorld(res, *node, ctx, *optCtx.Types);
+                        return res;
+                    } else {
+                        children.emplace_back(node->ChildPtr(i));
+                    }
                 }
             } else {
                 children.emplace_back(node->ChildPtr(i));
             }
+
+            hasSideEffects = hasSideEffects || node->Child(i)->HasSideEffects();
         }
 
-        auto res = children.empty() ?
-            ctx.WrapByCallableIf(IsOptBoolType(*node), "Just", MakeBool(node->Pos(), AndOr, ctx)):
-            ctx.ChangeChildren(*node, std::move(children));
-        res = KeepWorld(res, *node, ctx, *optCtx.Types);
-        return res;
+        if (children.size() < size) {
+            YQL_CLOG(DEBUG, Core) << node->Content() <<  " over literal bools - skipped args";
+            auto res = children.empty() ?
+                ctx.WrapByCallableIf(IsOptBoolType(*node), "Just", MakeBool(node->Pos(), AndOr, ctx)):
+                ctx.ChangeChildren(*node, std::move(children));
+            res = KeepWorld(res, *node, ctx, *optCtx.Types);
+            return res;
+        }
     }
 
     return node;

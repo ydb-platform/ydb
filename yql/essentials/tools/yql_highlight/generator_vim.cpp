@@ -41,6 +41,10 @@ namespace NSQLHighlight {
                 vim << R"(\c)";
             }
 
+            if (!pattern.Before.empty()) {
+                vim << "(" << ToVim(pattern.Before) << ")@<=";
+            }
+
             vim << "(" << ToVim(pattern.Body) << ")";
 
             if (!pattern.After.empty()) {
@@ -161,7 +165,7 @@ namespace NSQLHighlight {
 
         out << '\n';
 
-        out << "let b:current_syntax = \"yql\"" << '\n';
+        out << "let b:current_syntax = \"" << highlighting.Extension << "\"" << '\n';
         out.Flush();
     }
 

@@ -157,7 +157,7 @@ Table = namedtuple('Table', (
 
 
 def new_table(full_name, file_path=None, yqlrun_file=None, content=None, res_dir=None,
-              attr=None, format_name='yson', def_attr=None, should_exist=False, src_file_alternative=None):
+              attr=None, format_name='yson', def_attr=None, should_exist=False, src_file_alternative=None, attr_postprocess=None):
     assert '.' in full_name, 'expected name like cedar.Input'
     cluster = full_name.split('.')[0]
     name = '.'.join(full_name.split('.')[1:])
@@ -222,6 +222,9 @@ def new_table(full_name, file_path=None, yqlrun_file=None, content=None, res_dir
         attr = def_attr
 
     if attr is not None:
+        if attr_postprocess is not None:
+            attr = attr_postprocess(attr)
+
         # probably we get it, now write attr file to proper place
         attr_file = new_yqlrun_file + '.attr'
         with open(attr_file, 'w') as f:
@@ -417,7 +420,7 @@ def find_user_file(suite, path, data_path):
             raise Exception('Can not find file ' + path)
 
 
-def get_input_tables(suite, cfg, data_path, def_attr=None):
+def get_input_tables(suite, cfg, data_path, def_attr=None, attr_postprocess=None):
     in_tables = []
     for item in cfg:
         if item[0] in ('in', 'out'):
@@ -428,12 +431,13 @@ def get_input_tables(suite, cfg, data_path, def_attr=None):
                     yqlrun_file=os.path.join(data_path, suite if suite else '', file_name),
                     src_file_alternative=os.path.join(yql_work_path(), suite if suite else '', file_name),
                     def_attr=def_attr,
-                    should_exist=True
+                    should_exist=True,
+                    attr_postprocess=attr_postprocess
                 ))
     return in_tables
 
 
-def get_tables(suite, cfg, data_path, def_attr=None):
+def get_tables(suite, cfg, data_path, def_attr=None, attr_postprocess=None):
     in_tables = []
     out_tables = []
     suite_dir = os.path.join(data_path, suite)
@@ -457,13 +461,15 @@ def get_tables(suite, cfg, data_path, def_attr=None):
                 yqlrun_file=yqlrun_file,
                 format_name=format_name,
                 def_attr=def_attr,
-                res_dir=res_dir
+                res_dir=res_dir,
+                attr_postprocess=attr_postprocess
             ))
         if type_name == 'out':
             out_tables.append(new_table(
                 full_name='plato.' + table if '.' not in table else table,
                 yqlrun_file=yqlrun_file if os.path.exists(yqlrun_file) else None,
-                res_dir=res_dir
+                res_dir=res_dir,
+                attr_postprocess=attr_postprocess
             ))
     return in_tables, out_tables
 

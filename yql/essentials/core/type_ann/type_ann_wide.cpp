@@ -8,6 +8,20 @@ namespace NTypeAnnImpl {
 
 namespace {
 
+bool EnsureThatWideMapStreamAllowedForBlocksOnly(bool isFlow, const TMultiExprType* multiType, const TExprNode::TPtr& input, TContext& ctx) {
+    if (!isFlow && !IsWideBlockType(*multiType)) {
+        ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), TStringBuilder() << "WideMap must accept stream for block types."));
+        return false;
+    }
+
+    if (isFlow && IsWideBlockType(*multiType)) {
+        ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), TStringBuilder() << "WideMap must accept flow for non-block types."));
+        return false;
+    }
+
+    return true;
+}
+
 const TMultiExprType* GetWideLambdaOutputType(const TExprNode& lambda, TExprContext& ctx) {
     TTypeAnnotationNode::TListType types;
     types.reserve(lambda.ChildrenSize() - 1U);
@@ -54,11 +68,16 @@ IGraphTransformer::TStatus WideMapWrapper(const TExprNode::TPtr& input, TExprNod
         return IGraphTransformer::TStatus::Error;
     }
 
-    if (!EnsureWideFlowType(input->Head(), ctx.Expr)) {
+    if (!EnsureWideFlowOrStreamType(input->Head(), ctx.Expr)) {
         return IGraphTransformer::TStatus::Error;
     }
 
-    const auto multiType = input->Head().GetTypeAnn()->Cast<TFlowExprType>()->GetItemType()->Cast<TMultiExprType>();
+    const auto multiType = GetWideFlowOrStreamComponents(*input->Head().GetTypeAnn());
+    bool isFlow = input->Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Flow;
+
+    if (!EnsureThatWideMapStreamAllowedForBlocksOnly(isFlow, multiType, input, ctx)) {
+        return IGraphTransformer::TStatus::Error;
+    }
 
     auto& lambda = input->TailRef();
     const auto status = ConvertToLambda(lambda, ctx.Expr, multiType->GetSize());
@@ -85,7 +104,11 @@ IGraphTransformer::TStatus WideMapWrapper(const TExprNode::TPtr& input, TExprNod
         }
     }
 
-    input->SetTypeAnn(ctx.Expr.MakeType<TFlowExprType>(GetWideLambdaOutputType(*lambda, ctx.Expr)));
+    if (isFlow) {
+        input->SetTypeAnn(ctx.Expr.MakeType<TFlowExprType>(GetWideLambdaOutputType(*lambda, ctx.Expr)));
+    } else {
+        input->SetTypeAnn(ctx.Expr.MakeType<TStreamExprType>(GetWideLambdaOutputType(*lambda, ctx.Expr)));
+    }
     return IGraphTransformer::TStatus::Ok;
 }
 

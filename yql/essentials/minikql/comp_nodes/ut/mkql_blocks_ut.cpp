@@ -484,11 +484,11 @@ Y_UNIT_TEST_LLVM(TestBlockFunc) {
     const auto wideFlow = pb.ExpandMap(flow, [&](TRuntimeNode item) -> TRuntimeNode::TList {
         return {pb.Nth(item, 0U), pb.Nth(item, 1U)};
     });
-    const auto wideBlocksFlow = pb.ToFlow(pb.WideToBlocks(pb.FromFlow(wideFlow)));
-    const auto sumWideFlow = pb.WideMap(wideBlocksFlow, [&](TRuntimeNode::TList items) -> TRuntimeNode::TList {
+    const auto wideBlocksStream = pb.WideToBlocks(pb.FromFlow(wideFlow));
+    const auto sumWideStream = pb.WideMap(wideBlocksStream, [&](TRuntimeNode::TList items) -> TRuntimeNode::TList {
         return {pb.BlockFunc("Add", ui64BlockType, {items[0], items[1]})};
     });
-    const auto sumNarrowFlow = pb.NarrowMap(sumWideFlow, [&](TRuntimeNode::TList items) -> TRuntimeNode {
+    const auto sumNarrowFlow = pb.NarrowMap(pb.ToFlow(sumWideStream), [&](TRuntimeNode::TList items) -> TRuntimeNode {
         return items[0];
     });
     const auto pgmReturn = pb.Collect(pb.FromBlocks(sumNarrowFlow));
@@ -541,11 +541,11 @@ Y_UNIT_TEST_LLVM(TestBlockFuncWithNullables) {
     const auto wideFlow = pb.ExpandMap(flow, [&](TRuntimeNode item) -> TRuntimeNode::TList {
         return {pb.Nth(item, 0U), pb.Nth(item, 1U)};
     });
-    const auto wideBlocksFlow = pb.ToFlow(pb.WideToBlocks(pb.FromFlow(wideFlow)));
-    const auto sumWideFlow = pb.WideMap(wideBlocksFlow, [&](TRuntimeNode::TList items) -> TRuntimeNode::TList {
+    const auto wideBlocksStream = pb.WideToBlocks(pb.FromFlow(wideFlow));
+    const auto sumWideStream = pb.WideMap(wideBlocksStream, [&](TRuntimeNode::TList items) -> TRuntimeNode::TList {
         return {pb.BlockFunc("Add", ui64OptBlockType, {items[0], items[1]})};
     });
-    const auto sumNarrowFlow = pb.NarrowMap(sumWideFlow, [&](TRuntimeNode::TList items) -> TRuntimeNode {
+    const auto sumNarrowFlow = pb.NarrowMap(pb.ToFlow(sumWideStream), [&](TRuntimeNode::TList items) -> TRuntimeNode {
         return items[0];
     });
     const auto pgmReturn = pb.Collect(pb.FromBlocks(sumNarrowFlow));

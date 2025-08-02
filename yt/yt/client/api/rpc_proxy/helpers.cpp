@@ -583,46 +583,118 @@ void FromProto(NTabletClient::TTabletInfo* tabletInfo, const NProto::TTabletInfo
     tabletInfo->CellId = FromProto<TTabletCellId>(protoTabletInfo.cell_id());
 }
 
+template <class T>
+void ToProto(
+    NProto::TQueryStatistics::TAggregate* protoCounter,
+    const NQueryClient::TAggregate<T>& counter)
+{
+    protoCounter->set_argmax_node(counter.ArgmaxNode());
+    if constexpr (std::is_same_v<T, TDuration>) {
+        protoCounter->set_total(counter.GetTotal().GetValue());
+        protoCounter->set_max(counter.GetMax().GetValue());
+    } else {
+        protoCounter->set_total(counter.GetTotal());
+        protoCounter->set_max(counter.GetMax());
+    }
+}
+
+template <class T>
+void FromProto(
+    NQueryClient::TAggregate<T>* counter,
+    const NProto::TQueryStatistics::TAggregate& protoCounter)
+{
+    if (protoCounter.has_argmax_node()) {
+        FromProto(&counter->ArgmaxNode(), protoCounter.argmax_node());
+    }
+    if (protoCounter.has_total()) {
+        if constexpr (std::is_same_v<T, TDuration>) {
+            counter->SetTotal(TDuration::FromValue(protoCounter.total()));
+        } else {
+            counter->SetTotal(protoCounter.total());
+        }
+    }
+    if (protoCounter.has_max()) {
+        if constexpr (std::is_same_v<T, TDuration>) {
+            counter->SetMax(TDuration::FromValue(protoCounter.max()));
+        } else {
+            counter->SetMax(protoCounter.max());
+        }
+    }
+}
+
 void ToProto(
     NProto::TQueryStatistics* protoStatistics,
     const NQueryClient::TQueryStatistics& statistics)
 {
-    protoStatistics->set_rows_read(statistics.RowsRead);
-    protoStatistics->set_data_weight_read(statistics.DataWeightRead);
-    protoStatistics->set_rows_written(statistics.RowsWritten);
-    protoStatistics->set_sync_time(statistics.SyncTime.GetValue());
-    protoStatistics->set_async_time(statistics.AsyncTime.GetValue());
-    protoStatistics->set_execute_time(statistics.ExecuteTime.GetValue());
-    protoStatistics->set_read_time(statistics.ReadTime.GetValue());
-    protoStatistics->set_write_time(statistics.WriteTime.GetValue());
-    protoStatistics->set_codegen_time(statistics.CodegenTime.GetValue());
-    protoStatistics->set_wait_on_ready_event_time(statistics.WaitOnReadyEventTime.GetValue());
+    // COMPAT(sabdenovch)
+    protoStatistics->set_rows_read(statistics.RowsRead.GetTotal());
+    protoStatistics->set_data_weight_read(statistics.DataWeightRead.GetTotal());
+    protoStatistics->set_rows_written(statistics.RowsWritten.GetTotal());
+    protoStatistics->set_sync_time(statistics.SyncTime.GetTotal().GetValue());
+    protoStatistics->set_async_time(statistics.AsyncTime.GetTotal().GetValue());
+    protoStatistics->set_execute_time(statistics.ExecuteTime.GetTotal().GetValue());
+    protoStatistics->set_read_time(statistics.ReadTime.GetTotal().GetValue());
+    protoStatistics->set_write_time(statistics.WriteTime.GetTotal().GetValue());
+    protoStatistics->set_codegen_time(statistics.CodegenTime.GetTotal().GetValue());
+    protoStatistics->set_wait_on_ready_event_time(statistics.WaitOnReadyEventTime.GetTotal().GetValue());
+    protoStatistics->set_memory_usage(statistics.MemoryUsage.GetTotal());
+    protoStatistics->set_grouped_row_count(statistics.GroupedRowCount.GetTotal());
+
+    ToProto(protoStatistics->mutable_rows_read_aggr(), statistics.RowsRead);
+    ToProto(protoStatistics->mutable_data_weight_read_aggr(), statistics.DataWeightRead);
+    ToProto(protoStatistics->mutable_rows_written_aggr(), statistics.RowsWritten);
+    ToProto(protoStatistics->mutable_sync_time_aggr(), statistics.SyncTime);
+    ToProto(protoStatistics->mutable_async_time_aggr(), statistics.AsyncTime);
+    ToProto(protoStatistics->mutable_execute_time_aggr(), statistics.ExecuteTime);
+    ToProto(protoStatistics->mutable_read_time_aggr(), statistics.ReadTime);
+    ToProto(protoStatistics->mutable_write_time_aggr(), statistics.WriteTime);
+    ToProto(protoStatistics->mutable_codegen_time_aggr(), statistics.CodegenTime);
+    ToProto(protoStatistics->mutable_wait_on_ready_event_time_aggr(), statistics.WaitOnReadyEventTime);
+    ToProto(protoStatistics->mutable_memory_usage_aggr(), statistics.MemoryUsage);
+    ToProto(protoStatistics->mutable_grouped_row_count_aggr(), statistics.GroupedRowCount);
+
     protoStatistics->set_incomplete_input(statistics.IncompleteInput);
     protoStatistics->set_incomplete_output(statistics.IncompleteOutput);
-    protoStatistics->set_memory_usage(statistics.MemoryUsage);
-    protoStatistics->set_total_grouped_row_count(statistics.TotalGroupedRowCount);
+    protoStatistics->set_query_count(statistics.QueryCount);
 
     ToProto(protoStatistics->mutable_inner_statistics(), statistics.InnerStatistics);
 }
+
+#define DESERIALIZE_I64_AND_MAYBE_FALLBACK(snakeCaseName, camelCaseName) \
+    if (protoStatistics.has_##snakeCaseName##_aggr()) { \
+        FromProto(&statistics->camelCaseName, protoStatistics.snakeCaseName##_aggr()); \
+    } else if (protoStatistics.has_##snakeCaseName()) { \
+        statistics->camelCaseName.SetTotal(protoStatistics.snakeCaseName()); \
+    }
+
+#define DESERIALIZE_DURATION_AND_MAYBE_FALLBACK(snakeCaseName, camelCaseName) \
+    if (protoStatistics.has_##snakeCaseName##_aggr()) { \
+        FromProto(&statistics->camelCaseName, protoStatistics.snakeCaseName##_aggr()); \
+    } else if (protoStatistics.has_##snakeCaseName()) { \
+        statistics->camelCaseName.SetTotal(TDuration::FromValue(protoStatistics.snakeCaseName())); \
+    }
 
 void FromProto(
     NQueryClient::TQueryStatistics* statistics,
     const NProto::TQueryStatistics& protoStatistics)
 {
-    statistics->RowsRead = protoStatistics.rows_read();
-    statistics->DataWeightRead = protoStatistics.data_weight_read();
-    statistics->RowsWritten = protoStatistics.rows_written();
-    statistics->SyncTime = TDuration::FromValue(protoStatistics.sync_time());
-    statistics->AsyncTime = TDuration::FromValue(protoStatistics.async_time());
-    statistics->ExecuteTime = TDuration::FromValue(protoStatistics.execute_time());
-    statistics->ReadTime = TDuration::FromValue(protoStatistics.read_time());
-    statistics->WriteTime = TDuration::FromValue(protoStatistics.write_time());
-    statistics->CodegenTime = TDuration::FromValue(protoStatistics.codegen_time());
-    statistics->WaitOnReadyEventTime = TDuration::FromValue(protoStatistics.wait_on_ready_event_time());
+    // COMPAT(sabdenovch)
+    DESERIALIZE_I64_AND_MAYBE_FALLBACK(rows_read, RowsRead);
+    DESERIALIZE_I64_AND_MAYBE_FALLBACK(data_weight_read, DataWeightRead);
+    DESERIALIZE_I64_AND_MAYBE_FALLBACK(rows_written, RowsWritten);
+    DESERIALIZE_DURATION_AND_MAYBE_FALLBACK(sync_time, SyncTime);
+    DESERIALIZE_DURATION_AND_MAYBE_FALLBACK(async_time, AsyncTime);
+    DESERIALIZE_DURATION_AND_MAYBE_FALLBACK(execute_time, ExecuteTime);
+    DESERIALIZE_DURATION_AND_MAYBE_FALLBACK(read_time, ReadTime);
+    DESERIALIZE_DURATION_AND_MAYBE_FALLBACK(write_time, WriteTime);
+    DESERIALIZE_DURATION_AND_MAYBE_FALLBACK(codegen_time, CodegenTime);
+    DESERIALIZE_DURATION_AND_MAYBE_FALLBACK(wait_on_ready_event_time, WaitOnReadyEventTime);
+    DESERIALIZE_I64_AND_MAYBE_FALLBACK(memory_usage, MemoryUsage);
+    DESERIALIZE_I64_AND_MAYBE_FALLBACK(grouped_row_count, GroupedRowCount);
+
     statistics->IncompleteInput = protoStatistics.incomplete_input();
     statistics->IncompleteOutput = protoStatistics.incomplete_output();
-    statistics->MemoryUsage = protoStatistics.memory_usage();
-    statistics->TotalGroupedRowCount = protoStatistics.total_grouped_row_count();
+    statistics->QueryCount = protoStatistics.query_count();
 
     FromProto(&statistics->InnerStatistics, protoStatistics.inner_statistics());
 }

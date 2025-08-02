@@ -308,9 +308,9 @@
     ],
     "test.test[blocks-agg_by_key_mixed_distinct-default.txt-Peephole]": [
         {
-            "checksum": "0c88e98d12d4cf8941c04be6c12db505",
-            "size": 2985,
-            "uri": "https://{canondata_backend}/1809005/48af937bc8ac0c97a4229075f4b2be4980c228fe/resource.tar.gz#test.test_blocks-agg_by_key_mixed_distinct-default.txt-Peephole_/opt.yql"
+            "checksum": "82cea024410c65dd53c442c0ddde9eed",
+            "size": 2955,
+            "uri": "https://{canondata_backend}/1784117/a8dd4851cb105592256543c47107a9955843d104/resource.tar.gz#test.test_blocks-agg_by_key_mixed_distinct-default.txt-Peephole_/opt.yql"
         }
     ],
     "test.test[blocks-agg_by_key_mixed_distinct-default.txt-Results]": [
@@ -329,9 +329,9 @@
     ],
     "test.test[blocks-frompg-default.txt-Peephole]": [
         {
-            "checksum": "ccf828290806a669ba391634e532dac5",
-            "size": 551,
-            "uri": "https://{canondata_backend}/1809005/48af937bc8ac0c97a4229075f4b2be4980c228fe/resource.tar.gz#test.test_blocks-frompg-default.txt-Peephole_/opt.yql"
+            "checksum": "4a1252cc2d002cd96493909944981d71",
+            "size": 531,
+            "uri": "https://{canondata_backend}/1784117/a8dd4851cb105592256543c47107a9955843d104/resource.tar.gz#test.test_blocks-frompg-default.txt-Peephole_/opt.yql"
         }
     ],
     "test.test[blocks-frompg-default.txt-Results]": [
@@ -350,9 +350,9 @@
     ],
     "test.test[blocks-or_opt-default.txt-Peephole]": [
         {
-            "checksum": "5bf71c50b094eda6b1175383a07d0e5f",
-            "size": 899,
-            "uri": "https://{canondata_backend}/1809005/48af937bc8ac0c97a4229075f4b2be4980c228fe/resource.tar.gz#test.test_blocks-or_opt-default.txt-Peephole_/opt.yql"
+            "checksum": "f1c6a6d6b417fffbea3ed53396c10326",
+            "size": 879,
+            "uri": "https://{canondata_backend}/1784117/a8dd4851cb105592256543c47107a9955843d104/resource.tar.gz#test.test_blocks-or_opt-default.txt-Peephole_/opt.yql"
         }
     ],
     "test.test[blocks-or_opt-default.txt-Results]": [

@@ -1038,6 +1038,7 @@ IComputationNode* LocateNode(const TNodeLocator& nodeLocator, TNode& node, bool 
 IComputationExternalNode* LocateExternalNode(const TNodeLocator& nodeLocator, TCallable& callable, ui32 index, bool pop = true);
 
 using TPasstroughtMap = std::vector<std::optional<size_t>>;
+using TPassthroughSpan = std::vector<std::optional<size_t>>;
 
 template<class TContainerOne, class TContainerTwo>
 TPasstroughtMap GetPasstroughtMap(const TContainerOne& from, const TContainerTwo& to);

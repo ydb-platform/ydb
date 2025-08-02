@@ -23,7 +23,7 @@ public:
         return Max<ui64>() - presetId;
     }
     static NArrow::TSimpleRow GetPKSimpleRow(const NColumnShard::TSchemeShardLocalPathId& pathId, const ui64 tabletId, const ui64 taskId);
-    static std::shared_ptr<arrow::Schema> GetPKSchema();
+    static const std::shared_ptr<arrow::Schema>& GetPKSchema();
     virtual TIndexInfo GetIndexInfo(
         const std::shared_ptr<IStoragesManager>& storagesManager, const std::shared_ptr<TSchemaObjectsCache>& schemaObjectsCache) const override;
     virtual std::shared_ptr<ITableMetadataAccessor> BuildMetadataAccessor(

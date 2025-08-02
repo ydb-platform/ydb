@@ -2376,6 +2376,8 @@ message TKafkaProxyConfig {
     optional bool MeteringV2Enabled = 10 [default = true];
     optional bool AuthViaApiKey = 11 [default = true];
     optional uint32 TransactionTimeoutMs = 12 [default = 300000]; // 5 minutes (same as in kafka)
+    optional bool AutoCreateTopicsEnable = 13 [default = false];
+    optional uint32 DefaultNumOfPartitions = 14 [default = 1];
 }
 
 message TAwsCompatibilityConfig {

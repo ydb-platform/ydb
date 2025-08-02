@@ -544,17 +544,7 @@ namespace NKikimr::NStorage {
     void TDistributedConfigKeeper::PrepareScatterTask(ui64 cookie, TScatterTask& task) {
         switch (task.Request.GetRequestCase()) {
             case TEvScatter::kCollectConfigs: {
-                std::vector<TString> drives;
-                auto callback = [&](const auto& /*node*/, const auto& drive) {
-                    drives.push_back(drive.GetPath());
-                };
-                EnumerateConfigDrives(*StorageConfig, SelfId().NodeId(), callback);
-                if (ProposedStorageConfig) {
-                    EnumerateConfigDrives(*ProposedStorageConfig, SelfId().NodeId(), callback);
-                }
-                std::sort(drives.begin(), drives.end());
-                drives.erase(std::unique(drives.begin(), drives.end()), drives.end());
-                ReadConfig(cookie);
+                ReadConfig(GetDrivesToRead(false), cookie);
                 ++task.AsyncOperationsPending;
                 break;
             }

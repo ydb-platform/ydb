@@ -64,14 +64,7 @@ namespace NKikimr::NStorage {
 
         // generate initial drive set and query stored configuration
         if (IsSelfStatic) {
-            if (BaseConfig->GetSelfManagementConfig().GetEnabled()) {
-                // read this only if it is possibly enabled
-                EnumerateConfigDrives(*InitialConfig, SelfId().NodeId(), [&](const auto& /*node*/, const auto& drive) {
-                    DrivesToRead.push_back(drive.GetPath());
-                });
-                std::sort(DrivesToRead.begin(), DrivesToRead.end());
-            }
-            ReadConfig();
+            ReadConfig(GetDrivesToRead(true));
         } else {
             StorageConfigLoaded = true;
         }

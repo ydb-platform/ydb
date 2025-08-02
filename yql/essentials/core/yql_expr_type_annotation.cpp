@@ -3158,6 +3158,46 @@ bool EnsureWideStreamType(TPositionHandle position, const TTypeAnnotationNode& t
     return true;
 }
 
+bool EnsureWideFlowOrStreamType(const TExprNode& node, TExprContext& ctx) {
+    if (HasError(node.GetTypeAnn(), ctx)) {
+        return false;
+    }
+
+    if (!node.GetTypeAnn()) {
+        YQL_ENSURE(node.Type() == TExprNode::Lambda);
+        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() << "Expected wide stream or flow type, but got lambda"));
+        return false;
+    }
+
+    if (!IsWideFlowOrStreamType(*node.GetTypeAnn())) {
+        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() << "Expected wide stream or flow type, but got: " << *node.GetTypeAnn()));
+        return false;
+    }
+
+    return true;
+}
+
+bool IsWideFlowOrStreamType(const TTypeAnnotationNode& type) {
+    if (type.GetKind() == ETypeAnnotationKind::Stream && type.Cast<TStreamExprType>()->GetItemType()->GetKind() == ETypeAnnotationKind::Multi) {
+        return true;
+    } else if (type.GetKind() == ETypeAnnotationKind::Flow && type.Cast<TFlowExprType>()->GetItemType()->GetKind() == ETypeAnnotationKind::Multi) {
+        return true;
+    } else {
+        return false;
+    }
+}
+
+const TMultiExprType* GetWideFlowOrStreamComponents(const TTypeAnnotationNode& type) {
+    MKQL_ENSURE(IsWideFlowOrStreamType(type), "Expected wide stream or flow type.");
+    if (type.GetKind() == ETypeAnnotationKind::Flow) {
+        return type.Cast<TFlowExprType>()->GetItemType()->Cast<TMultiExprType>();
+    } else if (type.GetKind() == ETypeAnnotationKind::Stream) {
+        return type.Cast<TStreamExprType>()->GetItemType()->Cast<TMultiExprType>();
+    } else {
+        Y_UNREACHABLE();
+    }
+}
+
 bool IsWideBlockType(const TTypeAnnotationNode& type) {
     if (type.GetKind() != ETypeAnnotationKind::Multi) {
         return false;

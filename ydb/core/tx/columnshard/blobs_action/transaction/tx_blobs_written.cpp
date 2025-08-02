@@ -5,9 +5,12 @@
 #include <ydb/core/tx/columnshard/common/path_id.h>
 #include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
 #include <ydb/core/tx/columnshard/engines/portions/constructor_portion.h>
+#include <ydb/core/tx/columnshard/tracing/probes.h>
 #include <ydb/core/tx/columnshard/transactions/locks/write.h>
 
 namespace NKikimr::NColumnShard {
+
+LWTRACE_USING(YDB_CS);
 
 bool TTxBlobsWritingFinished::DoExecute(TTransactionContext& txc, const TActorContext&) {
     TMemoryProfileGuard mpg("TTxBlobsWritingFinished::Execute");
@@ -66,6 +69,7 @@ bool TTxBlobsWritingFinished::DoExecute(TTransactionContext& txc, const TActorCo
             Self->OperationsManager->LinkInsertWriteIdToOperationWriteId(InsertWriteIds, operation->GetWriteId());
         }
         if (operation->GetBehaviour() == EOperationBehaviour::NoTxWrite) {
+            LWPROBE(EvWriteResult, Self->TabletID(), Source.ToString(), TxId, Cookie, "no_tx_write");
             auto ev = NEvents::TDataEvents::TEvWriteResult::BuildCompleted(Self->TabletID());
             Results.emplace_back(std::move(ev), writeMeta.GetSource(), operation->GetCookie());
         } else {
@@ -76,6 +80,7 @@ bool TTxBlobsWritingFinished::DoExecute(TTransactionContext& txc, const TActorCo
             lock.SetGeneration(info.GetGeneration());
             lock.SetCounter(info.GetInternalGenerationCounter());
             writeMeta.GetPathId().SchemeShardLocalPathId.ToProto(lock);
+            LWPROBE(EvWriteResult, Self->TabletID(), Source.ToString(), TxId, Cookie, "tx_write", true, "");
             auto ev = NEvents::TDataEvents::TEvWriteResult::BuildCompleted(Self->TabletID(), operation->GetLockId(), lock);
             AddTableAccessStatsToTxStats(*ev->Record.MutableTxStats(), writeMeta.GetPathId().SchemeShardLocalPathId.GetRawValue(),
                                          writeResult.GetRecordsCount(), writeResult.GetDataSize(), operation->GetModificationType());
@@ -156,6 +161,7 @@ bool TTxBlobsWritingFailed::DoExecute(TTransactionContext& txc, const TActorCont
         Self->OperationsManager->AddTemporaryTxLink(op->GetLockId());
         Self->OperationsManager->AbortTransactionOnExecute(*Self, op->GetLockId(), txc);
 
+        LWPROBE(EvWriteResult, Self->TabletID(), Source.ToString(), TxId, Cookie, "tx_write", false, wResult.GetErrorMessage());
         auto ev = NEvents::TDataEvents::TEvWriteResult::BuildError(Self->TabletID(), op->GetLockId(),
             wResult.IsInternalError() ? NKikimrDataEvents::TEvWriteResult::STATUS_INTERNAL_ERROR
                                       : NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST,

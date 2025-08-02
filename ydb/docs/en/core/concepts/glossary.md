@@ -100,6 +100,8 @@ Technically, tablets are [actors](#actor) with a persistent state reliably saved
 
 Together, these mechanisms allow {{ ydb-short-name }} to provide [strict consistency](https://en.wikipedia.org/wiki/Consistency_model#Strict_consistency).
 
+{{ ydb-short-name }} provides the ability to control transaction execution modes. You can explicitly define a transaction mode with specific isolation and consistency guarantees, or use implicit transactions, where {{ ydb-short-name }} automatically determines the appropriate transactional behavior based on the type of statements being executed. A detailed description of available transaction modes and their characteristics is provided in a separate article [{#T}](./transactions.md#modes).
+
 The implementation of distributed transactions is covered in a separate article [{#T}](../contributor/datashard-distributed-txs.md), while below there's a list of several [related terms](#deterministic-transactions).
 
 ### Interactive transactions {#interactive-transaction}

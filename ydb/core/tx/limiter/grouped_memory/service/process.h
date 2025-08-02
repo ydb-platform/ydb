@@ -17,7 +17,7 @@ private:
     const ui64 ExternalScopeId;
     TAllocationGroups WaitAllocations;
     THashMap<ui64, std::shared_ptr<TAllocationInfo>> AllocationInfo;
-    TIdsControl GroupIds;
+    TExternalIdsControl GroupIds;
     ui32 Links = 1;
     const NActors::TActorId OwnerActorId;
 
@@ -65,7 +65,7 @@ public:
         if (--Links) {
             return false;
         }
-        for (auto&& [i, _] : GroupIds.GetExternalIdToInternalIds()) {
+        for (auto&& i : GroupIds.GetExternalIds()) {
             UnregisterGroupImplExt(i);
         }
         GroupIds.Clear();
@@ -153,7 +153,7 @@ public:
     }
 
     void RegisterGroup(const bool isPriorityProcess, const ui64 externalGroupId) {
-        Y_UNUSED(GroupIds.RegisterExternalId(externalGroupId));
+        GroupIds.RegisterExternalId(externalGroupId);
         AFL_INFO(NKikimrServices::GROUPED_MEMORY_LIMITER)("event", "register_group")("external_group_id", externalGroupId)(
             "min_group", GroupIds.GetMinExternalIdOptional());
         if (isPriorityProcess && (externalGroupId < GroupIds.GetMinExternalIdDef(externalGroupId))) {

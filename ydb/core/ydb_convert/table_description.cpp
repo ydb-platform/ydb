@@ -14,10 +14,14 @@
 #include <ydb/core/scheme/protos/type_info.pb.h>
 #include <ydb/core/scheme/scheme_pathid.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
+#include <ydb/core/tx/schemeshard/olap/column_family/column_family.h>
+
+#include <ydb/library/formats/arrow/accessor/common/const.h>
+#include <ydb/library/formats/arrow/protos/accessor.pb.h>
 #include <ydb/library/ydb_issue/proto/issue_id.pb.h>
-#include <yql/essentials/public/issue/yql_issue.h>
 
 #include <util/generic/hash.h>
+#include <yql/essentials/public/issue/yql_issue.h>
 
 namespace NKikimr {
 
@@ -789,33 +793,14 @@ bool FillColumnDescription(NKikimrSchemeOp::TAlterColumnTable& out, const google
 
 bool FillColumnFamily(
     const Ydb::Table::ColumnFamily& from, NKikimrSchemeOp::TFamilyDescription* to, Ydb::StatusIds::StatusCode& status, TString& error) {
-    to->SetName(from.name());
-    if (from.has_data()) {
+    NSchemeShard::TColumnFamily columFamily;
+    TConclusionStatus result = columFamily.DeserializeFromProto(from);
+    if (result.IsFail()) {
         status = Ydb::StatusIds::BAD_REQUEST;
-        error = TStringBuilder() << "Field `DATA` is not supported for OLAP tables in column family '" << from.name() << "'";
+        error = result.GetErrorMessage();
         return false;
     }
-    switch (from.compression()) {
-        case Ydb::Table::ColumnFamily::COMPRESSION_UNSPECIFIED:
-            break;
-        case Ydb::Table::ColumnFamily::COMPRESSION_NONE:
-            to->SetColumnCodec(NKikimrSchemeOp::ColumnCodecPlain);
-            break;
-        case Ydb::Table::ColumnFamily::COMPRESSION_LZ4:
-            to->SetColumnCodec(NKikimrSchemeOp::ColumnCodecLZ4);
-            break;
-        case Ydb::Table::ColumnFamily::COMPRESSION_ZSTD:
-            to->SetColumnCodec(NKikimrSchemeOp::ColumnCodecZSTD);
-            break;
-        default:
-            status = Ydb::StatusIds::BAD_REQUEST;
-            error = TStringBuilder() << "Unsupported compression value " << (ui32)from.compression() << " in column family '" << from.name()
-                                     << "'";
-            return false;
-    }
-    if (from.has_compression_level()) {
-        to->SetColumnCodecLevel(from.compression_level());
-    }
+    columFamily.SerializeToProto(*to);
     return true;
 }
 

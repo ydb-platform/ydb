@@ -193,7 +193,7 @@ int BlobStorageValueCountInAllGroups(TMyEnvBase& env, const TString& value) {
 }
 
 Y_UNIT_TEST_SUITE(Vacuum) {
-    ui32 TestTabletFlags = ui32(NFake::TDummy::EFlg::Comp) | ui32(NFake::TDummy::EFlg::Clean);
+    ui32 TestTabletFlags = ui32(NFake::TDummy::EFlg::Comp) | ui32(NFake::TDummy::EFlg::Vac);
 
     Y_UNIT_TEST(StartVacuumNoTables) {
         TMyEnvBase env;

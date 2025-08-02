@@ -4,7 +4,7 @@ import "ydb/core/fq/libs/config/protos/fq_config.proto";
 import "ydb/core/protos/alloc.proto";
 import "ydb/core/protos/auth.proto";
 import "ydb/core/protos/blobstorage.proto";
-import "ydb/core/protos/blobstorage_base3.proto";
+import "ydb/core/protos/blobstorage/blobstorage_base3.proto";
 import "ydb/core/protos/blobstorage_config.proto";
 import "ydb/core/protos/blobstorage_pdisk_config.proto";
 import "ydb/core/protos/blobstorage_vdisk_config.proto";

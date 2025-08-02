@@ -1,7 +1,11 @@
 #pragma once
 
-#include "defs.h"
-#include <ydb/core/protos/blobstorage_vdisk_internal.pb.h>
+#include <util/generic/string.h>
+#include <util/system/types.h>
+
+namespace NKikimrVDiskData {
+    class THullDbEntryPoint;
+}
 
 namespace NKikimr {
 

@@ -2,6 +2,7 @@
 
 #include <ydb/library/actors/core/event.h>
 #include <ydb/library/actors/core/interconnect.h>
+#include <ydb/core/base/events.h>
 #include <ydb/core/protos/blob_depot.pb.h>
 
 namespace NKikimr {
@@ -40,12 +41,12 @@ namespace NKikimr {
         }
 
 #define BLOBDEPOT_EVENT_PB_NO_ARGS(NAME)                                                    \
-        struct T##NAME : TEventPB<T##NAME, NKikimrBlobDepot::T##NAME, NAME> {               \
+        struct T##NAME : NActors::TEventPB<T##NAME, NKikimrBlobDepot::T##NAME, NAME> {               \
             T##NAME() = default;                                                            \
         }
 
 #define BLOBDEPOT_EVENT_PB(NAME, ...)                                                       \
-        struct T##NAME : TEventPB<T##NAME, NKikimrBlobDepot::T##NAME, NAME> {               \
+        struct T##NAME : NActors::TEventPB<T##NAME, NKikimrBlobDepot::T##NAME, NAME> {               \
             T##NAME() = default;                                                            \
                                                                                             \
             struct TArgListTerminator {};                                                   \
@@ -92,12 +93,12 @@ namespace NKikimr {
         template<> struct TResponseFor<TEvPrepareWriteS3> { using Type = TEvPrepareWriteS3Result; };
 
         template<typename TRequestEvent, typename... TArgs>
-        static auto MakeResponseFor(TEventHandle<TRequestEvent>& ev, TArgs&&... args) {
+        static auto MakeResponseFor(NActors::TEventHandle<TRequestEvent>& ev, TArgs&&... args) {
             auto event = std::make_unique<typename TResponseFor<TRequestEvent>::Type>(std::forward<TArgs>(args)...);
             auto *record = &event->Record;
-            auto handle = std::make_unique<IEventHandle>(ev.Sender, ev.Recipient, event.release(), 0, ev.Cookie);
+            auto handle = std::make_unique<NActors::IEventHandle>(ev.Sender, ev.Recipient, event.release(), 0, ev.Cookie);
             if (ev.InterconnectSession) {
-                handle->Rewrite(TEvInterconnect::EvForward, ev.InterconnectSession);
+                handle->Rewrite(NActors::TEvInterconnect::EvForward, ev.InterconnectSession);
             }
             return std::make_tuple(std::move(handle), record);
         }

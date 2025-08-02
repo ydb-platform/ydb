@@ -1,11 +1,8 @@
 #pragma once
 
-#include "defs.h"
-
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_events.h>
 #include <ydb/core/protos/blobstorage_base.pb.h>
-#include <ydb/core/protos/node_whiteboard.pb.h>
 
 #include <ydb/core/base/counters.h>
 #include <ydb/core/base/group_stat.h>

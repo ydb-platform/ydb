@@ -1,5 +1,6 @@
 #include "node_warden.h"
 #include "node_warden_impl.h"
+#include <ydb/core/protos/blobstorage/entity_status.pb.h>
 
 using namespace NKikimr;
 using namespace NStorage;

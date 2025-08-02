@@ -376,9 +376,7 @@ namespace NKikimr::NStorage {
                 , VDiskSlotId(vdiskSlotId)
             {}
 
-            TVSlotId(const NKikimrBlobStorage::TVDiskLocation& proto)
-                : TVSlotId(proto.GetNodeID(), proto.GetPDiskID(), proto.GetVDiskSlotID())
-            {}
+            TVSlotId(const NKikimrBlobStorage::TVDiskLocation& proto);
 
             TVSlotId(const NKikimrBlobStorage::TVSlotId& proto)
                 : TVSlotId(proto.GetNodeId(), proto.GetPDiskId(), proto.GetVSlotId())
@@ -455,10 +453,7 @@ namespace NKikimr::NStorage {
                 return Config.GetVDiskID().GetGroupID();
             }
 
-            TVSlotId GetVSlotId() const {
-                const auto& loc = Config.GetVDiskLocation();
-                return {loc.GetNodeID(), loc.GetPDiskID(), loc.GetVDiskSlotID()};
-            }
+            TVSlotId GetVSlotId() const;
 
             TVDiskID GetVDiskId() const {
                 const auto& vdiskId = VDiskIDFromVDiskID(Config.GetVDiskID());

@@ -8,6 +8,7 @@
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_tools.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_ut_http_request.h>
 #include <ydb/core/mind/bscontroller/bsc.h>
+#include <ydb/core/protos/blobstorage/entity_status.pb.h>
 #include <ydb/core/util/actorsys_test/testactorsys.h>
 
 #include <ydb/library/pdisk_io/sector_map.h>

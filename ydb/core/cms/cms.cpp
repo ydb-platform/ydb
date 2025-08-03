@@ -1537,13 +1537,17 @@ void TCms::ManuallyApproveRequest(TEvCms::TEvManageRequestRequest::TPtr &ev, con
     // Create a permission for each action in the scheduled request
     TAutoPtr<TEvCms::TEvPermissionResponse> resp = new TEvCms::TEvPermissionResponse;
     resp->Record.MutableStatus()->SetCode(TStatus::ALLOW);
+    ui32 priority = copy->Request.GetPriority();
     for (const auto& action : copy->Request.GetActions()) {
         auto items = ClusterInfo->FindLockedItems(action, &ctx);
         for (const auto& item : items) {
             TErrorInfo error;
             TDuration duration = TDuration::MicroSeconds(action.GetDuration());
             duration += TDuration::MicroSeconds(copy->Request.GetDuration());
-            if (item->IsLocked(error, State->Config.DefaultRetryTime, TActivationContext::Now(), duration)) {
+            item->DeactivateScheduledLocks(priority);
+            bool isLocked = item->IsLocked(error, State->Config.DefaultRetryTime, TActivationContext::Now(), duration);
+            item->ReactivateScheduledLocks();
+            if (isLocked) {
                 return ReplyWithError<TEvCms::TEvManageRequestResponse>(
                     ev, TStatus::WRONG_REQUEST, "Request has already locked items: " + error.Reason.GetMessage(), ctx);
             }

@@ -1495,6 +1495,7 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
         auto settings = TKikimrSettings()
             .SetAppConfig(appConfig)
             .SetFeatureFlags(featureFlags)
+            .SetEnableTempTables(true)
             .SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
 

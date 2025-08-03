@@ -61,6 +61,7 @@ namespace NKikimr::NKqp::NFederatedQueryTest {
         featureFlags.SetEnableScriptExecutionOperations(true);
         featureFlags.SetEnableExternalSourceSchemaInference(true);
         featureFlags.SetEnableMoveColumnTable(true);
+        featureFlags.SetEnableTempTables(true);
         if (!appConfig) {
             appConfig.emplace();
         }

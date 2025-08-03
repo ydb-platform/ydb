@@ -1,11 +1,11 @@
-Metadata-Version: 2.1
+Metadata-Version: 2.4
 Name: frozenlist
-Version: 1.5.0
+Version: 1.6.0
 Summary: A list-like structure which implements collections.abc.MutableSequence
 Home-page: https://github.com/aio-libs/frozenlist
 Maintainer: aiohttp team <team@aiohttp.org>
 Maintainer-email: team@aiohttp.org
-License: Apache 2
+License: Apache-2.0
 Project-URL: Chat: Matrix, https://matrix.to/#/#aio-libs:matrix.org
 Project-URL: Chat: Matrix Space, https://matrix.to/#/#aio-libs-space:matrix.org
 Project-URL: CI: Github Actions, https://github.com/aio-libs/frozenlist/actions
@@ -17,14 +17,12 @@ Project-URL: GitHub: issues, https://github.com/aio-libs/frozenlist/issues
 Project-URL: GitHub: repo, https://github.com/aio-libs/frozenlist
 Classifier: Development Status :: 5 - Production/Stable
 Classifier: Intended Audience :: Developers
-Classifier: License :: OSI Approved :: Apache Software License
 Classifier: Operating System :: POSIX
 Classifier: Operating System :: MacOS :: MacOS X
 Classifier: Operating System :: Microsoft :: Windows
 Classifier: Programming Language :: Cython
 Classifier: Programming Language :: Python
 Classifier: Programming Language :: Python :: 3
-Classifier: Programming Language :: Python :: 3.8
 Classifier: Programming Language :: Python :: 3.9
 Classifier: Programming Language :: Python :: 3.10
 Classifier: Programming Language :: Python :: 3.11
@@ -32,9 +30,10 @@ Classifier: Programming Language :: Python :: 3.12
 Classifier: Programming Language :: Python :: 3.13
 Classifier: Programming Language :: Python :: Implementation :: CPython
 Classifier: Programming Language :: Python :: Implementation :: PyPy
-Requires-Python: >=3.8
+Requires-Python: >=3.9
 Description-Content-Type: text/x-rst
 License-File: LICENSE
+Dynamic: license-file
 
 frozenlist
 ==========
@@ -43,8 +42,8 @@ frozenlist
    :target: https://github.com/aio-libs/frozenlist/actions
    :alt: GitHub status for master branch
 
-.. image:: https://codecov.io/gh/aio-libs/frozenlist/branch/master/graph/badge.svg
-   :target: https://codecov.io/gh/aio-libs/frozenlist
+.. image:: https://codecov.io/gh/aio-libs/frozenlist/branch/master/graph/badge.svg?flag=pytest
+   :target: https://codecov.io/gh/aio-libs/frozenlist?flags[]=pytest
    :alt: codecov.io status for master branch
 
 .. image:: https://img.shields.io/pypi/v/frozenlist.svg?logo=Python&logoColor=white
@@ -117,8 +116,6 @@ Installation
 
    $ pip install frozenlist
 
-The library requires Python 3.8 or newer.
-
 
 Documentation
 -------------
@@ -131,11 +128,6 @@ Communication channels
 We have a *Matrix Space* `#aio-libs-space:matrix.org
 <https://matrix.to/#/%23aio-libs-space:matrix.org>`_ which is
 also accessible via Gitter.
-
-Requirements
-------------
-
-- Python >= 3.8
 
 License
 -------
@@ -168,6 +160,82 @@ Changelog
     WARNING: Don't drop the next directive!
 
 .. towncrier release notes start
+
+v1.6.0
+======
+
+*(2025-04-17)*
+
+
+Bug fixes
+---------
+
+- Stopped implicitly allowing the use of Cython pre-release versions when
+  building the distribution package -- by `@ajsanchezsanz <https://github.com/sponsors/ajsanchezsanz>`__ and
+  `@markgreene74 <https://github.com/sponsors/markgreene74>`__.
+
+  *Related commits on GitHub:*
+  `41591f2 <https://github.com/aio-libs/frozenlist/commit/41591f2>`__.
+
+
+Features
+--------
+
+- Implemented support for the free-threaded build of CPython 3.13 -- by `@lysnikolaou <https://github.com/sponsors/lysnikolaou>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#618 <https://github.com/aio-libs/frozenlist/issues/618>`__.
+
+- Started building armv7l wheels -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#642 <https://github.com/aio-libs/frozenlist/issues/642>`__.
+
+
+Packaging updates and notes for downstreams
+-------------------------------------------
+
+- Stopped implicitly allowing the use of Cython pre-release versions when
+  building the distribution package -- by `@ajsanchezsanz <https://github.com/sponsors/ajsanchezsanz>`__ and
+  `@markgreene74 <https://github.com/sponsors/markgreene74>`__.
+
+  *Related commits on GitHub:*
+  `41591f2 <https://github.com/aio-libs/frozenlist/commit/41591f2>`__.
+
+- Started building wheels for the free-threaded build of CPython 3.13 -- by `@lysnikolaou <https://github.com/sponsors/lysnikolaou>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#618 <https://github.com/aio-libs/frozenlist/issues/618>`__.
+
+- The packaging metadata switched to including an SPDX license identifier introduced in `PEP 639 <https://peps.python.org/pep-639>`__ -- by `@cdce8p <https://github.com/sponsors/cdce8p>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#639 <https://github.com/aio-libs/frozenlist/issues/639>`__.
+
+
+Contributor-facing changes
+--------------------------
+
+- GitHub Actions CI/CD is now configured to manage caching pip-ecosystem
+  dependencies using `re-actors/cache-python-deps`_ -- an action by
+  `@webknjaz <https://github.com/sponsors/webknjaz>`__ that takes into account ABI stability and the exact
+  version of Python runtime.
+
+  .. _`re-actors/cache-python-deps`:
+     https://github.com/marketplace/actions/cache-python-deps
+
+  *Related issues and pull requests on GitHub:*
+  `#633 <https://github.com/aio-libs/frozenlist/issues/633>`__.
+
+- Organized dependencies into test and lint dependencies so that no
+  unnecessary ones are installed during CI runs -- by `@lysnikolaou <https://github.com/sponsors/lysnikolaou>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#636 <https://github.com/aio-libs/frozenlist/issues/636>`__.
+
+
+----
+
 
 1.5.0 (2024-10-22)
 ==================

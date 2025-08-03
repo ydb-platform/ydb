@@ -5182,7 +5182,7 @@ void TPersQueue::Handle(TEvPQ::TEvReadingPartitionStatusRequest::TPtr& ev, const
 void TPersQueue::Handle(TEvPQ::TEvPartitionScaleStatusChanged::TPtr& ev, const TActorContext& ctx)
 {
     const NKikimrPQ::TEvPartitionScaleStatusChanged& record = ev->Get()->Record;
-    if (MirrorFromEnabled(Config) && record.HasParticipatingPartitions()) {
+    if (MirroringEnabled(Config) && record.HasParticipatingPartitions()) {
         PQ_LOG_I("Got mirrorer split merge request" << ev->ToString());
     }
 

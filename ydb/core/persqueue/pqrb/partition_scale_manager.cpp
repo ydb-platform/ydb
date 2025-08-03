@@ -23,7 +23,7 @@ TPartitionScaleManager::TPartitionScaleManager(
     , DatabasePath(databasePath)
     , BalancerConfig(pathId, version, config)
     , PartitionGraph(partitionGraph)
-    , MirroredFromSomewhere(MirrorFromEnabled(config)) {
+    , MirroredFromSomewhere(MirroringEnabled(config)) {
     }
 
 TString TPartitionScaleManager::LogPrefix() const {
@@ -186,7 +186,7 @@ void TPartitionScaleManager::Die(const TActorContext& ctx) {
 
 void TPartitionScaleManager::UpdateBalancerConfig(ui64 pathId, int version, const NKikimrPQ::TPQTabletConfig& config) {
     BalancerConfig = TBalancerConfig(pathId, version, config);
-    MirroredFromSomewhere = MirrorFromEnabled(config);
+    MirroredFromSomewhere = MirroringEnabled(config);
 }
 
 void TPartitionScaleManager::UpdateDatabasePath(const TString& dbPath) {

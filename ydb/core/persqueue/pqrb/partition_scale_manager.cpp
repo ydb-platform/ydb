@@ -30,17 +30,17 @@ TString TPartitionScaleManager::LogPrefix() const {
     return TStringBuilder() << "[TPartitionScaleManager: " << TopicName << "] ";
 }
 
-void TPartitionScaleManager::HandleScaleStatusChange(const ui32 partition, NKikimrPQ::EScaleStatus scaleStatus, TMaybe<NKikimrPQ::TPartitionScaleParticipants> participants, const TActorContext& ctx) {
+void TPartitionScaleManager::HandleScaleStatusChange(const ui32 partitionId, NKikimrPQ::EScaleStatus scaleStatus, TMaybe<NKikimrPQ::TPartitionScaleParticipants> participants, const TActorContext& ctx) {
     if (scaleStatus == NKikimrPQ::EScaleStatus::NEED_SPLIT) {
-        PQ_LOG_D("TPartitionScaleManager::HandleScaleStatusChange need to split partition " << partition);
+        PQ_LOG_D("TPartitionScaleManager::HandleScaleStatusChange need to split partition " << partitionId);
         TPartitionScaleOperationInfo op{
-            .PartitionId = partition,
+            .PartitionId = partitionId,
             .PartitionScaleParticipants = std::move(participants),
         };
-        PartitionsToSplit.insert_or_assign(partition, std::move(op));
+        PartitionsToSplit.insert_or_assign(partitionId, std::move(op));
         TrySendScaleRequest(ctx);
     } else {
-        PartitionsToSplit.erase(partition);
+        PartitionsToSplit.erase(partitionId);
     }
 }
 

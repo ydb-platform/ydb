@@ -164,7 +164,7 @@ runs:
         set -ex
         echo "Artifacts will be uploaded [here](${PUBLIC_DIR_URL}/index.html)" | GITHUB_TOKEN="${{ github.token }}" .github/scripts/tests/comment-pr.py
 
-        export ORIGINAL_HEAD=$(git rev-parse HEAD)
+        ORIGINAL_HEAD=$(git rev-parse HEAD)
 
         if [ "${{ inputs.increment }}" = "true" ]; then
           GRAPH_COMPARE_OUTPUT="$PUBLIC_DIR/graph_compare_log.txt"
@@ -290,10 +290,16 @@ runs:
         echo "GITHUB_REF_NAME = $GITHUB_REF_NAME"
 
         if [ -z "${{ inputs.custom_branch_name }}" ]; then
-          export BRANCH_NAME="${GITHUB_REF_NAME}"
+          BRANCH_NAME="${GITHUB_REF_NAME}"
         else
-          export BRANCH_NAME="${{ inputs.custom_branch_name }}"
+          BRANCH_NAME="${{ inputs.custom_branch_name }}"
         fi
+
+        params+= {
+          -DGIT_BRANCH=$BRANCH_NAME
+          -DGIT_COMMIT_SHA=$ORIGINAL_HEAD
+        }
+
         echo "BRANCH_NAME=$BRANCH_NAME" >> $GITHUB_ENV
         echo "BRANCH_NAME is set to $BRANCH_NAME"
 

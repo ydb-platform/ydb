@@ -675,7 +675,6 @@ PG_TYPES = {
     TEXT_ARRAY: string_array_in,  # text[]
     TIME: time_in,  # time
     TIME_ARRAY: time_array_in,  # time[]
-    INTERVAL: interval_in,  # interval
     TIMESTAMP: timestamp_in,  # timestamp
     TIMESTAMP_ARRAY: timestamp_array_in,  # timestamp
     TIMESTAMPTZ: timestamptz_in,  # timestamptz
@@ -779,22 +778,11 @@ def identifier(sql):
     if len(sql) == 0:
         raise InterfaceError("identifier must be > 0 characters in length")
 
-    quote = not sql[0].isalpha()
+    if "\u0000" in sql:
+        raise InterfaceError("identifier cannot contain the code zero character")
 
-    for c in sql[1:]:
-        if not (c.isalpha() or c.isdecimal() or c in "_$"):
-            if c == "\u0000":
-                raise InterfaceError(
-                    "identifier cannot contain the code zero character"
-                )
-            quote = True
-            break
-
-    if quote:
-        sql = sql.replace('"', '""')
-        return f'"{sql}"'
-    else:
-        return sql
+    sql = sql.replace('"', '""')
+    return f'"{sql}"'
 
 
 def literal(value):

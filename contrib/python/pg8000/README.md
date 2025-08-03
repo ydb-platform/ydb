@@ -2,15 +2,14 @@
 
 pg8000 is a pure-[Python](https://www.python.org/)
 [PostgreSQL](http://www.postgresql.org/) driver that complies with
-[DB-API 2.0](http://www.python.org/dev/peps/pep-0249/). It is tested on Python versions
-3.8+, on CPython and PyPy, and PostgreSQL versions 12+. pg8000's name comes from the
+[DB-API 2.0](http://www.python.org/dev/peps/pep-0249/). pg8000's name comes from the
 belief that it is probably about the 8000th PostgreSQL interface for Python. pg8000 is
 distributed under the BSD 3-clause license.
 
 All bug reports, feature requests and contributions are welcome at
 [http://github.com/tlocke/pg8000/](http://github.com/tlocke/pg8000/).
 
-[![Workflow Status Badge](https://github.com/tlocke/pg8000/workflows/pg8000/badge.svg)](https://github.com/tlocke/pg8000/actions)
+[![Workflow Status Badge](https://github.com/tlocke/pg8000/actions/workflows/test.yml/badge.svg)](https://github.com/tlocke/pg8000/actions/workflows/test.yml)
 
 ## Installation
 
@@ -632,7 +631,7 @@ are both separate identifiers. So to escape them you'd do:
 ...     f"WHERE lanname = 'sql'"
 ... )
 >>> print(query)
-SELECT lanname FROM pg_catalog.pg_language WHERE lanname = 'sql'
+SELECT lanname FROM "pg_catalog"."pg_language" WHERE lanname = 'sql'
 >>>
 >>> con.run(query)
 [['sql']]
@@ -967,6 +966,48 @@ the `replication` keyword when creating a connection:
 >>>
 >>> con.run("IDENTIFY_SYSTEM")
 [['...', 1, '.../...', 'postgres']]
+>>>
+>>> con.close()
+
+```
+
+### Extra Startup Parameters
+
+The standard startup parameters `user`, `database` and `replication` are set with their
+own parameters in the `Connection()` constructor. However, as the
+[docs](https://www.postgresql.org/docs/current/protocol-message-formats.html) say:
+
+> In addition to the above, other parameters may be listed. Parameter names beginning
+> with \_pq\_. are reserved for use as protocol extensions, while others are treated as
+> run-time parameters to be set at backend start time. Such settings will be applied
+> during backend start (after parsing the command-line arguments if any) and will act as
+> session defaults.
+
+these additional parameters can be specified using the `startup_params` parameter of the
+`Connection()` constructor:
+
+```python
+>>> import pg8000.native
+>>>
+>>> con = pg8000.native.Connection(
+...    'postgres', password="cpsnow", startup_params={'IntervalStyle': 'sql_standard'})
+>>>
+>>> con.run("SHOW IntervalStyle")
+[['sql_standard']]
+>>>
+>>> con.close()
+
+```
+
+### PostgreSQL-Style Parameter Placeholders
+
+```python
+>>> import pg8000.native
+>>>
+>>> con = pg8000.native.Connection('postgres', password="cpsnow")
+>>>
+>>> con.run("SELECT $1", title='A Time Of Hope')
+[['A Time Of Hope']]
 >>>
 >>> con.close()
 
@@ -1316,6 +1357,7 @@ an error:
 ... )
 Traceback (most recent call last):
 struct.error: 'H' format requires 0 <= number <= 65535
+>>> conn.close()
 
 ```
 
@@ -1459,6 +1501,7 @@ Creates a connection to a PostgreSQL database.
 - *application_name* - Sets the [application\_name](https://www.postgresql.org/docs/current/runtime-config-logging.html#GUC-APPLICATION-NAME). If your server character encoding is not `ascii` or `utf8`, then you need to provide values as bytes, eg.  `'my_application_name'.encode('EUC-JP')`. The default is `None` which means that the server will set the application name.
 - *replication* - Used to run in [streaming replication mode](https://www.postgresql.org/docs/current/protocol-replication.html). If your server character encoding is not `ascii` or `utf8`, then you need to provide values as bytes, eg. `'database'.encode('EUC-JP')`.
 - *sock*  - A socket-like object to use for the connection. For example, `sock` could be a plain `socket.socket`, or it could represent an SSH tunnel or perhaps an `ssl.SSLSocket` to an SSL proxy. If an `ssl.SSLContext` is provided, then it will be used to attempt to create an SSL socket from the provided socket. 
+- *startup_params* - The standard startup parameters 'user', 'database' and 'replication' have their own parameters in this constructor. Other startup parameters can be specified in this dictionary. To quote the [docs](https://www.postgresql.org/docs/current/protocol-message-formats.html): "Parameter names beginning with _pq_. are reserved for use as protocol extensions, while others are treated as run-time parameters to be set at backend start time. Such settings will be applied during backend start (after parsing the command-line arguments if any) and will act as session defaults."
 
 ### pg8000.native.Connection.notifications
 
@@ -1524,7 +1567,9 @@ keys:
 
 ### pg8000.native.Connection.close()
 
-Closes the database connection.
+Closes the database connection. First the connection is closed at the PostgreSQL protocol
+level, and then regardless of whether that succeeds or not, the underlying socket is
+closed.
 
 
 ### pg8000.native.Connection.register\_out\_adapter(typ, out\_func)
@@ -1663,14 +1708,15 @@ Creates a connection to a PostgreSQL database.
 - *application_name* - Sets the [application\_name](https://www.postgresql.org/docs/current/runtime-config-logging.html#GUC-APPLICATION-NAME). If your server character encoding is not `ascii` or `utf8`, then you need to provide values as bytes, eg. `'my_application_name'.encode('EUC-JP')`. The default is `None` which means that the server will set the application name.
 - *replication* - Used to run in [streaming replication mode](https://www.postgresql.org/docs/current/protocol-replication.html). If your server character encoding is not `ascii` or `utf8`, then you need to provide values as bytes, eg. `'database'.encode('EUC-JP')`.
 - *sock* - A socket-like object to use for the connection. For example, `sock` could be a plain `socket.socket`, or it could represent an SSH tunnel or perhaps an `ssl.SSLSocket` to an SSL proxy. If an `ssl.SSLContext` is provided, then it will be used to attempt to create an SSL socket from the provided socket. 
+- *startup_params* - The standard startup parameters 'user', 'database' and 'replication' have their own parameters in this constructor. Other startup parameters can be specified in this dictionary. To quote the [docs](https://www.postgresql.org/docs/current/protocol-message-formats.html): "Parameter names beginning with _pq_. are reserved for use as protocol extensions, while others are treated as run-time parameters to be set at backend start time. Such settings will be applied during backend start (after parsing the command-line arguments if any) and will act as session defaults."
 
 
 #### pg8000.dbapi.Date(year, month, day)
 
 Construct an object holding a date value.
 
-This property is part of the `DBAPI 2.0 specification
-<http://www.python.org/dev/peps/pep-0249/>`_.
+This property is part of the
+[DBAPI 2.0 specification](http://www.python.org/dev/peps/pep-0249/).
 
 Returns: `datetime.date`
 
@@ -1805,7 +1851,9 @@ setting this boolean pg8000-specific autocommit property to ``True``.
 
 #### pg8000.dbapi.Connection.close()
 
-Closes the database connection.
+Closes the database connection. First the connection is closed at the PostgreSQL protocol
+level, and then regardless of whether that succeeds or not, the underlying socket is
+closed.
 
 
 #### pg8000.dbapi.Connection.cursor()
@@ -1818,7 +1866,7 @@ Creates a `pg8000.dbapi.Cursor` object bound to this connection.
 Rolls back the current database transaction.
 
 
-#### pg8000.dbapi.Connection.tpc_begin(xid)
+#### pg8000.dbapi.Connection.tpc\_begin(xid)
 
 Begins a TPC transaction with the given transaction ID xid. This method should be
 called outside of a transaction (i.e. nothing may have executed since the last
@@ -2058,6 +2106,12 @@ twine upload dist/*
 
 
 ## Release Notes
+
+### Version 1.31.3, 2025-07-19
+
+- Simplify the `indentifier()` function by always quoting.
+
+- New `startup_params` option that allows setting arbitrary startup parameters.
 
 ### Version 1.31.2, 2024-04-28
 

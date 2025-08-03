@@ -271,6 +271,7 @@ class CoreConnection:
         tcp_keepalive=True,
         application_name=None,
         replication=None,
+        startup_params=None,
         sock=None,
     ):
         self._client_encoding = "utf8"
@@ -296,6 +297,15 @@ class CoreConnection:
             "application_name": application_name,
             "replication": replication,
         }
+        start_params = {} if startup_params is None else startup_params
+        common_params = init_params.keys() & start_params.keys()
+
+        if len(common_params) > 0:
+            raise InterfaceError(
+                "The parameters '{common_params}' can't appear in startup_params, they "
+                "must be set using keyword arguments."
+            )
+        init_params.update(start_params)
 
         for k, v in tuple(init_params.items()):
             if isinstance(v, str):

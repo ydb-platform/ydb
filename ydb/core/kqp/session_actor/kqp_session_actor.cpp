@@ -1500,13 +1500,13 @@ public:
 
         auto executerActor = CreateKqpExecuter(std::move(request), Settings.Database,
             QueryState ? QueryState->UserToken : TIntrusiveConstPtr<NACLib::TUserToken>(),
+            QueryState ? QueryState->GetResultSetFormatSettings() : TResultSetFormatSettings{},
             RequestCounters, Settings.TableService,
             AsyncIoFactory, QueryState ? QueryState->PreparedQuery : nullptr, SelfId(),
             QueryState ? QueryState->UserRequestContext : MakeIntrusive<TUserRequestContext>("", Settings.Database, SessionId),
             QueryState ? QueryState->StatementResultIndex : 0, FederatedQuerySetup,
             (QueryState && QueryState->RequestEv->GetSyntax() == Ydb::Query::Syntax::SYNTAX_PG)
-                ? GUCSettings : nullptr, txCtx->ShardIdToTableInfo, txCtx->TxManager, txCtx->BufferActorId,
-            (QueryState) ? QueryState->GetResultSetType() : Ydb::ResultSet::UNSPECIFIED, Nothing());
+                ? GUCSettings : nullptr, txCtx->ShardIdToTableInfo, txCtx->TxManager, txCtx->BufferActorId, Nothing());
 
         auto exId = RegisterWithSameMailbox(executerActor);
         LOG_D("Created new KQP executer: " << exId << " isRollback: " << isRollback);
@@ -1800,6 +1800,9 @@ public:
     void HandleExecute(TEvKqpExecuter::TEvStreamData::TPtr& ev) {
         YQL_ENSURE(QueryState && QueryState->RequestActorId);
         LOG_D("Forwarded TEvStreamData to " << QueryState->RequestActorId);
+
+        QueryState->QueryData->AddBuiltResultIndex(ev->Get()->Record.GetQueryResultIndex());
+
         TlsActivationContext->Send(ev->Forward(QueryState->RequestActorId));
     }
 
@@ -2094,7 +2097,8 @@ public:
                 if (QueryState->IsStreamResult()) {
                     if (QueryState->QueryData->HasTrailingTxResult(phyQuery.GetResultBindings(i))) {
                         auto ydbResult = QueryState->QueryData->GetYdbTxResult(
-                            phyQuery.GetResultBindings(i), response->GetArena(), QueryState->GetResultSetType(), {});
+                            phyQuery.GetResultBindings(i), response->GetArena(),
+                            QueryState->GetResultSetFormatSettings(), {});
 
                         YQL_ENSURE(ydbResult);
                         ++trailingResultsCount;
@@ -2110,8 +2114,9 @@ public:
                     effectiveRowsLimit = QueryState->PreparedQuery->GetResults(i).GetRowsLimit();
                 }
 
-                auto* ydbResult = QueryState->QueryData->GetYdbTxResult(phyQuery.GetResultBindings(i),
-                    response->GetArena(), QueryState->GetResultSetType(), effectiveRowsLimit);
+                auto* ydbResult = QueryState->QueryData->GetYdbTxResult(
+                    phyQuery.GetResultBindings(i), response->GetArena(),
+                    QueryState->GetResultSetFormatSettings(), effectiveRowsLimit);
                 response->AddYdbResults()->Swap(ydbResult);
             }
         }

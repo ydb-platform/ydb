@@ -9,6 +9,7 @@ import "google/protobuf/duration.proto";
 
 import "ydb/public/api/protos/annotations/validation.proto";
 import "ydb/public/api/protos/ydb_common.proto";
+import "ydb/public/api/protos/ydb_formats.proto";
 import "ydb/public/api/protos/ydb_issue_message.proto";
 import "ydb/public/api/protos/ydb_operation.proto";
 import "ydb/public/api/protos/ydb_query_stats.proto";
@@ -155,6 +156,19 @@ enum StatsMode {
     STATS_MODE_PROFILE = 40;    // Detailed execution stats including stats for individual tasks and channels
 }
 
+enum SchemaInclusionMode {
+    // Unspecified mode, corresponds to:
+    // - Ydb.ResultSet.Format.FORMAT_VALUE: SCHEMA_INCLUSION_MODE_ALWAYS
+    // - Ydb.ResultSet.Format.FORMAT_ARROW: SCHEMA_INCLUSION_MODE_FIRST_ONLY
+    SCHEMA_INCLUSION_MODE_UNSPECIFIED = 0;
+
+    // Always include schema in every Ydb.ResultSet in the response stream.
+    SCHEMA_INCLUSION_MODE_ALWAYS = 1;
+
+    // Include schema only in the first Ydb.ResultSet per result_set_index of the response stream.
+    SCHEMA_INCLUSION_MODE_FIRST_ONLY = 2;
+}
+
 message ExecuteQueryRequest {
     // Session identifier (required)
     string session_id = 1 [(Ydb.length).le = 1024];
@@ -183,9 +197,16 @@ message ExecuteQueryRequest {
     // In case when stats_period_ms is specified and is non-zero, query statistics will be additionally sent every stats_period_ms milliseconds beginning from the start of query execution.
     int64 stats_period_ms = 11 [(Ydb.value) = ">= 0"];
 
-    // Type of query result set parts.
-    // It's for get default ResultSet or some result_data with a different type in response stream.
-    Ydb.ResultSet.Type result_set_type = 12;
+    // Schema inclusion mode for the result sets.
+    // If is not specified, it depends on the result set format.
+    SchemaInclusionMode schema_inclusion_mode = 12;
+
+    // Format of the result sets.
+    // If is not specified, Ydb.ResultSet.Format.FORMAT_VALUE is used.
+    Ydb.ResultSet.Format result_set_format = 13;
+
+    // Format settings, only used for Ydb.ResultSet.Format.FORMAT_ARROW
+    Ydb.Formats.ArrowFormatSettings arrow_format_settings = 14;
 }
 
 message ResultSetMeta {

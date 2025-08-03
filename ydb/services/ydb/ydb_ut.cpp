@@ -1993,7 +1993,7 @@ partitioning_settings {
                     "      null_flag_value: NULL_VALUE\n"
                     "    }\n"
                     "  }\n"
-                    "  type: MESSAGE\n"
+                    "  format: FORMAT_VALUE\n"
                     "}\n"
                     "tx_meta {\n"
                     "}\n";
@@ -2087,7 +2087,7 @@ partitioning_settings {
       high_128: 13600338575655354541
     }
   }
-  type: MESSAGE
+  format: FORMAT_VALUE
 }
 tx_meta {
 }
@@ -2350,7 +2350,7 @@ tx_meta {
                     "      bytes_value: \"Paul\"\n"
                     "    }\n"
                     "  }\n"
-                    "  type: MESSAGE\n"
+                    "  format: FORMAT_VALUE\n"
                     "}\n"
                     "tx_meta {\n"
                     "}\n";
@@ -2404,7 +2404,7 @@ tx_meta {
       high_128: 13600338575655354541
     }
   }
-  type: MESSAGE
+  format: FORMAT_VALUE
 }
 tx_meta {
 }
@@ -2754,7 +2754,7 @@ tx_meta {
                     "      bytes_value: \"Paul\"\n"
                     "    }\n"
                     "  }\n"
-                    "  type: MESSAGE\n"
+                    "  format: FORMAT_VALUE\n"
                     "}\n"
                     "tx_meta {\n"
                     "}\n";

@@ -79,5 +79,5 @@ jobs:
         s3cmd sync --follow-symlinks --acl-public --no-progress --stats --no-check-md5 "ydb/apps/ydbd/ydbd" "s3://ydb-builds/${{ matrix.branch }}/${{ matrix.build_preset }}/ydbd" -d
         if [ -e ydb/tests/library/compatibility/configs/dump/config-meta.json ]; then
           s3cmd sync --follow-symlinks --acl-public --no-progress --stats --no-check-md5 "ydb/tests/library/compatibility/configs/dump/config-meta.json" "s3://ydb-builds/${{ matrix.branch }}/${{ matrix.build_preset }}/config-meta.json" -d
-          echo 'Config dump for ${{ matrix.branch }} uploaded to [storage](${{ vars.AWS_ENDPOINT }}/ydb-builds/${{ matrix.branch }}/${{ matrix.build_preset }}/config-meta.json).' >> $GITHUB_STEP_SUMMARY
+          echo 'Config dump uploaded to [storage](${{ vars.AWS_ENDPOINT }}/ydb-builds/${{ matrix.branch }}/${{ matrix.build_preset }}/config-meta.json).' >> $GITHUB_STEP_SUMMARY
         fi

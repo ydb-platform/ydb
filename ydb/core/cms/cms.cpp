@@ -1525,9 +1525,6 @@ void TCms::ManuallyApproveRequest(TEvCms::TEvManageRequestRequest::TPtr &ev, con
 
     TString requestId = rec.GetRequestId();
 
-    auto actor = new TRequestApproveActor(requestId, State, ev->Sender);
-    TActorId approveActorId = ctx.RegisterWithSameMailbox(actor);
-
     // Find the scheduled request by RequestId
     auto it = State->ScheduledRequests.find(requestId);
     if (it == State->ScheduledRequests.end()) {
@@ -1541,6 +1538,17 @@ void TCms::ManuallyApproveRequest(TEvCms::TEvManageRequestRequest::TPtr &ev, con
     TAutoPtr<TEvCms::TEvPermissionResponse> resp = new TEvCms::TEvPermissionResponse;
     resp->Record.MutableStatus()->SetCode(TStatus::ALLOW);
     for (const auto& action : copy->Request.GetActions()) {
+        auto items = ClusterInfo->FindLockedItems(action, &ctx);
+        for (const auto& item : items) {
+            TErrorInfo error;
+            TDuration duration = TDuration::MicroSeconds(action.GetDuration());
+            duration += TDuration::MicroSeconds(copy->Request.GetDuration());
+            if (item->IsLocked(error, State->Config.DefaultRetryTime, TActivationContext::Now(), duration)) {
+                return ReplyWithError<TEvCms::TEvManageRequestResponse>(
+                    ev, TStatus::WRONG_REQUEST, "Request has already locked items: " + error.Reason.GetMessage(), ctx);
+            }
+        }
+
         auto* perm = resp->Record.AddPermissions();
         perm->MutableAction()->CopyFrom(action);
         TInstant deadline = TActivationContext::Now() + TDuration::MicroSeconds(copy->Request.GetDuration());
@@ -1548,6 +1556,9 @@ void TCms::ManuallyApproveRequest(TEvCms::TEvManageRequestRequest::TPtr &ev, con
     }
 
     AcceptPermissions(resp->Record, rec.GetRequestId(), rec.GetUser(), ctx, true);
+
+    auto actor = new TRequestApproveActor(requestId, State, ev->Sender);
+    TActorId approveActorId = ctx.RegisterWithSameMailbox(actor);
 
     auto handle = new IEventHandle(approveActorId, SelfId(), resp.Release(), 0, ev->Cookie);
     Execute(CreateTxStorePermissions(std::move(ev->Release()), handle, rec.GetUser(), std::move(copy)), ctx);

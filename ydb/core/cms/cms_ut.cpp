@@ -610,7 +610,7 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         TString pdiskPath = "/" + std::to_string(pdiskId.NodeId) + "/pdisk-" + std::to_string(pdiskId.DiskId) + ".data";
 
         auto req = MakePermissionRequest(
-            TRequestOptions("user", false, false, true),
+            TRequestOptions("user", true, false, true),
             MakeAction(TAction::SHUTDOWN_HOST, env.GetNodeId(0), 60000000),
             MakeAction(TAction::SHUTDOWN_HOST, env.GetNodeId(1), 60000000),
             MakeAction(TAction::SHUTDOWN_HOST, env.GetNodeId(2), 60000000)
@@ -618,17 +618,50 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
 
         req->Record.SetAvailabilityMode(NKikimrCms::EAvailabilityMode::MODE_MAX_AVAILABILITY);
 
-        auto rec1 = env.CheckPermissionRequest(req, TStatus::DISALLOW_TEMP);
+        auto rec1 = env.CheckPermissionRequest(req, TStatus::ALLOW_PARTIAL);
+        UNIT_ASSERT_VALUES_EQUAL(1, rec1.PermissionsSize());
+        auto rec2 = env.CheckGetPermission("user", rec1.GetPermissions(0).GetId());
+        UNIT_ASSERT_VALUES_EQUAL(rec2.PermissionsSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(rec2.GetPermissions(0).GetId(), rec1.GetPermissions(0).GetId());
 
         auto rid1 = rec1.GetRequestId();
         
         // // Manual approval
-        // auto approveResp = env.CheckApproveRequest("user", rid1, false, TStatus::OK);
-        // UNIT_ASSERT_VALUES_EQUAL(approveResp.ManuallyApprovedPermissionsSize(), 1);
-        // TString permissionId = approveResp.GetManuallyApprovedPermissions(0);
-        // auto rec2 = env.CheckGetPermission("user", permissionId);
-        // UNIT_ASSERT_VALUES_EQUAL(rec2.PermissionsSize(), 1);
-        // UNIT_ASSERT_VALUES_EQUAL(rec2.GetPermissions(0).GetId(), permissionId);
+        auto approveResp = env.CheckApproveRequest("user", rid1, false, TStatus::OK);
+        UNIT_ASSERT_VALUES_EQUAL(approveResp.ManuallyApprovedPermissionsSize(), 2);
+        for (const auto& permissionId : approveResp.GetManuallyApprovedPermissions()) {
+            auto rec3 = env.CheckGetPermission("user", permissionId);
+            UNIT_ASSERT_VALUES_EQUAL(rec3.PermissionsSize(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(rec3.GetPermissions(0).GetId(), permissionId);
+        }
+    }
+
+    Y_UNIT_TEST(ManualRequestApprovalAlreadyLockedNode)
+    {
+        auto opts = TTestEnvOpts(8, 8).WithSentinel().WithDynamicGroups();
+        TCmsTestEnv env(opts);
+
+        auto pdiskId = env.PDiskId(0, 0);
+        TString pdiskPath = "/" + std::to_string(pdiskId.NodeId) + "/pdisk-" + std::to_string(pdiskId.DiskId) + ".data";
+
+        auto req = MakePermissionRequest(
+            TRequestOptions("user", true, false, true),
+            MakeAction(TAction::SHUTDOWN_HOST, env.GetNodeId(0), 60000000)
+        );
+        req->Record.SetAvailabilityMode(NKikimrCms::EAvailabilityMode::MODE_MAX_AVAILABILITY);
+
+        env.CheckPermissionRequest(req, TStatus::ALLOW);
+
+        auto req2 = MakePermissionRequest(
+            TRequestOptions("user", true, false, true),
+            MakeAction(TAction::SHUTDOWN_HOST, env.GetNodeId(0), 60000000)
+        );
+        req2->Record.SetAvailabilityMode(NKikimrCms::EAvailabilityMode::MODE_MAX_AVAILABILITY);
+        auto rec2 = env.CheckPermissionRequest(req2, TStatus::DISALLOW_TEMP);
+        auto rid2 = rec2.GetRequestId();
+
+        // Manual approval should fail since node 0 is already locked
+        env.CheckApproveRequest("user", rid2, false, TStatus::WRONG_REQUEST);
     }
 
     Y_UNIT_TEST(RequestReplacePDiskDoesntBreakGroup)

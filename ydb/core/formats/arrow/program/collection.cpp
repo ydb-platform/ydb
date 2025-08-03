@@ -16,7 +16,12 @@ void TAccessorsCollection::Upsert(
 }
 
 void TAccessorsCollection::AddVerified(const ui32 columnId, const arrow::Datum& data, const bool withFilter, const bool forceChangeCount) {
-    AddVerified(columnId, TAccessorCollectedContainer(data), withFilter, forceChangeCount);
+    if (data.is_scalar()) {
+        AddConstantVerified(columnId, data.scalar());
+        RecordsCountActual = 1;
+    } else {
+        AddVerified(columnId, TAccessorCollectedContainer(data), withFilter, forceChangeCount);
+    }
 }
 
 void TAccessorsCollection::AddVerified(
@@ -138,18 +143,18 @@ std::shared_ptr<IChunkedArray> TAccessorsCollection::GetConstantVerified(const u
     return std::make_shared<TTrivialArray>(NArrow::TStatusValidator::GetValid(arrow::MakeArrayFromScalar(*it->second, recordsCount)));
 }
 
-std::shared_ptr<arrow::Scalar> TAccessorsCollection::GetConstantScalarVerified(const ui32 columnId) const {
+const std::shared_ptr<arrow::Scalar>& TAccessorsCollection::GetConstantScalarVerified(const ui32 columnId) const {
     auto it = Constants.find(columnId);
     AFL_VERIFY(it != Constants.end())("id", columnId);
     return it->second;
 }
 
-std::shared_ptr<arrow::Scalar> TAccessorsCollection::GetConstantScalarOptional(const ui32 columnId) const {
+const std::shared_ptr<arrow::Scalar>& TAccessorsCollection::GetConstantScalarOptional(const ui32 columnId) const {
     auto it = Constants.find(columnId);
     if (it != Constants.end()) {
         return it->second;
     } else {
-        return nullptr;
+        return Default<std::shared_ptr<arrow::Scalar>>();
     }
 }
 
@@ -206,9 +211,14 @@ std::shared_ptr<NKikimr::NArrow::TGeneralContainer> TAccessorsCollection::ToGene
             if (columnIds && !columnIds->contains(i)) {
                 continue;
             }
-            auto accessor = GetAccessorVerified(i);
-            fields.emplace_back(std::make_shared<arrow::Field>(predColumnName(i), accessor->GetDataType()));
-            arrays.emplace_back(accessor);
+            if (auto accessor = GetAccessorOptional(i)) {
+                fields.emplace_back(std::make_shared<arrow::Field>(predColumnName(i), accessor->GetDataType()));
+                arrays.emplace_back(accessor);
+            } else {
+                const auto& scalar = GetConstantScalarVerified(i);
+                fields.emplace_back(std::make_shared<arrow::Field>(predColumnName(i), scalar->type));
+                arrays.emplace_back(std::make_shared<NAccessor::TTrivialArray>(scalar));
+            }
         }
     } else {
         for (auto&& i : Accessors) {

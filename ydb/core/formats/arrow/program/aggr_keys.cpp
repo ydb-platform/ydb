@@ -214,31 +214,26 @@ private:
     const EAggregate AggregationType;
     virtual TConclusionStatus DoExecute(
         const std::vector<std::unique_ptr<TAccessorsCollection>>& sources, TAccessorsCollection& collectionResult) const override {
-        std::vector<const IChunkedArray*> arrays;
+        std::vector<const arrow::Scalar*> scalars;
         std::optional<arrow::Type::type> type;
         for (auto&& i : sources) {
             AFL_VERIFY(i);
-            const auto& acc = i->GetAccessorVerified(ColumnInfo.GetColumnId());
-            AFL_VERIFY(acc->GetRecordsCount() == 1)("count", acc->GetRecordsCount());
-            arrays.emplace_back(acc.get());
+            const auto& scalar = i->GetConstantScalarVerified(ColumnInfo.GetColumnId());
+            scalars.emplace_back(scalar.get());
             if (!type) {
-                type = acc->GetDataType()->id();
+                type = scalar->type->id();
             } else {
-                AFL_VERIFY(*type == acc->GetDataType()->id());
+                AFL_VERIFY(*type == scalar->type->id());
             }
         }
         TString errorMessage;
         if (!NArrow::SwitchType(*type, [&](const auto& type) {
                 using TWrap = std::decay_t<decltype(type)>;
-                using TArrayType = typename TWrap::TArray;
-                std::optional<ui32> arrResultIndex;
+                using TScalarType = typename TWrap::TScalar;
                 std::optional<typename TWrap::ValueType> result;
-                ui32 idx = 0;
-                for (auto&& i : arrays) {
-                    auto addr = i->GetChunkSlow(0);
-                    const typename TWrap::ValueType value = type.GetValue(*static_cast<const TArrayType*>(addr.GetArray().get()), 0);
+                for (auto&& i : scalars) {
+                    const typename TWrap::ValueType value = type.GetValue(*static_cast<const TScalarType*>(i));
                     if (!result) {
-                        arrResultIndex = idx;
                         result = value;
                     } else {
                         switch (AggregationType) {
@@ -251,7 +246,6 @@ private:
                             case EAggregate::Sum:
                                 if constexpr (TWrap::IsCType) {
                                     *result += value;
-                                    arrResultIndex.reset();
                                 }
                                 if constexpr (TWrap::IsStringView) {
                                     errorMessage = "cannot sum string views";
@@ -260,27 +254,19 @@ private:
                                 break;
                             case EAggregate::Max:
                                 if (*result < value) {
-                                    arrResultIndex = idx;
                                     result = value;
                                 }
                                 break;
                             case EAggregate::Min:
                                 if (value < *result) {
-                                    arrResultIndex = idx;
                                     result = value;
                                 }
                                 break;
                         }
                     }
-                    ++idx;
                 }
-                if (arrResultIndex) {
-                    collectionResult.AddVerified(
-                        ColumnInfo.GetColumnId(), sources[*arrResultIndex]->GetAccessorVerified(ColumnInfo.GetColumnId()), false, true);
-                } else {
-                    collectionResult.AddVerified(ColumnInfo.GetColumnId(),
-                        NAccessor::TTrivialArray::BuildArrayFromScalar(type.BuildScalar(*result, arrays.front()->GetDataType())), false, true);
-                }
+                collectionResult.AddVerified(ColumnInfo.GetColumnId(),
+                    NAccessor::TTrivialArray::BuildArrayFromScalar(type.BuildScalar(*result, scalars.front()->type)), false, true);
                 return true;
             })) {
             return TConclusionStatus::Fail(errorMessage);

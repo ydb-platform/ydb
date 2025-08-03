@@ -150,8 +150,8 @@ public:
         const NSSA::IColumnResolver* resolver = nullptr, const bool strictResolver = true) const;
 
     std::shared_ptr<IChunkedArray> GetConstantVerified(const ui32 columnId, const ui32 recordsCount) const;
-    std::shared_ptr<arrow::Scalar> GetConstantScalarVerified(const ui32 columnId) const;
-    std::shared_ptr<arrow::Scalar> GetConstantScalarOptional(const ui32 columnId) const;
+    const std::shared_ptr<arrow::Scalar>& GetConstantScalarVerified(const ui32 columnId) const;
+    const std::shared_ptr<arrow::Scalar>& GetConstantScalarOptional(const ui32 columnId) const;
 
     void Clear() {
         Accessors.clear();
@@ -193,6 +193,7 @@ public:
 
     void AddConstantVerified(const ui32 columnId, const std::shared_ptr<arrow::Scalar>& scalar) {
         AFL_VERIFY(columnId);
+        AFL_VERIFY(scalar);
         AFL_VERIFY(Constants.emplace(columnId, scalar).second);
     }
 

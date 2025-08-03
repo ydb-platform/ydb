@@ -13,9 +13,7 @@ void TMemoryLimiterActor::Bootstrap() {
     NLwTraceMonPage::ProbeRegistry().AddProbesList(LWTRACE_GET_PROBES(YDB_GROUPED_MEMORY_PROVIDER));
     for (ui64 i = 0; i < Config.GetCountBuckets(); i++) {
         LoadQueue.Add(i);
-        Counters.push_back(std::make_shared<TCounters>(Signals, Name + "_" + ToString(i)));
-        DefaultStages.push_back(std::make_shared<TStageFeatures>("GLOBAL", Config.GetMemoryLimit(), Config.GetHardMemoryLimit(), nullptr, Counters.back()->BuildStageCounters("general")));
-        Managers.push_back(std::make_shared<TManager>(SelfId(), Config, Name, Counters.back(), DefaultStages.back()));
+        Managers.push_back(std::make_shared<TManager>(SelfId(), Config, Name, Signals, DefaultStage));
     }
 
     Send(NMemory::MakeMemoryControllerId(), new NMemory::TEvConsumerRegister(ConsumerKind));
@@ -70,15 +68,8 @@ void TMemoryLimiterActor::Handle(NEvents::TEvExternal::TEvFinishProcess::TPtr& e
 
 void TMemoryLimiterActor::Handle(NEvents::TEvExternal::TEvStartProcess::TPtr& ev) {
     auto& event = *ev->Get();
-    const size_t index = AcquireManager(ev->Get()->GetExternalProcessId());
+    const size_t index = AcquireManager(event.GetExternalProcessId());
     LWPROBE(StartProcess, index, event.GetExternalProcessId(), LoadQueue.GetLoad(index));
-    for (auto& stage : event.GetStages()) {
-        if (!stage) {
-            continue;
-        }
-        stage->AttachOwner(DefaultStages[index]);
-        stage->AttachCounters(Counters[index]->BuildStageCounters(stage->GetName()));
-    }
     Managers[index]->RegisterProcess(event.GetExternalProcessId(), event.GetStages());
 }
 

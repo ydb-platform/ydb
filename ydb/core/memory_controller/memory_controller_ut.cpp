@@ -563,33 +563,33 @@ Y_UNIT_TEST(GroupedMemoryLimiter_ConfigCS) {
     TAutoPtr<IEventHandle> handle;
     auto sender = runtime.AllocateEdgeActor();
 
-    auto counters = runtime.GetAppData().Counters;
-    auto compactionCounters = counters->GetSubgroup("module_id", "grouped_memory_limiter")->GetSubgroup("limiter_name", "Comp_0")->GetSubgroup("stage", "general");
-    auto scanCounters = counters->GetSubgroup("module_id", "grouped_memory_limiter")->GetSubgroup("limiter_name", "Scan_0")->GetSubgroup("stage", "general");
+    auto scanLimits = NKikimr::NOlap::NGroupedMemoryManager::TScanMemoryLimiterOperator::GetDefaultStageFeatures();
+    auto compactionLimits = NKikimr::NOlap::NGroupedMemoryManager::TCompMemoryLimiterOperator::GetDefaultStageFeatures();
 
     InitRoot(server, sender);
 
     auto checkMemoryLimits = [&]() {
         using OlapLimits = NKikimr::NOlap::TGlobalLimits;
+
         UNIT_ASSERT_DOUBLES_EQUAL(
             static_cast<double>(currentHardMemoryLimit * OlapLimits::GroupedMemoryLimiterSoftLimitCoefficient *
                 (1.0 - ColumnTablesDeduplicationGroupedMemoryFraction) * readExecutionMemoryLimitPercent / 100),
-            static_cast<double>(scanCounters->GetCounter("Value/Limit/Soft/Bytes")->Val()),
+            static_cast<double>(scanLimits->GetLimit()),
             1_KB);
 
         UNIT_ASSERT_DOUBLES_EQUAL(
             static_cast<double>(currentHardMemoryLimit * (1.0 - ColumnTablesDeduplicationGroupedMemoryFraction) * readExecutionMemoryLimitPercent / 100),
-            static_cast<double>(scanCounters->GetCounter("Value/Limit/Hard/Bytes")->Val()),
+            static_cast<double>(scanLimits->GetHardLimit().value()),
             1_KB);
 
         UNIT_ASSERT_DOUBLES_EQUAL(
             static_cast<double>(currentHardMemoryLimit * OlapLimits::GroupedMemoryLimiterSoftLimitCoefficient * compactionMemoryLimitPercent / 100),
-            static_cast<double>(compactionCounters->GetCounter("Value/Limit/Soft/Bytes")->Val()),
+            static_cast<double>(compactionLimits->GetLimit()),
             1_KB);
 
         UNIT_ASSERT_DOUBLES_EQUAL(
             static_cast<double>(currentHardMemoryLimit * compactionMemoryLimitPercent / 100.0),
-            static_cast<double>(compactionCounters->GetCounter("Value/Limit/Hard/Bytes")->Val()),
+            static_cast<double>(compactionLimits->GetHardLimit().value()),
             1_KB);
     };
 

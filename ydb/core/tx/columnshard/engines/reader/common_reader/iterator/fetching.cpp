@@ -59,12 +59,11 @@ TConclusion<bool> TProgramStep::DoExecuteInplace(const std::shared_ptr<IDataSour
         source->MutableExecutionContext().Start(source, Program, step);
     }
     auto iterator = source->GetExecutionContext().GetProgramIteratorVerified();
-    const auto& resources = source->GetStageData().GetTable();
     if (!started) {
         iterator->Next();
         source->MutableExecutionContext().OnFinishProgramStepExecution();
     }
-    for (; iterator->IsValid();) {
+    while (iterator->IsValid()) {
         {
             auto conclusion = iterator->Next();
             if (conclusion.IsFail()) {
@@ -94,14 +93,15 @@ TConclusion<bool> TProgramStep::DoExecuteInplace(const std::shared_ptr<IDataSour
         source->MutableExecutionContext().OnFinishProgramStepExecution();
         GetSignals(iterator->GetCurrentNodeId())->OnExecuteGraphNode(source->GetRecordsCount());
         source->GetContext()->GetCommonContext()->GetCounters().OnExecuteGraphNode(iterator->GetCurrentNode().GetIdentifier());
-        if (resources->GetRecordsCountActualOptional() == 0) {
-            resources->Clear();
+        if (source->GetExecutionContext().GetExecutionVisitorVerified()->MutableContext().GetResources().GetRecordsCountActualOptional() == 0) {
+            source->GetExecutionContext().GetExecutionVisitorVerified()->MutableContext().MutableResources().Clear();
             break;
         }
     }
     FOR_DEBUG_LOG(NKikimrServices::COLUMNSHARD_SCAN_EVLOG, source->AddEvent("fgraph"));
     AFL_DEBUG(NKikimrServices::SSA_GRAPH_EXECUTION)(
         "graph_constructed", Program->DebugDOT(source->GetExecutionContext().GetExecutionVisitorVerified()->GetExecutedIds()));
+    source->MutableStageData().ReturnTable(source->GetExecutionContext().GetExecutionVisitorVerified()->MutableContext().ExtractResources());
 
     return true;
 }

@@ -21,16 +21,16 @@ namespace NKikimr::NArrow::NSSA {
 
 TConclusion<IResourceProcessor::EExecutionResult> TStreamLogicProcessor::DoExecute(
     const TProcessorContext& context, const TExecutionNodeContext& /*nodeContext*/) const {
-    AFL_VERIFY(context.GetResources()->GetAccessorOptional(GetOutputColumnIdOnce()));
+    AFL_VERIFY(context.GetResources().GetAccessorOptional(GetOutputColumnIdOnce()));
     return IResourceProcessor::EExecutionResult::Success;
 }
 
 TConclusion<bool> TStreamLogicProcessor::OnInputReady(
     const ui32 inputId, const TProcessorContext& context, const TExecutionNodeContext& /*nodeContext*/) const {
-    auto accInput = context.GetResources()->GetAccessorVerified(inputId);
+    auto accInput = context.GetResources().GetAccessorVerified(inputId);
 
-    AFL_VERIFY(!context.GetResources()->HasMarker(FinishMarker));
-    const auto accResult = context.GetResources()->GetAccessorOptional(GetOutputColumnIdOnce());
+    AFL_VERIFY(!context.GetResources().HasMarker(FinishMarker));
+    const auto accResult = context.GetResources().GetAccessorOptional(GetOutputColumnIdOnce());
 
     TConclusion<std::optional<bool>> isMonoInput = GetMonoInput(accInput);
     if (isMonoInput.IsFail()) {
@@ -42,25 +42,25 @@ TConclusion<bool> TStreamLogicProcessor::OnInputReady(
         if (Operation == NKernels::EOperation::And) {
             if (monoValue) {
                 if (!accResult) {
-                    context.GetResources()->AddVerified(GetOutputColumnIdOnce(),
-                        NAccessor::TSparsedArray::BuildTrueArrayUI8(context.GetResources()->GetRecordsCountRobustVerified()), false);
+                    context.MutableResources().AddVerified(GetOutputColumnIdOnce(),
+                        NAccessor::TSparsedArray::BuildTrueArrayUI8(context.GetResources().GetRecordsCountRobustVerified()), false);
                 }
                 return false;
             } else {
-                context.GetResources()->Upsert(GetOutputColumnIdOnce(),
-                    NAccessor::TSparsedArray::BuildFalseArrayUI8(context.GetResources()->GetRecordsCountRobustVerified()), false);
+                context.MutableResources().Upsert(GetOutputColumnIdOnce(),
+                    NAccessor::TSparsedArray::BuildFalseArrayUI8(context.GetResources().GetRecordsCountRobustVerified()), false);
                 return true;
             }
         } else if (Operation == NKernels::EOperation::Or) {
             if (!monoValue) {
                 if (!accResult) {
-                    context.GetResources()->AddVerified(GetOutputColumnIdOnce(),
-                        NAccessor::TSparsedArray::BuildFalseArrayUI8(context.GetResources()->GetRecordsCountRobustVerified()), false);
+                    context.MutableResources().AddVerified(GetOutputColumnIdOnce(),
+                        NAccessor::TSparsedArray::BuildFalseArrayUI8(context.GetResources().GetRecordsCountRobustVerified()), false);
                 }
                 return false;
             } else {
-                context.GetResources()->Upsert(GetOutputColumnIdOnce(),
-                    NAccessor::TSparsedArray::BuildTrueArrayUI8(context.GetResources()->GetRecordsCountRobustVerified()), false);
+                context.MutableResources().Upsert(GetOutputColumnIdOnce(),
+                    NAccessor::TSparsedArray::BuildTrueArrayUI8(context.GetResources().GetRecordsCountRobustVerified()), false);
                 return true;
             }
         }
@@ -68,15 +68,15 @@ TConclusion<bool> TStreamLogicProcessor::OnInputReady(
 
     if (!accResult) {
         AFL_VERIFY(accInput->GetDataType()->id() == arrow::uint8()->id())("type", accInput->GetDataType()->ToString());
-        context.GetResources()->AddVerified(GetOutputColumnIdOnce(), accInput, false);
+        context.MutableResources().AddVerified(GetOutputColumnIdOnce(), accInput, false);
     } else {
         auto result = Function->Call(TColumnChainInfo::BuildVector({ GetOutputColumnIdOnce(), inputId }), context.GetResources());
         if (result.IsFail()) {
             return result;
         }
         auto datum = result.DetachResult();
-        context.GetResources()->Remove(GetOutputColumnIdOnce());
-        context.GetResources()->AddVerified(GetOutputColumnIdOnce(), datum, false);
+        context.MutableResources().Remove(GetOutputColumnIdOnce());
+        context.MutableResources().AddVerified(GetOutputColumnIdOnce(), datum, false);
         if (IsFinishDatum(datum)) {
             return true;
         }

@@ -79,6 +79,20 @@ public:
         return !GetRecordsCountActualVerified() || IsEmptyFilter();
     }
 
+    bool HasSomeUsefulInfo() const {
+        if (Accessors.size()) {
+            return true;
+        }
+        if (!!RecordsCountActual && *RecordsCountActual) {
+            return true;
+        }
+        if (UseFilter) {
+            return false;
+        } else {
+            return !IsEmptyFilter();
+        }
+    }
+
     std::optional<ui32> GetRecordsCountActualOptional() const {
         return RecordsCountActual;
     }

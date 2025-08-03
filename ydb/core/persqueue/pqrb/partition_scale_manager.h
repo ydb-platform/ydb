@@ -14,7 +14,7 @@
 #include <util/generic/fwd.h>
 #include <util/generic/string.h>
 
-#include <map>
+#include <unordered_map>
 #include <utility>
 
 namespace NKikimr {
@@ -85,7 +85,7 @@ private:
     TDuration RequestTimeout = TDuration::MilliSeconds(0);
     TInstant LastResponseTime = TInstant::Zero();
 
-    std::map<ui32, TPartitionScaleOperationInfo> PartitionsToSplit;
+    std::unordered_map<ui32, TPartitionScaleOperationInfo> PartitionsToSplit;
 
     TBalancerConfig BalancerConfig;
     const TPartitionGraph& PartitionGraph;

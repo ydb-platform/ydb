@@ -47,6 +47,11 @@ private:
     THashSet<i64> Markers;
 
 public:
+    void TakeSequenceFrom(const TAccessorsCollection& collection) {
+        AFL_VERIFY(ColumnIdsSequence.empty() || ColumnIdsSequence == collection.ColumnIdsSequence);
+        ColumnIdsSequence = collection.ColumnIdsSequence;
+    }
+
     bool HasMarker(const i64 marker) const {
         return Markers.contains(marker);
     }
@@ -166,10 +171,11 @@ public:
         return Accessors.contains(id) || Constants.contains(id);
     }
 
-    void AddVerified(const ui32 columnId, const arrow::Datum& data, const bool withFilter);
-    void AddVerified(const ui32 columnId, const std::shared_ptr<IChunkedArray>& data, const bool withFilter);
-    void AddVerified(const ui32 columnId, const TAccessorCollectedContainer& data, const bool withFilter);
-    void Upsert(const ui32 columnId, const std::shared_ptr<IChunkedArray>& data, const bool withFilter);
+    void AddVerified(const ui32 columnId, const arrow::Datum& data, const bool withFilter, const bool forceChangeCount = false);
+    void AddVerified(
+        const ui32 columnId, const std::shared_ptr<IChunkedArray>& data, const bool withFilter, const bool forceChangeCount = false);
+    void AddVerified(const ui32 columnId, const TAccessorCollectedContainer& data, const bool withFilter, const bool forceChangeCount = false);
+    void Upsert(const ui32 columnId, const std::shared_ptr<IChunkedArray>& data, const bool withFilter, const bool forceChangeCount = false);
 
     void AddConstantVerified(const ui32 columnId, const std::shared_ptr<arrow::Scalar>& scalar) {
         AFL_VERIFY(columnId);
@@ -444,8 +450,8 @@ public:
         return std::min(Filter->GetFilteredCount().value_or(recordsCount), defLimit);
     }
 
-    std::shared_ptr<NArrow::TColumnFilter> GetAppliedFilter() const {
-        return UseFilter ? Filter : nullptr;
+    const std::shared_ptr<NArrow::TColumnFilter>& GetAppliedFilter() const {
+        return UseFilter ? Filter : Default<std::shared_ptr<NArrow::TColumnFilter>>();
     }
 
     std::shared_ptr<NArrow::TColumnFilter> GetNotAppliedFilter() const {

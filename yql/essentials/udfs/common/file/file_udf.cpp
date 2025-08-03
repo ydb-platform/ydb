@@ -169,15 +169,15 @@ namespace {
         typedef TIntrusivePtr<TStreamMeta> TPtr;
 
         TStreamMeta(TString filePath)
-            : FilePath(filePath)
+            : FilePath_(filePath)
         {
             // work in greedy mode to catch error on creation
-            Cached = DoCreateStream();
+            Cached_ = DoCreateStream();
         }
 
         std::unique_ptr<TStream> CreateStream(TTerminateFunc terminateFunc) {
-            if (Cached) {
-                return std::move(Cached);
+            if (Cached_) {
+                return std::move(Cached_);
             }
 
             terminateFunc("The file iterator was already created. To scan file data multiple times please use ListCollect either over ParseFile or over some lazy function over it, e.g. ListMap");
@@ -185,37 +185,37 @@ namespace {
         }
 
         bool GetLinesCount(ui64& count) const {
-            if (LinesCount == Unknown)
+            if (LinesCount_ == Unknown)
                 return false;
-            count = LinesCount;
+            count = LinesCount_;
             return true;
         }
         void SetLinesCount(ui64 count) {
-            Y_DEBUG_ABORT_UNLESS(LinesCount == Unknown || count == LinesCount, "Set another value of count lines");
-            if (LinesCount == Unknown) {
-                LinesCount = count;
+            Y_DEBUG_ABORT_UNLESS(LinesCount_ == Unknown || count == LinesCount_, "Set another value of count lines");
+            if (LinesCount_ == Unknown) {
+                LinesCount_ = count;
             }
         }
 
         const TString& GetFilePath() const {
-            return FilePath;
+            return FilePath_;
         }
 
     private:
         std::unique_ptr<TStream> DoCreateStream() {
             static const auto bufferSize = 1 << 12;
-            TFile file(FilePath, OpenExisting | RdOnly | Seq);
-            if (FileSize == Unknown) {
-                FileSize = file.GetLength();
+            TFile file(FilePath_, OpenExisting | RdOnly | Seq);
+            if (FileSize_ == Unknown) {
+                FileSize_ = file.GetLength();
             }
             return std::make_unique<TBuffered<TUnbufferedFileInput>>(bufferSize, file);
         }
 
-        TString FilePath;
+        TString FilePath_;
         static const ui64 Unknown = -1;
-        ui64 FileSize = Unknown;
-        ui64 LinesCount = Unknown;
-        std::unique_ptr<TStream> Cached;
+        ui64 FileSize_ = Unknown;
+        ui64 LinesCount_ = Unknown;
+        std::unique_ptr<TStream> Cached_;
     };
 
     class TEmptyIter: public TBoxedValue {
@@ -229,102 +229,102 @@ namespace {
 
     public:
         TEmptyIter(TTerminateFunc terminateFunc)
-            : TerminateFunc(terminateFunc)
+            : TerminateFunc_(terminateFunc)
         {
         }
 
     private:
-        const TTerminateFunc TerminateFunc;
+        const TTerminateFunc TerminateFunc_;
     };
 
     template <class TUserType>
     class TLineByLineBoxedValueIterator: public TBoxedValue {
     public:
         TLineByLineBoxedValueIterator(TStreamMeta::TPtr metaPtr, std::unique_ptr<TStreamMeta::TStream>&& stream, const IValueBuilder& valueBuilder, TTerminateFunc terminateFunc)
-            : MetaPtr(metaPtr)
-            , ValueBuilder(valueBuilder)
-            , Stream(std::move(stream))
-            , Splitter(*Stream)
-            , TerminateFunc(terminateFunc)
+            : MetaPtr_(metaPtr)
+            , ValueBuilder_(valueBuilder)
+            , Stream_(std::move(stream))
+            , Splitter_(*Stream_)
+            , TerminateFunc_(terminateFunc)
         {
         }
 
         void SetLimit(ui64 limit = TAKE_UNLIM) {
-            Limit = limit;
+            Limit_ = limit;
         }
 
     private:
         bool SkipLimit() {
-            if (Limit != TAKE_UNLIM) {
-                if (Limit == 0) {
+            if (Limit_ != TAKE_UNLIM) {
+                if (Limit_ == 0) {
                     return false;
                 }
-                --Limit;
+                --Limit_;
             }
             return true;
         }
 
         bool Skip() final {
-            ++CurLineNum;
-            return Splitter.Next(CurLine) && SkipLimit();
+            ++CurLineNum_;
+            return Splitter_.Next(CurLine_) && SkipLimit();
         }
 
         bool Next(TUnboxedValue& value) override {
             if (!Skip()) {
                 return false;
             }
-            if (!Helper::ConvertToUnboxed<TUserType>(ValueBuilder, CurLine, value)) {
+            if (!Helper::ConvertToUnboxed<TUserType>(ValueBuilder_, CurLine_, value)) {
                 TStringBuilder sb;
-                sb << "File::ByLines failed to cast string '" << CurLine << "' to " << Helper::TypeToTypeName<TUserType>::Name() << Endl;
-                sb << "- path: " << MetaPtr->GetFilePath() << Endl;
-                sb << "- line: " << CurLineNum << Endl;
-                TerminateFunc(sb);
+                sb << "File::ByLines failed to cast string '" << CurLine_ << "' to " << Helper::TypeToTypeName<TUserType>::Name() << Endl;
+                sb << "- path: " << MetaPtr_->GetFilePath() << Endl;
+                sb << "- line: " << CurLineNum_ << Endl;
+                TerminateFunc_(sb);
                 Y_ABORT("Terminate unstoppable!");
             }
             return true;
         }
 
-        TStreamMeta::TPtr MetaPtr;
-        const IValueBuilder& ValueBuilder;
+        TStreamMeta::TPtr MetaPtr_;
+        const IValueBuilder& ValueBuilder_;
 
-        std::unique_ptr<TStreamMeta::TStream> Stream;
-        TLineSplitter Splitter;
-        TTerminateFunc TerminateFunc;
-        TString CurLine;
-        ui64 CurLineNum = 0;
-        ui64 Limit = TAKE_UNLIM;
-        TUnboxedValue Result;
+        std::unique_ptr<TStreamMeta::TStream> Stream_;
+        TLineSplitter Splitter_;
+        TTerminateFunc TerminateFunc_;
+        TString CurLine_;
+        ui64 CurLineNum_ = 0;
+        ui64 Limit_ = TAKE_UNLIM;
+        TUnboxedValue Result_;
     };
 
     template <class TUserType>
     class TListByLineBoxedValue: public TBoxedValue {
     public:
         TListByLineBoxedValue(TStreamMeta::TPtr metaPtr, const IValueBuilder& valueBuilder, TTerminateFunc terminateFunc, ui64 skip = 0ULL, ui64 take = TAKE_UNLIM)
-            : MetaPtr(metaPtr)
-            , ValueBuilder(valueBuilder)
-            , TerminateFunc(terminateFunc)
-            , Skip(skip)
-            , Take(take)
+            : MetaPtr_(metaPtr)
+            , ValueBuilder_(valueBuilder)
+            , TerminateFunc_(terminateFunc)
+            , Skip_(skip)
+            , Take_(take)
         {}
     private:
         bool HasFastListLength() const override {
             ui64 tmp;
-            return MetaPtr->GetLinesCount(tmp);
+            return MetaPtr_->GetLinesCount(tmp);
         }
         ui64 GetListLength() const override {
             ui64 length;
-            if (!MetaPtr->GetLinesCount(length)) {
-                length = Skip;
+            if (!MetaPtr_->GetLinesCount(length)) {
+                length = Skip_;
                 for (const auto iter = GetListIterator(); iter.Skip(); ++length)
                     continue;
-                if (Take == TAKE_UNLIM) {
-                    MetaPtr->SetLinesCount(length);
+                if (Take_ == TAKE_UNLIM) {
+                    MetaPtr_->SetLinesCount(length);
                 }
             }
-            if (length <= Skip) {
+            if (length <= Skip_) {
                 return 0;
             }
-            return Min(length - Skip, Take);
+            return Min(length - Skip_, Take_);
         }
         ui64 GetEstimatedListLength() const override {
             /// \todo some optimisation?
@@ -333,35 +333,35 @@ namespace {
 
         TUnboxedValue GetListIterator() const override {
             try {
-                auto stream = MetaPtr->CreateStream(TerminateFunc);
-                IBoxedValuePtr iter(new TLineByLineBoxedValueIterator<TUserType>(MetaPtr, std::move(stream), ValueBuilder, TerminateFunc));
-                if (!Take || !SkipElements(*iter, Skip)) {
-                    return TUnboxedValuePod(new TEmptyIter(TerminateFunc));
+                auto stream = MetaPtr_->CreateStream(TerminateFunc_);
+                IBoxedValuePtr iter(new TLineByLineBoxedValueIterator<TUserType>(MetaPtr_, std::move(stream), ValueBuilder_, TerminateFunc_));
+                if (!Take_ || !SkipElements(*iter, Skip_)) {
+                    return TUnboxedValuePod(new TEmptyIter(TerminateFunc_));
                 }
-                static_cast<TLineByLineBoxedValueIterator<TUserType>*>(iter.Get())->SetLimit(Take);
+                static_cast<TLineByLineBoxedValueIterator<TUserType>*>(iter.Get())->SetLimit(Take_);
                 return TUnboxedValuePod(std::move(iter));
             } catch (const std::exception& e) {
-                TerminateFunc(CurrentExceptionMessage());
+                TerminateFunc_(CurrentExceptionMessage());
                 Y_ABORT("Terminate unstoppable!");
             }
         }
 
         IBoxedValuePtr SkipListImpl(const IValueBuilder& builder, ui64 count) const override {
-            return new TListByLineBoxedValue(MetaPtr, builder, TerminateFunc, Skip + count, Take == TAKE_UNLIM ? TAKE_UNLIM : Take - std::min(Take, count));
+            return new TListByLineBoxedValue(MetaPtr_, builder, TerminateFunc_, Skip_ + count, Take_ == TAKE_UNLIM ? TAKE_UNLIM : Take_ - std::min(Take_, count));
         }
         IBoxedValuePtr TakeListImpl(const IValueBuilder& builder, ui64 count) const override {
-            return new TListByLineBoxedValue(MetaPtr, builder, TerminateFunc, Skip, std::min(Take, count));
+            return new TListByLineBoxedValue(MetaPtr_, builder, TerminateFunc_, Skip_, std::min(Take_, count));
         }
 
         bool HasListItems() const override {
             return true;
         }
 
-        TStreamMeta::TPtr MetaPtr;
-        const IValueBuilder& ValueBuilder;
-        TTerminateFunc TerminateFunc;
-        ui64 Skip = 0ULL;
-        ui64 Take = TAKE_UNLIM;
+        TStreamMeta::TPtr MetaPtr_;
+        const IValueBuilder& ValueBuilder_;
+        TTerminateFunc TerminateFunc_;
+        ui64 Skip_ = 0ULL;
+        ui64 Take_ = TAKE_UNLIM;
     };
 
     template <class TUserType>
@@ -379,11 +379,11 @@ namespace {
                 TStreamMeta::TPtr metaPtr(new TStreamMeta(filePath));
                 auto pos = Pos_;
                 auto terminateFunc = [pos](const TString& message) {
-                    UdfTerminate((TStringBuilder() << pos << " " << message).data());
+                    UdfTerminate((TStringBuilder() << pos << " " << message).c_str());
                 };
                 return TUnboxedValuePod(new TListByLineBoxedValue<TUserType>(metaPtr, *valueBuilder, terminateFunc));
             } catch (const std::exception& e) {
-                UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data());
+                UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).c_str());
             }
         }
 
@@ -437,7 +437,7 @@ namespace {
                     items[IndexA_] = ValueBuilder_.NewString(attrs);
                 }
                 catch (const std::exception& e) {
-                    UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data());
+                    UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).c_str());
                 }
                 return true;
             }
@@ -469,20 +469,20 @@ namespace {
             }
 
             bool HasFastListLength() const override {
-                return bool(Length);
+                return bool(Length_);
             }
 
             ui64 GetListLength() const override {
-                if (!Length) {
+                if (!Length_) {
                     ui64 length = 0ULL;
                     for (const auto it = GetListIterator(); it.Skip();) {
                         ++length;
                     }
 
-                    Length = length;
+                    Length_ = length;
                 }
 
-                return *Length;
+                return *Length_;
             }
 
             ui64 GetEstimatedListLength() const override {
@@ -490,18 +490,18 @@ namespace {
             }
 
             bool HasListItems() const override {
-                if (HasItems) {
-                    return *HasItems;
+                if (HasItems_) {
+                    return *HasItems_;
                 }
 
-                if (Length) {
-                    HasItems = (*Length != 0);
-                    return *HasItems;
+                if (Length_) {
+                    HasItems_ = (*Length_ != 0);
+                    return *HasItems_;
                 }
 
                 auto iter = GetListIterator();
-                HasItems = iter.Skip();
-                return *HasItems;
+                HasItems_ = iter.Skip();
+                return *HasItems_;
             }
 
         protected:
@@ -511,8 +511,8 @@ namespace {
             const IValueBuilder& ValueBuilder_;
             const TSourcePosition Pos_;
             const TString FilePath_;
-            mutable TMaybe<ui64> Length;
-            mutable TMaybe<bool> HasItems;
+            mutable TMaybe<ui64> Length_;
+            mutable TMaybe<bool> HasItems_;
         };
 
     public:
@@ -534,7 +534,7 @@ namespace {
                 TString filePath(args[0].AsStringRef());
                 return TUnboxedValuePod(new TList(IndexP_, IndexT_, IndexA_, *valueBuilder, Pos_, filePath));
             } catch (const std::exception& e) {
-                UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data());
+                UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).c_str());
             }
         }
 

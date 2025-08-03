@@ -47,7 +47,7 @@ public:
     }
 };
 
-class TSchemaVersionsCleaner : public NYDBTest::ILocalDBModifier {
+class TSchemaVersionsCleaner: public NYDBTest::ILocalDBModifier {
 public:
     virtual void Apply(NTabletFlatExecutor::TTransactionContext& txc) const override {
         using namespace NColumnShard;
@@ -75,7 +75,7 @@ public:
     }
 };
 
-class TPortionsCleaner : public NYDBTest::ILocalDBModifier {
+class TPortionsCleaner: public NYDBTest::ILocalDBModifier {
 public:
     virtual void Apply(NTabletFlatExecutor::TTransactionContext& txc) const override {
         using namespace NColumnShard;
@@ -87,8 +87,8 @@ public:
             UNIT_ASSERT(rowset.IsReady());
 
             while (!rowset.EndOfSet()) {
-                NOlap::TPortionAddress addr(
-                    TInternalPathId::FromRawValue(rowset.GetValue<Schema::IndexPortions::PathId>()), rowset.GetValue<Schema::IndexPortions::PortionId>());
+                NOlap::TPortionAddress addr(TInternalPathId::FromRawValue(rowset.GetValue<Schema::IndexPortions::PathId>()),
+                    rowset.GetValue<Schema::IndexPortions::PortionId>());
                 portions.emplace_back(addr);
                 UNIT_ASSERT(rowset.Next());
             }
@@ -111,8 +111,8 @@ public:
                 metaProto.SetDeletionsCount(0);
                 metaProto.SetIsInserted(true);
 
-                const auto schema = std::make_shared<arrow::Schema>(
-                    arrow::FieldVector({ std::make_shared<arrow::Field>("key1", arrow::uint64()), std::make_shared<arrow::Field>("key2", arrow::uint64()) }));
+                const auto schema = std::make_shared<arrow::Schema>(arrow::FieldVector(
+                    { std::make_shared<arrow::Field>("key1", arrow::uint64()), std::make_shared<arrow::Field>("key2", arrow::uint64()) }));
                 auto batch = NArrow::MakeEmptyBatch(schema, 1);
                 NArrow::TFirstLastSpecialKeys keys(batch);
                 metaProto.SetPrimaryKeyBorders(keys.SerializePayloadToString());
@@ -137,20 +137,20 @@ public:
         using namespace NColumnShard;
         NIceDb::TNiceDb db(txc.DB);
 
-        std::vector<ui64> tables;
+        std::vector<TInternalPathId> tables;
         {
             auto rowset = db.Table<Schema::TableInfo>().Select();
             UNIT_ASSERT(rowset.IsReady());
 
             while (!rowset.EndOfSet()) {
-                const auto pathId = rowset.GetValue<Schema::TableInfo::PathId>();
+                const auto pathId = TInternalPathId::FromRawValue(rowset.GetValue<Schema::TableInfo::PathId>());
                 tables.emplace_back(pathId);
                 UNIT_ASSERT(rowset.Next());
             }
         }
 
         for (auto&& key : tables) {
-            db.Table<Schema::TableInfo>().Key(key).Delete();
+            db.Table<Schema::TableInfo>().Key(key.GetRawValue()).Delete();
         }
 
         struct TKey {
@@ -209,7 +209,7 @@ public:
     }
 };
 
-class TTrashUnusedInjector : public NYDBTest::ILocalDBModifier {
+class TTrashUnusedInjector: public NYDBTest::ILocalDBModifier {
 public:
     void Apply(NTabletFlatExecutor::TTransactionContext& txc) const override {
         using namespace NColumnShard;
@@ -218,10 +218,44 @@ public:
 
         if (db.HaveTable<Schema::IndexColumns>()) {
             for (size_t i = 0; i < 100; ++i) {
-                db.Table<Schema::IndexColumns>()
-                .Key(1 + i, 2 + i, 3 + i, 4 + i, 5 + i, 6 + i, 7 + i)
-                .Update();
+                db.Table<Schema::IndexColumns>().Key(1 + i, 2 + i, 3 + i, 4 + i, 5 + i, 6 + i, 7 + i).Update();
             }
+        }
+    }
+};
+
+template <ui64 ColumnId>
+class TExtraColumnsInjector: public NYDBTest::ILocalDBModifier {
+public:
+    void Apply(NTabletFlatExecutor::TTransactionContext& txc) const override {
+        using namespace NColumnShard;
+
+        NIceDb::TNiceDb db(txc.DB);
+
+        THashMap<NOlap::TPortionAddress, NKikimrTxColumnShard::TIndexPortionAccessor> portions;
+
+        auto rowset = db.Table<Schema::IndexColumnsV2>().Select();
+        UNIT_ASSERT(rowset.IsReady());
+
+        while (!rowset.EndOfSet()) {
+            auto metadataString = rowset.GetValue<NColumnShard::Schema::IndexColumnsV2::Metadata>();
+            NKikimrTxColumnShard::TIndexPortionAccessor metaProto;
+            AFL_VERIFY(metaProto.ParseFromArray(metadataString.data(), metadataString.size()))("event", "cannot parse metadata as protobuf");
+            {
+                auto chunk = metaProto.AddChunks();
+                chunk->SetSSColumnId(ColumnId);
+                chunk->MutableBlobRangeLink()->SetSize(1);
+                chunk->MutableChunkMetadata()->SetNumRows(20048);
+                chunk->MutableChunkMetadata()->SetRawBytes(1);
+            }
+            AFL_VERIFY(portions.emplace(NOlap::TPortionAddress(TInternalPathId::FromRawValue(rowset.GetValue<NColumnShard::Schema::IndexColumnsV2::PathId>()), rowset.GetValue<NColumnShard::Schema::IndexColumnsV2::PortionId>()), std::move(metaProto)).second);
+            UNIT_ASSERT(rowset.Next());
+        }
+
+        for (auto&& [key, metadata] : portions) {
+            db.Table<Schema::IndexColumnsV2>()
+                .Key(key.GetPathId().GetRawValue(), key.GetPortionId())
+                .Update(NIceDb::TUpdate<Schema::IndexColumnsV2::Metadata>(metadata.SerializeAsString()));
         }
     }
 };
@@ -236,8 +270,8 @@ Y_UNIT_TEST_SUITE(Normalizers) {
         TTester::Setup(runtime);
         runtime.GetAppData().ColumnShardConfig.SetColumnChunksV0Usage(false);
 
-        checker.CorrectConfigurationOnStart(runtime.GetAppData().ColumnShardConfig); 
-        checker.CorrectFeatureFlagsOnStart(runtime.GetAppData().FeatureFlags); 
+        checker.CorrectConfigurationOnStart(runtime.GetAppData().ColumnShardConfig);
+        checker.CorrectFeatureFlagsOnStart(runtime.GetAppData().FeatureFlags);
 
         const ui64 tableId = 1;
         const std::vector<NArrow::NTest::TTestColumn> schema = { NArrow::NTest::TTestColumn("key1", TTypeInfo(NTypeIds::Uint64)),
@@ -277,7 +311,7 @@ Y_UNIT_TEST_SUITE(Normalizers) {
             virtual ui64 RecordsCountAfterReboot(const ui64 /*initialRecodsCount*/) const override {
                 return 0;
             }
-            virtual void CorrectFeatureFlagsOnStart(TFeatureFlags & featuresFlags) const override{
+            virtual void CorrectFeatureFlagsOnStart(TFeatureFlags& featuresFlags) const override {
                 featuresFlags.SetEnableWritePortionsOnInsert(true);
             }
             virtual void CorrectConfigurationOnStart(NKikimrConfig::TColumnShardConfig& columnShardConfig) const override {
@@ -323,7 +357,6 @@ Y_UNIT_TEST_SUITE(Normalizers) {
         TestNormalizerImpl<TEmptyPortionsCleaner>(TLocalNormalizerChecker());
     }
 
-
     Y_UNIT_TEST(EmptyTablesNormalizer) {
         class TLocalNormalizerChecker: public TNormalizerChecker {
         public:
@@ -365,6 +398,34 @@ Y_UNIT_TEST_SUITE(Normalizers) {
 
         TTtlPresetsChecker checker;
         TestNormalizerImpl<TTrashUnusedInjector>(checker);
+    }
+
+    Y_UNIT_TEST(RemoveDeleteFlagNormalizer) {
+        class TChecker: public TNormalizerChecker {
+        public:
+            virtual void CorrectConfigurationOnStart(NKikimrConfig::TColumnShardConfig& columnShardConfig) const override {
+                auto* repair = columnShardConfig.MutableRepairs()->Add();
+                repair->SetClassName("RemoveDeleteFlag");
+                repair->SetDescription("normalizer");
+            }
+        };
+
+        TChecker checker;
+        TestNormalizerImpl<TExtraColumnsInjector<NOlap::NPortion::TSpecialColumns::SPEC_COL_DELETE_FLAG_INDEX>>(checker);
+    }
+
+    Y_UNIT_TEST(RemoveWriteIdNormalizer) {
+        class TChecker: public TNormalizerChecker {
+        public:
+            virtual void CorrectConfigurationOnStart(NKikimrConfig::TColumnShardConfig& columnShardConfig) const override {
+                auto* repair = columnShardConfig.MutableRepairs()->Add();
+                repair->SetClassName("RemoveWriteId");
+                repair->SetDescription("normalizer");
+            }
+        };
+
+        TChecker checker;
+        TestNormalizerImpl<TExtraColumnsInjector<NOlap::NPortion::TSpecialColumns::SPEC_COL_WRITE_ID_INDEX>>(checker);
     }
 }
 }   // namespace NKikimr

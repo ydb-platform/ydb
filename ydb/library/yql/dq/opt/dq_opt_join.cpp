@@ -1317,7 +1317,15 @@ TExprNode::TPtr ReplaceJoinOnSide(TExprNode::TPtr&& input, const TTypeAnnotation
 
 }
 
-TExprBase DqBuildHashJoin(const TDqJoin& join, EHashJoinMode mode, TExprContext& ctx, IOptimizationContext& optCtx, bool shuffleElimination, bool shuffleEliminationWithMap) {
+TExprBase DqBuildHashJoin(
+    const TDqJoin& join,
+    EHashJoinMode mode,
+    TExprContext& ctx,
+    IOptimizationContext& optCtx,
+    bool shuffleElimination,
+    bool shuffleEliminationWithMap,
+    bool useBlockHashJoin
+) {
     const auto joinType = join.JoinType().Value();
     YQL_ENSURE(joinType != "Cross"sv);
 
@@ -1348,7 +1356,11 @@ TExprBase DqBuildHashJoin(const TDqJoin& join, EHashJoinMode mode, TExprContext&
     const bool leftKind = joinType.starts_with("Left"sv);
     const bool rightKind = joinType.starts_with("Right"sv);
     TModifyKeysList remapLeft, remapRight;
-    if (!shuffleElimination /* for columnshardhashv1 it is important to save original types for join predicate */) {
+    bool shuffleLeftSide = !join.ShuffleLeftSideBy() || !join.ShuffleLeftSideBy().Cast().Empty() || !shuffleElimination;
+    bool shuffleRightSide = !join.ShuffleRightSideBy() || !join.ShuffleRightSideBy().Cast().Empty() || !shuffleElimination;
+    THashMap<TString, TString> leftColumnRemap;
+    THashMap<TString, TString> rightColumnRemap;
+    if (shuffleLeftSide && shuffleRightSide /* for columnshardhashv1 (shuffle elimination) it is important to save original types for join predicate */) {
         for (ui32 i = 0U; i < rightJoinKeys.size() && !badKey; ++i) {
             const auto keyType1 = leftStructType->FindItemType(leftJoinKeys[i]);
             const auto keyType2 = rightStructType->FindItemType(rightJoinKeys[i]);
@@ -1363,10 +1375,16 @@ TExprBase DqBuildHashJoin(const TDqJoin& join, EHashJoinMode mode, TExprContext&
             }
 
             if (commonType) {
-                if (!IsSameAnnotation(*keyType1, *commonType))
-                    remapLeft.emplace_back(leftJoinKeys[i], ctx.NewAtom(leftJoinKeys[i].Pos(), TString("_yql_dq_key_left_") += ToString(i), TNodeFlags::Default), i, commonType);
-                if (!IsSameAnnotation(*keyType2, *commonType))
-                    remapRight.emplace_back(rightJoinKeys[i], ctx.NewAtom(rightJoinKeys[i].Pos(), TString("_yql_dq_key_right_") += ToString(i), TNodeFlags::Default), i, commonType);
+                if (!IsSameAnnotation(*keyType1, *commonType)) {
+                    TString rename = (TString("_yql_dq_key_left_") + ToString(i));
+                    leftColumnRemap[leftJoinKeys[i].StringValue()] = rename;
+                    remapLeft.emplace_back(leftJoinKeys[i], ctx.NewAtom(leftJoinKeys[i].Pos(), std::move(rename), TNodeFlags::Default), i, commonType);
+                }
+                if (!IsSameAnnotation(*keyType2, *commonType)) {
+                    TString rename = TString("_yql_dq_key_right_") + ToString(i);
+                    rightColumnRemap[rightJoinKeys[i].StringValue()] = rename;
+                    remapRight.emplace_back(rightJoinKeys[i], ctx.NewAtom(rightJoinKeys[i].Pos(), rename, TNodeFlags::Default), i, commonType);
+                }
             } else
                 badKey = true;
         }
@@ -1455,14 +1473,78 @@ TExprBase DqBuildHashJoin(const TDqJoin& join, EHashJoinMode mode, TExprContext&
         TExprNode::TListType fields(items.size());
         std::transform(items.cbegin(), items.cend(), fields.begin(), [&](const TItemExprType* item) { return ctx.NewAtom(join.Pos(), item->GetName()); });
 
-        return Build<TCoExtractMembers>(ctx, join.Pos())
-            .Input<TDqJoin>()
+        auto remapShufflings =
+            [&](const TMaybeNode<TExprList>& maybeShuffleBy, const THashMap<TString, TString>& columnRemap) -> TExprNode::TListType {
+                if (!maybeShuffleBy) {
+                    return {};
+                }
+
+                TExprNode::TListType shuffleBy;
+                shuffleBy.reserve(maybeShuffleBy.Cast().Size());
+
+                for (const auto& columnExprBase: maybeShuffleBy.Cast()) {
+                    auto columnExpr = columnExprBase.Ptr();
+                    TString rel;
+                    TString attr;
+                    if (columnExpr->ChildrenSize() == 1) {
+                        attr = TString(columnExpr->Child(0)->Content());
+                    } else if (columnExpr->ChildrenSize() == 2) {
+                        rel = TString(columnExpr->Child(0)->Content());
+                        attr = TString(columnExpr->Child(1)->Content());
+                    }
+
+                    TString columnName;
+                    if (columnRemap.contains(rel + "." + attr)) {
+                        columnName = columnRemap.at(rel + "." + attr);
+                    } else if (columnRemap.contains(attr)) {
+                        columnName = columnRemap.at(attr);
+                    }
+
+                    if (columnName) {
+                        auto node =
+                            ctx.Builder(join.Pos())
+                                .List()
+                                    .Atom(0, columnName)
+                                .Seal()
+                            .Build();
+
+
+                        shuffleBy.push_back(std::move(node));
+                        continue;
+                    }
+
+                    shuffleBy.push_back(columnExpr);
+                }
+
+                return shuffleBy;
+            };
+
+        auto dqJoin =
+            Build<TDqJoin>(ctx, join.Pos())
                 .InitFrom(join)
                 .LeftInput(connLeft)
                 .RightInput(connRight)
-                .JoinKeys(ctx.ChangeChildren(join.JoinKeys().Ref(), std::move(joinKeys)))
+                .JoinKeys(ctx.ChangeChildren(join.JoinKeys().Ref(), std::move(joinKeys)));
+
+        if (auto shuffleLeftSideBy = remapShufflings(join.ShuffleLeftSideBy(), leftColumnRemap); !shuffleLeftSideBy.empty()) {
+            dqJoin
+                .ShuffleLeftSideBy()
+                    .Add(std::move(shuffleLeftSideBy))
+                .Build();
+        }
+        if (auto shuffleRightSideBy = remapShufflings(join.ShuffleRightSideBy(), rightColumnRemap); !shuffleRightSideBy.empty()) {
+            dqJoin
+                .ShuffleRightSideBy()
+                    .Add(std::move(shuffleRightSideBy))
+                .Build();
+        }
+
+        return
+            Build<TCoExtractMembers>(ctx, join.Pos())
+                .Input(std::move(dqJoin.Build().Value()))
+                .Members()
+                    .Add(std::move(fields))
                 .Build()
-            .Members().Add(std::move(fields)).Build()
             .Done();
     }
 
@@ -1471,29 +1553,55 @@ TExprBase DqBuildHashJoin(const TDqJoin& join, EHashJoinMode mode, TExprContext&
     std::transform(rightJoinKeys.cbegin(), rightJoinKeys.cend(), std::back_inserter(rightKeys), [&](const std::string_view& name) { return rightNames[name]; });
 
     const auto buildShuffle = [&ctx, &join](const TDqOutput& input, const TVector<TCoAtom>& keys) {
-    return Build<TDqCnHashShuffle>(ctx, join.Pos())
-            .Output(input)
-            .KeyColumns()
-                .Add(keys)
-                .Build()
-            .UseSpilling().Build(true)
-            .Done().Ptr();
+        return Build<TDqCnHashShuffle>(ctx, join.Pos())
+                .Output(input)
+                .KeyColumns()
+                    .Add(keys)
+                    .Build()
+                .UseSpilling().Build(true)
+                .Done().Ptr();
     };
-
 
     auto buildShuffleKeys = [&ctx, &join](const TExprList& exprList, const TVector<TCoAtom>& joinKeys) -> TVector<TCoAtom> {
         Y_ENSURE(exprList.Size() <= joinKeys.size());
 
+        auto contains = [&joinKeys](const TString& column){
+            return std::find_if(
+                joinKeys.begin(),
+                joinKeys.end(),
+                [&column](const TCoAtom& atom){ return atom.StringValue() == column; }
+            ) != joinKeys.end();
+        };
+
         TVector<TCoAtom> atomVector;
         atomVector.reserve(exprList.Size());
         for (std::size_t i = 0; i < exprList.Size(); ++i) {
+            TString rel, attr;
+            auto exprItem = exprList.Item(i).Ptr();
+            if (exprItem->ChildrenSize() == 1) {
+                attr = TString(exprItem->Child(0)->Content());
+            } else if (exprItem->ChildrenSize() == 2) {
+                rel  = TString(exprItem->Child(0)->Content());
+                attr = TString(exprItem->Child(1)->Content());
+            }
+
+            TString column;
+            if (contains(rel + "." + attr)){
+                column = rel + "." + attr;
+            } else if (contains(attr)) {
+                column = std::move(attr);
+            } else {
+                Y_ENSURE(false, TStringBuilder{} << "There's no such column for shuffling: " <<  "." << attr);
+            }
+
             auto atom =
                 Build<TCoAtom>(ctx, join.Pos())
-                    .Value(joinKeys[i].StringValue())
+                    .Value(std::move(column))
                 .Done();
 
             atomVector.push_back(std::move(atom));
         }
+
         return atomVector;
     };
 
@@ -1505,7 +1613,6 @@ TExprBase DqBuildHashJoin(const TDqJoin& join, EHashJoinMode mode, TExprContext&
     };
 
     TExprNode::TPtr leftConnection;
-    bool shuffleLeftSide = !join.ShuffleLeftSideBy() || !join.ShuffleLeftSideBy().Cast().Empty() || !shuffleElimination;
     if (!join.ShuffleLeftSideBy()) {
         YQL_CLOG(TRACE, CoreDq) << "ShuffleLeftSide isn't defined";
     }
@@ -1526,7 +1633,6 @@ TExprBase DqBuildHashJoin(const TDqJoin& join, EHashJoinMode mode, TExprContext&
     }
 
     TExprNode::TPtr rightConnection;
-    bool shuffleRightSide = !join.ShuffleRightSideBy() || !join.ShuffleRightSideBy().Cast().Empty() || !shuffleElimination;
     if (!join.ShuffleRightSideBy()) {
         YQL_CLOG(TRACE, CoreDq) << "ShuffleRightSide isn't defined";
     }
@@ -1580,6 +1686,22 @@ TExprBase DqBuildHashJoin(const TDqJoin& join, EHashJoinMode mode, TExprContext&
     switch (mode) {
         case EHashJoinMode::GraceAndSelf:
         case EHashJoinMode::Grace:
+            if (useBlockHashJoin) {
+                // Create TDqPhyBlockHashJoin node with structured inputs - peephole will handle conversion
+                // Pass the original structured inputs, not wide flows
+                hashJoin = Build<TDqPhyBlockHashJoin>(ctx, join.Pos())
+                    .LeftInput(leftInputArg)
+                    .RightInput(rightInputArg)
+                    .LeftLabel(join.LeftLabel())
+                    .RightLabel(join.RightLabel())
+                    .JoinType(join.JoinType())
+                    .JoinKeys(join.JoinKeys())
+                    .LeftJoinKeyNames(join.LeftJoinKeyNames())
+                    .RightJoinKeyNames(join.RightJoinKeyNames())
+                    .Done().Ptr();
+                break;
+            }
+
             hashJoin = ctx.Builder(join.Pos())
                 .Callable(callableName)
                     .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
@@ -1811,44 +1933,46 @@ TExprBase DqBuildHashJoin(const TDqJoin& join, EHashJoinMode mode, TExprContext&
             ythrow yexception() << "Invalid hash join mode: " << mode;
     }
 
-    std::vector<TString> fullColNames;
-    for (const auto& v: leftNames) {
-        if (leftTableName.empty()) {
-            fullColNames.emplace_back(v.first);
-        } else {
-            fullColNames.emplace_back(FullColumnName(leftTableName, v.first));
+    if (!useBlockHashJoin) {
+        std::vector<TString> fullColNames;
+        for (const auto& v: leftNames) {
+            if (leftTableName.empty()) {
+                fullColNames.emplace_back(v.first);
+            } else {
+                fullColNames.emplace_back(FullColumnName(leftTableName, v.first));
+            }
         }
-    }
 
-    for (const auto& v: rightNames ) {
-        if (rightTableName.empty()) {
-            fullColNames.emplace_back(v.first);
-        } else {
-            fullColNames.emplace_back(FullColumnName(rightTableName, v.first));
+        for (const auto& v: rightNames ) {
+            if (rightTableName.empty()) {
+                fullColNames.emplace_back(v.first);
+            } else {
+                fullColNames.emplace_back(FullColumnName(rightTableName, v.first));
+            }
         }
-    }
 
-    hashJoin = ctx.Builder(join.Pos())
-        .Callable("NarrowMap")
-            .Add(0, std::move(hashJoin))
-            .Lambda(1)
-                .Params("output", fullColNames.size())
-                .Callable("AsStruct")
-                    .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
-                        ui32 i = 0U;
-                        for (const auto& colName : fullColNames) {
-                            parent.List(i)
-                                .Atom(0, colName)
-                                .Arg(1, "output", i)
-                            .Seal();
-                            i++;
-                        }
-                        return parent;
-                    })
+        hashJoin = ctx.Builder(join.Pos())
+            .Callable("NarrowMap")
+                .Add(0, std::move(hashJoin))
+                .Lambda(1)
+                    .Params("output", fullColNames.size())
+                    .Callable("AsStruct")
+                        .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+                            ui32 i = 0U;
+                            for (const auto& colName : fullColNames) {
+                                parent.List(i)
+                                    .Atom(0, colName)
+                                    .Arg(1, "output", i)
+                                .Seal();
+                                i++;
+                            }
+                            return parent;
+                        })
+                    .Seal()
                 .Seal()
             .Seal()
-        .Seal()
-        .Build();
+            .Build();
+    }
 
     // this func add join to the stage and add connection to it. we do this instead of map connection to reduce data network interacting
     auto addJoinToStage =

@@ -18,15 +18,16 @@ TWorkersPoolCounters::TWorkersPoolCounters(const TString& poolName, const NColum
     , OverlimitRate(TBase::GetDeriviative("Overlimit"))
     , WaitWorkerRate(TBase::GetDeriviative("WaitWorker"))
     , UseWorkerRate(TBase::GetDeriviative("UseWorker"))
-    , ChangeCPULimitRate(TBase::GetDeriviative("ChangeCPULimit"))
-    , NoTasks(TBase::GetDeriviative("NoTasks")) {
+    , ChangeCPULimitRate(TBase::GetDeriviative("ChangeCPULimit")) {
 }
 
 TWPCategorySignals::TWPCategorySignals(NColumnShard::TCommonCountersOwner& base, const ESpecialTaskCategory cat)
     : TBase(base, "wp_category", ::ToString(cat))
     , Category(cat)
     , WaitingHistogram(TBase::GetHistogram("Waiting/Duration/Us", NMonitoring::ExponentialHistogram(25, 2, 50)))
+    , NoTasks(TBase::GetDeriviative("NoTasks"))
     , TaskExecuteHistogram(TBase::GetHistogram("TaskExecute/Duration/Us", NMonitoring::ExponentialHistogram(25, 2, 50)))
+    , ValueWeight(TBase::GetValue("Weight"))
     , ExecuteDuration(TBase::GetDeriviative("Execute/Duration/Us")) {
 }
 

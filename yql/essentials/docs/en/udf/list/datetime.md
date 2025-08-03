@@ -24,8 +24,8 @@ Conversion from a primitive type to an internal representation. It's always succ
 
 #### List of functions
 
-* `DateTime::Split(Date/TzDate/DateTime/TzDateTime/Timestamp/TzTimestamp{Flags:AutoMap}) -> Resource<TM>`
-* `DateTime::Split(Date32/TzDate32/DateTime64/TzDatetime64/Timestamp64/TzTimestamp64{Flags:AutoMap}) -> Resource<TM64>`
+* `DateTime::Split(Date/TzDate/Datetime/TzDatetime/Timestamp/TzTimestamp{Flags:AutoMap}) -> Resource<TM>`
+* `DateTime::Split(Date32/TzDate32/Datetime64/TzDatetime64/Timestamp64/TzTimestamp64{Flags:AutoMap}) -> Resource<TM64>`
 
 Functions that accept `Resource<TM>` or `Resource<TM64>` as input, can be called directly from the primitive date/time type. An implicit conversion will be made in this case by calling a relevant `Split` function.
 
@@ -145,12 +145,12 @@ Getting a number of seconds/milliseconds/microseconds since the UTC Epoch from a
 
 #### List of functions
 
-* `DateTime::ToSeconds(Date/DateTime/Timestamp/TzDate/TzDatetime/TzTimestamp{Flags:AutoMap}) -> Uint32`
-* `DateTime::ToSeconds(Date32/DateTime64/Timestamp64/TzDate32/TzDatetime64/TzTimestamp64{Flags:AutoMap}) -> Int64`
-* `DateTime::ToMilliseconds(Date/DateTime/Timestamp/TzDate/TzDatetime/TzTimestamp{Flags:AutoMap}) -> Uint64`
-* `DateTime::ToMilliseconds(Date32/DateTime64/Timestamp64/TzDate32/TzDatetime64/TzTimestamp64{Flags:AutoMap}) -> Int64`
-* `DateTime::ToMicroseconds(Date/DateTime/Timestamp/TzDate/TzDatetime/TzTimestamp{Flags:AutoMap}) -> Uint64`
-* `DateTime::ToMicroseconds(Date32/DateTime64/Timestamp64/TzDate32/TzDatetime64/TzTimestamp64{Flags:AutoMap}) -> Int64`
+* `DateTime::ToSeconds(Date/Datetime/Timestamp/TzDate/TzDatetime/TzTimestamp{Flags:AutoMap}) -> Uint32`
+* `DateTime::ToSeconds(Date32/Datetime64/Timestamp64/TzDate32/TzDatetime64/TzTimestamp64{Flags:AutoMap}) -> Int64`
+* `DateTime::ToMilliseconds(Date/Datetime/Timestamp/TzDate/TzDatetime/TzTimestamp{Flags:AutoMap}) -> Uint64`
+* `DateTime::ToMilliseconds(Date32/Datetime64/Timestamp64/TzDate32/TzDatetime64/TzTimestamp64{Flags:AutoMap}) -> Int64`
+* `DateTime::ToMicroseconds(Date/Datetime/Timestamp/TzDate/TzDatetime/TzTimestamp{Flags:AutoMap}) -> Uint64`
+* `DateTime::ToMicroseconds(Date32/Datetime64/Timestamp64/TzDate32/TzDatetime64/TzTimestamp64{Flags:AutoMap}) -> Int64`
 
 #### Examples
 
@@ -172,7 +172,8 @@ Conversions between `Interval` and various time units.
 * `DateTime::ToHours(Interval64{Flags:AutoMap}) -> Int64`
 * `DateTime::ToMinutes(Interval{Flags:AutoMap}) -> Int32`
 * `DateTime::ToMinutes(Interval64{Flags:AutoMap}) -> Int64`
-* `DateTime::ToSeconds(Interval{Flags:AutoMap}) -> Int32`
+* `DateTime::ToSeconds(Interval{Flags:AutoMap}) -> Int32` Until [2025.03](../../changelog/2025.03.md)
+* `DateTime::ToSeconds(Interval{Flags:AutoMap}) -> Int64` Since [2025.03](../../changelog/2025.03.md)
 * `DateTime::ToSeconds(Interval64{Flags:AutoMap}) -> Int64`
 * `DateTime::ToMilliseconds(Interval{Flags:AutoMap}) -> Int64`
 * `DateTime::ToMilliseconds(Interval64{Flags:AutoMap}) -> Int64`
@@ -184,7 +185,8 @@ Conversions between `Interval` and various time units.
 * `DateTime::Interval64FromHours(Int64{Flags:AutoMap}) -> Interval64`
 * `DateTime::IntervalFromMinutes(Int32{Flags:AutoMap}) -> Interval`
 * `DateTime::Interval64FromMinutes(Int64{Flags:AutoMap}) -> Interval64`
-* `DateTime::IntervalFromSeconds(Int32{Flags:AutoMap}) -> Interval`
+* `DateTime::IntervalFromSeconds(Int32{Flags:AutoMap}) -> Interval` Until [2025.03](../../changelog/2025.03.md)
+* `DateTime::IntervalFromSeconds(Int64{Flags:AutoMap}) -> Interval` Since [2025.03](../../changelog/2025.03.md)
 * `DateTime::Interval64FromSeconds(Int64{Flags:AutoMap}) -> Interval64`
 * `DateTime::IntervalFromMilliseconds(Int64{Flags:AutoMap}) -> Interval`
 * `DateTime::Interval64FromMilliseconds(Int64{Flags:AutoMap}) -> Interval64`
@@ -298,7 +300,7 @@ If the resulting number of the day in the month exceeds the maximum allowed, the
 #### Examples
 
 ```yql
-$tm1 = DateTime::Split(DateTime("2019-01-31T01:01:01Z"));
+$tm1 = DateTime::Split(Datetime("2019-01-31T01:01:01Z"));
 $tm2 = DateTime::Split(TzDatetime("2049-05-20T12:34:50,Europe/Moscow"));
 
 SELECT
@@ -419,7 +421,7 @@ $datetime_parse = DateTime::Parse("%Y-%m-%d %H:%M:%S");
 $datetime_parse_tz = DateTime::Parse("%Y-%m-%d %H:%M:%S %Z");
 
 SELECT
-    DateTime::ToSeconds(TzDateTime("2019-09-16T00:00:00,Europe/Moscow")) AS md_us1, -- 1568581200
+    DateTime::ToSeconds(TzDatetime("2019-09-16T00:00:00,Europe/Moscow")) AS md_us1, -- 1568581200
     DateTime::ToSeconds(DateTime::MakeDatetime($datetime_parse_tz("2019-09-16 00:00:00" || " Europe/Moscow"))),  -- 1568581200
     DateTime::ToSeconds(DateTime::MakeDatetime(DateTime::Update($datetime_parse("2019-09-16 00:00:00"), "Europe/Moscow" as Timezone))), -- 1568581200
 
@@ -495,7 +497,7 @@ This way, you can convert only constants:
 
 ```yql
 SELECT
-    TzDateTime("2019-09-16T00:00:00,Europe/Moscow"), -- 2019-09-16T00:00:00,Europe/Moscow
+    TzDatetime("2019-09-16T00:00:00,Europe/Moscow"), -- 2019-09-16T00:00:00,Europe/Moscow
     Date("2019-09-16") -- 2019-09-16
 ```
 
@@ -503,7 +505,7 @@ But this way, you can convert a constant, a named expression, or a table field:
 
 ```yql
 SELECT
-    CAST("2019-09-16T00:00:00,Europe/Moscow" AS TzDateTime), -- 2019-09-16T00:00:00,Europe/Moscow
+    CAST("2019-09-16T00:00:00,Europe/Moscow" AS TzDatetime), -- 2019-09-16T00:00:00,Europe/Moscow
     CAST("2019-09-16" AS Date) -- 2019-09-16
 ```
 
@@ -512,7 +514,7 @@ SELECT
 A CAST to Date or TzDate outputs a GMT date for a midnight, local time (for example, for Moscow time 2019-10-22 00:00:00, the date 2019-10-21 is returned). To get a date in the local timezone, you can use DateTime::Format.
 
 ```yql
-$x = DateTime("2019-10-21T21:00:00Z");
+$x = Datetime("2019-10-21T21:00:00Z");
 SELECT
     AddTimezone($x, "Europe/Moscow"), -- 2019-10-22T00:00:00,Europe/Moscow
     cast($x as TzDate), -- 2019-10-21,GMT
@@ -547,4 +549,3 @@ SELECT
     RemoveTimezone(TzDatetime("2008-12-03T10:00:00,Europe/Moscow")) as DST2, -- 2008-12-03T07:00:00Z
     RemoveTimezone(TzDatetime("2008-07-03T10:00:00,Europe/Moscow")) as DST3, -- 2008-07-03T06:00:00Z (DST)
 ```
-

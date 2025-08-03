@@ -275,6 +275,12 @@ namespace orc {
      */
     std::unique_ptr<SearchArgument> build() override;
 
+    /**
+     * Add a maybe leaf to the current item on the stack.
+     * @return this
+     */
+    SearchArgumentBuilder& maybe() override;
+
    private:
     SearchArgumentBuilder& start(ExpressionTree::Operator op);
     size_t addLeaf(PredicateLeaf leaf);

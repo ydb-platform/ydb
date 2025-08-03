@@ -11,7 +11,7 @@ namespace NKikimr::NStorage {
             (Binding, Binding), (Scepter, Scepter ? std::make_optional(Scepter->Id) : std::nullopt));
         Y_ABORT_UNLESS(!actorId && Binding && !Scepter // just forwarding what we got from binding
             || !actorId && !Binding && Scepter // initiating scatter task as a root node
-            || actorId && !Binding && (Scepter || ScepterlessOperationInProgress)); // query issued by InvokeOnRootNode machinery
+            || actorId && !Binding && (Scepter || RootState == ERootState::LOCAL_QUORUM_OP)); // query issued by InvokeOnRootNode machinery
         const auto [it, inserted] = ScatterTasks.try_emplace(cookie, Binding, std::move(request), ScepterCounter,
             actorId.value_or(TActorId()));
         Y_ABORT_UNLESS(inserted);

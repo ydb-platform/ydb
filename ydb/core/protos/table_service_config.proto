@@ -8,6 +8,8 @@ message TTableServiceConfig {
         optional uint32 ScanLimit = 3 [default = 16];
         optional bool ParallelScanningAvailable = 4 [default = false];
         optional uint32 ShardSplitFactor = 5 [default = 1];
+        optional uint32 CriticalTotalRetriesCount = 6 [default = 20];
+        optional uint32 ReaskShardRetriesCount = 7 [default = 5];
     }
 
     message TResourceManager {
@@ -276,13 +278,7 @@ message TTableServiceConfig {
 
     optional EChannelTransportVersion ChannelTransportVersion = 46 [default = CTV_OOB_PICKLE_1_0];
 
-    enum EIndexAutoChooseMode {
-        DISABLED = 0;
-        ONLY_FULL_KEY = 1; // Accepts iff point prefix includes all key columns
-        ONLY_POINTS = 2; // Accepts iff point prefix len > 0
-        MAX_USED_PREFIX = 3;
-    }
-    optional EIndexAutoChooseMode IndexAutoChooseMode = 50 [default = MAX_USED_PREFIX];
+    reserved 50; // optional EIndexAutoChooseMode IndexAutoChooseMode = 50 [default = MAX_USED_PREFIX];
 
     reserved 51; // optional bool EnableColumnsWithDefault = 51 [default = true];
 
@@ -392,4 +388,21 @@ message TTableServiceConfig {
     optional bool EnableOlapSubstringPushdown = 87 [default = true];
 
     optional bool EnableIndexStreamWrite = 88 [default = false];
+
+    optional bool EnableParallelPointReadConsolidation = 89 [default = true];
+
+    optional uint64 BufferPageAllocSize = 90  [ default = 4096 ];
+
+    optional bool EnableOlapPushdownProjections = 91  [ default = true ];
+
+    optional uint32 DefaultLangVer = 92 [default = 202501];
+
+    enum EHashKind {
+        HASH_V1 = 0;
+        HASH_V2 = 1;
+    }
+
+    optional EHashKind DefaultHashShuffleFuncType = 93 [ default = HASH_V2 ];
+
+    optional bool EnableParallelUnionAllConnectionsForExtend = 94  [ default = false ];
 };

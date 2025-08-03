@@ -48,6 +48,9 @@ void FillKey(NKikimrSysView::TStoragePoolKey* key, const TBoxStoragePoolId& id) 
 
 void CalculateGroupUsageStats(NKikimrSysView::TGroupInfo *info, const std::vector<TGroupDiskInfo>& disks,
         TBlobStorageGroupType type) {
+    if (disks.empty()) {
+        return;
+    }
     ui64 allocatedSize = 0;
     ui64 totalSize = 0;
     for (const TGroupDiskInfo& disk : disks) {
@@ -80,7 +83,7 @@ class TSystemViewsCollector : public TActorBootstrapped<TSystemViewsCollector> {
     std::map<TVSlotId, const NKikimrSysView::TVSlotInfo*> VSlotIndex;
     std::map<TGroupId, const NKikimrSysView::TGroupInfo*> GroupIndex;
     std::map<TBoxStoragePoolId, const NKikimrSysView::TStoragePoolInfo*> StoragePoolIndex;
-    TBlobStorageController::THostRecordMap HostRecords;
+    THostRecordMap HostRecords;
     ui32 GroupReserveMin = 0;
     ui32 GroupReservePart = 0;
     ::NMonitoring::TDynamicCounterPtr Counters;
@@ -294,7 +297,8 @@ void TBlobStorageController::Handle(TEvPrivate::TEvUpdateSystemViews::TPtr&) {
     UpdateSystemViews();
 }
 
-void CopyInfo(NKikimrSysView::TPDiskInfo* info, const THolder<TBlobStorageController::TPDiskInfo>& pDiskInfo) {
+void CopyInfo(NKikimrSysView::TPDiskInfo* info, const THolder<TBlobStorageController::TPDiskInfo>& pDiskInfo,
+        const TBlobStorageController::TGroupInfo::TGroupFinder& /*finder*/) {
     TPDiskCategory category(pDiskInfo->Kind);
     info->SetType(category.TypeStrShort());
     info->SetKind(category.Kind());
@@ -364,12 +368,14 @@ void SerializeVSlotInfo(NKikimrSysView::TVSlotInfo *pb, const TVDiskID& vdiskId,
     }
 }
 
-void CopyInfo(NKikimrSysView::TVSlotInfo* info, const THolder<TBlobStorageController::TVSlotInfo>& vSlotInfo) {
+void CopyInfo(NKikimrSysView::TVSlotInfo* info, const THolder<TBlobStorageController::TVSlotInfo>& vSlotInfo,
+        const TBlobStorageController::TGroupInfo::TGroupFinder& /*finder*/) {
     SerializeVSlotInfo(info, vSlotInfo->GetVDiskId(), vSlotInfo->Metrics, vSlotInfo->VDiskStatus,
         vSlotInfo->Kind, vSlotInfo->IsBeingDeleted());
 }
 
-void CopyInfo(NKikimrSysView::TGroupInfo* info, const THolder<TBlobStorageController::TGroupInfo>& groupInfo) {
+void CopyInfo(NKikimrSysView::TGroupInfo* info, const THolder<TBlobStorageController::TGroupInfo>& groupInfo,
+        const TBlobStorageController::TGroupInfo::TGroupFinder& finder) {
     info->SetGeneration(groupInfo->Generation);
     info->SetErasureSpeciesV2(TErasureType::ErasureSpeciesName(groupInfo->ErasureSpecies));
     info->SetBoxId(std::get<0>(groupInfo->StoragePoolId));
@@ -399,12 +405,22 @@ void CopyInfo(NKikimrSysView::TGroupInfo* info, const THolder<TBlobStorageContro
         info->SetGetFastLatency(latencyStats.GetFast->MicroSeconds());
     }
 
-    info->SetLayoutCorrect(groupInfo->LayoutCorrect);
-    info->SetOperatingStatus(NKikimrBlobStorage::TGroupStatus::E_Name(groupInfo->Status.OperatingStatus));
-    info->SetExpectedStatus(NKikimrBlobStorage::TGroupStatus::E_Name(groupInfo->Status.ExpectedStatus));
+    if (groupInfo->BridgePileId) {
+        info->SetBridgePileId(groupInfo->BridgePileId->GetRawId());
+    }
+
+    if (groupInfo->BridgeProxyGroupId) {
+        info->SetProxyGroupId(groupInfo->BridgeProxyGroupId->GetRawId());
+    }
+
+    info->SetLayoutCorrect(groupInfo->IsLayoutCorrect(finder));
+    const auto& status = groupInfo->GetStatus(finder);
+    info->SetOperatingStatus(NKikimrBlobStorage::TGroupStatus::E_Name(status.OperatingStatus));
+    info->SetExpectedStatus(NKikimrBlobStorage::TGroupStatus::E_Name(status.ExpectedStatus));
 }
 
-void CopyInfo(NKikimrSysView::TStoragePoolInfo* info, const TBlobStorageController::TStoragePoolInfo& poolInfo) {
+void CopyInfo(NKikimrSysView::TStoragePoolInfo* info, const TBlobStorageController::TStoragePoolInfo& poolInfo,
+        const TBlobStorageController::TGroupInfo::TGroupFinder& /*finder*/) {
     info->SetName(poolInfo.Name);
     if (poolInfo.Generation) {
         info->SetGeneration(*poolInfo.Generation);
@@ -431,10 +447,11 @@ void CopyInfo(NKikimrSysView::TStoragePoolInfo* info, const TBlobStorageControll
 }
 
 template<typename TDstMap, typename TDeletedSet, typename TSrcMap, typename TChangedSet>
-void CopyInfo(TDstMap& dst, TDeletedSet& deleted, const TSrcMap& src, TChangedSet& changed) {
+void CopyInfo(TDstMap& dst, TDeletedSet& deleted, const TSrcMap& src, TChangedSet& changed,
+        const TBlobStorageController::TGroupInfo::TGroupFinder& finder) {
     for (const auto& key : changed) {
         if (const auto it = src.find(key); it != src.end()) {
-            CopyInfo(&dst[key], it->second);
+            CopyInfo(&dst[key], it->second, finder);
         } else {
             deleted.insert(key);
         }
@@ -468,11 +485,26 @@ void TBlobStorageController::UpdateSystemViews() {
         update->GroupReserveMin = GroupReserveMin;
         update->GroupReservePart = GroupReservePart;
 
+        TBlobStorageController::TGroupInfo::TGroupFinder finder = [&](TGroupId groupId) { return FindGroup(groupId); };
+
+        for (const auto& [groupId, group] : GroupMap) {
+            if (SysViewChangedGroups.contains(groupId)) {
+                if (group->BridgeProxyGroupId) {
+                    SysViewChangedGroups.insert(*group->BridgeProxyGroupId);
+                }
+                if (group->BridgeGroupInfo) {
+                    for (auto id : group->BridgeGroupInfo->GetBridgeGroupIds()) {
+                        SysViewChangedGroups.insert(TGroupId::FromValue(id));
+                    }
+                }
+            }
+        }
+
         auto& state = update->State;
-        CopyInfo(state.PDisks, update->DeletedPDisks, PDisks, SysViewChangedPDisks);
-        CopyInfo(state.VSlots, update->DeletedVSlots, VSlots, SysViewChangedVSlots);
-        CopyInfo(state.Groups, update->DeletedGroups, GroupMap, SysViewChangedGroups);
-        CopyInfo(state.StoragePools, update->DeletedStoragePools, StoragePools, SysViewChangedStoragePools);
+        CopyInfo(state.PDisks, update->DeletedPDisks, PDisks, SysViewChangedPDisks, finder);
+        CopyInfo(state.VSlots, update->DeletedVSlots, VSlots, SysViewChangedVSlots, finder);
+        CopyInfo(state.Groups, update->DeletedGroups, GroupMap, SysViewChangedGroups, finder);
+        CopyInfo(state.StoragePools, update->DeletedStoragePools, StoragePools, SysViewChangedStoragePools, finder);
 
         // process static slots and static groups
         for (const auto& [pdiskId, pdisk] : StaticPDisks) {
@@ -505,61 +537,84 @@ void TBlobStorageController::UpdateSystemViews() {
                     vslot.VDiskStatus, vslot.VDiskKind, false);
             }
         }
-        if (StorageConfig && StorageConfig->HasBlobStorageConfig()) {
-            if (const auto& bsConfig = StorageConfig->GetBlobStorageConfig(); bsConfig.HasServiceSet()) {
-                const auto& ss = bsConfig.GetServiceSet();
-                for (const auto& group : ss.GetGroups()) {
-                    if (!SysViewChangedGroups.count(TGroupId::FromProto(&group, &NKikimrBlobStorage::TGroupInfo::GetGroupID))) {
-                        continue;
+        TStaticGroupInfo::TStaticGroupFinder staticFinder = [this](TGroupId groupId) {
+            const auto it = StaticGroups.find(groupId);
+            return it != StaticGroups.end() ? &it->second : nullptr;
+        };
+        for (auto& [groupId, group] : StaticGroups) {
+            group.UpdateStatus(now, this);
+            group.UpdateLayoutCorrect(this);
+        }
+        for (const auto& [groupId, group] : StaticGroups) {
+            if (const auto& info = group.Info; info && SysViewChangedGroups.count(groupId)) {
+                auto *pb = &state.Groups[groupId];
+                pb->SetGeneration(info->GroupGeneration);
+                pb->SetEncryptionMode(info->GetEncryptionMode());
+                pb->SetLifeCyclePhase(info->GetLifeCyclePhase());
+                pb->SetSeenOperational(true);
+                pb->SetErasureSpeciesV2(TBlobStorageGroupType::ErasureSpeciesName(info->Type.GetErasure()));
+
+                const NKikimrBlobStorage::TVDiskMetrics zero;
+                std::vector<TGroupDiskInfo> disks;
+                std::vector<TPDiskId> pdiskIds;
+                for (TActorId actorId : info->GetDynamicInfo().ServiceIdForOrderNumber) {
+                    const auto& [nodeId, pdiskId, vdiskSlotId] = DecomposeVDiskServiceId(actorId);
+                    const TVSlotId vslotId(nodeId, pdiskId, vdiskSlotId);
+                    TGroupDiskInfo disk{nullptr, nullptr, 0};
+                    if (const auto it = StaticVSlots.find(vslotId); it != StaticVSlots.end()) {
+                        disk.VDiskMetrics = it->second.VDiskMetrics ? &*it->second.VDiskMetrics : &zero;
                     }
-                    auto *pb = &state.Groups[TGroupId::FromProto(&group, &NKikimrBlobStorage::TGroupInfo::GetGroupID)];
-                    pb->SetGeneration(group.GetGroupGeneration());
-                    pb->SetEncryptionMode(group.GetEncryptionMode());
-                    pb->SetLifeCyclePhase(group.GetLifeCyclePhase());
-                    pb->SetSeenOperational(true);
-                    pb->SetErasureSpeciesV2(TBlobStorageGroupType::ErasureSpeciesName(group.GetErasureSpecies()));
-
-                    const NKikimrBlobStorage::TVDiskMetrics zero;
-                    std::vector<TGroupDiskInfo> disks;
-                    std::vector<TPDiskId> pdiskIds;
-                    for (const auto& realm : group.GetRings()) {
-                        for (const auto& domain : realm.GetFailDomains()) {
-                            for (const auto& location : domain.GetVDiskLocations()) {
-                                const TVSlotId vslotId(location.GetNodeID(), location.GetPDiskID(), location.GetVDiskSlotID());
-                                TGroupDiskInfo disk{nullptr, nullptr, 0};
-                                if (const auto it = StaticVSlots.find(vslotId); it != StaticVSlots.end()) {
-                                    disk.VDiskMetrics = it->second.VDiskMetrics ? &*it->second.VDiskMetrics : &zero;
-                                }
-                                if (const auto it = PDisks.find(vslotId.ComprisingPDiskId()); it != PDisks.end()) {
-                                    disk.PDiskMetrics = &it->second->Metrics;
-                                    disk.ExpectedSlotCount = it->second->ExpectedSlotCount;
-                                }
-                                if (disk.VDiskMetrics && disk.PDiskMetrics) {
-                                    disks.push_back(std::move(disk));
-                                }
-                                pdiskIds.emplace_back(location.GetNodeID(), location.GetPDiskID());
-                            }
-                        }
+                    if (const auto it = PDisks.find(vslotId.ComprisingPDiskId()); it != PDisks.end()) {
+                        disk.PDiskMetrics = &it->second->Metrics;
+                        disk.ExpectedSlotCount = it->second->ExpectedSlotCount;
                     }
-                    CalculateGroupUsageStats(pb, disks, (TBlobStorageGroupType::EErasureSpecies)group.GetErasureSpecies());
+                    if (disk.VDiskMetrics && disk.PDiskMetrics) {
+                        disks.push_back(std::move(disk));
+                    }
+                    pdiskIds.emplace_back(nodeId, pdiskId);
+                }
+                CalculateGroupUsageStats(pb, disks, info->Type.GetErasure());
 
-                    if (auto groupInfo = TBlobStorageGroupInfo::Parse(group, nullptr, nullptr)) {
-                        NLayoutChecker::TGroupLayout layout(groupInfo->GetTopology());
-                        NLayoutChecker::TDomainMapper mapper;
-                        TGroupGeometryInfo geom(groupInfo->Type, SelfManagementEnabled
-                            ? StorageConfig->GetSelfManagementConfig().GetGeometry()
-                            : NKikimrBlobStorage::TGroupGeometry());
+                pb->SetLayoutCorrect(group.IsLayoutCorrect(staticFinder));
 
-                        Y_DEBUG_ABORT_UNLESS(pdiskIds.size() == groupInfo->GetTotalVDisksNum());
+                const auto& status = group.GetStatus(staticFinder);
+                pb->SetOperatingStatus(NKikimrBlobStorage::TGroupStatus::E_Name(status.OperatingStatus));
+                pb->SetExpectedStatus(NKikimrBlobStorage::TGroupStatus::E_Name(status.ExpectedStatus));
 
-                        for (size_t i = 0; i < pdiskIds.size(); ++i) {
-                            const TPDiskId pdiskId = pdiskIds[i];
-                            layout.AddDisk({mapper, HostRecords->GetLocation(pdiskId.NodeId), pdiskId, geom}, i);
-                        }
+                for (size_t i = 0; i < group.Info->GetBridgeGroupIds().size(); ++i) {
+                    state.Groups[group.Info->GetBridgeGroupIds()[i]].SetProxyGroupId(group.Info->GroupID.GetRawId());
+                    state.Groups[group.Info->GetBridgeGroupIds()[i]].SetBridgePileId(i);
+                }
+            }
+        }
 
-                        pb->SetLayoutCorrect(layout.IsCorrect());
+        // aggregate allocated/available size for bridged groups
+        auto aggr = [&](auto& pb, auto&& ids) {
+            for (auto i : ids) {
+                TGroupId bridgeGroupId;
+                if constexpr (std::is_same_v<decltype(i), TGroupId>) {
+                    bridgeGroupId = i;
+                } else {
+                    bridgeGroupId = TGroupId::FromValue(i);
+                }
+                if (const auto it = state.Groups.find(bridgeGroupId); it != state.Groups.end()) {
+                    if (it->second.HasAllocatedSize()) {
+                        pb.SetAllocatedSize(Max<ui64>(pb.HasAllocatedSize() ? pb.GetAllocatedSize() : Min<ui64>(),
+                            it->second.GetAllocatedSize()));
+                    }
+                    if (it->second.HasAvailableSize()) {
+                        pb.SetAvailableSize(Min<ui64>(pb.HasAvailableSize() ? pb.GetAvailableSize() : Max<ui64>(),
+                            it->second.GetAvailableSize()));
                     }
                 }
+            }
+        };
+
+        for (auto& [groupId, g] : state.Groups) {
+            if (const TGroupInfo *group = FindGroup(groupId); group && group->BridgeGroupInfo) {
+                aggr(g, group->BridgeGroupInfo->GetBridgeGroupIds());
+            } else if (const auto it = StaticGroups.find(groupId); it != StaticGroups.end()) {
+                aggr(g, it->second.Info->GetBridgeGroupIds());
             }
         }
 

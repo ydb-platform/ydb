@@ -43,7 +43,8 @@ namespace NKikimr {
 
                 TInstant finishTime(TAppData::TimeProvider->Now());
                 if (HullCtx->VCtx->ActorSystem) {
-                    LOG_INFO(*HullCtx->VCtx->ActorSystem, NKikimrServices::BS_HULLCOMP,
+                    LOG_LOG(*HullCtx->VCtx->ActorSystem, action == ActNothing ? NLog::PRI_DEBUG : NLog::PRI_INFO,
+                            NKikimrServices::BS_HULLCOMP,
                             VDISKP(HullCtx->VCtx->VDiskLogPrefix,
                                 "%s: FreeSpace: action# %s timeSpent# %s candidate# %s",
                                 PDiskSignatureForHullDbKey<TKey>().ToString().data(),
@@ -123,6 +124,9 @@ namespace NKikimr {
 
                 if (Candidate.CompactSstToFreeSpace()) {
                     // free space by compacting this Sst
+                    LOG_INFO_S(*HullCtx->VCtx->ActorSystem, NKikimrServices::BS_HULLCOMP,
+                            HullCtx->VCtx->VDiskLogPrefix << " TStrategyFreeSpace decided to compact Ssts " << Task->CompactSsts.ToString()
+                            << " because of high garbage/data retio " << Candidate.ToString());
                     action = ActCompactSsts;
                     TUtils::SqueezeOneSst(LevelSnap.SliceSnap, Candidate.LevelSstPtr, Task->CompactSsts);
                 }
@@ -133,4 +137,3 @@ namespace NKikimr {
 
     } // NHullComp
 } // NKikimr
-

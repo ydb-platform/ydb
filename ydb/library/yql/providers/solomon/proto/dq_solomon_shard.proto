@@ -68,4 +68,5 @@ message TDqSolomonSource {
     string HttpEndpoint = 16;
     string GrpcEndpoint = 17;
     optional string Cluster = 18;
+    optional string Service = 19;
 }

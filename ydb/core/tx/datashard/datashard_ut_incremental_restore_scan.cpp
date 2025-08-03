@@ -28,6 +28,10 @@ public:
     void Throw(const std::exception& exc) override {
         Y_ENSURE(false, exc.what());
     }
+
+    ui64 GetTotalCpuTimeUs() const override {
+        return 0;
+    }
 };
 
 class TCbExecutorActor : public TActorBootstrapped<TCbExecutorActor> {
@@ -182,7 +186,7 @@ Y_UNIT_TEST_SUITE(IncrementalRestoreScan) {
             table,
             targetPathId,
             txId,
-            {}).Release();
+            NStreamScan::TLimits()).Release();
 
         TDriverMock driver;
 

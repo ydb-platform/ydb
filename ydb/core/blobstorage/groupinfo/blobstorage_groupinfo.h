@@ -169,10 +169,10 @@ public:
 
         struct TPartsState {
             bool IsOk = true;
-            TString DataErrorInfo;
+            TString DataInfo;
         };
 
-        virtual TPartsState GetDataState(const TLogoBlobID& id, const TPartsData& partsData) const = 0;
+        virtual TPartsState GetDataState(const TLogoBlobID& id, const TPartsData& partsData, char separator) const = 0;
     };
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

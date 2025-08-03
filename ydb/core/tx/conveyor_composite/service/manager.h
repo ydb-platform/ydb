@@ -25,12 +25,6 @@ public:
         return sb;
     }
 
-    void DoQuant(const TMonotonic newStart) {
-        for (auto&& c : Categories) {
-            c->DoQuant(newStart);
-        }
-    }
-
     TTasksManager(const TString& /*convName*/, const NConfig::TConfig& config, const NActors::TActorId distributorActorId, TCounters& counters)
         : DistributorActorId(distributorActorId)
         , Config(config)

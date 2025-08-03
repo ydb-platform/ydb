@@ -1,7 +1,12 @@
 #include "s3_backup_test_base.h"
 #include <ydb/core/backup/common/encryption.h>
 
+#include <library/cpp/streams/zstd/zstd.h>
+
 #include <util/generic/scope.h>
+#include <util/generic/size_literals.h>
+#include <util/stream/buffer.h>
+#include <util/stream/str.h>
 
 using namespace NYdb;
 
@@ -602,14 +607,6 @@ Y_UNIT_TEST_SUITE_F(EncryptedExportTest, TBackupEncryptionTestFixture) {
             });
         }
 
-        // Topics can't restore to a new dir
-        // Create dir
-        // TODO: remove after fix
-        {
-            auto res = YdbSchemeClient().MakeDirectory("/Root/Restored").GetValueSync();
-            UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
-        }
-
         {
             NImport::TImportFromS3Settings importSettings = MakeImportSettings("Prefix", "/Root/Restored");
             importSettings
@@ -941,5 +938,199 @@ Y_UNIT_TEST_SUITE_F(CommonEncryptionRequirementsTest, TBackupEncryptionCommonReq
             S3Mock().GetData()[key] = ReencryptWithDifferentIV(sourceValue, encryptionKey, NExport::TExportToS3Settings::TEncryptionAlgorithm::AES_128_GCM);
             checkImportFails(TStringBuilder() << "Change IV of " << key);
         }
+    }
+}
+
+Y_UNIT_TEST_SUITE_F(ImportBigEncryptedFileTest, TS3BackupTestFixture) {
+    Y_UNIT_TEST(ImportBigEncryptedFile) {
+        const bool debug = false;
+        // It is a big test, so turn logging off if it is not needed
+        if (!debug) {
+            auto& runtime = *Server().GetRuntime();
+            runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::EPriority::PRI_NOTICE);
+            runtime.SetLogPriority(NKikimrServices::EXPORT, NLog::EPriority::PRI_NOTICE);
+            runtime.SetLogPriority(NKikimrServices::IMPORT, NLog::EPriority::PRI_NOTICE);
+            runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NLog::EPriority::PRI_NOTICE);
+        }
+        TString key = "Cool very very secret rand key!!";
+
+        {
+            auto res = YdbQueryClient().ExecuteQuery(R"sql(
+                CREATE TABLE `/Root/TestTable` (
+                    Key Uint64 NOT NULL,
+                    Value Text,
+                    PRIMARY KEY (Key)
+                );
+            )sql", NQuery::TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
+        }
+
+        auto makeExport = [&](const TString& exportPath, bool compressed) {
+            NExport::TExportToS3Settings exportSettings = MakeExportSettings("", exportPath);
+            exportSettings
+                .SymmetricEncryption(NExport::TExportToS3Settings::TEncryptionAlgorithm::CHACHA_20_POLY_1305, key);
+
+            if (compressed) {
+                exportSettings
+                    .Compression("zstd");
+            }
+
+            auto res = YdbExportClient().ExportToS3(exportSettings).GetValueSync();
+            WaitOpSuccess(res);
+        };
+
+        makeExport("EncryptedExport", false);
+        makeExport("EncryptedCompressedExport", true);
+
+        NBackup::TEncryptionKey encryptionKey(key);
+
+        auto getIV = [&](const TString& path) {
+            auto it = S3Mock().GetData().find(path);
+            UNIT_ASSERT(it != S3Mock().GetData().end());
+            const TString& srcData = it->second;
+            auto [_, iv] = NBackup::TEncryptedFileDeserializer::DecryptFullFile(
+                encryptionKey,
+                TBuffer(srcData.data(), srcData.size()));
+            return iv;
+        };
+
+        const TString& dataFilePath = "/test_bucket/EncryptedExport/001/data_00.csv.enc";
+        const TString& compressedDataFilePath = "/test_bucket/EncryptedCompressedExport/001/data_00.csv.zst.enc";
+
+        NBackup::TEncryptionIV iv = getIV(dataFilePath);
+        NBackup::TEncryptionIV ivCompressed = getIV(compressedDataFilePath);
+
+        auto addToResult = [&](TStringBuf data, bool last, NBackup::TEncryptedFileSerializer& serializer, TString& resultEncryptedData) {
+            TBuffer block = serializer.AddBlock(data, last);
+            resultEncryptedData.append(block.Data(), block.Size());
+        };
+
+        TString bigStr = "X"; // in order not to import too many lines
+        bigStr *= 200;
+
+        auto patchData = [&](size_t encryptedBlockSize, size_t resultFileSize, bool compressed, const TString& path) {
+            Cerr << "Patch import file. EncryptedBlockSize: " << encryptedBlockSize
+                << ", ResultFileSize: " << resultFileSize
+                << ", Compressed: " << compressed
+                << ", Path: " << path << Endl;
+
+            TString resultData;
+            TStringOutput output(resultData);
+            IOutputStream* outputStream = &output;
+            std::optional<TZstdCompress> zstd;
+            if (compressed) {
+                zstd.emplace(&output);
+                outputStream = &*zstd;
+            }
+            TString resultEncryptedData;
+            ui64 line = 0;
+            NBackup::TEncryptedFileSerializer serializer("ChaCha20-Poly1305", encryptionKey, compressed ? ivCompressed : iv);
+            size_t previousSerializePos = 0;
+            while (resultData.size() < resultFileSize) {
+                outputStream->Write(TStringBuilder() << ++line << ",\"Encrypted+hello+world+line+" << bigStr << line << "\"\n");
+
+                if (resultData.size() - previousSerializePos >= encryptedBlockSize) {
+                    zstd.reset(); // finalize zstd frame (if any)
+                    addToResult(TStringBuf(resultData.data() + previousSerializePos, resultData.size() - previousSerializePos),
+                        false,
+                        serializer,
+                        resultEncryptedData);
+                    previousSerializePos = resultData.size();
+
+                    if (compressed) {
+                        zstd.emplace(&output);
+                        outputStream = &*zstd;
+                    }
+                }
+            }
+            zstd.reset();
+            addToResult(TStringBuf(resultData.data() + previousSerializePos, resultData.size() - previousSerializePos),
+                true,
+                serializer,
+                resultEncryptedData);
+            S3Mock().GetData()[path] = resultEncryptedData;
+
+            constexpr bool additionalCheck = false;
+            if (additionalCheck) {
+                // Check that we encoded correctly
+                auto [decodedData, decodedIV] = NBackup::TEncryptedFileDeserializer::DecryptFullFile(
+                    encryptionKey,
+                    TBuffer(resultEncryptedData.data(), resultEncryptedData.size()));
+
+                TBufferInput input(decodedData);
+                IInputStream* inputStream = &input;
+                std::optional<TZstdDecompress> zstdDecompressor;
+                if (compressed) {
+                    zstdDecompressor.emplace(&input);
+                    inputStream = &*zstdDecompressor;
+                }
+                size_t decodedLines = 0;
+                try {
+                    while (true) {
+                        inputStream->ReadLine();
+                        ++decodedLines;
+                    }
+                } catch (const std::exception&) { // end of line
+                }
+                UNIT_ASSERT_VALUES_EQUAL(decodedLines, line);
+            }
+            return line;
+        };
+
+        size_t destPathCounter = 0;
+
+        auto checkImport = [&](const TString& sourcePath, ui64 linesCount) {
+            const TString destinationPath = TStringBuilder() << "/Root/Restored_" << ++destPathCounter;
+            Cerr << "Test import from patched file. SourcePath: " << sourcePath
+                << ", LinesCount: " << linesCount
+                << ", DestinationPath: " << destinationPath << Endl;
+
+            NImport::TImportFromS3Settings importSettings = MakeImportSettings(sourcePath, destinationPath);
+            importSettings
+                .SymmetricKey(key);
+
+            auto res = YdbImportClient().ImportFromS3(importSettings).GetValueSync();
+            WaitOpSuccess(res, TStringBuilder() << "Import from S3 " << destinationPath, TDuration::Minutes(3));
+
+            TStringBuilder sql;
+            sql << "SELECT MAX(Key), COUNT(*) FROM `" << destinationPath << "/TestTable`";
+            auto result = YdbQueryClient().ExecuteQuery(sql, NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetStatus() << ": " << result.GetIssues().ToString());
+
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            auto resultSet = result.GetResultSetParser(0);
+            UNIT_ASSERT_VALUES_EQUAL(resultSet.RowsCount(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnsCount(), 2);
+            UNIT_ASSERT(resultSet.TryNextRow());
+            UNIT_ASSERT_VALUES_EQUAL(*resultSet.ColumnParser(0).GetOptionalUint64(), linesCount);
+            UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser(1).GetUint64(), linesCount);
+
+            // Free resources
+            auto session = YdbTableClient().GetSession().GetValueSync().GetSession();
+            auto dropResult = session.DropTable(TStringBuilder() << destinationPath << "/TestTable").GetValueSync();
+            UNIT_ASSERT_C(dropResult.IsSuccess(), dropResult.GetIssues().ToString());
+        };
+
+        // Patch data and test that datashard can work with any configuration.
+        // Data is read by datashard by 8 MB parts.
+        // Also it can be splitted into blocks in encrypted file.
+
+        ui64 linesCount;
+
+        // Read big parts (8 MB), decode small parts
+        linesCount = patchData(315_KB, 10_MB, false, dataFilePath);
+        checkImport("EncryptedExport", linesCount);
+
+        // Read big parts (8 MB), decode bigger parts
+        linesCount = patchData(9_MB, 20_MB, false, dataFilePath);
+        checkImport("EncryptedExport", linesCount);
+
+        // Read big parts (8 MB), decode small parts
+        linesCount = patchData(555_KB, 10_MB, true, compressedDataFilePath);
+        checkImport("EncryptedCompressedExport", linesCount);
+
+        // Read big parts (8 MB), decode bigger parts
+        linesCount = patchData(9_MB, 20_MB, true, compressedDataFilePath);
+        checkImport("EncryptedCompressedExport", linesCount);
     }
 }

@@ -20,6 +20,7 @@ public:
         , Counters(counters)
         , Weight(weight)
     {
+        counters->ValueWeight->Set(weight);
         AFL_VERIFY(Counters);
         AFL_VERIFY(cat);
         AFL_VERIFY(Weight);

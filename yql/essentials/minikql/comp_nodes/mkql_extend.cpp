@@ -554,7 +554,7 @@ public:
         const auto size = ConstantInt::get(sizeType, Lists.size());
 
         const auto arrayType = ArrayType::get(valueType, Lists.size());
-        const auto array = *this->Stateless || ctx.AlwaysInline ?
+        const auto array = *this->Stateless_ || ctx.AlwaysInline ?
             new AllocaInst(arrayType, 0U, "array", &ctx.Func->getEntryBlock().back()):
             new AllocaInst(arrayType, 0U, "array", block);
 

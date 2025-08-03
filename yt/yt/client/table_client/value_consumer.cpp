@@ -384,7 +384,7 @@ void TWritingValueConsumer::OnEndRow()
 
     if (RowBuffer_->GetSize() >= MaxRowBufferSize_) {
         auto error = WaitFor(Flush());
-        THROW_ERROR_EXCEPTION_IF_FAILED(error, "Table writer failed")
+        THROW_ERROR_EXCEPTION_IF_FAILED(error, "Table writer failed");
     }
 }
 

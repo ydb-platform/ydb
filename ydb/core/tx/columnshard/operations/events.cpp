@@ -24,7 +24,6 @@ TWriteResult::TWriteResult(const std::shared_ptr<NEvWrite::TWriteMeta>& writeMet
     , PKBatch(pkBatch)
     , RecordsCount(recordsCount) {
     AFL_VERIFY(WriteMeta);
-    WriteMeta->OnStage(NEvWrite::EWriteStage::Result);
 }
 
 }   // namespace NKikimr::NColumnShard

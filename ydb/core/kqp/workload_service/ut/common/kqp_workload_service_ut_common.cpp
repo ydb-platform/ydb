@@ -307,12 +307,16 @@ private:
             Ydb::Cms::CreateDatabaseRequest request;
             SetupResourcesTenant(request, request.mutable_resources()->add_storage_units(), Settings_.GetDedicatedTenantName());
             Tenants_->CreateTenant(std::move(request));
+            const auto describeResult = Client_->Describe(GetRuntime(), Settings_.GetDedicatedTenantName());
+            DedicatedTenantPathId = describeResult.GetPathDescription().GetDomainDescription().GetDomainKey().GetPathId();
         }
 
         {  // Shared
             Ydb::Cms::CreateDatabaseRequest request;
             SetupResourcesTenant(request, request.mutable_shared_resources()->add_storage_units(), Settings_.GetSharedTenantName());
             Tenants_->CreateTenant(std::move(request));
+            const auto describeResult = Client_->Describe(GetRuntime(), Settings_.GetSharedTenantName());
+            SharedTenantPathId = describeResult.GetPathDescription().GetDomainDescription().GetDomainKey().GetPathId();
         }
 
         {  // Serverless
@@ -320,6 +324,8 @@ private:
             request.set_path(Settings_.GetServerlessTenantName());
             request.mutable_serverless_resources()->set_shared_database_path(Settings_.GetSharedTenantName());
             Tenants_->CreateTenant(std::move(request));
+            const auto describeResult = Client_->Describe(GetRuntime(), Settings_.GetServerlessTenantName());
+            ServerlessTenantPathId = describeResult.GetPathDescription().GetDomainDescription().GetDomainKey().GetPathId();
         }
     }
 
@@ -549,6 +555,18 @@ public:
         return Settings_;
     }
 
+    TLocalPathId GetDedicatedTenantPathId() const override {
+        return DedicatedTenantPathId;
+    }
+
+    TLocalPathId GetSharedTenantPathId() const override {
+        return SharedTenantPathId;
+    }
+
+    TLocalPathId GetServerlessTenantPathId() const override {
+        return ServerlessTenantPathId;
+    }
+
 private:
     void SetupDefaultSettings(TQueryRunnerSettings& settings, bool asyncExecution) const {
         UNIT_ASSERT_C(!settings.HangUpDuringExecution_ || asyncExecution, "Hang up during execution is not supported for sync queries");
@@ -614,6 +632,10 @@ private:
     std::unique_ptr<TClient> Client_;
     std::unique_ptr<TDriver> YdbDriver_;
     std::unique_ptr<TTenants> Tenants_;
+
+    TLocalPathId DedicatedTenantPathId;
+    TLocalPathId SharedTenantPathId;
+    TLocalPathId ServerlessTenantPathId;
 
     std::unique_ptr<NYdb::NTable::TTableClient> TableClient_;
     std::unique_ptr<NYdb::NTable::TSession> TableClientSession_;

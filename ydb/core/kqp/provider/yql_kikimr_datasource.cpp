@@ -468,11 +468,11 @@ protected:
     {
         YQL_ENSURE(SessionCtx->Query().Type != EKikimrQueryType::Unspecified);
 
-        if (!Dispatcher->Dispatch(cluster, name, value, NCommon::TSettingDispatcher::EStage::STATIC, NCommon::TSettingDispatcher::GetErrorCallback(pos, ctx))) {
+        if (!GetDispatcher()->Dispatch(cluster, name, value, NCommon::TSettingDispatcher::EStage::STATIC, NCommon::TSettingDispatcher::GetErrorCallback(pos, ctx))) {
             return false;
         }
 
-        if (Dispatcher->IsRuntime(name)) {
+        if (GetDispatcher()->IsRuntime(name)) {
             bool pragmaAllowed = false;
 
             switch (SessionCtx->Query().Type) {
@@ -832,6 +832,7 @@ public:
                     SessionCtx->Config().BindingsMode,
                     GUCSettings
                 );
+                settingsBuilder.SetFromConfig(SessionCtx->Config());
                 return RewriteReadFromView(node, ctx, settingsBuilder, Types.Modules, viewData);
             }
         }

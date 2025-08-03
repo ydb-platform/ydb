@@ -5,11 +5,10 @@ namespace NKikimr::NStorage {
     using TInvokeRequestHandlerActor = TDistributedConfigKeeper::TInvokeRequestHandlerActor;
 
     void TInvokeRequestHandlerActor::ReassignGroupDisk(const TQuery::TReassignGroupDisk& cmd) {
-        if (!RunCommonChecks()) {
-            return;
-        }
+        RunCommonChecks();
+
         if (cmd.GetFromSelfHeal() && !Self->StorageConfig->GetSelfManagementConfig().GetAutomaticStaticGroupManagement()) {
-            return FinishWithError(TResult::ERROR, "operation forbidden: automatic static group management disabled");
+            throw TExError() << "Operation forbidden: automatic static group management disabled";
         }
 
         bool found = false;
@@ -17,10 +16,10 @@ namespace NKikimr::NStorage {
         for (const auto& group : Self->StorageConfig->GetBlobStorageConfig().GetServiceSet().GetGroups()) {
             if (group.GetGroupID() == vdiskId.GroupID.GetRawId()) {
                 if (group.GetGroupGeneration() != vdiskId.GroupGeneration) {
-                    return FinishWithError(TResult::ERROR, TStringBuilder() << "group generation mismatch"
+                    throw TExError() << "Group generation mismatch"
                         << " GroupId# " << group.GetGroupID()
                         << " Generation# " << group.GetGroupGeneration()
-                        << " VDiskId# " << vdiskId);
+                        << " VDiskId# " << vdiskId;
                 }
                 found = true;
                 if (!cmd.GetIgnoreGroupFailModelChecks()) {
@@ -30,7 +29,7 @@ namespace NKikimr::NStorage {
             }
         }
         if (!found) {
-            return FinishWithError(TResult::ERROR, TStringBuilder() << "GroupId# " << vdiskId.GroupID << " not found");
+            throw TExError() << "GroupId# " << vdiskId.GroupID << " not found";
         }
 
         Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), new TEvNodeWardenQueryBaseConfig);
@@ -40,7 +39,7 @@ namespace NKikimr::NStorage {
         TStringStream err;
         GroupInfo = TBlobStorageGroupInfo::Parse(group, nullptr, &err);
         if (!GroupInfo) {
-            return FinishWithError(TResult::ERROR, TStringBuilder() << "failed to parse group info: " << err.Str());
+            throw TExError() << "Failed to parse group info: " << err.Str();
         }
         SuccessfulVDisks.emplace(&GroupInfo->GetTopology());
 
@@ -54,6 +53,7 @@ namespace NKikimr::NStorage {
             Send(actorId, new TEvBlobStorage::TEvVStatus(vdiskId), flags);
             if (actorId.NodeId() != SelfId().NodeId()) {
                 NodeToVDisk.emplace(actorId.NodeId(), vdiskId);
+                Subscriptions.try_emplace(actorId.NodeId());
             }
             ActorToVDisk.emplace(actorId, vdiskId);
             PendingVDiskIds.emplace(vdiskId);
@@ -65,8 +65,7 @@ namespace NKikimr::NStorage {
         const TVDiskID vdiskId = VDiskIDFromVDiskID(record.GetVDiskID());
         STLOG(PRI_DEBUG, BS_NODE, NWDC74, "TEvVStatusResult", (SelfId, SelfId()), (Record, record), (VDiskId, vdiskId));
         if (!PendingVDiskIds.erase(vdiskId)) {
-            return FinishWithError(TResult::ERROR, TStringBuilder() << "TEvVStatusResult VDiskID# " << vdiskId
-                << " is unexpected");
+            throw TExError() << "TEvVStatusResult VDiskID# " << vdiskId << " is unexpected";
         }
         if (record.GetJoinedGroup() && record.GetReplicated()) {
             *SuccessfulVDisks |= {&GroupInfo->GetTopology(), vdiskId};
@@ -98,14 +97,16 @@ namespace NKikimr::NStorage {
     }
 
     void TInvokeRequestHandlerActor::ReassignGroupDiskExecute() {
-        const auto& record = Event->Get()->Record;
-        const auto& cmd = record.GetReassignGroupDisk();
+        RunCommonChecks();
 
-        if (!RunCommonChecks()) {
-            return;
-        } else if (!Self->SelfManagementEnabled) {
-            return FinishWithError(TResult::ERROR, "self-management is not enabled");
+        if (!Self->SelfManagementEnabled) {
+            throw TExError() << "Self-management is not enabled";
         }
+
+        auto *op = std::get_if<TInvokeExternalOperation>(&Query);
+        Y_ABORT_UNLESS(op);
+        const auto& record = op->Command;
+        const auto& cmd = record.GetReassignGroupDisk();
 
         STLOG(PRI_DEBUG, BS_NODE, NWDC75, "ReassignGroupDiskExecute", (SelfId, SelfId()));
 
@@ -121,21 +122,13 @@ namespace NKikimr::NStorage {
                 failedVDisks |= {&GroupInfo->GetTopology(), vdiskId};
 
                 if (!checker.CheckFailModelForGroup(failedVDisks)) {
-                    FinishWithError(TResult::ERROR, TStringBuilder()
-                        << "ReassignGroupDisk would render group inoperable (" << base << ')');
+                    throw TExError() << "ReassignGroupDisk would render group inoperable (" << base << ')';
                 } else if (!cmd.GetIgnoreDegradedGroupsChecks() && !wasDegraded && checker.IsDegraded(failedVDisks)) {
-                    FinishWithError(TResult::ERROR, TStringBuilder()
-                        << "ReassignGroupDisk would drive group into degraded state (" << base << ')');
-                } else {
-                    return true;
+                    throw TExError() << "ReassignGroupDisk would drive group into degraded state (" << base << ')';
                 }
-
-                return false;
             };
 
-            if (!check(~SuccessfulVDisks.value(), "polling")) {
-                return;
-            }
+            check(~SuccessfulVDisks.value(), "polling");
 
             // scan failed disks according to BS_CONTROLLER's data
             TBlobStorageGroupInfo::TGroupVDisks failedVDisks(&GroupInfo->GetTopology());
@@ -157,20 +150,18 @@ namespace NKikimr::NStorage {
                 }
             }
 
-            if (!check(failedVDisks, "BS_CONTROLLER state")) {
-                return;
-            }
+            check(failedVDisks, "BS_CONTROLLER state");
         }
 
         NKikimrBlobStorage::TStorageConfig config = *Self->StorageConfig;
 
         if (!config.HasBlobStorageConfig()) {
-            return FinishWithError(TResult::ERROR, "no BlobStorageConfig defined");
+            throw TExError() << "No BlobStorageConfig defined";
         }
         const auto& bsConfig = config.GetBlobStorageConfig();
 
         if (!bsConfig.HasServiceSet()) {
-            return FinishWithError(TResult::ERROR, "no ServiceSet defined");
+            throw TExError() << "No ServiceSet defined";
         }
         const auto& ss = bsConfig.GetServiceSet();
 
@@ -213,15 +204,14 @@ namespace NKikimr::NStorage {
                         (Config, config),
                         (BaseConfig, *BaseConfig),
                         (Error, ex.what()));
-                    return FinishWithError(TResult::ERROR, TStringBuilder() << "failed to allocate group: " << ex.what());
+                    throw TExError() << "Failed to allocate group: " << ex.what();
                 }
 
-                config.SetGeneration(config.GetGeneration() + 1);
                 return StartProposition(&config);
             }
         }
 
-        return FinishWithError(TResult::ERROR, TStringBuilder() << "group not found");
+        throw TExError() << "Group not found";
     }
 
     void TInvokeRequestHandlerActor::StaticVDiskSlain(const TQuery::TStaticVDiskSlain& cmd) {
@@ -233,19 +223,17 @@ namespace NKikimr::NStorage {
     }
 
     void TInvokeRequestHandlerActor::HandleDropDonorAndSlain(TVDiskID vdiskId, const NKikimrBlobStorage::TVSlotId& vslotId, bool isDropDonor) {
-        if (!RunCommonChecks()) {
-            return;
-        }
+        RunCommonChecks();
 
         NKikimrBlobStorage::TStorageConfig config = *Self->StorageConfig;
 
         if (!config.HasBlobStorageConfig()) {
-            return FinishWithError(TResult::ERROR, "no BlobStorageConfig defined");
+            throw TExError() << "No BlobStorageConfig defined";
         }
         auto *bsConfig = config.MutableBlobStorageConfig();
 
         if (!bsConfig->HasServiceSet()) {
-            return FinishWithError(TResult::ERROR, "no ServiceSet defined");
+            throw TExError() << "No ServiceSet defined";
         }
         auto *ss = bsConfig->MutableServiceSet();
 
@@ -329,10 +317,9 @@ namespace NKikimr::NStorage {
         }
 
         if (!changes) {
-            return Finish(Sender, SelfId(), PrepareResult(TResult::OK, std::nullopt).release(), 0, Cookie);
+            return Finish(TResult::OK, std::nullopt);
         }
 
-        config.SetGeneration(config.GetGeneration() + 1);
         StartProposition(&config);
     }
 

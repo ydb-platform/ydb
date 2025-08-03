@@ -66,6 +66,7 @@ RECURSE_FOR_TESTS(
 IF (OPENSOURCE_PROJECT != "yt")
     RECURSE(
         backtrace
+        docs
         failure_injector
         fetch
         log

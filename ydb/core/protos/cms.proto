@@ -78,6 +78,7 @@ message THostState {
   repeated EMarker       Markers = 8;
   optional NActorsInterconnect.TNodeLocation Location = 9;
   optional uint32        StartTimeSeconds = 10;
+  optional uint32        PileId = 11;
 }
 
 message TClusterState {
@@ -425,6 +426,15 @@ message TCmsConfig {
     }
 
     message TSentinelConfig {
+        message TStateStorageSelfHealConfig {
+            optional bool Enable = 19 [default = true];
+            optional uint32 NodeGoodStateLimit = 20 [default = 10];
+            optional uint32 NodePrettyGoodStateLimit = 21 [default = 7];
+            optional uint32 NodeBadStateLimit = 22 [default = 10];
+            optional uint32 WaitForConfigStep = 23 [default = 60000000];
+            optional uint32 RelaxTime = 24 [default = 600000000];
+        }
+
         message TStateLimit {
             optional uint32 State = 1; // EPDiskState
             optional uint32 Limit = 2;
@@ -452,6 +462,7 @@ message TCmsConfig {
         optional uint32 DataCenterRatio = 10 [default = 50];
         optional uint32 RoomRatio = 11 [default = 70];
         optional uint32 RackRatio = 12 [default = 90];
+        optional uint32 PileRatio = 18 [default = 50];
         // Similar to *Ratio settings, but specified in absolute numbers and applied per storage node.
         // This limit helps prevent cascading overreaction when many disks go offline on a single host
         // (due to disk shelf disconnection).
@@ -464,8 +475,10 @@ message TCmsConfig {
         optional bool DryRun = 13;
         repeated TStateLimit StateLimits = 14;
         optional EEvictVDisksStatus EvictVDisksStatus = 15;
-        
+
         optional uint32 GoodStateLimit = 16 [default = 5];
+
+        optional TStateStorageSelfHealConfig StateStorageSelfHealConfig = 19;
     }
 
     message TLogConfig {
@@ -655,6 +668,7 @@ message TPDiskInfo {
         RATIO_BY_ROOM = 4;
         RATIO_BY_RACK = 5;
         TOO_MANY_FAULTY_PER_NODE = 6;
+        RATIO_BY_PILE = 7;
     }
 
     optional uint32 State = 1; // EPDiskState

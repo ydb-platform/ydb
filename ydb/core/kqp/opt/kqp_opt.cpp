@@ -140,9 +140,11 @@ TKqpTable BuildTableMeta(const TKikimrTableDescription& tableDesc, const TPositi
     return BuildTableMeta(*tableDesc.Metadata, pos, ctx);
 }
 
-bool IsSortKeyPrimary(const NYql::NNodes::TCoLambda& keySelector, const NYql::TKikimrTableDescription& tableDesc,
-    const TMaybe<THashSet<TStringBuf>>& passthroughFields)
-{
+bool IsSortKeyPrimary(
+    const NYql::NNodes::TCoLambda& keySelector,
+    const NYql::TKikimrTableDescription& tableDesc,
+    const TMaybe<THashSet<TStringBuf>>& passthroughFields
+) {
     auto checkKey = [keySelector, &tableDesc, &passthroughFields] (NYql::NNodes::TExprBase key, ui32 index) {
         if (!key.Maybe<TCoMember>()) {
             return false;
@@ -195,6 +197,27 @@ bool IsBuiltEffect(const TExprBase& effect) {
     }
 
     return false;
+}
+
+void DumpAppliedRule(const TString& name, const NYql::TExprNode::TPtr& input,
+    const NYql::TExprNode::TPtr& output, NYql::TExprContext& ctx)
+{
+// #define KQP_ENABLE_DUMP_APPLIED_RULE
+#ifdef KQP_ENABLE_DUMP_APPLIED_RULE
+    if (input != output) {
+        auto builder = TStringBuilder() << "Rule applied: " << name << Endl;
+        builder << "Expression before rule application: " << Endl;
+        builder << KqpExprToPrettyString(*input, ctx) << Endl;
+        builder << "Expression after rule application: " << Endl;
+        builder << KqpExprToPrettyString(*output, ctx);
+        YQL_CLOG(TRACE, ProviderKqp) << builder;
+    }
+#else
+    Y_UNUSED(ctx);
+    if (input != output) {
+        YQL_CLOG(TRACE, ProviderKqp) << name;
+    }
+#endif
 }
 
 } // namespace NKikimr::NKqp::NOpt

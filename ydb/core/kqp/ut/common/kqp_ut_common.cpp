@@ -87,7 +87,7 @@ NMiniKQL::IFunctionRegistry* UdfFrFactory(const NScheme::TTypeRegistry& typeRegi
     funcRegistry->AddModule("", "Math", CreateMathModule());
     funcRegistry->AddModule("", "Unicode", CreateUnicodeModule());
     funcRegistry->AddModule("", "Digest", CreateDigestModule());
-    
+
     NKikimr::NMiniKQL::FillStaticModules(*funcRegistry);
     return funcRegistry.Release();
 }
@@ -144,6 +144,7 @@ TKikimrRunner::TKikimrRunner(const TKikimrSettings& settings) {
     ServerSettings->S3ActorsFactory = settings.S3ActorsFactory;
     ServerSettings->Controls = settings.Controls;
     ServerSettings->SetEnableForceFollowers(settings.EnableForceFollowers);
+    ServerSettings->SetEnableScriptExecutionBackgroundChecks(settings.EnableScriptExecutionBackgroundChecks);
 
     if (!settings.FeatureFlags.HasEnableOlapCompression()) {
         ServerSettings->SetEnableOlapCompression(true);
@@ -203,8 +204,7 @@ TKikimrRunner::TKikimrRunner(const TVector<NKikimrKqp::TKqpSetting>& kqpSettings
 
 TKikimrRunner::TKikimrRunner(const NKikimrConfig::TAppConfig& appConfig, const TString& authToken,
     const TString& domainRoot, ui32 nodeCount)
-    : TKikimrRunner(TKikimrSettings()
-        .SetAppConfig(appConfig)
+    : TKikimrRunner(TKikimrSettings(appConfig)
         .SetAuthToken(authToken)
         .SetDomainRoot(domainRoot)
         .SetNodeCount(nodeCount)) {}
@@ -212,8 +212,7 @@ TKikimrRunner::TKikimrRunner(const NKikimrConfig::TAppConfig& appConfig, const T
 TKikimrRunner::TKikimrRunner(const NKikimrConfig::TAppConfig& appConfig,
     const TVector<NKikimrKqp::TKqpSetting>& kqpSettings, const TString& authToken, const TString& domainRoot,
     ui32 nodeCount)
-    : TKikimrRunner(TKikimrSettings()
-        .SetAppConfig(appConfig)
+    : TKikimrRunner(TKikimrSettings(appConfig)
         .SetKqpSettings(kqpSettings)
         .SetAuthToken(authToken)
         .SetDomainRoot(domainRoot)
@@ -359,7 +358,7 @@ void TKikimrRunner::CreateSampleTables() {
             PARTITION_AT_KEYS = (105)
         );
 
-        CREATE TABLE `TuplePrimaryDescending` (
+        CREATE TABLE `ReorderKey` (
             Col1 Uint32,
             Col2 Uint64,
             Col3 Int64,
@@ -369,6 +368,19 @@ void TKikimrRunner::CreateSampleTables() {
         WITH (
             AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 2,
             PARTITION_AT_KEYS = (2, 3)
+        );
+
+        CREATE TABLE `ReorderOptionalKey` (
+            k1 Uint64 NOT NULL,
+            k2 Uint64,
+            v1 Uint64,
+            v2 String,
+            id Int64,
+            PRIMARY KEY (k2, k1)
+        )
+        WITH (
+            AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 3,
+            PARTITION_AT_KEYS = ((2, 2), (4), (5, 6), (8))
         );
     )").GetValueSync());
 
@@ -481,7 +493,7 @@ void TKikimrRunner::CreateSampleTables() {
             (106, "One",   "Name3", "Value29"),
             (108, "One",    NULL,   "Value31");
 
-        REPLACE INTO `TuplePrimaryDescending` (Col1, Col2, Col3, Col4) VALUES
+        REPLACE INTO `ReorderKey` (Col1, Col2, Col3, Col4) VALUES
             (0, 1, 0, 3),
             (1, 1, 0, 1),
             (1, 1, 1, 0),
@@ -498,6 +510,64 @@ void TKikimrRunner::CreateSampleTables() {
             (1, 3, 1, 1),
             (2, 3, 1, 2),
             (3, 3, 0, 1);
+
+        REPLACE INTO `ReorderOptionalKey` (k1, k2, v1, v2, id) VALUES
+            (0, NULL, 0, "0NULL", 0),
+            (1, NULL, 1, "1NULL", 2),
+            (1, 0, 1, "10", 0),
+            (1, 1, 2, "11", 1),
+            (1, 2, 3, "12", 2),
+            (1, 3, 4, "13", 0),
+            (1, 4, 5, "14", 1),
+            (2, NULL, 2, "2NULL", 1),
+            (2, 0, 2, "20", 2),
+            (2, 1, 3, "21", 0),
+            (2, 2, 4, "22", 1),
+            (2, 3, 5, "23", 2),
+            (2, 4, 6, "24", 0),
+            (3, NULL, 3, "3NULL", 0),
+            (3, 0, 3, "30", 1),
+            (3, 1, 4, "31", 2),
+            (3, 2, 5, "32", 0),
+            (3, 3, 6, "33", 1),
+            (3, 4, 7, "34", 2),
+            (4, NULL, 4, "4NULL", 2),
+            (4, 0, 4, "40", 0),
+            (4, 1, 5, "41", 1),
+            (4, 2, 6, "42", 2),
+            (4, 3, 7, "43", 0),
+            (4, 4, 8, "44", 1),
+            (5, NULL, 5, "5NULL", 1),
+            (5, 0, 5, "50", 2),
+            (5, 1, 6, "51", 0),
+            (5, 2, 7, "52", 1),
+            (5, 3, 8, "53", 2),
+            (5, 4, 9, "54", 0),
+            (6, NULL, 6, "6NULL", 0),
+            (6, 0, 6, "60", 1),
+            (6, 1, 7, "61", 2),
+            (6, 2, 8, "62", 0),
+            (6, 3, 9, "63", 1),
+            (6, 4, 10, "64", 2),
+            (6, 5, 11, "65", 0),
+            (7, NULL, 7, "7NULL", 2),
+            (7, 0, 7, "70", 0),
+            (7, 1, 8, "71", 1),
+            (7, 2, 9, "72", 2),
+            (7, 3, 10, "73", 0),
+            (7, 4, 11, "74", 1),
+            (8, NULL, 8, "8NULL", 1),
+            (8, 0, 8, "80", 2),
+            (8, 1, 9, "81", 0),
+            (8, 2, 10, "82", 1),
+            (8, 3, 11, "83", 2),
+            (8, 4, 12, "84", 0),
+            (9, NULL, 9, "9NULL", 0),
+            (9, 0, 9, "90", 1),
+            (9, 1, 10, "91", 2),
+            (9, 2, 11, "92", 0),
+            (9, 3, 12, "93", 1),
+            (9, 4, 13, "94", 2);
     )", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).GetValueSync());
 
 }
@@ -1417,7 +1487,7 @@ void Grant(NYdb::NTable::TSession& adminSession, const char* permissions, const 
     );
     auto result = adminSession.ExecuteSchemeQuery(grantQuery).ExtractValueSync();
     UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-};  
+};
 
 THolder<NSchemeCache::TSchemeCacheNavigate> Navigate(TTestActorRuntime& runtime, const TActorId& sender,
                                                      const TString& path, NSchemeCache::TSchemeCacheNavigate::EOp op)
@@ -1577,7 +1647,7 @@ void CheckTableReads(NYdb::NTable::TSession& session, const TString& tableName, 
         const TString selectPartitionStats(Q_(Sprintf(R"(
             SELECT *
             FROM `/Root/.sys/partition_stats`
-            WHERE FollowerId %s 0 AND (RowReads != 0 OR RangeReadRows != 0) AND Path = '%s'   
+            WHERE FollowerId %s 0 AND (RowReads != 0 OR RangeReadRows != 0) AND Path = '%s'
         )", (checkFollower ? "!=" : "="), tableName.c_str())));
 
         auto result = session.ExecuteDataQuery(selectPartitionStats, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
@@ -1595,7 +1665,7 @@ void CheckTableReads(NYdb::NTable::TSession& session, const TString& tableName, 
             Y_FAIL("!readsExpected, but there are read stats for %s", tableName.c_str());
         }
     }
-    Y_FAIL("readsExpected, but there is timeout waiting for read stats from %s", tableName.c_str());    
+    Y_FAIL("readsExpected, but there is timeout waiting for read stats from %s", tableName.c_str());
 }
 
 TTableId ResolveTableId(Tests::TServer* server, TActorId sender, const TString& path) {
@@ -1627,7 +1697,6 @@ void WaitForCompaction(Tests::TServer* server, const TString& path, bool compact
 }
 
 NJson::TJsonValue SimplifyPlan(NJson::TJsonValue& opt, const TGetPlanParams& params) {
-    Cout << opt.GetStringRobust() << Endl;
     if (!opt.IsMap()) {
         return {};
     }
@@ -1839,6 +1908,22 @@ void TTestExtEnv::CreateDatabase(const TString& databaseName) {
     storage->set_count(1);
 
     Tenants->CreateTenant(request, EnvSettings.DynamicNodeCount);
+}
+
+Tests::TServer& TTestExtEnv::GetServer() const {
+    return *Server.Get();
+}
+
+Tests::TClient& TTestExtEnv::GetClient() const {
+    return *Client;
+}
+
+void CheckOwner(TSession& session, const TString& path, const TString& name) {
+    TDescribeTableResult describe = session.DescribeTable(path).GetValueSync();
+    UNIT_ASSERT_VALUES_EQUAL(describe.GetStatus(), NYdb::EStatus::SUCCESS);
+    auto tableDesc = describe.GetTableDescription();
+    const auto& currentOwner = tableDesc.GetOwner();
+    UNIT_ASSERT_VALUES_EQUAL_C(name, currentOwner, "name is not currentOwner");
 }
 
 } // namspace NKqp

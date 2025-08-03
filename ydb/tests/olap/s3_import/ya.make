@@ -1,7 +1,7 @@
 PY3TEST()
 
 ENV(YDB_CLI_BINARY="ydb/apps/ydb/ydb")
-ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")
+INCLUDE(${ARCADIA_ROOT}/ydb/tests/ydbd_dep.inc)
 ENV(MOTO_SERVER_PATH="contrib/python/moto/bin/moto_server")
 
 TEST_SRCS(
@@ -26,7 +26,6 @@ PEERDIR(
 
 DEPENDS(
     ydb/apps/ydb
-    ydb/apps/ydbd
     contrib/python/moto/bin
 )
 

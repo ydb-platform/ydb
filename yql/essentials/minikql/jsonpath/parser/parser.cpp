@@ -29,17 +29,17 @@ class TParseErrorsCollector : public NProtoAST::IErrorCollector {
 public:
     TParseErrorsCollector(TIssues& issues, size_t maxErrors)
         : IErrorCollector(maxErrors)
-        , Issues(issues)
+        , Issues_(issues)
     {
     }
 
 private:
     void AddError(ui32 line, ui32 column, const TString& message) override {
-        Issues.AddIssue(TPosition(column, line, "jsonpath"), StripString(message));
-        Issues.back().SetCode(TIssuesIds::JSONPATH_PARSE_ERROR, TSeverityIds::S_ERROR);
+        Issues_.AddIssue(TPosition(column, line, "jsonpath"), StripString(message));
+        Issues_.back().SetCode(TIssuesIds::JSONPATH_PARSE_ERROR, TSeverityIds::S_ERROR);
     }
 
-    TIssues& Issues;
+    TIssues& Issues_;
 };
 
 }

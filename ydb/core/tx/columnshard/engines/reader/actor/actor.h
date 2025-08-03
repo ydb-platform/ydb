@@ -35,15 +35,16 @@ public:
         const std::shared_ptr<NDataAccessorControl::IDataAccessorsManager>& dataAccessorsManager,
         const TComputeShardingPolicy& computeShardingPolicy, ui32 scanId, ui64 txId, ui32 scanGen, ui64 requestCookie, ui64 tabletId,
         TDuration timeout, const TReadMetadataBase::TConstPtr& readMetadataRange, NKikimrDataEvents::EDataFormat dataFormat,
-        const NColumnShard::TScanCounters& scanCountersPool, const NConveyorComposite::TCPULimitsConfig& cpuLimits);
+        const NColumnShard::TScanCounters& scanCountersPool, const NConveyorComposite::TCPULimitsConfig& cpuLimits
+    );
 
     void Bootstrap(const TActorContext& ctx);
 
 private:
     STATEFN(StateScan) {
-        auto g = Stats->MakeGuard("processing");
+        auto g = Stats->MakeGuard("processing", IS_INFO_LOG_ENABLED(NKikimrServices::TX_COLUMNSHARD_SCAN));
         TLogContextGuard gLogging(NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD_SCAN) ("SelfId", SelfId())("TabletId",
-            TabletId)("ScanId", ScanId)("TxId", TxId)("ScanGen", ScanGen)("task_identifier", ReadMetadataRange->GetScanIdentifier()));
+                    TabletId)("ScanId", ScanId)("TxId", TxId)("ScanGen", ScanGen)("task_identifier", ReadMetadataRange->GetScanIdentifier()));
         switch (ev->GetTypeRewrite()) {
             hFunc(NKqp::TEvKqpCompute::TEvScanDataAck, HandleScan);
             hFunc(NKqp::TEvKqpCompute::TEvScanPing, HandleScan);
@@ -115,6 +116,7 @@ private:
     TMonotonic GetScanDeadline() const;
 
     TMonotonic GetComputeDeadline() const;
+    std::optional<TMonotonic> GetComputeDeadlineOptional() const;
 
 private:
     const TActorId ColumnShardActorId;
@@ -146,6 +148,7 @@ private:
     THolder<NKqp::TEvKqpCompute::TEvScanData> Result;
     std::shared_ptr<IScanCursor> CurrentLastReadKey;
     bool Finished = false;
+    ui32 BuildResultCounter = 0;
     std::optional<TMonotonic> LastResultInstant;
 
     class TBlobStats {
@@ -192,6 +195,9 @@ private:
     ui64 PacksSum = 0;
     ui64 Bytes = 0;
     ui32 PageFaults = 0;
+    TInstant StartWaitTime;
+    TDuration WaitTime;
+    TInstant LastSend = TInstant::Now();
 };
 
 }   // namespace NKikimr::NOlap::NReader

@@ -16,9 +16,8 @@ Y_UNIT_TEST_SUITE(KqpOlapSparsed) {
 
     class TSparsedDataTest {
     private:
-        const TKikimrSettings Settings = TKikimrSettings()
-            .SetColumnShardAlterObjectEnabled(true)
-            .SetWithSampleTables(false);
+        const TKikimrSettings Settings =
+            TKikimrSettings().SetColumnShardAlterObjectEnabled(true).SetWithSampleTables(false).SetColumnShardReaderClassName("PLAIN");
         TKikimrRunner Kikimr;
         NKikimr::NYDBTest::TControllers::TGuard<NKikimr::NYDBTest::NColumnShard::TController> CSController;
         const TString StoreName;
@@ -214,7 +213,6 @@ Y_UNIT_TEST_SUITE(KqpOlapSparsed) {
         }
 
         void Execute() {
-            CSController->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Indexation);
             CSController->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
             CSController->SetOverridePeriodicWakeupActivationPeriod(TDuration::MilliSeconds(100));
 
@@ -262,7 +260,6 @@ Y_UNIT_TEST_SUITE(KqpOlapSparsed) {
 #ifdef address_sanitizer_enabled
             MultiColumnRepCount = 30;
 #endif
-            CSController->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Indexation);
             CSController->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
             CSController->SetOverridePeriodicWakeupActivationPeriod(TDuration::MilliSeconds(100));
 
@@ -353,7 +350,6 @@ Y_UNIT_TEST_SUITE(KqpOlapSparsed) {
         Tests::NCommon::TLoggerInit(kikimr).SetComponents({ NKikimrServices::TX_COLUMNSHARD }, "CS").SetPriority(NActors::NLog::PRI_DEBUG).Initialize();
 
         WriteTestData(kikimr, "/Root/olapStore/olapTable", 1000000, 300000000, 10000);
-        csController->WaitIndexation(TDuration::Seconds(3));
 
         {
             auto result = session.ExecuteSchemeQuery("ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=ALTER_COLUMN, NAME=uid, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`SPARSED`)").GetValueSync();

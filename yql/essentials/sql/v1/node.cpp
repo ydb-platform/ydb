@@ -58,7 +58,7 @@ TColumnSchema::TColumnSchema(TPosition pos, const TString& name, const TNodePtr&
 }
 
 INode::INode(TPosition pos)
-    : Pos(pos)
+    : Pos_(pos)
 {
 }
 
@@ -67,44 +67,44 @@ INode::~INode()
 }
 
 TPosition INode::GetPos() const {
-    return Pos;
+    return Pos_;
 }
 
 const TString& INode::GetLabel() const {
-    return Label;
+    return Label_;
 }
 
 TMaybe<TPosition> INode::GetLabelPos() const {
-    return LabelPos;
+    return LabelPos_;
 }
 
 void INode::SetLabel(const TString& label, TMaybe<TPosition> pos) {
-    Label = label;
-    LabelPos = pos;
+    Label_ = label;
+    LabelPos_ = pos;
 }
 
 bool INode::IsImplicitLabel() const {
-    return ImplicitLabel;
+    return ImplicitLabel_;
 }
 
 void INode::MarkImplicitLabel(bool isImplicitLabel) {
-    ImplicitLabel = isImplicitLabel;
+    ImplicitLabel_ = isImplicitLabel;
 }
 
 void INode::SetRefPos(TPosition pos) {
-    RefPos = pos;
+    RefPos_ = pos;
 }
 
 TMaybe<TPosition> INode::GetRefPos() const {
-    return RefPos;
+    return RefPos_;
 }
 
 void INode::SetCountHint(bool isCount) {
-    State.Set(ENodeState::CountHint, isCount);
+    State_.Set(ENodeState::CountHint, isCount);
 }
 
 bool INode::GetCountHint() const {
-    return State.Test(ENodeState::CountHint);
+    return State_.Test(ENodeState::CountHint);
 }
 
 bool INode::IsConstant() const {
@@ -225,16 +225,16 @@ TVector<TNodePtr>* INode::ContentListPtr() {
 }
 
 bool INode::Init(TContext& ctx, ISource* src) {
-    if (State.Test(ENodeState::Failed)) {
+    if (State_.Test(ENodeState::Failed)) {
         return false;
     }
 
-    if (!State.Test(ENodeState::Initialized)) {
+    if (!State_.Test(ENodeState::Initialized)) {
         if (!DoInit(ctx, src)) {
-            State.Set(ENodeState::Failed);
+            State_.Set(ENodeState::Failed);
             return false;
         }
-        State.Set(ENodeState::Initialized);
+        State_.Set(ENodeState::Initialized);
     }
     return true;
 }
@@ -251,7 +251,7 @@ bool INode::DoInit(TContext& ctx, ISource* src) {
 }
 
 TNodePtr INode::AstNode() const {
-    return new TAstListNodeImpl(Pos);
+    return new TAstListNodeImpl(Pos_);
 }
 
 TNodePtr INode::AstNode(TNodePtr node) const {
@@ -259,7 +259,7 @@ TNodePtr INode::AstNode(TNodePtr node) const {
 }
 
 TNodePtr INode::AstNode(const TString& str) const {
-    return new TAstAtomNodeImpl(Pos, str, TNodeFlags::Default);
+    return new TAstAtomNodeImpl(Pos_, str, TNodeFlags::Default);
 }
 
 TNodePtr INode::AstNode(TAstNode* node) const {
@@ -271,9 +271,9 @@ TNodePtr INode::Clone() const {
     if (!clone) {
         clone = const_cast<INode*>(this);
     } else {
-        YQL_ENSURE(!State.Test(ENodeState::Initialized), "Clone should be for uninitialized or persistent node");
-        clone->SetLabel(Label, LabelPos);
-        clone->MarkImplicitLabel(ImplicitLabel);
+        YQL_ENSURE(!State_.Test(ENodeState::Initialized), "Clone should be for uninitialized or persistent node");
+        clone->SetLabel(Label_, LabelPos_);
+        clone->MarkImplicitLabel(ImplicitLabel_);
     }
     return clone;
 }
@@ -307,7 +307,7 @@ bool INode::SetPrimaryView(TContext& ctx, TPosition pos) {
 }
 
 void INode::UseAsInner() {
-    AsInner = true;
+    AsInner_ = true;
 }
 
 void INode::DisableSort() {
@@ -418,18 +418,18 @@ void INode::DoUpdateState() const {
 }
 
 void INode::PrecacheState() const {
-    if (State.Test(ENodeState::Failed)) {
+    if (State_.Test(ENodeState::Failed)) {
         return;
     }
 
     /// Not work right now! It's better use Init at first, because some kind of update depend on it
     /// \todo turn on and remove all issues
     //Y_DEBUG_ABORT_UNLESS(State.Test(ENodeState::Initialized));
-    if (State.Test(ENodeState::Precached)) {
+    if (State_.Test(ENodeState::Precached)) {
         return;
     }
     DoUpdateState();
-    State.Set(ENodeState::Precached);
+    State_.Set(ENodeState::Precached);
 }
 
 void INode::DoVisitChildren(const TVisitFunc& func, TVisitNodeSet& visited) const {
@@ -443,222 +443,222 @@ void INode::DoAdd(TNodePtr node) {
 }
 
 bool IProxyNode::IsNull() const {
-    return Inner->IsNull();
+    return Inner_->IsNull();
 }
 
 bool IProxyNode::IsLiteral() const {
-    return Inner->IsNull();
+    return Inner_->IsNull();
 }
 
 TString IProxyNode::GetLiteralType() const {
-    return Inner->GetLiteralType();
+    return Inner_->GetLiteralType();
 }
 
 TString IProxyNode::GetLiteralValue() const {
-    return Inner->GetLiteralValue();
+    return Inner_->GetLiteralValue();
 }
 
 bool IProxyNode::IsIntegerLiteral() const {
-    return Inner->IsIntegerLiteral();
+    return Inner_->IsIntegerLiteral();
 }
 
 INode::TPtr IProxyNode::ApplyUnaryOp(TContext& ctx, TPosition pos, const TString& opName) const {
-    return Inner->ApplyUnaryOp(ctx, pos, opName);
+    return Inner_->ApplyUnaryOp(ctx, pos, opName);
 }
 
 bool IProxyNode::IsAsterisk() const {
-    return Inner->IsAsterisk();
+    return Inner_->IsAsterisk();
 }
 
 const TString* IProxyNode::SubqueryAlias() const {
-    return Inner->SubqueryAlias();
+    return Inner_->SubqueryAlias();
 }
 
 TString IProxyNode::GetOpName() const {
-    return Inner->GetOpName();
+    return Inner_->GetOpName();
 }
 
 const TString* IProxyNode::GetLiteral(const TString& type) const {
-    return Inner->GetLiteral(type);
+    return Inner_->GetLiteral(type);
 }
 
 const TString* IProxyNode::GetColumnName() const {
-    return Inner->GetColumnName();
+    return Inner_->GetColumnName();
 }
 
 bool IProxyNode::IsPlainColumn() const {
-    return Inner->IsPlainColumn();
+    return Inner_->IsPlainColumn();
 }
 
 bool IProxyNode::IsTableRow() const {
-    return Inner->IsTableRow();
+    return Inner_->IsTableRow();
 }
 
 void IProxyNode::AssumeColumn() {
-    Inner->AssumeColumn();
+    Inner_->AssumeColumn();
 }
 
 const TString* IProxyNode::GetSourceName() const {
-    return Inner->GetSourceName();
+    return Inner_->GetSourceName();
 }
 
 const TString* IProxyNode::GetAtomContent() const {
-    return Inner->GetAtomContent();
+    return Inner_->GetAtomContent();
 }
 
 bool IProxyNode::IsOptionalArg() const {
-    return Inner->IsOptionalArg();
+    return Inner_->IsOptionalArg();
 }
 
 size_t IProxyNode::GetTupleSize() const {
-    return Inner->GetTupleSize();
+    return Inner_->GetTupleSize();
 }
 
 INode::TPtr IProxyNode::GetTupleElement(size_t index) const {
-    return Inner->GetTupleElement(index);
+    return Inner_->GetTupleElement(index);
 }
 
 ITableKeys* IProxyNode::GetTableKeys() {
-    return Inner->GetTableKeys();
+    return Inner_->GetTableKeys();
 }
 
 ISource* IProxyNode::GetSource() {
-    return Inner->GetSource();
+    return Inner_->GetSource();
 }
 
 TVector<INode::TPtr>* IProxyNode::ContentListPtr() {
-    return Inner->ContentListPtr();
+    return Inner_->ContentListPtr();
 }
 
 TAggregationPtr IProxyNode::GetAggregation() const {
-    return Inner->GetAggregation();
+    return Inner_->GetAggregation();
 }
 
 void IProxyNode::CollectPreaggregateExprs(TContext& ctx, ISource& src, TVector<INode::TPtr>& exprs) {
-    Inner->CollectPreaggregateExprs(ctx, src, exprs);
+    Inner_->CollectPreaggregateExprs(ctx, src, exprs);
 }
 
 INode::TPtr IProxyNode::WindowSpecFunc(const TPtr& type) const {
-    return Inner->WindowSpecFunc(type);
+    return Inner_->WindowSpecFunc(type);
 }
 
 bool IProxyNode::SetViewName(TContext& ctx, TPosition pos, const TString& view) {
-    return Inner->SetViewName(ctx, pos, view);
+    return Inner_->SetViewName(ctx, pos, view);
 }
 
 bool IProxyNode::SetPrimaryView(TContext& ctx, TPosition pos) {
-    return Inner->SetPrimaryView(ctx, pos);
+    return Inner_->SetPrimaryView(ctx, pos);
 }
 
 bool IProxyNode::UsedSubquery() const {
-    return Inner->UsedSubquery();
+    return Inner_->UsedSubquery();
 }
 
 bool IProxyNode::IsSelect() const {
-    return Inner->IsSelect();
+    return Inner_->IsSelect();
 }
 
 bool IProxyNode::HasSelectResult() const {
-    return Inner->HasSelectResult();
+    return Inner_->HasSelectResult();
 }
 
 const TString* IProxyNode::FuncName() const {
-    return Inner->FuncName();
+    return Inner_->FuncName();
 }
 
 const TString* IProxyNode::ModuleName() const {
-    return Inner->ModuleName();
+    return Inner_->ModuleName();
 }
 
 bool IProxyNode::IsScript() const {
-    return Inner->IsScript();
+    return Inner_->IsScript();
 }
 
 bool IProxyNode::HasSkip() const {
-    return Inner->HasSkip();
+    return Inner_->HasSkip();
 }
 
 TColumnNode* IProxyNode::GetColumnNode() {
-    return Inner->GetColumnNode();
+    return Inner_->GetColumnNode();
 }
 
 const TColumnNode* IProxyNode::GetColumnNode() const {
-    return static_cast<const INode*>(Inner.Get())->GetColumnNode();
+    return static_cast<const INode*>(Inner_.Get())->GetColumnNode();
 }
 
 TTupleNode* IProxyNode::GetTupleNode() {
-    return Inner->GetTupleNode();
+    return Inner_->GetTupleNode();
 }
 
 const TTupleNode* IProxyNode::GetTupleNode() const {
-    return static_cast<const INode*>(Inner.Get())->GetTupleNode();
+    return static_cast<const INode*>(Inner_.Get())->GetTupleNode();
 }
 
 TCallNode* IProxyNode::GetCallNode() {
-    return Inner->GetCallNode();
+    return Inner_->GetCallNode();
 }
 
 const TCallNode* IProxyNode::GetCallNode() const {
-    return static_cast<const INode*>(Inner.Get())->GetCallNode();
+    return static_cast<const INode*>(Inner_.Get())->GetCallNode();
 }
 
 TStructNode* IProxyNode::GetStructNode() {
-    return Inner->GetStructNode();
+    return Inner_->GetStructNode();
 }
 
 const TStructNode* IProxyNode::GetStructNode() const {
-    return static_cast<const INode*>(Inner.Get())->GetStructNode();
+    return static_cast<const INode*>(Inner_.Get())->GetStructNode();
 }
 
 TAccessNode* IProxyNode::GetAccessNode() {
-    return Inner->GetAccessNode();
+    return Inner_->GetAccessNode();
 }
 
 const TAccessNode* IProxyNode::GetAccessNode() const {
-    return static_cast<const INode*>(Inner.Get())->GetAccessNode();
+    return static_cast<const INode*>(Inner_.Get())->GetAccessNode();
 }
 
 TLambdaNode* IProxyNode::GetLambdaNode() {
-    return Inner->GetLambdaNode();
+    return Inner_->GetLambdaNode();
 }
 
 const TLambdaNode* IProxyNode::GetLambdaNode() const {
-    return static_cast<const INode*>(Inner.Get())->GetLambdaNode();
+    return static_cast<const INode*>(Inner_.Get())->GetLambdaNode();
 }
 
 TUdfNode* IProxyNode::GetUdfNode() {
-    return Inner->GetUdfNode();
+    return Inner_->GetUdfNode();
 }
 
 const TUdfNode* IProxyNode::GetUdfNode() const {
-    return static_cast<const INode*>(Inner.Get())->GetUdfNode();
+    return static_cast<const INode*>(Inner_.Get())->GetUdfNode();
 }
 
 void IProxyNode::DoUpdateState() const {
     static_assert(static_cast<int>(ENodeState::End) == 10, "Need to support new states here");
-    State.Set(ENodeState::CountHint, Inner->GetCountHint());
-    State.Set(ENodeState::Const, Inner->IsConstant());
-    State.Set(ENodeState::MaybeConst, Inner->MaybeConstant());
-    State.Set(ENodeState::Aggregated, Inner->IsAggregated());
-    State.Set(ENodeState::AggregationKey, Inner->IsAggregationKey());
-    State.Set(ENodeState::OverWindow, Inner->IsOverWindow());
-    State.Set(ENodeState::OverWindowDistinct, Inner->IsOverWindowDistinct());
+    State_.Set(ENodeState::CountHint, Inner_->GetCountHint());
+    State_.Set(ENodeState::Const, Inner_->IsConstant());
+    State_.Set(ENodeState::MaybeConst, Inner_->MaybeConstant());
+    State_.Set(ENodeState::Aggregated, Inner_->IsAggregated());
+    State_.Set(ENodeState::AggregationKey, Inner_->IsAggregationKey());
+    State_.Set(ENodeState::OverWindow, Inner_->IsOverWindow());
+    State_.Set(ENodeState::OverWindowDistinct, Inner_->IsOverWindowDistinct());
 }
 
 void IProxyNode::DoVisitChildren(const TVisitFunc& func, TVisitNodeSet& visited) const {
-    Inner->VisitTree(func, visited);
+    Inner_->VisitTree(func, visited);
 }
 
 bool IProxyNode::InitReference(TContext& ctx) {
-    return Inner->InitReference(ctx);
+    return Inner_->InitReference(ctx);
 }
 
 bool IProxyNode::DoInit(TContext& ctx, ISource* src) {
-    return Inner->Init(ctx, src);
+    return Inner_->Init(ctx, src);
 }
 
 void IProxyNode::DoAdd(TPtr node) {
-    Inner->Add(node);
+    Inner_->Add(node);
 }
 
 void MergeHints(TTableHints& base, const TTableHints& overrides) {
@@ -677,8 +677,8 @@ TTableHints CloneContainer(const TTableHints& hints) {
 
 TAstAtomNode::TAstAtomNode(TPosition pos, const TString& content, ui32 flags, bool isOptionalArg)
     : INode(pos)
-    , Content(content)
-    , Flags(flags)
+    , Content_(content)
+    , Flags_(flags)
     , IsOptionalArg_(isOptionalArg)
 {
 }
@@ -688,15 +688,15 @@ TAstAtomNode::~TAstAtomNode()
 }
 
 void TAstAtomNode::DoUpdateState() const {
-    State.Set(ENodeState::Const);
+    State_.Set(ENodeState::Const);
 }
 
 TAstNode* TAstAtomNode::Translate(TContext& ctx) const {
-    return TAstNode::NewAtom(Pos, Content, *ctx.Pool, Flags);
+    return TAstNode::NewAtom(Pos_, Content_, *ctx.Pool, Flags_);
 }
 
 const TString* TAstAtomNode::GetAtomContent() const {
-    return &Content;
+    return &Content_;
 }
 
 bool TAstAtomNode::IsOptionalArg() const {
@@ -705,13 +705,13 @@ bool TAstAtomNode::IsOptionalArg() const {
 
 TAstDirectNode::TAstDirectNode(TAstNode* node)
     : INode(node->GetPosition())
-    , Node(node)
+    , Node_(node)
 {
 }
 
 TAstNode* TAstDirectNode::Translate(TContext& ctx) const {
     Y_UNUSED(ctx);
-    return Node;
+    return Node_;
 }
 
 TNodePtr BuildList(TPosition pos, TVector<TNodePtr> nodes) {
@@ -736,7 +736,7 @@ TAstListNode::~TAstListNode()
 }
 
 bool TAstListNode::DoInit(TContext& ctx, ISource* src) {
-    for (auto& node: Nodes) {
+    for (auto& node: Nodes_) {
         if (!node->Init(ctx, src)) {
             return false;
         }
@@ -746,9 +746,9 @@ bool TAstListNode::DoInit(TContext& ctx, ISource* src) {
 
 TAstNode* TAstListNode::Translate(TContext& ctx) const {
     TSmallVec<TAstNode*> children;
-    children.reserve(Nodes.size());
-    auto listPos = Pos;
-    for (auto& node: Nodes) {
+    children.reserve(Nodes_.size());
+    auto listPos = Pos_;
+    for (auto& node: Nodes_) {
         if (node) {
             auto astNode = node->Translate(ctx);
             if (!astNode) {
@@ -756,7 +756,7 @@ TAstNode* TAstListNode::Translate(TContext& ctx) const {
             }
             children.push_back(astNode);
         } else {
-            ctx.Error(Pos) << "Translation error: encountered empty TNodePtr";
+            ctx.Error(Pos_) << "Translation error: encountered empty TNodePtr";
             return nullptr;
         }
     }
@@ -767,8 +767,8 @@ TAstNode* TAstListNode::Translate(TContext& ctx) const {
 void TAstListNode::UpdateStateByListNodes(const TVector<TNodePtr>& nodes) const {
     bool isConst = true;
     struct TAttributesFlags {
-        bool has = false;
-        bool all = true;
+        bool Has = false;
+        bool All = true;
     };
     std::array<ENodeState, 3> checkStates = {{ENodeState::Aggregated, ENodeState::AggregationKey, ENodeState::OverWindow}};
     std::map<ENodeState, TAttributesFlags> flags;
@@ -777,9 +777,9 @@ void TAstListNode::UpdateStateByListNodes(const TVector<TNodePtr>& nodes) const 
         const bool isNodeMaybeConst = node->MaybeConstant();
         for (auto state: checkStates) {
             if (node->HasState(state)) {
-                flags[state].has = true;
+                flags[state].Has = true;
             } else if (!isNodeConst && !isNodeMaybeConst) {
-                flags[state].all = false;
+                flags[state].All = false;
             }
 
             if (!isNodeConst) {
@@ -787,48 +787,48 @@ void TAstListNode::UpdateStateByListNodes(const TVector<TNodePtr>& nodes) const 
             }
         }
     }
-    State.Set(ENodeState::Const, isConst);
+    State_.Set(ENodeState::Const, isConst);
     for (auto& flag: flags) {
-        State.Set(flag.first, flag.second.has && flag.second.all);
+        State_.Set(flag.first, flag.second.Has && flag.second.All);
     }
-    State.Set(ENodeState::MaybeConst, !isConst && AllOf(nodes, [](const auto& node) { return node->IsConstant() || node->MaybeConstant(); }));
+    State_.Set(ENodeState::MaybeConst, !isConst && AllOf(nodes, [](const auto& node) { return node->IsConstant() || node->MaybeConstant(); }));
 }
 
 void TAstListNode::DoUpdateState() const {
-    UpdateStateByListNodes(Nodes);
+    UpdateStateByListNodes(Nodes_);
 }
 
 void TAstListNode::DoVisitChildren(const TVisitFunc& func, TVisitNodeSet& visited) const {
-    for (auto& node : Nodes) {
+    for (auto& node : Nodes_) {
         node->VisitTree(func, visited);
     }
 }
 
 TAstListNode::TAstListNode(const TAstListNode& node)
-    : INode(node.Pos)
-    , Nodes(node.Nodes)
+    : INode(node.Pos_)
+    , Nodes_(node.Nodes_)
 {
-    Label = node.Label;
-    State = node.State;
+    Label_ = node.Label_;
+    State_ = node.State_;
 }
 
 TAstListNode::TAstListNode(TPosition pos, TVector<TNodePtr>&& nodes)
     : INode(pos)
-    , Nodes(std::move(nodes))
+    , Nodes_(std::move(nodes))
 {
-    for (const auto& node: Nodes) {
+    for (const auto& node: Nodes_) {
         YQL_ENSURE(node, "Null ptr passed as list element");
     }
 }
 
 TNodePtr TAstListNode::ShallowCopy() const {
-    return new TAstListNodeImpl(Pos, Nodes);
+    return new TAstListNodeImpl(Pos_, Nodes_);
 }
 
 void TAstListNode::DoAdd(TNodePtr node) {
     Y_DEBUG_ABORT_UNLESS(node);
     Y_DEBUG_ABORT_UNLESS(node.Get() != this);
-    Nodes.push_back(node);
+    Nodes_.push_back(node);
 }
 
 TAstListNodeImpl::TAstListNodeImpl(TPosition pos)
@@ -841,33 +841,33 @@ TAstListNodeImpl::TAstListNodeImpl(TPosition pos, TVector<TNodePtr> nodes)
     for (const auto& node: nodes) {
         YQL_ENSURE(node, "Null ptr passed as list element");
     }
-    Nodes.swap(nodes);
+    Nodes_.swap(nodes);
 }
 
 void TAstListNodeImpl::CollectPreaggregateExprs(TContext& ctx, ISource& src, TVector<INode::TPtr>& exprs) {
-    for (auto& node : Nodes) {
+    for (auto& node : Nodes_) {
         node->CollectPreaggregateExprs(ctx, src, exprs);
     }
 }
 
 TNodePtr TAstListNodeImpl::DoClone() const {
-    return new TAstListNodeImpl(Pos, CloneContainer(Nodes));
+    return new TAstListNodeImpl(Pos_, CloneContainer(Nodes_));
 }
 
 TCallNode::TCallNode(TPosition pos, const TString& opName, i32 minArgs, i32 maxArgs, const TVector<TNodePtr>& args)
     : TAstListNode(pos)
-    , OpName(opName)
-    , MinArgs(minArgs)
-    , MaxArgs(maxArgs)
-    , Args(args)
+    , OpName_(opName)
+    , MinArgs_(minArgs)
+    , MaxArgs_(maxArgs)
+    , Args_(args)
 {
-    for (const auto& arg: Args) {
+    for (const auto& arg: Args_) {
         YQL_ENSURE(arg, "Null ptr passed as call argument");
     }
 }
 
 TString TCallNode::GetOpName() const {
-    return OpName;
+    return OpName_;
 }
 
 const TString* DeriveCommonSourceName(const TVector<TNodePtr> &nodes) {
@@ -887,47 +887,47 @@ const TString* DeriveCommonSourceName(const TVector<TNodePtr> &nodes) {
 
 
 const TString* TCallNode::GetSourceName() const {
-    return DeriveCommonSourceName(Args);
+    return DeriveCommonSourceName(Args_);
 }
 
 const TVector<TNodePtr>& TCallNode::GetArgs() const {
-    return Args;
+    return Args_;
 }
 
 void TCallNode::DoUpdateState() const {
-    UpdateStateByListNodes(Args);
+    UpdateStateByListNodes(Args_);
 }
 
 TString TCallNode::GetCallExplain() const {
     auto derivedName = GetOpName();
     TStringBuilder sb;
     sb << derivedName << "()";
-    if (derivedName != OpName) {
-        sb << ", converted to " << OpName << "()";
+    if (derivedName != OpName_) {
+        sb << ", converted to " << OpName_ << "()";
     }
     return std::move(sb);
 }
 
 void TCallNode::CollectPreaggregateExprs(TContext& ctx, ISource& src, TVector<INode::TPtr>& exprs) {
-    for (auto& arg : Args) {
+    for (auto& arg : Args_) {
         arg->CollectPreaggregateExprs(ctx, src, exprs);
     }
 }
 
 bool TCallNode::ValidateArguments(TContext& ctx) const {
-    const auto argsCount = static_cast<i32>(Args.size());
-    if (MinArgs >= 0 && MaxArgs == MinArgs && argsCount != MinArgs) {
-        ctx.Error(Pos) << GetCallExplain() << " requires exactly " << MinArgs << " arguments, given: " << Args.size();
+    const auto argsCount = static_cast<i32>(Args_.size());
+    if (MinArgs_ >= 0 && MaxArgs_ == MinArgs_ && argsCount != MinArgs_) {
+        ctx.Error(Pos_) << GetCallExplain() << " requires exactly " << MinArgs_ << " arguments, given: " << Args_.size();
         return false;
     }
 
-    if (MinArgs >= 0 && argsCount < MinArgs) {
-        ctx.Error(Pos) << GetCallExplain() << " requires at least " << MinArgs << " arguments, given: " << Args.size();
+    if (MinArgs_ >= 0 && argsCount < MinArgs_) {
+        ctx.Error(Pos_) << GetCallExplain() << " requires at least " << MinArgs_ << " arguments, given: " << Args_.size();
         return false;
     }
 
-    if (MaxArgs >= 0 && argsCount > MaxArgs) {
-        ctx.Error(Pos) << GetCallExplain() << " requires at most " << MaxArgs << " arguments, given: " << Args.size();
+    if (MaxArgs_ >= 0 && argsCount > MaxArgs_) {
+        ctx.Error(Pos_) << GetCallExplain() << " requires at most " << MaxArgs_ << " arguments, given: " << Args_.size();
         return false;
     }
 
@@ -940,7 +940,7 @@ bool TCallNode::DoInit(TContext& ctx, ISource* src) {
     }
 
     bool hasError = false;
-    for (auto& arg: Args) {
+    for (auto& arg: Args_) {
         if (!arg->Init(ctx, src)) {
             hasError = true;
             continue;
@@ -951,9 +951,9 @@ bool TCallNode::DoInit(TContext& ctx, ISource* src) {
         return false;
     }
 
-    Nodes.push_back(BuildAtom(Pos, OpName,
-         OpName.cend() == std::find_if_not(OpName.cbegin(), OpName.cend(), [](char c) { return bool(std::isalnum(c)); }) ? TNodeFlags::Default : TNodeFlags::ArbitraryContent));
-    Nodes.insert(Nodes.end(), Args.begin(), Args.end());
+    Nodes_.push_back(BuildAtom(Pos_, OpName_,
+         OpName_.cend() == std::find_if_not(OpName_.cbegin(), OpName_.cend(), [](char c) { return bool(std::isalnum(c)); }) ? TNodeFlags::Default : TNodeFlags::ArbitraryContent));
+    Nodes_.insert(Nodes_.end(), Args_.begin(), Args_.end());
     return true;
 }
 
@@ -974,7 +974,7 @@ TCallNodeImpl::TCallNodeImpl(TPosition pos, const TString& opName, const TVector
 {}
 
 TCallNode::TPtr TCallNodeImpl::DoClone() const {
-    return new TCallNodeImpl(GetPos(), OpName, MinArgs, MaxArgs, CloneContainer(Args));
+    return new TCallNodeImpl(GetPos(), OpName_, MinArgs_, MaxArgs_, CloneContainer(Args_));
 }
 
 TFuncNodeImpl::TFuncNodeImpl(TPosition pos, const TString& opName)
@@ -982,25 +982,25 @@ TFuncNodeImpl::TFuncNodeImpl(TPosition pos, const TString& opName)
 {}
 
 TCallNode::TPtr TFuncNodeImpl::DoClone() const {
-    return new TFuncNodeImpl(GetPos(), OpName);
+    return new TFuncNodeImpl(GetPos(), OpName_);
 }
 
 const TString* TFuncNodeImpl::FuncName() const {
-    return &OpName;
+    return &OpName_;
 }
 
 TCallNodeDepArgs::TCallNodeDepArgs(ui32 reqArgsCount, TPosition pos, const TString& opName, i32 minArgs, i32 maxArgs, const TVector<TNodePtr>& args)
     : TCallNode(pos, opName, minArgs, maxArgs, args)
-    , ReqArgsCount(reqArgsCount)
+    , ReqArgsCount_(reqArgsCount)
 {}
 
 TCallNodeDepArgs::TCallNodeDepArgs(ui32 reqArgsCount, TPosition pos, const TString& opName, const TVector<TNodePtr>& args)
     : TCallNode(pos, opName, args.size(), args.size(), args)
-    , ReqArgsCount(reqArgsCount)
+    , ReqArgsCount_(reqArgsCount)
 {}
 
 TCallNode::TPtr TCallNodeDepArgs::DoClone() const {
-    return new TCallNodeDepArgs(ReqArgsCount, GetPos(), OpName, MinArgs, MaxArgs, CloneContainer(Args));
+    return new TCallNodeDepArgs(ReqArgsCount_, GetPos(), OpName_, MinArgs_, MaxArgs_, CloneContainer(Args_));
 }
 
 bool TCallNodeDepArgs::DoInit(TContext& ctx, ISource* src) {
@@ -1008,14 +1008,14 @@ bool TCallNodeDepArgs::DoInit(TContext& ctx, ISource* src) {
         return false;
     }
 
-    for (ui32 i = 1 + ReqArgsCount; i < Nodes.size(); ++i) {
-        Nodes[i] = Y("DependsOn", Nodes[i]);
+    for (ui32 i = 1 + ReqArgsCount_; i < Nodes_.size(); ++i) {
+        Nodes_[i] = Y("DependsOn", Nodes_[i]);
     }
     return true;
 }
 
 TCallDirectRow::TPtr TCallDirectRow::DoClone() const {
-    return new TCallDirectRow(Pos, OpName, CloneContainer(Args));
+    return new TCallDirectRow(Pos_, OpName_, CloneContainer(Args_));
 }
 
 TCallDirectRow::TCallDirectRow(TPosition pos, const TString& opName, i32 minArgs, i32 maxArgs, const TVector<TNodePtr>& args)
@@ -1028,64 +1028,64 @@ TCallDirectRow::TCallDirectRow(TPosition pos, const TString& opName, const TVect
 
 bool TCallDirectRow::DoInit(TContext& ctx, ISource* src) {
     if (!src || (ctx.CompactNamedExprs && src->IsFake())) {
-        ctx.Error(Pos) << "Unable to use function: " << OpName << " without source";
+        ctx.Error(Pos_) << "Unable to use function: " << OpName_ << " without source";
         return false;
     }
     if (src->IsCompositeSource() || src->GetJoin() || src->HasAggregations() || src->IsFlattenByColumns() || src->IsOverWindowSource()) {
-        ctx.Error(Pos) << "Failed to use function: " << OpName << " with aggregation, join, flatten by or window functions";
+        ctx.Error(Pos_) << "Failed to use function: " << OpName_ << " with aggregation, join, flatten by or window functions";
         return false;
     }
     if (!TCallNode::DoInit(ctx, src)) {
         return false;
     }
-    Nodes.push_back(Y("DependsOn", "row"));
+    Nodes_.push_back(Y("DependsOn", "row"));
     return true;
 }
 
 void TCallDirectRow::DoUpdateState() const {
-    State.Set(ENodeState::Const, false);
+    State_.Set(ENodeState::Const, false);
 }
 
 void TWinAggrEmulation::DoUpdateState() const {
-    State.Set(ENodeState::OverWindow, true);
+    State_.Set(ENodeState::OverWindow, true);
 }
 
 bool TWinAggrEmulation::DoInit(TContext& ctx, ISource* src) {
     if (!src) {
-        ctx.Error(Pos) << "Unable to use window function " << OpName << " without source";
+        ctx.Error(Pos_) << "Unable to use window function " << OpName_ << " without source";
         return false;
     }
 
     if (!src->IsOverWindowSource()) {
-        ctx.Error(Pos) << "Failed to use window function " << OpName << " without window specification";
+        ctx.Error(Pos_) << "Failed to use window function " << OpName_ << " without window specification";
         return false;
     }
     if (!src->AddFuncOverWindow(ctx, this)) {
-        ctx.Error(Pos) << "Failed to use window function " << OpName << " without window specification or in wrong place";
+        ctx.Error(Pos_) << "Failed to use window function " << OpName_ << " without window specification or in wrong place";
         return false;
     }
 
-    FuncAlias = "_yql_" + src->MakeLocalName(OpName);
-    src->AddTmpWindowColumn(FuncAlias);
+    FuncAlias_ = "_yql_" + src->MakeLocalName(OpName_);
+    src->AddTmpWindowColumn(FuncAlias_);
     if (!TCallNode::DoInit(ctx, src)) {
         return false;
     }
-    Nodes.clear();
-    Add("Member", "row", Q(FuncAlias));
+    Nodes_.clear();
+    Add("Member", "row", Q(FuncAlias_));
     return true;
 }
 
 INode::TPtr TWinAggrEmulation::WindowSpecFunc(const TPtr& type) const {
-    auto result = Y(OpName, type);
-    for (const auto& arg: Args) {
+    auto result = Y(OpName_, type);
+    for (const auto& arg: Args_) {
         result = L(result, arg);
     }
-    return Q(Y(Q(FuncAlias), result));
+    return Q(Y(Q(FuncAlias_), result));
 }
 
 TWinAggrEmulation::TWinAggrEmulation(TPosition pos, const TString& opName, i32 minArgs, i32 maxArgs, const TVector<TNodePtr>& args)
     : TCallNode(pos, opName, minArgs, maxArgs, args)
-    , FuncAlias(opName)
+    , FuncAlias_(opName)
 {}
 
 TWinRowNumber::TWinRowNumber(TPosition pos, const TString& opName, i32 minArgs, i32 maxArgs, const TVector<TNodePtr>& args)
@@ -1101,30 +1101,30 @@ bool TWinCumeDist::DoInit(TContext& ctx, ISource* src) {
         return false;
     }
 
-    YQL_ENSURE(Args.size() == 0);
+    YQL_ENSURE(Args_.size() == 0);
     TVector<TNodePtr> optionsElements;
     if (ctx.AnsiCurrentRow) {
-        optionsElements.push_back(BuildTuple(Pos, { BuildQuotedAtom(Pos, "ansi", NYql::TNodeFlags::Default) }));
+        optionsElements.push_back(BuildTuple(Pos_, { BuildQuotedAtom(Pos_, "ansi", NYql::TNodeFlags::Default) }));
     }
-    Args.push_back(BuildTuple(Pos, optionsElements));
+    Args_.push_back(BuildTuple(Pos_, optionsElements));
 
-    MinArgs = MaxArgs = 1;
+    MinArgs_ = MaxArgs_ = 1;
     if (!TWinAggrEmulation::DoInit(ctx, src)) {
         return false;
     }
 
-    YQL_ENSURE(Args.size() == 1);
+    YQL_ENSURE(Args_.size() == 1);
     return true;
 }
 
 TWinNTile::TWinNTile(TPosition pos, const TString& opName, i32 minArgs, i32 maxArgs, const TVector<TNodePtr>& args)
     : TWinAggrEmulation(pos, opName, minArgs, maxArgs, args)
 {
-    FakeSource = BuildFakeSource(pos);
+    FakeSource_ = BuildFakeSource(pos);
 }
 
 bool TWinNTile::DoInit(TContext& ctx, ISource* src) {
-    if (Args.size() >= 1 && !Args[0]->Init(ctx, FakeSource.Get())) {
+    if (Args_.size() >= 1 && !Args_[0]->Init(ctx, FakeSource_.Get())) {
         return false;
     }
 
@@ -1139,17 +1139,17 @@ TWinLeadLag::TWinLeadLag(TPosition pos, const TString& opName, i32 minArgs, i32 
 {}
 
 bool TWinLeadLag::DoInit(TContext& ctx, ISource* src) {
-    if (Args.size() >= 2) {
-        if (!Args[1]->IsIntegerLiteral()) {
-            ctx.Error(Args[1]->GetPos()) << "Expected integer literal as second parameter of " << OpName << "( ) function";
+    if (Args_.size() >= 2) {
+        if (!Args_[1]->IsIntegerLiteral()) {
+            ctx.Error(Args_[1]->GetPos()) << "Expected integer literal as second parameter of " << OpName_ << "( ) function";
             return false;
         }
     }
     if (!TWinAggrEmulation::DoInit(ctx, src)) {
         return false;
     }
-    if (Args.size() >= 1) {
-        Args[0] = BuildLambda(Pos, Y("row"), Args[0]);
+    if (Args_.size() >= 1) {
+        Args_[0] = BuildLambda(Pos_, Y("row"), Args_[0]);
     }
     return true;
 }
@@ -1161,19 +1161,19 @@ TWinRank::TWinRank(TPosition pos, const TString& opName, i32 minArgs, i32 maxArg
 }
 
 bool TExternalFunctionConfig::DoInit(TContext& ctx, ISource* src) {
-    for (auto& param: Config) {
-        auto paramName = Y(BuildQuotedAtom(Pos, param.first));
+    for (auto& param: Config_) {
+        auto paramName = Y(BuildQuotedAtom(Pos_, param.first));
         if (!param.second->Init(ctx, src)) {
             return false;
         }
-        Nodes.push_back(Q(L(paramName, param.second)));
+        Nodes_.push_back(Q(L(paramName, param.second)));
     }
     return true;
 }
 
 INode::TPtr TExternalFunctionConfig::DoClone() const {
     TFunctionConfig cloned;
-    for (auto& [name, node] : Config) {
+    for (auto& [name, node] : Config_) {
         cloned[name] = SafeClone(node);
     }
 
@@ -1186,13 +1186,13 @@ bool TWinRank::DoInit(TContext& ctx, ISource* src) {
     }
 
     if (!src) {
-        ctx.Error(Pos) << "Unable to use window function: " << OpName << " without source";
+        ctx.Error(Pos_) << "Unable to use window function: " << OpName_ << " without source";
         return false;
     }
 
     auto winNamePtr = src->GetWindowName();
     if (!winNamePtr) {
-        ctx.Error(Pos) << "Failed to use window function: " << OpName << " without window";
+        ctx.Error(Pos_) << "Failed to use window function: " << OpName_ << " without window";
         return false;
     }
 
@@ -1203,42 +1203,42 @@ bool TWinRank::DoInit(TContext& ctx, ISource* src) {
 
     const auto& orderSpec = winSpecPtr->OrderBy;
     if (orderSpec.empty()) {
-        if (Args.empty()) {
+        if (Args_.empty()) {
             ctx.Warning(GetPos(), TIssuesIds::YQL_RANK_WITHOUT_ORDER_BY) <<
-                OpName << "() is used with unordered window - all rows will be considered equal to each other";
+                OpName_ << "() is used with unordered window - all rows will be considered equal to each other";
         } else {
             ctx.Warning(GetPos(), TIssuesIds::YQL_RANK_WITHOUT_ORDER_BY) <<
-                OpName << "(<expression>) is used with unordered window - the result is likely to be undefined";
+                OpName_ << "(<expression>) is used with unordered window - the result is likely to be undefined";
         }
     }
 
-    if (Args.empty()) {
+    if (Args_.empty()) {
         for (const auto& spec: orderSpec) {
-            Args.push_back(spec->Clone()->OrderExpr);
+            Args_.push_back(spec->Clone()->OrderExpr);
         }
 
-        if (Args.size() != 1) {
-            Args = {BuildTuple(GetPos(), Args)};
+        if (Args_.size() != 1) {
+            Args_ = {BuildTuple(GetPos(), Args_)};
         }
     }
 
-    YQL_ENSURE(Args.size() == 1);
+    YQL_ENSURE(Args_.size() == 1);
 
     TVector<TNodePtr> optionsElements;
     if (!ctx.AnsiRankForNullableKeys.Defined()) {
-        optionsElements.push_back(BuildTuple(Pos, { BuildQuotedAtom(Pos, "warnNoAnsi", NYql::TNodeFlags::Default) }));
+        optionsElements.push_back(BuildTuple(Pos_, { BuildQuotedAtom(Pos_, "warnNoAnsi", NYql::TNodeFlags::Default) }));
     } else if (*ctx.AnsiRankForNullableKeys) {
-        optionsElements.push_back(BuildTuple(Pos, { BuildQuotedAtom(Pos, "ansi", NYql::TNodeFlags::Default) }));
+        optionsElements.push_back(BuildTuple(Pos_, { BuildQuotedAtom(Pos_, "ansi", NYql::TNodeFlags::Default) }));
     }
-    Args.push_back(BuildTuple(Pos, optionsElements));
+    Args_.push_back(BuildTuple(Pos_, optionsElements));
 
-    MinArgs = MaxArgs = 2;
+    MinArgs_ = MaxArgs_ = 2;
     if (!TWinAggrEmulation::DoInit(ctx, src)) {
         return false;
     }
 
-    YQL_ENSURE(Args.size() == 2);
-    Args[0] = BuildLambda(Pos, Y("row"), Args[0]);
+    YQL_ENSURE(Args_.size() == 2);
+    Args_[0] = BuildLambda(Pos_, Y("row"), Args_[0]);
     return true;
 }
 
@@ -1252,9 +1252,9 @@ public:
 
 protected:
     TQuotedAtomNode(const TQuotedAtomNode& other)
-        : TAstListNode(other.Pos)
+        : TAstListNode(other.Pos_)
     {
-        Nodes = CloneContainer(other.Nodes);
+        Nodes_ = CloneContainer(other.Nodes_);
     }
     TPtr DoClone() const final {
         return new TQuotedAtomNode(*this);
@@ -1270,7 +1270,7 @@ TNodePtr ITableKeys::AddView(TNodePtr key, const TViewDescription& view) {
     if (view.PrimaryFlag) {
         return L(key, Q(Y(Q("primary_view"))));
     } else if (!view.empty()) {
-        return L(key, Q(Y(Q("view"), Y("String", BuildQuotedAtom(Pos, view.ViewName)))));
+        return L(key, Q(Y(Q("view"), Y("String", BuildQuotedAtom(Pos_, view.ViewName)))));
     } else {
         return key;
     }
@@ -1433,12 +1433,12 @@ bool TColumns::IsColumnPossible(TContext& ctx, const TString& name) const {
 TSortSpecification::TSortSpecification(const TNodePtr& orderExpr, bool ascending)
     : OrderExpr(orderExpr->Clone())
     , Ascending(ascending)
-    , CleanOrderExpr(orderExpr->Clone())
+    , CleanOrderExpr_(orderExpr->Clone())
 {
 }
 
 TSortSpecificationPtr TSortSpecification::Clone() const {
-    return MakeIntrusive<TSortSpecification>(CleanOrderExpr, Ascending);
+    return MakeIntrusive<TSortSpecification>(CleanOrderExpr_, Ascending);
 }
 
 TFrameBoundPtr TFrameBound::Clone() const {
@@ -1492,16 +1492,16 @@ TLegacyHoppingWindowSpecPtr TLegacyHoppingWindowSpec::Clone() const {
 
 TColumnNode::TColumnNode(TPosition pos, const TString& column, const TString& source, bool maybeType)
     : INode(pos)
-    , ColumnName(column)
-    , Source(source)
-    , MaybeType(maybeType)
+    , ColumnName_(column)
+    , Source_(source)
+    , MaybeType_(maybeType)
 {
 }
 
 TColumnNode::TColumnNode(TPosition pos, const TNodePtr& column, const TString& source)
     : INode(pos)
-    , ColumnExpr(column)
-    , Source(source)
+    , ColumnExpr_(column)
+    , Source_(source)
 {
 }
 
@@ -1510,19 +1510,19 @@ TColumnNode::~TColumnNode()
 }
 
 bool TColumnNode::IsAsterisk() const {
-    return ColumnName == "*";
+    return ColumnName_ == "*";
 }
 
 bool TColumnNode::IsArtificial() const {
-    return Artificial;
+    return Artificial_;
 }
 
 const TString* TColumnNode::GetColumnName() const {
-    return UseSourceAsColumn ? &Source : (ColumnExpr ? nullptr : &ColumnName);
+    return UseSourceAsColumn_ ? &Source_ : (ColumnExpr_ ? nullptr : &ColumnName_);
 }
 
 const TString* TColumnNode::GetSourceName() const {
-    return UseSourceAsColumn ? &Empty : &Source;
+    return UseSourceAsColumn_ ? &Empty : &Source_;
 }
 
 TColumnNode* TColumnNode::GetColumnNode() {
@@ -1535,7 +1535,7 @@ const TColumnNode* TColumnNode::GetColumnNode () const {
 
 bool TColumnNode::DoInit(TContext& ctx, ISource* src) {
     if (src) {
-        YQL_ENSURE(!State.Test(ENodeState::Initialized)); /// should be not initialized or Aggregated already invalid
+        YQL_ENSURE(!State_.Test(ENodeState::Initialized)); /// should be not initialized or Aggregated already invalid
         if (src->ShouldUseSourceAsColumn(*GetSourceName())) {
             if (!IsAsterisk() && IsReliable()) {
                 SetUseSourceAsColumn();
@@ -1543,118 +1543,120 @@ bool TColumnNode::DoInit(TContext& ctx, ISource* src) {
         }
 
         if (GetColumnName()) {
-            auto fullName = Source ? DotJoin(Source, *GetColumnName()) : *GetColumnName();
-            auto alias = src->GetGroupByColumnAlias(fullName);
-            if (alias) {
-                ResetColumn(alias, {});
+            auto fullName = Source_ ? DotJoin(Source_, *GetColumnName()) : *GetColumnName();
+            if (!ctx.GroupByExprAfterWhere) {
+                auto alias = src->GetGroupByColumnAlias(fullName);
+                if (alias) {
+                    ResetColumn(alias, {});
+                }
             }
-            Artificial = !Source && src->IsExprAlias(*GetColumnName());
+            Artificial_ = !Source_ && src->IsExprAlias(*GetColumnName());
         }
 
         if (!src->AddColumn(ctx, *this)) {
             return false;
         }
         if (GetColumnName()) {
-            if (src->GetJoin() && Source) {
-                GroupKey = src->IsGroupByColumn(DotJoin(Source, *GetColumnName()));
+            if (src->GetJoin() && Source_) {
+                GroupKey_ = src->IsGroupByColumn(DotJoin(Source_, *GetColumnName()));
             } else {
-                GroupKey = src->IsGroupByColumn(*GetColumnName()) || src->IsAlias(EExprSeat::GroupBy, *GetColumnName());
+                GroupKey_ = src->IsGroupByColumn(*GetColumnName()) || src->IsAlias(EExprSeat::GroupBy, *GetColumnName());
             }
         }
     }
     if (IsAsterisk()) {
-        Node = AstNode("row");
+        Node_ = AstNode("row");
     } else {
         TString callable;
-        if (MaybeType) {
-            callable = Reliable && !UseSource ? "SqlPlainColumnOrType" : "SqlColumnOrType";
+        if (MaybeType_) {
+            callable = Reliable_ && !UseSource_ ? "SqlPlainColumnOrType" : "SqlColumnOrType";
         } else {
             // TODO: consider replacing Member -> SqlPlainColumn
-            callable = Reliable && !UseSource ? "Member" : "SqlColumn";
+            callable = Reliable_ && !UseSource_ ? "Member" : "SqlColumn";
         }
-        Node = Y(callable, "row", ColumnExpr ? Y("EvaluateAtom", ColumnExpr) : BuildQuotedAtom(Pos, *GetColumnName()));
-        if (UseSource) {
-            YQL_ENSURE(Source);
-            Node = L(Node, BuildQuotedAtom(Pos, Source));
+        Node_ = Y(callable, "row", ColumnExpr_ ? Y("EvaluateAtom", ColumnExpr_) : BuildQuotedAtom(Pos_, *GetColumnName()));
+        if (UseSource_) {
+            YQL_ENSURE(Source_);
+            Node_ = L(Node_, BuildQuotedAtom(Pos_, Source_));
         }
     }
-    return Node->Init(ctx, src);
+    return Node_->Init(ctx, src);
 }
 
 void TColumnNode::SetUseSourceAsColumn() {
-    YQL_ENSURE(!State.Test(ENodeState::Initialized)); /// should be not initialized or Aggregated already invalid
+    YQL_ENSURE(!State_.Test(ENodeState::Initialized)); /// should be not initialized or Aggregated already invalid
     YQL_ENSURE(!IsAsterisk());
-    UseSourceAsColumn = true;
+    UseSourceAsColumn_ = true;
 }
 
 void TColumnNode::ResetAsReliable() {
-    Reliable = true;
+    Reliable_ = true;
 }
 
 void TColumnNode::SetAsNotReliable() {
-    Reliable = false;
+    Reliable_ = false;
 }
 
 void TColumnNode::SetUseSource() {
-    UseSource = true;
+    UseSource_ = true;
 }
 
 bool TColumnNode::IsUseSourceAsColumn() const {
-    return UseSourceAsColumn;
+    return UseSourceAsColumn_;
 }
 
 bool TColumnNode::IsUseSource() const {
-    return UseSource;
+    return UseSource_;
 }
 
 bool TColumnNode::IsReliable() const {
-    return Reliable;
+    return Reliable_;
 }
 
 bool TColumnNode::CanBeType() const {
-    return MaybeType;
+    return MaybeType_;
 }
 
 TNodePtr TColumnNode::DoClone() const {
-    YQL_ENSURE(!Node, "TColumnNode::Clone: Node should not be initialized");
-    auto copy = ColumnExpr ? new TColumnNode(Pos, ColumnExpr, Source) : new TColumnNode(Pos, ColumnName, Source, MaybeType);
-    copy->GroupKey = GroupKey;
-    copy->Artificial = Artificial;
-    copy->Reliable = Reliable;
-    copy->UseSource = UseSource;
-    copy->UseSourceAsColumn = UseSourceAsColumn;
+    YQL_ENSURE(!Node_, "TColumnNode::Clone: Node should not be initialized");
+    auto copy = ColumnExpr_ ? new TColumnNode(Pos_, ColumnExpr_, Source_) : new TColumnNode(Pos_, ColumnName_, Source_, MaybeType_);
+    copy->GroupKey_ = GroupKey_;
+    copy->Artificial_ = Artificial_;
+    copy->Reliable_ = Reliable_;
+    copy->UseSource_ = UseSource_;
+    copy->UseSourceAsColumn_ = UseSourceAsColumn_;
     return copy;
 }
 
 void TColumnNode::DoUpdateState() const {
-    State.Set(ENodeState::Const, false);
-    State.Set(ENodeState::MaybeConst, MaybeType);
-    State.Set(ENodeState::Aggregated, GroupKey);
-    State.Set(ENodeState::AggregationKey, GroupKey);
+    State_.Set(ENodeState::Const, false);
+    State_.Set(ENodeState::MaybeConst, MaybeType_);
+    State_.Set(ENodeState::Aggregated, GroupKey_);
+    State_.Set(ENodeState::AggregationKey, GroupKey_);
 }
 
 TAstNode* TColumnNode::Translate(TContext& ctx) const {
-    return Node->Translate(ctx);
+    return Node_->Translate(ctx);
 }
 
 void TColumnNode::ResetColumn(const TString& column, const TString& source) {
-    YQL_ENSURE(!State.Test(ENodeState::Initialized)); /// should be not initialized
-    Reliable = true;
-    UseSource = false;
-    UseSourceAsColumn = false;
-    ColumnName = column;
-    ColumnExpr = nullptr;
-    Source = source;
+    YQL_ENSURE(!State_.Test(ENodeState::Initialized)); /// should be not initialized
+    Reliable_ = true;
+    UseSource_ = false;
+    UseSourceAsColumn_ = false;
+    ColumnName_ = column;
+    ColumnExpr_ = nullptr;
+    Source_ = source;
 }
 
 void TColumnNode::ResetColumn(const TNodePtr& column, const TString& source) {
-    YQL_ENSURE(!State.Test(ENodeState::Initialized)); /// should be not initialized
-    Reliable = true;
-    UseSource = false;
-    UseSourceAsColumn = false;
-    ColumnName = "";
-    ColumnExpr = column;
-    Source = source;
+    YQL_ENSURE(!State_.Test(ENodeState::Initialized)); /// should be not initialized
+    Reliable_ = true;
+    UseSource_ = false;
+    UseSourceAsColumn_ = false;
+    ColumnName_ = "";
+    ColumnExpr_ = column;
+    Source_ = source;
 }
 
 const TString TColumnNode::Empty;
@@ -1698,17 +1700,17 @@ TAstNode* ITableKeys::Translate(TContext& ctx) const {
 }
 
 bool IAggregation::IsDistinct() const {
-    return !DistinctKey.empty();
+    return !DistinctKey_.empty();
 }
 
 void IAggregation::DoUpdateState() const {
-    State.Set(ENodeState::Aggregated, AggMode == EAggregateMode::Normal);
-    State.Set(ENodeState::OverWindow, AggMode == EAggregateMode::OverWindow);
-    State.Set(ENodeState::OverWindowDistinct, AggMode == EAggregateMode::OverWindowDistinct);
+    State_.Set(ENodeState::Aggregated, AggMode_ == EAggregateMode::Normal);
+    State_.Set(ENodeState::OverWindow, AggMode_ == EAggregateMode::OverWindow);
+    State_.Set(ENodeState::OverWindowDistinct, AggMode_ == EAggregateMode::OverWindowDistinct);
 }
 
-const TString* IAggregation::GetGenericKey() const {
-    return nullptr;
+TMaybe<TString> IAggregation::GetGenericKey() const {
+    return Nothing();
 }
 
 void IAggregation::Join(IAggregation*) {
@@ -1716,19 +1718,19 @@ void IAggregation::Join(IAggregation*) {
 }
 
 const TString& IAggregation::GetName() const {
-    return Name;
+    return Name_;
 }
 
 EAggregateMode IAggregation::GetAggregationMode() const {
-    return AggMode;
+    return AggMode_;
 }
 
 void IAggregation::MarkKeyColumnAsGenerated() {
-    IsGeneratedKeyColumn = true;
+    IsGeneratedKeyColumn_ = true;
 }
 
 IAggregation::IAggregation(TPosition pos, const TString& name, const TString& func, EAggregateMode aggMode)
-    : INode(pos), Name(name), Func(func), AggMode(aggMode)
+    : INode(pos), Name_(name), Func_(func), AggMode_(aggMode)
 {}
 
 TAstNode* IAggregation::Translate(TContext& ctx) const {
@@ -1738,8 +1740,8 @@ TAstNode* IAggregation::Translate(TContext& ctx) const {
 }
 
 std::pair<TNodePtr, bool> IAggregation::AggregationTraits(const TNodePtr& type, bool overState, bool many, bool allowAggApply, TContext& ctx) const {
-    const bool distinct = AggMode == EAggregateMode::Distinct;
-    const auto listType = distinct ? Y("ListType", Y("StructMemberType", Y("ListItemType", type), BuildQuotedAtom(Pos, DistinctKey))) : type;
+    const bool distinct = AggMode_ == EAggregateMode::Distinct;
+    const auto listType = distinct ? Y("ListType", Y("StructMemberType", Y("ListItemType", type), BuildQuotedAtom(Pos_, DistinctKey_))) : type;
     auto apply = GetApply(listType, many, allowAggApply, ctx);
     if (!apply) {
         return { nullptr, false };
@@ -1751,8 +1753,8 @@ std::pair<TNodePtr, bool> IAggregation::AggregationTraits(const TNodePtr& type, 
     }
 
     return { distinct ?
-        Q(Y(Q(Name), wrapped, BuildQuotedAtom(Pos, DistinctKey))) :
-        Q(Y(Q(Name), wrapped)), true };
+        Q(Y(Q(Name_), wrapped, BuildQuotedAtom(Pos_, DistinctKey_))) :
+        Q(Y(Q(Name_), wrapped)), true };
 }
 
 TNodePtr IAggregation::WrapIfOverState(const TNodePtr& input, bool overState, bool many, TContext& ctx) const {
@@ -1765,7 +1767,7 @@ TNodePtr IAggregation::WrapIfOverState(const TNodePtr& input, bool overState, bo
         return nullptr;
     }
 
-    return Y(ToString("AggOverState"), extractor, BuildLambda(Pos, Y(), input));
+    return Y(ToString("AggOverState"), extractor, BuildLambda(Pos_, Y(), input));
 }
 
 void IAggregation::AddFactoryArguments(TNodePtr& apply) const {
@@ -1777,13 +1779,13 @@ std::vector<ui32> IAggregation::GetFactoryColumnIndices() const {
 }
 
 TNodePtr IAggregation::WindowTraits(const TNodePtr& type, TContext& ctx) const {
-    YQL_ENSURE(AggMode == EAggregateMode::OverWindow || AggMode == EAggregateMode::OverWindowDistinct, "Windows traits is unavailable");
+    YQL_ENSURE(AggMode_ == EAggregateMode::OverWindow || AggMode_ == EAggregateMode::OverWindowDistinct, "Windows traits is unavailable");
 
-    const bool distinct = AggMode == EAggregateMode::OverWindowDistinct;
-    const auto listType = distinct ? Y("ListType", Y("StructMemberType", Y("ListItemType", type), BuildQuotedAtom(Pos, DistinctKey))) : type;
-    auto traits = Y(Q(Name), GetApply(listType, false, false, ctx));
-    if (AggMode == EAggregateMode::OverWindowDistinct) {
-        traits->Add(BuildQuotedAtom(Pos, DistinctKey));
+    const bool distinct = AggMode_ == EAggregateMode::OverWindowDistinct;
+    const auto listType = distinct ? Y("ListType", Y("StructMemberType", Y("ListItemType", type), BuildQuotedAtom(Pos_, DistinctKey_))) : type;
+    auto traits = Y(Q(Name_), GetApply(listType, false, false, ctx));
+    if (AggMode_ == EAggregateMode::OverWindowDistinct) {
+        traits->Add(BuildQuotedAtom(Pos_, DistinctKey_));
     }
 
     return Q(traits);
@@ -2025,56 +2027,56 @@ public:
 
 TLiteralNode::TLiteralNode(TPosition pos, bool isNull)
     : TAstListNode(pos)
-    , Null(isNull)
-    , Void(!isNull)
+    , Null_(isNull)
+    , Void_(!isNull)
 {
     Add(isNull ? "Null" : "Void");
 }
 
 TLiteralNode::TLiteralNode(TPosition pos, const TString& type, const TString& value)
     : TAstListNode(pos)
-    , Null(false)
-    , Void(false)
-    , Type(type)
-    , Value(value)
+    , Null_(false)
+    , Void_(false)
+    , Type_(type)
+    , Value_(value)
 {
-    if (Type.StartsWith("Pg")) {
-        Add("PgConst", BuildQuotedAtom(Pos, Value), Y("PgType", Q(to_lower(Type.substr(2)))));
+    if (Type_.StartsWith("Pg")) {
+        Add("PgConst", BuildQuotedAtom(Pos_, Value_), Y("PgType", Q(to_lower(Type_.substr(2)))));
     } else {
-        Add(Type, BuildQuotedAtom(Pos, Value));
+        Add(Type_, BuildQuotedAtom(Pos_, Value_));
     }
 }
 
 TLiteralNode::TLiteralNode(TPosition pos, const TString& value, ui32 nodeFlags)
     : TAstListNode(pos)
-    , Null(false)
-    , Void(false)
-    , Type("String")
-    , Value(value)
+    , Null_(false)
+    , Void_(false)
+    , Type_("String")
+    , Value_(value)
 {
-    Add(Type, BuildQuotedAtom(pos, Value, nodeFlags));
+    Add(Type_, BuildQuotedAtom(pos, Value_, nodeFlags));
 }
 
 TLiteralNode::TLiteralNode(TPosition pos, const TString& value, ui32 nodeFlags, const TString& type)
     : TAstListNode(pos)
-    , Null(false)
-    , Void(false)
-    , Type(type)
-    , Value(value)
+    , Null_(false)
+    , Void_(false)
+    , Type_(type)
+    , Value_(value)
 {
-    if (Type.StartsWith("Pg")) {
-        Add("PgConst", BuildQuotedAtom(Pos, Value, nodeFlags), Y("PgType", Q(to_lower(Type.substr(2)))));
+    if (Type_.StartsWith("Pg")) {
+        Add("PgConst", BuildQuotedAtom(Pos_, Value_, nodeFlags), Y("PgType", Q(to_lower(Type_.substr(2)))));
     } else {
-        Add(Type, BuildQuotedAtom(pos, Value, nodeFlags));
+        Add(Type_, BuildQuotedAtom(pos, Value_, nodeFlags));
     }
 }
 
 bool TLiteralNode::IsNull() const {
-    return Null;
+    return Null_;
 }
 
 const TString* TLiteralNode::GetLiteral(const TString& type) const {
-    return type == Type ? &Value : nullptr;
+    return type == Type_ ? &Value_ : nullptr;
 }
 
 bool TLiteralNode::IsLiteral() const {
@@ -2082,40 +2084,40 @@ bool TLiteralNode::IsLiteral() const {
 }
 
 TString TLiteralNode::GetLiteralType() const {
-    return Type;
+    return Type_;
 }
 
 TString TLiteralNode::GetLiteralValue() const {
-    return Value;
+    return Value_;
 }
 
 void TLiteralNode::DoUpdateState() const {
-    State.Set(ENodeState::Const);
+    State_.Set(ENodeState::Const);
 }
 
 TNodePtr TLiteralNode::DoClone() const {
-    auto res = (Null || Void) ? MakeIntrusive<TLiteralNode>(Pos, Null) : MakeIntrusive<TLiteralNode>(Pos, Type, Value);
-    res->Nodes = Nodes;
+    auto res = (Null_ || Void_) ? MakeIntrusive<TLiteralNode>(Pos_, Null_) : MakeIntrusive<TLiteralNode>(Pos_, Type_, Value_);
+    res->Nodes_ = Nodes_;
     return res;
 }
 
 template<typename T>
 TLiteralNumberNode<T>::TLiteralNumberNode(TPosition pos, const TString& type, const TString& value, bool implicitType)
     : TLiteralNode(pos, type, value)
-    , ImplicitType(implicitType)
+    , ImplicitType_(implicitType)
 {}
 
 template<typename T>
 TNodePtr TLiteralNumberNode<T>::DoClone() const {
-    return new TLiteralNumberNode<T>(Pos, Type, Value, ImplicitType);
+    return new TLiteralNumberNode<T>(Pos_, Type_, Value_, ImplicitType_);
 }
 
 template<typename T>
 bool TLiteralNumberNode<T>::DoInit(TContext& ctx, ISource* src) {
     Y_UNUSED(src);
     T val;
-    if (!TryFromString(Value, val)) {
-        ctx.Error(Pos) << "Failed to parse " << Value << " as integer literal of " << Type << " type: value out of range for " << Type;
+    if (!TryFromString(Value_, val)) {
+        ctx.Error(Pos_) << "Failed to parse " << Value_ << " as integer literal of " << Type_ << " type: value out of range for " << Type_;
         return false;
     }
     return true;
@@ -2128,22 +2130,22 @@ bool TLiteralNumberNode<T>::IsIntegerLiteral() const {
 
 template<typename T>
 TNodePtr TLiteralNumberNode<T>::ApplyUnaryOp(TContext& ctx, TPosition pos, const TString& opName) const {
-    YQL_ENSURE(!Value.empty());
-    if (opName == "Minus" && IsIntegerLiteral() && Value[0] != '-') {
-        if (ImplicitType) {
-            ui64 val = FromString<ui64>(Value);
-            TString negated = "-" + Value;
+    YQL_ENSURE(!Value_.empty());
+    if (opName == "Minus" && IsIntegerLiteral() && Value_[0] != '-') {
+        if (ImplicitType_) {
+            ui64 val = FromString<ui64>(Value_);
+            TString negated = "-" + Value_;
             if (val <= ui64(std::numeric_limits<i32>::max()) + 1) {
                 // negated value fits in Int32
                 i32 v;
                 YQL_ENSURE(TryFromString(negated, v));
-                return new TLiteralNumberNode<i32>(pos, Type.StartsWith("Pg") ? "PgInt4" : "Int32", negated);
+                return new TLiteralNumberNode<i32>(pos, Type_.StartsWith("Pg") ? "PgInt4" : "Int32", negated);
             }
             if (val <= ui64(std::numeric_limits<i64>::max()) + 1) {
                 // negated value fits in Int64
                 i64 v;
                 YQL_ENSURE(TryFromString(negated, v));
-                return new TLiteralNumberNode<i64>(pos, Type.StartsWith("Pg") ? "PgInt8" : "Int64", negated);
+                return new TLiteralNumberNode<i64>(pos, Type_.StartsWith("Pg") ? "PgInt8" : "Int64", negated);
             }
 
             ctx.Error(pos) << "Failed to parse negative integer: " << negated << ", number limit overflow";
@@ -2151,7 +2153,7 @@ TNodePtr TLiteralNumberNode<T>::ApplyUnaryOp(TContext& ctx, TPosition pos, const
         }
 
         if (std::numeric_limits<T>::is_signed) {
-            return new TLiteralNumberNode<T>(pos, Type, "-" + Value);
+            return new TLiteralNumberNode<T>(pos, Type_, "-" + Value_);
         }
     }
     return INode::ApplyUnaryOp(ctx, pos, opName);
@@ -2225,11 +2227,11 @@ bool TAsteriskNode::IsAsterisk() const {
 };
 
 TNodePtr TAsteriskNode::DoClone() const {
-    return new TAsteriskNode(Pos);
+    return new TAsteriskNode(Pos_);
 }
 
 TAstNode* TAsteriskNode::Translate(TContext& ctx) const {
-    ctx.Error(Pos) << "* is not allowed here";
+    ctx.Error(Pos_) << "* is not allowed here";
     return nullptr;
 }
 
@@ -2245,58 +2247,58 @@ TDeferredAtom::TDeferredAtom()
 
 TDeferredAtom::TDeferredAtom(TPosition pos, const TString& str)
 {
-    Node = BuildQuotedAtom(pos, str);
-    Explicit = str;
-    Repr = str;
+    Node_ = BuildQuotedAtom(pos, str);
+    Explicit_ = str;
+    Repr_ = str;
 }
 
 TDeferredAtom::TDeferredAtom(TNodePtr node, TContext& ctx)
 {
-    Node = node;
-    Repr = ctx.MakeName("DeferredAtom");
+    Node_ = node;
+    Repr_ = ctx.MakeName("DeferredAtom");
 }
 
 const TString* TDeferredAtom::GetLiteral() const {
-    return Explicit.Get();
+    return Explicit_.Get();
 }
 
 bool TDeferredAtom::GetLiteral(TString& value, TContext& ctx) const {
-    if (Explicit) {
-        value = *Explicit;
+    if (Explicit_) {
+        value = *Explicit_;
         return true;
     }
 
-    ctx.Error(Node ? Node->GetPos() : ctx.Pos()) << "Expected literal value";
+    ctx.Error(Node_ ? Node_->GetPos() : ctx.Pos()) << "Expected literal value";
     return false;
 }
 
 TNodePtr TDeferredAtom::Build() const {
-    return Node;
+    return Node_;
 }
 
 TString TDeferredAtom::GetRepr() const {
-    return Repr;
+    return Repr_;
 }
 
 bool TDeferredAtom::Empty() const {
-    return !Node || Repr.empty();
+    return !Node_ || Repr_.empty();
 }
 
 bool TDeferredAtom::HasNode() const {
-    return !!Node;
+    return !!Node_;
 }
 
 TTupleNode::TTupleNode(TPosition pos, const TVector<TNodePtr>& exprs)
     : TAstListNode(pos)
-    , Exprs(exprs)
+    , Exprs_(exprs)
 {}
 
 bool TTupleNode::IsEmpty() const {
-    return Exprs.empty();
+    return Exprs_.empty();
 }
 
 const TVector<TNodePtr>& TTupleNode::Elements() const {
-    return Exprs;
+    return Exprs_;
 }
 
 TTupleNode* TTupleNode::GetTupleNode() {
@@ -2309,7 +2311,7 @@ const TTupleNode* TTupleNode::GetTupleNode() const {
 
 bool TTupleNode::DoInit(TContext& ctx, ISource* src) {
     auto node(Y());
-    for (auto& expr: Exprs) {
+    for (auto& expr: Exprs_) {
         if (expr->GetLabel()) {
             ctx.Error(expr->GetPos()) << "Tuple does not allow named members";
             return false;
@@ -2321,25 +2323,25 @@ bool TTupleNode::DoInit(TContext& ctx, ISource* src) {
 }
 
 size_t TTupleNode::GetTupleSize() const {
-    return Exprs.size();
+    return Exprs_.size();
 }
 
 TNodePtr TTupleNode::GetTupleElement(size_t index) const {
-    return Exprs[index];
+    return Exprs_[index];
 }
 
 TNodePtr TTupleNode::DoClone() const {
-    return new TTupleNode(Pos, CloneContainer(Exprs));
+    return new TTupleNode(Pos_, CloneContainer(Exprs_));
 }
 
 void TTupleNode::CollectPreaggregateExprs(TContext& ctx, ISource& src, TVector<INode::TPtr>& exprs) {
-    for (auto& expr : Exprs) {
+    for (auto& expr : Exprs_) {
         expr->CollectPreaggregateExprs(ctx, src, exprs);
     }
 }
 
 const TString* TTupleNode::GetSourceName() const {
-    return DeriveCommonSourceName(Exprs);
+    return DeriveCommonSourceName(Exprs_);
 }
 
 TNodePtr BuildTuple(TPosition pos, const TVector<TNodePtr>& exprs) {
@@ -2348,34 +2350,34 @@ TNodePtr BuildTuple(TPosition pos, const TVector<TNodePtr>& exprs) {
 
 TStructNode::TStructNode(TPosition pos, const TVector<TNodePtr>& exprs, const TVector<TNodePtr>& labels, bool ordered)
     : TAstListNode(pos)
-    , Exprs(exprs)
-    , Labels(labels)
-    , Ordered(ordered)
+    , Exprs_(exprs)
+    , Labels_(labels)
+    , Ordered_(ordered)
 {
-    YQL_ENSURE(Labels.empty() || Labels.size() == Exprs.size());
+    YQL_ENSURE(Labels_.empty() || Labels_.size() == Exprs_.size());
 }
 
 bool TStructNode::DoInit(TContext& ctx, ISource* src) {
-    Nodes.push_back(BuildAtom(Pos, (Ordered || Exprs.size() < 2) ? "AsStruct" : "AsStructUnordered", TNodeFlags::Default));
+    Nodes_.push_back(BuildAtom(Pos_, (Ordered_ || Exprs_.size() < 2) ? "AsStruct" : "AsStructUnordered", TNodeFlags::Default));
     size_t i = 0;
-    for (const auto& expr : Exprs) {
+    for (const auto& expr : Exprs_) {
         TNodePtr label;
-        if (Labels.empty()) {
+        if (Labels_.empty()) {
             if (!expr->GetLabel()) {
                 ctx.Error(expr->GetPos()) << "Structure does not allow anonymous members";
                 return false;
             }
             label = BuildQuotedAtom(expr->GetPos(), expr->GetLabel());
         } else {
-            label = Labels[i++];
+            label = Labels_[i++];
         }
-        Nodes.push_back(Q(Y(label, expr)));
+        Nodes_.push_back(Q(Y(label, expr)));
     }
     return TAstListNode::DoInit(ctx, src);
 }
 
 TNodePtr TStructNode::DoClone() const {
-    return new TStructNode(Pos, CloneContainer(Exprs), CloneContainer(Labels), Ordered);
+    return new TStructNode(Pos_, CloneContainer(Exprs_), CloneContainer(Labels_), Ordered_);
 }
 
 TStructNode* TStructNode::GetStructNode() {
@@ -2387,13 +2389,13 @@ const TStructNode* TStructNode::GetStructNode() const {
 }
 
 void TStructNode::CollectPreaggregateExprs(TContext& ctx, ISource& src, TVector<INode::TPtr>& exprs) {
-    for (auto& expr : Exprs) {
+    for (auto& expr : Exprs_) {
         expr->CollectPreaggregateExprs(ctx, src, exprs);
     }
 }
 
 const TString* TStructNode::GetSourceName() const {
-    return DeriveCommonSourceName(Exprs);
+    return DeriveCommonSourceName(Exprs_);
 }
 
 TNodePtr BuildStructure(TPosition pos, const TVector<TNodePtr>& exprs) {
@@ -2413,11 +2415,11 @@ TNodePtr BuildOrderedStructure(TPosition pos, const TVector<TNodePtr>& exprsUnla
 
 TListOfNamedNodes::TListOfNamedNodes(TPosition pos, TVector<TNodePtr>&& exprs)
     : INode(pos)
-    , Exprs(std::move(exprs))
+    , Exprs_(std::move(exprs))
 {}
 
 TVector<TNodePtr>* TListOfNamedNodes::ContentListPtr() {
-    return &Exprs;
+    return &Exprs_;
 }
 
 TAstNode* TListOfNamedNodes::Translate(TContext& ctx) const {
@@ -2427,11 +2429,11 @@ TAstNode* TListOfNamedNodes::Translate(TContext& ctx) const {
 }
 
 TNodePtr TListOfNamedNodes::DoClone() const {
-    return new TListOfNamedNodes(GetPos(), CloneContainer(Exprs));
+    return new TListOfNamedNodes(GetPos(), CloneContainer(Exprs_));
 }
 
 void TListOfNamedNodes::DoVisitChildren(const TVisitFunc& func, TVisitNodeSet& visited) const {
-    for (auto& expr : Exprs) {
+    for (auto& expr : Exprs_) {
         expr->VisitTree(func, visited);
     }
 }
@@ -2442,13 +2444,13 @@ TNodePtr BuildListOfNamedNodes(TPosition pos, TVector<TNodePtr>&& exprs) {
 
 TArgPlaceholderNode::TArgPlaceholderNode(TPosition pos, const TString &name) :
     INode(pos),
-    Name(name)
+    Name_(name)
 {
 }
 
 bool TArgPlaceholderNode::DoInit(TContext& ctx, ISource* src) {
     Y_UNUSED(src);
-    ctx.Error(Pos) << Name << " can't be used as a part of expression.";
+    ctx.Error(Pos_) << Name_ << " can't be used as a part of expression.";
     return false;
 }
 
@@ -2458,11 +2460,11 @@ TAstNode* TArgPlaceholderNode::Translate(TContext& ctx) const {
 }
 
 TString TArgPlaceholderNode::GetName() const {
-    return Name;
+    return Name_;
 }
 
 TNodePtr TArgPlaceholderNode::DoClone() const {
-    return new TArgPlaceholderNode(GetPos(), Name);
+    return new TArgPlaceholderNode(GetPos(), Name_);
 }
 
 TNodePtr BuildArgPlaceholder(TPosition pos, const TString& name) {
@@ -2473,51 +2475,51 @@ class TAccessNode: public INode {
 public:
     TAccessNode(TPosition pos, const TVector<TIdPart>& ids, bool isLookup)
         : INode(pos)
-        , Ids(ids)
-        , IsLookup(isLookup)
-        , ColumnOnly(false)
-        , IsColumnRequired(false)
-        , AccessOpName("AccessNode")
+        , Ids_(ids)
+        , IsLookup_(isLookup)
+        , ColumnOnly_(false)
+        , IsColumnRequired_(false)
+        , AccessOpName_("AccessNode")
     {
-        Y_DEBUG_ABORT_UNLESS(Ids.size() > 1);
-        Y_DEBUG_ABORT_UNLESS(Ids[0].Expr);
-        auto column = Ids[0].Expr->GetColumnNode();
+        Y_DEBUG_ABORT_UNLESS(Ids_.size() > 1);
+        Y_DEBUG_ABORT_UNLESS(Ids_[0].Expr);
+        auto column = Ids_[0].Expr->GetColumnNode();
         if (column) {
             ui32 idx = 1;
             TString source;
-            if (Ids.size() > 2) {
-                source = Ids[idx].Name;
+            if (Ids_.size() > 2) {
+                source = Ids_[idx].Name;
                 ++idx;
             }
 
-            ColumnOnly = !IsLookup && Ids.size() < 4;
-            if (ColumnOnly && Ids[idx].Expr) {
-                column->ResetColumn(Ids[idx].Expr, source);
+            ColumnOnly_ = !IsLookup_ && Ids_.size() < 4;
+            if (ColumnOnly_ && Ids_[idx].Expr) {
+                column->ResetColumn(Ids_[idx].Expr, source);
             } else {
-                column->ResetColumn(Ids[idx].Name, source);
+                column->ResetColumn(Ids_[idx].Name, source);
             }
         }
     }
 
     void AssumeColumn() override {
-        IsColumnRequired = true;
+        IsColumnRequired_ = true;
     }
 
     TMaybe<TString> TryMakeTable() {
-        if (!ColumnOnly) {
+        if (!ColumnOnly_) {
             return Nothing();
         }
 
         ui32 idx = 1;
-        if (Ids.size() > 2) {
+        if (Ids_.size() > 2) {
             return Nothing();
         }
 
-        return Ids[idx].Name;
+        return Ids_[idx].Name;
     }
 
     const TString* GetColumnName() const override {
-        return ColumnOnly ? Ids[0].Expr->GetColumnName() : nullptr;
+        return ColumnOnly_ ? Ids_[0].Expr->GetColumnName() : nullptr;
     }
 
     bool IsPlainColumn() const override {
@@ -2525,7 +2527,7 @@ public:
             return true;
         }
 
-        if (Ids[0].Expr->IsTableRow()) {
+        if (Ids_[0].Expr->IsTableRow()) {
             return true;
         }
 
@@ -2533,7 +2535,7 @@ public:
     }
 
     const TString* GetSourceName() const override {
-        return Ids[0].Expr->GetSourceName();
+        return Ids_[0].Expr->GetSourceName();
     }
 
     TAccessNode* GetAccessNode() override {
@@ -2545,7 +2547,7 @@ public:
     }
 
     bool DoInit(TContext& ctx, ISource* src) override {
-        auto expr = Ids[0].Expr;
+        auto expr = Ids_[0].Expr;
         const TPosition pos(expr->GetPos());
         if (expr->IsAsterisk()) {
             ctx.Error(pos) << "Asterisk column does not allow any access";
@@ -2554,7 +2556,7 @@ public:
         if (!expr->Init(ctx, src)) {
             return false;
         }
-        for (auto& id: Ids) {
+        for (auto& id: Ids_) {
             if (id.Expr && !id.Expr->Init(ctx, src)) {
                 return false;
             }
@@ -2563,33 +2565,33 @@ public:
         auto column = expr->GetColumnNode();
         if (column) {
             const bool useSourceAsColumn = column->IsUseSourceAsColumn();
-            ColumnOnly &= !useSourceAsColumn;
-            if (IsColumnRequired && !ColumnOnly) {
+            ColumnOnly_ &= !useSourceAsColumn;
+            if (IsColumnRequired_ && !ColumnOnly_) {
                 ctx.Error(pos) << "Please use a full form (corellation.struct.field) or an alias (struct.field as alias) to access struct's field in the GROUP BY";
                 return false;
             }
 
-            if (Ids.size() > 2) {
-                if (!CheckColumnId(pos, ctx, Ids[idx], ColumnOnly ? "Correlation" : "Column", true)) {
+            if (Ids_.size() > 2) {
+                if (!CheckColumnId(pos, ctx, Ids_[idx], ColumnOnly_ ? "Correlation" : "Column", true)) {
                     return false;
                 }
                 ++idx;
             }
             if (!useSourceAsColumn) {
-                if (!IsLookup && !CheckColumnId(pos, ctx, Ids[idx], ColumnOnly ? "Column" : "Member", false)) {
+                if (!IsLookup_ && !CheckColumnId(pos, ctx, Ids_[idx], ColumnOnly_ ? "Column" : "Member", false)) {
                     return false;
                 }
                 ++idx;
             }
         }
-        for (; idx < Ids.size(); ++idx) {
-            const auto& id = Ids[idx];
+        for (; idx < Ids_.size(); ++idx) {
+            const auto& id = Ids_[idx];
             if (!id.Name.empty()) {
-                expr = Y("SqlAccess", Q("struct"), expr, id.Expr ? Y("EvaluateAtom", id.Expr) : BuildQuotedAtom(Pos, id.Name));
-                AccessOpName = "AccessStructMember";
+                expr = Y("SqlAccess", Q("struct"), expr, id.Expr ? Y("EvaluateAtom", id.Expr) : BuildQuotedAtom(Pos_, id.Name));
+                AccessOpName_ = "AccessStructMember";
             } else if (id.Expr) {
                 expr = Y("SqlAccess", Q("dict"), expr, id.Expr);
-                AccessOpName = "AccessDictMember";
+                AccessOpName_ = "AccessDictMember";
             } else {
                 continue;
             }
@@ -2597,55 +2599,55 @@ public:
             if (ctx.PragmaYsonAutoConvert || ctx.PragmaYsonStrict || ctx.PragmaYsonFast) {
                 auto ysonOptions = Y();
                 if (ctx.PragmaYsonAutoConvert) {
-                    ysonOptions->Add(BuildQuotedAtom(Pos, "yson_auto_convert"));
+                    ysonOptions->Add(BuildQuotedAtom(Pos_, "yson_auto_convert"));
                 }
                 if (ctx.PragmaYsonStrict) {
-                    ysonOptions->Add(BuildQuotedAtom(Pos, "yson_strict"));
+                    ysonOptions->Add(BuildQuotedAtom(Pos_, "yson_strict"));
                 }
                 if (ctx.PragmaYsonFast) {
-                    ysonOptions->Add(BuildQuotedAtom(Pos, "yson_fast"));
+                    ysonOptions->Add(BuildQuotedAtom(Pos_, "yson_fast"));
                 }
                 expr->Add(Q(ysonOptions));
             }
         }
-        Node = expr;
+        Node_ = expr;
         return true;
     }
 
     TAstNode* Translate(TContext& ctx) const override {
-        Y_DEBUG_ABORT_UNLESS(Node);
-        return Node->Translate(ctx);
+        Y_DEBUG_ABORT_UNLESS(Node_);
+        return Node_->Translate(ctx);
     }
 
     TPtr DoClone() const override {
-        YQL_ENSURE(!Node, "TAccessNode::Clone: Node should not be initialized");
+        YQL_ENSURE(!Node_, "TAccessNode::Clone: Node should not be initialized");
         TVector<TIdPart> cloneIds;
-        cloneIds.reserve(Ids.size());
-        for (const auto& id: Ids) {
+        cloneIds.reserve(Ids_.size());
+        for (const auto& id: Ids_) {
             cloneIds.emplace_back(id.Clone());
         }
-        auto copy = new TAccessNode(Pos, cloneIds, IsLookup);
-        copy->ColumnOnly = ColumnOnly;
+        auto copy = new TAccessNode(Pos_, cloneIds, IsLookup_);
+        copy->ColumnOnly_ = ColumnOnly_;
         return copy;
     }
 
     const TVector<TIdPart>& GetParts() const {
-        return Ids;
+        return Ids_;
     }
 
 protected:
     void DoUpdateState() const override {
-        YQL_ENSURE(Node);
-        State.Set(ENodeState::Const, Node->IsConstant());
-        State.Set(ENodeState::MaybeConst, Node->MaybeConstant());
-        State.Set(ENodeState::Aggregated, Node->IsAggregated());
-        State.Set(ENodeState::AggregationKey, Node->HasState(ENodeState::AggregationKey));
-        State.Set(ENodeState::OverWindow, Node->IsOverWindow());
+        YQL_ENSURE(Node_);
+        State_.Set(ENodeState::Const, Node_->IsConstant());
+        State_.Set(ENodeState::MaybeConst, Node_->MaybeConstant());
+        State_.Set(ENodeState::Aggregated, Node_->IsAggregated());
+        State_.Set(ENodeState::AggregationKey, Node_->HasState(ENodeState::AggregationKey));
+        State_.Set(ENodeState::OverWindow, Node_->IsOverWindow());
     }
 
     void DoVisitChildren(const TVisitFunc& func, TVisitNodeSet& visited) const final {
-        Y_DEBUG_ABORT_UNLESS(Node);
-        Node->VisitTree(func, visited);
+        Y_DEBUG_ABORT_UNLESS(Node_);
+        Node_->VisitTree(func, visited);
     }
 
     bool CheckColumnId(TPosition pos, TContext& ctx, const TIdPart& id, const TString& where, bool checkLookup) {
@@ -2661,11 +2663,11 @@ protected:
     }
 
     TString GetOpName() const override {
-        return AccessOpName;
+        return AccessOpName_;
     }
 
     void CollectPreaggregateExprs(TContext& ctx, ISource& src, TVector<INode::TPtr>& exprs) override {
-        for (auto& id : Ids) {
+        for (auto& id : Ids_) {
             if (id.Expr) {
                 id.Expr->CollectPreaggregateExprs(ctx, src, exprs);
             }
@@ -2673,12 +2675,12 @@ protected:
     }
 
 private:
-    TNodePtr Node;
-    TVector<TIdPart> Ids;
-    bool IsLookup;
-    bool ColumnOnly;
-    bool IsColumnRequired;
-    TString AccessOpName;
+    TNodePtr Node_;
+    TVector<TIdPart> Ids_;
+    bool IsLookup_;
+    bool ColumnOnly_;
+    bool IsColumnRequired_;
+    TString AccessOpName_;
 };
 
 TNodePtr BuildAccess(TPosition pos, const TVector<INode::TIdPart>& ids, bool isLookup) {
@@ -2828,7 +2830,7 @@ private:
     TBindNode(const TBindNode& other)
         : TAstListNode(other.GetPos())
     {
-        Nodes = CloneContainer(other.Nodes);
+        Nodes_ = CloneContainer(other.Nodes_);
     }
 
     TPtr DoClone() const final {
@@ -2872,7 +2874,7 @@ private:
     TLambdaNode(const TLambdaNode& other)
         : TAstListNode(other.GetPos())
     {
-        Nodes = CloneContainer(other.Nodes);
+        Nodes_ = CloneContainer(other.Nodes_);
     }
 
     TPtr DoClone() const final {
@@ -2880,7 +2882,7 @@ private:
     }
 
     void DoUpdateState() const final {
-        State.Set(ENodeState::Const);
+        State_.Set(ENodeState::Const);
     }
 };
 
@@ -3000,50 +3002,50 @@ TNodePtr BuildIsNullOp(TPosition pos, TNodePtr a) {
 
 TUdfNode::TUdfNode(TPosition pos, const TVector<TNodePtr>& args)
     : INode(pos)
-    , Args(args)
+    , Args_(args)
 {
-    if (Args.size()) {
+    if (Args_.size()) {
         // If there aren't any named args, args are passed as vector of positional args,
         // else Args has length 2: tuple for positional args and struct for named args,
         // so let's construct tuple of args there. Other type checks will within DoInit call.
-        if (!Args[0]->GetTupleNode()) {
-            Args = {BuildTuple(pos, args)};
+        if (!Args_[0]->GetTupleNode()) {
+            Args_ = {BuildTuple(pos, args)};
         }
     }
 }
 
 bool TUdfNode::DoInit(TContext& ctx, ISource* src) {
     Y_UNUSED(src);
-    if (Args.size() < 1) {
-        ctx.Error(Pos) << "Udf: expected at least one argument";
+    if (Args_.size() < 1) {
+        ctx.Error(Pos_) << "Udf: expected at least one argument";
         return false;
     }
 
-    TTupleNode* as_tuple = Args[0]->GetTupleNode();
+    TTupleNode* as_tuple = Args_[0]->GetTupleNode();
 
     if (!as_tuple || as_tuple->GetTupleSize() < 1) {
-        ctx.Error(Pos) << "Udf: first argument must be a callable, like Foo::Bar";
+        ctx.Error(Pos_) << "Udf: first argument must be a callable, like Foo::Bar";
         return false;
     }
 
     TNodePtr function = as_tuple->GetTupleElement(0);
 
     if (!function || !function->FuncName()) {
-        ctx.Error(Pos) << "Udf: first argument must be a callable, like Foo::Bar";
+        ctx.Error(Pos_) << "Udf: first argument must be a callable, like Foo::Bar";
         return false;
     }
 
-    FunctionName = function->FuncName();
-    ModuleName = function->ModuleName();
-    ScriptUdf = function->IsScript();
-    if (ScriptUdf && as_tuple->GetTupleSize() > 1) {
-        ctx.Error(Pos) << "Udf: user type is not supported for script udfs";
+    FunctionName_ = function->FuncName();
+    ModuleName_ = function->ModuleName();
+    ScriptUdf_ = function->IsScript();
+    if (ScriptUdf_ && as_tuple->GetTupleSize() > 1) {
+        ctx.Error(Pos_) << "Udf: user type is not supported for script udfs";
         return false;
     }
 
-    if (ScriptUdf) {
+    if (ScriptUdf_) {
         for (size_t i = 0; i < function->GetTupleSize(); ++i) {
-            ScriptArgs.push_back(function->GetTupleElement(i));
+            ScriptArgs_.push_back(function->GetTupleElement(i));
         }
     }
 
@@ -3060,13 +3062,13 @@ bool TUdfNode::DoInit(TContext& ctx, ISource* src) {
         external.push_back(current);
     }
 
-    ExternalTypesTuple = new TCallNodeImpl(Pos, "TupleType", external);
+    ExternalTypesTuple_ = new TCallNodeImpl(Pos_, "TupleType", external);
 
-    if (Args.size() == 1) {
+    if (Args_.size() == 1) {
         return true;
     }
 
-    if (TStructNode* named_args = Args[1]->GetStructNode(); named_args) {
+    if (TStructNode* named_args = Args_[1]->GetStructNode(); named_args) {
         for (const auto &arg: named_args->GetExprs()) {
             if (arg->GetLabel() == "TypeConfig") {
                 if (function->IsScript()) {
@@ -3074,18 +3076,18 @@ bool TUdfNode::DoInit(TContext& ctx, ISource* src) {
                     return false;
                 }
 
-                TypeConfig = MakeAtomFromExpression(Pos, ctx, arg);
+                TypeConfig_ = MakeAtomFromExpression(Pos_, ctx, arg);
             } else if (arg->GetLabel() == "RunConfig") {
                 if (function->IsScript()) {
                     ctx.Error() << "Udf: RunConfig is not supported for script udfs";
                     return false;
                 }
 
-                RunConfig = arg;
+                RunConfig_ = arg;
             } else if (arg->GetLabel() == "Cpu") {
-                Cpu = MakeAtomFromExpression(Pos, ctx, arg);
+                Cpu_ = MakeAtomFromExpression(Pos_, ctx, arg);
             } else if (arg->GetLabel() == "ExtraMem") {
-                ExtraMem = MakeAtomFromExpression(Pos, ctx, arg);
+                ExtraMem_ = MakeAtomFromExpression(Pos_, ctx, arg);
             } else {
                 ctx.Error() << "Udf: unexpected named argument: " << arg->GetLabel();
                 return false;
@@ -3097,48 +3099,48 @@ bool TUdfNode::DoInit(TContext& ctx, ISource* src) {
 }
 
 const TNodePtr TUdfNode::GetExternalTypes() const {
-    return ExternalTypesTuple;
+    return ExternalTypesTuple_;
 }
 
 const TString& TUdfNode::GetFunction() const {
-    return *FunctionName;
+    return *FunctionName_;
 }
 
 const TString& TUdfNode::GetModule() const {
-    return *ModuleName;
+    return *ModuleName_;
 }
 
 TNodePtr TUdfNode::GetRunConfig() const {
-    return RunConfig;
+    return RunConfig_;
 }
 
 const TDeferredAtom& TUdfNode::GetTypeConfig() const {
-    return TypeConfig;
+    return TypeConfig_;
 }
 
 TNodePtr TUdfNode::BuildOptions() const {
-    if (Cpu.Empty() && ExtraMem.Empty()) {
+    if (Cpu_.Empty() && ExtraMem_.Empty()) {
         return nullptr;
     }
 
     auto options = Y();
-    if (!Cpu.Empty()) {
-        options = L(options, Q(Y(Q("cpu"), Cpu.Build())));
+    if (!Cpu_.Empty()) {
+        options = L(options, Q(Y(Q("cpu"), Cpu_.Build())));
     }
 
-    if (!ExtraMem.Empty()) {
-        options = L(options, Q(Y(Q("extraMem"), ExtraMem.Build())));
+    if (!ExtraMem_.Empty()) {
+        options = L(options, Q(Y(Q("extraMem"), ExtraMem_.Build())));
     }
 
     return Q(options);
 }
 
 bool TUdfNode::IsScript() const {
-    return ScriptUdf;
+    return ScriptUdf_;
 }
 
 const TVector<TNodePtr>& TUdfNode::GetScriptArgs() const {
-    return ScriptArgs;
+    return ScriptArgs_;
 }
 
 TUdfNode* TUdfNode::GetUdfNode() {
@@ -3150,12 +3152,12 @@ const TUdfNode* TUdfNode::GetUdfNode() const {
 }
 
 TAstNode* TUdfNode::Translate(TContext& ctx) const {
-    ctx.Error(Pos) << "Abstract Udf Node can't be used as a part of expression.";
+    ctx.Error(Pos_) << "Abstract Udf Node can't be used as a part of expression.";
     return nullptr;
 }
 
 TNodePtr TUdfNode::DoClone() const {
-    return new TUdfNode(Pos, CloneContainer(Args));
+    return new TUdfNode(Pos_, CloneContainer(Args_));
 }
 
 
@@ -3164,8 +3166,8 @@ public:
     TBinaryOpNode(TPosition pos, const TString& opName, TNodePtr a, TNodePtr b);
 
     TNodePtr DoClone() const final {
-        YQL_ENSURE(Args.size() == 2);
-        return new TBinaryOpNode(Pos, OpName, Args[0]->Clone(), Args[1]->Clone());
+        YQL_ENSURE(Args_.size() == 2);
+        return new TBinaryOpNode(Pos_, OpName_, Args_[0]->Clone(), Args_[1]->Clone());
     }
 };
 
@@ -3209,49 +3211,49 @@ class TCalcOverWindow final: public INode {
 public:
     TCalcOverWindow(TPosition pos, const TString& windowName, TNodePtr node)
         : INode(pos)
-        , WindowName(windowName)
-        , FuncNode(node)
+        , WindowName_(windowName)
+        , FuncNode_(node)
     {}
 
     TAstNode* Translate(TContext& ctx) const override {
-        return FuncNode->Translate(ctx);
+        return FuncNode_->Translate(ctx);
     }
 
     bool DoInit(TContext& ctx, ISource* src) override {
         YQL_ENSURE(src);
-        TSourcePtr overWindowSource = BuildOverWindowSource(ctx.Pos(), WindowName, src);
-        if (!FuncNode->Init(ctx, overWindowSource.Get())) {
+        TSourcePtr overWindowSource = BuildOverWindowSource(ctx.Pos(), WindowName_, src);
+        if (!FuncNode_->Init(ctx, overWindowSource.Get())) {
             return false;
         }
         return true;
     }
 
     TPtr DoClone() const final {
-        return new TCalcOverWindow(Pos, WindowName, SafeClone(FuncNode));
+        return new TCalcOverWindow(Pos_, WindowName_, SafeClone(FuncNode_));
     }
 
     void DoUpdateState() const override {
-        State.Set(ENodeState::Const, FuncNode->IsConstant());
-        State.Set(ENodeState::MaybeConst, FuncNode->MaybeConstant());
-        State.Set(ENodeState::Aggregated, FuncNode->IsAggregated());
-        State.Set(ENodeState::OverWindow, true);
+        State_.Set(ENodeState::Const, FuncNode_->IsConstant());
+        State_.Set(ENodeState::MaybeConst, FuncNode_->MaybeConstant());
+        State_.Set(ENodeState::Aggregated, FuncNode_->IsAggregated());
+        State_.Set(ENodeState::OverWindow, true);
     }
 
     void DoVisitChildren(const TVisitFunc& func, TVisitNodeSet& visited) const final {
-        Y_DEBUG_ABORT_UNLESS(FuncNode);
-        FuncNode->VisitTree(func, visited);
+        Y_DEBUG_ABORT_UNLESS(FuncNode_);
+        FuncNode_->VisitTree(func, visited);
     }
 
     void CollectPreaggregateExprs(TContext& ctx, ISource& src, TVector<INode::TPtr>& exprs) override {
         if (ctx.DistinctOverWindow) {
-            FuncNode->CollectPreaggregateExprs(ctx, src, exprs);
+            FuncNode_->CollectPreaggregateExprs(ctx, src, exprs);
         } else {
             INode::CollectPreaggregateExprs(ctx, src, exprs);
         }
     }
 protected:
-    const TString WindowName;
-    TNodePtr FuncNode;
+    const TString WindowName_;
+    TNodePtr FuncNode_;
 };
 
 TNodePtr BuildCalcOverWindow(TPosition pos, const TString& windowName, TNodePtr call) {
@@ -3263,40 +3265,40 @@ class TYsonOptionsNode final: public INode {
 public:
     TYsonOptionsNode(TPosition pos, bool autoConvert, bool strict)
         : INode(pos)
-        , AutoConvert(autoConvert)
-        , Strict(strict)
+        , AutoConvert_(autoConvert)
+        , Strict_(strict)
     {
         auto udf = Y("Udf", Q(Fast ? "Yson2.Options" : "Yson.Options"));
         auto autoConvertNode = BuildLiteralBool(pos, autoConvert);
         autoConvertNode->SetLabel("AutoConvert");
         auto strictNode = BuildLiteralBool(pos, strict);
         strictNode->SetLabel("Strict");
-        Node = Y("NamedApply", udf, Q(Y()), BuildStructure(pos, { autoConvertNode, strictNode }));
+        Node_ = Y("NamedApply", udf, Q(Y()), BuildStructure(pos, { autoConvertNode, strictNode }));
     }
 
     TAstNode* Translate(TContext& ctx) const override {
-        return Node->Translate(ctx);
+        return Node_->Translate(ctx);
     }
 
     bool DoInit(TContext& ctx, ISource* src) override {
-        if (!Node->Init(ctx, src)) {
+        if (!Node_->Init(ctx, src)) {
             return false;
         }
         return true;
     }
 
     TPtr DoClone() const final {
-        return new TYsonOptionsNode(Pos, AutoConvert, Strict);
+        return new TYsonOptionsNode(Pos_, AutoConvert_, Strict_);
     }
 
     void DoUpdateState() const override {
-        State.Set(ENodeState::Const, true);
+        State_.Set(ENodeState::Const, true);
     }
 
 protected:
-    TNodePtr Node;
-    const bool AutoConvert;
-    const bool Strict;
+    TNodePtr Node_;
+    const bool AutoConvert_;
+    const bool Strict_;
 };
 
 TNodePtr BuildYsonOptionsNode(TPosition pos, bool autoConvert, bool strict, bool fastYson) {
@@ -3310,18 +3312,18 @@ class TDoCall final : public INode {
 public:
     TDoCall(TPosition pos, const TNodePtr& node)
         : INode(pos)
-        , Node(node)
+        , Node_(node)
     {
-        FakeSource = BuildFakeSource(pos);
+        FakeSource_ = BuildFakeSource(pos);
     }
 
     ISource* GetSource() final {
-        return FakeSource.Get();
+        return FakeSource_.Get();
     }
 
     bool DoInit(TContext& ctx, ISource* src) final {
         Y_UNUSED(src);
-        if (!Node->Init(ctx, FakeSource.Get())) {
+        if (!Node_->Init(ctx, FakeSource_.Get())) {
             return false;
         }
 
@@ -3329,20 +3331,20 @@ public:
     }
 
     TAstNode* Translate(TContext& ctx) const final {
-        return Node->Translate(ctx);
+        return Node_->Translate(ctx);
     }
 
     TPtr DoClone() const final {
-        return new TDoCall(Pos, Node->Clone());
+        return new TDoCall(Pos_, Node_->Clone());
     }
 
     void DoVisitChildren(const TVisitFunc& func, TVisitNodeSet& visited) const final {
-        Y_DEBUG_ABORT_UNLESS(Node);
-        Node->VisitTree(func, visited);
+        Y_DEBUG_ABORT_UNLESS(Node_);
+        Node_->VisitTree(func, visited);
     }
 private:
-    TNodePtr Node;
-    TSourcePtr FakeSource;
+    TNodePtr Node_;
+    TSourcePtr FakeSource_;
 };
 
 TNodePtr BuildDoCall(TPosition pos, const TNodePtr& node) {
@@ -3442,36 +3444,36 @@ class TTupleResultNode: public INode {
 public:
     TTupleResultNode(TNodePtr&& tuple, size_t ensureTupleSize)
         : INode(tuple->GetPos())
-        , Node(std::move(tuple))
-        , EnsureTupleSize(ensureTupleSize)
+        , Node_(std::move(tuple))
+        , EnsureTupleSize_(ensureTupleSize)
     {
     }
 
     bool DoInit(TContext& ctx, ISource* src) override {
-        if (!Node->Init(ctx, src)) {
+        if (!Node_->Init(ctx, src)) {
             return false;
         }
 
-        Node = Y("EnsureTupleSize", Node, Q(ToString(EnsureTupleSize)));
+        Node_ = Y("EnsureTupleSize", Node_, Q(ToString(EnsureTupleSize_)));
 
         return true;
     }
 
     TAstNode* Translate(TContext& ctx) const override {
-        return Node->Translate(ctx);
+        return Node_->Translate(ctx);
     }
 
     TPtr DoClone() const final {
-        return new TTupleResultNode(Node->Clone(), EnsureTupleSize);
+        return new TTupleResultNode(Node_->Clone(), EnsureTupleSize_);
     }
 
     void DoVisitChildren(const TVisitFunc& func, TVisitNodeSet& visited) const final {
-        Y_DEBUG_ABORT_UNLESS(Node);
-        Node->VisitTree(func, visited);
+        Y_DEBUG_ABORT_UNLESS(Node_);
+        Node_->VisitTree(func, visited);
     }
 protected:
-    TNodePtr Node;
-    const size_t EnsureTupleSize;
+    TNodePtr Node_;
+    const size_t EnsureTupleSize_;
 };
 
 TNodePtr BuildTupleResult(TNodePtr tuple, size_t ensureTupleSize) {
@@ -3482,8 +3484,8 @@ class TNamedExprReferenceNode: public IProxyNode {
 public:
     TNamedExprReferenceNode(TNodePtr parent, const TString& name, TMaybe<size_t> tupleIndex)
         : IProxyNode(parent->GetPos(), parent)
-        , Name(name)
-        , TupleIndex(tupleIndex)
+        , Name_(name)
+        , TupleIndex_(tupleIndex)
     {
     }
 
@@ -3493,28 +3495,28 @@ public:
             return false;
         }
 
-        Node = BuildAtom(GetPos(), Name, TNodeFlags::Default);
-        if (TupleIndex.Defined()) {
-            Node = Y("Nth", Node, Q(ToString(*TupleIndex)));
+        Node_ = BuildAtom(GetPos(), Name_, TNodeFlags::Default);
+        if (TupleIndex_.Defined()) {
+            Node_ = Y("Nth", Node_, Q(ToString(*TupleIndex_)));
         }
 
         return true;
     }
 
     TAstNode* Translate(TContext& ctx) const override {
-        YQL_ENSURE(Node, "Init() should be done before Translate()");
-        return Node->Translate(ctx);
+        YQL_ENSURE(Node_, "Init() should be done before Translate()");
+        return Node_->Translate(ctx);
     }
 
     TPtr DoClone() const final {
         // do not clone Inner here
-        return new TNamedExprReferenceNode(Inner, Name, TupleIndex);
+        return new TNamedExprReferenceNode(Inner_, Name_, TupleIndex_);
     }
 
 private:
-    const TString Name;
-    const TMaybe<size_t> TupleIndex;
-    TNodePtr Node;
+    const TString Name_;
+    const TMaybe<size_t> TupleIndex_;
+    TNodePtr Node_;
 };
 
 TNodePtr BuildNamedExprReference(TNodePtr parent, const TString& name, TMaybe<size_t> tupleIndex) {
@@ -3526,41 +3528,41 @@ class TNamedExprNode: public IProxyNode {
 public:
     TNamedExprNode(TNodePtr parent)
         : IProxyNode(parent->GetPos(), parent)
-        , FakeSource(BuildFakeSource(parent->GetPos()))
-        , Referenced(false)
+        , FakeSource_(BuildFakeSource(parent->GetPos()))
+        , Referenced_(false)
     {
     }
 
     bool DoInit(TContext& ctx, ISource* src) final {
-        YQL_ENSURE(!Referenced, "Refrence is initialized before named expr itself");
+        YQL_ENSURE(!Referenced_, "Refrence is initialized before named expr itself");
         Y_UNUSED(src);
         if (ctx.ValidateUnusedExprs) {
-            return IProxyNode::DoInit(ctx, FakeSource.Get());
+            return IProxyNode::DoInit(ctx, FakeSource_.Get());
         }
         // do actual init in InitReference()
         return true;
     }
 
     bool InitReference(TContext& ctx) final {
-        Referenced = true;
-        return IProxyNode::DoInit(ctx, FakeSource.Get());
+        Referenced_ = true;
+        return IProxyNode::DoInit(ctx, FakeSource_.Get());
     }
 
     TAstNode* Translate(TContext& ctx) const override {
-        if (ctx.ValidateUnusedExprs || Referenced) {
-            return Inner->Translate(ctx);
+        if (ctx.ValidateUnusedExprs || Referenced_) {
+            return Inner_->Translate(ctx);
         }
         auto unused = BuildQuotedAtom(GetPos(), "unused", TNodeFlags::Default);
         return unused->Translate(ctx);
     }
 
     TPtr DoClone() const final {
-        return new TNamedExprNode(Inner->Clone());
+        return new TNamedExprNode(Inner_->Clone());
     }
 
 private:
-    const TSourcePtr FakeSource;
-    bool Referenced;
+    const TSourcePtr FakeSource_;
+    bool Referenced_;
 };
 
 TNodePtr BuildNamedExpr(TNodePtr parent) {

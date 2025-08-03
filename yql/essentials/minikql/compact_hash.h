@@ -123,43 +123,43 @@ public:
 
         TListIterator(T* list) {
             if (LARGE_MARK == GetMark(list)) {
-                CurrentPage = EndPage = GetLargeListHeader(list)->Next();
-                Current = CurrentPage->template GetList<T>();
-                End = (TRawByte)Current + CurrentPage->Size * sizeof(T);
+                CurrentPage_ = EndPage_ = GetLargeListHeader(list)->Next();
+                Current_ = CurrentPage_->template GetList<T>();
+                End_ = (TRawByte)Current_ + CurrentPage_->Size * sizeof(T);
             } else {
-                Current = list;
-                End = (TRawByte)Current + GetPartListSize(list) * sizeof(T);
+                Current_ = list;
+                End_ = (TRawByte)Current_ + GetPartListSize(list) * sizeof(T);
             }
         }
 
         TListIterator(TRaw start, TRaw end)
-            : Current(start)
-            , End(end)
+            : Current_(start)
+            , End_(end)
         {
         }
 
         TListIterator& operator++() {
             Y_ASSERT(Ok());
-            Current = (TRawByte)Current + sizeof(T);
-            if (Current == End) {
-                if (CurrentPage) {
-                    CurrentPage = CurrentPage->Next();
-                    if (CurrentPage != EndPage) {
-                        Current = (TRaw)CurrentPage->template GetList<T>();
-                        End = (TRawByte)Current + CurrentPage->Size * sizeof(T);
+            Current_ = (TRawByte)Current_ + sizeof(T);
+            if (Current_ == End_) {
+                if (CurrentPage_) {
+                    CurrentPage_ = CurrentPage_->Next();
+                    if (CurrentPage_ != EndPage_) {
+                        Current_ = (TRaw)CurrentPage_->template GetList<T>();
+                        End_ = (TRawByte)Current_ + CurrentPage_->Size * sizeof(T);
                     } else {
-                        CurrentPage = EndPage = nullptr;
-                        Current = End = nullptr;
+                        CurrentPage_ = EndPage_ = nullptr;
+                        Current_ = End_ = nullptr;
                     }
                 } else {
-                    Current = End = nullptr;
+                    Current_ = End_ = nullptr;
                 }
             }
             return *this;
         }
 
         bool operator ==(const TListIterator& it) const {
-            return Current == it.Current && CurrentPage == it.CurrentPage;
+            return Current_ == it.Current_ && CurrentPage_ == it.CurrentPage_;
         }
 
         bool operator !=(const TListIterator& it) const {
@@ -168,26 +168,26 @@ public:
 
         T Get() const {
             using TClean = typename std::remove_cv<T>::type;
-            return ::ReadUnaligned<TClean>(Current);
+            return ::ReadUnaligned<TClean>(Current_);
         }
 
         void Set(T val) const {
-            ::WriteUnaligned<T>(Current, val);
+            ::WriteUnaligned<T>(Current_, val);
         }
 
         TRaw GetRaw() const {
-            return Current;
+            return Current_;
         }
 
         bool Ok() const {
-            return Current != nullptr;
+            return Current_ != nullptr;
         }
 
     private:
-        TRaw Current = nullptr;
-        TRaw End = nullptr;
-        THeader* CurrentPage = nullptr;
-        THeader* EndPage = nullptr;
+        TRaw Current_ = nullptr;
+        TRaw End_ = nullptr;
+        THeader* CurrentPage_ = nullptr;
+        THeader* EndPage_ = nullptr;
     };
 
 public:
@@ -383,12 +383,12 @@ public:
     TListPool(const TListPool&) = delete;
     TListPool(TListPool&& other)
         : TListPoolBase(std::move(other))
-        , Pools(std::move(other.Pools))
+        , Pools_(std::move(other.Pools_))
     {
     }
 
     ~TListPool() {
-        for (auto& p: Pools) {
+        for (auto& p: Pools_) {
             for (auto& list: p.SmallPages) {
                 Y_ABORT_UNLESS(list.Empty(), "%s", DebugInfo().data());
             }
@@ -523,24 +523,24 @@ public:
 
     void Swap(TListPool& other) {
         TListPoolBase::Swap(other);
-        DoSwap(Pools, other.Pools);
+        DoSwap(Pools_, other.Pools_);
     }
 
     void PrintStat(IOutputStream& out) const {
         size_t usedPages = 0;
         if (std::is_same<TPrimary, TSecondary>::value) {
-            usedPages = Pools[0].PrintStat(TStringBuf(""), out);
+            usedPages = Pools_[0].PrintStat(TStringBuf(""), out);
         } else {
-            usedPages = Pools[0].PrintStat(TStringBuf("Primary: "), out) + Pools[1].PrintStat(TStringBuf("Secondary: "), out);
+            usedPages = Pools_[0].PrintStat(TStringBuf("Primary: "), out) + Pools_[1].PrintStat(TStringBuf("Secondary: "), out);
         }
         GetPagePool().PrintStat(usedPages, out);
     }
 
     TString DebugInfo() const {
         if (std::is_same<TPrimary, TSecondary>::value) {
-            return Pools[0].DebugInfo();
+            return Pools_[0].DebugInfo();
         } else {
-            return TString().append("Primary:\n").append(Pools[0].DebugInfo()).append("Secondary:\n").append(Pools[1].DebugInfo());
+            return TString().append("Primary:\n").append(Pools_[0].DebugInfo()).append("Secondary:\n").append(Pools_[1].DebugInfo());
         }
     }
 
@@ -558,7 +558,7 @@ private:
     template <size_t PoolNdx, typename T>
     TListHeader* GetSmallListPage(size_t size) {
         Y_ASSERT(size > 1 && size <= MAX_SMALL_LIST_SIZE);
-        TListType& pages = Pools[PoolNdx].SmallPages[size - 2];
+        TListType& pages = Pools_[PoolNdx].SmallPages[size - 2];
         if (!pages.Empty()) {
             return pages.Front()->As<TListHeader>();
         }
@@ -573,8 +573,8 @@ private:
     TListHeader* GetMediumListPage(size_t size) {
         Y_ASSERT(size > MAX_SMALL_LIST_SIZE && size <= TListPoolBase::GetMaxListSize<T>());
         size_t index = MostSignificantBit((size - 1) >> MostSignificantBitCT(MAX_SMALL_LIST_SIZE));
-        Y_ASSERT(index < Pools[PoolNdx].MediumPages.size());
-        TListType& pages = Pools[PoolNdx].MediumPages[index];
+        Y_ASSERT(index < Pools_[PoolNdx].MediumPages.size());
+        TListType& pages = Pools_[PoolNdx].MediumPages[index];
         if (!pages.Empty()) {
             return pages.Front()->As<TListHeader>();
         }
@@ -613,7 +613,7 @@ private:
         }
         if (last) {
             listHeader->ListItem.Unlink();
-            Pools[PoolNdx].FullPages.PushBack(&listHeader->ListItem);
+            Pools_[PoolNdx].FullPages.PushBack(&listHeader->ListItem);
         }
         return reinterpret_cast<T*>(l);
     }
@@ -639,7 +639,7 @@ private:
 
         if (last) {
             listHeader->ListItem.Unlink();
-            Pools[PoolNdx].FullPages.PushBack(&listHeader->ListItem);
+            Pools_[PoolNdx].FullPages.PushBack(&listHeader->ListItem);
         }
         // For medium pages store the list size ahead
         *l = size;
@@ -659,7 +659,7 @@ private:
         ++listHeader->FreeLists;
         if (1 == listHeader->FreeLists) {
             listHeader->ListItem.Unlink(); // Remove from full list
-            Pools[PoolNdx].SmallPages[listHeader->ListSize - 2].PushFront(&listHeader->ListItem); // Add to partially used
+            Pools_[PoolNdx].SmallPages[listHeader->ListSize - 2].PushFront(&listHeader->ListItem); // Add to partially used
         } else if (GetSmallPageCapacity<T>(listHeader->ListSize) == listHeader->FreeLists) {
             listHeader->ListItem.Unlink(); // Remove from partially used
             FreeListPage(listHeader);
@@ -679,8 +679,8 @@ private:
         if (1 == listHeader->FreeLists) {
             listHeader->ListItem.Unlink(); // Remove from full list
             const size_t index = MostSignificantBit((listHeader->ListSize - 1) >> MostSignificantBitCT(MAX_SMALL_LIST_SIZE));
-            Y_ASSERT(index < Pools[PoolNdx].MediumPages.size());
-            Pools[PoolNdx].MediumPages[index].PushFront(&listHeader->ListItem); // Add to partially used
+            Y_ASSERT(index < Pools_[PoolNdx].MediumPages.size());
+            Pools_[PoolNdx].MediumPages[index].PushFront(&listHeader->ListItem); // Add to partially used
         } else if (GetMediumPageCapacity<T>(listHeader->ListSize) == listHeader->FreeLists) {
             listHeader->ListItem.Unlink(); // Remove from partially used
             FreeListPage(listHeader);
@@ -702,7 +702,7 @@ private:
         GetPagePool().ReturnPage(header);
     }
 protected:
-    std::array<TUsedPages, PoolCount> Pools;
+    std::array<TUsedPages, PoolCount> Pools_;
 };
 
 #pragma pack(push, 1)
@@ -841,8 +841,8 @@ struct TKeyValuePair {
     TKeyValuePair& operator =(const TKeyValuePair&) = default;
     TKeyValuePair& operator =(TKeyValuePair&&) = default;
 
-    TKey first;
-    TValue second;
+    TKey first; // NOLINT(readability-identifier-naming)
+    TValue second; // NOLINT(readability-identifier-naming)
 };
 
 template <typename TKey, typename TValue>
@@ -870,14 +870,14 @@ public:
 
         // Full scan iterator
         TIteratorImpl(const TCompactHashBase* hash)
-            : Hash(hash)
-            , Bucket(0)
-            , EndBucket(Hash->BucketsCount_)
-            , Pos()
+            : Hash_(hash)
+            , Bucket_(0)
+            , EndBucket_(Hash_->BucketsCount_)
+            , Pos_()
         {
-            for (; Bucket < EndBucket; ++Bucket) {
-                if (!Hash->IsEmptyBucket(Bucket)) {
-                    Pos = Hash->GetBucketIter(Bucket);
+            for (; Bucket_ < EndBucket_; ++Bucket_) {
+                if (!Hash_->IsEmptyBucket(Bucket_)) {
+                    Pos_ = Hash_->GetBucketIter(Bucket_);
                     break;
                 }
             }
@@ -885,10 +885,10 @@ public:
 
         // Key iterator
         TIteratorImpl(const TCompactHashBase* hash, size_t bucket, const TBucketIter& pos)
-            : Hash(hash)
-            , Bucket(bucket)
-            , EndBucket(bucket + 1)
-            , Pos(pos)
+            : Hash_(hash)
+            , Bucket_(bucket)
+            , EndBucket_(bucket + 1)
+            , Pos_(pos)
         {
         }
 
@@ -898,26 +898,26 @@ public:
 
     public:
         TIteratorImpl& operator=(const TIteratorImpl& rhs) {
-            Hash = rhs.Hash;
-            Bucket = rhs.Bucket;
-            EndBucket = rhs.EndBucket;
-            Pos = rhs.Pos;
+            Hash_ = rhs.Hash_;
+            Bucket_ = rhs.Bucket_;
+            EndBucket_ = rhs.EndBucket_;
+            Pos_ = rhs.Pos_;
             return *this;
         }
 
         bool Ok() const {
-            return Bucket < EndBucket && Pos.Ok();
+            return Bucket_ < EndBucket_ && Pos_.Ok();
         }
 
         TIteratorImpl& operator++() {
-            if (Bucket < EndBucket) {
-                if ((++Pos).Ok()) {
+            if (Bucket_ < EndBucket_) {
+                if ((++Pos_).Ok()) {
                     return *this;
                 }
 
-                for (++Bucket; Bucket < EndBucket; ++Bucket) {
-                    if (!Hash->IsEmptyBucket(Bucket)) {
-                        Pos = Hash->GetBucketIter(Bucket);
+                for (++Bucket_; Bucket_ < EndBucket_; ++Bucket_) {
+                    if (!Hash_->IsEmptyBucket(Bucket_)) {
+                        Pos_ = Hash_->GetBucketIter(Bucket_);
                         break;
                     }
                 }
@@ -927,24 +927,24 @@ public:
 
         T operator*() const {
             Y_ASSERT(Ok());
-            return Pos.Get();
+            return Pos_.Get();
         }
 
         T Get() const {
             Y_ASSERT(Ok());
-            return Pos.Get();
+            return Pos_.Get();
         }
 
         TIteratorImpl MakeCurrentKeyIter() const {
             Y_ASSERT(Ok());
-            return TIteratorImpl(Hash, Bucket, TBucketIter(Pos.GetRaw(), Pos.GetRaw() + sizeof(T)));
+            return TIteratorImpl(Hash_, Bucket_, TBucketIter(Pos_.GetRaw(), Pos_.GetRaw() + sizeof(T)));
         }
 
     private:
-        const TCompactHashBase* Hash = nullptr;
-        size_t Bucket = 0;
-        size_t EndBucket = 0;
-        TBucketIter Pos;
+        const TCompactHashBase* Hash_ = nullptr;
+        size_t Bucket_ = 0;
+        size_t EndBucket_ = 0;
+        TBucketIter Pos_;
     };
 
     template <typename T>
@@ -955,14 +955,14 @@ public:
 
         // Full scan iterator
         TIteratorImpl(const TCompactHashBase* hash)
-            : Hash(hash)
-            , Bucket(0)
-            , EndBucket(Hash->BucketsCount_)
+            : Hash_(hash)
+            , Bucket_(0)
+            , EndBucket_(Hash_->BucketsCount_)
         {
-            for (; Bucket < EndBucket; ++Bucket) {
-                if (!Hash->IsEmptyBucket(Bucket)) {
-                    Pos = Hash->GetBucketIter(Bucket);
-                    SubPos = static_cast<const TKeyNodePair<TKeyType, T>*>(Pos.GetRaw())->second.Iter();
+            for (; Bucket_ < EndBucket_; ++Bucket_) {
+                if (!Hash_->IsEmptyBucket(Bucket_)) {
+                    Pos_ = Hash_->GetBucketIter(Bucket_);
+                    SubPos_ = static_cast<const TKeyNodePair<TKeyType, T>*>(Pos_.GetRaw())->second.Iter();
                     break;
                 }
             }
@@ -970,11 +970,11 @@ public:
 
         // Key iterator
         TIteratorImpl(const TCompactHashBase* hash, size_t bucket, const TBucketIter& pos)
-            : Hash(hash)
-            , Bucket(bucket)
-            , EndBucket(bucket + 1)
-            , Pos(pos)
-            , SubPos(static_cast<const TKeyNodePair<TKeyType, T>*>(Pos.GetRaw())->second.Iter())
+            : Hash_(hash)
+            , Bucket_(bucket)
+            , EndBucket_(bucket + 1)
+            , Pos_(pos)
+            , SubPos_(static_cast<const TKeyNodePair<TKeyType, T>*>(Pos_.GetRaw())->second.Iter())
         {
         }
 
@@ -984,7 +984,7 @@ public:
 
     public:
         bool Ok() const {
-            return Bucket < EndBucket;
+            return Bucket_ < EndBucket_;
         }
 
         TIteratorImpl& operator++() {
@@ -997,12 +997,12 @@ public:
 
         TKeyType GetKey() const {
             Y_ASSERT(Ok());
-            return Pos.Get().first;
+            return Pos_.Get().first;
         }
 
         T GetValue() const {
             Y_ASSERT(Ok());
-            return SubPos.Get();
+            return SubPos_.Get();
         }
 
         T operator*() const {
@@ -1011,29 +1011,29 @@ public:
 
         TIteratorImpl MakeCurrentKeyIter() const {
             Y_ASSERT(Ok());
-            return TIteratorImpl(Hash, Bucket, TBucketIter(Pos.GetRaw(), static_cast<const ui8*>(Pos.GetRaw()) + sizeof(TKeyNodePair<TKeyType, T>)));
+            return TIteratorImpl(Hash_, Bucket_, TBucketIter(Pos_.GetRaw(), static_cast<const ui8*>(Pos_.GetRaw()) + sizeof(TKeyNodePair<TKeyType, T>)));
         }
 
     private:
         TIteratorImpl& Shift(bool nextKey) {
-            Y_ASSERT(Bucket < EndBucket);
-            Y_ASSERT(SubPos.Ok());
-            if (!nextKey && (++SubPos).Ok()) {
+            Y_ASSERT(Bucket_ < EndBucket_);
+            Y_ASSERT(SubPos_.Ok());
+            if (!nextKey && (++SubPos_).Ok()) {
                 return *this;
             }
 
-            Y_ASSERT(Pos.Ok());
-            if ((++Pos).Ok()) {
-                SubPos = static_cast<const TKeyNodePair<TKeyType, T>*>(Pos.GetRaw())->second.Iter();
+            Y_ASSERT(Pos_.Ok());
+            if ((++Pos_).Ok()) {
+                SubPos_ = static_cast<const TKeyNodePair<TKeyType, T>*>(Pos_.GetRaw())->second.Iter();
                 return *this;
             } else {
-                SubPos = TValueIter();
+                SubPos_ = TValueIter();
             }
 
-            for (++Bucket; Bucket < EndBucket; ++Bucket) {
-                if (!Hash->IsEmptyBucket(Bucket)) {
-                    Pos = Hash->GetBucketIter(Bucket);
-                    SubPos = static_cast<const TKeyNodePair<TKeyType, T>*>(Pos.GetRaw())->second.Iter();
+            for (++Bucket_; Bucket_ < EndBucket_; ++Bucket_) {
+                if (!Hash_->IsEmptyBucket(Bucket_)) {
+                    Pos_ = Hash_->GetBucketIter(Bucket_);
+                    SubPos_ = static_cast<const TKeyNodePair<TKeyType, T>*>(Pos_.GetRaw())->second.Iter();
                     break;
                 }
             }
@@ -1042,11 +1042,11 @@ public:
         }
 
     private:
-        const TCompactHashBase* Hash = nullptr;
-        size_t Bucket = 0;
-        size_t EndBucket = 0;
-        TBucketIter Pos;
-        TValueIter SubPos;
+        const TCompactHashBase* Hash_ = nullptr;
+        size_t Bucket_ = 0;
+        size_t EndBucket_ = 0;
+        TBucketIter Pos_;
+        TValueIter SubPos_;
     };
 
 public:

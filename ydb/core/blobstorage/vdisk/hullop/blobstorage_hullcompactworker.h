@@ -164,14 +164,8 @@ namespace NKikimr {
         // number of currently unresponded write requests
         ui32 InFlightWrites = 0;
 
-        // maximum number of such requests
-        ui32 MaxInFlightWrites;
-
         // number of currently unresponded read requests
         ui32 InFlightReads = 0;
-
-        // maximum number of such requests
-        ui32 MaxInFlightReads = 0;
 
         // vector of freed huge blobs
         TDiskPartVec FreedHugeBlobs;
@@ -188,6 +182,10 @@ namespace NKikimr {
 
         // pointer to an atomic variable contaning number of in flight writes
         TAtomic *WritesInFlight;
+
+        // max inflight request to pdisk
+        ui32 MaxInFlightWrites;
+        ui32 MaxInFlightReads;
 
         struct TBatcherPayload {
             ui64 Id = 0;
@@ -324,17 +322,16 @@ namespace NKikimr {
         {
             if (IsFresh) {
                 ChunksToUse = HullCtx->HullSstSizeInChunksFresh;
-                MaxInFlightWrites = HullCtx->FreshCompMaxInFlightWrites;
-                MaxInFlightReads = HullCtx->FreshCompMaxInFlightReads;
                 ReadsInFlight = &LevelIndex->FreshCompReadsInFlight;
                 WritesInFlight = &LevelIndex->FreshCompWritesInFlight;
             } else {
                 ChunksToUse = HullCtx->HullSstSizeInChunksLevel;
-                MaxInFlightWrites = HullCtx->HullCompMaxInFlightWrites;
-                MaxInFlightReads = HullCtx->HullCompMaxInFlightReads;
                 ReadsInFlight = &LevelIndex->HullCompReadsInFlight;
                 WritesInFlight = &LevelIndex->HullCompWritesInFlight;
             }
+
+            MaxInFlightWrites = GetMaxInFlightWrites();
+            MaxInFlightReads = GetMaxInFlightReads();
         }
 
         void Prepare(THandoffMapPtr hmp, TIntrusivePtr<TBarriersSnapshot::TBarriersEssence> barriers,
@@ -440,6 +437,7 @@ namespace NKikimr {
                         }
                         break;
                     }
+                    
 
                     case EState::WaitForPendingRequests:
                         // wait until all writes succeed
@@ -767,6 +765,14 @@ namespace NKikimr {
             const ui32 num = ChunksToUse - (ReservedChunks.size() + ChunkReservePending);
             ChunkReservePending += num;
             return std::make_unique<NPDisk::TEvChunkReserve>(PDiskCtx->Dsk->Owner, PDiskCtx->Dsk->OwnerRound, num);
+        }
+
+        ui32 GetMaxInFlightWrites() {
+            return IsFresh ? HullCtx->VCfg->FreshCompMaxInFlightWrites : HullCtx->VCfg->HullCompMaxInFlightWrites;
+        }
+
+        ui32 GetMaxInFlightReads() {
+            return IsFresh ? (ui32) HullCtx->VCfg->FreshCompMaxInFlightReads : (ui32) HullCtx->VCfg->HullCompMaxInFlightReads;
         }
     };
 

@@ -539,7 +539,8 @@
                 {"Index": 3, "Name": "Priority", "Type": "TCoAtom"},
                 {"Index": 4, "Name": "StreamWrite", "Type": "TCoAtom"},
                 {"Index": 5, "Name": "IsBatch", "Type": "TCoAtom"},
-                {"Index": 6, "Name": "Settings", "Type": "TCoNameValueTupleList", "Optional": true}
+                {"Index": 6, "Name": "IsIndexImplTable", "Type": "TCoAtom"},
+                {"Index": 7, "Name": "Settings", "Type": "TCoNameValueTupleList", "Optional": true}
             ]
         },
         {
@@ -561,11 +562,37 @@
             ]
         },
         {
+            "Name": "TKqpOlapPredicateClosure",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "TKqpOlapPredicateClosure"},
+            "Children": [
+                {"Index": 0, "Name": "Lambda", "Type": "TCoLambda"},
+                {"Index": 1, "Name": "ArgsType", "Type": "TExprBase"}
+            ]
+        },
+        {
             "Name": "TKqpOlapOperationBase",
             "Base": "TCallable",
             "Match": {"Type": "CallableBase"},
             "Children": [
                 {"Index": 0, "Name": "Input", "Type": "TExprBase"}
+            ]
+        },
+        {
+            "Name": "TKqpOlapProjection",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "KqpOlapProjection"},
+            "Children": [
+                {"Index": 0, "Name": "OlapOperation", "Type": "TExprBase"},
+                {"Index": 1, "Name": "ColumnName", "Type": "TCoAtom"}
+            ]
+        },
+        {
+            "Name": "TKqpOlapProjections",
+            "Base": "TKqpOlapOperationBase",
+            "Match": {"Type": "Callable", "Name": "KqpOlapProjections"},
+            "Children": [
+                {"Index": 1, "Name": "Projections", "Type": "TExprList"}
             ]
         },
         {

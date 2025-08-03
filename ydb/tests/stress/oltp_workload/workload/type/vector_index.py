@@ -1,6 +1,7 @@
 import logging
 import random
 import time
+from itertools import cycle, product
 
 from ydb.tests.stress.common.common import WorkloadBase
 from ydb.tests.datashard.lib.vector_index import targets, to_binary_string_converters
@@ -12,7 +13,7 @@ class WorkloadVectorIndex(WorkloadBase):
     def __init__(self, client, prefix, stop):
         super().__init__(client, prefix, "vector_index", stop)
         self.table_name = "table"
-        self.index_name = "vector_idx"
+        self.index_name_prefix = "vector_idx"
         self.rows_count = 10
         self.limit = 10
 
@@ -46,16 +47,16 @@ class WorkloadVectorIndex(WorkloadBase):
         """
         self.client.query(drop_table_sql, True)
 
-    def _drop_index(self, table_path):
-        logger.info(f"Drop index {self.index_name}")
+    def _drop_index(self, index_name, table_path):
+        logger.info(f"Drop index {index_name}")
         drop_index_sql = f"""
             ALTER TABLE `{table_path}`
-            DROP INDEX `{self.index_name}`;
+            DROP INDEX `{index_name}`;
         """
         self.client.query(drop_index_sql, True)
 
     def _create_index(
-        self, table_path, vector_type, vector_dimension, levels, clusters, distance=None, similarity=None
+        self, index_name, table_path, vector_type, vector_dimension, levels, clusters, distance=None, similarity=None
     ):
         logger.info(
             f"""Create index vector_type={vector_type},
@@ -67,7 +68,7 @@ class WorkloadVectorIndex(WorkloadBase):
         if distance is not None:
             create_index_sql = f"""
                 ALTER TABLE `{table_path}`
-                ADD INDEX `{self.index_name}` GLOBAL USING vector_kmeans_tree
+                ADD INDEX `{index_name}` GLOBAL USING vector_kmeans_tree
                 ON (embedding)
                 WITH (distance={distance},
                       vector_type={vector_type},
@@ -79,7 +80,7 @@ class WorkloadVectorIndex(WorkloadBase):
         else:
             create_index_sql = f"""
                 ALTER TABLE `{table_path}`
-                ADD INDEX `{self.index_name}` GLOBAL USING vector_kmeans_tree
+                ADD INDEX `{index_name}` GLOBAL USING vector_kmeans_tree
                 ON (embedding)
                 WITH (similarity={similarity},
                       vector_type={vector_type},
@@ -108,7 +109,7 @@ class WorkloadVectorIndex(WorkloadBase):
         """
         self.client.query(upsert_sql, False)
 
-    def _select(self, table_path, vector_type, vector_dimension, distance, similarity):
+    def _select(self, index_name, table_path, vector_type, vector_dimension, distance, similarity):
         if distance is not None:
             target = targets["distance"][distance]
         else:
@@ -122,15 +123,16 @@ class WorkloadVectorIndex(WorkloadBase):
             $Target = {name}(Cast([{vector}] AS List<{data_type}>));
             SELECT pk, embedding, {target}(embedding, $Target) as target
             FROM `{table_path}`
-            VIEW `{self.index_name}`
+            VIEW `{index_name}`
             ORDER BY {target}(embedding, $Target) {order}
             LIMIT {self.limit};
         """
         return self.client.query(select_sql, False)
 
-    def _select_top(self, table_path, vector_type, vector_dimension, distance, similarity):
+    def _select_top(self, index_name, table_path, vector_type, vector_dimension, distance, similarity):
         logger.info("Select values from table")
         result_set = self._select(
+            index_name=index_name,
             table_path=table_path,
             vector_type=vector_type,
             vector_dimension=vector_dimension,
@@ -154,28 +156,33 @@ class WorkloadVectorIndex(WorkloadBase):
                 )
             prev = cur
 
-    def _wait_inddex_ready(self, table_path, vector_type, vector_dimension, distance, similarity):
-        for i in range(10):
-            time.sleep(7)
-
+    def _wait_inddex_ready(self, index_name, table_path, vector_type, vector_dimension, distance, similarity):
+        start_time = time.time()
+        while time.time() - start_time < 60:
+            time.sleep(5)
             try:
-                self._select(
+                res = self._select(
+                    index_name=index_name,
                     table_path=table_path,
                     vector_type=vector_type,
                     vector_dimension=vector_dimension,
                     distance=distance,
                     similarity=similarity,
                 )
+                if len(res) == 0 or len(res[0].rows) == 0 or res[0].rows[0]['target'] is None:
+                    continue
             except Exception as ex:
                 if "No global indexes for table" in str(ex):
                     continue
                 raise ex
-            logger.info(f"Index {self.index_name} is ready")
+            logger.info(f"Index {index_name} is ready")
             return
         raise Exception("Error getting index status")
 
     def _check_loop(self, table_path, vector_type, vector_dimension, levels, clusters, distance=None, similarity=None):
+        index_name = f"{self.index_name_prefix}_{vector_type}_{vector_dimension}_{levels}_{clusters}_{distance}_{similarity}"
         self._create_index(
+            index_name=index_name,
             table_path=table_path,
             vector_type=vector_type,
             vector_dimension=vector_dimension,
@@ -185,6 +192,7 @@ class WorkloadVectorIndex(WorkloadBase):
             similarity=similarity,
         )
         self._wait_inddex_ready(
+            index_name=index_name,
             table_path=table_path,
             vector_type=vector_type,
             vector_dimension=vector_dimension,
@@ -192,13 +200,26 @@ class WorkloadVectorIndex(WorkloadBase):
             similarity=similarity,
         )
         self._select_top(
+            index_name=index_name,
             table_path=table_path,
             vector_type=vector_type,
             vector_dimension=vector_dimension,
             distance=distance,
             similarity=similarity,
         )
-        self._drop_index(table_path)
+        if random.randint(0, 1) == 0:
+            self._create_index(
+                index_name=index_name+'Rename',
+                table_path=table_path,
+                vector_type=vector_type,
+                vector_dimension=vector_dimension,
+                levels=levels,
+                clusters=clusters,
+                distance=distance,
+                similarity=similarity,
+            )
+            self.client.replace_index(table_path, index_name+'Rename', index_name)
+        self._drop_index(index_name, table_path)
         logger.info('check was completed successfully')
 
     def _loop(self):
@@ -210,62 +231,44 @@ class WorkloadVectorIndex(WorkloadBase):
         clusters_data = [1, 17]
         vector_dimension_data = [5]
         self._create_table(table_path)
+
+        distance_index_data = list(product(vector_type_data, vector_dimension_data, levels_data, clusters_data, distance_data))
+        similarity_index_data = list(product(vector_type_data, vector_dimension_data, levels_data, clusters_data, similarity_data))
+
+        random.shuffle(distance_index_data)
+        random.shuffle(similarity_index_data)
+        distance_iter = cycle(distance_index_data)
+        similarity_iter = cycle(similarity_index_data)
+
         while not self.is_stop_requested():
-            for vector_type in vector_type_data:
-                for vector_dimension in vector_dimension_data:
-                    self._upsert_values(
-                        table_path=table_path, vector_type=vector_type, vector_dimension=vector_dimension
-                    )
-                for levels in levels_data:
-                    for clusters in clusters_data:
-                        for distance in distance_data:
-                            logger.info(
-                                f"""vector_type: {vector_type}
-                                vector_dimension: {vector_dimension}
-                                levels: {levels}
-                                clusters: {clusters}
-                                distance: {distance}
-                                """
-                            )
-                            try:
-                                self._check_loop(
-                                    table_path=table_path,
-                                    vector_type=vector_type,
-                                    vector_dimension=vector_dimension,
-                                    levels=levels,
-                                    clusters=clusters,
-                                    distance=distance,
-                                )
-                            except Exception as ex:
-                                logger.info(f"ERRROR {ex}")
-                                raise str(ex)
-                            if self.is_stop_requested():
-                                return
+            distance_idx_data = next(distance_iter)
+            try:
+                self._upsert_values(
+                    table_path=table_path, vector_type=distance_idx_data[0], vector_dimension=distance_idx_data[1]
+                )
 
-                        for similarity in similarity_data:
-                            logger.info(
-                                f"""vector_type: {vector_type}
-                                vector_dimension: {vector_dimension}
-                                levels: {levels}
-                                clusters: {clusters}
-                                similarity: {similarity}
-                                """
-                            )
-                            try:
-                                self._check_loop(
-                                    table_path=table_path,
-                                    vector_type=vector_type,
-                                    vector_dimension=vector_dimension,
-                                    levels=levels,
-                                    clusters=clusters,
-                                    similarity=similarity,
-                                )
-                            except Exception as ex:
-                                logger.info(f"ERRROR {ex}")
-                                raise str(ex)
-                            if self.is_stop_requested():
-                                return
+                self._check_loop(
+                    table_path=table_path,
+                    vector_type=distance_idx_data[0],
+                    vector_dimension=distance_idx_data[1],
+                    levels=distance_idx_data[2],
+                    clusters=distance_idx_data[3],
+                    distance=distance_idx_data[4])
+                similarity_idx_data = next(similarity_iter)
 
+                self._upsert_values(
+                    table_path=table_path, vector_type=similarity_idx_data[0], vector_dimension=similarity_idx_data[1]
+                )
+                self._check_loop(
+                    table_path=table_path,
+                    vector_type=similarity_idx_data[0],
+                    vector_dimension=similarity_idx_data[1],
+                    levels=similarity_idx_data[2],
+                    clusters=similarity_idx_data[3],
+                    similarity=similarity_idx_data[4])
+            except Exception as ex:
+                logger.info(f"ERROR {ex}")
+                raise ex
         self._drop_table(table_path)
 
     def get_stat(self):

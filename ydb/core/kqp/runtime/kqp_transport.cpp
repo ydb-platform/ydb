@@ -100,11 +100,13 @@ void TKqpProtoBuilder::BuildYdbResultSet(
     }
 
     auto transportVersion = NDqProto::EDataTransportVersion::DATA_TRANSPORT_VERSION_UNSPECIFIED;
+    auto valuePackerVersion = NMiniKQL::EValuePackerVersion::V0;
     if (!data.empty()) {
         transportVersion = static_cast<NDqProto::EDataTransportVersion>(data.front().Proto.GetTransportVersion());
+        valuePackerVersion = NDq::FromProto(data.front().Proto.GetValuePackerVersion());
     }
-
-    NDq::TDqDataSerializer dataSerializer(*TypeEnv, *HolderFactory, transportVersion);
+    
+    NDq::TDqDataSerializer dataSerializer(*TypeEnv, *HolderFactory, transportVersion, valuePackerVersion);
 
     ui32 rowsCount = 0;
     if (resultSetFormatSettings.IsArrowFormat()) {

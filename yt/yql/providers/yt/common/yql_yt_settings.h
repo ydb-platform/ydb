@@ -99,6 +99,7 @@ public:
     NCommon::TConfSetting<TString, StaticPerCluster> TablesTmpFolder;
     NCommon::TConfSetting<TString, StaticPerCluster> BinaryTmpFolder;
     NCommon::TConfSetting<TString, StaticPerCluster> StaticPool;
+    NCommon::TConfSetting<TString, StaticPerCluster> StaticNetworkProject;
     NCommon::TConfSetting<TString, StaticPerCluster> CoreDumpPath;
 
     // static global
@@ -136,6 +137,7 @@ public:
     NCommon::TConfSetting<bool, Static> _ForbidSensitiveDataInOperationSpec;
     NCommon::TConfSetting<NSize::TSize, Static> _LocalTableContentLimit;
     NCommon::TConfSetting<bool, Static> EnableDynamicStoreReadInDQ;
+    NCommon::TConfSetting<bool, Static> UseDefaultArrowAllocatorInJobs;
 
     // Job runtime
     NCommon::TConfSetting<TString, Dynamic> Pool;

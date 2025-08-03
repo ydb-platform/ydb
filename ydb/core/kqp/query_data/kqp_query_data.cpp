@@ -271,13 +271,6 @@ TQueryData::~TQueryData() {
     }
 }
 
-const TQueryData::TParamMap& TQueryData::GetParams() {
-    for(auto& [name, _] : UnboxedData) {
-        GetParameterMiniKqlValue(name);
-    }
-
-    return Params;
-}
 
 const TQueryData::TParamProtobufMap& TQueryData::GetParamsProtobuf() {
     for(auto& [name, _] : UnboxedData) {
@@ -394,20 +387,6 @@ void TQueryData::ParseParameters(const google::protobuf::Map<TBasicString<char>,
     }
 }
 
-void TQueryData::ParseParameters(const NKikimrMiniKQL::TParams& parameters) {
-    if (!parameters.HasType()) {
-        return;
-    }
-
-    YQL_ENSURE(parameters.GetType().GetKind() == NKikimrMiniKQL::Struct, "Expected struct as query parameters type");
-    auto& structType = parameters.GetType().GetStruct();
-    for (ui32 i = 0; i < structType.MemberSize(); ++i) {
-        const auto& memberName = structType.GetMember(i).GetName();
-        YQL_ENSURE(i < parameters.GetValue().StructSize(), "Missing value for parameter: " << memberName);
-        auto success = AddMkqlParam(memberName, structType.GetMember(i).GetType(), parameters.GetValue().GetStruct(i));
-        YQL_ENSURE(success, "Duplicate parameter: " << memberName);
-    }
-}
 
 bool TQueryData::AddUVParam(const TString& name, NKikimr::NMiniKQL::TType* type, const NUdf::TUnboxedValue& value) {
     auto g = TypeEnv().BindAllocator();
@@ -450,27 +429,6 @@ TQueryData::TTypedUnboxedValue* TQueryData::GetParameterUnboxedValuePtr(const TS
     return &it->second;
 }
 
-const NKikimrMiniKQL::TParams* TQueryData::GetParameterMiniKqlValue(const TString& name) {
-    if (UnboxedData.find(name) == UnboxedData.end())
-        return nullptr;
-
-    auto it = Params.find(name);
-    if (it == Params.end()) {
-        with_lock(*AllocState->Alloc) {
-            const auto& [type, uv] = GetParameterUnboxedValue(name);
-            NKikimrMiniKQL::TParams param;
-            ExportTypeToProto(type, *param.MutableType());
-            ExportValueToProto(type, uv, *param.MutableValue());
-
-            auto [nit, success] = Params.emplace(name, std::move(param));
-            YQL_ENSURE(success);
-
-            return &(nit->second);
-        }
-    }
-
-    return &(it->second);
-}
 
 const Ydb::TypedValue* TQueryData::GetParameterTypedValue(const TString& name) {
     if (UnboxedData.find(name) == UnboxedData.end())
@@ -495,6 +453,11 @@ const Ydb::TypedValue* TQueryData::GetParameterTypedValue(const TString& name) {
 
 const NKikimr::NMiniKQL::TTypeEnvironment& TQueryData::TypeEnv() {
     return AllocState->TypeEnv;
+}
+
+
+const NKikimr::NMiniKQL::THolderFactory& TQueryData::HolderFactory() {
+    return AllocState->HolderFactory;
 }
 
 bool TQueryData::MaterializeParamValue(bool ensure, const NKqpProto::TKqpPhyParamBinding& paramBinding) {
@@ -568,7 +531,7 @@ NDqProto::TData TQueryData::GetShardParam(ui64 shardId, const TString& name) {
     }
 
     auto guard = TypeEnv().BindAllocator();
-    NDq::TDqDataSerializer dataSerializer{AllocState->TypeEnv, AllocState->HolderFactory, NDqProto::EDataTransportVersion::DATA_TRANSPORT_UV_PICKLE_1_0};
+    NDq::TDqDataSerializer dataSerializer{AllocState->TypeEnv, AllocState->HolderFactory, NDqProto::EDataTransportVersion::DATA_TRANSPORT_UV_PICKLE_1_0, EValuePackerVersion::V0};
     NDq::TDqSerializedBatch batch = dataSerializer.Serialize(it->second.Values.begin(), it->second.Values.end(), it->second.ItemType);
     YQL_ENSURE(!batch.IsOOB());
     return batch.Proto;

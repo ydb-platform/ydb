@@ -279,10 +279,10 @@ bool TCdcStreamChangeCollector::Collect(const TTableId& tableId, ERowOp rop,
 }
 
 TMaybe<TRowState> TCdcStreamChangeCollector::GetState(const TTableId& tableId, TArrayRef<const TRawTypeValue> key,
-        TArrayRef<const TTag> valueTags, TSelectStats& stats, const TMaybe<TRowVersion>& readVersion)
+        TArrayRef<const TTag> valueTags, TSelectStats& stats, const TMaybe<TRowVersion>& snapshot)
 {
     TRowState row;
-    const auto ready = UserDb.SelectRow(tableId, key, valueTags, row, stats, readVersion);
+    const auto ready = UserDb.SelectRow(tableId, key, valueTags, row, stats, snapshot);
 
     if (ready == EReady::Page) {
         return Nothing();
@@ -292,10 +292,10 @@ TMaybe<TRowState> TCdcStreamChangeCollector::GetState(const TTableId& tableId, T
 }
 
 TMaybe<TRowState> TCdcStreamChangeCollector::GetState(const TTableId& tableId, TArrayRef<const TRawTypeValue> key,
-        TArrayRef<const TTag> valueTags, const TMaybe<TRowVersion>& readVersion)
+        TArrayRef<const TTag> valueTags, const TMaybe<TRowVersion>& snapshot)
 {
     TSelectStats stats;
-    return GetState(tableId, key, valueTags, stats, readVersion);
+    return GetState(tableId, key, valueTags, stats, snapshot);
 }
 
 TRowState TCdcStreamChangeCollector::PatchState(const TRowState& oldState, ERowOp rop,

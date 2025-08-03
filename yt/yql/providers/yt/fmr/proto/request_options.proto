@@ -51,9 +51,8 @@ message TFmrError {
 }
 
 message TYtTableRef {
-    string Path = 1;
-    string Cluster = 2;
-    optional string FilePath = 3;
+    string RichPath = 1;
+    optional string FilePath = 2;
 }
 
 message TYtTableTaskRef {
@@ -161,13 +160,13 @@ message TMergeTaskParams {
 message TMapOperationParams {
     repeated TOperationTableRef Input = 1;
     repeated TFmrTableRef Output = 2;
-    string Executable = 3;
+    string SerializedMapJobState = 3;
 }
 
 message TMapTaskParams {
     TTaskTableInputRef Input = 1;
     repeated TFmrTableOutputRef Output = 2;
-    string Executable = 3;
+    string SerializedMapJobState = 3;
 }
 
 message TOperationParams {

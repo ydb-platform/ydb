@@ -1,21 +1,18 @@
 # -*- coding: utf-8 -*-
 import os
 import sys
-
 import pytest
-
 import yatest
 
-from ydb.tests.library.harness.kikimr_runner import KiKiMR
-from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.olap.lib.utils import get_external_param
 
+from ydb.tests.library.stress.fixtures import StressFixture
 
-class TestYdbMixedWorkload(object):
-    @classmethod
-    def setup_class(cls):
-        cls.cluster = KiKiMR(KikimrConfigGenerator())
-        cls.cluster.start()
+
+class TestYdbWorkload(StressFixture):
+    @pytest.fixture(autouse=True, scope="function")
+    def setup(self):
+        yield from self.setup_cluster()
 
     def get_command_prefix(self, subcmds: list[str]) -> list[str]:
         return [
@@ -25,10 +22,6 @@ class TestYdbMixedWorkload(object):
             '--database={}'.format(self.database),
             'workload', 'mixed'
         ] + subcmds
-
-    @classmethod
-    def teardown_class(cls):
-        cls.cluster.stop()
 
     @classmethod
     def get_cols_count_command_params(cls) -> list[str]:
@@ -77,8 +70,8 @@ class TestYdbMixedWorkload(object):
     @pytest.mark.parametrize('store_type', ['row', 'column'])
     def test(self, store_type):
         duration = get_external_param('duration', '120')
-        self.endpoint = get_external_param('endpoint', 'grpc://localhost:%d' % self.cluster.nodes[1].grpc_port)
-        self.database = get_external_param('database', '/Root')
+        self.endpoint = get_external_param('endpoint', self.endpoint)
+        self.database = get_external_param('database', self.database)
         yatest.common.execute(
             self.get_command_prefix(subcmds=['clean']))
 

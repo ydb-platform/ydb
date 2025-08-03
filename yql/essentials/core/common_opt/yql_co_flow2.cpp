@@ -1408,7 +1408,7 @@ TNodeMap<ESubgraphType> MarkSubgraphForAggregate(const TExprNode::TPtr& root, co
             result[node.Get()] = EXPR_CONST;
             return false;
         }
-        if (node->IsCallable("DependsOn")) {
+        if (TCoDependsOnBase::Match(node.Get())) {
             ++insideDependsOn;
             return true;
         }
@@ -1425,7 +1425,7 @@ TNodeMap<ESubgraphType> MarkSubgraphForAggregate(const TExprNode::TPtr& root, co
 
         return true;
     }, [&](const TExprNode::TPtr& node) {
-        if (node->IsCallable("DependsOn")) {
+        if (TCoDependsOnBase::Match(node.Get())) {
             YQL_ENSURE(insideDependsOn);
             --insideDependsOn;
         }
@@ -1660,6 +1660,43 @@ ICalcualtor::TPtr BuildProgram(const TExprNode::TPtr& node, const TNodeMap<ESubg
     return result;
 }
 
+bool CanPushdownOverAggregate(
+    const TExprNode::TPtr& p,
+    const TExprNode::TPtr& arg,
+    const TOptimizeContext& optCtx,
+    const THashSet<TStringBuf>& keyColumns
+) {
+    if (IsNoPush(*p)) {
+        return false;
+    }
+
+    if (HasDependsOn(p, arg)) {
+        return false;
+    }
+
+    if (!p->IsComplete() && !IsStrict(p)) {
+        return false;
+    }
+
+    // Check used fields to ensure that predicate use only key columns from aggregation.
+    TSet<TStringBuf> usedFields;
+    // Predicate with HaveFieldsSubset()==true and any usedFields (including empty) can be used for pushdown (for example constant predicates can have empty usedFields).
+    if (!HaveFieldsSubset(p, *arg, usedFields, *optCtx.ParentsMap)) {
+        static const char optName[] = "FilterOverAggregateAllFields";
+        const bool canPushdownAll = IsOptimizerEnabled<optName>(*optCtx.Types) && !IsOptimizerDisabled<optName>(*optCtx.Types);
+        if (!canPushdownAll) {
+            return false;
+        }
+
+        // Predicate with HaveFieldsSubset()==false and non-empty usedFields also can be used for pushdown (all fields are used).
+        if (usedFields.empty()) {
+            return false;
+        }
+    }
+
+    return AllOf(usedFields, [&keyColumns] (TStringBuf field) { return keyColumns.contains(field); });
+}
+
 TExprBase FilterOverAggregate(const TCoFlatMapBase& node, TExprContext& ctx, TOptimizeContext& optCtx) {
     YQL_ENSURE(optCtx.ParentsMap);
     if (!TCoConditionalValueBase::Match(node.Lambda().Body().Raw())) {
@@ -1682,18 +1719,12 @@ TExprBase FilterOverAggregate(const TCoFlatMapBase& node, TExprContext& ctx, TOp
     TExprNodeList pushComponents;
     TExprNodeList restComponents;
     size_t separableComponents = 0;
-    for (auto& p : andComponents) {
-        TSet<TStringBuf> usedFields;
-        if (IsNoPush(*p) ||
-            HasDependsOn(p, arg.Ptr()) ||
-            !HaveFieldsSubset(p, arg.Ref(), usedFields, *optCtx.ParentsMap) ||
-            !AllOf(usedFields, [&](TStringBuf field) { return keyColumns.contains(field); }) ||
-            !p->IsComplete() && !IsStrict(p))
-        {
-            restComponents.push_back(p);
-        } else {
+    for (const auto& p : andComponents) {
+        if (CanPushdownOverAggregate(p, arg.Ptr(), optCtx, keyColumns)) {
             pushComponents.push_back(p);
             ++separableComponents;
+        } else {
+            restComponents.push_back(p);
         }
     }
 
@@ -1766,6 +1797,102 @@ TExprBase FilterOverAggregate(const TCoFlatMapBase& node, TExprContext& ctx, TOp
     auto newAggInput = ctx.NewCallable(agg.Input().Pos(), "FlatMap", { agg.Input().Ptr(), pushLambda });
     auto newAgg = ctx.ChangeChild(agg.Ref(), TCoAggregate::idx_Input, std::move(newAggInput));
     return TExprBase(ctx.NewCallable(node.Pos(), node.Ref().Content(), { newAgg, restLambda }));
+}
+
+bool IsMemberOrJustMember(TExprNode::TPtr node, const TCoArgument& arg, bool& isJust, TStringBuf& memberName) {
+    isJust = node->IsCallable("Just");
+    if (isJust) {
+        node = node->HeadPtr();
+    }
+
+    if (node->IsCallable("Member")) {
+        memberName = node->Child(1)->Content();
+        return node->Child(0) == arg.Raw();
+    }
+
+    return false;
+}
+
+TExprNode::TPtr FilterNullMembersToSkipNullMembers(const TCoFlatMapBase& node, TExprContext& ctx, const TOptimizeContext& optCtx) {
+    YQL_ENSURE(optCtx.Types);
+    static const char optName[] = "MemberNthOverFlatMap";
+    if (IsOptimizerDisabled<optName>(*optCtx.Types)) {
+        return node.Ptr();
+    }
+
+    auto filter = node.Input().Cast<TCoFilterNullMembers>();
+
+    THashSet<TStringBuf> memberNames;
+    if (!filter.Members().IsValid()) {
+        for (const auto& atom : filter.Members().Cast()) {
+            memberNames.insert(atom.Value());
+        }
+    } else {
+        const TTypeAnnotationNode* itemType = GetSequenceItemType(filter.Input(), false);
+        YQL_ENSURE(itemType);
+        const TStructExprType* structType = itemType->Cast<TStructExprType>();
+        for (auto entry : structType->GetItems()) {
+            if (entry->GetItemType()->GetKind() == ETypeAnnotationKind::Optional) {
+                memberNames.insert(entry->GetName());
+            }
+        }
+    }
+
+    TCoArgument arg = node.Lambda().Args().Arg(0);
+
+    bool finish = false;
+    TNodeOnNodeOwnedMap remaps;
+    VisitExpr(node.Lambda().Body().Ptr(), [&](const TExprNode::TPtr& curr) {
+        if (finish) {
+            return false;
+        }
+        if (curr->GetDependencyScope() && curr->IsComplete()) {
+            return false;
+        }
+        if (TCoDependsOnBase::Match(curr.Get())) {
+            TExprNodeList children = curr->Head().IsList() ? curr->Head().ChildrenList() : curr->ChildrenList();
+            if (AllOf(children, [](const TExprNode::TPtr& child) { return child->IsArgument(); })) {
+                return false;
+            }
+        }
+
+        TStringBuf name;
+        bool isJust;
+        if (IsMemberOrJustMember(curr, arg, isJust, name)) {
+            if (memberNames.contains(name)) {
+                if (isJust) {
+                    remaps[curr.Get()] = curr->HeadPtr();
+                } else {
+                    // finish if we found filtered member reference not covered by Just
+                    finish = true;
+                }
+            }
+            return false;
+        }
+
+        if (curr.Get() == arg.Raw()) {
+            // finish if we found any other usage of row
+            finish = true;
+            return false;
+        }
+
+        return true;
+    });
+
+    if (finish) {
+        return node.Ptr();
+    }
+
+    auto newBody = ctx.ReplaceNodes(node.Lambda().Body().Ptr(), remaps);
+    auto newLambda = ctx.ChangeChild(node.Lambda().Ref(), TCoLambda::idx_Body, std::move(newBody));
+
+    YQL_CLOG(DEBUG, Core) << node.CallableName() << " with Just(Member) over FilterNullMembers";
+    return ctx.Builder(node.Pos())
+        .Callable(node.CallableName())
+            .Add(0, ctx.RenameNode(filter.Ref(), "SkipNullMembers"))
+            .Add(1, ctx.DeepCopyLambda(*newLambda))
+        .Seal()
+        .Build();
 }
 
 } // namespace
@@ -1919,6 +2046,13 @@ void RegisterCoFlowCallables2(TCallableOptimizerMap& map) {
                             .Seal()
                         .Seal()
                         .Build();
+                }
+            }
+
+            if (self.Input().Maybe<TCoFilterNullMembers>()) {
+                auto ret = FilterNullMembersToSkipNullMembers(self, ctx, optCtx);
+                if (ret != self.Ptr()) {
+                    return ret;
                 }
             }
         }
@@ -2097,56 +2231,27 @@ void RegisterCoFlowCallables2(TCallableOptimizerMap& map) {
                 continue;
             }
 
+            THashSet<TString> columns;
             auto itemNames = columnsForPruneKeysExtractor.find(scope.Ref().Content());
             if (itemNames == columnsForPruneKeysExtractor.end() || itemNames->second.empty()) {
                 children.push_back(equiJoin.Arg(i).Ptr());
                 continue;
             }
-
-            if (auto distinct = list.Ref().GetConstraint<TDistinctConstraintNode>()) {
-                if (distinct->ContainsCompleteSet(std::vector<std::string_view>(itemNames->second.cbegin(), itemNames->second.cend()))) {
-                    children.push_back(equiJoin.Arg(i).Ptr());
-                    continue;
-                }
+            for (const auto& elem : itemNames->second) {
+                columns.insert(TString(elem));
             }
 
-            bool isOrdered = false;
-            if (auto sorted = list.Ref().GetConstraint<TSortedConstraintNode>()) {
-                for (const auto& item : sorted->GetContent()) {
-                    size_t foundItemNamesCount = 0;
-                    for (const auto& path : item.first) {
-                        if (itemNames->second.contains(path.front())) {
-                            foundItemNamesCount++;
-                        }
-                    }
-                    if (foundItemNamesCount == itemNames->second.size()) {
-                        isOrdered = true;
-                        break;
-                    }
-                }
+            if (IsAlreadyDistinct(list.Ref(), columns)) {
+                children.push_back(equiJoin.Arg(i).Ptr());
+                continue;
             }
-
-            auto pruneKeysCallable = isOrdered ? "PruneAdjacentKeys" : "PruneKeys";
+            auto pruneKeysCallable = IsOrdered(list.Ref(), columns) ? "PruneAdjacentKeys" : "PruneKeys";
             YQL_CLOG(DEBUG, Core) << "Add " << pruneKeysCallable << " to EquiJoin input #" << i << ", label " << scope.Ref().Content();
             children.push_back(ctx.Builder(child.Pos())
                 .List()
                     .Callable(0, pruneKeysCallable)
                         .Add(0, list.Ptr())
-                        .Lambda(1)
-                            .Param("item")
-                            .List(0)
-                                .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder & {
-                                    ui32 i = 0;
-                                    for (const auto& column : itemNames->second) {
-                                        parent.Callable(i++, "Member")
-                                            .Arg(0, "item")
-                                            .Atom(1, column)
-                                        .Seal();
-                                    }
-                                    return parent;
-                                })
-                            .Seal()
-                        .Seal()
+                        .Add(1, MakePruneKeysExtractorLambda(child.Ref(), columns, ctx))
                     .Seal()
                     .Add(1, scope.Ptr())
                 .Seal()
@@ -2171,9 +2276,9 @@ void RegisterCoFlowCallables2(TCallableOptimizerMap& map) {
     map["ExtractMembers"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
         TCoExtractMembers self(node);
         const bool optInput = self.Input().Ref().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Optional;
-        static const char splitFlag[] = "ExtractMembersSplitOnOptional";
+        static const char splitFlag[] = "MemberNthOverFlatMap";
         YQL_ENSURE(optCtx.Types);
-        const bool split = !IsOptimizerDisabled<splitFlag>(*optCtx.Types);
+        const bool split = IsOptimizerDisabled<splitFlag>(*optCtx.Types);
         if (!optCtx.IsSingleUsage(self.Input()) && (!optInput || !split)) {
             return node;
         }
@@ -2192,15 +2297,8 @@ void RegisterCoFlowCallables2(TCallableOptimizerMap& map) {
             return node;
         }
 
-        if (self.Input().Maybe<TCoSkipNullMembers>()) {
-            if (auto res = ApplyExtractMembersToSkipNullMembers(self.Input().Ptr(), self.Members().Ptr(), ctx, {})) {
-                return res;
-            }
-            return node;
-        }
-
-        if (self.Input().Maybe<TCoFilterNullMembers>()) {
-            if (auto res = ApplyExtractMembersToFilterNullMembers(self.Input().Ptr(), self.Members().Ptr(), ctx, {})) {
+        if (self.Input().Maybe<TCoFilterNullMembersBase>()) {
+            if (auto res = ApplyExtractMembersToFilterSkipNullMembers(self.Input().Ptr(), self.Members().Ptr(), ctx, optCtx, {})) {
                 return res;
             }
             return node;

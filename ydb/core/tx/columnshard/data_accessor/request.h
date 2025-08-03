@@ -1,9 +1,12 @@
 #pragma once
-#include <ydb/library/signals/object_counter.h>
+#include "cache_policy/policy.h"
+
+#include <ydb/core/tx/columnshard/common/path_id.h>
 #include <ydb/core/tx/columnshard/engines/portions/data_accessor.h>
 #include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
 #include <ydb/core/tx/columnshard/resource_subscriber/task.h>
-#include <ydb/core/tx/columnshard/common/path_id.h>
+
+#include <ydb/library/signals/object_counter.h>
 
 namespace NKikimr::NOlap {
 
@@ -12,15 +15,29 @@ class TDataAccessorsRequest;
 class TDataAccessorsResult: private NNonCopyable::TMoveOnly {
 private:
     THashMap<TInternalPathId, TString> ErrorsByPathId;
-    THashMap<ui64, TPortionDataAccessor> PortionsById;
+    THashMap<ui64, std::shared_ptr<TPortionDataAccessor>> PortionsById;
 
 public:
-    const THashMap<ui64, TPortionDataAccessor>& GetPortions() const {
+    TDataAccessorsResult() = default;
+
+    TDataAccessorsResult(std::vector<std::shared_ptr<TPortionDataAccessor>>&& portions) {
+        for (auto&& i : portions) {
+            AFL_VERIFY(i);
+            const ui64 portionId = i->GetPortionInfo().GetPortionId();
+            PortionsById.emplace(portionId, std::move(i));
+        }
+    }
+
+    THashMap<ui64, std::shared_ptr<TPortionDataAccessor>> ExtractPortions() {
+        return std::move(PortionsById);
+    }
+
+    const THashMap<ui64, std::shared_ptr<TPortionDataAccessor>>& GetPortions() const {
         return PortionsById;
     }
 
-    std::vector<TPortionDataAccessor> ExtractPortionsVector() {
-        std::vector<TPortionDataAccessor> portions;
+    std::vector<std::shared_ptr<TPortionDataAccessor>> ExtractPortionsVector() {
+        std::vector<std::shared_ptr<TPortionDataAccessor>> portions;
         portions.reserve(PortionsById.size());
         for (auto&& [_, portionInfo] : PortionsById) {
             portions.emplace_back(std::move(portionInfo));
@@ -40,13 +57,25 @@ public:
     const TPortionDataAccessor& GetPortionAccessorVerified(const ui64 portionId) const {
         auto it = PortionsById.find(portionId);
         AFL_VERIFY(it != PortionsById.end());
-        return it->second;
+        return *it->second;
     }
 
-    void AddData(THashMap<ui64, TPortionDataAccessor>&& accessors) {
-        std::deque<TPortionDataAccessor> v;
-        for (auto&& [portionId, i] : accessors) {
-            AFL_VERIFY(PortionsById.emplace(portionId, i).second);
+    std::shared_ptr<TPortionDataAccessor> ExtractPortionAccessorVerified(const ui64 portionId) {
+        auto it = PortionsById.find(portionId);
+        AFL_VERIFY(it != PortionsById.end());
+        auto result = std::move(it->second);
+        PortionsById.erase(it);
+        return result;
+    }
+
+    void AddData(THashMap<ui64, std::shared_ptr<TPortionDataAccessor>>&& accessors) {
+        if (PortionsById.empty()) {
+            PortionsById = std::move(accessors);
+        } else {
+            for (auto&& [portionId, i] : accessors) {
+                AFL_VERIFY(i);
+                AFL_VERIFY(PortionsById.emplace(portionId, std::move(i)).second);
+            }
         }
     }
 
@@ -76,7 +105,7 @@ private:
     std::optional<TDataAccessorsResult> Result;
 
 public:
-    void OnResult(const ui32 requestId, TDataAccessorsResult&& result) {
+    void OnResult(const ui64 requestId, TDataAccessorsResult&& result) {
         AFL_VERIFY(RequestIds.erase(requestId));
         if (!Result) {
             Result = std::move(result);
@@ -103,132 +132,46 @@ private:
     }
 };
 
-class TPathFetchingState {
-public:
-    enum class EFetchStage {
-        Preparing,
-        Fetching,
-        Error,
-        Fetched
-    };
-
-private:
-    const TInternalPathId PathId;
-
-    YDB_READONLY(EFetchStage, Stage, EFetchStage::Preparing);
-    YDB_READONLY_DEF(TString, ErrorMessage);
-    THashMap<ui64, TPortionInfo::TConstPtr> Portions;
-    THashMap<ui64, TPortionDataAccessor> PortionAccessors;
-
-public:
-    TString DebugString() const {
-        TStringBuilder sb;
-        sb << "portions_count=" << Portions.size();
-        return sb;
-    }
-
-    explicit TPathFetchingState(const TInternalPathId pathId)
-        : PathId(pathId) {
-    }
-
-    const THashMap<ui64, TPortionInfo::TConstPtr>& GetPortions() const {
-        return Portions;
-    }
-
-    bool IsFinished() {
-        return Portions.empty() || Stage == EFetchStage::Error;
-    }
-
-    THashMap<ui64, TPortionDataAccessor>&& DetachAccessors() {
-        return std::move(PortionAccessors);
-    }
-
-    void AddPortion(const TPortionInfo::TConstPtr& portion) {
-        AFL_VERIFY(Stage == EFetchStage::Preparing);
-        AFL_VERIFY(portion->GetPathId() == PathId);
-        AFL_VERIFY(Portions.emplace(portion->GetPortionId(), portion).second);
-    }
-
-    void AddAccessor(
-        const TPortionDataAccessor& accessor, const std::optional<std::set<ui32>>& columnIds, const std::optional<std::set<ui32>>& indexIds) {
-        AFL_VERIFY(Stage == EFetchStage::Fetching);
-        AFL_VERIFY(Portions.erase(accessor.GetPortionInfo().GetPortionId()));
-        AFL_VERIFY(PortionAccessors.emplace(accessor.GetPortionInfo().GetPortionId(), accessor.Extract(columnIds, indexIds)).second);
-        if (Portions.empty()) {
-            AFL_VERIFY(Stage == EFetchStage::Fetching);
-            Stage = EFetchStage::Fetched;
-        }
-    }
-    void StartFetch() {
-        AFL_VERIFY(Stage == EFetchStage::Preparing);
-        Stage = EFetchStage::Fetching;
-        AFL_VERIFY(Portions.size());
-    }
-
-    void OnError(const TString& errorMessage) {
-        AFL_VERIFY(Stage == EFetchStage::Fetching);
-        Stage = EFetchStage::Error;
-        ErrorMessage = errorMessage;
-    }
-};
-
 class TDataAccessorsRequest: public NColumnShard::TMonitoringObjectsCounter<TDataAccessorsRequest> {
 private:
     static inline TAtomicCounter Counter = 0;
-    ui32 FetchStage = 0;
     YDB_READONLY(ui64, RequestId, Counter.Inc());
-    YDB_READONLY_DEF(TString, Consumer);
-    THashSet<ui64> PortionIds;
-    THashMap<TInternalPathId, TPathFetchingState> PathIdStatus;
-    THashSet<TInternalPathId> PathIds;
-    TDataAccessorsResult AccessorsByPathId;
-    YDB_READONLY_DEF(std::optional<std::set<ui32>>, ColumnIds);
-    std::optional<std::set<ui32>> IndexIds;
-
-    TAtomicCounter PreparingCount = 0;
-    TAtomicCounter FetchingCount = 0;
-    TAtomicCounter ReadyCount = 0;
-
+    YDB_READONLY(
+        NGeneralCache::TPortionsMetadataCachePolicy::EConsumer, Consumer, NGeneralCache::TPortionsMetadataCachePolicy::DefaultConsumer());
+    THashMap<ui64, TPortionInfo::TConstPtr> Portions;
     std::shared_ptr<IDataAccessorRequestsSubscriber> Subscriber;
 
-    void CheckReady() {
-        if (PathIdStatus.size()) {
-            return;
-        }
-        AFL_VERIFY(!PreparingCount.Val());
-        AFL_VERIFY(!FetchingCount.Val());
-        FetchStage = 2;
-        Subscriber->OnResult(RequestId, std::move(AccessorsByPathId));
-        Subscriber = nullptr;
+public:
+    std::shared_ptr<IDataAccessorRequestsSubscriber> ExtractSubscriber() {
+        AFL_VERIFY(HasSubscriber());
+        return std::move(Subscriber);
     }
 
-public:
-    void SetColumnIds(const std::set<ui32>& columnIds) {
-        AFL_VERIFY(!ColumnIds);
-        ColumnIds = columnIds;
+    THashSet<NGeneralCache::TGlobalPortionAddress> BuildAddresses(const NActors::TActorId tabletActorId) const {
+        THashSet<NGeneralCache::TGlobalPortionAddress> result;
+        for (auto&& [_, p] : Portions) {
+            AFL_VERIFY(result.emplace(NGeneralCache::TGlobalPortionAddress(tabletActorId, p->GetAddress())).second);
+        }
+        return result;
     }
 
     TString DebugString() const {
         TStringBuilder sb;
         sb << "request_id=" << RequestId << ";";
-        for (auto&& i : PathIdStatus) {
-            sb << i.first << "={" << i.second.DebugString() << "};";
+        for (auto&& [id, p] : Portions) {
+            sb << id << "={" << p->DebugString() << "};";
         }
         return sb;
     }
 
-    TDataAccessorsRequest(const TString& consumer)
-        : Consumer(consumer)
-    {
-
+    TDataAccessorsRequest(const NGeneralCache::TPortionsMetadataCachePolicy::EConsumer consumer)
+        : Consumer(consumer) {
     }
 
     ui64 PredictAccessorsMemory(const ISnapshotSchema::TPtr& schema) const {
         ui64 result = 0;
-        for (auto&& i : PathIdStatus) {
-            for (auto&& [_, p] : i.second.GetPortions()) {
-                result += p->PredictAccessorsMemory(schema);
-            }
+        for (auto&& [_, p] : Portions) {
+            result += p->PredictAccessorsMemory(schema);
         }
         return result;
     }
@@ -249,93 +192,25 @@ public:
     }
 
     ui32 GetSize() const {
-        return PortionIds.size();
-    }
-
-    const THashSet<TInternalPathId>& GetPathIds() const {
-        return PathIds;
+        return Portions.size();
     }
 
     bool IsEmpty() const {
-        return PortionIds.empty();
+        return Portions.empty();
+    }
+
+    void SetColumnIds(const std::set<ui32>& /*columnIds*/) {
     }
 
     void RegisterSubscriber(const std::shared_ptr<IDataAccessorRequestsSubscriber>& subscriber) {
         AFL_VERIFY(!Subscriber);
-        AFL_VERIFY(FetchStage == 0);
         Subscriber = subscriber;
         Subscriber->RegisterRequestId(*this);
     }
 
-    const THashMap<ui64, TPortionInfo::TConstPtr>& StartFetching(const TInternalPathId pathId) {
-        AFL_VERIFY(!!Subscriber);
-        AFL_VERIFY(FetchStage <= 1);
-        FetchStage = 1;
-
-        auto it = PathIdStatus.find(pathId);
-        AFL_VERIFY(it != PathIdStatus.end());
-        it->second.StartFetch();
-
-        FetchingCount.Inc();
-        AFL_VERIFY(PreparingCount.Dec() >= 0);
-
-        return it->second.GetPortions();
-    }
-
     void AddPortion(const TPortionInfo::TConstPtr& portion) {
         AFL_VERIFY(portion);
-        AFL_VERIFY(FetchStage <= 1);
-        AFL_VERIFY(PortionIds.emplace(portion->GetPortionId()).second);
-        const auto& pathId = portion->GetPathId();
-        PathIds.emplace(pathId);
-        auto it = PathIdStatus.find(pathId);
-        if (it == PathIdStatus.end()) {
-            PreparingCount.Inc();
-            it = PathIdStatus.emplace(pathId, TPathFetchingState{pathId}).first;
-        }
-        it->second.AddPortion(portion);
-    }
-
-    bool IsFetched() const {
-        return FetchStage == 2;
-    }
-
-    void AddError(const TInternalPathId pathId, const TString& errorMessage) {
-        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("error", errorMessage)("event", "ErrorOnFetching")("path_id", pathId);
-        AFL_VERIFY(FetchStage <= 1);
-        auto itStatus = PathIdStatus.find(pathId);
-        AFL_VERIFY(itStatus != PathIdStatus.end());
-        itStatus->second.OnError(errorMessage);
-        PathIdStatus.erase(itStatus);
-        AFL_VERIFY(FetchingCount.Dec() >= 0);
-        ReadyCount.Inc();
-        AccessorsByPathId.AddError(pathId, errorMessage);
-        CheckReady();
-    }
-
-    void AddAccessor(const TPortionDataAccessor& accessor) {
-        AFL_VERIFY(FetchStage == 1);
-        auto pathId = accessor.GetPortionInfo().GetPathId();
-        {
-            auto itStatus = PathIdStatus.find(pathId);
-            AFL_VERIFY(itStatus != PathIdStatus.end());
-            itStatus->second.AddAccessor(accessor, ColumnIds, IndexIds);
-            if (itStatus->second.IsFinished()) {
-                AFL_VERIFY(FetchingCount.Dec() >= 0);
-                ReadyCount.Inc();
-                AccessorsByPathId.AddData(itStatus->second.DetachAccessors());
-                PathIdStatus.erase(itStatus);
-            }
-        }
-        CheckReady();
-    }
-
-    void AddData(THashMap<ui64, std::vector<TPortionDataAccessor>>&& accessors) {
-        for (auto&& i : accessors) {
-            for (auto&& a : i.second) {
-                AddAccessor(std::move(a));
-            }
-        }
+        AFL_VERIFY(Portions.emplace(portion->GetPortionId(), portion).second);
     }
 
     TString GetTaskId() const {

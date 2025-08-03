@@ -6,7 +6,7 @@
 
 namespace NKikimr::NOlap::NStorageOptimizer::NLCBuckets {
 
-NKikimr::TConclusion<std::shared_ptr<NKikimr::NOlap::NStorageOptimizer::IOptimizerPlanner>> TOptimizerPlannerConstructor::DoBuildPlanner(const TBuildContext& context) const {
+TConclusion<std::shared_ptr<IOptimizerPlanner>> TOptimizerPlannerConstructor::DoBuildPlanner(const TBuildContext& context) const {
     auto counters = std::make_shared<TCounters>();
     auto portionsInfo =  std::make_shared<TSimplePortionsGroupInfo>();
     const TString defaultSelectorName = "default";
@@ -114,7 +114,8 @@ NKikimr::TConclusion<std::shared_ptr<NKikimr::NOlap::NStorageOptimizer::IOptimiz
         }
     }
     std::reverse(levels.begin(), levels.end());
-    return std::make_shared<TOptimizerPlanner>(context.GetPathId(), context.GetStorages(), context.GetPKSchema(), counters, portionsInfo, std::move(levels), std::move(selectors));
+    return std::make_shared<TOptimizerPlanner>(context.GetPathId(), context.GetStorages(), context.GetPKSchema(), counters, portionsInfo,
+        std::move(levels), std::move(selectors), GetNodePortionsCountLimit());
 }
 
 bool TOptimizerPlannerConstructor::DoApplyToCurrentObject(IOptimizerPlanner& /*current*/) const {

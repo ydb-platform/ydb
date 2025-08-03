@@ -4,7 +4,7 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <ydb/core/persqueue/partition_key_range/partition_key_range.h>
-#include <ydb/core/persqueue/partition_scale_manager.h>
+#include <ydb/core/persqueue/pqrb/partition_scale_manager.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/test_env.h>
 
@@ -32,10 +32,10 @@ Y_UNIT_TEST_SUITE(WithSDK) {
 
     Y_UNIT_TEST(DescribeConsumer) {
         TTopicSdkTestSetup setup = CreateSetup();
-        setup.CreateTopic(std::string{TEST_TOPIC}, std::string{TEST_CONSUMER}, 1);
+        setup.CreateTopic(TEST_TOPIC, TEST_CONSUMER, 1);
 
         auto describe = [&]() {
-            return setup.DescribeConsumer(TString{TEST_TOPIC}, TString{TEST_CONSUMER});
+            return setup.DescribeConsumer(TEST_TOPIC, TEST_CONSUMER);
         };
 
         auto write = [&](size_t seqNo) {
@@ -96,7 +96,7 @@ Y_UNIT_TEST_SUITE(WithSDK) {
             UNIT_ASSERT_VALUES_EQUAL(1, c->GetLastReadOffset());
         }
 
-        UNIT_ASSERT(setup.Commit(TString{TEST_TOPIC}, TEST_CONSUMER, 0, 1).IsSuccess());
+        UNIT_ASSERT(setup.Commit(TEST_TOPIC, TEST_CONSUMER, 0, 1).IsSuccess());
 
         // Check describe for topic whis contains messages, has commited offset but hasn`t read (restart tablet for example)
         {
@@ -131,11 +131,11 @@ Y_UNIT_TEST_SUITE(WithSDK) {
                 if (e) {
                     Cerr << ">>>>> Event = " << e->index() << Endl << Flush;
                 }
-                if (e && std::holds_alternative<TReadSessionEvent::TDataReceivedEvent>(e.value())) {
+                if (e && std::holds_alternative<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent>(e.value())) {
                     // we must recive only one date event with second message
                     break;
-                } else if (e && std::holds_alternative<TReadSessionEvent::TStartPartitionSessionEvent>(e.value())) {
-                    std::get<TReadSessionEvent::TStartPartitionSessionEvent>(e.value()).Confirm();
+                } else if (e && std::holds_alternative<NYdb::NTopic::TReadSessionEvent::TStartPartitionSessionEvent>(e.value())) {
+                    std::get<NYdb::NTopic::TReadSessionEvent::TStartPartitionSessionEvent>(e.value()).Confirm();
                 }
                 UNIT_ASSERT_C(endTime > TInstant::Now(), "Unable wait");
             }

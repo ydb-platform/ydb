@@ -1,5 +1,6 @@
 #include "defs.h"
 #include "blobstorage_syncfull.h"
+#include <ydb/core/util/frequently_called_hptimer.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_response.h>
 #include <ydb/core/blobstorage/vdisk/synclog/blobstorage_synclogformat.h>
 #include <ydb/core/blobstorage/vdisk/hulldb/hull_ds_all_snap.h>
@@ -30,58 +31,58 @@ namespace NKikimr {
         TIntrusivePtr<TBarriersSnapshot::TBarriersEssence> BarriersEssence;
     };
 
-
     ////////////////////////////////////////////////////////////////////////////
-    // THullSyncFullActor
+    // THullSyncFullBase
     ////////////////////////////////////////////////////////////////////////////
-    class THullSyncFullActor : public TActorBootstrapped<THullSyncFullActor> {
+    class THullSyncFullBase {
+    protected:
         TIntrusivePtr<TVDiskConfig> Config;
         TIntrusivePtr<THullCtx> HullCtx;
         const TActorId ParentId;
-        const TActorId Recipient;
         THullDsSnap FullSnap;
+
+        const TSyncState SyncState;
+        const TVDiskID SelfVDiskId;
+        std::shared_ptr<NMonGroup::TVDiskIFaceGroup> IFaceMonGroup;
+        std::shared_ptr<NMonGroup::TFullSyncGroup> FullSyncGroup;
+        TEvBlobStorage::TEvVSyncFull::TPtr CurrentEvent;
+        std::unique_ptr<TEvBlobStorage::TEvVSyncFullResult> Result;
+
+        // filters for record processing
+        TFakeFilter FakeFilter;
+        TLogoBlobFilterForHull LogoBlobFilter;
+
+        constexpr static TDuration MaxProcessingTime = TDuration::MilliSeconds(5);  // half of a quota for mailbox
+
+    private:
         // keys are subject to change during the processing
         TKeyLogoBlob KeyLogoBlob;
         TKeyBlock KeyBlock;
         TKeyBarrier KeyBarrier;
         NKikimrBlobStorage::ESyncFullStage Stage;
-        std::unique_ptr<TEvBlobStorage::TEvVSyncFullResult> Result;
-        TFakeFilter FakeFilter;
-        TLogoBlobFilterForHull LogoBlobFilter;
-        TVDiskID SourceVDisk;
 
-        friend class TActorBootstrapped<THullSyncFullActor>;
-
-        constexpr static TDuration MaxProcessingTime = TDuration::MilliSeconds(5);  // half of a quota for mailbox
-        constexpr static ui32 TimerIterations = 1024;
-
-        void Serialize(const TActorContext &ctx,
-                       TString *buf,
+    protected:
+        void Serialize(TString *buf,
                        const TKeyLogoBlob &key,
                        const TMemRecLogoBlob &memRec) {
-            Y_UNUSED(ctx);
             char tmpBuf[NSyncLog::MaxRecFullSize];
             auto s = NSyncLog::TSerializeRoutines::SetLogoBlob;
             ui32 size = s(HullCtx->VCtx->Top->GType, tmpBuf, 0, key.LogoBlobID(), memRec.GetIngress());
             buf->append(tmpBuf, size);
         }
 
-        void Serialize(const TActorContext &ctx,
-                       TString *buf,
+        void Serialize(TString *buf,
                        const TKeyBlock &key,
                        const TMemRecBlock &memRec) {
-            Y_UNUSED(ctx);
             char tmpBuf[NSyncLog::MaxRecFullSize];
             auto s = NSyncLog::TSerializeRoutines::SetBlock;
             ui32 size = s(tmpBuf, 0, key.TabletId, memRec.BlockedGeneration, 0);
             buf->append(tmpBuf, size);
         }
 
-        void Serialize(const TActorContext &ctx,
-                       TString *buf,
+        void Serialize(TString *buf,
                        const TKeyBarrier &key,
                        const TMemRecBarrier &memRec) {
-            Y_UNUSED(ctx);
             char tmpBuf[NSyncLog::MaxRecFullSize];
             auto s = NSyncLog::TSerializeRoutines::SetBarrier;
             ui32 size = s(tmpBuf, 0, key.TabletId, key.Channel, key.Gen,
@@ -94,28 +95,88 @@ namespace NKikimr {
         static const ui32 MsgFullFlag = 0x2;
         static const ui32 LongProcessing = 0x4;
 
-        void Bootstrap(const TActorContext &ctx) {
-            LogoBlobFilter.BuildBarriersEssence(FullSnap.BarriersSnap);
+        template <class TKey, class TMemRec, class TFilter>
+        ui32 Process(
+                ::NKikimr::TLevelIndexSnapshot<TKey, TMemRec>& snapshot,
+                TKey& key,
+                const TFilter& filter,
+                TString* data) {
 
+            // reserve some space for data
+            if (data->capacity() < Config->MaxResponseSize) {
+                data->reserve(Config->MaxResponseSize);
+            }
+
+            using TLevelIndexSnapshot = ::NKikimr::TLevelIndexSnapshot<TKey, TMemRec>;
+            using TIndexForwardIterator = typename TLevelIndexSnapshot::TIndexForwardIterator;
+            TIndexForwardIterator it(HullCtx, &snapshot);
+            it.Seek(key);
+
+            TFrequentlyCalledHPTimer timer(MaxProcessingTime); 
+
+            // copy data until we have some space
+            ui32 result = 0;
+            while (it.Valid()) {
+                if (data->size() + NSyncLog::MaxRecFullSize > data->capacity()) {
+                    result |= MsgFullFlag;
+                    break;
+                }
+
+                if (timer.Check()) {
+                    result |= LongProcessing;
+                    break;
+                }
+
+                key = it.GetCurKey();
+                if (filter.Check(key, it.GetMemRec(), HullCtx->AllowKeepFlags, true /*allowGarbageCollection*/))
+                    Serialize(data, key, it.GetMemRec());
+                it.Next();
+            }
+            // key points to the last seen key
+
+            if (!it.Valid())
+                result |= EmptyFlag;
+
+            return result;
+        }
+
+        bool RunStages() {
+            if (!Result) {
+                Result = std::make_unique<TEvBlobStorage::TEvVSyncFullResult>(NKikimrProto::OK, SelfVDiskId,
+                        SyncState, CurrentEvent->Get()->Record.GetCookie(), TActivationContext::Now(),
+                        IFaceMonGroup->SyncFullResMsgsPtr(), nullptr, CurrentEvent->GetChannel());
+                LogoBlobFilter.BuildBarriersEssence(FullSnap.BarriersSnap);
+            }
+
+            TString* data = Result->Record.MutableData();
             ui32 pres = 0;
             switch (Stage) {
                 case NKikimrBlobStorage::LogoBlobs:
                     Stage = NKikimrBlobStorage::LogoBlobs;
-                    pres = Process(ctx, FullSnap.LogoBlobsSnap, KeyLogoBlob, LogoBlobFilter);
-                    if (pres & (MsgFullFlag | LongProcessing))
+                    pres = Process(FullSnap.LogoBlobsSnap, KeyLogoBlob, LogoBlobFilter, data);
+                    if (pres & MsgFullFlag) {
                         break;
+                    } else if (pres & LongProcessing) {
+                        return false;
+                    }
                     Y_VERIFY_S(pres & EmptyFlag, HullCtx->VCtx->VDiskLogPrefix);
                     [[fallthrough]];
                 case NKikimrBlobStorage::Blocks:
                     Stage = NKikimrBlobStorage::Blocks;
-                    pres = Process(ctx, FullSnap.BlocksSnap, KeyBlock, FakeFilter);
-                    if (pres & (MsgFullFlag | LongProcessing))
+                    pres = Process(FullSnap.BlocksSnap, KeyBlock, FakeFilter, data);
+                    if (pres & MsgFullFlag) {
                         break;
+                    } else if (pres & LongProcessing) {
+                        return false;
+                    }
                     Y_VERIFY_S(pres & EmptyFlag, HullCtx->VCtx->VDiskLogPrefix);
                     [[fallthrough]];
                 case NKikimrBlobStorage::Barriers:
                     Stage = NKikimrBlobStorage::Barriers;
-                    pres = Process(ctx, FullSnap.BarriersSnap, KeyBarrier, FakeFilter);
+                    pres = Process(FullSnap.BarriersSnap, KeyBarrier, FakeFilter, data);
+                    if (pres & LongProcessing) {
+                        return false;
+                    }
                     break;
                 default: Y_ABORT("Unexpected case: stage=%d", Stage);
             }
@@ -128,59 +189,8 @@ namespace NKikimr {
             LogoBlobIDFromLogoBlobID(KeyLogoBlob.LogoBlobID(), Result->Record.MutableLogoBlobFrom());
             Result->Record.SetBlockTabletFrom(KeyBlock.TabletId);
             KeyBarrier.Serialize(*Result->Record.MutableBarrierFrom());
-            // send reply
-            SendVDiskResponse(ctx, Recipient, Result.release(), 0, HullCtx->VCtx, {});
-            // notify parent about death
-            ctx.Send(ParentId, new TEvents::TEvGone);
-            Die(ctx);
-        }
-
-        template <class TKey, class TMemRec, class TFilter>
-        ui32 Process(
-                const TActorContext &ctx,
-                ::NKikimr::TLevelIndexSnapshot<TKey, TMemRec> &snapshot,
-                TKey &key,
-                const TFilter &filter) {
-            THPTimer timer; 
-            // reserve some space for data
-            TString *data = Result->Record.MutableData();
-            if (data->capacity() < Config->MaxResponseSize) {
-                data->reserve(Config->MaxResponseSize);
-            }
-
-            using TLevelIndexSnapshot = ::NKikimr::TLevelIndexSnapshot<TKey, TMemRec>;
-            using TIndexForwardIterator = typename TLevelIndexSnapshot::TIndexForwardIterator;
-            TIndexForwardIterator it(HullCtx, &snapshot);
-            it.Seek(key);
-
-            // copy data until we have some space
-            ui32 result = 0;
-            ui32 timerIterations = TimerIterations;
-            while (it.Valid()) {
-                if (data->size() + NSyncLog::MaxRecFullSize > data->capacity()) {
-                    result |= MsgFullFlag;
-                    break;
-                }
-
-                if (--timerIterations == 0) {
-                    if (TDuration::Seconds(timer.Passed()) > MaxProcessingTime) {
-                        result |= LongProcessing;
-                        break;
-                    }
-                    timerIterations = TimerIterations;
-                }
-
-                key = it.GetCurKey();
-                if (filter.Check(key, it.GetMemRec(), HullCtx->AllowKeepFlags, true /*allowGarbageCollection*/))
-                    Serialize(ctx, data, key, it.GetMemRec());
-                it.Next();
-            }
-            // key points to the last seen key
-
-            if (!it.Valid())
-                result |= EmptyFlag;
-
-            return result;
+        
+            return true;
         }
 
     public:
@@ -188,52 +198,195 @@ namespace NKikimr {
             return NKikimrServices::TActivity::BS_HULL_SYNC_FULL;
         }
 
-        THullSyncFullActor(
+    public:
+        THullSyncFullBase(
                 const TIntrusivePtr<TVDiskConfig> &config,
                 const TIntrusivePtr<THullCtx> &hullCtx,
                 const TActorId &parentId,
-                const TVDiskID &sourceVDisk,
-                const TActorId &recipient,
                 THullDsSnap &&fullSnap,
-                const TKeyLogoBlob &keyLogoBlob,
-                const TKeyBlock &keyBlock,
-                const TKeyBarrier &keyBarrier,
-                NKikimrBlobStorage::ESyncFullStage stage,
-                std::unique_ptr<TEvBlobStorage::TEvVSyncFullResult> result)
-            : TActorBootstrapped<THullSyncFullActor>()
-            , Config(config)
+                const TSyncState& syncState,
+                const TVDiskID& selfVDiskId,
+                const std::shared_ptr<NMonGroup::TVDiskIFaceGroup>& ifaceMonGroup,
+                const std::shared_ptr<NMonGroup::TFullSyncGroup>& fullSyncGroup,
+                const TEvBlobStorage::TEvVSyncFull::TPtr& ev,
+                TKeyLogoBlob keyLogoBlob,
+                TKeyBlock keyBlock,
+                TKeyBarrier keyBarrier,
+                NKikimrBlobStorage::ESyncFullStage stage)
+            : Config(config)
             , HullCtx(hullCtx)
             , ParentId(parentId)
-            , Recipient(recipient)
             , FullSnap(std::move(fullSnap))
+            , SyncState(syncState)
+            , SelfVDiskId(selfVDiskId)
+            , IFaceMonGroup(ifaceMonGroup)
+            , FullSyncGroup(fullSyncGroup)
+            , CurrentEvent(ev)
+            , FakeFilter()
+            , LogoBlobFilter(HullCtx, VDiskIDFromVDiskID(CurrentEvent->Get()->Record.GetSourceVDiskID()))
             , KeyLogoBlob(keyLogoBlob)
             , KeyBlock(keyBlock)
             , KeyBarrier(keyBarrier)
             , Stage(stage)
-            , Result(std::move(result))
-            , FakeFilter()
-            , LogoBlobFilter(HullCtx, sourceVDisk)
-            , SourceVDisk(sourceVDisk)
-        {
-            Y_UNUSED(SourceVDisk);
-        }
+        {}
     };
 
 
-    IActor *CreateHullSyncFullActor(
+    ////////////////////////////////////////////////////////////////////////////
+    // THullSyncFullActorLegacyProtocol
+    ////////////////////////////////////////////////////////////////////////////
+    class THullSyncFullActorLegacyProtocol : public THullSyncFullBase,
+            public TActorBootstrapped<THullSyncFullActorLegacyProtocol> {
+
+    public:
+        void Bootstrap() {
+            Become(&TThis::StateFunc);
+            Run();
+        }
+
+        void Handle(const TEvBlobStorage::TEvVSyncFull::TPtr& ev) {
+            CurrentEvent = ev;
+            Run();
+        }
+
+        void Run() {
+            bool portionCompleted = RunStages();
+            if (portionCompleted) {
+                SendVDiskResponse(TActivationContext::AsActorContext(), CurrentEvent->Sender,
+                        Result.release(), 0, HullCtx->VCtx, {});
+                // notify parent about death
+                Send(ParentId, new TEvents::TEvGone);
+                PassAway();
+            } else {
+                Schedule(TDuration::Zero(), new TEvents::TEvWakeup);
+            }
+        }
+    
+        STRICT_STFUNC(StateFunc,
+            cFunc(TEvents::TEvPoisonPill::EventType, PassAway)
+            cFunc(TEvents::TEvWakeup::EventType, Run)
+        )
+
+        static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+            return NKikimrServices::TActivity::BS_HULL_SYNC_FULL;
+        }
+
+        THullSyncFullActorLegacyProtocol(
+                const TIntrusivePtr<TVDiskConfig> &config,
+                const TIntrusivePtr<THullCtx> &hullCtx,
+                const TActorId &parentId,
+                THullDsSnap &&fullSnap,
+                const TSyncState& syncState,
+                const TVDiskID& selfVDiskId,
+                const std::shared_ptr<NMonGroup::TVDiskIFaceGroup>& ifaceMonGroup,
+                const std::shared_ptr<NMonGroup::TFullSyncGroup>& fullSyncGroup,
+                const TEvBlobStorage::TEvVSyncFull::TPtr& ev,
+                const TKeyLogoBlob &keyLogoBlob,
+                const TKeyBlock &keyBlock,
+                const TKeyBarrier &keyBarrier,
+                NKikimrBlobStorage::ESyncFullStage stage)
+            : THullSyncFullBase(config, hullCtx, parentId, std::forward<THullDsSnap>(fullSnap),
+                    syncState, selfVDiskId, ifaceMonGroup, fullSyncGroup, ev,
+                    keyLogoBlob, keyBlock, keyBarrier, stage)
+            , TActorBootstrapped<THullSyncFullActorLegacyProtocol>()
+        {}
+    };
+
+    ////////////////////////////////////////////////////////////////////////////
+    // THullSyncFullActorUnorderedDataProtocol
+    ////////////////////////////////////////////////////////////////////////////
+    class THullSyncFullActorUnorderedDataProtocol : public THullSyncFullBase,
+            public TActorBootstrapped<THullSyncFullActorUnorderedDataProtocol> {
+    public:
+        void Bootstrap() {
+            ++FullSyncGroup->UnorderedDataProtocolActorsCreated();
+            Become(&TThis::StateFunc);
+            Run();
+        }
+
+        static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+            return NKikimrServices::TActivity::BS_HULL_SYNC_FULL_UNORDERED_DATA_PROTOCOL;
+        }
+    
+        THullSyncFullActorUnorderedDataProtocol(
+                const TIntrusivePtr<TVDiskConfig> &config,
+                const TIntrusivePtr<THullCtx> &hullCtx,
+                const TActorId &parentId,
+                THullDsSnap &&fullSnap,
+                const TSyncState& syncState,
+                const TVDiskID& selfVDiskId,
+                const std::shared_ptr<NMonGroup::TVDiskIFaceGroup>& ifaceMonGroup,
+                const std::shared_ptr<NMonGroup::TFullSyncGroup>& fullSyncGroup,
+                const TEvBlobStorage::TEvVSyncFull::TPtr& ev)
+            : THullSyncFullBase(config, hullCtx, parentId, std::forward<THullDsSnap>(fullSnap),
+                    syncState, selfVDiskId, ifaceMonGroup, fullSyncGroup, ev, TKeyLogoBlob::First(), 
+                    TKeyBlock::First(), TKeyBarrier::First(), NKikimrBlobStorage::LogoBlobs)
+            , TActorBootstrapped<THullSyncFullActorUnorderedDataProtocol>()
+        {}
+
+    private:
+        void Handle(TEvBlobStorage::TEvVSyncFull::TPtr& ev) {
+            CurrentEvent = ev;
+            Run();
+        }
+
+        void Run() {
+            bool portionCompleted = RunStages();
+            if (portionCompleted) {
+                bool finished = Result->Record.GetFinished();
+                // send reply
+                SendVDiskResponse(TActivationContext::AsActorContext(), CurrentEvent->Sender, Result.release(),
+                        0, HullCtx->VCtx, {});
+                // notify parent about death
+                if (finished) {
+                    Send(ParentId, new TEvents::TEvGone);
+                    ++FullSyncGroup->UnorderedDataProtocolActorsTerminated();
+                    PassAway();
+                }
+            } else {
+                Schedule(TDuration::Zero(), new TEvents::TEvWakeup);
+            }
+        }
+
+        STRICT_STFUNC(StateFunc,
+            hFunc(TEvBlobStorage::TEvVSyncFull, Handle)
+            cFunc(TEvents::TEvPoisonPill::EventType, PassAway)
+            cFunc(TEvents::TEvWakeup::EventType, Run)
+        )
+    };
+
+    IActor *CreateHullSyncFullActorLegacyProtocol(
             const TIntrusivePtr<TVDiskConfig> &config,
             const TIntrusivePtr<THullCtx> &hullCtx,
             const TActorId &parentId,
-            const TVDiskID &sourceVDisk,
-            const TActorId &recipient,
             THullDsSnap &&fullSnap,
+            const TSyncState& syncState,
+            const TVDiskID& selfVDiskId,
+            const std::shared_ptr<NMonGroup::TVDiskIFaceGroup>& ifaceMonGroup,
+            const std::shared_ptr<NMonGroup::TFullSyncGroup>& fullSyncGroup,
+            const TEvBlobStorage::TEvVSyncFull::TPtr& ev,
             const TKeyLogoBlob &keyLogoBlob,
             const TKeyBlock &keyBlock,
             const TKeyBarrier &keyBarrier,
-            NKikimrBlobStorage::ESyncFullStage stage,
-            std::unique_ptr<TEvBlobStorage::TEvVSyncFullResult> result) {
-        return new THullSyncFullActor(config, hullCtx, parentId, sourceVDisk, recipient, std::move(fullSnap),
-                                      keyLogoBlob, keyBlock, keyBarrier, stage, std::move(result));
+            NKikimrBlobStorage::ESyncFullStage stage) {
+        return new THullSyncFullActorLegacyProtocol(config, hullCtx, parentId,
+                std::move(fullSnap), syncState, selfVDiskId, ifaceMonGroup,
+                fullSyncGroup, ev, keyLogoBlob, keyBlock, keyBarrier, stage);
+    }
+
+    IActor* CreateHullSyncFullActorUnorderedDataProtocol(
+            const TIntrusivePtr<TVDiskConfig> &config,
+            const TIntrusivePtr<THullCtx> &hullCtx,
+            const TActorId &parentId,
+            THullDsSnap &&fullSnap,
+            const TSyncState& syncState,
+            const TVDiskID& selfVDiskId,
+            const std::shared_ptr<NMonGroup::TVDiskIFaceGroup>& ifaceMonGroup,
+            const std::shared_ptr<NMonGroup::TFullSyncGroup>& fullSyncGroup,
+            const TEvBlobStorage::TEvVSyncFull::TPtr& ev) {
+        return new THullSyncFullActorUnorderedDataProtocol(config, hullCtx, parentId,
+                std::move(fullSnap), syncState, selfVDiskId, ifaceMonGroup,
+                fullSyncGroup, ev);
     }
 
 } // NKikimr

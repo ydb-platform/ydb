@@ -9,7 +9,7 @@ TExprNode::TPtr ExpandPgSelect(const TExprNode::TPtr& node, TExprContext& ctx, T
 TExprNode::TPtr ExpandPgSelectSublink(const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx,
     ui32 subLinkId, const TExprNode::TListType& outerInputs, const TVector<TString>& outerInputAliases);
 
-TExprNode::TPtr ExpandPositionalUnionAll(const TExprNode& input, const TVector<TColumnOrder>& columnOrders,
+TExprNode::TPtr ExpandPositionalSelectOp(const TExprNode& input, const TVector<TColumnOrder>& columnOrders,
     TExprNode::TListType children, TExprContext& ctx, TOptimizeContext& optCtx);
 
 TExprNode::TPtr NormalizeColumnOrder(const TExprNode::TPtr& node, const TColumnOrder& sourceColumnOrder,
@@ -24,5 +24,7 @@ TExprNode::TPtr ExpandPgGroupRef(const TExprNode::TPtr& node, TExprContext& ctx,
 TExprNode::TPtr ExpandPgGrouping(const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx);
 
 TExprNode::TPtr ExpandPgIterate(const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx);
+
+TExprNode::TPtr CombineSetItems(TPositionHandle pos, const TExprNode::TPtr& left, const TExprNode::TPtr& right, const TStringBuf& op, TExprContext& ctx);
 
 } // namespace NYql

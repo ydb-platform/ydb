@@ -1,5 +1,6 @@
 #include <ydb/core/mon_alloc/memory_info.h>
 #include <ydb/core/protos/memory_controller_config.pb.h>
+#include <ydb/core/tx/columnshard/common/limits.h>
 #include <util/generic/size_literals.h>
 
 #pragma once
@@ -7,9 +8,13 @@
 namespace NKikimr::NMemory {
 
 namespace {
-    
+
 ui64 GetPercent(float percent, ui64 value) {
-    return static_cast<ui64>(static_cast<double>(value) * (percent / 100.0));
+    return static_cast<ui64>(static_cast<double>(value) * (static_cast<double>(percent) / 100.0));
+}
+
+ui64 GetFraction(float fraction, ui64 value) {
+    return static_cast<ui64>(static_cast<double>(value) * static_cast<double>(fraction));
 }
 
 #define GET_LIMIT(name) \
@@ -80,4 +85,102 @@ GET_MAX_LIMIT(SharedCache)
 
 GET_LIMIT(QueryExecutionLimit)
 
+GET_LIMIT(ColumnTablesReadExecutionLimit)
+GET_LIMIT(ColumnTablesCompactionLimit)
+GET_LIMIT(ColumnTablesCacheLimit)
+
+// ColumnTablesReadExecution memory is split into:
+// - ColumnTablesScanGroupedMemory
+// - ColumnTablesDeduplicationGroupedMemory
+
+// keep fractions as power of 2 to avoid precision loss
+static constexpr float ColumnTablesReadExecutionFraction = 0.5f; // 1/2
+static constexpr float ColumnTablesDeduplicationGroupedMemoryFraction = 0.5f; // 1/2
+static_assert(ColumnTablesReadExecutionFraction + ColumnTablesDeduplicationGroupedMemoryFraction == 1);
+
+inline ui64 GetColumnTablesScanGroupedMemoryLimitBytes(const NKikimrConfig::TMemoryControllerConfig& config, const ui64 hardLimitBytes) {
+    return GetFraction(ColumnTablesReadExecutionFraction,
+        GetColumnTablesReadExecutionLimitBytes(config, hardLimitBytes));
+}
+inline ui64 GetColumnTablesDeduplicationGroupedMemoryLimitBytes(const NKikimrConfig::TMemoryControllerConfig& config, const ui64 hardLimitBytes) {
+    return GetFraction(ColumnTablesDeduplicationGroupedMemoryFraction,
+        GetColumnTablesReadExecutionLimitBytes(config, hardLimitBytes));
+}
+
+// ColumnTablesCompaction memory is split into:
+// - ColumnTablesCompGroupedMemory
+// and resource broker queues:
+// - ColumnTablesCompactionIndexationQueue
+// - ColumnTablesTtlQueue
+// - ColumnTablesGeneralQueue
+// - ColumnTablesNormalizerQueue
+
+// keep fractions as power of 2 to avoid precision loss
+static constexpr float ColumnTablesCompactionIndexationQueueFraction = 0.125f; // 2/16
+static constexpr float ColumnTablesTtlQueueFraction = 0.125f; // 2/16
+static constexpr float ColumnTablesGeneralQueueFraction = 0.375f; // 6/16
+static constexpr float ColumnTablesNormalizerQueueFraction = 0.375f; // 6/16
+static_assert(ColumnTablesCompactionIndexationQueueFraction
+    + ColumnTablesTtlQueueFraction
+    + ColumnTablesGeneralQueueFraction
+    + ColumnTablesNormalizerQueueFraction == 1);
+
+inline ui64 GetColumnTablesCompGroupedMemoryLimitBytes(const NKikimrConfig::TMemoryControllerConfig& config, const ui64 hardLimitBytes) {
+    return GetColumnTablesCompactionLimitBytes(config, hardLimitBytes);
+}
+
+inline ui64 GetColumnTablesCompactionIndexationQueueLimitBytes(const NKikimrConfig::TMemoryControllerConfig& config, const ui64 hardLimitBytes) {
+    return GetFraction(ColumnTablesCompactionIndexationQueueFraction,
+        GetColumnTablesCompactionLimitBytes(config, hardLimitBytes));
+}
+
+inline ui64 GetColumnTablesTtlQueueLimitBytes(const NKikimrConfig::TMemoryControllerConfig& config, const ui64 hardLimitBytes) {
+    return GetFraction(ColumnTablesTtlQueueFraction,
+        GetColumnTablesCompactionLimitBytes(config, hardLimitBytes));
+}
+
+inline ui64 GetColumnTablesGeneralQueueQueueLimitBytes(const NKikimrConfig::TMemoryControllerConfig& config, const ui64 hardLimitBytes) {
+    return GetFraction(ColumnTablesGeneralQueueFraction,
+        GetColumnTablesCompactionLimitBytes(config, hardLimitBytes));
+}
+
+inline ui64 GetColumnTablesNormalizerQueueLimitBytes(const NKikimrConfig::TMemoryControllerConfig& config, const ui64 hardLimitBytes) {
+    return GetFraction(ColumnTablesNormalizerQueueFraction,
+        GetColumnTablesCompactionLimitBytes(config, hardLimitBytes));
+}
+
+// ColumnTablesCache memory is split into:
+// - ColumnTablesBlobCache
+// - ColumnTablesDeduplicationGroupedMemory
+// - ColumnTablesColumnDataCache
+
+// keep fractions as power of 2 to avoid precision loss
+static constexpr float ColumnTablesBlobCacheFraction = 0.125f; // 2/16
+static constexpr float ColumnTablesColumnTablesDataAccessorCacheFraction = 0.125f; // 2/16
+static constexpr float ColumnTablesColumnDataCacheFraction = 0.125f; // 2/16
+static constexpr float ColumnTablesPortionsMetaDataCacheFraction = 0.625f; // 10/16
+static_assert(ColumnTablesBlobCacheFraction
+    + ColumnTablesColumnTablesDataAccessorCacheFraction
+    + ColumnTablesColumnDataCacheFraction
+    + ColumnTablesPortionsMetaDataCacheFraction == 1);
+
+inline ui64 GetColumnTablesBlobCacheLimitBytes(const NKikimrConfig::TMemoryControllerConfig& config, const ui64 hardLimitBytes) {
+    return GetFraction(ColumnTablesBlobCacheFraction,
+        GetColumnTablesCacheLimitBytes(config, hardLimitBytes));
+}
+
+inline ui64 GetColumnTablesDataAccessorCacheLimitBytes(const NKikimrConfig::TMemoryControllerConfig& config, const ui64 hardLimitBytes) {
+    return GetFraction(ColumnTablesDeduplicationGroupedMemoryFraction,
+        GetColumnTablesCacheLimitBytes(config, hardLimitBytes));
+}
+
+inline ui64 GetColumnTablesColumnDataCacheLimitBytes(const NKikimrConfig::TMemoryControllerConfig& config, const ui64 hardLimitBytes) {
+    return GetFraction(ColumnTablesColumnDataCacheFraction,
+        GetColumnTablesCacheLimitBytes(config, hardLimitBytes));
+}
+
+inline ui64 GetPortionsMetaDataCacheLimitBytes(const NKikimrConfig::TMemoryControllerConfig& config, const ui64 hardLimitBytes) {
+    return GetFraction(ColumnTablesPortionsMetaDataCacheFraction,
+        GetColumnTablesCacheLimitBytes(config, hardLimitBytes));
+}
 }

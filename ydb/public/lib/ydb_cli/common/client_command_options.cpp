@@ -12,6 +12,11 @@
 
 namespace NYdb::NConsoleClient {
 
+TClientCommandOptions::TClientCommandOptions()
+    : Opts()
+{
+}
+
 TClientCommandOptions::TClientCommandOptions(NLastGetopt::TOpts opts)
     : Opts(std::move(opts))
 {
@@ -135,6 +140,11 @@ TClientCommandOption& TClientCommandOption::AddLongName(const TString& name) {
     return *this;
 }
 
+TClientCommandOption&  TClientCommandOption::IfPresentDisableCompletion() {
+    Opt->IfPresentDisableCompletion();
+    return *this;
+}
+
 const NLastGetopt::EHasArg& TClientCommandOption::GetHasArg() const {
     return Opt->GetHasArg();
 }
@@ -172,6 +182,11 @@ TClientCommandOption& TClientCommandOption::Handler(THandler handler) {
 TClientCommandOption& TClientCommandOption::Validator(TValidator validator) {
     ValidatorHandler = std::move(validator);
     return SetHandler();
+}
+
+TClientCommandOption& TClientCommandOption::Handler(void (*handler)(const NLastGetopt::TOptsParser*)) {
+    Opt->Handler(handler);
+    return *this;
 }
 
 TClientCommandOption& TClientCommandOption::SetHandler() {
@@ -415,9 +430,9 @@ TAnonymousAuthMethodOption::TAnonymousAuthMethodOption(TClientCommandOptions* cl
 }
 
 
-TOptionsParseResult::TOptionsParseResult(const TClientCommandOptions* options, int argc, const char** argv, bool throwOnParseError)
+TOptionsParseResult::TOptionsParseResult(const TClientCommandOptions* options, int argc, const char** argv)
     : ClientOptions(options)
-    , ParseFromCommandLineResult(&options->GetOpts(), argc, argv, throwOnParseError)
+    , ParseFromCommandLineResult(&options->GetOpts(), argc, argv)
 {
     for (const auto& clientOption : ClientOptions->ClientOpts) {
         if (const auto* optResult = ParseFromCommandLineResult.FindOptParseResult(&clientOption->GetOpt())) {

@@ -818,10 +818,10 @@ TExprNode::TPtr NormalizeColumnOrder(const TExprNode::TPtr& node, const TColumnO
         .Build();
 }
 
-TExprNode::TPtr ExpandPositionalUnionAll(const TExprNode& node, const TVector<TColumnOrder>& columnOrders,
+TExprNode::TPtr ExpandPositionalSelectOp(const TExprNode& node, const TVector<TColumnOrder>& columnOrders,
     TExprNode::TListType children, TExprContext& ctx, TOptimizeContext& optCtx)
 {
-    YQL_ENSURE(node.IsCallable({"UnionAllPositional", "UnionMergePositional"}));
+    YQL_ENSURE(node.IsCallable({"UnionAllPositional", "UnionMergePositional", "IntersectPositional", "IntersectAllPositional", "ExceptPositional", "ExceptAllPositional"}));
     auto targetColumnOrder = optCtx.Types->LookupColumnOrder(node);
     YQL_ENSURE(targetColumnOrder);
 
@@ -831,7 +831,9 @@ TExprNode::TPtr ExpandPositionalUnionAll(const TExprNode& node, const TVector<TC
         child = NormalizeColumnOrder(child, childColumnOrder, *targetColumnOrder, ctx);
     }
 
-    auto res = ctx.NewCallable(node.Pos(), node.IsCallable("UnionAllPositional") ? "UnionAll" : "UnionMerge", std::move(children));
+    TStringBuf callable = node.Content();
+    YQL_ENSURE(callable.ChopSuffix("Positional"));
+    auto res = ctx.NewCallable(node.Pos(), callable, std::move(children));
     return KeepColumnOrder(res, node, ctx, *optCtx.Types);
 }
 
@@ -1763,31 +1765,25 @@ std::tuple<TVector<ui32>, TExprNode::TListType> BuildJoinGroups(TPositionHandle 
                         }
 
                         TExprNode::TPtr left, right;
-                        if (!IsEquality(andTerm, left, right)) {
+                        if (!IsMemberEquality(andTerm, predicate->Head().Head(), left, right)) {
                             bad = true;
                             break;
                         }
 
                         bool leftOnLeft;
-                        if (left->IsCallable("Member") && &left->Head() == &predicate->Head().Head()) {
+                        {
                             auto inputPtr = memberToInput.FindPtr(left->Child(1)->Content());
                             YQL_ENSURE(inputPtr);
                             leftOnLeft = leftIdxs.contains(*inputPtr);
                             (leftOnLeft ? leftColumns : rightColumns).push_back(left->ChildPtr(1));
-                        } else {
-                            bad = true;
-                            break;
                         }
 
                         bool rightOnRight;
-                        if (right->IsCallable("Member") && &right->Head() == &predicate->Head().Head()) {
+                        {
                             auto inputPtr = memberToInput.FindPtr(right->Child(1)->Content());
                             YQL_ENSURE(inputPtr);
                             rightOnRight = rightIdxs.contains(*inputPtr);
                             (rightOnRight ? rightColumns : leftColumns).push_back(right->ChildPtr(1));
-                        } else {
-                            bad = true;
-                            break;
                         }
 
                         if (leftOnLeft != rightOnRight) {
@@ -3591,15 +3587,12 @@ TExprNode::TPtr CombineSetItems(TPositionHandle pos, const TExprNode::TPtr& left
                     .Add(0, aggregated)
                     .Lambda(1)
                         .Param("row")
-                        .Callable(0, ">")
+                        .Callable(0, "==")
                             .Callable(0, "Member")
-                                .Arg(0, "row")
-                                .Atom(1, "_yql_count_left")
-                            .Seal()
-                            .Callable(1, "Member")
                                 .Arg(0, "row")
                                 .Atom(1, "_yql_count_right")
                             .Seal()
+                            .Add(1, zero)
                         .Seal()
                     .Seal()
                 .Seal()

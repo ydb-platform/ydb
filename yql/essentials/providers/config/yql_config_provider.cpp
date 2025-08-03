@@ -32,9 +32,9 @@ namespace {
     class TConfigCallableExecutionTransformer : public TSyncTransformerBase {
     public:
         TConfigCallableExecutionTransformer(const TTypeAnnotationContext& types)
-            : Types(types)
+            : Types_(types)
         {
-            Y_UNUSED(Types);
+            Y_UNUSED(Types_);
         }
 
         TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final {
@@ -61,19 +61,15 @@ namespace {
                         writer.OnKeyedItem("Data");
                         writer.OnBeginList();
                         if (tag == "data_sinks") {
-                            writer.OnListItem();
-                            writer.OnStringScalar(KikimrProviderName);
-                            writer.OnListItem();
-                            writer.OnStringScalar(YtProviderName);
-                            writer.OnListItem();
-                            writer.OnStringScalar(ResultProviderName);
+                            for (const auto& ds: Types_.DataSinks) {
+                                writer.OnListItem();
+                                writer.OnStringScalar(ds->GetName());
+                            }
                         } else if (tag == "data_sources") {
-                            writer.OnListItem();
-                            writer.OnStringScalar(KikimrProviderName);
-                            writer.OnListItem();
-                            writer.OnStringScalar(YtProviderName);
-                            writer.OnListItem();
-                            writer.OnStringScalar(ConfigProviderName);
+                            for (const auto& ds: Types_.DataSources) {
+                                writer.OnListItem();
+                                writer.OnStringScalar(ds->GetName());
+                            }
                         }
                         writer.OnEndList();
                         writer.OnEndMap();
@@ -121,7 +117,7 @@ namespace {
         }
 
     private:
-        const TTypeAnnotationContext& Types;
+        const TTypeAnnotationContext& Types_;
     };
 
     class TConfigProvider : public TDataProviderBase {
@@ -135,10 +131,10 @@ namespace {
         };
 
         TConfigProvider(TTypeAnnotationContext& types, const TGatewaysConfig* config, const TString& username, const TAllowSettingPolicy& policy)
-            : Types(types)
-            , CoreConfig(config && config->HasYqlCore() ? &config->GetYqlCore() : nullptr)
-            , Username(username)
-            , Policy(policy)
+            : Types_(types)
+            , CoreConfig_(config && config->HasYqlCore() ? &config->GetYqlCore() : nullptr)
+            , Username_(username)
+            , Policy_(policy)
         {}
 
         TStringBuf GetName() const override {
@@ -147,22 +143,22 @@ namespace {
 
         bool Initialize(TExprContext& ctx) override {
             std::unordered_set<std::string_view> groups;
-            if (Types.Credentials != nullptr) {
-                groups.insert(Types.Credentials->GetGroups().begin(), Types.Credentials->GetGroups().end());
+            if (Types_.Credentials != nullptr) {
+                groups.insert(Types_.Credentials->GetGroups().begin(), Types_.Credentials->GetGroups().end());
             }
             auto filter = [this, groups = std::move(groups)](const TCoreAttr& attr) {
-                if (!attr.HasActivation() || !Username) {
+                if (!attr.HasActivation() || !Username_) {
                     return true;
                 }
-                if (NConfig::Allow(attr.GetActivation(), Username, groups)) {
-                    Statistics.Entries.emplace_back(TStringBuilder() << "Activation:" << attr.GetName(), 0, 0, 0, 0, 1);
+                if (NConfig::Allow(attr.GetActivation(), Username_, groups)) {
+                    Statistics_.Entries.emplace_back(TStringBuilder() << "Activation:" << attr.GetName(), 0, 0, 0, 0, 1);
                     return true;
                 }
                 return false;
             };
-            if (CoreConfig) {
+            if (CoreConfig_) {
                 TPosition pos;
-                for (auto& flag: CoreConfig->GetFlags()) {
+                for (auto& flag: CoreConfig_->GetFlags()) {
                     if (filter(flag)) {
                         TVector<TStringBuf> args;
                         for (auto& arg: flag.GetArgs()) {
@@ -178,12 +174,12 @@ namespace {
         }
 
         bool CollectStatistics(NYson::TYsonWriter& writer, bool totalOnly) override {
-            if (Statistics.Entries.empty()) {
+            if (Statistics_.Entries.empty()) {
                 return false;
             }
 
             THashMap<ui32, TOperationStatistics> tmp;
-            tmp.emplace(Max<ui32>(), Statistics);
+            tmp.emplace(Max<ui32>(), Statistics_);
             NCommon::WriteStatistics(writer, totalOnly, tmp);
 
             return true;
@@ -213,11 +209,11 @@ namespace {
         }
 
         IGraphTransformer& GetConfigurationTransformer() override {
-            if (ConfigurationTransformer) {
-                return *ConfigurationTransformer;
+            if (ConfigurationTransformer_) {
+                return *ConfigurationTransformer_;
             }
 
-            ConfigurationTransformer = CreateFunctorTransformer(
+            ConfigurationTransformer_ = CreateFunctorTransformer(
                 [this](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) -> IGraphTransformer::TStatus {
                 output = input;
                 if (ctx.Step.IsDone(TExprStep::Configure)) {
@@ -273,8 +269,8 @@ namespace {
                         }
 
                         if (command == "PureDataSource") {
-                            if (Types.PureResultDataSource != node->Child(3)->Content()) {
-                                res = ctx.ChangeChild(*node, 3, ctx.RenameNode(*node->Child(3), Types.PureResultDataSource));
+                            if (Types_.PureResultDataSource != node->Child(3)->Content()) {
+                                res = ctx.ChangeChild(*node, 3, ctx.RenameNode(*node->Child(3), Types_.PureResultDataSource));
                             }
                         }
                     }
@@ -285,13 +281,13 @@ namespace {
                 return status;
             });
 
-            return *ConfigurationTransformer;
+            return *ConfigurationTransformer_;
         }
 
         IGraphTransformer& GetTypeAnnotationTransformer(bool instantOnly) override {
             Y_UNUSED(instantOnly);
-            if (!TypeAnnotationTransformer) {
-                TypeAnnotationTransformer = CreateFunctorTransformer(
+            if (!TypeAnnotationTransformer_) {
+                TypeAnnotationTransformer_ = CreateFunctorTransformer(
                     [&](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) -> IGraphTransformer::TStatus {
                     output = input;
                     if (input->Content() == ConfReadName) {
@@ -379,7 +375,7 @@ namespace {
                 });
             }
 
-            return *TypeAnnotationTransformer;
+            return *TypeAnnotationTransformer_;
         }
 
         TExprNode::TPtr RewriteIO(const TExprNode::TPtr& node, TExprContext& ctx) override {
@@ -423,11 +419,11 @@ namespace {
         }
 
         IGraphTransformer& GetCallableExecutionTransformer() override {
-            if (!CallableExecutionTransformer) {
-                CallableExecutionTransformer = new TConfigCallableExecutionTransformer(Types);
+            if (!CallableExecutionTransformer_) {
+                CallableExecutionTransformer_ = new TConfigCallableExecutionTransformer(Types_);
             }
 
-            return *CallableExecutionTransformer;
+            return *CallableExecutionTransformer_;
         }
 
         bool GetDependencies(const TExprNode& node, TExprNode::TListType& children, bool compact) override {
@@ -453,7 +449,7 @@ namespace {
 
     private:
         bool IsSettingAllowed(const TPosition& pos, TStringBuf name, TExprContext& ctx) {
-            if (Policy && !Policy(name)) {
+            if (Policy_ && !Policy_(name)) {
                 ctx.AddError(TIssue(pos, TStringBuilder() << "Changing setting " << name << " is not allowed"));
                 return false;
             }
@@ -497,7 +493,7 @@ namespace {
                 }
 
                 try {
-                    Types.ValidateMode = NKikimr::NUdf::ValidateModeByStr(TString(args[0]));
+                    Types_.ValidateMode = NKikimr::NUdf::ValidateModeByStr(TString(args[0]));
                 } catch (const yexception& err) {
                     ctx.AddError(TIssue(pos, TStringBuilder() << err.AsStrBuf() << ", available modes: " << NKikimr::NUdf::ValidateModeAvailables()));
                     return false;
@@ -508,14 +504,14 @@ namespace {
                     ctx.AddError(TIssue(pos, TStringBuilder() << "Expected no arguments, but got " << args.size()));
                     return false;
                 }
-                Types.OptLLVM = "OFF";
+                Types_.OptLLVM = "OFF";
             }
             else if (name == "LLVM") {
                 if (args.size() > 1) {
                     ctx.AddError(TIssue(pos, TStringBuilder() << "Expected at most 1 argument, but got " << args.size()));
                     return false;
                 }
-                Types.OptLLVM = args.empty() ? TString() : TString(args[0]);
+                Types_.OptLLVM = args.empty() ? TString() : TString(args[0]);
             }
             else if (name == "RuntimeLogLevel") {
                 if (args.size() != 1) {
@@ -527,7 +523,7 @@ namespace {
                     ctx.AddError(TIssue(pos, TStringBuilder() << "Invalid log level value: " << args[0]));
                     return false;
                 }
-                Types.RuntimeLogLevel = *value;
+                Types_.RuntimeLogLevel = *value;
             }
             else if (name == "NodesAllocationLimit") {
                 if (args.size() != 1) {
@@ -576,11 +572,11 @@ namespace {
                 }
 
                 auto dataSource = args[0];
-                if (Find(Types.AvailablePureResultDataSources, dataSource) == Types.AvailablePureResultDataSources.end()) {
+                if (Find(Types_.AvailablePureResultDataSources, dataSource) == Types_.AvailablePureResultDataSources.end()) {
                     ctx.AddError(TIssue(pos, TStringBuilder() << "Unsupported datasource for result provider: " << dataSource));
                     return false;
                 }
-                if (auto p = Types.DataSourceMap.FindPtr(dataSource)) {
+                if (auto p = Types_.DataSourceMap.FindPtr(dataSource)) {
                     if ((*p)->GetName() != dataSource) {
                         dataSource = (*p)->GetName();
                     }
@@ -589,7 +585,7 @@ namespace {
                     return false;
                 }
 
-                Types.PureResultDataSource = dataSource;
+                Types_.PureResultDataSource = dataSource;
             }
             else if (name == "FullResultDataSink") {
                 if (args.size() != 1) {
@@ -598,7 +594,7 @@ namespace {
                 }
 
                 auto dataSink = args[0];
-                if (auto p = Types.DataSinkMap.FindPtr(dataSink)) {
+                if (auto p = Types_.DataSinkMap.FindPtr(dataSink)) {
                     if ((*p)->GetName() != dataSink) {
                         dataSink = (*p)->GetName();
                     }
@@ -607,7 +603,7 @@ namespace {
                     return false;
                 }
 
-                Types.FullResultDataSink = dataSink;
+                Types_.FullResultDataSink = dataSink;
             }
             else if (name == "Diagnostics") {
                 if (args.size() != 0) {
@@ -615,7 +611,7 @@ namespace {
                     return false;
                 }
 
-                Types.Diagnostics = true;
+                Types_.Diagnostics = true;
             }
             else if (name == TStringBuf("Warning")) {
                 if (!SetWarningRule(pos, args, ctx)) {
@@ -636,14 +632,14 @@ namespace {
                     }
                 }
 
-                Types.UdfSupportsYield = res;
+                Types_.UdfSupportsYield = res;
             }
             else if (name == "EvaluateForLimit") {
                 if (args.size() != 1) {
                     ctx.AddError(TIssue(pos, TStringBuilder() << "Expected 1 argument, but got " << args.size()));
                     return false;
                 }
-                if (!TryFromString(args[0], Types.EvaluateForLimit)) {
+                if (!TryFromString(args[0], Types_.EvaluateForLimit)) {
                     ctx.AddError(TIssue(pos, TStringBuilder() << "Expected integer, but got: " << args[0]));
                     return false;
                 }
@@ -653,7 +649,7 @@ namespace {
                     ctx.AddError(TIssue(pos, TStringBuilder() << "Expected 1 argument, but got " << args.size()));
                     return false;
                 }
-                if (!TryFromString(args[0], Types.EvaluateParallelForLimit)) {
+                if (!TryFromString(args[0], Types_.EvaluateParallelForLimit)) {
                     ctx.AddError(TIssue(pos, TStringBuilder() << "Expected integer, but got: " << args[0]));
                     return false;
                 }
@@ -664,14 +660,14 @@ namespace {
                     return false;
                 }
 
-                Types.PullUpFlatMapOverJoin = (name == "PullUpFlatMapOverJoin");
+                Types_.PullUpFlatMapOverJoin = (name == "PullUpFlatMapOverJoin");
             } else if (name == "DisableFilterPushdownOverJoinOptionalSide" || name == "FilterPushdownOverJoinOptionalSide") {
                 if (args.size() != 0) {
                     ctx.AddError(TIssue(pos, TStringBuilder() << "Expected no arguments, but got " << args.size()));
                     return false;
                 }
 
-                Types.FilterPushdownOverJoinOptionalSide = (name == "FilterPushdownOverJoinOptionalSide");
+                Types_.FilterPushdownOverJoinOptionalSide = (name == "FilterPushdownOverJoinOptionalSide");
             } else if (name == "RotateJoinTree") {
                 if (args.size() > 1) {
                     ctx.AddError(TIssue(pos, TStringBuilder() << "Expected at most 1 argument, but got " << args.size()));
@@ -686,7 +682,7 @@ namespace {
                     }
                 }
 
-                Types.RotateJoinTree = res;
+                Types_.RotateJoinTree = res;
             }
             else if (name == "SQL") {
                 if (args.size() > 1) {
@@ -694,7 +690,7 @@ namespace {
                     return false;
                 }
 
-                Types.DeprecatedSQL = (args[0] == "0");
+                Types_.DeprecatedSQL = (args[0] == "0");
             }
             else if (name == "DisableConstraintCheck") {
                 if (args.empty()) {
@@ -702,7 +698,7 @@ namespace {
                     return false;
                 }
                 for (auto arg: args) {
-                    Types.DisableConstraintCheck.emplace(arg);
+                    Types_.DisableConstraintCheck.emplace(arg);
                 }
             }
             else if (name == "EnableConstraintCheck") {
@@ -711,7 +707,7 @@ namespace {
                     return false;
                 }
                 for (auto arg: args) {
-                    Types.DisableConstraintCheck.erase(TString{arg});
+                    Types_.DisableConstraintCheck.erase(TString{arg});
                 }
             }
             else if (name == "DisableConstraints") {
@@ -746,14 +742,14 @@ namespace {
                     }
                 }
 
-                Types.UseTableMetaFromGraph = res;
+                Types_.UseTableMetaFromGraph = res;
             }
             else if (name == "DiscoveryMode") {
                 if (args.size() != 0) {
                     ctx.AddError(TIssue(pos, TStringBuilder() << "Expected no arguments, but got " << args.size()));
                     return false;
                 }
-                Types.DiscoveryMode = true;
+                Types_.DiscoveryMode = true;
             }
             else if (name == "EnableSystemColumns") {
                 if (args.size() != 0) {
@@ -767,12 +763,12 @@ namespace {
                     return false;
                 }
 
-                if (!Types.UdfIndex) {
+                if (!Types_.UdfIndex) {
                     ctx.AddError(TIssue(pos, "UdfIndex is not available"));
                     return false;
                 }
 
-                Types.UdfIndex->SetCaseSentiveSearch(name == "UdfStrictCase");
+                Types_.UdfIndex->SetCaseSentiveSearch(name == "UdfStrictCase");
             } else if (name == "DqEngine") {
                 if (args.size() != 1) {
                     ctx.AddError(TIssue(pos, TStringBuilder() << "Expected at most 1 argument, but got " << args.size()));
@@ -780,7 +776,7 @@ namespace {
                 }
 
                 auto arg = TString{args[0]};
-                if (Types.EngineType == EEngineType::Ytflow) {
+                if (Types_.EngineType == EEngineType::Ytflow) {
                     if (arg == "force") {
                         ctx.AddError(TIssue(pos, TStringBuilder()
                             << "Expected `disable|auto` argument for DqEngine pragma "
@@ -790,18 +786,18 @@ namespace {
                     }
 
                     arg = "disable";
-                } else if (Types.EngineType == EEngineType::Dq) {
+                } else if (Types_.EngineType == EEngineType::Dq) {
                     arg = "force";
                 }
 
-                if (Find(Types.AvailablePureResultDataSources, DqProviderName) == Types.AvailablePureResultDataSources.end() || arg == "disable") {
+                if (Find(Types_.AvailablePureResultDataSources, DqProviderName) == Types_.AvailablePureResultDataSources.end() || arg == "disable") {
                     ; // reserved
                 } else if (arg == "auto") {
-                    Types.PureResultDataSource = DqProviderName;
-                    Types.ForceDq = false;
+                    Types_.PureResultDataSource = DqProviderName;
+                    Types_.ForceDq = false;
                 } else if (arg == "force") {
-                    Types.PureResultDataSource = DqProviderName;
-                    Types.ForceDq = true;
+                    Types_.PureResultDataSource = DqProviderName;
+                    Types_.ForceDq = true;
                 } else {
                     ctx.AddError(TIssue(pos, TStringBuilder() << "Expected `disable|auto|force', but got: " << args[0]));
                     return false;
@@ -824,21 +820,21 @@ namespace {
                     ctx.AddError(TIssue(pos, TStringBuilder() << "Expected no arguments, but got " << args.size()));
                     return false;
                 }
-                Types.StrictTableProps = true;
+                Types_.StrictTableProps = true;
             }
             else if (name == "DisableStrictTableProps") {
                 if (args.size() != 0) {
                     ctx.AddError(TIssue(pos, TStringBuilder() << "Expected no arguments, but got " << args.size()));
                     return false;
                 }
-                Types.StrictTableProps = false;
+                Types_.StrictTableProps = false;
             }
             else if (name == "GeobaseDownloadUrl") {
                 if (args.size() != 1) {
                     ctx.AddError(TIssue(pos, TStringBuilder() << "Expected 1 argument, but got " << args.size()));
                     return false;
                 }
-                auto& userDataBlock = (Types.UserDataStorageCrutches[TUserDataKey::File(TStringBuf("/home/geodata6.bin"))] = TUserDataBlock{EUserDataType::URL, {}, TString(args[0]), {}, {}});
+                auto& userDataBlock = (Types_.UserDataStorageCrutches[TUserDataKey::File(TStringBuf("/home/geodata6.bin"))] = TUserDataBlock{EUserDataType::URL, {}, TString(args[0]), {}, {}});
                 userDataBlock.Usage.Set(EUserDataBlockUsage::Path);
             } else if (name == "JsonQueryReturnsJsonDocument" || name == "DisableJsonQueryReturnsJsonDocument") {
                 if (args.size() != 0) {
@@ -846,27 +842,27 @@ namespace {
                     return false;
                 }
 
-                Types.JsonQueryReturnsJsonDocument = (name == "JsonQueryReturnsJsonDocument");
+                Types_.JsonQueryReturnsJsonDocument = (name == "JsonQueryReturnsJsonDocument");
             } else if (name == "OrderedColumns" || name == "DisableOrderedColumns") {
                 if (args.size() != 0) {
                     ctx.AddError(TIssue(pos, TStringBuilder() << "Expected no arguments, but got " << args.size()));
                     return false;
                 }
-                Types.DeriveColumnOrder = (name == "OrderedColumns");
-                Types.OrderedColumns = (name == "OrderedColumns");
+                Types_.DeriveColumnOrder = (name == "OrderedColumns");
+                Types_.OrderedColumns = (name == "OrderedColumns");
             } else if (name == "DeriveColumnOrder" || name == "DisableDeriveColumnOrder") {
                 if (args.size() != 0) {
                     ctx.AddError(TIssue(pos, TStringBuilder() << "Expected no arguments, but got " << args.size()));
                     return false;
                 }
 
-                Types.DeriveColumnOrder = (name == "DeriveColumnOrder");
+                Types_.DeriveColumnOrder = (name == "DeriveColumnOrder");
             } else if (name == "FolderSubDirsLimit") {
                 if (args.size() != 1) {
                     ctx.AddError(TIssue(pos, TStringBuilder() << "Expected 1 argument, but got " << args.size()));
                     return false;
                 }
-                if (!TryFromString(args[0], Types.FolderSubDirsLimit)) {
+                if (!TryFromString(args[0], Types_.FolderSubDirsLimit)) {
                     ctx.AddError(TIssue(pos, TStringBuilder() << "Expected integer, but got: " << args[0]));
                     return false;
                 }
@@ -877,7 +873,7 @@ namespace {
                     return false;
                 }
 
-                Types.YsonCastToString = (name == "YsonCastToString");
+                Types_.YsonCastToString = (name == "YsonCastToString");
             }
             else if (name == "UseBlocks" || name == "DisableUseBlocks") {
                 if (args.size() != 0) {
@@ -885,7 +881,15 @@ namespace {
                     return false;
                 }
 
-                Types.UseBlocks = (name == "UseBlocks");
+                Types_.UseBlocks = (name == "UseBlocks");
+            }
+            else if (name == "DebugPositions" || name == "DisableDebugPositions") {
+                if (args.size() != 0) {
+                    ctx.AddError(TIssue(pos, TStringBuilder() << "Expected no arguments, but got " << args.size()));
+                    return false;
+                }
+
+                Types_.DebugPositions = (name == "DebugPositions");
             }
             else if (name == "PgEmitAggApply" || name == "DisablePgEmitAggApply") {
                 if (args.size() != 0) {
@@ -893,7 +897,7 @@ namespace {
                     return false;
                 }
 
-                Types.PgEmitAggApply = (name == "PgEmitAggApply");
+                Types_.PgEmitAggApply = (name == "PgEmitAggApply");
             }
             else if (name == "CostBasedOptimizer") {
                 if (args.size() != 1) {
@@ -901,7 +905,7 @@ namespace {
                     return false;
                 }
 
-                if (!TryFromString(args[0], Types.CostBasedOptimizer)) {
+                if (!TryFromString(args[0], Types_.CostBasedOptimizer)) {
                     ctx.AddError(TIssue(pos, TStringBuilder() << "Expected `disable|pg|native', but got: " << args[0]));
                     return false;
                 }
@@ -911,18 +915,18 @@ namespace {
                     ctx.AddError(TIssue(pos, TStringBuilder() << "Expected no arguments, but got " << args.size()));
                     return false;
                 }
-                Types.MatchRecognize = name == "_EnableMatchRecognize";
+                Types_.MatchRecognize = name == "_EnableMatchRecognize";
             }
             else if (name == "TimeOrderRecoverDelay") {
                 if (args.size() != 1) {
                     ctx.AddError(TIssue(pos, TStringBuilder() << "Expected one argument, but got " << args.size()));
                     return false;
                 }
-                if (!TryFromString(args[0], Types.TimeOrderRecoverDelay)) {
+                if (!TryFromString(args[0], Types_.TimeOrderRecoverDelay)) {
                     ctx.AddError(TIssue(pos, TStringBuilder() << "Expected integer, but got: " << args[0]));
                     return false;
                 }
-                if (Types.TimeOrderRecoverDelay >= 0) {
+                if (Types_.TimeOrderRecoverDelay >= 0) {
                     ctx.AddError(TIssue(pos, TStringBuilder() << "Expected negative value, but got: " << args[0]));
                     return false;
                 }
@@ -932,11 +936,11 @@ namespace {
                     ctx.AddError(TIssue(pos, TStringBuilder() << "Expected one argument, but got " << args.size()));
                     return false;
                 }
-                if (!TryFromString(args[0], Types.TimeOrderRecoverAhead)) {
+                if (!TryFromString(args[0], Types_.TimeOrderRecoverAhead)) {
                     ctx.AddError(TIssue(pos, TStringBuilder() << "Expected integer, but got: " << args[0]));
                     return false;
                 }
-                if (Types.TimeOrderRecoverAhead <= 0) {
+                if (Types_.TimeOrderRecoverAhead <= 0) {
                     ctx.AddError(TIssue(pos, TStringBuilder() << "Expected positive value, but got: " << args[0]));
                     return false;
                 }
@@ -946,11 +950,11 @@ namespace {
                     ctx.AddError(TIssue(pos, TStringBuilder() << "Expected one argument, but got " << args.size()));
                     return false;
                 }
-                if (!TryFromString(args[0], Types.TimeOrderRecoverRowLimit)) {
+                if (!TryFromString(args[0], Types_.TimeOrderRecoverRowLimit)) {
                     ctx.AddError(TIssue(pos, TStringBuilder() << "Expected integer, but got: " << args[0]));
                     return false;
                 }
-                if (Types.TimeOrderRecoverRowLimit == 0) {
+                if (Types_.TimeOrderRecoverRowLimit == 0) {
                     ctx.AddError(TIssue(pos, TStringBuilder() << "Expected positive value, but got: " << args[0]));
                     return false;
                 }
@@ -962,11 +966,11 @@ namespace {
                 }
                 const auto& arg = args[0];
                 if (arg == "disable") {
-                    Types.MatchRecognizeStreaming = EMatchRecognizeStreamingMode::Disable;
+                    Types_.MatchRecognizeStreaming = EMatchRecognizeStreamingMode::Disable;
                 } else if (arg == "auto") {
-                    Types.MatchRecognizeStreaming = EMatchRecognizeStreamingMode::Auto;
+                    Types_.MatchRecognizeStreaming = EMatchRecognizeStreamingMode::Auto;
                 } else if (arg == "force") {
-                    Types.MatchRecognizeStreaming = EMatchRecognizeStreamingMode::Force;
+                    Types_.MatchRecognizeStreaming = EMatchRecognizeStreamingMode::Force;
                 } else {
                     ctx.AddError(TIssue(pos, TStringBuilder() << "Expected `disable|auto|force', but got: " << args[0]));
                     return false;
@@ -979,7 +983,7 @@ namespace {
                 }
 
                 auto arg = TString{args[0]};
-                if (!TryFromString(arg, Types.BlockEngineMode)) {
+                if (!TryFromString(arg, Types_.BlockEngineMode)) {
                     ctx.AddError(TIssue(pos, TStringBuilder() << "Expected `disable|auto|force', but got: " << args[0]));
                     return false;
                 }
@@ -990,7 +994,7 @@ namespace {
                         ctx.AddError(TIssue(pos, "Empty flags are not supported"));
                         return false;
                     }
-                    Types.OptimizerFlags.insert(to_lower(ToString(arg)));
+                    Types_.OptimizerFlags.insert(to_lower(ToString(arg)));
                 }
             }
             else if (name == "PeepholeFlags") {
@@ -999,7 +1003,7 @@ namespace {
                         ctx.AddError(TIssue(pos, "Empty flags are not supported"));
                         return false;
                     }
-                    Types.PeepholeFlags.insert(to_lower(ToString(arg)));
+                    Types_.PeepholeFlags.insert(to_lower(ToString(arg)));
                 }
             }
             else if (name == "_EnableStreamLookupJoin" || name == "DisableStreamLookupJoin") {
@@ -1007,7 +1011,7 @@ namespace {
                     ctx.AddError(TIssue(pos, TStringBuilder() << "Expected no arguments, but got " << args.size()));
                     return false;
                 }
-                Types.StreamLookupJoin = name == "_EnableStreamLookupJoin";
+                Types_.StreamLookupJoin = name == "_EnableStreamLookupJoin";
             } else if (name == "MaxAggPushdownPredicates") {
                 if (args.size() != 1) {
                     ctx.AddError(TIssue(pos, TStringBuilder() << "Expected single numeric argument, but got " << args.size()));
@@ -1023,7 +1027,18 @@ namespace {
                     ctx.AddError(TIssue(pos, TStringBuilder() << "Hard limit for setting MaxAggPushdownPredicates is " << hardLimit << ", but got: " << args[0]));
                     return false;
                 }
-                Types.MaxAggPushdownPredicates = value;
+                Types_.MaxAggPushdownPredicates = value;
+            } else if (name == "AndOverOrExpansionLimit") {
+                if (args.size() != 1) {
+                    ctx.AddError(TIssue(pos, TStringBuilder() << "Expected single numeric argument, but got " << args.size()));
+                    return false;
+                }
+                ui32 value;
+                if (!TryFromString(args[0], value)) {
+                    ctx.AddError(TIssue(pos, TStringBuilder() << "Expected non-negative integer, but got: " << args[0]));
+                    return false;
+                }
+                Types_.AndOverOrExpansionLimit = value;
             } else if (name == "Engine") {
                 if (args.size() != 1) {
                     ctx.AddError(TIssue(pos, TStringBuilder() << "Expected at most 1 argument, but got " << args.size()));
@@ -1032,7 +1047,7 @@ namespace {
 
                 auto arg = TString{args[0]};
                 if (arg == "ytflow") {
-                    if (Types.ForceDq) {
+                    if (Types_.ForceDq) {
                         ctx.AddError(TIssue(pos, TStringBuilder()
                             << "Expected `disable|auto` argument for DqEngine pragma "
                             << "with Engine pragma argument `ytflow`"));
@@ -1040,26 +1055,41 @@ namespace {
                         return false;
                     }
 
-                    if (Types.PureResultDataSource == DqProviderName) {
-                        Types.PureResultDataSource.clear();
+                    if (Types_.PureResultDataSource == DqProviderName) {
+                        Types_.PureResultDataSource.clear();
                     }
 
-                    Types.EngineType = EEngineType::Ytflow;
+                    Types_.EngineType = EEngineType::Ytflow;
                 } else if (arg == "dq") {
-                    if (Find(Types.AvailablePureResultDataSources, DqProviderName) == Types.AvailablePureResultDataSources.end()) {
+                    if (Find(Types_.AvailablePureResultDataSources, DqProviderName) == Types_.AvailablePureResultDataSources.end()) {
                         ; // reserved
                     } else {
-                        Types.PureResultDataSource = DqProviderName;
-                        Types.ForceDq = true;
+                        Types_.PureResultDataSource = DqProviderName;
+                        Types_.ForceDq = true;
                     }
 
-                    Types.EngineType = EEngineType::Dq;
+                    Types_.EngineType = EEngineType::Dq;
                 } else if (arg == "default") {
-                    Types.EngineType = EEngineType::Default;
+                    Types_.EngineType = EEngineType::Default;
                 } else {
                     ctx.AddError(TIssue(pos, TStringBuilder() << "Expected `default|dq|ytflow', but got: " << arg));
                     return false;
                 }
+            } else if (name == "NormalizeDependsOn") {
+                if (args.size() > 1) {
+                    ctx.AddError(TIssue(pos, TStringBuilder() << "Expected at most 1 argument, but got " << args.size()));
+                    return false;
+                }
+
+                bool res = true;
+                if (!args.empty()) {
+                    if (!TryFromString(args[0], res)) {
+                        ctx.AddError(TIssue(pos, TStringBuilder() << "Expected bool, but got: " << args[0]));
+                        return false;
+                    }
+                }
+
+                Types_.NormalizeDependsOn = res;
             } else {
                 ctx.AddError(TIssue(pos, TStringBuilder() << "Unsupported command: " << name));
                 return false;
@@ -1074,7 +1104,7 @@ namespace {
                 return false;
             }
 
-            if (Types.DisableNativeUdfSupport) {
+            if (Types_.DisableNativeUdfSupport) {
                 ctx.AddError(TIssue(pos, "Native UDF support is disabled"));
                 return false;
             }
@@ -1085,8 +1115,8 @@ namespace {
             const auto key = TUserDataStorage::ComposeUserDataKey(fileAlias);
             TString errorMessage;
             const TUserDataBlock* udfSource = nullptr;
-            if (!Types.QContext.CanRead()) {
-                udfSource = Types.UserDataStorage->FreezeUdfNoThrow(key, errorMessage, customUdfPrefix, Types.RuntimeLogLevel);
+            if (!Types_.QContext.CanRead()) {
+                udfSource = Types_.UserDataStorage->FreezeUdfNoThrow(key, errorMessage, customUdfPrefix, Types_.RuntimeLogLevel, fileAlias);
                 if (!udfSource) {
                     ctx.AddError(TIssue(pos, TStringBuilder() << "Unknown file: " << fileAlias << ", details: " << errorMessage));
                     return false;
@@ -1097,7 +1127,7 @@ namespace {
             import.Pos = pos;
             import.FileAlias = fileAlias;
             import.Block = udfSource;
-            Types.UdfImports.insert({ TString(fileAlias), import });
+            Types_.UdfImports.insert({ TString(fileAlias), import });
             return true;
         }
 
@@ -1107,11 +1137,11 @@ namespace {
                 return false;
             }
 
-            if (Types.Credentials->FindCredential(args[0])) {
+            if (Types_.Credentials->FindCredential(args[0])) {
                 return true;
             }
 
-            Types.Credentials->AddCredential(TString(args[0]), TCredential(TString(args[1]), TString(args[2]), TString(args[3])));
+            Types_.Credentials->AddCredential(TString(args[0]), TCredential(TString(args[1]), TString(args[2]), TString(args[3])));
             return true;
         }
 
@@ -1122,13 +1152,13 @@ namespace {
             }
 
             auto key = TUserDataStorage::ComposeUserDataKey(alias);
-            if (Types.UserDataStorage->ContainsUserDataBlock(key)) {
+            if (Types_.UserDataStorage->ContainsUserDataBlock(key)) {
                 // Don't overwrite.
                 return true;
             }
 
             TUserDataBlock block;
-            if (Types.QContext.CanRead()) {
+            if (Types_.QContext.CanRead()) {
                 block.Type = EUserDataType::RAW_INLINE_DATA;
             } else {
                 block.Type = EUserDataType::URL;
@@ -1138,7 +1168,7 @@ namespace {
                 }
             }
 
-            Types.UserDataStorage->AddUserDataBlock(key, block);
+            Types_.UserDataStorage->AddUserDataBlock(key, block);
             return true;
         }
 
@@ -1150,7 +1180,7 @@ namespace {
 
             TStringBuf token = args.size() == 3 ? args[2] : TStringBuf();
             if (token) {
-                if (auto cred = Types.Credentials->FindCredential(token)) {
+                if (auto cred = Types_.Credentials->FindCredential(token)) {
                     token = cred->Content;
                 } else {
                     ctx.AddError(TIssue(pos, TStringBuilder() << "Unknown token name '" << token << "'."));
@@ -1163,7 +1193,7 @@ namespace {
 
         bool SetFileOptionImpl(const TStringBuf alias, const TString& key, const TString& value, const TPosition& pos, TExprContext& ctx) {
             const auto dataKey = TUserDataStorage::ComposeUserDataKey(alias);
-            const auto dataBlock = Types.UserDataStorage->FindUserDataBlock(dataKey);
+            const auto dataBlock = Types_.UserDataStorage->FindUserDataBlock(dataKey);
             if (!dataBlock) {
                 ctx.AddError(TIssue(pos, TStringBuilder() << "No such file '" << alias << "'"));
                 return false;
@@ -1192,12 +1222,12 @@ namespace {
                 return false;
             }
 
-            if (!Types.UdfIndexPackageSet || !Types.UdfIndex) {
+            if (!Types_.UdfIndexPackageSet || !Types_.UdfIndex) {
                 ctx.AddError(TIssue(pos, TStringBuilder() << "UdfIndex is not initialized, unable to set version for package " << args[0]));
                 return false;
             }
 
-            if (!Types.UdfIndexPackageSet->AddResourceTo(TString(args[0]), version, Types.UdfIndex)) {
+            if (!Types_.UdfIndexPackageSet->AddResourceTo(TString(args[0]), version, Types_.UdfIndex)) {
                 ctx.AddError(TIssue(pos, TStringBuilder() << "Unable set default version to " << version << " for package " << args[0]));
                 return false;
             }
@@ -1269,13 +1299,13 @@ namespace {
 
             TStringBuf token = args.size() == 3 ? args[2] : TStringBuf();
             if (token) {
-                if (auto cred = Types.Credentials->FindCredential(token)) {
+                if (auto cred = Types_.Credentials->FindCredential(token)) {
                     token = cred->Content;
                 } else {
                     ctx.AddError(TIssue(pos, TStringBuilder() << "Unknown token name '" << token << "' for folder."));
                     return false;
                 }
-            } else if (auto cred = Types.Credentials->FindCredential("default_sandbox")) {
+            } else if (auto cred = Types_.Credentials->FindCredential("default_sandbox")) {
                 token = cred->Content;
             }
 
@@ -1312,8 +1342,8 @@ namespace {
                             }
                         } else if (type == "DIRECTORY") {
                             queue.emplace_back(alias, fileUrl->GetString());
-                            if (++count > Types.FolderSubDirsLimit) {
-                                ctx.AddError(TIssue(pos, TStringBuilder() << "Sandbox resource has too many subfolders. Limit is " << Types.FolderSubDirsLimit));
+                            if (++count > Types_.FolderSubDirsLimit) {
+                                ctx.AddError(TIssue(pos, TStringBuilder() << "Sandbox resource has too many subfolders. Limit is " << Types_.FolderSubDirsLimit));
                                 return false;
                             }
                         } else {
@@ -1355,14 +1385,14 @@ namespace {
         }
 
     private:
-        TTypeAnnotationContext& Types;
-        TAutoPtr<IGraphTransformer> TypeAnnotationTransformer;
-        TAutoPtr<IGraphTransformer> ConfigurationTransformer;
-        TAutoPtr<IGraphTransformer> CallableExecutionTransformer;
-        const TYqlCoreConfig* CoreConfig;
-        TString Username;
-        const TAllowSettingPolicy Policy;
-        TOperationStatistics Statistics;
+        TTypeAnnotationContext& Types_;
+        TAutoPtr<IGraphTransformer> TypeAnnotationTransformer_;
+        TAutoPtr<IGraphTransformer> ConfigurationTransformer_;
+        TAutoPtr<IGraphTransformer> CallableExecutionTransformer_;
+        const TYqlCoreConfig* CoreConfig_;
+        TString Username_;
+        const TAllowSettingPolicy Policy_;
+        TOperationStatistics Statistics_;
     };
 }
 

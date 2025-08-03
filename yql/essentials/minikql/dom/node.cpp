@@ -22,17 +22,17 @@ inline bool StringEquals(const TPair& x, const TPair& y) {
 
 template <bool NoSwap>
 TMapNode::TIterator<NoSwap>::TIterator(const TMapNode* parent)
-    : Parent(const_cast<TMapNode*>(parent))
-    , Index(-1)
+    : Parent_(const_cast<TMapNode*>(parent))
+    , Index_(-1)
 {}
 
 template <bool NoSwap>
 bool TMapNode::TIterator<NoSwap>::Skip() {
-    if (Index + 1 == Parent->UniqueCount_) {
+    if (Index_ + 1 == Parent_->UniqueCount_) {
         return false;
     }
 
-    ++Index;
+    ++Index_;
     return true;
 }
 
@@ -41,9 +41,9 @@ bool TMapNode::TIterator<NoSwap>::Next(TUnboxedValue& key) {
     if (!Skip())
         return false;
     if constexpr (NoSwap) {
-        key = Parent->Items_[Index].first;
+        key = Parent_->Items_[Index_].first;
     } else {
-        key = Parent->Items_[Index].second;
+        key = Parent_->Items_[Index_].second;
     }
     return true;
 }
@@ -53,9 +53,9 @@ bool TMapNode::TIterator<NoSwap>::NextPair(TUnboxedValue& key, TUnboxedValue& pa
     if (!Next(key))
         return false;
     if constexpr (NoSwap) {
-        payload = Parent->Items_[Index].second;
+        payload = Parent_->Items_[Index_].second;
     } else {
-        payload = Parent->Items_[Index].first;
+        payload = Parent_->Items_[Index_].first;
     }
     return true;
 }

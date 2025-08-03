@@ -4169,34 +4169,54 @@ bool EnsureStructOrOptionalStructType(TPositionHandle position, const TTypeAnnot
     return true;
 }
 
-bool EnsureDependsOn(const TExprNode& node, TExprContext& ctx) {
+bool EnsureDependsOn(const TExprNode& node, TExprContext& ctx, bool inner) {
     if (HasError(node.GetTypeAnn(), ctx)) {
         return false;
     }
 
+    const std::string_view expected = inner ? "InnerDependsOn" : "DependsOn";
     if (!node.IsCallable()) {
-        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() << "Expected DependsOn, but got node with type: " << node.Type()));
+        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() << "Expected " << expected << ", but got node with type: " << node.Type()));
         return false;
     }
 
-    if (!node.IsCallable("DependsOn")) {
-        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() << "Expected DependsOn, but got callable: " << node.Content()));
+    if (!node.IsCallable(expected)) {
+        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() << "Expected " << expected << ", but got callable: " << node.Content()));
         return false;
     }
 
     return true;
 }
 
-bool EnsureDependsOnTail(const TExprNode& node, TExprContext& ctx, unsigned requiredArgumentCount, unsigned requiredDependsOnCount) {
-    if (!EnsureMinArgsCount(node, requiredArgumentCount+requiredDependsOnCount, ctx)) {
-        return false;
+IGraphTransformer::TStatus EnsureDependsOnTailAndRewrite(
+    const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx, const TTypeAnnotationContext& types,
+    unsigned requiredArgumentCount, unsigned requiredDependsOnCount
+) {
+    if (!EnsureMinArgsCount(*input, requiredArgumentCount + requiredDependsOnCount, ctx)) {
+        return IGraphTransformer::TStatus::Error;
     }
-    for (unsigned i = requiredArgumentCount; i < node.ChildrenSize(); ++i) {
-        if (!EnsureDependsOn(*node.Child(i), ctx)) {
-            return false;
+    if (input->ChildrenSize() == requiredArgumentCount) {
+        return IGraphTransformer::TStatus::Ok;
+    }
+
+    bool inner = input->Child(requiredArgumentCount)->IsCallable("InnerDependsOn");
+    for (unsigned i = requiredArgumentCount; i < input->ChildrenSize(); ++i) {
+        if (!EnsureDependsOn(*input->Child(i), ctx, inner)) {
+            return IGraphTransformer::TStatus::Error;
         }
     }
-    return true;
+    if (inner || !types.NormalizeDependsOn) {
+        return IGraphTransformer::TStatus::Ok;
+    }
+
+    TExprNode::TListType newChildren;
+    newChildren.insert(newChildren.begin(), input->Children().begin(), input->Children().begin() + requiredArgumentCount);
+    for (unsigned i = requiredArgumentCount; i < input->ChildrenSize(); ++i) {
+        newChildren.push_back(ctx.RenameNode(*input->Child(i), "InnerDependsOn"));
+    }
+
+    output = ctx.ChangeChildren(*input, std::move(newChildren));
+    return IGraphTransformer::TStatus::Repeat;
 }
 
 const TTypeAnnotationNode* MakeTypeHandleResourceType(TExprContext& ctx) {
@@ -4246,7 +4266,7 @@ const TTypeAnnotationNode* MakeSequenceType(ETypeAnnotationKind sequenceKind, co
 }
 
 IGraphTransformer::TStatus TryConvertTo(TExprNode::TPtr& node, const TTypeAnnotationNode& expectedType,
-    TExprContext& ctx, TConvertFlags flags) {
+    TExprContext& ctx, TConvertFlags flags, bool useTypeDiff) {
     if (HasError(node->GetTypeAnn(), ctx)) {
         return IGraphTransformer::TStatus::Error;
     }
@@ -4270,18 +4290,23 @@ IGraphTransformer::TStatus TryConvertTo(TExprNode::TPtr& node, const TTypeAnnota
         return IGraphTransformer::TStatus::Error;
     }
 
-    return TryConvertTo(node, *node->GetTypeAnn(), expectedType, ctx, flags);
+    return TryConvertTo(node, *node->GetTypeAnn(), expectedType, ctx, flags, useTypeDiff);
 }
 
 IGraphTransformer::TStatus TryConvertTo(TExprNode::TPtr& node, const TTypeAnnotationNode& sourceType,
-    const TTypeAnnotationNode& expectedType, TExprContext& ctx, TConvertFlags flags) {
+    const TTypeAnnotationNode& expectedType, TExprContext& ctx, TConvertFlags flags, bool useTypeDiff) {
     if (HasError(node->GetTypeAnn(), ctx)) {
         return IGraphTransformer::TStatus::Error;
     }
 
     TIssueScopeGuard guard(ctx.IssueManager, [&] {
-            return MakeIntrusive<TIssue>(ctx.GetPosition(node->Pos()),
-                TStringBuilder() << "Failed to convert type: " << sourceType << " to " << expectedType);
+            if (useTypeDiff) {
+                return MakeIntrusive<TIssue>(ctx.GetPosition(node->Pos()),
+                    TStringBuilder() << "Failed to convert, type diff: " << GetTypeDiff(sourceType, expectedType));
+            } else {
+                return MakeIntrusive<TIssue>(ctx.GetPosition(node->Pos()),
+                    TStringBuilder() << "Failed to convert type: " << sourceType << " to " << expectedType);
+            }
         });
     auto status = TryConvertToImpl(ctx, node, sourceType, expectedType, flags, /* raiseIssues */ true);
     if (status.Level  == IGraphTransformer::TStatus::Error) {
@@ -5008,7 +5033,7 @@ IGraphTransformer::TStatus SilentInferCommonType(TExprNode::TPtr& node1, const T
     return IGraphTransformer::TStatus::Error;
 }
 
-IGraphTransformer::TStatus ConvertChildrenToType(const TExprNode::TPtr& input, const TTypeAnnotationNode* targetType, TExprContext& ctx) {
+IGraphTransformer::TStatus ConvertChildrenToType(const TExprNode::TPtr& input, const TTypeAnnotationNode* targetType, TExprContext& ctx, bool useTypeDiff) {
     if (!input->ChildrenSize()) {
         return IGraphTransformer::TStatus::Ok;
     }
@@ -5020,7 +5045,7 @@ IGraphTransformer::TStatus ConvertChildrenToType(const TExprNode::TPtr& input, c
             return IGraphTransformer::TStatus::Error;
         }
 
-        status = status.Combine(TryConvertTo(input->ChildRef(i), *targetType, ctx));
+        status = status.Combine(TryConvertTo(input->ChildRef(i), *targetType, ctx, {}, useTypeDiff));
         if (status == IGraphTransformer::TStatus::Error)
             break;
     }
@@ -6298,6 +6323,19 @@ const TTypeAnnotationNode* GetBlockItemType(const TTypeAnnotationNode& type, boo
     }
     isScalar = true;
     return type.Cast<TScalarExprType>()->GetItemType();
+}
+
+const TTypeAnnotationNode* UnpackOptionalBlockItemType(const TTypeAnnotationNode& type, TExprContext& ctx, bool convertToScalar) {
+    YQL_ENSURE(type.IsBlockOrScalar());
+    bool isScalar;
+    auto* underlyingOptionalType = GetBlockItemType(type, isScalar);
+    YQL_ENSURE(underlyingOptionalType->GetKind() == ETypeAnnotationKind::Optional);
+    auto* underlyingType = underlyingOptionalType->Cast<TOptionalExprType>()->GetItemType();
+    if (isScalar || convertToScalar) {
+        return ctx.MakeType<TScalarExprType>(underlyingType);
+    } else {
+        return ctx.MakeType<TBlockExprType>(underlyingType);
+    }
 }
 
 const TTypeAnnotationNode* AggApplySerializedStateType(const TExprNode::TPtr& input, TExprContext& ctx) {

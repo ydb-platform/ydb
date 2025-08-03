@@ -38,6 +38,8 @@
 
 #include <yt/yt/core/ytree/attribute_filter.h>
 
+#include <yt/yt/core/yson/protobuf_helpers.h>
+
 #include <library/cpp/iterator/zip.h>
 
 namespace NYT::NApi::NRpcProxy {
@@ -384,7 +386,7 @@ TFuture<void> TClientBase::SetNode(
     SetTimeoutOptions(*req, options);
 
     req->set_path(path);
-    req->set_value(value.ToString());
+    req->set_value(ToProto(value));
     req->set_recursive(options.Recursive);
     req->set_force(options.Force);
     ToProto(req->mutable_suppressable_access_tracking_options(), options);
@@ -414,7 +416,7 @@ TFuture<void> TClientBase::MultisetAttributesNode(
     for (const auto& [attribute, value] : children) {
         auto* protoSubrequest = req->add_subrequests();
         protoSubrequest->set_attribute(ToProto(attribute));
-        protoSubrequest->set_value(ConvertToYsonString(value).ToString());
+        protoSubrequest->set_value(ToProto(ConvertToYsonString(value)));
     }
 
     ToProto(req->mutable_suppressable_access_tracking_options(), options);
@@ -657,7 +659,7 @@ TFuture<IFileReaderPtr> TClientBase::CreateFileReader(
     YT_OPTIONAL_SET_PROTO(req, offset, options.Offset);
     YT_OPTIONAL_SET_PROTO(req, length, options.Length);
     if (options.Config) {
-        req->set_config(ConvertToYsonString(*options.Config).ToString());
+        req->set_config(ToProto(ConvertToYsonString(*options.Config)));
     }
 
     ToProto(req->mutable_transactional_options(), options);
@@ -678,7 +680,7 @@ IFileWriterPtr TClientBase::CreateFileWriter(
 
     req->set_compute_md5(options.ComputeMD5);
     if (options.Config) {
-        req->set_config(ConvertToYsonString(*options.Config).ToString());
+        req->set_config(ToProto(ConvertToYsonString(*options.Config)));
     }
 
     ToProto(req->mutable_transactional_options(), options);
@@ -702,7 +704,7 @@ IJournalReaderPtr TClientBase::CreateJournalReader(
     YT_OPTIONAL_SET_PROTO(req, first_row_index, options.FirstRowIndex);
     YT_OPTIONAL_SET_PROTO(req, row_count, options.RowCount);
     if (options.Config) {
-        req->set_config(ConvertToYsonString(*options.Config).ToString());
+        req->set_config(ToProto(ConvertToYsonString(*options.Config)));
     }
 
     ToProto(req->mutable_transactional_options(), options);
@@ -722,7 +724,7 @@ IJournalWriterPtr TClientBase::CreateJournalWriter(
     req->set_path(path);
 
     if (options.Config) {
-        req->set_config(ConvertToYsonString(*options.Config).ToString());
+        req->set_config(ToProto(ConvertToYsonString(*options.Config)));
     }
 
     req->set_enable_multiplexing(options.EnableMultiplexing);
@@ -754,7 +756,7 @@ TFuture<ITableReaderPtr> TClientBase::CreateTableReader(
     req->set_enable_row_index(options.EnableRowIndex);
     req->set_enable_range_index(options.EnableRangeIndex);
     if (options.Config) {
-        req->set_config(ConvertToYsonString(*options.Config).ToString());
+        req->set_config(ToProto(ConvertToYsonString(*options.Config)));
     }
 
     ToProto(req->mutable_transactional_options(), options);
@@ -777,7 +779,7 @@ TFuture<ITableWriterPtr> TClientBase::CreateTableWriter(
     ToProto(req->mutable_path(), path);
 
     if (options.Config) {
-        req->set_config(ConvertToYsonString(*options.Config).ToString());
+        req->set_config(ToProto(ConvertToYsonString(*options.Config)));
     }
 
     ToProto(req->mutable_transactional_options(), options);
@@ -1074,7 +1076,7 @@ TFuture<TSelectRowsResult> TClientBase::SelectRows(
 
     YT_OPTIONAL_TO_PROTO(req, execution_pool, options.ExecutionPool);
     if (options.PlaceholderValues) {
-        req->set_placeholder_values(options.PlaceholderValues.ToString());
+        req->set_placeholder_values(ToProto(options.PlaceholderValues));
     }
     req->set_fail_on_incomplete_result(options.FailOnIncompleteResult);
     req->set_verbose_logging(options.VerboseLogging);
@@ -1089,6 +1091,7 @@ TFuture<TSelectRowsResult> TClientBase::SelectRows(
     ToProto(req->mutable_versioned_read_options(), options.VersionedReadOptions);
     YT_OPTIONAL_SET_PROTO(req, use_lookup_cache, options.UseLookupCache);
     req->set_expression_builder_version(options.ExpressionBuilderVersion);
+    req->set_use_order_by_in_join_subqueries(options.UseOrderByInJoinSubqueries);
 
     return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspSelectRowsPtr& rsp) {
         TSelectRowsResult result;

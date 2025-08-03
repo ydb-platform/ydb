@@ -2,7 +2,6 @@ from __future__ import annotations
 import os
 from .conftest import LoadSuiteBase
 from ydb.tests.olap.lib.ydb_cli import WorkloadType, CheckCanonicalPolicy
-from ydb.tests.olap.lib.ydb_cluster import YdbCluster
 
 
 class ExternalSuiteBase(LoadSuiteBase):
@@ -35,7 +34,7 @@ class ExternalSuiteBase(LoadSuiteBase):
         cls.check_tables_size(folder=cls.external_folder, tables={})
 
     def test(self, query_name: str):
-        self.run_workload_test(f'{YdbCluster.tables_path}/{self.external_folder}', query_name=query_name)
+        self.run_workload_test(self.external_folder, query_name=query_name)
 
 
 def pytest_generate_tests(metafunc):

@@ -8,9 +8,9 @@
 #include <aws/common/clock.h>
 #include <aws/common/encoding.h>
 #include <aws/common/string.h>
+#include <aws/common/uuid.h>
 #include <aws/io/channel_bootstrap.h>
 #include <aws/io/event_loop.h>
-#include <aws/io/stream.h>
 #include <aws/mqtt/private/v5/mqtt5_client_impl.h>
 #include <aws/mqtt/private/v5/mqtt5_utils.h>
 #include <aws/mqtt/v5/mqtt5_client.h>
@@ -3705,6 +3705,14 @@ void aws_mqtt5_client_options_storage_log(
         log_handle,
         level,
         AWS_LS_MQTT5_GENERAL,
+        "id=%p: aws_mqtt5_client_options_storage QoS 1 packet ack timeout interval set to %" PRIu32 " seconds",
+        (void *)options_storage,
+        options_storage->ack_timeout_seconds);
+
+    AWS_LOGUF(
+        log_handle,
+        level,
+        AWS_LS_MQTT5_GENERAL,
         "id=%p: aws_mqtt5_client_options_storage connect options:",
         (void *)options_storage);
 
@@ -3862,8 +3870,70 @@ struct aws_mqtt5_client_options_storage *aws_mqtt5_client_options_storage_new(
         options_storage->topic_aliasing_options = *options->topic_aliasing_options;
     }
 
+    struct aws_byte_buf auto_assign_id_buf;
+    AWS_ZERO_STRUCT(auto_assign_id_buf);
+
+    struct aws_mqtt5_packet_connect_view connect_options = *options->connect_options;
+    if (connect_options.client_id.len == 0) {
+        if (options->extended_validation_and_flow_control_options == AWS_MQTT5_EVAFCO_AWS_IOT_CORE_DEFAULTS) {
+            /*
+             * We're (probably) using an SDK builder to create the client and there's no client id set.  Assume this is
+             * targeting IoT Core.  Iot Core is not compliant to the MQTT311/5 spec with regard to auto-assigned client
+             * ids.
+             *
+             * In particular, IoT Core makes a client id of the pattern "$GEN/[uuid]" but it forbids a client id of that
+             * pattern to be specified by the user.  This is contrary to the spec that requires an auto-assigned client
+             * id to be able to reconnect using the same client id:
+             *
+             *   "It MUST then process the CONNECT packet as if the Client had provided that unique ClientID, and MUST
+             *     return the Assigned Client Identifier in the CONNACK packet."
+             *
+             * See (https://docs.oasis-open.org/mqtt/mqtt/v5.0/os/mqtt-v5.0-os.html#_Toc3901059) for details.
+             *
+             * The result is that using auto assigned client ids with IoT Core leads to permanent reconnect failures
+             * because we use the client id value returned in the CONNACK for all subsequent connection attempts.  This
+             * behavioral choice varies across MQTT clients, but I am firmly convinced it is proper.
+             *
+             * To work around this issue, when we think we're connecting to IoT Core (ie the condition above) and we
+             * don't have a client id, we generate one of the form "gen[uuid]" which will be able to successfully
+             * reconnect since it does not use the reserved prefix "$GEN/"
+             */
+            aws_byte_buf_init(&auto_assign_id_buf, allocator, 64);
+            struct aws_byte_cursor auto_assign_prefix_cursor = AWS_BYTE_CUR_INIT_FROM_STRING_LITERAL("gen");
+
+            aws_byte_buf_append(&auto_assign_id_buf, &auto_assign_prefix_cursor);
+
+            struct aws_uuid uuid;
+            AWS_FATAL_ASSERT(aws_uuid_init(&uuid) == AWS_OP_SUCCESS);
+
+            aws_uuid_to_str_compact(&uuid, &auto_assign_id_buf);
+
+            connect_options.client_id = aws_byte_cursor_from_buf(&auto_assign_id_buf);
+
+            AWS_LOGF_INFO(
+                AWS_LS_MQTT5_GENERAL,
+                "Inferring the server is IoT Core and no client id has been set.  IoT Core's auto-assigned client ids "
+                "cannot be reconnected with.  Avoiding this issue by locally setting the client id to \"" PRInSTR "\"",
+                AWS_BYTE_CURSOR_PRI(connect_options.client_id));
+        } else {
+            /*
+             * Log the fact that we're not manually generating the client id in case someone turns off iot core
+             * validation and then sees reconnect failures.
+             */
+            AWS_LOGF_WARN(
+                AWS_LS_MQTT5_GENERAL,
+                "Letting server assign the client id.  If reconnects fail with a connect reason code of "
+                "AWS_MQTT5_CRC_CLIENT_IDENTIFIER_NOT_VALID (133), then consider manually setting the client id to a "
+                "UUID.");
+        }
+    }
+
     options_storage->connect = aws_mem_calloc(allocator, 1, sizeof(struct aws_mqtt5_packet_connect_storage));
-    if (aws_mqtt5_packet_connect_storage_init(options_storage->connect, allocator, options->connect_options)) {
+    int connect_storage_result =
+        aws_mqtt5_packet_connect_storage_init(options_storage->connect, allocator, &connect_options);
+
+    aws_byte_buf_clean_up(&auto_assign_id_buf);
+    if (connect_storage_result != AWS_OP_SUCCESS) {
         goto error;
     }
 

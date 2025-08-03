@@ -30,6 +30,7 @@ struct TSettings {
     ui32 FullCompactionUntilLevel = 0;
     ui64 FullCompactionMaxBytes = -1;
     bool CompactNextLevelEdges = false;
+    std::optional<ui64> NodePortionsCountLimit{};
 
     NJson::TJsonValue SettingsJson;
 
@@ -128,6 +129,34 @@ struct TSettings {
             }
         }
 
+        if (Factor < 2) {
+            return TConclusionStatus::Fail("factor must be at least 2");
+        }
+
+        if (MaxLevels < 1 || MaxLevels > 10) {
+            return TConclusionStatus::Fail("max_levels must be between 1 and 10");
+        }
+
+        if (MaxAccumulateCount < 2) {
+            return TConclusionStatus::Fail("max_accumulate_count must be at least 2");
+        }
+
+        if (ExpectedPortionSize < MaxAccumulatePortionSize * 3) {
+            return TConclusionStatus::Fail(TStringBuilder()
+                << "expected_portion_size (" << ExpectedPortionSize << ") must be at least "
+                << "3x larger than max_accumulate_portion_size (" << MaxAccumulatePortionSize << ")");
+        }
+
+        if (MaxAccumulateTime < TDuration::Seconds(15)) {
+            return TConclusionStatus::Fail("max_accumulate_time must be at least 15 seconds");
+        }
+
+        if (MaxCompactionBytes < ExpectedPortionSize * 4) {
+            return TConclusionStatus::Fail(TStringBuilder()
+                << "max_compaction_bytes (" << MaxCompactionBytes << ") is too small "
+                << "relative to expected_portion_size (" << ExpectedPortionSize << ")");
+        }
+
         SettingsJson = jsonInfo;
 
         return TConclusionStatus::Success();
@@ -224,6 +253,16 @@ struct TAccumulator {
             TotalBlobBytes -= it->second->GetTotalBlobBytes();
             Portions.erase(it);
         }
+    }
+
+    NJson::TJsonValue DoSerializeToJsonVisual() const {
+        NJson::TJsonValue result = NJson::JSON_MAP;
+        result.InsertValue("Portions", Portions.size());
+        result.InsertValue("PortionsCompacting", Compacting.size());
+        result.InsertValue("TotalBlobBytes", TotalBlobBytes);
+        result.InsertValue("LastCompaction", LastCompaction.ToString());
+        result.InsertValue("TimeExceeded", TimeExceeded);
+        return result;
     }
 };
 
@@ -408,6 +447,14 @@ struct TLevel {
         }
         return portions;
     }
+
+    NJson::TJsonValue DoSerializeToJsonVisual() const {
+        NJson::TJsonValue result = NJson::JSON_MAP;
+        result.InsertValue("Portions", Portions.size());
+        result.InsertValue("PortionsCompacting", Compacting.size());
+        result.InsertValue("TotalBlobBytes", TotalBlobBytes);
+        return result;
+    }
 };
 
 class TOptimizerPlanner : public IOptimizerPlanner, private TSettings {
@@ -416,7 +463,7 @@ class TOptimizerPlanner : public IOptimizerPlanner, private TSettings {
 public:
     TOptimizerPlanner(const TInternalPathId pathId, const std::shared_ptr<IStoragesManager>& storagesManager,
             const std::shared_ptr<arrow::Schema>& primaryKeysSchema, const TSettings& settings = {})
-        : TBase(pathId)
+        : TBase(pathId, settings.NodePortionsCountLimit)
         , TSettings(settings)
         , StoragesManager(storagesManager)
         , PrimaryKeysSchema(primaryKeysSchema)
@@ -636,11 +683,37 @@ private:
     }
 
     TString DoDebugString() const override {
-        return "TODO: DebugString";
+        return DoSerializeToJsonVisual().GetString();
     }
 
     NJson::TJsonValue DoSerializeToJsonVisual() const override {
-        return NJson::JSON_NULL;
+        NJson::TJsonValue compaction_info = NJson::JSON_MAP;
+        compaction_info.InsertValue("1-Name", "TILING");
+
+        auto& settings = compaction_info.InsertValue("2-Settings", NJson::JSON_MAP);
+        settings.InsertValue("Factor", Factor);
+        settings.InsertValue("MaxLevels", MaxLevels);
+        settings.InsertValue("ExpectedPortionCount", ExpectedPortionCount);
+        settings.InsertValue("ExpectedPortionSize", ExpectedPortionSize);
+        settings.InsertValue("MaxAccumulateCount", MaxAccumulateCount);
+        settings.InsertValue("MaxAccumulatePortionSize", MaxAccumulatePortionSize);
+        settings.InsertValue("MaxAccumulateTime", MaxAccumulateTime.ToString());
+        settings.InsertValue("MaxCompactionBytes", MaxCompactionBytes);
+        settings.InsertValue("FullCompactionUntilLevel", FullCompactionUntilLevel);
+        settings.InsertValue("FullCompactionMaxBytes", FullCompactionMaxBytes);
+        settings.InsertValue("CompactNextLevelEdges", CompactNextLevelEdges);
+
+        NJson::TJsonValue& levels = compaction_info.InsertValue("3-Levels",NJson::JSON_ARRAY);
+        for (size_t level_i = 0; level_i < Max(Accumulator.size(), Levels.size()); ++level_i) {
+            NJson::TJsonValue& level = levels.AppendValue(NJson::JSON_MAP);
+            if (level_i < Accumulator.size()) {
+                level.InsertValue("Accumulator", Accumulator[level_i].DoSerializeToJsonVisual());
+            }
+            if (level_i < Levels.size()) {
+                level.InsertValue("Level", Levels[level_i].DoSerializeToJsonVisual());
+            }
+        }
+        return compaction_info;
     }
 
 private:
@@ -682,11 +755,17 @@ private:
             AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("error", "cannot parse tiling compaction optimizer from proto")("description", status.GetErrorDescription());
             return false;
         }
+        Settings.NodePortionsCountLimit = GetNodePortionsCountLimit();
         return true;
     }
 
     TConclusionStatus DoDeserializeFromJson(const NJson::TJsonValue& jsonInfo) override {
-        return Settings.DeserializeFromJson(jsonInfo);
+        auto conclusion = Settings.DeserializeFromJson(jsonInfo);
+        if (conclusion.IsFail()) {
+            return conclusion;
+        }
+        Settings.NodePortionsCountLimit = GetNodePortionsCountLimit();
+        return TConclusionStatus::Success();
     }
 
     bool DoApplyToCurrentObject(IOptimizerPlanner& current) const override {

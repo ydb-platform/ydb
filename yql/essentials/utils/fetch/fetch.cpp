@@ -64,33 +64,33 @@ public:
             rqs << "\r\n";
         }
 
-        Socket.Reset(new TSocket(TNetworkAddress(host, port), timeout));
-        SocketInput.Reset(new TSocketInput(*Socket));
-        SocketOutput.Reset(new TSocketOutput(*Socket));
+        Socket_.Reset(new TSocket(TNetworkAddress(host, port), timeout));
+        SocketInput_.Reset(new TSocketInput(*Socket_));
+        SocketOutput_.Reset(new TSocketOutput(*Socket_));
 
-        Socket->SetSocketTimeout(timeout.Seconds(), timeout.MilliSeconds() % 1000);
+        Socket_->SetSocketTimeout(timeout.Seconds(), timeout.MilliSeconds() % 1000);
 
         if (https) {
-            Ssl.Reset(new TOpenSslClientIO(SocketInput.Get(), SocketOutput.Get()));
+            Ssl_.Reset(new TOpenSslClientIO(SocketInput_.Get(), SocketOutput_.Get()));
         }
 
         {
-            THttpOutput ho(Ssl ? (IOutputStream*)Ssl.Get() : (IOutputStream*)SocketOutput.Get());
+            THttpOutput ho(Ssl_ ? (IOutputStream*)Ssl_.Get() : (IOutputStream*)SocketOutput_.Get());
             (ho << req).Finish();
         }
-        HttpInput.Reset(new THttpInput(Ssl ? (IInputStream*)Ssl.Get() : (IInputStream*)SocketInput.Get()));
+        HttpInput_.Reset(new THttpInput(Ssl_ ? (IInputStream*)Ssl_.Get() : (IInputStream*)SocketInput_.Get()));
     }
 
     THttpInput& GetStream() override {
-        return *HttpInput;
+        return *HttpInput_;
     }
 
     unsigned GetRetCode() override {
-        return ParseHttpRetCode(HttpInput->FirstLine());
+        return ParseHttpRetCode(HttpInput_->FirstLine());
     }
 
     THttpURL GetRedirectURL(const THttpURL& baseUrl) override {
-        for (auto i = HttpInput->Headers().Begin(); i != HttpInput->Headers().End(); ++i) {
+        for (auto i = HttpInput_->Headers().Begin(); i != HttpInput_->Headers().End(); ++i) {
             if (0 == TCiString::compare(i->Name(), TStringBuf("location"))) {
                 THttpURL target = ParseURL(i->Value(), THttpURL::FeaturesAll | NUri::TFeature::FeatureConvertHostIDN);
                 if (!target.IsValidAbs()) {
@@ -107,11 +107,11 @@ public:
     }
 
 private:
-    THolder<TSocket> Socket;
-    THolder<TSocketInput> SocketInput;
-    THolder<TSocketOutput> SocketOutput;
-    THolder<TOpenSslClientIO> Ssl;
-    THolder<THttpInput> HttpInput;
+    THolder<TSocket> Socket_;
+    THolder<TSocketInput> SocketInput_;
+    THolder<TSocketOutput> SocketOutput_;
+    THolder<TOpenSslClientIO> Ssl_;
+    THolder<THttpInput> HttpInput_;
 };
 
 inline bool IsRedirectCode(unsigned code) {
@@ -125,34 +125,70 @@ inline bool IsRedirectCode(unsigned code) {
     return false;
 }
 
-inline bool IsRetryCode(unsigned code) {
+} // unnamed
+
+ERetryErrorClass DefaultClassifyHttpCode(unsigned code) {
     switch (code) {
-        case HTTP_REQUEST_TIME_OUT:
-        case HTTP_AUTHENTICATION_TIMEOUT:
-        case HTTP_TOO_MANY_REQUESTS:
-        case HTTP_GATEWAY_TIME_OUT:
-        case HTTP_SERVICE_UNAVAILABLE:
-            return true;
+        case HTTP_REQUEST_TIME_OUT:             //408
+        case HTTP_AUTHENTICATION_TIMEOUT:       //419
+            return ERetryErrorClass::ShortRetry;
+        case HTTP_TOO_MANY_REQUESTS:            //429
+        case HTTP_SERVICE_UNAVAILABLE:          //503
+            return ERetryErrorClass::LongRetry;
+        default:
+            return IsServerError(code)
+                ? ERetryErrorClass::ShortRetry  //5xx
+                : ERetryErrorClass::NoRetry;
     }
-    return false;
 }
 
-} // unnamed
+IRetryPolicy<unsigned>::TPtr GetDefaultPolicy() {
+    static const auto policy = IRetryPolicy<unsigned>::GetExponentialBackoffPolicy(
+            /*retryClassFunction=*/DefaultClassifyHttpCode,
+            /*minDelay=*/TDuration::Seconds(1),
+            /*minLongRetryDelay:*/TDuration::Seconds(5),
+            /*maxDelay=*/TDuration::Minutes(1),
+            /*maxRetries=*/3,
+            /*maxTime=*/TDuration::Minutes(3),
+            /*scaleFactor=*/2
+    );
+    return policy;
+}
 
 THttpURL ParseURL(const TStringBuf addr) {
     return ParseURL(addr, THttpURL::FeaturesAll | NUri::TFeature::FeatureConvertHostIDN | NUri::TFeature::FeatureNoRelPath);
 }
 
-TFetchResultPtr Fetch(const THttpURL& url, const THttpHeaders& additionalHeaders, const TDuration& timeout, size_t retries, size_t redirects) {
+TFetchResultPtr Fetch(const THttpURL& url, const THttpHeaders& additionalHeaders, const TDuration& timeout, size_t redirects, const IRetryPolicy<unsigned>::TPtr& policy) {
+    const auto& actualPolicy = policy ? policy : GetDefaultPolicy();
     THttpURL currentUrl = url;
     for (size_t fetchNum = 0; fetchNum < redirects; ++fetchNum) {
+        IRetryPolicy<unsigned>::IRetryState::TPtr state = actualPolicy->CreateRetryState();
         unsigned responseCode = 0;
         TFetchResultPtr fr;
-        size_t fetchTry = 0;
-        do {
-            fr = TFetchResultImpl::Fetch(currentUrl, additionalHeaders, timeout);
-            responseCode = fr->GetRetCode();
-        } while (IsRetryCode(responseCode) && ++fetchTry < retries);
+        while (true) {
+            std::exception_ptr eptr;
+            try {
+                fr = TFetchResultImpl::Fetch(currentUrl, additionalHeaders, timeout);
+                responseCode = fr->GetRetCode();
+            } catch (const TSystemError& ex) {
+                if (ex.Status() != ETIMEDOUT) {
+                    throw;
+                }
+
+                responseCode = HTTP_REQUEST_TIME_OUT;
+                eptr = std::current_exception();
+            }
+
+            if (auto delay = state->GetNextRetryDelay(responseCode)) {
+                YQL_LOG(DEBUG) << "Connection failed. Retry delay: " << *delay;
+                Sleep(*delay);
+            } else if (eptr != nullptr) {
+                std::rethrow_exception(eptr);
+            } else {
+                break;
+            }
+        }
 
         if (responseCode >= 200 && responseCode < 300) {
             return fr;

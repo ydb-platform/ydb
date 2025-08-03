@@ -11,6 +11,8 @@ SRCS(
     board_lookup.cpp
     board_publish.cpp
     board_replica.cpp
+    bridge.h
+    bridge.cpp
     blobstorage.h
     blobstorage.cpp
     blobstorage_grouptype.cpp
@@ -98,6 +100,7 @@ PEERDIR(
     library/cpp/lwtrace/mon
     library/cpp/random_provider
     library/cpp/time_provider
+    ydb/core/audit/audit_config
     ydb/core/base/generated
     ydb/core/base/services
     ydb/core/debug

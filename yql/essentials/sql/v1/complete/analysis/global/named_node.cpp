@@ -14,11 +14,8 @@ namespace NSQLComplete {
 
         class TVisitor: public TSQLv1NarrowingVisitor {
         public:
-            TVisitor(
-                antlr4::TokenStream* tokens,
-                size_t cursorPosition,
-                THashSet<TString>* names)
-                : TSQLv1NarrowingVisitor(tokens, cursorPosition)
+            TVisitor(const TParsedInput& input, THashSet<TString>* names)
+                : TSQLv1NarrowingVisitor(input)
                 , Names_(names)
             {
             }
@@ -84,6 +81,10 @@ namespace NSQLComplete {
             }
 
             std::any visitBind_parameter(SQLv1::Bind_parameterContext* ctx) override {
+                if (IsEnclosing(ctx)) {
+                    return {};
+                }
+
                 TMaybe<std::string> id = GetId(ctx);
                 if (id.Empty() || id == "_") {
                     return {};
@@ -106,12 +107,9 @@ namespace NSQLComplete {
 
     } // namespace
 
-    TVector<TString> CollectNamedNodes(
-        SQLv1::Sql_queryContext* ctx,
-        antlr4::TokenStream* tokens,
-        size_t cursorPosition) {
+    TVector<TString> CollectNamedNodes(TParsedInput input) {
         THashSet<TString> names;
-        TVisitor(tokens, cursorPosition, &names).visit(ctx);
+        TVisitor(input, &names).visit(input.SqlQuery);
         return TVector<TString>(begin(names), end(names));
     }
 

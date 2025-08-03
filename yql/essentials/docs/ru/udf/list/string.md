@@ -62,8 +62,8 @@ SELECT String::Strip("YQL ");       -- "YQL"
 
   Устаревшие функции, к использованию не рекомендуются.
 
-* `String::AsciiStartsWithIgnoreCase(string:String?, prefix:String) -> Bool` - добавлена в версии [2025.02](../../changelog/2025.02.md#string-module)
-* `String::AsciiEndsWithIgnoreCase(string:String?, suffix:String) -> Bool` - добавлена в версии [2025.02](../../changelog/2025.02.md#string-module)
+* `String::AsciiStartsWithIgnoreCase(string:String?, prefix:String) -> Bool`
+* `String::AsciiEndsWithIgnoreCase(string:String?, suffix:String) -> Bool`
 * `String::HasPrefixIgnoreCase(string:String?, prefix:String) -> Bool` - удалена в версии [2025.02](../../changelog/2025.02.md#string-module)
 * `String::StartsWithIgnoreCase(string:String?, prefix:String) -> Bool` - удалена в версии [2025.02](../../changelog/2025.02.md#string-module)
 * `String::HasSuffixIgnoreCase(string:String?, suffix:String) -> Bool` - удалена в версии [2025.02](../../changelog/2025.02.md#string-module)

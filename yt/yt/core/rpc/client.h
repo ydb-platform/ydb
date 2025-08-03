@@ -47,6 +47,8 @@ struct IClientRequest
 
     virtual bool IsAttachmentCompressionEnabled() const = 0;
 
+    virtual bool HasAttachments() const = 0;
+
     virtual bool IsStreamingEnabled() const = 0;
 
     virtual const TStreamingParameters& ClientAttachmentsStreamingParameters() const = 0;
@@ -63,7 +65,7 @@ struct IClientRequest
     virtual std::string GetService() const = 0;
     virtual std::string GetMethod() const = 0;
 
-    virtual const std::optional<std::string>& GetRequestInfo() const = 0;
+    virtual const std::string& GetRequestInfo() const = 0;
 
     virtual void DeclareClientFeature(int featureId) = 0;
     virtual void RequireServerFeature(int featureId) = 0;
@@ -160,6 +162,8 @@ public:
 
     bool IsAttachmentCompressionEnabled() const override;
 
+    bool HasAttachments() const override;
+
     bool IsStreamingEnabled() const override;
 
     const TStreamingParameters& ClientAttachmentsStreamingParameters() const override;
@@ -179,7 +183,7 @@ public:
     template <class... TArgs>
     void SetRequestInfo(TFormatString<TArgs...> format, TArgs&&... args);
 
-    const std::optional<std::string>& GetRequestInfo() const override;
+    const std::string& GetRequestInfo() const override;
 
     using NRpc::IClientRequest::DeclareClientFeature;
     using NRpc::IClientRequest::RequireServerFeature;
@@ -255,9 +259,11 @@ private:
 
     std::string User_;
     std::string UserTag_;
-    std::optional<std::string> RequestInfo_;
+    std::string RequestInfo_;
 
     TWeakPtr<IClientRequestControl> RequestControl_;
+
+    void SetRawRequestInfo(std::string requestInfo);
 
     void OnPullRequestAttachmentsStream();
     void OnRequestStreamingPayloadAcked(int sequenceNumber, const TError& error);
@@ -358,7 +364,7 @@ protected:
     const TClientContextPtr ClientContext_;
 
     using EState = EClientResponseState;
-    std::atomic<EState> State_ = {EState::Sent};
+    std::atomic<EState> State_ = EState::Sent;
 
 
     explicit TClientResponse(TClientContextPtr clientContext);

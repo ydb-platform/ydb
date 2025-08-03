@@ -5,23 +5,17 @@ import yatest
 import time
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
-from ydb.tests.library.harness.param_constants import kikimr_driver_path
 from ydb.tests.library.common.types import Erasure
 from ydb.tests.oss.ydb_sdk_import import ydb
 
 
-current_binary_path = kikimr_driver_path()
-last_stable_binary_path = yatest.common.binary_path("ydb/tests/library/compatibility/binaries/ydbd-last-stable")
-prelast_stable_binary_path = yatest.common.binary_path("ydb/tests/library/compatibility/binaries/ydbd-prelast-stable")
-
-current_binary_version = (float("+inf"), )
-last_stable_version = None
-prelast_stable_version = None
-
-
 def string_version_to_tuple(s):
     result = []
-    for elem in s.split("-"):
+    s = s.replace('.', '-')
+    for idx, elem in enumerate(s.split("-")):
+        # skipping 'stable' in stable-25-1-1 version
+        if idx == 0 and elem == 'stable':
+            continue
         try:
             result.append(int(elem))
         except ValueError:
@@ -29,39 +23,53 @@ def string_version_to_tuple(s):
     return tuple(result)
 
 
-current_name = "current"
-last_stable_name = "last"
-if last_stable_binary_path is not None:  # in import_test yatest.common.binary_path returns None
-    last_stable_name = open(yatest.common.binary_path("ydb/tests/library/compatibility/binaries/ydbd-last-stable-name")).read().strip()
-    last_stable_version = string_version_to_tuple(last_stable_name)
-prelast_stable_name = "prelast"
-if prelast_stable_binary_path:  # in import_test yatest.common.binary_path returns None
-    prelast_stable_name = open(yatest.common.binary_path("ydb/tests/library/compatibility/binaries/ydbd-prelast-stable-name")).read().strip()
-    prelast_stable_version = string_version_to_tuple(prelast_stable_name)
+current_binary_path = yatest.common.binary_path("ydb/tests/library/compatibility/binaries/ydbd-target")
+current_name = 'current'
+if current_binary_path is not None:
+    with open(yatest.common.binary_path("ydb/tests/library/compatibility/binaries/ydbd-target-name")) as f:
+        current_name = f.read().strip()
+current_binary_version = string_version_to_tuple(current_name)
+
+inter_stable_binary_path = yatest.common.binary_path("ydb/tests/library/compatibility/binaries/ydbd-inter")
+init_stable_binary_path = yatest.common.binary_path("ydb/tests/library/compatibility/binaries/ydbd-init")
+
+inter_stable_version = None
+init_stable_version = None
+
+inter_stable_name = "intermediate"
+if inter_stable_binary_path is not None:  # in import_test yatest.common.binary_path returns None
+    with open(yatest.common.binary_path("ydb/tests/library/compatibility/binaries/ydbd-inter-name")) as f:
+        inter_stable_name = f.read().strip()
+        inter_stable_version = string_version_to_tuple(inter_stable_name)
+init_stable_name = "initial"
+if init_stable_binary_path:  # in import_test yatest.common.binary_path returns None
+    with open(yatest.common.binary_path("ydb/tests/library/compatibility/binaries/ydbd-init-name")) as f:
+        init_stable_name = f.read().strip()
+        init_stable_version = string_version_to_tuple(init_stable_name)
 
 path_to_version = {
     current_binary_path: current_binary_version,
-    last_stable_binary_path: last_stable_version,
-    prelast_stable_binary_path: prelast_stable_version,
+    inter_stable_binary_path: inter_stable_version,
+    init_stable_binary_path: init_stable_version,
 }
 
 all_binary_combinations_restart = [
-    [[last_stable_binary_path], [current_binary_path]],
-    [[current_binary_path], [last_stable_binary_path]],
+    [[inter_stable_binary_path], [current_binary_path]],
+    [[current_binary_path], [inter_stable_binary_path]],
     [[current_binary_path], [current_binary_path]],
 
-    [[prelast_stable_binary_path], [last_stable_binary_path]],
-    [[last_stable_binary_path], [prelast_stable_binary_path]],
-    [[last_stable_binary_path], [last_stable_binary_path]],
+    [[init_stable_binary_path], [inter_stable_binary_path]],
+    [[inter_stable_binary_path], [init_stable_binary_path]],
+    [[inter_stable_binary_path], [inter_stable_binary_path]],
 ]
 all_binary_combinations_ids_restart = [
-    "restart_{}_to_{}".format(last_stable_name, current_name),
-    "restart_{}_to_{}".format(current_name, last_stable_name),
+    "restart_{}_to_{}".format(inter_stable_name, current_name),
+    "restart_{}_to_{}".format(current_name, inter_stable_name),
     "restart_{}_to_{}".format(current_name, current_name),
 
-    "restart_{}_to_{}".format(prelast_stable_name, last_stable_name),
-    "restart_{}_to_{}".format(last_stable_name, prelast_stable_name),
-    "restart_{}_to_{}".format(last_stable_name, last_stable_name),
+    "restart_{}_to_{}".format(init_stable_name, inter_stable_name),
+    "restart_{}_to_{}".format(inter_stable_name, init_stable_name),
+    "restart_{}_to_{}".format(inter_stable_name, inter_stable_name),
 ]
 
 
@@ -94,7 +102,7 @@ class RestartToAnotherVersionFixture:
                 endpoint=self.endpoint
             )
         )
-        self.driver.wait()
+        self.driver.wait(timeout=60)
         yield
         self.cluster.stop()
 
@@ -109,7 +117,7 @@ class RestartToAnotherVersionFixture:
                 endpoint=self.endpoint
             )
         )
-        self.driver.wait()
+        self.driver.wait(timeout=60)
         # TODO: remove sleep
         # without sleep there are errors like
         # ydb.issues.Unavailable: message: "Failed to resolve tablet: 72075186224037909 after several retries." severity: 1 (server_code: 400050)
@@ -118,15 +126,15 @@ class RestartToAnotherVersionFixture:
 
 all_binary_combinations_mixed = [
     [current_binary_path],
-    [last_stable_binary_path],
-    [current_binary_path, last_stable_binary_path],
-    [last_stable_binary_path, prelast_stable_binary_path],
+    [inter_stable_binary_path],
+    [current_binary_path, inter_stable_binary_path],
+    [inter_stable_binary_path, init_stable_binary_path],
 ]
 all_binary_combinations_ids_mixed = [
     "mixed_{}".format(current_name),
-    "mixed_{}".format(last_stable_name),
-    "mixed_{}".format(current_name + "_and_" + last_stable_name),
-    "mixed_{}".format(last_stable_name + "_and_" + prelast_stable_name),
+    "mixed_{}".format(inter_stable_name),
+    "mixed_{}".format(current_name + "_and_" + inter_stable_name),
+    "mixed_{}".format(inter_stable_name + "_and_" + init_stable_name),
 ]
 
 
@@ -153,18 +161,18 @@ class MixedClusterFixture:
                 endpoint=self.endpoint
             )
         )
-        self.driver.wait()
+        self.driver.wait(timeout=60)
         yield
         self.cluster.stop()
 
 
 all_binary_combinations_rolling = [
-    [last_stable_binary_path, current_binary_path],
-    [prelast_stable_binary_path, last_stable_binary_path],
+    [inter_stable_binary_path, current_binary_path],
+    [init_stable_binary_path, inter_stable_binary_path],
 ]
 all_binary_combinations_ids_rolling = [
-    "rolling_{}_to_{}".format(last_stable_name, current_name),
-    "rolling_{}_to_{}".format(prelast_stable_name, last_stable_name),
+    "rolling_{}_to_{}".format(inter_stable_name, current_name),
+    "rolling_{}_to_{}".format(init_stable_name, inter_stable_name),
 ]
 
 
@@ -184,7 +192,7 @@ class RollingUpgradeAndDowngradeFixture:
                     endpoint=self.endpoints[0]
                 )
             )
-            self.driver.wait()
+            self.driver.wait(timeout=60)
 
         query = """
             CREATE TABLE `test_readiness` (
@@ -231,13 +239,15 @@ class RollingUpgradeAndDowngradeFixture:
         for i in range(1, len(self.cluster.nodes) + 1):
             self.endpoints.append("grpc://%s:%s" % ('localhost', self.cluster.nodes[i].port))
 
+        self.endpoint = self.endpoints[0]
+
         self.driver = ydb.Driver(
             ydb.DriverConfig(
                 self.endpoints[0],
                 database='/Root'
             )
         )
-        self.driver.wait()
+        self.driver.wait(timeout=60)
         yield
         self.cluster.stop()
 

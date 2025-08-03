@@ -12,31 +12,45 @@
 
 namespace NSQLComplete {
 
-    struct TIndentifier {
-        TString Indentifier;
+    struct TIdentifier {
+        TString Identifier;
     };
 
     struct TNamespaced {
         TString Namespace;
     };
 
+    struct TDescribed {
+        TMaybe<TString> Description;
+    };
+
     struct TKeyword {
         TString Content;
     };
 
-    struct TPragmaName: TIndentifier {
+    struct TPragmaName: TIdentifier {
         struct TConstraints: TNamespaced {};
     };
 
-    struct TTypeName: TIndentifier {
+    struct TTypeName: TIdentifier, TDescribed {
         struct TConstraints {};
+
+        enum class EKind {
+            Simple,
+            Container,
+            Parameterized,
+        };
+
+        EKind Kind = EKind::Simple;
     };
 
-    struct TFunctionName: TIndentifier {
-        struct TConstraints: TNamespaced {};
+    struct TFunctionName: TIdentifier, TDescribed {
+        struct TConstraints: TNamespaced {
+            ENodeKind ReturnType;
+        };
     };
 
-    struct THintName: TIndentifier {
+    struct THintName: TIdentifier {
         struct TConstraints {
             EStatementKind Statement;
         };
@@ -48,20 +62,29 @@ namespace NSQLComplete {
         THashSet<EObjectKind> Kinds;
     };
 
-    struct TFolderName: TIndentifier {
+    struct TFolderName: TIdentifier {
     };
 
-    struct TTableName: TIndentifier {
+    struct TTableName: TIdentifier {
     };
 
-    struct TClusterName: TIndentifier {
+    struct TClusterName: TIdentifier {
         struct TConstraints: TNamespaced {};
     };
 
-    struct TBindingName: TIndentifier {
+    struct TColumnName: TIdentifier {
+        struct TConstraints {
+            TVector<TAliased<TTableId>> Tables;
+            THashMap<TString, THashSet<TString>> WithoutByTableAlias;
+        };
+
+        TString TableAlias;
     };
 
-    struct TUnkownName {
+    struct TBindingName: TIdentifier {
+    };
+
+    struct TUnknownName {
         TString Content;
         TString Type;
     };
@@ -75,8 +98,9 @@ namespace NSQLComplete {
         TFolderName,
         TTableName,
         TClusterName,
+        TColumnName,
         TBindingName,
-        TUnkownName>;
+        TUnknownName>;
 
     struct TNameConstraints {
         TMaybe<TPragmaName::TConstraints> Pragma;
@@ -85,6 +109,7 @@ namespace NSQLComplete {
         TMaybe<THintName::TConstraints> Hint;
         TMaybe<TObjectNameConstraints> Object;
         TMaybe<TClusterName::TConstraints> Cluster;
+        TMaybe<TColumnName::TConstraints> Column;
 
         bool IsEmpty() const {
             return !Pragma &&
@@ -92,7 +117,8 @@ namespace NSQLComplete {
                    !Function &&
                    !Hint &&
                    !Object &&
-                   !Cluster;
+                   !Cluster &&
+                   !Column;
         }
 
         TGenericName Qualified(TGenericName unqualified) const;
@@ -125,8 +151,7 @@ namespace NSQLComplete {
     public:
         using TPtr = TIntrusivePtr<INameService>;
 
-        ~INameService() override = default;
-        virtual NThreading::TFuture<TNameResponse> Lookup(TNameRequest request) const = 0;
+        virtual NThreading::TFuture<TNameResponse> Lookup(const TNameRequest& request) const = 0;
     };
 
     TString NormalizeName(TStringBuf name);

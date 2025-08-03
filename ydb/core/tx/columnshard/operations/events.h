@@ -10,10 +10,14 @@ namespace NKikimr::NColumnShard {
 class TInsertedPortion {
 private:
     YDB_READONLY_DEF(std::shared_ptr<NOlap::TPortionAccessorConstructor>, PortionInfoConstructor);
-    std::optional<NOlap::TPortionDataAccessor> PortionInfo;
+    std::optional<std::shared_ptr<NOlap::TPortionDataAccessor>> PortionInfo;
 
 public:
     const NOlap::TPortionDataAccessor& GetPortionInfo() const {
+        AFL_VERIFY(PortionInfo);
+        return **PortionInfo;
+    }
+    const std::shared_ptr<NOlap::TPortionDataAccessor>& GetPortionInfoPtr() const {
         AFL_VERIFY(PortionInfo);
         return *PortionInfo;
     }
@@ -97,12 +101,11 @@ public:
         AFL_VERIFY(WriteResults.size());
         std::optional<TInternalPathId> pathId;
         for (auto&& i : WriteResults) {
-            i.GetWriteMeta().OnStage(NEvWrite::EWriteStage::Finished);
             AFL_VERIFY(!i.GetWriteMeta().HasLongTxId());
             if (!pathId) {
-                pathId = i.GetWriteMeta().GetTableId();
+                pathId = i.GetWriteMeta().GetPathId().InternalPathId;
             } else {
-                AFL_VERIFY(pathId == i.GetWriteMeta().GetTableId());
+                AFL_VERIFY(pathId == i.GetWriteMeta().GetPathId().InternalPathId);
             }
         }
         AFL_VERIFY(pathId);

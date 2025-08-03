@@ -14,11 +14,13 @@ private:
 public:
     NCommon::TConfSetting<bool, Static> _EnableReading;
     NCommon::TConfSetting<bool, Static> _EnableRuntimeListing;
+    NCommon::TConfSetting<ui64, Static> _TruePointsFindRange;
     NCommon::TConfSetting<ui64, Static> MetricsQueuePageSize;
     NCommon::TConfSetting<ui64, Static> MetricsQueuePrefetchSize;
     NCommon::TConfSetting<ui64, Static> MetricsQueueBatchCountLimit;
     NCommon::TConfSetting<TString, Static> SolomonClientDefaultReplica;
     NCommon::TConfSetting<ui64, Static> ComputeActorBatchSize;
+    NCommon::TConfSetting<ui64, Static> MaxApiInflight;
 };
 
 struct TSolomonConfiguration

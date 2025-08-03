@@ -1,0 +1,5 @@
+FederatedQueryConfig.Gateways.S3.MaxReadSizePerQuery: field was in stable-25-1, but is deleted in current
+QueryServiceConfig.S3.MaxReadSizePerQuery: field was in stable-25-1, but is deleted in current
+TableServiceConfig.EnableKqpDataQueryStreamLookup: field was in stable-25-1, but is deleted in current
+TableServiceConfig.EnableKqpScanQueryStreamLookup: field was in stable-25-1, but is deleted in current
+TableServiceConfig.IndexAutoChooseMode: field was in stable-25-1, but is deleted in current

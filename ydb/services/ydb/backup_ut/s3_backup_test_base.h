@@ -99,31 +99,33 @@ protected:
     }
 
     template<typename TOp>
-    void WaitOp(TMaybe<NYdb::TOperation>& op) {
-        int attempt = 200;
-        while (--attempt) {
+    void WaitOp(TMaybe<NYdb::TOperation>& op, TDuration timeout = TDuration::Seconds(30)) {
+        const TInstant start = TInstant::Now();
+        bool ok = false;
+        while (TInstant::Now() - start <= timeout) {
             op = YdbOperationClient().Get<TOp>(op->Id()).GetValueSync();
             if (op->Ready()) {
+                ok = true;
                 break;
             }
             Sleep(TDuration::MilliSeconds(100));
         }
-        UNIT_ASSERT_C(attempt, "Unable to wait completion of operation");
+        UNIT_ASSERT_C(ok, "Unable to wait completion of operation");
     }
 
     template <class TResponseType>
-    TMaybe<NYdb::TOperation> WaitOpSuccess(const TResponseType& res, const TString& comments = {}) {
-        return WaitOpStatus<TResponseType>(res, NYdb::EStatus::SUCCESS, comments);
+    TMaybe<NYdb::TOperation> WaitOpSuccess(const TResponseType& res, const TString& comments = {}, TDuration timeout = TDuration::Seconds(30)) {
+        return WaitOpStatus<TResponseType>(res, NYdb::EStatus::SUCCESS, comments, timeout);
     }
 
     template <class TResponseType>
-    TMaybe<NYdb::TOperation> WaitOpStatus(const TResponseType& res, NYdb::EStatus status, const TString& comments = {}) {
+    TMaybe<NYdb::TOperation> WaitOpStatus(const TResponseType& res, NYdb::EStatus status, const TString& comments = {}, TDuration timeout = TDuration::Seconds(30)) {
         if (res.Ready()) {
             UNIT_ASSERT_VALUES_EQUAL_C(res.Status().GetStatus(), status, comments << ". Status: " << res.Status().GetStatus() << ". Issues: " << res.Status().GetIssues().ToString());
             return res;
         } else {
             TMaybe<NYdb::TOperation> op = res;
-            WaitOp<TResponseType>(op);
+            WaitOp<TResponseType>(op, timeout);
             UNIT_ASSERT_VALUES_EQUAL_C(op->Status().GetStatus(), status, comments << ". Status: " << op->Status().GetStatus() << ". Issues: " << op->Status().GetIssues().ToString());
             return op;
         }

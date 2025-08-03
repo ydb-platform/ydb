@@ -1,6 +1,6 @@
 #include <yt/yt/core/test_framework/framework.h>
 
-#include "row_helpers.h"
+#include <yt/yt/tests/cpp/library/row_helpers.h>
 
 #include <yt/yt/library/formats/arrow_parser.h>
 
@@ -154,6 +154,37 @@ std::string MakeIntListArrow(const std::vector<std::optional<std::vector<int32_t
     return MakeOutputFromRecordBatch(recordBatch);
 }
 
+std::string MakeIntListDictionaryArrow(
+    const std::vector<int32_t>& listValues, int64_t numRows)
+{
+    auto* pool = arrow::default_memory_pool();
+
+    auto valueBuilder = std::make_shared<arrow::Int32Builder>(pool);
+    auto listBuilder = std::make_unique<arrow::ListBuilder>(pool, valueBuilder);
+
+    Verify(listBuilder->Append());
+    for (int32_t value : listValues) {
+        Verify(valueBuilder->Append(value));
+    }
+    std::shared_ptr<arrow::Array> dictArray;
+    Verify(listBuilder->Finish(&dictArray));
+
+    arrow::Int8Builder indicesBuilder(pool);
+    Verify(indicesBuilder.AppendValues(std::vector<int8_t>(numRows, 0)));
+    std::shared_ptr<arrow::Array> indicesArray;
+    Verify(indicesBuilder.Finish(&indicesArray));
+
+    auto dictType = arrow::dictionary(arrow::int8(), dictArray->type());
+    auto dictColumn = std::make_shared<arrow::DictionaryArray>(dictType, indicesArray, dictArray);
+
+    std::vector<std::shared_ptr<arrow::Array>> columns = {dictColumn};
+
+    auto arrowSchema = arrow::schema({arrow::field("list", dictColumn->type())});
+    auto recordBatch = arrow::RecordBatch::Make(arrowSchema, columns[0]->length(), columns);
+
+    return MakeOutputFromRecordBatch(recordBatch);
+}
+
 std::string MakeStringListArrow(const std::vector<std::vector<std::string>>& data)
 {
     auto* pool = arrow::default_memory_pool();
@@ -267,6 +298,231 @@ std::string MakeStructArrow(const std::vector<std::string>& stringData, const st
     std::shared_ptr<arrow::Array> structArray;
     Verify(structBuilder.Finish(&structArray));
     std::vector<std::shared_ptr<arrow::Array>> columns = {structArray};
+
+    auto recordBatch = arrow::RecordBatch::Make(arrowSchema, columns[0]->length(), columns);
+
+    return MakeOutputFromRecordBatch(recordBatch);
+}
+
+struct TTzRow
+{
+    ui16 DateValue = 0;
+    ui32 DatetimeValue = 0;
+    ui64 TimestampValue = 0;
+    i32 Date32Value = 0;
+    i64 Datetime64Value = 0;
+    i64 Timestamp64Value = 0;
+    ui16 TzIndex = 0;
+};
+
+std::string MakeTzTypeArrow(const std::vector<TTzRow>& dateValue)
+{
+    auto* pool = arrow::default_memory_pool();
+
+    auto dateBuilder = std::make_shared<arrow::UInt16Builder>(pool);
+    auto dateTzIndexBuilder = std::make_shared<arrow::UInt16Builder>(pool);
+    std::vector<std::shared_ptr<arrow::Field>> dateFields = {
+        std::make_shared<arrow::Field>("Timestamp", std::make_shared<arrow::UInt16Type>()),
+        std::make_shared<arrow::Field>("TzIndex", std::make_shared<arrow::UInt16Type>()),
+    };
+    arrow::StructBuilder tzDateBuilder(
+        std::make_shared<arrow::StructType>(dateFields),
+        pool,
+        {dateBuilder, dateTzIndexBuilder});
+
+    auto datetimeBuilder = std::make_shared<arrow::UInt32Builder>(pool);
+    auto datetimeTzIndexBuilder = std::make_shared<arrow::UInt16Builder>(pool);
+    std::vector<std::shared_ptr<arrow::Field>> datetimeFields = {
+        std::make_shared<arrow::Field>("Timestamp", std::make_shared<arrow::UInt32Type>()),
+        std::make_shared<arrow::Field>("TzIndex", std::make_shared<arrow::UInt16Type>()),
+    };
+    arrow::StructBuilder tzDatetimeBuilder(
+        std::make_shared<arrow::StructType>(datetimeFields),
+        pool,
+        {datetimeBuilder, datetimeTzIndexBuilder});
+
+    auto timestampBuilder = std::make_shared<arrow::UInt64Builder>(pool);
+    auto timestampTzIndexBuilder = std::make_shared<arrow::UInt16Builder>(pool);
+    std::vector<std::shared_ptr<arrow::Field>> timestampFields = {
+        std::make_shared<arrow::Field>("Timestamp", std::make_shared<arrow::UInt64Type>()),
+        std::make_shared<arrow::Field>("TzIndex", std::make_shared<arrow::UInt16Type>()),
+    };
+    arrow::StructBuilder tzTimestampBuilder(
+        std::make_shared<arrow::StructType>(timestampFields),
+        pool,
+        {timestampBuilder, timestampTzIndexBuilder});
+
+    auto date32Builder = std::make_shared<arrow::Int32Builder>(pool);
+    auto date32TzIndexBuilder = std::make_shared<arrow::UInt16Builder>(pool);
+    std::vector<std::shared_ptr<arrow::Field>> date32Fields = {
+        std::make_shared<arrow::Field>("Timestamp", std::make_shared<arrow::Int32Type>()),
+        std::make_shared<arrow::Field>("TzIndex", std::make_shared<arrow::UInt16Type>()),
+    };
+    arrow::StructBuilder tzDate32Builder(
+        std::make_shared<arrow::StructType>(date32Fields),
+        pool,
+        {date32Builder, date32TzIndexBuilder});
+
+    auto datetime64Builder = std::make_shared<arrow::Int64Builder>(pool);
+    auto datetime64TzIndexBuilder = std::make_shared<arrow::UInt16Builder>(pool);
+    std::vector<std::shared_ptr<arrow::Field>> datetime64Fields = {
+        std::make_shared<arrow::Field>("Timestamp", std::make_shared<arrow::Int64Type>()),
+        std::make_shared<arrow::Field>("TzIndex", std::make_shared<arrow::UInt16Type>()),
+    };
+    arrow::StructBuilder tzDatetime64Builder(
+        std::make_shared<arrow::StructType>(datetime64Fields),
+        pool,
+        {datetime64Builder, datetime64TzIndexBuilder});
+
+    auto timestamp64Builder = std::make_shared<arrow::Int64Builder>(pool);
+    auto timestamp64TzIndexBuilder = std::make_shared<arrow::UInt16Builder>(pool);
+    std::vector<std::shared_ptr<arrow::Field>> timestamp64Fields = {
+        std::make_shared<arrow::Field>("Timestamp", std::make_shared<arrow::Int64Type>()),
+        std::make_shared<arrow::Field>("TzIndex", std::make_shared<arrow::UInt16Type>()),
+    };
+    arrow::StructBuilder tzTimestamp64Builder(
+        std::make_shared<arrow::StructType>(timestamp64Fields),
+        pool,
+        {timestamp64Builder, timestamp64TzIndexBuilder});
+
+    for (int index = 0; index < std::ssize(dateValue); index++) {
+        Verify(tzDateBuilder.Append());
+        Verify(dateBuilder->Append(dateValue[index].DateValue));
+        Verify(dateTzIndexBuilder->Append(dateValue[index].TzIndex));
+
+        Verify(tzDatetimeBuilder.Append());
+        Verify(datetimeBuilder->Append(dateValue[index].DatetimeValue));
+        Verify(datetimeTzIndexBuilder->Append(dateValue[index].TzIndex));
+
+        Verify(tzTimestampBuilder.Append());
+        Verify(timestampBuilder->Append(dateValue[index].TimestampValue));
+        Verify(timestampTzIndexBuilder->Append(dateValue[index].TzIndex));
+
+        Verify(tzDate32Builder.Append());
+        Verify(date32Builder->Append(dateValue[index].Date32Value));
+        Verify(date32TzIndexBuilder->Append(dateValue[index].TzIndex));
+
+        Verify(tzDatetime64Builder.Append());
+        Verify(datetime64Builder->Append(dateValue[index].Datetime64Value));
+        Verify(datetime64TzIndexBuilder->Append(dateValue[index].TzIndex));
+
+        Verify(tzTimestamp64Builder.Append());
+        Verify(timestamp64Builder->Append(dateValue[index].Timestamp64Value));
+        Verify(timestamp64TzIndexBuilder->Append(dateValue[index].TzIndex));
+    }
+
+    std::shared_ptr<arrow::Schema> arrowSchema = arrow::schema({
+        arrow::field("tzDateColumn", tzDateBuilder.type()),
+        arrow::field("tzDatetimeColumn", tzDatetimeBuilder.type()),
+        arrow::field("tzTimestampColumn", tzTimestampBuilder.type()),
+        arrow::field("tzDate32Column", tzDate32Builder.type()),
+        arrow::field("tzDatetime64Column", tzDatetime64Builder.type()),
+        arrow::field("tzTimestamp64Column", tzTimestamp64Builder.type()),
+    });
+
+    std::shared_ptr<arrow::Array> dateArray;
+    Verify(tzDateBuilder.Finish(&dateArray));
+
+    std::shared_ptr<arrow::Array> datetimeArray;
+    Verify(tzDatetimeBuilder.Finish(&datetimeArray));
+
+    std::shared_ptr<arrow::Array> timestampArray;
+    Verify(tzTimestampBuilder.Finish(&timestampArray));
+
+    std::shared_ptr<arrow::Array> date32Array;
+    Verify(tzDate32Builder.Finish(&date32Array));
+
+    std::shared_ptr<arrow::Array> datetime64Array;
+    Verify(tzDatetime64Builder.Finish(&datetime64Array));
+
+    std::shared_ptr<arrow::Array> timestamp64Array;
+    Verify(tzTimestamp64Builder.Finish(&timestamp64Array));
+
+    auto columns = std::vector{
+        dateArray,
+        datetimeArray,
+        timestampArray,
+        date32Array,
+        datetime64Array,
+        timestamp64Array
+    };
+
+    auto recordBatch = arrow::RecordBatch::Make(arrowSchema, columns[0]->length(), columns);
+
+    return MakeOutputFromRecordBatch(recordBatch);
+}
+
+std::string MakeTzDateTypeArrow(const std::vector<int>& dateValue)
+{
+    auto* pool = arrow::default_memory_pool();
+
+    auto dateBuilder = std::make_shared<arrow::UInt16Builder>(pool);
+    auto dateTzNameBuilder = std::make_shared<arrow::BinaryBuilder>(pool);
+
+    std::vector<std::shared_ptr<arrow::Field>> dateFields = {
+        std::make_shared<arrow::Field>("Timestamp", std::make_shared<arrow::UInt16Type>()),
+        std::make_shared<arrow::Field>("TzIndex", std::make_shared<arrow::BinaryType>()),
+    };
+    arrow::StructBuilder tzDateBuilder(
+        std::make_shared<arrow::StructType>(dateFields),
+        pool,
+        {dateBuilder, dateTzNameBuilder});
+
+    for (int index = 0; index < std::ssize(dateValue); index++) {
+        Verify(tzDateBuilder.Append());
+        Verify(dateBuilder->Append(dateValue[index]));
+        Verify(dateTzNameBuilder->Append("Europe/Moscow"));
+    }
+
+    std::shared_ptr<arrow::Schema> arrowSchema = arrow::schema({
+        arrow::field("tzDateColumn", tzDateBuilder.type()),
+    });
+
+    std::shared_ptr<arrow::Array> dateArray;
+    Verify(tzDateBuilder.Finish(&dateArray));
+
+    std::vector<std::shared_ptr<arrow::Array>> columns = {
+        dateArray
+    };
+
+    auto recordBatch = arrow::RecordBatch::Make(arrowSchema, columns[0]->length(), columns);
+
+    return MakeOutputFromRecordBatch(recordBatch);
+}
+
+std::string MakeTzTypesListArrow(const std::vector<std::vector<i64>>& dateColumn)
+{
+    auto* pool = arrow::default_memory_pool();
+
+    auto dateBuilder = std::make_shared<arrow::UInt16Builder>(pool);
+    auto dateTzIndexBuilder = std::make_shared<arrow::UInt16Builder>(pool);
+    std::vector<std::shared_ptr<arrow::Field>> dateFields = {
+        std::make_shared<arrow::Field>("Timestamp", std::make_shared<arrow::UInt16Type>()),
+        std::make_shared<arrow::Field>("TzIndex", std::make_shared<arrow::UInt16Type>()),
+    };
+    arrow::StructBuilder tzDateBuilder(
+        std::make_shared<arrow::StructType>(dateFields),
+        pool,
+        {dateBuilder, dateTzIndexBuilder});
+
+    auto aa = std::make_shared<arrow::StructBuilder>(std::move(tzDateBuilder));
+
+    auto listBuilder = std::make_unique<arrow::ListBuilder>(pool, aa);
+
+    for (const auto& list : dateColumn) {
+        Verify(listBuilder->Append());
+        for (const auto& value : list) {
+            Verify(aa->Append());
+            Verify(dateBuilder->Append(value));
+            Verify(dateTzIndexBuilder->Append(1));
+        }
+    }
+
+    auto arrowSchema = arrow::schema({arrow::field("listOfTzTypes", listBuilder->type())});
+
+    std::shared_ptr<arrow::Array> listArray;
+    Verify(listBuilder->Finish(&listArray));
+    std::vector<std::shared_ptr<arrow::Array>> columns = {listArray};
 
     auto recordBatch = arrow::RecordBatch::Make(arrowSchema, columns[0]->length(), columns);
 
@@ -518,10 +774,11 @@ TEST(TArrowParserTest, String)
 }
 
 
-TString ConvertToYsonTextStringStable(const INodePtr& node)
+TString ConvertToYsonTextStringStable(const INodePtr& node, bool binary = false)
 {
     TStringStream out;
-    TYsonWriter writer(&out, EYsonFormat::Text);
+    auto format = binary ? EYsonFormat::Binary : EYsonFormat::Text;
+    TYsonWriter writer(&out, format);
     VisitTree(node, &writer, true, TAttributeFilter());
     writer.Flush();
     return out.Str();
@@ -548,6 +805,26 @@ TEST(TArrowParserTest, ListOfIntegers)
 
     auto thirdNode = GetComposite(collectedRows.GetRowValue(2, "list"));
     ASSERT_EQ(ConvertToYsonTextStringStable(thirdNode), "[4;5;]");
+}
+
+TEST(TArrowParserTest, DictionaryList)
+{
+    auto tableSchema = New<TTableSchema>(std::vector<TColumnSchema>{
+        TColumnSchema("list", ListLogicalType(SimpleLogicalType(ESimpleLogicalValueType::Int64))),
+    });
+
+    TCollectingValueConsumer collectedRows(tableSchema);
+
+    auto parser = CreateParserForArrow(&collectedRows);
+
+    auto data = MakeIntListDictionaryArrow(std::vector{1, 2, 3}, 3);
+
+    parser->Read(data);
+    parser->Finish();
+
+    ASSERT_EQ(ConvertToYsonTextStringStable(GetComposite(collectedRows.GetRowValue(0, "list"))), "[1;2;3;]");
+    ASSERT_EQ(ConvertToYsonTextStringStable(GetComposite(collectedRows.GetRowValue(1, "list"))), "[1;2;3;]");
+    ASSERT_EQ(ConvertToYsonTextStringStable(GetComposite(collectedRows.GetRowValue(2, "list"))), "[1;2;3;]");
 }
 
 TEST(TArrowParserTest, ListOfStrings)
@@ -758,6 +1035,139 @@ TEST(TArrowParserTest, Datetime64)
     ASSERT_EQ(GetInt64(collectedRows.GetRowValue(0, "date")), -18367);
     ASSERT_EQ(GetInt64(collectedRows.GetRowValue(0, "datetime")), -1586966302);
     ASSERT_EQ(GetInt64(collectedRows.GetRowValue(0, "timestamp")), -1586966302504185);
+}
+
+TEST(TArrowParserTest, TzType)
+{
+    auto tableSchema = New<TTableSchema>(std::vector<TColumnSchema>{
+        TColumnSchema("tzDateColumn", ESimpleLogicalValueType::TzDate),
+        TColumnSchema("tzDatetimeColumn", ESimpleLogicalValueType::TzDatetime),
+        TColumnSchema("tzTimestampColumn", ESimpleLogicalValueType::TzTimestamp),
+        TColumnSchema("tzDate32Column", ESimpleLogicalValueType::TzDate32),
+        TColumnSchema("tzDatetime64Column", ESimpleLogicalValueType::TzDatetime64),
+        TColumnSchema("tzTimestamp64Column", ESimpleLogicalValueType::TzTimestamp64),
+    });
+
+    TCollectingValueConsumer collectedRows(tableSchema);
+
+    auto parser = CreateParserForArrow(&collectedRows);
+
+    TTzRow row = {42, 100, 1, 2, 3, 4, 1};
+    parser->Read(MakeTzTypeArrow({row}));
+    parser->Finish();
+
+    TString stringValue;
+
+    stringValue = GetString(collectedRows.GetRowValue(0, "tzDateColumn"));
+    auto dateValue = NTzTypes::ParseTzValue<ui16>(stringValue);
+    ASSERT_EQ(dateValue.first, row.DateValue);
+    ASSERT_EQ(dateValue.second, "Europe/Moscow");
+
+    stringValue = GetString(collectedRows.GetRowValue(0, "tzDatetimeColumn"));
+    auto datetimeValue = NTzTypes::ParseTzValue<ui32>(stringValue);
+    ASSERT_EQ(datetimeValue.first, row.DatetimeValue);
+    ASSERT_EQ(datetimeValue.second, "Europe/Moscow");
+
+    stringValue = GetString(collectedRows.GetRowValue(0, "tzTimestampColumn"));
+    auto timestampValue = NTzTypes::ParseTzValue<ui64>(stringValue);
+    ASSERT_EQ(timestampValue.first, row.TimestampValue);
+    ASSERT_EQ(timestampValue.second, "Europe/Moscow");
+
+    stringValue = GetString(collectedRows.GetRowValue(0, "tzDate32Column"));
+    auto date32Value = NTzTypes::ParseTzValue<i32>(stringValue);
+    ASSERT_EQ(date32Value.first, row.Date32Value);
+    ASSERT_EQ(date32Value.second, "Europe/Moscow");
+
+    stringValue = GetString(collectedRows.GetRowValue(0, "tzDatetime64Column"));
+    auto datetime64Value = NTzTypes::ParseTzValue<i64>(stringValue);
+    ASSERT_EQ(datetime64Value.first, row.Datetime64Value);
+    ASSERT_EQ(datetime64Value.second, "Europe/Moscow");
+
+    stringValue = GetString(collectedRows.GetRowValue(0, "tzTimestamp64Column"));
+    auto timestamp64Value = NTzTypes::ParseTzValue<i64>(stringValue);
+    ASSERT_EQ(timestamp64Value.first, row.Timestamp64Value);
+    ASSERT_EQ(timestamp64Value.second, "Europe/Moscow");
+}
+
+TEST(TArrowParserTest, TzTypeName)
+{
+    auto tableSchema = New<TTableSchema>(std::vector<TColumnSchema>{
+        TColumnSchema("tzDateColumn", ESimpleLogicalValueType::TzDate),
+    });
+
+    TCollectingValueConsumer collectedRows(tableSchema);
+
+    auto parser = CreateParserForArrow(&collectedRows);
+
+    parser->Read(MakeTzDateTypeArrow({42}));
+    parser->Finish();
+
+    TString stringValue;
+
+    stringValue = GetString(collectedRows.GetRowValue(0, "tzDateColumn"));
+    auto dateValue = NTzTypes::ParseTzValue<ui16>(stringValue);
+    ASSERT_EQ(dateValue.first, 42);
+    ASSERT_EQ(dateValue.second, "Europe/Moscow");
+}
+
+TEST(TArrowParserTest, WrongTzIndex)
+{
+    auto tableSchema = New<TTableSchema>(std::vector<TColumnSchema>{
+        TColumnSchema("tzDateColumn", ESimpleLogicalValueType::TzDate),
+        TColumnSchema("tzDatetimeColumn", ESimpleLogicalValueType::TzDatetime),
+        TColumnSchema("tzTimestampColumn", ESimpleLogicalValueType::TzTimestamp),
+        TColumnSchema("tzDate32Column", ESimpleLogicalValueType::TzDate32),
+        TColumnSchema("tzDatetime64Column", ESimpleLogicalValueType::TzDatetime64),
+        TColumnSchema("tzTimestamp64Column", ESimpleLogicalValueType::TzTimestamp64),
+    });
+
+    TCollectingValueConsumer collectedRows(tableSchema);
+
+    auto parser = CreateParserForArrow(&collectedRows);
+
+    TTzRow row = {42, 100, 1, 2, 3, 4, 1000};
+    EXPECT_THROW_WITH_SUBSTRING(parser->Read(MakeTzTypeArrow({row})), "Failed to parse column");
+}
+
+TEST(TArrowParserTest, WrongTzType)
+{
+    auto tableSchema = New<TTableSchema>(std::vector<TColumnSchema>{
+        TColumnSchema("tzDateColumn", ESimpleLogicalValueType::TzDatetime),
+        TColumnSchema("tzDatetimeColumn", ESimpleLogicalValueType::TzDatetime),
+        TColumnSchema("tzTimestampColumn", ESimpleLogicalValueType::TzTimestamp),
+        TColumnSchema("tzDate32Column", ESimpleLogicalValueType::TzDate32),
+        TColumnSchema("tzDatetime64Column", ESimpleLogicalValueType::TzDatetime64),
+        TColumnSchema("tzTimestamp64Column", ESimpleLogicalValueType::TzTimestamp64),
+    });
+
+    TCollectingValueConsumer collectedRows(tableSchema);
+
+    auto parser = CreateParserForArrow(&collectedRows);
+
+    TTzRow row = {42, 100, 1, 2, 3, 4, 10};
+    EXPECT_THROW_WITH_SUBSTRING(parser->Read(MakeTzTypeArrow({row})), "Failed to parse column");
+}
+
+TEST(TArrowParserTest, ListOfTzTypes)
+{
+    auto tableSchema = New<TTableSchema>(std::vector<TColumnSchema>{
+        TColumnSchema("listOfTzTypes", ListLogicalType(SimpleLogicalType(ESimpleLogicalValueType::TzDate))),
+    });
+
+    TCollectingValueConsumer collectedRows(tableSchema);
+
+    auto parser = CreateParserForArrow(&collectedRows);
+
+    auto data = MakeTzTypesListArrow({{42}});
+    parser->Read(data);
+    parser->Finish();
+
+    auto firstNode = GetComposite(collectedRows.GetRowValue(0, "listOfTzTypes"));
+    auto result = ConvertToYsonTextStringStable(firstNode, true);
+
+    auto tzString = std::string_view(result.begin() + 3, result.end() - 2);
+
+    ASSERT_EQ(tzString, NTzTypes::MakeTzString<ui16>(42, NTzTypes::GetTzName(1)));
 }
 
 TEST(TArrowParserTest, ListOfDatetimes)

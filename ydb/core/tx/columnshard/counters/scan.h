@@ -157,6 +157,8 @@ private:
     NMonitoring::TDynamicCounters::TCounterPtr RecordsDeniedByHeader;
     std::shared_ptr<TSubColumnCounters> SubColumnCounters;
 
+    NMonitoring::TDynamicCounters::TCounterPtr HangingRequests;
+
 public:
     const std::shared_ptr<TSubColumnCounters>& GetSubColumns() const {
         AFL_VERIFY(SubColumnCounters);
@@ -316,6 +318,10 @@ public:
         ReadingOverload->Add(1);
     }
 
+    void OnHangingRequestDetected() const {
+        HangingRequests->Inc();
+    }
+
     TScanAggregations BuildAggregations();
 
     void FillStats(::NKikimrTableStats::TTableStats& output) const;
@@ -357,6 +363,8 @@ private:
     std::shared_ptr<TAtomicCounter> FilterFetchingGuard = std::make_shared<TAtomicCounter>();
     std::shared_ptr<TAtomicCounter> AbortsGuard = std::make_shared<TAtomicCounter>();
     std::shared_ptr<TAtomicCounter> TotalExecutionDurationUs = std::make_shared<TAtomicCounter>();
+    std::shared_ptr<TAtomicCounter> TotalRawBytes = std::make_shared<TAtomicCounter>();
+    std::shared_ptr<TAtomicCounter> AccessorsForConstructionGuard = std::make_shared<TAtomicCounter>();
     THashMap<ui32, std::shared_ptr<TAtomicCounter>> SkipNodesCount;
     THashMap<ui32, std::shared_ptr<TAtomicCounter>> ExecuteNodesCount;
 
@@ -387,6 +395,14 @@ public:
         return TDuration::MicroSeconds(TotalExecutionDurationUs->Val());
     }
 
+    void AddRawBytes(const ui64 bytes) const {
+        TotalRawBytes->Add(bytes);
+    }
+
+    ui64 GetRawBytes() const {
+        return TotalRawBytes->Val();
+    }
+
     TString DebugString() const {
         return TStringBuilder() << "FetchAccessorsCount:" << FetchAccessorsCount->Val() << ";"
                                 << "FetchBlobsCount:" << FetchBlobsCount->Val() << ";"
@@ -397,8 +413,14 @@ public:
                                 << "ResultsForSourceCount:" << ResultsForSourceCount->Val() << ";"
                                 << "ResultsForReplyGuard:" << ResultsForReplyGuard->Val() << ";"
                                 << "FilterFetchingGuard:" << FilterFetchingGuard->Val() << ";"
+                                << "AccessorsGuard:" << AccessorsForConstructionGuard->Val() << ";"
                                 << "AbortsGuard:" << AbortsGuard->Val() << ";";
     }
+
+    TCounterGuard GetAccessorsForConstructionGuard() const {
+        return TCounterGuard(AccessorsForConstructionGuard);
+    }
+
 
     TCounterGuard GetResultsForReplyGuard() const {
         return TCounterGuard(ResultsForReplyGuard);
@@ -443,7 +465,7 @@ public:
     bool InWaiting() const {
         return MergeTasksCount->Val() || AssembleTasksCount->Val() || ReadTasksCount->Val() || ResourcesAllocationTasksCount->Val() ||
                FetchAccessorsCount->Val() || ResultsForSourceCount->Val() || FetchBlobsCount->Val() || ResultsForReplyGuard->Val() ||
-               FilterFetchingGuard->Val() || AbortsGuard->Val();
+               FilterFetchingGuard->Val() || AbortsGuard->Val() || AccessorsForConstructionGuard->Val();
     }
 
     const THashMap<ui32, std::shared_ptr<TAtomicCounter>>& GetSkipStats() const {

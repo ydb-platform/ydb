@@ -173,7 +173,7 @@ void TestSimplePartitions(size_t maxBatchSize, size_t partitionLimit) {
     }
     {
         auto query = Q_(R"(
-            BATCH UPDATE TuplePrimaryDescending
+            BATCH UPDATE ReorderKey
                 SET Col4 = 2
                 WHERE Col3 = 0;
         )");
@@ -181,8 +181,50 @@ void TestSimplePartitions(size_t maxBatchSize, size_t partitionLimit) {
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
         ExecQueryAndTestEmpty(session, R"(
-            SELECT count(*) FROM TuplePrimaryDescending
+            SELECT count(*) FROM ReorderKey
                 WHERE Col3 = 0 AND Col4 != 2;
+        )");
+    }
+    {
+        auto query = Q_(R"(
+            BATCH UPDATE ReorderOptionalKey
+                SET v2 = "None";
+        )");
+        auto result = session.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        ExecQueryAndTestEmpty(session, R"(
+            SELECT count(*) FROM ReorderOptionalKey
+                WHERE v2 != "None";
+        )");
+    }
+    {
+        // With literal tx
+        auto query = Q_(R"(
+            BATCH UPDATE ReorderOptionalKey
+                SET v2 = "NotNone"
+                WHERE k1 IN [0, 1, 2, 3];
+        )");
+        auto result = session.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        ExecQueryAndTestEmpty(session, R"(
+            SELECT count(*) FROM ReorderOptionalKey
+                WHERE k1 IN [0, 1, 2, 3] AND v2 != "NotNone";
+        )");
+    }
+    {
+        auto query = Q_(R"(
+            BATCH UPDATE ReorderOptionalKey
+                SET v2 = "None"
+                WHERE id = 2 AND (k2 IS NULL OR k2 >= 0);
+        )");
+        auto result = session.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        ExecQueryAndTestEmpty(session, R"(
+            SELECT count(*) FROM ReorderOptionalKey
+                WHERE (id = 2 AND (k2 IS NULL OR k2 >= 0)) AND v2 != "None";
         )");
     }
 }
@@ -550,8 +592,7 @@ Y_UNIT_TEST_SUITE(KqpBatchUpdate) {
 
         {
             auto query = Q_(R"(
-                BATCH UPDATE Test
-                    ON (Amount, Comment)
+                BATCH UPDATE Test ON (Amount, Comment)
                     VALUES (100ul, "None");
             )");
 
@@ -562,7 +603,7 @@ Y_UNIT_TEST_SUITE(KqpBatchUpdate) {
     }
 
     Y_UNIT_TEST(ColumnTable) {
-        TKikimrRunner kikimr(GetAppConfig());
+        TKikimrRunner kikimr(TKikimrSettings(GetAppConfig()).SetWithSampleTables(false));
         auto db = kikimr.GetQueryClient();
         auto session = db.GetSession().GetValueSync().GetSession();
 
@@ -607,6 +648,63 @@ Y_UNIT_TEST_SUITE(KqpBatchUpdate) {
         }
     }
 
+    Y_UNIT_TEST(TableNotExists) {
+        TKikimrRunner kikimr(TKikimrSettings(GetAppConfig()).SetWithSampleTables(false));
+        auto db = kikimr.GetQueryClient();
+        auto session = db.GetSession().GetValueSync().GetSession();
+
+        {
+            auto query = Q_(R"(
+                BATCH UPDATE TestBatchNotExists
+                    SET Amount = 1000;
+            )");
+
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SCHEME_ERROR);
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Cannot find table 'db.[/Root/TestBatchNotExists]'", result.GetIssues().ToString());
+        }
+        {
+            auto query = Q_(R"(
+                BATCH UPDATE TestBatchNotExists
+                    SET Amount = 1000
+                    WHERE Key IN [1, 3, 5];
+            )");
+
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SCHEME_ERROR);
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Cannot find table 'db.[/Root/TestBatchNotExists]'", result.GetIssues().ToString());
+        }
+    }
+
+    Y_UNIT_TEST(UnknownColumn) {
+        TKikimrRunner kikimr(GetAppConfig());
+        auto db = kikimr.GetQueryClient();
+        auto session = db.GetSession().GetValueSync().GetSession();
+
+        {
+            auto query = Q_(R"(
+                BATCH UPDATE Test
+                    SET Amount = 1000
+                    WHERE UnknownColumn = 123;
+            )");
+
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Member not found: UnknownColumn", result.GetIssues().ToString());
+        }
+        {
+            auto query = Q_(R"(
+                BATCH UPDATE Test
+                    SET UnknownColumn = 1000
+                    WHERE Group IN [1, 3, 5];
+            )");
+
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::BAD_REQUEST);
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Column 'UnknownColumn' does not exist", result.GetIssues().ToString());
+        }
+    }
+
     Y_UNIT_TEST(HasTxControl) {
         TKikimrRunner kikimr(GetAppConfig());
         auto db = kikimr.GetQueryClient();
@@ -620,7 +718,7 @@ Y_UNIT_TEST_SUITE(KqpBatchUpdate) {
 
             auto result = session.ExecuteQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::BAD_REQUEST);
-            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "BATCH operation can be executed only in NoTx mode.", result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "BATCH operation can be executed only in the implicit transaction mode.", result.GetIssues().ToString());
         }
     }
 }

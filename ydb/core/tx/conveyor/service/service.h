@@ -188,12 +188,19 @@ public:
 class TWorkersPool {
     class TWorkerInfo {
         YDB_READONLY(bool, RunningTask, false);
-        YDB_READONLY(TWorker*, Worker, nullptr);
+        YDB_READONLY(double, CPUSoftLimit, 0.0);
         YDB_READONLY_DEF(TActorId, WorkerId);
     public:
-        explicit TWorkerInfo(std::unique_ptr<TWorker> worker)
-            : Worker(worker.get())
+        TWorkerInfo(const double cpuSoftLimit, std::unique_ptr<TWorker> worker)
+            : CPUSoftLimit(cpuSoftLimit)
             , WorkerId(TActivationContext::Register(worker.release())) {
+        }
+
+        void ChangeCPUSoftLimit(const double newCPUSoftLimit) {
+            if (std::abs(newCPUSoftLimit - CPUSoftLimit) > Eps) {
+                TActivationContext::Send(WorkerId, std::make_unique<TEvInternal::TEvChangeCPUSoftLimit>(newCPUSoftLimit));
+                CPUSoftLimit = newCPUSoftLimit;
+            }
         }
 
         void OnStartTask() {

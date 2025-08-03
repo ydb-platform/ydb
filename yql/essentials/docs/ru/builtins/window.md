@@ -88,7 +88,7 @@ item  odd  lag1
 ```
 
 
-## FIRST_VALUE / LAST_VALUE
+## FIRST_VALUE / LAST_VALUE {#first-last-value}
 
 Доступ к значениям из первой и последней (в порядке `ORDER BY` на окне) строк [рамки окна](../syntax/window.md#frame). Единственный аргумент - выражение, к которому необходим доступ.
 
@@ -232,7 +232,7 @@ WINDOW w AS (ORDER BY key);
 
 
 
-## SessionState() {#session-state}
+## SessionState {#session-state}
 
 Нестандартная оконная функция `SessionState()` (без аргументов) позволяет получить состояние расчета сессий из [SessionWindow](../syntax/group_by.md#session-window) для текущей строки.
 

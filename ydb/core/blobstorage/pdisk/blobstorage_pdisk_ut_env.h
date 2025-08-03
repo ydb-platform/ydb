@@ -278,15 +278,17 @@ struct TVDiskMock {
         return {LastUsedLsn, LastUsedLsn};
     };
 
-    void InitFull() {
-        Init();
+    void InitFull(ui32 groupSizeInUnits = 0) {
+        Init(groupSizeInUnits);
         ReadLog();
         SendEvLogImpl(1, {}, true);
     }
 
-    void Init() {
+    void Init(ui32 groupSizeInUnits = 0) {
         const auto evInitRes = TestCtx->TestResponse<NPDisk::TEvYardInitResult>(
-                new NPDisk::TEvYardInit(OwnerRound.fetch_add(1), VDiskID, TestCtx->TestCtx.PDiskGuid, TestCtx->Sender),
+                new NPDisk::TEvYardInit(OwnerRound.fetch_add(1), VDiskID,
+                    TestCtx->TestCtx.PDiskGuid, TestCtx->Sender,
+                    {}, Max<ui32>(), groupSizeInUnits),
                 NKikimrProto::OK);
 
         PDiskParams = evInitRes->PDiskParams;

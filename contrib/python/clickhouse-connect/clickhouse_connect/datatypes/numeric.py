@@ -1,5 +1,5 @@
 import decimal
-from typing import Union, Type, Sequence, MutableSequence
+from typing import Union, Type, Sequence, MutableSequence, Any
 
 from math import nan, isnan, isinf
 
@@ -72,7 +72,7 @@ class UInt64(IntBase):
     np_type = '<u8'
     python_type = int
 
-    def _read_column_binary(self, source: ByteSource, num_rows: int, ctx: QueryContext):
+    def _read_column_binary(self, source: ByteSource, num_rows: int, ctx: QueryContext, _read_state: Any):
         fmt = self.read_format(ctx)
         if ctx.use_numpy:
             np_type = '<q' if fmt == 'signed' else '<u8'
@@ -80,7 +80,7 @@ class UInt64(IntBase):
         arr_type = 'q' if fmt == 'signed' else 'Q'
         return source.read_array(arr_type, num_rows)
 
-    def _read_nullable_column(self, source: ByteSource, num_rows: int, ctx: QueryContext) -> Sequence:
+    def _read_nullable_column(self, source: ByteSource, num_rows: int, ctx: QueryContext, _read_state: Any) -> Sequence:
         return data_conv.read_nullable_array(source, 'q' if self.read_format(ctx) == 'signed' else 'Q',
                                              num_rows, self._active_null(ctx))
 
@@ -98,8 +98,9 @@ class UInt64(IntBase):
 class BigInt(ClickHouseType, registered=False):
     _signed = True
     valid_formats = 'string', 'native'
+    python_type = int
 
-    def _read_column_binary(self, source: ByteSource, num_rows: int, ctx: QueryContext):
+    def _read_column_binary(self, source: ByteSource, num_rows: int, ctx: QueryContext, _read_state: Any):
         signed = self._signed
         sz = self.byte_size
         column = []
@@ -212,7 +213,7 @@ class Bool(ClickHouseType):
     python_type = bool
     byte_size = 1
 
-    def _read_column_binary(self, source: ByteSource, num_rows: int, _ctx: QueryContext):
+    def _read_column_binary(self, source: ByteSource, num_rows: int, _ctx: QueryContext, _read_state: Any):
         column = source.read_bytes(num_rows)
         return [b != 0 for b in column]
 
@@ -243,7 +244,7 @@ class Enum(ClickHouseType):
         val_str = ', '.join(f"'{key}' = {value}" for key, value in zip(escaped_keys, type_def.values))
         self._name_suffix = f'({val_str})'
 
-    def _read_column_binary(self, source: ByteSource, num_rows: int, ctx: QueryContext):
+    def _read_column_binary(self, source: ByteSource, num_rows: int, ctx: QueryContext, _read_state: Any):
         column = source.read_array(self._array_type, num_rows)
         if self.read_format(ctx) == 'int':
             return column
@@ -299,7 +300,7 @@ class Decimal(ClickHouseType):
         self._name_suffix = f'({prec}, {scale})'
         self._array_type = array_type(self.byte_size, True)
 
-    def _read_column_binary(self, source: ByteSource, num_rows: int, _ctx: QueryContext):
+    def _read_column_binary(self, source: ByteSource, num_rows: int, _ctx: QueryContext, _read_state: Any):
         column = source.read_array(self._array_type, num_rows)
         dec = decimal.Decimal
         scale = self.scale
@@ -336,7 +337,7 @@ class Decimal(ClickHouseType):
 
 
 class BigDecimal(Decimal, registered=False):
-    def _read_column_binary(self, source: ByteSource, num_rows: int, _ctx):
+    def _read_column_binary(self, source: ByteSource, num_rows: int, _ctx: QueryContext, _read_state: Any):
         dec = decimal.Decimal
         scale = self.scale
         prec = self.prec

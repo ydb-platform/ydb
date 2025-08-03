@@ -14,6 +14,7 @@
 #include <yql/essentials/providers/common/udf_resolve/yql_simple_udf_resolver.h>
 #include <yql/essentials/providers/common/comp_nodes/yql_factory.h>
 #include <yql/essentials/providers/common/schema/mkql/yql_mkql_schema.h>
+#include <ydb/library/yql/providers/dq/actors/events.h>
 #include <ydb/library/yql/providers/dq/actors/executer_actor.h>
 #include <ydb/library/yql/providers/dq/actors/proto_builder.h>
 #include <ydb/library/yql/providers/dq/actors/task_controller.h>
@@ -359,6 +360,9 @@ public:
                 StatsMode = NYql::NDqProto::EDqStatsMode::DQ_STATS_MODE_FULL;
                 break;
         }
+        if (Params.Automatic) {
+            StatsMode = NYql::NDqProto::EDqStatsMode::DQ_STATS_MODE_BASIC;
+        }
     }
 
     static constexpr char ActorName[] = "YQ_RUN_ACTOR";
@@ -429,7 +433,7 @@ private:
         hFunc(TEvents::TEvQueryActionResult, Handle);
         hFunc(TEvents::TEvForwardPingResponse, Handle);
         hFunc(TEvCheckpointCoordinator::TEvZeroCheckpointDone, Handle);
-        hFunc(TEvents::TEvRaiseTransientIssues, Handle);
+        hFunc(TEvCheckpointCoordinator::TEvRaiseTransientIssues, Handle);
         hFunc(NFq::TEvInternalService::TEvCreateRateLimiterResourceResponse, Handle);
         hFunc(TEvDqStats, Handle);
         hFunc(NMon::TEvHttpInfo, Handle);
@@ -443,14 +447,17 @@ private:
         hFunc(NFq::TEvInternalService::TEvCreateRateLimiterResourceResponse, HandleFinish);
         hFunc(NFq::TEvInternalService::TEvDeleteRateLimiterResourceResponse, HandleFinish);
         hFunc(TEvents::TEvEffectApplicationResult, HandleFinish);
+        hFunc(NMon::TEvHttpInfo, Handle);
 
         // Ignore tail of action events after normal work.
+        IgnoreFunc(TEvPrivate::TEvProgramFinished);
         IgnoreFunc(TEvents::TEvAsyncContinue);
         IgnoreFunc(NActors::TEvents::TEvUndelivered);
         IgnoreFunc(TEvents::TEvGraphParams);
+        IgnoreFunc(NActors::TEvents::TEvWakeup);
         IgnoreFunc(TEvents::TEvQueryActionResult);
         IgnoreFunc(TEvCheckpointCoordinator::TEvZeroCheckpointDone);
-        IgnoreFunc(TEvents::TEvRaiseTransientIssues);
+        IgnoreFunc(TEvCheckpointCoordinator::TEvRaiseTransientIssues);
         IgnoreFunc(TEvDqStats);
     )
 
@@ -473,6 +480,10 @@ private:
             // Clear finished actors ids
             ExecuterId = {};
             ControlId = {};
+        }
+        if (CheckpointCoordinatorId) {
+            Send(CheckpointCoordinatorId, new NActors::TEvents::TEvPoison());
+            CheckpointCoordinatorId = {};
         }
     }
 
@@ -518,6 +529,7 @@ private:
     }
 
     void PassAway() override {
+        LOG_D("PassAway");
         Send(FetcherId, new NActors::TEvents::TEvPoisonTaken());
         KillChildrenActors();
         NActors::TActorBootstrapped<TRunActor>::PassAway();
@@ -854,7 +866,9 @@ private:
                 QueryStateUpdateRequest.resources().topic_consumers().size() ? Fq::Private::TaskResources::PREPARE : Fq::Private::TaskResources::NOT_NEEDED);
             ProcessQuery();
         } else if (ev->Cookie == SetLoadFromCheckpointModeCookie) {
-            Send(ControlId, new TEvCheckpointCoordinator::TEvRunGraph());
+            Send(CheckpointCoordinatorId, new TEvCheckpointCoordinator::TEvRunGraph());
+        } else if (ev->Cookie == UpdateStatisticsCookie) {
+            PendingUpdateStatisticsPing = false;
         }
     }
 
@@ -866,6 +880,7 @@ private:
         }
 
         if (ev->Cookie == SaveFinalizingStatusCookie) {
+            LOG_D("Finalizing status is saved");
             FinalizingStatusIsWritten = true;
             ContinueFinish();
         }
@@ -931,13 +946,13 @@ private:
         SetLoadFromCheckpointMode();
     }
 
-    void Handle(TEvents::TEvRaiseTransientIssues::TPtr& ev) {
+    void Handle(TEvCheckpointCoordinator::TEvRaiseTransientIssues::TPtr& ev) {
         SendTransientIssues(ev->Get()->TransientIssues);
     }
 
     void Handle(TEvDqStats::TPtr& ev) {
 
-        if (!CollectBasic()) {
+        if (!CollectBasic() || PendingUpdateStatisticsPing) {
             return;
         }
 
@@ -968,7 +983,8 @@ private:
                     request.set_statistics(statistics);
                 }
             }
-            Send(Pinger, new TEvents::TEvForwardPingRequest(request), 0);
+            Send(Pinger, new TEvents::TEvForwardPingRequest(request), 0, UpdateStatisticsCookie);
+            PendingUpdateStatisticsPing = true;
         }
     }
 
@@ -1373,6 +1389,7 @@ private:
            return;
         }
 
+        LOG_D("TEvQueryResponse received on finish");
         QueryResponseArrived = true;
         SaveQueryResponse(ev);
 
@@ -1524,7 +1541,7 @@ private:
             info.ResultId = info.ExecuterId;
         }
 
-        info.ControlId = Register(NYql::MakeTaskController(SessionId, info.ExecuterId, info.ResultId, dqConfiguration, QueryCounters, TDuration::Seconds(3)).Release());
+        info.ControlId = Register(NYql::MakeTaskController(SessionId, info.ExecuterId, info.ResultId, CheckpointCoordinatorId, dqConfiguration, QueryCounters, TDuration::Seconds(3)).Release());
 
         Yql::DqsProto::ExecuteGraphRequest request;
         request.SetSourceId(dqGraphParams.GetSourceId());
@@ -1592,7 +1609,7 @@ private:
         }
 
         if (enableCheckpointCoordinator) {
-            ControlId = Register(MakeCheckpointCoordinator(
+            CheckpointCoordinatorId = Register(MakeCheckpointCoordinator(
                 ::NFq::TCoordinatorId(Params.QueryId + "-" + ToString(DqGraphIndex), Params.PreviousQueryRevision),
                 NYql::NDq::MakeCheckpointStorageID(),
                 SelfId(),
@@ -1600,27 +1617,19 @@ private:
                 QueryCounters.Counters,
                 dqGraphParams,
                 Params.StateLoadMode,
-                Params.StreamingDisposition,
-                // vvv TaskController temporary params vvv
+                Params.StreamingDisposition).Release());
+        }
+
+        ControlId = Register(NYql::MakeTaskController(
                 SessionId,
                 ExecuterId,
                 resultId,
-                dqConfiguration,
-                QueryCounters,
-                pingPeriod,
-                aggrPeriod
-                ).Release());
-        } else {
-            ControlId = Register(NYql::MakeTaskController(
-                SessionId,
-                ExecuterId,
-                resultId,
+                CheckpointCoordinatorId,
                 dqConfiguration,
                 QueryCounters,
                 pingPeriod,
                 aggrPeriod
             ).Release());
-        }
 
         Yql::DqsProto::ExecuteGraphRequest request;
         request.SetSourceId(dqGraphParams.GetSourceId());
@@ -1889,10 +1898,12 @@ private:
     void ResignQuery(NYql::NDqProto::StatusIds::StatusCode statusCode) {
         QueryStateUpdateRequest.set_resign_query(true);
         QueryStateUpdateRequest.set_status_code(statusCode);
+        LOG_W("ResignQuery, status " << NYql::NDqProto::StatusIds::StatusCode_Name(statusCode));
         SendPingAndPassAway();
     }
 
     void SendPingAndPassAway() {
+        LOG_D("SendPingAndPassAway, FinalQueryStatus " <<  FederatedQuery::QueryMeta::ComputeStatus_Name(FinalQueryStatus));
         // Run ping.
         if (QueryStateUpdateRequest.resign_query()) { // Retry state => all issues are not fatal.
             TransientIssues.AddIssues(Issues);
@@ -1952,6 +1963,9 @@ private:
 
         *gatewaysConfig.MutableGeneric() = Params.Config.GetGateways().GetGeneric();
         gatewaysConfig.MutableGeneric()->ClearClusterMapping();
+
+        *gatewaysConfig.MutableSolomon() = Params.Config.GetGateways().GetSolomon();
+        gatewaysConfig.MutableSolomon()->ClearClusterMapping();
 
         THashMap<TString, TString> clusters;
 
@@ -2015,7 +2029,7 @@ private:
                 case FederatedQuery::StreamingDisposition::DISPOSITION_NOT_SET:
                     break;
             }
-            dataProvidersInit.push_back(GetPqDataProviderInitializer(pqGateway, false, dbResolver, std::move(disposition)));
+            dataProvidersInit.push_back(GetPqDataProviderInitializer(pqGateway, false, dbResolver, std::move(disposition), Params.TaskSensorLabels));
         }
 
         {
@@ -2150,18 +2164,26 @@ private:
         html << "<th>Param</th>";
         html << "<th>Value</th>";
         html << "</tr></thead><tbody>";
-            html << "<tr><td>Cloud ID</td><td>"     << Params.CloudId                                              << "</td></tr>";
-            html << "<tr><td>Scope</td><td>"        << Params.Scope.ToString()                                     << "</td></tr>";
-            html << "<tr><td>Query ID</td><td>"     << Params.QueryId                                              << "</td></tr>";
-            html << "<tr><td>User ID</td><td>"      << Params.UserId                                               << "</td></tr>";
-            html << "<tr><td>Owner</td><td>"        << Params.Owner                                                << "</td></tr>";
-            html << "<tr><td>Result ID</td><td>"    << Params.ResultId                                             << "</td></tr>";
-            html << "<tr><td>Prev Rev</td><td>"     << Params.PreviousQueryRevision                                << "</td></tr>";
-            html << "<tr><td>Query Type</td><td>"   << FederatedQuery::QueryContent::QueryType_Name(Params.QueryType) << "</td></tr>";
-            html << "<tr><td>Exec Mode</td><td>"    << FederatedQuery::ExecuteMode_Name(Params.ExecuteMode)           << "</td></tr>";
-            html << "<tr><td>St Load Mode</td><td>" << FederatedQuery::StateLoadMode_Name(Params.StateLoadMode)       << "</td></tr>";
-            html << "<tr><td>Disposition</td><td>"  << Params.StreamingDisposition                                 << "</td></tr>";
-            html << "<tr><td>Status</td><td>"       << FederatedQuery::QueryMeta::ComputeStatus_Name(Params.Status)   << "</td></tr>";
+        html << "<tr><td>Cloud ID</td><td>"     << Params.CloudId                                              << "</td></tr>";
+        html << "<tr><td>Scope</td><td>"        << Params.Scope.ToString()                                     << "</td></tr>";
+        html << "<tr><td>Query ID</td><td>"     << Params.QueryId                                              << "</td></tr>";
+        html << "<tr><td>User ID</td><td>"      << Params.UserId                                               << "</td></tr>";
+        html << "<tr><td>Owner</td><td>"        << Params.Owner                                                << "</td></tr>";
+        html << "<tr><td>Result ID</td><td>"    << Params.ResultId                                             << "</td></tr>";
+        html << "<tr><td>Prev Rev</td><td>"     << Params.PreviousQueryRevision                                << "</td></tr>";
+        html << "<tr><td>Query Type</td><td>"   << FederatedQuery::QueryContent::QueryType_Name(Params.QueryType) << "</td></tr>";
+        html << "<tr><td>Exec Mode</td><td>"    << FederatedQuery::ExecuteMode_Name(Params.ExecuteMode)           << "</td></tr>";
+        html << "<tr><td>St Load Mode</td><td>" << FederatedQuery::StateLoadMode_Name(Params.StateLoadMode)       << "</td></tr>";
+        html << "<tr><td>Disposition</td><td>"  << Params.StreamingDisposition                                 << "</td></tr>";
+        html << "<tr><td>Status</td><td>"       << FederatedQuery::QueryMeta::ComputeStatus_Name(Params.Status)   << "</td></tr>";
+        html << "<tr><td>Finishing</td><td>"    << Finishing   << "</td></tr>";
+        html << "<tr><td>Consumers are deleted</td><td>"         << ConsumersAreDeleted << "</td></tr>";
+        html << "<tr><td>Rate limiter enabled</td><td>"          << Params.Config.GetRateLimiter().GetEnabled() << "</td></tr>";
+        html << "<tr><td>RateLimiterResourceCreator ID</td><td>" << RateLimiterResourceCreatorId << "</td></tr>";
+        html << "<tr><td>RateLimiterResourceDeleter ID</td><td>" << RateLimiterResourceDeleterId << "</td></tr>";
+        html << "<tr><td>FinalizingStatusIsWritten</td><td>"     << FinalizingStatusIsWritten << "</td></tr>";
+        html << "<tr><td>QueryResponseArrived</td><td>"          << QueryResponseArrived << "</td></tr>";
+        html << "<tr><td>PendingUpdateStatisticsPing</td><td>"   << PendingUpdateStatisticsPing << "</td></tr>";
         html << "</tbody></table>";
 
         if (Params.Connections.size()) {
@@ -2308,6 +2330,7 @@ private:
     ui32 DqEvalIndex = 0;
     NActors::TActorId ExecuterId;
     NActors::TActorId ControlId;
+    NActors::TActorId CheckpointCoordinatorId;
     TString SessionId;
     ::NYql::NCommon::TServiceCounters QueryCounters;
     const ::NMonitoring::TDynamicCounters::TCounterPtr QueryUptime;
@@ -2342,6 +2365,8 @@ private:
     ui64 EffectApplicatorFinished = 0;
     TSet<TString> S3Prefixes;
 
+    bool PendingUpdateStatisticsPing = false;
+
     // Cookies for pings
     enum : ui64 {
         SaveQueryInfoCookie = 1,
@@ -2349,6 +2374,7 @@ private:
         SaveFinalizingStatusCookie,
         SetLoadFromCheckpointModeCookie,
         RaiseTransientIssuesCookie,
+        UpdateStatisticsCookie
     };
 };
 

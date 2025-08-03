@@ -160,6 +160,9 @@ class Platform(object):
         assert self.is_32_bit or self.is_64_bit
         assert not (self.is_32_bit and self.is_64_bit)
 
+        self.is_freebsd = self.os == 'freebsd'
+        self.is_freebsd_x86_64 = self.is_freebsd and self.is_x86_64
+
         self.is_linux = self.os == 'linux' or 'yocto' in self.os
         self.is_linux_x86_64 = self.is_linux and self.is_x86_64
         self.is_linux_armv8 = self.is_linux and self.is_armv8
@@ -187,7 +190,7 @@ class Platform(object):
 
         self.is_none = self.os == 'none'
 
-        self.is_posix = self.is_linux or self.is_apple or self.is_android or self.is_yocto
+        self.is_posix = self.is_linux or self.is_apple or self.is_android or self.is_yocto or self.is_freebsd
 
     @staticmethod
     def from_json(data):
@@ -207,9 +210,14 @@ class Platform(object):
             yield 'LINUX'
             yield 'OS_LINUX'
 
+        if self.is_freebsd:
+            yield 'FREEBSD'
+            yield 'OS_FREEBSD'
+
         if self.is_macos:
             yield 'DARWIN'
             yield 'OS_DARWIN'
+
         if self.is_iossim:
             yield 'IOS'
             yield 'OS_IOS'
@@ -357,6 +365,13 @@ def to_strings(o):
             elif isinstance(o, (str, int)):
                 yield str(o)
             else:
+                try:
+                    # Huge Python2 is still used for generating ymake.conf in case of ya.make yndexing
+                    if isinstance(o, unicode):
+                        yield o.decode('utf-8')
+                        return
+                except NameError:
+                    pass
                 raise ConfigureError('Unexpected value {} {}'.format(type(o), o))
 
 
@@ -764,7 +779,10 @@ class YMake(object):
         else:
             print('@import "${CONF_ROOT}/conf/export_gradle.no.conf"')
 
-        if presets.get('CLANG_COVERAGE', None) is None:
+        if (preset('CLANG_COVERAGE') is None and
+                (preset('PYTHON_COVERAGE') is None or
+                 preset('COVERAGE_FILTER_PROGRAMS') is None or
+                 preset('CYTHON_COVERAGE') is not None)):
             print('@import "${CONF_ROOT}/conf/coverage_full_instrumentation.conf"')
         else:
             print('@import "${CONF_ROOT}/conf/coverage_selective_instrumentation.conf"')
@@ -1190,6 +1208,8 @@ class GnuToolchain(Toolchain):
             target_triple = self.tc.triplet_opt.get(target.arch, None)
             if not target_triple:
                 target_triple = select(default=None, selectors=[
+                    (target.is_freebsd and target.is_x86_64, 'x86_64-freebsd-unknown'),
+
                     (target.is_linux and target.is_x86_64, 'x86_64-linux-gnu'),
                     (target.is_linux and target.is_armv8, 'aarch64-linux-gnu'),
                     (target.is_linux and target.is_armv6 and target.armv6_float_abi == 'hard', 'armv6-linux-gnueabihf'),
@@ -1303,6 +1323,9 @@ class GnuToolchain(Toolchain):
             if target.is_apple:
                 self.setup_apple_sdk(target)
 
+            if target.is_freebsd:
+                self.setup_freebsd_sdk_impl(project='build/internal/platform/freebsd', var='${FREEBSD_SDK_RESOURCE_GLOBAL}')
+
             if self.tc.is_from_arcadia or self.tc.is_system_cxx:
                 if target.is_linux:
                     if not tc.os_sdk_local:
@@ -1320,6 +1343,11 @@ class GnuToolchain(Toolchain):
 
                 if target.is_yocto:
                     self.setup_sdk(project='build/platform/yocto_sdk/yocto_sdk', var='${YOCTO_SDK_ROOT_RESOURCE_GLOBAL}')
+
+    def setup_freebsd_sdk_impl(self, project, var):
+        self.platform_projects.append(project)
+        self.c_flags_platform.append('--sysroot')
+        self.c_flags_platform.append(var)
 
     def setup_apple_sdk(self, target):
         if not self.tc.os_sdk_local:
@@ -1637,7 +1665,7 @@ class Linker(object):
             # Android toolchain is NDK, LLD works on all supported platforms
             return Linker.LLD
 
-        elif self.build.target.is_linux or self.build.target.is_macos or self.build.target.is_ios or self.build.target.is_wasm:
+        elif self.build.target.is_linux or self.build.target.is_macos or self.build.target.is_ios or self.build.target.is_wasm or self.build.target.is_freebsd:
             return Linker.LLD
 
         # There is no linker choice on Windows (link.exe)
@@ -1700,6 +1728,8 @@ class LD(Linker):
 
         if self.musl.value:
             self.ld_flags.extend(['-Wl,--no-as-needed'])
+        elif target.is_freebsd:
+            self.ld_flags.extend(['-lc', '-lm', '-lpthread', '-Wl,--no-as-needed'])
         elif target.is_linux:
             self.ld_flags.extend(['-ldl', '-lrt', '-Wl,--no-as-needed'])
             if self.tc.is_gcc:
@@ -2394,7 +2424,7 @@ class Cuda(object):
             if not self.cuda_version.from_user:
                 return False
 
-        if self.cuda_version.value in ('11.4', '11.8', '12.1', '12.2', '12.6', '12.8'):
+        if self.cuda_version.value in ('11.4', '11.8', '12.1', '12.2', '12.6', '12.8', '12.9'):
             return True
         elif self.cuda_version.value in ('10.2', '11.4.19') and target.is_linux_armv8:
             return True

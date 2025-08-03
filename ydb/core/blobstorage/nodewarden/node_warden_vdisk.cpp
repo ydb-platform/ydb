@@ -25,7 +25,10 @@ namespace NKikimr::NStorage {
         STLOG(PRI_INFO, BS_NODE, NW00, "PoisonLocalVDisk", (VDiskId, vdisk.GetVDiskId()), (VSlotId, vdisk.GetVSlotId()),
             (RuntimeData, vdisk.RuntimeData.has_value()));
 
+        bool vdiskRunning = false;
+
         if (vdisk.RuntimeData) {
+            vdiskRunning = true;
             vdisk.TIntrusiveListItem<TVDiskRecord, TGroupRelationTag>::Unlink();
             TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, vdisk.GetVDiskServiceId(), {}, nullptr, 0));
             vdisk.RuntimeData.reset();
@@ -50,7 +53,7 @@ namespace NKikimr::NStorage {
         vdisk.ScrubCookie = 0; // disable reception of Scrub messages from this disk
         vdisk.ScrubCookieForController = 0; // and from controller too
         vdisk.Status = NKikimrBlobStorage::EVDiskStatus::ERROR;
-        vdisk.ShutdownPending = true;
+        vdisk.ShutdownPending = vdiskRunning; // Shutdown pending only if VDisk was running before poison
         VDiskStatusChanged = true;
     }
 
@@ -196,6 +199,10 @@ namespace NKikimr::NStorage {
         vdiskConfig->DefaultHugeGarbagePerMille = DefaultHugeGarbagePerMille;
         vdiskConfig->HugeDefragFreeSpaceBorderPerMille = HugeDefragFreeSpaceBorderPerMille;
         vdiskConfig->MaxChunksToDefragInflight = MaxChunksToDefragInflight;
+        vdiskConfig->FreshCompMaxInFlightWrites = FreshCompMaxInFlightWrites;
+        vdiskConfig->FreshCompMaxInFlightReads = FreshCompMaxInFlightReads;
+        vdiskConfig->HullCompMaxInFlightWrites = HullCompMaxInFlightWrites;
+        vdiskConfig->HullCompMaxInFlightReads = HullCompMaxInFlightReads;
 
         vdiskConfig->EnableLocalSyncLogDataCutting = EnableLocalSyncLogDataCutting;
         if (deviceType == NPDisk::EDeviceType::DEVICE_TYPE_ROT) {
@@ -250,9 +257,11 @@ namespace NKikimr::NStorage {
 
         vdiskConfig->GroupSizeInUnits = groupInfo->GroupSizeInUnits;
 
+        vdiskConfig->EnableDeepScrubbing = EnableDeepScrubbing;
+
         // issue initial report to whiteboard before creating actor to avoid races
         Send(WhiteboardId, new NNodeWhiteboard::TEvWhiteboard::TEvVDiskStateUpdate(vdiskId, groupInfo->GetStoragePoolName(),
-            vslotId.PDiskId, vslotId.VDiskSlotId, pdiskGuid, kind, donorMode, whiteboardInstanceGuid, std::move(donors)));
+            vslotId.PDiskId, vslotId.VDiskSlotId, pdiskGuid, kind, donorMode, whiteboardInstanceGuid, std::move(donors), vdiskConfig->GroupSizeInUnits));
         vdisk.WhiteboardVDiskId.emplace(vdiskId);
         vdisk.WhiteboardInstanceGuid = whiteboardInstanceGuid;
 

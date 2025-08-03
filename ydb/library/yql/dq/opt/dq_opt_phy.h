@@ -60,17 +60,41 @@ NNodes::TExprBase DqPushFlatmapToStage(NNodes::TExprBase node, TExprContext& ctx
 NNodes::TExprBase DqPushCombineToStage(NNodes::TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx,
     const TParentsMap& parentsMap, bool allowStageMultiUsage = true);
 
+NNodes::TExprBase DqPushCombineToStageDependsOnOtherStage(NNodes::TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx,
+    const TParentsMap& parentsMap, bool allowStageMultiUsage = true);
+
 NNodes::TExprBase DqPushAggregateCombineToStage(NNodes::TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx,
     const TParentsMap& parentsMap, bool allowStageMultiUsage = true);
 
-NNodes::TExprBase DqBuildPartitionsStage(NNodes::TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx,
-    const TParentsMap& parentsMap, bool allowStageMultiUsage = true);
+NNodes::TExprBase DqBuildPartitionsStage(
+    NNodes::TExprBase node,
+    TExprContext& ctx,
+    IOptimizationContext& optCtx,
+    const TParentsMap& parentsMap,
+    bool allowStageMultiUsage = true,
+    TTypeAnnotationContext* typeCtx = nullptr,
+    bool enableShuffleElimination = false
+);
 
-NNodes::TExprBase DqBuildPartitionStage(NNodes::TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx,
-    const TParentsMap& parentsMap, bool allowStageMultiUsage = true);
+NNodes::TExprBase DqBuildPartitionStage(
+    NNodes::TExprBase node,
+    TExprContext& ctx,
+    IOptimizationContext& optCtx,
+    const TParentsMap& parentsMap,
+    bool allowStageMultiUsage = true,
+    TTypeAnnotationContext* typeCtx = nullptr,
+    bool enableShuffleElimination = false
+);
 
-NNodes::TExprBase DqBuildShuffleStage(NNodes::TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx,
-    const TParentsMap& parentsMap, bool allowStageMultiUsage = true);
+NNodes::TExprBase DqBuildShuffleStage(
+    NNodes::TExprBase node,
+    TExprContext& ctx,
+    IOptimizationContext& optCtx,
+    const TParentsMap& parentsMap,
+    bool allowStageMultiUsage = true,
+    TTypeAnnotationContext* typeCtx = nullptr,
+    bool enableShuffleElimination = false
+);
 
 NNodes::TExprBase DqBuildFinalizeByKeyStage(NNodes::TExprBase node, TExprContext& ctx,
     const TParentsMap& parentsMap, bool allowStageMultiUsage = true);
@@ -122,7 +146,7 @@ NNodes::TExprBase DqBuildOrderedLMapOverMuxStage(NNodes::TExprBase node, TExprCo
 
 NNodes::TExprBase DqBuildLMapOverMuxStage(NNodes::TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx, const TParentsMap& parentsMap);
 
-NNodes::TExprBase DqBuildExtendStage(NNodes::TExprBase node, TExprContext& ctx);
+NNodes::TExprBase DqBuildExtendStage(NNodes::TExprBase node, TExprContext& ctx, bool enableParallelUnionAllConnections = false);
 
 NNodes::TExprBase DqBuildPrecompute(NNodes::TExprBase node, TExprContext& ctx);
 

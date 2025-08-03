@@ -295,10 +295,10 @@ runs:
           BRANCH_NAME="${{ inputs.custom_branch_name }}"
         fi
 
-        params+= {
+        params+=(
           -DGIT_BRANCH=$BRANCH_NAME
           -DGIT_COMMIT_SHA=$ORIGINAL_HEAD
-        }
+        )
 
         echo "BRANCH_NAME=$BRANCH_NAME" >> $GITHUB_ENV
         echo "BRANCH_NAME is set to $BRANCH_NAME"

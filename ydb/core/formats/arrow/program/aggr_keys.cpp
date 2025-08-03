@@ -144,7 +144,7 @@ TConclusion<IResourceProcessor::EExecutionResult> TWithKeysAggregationProcessor:
             return TConclusionStatus::Fail("No expected column in GROUP BY result.");
         }
         if (auto columnId = TryFromString<ui32>(assign.result_column)) {
-            context.MutableResources().AddVerified(*columnId, column, false, true);
+            context.MutableResources().AddCalculated(*columnId, column);
         } else {
             return TConclusionStatus::Fail("Incorrect column id from name: " + assign.result_column);
         }
@@ -219,12 +219,12 @@ private:
         for (auto&& i : sources) {
             AFL_VERIFY(i);
             const auto& scalar = i->GetConstantScalarVerified(ColumnInfo.GetColumnId());
-            scalars.emplace_back(scalar.get());
             if (!type) {
                 type = scalar->type->id();
             } else {
                 AFL_VERIFY(*type == scalar->type->id());
             }
+            scalars.emplace_back(scalar.get());
         }
         TString errorMessage;
         if (!NArrow::SwitchType(*type, [&](const auto& type) {
@@ -233,6 +233,9 @@ private:
                 std::optional<typename TWrap::ValueType> result;
                 for (auto&& i : scalars) {
                     const typename TWrap::ValueType value = type.GetValue(*static_cast<const TScalarType*>(i));
+                    if (!i->is_valid) {
+                        continue;
+                    }
                     if (!result) {
                         result = value;
                     } else {
@@ -265,8 +268,13 @@ private:
                         }
                     }
                 }
-                collectionResult.AddVerified(ColumnInfo.GetColumnId(),
-                    NAccessor::TTrivialArray::BuildArrayFromScalar(type.BuildScalar(*result, scalars.front()->type)), false, true);
+                if (result) {
+                    collectionResult.AddCalculated(ColumnInfo.GetColumnId(),
+                        NAccessor::TTrivialArray::BuildArrayFromScalar(type.BuildScalar(*result, scalars.front()->type)));
+                } else {
+                    collectionResult.AddCalculated(ColumnInfo.GetColumnId(),
+                        NAccessor::TTrivialArray::BuildArrayFromScalar(std::make_shared<TScalarType>(scalars.front()->type)));
+                }
                 return true;
             })) {
             return TConclusionStatus::Fail(errorMessage);
@@ -470,14 +478,12 @@ private:
             if (conclusion.IsFail()) {
                 return conclusion;
             }
-            collectionResult.AddVerified(
-                a.GetColumnInfo().GetColumnId(), std::make_shared<NAccessor::TTrivialArray>(conclusion.DetachResult()), false, true);
+            collectionResult.AddCalculated(a.GetColumnInfo().GetColumnId(), conclusion.DetachResult());
         }
         {
             ui32 idx = 0;
             for (auto&& k : KeyColumns) {
-                collectionResult.AddVerified(k.GetColumnId(),
-                    std::make_shared<NAccessor::TTrivialArray>(NArrow::FinishBuilder(std::move(keyBuilders[idx]))), false, true);
+                collectionResult.AddCalculated(k.GetColumnId(), NArrow::FinishBuilder(std::move(keyBuilders[idx])));
                 ++idx;
             }
         }

@@ -46,7 +46,7 @@ TConclusionStatus TBaseMergeTask::PrepareResultBatch() {
             return conclusion;
         }
         accessors = conclusion.DetachResult();
-        if (accessors->GetRecordsCountOptional().value_or(0) == 0) {
+        if (!accessors->HasSomeUsefulInfo()) {
             ResultBatch = nullptr;
         } else {
             ResultBatch = accessors->ToTable(std::nullopt, Context->GetCommonContext()->GetResolver(), false);

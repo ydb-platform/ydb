@@ -58,7 +58,7 @@ size_t FilterTest(const std::vector<std::shared_ptr<arrow::Array>>& args, const 
 
     sds->ReturnResources(chain->Apply(sds, sds->ExtractResources()).DetachResult());
     AFL_VERIFY(sds->GetResources().GetColumnsCount() == 2)("count", sds->GetResources().GetColumnsCount());
-    return sds->GetResources().GetRecordsCountVerified();
+    return sds->GetResources().GetRecordsCountActualVerified();
 }
 
 size_t FilterTestUnary(std::vector<std::shared_ptr<arrow::Array>> args, const EOperation op1, const EOperation op2) {
@@ -81,7 +81,7 @@ size_t FilterTestUnary(std::vector<std::shared_ptr<arrow::Array>> args, const EO
     auto chain = builder.Finish().DetachResult();
     sds->ReturnResources(chain->Apply(sds, sds->ExtractResources()).DetachResult());
     UNIT_ASSERT_VALUES_EQUAL(sds->GetResources().GetColumnsCount(), 2);
-    return sds->GetResources().GetRecordsCountVerified();
+    return sds->GetResources().GetRecordsCountActualVerified();
 }
 
 std::vector<bool> LikeTest(const std::vector<std::string>& data, EOperation op, const std::string& pattern,
@@ -169,7 +169,7 @@ struct TSumData {
         }
 
         if (test == ETest::EMPTY) {
-            UNIT_ASSERT_VALUES_EQUAL(batch.GetRecordsCountVerified(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(batch.GetRecordsCountActualVerified(), 0);
             return;
         }
 
@@ -178,7 +178,7 @@ struct TSumData {
         auto& colX = static_cast<arrow::Int16Array&>(*colXOriginal);
 
         if (test == ETest::ONE_VALUE) {
-            UNIT_ASSERT_VALUES_EQUAL(batch.GetRecordsCountVerified(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(batch.GetRecordsCountActualVerified(), 1);
 
             UNIT_ASSERT_VALUES_EQUAL(aggX.Value(0), 1);
             if (nullable) {
@@ -190,7 +190,7 @@ struct TSumData {
             return;
         }
 
-        UNIT_ASSERT_VALUES_EQUAL(batch.GetRecordsCountVerified(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(batch.GetRecordsCountActualVerified(), 2);
 
         for (ui32 row = 0; row < 2; ++row) {
             if (colX.IsNull(row)) {
@@ -239,7 +239,7 @@ struct TMinMaxSomeData {
         auto& aggY = static_cast<arrow::UInt32Array&>(*aggYOriginal);
         auto& colX = static_cast<arrow::Int16Array&>(*colXOriginal);
 
-        UNIT_ASSERT_VALUES_EQUAL(batch.GetRecordsCountVerified(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(batch.GetRecordsCountActualVerified(), 1);
 
         UNIT_ASSERT_VALUES_EQUAL(colX.Value(0), 1);
         UNIT_ASSERT_VALUES_EQUAL(aggX.Value(0), 1);
@@ -525,7 +525,7 @@ Y_UNIT_TEST_SUITE(ProgramStep) {
         sds->ReturnResources(chain->Apply(sds, sds->ExtractResources()).DetachResult());
 
         AFL_VERIFY(sds->GetResources().GetColumnsCount() == 2);
-        AFL_VERIFY(sds->GetResources().GetRecordsCountVerified() == 2);
+        AFL_VERIFY(sds->GetResources().GetRecordsCountActualVerified() == 2);
     }
 
     Y_UNIT_TEST(TestValueFromNull) {
@@ -618,7 +618,7 @@ Y_UNIT_TEST_SUITE(ProgramStep) {
         sds->ReturnResources(chain->Apply(sds, sds->ExtractResources()).DetachResult());
 
         UNIT_ASSERT_VALUES_EQUAL(sds->GetResources().GetColumnsCount(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(sds->GetResources().GetRecordsCountVerified(), 4);
+        UNIT_ASSERT_VALUES_EQUAL(sds->GetResources().GetRecordsCountActualVerified(), 4);
     }
 
     Y_UNIT_TEST(MinMax) {
@@ -645,12 +645,12 @@ Y_UNIT_TEST_SUITE(ProgramStep) {
         }
         sds->ReturnResources(chain->Apply(sds, sds->ExtractResources()).DetachResult());
         UNIT_ASSERT_VALUES_EQUAL(sds->GetResources().GetColumnsCount(), 2);
-        UNIT_ASSERT_VALUES_EQUAL(sds->GetResources().GetRecordsCountVerified(), 1);
-        UNIT_ASSERT_EQUAL(sds->GetResources().GetAccessorVerified(3)->GetDataType()->id(), arrow::Type::INT16);
-        UNIT_ASSERT_EQUAL(sds->GetResources().GetAccessorVerified(4)->GetDataType()->id(), arrow::Type::TIMESTAMP);
+        UNIT_ASSERT_VALUES_EQUAL(sds->GetResources().GetRecordsCountActualVerified(), 1);
+        UNIT_ASSERT_EQUAL(sds->GetResources().GetConstantScalarVerified(3)->type->id(), arrow::Type::INT16);
+        UNIT_ASSERT_EQUAL(sds->GetResources().GetConstantScalarVerified(4)->type->id(), arrow::Type::TIMESTAMP);
 
-        UNIT_ASSERT_EQUAL(static_pointer_cast<arrow::Int16Scalar>(sds->GetResources().GetAccessorVerified(3)->GetScalar(0))->value, -1);
-        UNIT_ASSERT_EQUAL(static_pointer_cast<arrow::TimestampScalar>(sds->GetResources().GetAccessorVerified(4)->GetScalar(0))->value, 4);
+        UNIT_ASSERT_EQUAL(static_pointer_cast<arrow::Int16Scalar>(sds->GetResources().GetConstantScalarVerified(3))->value, -1);
+        UNIT_ASSERT_EQUAL(static_pointer_cast<arrow::TimestampScalar>(sds->GetResources().GetConstantScalarVerified(4))->value, 4);
     }
 
     Y_UNIT_TEST(Sum) {
@@ -676,12 +676,12 @@ Y_UNIT_TEST_SUITE(ProgramStep) {
 
         sds->ReturnResources(chain->Apply(sds, sds->ExtractResources()).DetachResult());
         UNIT_ASSERT_VALUES_EQUAL(sds->GetResources().GetColumnsCount(), 2);
-        UNIT_ASSERT_VALUES_EQUAL(sds->GetResources().GetRecordsCountVerified(), 1);
-        UNIT_ASSERT_EQUAL(sds->GetResources().GetAccessorVerified(3)->GetDataType()->id(), arrow::Type::INT64);
-        UNIT_ASSERT_EQUAL(sds->GetResources().GetAccessorVerified(4)->GetDataType()->id(), arrow::Type::UINT64);
+        UNIT_ASSERT_VALUES_EQUAL(sds->GetResources().GetRecordsCountActualVerified(), 1);
+        UNIT_ASSERT_EQUAL(sds->GetResources().GetConstantScalarVerified(3)->type->id(), arrow::Type::INT64);
+        UNIT_ASSERT_EQUAL(sds->GetResources().GetConstantScalarVerified(4)->type->id(), arrow::Type::UINT64);
 
-        UNIT_ASSERT_EQUAL(static_pointer_cast<arrow::Int64Scalar>(sds->GetResources().GetAccessorVerified(3)->GetScalar(0))->value, 2);
-        UNIT_ASSERT_EQUAL(static_pointer_cast<arrow::UInt64Scalar>(sds->GetResources().GetAccessorVerified(4)->GetScalar(0))->value, 10);
+        UNIT_ASSERT_EQUAL(static_pointer_cast<arrow::Int64Scalar>(sds->GetResources().GetConstantScalarVerified(3))->value, 2);
+        UNIT_ASSERT_EQUAL(static_pointer_cast<arrow::UInt64Scalar>(sds->GetResources().GetConstantScalarVerified(4))->value, 10);
     }
 
     Y_UNIT_TEST(SumGroupBy) {

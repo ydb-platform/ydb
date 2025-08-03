@@ -12,7 +12,7 @@ namespace {
 TKikimrRunner CreateKikimrRunner() {
     NKikimrConfig::TAppConfig appConfig;
     appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
-    return TKikimrRunner(TKikimrSettings().SetAppConfig(appConfig));
+    return TKikimrRunner(appConfig);
 }
 
 void FillOltpTypesTable(TQueryClient& client) {

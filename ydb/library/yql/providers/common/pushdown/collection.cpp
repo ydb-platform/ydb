@@ -646,7 +646,7 @@ private:
         if (!udf || !UdfCanBePushed(udf.Cast(), apply.Ref().ChildrenList())) {
             return false;
         }
-        
+
         // Check if all arguments can be pushed
         for (size_t i = 1; i < apply.Ref().ChildrenSize(); ++i) {
             if (!CheckExpressionNodeForPushdown(TExprBase(apply.Ref().Child(i)))) {

@@ -1,7 +1,6 @@
 #pragma once
 #include "read_metadata.h"
 
-#include <ydb/core/kqp/runtime/scheduler/new/kqp_schedulable_actor.h>
 #include <ydb/core/protos/tx_datashard.pb.h>
 #include <ydb/core/tx/columnshard/blobs_action/abstract/storages_manager.h>
 #include <ydb/core/tx/columnshard/column_fetching/manager.h>

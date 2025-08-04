@@ -638,19 +638,16 @@ message TEvStartKqpTasksRequest {
     optional string PoolId = 9;
     optional double MemoryPoolPercent = 10 [default = 100];
     optional string Database = 11;
-    optional string DatabaseId = 17;
+    optional string DatabaseId = 17; // used as unique id in case database was removed/added with the same name
     optional uint64 LockTxId = 13;
     optional uint32 LockNodeId = 14;
-
-    // TODO(scheduler): only for old scheduler.
-    optional double PoolMaxCpuShare = 12;
-    optional double QueryCpuShare = 16;
-    optional double ResourceWeight = 18;
-    // TODO(scheduler): end.
-
+    optional double PoolMaxCpuShare = 12; // used for TCPULimits for ColumnShards
     optional NKikimrDataEvents.ELockMode LockMode = 19;
-
     optional string UserToken = 20;
+
+    reserved 15;
+    reserved 16;
+    reserved 18;
 }
 
 message TEvStartKqpTasksResponse {

@@ -97,7 +97,6 @@ TSchedulableActorHelper::TSchedulableActorHelper(TOptions&& options)
     , Schedulable(options.IsSchedulable)
     , LastExecutionTime(AverageExecutionTime)
 {
-    Y_ENSURE(SchedulableTask);
 }
 
 // static
@@ -105,11 +104,16 @@ TMonotonic TSchedulableActorHelper::Now() {
     return TMonotonic::Now();
 }
 
+bool TSchedulableActorHelper::IsAccountable() const {
+    return !!SchedulableTask;
+}
+
 bool TSchedulableActorHelper::IsSchedulable() const {
     return Schedulable;
 }
 
 bool TSchedulableActorHelper::StartExecution(TMonotonic now) {
+    Y_ASSERT(SchedulableTask);
     Y_ASSERT(!Executed);
 
     Y_DEFER {
@@ -147,6 +151,8 @@ bool TSchedulableActorHelper::StartExecution(TMonotonic now) {
 }
 
 void TSchedulableActorHelper::StopExecution() {
+    Y_ASSERT(SchedulableTask);
+
     if (Executed) {
         Y_ASSERT(!Throttled);
 
@@ -161,9 +167,7 @@ void TSchedulableActorHelper::StopExecution() {
 }
 
 TDuration TSchedulableActorHelper::CalculateDelay(TMonotonic) const {
-    const auto MaxDelay = TDuration::Seconds(3);
-    const auto MinDelay = TDuration::MicroSeconds(10);
-    const auto AttemptBonus = TDuration::MicroSeconds(5);
+    Y_ASSERT(SchedulableTask);
 
     const auto query = SchedulableTask->Query;
     const auto snapshot = query->GetSnapshot();
@@ -171,18 +175,18 @@ TDuration TSchedulableActorHelper::CalculateDelay(TMonotonic) const {
     const auto share = snapshot->FairShare;
 
     if (share < 1e-9) {
-        return MaxDelay;
+        return query->DelayParams->MaxDelay;
     }
 
     i64 delay =
-        + (query->CurrentTasksTime / share)               // current tasks to complete
-        + (query->WaitingTasksTime / share)               // waiting tasks to complete
-        // TODO: (currentUsage - averageUsage) * penalty  // penalty for usage since last snapshot
-        - (ExecuteAttempts * AttemptBonus.MicroSeconds()) // bonus for number of attempts
-        + (RandomNumber<ui64>() % 100)                    // random delay
+        + (query->CurrentTasksTime / share)                                          // current tasks to complete
+        + (query->WaitingTasksTime / share)                                          // waiting tasks to complete
+        // TODO: (currentUsage - averageUsage) * penalty                             // penalty for usage since last snapshot
+        - (ExecuteAttempts * query->DelayParams->AttemptBonus.MicroSeconds())        // bonus for number of attempts
+        + (RandomNumber<ui64>() % query->DelayParams->MaxRandomDelay.MicroSeconds()) // random delay
     ;
 
-    auto delayDuration = Min(MaxDelay, Max(MinDelay, TDuration::MicroSeconds(Max<i64>(0, delay))));
+    auto delayDuration = Min(query->DelayParams->MaxDelay, Max(query->DelayParams->MinDelay, TDuration::MicroSeconds(Max<i64>(0, delay))));
     if (query->Delay) {
         query->Delay->Collect(delayDuration.MicroSeconds());
     }

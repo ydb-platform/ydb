@@ -146,7 +146,7 @@ class UploadClusterBase(UploadSuiteBase):
         raw_tables_size_bytes, tables_size_bytes = self.__get_tables_size_bytes()
         result.add_stat(self.query_name, 'tables_size_bytes', tables_size_bytes)
         result.add_stat(self.query_name, 'raw_tables_size_bytes', raw_tables_size_bytes)
-        sleep(120) # wait statistics
+        sleep(120)  # wait statistics
 
 
 class UploadTpchBase(UploadClusterBase):

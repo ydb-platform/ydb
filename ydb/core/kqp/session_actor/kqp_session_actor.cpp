@@ -50,6 +50,8 @@
 #include <ydb/library/actors/wilson/wilson_span.h>
 #include <ydb/library/actors/wilson/wilson_trace.h>
 
+#include <ydb/core/fq/libs/checkpointing/checkpoint_coordinator.h>
+#include <ydb/library/yql/dq/actors/compute/dq_checkpoints.h>
 LWTRACE_USING(KQP_PROVIDER);
 
 namespace NKikimr {
@@ -367,7 +369,7 @@ public:
     }
 
     void HandleClientLost(NGRpcService::TEvClientLost::TPtr&) {
-        LOG_D("Got ClientLost event, send AbortExecution to executor: "
+        LOG_D("Got ClientLost event, send AbortExecution to executer: "
             << ExecuterId);
 
         if (ExecuterId) {
@@ -1676,6 +1678,34 @@ public:
             txCtx->TxManager->AddTopicsToShards();
         }
 
+        bool enableCheckpointCoordinator = QueryServiceConfig.HasCheckpointsConfig();
+        if (enableCheckpointCoordinator) {
+            const NKikimrConfig::TCheckpointsConfig& checkpointConfig = QueryServiceConfig.GetCheckpointsConfig();
+
+            NFq::NConfig::TCheckpointCoordinatorConfig config;
+            config.SetEnabled(checkpointConfig.GetEnabled());
+            config.SetCheckpointingPeriodMillis(checkpointConfig.GetCheckpointingPeriodMillis());
+            config.SetMaxInflight(checkpointConfig.GetMaxInflight());
+            config.SetCheckpointingSnapshotRotationPeriod(checkpointConfig.GetCheckpointingSnapshotRotationPeriod());   
+
+            ui64 dqGraphIndex = 0;
+            ui64 generation = 0;
+            auto stateLoadMode = FederatedQuery::StateLoadMode::EMPTY;
+            FederatedQuery::StreamingDisposition streamingDisposition;
+            NFq::NProto::TGraphParams dqGraphParams;
+
+            CheckpointCoordinatorId = Register(MakeCheckpointCoordinator(
+                ::NFq::TCoordinatorId(request.UserTraceId + "-" + ToString(dqGraphIndex), generation),
+                NYql::NDq::MakeCheckpointStorageID(),
+                SelfId(),
+                config,
+                Counters->GetKqpCounters(),
+                dqGraphParams,
+                stateLoadMode,
+                streamingDisposition).Release());
+                LOG_D("Created new CheckpointCoordinator (" << CheckpointCoordinatorId << ")");
+        }
+
         auto executerActor = CreateKqpExecuter(std::move(request), Settings.Database,
             QueryState ? QueryState->UserToken : TIntrusiveConstPtr<NACLib::TUserToken>(),
             RequestCounters, TExecuterConfig(Settings.MutableExecuterConfig, Settings.TableService),
@@ -1684,7 +1714,8 @@ public:
             QueryState ? QueryState->StatementResultIndex : 0, FederatedQuerySetup,
             (QueryState && QueryState->RequestEv->GetSyntax() == Ydb::Query::Syntax::SYNTAX_PG)
                 ? GUCSettings : nullptr, {},
-            txCtx->ShardIdToTableInfo, txCtx->TxManager, txCtx->BufferActorId);
+            txCtx->ShardIdToTableInfo, txCtx->TxManager, txCtx->BufferActorId,
+            CheckpointCoordinatorId);
 
         auto exId = RegisterWithSameMailbox(executerActor);
         LOG_D("Created new KQP executer: " << exId << " isRollback: " << isRollback);
@@ -2905,6 +2936,8 @@ public:
 
                 // always come from WorkerActor
                 hFunc(TEvKqp::TEvQueryResponse, ForwardResponse);
+
+                hFunc(NFq::TEvCheckpointCoordinator::TEvZeroCheckpointDone, Handle);
             default:
                 UnexpectedEvent("ExecuteState", ev);
             }
@@ -3093,6 +3126,11 @@ private:
         }
     }
 
+    void Handle(NFq::TEvCheckpointCoordinator::TEvZeroCheckpointDone::TPtr&) {
+        LOG_D("Coordinator saved zero checkpoint");
+        Send(CheckpointCoordinatorId, new NFq::TEvCheckpointCoordinator::TEvRunGraph());
+    }
+
 private:
     TActorId Owner;
     TKqpQueryCachePtr QueryCache;
@@ -3112,6 +3150,7 @@ private:
     TKqpSettings::TConstPtr KqpSettings;
     std::optional<TActorId> WorkerId;
     TActorId ExecuterId;
+    TActorId CheckpointCoordinatorId;
     NWilson::TSpan AcquireSnapshotSpan;
 
     std::shared_ptr<TKqpQueryState> QueryState;

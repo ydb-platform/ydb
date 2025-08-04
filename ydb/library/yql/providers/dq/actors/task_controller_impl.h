@@ -32,6 +32,7 @@
 #include <util/generic/ptr.h>
 #include <util/string/split.h>
 #include <util/system/types.h>
+#include <ydb/core/fq/libs/checkpointing/events/events.h>
 
 namespace NYql {
 
@@ -536,6 +537,7 @@ public:
             YQL_CLOG(DEBUG, ProviderDq) << "Forward: " << SelfId() << " to " << CheckpointCoordinatorId;
 
             auto event = std::make_unique<NFq::TEvCheckpointCoordinator::TEvReadyState>();
+            event->NeedSendRunToCA = true;
             for (const auto& [settings, actorId] : Tasks) {
                 auto task = NFq::TEvCheckpointCoordinator::TEvReadyState::TTask{
                     settings.GetId(),
@@ -546,7 +548,7 @@ public:
                     actorId
                 };
                 event->Tasks.emplace_back(std::move(task));
-            }                
+            }
             Send(CheckpointCoordinatorId, event.release());
         }
     }

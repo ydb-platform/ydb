@@ -484,7 +484,6 @@ public:
         ui32 softTimeout = shs.GetSoftTimeoutMs();
         for(auto& [idx, sessionInfo] : *LocalSessions) {
             Send(sessionInfo.WorkerId, new TEvKqp::TEvInitiateSessionShutdown(softTimeout, hardTimeout));
-
             if (sessionInfo.AttachedRpcId) {
                 Send(sessionInfo.AttachedRpcId, CreateEvCloseSessionResponse(sessionInfo.SessionId));
             }
@@ -1819,4 +1818,5 @@ IActor* CreateKqpProxyService(const NKikimrConfig::TLogConfig& logConfig,
     return new TKqpProxyService(logConfig, tableServiceConfig, queryServiceConfig, std::move(settings),
         std::move(queryReplayFactory), std::move(kqpProxySharedResources), std::move(federatedQuerySetupFactory), std::move(s3ActorsFactory));
 }
+
 } // namespace NKikimr::NKqp

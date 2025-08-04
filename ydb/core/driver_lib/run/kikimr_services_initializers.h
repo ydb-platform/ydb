@@ -253,6 +253,11 @@ public:
     TSecurityServicesInitializer(const TKikimrRunConfig& runConfig, std::shared_ptr<TModuleFactories> factories);
 
     void InitializeServices(NActors::TActorSystemSetup *setup, const NKikimr::TAppData *appData) override;
+
+private:
+    void InitializeServiceTicketManager(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData);
+    void InitializeLdapAuthProvider(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData);
+    void InitializeTicketParser(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData);
 };
 
 // grpc_proxy

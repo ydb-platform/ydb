@@ -59,6 +59,7 @@ message TAuthConfig {
     optional TPasswordComplexity PasswordComplexity = 83;
     optional TAccountLockout AccountLockout = 84;
     optional string AccessServiceTokenName = 85;
+    optional TServiceTicketManager ServiceTicketManager = 86;
 }
 
 message TUserRegistryConfig {
@@ -139,4 +140,37 @@ message TPasswordComplexity {
 message TAccountLockout {
     optional uint32 AttemptThreshold = 1 [default = 4];
     optional string AttemptResetDuration = 2 [default = "1h"];
+}
+
+message TServiceTicketManager {
+    message TTokenProviderSettings {
+        optional string SuccessRefreshTime = 1 [default = "1h"];
+        optional string MinErrorRefreshTime = 2 [default = "1s"];
+        optional string MaxErrorRefreshTime = 3 [default = "1m"];
+        optional string RequestTimeout = 4 [default = "1m"];
+    }
+
+    message TVmMetadataProvider {
+        message TVmMetadataInfo {
+            optional string Id = 1;
+            optional string Endpoint = 2;
+        }
+
+        repeated TVmMetadataInfo VmMetadataInfo = 1;
+        optional TTokenProviderSettings TokenProviderSettings = 2;
+    }
+
+    message TTokenAgentProvider {
+        message TTokenAgentInfo {
+            optional string Id = 1;
+            optional string Endpoint = 2;
+        }
+
+        repeated TTokenAgentInfo TokenAgentInfo = 1;
+        optional TTokenProviderSettings TokenProviderSettings = 2;
+    }
+
+    optional string RefreshCheckPeriod = 1 [default = "1s"];
+    optional TVmMetadataProvider VmMetadataProvider = 2;
+    optional TTokenAgentProvider TokenAgentProvider = 3;
 }

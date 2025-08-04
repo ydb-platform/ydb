@@ -40,8 +40,11 @@ Additionally, there is a separate view that shows statistics on the usage of gro
 | TotalSize             | Uint64    |         | Total number of bytes on PDisk                                                                                                                                   |
 | Status                | String    |         | PDisk operating mode that affects its participation in group allocation (ACTIVE, INACTIVE, BROKEN, FAULTY, TO_BE_REMOVED)                                       |
 | StatusChangeTimestamp | Timestamp |         | Time when Status last changed; if NULL, Status has not changed since PDisk creation                                                                              |
-| ExpectedSlotCount     | Uint32    |         | Maximum number of slots (VSlot) that can be created on this PDisk                                                                                                |
-| NumActiveSlots        | Uint32    |         | Number of currently running slots                                                                                                                                |
+| ExpectedSlotCount     | Uint32    |         | Maximum number of slots (VSlot) that can be created on this PDisk. Either user-defined or inferred.                                                              |
+| NumActiveSlots        | Uint32    |         | Number of currently occupied slots with respect to GroupSizeInUnits of VDisks                                                                                    |
+| SlotSizeInUnits       | Uint32    |         | Slot size in units. Either user-defined or inferrerd.                                                                                                            |
+| DecommitStatus        | String    |         | Status of PDisk decommissioning (DECOMMIT_NONE, DECOMMIT_PENDING, DECOMMIT_IMMINENT, DECOMMIT_REJECTED)                                                          |
+| InferPDiskSlotCountFromUnitSize  | Uint64    |         | If not zero, ExpectedSlotCount and SlotSizeInUnits values are inferred (unless user-defined) from drive size and this value                           |
 
 ### ds_vslots
 
@@ -79,6 +82,9 @@ Note that the tuple (NodeId, PDiskId) forms a foreign key to the `ds_pdisks` vie
 | PutTabletLogLatency | Interval |         | 90th percentile of PutTabletLog request execution time                                                    |
 | PutUserDataLatency  | Interval |         | 90th percentile of PutUserData request execution time                                                     |
 | GetFastLatency      | Interval |         | 90th percentile of GetFast request execution time                                                         |
+| OperatingStatus     | String   |         | Group status based on latest VDisk reports only (UNKNOWN, FULL, PARTIAL, DEGRADED, DISINTEGRATED)         |
+| ExpectedStatus      | String   |         | Status based not only on operational report, but on PDisk status and plans too (UNKNOWN, FULL, PARTIAL, DEGRADED, DISINTEGRATED) |
+| GroupSizeInUnits    | Uint32   |         | Matching this value with PDisk.SlotSizeInUnits allows VDisks to acquire proportionally large storage size quota |
 
 In this view, the tuple (BoxId, StoragePoolId) forms a foreign key to the `ds_storage_pools` view.
 
@@ -97,6 +103,7 @@ In this view, the tuple (BoxId, StoragePoolId) forms a foreign key to the `ds_st
 | EncryptionMode | Uint32   |         | Data encryption setting for all groups (similar to ds_groups.EncryptionMode)                               |
 | SchemeshardId  | Uint64   |         | SchemeShard identifier of the schema object to which this storage pool belongs (currently always NULL)      |
 | PathId         | Uint64   |         | Schema object node identifier within the specified SchemeShard to which this storage pool belongs          |
+| DefaultGroupSizeInUnits | Uint32   |         | The value inherited by groups when new groups are added to the pool                                |
 
 ### ds_storage_stats
 

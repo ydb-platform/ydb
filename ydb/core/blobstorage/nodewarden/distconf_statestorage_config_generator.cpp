@@ -44,6 +44,9 @@ namespace NKikimr::NStorage {
             });
         }
         Y_ABORT_UNLESS(NodeGroups.size() > 0 && NodeGroups[0].Nodes.size() > 0);
+        for (auto& ng : NodeGroups) {
+            ng.Disconnected = ng.State[0] < ng.Nodes.size() / 2;
+        }
     }
 
     void TStateStoragePerPileGenerator::CalculateRingsParameters() {
@@ -81,6 +84,14 @@ namespace NKikimr::NStorage {
             PileId->CopyToProto(rg, &NKikimrConfig::TDomainsConfig::TStateStorage::TRing::SetBridgePileId);
         }
         rg->SetNToSelect(NToSelect);
+        for (auto &nodes : Rings) {
+            std::ranges::sort(nodes, [&](const auto& x, const auto& y) {
+                return x < y;
+            });
+        }
+        std::ranges::sort(Rings, [&](const auto& x, const auto& y) {
+            return x[0] < y[0];
+        });
         for (auto &nodes : Rings) {
             auto *ring = rg->AddRing();
             for(auto nodeId : nodes) {
@@ -134,7 +145,25 @@ namespace NKikimr::NStorage {
         return true;
     }
 
-    void TStateStoragePerPileGenerator::PickNodes(TNodeGroup& group) {
+    void TStateStoragePerPileGenerator::PickNodesByRack(TNodeGroup& group) {
+        auto compByRack = [&](const auto& x, const auto& y) {
+            auto rackX = std::get<1>(x).GetRackId();
+            auto rackY = std::get<1>(y).GetRackId();
+            if (rackX == rackY) {
+                auto nodeX = std::get<0>(x);
+                auto nodeY = std::get<0>(y);
+                return nodeX < nodeY;
+            }
+            return rackX < rackY;
+        };
+        std::ranges::sort(group.Nodes, compByRack);
+        if (!PickNodesSimpleStrategy(group, NodeStatesSize, false)) {
+            Y_ABORT_UNLESS(PickNodesSimpleStrategy(group, NodeStatesSize, true));
+        }
+
+    }
+
+    void TStateStoragePerPileGenerator::PickNodesByState(TNodeGroup& group) {
         std::unordered_map<TString, std::array<ui32, NodeStatesSize>> rackStates;
         for (auto& n : group.Nodes) {
             auto rack = std::get<1>(n).GetRackId();
@@ -143,7 +172,7 @@ namespace NKikimr::NStorage {
             rackState[CalcNodeState(nodeId)]++;
         }
 
-        auto compByRack = [&](const auto& x, const auto& y) {
+        auto compByState = [&](const auto& x, const auto& y) {
             auto rackX = std::get<1>(x).GetRackId();
             auto rackY = std::get<1>(y).GetRackId();
             if (rackX == rackY) {
@@ -163,7 +192,7 @@ namespace NKikimr::NStorage {
             return rackX < rackY;
         };
 
-        std::ranges::sort(group.Nodes, compByRack);
+        std::ranges::sort(group.Nodes, compByState);
         for (ui32 stateLimit : xrange(NodeStatesSize)) {
             if (PickNodesSimpleStrategy(group, stateLimit, rackStates.size() < RingsInGroupCount)) {
                 GoodConfig &= stateLimit <= 1;
@@ -173,5 +202,14 @@ namespace NKikimr::NStorage {
         GoodConfig = false;
         Y_ABORT_UNLESS(PickNodesSimpleStrategy(group, NodeStatesSize, true));
     }
+
+    void TStateStoragePerPileGenerator::PickNodes(TNodeGroup& group) {
+        if (group.Disconnected) {
+            PickNodesByRack(group);
+        } else {
+            PickNodesByState(group);
+        }
+    }
+
 
 }

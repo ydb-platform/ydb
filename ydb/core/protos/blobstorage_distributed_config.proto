@@ -229,6 +229,7 @@ message TEvNodeConfigInvokeOnRoot {
         bool StateStorage = 3;
         bool StateStorageBoard = 4;
         bool SchemeBoard = 5;
+        optional bool DisableRing = 6;
     }
 
     message TGetStateStorageConfig {

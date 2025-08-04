@@ -20,12 +20,15 @@ namespace NKikimr::NStorage {
         struct TNodeGroup {
             std::vector<std::tuple<ui32, TNodeLocation>> Nodes;
             std::array<ui32, NodeStatesSize> State;
+            bool Disconnected;
         };
 
         void FillNodeGroups(THashMap<TString, std::vector<std::tuple<ui32, TNodeLocation>>>& nodes);
         void CalculateRingsParameters();
         bool PickNodesSimpleStrategy(TNodeGroup& group, ui32 stateLimit, bool ignoreRacks);
         void PickNodes(TNodeGroup& group);
+        void PickNodesByRack(TNodeGroup& group);
+        void PickNodesByState(TNodeGroup& group);
         ui32 CalcNodeState(ui32 nodeId);
 
         const std::optional<TBridgePileId> PileId;

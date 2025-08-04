@@ -84,6 +84,7 @@ public:
 class TPrepareResultStep: public IFetchingStep {
 private:
     using TBase = IFetchingStep;
+    const bool StartResultBuildingInplace;
 
 protected:
     virtual TConclusion<bool> DoExecuteInplace(
@@ -96,8 +97,10 @@ public:
     virtual ui64 GetProcessingDataSize(const std::shared_ptr<NCommon::IDataSource>& /*source*/) const override {
         return 0;
     }
-    TPrepareResultStep()
-        : TBase("PREPARE_RESULT") {
+    TPrepareResultStep(const bool startResultBuildingInplace)
+        : TBase("PREPARE_RESULT")
+        , StartResultBuildingInplace(startResultBuildingInplace)
+    {
     }
 };
 
@@ -247,20 +250,6 @@ public:
     }
 };
 
-class TDetectScript: public IFetchingStep {
-private:
-    using TBase = IFetchingStep;
-    TColumnsSetIds Columns;
-
-public:
-    virtual TConclusion<bool> DoExecuteInplace(
-        const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step) const override;
-    TDetectScript(const TColumnsSetIds& columns)
-        : TBase("DETECT_SCRIPT")
-        , Columns(columns) {
-    }
-};
-
 class TDeletionFilter: public IFetchingStep {
 private:
     using TBase = IFetchingStep;
@@ -310,4 +299,17 @@ public:
     }
 };
 
+
+class TUpdateAggregatedMemoryStep: public IFetchingStep {
+private:
+    using TBase = IFetchingStep;
+
+public:
+    virtual TConclusion<bool> DoExecuteInplace(
+        const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step) const override;
+
+    TUpdateAggregatedMemoryStep()
+        : TBase("ACTUALIZE_MEMORY_AGGR") {
+    }
+};
 }   // namespace NKikimr::NOlap::NReader::NSimple

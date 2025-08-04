@@ -550,6 +550,12 @@ public:
             return EExecutionStatus::Executed;
         } catch (const TUniqueConstrainException&) {
             return OnUniqueConstrainException(userDb, *writeOp, txc, ctx);
+        } catch (const TKeySizeConstraintException&) {
+            writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_CONSTRAINT_VIOLATION, TStringBuilder() << "Size of key in secondary index is more than " << NLimits::MaxWriteKeySize);
+            txc.DB.RollbackChanges();
+            LOG_ERROR_S(ctx, NKikimrDataEvents::TEvWriteResult::STATUS_CONSTRAINT_VIOLATION, "Operation " << *writeOp << " at " << DataShard.TabletID() << " aborting. Size of key of secondary index is too big.");
+                
+            return EExecutionStatus::Executed;
         }
 
         Pipeline.AddCommittingOp(op);

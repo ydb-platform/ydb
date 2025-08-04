@@ -91,4 +91,7 @@ service TableService {
 
     // Returns information about a given external table.
     rpc DescribeExternalTable(Table.DescribeExternalTableRequest) returns (Table.DescribeExternalTableResponse);
+
+    // Returns information about a given system view table.
+    rpc DescribeSystemView(Table.DescribeSystemViewRequest) returns (Table.DescribeSystemViewResponse);
 }

@@ -40,7 +40,7 @@ Internally, a vector index consists of hidden index tables named `indexImpl*Tabl
 
 A vector index can be **covering**, meaning it includes additional columns to enable reading from the index without accessing the main table.
 
-Alternatively, it can be **prefixed**, allowing for additional columns to be used for quick filtering during reading.
+Alternatively, it can be **filtered**, allowing for additional columns to be used for quick filtering during reading.
 
 Below are examples of creating vector indexes of different types.
 
@@ -68,9 +68,9 @@ ALTER TABLE my_table
   WITH (distance=cosine, vector_type="uint8", vector_dimension=512, levels=2, clusters=128);
 ```
 
-### Prefixed Vector Index {#prefixed}
+### Filtered Vector Index {#filtered}
 
-A prefixed vector index, allowing filtering by the prefix column `user` during vector search:
+A filtered vector index, allowing filtering by the column `user` during vector search:
 
 ```yql
 ALTER TABLE my_table
@@ -80,9 +80,9 @@ ALTER TABLE my_table
   WITH (distance=cosine, vector_type="uint8", vector_dimension=512, levels=2, clusters=128);
 ```
 
-### Prefixed Vector Index with Covering Columns {#prefixed-covering}
+### Filtered Vector Index with Covering Columns {#filtered-covering}
 
-A prefixed vector index with covering columns:
+A filtered vector index with covering columns:
 
 ```yql
 ALTER TABLE my_table
@@ -101,13 +101,25 @@ Vector indexes can be created:
 
 ## Using Vector Indexes {#select}
 
-Queries to vector indexes are executed using the `VIEW` syntax in YQL. For prefixed indexes, specify the prefix columns in the `WHERE` clause:
+Queries to vector indexes are executed using the `VIEW` syntax in YQL:
 
 ```yql
 DECLARE $query_vector AS List<Uint8>;
 
 SELECT user, data
 FROM my_table VIEW my_index
+ORDER BY Knn::CosineSimilarity(embedding, $query_vector) DESC
+LIMIT 10;
+```
+
+For filtered indexes, specify the columns in the `WHERE` clause:
+
+```yql
+DECLARE $query_vector AS List<Uint8>;
+
+SELECT user, data
+FROM my_table VIEW my_index
+WHERE user = 'john'
 ORDER BY Knn::CosineSimilarity(embedding, $query_vector) DESC
 LIMIT 10;
 ```

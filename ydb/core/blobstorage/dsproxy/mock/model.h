@@ -320,7 +320,7 @@ namespace NFake {
         }
 
         TEvBlobStorage::TEvCollectGarbageResult* Handle(TEvBlobStorage::TEvCollectGarbage *msg) {
-            if (IsBlocked(msg->TabletId, msg->RecordGeneration) && (msg->CollectGeneration != Max<ui32>() ||
+            if (!msg->IgnoreBlock && IsBlocked(msg->TabletId, msg->RecordGeneration) && (msg->CollectGeneration != Max<ui32>() ||
                     msg->CollectStep != Max<ui32>() || Blocks.at(msg->TabletId) != Max<ui32>())) {
                 return new TEvBlobStorage::TEvCollectGarbageResult(NKikimrProto::BLOCKED,
                         msg->TabletId, msg->RecordGeneration, msg->PerGenerationCounter, msg->Channel);

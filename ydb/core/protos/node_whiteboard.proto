@@ -110,6 +110,7 @@ message TNodeStateInfo {
     optional uint64 WriteThroughput = 15; // bytes written per second
     optional ESessionState SessionState = 16;
     optional bool SameScope = 17; // true if the peer is in the same scope
+    optional string PeerBridgePileName = 18;
 }
 
 message TEvNodeStateRequest {

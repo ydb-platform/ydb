@@ -243,7 +243,8 @@ namespace NActors {
                 MonPorts.push_back(port);
             }
 
-            node->ActorSystem->Start();
+            StartActorSystem(nodeIndex, node);
+
             if (nodeAppData->Mon) {
                 nodeAppData->Mon->Start(node->ActorSystem.Get());
             }

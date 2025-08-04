@@ -1131,7 +1131,7 @@ void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
 {
     const auto& cfg = runConfig.AppConfig;
 
-    bool useAutoConfig = !cfg.HasActorSystemConfig() || (cfg.GetActorSystemConfig().HasUseAutoConfig() && cfg.GetActorSystemConfig().GetUseAutoConfig());
+    bool useAutoConfig = !cfg.HasActorSystemConfig() || NeedToUseAutoConfig(cfg.GetActorSystemConfig());
     bool useSharedThreads = cfg.HasActorSystemConfig() && cfg.GetActorSystemConfig().HasUseSharedThreads() && cfg.GetActorSystemConfig().GetUseSharedThreads();
     NAutoConfigInitializer::TASPools pools = NAutoConfigInitializer::GetASPools(cfg.GetActorSystemConfig(), useAutoConfig);
     TMap<TString, ui32> servicePools = NAutoConfigInitializer::GetServicePools(cfg.GetActorSystemConfig(), useAutoConfig);
@@ -1753,6 +1753,10 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
 
     if (serviceMask.EnableGeneralCachePortionsMetadata) {
         sil->AddServiceInitializer(new TGeneralCachePortionsMetadataInitializer(runConfig));
+    }
+
+    if (serviceMask.EnableGeneralCacheColumnData) {
+        sil->AddServiceInitializer(new TGeneralCacheColumnDataInitializer(runConfig));
     }
 
     if (serviceMask.EnableCms) {

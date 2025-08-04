@@ -5,6 +5,7 @@
 
 namespace NDB {
 
+// forward declaration for <ydb/library/yql/udfs/common/clickhouse/client/src/Formats/FormatSettings.h>
 struct FormatSettings;
 
 } // namespace NDB

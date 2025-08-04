@@ -193,6 +193,7 @@
 #include <ydb/core/tx/conveyor_composite/usage/config.h>
 #include <ydb/core/tx/conveyor_composite/usage/service.h>
 #include <ydb/core/tx/columnshard/data_accessor/cache_policy/policy.h>
+#include <ydb/core/tx/columnshard/column_fetching/cache_policy.h>
 #include <ydb/core/tx/general_cache/usage/service.h>
 #include <ydb/core/tx/priorities/usage/config.h>
 #include <ydb/core/tx/priorities/usage/service.h>
@@ -504,11 +505,6 @@ static TInterconnectSettings GetInterconnectSettings(const NKikimrConfig::TInter
     return result;
 }
 
-bool NeedToUseAutoConfig(const NKikimrConfig::TActorSystemConfig& config) {
-    return config.GetUseAutoConfig()
-        || config.HasNodeType()
-        || config.HasCpuCount();
-}
 
 void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* setup,
                                                    const NKikimr::TAppData* appData) {
@@ -679,6 +675,9 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
                         record.SetSessionState(NKikimrWhiteboard::TNodeStateInfo::CONNECTED);
                     }
                     record.SetSameScope(data.SameScope);
+                    if (data.PeerBridgePileName) {
+                        record.SetPeerBridgePileName(data.PeerBridgePileName);
+                    }
                     data.ActorSystem->Send(whiteboardId, update.release());
                 };
             }
@@ -786,14 +785,14 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
                     TString address;
                     if (node.second.first)
                         address = node.second.first;
-                    auto listener = new TInterconnectListenerTCP(
+                    auto listener = std::make_unique<TInterconnectListenerTCP>(
                         address, node.second.second, icCommon);
                     if (int err = listener->Bind()) {
                         ythrow yexception()
                             << "Failed to set up IC listener on port " << node.second.second
                             << " errno# " << err << " (" << strerror(err) << ")";
                     }
-                    setup->LocalServices.emplace_back(MakeInterconnectListenerActorId(false), TActorSetupCmd(listener,
+                    setup->LocalServices.emplace_back(MakeInterconnectListenerActorId(false), TActorSetupCmd(listener.release(),
                         TMailboxType::ReadAsFilled, interconnectPoolId));
                 }
             }
@@ -807,13 +806,13 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
                 if (info.GetAddress()) {
                     address = info.GetAddress();
                 }
-                auto listener = new TInterconnectListenerTCP(address, info.GetPort(), icCommon);
+                auto listener = std::make_unique<TInterconnectListenerTCP>(address, info.GetPort(), icCommon);
                 if (int err = listener->Bind()) {
                     ythrow yexception()
                         << "Failed to set up IC listener on port " << info.GetPort()
                         << " errno# " << err << " (" << strerror(err) << ")";
                 }
-                setup->LocalServices.emplace_back(MakeInterconnectListenerActorId(true), TActorSetupCmd(listener,
+                setup->LocalServices.emplace_back(MakeInterconnectListenerActorId(true), TActorSetupCmd(listener.release(),
                     TMailboxType::ReadAsFilled, interconnectPoolId));
             }
 
@@ -823,13 +822,13 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
                     if (nodesManagerConfig.GetEnabled()) {
                         TFederatedQueryInitializer::SetIcPort(nodesManagerConfig.GetPort());
                         icCommon->TechnicalSelfHostName = nodesManagerConfig.GetHost();
-                        auto listener = new TInterconnectListenerTCP({}, nodesManagerConfig.GetPort(), icCommon);
+                        auto listener = std::make_unique<TInterconnectListenerTCP>("", nodesManagerConfig.GetPort(), icCommon);
                         if (int err = listener->Bind()) {
                             ythrow yexception()
                                 << "Failed to set up IC listener on port " << nodesManagerConfig.GetPort()
                                 << " errno# " << err << " (" << strerror(err) << ")";
                         }
-                        setup->LocalServices.emplace_back(MakeInterconnectListenerActorId(true), TActorSetupCmd(listener,
+                        setup->LocalServices.emplace_back(MakeInterconnectListenerActorId(true), TActorSetupCmd(listener.release(),
                             TMailboxType::ReadAsFilled, interconnectPoolId));
                     }
                 }
@@ -2325,6 +2324,31 @@ void TGeneralCachePortionsMetadataInitializer::InitializeServices(NActors::TActo
         std::make_pair(NGeneralCache::TServiceOperator<NOlap::NGeneralCache::TPortionsMetadataCachePolicy>::MakeServiceId(NodeId),
             TActorSetupCmd(service, TMailboxType::HTSwap, appData->UserPoolId)));
 }
+
+TGeneralCacheColumnDataInitializer::TGeneralCacheColumnDataInitializer(const TKikimrRunConfig& runConfig)
+    : IKikimrServicesInitializer(runConfig)
+{
+}
+
+void TGeneralCacheColumnDataInitializer::InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) {
+    auto serviceConfig = NGeneralCache::NPublic::TConfig::BuildFromProto(Config.GetColumnDataCache());
+    if (serviceConfig.IsFail()) {
+        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("error", "cannot parse column data cache config")("action", "default_usage")(
+            "error", serviceConfig.GetErrorMessage())("default", NGeneralCache::NPublic::TConfig::BuildDefault().DebugString());
+        serviceConfig = NGeneralCache::NPublic::TConfig::BuildDefault();
+    }
+    AFL_VERIFY(!serviceConfig.IsFail());
+
+    TIntrusivePtr<::NMonitoring::TDynamicCounters> tabletGroup = GetServiceCounters(appData->Counters, "tablets");
+    TIntrusivePtr<::NMonitoring::TDynamicCounters> conveyorGroup = tabletGroup->GetSubgroup("type", "TX_GENERAL_CACHE_COLUMN_DATA");
+
+    auto service = NGeneralCache::TServiceOperator<NOlap::NGeneralCache::TColumnDataCachePolicy>::CreateService(*serviceConfig, conveyorGroup);
+
+    setup->LocalServices.push_back(
+        std::make_pair(NGeneralCache::TServiceOperator<NOlap::NGeneralCache::TColumnDataCachePolicy>::MakeServiceId(NodeId),
+            TActorSetupCmd(service, TMailboxType::HTSwap, appData->UserPoolId)));
+}
+
 
 TCompositeConveyorInitializer::TCompositeConveyorInitializer(const TKikimrRunConfig& runConfig)
 	: IKikimrServicesInitializer(runConfig) {

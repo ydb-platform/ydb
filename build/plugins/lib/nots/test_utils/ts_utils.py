@@ -83,17 +83,17 @@ def get_top_level_dirs(dirs):
     return top_level_dirs
 
 
-def create_bin_tsconfig(module_arc_path, source_root, bin_root, ts_config_path=DEFAULT_TS_CONFIG_FILE):
+def create_bin_tsconfig(module_arc_path, source_root, bin_root):
     """
     Creating a tsconfig.json config file inlining the required base files if any
     """
     source_path = os.path.join(source_root, module_arc_path)
     bin_path = os.path.join(bin_root, module_arc_path)
 
-    ts_config = TsConfig.load(os.path.join(source_path, ts_config_path))
+    ts_config = TsConfig.load(os.path.join(source_path, DEFAULT_TS_CONFIG_FILE))
     pj = PackageJson.load(build_pj_path(source_path))
     ts_config.inline_extend(pj.get_dep_paths_by_names())
 
-    bin_ts_config_path = os.path.join(bin_path, ts_config_path)
+    bin_ts_config_path = os.path.join(bin_path, DEFAULT_TS_CONFIG_FILE)
     ts_config.write(bin_ts_config_path, indent=4)
     return bin_ts_config_path

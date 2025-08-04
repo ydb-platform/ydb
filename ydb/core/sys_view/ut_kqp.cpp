@@ -3551,31 +3551,49 @@ ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = UPSERT_OPTIONS,
         TTableClient client(env.GetDriver());
         auto session = client.CreateSession().GetValueSync().GetSession();
         {
-            auto settings = TDescribeTableSettings()
-                .WithKeyShardBoundary(true)
-                .WithTableStatistics(true)
-                .WithPartitionStatistics(true);
+            if (EnableRealSystemViewPaths) {
+                auto result = session.DescribeSystemView("/Root/.sys/partition_stats").GetValueSync();
+                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 
-            auto result = session.DescribeTable("/Root/.sys/partition_stats", settings).GetValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+                const auto& systemView = result.GetSystemViewDescription();
 
-            const auto& table = result.GetTableDescription();
-            const auto& columns = table.GetTableColumns();
-            const auto& keyColumns = table.GetPrimaryKeyColumns();
+                UNIT_ASSERT_VALUES_EQUAL(systemView.GetSysViewId(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(systemView.GetSysViewName(), "partition_stats");
 
-            UNIT_ASSERT_VALUES_EQUAL(columns.size(), 30);
-            UNIT_ASSERT_STRINGS_EQUAL(columns[0].Name, "OwnerId");
-            UNIT_ASSERT_STRINGS_EQUAL(FormatType(columns[0].Type), "Uint64?");
+                const auto& columns = systemView.GetTableColumns();
+                UNIT_ASSERT_VALUES_EQUAL(columns.size(), 30);
+                UNIT_ASSERT_STRINGS_EQUAL(columns[0].Name, "OwnerId");
+                UNIT_ASSERT_STRINGS_EQUAL(FormatType(columns[0].Type), "Uint64?");
 
-            UNIT_ASSERT_VALUES_EQUAL(keyColumns.size(), 4);
-            UNIT_ASSERT_STRINGS_EQUAL(keyColumns[0], "OwnerId");
+                const auto& keyColumns = systemView.GetPrimaryKeyColumns();
+                UNIT_ASSERT_VALUES_EQUAL(keyColumns.size(), 4);
+                UNIT_ASSERT_STRINGS_EQUAL(keyColumns[0], "OwnerId");
+            } else {
+                auto settings = TDescribeTableSettings()
+                    .WithKeyShardBoundary(true)
+                    .WithTableStatistics(true)
+                    .WithPartitionStatistics(true);
 
-            UNIT_ASSERT_VALUES_EQUAL(table.GetPartitionStats().size(), 0);
-            UNIT_ASSERT_VALUES_EQUAL(table.GetPartitionsCount(), 0);
+                auto result = session.DescribeTable("/Root/.sys/partition_stats", settings).GetValueSync();
+                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+                const auto& table = result.GetTableDescription();
+                const auto& columns = table.GetTableColumns();
+                const auto& keyColumns = table.GetPrimaryKeyColumns();
+
+                UNIT_ASSERT_VALUES_EQUAL(columns.size(), 30);
+                UNIT_ASSERT_STRINGS_EQUAL(columns[0].Name, "OwnerId");
+                UNIT_ASSERT_STRINGS_EQUAL(FormatType(columns[0].Type), "Uint64?");
+
+                UNIT_ASSERT_VALUES_EQUAL(keyColumns.size(), 4);
+                UNIT_ASSERT_STRINGS_EQUAL(keyColumns[0], "OwnerId");
+
+                UNIT_ASSERT_VALUES_EQUAL(table.GetPartitionStats().size(), 0);
+                UNIT_ASSERT_VALUES_EQUAL(table.GetPartitionsCount(), 0);
+            }
         }
 
         TSchemeClient schemeClient(env.GetDriver());
-
         {
             auto result = schemeClient.DescribePath("/Root/.sys/partition_stats").GetValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());

@@ -181,16 +181,18 @@ class TCounters : public virtual TThrRefBase {
     struct TMetricsScope {
         TString CloudId;
         TString Scope;
+        ERequestTypeScope RequestType;
 
         TMetricsScope() = default;
 
-        TMetricsScope(const TString& cloudId, const TString& scope)
+        TMetricsScope(const TString& cloudId, const TString& scope, ERequestTypeScope requestType)
             : CloudId(cloudId)
             , Scope(scope)
+            , RequestType(requestType)
         { }
 
         bool operator<(const TMetricsScope& right) const {
-            return std::tie(CloudId, Scope) < std::tie(right.CloudId, right.Scope);
+            return std::tie(CloudId, Scope, RequestType) < std::tie(right.CloudId, right.Scope, right.RequestType);
         }
     };
 
@@ -235,7 +237,11 @@ class TCounters : public virtual TThrRefBase {
         {MakeIntrusive<TRequestCommonCounters>("DeleteFolderResources")},
     });
 
-    TTtlCache<TMetricsScope, TScopeCountersPtr, TMap> ScopeCounters{TTtlCacheSettings{}.SetTtl(TDuration::Days(1))};
+    TTtlCache<TMetricsScope, TRequestScopeCountersPtr, TMap> ScopeCounters{
+        TTtlCacheSettings{}
+            .SetTtl(TDuration::Days(1))
+            .SetTouchOnGet(true)
+    };
     ::NMonitoring::TDynamicCounterPtr Counters;
 
 public:
@@ -256,48 +262,47 @@ public:
     }
 
     TRequestScopeCountersPtr GetScopeCounters(const TString& cloudId, const TString& scope, ERequestTypeScope type) {
-        TMetricsScope key{cloudId, scope};
-        TMaybe<TScopeCountersPtr> cacheVal;
+        TMetricsScope key{cloudId, scope, type};
+        TMaybe<TRequestScopeCountersPtr> cacheVal;
         ScopeCounters.Get(key, &cacheVal);
         if (cacheVal) {
-            return (**cacheVal)[type];
+            return (*cacheVal);
         }
 
-        auto scopeRequests = std::make_shared<TScopeCounters>(CreateArray<RTS_MAX, TRequestScopeCountersPtr>({
-            {MakeIntrusive<TRequestScopeCounters>("CreateQuery")},
-            {MakeIntrusive<TRequestScopeCounters>("ListQueries")},
-            {MakeIntrusive<TRequestScopeCounters>("DescribeQuery")},
-            {MakeIntrusive<TRequestScopeCounters>("GetQueryStatus")},
-            {MakeIntrusive<TRequestScopeCounters>("ModifyQuery")},
-            {MakeIntrusive<TRequestScopeCounters>("DeleteQuery")},
-            {MakeIntrusive<TRequestScopeCounters>("ControlQuery")},
-            {MakeIntrusive<TRequestScopeCounters>("GetResultData")},
-            {MakeIntrusive<TRequestScopeCounters>("ListJobs")},
-            {MakeIntrusive<TRequestScopeCounters>("DescribeJob")},
-            {MakeIntrusive<TRequestScopeCounters>("CreateConnection")},
-            {MakeIntrusive<TRequestScopeCounters>("ListConnections")},
-            {MakeIntrusive<TRequestScopeCounters>("DescribeConnection")},
-            {MakeIntrusive<TRequestScopeCounters>("ModifyConnection")},
-            {MakeIntrusive<TRequestScopeCounters>("DeleteConnection")},
-            {MakeIntrusive<TRequestScopeCounters>("TestConnection")},
-            {MakeIntrusive<TRequestScopeCounters>("CreateBinding")},
-            {MakeIntrusive<TRequestScopeCounters>("ListBindings")},
-            {MakeIntrusive<TRequestScopeCounters>("DescribeBinding")},
-            {MakeIntrusive<TRequestScopeCounters>("ModifyBinding")},
-            {MakeIntrusive<TRequestScopeCounters>("DeleteBinding")},
-            {MakeIntrusive<TRequestScopeCounters>("DeleteFolderResources")},
-        }));
+        static std::array<TString, RTS_MAX> requestTypeNames {
+            "CreateQuery",
+            "ListQueries",
+            "DescribeQuery",
+            "GetQueryStatus",
+            "ModifyQuery",
+            "DeleteQuery",
+            "ControlQuery",
+            "GetResultData",
+            "ListJobs",
+            "DescribeJob",
+            "CreateConnection",
+            "ListConnections",
+            "DescribeConnection",
+            "ModifyConnection",
+            "DeleteConnection",
+            "TestConnection",
+            "CreateBinding",
+            "ListBindings",
+            "DescribeBinding",
+            "ModifyBinding",
+            "DeleteBinding",
+            "DeleteFolderResources",
+        };
 
         auto scopeCounters = Counters
                                  ->GetSubgroup("cloud_id", cloudId)
                                  ->GetSubgroup("scope", scope);
-
-        for (auto& request : *scopeRequests) {
-            request->Register(scopeCounters);
-        }
+        auto scopeRequests = MakeIntrusive<TRequestScopeCounters>(requestTypeNames[type]);
+        scopeRequests->Register(scopeCounters);
         cacheVal = scopeRequests;
+
         ScopeCounters.Put(key, cacheVal);
-        return (*scopeRequests)[type];
+        return scopeRequests;
     }
 };
 

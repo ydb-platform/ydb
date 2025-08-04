@@ -87,6 +87,14 @@ struct TTransferStrategy : public IStrategy {
             return true;
         }
 
+        if (target.HasDirectoryPath()) {
+            auto directoryPath = TPath::Resolve(target.GetDirectoryPath(), context.SS);
+            if (!directoryPath.IsResolved() || directoryPath.IsUnderDeleting() || directoryPath->IsUnderMoving() || directoryPath.IsDeleted()) {
+                result.SetError(NKikimrScheme::StatusNotAvailable, TStringBuilder() << "The transfer destination directory path '" << target.GetDirectoryPath() << "' not found");
+                return true;
+            }
+        }
+
         if (!AppData()->TransferWriterFactory) {
             result.SetError(NKikimrScheme::StatusNotAvailable, "The transfer is only available in the Enterprise version");
             return true;

@@ -32,7 +32,7 @@ Where:
 
 * `<index_name>` - unique index name for data access
 * `SYNC` - indicates synchronous data writes to the index. If not specified, synchronous.
-* `<index_columns>` - comma-separated list of table columns used for index searches (the last column is used as embedding, others as prefix columns)
+* `<index_columns>` - comma-separated list of table columns used for index searches (the last column is used as embedding, others as filtering columns)
 * `<cover_columns>` - list of additional table columns stored in the index to enable retrieval without accessing the main table
 * `<parameter_name>` and `<parameter_value>` - list of key-value parameters:
 

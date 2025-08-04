@@ -613,6 +613,36 @@ TAsyncDescribeExternalTableResult TTableClient::TImpl::DescribeExternalTable(con
     return promise.GetFuture();
 }
 
+TAsyncDescribeSystemViewResult TTableClient::TImpl::DescribeSystemView(const std::string& path,
+    const TDescribeSystemViewSettings& settings)
+{
+    auto request = MakeOperationRequest<Ydb::Table::DescribeSystemViewRequest>(settings);
+    request.set_path(path);
+
+    auto promise = NewPromise<TDescribeSystemViewResult>();
+
+    auto extractor = [promise, settings](google::protobuf::Any* any, TPlainStatus status) mutable {
+        Ydb::Table::DescribeSystemViewResult proto;
+        if (any) {
+            any->UnpackTo(&proto);
+        }
+        promise.SetValue(TDescribeSystemViewResult(TStatus(std::move(status)), std::move(proto)));
+    };
+
+    Connections_->RunDeferred<Ydb::Table::V1::TableService,
+                              Ydb::Table::DescribeSystemViewRequest,
+                              Ydb::Table::DescribeSystemViewResponse>(
+        std::move(request),
+        extractor,
+        &Ydb::Table::V1::TableService::Stub::AsyncDescribeSystemView,
+        DbDriverState_,
+        INITIAL_DEFERRED_CALL_DELAY,
+        TRpcRequestSettings::Make(settings)
+    );
+
+    return promise.GetFuture();
+}
+
 TAsyncPrepareQueryResult TTableClient::TImpl::PrepareDataQuery(const TSession& session, const std::string& query,
     const TPrepareDataQuerySettings& settings)
 {

@@ -23,22 +23,22 @@ void TGRpcYdbClickhouseInternalService::SetupIncomingRequests(NYdbGrpc::TLoggerP
 #ifdef ADD_REQUEST
 #error ADD_REQUEST macro already defined
 #endif
-#define ADD_REQUEST(NAME, IN, OUT, CB) \
+#define ADD_REQUEST(NAME, IN, OUT, CB, AUDIT_MODE) \
     MakeIntrusive<TGRpcRequest<Ydb::ClickhouseInternal::IN, Ydb::ClickhouseInternal::OUT, TGRpcYdbClickhouseInternalService>>(this, &Service_, CQ_, \
         [this](NYdbGrpc::IRequestContextBase *ctx) { \
             NGRpcService::ReportGrpcReqToMon(*ActorSystem_, ctx->GetPeer()); \
             ActorSystem_->Send(GRpcRequestProxyId_, \
                 new NGRpcService::TGrpcRequestOperationCall<Ydb::ClickhouseInternal::IN, Ydb::ClickhouseInternal::OUT> \
-                    (ctx, &CB, NGRpcService::TRequestAuxSettings{RLSWITCH(NGRpcService::TRateLimiterMode::Rps), nullptr})); \
+                    (ctx, &CB, NGRpcService::TRequestAuxSettings{RLSWITCH(NGRpcService::TRateLimiterMode::Rps), nullptr, AUDIT_MODE})); \
         }, &Ydb::ClickhouseInternal::V1::ClickhouseInternalService::AsyncService::Request ## NAME, \
         #NAME, logger, getCounterBlock("clickhouse_internal", #NAME), getLimiter("ClickhouseInternal", #NAME, DEFAULT_MAX_IN_FLIGHT))->Run();
 
-    ADD_REQUEST(Scan, ScanRequest, ScanResponse, DoReadColumnsRequest);
-    ADD_REQUEST(GetShardLocations, GetShardLocationsRequest, GetShardLocationsResponse, DoGetShardLocationsRequest);
-    ADD_REQUEST(DescribeTable, DescribeTableRequest, DescribeTableResponse, DoKikhouseDescribeTableRequest);
-    ADD_REQUEST(CreateSnapshot, CreateSnapshotRequest, CreateSnapshotResponse, DoKikhouseCreateSnapshotRequest);
-    ADD_REQUEST(RefreshSnapshot, RefreshSnapshotRequest, RefreshSnapshotResponse, DoKikhouseRefreshSnapshotRequest);
-    ADD_REQUEST(DiscardSnapshot, DiscardSnapshotRequest, DiscardSnapshotResponse, DoKikhouseDiscardSnapshotRequest);
+    ADD_REQUEST(Scan, ScanRequest, ScanResponse, DoReadColumnsRequest, TAuditMode::NonModifying());
+    ADD_REQUEST(GetShardLocations, GetShardLocationsRequest, GetShardLocationsResponse, DoGetShardLocationsRequest, TAuditMode::NonModifying());
+    ADD_REQUEST(DescribeTable, DescribeTableRequest, DescribeTableResponse, DoKikhouseDescribeTableRequest, TAuditMode::NonModifying());
+    ADD_REQUEST(CreateSnapshot, CreateSnapshotRequest, CreateSnapshotResponse, DoKikhouseCreateSnapshotRequest, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Ddl));
+    ADD_REQUEST(RefreshSnapshot, RefreshSnapshotRequest, RefreshSnapshotResponse, DoKikhouseRefreshSnapshotRequest, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Ddl));
+    ADD_REQUEST(DiscardSnapshot, DiscardSnapshotRequest, DiscardSnapshotResponse, DoKikhouseDiscardSnapshotRequest, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Ddl));
 #undef ADD_REQUEST
 }
 

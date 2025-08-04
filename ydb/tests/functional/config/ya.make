@@ -3,7 +3,6 @@ PY3TEST()
 TEST_SRCS(
     test_config_with_metadata.py
     test_generate_dynamic_config.py
-    test_distconf_generate_config.py
     test_distconf_reassign_state_storage.py
     test_distconf_self_heal.py
     test_distconf.py
@@ -36,6 +35,7 @@ PEERDIR(
     contrib/python/requests
     ydb/tests/library
     ydb/tests/library/clients
+    contrib/python/requests
 )
 
 FORK_SUBTESTS()

@@ -45,7 +45,9 @@ TSamplingThrottlingConfigurator::TSamplingThrottlingConfigurator(TIntrusivePtr<I
 
 TIntrusivePtr<TSamplingThrottlingControl> TSamplingThrottlingConfigurator::GetControl() {
     auto control = TIntrusivePtr(new TSamplingThrottlingControl(GenerateSetup()));
-    IssuedControls.push_back(control);
+    with_lock (ControlMutex) {
+        IssuedControls.push_back(control);
+    }
     return control;
 }
 
@@ -55,8 +57,10 @@ void TSamplingThrottlingConfigurator::UpdateSettings(TSettings<double, TWithTag<
     PropagateUnspecifiedRequest(enrichedSettings.ExternalThrottlingRules);
     CurrentSettings = std::move(enrichedSettings);
 
-    for (auto& control : IssuedControls) {
-        control->UpdateImpl(GenerateSetup());
+    with_lock (ControlMutex) {
+        for (auto& control : IssuedControls) {
+            control->UpdateImpl(GenerateSetup());
+        }
     }
 }
 

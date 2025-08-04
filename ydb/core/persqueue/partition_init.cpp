@@ -838,7 +838,7 @@ TInitEndWriteTimestampStep::TInitEndWriteTimestampStep(TInitializer* initializer
 
 void TInitEndWriteTimestampStep::Execute(const TActorContext &ctx) {
     if (Partition()->EndWriteTimestamp != TInstant::Zero() || (Partition()->HeadKeys.empty() && Partition()->DataKeysBody.empty())) {
-        LOG_ERROR_S(ctx, NKikimrServices::PERSQUEUE,
+        LOG_INFO_S(ctx, NKikimrServices::PERSQUEUE,
             "Initializing EndWriteTimestamp of the topic '" << Partition()->TopicName()
             << "' partition " << Partition()->Partition
             << " skiped because already initialized.");
@@ -857,7 +857,7 @@ void TInitEndWriteTimestampStep::Execute(const TActorContext &ctx) {
         Partition()->PendingWriteTimestamp = Partition()->EndWriteTimestamp;
     }
 
-     LOG_ERROR_S(ctx, NKikimrServices::PERSQUEUE,
+     LOG_INFO_S(ctx, NKikimrServices::PERSQUEUE,
         "Initializing EndWriteTimestamp of the topic '" << Partition()->TopicName()
         << "' partition " << Partition()->Partition
         << " from keys completed. Value " << Partition()->EndWriteTimestamp);

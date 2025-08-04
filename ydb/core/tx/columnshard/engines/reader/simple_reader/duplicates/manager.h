@@ -25,6 +25,10 @@ namespace NKikimr::NOlap::NReader::NSimple::NDuplicateFiltering {
 
 class TDuplicateManager: public NActors::TActor<TDuplicateManager> {
     friend class TMergeableInterval;
+
+private:
+    class TPortionsSlice;
+
 private:
     inline static const ui64 FILTER_CACHE_SIZE_CNT = 100;
 
@@ -57,6 +61,10 @@ private:
             });
         return portions;
     }
+
+    void BuildFilterForSlice(const TPortionsSlice& slice, const std::shared_ptr<TInternalFilterConstructor>& constructor,
+        const std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>& allocationGuard,
+        const THashMap<ui64, std::shared_ptr<NArrow::TGeneralContainer>>& dataByPortion);
 
 private:
     STATEFN(StateMain) {

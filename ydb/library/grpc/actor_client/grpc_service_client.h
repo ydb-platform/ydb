@@ -76,9 +76,11 @@ public:
         using TResponseType = decltype(typename TCallType::TResponseEventType().Response);
         const auto& requestId = ev->Get()->RequestId;
         if (!Connection) {
-            BLOG_GRPC_D(Prefix(requestId) << "Connect to "
-                        << ((Config.EnableSsl || !Config.SslCredentials.pem_root_certs.empty()) ? "grpcs://" : "grpc://")
-                        << Config.Locator);
+            TString schema;
+            if (!Config.UseXds) {
+                schema = ((Config.EnableSsl || !Config.SslCredentials.pem_root_certs.empty()) ? "grpcs://" : "grpc://");
+            }
+            BLOG_GRPC_D(Prefix(requestId) << "Connect to " << schema << Config.Locator);
             Connection = Client.CreateGRpcServiceConnection<TGrpcService>(Config);
         }
 

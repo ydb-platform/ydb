@@ -212,7 +212,6 @@ namespace NKikimr::NStorage {
 
         // initial config based on config file and stored committed configs
         std::shared_ptr<const NKikimrBlobStorage::TStorageConfig> InitialConfig;
-        std::vector<TString> DrivesToRead;
 
         // proposed storage configuration of the cluster
         std::optional<NKikimrBlobStorage::TStorageConfig> ProposedStorageConfig; // proposed one
@@ -359,11 +358,13 @@ namespace NKikimr::NStorage {
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // PDisk configuration retrieval and storing
 
-        void ReadConfig(ui64 cookie = 0);
+        void ReadConfig(std::vector<TString> paths, ui64 cookie = 0);
         void WriteConfig(std::vector<TString> drives, NKikimrBlobStorage::TPDiskMetadataRecord record);
         void PersistConfig(TPersistCallback callback);
         void Handle(TEvPrivate::TEvStorageConfigStored::TPtr ev);
         void Handle(TEvPrivate::TEvStorageConfigLoaded::TPtr ev);
+
+        std::vector<TString> GetDrivesToRead(bool initial) const;
 
         static TString CalculateFingerprint(const NKikimrBlobStorage::TStorageConfig& config);
         static void UpdateFingerprint(NKikimrBlobStorage::TStorageConfig *config);

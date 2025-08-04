@@ -21,6 +21,7 @@ namespace NInterconnect::NRdma {
     class TMemRegion: public NNonCopyable::TMoveOnly, public IContiguousChunk {
     public:
         TMemRegion(TChunkPtr chunk, uint32_t offset, uint32_t size) noexcept;
+        TMemRegion(TMemRegion&& other) noexcept = default;
         ~TMemRegion();
 
         void*    GetAddr() const;
@@ -29,15 +30,18 @@ namespace NInterconnect::NRdma {
         uint32_t GetLKey(size_t deviceIndex) const;
         uint32_t GetRKey(size_t deviceIndex) const;
 
+        void Resize(uint32_t newSize) noexcept;
+
     public: // IContiguousChunk
         TContiguousSpan GetData() const override;
         TMutableContiguousSpan GetDataMut() override;
         size_t GetOccupiedMemorySize() const override;
         EInnerType GetInnerType() const noexcept override;
     protected:
-        const TChunkPtr Chunk;
+        TChunkPtr Chunk;
         const uint32_t Offset;
-        const uint32_t Size;
+        uint32_t Size;
+        const uint32_t OrigSize;
     };
 
     class TMemRegionSlice {
@@ -79,6 +83,7 @@ namespace NInterconnect::NRdma {
         TMemRegionPtr Alloc(int size, ui32 flags) noexcept;
         std::optional<TRcBuf> AllocRcBuf(int size, ui32 flags) noexcept;
         virtual int GetMaxAllocSz() const noexcept = 0;
+        virtual TString GetName() const noexcept = 0;
 
     protected:
         virtual TMemRegion* AllocImpl(int size, ui32 flags) noexcept = 0;
@@ -88,4 +93,5 @@ namespace NInterconnect::NRdma {
 
     std::shared_ptr<IMemPool> CreateDummyMemPool() noexcept;
     std::shared_ptr<IMemPool> CreateIncrementalMemPool() noexcept;
+    std::shared_ptr<IMemPool> CreateSlotMemPool() noexcept;
 }

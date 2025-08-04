@@ -8,7 +8,9 @@
 #include <util/stream/output.h>
 #include <util/system/align.h>
 
+#include <bit>
 #include <vector>
+#include <list>
 
 #include <unistd.h>
 #include <sys/syscall.h>
@@ -39,7 +41,7 @@ namespace NInterconnect::NRdma {
     class TChunk: public NNonCopyable::TMoveOnly, public TAtomicRefCount<TChunk> {
     public:
 
-    TChunk(std::vector<ibv_mr*>&& mrs, std::weak_ptr<IMemPool> pool, void* auxData) noexcept
+    TChunk(std::vector<ibv_mr*>&& mrs, IMemPool* pool, void* auxData) noexcept
         : MRs(std::move(mrs))
         , MemPool(pool)
         , AuxData(auxData)
@@ -47,9 +49,7 @@ namespace NInterconnect::NRdma {
     }
 
     ~TChunk() {
-        if (auto memPool = MemPool.lock()) {
-            memPool->NotifyDealocated();
-        }
+        MemPool->NotifyDealocated();
         std::free(AuxData);
         if (Empty()) {
             return;
@@ -70,9 +70,7 @@ namespace NInterconnect::NRdma {
     }
 
     void Free(TMemRegion&& mr) noexcept {
-        if (auto memPool = MemPool.lock()) {
-            memPool->Free(std::move(mr), *this);
-        }
+        MemPool->Free(std::move(mr), *this);
     }
 
     bool Empty() const noexcept {
@@ -85,7 +83,7 @@ namespace NInterconnect::NRdma {
 
     private:
         std::vector<ibv_mr*> MRs;
-        std::weak_ptr<IMemPool> MemPool;
+        IMemPool* MemPool;
         void* AuxData;
     };
 
@@ -93,6 +91,7 @@ namespace NInterconnect::NRdma {
         : Chunk(std::move(chunk))
         , Offset(offset)
         , Size(size)
+        , OrigSize(size)
     {
         Y_ABORT_UNLESS(Chunk);
         Y_ABORT_UNLESS(!Chunk->Empty(), "Chunk is empty");
@@ -126,6 +125,11 @@ namespace NInterconnect::NRdma {
             return 0;
         }
         return mr->rkey;
+    }
+
+    void TMemRegion::Resize(uint32_t newSize) noexcept {
+        Y_ABORT_UNLESS(newSize <= OrigSize, "Cannot resize to larger size");
+        Size = newSize;
     }
 
     TContiguousSpan TMemRegion::GetData() const {
@@ -240,6 +244,7 @@ namespace NInterconnect::NRdma {
             , MaxChunk(maxChunk)
             , Alignment(NSystemInfo::GetPageSize())
         {
+            Y_ABORT_UNLESS((Alignment & Alignment - 1) == 0, "Alignment must be a power of two %zu", Alignment);
         }
     protected:
         template<typename TAuxData>
@@ -271,10 +276,10 @@ namespace NInterconnect::NRdma {
 
             AllocatedChunks++;
 
-            return MakeIntrusive<TChunk>(std::move(mrs), shared_from_this(), auxPtr);
+            return MakeIntrusive<TChunk>(std::move(mrs), this, auxPtr);
         }
 
-        void NotifyDealocated() noexcept {
+        void NotifyDealocated() noexcept override {
             const std::lock_guard<std::mutex> lock(Mutex);
             AllocatedChunks--;
         }
@@ -305,6 +310,10 @@ namespace NInterconnect::NRdma {
 
         int GetMaxAllocSz() const noexcept override {
             return 2048 << 20;
+        }
+
+        TString GetName() const noexcept override {
+            return "DummyMemPool";
         }
     };
 
@@ -446,6 +455,10 @@ namespace NInterconnect::NRdma {
             return ChunkSize - Alignment;
         }
 
+        TString GetName() const noexcept override {
+            return "IncrementalMemPool";
+        }
+
     private:
         static constexpr size_t ChunkSize = 32 << 20;
         static constexpr size_t MaxChunks = 1 << 5; //must be power of two
@@ -548,11 +561,223 @@ namespace NInterconnect::NRdma {
         std::mutex ReclaimMutex;
     };
 
+    constexpr ui32 GetPowerOfTwo(ui32 size) noexcept {
+        return std::bit_width(std::bit_ceil(size)) - 1;
+    }
+    static_assert((1 << GetPowerOfTwo(512)) == 512, "GetPowerOfTwo(512) must return 9");
+
+    constexpr ui32 GetNumChains(ui32 minAllocSz, ui32 maxAllocSz) noexcept {
+        return GetPowerOfTwo(maxAllocSz) - GetPowerOfTwo(minAllocSz) + 1;
+    }
+
+    class TSlotMemPool: public TMemPoolBase {
+        struct TChain {
+            TChain() = default;
+            void Init(ui32 slotSize) {
+                SlotSize = slotSize;
+                SlotsInBatch = GetSlotsInBatch(slotSize);
+            }
+            TMemRegion* TryGetSlot() noexcept {
+                if (Slots.empty()) {
+                    return nullptr;
+                }
+                // TMemRegion* slot = Slots.front();
+                TMemRegion* slot = Slots.front().release();
+                Slots.pop_front();
+                return slot;
+            }
+            void PutSlot(std::unique_ptr<TMemRegion>&& slot) noexcept {
+                Slots.push_back(std::move(slot));
+            }
+            void PutSlotsBatch(std::list<std::unique_ptr<TMemRegion>>&& slots) noexcept {
+                Slots.splice(Slots.end(), slots);
+            }
+            std::list<std::unique_ptr<TMemRegion>> GetSlotsBatch(ui32 batchSize) {
+                Y_ABORT_UNLESS(Slots.size() >= batchSize, "Not enough slots in chain");
+                std::list<std::unique_ptr<TMemRegion>> res;
+                auto it = Slots.begin();
+                std::advance(it, batchSize);
+                res.splice(res.end(), Slots, Slots.begin(), it);
+                return res;
+            }
+            std::list<std::unique_ptr<TMemRegion>> Slots;
+            ui32 SlotSize;
+            ui32 SlotsInBatch;
+        };
+
+        struct TLockFreeChain {
+            TLockFreeChain() = default;
+            void Init(ui32 slotSize) {
+                SlotSize = slotSize;
+                SlotsInBatch = GetSlotsInBatch(slotSize);
+            }
+            std::optional<std::list<std::unique_ptr<TMemRegion>>> GetSlotsBatch() {
+                std::list<std::unique_ptr<TMemRegion>> res;
+                if (FullBatchesSlots.Dequeue(&res)) {
+                    return res;
+                }
+                return std::nullopt;
+            }
+            void PutSlotsBatches(std::list<std::unique_ptr<TMemRegion>>&& slots) {
+                Y_DEBUG_ABORT_UNLESS(slots.size() == SlotsInBatch, "Invalid slots size: %zu, expected: %u", slots.size(), SlotsInBatch);
+                FullBatchesSlots.Enqueue(std::move(slots));
+            }
+            void PutSlotsBatches(std::list<std::list<std::unique_ptr<TMemRegion>>>&& slots) {
+                for (auto& batch : slots) {
+                    Y_DEBUG_ABORT_UNLESS(batch.size() == SlotsInBatch, "Invalid slots size: %zu, expected: %u", batch.size(), SlotsInBatch);
+                    FullBatchesSlots.Enqueue(std::move(batch));
+                }
+            }
+            void PutSlot(std::unique_ptr<TMemRegion>&& slot) noexcept {
+                std::lock_guard<std::mutex> lock(IncompleteBatchMutex);
+                IncompleteBatch.push_back(std::move(slot));
+                if (IncompleteBatch.size() >= SlotsInBatch) {
+                    FullBatchesSlots.Enqueue(std::move(IncompleteBatch));
+                    IncompleteBatch.clear();
+                }
+            }
+
+            TLockFreeStack<std::list<std::unique_ptr<TMemRegion>>> FullBatchesSlots;
+            ui32 SlotSize;
+            ui32 SlotsInBatch;
+
+            std::mutex IncompleteBatchMutex;
+            std::list<std::unique_ptr<TMemRegion>> IncompleteBatch;
+        };
+
+        static constexpr ui32 MinAllocSz = 512;
+        static constexpr ui32 MaxAllocSz = 8 * 1024 * 1024;
+        static_assert((MinAllocSz & (MinAllocSz - 1)) == 0, "MinAllocSz must be a power of 2");
+        static_assert((MaxAllocSz & (MaxAllocSz - 1)) == 0, "MaxAllocSz must be a power of 2");
+        static constexpr ui32 ChainsNum = GetNumChains(MinAllocSz, MaxAllocSz);
+        static constexpr ui32 BatchSizeBytes = 32 * 1024 * 1024; // 32 MB
+
+        static constexpr ui32 GetChainIndex(ui32 size) noexcept {
+            return GetPowerOfTwo(std::max(size, MinAllocSz)) - GetPowerOfTwo(MinAllocSz);
+        }
+        static ui32 GetSlotsInBatch(ui32 size) noexcept {
+            Y_ABORT_UNLESS(BatchSizeBytes % size == 0, "BatchSizeBytes must be divisible by size");
+            return BatchSizeBytes / size;
+        }
+
+        struct TSlotMemPoolCache {
+            TSlotMemPoolCache() {
+                for (ui32 i = GetPowerOfTwo(MinAllocSz); i <= GetPowerOfTwo(MaxAllocSz); ++i) {
+                    Chains[GetChainIndex(1 << i)].Init(1 << i);
+                }
+            }
+            ~TSlotMemPoolCache() {
+                Stopped = true;
+            }
+            TMemRegion* AllocImpl(int size, ui32 flags, TSlotMemPool& pool) noexcept {
+                if (flags & IMemPool::PAGE_ALIGNED && static_cast<size_t>(size) < pool.Alignment) {
+                    size = pool.Alignment;
+                }
+
+                if (Y_UNLIKELY(size > static_cast<int>(MaxAllocSz))) {
+                    return nullptr;
+                }
+                ui32 chainIndex = GetChainIndex(size);
+                Y_ABORT_UNLESS(chainIndex < ChainsNum, "Invalid chain index: %u", chainIndex);
+                // Try to get slot from local cache
+                auto& localChain = Chains[chainIndex];
+                TMemRegion* slot = localChain.TryGetSlot();
+                if (slot) {
+                    return slot;
+                }
+                // If no slot in local cache, try to get from global pool
+                auto batch = pool.Chains[chainIndex].GetSlotsBatch();
+                if (batch) {
+                    localChain.PutSlotsBatch(std::move(*batch));
+                    return localChain.TryGetSlot();
+                }
+                // If no slots in global pool, allocate new chunk
+                struct TDummy {};
+                auto chunk = pool.AllocNewChunk<TDummy>(BatchSizeBytes, true);
+                if (!chunk) {
+                    return nullptr;
+                }
+                for (size_t i = 0; i < localChain.SlotsInBatch; ++i) {
+                    auto region = std::make_unique<TMemRegion>(chunk, i * localChain.SlotSize, localChain.SlotSize);
+                    localChain.PutSlot(std::move(region));
+                }
+                return localChain.TryGetSlot();
+            }
+
+            void Free(TMemRegion&& mr, TSlotMemPool& pool) noexcept {
+                ui32 chainIndex = GetChainIndex(mr.GetSize());
+                if (Stopped) {
+                    // current thread is stopped, return mr to global pool
+                    pool.Chains[chainIndex].PutSlot(std::make_unique<TMemRegion>(std::move(mr)));
+                    return;
+                }
+
+                auto& chain = Chains[chainIndex];
+                Y_ABORT_UNLESS(chainIndex < ChainsNum, "Invalid chain index: %u", chainIndex);
+                chain.PutSlot(std::make_unique<TMemRegion>(std::move(mr)));
+
+                if (chain.Slots.size() >= 2 * chain.SlotsInBatch) { // TODO: replace constant 2
+                    // If we have too much slots in local cache, put them back to global pool
+                    auto batch = chain.GetSlotsBatch(chain.SlotsInBatch);
+                    pool.Chains[chainIndex].PutSlotsBatches(std::move(batch));
+                }
+            }
+
+            std::array<TChain, ChainsNum> Chains;
+            bool Stopped = false;
+        };
+        friend struct TSlotMemPoolCache;
+
+        
+    public:
+        TSlotMemPool()
+            : TMemPoolBase(32)
+        {
+            for (ui32 i = GetPowerOfTwo(MinAllocSz); i <= GetPowerOfTwo(MaxAllocSz); ++i) {
+                Chains[GetChainIndex(1 << i)].Init(1 << i);
+            }
+        }
+
+        int GetMaxAllocSz() const noexcept override {
+            return MaxAllocSz;
+        }
+
+        TString GetName() const noexcept override {
+            return "SlotMemPool";
+        }
+
+    protected:
+        TMemRegion* AllocImpl(int size, ui32 flags) noexcept override {
+            auto memReg = LocalCache.AllocImpl(size, flags, *this);
+            memReg->Resize(size);
+            return memReg;
+        }
+        void Free(TMemRegion&& mr, TChunk&) noexcept override {
+            LocalCache.Free(std::move(mr), *this);
+        }
+    
+    private:
+        std::array<TLockFreeChain, ChainsNum> Chains;
+
+    private:
+        static thread_local TSlotMemPoolCache LocalCache;
+    };
+
+    thread_local TSlotMemPool::TSlotMemPoolCache TSlotMemPool::LocalCache;
+
+
     std::shared_ptr<IMemPool> CreateDummyMemPool() noexcept {
-        return std::make_shared<TDummyMemPool>();
+        auto* pool = Singleton<TDummyMemPool>();
+        return std::shared_ptr<TDummyMemPool>(pool, [](TDummyMemPool*) {});
     }
 
     std::shared_ptr<IMemPool> CreateIncrementalMemPool() noexcept {
-        return std::make_shared<TIncrementalMemPool>();
+        auto* pool = Singleton<TIncrementalMemPool>();
+        return std::shared_ptr<TIncrementalMemPool>(pool, [](TIncrementalMemPool*) {});
+    }
+
+    std::shared_ptr<IMemPool> CreateSlotMemPool() noexcept {
+        auto* pool = HugeSingleton<TSlotMemPool>();
+        return std::shared_ptr<TSlotMemPool>(pool, [](TSlotMemPool*) {});
     }
 }

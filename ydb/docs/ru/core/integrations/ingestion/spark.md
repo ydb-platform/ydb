@@ -1,6 +1,7 @@
 # {{ spark-name }}
 
 {{ spark-name }} — это быстрая система кластерных вычислений с открытым исходным кодом для обработки больших данных, позволяющая работать с различными хранилищами данных и поддерживающая несколько языков программирования (Scala, Java, Python, R). {{ spark-name }} может работать с {{ ydb-full-name }} с помощью [{{ ydb-full-name }} Spark Connector](https://github.com/ydb-platform/ydb-spark-connector) — специального модуля, предоставляющего реализацию основных примитивов {{ spark-name }}. Поддерживается:
+
 * Распределение операций по партициям таблиц {{ ydb-full-name }};
 * Параллельная запись и чтение таблиц {{ ydb-full-name }};
 * Автоматическое создание таблиц при их отсутствии.
@@ -9,7 +10,7 @@
 
 Для использования {{ ydb-short-name }} в {{ spark-name }} необходимо добавить {{ ydb-short-name }} Spark Connector в [драйвер {{ spark-name }}](https://spark.apache.org/docs/latest/cluster-overview.html). Это можно сделать несколькими способами:
 
-* Загрузить коннектор напрямую из Maven Central с помощью опции `--packages`. Рекомендуется использовать последнюю опубликованную [версию](https://mvnrepository.com/artifact/tech.ydb.spark/ydb-spark-connector):
+* Загрузить коннектор напрямую из Maven Central с помощью опции `--packages`. Рекомендуется использовать последнюю опубликованную [версию](https://central.sonatype.com/artifact/tech.ydb.spark/ydb-spark-connector):
 
   ```shell
   # Запустить spark-shell
@@ -18,7 +19,7 @@
   ~ $ spark-sql --master <master-url> --packages tech.ydb.spark:ydb-spark-connector:2.0.1
   ```
 
-* Скачать последнюю версию shaded-сборки (вариант коннектора, включающий в себя все зависимости) из [GitHub](https://github.com/ydb-platform/ydb-spark-connector/releases) или [Маven Central](https://mvnrepository.com/artifact/tech.ydb.spark/ydb-spark-connector-shaded) и указать скачанный артефакт в опции `--jars`:
+* Скачать последнюю версию shaded-сборки (вариант коннектора, включающий в себя все зависимости) из [GitHub](https://github.com/ydb-platform/ydb-spark-connector/releases) или [Маven Central](https://central.sonatype.com/artifact/tech.ydb.spark/ydb-spark-connector-shaded) и указать скачанный артефакт в опции `--jars`:
 
   ```shell
   # Запустить spark-shell
@@ -29,20 +30,20 @@
 
 * Так же скачанную shaded-сборку можно скопировать в папку `jars` дистрибутива {{ spark-name }}. В таком случае никаких опций указывать не требуется.
 
-### Работа через DataFrame API {#dataframe-api}
+### Работа через DataSet API {#dataset-api}
 
-DataFrame API позволяет работать с {{ ydb-short-name }} в интерактивных `spark-shell` или `pyspark`, а так же при написании кода на `Java`, `Scala` или `Python` для `spark-submit`.
+DataSet API позволяет работать с {{ ydb-short-name }} в интерактивных `spark-shell` или `pyspark`, а так же при написании кода на `Java`, `Scala` или `Python` для `spark-submit`.
 
-Создать `DataFrame`, ссылающийся на таблицу {{ ydb-short-name }}:
+Создать `DataSet`, ссылающийся на таблицу {{ ydb-short-name }}:
 
 ```scala
-val ydb_df = spark.read.format("ydb").options(<options>).load(<table-path>)
+val ydb_ds = spark.read.format("ydb").options(<options>).load("<table-path>")
 ```
 
-Записать `DataFrame` в таблицу {{ ydb-short-name }}:
+Записать `DataSet` в таблицу {{ ydb-short-name }}:
 
 ```scala
-any_dataframe.write.format("ydb").options(<options>).mode("append").save(<table-path>)
+any_dataset.write.format("ydb").options(<options>).mode("append").save("<table-path>")
 ```
 
 {% note info %}
@@ -56,7 +57,7 @@ any_dataframe.write.format("ydb").options(<options>).mode("append").save(<table-
 ### Работа через Catalog API {#catalog-api}
 
 С помощью каталогов возможна работа с {{ ydb-short-name }} в интерактивном режиме `spark-sql` или при выполнении SQL-запросов через метод `spark.sql`.
-В этом случае для доступа к {{ ydb-short-name }} нужно создать каталог {{ spark-name }}, указав следующие опции (можно определить несколько каталогов с разными именами для разных баз данных {{ ydb-short-name }}):
+В этом случае для доступа к {{ ydb-short-name }} нужно добавить каталог, указав следующие [опции {{ spark-name }}](https://spark.apache.org/docs/latest/configuration.html#spark-properties) (можно определить несколько каталогов с разными именами для разных баз данных {{ ydb-short-name }}):
 
 ```properties
 # Обязательный параметр типа каталога
@@ -70,16 +71,16 @@ spark.sql.catalog.<catalog_name>.<param-name>=<param-value>
 После задания каталогов можно работать в таблицами {{ ydb-short-name }} через стандартные SQL запросы {{ spark-name }}. Обратите внимание, что в качестве разделителя в пути к таблице нужно использовать `.`:
 
 ```sql
-SELECT * FROM my_ydb.stackoverflow.posts LIMIT;
+SELECT * FROM <catalog_name>.<table-path> LIMIT 10;
 ```
 
 Более подробный пример приведен в разделе [Пример работы с {{ ydb-short-name }} в spark-sql](#example-spark-sql).
 
 ## Список параметров {{ ydb-short-name }} Spark Connector {#options}
 
-Поведение {{ ydb-short-name }} Spark Connector настраивается с помощью опций, которые как могут передаваться в виде одного набора с помощью метода `options`, так и указываться по одной с помощью метода `option`. При этом каждый `DataFrame` и даже каждая отдельная операция над `DataFrame` может иметь свой набор опций.
+Поведение {{ ydb-short-name }} Spark Connector настраивается с помощью опций, которые как могут передаваться в виде одного набора с помощью метода `options`, так и указываться по одной с помощью метода `option`. При этом каждый `DataSet` и даже каждая отдельная операция над `DataSet` может иметь свой набор опций.
 
-### Опции подключения {#auth-options}
+### Опции подключения {#connection-options}
 
 * `url` — обязательный параметр с адресом подключения к {{ ydb-short-name }}. Имеет вид `grpc[s]://<endpoint>:<port>/<database>[?<options>]`
    Примеры использования:
@@ -88,15 +89,15 @@ SELECT * FROM my_ydb.stackoverflow.posts LIMIT;
    - Экземпляр облачной базы данных с токеном:<br/>`grpcs://ydb.my-cloud.com:2135/my_folder/test_database?tokenFile=~/my_token`
    - Экземпляр облачной базы данных с файлом сервисного аккаунта:<br/>`grpcs://ydb.my-cloud.com:2135/my_folder/test_database?saKeyFile=~/sa_key.json`
 
-* `auth.use_env` — если указано `true`, то будет использоваться режим аутентификации на основе переменных среды окружения;
-* `auth.use_metadata` — если указано `true`, то будет использоваться режим аутентификации Metadata. Может быть указан прямо в `url` в виде опции `useMetadata`;
-* `auth.login` и `auth.password` — логин и пароль для статической аутентификации;
-* `auth.token` — аутентификация с использованием указанного токена;
-* `auth.token.file` — аутентификация с использованием токена из указанного файла. Может быть указан прямо в `url` в виде опции `tokenFile`;
-* `auth.ca.text` — указывает значение сертификата для установки TLS-соединения;
-* `auth.ca.file` — указывает путь к сертификату для установки TLS-соединения. Может быть указан прямо в `url` в виде опции `secureConnectionCertificate`;
-* `auth.sakey.text` — можно указать содержимое ключа для аутентификации по ключу сервисного аккаунта;
-* `auth.sakey.file` — можно указать путь к файлу ключа для аутентификации по ключу сервисного аккаунта. Может быть указан прямо в `url` в виде опции `saKeyFile`.
+* `auth.use_env` — если указано `true`, то будет использоваться режим аутентификации на основе [переменных среды окружения](../../reference/ydb-sdk/auth#env);
+* `auth.use_metadata` — если указано `true`, то будет использоваться режим аутентификации [Metadata](../../security/authentication.md#iam). Может быть указан прямо в `url` в виде опции `useMetadata`;
+* `auth.login` и `auth.password` — логин и пароль для [статической аутентификации](../../security/authentication.md#static-credentials);
+* `auth.token` — аутентификация с использованием указанного [Access Token](../../security/authentication.md#iam);
+* `auth.token.file` — аутентификация с использованием [Access Token](../../security/authentication.md#iam) из указанного файла. Может быть указан прямо в `url` в виде опции `tokenFile`;
+* `auth.ca.text` — указывает значение [сертификата](../../concepts/connect.md#tls-cert) для установки TLS-соединения;
+* `auth.ca.file` — указывает путь к [сертификату](../../concepts/connect.md#tls-cert) для установки TLS-соединения. Может быть указан прямо в `url` в виде опции `secureConnectionCertificate`;
+* `auth.sakey.text` — можно указать содержимое ключа для аутентификации [по ключу сервисного аккаунта](../../security/authentication.md#iam);
+* `auth.sakey.file` — можно указать путь к файлу ключа для аутентификации [по ключу сервисного аккаунта](../../security/authentication.md#iam). Может быть указан прямо в `url` в виде опции `saKeyFile`.
 
 ### Опции автоматического создания таблиц {#autocreate-options}
 

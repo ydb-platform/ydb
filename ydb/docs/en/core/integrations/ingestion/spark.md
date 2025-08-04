@@ -1,6 +1,7 @@
 # {{ spark-name }}
 
 {{ spark-name }} is a fast, open-source cluster computing system for big data processing that works with various data stores and supports multiple programming languages (Scala, Java, Python, R). {{ spark-name }} can work with {{ ydb-full-name }} using the [{{ ydb-full-name }} Spark Connector](https://github.com/ydb-platform/ydb-spark-connector), a special module that implements core  {{ spark-name }} primitives. It supports:
+
 * Distribution of operations across {{ ydb-full-name }} table partitions;
 * Scalable {{ ydb-full-name }} table readings and writing;
 * Automatic creation of tables if they do not exist.
@@ -9,7 +10,7 @@
 
 To work with {{ ydb-short-name }} in {{ spark-name }}, you need to add the {{ ydb-short-name }} Spark Connector to your {{ spark-name }} [driver](https://spark.apache.org/docs/latest/cluster-overview.html). This can be done in several ways:
 
-* Download the connector dependency directly from Maven Central using the `--packages` option. It's recommended to use the latest published [version](https://mvnrepository.com/artifact/tech.ydb.spark/ydb-spark-connector):
+* Download the connector dependency directly from Maven Central using the `--packages` option. It's recommended to use the latest published [version](https://central.sonatype.com/artifact/tech.ydb.spark/ydb-spark-connector):
 
   ```shell
   # Run spark-shell
@@ -18,7 +19,7 @@ To work with {{ ydb-short-name }} in {{ spark-name }}, you need to add the {{ yd
   ~ $ spark-sql --master <master-url> --packages tech.ydb.spark:ydb-spark-connector:2.0.1
   ```
 
-* Download the latest version of the shaded connector (a connector build that includes all dependencies) from [GitHub](https://github.com/ydb-platform/ydb-spark-connector/releases) or [Maven Central](https://mvnrepository.com/artifact/tech.ydb.spark/ydb-spark-connector-shaded) and specify the downloaded artifact in the `--jars` option:
+* Download the latest version of the shaded connector (a connector build that includes all dependencies) from [GitHub](https://github.com/ydb-platform/ydb-spark-connector/releases) or [Maven Central](https://central.sonatype.com/artifact/tech.ydb.spark/ydb-spark-connector-shaded) and specify the downloaded artifact in the `--jars` option:
 
   ```shell
   # Run spark-shell
@@ -29,20 +30,20 @@ To work with {{ ydb-short-name }} in {{ spark-name }}, you need to add the {{ yd
 
 * You can also copy the downloaded shaded artifact to the `jars` folder of your {{ spark-name }} distribution. In this case, no additional options need to be specified.
 
-### Use DataFrame API {#dataframe-api}
+### Use DataSet API {#dataset-api}
 
-The DataFrame API allows you to work with {{ ydb-short-name }} in an interactive `spark-shell` or `pyspark` session, as well as when writing code in `Java`, `Scala`, or `Python` for `spark-submit`.
+The DataSet API allows you to work with {{ ydb-short-name }} in an interactive `spark-shell` or `pyspark` session, as well as when writing code in `Java`, `Scala`, or `Python` for `spark-submit`.
 
-Create a `DataFrame` referencing a {{ ydb-short-name }} table:
+Create a `DataSet` referencing a {{ ydb-short-name }} table:
 
 ```scala
-val ydb_df = spark.read.format("ydb").options(<options>).load(<table-path>)
+val ydb_ds = spark.read.format("ydb").options(<options>).load("<table-path>")
 ```
 
-Write a `DataFrame` to a {{ ydb-short-name }} table:
+Write a `DataSet` to a {{ ydb-short-name }} table:
 
 ```scala
-any_dataframe.write.format("ydb").options(<options>).mode("append").save(<table-path>)
+any_dataset.write.format("ydb").options(<options>).mode("append").save("<table-path>")
 ```
 
 {% note info %}
@@ -55,15 +56,15 @@ A more detailed example is provided in the [Spark-shell example](#example-spark-
 
 ### Use Catalog API {#catalog-api}
 
-Catalogs allow you to work with {{ ydb-short-name }} in interactive `spark-sql` or execute SQL queries via the `spark.sql` method.
-In this case, to access {{ ydb-short-name }}, you need to create an {{ spark-name }} catalog by specifying the following properties (it's allowed to define multiple catalogs with different names for access to different {{ ydb-short-name }} databases):
+Catalogs allow you to work with {{ ydb-short-name }} in interactive `spark-sql` sessions or execute SQL queries via the `spark.sql` method.
+To access {{ ydb-short-name }}, you need to add a catalog by specifying the following [{{ spark-name }} properties](https://spark.apache.org/docs/latest/configuration.html#spark-properties). You can define multiple catalogs with different names to access to different {{ ydb-short-name }} databases:
 
 ```properties
 # Mandatory catalog's driver name
 spark.sql.catalog.<catalog_name>=tech.ydb.spark.connector.YdbCatalog
 # Mandatory option, the url of database
 spark.sql.catalog.<catalog_name>.url=<ydb-connnection-url>
-# Other options are not mandatory and may be specified by upon request
+# Other options are not mandatory and may be specified as necessary
 spark.sql.catalog.<catalog_name>.<param-name>=<param-value>
 ```
 
@@ -71,16 +72,16 @@ After that, you can work with  {{ ydb-short-name }} tables through standard {{ s
 Note that you should use a dot `.` as a separator in the table path.
 
 ```sql
-SELECT * FROM my_ydb.stackoverflow.posts LIMIT;
+SELECT * FROM <catalog_name>.<table-path> LIMIT 10;
 ```
 
-A more detailed example is provided in the [Spark-sql example](#example-spark-sql).
+A more detailed example is provided in the [Spark SQL example](#example-spark-sql).
 
-## {{ ydb-short-name }} Spark Connector options {#options}
+## {{ ydb-short-name }} Spark Connector Options {#options}
 
-The behavior of the {{ ydb-short-name }} Spark Connector is configured using options that can be passed as a `Map` using the `options` method, or specified one by one using the `option` method. Each `DataFrame` and even each individual operation on a `DataFrame` can have its own configuration of options.
+The behavior of the {{ ydb-short-name }} Spark Connector is configured using options that can be passed as a `Map` using the `options` method, or specified one by one using the `option` method. Each `DataSet` and even each individual operation on a `DataSet` can have its own configuration of options.
 
-### Authentication options {#auth-options}
+### Connection Options {#connection-options}
 
 * `url` — a required parameter with the {{ ydb-short-name }} connection string in the following format:
     `grpc[s]://<endpoint>:<port>/<database>[?<options>]`
@@ -90,17 +91,17 @@ The behavior of the {{ ydb-short-name }} Spark Connector is configured using opt
     - Cloud database instance with a token:<br/>`grpcs://ydb.my-cloud.com:2135/my_folder/test_database?tokenFile=~/my_token`
     - Cloud database instance with a service account key:<br/>`grpcs://ydb.my-cloud.com:2135/my_folder/test_database?saKeyFile=~/sa_key.json`
 
-* `auth.use_env` —  if set to `true`, authentication based on environment variables will be used.
-* `auth.use_metadata` —  if set to `true`, metadata based authentication mode will be used. You can specify it directly in `url` as the `useMetadata` option.
-* `auth.login` и `auth.password` — login and password for static authentication.
-* `auth.token` — authentication using the specified token.
-* `auth.token.file` — authentication using a token from the specified file. You can specify it directly in `url` as the `tokenFile` option.
-* `auth.ca.text` — specifies the certificate value for establishing a TLS connection.
-* `auth.ca.file` — specifies the path to the certificate for establishing a TLS connection. You can specify it directly in `url` as the `secureConnectionCertificate` option.
-* `auth.sakey.text` — uses to specify the key content for authentication using a service account key.
-* `auth.sakey.file` — uses to specify the path to the key file for authentication using a service account key. You can specify it directly in `url` as the `saKeyFile` option.
+* `auth.use_env` —  if set to `true`, authentication based on [environment variables](../../reference/ydb-sdk/auth#env) will be used.
+* `auth.use_metadata` —  if set to `true`, [metadata-based](../../security/authentication.md#iam) authentication mode will be used. You can specify it directly in `url` as the `useMetadata` option.
+* `auth.login` and `auth.password` — login and password for [static authentication](../../security/authentication.md#static-credentials).
+* `auth.token` — authentication using the specified [Access Token](../../security/authentication.md#iam).
+* `auth.token.file` — authentication using [Access Token](../../security/authentication.md#iam) from the specified file. You can specify it directly in `url` as the `tokenFile` option.
+* `auth.ca.text` — specifies the [certificate](../../concepts/connect.md#tls-cert) value for establishing a TLS connection.
+* `auth.ca.file` — specifies the path to the [certificate](../../concepts/connect.md#tls-cert) for establishing a TLS connection. You can specify it directly in `url` as the `secureConnectionCertificate` option.
+* `auth.sakey.text` — uses to specify the key content for authentication using [a service account key](../../security/authentication.md#iam).
+* `auth.sakey.file` — uses to specify the path to the key file for authentication using [a service account key](../../security/authentication.md#iam). You can specify it directly in `url` as the `saKeyFile` option.
 
-### Table autocreation options {#autocreate-options}
+### Table autocreation Options {#autocreate-options}
 
 * `table.autocreate` — аutomatically create a table if it doesn't exist. Enabled by default.
 * `table.type` — the type of automatically created table. Possible values:
@@ -109,9 +110,9 @@ The behavior of the {{ ydb-short-name }} Spark Connector is configured using opt
 * `table.primary_keys` — a comma-separated list of columns to use as the primary key. If this option is not provided, a new column with random content will be used for the key.
 * `table.auto_pk_name` — the name of the column for the randomly created key. Default value is `_spark_key`.
 
-## Spark-shell example {#example-spark-shell}
+## Spark Shell Example {#example-spark-shell}
 
-As an example, we'll show how to load a list of all StackOverflow posts from 2020 into {{ ydb-short-name }}. This data can be downloaded from the following  link: [https://datasets-documentation.s3.eu-west-3.amazonaws.com/stackoverflow/parquet/posts/2020.parquet](https://datasets-documentation.s3.eu-west-3.amazonaws.com/stackoverflow/parquet/posts/2020.parquet)
+As an example, we'll show how to load a list of all Stack Overflow posts from 2020 into {{ ydb-short-name }}. This data can be downloaded from the following link: [https://datasets-documentation.s3.eu-west-3.amazonaws.com/stackoverflow/parquet/posts/2020.parquet](https://datasets-documentation.s3.eu-west-3.amazonaws.com/stackoverflow/parquet/posts/2020.parquet)
 
 ```shell
 ~ $ spark-shell --master <master-url> --packages tech.ydb.spark:ydb-spark-connector:2.0.1
@@ -128,7 +129,7 @@ Type in expressions to have them evaluated.
 Type :help for more information.
 ```
 
-Let's display the schema of the parquet file and count the number of rows it contains:
+Let's display the schema of the Parquet file and count the number of rows it contains:
 
 ```shell
 scala> val so_posts2020 = spark.read.format("parquet").load("/home/username/2020.parquet")
@@ -172,7 +173,7 @@ my_ydb: scala.collection.immutable.Map[String,String] = Map(url -> grpcs://ydb.m
 scala> so_posts2020.withColumn("Year", lit(2020)).write.format("ydb").options(my_ydb).option("table.type", "column").option("table.primary_keys", "Id").mode("append").save("stackoverflow/posts");
 ```
 
-As a result, we can read the stored data from {{ ydb-short-name }} table and, for example, count the number of posts that have an accepted answer:
+As a result, you can read the stored data from the {{ ydb-short-name }} table and, for example, count the number of posts that have an accepted answer:
 
 ```shell
 scala> val ydb_posts2020 = spark.read.format("ydb").options(my_ydb).load("stackoverflow/posts")

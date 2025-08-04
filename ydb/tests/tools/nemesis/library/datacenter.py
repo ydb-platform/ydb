@@ -11,8 +11,7 @@ from ydb.tests.tools.nemesis.library import base
 logger = logging.getLogger("datacenter")
 
 # Временное логирование для диагностики
-print("=== DATACENTER.PY LOADED ===")
-logger.critical("=== DATACENTER.PY LOADED ===")
+logger.info("=== DATACENTER.PY LOADED ===")
 
 class AbstractDataCenterNemesis(Nemesis, base.AbstractMonitoredNemesis):
     def __init__(self, cluster, schedule=(300, 900), duration=60):
@@ -371,7 +370,7 @@ class DataCenterIptablesBlockPortsNemesis(AbstractDataCenterNemesis):
 
 def datacenter_nemesis_list(cluster):
     # Для функций модуля используем глобальный логгер
-    logger.critical("=== DATACENTER_NEMESIS_LIST CALLED ===")
+    logger.debug("=== DATACENTER_NEMESIS_LIST CALLED ===")
     logger.info("Creating datacenter nemesis list")
     logger.info("Cluster: %s", cluster)
     

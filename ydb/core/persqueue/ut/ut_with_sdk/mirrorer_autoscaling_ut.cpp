@@ -147,6 +147,7 @@ namespace NKikimr::NPersQueueTests {
     Y_UNIT_TEST_SUITE(TPersQueueMirrorerWith) {
         Y_UNIT_TEST(TestBasicRemote) {
             auto pqSettings = NKikimr::NPersQueueTests::PQSettings();
+            pqSettings.PQConfig.MutableCompactionConfig()->SetBlobsCount(0);
             NPersQueue::TTestServer server(pqSettings);
 
             const auto& settings = server.CleverServer->GetRuntime()->GetAppData().PQConfig.GetMirrorConfig().GetPQLibSettings();

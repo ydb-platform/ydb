@@ -77,11 +77,9 @@ using IDataBatchProjectionPtr = TIntrusivePtr<IDataBatchProjection>;
 IDataBatchProjectionPtr CreateDataBatchProjection(
     const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> inputColumns,
     const TConstArrayRef<ui32> inputWriteIndex,
+    const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> additionalInputColumns,
     const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> outputColumns,
     const TConstArrayRef<ui32> outputWriteIndex,
-    std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc);
-
-IDataBatchProjectionPtr CreateDataBatchProjection(
     std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc);
 
 std::vector<TConstArrayRef<TCell>> GetSortedUniqueRows(

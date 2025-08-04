@@ -1397,7 +1397,7 @@ private:
     enum class EState {
         BUFFERING,
         LOOKUP_MAIN_TABLE,
-        //LOOKUP_UNIQUE_INDEX,
+        LOOKUP_UNIQUE_INDEX,
         FINISHED,
     };
 
@@ -1408,11 +1408,13 @@ public:
             const TPathId pathId,
             const NKikimrDataEvents::TEvWrite::TOperation::EOperationType operationType,
             std::vector<TPathWriteInfo> writes,
-            std::vector<TPathLookupInfo> lookups)
+            std::vector<TPathLookupInfo> lookups,
+            std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc)
         : Cookie(cookie)
         , Priority(priority)
         , PathId(pathId)
-        , OperationType(operationType) {
+        , OperationType(operationType)
+        , Alloc(std::move(alloc)) {
 
         for (const auto& write : writes) {
             AFL_ENSURE(write.Projection || write.WriteActor->GetTableId().PathId == pathId);
@@ -1442,8 +1444,7 @@ public:
                     return ProcessBuffering();
                 case EState::LOOKUP_MAIN_TABLE:
                     return ProcessLookupMainTable();
-                //case EState::LOOKUP_UNIQUE_INDEX:
-                //    return ProcessLookupUniqueIndex();
+                case EState::LOOKUP_UNIQUE_INDEX:
                 case EState::FINISHED:
                     YQL_ENSURE(false);
             }
@@ -1486,6 +1487,7 @@ private:
         }
 
         if (auto lookupInfoIt = PathLookupInfo.find(PathId); lookupInfoIt != PathLookupInfo.end()) {
+            AFL_ENSURE(false);
             // Need to lookup main table
             std::swap(BufferedBatches, ProcessBatches);
 
@@ -1508,7 +1510,7 @@ private:
             // Need to lookup unique indexes
             AFL_ENSURE(false);
         } else {
-            // Write without lookups .
+            // Write without lookups.
             // We don't do uncessary copy here.
             Writes.reserve(BufferedBatches.size());
             for (auto& batch : BufferedBatches) {
@@ -1532,7 +1534,7 @@ private:
             return false;
         }
 
-        auto rowsBatcher = CreateRowsBatcher(ProcessCells.size() + lookupInfo.Lookup->LookupColumnsCount() /*, alloc */);
+        auto rowsBatcher = CreateRowsBatcher(ProcessCells.size() + lookupInfo.Lookup->LookupColumnsCount(Cookie), Alloc);
 
         const auto& keyColumnTypes = lookupInfo.Lookup->GetKeyColumnTypes();
         lookupInfo.Lookup->ExtractResult(Cookie, [&](TConstArrayRef<TCell> cells) {
@@ -1573,7 +1575,6 @@ private:
 
     void FlushWritesToActors() {
         for (auto& write : Writes) {
-            // TODO: Track memory usage
             Memory -= write->GetMemory();
             WriteBatchToActors(std::move(write));
         }
@@ -1584,7 +1585,9 @@ private:
         for (auto& [actorPathId, actorInfo] : PathWriteInfo) {
             // At first, write to indexes
             if (PathId != actorPathId) {
-                if (actorInfo.KeyProjection) {
+                if (OperationType != NKikimrDataEvents::TEvWrite::TOperation::OPERATION_DELETE
+                        && OperationType != NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INSERT) {
+                    AFL_ENSURE(actorInfo.KeyProjection);
                     actorInfo.KeyProjection->Fill(batch);
                     auto preparedKeyBatch = actorInfo.KeyProjection->Flush();
                     actorInfo.WriteActor->Write(
@@ -1593,6 +1596,7 @@ private:
                         std::move(preparedKeyBatch));
                     actorInfo.WriteActor->FlushBuffer(Cookie);
                 }
+                AFL_ENSURE(actorInfo.Projection);
                 actorInfo.Projection->Fill(batch);
                 auto preparedBatch = actorInfo.Projection->Flush();
                 actorInfo.WriteActor->Write(
@@ -1625,6 +1629,7 @@ private:
     const i64 Priority;
     const TPathId PathId;
     const NKikimrDataEvents::TEvWrite::TOperation::EOperationType OperationType;
+    std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc;
 
     EState State = EState::BUFFERING;
 
@@ -1996,6 +2001,7 @@ struct TWriteSettings {
     TVector<NKikimrKqp::TKqpColumnMetadataProto> KeyColumns;
     TVector<NKikimrKqp::TKqpColumnMetadataProto> Columns;
     std::vector<ui32> WriteIndex;
+    TVector<NKikimrKqp::TKqpColumnMetadataProto> LookupColumns;
     TTransactionSettings TransactionSettings;
     i64 Priority;
     bool EnableStreamWrite;
@@ -2265,8 +2271,20 @@ public:
                 auto projection = CreateDataBatchProjection(
                     settings.Columns,
                     settings.WriteIndex,
+                    settings.LookupColumns,
                     indexSettings.Columns,
                     indexSettings.WriteIndex,
+                    Alloc);
+
+                std::vector<ui32> keyWriteIndex(indexSettings.KeyColumns.size());
+                std::iota(std::begin(keyWriteIndex), std::end(keyWriteIndex), 0);
+
+                auto keyProjection = CreateDataBatchProjection(
+                    settings.Columns,
+                    settings.WriteIndex,
+                    settings.LookupColumns,
+                    indexSettings.KeyColumns,
+                    keyWriteIndex,
                     Alloc);
 
                 writeInfo.Actors.at(indexSettings.TableId.PathId).WriteActor->Open(
@@ -2277,10 +2295,21 @@ public:
                     settings.Priority);
 
                 writes.emplace_back(TKqpWriteTask::TPathWriteInfo{
-                    .Projection = projection,
-                    .KeyProjection = nullptr,
+                    .Projection = std::move(projection),
+                    .KeyProjection = std::move(keyProjection),
                     .WriteActor = writeInfo.Actors.at(indexSettings.TableId.PathId).WriteActor,
                 });
+            }
+
+            IDataBatchProjectionPtr projection = nullptr;
+            if (!settings.LookupColumns.empty()) {
+                projection = CreateDataBatchProjection(
+                    settings.Columns,
+                    settings.WriteIndex,
+                    settings.LookupColumns,
+                    settings.Columns,
+                    settings.WriteIndex,
+                    Alloc);
             }
 
             writeInfo.Actors.at(settings.TableId.PathId).WriteActor->Open(
@@ -2290,7 +2319,7 @@ public:
                 std::move(settings.WriteIndex),
                 settings.Priority);
             writes.emplace_back(TKqpWriteTask::TPathWriteInfo{
-                .Projection = nullptr,
+                .Projection = std::move(projection),
                 .KeyProjection = nullptr,
                 .WriteActor = writeInfo.Actors.at(settings.TableId.PathId).WriteActor,
             });
@@ -2303,7 +2332,8 @@ public:
                     settings.TableId.PathId,
                     settings.OperationType,
                     std::move(writes),
-                    {}
+                    {},
+                    Alloc
                 });
         } else {
             token = *ev->Get()->Token;
@@ -3558,7 +3588,17 @@ private:
         THashMap<TPathId, TActorInfo> Actors;
     };
 
+    struct TLookupInfo {
+        struct TActorInfo {
+            IKqpBufferTableLookup* LookupActor = nullptr;
+            TActorId Id;
+        };
+
+        THashMap<TPathId, TActorInfo> Actors;
+    };
+
     THashMap<TPathId, TWriteInfo> WriteInfos;
+    THashMap<TPathId, TLookupInfo> LookupInfos;
     THashMap<ui64, TKqpWriteTask> WriteTasks;
     TKqpTableWriteActor::TWriteToken CurrentWriteToken = 0;
 
@@ -3700,6 +3740,9 @@ private:
             std::vector<ui32> writeIndex(
                 Settings.GetWriteIndexes().begin(),
                 Settings.GetWriteIndexes().end());
+            TVector<NKikimrKqp::TKqpColumnMetadataProto> lookupColumnsMetadata(
+                Settings.GetLookupColumns().begin(),
+                Settings.GetLookupColumns().end());
 
             ev->Settings = TWriteSettings{
                 .TableId = TableId,
@@ -3708,6 +3751,7 @@ private:
                 .KeyColumns = std::move(keyColumnsMetadata),
                 .Columns = std::move(columnsMetadata),
                 .WriteIndex = std::move(writeIndex),
+                .LookupColumns = std::move(lookupColumnsMetadata),
                 .TransactionSettings = TTransactionSettings{
                     .TxId = TxId,
                     .LockTxId = Settings.GetLockTxId(),

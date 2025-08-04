@@ -161,11 +161,13 @@ public:
 
     void ProvideBlock(TPageId pageId, TSharedPageRef sharedBody, TInfo *info);
     THashMap<TLogoBlobID, TIntrusivePtr<TInfo>> DetachPrivatePageCache();
-    THashMap<TLogoBlobID, THashSet<TPageId>> GetPrepareSharedTouched();
+
+    void TouchSharedCache(const TPinned &pinned);
+    THashMap<TLogoBlobID, THashSet<TPageId>> GetSharedCacheTouches();
 
 private:
     THashMap<TLogoBlobID, TIntrusivePtr<TInfo>> PageCollections;
-    THashMap<TLogoBlobID, THashSet<TPageId>> ToTouchShared;
+    THashMap<TLogoBlobID, THashSet<TPageId>> SharedCacheTouches;
 
     TStats Stats;
 

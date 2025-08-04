@@ -57,7 +57,7 @@ void TPrivatePageCache::RegisterPageCollection(TIntrusivePtr<TInfo> info) {
 
         TryUnload(page);
         // notify shared cache that we have a page handle
-        ToTouchShared[page->Info->Id].insert(page->Id);
+        SharedCacheTouches[page->Info->Id].insert(page->Id);
         Y_DEBUG_ABORT_UNLESS(!page->IsUnnecessary());
     }
 }
@@ -77,7 +77,7 @@ void TPrivatePageCache::ForgetPageCollection(TIntrusivePtr<TInfo> info) {
 
     info->PageMap.clear();
     PageCollections.erase(info->Id);
-    ToTouchShared.erase(info->Id);
+    SharedCacheTouches.erase(info->Id);
     --Stats.TotalCollections;
 }
 
@@ -113,7 +113,6 @@ void TPrivatePageCache::TryLoad(TPage *page) {
 
 void TPrivatePageCache::TPrivatePageCache::TryUnload(TPage *page) {
     if (page->LoadState == TPage::LoadStateLoaded) {
-        ToTouchShared[page->Info->Id].insert(page->Id); // TODO: what about retries?
         page->LoadState = TPage::LoadStateNo;
         if (Y_LIKELY(page->PinnedBody)) {
             Stats.TotalPinnedBody -= page->Size;
@@ -252,12 +251,12 @@ void TPrivatePageCache::ResetTouchesAndToLoad(bool verifyEmpty) {
     }
     Stats.CurrentCacheHits = 0;
     Stats.CurrentCacheHitSize = 0;
+    Stats.CurrentCacheMisses = 0;
 
     while (ToLoad) {
         TPage *page = ToLoad.PopBack();
         TryEraseIfUnnecessary(page);
     }
-    Stats.CurrentCacheMisses = 0;
 }
 
 void TPrivatePageCache::DropSharedBody(TInfo *info, TPageId pageId) {
@@ -306,8 +305,20 @@ THashMap<TLogoBlobID, TIntrusivePtr<TPrivatePageCache::TInfo>> TPrivatePageCache
     return ret;
 }
 
-THashMap<TLogoBlobID, THashSet<TPageId>> TPrivatePageCache::GetPrepareSharedTouched() {
-    return std::move(ToTouchShared);
+void TPrivatePageCache::TouchSharedCache(const TPinned &pinned) {
+    for (const auto& [pageCollectionId, pages] : pinned) {
+        if (auto *info = Info(pageCollectionId)) {
+            auto& touches = SharedCacheTouches[pageCollectionId];
+            for (auto& page : pages) {
+                touches.insert(page.first);
+            }
+        }
+    }
+}
+
+
+THashMap<TLogoBlobID, THashSet<TPageId>> TPrivatePageCache::GetSharedCacheTouches() {
+    return std::move(SharedCacheTouches);
 }
 
 }}

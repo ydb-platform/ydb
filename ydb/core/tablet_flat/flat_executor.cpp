@@ -771,7 +771,7 @@ void TExecutor::DropSingleCache(const TLogoBlobID &label)
 }
 
 void TExecutor::TranslateCacheTouchesToSharedCache() {
-    auto touches = PrivatePageCache->GetPrepareSharedTouched();
+    auto touches = PrivatePageCache->GetSharedCacheTouches();
     if (touches.empty())
         return;
     Send(MakeSharedPageCacheId(), new NSharedCache::TEvTouch(std::move(touches)));
@@ -2085,6 +2085,7 @@ void TExecutor::UnpinTransactionPages(TSeat &seat) {
     Y_ENSURE(TransactionPagesMemory >= seat.MemoryTouched);
     TransactionPagesMemory -= seat.MemoryTouched;
 
+    PrivatePageCache->TouchSharedCache(seat.Pinned);
     seat.Pinned.clear();
     seat.MemoryTouched = 0;
 

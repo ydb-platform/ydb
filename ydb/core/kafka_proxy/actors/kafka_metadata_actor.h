@@ -12,7 +12,7 @@
 
 namespace NKafka {
 
-    struct TopicNameToIndex {
+    struct TTopicNameToIndex {
         TString TopicName;
         ui32 TopicIndex;
     };
@@ -97,7 +97,7 @@ private:
     bool FallbackToIcDiscovery = false;
     TMap<ui64, TSimpleSharedPtr<TEvLocationResponse>> PendingTopicResponses;
     TSet<TString> TopicСreationAttempts;
-    TMap<TActorId, TopicNameToIndex> CreateTopicRequests;
+    TMap<TActorId, TTopicNameToIndex> CreateTopicRequests;
 
     void Handle(const TEvKafka::TEvResponse::TPtr& ev, const TActorContext& ctx);
     void SendCreateTopicsRequest(const TString& topicName, ui32 index, const TActorContext& ctx);

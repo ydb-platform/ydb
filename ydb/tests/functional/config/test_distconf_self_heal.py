@@ -137,7 +137,7 @@ class TestKiKiMRDistConfSelfHeal(KiKiMRDistConfSelfHealTest):
         self.do_bad_config(configName)
 
         logger.info("Start SelfHeal")
-        logger.info(self.do_request({"SelfHealStateStorage": {"WaitForConfigStep": 1}}))
+        logger.info(self.do_request({"SelfHealStateStorage": {"WaitForConfigStep": 1, "ForceHeal": True}}))
         time.sleep(10)
 
         rg = get_ring_group(self.do_request_config(), configName)
@@ -158,7 +158,26 @@ class TestKiKiMRDistConfSelfHealNotNeed(KiKiMRDistConfSelfHealTest):
         assert_eq(rg["NToSelect"], 9)
         assert_eq(len(rg["Ring"]), 9)
         logger.info("Start SelfHeal")
-        self.check_failed({"SelfHealStateStorage": {"WaitForConfigStep": 1}}, "Current configuration is recommended. Nothing to self-heal.")
+        self.check_failed({"SelfHealStateStorage": {"WaitForConfigStep": 1, "ForceHeal": True}}, "Current configuration is recommended. Nothing to self-heal.")
+        time.sleep(10)
+
+        rg2 = get_ring_group(self.do_request_config(), configName)
+        assert_eq(rg, rg2)
+
+
+class TestKiKiMRDistConfSelfHealNotAvailable(KiKiMRDistConfSelfHealTest):
+    erasure = Erasure.MIRROR_3_DC
+    nodes_count = 9
+
+    def check_failed(self, req, message):
+        resp = self.do_request(req)
+        assert_that(resp.get("ErrorReason", "").startswith(message), {"Response": resp, "Expected": message})
+
+    def do_test(self, configName):
+        rg = get_ring_group(self.do_request_config(), configName)
+        assert_eq(rg["NToSelect"], 9)
+        assert_eq(len(rg["Ring"]), 9)
+        self.check_failed({"SelfHealStateStorage": {"WaitForConfigStep": 1}}, "Recommended configuration has faulty nodes and can not be applyed")
         time.sleep(10)
 
         rg2 = get_ring_group(self.do_request_config(), configName)
@@ -174,14 +193,14 @@ class TestKiKiMRDistConfSelfHealParallelCall(KiKiMRDistConfSelfHealTest):
         self.do_bad_config(configName)
 
         logger.info("Start SelfHeal")
-        logger.info(self.do_request({"SelfHealStateStorage": {"WaitForConfigStep": 3}}))
+        logger.info(self.do_request({"SelfHealStateStorage": {"WaitForConfigStep": 3, "ForceHeal": True}}))
         time.sleep(1)
         rg = self.do_request_config()[f"{configName}Config"]["RingGroups"]
         assert_eq(len(rg), 2)
         assert_eq(rg[0]["WriteOnly"], False)
         assert_eq(rg[1]["WriteOnly"], True)
 
-        logger.info(self.do_request({"SelfHealStateStorage": {"WaitForConfigStep": 2}}))
+        logger.info(self.do_request({"SelfHealStateStorage": {"WaitForConfigStep": 2, "ForceHeal": True}}))
         time.sleep(1)
         assert_eq(len(self.do_request_config()[f"{configName}Config"]["RingGroups"]), 2)
         time.sleep(10)
@@ -200,14 +219,14 @@ class TestKiKiMRDistConfSelfHealParallelCall2(KiKiMRDistConfSelfHealTest):
         self.do_bad_config(configName)
 
         logger.info("Start SelfHeal")
-        logger.info(self.do_request({"SelfHealStateStorage": {"WaitForConfigStep": 3}}))
+        logger.info(self.do_request({"SelfHealStateStorage": {"WaitForConfigStep": 3, "ForceHeal": True}}))
         time.sleep(4)
         rg = self.do_request_config()[f"{configName}Config"]["RingGroups"]
         assert_eq(len(rg), 2)
         assert_eq(rg[0]["WriteOnly"], False)
         assert_eq(rg[1]["WriteOnly"], False)
 
-        logger.info(self.do_request({"SelfHealStateStorage": {"WaitForConfigStep": 2}}))
+        logger.info(self.do_request({"SelfHealStateStorage": {"WaitForConfigStep": 2, "ForceHeal": True}}))
         time.sleep(1)
         assert_eq(len(self.do_request_config()[f"{configName}Config"]["RingGroups"]), 3)
         time.sleep(10)

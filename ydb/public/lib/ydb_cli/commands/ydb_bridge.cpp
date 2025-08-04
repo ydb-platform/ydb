@@ -15,27 +15,27 @@
 namespace NYdb::NConsoleClient {
 
 namespace {
-    Ydb::Bridge::PileState::State ParsePileState(TString stateStr) {
+    NYdb::NBridge::EPileState ParsePileState(TString stateStr) {
         TString stateStrUpper = stateStr;
         stateStrUpper.to_upper();
 
         if (stateStrUpper == "DISCONNECTED") {
-            return Ydb::Bridge::PileState::DISCONNECTED;
+            return NYdb::NBridge::EPileState::DISCONNECTED;
         }
         if (stateStrUpper == "NOT_SYNCHRONIZED") {
-            return Ydb::Bridge::PileState::NOT_SYNCHRONIZED;
+            return NYdb::NBridge::EPileState::NOT_SYNCHRONIZED;
         }
         if (stateStrUpper == "SYNCHRONIZED") {
-            return Ydb::Bridge::PileState::SYNCHRONIZED;
+            return NYdb::NBridge::EPileState::SYNCHRONIZED;
         }
         if (stateStrUpper == "PROMOTE") {
-            return Ydb::Bridge::PileState::PROMOTE;
+            return NYdb::NBridge::EPileState::PROMOTE;
         }
         if (stateStrUpper == "PRIMARY") {
-            return Ydb::Bridge::PileState::PRIMARY;
+            return NYdb::NBridge::EPileState::PRIMARY;
         }
         if (stateStrUpper == "SUSPENDED") {
-            return Ydb::Bridge::PileState::SUSPENDED;
+            return NYdb::NBridge::EPileState::SUSPENDED;
         }
         ythrow yexception() << "Invalid pile state: \"" << stateStr
             << "\". Please use one of: DISCONNECTED, NOT_SYNCHRONIZED, SYNCHRONIZED, PROMOTE, PRIMARY, SUSPENDED.";
@@ -101,7 +101,7 @@ void TCommandBridgeUpdate::Parse(TConfig& config) {
             }
             NYdb::NBridge::TPileStateUpdate update;
             update.PileName = pileNameStr;
-            update.State = static_cast<NYdb::NBridge::EPileState>(ParsePileState(TString(stateStr)));
+            update.State = ParsePileState(TString(stateStr));
             Updates.push_back(update);
         }
     }
@@ -123,7 +123,7 @@ void TCommandBridgeUpdate::Parse(TConfig& config) {
             }
             NYdb::NBridge::TPileStateUpdate update;
             update.PileName = item["pile_name"].GetString();
-            update.State = static_cast<NYdb::NBridge::EPileState>(ParsePileState(item["state"].GetString()));
+            update.State = ParsePileState(item["state"].GetString());
             Updates.push_back(update);
         }
     }

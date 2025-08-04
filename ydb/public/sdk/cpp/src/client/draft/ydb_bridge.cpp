@@ -4,6 +4,7 @@
 #include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/make_request/make.h>
 
 #include <ydb/public/api/grpc/draft/ydb_bridge_v1.grpc.pb.h>
+#include <ydb/public/api/protos/draft/ydb_bridge.pb.h>
 
 namespace NYdb::inline Dev::NBridge {
 

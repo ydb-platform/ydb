@@ -9,37 +9,43 @@
 
 namespace NKikimr::NArrow::NAccessor {
 
-void TAccessorsCollection::Upsert(
-    const ui32 columnId, const std::shared_ptr<IChunkedArray>& data, const bool withFilter, const bool isAggregation) {
+void TAccessorsCollection::Upsert(const ui32 columnId, const std::shared_ptr<IChunkedArray>& data, const bool withFilter) {
     Remove(columnId, true);
-    AddVerified(columnId, data, withFilter, isAggregation);
+    AddVerified(columnId, data, withFilter);
 }
 
-void TAccessorsCollection::AddVerified(const ui32 columnId, const arrow::Datum& data, const bool withFilter, const bool forceChangeCount) {
-    AddVerified(columnId, TAccessorCollectedContainer(data), withFilter, forceChangeCount);
+void TAccessorsCollection::AddCalculated(const ui32 columnId, const arrow::Datum& data) {
+    if (data.is_scalar()) {
+        AddConstantVerified(columnId, data.scalar());
+        RecordsCountActual = 1;
+    } else {
+        AddVerified(columnId, TAccessorCollectedContainer(data), false);
+    }
 }
 
-void TAccessorsCollection::AddVerified(
-    const ui32 columnId, const std::shared_ptr<IChunkedArray>& data, const bool withFilter, const bool forceChangeCount) {
-    AddVerified(columnId, TAccessorCollectedContainer(data), withFilter, forceChangeCount);
+void TAccessorsCollection::AddInput(const ui32 columnId, const arrow::Datum& data, const bool withFilter) {
+    if (data.is_scalar()) {
+        AFL_VERIFY(!withFilter);
+        AddConstantVerified(columnId, data.scalar());
+        RecordsCountActual = 1;
+    } else {
+        AddVerified(columnId, TAccessorCollectedContainer(data), withFilter);
+    }
 }
 
-void TAccessorsCollection::AddVerified(
-    const ui32 columnId, const TAccessorCollectedContainer& data, const bool withFilter, const bool forceChangeCount) {
+void TAccessorsCollection::AddVerified(const ui32 columnId, const std::shared_ptr<IChunkedArray>& data, const bool withFilter) {
+    AddVerified(columnId, TAccessorCollectedContainer(data), withFilter);
+}
+
+void TAccessorsCollection::AddVerified(const ui32 columnId, const TAccessorCollectedContainer& data, const bool withFilter) {
     AFL_VERIFY(columnId);
-    if (forceChangeCount) {
-        AFL_VERIFY(UseFilter);
-        RecordsCountActual = data->GetRecordsCount();
-        AFL_VERIFY(Accessors.emplace(columnId, data).second);
-    } else if (UseFilter && withFilter && !Filter->IsTotalAllowFilter()) {
+    if (UseFilter && withFilter && !Filter->IsTotalAllowFilter()) {
         auto filtered = Filter->Apply(data.GetData());
         RecordsCountActual = filtered->GetRecordsCount();
         AFL_VERIFY(Accessors.emplace(columnId, filtered).second)("id", columnId);
     } else {
         if (Filter->IsTotalAllowFilter()) {
-            if (!data.GetItWasScalar()) {
-                RecordsCountActual = data->GetRecordsCount();
-            }
+            RecordsCountActual = data->GetRecordsCount();
         } else {
             RecordsCountActual = Filter->GetFilteredCount();
         }
@@ -122,8 +128,6 @@ TAccessorsCollection::TChunkedArguments TAccessorsCollection::GetArguments(const
         auto it = Accessors.find(i);
         if (it == Accessors.end()) {
             result.AddScalar(GetConstantScalarVerified(i));
-        } else if (it->second.GetItWasScalar()) {
-            result.AddScalar(it->second->GetScalar(0));
         } else {
             result.AddArray(it->second.GetData());
         }
@@ -138,18 +142,18 @@ std::shared_ptr<IChunkedArray> TAccessorsCollection::GetConstantVerified(const u
     return std::make_shared<TTrivialArray>(NArrow::TStatusValidator::GetValid(arrow::MakeArrayFromScalar(*it->second, recordsCount)));
 }
 
-std::shared_ptr<arrow::Scalar> TAccessorsCollection::GetConstantScalarVerified(const ui32 columnId) const {
+const std::shared_ptr<arrow::Scalar>& TAccessorsCollection::GetConstantScalarVerified(const ui32 columnId) const {
     auto it = Constants.find(columnId);
     AFL_VERIFY(it != Constants.end())("id", columnId);
     return it->second;
 }
 
-std::shared_ptr<arrow::Scalar> TAccessorsCollection::GetConstantScalarOptional(const ui32 columnId) const {
+const std::shared_ptr<arrow::Scalar>& TAccessorsCollection::GetConstantScalarOptional(const ui32 columnId) const {
     auto it = Constants.find(columnId);
     if (it != Constants.end()) {
         return it->second;
     } else {
-        return nullptr;
+        return Default<std::shared_ptr<arrow::Scalar>>();
     }
 }
 
@@ -183,7 +187,7 @@ std::shared_ptr<arrow::Table> TAccessorsCollection::ToTable(
     return ToGeneralContainer(resolver, columnIds, strictResolver)->BuildTableVerified();
 }
 
-std::shared_ptr<NKikimr::NArrow::TGeneralContainer> TAccessorsCollection::ToGeneralContainer(
+std::shared_ptr<NArrow::TGeneralContainer> TAccessorsCollection::ToGeneralContainer(
     const NSSA::IColumnResolver* resolver, const std::optional<std::set<ui32>>& columnIds, const bool strictResolver) const {
     const auto predColumnName = [&](const ui32 colId) {
         TString colName;
@@ -206,9 +210,14 @@ std::shared_ptr<NKikimr::NArrow::TGeneralContainer> TAccessorsCollection::ToGene
             if (columnIds && !columnIds->contains(i)) {
                 continue;
             }
-            auto accessor = GetAccessorVerified(i);
-            fields.emplace_back(std::make_shared<arrow::Field>(predColumnName(i), accessor->GetDataType()));
-            arrays.emplace_back(accessor);
+            if (auto accessor = GetAccessorOptional(i)) {
+                fields.emplace_back(std::make_shared<arrow::Field>(predColumnName(i), accessor->GetDataType()));
+                arrays.emplace_back(accessor);
+            } else {
+                const auto& scalar = GetConstantScalarVerified(i);
+                fields.emplace_back(std::make_shared<arrow::Field>(predColumnName(i), scalar->type));
+                arrays.emplace_back(std::make_shared<NAccessor::TTrivialArray>(scalar));
+            }
         }
     } else {
         for (auto&& i : Accessors) {
@@ -281,8 +290,7 @@ void TAccessorsCollection::AddBatch(
     }
 }
 
-TAccessorCollectedContainer::TAccessorCollectedContainer(const arrow::Datum& data)
-    : ItWasScalar(data.is_scalar()) {
+TAccessorCollectedContainer::TAccessorCollectedContainer(const arrow::Datum& data) {
     if (data.is_array()) {
         Data = std::make_shared<TTrivialArray>(data.make_array());
     } else if (data.is_arraylike()) {
@@ -291,10 +299,8 @@ TAccessorCollectedContainer::TAccessorCollectedContainer(const arrow::Datum& dat
         } else {
             Data = std::make_shared<TTrivialChunkedArray>(data.chunked_array());
         }
-    } else if (data.is_scalar()) {
-        Data = std::make_shared<TTrivialArray>(data.scalar());
     } else {
-        AFL_VERIFY(false);
+        AFL_VERIFY(false)("kind", data.ToString());
     }
 }
 

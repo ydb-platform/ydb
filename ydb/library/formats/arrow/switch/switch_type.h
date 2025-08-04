@@ -131,6 +131,17 @@ public:
         return "";
     }
 
+    ValueType GetValue(const TScalar& scalar) const {
+        if constexpr (IsCType) {
+            return scalar.value;
+        }
+        if constexpr (IsStringView) {
+            return (arrow::util::string_view)*scalar.value;
+        }
+        Y_FAIL();
+        return ValueType{};
+    }
+
     ValueType GetValue(const TArray& arr, const ui32 index) const {
         if constexpr (IsCType) {
             return arr.Value(index);

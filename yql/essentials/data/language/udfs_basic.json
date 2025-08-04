@@ -536,6 +536,9 @@
       "name": "Sqrt"
     },
     {
+      "name": "SwapBytes"
+    },
+    {
       "name": "Tan"
     },
     {

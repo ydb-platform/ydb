@@ -719,17 +719,18 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
 #define WEAK_UNIT_ASSERT_EQUAL_C(A, B, C) do { if (!((A) == (B))) LOG_E("Assert " #A " == " #B " failed " << C); } while(0)
 #define WEAK_UNIT_ASSERT(A) do { if (!(A)) LOG_E("Assert " #A " failed "); } while(0)
 #endif
-    void BasicTests(ui32 packets, ui32 watermarkPeriod, bool waitIntermediateAcks, NDqProto::EDqStatsMode statsMode = NDqProto::DQ_STATS_MODE_PROFILE) {
+    void BasicMultichannelTests(ui32 packets, ui32 watermarkPeriod, bool waitIntermediateAcks, ui32 numChannels, auto& rng, NDqProto::EDqStatsMode statsMode = NDqProto::DQ_STATS_MODE_PROFILE) {
         LogPrefix = TStringBuilder() << "Square Test for:"
            << " packets=" << packets
            << " watermarkPeriod=" << watermarkPeriod
            << " waitIntermediateAcks=" << waitIntermediateAcks
+           << " channels=" << numChannels
            << " ";
         NDqProto::TDqTask task;
         GenerateSquareProgram(task, [](auto& ctx) {
             return ctx.template MakeType<TDataExprType>(EDataSlot::Int32);
         });
-        auto dqOutputChannel = AddDummyInputChannel(task, InputChannelId);
+        auto dqOutputChannels = AddDummyInputChannels(task, InputChannelId, numChannels);
         auto dqInputChannel = AddDummyOutputChannel(task, OutputChannelId, (IsWide ? static_cast<TType*>(WideRowType) : RowType));
 
         auto asyncCA = CreateTestAsyncCA(task, statsMode);
@@ -738,8 +739,14 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
 
         ui32 val = 0;
         TMaybe<TInstant> expectedWatermark;
-        ui32 seqNo = 0;
-        SendData([&](auto packet, bool) {
+        TVector<ui32> seqNo(numChannels);
+        TVector<ui64> activeChannels(numChannels);
+        std::iota(activeChannels.begin(), activeChannels.end(), 0);
+        SendData([&](auto packet, bool isFinal) {
+            auto channelIdxIdx = rng() % activeChannels.size();
+            std::swap(activeChannels[channelIdxIdx], activeChannels.back());
+            auto channelIdx = activeChannels.back();
+            auto dqOutputChannel = dqOutputChannels[channelIdx];
             PushRow(CreateRow(++val, packet), dqOutputChannel);
             PushRow(CreateRow(++val, packet), dqOutputChannel);
             PushRow(CreateRow(++val, packet), dqOutputChannel);
@@ -750,9 +757,22 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
                 dqOutputChannel->Push(std::move(watermark));
                 expectedWatermark = std::max(expectedWatermark, TMaybe<TInstant>(TInstant::Seconds(packet)));
             }
-            return std::pair { dqOutputChannel, &seqNo };
+            if (isFinal || activeChannels.size() > 1 && rng() % std::max(packets/numChannels, ui32{1}) == 0) {
+                // when we have more than one active channels left, we may randomly finish it midway
+                dqOutputChannel->Finish();
+                activeChannels.pop_back();
+            }
+            return std::pair { dqOutputChannel, &seqNo[channelIdx] };
         },
         asyncCA, packets, waitIntermediateAcks);
+        // Finish all unfinished channels (when we have more than one channel left, only one is forcibly finished on final packet)
+        for (ui32 channelIdx = 0; channelIdx < numChannels; ++channelIdx) {
+            auto dqOutputChannel = dqOutputChannels[channelIdx];
+            if (dqOutputChannel->IsFinished()) {
+                continue;
+            }
+            SendFinish(asyncCA, dqOutputChannel, &seqNo[channelIdx]);
+        }
 
         TMap<ui32, ui32> receivedData;
         TMaybe<TInstant> watermark;
@@ -794,7 +814,7 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
                     });
             throw;
         }
-        UNIT_ASSERT_EQUAL(receivedData.size(), val);
+        UNIT_ASSERT_EQUAL_C(receivedData.size(), val, "expected size " << val << " != " << receivedData.size());
         for (; val > 0; --val) {
             UNIT_ASSERT_EQUAL_C(receivedData[val * val], 1, "expected count for " << (val * val));
         }
@@ -844,6 +864,8 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
 
         auto asyncCA = CreateTestAsyncCA(task);
         ActorSystem.EnableScheduleForActor(asyncCA, true);
+        ActorSystem.GrabEdgeEvent<TEvDqCompute::TEvState>(EdgeActor);
+
         ui32 val = 0;
         TMaybe<TInstant> expectedWatermark;
         TVector<ui32> seqNo(numChannels);
@@ -998,12 +1020,16 @@ Y_UNIT_TEST_SUITE(TAsyncComputeActorTest) {
 
     Y_UNIT_TEST_F(Basic, TAsyncCATestFixture) {
         TVector<ui32> sizes{ 1, 2, 3, 4, 5, 51, 128, 251 };
-        std::mt19937 rng(GetRandomSeed());
+        auto seed = GetRandomSeed();
+        std::mt19937 rng(seed);
         for (ui32 t = 0; t < 16; ++t) sizes.push_back(1 + rng() % 734);
         for (bool waitIntermediateAcks : { false, true }) {
             for (ui32 watermarkPeriod : { 0, 1, 3 }) {
                 for (ui32 packets : sizes) {
-                    BasicTests(packets, watermarkPeriod, waitIntermediateAcks);
+                    for (ui32 numChannels : { 1, 3, 7, 16 }) {
+                        std::mt19937 trng(seed);
+                        BasicMultichannelTests(packets, watermarkPeriod, waitIntermediateAcks, numChannels, trng);
+                    }
                 }
             }
         }
@@ -1016,7 +1042,8 @@ Y_UNIT_TEST_SUITE(TAsyncComputeActorTest) {
                 NDqProto::DQ_STATS_MODE_FULL,
                 NDqProto::DQ_STATS_MODE_PROFILE,
                 }) {
-            BasicTests(5, 1, true, statsMode);
+            std::mt19937 rng;
+            BasicMultichannelTests(5, 1, true, 1, rng, statsMode);
         }
     }
 

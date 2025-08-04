@@ -105,17 +105,17 @@ void TKqpProtoBuilder::BuildYdbResultSet(
         transportVersion = static_cast<NDqProto::EDataTransportVersion>(data.front().Proto.GetTransportVersion());
         valuePackerVersion = NDq::FromProto(data.front().Proto.GetValuePackerVersion());
     }
-    
+
     NDq::TDqDataSerializer dataSerializer(*TypeEnv, *HolderFactory, transportVersion, valuePackerVersion);
 
-    ui32 rowsCount = 0;
+    ui32 arrowRowsCount = 0;
     if (resultSetFormatSettings.IsArrowFormat()) {
         for (const auto& part : data) {
             if (!part.ChunkCount()) {
                 continue;
             }
 
-            rowsCount += part.RowCount();
+            arrowRowsCount += part.RowCount();
         }
     }
 
@@ -137,7 +137,7 @@ void TKqpProtoBuilder::BuildYdbResultSet(
     } else if (resultSetFormatSettings.IsArrowFormat()) {
         NArrow::TArrowBatchBuilder batchBuilder(arrow::Compression::UNCOMPRESSED, arrowNotNullColumns);
 
-        batchBuilder.Reserve(rowsCount);
+        batchBuilder.Reserve(arrowRowsCount);
         YQL_ENSURE(batchBuilder.Start(arrowSchema).ok());
 
         TRowBuilder rowBuilder(arrowSchema.size());
@@ -161,7 +161,7 @@ void TKqpProtoBuilder::BuildYdbResultSet(
             });
         }
 
-        std::shared_ptr<arrow::RecordBatch> batch = batchBuilder.FlushBatch(false);
+        std::shared_ptr<arrow::RecordBatch> batch = batchBuilder.FlushBatch(false, /* flushEmpty */ true);
 
         auto writeOptions = arrow::ipc::IpcWriteOptions::Defaults();
         writeOptions.use_threads = false;
@@ -174,7 +174,7 @@ void TKqpProtoBuilder::BuildYdbResultSet(
         resultSet.set_data(std::move(serializedBatch));
 
         TString serializedSchema;
-        if (fillSchema && batch) {
+        if (fillSchema) {
             serializedSchema = NArrow::SerializeSchema(*batch->schema());
         }
 

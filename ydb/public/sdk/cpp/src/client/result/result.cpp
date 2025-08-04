@@ -81,6 +81,10 @@ bool TResultSet::Truncated() const {
     return Impl_->ProtoResultSet_.truncated();
 }
 
+TResultSet::EFormat TResultSet::Format() const {
+    return static_cast<EFormat>(Impl_->ProtoResultSet_.format());
+}
+
 const std::vector<TColumn>& TResultSet::GetColumnsMeta() const {
     return Impl_->ColumnsMeta_;
 }
@@ -200,6 +204,23 @@ private:
 
     size_t RowIndex_ = 0;
 };
+
+IOutputStream& operator<<(IOutputStream& out, const TResultSet::EFormat& format) {
+    out << "TResultSet::EFormat::";
+    switch (format) {
+        case TResultSet::EFormat::Unspecified:
+            out << "Unspecified";
+            break;
+        case TResultSet::EFormat::Value:
+            out << "Value";
+            break;
+        case TResultSet::EFormat::Arrow:
+            out << "Arrow";
+            break;
+    }
+
+    return out;
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 

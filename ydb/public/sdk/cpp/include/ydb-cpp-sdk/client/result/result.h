@@ -39,6 +39,13 @@ class TResultSet {
     friend class TResultSetParser;
     friend class NYdb::TProtoAccessor;
 public:
+    enum class EFormat {
+        Unspecified = 0,
+        Value = 1,
+        Arrow = 2,
+    };
+
+public:
     TResultSet(const Ydb::ResultSet& proto);
     TResultSet(Ydb::ResultSet&& proto);
 
@@ -54,6 +61,9 @@ public:
     //! Returns meta information (name, type) for columns
     const std::vector<TColumn>& GetColumnsMeta() const;
 
+    //! Returns format of the result set
+    EFormat Format() const;
+
     //! Set Arrow record batch with serialized schema and data
     void SetArrowResult(const TResultArrow& resultArrow);
 
@@ -67,6 +77,8 @@ private:
     class TImpl;
     std::shared_ptr<TImpl> Impl_;
 };
+
+IOutputStream& operator<<(IOutputStream& out, const TResultSet::EFormat& format);
 
 //! Note: TResultSetParser - mutable object, iteration thougth it changes internal state
 class TResultSetParser : public TMoveOnly {

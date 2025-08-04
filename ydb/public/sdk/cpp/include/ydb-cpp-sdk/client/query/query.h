@@ -44,12 +44,6 @@ enum class ESchemaInclusionMode {
     FirstOnly = 2,
 };
 
-enum class EResultSetFormat {
-    Unspecified = 0,
-    Value = 1,
-    Arrow = 2,
-};
-
 std::optional<EStatsMode> ParseStatsMode(std::string_view statsMode);
 std::string_view StatsModeToString(const EStatsMode statsMode);
 
@@ -119,7 +113,7 @@ struct TExecuteQuerySettings : public TRequestSettings<TExecuteQuerySettings> {
     FLUENT_SETTING(std::string, ResourcePool);
     FLUENT_SETTING_OPTIONAL(std::chrono::milliseconds, StatsCollectPeriod);
     FLUENT_SETTING_DEFAULT(ESchemaInclusionMode, SchemaInclusionMode, ESchemaInclusionMode::Unspecified);
-    FLUENT_SETTING_DEFAULT(EResultSetFormat, Format, EResultSetFormat::Value);
+    FLUENT_SETTING_DEFAULT(TResultSet::EFormat, Format, TResultSet::EFormat::Unspecified);
     FLUENT_SETTING_OPTIONAL(TArrowFormatSettings, ArrowFormatSettings);
 };
 

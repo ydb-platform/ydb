@@ -166,7 +166,7 @@ void TKqpExecuterTxResult::FillYdb(Ydb::ResultSet* ydbResult, const TResultSetFo
             return true;
         });
 
-        std::shared_ptr<arrow::RecordBatch> batch = batchBuilder.FlushBatch(false);
+        std::shared_ptr<arrow::RecordBatch> batch = batchBuilder.FlushBatch(false, /* flushEmpty */ true);
 
         auto writeOptions = arrow::ipc::IpcWriteOptions::Defaults();
         writeOptions.use_threads = false;
@@ -179,7 +179,7 @@ void TKqpExecuterTxResult::FillYdb(Ydb::ResultSet* ydbResult, const TResultSetFo
         ydbResult->set_data(std::move(serializedBatch));
 
         TString serializedSchema;
-        if (fillSchema && batch) {
+        if (fillSchema) {
             serializedSchema = NArrow::SerializeSchema(*batch->schema());
         }
 

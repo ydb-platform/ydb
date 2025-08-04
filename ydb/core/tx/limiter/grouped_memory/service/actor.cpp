@@ -76,8 +76,8 @@ void TMemoryLimiterActor::Handle(NEvents::TEvExternal::TEvStartProcess::TPtr& ev
         if (!stage) {
             continue;
         }
-//        stage->AttachOwner(DefaultStages[index]);
-//        stage->AttachCounters(Counters[index]->BuildStageCounters(stage->GetName()));
+        stage->AttachOwner(DefaultStages[index]);
+        stage->AttachCounters(Counters[index]->BuildStageCounters(stage->GetName()));
     }
     Managers[index]->RegisterProcess(event.GetExternalProcessId(), event.GetStages());
 }

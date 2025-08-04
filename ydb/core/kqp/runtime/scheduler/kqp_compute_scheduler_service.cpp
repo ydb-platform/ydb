@@ -243,7 +243,7 @@ TQueryPtr TComputeScheduler::AddOrUpdateQuery(const TString& databaseId, const T
 
     TQueryPtr query;
 
-    if (query = pool->GetQuery(queryId)) {
+    if (query = std::static_pointer_cast<TQuery>(pool->GetQuery(queryId))) {
         query->Update(attrs);
     } else {
         query = std::make_shared<TQuery>(queryId, &DelayParams, attrs);
@@ -273,13 +273,22 @@ void TComputeScheduler::UpdateFairShare() {
     }
 
     snapshot->UpdateBottomUp(Root->TotalLimit);
-    snapshot->UpdateTopDown();
+    auto* mostUnsatisfiedPool = snapshot->UpdateTopDown();
+    Y_ENSURE(mostUnsatisfiedPool->IsPool() && mostUnsatisfiedPool->IsLeaf());
 
     {
         TWriteGuard lock(Mutex);
         if (auto oldSnapshot = Root->SetSnapshot(snapshot)) {
             snapshot->AccountFairShare(oldSnapshot);
         }
+    }
+
+    if (mostUnsatisfiedPool->Satisfaction && mostUnsatisfiedPool->Satisfaction < 1.0) {
+        auto leftTasks = (mostUnsatisfiedPool->FairShare - mostUnsatisfiedPool->Usage) / 1'000'000;
+        mostUnsatisfiedPool->ForEachChild<NHdrf::NSnapshot::TQuery>([&](NHdrf::NSnapshot::TQuery* query, size_t) -> bool {
+            leftTasks -= query->Origin->ResumeTasks(leftTasks);
+            return !leftTasks; // 'true' means stop iterating children
+        });
     }
 
     Counters.UpdateFairShare->Add((TMonotonic::Now() - startTime).MicroSeconds());

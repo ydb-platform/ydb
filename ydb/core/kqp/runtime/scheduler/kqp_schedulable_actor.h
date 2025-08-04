@@ -4,44 +4,36 @@
 
 #include <library/cpp/time_provider/monotonic.h>
 
-#include <util/datetime/base.h>
 #include <util/system/hp_timer.h>
+
+namespace NActors {
+    struct TActorId;
+}
 
 namespace NKikimr::NKqp::NScheduler {
 
-// The proxy-object between any schedulable actor and the scheduler itself
-struct TSchedulableTask {
-    explicit TSchedulableTask(const NHdrf::NDynamic::TQueryPtr& query);
-    ~TSchedulableTask();
-
-    bool TryIncreaseUsage();
-    void IncreaseUsage();
-    void DecreaseUsage(const TDuration& burstUsage);
-
-    // Account extra usage which doesn't affect scheduling
-    void IncreaseExtraUsage();
-    void DecreaseExtraUsage(const TDuration& burstUsage);
-
-    void IncreaseBurstThrottle(const TDuration& burstThrottle);
-    void IncreaseThrottle();
-    void DecreaseThrottle();
-
-    NHdrf::NDynamic::TQueryPtr Query;
-};
-
-class TSchedulableActorHelper {
+class TSchedulableActorBase {
 public:
     struct TOptions {
-        TSchedulableTaskPtr SchedulableTask;
+        NHdrf::NDynamic::TQueryPtr Query;
         bool IsSchedulable;
     };
 
 protected:
-    explicit TSchedulableActorHelper(TOptions&& options);
+    explicit TSchedulableActorBase(const TOptions& options);
 
-    static TMonotonic Now();
-    bool IsAccountable() const;
-    bool IsSchedulable() const;
+    static inline TMonotonic Now() {
+        return TMonotonic::Now();
+    }
+
+    void RegisterForResume(const NActors::TActorId& actorId);
+
+    inline bool IsAccountable() const {
+        return !!SchedulableTask;
+    }
+    inline bool IsThrottled() const {
+        return Throttled;
+    }
 
     bool StartExecution(TMonotonic now);
     void StopExecution();
@@ -52,7 +44,8 @@ private:
     void Resume();
 
     TSchedulableTaskPtr SchedulableTask;
-    const bool Schedulable;
+    const bool IsSchedulable;
+
     THPTimer Timer;
     bool Executed = false;
     bool Throttled = false;
@@ -62,6 +55,6 @@ private:
     ui64 ExecuteAttempts = 0;
 };
 
-using TSchedulableActorOptions = TSchedulableActorHelper::TOptions;
+using TSchedulableActorOptions = TSchedulableActorBase::TOptions;
 
 } // namespace NKikimr::NKqp::NScheduler

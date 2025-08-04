@@ -4,11 +4,6 @@
 
 #include <ydb/core/kqp/counters/kqp_counters.h>
 
-#include <util/datetime/base.h>
-
-#include <atomic>
-#include <vector>
-
 namespace NKikimr::NKqp::NScheduler::NHdrf::NDynamic {
 
     template <class TSnapshotPtr>
@@ -32,7 +27,7 @@ namespace NKikimr::NKqp::NScheduler::NHdrf::NDynamic {
             std::atomic<ui8> SnapshotIdx = 0;
     };
 
-    struct TTreeElementBase : public TStaticAttributes {
+    struct TTreeElement : public virtual NHdrf::TTreeElementBase<ETreeType::DYNAMIC> {
         std::atomic<ui64> Usage = 0;
         std::atomic<ui64> UsageExtra = 0;
         std::atomic<ui64> Demand = 0;
@@ -42,35 +37,25 @@ namespace NKikimr::NKqp::NScheduler::NHdrf::NDynamic {
         std::atomic<ui64> BurstUsageExtra = 0;
         std::atomic<ui64> BurstThrottle = 0;
 
-        TTreeElementBase* Parent = nullptr;
-        std::vector<TTreeElementPtr> Children;
+        explicit TTreeElement(const TId& id, const TStaticAttributes& attrs = {}) : TTreeElementBase(id, attrs) {}
 
-        virtual ~TTreeElementBase() = default;
-        virtual NSnapshot::TTreeElementBase* TakeSnapshot() const = 0;
-        virtual const TId& GetId() const = 0;
+        TPool* GetParent() const;
 
-        void AddChild(const TTreeElementPtr& element);
-        void RemoveChild(const TTreeElementPtr& element);
-
-        bool IsRoot() const {
-            return !Parent;
-        }
-
-        bool IsLeaf() const {
-            return Children.empty();
-        }
+        virtual NSnapshot::TTreeElement* TakeSnapshot() const = 0;
     };
 
-    class TQuery : public TTreeElementBase, public TSnapshotSwitch<NSnapshot::TQueryPtr> {
+    class TQuery : public TTreeElement, public NHdrf::TQuery<ETreeType::DYNAMIC>, public TSnapshotSwitch<NSnapshot::TQueryPtr> {
     public:
+        // TODO: pass delay params directly to actors from table_service_config
         TQuery(const TQueryId& id, const TDelayParams* delayParams, const TStaticAttributes& attrs = {});
-
-        const TId& GetId() const override {
-            return Id;
-        }
 
         NSnapshot::TQuery* TakeSnapshot() const override;
 
+        TSchedulableTaskList::iterator AddTask(const TSchedulableTaskPtr& task);
+        void RemoveTask(const TSchedulableTaskList::iterator& it);
+        ui32 ResumeTasks(ui32 count);
+
+    public:
         std::atomic<ui64> CurrentTasksTime = 0; // sum of average execution time for all active tasks
         std::atomic<ui64> WaitingTasksTime = 0; // sum of average execution time for all throttled tasks
 
@@ -78,58 +63,33 @@ namespace NKikimr::NKqp::NScheduler::NHdrf::NDynamic {
         const TDelayParams* const DelayParams; // owned by scheduler
 
     private:
-        const TId Id;
+        TRWMutex TasksMutex;
+        TSchedulableTaskList SchedulableTasks; // protected by TasksMutex
     };
 
-    class TPool : public TTreeElementBase {
+    class TPool : public TTreeElement, public NHdrf::TPool<ETreeType::DYNAMIC> {
     public:
         TPool(const TPoolId& id, const TIntrusivePtr<TKqpCounters>& counters, const TStaticAttributes& attrs = {});
 
-        const TId& GetId() const override {
-            return Id;
-        }
-
-        void AddQuery(const TQueryPtr& query);
-        void RemoveQuery(const TQueryId& queryId);
-        TQueryPtr GetQuery(const TQueryId& queryId) const;
-
         NSnapshot::TPool* TakeSnapshot() const override;
 
-    private:
-        const TId Id;
-        THashMap<TQueryId, TQueryPtr> Queries;
-        TPoolCounters Counters;
+        // TODO: override AddQuery() to initialize query->Delay = Counters.Delay
     };
 
-    class TDatabase : public TTreeElementBase {
+    class TDatabase : public TPool {
     public:
         explicit TDatabase(const TDatabaseId& id, const TStaticAttributes& attrs = {});
 
-        const TId& GetId() const override {
-            return Id;
-        }
-
-        void AddPool(const TPoolPtr& pool);
-        TPoolPtr GetPool(const TPoolId& id) const;
-
         NSnapshot::TDatabase* TakeSnapshot() const override;
-
-    private:
-        const TId Id;
-        THashMap<TPoolId, TPoolPtr> Pools;
     };
 
-    class TRoot : public TTreeElementBase, public TSnapshotSwitch<NSnapshot::TRootPtr> {
+    class TRoot : public TPool, public TSnapshotSwitch<NSnapshot::TRootPtr> {
     public:
         explicit TRoot(TIntrusivePtr<TKqpCounters> counters);
 
-        const TId& GetId() const override {
-            static const TId id("(ROOT)");
-            return id;
-        }
-
         void AddDatabase(const TDatabasePtr& database);
-        TDatabasePtr GetDatabase(const TDatabaseId& id) const;
+        void RemoveDatabase(const TDatabaseId& databaseId);
+        TDatabasePtr GetDatabase(const TDatabaseId& databaseId) const;
 
         NSnapshot::TRoot* TakeSnapshot() const override;
 
@@ -137,8 +97,6 @@ namespace NKikimr::NKqp::NScheduler::NHdrf::NDynamic {
         ui64 TotalLimit = Infinity();
 
     private:
-        THashMap<TDatabaseId, TDatabasePtr> Databases;
-
         struct {
             NMonitoring::TDynamicCounters::TCounterPtr TotalLimit;
         } Counters;

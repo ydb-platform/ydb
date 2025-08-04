@@ -1,118 +1,37 @@
 #include "kqp_schedulable_actor.h"
 
-#include "tree/dynamic.h"
+#include "kqp_schedulable_task.h"
+
+#include <ydb/core/kqp/runtime/scheduler/tree/dynamic.h>
+
+#include <util/generic/scope.h>
 
 namespace NKikimr::NKqp::NScheduler {
 
-static constexpr TDuration AverageExecutionTime = TDuration::MicroSeconds(100);
+static constexpr TDuration AverageExecutionTime = TDuration::MicroSeconds(100); // TODO: make configurable from outside
 
 using namespace NHdrf::NDynamic;
 
-// class TSchedulableTask
-
-TSchedulableTask::TSchedulableTask(const TQueryPtr& query)
-    : Query(query)
-{
-    Y_ENSURE(query);
-    ++Query->Demand;
-}
-
-TSchedulableTask::~TSchedulableTask() {
-    --Query->Demand;
-}
-
-// TODO: referring to the pool's fair-share and usage - query's fair-share is ignored.
-bool TSchedulableTask::TryIncreaseUsage() {
-    const auto snapshot = Query->GetSnapshot();
-    auto pool = Query->Parent;
-    ui64 newUsage = pool->Usage.load();
-    bool increased = false;
-
-    while (!increased && newUsage < snapshot->Parent->FairShare) {
-        increased = pool->Usage.compare_exchange_weak(newUsage, newUsage + 1);
-    }
-
-    if (!increased) {
-        return false;
-    }
-
-    ++Query->Usage;
-    for (TTreeElementBase* parent = pool->Parent; parent; parent = parent->Parent) {
-        ++parent->Usage;
-    }
-
-    return true;
-}
-
-// TODO: referring to the pool's fair-share and usage - query's fair-share is ignored.
-void TSchedulableTask::IncreaseUsage() {
-    for (TTreeElementBase* parent = Query.get(); parent; parent = parent->Parent) {
-        ++parent->Usage;
-    }
-}
-
-// TODO: referring to the pool's fair-share and usage - query's fair-share is ignored.
-void TSchedulableTask::DecreaseUsage(const TDuration& burstUsage) {
-    for (TTreeElementBase* parent = Query.get(); parent; parent = parent->Parent) {
-        --parent->Usage;
-        parent->BurstUsage += burstUsage.MicroSeconds();
-    }
-}
-
-void TSchedulableTask::IncreaseExtraUsage() {
-    for (TTreeElementBase* parent = Query.get(); parent; parent = parent->Parent) {
-        ++parent->UsageExtra;
-    }
-}
-
-void TSchedulableTask::DecreaseExtraUsage(const TDuration& burstUsageExtra) {
-    for (TTreeElementBase* parent = Query.get(); parent; parent = parent->Parent) {
-        --parent->UsageExtra;
-        parent->BurstUsageExtra += burstUsageExtra.MicroSeconds();
-    }
-}
-
-void TSchedulableTask::IncreaseBurstThrottle(const TDuration& burstThrottle) {
-    for (TTreeElementBase* parent = Query.get(); parent; parent = parent->Parent) {
-        parent->BurstThrottle += burstThrottle.MicroSeconds();
-    }
-}
-
-void TSchedulableTask::IncreaseThrottle() {
-    for (TTreeElementBase* parent = Query.get(); parent; parent = parent->Parent) {
-        ++parent->Throttle;
-    }
-}
-
-void TSchedulableTask::DecreaseThrottle() {
-    for (TTreeElementBase* parent = Query.get(); parent; parent = parent->Parent) {
-        --parent->Throttle;
-    }
-}
-
-// class TSchedulableActorHelper
-
-TSchedulableActorHelper::TSchedulableActorHelper(TOptions&& options)
-    : SchedulableTask(std::move(options.SchedulableTask))
-    , Schedulable(options.IsSchedulable)
+TSchedulableActorBase::TSchedulableActorBase(const TOptions& options)
+    : IsSchedulable(options.IsSchedulable)
     , LastExecutionTime(AverageExecutionTime)
 {
+    if (options.Query) {
+        SchedulableTask = std::make_shared<TSchedulableTask>(options.Query);
+    }
+
+    Y_ENSURE(!IsSchedulable || IsAccountable());
 }
 
-// static
-TMonotonic TSchedulableActorHelper::Now() {
-    return TMonotonic::Now();
+void TSchedulableActorBase::RegisterForResume(const NActors::TActorId& actorId) {
+    Y_ASSERT(SchedulableTask);
+
+    if (IsSchedulable) {
+        SchedulableTask->RegisterForResume(actorId);
+    }
 }
 
-bool TSchedulableActorHelper::IsAccountable() const {
-    return !!SchedulableTask;
-}
-
-bool TSchedulableActorHelper::IsSchedulable() const {
-    return Schedulable;
-}
-
-bool TSchedulableActorHelper::StartExecution(TMonotonic now) {
+bool TSchedulableActorBase::StartExecution(TMonotonic now) {
     Y_ASSERT(SchedulableTask);
     Y_ASSERT(!Executed);
 
@@ -139,7 +58,7 @@ bool TSchedulableActorHelper::StartExecution(TMonotonic now) {
         }
     };
 
-    if (IsSchedulable() && SchedulableTask->Query->GetSnapshot()) {
+    if (IsSchedulable && SchedulableTask->Query->GetSnapshot()) {
         // TODO: check heuristics if we should execute this task.
         Executed = SchedulableTask->TryIncreaseUsage();
         return Executed;
@@ -150,7 +69,7 @@ bool TSchedulableActorHelper::StartExecution(TMonotonic now) {
     return Executed;
 }
 
-void TSchedulableActorHelper::StopExecution() {
+void TSchedulableActorBase::StopExecution() {
     Y_ASSERT(SchedulableTask);
 
     if (Executed) {
@@ -166,7 +85,7 @@ void TSchedulableActorHelper::StopExecution() {
     }
 }
 
-TDuration TSchedulableActorHelper::CalculateDelay(TMonotonic) const {
+TDuration TSchedulableActorBase::CalculateDelay(TMonotonic) const {
     Y_ASSERT(SchedulableTask);
 
     const auto query = SchedulableTask->Query;
@@ -193,7 +112,7 @@ TDuration TSchedulableActorHelper::CalculateDelay(TMonotonic) const {
     return delayDuration;
 }
 
-void TSchedulableActorHelper::Resume() {
+void TSchedulableActorBase::Resume() {
     Y_ASSERT(Throttled);
 
     Throttled = false;

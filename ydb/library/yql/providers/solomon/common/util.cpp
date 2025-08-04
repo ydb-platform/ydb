@@ -28,6 +28,9 @@ THolder<re2::RE2> SELECTOR_RE           = CompileRE2WithCheck(SELECTOR_PATTERN);
 const TString SELECTORS_FULL_PATTERN    = "{((" + SELECTOR_PATTERN + ",)*" + SELECTOR_PATTERN + ")?}";
 THolder<re2::RE2> SELECTORS_FULL_RE     = CompileRE2WithCheck(SELECTORS_FULL_PATTERN);
 
+const TString USER_LABELS_PATTERN       = "(" + LABEL_NAME_PATTERN + ")(?: (?i:as) (" + LABEL_NAME_PATTERN + "))?";
+THolder<re2::RE2> USER_LABELS_RE        = CompileRE2WithCheck(USER_LABELS_PATTERN);
+
 TMaybe<TString> InsertOrCheck(std::map<TString, TString>& selectors, const TString& name, const TString& value) {
     auto [it, inserted] = selectors.emplace(name, value);
     if (!inserted && it->second != value) {
@@ -98,6 +101,26 @@ TMaybe<TString> BuildSelectorValues(const NSo::NProto::TDqSolomonSource& source,
     }
 
     #undef RET_ON_ERROR
+    return {};
+}
+
+TMaybe<TString> ParseLabelNames(const TString& labelNames, TVector<TString>& names, TVector<TString>& aliases) {
+    auto labels = StringSplitter(labelNames).Split(',').SkipEmpty().ToList<TString>();
+    names.reserve(labels.size());
+    aliases.reserve(labels.size());
+    
+    for (TString& label : labels) {
+        TString name;
+        std::optional<TString> alias;
+
+        if (!RE2::FullMatch(label, *USER_LABELS_RE, &name, &alias)) {
+            return "Label names should be specified in \"label1 [as alias1], label2 [as alias2], ...\" format";
+        }
+
+        names.push_back(StripString(name));
+        aliases.push_back(StripString(alias ? *alias : name));
+    }
+
     return {};
 }
 

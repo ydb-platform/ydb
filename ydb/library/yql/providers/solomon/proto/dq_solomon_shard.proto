@@ -69,4 +69,5 @@ message TDqSolomonSource {
     string GrpcEndpoint = 17;
     optional string Cluster = 18;
     optional string Service = 19;
+    repeated string LabelNameAliases = 20;
 }

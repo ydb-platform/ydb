@@ -30,7 +30,7 @@ namespace NSQLHighlight {
         struct TLanguage {
             TString Name;
             TString ScopeName;
-            TVector<TString> FileTypes;
+            TString FileType;
             TVector<TMatcher> Matchers;
         };
 
@@ -129,7 +129,7 @@ namespace NSQLHighlight {
         NTextMate::TLanguage language = {
             .Name = highlighting.Name,
             .ScopeName = "source." + highlighting.Extension,
-            .FileTypes = {highlighting.Extension},
+            .FileType = highlighting.Extension,
         };
 
         for (const TUnit& unit : highlighting.Units) {
@@ -168,13 +168,22 @@ namespace NSQLHighlight {
     NJson::TJsonValue ToJson(const NTextMate::TLanguage& language) {
         NJson::TJsonMap root;
         root["$schema"] = "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json";
-        root["name"] = language.Name;
+        root["name"] = language.FileType;
         root["scopeName"] = language.ScopeName;
         root["scope"] = language.ScopeName;
+        root["fileTypes"] = NJson::TJsonArray({language.FileType});
 
-        for (const TString& type : language.FileTypes) {
-            root["fileTypes"].AppendValue(type);
-        }
+        root["patterns"].AppendValue(NJson::TJsonMap({
+            {"begin", "@@#py"},
+            {"end", "@@"},
+            {"patterns", NJson::TJsonArray({NJson::TJsonMap{{"include", "source.python"}}})},
+        }));
+
+        root["patterns"].AppendValue(NJson::TJsonMap({
+            {"begin", "@@//js"},
+            {"end", "@@"},
+            {"patterns", NJson::TJsonArray({NJson::TJsonMap{{"include", "source.js"}}})},
+        }));
 
         THashSet<TString> visited;
         for (const NTextMate::TMatcher& matcher : language.Matchers) {

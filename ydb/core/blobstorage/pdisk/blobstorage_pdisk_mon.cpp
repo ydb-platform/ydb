@@ -351,6 +351,7 @@ void TPDiskMon::IncrementResponseTime(ui8 priorityClass, double timeMs, size_t s
         case NPriWrite::HullHugeAsyncBlob:
             WriteResponseHullHugeAsync.Increment(timeMs);
             WriteHullHugeAsyncSizeBytes.Increment(sizeBytes);
+        break;
         case NPriWrite::HullHugeUserData:
             WriteResponseHullHugeUser.Increment(timeMs);
             WriteHullHugeUserSizeBytes.Increment(sizeBytes);

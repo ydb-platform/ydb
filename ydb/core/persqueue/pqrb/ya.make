@@ -12,6 +12,7 @@ SRCS(
 GENERATE_ENUM_SERIALIZATION(read_balancer__balancing.h)
 
 PEERDIR(
+    contrib/libs/fmt
     ydb/library/actors/core
     ydb/core/base
     ydb/core/engine/minikql

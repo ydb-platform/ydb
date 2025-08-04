@@ -291,7 +291,6 @@ std::pair<EKafkaErrors, THolder<TEvPartitionWriter::TEvWriteRequest>> Convert(
         NKikimrPQClient::TDataChunk proto;
         proto.set_codec(NPersQueueCommon::RAW);
         for(auto& h : record.Headers) {
-            TMaybe<TString> key;
             auto res = proto.AddMessageMeta();
             if (h.Key) {
                 res->set_key(static_cast<const char*>(h.Key->data()), h.Key->size());
@@ -306,7 +305,8 @@ std::pair<EKafkaErrors, THolder<TEvPartitionWriter::TEvWriteRequest>> Convert(
             auto res = proto.AddMessageMeta();
             res->set_key("__key");
             res->set_value(static_cast<const char*>(record.Key->data()), record.Key->size());
-            w->SetMessageKey(res->value());
+            if (record.Key->size() <= std::numeric_limits<ui16>::max())
+                w->SetMessageKey(res->value());
         }
 
         if (record.Value) {

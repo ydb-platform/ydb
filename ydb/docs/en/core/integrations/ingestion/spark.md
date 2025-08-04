@@ -1,6 +1,9 @@
 # {{ spark-name }}
 
-{{ spark-name }} is a fast, open-source cluster computing system for big data processing that works with various data stores and supports multiple programming languages (Scala, Java, Python, R). {{ spark-name }} can work with {{ ydb-full-name }} using the [{{ ydb-full-name }} Spark Connector](https://github.com/ydb-platform/ydb-spark-connector), a special module that implements core  {{ spark-name }} primitives.
+{{ spark-name }} is a fast, open-source cluster computing system for big data processing that works with various data stores and supports multiple programming languages (Scala, Java, Python, R). {{ spark-name }} can work with {{ ydb-full-name }} using the [{{ ydb-full-name }} Spark Connector](https://github.com/ydb-platform/ydb-spark-connector), a special module that implements core  {{ spark-name }} primitives. It supports:
+* Distribution of operations across {{ ydb-full-name }} table partitions;
+* Scalable {{ ydb-full-name }} table readings and writing;
+* Automatic creation of tables if they do not exist.
 
 ## How to Use {#usage}
 
@@ -39,12 +42,12 @@ val ydb_df = spark.read.format("ydb").options(<options>).load(<table-path>)
 Write a `DataFrame` to a {{ ydb-short-name }} table:
 
 ```scala
-any_dataframe.write.format("ydb").options(<options>).mode("append").load(<table-path>)
+any_dataframe.write.format("ydb").options(<options>).mode("append").save(<table-path>)
 ```
 
 {% note info %}
 
-For writing data to {{ ydb-short-name }} it's recommended to use the `append` mode, which uses [batch data loading](../../dev/batch-upload.md).
+For writing data to {{ ydb-short-name }} it's recommended to use the `append` mode, which uses [batch data loading](../../dev/batch-upload.md). If specified in the `save()` method a table is not exist, it will be created automatically according to [the table autocreation options](#autocreate-options)
 
 {% endnote %}
 
@@ -59,9 +62,9 @@ In this case, to access {{ ydb-short-name }}, you need to create an {{ spark-nam
 # Mandatory catalog's driver name
 spark.sql.catalog.<catalog_name>=tech.ydb.spark.connector.YdbCatalog
 # Mandatory option, the url of database
-spark.sql.catalog.<catalog_name>.url=grpc://my-ydb-host:2135/cluster/database
+spark.sql.catalog.<catalog_name>.url=<ydb-connnection-url>
 # Other options are not mandatory and may be specified by upon request
-spark.sql.catalog.<catalog_name>.auth.token.file=/home/username/.token
+spark.sql.catalog.<catalog_name>.<param-name>=<param-value>
 ```
 
 After that, you can work with  {{ ydb-short-name }} tables through standard {{ spark-name }} SQL queries.
@@ -217,7 +220,8 @@ First, let's run `spark-sql` with the configured `my_ydb` catalog:
 ```shell
 ~ $ spark-sql --master <master-url> --packages tech.ydb.spark:ydb-spark-connector:2.0.1 \
      --conf spark.sql.catalog.my_ydb=tech.ydb.spark.connector.YdbCatalog
-     --conf spark.sql.catalog.my_ydb.url=grpcs://ydb.my-host.net:2135/preprod/spark-test?tokenFile=~/.token
+     --conf spark.sql.catalog.my_ydb.url=grpcs://ydb.my-host.net:2135/preprod/spark-test
+     --conf spark.sql.catalog.my_ydb.auth.token.file=~/.token
 spark-sql (default)>
 ```
 

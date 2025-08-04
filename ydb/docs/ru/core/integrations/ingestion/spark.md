@@ -1,6 +1,9 @@
 # {{ spark-name }}
 
-{{ spark-name }} — это быстрая система кластерных вычислений с открытым исходным кодом для обработки больших данных, позволяющая работать с различными хранилищами данных и поддерживающая несколько языков программирования (Scala, Java, Python, R). {{ spark-name }} может работать с {{ ydb-full-name }} с помощью [{{ ydb-full-name }} Spark Connector](https://github.com/ydb-platform/ydb-spark-connector) — специального модуля, предоставляющего реализацию основных примитивов {{ spark-name }}.
+{{ spark-name }} — это быстрая система кластерных вычислений с открытым исходным кодом для обработки больших данных, позволяющая работать с различными хранилищами данных и поддерживающая несколько языков программирования (Scala, Java, Python, R). {{ spark-name }} может работать с {{ ydb-full-name }} с помощью [{{ ydb-full-name }} Spark Connector](https://github.com/ydb-platform/ydb-spark-connector) — специального модуля, предоставляющего реализацию основных примитивов {{ spark-name }}. Поддерживается:
+* Распределение операций по партициям таблиц {{ ydb-full-name }};
+* Параллельная запись и чтение таблиц {{ ydb-full-name }};
+* Автоматическое создание таблиц при их отсутствии.
 
 ## Где взять и как использовать {#usage}
 
@@ -39,12 +42,12 @@ val ydb_df = spark.read.format("ydb").options(<options>).load(<table-path>)
 Записать `DataFrame` в таблицу {{ ydb-short-name }}:
 
 ```scala
-any_dataframe.write.format("ydb").options(<options>).mode("append").load(<table-path>)
+any_dataframe.write.format("ydb").options(<options>).mode("append").save(<table-path>)
 ```
 
 {% note info %}
 
-При записи данных в {{ ydb-short-name }} рекомендуется использовать режим `append`, который использует [пакетную загрузку данных](../../dev/batch-upload.md).
+При записи данных в {{ ydb-short-name }} рекомендуется использовать режим `append`, который использует [пакетную загрузку данных](../../dev/batch-upload.md). Если указанная в методе `save()` таблица не существует, то оно будет создана в соответствии с опциями [автосоздания таблиц](#autocreate-options)
 
 {% endnote %}
 
@@ -59,9 +62,9 @@ any_dataframe.write.format("ydb").options(<options>).mode("append").load(<table-
 # Обязательный параметр типа каталога
 spark.sql.catalog.<catalog_name>=tech.ydb.spark.connector.YdbCatalog
 # Обязательный параметр url
-spark.sql.catalog.<catalog_name>.url=grpc://my-ydb-host:2135/cluster/database
+spark.sql.catalog.<catalog_name>.url=<ydb-connnection-url>
 # Все остальные параметры не обязательны и указываются только при необходимости
-spark.sql.catalog.<catalog_name>.auth.token.file=/home/username/.token
+spark.sql.catalog.<catalog_name>.<param-name>=<param-value>
 ```
 
 После задания каталогов можно работать в таблицами {{ ydb-short-name }} через стандартные SQL запросы {{ spark-name }}. Обратите внимание, что в качестве разделителя в пути к таблице нужно использовать `.`:
@@ -215,7 +218,8 @@ res4: Long = 843780
 ```shell
 ~ $ spark-sql --master <master-url> --packages tech.ydb.spark:ydb-spark-connector:2.0.1 \
      --conf spark.sql.catalog.my_ydb=tech.ydb.spark.connector.YdbCatalog
-     --conf spark.sql.catalog.my_ydb.url=grpcs://ydb.my-host.net:2135/preprod/spark-test?tokenFile=~/.token
+     --conf spark.sql.catalog.my_ydb.url=grpcs://ydb.my-host.net:2135/preprod/spark-test
+     --conf spark.sql.catalog.my_ydb.auth.token.file=~/.token
 spark-sql (default)>
 ```
 

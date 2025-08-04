@@ -361,8 +361,8 @@
             "text": "<html><body><h1>403 Forbidden</h1></body></html>"
         },
         "cluster_nodes_monitoring": {
-            "FieldsAvailable": "0000000000000000000110100000011",
-            "FieldsRequired": "0000000000000000000000000000001",
+            "FieldsAvailable": "10000000000000000000110100000011",
+            "FieldsRequired": "00000000000000000000000000000001",
             "FoundNodes": "3",
             "Nodes": [
                 {
@@ -378,8 +378,8 @@
             "TotalNodes": "3"
         },
         "cluster_nodes_root": {
-            "FieldsAvailable": "0000000000000000000110100000011",
-            "FieldsRequired": "0000000000000000000000000000001",
+            "FieldsAvailable": "10000000000000000000110100000011",
+            "FieldsRequired": "00000000000000000000000000000001",
             "FoundNodes": "3",
             "Nodes": [
                 {
@@ -395,8 +395,8 @@
             "TotalNodes": "3"
         },
         "cluster_nodes_viewer": {
-            "FieldsAvailable": "0000000000000000000110100000011",
-            "FieldsRequired": "0000000000000000000000000000001",
+            "FieldsAvailable": "10000000000000000000110100000011",
+            "FieldsRequired": "00000000000000000000000000000001",
             "FoundNodes": "3",
             "Nodes": [
                 {
@@ -412,8 +412,8 @@
             "TotalNodes": "3"
         },
         "database_nodes_database": {
-            "FieldsAvailable": "0000000010000000000110100000011",
-            "FieldsRequired": "0000000000000000000000000000001",
+            "FieldsAvailable": "10000000010000000000110100000011",
+            "FieldsRequired": "00000000000000000000000000000001",
             "FoundNodes": "1",
             "Nodes": [
                 {
@@ -423,8 +423,8 @@
             "TotalNodes": "1"
         },
         "database_nodes_monitoring": {
-            "FieldsAvailable": "0000000010000000000110100000011",
-            "FieldsRequired": "0000000000000000000000000000001",
+            "FieldsAvailable": "10000000010000000000110100000011",
+            "FieldsRequired": "00000000000000000000000000000001",
             "FoundNodes": "1",
             "Nodes": [
                 {
@@ -434,8 +434,8 @@
             "TotalNodes": "1"
         },
         "database_nodes_root": {
-            "FieldsAvailable": "0000000010000000000110100000011",
-            "FieldsRequired": "0000000000000000000000000000001",
+            "FieldsAvailable": "10000000010000000000110100000011",
+            "FieldsRequired": "00000000000000000000000000000001",
             "FoundNodes": "1",
             "Nodes": [
                 {
@@ -445,8 +445,8 @@
             "TotalNodes": "1"
         },
         "database_nodes_viewer": {
-            "FieldsAvailable": "0000000010000000000110100000011",
-            "FieldsRequired": "0000000000000000000000000000001",
+            "FieldsAvailable": "10000000010000000000110100000011",
+            "FieldsRequired": "00000000000000000000000000000001",
             "FoundNodes": "1",
             "Nodes": [
                 {
@@ -490,8 +490,8 @@
         }
     },
     "test.test_storage_groups": {
-        "FieldsAvailable": "111111111111111111111",
-        "FieldsRequired": "111111111111111111111",
+        "FieldsAvailable": "0111111111111111111111",
+        "FieldsRequired": "1111111111111111111111",
         "FoundGroups": 5,
         "StorageGroups": [
             {
@@ -3156,8 +3156,8 @@
     },
     "test.test_viewer_nodes": {
         "/Root": {
-            "FieldsAvailable": "0000000010000110111111100000111",
-            "FieldsRequired": "0000000000000000000000000000101",
+            "FieldsAvailable": "10000000010000110111111100000111",
+            "FieldsRequired": "00000000000000000000000000000101",
             "FoundNodes": "1",
             "Nodes": [
                 {
@@ -3234,8 +3234,8 @@
             "TotalNodes": "1"
         },
         "/Root/dedicated_db": {
-            "FieldsAvailable": "0000000010000110111111100000111",
-            "FieldsRequired": "0000000000000000000000000000101",
+            "FieldsAvailable": "10000000010000110111111100000111",
+            "FieldsRequired": "00000000000000000000000000000101",
             "FoundNodes": "1",
             "Nodes": [
                 {
@@ -3310,8 +3310,8 @@
             "TotalNodes": "1"
         },
         "/Root/serverless_db": {
-            "FieldsAvailable": "0000000010000110111111100000111",
-            "FieldsRequired": "0000000000000000000000000000101",
+            "FieldsAvailable": "10000000010000110111111100000111",
+            "FieldsRequired": "00000000000000000000000000000101",
             "FoundNodes": "1",
             "Nodes": [
                 {
@@ -3389,8 +3389,8 @@
             "TotalNodes": "1"
         },
         "/Root/shared_db": {
-            "FieldsAvailable": "0000000010000110111111100000111",
-            "FieldsRequired": "0000000000000000000000000000101",
+            "FieldsAvailable": "10000000010000110111111100000111",
+            "FieldsRequired": "00000000000000000000000000000101",
             "FoundNodes": "1",
             "Nodes": [
                 {
@@ -3467,8 +3467,8 @@
     },
     "test.test_viewer_nodes_all": {
         "/Root": {
-            "FieldsAvailable": "1111111110111111111111111111111",
-            "FieldsRequired": "1111111111111111111111111111111",
+            "FieldsAvailable": "11111111110111111111111111111111",
+            "FieldsRequired": "11111111111111111111111111111111",
             "FoundNodes": "1",
             "MaximumDisksPerNode": "1",
             "MaximumSlotsPerDisk": "5",
@@ -3837,8 +3837,8 @@
             "TotalNodes": "1"
         },
         "/Root/dedicated_db": {
-            "FieldsAvailable": "1111111110111111111111111111111",
-            "FieldsRequired": "1111111111111111111111111111111",
+            "FieldsAvailable": "11111111110111111111111111111111",
+            "FieldsRequired": "11111111111111111111111111111111",
             "FoundNodes": "1",
             "MaximumDisksPerNode": "1",
             "MaximumSlotsPerDisk": "5",
@@ -4043,8 +4043,8 @@
             "TotalNodes": "1"
         },
         "/Root/serverless_db": {
-            "FieldsAvailable": "1111111110111111111111111111111",
-            "FieldsRequired": "1111111111111111111111111111111",
+            "FieldsAvailable": "11111111110111111111111111111111",
+            "FieldsRequired": "11111111111111111111111111111111",
             "FoundNodes": "1",
             "MaximumDisksPerNode": "1",
             "MaximumSlotsPerDisk": "5",
@@ -4239,8 +4239,8 @@
             "TotalNodes": "1"
         },
         "/Root/shared_db": {
-            "FieldsAvailable": "1111111110111111111111111111111",
-            "FieldsRequired": "1111111111111111111111111111111",
+            "FieldsAvailable": "11111111110111111111111111111111",
+            "FieldsRequired": "11111111111111111111111111111111",
             "FoundNodes": "1",
             "MaximumDisksPerNode": "1",
             "MaximumSlotsPerDisk": "5",
@@ -4447,8 +4447,8 @@
     },
     "test.test_viewer_nodes_issue_14992": {
         "response_group": {
-            "FieldsAvailable": "0000000110111110111111100000111",
-            "FieldsRequired": "0000000001100000010000000000101",
+            "FieldsAvailable": "10000000110111110111111100000111",
+            "FieldsRequired": "00000000001100000010000000000101",
             "FoundNodes": "3",
             "MaximumDisksPerNode": "1",
             "Nodes": [
@@ -4665,8 +4665,8 @@
             "TotalNodes": "3"
         },
         "response_group_by": {
-            "FieldsAvailable": "0000000110111110111111100000111",
-            "FieldsRequired": "0000000001100000010000000000101",
+            "FieldsAvailable": "10000000110111110111111100000111",
+            "FieldsRequired": "00000000001100000010000000000101",
             "FoundNodes": "3",
             "MaximumDisksPerNode": "1",
             "NodeGroups": [
@@ -5367,8 +5367,8 @@
     },
     "test.test_viewer_storage_nodes": {
         "/Root": {
-            "FieldsAvailable": "0000000110000110111111100000111",
-            "FieldsRequired": "0000000000000000000000000000111",
+            "FieldsAvailable": "10000000110000110111111100000111",
+            "FieldsRequired": "00000000000000000000000000000111",
             "FoundNodes": "1",
             "MaximumSlotsPerDisk": "5",
             "Nodes": [
@@ -5446,8 +5446,8 @@
             "TotalNodes": "1"
         },
         "/Root/dedicated_db": {
-            "FieldsAvailable": "0000000110000110111111100000111",
-            "FieldsRequired": "0000000000000000000000000000111",
+            "FieldsAvailable": "10000000110000110111111100000111",
+            "FieldsRequired": "00000000000000000000000000000111",
             "FoundNodes": "1",
             "MaximumSlotsPerDisk": "5",
             "Nodes": [
@@ -5525,8 +5525,8 @@
             "TotalNodes": "1"
         },
         "/Root/serverless_db": {
-            "FieldsAvailable": "0000000110000110111111100000111",
-            "FieldsRequired": "0000000000000000000000000000111",
+            "FieldsAvailable": "10000000110000110111111100000111",
+            "FieldsRequired": "00000000000000000000000000000111",
             "FoundNodes": "1",
             "MaximumSlotsPerDisk": "5",
             "Nodes": [
@@ -5607,8 +5607,8 @@
             "TotalNodes": "1"
         },
         "/Root/shared_db": {
-            "FieldsAvailable": "0000000110000110111111100000111",
-            "FieldsRequired": "0000000000000000000000000000111",
+            "FieldsAvailable": "10000000110000110111111100000111",
+            "FieldsRequired": "00000000000000000000000000000111",
             "FoundNodes": "1",
             "MaximumSlotsPerDisk": "5",
             "Nodes": [
@@ -5688,8 +5688,8 @@
     },
     "test.test_viewer_storage_nodes_all": {
         "/Root": {
-            "FieldsAvailable": "1111111110111111111111111111111",
-            "FieldsRequired": "1111111111111111111111111111111",
+            "FieldsAvailable": "11111111110111111111111111111111",
+            "FieldsRequired": "11111111111111111111111111111111",
             "FoundNodes": "1",
             "MaximumDisksPerNode": "1",
             "MaximumSlotsPerDisk": "5",
@@ -6058,8 +6058,8 @@
             "TotalNodes": "1"
         },
         "/Root/dedicated_db": {
-            "FieldsAvailable": "1111111110111111111111111111111",
-            "FieldsRequired": "1111111111111111111111111111111",
+            "FieldsAvailable": "11111111110111111111111111111111",
+            "FieldsRequired": "11111111111111111111111111111111",
             "FoundNodes": "1",
             "MaximumDisksPerNode": "1",
             "MaximumSlotsPerDisk": "5",
@@ -6427,8 +6427,8 @@
             "TotalNodes": "1"
         },
         "/Root/serverless_db": {
-            "FieldsAvailable": "1111111110111111111111111111111",
-            "FieldsRequired": "1111111111111111111111111111111",
+            "FieldsAvailable": "11111111110111111111111111111111",
+            "FieldsRequired": "11111111111111111111111111111111",
             "FoundNodes": "1",
             "MaximumDisksPerNode": "1",
             "MaximumSlotsPerDisk": "5",
@@ -6796,8 +6796,8 @@
             "TotalNodes": "1"
         },
         "/Root/shared_db": {
-            "FieldsAvailable": "1111111110111111111111111111111",
-            "FieldsRequired": "1111111111111111111111111111111",
+            "FieldsAvailable": "11111111110111111111111111111111",
+            "FieldsRequired": "11111111111111111111111111111111",
             "FoundNodes": "1",
             "MaximumDisksPerNode": "1",
             "MaximumSlotsPerDisk": "5",

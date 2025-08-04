@@ -40,8 +40,9 @@ void TTreeElementBase::RemoveChild(const TTreeElementPtr& element) {
 // TQuery
 ///////////////////////////////////////////////////////////////////////////////
 
-TQuery::TQuery(const TQueryId& id, const TStaticAttributes& attrs)
-    : Id(id)
+TQuery::TQuery(const TQueryId& id, const TDelayParams* delayParams, const TStaticAttributes& attrs)
+    : DelayParams(delayParams)
+    , Id(id)
 {
     Update(attrs);
 }

@@ -269,6 +269,8 @@ private:
             hFunc(NConsole::TEvConsole::TEvConfigNotificationRequest, HandleConfig);
             hFunc(TEvents::TEvUndelivered, HandleUndelivery);
 
+            hFunc(TEvKqp::TEvListQueryCacheQueriesRequest, Handle);
+
             CFunc(TEvents::TSystem::Wakeup, HandleTtlTimer);
             cFunc(TEvents::TEvPoison::EventType, PassAway);
         default:
@@ -279,6 +281,19 @@ private:
 private:
     void HandleConfig(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse::TPtr&) {
         LOG_INFO(*TlsActivationContext, NKikimrServices::KQP_COMPILE_SERVICE, "Subscribed for config changes");
+    }
+
+    void Handle(TEvKqp::TEvListQueryCacheQueriesRequest::TPtr& ev) {
+        auto response = std::make_unique<TEvKqp::TEvListQueryCacheQueriesResponse>();
+        auto snapshot = QueryCache->GetSnapshot();
+
+        for(const auto& item: snapshot) {
+            item->SerializeTo(response->Record.AddCacheCacheQueries());
+        }
+
+        response->Record.SetFinished(true);
+
+        Send(ev->Sender, response.release());
     }
 
     void HandleConfig(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr& ev) {
@@ -1028,11 +1043,13 @@ bool TKqpQueryCache::Insert(
     TItem* item = &const_cast<TItem&>(*it.first);
     auto removedItem = List.Insert(item);
 
+    Snapshot.insert(item->Value.CompileResult);
     IncBytes(item->Value.CompileResult->PreparedQuery->ByteSize());
 
     if (removedItem) {
         DecBytes(removedItem->Value.CompileResult->PreparedQuery->ByteSize());
 
+        Snapshot.erase(removedItem->Value.CompileResult);
         auto queryId = *removedItem->Value.CompileResult->Query;
         QueryIndex.erase(queryId);
         if (removedItem->Value.CompileResult->GetAst()) {
@@ -1115,6 +1132,7 @@ bool TKqpQueryCache::EraseByUidImpl(const TString& uid) {
     DecBytes(item->Value.ReplayMessage.size());
 
     Y_ABORT_UNLESS(item->Value.CompileResult);
+    Snapshot.erase(item->Value.CompileResult);
     Y_ABORT_UNLESS(item->Value.CompileResult->Query);
     auto queryId = *item->Value.CompileResult->Query;
     QueryIndex.erase(queryId);
@@ -1134,7 +1152,9 @@ void TKqpQueryCache::Replace(const TKqpCompileResult::TConstPtr& compileResult) 
     auto it = Index.find(TItem(compileResult->Uid));
     if (it != Index.end()) {
         TItem& item = const_cast<TItem&>(*it);
+        Snapshot.erase(item.Value.CompileResult);
         item.Value.CompileResult = compileResult;
+        Snapshot.insert(item.Value.CompileResult);
     }
 }
 
@@ -1230,6 +1250,11 @@ TKqpCompileResult::TConstPtr TKqpQueryCache::FindByAst(
     return FindByUidImpl(*uid, promote);
 }
 
+THashSet<TKqpCompileResult::TConstPtr> TKqpQueryCache::GetSnapshot() const {
+    TGuard<TAdaptiveLock> guard(Lock);
+    return Snapshot;
+}
+
 size_t TKqpQueryCache::EraseExpiredQueries() {
     TGuard<TAdaptiveLock> guard(Lock);
 
@@ -1252,6 +1277,10 @@ void TKqpQueryCache::Clear() {
     QueryIndex.clear();
     AstIndex.clear();
     ByteSize = 0;
+    {
+        THashSet<TKqpCompileResult::TConstPtr> snapshot;
+        snapshot.swap(Snapshot);
+    }
 }
 
 void TKqpQueryCache::InsertQuery(const TKqpCompileResult::TConstPtr& compileResult) {

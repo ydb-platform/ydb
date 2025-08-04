@@ -34,11 +34,11 @@ namespace NKikimr::NStorage {
 
                 TGroupId groupId = TGroupId::Zero();
 
-                auto allocateGroup = [&](std::optional<TBridgePileId> bridgePileId) {
+                auto allocateGroup = [&](std::optional<TBridgePileId> bridgePileId, std::optional<TGroupId> bridgeProxyGroupId) {
                     AllocateStaticGroup(config, groupId, /*groupGeneration=*/ 1, TBlobStorageGroupType(species),
                         smConfig.GetGeometry(), smConfig.GetPDiskFilter(),
                         smConfig.HasPDiskType() ? std::make_optional(smConfig.GetPDiskType()) : std::nullopt, {}, {}, 0,
-                        nullptr, false, true, false, bridgePileId);
+                        nullptr, false, true, false, bridgePileId, bridgeProxyGroupId);
 
                     const auto& groups = config->GetBlobStorageConfig().GetServiceSet().GetGroups();
                     const auto& allocatedGroup = groups.at(groups.size() - 1);
@@ -47,6 +47,7 @@ namespace NKikimr::NStorage {
 
                 if (const auto& bridge = Cfg->BridgeConfig) {
                     auto *group = config->MutableBlobStorageConfig()->MutableServiceSet()->AddGroups();
+                    const TGroupId bridgeProxyGroupId = groupId;
                     groupId.CopyToProto(group, &NKikimrBlobStorage::TGroupInfo::SetGroupID);
                     ++groupId;
                     group->SetGroupGeneration(1);
@@ -54,12 +55,12 @@ namespace NKikimr::NStorage {
                     const auto& piles = bridge->GetPiles();
                     for (int i = 0; i < piles.size(); ++i) {
                         prefix << "pile# " << i << ' ';
-                        allocateGroup(TBridgePileId::FromValue(i));
+                        allocateGroup(TBridgePileId::FromValue(i), bridgeProxyGroupId);
                         groupId.CopyToProto(group, &NKikimrBlobStorage::TGroupInfo::AddBridgeGroupIds);
                         ++groupId;
                     }
                 } else {
-                    allocateGroup(std::nullopt);
+                    allocateGroup(std::nullopt, std::nullopt);
                 }
             } catch (const TExConfigError& ex) {
                 return TStringBuilder() << "failed to allocate static group: " << ex.what() << ' ' << prefix.Str();
@@ -135,7 +136,8 @@ namespace NKikimr::NStorage {
             THashMap<TVDiskIdShort, NBsController::TPDiskId> replacedDisks,
             const NBsController::TGroupMapper::TForbiddenPDisks& forbid, i64 requiredSpace,
             NKikimrBlobStorage::TBaseConfig *baseConfig, bool convertToDonor, bool ignoreVSlotQuotaCheck,
-            bool isSelfHealReasonDecommit, std::optional<TBridgePileId> bridgePileId) {
+            bool isSelfHealReasonDecommit, std::optional<TBridgePileId> bridgePileId,
+            std::optional<TGroupId> bridgeProxyGroupId) {
         using TPDiskId = NBsController::TPDiskId;
 
         NKikimrConfig::TBlobStorageConfig *bsConfig = config->MutableBlobStorageConfig();
@@ -494,6 +496,13 @@ namespace NKikimr::NStorage {
             sGroup->ClearRings();
         }
         sGroup->SetGroupGeneration(groupGeneration);
+
+        if (bridgeProxyGroupId) {
+            bridgeProxyGroupId->CopyToProto(sGroup, &NKikimrBlobStorage::TGroupInfo::SetBridgeProxyGroupId);
+        }
+        if (bridgePileId) {
+            bridgePileId->CopyToProto(sGroup, &NKikimrBlobStorage::TGroupInfo::SetBridgePileId);
+        }
 
         TVDiskIdShort prev;
         NKikimrBlobStorage::TGroupInfo::TFailRealm *sRealm = nullptr;

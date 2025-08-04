@@ -30,8 +30,9 @@ static constexpr TDuration TabletSuspectMinRetryDelay = TDuration::MilliSeconds(
 static constexpr TDuration TabletSuspectMaxRetryDelay = TDuration::MilliSeconds(50);
 
 static constexpr ui32 TabletSubscriptionInstantRetryCount = 1;
+static constexpr ui32 TabletSubscriptionMaxRetryCount = 70;
 static constexpr TDuration TabletSubscriptionMinRetryDelay = TDuration::MilliSeconds(1);
-static constexpr TDuration TabletSubscriptionMaxRetryDelay = TDuration::MilliSeconds(10);
+static constexpr TDuration TabletSubscriptionMaxRetryDelay = TDuration::MilliSeconds(500);
 
 #define BLOG_TRACE(stream) LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TABLET_RESOLVER, stream)
 #define BLOG_DEBUG(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TABLET_RESOLVER, stream)
@@ -509,8 +510,11 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
                     // Node disconnected, start a new iteration
                     subscribed = false;
                     BLOG_TRACE("TabletStateSubscriptionLoop tabletId: " << tabletId << " actor: " << actorId
-                        << " node disconnected");
-                    OnTabletProblem(tabletId, actorId);
+                        << " node " << (stream.HadConnect() ? "disconnected" : "failed to connect"));
+                    if (!stream.HadConnect()) {
+                        // Mark tablet as having a problem only when connection fails
+                        OnTabletProblem(tabletId, actorId);
+                    }
                     break;
                 }
 
@@ -552,6 +556,13 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
                 }
             }
 
+            // Don't use exponential backoff as long as we keep connecting
+            if (stream.HadConnect()) {
+                retryNumber = 0;
+                retryDelay = {};
+                continue;
+            }
+
             // A small exponential backoff on retries: 0ms, 1ms, 2ms, 4ms, 8ms, 10ms
             if (++retryNumber <= TabletSubscriptionInstantRetryCount) {
                 retryDelay = {};
@@ -559,6 +570,10 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
                 retryDelay = TabletSubscriptionMinRetryDelay;
             } else {
                 retryDelay = Min(retryDelay * 2, TabletSubscriptionMaxRetryDelay);
+            }
+
+            if (retryNumber > TabletSubscriptionMaxRetryCount) {
+                break;
             }
         }
     }
@@ -734,10 +749,8 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
             entry.KnownLeader = msg.CurrentLeader;
             entry.KnownLeaderTablet = msg.CurrentLeaderTablet;
             if (entry.KnownLeader) {
+                // Assume leader is alive when encountered for the first time
                 entry.MarkLeaderAlive();
-                if (entry.InCache) {
-                    SubscribeTabletState(entry.TabletId, entry.KnownLeader);
-                }
             } else {
                 // Note: currently state storage will reply with an error when
                 // the leader is missing, but this code path will handle
@@ -766,6 +779,10 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
         BLOG_DEBUG("ApplyEntry tabletId: " << msg.TabletID
             << " leader: " << entry.KnownLeader
             << " followers: " << entry.KnownFollowers.size());
+
+        if (entry.KnownLeader && entry.InCache) {
+            SubscribeTabletState(entry.TabletId, entry.KnownLeader);
+        }
 
         if (msg.Status == NKikimrProto::OK || !entry.KnownFollowers.empty()) {
             SendQueued(entry);

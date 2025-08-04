@@ -24,7 +24,7 @@ using TTabletId = ui64;
 using TFollowerId = ui32;
 using TNodeId = ui32;
 
-struct TEvWhiteboard{
+struct TEvWhiteboard {
     enum EEv {
         EvTabletStateUpdate = EventSpaceBegin(TKikimrEvents::ES_NODE_WHITEBOARD),
         EvTabletStateRequest,
@@ -331,6 +331,12 @@ struct TEvWhiteboard{
                 Record.SetBlobDepotId(*groupInfo->BlobDepotId);
             }
             Record.SetGroupSizeInUnits(groupInfo->GroupSizeInUnits);
+            if (const auto& bridgeProxyGroupId = groupInfo->GetBridgeProxyGroupId()) {
+                bridgeProxyGroupId->CopyToProto(&Record, &decltype(Record)::SetBridgeProxyGroupId);
+            }
+            if (const auto& bridgePileId = groupInfo->GetBridgePileId()) {
+                bridgePileId->CopyToProto(&Record, &decltype(Record)::SetBridgePileId);
+            }
         }
     };
 

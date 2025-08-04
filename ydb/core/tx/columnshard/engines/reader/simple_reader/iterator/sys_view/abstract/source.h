@@ -35,12 +35,12 @@ private:
         for (auto&& i : columns->GetColumnIds()) {
             if (i == (ui64)IIndexInfo::ESpecialColumn::PLAN_STEP || i == (ui64)IIndexInfo::ESpecialColumn::TX_ID ||
                 i == (ui64)IIndexInfo::ESpecialColumn::WRITE_ID) {
-                MutableStageData().GetTable()->AddVerified(i,
+                MutableStageData().MutableTable().AddVerified(i,
                     std::make_shared<NArrow::NAccessor::TTrivialArray>(
                         NArrow::TThreadSimpleArraysCache::GetConst(arrow::uint64(), std::make_shared<arrow::UInt64Scalar>(0), recordsCount)),
                     true);
             } else {
-                MutableStageData().GetTable()->AddVerified(
+                MutableStageData().MutableTable().AddVerified(
                     i, std::make_shared<NArrow::NAccessor::TTrivialArray>(BuildArrayAccessor(i, recordsCount)), true);
             }
         }
@@ -151,12 +151,12 @@ protected:
         AFL_VERIFY(!subColumnName);
         if (columnId == (ui64)IIndexInfo::ESpecialColumn::PLAN_STEP || columnId == (ui64)IIndexInfo::ESpecialColumn::TX_ID ||
             columnId == (ui64)IIndexInfo::ESpecialColumn::WRITE_ID) {
-            context.GetResources()->AddVerified(columnId,
+            context.MutableResources().AddVerified(columnId,
                 std::make_shared<NArrow::NAccessor::TTrivialArray>(
                     NArrow::TThreadSimpleArraysCache::GetConst(arrow::uint64(), std::make_shared<arrow::UInt64Scalar>(0), recordsCount)),
                 true);
         } else {
-            context.GetResources()->AddVerified(
+            context.MutableResources().AddVerified(
                 columnId, std::make_shared<NArrow::NAccessor::TTrivialArray>(BuildArrayAccessor(columnId, recordsCount)), true);
         }
     }

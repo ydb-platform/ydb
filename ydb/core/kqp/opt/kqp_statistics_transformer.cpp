@@ -552,7 +552,7 @@ public:
             }
 
             size_t listSize = listPtr->ChildrenSize();
-            if (listSize == 3) {
+            if (listSize == 3 || listSize == 4/*OpType optional field*/) {
                 TString compSign = TString(listPtr->Child(0)->Content());
                 auto left = listPtr->ChildPtr(1);
                 auto right = listPtr->ChildPtr(2);

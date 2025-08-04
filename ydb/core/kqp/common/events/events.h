@@ -51,6 +51,18 @@ struct TEvKqp {
 
     using TEvQueryResponse = NPrivateEvents::TEvQueryResponse;
 
+    struct TEvListQueryCacheQueriesRequest: public TEventPB<
+        TEvListQueryCacheQueriesRequest,
+        NKikimrKqp::TEvListCompileCacheQueriesRequest,
+        TKqpEvents::EvListCompileCacheQueriesRequest>
+    {};
+
+    struct TEvListQueryCacheQueriesResponse: public TEventPB<
+        TEvListQueryCacheQueriesResponse,
+        NKikimrKqp::TEvListCompileCacheQueriesResponse,
+        TKqpEvents::EvListCompileCacheQueriesResponse>
+    {};
+
     struct TEvListSessionsRequest: public TEventPB<TEvListSessionsRequest, NKikimrKqp::TEvListSessionsRequest,
         TKqpEvents::EvListSessionsRequest>
     {};

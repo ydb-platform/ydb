@@ -674,7 +674,7 @@ private:
 
         auto sourcesMap = Sources;
 
-        Invoker->Invoke([selfId, cookie, actorSystem, replyTo, taskRunner=TaskRunner, inputMap=std::move(inputMap), sourcesMap = std::move(sourcesMap), memLimit=ev->Get()->MemLimit, settings=Settings, stageId=StageId, runtimeData=RuntimeData]() mutable {
+        Invoker->Invoke([selfId, cookie, actorSystem, replyTo, taskRunner=TaskRunner, inputMap=std::move(inputMap), sourcesMap=std::move(sourcesMap), memLimit=ev->Get()->MemLimit, settings=Settings, stageId=StageId, runtimeData=RuntimeData]() mutable {
             try {
                 // auto guard = taskRunner->BindAllocator(); // only for local mode
                 // guard.GetMutex()->SetLimit(memLimit);

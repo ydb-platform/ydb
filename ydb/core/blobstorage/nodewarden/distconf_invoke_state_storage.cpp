@@ -236,7 +236,8 @@ namespace NKikimr::NStorage {
                         }
                     }
                 }
-                return badRings.size() < oldRg.NToSelect / 2 - 1 ? ReconfigType::ONE_NODE : ReconfigType::FULL;
+                ui32 majority = oldRg.NToSelect / 2 + 1;
+                return badRings.size() <= oldRg.NToSelect - majority ? ReconfigType::ONE_NODE : ReconfigType::FULL;
             }
             return nodesToReplace.empty() ? ReconfigType::NONE : ReconfigType::FULL;
         };
@@ -267,8 +268,11 @@ namespace NKikimr::NStorage {
 
         auto *op = std::get_if<TInvokeExternalOperation>(&Query);
         Y_ABORT_UNLESS(op);
+        ui32 pilesCnt = Self->BridgePileNameMap.size();
+        if (pilesCnt == 0)
+            pilesCnt = 1;
         Self->StateStorageSelfHealActor = Register(new TStateStorageSelfhealActor(op->Sender, op->Cookie,
-            TDuration::Seconds(waitForConfigStep), std::move(currentConfig), std::move(targetConfig)));
+            TDuration::Seconds(waitForConfigStep), std::move(currentConfig), std::move(targetConfig), pilesCnt));
         Finish(TResult::OK, std::nullopt);
     }
 

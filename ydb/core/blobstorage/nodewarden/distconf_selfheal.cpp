@@ -6,13 +6,14 @@ namespace NKikimr::NStorage {
     static constexpr TDuration MaxWaitForConfigStep = TDuration::Minutes(10);
 
     TStateStorageSelfhealActor::TStateStorageSelfhealActor(TActorId sender, ui64 cookie, TDuration waitForConfigStep
-        , NKikimrBlobStorage::TStateStorageConfig&& currentConfig, NKikimrBlobStorage::TStateStorageConfig&& targetConfig)
+        , NKikimrBlobStorage::TStateStorageConfig&& currentConfig, NKikimrBlobStorage::TStateStorageConfig&& targetConfig, ui32 pilesCount)
         : WaitForConfigStep(waitForConfigStep > TDuration::Seconds(0) && waitForConfigStep < MaxWaitForConfigStep ? waitForConfigStep : DefaultWaitForConfigStep)
         , StateStorageReconfigurationStep(NONE)
         , Sender(sender)
         , Cookie(cookie)
         , CurrentConfig(currentConfig)
         , TargetConfig(targetConfig)
+        , PilesCount(pilesCount)
     {}
 
     void TStateStorageSelfhealActor::RequestChangeStateStorage() {
@@ -28,7 +29,7 @@ namespace NKikimr::NStorage {
                     }
                     auto *ringGroup = cfg->AddRingGroups();
                     ringGroup->CopyFrom(rg);
-                    ringGroup->SetWriteOnly(StateStorageReconfigurationStep == MAKE_PREVIOUS_GROUP_WRITEONLY);
+                    ringGroup->SetWriteOnly(StateStorageReconfigurationStep == MAKE_PREVIOUS_GROUP_WRITEONLY || i > PilesCount);
                 }
             } else {
                 auto *ringGroup = cfg->AddRingGroups();

@@ -21,6 +21,7 @@ namespace NKikimr::NStorage {
         NKikimrBlobStorage::TStateStorageConfig CurrentConfig;
         NKikimrBlobStorage::TStateStorageConfig TargetConfig;
         bool AllowNextStep = true;
+        ui32 PilesCount;
 
         using TResult = NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult;
 
@@ -33,7 +34,7 @@ namespace NKikimr::NStorage {
 
     public:
         TStateStorageSelfhealActor(TActorId sender, ui64 cookie, TDuration waitForConfigStep
-            , NKikimrBlobStorage::TStateStorageConfig&& currentConfig, NKikimrBlobStorage::TStateStorageConfig&& targetConfig);
+            , NKikimrBlobStorage::TStateStorageConfig&& currentConfig, NKikimrBlobStorage::TStateStorageConfig&& targetConfig, ui32 pilesCount);
 
         void Bootstrap(TActorId parentId);
 

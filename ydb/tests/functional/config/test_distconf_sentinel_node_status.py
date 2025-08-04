@@ -199,4 +199,4 @@ class TestKiKiMRDistConfSelfHealDCDisconnected(KiKiMRDistConfNodeStatusTest):
         rg2 = get_ring_group(self.do_request_config(), configName)
         assert_eq(rg["NToSelect"], 9)
         assert_eq(len(rg["Ring"]), 9)
-        assert_eq(rg, rg2)
+        assert_eq(rg2, rg)

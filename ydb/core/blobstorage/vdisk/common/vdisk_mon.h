@@ -1,5 +1,4 @@
 #pragma once
-#include "defs.h"
 
 #include <ydb/core/protos/whiteboard_flags.pb.h>
 

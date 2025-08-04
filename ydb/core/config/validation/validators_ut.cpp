@@ -1,6 +1,8 @@
 #include "validators.h"
 
 #include <ydb/core/protos/blobstorage.pb.h>
+#include <ydb/core/protos/blobstorage/group_info.pb.h>
+#include <ydb/core/protos/blobstorage/vdisk_location.pb.h>
 #include <ydb/core/protos/blobstorage_disk.pb.h>
 #include <ydb/core/protos/feature_flags.pb.h>
 #include <ydb/core/protos/table_service_config.pb.h>

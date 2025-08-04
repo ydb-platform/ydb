@@ -1,6 +1,6 @@
 #include "node_warden_impl.h"
 #include <ydb/core/base/nameservice.h>
-
+#include <ydb/core/protos/blobstorage/vdisk_location.pb.h>
 
 namespace NKikimr::NStorage {
 

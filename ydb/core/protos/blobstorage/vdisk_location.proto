@@ -1,0 +1,9 @@
+package NKikimrBlobStorage;
+option java_package = "ru.yandex.kikimr.proto";
+
+message TVDiskLocation {
+    optional uint32 NodeID = 1;
+    optional uint32 PDiskID = 2;
+    optional uint32 VDiskSlotID = 3;
+    optional uint64 PDiskGuid = 4;
+}

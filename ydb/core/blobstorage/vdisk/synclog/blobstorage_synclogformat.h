@@ -1,12 +1,15 @@
 #pragma once
 
-#include "defs.h"
 #include <ydb/core/blobstorage/vdisk/ingress/blobstorage_ingress.h>
 
 #include <util/generic/deque.h>
 #include <util/generic/queue.h>
 #include <util/generic/algorithm.h>
 #include <util/string/printf.h>
+
+namespace NKikimrBlobStorage {
+    class TEvVCollectGarbage;
+}
 
 namespace NKikimr {
 

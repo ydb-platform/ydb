@@ -1,7 +1,7 @@
-#include "defs.h"
 #include "blobstorage_anubis_algo.h"
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo.h>
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_sets.h>
+#include <ydb/core/protos/blobstorage.pb.h>
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <util/stream/null.h>

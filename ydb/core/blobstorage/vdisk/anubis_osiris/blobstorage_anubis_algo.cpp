@@ -1,5 +1,6 @@
 #include "blobstorage_anubis_algo.h"
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_sets.h>
+#include <ydb/core/protos/blobstorage.pb.h>
 
 namespace NKikimr {
 

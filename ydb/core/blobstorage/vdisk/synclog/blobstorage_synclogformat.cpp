@@ -1,5 +1,7 @@
 #include "blobstorage_synclogformat.h"
 
+#include <ydb/core/protos/blobstorage.pb.h>
+
 namespace NKikimr {
 
     namespace NSyncLog {

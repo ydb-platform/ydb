@@ -21,7 +21,7 @@ from itertools import cycle, islice
 import ydb.core.protos.grpc_pb2_grpc as kikimr_grpc
 import ydb.core.protos.msgbus_pb2 as kikimr_msgbus
 import ydb.core.protos.blobstorage_config_pb2 as kikimr_bsconfig
-import ydb.core.protos.blobstorage_base3_pb2 as kikimr_bs3
+import ydb.core.protos.blobstorage.blobstorage_base3_pb2 as kikimr_bs3
 import ydb.core.protos.cms_pb2 as kikimr_cms
 import ydb.public.api.protos.draft.ydb_bridge_pb2 as ydb_bridge
 from ydb.public.api.grpc.draft import ydb_bridge_v1_pb2_grpc as bridge_grpc_server

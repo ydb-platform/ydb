@@ -1,9 +1,9 @@
 #pragma once
 
-#include "defs.h"
 #include <ydb/core/base/blobstorage.h>
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo.h>
 #include <ydb/core/blobstorage/vdisk/common/blobstorage_vdisk_guids.h>
+#include <ydb/core/protos/blobstorage.pb.h>
 
 namespace NKikimr {
 

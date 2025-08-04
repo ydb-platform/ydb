@@ -6,6 +6,7 @@
 #include "blobstorage_groupinfo_data_check.h"
 #include <ydb/core/base/services/blobstorage_service_id.h>
 #include <ydb/core/blobstorage/vdisk/ingress/blobstorage_ingress.h>
+#include <ydb/core/protos/blobstorage/vdisk_location.pb.h>
 #include <ydb/core/protos/blobstorage.pb.h>
 #include <ydb/core/protos/blobstorage_disk.pb.h>
 

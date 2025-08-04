@@ -19,13 +19,13 @@ from ydb.core.protos import (
     cms_pb2,
     config_pb2,
     blobstorage_config_pb2,
-    blobstorage_base3_pb2,
     feature_flags_pb2,
     key_pb2,
     netclassifier_pb2,
     pqconfig_pb2,
     resource_broker_pb2,
 )
+from ydb.core.protos.blobstorage import blobstorage_base3_pb2
 from ydb.tools.cfg import base, types, utils
 from ydb.tools.cfg.templates import (
     dynamic_cfg_new_style,

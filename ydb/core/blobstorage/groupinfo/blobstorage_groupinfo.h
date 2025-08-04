@@ -1,20 +1,20 @@
 #pragma once
 
-#include "defs.h"
 #include <ydb/core/blobstorage/base/blobstorage_vdiskid.h>
 #include <ydb/core/blobstorage/crypto/crypto.h>
-#include <ydb/core/protos/blobstorage.pb.h>
 
 #include <ydb/core/base/appdata_fwd.h>
 #include <ydb/core/base/blobstorage_common.h>
 #include <ydb/core/base/blobstorage.h>
 #include <ydb/core/base/event_filter.h>
-#include <ydb/core/protos/blobstorage_base3.pb.h>
+#include <ydb/core/protos/blobstorage/blobstorage_base3.pb.h>
+#include <ydb/core/protos/blobstorage/group_info.pb.h>
 #include <ydb/core/util/log_priority_mute_checker.h>
 
-#include <util/str_stl.h>
 #include <util/digest/numeric.h>
 #include <util/generic/hash_set.h>
+#include <util/string/escape.h>
+#include <util/str_stl.h>
 
 namespace NKikimrBlobStorage {
     class TGroupInfo;

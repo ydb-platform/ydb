@@ -30,31 +30,31 @@ const TString FETCH_ASSIGNMENTS = R"sql(
       AND consumer_group IN $ConsumerGroups
 )sql";
 
-struct TopicEntities {
+struct TTopicEntities {
     std::shared_ptr<TSet<TString>> Consumers = std::make_shared<TSet<TString>>();
     std::shared_ptr<TSet<ui32>> Partitions = std::make_shared<TSet<ui32>>();
 };
 
-struct ModifiedTopicInfo {
+struct TModifiedTopicInfo {
     TString TopicName;
-    TopicEntities Entities;
+    TTopicEntities Entities;
 };
 
-struct TopicGroupRequest {
+struct TTopicGroupRequest {
     TOffsetFetchRequestData::TOffsetFetchRequestGroup::TOffsetFetchRequestTopics TopicRequest;
     TString GroupId;
 };
 
-struct TopicGroupIdAndPath {
+struct TTopicGroupIdAndPath {
     TString GroupId;
     TString TopicPath;
 
-    bool operator==(const TopicGroupIdAndPath& topicGroupIdAndPath) const {
+    bool operator==(const TTopicGroupIdAndPath& topicGroupIdAndPath) const {
         return GroupId == topicGroupIdAndPath.GroupId && TopicPath == topicGroupIdAndPath.TopicPath;
     }
 };
 
-struct TStructHash { size_t operator()(const TopicGroupIdAndPath& alterTopicRequest) const { return CombineHashes(std::hash<TString>()(alterTopicRequest.GroupId), std::hash<TString>()(alterTopicRequest.TopicPath)); } };
+struct TStructHash { size_t operator()(const TTopicGroupIdAndPath& alterTopicRequest) const { return CombineHashes(std::hash<TString>()(alterTopicRequest.GroupId), std::hash<TString>()(alterTopicRequest.TopicPath)); } };
 
 
 class TKafkaOffsetFetchActor: public NActors::TActorBootstrapped<TKafkaOffsetFetchActor> {
@@ -115,14 +115,14 @@ private:
     const TContext::TPtr Context;
     const ui64 CorrelationId;
     const TMessagePtr<TOffsetFetchRequestData> Message;
-    std::unordered_map<TString, TopicEntities> TopicToEntities;
+    std::unordered_map<TString, TTopicEntities> TopicToEntities;
     std::unordered_map<TString, TAutoPtr<TEvKafka::TEvCommitedOffsetsResponse>> TopicsToResponses;
     std::unordered_map<TString, ui32> GroupIdToIndex;
     std::unordered_map<ui32, TString> CookieToGroupId;
-    std::unordered_map<ui32, ModifiedTopicInfo> AlterTopicInfo;
-    std::unordered_map<TString, TopicGroupRequest> GroupRequests;
-    std::unordered_map<TActorId, ModifiedTopicInfo> CreateTopicInfo;
-    std::unordered_set<TopicGroupIdAndPath, TStructHash> ConsumerTopicAlterRequestAttempts;
+    std::unordered_map<ui32, TModifiedTopicInfo> AlterTopicInfo;
+    std::unordered_map<TString, TTopicGroupRequest> GroupRequests;
+    std::unordered_map<TActorId, TModifiedTopicInfo> CreateTopicInfo;
+    std::unordered_set<TTopicGroupIdAndPath, TStructHash> ConsumerTopicAlterRequestAttempts;
     std::unordered_set<TString> TopicCreateRequestAttempts;
     std::unordered_set<TActorId> DependantActors;
     std::unique_ptr<NKafka::TKqpTxHelper> Kqp;

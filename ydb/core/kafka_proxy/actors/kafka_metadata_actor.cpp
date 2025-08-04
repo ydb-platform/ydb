@@ -269,8 +269,9 @@ void TKafkaMetadataActor::HandleLocationResponse(TEvLocationResponse::TPtr ev, c
 }
 
 void TKafkaMetadataActor::Handle(const TEvKafka::TEvResponse::TPtr& ev, const TActorContext& ctx) {
+    // can be recieved only from TCreateTopicActor
     TActorId& creatorActorId = ev->Sender;
-    const TopicNameToIndex& topicNameToIndex = CreateTopicRequests[creatorActorId];
+    const TTopicNameToIndex& topicNameToIndex = CreateTopicRequests[creatorActorId];
     const TString& topicName = topicNameToIndex.TopicName;
     const ui32& topicIndex = topicNameToIndex.TopicIndex;
     InflyCreateTopics--;
@@ -278,8 +279,11 @@ void TKafkaMetadataActor::Handle(const TEvKafka::TEvResponse::TPtr& ev, const TA
     if (errorCode == EKafkaErrors::NONE_ERROR) {
         TActorId child = SendTopicRequest(topicName);
         TopicIndexes[child].push_back(topicIndex);
-    } else if (InflyCreateTopics == 0) {
-        RespondIfRequired(ctx);
+    } else {
+        Response->Topics[topicIndex].ErrorCode = errorCode;
+        if (InflyCreateTopics == 0) {
+            RespondIfRequired(ctx);
+        }
     }
 }
 
@@ -299,7 +303,7 @@ void TKafkaMetadataActor::SendCreateTopicsRequest(const TString& topicName, ui32
         1,
         TMessagePtr<NKafka::TCreateTopicsRequestData>({}, message)
     ));
-    CreateTopicRequests[actorId] = TopicNameToIndex{topicName, index};
+    CreateTopicRequests[actorId] = TTopicNameToIndex{topicName, index};
 }
 
 void TKafkaMetadataActor::AddBroker(ui64 nodeId, const TString& host, ui64 port) {

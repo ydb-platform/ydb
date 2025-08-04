@@ -253,7 +253,7 @@ void TKafkaOffsetFetchActor::Handle(TEvKafka::TEvCommitedOffsetsResponse::TPtr& 
                                                                         topicResponse.Partitions);
                 break;
             } else if (topicPartition.ErrorCode == EKafkaErrors::UNKNOWN_TOPIC_OR_PARTITION) {
-                // topic does not exist case
+                // topic or partition does not exist case
                 bool continueChecking = CreateTopicIfNecessary(topicName, *topicGroupRequest.TopicRequest.Name, topicGroupRequest.GroupId, ctx);
                 if (!continueChecking) {
                     break;
@@ -271,7 +271,7 @@ void TKafkaOffsetFetchActor::Handle(TEvKafka::TEvCommitedOffsetsResponse::TPtr& 
 void TKafkaOffsetFetchActor::Handle(const TEvKafka::TEvResponse::TPtr& ev, const TActorContext& ctx) {
     // TKafkaOffsetFetchActor can receive TEvResponse only from TKafkaCreateTopicsActor actor
     TActorId& creatorActorId = ev->Sender;
-    const ModifiedTopicInfo& createdTopicInformation = CreateTopicInfo[creatorActorId];
+    const TModifiedTopicInfo& createdTopicInformation = CreateTopicInfo[creatorActorId];
     auto errorCode = ev->Release()->ErrorCode;
     DependantActors.erase(creatorActorId);
     if (errorCode != EKafkaErrors::NONE_ERROR) {
@@ -312,7 +312,7 @@ void TKafkaOffsetFetchActor::Handle(NKikimr::NReplication::TEvYdbProxy::TEvAlter
         return;
     }
 
-    const ModifiedTopicInfo& alteredTopicInfo = AlterTopicInfo[ev->Cookie];
+    const TModifiedTopicInfo& alteredTopicInfo = AlterTopicInfo[ev->Cookie];
     NKikimr::NGRpcProxy::V1::TLocalRequestBase locationRequest{
         NormalizePath(Context->DatabasePath, alteredTopicInfo.TopicName),
         Context->DatabasePath,
@@ -392,10 +392,10 @@ void NKafka::TKafkaOffsetFetchActor::Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr
 void TKafkaOffsetFetchActor::ExtractPartitions(const TString& group, const NKafka::TOffsetFetchRequestData::TOffsetFetchRequestGroup::TOffsetFetchRequestTopics& topic) {
     TString topicName = topic.Name.value();
     if (!TopicToEntities.contains(topicName)) {
-        TopicEntities newEntities;
+        TTopicEntities newEntities;
         TopicToEntities[topicName] = newEntities;
     }
-    TopicEntities& entities = TopicToEntities[topicName];
+    TTopicEntities& entities = TopicToEntities[topicName];
     entities.Consumers->insert(group);
     for (auto partition: topic.PartitionIndexes) {
         entities.Partitions->insert(partition);
@@ -437,7 +437,7 @@ void TKafkaOffsetFetchActor::CreateConsumerGroupIfNecessary(const TString& topic
                                     const TString& originalTopicName,
                                     const TString& groupId,
                                     const std::vector<TOffsetFetchResponsePartitions>& topicPartitions) {
-    TopicGroupIdAndPath consumerTopicRequest = TopicGroupIdAndPath{groupId, topicPath};
+    TTopicGroupIdAndPath consumerTopicRequest = TTopicGroupIdAndPath{groupId, topicPath};
     if (ConsumerTopicAlterRequestAttempts.find(consumerTopicRequest) == ConsumerTopicAlterRequestAttempts.end()) {
         ConsumerTopicAlterRequestAttempts.insert(consumerTopicRequest);
     } else {
@@ -455,7 +455,7 @@ void TKafkaOffsetFetchActor::CreateConsumerGroupIfNecessary(const TString& topic
         consumer->set_name(c.ConsumerName_);
     }
     AlterTopicCookie++;
-    ModifiedTopicInfo alteredTopicInfo;
+    TModifiedTopicInfo alteredTopicInfo;
     alteredTopicInfo.TopicName = originalTopicName;
     alteredTopicInfo.Entities.Consumers->insert(groupId);
     for (const auto& topicPartition : topicPartitions) {
@@ -504,7 +504,7 @@ bool TKafkaOffsetFetchActor::CreateTopicIfNecessary(const TString& topicName,
         1,
         TMessagePtr<NKafka::TCreateTopicsRequestData>({}, message)));
     DependantActors.insert(actorId);
-    ModifiedTopicInfo createdTopicInfo;
+    TModifiedTopicInfo createdTopicInfo;
     createdTopicInfo.TopicName = originalTopicName;
     createdTopicInfo.Entities.Consumers->insert(groupId);
     for (int partitionIndex = 0; partitionIndex < topicToCreate.NumPartitions; partitionIndex++) {
@@ -599,7 +599,7 @@ NYdb::TParamsBuilder TKafkaOffsetFetchActor::BuildFetchAssignmentsParams(const s
 void TKafkaOffsetFetchActor::FillMapWithGroupRequests() {
     for (const auto& groupRequest : Message->Groups) {
         for (auto& topicRequest : groupRequest.Topics) {
-            GroupRequests[*topicRequest.Name] = TopicGroupRequest{topicRequest, *groupRequest.GroupId};
+            GroupRequests[*topicRequest.Name] = TTopicGroupRequest{topicRequest, *groupRequest.GroupId};
         }
     }
 }

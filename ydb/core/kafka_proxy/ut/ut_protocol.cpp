@@ -2683,6 +2683,19 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             }
         }
 
+         {
+            // check that if user has no rights, topic is not created
+            TKafkaTestClient client(testServer.Port);
+            TString userName = "usernorights@/Root";
+            TString userPassword = "dummyPass";
+            client.AuthenticateToKafka(userName, userPassword);
+            TVector<TString> nonExistentTopic = {nonExistedTopicName2};
+            auto msg = client.Metadata(nonExistentTopic);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Topics.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Topics[0].Partitions.size(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Topics[0].ErrorCode, EKafkaErrors::TOPIC_AUTHORIZATION_FAILED);
+        }
+
         {
             TKafkaTestClient client(testServer.Port);
             TString userName = "user123@/Root";
@@ -2699,6 +2712,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
                 }
             }
         }
+
     }
 
     Y_UNIT_TEST(DescribeGroupsScenario) {

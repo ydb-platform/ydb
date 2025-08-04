@@ -4,6 +4,7 @@
 #include <ydb/core/base/path.h>
 #include <ydb/core/base/feature_flags.h>
 #include <ydb/core/base/statestorage.h>
+#include <ydb/core/blobstorage/base/blobstorage_events.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/public/api/protos/ydb_discovery.pb.h>
 
@@ -121,6 +122,32 @@ namespace NDiscovery {
         }
     }
 
+    void AddPile(Ydb::Discovery::ListEndpointsResult& result, const TBridgeInfo::TPile& pile) {
+        auto* pileInfo = result.add_piles();
+        pileInfo->set_bridge_pile_name(pile.Name);
+        if (pile.IsPrimary) {
+            pileInfo->set_state(Ydb::Discovery::PileState::PRIMARY);
+        }
+        if (pile.IsBeingPromoted) {
+            pileInfo->set_state(Ydb::Discovery::PileState::PROMOTE);
+        }
+        switch (pile.State) {
+            case NKikimrBridge::TClusterState::SYNCHRONIZED:
+                pileInfo->set_state(Ydb::Discovery::PileState::SYNCHRONIZED);
+                break;
+            case NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_1:
+            case NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_2:
+                pileInfo->set_state(Ydb::Discovery::PileState::NOT_SYNCHRONIZED);
+                break;
+            case NKikimrBridge::TClusterState::DISCONNECTED:
+                pileInfo->set_state(Ydb::Discovery::PileState::DISCONNECTED);
+                break;
+            case NKikimrBridge::TClusterState_EPileState_TClusterState_EPileState_INT_MIN_SENTINEL_DO_NOT_USE_:
+            case NKikimrBridge::TClusterState_EPileState_TClusterState_EPileState_INT_MAX_SENTINEL_DO_NOT_USE_:
+                Y_ABORT("Unknown pile state");
+        }
+    }
+
     TString SerializeResult(const Ydb::Discovery::ListEndpointsResult& result) {
         Ydb::Discovery::ListEndpointsResponse response;
         TString out;
@@ -140,7 +167,8 @@ namespace NDiscovery {
                 TMap<TActorId, TEvStateStorage::TBoardInfoEntry> newInfoEntries,
                 TSet<TString> services,
                 TString endpointId,
-                const THolder<TEvInterconnect::TEvNodeInfo>& nameserviceResponse) {
+                const THolder<TEvInterconnect::TEvNodeInfo>& nameserviceResponse,
+                const TBridgeInfo::TPtr& bridgeInfo) {
         TMap<TActorId, TEvStateStorage::TBoardInfoEntry> infoEntries;
         if (prevInfoEntries.empty()) {
             infoEntries = std::move(newInfoEntries);
@@ -168,9 +196,11 @@ namespace NDiscovery {
 
         Ydb::Discovery::ListEndpointsResult cachedMessage;
         cachedMessage.mutable_endpoints()->Reserve(infoEntries.size());
+        cachedMessage.mutable_piles()->Reserve(bridgeInfo ? bridgeInfo->Piles.size() : 0);
 
         Ydb::Discovery::ListEndpointsResult cachedMessageSsl;
         cachedMessageSsl.mutable_endpoints()->Reserve(infoEntries.size());
+        cachedMessageSsl.mutable_piles()->Reserve(bridgeInfo ? bridgeInfo->Piles.size() : 0);
 
         THashMap<TEndpointKey, TEndpointState> states;
         THashMap<TEndpointKey, TEndpointState> statesSsl;
@@ -200,6 +230,14 @@ namespace NDiscovery {
                 cachedMessageSsl.set_self_location(location);
             }
         }
+
+        if (bridgeInfo) {
+            for (const auto& pile : bridgeInfo->Piles) {
+                AddPile(cachedMessage, pile);
+                AddPile(cachedMessageSsl, pile);
+            }
+        }
+
         return {SerializeResult(cachedMessage), SerializeResult(cachedMessageSsl), std::move(infoEntries)};
     }
 }
@@ -226,6 +264,7 @@ namespace NDiscoveryPrivate {
         THashMap<TString, std::shared_ptr<NDiscovery::TCachedMessageData>> OldCachedMessages; // when subscriptions are enabled
         THashMap<TString, std::shared_ptr<NDiscovery::TCachedMessageData>> CachedNotAvailable; // for subscriptions
         THolder<TEvInterconnect::TEvNodeInfo> NameserviceResponse;
+        TBridgeInfo::TPtr BridgeInfo;
 
         struct TWaiter {
             TActorId ActorId;
@@ -280,7 +319,7 @@ namespace NDiscoveryPrivate {
             currentCachedMessage = std::make_shared<NDiscovery::TCachedMessageData>(
                 NDiscovery::CreateCachedMessage(
                     currentCachedMessage->InfoEntries, std::move(msg->Updates),
-                    {}, EndpointId.GetOrElse({}), NameserviceResponse)
+                    {}, EndpointId.GetOrElse({}), NameserviceResponse, BridgeInfo)
             );
 
             auto it = Requested.find(path);
@@ -295,7 +334,7 @@ namespace NDiscoveryPrivate {
 
             auto newCachedData = std::make_shared<NDiscovery::TCachedMessageData>(
                 NDiscovery::CreateCachedMessage({}, std::move(msg->InfoEntries),
-                {}, EndpointId.GetOrElse({}), NameserviceResponse)
+                {}, EndpointId.GetOrElse({}), NameserviceResponse, BridgeInfo)
             );
             newCachedData->Status = msg->Status;
 
@@ -373,6 +412,11 @@ namespace NDiscoveryPrivate {
             Send(ev->Sender, new TEvDiscovery::TEvDiscoveryData(*cachedData), 0, ev->Cookie);
         }
 
+        void Handle(TEvNodeWardenStorageConfig::TPtr& ev) {
+            CLOG_T("Handle " << ev->Get()->ToString());
+            BridgeInfo = ev->Get()->BridgeInfo;
+        }
+
     public:
         TDiscoveryCache() = default;
         TDiscoveryCache(const TString& endpointId)
@@ -383,9 +427,12 @@ namespace NDiscoveryPrivate {
             return NKikimrServices::TActivity::DISCOVERY_CACHE_ACTOR;
         }
 
-        void Bootstrap() {
+        void Bootstrap(const TActorContext& ctx) {
             Send(GetNameserviceActorId(), new TEvInterconnect::TEvGetNode(SelfId().NodeId()));
-
+            if (IsBridgeMode(ctx)) {
+                const TActorId wardenId = MakeBlobStorageNodeWardenID(SelfId().NodeId());
+                Send(wardenId, new TEvNodeWardenQueryStorageConfig(true));
+            }
             Become(&TThis::StateWork);
         }
 
@@ -395,6 +442,7 @@ namespace NDiscoveryPrivate {
                 hFunc(TEvStateStorage::TEvBoardInfo, Handle);
                 hFunc(TEvStateStorage::TEvBoardInfoUpdate, Handle);
                 hFunc(TEvInterconnect::TEvNodeInfo, Handle);
+                hFunc(TEvNodeWardenStorageConfig, Handle);
                 sFunc(TEvents::TEvWakeup, Wakeup);
                 sFunc(TEvents::TEvPoison, PassAway);
             }

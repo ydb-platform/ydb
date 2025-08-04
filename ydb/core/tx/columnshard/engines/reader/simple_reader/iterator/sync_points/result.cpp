@@ -21,7 +21,7 @@ ISyncPoint::ESourceAction TSyncPointResult::OnSourceReady(const std::shared_ptr<
         if (source->HasStageResult() && source->GetStageResult().IsEmpty()) {
             return ESourceAction::Finish;
         }
-        if (source->HasStageData() && (!source->GetStageData().GetTable()->HasData() || source->GetStageData().GetTable()->HasDataAndResultIsEmpty())) {
+        if (source->HasStageData() && !source->GetStageData().GetTable().HasSomeUsefulInfo()) {
             return ESourceAction::Finish;
         }
         return ESourceAction::ProvideNext;

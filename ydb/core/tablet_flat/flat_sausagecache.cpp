@@ -306,6 +306,14 @@ THashMap<TLogoBlobID, TIntrusivePtr<TPrivatePageCache::TInfo>> TPrivatePageCache
 }
 
 void TPrivatePageCache::TouchSharedCache(const TPinned &pinned) {
+    // report all touched pages:
+    
+    // 1. these that were touched on this transaction retry
+    for (auto &page : Touches) {
+        SharedCacheTouches[page.Info->Id].insert(page.Id);
+    }
+
+    // 2. and these that were touched on previous transaction retries
     for (const auto& [pageCollectionId, pages] : pinned) {
         if (auto *info = Info(pageCollectionId)) {
             auto& touches = SharedCacheTouches[pageCollectionId];

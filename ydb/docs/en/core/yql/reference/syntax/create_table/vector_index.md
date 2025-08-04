@@ -38,14 +38,6 @@ Where:
 
 {% include [vector_index_parameters.md](../_includes/vector_index_parameters.md) %}
 
-
-{% note warning %}
-
-The `distance` and `similarity` parameters can not be specified together.
-
-{% endnote %}
-
-
 {% note warning %}
 
 Vector indexes with `vector_type=bit` are not currently supported.
@@ -63,7 +55,13 @@ CREATE TABLE user_articles (
     embedding String,
     INDEX emb_cosine_idx GLOBAL SYNC USING vector_kmeans_tree
     ON (user, embedding) COVER (title, text)
-    WITH (distance="cosine", vector_type="float", vector_dimension=512, clusters=128, levels=2),
+    WITH (
+        distance="cosine",
+        vector_type="float",
+        vector_dimension=512,
+        clusters=128,
+        levels=2
+    ),
     PRIMARY KEY (article_id)
 )
 ```

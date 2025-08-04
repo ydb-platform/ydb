@@ -44,12 +44,6 @@ CREATE TABLE `<table_name>` (
 
 {% note warning %}
 
-Параметры `distance` и `similarity` не могут быть указаны одновременно.
-
-{% endnote %}
-
-{% note warning %}
-
 Векторные индексы с `vector_type=bit` в настоящее время не поддерживаются.
 
 {% endnote %}
@@ -65,7 +59,13 @@ CREATE TABLE user_articles (
     embedding String,
     INDEX emb_cosine_idx GLOBAL SYNC USING vector_kmeans_tree
     ON (user, embedding) COVER (title, text)
-    WITH (distance="cosine", vector_type="float", vector_dimension=512, clusters=128, levels=2),
+    WITH (
+        distance="cosine",
+        vector_type="float",
+        vector_dimension=512,
+        clusters=128,
+        levels=2
+    ),
     PRIMARY KEY (article_id)
 )
 ```

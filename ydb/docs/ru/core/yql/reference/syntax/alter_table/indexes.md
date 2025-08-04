@@ -37,12 +37,29 @@ ALTER TABLE `<table_name>`
 
 {% endif %}
 
-### Пример
+### Примеры
+
+Вторичный индекс:
 
 ```yql
 ALTER TABLE `series`
   ADD INDEX `title_index`
   GLOBAL ON (`title`);
+```
+
+Векторный индекс:
+
+```yql
+ALTER TABLE `series`
+  INDEX emb_cosine_idx GLOBAL SYNC USING vector_kmeans_tree
+  ON (embedding) COVER (title)
+  WITH (
+    distance="cosine",
+    vector_type="float",
+    vector_dimension=512,
+    clusters=128,
+    levels=2
+  );
 ```
 
 ## Изменение параметров индекса {#alter-index}

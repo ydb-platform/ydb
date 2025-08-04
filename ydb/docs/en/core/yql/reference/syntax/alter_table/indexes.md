@@ -37,12 +37,29 @@ You can also add a secondary index using the {{ ydb-short-name }} CLI [table ind
 
 {% endif %}
 
-### Example
+### Examples
+
+A regular secondary index:
 
 ```yql
 ALTER TABLE `series`
   ADD INDEX `title_index`
   GLOBAL ON (`title`);
+```
+
+A vector index:
+
+```yql
+ALTER TABLE `series`
+  INDEX emb_cosine_idx GLOBAL SYNC USING vector_kmeans_tree
+  ON (embedding) COVER (title)
+  WITH (
+    distance="cosine",
+    vector_type="float",
+    vector_dimension=512,
+    clusters=128,
+    levels=2
+  );
 ```
 
 ## Altering an index {#alter-index}
@@ -98,7 +115,6 @@ ALTER TABLE `series` ALTER INDEX `title_index` SET (
 ```
 
 ## Deleting an index {#drop-index}
-
 
 `DROP INDEX`: Deletes the index with the specified name. The code below deletes the index named `title_index`.
 

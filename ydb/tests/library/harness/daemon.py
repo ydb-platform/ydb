@@ -265,6 +265,8 @@ class ExternalNodeDaemon(object):
 
         args = [executable, "-A"] + self._ssh_options + [self._username_at_host]
         args += command_and_params
+        
+        self.logger.info("SSH command: %s", ' '.join(args))
         return self._run_in_subprocess(args, raise_on_error)
 
     def copy_file_or_dir(self, file_or_dir, target_path):
@@ -291,44 +293,74 @@ class ExternalNodeDaemon(object):
         )
 
     def send_signal(self, signal):
-        self.ssh_command(
-            "ps aux | grep %d | grep -v daemon | grep -v grep | awk '{ print $2 }' | xargs sudo kill -%d"
-            % (
-                int(self.ic_port),
-                int(signal),
-            )
+        # First, let's see what processes we're trying to find
+        ps_command = "ps aux | grep %d | grep -v daemon | grep -v grep" % int(self.ic_port)
+        self.logger.info("Looking for processes with command: %s", ps_command)
+        
+        # Get the list of processes first
+        try:
+            ps_output = self.ssh_command(ps_command, raise_on_error=False)
+            self.logger.info("Process list output: %s", ps_output.decode("utf-8", errors="replace") if ps_output else "No output")
+        except Exception as e:
+            self.logger.error("Failed to get process list: %s", str(e))
+        
+        # Now execute the kill command
+        kill_command = "ps aux | grep %d | grep -v daemon | grep -v grep | awk '{ print $2 }' | xargs -r sudo kill -%d" % (
+            int(self.ic_port),
+            int(signal),
         )
+        self.logger.info("Executing kill command: %s", kill_command)
+        
+        try:
+            result = self.ssh_command(kill_command, raise_on_error=False)
+            self.logger.info("Kill command result: %s", result.decode("utf-8", errors="replace") if result else "No output")
+        except Exception as e:
+            self.logger.error("Kill command failed: %s", str(e))
 
     def kill_process_and_daemon(self):
-        self.ssh_command(
-            "ps aux | grep daemon | grep %d | grep -v grep | awk '{ print $2 }' | xargs sudo kill -%d"
-            % (
-                int(self.ic_port),
-                int(signal.SIGKILL),
-            )
+        self.logger.info("Starting kill_process_and_daemon for port %d", int(self.ic_port))
+        
+        # Kill daemon processes first
+        daemon_command = "ps aux | grep daemon | grep %d | grep -v grep | awk '{ print $2 }' | xargs -r sudo kill -%d" % (
+            int(self.ic_port),
+            int(signal.SIGKILL),
         )
-        self.ssh_command(
-            "ps aux | grep %d | grep -v grep | awk '{ print $2 }' | xargs sudo kill -%d"
-            % (
-                int(self.ic_port),
-                int(signal.SIGKILL),
-            )
+        self.logger.info("Executing daemon kill command: %s", daemon_command)
+        
+        try:
+            daemon_result = self.ssh_command(daemon_command, raise_on_error=False)
+            self.logger.info("Daemon kill result: %s", daemon_result.decode("utf-8", errors="replace") if daemon_result else "No output")
+        except Exception as e:
+            self.logger.error("Daemon kill command failed: %s", str(e))
+        
+        # Kill regular processes
+        process_command = "ps aux | grep %d | grep -v grep | awk '{ print $2 }' | xargs -r sudo kill -%d" % (
+            int(self.ic_port),
+            int(signal.SIGKILL),
         )
+        self.logger.info("Executing process kill command: %s", process_command)
+        
+        try:
+            process_result = self.ssh_command(process_command, raise_on_error=False)
+            self.logger.info("Process kill result: %s", process_result.decode("utf-8", errors="replace") if process_result else "No output")
+        except Exception as e:
+            self.logger.error("Process kill command failed: %s", str(e))
 
     def kill(self):
         self.send_signal(9)
 
     def _run_in_subprocess(self, command, raise_on_error=False):
-        self.logger.info("Executing command = " + str(command))
+        self.logger.info("Executing command = %s", str(command))
         try:
             ret_str = subprocess.check_output(command, stderr=subprocess.STDOUT)
-            self.logger.info("Command returned stdout + stderr = " + ret_str.decode("utf-8", errors="replace"))
+            output_str = ret_str.decode("utf-8", errors="replace")
+            self.logger.info("Command succeeded with output = %s", output_str)
             return ret_str
         except subprocess.CalledProcessError as e:
+            output_str = e.output.decode("utf-8", errors="replace") if e.output else "No output"
+            self.logger.info("Command failed with exit code %d and output = %s", e.returncode, output_str)
             if raise_on_error:
-                self.logger.exception("Ssh command failed with output = " + e.output.decode("utf-8", errors="replace"))
+                self.logger.exception("Ssh command failed with output = " + output_str)
                 raise
             else:
-                self.logger.info(
-                    "Ssh command failed with output (it was ignored) = " + e.output.decode("utf-8", errors="replace")
-                )
+                self.logger.info("Ssh command failed with output (it was ignored) = " + output_str)

@@ -256,7 +256,12 @@ class RollingUpdateClusterNemesis(Nemesis, base.AbstractMonitoredNemesis):
         self.logger.info("Slots to update = %s", str(self.cluster.slots.values()))
 
         for slot in self.cluster.slots.values():
+            self.logger.info("Adding slot %s (host: %s) to slots_by_host", str(slot), slot.host)
             self.slots_by_host[slot.host].append(slot)
+        
+        # Log the final mapping
+        for host, slots in self.slots_by_host.items():
+            self.logger.info("Host %s has %d slots: %s", host, len(slots), [str(slot) for slot in slots])
 
     def extract_fault(self):
         pass
@@ -264,6 +269,12 @@ class RollingUpdateClusterNemesis(Nemesis, base.AbstractMonitoredNemesis):
     def inject_fault(self):
         self.logger.info("=== INJECT_FAULT START: RollingUpdateClusterNemesis ===")
         self.logger.info("Starting next (%d-th) iteration of rolling update process...." % next(self.step_id))
+        
+        # Log current state
+        self.logger.info("Current cluster state - nodes: %d, slots: %d", 
+                        len(self.cluster.nodes), len(self.cluster.slots))
+        self.logger.info("Bucket 0 size: %d, Bucket 1 size: %d", 
+                        len(self.buckets[0]), len(self.buckets[1]))
         
         bucket_id = 0 if len(self.buckets[0]) >= len(self.buckets[1]) else 1
         self.logger.info("Selected bucket_id: %d (bucket[0] size: %d, bucket[1] size: %d)", 
@@ -286,12 +297,14 @@ class RollingUpdateClusterNemesis(Nemesis, base.AbstractMonitoredNemesis):
             
             slots_for_host = self.slots_by_host.get(node.host, [])
             self.logger.info("Killing %d slots for host: %s", len(slots_for_host), node.host)
-            for slot in slots_for_host:
+            for i, slot in enumerate(slots_for_host):
                 try:
+                    self.logger.info("Killing slot %d/%d: %s (type: %s)", i+1, len(slots_for_host), str(slot), type(slot).__name__)
                     slot.kill()
                     self.logger.info("Successfully killed slot: %s", str(slot))
                 except Exception as e:
                     self.logger.error("Failed to kill slot %s: %s", str(slot), str(e))
+                    self.logger.exception("Exception details for slot %s:", str(slot))
 
             self.on_success_inject_fault()
             self.logger.info("=== INJECT_FAULT SUCCESS: RollingUpdateClusterNemesis ===")

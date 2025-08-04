@@ -82,6 +82,7 @@ union TBasicKikimrServicesMask {
         bool EnableAwsService:1;
         bool EnableCompPriorities : 1;
         bool EnableGeneralCachePortionsMetadata: 1;
+        bool EnableGeneralCacheColumnData: 1;
     };
 
     struct {

@@ -19,13 +19,19 @@ private:
     virtual void DoClear() = 0;
     virtual void DoAbort() = 0;
     virtual bool DoIsFinished() const = 0;
-    virtual std::shared_ptr<IDataSource> DoExtractNext(const std::shared_ptr<TSpecialReadContext>& context) = 0;
+    virtual std::shared_ptr<IDataSource> DoTryExtractNext(const std::shared_ptr<TSpecialReadContext>& context, const ui32 inFlightCurrentLimit) = 0;
     virtual void DoInitCursor(const std::shared_ptr<IScanCursor>& cursor) = 0;
     virtual TString DoDebugString() const = 0;
     bool InitCursorFlag = false;
-    virtual void DoFillReadStats(TReadStats& /*stats*/) const = 0;
+    virtual void DoFillReadStats(TReadStats& /*stats*/) const {
+    
+    }
 
 public:
+    virtual TString GetClassName() const {
+        return "UNDEFINED";
+    }
+
     virtual ~ISourcesConstructor() = default;
 
     void FillReadStats(const std::shared_ptr<TReadStats>& stats) const {
@@ -38,7 +44,12 @@ public:
     }
 
     TString DebugString() const {
-        return DoDebugString();
+        TStringBuilder sb;
+        sb << "{";
+        sb << "class_name=" << GetClassName() << ";";
+        sb << "internal={" << DoDebugString() << "};";
+        sb << "}";
+        return sb;
     }
     void Clear() {
         return DoClear();
@@ -49,11 +60,11 @@ public:
     bool IsFinished() const {
         return DoIsFinished();
     }
-    std::shared_ptr<IDataSource> ExtractNext(const std::shared_ptr<TSpecialReadContext>& context) {
+    std::shared_ptr<IDataSource> TryExtractNext(const std::shared_ptr<TSpecialReadContext>& context, const ui32 inFlightCurrentLimit) {
         AFL_VERIFY(!IsFinished());
         AFL_VERIFY(InitCursorFlag);
-        auto result = DoExtractNext(context);
-        AFL_VERIFY(result);
+        auto result = DoTryExtractNext(context, inFlightCurrentLimit);
+//        AFL_VERIFY(result);
         return result;
     }
     void InitCursor(const std::shared_ptr<IScanCursor>& cursor) {

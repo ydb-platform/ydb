@@ -176,8 +176,8 @@ void TExecutorBootLogic::LoadEntry(TIntrusivePtr<NBoot::TLoadBlobs> entry) {
     }
 }
 
-NBoot::TSpawned TExecutorBootLogic::LoadPages(NBoot::IStep *step, TAutoPtr<NPageCollection::TFetch> req) {
-    auto success = Loads.insert(std::make_pair(req->PageCollection.Get(), step)).second;
+NBoot::TSpawned TExecutorBootLogic::LoadPages(NBoot::IStep *step, NTable::TLoader::TFetch&& fetch) {
+    auto success = Loads.insert(std::make_pair(fetch.PageCollection.Get(), step)).second;
 
     Y_ENSURE(success, "IPageCollection queued twice for loading");
 
@@ -185,8 +185,9 @@ NBoot::TSpawned TExecutorBootLogic::LoadPages(NBoot::IStep *step, TAutoPtr<NPage
         NSharedCache::MakeSharedPageCacheId(),
         new NSharedCache::TEvRequest(
             NBlockIO::EPriority::Fast,
-            req),
-        0, (ui64)EPageCollectionRequest::BootLogic);
+            std::move(fetch.PageCollection),
+            std::move(fetch.Pages)),
+        0, (ui64)ESharedCacheRequestType::BootLogic);
 
     return NBoot::TSpawned(true);
 }
@@ -268,7 +269,7 @@ TExecutorBootLogic::EOpResult TExecutorBootLogic::Receive(::NActors::IEventHandl
             return OpResultBroken;
 
     } else if (auto *msg = ev.CastAsLocal<NSharedCache::TEvResult>()) {
-        if (EPageCollectionRequest(ev.Cookie) != EPageCollectionRequest::BootLogic)
+        if (ESharedCacheRequestType(ev.Cookie) != ESharedCacheRequestType::BootLogic)
             return OpResultUnhandled;
 
         auto it = Loads.find(msg->PageCollection.Get());

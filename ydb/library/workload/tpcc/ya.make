@@ -1,6 +1,7 @@
 LIBRARY()
 
 SRCS(
+    check.cpp
     clean.cpp
     common_queries.cpp
     data_splitter.cpp
@@ -10,6 +11,7 @@ SRCS(
     import_tui.cpp
     log_backend.cpp
     logs_scroller.cpp
+    path_checker.cpp
     runner.cpp
     runner_tui.cpp
     scroller.cpp

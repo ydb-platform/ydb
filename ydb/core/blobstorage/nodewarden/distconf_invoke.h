@@ -4,41 +4,51 @@
 
 namespace NKikimr::NStorage {
 
-    class TDistributedConfigKeeper::TInvokeRequestHandlerActor : public TActorBootstrapped<TInvokeRequestHandlerActor> {
+    class TDistributedConfigKeeper::TInvokeRequestHandlerActor : public TActor<TInvokeRequestHandlerActor> {
+        friend class TDistributedConfigKeeper;
+
         TDistributedConfigKeeper* const Self;
         const std::weak_ptr<TLifetimeToken> LifetimeToken;
-        const std::weak_ptr<TScepter> Scepter;
-        const ui64 ScepterCounter;
-        std::unique_ptr<TEventHandle<TEvNodeConfigInvokeOnRoot>> Event;
-        const TActorId Sender;
-        const ui64 Cookie;
-        const TActorId RequestSessionId;
+        const ui64 InvokePipelineGeneration;
+        TInvokeQuery Query;
 
-        bool IsScepterlessOperation = false;
         bool CheckSyncersAfterCommit = false;
 
-        TActorId ParentId;
         ui32 WaitingReplyFromNode = 0;
 
         using TQuery = NKikimrBlobStorage::TEvNodeConfigInvokeOnRoot;
         using TResult = NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult;
 
-        using TGatherCallback = std::function<std::optional<TString>(TEvGather*)>;
+        using TGatherCallback = std::function<void(TEvGather*)>;
         ui64 NextScatterCookie = 1;
         THashMap<ui64, TGatherCallback> ScatterTasks;
 
         std::shared_ptr<TLifetimeToken> RequestHandlerToken = std::make_shared<TLifetimeToken>();
 
-        THashSet<TBridgePileId> SpecificBridgePileIds;
-        std::optional<NKikimrBlobStorage::TStorageConfig> SwitchBridgeNewConfig;
+    public: // Error handling
+        struct TExError : yexception {
+            bool IsCritical = false; // the one what would case Y_ABORT if in debug mode
+            TResult::EStatus Status = TResult::ERROR;
+        };
 
-        bool WaitingForOtherProposition = false;
+        struct TExCriticalError : TExError {
+            TExCriticalError() { IsCritical = true; }
+        };
+
+        struct TExRace : TExError {
+            TExRace() { Status = TResult::RACE; }
+        };
+
+        struct TExNoQuorum : TExError {
+            TExNoQuorum() { Status = TResult::NO_QUORUM; }
+        };
 
     public:
-        TInvokeRequestHandlerActor(TDistributedConfigKeeper *self, std::unique_ptr<TEventHandle<TEvNodeConfigInvokeOnRoot>>&& ev);
+        TInvokeRequestHandlerActor(TDistributedConfigKeeper *self, TInvokeQuery&& query);
+        TInvokeRequestHandlerActor(TDistributedConfigKeeper *self, TInvokeExternalOperation&& query, ui32 hopNodeId);
 
-        void Bootstrap(TActorId parentId);
-        bool IsScepterExpired() const;
+        void HandleExecuteQuery();
+        void Handle(TEvPrivate::TEvAbortQuery::TPtr ev);
 
         void Handle(TEvNodeConfigInvokeOnRootResult::TPtr ev);
 
@@ -94,8 +104,14 @@ namespace NKikimr::NStorage {
 
         void ReassignStateStorageNode(const TQuery::TReassignStateStorageNode& cmd);
         void ReconfigStateStorage(const NKikimrBlobStorage::TStateStorageConfig& cmd);
+        void SelfHealStateStorage(const TQuery::TSelfHealStateStorage& cmd);
+        void SelfHealStateStorage(ui32 waitForConfigStep, bool forceHeal);
+        void SelfHealNodesStateUpdate(const TQuery::TSelfHealNodesStateUpdate& cmd);
         void GetStateStorageConfig(const TQuery::TGetStateStorageConfig& cmd);
 
+        void GetCurrentStateStorageConfig(NKikimrBlobStorage::TStateStorageConfig* currentConfig);
+        bool GetRecommendedStateStorageConfig(NKikimrBlobStorage::TStateStorageConfig* currentConfig);
+        void AdjustRingGroupActorIdOffsetInRecommendedStateStorageConfig(NKikimrBlobStorage::TStateStorageConfig* currentConfig);
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Storage configuration YAML manipulation
 
@@ -131,9 +147,9 @@ namespace NKikimr::NStorage {
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Bridge mode
 
-        std::optional<TString> ValidateSwitchBridgeClusterState(const NKikimrBridge::TClusterState& newClusterState);
-        void SwitchBridgeClusterState();
-        NKikimrBlobStorage::TStorageConfig GetSwitchBridgeNewConfig(const NKikimrBridge::TClusterState& newClusterState);
+        void NeedBridgeMode();
+
+        void SwitchBridgeClusterState(const TQuery::TSwitchBridgeClusterState& cmd);
 
         void NotifyBridgeSyncFinished(const TQuery::TNotifyBridgeSyncFinished& cmd);
 
@@ -141,26 +157,18 @@ namespace NKikimr::NStorage {
         // Configuration proposition
 
         void AdvanceGeneration();
-        void StartProposition(NKikimrBlobStorage::TStorageConfig *config, bool updateFields = true);
+        void StartProposition(NKikimrBlobStorage::TStorageConfig *config, bool acceptLocalQuorum = false,
+            bool requireScepter = true, bool mindPrev = true,
+            const NKikimrBlobStorage::TStorageConfig *propositionBase = nullptr);
         void Handle(TEvPrivate::TEvConfigProposed::TPtr ev);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Query termination and result delivery
 
-        bool RunCommonChecks();
+        void RunCommonChecks(bool requireScepter = true);
 
-        std::unique_ptr<TEvNodeConfigInvokeOnRootResult> PrepareResult(TResult::EStatus status, std::optional<TStringBuf> errorReason);
-        void FinishWithError(TResult::EStatus status, const TString& errorReason);
-
-        template<typename... TArgs>
-        void Finish(TArgs&&... args) {
-            auto handle = std::make_unique<IEventHandle>(std::forward<TArgs>(args)...);
-            if (RequestSessionId) { // deliver response through interconnection session the request arrived from
-                handle->Rewrite(TEvInterconnect::EvForward, RequestSessionId);
-            }
-            TActivationContext::Send(handle.release());
-            PassAway();
-        }
+        void Finish(TResult::EStatus status, std::optional<TStringBuf> errorReason,
+            const std::function<void(TResult*)>& callback = {});
 
         void PassAway() override;
 

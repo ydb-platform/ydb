@@ -50,9 +50,10 @@ struct TControllerSchema: NIceDb::Schema {
         struct Issue: Column<9, NScheme::NTypeIds::Utf8> {};
         struct TransformLambda: Column<10, NScheme::NTypeIds::Utf8> {};
         struct RunAsUser: Column<11, NScheme::NTypeIds::Utf8> {};
+        struct DirectoryPath: Column<12, NScheme::NTypeIds::Utf8> {};
 
         using TKey = TableKey<ReplicationId, Id>;
-        using TColumns = TableColumns<ReplicationId, Id, Kind, SrcPath, DstPath, DstState, DstPathOwnerId, DstPathLocalId, Issue, TransformLambda, RunAsUser>;
+        using TColumns = TableColumns<ReplicationId, Id, Kind, SrcPath, DstPath, DstState, DstPathOwnerId, DstPathLocalId, Issue, TransformLambda, RunAsUser, DirectoryPath>;
     };
 
     struct SrcStreams: Table<4> {

@@ -2,7 +2,6 @@ import hashlib
 import json
 import os
 import shutil
-import sys
 
 from .constants import (
     PNPM_PRE_LOCKFILE_FILENAME,
@@ -112,7 +111,6 @@ def hashed_by_files(files_to_hash, paths_to_exist, hash_storage_filename):
             all_paths_exist = True
             for p in paths_to_exist:
                 if not os.path.exists(p):
-                    sys.stderr.write(f"Path {p} does not exist\n")
                     all_paths_exist = False
                     break
 
@@ -125,9 +123,6 @@ def hashed_by_files(files_to_hash, paths_to_exist, hash_storage_filename):
             if saved_hash == current_state_hash:
                 return None
             else:
-                sys.stderr.write(
-                    f"Saved hash {saved_hash} != current hash {current_state_hash} for {hash_storage_filename}\n"
-                )
                 result = function(*args, **kwargs)
                 with open(hash_storage_filename, "w+") as f:
                     f.write(current_state_hash)
@@ -164,11 +159,7 @@ class PnpmPackageManager(BasePackageManager):
 
     @staticmethod
     def get_local_pnpm_store():
-        return os.path.join(home_dir(), ".cache", "pnpm-9-store")
-
-    @staticmethod
-    def get_local_old_pnpm_store():
-        return os.path.join(home_dir(), ".cache", "pnpm-store")
+        return os.path.join(os.getenv("NOTS_STORE_PATH", home_dir()), ".cache", "pnpm-9-store")
 
     @timeit
     def _get_file_hash(self, path: str):

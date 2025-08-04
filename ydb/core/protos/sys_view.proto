@@ -280,6 +280,8 @@ message TGroupInfo {
     optional bool LayoutCorrect = 16 [default = true];  // is the group layout correct?
     optional string OperatingStatus = 17;
     optional string ExpectedStatus = 18;
+    optional uint32 ProxyGroupId = 19;
+    optional uint32 BridgePileId = 20;
 }
 
 message TGroupEntry {

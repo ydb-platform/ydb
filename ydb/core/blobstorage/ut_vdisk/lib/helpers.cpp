@@ -451,7 +451,7 @@ class TManyMultiPuts : public TActorBootstrapped<TManyMultiPuts> {
             TVDiskIdShort mainVDiskId = TIngress::GetMainReplica(&Conf->GroupInfo->GetTopology(), logoBlobID);
             if (mainVDiskId == VDiskInfo.VDiskID) {
                 ui64 cookieValue = Step;
-                vMultiPut->AddVPut(logoBlobID, TRcBuf(MsgData), &cookieValue, nullptr, NWilson::TTraceId());
+                vMultiPut->AddVPut(logoBlobID, TRcBuf(MsgData), &cookieValue, false, false, nullptr, NWilson::TTraceId());
                 putCount++;
 
                 Step++;

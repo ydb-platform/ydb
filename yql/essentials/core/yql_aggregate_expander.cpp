@@ -686,11 +686,9 @@ TExprNode::TPtr TAggregateExpander::MakeInputBlocks(const TExprNode::TPtr& strea
     auto extractorLambda = Ctx_.NewLambda(Node_->Pos(), Ctx_.NewArguments(Node_->Pos(), std::move(extractorArgs)), std::move(extractorRoots));
     auto mappedWideFlow = Ctx_.NewCallable(Node_->Pos(), "WideMap", { wideFlow, extractorLambda });
     return Ctx_.Builder(Node_->Pos())
-        .Callable("ToFlow")
-            .Callable(0, "WideToBlocks")
-                .Callable(0, "FromFlow")
-                    .Add(0, mappedWideFlow)
-                .Seal()
+        .Callable("WideToBlocks")
+            .Callable(0, "FromFlow")
+                .Add(0, mappedWideFlow)
             .Seal()
         .Seal()
         .Build();
@@ -725,9 +723,7 @@ TExprNode::TPtr TAggregateExpander::TryGenerateBlockCombineAllOrHashed() {
             .Callable("ToFlow")
                 .Callable(0, "WideFromBlocks")
                     .Callable(0, "BlockCombineHashed")
-                        .Callable(0, "FromFlow")
-                            .Add(0, blocks)
-                            .Seal()
+                        .Add(0, blocks)
                         .Callable(1, "Void")
                         .Seal()
                         .Add(2, Ctx_.NewList(Node_->Pos(), std::move(keyIdxs)))
@@ -740,9 +736,7 @@ TExprNode::TPtr TAggregateExpander::TryGenerateBlockCombineAllOrHashed() {
         aggWideFlow = Ctx_.Builder(Node_->Pos())
             .Callable("ToFlow")
                 .Callable(0, "BlockCombineAll")
-                    .Callable(0, "FromFlow")
-                        .Add(0, blocks)
-                        .Seal()
+                    .Add(0, blocks)
                     .Callable(1, "Void")
                     .Seal()
                     .Add(2, Ctx_.NewList(Node_->Pos(), std::move(aggs)))
@@ -2914,14 +2908,10 @@ TExprNode::TPtr TAggregateExpander::TryGenerateBlockMergeFinalizeHashed() {
     TExprNode::TPtr aggBlocks;
     if (!isMany) {
         aggBlocks = Ctx_.Builder(Node_->Pos())
-            .Callable("ToFlow")
-                .Callable(0, "BlockMergeFinalizeHashed")
-                    .Callable(0, "FromFlow")
-                        .Add(0, blocks)
-                    .Seal()
-                    .Add(1, Ctx_.NewList(Node_->Pos(), std::move(keyIdxs)))
-                    .Add(2, Ctx_.NewList(Node_->Pos(), std::move(aggs)))
-                .Seal()
+            .Callable("BlockMergeFinalizeHashed")
+                .Add(0, blocks)
+                .Add(1, Ctx_.NewList(Node_->Pos(), std::move(keyIdxs)))
+                .Add(2, Ctx_.NewList(Node_->Pos(), std::move(aggs)))
             .Seal()
             .Build();
     } else {
@@ -2929,16 +2919,12 @@ TExprNode::TPtr TAggregateExpander::TryGenerateBlockMergeFinalizeHashed() {
         YQL_ENSURE(manyStreamsSetting, "Missing many_streams setting");
 
         aggBlocks = Ctx_.Builder(Node_->Pos())
-            .Callable("ToFlow")
-                .Callable(0, "BlockMergeManyFinalizeHashed")
-                    .Callable(0, "FromFlow")
-                        .Add(0, blocks)
-                    .Seal()
-                    .Add(1, Ctx_.NewList(Node_->Pos(), std::move(keyIdxs)))
-                    .Add(2, Ctx_.NewList(Node_->Pos(), std::move(aggs)))
-                    .Atom(3, ToString(streamIdxColumn))
-                    .Add(4, manyStreamsSetting->TailPtr())
-                .Seal()
+            .Callable("BlockMergeManyFinalizeHashed")
+                .Add(0, blocks)
+                .Add(1, Ctx_.NewList(Node_->Pos(), std::move(keyIdxs)))
+                .Add(2, Ctx_.NewList(Node_->Pos(), std::move(aggs)))
+                .Atom(3, ToString(streamIdxColumn))
+                .Add(4, manyStreamsSetting->TailPtr())
             .Seal()
             .Build();
     }
@@ -2946,9 +2932,7 @@ TExprNode::TPtr TAggregateExpander::TryGenerateBlockMergeFinalizeHashed() {
     auto aggWideFlow = Ctx_.Builder(Node_->Pos())
         .Callable("ToFlow")
             .Callable(0, "WideFromBlocks")
-                .Callable(0, "FromFlow")
-                    .Add(0, aggBlocks)
-                .Seal()
+                .Add(0, aggBlocks)
             .Seal()
         .Seal()
         .Build();

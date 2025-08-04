@@ -790,6 +790,9 @@ struct TCommonAppOptions {
 
     NActors::TNodeLocation CreateNodeLocation() const {
         NActorsInterconnect::TNodeLocation location;
+        if (BridgePileName) {
+            location.SetBridgePileName(BridgePileName);
+        }
         location.SetDataCenter(DataCenter ? DataCenter.GetRef() : TString(""));
         location.SetRack(Rack);
         location.SetUnit(ToString(Body));
@@ -1325,7 +1328,6 @@ public:
             cf.InterconnectPort,
             cf.CreateNodeLocation(),
             AppConfig.GetAuthConfig().GetNodeRegistrationToken(),
-            cf.BridgePileName ? std::make_optional(cf.BridgePileName) : std::nullopt,
         };
 
         auto result = NodeBrokerClient.RegisterDynamicNode(cf.GrpcSslSettings, addrs, settings, Env, Logger);

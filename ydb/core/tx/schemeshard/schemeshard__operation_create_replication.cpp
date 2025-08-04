@@ -87,6 +87,14 @@ struct TTransferStrategy : public IStrategy {
             return true;
         }
 
+        if (target.HasDirectoryPath()) {
+            auto directoryPath = TPath::Resolve(target.GetDirectoryPath(), context.SS);
+            if (!directoryPath.IsResolved() || directoryPath.IsUnderDeleting() || directoryPath->IsUnderMoving() || directoryPath.IsDeleted()) {
+                result.SetError(NKikimrScheme::StatusNotAvailable, TStringBuilder() << "The transfer destination directory path '" << target.GetDirectoryPath() << "' not found");
+                return true;
+            }
+        }
+
         if (!AppData()->TransferWriterFactory) {
             result.SetError(NKikimrScheme::StatusNotAvailable, "The transfer is only available in the Enterprise version");
             return true;
@@ -424,6 +432,12 @@ public:
                 "Unable to construct channel binding for replication controller with the storage pool");
             return result;
         }
+ 
+        const auto& connectionParams = desc.GetConfig().GetSrcConnectionParams();
+        if (connectionParams.HasCaCert() && !connectionParams.GetEnableSsl()) {
+            result->SetError(NKikimrScheme::StatusInvalidParameter, "CA_CERT has no effect in non-secure mode");
+            return result;
+        }
 
         path.MaterializeLeaf(owner);
         path->CreateTxId = OperationId.GetTxId();
@@ -436,7 +450,7 @@ public:
         IncAliveChildrenDirect(OperationId, parentPath, context); // for correct discard of ChildrenExist prop
         parentPath.DomainInfo()->IncPathsInside(context.SS);
 
-        if (desc.GetConfig().GetSrcConnectionParams().GetCredentialsCase() == NKikimrReplication::TConnectionParams::CREDENTIALS_NOT_SET) {
+        if (connectionParams.GetCredentialsCase() == NKikimrReplication::TConnectionParams::CREDENTIALS_NOT_SET) {
             desc.MutableConfig()->MutableSrcConnectionParams()->MutableOAuthToken()->SetToken(BUILTIN_ACL_ROOT);
         }
 

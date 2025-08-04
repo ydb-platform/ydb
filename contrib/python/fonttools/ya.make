@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(4.58.4)
+VERSION(4.59.0)
 
 LICENSE(MIT)
 
@@ -85,6 +85,18 @@ PY_SRCS(
     fontTools/misc/encodingTools.py
     fontTools/misc/etree.py
     fontTools/misc/filenames.py
+    fontTools/misc/filesystem/__init__.py
+    fontTools/misc/filesystem/_base.py
+    fontTools/misc/filesystem/_copy.py
+    fontTools/misc/filesystem/_errors.py
+    fontTools/misc/filesystem/_info.py
+    fontTools/misc/filesystem/_osfs.py
+    fontTools/misc/filesystem/_path.py
+    fontTools/misc/filesystem/_subfs.py
+    fontTools/misc/filesystem/_tempfs.py
+    fontTools/misc/filesystem/_tools.py
+    fontTools/misc/filesystem/_walk.py
+    fontTools/misc/filesystem/_zipfs.py
     fontTools/misc/fixedTools.py
     fontTools/misc/intTools.py
     fontTools/misc/iterTools.py

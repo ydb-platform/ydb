@@ -211,10 +211,30 @@ TExprNode::TPtr ApplyJoinPredicate(const TExprNode::TPtr& predicate, const TExpr
     .Build();
 }
 
-TExprNode::TPtr SingleInputPredicatePushdownOverEquiJoin(TExprNode::TPtr equiJoin, TExprNode::TPtr predicate,
-    const TSet<TStringBuf>& usedFields, TExprNode::TPtr args, const TJoinLabels& labels,
-    ui32 firstCandidate, const TMap<TStringBuf, TVector<TStringBuf>>& renameMap, bool ordered, bool skipNulls, TExprContext& ctx)
-{
+bool NeedEmitSkipNullMembers(const TTypeAnnotationContext* types) {
+    YQL_ENSURE(types);
+    static const char flag[] = "EmitSkipNullOnPushdown";
+    return IsOptimizerEnabled<flag>(*types) || !IsOptimizerDisabled<flag>(*types);
+}
+
+bool IsPredicatePushdownOverEquiJoinBothSides(const TTypeAnnotationContext* types) {
+    YQL_ENSURE(types);
+    static const char flag[] = "PredicatePushdownOverEquiJoinBothSides";
+    return IsOptimizerEnabled<flag>(*types) && !IsOptimizerDisabled<flag>(*types);
+}
+
+TExprNode::TPtr SingleInputPredicatePushdownOverEquiJoin(
+    TExprNode::TPtr equiJoin,
+    TExprNode::TPtr predicate,
+    const TSet<TStringBuf>& usedFields,
+    TExprNode::TPtr args,
+    const TJoinLabels& labels,
+    ui32 firstCandidate,
+    const TMap<TStringBuf, TVector<TStringBuf>>& renameMap,
+    bool ordered,
+    TExprContext& ctx,
+    const TTypeAnnotationContext* types
+) {
     auto inputsCount = equiJoin->ChildrenSize() - 2;
     auto joinTree = equiJoin->Child(inputsCount);
 
@@ -273,12 +293,17 @@ TExprNode::TPtr SingleInputPredicatePushdownOverEquiJoin(TExprNode::TPtr equiJoi
         }
     }
 
+
+    const bool skipNullsEnabled = NeedEmitSkipNullMembers(types);
+    const bool pushdownBothSides = IsPredicatePushdownOverEquiJoinBothSides(types);
+
     auto ret = ctx.ShallowCopy(*equiJoin);
     for (auto& inputIndex : candidates) {
-        auto x = IsRequiredSide(joinTree, labels, inputIndex);
-        if (!x.first) {
+        const auto [required, skipNullsPossible] = IsRequiredSide(joinTree, labels, inputIndex);
+        if (!pushdownBothSides && !required) {
             continue;
         }
+        YQL_ENSURE(required || onlyKeys);
 
         if (!isStrict && IsRequiredAndFilteredSide(joinTree, labels, inputIndex)) {
             continue;
@@ -286,7 +311,7 @@ TExprNode::TPtr SingleInputPredicatePushdownOverEquiJoin(TExprNode::TPtr equiJoi
 
         auto prevInput = equiJoin->Child(inputIndex)->ChildPtr(0);
         auto newInput = prevInput;
-        if (x.second && skipNulls) {
+        if (skipNullsPossible && skipNullsEnabled) {
             // skip null key columns
             TSet<TString> optionalKeyColumns;
             GatherOptionalKeyColumns(joinTree, labels, inputIndex, optionalKeyColumns);
@@ -306,6 +331,134 @@ TExprNode::TPtr SingleInputPredicatePushdownOverEquiJoin(TExprNode::TPtr equiJoi
     }
 
     return ret;
+}
+
+TExprNode::TListType ExtractOrPredicatesOverEquiJoin(const TExprNode::TPtr& predicate,
+    const TExprNode& row, const THashMap<TString, TString>& backRenameMap,
+    const TJoinLabels& labels, TExprContext& ctx, const TTypeAnnotationContext& types)
+{
+    if (!predicate->IsCallable("Or")) {
+        return {};
+    }
+
+    auto orTerms = predicate->Children();
+    if (!AnyOf(orTerms, [](const auto& orTerm) { return orTerm->IsCallable("And"); })) {
+        return {};
+    }
+
+    TNodeMap<TSet<ui32>> joinInputs;
+    if (!GatherJoinInputsForAllNodes(predicate, row, backRenameMap, labels, joinInputs)) {
+        // non-Member usages of row struct
+        return {};
+    }
+    auto it = joinInputs.find(predicate.Get());
+    YQL_ENSURE(it != joinInputs.end());
+    auto& predicateInputs = it->second;
+
+    THashMap<ui32, TExprNode::TListType> extractedPredicatesByInput;
+    TExprNode::TListType extractedConstantPredicates;
+
+    THashSet<ui32> forbiddenInputs;
+    bool constantPredicateForbidden = false;
+
+    size_t expansionSize = 0;
+    TDeque<TExprNode::TPtr> orTermsToProcess(orTerms.begin(), orTerms.end());
+    while (!orTermsToProcess.empty()) {
+        auto processOrTerm = [&]() {
+            auto orTerm = orTermsToProcess.front();
+            orTermsToProcess.pop_front();
+
+            TSet<ui32> orTermInputs;
+            THashMap<ui32, TExprNode::TListType> orTermExtractedPredicatesByInput;
+            TExprNode::TListType orTermExtractedConstantPredicates;
+            bool seenConstantPredicatesInOrTerm = false;
+
+            TExprNode::TListType innerAndTerms;
+            GetAndTerms(orTerm, innerAndTerms);
+            for (const auto& innerAndTerm : innerAndTerms) {
+                auto it = joinInputs.find(innerAndTerm.Get());
+                YQL_ENSURE(it != joinInputs.end());
+                auto& innerInputs = it->second;
+
+                if (!IsStrict(innerAndTerm)) {
+                    // Non-strict predicate can't be pushed down
+                    forbiddenInputs.insert(innerInputs.begin(), innerInputs.end());
+                    continue;
+                }
+
+                if (innerInputs.empty()) {
+                    orTermExtractedConstantPredicates.push_back(innerAndTerm);
+                    seenConstantPredicatesInOrTerm = true;
+                } else if (innerInputs.size() == 1) {
+                    ui32 input = *innerInputs.begin();
+                    orTermExtractedPredicatesByInput[input].push_back(innerAndTerm);
+                    orTermInputs.insert(input);
+                } else {
+                    auto expanded = ExpandAndOverOr(orTerm, ctx, types);
+                    if (!expanded.empty() && expansionSize + expanded.size() <= types.AndOverOrExpansionLimit) {
+                        // Update orTermsToProcess with terms after expansion and repeat
+                        for (auto it = expanded.rbegin(); it != expanded.rend(); it++) {
+                            orTermsToProcess.push_front(std::move(*it));
+                            // joinInputs update is not needed
+                            // as innerAndTerm can't be newly constructed node
+                        }
+                        expansionSize += expanded.size();
+                        return;
+                    }
+
+                    // Predicates with multiple inputs cannot be handled
+                    forbiddenInputs.insert(innerInputs.begin(), innerInputs.end());
+                }
+            }
+
+            if (orTermInputs.size() < predicateInputs.size()) {
+                for (ui32 input : predicateInputs) {
+                    if (!orTermInputs.contains(input)) {
+                        // Can't construct narrowing predicate for the input
+                        // if some OR term doesn't impose any conditions for that input
+                        forbiddenInputs.insert(input);
+                    }
+                }
+            }
+            for (auto& [input, terms]: orTermExtractedPredicatesByInput) {
+                if (!forbiddenInputs.contains(input)) {
+                    auto& predicates = extractedPredicatesByInput[input];
+                    predicates.insert(predicates.end(), terms.begin(), terms.end());
+                }
+            }
+
+            if (!constantPredicateForbidden && !seenConstantPredicatesInOrTerm) {
+                // Can't construct narrowing constant predicate
+                // if some OR term doesn't impose any conditions independent from inputs
+                constantPredicateForbidden = true;
+            }
+            if (!constantPredicateForbidden) {
+                extractedConstantPredicates.insert(
+                    extractedConstantPredicates.end(),
+                    orTermExtractedConstantPredicates.begin(),
+                    orTermExtractedConstantPredicates.end()
+                );
+            }
+        };
+        processOrTerm();
+    }
+
+    auto trueLiteral = Build<TCoBool>(ctx, predicate->Pos())
+        .Literal().Build("true")
+        .Done().Ptr();
+
+    TExprNode::TListType resultingPredicates;
+    for (ui32 input : predicateInputs) {
+        auto& predicates = extractedPredicatesByInput[input];
+        if (!predicates.empty() && !forbiddenInputs.contains(input)) {
+            resultingPredicates.push_back(ctx.NewCallable(predicate->Pos(), "Unessential", {ctx.NewCallable(predicate->Pos(), "Or", std::move(predicates)), trueLiteral}));
+        }
+    }
+    if (!constantPredicateForbidden && !extractedConstantPredicates.empty()) {
+        resultingPredicates.push_back(ctx.NewCallable(predicate->Pos(), "Unessential", {ctx.NewCallable(predicate->Pos(), "Or", std::move(extractedConstantPredicates)), trueLiteral}));
+    }
+
+    return resultingPredicates;
 }
 
 void CountLabelsInputUsage(TExprNode::TPtr joinTree, THashMap<TString, int>& counters) {
@@ -406,6 +559,12 @@ TExprNode::TPtr CreateLabelList(const THashSet<TString>& labels, TExprContext& c
     return ctx.NewList(position, std::move(newKeys));
 }
 
+bool FilterPushdownOverJoinOptionalSideIgnoreOnlyKeys(const TTypeAnnotationContext* types) {
+    YQL_ENSURE(types);
+    static const char flag[] = "FilterPushdownOverJoinOptionalSideIgnoreOnlyKeys";
+    return IsOptimizerEnabled<flag>(*types) && !IsOptimizerDisabled<flag>(*types);
+}
+
 TExprNode::TPtr FilterPushdownOverJoinOptionalSide(
     TExprNode::TPtr equiJoin,
     TExprNode::TPtr predicate,
@@ -415,11 +574,10 @@ TExprNode::TPtr FilterPushdownOverJoinOptionalSide(
     ui32 inputIndex,
     const TMap<TStringBuf, TVector<TStringBuf>>& renameMap,
     bool ordered,
-    bool skipNulls,
-    bool ignoreOnlyKeys,
     TExprContext& ctx,
-    const TPositionHandle& pos)
-{
+    const TTypeAnnotationContext* types,
+    const TPositionHandle& pos
+) {
     auto inputsCount = equiJoin->ChildrenSize() - 2;
     auto joinTree = equiJoin->Child(inputsCount);
 
@@ -445,7 +603,7 @@ TExprNode::TPtr FilterPushdownOverJoinOptionalSide(
 
     bool onlyKeys = false;
     // ignoreOnlyKeys (aka FilterPushdownOverJoinOptionalSideIgnoreOnlyKeys) was added to canonize ydb tests without breaking them
-    if (!ignoreOnlyKeys) {
+    if (!FilterPushdownOverJoinOptionalSideIgnoreOnlyKeys(types)) {
         // TODO: Remove this after all YDB tests are properly canonized. See YQL-19896 for details.
 
         // check whether some used fields are not aliased
@@ -506,7 +664,7 @@ TExprNode::TPtr FilterPushdownOverJoinOptionalSide(
     YQL_ENSURE(leftJoinTree->Child(2)->IsAtom());
     auto rightSideInput = equiJoinLabels.at(leftJoinTree->Child(2)->Content());
 
-    if (skipNulls) {
+    if (NeedEmitSkipNullMembers(types)) {
         // skip null key columns
         TSet<TString> optionalKeyColumns;
         GatherOptionalKeyColumns(joinTree, labels, inputIndex, optionalKeyColumns);
@@ -925,82 +1083,61 @@ private:
 };
 
 TExprNode::TPtr DecayCrossJoinIntoInner(TExprNode::TPtr equiJoin, const TExprNode::TPtr& predicate,
-    const TJoinLabels& labels, ui32 index1, ui32 index2,  const TExprNode& row, const THashMap<TString, TString>& backRenameMap,
-    const TParentsMap& parentsMap, TExprContext& ctx, bool rotateJoinTree) {
-    YQL_ENSURE(index1 != index2);
+    const TJoinLabels& labels, const TExprNode& row, const THashMap<TString, TString>& backRenameMap,
+    TExprContext& ctx, bool rotateJoinTree)
+{
     TExprNode::TPtr left, right;
-    if (!IsEquality(predicate, left, right)) {
+    if (!IsMemberEquality(predicate, row, left, right)) {
         return equiJoin;
     }
 
-    TSet<ui32> leftInputs, rightInputs;
-    TSet<TStringBuf> usedFields;
-    GatherJoinInputs(left, row, parentsMap, backRenameMap, labels, leftInputs, usedFields);
-    GatherJoinInputs(right, row, parentsMap, backRenameMap, labels, rightInputs, usedFields);
-    bool good = false;
-    if (leftInputs.size() == 1 && rightInputs.size() == 1) {
-        if (*leftInputs.begin() == index1 && *rightInputs.begin() == index2) {
-            good = true;
-        } else if (*leftInputs.begin() == index2 && *rightInputs.begin() == index1) {
-            good = true;
+    TVector<ui32> inputs;
+    TVector<TStringBuf> columnLabels;
+    TVector<TStringBuf> columns;
+    for (auto member : { left, right }) {
+        // rename used fields
+        TStringBuf memberName(member->Child(1)->Content());
+        if (auto renamed = backRenameMap.FindPtr(memberName)) {
+            memberName = *renamed;
         }
+
+        TStringBuf label;
+        TStringBuf column;
+        SplitTableName(memberName, label, column);
+        TMaybe<ui32> maybeIndex = labels.FindInputIndex(label);
+        YQL_ENSURE(maybeIndex, "Unable to find input for label " << ToString(label).Quote());
+        inputs.push_back(*maybeIndex);
+        columnLabels.push_back(label);
+        columns.push_back(column);
     }
 
-    if (!good) {
+    YQL_ENSURE(inputs.size() == 2 && inputs.size() == columnLabels.size() && columnLabels.size() == columns.size());
+    if (inputs.front() == inputs.back()) {
         return equiJoin;
     }
 
     auto inputsCount = equiJoin->ChildrenSize() - 2;
     auto joinTree = equiJoin->Child(inputsCount);
-    if (!IsRequiredSide(joinTree, labels, index1).first ||
-        !IsRequiredSide(joinTree, labels, index2).first) {
+    if (!IsRequiredSide(joinTree, labels, inputs.front()).first ||
+        !IsRequiredSide(joinTree, labels, inputs.back()).first)
+    {
         return equiJoin;
     }
 
-    TStringBuf label1, column1, label2, column2;
-    if (left->IsCallable("Member") && left->Child(0) == &row) {
-        auto x = left->Tail().Content();
-        if (auto ptr = backRenameMap.FindPtr(x)) {
-            x = *ptr;
-        }
-
-        SplitTableName(x, label1, column1);
-    } else {
-        return equiJoin;
-    }
-
-    if (right->IsCallable("Member") && right->Child(0) == &row) {
-        auto x = right->Tail().Content();
-        if (auto ptr = backRenameMap.FindPtr(x)) {
-            x = *ptr;
-        }
-
-        SplitTableName(x, label2, column2);
-    } else {
-        return equiJoin;
-    }
-
-    TJoinTreeRebuilder rebuilder(joinTree, label1, column1, label2, column2, ctx, rotateJoinTree);
+    TJoinTreeRebuilder rebuilder(joinTree, columnLabels.front(), columns.front(), columnLabels.back(), columns.back(), ctx, rotateJoinTree);
     auto newJoinTree = rebuilder.Run();
     return ctx.ChangeChild(*equiJoin, inputsCount, std::move(newJoinTree));
-}
-
-bool NeedEmitSkipNullMembers(const TTypeAnnotationContext* types) {
-    YQL_ENSURE(types);
-    static const TString emitFlag = to_lower(TString("EmitSkipNullOnPushdown"));
-    static const TString noEmitFlag = to_lower(TString("DisableEmitSkipNullOnPushdown"));
-    if (types->OptimizerFlags.contains(emitFlag)) {
-        return true;
-    }
-    if (types->OptimizerFlags.contains(noEmitFlag)) {
-        return false;
-    }
-    return true;
 }
 
 bool IsEqualityFilterOverJoinEnabled(const TTypeAnnotationContext* types) {
     YQL_ENSURE(types);
     static const char flag[] = "EqualityFilterOverJoin";
+    return IsOptimizerEnabled<flag>(*types) && !IsOptimizerDisabled<flag>(*types);
+}
+
+bool IsExtractOrPredicatesOverEquiJoinEnabled(const TTypeAnnotationContext* types) {
+    YQL_ENSURE(types);
+    static const char flag[] = "ExtractOrPredicatesOverEquiJoin";
     return IsOptimizerEnabled<flag>(*types) && !IsOptimizerDisabled<flag>(*types);
 }
 
@@ -1191,10 +1328,8 @@ TExprBase HandleEqualityFilterOverJoin(const TCoFlatMapBase& node, const TJoinLa
     THashSet<ui32> makeNoNullInputs;
     for (auto pred : andComponents) {
         TExprNode::TPtr left, right;
-        if (!IsEquality(pred, left, right) ||
-            !left->IsCallable("Member") || left->Child(0) != &row ||
-            !right->IsCallable("Member") || right->Child(0) != &row)
-        {
+        // TODO: handle case IsEquality() && !IsMemberEquality()
+        if (!IsMemberEquality(pred, row, left, right)) {
             rest.push_back(pred);
             continue;
         }
@@ -1365,12 +1500,6 @@ TExprBase HandleEqualityFilterOverJoin(const TCoFlatMapBase& node, const TJoinLa
         .Build());
 }
 
-bool FilterPushdownOverJoinOptionalSideIgnoreOnlyKeys(const TTypeAnnotationContext* types) {
-    YQL_ENSURE(types);
-    static const char flag[] = "FilterPushdownOverJoinOptionalSideIgnoreOnlyKeys";
-    return IsOptimizerEnabled<flag>(*types) && !IsOptimizerDisabled<flag>(*types);
-}
-
 } // namespace
 
 TExprBase FlatMapOverEquiJoin(
@@ -1520,9 +1649,8 @@ TExprBase FlatMapOverEquiJoin(
         TExprNode::TPtr extraPredicate;
 
         const bool ordered = node.Maybe<TCoOrderedFlatMap>().IsValid();
-        const bool skipNulls = NeedEmitSkipNullMembers(types);
 
-        for (const auto& andTerm : andTerms) {
+        for (auto andTerm : andTerms) {
             if (IsNoPush(*andTerm)) {
                 continue;
             }
@@ -1533,20 +1661,29 @@ TExprBase FlatMapOverEquiJoin(
             if (!multiUsage && inputs.size() == 0) {
                 YQL_CLOG(DEBUG, Core) << "ConstantPredicatePushdownOverEquiJoin";
                 ret = ConstantPredicatePushdownOverEquiJoin(equiJoin.Ptr(), andTerm, ordered, ctx);
-                extraPredicate = FuseAndTerms(node.Pos(), andTerms, andTerm, isPg, ctx);
+                extraPredicate = FuseAndTerms(node.Pos(), andTerms, andTerm, {}, isPg, ctx);
                 break;
             }
 
             if (!multiUsage && inputs.size() == 1) {
-                auto newJoin = SingleInputPredicatePushdownOverEquiJoin(equiJoin.Ptr(), andTerm, usedFields,
-                    node.Lambda().Args().Ptr(), labels, *inputs.begin(), renameMap, ordered, skipNulls, ctx);
+                auto newJoin = SingleInputPredicatePushdownOverEquiJoin(
+                    equiJoin.Ptr(),
+                    andTerm,
+                    usedFields,
+                    node.Lambda().Args().Ptr(),
+                    labels,
+                    *inputs.begin(),
+                    renameMap,
+                    ordered,
+                    ctx,
+                    types
+                );
                 if (newJoin != equiJoin.Ptr()) {
                     YQL_CLOG(DEBUG, Core) << "SingleInputPredicatePushdownOverEquiJoin";
                     ret = newJoin;
-                    extraPredicate = FuseAndTerms(node.Pos(), andTerms, andTerm, isPg, ctx);
+                    extraPredicate = FuseAndTerms(node.Pos(), andTerms, andTerm, {}, isPg, ctx);
                     break;
                 } else if (types->FilterPushdownOverJoinOptionalSide) {
-                    bool ignoreOnlyKeys = FilterPushdownOverJoinOptionalSideIgnoreOnlyKeys(types);
                     auto twoJoins = FilterPushdownOverJoinOptionalSide(
                         equiJoin.Ptr(),
                         andTerm,
@@ -1556,14 +1693,14 @@ TExprBase FlatMapOverEquiJoin(
                         *inputs.begin(),
                         renameMap,
                         ordered,
-                        skipNulls,
-                        ignoreOnlyKeys,
                         ctx,
-                        node.Pos());
+                        types,
+                        node.Pos()
+                    );
                     if (twoJoins != equiJoin.Ptr()) {
                         YQL_CLOG(DEBUG, Core) << "RightSidePredicatePushdownOverLeftJoin";
                         ret = twoJoins;
-                        extraPredicate = FuseAndTerms(node.Pos(), andTerms, andTerm, isPg, ctx);
+                        extraPredicate = FuseAndTerms(node.Pos(), andTerms, andTerm, {}, isPg, ctx);
                         break;
                     }
 
@@ -1572,11 +1709,27 @@ TExprBase FlatMapOverEquiJoin(
 
             if (!IsEqualityFilterOverJoinEnabled(types) && inputs.size() == 2) {
                 auto newJoin = DecayCrossJoinIntoInner(equiJoin.Ptr(), andTerm,
-                    labels, *inputs.begin(), *(++inputs.begin()), row, backRenameMap, parentsMap, ctx, types->RotateJoinTree);
+                    labels, row, backRenameMap, ctx, types->RotateJoinTree);
                 if (newJoin != equiJoin.Ptr()) {
                     YQL_CLOG(DEBUG, Core) << "DecayCrossJoinIntoInner";
                     ret = newJoin;
-                    extraPredicate = FuseAndTerms(node.Pos(), andTerms, andTerm, isPg, ctx);
+                    extraPredicate = FuseAndTerms(node.Pos(), andTerms, andTerm, {}, isPg, ctx);
+                    break;
+                }
+            }
+
+            if (IsExtractOrPredicatesOverEquiJoinEnabled(types)) {
+                // This optimizer tries to extract predicates from OR terms that can be pushed down to EquiJoin inputs as pre-conditions
+                // For example, in SELECT ... FROM a JOIN b ON ... WHERE (f(a) AND g(b)) OR (x(a) AND y(b)) statement
+                // f(a) OR x(a), g(b) OR y(b) are extracted for respective inputs
+
+                auto extractedPredicates = ExtractOrPredicatesOverEquiJoin(andTerm, row, backRenameMap, labels, ctx, *types);
+                if (!extractedPredicates.empty()) {
+                    YQL_CLOG(DEBUG, Core) << "ExtractOrPredicatesOverEquiJoin";
+                    ret = equiJoin.Ptr();
+                    auto newAndTerm = ctx.NewCallable(andTerm->Pos(), "NoPush", {andTerm});
+                    andTerms.insert(andTerms.end(), extractedPredicates.begin(), extractedPredicates.end());
+                    extraPredicate = FuseAndTerms(node.Pos(), andTerms, andTerm, std::move(newAndTerm), isPg, ctx);
                     break;
                 }
             }

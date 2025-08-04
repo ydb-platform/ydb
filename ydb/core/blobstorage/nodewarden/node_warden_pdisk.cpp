@@ -137,7 +137,9 @@ namespace NKikimr::NStorage {
             pdiskConfig->EnableSectorEncryption = !pdiskConfig->SectorMap;
         }
 
-        if (ui64 unitSizeInBytes = pdisk.GetInferPDiskSlotCountFromUnitSize()) {
+        if (pdisk.GetPDiskConfig().GetExpectedSlotCount() != 0) {
+            // Skip inferring PDisk SlotCount
+        } else if (ui64 unitSizeInBytes = pdisk.GetInferPDiskSlotCountFromUnitSize()) {
             ui64 driveSize = 0;
             TStringStream outDetails;
             if (pdiskConfig->SectorMap) {
@@ -148,7 +150,7 @@ namespace NKikimr::NStorage {
             }
 
             if (!driveSize) {
-                STLOG(PRI_ERROR, BS_NODE, NW91, "Unable to determine drive size for inferring PDisk slot count",
+                STLOG(PRI_ERROR, BS_NODE, NW96, "Unable to determine drive size for inferring PDisk slot count",
                     (Path, path), (Details, outDetails.Str()));
             } else {
                 InferPDiskSlotCount(pdiskConfig, driveSize, unitSizeInBytes);

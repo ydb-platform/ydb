@@ -316,6 +316,10 @@ void GenerateExtendedInfo(TTestActorRuntime &runtime, NKikimrBlobStorage::TBaseC
             groupShift = nodeIndex * groupsPerNode;
         }
 
+        if (nodeIndex < options.NodesWithoutPDisksCount) {
+            continue;
+        }
+
         for (ui32 pdiskIndex = 0; pdiskIndex < pdisks; ++pdiskIndex) {
             auto pdiskId = nodeId * pdisks + pdiskIndex;
             auto &pdisk = node.PDiskStateInfo[pdiskId];
@@ -586,8 +590,11 @@ static void SetupServices(TTestBasicRuntime &runtime, const TTestEnvOpts &option
     runtime.GetAppData().BootstrapConfig = TFakeNodeWhiteboardService::BootstrapConfig;
     
     if (options.IsBridgeMode) {
-        for (ui32 pileId = 0; pileId < options.PileCount; ++pileId) {
-            runtime.GetAppData().BridgeConfig->AddPiles()->SetName("r" + ToString(pileId));
+        for (ui32 nodeIndex = 0; nodeIndex < runtime.GetNodeCount(); ++nodeIndex) {
+            for (ui32 pileId = 0; pileId < options.PileCount; ++pileId) {
+                runtime.GetAppData(nodeIndex).BridgeConfig.AddPiles()->SetName("r" + ToString(pileId));
+            }
+            runtime.GetAppData(nodeIndex).BridgeModeEnabled = true;
         }
     }
 
@@ -658,7 +665,9 @@ TCmsTestEnv::TCmsTestEnv(const TTestEnvOpts &options)
         for (ui32 i = 1; i <= GetNodeCount(); ++i) {
             ringGroupIdToNodeIds[i % options.PileCount].push_back(i - 1);
         }
-        auto setuper = CreateCustomStateStorageSetupper(ringGroups, ringGroupIdToNodeIds);
+        auto setuper = options.EnableSimpleStateStorageConfig 
+                                              ? CreateCustomStateStorageSetupper(ringGroups, 3) 
+                                              : CreateCustomStateStorageSetupper(ringGroups, ringGroupIdToNodeIds);
 
         for (ui32 nodeIndex = 0; nodeIndex < GetNodeCount(); ++nodeIndex) {
             setuper(*this, nodeIndex);
@@ -676,6 +685,9 @@ TCmsTestEnv::TCmsTestEnv(const TTestEnvOpts &options)
 
     Sender = AllocateEdgeActor();
     ClientId = TActorId();
+
+    // Make sure default empty configs are handled first
+    SimulateSleep(TDuration::MilliSeconds(100));
 
     NKikimrCms::TCmsConfig cmsConfig;
     cmsConfig.MutableTenantLimits()->SetDisabledNodesRatioLimit(0);
@@ -821,6 +833,22 @@ TCmsTestEnv::RequestState(const NKikimrCms::TClusterStateRequest &request,
     UNIT_ASSERT_VALUES_EQUAL(rec.GetStatus().GetCode(), code);
 
     return rec.GetState();
+}
+
+TCmsTestEnv::TListNodes
+TCmsTestEnv::RequestListNodes()
+{
+    TAutoPtr<TEvCms::TEvListClusterNodesRequest> event = new TEvCms::TEvListClusterNodesRequest;
+    SendToPipe(CmsId, GetSender(), event.Release(), 0, GetPipeConfigWithRetries());
+
+    TAutoPtr<IEventHandle> handle;
+    auto reply = GrabEdgeEventRethrow<TEvCms::TEvListClusterNodesResponse>(handle);
+    UNIT_ASSERT(reply);
+
+    const auto &rec = reply->Record;
+    UNIT_ASSERT_VALUES_EQUAL(rec.GetStatus(), Ydb::StatusIds::SUCCESS);
+
+    return rec.GetResult().nodes();
 }
 
 std::pair<TString, TVector<TString>>

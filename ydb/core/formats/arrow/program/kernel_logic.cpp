@@ -71,16 +71,16 @@ NAccessor::TCompositeChunkedArray::TBuilder TExistsJsonPath::MakeCompositeBuilde
 }
 
 TString TSimpleKernelLogic::SignalDescription() const {
-    if (YqlOperationId) {
-        return ::ToString((NYql::TKernelRequestBuilder::EBinaryOp)*YqlOperationId);
+    if (GetYqlOperationId()) {
+        return ::ToString((NYql::TKernelRequestBuilder::EBinaryOp)*GetYqlOperationId());
     } else {
         return "UNKNOWN";
     }
 }
 
 bool TSimpleKernelLogic::IsBoolInResult() const {
-    if (YqlOperationId) {
-        switch ((NYql::TKernelRequestBuilder::EBinaryOp)*YqlOperationId) {
+    if (GetYqlOperationId()) {
+        switch ((NYql::TKernelRequestBuilder::EBinaryOp)*GetYqlOperationId()) {
             case NYql::TKernelRequestBuilder::EBinaryOp::And:
             case NYql::TKernelRequestBuilder::EBinaryOp::Or:
             case NYql::TKernelRequestBuilder::EBinaryOp::Xor:
@@ -111,11 +111,24 @@ bool TSimpleKernelLogic::IsBoolInResult() const {
 }
 
 NJson::TJsonValue TSimpleKernelLogic::DoDebugJson() const {
-    if (YqlOperationId) {
-        return ::ToString((NYql::TKernelRequestBuilder::EBinaryOp)*YqlOperationId);
+    if (GetYqlOperationId()) {
+        return ::ToString((NYql::TKernelRequestBuilder::EBinaryOp)*GetYqlOperationId());
     } else {
         return NJson::JSON_NULL;
     }
+}
+
+NJson::TJsonValue IKernelLogic::DebugJson() const {
+    NJson::TJsonValue result = NJson::JSON_MAP;
+    result.InsertValue("class_name", GetClassName());
+    if (YqlOperationId) {
+        result.InsertValue("operation_id", ::ToString((NYql::TKernelRequestBuilder::EBinaryOp)*YqlOperationId));
+    }
+    auto details = DoDebugJson();
+    if (details.IsDefined()) {
+        result.InsertValue("details", std::move(details));
+    }
+    return result;
 }
 
 }   // namespace NKikimr::NArrow::NSSA

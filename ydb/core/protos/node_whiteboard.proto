@@ -5,6 +5,7 @@ import "ydb/core/protos/blobstorage_disk.proto";
 import "ydb/core/protos/whiteboard_disk_states.proto";
 import "ydb/core/protos/whiteboard_flags.proto";
 import "ydb/core/protos/memory_stats.proto";
+import "ydb/core/protos/bridge.proto";
 import "google/protobuf/descriptor.proto";
 import "ydb/core/protos/tracing.proto";
 
@@ -38,9 +39,10 @@ message TTabletStateInfo {
         ResolveLeader = 11;
         Deleted = 12;
         Stopped = 13;
-        Reserved14 = 14;
+        Terminating = 14;
         Reserved15 = 15;
         Reserved16 = 16;
+        Reserved17 = 17;
     }
 
     optional uint64 TabletId = 1 [(DefaultField) = true];
@@ -108,6 +110,7 @@ message TNodeStateInfo {
     optional uint64 WriteThroughput = 15; // bytes written per second
     optional ESessionState SessionState = 16;
     optional bool SameScope = 17; // true if the peer is in the same scope
+    optional string PeerBridgePileName = 18;
 }
 
 message TEvNodeStateRequest {
@@ -411,4 +414,26 @@ message TEvSignalBodyRequest {
 
 message TEvSignalBodyResponse {
     optional string SignalBody = 1;
+}
+
+message TBridgeInfo {
+    optional NKikimrBridge.TClusterState ClusterState = 1;
+}
+
+message TBridgeNodesInfo {
+    message TPileInfo {
+        repeated uint32 NodeIds = 1;
+    }
+    repeated TPileInfo Piles = 1;
+}
+
+message TEvBridgeInfoRequest {
+    optional uint64 ChangedSince = 1;
+}
+
+message TEvBridgeInfoResponse {
+    optional bool IsBridgeCluster = 1;
+    optional TBridgeInfo BridgeInfo = 2;
+    optional TBridgeNodesInfo BridgeNodesInfo = 3;
+    optional uint64 ResponseTime = 4;
 }

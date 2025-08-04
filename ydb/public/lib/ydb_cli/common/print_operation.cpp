@@ -430,8 +430,8 @@ void Out<NYdb::NQuery::EExecStatus>(IOutputStream& o, NYdb::NQuery::EExecStatus 
         case EExecStatus::Unspecified:
             o << TStringBuf("unspecified");
             return;
-        default:
-            o << TStringBuf("unknown");
+        case EExecStatus::Failed:
+            o << TStringBuf("failed");
             return;
     }
 

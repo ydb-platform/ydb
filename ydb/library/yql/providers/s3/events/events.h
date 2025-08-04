@@ -10,9 +10,14 @@
 #include <yql/essentials/public/issue/yql_issue_message.h>
 #include <ydb/library/yql/providers/common/http_gateway/yql_http_gateway.h>
 
-#include <ydb/library/yql/udfs/common/clickhouse/client/src/Core/Block.h>
-
 #include <arrow/api.h>
+
+namespace NDB {
+
+// forward declaration for <ydb/library/yql/udfs/common/clickhouse/client/src/Core/Block.h>
+class Block;
+
+} // namespace NDB
 
 namespace NYql::NDq {
 
@@ -176,11 +181,9 @@ struct TEvS3Provider {
     };
 
     struct TEvNextBlock : public NActors::TEventLocal<TEvNextBlock, EvNextBlock> {
-        TEvNextBlock(NDB::Block& block, size_t pathInd, ui64 ingressDelta, TDuration cpuTimeDelta, ui64 ingressDecompressedDelta = 0)
-            : PathIndex(pathInd), IngressDelta(ingressDelta), CpuTimeDelta(cpuTimeDelta), IngressDecompressedDelta(ingressDecompressedDelta) {
-            Block.swap(block);
-        }
-        NDB::Block Block;
+        TEvNextBlock(NDB::Block& block, size_t pathInd, ui64 ingressDelta, TDuration cpuTimeDelta, ui64 ingressDecompressedDelta = 0);
+
+        std::unique_ptr<NDB::Block> Block;
         const size_t PathIndex;
         const ui64 IngressDelta;
         const TDuration CpuTimeDelta;

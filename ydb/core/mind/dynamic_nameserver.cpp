@@ -260,6 +260,7 @@ void TDynamicNameserver::Handle(TEvNodeWardenStorageConfig::TPtr ev) {
     const auto& config = *ev->Get()->Config;
 
     BridgeInfo = std::move(ev->Get()->BridgeInfo);
+    ListNodesCache->Invalidate();
 
     if (ev->Get()->SelfManagementEnabled) {
         // self-management through distconf is enabled and we are operating based on their tables, so apply them now
@@ -401,12 +402,19 @@ void TDynamicNameserver::SendNodesList(TActorId recipient, const TActorContext &
     if (ListNodesCache->NeedUpdate(now)) {
         auto newNodes = MakeIntrusive<TIntrusiveVector<TEvInterconnect::TNodeInfo>>();
         auto newExpire = TInstant::Max();
-        const bool bridgeModeEnabled = AppData()->BridgeConfig && AppData()->BridgeConfig->PilesSize();
+        const bool bridgeModeEnabled = AppData()->BridgeModeEnabled;
+        const auto& bridge = AppData()->BridgeConfig;
         auto newPileMap = bridgeModeEnabled
             ?  std::make_shared<TEvInterconnect::TEvNodesInfo::TPileMap>()
             : nullptr;
         if (newPileMap) {
-            newPileMap->resize(AppData()->BridgeConfig->PilesSize());
+            newPileMap->resize(bridge.PilesSize());
+        }
+        THashMap<TString, size_t> pileNameMap;
+        if (bridgeModeEnabled) {
+            for (size_t i = 0; i < bridge.PilesSize(); ++i) {
+                pileNameMap.emplace(bridge.GetPiles(i).GetName(), i);
+            }
         }
 
         for (const auto &pr : StaticConfig->StaticNodeTable) {
@@ -427,8 +435,12 @@ void TDynamicNameserver::SendNodesList(TActorId recipient, const TActorContext &
                                            pr.second.Host, pr.second.ResolveHost,
                                            pr.second.Port, pr.second.Location, false);
                     newExpire = std::min(newExpire, pr.second.Expire);
-                    if (pr.second.BridgePileId && newPileMap) {
-                        newPileMap->at(pr.second.BridgePileId->GetRawId()).push_back(pr.first);
+                    if (newPileMap) {
+                        TNodeLocation location(pr.second.Location);
+                        const auto& bridgePileName = location.GetBridgePileName();
+                        if (bridgePileName && pileNameMap.contains(*bridgePileName)) {
+                            newPileMap->at(pileNameMap[*bridgePileName]).push_back(pr.first);
+                        }
                     }
                 }
             }
@@ -999,7 +1011,13 @@ void TListNodesCache::Invalidate() {
 }
 
 bool TListNodesCache::NeedUpdate(TInstant now) const {
-    return Nodes == nullptr || now > Expire;
+    if (Nodes == nullptr || now > Expire) {
+        return true;
+    }
+    if (!PileMap && AppData()->BridgeModeEnabled) {
+        return true;
+    }
+    return false;
 }
 
 TIntrusiveVector<TEvInterconnect::TNodeInfo>::TConstPtr TListNodesCache::GetNodes() const {

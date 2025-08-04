@@ -83,7 +83,7 @@ class TSystemViewsCollector : public TActorBootstrapped<TSystemViewsCollector> {
     std::map<TVSlotId, const NKikimrSysView::TVSlotInfo*> VSlotIndex;
     std::map<TGroupId, const NKikimrSysView::TGroupInfo*> GroupIndex;
     std::map<TBoxStoragePoolId, const NKikimrSysView::TStoragePoolInfo*> StoragePoolIndex;
-    TBlobStorageController::THostRecordMap HostRecords;
+    THostRecordMap HostRecords;
     ui32 GroupReserveMin = 0;
     ui32 GroupReservePart = 0;
     ::NMonitoring::TDynamicCounterPtr Counters;
@@ -405,6 +405,14 @@ void CopyInfo(NKikimrSysView::TGroupInfo* info, const THolder<TBlobStorageContro
         info->SetGetFastLatency(latencyStats.GetFast->MicroSeconds());
     }
 
+    if (groupInfo->BridgePileId) {
+        info->SetBridgePileId(groupInfo->BridgePileId->GetRawId());
+    }
+
+    if (groupInfo->BridgeProxyGroupId) {
+        info->SetProxyGroupId(groupInfo->BridgeProxyGroupId->GetRawId());
+    }
+
     info->SetLayoutCorrect(groupInfo->IsLayoutCorrect(finder));
     const auto& status = groupInfo->GetStatus(finder);
     info->SetOperatingStatus(NKikimrBlobStorage::TGroupStatus::E_Name(status.OperatingStatus));
@@ -572,6 +580,11 @@ void TBlobStorageController::UpdateSystemViews() {
                 const auto& status = group.GetStatus(staticFinder);
                 pb->SetOperatingStatus(NKikimrBlobStorage::TGroupStatus::E_Name(status.OperatingStatus));
                 pb->SetExpectedStatus(NKikimrBlobStorage::TGroupStatus::E_Name(status.ExpectedStatus));
+
+                for (size_t i = 0; i < group.Info->GetBridgeGroupIds().size(); ++i) {
+                    state.Groups[group.Info->GetBridgeGroupIds()[i]].SetProxyGroupId(group.Info->GroupID.GetRawId());
+                    state.Groups[group.Info->GetBridgeGroupIds()[i]].SetBridgePileId(i);
+                }
             }
         }
 

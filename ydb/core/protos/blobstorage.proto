@@ -311,6 +311,7 @@ message TEvVPut {
 
     optional NKikimrProto.TLogoBlobID BlobID = 1;
     optional bytes Buffer = 2;
+    optional bool IssueKeepFlag = 12; // when set, blob is written along with keep flag
 
     optional NKikimrBlobStorage.TVDiskID VDiskID = 3;
 
@@ -346,6 +347,8 @@ message TEvVPutResult {
 message TVMultiPutItem {
     optional NKikimrProto.TLogoBlobID BlobID = 1;
     optional bytes Buffer = 2;
+    optional bool IssueKeepFlag = 7;
+    optional bool IgnoreBlock = 8;
 
     optional uint64 FullDataSize = 3;
     optional uint64 Cookie = 4;
@@ -619,6 +622,7 @@ message TEvVCollectGarbage {
     optional uint32 CollectGeneration = 4;
     optional uint32 CollectStep = 5;
     optional bool Hard = 12 [default = false];
+    optional bool IgnoreBlock = 13;
 
     repeated NKikimrProto.TLogoBlobID Keep = 6;
     repeated NKikimrProto.TLogoBlobID DoNotKeep = 7;
@@ -1315,6 +1319,7 @@ message TEvControllerSelectGroupsResult {
         optional uint64 AvailableSize = 9; // bytes as reported by VDisk metrics (pessimistic case)
         optional uint64 AllocatedSize = 10; // the same basis
         optional NKikimrBlobStorage.TPDiskSpaceColor.E SpaceColor = 11;
+        optional uint32 GroupSizeInUnits = 14;
     }
     message TMatchingGroupList {
         repeated TGroupParameters Groups = 1;

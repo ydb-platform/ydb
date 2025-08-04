@@ -8,6 +8,7 @@
 #include <ydb/core/sys_view/auth/permissions.h>
 #include <ydb/core/sys_view/auth/users.h>
 #include <ydb/core/sys_view/common/schema.h>
+#include <ydb/core/sys_view/compile_cache/compile_cache.h>
 #include <ydb/core/sys_view/nodes/nodes.h>
 #include <ydb/core/sys_view/partition_stats/partition_stats.h>
 #include <ydb/core/sys_view/partition_stats/top_partitions.h>
@@ -50,6 +51,7 @@ namespace {
         {TopQueriesByRequestUnits1HourName, ESysViewType::ETopQueriesByRequestUnitsOneHour},
 
         {QuerySessions, ESysViewType::EQuerySessions},
+        {CompileCacheQueries, ESysViewType::ECompileCacheQueries},
 
         {PDisksName, ESysViewType::EPDisks},
         {VSlotsName, ESysViewType::EVSlots},
@@ -266,6 +268,8 @@ THolder<NActors::IActor> CreateSystemViewScan(
         return CreateNodesScan(ownerId, scanId, sysViewDescription, tableRange, columns);
     case ESysViewType::EQuerySessions:
         return CreateSessionsScan(ownerId, scanId, sysViewDescription, tableRange, columns);
+    case ESysViewType::ECompileCacheQueries:
+        return CreateCompileCacheQueriesScan(ownerId, scanId, sysViewDescription, tableRange, columns);
     case ESysViewType::ETopQueriesByDurationOneMinute:
     case ESysViewType::ETopQueriesByDurationOneHour:
     case ESysViewType::ETopQueriesByReadBytesOneMinute:

@@ -83,7 +83,7 @@ public:
     virtual void Load(IInputStream& stream);
 
 protected:
-    NKikimr::NMiniKQL::TCallableVisitFuncProvider MakeTransformProvider(THashMap<TString, NKikimr::NMiniKQL::TRuntimeNode>* extraArgs = nullptr) const;
+    NKikimr::NMiniKQL::TCallableVisitFuncProvider MakeTransformProvider(THashMap<TString, NKikimr::NMiniKQL::TRuntimeNode>* extraArgs = nullptr, const TString& prefix = "Yt") const;
 
     void Init();
 

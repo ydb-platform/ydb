@@ -69,7 +69,7 @@ bool TTxBlobsWritingFinished::DoExecute(TTransactionContext& txc, const TActorCo
             Self->OperationsManager->LinkInsertWriteIdToOperationWriteId(InsertWriteIds, operation->GetWriteId());
         }
         if (operation->GetBehaviour() == EOperationBehaviour::NoTxWrite) {
-            LWPROBE(EvWriteResult, Self->TabletID(), Source.ToString(), TxId, Cookie, "no_tx_write");
+            LWPROBE(EvWriteResult, Self->TabletID(), writeMeta.GetSource().ToString(), 0, operation->GetCookie(), "no_tx_write", true, "");
             auto ev = NEvents::TDataEvents::TEvWriteResult::BuildCompleted(Self->TabletID());
             Results.emplace_back(std::move(ev), writeMeta.GetSource(), operation->GetCookie());
         } else {
@@ -80,7 +80,7 @@ bool TTxBlobsWritingFinished::DoExecute(TTransactionContext& txc, const TActorCo
             lock.SetGeneration(info.GetGeneration());
             lock.SetCounter(info.GetInternalGenerationCounter());
             writeMeta.GetPathId().SchemeShardLocalPathId.ToProto(lock);
-            LWPROBE(EvWriteResult, Self->TabletID(), Source.ToString(), TxId, Cookie, "tx_write", true, "");
+            LWPROBE(EvWriteResult, Self->TabletID(), writeMeta.GetSource().ToString(), 0, operation->GetCookie(), "tx_write", true, "");
             auto ev = NEvents::TDataEvents::TEvWriteResult::BuildCompleted(Self->TabletID(), operation->GetLockId(), lock);
             AddTableAccessStatsToTxStats(*ev->Record.MutableTxStats(), writeMeta.GetPathId().SchemeShardLocalPathId.GetRawValue(),
                                          writeResult.GetRecordsCount(), writeResult.GetDataSize(), operation->GetModificationType());
@@ -161,7 +161,7 @@ bool TTxBlobsWritingFailed::DoExecute(TTransactionContext& txc, const TActorCont
         Self->OperationsManager->AddTemporaryTxLink(op->GetLockId());
         Self->OperationsManager->AbortTransactionOnExecute(*Self, op->GetLockId(), txc);
 
-        LWPROBE(EvWriteResult, Self->TabletID(), Source.ToString(), TxId, Cookie, "tx_write", false, wResult.GetErrorMessage());
+        LWPROBE(EvWriteResult, Self->TabletID(), writeMeta.GetSource().ToString(), 0, op->GetCookie(), "tx_write", false, wResult.GetErrorMessage());
         auto ev = NEvents::TDataEvents::TEvWriteResult::BuildError(Self->TabletID(), op->GetLockId(),
             wResult.IsInternalError() ? NKikimrDataEvents::TEvWriteResult::STATUS_INTERNAL_ERROR
                                       : NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST,

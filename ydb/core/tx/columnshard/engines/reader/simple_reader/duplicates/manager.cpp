@@ -145,6 +145,9 @@ public:
     }
 
     void AddRange(const ui64 portion, const TRowRange& range) {
+        if (range.NumRows() == 0) {
+            return;
+        }
         AFL_VERIFY(RangeByPortion.emplace(portion, range).second);
     }
 

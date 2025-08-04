@@ -39,7 +39,7 @@ def get_cluster_state(client):
 
 def get_cluster_state_and_check(client, expected_states):
     result = get_cluster_state(client)
-    actual_states = {s.pile_id: s.state for s in result.per_pile_state}
+    actual_states = {s.pile_name: s.state for s in result.pile_states}
     assert_that(actual_states, is_(has_entries(expected_states)))
     assert_that(len(actual_states), is_(len(expected_states)))
     return result
@@ -59,7 +59,7 @@ def wait_for_cluster_state(client, expected_states, timeout_seconds=5):
 
 
 def check_states(result, expected_states):
-    actual_states = {s.pile_id: s.state for s in result.per_pile_state}
+    actual_states = {s.pile_name: s.state for s in result.pile_states}
     assert_that(actual_states, is_(has_entries(expected_states)))
     assert_that(len(actual_states), is_(len(expected_states)))
 
@@ -109,6 +109,7 @@ class BridgeKiKiMRTest(object):
         host = cls.cluster.nodes[1].host
         grpc_port = cls.cluster.nodes[1].port
         cls.bridge_client = BridgeClient(host, grpc_port)
+        cls.secondary_bridge_client = BridgeClient(cls.cluster.nodes[2].host, cls.cluster.nodes[2].port)
         cls.bridge_client.set_auth_token('root@builtin')
 
     @classmethod
@@ -121,29 +122,29 @@ class TestBridgeBasic(BridgeKiKiMRTest):
 
     def test_update_and_get_cluster_state(self):
         initial_result = get_cluster_state(self.bridge_client)
-        check_states(initial_result, {0: bridge.PRIMARY, 1: bridge.SYNCHRONIZED})
+        check_states(initial_result, {"r1": bridge.PileState.PRIMARY, "r2": bridge.PileState.SYNCHRONIZED})
 
         updates = [
-            bridge.PileStateUpdate(pile_id=1, state=bridge.PROMOTE),
+            bridge.PileState(pile_name="r2", state=bridge.PileState.PROMOTE),
         ]
         update_cluster_state(self.bridge_client, updates)
-        wait_for_cluster_state(self.bridge_client, {0: bridge.PRIMARY, 1: bridge.PROMOTE})
+        wait_for_cluster_state(self.bridge_client, {"r1": bridge.PileState.PRIMARY, "r2": bridge.PileState.PROMOTE})
 
     # TODO: uncomment when we stabilize this scenario
     # def test_failover(self):
     #     initial_result = get_cluster_state(self.bridge_client)
-    #     check_states(initial_result, {0: bridge.PRIMARY, 1: bridge.SYNCHRONIZED})
+    #     check_states(initial_result, {"r1": bridge.PileState.PRIMARY, "r2": bridge.PileState.SYNCHRONIZED})
 
     #     update_cluster_state(self.bridge_client, [
-    #         bridge.PileStateUpdate(pile_id=0, state=bridge.DISCONNECTED),
-    #         bridge.PileStateUpdate(pile_id=1, state=bridge.PRIMARY),
+    #         bridge.PileState(pile_name="r1", state=bridge.PileState.DISCONNECTED),
+    #         bridge.PileState(pile_name="r2", state=bridge.PileState.PRIMARY),
     #     ])
-    #     wait_for_cluster_state(self.bridge_client, {0: bridge.DISCONNECTED, 1: bridge.PRIMARY})
+    #     wait_for_cluster_state(self.bridge_client, {"r1": bridge.PileState.DISCONNECTED, "r2": bridge.PileState.PRIMARY})
 
-    #     update_cluster_state(self.bridge_client, [
-    #         bridge.PileStateUpdate(pile_id=0, state=bridge.NOT_SYNCHRONIZED),
+    #     update_cluster_state(self.secondary_bridge_client, [
+    #         bridge.PileState(pile_name="r1", state=bridge.PileState.NOT_SYNCHRONIZED),
     #     ])
-    #     wait_for_cluster_state(self.bridge_client, {0: bridge.NOT_SYNCHRONIZED, 1: bridge.PRIMARY})
+    #     wait_for_cluster_state(self.secondary_bridge_client, {"r1": bridge.PileState.NOT_SYNCHRONIZED, "r2": bridge.PileState.PRIMARY})
 
 
 class TestBridgeValidation(BridgeKiKiMRTest):
@@ -157,29 +158,29 @@ class TestBridgeValidation(BridgeKiKiMRTest):
             ),
             (
                 [
-                    bridge.PileStateUpdate(pile_id=0, state=bridge.PRIMARY),
-                    bridge.PileStateUpdate(pile_id=1, state=bridge.PRIMARY),
+                    bridge.PileState(pile_name="r1", state=bridge.PileState.PRIMARY),
+                    bridge.PileState(pile_name="r2", state=bridge.PileState.PRIMARY),
                 ],
                 "multiple_primary_piles_in_request"
             ),
             (
                 [
-                    bridge.PileStateUpdate(pile_id=0, state=bridge.SYNCHRONIZED),
+                    bridge.PileState(pile_name="r1", state=bridge.PileState.SYNCHRONIZED),
                 ],
                 "no_primary_pile_in_result"
             ),
             (
                 [
-                    bridge.PileStateUpdate(pile_id=0, state=bridge.SYNCHRONIZED),
-                    bridge.PileStateUpdate(pile_id=0, state=bridge.PRIMARY),
+                    bridge.PileState(pile_name="r1", state=bridge.PileState.SYNCHRONIZED),
+                    bridge.PileState(pile_name="r1", state=bridge.PileState.PRIMARY),
                 ],
                 "duplicate_pile_update"
             ),
             (
                 [
-                    bridge.PileStateUpdate(pile_id=99, state=bridge.PRIMARY),
+                    bridge.PileState(pile_name="r3", state=bridge.PileState.PRIMARY),
                 ],
-                "invalid_pile_id"
+                "invalid_pile_name"
             ),
         ]
     )

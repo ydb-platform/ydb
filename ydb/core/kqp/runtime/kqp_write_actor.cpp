@@ -2542,7 +2542,8 @@ public:
         OperationStartTime = TInstant::Now();
 
         CA_LOG_D("Start prepare for distributed commit");
-        YQL_ENSURE(CurrentStateFunc() == &TThis::StateWaitTasks);
+        AFL_ENSURE(CurrentStateFunc() == &TThis::StateWaitTasks
+            || CurrentStateFunc() == &TThis::StateFlush);
         Become(&TThis::StatePrepare);
 
         CheckQueuesEmpty();
@@ -3429,7 +3430,6 @@ public:
         YQL_ENSURE(CurrentStateFunc() == &TThis::StateFlush);
         UpdateTracingState("Write", BufferWriteActorSpan.GetTraceId());
         OnOperationFinished(Counters->BufferActorFlushLatencyHistogram);
-        Become(&TKqpBufferWriteActor::StateWrite);
 
         ForEachWriteActor([&](TKqpTableWriteActor* actor, const TActorId) {
             AFL_ENSURE(TxId || actor->IsEmpty());
@@ -3448,6 +3448,7 @@ public:
             Prepare(std::nullopt);
             return;
         }
+        Become(&TKqpBufferWriteActor::StateWrite);
 
         Send<ESendingType::Tail>(ExecuterActorId, new TEvKqpBuffer::TEvResult{
             BuildStats()

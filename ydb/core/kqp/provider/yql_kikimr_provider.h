@@ -110,6 +110,7 @@ struct TKikimrQueryContext : TThrRefBase {
     bool DocumentApiRestricted = true;
     bool IsInternalCall = false;
     bool ConcurrentResults = true;
+    bool RuntimeParameterSizeLimitSatisfied = false;
 
     std::unique_ptr<NKikimrKqp::TPreparedQuery> PreparingQuery;
     std::shared_ptr<const NKikimrKqp::TPreparedQuery> PreparedQuery;

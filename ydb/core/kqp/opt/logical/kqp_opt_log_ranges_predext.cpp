@@ -313,6 +313,13 @@ TExprBase KqpPushExtractedPredicateToReadTable(TExprBase node, TExprContext& ctx
         settings.MaxRanges = Nothing();
     }
 
+    if (kqpCtx.QueryCtx->RuntimeParameterSizeLimitSatisfied &&
+        kqpCtx.Config->EnableSimpleProgramsSinglePartitionOptimization &&
+        kqpCtx.Config->ExtractPredicateParameterListSizeLimit.has_value())
+    {
+        settings.ExternalParameterMaxSize = *kqpCtx.Config->ExtractPredicateParameterListSizeLimit;
+    }
+
     auto extractor = MakePredicateRangeExtractor(settings);
     YQL_ENSURE(mainTableDesc.SchemeNode);
 

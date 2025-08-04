@@ -184,6 +184,7 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
     bool EnableAstCache = false;
     bool EnablePgConstsToParams = false;
     ui64 ExtractPredicateRangesLimit = 0;
+    std::optional<ui64> ExtractPredicateParameterListSizeLimit;
     bool EnablePerStatementQueryExecution = false;
     bool EnableCreateTableAs = false;
     bool EnableDataShardCreateTableAs = false;
@@ -220,6 +221,7 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
     bool EnableTopSortSelectIndex = true;
     bool EnablePointPredicateSortAutoSelectIndex = true;
     bool EnableSimpleProgramsSinglePartitionOptimization = true;
+    bool EnableSimpleProgramsSinglePartitionOptimizationBroadPrograms = true;
 
     ui32 LangVer = NYql::MinLangVersion;
     NYql::EBackportCompatibleFeaturesMode BackportMode = NYql::EBackportCompatibleFeaturesMode::Released;

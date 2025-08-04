@@ -219,6 +219,7 @@ bool TKqpQueryState::TryGetFromCache(
     settings.DocumentApiRestricted = IsDocumentApiRestricted_;
     settings.IsInternalCall = IsInternalCall();
     settings.Syntax = GetSyntax();
+    settings.RuntimeParameterSizeLimitSatisfied = RuntimeParameterSizeLimitSatisfied;
 
     TGUCSettings gUCSettings = gUCSettingsPtr ? *gUCSettingsPtr : TGUCSettings();
     bool keepInCache = false;
@@ -278,6 +279,7 @@ std::unique_ptr<TEvKqp::TEvCompileRequest> TKqpQueryState::BuildCompileRequest(s
     settings.DocumentApiRestricted = IsDocumentApiRestricted_;
     settings.IsInternalCall = IsInternalCall();
     settings.Syntax = GetSyntax();
+    settings.RuntimeParameterSizeLimitSatisfied = RuntimeParameterSizeLimitSatisfied;
 
     bool keepInCache = false;
     bool perStatementResult = HasImplicitTx();
@@ -335,6 +337,7 @@ std::unique_ptr<TEvKqp::TEvRecompileRequest> TKqpQueryState::BuildReCompileReque
     settings.DocumentApiRestricted = IsDocumentApiRestricted_;
     settings.IsInternalCall = IsInternalCall();
     settings.Syntax = GetSyntax();
+    settings.RuntimeParameterSizeLimitSatisfied = RuntimeParameterSizeLimitSatisfied;
 
     TGUCSettings gUCSettings = gUCSettingsPtr ? *gUCSettingsPtr : TGUCSettings();
 
@@ -381,6 +384,7 @@ std::unique_ptr<TEvKqp::TEvCompileRequest> TKqpQueryState::BuildCompileSplittedR
     settings.DocumentApiRestricted = IsDocumentApiRestricted_;
     settings.IsInternalCall = IsInternalCall();
     settings.Syntax = GetSyntax();
+    settings.RuntimeParameterSizeLimitSatisfied = RuntimeParameterSizeLimitSatisfied;
     TGUCSettings gUCSettings = gUCSettingsPtr ? *gUCSettingsPtr : TGUCSettings();
 
     switch (GetAction()) {

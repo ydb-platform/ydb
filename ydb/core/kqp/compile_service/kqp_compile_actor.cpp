@@ -326,6 +326,7 @@ private:
         IKqpHost::TPrepareSettings prepareSettings;
         prepareSettings.DocumentApiRestricted = QueryId.Settings.DocumentApiRestricted;
         prepareSettings.IsInternalCall = QueryId.Settings.IsInternalCall;
+        prepareSettings.RuntimeParameterSizeLimitSatisfied = QueryId.Settings.RuntimeParameterSizeLimitSatisfied;
 
         switch (QueryId.Settings.Syntax) {
             case Ydb::Query::Syntax::SYNTAX_YQL_V1:
@@ -652,6 +653,7 @@ void ApplyServiceConfig(TKikimrConfiguration& kqpConfig, const TTableServiceConf
     kqpConfig.BindingsMode = RemapBindingsMode(serviceConfig.GetBindingsMode());
     kqpConfig.EnablePgConstsToParams = serviceConfig.GetEnablePgConstsToParams() && serviceConfig.GetEnableAstCache();
     kqpConfig.ExtractPredicateRangesLimit = serviceConfig.GetExtractPredicateRangesLimit();
+    kqpConfig.ExtractPredicateParameterListSizeLimit = serviceConfig.GetExtractPredicateParameterListSizeLimit();
     kqpConfig.EnablePerStatementQueryExecution = serviceConfig.GetEnablePerStatementQueryExecution();
     kqpConfig.EnableCreateTableAs = serviceConfig.GetEnableCreateTableAs();
     kqpConfig.EnableDataShardCreateTableAs = serviceConfig.GetEnableDataShardCreateTableAs();
@@ -680,6 +682,8 @@ void ApplyServiceConfig(TKikimrConfiguration& kqpConfig, const TTableServiceConf
     kqpConfig.EnableParallelUnionAllConnectionsForExtend = serviceConfig.GetEnableParallelUnionAllConnectionsForExtend();
     kqpConfig.EnableTempTablesForUser = serviceConfig.GetEnableTempTablesForUser();
     kqpConfig.EnableSimpleProgramsSinglePartitionOptimization = serviceConfig.GetEnableSimpleProgramsSinglePartitionOptimization();
+    kqpConfig.EnableSimpleProgramsSinglePartitionOptimizationBroadPrograms = serviceConfig.GetEnableSimpleProgramsSinglePartitionOptimizationBroadPrograms();
+
     kqpConfig.EnableOlapPushdownAggregate = serviceConfig.GetEnableOlapPushdownAggregate();
     kqpConfig.EnableOrderOptimizaionFSM = serviceConfig.GetEnableOrderOptimizaionFSM();
     kqpConfig.EnableTopSortSelectIndex = serviceConfig.GetEnableTopSortSelectIndex();

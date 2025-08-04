@@ -75,10 +75,18 @@ public:
         RequestEv.reset(ev->Release().Release());
         bool enableImplicitQueryParameterTypes = tableServiceConfig.GetEnableImplicitQueryParameterTypes() ||
             AppData()->FeatureFlags.GetEnableImplicitQueryParameterTypes();
+
         if (enableImplicitQueryParameterTypes && !RequestEv->GetYdbParameters().empty()) {
             QueryParameterTypes = std::make_shared<std::map<TString, Ydb::Type>>();
+
             for (const auto& [name, typedValue] : RequestEv->GetYdbParameters()) {
                 QueryParameterTypes->insert({name, typedValue.Gettype()});
+
+                if ((typedValue.type().has_list_type() || typedValue.type().has_tuple_type()) &&
+                    typedValue.value().items().size() > static_cast<int>(tableServiceConfig.GetExtractPredicateParameterListSizeLimit()))
+                {
+                    RuntimeParameterSizeLimitSatisfied = false;
+                }
             }
         }
 
@@ -167,6 +175,7 @@ public:
     std::optional<NCpuTime::TCpuTimer> CurrentTimer;
 
     std::shared_ptr<std::map<TString, Ydb::Type>> QueryParameterTypes;
+    bool RuntimeParameterSizeLimitSatisfied = true;
 
     TKqpTempTablesState::TConstPtr TempTablesState;
     TMaybe<TActorId> PoolHandlerActor;

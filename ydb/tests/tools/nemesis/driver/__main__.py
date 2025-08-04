@@ -4,6 +4,9 @@ import logging.config
 import subprocess as sp
 import os
 import tempfile
+import signal
+import sys
+import time
 
 import logging
 
@@ -99,14 +102,17 @@ class SshAgent(object):
         stdout, stderr = p.communicate(stdin)
 
         # Listing keys from empty ssh-agent results in exit code 1
-        if stdout.strip() == "The agent has no identities.":
+        if stdout.decode('utf-8', errors='ignore').strip() == "The agent has no identities.":
             return ""
 
         if p.returncode:
-            message = stderr.strip() + "\n" + stdout.strip()
+            # Декодируем bytes в строки перед конкатенацией
+            stderr_str = stderr.decode('utf-8', errors='ignore').strip()
+            stdout_str = stdout.decode('utf-8', errors='ignore').strip()
+            message = stderr_str + "\n" + stdout_str
             raise RuntimeError(message.strip())
 
-        return stdout
+        return stdout.decode('utf-8', errors='ignore')
 
 
 class Key(object):
@@ -127,37 +133,86 @@ class Key(object):
 
 def nemesis_logic(arguments):
     logging.config.dictConfig(setup_logging_config(arguments.log_file))
+    logger = logging.getLogger(__name__)
+    
+    logger.info("Starting nemesis logic")
+    logger.info("Arguments: %s", arguments)
+    
     ssh_username = os.getenv('NEMESIS_USER', 'robot-nemesis')
+    logger.info("SSH username: %s", ssh_username)
+    
     yaml_config = arguments.yaml_config
-    if yaml_config is not None:
-        nemesis = catalog.nemesis_factory(
-            ExternalKiKiMRCluster(
+    logger.info("YAML config: %s", yaml_config)
+    
+    try:
+        # Создаем nemesis процесс
+        if yaml_config is not None:
+            logger.info("Creating cluster with YAML config")
+            cluster = ExternalKiKiMRCluster(
                 cluster_template=arguments.ydb_cluster_template,
                 kikimr_configure_binary_path=None,
                 kikimr_path=arguments.ydb_binary_path,
                 ssh_username=ssh_username,
                 yaml_config=yaml_config,
-            ),
-            ssh_username=ssh_username,
-            enable_nemesis_list_filter_by_hostname=arguments.enable_nemesis_list_filter_by_hostname,
-        )
-    else:
-        nemesis = catalog.nemesis_factory(
-            ExternalKiKiMRCluster(
+            )
+        else:
+            logger.info("Creating cluster without YAML config")
+            cluster = ExternalKiKiMRCluster(
                 cluster_template=arguments.ydb_cluster_template,
                 kikimr_configure_binary_path=None,
                 kikimr_path=arguments.ydb_binary_path,
                 ssh_username=ssh_username,
-            ),
+            )
+        
+        logger.info("Cluster created successfully: %s", cluster)
+        logger.info("Cluster hostnames: %s", cluster.hostnames if hasattr(cluster, 'hostnames') else 'N/A')
+        
+        nemesis = catalog.nemesis_factory(
+            cluster,
             ssh_username=ssh_username,
             enable_nemesis_list_filter_by_hostname=arguments.enable_nemesis_list_filter_by_hostname,
         )
-    nemesis.start()
-    monitor.setup_page(arguments.mon_host, arguments.mon_port)
-    nemesis.stop()
+        logger.info("Nemesis factory created successfully")
+        
+    except Exception as e:
+        logger.error("Failed to create nemesis: %s", e)
+        raise
+    
+    # Функция для graceful shutdown
+    def signal_handler(signum, frame):
+        logger.info("Получен сигнал %d (SIGTERM/SIGINT), начинаем graceful shutdown", signum)
+        try:
+            nemesis.stop()
+        except Exception as e:
+            logger.error("Ошибка при остановке nemesis: %s", e)
+        sys.exit(0)
+    
+    # Устанавливаем обработчики сигналов в главном потоке
+    signal.signal(signal.SIGTERM, signal_handler)
+    signal.signal(signal.SIGINT, signal_handler)
+    
+    try:
+        nemesis.start()
+        flask_thread = monitor.setup_page(arguments.mon_host, arguments.mon_port)
+        
+        # Ждем завершения nemesis процесса
+        while nemesis.is_alive():
+            time.sleep(1)
+            
+    except Exception as e:
+        logger.error("Ошибка в nemesis_logic: %s", e)
+        raise
+    finally:
+        try:
+            nemesis.stop()
+        except Exception as e:
+            logger.error("Ошибка при остановке nemesis в finally: %s", e)
 
 
 def main():
+    logger = logging.getLogger(__name__)
+    logger.info("Starting nemesis driver")
+    
     parser = argparse.ArgumentParser(formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('--ydb-cluster-template', required=True, help='Path to the YDB cluster template')
     parser.add_argument('--ydb-binary-path', required=True, help='Path to the YDB binary')
@@ -169,11 +224,19 @@ def main():
     parser.add_argument('--enable-nemesis-list-filter-by-hostname', action='store_true')
     arguments = parser.parse_args()
 
-    if arguments.private_key_file:
-        with Key(arguments.private_key_file):
+    logger.info("Parsed arguments: %s", arguments)
+
+    try:
+        if arguments.private_key_file:
+            logger.info("Using private key file: %s", arguments.private_key_file)
+            with Key(arguments.private_key_file):
+                nemesis_logic(arguments)
+        else:
+            logger.info("No private key file specified")
             nemesis_logic(arguments)
-    else:
-        nemesis_logic(arguments)
+    except Exception as e:
+        logger.error("Failed to run nemesis: %s", e)
+        raise
 
 
 if __name__ == '__main__':

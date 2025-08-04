@@ -1,9 +1,12 @@
 # -*- coding: utf-8 -*-
 import flask
 import copy
-
 from library.python.monlib.metric_registry import MetricRegistry
 from library.python.monlib import encoder
+import threading
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 CONTENT_TYPE_SPACK = 'application/x-solomon-spack'
@@ -45,4 +48,20 @@ def monitor():
 
 
 def setup_page(host, port):
-    app.run(host, port)
+    logger.info("Setting up monitoring page on %s:%d", host, port)
+    
+    def run_flask():
+        try:
+            logger.info("Starting Flask app on %s:%d", host, port)
+            app.run(host, port, debug=False, use_reloader=False)
+            logger.info("Flask app started successfully")
+        except Exception as e:
+            logger.error("Failed to start Flask app: %s", e)
+            raise
+    
+    # Запускаем Flask в отдельном потоке
+    flask_thread = threading.Thread(target=run_flask, daemon=True)
+    flask_thread.start()
+    logger.info("Flask thread started")
+    
+    return flask_thread

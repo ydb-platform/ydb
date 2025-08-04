@@ -4,9 +4,15 @@ import time
 import asyncio
 import abc
 import socket
+import logging
 from ydb.tests.library.nemesis.nemesis_core import Nemesis, Schedule
 from ydb.tests.tools.nemesis.library import base
 
+logger = logging.getLogger("datacenter")
+
+# Временное логирование для диагностики
+print("=== DATACENTER.PY LOADED ===")
+logger.critical("=== DATACENTER.PY LOADED ===")
 
 class AbstractDataCenterNemesis(Nemesis, base.AbstractMonitoredNemesis):
     def __init__(self, cluster, schedule=(300, 900), duration=60):
@@ -364,8 +370,19 @@ class DataCenterIptablesBlockPortsNemesis(AbstractDataCenterNemesis):
 
 
 def datacenter_nemesis_list(cluster):
-    return [
-        DataCenterStopNodesNemesis(cluster),
-        DataCenterRouteUnreachableNemesis(cluster),
-        DataCenterIptablesBlockPortsNemesis(cluster)
-    ]
+    # Для функций модуля используем глобальный логгер
+    logger.critical("=== DATACENTER_NEMESIS_LIST CALLED ===")
+    logger.info("Creating datacenter nemesis list")
+    logger.info("Cluster: %s", cluster)
+    
+    try:
+        datacenter_nemesis_list = [
+            DataCenterStopNodesNemesis(cluster),
+            DataCenterRouteUnreachableNemesis(cluster),
+            DataCenterIptablesBlockPortsNemesis(cluster)
+        ]
+        logger.info("Successfully created %d datacenter nemesis", len(datacenter_nemesis_list))
+        return datacenter_nemesis_list
+    except Exception as e:
+        logger.error("Failed to create datacenter nemesis list: %s", e)
+        raise

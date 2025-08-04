@@ -1,6 +1,10 @@
 # -*- coding: utf-8 -*-
 
 import asyncio
+import logging
+
+# Временное логирование для диагностики
+print("=== BRIDGE_PILE.PY LOADED ===")
 import collections
 import random
 import time
@@ -463,8 +467,20 @@ class BridgePileRouteUnreachableNemesis(AbstractBridgePileNemesis):
 
 
 def bridge_pile_nemesis_list(cluster):
-    return [
-        BridgePileStopNodesNemesis(cluster),
-        BridgePileRouteUnreachableNemesis(cluster),
-        BridgePileIptablesBlockPortsNemesis(cluster),
-    ]
+    # Для функций модуля используем глобальный логгер
+    logger = logging.getLogger("bridge_pile")
+    logger.critical("=== BRIDGE_PILE_NEMESIS_LIST CALLED ===")
+    logger.info("Creating bridge pile nemesis list")
+    logger.info("Cluster: %s", cluster)
+    
+    try:
+        bridge_nemesis_list = [
+            BridgePileStopNodesNemesis(cluster),
+            BridgePileRouteUnreachableNemesis(cluster),
+            BridgePileIptablesBlockPortsNemesis(cluster),
+        ]
+        logger.info("Successfully created %d bridge pile nemesis", len(bridge_nemesis_list))
+        return bridge_nemesis_list
+    except Exception as e:
+        logger.error("Failed to create bridge pile nemesis list: %s", e)
+        raise

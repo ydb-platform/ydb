@@ -7,6 +7,7 @@
 #include <ydb/core/tx/general_cache/usage/config.h>
 
 #include <ydb/library/accessor/positive_integer.h>
+#include <ydb/library/actors/core/actorsystem.h>
 #include <ydb/library/signals/object_counter.h>
 
 #include <library/cpp/cache/cache.h>
@@ -249,7 +250,7 @@ public:
     }
 
     ~TSourceInfo() {
-        AFL_VERIFY(RequestedObjects.empty());
+        AFL_VERIFY(NActors::TActorSystem::IsStopped() || RequestedObjects.empty());
     }
 
     void DrainQueue() {

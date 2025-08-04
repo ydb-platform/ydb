@@ -494,7 +494,7 @@ public:
     }
 
     ~TManager() {
-        for (const auto& [_, info] : SourcesInfo) {
+        for (auto&& [_, info] : SourcesInfo) {
             info.Abort();
         }
         SourcesInfo.clear();

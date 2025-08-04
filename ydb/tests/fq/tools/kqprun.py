@@ -1,5 +1,5 @@
 import os
-from typing import Optional, List
+from typing import Optional, List, Callable
 
 import pytest
 import yatest.common
@@ -27,13 +27,16 @@ class KqpRun(object):
     def __res_file_path(self, name: str) -> str:
         return os.path.join(self.res_dir, name)
 
-    def add_table(self, name: str, content: List[str], attrs: Optional[str] = None):
+    def add_table(self, name: str, content: List[str], attrs: Optional[str] = None, attrs_postprocess: Callable[str, str] = None):
         table_path = self.__res_file_path(f'table_{len(self.tables)}.yson')
         with open(table_path, 'w') as table:
             for row in content:
                 table.write(f'{row}\n')
 
         if attrs is not None:
+            if attrs_postprocess is not None:
+                attrs = attrs_postprocess(attrs)
+
             with open(f'{table_path}.attr', 'w') as table_attrs:
                 table_attrs.write(attrs)
 

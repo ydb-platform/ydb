@@ -5,6 +5,8 @@ import ydb.public.api.protos.ydb_value_pb2 as ydb
 
 from ydb.tests.fq.tools.kqprun import KqpRun
 
+from yt.yql.tests.common.test_framework.test_utils import infer_yt_schema
+
 
 ValueByTypeExtractors = {
     ydb.Type.PrimitiveTypeId.INT64: lambda x: x.int64_value,
@@ -30,7 +32,7 @@ def add_sample_table(kqp_run: KqpRun, table_name: str = 'input', infer_schema: b
         '{"key"="800";"subkey"=2;"value"="ddd"};',
         '{"key"="020";"subkey"=3;"value"="q"};',
         '{"key"="150";"subkey"=4;"value"="qzz"};'
-    ], attrs)
+    ], attrs, attrs_postprocess=infer_yt_schema)
 
 
 def validate_sample_result(result: str):

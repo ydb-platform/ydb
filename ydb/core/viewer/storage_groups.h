@@ -630,7 +630,7 @@ public:
     std::unordered_map<TVSlotId, const NKikimrSysView::TVSlotInfo*> VSlotsByVSlotId;
     std::unordered_map<TVSlotId, const NKikimrWhiteboard::TVDiskStateInfo*> VDisksByVSlotId;
     std::unordered_map<TPDiskId, const NKikimrWhiteboard::TPDiskStateInfo*> PDisksByPDiskId;
-    std::unordered_map<ui32, TString> PileNames;
+    std::unordered_map<TBridgePileId, TString> PileNames;
 
     TFieldsType FieldsRequested; // fields that were requested by user
     TFieldsType FieldsRequired; // fields that are required to calculate the response
@@ -1317,7 +1317,7 @@ public:
                     if (NodeWardenStorageConfigResponse->Get()->BridgeInfo) {
                         const auto& srcBridgeInfo = *NodeWardenStorageConfigResponse->Get()->BridgeInfo.get();
                         for (const auto& pile : srcBridgeInfo.Piles) {
-                            PileNames[pile.BridgePileId.GetRawId()] = pile.Name;
+                            PileNames[pile.BridgePileId] = pile.Name;
                         }
                     } else {
                         AddProblem("empty-node-warden-bridge-info");
@@ -1347,7 +1347,8 @@ public:
                     group.PutUserDataLatency = info.GetPutUserDataLatency();
                     group.GetFastLatency = info.GetGetFastLatency();
                     if (info.HasBridgePileId() && !PileNames.empty()) {
-                        group.PileName = PileNames[info.GetBridgePileId()];
+                        const auto bridgePileId = TBridgePileId::FromProto(&info, &NKikimrSysView::TGroupInfo::GetBridgePileId);
+                        group.PileName = PileNames[bridgePileId];
                         FieldsAvailable.set(+EGroupFields::PileName);
                     }
                 }

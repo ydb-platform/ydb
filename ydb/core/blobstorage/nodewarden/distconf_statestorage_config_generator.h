@@ -9,7 +9,7 @@ namespace NKikimr::NStorage {
     public:
         TStateStoragePerPileGenerator(THashMap<TString, std::vector<std::tuple<ui32, TNodeLocation>>>& nodes,
             const std::unordered_map<ui32, ui32>& selfHealNodesState,
-            const std::optional<TBridgePileId>& pileId,
+            TBridgePileId pileId,
             std::unordered_set<ui32>& usedNodes);
         bool IsGoodConfig() const;
         void AddRingGroup(NKikimrConfig::TDomainsConfig::TStateStorage *ss);
@@ -29,7 +29,7 @@ namespace NKikimr::NStorage {
         void PickNodes(TNodeGroup& group);
         ui32 CalcNodeState(ui32 nodeId, bool disconnected);
 
-        const std::optional<TBridgePileId> PileId;
+        const TBridgePileId PileId;
         const std::unordered_map<ui32, ui32>& SelfHealNodesState;
         std::vector<TNodeGroup> NodeGroups;
         std::unordered_set<ui32>& UsedNodes;

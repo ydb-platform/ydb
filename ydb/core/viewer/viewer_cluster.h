@@ -358,7 +358,7 @@ private:
                     std::unordered_map<ui32, ui32> pileNodes;
                     for (const auto& pile : srcBridgeInfo.Piles) {
                         auto& pbBridgePileInfo = *pbBridgeInfo.AddPiles();
-                        pbBridgePileInfo.SetPileId(pile.BridgePileId.GetRawId());
+                        pile.BridgePileId.CopyToProto(&pbBridgePileInfo, &std::decay_t<decltype(pbBridgePileInfo)>::SetPileId);
                         pbBridgePileInfo.SetName(pile.Name);
                         pbBridgePileInfo.SetState(pile.State);
                         pbBridgePileInfo.SetIsPrimary(pile.IsPrimary);

@@ -251,7 +251,7 @@ namespace NKikimr {
 
             const auto& bridgeGroupIds = Info->GetBridgeGroupIds();
             for (size_t i = 0; i < bridgeGroupIds.size(); ++i) {
-                const auto bridgePileId = TBridgePileId::FromValue(i);
+                const auto bridgePileId = TBridgePileId::FromPileIndex(i);
                 const TBridgeInfo::TPile *pile = BridgeInfo->GetPile(bridgePileId);
                 if (!NBridge::PileStateTraits(pile->State).AllowsConnection) {
                     continue; // ignore this pile, it is disconnected

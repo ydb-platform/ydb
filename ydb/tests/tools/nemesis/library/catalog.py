@@ -24,18 +24,20 @@ from ydb.tests.tools.nemesis.library.disk import data_storage_nemesis_list
 from ydb.tests.tools.nemesis.library.datacenter import datacenter_nemesis_list
 from ydb.tests.tools.nemesis.library.bridge_pile import bridge_pile_nemesis_list
 
-# Для функций модуля используем глобальный логгер
+
 logger = logging.getLogger("catalog")
+logger.setLevel(logging.DEBUG)
+logger.propagate = True
 
 # Временное логирование для диагностики
-print("=== CATALOG.PY LOADED ===")
-logger.critical("=== CATALOG.PY LOADED ===")
+logger.info("=== CATALOG.PY LOADED ===")
 
 def is_first_cluster_node(cluster):
     logger.info("Checking if current node is first cluster node")
     logger.info("cluster.hostnames: %s", cluster.hostnames)
     logger.info("socket.gethostname(): %s", socket.gethostname())
     if len(cluster.hostnames) > 0:
+        logger.info("First cluster node (hostname): %s", cluster.hostnames[0])
         is_first = cluster.hostnames[0] == socket.gethostname().strip()
         logger.info("Is first cluster node: %s", is_first)
         return is_first
@@ -60,8 +62,7 @@ def basic_kikimr_nemesis_list(
         cluster, ssh_username, num_of_pq_nemesis=10, network_nemesis=False,
         enable_nemesis_list_filter_by_hostname=False):
     # Временное логирование для диагностики
-    print("=== basic_kikimr_nemesis_list CALLED ===")
-    logger.critical("=== basic_kikimr_nemesis_list CALLED ===")
+    logger.info("=== basic_kikimr_nemesis_list CALLED ===")
     
     logger.info("Building nemesis list")
     logger.info("is_bridge_cluster: %s", is_bridge_cluster(cluster))
@@ -189,6 +190,7 @@ def basic_kikimr_nemesis_list(
 
 
 def nemesis_factory(kikimr_cluster, ssh_username, num_of_pq_nemesis=10, **kwargs):
+    logger.info("=== NEMESIS_FACTORY CALLED ===")
     logger.info("Creating nemesis factory")
     logger.info("Cluster: %s", kikimr_cluster)
     logger.info("SSH username: %s", ssh_username)

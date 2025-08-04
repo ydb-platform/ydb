@@ -469,7 +469,7 @@ class BridgePileRouteUnreachableNemesis(AbstractBridgePileNemesis):
 def bridge_pile_nemesis_list(cluster):
     # Для функций модуля используем глобальный логгер
     logger = logging.getLogger("bridge_pile")
-    logger.critical("=== BRIDGE_PILE_NEMESIS_LIST CALLED ===")
+    logger.info("=== BRIDGE_PILE_NEMESIS_LIST CALLED ===")
     logger.info("Creating bridge pile nemesis list")
     logger.info("Cluster: %s", cluster)
     

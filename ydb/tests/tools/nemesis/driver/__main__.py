@@ -10,6 +10,20 @@ import time
 
 import logging
 
+# Настраиваем базовое логирование сразу при импорте модуля
+if not logging.getLogger().handlers:  # Проверяем, что handlers еще не настроены
+    # Перенаправляем stdout в stderr для journald
+    sys.stdout = sys.stderr
+    
+    # Используем basicConfig для настройки одного handler
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+        handlers=[
+            logging.StreamHandler(sys.stderr)  # Только stderr для journald
+        ]
+    )
+
 from ydb.tests.tools.nemesis.library import monitor
 from ydb.tests.tools.nemesis.library import catalog
 from ydb.tests.library.harness.kikimr_cluster import ExternalKiKiMRCluster
@@ -66,7 +80,7 @@ class SshAgent(object):
         self._env_backup["SSH_OPTIONS"] = os.environ.get("SSH_OPTIONS")
 
         for line in self._run(["ssh-agent"]).splitlines():
-            name, _, value = line.decode('utf-8').partition("=")
+            name, _, value = line.partition("=")
             if _ == "=":
                 value = value.split(";", 1)[0]
                 self._env[name] = value
@@ -77,7 +91,11 @@ class SshAgent(object):
         )
 
     def stop(self):
-        self._run(['kill', '-9', str(self.pid)])
+        try:
+            self._run(['kill', '-9', str(self.pid)])
+        except Exception as e:
+            logging.warning("Failed to stop ssh-agent: {}".format(e))
+            pass
 
     def add(self, key):
         key_pub = self._key_pub(key)
@@ -85,10 +103,14 @@ class SshAgent(object):
         return key_pub
 
     def remove(self, key_pub):
-        with tempfile.NamedTemporaryFile() as f:
-            f.write(key_pub)
-            f.flush()
-            self._run(["ssh-add", "-d", f.name])
+        try:
+            with tempfile.NamedTemporaryFile() as f:
+                f.write(key_pub)
+                f.flush()
+                self._run(["ssh-add", "-d", f.name])
+        except Exception as e:
+            logging.warning("Failed to remove key: {}".format(e))
+            pass
 
     def _key_pub(self, key):
         with tempfile.NamedTemporaryFile() as f:
@@ -127,13 +149,32 @@ class Key(object):
         self._key_pub = self._ssh_agent.add(self.key.encode('utf-8'))
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        self._ssh_agent.remove(self._key_pub)
-        self._ssh_agent.stop()
+        try:
+            if hasattr(self, '_key_pub') and self._key_pub:
+                self._ssh_agent.remove(self._key_pub)
+        except Exception:
+            pass
+        try:
+            self._ssh_agent.stop()
+        except Exception:
+            pass
 
 
 def nemesis_logic(arguments):
-    logging.config.dictConfig(setup_logging_config(arguments.log_file))
     logger = logging.getLogger(__name__)
+    
+    # Добавляем файловый handler если указан log_file
+    if arguments.log_file:
+        # Проверяем, не добавлен ли уже файловый handler
+        existing_handlers = [h for h in logger.handlers if isinstance(h, logging.FileHandler)]
+        if not existing_handlers:
+            file_handler = logging.FileHandler(arguments.log_file)
+            file_handler.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
+            # Добавляем handler только к текущему logger, а не к root
+            logger.addHandler(file_handler)
+            logger.info("Added file handler for: %s", arguments.log_file)
+        else:
+            logger.info("File handler already exists for: %s", arguments.log_file)
     
     logger.info("Starting nemesis logic")
     logger.info("Arguments: %s", arguments)

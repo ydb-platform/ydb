@@ -641,19 +641,19 @@ private:
     }
 
     bool ApplyCanBePushed(const TCoApply& apply) {
-        // Check callable
-        if (auto udf = apply.Callable().Maybe<TCoUdf>()) {
-            if (!UdfCanBePushed(udf.Cast(), apply.Ref().ChildrenList())) {
-                return false;
-            }
+        // Check if callable is a UDF and can be pushed
+        auto udf = apply.Callable().Maybe<TCoUdf>();
+        if (!udf || !UdfCanBePushed(udf.Cast(), apply.Ref().ChildrenList())) {
+            return false;
         }
-
-        // Check arguments
+        
+        // Check if all arguments can be pushed
         for (size_t i = 1; i < apply.Ref().ChildrenSize(); ++i) {
             if (!CheckExpressionNodeForPushdown(TExprBase(apply.Ref().Child(i)))) {
                 return false;
             }
         }
+        
         return true;
     }
 

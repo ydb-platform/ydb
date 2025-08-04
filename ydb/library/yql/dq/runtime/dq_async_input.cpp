@@ -58,7 +58,7 @@ public:
     }
 
     bool IsPending() const override {
-        return Pending;
+        return Pending && !IsFinished();
     }
 
     TString LogPrefix() const {

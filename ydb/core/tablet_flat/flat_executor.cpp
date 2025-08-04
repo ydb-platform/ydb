@@ -3048,7 +3048,6 @@ void TExecutor::Handle(NSharedCache::TEvResult::TPtr &ev) {
                 PrivatePageCache->ProvideBlock(loaded.PageId, loaded.Page, collectionInfo);
             }
             if (requestType == ESharedCacheRequestType::Transaction) {
-                Y_ASSERT(msg->Pages);
                 TryActivateWaitingTransaction(std::move(msg->WaitPad), std::move(msg->Pages), collectionInfo);
             }
         }

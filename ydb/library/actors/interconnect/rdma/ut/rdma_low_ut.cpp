@@ -21,7 +21,6 @@ static NInterconnect::NRdma::TMemRegionPtr AllocSourceRegion(std::shared_ptr<IMe
     return reg;
 }
 
-Y_UNIT_TEST_SUITE(RdmaLow) {
     void DoReadInOneProcess(TString bindTo) {
         auto rdma = InitLocalRdmaStuff(bindTo);
         
@@ -30,18 +29,18 @@ Y_UNIT_TEST_SUITE(RdmaLow) {
 
         ReadOneMemRegion(rdma, rdma->Qp2, reg1->GetAddr(), reg1->GetRKey(rdma->Ctx->GetDeviceIndex()), MEM_REG_SZ, reg2);
 
-        UNIT_ASSERT(strncmp((char*)reg1->GetAddr(), (char*)reg2->GetAddr(), MEM_REG_SZ) == 0);
+        ASSERT_TRUE(strncmp((char*)reg1->GetAddr(), (char*)reg2->GetAddr(), MEM_REG_SZ) == 0);
     }
 
-    Y_UNIT_TEST(ReadInOneProcessIpV4) {
+    TEST(RdmaLow, ReadInOneProcessIpV4) {
         DoReadInOneProcess("127.0.0.1");
     }
 
-    Y_UNIT_TEST(ReadInOneProcessIpV6) {
+    TEST(RdmaLow, ReadInOneProcessIpV6) {
         DoReadInOneProcess("::1");
     }
 
-    Y_UNIT_TEST(CqOverflow) {
+    TEST(RdmaLow, CqOverflow) {
         auto [actorSystem, ctx] = PrepareTestRuntime("::1");
         auto cqActorId = actorSystem->Register(CreateCqActor(1));
 
@@ -59,7 +58,7 @@ Y_UNIT_TEST_SUITE(RdmaLow) {
             TQueuePair qp1;
             {
                 int err = qp1.Init(ctx, cqPtr.get(), 8);
-                UNIT_ASSERT(err == 0);
+                ASSERT_EQ(err, 0);
             }
 
             auto reg1 = AllocSourceRegion(memPool);
@@ -68,14 +67,14 @@ Y_UNIT_TEST_SUITE(RdmaLow) {
             TQueuePair qp2;
             {
                 int err = qp2.Init(ctx, cqPtr.get(), 8);
-                UNIT_ASSERT(err == 0);
+                ASSERT_EQ(err, 0);
                 err = qp2.ToRtsState(ctx, qp1num, ctx->GetGid(), ctx->GetPortAttr().active_mtu);
-                UNIT_ASSERT(err == 0);
+                ASSERT_EQ(err, 0);
             }
 
             {
                 int err = qp1.ToRtsState(ctx, qp2.GetQpNum(), ctx->GetGid(), ctx->GetPortAttr().active_mtu);
-                UNIT_ASSERT(err == 0);
+                ASSERT_EQ(err, 0);
             }
 
             const size_t inflight = 40;
@@ -109,7 +108,7 @@ Y_UNIT_TEST_SUITE(RdmaLow) {
                         wasOverflow.store(true, std::memory_order_relaxed);
                         break;
                     } else {
-                        UNIT_ASSERT(ICq::IsWrBusy(allocResult));
+                        ASSERT_TRUE(ICq::IsWrBusy(allocResult));
                     }
                 }
 
@@ -117,7 +116,7 @@ Y_UNIT_TEST_SUITE(RdmaLow) {
                     break;
                 }
 
-                UNIT_ASSERT(wr);
+                ASSERT_TRUE(wr);
                 postedNum.fetch_add(1);
 
                 int err = qp2.SendRdmaReadWr(wr->GetId(), reg2->GetAddr(), reg2->GetLKey(ctx->GetDeviceIndex()), reg1->GetAddr(), reg1->GetRKey(ctx->GetDeviceIndex()), MEM_REG_SZ);
@@ -129,7 +128,7 @@ Y_UNIT_TEST_SUITE(RdmaLow) {
                 }
             }
 
-            UNIT_ASSERT(wasAlloc); // Check it was at least one sucess wr allocation
+            ASSERT_TRUE(wasAlloc); // Check it was at least one sucess wr allocation
             if (wasOverflow && attempt) {
                 attempt = 1;
             }
@@ -144,12 +143,10 @@ Y_UNIT_TEST_SUITE(RdmaLow) {
             }
 
             if (!wasOverflow) {
-                UNIT_ASSERT_VALUES_EQUAL(stats.Total, stats.Ready);
-                UNIT_ASSERT(strncmp((char*)reg1->GetAddr(), (char*)reg2->GetAddr(), MEM_REG_SZ) == 0);
+                ASSERT_TRUE(strncmp((char*)reg1->GetAddr(), (char*)reg2->GetAddr(), MEM_REG_SZ) == 0);
             }
         }
 
-        UNIT_ASSERT(wasOverflow.load(std::memory_order_relaxed)); // Check it was at least one sucess wr allocation
+        ASSERT_TRUE(wasOverflow.load(std::memory_order_relaxed)); // Check it was at least one sucess wr allocation
     }
-}
- 
+

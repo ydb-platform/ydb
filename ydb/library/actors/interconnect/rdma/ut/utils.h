@@ -8,7 +8,8 @@
 
 #include <ydb/library/actors/testlib/test_runtime.h>
 
-#include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/testing/gtest/gtest.h>
+#include <ydb/library/testlib/unittest_gtest_macro_subst.h>
 
 
 using namespace NInterconnect::NRdma;
@@ -25,7 +26,7 @@ ICq::TPtr GetCqHandle(NActors::TTestActorRuntimeBase* actorSystem, TRdmaCtx* ctx
     actorSystem->GrabEdgeEvent<TEvGetCqHandle>(handle);
 
     TEvGetCqHandle* cqHandle = handle->Get<TEvGetCqHandle>();
-    UNIT_ASSERT(cqHandle->CqPtr);
+    EXPECT_TRUE(cqHandle->CqPtr);
     return cqHandle->CqPtr;
 }
 
@@ -43,7 +44,7 @@ std::tuple<THolder<NActors::TTestActorRuntimeBase>, TRdmaCtx*> PrepareTestRuntim
 
     NInterconnect::TAddress address(ip, 7777);
     auto ctx = NInterconnect::NRdma::NLinkMgr::GetCtx(address.GetV6CompatAddr());
-    UNIT_ASSERT(ctx);
+    EXPECT_TRUE(ctx);
     Cerr << "Using verbs context: " << *ctx << ", on addr: " << ip << Endl;
 
     return {std::move(actorSystem), ctx};
@@ -74,21 +75,21 @@ std::shared_ptr<TLocalRdmaStuff> InitLocalRdmaStuff(TString bindTo="::1") {
 
     {
         int err = rdma->Qp1.Init(rdma->Ctx, rdma->CqPtr.get(), 16);
-        UNIT_ASSERT_C(err == 0, strerror(err));
+        EXPECT_TRUE(err == 0) << strerror(err);
     }
 
     auto qp1num = rdma->Qp1.GetQpNum();
 
     {
         int err = rdma->Qp2.Init(rdma->Ctx, rdma->CqPtr.get(), 16);
-        UNIT_ASSERT(err == 0);
+        EXPECT_TRUE(err == 0);
         err = rdma->Qp2.ToRtsState(rdma->Ctx, qp1num, rdma->Ctx->GetGid(), rdma->Ctx->GetPortAttr().active_mtu);
-        UNIT_ASSERT(err == 0);
+        EXPECT_TRUE(err == 0);
     }
 
     {
         int err = rdma->Qp1.ToRtsState(rdma->Ctx, rdma->Qp2.GetQpNum(), rdma->Ctx->GetGid(), rdma->Ctx->GetPortAttr().active_mtu);
-        UNIT_ASSERT(err == 0);
+        EXPECT_TRUE(err == 0);
     }
 
     return rdma;
@@ -107,7 +108,7 @@ void ReadOneMemRegion(std::shared_ptr<TLocalRdmaStuff> rdma, TQueuePair& qp, voi
     auto allocResult = rdma->CqPtr->AllocWr(cb);
     ICq::IWr* wr = (allocResult.index() == 0) ? std::get<0>(allocResult) : nullptr;
 
-    UNIT_ASSERT(wr);
+    EXPECT_TRUE(wr);
     qp.SendRdmaReadWr(wr->GetId(), src->GetAddr(), src->GetLKey(rdma->Ctx->GetDeviceIndex()), dstAddr, dstRkey, dstSize);
 }
 

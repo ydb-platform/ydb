@@ -5,6 +5,7 @@
 #include <ydb/library/actors/interconnect/rdma/ibdrv/include/infiniband/verbs.h>
 
 #include <util/thread/lfstack.h>
+#include <util/thread/lfqueue.h>
 #include <util/stream/output.h>
 #include <util/system/align.h>
 
@@ -41,7 +42,7 @@ namespace NInterconnect::NRdma {
     class TChunk: public NNonCopyable::TMoveOnly, public TAtomicRefCount<TChunk> {
     public:
 
-    TChunk(std::vector<ibv_mr*>&& mrs, std::weak_ptr<IMemPool> pool, void* auxData) noexcept
+    TChunk(std::vector<ibv_mr*>&& mrs, IMemPool* pool, void* auxData) noexcept
         : MRs(std::move(mrs))
         , MemPool(pool)
         , AuxData(auxData)
@@ -49,9 +50,7 @@ namespace NInterconnect::NRdma {
     }
 
     ~TChunk() {
-        if (auto memPool = MemPool.lock()) {
-            memPool->NotifyDealocated();
-        }
+        MemPool->NotifyDealocated();
         std::free(AuxData);
         if (Empty()) {
             return;
@@ -72,9 +71,7 @@ namespace NInterconnect::NRdma {
     }
 
     void Free(TMemRegion&& mr) noexcept {
-        if (auto memPool = MemPool.lock()) {
-            memPool->Free(std::move(mr), *this);
-        }
+        MemPool->Free(std::move(mr), *this);
     }
 
     bool Empty() const noexcept {
@@ -87,7 +84,7 @@ namespace NInterconnect::NRdma {
 
     private:
         std::vector<ibv_mr*> MRs;
-        std::weak_ptr<IMemPool> MemPool;
+        IMemPool* MemPool;
         void* AuxData;
     };
 
@@ -95,6 +92,7 @@ namespace NInterconnect::NRdma {
         : Chunk(std::move(chunk))
         , Offset(offset)
         , Size(size)
+        , OrigSize(size)
     {
         Y_ABORT_UNLESS(Chunk);
         Y_ABORT_UNLESS(!Chunk->Empty(), "Chunk is empty");
@@ -128,6 +126,11 @@ namespace NInterconnect::NRdma {
             return 0;
         }
         return mr->rkey;
+    }
+
+    void TMemRegion::Resize(uint32_t newSize) {
+        Y_ABORT_UNLESS(newSize <= OrigSize, "Cannot resize to larger size");
+        Size = newSize;
     }
 
     TContiguousSpan TMemRegion::GetData() const {
@@ -273,7 +276,7 @@ namespace NInterconnect::NRdma {
 
             AllocatedChunks++;
 
-            return MakeIntrusive<TChunk>(std::move(mrs), shared_from_this(), auxPtr);
+            return MakeIntrusive<TChunk>(std::move(mrs), this, auxPtr);
         }
 
         void NotifyDealocated() noexcept override {
@@ -307,6 +310,10 @@ namespace NInterconnect::NRdma {
 
         int GetMaxAllocSz() const noexcept override {
             return 2048 << 20;
+        }
+
+        TString GetName() const noexcept override {
+            return "DummyMemPool";
         }
     };
 
@@ -446,6 +453,10 @@ namespace NInterconnect::NRdma {
 
         int GetMaxAllocSz() const noexcept override {
             return ChunkSize - Alignment;
+        }
+
+        TString GetName() const noexcept override {
+            return "IncrementalMemPool";
         }
 
     private:
@@ -631,6 +642,35 @@ namespace NInterconnect::NRdma {
             ui32 SlotsInBatch;
         };
 
+        struct TLockFreeChain {
+            TLockFreeChain() = default;
+            void Init(ui32 slotSize) {
+                SlotSize = slotSize;
+                SlotsInBatch = GetSlotsInBatch(slotSize);
+            }
+            std::optional<std::list<std::unique_ptr<TMemRegion>>> GetSlotsBatch() {
+                std::list<std::unique_ptr<TMemRegion>> res;
+                if (Slots.Dequeue(&res)) {
+                    return res;
+                }
+                return std::nullopt;
+            }
+            void PutSlotsBatches(std::list<std::unique_ptr<TMemRegion>>&& slots) {
+                Y_DEBUG_ABORT_UNLESS(slots.size() == SlotsInBatch, "Invalid slots size: %zu, expected: %u", slots.size(), SlotsInBatch);
+                Slots.Enqueue(std::move(slots));
+            }
+            void PutSlotsBatches(std::list<std::list<std::unique_ptr<TMemRegion>>>&& slots) {
+                for (auto& batch : slots) {
+                    Y_DEBUG_ABORT_UNLESS(batch.size() == SlotsInBatch, "Invalid slots size: %zu, expected: %u", batch.size(), SlotsInBatch);
+                    Slots.Enqueue(std::move(batch));
+                }
+            }
+
+            TLockFreeStack<std::list<std::unique_ptr<TMemRegion>>> Slots;
+            ui32 SlotSize;
+            ui32 SlotsInBatch;
+        };
+
         static constexpr ui32 MinAllocSz = 512;
         static constexpr ui32 MaxAllocSz = 8 * 1024 * 1024;
         static_assert((MinAllocSz & (MinAllocSz - 1)) == 0, "MinAllocSz must be a power of 2");
@@ -723,16 +763,23 @@ namespace NInterconnect::NRdma {
             return MaxAllocSz;
         }
 
+        TString GetName() const noexcept override {
+            return "SlotMemPool";
+        }
+
     protected:
         TMemRegion* AllocImpl(int size, ui32 flags) noexcept override {
-            return LocalCache.AllocImpl(size, flags, *this);
+            auto memReg = LocalCache.AllocImpl(size, flags, *this);
+            memReg->Resize(size);
+            return memReg;
         }
         void Free(TMemRegion&& mr, TChunk&) noexcept override {
             LocalCache.Free(std::move(mr), *this);
         }
     
     private:
-        std::array<TThreadSafeChain, ChainsNum> Chains;
+        std::array<TLockFreeChain, ChainsNum> Chains;
+        // std::array<TThreadSafeChain, ChainsNum> Chains;
 
     private:
         static thread_local TSlotMemPoolCache LocalCache;
@@ -742,16 +789,17 @@ namespace NInterconnect::NRdma {
 
 
     std::shared_ptr<IMemPool> CreateDummyMemPool() noexcept {
-        return std::make_shared<TDummyMemPool>();
+        auto* pool = Singleton<TDummyMemPool>();
+        return std::shared_ptr<TDummyMemPool>(pool, [](TDummyMemPool*) {});
     }
 
     std::shared_ptr<IMemPool> CreateIncrementalMemPool() noexcept {
-        return std::make_shared<TIncrementalMemPool>();
+        auto* pool = Singleton<TIncrementalMemPool>();
+        return std::shared_ptr<TIncrementalMemPool>(pool, [](TIncrementalMemPool*) {});
     }
 
     std::shared_ptr<IMemPool> CreateSlotMemPool() noexcept {
-        // auto* pool = HugeSingleton<TSlotMemPool>();
-        // return std::shared_ptr<TSlotMemPool>(pool, [](TSlotMemPool*) {});
-        return std::make_shared<TSlotMemPool>();
+        auto* pool = HugeSingleton<TSlotMemPool>();
+        return std::shared_ptr<TSlotMemPool>(pool, [](TSlotMemPool*) {});
     }
 }

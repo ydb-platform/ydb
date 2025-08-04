@@ -30,6 +30,8 @@ namespace NInterconnect::NRdma {
         uint32_t GetLKey(size_t deviceIndex) const;
         uint32_t GetRKey(size_t deviceIndex) const;
 
+        void Resize(uint32_t newSize);
+
     public: // IContiguousChunk
         TContiguousSpan GetData() const override;
         TMutableContiguousSpan GetDataMut() override;
@@ -38,7 +40,8 @@ namespace NInterconnect::NRdma {
     protected:
         TChunkPtr Chunk;
         const uint32_t Offset;
-        const uint32_t Size;
+        uint32_t Size;
+        const uint32_t OrigSize;
     };
 
     class TMemRegionSlice {
@@ -80,6 +83,7 @@ namespace NInterconnect::NRdma {
         TMemRegionPtr Alloc(int size, ui32 flags) noexcept;
         std::optional<TRcBuf> AllocRcBuf(int size, ui32 flags) noexcept;
         virtual int GetMaxAllocSz() const noexcept = 0;
+        virtual TString GetName() const noexcept = 0;
 
     protected:
         virtual TMemRegion* AllocImpl(int size, ui32 flags) noexcept = 0;

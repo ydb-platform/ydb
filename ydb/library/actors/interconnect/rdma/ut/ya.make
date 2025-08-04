@@ -1,4 +1,5 @@
-UNITTEST()
+GTEST()
+
 
 IF (SANITIZER_TYPE == "thread")
     SIZE(LARGE)

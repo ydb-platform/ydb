@@ -20,7 +20,6 @@ PEERDIR(
     ydb/public/api/client/nc_private
     ydb/public/api/client/nc_private/audit
     ydb/public/api/client/nc_private/audit/v1/common
-    ydb/public/api/client/nc_private/buf/validate
     ydb/public/api/client/nc_private/common/v1
 )
 

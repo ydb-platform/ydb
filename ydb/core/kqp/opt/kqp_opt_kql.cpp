@@ -574,7 +574,7 @@ TExprBase BuildDeleteTableWithIndex(const TKiDeleteTable& del, const TKikimrTabl
 {
     auto rowsToDelete = BuildRowsToDelete(tableData, withSystemColumns, del.Filter(), del.IsBatch(), del.Pos(), ctx);
 
-    auto indexes = BuildSecondaryIndexVector(tableData, del.Pos(), ctx, nullptr,
+    auto indexes = BuildSecondaryIndexVector(tableData, del.Pos(), ctx, nullptr, false,
         [] (const TKikimrTableMetadata& meta, TPositionHandle pos, TExprContext& ctx) -> TExprBase {
             return BuildTableMeta(meta, pos, ctx);
         });

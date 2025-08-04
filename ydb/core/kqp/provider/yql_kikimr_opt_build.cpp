@@ -186,7 +186,7 @@ struct TKiExploreTxResults {
             }
 
             const auto indexTables = NKikimr::NKqp::NSchemeHelpers::CreateIndexTablePath(name, index);
-            YQL_ENSURE(indexTables.size() == 1, "Only index with one impl table is supported");
+            //YQL_ENSURE(indexTables.size() == 1, "Only index with one impl table is supported");
             const auto indexTable = indexTables[0];
 
             ops[name] |= TPrimitiveYdbOperation::Read;

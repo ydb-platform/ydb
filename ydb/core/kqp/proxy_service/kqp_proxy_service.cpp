@@ -484,6 +484,10 @@ public:
         ui32 softTimeout = shs.GetSoftTimeoutMs();
         for(auto& [idx, sessionInfo] : *LocalSessions) {
             Send(sessionInfo.WorkerId, new TEvKqp::TEvInitiateSessionShutdown(softTimeout, hardTimeout));
+
+            if (sessionInfo.AttachedRpcId) {
+                Send(sessionInfo.AttachedRpcId, CreateEvCloseSessionResponse(sessionInfo.SessionId));
+            }
         }
     }
 
@@ -1021,6 +1025,9 @@ public:
         ui32 softTimeout = sbs.GetSoftSessionShutdownTimeoutMs();
         Counters->ReportSessionShutdownRequest(sessionInfo->DbCounters);
         Send(sessionInfo->WorkerId, new TEvKqp::TEvInitiateSessionShutdown(softTimeout, hardTimeout));
+        if (sessionInfo->AttachedRpcId) {
+            Send(sessionInfo->AttachedRpcId, CreateEvCloseSessionResponse(sessionInfo->SessionId));
+        }
     }
 
     void ProcessMonShutdownQueue(ui32 wantsToShutdown) {
@@ -1418,11 +1425,7 @@ private:
             }
 
             if (rpcActor) {
-                auto closeEv = MakeHolder<TEvKqp::TEvCloseSessionResponse>();
-                closeEv->Record.SetStatus(Ydb::StatusIds::SUCCESS);
-                closeEv->Record.MutableResponse()->SetSessionId(sessionId);
-                closeEv->Record.MutableResponse()->SetClosed(true);
-                Send(rpcActor, closeEv.Release());
+                Send(rpcActor, CreateEvCloseSessionResponse(sessionId));
             }
 
             return;
@@ -1791,6 +1794,14 @@ private:
 
     TResourcePoolsCache ResourcePoolsCache;
     TDatabasesCache DatabasesCache;
+
+    TEvKqp::TEvCloseSessionResponse* CreateEvCloseSessionResponse(const TString& sessionId) {
+        auto closeEv = std::make_unique<TEvKqp::TEvCloseSessionResponse>();
+        closeEv->Record.SetStatus(Ydb::StatusIds::SUCCESS);
+        closeEv->Record.MutableResponse()->SetSessionId(sessionId);
+        closeEv->Record.MutableResponse()->SetClosed(true);
+        return closeEv.release();
+    }
 };
 
 } // namespace
@@ -1808,5 +1819,4 @@ IActor* CreateKqpProxyService(const NKikimrConfig::TLogConfig& logConfig,
     return new TKqpProxyService(logConfig, tableServiceConfig, queryServiceConfig, std::move(settings),
         std::move(queryReplayFactory), std::move(kqpProxySharedResources), std::move(federatedQuerySetupFactory), std::move(s3ActorsFactory));
 }
-
 } // namespace NKikimr::NKqp

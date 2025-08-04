@@ -161,7 +161,6 @@ private:
     }
 
     void ReplyFinishStream(Ydb::StatusIds::StatusCode status) {
-        Request->ReplyWithYdbStatus(status);
         Request->FinishStream(status);
         this->PassAway();
     }

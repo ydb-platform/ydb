@@ -492,6 +492,13 @@ public:
     void SetMemoryConsumer(TIntrusivePtr<NMemory::IMemoryConsumer> consumer) {
         MemoryConsumer = std::move(consumer);
     }
+
+    ~TManager() {
+        for (const auto& [_, info] : SourcesInfo) {
+            info.Abort();
+        }
+        SourcesInfo.clear();
+    }
 };
 
 }   // namespace NKikimr::NGeneralCache::NPrivate

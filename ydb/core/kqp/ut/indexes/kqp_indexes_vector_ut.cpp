@@ -443,10 +443,10 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
 
         const TString originalPostingTable = ReadTablePartToYson(session, "/Root/TestTable/index1/indexImplPostingTable");
 
-        // Upsert to the table with index should succeed
+        // Insert to the table with index should succeed
         {
             const TString query1(Q_(R"(
-                UPSERT INTO `/Root/TestTable` (pk, emb, data) VALUES)"
+                INSERT INTO `/Root/TestTable` (pk, emb, data) VALUES)"
                 "(10, \"\x76\x76\x03\", \"10\");"
             ));
 
@@ -475,29 +475,9 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         }
 
         const TString postingTable1 = ReadTablePartToYson(session, "/Root/TestTable/index1/indexImplPostingTable");
-        
-        // First index is not updated
-        UNIT_ASSERT_STRINGS_EQUAL(originalPostingTable, postingTable1);
 
-        // Add second index
-        {
-            const TString createIndex(Q_(R"(
-                ALTER TABLE `/Root/TestTable`
-                    ADD INDEX index2
-                    GLOBAL USING vector_kmeans_tree
-                    ON (emb)
-                    WITH (similarity=cosine, vector_type="uint8", vector_dimension=2, levels=2, clusters=2);
-            )"));
-
-            auto result = session.ExecuteSchemeQuery(createIndex).ExtractValueSync();
-
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-        }     
-        
-        const TString postingTable2 = ReadTablePartToYson(session, "/Root/TestTable/index2/indexImplPostingTable");
-        
-        // Second index is different
-        UNIT_ASSERT_STRINGS_UNEQUAL(originalPostingTable, postingTable2);
+        // First index is updated
+        UNIT_ASSERT_STRINGS_UNEQUAL(originalPostingTable, postingTable1);
     }
 
     Y_UNIT_TEST_TWIN(SimpleVectorIndexOrderByCosineDistanceWithCover, Nullable) {

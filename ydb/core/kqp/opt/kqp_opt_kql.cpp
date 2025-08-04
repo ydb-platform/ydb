@@ -473,7 +473,7 @@ TExprBase BuildUpdateOnTableWithIndex(const TKiWriteTable& write, const TCoAtomL
     const bool isSink, const TKikimrTableDescription& tableData, TExprContext& ctx)
 {
     if (isSink) {
-        auto indexes = BuildSecondaryIndexVector(tableData, write.Pos(), ctx, nullptr,
+        auto indexes = BuildSecondaryIndexVector(tableData, write.Pos(), ctx, nullptr, false,
             [] (const TKikimrTableMetadata& meta, TPositionHandle pos, TExprContext& ctx) -> TExprBase {
                 return BuildTableMeta(meta, pos, ctx);
             });
@@ -574,7 +574,7 @@ TExprBase BuildDeleteTableWithIndex(const TKiDeleteTable& del, const TKikimrTabl
 {
     auto rowsToDelete = BuildRowsToDelete(tableData, withSystemColumns, del.Filter(), del.IsBatch(), del.Pos(), ctx);
 
-    auto indexes = BuildSecondaryIndexVector(tableData, del.Pos(), ctx, nullptr,
+    auto indexes = BuildSecondaryIndexVector(tableData, del.Pos(), ctx, nullptr, false,
         [] (const TKikimrTableMetadata& meta, TPositionHandle pos, TExprContext& ctx) -> TExprBase {
             return BuildTableMeta(meta, pos, ctx);
         });
@@ -734,7 +734,7 @@ TExprBase BuildUpdateTableWithIndex(const TKiUpdateTable& update, const TKikimrT
         updateColumnsList.push_back(TCoAtom(ctx.NewAtom(update.Pos(), column)));
     }
 
-    auto indexes = BuildSecondaryIndexVector(tableData, update.Pos(), ctx, nullptr,
+    auto indexes = BuildSecondaryIndexVector(tableData, update.Pos(), ctx, nullptr, false,
         [] (const TKikimrTableMetadata& meta, TPositionHandle pos, TExprContext& ctx) -> TExprBase {
             return BuildTableMeta(meta, pos, ctx);
         });

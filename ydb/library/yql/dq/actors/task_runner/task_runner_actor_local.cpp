@@ -140,7 +140,7 @@ private:
                 return false;
             }
         }
-        for (const auto transformId: InputTransforms) {
+        for (const auto transformId: InputTransformsWithCheckpoints) {
             const auto t = TaskRunner->GetInputTransform(transformId);
             if (t) {
                 auto [_, transform] = *t;
@@ -165,7 +165,7 @@ private:
                 return false;
             }
         }
-        for (const auto transformId: InputTransforms) {
+        for (const auto transformId: InputTransformsWithWatermarks) {
             const auto t = TaskRunner->GetInputTransform(transformId);
             if (t) {
                 auto [_, transform] = *t;
@@ -489,17 +489,34 @@ private:
         auto& inputs = settings.GetInputs();
         for (auto inputId = 0; inputId < inputs.size(); inputId++) {
             auto& input = inputs[inputId];
+            bool inputWatermarksDisabled = false;
+            bool inputCheckpointDisabled = false;
             if (input.HasSource()) {
                 Sources.emplace_back(inputId);
+                if (input.GetSource().GetWatermarksMode() == NDqProto::WATERMARKS_MODE_DISABLED) {
+                    inputWatermarksDisabled = true;
+                }
             } else {
                 for (auto& channel : input.GetChannels()) {
                     Inputs.emplace_back(channel.GetId());
                     if (channel.GetCheckpointingMode() != NDqProto::CHECKPOINTING_MODE_DISABLED) {
                         InputsWithCheckpoints.emplace_back(channel.GetId());
+                    } else {
+                        inputCheckpointDisabled = true;
                     }
                     if (channel.GetWatermarksMode() != NDqProto::WATERMARKS_MODE_DISABLED) {
                         InputsWithWatermarks.emplace_back(channel.GetId());
+                    } else {
+                        inputWatermarksDisabled = true;
                     }
+                }
+            }
+            if (input.HasTransform()) {
+                if (!inputWatermarksDisabled) {
+                    InputTransformsWithWatermarks.emplace_back(inputId);
+                }
+                if (!inputCheckpointDisabled) {
+                    InputTransformsWithCheckpoints.emplace_back(inputId);
                 }
             }
         }
@@ -598,6 +615,8 @@ private:
     TVector<ui32> InputsWithCheckpoints;
     TVector<ui32> InputsWithWatermarks;
     TVector<ui32> InputTransforms;
+    TVector<ui32> InputTransformsWithCheckpoints;
+    TVector<ui32> InputTransformsWithWatermarks;
     TVector<ui32> Sources;
     TVector<ui32> Sinks;
     TVector<ui32> Outputs;

@@ -231,7 +231,7 @@ private:
         if (res == ERunStatus::PendingInput || res == ERunStatus::Finished) {
             if (shouldHandleWatermark) {
                 LOG_T("Task runner. Watermarks. Injecting requested watermark " << WatermarkRequest
-                    << " to " << Outputs.size() << " outputs ");
+                    << " to " << OutputsWithWatermarks.size() << " outputs ");
 
                 for (const auto& channelId : OutputsWithWatermarks) {
                     NDqProto::TWatermark watermark;

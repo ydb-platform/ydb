@@ -54,7 +54,7 @@ public:
 
     void SetAllocationGuard(std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>&& allocationGuard) {
         AFL_VERIFY(!AllocationGuard);
-        AllocationGuard = allocationGuard;
+        AllocationGuard = std::move(allocationGuard);
         AFL_VERIFY(AllocationGuard);
     }
 };
@@ -68,10 +68,12 @@ private:
 
 private:
     virtual void DoOnAllocationImpossible(const TString& errorMessage) override {
+        AFL_VERIFY(Callback);
         Callback->OnError(errorMessage);
     }
     virtual bool DoOnAllocated(std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>&& guard,
         const std::shared_ptr<NGroupedMemoryManager::IAllocation>& /*allocation*/) override {
+        AFL_VERIFY(Callback);
         Callback->SetAllocationGuard(std::move(guard));
         ColumnDataManager->AskColumnData(NBlobOperations::EConsumer::DUPLICATE_FILTERING, Portions, Columns, std::move(Callback));
         return true;
@@ -86,6 +88,7 @@ public:
         , Columns(columns)
         , ColumnDataManager(columnDataManager)
     {
+        AFL_VERIFY(Callback);
     }
 };
 
@@ -137,23 +140,9 @@ TDuplicateManager::TDuplicateManager(const TSpecialReadContext& context, const s
     : TActor(&TDuplicateManager::StateMain)
     , PKColumns(context.GetPKColumns())
     , Counters(context.GetCommonContext()->GetCounters().GetDuplicateFilteringCounters())
-    , Intervals([&portions]() {
-        TPortionIntervalTree intervals;
-        for (const auto& portion : portions) {
-            intervals.AddRange(TPortionIntervalTree::TOwnedRange(portion.GetPortion()->IndexKeyStart(), true,
-                                   portion.GetPortion()->IndexKeyEnd(), true), portion.GetPortion());
-        }
-        return intervals;
-    }())
-    , Portions([this]() {
-        THashMap<ui64, std::shared_ptr<TPortionInfo>> portions;
-        Intervals.EachRange(
-            [&portions](const TPortionIntervalTree::TOwnedRange& /*range*/, const std::shared_ptr<TPortionInfo>& portion) mutable {
-                AFL_VERIFY(portions.emplace(portion->GetPortionId(), portion).second);
-            });
-        return portions;
-    }())
-    , FiltersCache(100)
+    , Intervals(MakeIntervalTree(portions))
+    , Portions(MakePortionsIndex(Intervals))
+    , FiltersCache(FILTER_CACHE_SIZE_CNT)
     , DataAccessorsManager(context.GetCommonContext()->GetDataAccessorsManager())
     , ColumnDataManager(context.GetCommonContext()->GetColumnDataManager())
 {
@@ -185,7 +174,7 @@ void TDuplicateManager::Handle(const TEvRequestFilter::TPtr& ev) {
 
     TColumnDataSplitter splitter(
         borders, NArrow::TFirstLastSpecialKeys(source->IndexKeyStart(), source->IndexKeyEnd(), source->IndexKeyStart().GetSchema()));
-    std::shared_ptr<TInternalFilterConstructor> constructor = std::make_shared<TInternalFilterConstructor>(ev, std::move(splitter));
+    auto constructor = std::make_shared<TInternalFilterConstructor>(ev, std::move(splitter));
 
     {
         THashSet<TPortionAddress> portionAddresses;
@@ -303,7 +292,8 @@ void TDuplicateManager::Handle(const NPrivate::TEvDuplicateSourceCacheResult::TP
 void TDuplicateManager::Handle(const NPrivate::TEvFilterConstructionResult::TPtr& ev) {
     if (ev->Get()->GetConclusion().IsFail()) {
         LOCAL_LOG_TRACE("event", "filter_construction_error")("error", ev->Get()->GetConclusion().GetErrorMessage());
-        return AbortAndPassAway(ev->Get()->GetConclusion().GetErrorMessage());
+        AbortAndPassAway(ev->Get()->GetConclusion().GetErrorMessage());
+        return;
     }
     LOCAL_LOG_TRACE("event", "filters_constructed")("sources", ev->Get()->GetConclusion().GetResult().size());
     for (auto&& [key, filter] : ev->Get()->ExtractResult()) {

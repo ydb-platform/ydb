@@ -178,14 +178,6 @@ namespace NKikimr::NStorage {
         for (ui32 stateLimit : xrange(NodeStatesSize)) {
             if (PickNodesSimpleStrategy(group, stateLimit, rackStates.size() < RingsInGroupCount)) {
                 GoodConfig &= stateLimit <= 1;
-                std::string r = "disc:" + std::to_string(group.Disconnected) + " -> ";
-                for(auto n : group.Nodes) {
-                    auto& rackState = rackStates[std::get<1>(n).GetRackId()];
-                    r += std::to_string(std::get<0>(n)) + ":u" + std::to_string(UsedNodes.contains(std::get<0>(n)))
-                    + ":" + std::to_string(rackState[0]) + ":" + std::to_string(rackState[1])
-                    + ":" + std::to_string(CalcNodeState(std::get<0>(n), group.Disconnected)) + ", ";
-                }
-                STLOG(PRI_DEBUG, BS_NODE, NW102, "TStateStoragePerPileGenerator::PickNodesByState", (stateLimit, stateLimit), (Nodes, r));
                 return;
             }
         }

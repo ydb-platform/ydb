@@ -1408,7 +1408,7 @@ TNodeMap<ESubgraphType> MarkSubgraphForAggregate(const TExprNode::TPtr& root, co
             result[node.Get()] = EXPR_CONST;
             return false;
         }
-        if (node->IsCallable("DependsOn")) {
+        if (TCoDependsOnBase::Match(node.Get())) {
             ++insideDependsOn;
             return true;
         }
@@ -1425,7 +1425,7 @@ TNodeMap<ESubgraphType> MarkSubgraphForAggregate(const TExprNode::TPtr& root, co
 
         return true;
     }, [&](const TExprNode::TPtr& node) {
-        if (node->IsCallable("DependsOn")) {
+        if (TCoDependsOnBase::Match(node.Get())) {
             YQL_ENSURE(insideDependsOn);
             --insideDependsOn;
         }
@@ -1849,7 +1849,7 @@ TExprNode::TPtr FilterNullMembersToSkipNullMembers(const TCoFlatMapBase& node, T
         if (curr->GetDependencyScope() && curr->IsComplete()) {
             return false;
         }
-        if (curr->IsCallable("DependsOn")) {
+        if (TCoDependsOnBase::Match(curr.Get())) {
             TExprNodeList children = curr->Head().IsList() ? curr->Head().ChildrenList() : curr->ChildrenList();
             if (AllOf(children, [](const TExprNode::TPtr& child) { return child->IsArgument(); })) {
                 return false;

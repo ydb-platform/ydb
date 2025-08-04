@@ -44,6 +44,44 @@ namespace NSchemeShardUT_Private {
         runtime.GrabEdgeEventRethrow<NConsole::TEvConsole::TEvConfigNotificationResponse>(handle);
     }
 
+    ////////// Hive
+
+    // Stop tablet.
+    // Also see ydb/core/mind/hive/hive_ut.cpp, SendStopTablet
+    void HiveStopTablet(TTestActorRuntime &runtime, ui64 hiveTablet, ui64 tabletId, ui32 nodeIndex) {
+        TActorId senderB = runtime.AllocateEdgeActor(nodeIndex);
+        runtime.SendToPipe(hiveTablet, senderB, new TEvHive::TEvStopTablet(tabletId), 0, GetPipeConfigWithRetries());
+        TAutoPtr<IEventHandle> handle;
+        auto event = runtime.GrabEdgeEventRethrow<TEvHive::TEvStopTabletResult>(handle);
+        UNIT_ASSERT(event);
+        const auto& stopResult = event->Record;
+        UNIT_ASSERT_EQUAL_C(stopResult.GetTabletID(), tabletId, stopResult.GetTabletID() << " != " << tabletId);
+        UNIT_ASSERT_EQUAL_C(stopResult.GetStatus(), NKikimrProto::OK, (ui32)stopResult.GetStatus() << " != " << (ui32)NKikimrProto::OK);
+    }
+
+    // Retrieve tablets that belong to the given subdomain
+    std::vector<NKikimrHive::TTabletInfo> HiveGetSubdomainTablets(TTestActorRuntime &runtime, const ui64 hiveTablet, const TPathId& subdomainPathId) {
+        TActorId senderA = runtime.AllocateEdgeActor();
+        runtime.SendToPipe(hiveTablet, senderA, new TEvHive::TEvRequestHiveInfo(), 0, GetPipeConfigWithRetries());
+        TAutoPtr<IEventHandle> handle;
+        auto event = runtime.GrabEdgeEventRethrow<TEvHive::TEvResponseHiveInfo>(handle);
+        UNIT_ASSERT(event);
+        const auto& response = event->Record;
+
+        // Cerr << "TEST: HiveGetSubdomainTablets: " << response.ShortDebugString() << Endl;
+
+        std::vector<NKikimrHive::TTabletInfo> result;
+        std::copy_if(response.GetTablets().begin(), response.GetTablets().end(),
+            std::back_inserter(result),
+            [&subdomainPathId] (auto& tablet) {
+                return (tablet.GetObjectDomain().GetSchemeShard() == subdomainPathId.OwnerId
+                    && tablet.GetObjectDomain().GetPathId() == subdomainPathId.LocalPathId
+                );
+            }
+        );
+        return result;
+    }
+
     template <typename TEvResponse, typename TEvRequest, typename TStatus>
     static ui32 ReliableProposeImpl(
         NActors::TTestActorRuntime& runtime, const TActorId& proposer,
@@ -1421,6 +1459,30 @@ namespace NSchemeShardUT_Private {
         return result.GetValue().GetStruct(0).GetOptional().HasOptional();
     }
 
+    // Read records from a local table by a single component key
+    NKikimrMiniKQL::TResult ReadLocalTableRecords(TTestActorRuntime& runtime, ui64 tabletId, const TString& tableName, const TString& keyColumn) {
+        const auto query = Sprintf(
+            R"(
+                (
+                    (let range '('('%s (Null) (Void))))
+                    (let fields '('%s))
+                    (return (AsList
+                        (SetResult 'Result (SelectRange '%s range fields '()))
+                    ))
+                )
+            )",
+            keyColumn.c_str(),
+            keyColumn.c_str(),
+            tableName.c_str()
+        );
+        auto result = LocalMiniKQL(runtime, tabletId, query);
+        // Result: Value { Struct { Optional { Struct { List {
+        //     Struct { Optional { Uint64: 2 } } }
+        //     ...
+        // } } } } }
+        return result;
+    };
+
     ui64 GetDatashardState(TTestActorRuntime& runtime, ui64 tabletId) {
         NKikimrMiniKQL::TResult result;
         TString err;
@@ -2759,21 +2821,26 @@ namespace NSchemeShardUT_Private {
     }
 
     void WriteVectorTableRows(TTestActorRuntime& runtime, ui64 schemeShardId, ui64 txId, const TString & tablePath,
-        ui32 shard, ui32 min, ui32 max, std::vector<ui32> columnIds) {
+        ui32 shard, ui32 min, ui32 max, std::vector<ui32> columnIds, ui32 vectorDimension) {
         TVector<TCell> cells;
-        ui8 str[6] = { 0 };
-        str[4] = (ui8)Ydb::Table::VectorIndexSettings::VECTOR_TYPE_UINT8;
+        TVector<ui8> vec(vectorDimension + 1);
+        vec[vectorDimension] = (ui8)Ydb::Table::VectorIndexSettings::VECTOR_TYPE_UINT8;
         for (ui32 key = min; key < max; ++key) {
-            str[0] = ((key+106)* 7) % 256;
-            str[1] = ((key+106)*17) % 256;
-            str[2] = ((key+106)*37) % 256;
-            str[3] = ((key+106)*47) % 256;
+            for (ui32 index : xrange(vectorDimension)) {
+                vec[index] = ((key+106)* (10*index+7)) % 256;
+                if (index == 2) {
+                    vec[2] = ((key+106)*37) % 256;
+                }
+                if (index == 3) {
+                    vec[3] = ((key+106)*47) % 256;
+                }
+            }
             cells.emplace_back(TCell::Make(key));
-            cells.emplace_back(TCell((const char*)str, 5));
+            cells.emplace_back(TCell((const char*)vec.data(), vec.size()));
             // optional prefix ui32 column
             cells.emplace_back(TCell::Make(key % 17));
             // optionally use the same value for an additional covered string column
-            cells.emplace_back(TCell((const char*)str, 5));
+            cells.emplace_back(TCell((const char*)vec.data(), vec.size()));
         }
         if (!columnIds.size()) {
             columnIds = {1, 2, 3, 4};

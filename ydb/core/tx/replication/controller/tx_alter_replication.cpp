@@ -47,6 +47,7 @@ public:
             auto& newSpecific = newConfig.GetTransferSpecific();
 
             alter = oldSpecific.GetTarget().GetTransformLambda() != newSpecific.GetTarget().GetTransformLambda()
+                || oldSpecific.GetTarget().GetDirectoryPath() != newSpecific.GetTarget().GetDirectoryPath()
                 || oldSpecific.GetBatching().GetBatchSizeBytes() != newSpecific.GetBatching().GetBatchSizeBytes()
                 || oldSpecific.GetBatching().GetFlushIntervalMilliSeconds() != newSpecific.GetBatching().GetFlushIntervalMilliSeconds();
         }
@@ -68,7 +69,14 @@ public:
                     break;
                 default:
                     Y_ABORT("Invalid state");
-                }
+            }
+        }
+
+        if (alter && Replication->GetState() == TReplication::EState::Error) {
+            Replication->SetState(TReplication::EState::Ready);
+            if (desiredState == TReplication::EState::Error) {
+                desiredState = TReplication::EState::Ready;
+            }
         }
 
         auto issue = Replication->GetIssue();

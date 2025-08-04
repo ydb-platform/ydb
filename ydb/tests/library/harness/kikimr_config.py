@@ -177,12 +177,14 @@ class KikimrConfigGenerator(object):
             memory_controller_config=None,
             verbose_memory_limit_exception=False,
             enable_static_auth=False,
+            cms_config=None
     ):
         if extra_feature_flags is None:
             extra_feature_flags = []
         if extra_grpc_services is None:
             extra_grpc_services = []
 
+        self.cms_config = cms_config
         self.use_log_files = use_log_files
         self.use_self_management = use_self_management
         self.simple_config = simple_config
@@ -263,6 +265,9 @@ class KikimrConfigGenerator(object):
         if self.use_self_management:
             self.yaml_config["self_management_config"] = dict()
             self.yaml_config["self_management_config"]["enabled"] = True
+
+        if self.cms_config:
+            self.yaml_config["cms_config"] = self.cms_config
 
         if overrided_actor_system_config:
             self.yaml_config["actor_system_config"] = overrided_actor_system_config

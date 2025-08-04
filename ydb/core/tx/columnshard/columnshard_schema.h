@@ -84,7 +84,8 @@ struct Schema : NIceDb::Schema {
         GCBarrierPreparationStep = 17,
         SubDomainLocalPathId = 18,
         SubDomainOutOfSpace = 19,
-        MaxInternalPathId = 20, //max internal path id ever known in this tablet
+        InternalOwnerPathId = 20,
+        MaxInternalPathId = 21,   //max internal path id ever known in this tablet
     };
 
     enum class EInsertTableIds : ui8 {
@@ -875,6 +876,10 @@ private:
     YDB_READONLY_DEF(std::optional<NOlap::TSnapshot>, DeprecatedMinSnapshot);
 
 public:
+    TPortionAddress GetAddress() const {
+        return TPortionAddress(PathId, PortionId);
+    }
+
     template <class TSource>
     TPortionLoadContext(const TSource& rowset) {
         PathId = TInternalPathId::FromRawValue(rowset.template GetValue<NColumnShard::Schema::IndexPortions::PathId>());

@@ -1819,6 +1819,7 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
             "user",
             "password",
             "password_secret_name",
+            "ca_cert",
             "consistency_level",
             "commit_interval",
         };
@@ -1846,6 +1847,7 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
             "user",
             "password",
             "password_secret_name",
+            "ca_cert",
             "state",
             "failover_mode",
         };
@@ -1878,10 +1880,12 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
             "user",
             "password",
             "password_secret_name",
+            "ca_cert",
             "commit_interval",
             "flush_interval",
             "batch_size_bytes",
             "consumer",
+            "directory",
         };
 
         if (!CheckReplicationSettings(node.TransferSettings(), supportedSettings, ctx)) {
@@ -1907,10 +1911,12 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
             "user",
             "password",
             "password_secret_name",
+            "ca_cert",
             "state",
             "failover_mode",
             "flush_interval",
             "batch_size_bytes",
+            "directory"
         };
 
         if (!CheckReplicationSettings(node.TransferSettings(), supportedSettings, ctx)) {

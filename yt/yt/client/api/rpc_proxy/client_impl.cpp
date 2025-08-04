@@ -2618,6 +2618,9 @@ TFuture<TGetQueryTrackerInfoResult> TClient::GetQueryTrackerInfo(
     if (options.Attributes) {
         ToProto(req->mutable_attributes(), options.Attributes);
     }
+    if (options.Settings) {
+        ToProto(req->mutable_settings(), ConvertToYsonString(options.Settings));
+    }
 
     return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspGetQueryTrackerInfoPtr& rsp) {
         return TGetQueryTrackerInfoResult{
@@ -2625,7 +2628,8 @@ TFuture<TGetQueryTrackerInfoResult> TClient::GetQueryTrackerInfo(
             .ClusterName = FromProto<std::string>(rsp->cluster_name()),
             .SupportedFeatures = TYsonString(rsp->supported_features()),
             .AccessControlObjects = FromProto<std::vector<std::string>>(rsp->access_control_objects()),
-            .Clusters = FromProto<std::vector<std::string>>(rsp->clusters())
+            .Clusters = FromProto<std::vector<std::string>>(rsp->clusters()),
+            .EnginesInfo = TYsonString(rsp->engines_info()),
         };
     }));
 }
@@ -2898,7 +2902,7 @@ TFuture<TSignedShuffleHandlePtr> TClient::StartShuffle(
 TFuture<IRowBatchReaderPtr> TClient::CreateShuffleReader(
     const TSignedShuffleHandlePtr& signedShuffleHandle,
     int partitionIndex,
-    std::optional<std::pair<int, int>> writerIndexRange,
+    std::optional<TIndexRange> writerIndexRange,
     const TShuffleReaderOptions& options)
 {
     auto proxy = CreateApiServiceProxy();

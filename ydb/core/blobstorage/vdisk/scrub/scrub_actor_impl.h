@@ -25,7 +25,7 @@ namespace NKikimr {
 
         ::NMonitoring::TDynamicCounterPtr Counters;
         NMonGroup::TScrubGroup MonGroup;
-        NMonGroup::TDeepScrubbingGroup DeepScrubbingGroup;
+        NMonGroup::TDeepScrubbingSubgroups DeepScrubbingSubgroups;
 
         TRopeArena Arena;
 

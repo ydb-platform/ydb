@@ -17,7 +17,7 @@ private:
     YDB_ACCESSOR_DEF(TPositiveControlInteger, Waiting);
     std::shared_ptr<TStageFeatures> Owner;
     std::shared_ptr<TStageCounters> Counters;
-    TIntrusivePtr<NMemory::IMemoryConsumer> MemoryConsumer;
+    std::function<void(ui64)> MemoryConsumptionUpdate;
 
     void UpdateConsumption(const TStageFeatures* current) const;
 
@@ -38,7 +38,11 @@ public:
     bool IsAllocatable(const ui64 volume, const ui64 additional) const;
     void Add(const ui64 volume, const bool allocated);
 
-    void SetMemoryConsumer(TIntrusivePtr<NMemory::IMemoryConsumer> consumer);
+    void SetMemoryConsumptionUpdateFunction(std::function<void(ui64)> func);
+
+    void AttachOwner(const std::shared_ptr<TStageFeatures>& owner);
+    void AttachCounters(const std::shared_ptr<TStageCounters>& counters);
+
     void UpdateMemoryLimits(const ui64 limit, const std::optional<ui64>& hardLimit, bool& isLimitIncreased);
 };
 

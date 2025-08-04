@@ -39,6 +39,8 @@ struct TDistributedWriteSessionStartOptions
     : public TTransactionalOptions
 {
     int CookieCount = 0;
+     //! Timeout for session. Similar to transaction timeout.
+    std::optional<TDuration> Timeout;
 };
 
 struct TDistributedWriteSessionFinishOptions

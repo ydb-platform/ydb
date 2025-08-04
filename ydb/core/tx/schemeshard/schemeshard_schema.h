@@ -2145,7 +2145,7 @@ struct Schema : NIceDb::Schema {
         struct OperationId : Column<1, NScheme::NTypeIds::Uint64> {};
         struct State : Column<2, NScheme::NTypeIds::Uint32> {};
         struct CurrentIncrementalIdx : Column<3, NScheme::NTypeIds::Uint32> {};
-        
+
         using TKey = TableKey<OperationId>;
         using TColumns = TableColumns<OperationId, State, CurrentIncrementalIdx>;
     };
@@ -2156,9 +2156,16 @@ struct Schema : NIceDb::Schema {
         struct ShardIdx : Column<2, NScheme::NTypeIds::Uint64> {};
         struct Status : Column<3, NScheme::NTypeIds::Uint32> {};
         struct LastKey : Column<4, NScheme::NTypeIds::String> {};
-        
+
         using TKey = TableKey<OperationId, ShardIdx>;
         using TColumns = TableColumns<OperationId, ShardIdx, Status, LastKey>;
+    };
+
+    struct SystemShardsToDelete : Table<124> {
+        struct ShardIdx : Column<1, NScheme::NTypeIds::Uint64> { using Type = TLocalShardIdx; };
+
+        using TKey = TableKey<ShardIdx>;
+        using TColumns = TableColumns<ShardIdx>;
     };
 
     using TTables = SchemaTables<
@@ -2282,7 +2289,8 @@ struct Schema : NIceDb::Schema {
         IncrementalRestoreOperations,
         KMeansTreeClusters,
         IncrementalRestoreState,
-        IncrementalRestoreShardProgress
+        IncrementalRestoreShardProgress,
+        SystemShardsToDelete
     >;
 
     static constexpr ui64 SysParam_NextPathId = 1;

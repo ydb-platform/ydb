@@ -89,7 +89,7 @@ TConclusionStatus TScanHead::Start() {
             if (!i->NeedAccessorsFetching()) {
                 i->SetSourceInMemory(true);
             }
-            i->InitFetchingPlan(Context->GetColumnsFetchingPlan(i));
+            i->InitFetchingPlan(Context->GetColumnsFetchingPlan(i, true));
         }
         context.OnFinishPoint(point);
         if (context.GetCurrentSources().size()) {
@@ -118,7 +118,8 @@ TScanHead::TScanHead(std::unique_ptr<NCommon::ISourcesConstructor>&& sources, co
         InFlightLimit = MaxInFlight;
     }
     while (!sources->IsFinished()) {
-        auto source = std::static_pointer_cast<IDataSource>(sources->ExtractNext(context));
+        auto source = std::static_pointer_cast<IDataSource>(sources->TryExtractNext(context, InFlightLimit));
+        AFL_VERIFY(source);
         BorderPoints[source->GetStart()].AddStart(source);
         BorderPoints[source->GetFinish()].AddFinish(source);
     }

@@ -11,7 +11,7 @@ Y_UNIT_TEST_SUITE(FileYtServiceTests) {
                                    "{\"key\"=\"800\";\"subkey\"=\"2\";\"value\"=\"ddd\"};\n";
 
         TTempFileHandle file{};
-        TYtTableRef ytTable{.Path = "test_path", .Cluster = "hahn", .FilePath = file.Name()};
+        TYtTableRef ytTable{.RichPath = NYT::TRichYPath().Path("Path").Cluster("Cluster"), .FilePath = file.Name()};
 
         auto fileService = MakeFileYtJobSerivce();
         auto writer = fileService->MakeWriter(ytTable, TClusterConnection());
@@ -20,7 +20,7 @@ Y_UNIT_TEST_SUITE(FileYtServiceTests) {
 
         TFileInput input(file.Name());
 
-        auto reader = fileService->MakeReader(file.Name());
+        auto reader = fileService->MakeReader(ytTable);
         TStringStream binaryYsonStream;
         TStringStream textYsonStream;
         binaryYsonStream << reader->ReadAll();

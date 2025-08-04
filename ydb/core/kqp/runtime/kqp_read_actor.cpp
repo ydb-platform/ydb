@@ -680,6 +680,11 @@ public:
             }
         }
 
+        if (newShards.empty()) {
+            NotifyCA();
+            return;
+        }
+
         YQL_ENSURE(!newShards.empty());
         if (!state->IsFake) {
             Counters->IteratorsReadSplits->Add(newShards.size() - 1);

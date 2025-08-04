@@ -449,6 +449,31 @@ namespace NKikimr::NBsController {
         }
     }
 
+    void TBlobStorageController::TConsoleInteraction::CommitConfig() {
+        Y_ABORT_UNLESS(PendingCommitState);
+        Self.Execute(Self.CreateTxCommitConfig(
+            std::move(PendingCommitState->YamlConfig),
+            std::exchange(PendingStorageYamlConfig, {}),
+            std::move(PendingCommitState->StorageConfig),
+            PendingCommitState->ExpectedStorageYamlConfigVersion,
+            nullptr,
+            SwitchEnableConfigV2,
+            std::move(AuditLogInfo)
+        ));
+        CommitInProgress = true;
+
+        PendingCommitState.reset();
+        PendingYamlConfig.reset();
+    }
+
+    void TBlobStorageController::TConsoleInteraction::ProcessDryRunResponse(bool success, TString errorReason) {
+        if (success) {
+            CommitConfig();
+        } else {
+            IssueGRpcResponse(NKikimrBlobStorage::TEvControllerReplaceConfigResponse::InvalidRequest, std::move(errorReason));
+        }
+    }
+
     void TBlobStorageController::TConsoleInteraction::Handle(TEvBlobStorage::TEvControllerValidateConfigResponse::TPtr &ev) {
         STLOG(PRI_DEBUG, BS_CONTROLLER, BSC27, "Console validate config response", (Response, ev->Get()->Record));
         ++ExpectedValidationTimeoutCookie; // spoil validation timeout cookie to prevent event from firing
@@ -525,11 +550,31 @@ namespace NKikimr::NBsController {
                 }
             }
 
-            Self.Execute(Self.CreateTxCommitConfig(std::move(yamlConfig), std::exchange(PendingStorageYamlConfig, {}),
-                std::move(storageConfig), expectedStorageYamlConfigVersion, nullptr, SwitchEnableConfigV2,
-                std::move(AuditLogInfo)));
-            CommitInProgress = true;
-            PendingYamlConfig.reset();
+            PendingCommitState.emplace();
+            PendingCommitState->YamlConfig = std::move(yamlConfig);
+            PendingCommitState->StorageConfig = std::move(storageConfig);
+            PendingCommitState->ExpectedStorageYamlConfigVersion = expectedStorageYamlConfigVersion;
+
+            const ui64 cookie = Self.NextValidationCookie++;
+            Self.PendingValidationRequests.emplace(cookie, TConfigValidationInfo{
+                .Sender = Self.SelfId(),
+                .Cookie = ev->Cookie,
+                .InterconnectSession = ev->InterconnectSession,
+                .Source = TConfigValidationInfo::ESource::ConsoleInteraction,
+            });
+
+            if (PendingCommitState->StorageConfig) {
+                auto tempHostRecords = std::make_shared<THostRecordMap::element_type>(*PendingCommitState->StorageConfig);
+                if (auto req = Self.BuildConfigRequestFromStorageConfig(*PendingCommitState->StorageConfig, tempHostRecords, true)) {
+                    Self.Send(Self.SelfId(), req.release(), 0, cookie);
+                } else {
+                    Self.PendingValidationRequests.erase(cookie);
+                    ProcessDryRunResponse(true);
+                }
+            } else {
+                Self.PendingValidationRequests.erase(cookie);
+                ProcessDryRunResponse(true);
+            }
         } catch (const TExError& error) {
             IssueGRpcResponse(TResponseProto::BSCInvalidConfig, error.ErrorReason);
         }

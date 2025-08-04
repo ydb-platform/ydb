@@ -5,6 +5,7 @@ SRCS(
     events.cpp
     merge.cpp
     common.cpp
+    splitter.cpp
 )
 
 PEERDIR(

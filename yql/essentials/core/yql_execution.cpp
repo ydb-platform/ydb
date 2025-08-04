@@ -2,6 +2,7 @@
 #include "yql_expr_optimize.h"
 #include "yql_opt_proposed_by_data.h"
 
+#include <yql/essentials/core/yql_opt_utils.h>
 #include <yql/essentials/utils/log/log.h>
 #include <yql/essentials/utils/yql_panic.h>
 
@@ -889,7 +890,7 @@ TAutoPtr<IGraphTransformer> CreateCheckExecutionTransformer(const TTypeAnnotatio
                 if (parentsIt != parentsMap.end()) {
                     ui32 usageCount = 0;
                     for (auto& x : parentsIt->second) {
-                        if (x->IsCallable("DependsOn")) {
+                        if (IsDependsOnUsage(*x, parentsMap)) {
                             continue;
                         }
 

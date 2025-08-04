@@ -242,7 +242,7 @@ bool BuildAlterTableModifyScheme(const TString& path, const Ydb::Table::AlterTab
     for (const auto& drop : req->drop_changefeeds()) {
         modifyScheme->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpDropCdcStream);
         auto op = modifyScheme->MutableDropCdcStream();
-        op->SetStreamName(drop);
+        op->AddStreamName(drop);
         op->SetTableName(name);
     }
 
@@ -539,12 +539,14 @@ void FillColumnDescriptionImpl(TYdbProto& out,
         }
     }
 
-    if (in.HasTTLSettings()) {
-        if (in.GetTTLSettings().HasEnabled()) {
-            Ydb::StatusIds::StatusCode code;
-            TString error;
-            if (!FillTtlSettings(*out.mutable_ttl_settings(), in.GetTTLSettings().GetEnabled(), code, error)) {
-                ythrow yexception() << "invalid TTL settings: " << error;
+    if constexpr (!std::is_same_v<TYdbProto, Ydb::Table::DescribeSystemViewResult>) {
+        if (in.HasTTLSettings()) {
+            if (in.GetTTLSettings().HasEnabled()) {
+                Ydb::StatusIds::StatusCode code;
+                TString error;
+                if (!FillTtlSettings(*out.mutable_ttl_settings(), in.GetTTLSettings().GetEnabled(), code, error)) {
+                    ythrow yexception() << "invalid TTL settings: " << error;
+                }
             }
         }
     }
@@ -552,6 +554,11 @@ void FillColumnDescriptionImpl(TYdbProto& out,
 
 void FillColumnDescription(Ydb::Table::DescribeTableResult& out,
         NKikimrMiniKQL::TType& splitKeyType, const NKikimrSchemeOp::TTableDescription& in) {
+    FillColumnDescriptionImpl(out, splitKeyType, in);
+}
+
+void FillColumnDescription(Ydb::Table::DescribeSystemViewResult& out, const NKikimrSchemeOp::TTableDescription& in) {
+    NKikimrMiniKQL::TType splitKeyType;
     FillColumnDescriptionImpl(out, splitKeyType, in);
 }
 
@@ -1069,7 +1076,7 @@ void FillIndexDescriptionImpl(TYdbProto& out, const NKikimrSchemeOp::TTableDescr
                 FillGlobalIndexSettings(
                     *index->mutable_global_vector_kmeans_tree_index()->mutable_prefix_table_settings(),
                     tableIndex.GetIndexImplTableDescriptions(2)
-                );                    
+                );
             }
 
             *index->mutable_global_vector_kmeans_tree_index()->mutable_vector_settings() = tableIndex.GetVectorIndexKmeansTreeDescription().GetSettings();
@@ -1541,6 +1548,11 @@ void FillColumnFamilies(Ydb::Table::CreateTableRequest& out,
 }
 
 void FillAttributes(Ydb::Table::DescribeTableResult& out,
+        const NKikimrSchemeOp::TPathDescription& in) {
+    FillAttributesImpl(out, in);
+}
+
+void FillAttributes(Ydb::Table::DescribeSystemViewResult& out,
         const NKikimrSchemeOp::TPathDescription& in) {
     FillAttributesImpl(out, in);
 }

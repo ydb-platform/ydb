@@ -327,7 +327,7 @@ def _maven_coords_for_project(unit, project_dir):
     if os.path.exists(pom_path):
         try:
             # TODO(YMAKE-1694): xml is not currenly ready for Python subinterpreters, so we temporarily switch to parser implemented in ymake module
-            if hasattr(ymake, 'ymake.get_artifact_id_from_pom_xml'):
+            if hasattr(ymake, 'get_artifact_id_from_pom_xml'):
                 with open(pom_path, 'rb') as f:
                     artifact = ymake.get_artifact_id_from_pom_xml(f.read())
                     if artifact is not None:

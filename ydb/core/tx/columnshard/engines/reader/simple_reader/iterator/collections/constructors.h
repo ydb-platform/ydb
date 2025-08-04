@@ -1,6 +1,7 @@
 #pragma once
 #include "abstract.h"
 
+#include <ydb/core/tx/columnshard/engines/reader/common_reader/common/accessors_ordering.h>
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/constructor/read_metadata.h>
 
 #include <ydb/library/accessor/positive_integer.h>
@@ -25,8 +26,13 @@ private:
     virtual ui64 DoGetEntityRecordsCount() const override {
         return RecordsCount;
     }
+    std::optional<ui32> SourceIdx;
 
 public:
+    void SetIndex(const ui32 index) {
+        SourceIdx = index;
+    }
+
     void SetIsStartedByCursor() {
         IsStartedByCursorFlag = true;
     }
@@ -47,23 +53,35 @@ public:
         , RecordsCount(portion->GetRecordsCount()) {
     }
 
-    bool operator<(const TSourceConstructor& item) const {
-        return item.Start < Start;
-    }
+    class TComparator {
+    private:
+        const ERequestSorting Sorting;
 
-    std::shared_ptr<TPortionDataSource> Construct(const ui32 sourceIdx, const std::shared_ptr<TSpecialReadContext>& context) const;
+    public:
+        TComparator(const ERequestSorting sorting)
+            : Sorting(sorting) {
+            AFL_VERIFY(Sorting != ERequestSorting::NONE);
+        }
+
+        bool operator()(const TSourceConstructor& l, const TSourceConstructor& r) const {
+            return r.Start < l.Start;
+        }
+    };
+
+    std::shared_ptr<TPortionDataSource> Construct(const std::shared_ptr<NCommon::TSpecialReadContext>& context, std::shared_ptr<TPortionDataAccessor>&& accessor) const;
 };
 
-class TNotSortedPortionsSources: public NCommon::ISourcesConstructor {
+class TPortionsSources: public NCommon::TSourcesConstructorWithAccessors<TSourceConstructor> {
 private:
-    std::deque<TSourceConstructor> Sources;
-    ui32 SourceIdx = 0;
+    using TBase = NCommon::TSourcesConstructorWithAccessors<TSourceConstructor>;
+    ui32 CurrentSourceIdx = 0;
+    std::vector<TInsertWriteId> Uncommitted;    
 
     virtual void DoFillReadStats(TReadStats& stats) const override {
         ui64 compactedPortionsBytes = 0;
         ui64 insertedPortionsBytes = 0;
         ui64 committedPortionsBytes = 0;
-        for (auto&& i : Sources) {
+        for (auto&& i : TBase::GetConstructors()) {
             if (i.GetPortion()->GetPortionType() == EPortionType::Compacted) {
                 compactedPortionsBytes += i.GetPortion()->GetTotalBlobBytes();
             } else if (i.GetPortion()->GetProduced() == NPortion::EProduced::INSERTED) {
@@ -72,110 +90,33 @@ private:
                 committedPortionsBytes += i.GetPortion()->GetTotalBlobBytes();
             }
         }
-        stats.IndexPortions = Sources.size();
+        stats.IndexPortions = TBase::GetConstructorsCount();
         stats.InsertedPortionsBytes = insertedPortionsBytes;
         stats.CompactedPortionsBytes = compactedPortionsBytes;
         stats.CommittedPortionsBytes = committedPortionsBytes;
-    }
-
-    virtual TString DoDebugString() const override {
-        return "{" + ::ToString(Sources.size()) + "}";
-    }
-
-    virtual void DoInitCursor(const std::shared_ptr<IScanCursor>& cursor) override {
-        while (Sources.size()) {
-            bool usage = false;
-            if (!cursor->CheckEntityIsBorder(Sources.front(), usage)) {
-                Sources.pop_front();
-                continue;
-            }
-            if (usage) {
-                Sources.front().SetIsStartedByCursor();
-            } else {
-                Sources.pop_front();
-            }
-            break;
-        }
-    }
-
-    virtual void DoClear() override {
-        Sources.clear();
-    }
-    virtual void DoAbort() override {
-        Sources.clear();
-    }
-    virtual bool DoIsFinished() const override {
-        return Sources.empty();
-    }
-    virtual std::shared_ptr<NCommon::IDataSource> DoExtractNext(const std::shared_ptr<NCommon::TSpecialReadContext>& context) override {
-        auto result = Sources.front().Construct(SourceIdx++, static_pointer_cast<TSpecialReadContext>(context));
-        Sources.pop_front();
-        return result;
-    }
-
-public:
-    TNotSortedPortionsSources() = default;
-
-    virtual std::vector<TInsertWriteId> GetUncommittedWriteIds() const override;
-
-    TNotSortedPortionsSources(std::deque<TSourceConstructor>&& sources)
-        : Sources(std::move(sources)) {
-    }
-};
-
-class TSortedPortionsSources: public NCommon::ISourcesConstructor {
-private:
-    std::deque<TSourceConstructor> HeapSources;
-    ui32 SourceIdx = 0;
-
-    virtual void DoFillReadStats(TReadStats& stats) const override {
-        ui64 compactedPortionsBytes = 0;
-        ui64 insertedPortionsBytes = 0;
-        ui64 committedPortionsBytes = 0;
-        for (auto&& i : HeapSources) {
-            if (i.GetPortion()->GetPortionType() == EPortionType::Compacted) {
-                compactedPortionsBytes += i.GetPortion()->GetTotalBlobBytes();
-            } else if (i.GetPortion()->GetProduced() == NPortion::EProduced::INSERTED) {
-                insertedPortionsBytes += i.GetPortion()->GetTotalBlobBytes();
-            } else {
-                committedPortionsBytes += i.GetPortion()->GetTotalBlobBytes();
-            }
-        }
-        stats.IndexPortions = HeapSources.size();
-        stats.InsertedPortionsBytes = insertedPortionsBytes;
-        stats.CompactedPortionsBytes = compactedPortionsBytes;
-        stats.CommittedPortionsBytes = committedPortionsBytes;
-    }
-
-    virtual TString DoDebugString() const override {
-        return "{" + ::ToString(HeapSources.size()) + "}";
     }
 
     virtual void DoInitCursor(const std::shared_ptr<IScanCursor>& cursor) override;
 
     virtual std::vector<TInsertWriteId> GetUncommittedWriteIds() const override;
 
-    virtual void DoClear() override {
-        HeapSources.clear();
-    }
-    virtual void DoAbort() override {
-        HeapSources.clear();
-    }
-    virtual bool DoIsFinished() const override {
-        return HeapSources.empty();
-    }
-    virtual std::shared_ptr<NCommon::IDataSource> DoExtractNext(const std::shared_ptr<NCommon::TSpecialReadContext>& context) override {
-        AFL_VERIFY(HeapSources.size());
-        std::pop_heap(HeapSources.begin(), HeapSources.end());
-        auto result = HeapSources.back().Construct(SourceIdx++, static_pointer_cast<TSpecialReadContext>(context));
-        HeapSources.pop_back();
-        return result;
+    virtual std::shared_ptr<NCommon::IDataSource> DoExtractNextImpl(const std::shared_ptr<NCommon::TSpecialReadContext>& context) override {
+        auto constructor = TBase::PopObjectWithAccessor();
+        constructor.MutableObject().SetIndex(CurrentSourceIdx);
+        ++CurrentSourceIdx;
+        return constructor.MutableObject().Construct(context, constructor.DetachAccessor());
     }
 
 public:
-    TSortedPortionsSources(std::deque<TSourceConstructor>&& sources)
-        : HeapSources(std::move(sources)) {
-        std::make_heap(HeapSources.begin(), HeapSources.end());
+    TPortionsSources(std::deque<TSourceConstructor>&& sources, const ERequestSorting sorting, std::vector<TInsertWriteId>&& uncommitted)
+        : TBase(sorting)
+        , Uncommitted(std::move(uncommitted))
+    {
+        InitializeConstructors(std::move(sources));
+    }
+
+    static std::unique_ptr<TPortionsSources> BuildEmpty() {
+        return std::make_unique<TPortionsSources>(std::deque<TSourceConstructor>{}, ERequestSorting::NONE, std::vector<TInsertWriteId>{});
     }
 };
 

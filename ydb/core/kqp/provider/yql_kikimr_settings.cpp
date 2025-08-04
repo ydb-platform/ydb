@@ -90,15 +90,35 @@ TKikimrConfiguration::TKikimrConfiguration() {
     REGISTER_SETTING(*this, OptimizerHints).Parser([](const TString& v) { return NYql::TOptimizerHints::Parse(v); });
     REGISTER_SETTING(*this, OptShuffleElimination);
     REGISTER_SETTING(*this, OptShuffleEliminationWithMap);
+    REGISTER_SETTING(*this, OptShuffleEliminationForAggregation);
     REGISTER_SETTING(*this, OverridePlanner);
     REGISTER_SETTING(*this, UseGraceJoinCoreForMap);
     REGISTER_SETTING(*this, UseBlockHashJoin);
     REGISTER_SETTING(*this, EnableOrderPreservingLookupJoin);
+    REGISTER_SETTING(*this, OptEnableParallelUnionAllConnectionsForExtend);
 
     REGISTER_SETTING(*this, OptUseFinalizeByKey);
     REGISTER_SETTING(*this, CostBasedOptimizationLevel);
     REGISTER_SETTING(*this, EnableSpillingNodes)
         .Parser([](const TString& v) { return ParseEnableSpillingNodes(v); });
+    REGISTER_SETTING(*this, CostBasedOptimization)
+        .Parser(
+            [&](TString val) {
+                for (char& c: val) { c = ToLower(c); }
+
+                if (val == "on") {
+                    CostBasedOptimizationLevel = Max<ui32>();
+                } else if (val == "off") {
+                    CostBasedOptimizationLevel = 0;
+                } else if (val == "auto") {
+                    CostBasedOptimizationLevel = DefaultCostBasedOptimizationLevel;
+                } else {
+                    Y_ENSURE(false, "undefined cbo setting, available: [on, off, auto]");
+                }
+
+                return val;
+            }
+    );
     REGISTER_SETTING(*this, UseBlockReader);
 
     REGISTER_SETTING(*this, MaxDPHypDPTableSize);
@@ -204,4 +224,8 @@ bool TKikimrConfiguration::GetEnableOlapPushdownProjections() const {
     return ((GetOptionalFlagValue(OptEnableOlapPushdownProjections.Get()) == EOptionalFlag::Enabled) || EnableOlapPushdownProjections);
 }
 
+bool TKikimrConfiguration::GetEnableParallelUnionAllConnectionsForExtend() const {
+    return ((GetOptionalFlagValue(OptEnableParallelUnionAllConnectionsForExtend.Get()) == EOptionalFlag::Enabled) ||
+            EnableParallelUnionAllConnectionsForExtend);
+}
 }

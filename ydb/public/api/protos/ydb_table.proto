@@ -1346,3 +1346,29 @@ message DescribeExternalTableResult {
     repeated ColumnMeta columns = 5;
     map<string, string> content = 6;
 }
+
+// Returns information about a system view with a given path.
+message DescribeSystemViewRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+    string path = 2;
+}
+
+message DescribeSystemViewResponse {
+    // Holds DescribeSystemViewResult in case of a successful call.
+    Ydb.Operations.Operation operation = 1;
+}
+
+message DescribeSystemViewResult {
+    // Description of scheme object
+    Ydb.Scheme.Entry self = 1;
+    // Id of system view (Enum value from NKikimrSysView.ESysViewType)
+    uint64 sys_view_id = 2;
+    // NameId of system view
+    string sys_view_name = 3;
+    // List of columns
+    repeated ColumnMeta columns = 4;
+    // List of primary key columns
+    repeated string primary_key = 5;
+    // Attributes
+    map<string, string> attributes = 6;
+}

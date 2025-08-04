@@ -9,11 +9,8 @@ using namespace NYdb::NTable;
 
 Y_UNIT_TEST_SUITE(KqpBlockHashJoin) {
     Y_UNIT_TEST_TWIN(BlockHashJoinTest, UseBlockHashJoin) {
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
-        auto settings = TKikimrSettings()
-            .SetAppConfig(appConfig)
-            .SetWithSampleTables(false);
+        TKikimrSettings settings = TKikimrSettings().SetWithSampleTables(false);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
         TKikimrRunner kikimr(settings);
 
         auto queryClient = kikimr.GetQueryClient();

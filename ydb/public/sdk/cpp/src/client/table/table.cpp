@@ -1815,6 +1815,12 @@ TAsyncDescribeExternalTableResult TSession::DescribeExternalTable(const std::str
     return Client_->DescribeExternalTable(path, settings);
 }
 
+TAsyncDescribeSystemViewResult TSession::DescribeSystemView(const std::string& path,
+        const TDescribeSystemViewSettings& settings)
+{
+    return Client_->DescribeSystemView(path, settings);
+}
+
 TAsyncDataQueryResult TSession::ExecuteDataQuery(const std::string& query, const TTxControl& txControl,
     const TExecDataQuerySettings& settings)
 {
@@ -3428,6 +3434,124 @@ TDescribeExternalTableResult::TDescribeExternalTableResult(TStatus&& status, Ydb
 TExternalTableDescription TDescribeExternalTableResult::GetExternalTableDescription() const {
     CheckStatusOk("TDescribeExternalTableResult::GetExternalTableDescription");
     return ExternalTableDescription_;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+class TSystemViewDescription::TImpl {
+
+    TImpl(const Ydb::Table::DescribeSystemViewResult& proto)
+    {
+        // system view id
+        SysViewId_ = proto.sys_view_id();
+        SysViewName_ = proto.sys_view_name();
+
+        // primary key
+        for (const auto& pk : proto.primary_key()) {
+            PrimaryKey_.push_back(pk);
+        }
+
+        // columns
+        for (const auto& col : proto.columns()) {
+            std::optional<bool> not_null;
+            if (col.has_not_null()) {
+                not_null = col.not_null();
+            }
+
+            Columns_.emplace_back(col.name(), col.type(), "", not_null);
+        }
+
+        // attributes
+        for (auto [key, value] : proto.attributes()) {
+            Attributes_[key] = value;
+        }
+    }
+
+public:
+    TImpl() = default;
+
+    TImpl(Ydb::Table::DescribeSystemViewResult&& desc)
+        : TImpl(desc)
+    {
+        Proto_ = std::move(desc);
+    }
+
+    const Ydb::Table::DescribeSystemViewResult& GetProto() const {
+        return Proto_;
+    }
+
+    uint64_t GetSysViewId() const {
+        return SysViewId_;
+    }
+
+    const std::string& GetSysViewName() const {
+        return SysViewName_;
+    }
+
+    const std::vector<std::string>& GetPrimaryKeyColumns() const {
+        return PrimaryKey_;
+    }
+
+    const std::vector<TTableColumn>& GetColumns() const {
+        return Columns_;
+    }
+
+    const std::unordered_map<std::string, std::string>& GetAttributes() const {
+        return Attributes_;
+    }
+
+private:
+    Ydb::Table::DescribeSystemViewResult Proto_;
+
+    uint64_t SysViewId_;
+    std::string SysViewName_;
+    std::vector<std::string> PrimaryKey_;
+    std::vector<TTableColumn> Columns_;
+    std::unordered_map<std::string, std::string> Attributes_;
+};
+
+TSystemViewDescription::TSystemViewDescription()
+    : Impl_(new TImpl)
+{
+}
+
+TSystemViewDescription::TSystemViewDescription(Ydb::Table::DescribeSystemViewResult&& desc)
+    : Impl_(new TImpl(std::move(desc)))
+{
+}
+
+uint64_t TSystemViewDescription::GetSysViewId() const {
+    return Impl_->GetSysViewId();
+}
+
+const std::string& TSystemViewDescription::GetSysViewName() const {
+    return Impl_->GetSysViewName();
+}
+
+const std::vector<std::string>& TSystemViewDescription::GetPrimaryKeyColumns() const {
+    return Impl_->GetPrimaryKeyColumns();
+}
+
+std::vector<TTableColumn> TSystemViewDescription::GetTableColumns() const {
+    return Impl_->GetColumns();
+}
+
+const std::unordered_map<std::string, std::string>& TSystemViewDescription::GetAttributes() const {
+    return Impl_->GetAttributes();
+}
+
+const Ydb::Table::DescribeSystemViewResult& TSystemViewDescription::GetProto() const {
+    return Impl_->GetProto();
+}
+
+TDescribeSystemViewResult::TDescribeSystemViewResult(TStatus&& status, Ydb::Table::DescribeSystemViewResult&& desc)
+    : NScheme::TDescribePathResult(std::move(status), desc.self())
+    , SystemViewDescription_(std::move(desc))
+{}
+
+TSystemViewDescription TDescribeSystemViewResult::GetSystemViewDescription() const {
+    CheckStatusOk("TDescribeSystemViewResult::GetSystemViewDescription");
+    return SystemViewDescription_;
 }
 
 } // namespace NTable

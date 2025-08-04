@@ -5,11 +5,22 @@
 #include <contrib/libs/re2/re2/re2.h>
 
 #include <util/generic/yexception.h>
+#include <util/charset/utf8.h>
 
-namespace NSQLComplete {
+namespace NYql::NDocs {
 
     class TMarkdownParser {
+    private:
+        static constexpr TStringBuf HeaderRegex = R"re(([^#]+)(\s+{#([a-z0-9\-_]+)})?)re";
+
     public:
+        explicit TMarkdownParser(size_t headerDepth)
+            : HeaderDepth_(headerDepth)
+            , SectionHeaderRegex_(" *" + TString(HeaderDepth_, '#') + " " + HeaderRegex)
+            , IsSkipping_(true)
+        {
+        }
+
         void Parse(IInputStream& markdown, TMarkdownCallback&& onSection) {
             for (TString line; markdown.ReadLine(line) != 0;) {
                 if (IsSkipping_) {
@@ -42,10 +53,10 @@ namespace NSQLComplete {
             TString content;
             std::optional<TString> dummy;
             std::optional<TString> anchor;
-            YQL_ENSURE(
-                RE2::FullMatch(line, SectionHeaderRegex_, &content, &dummy, &anchor),
-                "line '" << line << "' does not match regex '"
-                         << SectionHeaderRegex_.pattern() << "'");
+            if (!RE2::FullMatch(line, SectionHeaderRegex_, &content, &dummy, &anchor)) {
+                Section_.Header.Content = std::move(line);
+                return;
+            }
 
             Section_.Header.Content = std::move(content);
             if (anchor) {
@@ -54,22 +65,63 @@ namespace NSQLComplete {
         }
 
         bool IsSectionHeader(TStringBuf line) const {
-            return HeaderDepth(line) == 2;
+            return HeaderDepth(line) == HeaderDepth_;
         }
 
         size_t HeaderDepth(TStringBuf line) const {
-            size_t pos = line.find_first_not_of('#');
-            return pos != TStringBuf::npos ? pos : 0;
+            size_t begin = line.find('#');
+            size_t end = line.find_first_not_of('#', begin);
+            return end != TStringBuf::npos ? (end - begin) : 0;
         }
 
-        RE2 SectionHeaderRegex_{R"re(## ([^#]+)(\s+{(#[a-z\-_]+)})?)re"};
-        bool IsSkipping_ = true;
+        size_t HeaderDepth_;
+        RE2 SectionHeaderRegex_;
+        bool IsSkipping_;
         TMarkdownSection Section_;
     };
 
-    void ParseMarkdown(IInputStream& markdown, TMarkdownCallback&& onSection) {
-        TMarkdownParser parser;
-        parser.Parse(markdown, std::forward<TMarkdownCallback>(onSection));
+    TMaybe<TString> Anchor(const TMarkdownHeader& header) {
+        static RE2 Regex(R"re([0-9a-z\-_]+)re");
+
+        if (header.Anchor) {
+            return header.Anchor;
+        }
+
+        TString content = ToLowerUTF8(header.Content);
+        SubstGlobal(content, ' ', '-');
+
+        if (RE2::FullMatch(content, Regex)) {
+            return content;
+        }
+
+        return Nothing();
     }
 
-} // namespace NSQLComplete
+    TMarkdownPage ParseMarkdownPage(TString markdown) {
+        TMarkdownPage page;
+
+        const auto onSection = [&](TMarkdownSection&& section) {
+            if (TMaybe<TString> anchor = Anchor(section.Header)) {
+                section.Header.Anchor = anchor;
+                page.SectionsByAnchor[*anchor] = std::move(section);
+            }
+        };
+
+        {
+            TMarkdownParser parser(/*headerDepth=*/2);
+            TStringStream stream(markdown);
+            parser.Parse(stream, onSection);
+        }
+
+        {
+            TMarkdownParser parser(/*headerDepth=*/3);
+            TStringStream stream(markdown);
+            parser.Parse(stream, onSection);
+        }
+
+        page.Text = std::move(markdown);
+
+        return page;
+    }
+
+} // namespace NYql::NDocs

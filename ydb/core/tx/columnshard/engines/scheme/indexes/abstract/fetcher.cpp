@@ -5,7 +5,7 @@ namespace NKikimr::NOlap::NIndexes {
 void TIndexFetcherLogic::DoStart(TReadActionsCollection& nextRead, NReader::NCommon::TFetchingResultContext& context) {
     TBlobsAction blobsAction(StoragesManager, NBlobOperations::EConsumer::SCAN);
     StorageId = context.GetSource()->GetEntityStorageId(GetEntityId());
-    auto indexChunks = context.GetSource()->GetStageData().GetPortionAccessor().GetIndexChunksPointers(IndexMeta->GetIndexId());
+    auto indexChunks = context.GetSource()->GetPortionAccessor().GetIndexChunksPointers(IndexMeta->GetIndexId());
     for (auto&& i : indexChunks) {
         if (i->HasBlobData()) {
             TChunkOriginalData originalData(i->GetBlobDataVerified());
@@ -13,7 +13,7 @@ void TIndexFetcherLogic::DoStart(TReadActionsCollection& nextRead, NReader::NCom
                 StorageId, IndexAddressesVector, originalData, IndexMeta->BuildHeader(originalData).DetachResult(), i->GetRecordsCount()));
         } else {
             TChunkOriginalData originalData(
-                context.GetSource()->GetStageData().GetPortionAccessor().RestoreBlobRange(i->GetBlobRangeVerified()));
+                context.GetSource()->GetPortionAccessor().RestoreBlobRange(i->GetBlobRangeVerified()));
             Fetching.emplace_back(TIndexChunkFetching(
                 StorageId, IndexAddressesVector, originalData, IndexMeta->BuildHeader(originalData).DetachResult(), i->GetRecordsCount()));
         }

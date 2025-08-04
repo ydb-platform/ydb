@@ -1,13 +1,13 @@
 #include "allocation.h"
+
 #include <ydb/library/accessor/validator.h>
 
 namespace NKikimr::NOlap::NGroupedMemoryManager {
 
-TAllocationInfo::TAllocationInfo(const ui64 processId, const ui64 scopeId, const ui64 allocationInternalGroupId,
-    const std::shared_ptr<IAllocation>& allocation,
-    const std::shared_ptr<TStageFeatures>& stage)
+TAllocationInfo::TAllocationInfo(const ui64 processId, const ui64 scopeId, const ui64 allocationExternalGroupId,
+    const std::shared_ptr<IAllocation>& allocation, const std::shared_ptr<TStageFeatures>& stage)
     : Allocation(allocation)
-    , AllocationInternalGroupId(allocationInternalGroupId)
+    , AllocationExternalGroupId(allocationExternalGroupId)
     , Identifier(TValidator::CheckNotNull(Allocation)->GetIdentifier())
     , ProcessId(processId)
     , ScopeId(scopeId)
@@ -25,8 +25,7 @@ TAllocationInfo::TAllocationInfo(const ui64 processId, const ui64 scopeId, const
 
 bool TAllocationInfo::Allocate(const NActors::TActorId& ownerId) {
     AFL_TRACE(NKikimrServices::GROUPED_MEMORY_LIMITER)("event", "allocated")("allocation_id", Identifier)("stage", Stage->GetName());
-    AFL_VERIFY(Allocation)("status", GetAllocationStatus())("volume", AllocatedVolume)("id", Identifier)("stage", Stage->GetName())(
-        "allocation_internal_group_id", AllocationInternalGroupId);
+    AFL_VERIFY(Allocation)("status", GetAllocationStatus())("volume", AllocatedVolume)("id", Identifier)("stage", Stage->GetName());
     auto allocationResult = Stage->Allocate(AllocatedVolume);
     if (allocationResult.IsFail()) {
         AllocationFailed = true;
@@ -35,7 +34,8 @@ bool TAllocationInfo::Allocate(const NActors::TActorId& ownerId) {
         return false;
     }
     const bool result = Allocation->OnAllocated(
-        std::make_shared<TAllocationGuard>(ProcessId, ScopeId, Allocation->GetIdentifier(), ownerId, Allocation->GetMemory()), Allocation);
+        std::make_shared<TAllocationGuard>(ProcessId, ScopeId, Allocation->GetIdentifier(), ownerId, Allocation->GetMemory(), Stage),
+        Allocation);
     if (!result) {
         Stage->Free(AllocatedVolume, true);
         AllocationFailed = true;
@@ -55,8 +55,8 @@ bool TAllocationInfo::IsAllocatable(const ui64 additional) const {
 }
 
 TAllocationInfo::~TAllocationInfo() {
-    if (GetAllocationStatus() != EAllocationStatus::Failed) {
-        Stage->Free(AllocatedVolume, GetAllocationStatus() == EAllocationStatus::Allocated);
+    if (GetAllocationStatus() != EAllocationStatus::Failed && GetAllocationStatus() != EAllocationStatus::Allocated) {
+        Stage->Free(AllocatedVolume, false);
     }
 
     AFL_TRACE(NKikimrServices::GROUPED_MEMORY_LIMITER)("event", "destroy")("allocation_id", Identifier)("stage", Stage->GetName());

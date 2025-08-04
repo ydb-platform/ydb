@@ -47,11 +47,11 @@
     ["SELECT id, alias from users", "KKKKKK#_#II#P#_#IIIII#_#KKKK#_#IIIII"],
     ["INSERT INTO users (id, alias) VALUES (12, \"tester\")", "KKKKKK#_#KKKK#_#IIIII#_#P#II#P#_#IIIII#P#_#KKKKKK#_#P#LL#P#_#SSSSSSSS#P"],
     ["SELECT 123467, \"HeLLo, {name}!\", (1 + (5 * 1 / 0)), MIN(identifier) FROM `local/test/space/table` JOIN test;", "KKKKKK#_#LLLLLL#P#_#SSSSSSSSSSSSSSSS#P#_#P#L#_#P#_#P#L#_#P#_#L#_#P#_#L#P#P#P#_#FFF#P#IIIIIIIIII#P#_#KKKK#_#QQQQQQQQQQQQQQQQQQQQQQQQ#_#KKKK#_#IIII#P"],
-    ["SELECT Bool(phone) FROM customer", "KKKKKK#_#TTTT#P#IIIII#P#_#KKKK#_#IIIIIIII"]
+    ["SELECT Bool(phone) FROM customer", "KKKKKK#_#FFFF#P#IIIII#P#_#KKKK#_#IIIIIIII"]
   ],
   "TypeIdentifier": [
     ["Bool", "TTTT"],
-    ["Bool(value)", "TTTT#P#IIIII#P"]
+    ["Bool(value)", "FFFF#P#IIIII#P"]
   ],
   "Identifier": [
     ["test", "IIII"]

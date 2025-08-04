@@ -157,7 +157,7 @@ struct TEvPrivate {
 
     private:
         using TCallback = NKikimr::NGeneralCache::NSource::IObjectsProcessor<NOlap::NGeneralCache::TColumnDataCachePolicy>;
-        using TColumnIdsByRequest = THashMap<TPortionRequest, std::vector<ui32>>;
+        using TColumnIdsByRequest = THashMap<TPortionRequest, std::set<ui32>>;
         YDB_READONLY_DEF(TColumnIdsByRequest, Requests);
         YDB_READONLY_DEF(std::shared_ptr<TCallback>, Callback);
 
@@ -167,7 +167,7 @@ struct TEvPrivate {
             , Callback(callback)
         {
             AFL_VERIFY(Callback);
-            AFL_VERIFY(requests.size());
+            AFL_VERIFY(Requests.size());
         }
     };
 

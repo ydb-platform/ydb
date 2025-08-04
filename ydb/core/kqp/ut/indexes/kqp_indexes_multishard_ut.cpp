@@ -1642,11 +1642,8 @@ Y_UNIT_TEST_SUITE(KqpMultishardIndex) {
     }
 
     Y_UNIT_TEST(DataColumnUpsertMixedSemantic) {
-        NKikimrConfig::TAppConfig appConfig;
         auto setting = NKikimrKqp::TKqpSetting();
-        auto serverSettings = TKikimrSettings()
-            .SetAppConfig(appConfig)
-            .SetKqpSettings({setting});
+        auto serverSettings = TKikimrSettings().SetKqpSettings({setting});
 
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
@@ -1688,11 +1685,8 @@ Y_UNIT_TEST_SUITE(KqpMultishardIndex) {
     }
 
     Y_UNIT_TEST(DataColumnWriteNull) {
-        NKikimrConfig::TAppConfig appConfig;
         auto setting = NKikimrKqp::TKqpSetting();
-        auto serverSettings = TKikimrSettings()
-            .SetAppConfig(appConfig)
-            .SetKqpSettings({setting});
+        auto serverSettings = TKikimrSettings().SetKqpSettings({setting});
 
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
@@ -1768,13 +1762,10 @@ Y_UNIT_TEST_SUITE(KqpMultishardIndex) {
     }
 
     Y_UNIT_TEST_TWIN(DataColumnWrite, UseSink) {
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
-
         auto setting = NKikimrKqp::TKqpSetting();
-        auto serverSettings = TKikimrSettings()
-            .SetAppConfig(appConfig)
-            .SetKqpSettings({setting});
+        auto serverSettings = TKikimrSettings().SetKqpSettings({setting});
+        serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
+
 
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
@@ -2168,12 +2159,8 @@ Y_UNIT_TEST_SUITE(KqpMultishardIndex) {
     }
 
     Y_UNIT_TEST(DataColumnSelect) {
-        NKikimrConfig::TAppConfig appConfig;
-
         auto setting = NKikimrKqp::TKqpSetting();
-        auto serverSettings = TKikimrSettings()
-            .SetAppConfig(appConfig)
-            .SetKqpSettings({setting});
+        auto serverSettings = TKikimrSettings().SetKqpSettings({setting});
 
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
@@ -2264,12 +2251,8 @@ Y_UNIT_TEST_SUITE(KqpMultishardIndex) {
     }
 
     Y_UNIT_TEST(DuplicateUpsert) {
-        NKikimrConfig::TAppConfig appConfig;
-
         auto setting = NKikimrKqp::TKqpSetting();
-        auto serverSettings = TKikimrSettings()
-            .SetAppConfig(appConfig)
-            .SetKqpSettings({setting});
+        auto serverSettings = TKikimrSettings().SetKqpSettings({setting});
 
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
@@ -2299,10 +2282,7 @@ Y_UNIT_TEST_SUITE(KqpMultishardIndex) {
     }
 
     Y_UNIT_TEST(SortByPk) {
-        NKikimrConfig::TAppConfig appConfig;
-        auto serverSettings = TKikimrSettings()
-            .SetAppConfig(appConfig);
-
+        TKikimrSettings serverSettings;
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -2521,10 +2501,7 @@ Y_UNIT_TEST_SUITE(KqpMultishardIndex) {
     }
 
     Y_UNIT_TEST(CheckPushTopSort) {
-        NKikimrConfig::TAppConfig appConfig;
-        auto serverSettings = TKikimrSettings()
-            .SetAppConfig(appConfig);
-
+        TKikimrSettings serverSettings;
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();

@@ -5,7 +5,6 @@
 #include <ydb/library/actors/interconnect/rdma/ibdrv/include/infiniband/verbs.h>
 
 #include <util/thread/lfstack.h>
-#include <util/thread/lfqueue.h>
 #include <util/stream/output.h>
 #include <util/system/align.h>
 
@@ -128,7 +127,7 @@ namespace NInterconnect::NRdma {
         return mr->rkey;
     }
 
-    void TMemRegion::Resize(uint32_t newSize) {
+    void TMemRegion::Resize(uint32_t newSize) noexcept {
         Y_ABORT_UNLESS(newSize <= OrigSize, "Cannot resize to larger size");
         Size = newSize;
     }
@@ -245,6 +244,7 @@ namespace NInterconnect::NRdma {
             , MaxChunk(maxChunk)
             , Alignment(NSystemInfo::GetPageSize())
         {
+            Y_ABORT_UNLESS((Alignment & Alignment - 1) == 0, "Alignment must be a power of two %zu", Alignment);
         }
     protected:
         template<typename TAuxData>
@@ -605,43 +605,6 @@ namespace NInterconnect::NRdma {
             ui32 SlotsInBatch;
         };
 
-        struct TThreadSafeChain {
-            TThreadSafeChain() = default;
-            void Init(ui32 slotSize) {
-                SlotSize = slotSize;
-                SlotsInBatch = GetSlotsInBatch(slotSize);
-            }
-            std::optional<std::list<std::unique_ptr<TMemRegion>>> GetSlotsBatch() {
-                std::lock_guard<std::mutex> lock(Mutex);
-                if (Slots.empty()) {
-                    return std::nullopt;
-                }
-                // auto it = Slots.begin();
-                std::list<std::unique_ptr<TMemRegion>> res;
-                std::swap(res, Slots.front());
-                // auto res = Slots.front();
-                Slots.pop_front();
-                return res;
-            }
-            void PutSlotsBatches(std::list<std::unique_ptr<TMemRegion>>&& slots) {
-                Y_DEBUG_ABORT_UNLESS(slots.size() == SlotsInBatch, "Invalid slots size: %zu, expected: %u", slots.size(), SlotsInBatch);
-                std::lock_guard<std::mutex> lock(Mutex);
-                Slots.push_back(std::move(slots));
-            }
-            void PutSlotsBatches(std::list<std::list<std::unique_ptr<TMemRegion>>>&& slots) {
-                for (auto& batch : slots) {
-                    Y_DEBUG_ABORT_UNLESS(batch.size() == SlotsInBatch, "Invalid slots size: %zu, expected: %u", batch.size(), SlotsInBatch);
-                }
-                std::lock_guard<std::mutex> lock(Mutex);
-                Slots.splice(Slots.end(), slots);
-            }
-
-            std::list<std::list<std::unique_ptr<TMemRegion>>> Slots;
-            std::mutex Mutex;
-            ui32 SlotSize;
-            ui32 SlotsInBatch;
-        };
-
         struct TLockFreeChain {
             TLockFreeChain() = default;
             void Init(ui32 slotSize) {
@@ -650,25 +613,36 @@ namespace NInterconnect::NRdma {
             }
             std::optional<std::list<std::unique_ptr<TMemRegion>>> GetSlotsBatch() {
                 std::list<std::unique_ptr<TMemRegion>> res;
-                if (Slots.Dequeue(&res)) {
+                if (FullBatchesSlots.Dequeue(&res)) {
                     return res;
                 }
                 return std::nullopt;
             }
             void PutSlotsBatches(std::list<std::unique_ptr<TMemRegion>>&& slots) {
                 Y_DEBUG_ABORT_UNLESS(slots.size() == SlotsInBatch, "Invalid slots size: %zu, expected: %u", slots.size(), SlotsInBatch);
-                Slots.Enqueue(std::move(slots));
+                FullBatchesSlots.Enqueue(std::move(slots));
             }
             void PutSlotsBatches(std::list<std::list<std::unique_ptr<TMemRegion>>>&& slots) {
                 for (auto& batch : slots) {
                     Y_DEBUG_ABORT_UNLESS(batch.size() == SlotsInBatch, "Invalid slots size: %zu, expected: %u", batch.size(), SlotsInBatch);
-                    Slots.Enqueue(std::move(batch));
+                    FullBatchesSlots.Enqueue(std::move(batch));
+                }
+            }
+            void PutSlot(std::unique_ptr<TMemRegion>&& slot) noexcept {
+                std::lock_guard<std::mutex> lock(IncompleteBatchMutex);
+                IncompleteBatch.push_back(std::move(slot));
+                if (IncompleteBatch.size() >= SlotsInBatch) {
+                    FullBatchesSlots.Enqueue(std::move(IncompleteBatch));
+                    IncompleteBatch.clear();
                 }
             }
 
-            TLockFreeStack<std::list<std::unique_ptr<TMemRegion>>> Slots;
+            TLockFreeStack<std::list<std::unique_ptr<TMemRegion>>> FullBatchesSlots;
             ui32 SlotSize;
             ui32 SlotsInBatch;
+
+            std::mutex IncompleteBatchMutex;
+            std::list<std::unique_ptr<TMemRegion>> IncompleteBatch;
         };
 
         static constexpr ui32 MinAllocSz = 512;
@@ -696,7 +670,9 @@ namespace NInterconnect::NRdma {
                 Stopped = true;
             }
             TMemRegion* AllocImpl(int size, ui32 flags, TSlotMemPool& pool) noexcept {
-                Y_UNUSED(flags);
+                if (flags & IMemPool::PAGE_ALIGNED && static_cast<size_t>(size) < pool.Alignment) {
+                    size = pool.Alignment;
+                }
 
                 if (Y_UNLIKELY(size > static_cast<int>(MaxAllocSz))) {
                     return nullptr;
@@ -729,10 +705,13 @@ namespace NInterconnect::NRdma {
             }
 
             void Free(TMemRegion&& mr, TSlotMemPool& pool) noexcept {
-                if (Stopped) {
-                    return; // TODO: return mr to global pool?
-                }
                 ui32 chainIndex = GetChainIndex(mr.GetSize());
+                if (Stopped) {
+                    // current thread is stopped, return mr to global pool
+                    pool.Chains[chainIndex].PutSlot(std::make_unique<TMemRegion>(std::move(mr)));
+                    return;
+                }
+
                 auto& chain = Chains[chainIndex];
                 Y_ABORT_UNLESS(chainIndex < ChainsNum, "Invalid chain index: %u", chainIndex);
                 chain.PutSlot(std::make_unique<TMemRegion>(std::move(mr)));
@@ -779,7 +758,6 @@ namespace NInterconnect::NRdma {
     
     private:
         std::array<TLockFreeChain, ChainsNum> Chains;
-        // std::array<TThreadSafeChain, ChainsNum> Chains;
 
     private:
         static thread_local TSlotMemPoolCache LocalCache;

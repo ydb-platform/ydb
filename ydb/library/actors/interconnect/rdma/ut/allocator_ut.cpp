@@ -271,7 +271,7 @@ bool IsFastPool(std::shared_ptr<NInterconnect::NRdma::IMemPool> memPool) {
         for (const auto& t : times) {
             s += t / float(NUM_ALLOC);
         }
-        Cerr << "Average time per allocation: " << s / NUM_THREADS << " us" << Endl;
+        Cerr << "Average time per allocation for " << memPool->GetName() << ": " << s / NUM_THREADS << " us" << Endl;
     }
 
     TEST_P(WithAllPools, SmallAllocationMultiThread) {
@@ -304,7 +304,30 @@ bool IsFastPool(std::shared_ptr<NInterconnect::NRdma::IMemPool> memPool) {
         for (const auto& t : times) {
             s += t / float(NUM_ALLOC);
         }
-        Cerr << "Average time per allocation: " << s / NUM_THREADS << " us" << Endl;
+        Cerr << "Average time per allocation for " << memPool->GetName() << ": " << s / NUM_THREADS << " us" << Endl;
+    }
+
+    TEST_P(WithAllPools, ThreadsDestroy) {
+        const ui32 NUM_THREADS = 1000;
+        auto memPool = GetParam();
+        for (ui32 i = 0; i < NUM_THREADS; ++i) {
+            std::thread t([memPool]() {
+                auto memRegion = memPool->Alloc(4096, NInterconnect::NRdma::IMemPool::EMPTY);
+                ASSERT_TRUE(memRegion->GetAddr()) << "invalid address";
+            });
+            t.join();
+        }
+    }
+
+    TEST_P(WithAllPools, PageAlligned) {
+        ui32 alignment = NSystemInfo::GetPageSize();
+        auto memPool = GetParam();
+        for (ui32 size: {123, 578, 4096, 10000}) {
+            auto memRegion = memPool->Alloc(size, NInterconnect::NRdma::IMemPool::PAGE_ALIGNED);
+            ASSERT_TRUE(memRegion->GetAddr()) << "invalid address";
+            ASSERT_TRUE(reinterpret_cast<ui64>(memRegion->GetAddr()) % alignment == 0) << "invalid address";
+            ASSERT_EQ(memRegion->GetSize(), size) << "invalid size";
+        }
     }
 
 INSTANTIATE_TEST_SUITE_P(

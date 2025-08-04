@@ -30,7 +30,7 @@ namespace NInterconnect::NRdma {
         uint32_t GetLKey(size_t deviceIndex) const;
         uint32_t GetRKey(size_t deviceIndex) const;
 
-        void Resize(uint32_t newSize);
+        void Resize(uint32_t newSize) noexcept;
 
     public: // IContiguousChunk
         TContiguousSpan GetData() const override;

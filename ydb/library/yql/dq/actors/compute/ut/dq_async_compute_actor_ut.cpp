@@ -974,6 +974,21 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
             UNIT_ASSERT(!watermark);
         }
     }
+
+    auto GetRandomSeed() {
+        uint32_t seed = 0; // by default tests are reproducible (fixed-seed PRNG)
+        if (auto env = getenv("RANDOM_SEED")) {
+            if (*env) {
+                // with non-empty $RANDOM_SEED use it as seed (to reproduce random test failures)
+                seed = ::FromString<uint32_t>(env);
+            } else {
+                // with empty $RANDOM_SEED make tests truly random
+                seed = (std::random_device {})();
+                Cerr << "RANDOM_SEED=" << seed << Endl;
+            }
+        }
+        return seed;
+    }
 };
 
 } //namespace anonymous
@@ -983,7 +998,7 @@ Y_UNIT_TEST_SUITE(TAsyncComputeActorTest) {
 
     Y_UNIT_TEST_F(Basic, TAsyncCATestFixture) {
         TVector<ui32> sizes{ 1, 2, 3, 4, 5, 51, 128, 251 };
-        std::mt19937 rng;
+        std::mt19937 rng(GetRandomSeed();
         for (ui32 t = 0; t < 16; ++t) sizes.push_back(1 + rng() % 734);
         for (bool waitIntermediateAcks : { false, true }) {
             for (ui32 watermarkPeriod : { 0, 1, 3 }) {
@@ -1007,18 +1022,7 @@ Y_UNIT_TEST_SUITE(TAsyncComputeActorTest) {
 
     Y_UNIT_TEST_F(InputTransformMultichannel, TAsyncCATestFixture) {
         TVector<ui32> sizes{ 1, 2, 3, 4, 5, 51, 128, 251 };
-        uint32_t seed = 0; // by default tests are reproducible (fixed-seed PRNG)
-        if (auto env = getenv("RANDOM_SEED")) {
-            if (*env) {
-                // with non-empty $RANDOM_SEED use it as seed (to reproduce random test failures)
-                seed = ::FromString<uint32_t>(env);
-            } else {
-                // with empty $RANDOM_SEED make tests truly random
-                seed = (std::random_device {})();
-                Cerr << "RANDOM_SEED=" << seed << Endl;
-            }
-        }
-        std::mt19937 rng(seed);
+        std::mt19937 rng(GetRandomSeed());
         for (ui32 t = 0; t < 16; ++t) sizes.push_back(1 + rng() % 734);
         for (ui32 numChannels: { 1, 2, 7, 11 }) {
             for (bool waitIntermediateAcks : { false, true }) {

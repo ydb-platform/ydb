@@ -1430,6 +1430,7 @@ message TPersQueueGroupDescription {
         required uint32 Partition = 1;
         required bytes SplitBoundary = 2;
         repeated uint32 ChildPartitionIds = 3; // use the prescribed ids instead of auto generating new ones
+        optional bool AllowRootLevelSibling = 4; // create a new child partition at the root level if its sibling already exists
     }
     repeated TPartitionSplit Split = 15;
 

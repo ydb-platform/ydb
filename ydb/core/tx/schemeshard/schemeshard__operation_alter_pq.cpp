@@ -39,8 +39,8 @@ public:
     {
     }
 
-    std::expected<void, TErrorMessage> ReservePartitionIndex(ui32 id, ui32 sourceId) {
-        if (id < First.Id) {
+    std::expected<void, TErrorMessage> ReservePartitionIndex(ui32 id, ui32 sourceId, bool allowToReuseExistingPartition) {
+        if (id < First.Id && !allowToReuseExistingPartition) {
             return std::unexpected(std::format("Attempt to reserve partition id ({}) that is less than the first availiable id ({})", id, First.Id));
         }
         TReservationInfo res{
@@ -49,6 +49,7 @@ public:
                 .GroupId = GenerateGroupIdFor(id),
             },
             .SourceId = sourceId,
+            .Existed = (id < First.Id),
         };
         const auto [it, unique] = Reserved.try_emplace(id, std::move(res));
         if (!unique) {
@@ -81,6 +82,13 @@ public:
         }
         ui32 id = First.Id;
         for (const auto& [allocId, _] : Allocated) {
+            const TReservationInfo* reserve = MapFindPtr(Reserved, id);
+            if (!reserve) {
+                return std::unexpected(std::format("Partition id ({}) is not reserved", id));
+            }
+            if (reserve->Existed) {
+                continue;
+            }
             if (id != allocId) {
                 return std::unexpected(std::format("Gap in the partition indices: attempt to create new partition ({}) without creating a previous one ({})", allocId, id));
             }
@@ -93,6 +101,7 @@ private:
     struct TReservationInfo {
         TIdPair Partition;
         ui32 SourceId = 0;
+        bool Existed = false;
     };
 
     enum class EAllocationType {
@@ -127,6 +136,17 @@ private:
     std::map<ui32, TReservationInfo> Reserved;
     std::map<ui32, EAllocationType> Allocated;
 };
+
+bool CreateSiblingAtRootLevel(const ::NKikimrSchemeOp::TPersQueueGroupDescription_TPartitionSplit& split, const TTopicInfo::TPtr& topic) {
+    if (!split.GetAllowRootLevelSibling() || split.ChildPartitionIdsSize() == 0) {
+        return false;
+    }
+    size_t existPartitions = 0;
+    for (const ui32 childId : split.GetChildPartitionIds()) {
+        existPartitions += topic->Partitions.contains(childId);
+    }
+    return (existPartitions > 0) && (existPartitions < split.ChildPartitionIdsSize());
+}
 
 class TAlterPQ: public TSubOperation {
     // Make sure we make decisions using a consistent runtime value
@@ -708,7 +728,7 @@ public:
             TPartitionIndexGenerator indexGenerator(topic->NextPartitionId, topic->TotalGroupCount + 1);
             for (const auto& split : alter.GetSplit()) {
                 for (const ui32 childId : split.GetChildPartitionIds()) {
-                    const auto reserve = indexGenerator.ReservePartitionIndex(childId, split.GetPartition());
+                    const auto reserve = indexGenerator.ReservePartitionIndex(childId, split.GetPartition(), CreateSiblingAtRootLevel(split, topic));
                     if (!reserve.has_value()) {
                         errStr = TStringBuilder() << "Split with prescribed partition ids: " << reserve.error();
                         result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
@@ -718,7 +738,7 @@ public:
             }
             for (const auto& merge : alter.GetMerge()) {
                 if (merge.HasChildPartitionId()) {
-                    const auto reserve = indexGenerator.ReservePartitionIndex(merge.GetChildPartitionId(), merge.GetPartition());
+                    const auto reserve = indexGenerator.ReservePartitionIndex(merge.GetChildPartitionId(), merge.GetPartition(), false);
                     if (!reserve.has_value()) {
                         errStr = TStringBuilder() << "Merge with prescribed partition id: " << reserve.error();
                         result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
@@ -796,15 +816,30 @@ public:
 
                 for (const size_t childIndex : {0, 1}) {
                     const TTopicTabletInfo::TKeyRange& range = childRange[childIndex];
-                    const auto childPartitionIdAndGroupId = childIndex < split.ChildPartitionIdsSize()
-                                                                ? indexGenerator.GetNextReservedIdAndGroupId(split.GetChildPartitionIds(childIndex))
+                    const TMaybe<ui32> prescribedChildPartitionId = childIndex < split.ChildPartitionIdsSize() ? MakeMaybe(split.GetChildPartitionIds(childIndex)) : Nothing();
+                    const auto childPartitionIdAndGroupId = prescribedChildPartitionId.Defined()
+                                                                ? indexGenerator.GetNextReservedIdAndGroupId(*prescribedChildPartitionId)
                                                                 : indexGenerator.GetNextUnreservedIdAndGroupId();
                     if (!childPartitionIdAndGroupId.has_value()) {
                         errStr = TStringBuilder() << "Split with prescribed partition ids: " << childPartitionIdAndGroupId.error();
                         result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
                         return result;
                     }
-                    alterData->PartitionsToAdd.emplace(childPartitionIdAndGroupId.value().Id, childPartitionIdAndGroupId.value().GroupId, range, parents);
+                    if (prescribedChildPartitionId && CreateSiblingAtRootLevel(split, topic)) [[unlikely]] {
+                        if (topic->Partitions.contains(*prescribedChildPartitionId)) {
+                            LOG_TRACE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                                        std::format("Skipping split partition {} because child partition {} exists",
+                                                    splittedPartitionId, *prescribedChildPartitionId));
+
+                        } else {
+                            LOG_TRACE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                                        std::format("Skipping split partition {}. Create new partition {}",
+                                                    splittedPartitionId, *prescribedChildPartitionId));
+                            alterData->PartitionsToAdd.emplace(childPartitionIdAndGroupId.value().Id, childPartitionIdAndGroupId.value().GroupId);
+                        }
+                    } else {
+                        alterData->PartitionsToAdd.emplace(childPartitionIdAndGroupId.value().Id, childPartitionIdAndGroupId.value().GroupId, range, parents);
+                    }
                 }
             }
             for (const auto& merge : alter.GetMerge()) {

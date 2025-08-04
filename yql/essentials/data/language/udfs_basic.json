@@ -367,6 +367,12 @@
       "name": "GetSubnetByMask"
     },
     {
+      "name": "Ipv4FromUint32"
+    },
+    {
+      "name": "Ipv4ToUint32"
+    },
+    {
       "name": "IsEmbeddedIPv4"
     },
     {

@@ -241,7 +241,7 @@ void TBatch::Pack(bool saveMessageKey) {
     bool hasKinesis = false;
     bool hasMessageKey = false;
     for (ui32 i = 0; i < Blobs.size(); ++i) {
-        if (Blobs[i].UncompressedSize > 0 || Blobs[i].HadUncompressed)
+        if (Blobs[i].UncompressedSize > 0)
             hasUncompressed = true;
 
         if (!Blobs[i].PartitionKey.empty() || !Blobs[i].ExplicitHashKey.empty()) {

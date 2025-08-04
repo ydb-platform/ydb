@@ -6,29 +6,14 @@
 
 |Операция|[Строковые таблицы](../datamodel/table.md#row-oriented-tables)|[Колоночные таблицы](../datamodel/table.md#column-oriented-tables)|
 |--------|-----------------|------------------|
-|[CREATE TABLE ... AS SELECT](../../yql/reference/syntax/create_table/index.md)|✓|✓|
 |[UPSERT](../../yql/reference/syntax/upsert_into.md)||✓|
 |[INSERT](../../yql/reference/syntax/insert_into.md)||✓|
 
 {% note tip %}
 
-Рекомендованными вариантами импорта с использованием федеративных запросов являются операции `CREATE TABLE ... AS SELECT` и `UPSERT` — для них значительно оптимизирован сценарий импорта данных.
+Рекомендованным вариантом импорта с использованием федеративных запросов является операция `UPSERT` — для неё значительно оптимизирован сценарий импорта данных.
 
 {% endnote %}
-
-Ниже приведён пример импорта данных из [внешней таблицы](../datamodel/external_table.md), указывающей на S3-совместимое хранилище, в новую [колоночную таблицу](../datamodel/table.md#column-oriented-tables) с помощью команды [CREATE TABLE ... AS SELECT](../../yql/reference/syntax/create_table/index.md). Параметры для создаваемой таблицы могут быть перечислены в секции `WITH`, подробнее см. в статье [{#T}](../../yql/reference/syntax/create_table/with.md).
-
-```yql
-CREATE TABLE column_table (
-    PRIMARY KEY (key)
-)
-WITH (
-    STORE = COLUMN
-)
-AS SELECT * FROM s3_external_table
-```
-
-В результате будет создана [колоночная таблица](../datamodel/table.md#column-oriented-tables) со схемой, соответствующей используемой для импорта [внешней таблице](../datamodel/external_table.md). Колонки, указанные в `PRIMARY KEY`, должны быть помечены как `NOT NULL` во внешней таблице.
 
 Пример импорта данных из внешнего источника данных, указывающего на [PostgreSQL](postgresql.md#query), в существующую таблицу:
 

@@ -442,7 +442,7 @@ namespace NKikimr::NStorage {
             const NBsController::TGroupMapper::TForbiddenPDisks& forbid,
             i64 requiredSpace, NKikimrBlobStorage::TBaseConfig *baseConfig,
             bool convertToDonor, bool ignoreVSlotQuotaCheck, bool isSelfHealReasonDecommit,
-            std::optional<TBridgePileId> bridgePileId);
+            std::optional<TBridgePileId> bridgePileId, std::optional<TGroupId> bridgeProxyGroupId);
 
         bool UpdateConfig(NKikimrBlobStorage::TStorageConfig *config, bool& checkSyncersAfterCommit);
 

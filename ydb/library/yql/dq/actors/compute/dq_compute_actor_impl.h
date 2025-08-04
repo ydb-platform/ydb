@@ -1615,18 +1615,11 @@ protected:
     void InitializeTask() {
         for (ui32 i = 0; i < Task.InputsSize(); ++i) {
             const auto& inputDesc = Task.GetInputs(i);
+            auto watermarksMode = NDqProto::WATERMARKS_MODE_DISABLED;
             Y_ABORT_UNLESS(!inputDesc.HasSource() || inputDesc.ChannelsSize() == 0); // HasSource => no channels
 
-            if (inputDesc.HasTransform()) {
-                auto result = InputTransformsMap.emplace(
-                    i,
-                    TAsyncInputTransformHelper(LogPrefix, i, NDqProto::WATERMARKS_MODE_DISABLED)
-                );
-                YQL_ENSURE(result.second);
-            }
-
             if (inputDesc.HasSource()) {
-                const auto watermarksMode = inputDesc.GetSource().GetWatermarksMode();
+                watermarksMode = inputDesc.GetSource().GetWatermarksMode();
                 auto result = SourcesMap.emplace(
                     i,
                     static_cast<TDerived*>(this)->CreateInputHelper(LogPrefix, i, watermarksMode)
@@ -1634,17 +1627,29 @@ protected:
                 YQL_ENSURE(result.second);
             } else {
                 for (auto& channel : inputDesc.GetChannels()) {
+                    auto channelWatermarksMode = channel.GetWatermarksMode();
+                    if (channelWatermarksMode != NDqProto::EWatermarksMode::WATERMARKS_MODE_DISABLED) {
+                        watermarksMode = channelWatermarksMode;
+                    }
                     auto result = InputChannelsMap.emplace(
                         channel.GetId(),
                         TInputChannelInfo(
                             LogPrefix,
                             channel.GetId(),
                             channel.GetSrcStageId(),
-                            channel.GetWatermarksMode(),
+                            channelWatermarksMode,
                             channel.GetCheckpointingMode())
                     );
                     YQL_ENSURE(result.second);
                 }
+            }
+
+            if (inputDesc.HasTransform()) {
+                auto result = InputTransformsMap.emplace(
+                    i,
+                    TAsyncInputTransformHelper(LogPrefix, i, watermarksMode)
+                );
+                YQL_ENSURE(result.second);
             }
         }
 

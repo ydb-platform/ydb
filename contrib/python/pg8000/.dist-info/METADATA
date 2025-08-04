@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: pg8000
-Version: 1.31.3
+Version: 1.31.4
 Summary: PostgreSQL interface library
 Project-URL: Homepage, https://github.com/tlocke/pg8000
 Author: The Contributors
@@ -2136,6 +2136,11 @@ twine upload dist/*
 
 
 ## Release Notes
+
+### Version 1.31.4, 2025-07-20
+
+- Various speed optimisations.
+
 
 ### Version 1.31.3, 2025-07-19
 

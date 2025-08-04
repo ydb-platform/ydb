@@ -2107,6 +2107,11 @@ twine upload dist/*
 
 ## Release Notes
 
+### Version 1.31.4, 2025-07-20
+
+- Various speed optimisations.
+
+
 ### Version 1.31.3, 2025-07-19
 
 - Simplify the `indentifier()` function by always quoting.

@@ -731,7 +731,7 @@ namespace NInterconnect::NRdma {
         
     public:
         TSlotMemPool()
-            : TMemPoolBase(32)
+            : TMemPoolBase(128)
         {
             for (ui32 i = GetPowerOfTwo(MinAllocSz); i <= GetPowerOfTwo(MaxAllocSz); ++i) {
                 Chains[GetChainIndex(1 << i)].Init(1 << i);
@@ -748,9 +748,11 @@ namespace NInterconnect::NRdma {
 
     protected:
         TMemRegion* AllocImpl(int size, ui32 flags) noexcept override {
-            auto memReg = LocalCache.AllocImpl(size, flags, *this);
-            memReg->Resize(size);
-            return memReg;
+            if (auto memReg = LocalCache.AllocImpl(size, flags, *this)) {
+                memReg->Resize(size);
+                return memReg;
+            }
+            return nullptr;
         }
         void Free(TMemRegion&& mr, TChunk&) noexcept override {
             LocalCache.Free(std::move(mr), *this);

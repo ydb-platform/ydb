@@ -43,7 +43,7 @@ public:
         const TActorId& owner, std::shared_ptr<TInternalFilterConstructor>&& context, const std::vector<TPortionInfo::TConstPtr>& portions)
         : Owner(owner)
         , Context(std::move(context))
-        , Portions(std::move(portions))
+        , Portions(portions)
     {
     }
 

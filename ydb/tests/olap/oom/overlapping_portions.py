@@ -25,11 +25,11 @@ class TestOverlappingPortions(object):
             column_shard_config={"compaction_enabled": False},
             scan_grouped_memory_limiter_config={
                 "enabled": True,
-                "memory_limit": 10 * 1024 * 1024,
-                "hard_memory_limit": 10 * 1024 * 1024,
+                "memory_limit": 300 * 1024 * 1024,
+                "hard_memory_limit": 300 * 1024 * 1024,
             },
             memory_controller_config={
-                "column_tables_read_execution_limit_bytes": 10 * 1024 * 1024
+                "column_tables_read_execution_limit_bytes": 300 * 1024 * 1024
             },
         )
         cls.cluster = KiKiMR(config)
@@ -90,9 +90,9 @@ class TestOverlappingPortions(object):
             f"""
             CREATE TABLE `{table_path}` (
                 ts Timestamp NOT NULL,
-                s String NOT NULL,
-                val Uint64 NOT NULL,
-                PRIMARY KEY(ts, s, val),
+                s String,
+                val Uint64,
+                PRIMARY KEY(ts),
             )
             WITH (
                 STORE = COLUMN,

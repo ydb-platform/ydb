@@ -49,7 +49,7 @@ public:
             return ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "Only POST method is allowed"));
         }
         if (force && !Viewer->CheckAccessAdministration(Event->Get())) {
-            return ReplyAndPassAway(GetHTTPFORBIDDEN("text/html", "<html><body><h1>403 Forbidden</h1></body></html>"), "Access denied");
+            return ReplyAndPassAway(GetHTTPFORBIDDEN());
         }
 
         if (!nodeId) {

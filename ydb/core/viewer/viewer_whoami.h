@@ -56,14 +56,9 @@ public:
 
         NACLib::TUserToken token(std::move(userToken));
         json["IsTokenRequired"] = AppData()->EnforceUserTokenRequirement;
-        bool isAdministrationAllowed = IsTokenAllowed(&token, AppData()->DomainsConfig.GetSecurityConfig().GetAdministrationAllowedSIDs());
-        bool isMonitoringAllowed = isAdministrationAllowed || IsTokenAllowed(&token, AppData()->DomainsConfig.GetSecurityConfig().GetMonitoringAllowedSIDs());
-        bool isViewerAllowed = isMonitoringAllowed || IsTokenAllowed(&token, AppData()->DomainsConfig.GetSecurityConfig().GetViewerAllowedSIDs());
-        bool isDatabaseAllowed = isViewerAllowed || IsTokenAllowed(&token, AppData()->DomainsConfig.GetSecurityConfig().GetDatabaseAllowedSIDs());
-        json["IsAdministrationAllowed"] = isAdministrationAllowed;
-        json["IsMonitoringAllowed"] = isMonitoringAllowed;
-        json["IsViewerAllowed"] = isViewerAllowed;
-        json["IsDatabaseAllowed"] = isDatabaseAllowed;
+        json["IsViewerAllowed"] = IsTokenAllowed(&token, AppData()->DomainsConfig.GetSecurityConfig().GetViewerAllowedSIDs());
+        json["IsMonitoringAllowed"] = IsTokenAllowed(&token, AppData()->DomainsConfig.GetSecurityConfig().GetMonitoringAllowedSIDs());
+        json["IsAdministrationAllowed"] = IsTokenAllowed(&token, AppData()->DomainsConfig.GetSecurityConfig().GetAdministrationAllowedSIDs());
         TBase::ReplyAndPassAway(GetHTTPOKJSON(json));
     }
 

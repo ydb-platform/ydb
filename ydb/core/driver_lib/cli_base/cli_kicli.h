@@ -60,15 +60,14 @@ void PrepareRequest(TClientCommand::TConfig& config, TAutoPtr<NMsgBusProxy::TBus
 void PrepareRequest(TClientCommand::TConfig& config, TAutoPtr<NMsgBusProxy::TBusTabletLocalSchemeTx>& request);
 void PrepareRequest(TClientCommand::TConfig& config, TAutoPtr<NMsgBusProxy::TBusFillNode>& request);
 void PrepareRequest(TClientCommand::TConfig& config, TAutoPtr<NMsgBusProxy::TBusDrainNode>& request);
-void PrepareRequest(TClientCommand::TConfig& config, TAutoPtr<NMsgBusProxy::TBusBlobStorageConfigRequest>& request);
 
 template <typename ResponseType>
 int OnMessageBus(const TClientCommand::TConfig& config, const ResponseType& response);
 
 template <typename RequestType, typename ResponseType>
 int MessageBusCall(TClientCommand::TConfig& config, TAutoPtr<RequestType> request, std::function<int(const ResponseType&)> callback) {
+    PrepareRequest(config, request);
     auto handler = [&](NClient::TKikimr& kikimr) {
-        PrepareRequest(config, request);
         NThreading::TFuture<NClient::TResult> future(kikimr.ExecuteRequest(request.Release()));
         return HandleResponse<NClient::TResult>(future, [&](const NClient::TResult& result) -> int {
             if (!result.HaveResponse<ResponseType>()) {

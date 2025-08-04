@@ -1209,10 +1209,6 @@ bool TViewerPipeClient::NeedToRedirect() {
             RedirectToDatabase(Database); // to find some dynamic node and redirect query there
             return true;
         }
-        if (!Viewer->CheckAccessViewer(request)) {
-            ReplyAndPassAway(GetHTTPFORBIDDEN("text/html", "<html><body><h1>403 Forbidden</h1></body></html>"), "Access denied");
-            return true;
-        }
     }
     return false;
 }

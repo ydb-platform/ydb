@@ -24,15 +24,21 @@ public:
 
 class TEvRequestFilter: public NActors::TEventLocal<TEvRequestFilter, NColumnShard::TEvPrivate::EvRequestFilter> {
 private:
+    YDB_READONLY_DEF(TString, ExternalTaskId);
     NArrow::TSimpleRow MinPK;
     NArrow::TSimpleRow MaxPK;
     YDB_READONLY_DEF(ui64, SourceId);
     YDB_READONLY_DEF(ui64, RecordsCount);
     TSnapshot MaxVersion;
     YDB_READONLY_DEF(std::shared_ptr<IFilterSubscriber>, Subscriber);
+    YDB_READONLY_DEF(std::shared_ptr<const TAtomicCounter>, AbortionFlag);
 
 public:
     TEvRequestFilter(const IDataSource& source, const std::shared_ptr<IFilterSubscriber>& subscriber);
+
+    TSnapshot GetMaxVersion() const {
+        return MaxVersion;
+    }
 };
 
 class TEvFilterConstructionResult

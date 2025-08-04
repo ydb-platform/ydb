@@ -1937,6 +1937,7 @@ message TColumnShardConfig {
     optional uint32 PeriodicWakeupActivationPeriodMs = 42 [default = 60000];
     optional bool GenerateInternalPathId = 43 [default = false]; //Be aware! IRREVERSIBLE(if set, can not be unset for a dababase)
     optional bool AllowExtraSymbolsForColumnTableColumns = 45 [default = false];
+    optional bool DeduplicationEnabled = 46 [default = false];
 }
 
 message TSchemeShardConfig {

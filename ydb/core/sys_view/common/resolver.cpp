@@ -1,43 +1,12 @@
-#include "schema.h"
+#include "resolver.h"
 
-#include <ydb/core/base/appdata.h>
-#include <yql/essentials/parser/pg_catalog/catalog.h>
+#include <ydb/core/sys_view/common/path.h>
+#include <ydb/core/sys_view/common/registry.h>
 
 using NKikimrSysView::ESysViewType;
 
 namespace NKikimr {
 namespace NSysView {
-
-namespace {
-TVector<Schema::PgColumn> GetPgStaticTableColumns(const TString& schema, const TString& tableName) {
-    TVector<Schema::PgColumn> res;
-    auto columns = NYql::NPg::GetStaticColumns().FindPtr(NYql::NPg::TTableInfoKey{schema, tableName});
-    res.reserve(columns->size());
-    for (size_t i = 0; i < columns->size(); i++) {
-        const auto& column = columns->at(i);
-        res.emplace_back(i, column.UdtType, column.Name);
-    }
-    return res;
-}
-}
-
-Schema::PgColumn::PgColumn(NIceDb::TColumnId columnId, TStringBuf columnTypeName, TStringBuf columnName)
-    : _ColumnId(columnId)
-    , _ColumnTypeInfo(NPg::TypeDescFromPgTypeId(NYql::NPg::LookupType(TString(columnTypeName)).TypeId))
-    , _ColumnName(columnName)
-{}
-
-const TVector<Schema::PgColumn>& Schema::PgTablesSchemaProvider::GetColumns(TStringBuf tableName) const {
-    TString key(tableName);
-    Y_ENSURE(columnsStorage.contains(key));
-    return columnsStorage.at(key);
-}
-
-Schema::PgTablesSchemaProvider::PgTablesSchemaProvider() {
-    columnsStorage[TString(PgTablesName)] = GetPgStaticTableColumns("pg_catalog", "pg_tables");
-    columnsStorage[TString(InformationSchemaTablesName)] = GetPgStaticTableColumns("information_schema", "tables");
-    columnsStorage[TString(PgClassName)] = GetPgStaticTableColumns("pg_catalog", "pg_class");
-}
 
 bool MaybeSystemViewPath(const TVector<TString>& path) {
     auto length = path.size();
@@ -54,78 +23,6 @@ bool MaybeSystemViewFolderPath(const TVector<TString>& path) {
         return false;
     }
     return true;
-}
-
-template <typename Table>
-struct TSchemaFiller {
-
-    using TSchema = ISystemViewResolver::TSchema;
-
-    template <typename...>
-    struct TFiller;
-
-    template <typename Column>
-    struct TFiller<Column> {
-        static void Fill(TSchema& schema) {
-            schema.Columns[Column::ColumnId] = TSysTables::TTableColumnInfo(
-                Table::template TableColumns<Column>::GetColumnName(),
-                Column::ColumnId, NScheme::TTypeInfo(Column::ColumnType), "", -1);
-        }
-    };
-
-    template <typename Column, typename... Columns>
-    struct TFiller<Column, Columns...> {
-        static void Fill(TSchema& schema) {
-            TFiller<Column>::Fill(schema);
-            TFiller<Columns...>::Fill(schema);
-        }
-    };
-
-    template <typename... Columns>
-    using TColumnsType = typename Table::template TableColumns<Columns...>;
-
-    template <typename... Columns>
-    static void FillColumns(TSchema& schema, TColumnsType<Columns...>) {
-        TFiller<Columns...>::Fill(schema);
-    }
-
-    template <typename...>
-    struct TKeyFiller;
-
-    template <typename Key>
-    struct TKeyFiller<Key> {
-        static void Fill(TSchema& schema, i32 index) {
-            auto& column = schema.Columns[Key::ColumnId];
-            column.KeyOrder = index;
-            schema.KeyColumnTypes.push_back(column.PType);
-        }
-    };
-
-    template <typename Key, typename... Keys>
-    struct TKeyFiller<Key, Keys...> {
-        static void Fill(TSchema& schema, i32 index) {
-            TKeyFiller<Key>::Fill(schema, index);
-            TKeyFiller<Keys...>::Fill(schema, index + 1);
-        }
-    };
-
-    template <typename... Keys>
-    using TKeysType = typename Table::template TableKey<Keys...>;
-
-    template <typename... Keys>
-    static void FillKeys(TSchema& schema, TKeysType<Keys...>) {
-        TKeyFiller<Keys...>::Fill(schema, 0);
-    }
-
-    static void Fill(TSchema& schema) {
-        FillColumns(schema, typename Table::TColumns());
-        FillKeys(schema, typename Table::TKey());
-    }
-};
-
-template <typename Schema>
-void FillSchema(ISystemViewResolver::TSchema& schema) {
-    TSchemaFiller<Schema>::Fill(schema);
 }
 
 class TSystemViewResolver : public ISystemViewResolver {
@@ -281,7 +178,7 @@ private:
     }
 
     void RegisterSystemViews() {
-        for (const auto& registryRecord : Registry.SysViews) {
+        for (const auto& registryRecord : SysViewsRegistry::SysViews) {
             TSchema schema;
             registryRecord.FillSchemaFunc(schema);
             SystemViews[registryRecord.Type] = schema;
@@ -340,7 +237,7 @@ class TSystemViewRewrittenResolver : public ISystemViewResolver {
 public:
 
     TSystemViewRewrittenResolver() {
-        for (const auto& registryRecord : Registry.RewrittenSysViews) {
+        for (const auto& registryRecord : SysViewsRegistry::RewrittenSysViews) {
             TSchema schema;
             registryRecord.FillSchemaFunc(schema);
             SystemViews[registryRecord.Name] = std::move(schema);

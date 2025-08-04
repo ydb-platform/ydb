@@ -17,7 +17,8 @@
 #include <ydb/core/protos/flat_tx_scheme.pb.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
-#include <ydb/core/sys_view/common/schema.h>
+#include <ydb/core/sys_view/common/path.h>
+#include <ydb/core/sys_view/common/resolver.h>
 #include <ydb/core/tx/locks/sys_tables.h>
 #include <ydb/core/tx/schemeshard/schemeshard_types.h>
 #include <ydb/core/tx/sharding/sharding.h>

@@ -4,7 +4,7 @@
 #include <ydb/core/base/cputime.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
-#include <ydb/core/sys_view/common/schema.h>
+#include <ydb/core/sys_view/common/resolver.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 
 namespace NKikimr::NKqp {
@@ -407,7 +407,7 @@ private:
                             }
                         }
                     } else if (!ResolvingNamesFinished) {
-                        // CTAS 
+                        // CTAS
                         AFL_ENSURE(!stageInfo.Meta.TableId);
                         AFL_ENSURE(stageInfo.Meta.TablePath);
                         const auto splittedPath = SplitPath(stageInfo.Meta.TablePath);

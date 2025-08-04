@@ -7,7 +7,7 @@
 #include <ydb/core/sys_view/auth/owners.h>
 #include <ydb/core/sys_view/auth/permissions.h>
 #include <ydb/core/sys_view/auth/users.h>
-#include <ydb/core/sys_view/common/schema.h>
+#include <ydb/core/sys_view/common/registry.h>
 #include <ydb/core/sys_view/compile_cache/compile_cache.h>
 #include <ydb/core/sys_view/nodes/nodes.h>
 #include <ydb/core/sys_view/partition_stats/partition_stats.h>

@@ -22,7 +22,7 @@
 #include <ydb/core/statistics/events.h>
 #include <ydb/core/statistics/service/service.h>
 #include <ydb/core/sys_view/common/path.h>
-#include <ydb/core/sys_view/common/schema.h>
+#include <ydb/core/sys_view/common/resolver.h>
 #include <ydb/core/sys_view/partition_stats/partition_stats.h>
 #include <ydb/core/tablet/tablet_counters_aggregator.h>
 #include <ydb/core/tablet/tablet_counters_protobuf.h>

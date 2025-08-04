@@ -2,7 +2,10 @@
 #include "grpc_proxy_status.h"
 
 #include <ydb/core/client/server/msgbus_server_persqueue.h>
+#include <ydb/core/grpc_services/base/base.h>
 #include <ydb/core/grpc_services/grpc_helper.h>
+#include <ydb/core/grpc_services/legacy/service_legacy.h>
+#include <ydb/core/jaeger_tracing/request_discriminator.h>
 #include <ydb/library/grpc/server/grpc_request.h>
 #include <ydb/library/grpc/server/grpc_counters.h>
 #include <ydb/library/grpc/server/grpc_async_ctx_base.h>
@@ -364,12 +367,14 @@ private:
 
 } // namespace
 
-TGRpcService::TGRpcService()
+TGRpcService::TGRpcService(NActors::TActorId grpcRequestProxyId)
     : ActorSystem(nullptr)
+    , GRpcRequestProxyId(grpcRequestProxyId)
 {}
 
-void TGRpcService::InitService(grpc::ServerCompletionQueue *cq, NYdbGrpc::TLoggerPtr) {
+void TGRpcService::InitService(grpc::ServerCompletionQueue *cq, NYdbGrpc::TLoggerPtr logger) {
     CQ = cq;
+    Logger = std::move(logger);
     Y_ASSERT(InitCb_);
     InitCb_();
 }
@@ -414,14 +419,14 @@ void TGRpcService::Start() {
     ui32 nodeId = ActorSystem->NodeId;
     ActorSystem->Send(MakeGRpcProxyStatusID(nodeId), new TEvGRpcProxyStatus::TEvSetup(true, PersQueueWriteSessionsMaxCount,
                                         PersQueueReadSessionsMaxCount));
-    SetupIncomingRequests();
+    SetupIncomingRequests(Logger);
 }
 
 void TGRpcService::RegisterRequestActor(NActors::IActor* req) {
     ActorSystem->Register(req, TMailboxType::HTSwap, ActorSystem->AppData<TAppData>()->UserPoolId);
 }
 
-void TGRpcService::SetupIncomingRequests() {
+void TGRpcService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
 
     auto getCounterBlock = NGRpcService::CreateCounterCb(Counters, ActorSystem);
 
@@ -465,11 +470,39 @@ void TGRpcService::SetupIncomingRequests() {
         RegisterRequestActor(CreateMessageBusCmsRequest(msg));
     })
 
-    // Console request
-    ADD_REQUEST(ConsoleRequest, TConsoleRequest, TConsoleResponse, {
-        NMsgBusProxy::TBusMessageContext msg(ctx->BindBusContext(NMsgBusProxy::MTYPE_CLIENT_CONSOLE_REQUEST));
-        RegisterRequestActor(CreateMessageBusConsoleRequest(msg));
-    })
+    using namespace ::NKikimr::NGRpcService;
+    using namespace ::NKikimr::NGRpcService::NLegacyGrpcService;
+
+#define SETUP_SERVER_METHOD(methodName, In, Out, createActorCb, rlMode, requestType, counterName, auditMode)       \
+    MakeIntrusive<NGRpcService::TGRpcRequest<                                                                \
+        NKikimrClient::In,                                                                                   \
+        NKikimrClient::Out,                                                                                  \
+        TGRpcService>>                                                                                       \
+    (                                                                                                        \
+        this,                                                                                                \
+        &Service_,                                                                                           \
+        CQ,                                                                                                  \
+        [this](NYdbGrpc::IRequestContextBase* reqCtx) {                                                      \
+            NGRpcService::ReportGrpcReqToMon(*ActorSystem, reqCtx->GetPeer());                               \
+            ActorSystem->Send(GRpcRequestProxyId, new TGrpcRequestNoOperationCall<                           \
+                NKikimrClient::In,                                                                           \
+                NKikimrClient::Out,                                                                          \
+                NLegacyGrpcService::TLegacyGrpcMethodAccessorTraits<NKikimrClient::In, NKikimrClient::Out>>( \
+                    reqCtx, createActorCb,                                                                   \
+                    TRequestAuxSettings {                                                                    \
+                        .RlMode = TRateLimiterMode::rlMode,                                                  \
+                        .AuditMode = auditMode,                                                              \
+                        .RequestType = NJaegerTracing::ERequestType::requestType,                            \
+                    }));                                                                                     \
+        },                                                                                                   \
+        &NKikimrClient::TGRpcServer::AsyncService::Y_CAT(Request, methodName),                               \
+        "Legacy/" Y_STRINGIZE(methodName),                                                                   \
+        logger,                                                                                              \
+        getCounterBlock(Y_STRINGIZE(counterName), Y_STRINGIZE(methodName))                                   \
+    )->Run()                                                                                                 \
+    /**/
+
+    SETUP_SERVER_METHOD(ConsoleRequest, TConsoleRequest, TConsoleResponse, DoConsoleRequest, Off, UNSPECIFIED, legacy, TAuditMode::Modifying(TAuditMode::TLogClassConfig::ClusterAdmin));
 
 #define ADD_PROXY_REQUEST_BASE(NAME, TYPE, RES_TYPE, EVENT_TYPE, MTYPE) \
     ADD_REQUEST(NAME, TYPE, RES_TYPE, { \

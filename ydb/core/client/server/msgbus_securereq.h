@@ -26,7 +26,9 @@ public:
     template <typename... Args>
     TMessageBusSecureRequest(Args&&... args)
         : TSecureRequestActor<TMessageBusServerRequestBase<TMessageBusSecureRequest<TMessageBusServerRequestBase<TDerived>>>, TDerived>(std::forward<Args>(args)...)
-    {}
+    {
+        this->SetInternalToken(this->GetInternalToken()); // No effect if token is nullptr
+    }
 
     template<typename T>
     void Become(T stateFunc) {

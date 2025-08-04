@@ -88,52 +88,102 @@ class TestDataType(RestartToAnotherVersionFixture):
         )
 
     def write_data(self):
-        querys = []
-        for i in range(self.count_table):
-            values = []
-            for key in range(1, self.count_rows + 1):
-                if self.store_type == "COLUMN":
-                    simple_pk_types = {
-                        "Int64": lambda i: i,
-                        "Int32": lambda i: i,
-                        "Int16": lambda i: i,
-                        "Decimal(15,0)": lambda i: f"{i}",
-                        "Decimal(22,9)": lambda i: f"{i}.123456789",
-                        "Decimal(35,10)": lambda i: f"{i}.1234567890",
-                    }
-                    
-                    simple_col_types = {
-                        "Int64": lambda i: i,
-                        "Int32": lambda i: i,
-                        "Int16": lambda i: i,
-                        "Decimal(15,0)": lambda i: f"{i}",
-                        "Decimal(22,9)": lambda i: f"{i}.123456789",
-                        "Decimal(35,10)": lambda i: f"{i}.1234567890",
-                    }
+        if self.store_type == "COLUMN":
+            for i in range(self.count_table):
+                for key in range(1, self.count_rows + 1):
+                    pk_params = {}
+                    for type_name in self.pk_types[i].keys():
+                        param_name = f"pk_{cleanup_type_name(type_name)}"
+                        value = self.pk_types[i][type_name](key)
+                        
+                        if type_name == "Int64":
+                            pk_params[param_name] = value
+                        elif type_name == "Int32":
+                            pk_params[param_name] = (value, ydb.PrimitiveType.Int32)
+                        elif type_name == "Int16":
+                            pk_params[param_name] = (value, ydb.PrimitiveType.Int16)
+                        elif type_name in ["Decimal(35,10)", "Decimal(22,9)", "Decimal(15,0)"]:
+                            from decimal import Decimal
+                            if type_name == "Decimal(15,0)":
+                                pk_params[param_name] = (Decimal(str(value)), ydb.DecimalType(15, 0))
+                            elif type_name == "Decimal(22,9)":
+                                pk_params[param_name] = (Decimal(str(value)), ydb.DecimalType(22, 9))
+                            elif type_name == "Decimal(35,10)":
+                                pk_params[param_name] = (Decimal(str(value)), ydb.DecimalType(35, 10))
 
-                    col_types = {**simple_pk_types, **simple_col_types}
-                else:
-                    col_types = self.all_types
-                
-                values.append(
-                f'''(
-                    {", ".join([format_sql_value(self.pk_types[i][type_name](key), type_name) for type_name in self.pk_types[i].keys()])},
-                    {", ".join([format_sql_value(col_types[type_name](key), type_name) for type_name in self.columns[i]['col_']])}
+                    col_params = {}
+                    for type_name in self.columns[i]["col_"]:
+                        param_name = f"col_{cleanup_type_name(type_name)}"
+                        value = self.all_types[type_name](key)
+                        
+                        if type_name == "Int64":
+                            col_params[param_name] = value
+                        elif type_name == "Int32":
+                            col_params[param_name] = (value, ydb.PrimitiveType.Int32)
+                        elif type_name == "Int16":
+                            col_params[param_name] = (value, ydb.PrimitiveType.Int16)
+                        elif type_name in ["Decimal(35,10)", "Decimal(22,9)", "Decimal(15,0)"]:
+                            from decimal import Decimal
+                            if type_name == "Decimal(15,0)":
+                                col_params[param_name] = (Decimal(str(value)), ydb.DecimalType(15, 0))
+                            elif type_name == "Decimal(22,9)":
+                                col_params[param_name] = (Decimal(str(value)), ydb.DecimalType(22, 9))
+                            elif type_name == "Decimal(35,10)":
+                                col_params[param_name] = (Decimal(str(value)), ydb.DecimalType(35, 10))
+
+                    from collections import OrderedDict
+                    ordered_params = OrderedDict()
+
+                    for type_name in self.pk_types[i].keys():
+                        param_name = f"pk_{cleanup_type_name(type_name)}"
+                        ordered_params[param_name] = pk_params[param_name]
+
+                    for type_name in self.columns[i]['col_']:
+                        param_name = f"col_{cleanup_type_name(type_name)}"
+                        ordered_params[param_name] = col_params[param_name]
+
+                    param_names = []
+                    for type_name in self.pk_types[i].keys():
+                        param_names.append(f"pk_{cleanup_type_name(type_name)}")
+                    for type_name in self.columns[i]['col_']:
+                        param_names.append(f"col_{cleanup_type_name(type_name)}")
+                    
+                    query = f"""
+                    UPSERT INTO `{self.table_names[i]}` (
+                        {", ".join([f"pk_{cleanup_type_name(type_name)}" for type_name in self.pk_types[i].keys()])},
+                        {", ".join([f"col_{cleanup_type_name(type_name)}" for type_name in self.columns[i]['col_']])}
                     )
-                    '''
-            )
-            querys.append(
-                f"""
-                UPSERT INTO `{self.table_names[i]}` (
-                    {", ".join([f"pk_{cleanup_type_name(type_name)}" for type_name in self.pk_types[i].keys()])},
-                    {", ".join([f"col_{cleanup_type_name(type_name)}" for type_name in self.columns[i]['col_']])}
+                    VALUES (
+                        {", ".join([f"${param_name}" for param_name in param_names])}
+                    );
+                    """
+                    
+                    with ydb.QuerySessionPool(self.driver) as session_pool:
+                        session_pool.execute_with_retries(query, parameters=ordered_params)
+        else:
+            querys = []
+            for i in range(self.count_table):
+                values = []
+                for key in range(1, self.count_rows + 1):
+                    values.append(
+                        f'''(
+                            {", ".join([format_sql_value(self.pk_types[i][type_name](key), type_name) for type_name in self.pk_types[i].keys()])},
+                            {", ".join([format_sql_value(self.all_types[type_name](key), type_name) for type_name in self.columns[i]['col_']])}
+                            )
+                            '''
+                    )
+                querys.append(
+                    f"""
+                    UPSERT INTO `{self.table_names[i]}` (
+                        {", ".join([f"pk_{cleanup_type_name(type_name)}" for type_name in self.pk_types[i].keys()])},
+                        {", ".join([f"col_{cleanup_type_name(type_name)}" for type_name in self.columns[i]['col_']])}
+                    )
+                    VALUES {",".join(values)};
+                """
                 )
-                VALUES {",".join(values)};
-            """
-            )
-        with ydb.QuerySessionPool(self.driver) as session_pool:
-            for query in querys:
-                session_pool.execute_with_retries(query)
+            with ydb.QuerySessionPool(self.driver) as session_pool:
+                for query in querys:
+                    session_pool.execute_with_retries(query)
 
     def check_table(self):
         queries = []

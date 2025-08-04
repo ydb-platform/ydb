@@ -82,6 +82,7 @@ public:
         ui64 computeActorBatchSize,
         TDuration truePointsFindRange,
         ui64 metricsQueueConsumersCountDelta,
+        ui64 maxInflight,
         NActors::TActorId metricsQueueActor,
         const ::NMonitoring::TDynamicCounterPtr& counters,
         std::shared_ptr<NYdb::ICredentialsProvider> credentialsProvider
@@ -97,6 +98,7 @@ public:
         , TrueRangeFrom(TInstant::Seconds(ReadParams.Source.GetFrom()) - truePointsFindRange)
         , TrueRangeTo(TInstant::Seconds(ReadParams.Source.GetTo()) + truePointsFindRange)
         , MetricsQueueConsumersCountDelta(metricsQueueConsumersCountDelta)
+        , MaxInflight(maxInflight)
         , MetricsQueueActor(metricsQueueActor)
         , CredentialsProvider(credentialsProvider)
         , SolomonClient(NSo::ISolomonAccessorClient::Make(ReadParams.Source, CredentialsProvider))
@@ -113,10 +115,10 @@ public:
                 }
                 return ERetryErrorClass::NoRetry;
             },
-            TDuration::MilliSeconds(25),
+            TDuration::MilliSeconds(50),
             TDuration::MilliSeconds(200),
-            TDuration::MilliSeconds(500),
-            5
+            TDuration::MilliSeconds(1000),
+            10
         );
 
         UseMetricsQueue = !ReadParams.Source.HasProgram();
@@ -244,7 +246,7 @@ public:
         ParsePointsCount(metric, pointsCount);
         CompletedMetricsCount++;
 
-        TryRequestData();
+        while (TryRequestData()) {}
     }
 
     void HandleNewDataBatch(TEvSolomonProvider::TEvNewDataBatch::TPtr& newDataBatch) {
@@ -432,6 +434,7 @@ private:
 
     bool TryRequestPointsCount() {
         TryRequestMetrics();
+
         if (ListedMetrics.empty()) {
             return false;
         }
@@ -457,12 +460,19 @@ private:
         });
     }
 
-    void TryRequestData() {
+    bool TryRequestData() {
         TryRequestPointsCount();
-        while (!MetricsWithTimeRange.empty()) {
-            RequestData();
-            TryRequestPointsCount();
+
+        if (MetricsWithTimeRange.empty()) {
+            return false;
         }
+
+        if (CurrentInflight >= MaxInflight) {
+            return false;
+        }
+
+        RequestData();
+        return true;
     }
 
     void RequestData() {
@@ -471,6 +481,7 @@ private:
 
         auto request = MetricsWithTimeRange.back();
         MetricsWithTimeRange.pop_back();
+        CurrentInflight++;
 
         if (UseMetricsQueue) {
             dataRequestFuture = SolomonClient->GetData(request.Selectors, request.From, request.To);
@@ -535,6 +546,7 @@ private:
         }
 
         PendingDataRequests_.erase(request);
+        CurrentInflight--;
         
         if (batch.Response.Status != NSo::EStatus::STATUS_OK) {
             TIssues issues { TIssue(batch.Response.Error) };
@@ -566,6 +578,7 @@ private:
     const TInstant TrueRangeFrom;
     const TInstant TrueRangeTo;
     const ui64 MetricsQueueConsumersCountDelta;
+    const ui64 MaxInflight;
     IRetryPolicy<NSo::TGetDataResponse>::TPtr RetryPolicy;
 
     bool UseMetricsQueue;
@@ -583,6 +596,7 @@ private:
     ui64 CompletedMetricsCount = 0;
     ui64 ListedTimeRanges = 0;
     ui64 CompletedTimeRanges = 0;
+    ui64 CurrentInflight = 0;
     const ui64 MaxPointsPerOneRequest = 10000;
 
     TString SourceId;
@@ -636,6 +650,11 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqSolom
         truePointsFindRange = FromString<ui64>(it->second);
     }
 
+    ui64 maxInflight = 40;
+    if (auto it = settings.find("maxApiInflight"); it != settings.end()) {
+        maxInflight = FromString<ui64>(it->second);
+    }
+
     auto credentialsProviderFactory = CreateCredentialsProviderFactoryForStructuredToken(credentialsFactory, token);
     auto credentialsProvider = credentialsProviderFactory->CreateProvider();
 
@@ -650,6 +669,7 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqSolom
         computeActorBatchSize,
         TDuration::Seconds(truePointsFindRange),
         metricsQueueConsumersCountDelta,
+        maxInflight,
         metricsQueueActor,
         counters,
         credentialsProvider);

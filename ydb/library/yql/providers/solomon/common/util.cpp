@@ -17,7 +17,7 @@ THolder<re2::RE2> CompileRE2WithCheck(const std::string& pattern) {
 }
 
 const TString LABEL_NAME_PATTERN        = R"( *[a-zA-Z0-9-._/]{1,50} *)";
-const TString LABEL_VALUE_PATTERN       = R"( *"[ -!#-&(-)+->@-_a-{}-~]{1,200}" *)";
+const TString LABEL_VALUE_PATTERN       = R"( *"[ -!#-&(-)+->@-_a-{}-~*|-]{1,200}" *)";
 
 const TString SENSOR_NAME_PATTERN       = "(" + LABEL_VALUE_PATTERN + ")?({.*})";
 THolder<re2::RE2> SENSOR_NAME_RE        = CompileRE2WithCheck(SENSOR_NAME_PATTERN);

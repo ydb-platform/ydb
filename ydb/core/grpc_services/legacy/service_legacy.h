@@ -15,6 +15,11 @@ namespace NYdbGrpc {
 class IRequestContextBase;
 }
 
+namespace NActors {
+struct TActorId;
+class TActorSystem;
+}
+
 namespace NKikimr::NGRpcService {
 
 class IRequestNoOpCtx;
@@ -23,6 +28,8 @@ class IFacilityProvider;
 namespace NLegacyGrpcService {
 
 namespace NPrivate {
+
+ui32 ToMsgBusStatus(Ydb::StatusIds::StatusCode status);
 
 template <class TReq>
 struct TGetYdbTokenLegacyTraits {
@@ -34,7 +41,25 @@ struct TGetYdbTokenLegacyTraits {
     }
 };
 
+template <class TReq>
+struct TGetYdbTokenUnsecureTraits {
+    static const TMaybe<TString> GetYdbToken(const TReq&, const NYdbGrpc::IRequestContextBase*) {
+        return Nothing();
+    }
+};
+
+struct TResponseLegacyCommonTraits {
+    static void FillResponse(NKikimrClient::TResponse& resp, const NYql::TIssues& issues, Ydb::CostInfo*, Ydb::StatusIds::StatusCode status) {
+        resp.SetStatus(ToMsgBusStatus(status));
+        NYql::IssuesToMessage(issues, resp.MutableIssues());
+    }
+};
+
 } // namespace NPrivate
+
+//
+// Accessor traits
+//
 
 template <class TReq, class TResp>
 struct TLegacyGrpcMethodAccessorTraits;
@@ -47,8 +72,26 @@ struct TLegacyGrpcMethodAccessorTraits<NKikimrClient::TConsoleRequest, NKikimrCl
     }
 };
 
+template <>
+struct TLegacyGrpcMethodAccessorTraits<NKikimrClient::TSchemeOperation, NKikimrClient::TResponse> : NPrivate::TGetYdbTokenLegacyTraits<NKikimrClient::TSchemeOperation>, NPrivate::TResponseLegacyCommonTraits {
+};
+
+template <>
+struct TLegacyGrpcMethodAccessorTraits<NKikimrClient::TSchemeOperationStatus, NKikimrClient::TResponse> : NPrivate::TGetYdbTokenUnsecureTraits<NKikimrClient::TSchemeOperationStatus>, NPrivate::TResponseLegacyCommonTraits {
+};
+
+template <>
+struct TLegacyGrpcMethodAccessorTraits<NKikimrClient::TSchemeDescribe, NKikimrClient::TResponse> : NPrivate::TGetYdbTokenLegacyTraits<NKikimrClient::TSchemeDescribe>, NPrivate::TResponseLegacyCommonTraits {
+};
+
 void DoConsoleRequest(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider& f);
 
-} // namespace NLegacyGrpcService
+// Requests that should be forwarded to msg bus proxy
+using TCreateActorCallback = std::function<void(std::unique_ptr<IRequestNoOpCtx>, const IFacilityProvider&)>;
 
+TCreateActorCallback DoSchemeOperation(const NActors::TActorId& msgBusProxy, NActors::TActorSystem* actorSystem);
+void DoSchemeOperationStatus(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider& f);
+TCreateActorCallback DoSchemeDescribe(const NActors::TActorId& msgBusProxy, NActors::TActorSystem* actorSystem);
+
+} // namespace NLegacyGrpcService
 } // namespace NKikimr::NGRpcService

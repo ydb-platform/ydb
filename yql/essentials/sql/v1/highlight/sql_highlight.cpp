@@ -4,6 +4,9 @@
 
 #include <contrib/libs/re2/re2/re2.h>
 
+#include <library/cpp/json/json_reader.h>
+#include <library/cpp/resource/resource.h>
+
 #include <util/generic/algorithm.h>
 #include <util/generic/hash.h>
 #include <util/generic/hash_set.h>
@@ -101,47 +104,17 @@ namespace NSQLHighlight {
 
     template <>
     TUnit MakeUnit<EUnitKind::TypeIdentifier>(Syntax& s) {
+        TVector<NSQLTranslationV1::TRegexPattern> types;
+        NJson::TJsonValue json = NJson::ReadJsonFastTree(NResource::Find("types.json"));
+        for (const NJson::TJsonValue& value : json.GetArraySafe()) {
+            types.emplace_back(CaseInsensitive(value["name"].GetStringSafe()));
+        }
+
         return {
             .Kind = EUnitKind::TypeIdentifier,
             .Patterns = {
                 {s.Get("ID_PLAIN"), s.Get("LESS")},
-                {Merged({
-                    CaseInsensitive("Decimal"),
-                    CaseInsensitive("Bool"),
-                    CaseInsensitive("Int8"),
-                    CaseInsensitive("Int16"),
-                    CaseInsensitive("Int32"),
-                    CaseInsensitive("Int64"),
-                    CaseInsensitive("Uint8"),
-                    CaseInsensitive("Uint16"),
-                    CaseInsensitive("Uint32"),
-                    CaseInsensitive("Uint64"),
-                    CaseInsensitive("Float"),
-                    CaseInsensitive("Double"),
-                    CaseInsensitive("DyNumber"),
-                    CaseInsensitive("String"),
-                    CaseInsensitive("Utf8"),
-                    CaseInsensitive("Json"),
-                    CaseInsensitive("JsonDocument"),
-                    CaseInsensitive("Yson"),
-                    CaseInsensitive("Uuid"),
-                    CaseInsensitive("Date"),
-                    CaseInsensitive("Datetime"),
-                    CaseInsensitive("Timestamp"),
-                    CaseInsensitive("Interval"),
-                    CaseInsensitive("TzDate"),
-                    CaseInsensitive("TzDateTime"),
-                    CaseInsensitive("TzTimestamp"),
-                    CaseInsensitive("Callable"),
-                    CaseInsensitive("Resource"),
-                    CaseInsensitive("Tagged"),
-                    CaseInsensitive("Generic"),
-                    CaseInsensitive("Unit"),
-                    CaseInsensitive("Null"),
-                    CaseInsensitive("Void"),
-                    CaseInsensitive("EmptyList"),
-                    CaseInsensitive("EmptyDict"),
-                })},
+                {Merged(std::move(types))},
             },
         };
     }

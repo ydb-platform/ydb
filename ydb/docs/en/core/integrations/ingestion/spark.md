@@ -1,10 +1,10 @@
 # {{ spark-name }}
 
-{{ spark-name }} is a fast, open-source cluster computing system for big data processing that works with various data stores and supports multiple programming languages (Scala, Java, Python, R). {{ spark-name }} can work with {{ ydb-full-name }} using [Spark Connector](https://github.com/ydb-platform/ydb-spark-connector), a special module that implements core  {{ spark-name }} primitives.
+{{ spark-name }} is a fast, open-source cluster computing system for big data processing that works with various data stores and supports multiple programming languages (Scala, Java, Python, R). {{ spark-name }} can work with {{ ydb-full-name }} using the [{{ ydb-full-name }} Spark Connector](https://github.com/ydb-platform/ydb-spark-connector), a special module that implements core  {{ spark-name }} primitives.
 
-## How to use {#usage}
+## How to Use {#usage}
 
-To work with {{ ydb-short-name }} in {{ spark-name }} you need to add the {{ ydb-short-name }} Spark Connector to your Apache Spark™ [driver](https://spark.apache.org/docs/latest/cluster-overview.html). That can be done in several ways:
+To work with {{ ydb-short-name }} in {{ spark-name }}, you need to add the {{ ydb-short-name }} Spark Connector to your {{ spark-name }} [driver](https://spark.apache.org/docs/latest/cluster-overview.html). This can be done in several ways:
 
 * Download the connector dependency directly from Maven Central using the `--packages` option. It's recommended to use the latest published [version](https://mvnrepository.com/artifact/tech.ydb.spark/ydb-spark-connector):
 
@@ -28,7 +28,7 @@ To work with {{ ydb-short-name }} in {{ spark-name }} you need to add the {{ ydb
 
 ### Use DataFrame API {#dataframe-api}
 
-The DataFrame API allows you to work with {{ ydb-short-name }} in interactive `spark-shell` or `pyspark`, as well as when writing code with `Java`, `Scala`, or `Python` for `spark-submit`.
+The DataFrame API allows you to work with {{ ydb-short-name }} in an interactive `spark-shell` or `pyspark` session, as well as when writing code in `Java`, `Scala`, or `Python` for `spark-submit`.
 
 Create a `DataFrame` referencing a {{ ydb-short-name }} table:
 
@@ -208,9 +208,9 @@ scala> ydb_posts2020.filter(col("AcceptedAnswerId") > 0).count
 res4: Long = 843780
 ```
 
-## Spark-sql example {#example-spark-sql}
+## Spark SQL example {#example-spark-sql}
 
-As an example, we'll show how to load a list of all StackOverflow posts from 2020 into {{ ydb-short-name }}. This data can be downloaded from the following link: [https://datasets-documentation.s3.eu-west-3.amazonaws.com/stackoverflow/parquet/posts/2020.parquet](https://datasets-documentation.s3.eu-west-3.amazonaws.com/stackoverflow/parquet/posts/2020.parquet)
+As an example, we'll show how to load a list of all Stack Overflow posts from 2020 into {{ ydb-short-name }}. This data can be downloaded from the following link: [https://datasets-documentation.s3.eu-west-3.amazonaws.com/stackoverflow/parquet/posts/2020.parquet](https://datasets-documentation.s3.eu-west-3.amazonaws.com/stackoverflow/parquet/posts/2020.parquet)
 
 First, let's run `spark-sql` with the configured `my_ydb` catalog:
 
@@ -261,15 +261,7 @@ ViewCount             bigint
 Body                  binary
 OwnerUserId           bigint
 OwnerDisplayName      binary
-LastEditorUserId      bigint* `auth.use_env` —  if set to `true`, authentication based on environment variables will be used.
-* `auth.use_metadata` —  if set to `true`, metadata based authentication mode will be used. You can specify it directly in `url` as the `useMetadata` option.
-* `auth.login` и `auth.password` — login and password for static authentication.
-* `auth.token` — authentication using the specified token.
-* `auth.token.file` — authentication using a token from the specified file. You can specify it directly in `url` as the `tokenFile` option.
-* `auth.ca.text` — specifies the certificate value for establishing a TLS connection.
-* `auth.ca.file` — specifies the path to the certificate for establishing a TLS connection. You can specify it directly in `url` as the `secureConnectionCertificate` option.
-* `auth.sakey.text` — uses to specify the key content for authentication using a service account key.
-* `auth.sakey.file` — uses to specify the path to the key file for authentication using a service account key. You can specify it directly in `url` as the `saKeyFile` option.
+LastEditorUserId      bigint
 LastEditorDisplayName binary
 LastEditDate          timestamp
 LastActivityDate      timestamp

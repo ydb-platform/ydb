@@ -130,8 +130,14 @@ public:
     }
 
     void FillSystemColumnPositionIndex() {
+        YQL_ENSURE(ReadParams.Source.GetLabelNameAliases().size() == ReadParams.Source.GetLabelNames().size());
+
+        for (int i = 0; i < ReadParams.Source.GetLabelNameAliases().size(); ++i) {
+            AliasIndex[ReadParams.Source.GetLabelNameAliases()[i]] = ReadParams.Source.GetLabelNames()[i];
+        }
+
         std::vector<TString> names(ReadParams.Source.GetSystemColumns().begin(), ReadParams.Source.GetSystemColumns().end());
-        names.insert(names.end(), ReadParams.Source.GetLabelNames().begin(), ReadParams.Source.GetLabelNames().end());
+        names.insert(names.end(), ReadParams.Source.GetLabelNameAliases().begin(), ReadParams.Source.GetLabelNameAliases().end());
         std::sort(names.begin(), names.end());
         size_t index = 0;
         for (auto& n : names) {
@@ -370,9 +376,9 @@ public:
                     items[it->second] = dictValue;
                 }
 
-                for (const auto& c : ReadParams.Source.GetLabelNames()) {
+                for (const auto& c : ReadParams.Source.GetLabelNameAliases()) {
                     auto& v = items[Index[c]];
-                    auto it = labels.find(c);
+                    auto it = labels.find(AliasIndex[c]);
                     if (it != labels.end()) {
                         v = NKikimr::NMiniKQL::MakeString(it->second);
                     } else {
@@ -618,6 +624,7 @@ private:
     TType* DictType = nullptr;
     std::vector<size_t> SystemColumnPositionIndex;
     THashMap<TString, size_t> Index;
+    THashMap<TString, TString> AliasIndex;
 };
 
 

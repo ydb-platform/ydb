@@ -38,7 +38,7 @@ public:
     }
 
     TStatus HandleSoSourceSettings(const TExprNode::TPtr& input, TExprContext& ctx) {
-        if (!EnsureArgsCount(*input, 16, ctx)) {
+        if (!EnsureArgsCount(*input, 17, ctx)) {
             return TStatus::Error;
         }
 
@@ -68,6 +68,11 @@ public:
 
         auto& labelNames = *input->Child(TSoSourceSettings::idx_LabelNames);
         if (!EnsureTupleOfAtoms(labelNames, ctx)) {
+            return TStatus::Error;
+        }
+
+        auto& labelNameAliases = *input->Child(TSoSourceSettings::idx_LabelNameAliases);
+        if (!EnsureTupleOfAtoms(labelNameAliases, ctx)) {
             return TStatus::Error;
         }
 
@@ -155,7 +160,7 @@ public:
     }
 
     TStatus HandleRead(const TExprNode::TPtr& input, TExprContext& ctx) {
-        if (!EnsureMinMaxArgsCount(*input, 8U, 9U, ctx)) {
+        if (!EnsureMinMaxArgsCount(*input, 9U, 10U, ctx)) {
             return TStatus::Error;
         }
 
@@ -174,6 +179,11 @@ public:
 
         auto& labelNames = *input->Child(TSoReadObject::idx_LabelNames);
         if (!EnsureTupleOfAtoms(labelNames, ctx)) {
+            return TStatus::Error;
+        }
+
+        auto& labelNameAliases = *input->Child(TSoReadObject::idx_LabelNameAliases);
+        if (!EnsureTupleOfAtoms(labelNameAliases, ctx)) {
             return TStatus::Error;
         }
 

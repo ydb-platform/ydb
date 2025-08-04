@@ -250,7 +250,7 @@ public:
     }
 
     ~TSourceInfo() {
-        AFL_VERIFY(NActors::TActorSystem::IsStopped() || RequestedObjects.empty());
+        AFL_VERIFY(RequestedObjects.empty() || NActors::TActorSystem::IsStopped());
     }
 
     void DrainQueue() {

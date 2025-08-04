@@ -474,8 +474,6 @@ protected:
     std::deque<TBarrier> PendingBarriers; // barrier and event count after barrier
     TBarrier BeforeBarrier; // event count before barTrier
     TInstant PauseBarrier; // 
-    bool PausedByCheckpoint = false;
-    ui32 NonZeroBarrierIndex = 0;
 };
 
 } // namespace NYql::NDq

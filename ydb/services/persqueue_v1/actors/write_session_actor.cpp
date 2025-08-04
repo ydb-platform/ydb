@@ -159,6 +159,7 @@ inline void FillChunkDataFromReq(
             auto* res = msgMeta->Add();
             res->set_key(item.key());
             res->set_value(item.value());
+        } else {
             messageKey = item.value();
         }
     }

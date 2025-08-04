@@ -136,25 +136,25 @@ class KiKiMRDistConfNodeStatusTest(object):
 
 class TestKiKiMRDistConfSelfHealNodeDisconnected(KiKiMRDistConfNodeStatusTest):
     erasure = Erasure.MIRROR_3_DC
-    nodes_count = 12
+    nodes_count = 10
 
     def do_test(self, configName):
         rg = get_ring_group(self.do_request_config(), configName)
         assert_eq(rg["NToSelect"], 9)
         assert_eq(len(rg["Ring"]), 9)
-        self.validate_contains_nodes(rg, [3])
-        self.cluster.nodes[3].stop()
+        self.validate_contains_nodes(rg, [4])
+        self.cluster.nodes[4].stop()
         time.sleep(25)
 
         rg2 = get_ring_group(self.do_request_config(), configName)
         assert_eq(rg["NToSelect"], 9)
         assert_eq(len(rg["Ring"]), 9)
-        self.validate_not_contains_nodes(rg2, [3])
+        self.validate_not_contains_nodes(rg2, [4])
         assert_that("RingGroupActorIdOffset" not in rg2)  # reassign node api used instead adding new ring groups test
         for ring in rg2:
             assert_that("IsDisabled" not in rg)
         assert_that(rg != rg2)
-        self.cluster.nodes[3].start()
+        self.cluster.nodes[4].start()
         time.sleep(25)
         rg3 = get_ring_group(self.do_request_config(), configName)
         assert_eq(rg3, rg2)  # Current config has no bad nodes and should not run self-heal

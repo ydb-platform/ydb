@@ -122,6 +122,7 @@ namespace NKikimr::NStorage {
         auto needReconfig = [&](auto clearFunc, auto ssMutableFunc, auto buildFunc) {
             auto copyCurrentConfig = currentConfig;
             auto ss = *(copyCurrentConfig.*ssMutableFunc)();
+            auto targetSS = *(targetConfig.*ssMutableFunc)();
             if (ss.RingGroupsSize() == 0) {
                 ss.MutableRing()->ClearRingGroupActorIdOffset();
             } else {
@@ -132,9 +133,11 @@ namespace NKikimr::NStorage {
             TIntrusivePtr<TStateStorageInfo> newSSInfo;
             TIntrusivePtr<TStateStorageInfo> oldSSInfo;
             oldSSInfo = (*buildFunc)(ss);
-            newSSInfo = (*buildFunc)(*(targetConfig.*ssMutableFunc)());
+            newSSInfo = (*buildFunc)(targetSS);
             if (oldSSInfo->RingGroups == newSSInfo->RingGroups) {
                 (targetConfig.*clearFunc)();
+                 STLOG(PRI_DEBUG, BS_NODE, NW104, "needReconfig clear config"
+                , (CurrentConfig, ss), (TargetConfig, targetSS), (oldSSInfo, oldSSInfo->ToString()), (newSSInfo, newSSInfo->ToString()));
                 return ReconfigType::NONE;
             }
 

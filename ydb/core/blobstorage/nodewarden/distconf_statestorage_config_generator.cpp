@@ -30,7 +30,7 @@ namespace NKikimr::NStorage {
             for (auto& n : dc) {
                 NodeGroups[0].Nodes.emplace_back(n);
                 ui32 nodeId = std::get<0>(n);
-                ui32 state = CalcNodeState(nodeId);
+                ui32 state = CalcNodeState(nodeId, false);
                 NodeGroups[0].State[state]++;
             }
 
@@ -45,7 +45,7 @@ namespace NKikimr::NStorage {
         }
         Y_ABORT_UNLESS(NodeGroups.size() > 0 && NodeGroups[0].Nodes.size() > 0);
         for (auto& ng : NodeGroups) {
-            ng.Disconnected = ng.State[0] < ng.Nodes.size() / 2;
+            ng.Disconnected = ng.State[0] + ng.State[1] < ng.Nodes.size() / 2;
         }
     }
 
@@ -101,8 +101,8 @@ namespace NKikimr::NStorage {
         }
     }
 
-    ui32 TStateStoragePerPileGenerator::CalcNodeState(ui32 nodeId) {
-        ui32 state = SelfHealNodesState.contains(nodeId) ? SelfHealNodesState.at(nodeId) : (NodeStatesSize - 1);
+    ui32 TStateStoragePerPileGenerator::CalcNodeState(ui32 nodeId, bool disconnected) {
+        ui32 state = disconnected ? 0 : (SelfHealNodesState.contains(nodeId) ? SelfHealNodesState.at(nodeId) : (NodeStatesSize - 1));
         Y_ABORT_UNLESS(state < NodeStatesSize);
         Y_ABORT_UNLESS(state != NCms::NSentinel::TNodeStatusComputer::ENodeState::PRETTY_GOOD);
         if (state == 0 && UsedNodes.contains(nodeId)) {
@@ -128,7 +128,7 @@ namespace NKikimr::NStorage {
                 }
                 ui32 nodeId = std::get<0>(*iter);
                 location = std::get<1>(*iter);
-                if (CalcNodeState(nodeId) <= stateLimit) {
+                if (CalcNodeState(nodeId, group.Disconnected) <= stateLimit) {
                     ring.push_back(nodeId);
                 }
                 iter++;
@@ -145,31 +145,13 @@ namespace NKikimr::NStorage {
         return true;
     }
 
-    void TStateStoragePerPileGenerator::PickNodesByRack(TNodeGroup& group) {
-        auto compByRack = [&](const auto& x, const auto& y) {
-            auto rackX = std::get<1>(x).GetRackId();
-            auto rackY = std::get<1>(y).GetRackId();
-            if (rackX == rackY) {
-                auto nodeX = std::get<0>(x);
-                auto nodeY = std::get<0>(y);
-                return nodeX < nodeY;
-            }
-            return rackX < rackY;
-        };
-        std::ranges::sort(group.Nodes, compByRack);
-        if (!PickNodesSimpleStrategy(group, NodeStatesSize, false)) {
-            Y_ABORT_UNLESS(PickNodesSimpleStrategy(group, NodeStatesSize, true));
-        }
-
-    }
-
-    void TStateStoragePerPileGenerator::PickNodesByState(TNodeGroup& group) {
+    void TStateStoragePerPileGenerator::PickNodes(TNodeGroup& group) {
         std::unordered_map<TString, std::array<ui32, NodeStatesSize>> rackStates;
         for (auto& n : group.Nodes) {
             auto rack = std::get<1>(n).GetRackId();
             auto nodeId = std::get<0>(n);
             auto& rackState = rackStates[rack];
-            rackState[CalcNodeState(nodeId)]++;
+            rackState[CalcNodeState(nodeId, group.Disconnected)]++;
         }
 
         auto compByState = [&](const auto& x, const auto& y) {
@@ -178,8 +160,8 @@ namespace NKikimr::NStorage {
             if (rackX == rackY) {
                 auto nodeX = std::get<0>(x);
                 auto nodeY = std::get<0>(y);
-                ui32 state1 = CalcNodeState(nodeX);
-                ui32 state2 = CalcNodeState(nodeY);
+                ui32 state1 = CalcNodeState(nodeX, group.Disconnected);
+                ui32 state2 = CalcNodeState(nodeY, group.Disconnected);
                 return state1 < state2 || (state1 == state2 && nodeX < nodeY);
             }
             auto& rackStateX = rackStates[rackX];
@@ -196,20 +178,19 @@ namespace NKikimr::NStorage {
         for (ui32 stateLimit : xrange(NodeStatesSize)) {
             if (PickNodesSimpleStrategy(group, stateLimit, rackStates.size() < RingsInGroupCount)) {
                 GoodConfig &= stateLimit <= 1;
+                std::string r = "disc:" + std::to_string(group.Disconnected) + " -> ";
+                for(auto n : group.Nodes) {
+                    auto& rackState = rackStates[std::get<1>(n).GetRackId()];
+                    r += std::to_string(std::get<0>(n)) + ":u" + std::to_string(UsedNodes.contains(std::get<0>(n)))
+                    + ":" + std::to_string(rackState[0]) + ":" + std::to_string(rackState[1])
+                    + ":" + std::to_string(CalcNodeState(std::get<0>(n), group.Disconnected)) + ", ";
+                }
+                STLOG(PRI_DEBUG, BS_NODE, NW102, "TStateStoragePerPileGenerator::PickNodesByState", (stateLimit, stateLimit), (Nodes, r));
                 return;
             }
         }
         GoodConfig = false;
+        STLOG(PRI_DEBUG, BS_NODE, NW103, "TStateStoragePerPileGenerator::PickNodesByState without limits");
         Y_ABORT_UNLESS(PickNodesSimpleStrategy(group, NodeStatesSize, true));
     }
-
-    void TStateStoragePerPileGenerator::PickNodes(TNodeGroup& group) {
-        if (group.Disconnected) {
-            PickNodesByRack(group);
-        } else {
-            PickNodesByState(group);
-        }
-    }
-
-
 }

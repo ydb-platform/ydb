@@ -61,10 +61,13 @@ public:
         const auto& databaseId = ev->Get()->DatabaseId;
         const auto& poolId = ev->Get()->PoolId;
         const auto resourceWeight = std::max(ev->Get()->Params.ResourceWeight, 0.0); // TODO: resource weight shouldn't be negative!
-        NHdrf::TStaticAttributes const attrs = {
-            .Limit = ev->Get()->Params.TotalCpuLimitPercentPerNode * Scheduler->GetTotalCpuLimit() / 100,
+        NHdrf::TStaticAttributes attrs = {
             .Weight = std::max(ev->Get()->Weight, 0.0), // TODO: weight shouldn't be negative!
         };
+
+        if (ev->Get()->Params.TotalCpuLimitPercentPerNode >= 0) {
+            attrs.Limit = ev->Get()->Params.TotalCpuLimitPercentPerNode * Scheduler->GetTotalCpuLimit() / 100;
+        }
 
         Y_ASSERT(!poolId.empty());
 
@@ -98,9 +101,11 @@ public:
             UpdatePoolsGuarantee();
 
             // Update limit
-            Scheduler->AddOrUpdatePool(databaseId, poolId, {
-                .Limit = ev->Get()->Config->TotalCpuLimitPercentPerNode * Scheduler->GetTotalCpuLimit() / 100
-            });
+            if (ev->Get()->Config->TotalCpuLimitPercentPerNode >= 0) {
+                Scheduler->AddOrUpdatePool(databaseId, poolId, {
+                    .Limit = ev->Get()->Config->TotalCpuLimitPercentPerNode * Scheduler->GetTotalCpuLimit() / 100,
+                });
+            }
         } else if (poolIt != PoolSubscribtions.end()) {
             if (!poolIt->second.IsFirstRemoval) {
                 // The first removal - try to re-subscribe in case it's just the pool removal from cache.

@@ -93,7 +93,7 @@ private:
         const auto &request = ev->Get()->Record;
         const auto count = request.GetCount();
         auto scheduler = request.GetScheduler();
-        auto filters = request.GetWorkerFilterPerTask();
+        const auto& filters = request.GetWorkerFilterPerTask();
         Y_ABORT_UNLESS((ui32)count == (ui32)filters.size(), "count %" PRIu32 ", filters size %" PRIu32, (ui32)count, (ui32)filters.size());
 
         auto response = MakeHolder<NDqs::TEvAllocateWorkersResponse>();

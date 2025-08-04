@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: frozenlist
-Version: 1.6.0
+Version: 1.7.0
 Summary: A list-like structure which implements collections.abc.MutableSequence
 Home-page: https://github.com/aio-libs/frozenlist
 Maintainer: aiohttp team <team@aiohttp.org>
@@ -160,6 +160,87 @@ Changelog
     WARNING: Don't drop the next directive!
 
 .. towncrier release notes start
+
+v1.7.0
+======
+
+*(2025-06-09)*
+
+
+Features
+--------
+
+- Added deepcopy support to FrozenList -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#659 <https://github.com/aio-libs/frozenlist/issues/659>`__.
+
+
+Packaging updates and notes for downstreams
+-------------------------------------------
+
+- Fixed an issue where ``frozenlist`` binary wheels would be built with debugging symbols and line tracing enabled, which significantly impacted performance. Line tracing is now disabled by default and can only be enabled explicitly -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  This change ensures that production builds are optimized for performance. Developers who need line tracing for debugging purposes can still enable it by:
+
+  1. Setting the ``FROZENLIST_CYTHON_TRACING`` environment variable
+  2. Using the ``--config-setting=with-cython-tracing=true`` option with pip
+
+  *Related issues and pull requests on GitHub:*
+  `#660 <https://github.com/aio-libs/frozenlist/issues/660>`__.
+
+- Enabled ``PIP_CONSTRAINT`` environment variable in the build configuration to ensure the pinned Cython version from ``requirements/cython.txt`` is used during wheel builds.
+
+  *Related issues and pull requests on GitHub:*
+  `#661 <https://github.com/aio-libs/frozenlist/issues/661>`__.
+
+
+----
+
+
+v1.6.2
+======
+
+*(2025-06-03)*
+
+
+No significant changes.
+
+
+----
+
+
+v1.6.1
+======
+
+*(2025-06-02)*
+
+
+Bug fixes
+---------
+
+- Correctly use ``cimport`` for including ``PyBool_FromLong`` -- by `@lysnikolaou <https://github.com/sponsors/lysnikolaou>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#653 <https://github.com/aio-libs/frozenlist/issues/653>`__.
+
+
+Packaging updates and notes for downstreams
+-------------------------------------------
+
+- Exclude ``_frozenlist.cpp`` from bdists/wheels -- by `@musicinmybrain <https://github.com/sponsors/musicinmybrain>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#649 <https://github.com/aio-libs/frozenlist/issues/649>`__.
+
+- Updated to use Cython 3.1 universally across the build path -- by `@lysnikolaou <https://github.com/sponsors/lysnikolaou>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#654 <https://github.com/aio-libs/frozenlist/issues/654>`__.
+
+
+----
+
 
 v1.6.0
 ======

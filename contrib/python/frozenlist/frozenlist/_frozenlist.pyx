@@ -1,9 +1,10 @@
 # cython: freethreading_compatible = True
 # distutils: language = c++
 
-from cpython.bool import PyBool_FromLong
+from cpython.bool cimport PyBool_FromLong
 from libcpp.atomic cimport atomic
 
+import copy
 import types
 from collections.abc import MutableSequence
 
@@ -121,6 +122,27 @@ cdef class FrozenList:
             return hash(tuple(self._items))
         else:
             raise RuntimeError("Cannot hash unfrozen list.")
+
+    def __deepcopy__(self, memo):
+        cdef FrozenList new_list
+        obj_id = id(self)
+
+        # Return existing copy if already processed (circular reference)
+        if obj_id in memo:
+            return memo[obj_id]
+
+        # Create new instance and register immediately
+        new_list = self.__class__([])
+        memo[obj_id] = new_list
+
+        # Deep copy items
+        new_list._items[:] = [copy.deepcopy(item, memo) for item in self._items]
+
+        # Preserve frozen state
+        if self._frozen.load():
+            new_list.freeze()
+
+        return new_list
 
 
 MutableSequence.register(FrozenList)

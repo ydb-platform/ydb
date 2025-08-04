@@ -193,7 +193,7 @@ private:
             if (shouldHandleWatermark) {
                 const auto watermarkRequested = ev->Get()->WatermarkRequest->Watermark;
                 LOG_T("Task runner. Watermarks. Injecting requested watermark " << watermarkRequested
-                    << " to " << Outputs.size() << " outputs ");
+                    << " to " << OutputsWithWatermarks.size() << " outputs ");
 
                 for (const auto& channelId : OutputsWithWatermarks) {
                     NDqProto::TWatermark watermark;

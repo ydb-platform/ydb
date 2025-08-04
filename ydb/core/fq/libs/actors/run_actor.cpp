@@ -371,7 +371,7 @@ public:
     static constexpr char ActorName[] = "YQ_RUN_ACTOR";
 
     void Bootstrap() {
-        LOG_D("Start run actor. Compute state: " << FederatedQuery::QueryMeta::ComputeStatus_Name(Params.Status) <<  "StatsMode = " << (int) StatsMode);
+        LOG_D("Start run actor. Compute state: " << FederatedQuery::QueryMeta::ComputeStatus_Name(Params.Status));
 
         FillConnections();
 

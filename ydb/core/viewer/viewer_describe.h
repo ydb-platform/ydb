@@ -48,11 +48,6 @@ public:
         if (NeedToRedirect()) {
             return;
         }
-        if (Params.Has("path_id") && !Params.Has("schemeshard_id")) {
-            // path_id is not enough to describe path, we need schemeshard_id
-            ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "schemeshard_id is required when path_id is specified"));
-            return;
-        }
         // for describe we keep old behavior where enums is false by default - for compatibility reasons
         if (FromStringWithDefault<bool>(Params.Get("enums"), false)) {
             Proto2JsonConfig.EnumMode = TProto2JsonConfig::EnumValueMode::EnumName;
@@ -153,8 +148,6 @@ public:
                 return NKikimrSchemeOp::EPathTypeFileStore;
             case TNavigate::KindView:
                 return NKikimrSchemeOp::EPathTypeView;
-            case TNavigate::KindSysView:
-                return NKikimrSchemeOp::EPathTypeSysView;
             default:
                 return NKikimrSchemeOp::EPathTypeDir;
         }

@@ -88,7 +88,7 @@ class NemesisProcess(threading.Thread):
             try:
                 self.__stop_nemesis()
             except Exception as e:
-                self.__logger.error("Ошибка при остановке nemesis в finally: %s", e)
+                self.__logger.error("Error while stopping nemesis in finally: %s", e)
 
     def __run(self):
         self.__logger.info("Starting nemesis execution loop")

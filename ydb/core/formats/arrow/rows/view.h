@@ -47,6 +47,10 @@ private:
     YDB_READONLY_DEF(TString, Data);
 
 public:
+    TSimpleRowContent(TString&& data)
+        : Data(std::move(data)) {
+    }
+
     TSimpleRowContent(const TString& data)
         : Data(data) {
     }

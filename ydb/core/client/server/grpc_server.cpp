@@ -450,18 +450,6 @@ void TGRpcService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
     ADD_ACTOR_REQUEST(TabletStateRequest,        TTabletStateRequest,               MTYPE_CLIENT_TABLET_STATE_REQUEST)
     ADD_ACTOR_REQUEST(InterconnectDebug,         TInterconnectDebug,                MTYPE_CLIENT_INTERCONNECT_DEBUG)
 
-    // dynamic node registration
-    ADD_REQUEST(RegisterNode, TNodeRegistrationRequest, TNodeRegistrationResponse, {
-        NMsgBusProxy::TBusMessageContext msg(ctx->BindBusContext(NMsgBusProxy::MTYPE_CLIENT_NODE_REGISTRATION_REQUEST));
-        RegisterRequestActor(CreateMessageBusRegisterNode(msg));
-    })
-
-    // CMS request
-    ADD_REQUEST(CmsRequest, TCmsRequest, TCmsResponse, {
-        NMsgBusProxy::TBusMessageContext msg(ctx->BindBusContext(NMsgBusProxy::MTYPE_CLIENT_CMS_REQUEST));
-        RegisterRequestActor(CreateMessageBusCmsRequest(msg));
-    })
-
     using namespace ::NKikimr::NGRpcService;
     using namespace ::NKikimr::NGRpcService::NLegacyGrpcService;
 
@@ -507,6 +495,7 @@ void TGRpcService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
     SETUP_SERVER_METHOD(HiveCreateTablet, THiveCreateTablet, TResponse, DoHiveCreateTablet, Off, UNSPECIFIED, legacy, TAuditMode::Modifying(TAuditMode::TLogClassConfig::ClusterAdmin));
     SETUP_SERVER_METHOD(TestShardControl, TTestShardControlRequest, TResponse, DoTestShardControl, Off, UNSPECIFIED, legacy, TAuditMode::Modifying(TAuditMode::TLogClassConfig::ClusterAdmin));
     SETUP_SERVER_METHOD(RegisterNode, TNodeRegistrationRequest, TNodeRegistrationResponse, DoRegisterNode, Off, UNSPECIFIED, legacy, TAuditMode::Modifying(TAuditMode::TLogClassConfig::NodeRegistration));
+    SETUP_SERVER_METHOD(CmsRequest, TCmsRequest, TCmsResponse, DoCmsRequest, Off, UNSPECIFIED, legacy, TAuditMode::Modifying(TAuditMode::TLogClassConfig::ClusterAdmin));
     SETUP_SERVER_METHOD(ConsoleRequest, TConsoleRequest, TConsoleResponse, DoConsoleRequest, Off, UNSPECIFIED, legacy, TAuditMode::Modifying(TAuditMode::TLogClassConfig::ClusterAdmin));
 }
 

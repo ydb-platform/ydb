@@ -1,6 +1,7 @@
 #pragma once
 #include <ydb/core/protos/grpc.grpc.pb.h>
 #include <ydb/core/protos/node_broker.pb.h>
+#include <ydb/core/protos/cms.pb.h>
 #include <ydb/core/protos/console_base.pb.h>
 #include <yql/essentials/public/issue/yql_issue.h>
 #include <yql/essentials/public/issue/yql_issue_message.h>
@@ -32,6 +33,7 @@ namespace NPrivate {
 
 ui32 ToMsgBusStatus(Ydb::StatusIds::StatusCode status);
 NKikimrNodeBroker::TStatus::ECode ToNodeBrokerStatus(Ydb::StatusIds::StatusCode status);
+NKikimrCms::TStatus::ECode ToCmsStatus(Ydb::StatusIds::StatusCode status);
 
 Y_HAS_MEMBER(GetSecurityToken);
 
@@ -167,6 +169,16 @@ struct TLegacyGrpcMethodAccessorTraits<NKikimrClient::TNodeRegistrationRequest, 
 };
 
 template <>
+struct TLegacyGrpcMethodAccessorTraits<NKikimrClient::TCmsRequest, NKikimrClient::TCmsResponse>
+    : NPrivate::TGetYdbTokenLegacyTraits<NKikimrClient::TCmsRequest>
+{
+    static void FillResponse(NKikimrClient::TCmsResponse& resp, const NYql::TIssues& issues, Ydb::CostInfo*, Ydb::StatusIds::StatusCode status) {
+        resp.MutableStatus()->SetCode(NPrivate::ToCmsStatus(status));
+        resp.MutableStatus()->SetReason(issues.ToString());
+    }
+};
+
+template <>
 struct TLegacyGrpcMethodAccessorTraits<NKikimrClient::TConsoleRequest, NKikimrClient::TConsoleResponse>
     : NPrivate::TGetYdbTokenLegacyTraits<NKikimrClient::TConsoleRequest>
 {
@@ -201,6 +213,7 @@ void DoTestShardControl(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvi
 
 void DoRegisterNode(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider& f);
 
+void DoCmsRequest(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider& f);
 void DoConsoleRequest(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider& f);
 
 } // namespace NLegacyGrpcService

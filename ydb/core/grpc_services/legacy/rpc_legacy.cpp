@@ -83,6 +83,40 @@ NKikimrNodeBroker::TStatus::ECode ToNodeBrokerStatus(Ydb::StatusIds::StatusCode 
     }
 }
 
+// In real situations we don't return all these codes from grpc layer
+NKikimrCms::TStatus::ECode ToCmsStatus(Ydb::StatusIds::StatusCode status) {
+    switch (status) {
+        case Ydb::StatusIds::STATUS_CODE_UNSPECIFIED:
+            return NKikimrCms::TStatus::UNKNOWN;
+        case Ydb::StatusIds::SUCCESS:
+            return NKikimrCms::TStatus::OK;
+        case Ydb::StatusIds::BAD_REQUEST:
+        case Ydb::StatusIds::BAD_SESSION:
+        case Ydb::StatusIds::PRECONDITION_FAILED:
+            return NKikimrCms::TStatus::WRONG_REQUEST;
+        case Ydb::StatusIds::UNAUTHORIZED:
+            return NKikimrCms::TStatus::UNAUTHORIZED;
+        case Ydb::StatusIds::INTERNAL_ERROR:
+        case Ydb::StatusIds::UNAVAILABLE:
+        case Ydb::StatusIds::OVERLOADED:
+        case Ydb::StatusIds::TIMEOUT:
+        case Ydb::StatusIds::SESSION_EXPIRED:
+        case Ydb::StatusIds::SESSION_BUSY:
+            return NKikimrCms::TStatus::ERROR_TEMP;
+        // case Ydb::StatusIds::SCHEME_ERROR:
+        // case Ydb::StatusIds::GENERIC_ERROR:
+        // case Ydb::StatusIds::ABORTED:
+        // case Ydb::StatusIds::ALREADY_EXISTS:
+        // case Ydb::StatusIds::NOT_FOUND:
+        // case Ydb::StatusIds::CANCELLED:
+        // case Ydb::StatusIds::UNDETERMINED:
+        // case Ydb::StatusIds::UNSUPPORTED:
+        // case Ydb::StatusIds::EXTERNAL_ERROR:
+        default:
+            return NKikimrCms::TStatus::ERROR;
+    }
+}
+
 }
 
 static bool CheckMsgBusProxy(const NActors::TActorId& msgBusProxy, IRequestNoOpCtx& p) {
@@ -191,6 +225,11 @@ void DoTestShardControl(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvi
 void DoRegisterNode(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider& f) {
     NKikimr::NMsgBusProxy::TBusMessageContext ctx(std::move(p), NMsgBusProxy::MTYPE_CLIENT_NODE_REGISTRATION_REQUEST);
     f.RegisterActor(CreateMessageBusRegisterNode(ctx));
+}
+
+void DoCmsRequest(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider& f) {
+    NKikimr::NMsgBusProxy::TBusMessageContext ctx(std::move(p), NMsgBusProxy::MTYPE_CLIENT_CMS_REQUEST);
+    f.RegisterActor(CreateMessageBusCmsRequest(ctx));
 }
 
 void DoConsoleRequest(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider& f) {

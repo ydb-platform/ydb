@@ -6,6 +6,12 @@
 * Scalable {{ ydb-full-name }} table readings and writing
 * Automatic creation of tables if they do not exist
 
+{% note info %}
+
+The connector may require additional memory on the {{ spark-name }} executor side to work with better speed and performance. 4 GB or more memory per [executor](https://spark.apache.org/docs/latest/configuration.html#application-properties) is highly recommended.
+
+{% endnote %}
+
 ## How to Use {#usage}
 
 To work with {{ ydb-short-name }} in {{ spark-name }}, you need to add the {{ ydb-short-name }} Spark Connector to your {{ spark-name }} [driver](https://spark.apache.org/docs/latest/cluster-overview.html). This can be done in several ways:

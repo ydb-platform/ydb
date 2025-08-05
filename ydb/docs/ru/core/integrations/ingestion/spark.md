@@ -6,6 +6,12 @@
 * Параллельная запись и чтение таблиц {{ ydb-full-name }}
 * Автоматическое создание таблиц при их отсутствии
 
+{% note info %}
+
+Для более быстрой работы {{ ydb-full-name }} Spark Connector может потребоваться увеличить размер памяти, доступной для каждого исполнителя {{ spark-name }}. Рекомендуется указывать 4 GB или больше на один [executor](https://spark.apache.org/docs/latest/configuration.html#application-properties).
+
+{% endnote %}
+
 ## Где взять и как использовать {#usage}
 
 Для использования {{ ydb-short-name }} в {{ spark-name }} необходимо добавить {{ ydb-short-name }} Spark Connector в [драйвер {{ spark-name }}](https://spark.apache.org/docs/latest/cluster-overview.html). Это можно сделать несколькими способами:
@@ -14,18 +20,18 @@
 
   ```shell
   # Запустить spark-shell
-  ~ $ spark-shell --master <master-url> --packages tech.ydb.spark:ydb-spark-connector:2.0.1
+  ~ $ spark-shell --master <master-url> --packages tech.ydb.spark:ydb-spark-connector:2.0.1 --conf spark.executor.memory=4g
   # Или spark-sql
-  ~ $ spark-sql --master <master-url> --packages tech.ydb.spark:ydb-spark-connector:2.0.1
+  ~ $ spark-sql --master <master-url> --packages tech.ydb.spark:ydb-spark-connector:2.0.1 --conf spark.executor.memory=4g
   ```
 
 * Скачать последнюю версию shaded-сборки (вариант коннектора, включающий в себя все зависимости) из [GitHub](https://github.com/ydb-platform/ydb-spark-connector/releases) или [Маven Central](https://central.sonatype.com/artifact/tech.ydb.spark/ydb-spark-connector-shaded) и указать скачанный артефакт в опции `--jars`:
 
   ```shell
   # Запустить spark-shell
-  ~ $ spark-shell --master <master-url> --jars ~/Download/ydb-spark-connector-shaded-2.0.1.jar
+  ~ $ spark-shell --master <master-url> --jars ~/Download/ydb-spark-connector-shaded-2.0.1.jar --conf spark.executor.memory=4g
   # Или spark-sql
-  ~ $ spark-sql --master <master-url> --jars ~/Download/ydb-spark-connector-shaded-2.0.1.jar
+  ~ $ spark-sql --master <master-url> --jars ~/Download/ydb-spark-connector-shaded-2.0.1.jar --conf spark.executor.memory=4g
   ```
 
 * Так же скачанную shaded-сборку можно скопировать в папку `jars` дистрибутива {{ spark-name }}. В таком случае никаких опций указывать не требуется.
@@ -113,7 +119,7 @@ SELECT * FROM <catalog_name>.<table-path> LIMIT 10;
 В качестве примера покажем как загрузить в {{ ydb-short-name }} список всех постов StackOverflow за 2020 год. Эти данные доступны в виде parquet-файла, расположенного по адресу [https://datasets-documentation.s3.eu-west-3.amazonaws.com/stackoverflow/parquet/posts/2020.parquet](https://datasets-documentation.s3.eu-west-3.amazonaws.com/stackoverflow/parquet/posts/2020.parquet):
 
 ```shell
-~ $ spark-shell --master <master-url> --packages tech.ydb.spark:ydb-spark-connector:2.0.1
+~ $ spark-shell --master <master-url> --packages tech.ydb.spark:ydb-spark-connector:2.0.1 --conf spark.executor.memory=4g
 Spark session available as 'spark'.
 Welcome to
       ____              __
@@ -218,9 +224,10 @@ res4: Long = 843780
 
 ```shell
 ~ $ spark-sql --master <master-url> --packages tech.ydb.spark:ydb-spark-connector:2.0.1 \
-     --conf spark.sql.catalog.my_ydb=tech.ydb.spark.connector.YdbCatalog
-     --conf spark.sql.catalog.my_ydb.url=grpcs://ydb.my-host.net:2135/preprod/spark-test
-     --conf spark.sql.catalog.my_ydb.auth.token.file=~/.token
+     --conf spark.sql.catalog.my_ydb=tech.ydb.spark.connector.YdbCatalog \
+     --conf spark.sql.catalog.my_ydb.url=grpcs://ydb.my-host.net:2135/preprod/spark-test \
+     --conf spark.sql.catalog.my_ydb.auth.token.file=~/.token \
+     --conf spark.executor.memory=4g
 spark-sql (default)>
 ```
 

@@ -12,6 +12,7 @@ ydb/core/cms/ut_sentinel_unstable TSentinelUnstableTests.BSControllerCantChangeS
 ydb/core/fq/libs/row_dispatcher/format_handler/ut TestFormatHandler.ManyRawClients
 ydb/core/fq/libs/row_dispatcher/ut sole chunk chunk
 ydb/core/http_proxy/ut/inside_ydb_ut TestKinesisHttpProxy.ErroneousRequestGetRecords
+ydb/core/kafka_proxy/ut ProduceActor.OnProduceWithoutTransactionalId_shouldNotKillOldWriter
 ydb/core/keyvalue/ut_trace TKeyValueTracingTest.ReadHuge
 ydb/core/keyvalue/ut_trace TKeyValueTracingTest.ReadSmall
 ydb/core/keyvalue/ut_trace TKeyValueTracingTest.WriteHuge

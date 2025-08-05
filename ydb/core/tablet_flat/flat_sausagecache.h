@@ -60,6 +60,7 @@ public:
         }
 
         void ProvideSharedBody(TSharedPageRef sharedBody) {
+            // here sharedBody may be unused or invalid
             SharedBody = std::move(sharedBody);
             SharedBody.UnUse();
             LoadState = LoadStateNo;
@@ -115,6 +116,12 @@ public:
             return StickyPagesSize;
         }
 
+        void Clear() {
+            PageMap.clear();
+            StickyPages.clear();
+            StickyPagesSize = 0;
+        }
+
         const TLogoBlobID Id;
         const TIntrusiveConstPtr<NPageCollection::IPageCollection> PageCollection;
         TPageMap<THolder<TPage>> PageMap;
@@ -129,7 +136,7 @@ public:
     };
 
 public:
-    TIntrusivePtr<TInfo> GetPageCollection(TLogoBlobID id) const;
+    TIntrusivePtr<TInfo> GetPageCollection(const TLogoBlobID &id) const;
     void RegisterPageCollection(TIntrusivePtr<TInfo> info);
     void ForgetPageCollection(TIntrusivePtr<TInfo> info);
 

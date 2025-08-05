@@ -2166,7 +2166,9 @@ struct Schema : NIceDb::Schema {
 
         using TKey = TableKey<ShardIdx>;
         using TColumns = TableColumns<ShardIdx>;
-    struct IncrementalBackups : Table<124> {
+    };
+  
+    struct IncrementalBackups : Table<125> {
         struct Id : Column<1, NScheme::NTypeIds::Uint64> {};
         struct State : Column<2, NScheme::NTypeIds::Uint8> {};
 
@@ -2189,7 +2191,7 @@ struct Schema : NIceDb::Schema {
         >;
     };
 
-    struct IncrementalBackupItems : Table<125> {
+    struct IncrementalBackupItems : Table<126> {
         struct Id : Column<1, NScheme::NTypeIds::Uint64> {};
         struct PathOwnerId : Column<2, NScheme::NTypeIds::Uint64> { using Type = TOwnerId; };
         struct PathId : Column<3, NScheme::NTypeIds::Uint64> {};
@@ -2327,7 +2329,7 @@ struct Schema : NIceDb::Schema {
         KMeansTreeClusters,
         IncrementalRestoreState,
         IncrementalRestoreShardProgress,
-        SystemShardsToDelete
+        SystemShardsToDelete,
         IncrementalBackups,
         IncrementalBackupItems
     >;

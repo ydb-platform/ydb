@@ -124,6 +124,21 @@ TCreateActorCallback DoSchemeInitRoot(const NActors::TActorId& msgBusProxy, NAct
     };
 }
 
+void DoResolveNode(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider& f) {
+    NKikimr::NMsgBusProxy::TBusMessageContext ctx(std::move(p), NMsgBusProxy::MTYPE_CLIENT_RESOLVE_NODE);
+    f.RegisterActor(CreateMessageBusResolveNode(ctx));
+}
+
+void DoFillNode(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider& f) {
+    NKikimr::NMsgBusProxy::TBusMessageContext ctx(std::move(p), NMsgBusProxy::MTYPE_CLIENT_FILL_NODE);
+    f.RegisterActor(CreateMessageBusFillNode(ctx));
+}
+
+void DoDrainNode(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider& f) {
+    NKikimr::NMsgBusProxy::TBusMessageContext ctx(std::move(p), NMsgBusProxy::MTYPE_CLIENT_DRAIN_NODE);
+    f.RegisterActor(CreateMessageBusDrainNode(ctx));
+}
+
 void DoConsoleRequest(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider& f) {
     NKikimr::NMsgBusProxy::TBusMessageContext ctx(std::move(p), NMsgBusProxy::MTYPE_CLIENT_CONSOLE_REQUEST);
     f.RegisterActor(CreateMessageBusConsoleRequest(ctx));

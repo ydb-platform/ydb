@@ -2,6 +2,7 @@
 import logging
 from hamcrest import assert_that
 import requests
+import threading
 import time
 import yaml
 
@@ -133,6 +134,20 @@ class KiKiMRDistConfNodeStatusTest(object):
     def test_state_storage(self):
         self.do_test("StateStorage")
 
+    def kill_nodes(self, check):
+        hosts = self.configurator.yaml_config["hosts"]
+        threads = []
+        cnt = 0
+        for i in range(len(hosts)):
+            if check(hosts, i):
+                t = threading.Thread(target=lambda x=i: self.cluster.nodes[x + 1].stop())
+                t.start()
+                threads.append(t)
+                cnt += 1
+        for t in threads:
+            t.join()
+        return cnt
+
 
 class TestKiKiMRDistConfSelfHealNodeDisconnected(KiKiMRDistConfNodeStatusTest):
     erasure = Erasure.MIRROR_3_DC
@@ -143,9 +158,8 @@ class TestKiKiMRDistConfSelfHealNodeDisconnected(KiKiMRDistConfNodeStatusTest):
         assert_eq(rg["NToSelect"], 9)
         assert_eq(len(rg["Ring"]), 9)
         self.validate_contains_nodes(rg, [4])
-        self.cluster.nodes[4].stop()
+        self.kill_nodes(lambda hosts, i: i == 3)
         time.sleep(25)
-
         rg2 = get_ring_group(self.do_request_config(), configName)
         assert_eq(rg["NToSelect"], 9)
         assert_eq(len(rg["Ring"]), 9)
@@ -169,8 +183,7 @@ class TestKiKiMRDistConfSelfHeal2NodesDisconnected(KiKiMRDistConfNodeStatusTest)
         assert_eq(rg["NToSelect"], 9)
         assert_eq(len(rg["Ring"]), 9)
         self.validate_contains_nodes(rg, [2, 3])
-        self.cluster.nodes[2].stop()
-        self.cluster.nodes[3].stop()
+        self.kill_nodes(lambda hosts, i: i == 1 or i == 2)
         time.sleep(25)
         rg2 = get_ring_group(self.do_request_config(), configName)
         assert_eq(rg["NToSelect"], 9)
@@ -187,14 +200,7 @@ class TestKiKiMRDistConfSelfHealDCDisconnected(KiKiMRDistConfNodeStatusTest):
         rg = get_ring_group(self.do_request_config(), configName)
         assert_eq(rg["NToSelect"], 9)
         assert_eq(len(rg["Ring"]), 9)
-        cnt = 0
-        hosts = self.configurator.yaml_config["hosts"]
-        for i in range(len(hosts)):
-            if hosts[i]["location"]["data_center"] == "zone-2":
-                self.cluster.nodes[i + 1].stop()
-                cnt += 1
-        assert_eq(cnt, 4)
-
+        assert_eq(self.kill_nodes(lambda hosts, i: hosts[i]["location"]["data_center"] == "zone-2"), 4)
         time.sleep(25)
         rg2 = get_ring_group(self.do_request_config(), configName)
         assert_eq(rg["NToSelect"], 9)

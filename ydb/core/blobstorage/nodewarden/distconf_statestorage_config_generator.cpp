@@ -75,7 +75,14 @@ namespace NKikimr::NStorage {
     }
 
     bool TStateStoragePerPileGenerator::IsGoodConfig() const {
-        return GoodConfig;
+         for (auto &nodes : Rings) {
+            for (auto nodeId : nodes) {
+                if (CalcNodeState(nodeId, false) > 1) {
+                    return false;
+                }
+            }
+         }
+         return true;
     }
 
     void TStateStoragePerPileGenerator::AddRingGroup(NKikimrConfig::TDomainsConfig::TStateStorage *ss) {
@@ -94,14 +101,14 @@ namespace NKikimr::NStorage {
         });
         for (auto &nodes : Rings) {
             auto *ring = rg->AddRing();
-            for(auto nodeId : nodes) {
+            for (auto nodeId : nodes) {
                 ring->AddNode(nodeId);
                 UsedNodes.insert(nodeId);
             }
         }
     }
 
-    ui32 TStateStoragePerPileGenerator::CalcNodeState(ui32 nodeId, bool disconnected) {
+    ui32 TStateStoragePerPileGenerator::CalcNodeState(ui32 nodeId, bool disconnected) const {
         ui32 state = disconnected ? 0 : (SelfHealNodesState.contains(nodeId) ? SelfHealNodesState.at(nodeId) : (NodeStatesSize - 1));
         Y_ABORT_UNLESS(state < NodeStatesSize);
         Y_ABORT_UNLESS(state != NCms::NSentinel::TNodeStatusComputer::ENodeState::PRETTY_GOOD);
@@ -177,11 +184,9 @@ namespace NKikimr::NStorage {
         std::ranges::sort(group.Nodes, compByState);
         for (ui32 stateLimit : xrange(NodeStatesSize)) {
             if (PickNodesSimpleStrategy(group, stateLimit, rackStates.size() < RingsInGroupCount)) {
-                GoodConfig &= stateLimit <= 1;
                 return;
             }
         }
-        GoodConfig = false;
         STLOG(PRI_DEBUG, BS_NODE, NW103, "TStateStoragePerPileGenerator::PickNodesByState without limits");
         Y_ABORT_UNLESS(PickNodesSimpleStrategy(group, NodeStatesSize, true));
     }

@@ -22,8 +22,8 @@
 #include <util/string/escape.h>
 #include <util/system/byteorder.h>
 
+
 #define VERIFY_RESULT_BLOB(blob, pos) \
-    Y_ABORT_UNLESS(!blob.Data.empty(), "Empty data. SourceId: %s, SeqNo: %" PRIu64, blob.SourceId.data(), blob.SeqNo); \
     Y_ABORT_UNLESS(blob.SeqNo <= (ui64)Max<i64>(), "SeqNo is too big: %" PRIu64, blob.SeqNo);
 
 namespace NKikimr::NPQ {
@@ -375,8 +375,9 @@ ui64 GetFirstHeaderOffset(const TKey& key, const TString& blob)
 bool TReadInfo::UpdateUsage(const TClientBlob& blob,
                             ui32& cnt, ui32& size, ui32& lastBlobSize) const
 {
-    size += blob.GetBlobSize();
-    lastBlobSize += blob.GetBlobSize();
+    size += blob.GetBlobSize(AppData()->FeatureFlags.GetEnableTopicMessageKeySaving());
+    lastBlobSize += blob.GetBlobSize(
+        AppData()->FeatureFlags.GetEnableTopicMessageKeySaving());
 
     if (blob.IsLastPart()) {
         bool messageSkippingBehaviour =
@@ -442,7 +443,7 @@ TMaybe<TReadAnswer> TReadInfo::AddBlobsFromBody(const TVector<NPQ::TRequestedBlo
             readResult->SetEndOffset(endOffset);
             return TReadAnswer{answerSize, std::move(answer)};
         }
-        Y_ABORT_UNLESS(blobValue.size() == blobs[pos].Size, "value for offset %" PRIu64 " count %u size must be %u, but got %u",
+        Y_ABORT_UNLESS(blobValue.size() <= blobs[pos].Size, "value for offset %" PRIu64 " count %u size must be %u, but got %u",
                                                         offset, count, blobs[pos].Size, (ui32)blobValue.size());
 
         if (offset > Offset || (offset == Offset && partNo > PartNo)) { // got gap
@@ -488,7 +489,6 @@ TMaybe<TReadAnswer> TReadInfo::AddBlobsFromBody(const TVector<NPQ::TRequestedBlo
                                                   Destination != 0, ctx.Now()
                                               );
                 }
-
                 AddResultBlob(readResult, res, Offset);
 
                 if (res.IsLastPart()) {
@@ -526,6 +526,7 @@ TReadAnswer TReadInfo::FormAnswer(
     Y_UNUSED(meteringMode);
     Y_UNUSED(partition);
     auto answer = MakeHolder<TEvPQ::TEvProxyResponse>(destination);
+
     NKikimrClient::TResponse& res = *answer->Response;
     const TEvPQ::TEvBlobResponse* response = &blobResponse;
     if (HasError(blobResponse)) {
@@ -561,10 +562,10 @@ TReadAnswer TReadInfo::FormAnswer(
 
     ui32 lastBlobSize = 0;
     const TVector<TRequestedBlob>& blobs = response->GetBlobs();
-
+    const bool saveMsgKey = AppData()->FeatureFlags.GetEnableTopicMessageKeySaving();
     auto updateUsage = [&](const TClientBlob& blob) {
-        size += blob.GetBlobSize();
-        lastBlobSize += blob.GetBlobSize();
+        size += blob.GetBlobSize(saveMsgKey);
+        lastBlobSize += blob.GetBlobSize(saveMsgKey);
         if (blob.IsLastPart()) {
             bool messageSkippingBehaviour = AppData()->PQConfig.GetTopicsAreFirstClassCitizen() &&
                     ReadTimestampMs > blob.WriteTimestamp.MilliSeconds();
@@ -610,7 +611,7 @@ TReadAnswer TReadInfo::FormAnswer(
         for (const auto& writeBlob : Cached) {
             VERIFY_RESULT_BLOB(writeBlob, 0u);
 
-            readResult->SetBlobsCachedSize(readResult->GetBlobsCachedSize() + writeBlob.GetBlobSize());
+            readResult->SetBlobsCachedSize(readResult->GetBlobsCachedSize() + writeBlob.GetBlobSize(saveMsgKey));
 
             if (userInfo) {
                 userInfo->AddTimestampToCache(
@@ -941,7 +942,9 @@ void TPartition::ProcessTimestampsForNewData(const ui64 prevEndOffset, const TAc
 
 void TPartition::Handle(TEvPQ::TEvProxyResponse::TPtr& ev, const TActorContext& ctx) {
     ReadingTimestamp = false;
+
     auto userInfo = UsersInfoStorage->GetIfExists(ReadingForUser);
+
     if (!userInfo || userInfo->ReadRuleGeneration != ReadingForUserReadRuleGeneration) {
         PQ_LOG_I("Topic '" << TopicConverter->GetClientsideName() << "'" <<
             " partition " << Partition <<
@@ -1020,7 +1023,6 @@ void TPartition::ProcessTimestampRead(const TActorContext& ctx) {
 void TPartition::ProcessRead(const TActorContext& ctx, TReadInfo&& info, const ui64 cookie, bool subscription) {
     ui32 count = 0;
     ui32 size = 0;
-
     Y_ABORT_UNLESS(!info.User.empty());
     auto& userInfo = UsersInfoStorage->GetOrCreate(info.User, ctx);
 

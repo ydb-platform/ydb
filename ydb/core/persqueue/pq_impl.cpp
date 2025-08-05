@@ -170,9 +170,6 @@ private:
         Y_ABORT_UNLESS(readResult.ResultSize() > 0 || isDirectRead);
         bool isStart = false;
         if (!responseRecord.HasPartitionResponse()) {
-            if (readResult.ResultSize() > 0) {
-                Y_ABORT_UNLESS(!readResult.GetResult(0).HasPartNo() || readResult.GetResult(0).GetPartNo() == 0); //starts from begin of record
-            }
             auto partResp = responseRecord.MutablePartitionResponse();
             auto readRes = partResp->MutableCmdReadResult();
             readRes->SetBlobsFromDisk(readRes->GetBlobsFromDisk() + readResult.GetBlobsFromDisk());
@@ -199,23 +196,33 @@ private:
 
         for (ui32 i = 0; i < readResult.ResultSize(); ++i) {
             bool isNewMsg = !readResult.GetResult(i).HasPartNo() || readResult.GetResult(i).GetPartNo() == 0;
+            bool isEmptyPart = readResult.GetResult(i).GetTotalParts() > 1 && readResult.GetResult(i).GetData().empty();
             if (!isStart) {
                 Y_ABORT_UNLESS(partResp->ResultSize() > 0);
                 auto& back = partResp->GetResult(partResp->ResultSize() - 1);
                 bool lastMsgIsNotFull = back.GetPartNo() + 1 < back.GetTotalParts();
-                bool trancate = lastMsgIsNotFull && isNewMsg;
+                bool trancate = lastMsgIsNotFull && (
+                        isNewMsg  // Multipart message with missing part, remove it.
+                        || isEmptyPart && back.GetOffset() == readResult.GetResult(i).GetOffset()); // Got empty part for multipart message
+                        // which was already stored in partResp; This message should've been cut out by compactification. Remove it from response;
+
                 if (trancate) {
                     partResp->MutableResult()->RemoveLast();
-                    if (partResp->GetResult().empty()) isStart = false;
+                    if (partResp->GetResult().empty()) isStart = true;
                 }
             }
-
+            if (isEmptyPart) { //Multipart message containing empty part. Ignore the part.
+                continue;
+            }
             if (isNewMsg) {
                 if (!isStart && readResult.GetResult(i).HasTotalParts()
                              && readResult.GetResult(i).GetTotalParts() + i > readResult.ResultSize()) //last blob is not full
                     break;
-                partResp->AddResult()->CopyFrom(readResult.GetResult(i));
-                isStart = false;
+                if (!readResult.GetResult(i).GetData().empty()) {
+                    partResp->AddResult()->CopyFrom(readResult.GetResult(i));
+                    isStart = false;
+                }
+
             } else { //glue to last res
                 auto rr = partResp->MutableResult(partResp->ResultSize() - 1);
                 if (rr->GetSeqNo() != readResult.GetResult(i).GetSeqNo() || rr->GetPartNo() + 1 != readResult.GetResult(i).GetPartNo()) {
@@ -226,6 +233,7 @@ private:
                 Y_ABORT_UNLESS(rr->GetSeqNo() == readResult.GetResult(i).GetSeqNo());
                 (*rr->MutableData()) += readResult.GetResult(i).GetData();
                 rr->SetPartitionKey(readResult.GetResult(i).GetPartitionKey());
+                rr->SetMessageKey(readResult.GetResult(i).GetMessageKey());
                 rr->SetExplicitHash(readResult.GetResult(i).GetExplicitHash());
                 rr->SetPartNo(readResult.GetResult(i).GetPartNo());
                 rr->SetUncompressedSize(rr->GetUncompressedSize() + readResult.GetResult(i).GetUncompressedSize());
@@ -2162,7 +2170,7 @@ void TPersQueue::HandleWriteRequest(const ui64 responseCookie, NWilson::TTraceId
                 msgs.push_back({cmd.GetSourceId(), static_cast<ui64>(cmd.GetSeqNo()), partNo,
                     totalParts, totalSize, createTimestampMs, receiveTimestampMs,
                     disableDeduplication, writeTimestampMs, data, uncompressedSize,
-                    cmd.GetPartitionKey(), cmd.GetExplicitHash(), cmd.GetExternalOperation(),
+                    cmd.GetPartitionKey(), cmd.GetExplicitHash(), cmd.GetMessageKey(), cmd.GetExternalOperation(),
                     cmd.GetIgnoreQuotaDeadline(), heartbeatVersion, cmd.GetEnableKafkaDeduplication(),
                     (cmd.HasProducerEpoch() ? TMaybe<i32>(cmd.GetProducerEpoch()) : Nothing())
                 });
@@ -2196,7 +2204,7 @@ void TPersQueue::HandleWriteRequest(const ui64 responseCookie, NWilson::TTraceId
             msgs.push_back({cmd.GetSourceId(), static_cast<ui64>(cmd.GetSeqNo()), static_cast<ui16>(cmd.HasPartNo() ? cmd.GetPartNo() : 0),
                 static_cast<ui16>(cmd.HasPartNo() ? cmd.GetTotalParts() : 1), totalSize,
                 createTimestampMs, receiveTimestampMs, disableDeduplication, writeTimestampMs, data,
-                cmd.HasUncompressedSize() ? cmd.GetUncompressedSize() : 0u, cmd.GetPartitionKey(), cmd.GetExplicitHash(),
+                cmd.HasUncompressedSize() ? cmd.GetUncompressedSize() : 0u, cmd.GetPartitionKey(), cmd.GetExplicitHash(), cmd.GetMessageKey(),
                 cmd.GetExternalOperation(), cmd.GetIgnoreQuotaDeadline(), heartbeatVersion, cmd.GetEnableKafkaDeduplication(),
                 (cmd.HasProducerEpoch() ? TMaybe<i32>(cmd.GetProducerEpoch()) : Nothing())
             });
@@ -2706,7 +2714,7 @@ void TPersQueue::HandleEventForSupportivePartition(const ui64 responseCookie,
         if (!req.GetNeedSupportivePartition()) {
             // missing supportivce partition in kafka transaction means that we already committed and deleted transaction for current producerId + producerEpoch
             NPersQueue::NErrorCode::EErrorCode errorCode = writeId.KafkaApiTransaction ?
-                NPersQueue::NErrorCode::KAFKA_TRANSACTION_MISSING_SUPPORTIVE_PARTITION : 
+                NPersQueue::NErrorCode::KAFKA_TRANSACTION_MISSING_SUPPORTIVE_PARTITION :
                 NPersQueue::NErrorCode::PRECONDITION_FAILED;
             TString error = writeId.KafkaApiTransaction ?
                 "Kafka transaction and there is no supportive partition for current producerId and producerEpoch. It means GetOwnership request was not called from TPartitionWriter" :
@@ -4872,6 +4880,7 @@ TPartition* TPersQueue::CreatePartitionActor(const TPartitionId& partitionId,
                           SubDomainOutOfSpace,
                           (ui32)channels,
                           GetPartitionQuoter(partitionId),
+                          AppData()->FeatureFlags,
                           newPartition);
 }
 

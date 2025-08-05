@@ -2682,5 +2682,62 @@ Y_UNIT_TEST(PQ_Tablet_Does_Not_Remove_The_Blob_Until_The_Reading_Is_Complete)
     UNIT_ASSERT(!keys.contains("d0000000000_00000000000000000003_00000_0000000001_00014"));
 }
 
+Y_UNIT_TEST(IncompleteProxyResponse) {
+    TTestContext tc;
+    tc.EnableDetailedPQLog = true;
+    TString user{"user1"};
+    tc.Prepare();
+    tc.Runtime->SetScheduledLimit(1000);
+
+    PQTabletPrepare({.partitions = 1, .writeSpeed = 10_MB}, {{user, true}}, tc);
+    TVector<std::pair<ui64, TString>> data;
+    TString s{2_MB, 'c'};
+    for (auto i = 0u; i < 5; ++i) {
+        data.push_back({i + 1, s});
+    }
+    CmdWrite(0, "sourceid0", data, tc, false, {}, false, "", -1, 0, false, false, true);
+    for (auto& d : data) {
+        d.first += 5;
+    }
+    CmdWrite(0, "sourceid0", data, tc, false, {}, false, "", -1, 5, false, false, true);
+
+    auto observer = [&](TAutoPtr<IEventHandle> &ev) {
+        if (auto event = ev->CastAsLocal<TEvPersQueue::TEvResponse>(); event) {
+            if (event->Record.HasPartitionResponse() &&
+                event->Record.GetPartitionResponse().HasCmdReadResult()) {
+                auto& readResult = *event->Record.MutablePartitionResponse()->MutableCmdReadResult();
+                NKikimrClient::TCmdReadResult newReadResult;
+                for (auto& res : readResult.GetResult()) {
+                    newReadResult.AddResult()->CopyFrom(res);
+                    if (res.GetOffset() == 1) { // First part deleted, other parts null
+                        if (res.GetPartNo() == 0) {
+                            newReadResult.MutableResult()->RemoveLast();
+                            continue;
+                        }
+                        newReadResult.MutableResult(newReadResult.ResultSize() - 1)->SetData("");
+                        newReadResult.MutableResult(newReadResult.ResultSize() - 1)->SetUncompressedSize(0);
+                    } else if (res.GetOffset() == 3) { // First last part deleted, other parts null
+                        if (res.GetPartNo() == res.GetTotalParts() - 1) {
+                            newReadResult.MutableResult()->RemoveLast();
+                            continue;
+                        }
+                        newReadResult.MutableResult(newReadResult.ResultSize() - 1)->SetData("");
+                        newReadResult.MutableResult(newReadResult.ResultSize() - 1)->SetUncompressedSize(0);
+                    } if (res.GetOffset() == 5) { // All parts null
+                        newReadResult.MutableResult(newReadResult.ResultSize() - 1)->SetData("");
+                        newReadResult.MutableResult(newReadResult.ResultSize() - 1)->SetUncompressedSize(0);
+                    }
+                }
+                readResult.MutableResult()->CopyFrom(newReadResult.GetResult());
+            }
+        }
+        return TTestActorRuntime::EEventAction::PROCESS;
+    };
+    tc.Runtime->SetObserverFunc(observer);
+    CmdRead(0, 0, 10, 20_MB, 4, false, tc, {0, 2, 4, 6});
+    CmdRead(0, 2, 10, 20_MB, 4, false, tc, {2, 4, 6, 7});
+    CmdRead(0, 5, 10, 20_MB, 3, false, tc, {6, 7, 8});
+    CmdRead(0, 7, 10, 20_MB, 3, false, tc, {7, 8, 9});
+}
 } // Y_UNIT_TEST_SUITE(TPQTest)
 } // namespace NKikimr::NPQ

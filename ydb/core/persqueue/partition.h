@@ -15,6 +15,7 @@
 #include "partition_blob_encoder.h"
 
 #include <ydb/core/keyvalue/keyvalue_events.h>
+#include <ydb/core/protos/feature_flags.pb.h>
 #include <ydb/library/persqueue/counter_time_keeper/counter_time_keeper.h>
 
 #include <ydb/library/actors/core/actor.h>
@@ -486,7 +487,7 @@ public:
     TPartition(ui64 tabletId, const TPartitionId& partition, const TActorId& tablet, ui32 tabletGeneration, const TActorId& blobCache,
                const NPersQueue::TTopicConverterPtr& topicConverter, TString dcId, bool isServerless,
                const NKikimrPQ::TPQTabletConfig& config, const TTabletCountersBase& counters, bool SubDomainOutOfSpace, ui32 numChannels,
-               const TActorId& writeQuoterActorId, bool newPartition = false,
+               const TActorId& writeQuoterActorId, const NKikimrConfig::TFeatureFlags& featureFlags, bool newPartition = false,
                TVector<TTransaction> distrTxs = {});
 
     void Bootstrap(const TActorContext& ctx);

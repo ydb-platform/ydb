@@ -31,6 +31,12 @@ A unique secondary index is a synchronous index, so the update process is the sa
 
 Currently, a unique index cannot be added to an existing table.
 
+## Vector index
+
+[Vector Index](../../dev/vector-indexes.md) is a special type of secondary index.
+
+Unlike secondary indexes, which optimize equality or range searches, vector indexes allow [vector search](../vector_search.md) based on distance or similarity functions.
+
 ## Creating a secondary index online {#index-add}
 
 {{ ydb-short-name }} lets you create new and delete existing secondary indexes without stopping the service. For a single table, you can only create one index at a time.

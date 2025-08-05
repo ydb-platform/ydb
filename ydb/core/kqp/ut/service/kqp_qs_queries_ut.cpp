@@ -4510,7 +4510,6 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
             csController->SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(1));
             csController->SetOverrideLagForCompactionBeforeTierings(TDuration::Seconds(1));
-            csController->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Indexation);
 
             const TString query = Sprintf(R"(
                 CREATE TABLE `/Root/DataShard` (
@@ -4527,8 +4526,6 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
             DoExecute();
-            csController->EnableBackground(NKikimr::NYDBTest::ICSController::EBackground::Indexation);
-            csController->WaitIndexation(TDuration::Seconds(5));
         }
 
     };
@@ -6163,6 +6160,89 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
             CompareYson(R"([[4u]])", FormatResultSetYson(result.GetResultSet(0)));
+        }
+    }
+    Y_UNIT_TEST_TWIN(LargeUpsert, UseSink) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
+        auto settings = TKikimrSettings()
+            .SetAppConfig(appConfig)
+            .SetWithSampleTables(false);
+
+        TKikimrRunner kikimr(settings);
+        Tests::NCommon::TLoggerInit(kikimr).Initialize();
+
+        
+        {
+            auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+
+            const TString query = Sprintf(R"(
+                CREATE TABLE `/Root/DataShard` (
+                    Key Uint64 NOT NULL,
+                    Value String,
+                    PRIMARY KEY (Key)
+                ) WITH (
+                    AUTO_PARTITIONING_BY_SIZE = DISABLED,
+                    AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 64,
+                    AUTO_PARTITIONING_MAX_PARTITIONS_COUNT = 64,
+                    UNIFORM_PARTITIONS = 64
+                );
+            )");
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            auto client = kikimr.GetQueryClient();
+            auto session = client.GetSession().GetValueSync().GetSession();
+            auto tx = session.BeginTransaction(TTxSettings::SerializableRW()).ExtractValueSync().GetTransaction();
+
+            const int batchesCount = 5;
+            const int rowsCount = 48'000;
+            const int rowLen = 1000;
+
+            for (int i = 0; i < batchesCount; ++i) {
+                TParamsBuilder params;
+                auto& rowsParam = params.AddParam("$rows");
+                rowsParam.BeginList();
+                for (int rowIndex = 0; rowIndex < rowsCount; ++rowIndex) {
+                    rowsParam.AddListItem()
+                        .BeginStruct()
+                        .AddMember("Key").Uint64(rowIndex + rowsCount * i)
+                        .AddMember("Value").String(TString(rowLen, '?'))
+                        .EndStruct();
+                }
+                rowsParam.EndList();
+                rowsParam.Build();
+
+                auto query = R"(
+                    PRAGMA kikimr.KqpForceImmediateEffectsExecution="true";
+
+                    DECLARE $rows AS List<Struct<
+                        Key: Uint64,
+                        Value: String
+                    >>;
+                    
+                    UPSERT INTO `/Root/DataShard`
+                    SELECT * FROM AS_TABLE($rows);
+                )";
+                
+                auto result = session.ExecuteQuery(query, TTxControl::Tx(tx.GetId()), params.Build()).GetValueSync();
+                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+                Sleep(TDuration::MilliSeconds(500));
+            }
+            
+            auto commitResult = tx.Commit().GetValueSync();
+            UNIT_ASSERT_C(commitResult.IsSuccess(), commitResult.GetIssues().ToString());
+        }
+
+        {
+            auto client = kikimr.GetQueryClient();
+            auto result = client.ExecuteQuery(Q_(R"(
+                SELECT COUNT(*) FROM `/Root/DataShard`;
+            )"), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
+            UNIT_ASSERT(result.IsSuccess());
+            CompareYson(R"([[240000u]])", FormatResultSetYson(result.GetResultSet(0)));
         }
     }
 }

@@ -10,7 +10,6 @@
 #include <ydb/core/tablet_flat/flat_row_state.h>
 
 #include <ydb/core/tx/tx_proxy/proxy.h>
-#include <ydb/core/tx/tx_proxy/upload_rows.h>
 
 #include <ydb/core/ydb_convert/table_description.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
@@ -115,62 +114,64 @@ public:
     }
 
     EScan Seek(TLead& lead, ui64 seq) noexcept final {
-        try {
-            LOG_D("Seek " << seq << " " << Debug());
+    try {
+        LOG_T("Seek " << seq << " " << Debug());
 
-            lead = Lead;
+        lead = Lead;
 
-            return EScan::Feed;
-        } catch (const std::exception& exc) {
-            HasBuildError = true;
-            Issues.AddIssue(NYql::TIssue(TStringBuilder()
-                << "Scan failed " << exc.what()));
-            return EScan::Final;
-        }
+        return EScan::Feed;
+    } catch (const std::exception& exc) {
+        HasBuildError = true;
+        Issues.AddIssue(NYql::TIssue(TStringBuilder()
+            << "Scan failed " << exc.what()));
+        return EScan::Final;
+    }
     }
 
-    EScan Feed(TArrayRef<const TCell> key, const TRow& row) noexcept final {
-        try {
-            LOG_T("Feed " << Debug());
+    EScan Feed(TArrayRef<const TCell> key, const TRow& row) noexcept final
+    {
+    try {
+        // LOG_T("Feed " << Debug());
 
-            ++ReadRows;
-            ReadBytes += CountBytes(key, row);
+        ++ReadRows;
+        ReadBytes += CountRowCellBytes(key, *row);
 
-            Sampler.Add([&row](){
-                return TSerializedCellVec::Serialize(*row);
-            });
+        Sampler.Add([&row](){
+            return TSerializedCellVec::Serialize(*row);
+        });
 
-            if (Sampler.GetMaxProbability() == 0) {
-                return EScan::Final;
-            }
-
-            return EScan::Feed;
-        } catch (const std::exception& exc) {
-            HasBuildError = true;
-            Issues.AddIssue(NYql::TIssue(TStringBuilder()
-                << "Scan failed " << exc.what()));
+        if (Sampler.GetMaxProbability() == 0) {
             return EScan::Final;
         }
+
+        return EScan::Feed;
+    } catch (const std::exception& exc) {
+        HasBuildError = true;
+        Issues.AddIssue(NYql::TIssue(TStringBuilder()
+            << "Scan failed " << exc.what()));
+        return EScan::Final;
+    }
     }
 
     EScan Exhausted() noexcept final
     {
-        try {
-            LOG_D("Exhausted " << Debug());
+    try {
+        LOG_T("Exhausted " << Debug());
 
-            return EScan::Final;
-        } catch (const std::exception& exc) {
-            HasBuildError = true;
-            Issues.AddIssue(NYql::TIssue(TStringBuilder()
-                << "Scan failed " << exc.what()));
-            return EScan::Final;
-        }
+        return EScan::Final;
+    } catch (const std::exception& exc) {
+        HasBuildError = true;
+        Issues.AddIssue(NYql::TIssue(TStringBuilder()
+            << "Scan failed " << exc.what()));
+        return EScan::Final;
+    }
     }
 
     TAutoPtr<IDestructable> Finish(EAbort abort) noexcept final {
         auto& record = Response->Record;
-        record.SetReadRows(ReadRows);
-        record.SetReadBytes(ReadBytes);
+        record.MutableMeteringStats()->SetReadRows(ReadRows);
+        record.MutableMeteringStats()->SetReadBytes(ReadBytes);
+        record.MutableMeteringStats()->SetCpuTimeUs(Driver->GetTotalCpuTimeUs());
 
         if (HasBuildError) {
             record.SetStatus(NKikimrIndexBuilder::EBuildStatus::BUILD_ERROR);

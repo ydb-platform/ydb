@@ -117,114 +117,90 @@ public:
     }
 };
 
+template<class T = TSocketDescriptor> // for tests
 class TBufferedWriter {
 public:
-    TBufferedWriter(TSocketDescriptor* socket, size_t size)
+    TBufferedWriter(T* socket, size_t size)
         : Socket(socket)
-        , Buffer(size) {
+        , BufferSize(size) {
     }
 
-    /**
-    * Writes data to the socket buffer.
-    *
-    * This method writes the specified number of bytes from the source buffer to the internal buffer.
-    * If the internal buffer becomes full, it flushes the buffer to the socket. The process repeats until all data is written.
-    *
-    * @param src A pointer to the source buffer containing the data to be written.
-    * @param length The number of bytes to write from the source buffer.
-    * @return The total number of bytes written to the socket. If an error occurs during writing, a negative value is returned.
-    */
-    [[nodiscard]] ssize_t write(const char* src, size_t length) {
+    void write(const char* src, size_t length) {
         size_t left = length;
         size_t offset = 0;
-        ssize_t totalWritten = 0;
+
         do {
-            if (Buffer.Avail() < left) { // time to flush
-                // flush the remains from buffer, than write straight to socket if we have a lot data
-                if (!Empty()) {
-                    ssize_t flushRes = flush();
-                    if (flushRes < 0) {
-                        // less than zero means error
-                        return flushRes;
-                    } else {
-                        totalWritten += flushRes;
-                    }
-                }
-                // if we have a lot data, skip copying it to buffer, just send ot straight to socket
-                if (left > Buffer.Capacity()) {
-                    // we send only small batch to socket, cause we know for sure that it will be written to socket without error
-                    // there was a bug when we wrote to socket one big batch and OS closed the connection in case message was bigger than 6mb and SSL was enabled
-                    size_t bytesToSend = std::min(left, MAX_SOCKET_BATCH_SIZE);
-                    ssize_t sendRes = Send(src + offset, bytesToSend);
-                    if (sendRes <= 0) {
-                        // less than zero means error
-                        // exactly zero is also interpreted as error
-                        return sendRes;
-                    } else {
-                        left -= sendRes;
-                        offset += sendRes;
-                        totalWritten += sendRes;
-                    }
-                } else {
-                    Buffer.Append(src + offset, left);
-                    left = 0;   
-                }
+            TBuffer& buffer = GetOrCreateFrontBuffer();
+            if (buffer.Avail() < left) {
+                size_t avail = buffer.Avail();
+                buffer.Append(src + offset, avail);
+                offset += avail;
+                left -= avail;
+                BuffersDeque.push_front(TBuffer(BufferSize));
             } else {
-                Buffer.Append(src + offset, left);
-                left = 0;
+                buffer.Append(src + offset, left);
+                break;
             }
         } while (left > 0);
+    }
+
+    [[nodiscard]] ssize_t flush() {
+        size_t totalWritten = 0;
+
+        while (!BuffersDeque.empty()) {
+            TBuffer& buffer = BuffersDeque.back();
+            ssize_t left = buffer.Size() - CurrentBufferOffset;
+            while (left > 0) {
+                ssize_t res = Send(buffer.Data() + CurrentBufferOffset, left);
+                if (res < 0) {
+                    return res;
+                } else if (res == left) {
+                    totalWritten += res;
+                    CurrentBufferOffset = 0;
+                    BuffersDeque.pop_back();
+                    break;
+                } else {
+                    left -= res;
+                    CurrentBufferOffset += res;
+                    totalWritten += res;
+                }
+            }
+        }
 
         return totalWritten;
     }
 
-    [[nodiscard]] ssize_t flush() {
-        if (Empty()) {
-            return 0;
-        }
-        ssize_t res = Send(Data(), Size());
-        if (res > 0) {
-            Buffer.Clear();
-        }
-        return res;
+    TBuffer& GetFrontBuffer() {
+        return GetOrCreateFrontBuffer();
     }
 
-    const char* Data() {
-        return Buffer.Data();
+    bool Empty() const {
+        return BuffersDeque.empty();
     }
 
-    const TBuffer& GetBuffer() {
-        return Buffer;
-    }
-
-    size_t Size() {
-        return Buffer.Size();
-    }
-
-    bool Empty() {
-        return Buffer.Empty();
+    const TDeque<TBuffer>& GetBuffersDeque() const {
+        return BuffersDeque;
     }
 
 private:
-    static constexpr ui32 MAX_RETRY_ATTEMPTS = 3;
-    static constexpr size_t MAX_SOCKET_BATCH_SIZE = 1_MB;
-    TSocketDescriptor* Socket;
-    TBuffer Buffer;
+    T* Socket;
+    size_t BufferSize;
+    TDeque<TBuffer> BuffersDeque = {};
+    size_t CurrentBufferOffset = 0;
 
     ssize_t Send(const char* data, size_t length) {
-        ui32 retryAttemtpts = MAX_RETRY_ATTEMPTS;
-        while (true) {
-            ssize_t res = Socket->Send(data, length);
-            // retry 
-            if ((-res == EAGAIN || -res == EWOULDBLOCK || -res == EINTR) && retryAttemtpts--) {
-                continue;
-            }
-            
-            return res;
-        }
+        ssize_t res = Socket->Send(data, length);
         
-        Y_UNREACHABLE();
+        return res;
+    }
+
+    TBuffer& GetOrCreateFrontBuffer() {
+        if (BuffersDeque.empty()) {
+            BuffersDeque.push_front(TBuffer(BufferSize));
+        }
+        return BuffersDeque.front();
     }
 };
 
 } // namespace NKikimr::NRawSocket
+

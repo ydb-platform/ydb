@@ -459,6 +459,7 @@ public:
     NMonitoring::THistogramPtr ScanTxTotalTimeHistogram;
 
     NMonitoring::TDynamicCounters::TCounterPtr RowsDuplicationsFound;
+    ::NMonitoring::TDynamicCounters::TCounterPtr ForcedImmediateEffectsExecution;
 
     // Locality metrics for request
     NMonitoring::TDynamicCounters::TCounterPtr TotalSingleNodeReqCount;

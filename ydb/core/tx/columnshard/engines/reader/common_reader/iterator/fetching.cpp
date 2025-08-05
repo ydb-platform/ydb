@@ -67,6 +67,8 @@ TConclusion<bool> TFetchingScriptCursor::Execute(const std::shared_ptr<IDataSour
 
         const TMonotonic startInstant = TMonotonic::Now();
         const TConclusion<bool> resultStep = step->ExecuteInplace(source, *this);
+        const auto executionTime = TMonotonic::Now() - startInstant;
+        source->GetContext()->GetCommonContext()->GetCounters().AddExecutionDuration(executionTime);
         FlushDuration(TMonotonic::Now() - startInstant);
         if (!resultStep) {
             return resultStep;

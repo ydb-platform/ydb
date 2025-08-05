@@ -145,6 +145,9 @@
 /* Define to 1 if you have the `if_nametoindex' function. */
 #define HAVE_IF_NAMETOINDEX 1
 
+/* Define to 1 if you have the `GetBestRoute2' function. */
+/* #undef HAVE_GETBESTROUTE2 */
+
 /* Define to 1 if you have the `ConvertInterfaceIndexToLuid' function. */
 /* #undef HAVE_CONVERTINTERFACEINDEXTOLUID */
 

@@ -68,7 +68,7 @@ EExecutionStatus TExecuteDataTxUnit::Execute(TOperation::TPtr op,
 
     if (op->IsImmediate()) {
         // Every time we execute immediate transaction we may choose a new mvcc version
-        op->MvccReadWriteVersion.reset();
+        op->CachedMvccVersion.reset();
     }
 
     TActiveTransaction* tx = dynamic_cast<TActiveTransaction*>(op.Get());
@@ -233,9 +233,8 @@ void TExecuteDataTxUnit::ExecuteDataTx(TOperation::TPtr op,
     DataShard.ReleaseCache(*tx);
     tx->GetDataTx()->ResetCounters();
 
-    auto [readVersion, writeVersion] = DataShard.GetReadWriteVersions(tx);
-    tx->GetDataTx()->SetReadVersion(readVersion);
-    tx->GetDataTx()->SetWriteVersion(writeVersion);
+    auto mvccVersion = DataShard.GetMvccVersion(tx);
+    tx->GetDataTx()->SetMvccVersion(mvccVersion);
 
     // TODO: is it required to always prepare outgoing read sets?
     if (!engine->IsAfterOutgoingReadsetsExtracted()) {
@@ -326,7 +325,7 @@ void TExecuteDataTxUnit::ExecuteDataTx(TOperation::TPtr op,
         TVector<ui64> participants; // empty participants
         DataShard.GetVolatileTxManager().PersistAddVolatileTx(
             tx->GetTxId(),
-            writeVersion,
+            mvccVersion,
             commitTxIds,
             tx->GetDataTx()->GetVolatileDependencies(),
             participants,

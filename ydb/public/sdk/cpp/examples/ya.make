@@ -7,4 +7,5 @@ RECURSE(
     topic_reader
     ttl
     vector_index
+    vector_index_builtin
 )

@@ -599,6 +599,9 @@ TVector<ISubOperation::TPtr> CreateConsistentMoveIndex(TOperationId nextId, cons
     for(const auto& implTable : srcIndexPath.Base()->GetChildren()) {
         TString srcImplTableName = implTable.first;
         TPath srcImplTable = srcIndexPath.Child(srcImplTableName);
+        if (srcImplTable.IsDeleted()) {
+            continue;
+        }
 
         Y_ABORT_UNLESS(srcImplTable.Base()->PathId == implTable.second);
 

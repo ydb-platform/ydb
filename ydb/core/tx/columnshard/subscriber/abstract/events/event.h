@@ -6,7 +6,8 @@ namespace NKikimr::NColumnShard::NSubscriber {
 
 enum class EEventType {
     Undefined,
-    TablesErased
+    TablesErased,
+    TxCompleted,
 };
 
 class ISubscriptionEvent {

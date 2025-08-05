@@ -8,6 +8,8 @@
 #include <ydb/core/tx/long_tx_service/public/lock_handle.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 
+#include <ydb/core/kafka_proxy/kafka_producer_instance_id.h>
+
 #include <ydb/library/actors/core/actor.h>
 
 #include <util/system/types.h>
@@ -36,6 +38,7 @@ public:
     bool GetKillReadSession() const;
     bool GetOnlyCheckCommitedToFinish() const;
     TString GetReadSessionId() const;
+    ui64 GetKafkaCommitOffset() const;
 
     void AddOperation(const TString& consumer,
                       const NKikimrKqp::TTopicOperationsRequest_TopicOffsets_PartitionOffsets_OffsetsRange& range,
@@ -43,6 +46,9 @@ public:
                       bool killReadSession = false,
                       bool onlyCheckCommitedToFinish = false,
                       const TString& readSessionId = {});
+    void AddKafkaApiOffsetCommit(const TString& consumer, ui64 offset);
+    
+    bool IsKafkaApiOperation() const;
 
     void Merge(const TConsumerOperations& rhs);
 
@@ -61,6 +67,7 @@ private:
     bool KillReadSession_ = false;
     bool OnlyCheckCommitedToFinish_ = false;
     TString ReadSessionId_;
+    TMaybe<ui64> KafkaCommitOffset_;
 };
 
 struct TTopicOperationTransaction {
@@ -84,6 +91,9 @@ public:
                       const TString& readSessionId = {});
     void AddOperation(const TString& topic, ui32 partition,
                       TMaybe<ui32> supportivePartition);
+    void AddKafkaApiWriteOperation(const TString& topic, ui32 partition, const NKafka::TProducerInstanceId& producerInstanceId);
+    
+    void AddKafkaApiReadOperation(const TString& topic, ui32 partition, const TString& consumerName, ui64 offset);
 
     void BuildTopicTxs(TTopicOperationTransactions &txs);
 
@@ -91,6 +101,7 @@ public:
 
     void SetTabletId(ui64 value);
     ui64 GetTabletId() const;
+    bool HasTabletId() const;
 
     TMaybe<TString> GetTopicName() const;
 
@@ -104,6 +115,7 @@ private:
     bool HasWriteOperations_ = false;
     TMaybe<ui64> TabletId_;
     TMaybe<ui32> SupportivePartition_;
+    TMaybe<NKafka::TProducerInstanceId> KafkaProducerInstanceId_;
 };
 
 struct TTopicPartition {
@@ -126,9 +138,11 @@ public:
     bool HasOperations() const;
     bool HasReadOperations() const;
     bool HasWriteOperations() const;
+    bool HasKafkaOperations() const;
     bool HasWriteId() const;
     ui64 GetWriteId() const;
     void SetWriteId(NLongTxService::TLockHandle handle);
+    NKafka::TProducerInstanceId GetKafkaProducerInstanceId() const;
 
     bool TabletHasReadOperations(ui64 tabletId) const;
 
@@ -141,6 +155,10 @@ public:
                       const TString& readSessionId);
     void AddOperation(const TString& topic, ui32 partition,
                       TMaybe<ui32> supportivePartition);
+                      
+    void AddKafkaApiWriteOperation(const TString& topic, ui32 partition, const NKafka::TProducerInstanceId& producerInstanceId);
+    
+    void AddKafkaApiReadOperation(const TString& topic, ui32 partition, const TString& consumerName, ui64 offset);
 
     void FillSchemeCacheNavigate(NSchemeCache::TSchemeCacheNavigate& navigate,
                                  TMaybe<TString> consumer);
@@ -166,11 +184,13 @@ private:
     THashMap<TTopicPartition, TTopicPartitionOperations, TTopicPartition::THash> Operations_;
     bool HasReadOperations_ = false;
     bool HasWriteOperations_ = false;
+    bool HasKafkaOperations_ = false;
 
     TMaybe<TString> Consumer_;
     NLongTxService::TLockHandle WriteId_;
 
     THashMap<TString, NSchemeCache::TSchemeCacheNavigate::TEntry> CachedNavigateResult_;
+    TMaybe<NKafka::TProducerInstanceId> KafkaProducerInstanceId_;
 };
 
 }

@@ -99,12 +99,36 @@ message TTopicOperationsRequest {
     }
 }
 
+message TKafkaApiOperationsRequest {
+    optional int64 ProducerId = 1;
+    optional int32 ProducerEpoch = 2;
+    repeated TKafkaApiOperationsRequest.KafkaApiPartitionInTxn PartitionsInTxn = 3;
+    repeated TKafkaApiOperationsRequest.KafkaApiOffsetInTxn OffsetsInTxn = 4;
 
+    message KafkaApiPartitionInTxn {
+        optional string TopicPath = 1;
+        optional uint32 PartitionId = 2;
+    }
+
+    message KafkaApiOffsetInTxn {
+        optional string TopicPath = 1;
+        optional uint32 PartitionId = 2;
+        optional string ConsumerName = 3;
+        optional int64 Offset = 4;
+    }
+}
 
 message TTopicOperationsResponse {
     message TWriteId {
+        message TKafkaProducerInstanceId {
+            optional int64 Id = 1;
+            optional int32 Epoch = 2;
+        };
+
         optional uint64 NodeId = 1;
         optional uint64 KeyId = 2;
+        optional bool KafkaTransaction = 3 [default = false];
+        optional TKafkaProducerInstanceId KafkaProducerInstanceId = 4;
     }
 
     optional TWriteId WriteId = 1;
@@ -148,6 +172,7 @@ message TQueryRequest {
     optional uint64 OutputChunkMaxSize = 34;
     optional string PoolId = 35;
     optional string DatabaseId = 36;
+    optional TKafkaApiOperationsRequest KafkaApiOperations = 37;
 }
 
 message TKqpPathIdProto {
@@ -785,6 +810,7 @@ message TKqpTableSinkSettings {
     optional bool EnableStreamWrite = 16;
     optional bool IsBatch = 17;
     repeated string InputColumns = 18; // Only for MODE_FILL
+    optional bool IsIndexImplTable = 21;
 }
 
 message TKqpStreamLookupSettings {

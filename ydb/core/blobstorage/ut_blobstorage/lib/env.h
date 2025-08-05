@@ -57,6 +57,7 @@ struct TEnvironmentSetup {
         const ui64 PDiskSize = 10_TB;
         const ui64 PDiskChunkSize = 0;
         const bool TrackSharedQuotaInPDiskMock = false;
+        const bool EnableDeepScrubbing = false;
     };
 
     const TSettings Settings;
@@ -380,6 +381,7 @@ struct TEnvironmentSetup {
 //            NKikimrServices::BS_VDISK_PATCH,
 //            NKikimrServices::BS_VDISK_PUT,
 //            NKikimrServices::BS_VDISK_OTHER,
+            NKikimrServices::BS_VDISK_SCRUB,
 //            NKikimrServices::BS_PROXY,
 //            NKikimrServices::BS_PROXY_RANGE,
 //            NKikimrServices::BS_PROXY_GET,
@@ -474,6 +476,8 @@ struct TEnvironmentSetup {
                 ADD_ICB_CONTROL("DSProxyControls.MaxNumOfSlowDisks", 2, 1, 2, Settings.MaxNumOfSlowDisks);
                 ADD_ICB_CONTROL("DSProxyControls.MaxNumOfSlowDisksHDD", 2, 1, 2, Settings.MaxNumOfSlowDisks);
                 ADD_ICB_CONTROL("DSProxyControls.MaxNumOfSlowDisksSSD", 2, 1, 2, Settings.MaxNumOfSlowDisks);
+
+                ADD_ICB_CONTROL("VDiskControls.EnableDeepScrubbing", false, false, true, Settings.EnableDeepScrubbing);
                 
 #undef ADD_ICB_CONTROL
 
@@ -1023,7 +1027,32 @@ struct TEnvironmentSetup {
             }
         }
         return ctr;
-    };
+    }
+
+    template <class TCallback>
+    ui64 AggregateVDiskCountersWithCallback(TString storagePool, ui32 nodesCount, ui32 groupSize, ui32 groupId,
+            const std::vector<ui32>& pdiskLayout, TCallback callback) {
+        ui64 ctr = 0;
+
+        for (ui32 nodeId = 1; nodeId <= nodesCount; ++nodeId) {
+            auto* appData = Runtime->GetNode(nodeId)->AppData.get();
+            for (ui32 i = 0; i < groupSize; ++i) {
+                TStringStream ss;
+                ss << LeftPad(i, 2, '0');
+                TString orderNumber = ss.Str();
+                ss.Clear();
+                ss << LeftPad(pdiskLayout[i], 9, '0');
+                TString pdisk = ss.Str();
+                ctr += callback(GetServiceCounters(appData->Counters, "vdisks")->
+                        GetSubgroup("storagePool", storagePool)->
+                        GetSubgroup("group", std::to_string(groupId))->
+                        GetSubgroup("orderNumber", orderNumber)->
+                        GetSubgroup("pdisk", pdisk)->
+                        GetSubgroup("media", "rot"));
+            }
+        }
+        return ctr;
+    }
 
     void SetIcbControl(ui32 nodeId, TString controlName, ui64 value) {
         if (nodeId == 0) {

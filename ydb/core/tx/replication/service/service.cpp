@@ -26,7 +26,7 @@ namespace NKikimr::NReplication::NService {
 class TSessionInfo {
     struct TWorkerInfo {
         const TActorId ActorId;
-        TRowVersion Heartbeat;
+        TRowVersion Heartbeat = TRowVersion::Min();
 
         explicit TWorkerInfo(const TActorId& actorId)
             : ActorId(actorId)

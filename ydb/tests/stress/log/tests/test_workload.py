@@ -12,7 +12,11 @@ from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 class TestYdbLogWorkload(object):
     @classmethod
     def setup_class(cls):
-        cls.cluster = KiKiMR(KikimrConfigGenerator())
+        cls.cluster = KiKiMR(KikimrConfigGenerator(
+            column_shard_config={
+                'disabled_on_scheme_shard': False,
+            }
+        ))
         cls.cluster.start()
 
     @classmethod

@@ -17,6 +17,7 @@
 #include <ydb/core/tx/tx_allocator/txallocator.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/services/metadata/ds_table/service.h>
+#include <ydb/core/tx/columnshard/test_helper/columnshard_ut_common.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -1055,6 +1056,22 @@ NSchemeShardUT_Private::TTestWithReboots::TTestWithReboots(bool killOnCommit, NS
     TabletIds.push_back(datashard+6);
     TabletIds.push_back(datashard+7);
     TabletIds.push_back(datashard+8);
+
+    NoRebootEventTypes.insert(TEvSchemeShard::EvModifySchemeTransaction);
+    NoRebootEventTypes.insert(TEvSchemeShard::EvDescribeScheme);
+    NoRebootEventTypes.insert(TEvSchemeShard::EvNotifyTxCompletion);
+    NoRebootEventTypes.insert(TEvSchemeShard::EvMeasureSelfResponseTime);
+    NoRebootEventTypes.insert(TEvSchemeShard::EvWakeupToMeasureSelfResponseTime);
+    NoRebootEventTypes.insert(TEvTablet::EvLocalMKQL);
+    NoRebootEventTypes.insert(TEvFakeHive::EvSubscribeToTabletDeletion);
+    NoRebootEventTypes.insert(TEvSchemeShard::EvCancelTx);
+    NoRebootEventTypes.insert(TEvExport::EvCreateExportRequest);
+    NoRebootEventTypes.insert(TEvIndexBuilder::EvCreateRequest);
+    NoRebootEventTypes.insert(TEvIndexBuilder::EvGetRequest);
+    NoRebootEventTypes.insert(TEvIndexBuilder::EvCancelRequest);
+    NoRebootEventTypes.insert(TEvIndexBuilder::EvForgetRequest);
+    // without it, ut_vector_index_build_reboots test hangs on GetRequest on the very first reboot
+    NoRebootEventTypes.insert(TEvTablet::EvCommitResult);
 }
 
 void NSchemeShardUT_Private::TTestWithReboots::Run(std::function<void (TTestActorRuntime &, bool &)> testScenario) {
@@ -1089,9 +1106,10 @@ struct NSchemeShardUT_Private::TTestWithReboots::TFinalizer {
 };
 
 void NSchemeShardUT_Private::TTestWithReboots::RunWithTabletReboots(std::function<void (TTestActorRuntime &, bool &)> testScenario) {
-    RunTestWithReboots(TabletIds,
-                       [&]() {
-        return PassUserRequests;
+    RunTestWithReboots(TabletIds, [&]() {
+        return [this](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event) {
+            return PassUserRequests(runtime, event);
+        };
     },
     [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& activeZone) {
         TFinalizer finalizer(*this);
@@ -1105,7 +1123,9 @@ void NSchemeShardUT_Private::TTestWithReboots::RunWithTabletReboots(std::functio
 void NSchemeShardUT_Private::TTestWithReboots::RunWithPipeResets(std::function<void (TTestActorRuntime &, bool &)> testScenario) {
     RunTestWithPipeResets(TabletIds,
                           [&]() {
-        return PassUserRequests;
+        return [this](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event) {
+            return PassUserRequests(runtime, event);
+        };
     },
     [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& activeZone) {
         TFinalizer finalizer(*this);
@@ -1174,22 +1194,7 @@ void NSchemeShardUT_Private::TTestWithReboots::Finalize() {
 
 bool NSchemeShardUT_Private::TTestWithReboots::PassUserRequests(TTestActorRuntimeBase &runtime, TAutoPtr<IEventHandle> &event) {
     Y_UNUSED(runtime);
-    return event->Type == TEvSchemeShard::EvModifySchemeTransaction ||
-           event->Type == TEvSchemeShard::EvDescribeScheme ||
-           event->Type == TEvSchemeShard::EvNotifyTxCompletion ||
-           event->Type == TEvSchemeShard::EvMeasureSelfResponseTime ||
-           event->Type == TEvSchemeShard::EvWakeupToMeasureSelfResponseTime ||
-           event->Type == TEvTablet::EvLocalMKQL ||
-           event->Type == TEvFakeHive::EvSubscribeToTabletDeletion ||
-           event->Type == TEvSchemeShard::EvCancelTx ||
-           event->Type == TEvExport::EvCreateExportRequest ||
-           event->Type == TEvIndexBuilder::EvCreateRequest ||
-           event->Type == TEvIndexBuilder::EvGetRequest ||
-           event->Type == TEvIndexBuilder::EvCancelRequest ||
-           event->Type == TEvIndexBuilder::EvForgetRequest ||
-           // without it, ut_vector_index_build_reboots test hangs on GetRequest on the very first reboot
-           event->Type == TEvTablet::EvCommitResult
-        ;
+    return NoRebootEventTypes.contains(event->Type);
 }
 
 NSchemeShardUT_Private::TTestEnvOptions& NSchemeShardUT_Private::TTestWithReboots::GetTestEnvOptions() {

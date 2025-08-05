@@ -97,8 +97,7 @@ public:
     const TValidationInfo& TxInfo() const { return KeyValidator.GetInfo(); }
     TEngineBay::TSizes CalcSizes(bool needsTotalKeysSize) const;
 
-    void SetWriteVersion(TRowVersion writeVersion);
-    void SetReadVersion(TRowVersion readVersion);
+    void SetMvccVersion(TRowVersion mvccVersion);
     void SetVolatileTxId(ui64 txId);
     void SetIsImmediateTx();
     void SetUsesMvccSnapshot();

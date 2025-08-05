@@ -21,12 +21,24 @@ public:
 
     void Activate();
 
-    void AddBlobRecord(const TLogoBlobRec& blobRec);
+    void ProcessBlobRecordFromSyncLog(const TLogoBlobRec* blobRec);
+    // Add all DoNotKeep records from cut synclog snapshot
     void AddFlags(TPhantomFlags flags);
-    void Clear();
+    void Deactivate();
 
+    // TODO: rebuild thresholds structure after restart. Either write it to VDisk log or rebuild from hull snapshot
+
+    // Read everything from storage
     TPhantomFlagStorageSnapshot GetSnapshot() const;
     bool IsActive() const;
+
+    void ProcessLocalSyncData(ui32 orderNumber, const TString& data);
+
+private:
+    // Adds DoNotKeep flags to storage and Keeps to Thresholds for specified neighbour
+    void ProcessBlobRecordFromNeighbour(ui32 orderNumber, const TLogoBlobRec* blobRec);
+    // Prune Thresholds
+    void ProcessBarrierRecordFromNeighbour(ui32 orderNumber, const TBarrierRec* barrierRec);
 
 private:
     const TBlobStorageGroupType GType;

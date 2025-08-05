@@ -185,7 +185,6 @@ namespace NKikimr {
                     }
                     [[fallthrough]];
                 case NKikimrBlobStorage::PhantomFlags:
-                    Cerr << "PROCESS PHANTOM FLAGS" << Endl;
                     pres = ProcessPhantomFlags(data);
                     if (pres & LongProcessing) {
                         return false;
@@ -339,7 +338,7 @@ namespace NKikimr {
             , TActorBootstrapped<THullSyncFullActorUnorderedDataProtocol>()
             , SyncLogActorId(syncLogActorId)
         {}
-    
+
     private:
         void Serialize(TString* buf, const NSyncLog::TLogoBlobRec& rec) {
             char tmpBuf[NSyncLog::MaxRecFullSize];

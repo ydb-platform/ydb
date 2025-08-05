@@ -126,7 +126,7 @@ private:
 };
 
 
-NActors::IActor* CreatePhantomFlagBuilderActor(const TIntrusivePtr<TSyncLogCtx>& slCtx,
+NActors::IActor* CreatePhantomFlagStorageBuilderActor(const TIntrusivePtr<TSyncLogCtx>& slCtx,
     const TActorId& keeperId, const TSyncLogSnapshotPtr& snapshot) {
     return new TPhantomFlagStorageBuilderActor(slCtx, keeperId, snapshot);
 }

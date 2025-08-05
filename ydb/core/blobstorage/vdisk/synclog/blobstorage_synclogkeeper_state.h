@@ -161,8 +161,13 @@ namespace NKikimr {
 
             void ListChunks(const THashSet<TChunkIdx>& chunksOfInterest, THashSet<TChunkIdx>& chunks);
 
+            void UpdateNeighbourSyncedLsn(ui32 orderNumber, ui64 syncedLsn);
+
+            // Add flags from cut sync log snapshot
+            void PrunePhantomFlagStorage();
             void AddFlagsToPhantomFlagStorage(TPhantomFlags&& flags);
             TPhantomFlagStorageSnapshot GetPhantomFlagStorageSnapshot() const;
+            void ProcessLocalSyncData(ui32 orderNumber, const TString& data);
 
         private:
             // VDisk Context
@@ -198,6 +203,11 @@ namespace NKikimr {
             // Id of Keeper actor which possesses the state
             const TActorId SelfId;
 
+            // synced lsns of neighbours
+            std::vector<ui64> SyncedLsns;
+            TPhantomFlagStorageState PhantomFlagStorageState;
+
+        private:
             // Fix Disk overflow, i.e. remove some chunks from SyncLog
             TVector<ui32> FixDiskOverflow(ui32 numChunksToAdd);
             // Build Snapshot of memory pages for swapping to disk
@@ -212,8 +222,6 @@ namespace NKikimr {
             // Calculate first lsn to keep in recovery log for _DATA_RECORDS_,
             // i.e. for those records in SyncLog which keep user data
             ui64 CalculateFirstDataInRecovLogLsnToKeep() const;
-
-            TPhantomFlagStorageState PhantomFlagStorageState;
         };
 
     } // NSyncLog

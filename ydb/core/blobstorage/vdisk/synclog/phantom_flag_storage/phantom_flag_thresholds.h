@@ -10,12 +10,21 @@
 namespace NKikimr {
 
 namespace NSyncLog {
+
+////////////////////////////////////////////////////////////////////////////////////////////
+// TPhantomFlagThresholds is a structure that contains last known Kept blob for each
+// tablet-channel on this VDisk. This value serves as thresholds for PhantomFlagStorage
+// to decide whether to store a new DoNotKeep flag for this channel or to omit it: we keep
+// flag if there is known Kept blob with greater id and omit otherwise.
+// TPhantomFlagThresholds is pruned when we recieve hard barrier
+////////////////////////////////////////////////////////////////////////////////////////////
+
 class TPhantomFlagThresholds {
 public:
     TPhantomFlagThresholds(const TBlobStorageGroupType& gtype);
 
     void AddBlob(ui32 orderNumber, const TLogoBlobID& blob);
-    void AddHardBarrier(ui32 orderNumber, ui64 tabletId, ui32 generation, ui32 step);
+    void AddHardBarrier(ui32 orderNumber, ui64 tabletId, ui32 channel, ui32 generation, ui32 step);
     bool IsBehindThreshold(const TLogoBlobID& blob) const;
     TPhantomFlags Sift(const TPhantomFlags& flags);
 
@@ -26,7 +35,7 @@ private:
     class TNeighbourThresholds {
     public:
         void AddBlob(const TLogoBlobID& blob);
-        void AddHardBarrier(ui64 tabletId, ui32 generation, ui32 step);
+        void AddHardBarrier(ui64 tabletId, ui8 channel, TGenStep barrier);
         bool IsBehindThreshold(const TLogoBlobID& blob) const;
     
     private:
@@ -36,7 +45,7 @@ private:
         class TTabletThresholds {
         public:
             void AddBlob(const TLogoBlobID& blob);
-            void AddHardBarrier(ui32 generation, ui32 step);
+            void AddHardBarrier(ui8 channel, TGenStep barrier);
             bool IsBehindThreshold(const TLogoBlobID& blob) const;
             bool IsEmpty() const;
     

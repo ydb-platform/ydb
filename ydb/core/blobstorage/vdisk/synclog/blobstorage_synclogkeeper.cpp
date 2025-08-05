@@ -9,6 +9,7 @@
 #include <ydb/core/blobstorage/vdisk/common/circlebufstream.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_events.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_private_events.h>
+#include <ydb/core/blobstorage/vdisk/syncer/blobstorage_syncer_localwriter.h>
 
 using namespace NKikimrServices;
 
@@ -252,8 +253,18 @@ namespace NKikimr {
                 KeepState.AddFlagsToPhantomFlagStorage(std::move(ev->Get()->Flags));
             }
 
-            void Handle(TEvPhantomFlagStorageGetSnapshot::TPtr ev) {
+            void Handle(const TEvPhantomFlagStorageGetSnapshot::TPtr& ev) {
                 Send(ev->Sender, new TEvPhantomFlagStorageGetSnapshotResult(KeepState.GetPhantomFlagStorageSnapshot()));
+            }
+
+            void Handle(const TEvLocalSyncData::TPtr& ev) {
+                TVDiskIdShort vdiskId(ev->Get()->VDiskID);
+                ui32 orderNumber = SlCtx->VCtx->Top->GetOrderNumber(vdiskId);
+                KeepState.ProcessLocalSyncData(orderNumber, ev->Get()->Data);
+            }
+
+            void Handle(const TEvSyncLogUpdateNeighbourSyncedLsn::TPtr& ev) {
+                KeepState.UpdateNeighbourSyncedLsn(ev->Get()->OrderNumber, ev->Get()->SyncedLsn);
             }
 
             STRICT_STFUNC(StateFunc,
@@ -270,6 +281,8 @@ namespace NKikimr {
                 HFunc(TEvListChunks, Handle)
                 hFunc(TEvPhantomFlagStorageAddFlagsFromSnapshot, Handle)
                 hFunc(TEvPhantomFlagStorageGetSnapshot, Handle)
+                hFunc(TEvLocalSyncData, Handle)
+                hFunc(TEvSyncLogUpdateNeighbourSyncedLsn, Handle)
             )
 
         public:

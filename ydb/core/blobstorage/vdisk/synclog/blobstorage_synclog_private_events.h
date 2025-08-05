@@ -98,5 +98,18 @@ namespace NKikimr {
 
             TPhantomFlagStorageSnapshot Snapshot;
         };
+
+        struct TEvSyncLogUpdateNeighbourSyncedLsn
+            : public TEventLocal<TEvSyncLogUpdateNeighbourSyncedLsn,
+                                 TEvBlobStorage::EvSyncLogUpdateNeighbourSyncedLsn>
+        {
+            ui32 OrderNumber;
+            ui64 SyncedLsn;
+
+            TEvSyncLogUpdateNeighbourSyncedLsn(ui32 orderNumber, ui64 syncedLsn)
+                : OrderNumber(orderNumber)
+                , SyncedLsn(syncedLsn)
+            {}
+        };
     } // NSyncLog
 } // NKikimr

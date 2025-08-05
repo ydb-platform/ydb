@@ -41,6 +41,8 @@ Y_UNIT_TEST_SUITE(PhantomBlobs) {
                 .Step = step,
             });
 
+            auto itMiddle = blobs.begin() + blobs.size() / 2;
+
             auto collectEverything = [&](TVector<TLogoBlobID>* keepFlags, TVector<TLogoBlobID>* doNotKeepFlags) {
                 Env->Runtime->WrapInActorContext(Edge, [&] {
                     TString data;
@@ -80,8 +82,8 @@ Y_UNIT_TEST_SUITE(PhantomBlobs) {
 
             AllocateEdgeActor(); // reallocate actor, in case it lived on a restarted or dead node
 
-            Ctest << "Set DoNotKeepFlags" << Endl;
-            collectEverything(nullptr, new TVector<TLogoBlobID>(blobs.begin(), blobs.end()));
+            Ctest << "Set DoNotKeepFlags on first half of blobs" << Endl;
+            collectEverything(nullptr, new TVector<TLogoBlobID>(blobs.begin(), itMiddle));
 
             for (ui32 i = 0; i < unsyncedBlobs; i += unsyncedBatchSize) {
                 Ctest << "Write batch, blobs written# " << i << Endl;
@@ -96,10 +98,11 @@ Y_UNIT_TEST_SUITE(PhantomBlobs) {
                     .Generation = generation,
                     .Step = step,
                 });
-                // collectEverything(new TVector<TLogoBlobID>(batch.begin(), batch.end()), nullptr);
-                // collectEverything(nullptr, new TVector<TLogoBlobID>(batch.begin(), batch.end()));
                 collectEverything(nullptr, nullptr);
             }
+
+            Ctest << "Set DoNotKeepFlags on second half of blobs" << Endl;
+            collectEverything(nullptr, new TVector<TLogoBlobID>(itMiddle, blobs.end()));
 
             Ctest << "Wait for sync" << Endl;
             Env->Sim(TDuration::Minutes(30));
@@ -193,7 +196,7 @@ Y_UNIT_TEST_SUITE(PhantomBlobs) {
             .ControllerNodeId = controllerNodeId,
             .PDiskChunkSize = 32_MB,
         });
-        ctx.RunTest(1000, 3'000'000, nodeStates);
+        ctx.RunTest(1000, 5'500'000, nodeStates);
     }
 
 

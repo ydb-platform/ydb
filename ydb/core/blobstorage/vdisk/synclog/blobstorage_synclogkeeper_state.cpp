@@ -3,6 +3,7 @@
 #include <ydb/core/blobstorage/vdisk/hulldb/generic/hullds_sst_it.h>
 #include <ydb/core/blobstorage/vdisk/synclog/blobstorage_synclog_private_events.h>
 #include <ydb/core/blobstorage/vdisk/synclog/phantom_flag_storage/phantom_flag_storage_builder.h>
+#include <ydb/core/blobstorage/vdisk/synclog/blobstorage_synclogmsgreader.h>
 
 using namespace NKikimrServices;
 
@@ -45,7 +46,11 @@ namespace NKikimr {
             , NeedsInitialCommit(repaired->NeedsInitialCommit)
             , SelfId(selfId)
             , PhantomFlagStorageState(SlCtx->VCtx->Top->GType)
-        {}
+        {
+            SyncedLsns.resize(SlCtx->VCtx->Top->GetTotalVDisksNum());
+            ui32 selfOrderNum = SlCtx->VCtx->Top->GetOrderNumber(SlCtx->VCtx->ShortSelfVDisk);
+            SyncedLsns[selfOrderNum] = Max<ui64>();
+        }
 
         // Calculate first lsn in recovery log we must keep
         ui64 TSyncLogKeeperState::CalculateFirstLsnToKeep() const {
@@ -74,6 +79,11 @@ namespace NKikimr {
             // Check for memory overflow
             if (SyncLogPtr->GetNumberOfPagesInMemory() > MaxMemPages)
                 DelayedActions.SetMemOverflow();
+
+            // Put blob record to PhantomFlagStorage
+            if (rec->RecType == TRecordHdr::RecLogoBlob) {
+                PhantomFlagStorageState.ProcessBlobRecordFromSyncLog(rec->GetLogoBlob());
+            }
         }
 
         void TSyncLogKeeperState::PutMany(const void *buf, ui32 size) {
@@ -81,6 +91,19 @@ namespace NKikimr {
             // Check for memory overflow
             if (SyncLogPtr->GetNumberOfPagesInMemory() > MaxMemPages)
                 DelayedActions.SetMemOverflow();
+
+            // Put all blob records to PhantomFlagStorage
+            TRecordHdr* rec = (TRecordHdr*)buf;
+            ui32 recSize = 0;
+            do {
+                recSize = rec->GetSize();
+                Y_DEBUG_ABORT_UNLESS(recSize <= size);
+                if (rec->RecType == TRecordHdr::RecLogoBlob) {
+                    PhantomFlagStorageState.ProcessBlobRecordFromSyncLog(rec->GetLogoBlob());
+                }
+                rec = rec->Next();
+                size -= recSize;
+            } while (size);
         }
 
         // put the whole level into SyncLog
@@ -383,7 +406,7 @@ namespace NKikimr {
 
             if (!scheduledChunks.empty() && !PhantomFlagStorageState.IsActive() && SelfId != TActorId{}) {
                 PhantomFlagStorageState.Activate();
-                TActivationContext::Register(CreatePhantomFlagBuilderActor(SlCtx, SelfId, Snapshot));
+                TActivationContext::Register(CreatePhantomFlagStorageBuilderActor(SlCtx, SelfId, Snapshot));
             }
             
             // append scheduledChunks to ChunksToDeleteDelayed
@@ -418,12 +441,32 @@ namespace NKikimr {
         }
 
 
+        void TSyncLogKeeperState::UpdateNeighbourSyncedLsn(ui32 orderNumber, ui64 syncedLsn) {
+            SyncedLsns[orderNumber] = std::max(SyncedLsns[orderNumber], syncedLsn);
+
+            // If there are no unsynced disks left, deactivate the PhantomFlagStorage
+            // and remove all records from it.
+            // TODO: more precise pruning
+            ui64 firstStoredLsn = SyncLogPtr->GetFirstLsn();
+            if (PhantomFlagStorageState.IsActive()) {
+                if (std::all_of(SyncedLsns.begin(), SyncedLsns.end(), [&](ui64 lsn) {
+                    return lsn >= firstStoredLsn;
+                })) {
+                    PhantomFlagStorageState.Deactivate();
+                }
+            }
+        }
+
         void TSyncLogKeeperState::AddFlagsToPhantomFlagStorage(TPhantomFlags&& flags) {
             PhantomFlagStorageState.AddFlags(std::forward<TPhantomFlags>(flags));
         }
 
         TPhantomFlagStorageSnapshot TSyncLogKeeperState::GetPhantomFlagStorageSnapshot() const {
             return PhantomFlagStorageState.GetSnapshot();
+        }
+
+        void TSyncLogKeeperState::ProcessLocalSyncData(ui32 orderNumber, const TString& data) {
+            PhantomFlagStorageState.ProcessLocalSyncData(orderNumber, data);
         }
 
     } // NSyncLog

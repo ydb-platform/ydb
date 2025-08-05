@@ -1597,7 +1597,9 @@ namespace NKikimr {
 
             auto traceId = ev->TraceId.Clone();
             TString data = ev->Get()->Serialize();
-            intptr_t loggedRecId = LoggedRecsVault.Put(new TLoggedRecLocalSyncData(seg, false, std::move(result), ev));
+            Y_ABORT_UNLESS(Db->SyncLogID);
+            intptr_t loggedRecId = LoggedRecsVault.Put(new TLoggedRecLocalSyncData(seg, false, std::move(result), ev,
+                    Db->SyncLogID));
             void *loggedRecCookie = reinterpret_cast<void *>(loggedRecId);
             // create log msg
             auto logMsg = CreateHullUpdate(HullLogCtx, TLogSignature::SignatureLocalSyncData, data, seg,

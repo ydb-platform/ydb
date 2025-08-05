@@ -19,14 +19,14 @@ bool TPhantomFlagThresholds::TNeighbourThresholds::IsBehindThreshold(const TLogo
     return it->second.IsBehindThreshold(blob);
 }
 
-void TPhantomFlagThresholds::TNeighbourThresholds::AddHardBarrier(ui64 tabletId, ui32 generation, ui32 step) {
+void TPhantomFlagThresholds::TNeighbourThresholds::AddHardBarrier(ui64 tabletId, ui8 channel, TGenStep barrier) {
     auto it = TabletThresholds.find(tabletId);
     if (it == TabletThresholds.end()) {
         return;
     }
 
     TTabletThresholds& tabletThresholds = it->second;
-    tabletThresholds.AddHardBarrier(generation, step);
+    tabletThresholds.AddHardBarrier(channel, barrier);
     if (tabletThresholds.IsEmpty()) {
         TabletThresholds.erase(it);
     }
@@ -37,17 +37,21 @@ void TPhantomFlagThresholds::TNeighbourThresholds::TTabletThresholds::AddBlob(co
     current = std::max(current, TGenStep(blob.Generation(), blob.Step()));
 }
 
-void TPhantomFlagThresholds::TNeighbourThresholds::TTabletThresholds::AddHardBarrier(ui32 generation, ui32 step) {
-    TGenStep barrier(generation, step);
-    std::erase_if(ChannelThresholds, [&](const std::pair<ui8, TGenStep>& ChannelThresholds) {
-        return ChannelThresholds.second <= barrier;
-    });
+void TPhantomFlagThresholds::TNeighbourThresholds::TTabletThresholds::AddHardBarrier(ui8 channel, TGenStep barrier) {
+    auto it = ChannelThresholds.find(channel);
+    if (it == ChannelThresholds.end()) {
+        return;
+    }
+
+    if (it->second <= barrier) {
+        ChannelThresholds.erase(it);
+    }
 }
 
 bool TPhantomFlagThresholds::TNeighbourThresholds::TTabletThresholds::IsBehindThreshold(const TLogoBlobID& blob) const {
     auto it = ChannelThresholds.find(blob.Channel());
     if (it == ChannelThresholds.end()) {
-        return true;
+        return false;
     }
     return it->second >= TGenStep(blob.Generation(), blob.Step());
 }
@@ -55,7 +59,6 @@ bool TPhantomFlagThresholds::TNeighbourThresholds::TTabletThresholds::IsBehindTh
 bool TPhantomFlagThresholds::TNeighbourThresholds::TTabletThresholds::IsEmpty() const {
     return ChannelThresholds.empty();
 }
-
 
 TPhantomFlagThresholds::TPhantomFlagThresholds(const TBlobStorageGroupType& gtype)
     : GType(gtype)
@@ -68,9 +71,9 @@ void TPhantomFlagThresholds::AddBlob(ui32 orderNumber, const TLogoBlobID& blob) 
     }
 }
 
-void TPhantomFlagThresholds::AddHardBarrier(ui32 orderNumber, ui64 tabletId, ui32 generation, ui32 step) {
+void TPhantomFlagThresholds::AddHardBarrier(ui32 orderNumber, ui64 tabletId, ui32 channel, ui32 generation, ui32 step) {
     if (orderNumber < GType.BlobSubgroupSize()) {
-        NeighbourThresholds[orderNumber].AddHardBarrier(tabletId, generation, step);
+        NeighbourThresholds[orderNumber].AddHardBarrier(tabletId, channel, TGenStep{generation, step});
     }
 }
 

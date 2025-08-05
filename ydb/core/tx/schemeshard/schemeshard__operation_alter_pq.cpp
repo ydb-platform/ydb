@@ -53,8 +53,13 @@ public:
         };
         const auto [it, unique] = Reserved.try_emplace(id, std::move(res));
         if (!unique) {
-            return std::unexpected(std::format("Attempt to reserve parition id ({}) for multiple split/merge operations ({}, {})",
-                                               id, it->second.SourceId, sourceId));
+            if (it->second.SourceId == sourceId) {
+                return std::unexpected(std::format("Splitting parition id ({}) has repetition in the children partition ids ({})",
+                                                   sourceId, id));
+            } else {
+                return std::unexpected(std::format("Attempt to reserve parition id ({}) for multiple split/merge operations ({}, {})",
+                                                   id, it->second.SourceId, sourceId));
+            }
         }
         return {};
     }
@@ -81,12 +86,13 @@ public:
             }
         }
         ui32 id = First.Id;
-        for (const auto& [allocId, _] : Allocated) {
-            const TReservationInfo* reserve = MapFindPtr(Reserved, id);
+        for (const auto& [allocId, type] : Allocated) {
+            const TReservationInfo* reserve = MapFindPtr(Reserved, allocId);
             if (!reserve) {
-                return std::unexpected(std::format("Partition id ({}) is not reserved", id));
-            }
-            if (reserve->Existed) {
+                if (type == EAllocationType::Reserved) {
+                    return std::unexpected(std::format("Partition id ({}) is not reserved", id));
+                }
+            } else if (reserve->Existed) {
                 continue;
             }
             if (id != allocId) {
@@ -809,8 +815,8 @@ public:
                         .ToBound = splitBoundary,
                     },
                     {
-                        .FromBound = keyRange ? keyRange->FromBound : Nothing(),
-                        .ToBound = splitBoundary,
+                        .FromBound = splitBoundary,
+                        .ToBound = keyRange ? keyRange->ToBound : Nothing(),
                     },
                 };
 
@@ -830,7 +836,7 @@ public:
                             LOG_TRACE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                                         std::format("Skipping split partition {} because child partition {} exists",
                                                     splittedPartitionId, *prescribedChildPartitionId));
-
+                            alterData->TotalGroupCount -= 1;
                         } else {
                             LOG_TRACE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                                         std::format("Skipping split partition {}. Create new partition {}",

@@ -313,13 +313,14 @@ class DataCenterIptablesBlockPortsNemesis(AbstractDataCenterNemesis):
                             self.logger.error("Failed to resolve hostname %s to IP address", node.host)
                             raise Exception("Failed to resolve hostname to IP address")
 
-                        # Schedule automatic recovery first
+                        # Schedule automatic recovery using sleep + nohup
                         recovery_cmd = f"sudo /usr/bin/ip -6 ro del unreach {ip}"
-                        at_cmd = f"echo '{recovery_cmd}' | sudo at now + {self._duration} seconds"
+                        sleep_cmd = f"nohup bash -c 'sleep {self._duration} && {recovery_cmd}' > /dev/null 2>&1 &"
+
                         try:
-                            at_task = asyncio.create_task(asyncio.to_thread(other_node.ssh_command, at_cmd, raise_on_error=False))
-                            self.logger.info("Scheduled automatic recovery for IP %s on host %s", ip, other_node.host)
-                            recovery_tasks.append(at_task)
+                            sleep_task = asyncio.create_task(asyncio.to_thread(other_node.ssh_command, sleep_cmd, raise_on_error=False))
+                            self.logger.info("Scheduled automatic recovery for IP %s on host %s (sleep %d seconds)", ip, other_node.host, self._duration)
+                            recovery_tasks.append(sleep_task)
                         except Exception as e:
                             self.logger.warning("Failed to schedule automatic recovery for IP %s on host %s: %s", ip, other_node.host, str(e))
 

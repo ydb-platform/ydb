@@ -3015,6 +3015,7 @@ void TPartition::EndChangePartitionConfig(NKikimrPQ::TPQTabletConfig&& config,
             ctx.Send(Mirrorer->Actor, new TEvPQ::TEvChangePartitionConfig(TopicConverter,
                                                                           Config));
         } else {
+            ScaleStatus = NKikimrPQ::EScaleStatus::NORMAL;
             CreateMirrorerActor();
         }
     } else {

@@ -1,8 +1,11 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 
 #include <ydb/core/formats/arrow/arrow_helpers.h>
+#include <ydb/core/formats/arrow/converter.h>
 #include <ydb/core/tx/columnshard/test_helper/columnshard_ut_common.h>
 #include <ydb/library/formats/arrow/arrow_helpers.h>
+#include <yql/essentials/types/binary_json/write.h>
+#include <yql/essentials/types/dynumber/dynumber.h>
 
 namespace NKikimr::NKqp {
 
@@ -13,12 +16,12 @@ namespace NTypeIds = NScheme::NTypeIds;
 
 namespace {
 
-    TKikimrRunner CreateKikimrRunner(bool withSampleTables) {
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
-        auto settings = TKikimrSettings(appConfig).SetWithSampleTables(withSampleTables);
-        return TKikimrRunner(settings);
-    }
+TKikimrRunner CreateKikimrRunner(bool withSampleTables) {
+    NKikimrConfig::TAppConfig appConfig;
+    appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+    auto settings = TKikimrSettings(appConfig).SetWithSampleTables(withSampleTables);
+    return TKikimrRunner(settings);
+}
 
 void CreateAllTypesRowTable(TQueryClient& client) {
     auto createResult = client.ExecuteQuery(R"(
@@ -159,6 +162,12 @@ std::shared_ptr<arrow::RecordBatch> ExecuteAndCombineBatches(TQueryClient& clien
     UNIT_ASSERT_C(resultBatch->ValidateFull().ok(), "Batch combine validation failed");
 
     return resultBatch;
+}
+
+std::string SerializeToBinaryJsonString(const TStringBuf json) {
+    const auto binaryJson = std::get<NBinaryJson::TBinaryJson>(NBinaryJson::SerializeToBinaryJson(json));
+    const TStringBuf buffer(binaryJson.Data(), binaryJson.Size());
+    return TString(buffer);
 }
 
 } // namespace
@@ -363,7 +372,7 @@ Y_UNIT_TEST_SUITE(KqpResultSetFormat) {
         {
             auto result = client.ExecuteQuery(R"(
                 INSERT INTO BinaryTypesTable (StringValue, YsonValue, DyNumberValue, JsonDocumentValue, StringNotNullValue, YsonNotNullValue, JsonDocumentNotNullValue, DyNumberNotNullValue) VALUES
-                ("John", "[1]", DyNumber("1.0"), JsonDocument("[1]"), "Mark", "[2]", JsonDocument("[3]"), DyNumber("4.0")),
+                ("John", "[1]", DyNumber("1.0"), JsonDocument("{\"a\": 1}"), "Mark", "[2]", JsonDocument("{\"b\": 2}"), DyNumber("4.0")),
                 (NULL, "[4]", NULL, NULL, "Maria", "[5]", JsonDocument("[6]"), DyNumber("7.0")),
                 ("Mark", NULL, NULL, NULL, "Michael", "[7]", JsonDocument("[8]"), DyNumber("9.0")),
                 ("Leo", "[10]", DyNumber("11.0"), JsonDocument("[12]"), "Maria", "[13]", JsonDocument("[14]"), DyNumber("15.0"));
@@ -388,10 +397,11 @@ Y_UNIT_TEST_SUITE(KqpResultSetFormat) {
                 std::make_pair("DyNumberNotNullValue", TTypeInfo(NTypeIds::DyNumber))
             }));
 
-            builder.AddRow().AddNull().Add<std::string>("[4]").AddNull().AddNull().Add<std::string>("Maria").Add<std::string>("[5]").Add<std::string>("[6]").Add<std::string>("7.0");
-            builder.AddRow().Add<std::string>("John").Add<std::string>("[1]").Add<std::string>("1.0").Add<std::string>("[1]").Add<std::string>("Mark").Add<std::string>("[2]").Add<std::string>("[3]").Add<std::string>("4.0");
-            builder.AddRow().Add<std::string>("Leo").Add<std::string>("[10]").Add<std::string>("11.0").Add<std::string>("[12]").Add<std::string>("Maria").Add<std::string>("[13]").Add<std::string>("[14]").Add<std::string>("15.0");
-            builder.AddRow().Add<std::string>("Mark").AddNull().AddNull().AddNull().Add<std::string>("Michael").Add<std::string>("[7]").Add<std::string>("[8]").Add<std::string>("9.0");
+            builder.AddRow().AddNull().Add("[4]").AddNull().AddNull().Add("Maria").Add("[5]").Add(SerializeToBinaryJsonString("[6]")).Add(NDyNumber::ParseDyNumberString("7.0")->c_str());
+            builder.AddRow().Add("John").Add("[1]").Add(NDyNumber::ParseDyNumberString("1.0")->c_str()).Add(SerializeToBinaryJsonString("{\"a\": 1}")).Add("Mark").Add("[2]").Add(SerializeToBinaryJsonString("{\"b\": 2}")).Add(NDyNumber::ParseDyNumberString("4.0")->c_str());
+            builder.AddRow().Add("Leo").Add("[10]").Add(NDyNumber::ParseDyNumberString("11.0")->c_str()).Add(SerializeToBinaryJsonString("[12]")).Add("Maria").Add("[13]").Add(SerializeToBinaryJsonString("[14]")).Add(NDyNumber::ParseDyNumberString("15.0")->c_str());
+            builder.AddRow().Add("Mark").AddNull().AddNull().AddNull().Add("Michael").Add("[7]").Add(SerializeToBinaryJsonString("[8]")).Add(NDyNumber::ParseDyNumberString("9.0")->c_str());
+
 
             auto expected = builder.BuildArrow();
             UNIT_ASSERT_VALUES_EQUAL(batch->ToString(), expected->ToString());

@@ -4670,6 +4670,10 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                         TIndexBuildInfo::FillFromRow(rowset, &buildInfo);
                     });
 
+                    if (!Self->EnableVectorIndex) { // prevent build index from progress
+                        buildInfo->IsBroken = true;
+                    }
+
                     // Note: broken build are also added to IndexBuilds
                     Y_ASSERT(!Self->IndexBuilds.contains(buildInfo->Id));
                     Self->IndexBuilds[buildInfo->Id] = buildInfo;
